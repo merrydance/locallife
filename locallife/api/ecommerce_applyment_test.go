@@ -57,6 +57,31 @@ func newTestServerWithEcommerce(t *testing.T, store db.Store, ecommerceClient we
 	return server
 }
 
+func expectMerchantApplymentCommandAccepted(t *testing.T, store *mockdb.MockStore, upstreamApplymentID string) {
+	t.Helper()
+
+	store.EXPECT().
+		CreateExternalPaymentCommand(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentCommandParams{})).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+			require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
+			require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
+			require.Equal(t, db.ExternalPaymentCapabilityApplyment, arg.Capability)
+			require.Equal(t, db.ExternalPaymentCommandTypeCreateApplyment, arg.CommandType)
+			require.Equal(t, db.ExternalPaymentBusinessOwnerApplyment, arg.BusinessOwner)
+			require.True(t, arg.BusinessObjectType.Valid)
+			require.Equal(t, "ecommerce_applyment", arg.BusinessObjectType.String)
+			require.True(t, arg.BusinessObjectID.Valid)
+			require.Equal(t, db.ExternalPaymentObjectApplyment, arg.ExternalObjectType)
+			require.NotEmpty(t, arg.ExternalObjectKey)
+			require.True(t, arg.ExternalSecondaryKey.Valid)
+			require.Equal(t, upstreamApplymentID, arg.ExternalSecondaryKey.String)
+			require.Equal(t, db.ExternalPaymentCommandStatusAccepted, arg.CommandStatus)
+			require.Contains(t, string(arg.ResponseSnapshot), upstreamApplymentID)
+			return db.ExternalPaymentCommand{ID: util.RandomInt(1, 1000), CommandStatus: arg.CommandStatus}, nil
+		})
+}
+
 func seedPrivateContactDocumentAsset(t *testing.T, server *Server, objectKey string, content []byte) {
 	t.Helper()
 	err := server.mediaStorage.PutObject(
@@ -227,6 +252,8 @@ func TestMerchantBindBankAPI(t *testing.T) {
 					UpdateEcommerceApplymentToSubmitted(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.EcommerceApplyment{}, nil)
+
+				expectMerchantApplymentCommandAccepted(t, store, "123456789")
 
 				// 更新商户状态
 				store.EXPECT().
@@ -421,6 +448,8 @@ func TestMerchantBindBankAPI(t *testing.T) {
 					UpdateEcommerceApplymentToSubmitted(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.EcommerceApplyment{}, nil)
+
+				expectMerchantApplymentCommandAccepted(t, store, "22334455")
 
 				store.EXPECT().
 					UpdateMerchantStatus(gomock.Any(), gomock.Any()).
@@ -1182,6 +1211,29 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "InvalidStoredAccountValidationReturnsInternalServerError",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				applyment := randomEcommerceApplymentForTest("merchant", merchant.ID)
+				applyment.Status = "pending"
+				applyment.AccountValidation = []byte("{")
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(applyment, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				var response apiTestEnvelope
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+				require.Equal(t, "internal server error", response.Message)
+			},
+		},
+		{
 			name: "NoApplyment",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -1761,8 +1813,8 @@ func TestRespondApplymentWechatError(t *testing.T) {
 			name:           "SystemErrorMapsToBadGateway",
 			wxErr:          &wechat.WechatPayError{StatusCode: http.StatusInternalServerError, Code: "SYSTEM_ERROR", Message: "系统异常"},
 			expectedStatus: http.StatusInternalServerError,
-			expectedCode:   ErrApplymentWechatServiceUnavailable.Code,
-			expectedError:  ErrApplymentWechatServiceUnavailable.Message,
+			expectedCode:   0,
+			expectedError:  "internal server error",
 		},
 		{
 			name:           "ResourceNotExistsMapsToNotFound",

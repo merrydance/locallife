@@ -21,6 +21,7 @@ import (
 const (
 	currentTableQRCodeFilenameSuffix      = "_qrcode_v2.png"
 	currentStorefrontQRCodeFilenameSuffix = "_storefront_qrcode_v1.png"
+	merchantStorefrontQRCodePage          = "pages/takeout/restaurant-detail/index"
 )
 
 // =============================================================================
@@ -263,10 +264,14 @@ func (server *Server) buildScanTableResponse(ctx context.Context, merchant db.Me
 			dishInfo.MemberPrice = &dish.MemberPrice.Int64
 		}
 		if dish.Tags != nil {
-			_ = parseJSON(dish.Tags, &dishInfo.Tags)
+			if err := parseJSON(dish.Tags, &dishInfo.Tags); err != nil {
+				return scanTableResponse{}, fmt.Errorf("decode scan table dish %d tags: %w", dish.ID, err)
+			}
 		}
 		if dish.CustomizationGroups != nil {
-			_ = parseJSON(dish.CustomizationGroups, &dishInfo.CustomizationGroups)
+			if err := parseJSON(dish.CustomizationGroups, &dishInfo.CustomizationGroups); err != nil {
+				return scanTableResponse{}, fmt.Errorf("decode scan table dish %d customization_groups: %w", dish.ID, err)
+			}
 		}
 
 		if categoryName, ok := categoryNameMap[categoryID]; ok {
@@ -298,7 +303,9 @@ func (server *Server) buildScanTableResponse(ctx context.Context, merchant db.Me
 			IsAvailable: combo.IsOnline,
 		}
 		if combo.Tags != nil {
-			_ = parseJSON(combo.Tags, &comboInfo.Tags)
+			if err := parseJSON(combo.Tags, &comboInfo.Tags); err != nil {
+				return scanTableResponse{}, fmt.Errorf("decode scan table combo %d tags: %w", combo.ID, err)
+			}
 		}
 		if combo.Description.Valid {
 			comboInfo.Description = &combo.Description.String
@@ -470,6 +477,10 @@ func buildMerchantStorefrontQRCodeObjectKey(merchantID int64) string {
 	return fmt.Sprintf("merchant/storefront/%d/qrcodes/%s", merchantID, filename)
 }
 
+func buildMerchantStorefrontQRCodeScene(merchantID int64) string {
+	return "m_" + strconv.FormatInt(merchantID, 10)
+}
+
 func wxaCodeEnvVersion(environment string) string {
 	switch strings.ToLower(strings.TrimSpace(environment)) {
 	case "prod", "production":
@@ -506,8 +517,8 @@ func (server *Server) ensureMerchantStorefrontQRCode(ctx context.Context, upload
 
 	checkPath := false
 	wxaReq := &wechat.WXACodeRequest{
-		Scene:      "m_" + strconv.FormatInt(merchantID, 10),
-		Page:       "pages/takeout/restaurant-detail/index",
+		Scene:      buildMerchantStorefrontQRCodeScene(merchantID),
+		Page:       merchantStorefrontQRCodePage,
 		CheckPath:  &checkPath,
 		EnvVersion: wxaCodeEnvVersion(server.config.Environment),
 		Width:      430,

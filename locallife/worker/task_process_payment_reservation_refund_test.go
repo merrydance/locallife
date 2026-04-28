@@ -3,6 +3,7 @@ package worker_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/hibiken/asynq"
@@ -12,7 +13,6 @@ import (
 	"github.com/merrydance/locallife/wechat"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/merrydance/locallife/worker"
-	mockwk "github.com/merrydance/locallife/worker/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -50,6 +50,7 @@ func TestProcessTaskInitiateRefund_ReservationAddonRefund_UsesProvidedOutRefundN
 		return &wechat.EcommerceRefundResponse{RefundID: "refund_ra_12"}, nil
 	})
 	store.EXPECT().UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{ID: refundOrder.ID, RefundID: pgtype.Text{String: "refund_ra_12", Valid: true}}).Return(db.RefundOrder{ID: refundOrder.ID, PaymentOrderID: refundOrder.PaymentOrderID, RefundAmount: refundOrder.RefundAmount, Status: "processing", OutRefundNo: refundOrder.OutRefundNo}, nil)
+	expectWorkerEcommerceRefundAcceptedCommand(t, store, refundOrder.ID, refundOrder.OutRefundNo, "refund_ra_12", db.ExternalPaymentBusinessOwnerReservation, 9602)
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
 	payloadBytes, err := json.Marshal(worker.PayloadProcessRefund{
@@ -85,11 +86,6 @@ func TestProcessTaskRefundResult_ReservationRefundSuccess_UpdatesPrepaidAmount(t
 
 	store.EXPECT().GetRefundOrderByOutRefundNo(gomock.Any(), refundOrder.OutRefundNo).Return(refundOrder, nil)
 	store.EXPECT().GetPaymentOrder(gomock.Any(), refundOrder.PaymentOrderID).Return(paymentOrder, nil)
-	store.EXPECT().GetTableReservation(gomock.Any(), reservationID).Return(db.TableReservation{ID: reservationID, MerchantID: 55}, nil)
-	store.EXPECT().UpdateRefundOrderToSuccess(gomock.Any(), refundOrder.ID).Return(db.RefundOrder{ID: refundOrder.ID, PaymentOrderID: refundOrder.PaymentOrderID, RefundAmount: refundOrder.RefundAmount, Status: "success", OutRefundNo: refundOrder.OutRefundNo}, nil)
-	store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(int64(400), nil)
-	store.EXPECT().UpdatePaymentOrderToRefunded(gomock.Any(), paymentOrder.ID).Return(db.PaymentOrder{ID: paymentOrder.ID, Status: "refunded"}, nil)
-	store.EXPECT().AddReservationPrepaidAmount(gomock.Any(), db.AddReservationPrepaidAmountParams{ID: reservationID, PrepaidAmount: -400}).Return(db.TableReservation{ID: reservationID}, nil)
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
 	payloadBytes, err := json.Marshal(worker.RefundResultPayload{
@@ -101,7 +97,9 @@ func TestProcessTaskRefundResult_ReservationRefundSuccess_UpdatesPrepaidAmount(t
 
 	task := asynq.NewTask(worker.TaskProcessRefundResult, payloadBytes)
 	err = processor.ProcessTaskRefundResult(context.Background(), task)
-	require.NoError(t, err)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "reservation refund results must be applied via payment fact application")
+	require.True(t, errors.Is(err, asynq.SkipRetry))
 }
 
 func TestProcessTaskRefundResult_ReservationRefundClosed_DoesNotAdjustPrepaidAmount(t *testing.T) {
@@ -123,8 +121,6 @@ func TestProcessTaskRefundResult_ReservationRefundClosed_DoesNotAdjustPrepaidAmo
 
 	store.EXPECT().GetRefundOrderByOutRefundNo(gomock.Any(), refundOrder.OutRefundNo).Return(refundOrder, nil)
 	store.EXPECT().GetPaymentOrder(gomock.Any(), refundOrder.PaymentOrderID).Return(paymentOrder, nil)
-	store.EXPECT().GetTableReservation(gomock.Any(), reservationID).Return(db.TableReservation{ID: reservationID, MerchantID: 55}, nil)
-	store.EXPECT().UpdateRefundOrderToClosed(gomock.Any(), refundOrder.ID).Return(db.RefundOrder{ID: refundOrder.ID, PaymentOrderID: refundOrder.PaymentOrderID, RefundAmount: refundOrder.RefundAmount, Status: "closed", OutRefundNo: refundOrder.OutRefundNo}, nil)
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
 	payloadBytes, err := json.Marshal(worker.RefundResultPayload{
@@ -136,7 +132,9 @@ func TestProcessTaskRefundResult_ReservationRefundClosed_DoesNotAdjustPrepaidAmo
 
 	task := asynq.NewTask(worker.TaskProcessRefundResult, payloadBytes)
 	err = processor.ProcessTaskRefundResult(context.Background(), task)
-	require.NoError(t, err)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "reservation refund results must be applied via payment fact application")
+	require.True(t, errors.Is(err, asynq.SkipRetry))
 }
 
 func TestProcessTaskRefundResult_OrderRefundSuccess_SendsNotificationAndMarksPaymentRefunded(t *testing.T) {
@@ -144,40 +142,22 @@ func TestProcessTaskRefundResult_OrderRefundSuccess_SendsNotificationAndMarksPay
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	distributor := mockwk.NewMockTaskDistributor(ctrl)
 
 	refundOrder := db.RefundOrder{ID: 88, PaymentOrderID: 78, RefundAmount: 500, Status: "processing", OutRefundNo: "RF_ORDER_78_1"}
 	paymentOrder := db.PaymentOrder{
-		ID:           78,
-		OrderID:      pgtype.Int8{Int64: 68, Valid: true},
-		Amount:       500,
-		Status:       "paid",
-		BusinessType: "takeout_order",
-		UserID:       567,
+		ID:             78,
+		OrderID:        pgtype.Int8{Int64: 68, Valid: true},
+		Amount:         500,
+		Status:         "paid",
+		BusinessType:   db.ExternalPaymentBusinessOwnerOrder,
+		PaymentChannel: db.PaymentChannelEcommerce,
+		UserID:         567,
 	}
 
 	store.EXPECT().GetRefundOrderByOutRefundNo(gomock.Any(), refundOrder.OutRefundNo).Return(refundOrder, nil)
 	store.EXPECT().GetPaymentOrder(gomock.Any(), refundOrder.PaymentOrderID).Return(paymentOrder, nil)
-	store.EXPECT().GetOrder(gomock.Any(), int64(68)).Return(db.Order{ID: 68, MerchantID: 66}, nil)
-	store.EXPECT().UpdateRefundOrderToSuccess(gomock.Any(), refundOrder.ID).Return(db.RefundOrder{ID: refundOrder.ID, PaymentOrderID: refundOrder.PaymentOrderID, RefundAmount: refundOrder.RefundAmount, Status: "success", OutRefundNo: refundOrder.OutRefundNo}, nil)
-	store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(int64(500), nil)
-	store.EXPECT().UpdatePaymentOrderToRefunded(gomock.Any(), paymentOrder.ID).Return(db.PaymentOrder{ID: paymentOrder.ID, Status: "refunded"}, nil)
-	distributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.AssignableToTypeOf(&worker.SendNotificationPayload{}), gomock.Any()).DoAndReturn(
-		func(_ context.Context, payload *worker.SendNotificationPayload, _ ...asynq.Option) error {
-			require.Equal(t, int64(567), payload.UserID)
-			require.Equal(t, "refund", payload.Type)
-			require.Equal(t, "退款成功", payload.Title)
-			require.Contains(t, payload.Content, "5.00")
-			require.Equal(t, int64(88), payload.RelatedID)
-			require.Equal(t, "refund", payload.RelatedType)
-			require.Equal(t, refundOrder.OutRefundNo, payload.ExtraData["out_refund_no"])
-			require.Equal(t, "refund_order_78", payload.ExtraData["refund_id"])
-			require.Equal(t, int64(500), payload.ExtraData["amount"])
-			return nil
-		},
-	)
 
-	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
 	payloadBytes, err := json.Marshal(worker.RefundResultPayload{
 		OutRefundNo:  refundOrder.OutRefundNo,
 		RefundStatus: "SUCCESS",
@@ -187,7 +167,35 @@ func TestProcessTaskRefundResult_OrderRefundSuccess_SendsNotificationAndMarksPay
 
 	task := asynq.NewTask(worker.TaskProcessRefundResult, payloadBytes)
 	err = processor.ProcessTaskRefundResult(context.Background(), task)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "order refund results must be applied via payment fact application")
+	require.True(t, errors.Is(err, asynq.SkipRetry))
+}
+
+func TestProcessTaskRefundResult_PaymentOrderLookupFailureReturnsError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+
+	refundOrder := db.RefundOrder{ID: 89, PaymentOrderID: 79, RefundAmount: 500, Status: "processing", OutRefundNo: "RF_ORDER_79_1"}
+
+	store.EXPECT().GetRefundOrderByOutRefundNo(gomock.Any(), refundOrder.OutRefundNo).Return(refundOrder, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), refundOrder.PaymentOrderID).Return(db.PaymentOrder{}, errors.New("db unavailable"))
+
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
+	payloadBytes, err := json.Marshal(worker.RefundResultPayload{
+		OutRefundNo:  refundOrder.OutRefundNo,
+		RefundStatus: "SUCCESS",
+		RefundID:     "refund_order_79",
+	})
 	require.NoError(t, err)
+
+	task := asynq.NewTask(worker.TaskProcessRefundResult, payloadBytes)
+	err = processor.ProcessTaskRefundResult(context.Background(), task)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "get payment order for refund result routing")
+	require.False(t, errors.Is(err, asynq.SkipRetry))
 }
 
 func TestProcessTaskRefundResult_ClosedDuplicateSkipsWithoutLoadingPaymentOrder(t *testing.T) {

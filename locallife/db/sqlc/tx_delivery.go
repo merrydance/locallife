@@ -9,6 +9,7 @@ import (
 )
 
 var ErrDeliveryStateTransitionConflict = errors.New("delivery state changed concurrently")
+var ErrTakeoutOrderPausedByFoodSafety = errors.New("takeout order is paused due to food safety suspension")
 
 // ==================== 骑手抢单事务 ====================
 
@@ -64,6 +65,10 @@ func (store *SQLStore) UpdateDeliveryToPickupTx(ctx context.Context, arg UpdateD
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
 
+		if err := ensureFoodSafetyTakeoutProgressAllowed(ctx, q, arg.OrderID); err != nil {
+			return err
+		}
+
 		result.Delivery, err = q.UpdateDeliveryToPickup(ctx, UpdateDeliveryToPickupParams{
 			ID:      arg.DeliveryID,
 			RiderID: pgtype.Int8{Int64: arg.RiderID, Valid: true},
@@ -95,6 +100,10 @@ func (store *SQLStore) UpdateDeliveryToPickedTx(ctx context.Context, arg UpdateD
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
+
+		if err := ensureFoodSafetyTakeoutProgressAllowed(ctx, q, arg.OrderID); err != nil {
+			return err
+		}
 
 		result.Delivery, err = q.UpdateDeliveryToPicked(ctx, UpdateDeliveryToPickedParams{
 			ID:      arg.DeliveryID,
@@ -141,6 +150,10 @@ func (store *SQLStore) UpdateDeliveryToDeliveringTx(ctx context.Context, arg Upd
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
 
+		if err := ensureFoodSafetyTakeoutProgressAllowed(ctx, q, arg.OrderID); err != nil {
+			return err
+		}
+
 		result.Delivery, err = q.UpdateDeliveryToDelivering(ctx, UpdateDeliveryToDeliveringParams{
 			ID:      arg.DeliveryID,
 			RiderID: pgtype.Int8{Int64: arg.RiderID, Valid: true},
@@ -178,6 +191,10 @@ func (store *SQLStore) GrabOrderTx(ctx context.Context, arg GrabOrderTxParams) (
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
+
+		if err := ensureFoodSafetyTakeoutProgressAllowed(ctx, q, arg.OrderID); err != nil {
+			return err
+		}
 
 		order, err := q.GetOrderForUpdate(ctx, arg.OrderID)
 		if err != nil {

@@ -15,10 +15,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/ocr"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/worker"
 	"github.com/rs/zerolog/log"
 )
 
@@ -50,91 +52,96 @@ func (l *loggingReader) Close() error {
 
 // BusinessLicenseOCRData 营业执照OCR识别数据
 type BusinessLicenseOCRData struct {
-	Status              string `json:"status,omitempty"`               // pending/processing/done/failed
-	Error               string `json:"error,omitempty"`                // failure reason (if any)
-	ErrorCode           string `json:"error_code,omitempty"`           // machine-readable failure code
-	AlertEmittedAt      string `json:"alert_emitted_at,omitempty"`     // 平台告警发送时间
-	QueuedAt            string `json:"queued_at,omitempty"`            // task enqueued time
-	StartedAt           string `json:"started_at,omitempty"`           // task started processing time
-	OCRJobID            *int64 `json:"ocr_job_id,omitempty"`           // 统一 OCR 任务 ID
-	RegNum              string `json:"reg_num,omitempty"`              // 注册号
-	EnterpriseName      string `json:"enterprise_name,omitempty"`      // 企业名称
-	LegalRepresentative string `json:"legal_representative,omitempty"` // 法定代表人
-	TypeOfEnterprise    string `json:"type_of_enterprise,omitempty"`   // 类型
-	Address             string `json:"address,omitempty"`              // 地址
-	BusinessScope       string `json:"business_scope,omitempty"`       // 经营范围
-	RegisteredCapital   string `json:"registered_capital,omitempty"`   // 注册资本
-	ValidPeriod         string `json:"valid_period"`                   // 营业期限（如：2020年01月01日至2040年01月01日 或 长期）
-	CreditCode          string `json:"credit_code,omitempty"`          // 统一社会信用代码
-	OCRAt               string `json:"ocr_at,omitempty"`               // OCR识别时间
+	Status              string        `json:"status,omitempty"`           // pending/processing/done/failed
+	Error               string        `json:"error,omitempty"`            // failure reason (if any)
+	ErrorCode           string        `json:"error_code,omitempty"`       // machine-readable failure code
+	AlertEmittedAt      string        `json:"alert_emitted_at,omitempty"` // 平台告警发送时间
+	Readiness           *OCRReadiness `json:"readiness,omitempty"`
+	QueuedAt            string        `json:"queued_at,omitempty"`            // task enqueued time
+	StartedAt           string        `json:"started_at,omitempty"`           // task started processing time
+	OCRJobID            *int64        `json:"ocr_job_id,omitempty"`           // 统一 OCR 任务 ID
+	RegNum              string        `json:"reg_num,omitempty"`              // 注册号
+	EnterpriseName      string        `json:"enterprise_name,omitempty"`      // 企业名称
+	LegalRepresentative string        `json:"legal_representative,omitempty"` // 法定代表人
+	TypeOfEnterprise    string        `json:"type_of_enterprise,omitempty"`   // 类型
+	Address             string        `json:"address,omitempty"`              // 地址
+	BusinessScope       string        `json:"business_scope,omitempty"`       // 经营范围
+	RegisteredCapital   string        `json:"registered_capital,omitempty"`   // 注册资本
+	ValidPeriod         string        `json:"valid_period"`                   // 营业期限（如：2020年01月01日至2040年01月01日 或 长期）
+	CreditCode          string        `json:"credit_code,omitempty"`          // 统一社会信用代码
+	OCRAt               string        `json:"ocr_at,omitempty"`               // OCR识别时间
 }
 
 // FoodPermitOCRData 食品经营许可证OCR识别数据（通用印刷体识别后解析）
 type FoodPermitOCRData struct {
-	Status         string `json:"status,omitempty"`           // pending/processing/done/failed
-	Error          string `json:"error,omitempty"`            // failure reason (if any)
-	ErrorCode      string `json:"error_code,omitempty"`       // machine-readable failure code
-	AlertEmittedAt string `json:"alert_emitted_at,omitempty"` // 平台告警发送时间
-	QueuedAt       string `json:"queued_at,omitempty"`        // task enqueued time
-	StartedAt      string `json:"started_at,omitempty"`       // task started processing time
-	OCRJobID       *int64 `json:"ocr_job_id,omitempty"`       // 统一 OCR 任务 ID
-	RawText        string `json:"raw_text,omitempty"`         // 原始OCR文本
-	PermitNo       string `json:"permit_no,omitempty"`        // 许可证编号
-	CompanyName    string `json:"company_name,omitempty"`     // 企业名称
-	OperatorName   string `json:"operator_name,omitempty"`    // 经营者/法定代表人姓名
-	ValidFrom      string `json:"valid_from,omitempty"`       // 有效期起
-	ValidTo        string `json:"valid_to,omitempty"`         // 有效期止（如：2025年12月31日 或 长期）
-	OCRAt          string `json:"ocr_at,omitempty"`           // OCR识别时间
+	Status         string        `json:"status,omitempty"`           // pending/processing/done/failed
+	Error          string        `json:"error,omitempty"`            // failure reason (if any)
+	ErrorCode      string        `json:"error_code,omitempty"`       // machine-readable failure code
+	AlertEmittedAt string        `json:"alert_emitted_at,omitempty"` // 平台告警发送时间
+	Readiness      *OCRReadiness `json:"readiness,omitempty"`
+	QueuedAt       string        `json:"queued_at,omitempty"`     // task enqueued time
+	StartedAt      string        `json:"started_at,omitempty"`    // task started processing time
+	OCRJobID       *int64        `json:"ocr_job_id,omitempty"`    // 统一 OCR 任务 ID
+	RawText        string        `json:"raw_text,omitempty"`      // 原始OCR文本
+	PermitNo       string        `json:"permit_no,omitempty"`     // 许可证编号
+	CompanyName    string        `json:"company_name,omitempty"`  // 企业名称
+	OperatorName   string        `json:"operator_name,omitempty"` // 经营者/法定代表人姓名
+	ValidFrom      string        `json:"valid_from,omitempty"`    // 有效期起
+	ValidTo        string        `json:"valid_to,omitempty"`      // 有效期止（如：2025年12月31日 或 长期）
+	OCRAt          string        `json:"ocr_at,omitempty"`        // OCR识别时间
 }
 
 // MerchantIDCardOCRData 商户法人身份证OCR识别数据
 type MerchantIDCardOCRData struct {
-	Status         string `json:"status,omitempty"`           // pending/processing/done/failed
-	Error          string `json:"error,omitempty"`            // failure reason (if any)
-	ErrorCode      string `json:"error_code,omitempty"`       // machine-readable failure code
-	AlertEmittedAt string `json:"alert_emitted_at,omitempty"` // 平台告警发送时间
-	QueuedAt       string `json:"queued_at,omitempty"`        // task enqueued time
-	StartedAt      string `json:"started_at,omitempty"`       // task started processing time
-	OCRJobID       *int64 `json:"ocr_job_id,omitempty"`       // 统一 OCR 任务 ID
-	Name           string `json:"name,omitempty"`             // 姓名
-	IDNumber       string `json:"id_number,omitempty"`        // 身份证号
-	Gender         string `json:"gender,omitempty"`           // 性别
-	Nation         string `json:"nation,omitempty"`           // 民族
-	Address        string `json:"address,omitempty"`          // 地址
-	ValidDate      string `json:"valid_date,omitempty"`       // 有效期（背面）
-	OCRAt          string `json:"ocr_at,omitempty"`           // OCR识别时间
+	Status         string        `json:"status,omitempty"`           // pending/processing/done/failed
+	Error          string        `json:"error,omitempty"`            // failure reason (if any)
+	ErrorCode      string        `json:"error_code,omitempty"`       // machine-readable failure code
+	AlertEmittedAt string        `json:"alert_emitted_at,omitempty"` // 平台告警发送时间
+	Readiness      *OCRReadiness `json:"readiness,omitempty"`
+	QueuedAt       string        `json:"queued_at,omitempty"`  // task enqueued time
+	StartedAt      string        `json:"started_at,omitempty"` // task started processing time
+	OCRJobID       *int64        `json:"ocr_job_id,omitempty"` // 统一 OCR 任务 ID
+	Name           string        `json:"name,omitempty"`       // 姓名
+	IDNumber       string        `json:"id_number,omitempty"`  // 身份证号
+	Gender         string        `json:"gender,omitempty"`     // 性别
+	Nation         string        `json:"nation,omitempty"`     // 民族
+	Address        string        `json:"address,omitempty"`    // 地址
+	ValidDate      string        `json:"valid_date,omitempty"` // 有效期（背面）
+	OCRAt          string        `json:"ocr_at,omitempty"`     // OCR识别时间
 }
 
 // merchantApplicationDraftResponse 商户申请草稿响应
 type merchantApplicationDraftResponse struct {
-	ID                          int64                   `json:"id"`
-	UserID                      int64                   `json:"user_id"`
-	MerchantName                string                  `json:"merchant_name"`
-	ContactPhone                string                  `json:"contact_phone"`
-	BusinessAddress             string                  `json:"business_address"`
-	Longitude                   *string                 `json:"longitude,omitempty"`
-	Latitude                    *string                 `json:"latitude,omitempty"`
-	RegionID                    *int64                  `json:"region_id,omitempty"`
-	BusinessLicenseMediaAssetID *int64                  `json:"business_license_media_asset_id,omitempty"`
-	BusinessLicenseURL          *string                 `json:"business_license_url,omitempty"`
-	BusinessLicenseNumber       string                  `json:"business_license_number"`
-	BusinessScope               *string                 `json:"business_scope,omitempty"`
-	BusinessLicenseOCR          *BusinessLicenseOCRData `json:"business_license_ocr,omitempty"`
-	FoodPermitMediaAssetID      *int64                  `json:"food_permit_media_asset_id,omitempty"`
-	FoodPermitURL               *string                 `json:"food_permit_url,omitempty"`
-	FoodPermitOCR               *FoodPermitOCRData      `json:"food_permit_ocr,omitempty"`
-	LegalPersonName             string                  `json:"legal_person_name"`
-	LegalPersonIDNumber         string                  `json:"legal_person_id_number"`
-	IDCardFrontMediaAssetID     *int64                  `json:"id_card_front_media_asset_id,omitempty"`
-	IDCardBackMediaAssetID      *int64                  `json:"id_card_back_media_asset_id,omitempty"`
-	IDCardFrontOCR              *MerchantIDCardOCRData  `json:"id_card_front_ocr,omitempty"`
-	IDCardBackOCR               *MerchantIDCardOCRData  `json:"id_card_back_ocr,omitempty"`
-	StorefrontImages            []string                `json:"storefront_images,omitempty"`
-	EnvironmentImages           []string                `json:"environment_images,omitempty"`
-	Status                      string                  `json:"status"`
-	RejectReason                *string                 `json:"reject_reason,omitempty"`
-	CreatedAt                   time.Time               `json:"created_at"`
-	UpdatedAt                   time.Time               `json:"updated_at"`
+	ID                          int64                             `json:"id"`
+	UserID                      int64                             `json:"user_id"`
+	MerchantName                string                            `json:"merchant_name"`
+	ContactPhone                string                            `json:"contact_phone"`
+	BusinessAddress             string                            `json:"business_address"`
+	Longitude                   *string                           `json:"longitude,omitempty"`
+	Latitude                    *string                           `json:"latitude,omitempty"`
+	RegionID                    *int64                            `json:"region_id,omitempty"`
+	BusinessLicenseMediaAssetID *int64                            `json:"business_license_media_asset_id,omitempty"`
+	BusinessLicenseURL          *string                           `json:"business_license_url,omitempty"`
+	BusinessLicenseNumber       string                            `json:"business_license_number"`
+	BusinessScope               *string                           `json:"business_scope,omitempty"`
+	BusinessLicenseOCR          *BusinessLicenseOCRData           `json:"business_license_ocr,omitempty"`
+	FoodPermitMediaAssetID      *int64                            `json:"food_permit_media_asset_id,omitempty"`
+	FoodPermitURL               *string                           `json:"food_permit_url,omitempty"`
+	FoodPermitOCR               *FoodPermitOCRData                `json:"food_permit_ocr,omitempty"`
+	LegalPersonName             string                            `json:"legal_person_name"`
+	LegalPersonIDNumber         string                            `json:"legal_person_id_number"`
+	IDCardFrontMediaAssetID     *int64                            `json:"id_card_front_media_asset_id,omitempty"`
+	IDCardBackMediaAssetID      *int64                            `json:"id_card_back_media_asset_id,omitempty"`
+	IDCardFrontOCR              *MerchantIDCardOCRData            `json:"id_card_front_ocr,omitempty"`
+	IDCardBackOCR               *MerchantIDCardOCRData            `json:"id_card_back_ocr,omitempty"`
+	StorefrontImages            []string                          `json:"storefront_images,omitempty"`
+	EnvironmentImages           []string                          `json:"environment_images,omitempty"`
+	ReviewSummary               *onboardingReviewSummaryResponse  `json:"review_summary,omitempty"`
+	ActiveCredentials           []activeCredentialSummaryResponse `json:"active_credentials,omitempty"`
+	Status                      string                            `json:"status"`
+	RejectReason                *string                           `json:"reject_reason,omitempty"`
+	CreatedAt                   time.Time                         `json:"created_at"`
+	UpdatedAt                   time.Time                         `json:"updated_at"`
 }
 
 func (server *Server) defaultOCRProviderName(documentType ocr.DocumentType) ocr.ProviderName {
@@ -180,7 +187,7 @@ func (server *Server) applicantVisiblePublicMediaURL(ctx context.Context, assetI
 	return &url
 }
 
-func (server *Server) newMerchantApplicationDraftResponse(ctx context.Context, app db.MerchantApplication) merchantApplicationDraftResponse {
+func (server *Server) newMerchantApplicationDraftResponse(ctx context.Context, app db.MerchantApplication) (merchantApplicationDraftResponse, error) {
 	resp := merchantApplicationDraftResponse{
 		ID:                          app.ID,
 		UserID:                      app.UserID,
@@ -196,6 +203,8 @@ func (server *Server) newMerchantApplicationDraftResponse(ctx context.Context, a
 		Status:                      app.Status,
 		CreatedAt:                   app.CreatedAt,
 		UpdatedAt:                   app.UpdatedAt,
+		ReviewSummary:               decodeOnboardingReviewSummary(app.ReviewSummary),
+		ActiveCredentials:           server.loadMerchantActiveCredentialSummaries(ctx, app.UserID),
 	}
 
 	// 经纬度
@@ -248,62 +257,88 @@ func (server *Server) newMerchantApplicationDraftResponse(ctx context.Context, a
 	// 解析OCR数据
 	if len(app.BusinessLicenseOcr) > 0 {
 		var ocr BusinessLicenseOCRData
-		if json.Unmarshal(app.BusinessLicenseOcr, &ocr) == nil {
-			if ocr.Status == "" {
-				ocr.Status = "done"
-			}
-			resp.BusinessLicenseOCR = &ocr
+		if err := decodeMerchantApplicationJSONField(app.ID, "business_license_ocr", app.BusinessLicenseOcr, &ocr); err != nil {
+			return merchantApplicationDraftResponse{}, err
 		}
+		if ocr.Status == "" {
+			ocr.Status = "done"
+		}
+		resp.BusinessLicenseOCR = &ocr
 	}
 	if len(app.FoodPermitOcr) > 0 {
 		var ocr FoodPermitOCRData
-		if json.Unmarshal(app.FoodPermitOcr, &ocr) == nil {
-			if ocr.Status == "" {
-				ocr.Status = "done"
-			}
-			resp.FoodPermitOCR = &ocr
+		if err := decodeMerchantApplicationJSONField(app.ID, "food_permit_ocr", app.FoodPermitOcr, &ocr); err != nil {
+			return merchantApplicationDraftResponse{}, err
 		}
+		if ocr.Status == "" {
+			ocr.Status = "done"
+		}
+		resp.FoodPermitOCR = &ocr
 	}
 	if len(app.IDCardFrontOcr) > 0 {
 		var ocr MerchantIDCardOCRData
-		if json.Unmarshal(app.IDCardFrontOcr, &ocr) == nil {
-			if ocr.Status == "" {
-				ocr.Status = "done"
-			}
-			resp.IDCardFrontOCR = &ocr
+		if err := decodeMerchantApplicationJSONField(app.ID, "id_card_front_ocr", app.IDCardFrontOcr, &ocr); err != nil {
+			return merchantApplicationDraftResponse{}, err
 		}
+		if ocr.Status == "" {
+			ocr.Status = "done"
+		}
+		resp.IDCardFrontOCR = &ocr
 	}
 	if len(app.IDCardBackOcr) > 0 {
 		var ocr MerchantIDCardOCRData
-		if json.Unmarshal(app.IDCardBackOcr, &ocr) == nil {
-			if ocr.Status == "" {
-				ocr.Status = "done"
-			}
-			resp.IDCardBackOCR = &ocr
+		if err := decodeMerchantApplicationJSONField(app.ID, "id_card_back_ocr", app.IDCardBackOcr, &ocr); err != nil {
+			return merchantApplicationDraftResponse{}, err
 		}
+		if ocr.Status == "" {
+			ocr.Status = "done"
+		}
+		resp.IDCardBackOCR = &ocr
 	}
 
 	// 解析门头照和环境照（jsonb数组）
 	if len(app.StorefrontImages) > 0 {
 		var images []string
-		if json.Unmarshal(app.StorefrontImages, &images) == nil {
-			for i, img := range images {
-				images[i] = server.resolvePublicUploadURLForClient(img)
-			}
-			resp.StorefrontImages = images
+		if err := decodeMerchantApplicationJSONField(app.ID, "storefront_images", app.StorefrontImages, &images); err != nil {
+			return merchantApplicationDraftResponse{}, err
 		}
+		for i, img := range images {
+			images[i] = server.resolvePublicUploadURLForClient(img)
+		}
+		resp.StorefrontImages = images
 	}
 	if len(app.EnvironmentImages) > 0 {
 		var images []string
-		if json.Unmarshal(app.EnvironmentImages, &images) == nil {
-			for i, img := range images {
-				images[i] = server.resolvePublicUploadURLForClient(img)
-			}
-			resp.EnvironmentImages = images
+		if err := decodeMerchantApplicationJSONField(app.ID, "environment_images", app.EnvironmentImages, &images); err != nil {
+			return merchantApplicationDraftResponse{}, err
 		}
+		for i, img := range images {
+			images[i] = server.resolvePublicUploadURLForClient(img)
+		}
+		resp.EnvironmentImages = images
 	}
 
-	return resp
+	return resp, nil
+}
+
+func decodeMerchantApplicationJSONField(applicationID int64, field string, payload []byte, target interface{}) error {
+	if len(payload) == 0 {
+		return nil
+	}
+	if err := json.Unmarshal(payload, target); err != nil {
+		return fmt.Errorf("decode merchant application %d %s: %w", applicationID, field, err)
+	}
+	return nil
+}
+
+func (server *Server) writeMerchantApplicationDraftResponse(ctx *gin.Context, status int, app db.MerchantApplication) bool {
+	resp, err := server.newMerchantApplicationDraftResponse(ctx.Request.Context(), app)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return false
+	}
+	ctx.JSON(status, resp)
+	return true
 }
 
 // ==================== 获取或创建草稿 ====================
@@ -334,7 +369,7 @@ func (server *Server) getOrCreateMerchantApplicationDraft(ctx *gin.Context) {
 				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 				return
 			}
-			ctx.JSON(http.StatusCreated, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), newApp))
+			server.writeMerchantApplicationDraftResponse(ctx, http.StatusCreated, newApp)
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -353,7 +388,7 @@ func (server *Server) getOrCreateMerchantApplicationDraft(ctx *gin.Context) {
 		app = resetResult.Application
 	}
 
-	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), app))
+	server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, app)
 }
 
 // ==================== 更新基础信息 ====================
@@ -517,7 +552,7 @@ func (server *Server) updateMerchantApplicationBasicInfo(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), updatedApp))
+	server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, updatedApp)
 }
 
 // ==================== 更新门头照和环境照 ====================
@@ -606,8 +641,20 @@ func (server *Server) updateMerchantApplicationImages(ctx *gin.Context) {
 
 	// 记录更新前的旧图片列表，用于稍后删除被移除的图片
 	var oldStorefront, oldEnvironment []string
-	_ = json.Unmarshal(app.StorefrontImages, &oldStorefront)
-	_ = json.Unmarshal(app.EnvironmentImages, &oldEnvironment)
+	if req.StorefrontImages != nil {
+		oldStorefront, err = decodeStoredMerchantApplicationImageList(app.ID, "storefront_images", app.StorefrontImages)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+	}
+	if req.EnvironmentImages != nil {
+		oldEnvironment, err = decodeStoredMerchantApplicationImageList(app.ID, "environment_images", app.EnvironmentImages)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+	}
 
 	// 注意：用 != nil 而非 len > 0，使得前端传空数组 [] 时能正确清空图片
 	if req.StorefrontImages != nil {
@@ -661,7 +708,18 @@ func (server *Server) updateMerchantApplicationImages(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), updatedApp))
+	server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, updatedApp)
+}
+
+func decodeStoredMerchantApplicationImageList(applicationID int64, field string, payload []byte) ([]string, error) {
+	if len(payload) == 0 {
+		return nil, nil
+	}
+	var images []string
+	if err := json.Unmarshal(payload, &images); err != nil {
+		return nil, fmt.Errorf("decode merchant application %d %s: %w", applicationID, field, err)
+	}
+	return images, nil
 }
 
 // deleteMerchantApplicationDocument godoc
@@ -747,7 +805,7 @@ func (server *Server) deleteMerchantApplicationDocument(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), updatedApp))
+	server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, updatedApp)
 }
 
 // ==================== 上传营业执照并OCR识别 ====================
@@ -861,6 +919,7 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 	}
 
 	if err := server.checkMerchantApplicationApproval(ctx, app); err != nil {
+		server.recordMerchantBlockedReview(ctx, app, authPayload.UserID, err)
 		log.Warn().Str("request_id", requestID).Str("reject_reason", err.Error()).Msg("submit blocked: merchant application remains editable")
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
@@ -880,64 +939,66 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 		}
 	}
 
-	// 审核通过 - 使用事务确保原子性
-	var storefrontImages []string
-	if len(submittedApp.StorefrontImages) > 0 {
-		json.Unmarshal(submittedApp.StorefrontImages, &storefrontImages) //nolint:errcheck
+	reviewExecutor := logic.NewMerchantOnboardingReviewService(server.store, server.onboardingReviewService, server.credentialGovernanceService)
+	var queuedRun *db.OnboardingReviewRun
+	if server.onboardingReviewService != nil && server.taskDistributor != nil {
+		run, err := server.onboardingReviewService.CreateMerchantReviewRun(ctx, submittedApp.ID, logic.OnboardingReviewDecision{
+			RequestedBy: &authPayload.UserID,
+			OCRJobRefs:  merchantApplicationOCRJobRefs(submittedApp),
+			Snapshot: map[string]any{
+				"application_id":   submittedApp.ID,
+				"application_type": "merchant",
+				"status":           submittedApp.Status,
+				"user_id":          submittedApp.UserID,
+				"merchant_name":    submittedApp.MerchantName,
+			},
+		})
+		if err != nil {
+			log.Error().Err(err).Int64("application_id", submittedApp.ID).Msg("create merchant onboarding review run failed, fallback to sync review")
+		} else {
+			queuedRun = &run
+			err = server.taskDistributor.DistributeTaskOnboardingReview(ctx, &worker.OnboardingReviewPayload{
+				ReviewRunID:     run.ID,
+				ApplicationID:   submittedApp.ID,
+				ApplicationType: "merchant",
+				RequestedBy:     authPayload.UserID,
+			})
+			if err == nil {
+				attachMerchantReviewSummary(&submittedApp, queuedRun)
+				server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, submittedApp)
+				return
+			}
+			log.Error().Err(err).Int64("application_id", submittedApp.ID).Int64("review_run_id", run.ID).Msg("enqueue merchant onboarding review failed, fallback to sync review")
+		}
 	}
-	var environmentImages []string
-	if len(submittedApp.EnvironmentImages) > 0 {
-		json.Unmarshal(submittedApp.EnvironmentImages, &environmentImages) //nolint:errcheck
-	}
-	appData, _ := json.Marshal(map[string]interface{}{
-		"business_license_number":         submittedApp.BusinessLicenseNumber,
-		"legal_person_name":               submittedApp.LegalPersonName,
-		"legal_person_id_number":          submittedApp.LegalPersonIDNumber,
-		"business_license_media_asset_id": submittedApp.BusinessLicenseMediaAssetID.Int64,
-		"id_card_front_media_asset_id":    submittedApp.IDCardFrontMediaAssetID.Int64,
-		"id_card_back_media_asset_id":     submittedApp.IDCardBackMediaAssetID.Int64,
-		"food_permit_media_asset_id":      submittedApp.FoodPermitMediaAssetID.Int64,
-		"storefront_images":               storefrontImages,
-		"environment_images":              environmentImages,
-	})
 
-	var regionID int64
-	if submittedApp.RegionID.Valid {
-		regionID = submittedApp.RegionID.Int64
-	}
-
-	// 事务性审核：更新申请状态 + 创建商户 + 创建用户角色
-	txResult, err := server.store.ApproveMerchantApplicationTx(ctx, db.ApproveMerchantApplicationTxParams{
-		ApplicationID: submittedApp.ID,
-		UserID:        submittedApp.UserID,
-		MerchantName:  submittedApp.MerchantName,
-		Phone:         submittedApp.ContactPhone,
-		Address:       submittedApp.BusinessAddress,
-		Latitude:      submittedApp.Latitude,
-		Longitude:     submittedApp.Longitude,
-		RegionID:      regionID,
-		AppData:       appData,
-	})
+	result, err := reviewExecutor.ProcessSubmittedApplication(ctx, submittedApp, authPayload.UserID, onboardingReviewRunID(queuedRun))
 	if err != nil {
-		log.Error().Err(err).Int64("application_id", submittedApp.ID).Msg("商户审核通过事务失败")
+		log.Error().Err(err).Int64("application_id", submittedApp.ID).Msg("merchant onboarding review failed")
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-
-	if strings.TrimSpace(txResult.Application.MerchantName) == "" {
-		txResult.Application.MerchantName = submittedApp.MerchantName
-	}
-	if strings.TrimSpace(txResult.Application.ContactPhone) == "" {
-		txResult.Application.ContactPhone = submittedApp.ContactPhone
+	if result.RestoreReleased && result.Merchant != nil {
+		server.notifyCredentialGovernanceRestored(ctx, "merchant", result.Merchant.ID, result.Application.ID, result.ReviewRun, result.CredentialEntries)
 	}
 
+	if strings.TrimSpace(result.Application.MerchantName) == "" {
+		result.Application.MerchantName = submittedApp.MerchantName
+	}
+	if strings.TrimSpace(result.Application.ContactPhone) == "" {
+		result.Application.ContactPhone = submittedApp.ContactPhone
+	}
+
+	merchantID := int64(0)
+	if result.Merchant != nil {
+		merchantID = result.Merchant.ID
+	}
 	log.Info().
-		Int64("application_id", txResult.Application.ID).
-		Int64("merchant_id", txResult.Merchant.ID).
-		Int64("user_role_id", txResult.UserRole.ID).
+		Int64("application_id", result.Application.ID).
+		Int64("merchant_id", merchantID).
 		Msg("商户审核通过事务完成")
 
-	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), txResult.Application))
+	server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, result.Application)
 }
 
 // validateMerchantApplicationRequired 验证必填字段
@@ -984,43 +1045,62 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 		return apierr(ErrMerchantLocationRequired.Code, "请选择商户地理位置")
 	}
 
-	// 2. 检查营业执照OCR数据
-	if len(app.BusinessLicenseOcr) == 0 {
-		return apierr(ErrBusinessLicenseRequired.Code, "营业执照信息未识别，请重新上传清晰的营业执照照片")
+	payloadResult, err := logic.BuildMerchantDocumentReviewInputFromPayloads(logic.MerchantDocumentReviewPayloads{
+		BusinessLicenseJSON: app.BusinessLicenseOcr,
+		FoodPermitJSON:      app.FoodPermitOcr,
+		IDCardFrontJSON:     app.IDCardFrontOcr,
+		IDCardBackJSON:      app.IDCardBackOcr,
+	})
+	if err != nil {
+		return merchantDocumentReviewAPIError(err)
 	}
 
-	var licenseOCR BusinessLicenseOCRData
-	if err := json.Unmarshal(app.BusinessLicenseOcr, &licenseOCR); err != nil {
-		return apierr(ErrBusinessLicenseRequired.Code, "营业执照信息解析失败，请重新上传清晰完整的营业执照照片")
+	if payloadResult.FoodPermitNeedsNormalizedRepair && server.store != nil && payloadResult.Input.FoodPermit.OCRJobID != nil && *payloadResult.Input.FoodPermit.OCRJobID > 0 {
+		ocrJobID := *payloadResult.Input.FoodPermit.OCRJobID
+		job, jobErr := server.store.GetOCRJob(ctx, ocrJobID)
+		if jobErr != nil {
+			log.Warn().Err(jobErr).Int64("application_id", app.ID).Int64("ocr_job_id", ocrJobID).Msg("submit merchant application: load food permit ocr job for repair failed")
+		} else if len(job.NormalizedResult) > 0 {
+			repairedFoodPermitJSON, changed, repairErr := logic.RepairMerchantFoodPermitFromNormalized(&payloadResult.Input.FoodPermit, job.NormalizedResult)
+			if repairErr != nil {
+				log.Warn().Err(repairErr).Int64("application_id", app.ID).Int64("ocr_job_id", job.ID).Msg("submit merchant application: decode food permit ocr normalized result failed")
+			} else if changed {
+				payloadResult.RepairedFoodPermitJSON = repairedFoodPermitJSON
+				log.Info().Int64("application_id", app.ID).Int64("ocr_job_id", job.ID).Str("ocr_provider", job.Provider).Msg("submit merchant application: repaired food permit ocr from job result")
+			}
+		}
 	}
 
-	// 3. 检查营业执照有效期
-	if !isValidPeriodValid(licenseOCR.ValidPeriod) {
-		return apierr(ErrApplymentBusinessLicenseValidityInvalid.Code, "营业执照已过期或有效期无法识别，请重新上传在有效期内的营业执照")
+	server.persistRepairedFoodPermitOCR(ctx, app.ID, payloadResult.RepairedFoodPermitJSON)
+
+	documentReview, err := logic.EvaluateMerchantDocumentReview(payloadResult.Input, time.Now())
+	if err != nil {
+		if reviewErr, ok := err.(*logic.MerchantDocumentReviewError); ok {
+			switch reviewErr.Code {
+			case logic.MerchantDocumentReviewCodeFoodPermitNameUnreadable, logic.MerchantDocumentReviewCodeFoodPermitNameMismatch:
+				server.logFoodPermitValidationFailure(ctx, app, payloadResult.Input.FoodPermit, strings.TrimSpace(payloadResult.Input.BusinessLicense.EnterpriseName), strings.TrimSpace(payloadResult.Input.FoodPermit.CompanyName), reviewErr.Code)
+			}
+		}
+		return merchantDocumentReviewAPIError(err)
 	}
 
-	// 4. 检查经营范围是否包含餐饮相关
-	if !isCateringBusiness(licenseOCR.EnterpriseName, licenseOCR.BusinessScope) {
-		return apierr(ErrApplicationInvalidState.Code, "营业执照经营范围未识别到餐饮相关内容，请确认经营范围后重试")
-	}
-
-	// 5. 检查地址匹配（营业执照地址与地图坐标反查地址）
+	// 3. 检查地址匹配（营业执照地址与地图坐标反查地址）
 	reviewAddresses, reviewErr := server.resolveMerchantLocationReviewAddresses(ctx, app)
 	if reviewErr != nil {
 		log.Warn().Err(reviewErr).Int64("application_id", app.ID).Msg("merchant application: reverse geocode failed, fallback to stored address")
 	}
-	matchedAddress, matched := matchMerchantLicenseAddress(licenseOCR.Address, reviewAddresses)
+	matchedAddress, matched := matchMerchantLicenseAddress(documentReview.LicenseAddress, reviewAddresses)
 	if !matched {
 		reviewAddress := app.BusinessAddress
 		if len(reviewAddresses) > 0 {
 			reviewAddress = reviewAddresses[0]
 		}
-		return apierr(ErrInvalidAddress.Code, fmt.Sprintf("地图定位与营业执照注册地址不一致，请重新在地图上选择店铺位置。营业执照地址：%s；当前定位解析地址：%s。", licenseOCR.Address, strings.TrimSpace(reviewAddress)))
+		return apierr(ErrInvalidAddress.Code, fmt.Sprintf("地图定位与营业执照注册地址不一致，请重新在地图上选择店铺位置。营业执照地址：%s；当前定位解析地址：%s。", documentReview.LicenseAddress, strings.TrimSpace(reviewAddress)))
 	}
 	if matchedAddress != "" && matchedAddress != app.BusinessAddress {
 		log.Info().
 			Int64("application_id", app.ID).
-			Str("license_address", licenseOCR.Address).
+			Str("license_address", documentReview.LicenseAddress).
 			Str("review_address", matchedAddress).
 			Msg("merchant application address matched by geocoded location")
 	}
@@ -1062,109 +1142,8 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 		}
 	}
 
-	// 7. 检查食品经营许可证
-	if len(app.FoodPermitOcr) == 0 {
-		return apierr(ErrFoodLicenseRequired.Code, "食品经营许可证信息未识别，请重新上传清晰完整的食品经营许可证照片")
-	}
-
-	var foodPermitOCR FoodPermitOCRData
-	if err := json.Unmarshal(app.FoodPermitOcr, &foodPermitOCR); err != nil {
-		return apierr(ErrFoodLicenseRequired.Code, "食品经营许可证信息解析失败，请重新上传清晰完整的食品经营许可证照片")
-	}
-
-	server.repairFoodPermitOCRFields(ctx, app.ID, &foodPermitOCR)
-
-	// 检查食品经营许可证有效期
-	if !isFoodPermitValid(foodPermitOCR.ValidTo) {
-		return apierr(ErrFoodLicenseRequired.Code, "食品经营许可证已过期或有效期无法识别，请重新上传在有效期内的证件")
-	}
-
-	// 新增规则：食品经营许可证企业名称必须与营业执照企业名称一致。
-	// 优先使用结构化 company_name；若结构化字段缺失、异常或与营业执照不一致，则回退到 RawText 做全文匹配，
-	// 避免解析器误把地址/说明文字当成企业名称时误伤正常申请。
-	licenseName := normalizeCompanyName(licenseOCR.EnterpriseName)
-	permitName := normalizeCompanyName(foodPermitOCR.CompanyName)
-	permitOperator := strings.TrimSpace(foodPermitOCR.OperatorName)
-	licenseLegalPerson := strings.TrimSpace(licenseOCR.LegalRepresentative)
-	if licenseName == "" {
-		return ErrMerchantBusinessLicenseNameUnreadable
-	}
-	matchedByRawText := false
-	if permitName != "" && companyNamesMatch(licenseName, permitName) {
-		matchedByRawText = false
-	} else if foodPermitRawTextContainsCompanyName(foodPermitOCR.RawText, licenseName) {
-		permitName = licenseName
-		matchedByRawText = true
-	} else if permitName == "" && canUseFoodPermitOperatorFallback(foodPermitOCR.RawText, permitOperator, licenseLegalPerson) {
-		permitName = licenseName
-		matchedByRawText = true
-		log.Info().Int64("application_id", app.ID).Int64("user_id", app.UserID).Str("license_name", licenseName).Str("permit_operator", permitOperator).Msg("submit merchant application: food permit validated by operator fallback")
-	}
-	if permitName == "" {
-		server.logFoodPermitValidationFailure(ctx, app, foodPermitOCR, licenseName, permitName, "name_unreadable")
-		return ErrMerchantFoodPermitNameUnreadable
-	}
-	if !companyNamesMatch(licenseName, permitName) {
-		if isSuspiciousFoodPermitCompanyName(permitName) {
-			server.logFoodPermitValidationFailure(ctx, app, foodPermitOCR, licenseName, permitName, "suspicious_company_name")
-			return ErrMerchantFoodPermitNameUnreadable
-		}
-		server.logFoodPermitValidationFailure(ctx, app, foodPermitOCR, licenseName, permitName, "name_mismatch")
-		return apierr(ErrMerchantFoodPermitNameMismatch.Code, fmt.Sprintf("食品经营许可证主体名称与营业执照企业名称不一致，请核对后重试。营业执照：%s；食品经营许可证：%s。", licenseName, permitName))
-	}
-	// 仅前缀宽松匹配通过（非完全一致）时，额外要求经营者姓名与营业执照法人一致
-	if !matchedByRawText && licenseName != permitName {
-		if licenseLegalPerson != "" && permitOperator != "" && licenseLegalPerson != permitOperator {
-			server.logFoodPermitValidationFailure(ctx, app, foodPermitOCR, licenseName, permitName, "operator_mismatch")
-			return apierr(ErrMerchantFoodPermitNameMismatch.Code, fmt.Sprintf("食品经营许可证主体名称与营业执照企业名称未完全一致，且食品经营许可证经营者（%s）与营业执照法人（%s）不一致，请核对证照信息后重试。", permitOperator, licenseLegalPerson))
-		}
-	}
-
-	// 新增规则：食品经营许可证有效期需超过提交当日30天
-	if !isChineseDateAtLeastDaysAfterNow(foodPermitOCR.ValidTo, 30) {
-		return apierr(ErrFoodLicenseRequired.Code, "食品经营许可证有效期需至少超过当前日期30天，请更新证件后重试")
-	}
-
-	// 7. 检查身份证正面信息（姓名）
-	if len(app.IDCardFrontOcr) == 0 {
-		return apierr(ErrIDCardFrontRequired.Code, "身份证正面信息未识别，请重新上传清晰的身份证正面照片")
-	}
-
-	var idCardFrontOCR MerchantIDCardOCRData
-	if err := json.Unmarshal(app.IDCardFrontOcr, &idCardFrontOCR); err != nil {
-		return apierr(ErrIDCardFrontRequired.Code, "身份证正面信息解析失败，请重新上传清晰的身份证正面照片")
-	}
-
-	// 新增规则：身份证姓名必须与营业执照法人一致
-	licenseLegalPerson = strings.TrimSpace(licenseOCR.LegalRepresentative)
-	idCardName := strings.TrimSpace(idCardFrontOCR.Name)
-	if licenseLegalPerson == "" {
-		return apierr(ErrBusinessLicenseRequired.Code, "营业执照法人姓名未识别，请重新上传清晰完整的营业执照照片")
-	}
-	if idCardName == "" {
-		return apierr(ErrIDCardFrontRequired.Code, "身份证姓名未识别，请重新上传清晰的身份证正面照片")
-	}
-	if licenseLegalPerson != idCardName {
-		return apierr(ErrApplicationInvalidState.Code, fmt.Sprintf("身份证姓名与营业执照法人信息不一致，请核对后重试。身份证：%s；营业执照法人：%s。", idCardName, licenseLegalPerson))
-	}
-
-	// 8. 检查身份证背面信息（有效期）
-	if len(app.IDCardBackOcr) == 0 {
-		return apierr(ErrIDCardBackRequired.Code, "身份证背面信息未识别，请重新上传清晰的身份证背面照片")
-	}
-
-	var idCardBackOCR MerchantIDCardOCRData
-	if err := json.Unmarshal(app.IDCardBackOcr, &idCardBackOCR); err != nil {
-		return apierr(ErrIDCardBackRequired.Code, "身份证背面信息解析失败，请重新上传清晰的身份证背面照片")
-	}
-
-	// 检查身份证有效期
-	if !isIDCardValidPeriodValid(idCardBackOCR.ValidDate) {
-		return apierr(ErrIDCardBackRequired.Code, "法人身份证已过期或有效期无法识别，请重新上传在有效期内的身份证背面照片")
-	}
-
 	// P1-038: 防欺诈多重校验
-	// 9. 检查营业执照是否已被使用
+	// 4. 检查营业执照是否已被使用
 	licenseCount, err := server.store.CheckBusinessLicenseExists(ctx, db.CheckBusinessLicenseExistsParams{
 		BusinessLicenseNumber: app.BusinessLicenseNumber,
 		ID:                    app.ID,
@@ -1177,7 +1156,7 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 		return apierr(ErrApplicationInvalidState.Code, "该营业执照号码已被其他商户使用，如非重复申请请联系客服处理") // 防止恶意抢注/重复入驻
 	}
 
-	// 10. 检查身份证是否已被使用
+	// 5. 检查身份证是否已被使用
 	// 注意：此处严格限制身份证唯一性，暂不支持同一法人开设多家店铺（防止欺诈多账号）
 	// 如需支持连锁店，需放宽此处逻辑或增加连锁店审核流程
 	idCardCount, err := server.store.CheckLegalPersonIDExists(ctx, db.CheckLegalPersonIDExistsParams{
@@ -1195,117 +1174,37 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 	return nil
 }
 
-// companyNamesMatch 比较两个企业名称是否实质相同。
-// 允许一方是另一方的前缀且差异 ≤ 2 个 Unicode 字符，以容忍 OCR 漏识末尾
-// 「馆」「店」「厅」「坊」等一两个字的情况。
-func companyNamesMatch(a, b string) bool {
-	if a == b {
-		return true
+func merchantDocumentReviewAPIError(err error) error {
+	reviewErr, ok := err.(*logic.MerchantDocumentReviewError)
+	if !ok {
+		return err
 	}
-	ra := []rune(a)
-	rb := []rune(b)
-	// 确保 ra 是较短的那个
-	if len(ra) > len(rb) {
-		ra, rb = rb, ra
+
+	switch reviewErr.Code {
+	case logic.MerchantDocumentReviewCodeBusinessLicenseRequired:
+		return apierr(ErrBusinessLicenseRequired.Code, reviewErr.Message)
+	case logic.MerchantDocumentReviewCodeFoodLicenseRequired:
+		return apierr(ErrFoodLicenseRequired.Code, reviewErr.Message)
+	case logic.MerchantDocumentReviewCodeIDCardFrontRequired:
+		return apierr(ErrIDCardFrontRequired.Code, reviewErr.Message)
+	case logic.MerchantDocumentReviewCodeIDCardBackRequired:
+		return apierr(ErrIDCardBackRequired.Code, reviewErr.Message)
+	case logic.MerchantDocumentReviewCodeBusinessLicenseValidityInvalid:
+		return apierr(ErrApplymentBusinessLicenseValidityInvalid.Code, reviewErr.Message)
+	case logic.MerchantDocumentReviewCodeApplicationInvalidState:
+		return apierr(ErrApplicationInvalidState.Code, reviewErr.Message)
+	case logic.MerchantDocumentReviewCodeLicenseNameUnreadable:
+		return apierr(ErrMerchantBusinessLicenseNameUnreadable.Code, reviewErr.Message)
+	case logic.MerchantDocumentReviewCodeFoodPermitNameUnreadable:
+		return apierr(ErrMerchantFoodPermitNameUnreadable.Code, reviewErr.Message)
+	case logic.MerchantDocumentReviewCodeFoodPermitNameMismatch:
+		return apierr(ErrMerchantFoodPermitNameMismatch.Code, reviewErr.Message)
+	default:
+		return err
 	}
-	diff := len(rb) - len(ra)
-	// 差异超过 2 个字或短的不是长的前缀，视为不一致
-	if diff > 2 {
-		return false
-	}
-	for i, c := range ra {
-		if rb[i] != c {
-			return false
-		}
-	}
-	return true
 }
 
-func foodPermitRawTextContainsCompanyName(rawText, companyName string) bool {
-	normalizedText := normalizeOCRSearchText(rawText)
-	normalizedCompanyName := normalizeCompanyName(companyName)
-	if normalizedText == "" || normalizedCompanyName == "" {
-		return false
-	}
-	return strings.Contains(normalizedText, normalizedCompanyName)
-}
-
-func canUseFoodPermitOperatorFallback(rawText, permitOperator, licenseLegalPerson string) bool {
-	if normalizeCompanyName(permitOperator) == "" || normalizeCompanyName(licenseLegalPerson) == "" {
-		return false
-	}
-	if normalizeCompanyName(permitOperator) != normalizeCompanyName(licenseLegalPerson) {
-		return false
-	}
-	rawText = normalizeOCRSearchText(rawText)
-	if rawText == "" {
-		return false
-	}
-	for _, keyword := range []string{"登记证", "小餐饮", "小作坊"} {
-		if strings.Contains(rawText, keyword) {
-			return true
-		}
-	}
-	return false
-}
-
-func normalizeOCRSearchText(text string) string {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return ""
-	}
-	replacer := strings.NewReplacer(
-		" ", "",
-		"\t", "",
-		"\n", "",
-		"\r", "",
-		"（", "(",
-		"）", ")",
-		"：", "",
-		":", "",
-		"，", "",
-		",", "",
-		"。", "",
-		"、", "",
-		"；", "",
-		";", "",
-		"《", "",
-		"》", "",
-	)
-	return replacer.Replace(text)
-}
-
-func isSuspiciousFoodPermitCompanyName(name string) bool {
-	name = normalizeCompanyName(name)
-	if name == "" {
-		return true
-	}
-	if len([]rune(name)) > 30 {
-		return true
-	}
-	suspiciousKeywords := []string{"地址", "经营场所", "面积", "办理", "许可证", "登记证", "项目", "食品", "小作坊", "小餐饮", "路东", "路西", "请", "《"}
-	for _, keyword := range suspiciousKeywords {
-		if strings.Contains(name, keyword) {
-			return true
-		}
-	}
-	return false
-}
-
-func normalizeCompanyName(name string) string {
-	name = strings.TrimSpace(name)
-	// 去掉常见空白
-	name = strings.ReplaceAll(name, " ", "")
-	name = strings.ReplaceAll(name, "\t", "")
-	name = strings.ReplaceAll(name, "\n", "")
-	name = strings.ReplaceAll(name, "\r", "")
-	// 统一括号形态
-	name = strings.ReplaceAll(name, "（", "(")
-	name = strings.ReplaceAll(name, "）", ")")
-	return name
-}
-
-func (server *Server) logFoodPermitValidationFailure(ctx *gin.Context, app db.MerchantApplication, foodPermitOCR FoodPermitOCRData, licenseName, permitName, reason string) {
+func (server *Server) logFoodPermitValidationFailure(ctx *gin.Context, app db.MerchantApplication, foodPermitOCR logic.MerchantReviewFoodPermitOCRData, licenseName, permitName, reason string) {
 	logger := log.Warn().
 		Int64("application_id", app.ID).
 		Int64("user_id", app.UserID).
@@ -1329,117 +1228,23 @@ func (server *Server) logFoodPermitValidationFailure(ctx *gin.Context, app db.Me
 	logger.Msg("submit merchant application: food permit validation failed")
 }
 
+func (server *Server) persistRepairedFoodPermitOCR(ctx context.Context, appID int64, foodPermitOCR []byte) {
+	if len(foodPermitOCR) == 0 || server.store == nil {
+		return
+	}
+	if _, err := server.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
+		ID:            appID,
+		FoodPermitOcr: foodPermitOCR,
+	}); err != nil {
+		log.Warn().Err(err).Int64("application_id", appID).Msg("submit merchant application: persist repaired food permit ocr failed")
+	}
+}
+
 func truncateMerchantOCRText(text string, maxLen int) string {
 	if len(text) <= maxLen {
 		return text
 	}
 	return text[:maxLen] + "..."
-}
-
-// isChineseDateAtLeastDaysAfterNow 判断形如 2025年12月31日/长期 的日期是否至少晚于 now + days。
-// 长期/永久 视为满足。
-func isChineseDateAtLeastDaysAfterNow(dateStr string, days int) bool {
-	if dateStr == "" {
-		return false
-	}
-	if strings.Contains(dateStr, "长期") || strings.Contains(dateStr, "永久") {
-		return true
-	}
-	// 归一化：去除OCR在年月日前后插入的空格
-	dateStr = strings.ReplaceAll(dateStr, " 年", "年")
-	dateStr = strings.ReplaceAll(dateStr, "年 ", "年")
-	dateStr = strings.ReplaceAll(dateStr, " 月", "月")
-	dateStr = strings.ReplaceAll(dateStr, "月 ", "月")
-	dateStr = strings.ReplaceAll(dateStr, " 日", "日")
-	dateRegex := regexp.MustCompile(`(\d{4})年(\d{1,2})月(\d{1,2})日`)
-	match := dateRegex.FindStringSubmatch(dateStr)
-	if len(match) < 4 {
-		return false
-	}
-	year := match[1]
-	month := match[2]
-	day := match[3]
-	if len(month) == 1 {
-		month = "0" + month
-	}
-	if len(day) == 1 {
-		day = "0" + day
-	}
-	parsed, err := parseISODate(year+"-"+month+"-"+day, "")
-	if err != nil {
-		return false
-	}
-	threshold := time.Now().AddDate(0, 0, days)
-	return parsed.After(threshold)
-}
-
-// isValidPeriodValid 检查营业期限是否有效
-// 格式：长期、长期有效、2020年01月01日至2040年01月01日、2040年01月01日
-func isValidPeriodValid(validPeriod string) bool {
-	if validPeriod == "" {
-		return false
-	}
-
-	// 长期有效
-	if strings.Contains(validPeriod, "长期") || strings.Contains(validPeriod, "永久") {
-		return true
-	}
-
-	// 尝试解析日期
-	// 格式1: 至2040年01月01日
-	// 格式2: 2020年01月01日至2040年01月01日
-	dateRegex := regexp.MustCompile(`(\d{4})年(\d{1,2})月(\d{1,2})日`)
-	matches := dateRegex.FindAllStringSubmatch(validPeriod, -1)
-	if len(matches) == 0 {
-		return false
-	}
-
-	// 取最后一个日期作为有效期止
-	lastMatch := matches[len(matches)-1]
-	if len(lastMatch) < 4 {
-		return false
-	}
-
-	year := lastMatch[1]
-	month := lastMatch[2]
-	day := lastMatch[3]
-
-	// 补零
-	if len(month) == 1 {
-		month = "0" + month
-	}
-	if len(day) == 1 {
-		day = "0" + day
-	}
-
-	// 解析日期
-	dateStr := year + "-" + month + "-" + day
-	expDate, err := parseISODate(dateStr, "")
-	if err != nil {
-		return false
-	}
-
-	return expDate.After(time.Now())
-}
-
-// isCateringBusiness 检查是否为餐饮相关经营
-func isCateringBusiness(enterpriseName, businessScope string) bool {
-	keywords := []string{
-		"餐饮", "餐厅", "饭店", "饭馆", "酒楼", "酒家",
-		"快餐", "小吃", "面馆", "面店", "粉店",
-		"火锅", "烧烤", "串串", "麻辣烫",
-		"奶茶", "茶饮", "咖啡", "甜品",
-		"食品", "食堂", "厨房", "外卖",
-		"菜", "料理", "美食",
-	}
-
-	text := enterpriseName + " " + businessScope
-	for _, keyword := range keywords {
-		if strings.Contains(text, keyword) {
-			return true
-		}
-	}
-	return false
 }
 
 // isAddressMatch 检查营业执照地址与商户地址是否匹配
@@ -1777,309 +1582,6 @@ func extractAddressKeywords(addr string) []string {
 	return keywords
 }
 
-func (server *Server) repairFoodPermitOCRFields(ctx context.Context, appID int64, ocrData *FoodPermitOCRData) {
-	if ocrData == nil || !foodPermitNeedsRepair(*ocrData) {
-		return
-	}
-
-	changed := false
-	if ocrData.RawText != "" {
-		changed = reparseFoodPermitMissingFields(ocrData) || changed
-	}
-	if foodPermitNeedsRepair(*ocrData) {
-		changed = server.hydrateFoodPermitOCRFromJob(ctx, appID, ocrData) || changed
-		if ocrData.RawText != "" {
-			changed = reparseFoodPermitMissingFields(ocrData) || changed
-		}
-	}
-	if !changed || server.store == nil {
-		return
-	}
-
-	reparsed, err := json.Marshal(ocrData)
-	if err != nil {
-		log.Warn().Err(err).Int64("application_id", appID).Msg("submit merchant application: marshal repaired food permit ocr failed")
-		return
-	}
-	if _, err := server.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
-		ID:            appID,
-		FoodPermitOcr: reparsed,
-	}); err != nil {
-		log.Warn().Err(err).Int64("application_id", appID).Msg("submit merchant application: persist repaired food permit ocr failed")
-	}
-}
-
-func foodPermitNeedsRepair(ocr FoodPermitOCRData) bool {
-	return ocr.ValidTo == "" || ocr.OperatorName == "" || ocr.CompanyName == "" || ocr.PermitNo == "" || isSuspiciousFoodPermitCompanyName(ocr.CompanyName)
-}
-
-func (server *Server) hydrateFoodPermitOCRFromJob(ctx context.Context, appID int64, ocrData *FoodPermitOCRData) bool {
-	if server.store == nil || ocrData == nil || ocrData.OCRJobID == nil || *ocrData.OCRJobID <= 0 {
-		return false
-	}
-
-	job, err := server.store.GetOCRJob(ctx, *ocrData.OCRJobID)
-	if err != nil {
-		log.Warn().Err(err).Int64("application_id", appID).Int64("ocr_job_id", *ocrData.OCRJobID).Msg("submit merchant application: load food permit ocr job for repair failed")
-		return false
-	}
-	if len(job.NormalizedResult) == 0 {
-		return false
-	}
-
-	normalized, err := ocr.UnmarshalNormalizedResult(job.NormalizedResult)
-	if err != nil {
-		log.Warn().Err(err).Int64("application_id", appID).Int64("ocr_job_id", job.ID).Msg("submit merchant application: decode food permit ocr normalized result failed")
-		return false
-	}
-	if normalized.FoodPermit == nil {
-		return false
-	}
-
-	changed := populateFoodPermitOCRDataFromNormalized(ocrData, normalized.FoodPermit)
-	if changed {
-		log.Info().Int64("application_id", appID).Int64("ocr_job_id", job.ID).Str("ocr_provider", job.Provider).Msg("submit merchant application: repaired food permit ocr from job result")
-	}
-	return changed
-}
-
-// reparseFoodPermitMissingFields 从 RawText 补充因旧解析器bug漏掉的字段。
-// 用于修复存量OCR缓存数据（如 OCR输出"2027 年01月08日"在旧版未能正确提取的情况）。
-func reparseFoodPermitMissingFields(ocr *FoodPermitOCRData) bool {
-	changed := false
-	raw := ocr.RawText
-	if raw == "" {
-		return false
-	}
-
-	// 提取有效期至
-	if ocr.ValidTo == "" {
-		dateRe := regexp.MustCompile(`有效期至\s*[:：]?\s*(\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日)`)
-		if m := dateRe.FindStringSubmatch(raw); m != nil {
-			// 归一化：去除年月日前后空格
-			norm := strings.ReplaceAll(m[1], " 年", "年")
-			norm = strings.ReplaceAll(norm, "年 ", "年")
-			norm = strings.ReplaceAll(norm, " 月", "月")
-			norm = strings.ReplaceAll(norm, "月 ", "月")
-			norm = strings.ReplaceAll(norm, " 日", "日")
-			if norm != ocr.ValidTo {
-				ocr.ValidTo = norm
-				changed = true
-			}
-		}
-	}
-
-	// 提取许可证/登记证编号
-	if ocr.PermitNo == "" {
-		permitRe := regexp.MustCompile(`(?:JY[0-9]{12,}|(?:登记证编号|证书编号|食品经营许可证编号)\s*[:：]\s*([0-9A-Za-z]{6,}))`)
-		if m := permitRe.FindStringSubmatch(raw); m != nil {
-			if m[1] != "" {
-				if m[1] != ocr.PermitNo {
-					ocr.PermitNo = m[1]
-					changed = true
-				}
-			} else {
-				if m[0] != ocr.PermitNo {
-					ocr.PermitNo = m[0]
-					changed = true
-				}
-			}
-		}
-	}
-
-	// 提取企业/商号名称
-	if ocr.CompanyName == "" || isSuspiciousFoodPermitCompanyName(ocr.CompanyName) {
-		nameRe := regexp.MustCompile(`(?:经营者名称|单位名称|主体名称|商号名称)\s*[:：]?\s*([^\n\r]{2,30})`)
-		if m := nameRe.FindStringSubmatch(raw); m != nil {
-			candidate := normalizeCompanyName(strings.TrimSpace(m[1]))
-			if candidate != "" && !isSuspiciousFoodPermitCompanyName(candidate) && candidate != ocr.CompanyName {
-				ocr.CompanyName = candidate
-				changed = true
-			}
-		}
-	}
-
-	// 提取经营者姓名
-	if ocr.OperatorName == "" {
-		operatorRe := regexp.MustCompile(`经营者姓名\s*[:：]?\s*([^\s\n\r,，。]{2,10})`)
-		if m := operatorRe.FindStringSubmatch(raw); m != nil {
-			candidate := strings.TrimSpace(m[1])
-			if candidate != "" && candidate != ocr.OperatorName {
-				ocr.OperatorName = candidate
-				changed = true
-			}
-		}
-	}
-
-	return changed
-}
-
-func populateFoodPermitOCRDataFromNormalized(ocrData *FoodPermitOCRData, result *ocr.FoodPermitResult) bool {
-	if ocrData == nil || result == nil {
-		return false
-	}
-
-	changed := false
-	if rawText := strings.TrimSpace(result.RawText); rawText != "" && rawText != ocrData.RawText {
-		ocrData.RawText = rawText
-		changed = true
-	}
-	if licenseNumber := strings.TrimSpace(result.LicenseNumber); licenseNumber != "" && ocrData.PermitNo == "" {
-		ocrData.PermitNo = licenseNumber
-		changed = true
-	}
-	if companyName := normalizeCompanyName(strings.TrimSpace(result.BusinessName)); companyName != "" && !isSuspiciousFoodPermitCompanyName(companyName) && (ocrData.CompanyName == "" || isSuspiciousFoodPermitCompanyName(ocrData.CompanyName)) {
-		if companyName != ocrData.CompanyName {
-			ocrData.CompanyName = companyName
-			changed = true
-		}
-	}
-	if operatorName := strings.TrimSpace(result.OperatorName); operatorName != "" && ocrData.OperatorName == "" {
-		ocrData.OperatorName = operatorName
-		changed = true
-	}
-	validFrom, validTo := parseFoodPermitValidPeriod(result.ValidPeriod)
-	if validFrom != "" && ocrData.ValidFrom == "" {
-		ocrData.ValidFrom = validFrom
-		changed = true
-	}
-	if validTo != "" && ocrData.ValidTo == "" {
-		ocrData.ValidTo = validTo
-		changed = true
-	}
-	return changed
-}
-
-func parseFoodPermitValidPeriod(raw string) (string, string) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return "", ""
-	}
-	raw = strings.ReplaceAll(raw, " 年", "年")
-	raw = strings.ReplaceAll(raw, "年 ", "年")
-	raw = strings.ReplaceAll(raw, " 月", "月")
-	raw = strings.ReplaceAll(raw, "月 ", "月")
-	raw = strings.ReplaceAll(raw, " 日", "日")
-	raw = strings.ReplaceAll(raw, "日 ", "日")
-	if strings.Contains(raw, "长期") || strings.Contains(raw, "永久") {
-		return "", "长期"
-	}
-	datePattern := `\d{4}年\d{1,2}月\d{1,2}日`
-	rangeRegex := regexp.MustCompile(`(` + datePattern + `)\s*[至到-]\s*(` + datePattern + `)`)
-	if match := rangeRegex.FindStringSubmatch(raw); len(match) > 2 {
-		return match[1], match[2]
-	}
-	singleRegex := regexp.MustCompile(`(` + datePattern + `)`)
-	if match := singleRegex.FindStringSubmatch(raw); len(match) > 1 {
-		return "", match[1]
-	}
-	return "", raw
-}
-
-// isFoodPermitValid 检查食品经营许可证是否有效
-func isFoodPermitValid(validTo string) bool {
-	if validTo == "" {
-		return false
-	}
-
-	// 长期有效
-	if strings.Contains(validTo, "长期") || strings.Contains(validTo, "永久") {
-		return true
-	}
-
-	// 归一化：去除OCR在年月日前后插入的空格，如 "2027 年01月08日" → "2027年01月08日"
-	validTo = strings.ReplaceAll(validTo, " 年", "年")
-	validTo = strings.ReplaceAll(validTo, "年 ", "年")
-	validTo = strings.ReplaceAll(validTo, " 月", "月")
-	validTo = strings.ReplaceAll(validTo, "月 ", "月")
-	validTo = strings.ReplaceAll(validTo, " 日", "日")
-
-	// 解析日期
-	dateRegex := regexp.MustCompile(`(\d{4})年(\d{1,2})月(\d{1,2})日`)
-	match := dateRegex.FindStringSubmatch(validTo)
-	if len(match) < 4 {
-		return false
-	}
-
-	year := match[1]
-	month := match[2]
-	day := match[3]
-
-	if len(month) == 1 {
-		month = "0" + month
-	}
-	if len(day) == 1 {
-		day = "0" + day
-	}
-
-	dateStr := year + "-" + month + "-" + day
-	expDate, err := parseISODate(dateStr, "")
-	if err != nil {
-		return false
-	}
-
-	return expDate.After(time.Now())
-}
-
-// isIDCardValidPeriodValid 检查身份证有效期是否有效
-// 格式：2020.01.01-2030.01.01 或 2020.01.01-长期
-func isIDCardValidPeriodValid(validDate string) bool {
-	if validDate == "" {
-		return false
-	}
-
-	// 长期有效
-	if strings.Contains(validDate, "长期") || strings.Contains(validDate, "永久") {
-		return true
-	}
-
-	// 解析有效期止日期
-	// 微信OCR可能返回的格式：
-	// - 20200101-20300101 (纯数字)
-	// - 2020.01.01-2030.01.01 (点分隔)
-	// - 2020-01-01-2030-01-01 (横线分隔，但这会被错误分割)
-	// - 2020年01月01日-2030年01月01日 (中文格式)
-
-	// 先尝试找到最后的日期部分
-	var endDate string
-
-	// 方法1：查找"至"或最后一个完整日期
-	if idx := strings.LastIndex(validDate, "-"); idx > 4 {
-		// 确保不是日期中的横线（检查后面是否还有足够字符构成日期）
-		after := validDate[idx+1:]
-		if len(after) >= 6 { // 至少 YYMMDD
-			endDate = strings.TrimSpace(after)
-		}
-	}
-
-	// 如果没找到，尝试用"至"分割
-	if endDate == "" && strings.Contains(validDate, "至") {
-		parts := strings.Split(validDate, "至")
-		if len(parts) >= 2 {
-			endDate = strings.TrimSpace(parts[len(parts)-1])
-		}
-	}
-
-	// 如果还没找到，整个字符串可能就是结束日期
-	if endDate == "" {
-		endDate = validDate
-	}
-
-	// 如果结束日期包含"长期"
-	if strings.Contains(endDate, "长期") || strings.Contains(endDate, "永久") {
-		return true
-	}
-
-	// 尝试解析多种日期格式
-	expDate, ok := parseFlexibleDate(endDate)
-	if !ok {
-		log.Warn().Str("valid_date", validDate).Str("end_date", endDate).Msg("无法解析身份证有效期")
-		return false
-	}
-
-	return expDate.After(time.Now())
-}
-
 // parseFlexibleDate 灵活解析多种日期格式
 func parseFlexibleDate(dateStr string) (time.Time, bool) {
 	// 移除空白和常见无关字符
@@ -2179,5 +1681,5 @@ func (server *Server) resetMerchantApplication(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), resetResult.Application))
+	server.writeMerchantApplicationDraftResponse(ctx, http.StatusOK, resetResult.Application)
 }

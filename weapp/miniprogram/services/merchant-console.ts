@@ -1,49 +1,9 @@
-import { generateAppBindCode } from '../api/auth'
-import { buildMerchantApplymentStatusView, getMerchantApplymentStatus } from '../api/merchant-applyment'
-import { getMerchantComplaintSummary } from '../api/merchant-complaints'
-import {
-  getMyMerchantOpenStatus,
-  getMyMerchantProfile,
-  updateMyMerchantOpenStatus,
-  type MerchantOperatorResponse
-} from '../api/merchant'
-import { MerchantStatsService } from '../api/merchant-stats'
-import { MerchantOrderManagementService } from '../api/order-management'
+// Protected tombstone module.
+// Merchant console owners were split into task-domain services:
+// - services/merchant-dashboard.ts
+// - services/merchant-open-status.ts
+// - services/merchant-applyment-console.ts
+// - services/merchant-app-bind.ts
+// Keep this file only as a protected boundary so future code cannot silently rebuild the old super-service import path.
 
-export type MerchantConsoleProfile = MerchantOperatorResponse
-
-export function fetchMerchantConsoleProfile() {
-  return getMyMerchantProfile()
-}
-
-export function fetchMerchantConsoleOpenStatus() {
-  return getMyMerchantOpenStatus()
-}
-
-export function fetchMerchantConsoleOverview(startDate: string, endDate: string) {
-  return MerchantStatsService.getOverview({
-    start_date: startDate,
-    end_date: endDate
-  })
-}
-
-export function fetchMerchantConsoleOrderSummary() {
-  return MerchantOrderManagementService.getOrderSummary()
-}
-
-export function fetchMerchantConsoleComplaintSummary() {
-  return getMerchantComplaintSummary()
-}
-
-export function createMerchantAppBindCode() {
-  return generateAppBindCode()
-}
-
-export async function fetchMerchantApplymentStatusView() {
-  const applyment = await getMerchantApplymentStatus()
-  return buildMerchantApplymentStatusView(applyment)
-}
-
-export function updateMerchantConsoleOpenStatus(nextIsOpen: boolean) {
-  return updateMyMerchantOpenStatus(nextIsOpen)
-}
+export {}

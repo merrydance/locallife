@@ -60,6 +60,8 @@ definitions:
       queued_at:
         description: task enqueued time
         type: string
+      readiness:
+        $ref: '#/definitions/api.OCRReadiness'
       reg_num:
         description: 注册号
         type: string
@@ -153,6 +155,8 @@ definitions:
       raw_text:
         description: 原始OCR文本
         type: string
+      readiness:
+        $ref: '#/definitions/api.OCRReadiness'
       started_at:
         description: task started processing time
         type: string
@@ -190,6 +194,8 @@ definitions:
         type: integer
       queued_at:
         type: string
+      readiness:
+        $ref: '#/definitions/api.OCRReadiness'
       started_at:
         type: string
       status:
@@ -231,6 +237,8 @@ definitions:
         type: integer
       queued_at:
         type: string
+      readiness:
+        $ref: '#/definitions/api.OCRReadiness'
       started_at:
         type: string
       status:
@@ -284,6 +292,8 @@ definitions:
       queued_at:
         description: task enqueued time
         type: string
+      readiness:
+        $ref: '#/definitions/api.OCRReadiness'
       started_at:
         description: task started processing time
         type: string
@@ -299,6 +309,25 @@ definitions:
       message:
         example: ok
         type: string
+    type: object
+  api.OCRReadiness:
+    properties:
+      missing_fields:
+        items:
+          type: string
+        type: array
+      reason_code:
+        type: string
+      required_fields:
+        items:
+          type: string
+        type: array
+      state:
+        type: string
+      unparseable_fields:
+        items:
+          type: string
+        type: array
     type: object
   api.OperatorIDCardBackOCR:
     properties:
@@ -370,9 +399,6 @@ definitions:
       order_id:
         minimum: 1
         type: integer
-      reporter_id:
-        minimum: 1
-        type: integer
       severity_level:
         maximum: 5
         minimum: 1
@@ -382,11 +408,12 @@ definitions:
     - incident_type
     - merchant_id
     - order_id
-    - reporter_id
     - severity_level
     type: object
   api.ReportFoodSafetyResponse:
     properties:
+      case_id:
+        type: integer
       incident_id:
         type: integer
       merchant_suspended:
@@ -484,11 +511,14 @@ definitions:
       compensation_source:
         description: merchant, rider, platform
         type: string
+      compensation_status:
+        type: string
+      customer_action:
+        type: string
+      customer_action_required:
+        type: boolean
       decision_status:
         description: auto-adjudicated
-        type: string
-      payout_eta:
-        description: 预计赔付时间
         type: string
       payout_status:
         description: processing, paid
@@ -496,7 +526,6 @@ definitions:
       reason:
         type: string
       status:
-        description: accepted
         type: string
       warning:
         description: 警告信息
@@ -539,6 +568,23 @@ definitions:
       refund_id:
         type: string
       status:
+        type: string
+    type: object
+  api.activeCredentialSummaryResponse:
+    properties:
+      days_until_expiry:
+        type: integer
+      document_type:
+        type: string
+      expires_at:
+        type: string
+      last_reminded_at:
+        type: string
+      resumed_at:
+        type: string
+      suspended:
+        type: boolean
+      suspended_at:
         type: string
     type: object
   api.addCartItemRequest:
@@ -712,48 +758,6 @@ definitions:
         type: string
       status:
         type: string
-    type: object
-  api.appealResponse:
-    properties:
-      appellant_id:
-        type: integer
-      appellant_type:
-        type: string
-      claim_id:
-        type: integer
-      compensated_at:
-        type: string
-      compensation_amount:
-        type: integer
-      created_at:
-        type: string
-      id:
-        type: integer
-      reason:
-        type: string
-      region_id:
-        type: integer
-      review_notes:
-        type: string
-      reviewed_at:
-        type: string
-      reviewer_id:
-        type: integer
-      status:
-        type: string
-    type: object
-  api.appealSummaryResponse:
-    properties:
-      approved:
-        type: integer
-      compensated:
-        type: integer
-      pending:
-        type: integer
-      rejected:
-        type: integer
-      total:
-        type: integer
     type: object
   api.applyAbnormalRefundBodyRequest:
     properties:
@@ -1453,9 +1457,9 @@ definitions:
     type: object
   api.claimSummaryResponse:
     properties:
-      appealed:
-        type: integer
       closed:
+        type: integer
+      disputed:
         type: integer
       pending_action:
         type: integer
@@ -2068,19 +2072,6 @@ definitions:
     - name
     - owner_user_id
     type: object
-  api.createMerchantAppealRequest:
-    properties:
-      claim_id:
-        minimum: 1
-        type: integer
-      reason:
-        maxLength: 1000
-        minLength: 10
-        type: string
-    required:
-    - claim_id
-    - reason
-    type: object
   api.createMerchantCancelWithdrawRequest:
     properties:
       additional_material_asset_ids:
@@ -2112,6 +2103,19 @@ definitions:
         type: string
     required:
     - withdraw
+    type: object
+  api.createMerchantRecoveryDisputeRequest:
+    properties:
+      claim_id:
+        minimum: 1
+        type: integer
+      reason:
+        maxLength: 1000
+        minLength: 10
+        type: string
+    required:
+    - claim_id
+    - reason
     type: object
   api.createOCRJobRequest:
     properties:
@@ -2421,7 +2425,7 @@ definitions:
     - content
     - order_id
     type: object
-  api.createRiderAppealRequest:
+  api.createRiderRecoveryDisputeRequest:
     properties:
       claim_id:
         minimum: 1
@@ -3335,6 +3339,30 @@ definitions:
         description: 总服务费（平台+运营商）
         type: integer
     type: object
+  api.foodSafetyCaseDetailResponse:
+    properties:
+      case:
+        $ref: '#/definitions/api.operatorFoodSafetyCaseResponse'
+      incidents:
+        items:
+          $ref: '#/definitions/api.operatorFoodSafetyIncidentResponse'
+        type: array
+    type: object
+  api.foodSafetyCaseListResponse:
+    properties:
+      has_more:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/api.operatorFoodSafetyCaseResponse'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+    type: object
   api.generateAppBindCodeResponse:
     properties:
       code:
@@ -3395,6 +3423,11 @@ definitions:
         type: boolean
       voice_takeout:
         type: boolean
+    type: object
+  api.getProfitSharingReceiverLifecycleTargetResponse:
+    properties:
+      target:
+        $ref: '#/definitions/api.profitSharingReceiverLifecycleTargetItem'
     type: object
   api.groupApplicationResponse:
     properties:
@@ -3576,6 +3609,15 @@ definitions:
       unlimited_dishes:
         description: 无限库存菜品数
         type: integer
+    type: object
+  api.investigateOperatorFoodSafetyCaseRequest:
+    properties:
+      investigation_report:
+        maxLength: 4000
+        minLength: 10
+        type: string
+    required:
+    - investigation_report
     type: object
   api.joinMembershipRequest:
     properties:
@@ -3927,6 +3969,32 @@ definitions:
       total:
         type: integer
     type: object
+  api.listOperatorNotificationsResponse:
+    properties:
+      notifications:
+        items:
+          $ref: '#/definitions/api.operatorNotificationResponse'
+        type: array
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+    type: object
+  api.listOperatorPendingDispatchesResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/api.operatorPendingDispatchItemResponse'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+    type: object
   api.listOperatorProfitSharingConfigsResponse:
     properties:
       items:
@@ -4049,6 +4117,42 @@ definitions:
       limit:
         type: integer
       page:
+        type: integer
+    type: object
+  api.listProfitSharingReceiverLifecycleAttemptsResponse:
+    properties:
+      has_more:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/api.profitSharingReceiverLifecycleAttemptItem'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      target:
+        $ref: '#/definitions/api.profitSharingReceiverLifecycleTargetItem'
+      total:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  api.listProfitSharingReceiverLifecycleTargetsResponse:
+    properties:
+      has_more:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/api.profitSharingReceiverLifecycleTargetItem'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+      total_pages:
         type: integer
     type: object
   api.listRefundOrdersByPaymentResponse:
@@ -4274,6 +4378,10 @@ definitions:
     type: object
   api.merchantApplicationDraftResponse:
     properties:
+      active_credentials:
+        items:
+          $ref: '#/definitions/api.activeCredentialSummaryResponse'
+        type: array
       business_address:
         type: string
       business_license_media_asset_id:
@@ -4324,6 +4432,8 @@ definitions:
         type: integer
       reject_reason:
         type: string
+      review_summary:
+        $ref: '#/definitions/api.onboardingReviewSummaryResponse'
       status:
         type: string
       storefront_images:
@@ -5568,6 +5678,29 @@ definitions:
       status:
         type: string
     type: object
+  api.onboardingReviewSummaryResponse:
+    properties:
+      created_at:
+        type: string
+      ocr_job_refs:
+        items:
+          type: integer
+        type: array
+      outcome:
+        type: string
+      reason_code:
+        type: string
+      reason_message:
+        type: string
+      rule_hits:
+        items:
+          type: string
+        type: array
+      run_id:
+        type: integer
+      stage:
+        type: string
+    type: object
   api.openDiningSessionRequest:
     properties:
       reservation_id:
@@ -5734,6 +5867,64 @@ definitions:
             type: integer
         type: object
     type: object
+  api.operatorFoodSafetyCaseResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      investigation_report:
+        type: string
+      merchant_id:
+        type: integer
+      merchant_rectification_report:
+        type: string
+      primary_product_key:
+        type: string
+      primary_product_label:
+        type: string
+      region_id:
+        type: integer
+      resolution:
+        type: string
+      resolved_at:
+        type: string
+      status:
+        type: string
+      suspended_at:
+        type: string
+      trigger_reason:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  api.operatorFoodSafetyIncidentResponse:
+    properties:
+      case_id:
+        type: integer
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      incident_type:
+        type: string
+      merchant_id:
+        type: integer
+      order_id:
+        type: integer
+      primary_product_key:
+        type: string
+      primary_product_label:
+        type: string
+      resolved_at:
+        type: string
+      status:
+        type: string
+      user_id:
+        type: integer
+    type: object
   api.operatorMerchantRankingRow:
     properties:
       avg_order_amount:
@@ -5760,6 +5951,88 @@ definitions:
       suspended:
         type: integer
       total:
+        type: integer
+    type: object
+  api.operatorNotificationResponse:
+    properties:
+      category:
+        type: string
+      content:
+        type: string
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: integer
+      is_read:
+        type: boolean
+      level:
+        type: string
+      read_at:
+        type: string
+      region_id:
+        type: integer
+      region_name:
+        type: string
+      related_id:
+        type: integer
+      related_type:
+        type: string
+      summary:
+        type: string
+      title:
+        type: string
+      type:
+        type: string
+      wait_minutes:
+        type: integer
+    type: object
+  api.operatorNotificationSummaryResponse:
+    properties:
+      latest_notification:
+        $ref: '#/definitions/api.operatorNotificationResponse'
+      unread_count:
+        type: integer
+    type: object
+  api.operatorPendingDispatchItemResponse:
+    properties:
+      delivery_fee:
+        type: integer
+      delivery_id:
+        type: integer
+      expected_pickup_at:
+        type: string
+      is_timeout_over_3m:
+        type: boolean
+      merchant_id:
+        type: integer
+      merchant_name:
+        type: string
+      order_id:
+        type: integer
+      order_no:
+        type: string
+      region_id:
+        type: integer
+      region_name:
+        type: string
+      wait_seconds:
+        type: integer
+    type: object
+  api.operatorPendingDispatchSummaryResponse:
+    properties:
+      latest_refresh_at:
+        type: string
+      oldest_wait_seconds:
+        type: integer
+      pending_total:
+        type: integer
+      region_id:
+        type: integer
+      region_name:
+        type: string
+      timeout_over_3m_total:
         type: integer
     type: object
   api.operatorRealtimeStatsResponse:
@@ -6288,6 +6561,8 @@ definitions:
     type: object
   api.paymentOrderWechatPayerResult:
     properties:
+      openid:
+        type: string
       sp_openid:
         type: string
       sub_openid:
@@ -6337,9 +6612,13 @@ definitions:
     properties:
       amount:
         $ref: '#/definitions/api.paymentOrderWechatAmountResult'
+      appid:
+        type: string
       attach:
         type: string
       bank_type:
+        type: string
+      mchid:
         type: string
       out_trade_no:
         type: string
@@ -6749,6 +7028,87 @@ definitions:
       rider_enabled:
         type: boolean
       status:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  api.profitSharingReceiverLifecycleAttemptItem:
+    properties:
+      action:
+        type: string
+      created_at:
+        type: string
+      error_code:
+        type: string
+      error_message:
+        type: string
+      finished_at:
+        type: string
+      id:
+        type: integer
+      idempotent_success:
+        type: boolean
+      started_at:
+        type: string
+      status:
+        type: string
+      target_id:
+        type: integer
+    type: object
+  api.profitSharingReceiverLifecycleTargetItem:
+    properties:
+      appid:
+        type: string
+      attempt_count:
+        type: integer
+      channel:
+        type: string
+      created_at:
+        type: string
+      desired_state:
+        type: string
+      id:
+        type: integer
+      last_attempt_at:
+        type: string
+      last_error_code:
+        type: string
+      last_error_message:
+        type: string
+      next_retry_at:
+        type: string
+      owner_id:
+        type: integer
+      owner_type:
+        type: string
+      provider:
+        type: string
+      receiver_type:
+        type: string
+      skipped_at:
+        type: string
+      sync_status:
+        type: string
+      synced_at:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  api.profitSharingReceiverLifecycleTargetResponse:
+    properties:
+      attempt_count:
+        type: integer
+      created_at:
+        type: string
+      desired_state:
+        type: string
+      id:
+        type: integer
+      owner_id:
+        type: integer
+      owner_type:
+        type: string
+      sync_status:
         type: string
       updated_at:
         type: string
@@ -7174,6 +7534,46 @@ definitions:
     required:
     - recharge_amount
     type: object
+  api.recoveryDisputeResponse:
+    properties:
+      appellant_id:
+        type: integer
+      appellant_type:
+        type: string
+      claim_id:
+        type: integer
+      compensated_at:
+        type: string
+      compensation_amount:
+        type: integer
+      created_at:
+        type: string
+      id:
+        type: integer
+      reason:
+        type: string
+      region_id:
+        type: integer
+      review_notes:
+        type: string
+      reviewed_at:
+        type: string
+      reviewer_id:
+        type: integer
+      status:
+        type: string
+    type: object
+  api.recoveryDisputeSummaryResponse:
+    properties:
+      approved:
+        type: integer
+      rejected:
+        type: integer
+      submitted:
+        type: integer
+      total:
+        type: integer
+    type: object
   api.refundOrderResponse:
     properties:
       created_at:
@@ -7338,6 +7738,33 @@ definitions:
         type: string
       refresh_token_expires_at:
         type: string
+    type: object
+  api.repairProfitSharingReceiverLifecycleRequest:
+    properties:
+      desired_state:
+        enum:
+        - present
+        - absent
+        type: string
+      owner_id:
+        minimum: 1
+        type: integer
+      owner_type:
+        enum:
+        - operator
+        - rider
+        type: string
+    required:
+    - desired_state
+    - owner_id
+    - owner_type
+    type: object
+  api.repairProfitSharingReceiverLifecycleResponse:
+    properties:
+      enqueued:
+        type: boolean
+      target:
+        $ref: '#/definitions/api.profitSharingReceiverLifecycleTargetResponse'
     type: object
   api.replaceOrderRequest:
     properties:
@@ -7527,28 +7954,23 @@ definitions:
       pending_count:
         type: integer
     type: object
-  api.resolveSafetyReportRequest:
+  api.resolveOperatorFoodSafetyCaseRequest:
     properties:
-      recover_merchant_ids:
-        items:
-          type: integer
-        type: array
-      recover_reason:
-        maxLength: 500
-        minLength: 2
+      investigation_report:
+        maxLength: 4000
+        minLength: 10
         type: string
-      resolution_notes:
-        maxLength: 1000
+      merchant_rectification_report:
+        maxLength: 4000
+        minLength: 10
+        type: string
+      resolution:
+        maxLength: 2000
         minLength: 5
         type: string
-      status:
-        enum:
-        - resolved
-        - rejected
-        type: string
     required:
-    - resolution_notes
-    - status
+    - merchant_rectification_report
+    - resolution
     type: object
   api.respondToComplaintRequest:
     properties:
@@ -7653,6 +8075,10 @@ definitions:
     type: object
   api.riderApplicationResponse:
     properties:
+      active_credentials:
+        items:
+          $ref: '#/definitions/api.activeCredentialSummaryResponse'
+        type: array
       created_at:
         type: string
       health_cert_asset_id:
@@ -7673,6 +8099,8 @@ definitions:
         type: string
       reject_reason:
         type: string
+      review_summary:
+        $ref: '#/definitions/api.onboardingReviewSummaryResponse'
       status:
         type: string
       submitted_at:
@@ -7874,6 +8302,52 @@ definitions:
         type: integer
       status:
         type: string
+    type: object
+  api.riderWithdrawalStatusRefundItemResponse:
+    properties:
+      amount:
+        type: integer
+      created_at:
+        type: string
+      out_refund_no:
+        type: string
+      out_trade_no:
+        type: string
+      payment_order_id:
+        type: integer
+      refund_id:
+        type: string
+      refund_order_id:
+        type: integer
+      refunded_at:
+        type: string
+      source_payment_amount:
+        type: integer
+      status:
+        type: string
+      status_text:
+        type: string
+    type: object
+  api.riderWithdrawalStatusResponse:
+    properties:
+      accepted_amount:
+        type: integer
+      failed_amount:
+        type: integer
+      message:
+        type: string
+      processing_amount:
+        type: integer
+      refunds:
+        items:
+          $ref: '#/definitions/api.riderWithdrawalStatusRefundItemResponse'
+        type: array
+      status:
+        type: string
+      status_text:
+        type: string
+      success_amount:
+        type: integer
     type: object
   api.rollbackRuleRequest:
     properties:
@@ -8431,36 +8905,6 @@ definitions:
         type: string
       user_id:
         type: integer
-    type: object
-  api.submitSafetyReportRequest:
-    properties:
-      description:
-        minLength: 10
-        type: string
-      images:
-        items:
-          type: string
-        type: array
-      level:
-        enum:
-        - low
-        - medium
-        - high
-        - critical
-        type: string
-      merchant_ids:
-        description: 涉及商户
-        items:
-          type: integer
-        type: array
-      title:
-        maxLength: 100
-        minLength: 5
-        type: string
-    required:
-    - description
-    - level
-    - title
     type: object
   api.successMessageResponse:
     properties:
@@ -9421,8 +9865,14 @@ definitions:
         type: integer
       claim_type:
         type: string
+      compensation_status:
+        type: string
       created_at:
         type: string
+      customer_action:
+        type: string
+      customer_action_required:
+        type: boolean
       decision_status:
         description: auto-adjudicated, rejected
         type: string
@@ -9432,8 +9882,6 @@ definitions:
         type: integer
       order_id:
         type: integer
-      payout_eta:
-        type: string
       payout_status:
         description: processing, paid
         type: string
@@ -9442,7 +9890,6 @@ definitions:
       reason:
         type: string
       status:
-        description: accepted, rejected
         type: string
     type: object
   api.userClaimsListResponse:
@@ -9812,33 +10259,6 @@ definitions:
       version:
         type: integer
     type: object
-  db.SafetyReport:
-    properties:
-      created_at:
-        type: string
-      description:
-        type: string
-      id:
-        type: integer
-      level:
-        type: string
-      merchant_ids:
-        items:
-          type: integer
-        type: array
-      region_id:
-        type: integer
-      reporter_id:
-        type: integer
-      resolution_notes:
-        $ref: '#/definitions/pgtype.Text'
-      status:
-        type: string
-      title:
-        type: string
-      updated_at:
-        type: string
-    type: object
   logic.AppliedPromotion:
     properties:
       amount:
@@ -9931,13 +10351,6 @@ definitions:
       int64:
         format: int64
         type: integer
-      valid:
-        type: boolean
-    type: object
-  pgtype.Text:
-    properties:
-      string:
-        type: string
       valid:
         type: boolean
     type: object
@@ -11364,6 +11777,100 @@ paths:
       security:
       - BearerAuth: []
       summary: 获取索赔详情
+      tags:
+      - 索赔管理
+  /v1/claims/{id}/confirm-continue:
+    post:
+      consumes:
+      - application/json
+      description: 用户确认继续已完成判责的索赔，系统进入补偿执行阶段
+      parameters:
+      - description: 索赔ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 索赔状态
+          schema:
+            $ref: '#/definitions/api.userClaimResponse'
+        "400":
+          description: 无效的索赔ID
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 该索赔不属于当前用户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 索赔不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 当前索赔状态不允许继续
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 确认继续索赔
+      tags:
+      - 索赔管理
+  /v1/claims/{id}/withdraw:
+    post:
+      consumes:
+      - application/json
+      description: 用户撤回已完成判责但尚未进入补偿执行的索赔
+      parameters:
+      - description: 索赔ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 索赔状态
+          schema:
+            $ref: '#/definitions/api.userClaimResponse'
+        "400":
+          description: 无效的索赔ID
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 该索赔不属于当前用户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 索赔不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 当前索赔状态不允许撤回
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 撤回索赔
       tags:
       - 索赔管理
   /v1/combos:
@@ -15640,201 +16147,6 @@ paths:
       summary: 会员卡充值（已暂停）
       tags:
       - 会员管理
-  /v1/merchant/appeals:
-    get:
-      consumes:
-      - application/json
-      description: 商户查看自己提交的申诉列表
-      parameters:
-      - description: 页码
-        in: query
-        minimum: 1
-        name: page_id
-        required: true
-        type: integer
-      - description: 每页数量
-        in: query
-        maximum: 50
-        minimum: 1
-        name: page_size
-        required: true
-        type: integer
-      - description: 状态筛选
-        enum:
-        - pending
-        - approved
-        - compensated
-        - rejected
-        in: query
-        name: status
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 成功返回申诉列表
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 参数错误
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 未授权
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: 非商户用户
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 服务器错误
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      summary: 获取申诉列表
-      tags:
-      - 商户申诉管理
-    post:
-      consumes:
-      - application/json
-      description: 商户对已批准的索赔提交申诉，提交后由系统自动复核并写回最终结果
-      parameters:
-      - description: 申诉请求
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.createMerchantAppealRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: 成功创建申诉
-          schema:
-            $ref: '#/definitions/api.appealResponse'
-        "400":
-          description: 参数错误
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 未授权
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: 非商户用户或索赔不属于该商户
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: 索赔不存在
-          schema:
-            additionalProperties: true
-            type: object
-        "409":
-          description: 已存在申诉
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 服务器错误
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      summary: 提交申诉
-      tags:
-      - 商户申诉管理
-  /v1/merchant/appeals/{id}:
-    get:
-      consumes:
-      - application/json
-      description: 商户查看自己提交的申诉详细信息
-      parameters:
-      - description: 申诉ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 成功返回申诉详情
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 参数错误
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 未授权
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: 非商户用户
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: 申诉不存在
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 服务器错误
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      summary: 获取申诉详情
-      tags:
-      - 商户申诉管理
-  /v1/merchant/appeals/summary:
-    get:
-      consumes:
-      - application/json
-      description: 返回商户申诉总数及各状态汇总，供工作台和筛选条使用
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 成功返回申诉汇总
-          schema:
-            $ref: '#/definitions/api.appealSummaryResponse'
-        "401":
-          description: 未授权
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: 非商户用户
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 服务器错误
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      summary: 获取商户申诉汇总
-      tags:
-      - 商户申诉管理
   /v1/merchant/application:
     get:
       consumes:
@@ -16319,7 +16631,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: 商户查看已批准的索赔列表，包含订单信息和申诉状态
+      description: 商户查看已批准的索赔列表，包含订单信息和追偿争议状态
       parameters:
       - description: 页码
         in: query
@@ -16337,7 +16649,7 @@ paths:
       - description: 运营视图筛选
         enum:
         - pending_action
-        - appealed
+        - disputed
         - closed
         in: query
         name: bucket
@@ -16374,12 +16686,12 @@ paths:
       - Bearer: []
       summary: 获取商户收到的索赔列表
       tags:
-      - 商户申诉管理
+      - 商户索赔管理
   /v1/merchant/claims/{id}:
     get:
       consumes:
       - application/json
-      description: 商户查看单个索赔的详细信息，包含申诉信息
+      description: 商户查看单个索赔的详细信息，包含追偿争议信息
       parameters:
       - description: 索赔ID
         in: path
@@ -16423,7 +16735,7 @@ paths:
       - Bearer: []
       summary: 获取索赔详情
       tags:
-      - 商户申诉管理
+      - 商户索赔管理
   /v1/merchant/claims/{id}/decision:
     get:
       consumes:
@@ -16472,102 +16784,6 @@ paths:
       - Bearer: []
       summary: 获取索赔判定依据
       tags:
-      - 商户申诉管理
-  /v1/merchant/claims/{id}/recovery:
-    get:
-      consumes:
-      - application/json
-      description: 商户查看索赔对应的追偿单状态
-      parameters:
-      - description: 索赔ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 追偿单详情
-          schema:
-            $ref: '#/definitions/api.claimRecoveryResponse'
-        "400":
-          description: 参数错误
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 未授权
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: 非商户用户或索赔不属于该商户
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: 追偿单不存在
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 服务器错误
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      summary: 商户查看追偿单
-      tags:
-      - 商户索赔管理
-  /v1/merchant/claims/{id}/recovery/pay:
-    post:
-      consumes:
-      - application/json
-      description: 商户为索赔追偿创建微信支付单，支付成功后系统再标记追偿单为已支付
-      parameters:
-      - description: 索赔ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 支付单创建成功
-          schema:
-            $ref: '#/definitions/api.claimRecoveryPaymentResponse'
-        "400":
-          description: 参数错误
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 未授权
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: 非商户用户或索赔不属于该商户
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: 追偿单不存在
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 服务器错误
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      summary: 商户创建追偿支付单
-      tags:
       - 商户索赔管理
   /v1/merchant/claims/summary:
     get:
@@ -16600,7 +16816,7 @@ paths:
       - Bearer: []
       summary: 获取商户索赔汇总
       tags:
-      - 商户申诉管理
+      - 商户索赔管理
   /v1/merchant/complaints:
     get:
       consumes:
@@ -18751,6 +18967,296 @@ paths:
       summary: 获取商户订单汇总
       tags:
       - 商户订单管理
+  /v1/merchant/recoveries/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 商户查看索赔对应的追偿单状态
+      parameters:
+      - description: 追偿单ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 追偿单详情
+          schema:
+            $ref: '#/definitions/api.claimRecoveryResponse'
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 非商户用户或索赔不属于该商户
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 追偿单不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 商户查看追偿单
+      tags:
+      - 商户索赔管理
+  /v1/merchant/recoveries/{id}/pay:
+    post:
+      consumes:
+      - application/json
+      description: 商户为索赔追偿创建微信支付单，支付成功后系统再标记追偿单为已支付
+      parameters:
+      - description: 追偿单ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 支付单创建成功
+          schema:
+            $ref: '#/definitions/api.claimRecoveryPaymentResponse'
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 非商户用户或索赔不属于该商户
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 追偿单不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 商户创建追偿支付单
+      tags:
+      - 商户索赔管理
+  /v1/merchant/recovery-disputes:
+    get:
+      consumes:
+      - application/json
+      description: 商户查看自己提交的追偿争议列表
+      parameters:
+      - description: 页码
+        in: query
+        minimum: 1
+        name: page_id
+        required: true
+        type: integer
+      - description: 每页数量
+        in: query
+        maximum: 50
+        minimum: 1
+        name: page_size
+        required: true
+        type: integer
+      - description: 状态筛选
+        enum:
+        - submitted
+        - approved
+        - rejected
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回追偿争议列表
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 非商户用户
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 获取追偿争议列表
+      tags:
+      - 商户追偿争议管理
+    post:
+      consumes:
+      - application/json
+      description: 商户对平台向自身发起的追偿提交争议，提交后由系统自动复核并写回最终结果
+      parameters:
+      - description: 追偿争议请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.createMerchantRecoveryDisputeRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 成功创建追偿争议
+          schema:
+            $ref: '#/definitions/api.recoveryDisputeResponse'
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 非商户用户或追偿不属于该商户
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 追偿不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: 已存在追偿争议
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 提交追偿争议
+      tags:
+      - 商户追偿争议管理
+  /v1/merchant/recovery-disputes/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 商户查看自己提交的追偿争议详细信息
+      parameters:
+      - description: 追偿争议ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回追偿争议详情
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 非商户用户
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 追偿争议不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 获取追偿争议详情
+      tags:
+      - 商户追偿争议管理
+  /v1/merchant/recovery-disputes/summary:
+    get:
+      consumes:
+      - application/json
+      description: 返回商户追偿争议总数及各状态汇总，供工作台和筛选条使用
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回追偿争议汇总
+          schema:
+            $ref: '#/definitions/api.recoveryDisputeSummaryResponse'
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 非商户用户
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 获取商户追偿争议汇总
+      tags:
+      - 商户追偿争议管理
   /v1/merchant/risk/users/{id}:
     get:
       consumes:
@@ -21395,153 +21901,6 @@ paths:
       summary: 查询需要人工介入的 OCR 死信任务
       tags:
       - OCR
-  /v1/operator/appeals:
-    get:
-      consumes:
-      - application/json
-      description: 运营商查看自己管辖区域内的申诉列表，可按状态筛选
-      parameters:
-      - description: 状态筛选
-        enum:
-        - pending
-        - approved
-        - rejected
-        in: query
-        name: status
-        type: string
-      - description: 页码
-        in: query
-        minimum: 1
-        name: page_id
-        required: true
-        type: integer
-      - description: 每页数量
-        in: query
-        maximum: 50
-        minimum: 1
-        name: page_size
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 成功返回申诉列表
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 参数错误
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 未授权
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: 非运营商用户
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 服务器错误
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      summary: 获取区域内申诉列表
-      tags:
-      - 运营商申诉管理
-  /v1/operator/appeals/{id}:
-    get:
-      consumes:
-      - application/json
-      description: 运营商查看区域内申诉的详细信息，包含索赔、订单、用户信用分等信息
-      parameters:
-      - description: 申诉ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 成功返回申诉详情
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 参数错误
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 未授权
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: 非运营商用户
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: 申诉不存在
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 服务器错误
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      summary: 获取申诉详情
-      tags:
-      - 运营商申诉管理
-  /v1/operator/appeals/summary:
-    get:
-      consumes:
-      - application/json
-      description: 返回运营商可管理区域内申诉总数及各状态汇总，供工作台和审批入口使用
-      parameters:
-      - description: 区域ID
-        in: query
-        name: region_id
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 成功返回申诉汇总
-          schema:
-            $ref: '#/definitions/api.appealSummaryResponse'
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.errorMessage'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.errorMessage'
-        "403":
-          description: 无权限
-          schema:
-            $ref: '#/definitions/api.errorMessage'
-        "500":
-          description: 服务器错误
-          schema:
-            $ref: '#/definitions/api.errorMessage'
-      security:
-      - BearerAuth: []
-      summary: 获取区域申诉汇总
-      tags:
-      - 运营商申诉管理
   /v1/operator/application:
     get:
       description: 获取当前用户的运营商申请信息
@@ -21794,13 +22153,55 @@ paths:
       summary: 提交运营商入驻申请
       tags:
       - 运营商申请
-  /v1/operator/claims/{id}/recovery:
+  /v1/operator/food-safety/cases:
     get:
       consumes:
       - application/json
-      description: 运营商查看索赔对应的追偿单状态
+      description: 获取当前运营商辖区内由顾客食安上报触发的案件列表
       parameters:
-      - description: 索赔ID
+      - description: 页码
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量
+        in: query
+        name: limit
+        type: integer
+      - description: 案件状态
+        enum:
+        - merchant-suspended
+        - investigating
+        - resolved
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.foodSafetyCaseListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取食安案件列表
+      tags:
+      - 运营商功能
+  /v1/operator/food-safety/cases/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前运营商辖区内的单个食安案件和关联上报事件
+      parameters:
+      - description: 案件ID
         in: path
         name: id
         required: true
@@ -21809,39 +22210,108 @@ paths:
       - application/json
       responses:
         "200":
-          description: 追偿单详情
+          description: OK
           schema:
-            $ref: '#/definitions/api.claimRecoveryResponse'
+            $ref: '#/definitions/api.foodSafetyCaseDetailResponse'
         "400":
-          description: 参数错误
+          description: Bad Request
           schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 未授权
-          schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/api.ErrorResponse'
         "403":
-          description: 无权限处理该区域
+          description: Forbidden
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/api.ErrorResponse'
         "404":
-          description: 追偿单不存在
+          description: Not Found
           schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 服务器错误
-          schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/api.ErrorResponse'
       security:
-      - Bearer: []
-      summary: 运营商查看追偿单
+      - BearerAuth: []
+      summary: 获取食安案件详情
       tags:
-      - 运营商申诉管理
+      - 运营商功能
+  /v1/operator/food-safety/cases/{id}/investigate:
+    post:
+      consumes:
+      - application/json
+      description: 运营商对顾客食安上报触发的案件录入调查报告，并将案件置为调查中
+      parameters:
+      - description: 案件ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 调查报告
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.investigateOperatorFoodSafetyCaseRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.operatorFoodSafetyCaseResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 填写食安案件调查报告
+      tags:
+      - 运营商功能
+  /v1/operator/food-safety/cases/{id}/resolve:
+    post:
+      consumes:
+      - application/json
+      description: 运营商提交调查结论和商户整改报告，原子恢复商户并关闭关联事件
+      parameters:
+      - description: 案件ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 处置信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.resolveOperatorFoodSafetyCaseRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.operatorFoodSafetyCaseResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 完成食安案件处置并恢复商户
+      tags:
+      - 运营商功能
   /v1/operator/merchants:
     get:
       consumes:
@@ -22211,6 +22681,201 @@ paths:
       summary: Delete peak hour config (Operator)
       tags:
       - delivery-fee
+  /v1/operator/recoveries/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 运营商查看索赔对应的追偿单状态
+      parameters:
+      - description: 追偿单ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 追偿单详情
+          schema:
+            $ref: '#/definitions/api.claimRecoveryResponse'
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 无权限处理该区域
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 追偿单不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 运营商查看追偿单
+      tags:
+      - 运营商索赔管理
+  /v1/operator/recovery-disputes:
+    get:
+      consumes:
+      - application/json
+      description: 运营商查看自己管辖区域内的追偿争议列表，可按状态筛选
+      parameters:
+      - description: 状态筛选
+        enum:
+        - submitted
+        - approved
+        - rejected
+        in: query
+        name: status
+        type: string
+      - description: 页码
+        in: query
+        minimum: 1
+        name: page_id
+        required: true
+        type: integer
+      - description: 每页数量
+        in: query
+        maximum: 50
+        minimum: 1
+        name: page_size
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回追偿争议列表
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 非运营商用户
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 获取区域内追偿争议列表
+      tags:
+      - 运营商追偿争议管理
+  /v1/operator/recovery-disputes/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 运营商查看区域内追偿争议的详细信息，包含索赔、订单、用户信用分等信息
+      parameters:
+      - description: 追偿争议ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回追偿争议详情
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 非运营商用户
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 追偿争议不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 获取追偿争议详情
+      tags:
+      - 运营商追偿争议管理
+  /v1/operator/recovery-disputes/summary:
+    get:
+      consumes:
+      - application/json
+      description: 返回运营商可管理区域内追偿争议总数及各状态汇总，供工作台和审批入口使用
+      parameters:
+      - description: 区域ID
+        in: query
+        name: region_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回追偿争议汇总
+          schema:
+            $ref: '#/definitions/api.recoveryDisputeSummaryResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+      security:
+      - BearerAuth: []
+      summary: 获取区域追偿争议汇总
+      tags:
+      - 运营商追偿争议管理
   /v1/operator/region-expansion:
     get:
       produces:
@@ -22311,6 +22976,84 @@ paths:
       security:
       - BearerAuth: []
       summary: 获取管理的区域
+      tags:
+      - 运营商数据统计
+  /v1/operator/regions/{region_id}/delivery-pool:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定运营区域当前待接单列表，支持分页
+      parameters:
+      - description: 区域ID
+        in: path
+        name: region_id
+        required: true
+        type: integer
+      - description: 页码
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.listOperatorPendingDispatchesResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限访问该区域
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取运营区域待接单列表
+      tags:
+      - 运营商数据统计
+  /v1/operator/regions/{region_id}/delivery-pool/summary:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定运营区域当前待接单总数、超时数量和最长等待时长
+      parameters:
+      - description: 区域ID
+        in: path
+        name: region_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.operatorPendingDispatchSummaryResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限访问该区域
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取运营区域待接单摘要
       tags:
       - 运营商数据统计
   /v1/operator/regions/{region_id}/peak-hours:
@@ -22449,153 +23192,6 @@ paths:
       summary: 获取区域统计
       tags:
       - 运营商数据统计
-  /v1/operator/reports/safety:
-    get:
-      consumes:
-      - application/json
-      description: 按运营商所属区域分页查询食安事件
-      parameters:
-      - description: 页码
-        in: query
-        name: page
-        type: integer
-      - description: 每页条数
-        in: query
-        name: limit
-        type: integer
-      - description: 状态
-        enum:
-        - pending
-        - resolved
-        - rejected
-        in: query
-        name: status
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 查询成功
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 无权限
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 获取食安事件列表
-      tags:
-      - 运营商功能
-    post:
-      consumes:
-      - application/json
-      description: 运营商提交食品安全事件报告，可能触发熔断机制
-      parameters:
-      - description: 报告内容
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.submitSafetyReportRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 提交成功
-          schema:
-            $ref: '#/definitions/api.MessageResponse'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 无权限
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 提交食安报告
-      tags:
-      - 运营商功能
-  /v1/operator/reports/safety/{id}:
-    get:
-      consumes:
-      - application/json
-      description: 获取运营商区域内食安事件详情
-      parameters:
-      - description: 事件ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 查询成功
-          schema:
-            $ref: '#/definitions/db.SafetyReport'
-        "403":
-          description: 无权限
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 未找到
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 获取食安事件详情
-      tags:
-      - 运营商功能
-  /v1/operator/reports/safety/{id}/resolve:
-    post:
-      consumes:
-      - application/json
-      description: 运营商填写处置报告，支持恢复商户上线
-      parameters:
-      - description: 事件ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: 处理信息
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.resolveSafetyReportRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 处理成功
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 无权限
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 未找到
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 处理食安事件
-      tags:
-      - 运营商功能
   /v1/operator/riders:
     get:
       consumes:
@@ -23058,6 +23654,180 @@ paths:
       summary: 获取财务概览
       tags:
       - 运营商数据统计
+  /v1/operators/me/notifications:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前运营商的提醒列表，支持按已读状态和分类筛选，支持分页
+      parameters:
+      - description: '筛选读取状态: true-已读, false-未读'
+        in: query
+        name: is_read
+        type: boolean
+      - description: '筛选分类: dispatch_timeout/system'
+        in: query
+        name: category
+        type: string
+      - description: 每页数量(默认20, 最大100)
+        in: query
+        name: limit
+        type: integer
+      - description: 分页偏移量(默认0)
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.listOperatorNotificationsResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取运营商通知列表
+      tags:
+      - 运营商通知
+  /v1/operators/me/notifications/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前运营商的一条提醒详情
+      parameters:
+      - description: 通知ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.operatorNotificationResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 通知不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取运营商通知详情
+      tags:
+      - 运营商通知
+  /v1/operators/me/notifications/{id}/read:
+    put:
+      consumes:
+      - application/json
+      description: 将指定运营商提醒标记为已读，仅能操作自己的提醒
+      parameters:
+      - description: 通知ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.operatorNotificationResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 通知不存在或已读
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 标记运营商通知已读
+      tags:
+      - 运营商通知
+  /v1/operators/me/notifications/read-all:
+    put:
+      consumes:
+      - application/json
+      description: 将当前运营商的所有未读提醒标记为已读
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.markAllAsReadResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 全部标记运营商通知已读
+      tags:
+      - 运营商通知
+  /v1/operators/me/notifications/summary:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前运营商未读数和最近一条提醒
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.operatorNotificationSummaryResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取运营商通知摘要
+      tags:
+      - 运营商通知
   /v1/operators/me/payment-orders/{id}/profit-sharing/amounts:
     get:
       consumes:
@@ -25165,6 +25935,220 @@ paths:
       security:
       - BearerAuth: []
       summary: 禁用分账规则配置
+      tags:
+      - Platform
+  /v1/platform/profit-sharing/receiver-lifecycle/repair:
+    post:
+      consumes:
+      - application/json
+      description: 平台按 owner 维度重放分账接收方同步，不使用 payment_order 上下文，也不在 API 请求内直接调用微信
+      parameters:
+      - description: 接收方生命周期修复请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.repairProfitSharingReceiverLifecycleRequest'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: 已写入修复意图并入队
+          schema:
+            $ref: '#/definitions/api.repairProfitSharingReceiverLifecycleResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "404":
+          description: owner不存在
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 手工修复分账接收方生命周期
+      tags:
+      - Platform
+  /v1/platform/profit-sharing/receiver-lifecycle/targets:
+    get:
+      consumes:
+      - application/json
+      description: 平台只读查询 receiver lifecycle target，用于排查 pending/failed/synced 状态；响应不返回
+        openid、receiver name、account hash、display name hash 或微信原始 payload
+      parameters:
+      - description: owner 类型
+        enum:
+        - operator
+        - rider
+        in: query
+        name: owner_type
+        type: string
+      - description: owner ID
+        in: query
+        name: owner_id
+        type: integer
+      - description: 同步状态
+        enum:
+        - pending
+        - processing
+        - synced
+        - failed
+        - skipped
+        in: query
+        name: sync_status
+        type: string
+      - default: 1
+        description: 页码
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: target 列表
+          schema:
+            $ref: '#/definitions/api.listProfitSharingReceiverLifecycleTargetsResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取分账接收方生命周期 target 列表
+      tags:
+      - Platform
+  /v1/platform/profit-sharing/receiver-lifecycle/targets/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 平台只读查询单个 receiver lifecycle target；响应不返回 openid、receiver name、account
+        hash、display name hash 或微信原始 payload
+      parameters:
+      - description: target ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: target 详情
+          schema:
+            $ref: '#/definitions/api.getProfitSharingReceiverLifecycleTargetResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "404":
+          description: target不存在
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取分账接收方生命周期 target 详情
+      tags:
+      - Platform
+  /v1/platform/profit-sharing/receiver-lifecycle/targets/{id}/attempts:
+    get:
+      consumes:
+      - application/json
+      description: 平台只读查询单个 receiver lifecycle target 的 attempts；错误字段为服务端脱敏摘要，不包含微信原始
+        payload
+      parameters:
+      - description: target ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - default: 1
+        description: 页码
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: attempt 列表
+          schema:
+            $ref: '#/definitions/api.listProfitSharingReceiverLifecycleAttemptsResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "404":
+          description: target不存在
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取分账接收方生命周期 target 执行记录
       tags:
       - Platform
   /v1/platform/refunds/{id}/apply-abnormal-refund:
@@ -27775,160 +28759,6 @@ paths:
       summary: 获取商户所有评价（商户专用）
       tags:
       - 评价管理-商户
-  /v1/rider/appeals:
-    get:
-      consumes:
-      - application/json
-      description: 骑手查看自己提交的申诉列表
-      parameters:
-      - description: 页码
-        in: query
-        minimum: 1
-        name: page_id
-        required: true
-        type: integer
-      - description: 每页数量
-        in: query
-        maximum: 50
-        minimum: 1
-        name: page_size
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 成功返回申诉列表
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 参数错误
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 未授权
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: 非骑手用户
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 服务器错误
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      summary: 获取申诉列表
-      tags:
-      - 骑手申诉管理
-    post:
-      consumes:
-      - application/json
-      description: 骑手对与自己配送订单相关的索赔提交申诉，提交后由系统自动复核并写回最终结果
-      parameters:
-      - description: 申诉请求
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.createRiderAppealRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: 成功创建申诉
-          schema:
-            $ref: '#/definitions/api.appealResponse'
-        "400":
-          description: 参数错误
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 未授权
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: 非骑手用户或索赔与骑手无关
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: 索赔不存在
-          schema:
-            additionalProperties: true
-            type: object
-        "409":
-          description: 已存在申诉
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 服务器错误
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      summary: 提交申诉
-      tags:
-      - 骑手申诉管理
-  /v1/rider/appeals/{id}:
-    get:
-      consumes:
-      - application/json
-      description: 骑手查看自己提交的申诉详细信息
-      parameters:
-      - description: 申诉ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 成功返回申诉详情
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: 参数错误
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 未授权
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: 非骑手用户
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: 申诉不存在
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 服务器错误
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      summary: 获取申诉详情
-      tags:
-      - 骑手申诉管理
   /v1/rider/application:
     get:
       consumes:
@@ -28183,7 +29013,7 @@ paths:
       - Bearer: []
       summary: 获取骑手收到的索赔列表
       tags:
-      - 骑手申诉管理
+      - 骑手索赔管理
   /v1/rider/claims/{id}:
     get:
       consumes:
@@ -28232,7 +29062,7 @@ paths:
       - Bearer: []
       summary: 获取索赔详情
       tags:
-      - 骑手申诉管理
+      - 骑手索赔管理
   /v1/rider/claims/{id}/decision:
     get:
       consumes:
@@ -28280,102 +29110,6 @@ paths:
       - Bearer: []
       summary: 获取索赔判定依据
       tags:
-      - 骑手申诉管理
-  /v1/rider/claims/{id}/recovery:
-    get:
-      consumes:
-      - application/json
-      description: 骑手查看索赔对应的追偿单状态
-      parameters:
-      - description: 索赔ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 追偿单详情
-          schema:
-            $ref: '#/definitions/api.claimRecoveryResponse'
-        "400":
-          description: 参数错误
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 未授权
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: 非骑手用户或索赔不属于该骑手
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: 追偿单不存在
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 服务器错误
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      summary: 骑手查看追偿单
-      tags:
-      - 骑手索赔管理
-  /v1/rider/claims/{id}/recovery/pay:
-    post:
-      consumes:
-      - application/json
-      description: 骑手为索赔追偿创建微信支付单，支付成功后系统再标记追偿单为已支付
-      parameters:
-      - description: 索赔ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 支付单创建成功
-          schema:
-            $ref: '#/definitions/api.claimRecoveryPaymentResponse'
-        "400":
-          description: 参数错误
-          schema:
-            additionalProperties: true
-            type: object
-        "401":
-          description: 未授权
-          schema:
-            additionalProperties: true
-            type: object
-        "403":
-          description: 非骑手用户或索赔不属于该骑手
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: 追偿单不存在
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: 服务器错误
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - Bearer: []
-      summary: 骑手创建追偿支付单
-      tags:
       - 骑手索赔管理
   /v1/rider/claims/summary:
     get:
@@ -28408,7 +29142,7 @@ paths:
       - Bearer: []
       summary: 获取骑手索赔汇总
       tags:
-      - 骑手申诉管理
+      - 骑手索赔管理
   /v1/rider/deposit:
     get:
       consumes:
@@ -28481,7 +29215,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: 分页查询当前骑手的押金变动流水记录，包括充值、提现、冻结、解冻、扣款等
+      description: 分页查询当前骑手的押金变动流水记录，包括充值、提现、配送冻结、解冻、扣款等；提现冻结中间流水不作为账单明细返回
       parameters:
       - default: 1
         description: 页码
@@ -28668,6 +29402,264 @@ paths:
       summary: 骑手上线
       tags:
       - 骑手
+  /v1/rider/recoveries/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 骑手查看索赔对应的追偿单状态
+      parameters:
+      - description: 追偿单ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 追偿单详情
+          schema:
+            $ref: '#/definitions/api.claimRecoveryResponse'
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 非骑手用户或索赔不属于该骑手
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 追偿单不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 骑手查看追偿单
+      tags:
+      - 骑手索赔管理
+  /v1/rider/recoveries/{id}/pay:
+    post:
+      consumes:
+      - application/json
+      description: 骑手为索赔追偿创建微信支付单，支付成功后系统再标记追偿单为已支付
+      parameters:
+      - description: 追偿单ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 支付单创建成功
+          schema:
+            $ref: '#/definitions/api.claimRecoveryPaymentResponse'
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 非骑手用户或索赔不属于该骑手
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 追偿单不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 骑手创建追偿支付单
+      tags:
+      - 骑手索赔管理
+  /v1/rider/recovery-disputes:
+    get:
+      consumes:
+      - application/json
+      description: 骑手查看自己提交的追偿争议列表
+      parameters:
+      - description: 页码
+        in: query
+        minimum: 1
+        name: page_id
+        required: true
+        type: integer
+      - description: 每页数量
+        in: query
+        maximum: 50
+        minimum: 1
+        name: page_size
+        required: true
+        type: integer
+      - description: 状态筛选
+        enum:
+        - submitted
+        - approved
+        - rejected
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回追偿争议列表
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 非骑手用户
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 获取追偿争议列表
+      tags:
+      - 骑手追偿争议管理
+    post:
+      consumes:
+      - application/json
+      description: 骑手对平台向自身发起的追偿提交争议，提交后由系统自动复核并写回最终结果
+      parameters:
+      - description: 追偿争议请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.createRiderRecoveryDisputeRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 成功创建追偿争议
+          schema:
+            $ref: '#/definitions/api.recoveryDisputeResponse'
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 非骑手用户或追偿与骑手无关
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 追偿不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: 已存在追偿争议
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 提交追偿争议
+      tags:
+      - 骑手追偿争议管理
+  /v1/rider/recovery-disputes/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 骑手查看自己提交的追偿争议详细信息
+      parameters:
+      - description: 追偿争议ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回追偿争议详情
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 非骑手用户
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 追偿争议不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 获取追偿争议详情
+      tags:
+      - 骑手追偿争议管理
   /v1/rider/status:
     get:
       consumes:
@@ -28713,7 +29705,11 @@ paths:
       - application/json
       responses:
         "200":
-          description: 提现已提交或完成
+          description: 提现已完成对账
+          schema:
+            $ref: '#/definitions/api.riderWithdrawResponse'
+        "202":
+          description: 提现请求已受理，等待异步终态
           schema:
             $ref: '#/definitions/api.riderWithdrawResponse'
         "400":
@@ -28735,6 +29731,48 @@ paths:
       security:
       - BearerAuth: []
       summary: 骑手押金提现
+      tags:
+      - 骑手
+  /v1/rider/withdrawals/status:
+    get:
+      consumes:
+      - application/json
+      description: 按提现提交返回的 refund_order_ids 查询本次提现处理状态和金额汇总。
+      parameters:
+      - collectionFormat: multi
+        description: 提现退款单ID，支持逗号或重复参数
+        in: query
+        items:
+          type: integer
+        name: refund_order_ids
+        required: true
+        type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 提现状态
+          schema:
+            $ref: '#/definitions/api.riderWithdrawalStatusResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 未注册骑手或提现记录不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询骑手押金提现状态
       tags:
       - 骑手
   /v1/role-access:

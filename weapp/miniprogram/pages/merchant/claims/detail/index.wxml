@@ -17,7 +17,9 @@
     </view>
 
     <view wx:if="{{actionNoticeMessage}}" class="notice-banner">
-      <t-notice-bar theme="warning" visible="{{true}}" content="{{actionNoticeMessage}}" />
+      <t-notice-bar theme="warning" visible="{{true}}" content="{{actionNoticeMessage}}">
+        <text wx:if="{{actionNoticeRefreshable}}" slot="operation" class="notice-banner-operation" bindtap="onRetryRefresh">刷新追偿状态</text>
+      </t-notice-bar>
     </view>
 
     <view wx:if="{{refreshErrorMessage}}" class="notice-banner">

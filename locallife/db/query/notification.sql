@@ -35,6 +35,28 @@ SELECT COUNT(*) FROM notifications
 WHERE user_id = $1
   AND is_read = false;
 
+-- name: ListOperatorNotifications :many
+SELECT id, user_id, type, title, content, related_type, related_id, extra_data, is_read, read_at, is_pushed, pushed_at, created_at, expires_at FROM notifications
+WHERE user_id = sqlc.arg('user_id')
+  AND COALESCE(extra_data->>'audience', '') = 'operator'
+  AND (sqlc.narg('is_read')::boolean IS NULL OR is_read = sqlc.narg('is_read'))
+  AND (sqlc.narg('category')::text IS NULL OR extra_data->>'category' = sqlc.narg('category'))
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: CountOperatorNotifications :one
+SELECT COUNT(*) FROM notifications
+WHERE user_id = sqlc.arg('user_id')
+  AND COALESCE(extra_data->>'audience', '') = 'operator'
+  AND (sqlc.narg('is_read')::boolean IS NULL OR is_read = sqlc.narg('is_read'))
+  AND (sqlc.narg('category')::text IS NULL OR extra_data->>'category' = sqlc.narg('category'));
+
+-- name: GetOperatorNotification :one
+SELECT id, user_id, type, title, content, related_type, related_id, extra_data, is_read, read_at, is_pushed, pushed_at, created_at, expires_at FROM notifications
+WHERE id = sqlc.arg('id')
+  AND user_id = sqlc.arg('user_id')
+  AND COALESCE(extra_data->>'audience', '') = 'operator';
+
 -- name: MarkNotificationAsRead :one
 UPDATE notifications
 SET 
@@ -45,12 +67,32 @@ WHERE id = $1
   AND is_read = false
 RETURNING *;
 
+-- name: MarkOperatorNotificationAsRead :one
+UPDATE notifications
+SET
+  is_read = true,
+  read_at = now()
+WHERE id = sqlc.arg('id')
+  AND user_id = sqlc.arg('user_id')
+  AND COALESCE(extra_data->>'audience', '') = 'operator'
+  AND is_read = false
+RETURNING *;
+
 -- name: MarkAllNotificationsAsRead :exec
 UPDATE notifications
 SET 
   is_read = true,
   read_at = now()
 WHERE user_id = $1
+  AND is_read = false;
+
+-- name: MarkAllOperatorNotificationsAsRead :exec
+UPDATE notifications
+SET
+  is_read = true,
+  read_at = now()
+WHERE user_id = sqlc.arg('user_id')
+  AND COALESCE(extra_data->>'audience', '') = 'operator'
   AND is_read = false;
 
 -- name: MarkNotificationAsPushed :exec

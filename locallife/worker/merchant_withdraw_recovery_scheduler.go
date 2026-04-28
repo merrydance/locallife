@@ -14,6 +14,7 @@ import (
 const (
 	merchantWithdrawRecoveryCron       = "*/3 * * * *"
 	merchantWithdrawRecoveryBatchLimit = int32(200)
+	merchantWithdrawRecoveryMinAge     = 5 * time.Minute
 )
 
 // MerchantWithdrawRecoveryScheduler 扫描pending商户提现并触发结果轮询
@@ -91,10 +92,12 @@ func (s *MerchantWithdrawRecoveryScheduler) runOnce(ctx context.Context) {
 	defer cancel()
 
 	channels := []string{merchantWithdrawChannel}
+	updatedBefore := time.Now().Add(-merchantWithdrawRecoveryMinAge)
 	for _, channel := range channels {
 		records, err := s.store.ListPendingWithdrawalRecordsByChannel(ctx, db.ListPendingWithdrawalRecordsByChannelParams{
-			Channel: channel,
-			Limit:   merchantWithdrawRecoveryBatchLimit,
+			Channel:       channel,
+			UpdatedBefore: updatedBefore,
+			LimitCount:    merchantWithdrawRecoveryBatchLimit,
 		})
 		if err != nil {
 			log.Error().Err(err).Str("channel", channel).Msg("list pending withdrawal records failed")

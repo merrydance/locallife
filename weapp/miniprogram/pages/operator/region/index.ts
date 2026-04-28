@@ -1,7 +1,6 @@
-import { operatorBasicManagementService, OperatorBasicManagementAdapter } from '../../../api/operator-basic-management'
+import { loadOperatorRegionListItems, type OperatorRegionListItem } from '../../../services/operator-regions'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
-type RegionListItem = ReturnType<typeof OperatorBasicManagementAdapter.adaptRegionResponse>
 type RegionPageTarget = 'delivery' | 'rules'
 
 interface RegionPageOptions {
@@ -10,37 +9,25 @@ interface RegionPageOptions {
 
 Page({
     data: {
-        regions: [] as RegionListItem[],
+        regions: [] as OperatorRegionListItem[],
         initialLoading: true,
-        loadingMore: false,
         error: '',
-        page: 1,
-        pageSize: 20,
-        hasMore: true,
         navBarHeight: 0,
         target: 'delivery' as RegionPageTarget,
-        pageTitle: '区域管理',
-        subtitle: '管理您所负责的区域及其配送运费规则'
+        pageTitle: '区域管理'
     },
 
     onLoad(options: RegionPageOptions) {
         const target: RegionPageTarget = options?.target === 'rules' ? 'rules' : 'delivery'
         this.setData({
             target,
-            pageTitle: target === 'rules' ? '选择规则配置区县' : '区域管理',
-            subtitle: target === 'rules' ? '请先选择要配置的区县，再进入规则配置页' : '管理您所负责的区域及其配送运费规则'
+            pageTitle: target === 'rules' ? '选择规则配置区县' : '区域管理'
         })
-        this.loadRegions(true)
+        this.loadRegions()
     },
 
     onPullDownRefresh() {
-        this.loadRegions(true)
-    },
-
-    onReachBottom() {
-        if (this.data.hasMore && !this.data.loadingMore && !this.data.initialLoading) {
-            this.loadRegions(false)
-        }
+        this.loadRegions()
     },
 
     onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight: number }>) {
@@ -50,47 +37,26 @@ Page({
     },
 
     onRetry() {
-        this.loadRegions(true)
+        this.loadRegions()
     },
 
-    async loadRegions(reset = false) {
-        if (reset) {
-            this.setData({ initialLoading: true, error: '', page: 1, regions: [], hasMore: true })
-        } else {
-            this.setData({ loadingMore: true })
-        }
-
+    async loadRegions() {
+        this.setData({ initialLoading: true, error: '', regions: [] })
         try {
-            const res = await operatorBasicManagementService.getOperatorRegions({
-                page: this.data.page,
-                limit: this.data.pageSize
-            })
-
-            const newRegions = (res.regions || []).map((r) => OperatorBasicManagementAdapter.adaptRegionResponse(r))
-
             this.setData({
-                regions: reset ? newRegions : [...this.data.regions, ...newRegions],
-                page: this.data.page + 1,
-                hasMore: Boolean(res.has_more),
-                initialLoading: false,
-                loadingMore: false
+                regions: await loadOperatorRegionListItems(),
+                initialLoading: false
             })
 
         } catch (err: unknown) {
             console.error(err)
             const errorMsg = getErrorUserMessage(err, '加载区域列表失败，请稍后重试')
-            if (reset) {
-                this.setData({
-                    error: errorMsg,
-                    initialLoading: false,
-                    loadingMore: false
-                })
-            } else {
-                this.setData({ loadingMore: false })
-                wx.showToast({ title: errorMsg, icon: 'none' })
-            }
+            this.setData({
+                error: errorMsg,
+                initialLoading: false
+            })
         } finally {
-            if (reset) wx.stopPullDownRefresh()
+            wx.stopPullDownRefresh()
         }
     },
 

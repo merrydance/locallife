@@ -104,6 +104,26 @@ WHERE po.user_id = $1
     AND ro.refund_type = 'rider_deposit'
     AND ro.status IN ('pending', 'processing');
 
+-- name: ListRiderDepositWithdrawalRefundOrdersByIDs :many
+SELECT
+    ro.id AS refund_order_id,
+    ro.payment_order_id,
+    ro.refund_amount,
+    ro.out_refund_no,
+    ro.refund_id,
+    ro.status,
+    ro.refunded_at,
+    ro.created_at,
+    po.out_trade_no,
+    po.amount AS source_payment_amount
+FROM refund_orders ro
+JOIN payment_orders po ON po.id = ro.payment_order_id
+WHERE po.user_id = sqlc.arg('user_id')::bigint
+    AND po.business_type = 'rider_deposit'
+    AND ro.refund_type = 'rider_deposit'
+    AND ro.id = ANY(sqlc.arg('refund_order_ids')::bigint[])
+ORDER BY ro.created_at ASC, ro.id ASC;
+
 -- name: ListRefundOrdersForReconciliation :many
 -- 获取指定日期范围内直连支付（miniprogram/deposit等）成功退款订单（用于每日对账）
 -- 通过 JOIN payment_orders 过滤 payment_channel，排除收付通退款（已单独对账）

@@ -4,12 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/websocket"
 )
+
+type FoodSafetyReportInput struct {
+	ReporterUserID int64
+	MerchantID     int64
+	Order          db.Order
+}
 
 // FoodSafetyHandler 食安事件处理器
 type FoodSafetyHandler struct {
@@ -29,18 +36,32 @@ func NewFoodSafetyHandler(store db.Store, wsHub WebSocketHub) *FoodSafetyHandler
 // 返回是否应该熔断、是否恶作剧、熔断时长等
 func (fsh *FoodSafetyHandler) EvaluateFoodSafetyReport(
 	ctx context.Context,
-	userID int64,
-	merchantID int64,
-	evidence []string,
+	input FoodSafetyReportInput,
 ) (*FoodSafetyCheckResult, error) {
 	// Step 1: 检查商户最近1小时的食安举报
-	reports, err := fsh.store.GetMerchantRecentFoodSafetyReports(ctx, merchantID)
+	var (
+		reports []db.FoodSafetyIncident
+		err     error
+	)
+	recentRows, queryErr := fsh.store.GetMerchantRecentFoodSafetyReports(ctx, input.MerchantID)
+	err = queryErr
+	reports = make([]db.FoodSafetyIncident, 0, len(recentRows))
+	for _, row := range recentRows {
+		reports = append(reports, db.FoodSafetyIncident{ID: row.ID, OrderID: row.OrderID, UserID: row.UserID})
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	// Step 2: 未达到3个 -> 仅记录和通知
-	if len(reports) < FoodSafetyReportsIn1Hour-1 { // -1因为当前这次还没创建
+	reporterIDs := make([]int64, 0, len(reports)+1)
+	reporterIDs = append(reporterIDs, input.ReporterUserID)
+	for _, report := range reports {
+		reporterIDs = append(reporterIDs, report.UserID)
+	}
+	reporterIDs = UniqueInt64(reporterIDs)
+
+	// Step 2: 未达到3个不同用户 -> 仅记录和通知
+	if len(reporterIDs) < FoodSafetyReportsIn1Hour {
 		return &FoodSafetyCheckResult{
 			ShouldCircuitBreak: false,
 			IsMalicious:        false,
@@ -51,14 +72,7 @@ func (fsh *FoodSafetyHandler) EvaluateFoodSafetyReport(
 	}
 
 	// Step 3: 达到3个，检查是否恶作剧
-	// 需要加上当前用户
-	reporterIDs := make([]int64, 0, len(reports)+1)
-	reporterIDs = append(reporterIDs, userID)
-	for _, report := range reports {
-		reporterIDs = append(reporterIDs, report.UserID)
-	}
-
-	isMalicious, err := fsh.checkMaliciousPattern(ctx, reporterIDs)
+	isMalicious, err := fsh.checkMaliciousPattern(ctx, reporterIDs, input.Order, reports)
 	if err != nil {
 		return nil, err
 	}
@@ -78,8 +92,8 @@ func (fsh *FoodSafetyHandler) EvaluateFoodSafetyReport(
 	return &FoodSafetyCheckResult{
 		ShouldCircuitBreak: true,
 		IsMalicious:        false,
-		ReasonCode:         "3-food-safety-reports-in-1h",
-		Message:            "1小时内3次真实食安举报，立即熔断",
+		ReasonCode:         "3-distinct-customer-food-safety-reports-in-1h",
+		Message:            "1小时内同商户出现3名不同顾客的真实食安举报，立即熔断",
 		DurationHours:      48,
 	}, nil
 }
@@ -92,6 +106,8 @@ func (fsh *FoodSafetyHandler) EvaluateFoodSafetyReport(
 func (fsh *FoodSafetyHandler) checkMaliciousPattern(
 	ctx context.Context,
 	reporterIDs []int64,
+	currentOrder db.Order,
+	priorReports []db.FoodSafetyIncident,
 ) (bool, error) {
 	if len(reporterIDs) < 2 {
 		return false, nil
@@ -102,7 +118,7 @@ func (fsh *FoodSafetyHandler) checkMaliciousPattern(
 	for _, uid := range reporterIDs {
 		totalOrders, err := fsh.store.CountUserOrders(ctx, uid)
 		if err != nil {
-			continue
+			return false, err
 		}
 		if totalOrders > 1 {
 			allNewUsersFirstOrder = false
@@ -114,37 +130,84 @@ func (fsh *FoodSafetyHandler) checkMaliciousPattern(
 		return true, nil
 	}
 
-	// 检查2: 是否存在同一设备被多个用户使用的已确认欺诈模式
-	// 查询这些用户是否已经被标记为欺诈关联用户
-	patterns, err := fsh.store.GetFraudPatternsByUsers(ctx, reporterIDs)
-	if err == nil {
-		// 如果用户存在已确认的欺诈模式，判定为恶作剧
-		for _, pattern := range patterns {
-			if pattern.IsConfirmed && (pattern.PatternType == FraudPatternDeviceReuse || pattern.PatternType == FraudPatternAddressCluster) {
-				return true, nil
+	// 检查2: 当前参与举报用户是否存在共享设备
+	sharedDevice, err := fsh.hasSharedReporterDevice(ctx, reporterIDs)
+	if err != nil {
+		return false, err
+	}
+	if sharedDevice {
+		return true, nil
+	}
+
+	// 检查3: 当前事件簇是否存在共享收货地址
+	sharedAddress, err := fsh.hasSharedReporterAddress(ctx, currentOrder, priorReports)
+	if err != nil {
+		return false, err
+	}
+	if sharedAddress {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func (fsh *FoodSafetyHandler) hasSharedReporterDevice(ctx context.Context, reporterIDs []int64) (bool, error) {
+	deviceUsers := make(map[string]map[int64]struct{})
+
+	for _, uid := range reporterIDs {
+		devices, err := fsh.store.GetDevicesByUserID(ctx, uid)
+		if err != nil {
+			return false, err
+		}
+		for _, device := range devices {
+			deviceKey := strings.TrimSpace(device.DeviceID)
+			if device.DeviceFingerprint.Valid && strings.TrimSpace(device.DeviceFingerprint.String) != "" {
+				deviceKey = strings.TrimSpace(device.DeviceFingerprint.String)
 			}
+			if deviceKey == "" {
+				continue
+			}
+			if _, ok := deviceUsers[deviceKey]; !ok {
+				deviceUsers[deviceKey] = make(map[int64]struct{})
+			}
+			deviceUsers[deviceKey][uid] = struct{}{}
 		}
 	}
 
-	// 检查3: 相同收货地址
-	// 获取每个用户最近一次订单的地址
-	addressMap := make(map[int64]int) // address_id -> 用户数
-	for _, uid := range reporterIDs {
-		// 查询用户最近订单的地址
-		orders, err := fsh.store.ListUserRecentOrders(ctx, db.ListUserRecentOrdersParams{
-			UserID: uid,
-			Limit:  1,
-		})
-		if err != nil || len(orders) == 0 {
-			continue
-		}
-		if orders[0].AddressID.Valid {
-			addressMap[orders[0].AddressID.Int64]++
+	for _, users := range deviceUsers {
+		if len(users) >= 2 {
+			return true, nil
 		}
 	}
-	// 如果同一地址被>=2个用户使用，判定为恶作剧
-	for _, count := range addressMap {
-		if count >= 2 {
+
+	return false, nil
+}
+
+func (fsh *FoodSafetyHandler) hasSharedReporterAddress(ctx context.Context, currentOrder db.Order, priorReports []db.FoodSafetyIncident) (bool, error) {
+	addressUsers := make(map[int64]map[int64]struct{})
+
+	if currentOrder.AddressID.Valid {
+		addressUsers[currentOrder.AddressID.Int64] = map[int64]struct{}{
+			currentOrder.UserID: {},
+		}
+	}
+
+	for _, report := range priorReports {
+		order, err := fsh.store.GetOrder(ctx, report.OrderID)
+		if err != nil {
+			return false, err
+		}
+		if !order.AddressID.Valid {
+			continue
+		}
+		if _, ok := addressUsers[order.AddressID.Int64]; !ok {
+			addressUsers[order.AddressID.Int64] = make(map[int64]struct{})
+		}
+		addressUsers[order.AddressID.Int64][order.UserID] = struct{}{}
+	}
+
+	for _, users := range addressUsers {
+		if len(users) >= 2 {
 			return true, nil
 		}
 	}
@@ -176,13 +239,7 @@ func (fsh *FoodSafetyHandler) CircuitBreakMerchant(
 		return err
 	}
 
-	// 发送通知给商户
-	fsh.sendNotification(
-		"merchant",
-		"食安熔断警告",
-		"您的店铺因食品安全问题被熔断，请立即整改",
-		merchantID,
-	)
+	fsh.NotifyMerchantCircuitBreak(merchantID)
 
 	// 取消未来预定并处理退款
 	// 1. 先获取需要退款的预订列表
@@ -213,6 +270,16 @@ func (fsh *FoodSafetyHandler) CircuitBreakMerchant(
 	})
 
 	return nil
+}
+
+// NotifyMerchantCircuitBreak 在熔断完成后向商户发送告警。
+func (fsh *FoodSafetyHandler) NotifyMerchantCircuitBreak(merchantID int64) {
+	fsh.sendNotification(
+		"merchant",
+		"食安熔断警告",
+		"您的店铺因食品安全问题被熔断，请立即整改",
+		merchantID,
+	)
 }
 
 // sendNotification 发送WebSocket通知（复用ClaimAutoApproval的逻辑）

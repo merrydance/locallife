@@ -458,22 +458,26 @@ func (server *Server) updateCurrentMerchantShopImages(ctx *gin.Context) {
 
 	resp := updateCurrentMerchantShopImagesResponse{}
 	if len(updatedApp.StorefrontImages) > 0 {
-		var images []string
-		if json.Unmarshal(updatedApp.StorefrontImages, &images) == nil {
-			for i, img := range images {
-				images[i] = server.resolvePublicUploadURLForClient(img)
-			}
-			resp.StorefrontImages = images
+		images, decodeErr := decodeStoredMerchantApplicationImageList(updatedApp.ID, "storefront_images", updatedApp.StorefrontImages)
+		if decodeErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, decodeErr))
+			return
 		}
+		for i, img := range images {
+			images[i] = server.resolvePublicUploadURLForClient(img)
+		}
+		resp.StorefrontImages = images
 	}
 	if len(updatedApp.EnvironmentImages) > 0 {
-		var images []string
-		if json.Unmarshal(updatedApp.EnvironmentImages, &images) == nil {
-			for i, img := range images {
-				images[i] = server.resolvePublicUploadURLForClient(img)
-			}
-			resp.EnvironmentImages = images
+		images, decodeErr := decodeStoredMerchantApplicationImageList(updatedApp.ID, "environment_images", updatedApp.EnvironmentImages)
+		if decodeErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, decodeErr))
+			return
 		}
+		for i, img := range images {
+			images[i] = server.resolvePublicUploadURLForClient(img)
+		}
+		resp.EnvironmentImages = images
 	}
 
 	ctx.JSON(http.StatusOK, resp)
@@ -1206,17 +1210,19 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 	// 解析 application_data 获取证照信息（lite 模式跳过）
 	if !liteMode && merchant.ApplicationData != nil {
 		var appData map[string]interface{}
-		if err := json.Unmarshal(merchant.ApplicationData, &appData); err == nil {
-			if v, ok := appData["business_license_media_asset_id"].(float64); ok && v > 0 {
-				id := int64(v)
-				url := server.publicImageURL(ctx, &id, media.VariantOriginal)
-				resp.BusinessLicenseImageURL = &url
-			}
-			if v, ok := appData["food_permit_media_asset_id"].(float64); ok && v > 0 {
-				id := int64(v)
-				url := server.publicImageURL(ctx, &id, media.VariantOriginal)
-				resp.FoodPermitURL = &url
-			}
+		if err := json.Unmarshal(merchant.ApplicationData, &appData); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("decode merchant %d application_data: %w", merchant.ID, err)))
+			return
+		}
+		if v, ok := appData["business_license_media_asset_id"].(float64); ok && v > 0 {
+			id := int64(v)
+			url := server.publicImageURL(ctx, &id, media.VariantOriginal)
+			resp.BusinessLicenseImageURL = &url
+		}
+		if v, ok := appData["food_permit_media_asset_id"].(float64); ok && v > 0 {
+			id := int64(v)
+			url := server.publicImageURL(ctx, &id, media.VariantOriginal)
+			resp.FoodPermitURL = &url
 		}
 	}
 
@@ -1224,8 +1230,12 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 	if !liteMode {
 		application, appErr := server.store.GetMerchantApplicationDraft(ctx, merchant.OwnerUserID)
 		if appErr == nil && len(application.StorefrontImages) > 0 {
-			var storefrontImages []string
-			if json.Unmarshal(application.StorefrontImages, &storefrontImages) == nil && len(storefrontImages) > 0 {
+			storefrontImages, decodeErr := decodeStoredMerchantApplicationImageList(application.ID, "storefront_images", application.StorefrontImages)
+			if decodeErr != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, decodeErr))
+				return
+			}
+			if len(storefrontImages) > 0 {
 				url := server.resolvePublicUploadURLForClient(storefrontImages[0])
 				if url != "" {
 					resp.CoverImage = &url
@@ -1413,7 +1423,10 @@ func (server *Server) getPublicMerchantDishes(ctx *gin.Context) {
 		// 解析标签
 		var tags []string
 		if d.Tags != nil {
-			_ = parseJSON(d.Tags, &tags)
+			if err := parseJSON(d.Tags, &tags); err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("decode public dish %d tags: %w", d.ID, err)))
+				return
+			}
 		}
 		if tags == nil {
 			tags = []string{}
@@ -1445,7 +1458,10 @@ func (server *Server) getPublicMerchantDishes(ctx *gin.Context) {
 		}
 
 		if d.CustomizationGroups != nil {
-			_ = parseJSON(d.CustomizationGroups, &dish.CustomizationGroups)
+			if err := parseJSON(d.CustomizationGroups, &dish.CustomizationGroups); err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("decode public dish %d customization_groups: %w", d.ID, err)))
+				return
+			}
 		}
 		if dish.CustomizationGroups == nil {
 			dish.CustomizationGroups = []customizationGroup{}
@@ -1569,17 +1585,25 @@ func (server *Server) getPublicMerchantCombos(ctx *gin.Context) {
 		// 解析菜品
 		if c.Dishes != nil {
 			var dishes []comboDishItem
-			if err := json.Unmarshal(c.Dishes, &dishes); err == nil {
-				combo.Dishes = dishes
+			if err := json.Unmarshal(c.Dishes, &dishes); err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("decode public combo %d dishes: %w", c.ID, err)))
+				return
 			}
+			combo.Dishes = dishes
 		}
 
 		// 解析标签
 		if c.Tags != nil {
 			var tags []string
 			if tagBytes, ok := c.Tags.([]byte); ok {
-				_ = json.Unmarshal(tagBytes, &tags)
+				if err := json.Unmarshal(tagBytes, &tags); err != nil {
+					ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("decode public combo %d tags: %w", c.ID, err)))
+					return
+				}
 				combo.Tags = tags
+			} else {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("decode public combo %d tags: unexpected type %T", c.ID, c.Tags)))
+				return
 			}
 		}
 

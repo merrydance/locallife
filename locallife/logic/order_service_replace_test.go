@@ -142,6 +142,7 @@ func TestOrderServiceReplaceOrderSchedulesPaymentTimeout(t *testing.T) {
 		updated.PrepayID = arg.PrepayID
 		return updated, nil
 	})
+	expectPartnerJSAPIPaymentCommand(t, store, paymentOrder.ID, paymentOrder.OutTradeNo, "prepay-replace-1", db.ExternalPaymentBusinessOwnerReservation, db.ExternalPaymentCommandStatusAccepted, "", 9803)
 	store.EXPECT().GetPaymentOrder(gomock.Any(), int64(222)).Times(1).Return(paymentOrder, nil)
 
 	service := NewOrderService(store, nil, nil, nil, taskScheduler, replaceOrderNormalizerStub{}, nil, ecommerceClient, nil, nil, nil)

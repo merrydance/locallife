@@ -713,6 +713,61 @@ func (q *Queries) ListExpiredPendingReservations(ctx context.Context) ([]TableRe
 	return items, nil
 }
 
+const listMerchantFutureReservationsForFoodSafetyAlert = `-- name: ListMerchantFutureReservationsForFoodSafetyAlert :many
+SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source FROM table_reservations
+WHERE merchant_id = $1
+  AND status IN ('pending', 'paid', 'confirmed')
+  AND (reservation_date + reservation_time) >= NOW()
+ORDER BY reservation_date, reservation_time
+`
+
+func (q *Queries) ListMerchantFutureReservationsForFoodSafetyAlert(ctx context.Context, merchantID int64) ([]TableReservation, error) {
+	rows, err := q.db.Query(ctx, listMerchantFutureReservationsForFoodSafetyAlert, merchantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TableReservation{}
+	for rows.Next() {
+		var i TableReservation
+		if err := rows.Scan(
+			&i.ID,
+			&i.TableID,
+			&i.UserID,
+			&i.MerchantID,
+			&i.ReservationDate,
+			&i.ReservationTime,
+			&i.GuestCount,
+			&i.ContactName,
+			&i.ContactPhone,
+			&i.PaymentMode,
+			&i.DepositAmount,
+			&i.PrepaidAmount,
+			&i.RefundDeadline,
+			&i.Status,
+			&i.PaymentDeadline,
+			&i.Notes,
+			&i.PaidAt,
+			&i.ConfirmedAt,
+			&i.CompletedAt,
+			&i.CancelledAt,
+			&i.CancelReason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CheckedInAt,
+			&i.CookingStartedAt,
+			&i.Source,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMerchantFutureReservationsForRefund = `-- name: ListMerchantFutureReservationsForRefund :many
 SELECT id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source FROM table_reservations
 WHERE merchant_id = $1 

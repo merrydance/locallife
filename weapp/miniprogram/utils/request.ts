@@ -93,12 +93,16 @@ function containsChineseText(text: string): boolean {
   return /[\u4e00-\u9fff]/.test(text)
 }
 
-function isOnboardingSubmitEndpoint(url: string): boolean {
-  return url === '/v1/merchant/application/submit' || url === '/v1/rider/application/submit'
+function isBusinessMessagePreserveEndpoint(url: string): boolean {
+  return (
+    url === '/v1/merchant/application/submit' ||
+    url === '/v1/rider/application/submit' ||
+    url === '/v1/merchant/applyment/bindbank'
+  )
 }
 
-function shouldPreserveOnboardingBusinessMessage(url: string, backendMessage: string): boolean {
-  if (!isOnboardingSubmitEndpoint(url)) {
+function shouldPreserveBusinessMessage(url: string, backendMessage: string): boolean {
+  if (!isBusinessMessagePreserveEndpoint(url)) {
     return false
   }
 
@@ -164,6 +168,22 @@ function mapKnownBackendMessage(url: string, backendMessage: string): string | u
   const normalized = backendMessage.trim().toLowerCase()
   if (!normalized) {
     return undefined
+  }
+
+  if (normalized.includes('active delivery orders')) {
+    return '当前有进行中的配送订单，完成后才能申请提现'
+  }
+
+  if (normalized.includes('deposit is currently frozen')) {
+    return '当前有冻结押金或提现处理中金额，暂时不能申请提现'
+  }
+
+  if (normalized.includes('insufficient available balance')) {
+    return '可用押金不足'
+  }
+
+  if (normalized.includes('商户退款余额不足') || normalized.includes('基本账户余额不足')) {
+    return '当前退款通道余额不足，暂时无法处理提现，请稍后再试'
   }
 
   if (normalized.includes('this endpoint requires merchant role') || normalized.includes('merchant owner role not found') || normalized.includes('not a merchant')) {
@@ -262,7 +282,7 @@ function normalizeBackendUserMessage(url: string, backendMessage: string, fallba
     return mappedMessage
   }
 
-  if (shouldPreserveOnboardingBusinessMessage(url, backendMessage)) {
+  if (shouldPreserveBusinessMessage(url, backendMessage)) {
     return backendMessage.replace(/\s+/g, ' ').trim()
   }
 

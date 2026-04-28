@@ -1,88 +1,13 @@
-
-import { deliveryFeeService } from '../../../api/delivery-fee'
-import type { DeliveryFeeConfigResponse, PeakHourConfigResponse } from '../../../api/delivery-fee'
+import {
+    createEmptyOperatorPeakConfigSummary,
+    createEmptyOperatorRegionConfigSummary,
+    loadOperatorRegionConfigOverview
+} from '../../../services/operator-region-config'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface RegionConfigPageOptions {
     id?: string
     region_name?: string
-}
-
-interface RegionConfigSummary {
-    baseFee: string
-    baseDistance: string
-    extraFeePerKm: string
-    valueRatio: string
-    minFee: string
-    maxFee: string
-    statusText: string
-}
-
-interface PeakConfigSummary {
-    count: number
-    daysText: string
-    note: string
-}
-
-function formatFen(amount?: number): string {
-    if (typeof amount !== 'number') {
-        return '未配置'
-    }
-    return `${(amount / 100).toFixed(2)}元`
-}
-
-function formatDayList(days: number[]): string {
-    const map = ['日', '一', '二', '三', '四', '五', '六']
-    return days
-        .map((day) => map[day] || '')
-        .filter(Boolean)
-        .join('、')
-}
-
-function buildFeeSummary(config: DeliveryFeeConfigResponse | null): RegionConfigSummary {
-    if (!config) {
-        return {
-            baseFee: '未配置',
-            baseDistance: '未配置',
-            extraFeePerKm: '未配置',
-            valueRatio: '未配置',
-            minFee: '未配置',
-            maxFee: '不限',
-            statusText: '当前区域还没有基础配送费配置'
-        }
-    }
-
-    return {
-        baseFee: formatFen(config.base_fee),
-        baseDistance: `${config.base_distance}米`,
-        extraFeePerKm: formatFen(config.extra_fee_per_km),
-        valueRatio: `${(config.value_ratio * 100).toFixed(2)}%`,
-        minFee: formatFen(config.min_fee),
-        maxFee: typeof config.max_fee === 'number' ? formatFen(config.max_fee) : '不限',
-        statusText: config.is_active ? '当前配置已启用' : '当前配置未启用'
-    }
-}
-
-function buildPeakSummary(configs: PeakHourConfigResponse[]): PeakConfigSummary {
-    if (!configs.length) {
-        return {
-            count: 0,
-            daysText: '暂无峰时时段',
-            note: '当前后端仅支持新增和删除；若需调整已有时段，请删除后重建。'
-        }
-    }
-
-    const uniqueDays = Array.from(
-        new Set(
-            configs.reduce<number[]>((allDays, item) => allDays.concat(item.days_of_week || []), [])
-        )
-    ).sort((left, right) => left - right)
-
-    return {
-        count: configs.length,
-        daysText: uniqueDays.length ? `覆盖周${formatDayList(uniqueDays)}` : '已配置峰时时段',
-        note: '当前后端仅支持新增和删除；若需调整已有时段，请删除后重建。'
-    }
 }
 
 Page({
@@ -92,8 +17,8 @@ Page({
         initialLoading: true,
         error: '',
         navBarHeight: 0,
-        feeSummary: buildFeeSummary(null),
-        peakSummary: buildPeakSummary([])
+        feeSummary: createEmptyOperatorRegionConfigSummary(),
+        peakSummary: createEmptyOperatorPeakConfigSummary()
     },
 
     onLoad(options: RegionConfigPageOptions) {
@@ -121,16 +46,12 @@ Page({
     async loadData() {
         this.setData({ initialLoading: true, error: '' })
         try {
-            const regionId = this.data.regionId
-            const [feeConfig, peakConfigs] = await Promise.all([
-                this.loadFeeConfigSafe(regionId),
-                deliveryFeeService.getPeakConfigs(regionId)
-            ])
+            const overview = await loadOperatorRegionConfigOverview(this.data.regionId)
 
             this.setData({
                 initialLoading: false,
-                feeSummary: buildFeeSummary(feeConfig),
-                peakSummary: buildPeakSummary(peakConfigs)
+                feeSummary: overview.feeSummary,
+                peakSummary: overview.peakSummary
             })
         } catch (err: unknown) {
             const errorMsg = getErrorUserMessage(err, '加载配置失败，请稍后重试')
@@ -138,14 +59,6 @@ Page({
                 initialLoading: false,
                 error: errorMsg
             })
-        }
-    },
-
-    async loadFeeConfigSafe(id: number): Promise<DeliveryFeeConfigResponse | null> {
-        try {
-            return await deliveryFeeService.getRegionConfig(id)
-        } catch (_e) {
-            return null
         }
     },
 

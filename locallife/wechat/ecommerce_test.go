@@ -14,6 +14,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -40,6 +43,18 @@ func decodeTinyPNG(t *testing.T) []byte {
 	decoded, err := base64.StdEncoding.DecodeString(tinyPNGBase64)
 	require.NoError(t, err)
 	return decoded
+}
+
+func encodeTinyJPEG(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	img.Set(0, 0, color.RGBA{R: 255, G: 255, B: 255, A: 255})
+
+	var buf bytes.Buffer
+	err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 90})
+	require.NoError(t, err)
+
+	return buf.Bytes()
 }
 
 func newSignedEcommerceClientForTest(t *testing.T, handler func(*http.Request) (*http.Response, error)) *EcommerceClient {
@@ -341,6 +356,59 @@ func TestUploadImage_AcceptsBMPPayload(t *testing.T) {
 	resp, err := client.UploadImage(context.Background(), "tiny.bmp", fileBytes)
 	require.NoError(t, err)
 	require.Equal(t, "wx-media-id-bmp", resp.MediaID)
+}
+
+func TestUploadImage_NormalizesFilenameToDetectedJPEGFormat(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		DirectPaymentClientConfig: DirectPaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              testAPIV3Key(),
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	fileBytes := encodeTinyJPEG(t)
+	expectedHash := sha256.Sum256(fileBytes)
+	expectedHashHex := fmt.Sprintf("%x", expectedHash)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodPost, req.Method)
+			require.Equal(t, merchantMediaUploadURL, req.URL.Path)
+
+			meta, uploadedFile, uploadedFileName, uploadedContentType := parseUploadImageMultipartRequest(t, req)
+			require.Equal(t, "storefront.jpg", meta["filename"])
+			require.Equal(t, expectedHashHex, meta["sha256"])
+			require.Equal(t, "storefront.jpg", uploadedFileName)
+			require.Equal(t, "image/jpeg", uploadedContentType)
+			require.Equal(t, fileBytes, uploadedFile)
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"media_id":"wx-media-id-jpeg"}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.UploadImage(context.Background(), "storefront.png", fileBytes)
+	require.NoError(t, err)
+	require.Equal(t, "wx-media-id-jpeg", resp.MediaID)
 }
 
 func TestUploadImage_RejectsEmptyFile(t *testing.T) {

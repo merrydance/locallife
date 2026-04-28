@@ -8,10 +8,7 @@
         "t-icon": "tdesign-miniprogram/icon/icon",
         "t-empty": "tdesign-miniprogram/empty/empty",
         "remark-input": "/components/remark-input/index",
-        "merchant-promos": "/components/merchant-promos/index",
-        "t-radio": "tdesign-miniprogram/radio/radio",
-        "t-radio-group": "tdesign-miniprogram/radio-group/radio-group",
-        "t-cell": "tdesign-miniprogram/cell/cell",
-        "t-cell-group": "tdesign-miniprogram/cell-group/cell-group"
-    }
+        "merchant-promos": "/components/merchant-promos/index"
+    },
+    "navigationStyle": "custom"
 }

@@ -93,44 +93,37 @@ export class Navigation {
     })
   }
 
-  /**
-   * 跳转到支付成功页
-   */
-  static toPaymentSuccess(params: { orderId: string, orderNo: string, amount: string, isCombined?: boolean, orderCount?: number }) {
-    const combinedQuery = params.isCombined ? `&combined=1&orderCount=${params.orderCount || 0}` : ''
-    wx.redirectTo({
-      url: `/pages/orders/success/index?orderId=${params.orderId}&orderNo=${params.orderNo}&amount=${params.amount}${combinedQuery}`
-    })
-  }
-
-  static toReservationPaymentResult(params: {
-    reservationId: string
-    amount: string
-    result: 'success' | 'failed' | 'cancelled' | 'unknown'
-    source?: 'confirm' | 'detail' | 'list'
+  static toPaymentResult(params: {
+    status: string
+    paymentOrderId?: string | number
+    businessId?: string | number
+    businessType?: string
+    orderNo?: string
+    amount?: string
     returnStatus?: string
   }) {
-    const sourceQuery = params.source ? `&source=${params.source}` : ''
-    const returnStatusQuery = params.returnStatus !== undefined ? `&returnStatus=${encodeURIComponent(params.returnStatus)}` : ''
-    const url = `/pages/orders/success/index?businessType=reservation&orderId=${params.reservationId}&orderNo=${params.reservationId}&amount=${params.amount}&result=${params.result}${sourceQuery}${returnStatusQuery}`
+    const query: string[] = [`status=${encodeURIComponent(params.status)}`]
 
-    if (params.source === 'list') {
-      wx.navigateTo({ url })
-      return
+    if (params.paymentOrderId !== undefined) {
+      query.push(`paymentOrderId=${encodeURIComponent(String(params.paymentOrderId))}`)
+    }
+    if (params.businessId !== undefined) {
+      query.push(`businessId=${encodeURIComponent(String(params.businessId))}`)
+    }
+    if (params.businessType) {
+      query.push(`businessType=${encodeURIComponent(params.businessType)}`)
+    }
+    if (params.orderNo) {
+      query.push(`orderNo=${encodeURIComponent(params.orderNo)}`)
+    }
+    if (params.amount) {
+      query.push(`amount=${encodeURIComponent(params.amount)}`)
+    }
+    if (params.returnStatus) {
+      query.push(`returnStatus=${encodeURIComponent(params.returnStatus)}`)
     }
 
-    wx.redirectTo({ url })
-  }
-
-  static toDineInPaymentSuccess(params: { orderId: string, amount: string, merchantName?: string, tableNumber?: string }) {
-    let url = `/pages/dine-in/payment-success/payment-success?order_id=${params.orderId}&amount=${params.amount}`
-    if (params.merchantName) {
-      url += `&merchant_name=${encodeURIComponent(params.merchantName)}`
-    }
-    if (params.tableNumber) {
-      url += `&table_number=${encodeURIComponent(params.tableNumber)}`
-    }
-    wx.redirectTo({ url })
+    wx.redirectTo({ url: `/pages/payment/result/index?${query.join('&')}` })
   }
 
   /**

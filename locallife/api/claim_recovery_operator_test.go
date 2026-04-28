@@ -19,16 +19,13 @@ func TestGetOperatorClaimRecoveryAPI(t *testing.T) {
 	managedRegion := randomRegion()
 	operator.RegionID = managedRegion.ID
 	unmanagedRegion := randomRegion()
-
-	claim := db.GetClaimForAppealRow{
-		ID:         1,
-		MerchantID: 200,
-		RegionID:   unmanagedRegion.ID,
-		CreatedAt:  time.Now(),
+	if unmanagedRegion.ID == managedRegion.ID {
+		unmanagedRegion.ID = managedRegion.ID + 1
 	}
-	recovery := db.ClaimRecovery{
+
+	recoveryCtx := db.GetClaimRecoveryContextByIDRow{
 		ID:               11,
-		ClaimID:          claim.ID,
+		ClaimID:          1,
 		OrderID:          88,
 		ResponsibleParty: "merchant",
 		RecoveryTarget:   pgtype.Text{String: "merchant", Valid: true},
@@ -36,6 +33,8 @@ func TestGetOperatorClaimRecoveryAPI(t *testing.T) {
 		Status:           "pending",
 		DueAt:            time.Now().Add(24 * time.Hour),
 		UpdatedAt:        time.Now(),
+		MerchantID:       200,
+		RegionID:         unmanagedRegion.ID,
 	}
 
 	testCases := []struct {
@@ -50,22 +49,17 @@ func TestGetOperatorClaimRecoveryAPI(t *testing.T) {
 				expectOperatorManagedRegions(store, operator, managedRegion.ID, unmanagedRegion.ID)
 
 				store.EXPECT().
-					GetClaimForAppeal(gomock.Any(), claim.ID).
+					GetClaimRecoveryContextByID(gomock.Any(), recoveryCtx.ID).
 					Times(1).
-					Return(claim, nil)
-
-				store.EXPECT().
-					GetClaimRecoveryByClaimID(gomock.Any(), claim.ID).
-					Times(1).
-					Return(recovery, nil)
+					Return(recoveryCtx, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var response claimRecoveryResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-				require.Equal(t, recovery.ID, response.ID)
-				require.Equal(t, claim.ID, response.ClaimID)
+				require.Equal(t, recoveryCtx.ID, response.ID)
+				require.Equal(t, recoveryCtx.ClaimID, response.ClaimID)
 			},
 		},
 		{
@@ -75,9 +69,9 @@ func TestGetOperatorClaimRecoveryAPI(t *testing.T) {
 				expectOperatorManagedRegions(store, operator, managedRegion.ID)
 
 				store.EXPECT().
-					GetClaimForAppeal(gomock.Any(), claim.ID).
+					GetClaimRecoveryContextByID(gomock.Any(), recoveryCtx.ID).
 					Times(1).
-					Return(claim, nil)
+					Return(recoveryCtx, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -96,7 +90,7 @@ func TestGetOperatorClaimRecoveryAPI(t *testing.T) {
 			server := newTestServer(t, store)
 			recorder := httptest.NewRecorder()
 
-			request, err := http.NewRequest(http.MethodGet, "/v1/operator/claims/1/recovery", nil)
+			request, err := http.NewRequest(http.MethodGet, "/v1/operator/recoveries/11", nil)
 			require.NoError(t, err)
 			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 

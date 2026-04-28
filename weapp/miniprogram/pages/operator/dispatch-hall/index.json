@@ -1,0 +1,11 @@
+{
+  "navigationBarTitleText": "待接单大厅",
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
+    "page-state": "/components/page-state/index",
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-tag": "tdesign-miniprogram/tag/tag",
+    "t-picker": "tdesign-miniprogram/picker/picker",
+    "t-picker-item": "tdesign-miniprogram/picker-item/picker-item"
+  }
+}

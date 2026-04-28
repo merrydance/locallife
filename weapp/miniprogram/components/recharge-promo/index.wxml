@@ -5,58 +5,12 @@
     <t-loading theme="circular" size="32rpx" />
   </view>
 
-  <!-- 有活动时展示 -->
-  <view wx:elif="{{rules.length > 0}}" class="promo-content">
-    <view class="promo-header">
-      <t-icon name="discount" size="36rpx" color="#FF6B00" />
-      <text class="promo-title">储值有礼</text>
-      <t-tag theme="warning" variant="dark" size="small">限时优惠</t-tag>
-    </view>
-    
-    <view class="promo-list">
-      <view 
-        wx:for="{{rules}}" 
-        wx:key="id" 
-        class="promo-item {{selectedRuleId === item.id ? 'selected' : ''}}"
-        bind:tap="onSelectRule"
-        data-rule="{{item}}"
-      >
-        <view class="promo-amount">
-          <text class="amount-main">充{{item.rechargeDisplay}}</text>
-          <text class="amount-bonus">送{{item.bonusDisplay}}</text>
-        </view>
-        <view class="promo-total">
-          <text class="total-label">到账</text>
-          <text class="total-amount">¥{{item.totalDisplay}}</text>
-        </view>
-      </view>
-    </view>
-
-    <!-- 余额不足提示 -->
-    <view wx:if="{{showInsufficientTip}}" class="insufficient-tip">
-      <t-icon name="error-circle" size="28rpx" color="#FA5151" />
-      <text>余额不足以支付本单，请先充值或选择其他支付方式</text>
-    </view>
-
-    <t-button 
-      theme="primary" 
-      size="medium" 
-      shape="round"
-      class="recharge-btn"
-      bind:tap="onRecharge"
-      loading="{{recharging}}"
-      disabled="{{!selectedRuleId}}"
-    >
-      {{selectedRuleId ? '立即充值 ¥' + selectedRechargeDisplay : '选择充值金额'}}
-    </t-button>
-  </view>
-
-  <!-- 无活动时的简洁充值入口 -->
-  <view wx:elif="{{!loading && membershipId}}" class="promo-simple">
+  <!-- 线上充值暂停提示 -->
+  <view wx:else class="promo-simple">
     <view class="simple-row">
-      <text class="simple-label">储值余额不足？</text>
+      <text class="simple-label">{{pausedMessage}}</text>
       <t-button theme="primary" variant="text" size="small" bind:tap="onCustomRecharge" shape="round">
-        去充值
+        我知道了
       </t-button>
     </view>
   </view>

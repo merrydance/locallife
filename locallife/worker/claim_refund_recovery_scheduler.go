@@ -68,6 +68,10 @@ func (s *ClaimPayoutRecoveryScheduler) Stop() {
 	log.Info().Msg("claim payout recovery scheduler stopped")
 }
 
+func (s *ClaimPayoutRecoveryScheduler) RunOnce() {
+	s.runOnce(context.Background())
+}
+
 func (s *ClaimPayoutRecoveryScheduler) runOnce(ctx context.Context) {
 	if !s.runMu.TryLock() {
 		log.Warn().Msg("claim payout recovery already running, skipping concurrent execution")
@@ -95,7 +99,7 @@ func (s *ClaimPayoutRecoveryScheduler) runOnce(ctx context.Context) {
 			if action.Status == "failed" && isClaimPayoutTerminalFailure(action.Detail) {
 				continue
 			}
-			if err := ExecuteClaimPayoutAction(ctx, s.store, s.transferClient, action.ID); err != nil {
+			if err := ExecuteClaimPayoutAction(ctx, s.store, nil, s.transferClient, action.ID); err != nil {
 				log.Error().Err(err).Int64("behavior_action_id", action.ID).Msg("recover claim payout action failed")
 			}
 		}

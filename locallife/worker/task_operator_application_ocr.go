@@ -133,9 +133,6 @@ func (processor *RedisTaskProcessor) ProcessTaskOperatorApplicationBusinessLicen
 		} else if normalized.BusinessLicense.RegistrationNumber != "" {
 			arg.BusinessLicenseNumber = pgtype.Text{String: normalized.BusinessLicense.RegistrationNumber, Valid: true}
 		}
-		if normalized.BusinessLicense.EnterpriseName != "" {
-			arg.Name = pgtype.Text{String: normalized.BusinessLicense.EnterpriseName, Valid: true}
-		}
 	}
 	ocrJSON, _ := json.Marshal(ocrData)
 	arg.BusinessLicenseOcr = ocrJSON

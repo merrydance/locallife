@@ -10,6 +10,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	wechaterrorcodes "github.com/merrydance/locallife/wechat/errorcodes"
@@ -17,9 +18,11 @@ import (
 )
 
 const (
-	TaskProcessMerchantWithdrawResult = "payment:process_merchant_withdraw_result"
-	merchantWithdrawMaxRetry          = 5
-	merchantWithdrawChannel           = "wechat_ecommerce_fund"
+	TaskProcessMerchantWithdrawResult  = "payment:process_merchant_withdraw_result"
+	merchantWithdrawMaxRetry           = 5
+	merchantWithdrawChannel            = "wechat_ecommerce_fund"
+	merchantWithdrawFactConsumerDomain = "merchant_funds_domain"
+	merchantWithdrawFactBusinessType   = "withdrawal_record"
 )
 
 // MerchantWithdrawResultPayload 商户提现状态轮询任务载荷
@@ -158,6 +161,7 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantWithdrawResult(ctx conte
 			return fmt.Errorf("query withdraw result failed after retries: %w", asynq.SkipRetry)
 		}
 
+		processor.touchMerchantWithdrawQueryAttempt(ctx, record)
 		if processor.distributor != nil {
 			_ = processor.distributor.DistributeTaskProcessMerchantWithdrawResult(
 				ctx,
@@ -170,22 +174,21 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantWithdrawResult(ctx conte
 		return nil
 	}
 
-	newStatus := mapWechatWithdrawStatus(resp.Status)
-	reason := pgtype.Text{}
-	if resp.Reason != "" {
-		reason = pgtype.Text{String: resp.Reason, Valid: true}
+	application, err := recordMerchantWithdrawQueryFact(ctx, processor.store, record, accountInfo, resp)
+	if err != nil {
+		return fmt.Errorf("record merchant withdraw query fact: %w", err)
 	}
-	clearReason := !reason.Valid && record.Reason.Valid
 
-	if newStatus != record.Status || reason.Valid || clearReason {
-		_, err = processor.store.UpdateWithdrawalStatus(ctx, db.UpdateWithdrawalStatusParams{
-			ID:          record.ID,
-			Status:      newStatus,
-			Reason:      reason,
-			ClearReason: clearReason,
-		})
-		if err != nil {
-			return fmt.Errorf("update withdrawal status: %w", err)
+	updatedRecord := record
+	newStatus := mapWechatWithdrawStatus(resp.Status)
+	if application != nil {
+		applyResult, applyErr := logic.NewPaymentFactService(processor.store).ApplyExternalPaymentFactApplication(ctx, application.ID)
+		if applyErr != nil {
+			return fmt.Errorf("apply merchant withdraw query fact: %w", applyErr)
+		}
+		if applyResult.MerchantWithdraw != nil {
+			updatedRecord = applyResult.MerchantWithdraw.WithdrawalRecord
+			newStatus = updatedRecord.Status
 		}
 	}
 
@@ -204,6 +207,10 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantWithdrawResult(ctx conte
 		})
 	}
 
+	if newStatus == "pending" {
+		processor.touchMerchantWithdrawQueryAttempt(ctx, updatedRecord)
+	}
+
 	if newStatus == "pending" && payload.RetryCount < merchantWithdrawMaxRetry && processor.distributor != nil {
 		_ = processor.distributor.DistributeTaskProcessMerchantWithdrawResult(
 			ctx,
@@ -214,6 +221,103 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantWithdrawResult(ctx conte
 	}
 
 	return nil
+}
+
+func (processor *RedisTaskProcessor) touchMerchantWithdrawQueryAttempt(ctx context.Context, record db.WithdrawalRecord) {
+	if record.ID == 0 || record.Status != "pending" {
+		return
+	}
+	if _, err := processor.store.UpdateWithdrawalStatus(ctx, db.UpdateWithdrawalStatusParams{
+		ID:          record.ID,
+		Status:      "pending",
+		Reason:      pgtype.Text{},
+		ClearReason: false,
+	}); err != nil {
+		log.Warn().Err(err).
+			Int64("withdrawal_record_id", record.ID).
+			Msg("touch merchant withdraw query attempt failed")
+	}
+}
+
+func recordMerchantWithdrawQueryFact(ctx context.Context, store db.Store, record db.WithdrawalRecord, accountInfo merchantWithdrawAccountInfo, resp *wechat.EcommerceWithdrawResponse) (*db.ExternalPaymentFactApplication, error) {
+	if resp == nil {
+		return nil, nil
+	}
+
+	outRequestNo := strings.TrimSpace(accountInfo.OutRequestNo)
+	if outRequestNo == "" {
+		return nil, nil
+	}
+
+	service := logic.NewPaymentFactService(store)
+	result, err := service.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilityWithdraw,
+		FactSource:           db.ExternalPaymentFactSourceQuery,
+		ExternalObjectType:   db.ExternalPaymentObjectWithdraw,
+		ExternalObjectKey:    outRequestNo,
+		ExternalSecondaryKey: optionalPaymentFactStringPtr(strings.TrimSpace(resp.WithdrawID)),
+		BusinessOwner:        paymentFactStringPtr(db.ExternalPaymentBusinessOwnerMerchantFunds),
+		BusinessObjectType:   paymentFactStringPtr(merchantWithdrawFactBusinessType),
+		BusinessObjectID:     paymentFactInt64Ptr(record.ID),
+		UpstreamState:        strings.TrimSpace(resp.Status),
+		TerminalStatus:       merchantWithdrawTerminalStatus(resp.Status),
+		Amount:               paymentFactInt64Ptr(record.Amount),
+		Currency:             "CNY",
+		RawResource:          merchantWithdrawQueryFactResource(record, accountInfo, resp),
+		DedupeKey:            merchantWithdrawQueryFactDedupeKey(outRequestNo, resp.Status, resp.WithdrawID, resp.Reason),
+		Application: &logic.ExternalPaymentFactApplicationTarget{
+			Consumer:           merchantWithdrawFactConsumerDomain,
+			BusinessObjectType: merchantWithdrawFactBusinessType,
+			BusinessObjectID:   record.ID,
+		},
+		AllowNonTerminalApplication: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Application, nil
+}
+
+func merchantWithdrawTerminalStatus(status string) string {
+	switch mapWechatWithdrawStatus(status) {
+	case "success":
+		return db.ExternalPaymentTerminalStatusSuccess
+	case "failed":
+		return db.ExternalPaymentTerminalStatusFailed
+	default:
+		return db.ExternalPaymentTerminalStatusProcessing
+	}
+}
+
+func merchantWithdrawQueryFactDedupeKey(outRequestNo string, status string, withdrawID string, reason string) string {
+	suffix := strings.TrimSpace(withdrawID)
+	if suffix == "" {
+		suffix = strings.TrimSpace(reason)
+	}
+	if suffix == "" {
+		suffix = "current"
+	}
+	return fmt.Sprintf("wechat:query:ecommerce:withdraw:%s:%s:%s", strings.TrimSpace(outRequestNo), strings.TrimSpace(status), suffix)
+}
+
+func merchantWithdrawQueryFactResource(record db.WithdrawalRecord, accountInfo merchantWithdrawAccountInfo, resp *wechat.EcommerceWithdrawResponse) []byte {
+	raw, err := json.Marshal(map[string]any{
+		"withdrawal_record_id": record.ID,
+		"merchant_id":          accountInfo.MerchantID,
+		"operator_id":          accountInfo.OperatorID,
+		"sub_mch_id":           strings.TrimSpace(accountInfo.SubMchID),
+		"out_request_no":       strings.TrimSpace(accountInfo.OutRequestNo),
+		"withdraw_id":          strings.TrimSpace(resp.WithdrawID),
+		"wechat_status":        strings.TrimSpace(resp.Status),
+		"reason":               strings.TrimSpace(resp.Reason),
+		"amount":               record.Amount,
+	})
+	if err != nil {
+		return nil
+	}
+	return raw
 }
 
 func isWechatWithdrawRequestNotFound(err error) bool {

@@ -1,0 +1,37 @@
+<custom-navbar title="提醒详情" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px">
+  <page-state wx:if="{{loading}}" type="loading" loadingText="加载详情中" />
+
+  <page-state wx:elif="{{error}}" icon="error-circle" description="{{error}}" actionText="重试" bind:action="onRetry" />
+
+  <view wx:elif="{{notification}}" class="detail-card">
+    <view class="detail-card__head">
+      <view>
+        <view class="detail-card__title">{{notification.title}}</view>
+        <view class="detail-card__time">{{notification.timeDisplay}}</view>
+      </view>
+      <t-tag theme="warning" variant="light">待接单</t-tag>
+    </view>
+
+    <view class="detail-card__section">
+      <view class="detail-card__label">影响区域</view>
+      <view class="detail-card__value">{{notification.regionText}}</view>
+    </view>
+
+    <view wx:if="{{notification.waitText}}" class="detail-card__section">
+      <view class="detail-card__label">等待时长</view>
+      <view class="detail-card__value detail-card__value--emphasis">{{notification.waitText}}</view>
+    </view>
+
+    <view class="detail-card__section">
+      <view class="detail-card__label">提醒内容</view>
+      <view class="detail-card__message">{{notification.summaryText}}</view>
+      <view class="detail-card__message detail-card__message--secondary">{{notification.content}}</view>
+    </view>
+
+    <view wx:if="{{notification.region_id}}" class="detail-card__actions">
+      <t-button theme="primary" variant="outline" bind:tap="onOpenDispatchHall">进入待接单大厅</t-button>
+    </view>
+  </view>
+</view>

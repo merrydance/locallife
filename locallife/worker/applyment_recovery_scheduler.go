@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -125,7 +126,7 @@ func (s *ApplymentRecoveryScheduler) runOnce(ctx context.Context) {
 				SignState:       signState,
 				SubMchID:        textValue(applyment.SubMchID),
 			})
-			if resolvedProcessedState != resolvedStatus {
+			if resolvedProcessedState != resolvedStatus && !applymentStatusHandledByFact(resolvedStatus, textValue(applyment.SubMchID)) {
 				s.enqueueApplymentFollowUp(ctx, applyment, "", status, signState, textValue(applyment.SubMchID))
 				continue
 			}
@@ -162,7 +163,7 @@ func (s *ApplymentRecoveryScheduler) runOnce(ctx context.Context) {
 			SignState:       queryResp.SignState,
 			SubMchID:        resolvedSubMchID,
 		})
-		if applymentStatusNeedsAsyncFollowUp(resolvedStatus, queryResp.SignState) && resolvedProcessedState != resolvedFollowUpState {
+		if applymentStatusNeedsAsyncFollowUp(resolvedStatus, queryResp.SignState) && resolvedProcessedState != resolvedFollowUpState && !applymentStatusHandledByFact(resolvedStatus, resolvedSubMchID) {
 			s.enqueueApplymentFollowUp(ctx, applyment, queryResp.ApplymentState, resolvedStatus, queryResp.SignState, resolvedSubMchID)
 		}
 	}
@@ -215,22 +216,49 @@ func (s *ApplymentRecoveryScheduler) queryApplymentStatus(ctx context.Context, a
 func (s *ApplymentRecoveryScheduler) reconcileApplymentStatus(ctx context.Context, applyment db.EcommerceApplymentPendingFollowUp, queryResp *wechatcontracts.EcommerceApplymentQueryResponse) (string, string, error) {
 	mappedStatus := mapWechatApplymentStateToStatus(queryResp.ApplymentState)
 	if mappedStatus == "" {
-		mappedStatus = applyment.Status
+		s.persistUnsupportedApplymentRecoveryStateAlert(ctx, applyment, queryResp)
+		log.Warn().
+			Int64("applyment_id", applyment.ID).
+			Str("out_request_no", applyment.OutRequestNo).
+			Str("applyment_state", strings.TrimSpace(queryResp.ApplymentState)).
+			Msg("applyment recovery query returned unsupported upstream state; local status update skipped")
+		return "", "", nil
 	}
 	resolvedStatus := normalizeApplymentFollowUpStatus(mappedStatus, queryResp.SubMchID)
 	resolvedSubMchID := queryResp.SubMchID
 
 	if resolvedStatus == "finish" && resolvedSubMchID != "" {
-		if err := s.store.ApplymentSubMchActivationTx(ctx, db.ApplymentSubMchActivationTxParams{
-			ApplymentID: applyment.ID,
-			SubjectType: applyment.SubjectType,
-			SubjectID:   applyment.SubjectID,
-			SubMchID:    resolvedSubMchID,
-		}); err != nil {
+		application, err := recordApplymentActivatedQueryFact(ctx, s.store, applyment, queryResp)
+		if err != nil {
+			return "", "", err
+		}
+		if err := EnqueueApplymentPaymentFactApplication(ctx, s.distributor, application); err != nil {
 			return "", "", err
 		}
 
 		return normalizeApplymentFollowUpStatus("finish", resolvedSubMchID), resolvedSubMchID, nil
+	}
+	if resolvedStatus == "rejected" || resolvedStatus == "frozen" || resolvedStatus == "canceled" {
+		application, err := recordApplymentTerminalQueryFact(ctx, s.store, applyment, queryResp)
+		if err != nil {
+			return "", "", err
+		}
+		if err := EnqueueApplymentPaymentFactApplication(ctx, s.distributor, application); err != nil {
+			return "", "", err
+		}
+
+		return resolvedStatus, resolvedSubMchID, nil
+	}
+	if resolvedStatus == "account_need_verify" || resolvedStatus == "to_be_confirmed" || resolvedStatus == "to_be_signed" {
+		application, err := recordApplymentPendingQueryFact(ctx, s.store, applyment, queryResp)
+		if err != nil {
+			return "", "", err
+		}
+		if err := EnqueueApplymentPaymentFactApplication(ctx, s.distributor, application); err != nil {
+			return "", "", err
+		}
+
+		return resolvedStatus, resolvedSubMchID, nil
 	}
 
 	if _, err := s.store.UpdateEcommerceApplymentStatus(ctx, db.UpdateEcommerceApplymentStatusParams{
@@ -248,6 +276,56 @@ func (s *ApplymentRecoveryScheduler) reconcileApplymentStatus(ctx context.Contex
 	}
 
 	return resolvedStatus, resolvedSubMchID, nil
+}
+
+func (s *ApplymentRecoveryScheduler) persistUnsupportedApplymentRecoveryStateAlert(ctx context.Context, applyment db.EcommerceApplymentPendingFollowUp, queryResp *wechatcontracts.EcommerceApplymentQueryResponse) {
+	applymentState := ""
+	stateDesc := ""
+	signState := ""
+	wechatApplymentID := int64(0)
+	wechatOutRequestNo := ""
+	subMchID := textValue(applyment.SubMchID)
+	if queryResp != nil {
+		applymentState = strings.TrimSpace(queryResp.ApplymentState)
+		stateDesc = strings.TrimSpace(queryResp.ApplymentStateDesc)
+		signState = strings.TrimSpace(queryResp.SignState)
+		wechatApplymentID = queryResp.ApplymentID
+		wechatOutRequestNo = strings.TrimSpace(queryResp.OutRequestNo)
+		if strings.TrimSpace(queryResp.SubMchID) != "" {
+			subMchID = strings.TrimSpace(queryResp.SubMchID)
+		}
+	}
+
+	err := SavePlatformAlertEvent(
+		ctx,
+		s.store,
+		string(AlertTypeSystemError),
+		string(AlertLevelCritical),
+		"进件恢复查询返回未知状态",
+		fmt.Sprintf("进件申请 %s 查询微信侧返回未知状态 %s，系统已停止直接更新本地状态，请人工核对并补齐状态映射或 terminalizer。", applyment.OutRequestNo, applymentState),
+		applyment.ID,
+		"ecommerce_applyment",
+		map[string]any{
+			"applyment_id":          applyment.ID,
+			"out_request_no":        applyment.OutRequestNo,
+			"wechat_out_request_no": wechatOutRequestNo,
+			"wechat_applyment_id":   wechatApplymentID,
+			"applyment_state":       applymentState,
+			"applyment_state_desc":  stateDesc,
+			"sign_state":            signState,
+			"local_status":          applyment.Status,
+			"sub_mch_id":            subMchID,
+			"requires_mapping":      true,
+		},
+		time.Now(),
+	)
+	if err != nil {
+		log.Error().Err(err).
+			Int64("applyment_id", applyment.ID).
+			Str("out_request_no", applyment.OutRequestNo).
+			Str("applyment_state", applymentState).
+			Msg("persist unsupported applyment recovery state alert failed")
+	}
 }
 
 func (s *ApplymentRecoveryScheduler) enqueueApplymentFollowUp(ctx context.Context, applyment db.EcommerceApplymentPendingFollowUp, applymentState, applymentStatus, signState, subMchID string) {

@@ -149,78 +149,93 @@ export interface UpdateOperatorRequest extends Record<string, unknown> {
     commission_rate?: number
 }
 
-/** 食安熔断报告请求 */
-export interface SubmitSafetyReportRequest extends Record<string, unknown> {
-    title: string
-    description: string
-    merchant_ids?: number[]
-    images?: string[]
-    level: 'low' | 'medium' | 'high' | 'critical'
-}
+export type OperatorFoodSafetyCaseStatus = 'merchant-suspended' | 'investigating' | 'resolved'
+export type OperatorFoodSafetyCaseStatusTheme = 'danger' | 'warning' | 'success'
 
-export interface SafetyReportItem {
+export interface OperatorFoodSafetyCaseItem {
     id: number
-    reporter_id: number
+    merchant_id: number
     region_id: number
-    title: string
-    description: string
-    level: 'low' | 'medium' | 'high' | 'critical'
-    merchant_ids: number[]
-    images: string[]
-    status: 'pending' | 'resolved' | 'rejected'
-    resolution_notes?: string
+    primary_product_key: string
+    primary_product_label: string
+    status: OperatorFoodSafetyCaseStatus
+    trigger_reason: string
+    investigation_report?: string
+    merchant_rectification_report?: string
+    resolution?: string
+    suspended_at: string
+    resolved_at?: string
     created_at: string
     updated_at: string
 }
 
-export interface SafetyReportListResponse {
-    items: SafetyReportItem[]
+export interface OperatorFoodSafetyIncidentItem {
+    id: number
+    order_id: number
+    merchant_id: number
+    user_id: number
+    incident_type: string
+    description: string
+    status: OperatorFoodSafetyCaseStatus
+    primary_product_key: string
+    primary_product_label: string
+    case_id?: number
+    created_at: string
+    resolved_at?: string
+}
+
+export interface OperatorFoodSafetyCaseListResponse {
+    items: OperatorFoodSafetyCaseItem[]
     page: number
     limit: number
     has_more: boolean
+    total: number
 }
 
-export interface ResolveSafetyReportRequest extends Record<string, unknown> {
-    status: 'resolved' | 'rejected'
-    resolution_notes: string
-    recover_merchant_ids?: number[]
-    recover_reason?: string
+export interface OperatorFoodSafetyCaseDetailResponse {
+    case: OperatorFoodSafetyCaseItem
+    incidents: OperatorFoodSafetyIncidentItem[]
 }
 
-export type SafetyReportStatus = SafetyReportItem['status']
-export type SafetyReportStatusTheme = 'warning' | 'success' | 'danger'
+export interface InvestigateOperatorFoodSafetyCaseRequest extends Record<string, unknown> {
+    investigation_report: string
+}
 
-export function getSafetyReportStatusLabel(status: SafetyReportStatus): string {
-    const labels: Record<SafetyReportStatus, string> = {
-        pending: '待处理',
-        resolved: '已处理',
-        rejected: '已驳回'
+export interface ResolveOperatorFoodSafetyCaseRequest extends Record<string, unknown> {
+    investigation_report?: string
+    merchant_rectification_report: string
+    resolution: string
+}
+
+export function getFoodSafetyCaseStatusLabel(status: OperatorFoodSafetyCaseStatus): string {
+    const labels: Record<OperatorFoodSafetyCaseStatus, string> = {
+        'merchant-suspended': '待调查',
+        investigating: '调查中',
+        resolved: '已结案'
     }
     return labels[status] || status
 }
 
-export function getSafetyReportStatusTheme(status: SafetyReportStatus): SafetyReportStatusTheme {
-    const themes: Record<SafetyReportStatus, SafetyReportStatusTheme> = {
-        pending: 'warning',
-        resolved: 'success',
-        rejected: 'danger'
+export function getFoodSafetyCaseStatusTheme(status: OperatorFoodSafetyCaseStatus): OperatorFoodSafetyCaseStatusTheme {
+    const themes: Record<OperatorFoodSafetyCaseStatus, OperatorFoodSafetyCaseStatusTheme> = {
+        'merchant-suspended': 'danger',
+        investigating: 'warning',
+        resolved: 'success'
     }
     return themes[status] || 'warning'
 }
 
-export function getSafetyReportStatusDisplay(status: SafetyReportStatus): {
+export function getFoodSafetyCaseStatusDisplay(status: OperatorFoodSafetyCaseStatus): {
     label: string
-    theme: SafetyReportStatusTheme
-    isPending: boolean
+    theme: OperatorFoodSafetyCaseStatusTheme
+    isActive: boolean
     isResolved: boolean
-    isRejected: boolean
 } {
     return {
-        label: getSafetyReportStatusLabel(status),
-        theme: getSafetyReportStatusTheme(status),
-        isPending: status === 'pending',
-        isResolved: status === 'resolved',
-        isRejected: status === 'rejected'
+        label: getFoodSafetyCaseStatusLabel(status),
+        theme: getFoodSafetyCaseStatusTheme(status),
+        isActive: status !== 'resolved',
+        isResolved: status === 'resolved'
     }
 }
 
@@ -336,30 +351,15 @@ export class OperatorBasicManagementService {
         })
     }
 
-    /**
-     * 提交食安熔断报告
-     * @param data 报告数据
-     */
-    async submitSafetyReport(data: SubmitSafetyReportRequest): Promise<void> {
-        return request({
-            url: '/v1/operator/reports/safety',
-            method: 'POST',
-            data
-        })
-    }
-
-    /**
-     * 获取食安事件列表
-     */
-    async getSafetyReports(params?: {
+    async getFoodSafetyCases(params?: {
         page?: number
         limit?: number
-        status?: 'pending' | 'resolved' | 'rejected'
-    }): Promise<SafetyReportListResponse> {
+        status?: OperatorFoodSafetyCaseStatus
+    }): Promise<OperatorFoodSafetyCaseListResponse> {
         const query: {
             page?: number
             limit?: number
-            status?: 'pending' | 'resolved' | 'rejected'
+            status?: OperatorFoodSafetyCaseStatus
         } = {
             page: params?.page,
             limit: params?.limit
@@ -369,44 +369,32 @@ export class OperatorBasicManagementService {
         }
 
         return request({
-            url: '/v1/operator/reports/safety',
+            url: '/v1/operator/food-safety/cases',
             method: 'GET',
             data: query
         })
     }
 
-    /**
-     * 获取食安事件详情
-     */
-    async getSafetyReportDetail(reportId: number): Promise<SafetyReportItem> {
+    async getFoodSafetyCaseDetail(caseId: number): Promise<OperatorFoodSafetyCaseDetailResponse> {
         return request({
-            url: `/v1/operator/reports/safety/${reportId}`,
+            url: `/v1/operator/food-safety/cases/${caseId}`,
             method: 'GET'
         })
     }
 
-    /**
-     * 处理食安事件并可恢复商户上线
-     */
-    async resolveSafetyReport(reportId: number, data: ResolveSafetyReportRequest): Promise<{
-        report: SafetyReportItem
-        recovered_merchant_ids: number[]
-    }> {
+    async investigateFoodSafetyCase(caseId: number, data: InvestigateOperatorFoodSafetyCaseRequest): Promise<OperatorFoodSafetyCaseItem> {
         return request({
-            url: `/v1/operator/reports/safety/${reportId}/resolve`,
+            url: `/v1/operator/food-safety/cases/${caseId}/investigate`,
             method: 'POST',
             data
         })
     }
 
-    /**
-     * 手动恢复商户上线
-     */
-    async resumeMerchant(merchantId: number, reason: string): Promise<{ message: string }> {
+    async resolveFoodSafetyCase(caseId: number, data: ResolveOperatorFoodSafetyCaseRequest): Promise<OperatorFoodSafetyCaseItem> {
         return request({
-            url: `/v1/operator/merchants/${merchantId}/resume`,
+            url: `/v1/operator/food-safety/cases/${caseId}/resolve`,
             method: 'POST',
-            data: { reason }
+            data
         })
     }
 }

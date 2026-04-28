@@ -999,6 +999,77 @@ func TestGetOrderAPI(t *testing.T) {
 			},
 		},
 		{
+			name:    "InvalidItemCustomizations",
+			orderID: order.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				orderWithDetails := orderWithDetailsFromOrder(order)
+
+				store.EXPECT().
+					GetOrderWithDetails(gomock.Any(), order.ID).
+					Times(1).
+					Return(orderWithDetails, nil)
+
+				store.EXPECT().
+					ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).
+					Times(1).
+					Return([]db.ListOrderItemsWithDishByOrderRow{{
+						ID:             501,
+						OrderID:        order.ID,
+						Name:           "测试菜品",
+						UnitPrice:      1000,
+						Quantity:       1,
+						Subtotal:       1000,
+						Customizations: []byte("not-json"),
+					}}, nil)
+
+				store.EXPECT().
+					GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
+					AnyTimes().
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				var resp APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.Equal(t, "internal server error", resp.Message)
+			},
+		},
+		{
+			name:    "InvalidBadges",
+			orderID: order.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				orderWithDetails := orderWithDetailsFromOrder(order)
+				orderWithDetails.Badges = []byte("not-json")
+
+				store.EXPECT().
+					GetOrderWithDetails(gomock.Any(), order.ID).
+					Times(1).
+					Return(orderWithDetails, nil)
+
+				store.EXPECT().
+					ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).
+					Times(1).
+					Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+
+				store.EXPECT().
+					GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
+					AnyTimes().
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				var resp APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.Equal(t, "internal server error", resp.Message)
+			},
+		},
+		{
 			name:    "Forbidden",
 			orderID: order.ID,
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
@@ -2183,6 +2254,65 @@ func TestGetMerchantOrderAPI(t *testing.T) {
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
+			},
+		},
+		{
+			name:    "InvalidItemCustomizations",
+			orderID: order.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+				store.EXPECT().
+					GetOrder(gomock.Any(), order.ID).
+					Times(1).
+					Return(order, nil)
+				store.EXPECT().
+					ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).
+					Times(1).
+					Return([]db.ListOrderItemsWithDishByOrderRow{{
+						ID:             601,
+						OrderID:        order.ID,
+						Name:           "测试菜品",
+						UnitPrice:      1000,
+						Quantity:       1,
+						Subtotal:       1000,
+						Customizations: []byte("not-json"),
+					}}, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				var resp APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.Equal(t, "internal server error", resp.Message)
+			},
+		},
+		{
+			name:    "InvalidBadges",
+			orderID: order.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				orderWithInvalidBadges := order
+				orderWithInvalidBadges.Badges = []byte("not-json")
+
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+				store.EXPECT().
+					GetOrder(gomock.Any(), order.ID).
+					Times(1).
+					Return(orderWithInvalidBadges, nil)
+				store.EXPECT().
+					ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).
+					Times(1).
+					Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				var resp APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.Equal(t, "internal server error", resp.Message)
 			},
 		},
 		{

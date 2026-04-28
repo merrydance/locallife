@@ -308,12 +308,6 @@
   align-items: center;
 }
 
-.loading-sub {
-  font-size: 24rpx;
-  color: var(--td-text-color-placeholder);
-  margin-top: 24rpx;
-}
-
 .consent-row {
   margin-bottom: 20rpx;
 }

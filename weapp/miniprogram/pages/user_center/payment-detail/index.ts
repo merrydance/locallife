@@ -1,9 +1,16 @@
-import { BusinessType, closePayment, createPayment as createPaymentOrder, getPaymentById, getPaymentRefunds, getPayments, getPaymentStatusView, getRefundStatusView, invokeWechatPay, isPaymentStatusSuccessful, PaymentOrder, RefundOrder } from '../../../api/payment'
+import { BusinessType, closePayment, getPaymentById, getPaymentRefunds, getPayments, getPaymentStatusView, getRefundStatusView, isRefundStatusTerminal, PaymentOrder, RefundOrder } from '../../../api/payment'
+import {
+    continuePendingRiderDepositRecharge,
+    getRiderDepositRechargeWorkflowStatusView,
+    type RiderDepositPendingRechargeContext
+} from '../../../services/rider-deposit-payment'
+import { startPaymentOrderWorkflow } from '../../../services/payment-workflow'
 import { logger } from '../../../utils/logger'
 import Navigation from '../../../utils/navigation'
 
 type RefundView = RefundOrder & {
     _amountDisplay: string
+    _reasonText: string
     _statusText: string
     _statusClass: string
     _statusTheme: 'success' | 'warning' | 'danger' | 'primary' | 'default'
@@ -44,6 +51,8 @@ Page({
         statusClass: '',
         statusIcon: 'info-circle-filled',
         paymentMethodText: '',
+        referenceLabel: '订单编号',
+        referenceValue: '-',
         showCloseButton: false,
         showPayButton: false,
         paying: false,
@@ -66,7 +75,7 @@ Page({
         this.setData({ loading: true, error: null })
         try {
             const payment = await getPaymentById(this.data.paymentId)
-            this.processPayment(payment)
+            this.applyPaymentDetail(payment)
 
             await this.loadRefunds()
             this.setData({ initialLoading: false, loading: false })
@@ -88,7 +97,7 @@ Page({
             if (result.payment_orders && result.payment_orders.length > 0) {
                 const payment = result.payment_orders[0]
                 this.setData({ paymentId: payment.id })
-                this.processPayment(payment)
+                this.applyPaymentDetail(payment)
                 await this.loadRefunds()
                 this.setData({ initialLoading: false, loading: false })
             } else {
@@ -119,15 +128,21 @@ Page({
         }
     },
 
-    processPayment(payment: PaymentOrder) {
+    applyPaymentDetail(payment: PaymentOrder) {
         const statusView = getPaymentStatusView(payment.status)
-        const amountDisplay = `¥${(payment.amount / 100).toFixed(2)}`
+        const amountDisplay = (payment.amount / 100).toFixed(2)
         const statusText = statusView.text
         const statusClass = statusView.className
         const paymentMethodText = this.getPaymentMethodText(payment.payment_type)
         const showCloseButton = statusView.isPending
-        const showPayButton = statusView.isPending && !!payment.order_id && payment.payment_type === 'miniprogram'
+        const showPayButton = statusView.isPending
+            && payment.payment_type === 'miniprogram'
+            && (!!payment.order_id || payment.business_type === 'rider_deposit')
         const showRefundList = false
+        const referenceLabel = payment.order_id ? '订单编号' : '支付单号'
+        const referenceValue = payment.order_id
+            ? String(payment.order_id)
+            : (payment.out_trade_no || String(payment.id))
 
         this.setData({
             payment,
@@ -136,6 +151,8 @@ Page({
             statusClass,
             statusIcon: statusView.icon,
             paymentMethodText,
+            referenceLabel,
+            referenceValue,
             showCloseButton,
             showPayButton,
             showRefundList,
@@ -147,7 +164,7 @@ Page({
         if (this.data.paying) return
 
         const payment = this.data.payment
-        if (!payment || !payment.order_id) {
+        if (!payment) {
             wx.showToast({ title: '订单信息缺失', icon: 'none' })
             return
         }
@@ -155,44 +172,70 @@ Page({
         this.setData({ paying: true })
         wx.showLoading({ title: '拉起支付...' })
         try {
-            const latestPayment = await createPaymentOrder({
-                order_id: payment.order_id,
-                payment_type: 'miniprogram',
-                business_type: normalizeBusinessType(payment.business_type)
-            })
-
-            if (latestPayment.pay_params) {
-                try {
-                    await invokeWechatPay(latestPayment.pay_params)
-                } catch (error: unknown) {
-                    const wxError = error as { errMsg?: string }
-                    if (wxError?.errMsg?.includes('cancel')) {
-                        wx.showToast({ title: '已取消支付', icon: 'none' })
-                        return
-                    }
-                    throw error
+            if (payment.business_type === 'rider_deposit') {
+                const rechargeContext: RiderDepositPendingRechargeContext = {
+                    paymentOrderId: payment.id,
+                    amount: payment.amount,
+                    outTradeNo: payment.out_trade_no,
+                    updatedAt: new Date().toISOString()
                 }
-            } else if (!isPaymentStatusSuccessful(latestPayment.status)) {
-                throw new Error('支付参数缺失')
-            }
+                const rechargeResult = await continuePendingRiderDepositRecharge(rechargeContext)
+                const rechargeStatusView = getRiderDepositRechargeWorkflowStatusView(rechargeResult.status)
 
-            if (latestPayment.order_id) {
-                Navigation.toPaymentSuccess({
-                    orderId: String(latestPayment.order_id),
-                    orderNo: latestPayment.out_trade_no || String(latestPayment.order_id),
-                    amount: (latestPayment.amount / 100).toFixed(2)
-                })
+                if (rechargeStatusView.isCancelled) {
+                    wx.showToast({ title: '已取消支付', icon: 'none' })
+                    await this.loadPaymentDetail()
+                    return
+                }
+
+                if (rechargeStatusView.isPaid) {
+                    wx.showToast({ title: '充值已完成', icon: 'success' })
+                    await this.loadPaymentDetail()
+                    return
+                }
+
+                if (rechargeStatusView.isPendingConfirmation) {
+                    Navigation.toPaymentResult({
+                        status: 'pending_confirmation',
+                        paymentOrderId: rechargeResult.paymentOrderId,
+                        businessType: 'rider_deposit',
+                        orderNo: payment.out_trade_no,
+                        amount: (rechargeResult.amount / 100).toFixed(2)
+                    })
+                    return
+                }
+
+                wx.showToast({ title: '支付未完成', icon: 'none' })
+                await this.loadPaymentDetail()
                 return
             }
 
-            if (latestPayment.id) {
-                this.setData({ paymentId: latestPayment.id })
+            if (!payment.order_id) {
+                wx.showToast({ title: '订单信息缺失', icon: 'none' })
+                return
             }
-            await new Promise((resolve) => setTimeout(resolve, 1200))
-            await this.loadPaymentDetail()
+
+            const paymentResult = await startPaymentOrderWorkflow({
+                orderId: payment.order_id,
+                paymentType: 'miniprogram',
+                businessType: normalizeBusinessType(payment.business_type)
+            })
+
+            if (paymentResult.paymentOrderId) {
+                this.setData({ paymentId: paymentResult.paymentOrderId })
+            }
+
+            Navigation.toPaymentResult({
+                status: paymentResult.status,
+                paymentOrderId: paymentResult.paymentOrderId,
+                businessId: paymentResult.businessId || payment.order_id,
+                businessType: paymentResult.businessType || payment.business_type,
+                orderNo: paymentResult.outTradeNo,
+                amount: paymentResult.amountFen ? (paymentResult.amountFen / 100).toFixed(2) : this.data.amountDisplay
+            })
         } catch (error) {
             logger.error('继续支付失败', error, 'payment-detail.onContinuePay')
-            wx.showToast({ title: '支付失败', icon: 'none' })
+            wx.showToast({ title: '支付未完成，请稍后重试', icon: 'none' })
         } finally {
             wx.hideLoading()
             this.setData({ paying: false })
@@ -203,16 +246,19 @@ Page({
         try {
             const refundsResponse = await getPaymentRefunds(this.data.paymentId)
             // 处理退款显示字段
-            const processedRefunds: RefundView[] = refundsResponse.refund_orders.map((refund) => {
-                const statusView = getRefundStatusView(refund.status)
-                return {
-                    ...refund,
-                    _amountDisplay: `¥${(refund.refund_amount / 100).toFixed(2)}`,
-                    _statusText: statusView.text,
-                    _statusClass: statusView.className,
-                    _statusTheme: statusView.theme
-                }
-            })
+            const processedRefunds: RefundView[] = refundsResponse.refund_orders
+                .filter((refund) => isRefundStatusTerminal(refund.status))
+                .map((refund) => {
+                    const statusView = getRefundStatusView(refund.status)
+                    return {
+                        ...refund,
+                        _amountDisplay: (refund.refund_amount / 100).toFixed(2),
+                        _reasonText: refund.refund_reason || '常规退款',
+                        _statusText: statusView.text,
+                        _statusClass: statusView.className,
+                        _statusTheme: statusView.theme
+                    }
+                })
             this.setData({ refunds: processedRefunds, showRefundList: processedRefunds.length > 0 })
         } catch (error) {
             logger.error('加载退款列表失败', error, 'payment-detail.loadRefunds')
@@ -243,9 +289,11 @@ Page({
     },
 
     async onClosePayment() {
+        if (this.data.paying) return
+
         wx.showModal({
-            title: '关闭支付',
-            content: '确定要关闭此支付订单吗？关闭后将无法继续支付。',
+            title: '关闭支付单',
+            content: '关闭后该支付单无法继续支付，如仍需付款需要重新发起。',
             success: async (res) => {
                 if (res.confirm) {
                     wx.showLoading({ title: '处理中...' })

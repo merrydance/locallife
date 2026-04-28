@@ -927,6 +927,43 @@ func TestUpdateTableStatusAPI(t *testing.T) {
 			},
 		},
 		{
+			name:    "ReleaseTableFailsWhenReservationCleanupFails",
+			tableID: table.ID,
+			body: gin.H{
+				"status": "available",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				tableWithReservation := table
+				tableWithReservation.CurrentReservationID = pgtype.Int8{Int64: 88, Valid: true}
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Eq(table.ID)).
+					Times(1).
+					Return(tableWithReservation, nil)
+
+				store.EXPECT().
+					GetActiveDiningSessionByTable(gomock.Any(), gomock.Eq(table.ID)).
+					Times(1).
+					Return(db.DiningSession{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					UpdateReservationToCompleted(gomock.Any(), gomock.Eq(int64(88))).
+					Times(1).
+					Return(db.TableReservation{}, fmt.Errorf("update reservation failed"))
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				var resp APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.Equal(t, "internal server error", resp.Message)
+			},
+		},
+		{
 			name:    "InvalidStatus",
 			tableID: table.ID,
 			body: gin.H{

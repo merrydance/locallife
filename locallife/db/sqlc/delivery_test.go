@@ -459,6 +459,44 @@ func TestRemoveFromDeliveryPool(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestDeliveryListQueriesUseIDTieBreaker(t *testing.T) {
+	rider := createOnlineRider(t)
+	delivery1 := createAssignedDelivery(t, rider.ID)
+	delivery2 := createAssignedDelivery(t, rider.ID)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+
+	store, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+
+	_, err := store.connPool.Exec(context.Background(),
+		"UPDATE deliveries SET created_at = $1 WHERE id = ANY($2)",
+		tiedCreatedAt,
+		[]int64{delivery1.ID, delivery2.ID},
+	)
+	require.NoError(t, err)
+
+	deliveries, err := testStore.ListDeliveriesByRider(context.Background(), ListDeliveriesByRiderParams{
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+		Limit:   2,
+		Offset:  0,
+	})
+	require.NoError(t, err)
+	require.Len(t, deliveries, 2)
+	require.Equal(t, delivery2.ID, deliveries[0].ID)
+	require.Equal(t, delivery1.ID, deliveries[1].ID)
+
+	assignedDeliveries, err := testStore.ListDeliveriesByRiderAndStatus(context.Background(), ListDeliveriesByRiderAndStatusParams{
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+		Status:  "assigned",
+		Limit:   2,
+		Offset:  0,
+	})
+	require.NoError(t, err)
+	require.Len(t, assignedDeliveries, 2)
+	require.Equal(t, delivery2.ID, assignedDeliveries[0].ID)
+	require.Equal(t, delivery1.ID, assignedDeliveries[1].ID)
+}
+
 func TestListDeliveryPool(t *testing.T) {
 	// 创建几个订单池项
 	for i := 0; i < 3; i++ {

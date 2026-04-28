@@ -4,10 +4,11 @@
  * 可用于所有支付页面
  */
 
-import { rechargeMembership, getMyMemberships, MembershipResponse, claimVoucher } from '../../api/personal'
+import { claimVoucher } from '../../api/personal'
 import { getMerchantPromotionCenter, MerchantPromotionCenterResponse } from '../../api/merchant'
 import { formatPriceNoSymbol } from '../../utils/util'
 import { getErrorDebugMessage, getErrorUserMessage } from '../../utils/user-facing'
+import { MEMBERSHIP_RECHARGE_PAUSED_MESSAGE, showMembershipRechargePausedMessage } from '../../utils/membership-recharge-pause'
 
 /** 优惠项目类型 - 对齐后端 api.promotionItem */
 interface PromotionItem {
@@ -20,15 +21,6 @@ interface PromotionItem {
     valid_until: string    // 有效期
     rule_id: number        // 规则ID（充值活动用）
     displayTitle?: string  // 展现用的格式化标题
-}
-
-/** 展示用的充值项 */
-interface RechargeView extends PromotionItem {
-    rechargeDisplay: string
-    bonusDisplay: string
-    totalDisplay: string
-    minAmountDisplay: string
-    valueDisplay: string
 }
 
 /** 展示用的优惠券项 */
@@ -77,12 +69,9 @@ Component({
         discountRules: [] as PromotionItem[],
         deliveryFeeRules: [] as PromotionItem[],
         vouchers: [] as VoucherView[],
-        rechargeRules: [] as RechargeView[],
-        
-        // 充值选择
-        selectedRechargeId: 0,
-        selectedRechargeDisplay: '',
-        balanceDisplay: '0.00'
+        showRechargePaused: false,
+        balanceDisplay: '0.00',
+        rechargePausedMessage: MEMBERSHIP_RECHARGE_PAUSED_MESSAGE
     },
 
     observers: {
@@ -157,36 +146,20 @@ Component({
                         }
                     })
                 
-                // 处理充值规则（过滤已过期）
-                const rechargeRules: RechargeView[] = (result.recharge_rules || [])
-                    .filter(isNotExpired)
-                    .map((r) => ({
-                        ...r,
-                        rechargeDisplay: formatPriceNoSymbol(r.min_amount),
-                        bonusDisplay: formatPriceNoSymbol(r.bonus_amount),
-                        totalDisplay: formatPriceNoSymbol(r.min_amount + r.bonus_amount),
-                        minAmountDisplay: formatPriceNoSymbol(r.min_amount),
-                        valueDisplay: formatPriceNoSymbol(r.value)
-                    }))
+                const hasRechargeRules = (result.recharge_rules || []).filter(isNotExpired).length > 0
 
                 // 计算总数（过滤后）
                 const totalCount = discountRules.length + deliveryFeeRules.length + 
-                                   vouchers.length + rechargeRules.length
+                                   vouchers.length + (hasRechargeRules ? 1 : 0)
                 const hasPromos = totalCount > 0
-
-                // 默认选择第一个充值项
-                const selectedRechargeId = rechargeRules.length > 0 ? rechargeRules[0].rule_id : 0
-                const selectedRechargeDisplay = rechargeRules.length > 0 ? rechargeRules[0].rechargeDisplay : ''
 
                 this.setData({
                     discountRules,
                     deliveryFeeRules,
                     vouchers,
-                    rechargeRules,
+                    showRechargePaused: hasRechargeRules,
                     totalCount,
                     hasPromos,
-                    selectedRechargeId,
-                    selectedRechargeDisplay,
                     loading: false,
                     visible: true // 始终显示，无优惠时展示空状态
                 })
@@ -196,83 +169,9 @@ Component({
             }
         },
 
-        /** 选择充值规则 */
-        onSelectRecharge(e: WechatMiniprogram.TouchEvent) {
-            const { rule } = e.currentTarget.dataset as { rule?: RechargeView }
-            if (!rule) return
-
-            this.setData({
-                selectedRechargeId: rule.rule_id,
-                selectedRechargeDisplay: rule.rechargeDisplay
-            })
-        },
-
         /** 点击充值按钮 */
-        async onRecharge() {
-            const { selectedRechargeId, rechargeRules, recharging } = this.data
-            let { membershipId } = this.data
-
-            if (recharging || !selectedRechargeId) return
-
-            const selectedRule = rechargeRules.find((r) => r.rule_id === selectedRechargeId)
-            if (!selectedRule) return
-
-            this.setData({ recharging: true })
-
-            try {
-                // 如果没有 membershipId，需要先获取或创建
-                if (!membershipId) {
-                    const membershipsResult = await getMyMemberships()
-                    const membership = membershipsResult.memberships?.find(
-                        (m: MembershipResponse) => m.merchant_id === this.data.merchantId
-                    )
-                    if (membership) {
-                        membershipId = membership.id
-                    } else {
-                        // 用户还不是会员，需要先加入
-                        wx.showToast({ title: '请先加入会员', icon: 'none' })
-                        this.setData({ recharging: false })
-                        return
-                    }
-                }
-
-                // 调用充值接口
-                const result = await rechargeMembership({
-                    membership_id: membershipId,
-                    payment_method: 'wechat',
-                    recharge_amount: selectedRule.min_amount  // min_amount 就是充值金额
-                })
-
-                if (result.pay_params) {
-                    // 调起微信支付
-                    wx.requestPayment({
-                        ...result.pay_params,
-                        success: () => {
-                            wx.showToast({ title: '充值成功', icon: 'success' })
-                            // 通知父组件刷新余额
-                            this.triggerEvent('recharged', {
-                                amount: selectedRule.min_amount,
-                                bonus: selectedRule.bonus_amount
-                            })
-                        },
-                        fail: (err: WechatMiniprogram.GeneralCallbackResult) => {
-                            if (err.errMsg.includes('cancel')) {
-                                wx.showToast({ title: '已取消支付', icon: 'none' })
-                            } else {
-                                wx.showToast({ title: '支付失败', icon: 'error' })
-                            }
-                        }
-                    })
-                }
-            } catch (err) {
-                console.error('充值失败:', err)
-                wx.showToast({
-                    title: getErrorUserMessage(err, '充值失败，请稍后重试'),
-                    icon: 'none'
-                })
-            } finally {
-                this.setData({ recharging: false })
-            }
+        onRecharge() {
+            showMembershipRechargePausedMessage()
         },
 
         /** 领取优惠券 */

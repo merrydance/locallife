@@ -20,6 +20,7 @@ import (
 const (
 	TaskProcessMerchantCancelWithdrawResult = "payment:process_merchant_cancel_withdraw_result"
 	merchantCancelWithdrawMaxRetry          = 5
+	merchantCancelWithdrawFactBusinessType  = "merchant_cancel_withdraw_application"
 )
 
 type MerchantCancelWithdrawResultPayload struct {
@@ -107,21 +108,17 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantCancelWithdrawResult(ctx
 		return nil
 	}
 
-	params, err := logic.BuildMerchantCancelWithdrawSyncParams(
-		record,
-		queryResp,
-		db.MerchantCancelWithdrawLocalSyncStateSubmitSucceeded,
-		"",
-		false,
-		time.Now(),
-	)
+	application, err := recordMerchantCancelWithdrawQueryFact(ctx, processor.store, record, queryResp)
 	if err != nil {
-		return fmt.Errorf("build merchant cancel withdraw sync params: %w", err)
+		return fmt.Errorf("record merchant cancel withdraw query fact: %w", err)
 	}
 
-	updated, err := processor.store.UpdateMerchantCancelWithdrawApplicationSync(ctx, params)
+	updated, applied, err := applyMerchantCancelWithdrawFactApplication(ctx, processor.store, application)
 	if err != nil {
-		return fmt.Errorf("update merchant cancel withdraw sync: %w", err)
+		return fmt.Errorf("apply merchant cancel withdraw fact application: %w", err)
+	}
+	if !applied {
+		updated = record
 	}
 
 	if logic.MerchantCancelWithdrawIsTerminal(updated.CancelState.String) {
@@ -246,4 +243,131 @@ func logMerchantCancelWithdrawResultQueryFailure(record db.MerchantCancelWithdra
 	}
 
 	evt.Err(err).Msg("merchant cancel withdraw result query failed")
+}
+
+func recordMerchantCancelWithdrawQueryFact(ctx context.Context, store db.Store, record db.MerchantCancelWithdrawApplication, queryResp *wechatcontracts.CancelWithdrawQueryResponse) (*db.ExternalPaymentFactApplication, error) {
+	if queryResp == nil {
+		return nil, nil
+	}
+
+	outRequestNo := strings.TrimSpace(queryResp.OutRequestNo)
+	if outRequestNo == "" {
+		outRequestNo = strings.TrimSpace(record.OutRequestNo)
+	}
+	if outRequestNo == "" {
+		return nil, nil
+	}
+
+	service := logic.NewPaymentFactService(store)
+	result, err := service.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilityCancelWithdraw,
+		FactSource:           db.ExternalPaymentFactSourceQuery,
+		ExternalObjectType:   db.ExternalPaymentObjectCancelWithdraw,
+		ExternalObjectKey:    outRequestNo,
+		ExternalSecondaryKey: optionalPaymentFactStringPtr(strings.TrimSpace(queryResp.ApplymentID)),
+		BusinessOwner:        paymentFactStringPtr(db.ExternalPaymentBusinessOwnerMerchantFunds),
+		BusinessObjectType:   paymentFactStringPtr(merchantCancelWithdrawFactBusinessType),
+		BusinessObjectID:     paymentFactInt64Ptr(record.ID),
+		UpstreamState:        strings.TrimSpace(queryResp.CancelState),
+		TerminalStatus:       merchantCancelWithdrawQueryTerminalStatus(queryResp.CancelState),
+		Currency:             "CNY",
+		OccurredAt:           parseMerchantCancelWithdrawFactTime(queryResp.ModifyTime),
+		UpstreamUpdatedAt:    parseMerchantCancelWithdrawFactTime(queryResp.ModifyTime),
+		RawResource:          merchantCancelWithdrawQueryFactResource(record, queryResp),
+		DedupeKey:            merchantCancelWithdrawQueryFactDedupeKey(outRequestNo, queryResp.CancelState, queryResp.WithdrawState, queryResp.ApplymentID),
+		Application: &logic.ExternalPaymentFactApplicationTarget{
+			Consumer:           "merchant_funds_domain",
+			BusinessObjectType: merchantCancelWithdrawFactBusinessType,
+			BusinessObjectID:   record.ID,
+		},
+		AllowNonTerminalApplication: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Application, nil
+}
+
+func applyMerchantCancelWithdrawFactApplication(ctx context.Context, store db.Store, application *db.ExternalPaymentFactApplication) (db.MerchantCancelWithdrawApplication, bool, error) {
+	if application == nil {
+		return db.MerchantCancelWithdrawApplication{}, false, nil
+	}
+
+	result, err := logic.NewPaymentFactService(store).ApplyExternalPaymentFactApplication(ctx, application.ID)
+	if err != nil {
+		return db.MerchantCancelWithdrawApplication{}, false, err
+	}
+	if result.MerchantCancelWithdraw == nil {
+		return db.MerchantCancelWithdrawApplication{}, false, nil
+	}
+	return result.MerchantCancelWithdraw.Application, true, nil
+}
+
+func merchantCancelWithdrawQueryTerminalStatus(cancelState string) string {
+	if !logic.MerchantCancelWithdrawIsTerminal(cancelState) {
+		return db.ExternalPaymentTerminalStatusProcessing
+	}
+
+	switch logic.NormalizeMerchantCancelState(cancelState) {
+	case db.MerchantCancelStateFinish:
+		return db.ExternalPaymentTerminalStatusSuccess
+	default:
+		return db.ExternalPaymentTerminalStatusFailed
+	}
+}
+
+func merchantCancelWithdrawQueryFactDedupeKey(outRequestNo string, cancelState string, withdrawState string, applymentID string) string {
+	suffix := strings.TrimSpace(applymentID)
+	if suffix == "" {
+		suffix = "current"
+	}
+	return fmt.Sprintf(
+		"wechat:query:ecommerce:cancel_withdraw:%s:%s:%s:%s",
+		strings.TrimSpace(outRequestNo),
+		strings.TrimSpace(cancelState),
+		strings.TrimSpace(withdrawState),
+		suffix,
+	)
+}
+
+func merchantCancelWithdrawQueryFactResource(record db.MerchantCancelWithdrawApplication, queryResp *wechatcontracts.CancelWithdrawQueryResponse) []byte {
+	confirmCancelURL := ""
+	if queryResp != nil && queryResp.ConfirmCancel != nil {
+		confirmCancelURL = strings.TrimSpace(queryResp.ConfirmCancel.ConfirmCancelURL)
+	}
+
+	raw, err := json.Marshal(map[string]any{
+		"application_id":             record.ID,
+		"merchant_id":                record.MerchantID,
+		"sub_mch_id":                 strings.TrimSpace(record.SubMchID),
+		"out_request_no":             strings.TrimSpace(queryResp.OutRequestNo),
+		"applyment_id":               strings.TrimSpace(queryResp.ApplymentID),
+		"cancel_state":               strings.TrimSpace(queryResp.CancelState),
+		"cancel_state_description":   strings.TrimSpace(queryResp.CancelStateDescription),
+		"withdraw_state":             strings.TrimSpace(queryResp.WithdrawState),
+		"withdraw_state_description": strings.TrimSpace(queryResp.WithdrawStateDescription),
+		"withdraw":                   strings.TrimSpace(queryResp.Withdraw),
+		"modify_time":                strings.TrimSpace(queryResp.ModifyTime),
+		"confirm_cancel_url":         confirmCancelURL,
+		"account_info":               queryResp.AccountInfo,
+		"account_withdraw_result":    queryResp.AccountWithdrawResult,
+	})
+	if err != nil {
+		return nil
+	}
+	return raw
+}
+
+func parseMerchantCancelWithdrawFactTime(value string) *time.Time {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	parsed, err := time.Parse(time.RFC3339, trimmed)
+	if err != nil {
+		return nil
+	}
+	return &parsed
 }

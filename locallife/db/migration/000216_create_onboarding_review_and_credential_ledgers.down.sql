@@ -1,0 +1,14 @@
+DROP INDEX IF EXISTS idx_credential_ledgers_rider_active_document;
+DROP INDEX IF EXISTS idx_credential_ledgers_merchant_active_document;
+DROP INDEX IF EXISTS idx_credential_ledgers_active_expires_at;
+DROP INDEX IF EXISTS idx_credential_ledgers_unique_active_rider_document;
+DROP INDEX IF EXISTS idx_credential_ledgers_unique_active_merchant_document;
+DROP TABLE IF EXISTS credential_ledgers;
+
+DROP INDEX IF EXISTS idx_onboarding_review_runs_rider_application_created_at;
+DROP INDEX IF EXISTS idx_onboarding_review_runs_merchant_application_created_at;
+DROP INDEX IF EXISTS idx_onboarding_review_runs_status_queued_at;
+DROP TABLE IF EXISTS onboarding_review_runs;
+
+ALTER TABLE rider_applications DROP COLUMN IF EXISTS review_summary;
+ALTER TABLE merchant_applications DROP COLUMN IF EXISTS review_summary;

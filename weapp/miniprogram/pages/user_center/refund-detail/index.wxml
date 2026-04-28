@@ -15,6 +15,11 @@
       <list-skeleton row="6" t-class="skeleton-item" />
     </view>
 
+    <view wx:elif="{{waitingForTerminal}}" class="terminal-waiting">
+      <t-loading theme="circular" size="56rpx" text="正在确认退款结果..." />
+      <view class="status-note" wx:if="{{statusNote}}">{{statusNote}}</view>
+    </view>
+
     <view wx:elif="{{refund}}" class="detail-content animate-fade-in">
       <!-- 退款状态卡片 -->
       <view class="status-card {{statusClass}}">
@@ -59,12 +64,15 @@
           <view class="refund-list">
             <view class="refund-card" wx:for="{{profitSharingReturns}}" wx:key="id">
               <view class="refund-card-header">
-                <text class="refund-card-amount">¥{{item.amount / 100}}</text>
-                <text class="refund-card-status">{{item.status}}</text>
+                <text class="refund-card-amount">¥{{item.amountDisplay}}</text>
+                <t-tag theme="{{item.statusTheme}}" variant="light" size="small">{{item.statusText}}</t-tag>
               </view>
               <view class="refund-card-body">
                 <text class="refund-reason">回退单号：{{item.out_return_no}}</text>
-                <text class="refund-time">{{item.created_at}}</text>
+                <text class="refund-time">{{item.displayTime}}</text>
+              </view>
+              <view class="refund-card-body" wx:if="{{item.failReasonText}}">
+                <text class="refund-reason is-error">失败原因：{{item.failReasonText}}</text>
               </view>
             </view>
           </view>
@@ -81,25 +89,25 @@
           <t-divider dashed />
           <view class="info-row">
             <text class="label">退款原因</text>
-            <text class="value">{{refund.reason || '无'}}</text>
+            <text class="value">{{refundReasonText}}</text>
           </view>
           <t-divider dashed />
           <view class="info-row">
             <text class="label">申请时间</text>
-            <text class="value">{{refund.created_at}}</text>
+            <text class="value">{{createdAtDisplay}}</text>
           </view>
-          <block wx:if="{{refund.processed_at}}">
+          <block wx:if="{{refundedAtDisplay}}">
             <t-divider dashed />
             <view class="info-row">
-              <text class="label">处理时间</text>
-              <text class="value">{{refund.processed_at}}</text>
+              <text class="label">退款完成时间</text>
+              <text class="value">{{refundedAtDisplay}}</text>
             </view>
           </block>
-          <block wx:if="{{refund.refund_transaction_id}}">
+          <block wx:if="{{outRefundNoText}}">
             <t-divider dashed />
             <view class="info-row">
               <text class="label">退款单号</text>
-              <text class="value">{{refund.refund_transaction_id}}</text>
+              <text class="value">{{outRefundNoText}}</text>
             </view>
           </block>
         </view>

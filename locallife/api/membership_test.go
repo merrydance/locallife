@@ -639,6 +639,7 @@ func TestCreateRechargeRuleAPI(t *testing.T) {
 	merchantOwner, _ := randomUser(t)
 	merchant := randomMerchant(merchantOwner.ID)
 	otherUser, _ := randomUser(t)
+	wrongMerchantID := merchant.ID + 1
 
 	testCases := []struct {
 		name          string
@@ -697,7 +698,7 @@ func TestCreateRechargeRuleAPI(t *testing.T) {
 		},
 		{
 			name:       "Forbidden_WrongMerchant",
-			merchantID: 999, // 不同的商户ID
+			merchantID: wrongMerchantID,
 			body: map[string]interface{}{
 				"recharge_amount": 10000,
 				"bonus_amount":    1000,

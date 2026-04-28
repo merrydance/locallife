@@ -186,10 +186,13 @@
       </view>
     </view>
 
-    <!-- Step 4: 处理中/结果页面 -->
+    <!-- Step 4: 已提交审核 -->
     <view class="step-view center" wx:if="{{currentStep === 4}}">
-      <t-loading theme="circular" size="80rpx" layout="vertical" text="系统正在核验您的资料..." />
-      <view class="loading-sub">核验大约需要 10-30 秒</view>
+      <t-result theme="warning" title="申请已提交审核" description="资料核验完成后会自动更新状态，可稍后重新进入查看。" />
+      <onboarding-review-summary
+        reviewDisplay="{{reviewDisplay}}"
+        activeCredentialDisplays="{{activeCredentialDisplays}}"
+      />
     </view>
 
   </view>

@@ -122,6 +122,16 @@
   background: #FFF9F5;
 }
 
+.recharge-paused {
+  padding: 20rpx;
+  margin-bottom: 16rpx;
+  border-radius: 12rpx;
+  background: var(--td-bg-color-secondarycontainer);
+  color: var(--td-text-color-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
 .rb-main {
   font-size: 30rpx;
   font-weight: bold;

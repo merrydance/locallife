@@ -80,6 +80,24 @@ for file in "${changed_files[@]}"; do
         violations=$((violations + 1))
       fi
     fi
+
+    if [[ "$trimmed" =~ ^_[[:space:]]*=[[:space:]]*(parseJSON|json\.Unmarshal)\( ]]; then
+      echo "  ❌ $file ignores JSON decode errors: $trimmed"
+      echo "     handle the decode error explicitly or document a narrow, contract-backed downgrade instead of discarding it"
+      violations=$((violations + 1))
+    fi
+
+    if [[ "$file" == locallife/logic/* ]] && [[ "$trimmed" =~ NewRequestError\( ]] && [[ "$trimmed" =~ (http\.StatusInternalServerError|http\.StatusBadGateway|http\.StatusServiceUnavailable|http\.StatusGatewayTimeout|500|502|503|504) ]]; then
+      echo "  ❌ $file adds NewRequestError(...) with a 5xx status: $trimmed"
+      echo "     return a wrapped plain error so the handler can log via internalError(...) or the repo's logged server-error helper"
+      violations=$((violations + 1))
+    fi
+
+    if [[ "$file" == locallife/api/* ]] && [[ "$trimmed" =~ ctx\.JSON\( ]] && [[ "$trimmed" =~ errorResponse\( ]] && [[ "$trimmed" =~ (http\.StatusInternalServerError|http\.StatusBadGateway|http\.StatusServiceUnavailable|500|502|503) ]]; then
+      echo "  ❌ $file adds ctx.JSON(..., errorResponse(...)) for a 5xx status: $trimmed"
+      echo "     use internalError(ctx, err) for 500, or loggedServerError(...) for 502/503 with a stable public message"
+      violations=$((violations + 1))
+    fi
   done < <(git -C "$repo_root" diff --unified=0 "$base_ref" "$head_ref" -- "$file")
 done
 

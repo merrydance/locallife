@@ -8,7 +8,8 @@
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-image": "tdesign-miniprogram/image/image",
     "t-loading": "tdesign-miniprogram/loading/loading",
-    "t-tag": "tdesign-miniprogram/tag/tag"
+    "t-tag": "tdesign-miniprogram/tag/tag",
+    "onboarding-review-summary": "/components/onboarding-review-summary/index"
   },
   "navigationStyle": "custom",
   "enablePullDownRefresh": true

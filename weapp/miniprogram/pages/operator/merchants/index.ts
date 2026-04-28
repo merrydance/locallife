@@ -1,12 +1,10 @@
 import { isLargeScreen } from '@/utils/responsive'
 import {
-  getMerchantStatusDisplay,
-  operatorMerchantManagementService,
-  parseMerchantStatusFilter,
-  OperatorMerchantItem,
-  MerchantQueryParams,
-  MerchantStatus
-} from '../../../api/operator-merchant-management'
+  loadOperatorMerchantListPageData,
+  parseOperatorMerchantStatusFilter,
+  type OperatorMerchantFilterStatus,
+  type OperatorMerchantListView
+} from '../../../services/operator-merchant-management'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface MerchantListPageDataset {
@@ -19,37 +17,6 @@ interface MerchantListPageOptions {
   status?: string
 }
 
-interface MerchantView extends OperatorMerchantItem {
-  status_label: string
-  status_theme: 'success' | 'warning' | 'default'
-  rating_display: string
-  order_count_display: number
-  total_gmv_display: string
-  commission_amount_display: string
-  region_name_display: string
-  category_display: string
-  can_suspend: boolean
-  can_resume: boolean
-}
-
-function adaptMerchantItem(item: OperatorMerchantItem): MerchantView {
-  const statusDisplay = getMerchantStatusDisplay(item.status)
-  return {
-    ...item,
-    status: statusDisplay.normalizedStatus,
-    status_label: statusDisplay.label,
-    status_theme: statusDisplay.theme,
-    rating_display: Number(item.rating || 0).toFixed(1),
-    order_count_display: Number(item.order_count || 0),
-    total_gmv_display: `¥${(Number(item.total_gmv || 0) / 100).toFixed(2)}`,
-    commission_amount_display: `¥${(Number(item.commission_amount || 0) / 100).toFixed(2)}`,
-    region_name_display: item.region_name || `区域 ${item.region_id}`,
-    category_display: item.category || '未分类',
-    can_suspend: statusDisplay.canSuspend,
-    can_resume: statusDisplay.canResume
-  }
-}
-
 Page({
   data: {
     loading: false,
@@ -60,7 +27,7 @@ Page({
     navBarHeight: 88,
     isLargeScreen: false,
 
-    merchants: [] as MerchantView[],
+    merchants: [] as OperatorMerchantListView[],
 
     page: 1,
     limit: 20,
@@ -69,19 +36,14 @@ Page({
 
     regionId: 0,
     searchKeyword: '',
-    statusFilter: '' as MerchantStatus | '',
-
-    suspendDialogVisible: false,
-    resumeDialogVisible: false,
-    selectedMerchant: { id: 0, name: '' },
-    suspendReason: '',
+    statusFilter: '' as OperatorMerchantFilterStatus,
 
     searchTimer: null as number | null
   },
 
   onLoad(options: MerchantListPageOptions) {
     const regionId = options.region_id ? parseInt(options.region_id) : 0
-    const statusFilter = parseMerchantStatusFilter(options.status)
+    const statusFilter = parseOperatorMerchantStatusFilter(options.status)
     this.setData({
       isLargeScreen: isLargeScreen(),
       regionId,
@@ -126,27 +88,22 @@ Page({
         this.setData({ loadingMore: true })
       }
 
-      const params: MerchantQueryParams = {
-        page: this.data.page,
-        limit: this.data.limit,
-        keyword: this.data.searchKeyword || undefined,
-        status: this.data.statusFilter || undefined,
-        sort_by: 'created_at',
-        sort_order: 'desc',
-        ...(this.data.regionId ? { region_id: this.data.regionId } : {})
-      }
-
-      const result = await operatorMerchantManagementService.getMerchantList(params)
-      const list = (result.merchants || []).map(adaptMerchantItem)
-      const merchants = refresh ? list : [...this.data.merchants, ...list]
-      const total = Number(result.total || merchants.length)
+      const result = await loadOperatorMerchantListPageData({
+        pageId: refresh ? 1 : this.data.page,
+        pageSize: this.data.limit,
+        regionId: this.data.regionId,
+        statusFilter: this.data.statusFilter,
+        searchKeyword: this.data.searchKeyword
+      })
+      const merchants = refresh ? result.merchants : [...this.data.merchants, ...result.merchants]
+      const total = refresh ? result.total : Number(result.total || merchants.length)
       const hasMore = merchants.length < total
 
       this.setData({
         merchants,
         total,
         hasMore,
-        page: refresh ? 2 : this.data.page + 1,
+        page: refresh ? result.nextPage : this.data.page + 1,
         loading: false,
         loadingMore: false,
         initialLoading: false,
@@ -195,7 +152,7 @@ Page({
     this.loadMerchants(true)
   },
 
-  onStatusFilterChange(e: WechatMiniprogram.CustomEvent<{ value: MerchantStatus | '' }>) {
+  onStatusFilterChange(e: WechatMiniprogram.CustomEvent<{ value: OperatorMerchantFilterStatus }>) {
     this.setData({
       statusFilter: e.detail.value,
       page: 1
@@ -207,88 +164,5 @@ Page({
     const { id } = e.currentTarget.dataset as MerchantListPageDataset
     if (!id) return
     wx.navigateTo({ url: `/pages/operator/merchants/detail/index?id=${id}` })
-  },
-
-  onSuspendTap(e: WechatMiniprogram.TouchEvent) {
-    const { id, name } = e.currentTarget.dataset as MerchantListPageDataset
-    if (!id || !name) return
-
-    this.setData({
-      selectedMerchant: { id, name },
-      suspendDialogVisible: true,
-      suspendReason: ''
-    })
-  },
-
-  async onSuspendConfirm() {
-    const { selectedMerchant, suspendReason } = this.data
-    if (!suspendReason.trim()) {
-      wx.showToast({ title: '请输入暂停原因', icon: 'none' })
-      return
-    }
-
-    try {
-      wx.showLoading({ title: '处理中...' })
-      await operatorMerchantManagementService.suspendMerchant(selectedMerchant.id, {
-        reason: suspendReason
-      })
-      this.setData({
-        suspendDialogVisible: false,
-        page: 1
-      })
-      this.loadMerchants(true)
-    } catch (error) {
-      console.error('暂停商户失败:', error)
-      wx.showToast({ title: getErrorUserMessage(error, '暂停失败，请稍后重试'), icon: 'none' })
-    } finally {
-      wx.hideLoading()
-    }
-  },
-
-  onSuspendCancel() {
-    this.setData({ suspendDialogVisible: false })
-  },
-
-  onSuspendReasonChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    this.setData({ suspendReason: e.detail.value || '' })
-  },
-
-  onResumeTap(e: WechatMiniprogram.TouchEvent) {
-    const { id, name } = e.currentTarget.dataset as MerchantListPageDataset
-    if (!id || !name) return
-
-    this.setData({
-      selectedMerchant: { id, name },
-      resumeDialogVisible: true
-    })
-  },
-
-  async onResumeConfirm() {
-    const { selectedMerchant } = this.data
-
-    try {
-      wx.showLoading({ title: '处理中...' })
-      await operatorMerchantManagementService.resumeMerchant(selectedMerchant.id, {
-        reason: '运营商恢复'
-      })
-      this.setData({
-        resumeDialogVisible: false,
-        page: 1
-      })
-      this.loadMerchants(true)
-    } catch (error) {
-      console.error('恢复商户失败:', error)
-      wx.showToast({ title: getErrorUserMessage(error, '恢复失败，请稍后重试'), icon: 'none' })
-    } finally {
-      wx.hideLoading()
-    }
-  },
-
-  onResumeCancel() {
-    this.setData({ resumeDialogVisible: false })
-  },
-
-  stopPropagation() {
-    // 阻止事件冒泡
   }
 })

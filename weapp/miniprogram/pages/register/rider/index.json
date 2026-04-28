@@ -8,11 +8,12 @@
         "t-input": "tdesign-miniprogram/input/input",
         "t-steps": "tdesign-miniprogram/steps/steps",
         "t-step-item": "tdesign-miniprogram/step-item/step-item",
-        "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-result": "tdesign-miniprogram/result/result",
         "t-tag": "tdesign-miniprogram/tag/tag",
         "t-popup": "tdesign-miniprogram/popup/popup",
         "t-checkbox": "tdesign-miniprogram/checkbox/checkbox",
         "t-checkbox-group": "tdesign-miniprogram/checkbox-group/checkbox-group",
-        "document-uploader": "/components/document-uploader/index"
+        "document-uploader": "/components/document-uploader/index",
+        "onboarding-review-summary": "/components/onboarding-review-summary/index"
     }
 }

@@ -70,7 +70,7 @@ func TestProcessTaskOperatorApplicationBusinessLicenseOCR_UsesOCRJob(t *testing.
 		store.EXPECT().UpdateOperatorApplicationBusinessLicense(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.UpdateOperatorApplicationBusinessLicenseParams) (db.OperatorApplication, error) {
 			require.Equal(t, int64(69), arg.ID)
 			require.Equal(t, "91310000123456789A", arg.BusinessLicenseNumber.String)
-			require.Equal(t, "本地生活科技有限公司", arg.Name.String)
+			require.False(t, arg.Name.Valid)
 			var payload map[string]any
 			require.NoError(t, json.Unmarshal(arg.BusinessLicenseOcr, &payload))
 			require.Equal(t, "done", payload["status"])

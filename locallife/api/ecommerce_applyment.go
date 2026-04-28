@@ -540,6 +540,13 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		writeApplymentMediaUploadServerError(ctx, err, "店铺首页二维码", "上传店铺首页二维码失败")
 		return
 	}
+	log.Info().
+		Int64("merchant_id", merchant.ID).
+		Str("store_qr_code_media_id", storeQRCodeUploadResp.MediaID).
+		Str("storefront_qr_object_key", storeQRCodeObjectKey).
+		Str("storefront_qr_page", merchantStorefrontQRCodePage).
+		Str("storefront_qr_scene", buildMerchantStorefrontQRCodeScene(merchant.ID)).
+		Msg("merchant applyment storefront qrcode uploaded as wechat media id")
 
 	contactInfo := logic.BuildWechatApplymentContactInfo(logic.ApplymentWechatContactInput{
 		ContactType:             resolvedContact.ContactType,
@@ -719,14 +726,13 @@ func buildApplymentAccountValidationResponse(validation *wechatcontracts.Ecommer
 	}
 }
 
-func buildStoredApplymentAccountValidationResponse(raw []byte, decryptor applymentSensitiveDecryptor) *applymentAccountValidationResponse {
+func buildStoredApplymentAccountValidationResponse(raw []byte, decryptor applymentSensitiveDecryptor) (*applymentAccountValidationResponse, error) {
 	validation, err := wechat.UnmarshalEcommerceApplymentAccountValidation(raw)
 	if err != nil {
-		log.Warn().Err(err).Msg("failed to unmarshal stored applyment account validation")
-		return nil
+		return nil, fmt.Errorf("decode stored applyment account validation: %w", err)
 	}
 
-	return buildApplymentAccountValidationResponse(validation, decryptor)
+	return buildApplymentAccountValidationResponse(validation, decryptor), nil
 }
 
 type applymentSubmissionStatusSnapshot struct {
@@ -894,8 +900,6 @@ func respondApplymentWechatError(ctx *gin.Context, merchantID int64, outRequestN
 		return false
 	}
 
-	_ = ctx.Error(err)
-
 	evt := log.Error()
 	if wxErr.StatusCode < http.StatusInternalServerError && wxErr.Code != "INVALID_REQUEST" && wxErr.Code != "SIGN_ERROR" {
 		evt = log.Warn()
@@ -911,23 +915,28 @@ func respondApplymentWechatError(ctx *gin.Context, merchantID int64, outRequestN
 		Str("wechat_error_detail", strings.TrimSpace(wxErr.Detail)).
 		Msg("wechat applyment request failed")
 
+	writeClientError := func(status int, responseErr error) {
+		_ = ctx.Error(err)
+		ctx.JSON(status, errorResponse(responseErr))
+	}
+
 	switch strings.TrimSpace(wxErr.Code) {
 	case "RESOURCE_ALREADY_EXISTS":
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrAccountApplymentPending))
+		writeClientError(http.StatusBadRequest, ErrAccountApplymentPending)
 	case "PARAM_ERROR":
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplymentWechatParamError))
+		writeClientError(http.StatusBadRequest, ErrApplymentWechatParamError)
 	case "NO_AUTH":
-		ctx.JSON(http.StatusForbidden, errorResponse(ErrApplymentWechatNoAuth))
+		writeClientError(http.StatusForbidden, ErrApplymentWechatNoAuth)
 	case "RESOURCE_NOT_EXISTS":
-		ctx.JSON(http.StatusNotFound, errorResponse(ErrApplymentWechatNotFound))
+		writeClientError(http.StatusNotFound, ErrApplymentWechatNotFound)
 	case "INVALID_REQUEST":
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplymentWechatInvalidRequest))
+		writeClientError(http.StatusBadRequest, ErrApplymentWechatInvalidRequest)
 	case "SIGN_ERROR":
-		ctx.JSON(http.StatusUnauthorized, errorResponse(ErrApplymentWechatSignError))
+		writeClientError(http.StatusUnauthorized, ErrApplymentWechatSignError)
 	case "SYSTEM_ERROR":
-		ctx.JSON(http.StatusInternalServerError, errorResponse(ErrApplymentWechatServiceUnavailable))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 	default:
-		ctx.JSON(http.StatusBadGateway, errorResponse(ErrApplymentWechatServiceUnavailable))
+		writeClientError(http.StatusBadGateway, ErrApplymentWechatServiceUnavailable)
 	}
 
 	return true
@@ -1149,7 +1158,12 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 	if applyment.LegalValidationUrl.Valid && applyment.LegalValidationUrl.String != "" {
 		resp.LegalValidationURL = &applyment.LegalValidationUrl.String
 	}
-	if storedAccountValidation := buildStoredApplymentAccountValidationResponse(applyment.AccountValidation, decryptor); storedAccountValidation != nil {
+	storedAccountValidation, err := buildStoredApplymentAccountValidationResponse(applyment.AccountValidation, decryptor)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if storedAccountValidation != nil {
 		resp.AccountValidation = storedAccountValidation
 	}
 	if remoteLegalValidationURL != "" {

@@ -65,6 +65,10 @@ func (processor *RedisTaskProcessor) ProcessTaskSendNotification(ctx context.Con
 	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 		return fmt.Errorf("unmarshal payload: %w", err)
 	}
+	return processor.executeSendNotificationPayload(ctx, payload)
+}
+
+func (processor *RedisTaskProcessor) executeSendNotificationPayload(ctx context.Context, payload SendNotificationPayload) error {
 
 	log.Info().
 		Int64("user_id", payload.UserID).

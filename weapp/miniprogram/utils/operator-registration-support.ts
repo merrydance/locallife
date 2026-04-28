@@ -5,10 +5,13 @@ import { locationService, type LocationInfo } from './location'
 import {
   buildAvailableRegionsPatch,
   buildCityOptionsPatch,
+  buildProvinceOptionsPatch,
   buildRegionFullName,
   CityOption,
+  findMatchedProvinceOption,
   findMatchedCityOption,
   findMatchedDistrictOption,
+  ProvinceOption,
   RegionOption,
   UploadFieldValue
 } from './operator-registration-view'
@@ -71,12 +74,49 @@ export function handleExistingOperatorApplication(
   return 0
 }
 
-export async function fetchOperatorCityOptions(selectedCityId: number) {
-  const cities: CityOption[] = []
+export async function fetchOperatorProvinceOptions(selectedProvinceId: number) {
+  const provinces: ProvinceOption[] = []
   let pageID = 1
 
   for (;;) {
-    const items = await listRegions({ page_id: pageID, page_size: 100, level: 2 })
+    const items = await listRegions({ page_id: pageID, page_size: 100, level: 1 })
+    if (!items || items.length === 0) {
+      break
+    }
+
+    items.forEach((item) => {
+      provinces.push({
+        label: item.name,
+        value: item.id
+      })
+    })
+
+    if (items.length < 100) {
+      break
+    }
+    pageID += 1
+  }
+
+  const nextSelectedProvinceId = selectedProvinceId || (provinces[0]?.value || 0)
+  return {
+    selectedProvinceId: nextSelectedProvinceId,
+    patch: buildProvinceOptionsPatch(provinces, nextSelectedProvinceId)
+  }
+}
+
+export async function fetchOperatorCityOptions(provinceId: number, selectedCityId: number) {
+  const cities: CityOption[] = []
+  if (!provinceId) {
+    return {
+      selectedCityId: 0,
+      patch: buildCityOptionsPatch([], 0)
+    }
+  }
+
+  let pageID = 1
+
+  for (;;) {
+    const items = await listRegions({ page_id: pageID, page_size: 100, level: 2, parent_id: provinceId })
     if (!items || items.length === 0) {
       break
     }
@@ -101,30 +141,17 @@ export async function fetchOperatorCityOptions(selectedCityId: number) {
   }
 }
 
-export async function fetchOperatorAvailableRegionsByCity(cityID: number, keyword: string = '') {
+export async function fetchOperatorAvailableRegionsByCity(cityID: number) {
   const districts: RegionOption[] = []
   let pageID = 1
-  const normalizedKeyword = keyword.trim()
 
   for (;;) {
-    const query: {
-      page_id: number
-      page_size: number
-      level: number
-      parent_id: number
-      keyword?: string
-    } = {
+    const res = await listAvailableRegions({
       page_id: pageID,
       page_size: 100,
       level: 3,
       parent_id: cityID
-    }
-
-    if (normalizedKeyword) {
-      query.keyword = normalizedKeyword
-    }
-
-    const res = await listAvailableRegions(query)
+    })
     const regions = res?.regions || []
     if (regions.length === 0) {
       break
@@ -145,7 +172,7 @@ export async function fetchOperatorAvailableRegionsByCity(cityID: number, keywor
     pageID += 1
   }
 
-  return buildAvailableRegionsPatch(districts, normalizedKeyword)
+  return buildAvailableRegionsPatch(districts)
 }
 
 export async function getOperatorCurrentLocation(): Promise<LocationInfo | null> {
@@ -177,10 +204,12 @@ export async function getOperatorCurrentRegionByLocation(location: LocationInfo)
 }
 
 export async function resolveOperatorDefaultRegionPatch(params: {
+  getProvinceOptions: () => ProvinceOption[]
   getCityOptions: () => CityOption[]
   getRegionOptions: () => RegionOption[]
-  fetchCityOptions: (withRegions?: boolean) => Promise<void>
-  fetchAvailableRegionsByCity: (cityId: number, keyword?: string) => Promise<void>
+  fetchProvinceOptions: (withCities?: boolean) => Promise<void>
+  fetchCityOptions: (provinceId: number, withRegions?: boolean) => Promise<void>
+  fetchAvailableRegionsByCity: (cityId: number) => Promise<void>
 }) {
   const location = await getOperatorCurrentLocation()
   if (!location) {
@@ -188,60 +217,68 @@ export async function resolveOperatorDefaultRegionPatch(params: {
   }
 
   const currentRegion = await getOperatorCurrentRegionByLocation(location)
+  const provinceName = String(location.province || '').trim()
   const cityName = String(location.city || '').trim()
   const districtName = String(location.district || '').trim()
-  if (!currentRegion && (!cityName || !districtName)) {
+  if (!currentRegion && (!provinceName || !cityName || !districtName)) {
     return null
   }
 
-  if (!params.getCityOptions().length) {
-    await params.fetchCityOptions(false)
+  if (!params.getProvinceOptions().length) {
+    await params.fetchProvinceOptions(false)
   }
 
-  const getCityPatch = (city: CityOption) => {
+  const matchedProvince = findMatchedProvinceOption(params.getProvinceOptions(), provinceName)
+  if (!matchedProvince) {
+    return null
+  }
+
+  await params.fetchCityOptions(matchedProvince.value, false)
+
+  const getPickerPatch = (province: ProvinceOption, city: CityOption) => {
+    const provinceOptions = params.getProvinceOptions()
+    const provinceIndex = provinceOptions.findIndex((item) => item.value === province.value)
     const cityOptions = params.getCityOptions()
     const cityIndex = cityOptions.findIndex((item) => item.value === city.value)
     return {
+      selectedProvinceIndex: Math.max(0, provinceIndex),
+      selectedProvinceId: province.value,
+      selectedProvinceName: province.label,
       selectedCityIndex: Math.max(0, cityIndex),
       selectedCityId: city.value,
       selectedCityName: city.label
     }
   }
 
-  if (currentRegion?.parent_id) {
-    const cityOptions = params.getCityOptions()
-    const matchedCity = cityOptions.find((item) => item.value === currentRegion.parent_id)
-      || (currentRegion.parent_name ? findMatchedCityOption(cityOptions, currentRegion.parent_name) : null)
-
-    if (matchedCity) {
-      await params.fetchAvailableRegionsByCity(matchedCity.value)
-      const regionOptions = params.getRegionOptions()
-      const matchedDistrict = regionOptions.find((item) => item.value === currentRegion.region_id)
-        || findMatchedDistrictOption(regionOptions, currentRegion.region_name)
-
-      if (matchedDistrict) {
-        return {
-          ...getCityPatch(matchedCity),
-          'formData.regionId': matchedDistrict.value,
-          'formData.regionName': `${matchedCity.label} - ${matchedDistrict.label}`
-        }
-      }
-    }
-  }
-
-  const matchedCity = findMatchedCityOption(params.getCityOptions(), cityName)
+  const matchedCity = findMatchedCityOption(
+    params.getCityOptions(),
+    String(currentRegion?.parent_name || cityName || '').trim()
+  )
   if (!matchedCity) {
     return null
   }
 
   await params.fetchAvailableRegionsByCity(matchedCity.value)
-  const matchedDistrict = findMatchedDistrictOption(params.getRegionOptions(), districtName)
+  let matchedDistrict = params.getRegionOptions().find((item) => item.value === currentRegion?.region_id)
+  if (!matchedDistrict && currentRegion?.region_name) {
+    const fallbackDistrict = findMatchedDistrictOption(params.getRegionOptions(), currentRegion.region_name)
+    if (fallbackDistrict) {
+      matchedDistrict = fallbackDistrict
+    }
+  }
+  if (!matchedDistrict) {
+    const fallbackDistrict = findMatchedDistrictOption(params.getRegionOptions(), districtName)
+    if (fallbackDistrict) {
+      matchedDistrict = fallbackDistrict
+    }
+  }
   if (!matchedDistrict) {
     return null
   }
 
   return {
-    ...getCityPatch(matchedCity),
+    ...getPickerPatch(matchedProvince, matchedCity),
+    selectedDistrictName: matchedDistrict.label,
     'formData.regionId': matchedDistrict.value,
     'formData.regionName': `${matchedCity.label} - ${matchedDistrict.label}`
   }
@@ -300,5 +337,8 @@ export function buildRegionNamePatch(regionOptions: RegionOption[], regionId: nu
     return null
   }
 
-  return { 'formData.regionName': buildRegionFullName(matched) }
+  return {
+    selectedDistrictName: matched.label,
+    'formData.regionName': buildRegionFullName(matched)
+  }
 }

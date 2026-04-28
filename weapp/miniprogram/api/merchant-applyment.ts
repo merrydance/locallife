@@ -354,9 +354,6 @@ function getDefaultMerchantApplymentBlockReason(
   if (options.needsAccountValidation) {
     return '当前申请待账户验证，请先完成验证后再刷新状态。'
   }
-  if (options.needsConfirmation || statusCode === 'to_be_confirmed') {
-    return '当前申请待确认，请先完成确认后再刷新状态。'
-  }
   if (options.needsSign) {
     return '当前申请存在待签约事项，请先完成签约。'
   }
@@ -406,14 +403,6 @@ function getMerchantApplymentGuideTitle(options: {
 
   if (options.needsAccountValidation) {
     return '完成账户验证'
-  }
-
-  if (options.needsConfirmation && options.needsSign) {
-    return '完成确认和签约'
-  }
-
-  if (options.needsConfirmation) {
-    return '完成确认'
   }
 
   if (options.needsSign) {
@@ -481,14 +470,6 @@ function buildMerchantApplymentHeadline(options: {
     return '先完成账户验证'
   }
 
-  if (options.needsConfirmation && options.needsSign) {
-    return '先完成确认和签约'
-  }
-
-  if (options.needsConfirmation) {
-    return '先完成确认'
-  }
-
   if (options.needsSign) {
     return '先完成签约'
   }
@@ -541,7 +522,7 @@ function buildMerchantApplymentPrimaryActionText(options: {
     return options.submitActionLabel
   }
 
-  if (options.needsAccountValidation || options.needsConfirmation || options.needsSign) {
+  if (options.needsAccountValidation || options.needsSign) {
     return '处理当前待办'
   }
 
@@ -561,7 +542,7 @@ function buildMerchantApplymentFlowSteps(options: {
   isInReview: boolean
   isOpened: boolean
 }): MerchantApplymentFlowStepView[] {
-  const isActionStage = options.needsAccountValidation || options.needsConfirmation || options.needsSign
+  const isActionStage = options.needsAccountValidation || options.needsSign
 
   const submitState: MerchantApplymentFlowStepState = options.hasApplyment && !options.canSubmitOpenInfo
     ? 'done'
@@ -677,12 +658,8 @@ function resolveMerchantApplymentStatusDesc(
       : '当前申请待账户验证，请按汇款指引完成验证后再刷新状态。'
   }
 
-  if (options.needsConfirmation && options.needsSign) {
-    return '当前申请待确认且签约未完成，请先完成确认和签约，再回到本页刷新状态。'
-  }
-
-  if (options.needsConfirmation) {
-    return '当前申请待确认，请先按微信支付指引完成确认。'
+  if (statusCode === 'to_be_confirmed') {
+    return rawStatusDesc || '微信支付待确认结果同步，请稍后刷新状态。'
   }
 
   if (options.needsSign) {
@@ -704,18 +681,19 @@ export function buildMerchantApplymentStatusView(
   const signState = normalizeMerchantApplymentSignState(status.sign_state)
   const signStateText = getMerchantApplymentSignStateText(signState)
   const accountValidation = buildMerchantApplymentAccountValidationView(status.account_validation)
+  const signURL = status.sign_url || ''
   const legalValidationURL = status.legal_validation_url || ''
-  const needsAccountValidation = statusCode === 'account_need_verify' || Boolean(accountValidation)
-  const needsConfirmation = statusCode === 'to_be_confirmed'
+  const needsAccountValidation = Boolean(accountValidation) || Boolean(legalValidationURL)
+  const needsConfirmation = false
   const needsLegalValidation = Boolean(legalValidationURL)
-  const needsSign = shouldMerchantApplymentNeedSign(signState, statusCode)
+  const needsSign = Boolean(signURL) && shouldMerchantApplymentNeedSign(signState, statusCode)
   const statusDesc = resolveMerchantApplymentStatusDesc(status.status_desc || '', statusCode, {
     needsAccountValidation,
     needsConfirmation,
     needsSign,
     needsLegalValidation
   })
-  const hasPendingActions = needsAccountValidation || needsConfirmation || needsSign
+  const hasPendingActions = needsAccountValidation || needsSign
   const canSubmitOpenInfo = typeof status.can_submit === 'boolean'
     ? status.can_submit
     : normalizedStatus === 'pending' || normalizedStatus === 'rejected' || normalizedStatus === 'cancelled'
@@ -725,7 +703,6 @@ export function buildMerchantApplymentStatusView(
     needsConfirmation,
     needsSign
   })
-  const signURL = status.sign_url || ''
   const subMchId = status.sub_mch_id || '-'
   const isOpened = normalizedStatus === 'opened'
   const isInReview = normalizedStatus === 'in_review' && !hasPendingActions
@@ -758,16 +735,6 @@ export function buildMerchantApplymentStatusView(
     guideTheme = 'warning'
     tagTheme = 'primary'
     tagText = '待验证'
-  } else if (needsConfirmation && needsSign) {
-    guideText = '当前申请待确认且签约未完成，请先完成确认和签约，再回到本页刷新状态。'
-    guideTheme = 'warning'
-    tagTheme = 'primary'
-    tagText = '待处理'
-  } else if (needsConfirmation) {
-    guideText = '当前申请待确认，请先按微信支付指引完成确认。'
-    guideTheme = 'warning'
-    tagTheme = 'primary'
-    tagText = '待确认'
   } else if (needsSign) {
     guideText = '当前申请存在待签约事项，请先完成签约，再回到本页刷新状态。'
     guideTheme = 'warning'

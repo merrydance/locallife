@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -12,11 +13,13 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/rs/zerolog/log"
 )
 
 const riderWithdrawProcessingStatus = "processing"
+const riderDepositPaymentOrderObjectType = "payment_order"
 
 func isRiderOnlineEligibleStatus(status string) bool {
 	return status == db.RiderStatusActive
@@ -24,6 +27,87 @@ func isRiderOnlineEligibleStatus(status string) bool {
 
 func (server *Server) getRiderDepositThreshold(ctx context.Context, rider db.Rider) (int64, error) {
 	return db.GetEffectiveRiderDepositThreshold(ctx, server.store, rider.RegionID)
+}
+
+func recordRiderDepositRechargeCommandAccepted(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, prepayID string) {
+	paymentCommandSvc := logic.NewPaymentCommandService(store)
+	secondaryKey := prepayID
+	if _, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbRiderDepositRechargeCommandInput(paymentOrder, db.ExternalPaymentCommandStatusAccepted, &secondaryKey, nil)); err != nil {
+		log.Warn().Err(err).Int64("payment_order_id", paymentOrder.ID).Msg("record rider deposit recharge command accepted failed")
+	}
+}
+
+func recordRiderDepositRechargeCommandRejected(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, submitErr error) {
+	paymentCommandSvc := logic.NewPaymentCommandService(store)
+	lastErrorCode, lastErrorMessage := directPaymentCommandErrorFields(submitErr)
+	if _, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbRiderDepositRechargeCommandInput(paymentOrder, db.ExternalPaymentCommandStatusRejected, nil, map[string]string{
+		"error_code":    stringValue(lastErrorCode),
+		"error_message": stringValue(lastErrorMessage),
+	})); err != nil {
+		log.Warn().Err(err).Int64("payment_order_id", paymentOrder.ID).Msg("record rider deposit recharge command rejected failed")
+	}
+}
+
+func dbRiderDepositRechargeCommandInput(paymentOrder db.PaymentOrder, status string, secondaryKey *string, snapshot map[string]string) logic.RecordExternalPaymentCommandInput {
+	businessObjectID := paymentOrder.ID
+	responseSnapshot := []byte(`{}`)
+	if len(snapshot) > 0 {
+		if encoded, err := json.Marshal(snapshot); err == nil {
+			responseSnapshot = encoded
+		}
+	}
+	if secondaryKey != nil && len(snapshot) == 0 {
+		responseSnapshot, _ = json.Marshal(map[string]string{"prepay_id": *secondaryKey})
+	}
+
+	return logic.RecordExternalPaymentCommandInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelDirect,
+		Capability:           db.ExternalPaymentCapabilityDirectJSAPIPayment,
+		CommandType:          db.ExternalPaymentCommandTypeCreatePayment,
+		BusinessOwner:        db.ExternalPaymentBusinessOwnerRiderDeposit,
+		BusinessObjectType:   stringPtrIfNotEmpty(riderDepositPaymentOrderObjectType),
+		BusinessObjectID:     &businessObjectID,
+		ExternalObjectType:   db.ExternalPaymentObjectPayment,
+		ExternalObjectKey:    paymentOrder.OutTradeNo,
+		ExternalSecondaryKey: secondaryKey,
+		CommandStatus:        status,
+		LastErrorCode:        stringPtrIfNotEmpty(stringValueFromSnapshot(snapshot, "error_code")),
+		LastErrorMessage:     stringPtrIfNotEmpty(stringValueFromSnapshot(snapshot, "error_message")),
+		ResponseSnapshot:     responseSnapshot,
+	}
+}
+
+func directPaymentCommandErrorFields(err error) (*string, *string) {
+	if err == nil {
+		return nil, nil
+	}
+	var wxErr *wechat.WechatPayError
+	if errors.As(err, &wxErr) {
+		return stringPtrIfNotEmpty(wxErr.Code), stringPtrIfNotEmpty(wxErr.Message)
+	}
+	return nil, stringPtrIfNotEmpty(err.Error())
+}
+
+func stringPtrIfNotEmpty(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func stringValue(ptr *string) string {
+	if ptr == nil {
+		return ""
+	}
+	return *ptr
+}
+
+func stringValueFromSnapshot(snapshot map[string]string, key string) string {
+	if snapshot == nil {
+		return ""
+	}
+	return snapshot[key]
 }
 
 type riderWithdrawRefundItemResponse struct {
@@ -223,7 +307,8 @@ func (server *Server) depositRider(ctx *gin.Context) {
 		return
 	}
 	if server.directPaymentClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("payment service not configured")))
+		err := errors.New("payment service not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service not configured", "rider deposit payment service not configured"))
 		return
 	}
 
@@ -302,7 +387,11 @@ func (server *Server) depositRider(ctx *gin.Context) {
 		PayerClientIP: ctx.ClientIP(),
 	})
 	if err != nil {
-		_, _ = server.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
+		if _, closeErr := server.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID); closeErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("close rider deposit payment order after jsapi create failure: %w", closeErr)))
+			return
+		}
+		recordRiderDepositRechargeCommandRejected(ctx, server.store, paymentOrder, err)
 		if writeLogicRequestError(ctx, logic.MapDirectJSAPIOrderCreateError(err)) {
 			return
 		}
@@ -317,6 +406,7 @@ func (server *Server) depositRider(ctx *gin.Context) {
 	}); err != nil {
 		log.Warn().Err(err).Int64("payment_order_id", paymentOrder.ID).Msg("failed to update prepay_id, record will lack prepay_id for audit")
 	}
+	recordRiderDepositRechargeCommandAccepted(ctx, server.store, paymentOrder, wxResp.PrepayID)
 
 	// 返回支付参数
 	resp["pay_params"] = map[string]string{
@@ -337,7 +427,8 @@ func (server *Server) depositRider(ctx *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param request body withdrawRequest true "提现金额（单位：分）"
-// @Success 200 {object} riderWithdrawResponse "提现已提交或完成"
+// @Success 200 {object} riderWithdrawResponse "提现已完成对账"
+// @Success 202 {object} riderWithdrawResponse "提现请求已受理，等待异步终态"
 // @Failure 400 {object} ErrorResponse "余额不足、有进行中订单或账号未激活"
 // @Failure 401 {object} ErrorResponse "未登录"
 // @Failure 404 {object} ErrorResponse "未注册骑手"
@@ -437,17 +528,14 @@ func (server *Server) getRiderDepositBalance(ctx *gin.Context) {
 		return
 	}
 
-	deliveryFrozenDeposit := rider.FrozenDeposit - withdrawalProcessingAmount
-	if deliveryFrozenDeposit < 0 {
-		deliveryFrozenDeposit = 0
-	}
+	availability := db.CalculateRiderDepositAvailability(rider, withdrawalProcessingAmount)
 
 	response := depositBalanceResponse{
 		TotalDeposit:               rider.DepositAmount,
 		FrozenDeposit:              rider.FrozenDeposit,
-		DeliveryFrozenDeposit:      deliveryFrozenDeposit,
-		WithdrawalProcessingAmount: withdrawalProcessingAmount,
-		AvailableDeposit:           rider.DepositAmount - rider.FrozenDeposit,
+		DeliveryFrozenDeposit:      availability.DeliveryFrozenDeposit,
+		WithdrawalProcessingAmount: availability.WithdrawalProcessingAmount,
+		AvailableDeposit:           availability.AvailableDeposit,
 	}
 
 	ctx.JSON(http.StatusOK, response)
@@ -462,7 +550,7 @@ type listRiderDepositsResponse struct {
 
 // listRiderDeposits godoc
 // @Summary 查询押金流水
-// @Description 分页查询当前骑手的押金变动流水记录，包括充值、提现、冻结、解冻、扣款等
+// @Description 分页查询当前骑手的押金变动流水记录，包括充值、提现、配送冻结、解冻、扣款等；提现冻结中间流水不作为账单明细返回
 // @Tags 骑手
 // @Accept json
 // @Produce json

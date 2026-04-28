@@ -3,7 +3,8 @@ import { getPaymentLedger, PaymentLedgerEntry } from '../../../api/payment'
 import ConsumerProfileAdapter from '../../../adapters/consumer-profile'
 import MembershipService from '../../../api/membership'
 import Navigation from '../../../utils/navigation'
-import { getPaymentLedgerStatusView } from '../../../utils/payment-ledger-view'
+import { getPaymentLedgerStatusView, isPaymentLedgerEntryTerminal } from '../../../utils/payment-ledger-view'
+import { MEMBERSHIP_RECHARGE_PAUSED_MESSAGE } from '../../../utils/membership-recharge-pause'
 
 interface MembershipDisplay {
   id: number
@@ -124,7 +125,9 @@ Page({
       const totalBalance = (membershipRes.memberships || []).reduce((sum, m) => sum + (m.balance || 0), 0)
       const totalRecharged = (membershipRes.memberships || []).reduce((sum, m) => sum + (m.total_recharged || 0), 0)
 
-      const transactions: TransactionDisplay[] = (paymentRes.entries || []).map((entry) => mapTransactionDisplay(entry))
+      const transactions: TransactionDisplay[] = (paymentRes.entries || [])
+        .filter((entry) => isPaymentLedgerEntryTerminal(entry))
+        .map((entry) => mapTransactionDisplay(entry))
 
       this.setData({
         balance: totalBalance,
@@ -163,17 +166,16 @@ Page({
   onTopUp(e: MembershipEvent) {
     const id = e.currentTarget.dataset.id
     if (id) {
-       // Target specific membership recharge
        const m = this.data.memberships.find((item) => item.id === id)
        if (m) {
-         Navigation.toMembership({ membershipId: m.id, autoRecharge: true })
+         this.showRechargePaused(m)
          return
        }
     }
     
     if (this.data.memberships.length === 0) {
       wx.showModal({
-        title: '去充值',
+        title: '暂无会员卡',
         content: '您目前还没有会员卡，去喜欢的餐厅看看吧',
         confirmText: '去逛逛',
         success: (res) => {
@@ -189,7 +191,22 @@ Page({
       itemList: names.slice(0, 6), // Wechat limit is 6
       success: (res) => {
         const m = this.data.memberships[res.tapIndex]
-        Navigation.toMembership({ membershipId: m.id, autoRecharge: true })
+        this.showRechargePaused(m)
+      }
+    })
+  },
+
+  showRechargePaused(membership?: MembershipDisplay) {
+    wx.showModal({
+      title: '线上充值已暂停',
+      content: MEMBERSHIP_RECHARGE_PAUSED_MESSAGE,
+      cancelText: '我知道了',
+      confirmText: membership ? '查看商户' : '我知道了',
+      showCancel: !!membership,
+      success: (res) => {
+        if (res.confirm && membership) {
+          Navigation.toRestaurantDetail(membership.merchant_id)
+        }
       }
     })
   },

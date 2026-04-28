@@ -238,19 +238,18 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 		// 微信下单失败：将本地创建的合单和子支付单标记为 closed，避免僵尸记录
 		// 超时任务（payment_timeout）会兜底，但主动清理能减少脏数据积压
 		cleanupCtx := context.Background() // 使用新 context，避免父 ctx 已取消时清理失败
-		for _, info := range txResult.OrderInfos {
-			_, _ = svc.store.UpdatePaymentOrderToClosed(cleanupCtx, info.PaymentOrder.ID)
+		if svc.closeCombinedPaymentCommandAnchor(cleanupCtx, txResult) {
+			recordCombinePaymentCommandRejected(cleanupCtx, svc.store, txResult.CombinedPaymentOrder, err)
 		}
-		_, _ = svc.store.UpdateCombinedPaymentOrderToClosed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
 		return result, mapCombineOrderCreateError(err)
 	}
 	if combineResp == nil || strings.TrimSpace(combineResp.PrepayID) == "" {
 		cleanupCtx := context.Background()
-		for _, info := range txResult.OrderInfos {
-			_, _ = svc.store.UpdatePaymentOrderToClosed(cleanupCtx, info.PaymentOrder.ID)
+		emptyPrepayErr := errors.New("create combine order: empty prepay id")
+		if svc.closeCombinedPaymentCommandAnchor(cleanupCtx, txResult) {
+			recordCombinePaymentCommandRejected(cleanupCtx, svc.store, txResult.CombinedPaymentOrder, emptyPrepayErr)
 		}
-		_, _ = svc.store.UpdateCombinedPaymentOrderToClosed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
-		return result, mapCombineOrderCreateError(errors.New("create combine order: empty prepay id"))
+		return result, mapCombineOrderCreateError(emptyPrepayErr)
 	}
 
 	updatedCombined, err := svc.store.UpdateCombinedPaymentOrderPrepay(ctx, db.UpdateCombinedPaymentOrderPrepayParams{
@@ -277,11 +276,116 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 		}
 		return result, fmt.Errorf("update combined payment prepay: %w", err)
 	}
+	recordCombinePaymentCommandAccepted(ctx, svc.store, txResult.CombinedPaymentOrder, combineResp.PrepayID)
 
 	result.CombinedPayment = updatedCombined
 	result.SubOrders = subOrders
 	result.PayParams = payParams
 	return result, nil
+}
+
+func (svc *CombinedPaymentService) closeCombinedPaymentCommandAnchor(ctx context.Context, txResult db.CreateCombinedPaymentTxResult) bool {
+	allClosed := true
+	for _, info := range txResult.OrderInfos {
+		if _, closeErr := svc.store.UpdatePaymentOrderToClosed(ctx, info.PaymentOrder.ID); closeErr != nil {
+			allClosed = false
+			log.Error().Err(closeErr).Int64("payment_order_id", info.PaymentOrder.ID).Msg("failed to close combined sub payment order after create rejection")
+		}
+	}
+	if _, closeErr := svc.store.UpdateCombinedPaymentOrderToClosed(ctx, txResult.CombinedPaymentOrder.ID); closeErr != nil {
+		allClosed = false
+		log.Error().Err(closeErr).Int64("combined_payment_order_id", txResult.CombinedPaymentOrder.ID).Msg("failed to close combined payment order after create rejection")
+	}
+	return allClosed
+}
+
+func recordCombinePaymentCommandAccepted(ctx context.Context, store db.Store, combinedPayment db.CombinedPaymentOrder, prepayID string) {
+	paymentCommandSvc := NewPaymentCommandService(store)
+	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbCombinePaymentCommandInput(
+		combinedPayment,
+		db.ExternalPaymentCommandStatusAccepted,
+		stringPtrIfNotEmpty(prepayID),
+		nil,
+		nil,
+		combinePaymentCommandSnapshot(map[string]string{
+			"combine_out_trade_no": combinedPayment.CombineOutTradeNo,
+			"prepay_id":            prepayID,
+		}),
+	))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("combined_payment_order_id", combinedPayment.ID).
+			Str("combine_out_trade_no", combinedPayment.CombineOutTradeNo).
+			Msg("record combine payment command accepted failed")
+	}
+}
+
+func recordCombinePaymentCommandRejected(ctx context.Context, store db.Store, combinedPayment db.CombinedPaymentOrder, paymentErr error) {
+	paymentCommandSvc := NewPaymentCommandService(store)
+	errorCode, errorMessage := partnerPaymentCommandErrorFields(paymentErr)
+	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbCombinePaymentCommandInput(
+		combinedPayment,
+		db.ExternalPaymentCommandStatusRejected,
+		nil,
+		errorCode,
+		errorMessage,
+		combinePaymentCommandSnapshot(map[string]string{
+			"combine_out_trade_no": combinedPayment.CombineOutTradeNo,
+			"error_code":           stringValue(errorCode),
+			"error_message":        stringValue(errorMessage),
+		}),
+	))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("combined_payment_order_id", combinedPayment.ID).
+			Str("combine_out_trade_no", combinedPayment.CombineOutTradeNo).
+			Msg("record combine payment command rejected failed")
+	}
+}
+
+func dbCombinePaymentCommandInput(
+	combinedPayment db.CombinedPaymentOrder,
+	commandStatus string,
+	externalSecondaryKey *string,
+	lastErrorCode *string,
+	lastErrorMessage *string,
+	responseSnapshot []byte,
+) RecordExternalPaymentCommandInput {
+	businessObjectType := "combined_payment_order"
+	businessObjectID := combinedPayment.ID
+	return RecordExternalPaymentCommandInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilityCombinePayment,
+		CommandType:          db.ExternalPaymentCommandTypeCreatePayment,
+		BusinessOwner:        db.ExternalPaymentBusinessOwnerOrder,
+		BusinessObjectType:   &businessObjectType,
+		BusinessObjectID:     &businessObjectID,
+		ExternalObjectType:   db.ExternalPaymentObjectCombinedPayment,
+		ExternalObjectKey:    combinedPayment.CombineOutTradeNo,
+		ExternalSecondaryKey: externalSecondaryKey,
+		CommandStatus:        commandStatus,
+		LastErrorCode:        lastErrorCode,
+		LastErrorMessage:     lastErrorMessage,
+		ResponseSnapshot:     responseSnapshot,
+	}
+}
+
+func combinePaymentCommandSnapshot(values map[string]string) []byte {
+	filtered := make(map[string]string, len(values))
+	for key, value := range values {
+		if value != "" {
+			filtered[key] = value
+		}
+	}
+	if len(filtered) == 0 {
+		return []byte(`{}`)
+	}
+	data, err := json.Marshal(filtered)
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return data
 }
 
 func (svc *CombinedPaymentService) resolveConcurrentCombinedPayment(

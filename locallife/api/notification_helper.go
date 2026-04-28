@@ -202,10 +202,26 @@ func (server *Server) sendNotificationInternal(ctx context.Context, params SendN
 
 	// 通过WebSocket推送（如果骑手或商户在线）
 	pushed := false
+	notificationResp, err := newNotificationResponse(notification)
+	if err != nil {
+		log.Error().Err(err).
+			Int64("notification_id", notification.ID).
+			Int64("user_id", notification.UserID).
+			Msg("build notification websocket payload failed")
+		return
+	}
+
+	msgData, err := json.Marshal(notificationResp)
+	if err != nil {
+		log.Error().Err(err).
+			Int64("notification_id", notification.ID).
+			Int64("user_id", notification.UserID).
+			Msg("marshal notification websocket payload failed")
+		return
+	}
 
 	if params.PushToRider && params.RiderID > 0 {
 		if server.wsHub.IsRiderOnline(params.RiderID) {
-			msgData, _ := json.Marshal(newNotificationResponse(notification))
 			server.wsHub.SendToRider(params.RiderID, websocket.Message{
 				Type:      "notification",
 				Data:      msgData,
@@ -217,7 +233,6 @@ func (server *Server) sendNotificationInternal(ctx context.Context, params SendN
 
 	if params.PushToMerchant && params.MerchantID > 0 {
 		if server.wsHub.IsMerchantOnline(params.MerchantID) {
-			msgData, _ := json.Marshal(newNotificationResponse(notification))
 			server.wsHub.SendToMerchant(params.MerchantID, websocket.Message{
 				Type:      "notification",
 				Data:      msgData,

@@ -67,10 +67,8 @@ type Querier interface {
 	BatchUpdateDishOnlineStatus(ctx context.Context, arg BatchUpdateDishOnlineStatusParams) (int64, error)
 	// 商户熔断时自动取消所有未来的预订
 	CancelMerchantFutureReservations(ctx context.Context, arg CancelMerchantFutureReservationsParams) (int64, error)
+	CancelOnboardingReviewRun(ctx context.Context, arg CancelOnboardingReviewRunParams) (OnboardingReviewRun, error)
 	CheckAndDecrementInventory(ctx context.Context, arg CheckAndDecrementInventoryParams) (DailyInventory, error)
-	// =========================== 通用查询 ===========================
-	// 检查索赔是否已有指定申诉方类型的申诉
-	CheckAppealExists(ctx context.Context, arg CheckAppealExistsParams) (bool, error)
 	// 检查营业执照号是否已被其他已通过的申请占用
 	CheckBusinessLicenseExists(ctx context.Context, arg CheckBusinessLicenseExistsParams) (int64, error)
 	// 检查法人身份证号是否已被其他已通过的申请占用
@@ -80,12 +78,21 @@ type Querier interface {
 	CheckNotificationExists(ctx context.Context, id string) (bool, error)
 	// 检查运营商是否管理某区域
 	CheckOperatorManagesRegion(ctx context.Context, arg CheckOperatorManagesRegionParams) (bool, error)
+	// =========================== 通用查询 ===========================
+	// 检查索赔是否已有指定争议方类型的追偿争议
+	CheckRecoveryDisputeExists(ctx context.Context, arg CheckRecoveryDisputeExistsParams) (bool, error)
 	// Check if table has any active reservation for given date and time
 	CheckTableAvailability(ctx context.Context, arg CheckTableAvailabilityParams) (int64, error)
 	CheckUserHasMerchantAccess(ctx context.Context, arg CheckUserHasMerchantAccessParams) (bool, error)
 	// 检查用户是否是某商户的 Boss
 	CheckUserIsBoss(ctx context.Context, arg CheckUserIsBossParams) (bool, error)
 	CheckUserVoucherExists(ctx context.Context, arg CheckUserVoucherExistsParams) (bool, error)
+	ClaimExternalPaymentFactApplication(ctx context.Context, id int64) (ExternalPaymentFactApplication, error)
+	ClaimMerchantTakeoutSuspensionIfAvailable(ctx context.Context, arg ClaimMerchantTakeoutSuspensionIfAvailableParams) (int64, error)
+	ClaimPaymentDomainOutbox(ctx context.Context, arg ClaimPaymentDomainOutboxParams) (PaymentDomainOutbox, error)
+	ClaimPendingProfitSharingReceiverTargets(ctx context.Context, arg ClaimPendingProfitSharingReceiverTargetsParams) ([]ClaimPendingProfitSharingReceiverTargetsRow, error)
+	ClaimProfitSharingReceiverTarget(ctx context.Context, arg ClaimProfitSharingReceiverTargetParams) (ProfitSharingReceiverTarget, error)
+	ClaimRiderSuspensionIfAvailable(ctx context.Context, arg ClaimRiderSuspensionIfAvailableParams) (int64, error)
 	// P1-026: 清理长期未更新的购物车及其商品（ON DELETE CASCADE）
 	CleanupOldCarts(ctx context.Context, updatedAt time.Time) error
 	ClearBrowseHistory(ctx context.Context, userID int64) error
@@ -101,6 +108,7 @@ type Querier interface {
 	ClearMerchantApplicationIDCardBack(ctx context.Context, id int64) (MerchantApplication, error)
 	// 清空身份证正面关联和 OCR 结果
 	ClearMerchantApplicationIDCardFront(ctx context.Context, id int64) (MerchantApplication, error)
+	ClearMerchantFoodSafetyPausedOrders(ctx context.Context, merchantID int64) (int64, error)
 	ClearMerchantLogo(ctx context.Context, arg ClearMerchantLogoParams) (Merchant, error)
 	ClearMerchantTags(ctx context.Context, merchantID int64) error
 	// 批量清空购物车（合单支付成功后）
@@ -122,6 +130,7 @@ type Querier interface {
 	// 批量关闭过期的 pending 支付订单
 	CloseExpiredPaymentOrders(ctx context.Context) (int64, error)
 	CompleteOCRJob(ctx context.Context, arg CompleteOCRJobParams) (OcrJob, error)
+	CompleteOnboardingReviewRun(ctx context.Context, arg CompleteOnboardingReviewRunParams) (OnboardingReviewRun, error)
 	// 用户点击完成（外卖）：直接进入 completed，并补齐 user_delivered_at
 	CompleteTakeoutOrderByUser(ctx context.Context, id int64) (Order, error)
 	CompleteUploadSession(ctx context.Context, arg CompleteUploadSessionParams) (MediaUploadSession, error)
@@ -152,11 +161,11 @@ type Querier interface {
 	CountExploreNearbyRooms(ctx context.Context, arg CountExploreNearbyRoomsParams) (int64, error)
 	CountFavoriteDishes(ctx context.Context, userID int64) (int64, error)
 	CountFavoriteMerchants(ctx context.Context, userID int64) (int64, error)
+	CountFoodSafetyCasesByRegion(ctx context.Context, regionID int64) (int64, error)
+	CountFoodSafetyCasesByRegionAndStatus(ctx context.Context, arg CountFoodSafetyCasesByRegionAndStatusParams) (int64, error)
 	// 检查某桌台是否有未来的有效预定（用于删除桌台前检查）
 	CountFutureReservationsByTable(ctx context.Context, tableID int64) (int64, error)
 	CountIngredients(ctx context.Context, arg CountIngredientsParams) (int64, error)
-	// 商户申诉计数
-	CountMerchantAppealsForMerchant(ctx context.Context, arg CountMerchantAppealsForMerchantParams) (int64, error)
 	// 统计各状态的申请数量
 	CountMerchantApplicationsByStatus(ctx context.Context, status string) (int64, error)
 	CountMerchantBosses(ctx context.Context, merchantID int64) (int64, error)
@@ -175,6 +184,8 @@ type Querier interface {
 	CountMerchantOrdersByStatusAfterTime(ctx context.Context, arg CountMerchantOrdersByStatusAfterTimeParams) (int64, error)
 	CountMerchantPrintAnomalies(ctx context.Context, arg CountMerchantPrintAnomaliesParams) (int64, error)
 	CountMerchantPromotionOrders(ctx context.Context, arg CountMerchantPromotionOrdersParams) (int64, error)
+	// 商户追偿争议计数
+	CountMerchantRecoveryDisputesForMerchant(ctx context.Context, arg CountMerchantRecoveryDisputesForMerchantParams) (int64, error)
 	CountMerchantSettlementAdjustments(ctx context.Context, arg CountMerchantSettlementAdjustmentsParams) (int64, error)
 	CountMerchantSettlementTimeline(ctx context.Context, arg CountMerchantSettlementTimelineParams) (int64, error)
 	CountMerchantSettlements(ctx context.Context, arg CountMerchantSettlementsParams) (int64, error)
@@ -187,8 +198,10 @@ type Querier interface {
 	CountOnlineRiders(ctx context.Context) (int64, error)
 	// 统计区域内当前在线骑手数量
 	CountOnlineRidersByRegion(ctx context.Context, regionID pgtype.Int8) (int64, error)
-	// 运营商申诉计数
-	CountOperatorAppeals(ctx context.Context, arg CountOperatorAppealsParams) (int64, error)
+	CountOperatorNotifications(ctx context.Context, arg CountOperatorNotificationsParams) (int64, error)
+	CountOperatorPendingDispatches(ctx context.Context, arg CountOperatorPendingDispatchesParams) (int64, error)
+	// 运营商追偿争议计数
+	CountOperatorRecoveryDisputes(ctx context.Context, arg CountOperatorRecoveryDisputesParams) (int64, error)
 	// 统计运营商管理的区域数量
 	CountOperatorRegions(ctx context.Context, operatorID int64) (int64, error)
 	CountOperators(ctx context.Context) (int64, error)
@@ -205,6 +218,8 @@ type Querier interface {
 	CountPendingPrintLogs(ctx context.Context, printerID int64) (int64, error)
 	CountPendingRegionApplications(ctx context.Context) (int64, error)
 	CountPlatformAlertEvents(ctx context.Context) (int64, error)
+	CountProfitSharingReceiverAttemptsByTarget(ctx context.Context, targetID int64) (int64, error)
+	CountProfitSharingReceiverTargets(ctx context.Context, arg CountProfitSharingReceiverTargetsParams) (int64, error)
 	CountProfitSharingReturnsByRefundOrder(ctx context.Context, refundOrderID int64) (int32, error)
 	CountProfitSharingReturnsByRefundOrderStatus(ctx context.Context, arg CountProfitSharingReturnsByRefundOrderStatusParams) (int32, error)
 	// 统计多个用户最近N天的索赔总数
@@ -218,8 +233,6 @@ type Querier interface {
 	CountReservationsByUserAndStatus(ctx context.Context, arg CountReservationsByUserAndStatusParams) (int64, error)
 	CountReviewsByMerchant(ctx context.Context, merchantID int64) (int64, error)
 	CountReviewsByUser(ctx context.Context, userID int64) (int64, error)
-	// 骑手申诉计数
-	CountRiderAppeals(ctx context.Context, appellantID int64) (int64, error)
 	// 统计各状态的申请数量
 	CountRiderApplicationsByStatus(ctx context.Context, status string) (int64, error)
 	// 骑手收到的索赔计数
@@ -233,13 +246,13 @@ type Querier interface {
 	CountRiderDeliveries(ctx context.Context, riderID pgtype.Int8) (int64, error)
 	CountRiderDeposits(ctx context.Context, riderID int64) (int64, error)
 	CountRiderLocations(ctx context.Context, riderID int64) (int64, error)
+	// 骑手追偿争议计数
+	CountRiderRecoveryDisputes(ctx context.Context, arg CountRiderRecoveryDisputesParams) (int64, error)
 	// 统计区域内骑手数量
 	CountRidersByRegion(ctx context.Context, regionID pgtype.Int8) (int64, error)
 	// 按区域和状态统计骑手数量
 	CountRidersByRegionWithStatus(ctx context.Context, arg CountRidersByRegionWithStatusParams) (int64, error)
 	CountRidersByStatus(ctx context.Context, status string) (int64, error)
-	CountSafetyReportsByRegion(ctx context.Context, regionID int64) (int64, error)
-	CountSafetyReportsByRegionAndStatus(ctx context.Context, arg CountSafetyReportsByRegionAndStatusParams) (int64, error)
 	// Count for pagination
 	CountSearchCombosGlobal(ctx context.Context, arg CountSearchCombosGlobalParams) (int64, error)
 	// 统计商户内菜品搜索结果总数
@@ -274,12 +287,6 @@ type Querier interface {
 	CountWechatComplaintsByMerchant(ctx context.Context, arg CountWechatComplaintsByMerchantParams) (int64, error)
 	CountWechatMerchantViolations(ctx context.Context, arg CountWechatMerchantViolationsParams) (int64, error)
 	CountWithdrawalRecords(ctx context.Context, arg CountWithdrawalRecordsParams) (int64, error)
-	// =====================================================================
-	// Appeal Queries - 申诉相关查询
-	// =====================================================================
-	// =========================== 商户申诉 ===========================
-	// 创建申诉
-	CreateAppeal(ctx context.Context, arg CreateAppealParams) (Appeal, error)
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error)
 	// ==============================
 	// behavior_actions
@@ -336,6 +343,7 @@ type Querier interface {
 	CreateDeliveryFeeConfig(ctx context.Context, arg CreateDeliveryFeeConfigParams) (DeliveryFeeConfig, error)
 	CreateDeliveryLocationEvent(ctx context.Context, arg CreateDeliveryLocationEventParams) (DeliveryLocationEvent, error)
 	CreateDeliveryPromotion(ctx context.Context, arg CreateDeliveryPromotionParams) (MerchantDeliveryPromotion, error)
+	CreateDeliveryTimeoutAlert(ctx context.Context, arg CreateDeliveryTimeoutAlertParams) (DeliveryTimeoutAlert, error)
 	CreateDiningSession(ctx context.Context, arg CreateDiningSessionParams) (DiningSession, error)
 	// Discount Rules (满减规则)
 	CreateDiscountRule(ctx context.Context, arg CreateDiscountRuleParams) (DiscountRule, error)
@@ -350,9 +358,13 @@ type Querier interface {
 	CreateDishCustomizationGroup(ctx context.Context, arg CreateDishCustomizationGroupParams) (DishCustomizationGroup, error)
 	CreateDishCustomizationOption(ctx context.Context, arg CreateDishCustomizationOptionParams) (DishCustomizationOption, error)
 	CreateEcommerceApplyment(ctx context.Context, arg CreateEcommerceApplymentParams) (EcommerceApplyment, error)
+	CreateExternalPaymentCommand(ctx context.Context, arg CreateExternalPaymentCommandParams) (ExternalPaymentCommand, error)
+	CreateExternalPaymentFact(ctx context.Context, arg CreateExternalPaymentFactParams) (ExternalPaymentFact, error)
+	CreateExternalPaymentFactApplication(ctx context.Context, arg CreateExternalPaymentFactApplicationParams) (ExternalPaymentFactApplication, error)
 	// ==========================================
 	// food_safety_incidents（食品安全事件）
 	// ==========================================
+	CreateFoodSafetyCase(ctx context.Context, arg CreateFoodSafetyCaseParams) (FoodSafetyCase, error)
 	CreateFoodSafetyIncident(ctx context.Context, arg CreateFoodSafetyIncidentParams) (FoodSafetyIncident, error)
 	// ==========================================
 	// fraud_patterns（欺诈模式检测）
@@ -391,10 +403,12 @@ type Querier interface {
 	CreateMerchantBoss(ctx context.Context, arg CreateMerchantBossParams) (MerchantBoss, error)
 	CreateMerchantBrand(ctx context.Context, arg CreateMerchantBrandParams) (MerchantBrand, error)
 	CreateMerchantCancelWithdrawApplication(ctx context.Context, arg CreateMerchantCancelWithdrawApplicationParams) (MerchantCancelWithdrawApplication, error)
+	CreateMerchantCredentialLedger(ctx context.Context, arg CreateMerchantCredentialLedgerParams) (CredentialLedger, error)
 	// Groups
 	CreateMerchantGroup(ctx context.Context, arg CreateMerchantGroupParams) (MerchantGroup, error)
 	CreateMerchantMembership(ctx context.Context, arg CreateMerchantMembershipParams) (MerchantMembership, error)
 	CreateMerchantMembershipSettings(ctx context.Context, arg CreateMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
+	CreateMerchantOnboardingReviewRun(ctx context.Context, arg CreateMerchantOnboardingReviewRunParams) (OnboardingReviewRun, error)
 	CreateMerchantPaymentConfig(ctx context.Context, arg CreateMerchantPaymentConfigParams) (MerchantPaymentConfig, error)
 	// M9: TrustScore信任分系统查询
 	// 设计理念：信用驱动，非证据驱动
@@ -417,6 +431,8 @@ type Querier interface {
 	CreateOrderDisplayConfig(ctx context.Context, arg CreateOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	CreateOrderItem(ctx context.Context, arg CreateOrderItemParams) (OrderItem, error)
 	CreateOrderStatusLog(ctx context.Context, arg CreateOrderStatusLogParams) (OrderStatusLog, error)
+	CreatePaymentDomainOutbox(ctx context.Context, arg CreatePaymentDomainOutboxParams) (PaymentDomainOutbox, error)
+	CreatePaymentDomainOutboxOnce(ctx context.Context, arg CreatePaymentDomainOutboxOnceParams) (PaymentDomainOutbox, error)
 	CreatePaymentOrder(ctx context.Context, arg CreatePaymentOrderParams) (PaymentOrder, error)
 	CreatePeakHourConfig(ctx context.Context, arg CreatePeakHourConfigParams) (PeakHourConfig, error)
 	CreatePlatformAlertEvent(ctx context.Context, arg CreatePlatformAlertEventParams) (PlatformAlertEvent, error)
@@ -430,11 +446,18 @@ type Querier interface {
 	CreateProfitSharingOrder(ctx context.Context, arg CreateProfitSharingOrderParams) (ProfitSharingOrder, error)
 	// 简化版创建（不含骑手分账，用于堂食/自提订单）
 	CreateProfitSharingOrderSimple(ctx context.Context, arg CreateProfitSharingOrderSimpleParams) (ProfitSharingOrder, error)
+	CreateProfitSharingReceiverAttempt(ctx context.Context, arg CreateProfitSharingReceiverAttemptParams) (ProfitSharingReceiverAttempt, error)
 	CreateProfitSharingReturn(ctx context.Context, arg CreateProfitSharingReturnParams) (ProfitSharingReturn, error)
 	// Recharge Rules
 	CreateRechargeRule(ctx context.Context, arg CreateRechargeRuleParams) (RechargeRule, error)
 	CreateRecommendConfig(ctx context.Context, arg CreateRecommendConfigParams) (RecommendConfig, error)
 	CreateReconciliationReport(ctx context.Context, arg CreateReconciliationReportParams) (ReconciliationReport, error)
+	// =====================================================================
+	// Recovery Dispute Queries - 追偿争议相关查询
+	// =====================================================================
+	// =========================== 追偿争议基础查询 ===========================
+	// 创建追偿争议
+	CreateRecoveryDispute(ctx context.Context, arg CreateRecoveryDisputeParams) (RecoveryDispute, error)
 	CreateRefundOrder(ctx context.Context, arg CreateRefundOrderParams) (RefundOrder, error)
 	CreateRegion(ctx context.Context, arg CreateRegionParams) (Region, error)
 	CreateReservationItem(ctx context.Context, arg CreateReservationItemParams) (ReservationItem, error)
@@ -443,9 +466,11 @@ type Querier interface {
 	CreateRider(ctx context.Context, arg CreateRiderParams) (Rider, error)
 	// 创建骑手申请草稿
 	CreateRiderApplication(ctx context.Context, userID int64) (RiderApplication, error)
+	CreateRiderCredentialLedger(ctx context.Context, arg CreateRiderCredentialLedgerParams) (CredentialLedger, error)
 	CreateRiderDeposit(ctx context.Context, arg CreateRiderDepositParams) (RiderDeposit, error)
 	CreateRiderDepositCredit(ctx context.Context, arg CreateRiderDepositCreditParams) (RiderDepositCredit, error)
 	CreateRiderLocation(ctx context.Context, arg CreateRiderLocationParams) (RiderLocation, error)
+	CreateRiderOnboardingReviewRun(ctx context.Context, arg CreateRiderOnboardingReviewRunParams) (OnboardingReviewRun, error)
 	// ==========================================
 	// rider_profiles（骑手信任画像）
 	// ==========================================
@@ -456,7 +481,6 @@ type Querier interface {
 	// Phase1: 规则命中审计查询（草案）
 	CreateRuleHit(ctx context.Context, arg CreateRuleHitParams) (RuleHit, error)
 	CreateRuleVersion(ctx context.Context, arg CreateRuleVersionParams) (RuleVersion, error)
-	CreateSafetyReport(ctx context.Context, arg CreateSafetyReportParams) (SafetyReport, error)
 	CreateSearchHistory(ctx context.Context, arg CreateSearchHistoryParams) (SearchHistory, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateSubsidyOrder(ctx context.Context, arg CreateSubsidyOrderParams) (SubsidyOrder, error)
@@ -490,6 +514,8 @@ type Querier interface {
 	CreateWebLoginSession(ctx context.Context, arg CreateWebLoginSessionParams) (WebLoginSession, error)
 	CreateWechatNotification(ctx context.Context, arg CreateWechatNotificationParams) (WechatNotification, error)
 	CreateWithdrawalRecord(ctx context.Context, arg CreateWithdrawalRecordParams) (WithdrawalRecord, error)
+	DeactivateMerchantActiveCredentialLedger(ctx context.Context, arg DeactivateMerchantActiveCredentialLedgerParams) (int64, error)
+	DeactivateRiderActiveCredentialLedger(ctx context.Context, arg DeactivateRiderActiveCredentialLedgerParams) (int64, error)
 	DecrementMembershipBalance(ctx context.Context, arg DecrementMembershipBalanceParams) (MerchantMembership, error)
 	DecrementVoucherUsedQuantity(ctx context.Context, id int64) (Voucher, error)
 	// 从骑手押金扣款（原子操作：检查余额 + 扣款）
@@ -509,6 +535,7 @@ type Querier interface {
 	DeleteDeliveryFeeConfig(ctx context.Context, id int64) error
 	DeleteDeliveryPromotion(ctx context.Context, id int64) error
 	DeleteDeliveryPromotionsByMerchant(ctx context.Context, merchantID int64) error
+	DeleteDeliveryTimeoutAlert(ctx context.Context, arg DeleteDeliveryTimeoutAlertParams) error
 	// 软删除满减规则
 	DeleteDiscountRule(ctx context.Context, id int64) error
 	// 软删除菜品
@@ -576,20 +603,14 @@ type Querier interface {
 	GetActiveDeliveryFeeConfigByRegion(ctx context.Context, regionID int64) (DeliveryFeeConfig, error)
 	GetActiveDiningSessionByReservation(ctx context.Context, reservationID pgtype.Int8) (DiningSession, error)
 	GetActiveDiningSessionByTable(ctx context.Context, tableID int64) (DiningSession, error)
-	GetActiveFoodSafetyIncidents(ctx context.Context, limit int32) ([]FoodSafetyIncident, error)
+	GetActiveFoodSafetyIncidents(ctx context.Context, limit int32) ([]GetActiveFoodSafetyIncidentsRow, error)
+	GetActiveMerchantCredentialLedgers(ctx context.Context, merchantID pgtype.Int8) ([]CredentialLedger, error)
 	// 根据区域获取运营商（通过operator_regions表，支持多区域）
 	GetActiveOperatorByRegion(ctx context.Context, regionID int64) (Operator, error)
 	// Phase2: 分账规则配置查询（草案）
 	GetActiveProfitSharingConfig(ctx context.Context, arg GetActiveProfitSharingConfigParams) (ProfitSharingConfig, error)
 	GetActiveRecommendConfig(ctx context.Context) (RecommendConfig, error)
-	// 获取申诉详情
-	GetAppeal(ctx context.Context, id int64) (Appeal, error)
-	// 根据索赔ID与申诉方类型获取申诉
-	GetAppealByClaim(ctx context.Context, arg GetAppealByClaimParams) (Appeal, error)
-	// 获取申诉审核后处理所需信息
-	GetAppealForPostProcess(ctx context.Context, id int64) (GetAppealForPostProcessRow, error)
-	// 获取申诉详情（包含索赔和订单信息）
-	GetAppealWithDetails(ctx context.Context, id int64) (GetAppealWithDetailsRow, error)
+	GetActiveRiderCredentialLedgers(ctx context.Context, riderID pgtype.Int8) ([]CredentialLedger, error)
 	GetApplicableDiscountRules(ctx context.Context, arg GetApplicableDiscountRulesParams) ([]DiscountRule, error)
 	GetBehaviorAction(ctx context.Context, id int64) (BehaviorAction, error)
 	GetBehaviorDecision(ctx context.Context, id int64) (BehaviorDecision, error)
@@ -611,10 +632,11 @@ type Querier interface {
 	// 分类销售统计
 	GetCategoryStats(ctx context.Context, arg GetCategoryStatsParams) ([]GetCategoryStatsRow, error)
 	GetClaim(ctx context.Context, id int64) (Claim, error)
-	// 获取索赔信息（用于创建申诉时验证）
-	GetClaimForAppeal(ctx context.Context, id int64) (GetClaimForAppealRow, error)
 	GetClaimForUpdate(ctx context.Context, id int64) (Claim, error)
 	GetClaimRecoveryByClaimID(ctx context.Context, claimID int64) (ClaimRecovery, error)
+	GetClaimRecoveryByID(ctx context.Context, id int64) (ClaimRecovery, error)
+	GetClaimRecoveryContextByClaimID(ctx context.Context, claimID int64) (GetClaimRecoveryContextByClaimIDRow, error)
+	GetClaimRecoveryContextByID(ctx context.Context, id int64) (GetClaimRecoveryContextByIDRow, error)
 	// 获取索赔详情（包含订单、商户、用户信息）
 	GetClaimWithDetails(ctx context.Context, id int64) (GetClaimWithDetailsRow, error)
 	// ==========================================
@@ -648,6 +670,7 @@ type Querier interface {
 	// 批量获取套餐详情及商户信息（用于推荐流展示）
 	// 当套餐没有专属图片时，使用套餐内第一个菜品的图片作为展示图
 	GetCombosWithMerchantByIDs(ctx context.Context, dollar_1 []int64) ([]GetCombosWithMerchantByIDsRow, error)
+	GetCredentialLedger(ctx context.Context, id int64) (CredentialLedger, error)
 	// 查询顾客最喜欢的菜品
 	GetCustomerFavoriteDishes(ctx context.Context, arg GetCustomerFavoriteDishesParams) ([]GetCustomerFavoriteDishesRow, error)
 	// 单个顾客在某商户的消费详情
@@ -704,7 +727,13 @@ type Querier interface {
 	GetEcommerceApplymentBySubject(ctx context.Context, arg GetEcommerceApplymentBySubjectParams) (EcommerceApplyment, error)
 	// 获取用户未购买过的热门菜品（探索推荐）
 	GetExploreDishes(ctx context.Context, arg GetExploreDishesParams) ([]GetExploreDishesRow, error)
-	GetFoodSafetyIncident(ctx context.Context, id int64) (FoodSafetyIncident, error)
+	GetExternalPaymentCommandByExternalObject(ctx context.Context, arg GetExternalPaymentCommandByExternalObjectParams) (ExternalPaymentCommand, error)
+	GetExternalPaymentFact(ctx context.Context, id int64) (ExternalPaymentFact, error)
+	GetExternalPaymentFactApplication(ctx context.Context, id int64) (ExternalPaymentFactApplication, error)
+	GetExternalPaymentFactByDedupeKey(ctx context.Context, dedupeKey string) (ExternalPaymentFact, error)
+	GetFoodSafetyCase(ctx context.Context, id int64) (FoodSafetyCase, error)
+	GetFoodSafetyCaseForUpdate(ctx context.Context, id int64) (FoodSafetyCase, error)
+	GetFoodSafetyIncident(ctx context.Context, id int64) (GetFoodSafetyIncidentRow, error)
 	GetFraudPattern(ctx context.Context, id int64) (FraudPattern, error)
 	GetFraudPatternsByDevice(ctx context.Context, arg GetFraudPatternsByDeviceParams) ([]FraudPattern, error)
 	GetFraudPatternsByUsers(ctx context.Context, dollar_1 []int64) ([]FraudPattern, error)
@@ -716,13 +745,16 @@ type Querier interface {
 	GetHourlyDistribution(ctx context.Context, arg GetHourlyDistributionParams) ([]GetHourlyDistributionRow, error)
 	GetIngredient(ctx context.Context, id int64) (Ingredient, error)
 	GetInventoryStats(ctx context.Context, arg GetInventoryStatsParams) (GetInventoryStatsRow, error)
+	GetLatestBehaviorDecisionByClaimID(ctx context.Context, claimID pgtype.Int8) (BehaviorDecision, error)
 	GetLatestEcommerceApplymentBySubject(ctx context.Context, arg GetLatestEcommerceApplymentBySubjectParams) (EcommerceApplyment, error)
 	GetLatestGroupApplicationByApplicant(ctx context.Context, applicantUserID int64) (MerchantGroupApplication, error)
+	GetLatestMerchantOnboardingReviewRun(ctx context.Context, merchantApplicationID pgtype.Int8) (OnboardingReviewRun, error)
 	GetLatestOrderByReservation(ctx context.Context, reservationID pgtype.Int8) (Order, error)
 	GetLatestPaymentOrderByBusinessTypeAndAttach(ctx context.Context, arg GetLatestPaymentOrderByBusinessTypeAndAttachParams) (PaymentOrder, error)
 	GetLatestPaymentOrderByOrder(ctx context.Context, arg GetLatestPaymentOrderByOrderParams) (PaymentOrder, error)
 	GetLatestPaymentOrderByReservation(ctx context.Context, arg GetLatestPaymentOrderByReservationParams) (PaymentOrder, error)
 	GetLatestPrintLogByOrderAndPrinter(ctx context.Context, arg GetLatestPrintLogByOrderAndPrinterParams) (PrintLog, error)
+	GetLatestRiderOnboardingReviewRun(ctx context.Context, riderApplicationID pgtype.Int8) (OnboardingReviewRun, error)
 	GetLatestWeatherCoefficient(ctx context.Context, regionID int64) (WeatherCoefficient, error)
 	GetMaliciousClaims(ctx context.Context, createdAt time.Time) ([]Claim, error)
 	// 运营商多区域日趋势（跨区域按用户/商户去重）
@@ -740,8 +772,6 @@ type Querier interface {
 	GetMembershipTransactionByPaymentOrderID(ctx context.Context, paymentOrderID pgtype.Int8) (MembershipTransaction, error)
 	GetMembershipTransactionStats(ctx context.Context, membershipID int64) (GetMembershipTransactionStatsRow, error)
 	GetMerchant(ctx context.Context, id int64) (Merchant, error)
-	// 商户查看自己的申诉详情
-	GetMerchantAppealDetail(ctx context.Context, arg GetMerchantAppealDetailParams) (GetMerchantAppealDetailRow, error)
 	GetMerchantApplication(ctx context.Context, id int64) (MerchantApplication, error)
 	GetMerchantApplicationByLicenseNumber(ctx context.Context, businessLicenseNumber string) (MerchantApplication, error)
 	// 获取用户的草稿或可编辑申请（包含所有状态，以便随时编辑）
@@ -807,7 +837,10 @@ type Querier interface {
 	GetMerchantPromotionExpenses(ctx context.Context, arg GetMerchantPromotionExpensesParams) (GetMerchantPromotionExpensesRow, error)
 	// 商户销售排行
 	GetMerchantRanking(ctx context.Context, arg GetMerchantRankingParams) ([]GetMerchantRankingRow, error)
-	GetMerchantRecentFoodSafetyReports(ctx context.Context, merchantID int64) ([]FoodSafetyIncident, error)
+	GetMerchantRecentFoodSafetyReports(ctx context.Context, merchantID int64) ([]GetMerchantRecentFoodSafetyReportsRow, error)
+	GetMerchantRecentFoodSafetyReportsByProduct(ctx context.Context, arg GetMerchantRecentFoodSafetyReportsByProductParams) ([]GetMerchantRecentFoodSafetyReportsByProductRow, error)
+	// 商户查看自己的追偿争议详情
+	GetMerchantRecoveryDisputeDetail(ctx context.Context, arg GetMerchantRecoveryDisputeDetailParams) (GetMerchantRecoveryDisputeDetailRow, error)
 	// 复购率分析
 	// 注意: repurchase_rate_percent 返回万分比(如 7550 表示 75.50%)，API层需除以100
 	// 注意: avg_orders_per_user 返回百分比形式(如 235 表示 2.35次)，API层需除以100
@@ -826,9 +859,10 @@ type Querier interface {
 	GetNotification(ctx context.Context, id int64) (Notification, error)
 	GetNotificationsByRelated(ctx context.Context, arg GetNotificationsByRelatedParams) ([]Notification, error)
 	GetOCRJob(ctx context.Context, id int64) (OcrJob, error)
+	GetOnboardingReviewRun(ctx context.Context, id int64) (OnboardingReviewRun, error)
+	GetOpenFoodSafetyCaseByMerchant(ctx context.Context, merchantID int64) (FoodSafetyCase, error)
+	GetOpenFoodSafetyIncidentByOrderAndUser(ctx context.Context, arg GetOpenFoodSafetyIncidentByOrderAndUserParams) (GetOpenFoodSafetyIncidentByOrderAndUserRow, error)
 	GetOperator(ctx context.Context, id int64) (Operator, error)
-	// 运营商查看申诉详情
-	GetOperatorAppealDetail(ctx context.Context, arg GetOperatorAppealDetailParams) (GetOperatorAppealDetailRow, error)
 	// 通过ID获取申请
 	GetOperatorApplicationByID(ctx context.Context, id int64) (OperatorApplication, error)
 	// 获取用户的任意状态申请
@@ -839,9 +873,13 @@ type Querier interface {
 	GetOperatorForUpdate(ctx context.Context, id int64) (Operator, error)
 	// 运营商区域内商户排行（基于实际分账数据）
 	GetOperatorMerchantRanking(ctx context.Context, arg GetOperatorMerchantRankingParams) ([]GetOperatorMerchantRankingRow, error)
+	GetOperatorNotification(ctx context.Context, arg GetOperatorNotificationParams) (Notification, error)
+	GetOperatorPendingDispatchSummary(ctx context.Context, arg GetOperatorPendingDispatchSummaryParams) (GetOperatorPendingDispatchSummaryRow, error)
 	GetOperatorProfitSharingStats(ctx context.Context, arg GetOperatorProfitSharingStatsParams) (GetOperatorProfitSharingStatsRow, error)
 	// 按区域过滤的运营商分账统计（多区域运营商区域维度财务概览）
 	GetOperatorProfitSharingStatsByRegion(ctx context.Context, arg GetOperatorProfitSharingStatsByRegionParams) (GetOperatorProfitSharingStatsByRegionRow, error)
+	// 运营商查看追偿争议详情
+	GetOperatorRecoveryDisputeDetail(ctx context.Context, arg GetOperatorRecoveryDisputeDetailParams) (GetOperatorRecoveryDisputeDetailRow, error)
 	GetOperatorRegion(ctx context.Context, arg GetOperatorRegionParams) (OperatorRegion, error)
 	GetOperatorRegionApplication(ctx context.Context, id int64) (OperatorRegionApplication, error)
 	GetOperatorRegionApplicationByOperatorAndRegion(ctx context.Context, arg GetOperatorRegionApplicationByOperatorAndRegionParams) (OperatorRegionApplication, error)
@@ -908,6 +946,8 @@ type Querier interface {
 	GetProfitSharingOrderByOutOrderNo(ctx context.Context, outOrderNo string) (ProfitSharingOrder, error)
 	GetProfitSharingOrderByPaymentOrder(ctx context.Context, paymentOrderID int64) (ProfitSharingOrder, error)
 	GetProfitSharingOrderForUpdate(ctx context.Context, id int64) (ProfitSharingOrder, error)
+	GetProfitSharingReceiverTarget(ctx context.Context, id int64) (ProfitSharingReceiverTarget, error)
+	GetProfitSharingReceiverTargetByKey(ctx context.Context, arg GetProfitSharingReceiverTargetByKeyParams) (ProfitSharingReceiverTarget, error)
 	GetProfitSharingReconciliationSummary(ctx context.Context, arg GetProfitSharingReconciliationSummaryParams) ([]GetProfitSharingReconciliationSummaryRow, error)
 	GetProfitSharingReturn(ctx context.Context, id int64) (ProfitSharingReturn, error)
 	GetProfitSharingReturnByOutReturnNo(ctx context.Context, outReturnNo string) (ProfitSharingReturn, error)
@@ -920,6 +960,14 @@ type Querier interface {
 	GetRecommendConfig(ctx context.Context, name string) (RecommendConfig, error)
 	GetReconciliationReport(ctx context.Context, id int64) (ReconciliationReport, error)
 	GetReconciliationReportByDateAndType(ctx context.Context, arg GetReconciliationReportByDateAndTypeParams) (ReconciliationReport, error)
+	// 获取追偿争议详情
+	GetRecoveryDispute(ctx context.Context, id int64) (RecoveryDispute, error)
+	// 根据索赔ID与争议方类型获取追偿争议
+	GetRecoveryDisputeByClaim(ctx context.Context, arg GetRecoveryDisputeByClaimParams) (RecoveryDispute, error)
+	// 获取追偿争议审核后处理所需信息
+	GetRecoveryDisputeForPostProcess(ctx context.Context, id int64) (GetRecoveryDisputeForPostProcessRow, error)
+	// 获取追偿争议详情（包含索赔和订单信息）
+	GetRecoveryDisputeWithDetails(ctx context.Context, id int64) (GetRecoveryDisputeWithDetailsRow, error)
 	GetRefundOrder(ctx context.Context, id int64) (RefundOrder, error)
 	GetRefundOrderByOutRefundNo(ctx context.Context, outRefundNo string) (RefundOrder, error)
 	GetRefundOrderByRefundId(ctx context.Context, refundID pgtype.Text) (RefundOrder, error)
@@ -955,8 +1003,6 @@ type Querier interface {
 	GetReview(ctx context.Context, id int64) (Review, error)
 	GetReviewByOrderID(ctx context.Context, orderID int64) (Review, error)
 	GetRider(ctx context.Context, id int64) (Rider, error)
-	// 骑手查看自己的申诉详情
-	GetRiderAppealDetail(ctx context.Context, arg GetRiderAppealDetailParams) (GetRiderAppealDetailRow, error)
 	// 获取骑手申请
 	GetRiderApplication(ctx context.Context, id int64) (RiderApplication, error)
 	// 根据用户ID获取骑手申请
@@ -987,12 +1033,13 @@ type Querier interface {
 	// ==================== 骑手分账查询 ====================
 	// 骑手配送费收入统计
 	GetRiderProfitSharingStats(ctx context.Context, arg GetRiderProfitSharingStatsParams) (GetRiderProfitSharingStatsRow, error)
+	// 骑手查看自己的追偿争议详情
+	GetRiderRecoveryDisputeDetail(ctx context.Context, arg GetRiderRecoveryDisputeDetailParams) (GetRiderRecoveryDisputeDetailRow, error)
 	// ============ Customer-side Room Queries (C端包间查询) ============
 	// 获取包间详情（含商户信息、主图、月销量）供顾客查看
 	GetRoomDetailForCustomer(ctx context.Context, id int64) (GetRoomDetailForCustomerRow, error)
 	GetRule(ctx context.Context, id int64) (Rule, error)
 	GetRuleVersion(ctx context.Context, id int64) (RuleVersion, error)
-	GetSafetyReport(ctx context.Context, id int64) (SafetyReport, error)
 	GetSession(ctx context.Context, id int64) (Session, error)
 	GetSessionByAccessToken(ctx context.Context, accessToken string) (Session, error)
 	GetSessionByRefreshToken(ctx context.Context, arg GetSessionByRefreshTokenParams) (Session, error)
@@ -1087,6 +1134,8 @@ type Querier interface {
 	GetWechatNotification(ctx context.Context, id string) (WechatNotification, error)
 	GetWithdrawalRecord(ctx context.Context, id int64) (WithdrawalRecord, error)
 	GetWithdrawalRecordByOutRequestNo(ctx context.Context, outRequestNo pgtype.Text) (WithdrawalRecord, error)
+	HasBlockingClaimRecoveryForMerchant(ctx context.Context, merchantID int64) (bool, error)
+	HasBlockingClaimRecoveryForRider(ctx context.Context, riderID pgtype.Int8) (bool, error)
 	HasRole(ctx context.Context, arg HasRoleParams) (bool, error)
 	HasUserOrderedFromMerchant(ctx context.Context, arg HasUserOrderedFromMerchantParams) (bool, error)
 	IncrementMembershipBalance(ctx context.Context, arg IncrementMembershipBalanceParams) (MerchantMembership, error)
@@ -1104,6 +1153,7 @@ type Querier interface {
 	InitiateSubsidyReturn(ctx context.Context, arg InitiateSubsidyReturnParams) (SubsidyOrder, error)
 	IsDishFavorited(ctx context.Context, arg IsDishFavoritedParams) (bool, error)
 	IsMerchantFavorited(ctx context.Context, arg IsMerchantFavoritedParams) (bool, error)
+	LinkFoodSafetyIncidentsToCase(ctx context.Context, arg LinkFoodSafetyIncidentsToCaseParams) (int64, error)
 	LinkMerchantDishCategory(ctx context.Context, arg LinkMerchantDishCategoryParams) (MerchantDishCategory, error)
 	ListAbnormalStatsAlerts(ctx context.Context, arg ListAbnormalStatsAlertsParams) ([]ListAbnormalStatsAlertsRow, error)
 	ListAbnormalStatsDaily(ctx context.Context, arg ListAbnormalStatsDailyParams) ([]AbnormalStatsDaily, error)
@@ -1113,6 +1163,8 @@ type Querier interface {
 	ListActiveDeliveryFeeConfigs(ctx context.Context) ([]DeliveryFeeConfig, error)
 	ListActiveDeliveryPromotionsByMerchant(ctx context.Context, merchantID int64) ([]MerchantDeliveryPromotion, error)
 	ListActiveDiscountRules(ctx context.Context, merchantID int64) ([]DiscountRule, error)
+	// 列出区域内可接收提醒的运营商用户
+	ListActiveOperatorNotificationRecipientsByRegion(ctx context.Context, regionID int64) ([]ListActiveOperatorNotificationRecipientsByRegionRow, error)
 	ListActivePeakHourConfigsByRegion(ctx context.Context, regionID int64) ([]PeakHourConfig, error)
 	ListActiveRechargeRules(ctx context.Context, merchantID int64) ([]RechargeRule, error)
 	ListActiveRiderDepositCreditsByRiderID(ctx context.Context, riderID int64) ([]RiderDepositCredit, error)
@@ -1164,6 +1216,7 @@ type Querier interface {
 	ListComboSetsByMerchant(ctx context.Context, arg ListComboSetsByMerchantParams) ([]ListComboSetsByMerchantRow, error)
 	ListComboTags(ctx context.Context, comboID int64) ([]Tag, error)
 	ListCompletedOrdersMissingProfitSharing(ctx context.Context, limit int32) ([]ListCompletedOrdersMissingProfitSharingRow, error)
+	ListCredentialsForReminderWindow(ctx context.Context, arg ListCredentialsForReminderWindowParams) ([]CredentialLedger, error)
 	ListDailyInventoryByDate(ctx context.Context, date pgtype.Date) ([]DailyInventory, error)
 	ListDailyInventoryByMerchant(ctx context.Context, arg ListDailyInventoryByMerchantParams) ([]ListDailyInventoryByMerchantRow, error)
 	ListDeliveriesByRider(ctx context.Context, arg ListDeliveriesByRiderParams) ([]Delivery, error)
@@ -1194,6 +1247,7 @@ type Querier interface {
 	// 获取指定日期范围内收付通退款成功记录（payment_channel='ecommerce'）
 	// 对应微信 /v3/ecommerce/refunds/apply 产生的退款账单
 	ListEcommerceRefundOrdersForReconciliation(ctx context.Context, arg ListEcommerceRefundOrdersForReconciliationParams) ([]ListEcommerceRefundOrdersForReconciliationRow, error)
+	ListExpiredActiveCredentialLedgers(ctx context.Context, arg ListExpiredActiveCredentialLedgersParams) ([]CredentialLedger, error)
 	// 列出已过期的运营商
 	ListExpiredOperators(ctx context.Context) ([]ListExpiredOperatorsRow, error)
 	ListExpiredPaymentOrders(ctx context.Context, limit int32) ([]PaymentOrder, error)
@@ -1202,8 +1256,13 @@ type Querier interface {
 	ListExpiredRiderDepositCredits(ctx context.Context, arg ListExpiredRiderDepositCreditsParams) ([]RiderDepositCredit, error)
 	// 列出即将到期的运营商（用于提前通知续约）
 	ListExpiringOperators(ctx context.Context, dollar_1 int32) ([]ListExpiringOperatorsRow, error)
+	ListExternalPaymentFactApplicationsByFact(ctx context.Context, factID int64) ([]ExternalPaymentFactApplication, error)
+	ListExternalPaymentFactsByExternalObject(ctx context.Context, arg ListExternalPaymentFactsByExternalObjectParams) ([]ExternalPaymentFact, error)
 	ListFavoriteDishes(ctx context.Context, arg ListFavoriteDishesParams) ([]ListFavoriteDishesRow, error)
 	ListFavoriteMerchants(ctx context.Context, arg ListFavoriteMerchantsParams) ([]ListFavoriteMerchantsRow, error)
+	ListFoodSafetyCasesByRegion(ctx context.Context, arg ListFoodSafetyCasesByRegionParams) ([]FoodSafetyCase, error)
+	ListFoodSafetyCasesByRegionAndStatus(ctx context.Context, arg ListFoodSafetyCasesByRegionAndStatusParams) ([]FoodSafetyCase, error)
+	ListFoodSafetyIncidentsByCase(ctx context.Context, caseID pgtype.Int8) ([]ListFoodSafetyIncidentsByCaseRow, error)
 	ListFraudPatterns(ctx context.Context, arg ListFraudPatternsParams) ([]FraudPattern, error)
 	ListGlobalDishCategories(ctx context.Context) ([]ListGlobalDishCategoriesRow, error)
 	ListGroupJoinRequestsByGroup(ctx context.Context, groupID int64) ([]MerchantGroupJoinRequest, error)
@@ -1218,12 +1277,10 @@ type Querier interface {
 	ListMerchantActiveDeliveryPromotions(ctx context.Context, merchantID int64) ([]MerchantDeliveryPromotion, error)
 	// 获取商户当前有效的满减规则
 	ListMerchantActiveDiscountRules(ctx context.Context, merchantID int64) ([]DiscountRule, error)
+	ListMerchantActiveTakeoutOrdersForFoodSafety(ctx context.Context, merchantID int64) ([]Order, error)
 	// 获取商户当前有效的代金券
 	ListMerchantActiveVouchers(ctx context.Context, merchantID int64) ([]Voucher, error)
 	ListMerchantAddressesByRegion(ctx context.Context, regionID int64) ([]string, error)
-	// =========================== 商户视角 ===========================
-	// 商户查询自己的申诉列表
-	ListMerchantAppealsForMerchant(ctx context.Context, arg ListMerchantAppealsForMerchantParams) ([]ListMerchantAppealsForMerchantRow, error)
 	ListMerchantApplications(ctx context.Context, arg ListMerchantApplicationsParams) ([]MerchantApplication, error)
 	ListMerchantApplymentsPendingSettlementVerification(ctx context.Context, arg ListMerchantApplymentsPendingSettlementVerificationParams) ([]ListMerchantApplymentsPendingSettlementVerificationRow, error)
 	ListMerchantBrandsByGroup(ctx context.Context, groupID int64) ([]MerchantBrand, error)
@@ -1239,7 +1296,8 @@ type Querier interface {
 	ListMerchantDiscountRules(ctx context.Context, arg ListMerchantDiscountRulesParams) ([]DiscountRule, error)
 	// 商户财务订单明细（带分账信息）
 	ListMerchantFinanceOrders(ctx context.Context, arg ListMerchantFinanceOrdersParams) ([]ListMerchantFinanceOrdersRow, error)
-	ListMerchantFoodSafetyIncidents(ctx context.Context, arg ListMerchantFoodSafetyIncidentsParams) ([]FoodSafetyIncident, error)
+	ListMerchantFoodSafetyIncidents(ctx context.Context, arg ListMerchantFoodSafetyIncidentsParams) ([]ListMerchantFoodSafetyIncidentsRow, error)
+	ListMerchantFutureReservationsForFoodSafetyAlert(ctx context.Context, merchantID int64) ([]TableReservation, error)
 	// 获取商户未来预订列表（用于熔断后退款处理）
 	ListMerchantFutureReservationsForRefund(ctx context.Context, merchantID int64) ([]TableReservation, error)
 	ListMerchantGroups(ctx context.Context, arg ListMerchantGroupsParams) ([]MerchantGroup, error)
@@ -1253,6 +1311,9 @@ type Querier interface {
 	// 商户满返支出明细
 	ListMerchantPromotionOrders(ctx context.Context, arg ListMerchantPromotionOrdersParams) ([]ListMerchantPromotionOrdersRow, error)
 	ListMerchantRechargeRules(ctx context.Context, merchantID int64) ([]RechargeRule, error)
+	// =========================== 商户视角 ===========================
+	// 商户查询自己的追偿争议列表
+	ListMerchantRecoveryDisputesForMerchant(ctx context.Context, arg ListMerchantRecoveryDisputesForMerchantParams) ([]ListMerchantRecoveryDisputesForMerchantRow, error)
 	// 获取商户的包间列表（含主图、月销量）供顾客查看
 	ListMerchantRoomsForCustomer(ctx context.Context, merchantID int64) ([]ListMerchantRoomsForCustomerRow, error)
 	ListMerchantSettlementAdjustments(ctx context.Context, arg ListMerchantSettlementAdjustmentsParams) ([]MerchantSettlementAdjustment, error)
@@ -1292,11 +1353,13 @@ type Querier interface {
 	ListOpenDiningSessionsBefore(ctx context.Context, arg ListOpenDiningSessionsBeforeParams) ([]DiningSession, error)
 	// 获取营业中的商户列表
 	ListOpenMerchants(ctx context.Context, arg ListOpenMerchantsParams) ([]Merchant, error)
-	// =========================== 运营商视角 ===========================
-	// 运营商查询区域内的申诉列表
-	ListOperatorAppeals(ctx context.Context, arg ListOperatorAppealsParams) ([]ListOperatorAppealsRow, error)
 	// 列出所有申请（支持状态筛选）
 	ListOperatorApplications(ctx context.Context, arg ListOperatorApplicationsParams) ([]ListOperatorApplicationsRow, error)
+	ListOperatorNotifications(ctx context.Context, arg ListOperatorNotificationsParams) ([]Notification, error)
+	ListOperatorPendingDispatches(ctx context.Context, arg ListOperatorPendingDispatchesParams) ([]ListOperatorPendingDispatchesRow, error)
+	// =========================== 运营商视角 ===========================
+	// 运营商查询区域内的追偿争议列表
+	ListOperatorRecoveryDisputes(ctx context.Context, arg ListOperatorRecoveryDisputesParams) ([]ListOperatorRecoveryDisputesRow, error)
 	// 列出某运营商的所有区域扩展申请
 	ListOperatorRegionApplicationsByOperator(ctx context.Context, operatorID int64) ([]ListOperatorRegionApplicationsByOperatorRow, error)
 	// 列出运营商管理的所有区域
@@ -1325,14 +1388,17 @@ type Querier interface {
 	ListPendingDeliveries(ctx context.Context, limit int32) ([]Delivery, error)
 	// 获取超时未接单的配送单
 	ListPendingDeliveriesBefore(ctx context.Context, arg ListPendingDeliveriesBeforeParams) ([]Delivery, error)
+	ListPendingDeliveriesBeforeWithoutAlert(ctx context.Context, arg ListPendingDeliveriesBeforeWithoutAlertParams) ([]Delivery, error)
 	ListPendingEcommerceApplyments(ctx context.Context, arg ListPendingEcommerceApplymentsParams) ([]EcommerceApplyment, error)
-	ListPendingMerchantCancelWithdrawApplications(ctx context.Context, limit int32) ([]MerchantCancelWithdrawApplication, error)
+	ListPendingMerchantCancelWithdrawApplications(ctx context.Context, arg ListPendingMerchantCancelWithdrawApplicationsParams) ([]MerchantCancelWithdrawApplication, error)
 	ListPendingOCRJobsByMediaAsset(ctx context.Context, mediaAssetID int64) ([]OcrJob, error)
 	// 列出申请（平台管理员用，包含 submitted/approved/rejected）
 	ListPendingOperatorApplications(ctx context.Context, arg ListPendingOperatorApplicationsParams) ([]ListPendingOperatorApplicationsRow, error)
 	// ==================== 订单超时清理 ====================
 	// 获取超时未支付的 pending 订单（创建时间早于指定时间）
 	ListPendingOrdersBefore(ctx context.Context, arg ListPendingOrdersBeforeParams) ([]Order, error)
+	ListPendingPaymentDomainOutbox(ctx context.Context, arg ListPendingPaymentDomainOutboxParams) ([]PaymentDomainOutbox, error)
+	ListPendingPaymentDomainOutboxByEventType(ctx context.Context, arg ListPendingPaymentDomainOutboxByEventTypeParams) ([]PaymentDomainOutbox, error)
 	// 管理后台：列出所有待审核的区域扩展申请
 	ListPendingRegionApplications(ctx context.Context, arg ListPendingRegionApplicationsParams) ([]ListPendingRegionApplicationsRow, error)
 	ListPendingReservationRefundOrdersForRecovery(ctx context.Context, arg ListPendingReservationRefundOrdersForRecoveryParams) ([]ListPendingReservationRefundOrdersForRecoveryRow, error)
@@ -1352,7 +1418,12 @@ type Querier interface {
 	ListProfitSharingOrdersByOperator(ctx context.Context, arg ListProfitSharingOrdersByOperatorParams) ([]ProfitSharingOrder, error)
 	ListProfitSharingOrdersByStatus(ctx context.Context, arg ListProfitSharingOrdersByStatusParams) ([]ProfitSharingOrder, error)
 	ListProfitSharingOrdersForRetry(ctx context.Context, arg ListProfitSharingOrdersForRetryParams) ([]ProfitSharingOrder, error)
+	ListProfitSharingReceiverAttemptsByTarget(ctx context.Context, targetID int64) ([]ProfitSharingReceiverAttempt, error)
+	ListProfitSharingReceiverAttemptsByTargetPaginated(ctx context.Context, arg ListProfitSharingReceiverAttemptsByTargetPaginatedParams) ([]ProfitSharingReceiverAttempt, error)
+	ListProfitSharingReceiverTargets(ctx context.Context, arg ListProfitSharingReceiverTargetsParams) ([]ProfitSharingReceiverTarget, error)
+	ListProfitSharingReceiverTargetsByOwner(ctx context.Context, arg ListProfitSharingReceiverTargetsByOwnerParams) ([]ProfitSharingReceiverTarget, error)
 	ListProfitSharingReturnsByRefundOrder(ctx context.Context, refundOrderID int64) ([]ProfitSharingReturn, error)
+	ListQueuedOnboardingReviewRuns(ctx context.Context, arg ListQueuedOnboardingReviewRunsParams) ([]OnboardingReviewRun, error)
 	ListRecentWeatherCoefficients(ctx context.Context, arg ListRecentWeatherCoefficientsParams) ([]WeatherCoefficient, error)
 	ListRecommendConfigs(ctx context.Context) ([]RecommendConfig, error)
 	ListReconciliationReports(ctx context.Context, arg ListReconciliationReportsParams) ([]ReconciliationReport, error)
@@ -1377,25 +1448,30 @@ type Querier interface {
 	ListReservationsByTableAndDate(ctx context.Context, arg ListReservationsByTableAndDateParams) ([]TableReservation, error)
 	// 用户预订列表：只返回在线预订（source = 'online' 或 NULL），不包括商户代客创建的预订
 	ListReservationsByUserWithStatus(ctx context.Context, arg ListReservationsByUserWithStatusParams) ([]ListReservationsByUserWithStatusRow, error)
+	ListRetryableExternalPaymentFactApplications(ctx context.Context, arg ListRetryableExternalPaymentFactApplicationsParams) ([]ExternalPaymentFactApplication, error)
+	ListRetryableExternalPaymentFactApplicationsByTarget(ctx context.Context, arg ListRetryableExternalPaymentFactApplicationsByTargetParams) ([]ExternalPaymentFactApplication, error)
+	ListRetryableProfitSharingReceiverTargetsByOwnerType(ctx context.Context, arg ListRetryableProfitSharingReceiverTargetsByOwnerTypeParams) ([]ProfitSharingReceiverTarget, error)
 	ListReviewImages(ctx context.Context, reviewID int64) ([]ReviewImage, error)
 	ListReviewImagesByReviews(ctx context.Context, dollar_1 []int64) ([]ReviewImage, error)
 	ListReviewsByMerchant(ctx context.Context, arg ListReviewsByMerchantParams) ([]Review, error)
 	ListReviewsByUser(ctx context.Context, arg ListReviewsByUserParams) ([]ListReviewsByUserRow, error)
 	ListRiderActiveDeliveries(ctx context.Context, riderID pgtype.Int8) ([]Delivery, error)
-	// =========================== 骑手视角 ===========================
-	// 骑手查询自己的申诉列表
-	ListRiderAppeals(ctx context.Context, arg ListRiderAppealsParams) ([]ListRiderAppealsRow, error)
 	// 列出骑手申请（管理员用）
 	ListRiderApplications(ctx context.Context, arg ListRiderApplicationsParams) ([]RiderApplication, error)
 	ListRiderClaims(ctx context.Context, arg ListRiderClaimsParams) ([]Claim, error)
 	// 骑手查看收到的索赔列表（通过配送单关联）
 	ListRiderClaimsForRider(ctx context.Context, arg ListRiderClaimsForRiderParams) ([]ListRiderClaimsForRiderRow, error)
 	ListRiderDepositCreditsForReminderWindow(ctx context.Context, arg ListRiderDepositCreditsForReminderWindowParams) ([]RiderDepositCredit, error)
+	ListRiderDepositLedgerAnomalies(ctx context.Context, arg ListRiderDepositLedgerAnomaliesParams) ([]ListRiderDepositLedgerAnomaliesRow, error)
+	ListRiderDepositWithdrawalRefundOrdersByIDs(ctx context.Context, arg ListRiderDepositWithdrawalRefundOrdersByIDsParams) ([]ListRiderDepositWithdrawalRefundOrdersByIDsRow, error)
 	ListRiderDeposits(ctx context.Context, arg ListRiderDepositsParams) ([]RiderDeposit, error)
 	ListRiderDepositsByType(ctx context.Context, arg ListRiderDepositsByTypeParams) ([]RiderDeposit, error)
 	ListRiderLocations(ctx context.Context, arg ListRiderLocationsParams) ([]RiderLocation, error)
 	// 骑手配送费明细
 	ListRiderProfitSharingOrders(ctx context.Context, arg ListRiderProfitSharingOrdersParams) ([]ListRiderProfitSharingOrdersRow, error)
+	// =========================== 骑手视角 ===========================
+	// 骑手查询自己的追偿争议列表
+	ListRiderRecoveryDisputes(ctx context.Context, arg ListRiderRecoveryDisputesParams) ([]ListRiderRecoveryDisputesRow, error)
 	// 按区域列出骑手（供运营商管理使用）
 	ListRidersByRegion(ctx context.Context, arg ListRidersByRegionParams) ([]Rider, error)
 	// 按区域和状态列出骑手
@@ -1406,8 +1482,6 @@ type Querier interface {
 	ListRuleVersionsByRule(ctx context.Context, ruleID int64) ([]RuleVersion, error)
 	// Phase1: 规则读取查询（草案）
 	ListRules(ctx context.Context, arg ListRulesParams) ([]Rule, error)
-	ListSafetyReportsByRegion(ctx context.Context, arg ListSafetyReportsByRegionParams) ([]SafetyReport, error)
-	ListSafetyReportsByRegionAndStatus(ctx context.Context, arg ListSafetyReportsByRegionAndStatusParams) ([]SafetyReport, error)
 	ListSearchHistory(ctx context.Context, arg ListSearchHistoryParams) ([]ListSearchHistoryRow, error)
 	ListStaleUnprocessedWechatNotifications(ctx context.Context, arg ListStaleUnprocessedWechatNotificationsParams) ([]WechatNotification, error)
 	ListStuckProcessingProfitSharingReturns(ctx context.Context, arg ListStuckProcessingProfitSharingReturnsParams) ([]ProfitSharingReturn, error)
@@ -1455,18 +1529,34 @@ type Querier interface {
 	ListWechatNotificationsByOutTradeNo(ctx context.Context, outTradeNo pgtype.Text) ([]WechatNotification, error)
 	ListWithdrawalRecords(ctx context.Context, arg ListWithdrawalRecordsParams) ([]WithdrawalRecord, error)
 	MarkAllNotificationsAsRead(ctx context.Context, userID int64) error
-	MarkAppealCompensated(ctx context.Context, arg MarkAppealCompensatedParams) error
+	MarkAllOperatorNotificationsAsRead(ctx context.Context, userID int64) error
 	MarkClaimPaid(ctx context.Context, arg MarkClaimPaidParams) error
-	MarkClaimRecoveryAppealed(ctx context.Context, id int64) (ClaimRecovery, error)
+	MarkClaimRecoveryDisputed(ctx context.Context, id int64) (ClaimRecovery, error)
 	MarkClaimRecoveryOverdue(ctx context.Context, id int64) (ClaimRecovery, error)
 	MarkClaimRecoveryPaid(ctx context.Context, id int64) (ClaimRecovery, error)
 	MarkClaimRecoveryPending(ctx context.Context, id int64) (ClaimRecovery, error)
 	MarkClaimRecoveryWaived(ctx context.Context, id int64) (ClaimRecovery, error)
+	MarkCredentialLedgerReminderSent(ctx context.Context, arg MarkCredentialLedgerReminderSentParams) (CredentialLedger, error)
+	MarkCredentialLedgerResumed(ctx context.Context, arg MarkCredentialLedgerResumedParams) (CredentialLedger, error)
+	MarkCredentialLedgerSuspended(ctx context.Context, arg MarkCredentialLedgerSuspendedParams) (CredentialLedger, error)
 	MarkEcommerceApplymentSettlementVerifyFailedNotified(ctx context.Context, id int64) (EcommerceApplyment, error)
+	MarkExternalPaymentFactApplicationApplied(ctx context.Context, arg MarkExternalPaymentFactApplicationAppliedParams) (ExternalPaymentFactApplication, error)
+	MarkExternalPaymentFactApplicationFailed(ctx context.Context, arg MarkExternalPaymentFactApplicationFailedParams) (ExternalPaymentFactApplication, error)
 	MarkNotificationAsPushed(ctx context.Context, id int64) error
 	MarkNotificationAsRead(ctx context.Context, arg MarkNotificationAsReadParams) (Notification, error)
 	MarkOCRJobProcessing(ctx context.Context, arg MarkOCRJobProcessingParams) (OcrJob, error)
+	MarkOnboardingReviewRunProcessing(ctx context.Context, id int64) (OnboardingReviewRun, error)
+	MarkOperatorNotificationAsRead(ctx context.Context, arg MarkOperatorNotificationAsReadParams) (Notification, error)
 	MarkOrderReplaced(ctx context.Context, arg MarkOrderReplacedParams) (Order, error)
+	MarkPaymentDomainOutboxFailed(ctx context.Context, arg MarkPaymentDomainOutboxFailedParams) (PaymentDomainOutbox, error)
+	MarkPaymentDomainOutboxPublished(ctx context.Context, id int64) (PaymentDomainOutbox, error)
+	MarkProfitSharingReceiverAttemptFailed(ctx context.Context, arg MarkProfitSharingReceiverAttemptFailedParams) (ProfitSharingReceiverAttempt, error)
+	MarkProfitSharingReceiverAttemptSkipped(ctx context.Context, arg MarkProfitSharingReceiverAttemptSkippedParams) (ProfitSharingReceiverAttempt, error)
+	MarkProfitSharingReceiverAttemptSucceeded(ctx context.Context, arg MarkProfitSharingReceiverAttemptSucceededParams) (ProfitSharingReceiverAttempt, error)
+	MarkProfitSharingReceiverTargetFailed(ctx context.Context, arg MarkProfitSharingReceiverTargetFailedParams) (ProfitSharingReceiverTarget, error)
+	MarkProfitSharingReceiverTargetSkipped(ctx context.Context, arg MarkProfitSharingReceiverTargetSkippedParams) (ProfitSharingReceiverTarget, error)
+	MarkProfitSharingReceiverTargetSynced(ctx context.Context, arg MarkProfitSharingReceiverTargetSyncedParams) (ProfitSharingReceiverTarget, error)
+	MarkRecoveryDisputeCompensated(ctx context.Context, arg MarkRecoveryDisputeCompensatedParams) error
 	MarkRiderDepositCreditExpired(ctx context.Context, arg MarkRiderDepositCreditExpiredParams) (RiderDepositCredit, error)
 	MarkUserVoucherAsExpiredOnRollback(ctx context.Context, arg MarkUserVoucherAsExpiredOnRollbackParams) (UserVoucher, error)
 	MarkUserVoucherAsUnused(ctx context.Context, arg MarkUserVoucherAsUnusedParams) (UserVoucher, error)
@@ -1479,7 +1569,9 @@ type Querier interface {
 	RejectOperatorApplication(ctx context.Context, arg RejectOperatorApplicationParams) (OperatorApplication, error)
 	// 审批拒绝区域扩展申请
 	RejectOperatorRegionApplication(ctx context.Context, arg RejectOperatorRegionApplicationParams) (OperatorRegionApplication, error)
+	ReleaseMerchantTakeoutSuspensionIfOwned(ctx context.Context, arg ReleaseMerchantTakeoutSuspensionIfOwnedParams) (int64, error)
 	ReleaseReservedInventory(ctx context.Context, arg ReleaseReservedInventoryParams) (DailyInventory, error)
+	ReleaseRiderSuspensionIfOwned(ctx context.Context, arg ReleaseRiderSuspensionIfOwnedParams) (int64, error)
 	RemoveAllComboDishes(ctx context.Context, comboID int64) error
 	RemoveAllComboTags(ctx context.Context, comboID int64) error
 	RemoveAllDishIngredients(ctx context.Context, dishID int64) error
@@ -1512,14 +1604,16 @@ type Querier interface {
 	ResetRiderApplicationToDraft(ctx context.Context, id int64) (RiderApplication, error)
 	ResetStaleMerchantOCRStatus(ctx context.Context, updatedAt time.Time) error
 	ResolveCloudPrinterReconciliationJob(ctx context.Context, id int64) (CloudPrinterReconciliationJob, error)
+	ResolveFoodSafetyCase(ctx context.Context, arg ResolveFoodSafetyCaseParams) (FoodSafetyCase, error)
+	ResolveFoodSafetyIncidentsByCase(ctx context.Context, arg ResolveFoodSafetyIncidentsByCaseParams) error
 	RestoreRiderDepositCreditByPaymentOrderID(ctx context.Context, arg RestoreRiderDepositCreditByPaymentOrderIDParams) (RiderDepositCredit, error)
-	ResumeClaimRecoveryAfterAppeal(ctx context.Context, id int64) (ClaimRecovery, error)
+	ResumeClaimRecoveryAfterDispute(ctx context.Context, id int64) (ClaimRecovery, error)
 	// 审核未通过后退回草稿，保留失败原因
 	ReturnRiderApplicationToDraft(ctx context.Context, arg ReturnRiderApplicationToDraftParams) (RiderApplication, error)
 	RevertBehaviorDecisionEffectsByDecision(ctx context.Context, arg RevertBehaviorDecisionEffectsByDecisionParams) error
-	// 审核申诉
-	ReviewAppeal(ctx context.Context, arg ReviewAppealParams) (Appeal, error)
 	ReviewGroupApplication(ctx context.Context, arg ReviewGroupApplicationParams) (MerchantGroupApplication, error)
+	// 审核追偿争议
+	ReviewRecoveryDispute(ctx context.Context, arg ReviewRecoveryDisputeParams) (RecoveryDispute, error)
 	RevokeSession(ctx context.Context, id int64) (Session, error)
 	RevokeUserSessions(ctx context.Context, userID int64) error
 	// 全局套餐搜索，只返回套餐ID（用于推荐接口的关键词过滤）
@@ -1582,7 +1676,6 @@ type Querier interface {
 	SumReservationItemsTotal(ctx context.Context, reservationID int64) (int64, error)
 	SuspendMerchant(ctx context.Context, arg SuspendMerchantParams) error
 	SuspendMerchantTakeout(ctx context.Context, arg SuspendMerchantTakeoutParams) error
-	SuspendRegion(ctx context.Context, id int64) error
 	SuspendRider(ctx context.Context, arg SuspendRiderParams) error
 	SyncMerchantOpenStatusByBusinessHours(ctx context.Context) ([]int64, error)
 	TouchRiderDepositCreditReminder(ctx context.Context, arg TouchRiderDepositCreditReminderParams) (RiderDepositCredit, error)
@@ -1593,6 +1686,7 @@ type Querier interface {
 	UnsuspendMerchantTakeout(ctx context.Context, merchantID int64) error
 	UnsuspendRider(ctx context.Context, riderID int64) error
 	UpdateBehaviorActionExecution(ctx context.Context, arg UpdateBehaviorActionExecutionParams) error
+	UpdateBehaviorActionExecutionIfCurrent(ctx context.Context, arg UpdateBehaviorActionExecutionIfCurrentParams) (BehaviorAction, error)
 	UpdateBehaviorActionStatus(ctx context.Context, arg UpdateBehaviorActionStatusParams) error
 	UpdateBehaviorAppealStatus(ctx context.Context, arg UpdateBehaviorAppealStatusParams) error
 	UpdateBehaviorBlocklistStatus(ctx context.Context, arg UpdateBehaviorBlocklistStatusParams) error
@@ -1605,6 +1699,7 @@ type Querier interface {
 	UpdateCartItemQuantityRelative(ctx context.Context, arg UpdateCartItemQuantityRelativeParams) (CartItem, error)
 	UpdateClaimLookbackResult(ctx context.Context, arg UpdateClaimLookbackResultParams) error
 	UpdateClaimStatus(ctx context.Context, arg UpdateClaimStatusParams) error
+	UpdateClaimStatusIfCurrent(ctx context.Context, arg UpdateClaimStatusIfCurrentParams) (Claim, error)
 	UpdateCloudPrinter(ctx context.Context, arg UpdateCloudPrinterParams) (CloudPrinter, error)
 	UpdateCombinedPaymentOrderPrepay(ctx context.Context, arg UpdateCombinedPaymentOrderPrepayParams) (CombinedPaymentOrder, error)
 	UpdateCombinedPaymentOrderToClosed(ctx context.Context, id int64) (CombinedPaymentOrder, error)
@@ -1636,6 +1731,8 @@ type Querier interface {
 	UpdateEcommerceApplymentStatus(ctx context.Context, arg UpdateEcommerceApplymentStatusParams) (EcommerceApplyment, error)
 	UpdateEcommerceApplymentSubMchID(ctx context.Context, arg UpdateEcommerceApplymentSubMchIDParams) (EcommerceApplyment, error)
 	UpdateEcommerceApplymentToSubmitted(ctx context.Context, arg UpdateEcommerceApplymentToSubmittedParams) (EcommerceApplyment, error)
+	UpdateExternalPaymentFactProcessingStatus(ctx context.Context, arg UpdateExternalPaymentFactProcessingStatusParams) (ExternalPaymentFact, error)
+	UpdateFoodSafetyCaseInvestigation(ctx context.Context, arg UpdateFoodSafetyCaseInvestigationParams) (FoodSafetyCase, error)
 	UpdateFoodSafetyIncidentStatus(ctx context.Context, arg UpdateFoodSafetyIncidentStatusParams) error
 	UpdateFraudPatternReview(ctx context.Context, arg UpdateFraudPatternReviewParams) error
 	UpdateGroupApplicationBasic(ctx context.Context, arg UpdateGroupApplicationBasicParams) (MerchantGroupApplication, error)
@@ -1657,6 +1754,7 @@ type Querier interface {
 	UpdateMerchantApplicationIDCardFront(ctx context.Context, arg UpdateMerchantApplicationIDCardFrontParams) (MerchantApplication, error)
 	// 更新门头照和环境照（jsonb数组）
 	UpdateMerchantApplicationImages(ctx context.Context, arg UpdateMerchantApplicationImagesParams) (MerchantApplication, error)
+	UpdateMerchantApplicationReviewSummary(ctx context.Context, arg UpdateMerchantApplicationReviewSummaryParams) (MerchantApplication, error)
 	// 更新门头照和环境照（商户已审核通过后也可以更新）
 	UpdateMerchantApplicationShopImages(ctx context.Context, arg UpdateMerchantApplicationShopImagesParams) (MerchantApplication, error)
 	UpdateMerchantApplicationStatus(ctx context.Context, arg UpdateMerchantApplicationStatusParams) (MerchantApplication, error)
@@ -1700,6 +1798,7 @@ type Querier interface {
 	UpdateOperatorStatus(ctx context.Context, arg UpdateOperatorStatusParams) (Operator, error)
 	UpdateOrderDisplayConfig(ctx context.Context, arg UpdateOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	UpdateOrderExceptionState(ctx context.Context, arg UpdateOrderExceptionStateParams) (Order, error)
+	UpdateOrderFoodSafetyPauseState(ctx context.Context, arg UpdateOrderFoodSafetyPauseStateParams) (Order, error)
 	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) (Order, error)
 	UpdateOrderToCancelled(ctx context.Context, arg UpdateOrderToCancelledParams) (Order, error)
 	UpdateOrderToCompleted(ctx context.Context, id int64) (Order, error)
@@ -1759,6 +1858,7 @@ type Querier interface {
 	UpdateRiderApplicationHealthCert(ctx context.Context, arg UpdateRiderApplicationHealthCertParams) (RiderApplication, error)
 	// 更新身份证信息
 	UpdateRiderApplicationIDCard(ctx context.Context, arg UpdateRiderApplicationIDCardParams) (RiderApplication, error)
+	UpdateRiderApplicationReviewSummary(ctx context.Context, arg UpdateRiderApplicationReviewSummaryParams) (RiderApplication, error)
 	UpdateRiderDeposit(ctx context.Context, arg UpdateRiderDepositParams) (Rider, error)
 	UpdateRiderLocation(ctx context.Context, arg UpdateRiderLocationParams) (Rider, error)
 	UpdateRiderOnlineDuration(ctx context.Context, arg UpdateRiderOnlineDurationParams) (Rider, error)
@@ -1770,7 +1870,6 @@ type Querier interface {
 	UpdateRiderStatus(ctx context.Context, arg UpdateRiderStatusParams) (Rider, error)
 	UpdateRuleCurrentVersion(ctx context.Context, arg UpdateRuleCurrentVersionParams) (Rule, error)
 	UpdateRuleStatus(ctx context.Context, arg UpdateRuleStatusParams) (Rule, error)
-	UpdateSafetyReportStatus(ctx context.Context, arg UpdateSafetyReportStatusParams) (SafetyReport, error)
 	UpdateSessionTokens(ctx context.Context, arg UpdateSessionTokensParams) (Session, error)
 	UpdateSubOrderProfitSharingStatus(ctx context.Context, arg UpdateSubOrderProfitSharingStatusParams) (CombinedPaymentSubOrder, error)
 	UpdateSubsidyOrderToCanceled(ctx context.Context, id int64) (SubsidyOrder, error)
@@ -1807,6 +1906,7 @@ type Querier interface {
 	UpsertOCRJob(ctx context.Context, arg UpsertOCRJobParams) (OcrJob, error)
 	UpsertOrderDisplayConfig(ctx context.Context, arg UpsertOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	UpsertPlatformConfig(ctx context.Context, arg UpsertPlatformConfigParams) (PlatformConfig, error)
+	UpsertProfitSharingReceiverTarget(ctx context.Context, arg UpsertProfitSharingReceiverTargetParams) (ProfitSharingReceiverTarget, error)
 	UpsertRegionExternalMapping(ctx context.Context, arg UpsertRegionExternalMappingParams) (RegionExternalMapping, error)
 	UpsertRegionRuleConfig(ctx context.Context, arg UpsertRegionRuleConfigParams) (RegionRuleConfig, error)
 	UpsertReservationInventory(ctx context.Context, arg UpsertReservationInventoryParams) (ReservationInventory, error)

@@ -387,7 +387,7 @@ INSERT INTO merchant_applications (
 ) VALUES (
   $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
-RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
 `
 
 type CreateMerchantApplicationParams struct {
@@ -449,6 +449,7 @@ func (q *Queries) CreateMerchantApplication(ctx context.Context, arg CreateMerch
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -602,7 +603,7 @@ func (q *Queries) GetMerchant(ctx context.Context, id int64) (Merchant, error) {
 }
 
 const getMerchantApplication = `-- name: GetMerchantApplication :one
-SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM merchant_applications
+SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary FROM merchant_applications
 WHERE id = $1 LIMIT 1
 `
 
@@ -638,12 +639,13 @@ func (q *Queries) GetMerchantApplication(ctx context.Context, id int64) (Merchan
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
 
 const getMerchantApplicationByLicenseNumber = `-- name: GetMerchantApplicationByLicenseNumber :one
-SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM merchant_applications
+SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary FROM merchant_applications
 WHERE business_license_number = $1
 LIMIT 1
 `
@@ -680,6 +682,7 @@ func (q *Queries) GetMerchantApplicationByLicenseNumber(ctx context.Context, bus
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -1064,7 +1067,7 @@ func (q *Queries) GetPopularMerchants(ctx context.Context, arg GetPopularMerchan
 }
 
 const getUserMerchantApplication = `-- name: GetUserMerchantApplication :one
-SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM merchant_applications
+SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary FROM merchant_applications
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT 1
@@ -1102,13 +1105,14 @@ func (q *Queries) GetUserMerchantApplication(ctx context.Context, userID int64) 
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
 
 const listAllMerchantApplications = `-- name: ListAllMerchantApplications :many
-SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM merchant_applications
-ORDER BY created_at DESC
+SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary FROM merchant_applications
+ORDER BY created_at DESC, id DESC
 LIMIT $1 OFFSET $2
 `
 
@@ -1155,6 +1159,7 @@ func (q *Queries) ListAllMerchantApplications(ctx context.Context, arg ListAllMe
 			&i.FoodPermitMediaAssetID,
 			&i.IDCardFrontMediaAssetID,
 			&i.IDCardBackMediaAssetID,
+			&i.ReviewSummary,
 		); err != nil {
 			return nil, err
 		}
@@ -1224,9 +1229,9 @@ func (q *Queries) ListAllMerchants(ctx context.Context, arg ListAllMerchantsPara
 }
 
 const listMerchantApplications = `-- name: ListMerchantApplications :many
-SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM merchant_applications
+SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary FROM merchant_applications
 WHERE status = $1
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -1274,6 +1279,7 @@ func (q *Queries) ListMerchantApplications(ctx context.Context, arg ListMerchant
 			&i.FoodPermitMediaAssetID,
 			&i.IDCardFrontMediaAssetID,
 			&i.IDCardBackMediaAssetID,
+			&i.ReviewSummary,
 		); err != nil {
 			return nil, err
 		}
@@ -2436,7 +2442,7 @@ SET
   reviewed_at = $5,
   updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
 `
 
 type UpdateMerchantApplicationStatusParams struct {
@@ -2485,6 +2491,7 @@ func (q *Queries) UpdateMerchantApplicationStatus(ctx context.Context, arg Updat
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }

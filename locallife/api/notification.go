@@ -33,7 +33,7 @@ type notificationResponse struct {
 	ExpiresAt   *time.Time     `json:"expires_at,omitempty"`
 }
 
-func newNotificationResponse(n db.Notification) notificationResponse {
+func newNotificationResponse(n db.Notification) (notificationResponse, error) {
 	resp := notificationResponse{
 		ID:        n.ID,
 		UserID:    n.UserID,
@@ -68,12 +68,13 @@ func newNotificationResponse(n db.Notification) notificationResponse {
 
 	if len(n.ExtraData) > 0 {
 		var extraData map[string]any
-		if err := json.Unmarshal(n.ExtraData, &extraData); err == nil {
-			resp.ExtraData = extraData
+		if err := json.Unmarshal(n.ExtraData, &extraData); err != nil {
+			return notificationResponse{}, err
 		}
+		resp.ExtraData = extraData
 	}
 
-	return resp
+	return resp, nil
 }
 
 type listNotificationsRequest struct {
@@ -117,7 +118,7 @@ type listPlatformAlertsResponse struct {
 	HasMore  bool                         `json:"has_more"`
 }
 
-func newPlatformAlertEventResponse(alert db.PlatformAlertEvent) platformAlertEventResponse {
+func newPlatformAlertEventResponse(alert db.PlatformAlertEvent) (platformAlertEventResponse, error) {
 	resp := platformAlertEventResponse{
 		ID:          alert.ID,
 		AlertType:   alert.AlertType,
@@ -130,11 +131,12 @@ func newPlatformAlertEventResponse(alert db.PlatformAlertEvent) platformAlertEve
 	}
 	if len(alert.Extra) > 0 {
 		var extra map[string]any
-		if err := json.Unmarshal(alert.Extra, &extra); err == nil {
-			resp.Extra = extra
+		if err := json.Unmarshal(alert.Extra, &extra); err != nil {
+			return platformAlertEventResponse{}, err
 		}
+		resp.Extra = extra
 	}
-	return resp
+	return resp, nil
 }
 
 func hasPlatformAlertRole(roles []db.UserRole) bool {
@@ -224,7 +226,12 @@ func (server *Server) listNotifications(ctx *gin.Context) {
 	// 转换响应
 	responseList := make([]notificationResponse, len(notifications))
 	for i, n := range notifications {
-		responseList[i] = newNotificationResponse(n)
+		responseItem, err := newNotificationResponse(n)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		responseList[i] = responseItem
 	}
 
 	pageID := int32(1)
@@ -308,7 +315,13 @@ func (server *Server) markNotificationAsRead(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newNotificationResponse(notification))
+	response, err := newNotificationResponse(notification)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, response)
 }
 
 type markAllAsReadResponse struct {
@@ -591,7 +604,12 @@ func (server *Server) listPlatformAlerts(ctx *gin.Context) {
 
 	items := make([]platformAlertEventResponse, len(alerts))
 	for i, alert := range alerts {
-		items[i] = newPlatformAlertEventResponse(alert)
+		item, err := newPlatformAlertEventResponse(alert)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		items[i] = item
 	}
 
 	ctx.JSON(http.StatusOK, listPlatformAlertsResponse{

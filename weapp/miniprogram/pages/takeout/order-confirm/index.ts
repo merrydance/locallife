@@ -3,12 +3,14 @@ import { logger } from '../../../utils/logger'
 import { createOrder, OrderType } from '../../../api/order'
 import {
   createCombinedPaymentOrder,
-  createOrderPayment,
-  isPaymentStatusSuccessful,
-  isCombinedPaymentSuccessful,
-  recoverCombinedPaymentOrder,
-  invokeWechatPay
+  createOrderPayment
 } from '../../../api/payment'
+import {
+  completeCombinedPaymentWorkflow,
+  completePaymentWorkflow,
+  isCombinedPaymentWorkflowCancelled,
+  isCombinedPaymentWorkflowPaid
+} from '../../../services/payment-workflow'
 import Navigation from '../../../utils/navigation'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import {
@@ -27,7 +29,6 @@ import {
   buildTodaySlots,
   CheckoutSnapshotPayload,
   getCombinedPaymentPageMessage,
-  isWechatPayCancelled,
   mapWithConcurrency,
   MerchantCartView,
   navigateToCombinedPaymentSuccess,
@@ -50,10 +51,8 @@ Page({
     summarySubtotalDisplay: '0.00',
     summaryDeliveryDisplay: '待计算',
     
-    // 支付及会员相关
-    selectedPaymentMethod: 'wechat', // 'wechat' | 'balance'
+    // 会员优惠相关
     memberBalances: {} as Record<number, number>, // merchantId -> balance
-    memberBalanceDisplays: {} as Record<number, string>,
     membershipIds: {} as Record<number, number>
   },
 
@@ -413,8 +412,7 @@ Page({
         const order = await createOrder(buildTakeoutCreateOrderRequest({
           cart,
           addressId: address.id,
-          note: remarks[cart.merchantId] || '',
-          useBalance: carts.length === 1 && this.data.selectedPaymentMethod === 'balance'
+          note: remarks[cart.merchantId] || ''
         }))
         ordersCreated.push(order.id)
 
@@ -477,37 +475,15 @@ Page({
 
   async handlePayment(orderId: number) {
     try {
-      const paymentResult = await createOrderPayment(orderId)
-      const amount = (paymentResult.amount / 100).toFixed(2)
-      const orderNo = paymentResult.out_trade_no || String(orderId)
-
-      if (paymentResult.pay_params) {
-        try {
-          await invokeWechatPay(paymentResult.pay_params)
-          Navigation.toPaymentSuccess({
-            orderId: String(orderId),
-            orderNo,
-            amount
-          })
-        } catch {
-          // 用户取消支付或唤起失败：订单已创建，引导用户前往订单详情重新支付
-          wx.showModal({
-            title: '支付未完成',
-            content: '订单已创建，可在订单详情页重新发起支付。',
-            showCancel: false,
-            confirmText: '查看订单',
-            success: () => wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` })
-          })
-        }
-      } else if (isPaymentStatusSuccessful(paymentResult.status)) {
-        Navigation.toPaymentSuccess({
-          orderId: String(orderId),
-          orderNo,
-          amount
-        })
-      } else {
-        this.showPaymentCreateFailed(orderId)
-      }
+      const paymentResult = await completePaymentWorkflow(await createOrderPayment(orderId))
+      Navigation.toPaymentResult({
+        status: paymentResult.status,
+        paymentOrderId: paymentResult.paymentOrderId,
+        businessId: orderId,
+        businessType: paymentResult.businessType || 'order',
+        orderNo: paymentResult.outTradeNo || String(orderId),
+        amount: paymentResult.amountFen ? (paymentResult.amountFen / 100).toFixed(2) : undefined
+      })
     } catch (paymentError) {
       logger.error('Payment creation failed', paymentError, 'Order-confirm')
       this.showPaymentCreateFailed(orderId)
@@ -518,44 +494,22 @@ Page({
 
   async handleCombinedPayment(orderIds: number[]) {
     try {
-      let combinedPayment = await createCombinedPaymentOrder({ order_ids: orderIds })
+      const paymentResult = await completeCombinedPaymentWorkflow(await createCombinedPaymentOrder({ order_ids: orderIds }))
+      const combinedPayment = paymentResult.combinedPayment
 
-      if (combinedPayment.pay_params) {
-        try {
-          await invokeWechatPay(combinedPayment.pay_params)
-          navigateToCombinedPaymentSuccess(combinedPayment, orderIds)
-          return
-        } catch (error: unknown) {
-          if (isWechatPayCancelled(error)) {
-            wx.showModal({
-              title: '支付未完成',
-              content: '订单已创建，可在订单列表继续完成合单支付。',
-              showCancel: false,
-              confirmText: '查看订单',
-              success: () => Navigation.redirectToOrderList({ orderType: 'takeout' })
-            })
-            return
-          }
-
-          combinedPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
-          if (isCombinedPaymentSuccessful(combinedPayment)) {
-            navigateToCombinedPaymentSuccess(combinedPayment, orderIds)
-            return
-          }
-
-          wx.showModal({
-            title: '订单已创建',
-            content: getCombinedPaymentPageMessage(combinedPayment),
-            showCancel: false,
-            confirmText: '查看订单',
-            success: () => Navigation.redirectToOrderList({ orderType: 'takeout' })
-          })
-          return
-        }
+      if (isCombinedPaymentWorkflowPaid(paymentResult.status)) {
+        navigateToCombinedPaymentSuccess(combinedPayment, orderIds)
+        return
       }
 
-      if (isCombinedPaymentSuccessful(combinedPayment)) {
-        navigateToCombinedPaymentSuccess(combinedPayment, orderIds)
+      if (isCombinedPaymentWorkflowCancelled(paymentResult.status)) {
+        wx.showModal({
+          title: '支付未完成',
+          content: '订单已创建，可在订单列表继续完成合单支付。',
+          showCancel: false,
+          confirmText: '查看订单',
+          success: () => Navigation.redirectToOrderList({ orderType: 'takeout' })
+        })
         return
       }
 
@@ -589,13 +543,6 @@ Page({
         wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` })
       }
     })
-  },
-
-  /**
-   * 切换支付方式
-   */
-  onPaymentMethodChange(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ selectedPaymentMethod: e.detail.value })
   },
 
   /**

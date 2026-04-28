@@ -36,6 +36,110 @@ const maxWebhookBodyBytes int64 = 1 << 20 // 1MB
 const notificationClaimStaleWindow = 2 * time.Minute
 const notificationReleaseReasonProcessingFailed = "processing_failed"
 
+const (
+	paymentFactBusinessObjectPaymentOrder       = "payment_order"
+	paymentFactBusinessObjectRefundOrder        = "refund_order"
+	paymentFactBusinessObjectProfitSharingOrder = "profit_sharing_order"
+	paymentFactConsumerOrderDomain              = "order_domain"
+	paymentFactConsumerClaimRecoveryDomain      = "claim_recovery_domain"
+	paymentFactConsumerProfitSharingDomain      = "profit_sharing_domain"
+	paymentFactConsumerRiderDepositDomain       = "rider_deposit_domain"
+	paymentFactConsumerReservationDomain        = "reservation_domain"
+	paymentFactApplicationTaskUnique            = 30 * time.Second
+)
+
+func (server *Server) enqueueProfitSharingPaymentFactApplication(ctx context.Context, application *db.ExternalPaymentFactApplication) {
+	if application == nil || server.taskDistributor == nil {
+		return
+	}
+	distributor, ok := server.taskDistributor.(worker.PaymentFactApplicationTaskDistributor)
+	if !ok {
+		return
+	}
+	if err := distributor.DistributeTaskProcessPaymentFactApplication(
+		ctx,
+		&worker.PaymentFactApplicationPayload{ApplicationID: application.ID},
+		asynq.MaxRetry(5),
+		asynq.Queue(worker.QueueCritical),
+		asynq.Unique(paymentFactApplicationTaskUnique),
+	); err != nil {
+		log.Warn().Err(err).
+			Int64("payment_fact_application_id", application.ID).
+			Int64("payment_fact_id", application.FactID).
+			Int64("profit_sharing_order_id", application.BusinessObjectID).
+			Msg("enqueue profit sharing payment fact application from callback failed; scheduler will retry")
+	}
+}
+
+func (server *Server) enqueueRiderDepositRefundPaymentFactApplication(ctx context.Context, application *db.ExternalPaymentFactApplication) {
+	if application == nil || server.taskDistributor == nil {
+		return
+	}
+	distributor, ok := server.taskDistributor.(worker.PaymentFactApplicationTaskDistributor)
+	if !ok {
+		return
+	}
+	if err := distributor.DistributeTaskProcessPaymentFactApplication(
+		ctx,
+		&worker.PaymentFactApplicationPayload{ApplicationID: application.ID},
+		asynq.MaxRetry(5),
+		asynq.Queue(worker.QueueCritical),
+		asynq.Unique(paymentFactApplicationTaskUnique),
+	); err != nil {
+		log.Warn().Err(err).
+			Int64("payment_fact_application_id", application.ID).
+			Int64("payment_fact_id", application.FactID).
+			Int64("refund_order_id", application.BusinessObjectID).
+			Msg("enqueue rider deposit refund payment fact application from callback failed; scheduler will retry")
+	}
+}
+
+func (server *Server) enqueueReservationRefundPaymentFactApplication(ctx context.Context, application *db.ExternalPaymentFactApplication) {
+	if application == nil || server.taskDistributor == nil {
+		return
+	}
+	distributor, ok := server.taskDistributor.(worker.PaymentFactApplicationTaskDistributor)
+	if !ok {
+		return
+	}
+	if err := distributor.DistributeTaskProcessPaymentFactApplication(
+		ctx,
+		&worker.PaymentFactApplicationPayload{ApplicationID: application.ID},
+		asynq.MaxRetry(5),
+		asynq.Queue(worker.QueueCritical),
+		asynq.Unique(paymentFactApplicationTaskUnique),
+	); err != nil {
+		log.Warn().Err(err).
+			Int64("payment_fact_application_id", application.ID).
+			Int64("payment_fact_id", application.FactID).
+			Int64("refund_order_id", application.BusinessObjectID).
+			Msg("enqueue reservation refund payment fact application from callback failed; scheduler will retry")
+	}
+}
+
+func (server *Server) enqueueOrderRefundPaymentFactApplication(ctx context.Context, application *db.ExternalPaymentFactApplication) {
+	if application == nil || server.taskDistributor == nil {
+		return
+	}
+	distributor, ok := server.taskDistributor.(worker.PaymentFactApplicationTaskDistributor)
+	if !ok {
+		return
+	}
+	if err := distributor.DistributeTaskProcessPaymentFactApplication(
+		ctx,
+		&worker.PaymentFactApplicationPayload{ApplicationID: application.ID},
+		asynq.MaxRetry(5),
+		asynq.Queue(worker.QueueCritical),
+		asynq.Unique(paymentFactApplicationTaskUnique),
+	); err != nil {
+		log.Warn().Err(err).
+			Int64("payment_fact_application_id", application.ID).
+			Int64("payment_fact_id", application.FactID).
+			Int64("refund_order_id", application.BusinessObjectID).
+			Msg("enqueue order refund payment fact application from callback failed; scheduler will retry")
+	}
+}
+
 type directPaymentOwnershipProvider interface {
 	GetMchID() string
 	GetAppID() string
@@ -284,6 +388,374 @@ func (server *Server) validateDirectRefundOwnership(resource *wechatcontracts.Di
 	return nil
 }
 
+func paymentFactStringPtr(value string) *string {
+	return &value
+}
+
+func paymentFactInt64Ptr(value int64) *int64 {
+	return &value
+}
+
+func parseWechatFactTime(value string) *time.Time {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		log.Warn().Err(err).Str("wechat_time", value).Msg("parse wechat payment fact time failed")
+		return nil
+	}
+	return &parsed
+}
+
+func directPaymentFactResource(resource *wechatcontracts.DirectPaymentNotificationResource) []byte {
+	if resource == nil {
+		return nil
+	}
+	raw, err := json.Marshal(map[string]any{
+		"appid":            resource.AppID,
+		"mchid":            resource.MchID,
+		"out_trade_no":     resource.OutTradeNo,
+		"transaction_id":   resource.TransactionID,
+		"trade_type":       resource.TradeType,
+		"trade_state":      resource.TradeState,
+		"trade_state_desc": resource.TradeStateDesc,
+		"amount_total":     resource.Amount.Total,
+		"success_time":     resource.SuccessTime,
+	})
+	if err != nil {
+		log.Warn().Err(err).Str("out_trade_no", resource.OutTradeNo).Msg("marshal direct payment fact resource failed")
+		return nil
+	}
+	return raw
+}
+
+func directRefundFactResource(resource *wechatcontracts.DirectRefundNotificationResource) []byte {
+	if resource == nil {
+		return nil
+	}
+	raw, err := json.Marshal(map[string]any{
+		"mchid":          resource.MchID,
+		"out_trade_no":   resource.OutTradeNo,
+		"transaction_id": resource.TransactionID,
+		"out_refund_no":  resource.OutRefundNo,
+		"refund_id":      resource.RefundID,
+		"refund_status":  resource.RefundStatus,
+		"amount_total":   resource.Amount.Total,
+		"amount_refund":  resource.Amount.Refund,
+		"success_time":   resource.SuccessTime,
+	})
+	if err != nil {
+		log.Warn().Err(err).Str("out_refund_no", resource.OutRefundNo).Msg("marshal direct refund fact resource failed")
+		return nil
+	}
+	return raw
+}
+
+func (server *Server) resolveRiderDepositRefundFactObjects(ctx context.Context, outRefundNo string) (db.RefundOrder, db.PaymentOrder, bool, error) {
+	if server.paymentFactService == nil {
+		return db.RefundOrder{}, db.PaymentOrder{}, false, nil
+	}
+	refundOrder, err := server.store.GetRefundOrderByOutRefundNo(ctx, outRefundNo)
+	if err != nil {
+		if !isNotFoundError(err) {
+			log.Warn().Err(err).Str("out_refund_no", outRefundNo).Msg("skip rider deposit refund fact because local refund order resolution failed")
+		}
+		return db.RefundOrder{}, db.PaymentOrder{}, false, nil
+	}
+	paymentOrder, err := server.store.GetPaymentOrder(ctx, refundOrder.PaymentOrderID)
+	if err != nil {
+		log.Warn().Err(err).
+			Int64("refund_order_id", refundOrder.ID).
+			Int64("payment_order_id", refundOrder.PaymentOrderID).
+			Str("out_refund_no", outRefundNo).
+			Msg("skip rider deposit refund fact because local payment order resolution failed")
+		return db.RefundOrder{}, db.PaymentOrder{}, false, nil
+	}
+	return refundOrder, paymentOrder, paymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerRiderDeposit, nil
+}
+
+func (server *Server) resolveReservationRefundFactObjects(ctx context.Context, outRefundNo string) (db.RefundOrder, db.PaymentOrder, bool, error) {
+	if server.paymentFactService == nil {
+		return db.RefundOrder{}, db.PaymentOrder{}, false, nil
+	}
+	refundOrder, err := server.store.GetRefundOrderByOutRefundNo(ctx, outRefundNo)
+	if err != nil {
+		if !isNotFoundError(err) {
+			log.Warn().Err(err).Str("out_refund_no", outRefundNo).Msg("skip reservation refund fact because local refund order resolution failed")
+		}
+		return db.RefundOrder{}, db.PaymentOrder{}, false, nil
+	}
+	paymentOrder, err := server.store.GetPaymentOrder(ctx, refundOrder.PaymentOrderID)
+	if err != nil {
+		log.Warn().Err(err).
+			Int64("refund_order_id", refundOrder.ID).
+			Int64("payment_order_id", refundOrder.PaymentOrderID).
+			Str("out_refund_no", outRefundNo).
+			Msg("skip reservation refund fact because local payment order resolution failed")
+		return db.RefundOrder{}, db.PaymentOrder{}, false, nil
+	}
+	shouldRecord := paymentOrder.PaymentChannel == db.PaymentChannelEcommerce && paymentOrder.ReservationID.Valid &&
+		(paymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerReservation || paymentOrder.BusinessType == "reservation_addon")
+	return refundOrder, paymentOrder, shouldRecord, nil
+}
+
+func (server *Server) resolveOrderRefundFactObjects(ctx context.Context, outRefundNo string) (db.RefundOrder, db.PaymentOrder, bool, error) {
+	if server.paymentFactService == nil {
+		return db.RefundOrder{}, db.PaymentOrder{}, false, nil
+	}
+	refundOrder, err := server.store.GetRefundOrderByOutRefundNo(ctx, outRefundNo)
+	if err != nil {
+		if isNotFoundError(err) {
+			return db.RefundOrder{}, db.PaymentOrder{}, false, nil
+		}
+		log.Warn().Err(err).Str("out_refund_no", outRefundNo).Msg("resolve order refund fact failed because local refund order lookup failed")
+		return db.RefundOrder{}, db.PaymentOrder{}, false, err
+	}
+	paymentOrder, err := server.store.GetPaymentOrder(ctx, refundOrder.PaymentOrderID)
+	if err != nil {
+		log.Warn().Err(err).
+			Int64("refund_order_id", refundOrder.ID).
+			Int64("payment_order_id", refundOrder.PaymentOrderID).
+			Str("out_refund_no", outRefundNo).
+			Msg("resolve order refund fact failed because local payment order lookup failed")
+		return db.RefundOrder{}, db.PaymentOrder{}, false, err
+	}
+	shouldRecord := paymentOrder.PaymentChannel == db.PaymentChannelEcommerce && paymentOrder.OrderID.Valid && !paymentOrder.ReservationID.Valid && paymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerOrder
+	return refundOrder, paymentOrder, shouldRecord, nil
+}
+
+func (server *Server) recordDirectPaymentCallbackFact(ctx context.Context, notification wechat.PaymentNotification, paymentOrder db.PaymentOrder, resource *wechatcontracts.DirectPaymentNotificationResource) (*db.ExternalPaymentFactApplication, error) {
+	if server.paymentFactService == nil || resource == nil {
+		return nil, nil
+	}
+	consumer := ""
+	businessOwner := ""
+	switch paymentOrder.BusinessType {
+	case db.ExternalPaymentBusinessOwnerRiderDeposit:
+		consumer = paymentFactConsumerRiderDepositDomain
+		businessOwner = db.ExternalPaymentBusinessOwnerRiderDeposit
+	case db.ExternalPaymentBusinessOwnerClaimRecovery:
+		consumer = paymentFactConsumerClaimRecoveryDomain
+		businessOwner = db.ExternalPaymentBusinessOwnerClaimRecovery
+	default:
+		return nil, nil
+	}
+	status := logic.NormalizeDirectPaymentTerminalStatus(resource.TradeState)
+	if status == db.ExternalPaymentTerminalStatusUnknown && notification.EventType == "TRANSACTION.SUCCESS" {
+		status = db.ExternalPaymentTerminalStatusSuccess
+	}
+	occurredAt := parseWechatFactTime(resource.SuccessTime)
+	result, err := server.paymentFactService.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelDirect,
+		Capability:           db.ExternalPaymentCapabilityDirectJSAPIPayment,
+		FactSource:           db.ExternalPaymentFactSourceCallback,
+		SourceEventID:        paymentFactStringPtr(notification.ID),
+		SourceEventType:      paymentFactStringPtr(notification.EventType),
+		ExternalObjectType:   db.ExternalPaymentObjectPayment,
+		ExternalObjectKey:    resource.OutTradeNo,
+		ExternalSecondaryKey: paymentFactStringPtr(resource.TransactionID),
+		BusinessOwner:        paymentFactStringPtr(businessOwner),
+		BusinessObjectType:   paymentFactStringPtr(paymentFactBusinessObjectPaymentOrder),
+		BusinessObjectID:     paymentFactInt64Ptr(paymentOrder.ID),
+		UpstreamState:        "SUCCESS",
+		TerminalStatus:       status,
+		Amount:               paymentFactInt64Ptr(resource.Amount.Total),
+		Currency:             "CNY",
+		OccurredAt:           occurredAt,
+		UpstreamUpdatedAt:    occurredAt,
+		RawResource:          directPaymentFactResource(resource),
+		DedupeKey:            fmt.Sprintf("wechat:callback:direct_payment:%s", notification.ID),
+		Application: &logic.ExternalPaymentFactApplicationTarget{
+			Consumer:           consumer,
+			BusinessObjectType: paymentFactBusinessObjectPaymentOrder,
+			BusinessObjectID:   paymentOrder.ID,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Application, nil
+}
+
+func (server *Server) enqueueRiderDepositPaymentFactApplication(ctx context.Context, application *db.ExternalPaymentFactApplication) {
+	if application == nil || server.taskDistributor == nil {
+		return
+	}
+	distributor, ok := server.taskDistributor.(worker.PaymentFactApplicationTaskDistributor)
+	if !ok {
+		return
+	}
+	if err := distributor.DistributeTaskProcessPaymentFactApplication(
+		ctx,
+		&worker.PaymentFactApplicationPayload{ApplicationID: application.ID},
+		asynq.MaxRetry(5),
+		asynq.Queue(worker.QueueCritical),
+		asynq.Unique(paymentFactApplicationTaskUnique),
+	); err != nil {
+		log.Warn().Err(err).
+			Int64("payment_fact_application_id", application.ID).
+			Int64("payment_fact_id", application.FactID).
+			Int64("payment_order_id", application.BusinessObjectID).
+			Msg("enqueue rider deposit payment fact application from callback failed; scheduler will retry")
+	}
+}
+
+func (server *Server) enqueueClaimRecoveryPaymentFactApplication(ctx context.Context, application *db.ExternalPaymentFactApplication) {
+	if application == nil || server.taskDistributor == nil {
+		return
+	}
+	distributor, ok := server.taskDistributor.(worker.PaymentFactApplicationTaskDistributor)
+	if !ok {
+		return
+	}
+	if err := distributor.DistributeTaskProcessPaymentFactApplication(
+		ctx,
+		&worker.PaymentFactApplicationPayload{ApplicationID: application.ID},
+		asynq.MaxRetry(5),
+		asynq.Queue(worker.QueueCritical),
+		asynq.Unique(paymentFactApplicationTaskUnique),
+	); err != nil {
+		log.Warn().Err(err).
+			Int64("payment_fact_application_id", application.ID).
+			Int64("payment_fact_id", application.FactID).
+			Int64("payment_order_id", application.BusinessObjectID).
+			Msg("enqueue claim recovery payment fact application from callback failed; scheduler will retry")
+	}
+}
+
+func (server *Server) recordRiderDepositDirectRefundCallbackFact(ctx context.Context, notification wechat.PaymentNotification, refundOrder db.RefundOrder, paymentOrder db.PaymentOrder, resource *wechatcontracts.DirectRefundNotificationResource) (*db.ExternalPaymentFactApplication, error) {
+	if server.paymentFactService == nil || paymentOrder.BusinessType != db.ExternalPaymentBusinessOwnerRiderDeposit || resource == nil {
+		return nil, nil
+	}
+	occurredAt := parseWechatFactTime(resource.SuccessTime)
+	result, err := server.paymentFactService.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelDirect,
+		Capability:           db.ExternalPaymentCapabilityDirectRefund,
+		FactSource:           db.ExternalPaymentFactSourceCallback,
+		SourceEventID:        paymentFactStringPtr(notification.ID),
+		SourceEventType:      paymentFactStringPtr(notification.EventType),
+		ExternalObjectType:   db.ExternalPaymentObjectRefund,
+		ExternalObjectKey:    resource.OutRefundNo,
+		ExternalSecondaryKey: paymentFactStringPtr(resource.RefundID),
+		BusinessOwner:        paymentFactStringPtr(db.ExternalPaymentBusinessOwnerRiderDeposit),
+		BusinessObjectType:   paymentFactStringPtr(paymentFactBusinessObjectRefundOrder),
+		BusinessObjectID:     paymentFactInt64Ptr(refundOrder.ID),
+		UpstreamState:        resource.RefundStatus,
+		TerminalStatus:       logic.NormalizeDirectRefundTerminalStatus(resource.RefundStatus),
+		Amount:               paymentFactInt64Ptr(resource.Amount.Refund),
+		Currency:             "CNY",
+		OccurredAt:           occurredAt,
+		UpstreamUpdatedAt:    occurredAt,
+		RawResource:          directRefundFactResource(resource),
+		DedupeKey:            fmt.Sprintf("wechat:callback:direct_refund:%s", notification.ID),
+		Application: &logic.ExternalPaymentFactApplicationTarget{
+			Consumer:           paymentFactConsumerRiderDepositDomain,
+			BusinessObjectType: paymentFactBusinessObjectRefundOrder,
+			BusinessObjectID:   refundOrder.ID,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Application, nil
+}
+
+func (server *Server) recordReservationEcommerceRefundCallbackFact(ctx context.Context, notification wechat.PaymentNotification, refundOrder db.RefundOrder, paymentOrder db.PaymentOrder, resource *wechat.EcommerceRefundNotification) (*db.ExternalPaymentFactApplication, error) {
+	if server.paymentFactService == nil || resource == nil || !paymentOrder.ReservationID.Valid {
+		return nil, nil
+	}
+	status := logic.NormalizeEcommerceRefundTerminalStatus(resource.RefundStatus)
+	result, err := server.paymentFactService.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilityEcommerceRefund,
+		FactSource:           db.ExternalPaymentFactSourceCallback,
+		SourceEventID:        paymentFactStringPtr(notification.ID),
+		SourceEventType:      paymentFactStringPtr(notification.EventType),
+		ExternalObjectType:   db.ExternalPaymentObjectRefund,
+		ExternalObjectKey:    resource.OutRefundNo,
+		ExternalSecondaryKey: paymentFactStringPtr(resource.RefundID),
+		BusinessOwner:        paymentFactStringPtr(db.ExternalPaymentBusinessOwnerReservation),
+		BusinessObjectType:   paymentFactStringPtr(paymentFactBusinessObjectRefundOrder),
+		BusinessObjectID:     paymentFactInt64Ptr(refundOrder.ID),
+		UpstreamState:        resource.RefundStatus,
+		TerminalStatus:       status,
+		Amount:               paymentFactInt64Ptr(resource.Amount.Refund),
+		Currency:             "CNY",
+		RawResource:          ecommerceRefundFactResource(resource),
+		DedupeKey:            fmt.Sprintf("wechat:callback:ecommerce_refund:%s", notification.ID),
+		Application: &logic.ExternalPaymentFactApplicationTarget{
+			Consumer:           paymentFactConsumerReservationDomain,
+			BusinessObjectType: paymentFactBusinessObjectRefundOrder,
+			BusinessObjectID:   refundOrder.ID,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Application, nil
+}
+
+func (server *Server) recordOrderEcommerceRefundCallbackFact(ctx context.Context, notification wechat.PaymentNotification, refundOrder db.RefundOrder, paymentOrder db.PaymentOrder, resource *wechat.EcommerceRefundNotification) (*db.ExternalPaymentFactApplication, error) {
+	if server.paymentFactService == nil || resource == nil || !paymentOrder.OrderID.Valid || paymentOrder.ReservationID.Valid {
+		return nil, nil
+	}
+	status := logic.NormalizeEcommerceRefundTerminalStatus(resource.RefundStatus)
+	result, err := server.paymentFactService.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilityEcommerceRefund,
+		FactSource:           db.ExternalPaymentFactSourceCallback,
+		SourceEventID:        paymentFactStringPtr(notification.ID),
+		SourceEventType:      paymentFactStringPtr(notification.EventType),
+		ExternalObjectType:   db.ExternalPaymentObjectRefund,
+		ExternalObjectKey:    resource.OutRefundNo,
+		ExternalSecondaryKey: paymentFactStringPtr(resource.RefundID),
+		BusinessOwner:        paymentFactStringPtr(db.ExternalPaymentBusinessOwnerOrder),
+		BusinessObjectType:   paymentFactStringPtr(paymentFactBusinessObjectRefundOrder),
+		BusinessObjectID:     paymentFactInt64Ptr(refundOrder.ID),
+		UpstreamState:        resource.RefundStatus,
+		TerminalStatus:       status,
+		Amount:               paymentFactInt64Ptr(resource.Amount.Refund),
+		Currency:             "CNY",
+		RawResource:          ecommerceRefundFactResource(resource),
+		DedupeKey:            fmt.Sprintf("wechat:callback:ecommerce_refund:%s", notification.ID),
+		Application: &logic.ExternalPaymentFactApplicationTarget{
+			Consumer:           paymentFactConsumerOrderDomain,
+			BusinessObjectType: paymentFactBusinessObjectRefundOrder,
+			BusinessObjectID:   refundOrder.ID,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Application, nil
+}
+
+func ecommerceRefundFactResource(resource *wechat.EcommerceRefundNotification) []byte {
+	if resource == nil {
+		return nil
+	}
+	raw, err := json.Marshal(map[string]any{
+		"sp_mchid":       resource.SpMchID,
+		"sub_mchid":      resource.SubMchID,
+		"out_trade_no":   resource.OutTradeNo,
+		"transaction_id": resource.TransactionID,
+		"out_refund_no":  resource.OutRefundNo,
+		"refund_id":      resource.RefundID,
+		"refund_status":  resource.RefundStatus,
+		"amount_refund":  resource.Amount.Refund,
+	})
+	if err != nil {
+		log.Warn().Err(err).Str("out_refund_no", resource.OutRefundNo).Msg("marshal ecommerce refund fact resource failed")
+		return nil
+	}
+	return raw
+}
+
 func (server *Server) validateDirectMerchantTransferOwnership(resource *wechatcontracts.DirectMerchantTransferNotificationResource) error {
 	if resource == nil || resource.MchID == "" {
 		return nil
@@ -398,10 +870,6 @@ func (server *Server) syncWithdrawalRecordWithWechat(ctx *gin.Context, record db
 		return record, fmt.Errorf("unsupported withdrawal channel: %s", record.Channel)
 	}
 
-	record, err := server.persistWithdrawalRecordStatus(ctx, record, mapWechatWithdrawStatus(resource.Status), resource.Reason)
-	if err != nil {
-		return record, fmt.Errorf("persist withdrawal status: %w", err)
-	}
 	return record, nil
 }
 
@@ -490,14 +958,60 @@ func (server *Server) handlePartnerPaymentNotification(ctx *gin.Context, notific
 
 	if paymentOrder.Status == PaymentStatusPaid {
 		if !paymentOrder.ProcessedAt.Valid {
-			if err := server.enqueuePaymentSuccessProcessing(ctx, paymentOrder, resource.TransactionID); err != nil {
-				paymentCallbackFailuresTotal.WithLabelValues("ecommerce_payment", "reenqueue_payment_success_task").Inc()
-				log.Error().Err(err).
+			if paymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerOrder && db.PaymentOrderUsesEcommerceChannel(paymentOrder) {
+				application, factErr := server.recordOrderPaymentCallbackFact(ctx, notification, paymentOrder, resource)
+				if factErr != nil {
+					paymentCallbackFailuresTotal.WithLabelValues("ecommerce_payment", "record_order_payment_fact").Inc()
+					log.Error().Err(factErr).
+						Int64("payment_order_id", paymentOrder.ID).
+						Str("out_trade_no", paymentOrder.OutTradeNo).
+						Msg("record order payment callback fact failed")
+					server.releaseNotification(ctx, notification.ID, "ecommerce_payment")
+					ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "record payment fact failed, please retry"})
+					return
+				}
+				if err := server.enqueueOrderPaymentFactApplication(ctx, application); err != nil {
+					paymentCallbackFailuresTotal.WithLabelValues("ecommerce_payment", "reenqueue_order_payment_fact_application").Inc()
+					log.Error().Err(err).
+						Int64("payment_order_id", paymentOrder.ID).
+						Str("out_trade_no", paymentOrder.OutTradeNo).
+						Msg("partner payment order already paid but order payment fact application enqueue failed")
+					server.releaseNotification(ctx, notification.ID, "ecommerce_payment")
+					ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "payment processing enqueue failed, please retry"})
+					return
+				}
+			} else if shouldRecordReservationPaymentFact(paymentOrder) {
+				application, factErr := server.recordReservationPaymentCallbackFact(ctx, notification, paymentOrder, resource)
+				if factErr != nil {
+					paymentCallbackFailuresTotal.WithLabelValues("ecommerce_payment", "record_reservation_payment_fact").Inc()
+					log.Error().Err(factErr).
+						Int64("payment_order_id", paymentOrder.ID).
+						Str("out_trade_no", paymentOrder.OutTradeNo).
+						Msg("record reservation payment callback fact failed")
+					server.releaseNotification(ctx, notification.ID, "ecommerce_payment")
+					ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "record payment fact failed, please retry"})
+					return
+				}
+				if err := server.enqueueReservationPaymentFactApplication(ctx, application); err != nil {
+					paymentCallbackFailuresTotal.WithLabelValues("ecommerce_payment", "reenqueue_reservation_payment_fact_application").Inc()
+					log.Error().Err(err).
+						Int64("payment_order_id", paymentOrder.ID).
+						Str("out_trade_no", paymentOrder.OutTradeNo).
+						Msg("partner payment reservation already paid but reservation payment fact application enqueue failed")
+					server.releaseNotification(ctx, notification.ID, "ecommerce_payment")
+					ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "payment processing enqueue failed, please retry"})
+					return
+				}
+			} else {
+				paymentCallbackFailuresTotal.WithLabelValues("ecommerce_payment", "unsupported_payment_fact_owner").Inc()
+				log.Error().
 					Int64("payment_order_id", paymentOrder.ID).
 					Str("out_trade_no", paymentOrder.OutTradeNo).
-					Msg("partner payment order already paid but post-payment processing enqueue failed")
+					Str("business_type", paymentOrder.BusinessType).
+					Str("payment_channel", paymentOrder.PaymentChannel).
+					Msg("partner payment order already paid but no payment fact application owner matched")
 				server.releaseNotification(ctx, notification.ID, "ecommerce_payment")
-				ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "payment processing enqueue failed, please retry"})
+				ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "unsupported payment business type, please retry"})
 				return
 			}
 		}
@@ -701,14 +1215,60 @@ func (server *Server) handlePartnerPaymentNotification(ctx *gin.Context, notific
 		IgnorePreferences: true,
 	})
 
-	if err := server.enqueuePaymentSuccessProcessing(ctx, paymentOrder, resource.TransactionID); err != nil {
-		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_payment", "enqueue_payment_success_task").Inc()
-		log.Error().Err(err).
+	if updatedPaymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerOrder && db.PaymentOrderUsesEcommerceChannel(updatedPaymentOrder) {
+		application, factErr := server.recordOrderPaymentCallbackFact(ctx, notification, updatedPaymentOrder, resource)
+		if factErr != nil {
+			paymentCallbackFailuresTotal.WithLabelValues("ecommerce_payment", "record_order_payment_fact").Inc()
+			log.Error().Err(factErr).
+				Int64("payment_order_id", updatedPaymentOrder.ID).
+				Str("out_trade_no", updatedPaymentOrder.OutTradeNo).
+				Msg("record order payment callback fact failed")
+			server.releaseNotification(ctx, notification.ID, "ecommerce_payment")
+			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "record payment fact failed, please retry"})
+			return
+		}
+		if err := server.enqueueOrderPaymentFactApplication(ctx, application); err != nil {
+			paymentCallbackFailuresTotal.WithLabelValues("ecommerce_payment", "enqueue_order_payment_fact_application").Inc()
+			log.Error().Err(err).
+				Int64("payment_order_id", updatedPaymentOrder.ID).
+				Str("out_trade_no", updatedPaymentOrder.OutTradeNo).
+				Msg("partner order payment fact application enqueue failed")
+			server.releaseNotification(ctx, notification.ID, "ecommerce_payment")
+			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "payment processing enqueue failed, please retry"})
+			return
+		}
+	} else if shouldRecordReservationPaymentFact(updatedPaymentOrder) {
+		application, factErr := server.recordReservationPaymentCallbackFact(ctx, notification, updatedPaymentOrder, resource)
+		if factErr != nil {
+			paymentCallbackFailuresTotal.WithLabelValues("ecommerce_payment", "record_reservation_payment_fact").Inc()
+			log.Error().Err(factErr).
+				Int64("payment_order_id", updatedPaymentOrder.ID).
+				Str("out_trade_no", updatedPaymentOrder.OutTradeNo).
+				Msg("record reservation payment callback fact failed")
+			server.releaseNotification(ctx, notification.ID, "ecommerce_payment")
+			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "record payment fact failed, please retry"})
+			return
+		}
+		if err := server.enqueueReservationPaymentFactApplication(ctx, application); err != nil {
+			paymentCallbackFailuresTotal.WithLabelValues("ecommerce_payment", "enqueue_reservation_payment_fact_application").Inc()
+			log.Error().Err(err).
+				Int64("payment_order_id", updatedPaymentOrder.ID).
+				Str("out_trade_no", updatedPaymentOrder.OutTradeNo).
+				Msg("partner reservation payment fact application enqueue failed")
+			server.releaseNotification(ctx, notification.ID, "ecommerce_payment")
+			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "payment processing enqueue failed, please retry"})
+			return
+		}
+	} else {
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_payment", "unsupported_payment_fact_owner").Inc()
+		log.Error().
 			Int64("payment_order_id", paymentOrder.ID).
 			Str("out_trade_no", paymentOrder.OutTradeNo).
-			Msg("partner payment success task enqueue failed")
+			Str("business_type", paymentOrder.BusinessType).
+			Str("payment_channel", paymentOrder.PaymentChannel).
+			Msg("partner payment callback paid transition has no payment fact application owner")
 		server.releaseNotification(ctx, notification.ID, "ecommerce_payment")
-		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "payment processing enqueue failed, please retry"})
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "unsupported payment business type, please retry"})
 		return
 	}
 
@@ -814,6 +1374,15 @@ func (server *Server) handleEcommerceWithdrawNotify(ctx *gin.Context) {
 		return
 	}
 
+	application, err := server.recordMerchantWithdrawCallbackFact(ctx, notification, record, &resource)
+	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_withdraw", "record_fact").Inc()
+		log.Error().Err(err).Int64("withdrawal_record_id", record.ID).Str("out_request_no", resource.OutRequestNo).Msg("record merchant withdraw callback fact failed")
+		server.releaseNotification(ctx, notification.ID, "ecommerce_withdraw")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "withdrawal fact record failed"})
+		return
+	}
+
 	if _, err := server.syncWithdrawalRecordWithWechat(ctx, record, &withdrawStatusSyncSnapshot{
 		OutRequestNo: resource.OutRequestNo,
 		SubMchID:     resource.SubMchID,
@@ -823,6 +1392,14 @@ func (server *Server) handleEcommerceWithdrawNotify(ctx *gin.Context) {
 	}); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_withdraw", "sync_withdrawal").Inc()
 		log.Error().Err(err).Int64("withdrawal_record_id", record.ID).Str("out_request_no", resource.OutRequestNo).Msg("sync withdrawal record with ecommerce callback failed")
+		server.releaseNotification(ctx, notification.ID, "ecommerce_withdraw")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "withdrawal sync failed"})
+		return
+	}
+
+	if _, _, err := server.applyMerchantWithdrawFactApplication(ctx, application); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_withdraw", "apply_fact").Inc()
+		log.Error().Err(err).Int64("withdrawal_record_id", record.ID).Str("out_request_no", resource.OutRequestNo).Msg("apply merchant withdraw callback fact failed")
 		server.releaseNotification(ctx, notification.ID, "ecommerce_withdraw")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "withdrawal sync failed"})
 		return
@@ -887,23 +1464,6 @@ func buildAmountMismatchRefundPayload(paymentOrder db.PaymentOrder, refundAmount
 		return payload, true
 	}
 	return nil, false
-}
-
-func (server *Server) enqueuePaymentSuccessProcessing(ctx context.Context, paymentOrder db.PaymentOrder, transactionID string) error {
-	if server.taskDistributor == nil {
-		return errors.New("task distributor not configured")
-	}
-	return server.taskDistributor.DistributeTaskProcessPaymentSuccess(
-		ctx,
-		&worker.PaymentSuccessPayload{
-			PaymentOrderID: paymentOrder.ID,
-			TransactionID:  transactionID,
-			BusinessType:   paymentOrder.BusinessType,
-		},
-		asynq.MaxRetry(3),
-		asynq.ProcessIn(1*time.Second),
-		asynq.Queue(worker.QueueCritical),
-	)
 }
 
 func (server *Server) markRefundOrderFailed(ctx context.Context, refundOrderID int64) {
@@ -1115,7 +1675,7 @@ func (server *Server) handleMerchantTransferNotify(ctx *gin.Context) {
 		return
 	}
 
-	if err := worker.HandleClaimPayoutTransferNotification(ctx, server.store, actionID, resource); err != nil {
+	if err := worker.HandleClaimPayoutTransferNotification(ctx, server.store, server.taskDistributor, actionID, resource); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("merchant_transfer", "apply_business").Inc()
 		log.Error().Err(err).Int64("behavior_action_id", actionID).Str("out_bill_no", resource.OutBillNo).Msg("apply merchant transfer notification failed")
 		server.releaseNotification(ctx, notification.ID, "merchant_transfer")
@@ -1280,19 +1840,53 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 		})
 		return
 	}
+	paymentFactApplication, err := server.recordDirectPaymentCallbackFact(ctx, notification, paymentOrder, resource)
+	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("payment", "record_payment_fact").Inc()
+		log.Error().Err(err).
+			Int64("payment_order_id", paymentOrder.ID).
+			Str("out_trade_no", resource.OutTradeNo).
+			Msg("record direct payment fact failed")
+		server.releaseNotification(ctx, notification.ID, "payment")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "payment fact recording failed, please retry"})
+		return
+	}
+
 	// 检查是否已处理（幂等）
 	if paymentOrder.Status == PaymentStatusPaid {
 		if !paymentOrder.ProcessedAt.Valid {
-			if err := server.enqueuePaymentSuccessProcessing(ctx, paymentOrder, resource.TransactionID); err != nil {
-				paymentCallbackFailuresTotal.WithLabelValues("payment", "reenqueue_payment_success_task").Inc()
-				log.Error().Err(err).
+			if paymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerRiderDeposit || paymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerClaimRecovery {
+				if paymentFactApplication == nil {
+					paymentCallbackFailuresTotal.WithLabelValues("payment", "missing_payment_fact_application").Inc()
+					log.Error().
+						Int64("payment_order_id", paymentOrder.ID).
+						Str("out_trade_no", paymentOrder.OutTradeNo).
+						Str("business_type", paymentOrder.BusinessType).
+						Msg("direct payment callback missing payment fact application")
+					server.releaseNotification(ctx, notification.ID, "payment")
+					ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+						Code:    "FAIL",
+						Message: "payment fact application missing, please retry",
+					})
+					return
+				}
+				if paymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerRiderDeposit {
+					server.enqueueRiderDepositPaymentFactApplication(ctx, paymentFactApplication)
+				} else {
+					server.enqueueClaimRecoveryPaymentFactApplication(ctx, paymentFactApplication)
+				}
+			} else {
+				paymentCallbackFailuresTotal.WithLabelValues("payment", "unsupported_payment_fact_owner").Inc()
+				log.Error().
 					Int64("payment_order_id", paymentOrder.ID).
 					Str("out_trade_no", paymentOrder.OutTradeNo).
-					Msg("payment order already paid but post-payment processing enqueue failed")
+					Str("business_type", paymentOrder.BusinessType).
+					Str("payment_channel", paymentOrder.PaymentChannel).
+					Msg("direct payment order already paid but no payment fact application owner matched")
 				server.releaseNotification(ctx, notification.ID, "payment")
 				ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 					Code:    "FAIL",
-					Message: "payment processing enqueue failed, please retry",
+					Message: "unsupported payment business type, please retry",
 				})
 				return
 			}
@@ -1564,29 +2158,51 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 
 	// 通知ID已在 tryClaimNotification 中原子写入，无需重复记录
 
-	if err := server.enqueuePaymentSuccessProcessing(ctx, paymentOrder, resource.TransactionID); err != nil {
-		paymentCallbackFailuresTotal.WithLabelValues("payment", "enqueue_payment_success_task").Inc()
-		log.Error().Err(err).
+	if updatedPaymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerRiderDeposit || updatedPaymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerClaimRecovery {
+		if paymentFactApplication == nil {
+			paymentCallbackFailuresTotal.WithLabelValues("payment", "missing_payment_fact_application").Inc()
+			log.Error().
+				Int64("payment_order_id", updatedPaymentOrder.ID).
+				Str("out_trade_no", updatedPaymentOrder.OutTradeNo).
+				Str("business_type", updatedPaymentOrder.BusinessType).
+				Msg("direct payment callback missing payment fact application after paid transition")
+			server.releaseNotification(ctx, notification.ID, "payment")
+			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+				Code:    "FAIL",
+				Message: "payment fact application missing, please retry",
+			})
+			return
+		}
+		if updatedPaymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerRiderDeposit {
+			server.enqueueRiderDepositPaymentFactApplication(ctx, paymentFactApplication)
+		} else {
+			server.enqueueClaimRecoveryPaymentFactApplication(ctx, paymentFactApplication)
+		}
+	} else {
+		paymentCallbackFailuresTotal.WithLabelValues("payment", "unsupported_payment_fact_owner").Inc()
+		log.Error().
 			Int64("payment_order_id", paymentOrder.ID).
 			Str("out_trade_no", paymentOrder.OutTradeNo).
+			Str("business_type", paymentOrder.BusinessType).
+			Str("payment_channel", paymentOrder.PaymentChannel).
 			Str("alert_type", "TASK_ENQUEUE_FAILURE").
-			Msg("payment success task enqueue failed")
+			Msg("direct payment callback paid transition has no payment fact application owner")
 		server.sendAlert(websocket.AlertData{
 			AlertType:   websocket.AlertTypeTaskEnqueueFailure,
 			Level:       websocket.AlertLevelCritical,
-			Title:       "支付成功任务入队失败",
-			Message:     fmt.Sprintf("支付单 %s 支付成功，但后续业务任务入队失败，系统已返回 FAIL 请求微信重试。", paymentOrder.OutTradeNo),
+			Title:       "支付事实应用匹配失败",
+			Message:     fmt.Sprintf("支付单 %s 支付成功，但业务类型未匹配支付事实应用，系统已返回 FAIL 请求微信重试。", paymentOrder.OutTradeNo),
 			RelatedID:   paymentOrder.ID,
 			RelatedType: "payment_order",
 			Extra: map[string]interface{}{
-				"out_trade_no": paymentOrder.OutTradeNo,
-				"error":        err.Error(),
+				"out_trade_no":  paymentOrder.OutTradeNo,
+				"business_type": paymentOrder.BusinessType,
 			},
 		})
 		server.releaseNotification(ctx, notification.ID, "payment")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
-			Message: "payment processing enqueue failed, please retry",
+			Message: "unsupported payment business type, please retry",
 		})
 		return
 	}
@@ -1726,28 +2342,55 @@ func (server *Server) handleRefundNotify(ctx *gin.Context) {
 		return
 	}
 
-	// 将退款结果处理放入队列
-	err = server.taskDistributor.DistributeTaskProcessRefundResult(
-		ctx,
-		&worker.RefundResultPayload{
-			OutRefundNo:  resource.OutRefundNo,
-			RefundStatus: resource.RefundStatus,
-			RefundID:     resource.RefundID,
-		},
-		asynq.MaxRetry(3),
-		asynq.Queue(worker.QueueCritical),
-	)
+	refundOrder, paymentOrder, shouldRecordFact, err := server.resolveRiderDepositRefundFactObjects(ctx, resource.OutRefundNo)
 	if err != nil {
-		paymentCallbackFailuresTotal.WithLabelValues("refund", "enqueue").Inc()
+		paymentCallbackFailuresTotal.WithLabelValues("refund", "resolve_refund_fact_object").Inc()
 		log.Error().Err(err).
 			Str("out_refund_no", resource.OutRefundNo).
-			Msg("failed to enqueue refund result task")
+			Msg("resolve rider deposit refund fact object failed")
 		server.releaseNotification(ctx, notification.ID, "refund")
-		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
-			Code:    "FAIL",
-			Message: "enqueue failed, please retry",
-		})
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "refund fact object resolution failed, please retry"})
 		return
+	}
+	if shouldRecordFact {
+		application, err := server.recordRiderDepositDirectRefundCallbackFact(ctx, notification, refundOrder, paymentOrder, resource)
+		if err != nil {
+			paymentCallbackFailuresTotal.WithLabelValues("refund", "record_refund_fact").Inc()
+			log.Error().Err(err).
+				Int64("refund_order_id", refundOrder.ID).
+				Str("out_refund_no", resource.OutRefundNo).
+				Msg("record rider deposit direct refund fact failed")
+			server.releaseNotification(ctx, notification.ID, "refund")
+			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "refund fact recording failed, please retry"})
+			return
+		}
+		server.enqueueRiderDepositRefundPaymentFactApplication(ctx, application)
+	}
+
+	if !shouldRecordFact {
+		// 将非骑手押金退款结果处理放入旧队列
+		err = server.taskDistributor.DistributeTaskProcessRefundResult(
+			ctx,
+			&worker.RefundResultPayload{
+				OutRefundNo:  resource.OutRefundNo,
+				RefundStatus: resource.RefundStatus,
+				RefundID:     resource.RefundID,
+			},
+			asynq.MaxRetry(3),
+			asynq.Queue(worker.QueueCritical),
+		)
+		if err != nil {
+			paymentCallbackFailuresTotal.WithLabelValues("refund", "enqueue").Inc()
+			log.Error().Err(err).
+				Str("out_refund_no", resource.OutRefundNo).
+				Msg("failed to enqueue refund result task")
+			server.releaseNotification(ctx, notification.ID, "refund")
+			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+				Code:    "FAIL",
+				Message: "enqueue failed, please retry",
+			})
+			return
+		}
 	}
 
 	// 通知ID已在 tryClaimNotification 中原子写入，无需重复记录
@@ -1879,30 +2522,87 @@ func (server *Server) handleEcommerceRefundNotify(ctx *gin.Context) {
 		return
 	}
 
-	// 将退款结果处理放入队列（复用现有退款结果处理逻辑）
-	err = server.taskDistributor.DistributeTaskProcessRefundResult(
-		ctx,
-		&worker.RefundResultPayload{
-			OutRefundNo:  resource.OutRefundNo,
-			RefundStatus: resource.RefundStatus,
-			RefundID:     resource.RefundID,
-		},
-		asynq.MaxRetry(3),
-		asynq.Queue(worker.QueueCritical),
-	)
+	handledByFact := false
+	refundOrder, paymentOrder, shouldRecordFact, err := server.resolveReservationRefundFactObjects(ctx, resource.OutRefundNo)
 	if err != nil {
-		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_refund", "enqueue").Inc()
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_refund", "resolve_refund_fact_object").Inc()
 		log.Error().Err(err).
 			Str("out_refund_no", resource.OutRefundNo).
-			Str("sp_mchid", resource.SpMchID).
-			Str("sub_mchid", resource.SubMchID).
-			Msg("⚠️ CRITICAL: failed to enqueue ecommerce refund result task - manual intervention may be required")
+			Msg("resolve reservation refund fact object failed")
 		server.releaseNotification(ctx, notification.ID, "ecommerce_refund")
-		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
-			Code:    "FAIL",
-			Message: "enqueue failed, please retry",
-		})
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "refund fact object resolution failed, please retry"})
 		return
+	}
+	if shouldRecordFact {
+		handledByFact = true
+		application, err := server.recordReservationEcommerceRefundCallbackFact(ctx, notification, refundOrder, paymentOrder, resource)
+		if err != nil {
+			paymentCallbackFailuresTotal.WithLabelValues("ecommerce_refund", "record_refund_fact").Inc()
+			log.Error().Err(err).
+				Int64("refund_order_id", refundOrder.ID).
+				Str("out_refund_no", resource.OutRefundNo).
+				Msg("record reservation ecommerce refund fact failed")
+			server.releaseNotification(ctx, notification.ID, "ecommerce_refund")
+			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "refund fact recording failed, please retry"})
+			return
+		}
+		server.enqueueReservationRefundPaymentFactApplication(ctx, application)
+	}
+
+	if !handledByFact {
+		refundOrder, paymentOrder, shouldRecordFact, err = server.resolveOrderRefundFactObjects(ctx, resource.OutRefundNo)
+		if err != nil {
+			paymentCallbackFailuresTotal.WithLabelValues("ecommerce_refund", "resolve_order_refund_fact_object").Inc()
+			log.Error().Err(err).
+				Str("out_refund_no", resource.OutRefundNo).
+				Msg("resolve order refund fact object failed")
+			server.releaseNotification(ctx, notification.ID, "ecommerce_refund")
+			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "refund fact object resolution failed, please retry"})
+			return
+		}
+		if shouldRecordFact {
+			handledByFact = true
+			application, err := server.recordOrderEcommerceRefundCallbackFact(ctx, notification, refundOrder, paymentOrder, resource)
+			if err != nil {
+				paymentCallbackFailuresTotal.WithLabelValues("ecommerce_refund", "record_order_refund_fact").Inc()
+				log.Error().Err(err).
+					Int64("refund_order_id", refundOrder.ID).
+					Str("out_refund_no", resource.OutRefundNo).
+					Msg("record order ecommerce refund fact failed")
+				server.releaseNotification(ctx, notification.ID, "ecommerce_refund")
+				ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "refund fact recording failed, please retry"})
+				return
+			}
+			server.enqueueOrderRefundPaymentFactApplication(ctx, application)
+		}
+	}
+
+	if !handledByFact {
+		// 将非预订退款结果处理放入旧队列
+		err = server.taskDistributor.DistributeTaskProcessRefundResult(
+			ctx,
+			&worker.RefundResultPayload{
+				OutRefundNo:  resource.OutRefundNo,
+				RefundStatus: resource.RefundStatus,
+				RefundID:     resource.RefundID,
+			},
+			asynq.MaxRetry(3),
+			asynq.Queue(worker.QueueCritical),
+		)
+		if err != nil {
+			paymentCallbackFailuresTotal.WithLabelValues("ecommerce_refund", "enqueue").Inc()
+			log.Error().Err(err).
+				Str("out_refund_no", resource.OutRefundNo).
+				Str("sp_mchid", resource.SpMchID).
+				Str("sub_mchid", resource.SubMchID).
+				Msg("⚠️ CRITICAL: failed to enqueue ecommerce refund result task - manual intervention may be required")
+			server.releaseNotification(ctx, notification.ID, "ecommerce_refund")
+			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+				Code:    "FAIL",
+				Message: "enqueue failed, please retry",
+			})
+			return
+		}
 	}
 
 	// 通知ID已在 tryClaimNotification 中原子写入，无需重复记录
@@ -2103,77 +2803,37 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 		return
 	}
 
-	finalResult := "PROCESSING"
-	finalFailReason := ""
+	finalResult, finalFailReason := logic.ResolveProfitSharingQueryFinalResult(queryResp)
 
-	allSuccess := strings.ToUpper(queryResp.Status) == "FINISHED"
-	hasFailed := false
-	failedReasons := make([]string, 0)
-
-	for _, receiver := range queryResp.Receivers {
-		result := strings.ToUpper(receiver.Result)
-		switch result {
-		case "SUCCESS":
-			// pass
-		case "FAILED", "CLOSED":
-			hasFailed = true
-			if receiver.FailReason != "" {
-				failedReasons = append(failedReasons, receiver.FailReason)
-			}
-			allSuccess = false
-		default:
-			allSuccess = false
-		}
+	paymentFactApplication, err := server.recordProfitSharingCallbackFact(ctx, notification, profitSharingOrder, resource, queryResp, finalResult, finalFailReason)
+	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "record_fact").Inc()
+		log.Error().Err(err).
+			Int64("profit_sharing_order_id", profitSharingOrder.ID).
+			Str("out_order_no", resource.OutOrderNo).
+			Str("result", finalResult).
+			Msg("record profit sharing payment fact failed")
+		server.releaseNotification(ctx, notification.ID, "profit_sharing")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "record payment fact failed",
+		})
+		return
 	}
-
-	switch {
-	case hasFailed:
-		finalResult = "FAILED"
-		if len(failedReasons) > 0 {
-			finalFailReason = strings.Join(failedReasons, ";")
-		}
-	case allSuccess:
-		finalResult = "SUCCESS"
-	default:
-		finalResult = "PROCESSING"
-	}
-
 	switch finalResult {
 	case "SUCCESS":
-		_, err = server.store.UpdateProfitSharingOrderToFinished(ctx, profitSharingOrder.ID)
-		if err != nil {
-			paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "update_profit_sharing_order").Inc()
-			log.Error().Err(err).Int64("id", profitSharingOrder.ID).Msg("update profit sharing order to finished")
-			server.releaseNotification(ctx, notification.ID, "profit_sharing")
-			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
-				Code:    "FAIL",
-				Message: "update order failed",
-			})
-			return
-		}
 		log.Info().
 			Int64("profit_sharing_order_id", profitSharingOrder.ID).
 			Str("out_order_no", resource.OutOrderNo).
-			Msg("profit sharing completed successfully")
+			Msg("profit sharing terminal fact recorded; waiting for fact application consumer")
 
 	case "FAILED", "CLOSED":
-		_, err = server.store.UpdateProfitSharingOrderToFailed(ctx, profitSharingOrder.ID)
-		if err != nil {
-			paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "update_profit_sharing_order").Inc()
-			log.Error().Err(err).Int64("id", profitSharingOrder.ID).Msg("update profit sharing order to failed")
-			server.releaseNotification(ctx, notification.ID, "profit_sharing")
-			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
-				Code:    "FAIL",
-				Message: "update order failed",
-			})
-			return
-		}
 		log.Error().
 			Int64("profit_sharing_order_id", profitSharingOrder.ID).
 			Str("out_order_no", resource.OutOrderNo).
 			Str("result", finalResult).
 			Str("fail_reason", finalFailReason).
-			Msg("⚠️ profit sharing failed - manual review required")
+			Msg("profit sharing terminal fact recorded as failed; waiting for fact application consumer")
 
 	case "PROCESSING":
 		log.Info().
@@ -2187,47 +2847,9 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 			Str("out_order_no", resource.OutOrderNo).
 			Msg("unknown profit sharing result")
 	}
+	server.enqueueProfitSharingPaymentFactApplication(ctx, paymentFactApplication)
 
 	// 通知ID已在 tryClaimNotification 中原子写入，无需重复记录
-
-	if !server.requireTaskDistributorForNotification(ctx, notification.ID, "profit_sharing", "profit sharing result processing unavailable, please retry") {
-		return
-	}
-
-	// 📤 CB-3: 异步处理分账结果通知
-	if enqErr := server.taskDistributor.DistributeTaskProcessProfitSharingResult(
-		ctx,
-		&worker.ProfitSharingResultPayload{
-			ProfitSharingOrderID: profitSharingOrder.ID,
-			OutOrderNo:           resource.OutOrderNo,
-			Result:               finalResult,
-			FailReason:           finalFailReason,
-			MerchantID:           profitSharingOrder.MerchantID,
-		},
-		asynq.MaxRetry(3),
-		asynq.Queue(worker.QueueDefault),
-	); enqErr != nil {
-		paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "enqueue_result_task").Inc()
-		log.Error().Err(enqErr).
-			Int64("profit_sharing_order_id", profitSharingOrder.ID).
-			Str("out_order_no", resource.OutOrderNo).
-			Msg("failed to enqueue profit sharing result task")
-		server.sendAlert(websocket.AlertData{
-			AlertType:   websocket.AlertTypeTaskEnqueueFailure,
-			Level:       websocket.AlertLevelCritical,
-			Title:       "分账结果任务入队失败",
-			Message:     fmt.Sprintf("分账单 %s 结果 %s 已落库，但后续结果任务入队失败。商户（ID=%d）收入到账通知将不会发出；若结果为 FAILED，分账重试任务也不会触发。请人工：1）确认 DB profit_sharing_orders 状态；2）若 SUCCESS 则通知商户资金到账；3）若 FAILED 则手动触发分账重试。", resource.OutOrderNo, finalResult, profitSharingOrder.MerchantID),
-			RelatedID:   profitSharingOrder.ID,
-			RelatedType: "profit_sharing_order",
-			Extra:       map[string]interface{}{"out_order_no": resource.OutOrderNo, "result": finalResult, "merchant_id": profitSharingOrder.MerchantID, "error": enqErr.Error()},
-		})
-		server.releaseNotification(ctx, notification.ID, "profit_sharing")
-		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
-			Code:    "FAIL",
-			Message: "enqueue failed, please retry",
-		})
-		return
-	}
 
 	// 快速返回成功
 	writeWechatNotifySuccess(ctx, "profit_sharing")
@@ -2471,12 +3093,54 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 				successCount++
 				continue
 			}
-			if enqErr := server.enqueuePaymentSuccessProcessing(ctx, paymentOrder, subOrder.TransactionID); enqErr != nil {
-				paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "reenqueue_payment_success_task").Inc()
-				log.Error().Err(enqErr).
+			if paymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerOrder && db.PaymentOrderUsesEcommerceChannel(paymentOrder) {
+				application, factErr := server.recordCombinedOrderPaymentCallbackFact(ctx, notification, combinedOrder, paymentOrder, subOrder)
+				if factErr != nil {
+					paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "record_order_payment_fact").Inc()
+					log.Error().Err(factErr).
+						Int64("payment_order_id", paymentOrder.ID).
+						Str("out_trade_no", subOrder.OutTradeNo).
+						Msg("record combined order payment callback fact failed")
+					failedOrders = append(failedOrders, subOrder.OutTradeNo)
+					continue
+				}
+				if enqErr := server.enqueueOrderPaymentFactApplication(ctx, application); enqErr != nil {
+					paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "reenqueue_order_payment_fact_application").Inc()
+					log.Error().Err(enqErr).
+						Int64("payment_order_id", paymentOrder.ID).
+						Str("out_trade_no", subOrder.OutTradeNo).
+						Msg("combine sub-order already paid but order payment fact application enqueue failed")
+					failedOrders = append(failedOrders, subOrder.OutTradeNo)
+					continue
+				}
+			} else if shouldRecordReservationPaymentFact(paymentOrder) {
+				application, factErr := server.recordCombinedReservationPaymentCallbackFact(ctx, notification, combinedOrder, paymentOrder, subOrder)
+				if factErr != nil {
+					paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "record_reservation_payment_fact").Inc()
+					log.Error().Err(factErr).
+						Int64("payment_order_id", paymentOrder.ID).
+						Str("out_trade_no", subOrder.OutTradeNo).
+						Msg("record combined reservation payment callback fact failed")
+					failedOrders = append(failedOrders, subOrder.OutTradeNo)
+					continue
+				}
+				if enqErr := server.enqueueReservationPaymentFactApplication(ctx, application); enqErr != nil {
+					paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "reenqueue_reservation_payment_fact_application").Inc()
+					log.Error().Err(enqErr).
+						Int64("payment_order_id", paymentOrder.ID).
+						Str("out_trade_no", subOrder.OutTradeNo).
+						Msg("combine sub-order already paid but reservation payment fact application enqueue failed")
+					failedOrders = append(failedOrders, subOrder.OutTradeNo)
+					continue
+				}
+			} else {
+				paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "unsupported_payment_fact_owner").Inc()
+				log.Error().
 					Int64("payment_order_id", paymentOrder.ID).
 					Str("out_trade_no", subOrder.OutTradeNo).
-					Msg("combine sub-order already paid but post-payment processing enqueue failed")
+					Str("business_type", paymentOrder.BusinessType).
+					Str("payment_channel", paymentOrder.PaymentChannel).
+					Msg("combine sub-order already paid but no payment fact application owner matched")
 				failedOrders = append(failedOrders, subOrder.OutTradeNo)
 				continue
 			}
@@ -2642,24 +3306,65 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 
 		successCount++
 
-		if enqErr := server.enqueuePaymentSuccessProcessing(ctx, paymentOrder, subOrder.TransactionID); enqErr != nil {
-			paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "enqueue_payment_success_task").Inc()
-			log.Error().Err(enqErr).
+		if paymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerOrder && db.PaymentOrderUsesEcommerceChannel(paymentOrder) {
+			application, factErr := server.recordCombinedOrderPaymentCallbackFact(ctx, notification, combinedOrder, paymentOrder, subOrder)
+			if factErr != nil {
+				paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "record_order_payment_fact").Inc()
+				log.Error().Err(factErr).
+					Int64("payment_order_id", paymentOrder.ID).
+					Str("out_trade_no", subOrder.OutTradeNo).
+					Msg("record combined order payment callback fact failed")
+				failedOrders = append(failedOrders, subOrder.OutTradeNo)
+				continue
+			}
+			if enqErr := server.enqueueOrderPaymentFactApplication(ctx, application); enqErr != nil {
+				paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "enqueue_order_payment_fact_application").Inc()
+				log.Error().Err(enqErr).
+					Int64("payment_order_id", paymentOrder.ID).
+					Str("out_trade_no", subOrder.OutTradeNo).
+					Msg("combine order payment fact application enqueue failed")
+				failedOrders = append(failedOrders, subOrder.OutTradeNo)
+				continue
+			}
+		} else if shouldRecordReservationPaymentFact(paymentOrder) {
+			application, factErr := server.recordCombinedReservationPaymentCallbackFact(ctx, notification, combinedOrder, paymentOrder, subOrder)
+			if factErr != nil {
+				paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "record_reservation_payment_fact").Inc()
+				log.Error().Err(factErr).
+					Int64("payment_order_id", paymentOrder.ID).
+					Str("out_trade_no", subOrder.OutTradeNo).
+					Msg("record combined reservation payment callback fact failed")
+				failedOrders = append(failedOrders, subOrder.OutTradeNo)
+				continue
+			}
+			if enqErr := server.enqueueReservationPaymentFactApplication(ctx, application); enqErr != nil {
+				paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "enqueue_reservation_payment_fact_application").Inc()
+				log.Error().Err(enqErr).
+					Int64("payment_order_id", paymentOrder.ID).
+					Str("out_trade_no", subOrder.OutTradeNo).
+					Msg("combine reservation payment fact application enqueue failed")
+				failedOrders = append(failedOrders, subOrder.OutTradeNo)
+				continue
+			}
+		} else {
+			paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "unsupported_payment_fact_owner").Inc()
+			log.Error().
 				Int64("payment_order_id", paymentOrder.ID).
 				Str("out_trade_no", subOrder.OutTradeNo).
-				Msg("combine payment success task enqueue failed")
+				Str("business_type", paymentOrder.BusinessType).
+				Str("payment_channel", paymentOrder.PaymentChannel).
+				Msg("combine payment callback paid transition has no payment fact application owner")
 			server.sendAlert(websocket.AlertData{
 				AlertType:   websocket.AlertTypeTaskEnqueueFailure,
 				Level:       websocket.AlertLevelCritical,
-				Title:       "合单支付成功任务入队失败",
-				Message:     fmt.Sprintf("合单子订单 %s 已支付，但后续业务任务入队失败，系统已返回 FAIL 请求微信重试。", subOrder.OutTradeNo),
+				Title:       "合单支付事实应用匹配失败",
+				Message:     fmt.Sprintf("合单子订单 %s 已支付，但业务类型未匹配支付事实应用，系统已返回 FAIL 请求微信重试。", subOrder.OutTradeNo),
 				RelatedID:   paymentOrder.ID,
 				RelatedType: "payment_order",
 				Extra: map[string]interface{}{
 					"out_trade_no":   subOrder.OutTradeNo,
 					"transaction_id": subOrder.TransactionID,
 					"business_type":  paymentOrder.BusinessType,
-					"error":          enqErr.Error(),
 				},
 			})
 			failedOrders = append(failedOrders, subOrder.OutTradeNo)
@@ -2899,26 +3604,115 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 		newStatus = "submitted"
 	}
 	shouldActivate := newStatus == "finish" && resource.SubMchID != ""
+	shouldRoutePendingFact := newStatus == "account_need_verify" || newStatus == "to_be_confirmed" || newStatus == "to_be_signed"
+	shouldRouteTerminalFact := newStatus == "rejected" || newStatus == "frozen" || newStatus == "canceled"
 
-	// 只有申请单真正完成时才激活主体；提前返回的 sub_mch_id 只落进件记录，供后续签约/验证流程使用。
+	// merchant applyment 的 FINISH 终态改由 payment fact/application owner path 驱动。
 	if shouldActivate {
-		// 🔐 CB-4: 三步进件激活更新在单个事务中原子完成（UpdateEcommerceApplymentSubMchID +
-		// UpdateMerchantPaymentConfig + UpdateMerchantStatus），任意失败整体回滚。
-		if txErr := server.store.ApplymentSubMchActivationTx(ctx, db.ApplymentSubMchActivationTxParams{
-			ApplymentID: applyment.ID,
-			SubjectType: applyment.SubjectType,
-			SubjectID:   applyment.SubjectID,
-			SubMchID:    resource.SubMchID,
-		}); txErr != nil {
-			log.Error().Err(txErr).
+		if !server.requireTaskDistributorForNotification(ctx, notification.ID, "applyment", "applyment activation processing unavailable, please retry") {
+			return
+		}
+		application, factErr := worker.RecordApplymentActivatedCallbackFact(ctx, server.store, applyment, map[string]any{
+			"applyment_id":    resource.ApplymentID,
+			"out_request_no":  resource.OutRequestNo,
+			"applyment_state": resource.ApplymentState,
+			"sub_mchid":       resource.SubMchID,
+		}, notification.ID, notification.EventType, resource.SubMchID)
+		if factErr != nil {
+			log.Error().Err(factErr).
 				Int64("applyment_id", applyment.ID).
-				Str("subject_type", applyment.SubjectType).
-				Msg("applyment activation tx failed")
+				Str("out_request_no", resource.OutRequestNo).
+				Msg("record applyment activation callback fact failed")
 			server.releaseNotification(ctx, notification.ID, "applyment")
 			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "internal error"})
 			return
 		}
-	} else {
+		if err := worker.EnqueueApplymentPaymentFactApplication(ctx, server.taskDistributor, application); err != nil {
+			paymentCallbackFailuresTotal.WithLabelValues("applyment", "enqueue_fact_application").Inc()
+			log.Error().Err(err).
+				Int64("applyment_id", applyment.ID).
+				Str("out_request_no", resource.OutRequestNo).
+				Msg("enqueue applyment activation fact application failed")
+			server.releaseNotification(ctx, notification.ID, "applyment")
+			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "enqueue failed, please retry"})
+			return
+		}
+		writeWechatNotifySuccess(ctx, "applyment")
+		server.markNotificationProcessed(ctx, notification.ID, "", "")
+		return
+	}
+	if shouldRoutePendingFact {
+		if !server.requireTaskDistributorForNotification(ctx, notification.ID, "applyment", "applyment result processing unavailable, please retry") {
+			return
+		}
+		application, factErr := worker.RecordApplymentPendingCallbackFact(ctx, server.store, applyment, map[string]any{
+			"applyment_id":    resource.ApplymentID,
+			"out_request_no":  resource.OutRequestNo,
+			"applyment_state": resource.ApplymentState,
+			"sub_mchid":       resource.SubMchID,
+		}, notification.ID, notification.EventType, resource.ApplymentState, resource.SubMchID)
+		if factErr != nil {
+			log.Error().Err(factErr).
+				Int64("applyment_id", applyment.ID).
+				Str("out_request_no", resource.OutRequestNo).
+				Str("applyment_state", resource.ApplymentState).
+				Msg("record applyment pending callback fact failed")
+			server.releaseNotification(ctx, notification.ID, "applyment")
+			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "internal error"})
+			return
+		}
+		if err := worker.EnqueueApplymentPaymentFactApplication(ctx, server.taskDistributor, application); err != nil {
+			paymentCallbackFailuresTotal.WithLabelValues("applyment", "enqueue_fact_application").Inc()
+			log.Error().Err(err).
+				Int64("applyment_id", applyment.ID).
+				Str("out_request_no", resource.OutRequestNo).
+				Str("applyment_state", resource.ApplymentState).
+				Msg("enqueue applyment pending fact application failed")
+			server.releaseNotification(ctx, notification.ID, "applyment")
+			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "enqueue failed, please retry"})
+			return
+		}
+		writeWechatNotifySuccess(ctx, "applyment")
+		server.markNotificationProcessed(ctx, notification.ID, "", "")
+		return
+	}
+	if shouldRouteTerminalFact {
+		if !server.requireTaskDistributorForNotification(ctx, notification.ID, "applyment", "applyment result processing unavailable, please retry") {
+			return
+		}
+		application, factErr := worker.RecordApplymentTerminalCallbackFact(ctx, server.store, applyment, map[string]any{
+			"applyment_id":    resource.ApplymentID,
+			"out_request_no":  resource.OutRequestNo,
+			"applyment_state": resource.ApplymentState,
+			"sub_mchid":       resource.SubMchID,
+		}, notification.ID, notification.EventType, resource.ApplymentState, resource.SubMchID)
+		if factErr != nil {
+			log.Error().Err(factErr).
+				Int64("applyment_id", applyment.ID).
+				Str("out_request_no", resource.OutRequestNo).
+				Str("applyment_state", resource.ApplymentState).
+				Msg("record applyment terminal callback fact failed")
+			server.releaseNotification(ctx, notification.ID, "applyment")
+			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "internal error"})
+			return
+		}
+		if err := worker.EnqueueApplymentPaymentFactApplication(ctx, server.taskDistributor, application); err != nil {
+			paymentCallbackFailuresTotal.WithLabelValues("applyment", "enqueue_fact_application").Inc()
+			log.Error().Err(err).
+				Int64("applyment_id", applyment.ID).
+				Str("out_request_no", resource.OutRequestNo).
+				Str("applyment_state", resource.ApplymentState).
+				Msg("enqueue applyment terminal fact application failed")
+			server.releaseNotification(ctx, notification.ID, "applyment")
+			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "enqueue failed, please retry"})
+			return
+		}
+		writeWechatNotifySuccess(ctx, "applyment")
+		server.markNotificationProcessed(ctx, notification.ID, "", "")
+		return
+	}
+
+	{
 		nextSubMchID := applyment.SubMchID
 		if resource.SubMchID != "" {
 			nextSubMchID = pgtype.Text{String: resource.SubMchID, Valid: true}

@@ -18,7 +18,7 @@ RETURNING *;
 
 -- name: GetMerchantApplicationDraft :one
 -- 获取用户的草稿或可编辑申请（包含所有状态，以便随时编辑）
-SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM merchant_applications
+SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary FROM merchant_applications
 WHERE user_id = $1 AND status IN ('draft', 'submitted', 'rejected', 'approved')
 ORDER BY created_at DESC
 LIMIT 1;
@@ -224,3 +224,10 @@ WHERE
    id_card_front_ocr->>'status' = 'processing' OR
    id_card_back_ocr->>'status' = 'processing')
   AND updated_at < $1;
+
+-- name: UpdateMerchantApplicationReviewSummary :one
+UPDATE merchant_applications
+SET review_summary = sqlc.narg(review_summary),
+    updated_at = now()
+WHERE id = $1
+RETURNING *;

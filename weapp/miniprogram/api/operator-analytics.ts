@@ -1,21 +1,10 @@
 /**
  * 运营商数据统计和分析接口重构 (Task 4.4)
  * 基于swagger.json完全重构，移除所有没有后端支持的旧功能
- * 包含：区域统计、趋势分析、申诉处理
+ * 包含：区域统计、趋势分析
  */
 
 import { request } from '../utils/request'
-
-// ==================== 数据类型定义 ====================
-
-/** 申诉状态枚举 */
-export type AppealStatus = 'pending' | 'processing' | 'resolved' | 'rejected' | 'closed'
-
-/** 申诉类型枚举 */
-export type AppealType = 'order_issue' | 'payment_issue' | 'service_issue' | 'delivery_issue' | 'other'
-
-/** 申诉优先级枚举 */
-export type AppealPriority = 'low' | 'medium' | 'high' | 'urgent'
 
 // ==================== 区域统计相关类型 ====================
 
@@ -105,142 +94,12 @@ export interface OperatorDailyTrendItem {
     special_events?: string[]
 }
 
-// ==================== 申诉处理相关类型 ====================
-
-/** 运营商申诉列表响应 - 基于swagger api.listOperatorAppealsResponse */
-export interface ListOperatorAppealsResponse {
-    appeals: OperatorAppealItem[]
-    total: number
-    page: number
-    limit: number
-    has_more: boolean
-    stats: {
-        pending_count: number
-        processing_count: number
-        resolved_count: number
-        avg_resolution_time: number
-    }
-}
-
-export interface OperatorAppealSummaryResponse {
-    total: number
-    pending: number
-    approved: number
-    rejected: number
-}
-
-/** 运营商申诉项 - 基于swagger api.operatorAppealItem */
-export interface OperatorAppealItem {
-    id: number
-    appeal_type: AppealType
-    status: AppealStatus
-    priority: AppealPriority
-    title: string
-    description: string
-    user_id: number
-    user_name: string
-    user_phone: string
-    order_id?: number
-    merchant_id?: number
-    rider_id?: number
-    region_id: number
-    created_at: string
-    updated_at: string
-    resolved_at?: string
-    assigned_to?: string
-    resolution_time?: number
-    satisfaction_rating?: number
-}
-
-/** 申诉详情响应 - 基于swagger api.operatorAppealDetailResponse */
-export interface OperatorAppealDetailResponse {
-    id: number
-    appeal_type: AppealType
-    status: AppealStatus
-    priority: AppealPriority
-    title: string
-    description: string
-    user_id: number
-    user_name: string
-    user_phone: string
-    user_email?: string
-    order_id?: number
-    merchant_id?: number
-    rider_id?: number
-    region_id: number
-    region_name: string
-    evidence_files: string[]
-    created_at: string
-    updated_at: string
-    resolved_at?: string
-    assigned_to?: string
-    resolution_time?: number
-    satisfaction_rating?: number
-    resolution_notes?: string
-    related_order?: {
-        id: number
-        order_number: string
-        merchant_name: string
-        rider_name?: string
-        order_amount: number
-        status: string
-        created_at: string
-    }
-    timeline: Array<{
-        action: string
-        operator: string
-        timestamp: string
-        notes?: string
-    }>
-}
-
-/** 申诉审核请求 - 基于swagger api.reviewAppealRequest */
-/** 申诉审核请求 - 对齐 api.reviewAppealRequest */
-export interface ReviewAppealRequest extends Record<string, unknown> {
-    compensation_amount?: number                 // 补偿金额（分，最大10万元）
-    review_notes: string                         // 审核备注（5-500字符）
-    status: 'approved' | 'rejected'              // 审核状态
-}
-
-/** 申诉查询参数 */
-export interface AppealQueryParams extends Record<string, unknown> {
-    region_id?: number
-    status?: AppealStatus
-    type?: AppealType
-    priority?: AppealPriority
-    user_id?: number
-    order_id?: number
-    merchant_id?: number
-    rider_id?: number
-    assigned_to?: string
-    start_date?: string
-    end_date?: string
-    keyword?: string
-    sort_by?: 'created_at' | 'updated_at' | 'priority' | 'resolution_time'
-    sort_order?: 'asc' | 'desc'
-    page?: number
-    limit?: number
-}
-
 type GrowthAnalysis = {
     merchantGrowth: number
     riderGrowth: number
     orderGrowth: number
     gmvGrowth: number
     overallGrowth: number
-}
-
-type AppealEfficiencyMetrics = {
-    avgResolutionTime: number
-    resolutionRate: number
-    satisfactionRate: number
-    workload: number
-}
-
-type AppealDistribution = {
-    byStatus: Map<AppealStatus, number>
-    byType: Map<AppealType, number>
-    byPriority: Map<AppealPriority, number>
 }
 
 // ==================== 运营商数据统计服务类 ====================
@@ -294,58 +153,6 @@ export class OperatorAnalyticsService {
             url: '/v1/operator/stats/realtime',
             method: 'GET',
             data: regionId ? { region_id: regionId } : undefined
-        })
-    }
-}
-
-// ==================== 运营商申诉处理服务类 ====================
-
-/**
- * 运营商申诉处理服务
- * 提供申诉列表、详情、审核等功能
- */
-export class OperatorAppealService {
-    /**
-     * 获取申诉列表
-     * @param params 查询参数
-     */
-    async getAppealList(params: AppealQueryParams): Promise<ListOperatorAppealsResponse> {
-        return request({
-            url: '/v1/operator/appeals',
-            method: 'GET',
-            data: params
-        })
-    }
-
-    async getAppealSummary(regionId?: number): Promise<OperatorAppealSummaryResponse> {
-        return request({
-            url: '/v1/operator/appeals/summary',
-            method: 'GET',
-            data: regionId ? { region_id: regionId } : undefined
-        })
-    }
-
-    /**
-     * 获取申诉详情
-     * @param appealId 申诉ID
-     */
-    async getAppealDetail(appealId: number): Promise<OperatorAppealDetailResponse> {
-        return request({
-            url: `/v1/operator/appeals/${appealId}`,
-            method: 'GET'
-        })
-    }
-
-    /**
-     * 审核申诉
-     * @param appealId 申诉ID
-     * @param reviewData 审核数据
-     */
-    async reviewAppeal(appealId: number, reviewData: ReviewAppealRequest): Promise<OperatorAppealDetailResponse> {
-        return request({
-            url: `/v1/operator/appeals/${appealId}/review`,
-            method: 'POST',
-            data: reviewData
         })
     }
 }
@@ -436,127 +243,6 @@ export class DataAnalysisService {
             growthAnalysis,
             insights,
             recommendations
-        }
-    }
-
-    /**
-     * 分析申诉处理效率
-     * @param appeals 申诉列表
-     */
-    analyzeAppealEfficiency(appeals: OperatorAppealItem[]): {
-        efficiency: {
-            avgResolutionTime: number
-            resolutionRate: number
-            satisfactionRate: number
-            workload: number
-        }
-        distribution: {
-            byStatus: Map<AppealStatus, number>
-            byType: Map<AppealType, number>
-            byPriority: Map<AppealPriority, number>
-        }
-        trends: {
-            dailyVolume: Array<{ date: string, count: number }>
-            resolutionTrend: Array<{ date: string, avgTime: number }>
-        }
-        insights: string[]
-        actionItems: string[]
-    } {
-        const resolvedAppeals = appeals.filter((a) => a.status === 'resolved' && a.resolution_time)
-        const totalAppeals = appeals.length
-
-        // 效率指标
-        const avgResolutionTime = resolvedAppeals.length > 0
-            ? resolvedAppeals.reduce((sum, a) => sum + (a.resolution_time || 0), 0) / resolvedAppeals.length
-            : 0
-
-        const resolutionRate = totalAppeals > 0 ? (resolvedAppeals.length / totalAppeals) * 100 : 0
-
-        const satisfactionAppeals = resolvedAppeals.filter((a) => a.satisfaction_rating)
-        const satisfactionRate = satisfactionAppeals.length > 0
-            ? satisfactionAppeals.reduce((sum, a) => sum + (a.satisfaction_rating || 0), 0) / satisfactionAppeals.length
-            : 0
-
-        const workload = appeals.filter((a) => ['pending', 'processing'].includes(a.status)).length
-
-        // 分布统计
-        const statusDistribution = new Map<AppealStatus, number>()
-        const typeDistribution = new Map<AppealType, number>()
-        const priorityDistribution = new Map<AppealPriority, number>()
-
-        appeals.forEach((appeal) => {
-            statusDistribution.set(appeal.status, (statusDistribution.get(appeal.status) || 0) + 1)
-            typeDistribution.set(appeal.appeal_type, (typeDistribution.get(appeal.appeal_type) || 0) + 1)
-            priorityDistribution.set(appeal.priority, (priorityDistribution.get(appeal.priority) || 0) + 1)
-        })
-
-        // 趋势分析（简化版）
-        const dailyVolumeMap = new Map<string, number>()
-        const resolutionTimeMap = new Map<string, { total: number, count: number }>()
-
-        appeals.forEach((appeal) => {
-            const date = appeal.created_at.split('T')[0]
-            dailyVolumeMap.set(date, (dailyVolumeMap.get(date) || 0) + 1)
-
-            if (appeal.status === 'resolved' && appeal.resolved_at && appeal.resolution_time) {
-                const resolvedDate = appeal.resolved_at.split('T')[0]
-                const existing = resolutionTimeMap.get(resolvedDate) || { total: 0, count: 0 }
-                resolutionTimeMap.set(resolvedDate, {
-                    total: existing.total + appeal.resolution_time,
-                    count: existing.count + 1
-                })
-            }
-        })
-
-        const dailyVolume = Array.from(dailyVolumeMap.entries())
-            .map(([date, count]) => ({ date, count }))
-            .sort((a, b) => a.date.localeCompare(b.date))
-
-        const resolutionTrend = Array.from(resolutionTimeMap.entries())
-            .map(([date, data]) => ({ date, avgTime: data.total / data.count }))
-            .sort((a, b) => a.date.localeCompare(b.date))
-
-        // 生成洞察和行动项
-        const insights = this.generateAppealInsights({
-            avgResolutionTime,
-            resolutionRate,
-            satisfactionRate,
-            workload
-        }, {
-            byStatus: statusDistribution,
-            byType: typeDistribution,
-            byPriority: priorityDistribution
-        })
-
-        const actionItems = this.generateAppealActionItems({
-            avgResolutionTime,
-            resolutionRate,
-            satisfactionRate,
-            workload
-        }, {
-            byStatus: statusDistribution,
-            byType: typeDistribution,
-            byPriority: priorityDistribution
-        })
-
-        return {
-            efficiency: {
-                avgResolutionTime,
-                resolutionRate,
-                satisfactionRate,
-                workload
-            },
-            distribution: {
-                byStatus: statusDistribution,
-                byType: typeDistribution,
-                byPriority: priorityDistribution
-            },
-            trends: {
-                dailyVolume,
-                resolutionTrend
-            },
-            insights,
-            actionItems
         }
     }
 
@@ -702,123 +388,10 @@ export class DataAnalysisService {
         return recommendations
     }
 
-    /**
-     * 生成申诉洞察
-     */
-    private generateAppealInsights(
-        efficiency: AppealEfficiencyMetrics,
-        distribution: AppealDistribution
-    ): string[] {
-        const insights: string[] = []
-
-        if (efficiency.avgResolutionTime > 24 * 60) { // 超过24小时
-            insights.push('平均处理时间较长，可能影响用户满意度')
-        }
-
-        if (efficiency.resolutionRate < 80) {
-            insights.push('申诉解决率偏低，需要提高处理效率')
-        }
-
-        if (efficiency.workload > 50) {
-            insights.push('待处理申诉数量较多，建议增加处理人员')
-        }
-
-        const byType = distribution.byType
-        const orderIssueCount = byType.get('order_issue') || 0
-        const totalCount = Array.from(byType.values()).reduce((sum, count) => sum + count, 0)
-        if (totalCount > 0 && orderIssueCount / totalCount > 0.5) {
-            insights.push('订单相关申诉占比较高，建议重点关注订单流程')
-        }
-
-        return insights
-    }
-
-    /**
-     * 生成申诉行动项
-     */
-    private generateAppealActionItems(
-        efficiency: AppealEfficiencyMetrics,
-        distribution: AppealDistribution
-    ): string[] {
-        const actionItems: string[] = []
-
-        if (efficiency.avgResolutionTime > 24 * 60) {
-            actionItems.push('优化申诉处理流程，缩短平均处理时间')
-        }
-
-        if (efficiency.workload > 50) {
-            actionItems.push('考虑增加客服人员或优化工作分配')
-        }
-
-        const urgentCount = distribution.byPriority.get('urgent') || 0
-        if (urgentCount > 10) {
-            actionItems.push('优先处理紧急申诉，建立快速响应机制')
-        }
-
-        if (efficiency.satisfactionRate < 4.0) {
-            actionItems.push('提升申诉处理质量，改善用户满意度')
-        }
-
-        return actionItems
-    }
 }
 
 export const operatorAnalyticsService = new OperatorAnalyticsService()
-export const operatorAppealService = new OperatorAppealService()
 export const dataAnalysisService = new DataAnalysisService()
-
-// ==================== 便捷函数 ====================
-
-/**
- * 获取运营商分析工作台数据
- * @param regionId 区域ID（可选）
- */
-export async function getOperatorAnalyticsDashboard(regionId?: number): Promise<{
-    regionStats: OperatorRegionStatsResponse
-    trendAnalysis: OperatorTrendDailyResponse
-    performanceAnalysis: ReturnType<DataAnalysisService['analyzeRegionPerformanceTrend']>
-    appealSummary: {
-        totalAppeals: number
-        pendingAppeals: number
-        avgResolutionTime: number
-        satisfactionRate: number
-    }
-    recentAppeals: OperatorAppealItem[]
-}> {
-    const endDate = new Date().toISOString().split('T')[0]
-    const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-
-    const [regionStats, trendAnalysis, appealSummary, appealList] = await Promise.all([
-        operatorAnalyticsService.getRegionStats(regionId || 1, startDate, endDate),
-        operatorAnalyticsService.getDailyTrend(regionId, startDate, endDate),
-        operatorAppealService.getAppealSummary(regionId),
-        operatorAppealService.getAppealList({
-            region_id: regionId,
-            limit: 20,
-            sort_by: 'created_at',
-            sort_order: 'desc'
-        })
-    ])
-
-    // 分析区域绩效
-    const performanceAnalysis = dataAnalysisService.analyzeRegionPerformanceTrend(regionStats)
-
-    // 申诉摘要
-    const appealSummaryView = {
-        totalAppeals: appealSummary.total,
-        pendingAppeals: appealSummary.pending,
-        avgResolutionTime: appealList.stats.avg_resolution_time,
-        satisfactionRate: 4.2 // 模拟数据，实际应该从API获取
-    }
-
-    return {
-        regionStats,
-        trendAnalysis,
-        performanceAnalysis,
-        appealSummary: appealSummaryView,
-        recentAppeals: appealList.appeals.slice(0, 10)
-    }
-}
 
 /**
  * 生成区域分析报告
@@ -924,34 +497,4 @@ function generateActionPlan(analysis: ReturnType<DataAnalysisService['analyzeReg
         shortTermGoals,
         longTermStrategy
     }
-}
-
-/**
- * 格式化申诉状态显示
- * @param status 申诉状态
- */
-export function formatAppealStatus(status: AppealStatus): string {
-    const statusMap: Record<AppealStatus, string> = {
-        pending: '待处理',
-        processing: '处理中',
-        resolved: '已解决',
-        rejected: '已拒绝',
-        closed: '已关闭'
-    }
-    return statusMap[status] || status
-}
-
-/**
- * 格式化申诉类型显示
- * @param type 申诉类型
- */
-export function formatAppealType(type: AppealType): string {
-    const typeMap: Record<AppealType, string> = {
-        order_issue: '订单问题',
-        payment_issue: '支付问题',
-        service_issue: '服务问题',
-        delivery_issue: '配送问题',
-        other: '其他'
-    }
-    return typeMap[type] || type
 }

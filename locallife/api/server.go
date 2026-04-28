@@ -59,38 +59,41 @@ type successMessageResponse struct {
 
 // Server serves HTTP requests for our banking service.
 type Server struct {
-	config                  util.Config
-	store                   db.Store
-	tokenMaker              token.Maker
-	auditWriter             AuditWriter
-	wechatClient            wechat.WechatClient
-	directPaymentClient     wechat.DirectPaymentClientInterface // 小程序直连支付（骑手押金、追偿付款）
-	transferClient          wechat.TransferClientInterface      // 商家转账到零钱（索赔赔付）
-	ecommerceClient         wechat.EcommerceClientInterface     // 平台收付通（订单支付分账）
-	dataEncryptor           util.DataEncryptor                  // 敏感数据加密器（本地存储加密）
-	mapClient               maps.TencentMapClientInterface      // 地图客户端（自建 OSM）
-	weatherCache            weather.WeatherCache
-	taskDistributor         worker.TaskDistributor
-	wsHub                   *websocket.Hub           // WebSocket连接管理（骑手和商户）
-	wsPubSub                *websocket.PubSubManager // Redis Pub/Sub管理（跨进程推送）
-	deliveryBroadcast       *logic.DeliveryBroadcastLogic
-	rateLimiter             *RateLimiter
-	mediaRegistry           *media.Registry
-	mediaResolver           *media.URLResolver
-	imageDeleter            *imageDeleteWorker   // 有界异步图片删除 worker pool
-	keywordWorker           *searchKeywordWorker // 有界异步搜索关键词记录 worker pool
-	rulesEngine             rules.Engine
-	routeService            *logic.RouteService
-	orderCommandSvc         logic.OrderCommandService
-	orderQuerySvc           logic.OrderQueryService
-	paymentFacade           logic.PaymentFacade
-	refundOrchestrator      logic.RefundOrchestrator
-	mediaStorage            media.ObjectStorage
-	printerClient           cloudprint.Client
-	router                  *gin.Engine
-	applymentCatalogCache   *applymentCatalogCache
-	applymentCatalogCacheMu sync.Mutex
-	redisClient             *redis.Client // Redis 客户端（绑定码等功能使用）
+	config                      util.Config
+	store                       db.Store
+	tokenMaker                  token.Maker
+	auditWriter                 AuditWriter
+	wechatClient                wechat.WechatClient
+	directPaymentClient         wechat.DirectPaymentClientInterface // 小程序直连支付（骑手押金、追偿付款）
+	transferClient              wechat.TransferClientInterface      // 商家转账到零钱（索赔赔付）
+	ecommerceClient             wechat.EcommerceClientInterface     // 平台收付通（订单支付分账）
+	dataEncryptor               util.DataEncryptor                  // 敏感数据加密器（本地存储加密）
+	mapClient                   maps.TencentMapClientInterface      // 地图客户端（自建 OSM）
+	weatherCache                weather.WeatherCache
+	taskDistributor             worker.TaskDistributor
+	wsHub                       *websocket.Hub           // WebSocket连接管理（骑手和商户）
+	wsPubSub                    *websocket.PubSubManager // Redis Pub/Sub管理（跨进程推送）
+	deliveryBroadcast           *logic.DeliveryBroadcastLogic
+	rateLimiter                 *RateLimiter
+	mediaRegistry               *media.Registry
+	mediaResolver               *media.URLResolver
+	imageDeleter                *imageDeleteWorker   // 有界异步图片删除 worker pool
+	keywordWorker               *searchKeywordWorker // 有界异步搜索关键词记录 worker pool
+	rulesEngine                 rules.Engine
+	routeService                *logic.RouteService
+	orderCommandSvc             logic.OrderCommandService
+	orderQuerySvc               logic.OrderQueryService
+	paymentFacade               logic.PaymentFacade
+	refundOrchestrator          logic.RefundOrchestrator
+	paymentFactService          *logic.PaymentFactService
+	onboardingReviewService     *logic.OnboardingReviewService
+	credentialGovernanceService *logic.CredentialGovernanceService
+	mediaStorage                media.ObjectStorage
+	printerClient               cloudprint.Client
+	router                      *gin.Engine
+	applymentCatalogCache       *applymentCatalogCache
+	applymentCatalogCacheMu     sync.Mutex
+	redisClient                 *redis.Client // Redis 客户端（绑定码等功能使用）
 }
 
 // SetDirectPaymentClientForTest injects a payment client in tests.
@@ -304,24 +307,27 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	}
 
 	server := &Server{
-		config:              config,
-		store:               store,
-		tokenMaker:          tokenMaker,
-		auditWriter:         auditWriter,
-		wechatClient:        wechatClient,
-		directPaymentClient: paymentClient,
-		transferClient:      transferClient,
-		ecommerceClient:     ecommerceClient,
-		dataEncryptor:       dataEncryptor,
-		mapClient:           mapClient,
-		weatherCache:        weatherCache,
-		taskDistributor:     taskDistributor,
-		printerClient:       cloudprint.NewFeieyunClientFromConfig(config),
-		wsHub:               wsHub,
-		wsPubSub:            wsPubSub,
-		rulesEngine:         engine,
-		imageDeleter:        newImageDeleteWorker(),
-		keywordWorker:       newSearchKeywordWorker(store),
+		config:                      config,
+		store:                       store,
+		tokenMaker:                  tokenMaker,
+		auditWriter:                 auditWriter,
+		wechatClient:                wechatClient,
+		directPaymentClient:         paymentClient,
+		transferClient:              transferClient,
+		ecommerceClient:             ecommerceClient,
+		dataEncryptor:               dataEncryptor,
+		mapClient:                   mapClient,
+		weatherCache:                weatherCache,
+		taskDistributor:             taskDistributor,
+		printerClient:               cloudprint.NewFeieyunClientFromConfig(config),
+		wsHub:                       wsHub,
+		wsPubSub:                    wsPubSub,
+		rulesEngine:                 engine,
+		imageDeleter:                newImageDeleteWorker(),
+		keywordWorker:               newSearchKeywordWorker(store),
+		paymentFactService:          logic.NewPaymentFactService(store).WithPaymentSuccessConfig(config.RiderAverageSpeed, config.DefaultPrepareTime),
+		onboardingReviewService:     logic.NewOnboardingReviewService(store),
+		credentialGovernanceService: logic.NewCredentialGovernanceService(store),
 	}
 
 	// 初始化 Redis 客户端（供绑定码等功能使用）
@@ -1017,7 +1023,7 @@ func (server *Server) setupRouter() {
 		kitchenGroup.POST("/orders/:id/ready", server.markKitchenOrderReady)
 	}
 
-	// 商户索赔与申诉路由
+	// 商户索赔与追偿争议路由
 	merchantClaimsGroup := authGroup.Group("/merchant")
 	{
 		merchantClaimsGroup.GET("/claims", server.listMerchantClaims)
@@ -1025,12 +1031,12 @@ func (server *Server) setupRouter() {
 		merchantClaimsGroup.GET("/claims/:id", server.getMerchantClaimDetail)
 		merchantClaimsGroup.GET("/claims/:id/decision", server.getMerchantClaimDecision)
 		merchantClaimsGroup.GET("/claims/behavior-summary", server.getMerchantClaimBehaviorSummary)
-		merchantClaimsGroup.GET("/claims/:id/recovery", server.getMerchantClaimRecovery)
-		merchantClaimsGroup.POST("/claims/:id/recovery/pay", server.payMerchantClaimRecovery)
-		merchantClaimsGroup.POST("/appeals", server.createMerchantAppeal)
-		merchantClaimsGroup.GET("/appeals", server.listMerchantAppeals)
-		merchantClaimsGroup.GET("/appeals/summary", server.listMerchantAppealsSummary)
-		merchantClaimsGroup.GET("/appeals/:id", server.getMerchantAppealDetail)
+		merchantClaimsGroup.GET("/recoveries/:id", server.getMerchantClaimRecovery)
+		merchantClaimsGroup.POST("/recoveries/:id/pay", server.payMerchantClaimRecovery)
+		merchantClaimsGroup.POST("/recovery-disputes", server.createMerchantRecoveryDispute)
+		merchantClaimsGroup.GET("/recovery-disputes", server.listMerchantRecoveryDisputes)
+		merchantClaimsGroup.GET("/recovery-disputes/summary", server.listMerchantRecoveryDisputesSummary)
+		merchantClaimsGroup.GET("/recovery-disputes/:id", server.getMerchantRecoveryDisputeDetail)
 	}
 
 	merchantRiskGroup := authGroup.Group("/merchant/risk")
@@ -1078,6 +1084,7 @@ func (server *Server) setupRouter() {
 		riderGroup.GET("/deposit", server.getRiderDepositBalance)
 		riderGroup.POST("/deposit", server.depositRider)
 		riderGroup.POST("/withdraw", server.withdrawRider)
+		riderGroup.GET("/withdrawals/status", server.getRiderWithdrawalStatus)
 		riderGroup.GET("/deposits", server.listRiderDeposits)
 
 		// 上下线与状态
@@ -1088,17 +1095,17 @@ func (server *Server) setupRouter() {
 		// 位置上报
 		riderGroup.POST("/location", server.updateRiderLocation)
 
-		// 骑手索赔与申诉
+		// 骑手索赔与追偿争议
 		riderGroup.GET("/claims", server.listRiderClaims)
 		riderGroup.GET("/claims/summary", server.listRiderClaimsSummary)
 		riderGroup.GET("/claims/:id", server.getRiderClaimDetail)
 		riderGroup.GET("/claims/:id/decision", server.getRiderClaimDecision)
 		riderGroup.GET("/claims/behavior-summary", server.getRiderClaimBehaviorSummary)
-		riderGroup.GET("/claims/:id/recovery", server.getRiderClaimRecovery)
-		riderGroup.POST("/claims/:id/recovery/pay", server.payRiderClaimRecovery)
-		riderGroup.POST("/appeals", server.createRiderAppeal)
-		riderGroup.GET("/appeals", server.listRiderAppeals)
-		riderGroup.GET("/appeals/:id", server.getRiderAppealDetail)
+		riderGroup.GET("/recoveries/:id", server.getRiderClaimRecovery)
+		riderGroup.POST("/recoveries/:id/pay", server.payRiderClaimRecovery)
+		riderGroup.POST("/recovery-disputes", server.createRiderRecoveryDispute)
+		riderGroup.GET("/recovery-disputes", server.listRiderRecoveryDisputes)
+		riderGroup.GET("/recovery-disputes/:id", server.getRiderRecoveryDisputeDetail)
 	}
 
 	// M8: 配送管理路由
@@ -1272,6 +1279,8 @@ func (server *Server) setupRouter() {
 		// 区域相关路由（需要额外验证区域管理权限）
 		operatorStatsGroup.GET("/regions", server.listOperatorRegions) // 获取管理的区域列表
 		operatorStatsGroup.GET("/regions/:region_id/stats", server.getRegionStats)
+		operatorStatsGroup.GET("/regions/:region_id/delivery-pool/summary", server.getOperatorPendingDispatchSummary)
+		operatorStatsGroup.GET("/regions/:region_id/delivery-pool", server.listOperatorPendingDispatches)
 		operatorStatsGroup.POST("/regions/:region_id/peak-hours", server.createPeakHourConfig)
 		operatorStatsGroup.GET("/regions/:region_id/peak-hours", server.listPeakHourConfigs)
 
@@ -1286,41 +1295,32 @@ func (server *Server) setupRouter() {
 		// 高峰时段删除（handler 内部验证区域）
 		operatorStatsGroup.DELETE("/peak-hours/:id", server.deletePeakHourConfig)
 
-		// 商户管理（完整CRUD + 暂停/恢复）
+		// 商户管理（只读与能力配置；恢复由追偿/食安链路收口）
 		operatorStatsGroup.GET("/merchants", server.listOperatorMerchants)
 		operatorStatsGroup.GET("/merchants/summary", server.getOperatorMerchantSummary)
 		operatorStatsGroup.GET("/merchants/:id", server.getOperatorMerchant)
 		operatorStatsGroup.GET("/merchants/:id/capabilities", server.getOperatorMerchantCapabilities)
 		operatorStatsGroup.PATCH("/merchants/:id/capabilities", server.updateOperatorMerchantCapabilities)
 		operatorStatsGroup.GET("/merchants/:id/stats", server.getOperatorMerchantStats)
-		operatorStatsGroup.POST("/merchants/:id/resume", server.ResumeMerchant)
 
-		// 骑手管理（完整CRUD + 暂停/恢复）
+		// 骑手管理（规则驱动：运营商不提供暂停/恢复入口）
 		operatorStatsGroup.GET("/riders", server.listOperatorRiders)
 		operatorStatsGroup.GET("/riders/summary", server.getOperatorRiderSummary)
 		operatorStatsGroup.GET("/riders/:id", server.getOperatorRider)
 		operatorStatsGroup.GET("/riders/:id/stats", server.getOperatorRiderStats)
 		// 规则驱动：运营商不提供暂停/恢复入口
 
-		// 申诉处理（运营商审核商户/骑手申诉）
-		// operatorStatsGroup.GET("/appeals", server.listOperatorAppeals) // Already exists or covered by our new file
-		// If collision, we will use our new one or check grep result.
-		// Assuming we simply add our new specific ones or keep existing if same name.
-		// Actually, let's wait for grep result in next turn to decide on 'listOperatorAppeals'.
-		// But I need to output something here.
-		// I will just add the safe ones for now: realtime and safety report.
-		// And withdraw.
+		// 追偿争议处理（运营商查看区域内商户/骑手追偿争议）
 
-		// 食安熔断 (New)
-		operatorStatsGroup.GET("/reports/safety", server.listSafetyReports)
-		operatorStatsGroup.POST("/reports/safety", server.submitSafetyReport)
-		operatorStatsGroup.GET("/reports/safety/:id", server.getSafetyReportDetail)
-		operatorStatsGroup.POST("/reports/safety/:id/resolve", server.resolveSafetyReport)
+		operatorStatsGroup.GET("/food-safety/cases", server.listOperatorFoodSafetyCases)
+		operatorStatsGroup.GET("/food-safety/cases/:id", server.getOperatorFoodSafetyCase)
+		operatorStatsGroup.POST("/food-safety/cases/:id/investigate", server.investigateOperatorFoodSafetyCase)
+		operatorStatsGroup.POST("/food-safety/cases/:id/resolve", server.resolveOperatorFoodSafetyCase)
 
-		operatorStatsGroup.GET("/appeals", server.listOperatorAppeals)
-		operatorStatsGroup.GET("/appeals/summary", server.listOperatorAppealsSummary)
-		operatorStatsGroup.GET("/appeals/:id", server.getOperatorAppealDetail)
-		operatorStatsGroup.GET("/claims/:id/recovery", server.getOperatorClaimRecovery)
+		operatorStatsGroup.GET("/recovery-disputes", server.listOperatorRecoveryDisputes)
+		operatorStatsGroup.GET("/recovery-disputes/summary", server.listOperatorRecoveryDisputesSummary)
+		operatorStatsGroup.GET("/recovery-disputes/:id", server.getOperatorRecoveryDisputeDetail)
+		operatorStatsGroup.GET("/recoveries/:id", server.getOperatorClaimRecovery)
 
 		// 规则管理
 		operatorStatsGroup.GET("/rules", server.listOperatorRules)
@@ -1334,6 +1334,11 @@ func (server *Server) setupRouter() {
 		operatorsGroup.GET("/finance/overview", server.getOperatorFinanceOverview)
 		operatorsGroup.GET("/commission", server.getOperatorCommission)
 		operatorsGroup.GET("/profit-sharing/configs", server.listOperatorProfitSharingConfigs)
+		operatorsGroup.GET("/notifications", server.listOperatorNotifications)
+		operatorsGroup.GET("/notifications/summary", server.getOperatorNotificationSummary)
+		operatorsGroup.GET("/notifications/:id", server.getOperatorNotification)
+		operatorsGroup.PUT("/notifications/:id/read", server.markOperatorNotificationAsRead)
+		operatorsGroup.PUT("/notifications/read-all", server.markAllOperatorNotificationsAsRead)
 
 		// 用户投诉管理（运营商视角：查看所有待处理投诉，可完结投诉）
 		operatorsGroup.GET("/complaints", server.listPendingComplaints)
@@ -1390,6 +1395,10 @@ func (server *Server) setupRouter() {
 		platformProfitSharingGroup.GET("/configs", server.listProfitSharingConfigs)
 		platformProfitSharingGroup.PATCH("/configs/:id", server.updateProfitSharingConfig)
 		platformProfitSharingGroup.POST("/configs/:id/disable", server.disableProfitSharingConfig)
+		platformProfitSharingGroup.GET("/receiver-lifecycle/targets", server.listProfitSharingReceiverLifecycleTargets)
+		platformProfitSharingGroup.GET("/receiver-lifecycle/targets/:id", server.getProfitSharingReceiverLifecycleTarget)
+		platformProfitSharingGroup.GET("/receiver-lifecycle/targets/:id/attempts", server.listProfitSharingReceiverLifecycleAttempts)
+		platformProfitSharingGroup.POST("/receiver-lifecycle/repair", server.repairProfitSharingReceiverLifecycle)
 	}
 
 	platformRulesGroup := authGroup.Group("/platform/rules")
@@ -1441,6 +1450,8 @@ func (server *Server) setupRouter() {
 	claimsGroup := authGroup.Group("/claims")
 	{
 		claimsGroup.POST("", server.SubmitClaim)
+		claimsGroup.POST("/:id/confirm-continue", server.ConfirmContinueClaim)
+		claimsGroup.POST("/:id/withdraw", server.WithdrawClaim)
 		claimsGroup.GET("", server.ListUserClaims)
 		claimsGroup.GET("/:id", server.GetClaimDetail)
 		// ReviewClaim 入口停止使用：裁决全自动，仅保留审计旁路
@@ -1734,6 +1745,11 @@ func errorResponse(err error) ErrorResponse {
 //	ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 func internalError(ctx *gin.Context, err error) ErrorResponse {
 	return loggedServerError(ctx, err, "internal server error", "internal error")
+}
+
+func attachedServerError(ctx *gin.Context, err error, publicMessage string) ErrorResponse {
+	_ = ctx.Error(err)
+	return ErrorResponse{Error: publicMessage}
 }
 
 func loggedServerError(ctx *gin.Context, err error, publicMessage string, logMessage string) ErrorResponse {

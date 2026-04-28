@@ -109,40 +109,6 @@
                   <text class="stat-label">佣金</text>
                 </view>
               </view>
-
-              <view class="merchant-actions">
-                <t-button
-                  wx:if="{{item.can_suspend}}"
-                  theme="warning"
-                  size="small"
-                  bindtap="onSuspendTap"
-                  data-id="{{item.id}}"
-                  data-name="{{item.name}}"
-                  catchtap="stopPropagation"
-                >
-                  暂停商户
-                </t-button>
-                <t-button
-                  wx:elif="{{item.can_resume}}"
-                  theme="success"
-                  size="small"
-                  bindtap="onResumeTap"
-                  data-id="{{item.id}}"
-                  data-name="{{item.name}}"
-                  catchtap="stopPropagation"
-                >
-                  恢复营业
-                </t-button>
-                <t-button
-                  theme="primary"
-                  size="small"
-                  bindtap="onMerchantTap"
-                  data-id="{{item.id}}"
-                  catchtap="stopPropagation"
-                >
-                  管理详情
-                </t-button>
-              </view>
             </view>
 
             <view class="load-more">
@@ -155,35 +121,4 @@
     </block>
   </view>
 
-  <t-dialog
-    visible="{{suspendDialogVisible}}"
-    title="暂停商户"
-    confirm-btn="确认暂停"
-    cancel-btn="取消"
-    bind:confirm="onSuspendConfirm"
-    bind:cancel="onSuspendCancel"
-  >
-    <view class="dialog-content">
-      <text>确定要暂停商户 "{{selectedMerchant.name}}" 吗？</text>
-      <t-textarea
-        placeholder="请输入暂停原因（必填）"
-        value="{{suspendReason}}"
-        bind:change="onSuspendReasonChange"
-        maxlength="200"
-      />
-    </view>
-  </t-dialog>
-
-  <t-dialog
-    visible="{{resumeDialogVisible}}"
-    title="恢复商户"
-    confirm-btn="确认恢复"
-    cancel-btn="取消"
-    bind:confirm="onResumeConfirm"
-    bind:cancel="onResumeCancel"
-  >
-    <view class="dialog-content">
-      <text>确定要恢复商户 "{{selectedMerchant.name}}" 吗？</text>
-    </view>
-  </t-dialog>
 </view>

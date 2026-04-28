@@ -122,4 +122,6 @@
 .simple-label {
   font-size: 26rpx;
   color: #666;
+  flex: 1;
+  line-height: 1.5;
 }

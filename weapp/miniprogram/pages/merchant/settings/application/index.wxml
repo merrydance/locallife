@@ -54,6 +54,11 @@
           </view>
         </t-badge>
 
+        <onboarding-review-summary
+          reviewDisplay="{{reviewDisplay}}"
+          activeCredentialDisplays="{{activeCredentialDisplays}}"
+        />
+
         <view class="section-panel">
           <view class="section-head section-head-tight">
             <text class="section-title">必要证照</text>

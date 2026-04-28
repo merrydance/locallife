@@ -32,6 +32,7 @@
 - 商户、运营、平台、骑手等非顾客侧页面的 UI 结构、小屏手感、page shell 与克制型 TDesign-first 表达，读 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`。
 - 非顾客侧页面若处于实现收口、样式统一或快速自检阶段，再补读 `.github/standards/weapp/NON_CONSUMER_PAGE_EXECUTION_CHECKLIST.md` 作为执行压缩清单；它是辅助收口文档，不是新的并行权威层。
 - 页面审查与复审时，配合 `.github/standards/weapp/REVIEW_CHECKLIST.md` 使用。
+- 触达已知超级 service 热点时，同时参考 `weapp/docs/architecture-ownership/` 下的 ownership notes；这些 note 不是新的标准层，但它们是 gate 校验的一部分，用于阻止超级 service 无说明扩张。
 
 ## TDesign 来源口径
 
@@ -113,6 +114,7 @@
 - instructions：只能保留 Read First、始终生效的执行约束和路径级反模式，不重复标准正文。
 - prompts：只组织任务输入、输出结构和验收方式，不承载长期规范。
 - 运行时实现参考：只回答“代码里现在怎么接”，不定义产品或交付规则。
+- ownership notes：只记录受保护超级 service 的 owner、临时边界和 gate 约束，不升级成新的并行权威标准。
 
 建议按下表判断新内容该放哪里：
 

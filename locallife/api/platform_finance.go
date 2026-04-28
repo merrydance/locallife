@@ -107,7 +107,8 @@ func respondFundBalanceQueryError(ctx *gin.Context, operation string, err error)
 // @Router /v1/platform/finance/account/balance [get]
 func (server *Server) getPlatformAccountBalance(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("ecommerce client not configured")))
+		err := errors.New("ecommerce client not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "ecommerce client not configured", "platform account balance ecommerce client not configured"))
 		return
 	}
 

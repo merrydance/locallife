@@ -64,7 +64,12 @@ func (server *Server) listGroupApplicationsAdmin(ctx *gin.Context) {
 
 	items := make([]groupApplicationResponse, 0, len(apps))
 	for _, app := range apps {
-		items = append(items, newGroupApplicationResponse(app))
+		resp, err := newGroupApplicationResponse(app)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		items = append(items, resp)
 	}
 
 	hasMore := int64(req.Page*req.Limit) < total
@@ -94,5 +99,5 @@ func (server *Server) getGroupApplicationAdmin(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newGroupApplicationResponse(app))
+	server.writeGroupApplicationResponse(ctx, http.StatusOK, app)
 }

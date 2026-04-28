@@ -108,12 +108,12 @@ export const navigateToCombinedPaymentSuccess = (combinedPayment: CombinedPaymen
   const amount = (combinedPayment.total_amount / 100).toFixed(2)
   const orderNo = combinedPayment.combine_out_trade_no || String(firstOrderId)
 
-  Navigation.toPaymentSuccess({
-    orderId: String(firstOrderId),
+  Navigation.toPaymentResult({
+    status: 'paid',
+    businessId: firstOrderId,
+    businessType: 'order',
     orderNo,
-    amount,
-    isCombined: true,
-    orderCount: orderIds.length
+    amount
   })
 }
 
@@ -425,7 +425,6 @@ export function buildTakeoutCreateOrderRequest(params: {
   cart: MerchantCartView
   addressId: number
   note: string
-  useBalance: boolean
 }): CreateOrderRequest {
   return {
     merchant_id: params.cart.merchantId,
@@ -447,7 +446,6 @@ export function buildTakeoutCreateOrderRequest(params: {
     notes: params.note,
     delivery_fee: params.cart.deliveryFee,
     delivery_fee_discount: params.cart.deliveryFeeDiscount,
-    delivery_distance: params.cart.deliveryDistance,
-    use_balance: params.useBalance
+    delivery_distance: params.cart.deliveryDistance
   }
 }

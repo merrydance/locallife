@@ -1,6 +1,6 @@
 import { type MerchantApplymentStatusView } from '../api/merchant-applyment'
 import { getErrorUserMessage } from './user-facing'
-import type { MerchantConsoleProfile } from '../services/merchant-console'
+import type { MerchantStorefrontProfile } from '../services/merchant-open-status'
 
 export interface MerchantBusinessStateView {
   title: string
@@ -55,7 +55,7 @@ export type DashboardRequestResult<T> =
   | { ok: true, value: T }
   | { ok: false, error: unknown }
 
-export const EMPTY_MERCHANT: MerchantConsoleProfile = {
+export const EMPTY_MERCHANT: MerchantStorefrontProfile = {
   id: 0,
   owner_user_id: 0,
   region_id: 0,
@@ -212,8 +212,6 @@ const DASHBOARD_SECTIONS: DashboardSectionDefinition[] = [
     id: 'finance',
     title: '财务',
     items: [
-      { id: 'finance', title: '资金账户', icon: createIcon('wallet', 'var(--td-brand-color)'), path: '/pages/merchant/finance/index' },
-      { id: 'settlement-account', title: '微信提现卡', icon: createIcon('creditcard', 'var(--td-brand-color)'), path: '/pages/merchant/finance/settlement-account/index' },
       { id: 'application', title: '主体资料', icon: createIcon('personal-information', 'var(--td-brand-color)'), path: '/pages/merchant/settings/application/index' },
       { id: 'applyment', title: '收付通进件', icon: createIcon('creditcard-add', 'var(--td-brand-color)'), path: '/pages/merchant/settings/applyment/index' }
     ]
@@ -285,6 +283,8 @@ export function buildSections(params: {
   canManageDeviceSettings: boolean
   canManageMerchantApplyment: boolean
 }): DashboardSectionView[] {
+  const badgeOffset: [number, string] = [0, '8rpx']
+
   return DASHBOARD_SECTIONS.map((section) => ({
     id: section.id,
     title: section.title,
@@ -304,7 +304,7 @@ export function buildSections(params: {
       return {
         ...item,
         badgeText,
-        badgeProps: badgeText ? { count: badgeText, maxCount: 99, offset: [0, '8rpx'] } : null
+        badgeProps: badgeText ? { count: badgeText, maxCount: 99, offset: badgeOffset } : null
       }
     })
   })).filter((section) => section.items.length > 0)

@@ -4,94 +4,63 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
 )
 
 type MerchantClaimRecoveryInput struct {
-	ClaimID    int64
+	RecoveryID int64
 	MerchantID int64
 }
 
 type RiderClaimRecoveryInput struct {
-	ClaimID int64
-	RiderID int64
+	RecoveryID int64
+	RiderID    int64
 }
 
 type OperatorClaimRecoveryInput struct {
-	ClaimID   int64
-	RegionID  int64
-	RegionIDs []int64
-}
-
-type WaiveClaimRecoveryInput struct {
-	ClaimID  int64
-	RegionID int64
-	Now      time.Time
+	RecoveryID int64
+	RegionID   int64
+	RegionIDs  []int64
 }
 
 func GetClaimRecoveryForMerchant(ctx context.Context, store db.Store, input MerchantClaimRecoveryInput) (db.ClaimRecovery, error) {
-	claimInfo, err := store.GetClaimForAppeal(ctx, input.ClaimID)
+	recoveryCtx, err := getClaimRecoveryContextByID(ctx, store, input.RecoveryID)
 	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			return db.ClaimRecovery{}, NewRequestError(http.StatusNotFound, errors.New("claim not found or not eligible for recovery"))
-		}
 		return db.ClaimRecovery{}, err
 	}
 
-	if claimInfo.MerchantID != input.MerchantID {
+	if recoveryCtx.MerchantID != input.MerchantID {
 		return db.ClaimRecovery{}, NewRequestError(http.StatusForbidden, errors.New("this claim does not belong to your merchant"))
 	}
 
-	recovery, err := store.GetClaimRecoveryByClaimID(ctx, input.ClaimID)
-	if err != nil {
-		return db.ClaimRecovery{}, NewRequestError(http.StatusNotFound, errors.New("claim recovery not found"))
-	}
-
-	return recovery, nil
+	return claimRecoveryFromContextByID(recoveryCtx), nil
 }
 
 func GetClaimRecoveryForRider(ctx context.Context, store db.Store, input RiderClaimRecoveryInput) (db.ClaimRecovery, error) {
-	claimInfo, err := store.GetClaimForAppeal(ctx, input.ClaimID)
+	recoveryCtx, err := getClaimRecoveryContextByID(ctx, store, input.RecoveryID)
 	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			return db.ClaimRecovery{}, NewRequestError(http.StatusNotFound, errors.New("claim not found or not eligible for recovery"))
-		}
 		return db.ClaimRecovery{}, err
 	}
 
-	if !claimInfo.RiderID.Valid || claimInfo.RiderID.Int64 != input.RiderID {
+	if !recoveryCtx.RiderID.Valid || recoveryCtx.RiderID.Int64 != input.RiderID {
 		return db.ClaimRecovery{}, NewRequestError(http.StatusForbidden, errors.New("this claim does not belong to your rider"))
 	}
 
-	recovery, err := store.GetClaimRecoveryByClaimID(ctx, input.ClaimID)
-	if err != nil {
-		return db.ClaimRecovery{}, NewRequestError(http.StatusNotFound, errors.New("claim recovery not found"))
-	}
-
-	return recovery, nil
+	return claimRecoveryFromContextByID(recoveryCtx), nil
 }
 
 func GetClaimRecoveryForOperator(ctx context.Context, store db.Store, input OperatorClaimRecoveryInput) (db.ClaimRecovery, error) {
-	claimInfo, err := store.GetClaimForAppeal(ctx, input.ClaimID)
+	recoveryCtx, err := getClaimRecoveryContextByID(ctx, store, input.RecoveryID)
 	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			return db.ClaimRecovery{}, NewRequestError(http.StatusNotFound, errors.New("claim not found or not eligible for recovery"))
-		}
 		return db.ClaimRecovery{}, err
 	}
 
-	if !operatorManagesClaimRecoveryRegion(claimInfo.RegionID, input.RegionID, input.RegionIDs) {
+	if !operatorManagesClaimRecoveryRegion(recoveryCtx.RegionID, input.RegionID, input.RegionIDs) {
 		return db.ClaimRecovery{}, NewRequestError(http.StatusForbidden, errors.New("operator does not manage this region"))
 	}
 
-	recovery, err := store.GetClaimRecoveryByClaimID(ctx, input.ClaimID)
-	if err != nil {
-		return db.ClaimRecovery{}, NewRequestError(http.StatusNotFound, errors.New("claim recovery not found"))
-	}
-
-	return recovery, nil
+	return claimRecoveryFromContextByID(recoveryCtx), nil
 }
 
 func operatorManagesClaimRecoveryRegion(claimRegionID int64, fallbackRegionID int64, managedRegionIDs []int64) bool {
@@ -106,52 +75,4 @@ func operatorManagesClaimRecoveryRegion(claimRegionID int64, fallbackRegionID in
 	}
 
 	return false
-}
-
-func WaiveClaimRecovery(ctx context.Context, store db.Store, input WaiveClaimRecoveryInput) (db.ClaimRecovery, error) {
-	claimInfo, err := store.GetClaimForAppeal(ctx, input.ClaimID)
-	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			return db.ClaimRecovery{}, NewRequestError(http.StatusNotFound, errors.New("claim not found or not eligible for recovery"))
-		}
-		return db.ClaimRecovery{}, err
-	}
-
-	if claimInfo.RegionID != input.RegionID {
-		return db.ClaimRecovery{}, NewRequestError(http.StatusForbidden, errors.New("operator does not manage this region"))
-	}
-
-	recovery, err := store.GetClaimRecoveryByClaimID(ctx, input.ClaimID)
-	if err != nil {
-		return db.ClaimRecovery{}, NewRequestError(http.StatusNotFound, errors.New("claim recovery not found"))
-	}
-
-	updated, err := store.MarkClaimRecoveryWaived(ctx, recovery.ID)
-	if err != nil {
-		return db.ClaimRecovery{}, err
-	}
-
-	if updated.RecoveryTarget.Valid && updated.RecoveryTarget.String == "merchant" {
-		order, orderErr := store.GetOrder(ctx, updated.OrderID)
-		if orderErr != nil {
-			return db.ClaimRecovery{}, orderErr
-		}
-		if err := store.UnsuspendMerchantTakeout(ctx, order.MerchantID); err != nil {
-			return db.ClaimRecovery{}, err
-		}
-	}
-
-	if updated.RecoveryTarget.Valid && updated.RecoveryTarget.String == "rider" {
-		delivery, deliveryErr := store.GetDeliveryByOrderID(ctx, updated.OrderID)
-		if deliveryErr != nil {
-			return db.ClaimRecovery{}, deliveryErr
-		}
-		if delivery.RiderID.Valid {
-			if err := store.UnsuspendRider(ctx, delivery.RiderID.Int64); err != nil {
-				return db.ClaimRecovery{}, err
-			}
-		}
-	}
-
-	return updated, nil
 }

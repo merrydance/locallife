@@ -1,17 +1,5 @@
 DB_URL ?= $(if $(strip $(DB_SOURCE)),$(strip $(DB_SOURCE)),postgresql:///locallife_test?host=/var/run/postgresql&sslmode=disable)
 
-# network:
-#	docker network create bank-network
-
-#postgres:
-#	docker run --name postgres --network bank-network -p 5432:5432 -e POSTGRES_USER=root -e POSTGRES_PASSWORD=secret -d postgres:14-alpine
-
-#createdb:
-#	createdb locallife_test
-
-#dropdb:
-#	dropdb locallife_test
-
 migrateup:
 	$(HOME)/go/bin/migrate -path db/migration -database "$(DB_URL)" -verbose up
 
@@ -99,9 +87,6 @@ proto:
 evans:
 	evans --host localhost --port 9090 -r repl
 
-redis:
-	docker run --name redis -p 6379:6379 -d redis:7-alpine
-
 # Handler/Logic 文件行数检查（上限 500 行，排除自动生成和测试文件）
 MAX_FILE_LINES ?= 500
 lint-filesize:
@@ -123,4 +108,4 @@ lint-filesize:
 	  echo "✅ All files within $(MAX_FILE_LINES)-line limit"; \
 	fi
 
-.PHONY: network postgres createdb dropdb migrateup migratedown migrateup1 migratedown1 new_migration db_docs db_schema sqlc swagger ocr-baseline test test-unit test-integration test-safety check-generated server mock proto evans redis sync_regions_test doc-audit lint-filesize
+.PHONY: migrateup migratedown migrateup1 migratedown1 migrateforce migratestatus new_migration sqlc swagger ocr-baseline test test-unit test-integration test-safety check-generated server mock proto evans sync_regions_test doc-audit lint-filesize

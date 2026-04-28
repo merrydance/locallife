@@ -2,36 +2,37 @@ import {
   buildRiderApplicationStatusView,
   getOrCreateRiderApplication, 
   updateRiderApplicationBasic, 
-  ocrRiderIdCard, 
-  ocrRiderHealthCert, 
   submitRiderApplication,
-  deleteRiderApplicationDocument,
   type RiderApplicationResponse
 } from '../../../api/rider-application'
 import { getPrivateMediaUrl } from '../../../utils/image-security'
 import { logger } from '../../../utils/logger'
 import Navigation from '../../../utils/navigation'
 import { buildAgreementConsentPayload } from '../../../api/agreement-consent'
-import { type ApplicationStatus } from '../../../api/onboarding'
+import {
+  buildActiveCredentialDisplays,
+  buildOnboardingReviewDisplay,
+  type ApplicationStatus
+} from '../../../api/onboarding'
 import { getErrorDebugMessage, getErrorUserMessage } from '../../../utils/user-facing'
 import {
-  buildRiderOCRPanelState,
-  buildRiderOcrDisplayState,
-  buildRiderUploadFeedback,
-  createUploadFeedback,
   DEFAULT_RIDER_OCR_DISPLAY_STATE,
   DEFAULT_RIDER_OCR_PANEL_STATE,
   DEFAULT_RIDER_UPLOAD_FEEDBACK,
-  EMPTY_UPLOAD_FEEDBACK,
   isDocumentCorrectionError,
   isRejectedRiderApplication,
-  pickOCRText,
-  type OCRDisplayStateValue,
-  type RiderUploadFeedback,
-  type UploadFeedback,
   type UploadField,
   type UploadFieldValue
 } from '../../../utils/rider-register-view'
+import {
+  buildRiderApplicationResponsePatch,
+  buildRiderDocumentDeleteLocalPatch,
+  buildRiderDocumentOCRFailurePatch,
+  buildRiderDocumentResponsePatch,
+  createRiderDocumentOCRWorkflow,
+  deleteRiderDocumentByField,
+  type RiderDocumentOCRWorkflow
+} from '../../../utils/rider-application-document-workflow'
 
 type UploadEvent = WechatMiniprogram.CustomEvent<{ path?: string }>
 
@@ -60,7 +61,9 @@ Page({
     consentPopupVisible: false,
     applicationStatus: 'draft' as ApplicationStatus,
     riderStatusView: buildRiderApplicationStatusView('draft'),
-    ocrPanelState: DEFAULT_RIDER_OCR_PANEL_STATE
+    ocrPanelState: DEFAULT_RIDER_OCR_PANEL_STATE,
+    reviewDisplay: buildOnboardingReviewDisplay(null, 'draft'),
+    activeCredentialDisplays: buildActiveCredentialDisplays([])
   },
 
   previewRefreshVersion: 0,
@@ -72,6 +75,12 @@ Page({
 
   async onLoad() {
     await this.initApplication()
+  },
+
+  onShow() {
+    if (this.data.riderStatusView.isSubmitted) {
+      void this.initApplication()
+    }
   },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>) {
@@ -87,7 +96,7 @@ Page({
         const statusView = buildRiderApplicationStatusView(res.status)
         
         if (statusView.isSubmitted) {
-          this.setData({ currentStep: 4, isSubmitting: true })
+          this.setData({ currentStep: 4, isSubmitting: false })
         } else if (statusView.isApproved) {
           wx.showModal({
             title: '审核通过',
@@ -107,31 +116,14 @@ Page({
   },
 
   mapResponseToData(res: RiderApplicationResponse) {
-    const currentForm = this.data.formData
-    const nextPhone = res.phone || currentForm.phone || ''
-    const idCardOCR = res.id_card_ocr as Record<string, unknown> | undefined
-    const healthCertOCR = res.health_cert_ocr as Record<string, unknown> | undefined
-    const statusView = buildRiderApplicationStatusView(res.status)
-    const ocrDisplayState = buildRiderOcrDisplayState(res, this.data)
-    this.setData({
-      'formData.realName': res.real_name || pickOCRText(idCardOCR, 'name') || currentForm.realName || '',
-      'formData.phone': nextPhone,
-      'formData.idNumber': pickOCRText(idCardOCR, 'id_number', 'id_num') || currentForm.idNumber || '',
-      'formData.idValidity': pickOCRText(idCardOCR, 'valid_end', 'valid_date', 'valid_period') || currentForm.idValidity || '',
-      'formData.healthCertNo': pickOCRText(healthCertOCR, 'cert_number', 'certificate_number', 'certificate') || currentForm.healthCertNo || '',
-      'formData.healthCertDate': pickOCRText(healthCertOCR, 'valid_end', 'valid_date', 'valid_period') || currentForm.healthCertDate || '',
-      phoneError: nextPhone.trim() ? '' : this.data.phoneError,
-      currentStep: statusView.isSubmitted ? 4 : this.data.currentStep,
-      applicationStatus: res.status,
-      riderStatusView: statusView,
-      isSubmitting: statusView.isSubmitted,
-      idFront: { url: '', assetId: res.id_card_front_asset_id },
-      idBack: { url: '', assetId: res.id_card_back_asset_id },
-      healthCert: { url: '', assetId: res.health_cert_asset_id },
-      ocrDisplayState,
-      ocrPanelState: buildRiderOCRPanelState(ocrDisplayState),
-      uploadFeedback: buildRiderUploadFeedback(res, this.data)
-    }, () => {
+    this.setData(buildRiderApplicationResponsePatch(res, {
+      formData: this.data.formData,
+      phoneError: this.data.phoneError,
+      currentStep: this.data.currentStep,
+      idFront: this.data.idFront,
+      idBack: this.data.idBack,
+      healthCert: this.data.healthCert
+    }), () => {
       void this.refreshUploadPreviewURLs()
     })
   },
@@ -171,51 +163,14 @@ Page({
       return
     }
 
-    const currentForm = this.data.formData
-    const idCardOCR = res.id_card_ocr as Record<string, unknown> | undefined
-    const healthCertOCR = res.health_cert_ocr as Record<string, unknown> | undefined
-    const mergedRes: RiderApplicationResponse = {
-      ...res,
-      id_card_front_asset_id: field === 'idFront' ? res.id_card_front_asset_id : this.data.idFront.assetId,
-      id_card_back_asset_id: field === 'idBack' ? res.id_card_back_asset_id : this.data.idBack.assetId,
-      health_cert_asset_id: field === 'healthCert' ? res.health_cert_asset_id : this.data.healthCert.assetId
-    }
-
-    const nextOCRDisplayState = buildRiderOcrDisplayState(mergedRes, this.data)
-    const nextData: Record<string, unknown> = {
-      ocrDisplayState: nextOCRDisplayState,
-      ocrPanelState: buildRiderOCRPanelState(nextOCRDisplayState),
-      uploadFeedback: buildRiderUploadFeedback(mergedRes, this.data)
-    }
-
-    if (field === 'idFront') {
-      nextData['formData.realName'] = res.real_name || pickOCRText(idCardOCR, 'name') || currentForm.realName || ''
-      nextData['formData.idNumber'] = pickOCRText(idCardOCR, 'id_number', 'id_num') || currentForm.idNumber || ''
-      nextData.idFront = { url: '', assetId: res.id_card_front_asset_id }
-    }
-
-    if (field === 'idBack') {
-      nextData['formData.idValidity'] = pickOCRText(idCardOCR, 'valid_end', 'valid_date', 'valid_period') || currentForm.idValidity || ''
-      nextData.idBack = { url: '', assetId: res.id_card_back_asset_id }
-    }
-
-    if (field === 'healthCert') {
-      nextData['formData.healthCertNo'] = pickOCRText(healthCertOCR, 'cert_number', 'certificate_number', 'certificate') || currentForm.healthCertNo || ''
-      nextData['formData.healthCertDate'] = pickOCRText(healthCertOCR, 'valid_end', 'valid_date', 'valid_period') || currentForm.healthCertDate || ''
-      nextData.healthCert = { url: '', assetId: res.health_cert_asset_id }
-    }
-
-    this.setData(nextData, () => {
+    this.setData(buildRiderDocumentResponsePatch(field, res, {
+      formData: this.data.formData,
+      idFront: this.data.idFront,
+      idBack: this.data.idBack,
+      healthCert: this.data.healthCert
+    }), () => {
       void this.refreshUploadPreviewURLs()
     })
-  },
-
-  setOCRState(type: 'identity' | 'health', status: OCRDisplayStateValue) {
-    this.setData({ [`ocrDisplayState.${type}`]: status })
-  },
-
-  setUploadFeedback(field: keyof RiderUploadFeedback, feedback: UploadFeedback) {
-    this.setData({ [`uploadFeedback.${field}`]: feedback })
   },
 
   isApplicationEditable() {
@@ -230,7 +185,7 @@ Page({
     let message = '当前申请状态暂不支持修改资料'
     if (this.data.riderStatusView.isSubmitted) {
       message = '申请已提交，暂时不能修改资料'
-      this.setData({ currentStep: 4, isSubmitting: true })
+      this.setData({ currentStep: 4, isSubmitting: false })
     } else if (this.data.riderStatusView.isApproved) {
       message = '入驻已通过，无需重复上传资料'
     } else if (this.data.riderStatusView.isRejected) {
@@ -279,89 +234,35 @@ Page({
   },
 
   async onIdFrontUpload(e: UploadEvent) {
-    if (!this.ensureApplicationEditable()) return
-    const { path } = e.detail
-    if (!path) return
-    this.setData({ 'idFront.url': path, 'idFront.rawUrl': path })
-    this.processOCR(
-      ocrRiderIdCard(path, 'Front'),
-      'idFront',
-      'identity',
-      'idFront'
-    )
+    await this.handleDocumentUpload('idFront', e.detail.path)
   },
 
   async onIdBackUpload(e: UploadEvent) {
-    if (!this.ensureApplicationEditable()) return
-    const { path } = e.detail
-    if (!path) return
-    this.setData({ 'idBack.url': path, 'idBack.rawUrl': path })
-    this.processOCR(
-      ocrRiderIdCard(path, 'Back'),
-      'idBack',
-      'identity',
-      'idBack'
-    )
+    await this.handleDocumentUpload('idBack', e.detail.path)
   },
 
   async onHealthCertUpload(e: UploadEvent) {
+    await this.handleDocumentUpload('healthCert', e.detail.path)
+  },
+
+  async handleDocumentUpload(field: UploadField, path?: string) {
     if (!this.ensureApplicationEditable()) return
-    const { path } = e.detail
     if (!path) return
-    this.setData({ 'healthCert.url': path, 'healthCert.rawUrl': path })
-    this.processOCR(
-      ocrRiderHealthCert(path),
-      'healthCert',
-      'health',
-      'healthCert'
-    )
+
+    await this.processOCR(createRiderDocumentOCRWorkflow(field, path))
   },
 
   async removeUploadedDocument(field: UploadField) {
     if (!this.ensureApplicationEditable()) return
-
-    const documentMap: Record<UploadField, {
-      documentType: 'id_card_front' | 'id_card_back' | 'health_cert'
-      data: Record<string, unknown>
-    }> = {
-      idFront: {
-        documentType: 'id_card_front',
-        data: {
-          idFront: { url: '', rawUrl: '', assetId: undefined },
-          'formData.realName': '',
-          'formData.idNumber': '',
-          'uploadFeedback.idFront': { ...EMPTY_UPLOAD_FEEDBACK }
-        }
-      },
-      idBack: {
-        documentType: 'id_card_back',
-        data: {
-          idBack: { url: '', rawUrl: '', assetId: undefined },
-          'formData.idValidity': '',
-          'uploadFeedback.idBack': { ...EMPTY_UPLOAD_FEEDBACK }
-        }
-      },
-      healthCert: {
-        documentType: 'health_cert',
-        data: {
-          healthCert: { url: '', rawUrl: '', assetId: undefined },
-          'formData.healthCertNo': '',
-          'formData.healthCertDate': '',
-          'uploadFeedback.healthCert': { ...EMPTY_UPLOAD_FEEDBACK }
-        }
-      }
-    }
-
-    const target = documentMap[field]
     const requestVersion = this.beginDocumentRequest(field)
 
     wx.showLoading({ title: '删除中...' })
     try {
-      const res = await deleteRiderApplicationDocument(target.documentType)
+      const res = await deleteRiderDocumentByField(field)
       if (!this.isLatestDocumentRequest(field, requestVersion)) {
         return
       }
-      this.setData(target.data, () => {
+      this.setData(buildRiderDocumentDeleteLocalPatch(field), () => {
         this.applyDocumentResponse(field, requestVersion, res)
       })
     } catch (e) {
@@ -384,23 +285,16 @@ Page({
     this.removeUploadedDocument('healthCert')
   },
 
-  async processOCR(
-    ocrPromise: Promise<RiderApplicationResponse>,
-    field: UploadField,
-    _type: 'identity' | 'health',
-    feedbackField: keyof RiderUploadFeedback
-  ) {
-    const requestVersion = this.beginDocumentRequest(field)
-    this.setOCRState(_type, 'processing')
-    this.setUploadFeedback(feedbackField, createUploadFeedback('processing', '证照识别中', '请稍候，识别结果会显示在当前卡片中'))
+  async processOCR(workflow: RiderDocumentOCRWorkflow) {
+    const requestVersion = this.beginDocumentRequest(workflow.field)
+    this.setData(workflow.startPatch)
     try {
-      const res = await ocrPromise
-      this.applyDocumentResponse(field, requestVersion, res)
+      const res = await workflow.run()
+      this.applyDocumentResponse(workflow.field, requestVersion, res)
     } catch (e) {
       logger.error('OCR failed', e)
       const message = getErrorMessage(e, '识别失败，请提供更清晰更规整的图片重试')
-      this.setOCRState(_type, 'failed')
-      this.setUploadFeedback(feedbackField, createUploadFeedback('error', '识别失败', message))
+      this.setData(buildRiderDocumentOCRFailurePatch(workflow.displayType, workflow.feedbackField, message))
     }
   },
 
@@ -512,24 +406,31 @@ Page({
     this.setData({ isSubmitting: true, currentStep: 4 })
     try {
       const res = await submitRiderApplication(consentPayload)
-      
-      // 模拟审核轮询或等待
-      setTimeout(() => {
-        const statusView = buildRiderApplicationStatusView(res.status)
-        if (statusView.isApproved) {
-          wx.showModal({
-            title: '审核通过',
-            content: '恭喜！您已正式成为 LocalLife 骑手。',
-            showCancel: false,
-            success: () => wx.reLaunch({ url: '/pages/rider/dashboard/index' })
-          })
-        } else if (isRejectedRiderApplication(res)) {
-          this.mapResponseToData(res)
-          this.showRejectedApplicationModal(res)
-        } else if (statusView.isSubmitted) {
-          this.setData({ isSubmitting: true, currentStep: 4 })
-        }
-      }, 1500)
+
+      this.mapResponseToData(res)
+
+      const statusView = buildRiderApplicationStatusView(res.status)
+      if (statusView.isApproved) {
+        wx.showModal({
+          title: '审核通过',
+          content: '恭喜！您已正式成为 LocalLife 骑手。',
+          showCancel: false,
+          success: () => wx.reLaunch({ url: '/pages/rider/dashboard/index' })
+        })
+        return
+      }
+
+      if (isRejectedRiderApplication(res)) {
+        this.showRejectedApplicationModal(res)
+        return
+      }
+
+      if (statusView.isSubmitted) {
+        wx.showToast({
+          title: '已提交审核，可稍后回来查看',
+          icon: 'none'
+        })
+      }
     } catch (e: unknown) {
       const message = getErrorMessage(e, '提交失败')
       const debugMessage = getErrorDebugMessage(e)

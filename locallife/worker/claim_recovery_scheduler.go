@@ -2,12 +2,10 @@ package worker
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/hibiken/asynq"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
@@ -20,25 +18,27 @@ const (
 
 // ClaimRecoveryScheduler scans due claim recoveries and applies overdue actions.
 type ClaimRecoveryScheduler struct {
-	cron       *cron.Cron
-	wg         sync.WaitGroup
-	stopCtx    context.Context
-	stopCancel context.CancelFunc
-	runMu      sync.Mutex
-	store      db.Store
+	cron        *cron.Cron
+	wg          sync.WaitGroup
+	stopCtx     context.Context
+	stopCancel  context.CancelFunc
+	runMu       sync.Mutex
+	store       db.Store
+	distributor TaskDistributor
 }
 
 // NewClaimRecoveryScheduler creates a new scheduler for claim recoveries.
-func NewClaimRecoveryScheduler(store db.Store) *ClaimRecoveryScheduler {
+func NewClaimRecoveryScheduler(store db.Store, distributor TaskDistributor) *ClaimRecoveryScheduler {
 	stopCtx, stopCancel := context.WithCancel(context.Background())
 	return &ClaimRecoveryScheduler{
 		cron: cron.New(cron.WithChain(
 			cron.SkipIfStillRunning(cron.DefaultLogger),
 			cron.Recover(cron.DefaultLogger),
 		)),
-		stopCtx:    stopCtx,
-		stopCancel: stopCancel,
-		store:      store,
+		stopCtx:     stopCtx,
+		stopCancel:  stopCancel,
+		store:       store,
+		distributor: distributor,
 	}
 }
 
@@ -70,6 +70,11 @@ func (s *ClaimRecoveryScheduler) Stop() {
 	log.Info().Msg("claim recovery scheduler stopped")
 }
 
+// RunOnce executes a single synchronous recovery scan without starting cron.
+func (s *ClaimRecoveryScheduler) RunOnce() {
+	s.runOnce(s.stopCtx)
+}
+
 func (s *ClaimRecoveryScheduler) runOnce(ctx context.Context) {
 	if !s.runMu.TryLock() {
 		log.Warn().Msg("claim recovery already running, skipping concurrent execution")
@@ -90,77 +95,41 @@ func (s *ClaimRecoveryScheduler) runOnce(ctx context.Context) {
 	}
 
 	for _, recovery := range recoveries {
-		updated, err := s.store.MarkClaimRecoveryOverdue(ctx, recovery.ID)
+		result, err := s.store.MarkClaimRecoveryOverdueWithActionTx(ctx, db.MarkClaimRecoveryOverdueWithActionTxParams{
+			RecoveryID:    recovery.ID,
+			SuspendUntil:  time.Now().Add(24 * time.Hour),
+			OverdueRemark: overdueClaimRecoveryRemark(recovery),
+		})
 		if err != nil {
-			log.Error().Err(err).Int64("recovery_id", recovery.ID).Msg("mark claim recovery overdue failed")
+			log.Error().Err(err).Int64("recovery_id", recovery.ID).Msg("mark claim recovery overdue with block action failed")
 			continue
 		}
+		s.enqueueClaimBehaviorAction(ctx, result.Action.ID)
+	}
+}
 
-		reason := fmt.Sprintf("claim recovery overdue: claim_id=%d", updated.ClaimID)
-		suspendUntil := pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true}
-
-		if updated.RecoveryTarget.Valid && updated.RecoveryTarget.String == "merchant" {
-			order, orderErr := s.store.GetOrder(ctx, updated.OrderID)
-			if orderErr != nil {
-				log.Error().Err(orderErr).Int64("order_id", updated.OrderID).Msg("get order for recovery failed")
-				continue
-			}
-			if err := s.store.SuspendMerchantTakeout(ctx, db.SuspendMerchantTakeoutParams{
-				MerchantID:           order.MerchantID,
-				TakeoutSuspendReason: pgtype.Text{String: reason, Valid: true},
-				TakeoutSuspendUntil:  suspendUntil,
-			}); err != nil {
-				log.Error().Err(err).Int64("merchant_id", order.MerchantID).Msg("suspend merchant for recovery failed")
-			}
-			// 这里读取 persisted behavior decision 只是为了给逾期后的 block action 找到归属锚点。
-			// scheduler 不重跑主判，只把已发生的恢复逾期后处理记录到既有 decision 上。
-			if decisions, err := s.store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: updated.OrderID, Valid: true}); err == nil && len(decisions) > 0 {
-				detail, _ := json.Marshal(map[string]any{
-					"action":        "suspend_takeout",
-					"merchant_id":   order.MerchantID,
-					"recovery_id":   updated.ID,
-					"suspend_until": suspendUntil.Time,
-				})
-				_, _ = s.store.CreateBehaviorAction(ctx, db.CreateBehaviorActionParams{
-					DecisionID:   decisions[0].ID,
-					ActionType:   "block",
-					TargetEntity: "merchant",
-					Status:       "created",
-					Detail:       detail,
-				})
-			}
+func overdueClaimRecoveryRemark(recovery db.ClaimRecovery) string {
+	if recovery.RecoveryTarget.Valid {
+		switch recovery.RecoveryTarget.String {
+		case "merchant":
+			return "merchant recovery overdue block action created"
+		case "rider":
+			return "rider recovery overdue block action created"
 		}
+	}
+	return "claim recovery overdue block action created"
+}
 
-		if updated.RecoveryTarget.Valid && updated.RecoveryTarget.String == "rider" {
-			delivery, deliveryErr := s.store.GetDeliveryByOrderID(ctx, updated.OrderID)
-			if deliveryErr != nil || !delivery.RiderID.Valid {
-				log.Error().Err(deliveryErr).Int64("order_id", updated.OrderID).Msg("get delivery for recovery failed")
-				continue
-			}
-			if err := s.store.SuspendRider(ctx, db.SuspendRiderParams{
-				RiderID:       delivery.RiderID.Int64,
-				SuspendReason: pgtype.Text{String: reason, Valid: true},
-				SuspendUntil:  suspendUntil,
-			}); err != nil {
-				log.Error().Err(err).Int64("rider_id", delivery.RiderID.Int64).Msg("suspend rider for recovery failed")
-			}
-			// 这里读取 persisted behavior decision 只是为了给逾期后的 block action 找到归属锚点。
-			// scheduler 不重跑主判，只把已发生的恢复逾期后处理记录到既有 decision 上。
-			if decisions, err := s.store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: updated.OrderID, Valid: true}); err == nil && len(decisions) > 0 {
-				detail, _ := json.Marshal(map[string]any{
-					"action":        "suspend_rider",
-					"rider_id":      delivery.RiderID.Int64,
-					"recovery_id":   updated.ID,
-					"suspend_until": suspendUntil.Time,
-				})
-				_, _ = s.store.CreateBehaviorAction(ctx, db.CreateBehaviorActionParams{
-					DecisionID:   decisions[0].ID,
-					ActionType:   "block",
-					TargetEntity: "rider",
-					Status:       "created",
-					Detail:       detail,
-				})
-			}
-		}
+func (s *ClaimRecoveryScheduler) enqueueClaimBehaviorAction(ctx context.Context, actionID int64) {
+	if s.distributor == nil {
+		return
+	}
+	if err := s.distributor.DistributeTaskClaimBehaviorAction(
+		ctx,
+		&ClaimBehaviorActionPayload{ActionID: actionID},
+		asynq.Queue(QueueCritical),
+		asynq.MaxRetry(10),
+	); err != nil {
+		log.Error().Err(err).Int64("behavior_action_id", actionID).Msg("enqueue claim recovery block action failed")
 	}
 }

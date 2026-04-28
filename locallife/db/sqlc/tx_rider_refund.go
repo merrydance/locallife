@@ -13,6 +13,7 @@ const (
 	riderDepositRefundType      = "rider_deposit"
 	riderDepositFreezeRemark    = "押金提现冻结"
 	riderDepositWithdrawRemark  = "押金退款提现成功"
+	riderDepositDeductRemark    = "押金原单已退款自动对账扣减"
 	riderDepositUnfreezeRemark  = "押金退款失败解冻"
 	riderDepositRefundSucceeded = "SUCCESS"
 	riderDepositRefundFailed    = "FAILED"
@@ -40,17 +41,19 @@ type PrepareRiderDepositRefundTxResult struct {
 }
 
 type ResolveRiderDepositRefundTxParams struct {
-	RefundOrderID int64
-	RefundStatus  string
-	RefundID      string
+	RefundOrderID        int64
+	RefundStatus         string
+	RefundID             string
+	DrainRemainingCredit bool
 }
 
 type ResolveRiderDepositRefundTxResult struct {
-	RefundOrder RefundOrder
-	Rider       Rider
-	DepositLog  RiderDeposit
-	Credit      RiderDepositCredit
-	Applied     bool
+	RefundOrder      RefundOrder
+	Rider            Rider
+	DepositLog       RiderDeposit
+	Credit           RiderDepositCredit
+	Applied          bool
+	ReconciledAmount int64
 }
 
 func (store *SQLStore) PrepareRiderDepositRefundTx(ctx context.Context, arg PrepareRiderDepositRefundTxParams) (PrepareRiderDepositRefundTxResult, error) {
@@ -65,8 +68,12 @@ func (store *SQLStore) PrepareRiderDepositRefundTx(ctx context.Context, arg Prep
 			return ErrRiderDepositFrozen
 		}
 
-		availableBalance := rider.DepositAmount - rider.FrozenDeposit
-		if arg.Amount > availableBalance {
+		withdrawalProcessingAmount, err := q.GetPendingRiderDepositRefundAmountByUserID(ctx, rider.UserID)
+		if err != nil {
+			return fmt.Errorf("get pending rider deposit refund amount: %w", err)
+		}
+		availability := CalculateRiderDepositAvailability(rider, withdrawalProcessingAmount)
+		if arg.Amount > availability.AvailableDeposit {
 			return ErrInsufficientDeposit
 		}
 
@@ -76,7 +83,7 @@ func (store *SQLStore) PrepareRiderDepositRefundTx(ctx context.Context, arg Prep
 		}
 
 		remaining := arg.Amount
-		availableAfter := availableBalance
+		availableAfter := availability.AvailableDeposit
 		plans := make([]RiderDepositRefundPlan, 0)
 
 		for _, credit := range credits {
@@ -233,13 +240,32 @@ func (store *SQLStore) ResolveRiderDepositRefundTx(ctx context.Context, arg Reso
 				}
 			}
 
-			if lockedRider.DepositAmount < refundOrder.RefundAmount || lockedRider.FrozenDeposit < refundOrder.RefundAmount {
+			credit, err := q.GetRiderDepositCreditByPaymentOrderID(ctx, paymentOrder.ID)
+			if err != nil {
+				return fmt.Errorf("get rider deposit credit: %w", err)
+			}
+
+			reconciledAmount := int64(0)
+			if arg.DrainRemainingCredit && credit.RefundableAmount > 0 {
+				reconciledAmount = credit.RefundableAmount
+				credit, err = q.ConsumeRiderDepositCredit(ctx, ConsumeRiderDepositCreditParams{
+					ID:               credit.ID,
+					RefundableAmount: reconciledAmount,
+				})
+				if err != nil {
+					return fmt.Errorf("consume remaining stale rider deposit credit: %w", err)
+				}
+			}
+
+			if lockedRider.DepositAmount < refundOrder.RefundAmount+reconciledAmount || lockedRider.FrozenDeposit < refundOrder.RefundAmount {
 				return fmt.Errorf("rider deposit state invalid for refund settlement")
 			}
 
+			withdrawBalanceAfter := lockedRider.DepositAmount - refundOrder.RefundAmount
+
 			updatedRider, err := q.UpdateRiderDeposit(ctx, UpdateRiderDepositParams{
 				ID:            lockedRider.ID,
-				DepositAmount: lockedRider.DepositAmount - refundOrder.RefundAmount,
+				DepositAmount: lockedRider.DepositAmount - refundOrder.RefundAmount - reconciledAmount,
 				FrozenDeposit: lockedRider.FrozenDeposit - refundOrder.RefundAmount,
 			})
 			if err != nil {
@@ -257,16 +283,26 @@ func (store *SQLStore) ResolveRiderDepositRefundTx(ctx context.Context, arg Reso
 				Type:           "withdraw",
 				RelatedOrderID: pgtype.Int8{},
 				PaymentOrderID: pgtype.Int8{Int64: paymentOrder.ID, Valid: true},
-				BalanceAfter:   updatedRider.DepositAmount - updatedRider.FrozenDeposit,
+				BalanceAfter:   withdrawBalanceAfter,
 				Remark:         pgtype.Text{String: riderDepositWithdrawRemark, Valid: true},
 			})
 			if err != nil {
 				return fmt.Errorf("create rider withdraw log: %w", err)
 			}
 
-			credit, err := q.GetRiderDepositCreditByPaymentOrderID(ctx, paymentOrder.ID)
-			if err != nil {
-				return fmt.Errorf("get rider deposit credit: %w", err)
+			if reconciledAmount > 0 {
+				_, err = q.CreateRiderDeposit(ctx, CreateRiderDepositParams{
+					RiderID:        lockedRider.ID,
+					Amount:         reconciledAmount,
+					Type:           "deduct",
+					RelatedOrderID: pgtype.Int8{},
+					PaymentOrderID: pgtype.Int8{Int64: paymentOrder.ID, Valid: true},
+					BalanceAfter:   updatedRider.DepositAmount - updatedRider.FrozenDeposit,
+					Remark:         pgtype.Text{String: riderDepositDeductRemark, Valid: true},
+				})
+				if err != nil {
+					return fmt.Errorf("create rider stale credit deduct log: %w", err)
+				}
 			}
 
 			result.RefundOrder = refundOrder
@@ -274,6 +310,7 @@ func (store *SQLStore) ResolveRiderDepositRefundTx(ctx context.Context, arg Reso
 			result.DepositLog = depositLog
 			result.Credit = credit
 			result.Applied = true
+			result.ReconciledAmount = reconciledAmount
 			return nil
 
 		case riderDepositRefundFailed, riderDepositRefundAbnormal, riderDepositRefundClosed:

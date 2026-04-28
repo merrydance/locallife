@@ -12,17 +12,18 @@ import type { OrderCardViewModel } from '../../../adapters/order-card'
 import CartService from '../../../services/cart'
 import { OrderAdapter } from '../../../adapters/order'
 import {
-  CombinedPaymentOrderResponse,
   createCombinedPaymentOrder,
   createOrderPayment,
-  getPaymentProcessOutcomeMessage,
-  isCombinedPaymentSuccessful,
-  isPaymentProcessSuccessful,
-  processCreatedPayment,
-  recoverCombinedPaymentOrder,
-  shouldRecreateCombinedPayment,
-  invokeWechatPay
+  recoverCombinedPaymentOrder
 } from '../../../api/payment'
+import {
+  completeCombinedPaymentWorkflow,
+  completePaymentWorkflow,
+  isCombinedPaymentWorkflowCancelled,
+  isCombinedPaymentWorkflowPaid,
+  isPaymentWorkflowPaid,
+  shouldRecreateCombinedPaymentWorkflow
+} from '../../../services/payment-workflow'
 import Navigation from '../../../utils/navigation'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 const getErrorMessage = getErrorUserMessage
@@ -32,7 +33,6 @@ import {
   getDatasetId,
   getSharedCombinedPaymentID,
   isOrderResponse,
-  isWechatPayCancelled,
   navigateToCombinedPaymentSuccess,
   normalizeOrderType,
   ORDER_REQUEST_DEDUP_MS,
@@ -383,31 +383,18 @@ Page({
           }
         }
 
-      const paymentResult = await processCreatedPayment(await createOrderPayment(orderId))
-      if (!isPaymentProcessSuccessful(paymentResult)) {
-        await this.loadOrders(true)
-        wx.showToast({
-          title: getPaymentProcessOutcomeMessage(paymentResult, {
-            failed: '支付未完成，请重新发起',
-            unknown: '支付结果确认中，请稍后刷新'
-          }),
-          icon: 'none'
-        })
-        return
-      }
+      const paymentResult = await completePaymentWorkflow(await createOrderPayment(orderId))
 
-      const payment = paymentResult.payment
-      if (!payment) {
-        await this.loadOrders(true)
-        wx.showToast({ title: '支付结果确认中，请稍后刷新', icon: 'none' })
-        return
+      if (isPaymentWorkflowPaid(paymentResult.status)) {
+        this.setData({ selectedPayMap: {}, selectedPayCount: 0 })
       }
-
-      this.setData({ selectedPayMap: {}, selectedPayCount: 0 })
-      Navigation.toPaymentSuccess({
-        orderId: String(orderId),
-        orderNo: payment.out_trade_no || String(orderId),
-        amount: (payment.amount / 100).toFixed(2)
+      Navigation.toPaymentResult({
+        status: paymentResult.status,
+        paymentOrderId: paymentResult.paymentOrderId,
+        businessId: orderId,
+        businessType: paymentResult.businessType || 'order',
+        orderNo: paymentResult.outTradeNo || String(orderId),
+        amount: paymentResult.amountFen ? (paymentResult.amountFen / 100).toFixed(2) : undefined
       })
     } catch (error) {
       logger.error('单笔支付失败', error, 'List.paySingleOrder')
@@ -422,38 +409,20 @@ Page({
     combinedPaymentId: number,
     orderIds: number[]
   ): Promise<'completed' | 'handled' | 'fallback'> {
-    let combinedPayment = await recoverCombinedPaymentOrder(combinedPaymentId)
+    const paymentResult = await completeCombinedPaymentWorkflow(await recoverCombinedPaymentOrder(combinedPaymentId))
+    const combinedPayment = paymentResult.combinedPayment
 
-    if (combinedPayment.pay_params) {
-      try {
-        await invokeWechatPay(combinedPayment.pay_params)
-      } catch (error: unknown) {
-        if (isWechatPayCancelled(error)) {
-          wx.showToast({ title: '已取消支付，可继续完成原合单支付', icon: 'none' })
-          return 'handled'
-        }
-
-        combinedPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
-        if (isCombinedPaymentSuccessful(combinedPayment)) {
-          navigateToCombinedPaymentSuccess(combinedPayment, orderIds)
-          return 'completed'
-        }
-
-        if (shouldRecreateCombinedPayment(combinedPayment)) {
-          return 'fallback'
-        }
-
-        wx.showToast({ title: getCombinedPaymentToastMessage(combinedPayment), icon: 'none' })
-        return 'handled'
-      }
-    }
-
-    if (isCombinedPaymentSuccessful(combinedPayment)) {
+    if (isCombinedPaymentWorkflowPaid(paymentResult.status)) {
       navigateToCombinedPaymentSuccess(combinedPayment, orderIds)
       return 'completed'
     }
 
-    if (shouldRecreateCombinedPayment(combinedPayment)) {
+    if (isCombinedPaymentWorkflowCancelled(paymentResult.status)) {
+      wx.showToast({ title: '已取消支付，可继续完成原合单支付', icon: 'none' })
+      return 'handled'
+    }
+
+    if (shouldRecreateCombinedPaymentWorkflow(paymentResult.status)) {
       return 'fallback'
     }
 
@@ -482,7 +451,6 @@ Page({
     wx.showLoading({ title: '拉起合并支付...' })
     try {
       const existingCombinedPaymentID = getSharedCombinedPaymentID(this.data.orders, selectedOrderIDs)
-      let combinedPayment: CombinedPaymentOrderResponse
 
       if (existingCombinedPaymentID) {
         const resumeResult = await this.resumeCombinedPayment(existingCombinedPaymentID, selectedOrderIDs)
@@ -495,30 +463,15 @@ Page({
         }
       }
 
-      combinedPayment = await createCombinedPaymentOrder({ order_ids: selectedOrderIDs })
+      const paymentResult = await completeCombinedPaymentWorkflow(await createCombinedPaymentOrder({ order_ids: selectedOrderIDs }))
+      const combinedPayment = paymentResult.combinedPayment
 
-      if (combinedPayment.pay_params) {
-        try {
-          await invokeWechatPay(combinedPayment.pay_params)
-        } catch (error: unknown) {
-          if (isWechatPayCancelled(error)) {
-            wx.showToast({ title: '已取消支付，可继续完成合单支付', icon: 'none' })
-            return
-          }
-
-          combinedPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
-          if (isCombinedPaymentSuccessful(combinedPayment)) {
-            this.setData({ selectedPayMap: {}, selectedPayCount: 0 })
-            navigateToCombinedPaymentSuccess(combinedPayment, selectedOrderIDs)
-            return
-          }
-
-          wx.showToast({ title: getCombinedPaymentToastMessage(combinedPayment), icon: 'none' })
+      if (!isCombinedPaymentWorkflowPaid(paymentResult.status)) {
+        if (isCombinedPaymentWorkflowCancelled(paymentResult.status)) {
+          wx.showToast({ title: '已取消支付，可继续完成合单支付', icon: 'none' })
           return
         }
-      }
 
-      if (!isCombinedPaymentSuccessful(combinedPayment)) {
         wx.showToast({ title: getCombinedPaymentToastMessage(combinedPayment), icon: 'none' })
         return
       }

@@ -286,7 +286,8 @@ type respondToComplaintRequest struct {
 // POST /v1/merchant/complaints/:id/response
 func (server *Server) respondToComplaint(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("payment service not configured")))
+		err := errors.New("payment service not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service not configured", "respond complaint payment service not configured"))
 		return
 	}
 
@@ -329,8 +330,7 @@ func (server *Server) respondToComplaint(ctx *gin.Context) {
 		ResponseContent: req.ResponseContent,
 		JumpURL:         req.JumpURL,
 	}); err != nil {
-		log.Error().Err(err).Str("complaint_id", complaintID).Msg("respond complaint: wxpay api failed")
-		ctx.JSON(http.StatusBadGateway, errorResponse(errors.New("failed to submit response to WeChat")))
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "failed to submit response to WeChat", "respond complaint: wxpay api failed"))
 		return
 	}
 
@@ -370,7 +370,8 @@ func (server *Server) respondToComplaint(ctx *gin.Context) {
 // POST /v1/operator/complaints/:id/complete （运营商端，路由复用同一 handler）
 func (server *Server) completeComplaint(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("payment service not configured")))
+		err := errors.New("payment service not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service not configured", "complete complaint payment service not configured"))
 		return
 	}
 
@@ -410,8 +411,7 @@ func (server *Server) completeComplaint(ctx *gin.Context) {
 
 	// 调用微信 API 完结投诉
 	if err := server.ecommerceClient.CompleteComplaint(ctx, complaintID); err != nil {
-		log.Error().Err(err).Str("complaint_id", complaintID).Msg("complete complaint: wxpay api failed")
-		ctx.JSON(http.StatusBadGateway, errorResponse(errors.New("failed to complete complaint via WeChat")))
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "failed to complete complaint via WeChat", "complete complaint: wxpay api failed"))
 		return
 	}
 

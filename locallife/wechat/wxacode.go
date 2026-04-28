@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -16,6 +18,8 @@ const (
 	// 小程序码API端点
 	getWXACodeUnlimitedURL = "https://api.weixin.qq.com/wxa/getwxacodeunlimit"
 )
+
+var pngSignature = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
 
 // WXACodeRequest 小程序码请求参数
 type WXACodeRequest struct {
@@ -109,16 +113,22 @@ func (c *Client) doWXACodeRequest(ctx context.Context, accessToken string, req *
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	// 检查是不是错误响应（JSON）还是成功响应（PNG图片）
-	// 如果是JSON，说明报错了
-	contentType := resp.Header.Get("Content-Type")
-	if contentType == "application/json" || len(body) < 100 {
-		var errResp WXACodeResponse
-		if err := json.Unmarshal(body, &errResp); err == nil && errResp.ErrCode != 0 {
-			return nil, &APIError{Code: errResp.ErrCode, Msg: errResp.ErrMsg}
-		}
+	if bytes.HasPrefix(body, pngSignature) {
+		return body, nil
 	}
 
-	// 返回PNG图片数据
-	return body, nil
+	var errResp WXACodeResponse
+	if err := json.Unmarshal(body, &errResp); err == nil {
+		if errResp.ErrCode != 0 {
+			return nil, &APIError{Code: errResp.ErrCode, Msg: errResp.ErrMsg}
+		}
+		return nil, fmt.Errorf("unexpected wxa code json response: %s", strings.TrimSpace(errResp.ErrMsg))
+	}
+
+	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
+	if contentType != "" {
+		return nil, fmt.Errorf("unexpected wxa code response content type %q", contentType)
+	}
+
+	return nil, errors.New("unexpected non-png wxa code response")
 }

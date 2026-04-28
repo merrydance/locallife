@@ -1,4 +1,4 @@
-import { getPaymentStatusView, getRefundStatusView, PaymentLedgerEntry } from '../api/payment'
+import { getPaymentStatusView, getRefundStatusView, isPaymentStatusTerminal, isRefundStatusTerminal, PaymentLedgerEntry } from '../api/payment'
 
 export type PaymentLedgerStatusTheme = 'primary' | 'success' | 'warning' | 'error' | 'default'
 
@@ -7,12 +7,22 @@ interface PaymentLedgerStatusView {
   statusTheme: PaymentLedgerStatusTheme
 }
 
+export function isPaymentLedgerEntryTerminal(entry: Pick<PaymentLedgerEntry, 'entry_type' | 'status'>): boolean {
+  return entry.entry_type === 'refund'
+    ? isRefundStatusTerminal(entry.status)
+    : isPaymentStatusTerminal(entry.status)
+}
+
 export function getPaymentLedgerStatusView(entry: Pick<PaymentLedgerEntry, 'entry_type' | 'status'>): PaymentLedgerStatusView {
   if (entry.entry_type === 'refund') {
     const refundStatusView = getRefundStatusView(entry.status)
 
+    if (refundStatusView.normalizedStatus === 'success') {
+      return { statusName: '退款成功', statusTheme: 'primary' }
+    }
+
     if (refundStatusView.isProcessing) {
-      return { statusName: '退款中', statusTheme: 'warning' }
+      return { statusName: '状态同步中', statusTheme: 'default' }
     }
 
     if (refundStatusView.isFailed) {
@@ -23,13 +33,21 @@ export function getPaymentLedgerStatusView(entry: Pick<PaymentLedgerEntry, 'entr
       return { statusName: '已关闭', statusTheme: 'default' }
     }
 
-    return { statusName: '退款成功', statusTheme: 'primary' }
+    return { statusName: '状态同步中', statusTheme: 'default' }
   }
 
   const paymentStatusView = getPaymentStatusView(entry.status)
 
+  if (paymentStatusView.normalizedStatus === 'paid') {
+    return { statusName: '已支付', statusTheme: 'success' }
+  }
+
+  if (paymentStatusView.normalizedStatus === 'refunded') {
+    return { statusName: '已退款', statusTheme: 'primary' }
+  }
+
   if (paymentStatusView.normalizedStatus === 'pending') {
-    return { statusName: '待支付', statusTheme: 'warning' }
+    return { statusName: '状态同步中', statusTheme: 'default' }
   }
 
   if (paymentStatusView.normalizedStatus === 'failed') {
@@ -40,5 +58,5 @@ export function getPaymentLedgerStatusView(entry: Pick<PaymentLedgerEntry, 'entr
     return { statusName: '已关闭', statusTheme: 'default' }
   }
 
-  return { statusName: '已支付', statusTheme: 'success' }
+  return { statusName: '状态同步中', statusTheme: 'default' }
 }

@@ -1,8 +1,12 @@
 /* 骑手钱包样式 */
 
-.page-container {
+.deposit-page {
   background: var(--td-bg-color-page);
   min-height: 100vh;
+}
+
+.deposit-scroll {
+  height: calc(100vh - var(--page-shell-nav-height, 88px) - var(--spacer-sm));
 }
 
 .state-shell,
@@ -91,8 +95,84 @@
   color: var(--td-text-color-secondary);
 }
 
-.notice-banner {
+.status-card-inline {
   margin: 0 0 24rpx;
+  padding: 24rpx;
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-page);
+}
+
+.status-card-inline--pending {
+  border: 1rpx solid var(--td-warning-color-disabled);
+}
+
+.status-card-inline--withdrawal {
+  border: 1rpx solid rgba(237, 108, 2, 0.18);
+}
+
+.status-card-inline--feedback {
+  border: 1rpx solid transparent;
+}
+
+.status-card-inline--success {
+  background: var(--td-success-color-light);
+  border-color: rgba(0, 186, 173, 0.18);
+}
+
+.status-card-inline--warning {
+  background: var(--td-warning-color-1);
+  border-color: rgba(237, 108, 2, 0.18);
+}
+
+.status-card-inline--error {
+  background: var(--td-error-color-1);
+  border-color: rgba(224, 54, 54, 0.18);
+}
+
+.status-card-inline__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24rpx;
+}
+
+.status-card-inline__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.status-card-inline__title-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-wrap: wrap;
+}
+
+.status-card-inline__title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.status-card-inline__desc {
+  margin-top: 8rpx;
+  font-size: var(--font-size-xxs);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.status-card-inline__amount {
+  flex-shrink: 0;
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.status-card-inline__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16rpx;
+  margin-top: 20rpx;
 }
 
 /* 历史列表 */
@@ -199,4 +279,14 @@
   color: var(--td-text-color-placeholder);
   margin-top: 16rpx;
   padding: 0 16rpx;
+}
+
+.dialog-error-message {
+  margin-top: 16rpx;
+  padding: 16rpx 20rpx;
+  border-radius: var(--radius-sm);
+  background: var(--td-error-color-1);
+  color: var(--td-error-color);
+  font-size: var(--font-size-xxs);
+  line-height: 1.6;
 }

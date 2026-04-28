@@ -1,0 +1,26 @@
+.page-container {
+  background: var(--td-bg-color-page);
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.page-content {
+  display: flex;
+  flex-direction: column;
+  gap: 32rpx;
+  padding-bottom: var(--spacer-lg);
+}
+
+.state-block {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacer-md);
+  padding: 0 var(--spacer-lg);
+}
+
+.state-block--embedded {
+  min-height: 240rpx;
+}

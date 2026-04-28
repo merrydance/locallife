@@ -369,17 +369,49 @@ func TestCreateRiderDeposit(t *testing.T) {
 
 func TestListRiderDeposits(t *testing.T) {
 	rider := createActiveRider(t)
+	tiedCreatedAt := time.Now().UTC().Truncate(time.Microsecond)
+	var depositIDs []int64
+	var allRecordIDs []int64
 
 	// 创建几笔押金记录
 	for i := 0; i < 3; i++ {
-		_, err := testStore.CreateRiderDeposit(context.Background(), CreateRiderDepositParams{
+		deposit, err := testStore.CreateRiderDeposit(context.Background(), CreateRiderDepositParams{
 			RiderID:      rider.ID,
 			Amount:       int64((i + 1) * 10000),
 			Type:         "deposit",
 			BalanceAfter: int64((i + 1) * 10000),
 		})
 		require.NoError(t, err)
+		depositIDs = append(depositIDs, deposit.ID)
+		allRecordIDs = append(allRecordIDs, deposit.ID)
 	}
+
+	withdrawFreeze, err := testStore.CreateRiderDeposit(context.Background(), CreateRiderDepositParams{
+		RiderID:      rider.ID,
+		Amount:       5000,
+		Type:         "freeze",
+		BalanceAfter: 25000,
+		Remark:       pgtype.Text{String: riderDepositFreezeRemark, Valid: true},
+	})
+	require.NoError(t, err)
+	allRecordIDs = append(allRecordIDs, withdrawFreeze.ID)
+
+	deliveryFreeze, err := testStore.CreateRiderDeposit(context.Background(), CreateRiderDepositParams{
+		RiderID:      rider.ID,
+		Amount:       3000,
+		Type:         "freeze",
+		BalanceAfter: 27000,
+		Remark:       pgtype.Text{String: "接单冻结押金", Valid: true},
+	})
+	require.NoError(t, err)
+	allRecordIDs = append(allRecordIDs, deliveryFreeze.ID)
+
+	_, err = testStore.(*SQLStore).connPool.Exec(context.Background(),
+		`UPDATE rider_deposits SET created_at = $1 WHERE id = ANY($2)`,
+		tiedCreatedAt,
+		allRecordIDs,
+	)
+	require.NoError(t, err)
 
 	deposits, err := testStore.ListRiderDeposits(context.Background(), ListRiderDepositsParams{
 		RiderID: rider.ID,
@@ -387,12 +419,18 @@ func TestListRiderDeposits(t *testing.T) {
 		Offset:  0,
 	})
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(deposits), 3)
-
-	// 验证按时间倒序
-	for i := 0; i < len(deposits)-1; i++ {
-		require.GreaterOrEqual(t, deposits[i].CreatedAt, deposits[i+1].CreatedAt)
+	require.GreaterOrEqual(t, len(deposits), 4)
+	require.Equal(t, deliveryFreeze.ID, deposits[0].ID)
+	require.Equal(t, depositIDs[2], deposits[1].ID)
+	require.Equal(t, depositIDs[1], deposits[2].ID)
+	require.Equal(t, depositIDs[0], deposits[3].ID)
+	for _, deposit := range deposits {
+		require.NotEqual(t, withdrawFreeze.ID, deposit.ID)
 	}
+
+	total, err := testStore.CountRiderDeposits(context.Background(), rider.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(4), total)
 }
 
 // ==================== Rider Location Tests ====================

@@ -61,40 +61,84 @@ type reservationStatusResponse struct {
 }
 
 type claimSubmitResponse struct {
-	ClaimID            int64   `json:"claim_id"`
-	Status             string  `json:"status"`
-	DecisionStatus     string  `json:"decision_status"`
-	PayoutStatus       string  `json:"payout_status"`
-	ApprovedAmount     *int64  `json:"approved_amount"`
-	CompensationSource string  `json:"compensation_source"`
-	PayoutETA          *string `json:"payout_eta"`
-	Reason             string  `json:"reason"`
+	ClaimID                int64  `json:"claim_id"`
+	Status                 string `json:"status"`
+	DecisionStatus         string `json:"decision_status"`
+	CompensationStatus     string `json:"compensation_status"`
+	PayoutStatus           string `json:"payout_status"`
+	CustomerActionRequired bool   `json:"customer_action_required"`
+	CustomerAction         string `json:"customer_action"`
+	ApprovedAmount         *int64 `json:"approved_amount"`
+	CompensationSource     string `json:"compensation_source"`
+	Reason                 string `json:"reason"`
+}
+
+type claimContinueResponse struct {
+	ID                     int64  `json:"id"`
+	Status                 string `json:"status"`
+	DecisionStatus         string `json:"decision_status"`
+	CompensationStatus     string `json:"compensation_status"`
+	PayoutStatus           string `json:"payout_status"`
+	CustomerActionRequired bool   `json:"customer_action_required"`
+	CustomerAction         string `json:"customer_action"`
+	ApprovedAmount         *int64 `json:"approved_amount"`
+	Reason                 string `json:"reason"`
 }
 
 func requireAcceptedClaimSubmission(t *testing.T, claimResp claimSubmitResponse, approvedAmount int64) {
 	t.Helper()
 
 	require.NotZero(t, claimResp.ClaimID)
-	require.Equal(t, "accepted", claimResp.Status)
+	require.Equal(t, "warned_waiting_customer_confirmation", claimResp.Status)
 	require.Equal(t, "auto-adjudicated", claimResp.DecisionStatus)
-	require.Equal(t, "processing", claimResp.PayoutStatus)
+	require.Equal(t, "awaiting_compensation", claimResp.CompensationStatus)
+	require.Empty(t, claimResp.PayoutStatus)
+	require.True(t, claimResp.CustomerActionRequired)
+	require.Equal(t, "confirm_continue", claimResp.CustomerAction)
 	require.NotNil(t, claimResp.ApprovedAmount)
 	require.Equal(t, approvedAmount, *claimResp.ApprovedAmount)
-	require.NotNil(t, claimResp.PayoutETA)
 	require.NotEmpty(t, claimResp.CompensationSource)
 	require.NotEmpty(t, claimResp.Reason)
 }
 
+func requireAcceptedClaimContinue(t *testing.T, claimResp claimContinueResponse, claimID, approvedAmount int64) {
+	t.Helper()
+
+	require.Equal(t, claimID, claimResp.ID)
+	require.Equal(t, "accepted", claimResp.Status)
+	require.Equal(t, "auto-adjudicated", claimResp.DecisionStatus)
+	require.Equal(t, "compensating", claimResp.CompensationStatus)
+	require.Equal(t, "processing", claimResp.PayoutStatus)
+	require.False(t, claimResp.CustomerActionRequired)
+	require.Empty(t, claimResp.CustomerAction)
+	require.NotNil(t, claimResp.ApprovedAmount)
+	require.Equal(t, approvedAmount, *claimResp.ApprovedAmount)
+	require.NotEmpty(t, claimResp.Reason)
+}
+
+func confirmClaimContinueIntegration(t *testing.T, server *api.Server, claimID, customerID, approvedAmount int64) claimContinueResponse {
+	t.Helper()
+
+	url := fmt.Sprintf("/v1/claims/%d/confirm-continue", claimID)
+	rec := doJSON(t, server, http.MethodPost, url, nil, customerID)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var continueResp claimContinueResponse
+	requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &continueResp)
+	requireAcceptedClaimContinue(t, continueResp, claimID, approvedAmount)
+	return continueResp
+}
+
 type claimPayoutActionDetailSnapshot struct {
-	ClaimID         int64  `json:"claim_id"`
-	AppealID        int64  `json:"appeal_id"`
-	UserID          int64  `json:"user_id"`
-	Amount          int64  `json:"amount"`
-	OutBillNo       string `json:"out_bill_no"`
-	TransferBillNo  string `json:"transfer_bill_no"`
-	TransferState   string `json:"transfer_state"`
-	LastError       string `json:"last_error"`
-	TerminalFailure bool   `json:"terminal_failure"`
+	ClaimID           int64  `json:"claim_id"`
+	RecoveryDisputeID int64  `json:"recovery_dispute_id"`
+	UserID            int64  `json:"user_id"`
+	Amount            int64  `json:"amount"`
+	OutBillNo         string `json:"out_bill_no"`
+	TransferBillNo    string `json:"transfer_bill_no"`
+	TransferState     string `json:"transfer_state"`
+	LastError         string `json:"last_error"`
+	TerminalFailure   bool   `json:"terminal_failure"`
 }
 
 func newFinishedClaimPayoutPaymentClient(t *testing.T, store *db.SQLStore, userID, amount int64, transferRemark, batchRemark string) *mockwechat.MockTransferClientInterface {
@@ -178,36 +222,101 @@ func newClaimRecoveryPaymentClient(t *testing.T, store *db.SQLStore, userID, amo
 	return mockPaymentClient
 }
 
-func findPayoutActionForClaimOrAppeal(t *testing.T, store *db.SQLStore, orderID, claimID, appealID int64) (db.BehaviorAction, claimPayoutActionDetailSnapshot) {
-	t.Helper()
-
+func lookupPayoutActionForClaimOrRecoveryDispute(store *db.SQLStore, orderID, claimID, recoveryDisputeID int64) (db.BehaviorAction, claimPayoutActionDetailSnapshot, bool, error) {
 	decisions, err := store.ListBehaviorDecisionsByOrder(context.Background(), pgtype.Int8{Int64: orderID, Valid: true})
-	require.NoError(t, err)
-	require.NotEmpty(t, decisions)
+	if err != nil {
+		return db.BehaviorAction{}, claimPayoutActionDetailSnapshot{}, false, err
+	}
+	if len(decisions) == 0 {
+		return db.BehaviorAction{}, claimPayoutActionDetailSnapshot{}, false, nil
+	}
 
 	for _, decision := range decisions {
 		actions, actionErr := store.ListBehaviorActionsByDecision(context.Background(), decision.ID)
-		require.NoError(t, actionErr)
+		if actionErr != nil {
+			return db.BehaviorAction{}, claimPayoutActionDetailSnapshot{}, false, actionErr
+		}
 		for _, action := range actions {
 			if action.ActionType != "payout" || action.TargetEntity != "user" {
 				continue
 			}
 			var detail claimPayoutActionDetailSnapshot
-			require.NoError(t, json.Unmarshal(action.Detail, &detail))
-			if appealID > 0 && detail.AppealID == appealID {
-				return action, detail
+			if err := json.Unmarshal(action.Detail, &detail); err != nil {
+				return db.BehaviorAction{}, claimPayoutActionDetailSnapshot{}, false, err
 			}
-			if appealID == 0 && detail.ClaimID == claimID {
-				return action, detail
+			if recoveryDisputeID > 0 && detail.RecoveryDisputeID == recoveryDisputeID {
+				return action, detail, true, nil
+			}
+			if recoveryDisputeID == 0 && detail.ClaimID == claimID {
+				return action, detail, true, nil
 			}
 		}
 	}
 
-	t.Fatalf("payout action not found for order=%d claim=%d appeal=%d", orderID, claimID, appealID)
-	return db.BehaviorAction{}, claimPayoutActionDetailSnapshot{}
+	return db.BehaviorAction{}, claimPayoutActionDetailSnapshot{}, false, nil
 }
 
-type appealSubmitResponse struct {
+func findPayoutActionForClaimOrRecoveryDispute(t *testing.T, store *db.SQLStore, orderID, claimID, recoveryDisputeID int64) (db.BehaviorAction, claimPayoutActionDetailSnapshot) {
+	t.Helper()
+
+	action, detail, found, err := lookupPayoutActionForClaimOrRecoveryDispute(store, orderID, claimID, recoveryDisputeID)
+	require.NoError(t, err)
+	require.Truef(t, found, "payout action not found for order=%d claim=%d recovery_dispute=%d", orderID, claimID, recoveryDisputeID)
+	return action, detail
+}
+
+func requireNoPayoutActionForClaimOrRecoveryDispute(t *testing.T, store *db.SQLStore, orderID, claimID, recoveryDisputeID int64) {
+	t.Helper()
+
+	_, _, found, err := lookupPayoutActionForClaimOrRecoveryDispute(store, orderID, claimID, recoveryDisputeID)
+	require.NoError(t, err)
+	require.Falsef(t, found, "unexpected payout action found for order=%d claim=%d recovery_dispute=%d", orderID, claimID, recoveryDisputeID)
+}
+
+func completeClaimPayoutForClaim(t *testing.T, store *db.SQLStore, claimID, userID, amount int64) {
+	t.Helper()
+
+	ctx := context.Background()
+	claim, err := store.GetClaim(ctx, claimID)
+	require.NoError(t, err)
+
+	payoutAction, _ := findPayoutActionForClaimOrRecoveryDispute(t, store, claim.OrderID, claimID, 0)
+	mockPaymentClient := newFinishedClaimPayoutPaymentClient(t, store, userID, amount, "platform payout", "claim payout")
+	processor := worker.NewTestTaskProcessor(store, worker.NewNoopTaskDistributor(), nil, nil)
+	processor.SetTransferClient(mockPaymentClient)
+	payloadBytes, err := json.Marshal(worker.ClaimPayoutPayload{ActionID: payoutAction.ID})
+	require.NoError(t, err)
+	require.NoError(t, processor.ProcessTaskClaimPayout(ctx, asynq.NewTask(worker.TaskClaimPayout, payloadBytes)))
+}
+
+func processClaimBehaviorAction(t *testing.T, store *db.SQLStore, actionID int64) {
+	t.Helper()
+
+	payloadBytes, err := json.Marshal(worker.ClaimBehaviorActionPayload{ActionID: actionID})
+	require.NoError(t, err)
+
+	processor := worker.NewTestTaskProcessor(store, worker.NewNoopTaskDistributor(), nil, nil)
+	task := asynq.NewTask(worker.TaskClaimBehaviorAction, payloadBytes)
+	require.NoError(t, processor.ProcessTaskClaimBehaviorAction(context.Background(), task))
+}
+
+func triggerClaimRecoveryOverdueViaScheduler(t *testing.T, store *db.SQLStore, recoveryID int64) int64 {
+	t.Helper()
+
+	_, err := integrationPool.Exec(context.Background(), `UPDATE claim_recoveries SET due_at = $2 WHERE id = $1`, recoveryID, time.Now().Add(-2*time.Minute))
+	require.NoError(t, err)
+
+	distributor := &captureClaimBehaviorActionDistributor{}
+	s := worker.NewClaimRecoveryScheduler(store, distributor)
+	s.RunOnce()
+
+	payloads := distributor.Payloads()
+	require.Len(t, payloads, 1)
+	processClaimBehaviorAction(t, store, payloads[0].ActionID)
+	return payloads[0].ActionID
+}
+
+type recoveryDisputeSubmitResponse struct {
 	ID            int64  `json:"id"`
 	ClaimID       int64  `json:"claim_id"`
 	AppellantType string `json:"appellant_type"`
@@ -248,47 +357,33 @@ type takeoutCombinedPaymentFixture struct {
 func markClaimRecoveryPaymentPaid(t *testing.T, store *db.SQLStore, paymentOrderID int64, transactionID string) {
 	t.Helper()
 
-	_, err := store.UpdatePaymentOrderToPaid(context.Background(), db.UpdatePaymentOrderToPaidParams{
+	updatedPayment, err := store.UpdatePaymentOrderToPaid(context.Background(), db.UpdatePaymentOrderToPaidParams{
 		ID:            paymentOrderID,
 		TransactionID: pgtype.Text{String: transactionID, Valid: true},
 	})
 	require.NoError(t, err)
-	result, err := store.ProcessPaymentSuccessTx(context.Background(), db.ProcessPaymentSuccessTxParams{
-		PaymentOrderID: paymentOrderID,
-	})
-	require.NoError(t, err)
-	require.True(t, result.Processed)
+	require.NotEmpty(t, updatedPayment.BusinessType)
+	processPaymentSuccessTxForIntegration(t, store, paymentOrderID)
 }
 
-func ensureIntegrationMerchantRecovery(t *testing.T, store *db.SQLStore, orderID, claimID, amount int64) db.ClaimRecovery {
+func claimRecoveryEventTypesForIntegration(t *testing.T, store *db.SQLStore, recoveryID int64) []string {
 	t.Helper()
 
-	ctx := context.Background()
-	recovery, err := store.GetClaimRecoveryByClaimID(ctx, claimID)
-	if err == nil {
-		return recovery
+	events, err := store.ListClaimRecoveryEventsByRecovery(context.Background(), recoveryID)
+	require.NoError(t, err)
+	types := make([]string, 0, len(events))
+	for _, event := range events {
+		types = append(types, event.EventType)
 	}
-	require.ErrorIs(t, err, db.ErrRecordNotFound)
+	return types
+}
 
-	decisions, err := store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: orderID, Valid: true})
+func claimRecoveryIDForIntegration(t *testing.T, store *db.SQLStore, claimID int64) int64 {
+	t.Helper()
+
+	recovery, err := store.GetClaimRecoveryByClaimID(context.Background(), claimID)
 	require.NoError(t, err)
-	require.NotEmpty(t, decisions)
-
-	recovery, err = store.CreateClaimRecovery(ctx, db.CreateClaimRecoveryParams{
-		ClaimID:          claimID,
-		OrderID:          orderID,
-		DecisionID:       pgtype.Int8{Int64: decisions[len(decisions)-1].ID, Valid: true},
-		ResponsibleParty: "merchant",
-		RecoveryTarget:   pgtype.Text{String: "merchant", Valid: true},
-		RecoveryAmount:   amount,
-		Status:           "pending",
-		DueAt:            time.Now().Add(24 * time.Hour),
-		DecisionSnapshot: []byte(`{"source":"integration_manual_recovery_seed"}`),
-		RecoveryBasis:    pgtype.Text{String: db.ClaimRecoveryBasisMerchantRecovery, Valid: true},
-	})
-	require.NoError(t, err)
-
-	return recovery
+	return recovery.ID
 }
 
 func createTakeoutCombinedPaymentFixture(t *testing.T, server *api.Server, store *db.SQLStore) takeoutCombinedPaymentFixture {
@@ -500,15 +595,25 @@ func postIntegrationEcommercePaymentNotify(t *testing.T, server *api.Server, not
 	return rec
 }
 
-func processCapturedPaymentSuccessPayload(t *testing.T, store *db.SQLStore, payload worker.PaymentSuccessPayload) {
+func processCapturedPaymentFactApplicationPayload(t *testing.T, store *db.SQLStore, payload worker.PaymentFactApplicationPayload) {
 	t.Helper()
 
 	payloadBytes, err := json.Marshal(payload)
 	require.NoError(t, err)
 
 	processor := worker.NewTestTaskProcessor(store, worker.NewNoopTaskDistributor(), nil, nil)
-	task := asynq.NewTask(worker.TaskProcessPaymentSuccess, payloadBytes)
-	require.NoError(t, processor.ProcessTaskPaymentSuccess(context.Background(), task))
+	task := asynq.NewTask(worker.TaskProcessPaymentFactApplication, payloadBytes)
+	require.NoError(t, processor.ProcessTaskPaymentFactApplication(context.Background(), task))
+}
+
+func processPaymentSuccessTxForIntegration(t *testing.T, store *db.SQLStore, paymentOrderID int64) {
+	t.Helper()
+	_, err := store.ProcessPaymentSuccessTx(context.Background(), db.ProcessPaymentSuccessTxParams{
+		PaymentOrderID:     paymentOrderID,
+		RiderAverageSpeed:  15000,
+		DefaultPrepareTime: 20,
+	})
+	require.NoError(t, err)
 }
 
 type roomAvailabilitySlot struct {
@@ -633,7 +738,6 @@ func TestTakeoutJourneyB1Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	dish := createIntegrationDish(t, store, merchant.ID)
-
 	customer := createIntegrationUser(t, store)
 	addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
 	customerRow, err := store.GetUser(ctx, customer.ID)
@@ -1055,8 +1159,8 @@ func TestTakeoutJourneyB1WebhookIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	processor := worker.NewTestTaskProcessor(store, worker.NewNoopTaskDistributor(), nil, nil)
-	task := asynq.NewTask(worker.TaskProcessPaymentSuccess, payloadBytes)
-	require.NoError(t, processor.ProcessTaskPaymentSuccess(ctx, task))
+	task := asynq.NewTask(worker.TaskProcessPaymentFactApplication, payloadBytes)
+	require.NoError(t, processor.ProcessTaskPaymentFactApplication(ctx, task))
 
 	order, err := store.GetOrder(ctx, orderID)
 	require.NoError(t, err)
@@ -1371,7 +1475,7 @@ func TestTakeoutJourneyB0CombinedPaymentDelayedCallbackRecoveryIntegration(t *te
 
 	payloads := distributor.Payloads()
 	require.Len(t, payloads, 1)
-	processCapturedPaymentSuccessPayload(t, store, payloads[0])
+	processCapturedPaymentFactApplicationPayload(t, store, payloads[0])
 
 	order, err := store.GetOrder(ctx, fixture.Order.ID)
 	require.NoError(t, err)
@@ -1456,7 +1560,7 @@ func TestTakeoutJourneyB0DeliveryRecommendIntegration(t *testing.T) {
 		OrderID:        pgtype.Int8{Int64: orderID, Valid: true},
 		UserID:         customer.ID,
 		PaymentType:    "miniprogram",
-		PaymentChannel: db.PaymentChannelDirect,
+		PaymentChannel: db.PaymentChannelEcommerce,
 		BusinessType:   "order",
 		Amount:         orderForPayment.TotalAmount,
 		OutTradeNo:     fmt.Sprintf("b0_recommend_%d_%d", orderID, util.RandomInt(1000, 9999)),
@@ -1876,14 +1980,14 @@ func TestTakeoutJourneyB5PaymentRecoveryIntegration(t *testing.T) {
 	_, err = integrationPool.Exec(ctx, `UPDATE payment_orders SET paid_at = $2 WHERE id = $1`, payment.ID, time.Now().Add(-5*time.Minute))
 	require.NoError(t, err)
 
-	// 3) 触发 recovery scheduler 并断言入队
-	d := &capturePaymentSuccessDistributor{}
+	// 3) 触发 recovery scheduler 并断言 fact application 入队
+	d := &capturePaymentFactApplicationDistributor{}
 	recovery := worker.NewPaymentRecoveryScheduler(store, d)
 	recovery.RunOnce()
 
 	payloads := d.Payloads()
 	require.Len(t, payloads, 1)
-	require.Equal(t, payment.ID, payloads[0].PaymentOrderID)
+	require.NotZero(t, payloads[0].ApplicationID)
 }
 
 // TestTakeoutJourneyB6OrderPaymentTimeoutIntegration
@@ -2119,8 +2223,8 @@ func TestDineInJourneyA1Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	processor := worker.NewTestTaskProcessor(store, worker.NewNoopTaskDistributor(), nil, nil)
-	task := asynq.NewTask(worker.TaskProcessPaymentSuccess, payloadBytes)
-	require.NoError(t, processor.ProcessTaskPaymentSuccess(ctx, task))
+	task := asynq.NewTask(worker.TaskProcessPaymentFactApplication, payloadBytes)
+	require.NoError(t, processor.ProcessTaskPaymentFactApplication(ctx, task))
 
 	paidOrder, err := store.GetOrder(ctx, orderID)
 	require.NoError(t, err)
@@ -2616,8 +2720,8 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	processor := worker.NewTestTaskProcessor(store, worker.NewNoopTaskDistributor(), nil, nil)
-	task := asynq.NewTask(worker.TaskProcessPaymentSuccess, payloadBytes)
-	require.NoError(t, processor.ProcessTaskPaymentSuccess(ctx, task))
+	task := asynq.NewTask(worker.TaskProcessPaymentFactApplication, payloadBytes)
+	require.NoError(t, processor.ProcessTaskPaymentFactApplication(ctx, task))
 
 	paidReservation, err := store.GetTableReservation(ctx, created.ID)
 	require.NoError(t, err)
@@ -2987,8 +3091,8 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	processor := worker.NewTestTaskProcessor(store, worker.NewNoopTaskDistributor(), nil, nil)
-	task := asynq.NewTask(worker.TaskProcessPaymentSuccess, payloadBytes)
-	require.NoError(t, processor.ProcessTaskPaymentSuccess(ctx, task))
+	task := asynq.NewTask(worker.TaskProcessPaymentFactApplication, payloadBytes)
+	require.NoError(t, processor.ProcessTaskPaymentFactApplication(ctx, task))
 
 	// 5) 商户确认预订
 	{
@@ -3514,7 +3618,7 @@ func TestRiderDepositRefundCallbackAccountingIntegration(t *testing.T) {
 }
 
 // TestClaimJourneyD1Integration
-// 索赔旅程（D1）端到端验收：完成订单后提交索赔并落库。
+// 索赔旅程（D1）端到端验收：完成订单后提交索赔、顾客确认继续、平台完成赔付。
 func TestClaimJourneyD1Integration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
@@ -3585,30 +3689,36 @@ func TestClaimJourneyD1Integration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
-	_ = ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
 
 	claim, err := store.GetClaim(ctx, claimResp.ClaimID)
 	require.NoError(t, err)
 	require.Equal(t, orderID, claim.OrderID)
 	require.False(t, claim.PaidAt.Valid)
+	require.Equal(t, db.ClaimStatusWaitingCustomerConfirmation, claim.Status)
+	requireNoPayoutActionForClaimOrRecoveryDispute(t, store, orderID, claim.ID, 0)
 
-	payoutAction, payoutDetail := findPayoutActionForClaimOrAppeal(t, store, orderID, claim.ID, 0)
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+
+	claim, err = store.GetClaim(ctx, claimResp.ClaimID)
+	require.NoError(t, err)
+	require.Equal(t, db.ClaimStatusApproved, claim.Status)
+	require.False(t, claim.PaidAt.Valid)
+
+	payoutAction, payoutDetail := findPayoutActionForClaimOrRecoveryDispute(t, store, orderID, claim.ID, 0)
 	require.Equal(t, "created", payoutAction.Status)
 	require.Equal(t, customer.ID, payoutDetail.UserID)
 	require.Equal(t, order.TotalAmount, payoutDetail.Amount)
 
-	mockPaymentClient := newFinishedClaimPayoutPaymentClient(t, store, customer.ID, order.TotalAmount, "platform payout", "claim payout")
-	processor := worker.NewTestTaskProcessor(store, worker.NewNoopTaskDistributor(), nil, nil)
-	processor.SetTransferClient(mockPaymentClient)
-	payloadBytes, err := json.Marshal(worker.ClaimPayoutPayload{ActionID: payoutAction.ID})
-	require.NoError(t, err)
-	require.NoError(t, processor.ProcessTaskClaimPayout(ctx, asynq.NewTask(worker.TaskClaimPayout, payloadBytes)))
+	_, err = store.GetClaimRecoveryByClaimID(ctx, claim.ID)
+	require.ErrorIs(t, err, db.ErrRecordNotFound)
+
+	completeClaimPayoutForClaim(t, store, claim.ID, customer.ID, order.TotalAmount)
 
 	claim, err = store.GetClaim(ctx, claimResp.ClaimID)
 	require.NoError(t, err)
 	require.True(t, claim.PaidAt.Valid)
 
-	payoutAction, payoutDetail = findPayoutActionForClaimOrAppeal(t, store, orderID, claim.ID, 0)
+	payoutAction, payoutDetail = findPayoutActionForClaimOrRecoveryDispute(t, store, orderID, claim.ID, 0)
 	require.Equal(t, "success", payoutAction.Status)
 	require.Equal(t, wechatcontracts.DirectMerchantTransferStateSuccess, payoutDetail.TransferState)
 	require.NotEmpty(t, payoutDetail.OutBillNo)
@@ -3621,9 +3731,9 @@ func TestClaimJourneyD1Integration(t *testing.T) {
 	require.Equal(t, "pending", recovery.Status)
 }
 
-// TestClaimJourneyD2MerchantAppealIntegration
-// 索赔旅程（D2）端到端验收：商户对已批准索赔提交申诉。
-func TestClaimJourneyD2MerchantAppealIntegration(t *testing.T) {
+// TestClaimJourneyD2MerchantRecoveryDisputeIntegration
+// 索赔旅程（D2）端到端验收：顾客确认继续后商户发起追偿争议，系统自动复核维持原判并恢复追偿。
+func TestClaimJourneyD2MerchantRecoveryDisputeIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -3693,37 +3803,43 @@ func TestClaimJourneyD2MerchantAppealIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
-	_ = ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
-	// 4) 商户申诉
-	var appealResp appealSubmitResponse
+	// 4) 商户发起追偿争议
+	var recoveryDisputeResp recoveryDisputeSubmitResponse
 	{
-		appealBody := map[string]any{
+		recoveryDisputeBody := map[string]any{
 			"claim_id": claimResp.ClaimID,
 			"reason":   "evidence shows no foreign object in dish",
 		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/appeals", appealBody, merchantOwner.ID)
+		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/recovery-disputes", recoveryDisputeBody, merchantOwner.ID)
 		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &appealResp)
-		require.NotZero(t, appealResp.ID)
-		require.Equal(t, claimResp.ClaimID, appealResp.ClaimID)
-		require.Equal(t, "merchant", appealResp.AppellantType)
-		require.Equal(t, merchant.ID, appealResp.AppellantID)
-		require.Equal(t, "pending", appealResp.Status)
+		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &recoveryDisputeResp)
+		require.NotZero(t, recoveryDisputeResp.ID)
+		require.Equal(t, claimResp.ClaimID, recoveryDisputeResp.ClaimID)
+		require.Equal(t, "merchant", recoveryDisputeResp.AppellantType)
+		require.Equal(t, merchant.ID, recoveryDisputeResp.AppellantID)
+		require.Equal(t, "rejected", recoveryDisputeResp.Status)
 	}
 
-	appeal, err := store.GetAppealByClaim(ctx, db.GetAppealByClaimParams{
+	recoveryDispute, err := store.GetRecoveryDisputeByClaim(ctx, db.GetRecoveryDisputeByClaimParams{
 		ClaimID:       claimResp.ClaimID,
 		AppellantType: "merchant",
 	})
 	require.NoError(t, err)
-	require.Equal(t, appealResp.ID, appeal.ID)
-	require.Equal(t, "pending", appeal.Status)
+	require.Equal(t, recoveryDisputeResp.ID, recoveryDispute.ID)
+	require.Equal(t, "rejected", recoveryDispute.Status)
+	require.True(t, recoveryDispute.ReviewedAt.Valid)
+
+	recovery, err := store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
+	require.NoError(t, err)
+	require.Equal(t, "pending", recovery.Status)
 }
 
-// TestClaimJourneyD3RiderAppealIntegration
-// 索赔旅程（D3）端到端验收：骑手对关联索赔提交申诉。
-func TestClaimJourneyD3RiderAppealIntegration(t *testing.T) {
+// TestClaimJourneyD3RiderRecoveryDisputeIntegration
+// 索赔旅程（D3）端到端验收：骑手追偿争议提交后系统自动复核并撤销错误追责。
+func TestClaimJourneyD3RiderRecoveryDisputeIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -3852,943 +3968,34 @@ func TestClaimJourneyD3RiderAppealIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
-	// 7) 骑手申诉
-	var appealResp appealSubmitResponse
+	// 7) 骑手发起追偿争议
+	var recoveryDisputeResp recoveryDisputeSubmitResponse
 	{
-		appealBody := map[string]any{
+		recoveryDisputeBody := map[string]any{
 			"claim_id": claimResp.ClaimID,
 			"reason":   "delivery handled properly with no issues",
 		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/rider/appeals", appealBody, riderUser.ID)
+		rec := doJSON(t, server, http.MethodPost, "/v1/rider/recovery-disputes", recoveryDisputeBody, riderUser.ID)
 		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &appealResp)
-		require.NotZero(t, appealResp.ID)
-		require.Equal(t, claimResp.ClaimID, appealResp.ClaimID)
-		require.Equal(t, "rider", appealResp.AppellantType)
-		require.Equal(t, rider.ID, appealResp.AppellantID)
-		require.Equal(t, "pending", appealResp.Status)
+		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &recoveryDisputeResp)
+		require.NotZero(t, recoveryDisputeResp.ID)
+		require.Equal(t, claimResp.ClaimID, recoveryDisputeResp.ClaimID)
+		require.Equal(t, "rider", recoveryDisputeResp.AppellantType)
+		require.Equal(t, rider.ID, recoveryDisputeResp.AppellantID)
+		require.Equal(t, "approved", recoveryDisputeResp.Status)
 	}
 
-	appeal, err := store.GetAppealByClaim(ctx, db.GetAppealByClaimParams{
+	recoveryDispute, err := store.GetRecoveryDisputeByClaim(ctx, db.GetRecoveryDisputeByClaimParams{
 		ClaimID:       claimResp.ClaimID,
 		AppellantType: "rider",
 	})
 	require.NoError(t, err)
-	require.Equal(t, appealResp.ID, appeal.ID)
-	require.Equal(t, "pending", appeal.Status)
-}
-
-// TestClaimJourneyD4OperatorReviewIntegration
-// 索赔旅程（D4）端到端验收：运营商审核申诉并写入结果。
-func TestClaimJourneyD4OperatorReviewIntegration(t *testing.T) {
-	server, store := initIntegrationServer(t)
-	resetIntegrationData(t)
-
-	ctx := context.Background()
-
-	region := createIntegrationRegion(t, store)
-	merchantOwner := createIntegrationUser(t, store)
-	merchant := createIntegrationMerchant(t, store, merchantOwner.ID, region.ID)
-
-	_, err := store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{ID: merchant.ID, Status: "active"})
-	require.NoError(t, err)
-	_, err = store.UpdateMerchantIsOpen(ctx, db.UpdateMerchantIsOpenParams{ID: merchant.ID, IsOpen: true, AutoCloseAt: pgtype.Timestamptz{Valid: false}})
-	require.NoError(t, err)
-	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
-
-	dish := createIntegrationDish(t, store, merchant.ID)
-
-	customer := createIntegrationUser(t, store)
-	addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
-
-	operatorUser := createIntegrationUser(t, store)
-	commissionRate := pgtype.Numeric{}
-	_ = commissionRate.Scan("0.03")
-	operator, err := store.CreateOperator(ctx, db.CreateOperatorParams{
-		UserID:            operatorUser.ID,
-		RegionID:          region.ID,
-		Name:              "op_" + util.RandomString(6),
-		ContactName:       "contact_" + util.RandomString(6),
-		ContactPhone:      "138" + util.RandomString(8),
-		WechatMchID:       pgtype.Text{Valid: false},
-		Status:            "active",
-		ContractStartDate: pgtype.Date{Valid: false},
-		ContractEndDate:   pgtype.Date{Valid: false},
-		ContractYears:     1,
-	})
-	require.NoError(t, err)
-	_, err = store.CreateUserRole(ctx, db.CreateUserRoleParams{
-		UserID:          operatorUser.ID,
-		Role:            api.RoleOperator,
-		Status:          "active",
-		RelatedEntityID: pgtype.Int8{Int64: operator.ID, Valid: true},
-	})
-	require.NoError(t, err)
-
-	// 1) 创建外卖订单
-	createBody := map[string]any{
-		"merchant_id":           merchant.ID,
-		"order_type":            "takeout",
-		"address_id":            addr.ID,
-		"items":                 []map[string]any{{"dish_id": dish.ID, "quantity": 1}},
-		"use_balance":           false,
-		"delivery_fee":          int64(500),
-		"delivery_distance":     int32(1000),
-		"delivery_fee_discount": int64(0),
-	}
-
-	var created takeoutOrderResponse
-	{
-		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
-		require.Equal(t, "pending", created.Status)
-	}
-
-	orderID := created.ID
-
-	// 2) 标记订单完成
-	_, err = store.CompleteOrderTx(ctx, db.CompleteOrderTxParams{
-		OrderID:      orderID,
-		OldStatus:    "pending",
-		OperatorID:   customer.ID,
-		OperatorType: "user",
-	})
-	require.NoError(t, err)
-
-	order, err := store.GetOrder(ctx, orderID)
-	require.NoError(t, err)
-	require.Equal(t, "completed", order.Status)
-
-	// 3) 提交索赔
-	var claimResp claimSubmitResponse
-	{
-		body := map[string]any{
-			"order_id":     orderID,
-			"claim_type":   "foreign-object",
-			"claim_amount": order.TotalAmount,
-			"claim_reason": "foreign object found in dish",
-		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/claims", body, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
-		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
-	}
-	_ = ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
-
-	// 4) 商户申诉
-	var appealResp appealSubmitResponse
-	{
-		appealBody := map[string]any{
-			"claim_id": claimResp.ClaimID,
-			"reason":   "evidence shows no foreign object in dish",
-		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/appeals", appealBody, merchantOwner.ID)
-		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &appealResp)
-		require.NotZero(t, appealResp.ID)
-		require.Equal(t, claimResp.ClaimID, appealResp.ClaimID)
-		require.Equal(t, "merchant", appealResp.AppellantType)
-		require.Equal(t, merchant.ID, appealResp.AppellantID)
-		require.Equal(t, "pending", appealResp.Status)
-	}
-
-	// 5) 运营商审核申诉
-	var reviewed appealSubmitResponse
-	{
-		reviewBody := map[string]any{
-			"status":              "approved",
-			"review_notes":        "appeal verified by operator",
-			"compensation_amount": int64(500),
-		}
-		url := fmt.Sprintf("/v1/operator/appeals/%d/review", appealResp.ID)
-		rec := doJSON(t, server, http.MethodPost, url, reviewBody, operatorUser.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &reviewed)
-		require.Equal(t, appealResp.ID, reviewed.ID)
-		require.Equal(t, "approved", reviewed.Status)
-	}
-
-	appeal, err := store.GetAppeal(ctx, appealResp.ID)
-	require.NoError(t, err)
-	require.Equal(t, "approved", appeal.Status)
-	require.True(t, appeal.ReviewerID.Valid)
-	require.Equal(t, operator.ID, appeal.ReviewerID.Int64)
-	require.True(t, appeal.CompensationAmount.Valid)
-	require.Equal(t, int64(500), appeal.CompensationAmount.Int64)
-}
-
-// TestClaimJourneyD5AppealReviewNotificationsIntegration
-// 索赔旅程（D5）端到端验收：申诉审核后的追偿回滚与通知落库。
-func TestClaimJourneyD5AppealReviewNotificationsIntegration(t *testing.T) {
-	server, store := initIntegrationServer(t)
-	resetIntegrationData(t)
-
-	ctx := context.Background()
-
-	region := createIntegrationRegion(t, store)
-	merchantOwner := createIntegrationUser(t, store)
-	merchant := createIntegrationMerchant(t, store, merchantOwner.ID, region.ID)
-
-	_, err := store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{ID: merchant.ID, Status: "active"})
-	require.NoError(t, err)
-	_, err = store.UpdateMerchantIsOpen(ctx, db.UpdateMerchantIsOpenParams{ID: merchant.ID, IsOpen: true, AutoCloseAt: pgtype.Timestamptz{Valid: false}})
-	require.NoError(t, err)
-	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
-
-	dish := createIntegrationDish(t, store, merchant.ID)
-
-	customer := createIntegrationUser(t, store)
-	addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
-
-	operatorUser := createIntegrationUser(t, store)
-	commissionRate := pgtype.Numeric{}
-	_ = commissionRate.Scan("0.03")
-	operator, err := store.CreateOperator(ctx, db.CreateOperatorParams{
-		UserID:            operatorUser.ID,
-		RegionID:          region.ID,
-		Name:              "op_" + util.RandomString(6),
-		ContactName:       "contact_" + util.RandomString(6),
-		ContactPhone:      "138" + util.RandomString(8),
-		WechatMchID:       pgtype.Text{Valid: false},
-		Status:            "active",
-		ContractStartDate: pgtype.Date{Valid: false},
-		ContractEndDate:   pgtype.Date{Valid: false},
-		ContractYears:     1,
-	})
-	require.NoError(t, err)
-	_, err = store.CreateUserRole(ctx, db.CreateUserRoleParams{
-		UserID:          operatorUser.ID,
-		Role:            api.RoleOperator,
-		Status:          "active",
-		RelatedEntityID: pgtype.Int8{Int64: operator.ID, Valid: true},
-	})
-	require.NoError(t, err)
-
-	// 1) 创建外卖订单
-	createBody := map[string]any{
-		"merchant_id":           merchant.ID,
-		"order_type":            "takeout",
-		"address_id":            addr.ID,
-		"items":                 []map[string]any{{"dish_id": dish.ID, "quantity": 1}},
-		"use_balance":           false,
-		"delivery_fee":          int64(500),
-		"delivery_distance":     int32(1000),
-		"delivery_fee_discount": int64(0),
-	}
-
-	var created takeoutOrderResponse
-	{
-		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
-		require.Equal(t, "pending", created.Status)
-	}
-
-	orderID := created.ID
-
-	// 2) 标记订单完成
-	_, err = store.CompleteOrderTx(ctx, db.CompleteOrderTxParams{
-		OrderID:      orderID,
-		OldStatus:    "pending",
-		OperatorID:   customer.ID,
-		OperatorType: "user",
-	})
-	require.NoError(t, err)
-
-	order, err := store.GetOrder(ctx, orderID)
-	require.NoError(t, err)
-	require.Equal(t, "completed", order.Status)
-
-	// 3) 提交索赔
-	var claimResp claimSubmitResponse
-	{
-		body := map[string]any{
-			"order_id":     orderID,
-			"claim_type":   "foreign-object",
-			"claim_amount": order.TotalAmount,
-			"claim_reason": "foreign object found in dish",
-		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/claims", body, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
-		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
-	}
-	_ = ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
-
-	// 4) 商户申诉
-	var appealResp appealSubmitResponse
-	{
-		appealBody := map[string]any{
-			"claim_id": claimResp.ClaimID,
-			"reason":   "evidence shows no foreign object in dish",
-		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/appeals", appealBody, merchantOwner.ID)
-		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &appealResp)
-		require.NotZero(t, appealResp.ID)
-		require.Equal(t, claimResp.ClaimID, appealResp.ClaimID)
-		require.Equal(t, "merchant", appealResp.AppellantType)
-		require.Equal(t, merchant.ID, appealResp.AppellantID)
-		require.Equal(t, "pending", appealResp.Status)
-	}
-
-	server.SetTaskDistributorForTest(nil)
-	server.SetTransferClientForTest(newFinishedClaimPayoutPaymentClient(t, store, merchantOwner.ID, 500, "appeal compensation", "appeal compensation"))
-	defer server.SetTaskDistributorForTest(worker.NewNoopTaskDistributor())
-	defer server.SetTransferClientForTest(nil)
-
-	// 5) 运营商审核申诉
-	{
-		reviewBody := map[string]any{
-			"status":              "approved",
-			"review_notes":        "appeal verified by operator",
-			"compensation_amount": int64(500),
-		}
-		url := fmt.Sprintf("/v1/operator/appeals/%d/review", appealResp.ID)
-		rec := doJSON(t, server, http.MethodPost, url, reviewBody, operatorUser.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
-	}
-
-	appeal, err := store.GetAppeal(ctx, appealResp.ID)
-	require.NoError(t, err)
-	require.True(t, appeal.CompensatedAt.Valid)
-
-	compensationAction, compensationDetail := findPayoutActionForClaimOrAppeal(t, store, orderID, claimResp.ClaimID, appealResp.ID)
-	require.Equal(t, "success", compensationAction.Status)
-	require.Equal(t, merchantOwner.ID, compensationDetail.UserID)
-	require.Equal(t, int64(500), compensationDetail.Amount)
-	require.Equal(t, wechatcontracts.DirectMerchantTransferStateSuccess, compensationDetail.TransferState)
-	require.NotEmpty(t, compensationDetail.OutBillNo)
-	require.Equal(t, "batch-integration", compensationDetail.TransferBillNo)
-	require.False(t, compensationDetail.TerminalFailure)
-
-	recovery, err := store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
-	require.NoError(t, err)
-	require.Equal(t, "waived", recovery.Status)
-
-	notifications, err := store.GetNotificationsByRelated(ctx, db.GetNotificationsByRelatedParams{
-		RelatedType: pgtype.Text{String: "appeal", Valid: true},
-		RelatedID:   pgtype.Int8{Int64: appealResp.ID, Valid: true},
-	})
-	require.NoError(t, err)
-	require.Len(t, notifications, 2)
-
-	userIDs := map[int64]bool{}
-	for _, n := range notifications {
-		userIDs[n.UserID] = true
-		require.Equal(t, "appeal", n.Type)
-	}
-	require.True(t, userIDs[merchantOwner.ID])
-	require.True(t, userIDs[customer.ID])
-}
-
-// TestClaimJourneyD6AppealRejectRecoveryResumeIntegration
-// 索赔旅程（D6）端到端验收：申诉驳回后追偿恢复与通知落库。
-func TestClaimJourneyD6AppealRejectRecoveryResumeIntegration(t *testing.T) {
-	server, store := initIntegrationServer(t)
-	resetIntegrationData(t)
-
-	ctx := context.Background()
-
-	region := createIntegrationRegion(t, store)
-	merchantOwner := createIntegrationUser(t, store)
-	merchant := createIntegrationMerchant(t, store, merchantOwner.ID, region.ID)
-
-	_, err := store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{ID: merchant.ID, Status: "active"})
-	require.NoError(t, err)
-	_, err = store.UpdateMerchantIsOpen(ctx, db.UpdateMerchantIsOpenParams{ID: merchant.ID, IsOpen: true, AutoCloseAt: pgtype.Timestamptz{Valid: false}})
-	require.NoError(t, err)
-	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
-
-	dish := createIntegrationDish(t, store, merchant.ID)
-
-	customer := createIntegrationUser(t, store)
-	addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
-
-	operatorUser := createIntegrationUser(t, store)
-	commissionRate := pgtype.Numeric{}
-	_ = commissionRate.Scan("0.03")
-	operator, err := store.CreateOperator(ctx, db.CreateOperatorParams{
-		UserID:            operatorUser.ID,
-		RegionID:          region.ID,
-		Name:              "op_" + util.RandomString(6),
-		ContactName:       "contact_" + util.RandomString(6),
-		ContactPhone:      "138" + util.RandomString(8),
-		WechatMchID:       pgtype.Text{Valid: false},
-		Status:            "active",
-		ContractStartDate: pgtype.Date{Valid: false},
-		ContractEndDate:   pgtype.Date{Valid: false},
-		ContractYears:     1,
-	})
-	require.NoError(t, err)
-	_, err = store.CreateUserRole(ctx, db.CreateUserRoleParams{
-		UserID:          operatorUser.ID,
-		Role:            api.RoleOperator,
-		Status:          "active",
-		RelatedEntityID: pgtype.Int8{Int64: operator.ID, Valid: true},
-	})
-	require.NoError(t, err)
-
-	// 1) 创建外卖订单
-	createBody := map[string]any{
-		"merchant_id":           merchant.ID,
-		"order_type":            "takeout",
-		"address_id":            addr.ID,
-		"items":                 []map[string]any{{"dish_id": dish.ID, "quantity": 1}},
-		"use_balance":           false,
-		"delivery_fee":          int64(500),
-		"delivery_distance":     int32(1000),
-		"delivery_fee_discount": int64(0),
-	}
-
-	var created takeoutOrderResponse
-	{
-		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
-		require.Equal(t, "pending", created.Status)
-	}
-
-	orderID := created.ID
-
-	// 2) 标记订单完成
-	_, err = store.CompleteOrderTx(ctx, db.CompleteOrderTxParams{
-		OrderID:      orderID,
-		OldStatus:    "pending",
-		OperatorID:   customer.ID,
-		OperatorType: "user",
-	})
-	require.NoError(t, err)
-
-	order, err := store.GetOrder(ctx, orderID)
-	require.NoError(t, err)
-	require.Equal(t, "completed", order.Status)
-
-	// 3) 提交索赔
-	var claimResp claimSubmitResponse
-	{
-		body := map[string]any{
-			"order_id":     orderID,
-			"claim_type":   "foreign-object",
-			"claim_amount": order.TotalAmount,
-			"claim_reason": "foreign object found in dish",
-		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/claims", body, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
-		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
-	}
-	_ = ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
-
-	server.SetTaskDistributorForTest(nil)
-	defer server.SetTaskDistributorForTest(worker.NewNoopTaskDistributor())
-
-	// 4) 商户申诉
-	var appealResp appealSubmitResponse
-	{
-		appealBody := map[string]any{
-			"claim_id": claimResp.ClaimID,
-			"reason":   "evidence shows no foreign object in dish",
-		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/appeals", appealBody, merchantOwner.ID)
-		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &appealResp)
-		require.NotZero(t, appealResp.ID)
-		require.Equal(t, claimResp.ClaimID, appealResp.ClaimID)
-		require.Equal(t, "merchant", appealResp.AppellantType)
-		require.Equal(t, merchant.ID, appealResp.AppellantID)
-		require.Equal(t, "pending", appealResp.Status)
-	}
-
-	// 5) 运营商驳回申诉
-	{
-		reviewBody := map[string]any{
-			"status":       "rejected",
-			"review_notes": "insufficient evidence for appeal",
-		}
-		url := fmt.Sprintf("/v1/operator/appeals/%d/review", appealResp.ID)
-		rec := doJSON(t, server, http.MethodPost, url, reviewBody, operatorUser.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
-	}
-
-	recovery, err := store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
-	require.NoError(t, err)
-	require.Equal(t, "pending", recovery.Status)
-
-	notifications, err := store.GetNotificationsByRelated(ctx, db.GetNotificationsByRelatedParams{
-		RelatedType: pgtype.Text{String: "appeal", Valid: true},
-		RelatedID:   pgtype.Int8{Int64: appealResp.ID, Valid: true},
-	})
-	require.NoError(t, err)
-	require.Len(t, notifications, 2)
-
-	userIDs := map[int64]bool{}
-	for _, n := range notifications {
-		userIDs[n.UserID] = true
-		require.Equal(t, "appeal", n.Type)
-	}
-	require.True(t, userIDs[merchantOwner.ID])
-	require.True(t, userIDs[customer.ID])
-}
-
-// TestClaimJourneyD7AppealReviewEnqueueIntegration
-// 索赔旅程（D7）端到端验收：审核时入队申诉后处理任务。
-func TestClaimJourneyD7AppealReviewEnqueueIntegration(t *testing.T) {
-	server, store := initIntegrationServer(t)
-	resetIntegrationData(t)
-
-	ctx := context.Background()
-
-	region := createIntegrationRegion(t, store)
-	merchantOwner := createIntegrationUser(t, store)
-	merchant := createIntegrationMerchant(t, store, merchantOwner.ID, region.ID)
-
-	_, err := store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{ID: merchant.ID, Status: "active"})
-	require.NoError(t, err)
-	_, err = store.UpdateMerchantIsOpen(ctx, db.UpdateMerchantIsOpenParams{ID: merchant.ID, IsOpen: true, AutoCloseAt: pgtype.Timestamptz{Valid: false}})
-	require.NoError(t, err)
-	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
-
-	dish := createIntegrationDish(t, store, merchant.ID)
-
-	customer := createIntegrationUser(t, store)
-	addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
-
-	operatorUser := createIntegrationUser(t, store)
-	commissionRate := pgtype.Numeric{}
-	_ = commissionRate.Scan("0.03")
-	operator, err := store.CreateOperator(ctx, db.CreateOperatorParams{
-		UserID:            operatorUser.ID,
-		RegionID:          region.ID,
-		Name:              "op_" + util.RandomString(6),
-		ContactName:       "contact_" + util.RandomString(6),
-		ContactPhone:      "138" + util.RandomString(8),
-		WechatMchID:       pgtype.Text{Valid: false},
-		Status:            "active",
-		ContractStartDate: pgtype.Date{Valid: false},
-		ContractEndDate:   pgtype.Date{Valid: false},
-		ContractYears:     1,
-	})
-	require.NoError(t, err)
-	_, err = store.CreateUserRole(ctx, db.CreateUserRoleParams{
-		UserID:          operatorUser.ID,
-		Role:            api.RoleOperator,
-		Status:          "active",
-		RelatedEntityID: pgtype.Int8{Int64: operator.ID, Valid: true},
-	})
-	require.NoError(t, err)
-
-	// 1) 创建外卖订单
-	createBody := map[string]any{
-		"merchant_id":           merchant.ID,
-		"order_type":            "takeout",
-		"address_id":            addr.ID,
-		"items":                 []map[string]any{{"dish_id": dish.ID, "quantity": 1}},
-		"use_balance":           false,
-		"delivery_fee":          int64(500),
-		"delivery_distance":     int32(1000),
-		"delivery_fee_discount": int64(0),
-	}
-
-	var created takeoutOrderResponse
-	{
-		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
-		require.Equal(t, "pending", created.Status)
-	}
-
-	orderID := created.ID
-
-	// 2) 标记订单完成
-	_, err = store.CompleteOrderTx(ctx, db.CompleteOrderTxParams{
-		OrderID:      orderID,
-		OldStatus:    "pending",
-		OperatorID:   customer.ID,
-		OperatorType: "user",
-	})
-	require.NoError(t, err)
-
-	order, err := store.GetOrder(ctx, orderID)
-	require.NoError(t, err)
-	require.Equal(t, "completed", order.Status)
-
-	// 3) 提交索赔
-	var claimResp claimSubmitResponse
-	{
-		body := map[string]any{
-			"order_id":     orderID,
-			"claim_type":   "foreign-object",
-			"claim_amount": order.TotalAmount,
-			"claim_reason": "foreign object found in dish",
-		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/claims", body, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
-		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
-	}
-	_ = ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
-
-	// 4) 商户申诉
-	var appealResp appealSubmitResponse
-	{
-		appealBody := map[string]any{
-			"claim_id": claimResp.ClaimID,
-			"reason":   "evidence shows no foreign object in dish",
-		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/appeals", appealBody, merchantOwner.ID)
-		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &appealResp)
-		require.NotZero(t, appealResp.ID)
-		require.Equal(t, claimResp.ClaimID, appealResp.ClaimID)
-		require.Equal(t, "merchant", appealResp.AppellantType)
-		require.Equal(t, merchant.ID, appealResp.AppellantID)
-		require.Equal(t, "pending", appealResp.Status)
-	}
-
-	distributor := &captureAppealResultDistributor{}
-	server.SetTaskDistributorForTest(distributor)
-	defer server.SetTaskDistributorForTest(worker.NewNoopTaskDistributor())
-
-	// 5) 运营商审核申诉（入队）
-	{
-		reviewBody := map[string]any{
-			"status":              "approved",
-			"review_notes":        "appeal verified by operator",
-			"compensation_amount": int64(500),
-		}
-		url := fmt.Sprintf("/v1/operator/appeals/%d/review", appealResp.ID)
-		rec := doJSON(t, server, http.MethodPost, url, reviewBody, operatorUser.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
-	}
-
-	payloads := distributor.Payloads()
-	require.Len(t, payloads, 1)
-	require.Equal(t, appealResp.ID, payloads[0].AppealID)
-	require.Equal(t, claimResp.ClaimID, payloads[0].ClaimID)
-	require.NotZero(t, payloads[0].CompensationActionID)
-	require.Equal(t, int64(500), payloads[0].CompensationAmount)
-	require.Equal(t, "approved", payloads[0].Status)
-	require.Equal(t, "merchant", payloads[0].AppellantType)
-	require.Equal(t, merchant.ID, payloads[0].AppellantID)
-	require.Equal(t, customer.ID, payloads[0].ClaimantUserID)
-
-	recovery, err := store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
-	require.NoError(t, err)
-	require.Equal(t, "appealed", recovery.Status)
-}
-
-// TestClaimJourneyD8AppealResultWorkerIntegration
-// 索赔旅程（D8）端到端验收：申诉处理任务执行后回滚追偿并发送通知。
-func TestClaimJourneyD8AppealResultWorkerIntegration(t *testing.T) {
-	server, store := initIntegrationServer(t)
-	resetIntegrationData(t)
-
-	ctx := context.Background()
-
-	region := createIntegrationRegion(t, store)
-	merchantOwner := createIntegrationUser(t, store)
-	merchant := createIntegrationMerchant(t, store, merchantOwner.ID, region.ID)
-
-	_, err := store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{ID: merchant.ID, Status: "active"})
-	require.NoError(t, err)
-	_, err = store.UpdateMerchantIsOpen(ctx, db.UpdateMerchantIsOpenParams{ID: merchant.ID, IsOpen: true, AutoCloseAt: pgtype.Timestamptz{Valid: false}})
-	require.NoError(t, err)
-	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
-
-	dish := createIntegrationDish(t, store, merchant.ID)
-
-	customer := createIntegrationUser(t, store)
-	addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
-
-	operatorUser := createIntegrationUser(t, store)
-	commissionRate := pgtype.Numeric{}
-	_ = commissionRate.Scan("0.03")
-	operator, err := store.CreateOperator(ctx, db.CreateOperatorParams{
-		UserID:            operatorUser.ID,
-		RegionID:          region.ID,
-		Name:              "op_" + util.RandomString(6),
-		ContactName:       "contact_" + util.RandomString(6),
-		ContactPhone:      "138" + util.RandomString(8),
-		WechatMchID:       pgtype.Text{Valid: false},
-		Status:            "active",
-		ContractStartDate: pgtype.Date{Valid: false},
-		ContractEndDate:   pgtype.Date{Valid: false},
-		ContractYears:     1,
-	})
-	require.NoError(t, err)
-	_, err = store.CreateUserRole(ctx, db.CreateUserRoleParams{
-		UserID:          operatorUser.ID,
-		Role:            api.RoleOperator,
-		Status:          "active",
-		RelatedEntityID: pgtype.Int8{Int64: operator.ID, Valid: true},
-	})
-	require.NoError(t, err)
-
-	// 1) 创建外卖订单
-	createBody := map[string]any{
-		"merchant_id":           merchant.ID,
-		"order_type":            "takeout",
-		"address_id":            addr.ID,
-		"items":                 []map[string]any{{"dish_id": dish.ID, "quantity": 1}},
-		"use_balance":           false,
-		"delivery_fee":          int64(500),
-		"delivery_distance":     int32(1000),
-		"delivery_fee_discount": int64(0),
-	}
-
-	var created takeoutOrderResponse
-	{
-		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
-		require.Equal(t, "pending", created.Status)
-	}
-
-	orderID := created.ID
-
-	// 2) 标记订单完成
-	_, err = store.CompleteOrderTx(ctx, db.CompleteOrderTxParams{
-		OrderID:      orderID,
-		OldStatus:    "pending",
-		OperatorID:   customer.ID,
-		OperatorType: "user",
-	})
-	require.NoError(t, err)
-
-	order, err := store.GetOrder(ctx, orderID)
-	require.NoError(t, err)
-	require.Equal(t, "completed", order.Status)
-
-	// 3) 提交索赔
-	var claimResp claimSubmitResponse
-	{
-		body := map[string]any{
-			"order_id":     orderID,
-			"claim_type":   "foreign-object",
-			"claim_amount": order.TotalAmount,
-			"claim_reason": "foreign object found in dish",
-		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/claims", body, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
-		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
-	}
-	_ = ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
-
-	// 4) 商户申诉
-	var appealResp appealSubmitResponse
-	{
-		appealBody := map[string]any{
-			"claim_id": claimResp.ClaimID,
-			"reason":   "evidence shows no foreign object in dish",
-		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/appeals", appealBody, merchantOwner.ID)
-		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &appealResp)
-		require.NotZero(t, appealResp.ID)
-		require.Equal(t, claimResp.ClaimID, appealResp.ClaimID)
-		require.Equal(t, "merchant", appealResp.AppellantType)
-		require.Equal(t, merchant.ID, appealResp.AppellantID)
-		require.Equal(t, "pending", appealResp.Status)
-	}
-
-	recovery, err := store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
-	require.NoError(t, err)
-	require.Equal(t, "appealed", recovery.Status)
-
-	appealResultDistributor := &captureAppealResultDistributor{}
-	server.SetTaskDistributorForTest(appealResultDistributor)
-	defer server.SetTaskDistributorForTest(worker.NewNoopTaskDistributor())
-
-	{
-		reviewBody := map[string]any{
-			"status":              "approved",
-			"review_notes":        "appeal verified by operator",
-			"compensation_amount": int64(500),
-		}
-		url := fmt.Sprintf("/v1/operator/appeals/%d/review", appealResp.ID)
-		rec := doJSON(t, server, http.MethodPost, url, reviewBody, operatorUser.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
-	}
-
-	payloads := appealResultDistributor.Payloads()
-	require.Len(t, payloads, 1)
-	require.NotZero(t, payloads[0].CompensationActionID)
-
-	distributor := &captureSendNotificationDistributor{}
-	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
-	processor.SetTransferClient(newFinishedClaimPayoutPaymentClient(t, store, merchantOwner.ID, 500, "appeal compensation", "appeal compensation"))
-
-	payloadBytes, err := json.Marshal(payloads[0])
-	require.NoError(t, err)
-	if err := processor.ProcessTaskProcessAppealResult(ctx, asynq.NewTask(worker.TaskProcessAppealResult, payloadBytes)); err != nil {
-		require.NoError(t, err)
-	}
-
-	appeal, err := store.GetAppeal(ctx, appealResp.ID)
-	require.NoError(t, err)
-	require.True(t, appeal.CompensatedAt.Valid)
-
-	compensationAction, compensationDetail := findPayoutActionForClaimOrAppeal(t, store, orderID, claimResp.ClaimID, appealResp.ID)
-	require.Equal(t, "success", compensationAction.Status)
-	require.Equal(t, merchantOwner.ID, compensationDetail.UserID)
-	require.Equal(t, int64(500), compensationDetail.Amount)
-	require.Equal(t, wechatcontracts.DirectMerchantTransferStateSuccess, compensationDetail.TransferState)
-	require.NotEmpty(t, compensationDetail.OutBillNo)
-	require.Equal(t, "batch-integration", compensationDetail.TransferBillNo)
-	require.False(t, compensationDetail.TerminalFailure)
-
-	recovery, err = store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
-	require.NoError(t, err)
-	require.Equal(t, "waived", recovery.Status)
-
-	notifications := distributor.Payloads()
-	require.Len(t, notifications, 2)
-
-	userIDs := map[int64]bool{}
-	for _, n := range notifications {
-		userIDs[n.UserID] = true
-		require.Equal(t, "appeal", n.Type)
-		require.Equal(t, appealResp.ID, n.RelatedID)
-	}
-	require.True(t, userIDs[merchantOwner.ID])
-	require.True(t, userIDs[customer.ID])
-}
-
-// TestClaimJourneyD9AppealResultWorkerRejectIntegration
-// 索赔旅程（D9）端到端验收：申诉处理任务驳回时恢复追偿并发送通知。
-func TestClaimJourneyD9AppealResultWorkerRejectIntegration(t *testing.T) {
-	server, store := initIntegrationServer(t)
-	resetIntegrationData(t)
-
-	ctx := context.Background()
-
-	region := createIntegrationRegion(t, store)
-	merchantOwner := createIntegrationUser(t, store)
-	merchant := createIntegrationMerchant(t, store, merchantOwner.ID, region.ID)
-
-	_, err := store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{ID: merchant.ID, Status: "active"})
-	require.NoError(t, err)
-	_, err = store.UpdateMerchantIsOpen(ctx, db.UpdateMerchantIsOpenParams{ID: merchant.ID, IsOpen: true, AutoCloseAt: pgtype.Timestamptz{Valid: false}})
-	require.NoError(t, err)
-	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
-
-	dish := createIntegrationDish(t, store, merchant.ID)
-
-	customer := createIntegrationUser(t, store)
-	addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
-
-	// 1) 创建外卖订单
-	createBody := map[string]any{
-		"merchant_id":           merchant.ID,
-		"order_type":            "takeout",
-		"address_id":            addr.ID,
-		"items":                 []map[string]any{{"dish_id": dish.ID, "quantity": 1}},
-		"use_balance":           false,
-		"delivery_fee":          int64(500),
-		"delivery_distance":     int32(1000),
-		"delivery_fee_discount": int64(0),
-	}
-
-	var created takeoutOrderResponse
-	{
-		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
-		require.Equal(t, "pending", created.Status)
-	}
-
-	orderID := created.ID
-
-	// 2) 标记订单完成
-	_, err = store.CompleteOrderTx(ctx, db.CompleteOrderTxParams{
-		OrderID:      orderID,
-		OldStatus:    "pending",
-		OperatorID:   customer.ID,
-		OperatorType: "user",
-	})
-	require.NoError(t, err)
-
-	order, err := store.GetOrder(ctx, orderID)
-	require.NoError(t, err)
-	require.Equal(t, "completed", order.Status)
-
-	// 3) 提交索赔
-	var claimResp claimSubmitResponse
-	{
-		body := map[string]any{
-			"order_id":     orderID,
-			"claim_type":   "foreign-object",
-			"claim_amount": order.TotalAmount,
-			"claim_reason": "foreign object found in dish",
-		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/claims", body, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
-		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
-	}
-	_ = ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
-
-	// 4) 商户申诉
-	var appealResp appealSubmitResponse
-	{
-		appealBody := map[string]any{
-			"claim_id": claimResp.ClaimID,
-			"reason":   "evidence shows no foreign object in dish",
-		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/appeals", appealBody, merchantOwner.ID)
-		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &appealResp)
-		require.NotZero(t, appealResp.ID)
-		require.Equal(t, claimResp.ClaimID, appealResp.ClaimID)
-		require.Equal(t, "merchant", appealResp.AppellantType)
-		require.Equal(t, merchant.ID, appealResp.AppellantID)
-		require.Equal(t, "pending", appealResp.Status)
-	}
-
-	claim, err := store.GetClaim(ctx, claimResp.ClaimID)
-	require.NoError(t, err)
-
-	distributor := &captureSendNotificationDistributor{}
-	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
-
-	payload := worker.ProcessAppealResultPayload{
-		AppealID:           appealResp.ID,
-		ClaimID:            claimResp.ClaimID,
-		Status:             "rejected",
-		AppellantType:      "merchant",
-		AppellantID:        merchant.ID,
-		ClaimantUserID:     customer.ID,
-		ClaimType:          claim.ClaimType,
-		ClaimAmount:        claim.ClaimAmount,
-		CompensationAmount: 0,
-		OrderNo:            order.OrderNo,
-	}
-
-	payloadBytes, err := json.Marshal(payload)
-	require.NoError(t, err)
-	if err := processor.ProcessTaskProcessAppealResult(ctx, asynq.NewTask(worker.TaskProcessAppealResult, payloadBytes)); err != nil {
-		require.NoError(t, err)
-	}
-
-	recovery, err := store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
-	require.NoError(t, err)
-	require.Equal(t, "pending", recovery.Status)
-
-	notifications := distributor.Payloads()
-	require.Len(t, notifications, 2)
-
-	userIDs := map[int64]bool{}
-	for _, n := range notifications {
-		userIDs[n.UserID] = true
-		require.Equal(t, "appeal", n.Type)
-		require.Equal(t, appealResp.ID, n.RelatedID)
-	}
-	require.True(t, userIDs[merchantOwner.ID])
-	require.True(t, userIDs[customer.ID])
+	require.Equal(t, recoveryDisputeResp.ID, recoveryDispute.ID)
+	require.Equal(t, "approved", recoveryDispute.Status)
+	require.True(t, recoveryDispute.ReviewedAt.Valid)
 }
 
 // TestClaimJourneyD10MerchantRecoveryPayIntegration
@@ -4864,10 +4071,25 @@ func TestClaimJourneyD10MerchantRecoveryPayIntegration(t *testing.T) {
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
 
-	recovery := ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	recovery, err := store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
+	require.NoError(t, err)
 	require.Equal(t, "pending", recovery.Status)
 	require.True(t, recovery.RecoveryTarget.Valid)
 	require.Equal(t, "merchant", recovery.RecoveryTarget.String)
+	_, err = store.CreateMerchantProfile(ctx, merchant.ID)
+	require.NoError(t, err)
+	triggerClaimRecoveryOverdueViaScheduler(t, store, recovery.ID)
+	recovery, err = store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
+	require.NoError(t, err)
+	require.Equal(t, "overdue", recovery.Status)
+	merchantProfile, err := store.GetMerchantProfile(ctx, merchant.ID)
+	require.NoError(t, err)
+	require.True(t, merchantProfile.IsTakeoutSuspended)
+	require.True(t, merchantProfile.TakeoutSuspendReason.Valid)
+	eventTypes := claimRecoveryEventTypesForIntegration(t, store, recovery.ID)
+	require.Contains(t, eventTypes, db.ClaimRecoveryEventTypeOverdue)
 
 	server.SetDirectPaymentClientForTest(newClaimRecoveryPaymentClient(t, store, merchantOwner.ID, recovery.RecoveryAmount, "商户索赔追偿支付"))
 	defer server.SetDirectPaymentClientForTest(nil)
@@ -4875,7 +4097,7 @@ func TestClaimJourneyD10MerchantRecoveryPayIntegration(t *testing.T) {
 	// 4) 商户支付追偿单
 	var payResp claimRecoveryPaymentCreateResponse
 	{
-		url := fmt.Sprintf("/v1/merchant/claims/%d/recovery/pay", claimResp.ClaimID)
+		url := fmt.Sprintf("/v1/merchant/recoveries/%d/pay", recovery.ID)
 		rec := doJSON(t, server, http.MethodPost, url, nil, merchantOwner.ID)
 		require.Equal(t, http.StatusOK, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payResp)
@@ -4889,121 +4111,15 @@ func TestClaimJourneyD10MerchantRecoveryPayIntegration(t *testing.T) {
 	recovery, err = store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
 	require.NoError(t, err)
 	require.Equal(t, "paid", recovery.Status)
-}
-
-// TestClaimJourneyD11OperatorRecoveryWaiveIntegration
-// 索赔旅程（D11）端到端验收：运营商核销追偿单。
-func TestClaimJourneyD11OperatorRecoveryWaiveIntegration(t *testing.T) {
-	server, store := initIntegrationServer(t)
-	resetIntegrationData(t)
-
-	ctx := context.Background()
-
-	region := createIntegrationRegion(t, store)
-	merchantOwner := createIntegrationUser(t, store)
-	merchant := createIntegrationMerchant(t, store, merchantOwner.ID, region.ID)
-
-	_, err := store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{ID: merchant.ID, Status: "active"})
+	merchantProfile, err = store.GetMerchantProfile(ctx, merchant.ID)
 	require.NoError(t, err)
-	_, err = store.UpdateMerchantIsOpen(ctx, db.UpdateMerchantIsOpenParams{ID: merchant.ID, IsOpen: true, AutoCloseAt: pgtype.Timestamptz{Valid: false}})
-	require.NoError(t, err)
-	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
-
-	dish := createIntegrationDish(t, store, merchant.ID)
-
-	customer := createIntegrationUser(t, store)
-	addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
-
-	operatorUser := createIntegrationUser(t, store)
-	commissionRate := pgtype.Numeric{}
-	_ = commissionRate.Scan("0.03")
-	operator, err := store.CreateOperator(ctx, db.CreateOperatorParams{
-		UserID:            operatorUser.ID,
-		RegionID:          region.ID,
-		Name:              "op_" + util.RandomString(6),
-		ContactName:       "contact_" + util.RandomString(6),
-		ContactPhone:      "138" + util.RandomString(8),
-		WechatMchID:       pgtype.Text{Valid: false},
-		Status:            "active",
-		ContractStartDate: pgtype.Date{Valid: false},
-		ContractEndDate:   pgtype.Date{Valid: false},
-		ContractYears:     1,
-	})
-	require.NoError(t, err)
-	_, err = store.CreateUserRole(ctx, db.CreateUserRoleParams{
-		UserID:          operatorUser.ID,
-		Role:            api.RoleOperator,
-		Status:          "active",
-		RelatedEntityID: pgtype.Int8{Int64: operator.ID, Valid: true},
-	})
-	require.NoError(t, err)
-
-	// 1) 创建外卖订单
-	createBody := map[string]any{
-		"merchant_id":           merchant.ID,
-		"order_type":            "takeout",
-		"address_id":            addr.ID,
-		"items":                 []map[string]any{{"dish_id": dish.ID, "quantity": 1}},
-		"use_balance":           false,
-		"delivery_fee":          int64(500),
-		"delivery_distance":     int32(1000),
-		"delivery_fee_discount": int64(0),
-	}
-
-	var created takeoutOrderResponse
-	{
-		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
-		require.Equal(t, "pending", created.Status)
-	}
-
-	orderID := created.ID
-
-	// 2) 标记订单完成
-	_, err = store.CompleteOrderTx(ctx, db.CompleteOrderTxParams{
-		OrderID:      orderID,
-		OldStatus:    "pending",
-		OperatorID:   customer.ID,
-		OperatorType: "user",
-	})
-	require.NoError(t, err)
-
-	order, err := store.GetOrder(ctx, orderID)
-	require.NoError(t, err)
-	require.Equal(t, "completed", order.Status)
-
-	// 3) 提交索赔
-	var claimResp claimSubmitResponse
-	{
-		body := map[string]any{
-			"order_id":     orderID,
-			"claim_type":   "foreign-object",
-			"claim_amount": order.TotalAmount,
-			"claim_reason": "foreign object found in dish",
-		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/claims", body, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
-		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
-	}
-
-	recovery := ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
-	require.Equal(t, "pending", recovery.Status)
-
-	// 4) 运营商核销追偿单
-	var waiveResp claimRecoveryStatusResponse
-	{
-		url := fmt.Sprintf("/v1/operator/claims/%d/recovery/waive", claimResp.ClaimID)
-		rec := doJSON(t, server, http.MethodPost, url, nil, operatorUser.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &waiveResp)
-		require.Equal(t, "waived", waiveResp.Status)
-	}
-
-	recovery, err = store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
-	require.NoError(t, err)
-	require.Equal(t, "waived", recovery.Status)
+	require.False(t, merchantProfile.IsTakeoutSuspended)
+	require.False(t, merchantProfile.TakeoutSuspendReason.Valid)
+	eventTypes = claimRecoveryEventTypesForIntegration(t, store, recovery.ID)
+	require.Contains(t, eventTypes, db.ClaimRecoveryEventTypeOverdue)
+	require.Contains(t, eventTypes, db.ClaimRecoveryEventTypePaymentStarted)
+	require.Contains(t, eventTypes, db.ClaimRecoveryEventTypePaid)
+	require.Equal(t, db.ClaimRecoveryEventTypeClosed, eventTypes[len(eventTypes)-1])
 }
 
 // TestClaimJourneyD12RiderRecoveryPayIntegration
@@ -5137,12 +4253,24 @@ func TestClaimJourneyD12RiderRecoveryPayIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		require.NotZero(t, claimResp.ClaimID)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	recovery, err := store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
 	require.NoError(t, err)
 	require.Equal(t, "pending", recovery.Status)
 	require.True(t, recovery.RecoveryTarget.Valid)
 	require.Equal(t, "rider", recovery.RecoveryTarget.String)
+	triggerClaimRecoveryOverdueViaScheduler(t, store, recovery.ID)
+	recovery, err = store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
+	require.NoError(t, err)
+	require.Equal(t, "overdue", recovery.Status)
+	riderProfile, err := store.GetRiderProfile(ctx, rider.ID)
+	require.NoError(t, err)
+	require.True(t, riderProfile.IsSuspended)
+	require.True(t, riderProfile.SuspendReason.Valid)
+	eventTypes := claimRecoveryEventTypesForIntegration(t, store, recovery.ID)
+	require.Contains(t, eventTypes, db.ClaimRecoveryEventTypeOverdue)
 
 	server.SetDirectPaymentClientForTest(newClaimRecoveryPaymentClient(t, store, riderUser.ID, recovery.RecoveryAmount, "骑手索赔追偿支付"))
 	defer server.SetDirectPaymentClientForTest(nil)
@@ -5150,7 +4278,7 @@ func TestClaimJourneyD12RiderRecoveryPayIntegration(t *testing.T) {
 	// 7) 骑手支付追偿单
 	var payResp claimRecoveryPaymentCreateResponse
 	{
-		url := fmt.Sprintf("/v1/rider/claims/%d/recovery/pay", claimResp.ClaimID)
+		url := fmt.Sprintf("/v1/rider/recoveries/%d/pay", recovery.ID)
 		rec := doJSON(t, server, http.MethodPost, url, nil, riderUser.ID)
 		require.Equal(t, http.StatusOK, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payResp)
@@ -5164,6 +4292,15 @@ func TestClaimJourneyD12RiderRecoveryPayIntegration(t *testing.T) {
 	recovery, err = store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
 	require.NoError(t, err)
 	require.Equal(t, "paid", recovery.Status)
+	riderProfile, err = store.GetRiderProfile(ctx, rider.ID)
+	require.NoError(t, err)
+	require.False(t, riderProfile.IsSuspended)
+	require.False(t, riderProfile.SuspendReason.Valid)
+	eventTypes = claimRecoveryEventTypesForIntegration(t, store, recovery.ID)
+	require.Contains(t, eventTypes, db.ClaimRecoveryEventTypeOverdue)
+	require.Contains(t, eventTypes, db.ClaimRecoveryEventTypePaymentStarted)
+	require.Contains(t, eventTypes, db.ClaimRecoveryEventTypePaid)
+	require.Equal(t, db.ClaimRecoveryEventTypeClosed, eventTypes[len(eventTypes)-1])
 }
 
 // TestClaimJourneyD13OperatorRecoveryViewIntegration
@@ -5185,7 +4322,6 @@ func TestClaimJourneyD13OperatorRecoveryViewIntegration(t *testing.T) {
 	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
 
 	dish := createIntegrationDish(t, store, merchant.ID)
-
 	customer := createIntegrationUser(t, store)
 	addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
 
@@ -5262,12 +4398,13 @@ func TestClaimJourneyD13OperatorRecoveryViewIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
-	_ = ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 4) 运营商查看追偿单
 	var recoveryResp claimRecoveryStatusResponse
 	{
-		url := fmt.Sprintf("/v1/operator/claims/%d/recovery", claimResp.ClaimID)
+		url := fmt.Sprintf("/v1/operator/recoveries/%d", claimRecoveryIDForIntegration(t, store, claimResp.ClaimID))
 		rec := doGET(t, server, url, operatorUser.ID)
 		require.Equal(t, http.StatusOK, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &recoveryResp)
@@ -5349,12 +4486,13 @@ func TestClaimJourneyD14MerchantRecoveryViewIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
-	_ = ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 4) 商户查看追偿单
 	var recoveryResp claimRecoveryStatusResponse
 	{
-		url := fmt.Sprintf("/v1/merchant/claims/%d/recovery", claimResp.ClaimID)
+		url := fmt.Sprintf("/v1/merchant/recoveries/%d", claimRecoveryIDForIntegration(t, store, claimResp.ClaimID))
 		rec := doGET(t, server, url, merchantOwner.ID)
 		require.Equal(t, http.StatusOK, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &recoveryResp)
@@ -5495,11 +4633,13 @@ func TestClaimJourneyD15RiderRecoveryViewIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		require.NotZero(t, claimResp.ClaimID)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 7) 骑手查看追偿单
 	var recoveryResp claimRecoveryStatusResponse
 	{
-		url := fmt.Sprintf("/v1/rider/claims/%d/recovery", claimResp.ClaimID)
+		url := fmt.Sprintf("/v1/rider/recoveries/%d", claimRecoveryIDForIntegration(t, store, claimResp.ClaimID))
 		rec := doGET(t, server, url, riderUser.ID)
 		require.Equal(t, http.StatusOK, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &recoveryResp)
@@ -5601,9 +4741,11 @@ func TestClaimJourneyD16MerchantRecoveryForbiddenIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 4) 非所属商户查看追偿单应被拒绝
-	url := fmt.Sprintf("/v1/merchant/claims/%d/recovery", claimResp.ClaimID)
+	url := fmt.Sprintf("/v1/merchant/recoveries/%d", claimRecoveryIDForIntegration(t, store, claimResp.ClaimID))
 	rec := doGET(t, server, url, otherOwner.ID)
 	require.Equal(t, http.StatusForbidden, rec.Code)
 }
@@ -5757,9 +4899,11 @@ func TestClaimJourneyD17RiderRecoveryForbiddenIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		require.NotZero(t, claimResp.ClaimID)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 7) 非所属骑手查看追偿单应被拒绝
-	url := fmt.Sprintf("/v1/rider/claims/%d/recovery", claimResp.ClaimID)
+	url := fmt.Sprintf("/v1/rider/recoveries/%d", claimRecoveryIDForIntegration(t, store, claimResp.ClaimID))
 	rec := doGET(t, server, url, otherRiderUser.ID)
 	require.Equal(t, http.StatusForbidden, rec.Code)
 }
@@ -5784,7 +4928,6 @@ func TestClaimJourneyD18OperatorRecoveryCrossRegionForbiddenIntegration(t *testi
 	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
 
 	dish := createIntegrationDish(t, store, merchant.ID)
-
 	customer := createIntegrationUser(t, store)
 	addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
 
@@ -5861,9 +5004,11 @@ func TestClaimJourneyD18OperatorRecoveryCrossRegionForbiddenIntegration(t *testi
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 4) 跨区域运营商查看追偿单应被拒绝
-	url := fmt.Sprintf("/v1/operator/claims/%d/recovery", claimResp.ClaimID)
+	url := fmt.Sprintf("/v1/operator/recoveries/%d", claimRecoveryIDForIntegration(t, store, claimResp.ClaimID))
 	rec := doGET(t, server, url, operatorUser.ID)
 	require.Equal(t, http.StatusForbidden, rec.Code)
 }
@@ -5886,7 +5031,7 @@ func TestClaimJourneyD19MerchantRecoveryNotFoundIntegration(t *testing.T) {
 	require.NoError(t, err)
 	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
 
-	url := "/v1/merchant/claims/999999/recovery"
+	url := "/v1/merchant/recoveries/999999"
 	rec := doGET(t, server, url, merchantOwner.ID)
 	require.Equal(t, http.StatusNotFound, rec.Code)
 }
@@ -5911,7 +5056,7 @@ func TestClaimJourneyD20RiderRecoveryNotFoundIntegration(t *testing.T) {
 	_, err = store.UpdateRiderOnlineStatus(ctx, db.UpdateRiderOnlineStatusParams{ID: rider.ID, IsOnline: true})
 	require.NoError(t, err)
 
-	url := "/v1/rider/claims/999999/recovery"
+	url := "/v1/rider/recoveries/999999"
 	rec := doGET(t, server, url, riderUser.ID)
 	require.Equal(t, http.StatusNotFound, rec.Code)
 }
@@ -5949,7 +5094,7 @@ func TestClaimJourneyD21OperatorRecoveryNotFoundIntegration(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	url := "/v1/operator/claims/999999/recovery"
+	url := "/v1/operator/recoveries/999999"
 	rec := doGET(t, server, url, operatorUser.ID)
 	require.Equal(t, http.StatusNotFound, rec.Code)
 }
@@ -6029,11 +5174,14 @@ func TestClaimJourneyD22MerchantRecoveryViewAfterPayIntegration(t *testing.T) {
 
 	// 4) 商户支付追偿单
 	{
-		recovery := ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
+		confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+		completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
+		recovery, err := store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
+		require.NoError(t, err)
 		server.SetDirectPaymentClientForTest(newClaimRecoveryPaymentClient(t, store, merchantOwner.ID, recovery.RecoveryAmount, "商户索赔追偿支付"))
 		defer server.SetDirectPaymentClientForTest(nil)
 
-		url := fmt.Sprintf("/v1/merchant/claims/%d/recovery/pay", claimResp.ClaimID)
+		url := fmt.Sprintf("/v1/merchant/recoveries/%d/pay", recovery.ID)
 		rec := doJSON(t, server, http.MethodPost, url, nil, merchantOwner.ID)
 		require.Equal(t, http.StatusOK, rec.Code)
 		var payResp claimRecoveryPaymentCreateResponse
@@ -6044,7 +5192,7 @@ func TestClaimJourneyD22MerchantRecoveryViewAfterPayIntegration(t *testing.T) {
 	// 5) 商户查看追偿单状态
 	var recoveryResp claimRecoveryStatusResponse
 	{
-		url := fmt.Sprintf("/v1/merchant/claims/%d/recovery", claimResp.ClaimID)
+		url := fmt.Sprintf("/v1/merchant/recoveries/%d", claimRecoveryIDForIntegration(t, store, claimResp.ClaimID))
 		rec := doGET(t, server, url, merchantOwner.ID)
 		require.Equal(t, http.StatusOK, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &recoveryResp)
@@ -6183,6 +5331,8 @@ func TestClaimJourneyD23RiderRecoveryViewAfterPayIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		require.NotZero(t, claimResp.ClaimID)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
 	// 7) 骑手支付追偿单
 	{
@@ -6191,7 +5341,7 @@ func TestClaimJourneyD23RiderRecoveryViewAfterPayIntegration(t *testing.T) {
 		server.SetDirectPaymentClientForTest(newClaimRecoveryPaymentClient(t, store, riderUser.ID, recovery.RecoveryAmount, "骑手索赔追偿支付"))
 		defer server.SetDirectPaymentClientForTest(nil)
 
-		url := fmt.Sprintf("/v1/rider/claims/%d/recovery/pay", claimResp.ClaimID)
+		url := fmt.Sprintf("/v1/rider/recoveries/%d/pay", recovery.ID)
 		rec := doJSON(t, server, http.MethodPost, url, nil, riderUser.ID)
 		require.Equal(t, http.StatusOK, rec.Code)
 		var payResp claimRecoveryPaymentCreateResponse
@@ -6202,7 +5352,7 @@ func TestClaimJourneyD23RiderRecoveryViewAfterPayIntegration(t *testing.T) {
 	// 8) 骑手查看追偿单状态
 	var recoveryResp claimRecoveryStatusResponse
 	{
-		url := fmt.Sprintf("/v1/rider/claims/%d/recovery", claimResp.ClaimID)
+		url := fmt.Sprintf("/v1/rider/recoveries/%d", claimRecoveryIDForIntegration(t, store, claimResp.ClaimID))
 		rec := doGET(t, server, url, riderUser.ID)
 		require.Equal(t, http.StatusOK, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &recoveryResp)
@@ -6211,7 +5361,7 @@ func TestClaimJourneyD23RiderRecoveryViewAfterPayIntegration(t *testing.T) {
 }
 
 // TestClaimJourneyD24OperatorRecoveryViewAfterWaiveIntegration
-// 索赔旅程（D24）端到端验收：运营商核销后查看追偿单状态。
+// 索赔旅程（D24）端到端验收：申诉自动通过后运营商查看追偿单状态。
 func TestClaimJourneyD24OperatorRecoveryViewAfterWaiveIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
@@ -6229,7 +5379,6 @@ func TestClaimJourneyD24OperatorRecoveryViewAfterWaiveIntegration(t *testing.T) 
 	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
 
 	dish := createIntegrationDish(t, store, merchant.ID)
-
 	customer := createIntegrationUser(t, store)
 	addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
 
@@ -6306,29 +5455,65 @@ func TestClaimJourneyD24OperatorRecoveryViewAfterWaiveIntegration(t *testing.T) 
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
-	_ = ensureIntegrationMerchantRecovery(t, store, orderID, claimResp.ClaimID, order.TotalAmount)
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	recovery, err := store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
+	require.NoError(t, err)
+	_, err = store.CreateMerchantProfile(ctx, merchant.ID)
+	require.NoError(t, err)
+	triggerClaimRecoveryOverdueViaScheduler(t, store, recovery.ID)
+	recovery, err = store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
+	require.NoError(t, err)
+	require.Equal(t, "overdue", recovery.Status)
+	merchantProfile, err := store.GetMerchantProfile(ctx, merchant.ID)
+	require.NoError(t, err)
+	require.True(t, merchantProfile.IsTakeoutSuspended)
+	require.True(t, merchantProfile.TakeoutSuspendReason.Valid)
 
-	// 4) 运营商核销追偿单
+	decisions, err := store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: orderID, Valid: true})
+	require.NoError(t, err)
+	require.NotEmpty(t, decisions)
+	_, err = integrationPool.Exec(ctx, `UPDATE behavior_decisions SET effective_status = 'superseded', updated_at = NOW() WHERE id = $1`, decisions[0].ID)
+	require.NoError(t, err)
+
+	// 4) 商户申诉自动通过并撤销追偿
 	{
-		url := fmt.Sprintf("/v1/operator/claims/%d/recovery/waive", claimResp.ClaimID)
-		rec := doJSON(t, server, http.MethodPost, url, nil, operatorUser.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		recoveryDisputeBody := map[string]any{
+			"claim_id": claimResp.ClaimID,
+			"reason":   "latest behavior decision no longer points to merchant",
+		}
+		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/recovery-disputes", recoveryDisputeBody, merchantOwner.ID)
+		require.Equal(t, http.StatusCreated, rec.Code)
+		var recoveryDisputeResp recoveryDisputeSubmitResponse
+		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &recoveryDisputeResp)
+		require.Equal(t, "approved", recoveryDisputeResp.Status)
 	}
 
 	// 5) 运营商查看追偿单状态
 	var recoveryResp claimRecoveryStatusResponse
 	{
-		url := fmt.Sprintf("/v1/operator/claims/%d/recovery", claimResp.ClaimID)
+		url := fmt.Sprintf("/v1/operator/recoveries/%d", claimRecoveryIDForIntegration(t, store, claimResp.ClaimID))
 		rec := doGET(t, server, url, operatorUser.ID)
 		require.Equal(t, http.StatusOK, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &recoveryResp)
 		require.Equal(t, "waived", recoveryResp.Status)
 	}
+	recovery, err = store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
+	require.NoError(t, err)
+	merchantProfile, err = store.GetMerchantProfile(ctx, merchant.ID)
+	require.NoError(t, err)
+	require.False(t, merchantProfile.IsTakeoutSuspended)
+	require.False(t, merchantProfile.TakeoutSuspendReason.Valid)
+	eventTypes := claimRecoveryEventTypesForIntegration(t, store, recovery.ID)
+	require.Contains(t, eventTypes, db.ClaimRecoveryEventTypeOverdue)
+	require.Contains(t, eventTypes, db.ClaimRecoveryEventTypeDisputed)
+	require.Contains(t, eventTypes, db.ClaimRecoveryEventTypeWaived)
+	require.Equal(t, db.ClaimRecoveryEventTypeClosed, eventTypes[len(eventTypes)-1])
 }
 
-// TestClaimJourneyD25MerchantAppealDetailNotFoundIntegration
-// 索赔旅程（D25）端到端验收：非所属商户查看申诉详情返回 404。
-func TestClaimJourneyD25MerchantAppealDetailNotFoundIntegration(t *testing.T) {
+// TestClaimJourneyD25MerchantRecoveryDisputeDetailNotFoundIntegration
+// 索赔旅程（D25）端到端验收：非所属商户查看追偿争议详情返回 404。
+func TestClaimJourneyD25MerchantRecoveryDisputeDetailNotFoundIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -6418,29 +5603,31 @@ func TestClaimJourneyD25MerchantAppealDetailNotFoundIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
-	// 4) 商户申诉
-	var appealResp appealSubmitResponse
+	// 4) 商户发起追偿争议
+	var recoveryDisputeResp recoveryDisputeSubmitResponse
 	{
-		appealBody := map[string]any{
+		recoveryDisputeBody := map[string]any{
 			"claim_id": claimResp.ClaimID,
 			"reason":   "evidence shows no foreign object in dish",
 		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/appeals", appealBody, merchantOwner.ID)
+		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/recovery-disputes", recoveryDisputeBody, merchantOwner.ID)
 		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &appealResp)
-		require.NotZero(t, appealResp.ID)
+		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &recoveryDisputeResp)
+		require.NotZero(t, recoveryDisputeResp.ID)
 	}
 
-	// 5) 非所属商户查看申诉详情
-	url := fmt.Sprintf("/v1/merchant/appeals/%d", appealResp.ID)
+	// 5) 非所属商户查看追偿争议详情
+	url := fmt.Sprintf("/v1/merchant/recovery-disputes/%d", recoveryDisputeResp.ID)
 	rec := doGET(t, server, url, otherOwner.ID)
 	require.Equal(t, http.StatusNotFound, rec.Code)
 }
 
-// TestClaimJourneyD26RiderAppealDetailNotFoundIntegration
-// 索赔旅程（D26）端到端验收：非所属骑手查看申诉详情返回 404。
-func TestClaimJourneyD26RiderAppealDetailNotFoundIntegration(t *testing.T) {
+// TestClaimJourneyD26RiderRecoveryDisputeDetailNotFoundIntegration
+// 索赔旅程（D26）端到端验收：非所属骑手查看追偿争议详情返回 404。
+func TestClaimJourneyD26RiderRecoveryDisputeDetailNotFoundIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -6587,29 +5774,31 @@ func TestClaimJourneyD26RiderAppealDetailNotFoundIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
-	// 7) 骑手申诉
-	var appealResp appealSubmitResponse
+	// 7) 骑手发起追偿争议
+	var recoveryDisputeResp recoveryDisputeSubmitResponse
 	{
-		appealBody := map[string]any{
+		recoveryDisputeBody := map[string]any{
 			"claim_id": claimResp.ClaimID,
 			"reason":   "delivery handled properly with no issues",
 		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/rider/appeals", appealBody, riderUser.ID)
+		rec := doJSON(t, server, http.MethodPost, "/v1/rider/recovery-disputes", recoveryDisputeBody, riderUser.ID)
 		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &appealResp)
-		require.NotZero(t, appealResp.ID)
+		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &recoveryDisputeResp)
+		require.NotZero(t, recoveryDisputeResp.ID)
 	}
 
-	// 8) 非所属骑手查看申诉详情
-	url := fmt.Sprintf("/v1/rider/appeals/%d", appealResp.ID)
+	// 8) 非所属骑手查看追偿争议详情
+	url := fmt.Sprintf("/v1/rider/recovery-disputes/%d", recoveryDisputeResp.ID)
 	rec := doGET(t, server, url, otherRiderUser.ID)
 	require.Equal(t, http.StatusNotFound, rec.Code)
 }
 
-// TestClaimJourneyD27OperatorAppealDetailNotFoundIntegration
-// 索赔旅程（D27）端到端验收：跨区域运营商查看申诉详情返回 404。
-func TestClaimJourneyD27OperatorAppealDetailNotFoundIntegration(t *testing.T) {
+// TestClaimJourneyD27OperatorRecoveryDisputeDetailNotFoundIntegration
+// 索赔旅程（D27）端到端验收：跨区域运营商查看追偿争议详情返回 404。
+func TestClaimJourneyD27OperatorRecoveryDisputeDetailNotFoundIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -6704,36 +5893,37 @@ func TestClaimJourneyD27OperatorAppealDetailNotFoundIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
-	// 4) 商户申诉
-	var appealResp appealSubmitResponse
+	// 4) 商户发起追偿争议
+	var recoveryDisputeResp recoveryDisputeSubmitResponse
 	{
-		appealBody := map[string]any{
+		recoveryDisputeBody := map[string]any{
 			"claim_id": claimResp.ClaimID,
 			"reason":   "evidence shows no foreign object in dish",
 		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/appeals", appealBody, merchantOwner.ID)
+		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/recovery-disputes", recoveryDisputeBody, merchantOwner.ID)
 		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &appealResp)
-		require.NotZero(t, appealResp.ID)
+		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &recoveryDisputeResp)
+		require.NotZero(t, recoveryDisputeResp.ID)
 	}
 
-	// 5) 跨区域运营商查看申诉详情
-	url := fmt.Sprintf("/v1/operator/appeals/%d", appealResp.ID)
+	// 5) 跨区域运营商查看追偿争议详情
+	url := fmt.Sprintf("/v1/operator/recovery-disputes/%d", recoveryDisputeResp.ID)
 	rec := doGET(t, server, url, operatorUser.ID)
 	require.Equal(t, http.StatusForbidden, rec.Code)
 }
 
-// TestClaimJourneyD28OperatorReviewCrossRegionForbiddenIntegration
-// 索赔旅程（D28）端到端验收：跨区域运营商审核申诉返回 403。
-func TestClaimJourneyD28OperatorReviewCrossRegionForbiddenIntegration(t *testing.T) {
+// TestClaimJourneyD28RiderRecoveryViewAfterWaiveIntegration
+// 索赔旅程（D28）端到端验收：骑手追偿单逾期封禁后，申诉自动通过会撤销追偿并释放封禁。
+func TestClaimJourneyD28RiderRecoveryViewAfterWaiveIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
 	ctx := context.Background()
 
 	region := createIntegrationRegion(t, store)
-	otherRegion := createIntegrationRegion(t, store)
 	merchantOwner := createIntegrationUser(t, store)
 	merchant := createIntegrationMerchant(t, store, merchantOwner.ID, region.ID)
 
@@ -6744,35 +5934,20 @@ func TestClaimJourneyD28OperatorReviewCrossRegionForbiddenIntegration(t *testing
 	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
 
 	dish := createIntegrationDish(t, store, merchant.ID)
-
 	customer := createIntegrationUser(t, store)
 	addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
 
-	operatorUser := createIntegrationUser(t, store)
-	commissionRate := pgtype.Numeric{}
-	_ = commissionRate.Scan("0.03")
-	operator, err := store.CreateOperator(ctx, db.CreateOperatorParams{
-		UserID:            operatorUser.ID,
-		RegionID:          otherRegion.ID,
-		Name:              "op_" + util.RandomString(6),
-		ContactName:       "contact_" + util.RandomString(6),
-		ContactPhone:      "138" + util.RandomString(8),
-		WechatMchID:       pgtype.Text{Valid: false},
-		Status:            "active",
-		ContractStartDate: pgtype.Date{Valid: false},
-		ContractEndDate:   pgtype.Date{Valid: false},
-		ContractYears:     1,
-	})
+	riderUser := createIntegrationUser(t, store)
+	rider := createIntegrationRider(t, store, riderUser.ID, region.ID)
+	_, err = store.CreateRiderProfile(ctx, rider.ID)
 	require.NoError(t, err)
-	_, err = store.CreateUserRole(ctx, db.CreateUserRoleParams{
-		UserID:          operatorUser.ID,
-		Role:            api.RoleOperator,
-		Status:          "active",
-		RelatedEntityID: pgtype.Int8{Int64: operator.ID, Valid: true},
-	})
+	_, err = store.UpdateRiderStatus(ctx, db.UpdateRiderStatusParams{ID: rider.ID, Status: "active"})
+	require.NoError(t, err)
+	_, err = store.UpdateRiderDeposit(ctx, db.UpdateRiderDepositParams{ID: rider.ID, DepositAmount: 100_000, FrozenDeposit: 0})
+	require.NoError(t, err)
+	_, err = store.UpdateRiderOnlineStatus(ctx, db.UpdateRiderOnlineStatusParams{ID: rider.ID, IsOnline: true})
 	require.NoError(t, err)
 
-	// 1) 创建外卖订单
 	createBody := map[string]any{
 		"merchant_id":           merchant.ID,
 		"order_type":            "takeout",
@@ -6793,11 +5968,54 @@ func TestClaimJourneyD28OperatorReviewCrossRegionForbiddenIntegration(t *testing
 	}
 
 	orderID := created.ID
+	orderForPayment, err := store.GetOrder(ctx, orderID)
+	require.NoError(t, err)
 
-	// 2) 标记订单完成
+	payment, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
+		OrderID:        pgtype.Int8{Int64: orderID, Valid: true},
+		UserID:         customer.ID,
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelDirect,
+		BusinessType:   "order",
+		Amount:         orderForPayment.TotalAmount,
+		OutTradeNo:     fmt.Sprintf("d28_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = store.UpdatePaymentOrderToPaid(ctx, db.UpdatePaymentOrderToPaidParams{
+		ID:            payment.ID,
+		TransactionID: pgtype.Text{String: "integration_tx_d28_001", Valid: true},
+	})
+	require.NoError(t, err)
+
+	payRes, err := store.ProcessPaymentSuccessTx(ctx, db.ProcessPaymentSuccessTxParams{
+		PaymentOrderID:     payment.ID,
+		RiderAverageSpeed:  15000,
+		DefaultPrepareTime: 20,
+	})
+	require.NoError(t, err)
+	require.True(t, payRes.Processed)
+
+	{
+		url := fmt.Sprintf("/v1/merchant/orders/%d/accept", orderID)
+		rec := doJSON(t, server, http.MethodPost, url, nil, merchantOwner.ID)
+		require.Equal(t, http.StatusOK, rec.Code)
+	}
+	{
+		url := fmt.Sprintf("/v1/merchant/orders/%d/ready", orderID)
+		rec := doJSON(t, server, http.MethodPost, url, nil, merchantOwner.ID)
+		require.Equal(t, http.StatusOK, rec.Code)
+	}
+	{
+		url := fmt.Sprintf("/v1/delivery/grab/%d", orderID)
+		rec := doJSON(t, server, http.MethodPost, url, nil, riderUser.ID)
+		require.Equal(t, http.StatusOK, rec.Code)
+	}
+
 	_, err = store.CompleteOrderTx(ctx, db.CompleteOrderTxParams{
 		OrderID:      orderID,
-		OldStatus:    "pending",
+		OldStatus:    "ready",
 		OperatorID:   customer.ID,
 		OperatorType: "user",
 	})
@@ -6807,48 +6025,80 @@ func TestClaimJourneyD28OperatorReviewCrossRegionForbiddenIntegration(t *testing
 	require.NoError(t, err)
 	require.Equal(t, "completed", order.Status)
 
-	// 3) 提交索赔
 	var claimResp claimSubmitResponse
 	{
 		body := map[string]any{
 			"order_id":     orderID,
-			"claim_type":   "foreign-object",
+			"claim_type":   "damage",
 			"claim_amount": order.TotalAmount,
-			"claim_reason": "foreign object found in dish",
+			"claim_reason": "food was damaged during delivery",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/claims", body, customer.ID)
 		require.Equal(t, http.StatusOK, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
-		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
+		require.NotZero(t, claimResp.ClaimID)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
-	// 4) 商户申诉
-	var appealResp appealSubmitResponse
+	recovery, err := store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
+	require.NoError(t, err)
+	require.Equal(t, "pending", recovery.Status)
+	require.True(t, recovery.RecoveryTarget.Valid)
+	require.Equal(t, "rider", recovery.RecoveryTarget.String)
+	triggerClaimRecoveryOverdueViaScheduler(t, store, recovery.ID)
+	recovery, err = store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
+	require.NoError(t, err)
+	require.Equal(t, "overdue", recovery.Status)
+	riderProfile, err := store.GetRiderProfile(ctx, rider.ID)
+	require.NoError(t, err)
+	require.True(t, riderProfile.IsSuspended)
+	require.True(t, riderProfile.SuspendReason.Valid)
+
+	decisions, err := store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: orderID, Valid: true})
+	require.NoError(t, err)
+	require.NotEmpty(t, decisions)
+	_, err = integrationPool.Exec(ctx, `UPDATE behavior_decisions SET effective_status = 'superseded', updated_at = NOW() WHERE id = $1`, decisions[0].ID)
+	require.NoError(t, err)
+
+	var recoveryDisputeResp recoveryDisputeSubmitResponse
 	{
-		appealBody := map[string]any{
+		recoveryDisputeBody := map[string]any{
 			"claim_id": claimResp.ClaimID,
-			"reason":   "evidence shows no foreign object in dish",
+			"reason":   "latest behavior decision no longer points to rider",
 		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/appeals", appealBody, merchantOwner.ID)
+		rec := doJSON(t, server, http.MethodPost, "/v1/rider/recovery-disputes", recoveryDisputeBody, riderUser.ID)
 		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &appealResp)
-		require.NotZero(t, appealResp.ID)
+		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &recoveryDisputeResp)
+		require.Equal(t, "approved", recoveryDisputeResp.Status)
 	}
 
-	// 5) 跨区域运营商审核申诉
-	reviewBody := map[string]any{
-		"status":              "approved",
-		"review_notes":        "appeal verified by operator",
-		"compensation_amount": int64(500),
+	var recoveryResp claimRecoveryStatusResponse
+	{
+		url := fmt.Sprintf("/v1/rider/recoveries/%d", claimRecoveryIDForIntegration(t, store, claimResp.ClaimID))
+		rec := doGET(t, server, url, riderUser.ID)
+		require.Equal(t, http.StatusOK, rec.Code)
+		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &recoveryResp)
+		require.Equal(t, "waived", recoveryResp.Status)
 	}
-	url := fmt.Sprintf("/v1/operator/appeals/%d/review", appealResp.ID)
-	rec := doJSON(t, server, http.MethodPost, url, reviewBody, operatorUser.ID)
-	require.Equal(t, http.StatusForbidden, rec.Code)
+
+	recovery, err = store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
+	require.NoError(t, err)
+	require.Equal(t, "waived", recovery.Status)
+	riderProfile, err = store.GetRiderProfile(ctx, rider.ID)
+	require.NoError(t, err)
+	require.False(t, riderProfile.IsSuspended)
+	require.False(t, riderProfile.SuspendReason.Valid)
+	eventTypes := claimRecoveryEventTypesForIntegration(t, store, recovery.ID)
+	require.Contains(t, eventTypes, db.ClaimRecoveryEventTypeOverdue)
+	require.Contains(t, eventTypes, db.ClaimRecoveryEventTypeDisputed)
+	require.Contains(t, eventTypes, db.ClaimRecoveryEventTypeWaived)
+	require.Equal(t, db.ClaimRecoveryEventTypeClosed, eventTypes[len(eventTypes)-1])
 }
 
-// TestClaimJourneyD29OperatorReviewAlreadyReviewedIntegration
-// 索赔旅程（D29）端到端验收：申诉已审核再次提交返回 400。
-func TestClaimJourneyD29OperatorReviewAlreadyReviewedIntegration(t *testing.T) {
+// TestClaimJourneyD29RiderRecoveryViewAfterRejectedRecoveryDisputeIntegration
+// 索赔旅程（D29）端到端验收：骑手追偿单逾期封禁后，追偿争议被自动驳回会恢复到逾期追偿并保持封禁。
+func TestClaimJourneyD29RiderRecoveryViewAfterRejectedRecoveryDisputeIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -6865,35 +6115,20 @@ func TestClaimJourneyD29OperatorReviewAlreadyReviewedIntegration(t *testing.T) {
 	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
 
 	dish := createIntegrationDish(t, store, merchant.ID)
-
 	customer := createIntegrationUser(t, store)
 	addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
 
-	operatorUser := createIntegrationUser(t, store)
-	commissionRate := pgtype.Numeric{}
-	_ = commissionRate.Scan("0.03")
-	operator, err := store.CreateOperator(ctx, db.CreateOperatorParams{
-		UserID:            operatorUser.ID,
-		RegionID:          region.ID,
-		Name:              "op_" + util.RandomString(6),
-		ContactName:       "contact_" + util.RandomString(6),
-		ContactPhone:      "138" + util.RandomString(8),
-		WechatMchID:       pgtype.Text{Valid: false},
-		Status:            "active",
-		ContractStartDate: pgtype.Date{Valid: false},
-		ContractEndDate:   pgtype.Date{Valid: false},
-		ContractYears:     1,
-	})
+	riderUser := createIntegrationUser(t, store)
+	rider := createIntegrationRider(t, store, riderUser.ID, region.ID)
+	_, err = store.CreateRiderProfile(ctx, rider.ID)
 	require.NoError(t, err)
-	_, err = store.CreateUserRole(ctx, db.CreateUserRoleParams{
-		UserID:          operatorUser.ID,
-		Role:            api.RoleOperator,
-		Status:          "active",
-		RelatedEntityID: pgtype.Int8{Int64: operator.ID, Valid: true},
-	})
+	_, err = store.UpdateRiderStatus(ctx, db.UpdateRiderStatusParams{ID: rider.ID, Status: "active"})
+	require.NoError(t, err)
+	_, err = store.UpdateRiderDeposit(ctx, db.UpdateRiderDepositParams{ID: rider.ID, DepositAmount: 100_000, FrozenDeposit: 0})
+	require.NoError(t, err)
+	_, err = store.UpdateRiderOnlineStatus(ctx, db.UpdateRiderOnlineStatusParams{ID: rider.ID, IsOnline: true})
 	require.NoError(t, err)
 
-	// 1) 创建外卖订单
 	createBody := map[string]any{
 		"merchant_id":           merchant.ID,
 		"order_type":            "takeout",
@@ -6914,11 +6149,54 @@ func TestClaimJourneyD29OperatorReviewAlreadyReviewedIntegration(t *testing.T) {
 	}
 
 	orderID := created.ID
+	orderForPayment, err := store.GetOrder(ctx, orderID)
+	require.NoError(t, err)
 
-	// 2) 标记订单完成
+	payment, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
+		OrderID:        pgtype.Int8{Int64: orderID, Valid: true},
+		UserID:         customer.ID,
+		PaymentType:    "miniprogram",
+		PaymentChannel: db.PaymentChannelDirect,
+		BusinessType:   "order",
+		Amount:         orderForPayment.TotalAmount,
+		OutTradeNo:     fmt.Sprintf("d29_order_%d_%d", orderID, util.RandomInt(1000, 9999)),
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = store.UpdatePaymentOrderToPaid(ctx, db.UpdatePaymentOrderToPaidParams{
+		ID:            payment.ID,
+		TransactionID: pgtype.Text{String: "integration_tx_d29_001", Valid: true},
+	})
+	require.NoError(t, err)
+
+	payRes, err := store.ProcessPaymentSuccessTx(ctx, db.ProcessPaymentSuccessTxParams{
+		PaymentOrderID:     payment.ID,
+		RiderAverageSpeed:  15000,
+		DefaultPrepareTime: 20,
+	})
+	require.NoError(t, err)
+	require.True(t, payRes.Processed)
+
+	{
+		url := fmt.Sprintf("/v1/merchant/orders/%d/accept", orderID)
+		rec := doJSON(t, server, http.MethodPost, url, nil, merchantOwner.ID)
+		require.Equal(t, http.StatusOK, rec.Code)
+	}
+	{
+		url := fmt.Sprintf("/v1/merchant/orders/%d/ready", orderID)
+		rec := doJSON(t, server, http.MethodPost, url, nil, merchantOwner.ID)
+		require.Equal(t, http.StatusOK, rec.Code)
+	}
+	{
+		url := fmt.Sprintf("/v1/delivery/grab/%d", orderID)
+		rec := doJSON(t, server, http.MethodPost, url, nil, riderUser.ID)
+		require.Equal(t, http.StatusOK, rec.Code)
+	}
+
 	_, err = store.CompleteOrderTx(ctx, db.CompleteOrderTxParams{
 		OrderID:      orderID,
-		OldStatus:    "pending",
+		OldStatus:    "ready",
 		OperatorID:   customer.ID,
 		OperatorType: "user",
 	})
@@ -6928,56 +6206,73 @@ func TestClaimJourneyD29OperatorReviewAlreadyReviewedIntegration(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "completed", order.Status)
 
-	// 3) 提交索赔
 	var claimResp claimSubmitResponse
 	{
 		body := map[string]any{
 			"order_id":     orderID,
-			"claim_type":   "foreign-object",
+			"claim_type":   "damage",
 			"claim_amount": order.TotalAmount,
-			"claim_reason": "foreign object found in dish",
+			"claim_reason": "food was damaged during delivery",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/claims", body, customer.ID)
 		require.Equal(t, http.StatusOK, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
-		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
+		require.NotZero(t, claimResp.ClaimID)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
-	// 4) 商户申诉
-	var appealResp appealSubmitResponse
+	recovery, err := store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
+	require.NoError(t, err)
+	require.Equal(t, "pending", recovery.Status)
+	require.True(t, recovery.RecoveryTarget.Valid)
+	require.Equal(t, "rider", recovery.RecoveryTarget.String)
+	triggerClaimRecoveryOverdueViaScheduler(t, store, recovery.ID)
+	recovery, err = store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
+	require.NoError(t, err)
+	require.Equal(t, "overdue", recovery.Status)
+	riderProfile, err := store.GetRiderProfile(ctx, rider.ID)
+	require.NoError(t, err)
+	require.True(t, riderProfile.IsSuspended)
+	require.True(t, riderProfile.SuspendReason.Valid)
+
+	var recoveryDisputeResp recoveryDisputeSubmitResponse
 	{
-		appealBody := map[string]any{
+		recoveryDisputeBody := map[string]any{
 			"claim_id": claimResp.ClaimID,
-			"reason":   "evidence shows no foreign object in dish",
+			"reason":   "current behavior decision still points to rider responsibility",
 		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/appeals", appealBody, merchantOwner.ID)
+		rec := doJSON(t, server, http.MethodPost, "/v1/rider/recovery-disputes", recoveryDisputeBody, riderUser.ID)
 		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &appealResp)
-		require.NotZero(t, appealResp.ID)
+		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &recoveryDisputeResp)
+		require.Equal(t, "rejected", recoveryDisputeResp.Status)
 	}
 
-	// 5) 运营商首次审核通过
-	reviewBody := map[string]any{
-		"status":              "approved",
-		"review_notes":        "appeal verified by operator",
-		"compensation_amount": int64(500),
-	}
-	url := fmt.Sprintf("/v1/operator/appeals/%d/review", appealResp.ID)
+	var recoveryResp claimRecoveryStatusResponse
 	{
-		rec := doJSON(t, server, http.MethodPost, url, reviewBody, operatorUser.ID)
+		url := fmt.Sprintf("/v1/rider/recoveries/%d", claimRecoveryIDForIntegration(t, store, claimResp.ClaimID))
+		rec := doGET(t, server, url, riderUser.ID)
 		require.Equal(t, http.StatusOK, rec.Code)
+		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &recoveryResp)
+		require.Equal(t, "overdue", recoveryResp.Status)
 	}
 
-	// 6) 再次审核应返回 400
-	{
-		rec := doJSON(t, server, http.MethodPost, url, reviewBody, operatorUser.ID)
-		require.Equal(t, http.StatusBadRequest, rec.Code)
-	}
+	recovery, err = store.GetClaimRecoveryByClaimID(ctx, claimResp.ClaimID)
+	require.NoError(t, err)
+	require.Equal(t, "overdue", recovery.Status)
+	riderProfile, err = store.GetRiderProfile(ctx, rider.ID)
+	require.NoError(t, err)
+	require.True(t, riderProfile.IsSuspended)
+	require.True(t, riderProfile.SuspendReason.Valid)
+	eventTypes := claimRecoveryEventTypesForIntegration(t, store, recovery.ID)
+	require.Contains(t, eventTypes, db.ClaimRecoveryEventTypeOverdue)
+	require.Contains(t, eventTypes, db.ClaimRecoveryEventTypeDisputed)
+	require.Equal(t, db.ClaimRecoveryEventTypeResumed, eventTypes[len(eventTypes)-1])
 }
 
-// TestClaimJourneyD30MerchantAppealDuplicateIntegration
-// 索赔旅程（D30）端到端验收：商户对同一索赔重复申诉返回 409。
-func TestClaimJourneyD30MerchantAppealDuplicateIntegration(t *testing.T) {
+// TestClaimJourneyD30MerchantRecoveryDisputeDuplicateIntegration
+// 索赔旅程（D30）端到端验收：商户对同一索赔重复发起追偿争议返回 409。
+func TestClaimJourneyD30MerchantRecoveryDisputeDuplicateIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -7047,20 +6342,22 @@ func TestClaimJourneyD30MerchantAppealDuplicateIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
-	// 4) 商户首次申诉
-	appealBody := map[string]any{
+	// 4) 商户首次发起追偿争议
+	recoveryDisputeBody := map[string]any{
 		"claim_id": claimResp.ClaimID,
 		"reason":   "evidence shows no foreign object in dish",
 	}
 	{
-		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/appeals", appealBody, merchantOwner.ID)
+		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/recovery-disputes", recoveryDisputeBody, merchantOwner.ID)
 		require.Equal(t, http.StatusCreated, rec.Code)
 	}
 
-	// 5) 商户重复申诉
+	// 5) 商户重复发起追偿争议
 	{
-		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/appeals", appealBody, merchantOwner.ID)
+		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/recovery-disputes", recoveryDisputeBody, merchantOwner.ID)
 		require.Equal(t, http.StatusConflict, rec.Code)
 	}
 }
@@ -7114,9 +6411,9 @@ func TestReservationJourneyCConfirmBeforePaidIntegration(t *testing.T) {
 	}
 }
 
-// TestClaimJourneyD31RiderAppealDuplicateIntegration
-// 索赔旅程（D31）端到端验收：骑手重复申诉返回已存在申诉。
-func TestClaimJourneyD31RiderAppealDuplicateIntegration(t *testing.T) {
+// TestClaimJourneyD31RiderRecoveryDisputeDuplicateIntegration
+// 索赔旅程（D31）端到端验收：骑手重复发起追偿争议返回已存在争议。
+func TestClaimJourneyD31RiderRecoveryDisputeDuplicateIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -7245,27 +6542,29 @@ func TestClaimJourneyD31RiderAppealDuplicateIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
-	// 7) 骑手首次申诉
-	appealBody := map[string]any{
+	// 7) 骑手首次发起追偿争议
+	recoveryDisputeBody := map[string]any{
 		"claim_id": claimResp.ClaimID,
 		"reason":   "delivery handled properly with no issues",
 	}
 	{
-		rec := doJSON(t, server, http.MethodPost, "/v1/rider/appeals", appealBody, riderUser.ID)
+		rec := doJSON(t, server, http.MethodPost, "/v1/rider/recovery-disputes", recoveryDisputeBody, riderUser.ID)
 		require.Equal(t, http.StatusCreated, rec.Code)
 	}
 
-	// 8) 骑手重复申诉
+	// 8) 骑手重复发起追偿争议
 	{
-		rec := doJSON(t, server, http.MethodPost, "/v1/rider/appeals", appealBody, riderUser.ID)
+		rec := doJSON(t, server, http.MethodPost, "/v1/rider/recovery-disputes", recoveryDisputeBody, riderUser.ID)
 		require.Equal(t, http.StatusOK, rec.Code)
 	}
 }
 
-// TestClaimJourneyD32RiderAppealDuplicateConflictIntegration
-// 索赔旅程（D32）端到端验收：不同骑手对同一索赔申诉返回 403。
-func TestClaimJourneyD32RiderAppealDuplicateConflictIntegration(t *testing.T) {
+// TestClaimJourneyD32RiderRecoveryDisputeDuplicateConflictIntegration
+// 索赔旅程（D32）端到端验收：不同骑手对同一索赔发起追偿争议返回 403。
+func TestClaimJourneyD32RiderRecoveryDisputeDuplicateConflictIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -7412,27 +6711,29 @@ func TestClaimJourneyD32RiderAppealDuplicateConflictIntegration(t *testing.T) {
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
 	}
+	confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+	completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
 
-	// 7) 骑手首次申诉
-	appealBody := map[string]any{
+	// 7) 骑手首次发起追偿争议
+	recoveryDisputeBody := map[string]any{
 		"claim_id": claimResp.ClaimID,
 		"reason":   "delivery handled properly with no issues",
 	}
 	{
-		rec := doJSON(t, server, http.MethodPost, "/v1/rider/appeals", appealBody, riderUser.ID)
+		rec := doJSON(t, server, http.MethodPost, "/v1/rider/recovery-disputes", recoveryDisputeBody, riderUser.ID)
 		require.Equal(t, http.StatusCreated, rec.Code)
 	}
 
-	// 8) 其他骑手重复申诉
+	// 8) 其他骑手重复发起追偿争议
 	{
-		rec := doJSON(t, server, http.MethodPost, "/v1/rider/appeals", appealBody, otherRiderUser.ID)
+		rec := doJSON(t, server, http.MethodPost, "/v1/rider/recovery-disputes", recoveryDisputeBody, otherRiderUser.ID)
 		require.Equal(t, http.StatusForbidden, rec.Code)
 	}
 }
 
-// TestClaimJourneyD33OperatorAppealListByStatusIntegration
-// 索赔旅程（D33）端到端验收：运营商按状态筛选申诉列表。
-func TestClaimJourneyD33OperatorAppealListByStatusIntegration(t *testing.T) {
+// TestClaimJourneyD33OperatorRecoveryDisputeListByStatusIntegration
+// 索赔旅程（D33）端到端验收：运营商按状态筛选追偿争议列表。
+func TestClaimJourneyD33OperatorRecoveryDisputeListByStatusIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -7450,9 +6751,6 @@ func TestClaimJourneyD33OperatorAppealListByStatusIntegration(t *testing.T) {
 
 	dish := createIntegrationDish(t, store, merchant.ID)
 
-	customer := createIntegrationUser(t, store)
-	addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
-
 	operatorUser := createIntegrationUser(t, store)
 	commissionRate := pgtype.Numeric{}
 	_ = commissionRate.Scan("0.03")
@@ -7477,143 +6775,133 @@ func TestClaimJourneyD33OperatorAppealListByStatusIntegration(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 1) 创建外卖订单
-	createBody := map[string]any{
-		"merchant_id":           merchant.ID,
-		"order_type":            "takeout",
-		"address_id":            addr.ID,
-		"items":                 []map[string]any{{"dish_id": dish.ID, "quantity": 1}},
-		"use_balance":           false,
-		"delivery_fee":          int64(500),
-		"delivery_distance":     int32(1000),
-		"delivery_fee_discount": int64(0),
-	}
+	createCompletedOrderAndClaim := func(claimReason string) (int64, int64, int64) {
+		customer := createIntegrationUser(t, store)
+		addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
+		createBody := map[string]any{
+			"merchant_id":           merchant.ID,
+			"order_type":            "takeout",
+			"address_id":            addr.ID,
+			"items":                 []map[string]any{{"dish_id": dish.ID, "quantity": 1}},
+			"use_balance":           false,
+			"delivery_fee":          int64(500),
+			"delivery_distance":     int32(1000),
+			"delivery_fee_discount": int64(0),
+		}
 
-	var created takeoutOrderResponse
-	{
+		var created takeoutOrderResponse
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
 		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
-		require.Equal(t, "pending", created.Status)
-	}
 
-	orderID := created.ID
+		_, err = store.CompleteOrderTx(ctx, db.CompleteOrderTxParams{
+			OrderID:      created.ID,
+			OldStatus:    "pending",
+			OperatorID:   customer.ID,
+			OperatorType: "user",
+		})
+		require.NoError(t, err)
 
-	// 2) 标记订单完成
-	_, err = store.CompleteOrderTx(ctx, db.CompleteOrderTxParams{
-		OrderID:      orderID,
-		OldStatus:    "pending",
-		OperatorID:   customer.ID,
-		OperatorType: "user",
-	})
-	require.NoError(t, err)
+		order, err := store.GetOrder(ctx, created.ID)
+		require.NoError(t, err)
 
-	order, err := store.GetOrder(ctx, orderID)
-	require.NoError(t, err)
-	require.Equal(t, "completed", order.Status)
-
-	// 3) 提交索赔
-	var claimResp claimSubmitResponse
-	{
-		body := map[string]any{
-			"order_id":     orderID,
+		var claimResp claimSubmitResponse
+		claimBody := map[string]any{
+			"order_id":     created.ID,
 			"claim_type":   "foreign-object",
 			"claim_amount": order.TotalAmount,
-			"claim_reason": "foreign object found in dish",
+			"claim_reason": claimReason,
 		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/claims", body, customer.ID)
+		rec = doJSON(t, server, http.MethodPost, "/v1/claims", claimBody, customer.ID)
 		require.Equal(t, http.StatusOK, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 		requireAcceptedClaimSubmission(t, claimResp, order.TotalAmount)
+		confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customer.ID, order.TotalAmount)
+		completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customer.ID, order.TotalAmount)
+
+		return created.ID, claimResp.ClaimID, customer.ID
 	}
 
-	// 4) 商户申诉
-	var appealResp appealSubmitResponse
+	approvedOrderID, approvedClaimID, _ := createCompletedOrderAndClaim("approved recovery dispute candidate")
+	decisions, err := store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: approvedOrderID, Valid: true})
+	require.NoError(t, err)
+	require.NotEmpty(t, decisions)
+	_, err = integrationPool.Exec(ctx, `UPDATE behavior_decisions SET effective_status = 'superseded', updated_at = NOW() WHERE id = $1`, decisions[0].ID)
+	require.NoError(t, err)
+
+	var approvedRecoveryDispute recoveryDisputeSubmitResponse
 	{
-		appealBody := map[string]any{
-			"claim_id": claimResp.ClaimID,
-			"reason":   "evidence shows no foreign object in dish",
+		recoveryDisputeBody := map[string]any{
+			"claim_id": approvedClaimID,
+			"reason":   "recovery dispute approved by latest behavior decision",
 		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/appeals", appealBody, merchantOwner.ID)
+		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/recovery-disputes", recoveryDisputeBody, merchantOwner.ID)
 		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &appealResp)
-		require.NotZero(t, appealResp.ID)
+		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &approvedRecoveryDispute)
+		require.Equal(t, "approved", approvedRecoveryDispute.Status)
 	}
 
-	// 5) 运营商审核为 approved
+	rejectedOrderID, rejectedClaimID, _ := createCompletedOrderAndClaim("rejected recovery dispute candidate")
+	decisions, err = store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: rejectedOrderID, Valid: true})
+	require.NoError(t, err)
+	require.NotEmpty(t, decisions)
+	_, err = integrationPool.Exec(ctx, `
+		UPDATE behavior_decisions
+		SET responsible_party = 'merchant',
+		    compensation_source = 'merchant',
+		    decision_mode = 'merchant_recovery',
+		    responsibility_domain = 'merchant_domain',
+		    payout_mode = 'instant_paid',
+		    effective_status = 'effective',
+		    updated_at = NOW()
+		WHERE id = $1
+	`, decisions[0].ID)
+	require.NoError(t, err)
+	var rejectedRecoveryDispute recoveryDisputeSubmitResponse
 	{
-		reviewBody := map[string]any{
-			"status":              "approved",
-			"review_notes":        "appeal verified by operator",
-			"compensation_amount": int64(500),
+		recoveryDisputeBody := map[string]any{
+			"claim_id": rejectedClaimID,
+			"reason":   "recovery dispute rejected by current behavior decision",
 		}
-		url := fmt.Sprintf("/v1/operator/appeals/%d/review", appealResp.ID)
-		rec := doJSON(t, server, http.MethodPost, url, reviewBody, operatorUser.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
-	}
-
-	// 6) 再提交一笔待审核申诉
-	var pendingAppeal appealSubmitResponse
-	{
-		// 新建订单用于 pending 申诉
-		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
+		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/recovery-disputes", recoveryDisputeBody, merchantOwner.ID)
 		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
-		require.Equal(t, "pending", created.Status)
+		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &rejectedRecoveryDispute)
+		require.Equal(t, "rejected", rejectedRecoveryDispute.Status)
 	}
 
-	secondOrderID := created.ID
-	_, err = store.CompleteOrderTx(ctx, db.CompleteOrderTxParams{
-		OrderID:      secondOrderID,
-		OldStatus:    "pending",
-		OperatorID:   customer.ID,
-		OperatorType: "user",
+	submittedOrderID, submittedClaimID, _ := createCompletedOrderAndClaim("submitted recovery dispute seed")
+	_, err = store.CreateRecoveryDispute(ctx, db.CreateRecoveryDisputeParams{
+		ClaimID:       submittedClaimID,
+		AppellantType: "merchant",
+		AppellantID:   merchant.ID,
+		Reason:        "submitted recovery dispute seeded for operator filter",
+		RegionID:      region.ID,
 	})
 	require.NoError(t, err)
-
-	secondOrder, err := store.GetOrder(ctx, secondOrderID)
+	submittedRecoveryDispute, err := store.GetRecoveryDisputeByClaim(ctx, db.GetRecoveryDisputeByClaimParams{
+		ClaimID:       submittedClaimID,
+		AppellantType: "merchant",
+	})
 	require.NoError(t, err)
-	require.Equal(t, "completed", secondOrder.Status)
-
-	{
-		claimBody := map[string]any{
-			"order_id":     secondOrderID,
-			"claim_type":   "foreign-object",
-			"claim_amount": secondOrder.TotalAmount,
-			"claim_reason": "another foreign object report",
-		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/claims", claimBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
-		require.NotZero(t, claimResp.ClaimID)
-	}
-	{
-		appealBody := map[string]any{
-			"claim_id": claimResp.ClaimID,
-			"reason":   "pending appeal for filter",
-		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/merchant/appeals", appealBody, merchantOwner.ID)
-		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &pendingAppeal)
-	}
+	_ = submittedOrderID
 
 	// 7) 按 status=approved 查询
 	{
-		url := "/v1/operator/appeals?status=approved&page=1&limit=10"
+		url := "/v1/operator/recovery-disputes?status=approved&page=1&limit=10"
 		rec := doGET(t, server, url, operatorUser.ID)
 		require.Equal(t, http.StatusOK, rec.Code)
 		var resp struct {
-			Appeals []struct {
+			Disputes []struct {
 				ID     int64  `json:"id"`
 				Status string `json:"status"`
-			} `json:"appeals"`
+			} `json:"disputes"`
 			Total int64 `json:"total"`
 		}
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &resp)
 		require.GreaterOrEqual(t, resp.Total, int64(1))
 		found := false
-		for _, a := range resp.Appeals {
-			if a.ID == appealResp.ID {
+		for _, a := range resp.Disputes {
+			if a.ID == approvedRecoveryDispute.ID {
 				found = true
 				require.Equal(t, "approved", a.Status)
 			}
@@ -7621,34 +6909,58 @@ func TestClaimJourneyD33OperatorAppealListByStatusIntegration(t *testing.T) {
 		require.True(t, found)
 	}
 
-	// 8) 按 status=pending 查询
+	// 8) 按 status=submitted 查询
 	{
-		url := "/v1/operator/appeals?status=pending&page=1&limit=10"
+		url := "/v1/operator/recovery-disputes?status=submitted&page=1&limit=10"
 		rec := doGET(t, server, url, operatorUser.ID)
 		require.Equal(t, http.StatusOK, rec.Code)
 		var resp struct {
-			Appeals []struct {
+			Disputes []struct {
 				ID     int64  `json:"id"`
 				Status string `json:"status"`
-			} `json:"appeals"`
+			} `json:"disputes"`
 			Total int64 `json:"total"`
 		}
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &resp)
 		require.GreaterOrEqual(t, resp.Total, int64(1))
 		found := false
-		for _, a := range resp.Appeals {
-			if a.ID == pendingAppeal.ID {
+		for _, a := range resp.Disputes {
+			if a.ID == submittedRecoveryDispute.ID {
 				found = true
-				require.Equal(t, "pending", a.Status)
+				require.Equal(t, "submitted", a.Status)
+			}
+		}
+		require.True(t, found)
+	}
+
+	// 9) 按 status=rejected 查询
+	{
+		url := "/v1/operator/recovery-disputes?status=rejected&page=1&limit=10"
+		rec := doGET(t, server, url, operatorUser.ID)
+		require.Equal(t, http.StatusOK, rec.Code)
+		var resp struct {
+			Disputes []struct {
+				ID     int64  `json:"id"`
+				Status string `json:"status"`
+			} `json:"disputes"`
+			Total int64 `json:"total"`
+		}
+		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &resp)
+		require.GreaterOrEqual(t, resp.Total, int64(1))
+		found := false
+		for _, a := range resp.Disputes {
+			if a.ID == rejectedRecoveryDispute.ID {
+				found = true
+				require.Equal(t, "rejected", a.Status)
 			}
 		}
 		require.True(t, found)
 	}
 }
 
-// TestClaimJourneyD34OperatorAppealListEmptyIntegration
-// 索赔旅程（D34）端到端验收：运营商按状态筛选返回空列表。
-func TestClaimJourneyD34OperatorAppealListEmptyIntegration(t *testing.T) {
+// TestClaimJourneyD34OperatorRecoveryDisputeListEmptyIntegration
+// 索赔旅程（D34）端到端验收：运营商按追偿争议状态筛选返回空列表。
+func TestClaimJourneyD34OperatorRecoveryDisputeListEmptyIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -7679,24 +6991,24 @@ func TestClaimJourneyD34OperatorAppealListEmptyIntegration(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	url := "/v1/operator/appeals?status=approved&page=1&limit=10"
+	url := "/v1/operator/recovery-disputes?status=approved&page=1&limit=10"
 	rec := doGET(t, server, url, operatorUser.ID)
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var resp struct {
-		Appeals []struct {
+		Disputes []struct {
 			ID int64 `json:"id"`
-		} `json:"appeals"`
+		} `json:"disputes"`
 		Total int64 `json:"total"`
 	}
 	requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &resp)
 	require.Equal(t, int64(0), resp.Total)
-	require.Len(t, resp.Appeals, 0)
+	require.Len(t, resp.Disputes, 0)
 }
 
-// TestClaimJourneyD35MerchantAppealListEmptyIntegration
-// 索赔旅程（D35）端到端验收：商户申诉列表空结果。
-func TestClaimJourneyD35MerchantAppealListEmptyIntegration(t *testing.T) {
+// TestClaimJourneyD35MerchantRecoveryDisputeListEmptyIntegration
+// 索赔旅程（D35）端到端验收：商户追偿争议列表空结果。
+func TestClaimJourneyD35MerchantRecoveryDisputeListEmptyIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -7712,24 +7024,24 @@ func TestClaimJourneyD35MerchantAppealListEmptyIntegration(t *testing.T) {
 	require.NoError(t, err)
 	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
 
-	url := "/v1/merchant/appeals?page_id=1&page_size=10"
+	url := "/v1/merchant/recovery-disputes?page_id=1&page_size=10"
 	rec := doGET(t, server, url, merchantOwner.ID)
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var resp struct {
-		Appeals []struct {
+		Disputes []struct {
 			ID int64 `json:"id"`
-		} `json:"appeals"`
+		} `json:"disputes"`
 		Total int64 `json:"total"`
 	}
 	requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &resp)
 	require.Equal(t, int64(0), resp.Total)
-	require.Len(t, resp.Appeals, 0)
+	require.Len(t, resp.Disputes, 0)
 }
 
-// TestClaimJourneyD36RiderAppealListEmptyIntegration
-// 索赔旅程（D36）端到端验收：骑手申诉列表空结果。
-func TestClaimJourneyD36RiderAppealListEmptyIntegration(t *testing.T) {
+// TestClaimJourneyD36RiderRecoveryDisputeListEmptyIntegration
+// 索赔旅程（D36）端到端验收：骑手追偿争议列表空结果。
+func TestClaimJourneyD36RiderRecoveryDisputeListEmptyIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -7747,24 +7059,24 @@ func TestClaimJourneyD36RiderAppealListEmptyIntegration(t *testing.T) {
 	_, err = store.UpdateRiderOnlineStatus(ctx, db.UpdateRiderOnlineStatusParams{ID: rider.ID, IsOnline: true})
 	require.NoError(t, err)
 
-	url := "/v1/rider/appeals?page_id=1&page_size=10"
+	url := "/v1/rider/recovery-disputes?page_id=1&page_size=10"
 	rec := doGET(t, server, url, riderUser.ID)
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var resp struct {
-		Appeals []struct {
+		Disputes []struct {
 			ID int64 `json:"id"`
-		} `json:"appeals"`
+		} `json:"disputes"`
 		Total int64 `json:"total"`
 	}
 	requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &resp)
 	require.Equal(t, int64(0), resp.Total)
-	require.Len(t, resp.Appeals, 0)
+	require.Len(t, resp.Disputes, 0)
 }
 
-// TestClaimJourneyD37OperatorAppealListPaginationIntegration
-// 索赔旅程（D37）端到端验收：运营商申诉列表分页返回稳定。
-func TestClaimJourneyD37OperatorAppealListPaginationIntegration(t *testing.T) {
+// TestClaimJourneyD37OperatorRecoveryDisputeListPaginationIntegration
+// 索赔旅程（D37）端到端验收：运营商追偿争议列表分页返回稳定。
+func TestClaimJourneyD37OperatorRecoveryDisputeListPaginationIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -7781,9 +7093,6 @@ func TestClaimJourneyD37OperatorAppealListPaginationIntegration(t *testing.T) {
 	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
 
 	dish := createIntegrationDish(t, store, merchant.ID)
-
-	customer := createIntegrationUser(t, store)
-	addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
 
 	operatorUser := createIntegrationUser(t, store)
 	commissionRate := pgtype.Numeric{}
@@ -7809,7 +7118,7 @@ func TestClaimJourneyD37OperatorAppealListPaginationIntegration(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	createAppeal := func(orderID int64, reason string) appealSubmitResponse {
+	createRecoveryDispute := func(orderID int64, customerID int64, reason string) recoveryDisputeSubmitResponse {
 		var claimResp claimSubmitResponse
 		{
 			body := map[string]any{
@@ -7818,27 +7127,31 @@ func TestClaimJourneyD37OperatorAppealListPaginationIntegration(t *testing.T) {
 				"claim_amount": int64(1000),
 				"claim_reason": "foreign object found in dish",
 			}
-			rec := doJSON(t, server, http.MethodPost, "/v1/claims", body, customer.ID)
+			rec := doJSON(t, server, http.MethodPost, "/v1/claims", body, customerID)
 			require.Equal(t, http.StatusOK, rec.Code)
 			requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 			require.NotZero(t, claimResp.ClaimID)
 		}
+		confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customerID, int64(1000))
+		completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customerID, int64(1000))
 
-		var appealResp appealSubmitResponse
+		var recoveryDisputeResp recoveryDisputeSubmitResponse
 		{
-			appealBody := map[string]any{
+			recoveryDisputeBody := map[string]any{
 				"claim_id": claimResp.ClaimID,
 				"reason":   reason,
 			}
-			rec := doJSON(t, server, http.MethodPost, "/v1/merchant/appeals", appealBody, merchantOwner.ID)
+			rec := doJSON(t, server, http.MethodPost, "/v1/merchant/recovery-disputes", recoveryDisputeBody, merchantOwner.ID)
 			require.Equal(t, http.StatusCreated, rec.Code)
-			requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &appealResp)
-			require.NotZero(t, appealResp.ID)
+			requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &recoveryDisputeResp)
+			require.NotZero(t, recoveryDisputeResp.ID)
 		}
-		return appealResp
+		return recoveryDisputeResp
 	}
 
-	createOrder := func() int64 {
+	createOrder := func() (int64, int64) {
+		customer := createIntegrationUser(t, store)
+		addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
 		createBody := map[string]any{
 			"merchant_id":           merchant.ID,
 			"order_type":            "takeout",
@@ -7863,22 +7176,22 @@ func TestClaimJourneyD37OperatorAppealListPaginationIntegration(t *testing.T) {
 			OperatorType: "user",
 		})
 		require.NoError(t, err)
-		return created.ID
+		return created.ID, customer.ID
 	}
 
-	orderID1 := createOrder()
-	appeal1 := createAppeal(orderID1, "appeal one")
+	orderID1, customerID1 := createOrder()
+	recoveryDispute1 := createRecoveryDispute(orderID1, customerID1, "recovery dispute one")
 
-	orderID2 := createOrder()
-	appeal2 := createAppeal(orderID2, "appeal two")
+	orderID2, customerID2 := createOrder()
+	recoveryDispute2 := createRecoveryDispute(orderID2, customerID2, "recovery dispute two")
 
-	page1URL := "/v1/operator/appeals?page=1&limit=1"
-	page2URL := "/v1/operator/appeals?page=2&limit=1"
+	page1URL := "/v1/operator/recovery-disputes?page=1&limit=1"
+	page2URL := "/v1/operator/recovery-disputes?page=2&limit=1"
 
 	var page1 struct {
-		Appeals []struct {
+		Disputes []struct {
 			ID int64 `json:"id"`
-		} `json:"appeals"`
+		} `json:"disputes"`
 		Total int64 `json:"total"`
 	}
 	{
@@ -7886,13 +7199,13 @@ func TestClaimJourneyD37OperatorAppealListPaginationIntegration(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &page1)
 		require.Equal(t, int64(2), page1.Total)
-		require.Len(t, page1.Appeals, 1)
+		require.Len(t, page1.Disputes, 1)
 	}
 
 	var page2 struct {
-		Appeals []struct {
+		Disputes []struct {
 			ID int64 `json:"id"`
-		} `json:"appeals"`
+		} `json:"disputes"`
 		Total int64 `json:"total"`
 	}
 	{
@@ -7900,20 +7213,20 @@ func TestClaimJourneyD37OperatorAppealListPaginationIntegration(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &page2)
 		require.Equal(t, int64(2), page2.Total)
-		require.Len(t, page2.Appeals, 1)
+		require.Len(t, page2.Disputes, 1)
 	}
 
 	ids := map[int64]bool{
-		page1.Appeals[0].ID: true,
-		page2.Appeals[0].ID: true,
+		page1.Disputes[0].ID: true,
+		page2.Disputes[0].ID: true,
 	}
-	require.True(t, ids[appeal1.ID])
-	require.True(t, ids[appeal2.ID])
+	require.True(t, ids[recoveryDispute1.ID])
+	require.True(t, ids[recoveryDispute2.ID])
 }
 
-// TestClaimJourneyD38MerchantAppealListPaginationIntegration
-// 索赔旅程（D38）端到端验收：商户申诉列表分页返回稳定。
-func TestClaimJourneyD38MerchantAppealListPaginationIntegration(t *testing.T) {
+// TestClaimJourneyD38MerchantRecoveryDisputeListPaginationIntegration
+// 索赔旅程（D38）端到端验收：商户追偿争议列表分页返回稳定。
+func TestClaimJourneyD38MerchantRecoveryDisputeListPaginationIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -7931,10 +7244,9 @@ func TestClaimJourneyD38MerchantAppealListPaginationIntegration(t *testing.T) {
 
 	dish := createIntegrationDish(t, store, merchant.ID)
 
-	customer := createIntegrationUser(t, store)
-	addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
-
-	createOrder := func() int64 {
+	createOrder := func() (int64, int64) {
+		customer := createIntegrationUser(t, store)
+		addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
 		createBody := map[string]any{
 			"merchant_id":           merchant.ID,
 			"order_type":            "takeout",
@@ -7959,10 +7271,10 @@ func TestClaimJourneyD38MerchantAppealListPaginationIntegration(t *testing.T) {
 			OperatorType: "user",
 		})
 		require.NoError(t, err)
-		return created.ID
+		return created.ID, customer.ID
 	}
 
-	createAppeal := func(orderID int64, reason string) appealSubmitResponse {
+	createRecoveryDispute := func(orderID int64, customerID int64, reason string) recoveryDisputeSubmitResponse {
 		var claimResp claimSubmitResponse
 		{
 			body := map[string]any{
@@ -7971,39 +7283,41 @@ func TestClaimJourneyD38MerchantAppealListPaginationIntegration(t *testing.T) {
 				"claim_amount": int64(1000),
 				"claim_reason": "foreign object found in dish",
 			}
-			rec := doJSON(t, server, http.MethodPost, "/v1/claims", body, customer.ID)
+			rec := doJSON(t, server, http.MethodPost, "/v1/claims", body, customerID)
 			require.Equal(t, http.StatusOK, rec.Code)
 			requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 			require.NotZero(t, claimResp.ClaimID)
 		}
+		confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customerID, int64(1000))
+		completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customerID, int64(1000))
 
-		var appealResp appealSubmitResponse
+		var recoveryDisputeResp recoveryDisputeSubmitResponse
 		{
-			appealBody := map[string]any{
+			recoveryDisputeBody := map[string]any{
 				"claim_id": claimResp.ClaimID,
 				"reason":   reason,
 			}
-			rec := doJSON(t, server, http.MethodPost, "/v1/merchant/appeals", appealBody, merchantOwner.ID)
+			rec := doJSON(t, server, http.MethodPost, "/v1/merchant/recovery-disputes", recoveryDisputeBody, merchantOwner.ID)
 			require.Equal(t, http.StatusCreated, rec.Code)
-			requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &appealResp)
-			require.NotZero(t, appealResp.ID)
+			requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &recoveryDisputeResp)
+			require.NotZero(t, recoveryDisputeResp.ID)
 		}
-		return appealResp
+		return recoveryDisputeResp
 	}
 
-	orderID1 := createOrder()
-	appeal1 := createAppeal(orderID1, "appeal one")
+	orderID1, customerID1 := createOrder()
+	recoveryDispute1 := createRecoveryDispute(orderID1, customerID1, "recovery dispute one")
 
-	orderID2 := createOrder()
-	appeal2 := createAppeal(orderID2, "appeal two")
+	orderID2, customerID2 := createOrder()
+	recoveryDispute2 := createRecoveryDispute(orderID2, customerID2, "recovery dispute two")
 
-	page1URL := "/v1/merchant/appeals?page_id=1&page_size=1"
-	page2URL := "/v1/merchant/appeals?page_id=2&page_size=1"
+	page1URL := "/v1/merchant/recovery-disputes?page_id=1&page_size=1"
+	page2URL := "/v1/merchant/recovery-disputes?page_id=2&page_size=1"
 
 	var page1 struct {
-		Appeals []struct {
+		Disputes []struct {
 			ID int64 `json:"id"`
-		} `json:"appeals"`
+		} `json:"disputes"`
 		Total int64 `json:"total"`
 	}
 	{
@@ -8011,13 +7325,13 @@ func TestClaimJourneyD38MerchantAppealListPaginationIntegration(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &page1)
 		require.Equal(t, int64(2), page1.Total)
-		require.Len(t, page1.Appeals, 1)
+		require.Len(t, page1.Disputes, 1)
 	}
 
 	var page2 struct {
-		Appeals []struct {
+		Disputes []struct {
 			ID int64 `json:"id"`
-		} `json:"appeals"`
+		} `json:"disputes"`
 		Total int64 `json:"total"`
 	}
 	{
@@ -8025,20 +7339,20 @@ func TestClaimJourneyD38MerchantAppealListPaginationIntegration(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &page2)
 		require.Equal(t, int64(2), page2.Total)
-		require.Len(t, page2.Appeals, 1)
+		require.Len(t, page2.Disputes, 1)
 	}
 
 	ids := map[int64]bool{
-		page1.Appeals[0].ID: true,
-		page2.Appeals[0].ID: true,
+		page1.Disputes[0].ID: true,
+		page2.Disputes[0].ID: true,
 	}
-	require.True(t, ids[appeal1.ID])
-	require.True(t, ids[appeal2.ID])
+	require.True(t, ids[recoveryDispute1.ID])
+	require.True(t, ids[recoveryDispute2.ID])
 }
 
-// TestClaimJourneyD39RiderAppealListPaginationIntegration
-// 索赔旅程（D39）端到端验收：骑手申诉列表分页返回稳定。
-func TestClaimJourneyD39RiderAppealListPaginationIntegration(t *testing.T) {
+// TestClaimJourneyD39RiderRecoveryDisputeListPaginationIntegration
+// 索赔旅程（D39）端到端验收：骑手追偿争议列表分页返回稳定。
+func TestClaimJourneyD39RiderRecoveryDisputeListPaginationIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -8055,9 +7369,6 @@ func TestClaimJourneyD39RiderAppealListPaginationIntegration(t *testing.T) {
 	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
 
 	dish := createIntegrationDish(t, store, merchant.ID)
-
-	customer := createIntegrationUser(t, store)
-	addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
 
 	riderUser := createIntegrationUser(t, store)
 	rider := createIntegrationRider(t, store, riderUser.ID, region.ID)
@@ -8070,7 +7381,9 @@ func TestClaimJourneyD39RiderAppealListPaginationIntegration(t *testing.T) {
 	_, err = store.UpdateRiderOnlineStatus(ctx, db.UpdateRiderOnlineStatusParams{ID: rider.ID, IsOnline: true})
 	require.NoError(t, err)
 
-	createOrder := func() int64 {
+	createOrder := func() (int64, int64) {
+		customer := createIntegrationUser(t, store)
+		addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
 		createBody := map[string]any{
 			"merchant_id":           merchant.ID,
 			"order_type":            "takeout",
@@ -8140,10 +7453,10 @@ func TestClaimJourneyD39RiderAppealListPaginationIntegration(t *testing.T) {
 			OperatorType: "user",
 		})
 		require.NoError(t, err)
-		return created.ID
+		return created.ID, customer.ID
 	}
 
-	createAppeal := func(orderID int64, reason string) appealSubmitResponse {
+	createRecoveryDispute := func(orderID int64, customerID int64, reason string) recoveryDisputeSubmitResponse {
 		var claimResp claimSubmitResponse
 		{
 			body := map[string]any{
@@ -8152,39 +7465,41 @@ func TestClaimJourneyD39RiderAppealListPaginationIntegration(t *testing.T) {
 				"claim_amount": int64(1000),
 				"claim_reason": "foreign object found in dish",
 			}
-			rec := doJSON(t, server, http.MethodPost, "/v1/claims", body, customer.ID)
+			rec := doJSON(t, server, http.MethodPost, "/v1/claims", body, customerID)
 			require.Equal(t, http.StatusOK, rec.Code)
 			requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &claimResp)
 			requireAcceptedClaimSubmission(t, claimResp, int64(1000))
 		}
+		confirmClaimContinueIntegration(t, server, claimResp.ClaimID, customerID, int64(1000))
+		completeClaimPayoutForClaim(t, store, claimResp.ClaimID, customerID, int64(1000))
 
-		var appealResp appealSubmitResponse
+		var recoveryDisputeResp recoveryDisputeSubmitResponse
 		{
-			appealBody := map[string]any{
+			recoveryDisputeBody := map[string]any{
 				"claim_id": claimResp.ClaimID,
 				"reason":   reason,
 			}
-			rec := doJSON(t, server, http.MethodPost, "/v1/rider/appeals", appealBody, riderUser.ID)
+			rec := doJSON(t, server, http.MethodPost, "/v1/rider/recovery-disputes", recoveryDisputeBody, riderUser.ID)
 			require.Equal(t, http.StatusCreated, rec.Code)
-			requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &appealResp)
-			require.NotZero(t, appealResp.ID)
+			requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &recoveryDisputeResp)
+			require.NotZero(t, recoveryDisputeResp.ID)
 		}
-		return appealResp
+		return recoveryDisputeResp
 	}
 
-	orderID1 := createOrder()
-	appeal1 := createAppeal(orderID1, "appeal one")
+	orderID1, customerID1 := createOrder()
+	recoveryDispute1 := createRecoveryDispute(orderID1, customerID1, "recovery dispute one")
 
-	orderID2 := createOrder()
-	appeal2 := createAppeal(orderID2, "appeal two")
+	orderID2, customerID2 := createOrder()
+	recoveryDispute2 := createRecoveryDispute(orderID2, customerID2, "recovery dispute two")
 
-	page1URL := "/v1/rider/appeals?page_id=1&page_size=1"
-	page2URL := "/v1/rider/appeals?page_id=2&page_size=1"
+	page1URL := "/v1/rider/recovery-disputes?page_id=1&page_size=1"
+	page2URL := "/v1/rider/recovery-disputes?page_id=2&page_size=1"
 
 	var page1 struct {
-		Appeals []struct {
+		Disputes []struct {
 			ID int64 `json:"id"`
-		} `json:"appeals"`
+		} `json:"disputes"`
 		Total int64 `json:"total"`
 	}
 	{
@@ -8192,13 +7507,13 @@ func TestClaimJourneyD39RiderAppealListPaginationIntegration(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &page1)
 		require.Equal(t, int64(2), page1.Total)
-		require.Len(t, page1.Appeals, 1)
+		require.Len(t, page1.Disputes, 1)
 	}
 
 	var page2 struct {
-		Appeals []struct {
+		Disputes []struct {
 			ID int64 `json:"id"`
-		} `json:"appeals"`
+		} `json:"disputes"`
 		Total int64 `json:"total"`
 	}
 	{
@@ -8206,20 +7521,20 @@ func TestClaimJourneyD39RiderAppealListPaginationIntegration(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &page2)
 		require.Equal(t, int64(2), page2.Total)
-		require.Len(t, page2.Appeals, 1)
+		require.Len(t, page2.Disputes, 1)
 	}
 
 	ids := map[int64]bool{
-		page1.Appeals[0].ID: true,
-		page2.Appeals[0].ID: true,
+		page1.Disputes[0].ID: true,
+		page2.Disputes[0].ID: true,
 	}
-	require.True(t, ids[appeal1.ID])
-	require.True(t, ids[appeal2.ID])
+	require.True(t, ids[recoveryDispute1.ID])
+	require.True(t, ids[recoveryDispute2.ID])
 }
 
-// TestClaimJourneyD40OperatorAppealListInvalidStatusIntegration
-// 索赔旅程（D40）端到端验收：运营商申诉列表非法状态返回 400。
-func TestClaimJourneyD40OperatorAppealListInvalidStatusIntegration(t *testing.T) {
+// TestClaimJourneyD40OperatorRecoveryDisputeListInvalidStatusIntegration
+// 索赔旅程（D40）端到端验收：运营商追偿争议列表非法状态返回 400。
+func TestClaimJourneyD40OperatorRecoveryDisputeListInvalidStatusIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -8250,14 +7565,14 @@ func TestClaimJourneyD40OperatorAppealListInvalidStatusIntegration(t *testing.T)
 	})
 	require.NoError(t, err)
 
-	url := "/v1/operator/appeals?status=invalid&page=1&limit=10"
+	url := "/v1/operator/recovery-disputes?status=invalid&page=1&limit=10"
 	rec := doGET(t, server, url, operatorUser.ID)
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
-// TestClaimJourneyD41MerchantAppealListInvalidPaginationIntegration
-// 索赔旅程（D41）端到端验收：商户申诉列表非法分页返回 400。
-func TestClaimJourneyD41MerchantAppealListInvalidPaginationIntegration(t *testing.T) {
+// TestClaimJourneyD41MerchantRecoveryDisputeListInvalidPaginationIntegration
+// 索赔旅程（D41）端到端验收：商户追偿争议列表非法分页返回 400。
+func TestClaimJourneyD41MerchantRecoveryDisputeListInvalidPaginationIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -8273,14 +7588,14 @@ func TestClaimJourneyD41MerchantAppealListInvalidPaginationIntegration(t *testin
 	require.NoError(t, err)
 	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
 
-	url := "/v1/merchant/appeals?page_id=0&page_size=10"
+	url := "/v1/merchant/recovery-disputes?page_id=0&page_size=10"
 	rec := doGET(t, server, url, merchantOwner.ID)
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
-// TestClaimJourneyD42RiderAppealListInvalidPaginationIntegration
-// 索赔旅程（D42）端到端验收：骑手申诉列表非法分页返回 400。
-func TestClaimJourneyD42RiderAppealListInvalidPaginationIntegration(t *testing.T) {
+// TestClaimJourneyD42RiderRecoveryDisputeListInvalidPaginationIntegration
+// 索赔旅程（D42）端到端验收：骑手追偿争议列表非法分页返回 400。
+func TestClaimJourneyD42RiderRecoveryDisputeListInvalidPaginationIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -8298,14 +7613,14 @@ func TestClaimJourneyD42RiderAppealListInvalidPaginationIntegration(t *testing.T
 	_, err = store.UpdateRiderOnlineStatus(ctx, db.UpdateRiderOnlineStatusParams{ID: rider.ID, IsOnline: true})
 	require.NoError(t, err)
 
-	url := "/v1/rider/appeals?page_id=0&page_size=10"
+	url := "/v1/rider/recovery-disputes?page_id=0&page_size=10"
 	rec := doGET(t, server, url, riderUser.ID)
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
-// TestClaimJourneyD43OperatorAppealListDefaultPaginationIntegration
-// 索赔旅程（D43）端到端验收：运营商申诉列表默认分页参数。
-func TestClaimJourneyD43OperatorAppealListDefaultPaginationIntegration(t *testing.T) {
+// TestClaimJourneyD43OperatorRecoveryDisputeListDefaultPaginationIntegration
+// 索赔旅程（D43）端到端验收：运营商追偿争议列表默认分页参数。
+func TestClaimJourneyD43OperatorRecoveryDisputeListDefaultPaginationIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -8336,7 +7651,7 @@ func TestClaimJourneyD43OperatorAppealListDefaultPaginationIntegration(t *testin
 	})
 	require.NoError(t, err)
 
-	url := "/v1/operator/appeals"
+	url := "/v1/operator/recovery-disputes"
 	rec := doGET(t, server, url, operatorUser.ID)
 	require.Equal(t, http.StatusOK, rec.Code)
 
@@ -8349,9 +7664,9 @@ func TestClaimJourneyD43OperatorAppealListDefaultPaginationIntegration(t *testin
 	require.Equal(t, int32(10), resp.Limit)
 }
 
-// TestClaimJourneyD44MerchantAppealListInvalidPageSizeIntegration
-// 索赔旅程（D44）端到端验收：商户申诉列表超限 page_size 返回 400。
-func TestClaimJourneyD44MerchantAppealListInvalidPageSizeIntegration(t *testing.T) {
+// TestClaimJourneyD44MerchantRecoveryDisputeListInvalidPageSizeIntegration
+// 索赔旅程（D44）端到端验收：商户追偿争议列表超限 page_size 返回 400。
+func TestClaimJourneyD44MerchantRecoveryDisputeListInvalidPageSizeIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -8367,14 +7682,14 @@ func TestClaimJourneyD44MerchantAppealListInvalidPageSizeIntegration(t *testing.
 	require.NoError(t, err)
 	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
 
-	url := "/v1/merchant/appeals?page_id=1&page_size=51"
+	url := "/v1/merchant/recovery-disputes?page_id=1&page_size=51"
 	rec := doGET(t, server, url, merchantOwner.ID)
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
-// TestClaimJourneyD45RiderAppealListInvalidPageSizeIntegration
-// 索赔旅程（D45）端到端验收：骑手申诉列表超限 page_size 返回 400。
-func TestClaimJourneyD45RiderAppealListInvalidPageSizeIntegration(t *testing.T) {
+// TestClaimJourneyD45RiderRecoveryDisputeListInvalidPageSizeIntegration
+// 索赔旅程（D45）端到端验收：骑手追偿争议列表超限 page_size 返回 400。
+func TestClaimJourneyD45RiderRecoveryDisputeListInvalidPageSizeIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -8392,14 +7707,14 @@ func TestClaimJourneyD45RiderAppealListInvalidPageSizeIntegration(t *testing.T) 
 	_, err = store.UpdateRiderOnlineStatus(ctx, db.UpdateRiderOnlineStatusParams{ID: rider.ID, IsOnline: true})
 	require.NoError(t, err)
 
-	url := "/v1/rider/appeals?page_id=1&page_size=51"
+	url := "/v1/rider/recovery-disputes?page_id=1&page_size=51"
 	rec := doGET(t, server, url, riderUser.ID)
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
-// TestClaimJourneyD46MerchantAppealDetailInvalidIDIntegration
-// 索赔旅程（D46）端到端验收：商户申诉详情非法 ID 返回 400。
-func TestClaimJourneyD46MerchantAppealDetailInvalidIDIntegration(t *testing.T) {
+// TestClaimJourneyD46MerchantRecoveryDisputeDetailInvalidIDIntegration
+// 索赔旅程（D46）端到端验收：商户追偿争议详情非法 ID 返回 400。
+func TestClaimJourneyD46MerchantRecoveryDisputeDetailInvalidIDIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -8415,14 +7730,14 @@ func TestClaimJourneyD46MerchantAppealDetailInvalidIDIntegration(t *testing.T) {
 	require.NoError(t, err)
 	_ = ensureIntegrationMerchantCoords(t, store, merchant.ID)
 
-	url := "/v1/merchant/appeals/invalid"
+	url := "/v1/merchant/recovery-disputes/invalid"
 	rec := doGET(t, server, url, merchantOwner.ID)
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
-// TestClaimJourneyD47RiderAppealDetailInvalidIDIntegration
-// 索赔旅程（D47）端到端验收：骑手申诉详情非法 ID 返回 400。
-func TestClaimJourneyD47RiderAppealDetailInvalidIDIntegration(t *testing.T) {
+// TestClaimJourneyD47RiderRecoveryDisputeDetailInvalidIDIntegration
+// 索赔旅程（D47）端到端验收：骑手追偿争议详情非法 ID 返回 400。
+func TestClaimJourneyD47RiderRecoveryDisputeDetailInvalidIDIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -8440,14 +7755,14 @@ func TestClaimJourneyD47RiderAppealDetailInvalidIDIntegration(t *testing.T) {
 	_, err = store.UpdateRiderOnlineStatus(ctx, db.UpdateRiderOnlineStatusParams{ID: rider.ID, IsOnline: true})
 	require.NoError(t, err)
 
-	url := "/v1/rider/appeals/invalid"
+	url := "/v1/rider/recovery-disputes/invalid"
 	rec := doGET(t, server, url, riderUser.ID)
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
-// TestClaimJourneyD48OperatorAppealDetailInvalidIDIntegration
-// 索赔旅程（D48）端到端验收：运营商申诉详情非法 ID 返回 400。
-func TestClaimJourneyD48OperatorAppealDetailInvalidIDIntegration(t *testing.T) {
+// TestClaimJourneyD48OperatorRecoveryDisputeDetailInvalidIDIntegration
+// 索赔旅程（D48）端到端验收：运营商追偿争议详情非法 ID 返回 400。
+func TestClaimJourneyD48OperatorRecoveryDisputeDetailInvalidIDIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
 
@@ -8478,7 +7793,7 @@ func TestClaimJourneyD48OperatorAppealDetailInvalidIDIntegration(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	url := "/v1/operator/appeals/invalid"
+	url := "/v1/operator/recovery-disputes/invalid"
 	rec := doGET(t, server, url, operatorUser.ID)
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
@@ -8682,10 +7997,24 @@ type capturePaymentSuccessDistributor struct {
 	worker.NoopTaskDistributor
 
 	mu       sync.Mutex
-	payloads []worker.PaymentSuccessPayload
+	payloads []worker.PaymentFactApplicationPayload
 }
 
-func (d *capturePaymentSuccessDistributor) DistributeTaskProcessPaymentSuccess(ctx context.Context, payload *worker.PaymentSuccessPayload, opts ...asynq.Option) error {
+type capturePaymentFactApplicationDistributor struct {
+	worker.NoopTaskDistributor
+
+	mu       sync.Mutex
+	payloads []worker.PaymentFactApplicationPayload
+}
+
+type captureClaimBehaviorActionDistributor struct {
+	worker.NoopTaskDistributor
+
+	mu       sync.Mutex
+	payloads []worker.ClaimBehaviorActionPayload
+}
+
+func (d *captureClaimBehaviorActionDistributor) DistributeTaskClaimBehaviorAction(ctx context.Context, payload *worker.ClaimBehaviorActionPayload, opts ...asynq.Option) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if payload != nil {
@@ -8694,10 +8023,44 @@ func (d *capturePaymentSuccessDistributor) DistributeTaskProcessPaymentSuccess(c
 	return nil
 }
 
-func (d *capturePaymentSuccessDistributor) Payloads() []worker.PaymentSuccessPayload {
+func (d *captureClaimBehaviorActionDistributor) Payloads() []worker.ClaimBehaviorActionPayload {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	out := make([]worker.PaymentSuccessPayload, len(d.payloads))
+	out := make([]worker.ClaimBehaviorActionPayload, len(d.payloads))
+	copy(out, d.payloads)
+	return out
+}
+
+func (d *capturePaymentSuccessDistributor) DistributeTaskProcessPaymentFactApplication(ctx context.Context, payload *worker.PaymentFactApplicationPayload, opts ...asynq.Option) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if payload != nil {
+		d.payloads = append(d.payloads, *payload)
+	}
+	return nil
+}
+
+func (d *capturePaymentSuccessDistributor) Payloads() []worker.PaymentFactApplicationPayload {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	out := make([]worker.PaymentFactApplicationPayload, len(d.payloads))
+	copy(out, d.payloads)
+	return out
+}
+
+func (d *capturePaymentFactApplicationDistributor) DistributeTaskProcessPaymentFactApplication(ctx context.Context, payload *worker.PaymentFactApplicationPayload, opts ...asynq.Option) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if payload != nil {
+		d.payloads = append(d.payloads, *payload)
+	}
+	return nil
+}
+
+func (d *capturePaymentFactApplicationDistributor) Payloads() []worker.PaymentFactApplicationPayload {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	out := make([]worker.PaymentFactApplicationPayload, len(d.payloads))
 	copy(out, d.payloads)
 	return out
 }
@@ -8709,14 +8072,14 @@ type captureRefundResultDistributor struct {
 	payloads []worker.RefundResultPayload
 }
 
-type captureAppealResultDistributor struct {
+type captureRecoveryDisputeResultDistributor struct {
 	worker.NoopTaskDistributor
 
 	mu       sync.Mutex
-	payloads []worker.ProcessAppealResultPayload
+	payloads []worker.ProcessRecoveryDisputeResultPayload
 }
 
-func (d *captureAppealResultDistributor) DistributeTaskProcessAppealResult(ctx context.Context, payload *worker.ProcessAppealResultPayload, opts ...asynq.Option) error {
+func (d *captureRecoveryDisputeResultDistributor) DistributeTaskProcessRecoveryDisputeResult(ctx context.Context, payload *worker.ProcessRecoveryDisputeResultPayload, opts ...asynq.Option) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if payload != nil {
@@ -8725,10 +8088,10 @@ func (d *captureAppealResultDistributor) DistributeTaskProcessAppealResult(ctx c
 	return nil
 }
 
-func (d *captureAppealResultDistributor) Payloads() []worker.ProcessAppealResultPayload {
+func (d *captureRecoveryDisputeResultDistributor) Payloads() []worker.ProcessRecoveryDisputeResultPayload {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	out := make([]worker.ProcessAppealResultPayload, len(d.payloads))
+	out := make([]worker.ProcessRecoveryDisputeResultPayload, len(d.payloads))
 	copy(out, d.payloads)
 	return out
 }
@@ -8958,7 +8321,7 @@ func TestTakeoutJourneyB3Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	d := &captureTaskDistributor{}
-	recovery := worker.NewProfitSharingRecoveryScheduler(store, d)
+	recovery := worker.NewProfitSharingRecoveryScheduler(store, d, nil)
 	recovery.RunOnce()
 
 	calls := d.Calls()

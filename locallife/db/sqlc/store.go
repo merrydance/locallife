@@ -92,8 +92,11 @@ type Store interface {
 	CloseDiningSessionTx(ctx context.Context, arg CloseDiningSessionTxParams) (CloseDiningSessionTxResult, error)
 	// Behavior trace transactions
 	CreateClaimWithBehaviorTx(ctx context.Context, arg CreateClaimWithBehaviorTxParams) (CreateClaimWithBehaviorTxResult, error)
-	CreateAppealWithRecoveryTx(ctx context.Context, arg CreateAppealWithRecoveryTxParams) (CreateAppealWithRecoveryTxResult, error)
-	ReviewAppealWithCompensationTx(ctx context.Context, arg ReviewAppealWithCompensationTxParams) (ReviewAppealWithCompensationTxResult, error)
+	CreateClaimCompensationTx(ctx context.Context, arg CreateClaimCompensationTxParams) (CreateClaimCompensationTxResult, error)
+	FinalizeClaimCompensationAfterPayoutTx(ctx context.Context, arg FinalizeClaimCompensationAfterPayoutTxParams) (FinalizeClaimCompensationAfterPayoutTxResult, error)
+	CreateRecoveryDisputeWithRecoveryTx(ctx context.Context, arg CreateRecoveryDisputeWithRecoveryTxParams) (CreateRecoveryDisputeWithRecoveryTxResult, error)
+	ReviewRecoveryDisputeWithCompensationTx(ctx context.Context, arg ReviewRecoveryDisputeWithCompensationTxParams) (ReviewRecoveryDisputeWithCompensationTxResult, error)
+	MarkClaimRecoveryOverdueWithActionTx(ctx context.Context, arg MarkClaimRecoveryOverdueWithActionTxParams) (MarkClaimRecoveryOverdueWithActionTxResult, error)
 	// Group multi-store transactions
 	ApproveGroupApplicationTx(ctx context.Context, arg ApproveGroupApplicationTxParams) (ApproveGroupApplicationTxResult, error)
 	ApproveGroupJoinRequestTx(ctx context.Context, arg ApproveGroupJoinRequestTxParams) (ApproveGroupJoinRequestTxResult, error)
@@ -105,6 +108,9 @@ type Store interface {
 	RefreshSessionTx(ctx context.Context, arg RefreshSessionTxParams) (RefreshSessionTxResult, error)
 	// Order replacement transaction
 	ReplaceOrderTx(ctx context.Context, arg ReplaceOrderTxParams) (ReplaceOrderTxResult, error)
+	// Food safety transactions
+	ReportFoodSafetyIncidentTx(ctx context.Context, arg ReportFoodSafetyIncidentTxParams) (ReportFoodSafetyIncidentTxResult, error)
+	ResolveFoodSafetyCaseTx(ctx context.Context, arg ResolveFoodSafetyCaseTxParams) (ResolveFoodSafetyCaseTxResult, error)
 }
 
 // SQLStore provides all functions to execute SQL queries and transactions

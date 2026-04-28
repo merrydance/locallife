@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -126,17 +127,19 @@ const listPendingWithdrawalRecordsByChannel = `-- name: ListPendingWithdrawalRec
 SELECT id, user_id, amount, status, channel, account_info, reason, created_at, updated_at, out_request_no FROM withdrawal_records
 WHERE channel = $1
     AND status = 'pending'
+    AND updated_at < $2
 ORDER BY created_at ASC, id ASC
-LIMIT $2
+LIMIT $3
 `
 
 type ListPendingWithdrawalRecordsByChannelParams struct {
-	Channel string `json:"channel"`
-	Limit   int32  `json:"limit"`
+	Channel       string    `json:"channel"`
+	UpdatedBefore time.Time `json:"updated_before"`
+	LimitCount    int32     `json:"limit_count"`
 }
 
 func (q *Queries) ListPendingWithdrawalRecordsByChannel(ctx context.Context, arg ListPendingWithdrawalRecordsByChannelParams) ([]WithdrawalRecord, error) {
-	rows, err := q.db.Query(ctx, listPendingWithdrawalRecordsByChannel, arg.Channel, arg.Limit)
+	rows, err := q.db.Query(ctx, listPendingWithdrawalRecordsByChannel, arg.Channel, arg.UpdatedBefore, arg.LimitCount)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +173,7 @@ const listWithdrawalRecords = `-- name: ListWithdrawalRecords :many
 SELECT id, user_id, amount, status, channel, account_info, reason, created_at, updated_at, out_request_no FROM withdrawal_records
 WHERE user_id = $1
     AND channel = $2
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $4
 `
 

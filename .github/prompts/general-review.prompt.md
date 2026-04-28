@@ -12,6 +12,8 @@ If the change is cross-area, high-risk, or touches security, status semantics, a
 
 When the review spans multiple stacks, use the shared implementation and review matrix in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` so implementation push items, prohibited shortcuts, and findings-first review checks stay on the same source of truth.
 
+The protocol goal of this template is to surface concrete defects and missing validation early, especially when failures can disappear through silent fallbacks, vague error semantics, or incomplete propagation.
+
 ## General Review
 
 Request:
@@ -19,7 +21,9 @@ Request:
 - Review this change with findings first, ordered by severity
 - Infer the likely risk level (`G0`/`G1`/`G2`/`G3`) and call out if the implementation or validation evidence treated a clearly higher-risk path as routine
 - Prioritize bugs, behavioral regressions, contract violations, broken change propagation, and missing validation
+- Flag silent error swallowing, nil-or-empty values treated as implicit success, missing logging boundaries for unexpected failures, or caller-facing errors that are vague, unstable, or leak internal details
 - Check whether the change forms a complete end-to-end path instead of stopping at one layer
+- Check whether the capability owner and single source of truth remain clear, or whether the change introduced duplicate state semantics or multiple writers
 - Call out missing tests, missing regeneration steps, and residual risk
 - For `G2` and `G3` paths, call out missing failure-mode coverage, duplicate-trigger handling, rollback or recovery story, and user-visible degradation handling
 - If a high-risk path changed but was not actually validated, say exactly which path remains unverified
@@ -36,6 +40,6 @@ Optional context:
 
 Area-specific reminders:
 
-- Backend-heavy review: name the handler/logic/store or worker path, any DTO or contract change, and whether regeneration steps may be relevant.
+- Backend-heavy review: name the handler/logic/store or worker path, any DTO or contract change, whether unexpected errors reach one structured logging boundary, whether public error semantics stay clear and stable, and whether regeneration steps may be relevant.
 - Web-heavy review: name the route or component path, expected loading or error behavior, and any sensitive fields or dangerous actions involved.
 - Mini Program-heavy review: name the page or component path, expected weak-network or re-entry behavior, and any state-recovery expectations.

@@ -12,6 +12,64 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const claimMerchantTakeoutSuspensionIfAvailable = `-- name: ClaimMerchantTakeoutSuspensionIfAvailable :execrows
+UPDATE merchant_profiles
+SET is_takeout_suspended = true,
+    takeout_suspend_reason = $2,
+    takeout_suspended_at = COALESCE(takeout_suspended_at, NOW()),
+    takeout_suspend_until = $3,
+    updated_at = NOW()
+WHERE merchant_id = $1
+  AND (
+      takeout_suspend_reason IS NULL
+      OR takeout_suspend_reason = ''
+      OR takeout_suspend_reason = $2
+  )
+`
+
+type ClaimMerchantTakeoutSuspensionIfAvailableParams struct {
+	MerchantID           int64              `json:"merchant_id"`
+	TakeoutSuspendReason pgtype.Text        `json:"takeout_suspend_reason"`
+	TakeoutSuspendUntil  pgtype.Timestamptz `json:"takeout_suspend_until"`
+}
+
+func (q *Queries) ClaimMerchantTakeoutSuspensionIfAvailable(ctx context.Context, arg ClaimMerchantTakeoutSuspensionIfAvailableParams) (int64, error) {
+	result, err := q.db.Exec(ctx, claimMerchantTakeoutSuspensionIfAvailable, arg.MerchantID, arg.TakeoutSuspendReason, arg.TakeoutSuspendUntil)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const claimRiderSuspensionIfAvailable = `-- name: ClaimRiderSuspensionIfAvailable :execrows
+UPDATE rider_profiles
+SET is_suspended = true,
+    suspend_reason = $2,
+    suspended_at = COALESCE(suspended_at, NOW()),
+    suspend_until = $3,
+    updated_at = NOW()
+WHERE rider_id = $1
+  AND (
+      suspend_reason IS NULL
+      OR suspend_reason = ''
+      OR suspend_reason = $2
+  )
+`
+
+type ClaimRiderSuspensionIfAvailableParams struct {
+	RiderID       int64              `json:"rider_id"`
+	SuspendReason pgtype.Text        `json:"suspend_reason"`
+	SuspendUntil  pgtype.Timestamptz `json:"suspend_until"`
+}
+
+func (q *Queries) ClaimRiderSuspensionIfAvailable(ctx context.Context, arg ClaimRiderSuspensionIfAvailableParams) (int64, error) {
+	result, err := q.db.Exec(ctx, claimRiderSuspensionIfAvailable, arg.RiderID, arg.SuspendReason, arg.SuspendUntil)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const confirmFraudPattern = `-- name: ConfirmFraudPattern :exec
 UPDATE fraud_patterns
 SET is_confirmed = true,
@@ -48,6 +106,36 @@ func (q *Queries) CountDistinctUsersInClaimWindow(ctx context.Context, arg Count
 	var user_count int64
 	err := row.Scan(&user_count)
 	return user_count, err
+}
+
+const countFoodSafetyCasesByRegion = `-- name: CountFoodSafetyCasesByRegion :one
+SELECT COUNT(*) FROM food_safety_cases
+WHERE region_id = $1
+`
+
+func (q *Queries) CountFoodSafetyCasesByRegion(ctx context.Context, regionID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countFoodSafetyCasesByRegion, regionID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countFoodSafetyCasesByRegionAndStatus = `-- name: CountFoodSafetyCasesByRegionAndStatus :one
+SELECT COUNT(*) FROM food_safety_cases
+WHERE region_id = $1
+  AND status = $2
+`
+
+type CountFoodSafetyCasesByRegionAndStatusParams struct {
+	RegionID int64  `json:"region_id"`
+	Status   string `json:"status"`
+}
+
+func (q *Queries) CountFoodSafetyCasesByRegionAndStatus(ctx context.Context, arg CountFoodSafetyCasesByRegionAndStatusParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countFoodSafetyCasesByRegionAndStatus, arg.RegionID, arg.Status)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const countMerchantClaimsByType = `-- name: CountMerchantClaimsByType :one
@@ -287,8 +375,65 @@ func (q *Queries) CreateClaim(ctx context.Context, arg CreateClaimParams) (Claim
 	return i, err
 }
 
-const createFoodSafetyIncident = `-- name: CreateFoodSafetyIncident :one
+const createFoodSafetyCase = `-- name: CreateFoodSafetyCase :one
 
+INSERT INTO food_safety_cases (
+    merchant_id,
+    region_id,
+    primary_product_key,
+    primary_product_label,
+    status,
+    trigger_reason,
+    suspended_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7
+) RETURNING id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at
+`
+
+type CreateFoodSafetyCaseParams struct {
+	MerchantID          int64     `json:"merchant_id"`
+	RegionID            int64     `json:"region_id"`
+	PrimaryProductKey   string    `json:"primary_product_key"`
+	PrimaryProductLabel string    `json:"primary_product_label"`
+	Status              string    `json:"status"`
+	TriggerReason       string    `json:"trigger_reason"`
+	SuspendedAt         time.Time `json:"suspended_at"`
+}
+
+// ==========================================
+// food_safety_incidents（食品安全事件）
+// ==========================================
+func (q *Queries) CreateFoodSafetyCase(ctx context.Context, arg CreateFoodSafetyCaseParams) (FoodSafetyCase, error) {
+	row := q.db.QueryRow(ctx, createFoodSafetyCase,
+		arg.MerchantID,
+		arg.RegionID,
+		arg.PrimaryProductKey,
+		arg.PrimaryProductLabel,
+		arg.Status,
+		arg.TriggerReason,
+		arg.SuspendedAt,
+	)
+	var i FoodSafetyCase
+	err := row.Scan(
+		&i.ID,
+		&i.MerchantID,
+		&i.RegionID,
+		&i.PrimaryProductKey,
+		&i.PrimaryProductLabel,
+		&i.Status,
+		&i.TriggerReason,
+		&i.InvestigationReport,
+		&i.MerchantRectificationReport,
+		&i.Resolution,
+		&i.SuspendedAt,
+		&i.ResolvedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createFoodSafetyIncident = `-- name: CreateFoodSafetyIncident :one
 INSERT INTO food_safety_incidents (
     order_id,
     merchant_id,
@@ -301,11 +446,14 @@ INSERT INTO food_safety_incidents (
     status,
     investigation_report,
     resolution,
+    primary_product_key,
+    primary_product_label,
+    case_id,
     created_at,
     resolved_at
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
-) RETURNING id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+) RETURNING id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at, primary_product_key, primary_product_label, case_id
 `
 
 type CreateFoodSafetyIncidentParams struct {
@@ -320,13 +468,13 @@ type CreateFoodSafetyIncidentParams struct {
 	Status              string             `json:"status"`
 	InvestigationReport pgtype.Text        `json:"investigation_report"`
 	Resolution          pgtype.Text        `json:"resolution"`
+	PrimaryProductKey   string             `json:"primary_product_key"`
+	PrimaryProductLabel string             `json:"primary_product_label"`
+	CaseID              pgtype.Int8        `json:"case_id"`
 	CreatedAt           time.Time          `json:"created_at"`
 	ResolvedAt          pgtype.Timestamptz `json:"resolved_at"`
 }
 
-// ==========================================
-// food_safety_incidents（食品安全事件）
-// ==========================================
 func (q *Queries) CreateFoodSafetyIncident(ctx context.Context, arg CreateFoodSafetyIncidentParams) (FoodSafetyIncident, error) {
 	row := q.db.QueryRow(ctx, createFoodSafetyIncident,
 		arg.OrderID,
@@ -340,6 +488,9 @@ func (q *Queries) CreateFoodSafetyIncident(ctx context.Context, arg CreateFoodSa
 		arg.Status,
 		arg.InvestigationReport,
 		arg.Resolution,
+		arg.PrimaryProductKey,
+		arg.PrimaryProductLabel,
+		arg.CaseID,
 		arg.CreatedAt,
 		arg.ResolvedAt,
 	)
@@ -359,6 +510,9 @@ func (q *Queries) CreateFoodSafetyIncident(ctx context.Context, arg CreateFoodSa
 		&i.Resolution,
 		&i.CreatedAt,
 		&i.ResolvedAt,
+		&i.PrimaryProductKey,
+		&i.PrimaryProductLabel,
+		&i.CaseID,
 	)
 	return i, err
 }
@@ -612,21 +766,41 @@ func (q *Queries) CreateUserClaimWarning(ctx context.Context, arg CreateUserClai
 }
 
 const getActiveFoodSafetyIncidents = `-- name: GetActiveFoodSafetyIncidents :many
-SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at FROM food_safety_incidents
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, primary_product_key, primary_product_label, case_id, created_at, resolved_at FROM food_safety_incidents
 WHERE status IN ('reported', 'investigating', 'merchant-suspended')
 ORDER BY created_at DESC
 LIMIT $1
 `
 
-func (q *Queries) GetActiveFoodSafetyIncidents(ctx context.Context, limit int32) ([]FoodSafetyIncident, error) {
+type GetActiveFoodSafetyIncidentsRow struct {
+	ID                  int64              `json:"id"`
+	OrderID             int64              `json:"order_id"`
+	MerchantID          int64              `json:"merchant_id"`
+	UserID              int64              `json:"user_id"`
+	IncidentType        string             `json:"incident_type"`
+	Description         string             `json:"description"`
+	OrderSnapshot       []byte             `json:"order_snapshot"`
+	MerchantSnapshot    []byte             `json:"merchant_snapshot"`
+	RiderSnapshot       []byte             `json:"rider_snapshot"`
+	Status              string             `json:"status"`
+	InvestigationReport pgtype.Text        `json:"investigation_report"`
+	Resolution          pgtype.Text        `json:"resolution"`
+	PrimaryProductKey   string             `json:"primary_product_key"`
+	PrimaryProductLabel string             `json:"primary_product_label"`
+	CaseID              pgtype.Int8        `json:"case_id"`
+	CreatedAt           time.Time          `json:"created_at"`
+	ResolvedAt          pgtype.Timestamptz `json:"resolved_at"`
+}
+
+func (q *Queries) GetActiveFoodSafetyIncidents(ctx context.Context, limit int32) ([]GetActiveFoodSafetyIncidentsRow, error) {
 	rows, err := q.db.Query(ctx, getActiveFoodSafetyIncidents, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []FoodSafetyIncident{}
+	items := []GetActiveFoodSafetyIncidentsRow{}
 	for rows.Next() {
-		var i FoodSafetyIncident
+		var i GetActiveFoodSafetyIncidentsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrderID,
@@ -640,6 +814,9 @@ func (q *Queries) GetActiveFoodSafetyIncidents(ctx context.Context, limit int32)
 			&i.Status,
 			&i.InvestigationReport,
 			&i.Resolution,
+			&i.PrimaryProductKey,
+			&i.PrimaryProductLabel,
+			&i.CaseID,
 			&i.CreatedAt,
 			&i.ResolvedAt,
 		); err != nil {
@@ -1019,15 +1196,92 @@ func (q *Queries) GetDevicesByUserID(ctx context.Context, userID int64) ([]UserD
 	return items, nil
 }
 
-const getFoodSafetyIncident = `-- name: GetFoodSafetyIncident :one
-SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at FROM food_safety_incidents
+const getFoodSafetyCase = `-- name: GetFoodSafetyCase :one
+SELECT id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at FROM food_safety_cases
 WHERE id = $1
 LIMIT 1
 `
 
-func (q *Queries) GetFoodSafetyIncident(ctx context.Context, id int64) (FoodSafetyIncident, error) {
+func (q *Queries) GetFoodSafetyCase(ctx context.Context, id int64) (FoodSafetyCase, error) {
+	row := q.db.QueryRow(ctx, getFoodSafetyCase, id)
+	var i FoodSafetyCase
+	err := row.Scan(
+		&i.ID,
+		&i.MerchantID,
+		&i.RegionID,
+		&i.PrimaryProductKey,
+		&i.PrimaryProductLabel,
+		&i.Status,
+		&i.TriggerReason,
+		&i.InvestigationReport,
+		&i.MerchantRectificationReport,
+		&i.Resolution,
+		&i.SuspendedAt,
+		&i.ResolvedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getFoodSafetyCaseForUpdate = `-- name: GetFoodSafetyCaseForUpdate :one
+SELECT id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at FROM food_safety_cases
+WHERE id = $1
+LIMIT 1
+FOR UPDATE
+`
+
+func (q *Queries) GetFoodSafetyCaseForUpdate(ctx context.Context, id int64) (FoodSafetyCase, error) {
+	row := q.db.QueryRow(ctx, getFoodSafetyCaseForUpdate, id)
+	var i FoodSafetyCase
+	err := row.Scan(
+		&i.ID,
+		&i.MerchantID,
+		&i.RegionID,
+		&i.PrimaryProductKey,
+		&i.PrimaryProductLabel,
+		&i.Status,
+		&i.TriggerReason,
+		&i.InvestigationReport,
+		&i.MerchantRectificationReport,
+		&i.Resolution,
+		&i.SuspendedAt,
+		&i.ResolvedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getFoodSafetyIncident = `-- name: GetFoodSafetyIncident :one
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, primary_product_key, primary_product_label, case_id, created_at, resolved_at FROM food_safety_incidents
+WHERE id = $1
+LIMIT 1
+`
+
+type GetFoodSafetyIncidentRow struct {
+	ID                  int64              `json:"id"`
+	OrderID             int64              `json:"order_id"`
+	MerchantID          int64              `json:"merchant_id"`
+	UserID              int64              `json:"user_id"`
+	IncidentType        string             `json:"incident_type"`
+	Description         string             `json:"description"`
+	OrderSnapshot       []byte             `json:"order_snapshot"`
+	MerchantSnapshot    []byte             `json:"merchant_snapshot"`
+	RiderSnapshot       []byte             `json:"rider_snapshot"`
+	Status              string             `json:"status"`
+	InvestigationReport pgtype.Text        `json:"investigation_report"`
+	Resolution          pgtype.Text        `json:"resolution"`
+	PrimaryProductKey   string             `json:"primary_product_key"`
+	PrimaryProductLabel string             `json:"primary_product_label"`
+	CaseID              pgtype.Int8        `json:"case_id"`
+	CreatedAt           time.Time          `json:"created_at"`
+	ResolvedAt          pgtype.Timestamptz `json:"resolved_at"`
+}
+
+func (q *Queries) GetFoodSafetyIncident(ctx context.Context, id int64) (GetFoodSafetyIncidentRow, error) {
 	row := q.db.QueryRow(ctx, getFoodSafetyIncident, id)
-	var i FoodSafetyIncident
+	var i GetFoodSafetyIncidentRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrderID,
@@ -1041,6 +1295,9 @@ func (q *Queries) GetFoodSafetyIncident(ctx context.Context, id int64) (FoodSafe
 		&i.Status,
 		&i.InvestigationReport,
 		&i.Resolution,
+		&i.PrimaryProductKey,
+		&i.PrimaryProductLabel,
+		&i.CaseID,
 		&i.CreatedAt,
 		&i.ResolvedAt,
 	)
@@ -1362,21 +1619,42 @@ func (q *Queries) GetMerchantProfileForUpdate(ctx context.Context, merchantID in
 }
 
 const getMerchantRecentFoodSafetyReports = `-- name: GetMerchantRecentFoodSafetyReports :many
-SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at FROM food_safety_incidents
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, primary_product_key, primary_product_label, case_id, created_at, resolved_at FROM food_safety_incidents
 WHERE merchant_id = $1
+  AND status = 'reported'
   AND created_at >= NOW() - INTERVAL '1 hour'
 ORDER BY created_at DESC
 `
 
-func (q *Queries) GetMerchantRecentFoodSafetyReports(ctx context.Context, merchantID int64) ([]FoodSafetyIncident, error) {
+type GetMerchantRecentFoodSafetyReportsRow struct {
+	ID                  int64              `json:"id"`
+	OrderID             int64              `json:"order_id"`
+	MerchantID          int64              `json:"merchant_id"`
+	UserID              int64              `json:"user_id"`
+	IncidentType        string             `json:"incident_type"`
+	Description         string             `json:"description"`
+	OrderSnapshot       []byte             `json:"order_snapshot"`
+	MerchantSnapshot    []byte             `json:"merchant_snapshot"`
+	RiderSnapshot       []byte             `json:"rider_snapshot"`
+	Status              string             `json:"status"`
+	InvestigationReport pgtype.Text        `json:"investigation_report"`
+	Resolution          pgtype.Text        `json:"resolution"`
+	PrimaryProductKey   string             `json:"primary_product_key"`
+	PrimaryProductLabel string             `json:"primary_product_label"`
+	CaseID              pgtype.Int8        `json:"case_id"`
+	CreatedAt           time.Time          `json:"created_at"`
+	ResolvedAt          pgtype.Timestamptz `json:"resolved_at"`
+}
+
+func (q *Queries) GetMerchantRecentFoodSafetyReports(ctx context.Context, merchantID int64) ([]GetMerchantRecentFoodSafetyReportsRow, error) {
 	rows, err := q.db.Query(ctx, getMerchantRecentFoodSafetyReports, merchantID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []FoodSafetyIncident{}
+	items := []GetMerchantRecentFoodSafetyReportsRow{}
 	for rows.Next() {
-		var i FoodSafetyIncident
+		var i GetMerchantRecentFoodSafetyReportsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrderID,
@@ -1390,6 +1668,9 @@ func (q *Queries) GetMerchantRecentFoodSafetyReports(ctx context.Context, mercha
 			&i.Status,
 			&i.InvestigationReport,
 			&i.Resolution,
+			&i.PrimaryProductKey,
+			&i.PrimaryProductLabel,
+			&i.CaseID,
 			&i.CreatedAt,
 			&i.ResolvedAt,
 		); err != nil {
@@ -1401,6 +1682,167 @@ func (q *Queries) GetMerchantRecentFoodSafetyReports(ctx context.Context, mercha
 		return nil, err
 	}
 	return items, nil
+}
+
+const getMerchantRecentFoodSafetyReportsByProduct = `-- name: GetMerchantRecentFoodSafetyReportsByProduct :many
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, primary_product_key, primary_product_label, case_id, created_at, resolved_at FROM food_safety_incidents
+WHERE merchant_id = $1
+  AND primary_product_key = $2
+  AND status = 'reported'
+  AND created_at >= NOW() - INTERVAL '1 hour'
+ORDER BY created_at DESC
+`
+
+type GetMerchantRecentFoodSafetyReportsByProductParams struct {
+	MerchantID        int64  `json:"merchant_id"`
+	PrimaryProductKey string `json:"primary_product_key"`
+}
+
+type GetMerchantRecentFoodSafetyReportsByProductRow struct {
+	ID                  int64              `json:"id"`
+	OrderID             int64              `json:"order_id"`
+	MerchantID          int64              `json:"merchant_id"`
+	UserID              int64              `json:"user_id"`
+	IncidentType        string             `json:"incident_type"`
+	Description         string             `json:"description"`
+	OrderSnapshot       []byte             `json:"order_snapshot"`
+	MerchantSnapshot    []byte             `json:"merchant_snapshot"`
+	RiderSnapshot       []byte             `json:"rider_snapshot"`
+	Status              string             `json:"status"`
+	InvestigationReport pgtype.Text        `json:"investigation_report"`
+	Resolution          pgtype.Text        `json:"resolution"`
+	PrimaryProductKey   string             `json:"primary_product_key"`
+	PrimaryProductLabel string             `json:"primary_product_label"`
+	CaseID              pgtype.Int8        `json:"case_id"`
+	CreatedAt           time.Time          `json:"created_at"`
+	ResolvedAt          pgtype.Timestamptz `json:"resolved_at"`
+}
+
+func (q *Queries) GetMerchantRecentFoodSafetyReportsByProduct(ctx context.Context, arg GetMerchantRecentFoodSafetyReportsByProductParams) ([]GetMerchantRecentFoodSafetyReportsByProductRow, error) {
+	rows, err := q.db.Query(ctx, getMerchantRecentFoodSafetyReportsByProduct, arg.MerchantID, arg.PrimaryProductKey)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetMerchantRecentFoodSafetyReportsByProductRow{}
+	for rows.Next() {
+		var i GetMerchantRecentFoodSafetyReportsByProductRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderID,
+			&i.MerchantID,
+			&i.UserID,
+			&i.IncidentType,
+			&i.Description,
+			&i.OrderSnapshot,
+			&i.MerchantSnapshot,
+			&i.RiderSnapshot,
+			&i.Status,
+			&i.InvestigationReport,
+			&i.Resolution,
+			&i.PrimaryProductKey,
+			&i.PrimaryProductLabel,
+			&i.CaseID,
+			&i.CreatedAt,
+			&i.ResolvedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getOpenFoodSafetyCaseByMerchant = `-- name: GetOpenFoodSafetyCaseByMerchant :one
+SELECT id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at FROM food_safety_cases
+WHERE merchant_id = $1
+  AND status IN ('merchant-suspended', 'investigating')
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetOpenFoodSafetyCaseByMerchant(ctx context.Context, merchantID int64) (FoodSafetyCase, error) {
+	row := q.db.QueryRow(ctx, getOpenFoodSafetyCaseByMerchant, merchantID)
+	var i FoodSafetyCase
+	err := row.Scan(
+		&i.ID,
+		&i.MerchantID,
+		&i.RegionID,
+		&i.PrimaryProductKey,
+		&i.PrimaryProductLabel,
+		&i.Status,
+		&i.TriggerReason,
+		&i.InvestigationReport,
+		&i.MerchantRectificationReport,
+		&i.Resolution,
+		&i.SuspendedAt,
+		&i.ResolvedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getOpenFoodSafetyIncidentByOrderAndUser = `-- name: GetOpenFoodSafetyIncidentByOrderAndUser :one
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, primary_product_key, primary_product_label, case_id, created_at, resolved_at FROM food_safety_incidents
+WHERE order_id = $1
+  AND user_id = $2
+  AND status IN ('reported', 'investigating', 'merchant-suspended')
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+type GetOpenFoodSafetyIncidentByOrderAndUserParams struct {
+	OrderID int64 `json:"order_id"`
+	UserID  int64 `json:"user_id"`
+}
+
+type GetOpenFoodSafetyIncidentByOrderAndUserRow struct {
+	ID                  int64              `json:"id"`
+	OrderID             int64              `json:"order_id"`
+	MerchantID          int64              `json:"merchant_id"`
+	UserID              int64              `json:"user_id"`
+	IncidentType        string             `json:"incident_type"`
+	Description         string             `json:"description"`
+	OrderSnapshot       []byte             `json:"order_snapshot"`
+	MerchantSnapshot    []byte             `json:"merchant_snapshot"`
+	RiderSnapshot       []byte             `json:"rider_snapshot"`
+	Status              string             `json:"status"`
+	InvestigationReport pgtype.Text        `json:"investigation_report"`
+	Resolution          pgtype.Text        `json:"resolution"`
+	PrimaryProductKey   string             `json:"primary_product_key"`
+	PrimaryProductLabel string             `json:"primary_product_label"`
+	CaseID              pgtype.Int8        `json:"case_id"`
+	CreatedAt           time.Time          `json:"created_at"`
+	ResolvedAt          pgtype.Timestamptz `json:"resolved_at"`
+}
+
+func (q *Queries) GetOpenFoodSafetyIncidentByOrderAndUser(ctx context.Context, arg GetOpenFoodSafetyIncidentByOrderAndUserParams) (GetOpenFoodSafetyIncidentByOrderAndUserRow, error) {
+	row := q.db.QueryRow(ctx, getOpenFoodSafetyIncidentByOrderAndUser, arg.OrderID, arg.UserID)
+	var i GetOpenFoodSafetyIncidentByOrderAndUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.MerchantID,
+		&i.UserID,
+		&i.IncidentType,
+		&i.Description,
+		&i.OrderSnapshot,
+		&i.MerchantSnapshot,
+		&i.RiderSnapshot,
+		&i.Status,
+		&i.InvestigationReport,
+		&i.Resolution,
+		&i.PrimaryProductKey,
+		&i.PrimaryProductLabel,
+		&i.CaseID,
+		&i.CreatedAt,
+		&i.ResolvedAt,
+	)
+	return i, err
 }
 
 const getOrdersMerchantAndRider = `-- name: GetOrdersMerchantAndRider :many
@@ -2002,6 +2444,27 @@ func (q *Queries) IncrementUserPlatformPayCount(ctx context.Context, arg Increme
 	return err
 }
 
+const linkFoodSafetyIncidentsToCase = `-- name: LinkFoodSafetyIncidentsToCase :execrows
+UPDATE food_safety_incidents
+SET case_id = $1,
+    status = $2
+WHERE id = ANY($3::bigint[])
+`
+
+type LinkFoodSafetyIncidentsToCaseParams struct {
+	CaseID      pgtype.Int8 `json:"case_id"`
+	Status      string      `json:"status"`
+	IncidentIds []int64     `json:"incident_ids"`
+}
+
+func (q *Queries) LinkFoodSafetyIncidentsToCase(ctx context.Context, arg LinkFoodSafetyIncidentsToCaseParams) (int64, error) {
+	result, err := q.db.Exec(ctx, linkFoodSafetyIncidentsToCase, arg.CaseID, arg.Status, arg.IncidentIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const listClaimsByTimeWindow = `-- name: ListClaimsByTimeWindow :many
 
 SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason, o.address_id
@@ -2078,6 +2541,173 @@ func (q *Queries) ListClaimsByTimeWindow(ctx context.Context, arg ListClaimsByTi
 			&i.DecisionVersion,
 			&i.DecisionReason,
 			&i.AddressID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFoodSafetyCasesByRegion = `-- name: ListFoodSafetyCasesByRegion :many
+SELECT id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at FROM food_safety_cases
+WHERE region_id = $1
+ORDER BY created_at DESC, id DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListFoodSafetyCasesByRegionParams struct {
+	RegionID int64 `json:"region_id"`
+	Limit    int32 `json:"limit"`
+	Offset   int32 `json:"offset"`
+}
+
+func (q *Queries) ListFoodSafetyCasesByRegion(ctx context.Context, arg ListFoodSafetyCasesByRegionParams) ([]FoodSafetyCase, error) {
+	rows, err := q.db.Query(ctx, listFoodSafetyCasesByRegion, arg.RegionID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FoodSafetyCase{}
+	for rows.Next() {
+		var i FoodSafetyCase
+		if err := rows.Scan(
+			&i.ID,
+			&i.MerchantID,
+			&i.RegionID,
+			&i.PrimaryProductKey,
+			&i.PrimaryProductLabel,
+			&i.Status,
+			&i.TriggerReason,
+			&i.InvestigationReport,
+			&i.MerchantRectificationReport,
+			&i.Resolution,
+			&i.SuspendedAt,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFoodSafetyCasesByRegionAndStatus = `-- name: ListFoodSafetyCasesByRegionAndStatus :many
+SELECT id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at FROM food_safety_cases
+WHERE region_id = $1
+  AND status = $2
+ORDER BY created_at DESC, id DESC
+LIMIT $3 OFFSET $4
+`
+
+type ListFoodSafetyCasesByRegionAndStatusParams struct {
+	RegionID int64  `json:"region_id"`
+	Status   string `json:"status"`
+	Limit    int32  `json:"limit"`
+	Offset   int32  `json:"offset"`
+}
+
+func (q *Queries) ListFoodSafetyCasesByRegionAndStatus(ctx context.Context, arg ListFoodSafetyCasesByRegionAndStatusParams) ([]FoodSafetyCase, error) {
+	rows, err := q.db.Query(ctx, listFoodSafetyCasesByRegionAndStatus,
+		arg.RegionID,
+		arg.Status,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FoodSafetyCase{}
+	for rows.Next() {
+		var i FoodSafetyCase
+		if err := rows.Scan(
+			&i.ID,
+			&i.MerchantID,
+			&i.RegionID,
+			&i.PrimaryProductKey,
+			&i.PrimaryProductLabel,
+			&i.Status,
+			&i.TriggerReason,
+			&i.InvestigationReport,
+			&i.MerchantRectificationReport,
+			&i.Resolution,
+			&i.SuspendedAt,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFoodSafetyIncidentsByCase = `-- name: ListFoodSafetyIncidentsByCase :many
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, primary_product_key, primary_product_label, case_id, created_at, resolved_at FROM food_safety_incidents
+WHERE case_id = $1
+ORDER BY created_at DESC, id DESC
+`
+
+type ListFoodSafetyIncidentsByCaseRow struct {
+	ID                  int64              `json:"id"`
+	OrderID             int64              `json:"order_id"`
+	MerchantID          int64              `json:"merchant_id"`
+	UserID              int64              `json:"user_id"`
+	IncidentType        string             `json:"incident_type"`
+	Description         string             `json:"description"`
+	OrderSnapshot       []byte             `json:"order_snapshot"`
+	MerchantSnapshot    []byte             `json:"merchant_snapshot"`
+	RiderSnapshot       []byte             `json:"rider_snapshot"`
+	Status              string             `json:"status"`
+	InvestigationReport pgtype.Text        `json:"investigation_report"`
+	Resolution          pgtype.Text        `json:"resolution"`
+	PrimaryProductKey   string             `json:"primary_product_key"`
+	PrimaryProductLabel string             `json:"primary_product_label"`
+	CaseID              pgtype.Int8        `json:"case_id"`
+	CreatedAt           time.Time          `json:"created_at"`
+	ResolvedAt          pgtype.Timestamptz `json:"resolved_at"`
+}
+
+func (q *Queries) ListFoodSafetyIncidentsByCase(ctx context.Context, caseID pgtype.Int8) ([]ListFoodSafetyIncidentsByCaseRow, error) {
+	rows, err := q.db.Query(ctx, listFoodSafetyIncidentsByCase, caseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListFoodSafetyIncidentsByCaseRow{}
+	for rows.Next() {
+		var i ListFoodSafetyIncidentsByCaseRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderID,
+			&i.MerchantID,
+			&i.UserID,
+			&i.IncidentType,
+			&i.Description,
+			&i.OrderSnapshot,
+			&i.MerchantSnapshot,
+			&i.RiderSnapshot,
+			&i.Status,
+			&i.InvestigationReport,
+			&i.Resolution,
+			&i.PrimaryProductKey,
+			&i.PrimaryProductLabel,
+			&i.CaseID,
+			&i.CreatedAt,
+			&i.ResolvedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -2260,7 +2890,7 @@ func (q *Queries) ListMerchantClaimsByTypeInPeriod(ctx context.Context, arg List
 }
 
 const listMerchantFoodSafetyIncidents = `-- name: ListMerchantFoodSafetyIncidents :many
-SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, created_at, resolved_at FROM food_safety_incidents
+SELECT id, order_id, merchant_id, user_id, incident_type, description, order_snapshot, merchant_snapshot, rider_snapshot, status, investigation_report, resolution, primary_product_key, primary_product_label, case_id, created_at, resolved_at FROM food_safety_incidents
 WHERE merchant_id = $1
   AND created_at >= $2
 ORDER BY created_at DESC
@@ -2271,15 +2901,35 @@ type ListMerchantFoodSafetyIncidentsParams struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
-func (q *Queries) ListMerchantFoodSafetyIncidents(ctx context.Context, arg ListMerchantFoodSafetyIncidentsParams) ([]FoodSafetyIncident, error) {
+type ListMerchantFoodSafetyIncidentsRow struct {
+	ID                  int64              `json:"id"`
+	OrderID             int64              `json:"order_id"`
+	MerchantID          int64              `json:"merchant_id"`
+	UserID              int64              `json:"user_id"`
+	IncidentType        string             `json:"incident_type"`
+	Description         string             `json:"description"`
+	OrderSnapshot       []byte             `json:"order_snapshot"`
+	MerchantSnapshot    []byte             `json:"merchant_snapshot"`
+	RiderSnapshot       []byte             `json:"rider_snapshot"`
+	Status              string             `json:"status"`
+	InvestigationReport pgtype.Text        `json:"investigation_report"`
+	Resolution          pgtype.Text        `json:"resolution"`
+	PrimaryProductKey   string             `json:"primary_product_key"`
+	PrimaryProductLabel string             `json:"primary_product_label"`
+	CaseID              pgtype.Int8        `json:"case_id"`
+	CreatedAt           time.Time          `json:"created_at"`
+	ResolvedAt          pgtype.Timestamptz `json:"resolved_at"`
+}
+
+func (q *Queries) ListMerchantFoodSafetyIncidents(ctx context.Context, arg ListMerchantFoodSafetyIncidentsParams) ([]ListMerchantFoodSafetyIncidentsRow, error) {
 	rows, err := q.db.Query(ctx, listMerchantFoodSafetyIncidents, arg.MerchantID, arg.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []FoodSafetyIncident{}
+	items := []ListMerchantFoodSafetyIncidentsRow{}
 	for rows.Next() {
-		var i FoodSafetyIncident
+		var i ListMerchantFoodSafetyIncidentsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrderID,
@@ -2293,6 +2943,9 @@ func (q *Queries) ListMerchantFoodSafetyIncidents(ctx context.Context, arg ListM
 			&i.Status,
 			&i.InvestigationReport,
 			&i.Resolution,
+			&i.PrimaryProductKey,
+			&i.PrimaryProductLabel,
+			&i.CaseID,
 			&i.CreatedAt,
 			&i.ResolvedAt,
 		); err != nil {
@@ -2520,6 +3173,130 @@ type MarkClaimPaidParams struct {
 
 func (q *Queries) MarkClaimPaid(ctx context.Context, arg MarkClaimPaidParams) error {
 	_, err := q.db.Exec(ctx, markClaimPaid, arg.ID, arg.PaidAt)
+	return err
+}
+
+const releaseMerchantTakeoutSuspensionIfOwned = `-- name: ReleaseMerchantTakeoutSuspensionIfOwned :execrows
+UPDATE merchant_profiles
+SET is_takeout_suspended = false,
+    takeout_suspend_reason = NULL,
+    takeout_suspended_at = NULL,
+    takeout_suspend_until = NULL,
+    updated_at = NOW()
+WHERE merchant_id = $1
+  AND is_takeout_suspended = true
+  AND takeout_suspend_reason = $2
+`
+
+type ReleaseMerchantTakeoutSuspensionIfOwnedParams struct {
+	MerchantID           int64       `json:"merchant_id"`
+	TakeoutSuspendReason pgtype.Text `json:"takeout_suspend_reason"`
+}
+
+func (q *Queries) ReleaseMerchantTakeoutSuspensionIfOwned(ctx context.Context, arg ReleaseMerchantTakeoutSuspensionIfOwnedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseMerchantTakeoutSuspensionIfOwned, arg.MerchantID, arg.TakeoutSuspendReason)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const releaseRiderSuspensionIfOwned = `-- name: ReleaseRiderSuspensionIfOwned :execrows
+UPDATE rider_profiles
+SET is_suspended = false,
+    suspend_reason = NULL,
+    suspended_at = NULL,
+    suspend_until = NULL,
+    updated_at = NOW()
+WHERE rider_id = $1
+  AND is_suspended = true
+  AND suspend_reason = $2
+`
+
+type ReleaseRiderSuspensionIfOwnedParams struct {
+	RiderID       int64       `json:"rider_id"`
+	SuspendReason pgtype.Text `json:"suspend_reason"`
+}
+
+func (q *Queries) ReleaseRiderSuspensionIfOwned(ctx context.Context, arg ReleaseRiderSuspensionIfOwnedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, releaseRiderSuspensionIfOwned, arg.RiderID, arg.SuspendReason)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const resolveFoodSafetyCase = `-- name: ResolveFoodSafetyCase :one
+UPDATE food_safety_cases
+SET status = 'resolved',
+    investigation_report = COALESCE($2, investigation_report),
+    merchant_rectification_report = COALESCE($3, merchant_rectification_report),
+    resolution = COALESCE($4, resolution),
+    resolved_at = COALESCE($5, resolved_at),
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at
+`
+
+type ResolveFoodSafetyCaseParams struct {
+	ID                          int64              `json:"id"`
+	InvestigationReport         pgtype.Text        `json:"investigation_report"`
+	MerchantRectificationReport pgtype.Text        `json:"merchant_rectification_report"`
+	Resolution                  pgtype.Text        `json:"resolution"`
+	ResolvedAt                  pgtype.Timestamptz `json:"resolved_at"`
+}
+
+func (q *Queries) ResolveFoodSafetyCase(ctx context.Context, arg ResolveFoodSafetyCaseParams) (FoodSafetyCase, error) {
+	row := q.db.QueryRow(ctx, resolveFoodSafetyCase,
+		arg.ID,
+		arg.InvestigationReport,
+		arg.MerchantRectificationReport,
+		arg.Resolution,
+		arg.ResolvedAt,
+	)
+	var i FoodSafetyCase
+	err := row.Scan(
+		&i.ID,
+		&i.MerchantID,
+		&i.RegionID,
+		&i.PrimaryProductKey,
+		&i.PrimaryProductLabel,
+		&i.Status,
+		&i.TriggerReason,
+		&i.InvestigationReport,
+		&i.MerchantRectificationReport,
+		&i.Resolution,
+		&i.SuspendedAt,
+		&i.ResolvedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const resolveFoodSafetyIncidentsByCase = `-- name: ResolveFoodSafetyIncidentsByCase :exec
+UPDATE food_safety_incidents
+SET status = 'resolved',
+    investigation_report = COALESCE($2, investigation_report),
+    resolution = COALESCE($3, resolution),
+    resolved_at = COALESCE($4, resolved_at)
+WHERE case_id = $1
+`
+
+type ResolveFoodSafetyIncidentsByCaseParams struct {
+	CaseID              pgtype.Int8        `json:"case_id"`
+	InvestigationReport pgtype.Text        `json:"investigation_report"`
+	Resolution          pgtype.Text        `json:"resolution"`
+	ResolvedAt          pgtype.Timestamptz `json:"resolved_at"`
+}
+
+func (q *Queries) ResolveFoodSafetyIncidentsByCase(ctx context.Context, arg ResolveFoodSafetyIncidentsByCaseParams) error {
+	_, err := q.db.Exec(ctx, resolveFoodSafetyIncidentsByCase,
+		arg.CaseID,
+		arg.InvestigationReport,
+		arg.Resolution,
+		arg.ResolvedAt,
+	)
 	return err
 }
 
@@ -2783,6 +3560,115 @@ func (q *Queries) UpdateClaimStatus(ctx context.Context, arg UpdateClaimStatusPa
 		arg.PaidAt,
 	)
 	return err
+}
+
+const updateClaimStatusIfCurrent = `-- name: UpdateClaimStatusIfCurrent :one
+UPDATE claims
+SET status = $1,
+    approval_type = COALESCE($2, approval_type),
+    approved_amount = COALESCE($3, approved_amount),
+    is_malicious = COALESCE($4, is_malicious),
+    auto_approval_reason = COALESCE($5, auto_approval_reason),
+    rejection_reason = COALESCE($6, rejection_reason),
+    reviewer_id = COALESCE($7, reviewer_id),
+    review_notes = COALESCE($8, review_notes),
+    reviewed_at = COALESCE($9, reviewed_at),
+    paid_at = COALESCE($10, paid_at)
+WHERE id = $11
+  AND status = $12
+RETURNING id, order_id, user_id, claim_type, description, claim_amount, approved_amount, status, approval_type, is_malicious, lookback_result, auto_approval_reason, rejection_reason, reviewer_id, review_notes, created_at, reviewed_at, paid_at, decision_version, decision_reason
+`
+
+type UpdateClaimStatusIfCurrentParams struct {
+	Status             string             `json:"status"`
+	ApprovalType       pgtype.Text        `json:"approval_type"`
+	ApprovedAmount     pgtype.Int8        `json:"approved_amount"`
+	IsMalicious        pgtype.Bool        `json:"is_malicious"`
+	AutoApprovalReason pgtype.Text        `json:"auto_approval_reason"`
+	RejectionReason    pgtype.Text        `json:"rejection_reason"`
+	ReviewerID         pgtype.Int8        `json:"reviewer_id"`
+	ReviewNotes        pgtype.Text        `json:"review_notes"`
+	ReviewedAt         pgtype.Timestamptz `json:"reviewed_at"`
+	PaidAt             pgtype.Timestamptz `json:"paid_at"`
+	ID                 int64              `json:"id"`
+	CurrentStatus      string             `json:"current_status"`
+}
+
+func (q *Queries) UpdateClaimStatusIfCurrent(ctx context.Context, arg UpdateClaimStatusIfCurrentParams) (Claim, error) {
+	row := q.db.QueryRow(ctx, updateClaimStatusIfCurrent,
+		arg.Status,
+		arg.ApprovalType,
+		arg.ApprovedAmount,
+		arg.IsMalicious,
+		arg.AutoApprovalReason,
+		arg.RejectionReason,
+		arg.ReviewerID,
+		arg.ReviewNotes,
+		arg.ReviewedAt,
+		arg.PaidAt,
+		arg.ID,
+		arg.CurrentStatus,
+	)
+	var i Claim
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.UserID,
+		&i.ClaimType,
+		&i.Description,
+		&i.ClaimAmount,
+		&i.ApprovedAmount,
+		&i.Status,
+		&i.ApprovalType,
+		&i.IsMalicious,
+		&i.LookbackResult,
+		&i.AutoApprovalReason,
+		&i.RejectionReason,
+		&i.ReviewerID,
+		&i.ReviewNotes,
+		&i.CreatedAt,
+		&i.ReviewedAt,
+		&i.PaidAt,
+		&i.DecisionVersion,
+		&i.DecisionReason,
+	)
+	return i, err
+}
+
+const updateFoodSafetyCaseInvestigation = `-- name: UpdateFoodSafetyCaseInvestigation :one
+UPDATE food_safety_cases
+SET status = 'investigating',
+    investigation_report = $2,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at
+`
+
+type UpdateFoodSafetyCaseInvestigationParams struct {
+	ID                  int64       `json:"id"`
+	InvestigationReport pgtype.Text `json:"investigation_report"`
+}
+
+func (q *Queries) UpdateFoodSafetyCaseInvestigation(ctx context.Context, arg UpdateFoodSafetyCaseInvestigationParams) (FoodSafetyCase, error) {
+	row := q.db.QueryRow(ctx, updateFoodSafetyCaseInvestigation, arg.ID, arg.InvestigationReport)
+	var i FoodSafetyCase
+	err := row.Scan(
+		&i.ID,
+		&i.MerchantID,
+		&i.RegionID,
+		&i.PrimaryProductKey,
+		&i.PrimaryProductLabel,
+		&i.Status,
+		&i.TriggerReason,
+		&i.InvestigationReport,
+		&i.MerchantRectificationReport,
+		&i.Resolution,
+		&i.SuspendedAt,
+		&i.ResolvedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const updateFoodSafetyIncidentStatus = `-- name: UpdateFoodSafetyIncidentStatus :exec

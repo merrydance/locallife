@@ -1,0 +1,33 @@
+<view class="ranking-section">
+  <view class="section-header section-header--compact">
+    <t-tabs value="{{rankingType}}" bindchange="onTypeChange" theme="tag" t-class="ranking-tabs">
+      <t-tab-panel label="商家榜" value="merchant" />
+      <t-tab-panel label="骑手榜" value="rider" />
+    </t-tabs>
+    <view class="ranking-label">{{timeLabel}}</view>
+  </view>
+
+  <view wx:if="{{rankingType === 'merchant'}}" class="ranking-list">
+    <t-empty wx:if="{{merchantRankings.length === 0}}" description="暂无排行数据" />
+    <view wx:for="{{merchantRankings}}" wx:key="merchant_id" class="ranking-item">
+      <view class="rank-num {{index < 3 ? 'top-' + (index + 1) : ''}}">{{index + 1}}</view>
+      <view class="rank-main">
+        <view class="rank-name">{{item.merchant_name}}</view>
+        <view class="rank-sub">订单 {{item.order_count}} | 佣金 ¥{{item.total_commission / 100}}</view>
+      </view>
+      <view class="rank-val">¥{{item.total_sales / 100}}</view>
+    </view>
+  </view>
+
+  <view wx:if="{{rankingType === 'rider'}}" class="ranking-list">
+    <t-empty wx:if="{{riderRankings.length === 0}}" description="暂无排行数据" />
+    <view wx:for="{{riderRankings}}" wx:key="rider_id" class="ranking-item">
+      <view class="rank-num {{index < 3 ? 'top-' + (index + 1) : ''}}">{{index + 1}}</view>
+      <view class="rank-main">
+        <view class="rank-name">{{item.rider_name}}</view>
+        <view class="rank-sub">配送 {{item.delivery_count}}单 | 准时率 {{item.completion_rate}}%</view>
+      </view>
+      <view class="rank-val">¥{{item.total_earnings / 100}}</view>
+    </view>
+  </view>
+</view>

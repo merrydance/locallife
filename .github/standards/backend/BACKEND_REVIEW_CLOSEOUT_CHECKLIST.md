@@ -17,12 +17,15 @@
 - 若范围涉及资金、支付、退款、分账、配送、预订、callback、worker、scheduler、OCR、上传下载或 authz，是否明确检查了高风险路径？
 - 若高风险路径没有实际验证证据，是否明确点名未验证的是哪个 callback、retry、recovery、duplicate-delivery 或 authz 分支？
 - 是否检查了 `make sqlc`、`make mock`、`make swagger`、`make check-generated`、`make test-safety` 等必要生成或验证步骤？
+- 若改动触及错误处理、空值回退、5xx 返回、上游失败映射或前端提示语义，是否明确检查了 unexpected error 是否到达唯一结构化日志边界、业务错误与基础设施错误是否正确分流、以及对前端是否保持稳定且不泄漏内部细节的语义？
+- 是否明确检查了 `nil`、0-row conditional update、空 DTO、silent early return 或 fallback/no-op 分支没有把真实失败伪装成成功？
 
 ## 3. Durable Knowledge
 
 - 如果 finding 暴露的是重复 bug class、事务边界漂移、权限检查漏项、worker/scheduler 被遗忘等系统性问题，是否把它反馈到标准、instructions、prompts、workflow、测试或 runbook？
 - 如果本仓库已有风险地图、review backlog、审计日志或 domain audit 机制，是否把高价值 finding 写入对应 artifact，而不是只留在聊天记录里？
 - 如果现有治理资产缺少该 bug class 的默认约束，是否明确指出应该补到哪里？
+- 如果 finding 属于静默吞错、5xx 跳过日志、raw upstream error 透传、或 caller-facing error semantics 含糊这类重复问题，是否检查 `.github/standards/backend/ERROR_HANDLING.md`、`.github/instructions/backend-locallife.instructions.md`、相关 backend prompt，以及 `.github/scripts/backend_go_guard.sh` 是否需要同步补门禁？
 
 ## 4. Scope And Remaining Work
 

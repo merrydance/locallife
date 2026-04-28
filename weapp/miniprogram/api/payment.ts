@@ -9,7 +9,6 @@ export type RefundStatus = 'pending' | 'processing' | 'success' | 'failed' | 'cl
 export type PaymentType = 'native' | 'miniprogram'
 export type BusinessType = 'order' | 'reservation' | 'reservation_addon' | 'membership_recharge' | 'rider_deposit' | 'claim_recovery'
 export type PaymentLedgerEntryType = 'payment' | 'refund'
-export type PaymentProcessStatus = 'paid' | 'failed' | 'unknown'
 export type CombinedPaymentResolution = 'success' | 'recreate' | 'syncing'
 export type PaymentViewTheme = 'success' | 'warning' | 'danger' | 'primary' | 'default'
 
@@ -17,11 +16,8 @@ const SUCCESS_PAYMENT_STATUSES = new Set<PaymentStatus>(['paid', 'refunded'])
 const FAILED_PAYMENT_STATUSES = new Set<PaymentStatus>(['closed', 'failed'])
 const SYNCING_COMBINED_PAYMENT_STATES = new Set(['partial', 'mixed', 'unknown'])
 
-export interface PaymentProcessResult {
-  paymentId: number
-  status: PaymentProcessStatus
-  payment?: PaymentOrderResponse
-}
+export const PAYMENT_STATUS_POLL_MAX_ATTEMPTS = 30
+export const PAYMENT_STATUS_POLL_INTERVAL_MS = 2000
 
 export interface MiniProgramPayParams {
   timeStamp: string
@@ -48,6 +44,19 @@ export interface PaymentOrder {
 
 export type PaymentOrderResponse = PaymentOrder
 export type PaymentDTO = PaymentOrder
+
+export interface PaymentOrderWechatQueryResponse {
+  out_trade_no: string
+  transaction_id?: string
+  trade_type?: string
+  trade_state: string
+  trade_state_desc?: string
+  success_time?: string
+}
+
+export interface PaymentOrderQueryResponse extends PaymentOrderResponse {
+  wechat_query?: PaymentOrderWechatQueryResponse
+}
 
 export interface CombinedPaymentSubOrderResponse {
   order_id: number
@@ -265,6 +274,15 @@ export function isPaymentStatusFailed(status?: string): boolean {
   return !!status && FAILED_PAYMENT_STATUSES.has(status as PaymentStatus)
 }
 
+export function isPaymentStatusTerminal(status?: string): boolean {
+  return isPaymentStatusSuccessful(status) || isPaymentStatusFailed(status) || status === 'cancelled'
+}
+
+export function isRefundStatusTerminal(status?: string): boolean {
+  const normalizedStatus = String(status || '').trim().toLowerCase()
+  return normalizedStatus === 'success' || normalizedStatus === 'failed' || normalizedStatus === 'closed'
+}
+
 export function getPaymentStatusView(status?: PaymentStatus | string) {
   const normalizedStatus = String(status || '').trim().toLowerCase()
 
@@ -429,25 +447,6 @@ export function buildRefundProgress(refund: RefundOrder, formatTime: (timeStr: s
   ]
 }
 
-export function isPaymentProcessSuccessful(resultOrStatus: PaymentProcessResult | PaymentProcessStatus): boolean {
-  const status = typeof resultOrStatus === 'string' ? resultOrStatus : resultOrStatus.status
-  return status === 'paid'
-}
-
-export function isPaymentProcessFailed(resultOrStatus: PaymentProcessResult | PaymentProcessStatus): boolean {
-  const status = typeof resultOrStatus === 'string' ? resultOrStatus : resultOrStatus.status
-  return status === 'failed'
-}
-
-export function getPaymentProcessOutcomeMessage(
-  resultOrStatus: PaymentProcessResult | PaymentProcessStatus,
-  messages?: { failed?: string, unknown?: string }
-): string {
-  return isPaymentProcessFailed(resultOrStatus)
-    ? (messages?.failed || '支付未完成，请稍后重试')
-    : (messages?.unknown || '支付结果确认中，请稍后刷新')
-}
-
 export function getCombinedPaymentResolution(paymentOrState: CombinedPaymentOrderResponse | string): CombinedPaymentResolution {
   const effectiveState = typeof paymentOrState === 'string'
     ? paymentOrState
@@ -548,6 +547,13 @@ export async function getPaymentDetail(paymentId: number): Promise<PaymentOrderR
 }
 
 export const getPaymentById = getPaymentDetail
+
+export async function queryPaymentOrder(paymentId: number): Promise<PaymentOrderQueryResponse> {
+  return request({
+    url: `/v1/payments/${paymentId}/query`,
+    method: 'GET'
+  })
+}
 
 export async function createPayment(paymentData: CreatePaymentRequest): Promise<PaymentOrderResponse> {
   return request({
@@ -659,93 +665,85 @@ export async function invokeWechatPay(paymentParams: MiniProgramPayParams): Prom
   })
 }
 
-function resolveCreatedPaymentStatus(payment: PaymentOrderResponse): PaymentProcessStatus {
-  if (isPaymentStatusSuccessful(payment.status)) {
-    return 'paid'
-  }
-
-  if (isPaymentStatusFailed(payment.status)) {
-    return 'failed'
-  }
-
-  console.warn('[payment] 支付参数缺失', {
-    paymentId: payment.id,
-    paymentStatus: payment.status,
-    businessType: payment.business_type
-  })
-  return 'failed'
-}
-
-export async function processCreatedPayment(payment: PaymentOrderResponse): Promise<PaymentProcessResult> {
-  if (!payment.pay_params) {
-    return {
-      paymentId: payment.id,
-      status: resolveCreatedPaymentStatus(payment),
-      payment
-    }
-  }
-
-  try {
-    await invokeWechatPay(payment.pay_params)
-  } catch (error: unknown) {
-    const wxError = error as { errMsg?: string }
-    if (wxError?.errMsg?.includes('cancel')) {
-      throw new PaymentCancelledError()
-    }
-
-    console.warn('[payment] 拉起支付失败', error)
-    return {
-      paymentId: payment.id,
-      status: 'failed',
-      payment
-    }
-  }
-
-  try {
-    const finalStatus = await pollPaymentStatus(payment.id, 5, 2000)
-
-    return {
-      paymentId: payment.id,
-      status: isPaymentStatusSuccessful(finalStatus) ? 'paid' : 'failed',
-      payment
-    }
-  } catch (error: unknown) {
-    console.warn('[payment] 支付结果暂未同步，按 unknown 承接', error)
-    return {
-      paymentId: payment.id,
-      status: 'unknown',
-      payment
-    }
+export function mapWechatTradeStateToPaymentStatus(tradeState?: string): PaymentStatus | undefined {
+  switch (String(tradeState || '').trim().toUpperCase()) {
+    case 'SUCCESS':
+      return 'paid'
+    case 'REFUND':
+      return 'refunded'
+    case 'CLOSED':
+    case 'REVOKED':
+      return 'closed'
+    case 'PAYERROR':
+      return 'failed'
+    case 'NOTPAY':
+    case 'USERPAYING':
+      return 'pending'
+    default:
+      return undefined
   }
 }
 
-export async function processPayment(orderId: number, businessType: BusinessType = 'order'): Promise<PaymentProcessResult> {
-  let payment: PaymentOrderResponse
+function isRemotePaymentQueryUnsupported(error: unknown): boolean {
+  const maybeError = error as { statusCode?: number, detailMessage?: string, message?: string, userMessage?: string }
+  if (maybeError?.statusCode !== 400) {
+    return false
+  }
 
-  try {
-    payment = await createPayment({
-      order_id: orderId,
-      business_type: businessType
-    })
-  } catch (error: unknown) {
-    console.warn('[payment] 创建支付单异常，按 unknown 承接', error)
-    return {
-      paymentId: 0,
-      status: 'unknown'
+  const message = `${maybeError.detailMessage || ''} ${maybeError.message || ''} ${maybeError.userMessage || ''}`
+  return message.includes('合单支付订单请使用合单查询接口') || message.includes('仅收付通普通支付订单支持微信远端查询')
+}
+
+async function checkPaymentStatusWithRemoteFallback(
+  paymentId: number,
+  preferRemote: boolean
+): Promise<{ status: PaymentStatus, remoteQueryUnsupported: boolean }> {
+  if (preferRemote) {
+    try {
+      const payment = await queryPaymentOrder(paymentId)
+      return {
+        status: mapWechatTradeStateToPaymentStatus(payment.wechat_query?.trade_state) || payment.status,
+        remoteQueryUnsupported: false
+      }
+    } catch (error: unknown) {
+      if (!isRemotePaymentQueryUnsupported(error)) {
+        console.warn('[payment] 微信远端支付状态查询失败，回退本地支付单状态', error)
+      }
+
+      const payment = await getPaymentDetail(paymentId)
+      return {
+        status: payment.status,
+        remoteQueryUnsupported: isRemotePaymentQueryUnsupported(error)
+      }
     }
   }
 
-  return processCreatedPayment(payment)
+  const payment = await getPaymentDetail(paymentId)
+  return {
+    status: payment.status,
+    remoteQueryUnsupported: false
+  }
 }
 
 export async function checkPaymentStatus(paymentId: number): Promise<PaymentStatus> {
-  const payment = await getPaymentDetail(paymentId)
-  return payment.status
+  const result = await checkPaymentStatusWithRemoteFallback(paymentId, true)
+  return result.status
 }
 
-export async function pollPaymentStatus(paymentId: number, maxAttempts: number = 30, interval: number = 2000): Promise<PaymentStatus> {
+export async function pollPaymentStatus(
+  paymentId: number,
+  maxAttempts: number = PAYMENT_STATUS_POLL_MAX_ATTEMPTS,
+  interval: number = PAYMENT_STATUS_POLL_INTERVAL_MS
+): Promise<PaymentStatus> {
+  let preferRemote = true
+
   for (let i = 0; i < maxAttempts; i++) {
-    const status = await checkPaymentStatus(paymentId)
+    const result = await checkPaymentStatusWithRemoteFallback(paymentId, preferRemote)
+    const status = result.status
+
+    if (result.remoteQueryUnsupported) {
+      preferRemote = false
+    }
 
     if (isPaymentStatusSuccessful(status) || isPaymentStatusFailed(status)) {
       return status

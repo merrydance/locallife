@@ -12,15 +12,21 @@ import {
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 import {
-  createMerchantAppBindCode,
-  fetchMerchantApplymentStatusView,
-  fetchMerchantConsoleComplaintSummary,
-  fetchMerchantConsoleOpenStatus,
-  fetchMerchantConsoleOrderSummary,
-  fetchMerchantConsoleOverview,
-  fetchMerchantConsoleProfile,
-  updateMerchantConsoleOpenStatus
-} from '../../../services/merchant-console'
+  fetchMerchantDashboardComplaintSummary,
+  fetchMerchantDashboardOrderSummary,
+  fetchMerchantDashboardOverview
+} from '../../../services/merchant-dashboard'
+import {
+  fetchMerchantStorefrontOpenStatus,
+  fetchMerchantStorefrontProfile,
+  updateMerchantStorefrontOpenStatus
+} from '../../../services/merchant-open-status'
+import {
+  fetchMerchantApplymentStatusView
+} from '../../../services/merchant-applyment-console'
+import {
+  createMerchantAppBindCode
+} from '../../../services/merchant-app-bind'
 import {
   buildOverviewMetrics,
   buildMerchantBusinessStateView,
@@ -183,14 +189,14 @@ Page({
         orderSummaryResult,
         complaintSummaryResult
       ] = await Promise.all([
-        captureDashboardRequest(fetchMerchantConsoleProfile()),
-        captureDashboardRequest(fetchMerchantConsoleOpenStatus()),
+        captureDashboardRequest(fetchMerchantStorefrontProfile()),
+        captureDashboardRequest(fetchMerchantStorefrontOpenStatus()),
         this.data.canManageMerchantApplyment
           ? captureDashboardRequest(fetchMerchantApplymentStatusView())
           : Promise.resolve({ ok: true as const, value: null as MerchantApplymentStatusView | null }),
-        captureDashboardRequest(fetchMerchantConsoleOverview(monthStart, monthEnd)),
-        captureDashboardRequest(fetchMerchantConsoleOrderSummary()),
-        captureDashboardRequest(fetchMerchantConsoleComplaintSummary())
+        captureDashboardRequest(fetchMerchantDashboardOverview(monthStart, monthEnd)),
+        captureDashboardRequest(fetchMerchantDashboardOrderSummary()),
+        captureDashboardRequest(fetchMerchantDashboardComplaintSummary())
       ] as const)
 
       if (!isDashboardRequestOk(profileResult)) {
@@ -459,7 +465,7 @@ Page({
     this.setData({ openStatusSubmitting: true })
 
     try {
-      const response = await updateMerchantConsoleOpenStatus(nextIsOpen)
+      const response = await updateMerchantStorefrontOpenStatus(nextIsOpen)
       const businessStateView = buildMerchantBusinessStateView({
         merchantStatus: this.data.activeMerchant.status,
         isOpen: response.is_open,

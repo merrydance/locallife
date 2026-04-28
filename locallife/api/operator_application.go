@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -90,7 +91,7 @@ const (
 	operatorApplicationDocumentIDCardBack      operatorApplicationDocumentType = "id_card_back"
 )
 
-func newOperatorApplicationResponse(app db.OperatorApplication, regionName string) operatorApplicationResponse {
+func newOperatorApplicationResponse(app db.OperatorApplication, regionName string) (operatorApplicationResponse, error) {
 	resp := operatorApplicationResponse{
 		ID:                     app.ID,
 		UserID:                 app.UserID,
@@ -145,24 +146,47 @@ func newOperatorApplicationResponse(app db.OperatorApplication, regionName strin
 	// 解析OCR数据
 	if len(app.BusinessLicenseOcr) > 0 {
 		var ocr BusinessLicenseOCRData
-		if json.Unmarshal(app.BusinessLicenseOcr, &ocr) == nil {
-			resp.BusinessLicenseOCR = &ocr
+		if err := decodeOperatorApplicationJSONField(app.ID, "business_license_ocr", app.BusinessLicenseOcr, &ocr); err != nil {
+			return operatorApplicationResponse{}, err
 		}
+		resp.BusinessLicenseOCR = &ocr
 	}
 	if len(app.IDCardFrontOcr) > 0 {
 		var ocr OperatorIDCardOCRData
-		if json.Unmarshal(app.IDCardFrontOcr, &ocr) == nil {
-			resp.IDCardFrontOCR = &ocr
+		if err := decodeOperatorApplicationJSONField(app.ID, "id_card_front_ocr", app.IDCardFrontOcr, &ocr); err != nil {
+			return operatorApplicationResponse{}, err
 		}
+		resp.IDCardFrontOCR = &ocr
 	}
 	if len(app.IDCardBackOcr) > 0 {
 		var ocr OperatorIDCardBackOCR
-		if json.Unmarshal(app.IDCardBackOcr, &ocr) == nil {
-			resp.IDCardBackOCR = &ocr
+		if err := decodeOperatorApplicationJSONField(app.ID, "id_card_back_ocr", app.IDCardBackOcr, &ocr); err != nil {
+			return operatorApplicationResponse{}, err
 		}
+		resp.IDCardBackOCR = &ocr
 	}
 
-	return resp
+	return resp, nil
+}
+
+func decodeOperatorApplicationJSONField(applicationID int64, field string, payload []byte, target interface{}) error {
+	if len(payload) == 0 {
+		return nil
+	}
+	if err := json.Unmarshal(payload, target); err != nil {
+		return fmt.Errorf("decode operator application %d %s: %w", applicationID, field, err)
+	}
+	return nil
+}
+
+func (server *Server) writeOperatorApplicationResponse(ctx *gin.Context, status int, app db.OperatorApplication, regionName string) bool {
+	resp, err := newOperatorApplicationResponse(app, regionName)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return false
+	}
+	ctx.JSON(status, resp)
+	return true
 }
 
 // ==================== 获取或创建草稿 ====================
@@ -202,7 +226,7 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 		}
 		// 返回草稿或被拒绝的申请
 		regionName := server.getRegionName(ctx, existingApp.RegionID)
-		ctx.JSON(http.StatusOK, newOperatorApplicationResponse(existingApp, regionName))
+		server.writeOperatorApplicationResponse(ctx, http.StatusOK, existingApp, regionName)
 		return
 	}
 	if !isNotFoundError(err) {
@@ -271,7 +295,7 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusCreated, newOperatorApplicationResponse(newApp, region.Name))
+	server.writeOperatorApplicationResponse(ctx, http.StatusCreated, newApp, region.Name)
 }
 
 // getOperatorApplication godoc
@@ -297,7 +321,11 @@ func (server *Server) getOperatorApplication(ctx *gin.Context) {
 		return
 	}
 
-	resp := newOperatorApplicationResponse(app, server.getRegionName(ctx, app.RegionID))
+	resp, err := newOperatorApplicationResponse(app, server.getRegionName(ctx, app.RegionID))
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
 	// 若申请已通过，进一步检查运营商账号是否已建立
 	if app.Status == "approved" {
 		if _, opErr := server.store.GetOperatorByUser(ctx, authPayload.UserID); opErr == nil {
@@ -356,7 +384,7 @@ func (server *Server) updateOperatorApplicationRegion(ctx *gin.Context) {
 	// 如果区域没变，直接返回
 	if app.RegionID == req.RegionID {
 		regionName := server.getRegionName(ctx, app.RegionID)
-		ctx.JSON(http.StatusOK, newOperatorApplicationResponse(app, regionName))
+		server.writeOperatorApplicationResponse(ctx, http.StatusOK, app, regionName)
 		return
 	}
 
@@ -403,7 +431,7 @@ func (server *Server) updateOperatorApplicationRegion(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(updatedApp, region.Name))
+	server.writeOperatorApplicationResponse(ctx, http.StatusOK, updatedApp, region.Name)
 }
 
 // ==================== 更新基础信息 ====================
@@ -478,7 +506,7 @@ func (server *Server) updateOperatorApplicationBasicInfo(ctx *gin.Context) {
 	}
 
 	regionName := server.getRegionName(ctx, updatedApp.RegionID)
-	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(updatedApp, regionName))
+	server.writeOperatorApplicationResponse(ctx, http.StatusOK, updatedApp, regionName)
 }
 
 func (server *Server) deleteOperatorApplicationDocumentByType(ctx *gin.Context, documentType operatorApplicationDocumentType) {
@@ -543,7 +571,7 @@ func (server *Server) deleteOperatorApplicationDocumentByType(ctx *gin.Context, 
 	}
 
 	regionName := server.getRegionName(ctx, updatedApp.RegionID)
-	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(updatedApp, regionName))
+	server.writeOperatorApplicationResponse(ctx, http.StatusOK, updatedApp, regionName)
 }
 
 // deleteOperatorApplicationDocument godoc
@@ -658,7 +686,7 @@ func (server *Server) submitOperatorApplication(ctx *gin.Context) {
 	}
 
 	regionName := server.getRegionName(ctx, submittedApp.RegionID)
-	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(submittedApp, regionName))
+	server.writeOperatorApplicationResponse(ctx, http.StatusOK, submittedApp, regionName)
 }
 
 // validateOperatorApplicationRequired 验证必填字段
@@ -720,7 +748,7 @@ func (server *Server) resetOperatorApplicationToDraft(ctx *gin.Context) {
 	}
 
 	regionName := server.getRegionName(ctx, resetApp.RegionID)
-	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(resetApp, regionName))
+	server.writeOperatorApplicationResponse(ctx, http.StatusOK, resetApp, regionName)
 }
 
 // ==================== 辅助函数 ====================

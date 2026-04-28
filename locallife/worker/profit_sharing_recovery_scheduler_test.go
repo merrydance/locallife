@@ -1,14 +1,18 @@
 package worker_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/merrydance/locallife/worker"
 	mockwk "github.com/merrydance/locallife/worker/mock"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
@@ -40,7 +44,7 @@ func TestProfitSharingRecoverySchedulerRunOnceEnqueuesCompletedOrdersMissingProf
 		ListStuckProcessingProfitSharingReturns(gomock.Any(), gomock.Any()).
 		Return([]db.ProfitSharingReturn{}, nil)
 
-	scheduler := worker.NewProfitSharingRecoveryScheduler(store, distributor)
+	scheduler := worker.NewProfitSharingRecoveryScheduler(store, distributor, nil)
 	scheduler.RunOnce()
 }
 
@@ -77,8 +81,109 @@ func TestProfitSharingRecoverySchedulerRunOnceEnqueuesReservationProfitSharingRe
 		ListStuckProcessingProfitSharingReturns(gomock.Any(), gomock.Any()).
 		Return([]db.ProfitSharingReturn{}, nil)
 
-	scheduler := worker.NewProfitSharingRecoveryScheduler(store, distributor)
+	scheduler := worker.NewProfitSharingRecoveryScheduler(store, distributor, nil)
 	scheduler.RunOnce()
+}
+
+func TestProfitSharingRecoverySchedulerRunOnceRecordsStuckReturnFactInsteadOfLegacyResultTask(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &profitSharingFactApplicationEnqueueRecorder{}
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	returnRecord := db.ProfitSharingReturn{
+		ID:                   188,
+		RefundOrderID:        288,
+		ProfitSharingOrderID: 388,
+		PaymentOrderID:       488,
+		SubMchid:             "sub-mchid-188",
+		OutOrderNo:           "PS188",
+		OutReturnNo:          "PR188",
+		ReturnMchid:          "190000188",
+		Amount:               420,
+		Status:               "processing",
+	}
+
+	store.EXPECT().
+		ListProfitSharingOrdersForRetry(gomock.Any(), gomock.Any()).
+		Return([]db.ProfitSharingOrder{}, nil)
+	store.EXPECT().
+		ListCompletedOrdersMissingProfitSharing(gomock.Any(), gomock.Any()).
+		Return([]db.ListCompletedOrdersMissingProfitSharingRow{}, nil)
+	store.EXPECT().
+		ListStuckProcessingProfitSharingReturns(gomock.Any(), gomock.Any()).
+		Return([]db.ProfitSharingReturn{returnRecord}, nil)
+	ecommerceClient.EXPECT().
+		QueryProfitSharingReturn(gomock.Any(), returnRecord.SubMchid, returnRecord.OutReturnNo, returnRecord.OutOrderNo).
+		Return(&wechatcontracts.ProfitSharingReturnResponse{
+			SubMchID:    returnRecord.SubMchid,
+			OutOrderNo:  returnRecord.OutOrderNo,
+			OutReturnNo: returnRecord.OutReturnNo,
+			ReturnID:    "wx-return-188",
+			ReturnMchID: returnRecord.ReturnMchid,
+			Amount:      returnRecord.Amount,
+			Result:      wechatcontracts.ProfitSharingReturnResultSuccess,
+		}, nil)
+	expectProfitSharingReturnQueryFact(t, store, returnRecord, "wx-return-188", wechatcontracts.ProfitSharingReturnResultSuccess, db.ExternalPaymentTerminalStatusSuccess, "")
+
+	scheduler := worker.NewProfitSharingRecoveryScheduler(store, distributor, ecommerceClient)
+	scheduler.RunOnce()
+
+	require.Equal(t, []int64{10188}, distributor.applicationIDs)
+}
+
+func TestProfitSharingRecoverySchedulerRunOnceKeepsProcessingReturnWithoutLegacyResultTask(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &profitSharingReturnRecoveryNoLegacyDistributor{}
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	returnRecord := db.ProfitSharingReturn{
+		ID:            189,
+		RefundOrderID: 289,
+		SubMchid:      "sub-mchid-189",
+		OutOrderNo:    "PS189",
+		OutReturnNo:   "PR189",
+		Amount:        360,
+		Status:        "processing",
+	}
+
+	store.EXPECT().ListProfitSharingOrdersForRetry(gomock.Any(), gomock.Any()).Return([]db.ProfitSharingOrder{}, nil)
+	store.EXPECT().ListCompletedOrdersMissingProfitSharing(gomock.Any(), gomock.Any()).Return([]db.ListCompletedOrdersMissingProfitSharingRow{}, nil)
+	store.EXPECT().ListStuckProcessingProfitSharingReturns(gomock.Any(), gomock.Any()).Return([]db.ProfitSharingReturn{returnRecord}, nil)
+	ecommerceClient.EXPECT().
+		QueryProfitSharingReturn(gomock.Any(), returnRecord.SubMchid, returnRecord.OutReturnNo, returnRecord.OutOrderNo).
+		Return(&wechatcontracts.ProfitSharingReturnResponse{
+			SubMchID:    returnRecord.SubMchid,
+			OutOrderNo:  returnRecord.OutOrderNo,
+			OutReturnNo: returnRecord.OutReturnNo,
+			ReturnID:    "wx-return-189",
+			Amount:      returnRecord.Amount,
+			Result:      wechatcontracts.ProfitSharingReturnResultProcessing,
+		}, nil)
+	store.EXPECT().
+		UpdateProfitSharingReturnToProcessing(gomock.Any(), db.UpdateProfitSharingReturnToProcessingParams{
+			ID:       returnRecord.ID,
+			ReturnID: pgtype.Text{String: "wx-return-189", Valid: true},
+		}).
+		Return(returnRecord, nil)
+
+	scheduler := worker.NewProfitSharingRecoveryScheduler(store, distributor, ecommerceClient)
+	scheduler.RunOnce()
+
+	require.False(t, distributor.legacyResultTaskCalled)
+}
+
+type profitSharingReturnRecoveryNoLegacyDistributor struct {
+	worker.NoopTaskDistributor
+	legacyResultTaskCalled bool
+}
+
+func (d *profitSharingReturnRecoveryNoLegacyDistributor) DistributeTaskProcessProfitSharingReturnResult(context.Context, *worker.ProfitSharingReturnResultPayload, ...asynq.Option) error {
+	d.legacyResultTaskCalled = true
+	return nil
 }
 
 func TestWithProfitSharingEnqueueDedupAppendsUniqueOption(t *testing.T) {

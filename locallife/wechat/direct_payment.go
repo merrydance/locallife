@@ -498,7 +498,7 @@ func (c *DirectPaymentClient) CreateRefund(ctx context.Context, req *RefundReque
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
-	if err := wechatcontracts.ValidateDirectRefundResponse("create direct refund", toDirectRefundContractResponse(&resp)); err != nil {
+	if err := wechatcontracts.ValidateDirectRefundCreateResponse("create direct refund", toDirectRefundContractResponse(&resp)); err != nil {
 		return nil, err
 	}
 
@@ -522,7 +522,7 @@ func (c *DirectPaymentClient) QueryRefund(ctx context.Context, outRefundNo strin
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
-	if err := wechatcontracts.ValidateDirectRefundResponse("query direct refund", toDirectRefundContractResponse(&resp)); err != nil {
+	if err := wechatcontracts.ValidateDirectRefundQueryResponse("query direct refund", toDirectRefundContractResponse(&resp)); err != nil {
 		return nil, err
 	}
 

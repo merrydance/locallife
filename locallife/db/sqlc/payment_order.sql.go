@@ -33,6 +33,7 @@ FROM (
     SELECT po.id
     FROM payment_orders po
     WHERE po.user_id = $1
+        AND po.status IN ('paid', 'refunded', 'closed', 'failed')
 
     UNION ALL
 
@@ -40,6 +41,7 @@ FROM (
     FROM refund_orders ro
     JOIN payment_orders po ON po.id = ro.payment_order_id
     WHERE po.user_id = $1
+        AND ro.status IN ('success', 'failed', 'closed')
 ) AS ledger_entries
 `
 
@@ -805,6 +807,7 @@ FROM (
         po.created_at
     FROM payment_orders po
     WHERE po.user_id = $1
+        AND po.status IN ('paid', 'refunded', 'closed', 'failed')
 
     UNION ALL
 
@@ -822,6 +825,7 @@ FROM (
     FROM refund_orders ro
     JOIN payment_orders po ON po.id = ro.payment_order_id
     WHERE po.user_id = $1
+        AND ro.status IN ('success', 'failed', 'closed')
 ) AS ledger_entries
 ORDER BY occurred_at DESC, created_at DESC, id DESC
 LIMIT $2 OFFSET $3

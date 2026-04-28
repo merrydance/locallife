@@ -181,14 +181,6 @@ func decodeTraceMetricPayload(t *testing.T, raw []byte) behaviorTraceMetricPaylo
 	return payload
 }
 
-func decodeRecoveryEventPayload(t *testing.T, raw []byte) claimRecoveryEventPayload {
-	t.Helper()
-
-	var payload claimRecoveryEventPayload
-	require.NoError(t, json.Unmarshal(raw, &payload))
-	return payload
-}
-
 func decodeAssociationPayload(t *testing.T, raw []byte) behaviorAssociationPayload {
 	t.Helper()
 
@@ -211,15 +203,6 @@ func decodeScoreBreakdown(t *testing.T, raw []byte) behaviorDecisionScoreBreakdo
 	var payload behaviorDecisionScoreBreakdown
 	require.NoError(t, json.Unmarshal(raw, &payload))
 	return payload
-}
-
-func scoreSignalByCode(detail behaviorDecisionScoreDetail, code string) (behaviorDecisionSignal, bool) {
-	for _, signal := range detail.Signals {
-		if signal.Code == code {
-			return signal, true
-		}
-	}
-	return behaviorDecisionSignal{}, false
 }
 
 func snapshotKey(snapshot BehaviorTraceSnapshot) string {
@@ -294,26 +277,16 @@ func TestCreateClaimWithBehaviorTx_MerchantRecoveryWritesV2Artifacts(t *testing.
 	require.Equal(t, BehaviorDecisionModeMerchantRecovery, decision.DecisionMode.String)
 	require.Equal(t, BehaviorResponsibilityDomainMerchant, decision.ResponsibilityDomain.String)
 	require.Equal(t, BehaviorPayoutModeInstantPaid, decision.PayoutMode.String)
-	require.Equal(t, int32(75), decision.ConfidenceScore.Int32)
-	require.Equal(t, int32(11), decision.UserRiskScore.Int32)
-	require.Equal(t, int32(79), decision.MerchantLiabilityScore.Int32)
-	require.Equal(t, int32(0), decision.RiderLiabilityScore.Int32)
+	require.False(t, decision.ConfidenceScore.Valid)
+	require.False(t, decision.UserRiskScore.Valid)
+	require.False(t, decision.MerchantLiabilityScore.Valid)
+	require.False(t, decision.RiderLiabilityScore.Valid)
 	require.Equal(t, BehaviorEffectiveStatusEffective, persistedDecision.EffectiveStatus)
 	require.True(t, persistedDecision.ProfileEffectApplied)
 	require.JSONEq(t, `{}`, string(decision.LiabilityShares))
 
 	scoreBreakdown := decodeScoreBreakdown(t, decision.ScoreBreakdown)
-	require.Equal(t, "phase2_bridge_v1", scoreBreakdown.Version)
-	require.Equal(t, int32(75), scoreBreakdown.Confidence.Score)
-	require.Equal(t, int32(11), scoreBreakdown.UserRisk.Score)
-	require.Equal(t, int32(79), scoreBreakdown.MerchantLiability.Score)
-	require.Equal(t, int32(0), scoreBreakdown.RiderLiability.Score)
-	_, hasSharedDeviceRisk := scoreSignalByCode(scoreBreakdown.UserRisk, "shared_device_other_users")
-	require.True(t, hasSharedDeviceRisk)
-	_, hasMerchantHistorySignal := scoreSignalByCode(scoreBreakdown.MerchantLiability, "historical_merchant_liability")
-	require.True(t, hasMerchantHistorySignal)
-	_, hasMerchantRecoverySignal := scoreSignalByCode(scoreBreakdown.MerchantLiability, "merchant_recovery_mode")
-	require.True(t, hasMerchantRecoverySignal)
+	require.Equal(t, "claims_rules_v1", scoreBreakdown.Version)
 
 	graphHits := decodeGraphHits(t, decision.GraphHits)
 	require.Equal(t, int32(2), graphHits.SharedDeviceUsers)
@@ -335,7 +308,6 @@ func TestCreateClaimWithBehaviorTx_MerchantRecoveryWritesV2Artifacts(t *testing.
 	require.Equal(t, "merchant", factSnapshot.RecoveryTarget)
 	require.Equal(t, approvedAmount, factSnapshot.RecoveryAmount)
 	require.Equal(t, approvedAmount, factSnapshot.ApprovedAmount)
-	require.False(t, factSnapshot.PlatformFallbackHint)
 	require.Equal(t, int32(1), factSnapshot.Associations.DistinctDevices)
 	require.Equal(t, int32(1), factSnapshot.Associations.DistinctAddresses)
 	require.Equal(t, int32(2), factSnapshot.Associations.SharedDeviceUsers)
@@ -345,17 +317,17 @@ func TestCreateClaimWithBehaviorTx_MerchantRecoveryWritesV2Artifacts(t *testing.
 
 	actions, err := testStore.ListBehaviorActionsByDecision(ctx, decision.ID)
 	require.NoError(t, err)
-	require.Len(t, actions, 3)
+	require.Len(t, actions, 1)
 	require.NotNil(t, result.PayoutAction)
-	require.NotNil(t, result.RecoveryAction)
-	require.NotNil(t, result.NotificationAction)
+	require.Nil(t, result.RecoveryAction)
+	require.Nil(t, result.NotificationAction)
 	actionByKey := make(map[string]BehaviorAction, len(actions))
 	for _, action := range actions {
 		actionByKey[actionKey(action)] = action
 	}
 	require.Equal(t, result.PayoutAction.ID, actionByKey["payout:user"].ID)
-	require.Equal(t, result.RecoveryAction.ID, actionByKey["recovery:merchant"].ID)
-	require.Equal(t, result.NotificationAction.ID, actionByKey["notify:merchant"].ID)
+	require.NotContains(t, actionByKey, "recovery:merchant")
+	require.NotContains(t, actionByKey, "notify:merchant")
 
 	var payoutDetail behaviorPayoutActionDetail
 	require.NoError(t, json.Unmarshal(actionByKey["payout:user"].Detail, &payoutDetail))
@@ -363,26 +335,6 @@ func TestCreateClaimWithBehaviorTx_MerchantRecoveryWritesV2Artifacts(t *testing.
 	require.Equal(t, approvedAmount, payoutDetail.Amount)
 	require.Equal(t, result.Claim.ID, payoutDetail.ClaimID)
 	require.Equal(t, user.ID, payoutDetail.UserID)
-
-	var recoveryActionDetail behaviorRecoveryActionDetail
-	require.NoError(t, json.Unmarshal(actionByKey["recovery:merchant"].Detail, &recoveryActionDetail))
-	require.Equal(t, "claim_recovery", recoveryActionDetail.Action)
-	require.Equal(t, result.Claim.ID, recoveryActionDetail.ClaimID)
-	require.Equal(t, approvedAmount, recoveryActionDetail.RecoveryAmount)
-	require.Equal(t, "merchant", recoveryActionDetail.TargetEntity)
-	require.Equal(t, merchant.ID, recoveryActionDetail.TargetID)
-	require.Equal(t, ClaimRecoveryBasisMerchantRecovery, recoveryActionDetail.RecoveryBasis)
-
-	var merchantNotifyDetail behaviorNotifyActionDetail
-	require.NoError(t, json.Unmarshal(actionByKey["notify:merchant"].Detail, &merchantNotifyDetail))
-	require.Equal(t, "notify_responsible_party", merchantNotifyDetail.Action)
-	require.Equal(t, result.Claim.ID, merchantNotifyDetail.ClaimID)
-	require.Equal(t, "merchant", merchantNotifyDetail.TargetEntity)
-	require.Equal(t, merchant.ID, merchantNotifyDetail.TargetID)
-	require.Equal(t, merchant.OwnerUserID, merchantNotifyDetail.RecipientUserID)
-	require.Equal(t, "system", merchantNotifyDetail.NotificationType)
-	require.Equal(t, "异常订单判责通知", merchantNotifyDetail.Title)
-	require.Contains(t, merchantNotifyDetail.Content, order.OrderNo)
 
 	snapshots, err := testStore.ListBehaviorTraceSnapshotsByDecision(ctx, decision.ID)
 	require.NoError(t, err)
@@ -462,28 +414,11 @@ func TestCreateClaimWithBehaviorTx_MerchantRecoveryWritesV2Artifacts(t *testing.
 	require.Equal(t, int64(1), effectByKey["merchant:effective_liability_claims"].DeltaValue)
 
 	recovery, err := testStore.GetClaimRecoveryByClaimID(ctx, result.Claim.ID)
-	require.NoError(t, err)
-	require.True(t, recovery.DecisionID.Valid)
-	require.Equal(t, decision.ID, recovery.DecisionID.Int64)
-	require.Equal(t, "merchant", recovery.RecoveryTarget.String)
-	require.Equal(t, ClaimRecoveryBasisMerchantRecovery, recovery.RecoveryBasis.String)
-	require.WithinDuration(t, recoveryDueAt, recovery.DueAt, time.Second)
-	require.JSONEq(t, string(decisionSnapshot), string(recovery.DecisionSnapshot))
-
-	recoveryEvents, err := testStore.ListClaimRecoveryEventsByRecovery(ctx, recovery.ID)
-	require.NoError(t, err)
-	require.Len(t, recoveryEvents, 1)
-	require.Equal(t, ClaimRecoveryEventTypeCreated, recoveryEvents[0].EventType)
-	require.True(t, recoveryEvents[0].DecisionID.Valid)
-	require.Equal(t, decision.ID, recoveryEvents[0].DecisionID.Int64)
-
-	recoveryEventPayload := decodeRecoveryEventPayload(t, recoveryEvents[0].Payload)
-	require.Equal(t, "merchant", recoveryEventPayload.RecoveryTarget)
-	require.Equal(t, ClaimRecoveryBasisMerchantRecovery, recoveryEventPayload.RecoveryBasis)
-	require.Equal(t, approvedAmount, recoveryEventPayload.RecoveryAmount)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+	require.Zero(t, recovery.ID)
 }
 
-func TestCreateClaimWithBehaviorTx_MerchantLowScoreFallsBackToPlatform(t *testing.T) {
+func TestCreateClaimWithBehaviorTx_MerchantRecoveryPersistsDeterministicResponsibility(t *testing.T) {
 	ctx := context.Background()
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
@@ -508,7 +443,7 @@ func TestCreateClaimWithBehaviorTx_MerchantLowScoreFallsBackToPlatform(t *testin
 		ReasonCodes:        []string{"merchant_foreign_object"},
 		ResponsibleParty:   "merchant",
 		CompensationSource: "merchant",
-		TraceSummary:       "merchant recovery downgraded to platform fallback",
+		TraceSummary:       "销售侧异常索赔默认由商户承担责任",
 		DeviceID:           util.RandomString(12),
 		DeviceFingerprint:  "merchant-fallback-" + util.RandomString(8),
 		DeviceType:         "ios",
@@ -522,31 +457,27 @@ func TestCreateClaimWithBehaviorTx_MerchantLowScoreFallsBackToPlatform(t *testin
 	require.NoError(t, err)
 
 	decision := result.BehaviorDecision
-	require.Equal(t, BehaviorDecisionModePlatformFallback, decision.DecisionMode.String)
-	require.Equal(t, BehaviorResponsibilityDomainUnknown, decision.ResponsibilityDomain.String)
-	require.Equal(t, "platform", decision.CompensationSource)
-	require.Equal(t, "platform_fallback", decision.ResponsibleParty)
-	require.Equal(t, "low_merchant_liability_score", decision.FallbackReason.String)
-	require.Equal(t, "auto", result.Claim.ApprovalType.String)
-	require.Contains(t, result.Claim.AutoApprovalReason.String, "平台兜底处理")
-	require.Less(t, decision.MerchantLiabilityScore.Int32, int32(70))
-	require.Equal(t, int32(15), decision.MerchantLiabilityScore.Int32)
+	require.Equal(t, BehaviorDecisionModeMerchantRecovery, decision.DecisionMode.String)
+	require.Equal(t, BehaviorResponsibilityDomainMerchant, decision.ResponsibilityDomain.String)
+	require.Equal(t, "merchant", decision.CompensationSource)
+	require.Equal(t, "merchant", decision.ResponsibleParty)
+	require.False(t, decision.FallbackReason.Valid)
+	require.Equal(t, "instant", result.Claim.ApprovalType.String)
+	require.Equal(t, "phase2 merchant fallback test", result.Claim.AutoApprovalReason.String)
+	require.False(t, decision.MerchantLiabilityScore.Valid)
 
 	scoreBreakdown := decodeScoreBreakdown(t, decision.ScoreBreakdown)
-	_, hasPlatformFallbackSignal := scoreSignalByCode(scoreBreakdown.Confidence, "platform_fallback_mode")
-	require.True(t, hasPlatformFallbackSignal)
+	require.Equal(t, "claims_rules_v1", scoreBreakdown.Version)
 
 	factSnapshot := decodeFactSnapshot(t, decision.FactSnapshot)
-	require.Equal(t, BehaviorDecisionModePlatformFallback, factSnapshot.DecisionMode)
-	require.Equal(t, BehaviorResponsibilityDomainUnknown, factSnapshot.ResponsibilityDomain)
-	require.True(t, factSnapshot.PlatformFallbackHint)
-	require.Contains(t, factSnapshot.FallbackHintReasons, "low_merchant_liability_score")
-	require.Empty(t, factSnapshot.RecoveryTarget)
-	require.Zero(t, factSnapshot.RecoveryAmount)
+	require.Equal(t, BehaviorDecisionModeMerchantRecovery, factSnapshot.DecisionMode)
+	require.Equal(t, BehaviorResponsibilityDomainMerchant, factSnapshot.ResponsibilityDomain)
+	require.Equal(t, "merchant", factSnapshot.RecoveryTarget)
+	require.Equal(t, approvedAmount, factSnapshot.RecoveryAmount)
 
 	effects, err := testStore.ListBehaviorDecisionEffectsByDecision(ctx, decision.ID)
 	require.NoError(t, err)
-	require.Len(t, effects, 3)
+	require.Len(t, effects, 4)
 
 	effectByKey := make(map[string]BehaviorDecisionEffect, len(effects))
 	for _, effect := range effects {
@@ -555,16 +486,17 @@ func TestCreateClaimWithBehaviorTx_MerchantLowScoreFallsBackToPlatform(t *testin
 
 	require.Equal(t, int64(1), effectByKey["user:claim_attempts"].DeltaValue)
 	require.Equal(t, int64(1), effectByKey["user:effective_claims"].DeltaValue)
-	require.Equal(t, int64(1), effectByKey["user:platform_fallback_claims"].DeltaValue)
+	require.Equal(t, int64(1), effectByKey["user:merchant_recovered_claims"].DeltaValue)
+	require.Equal(t, int64(1), effectByKey["merchant:effective_liability_claims"].DeltaValue)
 
 	recovery, err := testStore.GetClaimRecoveryByClaimID(ctx, result.Claim.ID)
 	require.ErrorIs(t, err, ErrRecordNotFound)
 	require.Zero(t, recovery.ID)
 
-	require.Equal(t, "当前订单商户责任画像尚未达到稳定追责阈值，本次不向服务方追责，已由平台兜底处理", decision.TraceSummary.String)
+	require.Equal(t, "销售侧异常索赔默认由商户承担责任", decision.TraceSummary.String)
 }
 
-func TestCreateClaimWithBehaviorTx_RiderCriticalFactsMissingFallsBackToPlatform(t *testing.T) {
+func TestCreateClaimWithBehaviorTx_RiderRecoveryPersistsWithoutPickupConfirmation(t *testing.T) {
 	ctx := context.Background()
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
@@ -610,32 +542,26 @@ func TestCreateClaimWithBehaviorTx_RiderCriticalFactsMissingFallsBackToPlatform(
 	require.NoError(t, err)
 	require.True(t, decision.RiderID.Valid)
 	require.Equal(t, rider.ID, decision.RiderID.Int64)
-	require.Equal(t, BehaviorDecisionModePlatformFallback, decision.DecisionMode.String)
-	require.Equal(t, BehaviorResponsibilityDomainUnknown, decision.ResponsibilityDomain.String)
-	require.Equal(t, BehaviorPayoutModeLimitedPaid, decision.PayoutMode.String)
-	require.Equal(t, "platform", decision.CompensationSource)
-	require.Equal(t, "platform_fallback", decision.ResponsibleParty)
-	require.Equal(t, "missing_pickup_confirmation", decision.FallbackReason.String)
-	require.Less(t, decision.ConfidenceScore.Int32, int32(70))
-	require.Less(t, decision.RiderLiabilityScore.Int32, int32(70))
+	require.Equal(t, BehaviorDecisionModeRiderRecovery, decision.DecisionMode.String)
+	require.Equal(t, BehaviorResponsibilityDomainRider, decision.ResponsibilityDomain.String)
+	require.Equal(t, BehaviorPayoutModeInstantPaid, decision.PayoutMode.String)
+	require.Equal(t, "rider", decision.CompensationSource)
+	require.Equal(t, "rider", decision.ResponsibleParty)
+	require.False(t, decision.FallbackReason.Valid)
+	require.False(t, decision.ConfidenceScore.Valid)
+	require.False(t, decision.RiderLiabilityScore.Valid)
 	require.True(t, persistedDecision.ProfileEffectApplied)
-	require.Equal(t, "auto", result.Claim.ApprovalType.String)
-	require.Contains(t, result.Claim.AutoApprovalReason.String, "平台兜底处理")
+	require.Equal(t, "instant", result.Claim.ApprovalType.String)
+	require.Equal(t, "phase1 rider recovery test", result.Claim.AutoApprovalReason.String)
 
 	scoreBreakdown := decodeScoreBreakdown(t, decision.ScoreBreakdown)
-	require.Equal(t, "phase2_bridge_v1", scoreBreakdown.Version)
-	_, ok := scoreSignalByCode(scoreBreakdown.RiderLiability, "missing_critical_facts_penalty")
-	require.True(t, ok)
-	_, ok = scoreSignalByCode(scoreBreakdown.Confidence, "platform_fallback_mode")
-	require.True(t, ok)
+	require.Equal(t, "claims_rules_v1", scoreBreakdown.Version)
 
 	factSnapshot := decodeFactSnapshot(t, decision.FactSnapshot)
-	require.Empty(t, factSnapshot.RecoveryTarget)
-	require.Zero(t, factSnapshot.RecoveryAmount)
-	require.Equal(t, BehaviorDecisionModePlatformFallback, factSnapshot.DecisionMode)
-	require.Equal(t, BehaviorResponsibilityDomainUnknown, factSnapshot.ResponsibilityDomain)
-	require.True(t, factSnapshot.PlatformFallbackHint)
-	require.Contains(t, factSnapshot.FallbackHintReasons, "missing_pickup_confirmation")
+	require.Equal(t, "rider", factSnapshot.RecoveryTarget)
+	require.Equal(t, approvedAmount, factSnapshot.RecoveryAmount)
+	require.Equal(t, BehaviorDecisionModeRiderRecovery, factSnapshot.DecisionMode)
+	require.Equal(t, BehaviorResponsibilityDomainRider, factSnapshot.ResponsibilityDomain)
 	require.True(t, factSnapshot.ResponsibilityFacts.DeliveryExists)
 	require.True(t, factSnapshot.ResponsibilityFacts.RiderAssigned)
 	require.False(t, factSnapshot.ResponsibilityFacts.PickupConfirmed)
@@ -660,8 +586,7 @@ func TestCreateClaimWithBehaviorTx_RiderCriticalFactsMissingFallsBackToPlatform(
 	rider7Net, ok := snapshotByKey["rider:7d:net_effective"]
 	require.True(t, ok)
 	rider7NetPayload := decodeTraceMetricPayload(t, rider7Net.MetricPayload)
-	require.Zero(t, rider7NetPayload.EffectiveLiabilityClaims)
-	require.Zero(t, rider7NetPayload.PlatformFallbackClaims)
+	require.Equal(t, int32(1), rider7NetPayload.EffectiveLiabilityClaims)
 
 	rider30Raw, ok := snapshotByKey["rider:30d:raw"]
 	require.True(t, ok)
@@ -673,7 +598,7 @@ func TestCreateClaimWithBehaviorTx_RiderCriticalFactsMissingFallsBackToPlatform(
 
 	effects, err := testStore.ListBehaviorDecisionEffectsByDecision(ctx, decision.ID)
 	require.NoError(t, err)
-	require.Len(t, effects, 3)
+	require.Len(t, effects, 4)
 
 	effectByKey := make(map[string]BehaviorDecisionEffect, len(effects))
 	for _, effect := range effects {
@@ -682,13 +607,14 @@ func TestCreateClaimWithBehaviorTx_RiderCriticalFactsMissingFallsBackToPlatform(
 
 	require.Equal(t, int64(1), effectByKey["user:claim_attempts"].DeltaValue)
 	require.Equal(t, int64(1), effectByKey["user:effective_claims"].DeltaValue)
-	require.Equal(t, int64(1), effectByKey["user:platform_fallback_claims"].DeltaValue)
+	require.Equal(t, int64(1), effectByKey["user:rider_recovered_claims"].DeltaValue)
+	require.Equal(t, int64(1), effectByKey["rider:effective_liability_claims"].DeltaValue)
 
 	recovery, err := testStore.GetClaimRecoveryByClaimID(ctx, result.Claim.ID)
 	require.ErrorIs(t, err, ErrRecordNotFound)
 	require.Zero(t, recovery.ID)
 
-	require.Equal(t, "当前订单缺少取餐确认等关键责任事实，本次不向服务方追责，已由平台兜底处理", decision.TraceSummary.String)
+	require.Equal(t, "rider recovery dual write", decision.TraceSummary.String)
 }
 
 func TestCreateClaimWithBehaviorTx_RiderRecoveryWritesRiderArtifacts(t *testing.T) {
@@ -747,23 +673,17 @@ func TestCreateClaimWithBehaviorTx_RiderRecoveryWritesRiderArtifacts(t *testing.
 	require.Equal(t, BehaviorDecisionModeRiderRecovery, decision.DecisionMode.String)
 	require.Equal(t, BehaviorResponsibilityDomainRider, decision.ResponsibilityDomain.String)
 	require.Equal(t, BehaviorPayoutModeInstantPaid, decision.PayoutMode.String)
-	require.GreaterOrEqual(t, decision.ConfidenceScore.Int32, int32(60))
-	require.GreaterOrEqual(t, decision.RiderLiabilityScore.Int32, int32(70))
+	require.False(t, decision.ConfidenceScore.Valid)
+	require.False(t, decision.RiderLiabilityScore.Valid)
 	require.True(t, persistedDecision.ProfileEffectApplied)
 
 	scoreBreakdown := decodeScoreBreakdown(t, decision.ScoreBreakdown)
-	require.Equal(t, "phase2_bridge_v1", scoreBreakdown.Version)
-	_, ok := scoreSignalByCode(scoreBreakdown.RiderLiability, "pickup_confirmed")
-	require.True(t, ok)
-	_, ok = scoreSignalByCode(scoreBreakdown.Confidence, "rider_recovery_mode")
-	require.True(t, ok)
+	require.Equal(t, "claims_rules_v1", scoreBreakdown.Version)
 
 	factSnapshot := decodeFactSnapshot(t, decision.FactSnapshot)
 	require.Equal(t, "rider", factSnapshot.RecoveryTarget)
 	require.Equal(t, BehaviorDecisionModeRiderRecovery, factSnapshot.DecisionMode)
 	require.Equal(t, BehaviorResponsibilityDomainRider, factSnapshot.ResponsibilityDomain)
-	require.False(t, factSnapshot.PlatformFallbackHint)
-	require.Empty(t, factSnapshot.FallbackHintReasons)
 	require.True(t, factSnapshot.ResponsibilityFacts.DeliveryExists)
 	require.True(t, factSnapshot.ResponsibilityFacts.RiderAssigned)
 	require.True(t, factSnapshot.ResponsibilityFacts.PickupConfirmed)
@@ -805,49 +725,26 @@ func TestCreateClaimWithBehaviorTx_RiderRecoveryWritesRiderArtifacts(t *testing.
 	require.Equal(t, int64(1), effectByKey["rider:effective_liability_claims"].DeltaValue)
 
 	recovery, err := testStore.GetClaimRecoveryByClaimID(ctx, result.Claim.ID)
-	require.NoError(t, err)
-	require.True(t, recovery.DecisionID.Valid)
-	require.Equal(t, decision.ID, recovery.DecisionID.Int64)
-	require.Equal(t, "rider", recovery.RecoveryTarget.String)
-	require.Equal(t, ClaimRecoveryBasisRiderRecovery, recovery.RecoveryBasis.String)
-	require.WithinDuration(t, recoveryDueAt, recovery.DueAt, time.Second)
-
-	recoveryEvents, err := testStore.ListClaimRecoveryEventsByRecovery(ctx, recovery.ID)
-	require.NoError(t, err)
-	require.Len(t, recoveryEvents, 1)
-	require.Equal(t, ClaimRecoveryEventTypeCreated, recoveryEvents[0].EventType)
-
-	recoveryEventPayload := decodeRecoveryEventPayload(t, recoveryEvents[0].Payload)
-	require.Equal(t, "rider", recoveryEventPayload.RecoveryTarget)
-	require.Equal(t, ClaimRecoveryBasisRiderRecovery, recoveryEventPayload.RecoveryBasis)
-	require.Equal(t, approvedAmount, recoveryEventPayload.RecoveryAmount)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+	require.Zero(t, recovery.ID)
 
 	actions, err := testStore.ListBehaviorActionsByDecision(ctx, decision.ID)
 	require.NoError(t, err)
-	require.Len(t, actions, 3)
+	require.Len(t, actions, 1)
 	require.NotNil(t, result.PayoutAction)
-	require.NotNil(t, result.RecoveryAction)
-	require.NotNil(t, result.NotificationAction)
+	require.Nil(t, result.RecoveryAction)
+	require.Nil(t, result.NotificationAction)
 	actionByKey := make(map[string]BehaviorAction, len(actions))
 	for _, action := range actions {
 		actionByKey[actionKey(action)] = action
 	}
-	require.Equal(t, result.NotificationAction.ID, actionByKey["notify:rider"].ID)
-	var riderRecoveryActionDetail behaviorRecoveryActionDetail
-	require.NoError(t, json.Unmarshal(actionByKey["recovery:rider"].Detail, &riderRecoveryActionDetail))
-	require.Equal(t, "claim_recovery", riderRecoveryActionDetail.Action)
-	require.Equal(t, result.Claim.ID, riderRecoveryActionDetail.ClaimID)
-	require.Equal(t, recovery.ID, riderRecoveryActionDetail.RecoveryID)
-	require.Equal(t, rider.ID, riderRecoveryActionDetail.TargetID)
-	require.Equal(t, ClaimRecoveryBasisRiderRecovery, riderRecoveryActionDetail.RecoveryBasis)
+	require.Equal(t, result.PayoutAction.ID, actionByKey["payout:user"].ID)
+	require.NotContains(t, actionByKey, "recovery:rider")
+	require.NotContains(t, actionByKey, "notify:rider")
 
-	var riderNotifyDetail behaviorNotifyActionDetail
-	require.NoError(t, json.Unmarshal(actionByKey["notify:rider"].Detail, &riderNotifyDetail))
-	require.Equal(t, "notify_responsible_party", riderNotifyDetail.Action)
-	require.Equal(t, result.Claim.ID, riderNotifyDetail.ClaimID)
-	require.Equal(t, rider.ID, riderNotifyDetail.TargetID)
-	require.Equal(t, rider.UserID, riderNotifyDetail.RecipientUserID)
-	require.Contains(t, riderNotifyDetail.Content, "餐损")
+	recovery, err = testStore.GetClaimRecoveryByClaimID(ctx, result.Claim.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+	require.Zero(t, recovery.ID)
 }
 
 func TestCreateClaimWithBehaviorTx_PromotesUserRestrictedFromHighRiskSignals(t *testing.T) {
@@ -907,29 +804,20 @@ func TestCreateClaimWithBehaviorTx_PromotesUserRestrictedFromHighRiskSignals(t *
 	require.Equal(t, "platform", decision.CompensationSource)
 	require.Equal(t, "confirmed_high_user_risk", decision.RestrictionReason.String)
 	require.False(t, decision.FallbackReason.Valid)
-	require.GreaterOrEqual(t, decision.UserRiskScore.Int32, int32(80))
-	require.GreaterOrEqual(t, decision.ConfidenceScore.Int32, int32(70))
+	require.False(t, decision.UserRiskScore.Valid)
+	require.False(t, decision.ConfidenceScore.Valid)
 	require.Contains(t, decision.ReasonCodes, BehaviorDecisionModeUserRestricted)
 	require.Contains(t, decision.ReasonCodes, "confirmed_high_user_risk")
 	require.NotContains(t, decision.ReasonCodes, BehaviorDecisionModeMerchantRecovery)
 	require.NotNil(t, result.RestrictionAction)
 
 	scoreBreakdown := decodeScoreBreakdown(t, decision.ScoreBreakdown)
-	require.Equal(t, int32(81), scoreBreakdown.UserRisk.Score)
-	_, ok := scoreSignalByCode(scoreBreakdown.UserRisk, "historical_malicious_confirmed")
-	require.True(t, ok)
-	_, ok = scoreSignalByCode(scoreBreakdown.UserRisk, "shared_device_other_users")
-	require.True(t, ok)
-	_, ok = scoreSignalByCode(scoreBreakdown.UserRisk, "shared_address_other_users")
-	require.True(t, ok)
-	_, ok = scoreSignalByCode(scoreBreakdown.UserRisk, "user_restricted_mode_floor")
-	require.False(t, ok)
+	require.Equal(t, "claims_rules_v1", scoreBreakdown.Version)
 
 	factSnapshot := decodeFactSnapshot(t, decision.FactSnapshot)
 	require.Equal(t, BehaviorDecisionModeUserRestricted, factSnapshot.DecisionMode)
 	require.Equal(t, BehaviorResponsibilityDomainUser, factSnapshot.ResponsibilityDomain)
 	require.Equal(t, "user", factSnapshot.ResponsibleParty)
-	require.False(t, factSnapshot.PlatformFallbackHint)
 	require.Empty(t, factSnapshot.RecoveryTarget)
 	require.Zero(t, factSnapshot.RecoveryAmount)
 
@@ -973,7 +861,7 @@ func TestCreateClaimWithBehaviorTx_PromotesUserRestrictedFromHighRiskSignals(t *
 	require.Equal(t, "账户状态变更通知", restrictedNotifyDetail.Title)
 }
 
-func TestCreateClaimWithBehaviorTx_DoesNotPromoteUserRestrictedWithoutThresholds(t *testing.T) {
+func TestCreateClaimWithBehaviorTx_DoesNotPromoteUserRestrictedWithoutStrongConfirmation(t *testing.T) {
 	ctx := context.Background()
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
@@ -991,7 +879,6 @@ func TestCreateClaimWithBehaviorTx_DoesNotPromoteUserRestrictedWithoutThresholds
 	})
 	require.NoError(t, err)
 	createTakeoutOrderForClaimBehavior(t, otherUser.ID, merchant.ID, &address.ID)
-	seedUserMaliciousHistoryForClaimBehavior(t, user.ID, 1)
 	seedMerchantLiabilityHistoryForClaimBehavior(t, merchant.ID, 2)
 
 	approvedAmount := int64(2600)
@@ -1029,14 +916,14 @@ func TestCreateClaimWithBehaviorTx_DoesNotPromoteUserRestrictedWithoutThresholds
 	require.Equal(t, BehaviorResponsibilityDomainMerchant, decision.ResponsibilityDomain.String)
 	require.Equal(t, "merchant", decision.ResponsibleParty)
 	require.False(t, decision.RestrictionReason.Valid)
-	require.Less(t, decision.UserRiskScore.Int32, int32(80))
+	require.False(t, decision.UserRiskScore.Valid)
 	require.Contains(t, decision.ReasonCodes, BehaviorDecisionModeMerchantRecovery)
 	require.NotContains(t, decision.ReasonCodes, BehaviorDecisionModeUserRestricted)
-	require.NotNil(t, result.RecoveryAction)
+	require.Nil(t, result.RecoveryAction)
 
 	recovery, err := testStore.GetClaimRecoveryByClaimID(ctx, result.Claim.ID)
-	require.NoError(t, err)
-	require.Equal(t, "merchant", recovery.RecoveryTarget.String)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+	require.Zero(t, recovery.ID)
 }
 
 func TestCreateClaimWithBehaviorTx_UserRestrictedPersistsFormalDecision(t *testing.T) {
@@ -1058,12 +945,12 @@ func TestCreateClaimWithBehaviorTx_UserRestrictedPersistsFormalDecision(t *testi
 		Status:             "auto-approved",
 		ApprovalType:       "auto",
 		ApprovedAmount:     &approvedAmount,
-		AutoApprovalReason: "拒绝服务用户，平台垫付",
+		AutoApprovalReason: "用户限制服务，平台先行赔付",
 		DecisionVersion:    "behavior-v2-test",
-		ReasonCodes:        []string{"platform_fallback", "user_restricted"},
+		ReasonCodes:        []string{"user_restricted"},
 		ResponsibleParty:   "user",
 		CompensationSource: "platform",
-		TraceSummary:       "您的账号因索赔行为异常已被限制服务，本次索赔由平台兜底处理。",
+		TraceSummary:       "您的账号因索赔行为异常已被限制服务；若确认继续索赔，平台将先行赔付并停止后续服务。",
 		DeviceID:           util.RandomString(12),
 		DeviceFingerprint:  "user-restricted-" + util.RandomString(8),
 		DeviceType:         "ios",
@@ -1081,18 +968,14 @@ func TestCreateClaimWithBehaviorTx_UserRestrictedPersistsFormalDecision(t *testi
 	require.Equal(t, BehaviorResponsibilityDomainUser, decision.ResponsibilityDomain.String)
 	require.Equal(t, BehaviorPayoutModeLimitedPaid, decision.PayoutMode.String)
 	require.Equal(t, "confirmed_high_user_risk", decision.RestrictionReason.String)
-	require.GreaterOrEqual(t, decision.UserRiskScore.Int32, int32(80))
-	require.GreaterOrEqual(t, decision.ConfidenceScore.Int32, int32(70))
+	require.False(t, decision.UserRiskScore.Valid)
+	require.False(t, decision.ConfidenceScore.Valid)
 	require.Equal(t, "platform", decision.CompensationSource)
 	require.Equal(t, "user", decision.ResponsibleParty)
 	require.False(t, decision.FallbackReason.Valid)
 
 	scoreBreakdown := decodeScoreBreakdown(t, decision.ScoreBreakdown)
-	require.Equal(t, "phase2_bridge_v1", scoreBreakdown.Version)
-	_, ok := scoreSignalByCode(scoreBreakdown.UserRisk, "user_restricted_mode_floor")
-	require.True(t, ok)
-	_, ok = scoreSignalByCode(scoreBreakdown.Confidence, "user_restricted_confidence_floor")
-	require.True(t, ok)
+	require.Equal(t, "claims_rules_v1", scoreBreakdown.Version)
 	require.NotNil(t, result.RestrictionAction)
 
 	factSnapshot := decodeFactSnapshot(t, decision.FactSnapshot)
@@ -1100,7 +983,6 @@ func TestCreateClaimWithBehaviorTx_UserRestrictedPersistsFormalDecision(t *testi
 	require.Equal(t, BehaviorResponsibilityDomainUser, factSnapshot.ResponsibilityDomain)
 	require.Equal(t, "user", factSnapshot.ResponsibleParty)
 	require.Equal(t, "platform", factSnapshot.CompensationSource)
-	require.False(t, factSnapshot.PlatformFallbackHint)
 
 	effects, err := testStore.ListBehaviorDecisionEffectsByDecision(ctx, decision.ID)
 	require.NoError(t, err)
@@ -1149,9 +1031,298 @@ func TestCreateClaimWithBehaviorTx_UserRestrictedPersistsFormalDecision(t *testi
 	require.Equal(t, int32(1), user7NetPayload.ClaimAttempts)
 	require.Equal(t, int32(1), user7NetPayload.EffectiveClaims)
 	require.Equal(t, int32(1), user7NetPayload.MaliciousConfirmedClaims)
-	require.Zero(t, user7NetPayload.PlatformFallbackClaims)
 
 	recovery, err := testStore.GetClaimRecoveryByClaimID(ctx, result.Claim.ID)
 	require.ErrorIs(t, err, ErrRecordNotFound)
 	require.Zero(t, recovery.ID)
+}
+
+func TestCreateClaimCompensationTx_DefersMerchantRecoveryArtifactsUntilPayoutComplete(t *testing.T) {
+	ctx := context.Background()
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+	address := createRandomUserAddress(t, user)
+	order := createTakeoutOrderForClaimBehavior(t, user.ID, merchant.ID, &address.ID)
+	sharedFingerprint := "deferred-merchant-" + util.RandomString(8)
+	otherUser := createRandomUser(t)
+	_, err := testStore.UpsertUserDevice(ctx, UpsertUserDeviceParams{
+		UserID:            otherUser.ID,
+		DeviceID:          util.RandomString(12),
+		DeviceFingerprint: pgtype.Text{String: sharedFingerprint, Valid: true},
+		DeviceType:        "ios",
+	})
+	require.NoError(t, err)
+	createTakeoutOrderForClaimBehavior(t, otherUser.ID, merchant.ID, &address.ID)
+	seedMerchantLiabilityHistoryForClaimBehavior(t, merchant.ID, 2)
+
+	approvedAmount := int64(2600)
+	recoveryDueAt := time.Now().Add(36 * time.Hour).UTC().Truncate(time.Second)
+	submitResult, err := testStore.CreateClaimWithBehaviorTx(ctx, CreateClaimWithBehaviorTxParams{
+		OrderID:            order.ID,
+		UserID:             user.ID,
+		ClaimType:          "foreign-object",
+		Description:        "先判责后赔付",
+		ClaimAmount:        approvedAmount,
+		Status:             ClaimStatusWaitingCustomerConfirmation,
+		ApprovalType:       "auto",
+		ApprovedAmount:     &approvedAmount,
+		AutoApprovalReason: "商户责任，等待进入赔付阶段",
+		DecisionVersion:    "behavior-v2-test",
+		ReasonCodes:        []string{"merchant_recovery"},
+		ResponsibleParty:   "merchant",
+		CompensationSource: "merchant",
+		TraceSummary:       "商户责任成立，待进入赔付阶段",
+		DeviceID:           util.RandomString(12),
+		DeviceFingerprint:  sharedFingerprint,
+		DeviceType:         "ios",
+		AddressID:          &address.ID,
+		CreateRecovery:     true,
+		RecoveryTarget:     "merchant",
+		RecoveryAmount:     approvedAmount,
+		RecoveryDueAt:      &recoveryDueAt,
+		DecisionSnapshot:   []byte(`{"phase":"submit"}`),
+		SkipActionCreation: true,
+	})
+	require.NoError(t, err)
+	require.Nil(t, submitResult.PayoutAction)
+	require.Nil(t, submitResult.RecoveryAction)
+	require.Nil(t, submitResult.NotificationAction)
+
+	_, err = testStore.GetClaimRecoveryByClaimID(ctx, submitResult.Claim.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+
+	compensationResult, err := testStore.CreateClaimCompensationTx(ctx, CreateClaimCompensationTxParams{ClaimID: submitResult.Claim.ID})
+	require.NoError(t, err)
+	require.NotNil(t, compensationResult.PayoutAction)
+	require.Nil(t, compensationResult.RecoveryAction)
+	require.Nil(t, compensationResult.NotificationAction)
+	require.Nil(t, compensationResult.RestrictionAction)
+
+	_, err = testStore.GetClaimRecoveryByClaimID(ctx, submitResult.Claim.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+
+	actions, err := testStore.ListBehaviorActionsByDecision(ctx, submitResult.BehaviorDecision.ID)
+	require.NoError(t, err)
+	require.Len(t, actions, 1)
+
+	actionByKey := make(map[string]BehaviorAction, len(actions))
+	for _, action := range actions {
+		actionByKey[actionKey(action)] = action
+	}
+	require.Contains(t, actionByKey, "payout:user")
+	require.NotContains(t, actionByKey, "recovery:merchant")
+	require.NotContains(t, actionByKey, "notify:merchant")
+
+	err = testStore.MarkClaimPaid(ctx, MarkClaimPaidParams{
+		ID:     submitResult.Claim.ID,
+		PaidAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	paidClaim, err := testStore.GetClaim(ctx, submitResult.Claim.ID)
+	require.NoError(t, err)
+	require.True(t, paidClaim.PaidAt.Valid)
+
+	finalizeResult, err := testStore.FinalizeClaimCompensationAfterPayoutTx(ctx, FinalizeClaimCompensationAfterPayoutTxParams{ClaimID: submitResult.Claim.ID})
+	require.NoError(t, err)
+	require.NotNil(t, finalizeResult.RecoveryAction)
+	require.NotNil(t, finalizeResult.NotificationAction)
+	require.Nil(t, finalizeResult.RestrictionAction)
+
+	recovery, err := testStore.GetClaimRecoveryByClaimID(ctx, submitResult.Claim.ID)
+	require.NoError(t, err)
+	require.Equal(t, "merchant", recovery.RecoveryTarget.String)
+	require.Equal(t, approvedAmount, recovery.RecoveryAmount)
+	require.Equal(t, submitResult.BehaviorDecision.ID, recovery.DecisionID.Int64)
+	require.WithinDuration(t, recoveryDueAt, recovery.DueAt, time.Second)
+	recoveryEvents, err := testStore.ListClaimRecoveryEventsByRecovery(ctx, recovery.ID)
+	require.NoError(t, err)
+	require.Len(t, recoveryEvents, 2)
+	require.Equal(t, ClaimRecoveryEventTypeCreated, recoveryEvents[0].EventType)
+	require.Equal(t, ClaimRecoveryEventTypePayable, recoveryEvents[1].EventType)
+
+	secondResult, err := testStore.CreateClaimCompensationTx(ctx, CreateClaimCompensationTxParams{ClaimID: submitResult.Claim.ID})
+	require.NoError(t, err)
+	require.Equal(t, compensationResult.PayoutAction.ID, secondResult.PayoutAction.ID)
+	require.NotNil(t, secondResult.RecoveryAction)
+	require.Equal(t, finalizeResult.RecoveryAction.ID, secondResult.RecoveryAction.ID)
+	require.Nil(t, secondResult.NotificationAction)
+
+	actions, err = testStore.ListBehaviorActionsByDecision(ctx, submitResult.BehaviorDecision.ID)
+	require.NoError(t, err)
+	require.Len(t, actions, 3)
+	actionByKey = make(map[string]BehaviorAction, len(actions))
+	for _, action := range actions {
+		actionByKey[actionKey(action)] = action
+	}
+	require.Equal(t, finalizeResult.RecoveryAction.ID, actionByKey["recovery:merchant"].ID)
+	require.Equal(t, finalizeResult.NotificationAction.ID, actionByKey["notify:merchant"].ID)
+}
+
+func TestCreateClaimCompensationTx_IsIdempotentForUserRestrictedArtifacts(t *testing.T) {
+	ctx := context.Background()
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+	address := createRandomUserAddress(t, user)
+	order := createTakeoutOrderForClaimBehavior(t, user.ID, merchant.ID, &address.ID)
+
+	approvedAmount := int64(1900)
+	submitResult, err := testStore.CreateClaimWithBehaviorTx(ctx, CreateClaimWithBehaviorTxParams{
+		OrderID:            order.ID,
+		UserID:             user.ID,
+		ClaimType:          "damage",
+		Description:        "高风险用户需要进入补偿阶段",
+		ClaimAmount:        approvedAmount,
+		Status:             ClaimStatusWaitingCustomerConfirmation,
+		ApprovalType:       "auto",
+		ApprovedAmount:     &approvedAmount,
+		AutoApprovalReason: "高风险用户平台先行赔付",
+		DecisionVersion:    "behavior-v2-test",
+		ReasonCodes:        []string{"user_restricted"},
+		ResponsibleParty:   "user",
+		CompensationSource: "platform",
+		TraceSummary:       "您的账号因索赔行为异常已被限制服务；若确认继续索赔，平台将先行赔付并停止后续服务。",
+		DeviceID:           util.RandomString(12),
+		DeviceFingerprint:  "deferred-user-" + util.RandomString(8),
+		DeviceType:         "ios",
+		AddressID:          &address.ID,
+		CreateRecovery:     false,
+		SkipActionCreation: true,
+	})
+	require.NoError(t, err)
+
+	firstResult, err := testStore.CreateClaimCompensationTx(ctx, CreateClaimCompensationTxParams{ClaimID: submitResult.Claim.ID})
+	require.NoError(t, err)
+	require.NotNil(t, firstResult.PayoutAction)
+	require.Nil(t, firstResult.RestrictionAction)
+	require.Nil(t, firstResult.NotificationAction)
+	require.Nil(t, firstResult.RecoveryAction)
+
+	secondResult, err := testStore.CreateClaimCompensationTx(ctx, CreateClaimCompensationTxParams{ClaimID: submitResult.Claim.ID})
+	require.NoError(t, err)
+	require.Equal(t, firstResult.PayoutAction.ID, secondResult.PayoutAction.ID)
+	require.Nil(t, secondResult.RestrictionAction)
+	require.Nil(t, secondResult.NotificationAction)
+
+	actions, err := testStore.ListBehaviorActionsByDecision(ctx, submitResult.BehaviorDecision.ID)
+	require.NoError(t, err)
+	require.Len(t, actions, 1)
+
+	actionByKey := make(map[string]BehaviorAction, len(actions))
+	for _, action := range actions {
+		actionByKey[actionKey(action)] = action
+	}
+	require.Contains(t, actionByKey, "payout:user")
+	require.NotContains(t, actionByKey, "block:user")
+	require.NotContains(t, actionByKey, "notify:user")
+
+	err = testStore.MarkClaimPaid(ctx, MarkClaimPaidParams{
+		ID:     submitResult.Claim.ID,
+		PaidAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	paidClaim, err := testStore.GetClaim(ctx, submitResult.Claim.ID)
+	require.NoError(t, err)
+	require.True(t, paidClaim.PaidAt.Valid)
+
+	finalizeResult, err := testStore.FinalizeClaimCompensationAfterPayoutTx(ctx, FinalizeClaimCompensationAfterPayoutTxParams{ClaimID: submitResult.Claim.ID})
+	require.NoError(t, err)
+	require.NotNil(t, finalizeResult.RestrictionAction)
+	require.NotNil(t, finalizeResult.NotificationAction)
+
+	secondFinalizeResult, err := testStore.FinalizeClaimCompensationAfterPayoutTx(ctx, FinalizeClaimCompensationAfterPayoutTxParams{ClaimID: submitResult.Claim.ID})
+	require.NoError(t, err)
+	require.Equal(t, finalizeResult.RestrictionAction.ID, secondFinalizeResult.RestrictionAction.ID)
+	require.Equal(t, finalizeResult.NotificationAction.ID, secondFinalizeResult.NotificationAction.ID)
+
+	actions, err = testStore.ListBehaviorActionsByDecision(ctx, submitResult.BehaviorDecision.ID)
+	require.NoError(t, err)
+	require.Len(t, actions, 3)
+
+	actionByKey = make(map[string]BehaviorAction, len(actions))
+	for _, action := range actions {
+		actionByKey[actionKey(action)] = action
+	}
+	require.Contains(t, actionByKey, "block:user")
+	require.Contains(t, actionByKey, "notify:user")
+
+	var restrictionDetail behaviorRestrictionActionDetail
+	require.NoError(t, json.Unmarshal(actionByKey["block:user"].Detail, &restrictionDetail))
+	require.Equal(t, submitResult.Claim.ID, restrictionDetail.ClaimID)
+	require.Equal(t, user.ID, restrictionDetail.UserID)
+}
+
+func TestCreateClaimCompensationTx_RejectsLegacyAutoApprovedStatus(t *testing.T) {
+	ctx := context.Background()
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+	address := createRandomUserAddress(t, user)
+	order := createTakeoutOrderForClaimBehavior(t, user.ID, merchant.ID, &address.ID)
+
+	approvedAmount := int64(1500)
+	legacyResult, err := testStore.CreateClaimWithBehaviorTx(ctx, CreateClaimWithBehaviorTxParams{
+		OrderID:            order.ID,
+		UserID:             user.ID,
+		ClaimType:          "damage",
+		Description:        "遗留 auto-approved 记录",
+		ClaimAmount:        approvedAmount,
+		Status:             ClaimStatusAutoApproved,
+		ApprovalType:       "auto",
+		ApprovedAmount:     &approvedAmount,
+		AutoApprovalReason: "legacy processing row",
+		DecisionVersion:    "behavior-v2-test",
+		ReasonCodes:        []string{"user_restricted"},
+		ResponsibleParty:   "user",
+		CompensationSource: "platform",
+		TraceSummary:       "legacy processing row",
+		DeviceID:           util.RandomString(12),
+		DeviceFingerprint:  "legacy-auto-approved-" + util.RandomString(8),
+		DeviceType:         "ios",
+		AddressID:          &address.ID,
+		CreateRecovery:     false,
+		SkipActionCreation: true,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CreateClaimCompensationTx(ctx, CreateClaimCompensationTxParams{ClaimID: legacyResult.Claim.ID})
+	require.ErrorIs(t, err, ErrClaimCompensationNotEligible)
+}
+
+func TestCreateClaimWithBehaviorTx_RejectsRiderRecoveryWithoutConcreteRider(t *testing.T) {
+	ctx := context.Background()
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+	address := createRandomUserAddress(t, user)
+	order := createTakeoutOrderForClaimBehavior(t, user.ID, merchant.ID, &address.ID)
+
+	approvedAmount := int64(1800)
+	_, err := testStore.CreateClaimWithBehaviorTx(ctx, CreateClaimWithBehaviorTxParams{
+		OrderID:            order.ID,
+		UserID:             user.ID,
+		ClaimType:          "damage",
+		Description:        "缺少具体骑手主体时不应进入骑手追偿",
+		ClaimAmount:        approvedAmount,
+		Status:             ClaimStatusWaitingCustomerConfirmation,
+		ApprovalType:       "instant",
+		ApprovedAmount:     &approvedAmount,
+		AutoApprovalReason: "服务侧异常索赔默认由骑手承担责任",
+		DecisionVersion:    "behavior-v2-test",
+		ReasonCodes:        []string{"rider_recovery"},
+		ResponsibleParty:   "rider",
+		CompensationSource: "rider",
+		TraceSummary:       "服务侧异常索赔默认由骑手承担责任",
+		DeviceID:           util.RandomString(12),
+		DeviceFingerprint:  "missing-rider-" + util.RandomString(8),
+		DeviceType:         "ios",
+		AddressID:          &address.ID,
+		CreateRecovery:     true,
+		RecoveryTarget:     "rider",
+		RecoveryAmount:     approvedAmount,
+		DecisionSnapshot:   []byte(`{"phase":"submit"}`),
+		SkipActionCreation: true,
+	})
+	require.ErrorIs(t, err, ErrClaimResponsibleRiderMissing)
 }

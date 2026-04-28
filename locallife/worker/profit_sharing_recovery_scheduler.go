@@ -6,10 +6,12 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
+	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
-
-	db "github.com/merrydance/locallife/db/sqlc"
 )
 
 const (
@@ -21,27 +23,29 @@ const (
 
 // ProfitSharingRecoveryScheduler scans failed/stale profit sharing orders and re-enqueues processing.
 type ProfitSharingRecoveryScheduler struct {
-	cron        *cron.Cron
-	wg          sync.WaitGroup
-	stopCtx     context.Context
-	stopCancel  context.CancelFunc
-	runMu       sync.Mutex
-	store       db.Store
-	distributor TaskDistributor
+	cron            *cron.Cron
+	wg              sync.WaitGroup
+	stopCtx         context.Context
+	stopCancel      context.CancelFunc
+	runMu           sync.Mutex
+	store           db.Store
+	distributor     TaskDistributor
+	ecommerceClient wechat.EcommerceClientInterface
 }
 
 // NewProfitSharingRecoveryScheduler creates a new scheduler for profit sharing recovery.
-func NewProfitSharingRecoveryScheduler(store db.Store, distributor TaskDistributor) *ProfitSharingRecoveryScheduler {
+func NewProfitSharingRecoveryScheduler(store db.Store, distributor TaskDistributor, ecommerceClient wechat.EcommerceClientInterface) *ProfitSharingRecoveryScheduler {
 	stopCtx, stopCancel := context.WithCancel(context.Background())
 	return &ProfitSharingRecoveryScheduler{
 		cron: cron.New(cron.WithChain(
 			cron.SkipIfStillRunning(cron.DefaultLogger),
 			cron.Recover(cron.DefaultLogger),
 		)),
-		stopCtx:     stopCtx,
-		stopCancel:  stopCancel,
-		store:       store,
-		distributor: distributor,
+		stopCtx:         stopCtx,
+		stopCancel:      stopCancel,
+		store:           store,
+		distributor:     distributor,
+		ecommerceClient: ecommerceClient,
 	}
 }
 
@@ -171,8 +175,7 @@ func (s *ProfitSharingRecoveryScheduler) runOnce(ctx context.Context) {
 		}
 	}
 
-	// 补偿扫描：找出卡在 processing 超过阈值的分账回退单，重新入队结果轮询任务。
-	// 兜底路径：入队时若 Redis 故障，DB 状态已是 processing 但轮询任务丢失，会导致永久卡死。
+	// 补偿扫描：找出卡在 processing 超过阈值的分账回退单，直接查询微信结果并写入 fact application。
 	stuckCutoff := time.Now().Add(-profitSharingReturnStuckThreshold)
 	stuckReturns, err := s.store.ListStuckProcessingProfitSharingReturns(ctx, db.ListStuckProcessingProfitSharingReturnsParams{
 		UpdatedAt: stuckCutoff,
@@ -184,29 +187,91 @@ func (s *ProfitSharingRecoveryScheduler) runOnce(ctx context.Context) {
 	}
 
 	for _, r := range stuckReturns {
+		if s.ecommerceClient == nil {
+			log.Warn().
+				Int64("profit_sharing_return_id", r.ID).
+				Int64("refund_order_id", r.RefundOrderID).
+				Msg("skip stuck profit sharing return recovery because ecommerce client is unavailable")
+			continue
+		}
+
 		log.Warn().
 			Int64("profit_sharing_return_id", r.ID).
 			Int64("refund_order_id", r.RefundOrderID).
 			Time("updated_at", r.UpdatedAt).
-			Msg("found stuck processing profit sharing return, re-enqueuing result poll")
+			Msg("found stuck processing profit sharing return, querying upstream result")
 
-		if err := s.distributor.DistributeTaskProcessProfitSharingReturnResult(
-			ctx,
-			&ProfitSharingReturnResultPayload{
-				ProfitSharingReturnID: r.ID,
-				OutReturnNo:           r.OutReturnNo,
-				OutOrderNo:            r.OutOrderNo,
-				SubMchID:              r.SubMchid,
-				RefundOrderID:         r.RefundOrderID,
-				RetryCount:            0,
-			},
-			asynq.ProcessIn(0),
-			asynq.Queue(QueueCritical),
-			asynq.MaxRetry(5),
-		); err != nil {
+		resp, err := s.ecommerceClient.QueryProfitSharingReturn(ctx, r.SubMchid, r.OutReturnNo, r.OutOrderNo)
+		if err != nil {
 			log.Error().Err(err).
 				Int64("profit_sharing_return_id", r.ID).
-				Msg("re-enqueue stuck profit sharing return result task failed")
+				Str("out_return_no", r.OutReturnNo).
+				Msg("query stuck profit sharing return result failed")
+			continue
 		}
+
+		s.handleStuckProfitSharingReturnQueryResult(ctx, r, resp)
 	}
+}
+
+func (s *ProfitSharingRecoveryScheduler) handleStuckProfitSharingReturnQueryResult(ctx context.Context, returnRecord db.ProfitSharingReturn, resp *wechatcontracts.ProfitSharingReturnResponse) {
+	if resp == nil {
+		log.Warn().
+			Int64("profit_sharing_return_id", returnRecord.ID).
+			Str("out_return_no", returnRecord.OutReturnNo).
+			Msg("profit sharing return query response is empty")
+		return
+	}
+
+	switch resp.Result {
+	case wechatcontracts.ProfitSharingReturnResultProcessing:
+		if _, err := s.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
+			ID:       returnRecord.ID,
+			ReturnID: pgtype.Text{String: resp.ReturnID, Valid: resp.ReturnID != ""},
+		}); err != nil {
+			log.Error().Err(err).
+				Int64("profit_sharing_return_id", returnRecord.ID).
+				Str("out_return_no", returnRecord.OutReturnNo).
+				Str("return_id", resp.ReturnID).
+				Msg("refresh processing profit sharing return after recovery query failed")
+			return
+		}
+		log.Info().
+			Int64("profit_sharing_return_id", returnRecord.ID).
+			Str("out_return_no", returnRecord.OutReturnNo).
+			Str("return_id", resp.ReturnID).
+			Msg("stuck profit sharing return still processing; keep waiting")
+		return
+	case wechatcontracts.ProfitSharingReturnResultSuccess, wechatcontracts.ProfitSharingReturnResultFailed:
+		application, err := recordProfitSharingReturnQueryFact(ctx, s.store, returnRecord, resp)
+		if err != nil {
+			log.Error().Err(err).
+				Int64("profit_sharing_return_id", returnRecord.ID).
+				Str("out_return_no", returnRecord.OutReturnNo).
+				Str("result", resp.Result).
+				Msg("record stuck profit sharing return query fact failed")
+			return
+		}
+		enqueueProfitSharingReturnPaymentFactApplication(ctx, s.distributor, application)
+		log.Info().
+			Int64("profit_sharing_return_id", returnRecord.ID).
+			Int64("refund_order_id", returnRecord.RefundOrderID).
+			Str("out_return_no", returnRecord.OutReturnNo).
+			Str("result", resp.Result).
+			Int64("payment_fact_application_id", applicationIDForLog(application)).
+			Msg("stuck profit sharing return fact application enqueued")
+	default:
+		log.Error().
+			Int64("profit_sharing_return_id", returnRecord.ID).
+			Str("out_return_no", returnRecord.OutReturnNo).
+			Str("result", resp.Result).
+			Msg("profit sharing return query returned unsupported result during recovery")
+	}
+}
+
+func applicationIDForLog(application *db.ExternalPaymentFactApplication) int64 {
+	if application == nil {
+		return 0
+	}
+	return application.ID
 }

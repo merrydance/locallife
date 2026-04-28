@@ -2,6 +2,7 @@ import {
   getOrCreateOperatorApplication, 
   getOperatorApplication,
   resetOperatorApplication,
+  updateOperatorRegion,
   updateOperatorBasic, 
   deleteOperatorApplicationDocument,
   ocrOperatorBusinessLicense, 
@@ -13,15 +14,14 @@ import { logger } from '../../../utils/logger'
 import Navigation from '../../../utils/navigation'
 import { buildAgreementConsentPayload } from '../../../api/agreement-consent'
 import {
-  buildCityChangePatch,
   buildOperatorApplicationPatch,
   buildOperatorBasicPayload,
   buildSelectedRegionPatch,
   CityOption,
+  ProvinceOption,
   createUploadFeedback,
   DEFAULT_OPERATOR_OCR_DISPLAY_STATE,
   DEFAULT_OPERATOR_UPLOAD_FEEDBACK,
-  extractRegionSearchKeyword,
   FormDataValue,
   getErrorText,
   getOperatorDocumentRemovalData,
@@ -42,6 +42,7 @@ import {
   collectOperatorUploadPreviewPatch,
   fetchOperatorAvailableRegionsByCity,
   fetchOperatorCityOptions,
+  fetchOperatorProvinceOptions,
   handleExistingOperatorApplication,
   resolveOperatorDefaultRegionPatch
 } from '../../../utils/operator-registration-support'
@@ -63,17 +64,23 @@ Page({
       years: 3
     },
     regionPopupVisible: false,
+    provinceOptions: [] as ProvinceOption[],
+    selectedProvinceIndex: 0,
+    selectedProvinceId: 0,
+    selectedProvinceName: '',
     cityOptions: [] as CityOption[],
-    cityPickerVisible: false,
     selectedCityIndex: 0,
     selectedCityId: 0,
     selectedCityName: '',
-    regionKeyword: '',
-    regionSearchTimer: null as number | null,
-    lastRegionSearchKeyword: '',
-    lastRegionSearchCityId: 0,
-    regionOptions: [] as RegionOption[],     // 原始列表
-    filteredRegions: [] as RegionOption[],   // 搜索过滤后的列表
+    selectedDistrictName: '',
+    regionPickerValue: [] as number[],
+    regionOptions: [] as RegionOption[],
+    regionPickerPopupProps: {
+      preventScrollThrough: true,
+      overlayProps: {
+        preventScrollThrough: true
+      }
+    },
     ocrDisplayState: DEFAULT_OPERATOR_OCR_DISPLAY_STATE,
     uploadFeedback: DEFAULT_OPERATOR_UPLOAD_FEEDBACK,
     phoneError: '',
@@ -82,6 +89,18 @@ Page({
   },
 
   previewRefreshVersion: 0,
+  regionPickerSnapshot: null as null | {
+    selectedProvinceIndex: number
+    selectedProvinceId: number
+    selectedProvinceName: string
+    selectedCityIndex: number
+    selectedCityId: number
+    selectedCityName: string
+    selectedDistrictName: string
+    regionPickerValue: number[]
+    cityOptions: CityOption[]
+    regionOptions: RegionOption[]
+  },
 
   async onLoad() {
     await this.initApplication()
@@ -134,9 +153,10 @@ Page({
     }
   },
 
-  async fetchCityOptions(withRegions: boolean = true) {
+  async fetchCityOptions(provinceId?: number, withRegions: boolean = true) {
+    const targetProvinceId = Number(provinceId || this.data.selectedProvinceId || 0)
     try {
-      const result = await fetchOperatorCityOptions(this.data.selectedCityId)
+      const result = await fetchOperatorCityOptions(targetProvinceId, this.data.selectedCityId)
       this.setData(result.patch)
       if (withRegions && result.selectedCityId > 0) {
         await this.fetchAvailableRegionsByCity(result.selectedCityId)
@@ -146,13 +166,27 @@ Page({
     }
   },
 
+  async fetchProvinceOptions(withCities: boolean = true) {
+    try {
+      const result = await fetchOperatorProvinceOptions(this.data.selectedProvinceId)
+      this.setData(result.patch)
+      if (withCities && result.selectedProvinceId > 0) {
+        await this.fetchCityOptions(result.selectedProvinceId, true)
+      }
+    } catch (e: unknown) {
+      logger.error('Fetch province regions failed', e)
+    }
+  },
+
   async initDefaultRegionFromLocation() {
     try {
       const patch = await resolveOperatorDefaultRegionPatch({
+        getProvinceOptions: () => this.data.provinceOptions,
         getCityOptions: () => this.data.cityOptions,
         getRegionOptions: () => this.data.regionOptions,
-        fetchCityOptions: (withRegions?: boolean) => this.fetchCityOptions(withRegions),
-        fetchAvailableRegionsByCity: (cityId: number, keyword?: string) => this.fetchAvailableRegionsByCity(cityId, keyword)
+        fetchProvinceOptions: (withCities?: boolean) => this.fetchProvinceOptions(withCities),
+        fetchCityOptions: (provinceId: number, withRegions?: boolean) => this.fetchCityOptions(provinceId, withRegions),
+        fetchAvailableRegionsByCity: (cityId: number) => this.fetchAvailableRegionsByCity(cityId)
       })
       if (patch) {
         this.setData(patch)
@@ -162,9 +196,9 @@ Page({
     }
   },
 
-  async fetchAvailableRegionsByCity(cityID: number, keyword: string = '') {
+  async fetchAvailableRegionsByCity(cityID: number) {
     try {
-      this.setData(await fetchOperatorAvailableRegionsByCity(cityID, keyword), () => {
+      this.setData(await fetchOperatorAvailableRegionsByCity(cityID), () => {
         const currentRegionName = (this.data.formData.regionName || '').trim()
         if (this.data.formData.regionId && (!currentRegionName || !currentRegionName.includes(' - '))) {
           this.syncRegionName(this.data.formData.regionId)
@@ -199,6 +233,7 @@ Page({
       res,
       regionOptions: this.data.regionOptions,
       phoneError: this.data.phoneError,
+      currentFormData: this.data.formData,
       uploads: {
         license: this.data.license,
         idFront: this.data.idFront,
@@ -224,120 +259,148 @@ Page({
   },
 
   async onOpenRegionPopup() {
-    this.setData({ regionPopupVisible: true })
+    if (!this.data.provinceOptions.length) {
+      await this.fetchProvinceOptions()
+    }
 
     if (!this.data.cityOptions.length) {
-      await this.fetchCityOptions()
-      return
+      await this.fetchCityOptions(this.data.selectedProvinceId)
     }
 
     if (this.data.selectedCityId > 0) {
-      await this.fetchAvailableRegionsByCity(this.data.selectedCityId, this.data.regionKeyword)
+      await this.fetchAvailableRegionsByCity(this.data.selectedCityId)
     }
+
+    this.regionPickerSnapshot = {
+      selectedProvinceIndex: this.data.selectedProvinceIndex,
+      selectedProvinceId: this.data.selectedProvinceId,
+      selectedProvinceName: this.data.selectedProvinceName,
+      selectedCityIndex: this.data.selectedCityIndex,
+      selectedCityId: this.data.selectedCityId,
+      selectedCityName: this.data.selectedCityName,
+      selectedDistrictName: this.data.selectedDistrictName,
+      regionPickerValue: [this.data.selectedProvinceId, this.data.selectedCityId, this.data.formData.regionId],
+      cityOptions: [...this.data.cityOptions],
+      regionOptions: [...this.data.regionOptions]
+    }
+
+    this.setData({
+      regionPopupVisible: true,
+      regionPickerValue: [this.data.selectedProvinceId, this.data.selectedCityId, this.data.formData.regionId]
+    })
   },
 
   onCloseRegionPopup() {
-    if (this.data.regionSearchTimer) {
-      clearTimeout(this.data.regionSearchTimer)
+    if (this.regionPickerSnapshot) {
+      this.setData({
+        regionPopupVisible: false,
+        selectedProvinceIndex: this.regionPickerSnapshot.selectedProvinceIndex,
+        selectedProvinceId: this.regionPickerSnapshot.selectedProvinceId,
+        selectedProvinceName: this.regionPickerSnapshot.selectedProvinceName,
+        selectedCityIndex: this.regionPickerSnapshot.selectedCityIndex,
+        selectedCityId: this.regionPickerSnapshot.selectedCityId,
+        selectedCityName: this.regionPickerSnapshot.selectedCityName,
+        selectedDistrictName: this.regionPickerSnapshot.selectedDistrictName,
+        regionPickerValue: this.regionPickerSnapshot.regionPickerValue,
+        cityOptions: this.regionPickerSnapshot.cityOptions,
+        regionOptions: this.regionPickerSnapshot.regionOptions
+      })
+      this.regionPickerSnapshot = null
+      return
     }
+
     this.setData({ regionPopupVisible: false })
   },
 
-  onRegionSearch(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
-    const keyword = extractRegionSearchKeyword(e.detail as unknown)
-    if (this.data.regionSearchTimer) {
-      clearTimeout(this.data.regionSearchTimer)
-    }
+  async onRegionPickerPick(e: WechatMiniprogram.CustomEvent<{
+    value?: Array<string | number>
+    column?: number
+  }>) {
+    const values = Array.isArray(e.detail?.value) ? e.detail.value.map((value) => Number(value)) : []
+    const column = Number(e.detail?.column ?? -1)
 
-    this.setData({ regionKeyword: keyword })
+    this.setData({ regionPickerValue: values })
 
-    if (!this.data.selectedCityId) return
+    if (column === 0) {
+      const provinceId = Number(values[0] || 0)
+      const index = this.data.provinceOptions.findIndex((item) => item.value === provinceId)
+      const province = index >= 0 ? this.data.provinceOptions[index] : null
+      if (!province || province.value === this.data.selectedProvinceId) {
+        return
+      }
 
-    if (
-      keyword === this.data.lastRegionSearchKeyword &&
-      this.data.selectedCityId === this.data.lastRegionSearchCityId
-    ) {
-      return
-    }
-
-    const timer = setTimeout(() => {
       this.setData({
-        lastRegionSearchKeyword: keyword,
-        lastRegionSearchCityId: this.data.selectedCityId
+        selectedProvinceIndex: index,
+        selectedProvinceId: province.value,
+        selectedProvinceName: province.label,
+        cityOptions: [],
+        selectedCityIndex: 0,
+        selectedCityId: 0,
+        selectedCityName: '',
+        selectedDistrictName: '',
+        regionOptions: []
       })
-      this.fetchAvailableRegionsByCity(this.data.selectedCityId, keyword)
-    }, 300)
 
-    this.setData({ regionSearchTimer: timer })
-  },
-
-  onRegionSearchClear() {
-    if (this.data.regionSearchTimer) {
-      clearTimeout(this.data.regionSearchTimer)
-    }
-    this.setData({
-      regionKeyword: '',
-      filteredRegions: this.data.regionOptions,
-      regionSearchTimer: null,
-      lastRegionSearchKeyword: '',
-      lastRegionSearchCityId: this.data.selectedCityId
-    })
-
-    if (this.data.selectedCityId) {
-      this.fetchAvailableRegionsByCity(this.data.selectedCityId, '')
-    }
-  },
-
-  async onCityChange(e: WechatMiniprogram.CustomEvent<{ value?: string | number }>) {
-    const rawIndex = e.detail.value
-    const index = Number(rawIndex)
-    if (!Number.isFinite(index)) return
-
-    const city = this.data.cityOptions[index]
-    if (!city) return
-
-    this.setData({
-      selectedCityIndex: index,
-      ...buildCityChangePatch(city)
-    })
-
-    await this.fetchAvailableRegionsByCity(city.value)
-  },
-
-  onOpenCityPicker() {
-    if (!this.data.cityOptions.length) return
-    this.setData({ cityPickerVisible: true })
-  },
-
-  onCloseCityPicker() {
-    this.setData({ cityPickerVisible: false })
-  },
-
-  async onCityPickerConfirm(e: WechatMiniprogram.CustomEvent<{ value: Array<string | number> | null }>) {
-    const values = Array.isArray(e.detail?.value) ? e.detail.value : []
-    const selectedValue = Number(values[0] || 0)
-    const index = this.data.cityOptions.findIndex((item) => item.value === selectedValue)
-    const city = index >= 0 ? this.data.cityOptions[index] : null
-    if (!city) {
-      this.setData({ cityPickerVisible: false })
+      await this.fetchCityOptions(province.value, true)
+      this.setData({
+        regionPickerValue: [province.value, this.data.selectedCityId, this.data.regionOptions[0]?.value || 0],
+        selectedDistrictName: this.data.regionOptions[0]?.label || ''
+      })
       return
     }
 
-    this.setData({ cityPickerVisible: false })
-    await this.onCityChange({ detail: { value: index } } as WechatMiniprogram.CustomEvent<{ value?: string | number }>)
+    if (column === 1) {
+      const cityId = Number(values[1] || 0)
+      const index = this.data.cityOptions.findIndex((item) => item.value === cityId)
+      const city = index >= 0 ? this.data.cityOptions[index] : null
+      if (!city || city.value === this.data.selectedCityId) {
+        return
+      }
+
+      this.setData({
+        selectedCityIndex: index,
+        selectedCityId: city.value,
+        selectedCityName: city.label,
+        selectedDistrictName: '',
+        regionOptions: []
+      })
+
+      await this.fetchAvailableRegionsByCity(city.value)
+      this.setData({
+        regionPickerValue: [this.data.selectedProvinceId, city.value, this.data.regionOptions[0]?.value || 0],
+        selectedDistrictName: this.data.regionOptions[0]?.label || ''
+      })
+      return
+    }
+
+    if (column === 2) {
+      const regionId = Number(values[2] || 0)
+      const region = this.data.regionOptions.find((item) => Number(item.value) === regionId)
+      if (region) {
+        this.setData({
+          selectedDistrictName: region.label,
+          regionPickerValue: [this.data.selectedProvinceId, this.data.selectedCityId, region.value]
+        })
+      }
+    }
   },
 
-  onSelectRegion(e: WechatMiniprogram.CustomEvent<{ value?: number | string }>) {
-    const regionId = Number(e.detail.value)
+  onRegionPickerConfirm(e: WechatMiniprogram.CustomEvent<{ value: Array<string | number> | null }>) {
+    const values = Array.isArray(e.detail?.value) ? e.detail.value : []
+    const regionId = Number(values[2] || 0)
     const region = this.data.regionOptions.find((r) => Number(r.value) === regionId)
-    
+
     if (region) {
       this.setData(buildSelectedRegionPatch({
         region,
         cityOptions: this.data.cityOptions,
         selectedCityName: this.data.selectedCityName
       }))
+      this.regionPickerSnapshot = null
+      return
     }
+
+    this.onCloseRegionPopup()
   },
 
   onInput(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
@@ -471,6 +534,23 @@ Page({
     this.setData({ currentStep: this.data.currentStep - 1 })
   },
 
+  async syncDraftBeforeStepTwo() {
+    const existing = await getOperatorApplication()
+    if (existing?.id) {
+      if (existing.status && existing.status !== 'draft') {
+        throw new Error('当前申请状态不支持继续编辑，请刷新页面后重试')
+      }
+
+      if (Number(existing.region_id || 0) !== Number(this.data.formData.regionId || 0)) {
+        return updateOperatorRegion({ region_id: this.data.formData.regionId })
+      }
+
+      return existing
+    }
+
+    return getOrCreateOperatorApplication({ region_id: this.data.formData.regionId })
+  },
+
   async onNext() {
     const { currentStep, formData, idFront, idBack } = this.data
     if (currentStep === 0) {
@@ -491,7 +571,7 @@ Page({
       
       wx.showLoading({ title: '锁定区域中...', mask: true })
       try {
-        const res = await getOrCreateOperatorApplication({ region_id: formData.regionId })
+        const res = await this.syncDraftBeforeStepTwo()
         this.mapResponseToData(res)
         const updated = await updateOperatorBasic(buildOperatorBasicPayload(formData))
         this.mapResponseToData(updated)

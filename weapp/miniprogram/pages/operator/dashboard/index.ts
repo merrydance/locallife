@@ -1,41 +1,38 @@
 import { responsiveBehavior } from '@/utils/responsive'
 import { getConsoleDashboardErrorState } from '../../../utils/console-dashboard'
-import { wsManager, WSMessageType } from '../../../utils/websocket'
 import {
-  buildAbnormalRefundClipboardText,
-  formatPlatformAlertTime,
-  toActionableAbnormalRefundAlert,
-  type ActionableAbnormalRefundAlert
-} from '../../../utils/platform-alerts'
-import {
-  loadOperatorAlertFeed,
-  loadOperatorCenterPageData,
   loadOperatorRegions,
   type ConsoleRegionOption
-} from '../../../services/operator-console'
+} from '../../../services/operator-regions'
+import {
+  loadOperatorCenterPageData
+} from '../../../services/operator-workbench'
 
 type TimeDimension = 'day' | 'week' | 'month'
 
 interface PendingSummary {
   merchants: number
   riders: number
-  appeals: number
 }
 
 interface PendingApprovalItem {
   id: number
-  type: 'MERCHANT' | 'RIDER' | 'APPEAL'
+  type: 'MERCHANT' | 'RIDER'
   name: string
   time: string
+}
+
+interface NotificationSummary {
+  unreadCount: number
+  latestTitle: string
+  latestSummary: string
+  latestCreatedAt: string
+  empty: boolean
 }
 
 interface RiderRankingDisplayItem {
   completion_rate: string
   [key: string]: unknown
-}
-
-interface AlertFeedItem extends ActionableAbnormalRefundAlert {
-  timeDisplay: string
 }
 
 Page({
@@ -67,9 +64,15 @@ Page({
     pending_count: 0,
     pendingSummary: {
       merchants: 0,
-      riders: 0,
-      appeals: 0
+      riders: 0
     } as PendingSummary,
+    notificationSummary: {
+      unreadCount: 0,
+      latestTitle: '暂无待接单提醒',
+      latestSummary: '当前没有新的待接单提醒。',
+      latestCreatedAt: '',
+      empty: true
+    } as NotificationSummary,
     
     // 排行榜
     merchantRankings: [] as Array<Record<string, unknown>>,
@@ -88,32 +91,17 @@ Page({
     initialLoading: true,
     error: null as string | null,
     errorCanRetry: true,
-    navBarHeight: 88,
-    abnormalRefundAlerts: [] as AlertFeedItem[],
-    alertFeedReady: false,
-    _alertListeners: [] as Array<() => void>
+    navBarHeight: 88
   },
 
   onLoad() {
     this.initDashboard()
-    this.initAlertFeed()
   },
 
   onShow() {
     if (!this.data.initialLoading) {
       this.refreshData()
     }
-    if (this.data._alertListeners.length === 0) {
-      this.startAlertFeed()
-    }
-  },
-
-  onHide() {
-    this.stopAlertFeed()
-  },
-
-  onUnload() {
-    this.stopAlertFeed()
   },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent) {
@@ -121,11 +109,22 @@ Page({
   },
 
   async initDashboard() {
-    this.setData({ initialLoading: true, error: null })
-    const regionState = await loadOperatorRegions()
-    this.setData(regionState)
-    await this.loadDashboardData()
-    this.setData({ initialLoading: false })
+    this.setData({ initialLoading: true, error: null, errorCanRetry: true })
+
+    try {
+      const regionState = await loadOperatorRegions()
+      this.setData(regionState)
+      await this.loadDashboardData()
+      this.setData({ initialLoading: false })
+    } catch (error: unknown) {
+      const errorState = getConsoleDashboardErrorState('operator', error, '运营中心加载失败，请稍后重试。')
+      this.setData({
+        initialLoading: false,
+        loading: false,
+        error: errorState.message,
+        errorCanRetry: errorState.canRetry
+      })
+    }
   },
 
   async refreshData() {
@@ -244,116 +243,6 @@ Page({
     })
   },
 
-  startAlertFeed() {
-    this.stopAlertFeed()
-    wsManager.connect('/v1/platform/ws')
-
-    const alertSub = wsManager.on(WSMessageType.ALERT, (data) => {
-      const nextAlert = toActionableAbnormalRefundAlert(data)
-      if (!nextAlert) {
-        return
-      }
-
-      const nextItems = [
-        {
-          ...nextAlert,
-          timeDisplay: formatPlatformAlertTime(nextAlert.timestamp)
-        },
-        ...this.data.abnormalRefundAlerts.filter((item) => item.refundOrderId !== nextAlert.refundOrderId)
-      ].slice(0, 5)
-
-      this.setData({
-        abnormalRefundAlerts: nextItems,
-        alertFeedReady: true
-      })
-    })
-
-    this.data._alertListeners = [alertSub]
-  },
-
-  async initAlertFeed() {
-    try {
-      await this.loadRecentPlatformAlerts()
-    } finally {
-      this.startAlertFeed()
-    }
-  },
-
-  async loadRecentPlatformAlerts() {
-    try {
-      this.setData({
-        abnormalRefundAlerts: await loadOperatorAlertFeed(),
-        alertFeedReady: true
-      })
-    } catch (_error) {
-      this.setData({ alertFeedReady: true })
-    }
-  },
-
-  stopAlertFeed() {
-    if (this.data._alertListeners.length > 0) {
-      this.data._alertListeners.forEach((unsubscribe) => unsubscribe())
-      this.data._alertListeners = []
-    }
-    wsManager.disconnect()
-  },
-
-  onAbnormalRefundAlertTap(e: WechatMiniprogram.TouchEvent) {
-    const { index } = e.currentTarget.dataset as { index?: number }
-    const alert = typeof index === 'number' ? this.data.abnormalRefundAlerts[index] : undefined
-    if (!alert) {
-      return
-    }
-
-    wx.showActionSheet({
-      itemList: ['查看处理说明', '复制处理参数'],
-      success: ({ tapIndex }) => {
-        if (tapIndex === 0) {
-          this.showAbnormalRefundGuide(alert)
-          return
-        }
-        this.copyAbnormalRefundAlert(alert)
-      }
-    })
-  },
-
-  showAbnormalRefundGuide(alert: AlertFeedItem) {
-    const extraFields = alert.userBankCardRequiredFields.length > 0
-      ? `\n收款到用户银行卡需补充：${alert.userBankCardRequiredFields.join('、')}`
-      : ''
-
-    wx.showModal({
-      title: '异常退款处理说明',
-      content:
-        `该退款已进入微信异常退款人工处理流程。\n\n` +
-        `接口：${alert.method} ${alert.path}\n` +
-        `权限：平台管理员\n` +
-        `退款单ID：${alert.refundOrderId}\n` +
-        `支付单ID：${alert.paymentOrderId || '-'}\n` +
-        `微信退款ID：${alert.refundId}\n` +
-        `默认退款去向：${alert.defaultType}\n` +
-        `支持退款去向：${alert.supportedTypes.join(' / ') || alert.defaultType}` +
-        extraFields +
-        `\n\n${alert.message}`,
-      cancelText: '关闭',
-      confirmText: '复制参数',
-      success: (result) => {
-        if (result.confirm) {
-          this.copyAbnormalRefundAlert(alert)
-        }
-      }
-    })
-  },
-
-  copyAbnormalRefundAlert(alert: AlertFeedItem) {
-    wx.setClipboardData({
-      data: buildAbnormalRefundClipboardText(alert),
-      success: () => {
-        wx.showToast({ title: '处理参数已复制', icon: 'success' })
-      }
-    })
-  },
-
   /**
    * 处理待办点击
    */
@@ -362,7 +251,6 @@ Page({
     let url = ''
     if (type === 'MERCHANT') url = `/pages/operator/merchants/detail/index?id=${id}`
     else if (type === 'RIDER') url = `/pages/operator/riders/detail/index?id=${id}`
-    else if (type === 'APPEAL') url = `/pages/operator/appeal/detail/index?id=${id}`
     
     if (url) wx.navigateTo({ url })
   },
@@ -380,11 +268,6 @@ Page({
         label: `骑手待审 (${this.data.pendingSummary.riders})`,
         enabled: this.data.pendingSummary.riders > 0,
         url: `/pages/operator/riders/index?${query}${query ? '&' : ''}status=pending_approval`
-      },
-      {
-        label: `待处理申诉 (${this.data.pendingSummary.appeals})`,
-        enabled: this.data.pendingSummary.appeals > 0,
-        url: `/pages/operator/appeal/list/index${query ? `?${query}` : ''}`
       }
     ].filter((item) => item.enabled)
 
@@ -405,5 +288,13 @@ Page({
         wx.navigateTo({ url: target.url })
       }
     })
+  },
+
+  onOpenNotifications() {
+    wx.navigateTo({ url: '/pages/operator/notifications/index' })
+  },
+
+  onOpenFinanceOverview() {
+    wx.navigateTo({ url: '/pages/operator/finance/withdraw/index' })
   }
 })

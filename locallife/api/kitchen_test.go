@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -551,6 +552,34 @@ func TestGetKitchenOrderDetailsAPI(t *testing.T) {
 				require.Empty(t, response.Items)
 				// 无商品时，预估出餐时间为nil
 				require.Nil(t, response.EstimatedReadyAt)
+			},
+		},
+		{
+			name:    "InvalidItemCustomizations",
+			orderID: order.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(order.ID)).
+					Times(1).
+					Return(order, nil)
+
+				brokenItem := orderItem
+				brokenItem.Customizations = []byte("not-json")
+				store.EXPECT().
+					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(order.ID)).
+					Times(1).
+					Return([]db.OrderItem{brokenItem}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				var resp APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.Equal(t, "internal server error", resp.Message)
 			},
 		},
 		{

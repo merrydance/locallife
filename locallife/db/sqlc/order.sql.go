@@ -88,6 +88,27 @@ func (q *Queries) AutoCompleteTakeoutOrder(ctx context.Context, id int64) (Order
 	return i, err
 }
 
+const clearMerchantFoodSafetyPausedOrders = `-- name: ClearMerchantFoodSafetyPausedOrders :execrows
+UPDATE orders
+SET
+    exception_state = NULL,
+    status_hint = NULL,
+    claim_channel = NULL,
+    updated_at = now()
+WHERE merchant_id = $1
+  AND order_type = 'takeout'
+  AND exception_state = 'food_safety_paused'
+  AND status IN ('paid', 'preparing', 'ready', 'courier_accepted', 'picked', 'delivering')
+`
+
+func (q *Queries) ClearMerchantFoodSafetyPausedOrders(ctx context.Context, merchantID int64) (int64, error) {
+	result, err := q.db.Exec(ctx, clearMerchantFoodSafetyPausedOrders, merchantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const completeTakeoutOrderByUser = `-- name: CompleteTakeoutOrderByUser :one
 UPDATE orders
 SET
@@ -1052,6 +1073,88 @@ func (q *Queries) HasUserOrderedFromMerchant(ctx context.Context, arg HasUserOrd
 	return has_ordered, err
 }
 
+const listMerchantActiveTakeoutOrdersForFoodSafety = `-- name: ListMerchantActiveTakeoutOrdersForFoodSafety :many
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
+WHERE merchant_id = $1
+    AND order_type = 'takeout'
+    AND replaced_by_order_id IS NULL
+    AND status IN ('paid', 'preparing', 'ready', 'courier_accepted', 'picked', 'delivering')
+ORDER BY created_at ASC, id ASC
+`
+
+func (q *Queries) ListMerchantActiveTakeoutOrdersForFoodSafety(ctx context.Context, merchantID int64) ([]Order, error) {
+	rows, err := q.db.Query(ctx, listMerchantActiveTakeoutOrdersForFoodSafety, merchantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Order{}
+	for rows.Next() {
+		var i Order
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderNo,
+			&i.UserID,
+			&i.MerchantID,
+			&i.OrderType,
+			&i.AddressID,
+			&i.DeliveryFee,
+			&i.DeliveryDistance,
+			&i.TableID,
+			&i.ReservationID,
+			&i.Subtotal,
+			&i.DiscountAmount,
+			&i.DeliveryFeeDiscount,
+			&i.TotalAmount,
+			&i.Status,
+			&i.PaymentMethod,
+			&i.PaidAt,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CompletedAt,
+			&i.CancelledAt,
+			&i.CancelReason,
+			&i.FinalAmount,
+			&i.PlatformCommission,
+			&i.UserVoucherID,
+			&i.VoucherAmount,
+			&i.BalancePaid,
+			&i.MembershipID,
+			&i.FulfillmentStatus,
+			&i.ReplacedByOrderID,
+			&i.PickupCode,
+			&i.DispatchOrderID,
+			&i.FlowID,
+			&i.StatusHint,
+			&i.Badges,
+			&i.ExceptionState,
+			&i.ClaimChannel,
+			&i.Overtime,
+			&i.PrepStartAt,
+			&i.ReadyAt,
+			&i.CourierAcceptAt,
+			&i.PickedAt,
+			&i.RiderDeliveredAt,
+			&i.UserDeliveredAt,
+			&i.AutoUserDeliveredAt,
+			&i.DeliveryDuration,
+			&i.DeliveryContactNameSnapshot,
+			&i.DeliveryContactPhoneSnapshot,
+			&i.DeliveryAddressSnapshot,
+			&i.DeliveryLongitudeSnapshot,
+			&i.DeliveryLatitudeSnapshot,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMerchantOrdersByStatus = `-- name: ListMerchantOrdersByStatus :many
 
 SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
@@ -1164,7 +1267,7 @@ WHERE merchant_id = $1
         AND status IN ('user_delivered', 'completed')
     AND created_at >= $2
     AND created_at <= $3
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT $5 OFFSET $4
 `
 
@@ -2347,6 +2450,89 @@ type UpdateOrderExceptionStateParams struct {
 
 func (q *Queries) UpdateOrderExceptionState(ctx context.Context, arg UpdateOrderExceptionStateParams) (Order, error) {
 	row := q.db.QueryRow(ctx, updateOrderExceptionState, arg.ExceptionState, arg.ClaimChannel, arg.ID)
+	var i Order
+	err := row.Scan(
+		&i.ID,
+		&i.OrderNo,
+		&i.UserID,
+		&i.MerchantID,
+		&i.OrderType,
+		&i.AddressID,
+		&i.DeliveryFee,
+		&i.DeliveryDistance,
+		&i.TableID,
+		&i.ReservationID,
+		&i.Subtotal,
+		&i.DiscountAmount,
+		&i.DeliveryFeeDiscount,
+		&i.TotalAmount,
+		&i.Status,
+		&i.PaymentMethod,
+		&i.PaidAt,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+		&i.CancelledAt,
+		&i.CancelReason,
+		&i.FinalAmount,
+		&i.PlatformCommission,
+		&i.UserVoucherID,
+		&i.VoucherAmount,
+		&i.BalancePaid,
+		&i.MembershipID,
+		&i.FulfillmentStatus,
+		&i.ReplacedByOrderID,
+		&i.PickupCode,
+		&i.DispatchOrderID,
+		&i.FlowID,
+		&i.StatusHint,
+		&i.Badges,
+		&i.ExceptionState,
+		&i.ClaimChannel,
+		&i.Overtime,
+		&i.PrepStartAt,
+		&i.ReadyAt,
+		&i.CourierAcceptAt,
+		&i.PickedAt,
+		&i.RiderDeliveredAt,
+		&i.UserDeliveredAt,
+		&i.AutoUserDeliveredAt,
+		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
+	)
+	return i, err
+}
+
+const updateOrderFoodSafetyPauseState = `-- name: UpdateOrderFoodSafetyPauseState :one
+UPDATE orders
+SET
+    exception_state = $1,
+    status_hint = $2,
+    claim_channel = $3,
+    updated_at = now()
+WHERE id = $4
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot
+`
+
+type UpdateOrderFoodSafetyPauseStateParams struct {
+	ExceptionState pgtype.Text `json:"exception_state"`
+	StatusHint     pgtype.Text `json:"status_hint"`
+	ClaimChannel   pgtype.Text `json:"claim_channel"`
+	ID             int64       `json:"id"`
+}
+
+func (q *Queries) UpdateOrderFoodSafetyPauseState(ctx context.Context, arg UpdateOrderFoodSafetyPauseStateParams) (Order, error) {
+	row := q.db.QueryRow(ctx, updateOrderFoodSafetyPauseState,
+		arg.ExceptionState,
+		arg.StatusHint,
+		arg.ClaimChannel,
+		arg.ID,
+	)
 	var i Order
 	err := row.Scan(
 		&i.ID,

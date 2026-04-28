@@ -19,7 +19,7 @@ SET
   reviewed_at = now(),
   updated_at = now()
 WHERE id = $1 AND status = 'submitted'
-RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
 `
 
 // 审核通过商户申请
@@ -55,6 +55,7 @@ func (q *Queries) ApproveMerchantApplication(ctx context.Context, id int64) (Mer
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -86,7 +87,7 @@ SET
   business_license_ocr = NULL,
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
 `
 
 // 清空营业执照关联和 OCR 结果
@@ -122,6 +123,7 @@ func (q *Queries) ClearMerchantApplicationBusinessLicense(ctx context.Context, i
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -133,7 +135,7 @@ SET
   food_permit_ocr = NULL,
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
 `
 
 // 清空食品经营许可证关联和 OCR 结果
@@ -169,6 +171,7 @@ func (q *Queries) ClearMerchantApplicationFoodPermit(ctx context.Context, id int
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -180,7 +183,7 @@ SET
   id_card_back_ocr = NULL,
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
 `
 
 // 清空身份证背面关联和 OCR 结果
@@ -216,6 +219,7 @@ func (q *Queries) ClearMerchantApplicationIDCardBack(ctx context.Context, id int
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -227,7 +231,7 @@ SET
   id_card_front_ocr = NULL,
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
 `
 
 // 清空身份证正面关联和 OCR 结果
@@ -263,6 +267,7 @@ func (q *Queries) ClearMerchantApplicationIDCardFront(ctx context.Context, id in
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -294,7 +299,7 @@ INSERT INTO merchant_applications (
 ) VALUES (
   $1, '', '', '', '', '', '', 'draft'
 )
-RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
 `
 
 // ==================== 商户入驻申请（草稿模式+自动审核） ====================
@@ -331,12 +336,13 @@ func (q *Queries) CreateMerchantApplicationDraft(ctx context.Context, userID int
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
 
 const getMerchantApplicationDraft = `-- name: GetMerchantApplicationDraft :one
-SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM merchant_applications
+SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary FROM merchant_applications
 WHERE user_id = $1 AND status IN ('draft', 'submitted', 'rejected', 'approved')
 ORDER BY created_at DESC
 LIMIT 1
@@ -375,6 +381,7 @@ func (q *Queries) GetMerchantApplicationDraft(ctx context.Context, userID int64)
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -450,7 +457,7 @@ SET
   reviewed_at = now(),
   updated_at = now()
 WHERE id = $1 AND status = 'submitted'
-RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
 `
 
 type RejectMerchantApplicationParams struct {
@@ -491,6 +498,7 @@ func (q *Queries) RejectMerchantApplication(ctx context.Context, arg RejectMerch
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -504,7 +512,7 @@ SET
   reviewed_by = NULL,
   updated_at = now()
 WHERE id = $1 AND status IN ('submitted', 'rejected', 'approved')
-RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
 `
 
 // 重置申请为草稿状态（允许用户重新编辑，支持从待审核、被拒绝或已通过状态重置）
@@ -540,6 +548,7 @@ func (q *Queries) ResetMerchantApplicationToDraft(ctx context.Context, id int64)
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -573,7 +582,7 @@ SET
   reviewed_by = NULL,
   updated_at = now()
 WHERE id = $1 AND status IN ('draft', 'rejected', 'approved')
-RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
 `
 
 // 提交商户申请（从草稿、被拒绝或已通过状态变为已提交）
@@ -609,6 +618,7 @@ func (q *Queries) SubmitMerchantApplication(ctx context.Context, id int64) (Merc
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -628,7 +638,7 @@ SET
   region_id = COALESCE($11, region_id),
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
 `
 
 type UpdateMerchantApplicationBasicInfoParams struct {
@@ -690,6 +700,7 @@ func (q *Queries) UpdateMerchantApplicationBasicInfo(ctx context.Context, arg Up
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -703,7 +714,7 @@ SET
   business_license_ocr = COALESCE($5, business_license_ocr),
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
 `
 
 type UpdateMerchantApplicationBusinessLicenseParams struct {
@@ -753,6 +764,7 @@ func (q *Queries) UpdateMerchantApplicationBusinessLicense(ctx context.Context, 
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -764,7 +776,7 @@ SET
   food_permit_ocr = COALESCE($3, food_permit_ocr),
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
 `
 
 type UpdateMerchantApplicationFoodPermitParams struct {
@@ -806,6 +818,7 @@ func (q *Queries) UpdateMerchantApplicationFoodPermit(ctx context.Context, arg U
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -817,7 +830,7 @@ SET
   id_card_back_ocr = COALESCE($3, id_card_back_ocr),
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
 `
 
 type UpdateMerchantApplicationIDCardBackParams struct {
@@ -859,6 +872,7 @@ func (q *Queries) UpdateMerchantApplicationIDCardBack(ctx context.Context, arg U
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -872,7 +886,7 @@ SET
   id_card_front_ocr = COALESCE($5, id_card_front_ocr),
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
 `
 
 type UpdateMerchantApplicationIDCardFrontParams struct {
@@ -922,6 +936,7 @@ func (q *Queries) UpdateMerchantApplicationIDCardFront(ctx context.Context, arg 
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -933,7 +948,7 @@ SET
   environment_images = COALESCE($3, environment_images),
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
-RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
 `
 
 type UpdateMerchantApplicationImagesParams struct {
@@ -975,6 +990,57 @@ func (q *Queries) UpdateMerchantApplicationImages(ctx context.Context, arg Updat
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
+	)
+	return i, err
+}
+
+const updateMerchantApplicationReviewSummary = `-- name: UpdateMerchantApplicationReviewSummary :one
+UPDATE merchant_applications
+SET review_summary = $2,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
+`
+
+type UpdateMerchantApplicationReviewSummaryParams struct {
+	ID            int64  `json:"id"`
+	ReviewSummary []byte `json:"review_summary"`
+}
+
+func (q *Queries) UpdateMerchantApplicationReviewSummary(ctx context.Context, arg UpdateMerchantApplicationReviewSummaryParams) (MerchantApplication, error) {
+	row := q.db.QueryRow(ctx, updateMerchantApplicationReviewSummary, arg.ID, arg.ReviewSummary)
+	var i MerchantApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.MerchantName,
+		&i.BusinessLicenseNumber,
+		&i.LegalPersonName,
+		&i.LegalPersonIDNumber,
+		&i.ContactPhone,
+		&i.BusinessAddress,
+		&i.BusinessScope,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Longitude,
+		&i.Latitude,
+		&i.RegionID,
+		&i.FoodPermitOcr,
+		&i.BusinessLicenseOcr,
+		&i.IDCardFrontOcr,
+		&i.IDCardBackOcr,
+		&i.StorefrontImages,
+		&i.EnvironmentImages,
+		&i.BusinessLicenseMediaAssetID,
+		&i.FoodPermitMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }
@@ -986,7 +1052,7 @@ SET
   environment_images = COALESCE($3, environment_images),
   updated_at = now()
 WHERE user_id = $1
-RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id, review_summary
 `
 
 type UpdateMerchantApplicationShopImagesParams struct {
@@ -1028,6 +1094,7 @@ func (q *Queries) UpdateMerchantApplicationShopImages(ctx context.Context, arg U
 		&i.FoodPermitMediaAssetID,
 		&i.IDCardFrontMediaAssetID,
 		&i.IDCardBackMediaAssetID,
+		&i.ReviewSummary,
 	)
 	return i, err
 }

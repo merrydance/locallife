@@ -2205,6 +2205,152 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/claims/{id}/confirm-continue": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "用户确认继续已完成判责的索赔，系统进入补偿执行阶段",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "索赔管理"
+                ],
+                "summary": "确认继续索赔",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "索赔ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "索赔状态",
+                        "schema": {
+                            "$ref": "#/definitions/api.userClaimResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "无效的索赔ID",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "该索赔不属于当前用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "索赔不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "当前索赔状态不允许继续",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/claims/{id}/withdraw": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "用户撤回已完成判责但尚未进入补偿执行的索赔",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "索赔管理"
+                ],
+                "summary": "撤回索赔",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "索赔ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "索赔状态",
+                        "schema": {
+                            "$ref": "#/definitions/api.userClaimResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "无效的索赔ID",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "该索赔不属于当前用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "索赔不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "当前索赔状态不允许撤回",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/combos": {
             "get": {
                 "security": [
@@ -8814,295 +8960,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/merchant/appeals": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "商户查看自己提交的申诉列表",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "商户申诉管理"
-                ],
-                "summary": "获取申诉列表",
-                "parameters": [
-                    {
-                        "minimum": 1,
-                        "type": "integer",
-                        "description": "页码",
-                        "name": "page_id",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "maximum": 50,
-                        "minimum": 1,
-                        "type": "integer",
-                        "description": "每页数量",
-                        "name": "page_size",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "enum": [
-                            "pending",
-                            "approved",
-                            "compensated",
-                            "rejected"
-                        ],
-                        "type": "string",
-                        "description": "状态筛选",
-                        "name": "status",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "成功返回申诉列表",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "非商户用户",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "商户对已批准的索赔提交申诉，提交后由系统自动复核并写回最终结果",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "商户申诉管理"
-                ],
-                "summary": "提交申诉",
-                "parameters": [
-                    {
-                        "description": "申诉请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.createMerchantAppealRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "成功创建申诉",
-                        "schema": {
-                            "$ref": "#/definitions/api.appealResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "非商户用户或索赔不属于该商户",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "索赔不存在",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "409": {
-                        "description": "已存在申诉",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/merchant/appeals/summary": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "返回商户申诉总数及各状态汇总，供工作台和筛选条使用",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "商户申诉管理"
-                ],
-                "summary": "获取商户申诉汇总",
-                "responses": {
-                    "200": {
-                        "description": "成功返回申诉汇总",
-                        "schema": {
-                            "$ref": "#/definitions/api.appealSummaryResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "非商户用户",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/merchant/appeals/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "商户查看自己提交的申诉详细信息",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "商户申诉管理"
-                ],
-                "summary": "获取申诉详情",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "申诉ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "成功返回申诉详情",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "非商户用户",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "申诉不存在",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/v1/merchant/application": {
             "get": {
                 "security": [
@@ -9853,7 +9710,7 @@ const docTemplate = `{
                         "Bearer": []
                     }
                 ],
-                "description": "商户查看已批准的索赔列表，包含订单信息和申诉状态",
+                "description": "商户查看已批准的索赔列表，包含订单信息和追偿争议状态",
                 "consumes": [
                     "application/json"
                 ],
@@ -9861,7 +9718,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "商户申诉管理"
+                    "商户索赔管理"
                 ],
                 "summary": "获取商户收到的索赔列表",
                 "parameters": [
@@ -9885,7 +9742,7 @@ const docTemplate = `{
                     {
                         "enum": [
                             "pending_action",
-                            "appealed",
+                            "disputed",
                             "closed"
                         ],
                         "type": "string",
@@ -9948,7 +9805,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "商户申诉管理"
+                    "商户索赔管理"
                 ],
                 "summary": "获取商户索赔汇总",
                 "responses": {
@@ -9989,7 +9846,7 @@ const docTemplate = `{
                         "Bearer": []
                     }
                 ],
-                "description": "商户查看单个索赔的详细信息，包含申诉信息",
+                "description": "商户查看单个索赔的详细信息，包含追偿争议信息",
                 "consumes": [
                     "application/json"
                 ],
@@ -9997,7 +9854,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "商户申诉管理"
+                    "商户索赔管理"
                 ],
                 "summary": "获取索赔详情",
                 "parameters": [
@@ -10070,7 +9927,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "商户申诉管理"
+                    "商户索赔管理"
                 ],
                 "summary": "获取索赔判定依据",
                 "parameters": [
@@ -10113,150 +9970,6 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "索赔不存在",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/merchant/claims/{id}/recovery": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "商户查看索赔对应的追偿单状态",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "商户索赔管理"
-                ],
-                "summary": "商户查看追偿单",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "索赔ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "追偿单详情",
-                        "schema": {
-                            "$ref": "#/definitions/api.claimRecoveryResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "非商户用户或索赔不属于该商户",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "追偿单不存在",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/merchant/claims/{id}/recovery/pay": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "商户为索赔追偿创建微信支付单，支付成功后系统再标记追偿单为已支付",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "商户索赔管理"
-                ],
-                "summary": "商户创建追偿支付单",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "索赔ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "支付单创建成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.claimRecoveryPaymentResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "非商户用户或索赔不属于该商户",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "追偿单不存在",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -13495,6 +13208,438 @@ const docTemplate = `{
                         "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/recoveries/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "商户查看索赔对应的追偿单状态",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户索赔管理"
+                ],
+                "summary": "商户查看追偿单",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "追偿单ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "追偿单详情",
+                        "schema": {
+                            "$ref": "#/definitions/api.claimRecoveryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "非商户用户或索赔不属于该商户",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "追偿单不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/recoveries/{id}/pay": {
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "商户为索赔追偿创建微信支付单，支付成功后系统再标记追偿单为已支付",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户索赔管理"
+                ],
+                "summary": "商户创建追偿支付单",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "追偿单ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "支付单创建成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.claimRecoveryPaymentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "非商户用户或索赔不属于该商户",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "追偿单不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/recovery-disputes": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "商户查看自己提交的追偿争议列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户追偿争议管理"
+                ],
+                "summary": "获取追偿争议列表",
+                "parameters": [
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "maximum": 50,
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "submitted",
+                            "approved",
+                            "rejected"
+                        ],
+                        "type": "string",
+                        "description": "状态筛选",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功返回追偿争议列表",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "非商户用户",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "商户对平台向自身发起的追偿提交争议，提交后由系统自动复核并写回最终结果",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户追偿争议管理"
+                ],
+                "summary": "提交追偿争议",
+                "parameters": [
+                    {
+                        "description": "追偿争议请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.createMerchantRecoveryDisputeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "成功创建追偿争议",
+                        "schema": {
+                            "$ref": "#/definitions/api.recoveryDisputeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "非商户用户或追偿不属于该商户",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "追偿不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "已存在追偿争议",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/recovery-disputes/summary": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "返回商户追偿争议总数及各状态汇总，供工作台和筛选条使用",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户追偿争议管理"
+                ],
+                "summary": "获取商户追偿争议汇总",
+                "responses": {
+                    "200": {
+                        "description": "成功返回追偿争议汇总",
+                        "schema": {
+                            "$ref": "#/definitions/api.recoveryDisputeSummaryResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "非商户用户",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/recovery-disputes/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "商户查看自己提交的追偿争议详细信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户追偿争议管理"
+                ],
+                "summary": "获取追偿争议详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "追偿争议ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功返回追偿争议详情",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "非商户用户",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "追偿争议不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
@@ -17605,226 +17750,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/operator/appeals": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "运营商查看自己管辖区域内的申诉列表，可按状态筛选",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商申诉管理"
-                ],
-                "summary": "获取区域内申诉列表",
-                "parameters": [
-                    {
-                        "enum": [
-                            "pending",
-                            "approved",
-                            "rejected"
-                        ],
-                        "type": "string",
-                        "description": "状态筛选",
-                        "name": "status",
-                        "in": "query"
-                    },
-                    {
-                        "minimum": 1,
-                        "type": "integer",
-                        "description": "页码",
-                        "name": "page_id",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "maximum": 50,
-                        "minimum": 1,
-                        "type": "integer",
-                        "description": "每页数量",
-                        "name": "page_size",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "成功返回申诉列表",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "非运营商用户",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operator/appeals/summary": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "返回运营商可管理区域内申诉总数及各状态汇总，供工作台和审批入口使用",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商申诉管理"
-                ],
-                "summary": "获取区域申诉汇总",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "区域ID",
-                        "name": "region_id",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "成功返回申诉汇总",
-                        "schema": {
-                            "$ref": "#/definitions/api.appealSummaryResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorMessage"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorMessage"
-                        }
-                    },
-                    "403": {
-                        "description": "无权限",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorMessage"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorMessage"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operator/appeals/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "运营商查看区域内申诉的详细信息，包含索赔、订单、用户信用分等信息",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商申诉管理"
-                ],
-                "summary": "获取申诉详情",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "申诉ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "成功返回申诉详情",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "非运营商用户",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "申诉不存在",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/v1/operator/application": {
             "get": {
                 "security": [
@@ -18222,14 +18147,14 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/operator/claims/{id}/recovery": {
+        "/v1/operator/food-safety/cases": {
             "get": {
                 "security": [
                     {
-                        "Bearer": []
+                        "BearerAuth": []
                     }
                 ],
-                "description": "运营商查看索赔对应的追偿单状态",
+                "description": "获取当前运营商辖区内由顾客食安上报触发的案件列表",
                 "consumes": [
                     "application/json"
                 ],
@@ -18237,13 +18162,78 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "运营商申诉管理"
+                    "运营商功能"
                 ],
-                "summary": "运营商查看追偿单",
+                "summary": "获取食安案件列表",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "索赔ID",
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "merchant-suspended",
+                            "investigating",
+                            "resolved"
+                        ],
+                        "type": "string",
+                        "description": "案件状态",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.foodSafetyCaseListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operator/food-safety/cases/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取当前运营商辖区内的单个食安案件和关联上报事件",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商功能"
+                ],
+                "summary": "获取食安案件详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "案件ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -18251,44 +18241,155 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "追偿单详情",
+                        "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api.claimRecoveryResponse"
+                            "$ref": "#/definitions/api.foodSafetyCaseDetailResponse"
                         }
                     },
                     "400": {
-                        "description": "参数错误",
+                        "description": "Bad Request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "403": {
-                        "description": "无权限处理该区域",
+                        "description": "Forbidden",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "追偿单不存在",
+                        "description": "Not Found",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operator/food-safety/cases/{id}/investigate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "运营商对顾客食安上报触发的案件录入调查报告，并将案件置为调查中",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商功能"
+                ],
+                "summary": "填写食安案件调查报告",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "案件ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "调查报告",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.investigateOperatorFoodSafetyCaseRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.operatorFoodSafetyCaseResponse"
                         }
                     },
-                    "500": {
-                        "description": "服务器错误",
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operator/food-safety/cases/{id}/resolve": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "运营商提交调查结论和商户整改报告，原子恢复商户并关闭关联事件",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商功能"
+                ],
+                "summary": "完成食安案件处置并恢复商户",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "案件ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "处置信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.resolveOperatorFoodSafetyCaseRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.operatorFoodSafetyCaseResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     }
                 }
@@ -18863,6 +18964,298 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/operator/recoveries/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "运营商查看索赔对应的追偿单状态",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商索赔管理"
+                ],
+                "summary": "运营商查看追偿单",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "追偿单ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "追偿单详情",
+                        "schema": {
+                            "$ref": "#/definitions/api.claimRecoveryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "无权限处理该区域",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "追偿单不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operator/recovery-disputes": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "运营商查看自己管辖区域内的追偿争议列表，可按状态筛选",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商追偿争议管理"
+                ],
+                "summary": "获取区域内追偿争议列表",
+                "parameters": [
+                    {
+                        "enum": [
+                            "submitted",
+                            "approved",
+                            "rejected"
+                        ],
+                        "type": "string",
+                        "description": "状态筛选",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "maximum": 50,
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功返回追偿争议列表",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "非运营商用户",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operator/recovery-disputes/summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "返回运营商可管理区域内追偿争议总数及各状态汇总，供工作台和审批入口使用",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商追偿争议管理"
+                ],
+                "summary": "获取区域追偿争议汇总",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "区域ID",
+                        "name": "region_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功返回追偿争议汇总",
+                        "schema": {
+                            "$ref": "#/definitions/api.recoveryDisputeSummaryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operator/recovery-disputes/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "运营商查看区域内追偿争议的详细信息，包含索赔、订单、用户信用分等信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商追偿争议管理"
+                ],
+                "summary": "获取追偿争议详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "追偿争议ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功返回追偿争议详情",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "非运营商用户",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "追偿争议不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/v1/operator/region-expansion": {
             "get": {
                 "security": [
@@ -19011,6 +19404,128 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operator/regions/{region_id}/delivery-pool": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取指定运营区域当前待接单列表，支持分页",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商数据统计"
+                ],
+                "summary": "获取运营区域待接单列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "区域ID",
+                        "name": "region_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.listOperatorPendingDispatchesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限访问该区域",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operator/regions/{region_id}/delivery-pool/summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取指定运营区域当前待接单总数、超时数量和最长等待时长",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商数据统计"
+                ],
+                "summary": "获取运营区域待接单摘要",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "区域ID",
+                        "name": "region_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.operatorPendingDispatchSummaryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限访问该区域",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -19224,235 +19739,6 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operator/reports/safety": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "按运营商所属区域分页查询食安事件",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商功能"
-                ],
-                "summary": "获取食安事件列表",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "页码",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "每页条数",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "pending",
-                            "resolved",
-                            "rejected"
-                        ],
-                        "type": "string",
-                        "description": "状态",
-                        "name": "status",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "查询成功",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "无权限",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "运营商提交食品安全事件报告，可能触发熔断机制",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商功能"
-                ],
-                "summary": "提交食安报告",
-                "parameters": [
-                    {
-                        "description": "报告内容",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.submitSafetyReportRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "提交成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.MessageResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "无权限",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operator/reports/safety/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "获取运营商区域内食安事件详情",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商功能"
-                ],
-                "summary": "获取食安事件详情",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "事件ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "查询成功",
-                        "schema": {
-                            "$ref": "#/definitions/db.SafetyReport"
-                        }
-                    },
-                    "403": {
-                        "description": "无权限",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "未找到",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operator/reports/safety/{id}/resolve": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "运营商填写处置报告，支持恢复商户上线",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商功能"
-                ],
-                "summary": "处理食安事件",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "事件ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "处理信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.resolveSafetyReportRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "处理成功",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "无权限",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "未找到",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -20161,6 +20447,280 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operators/me/notifications": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取当前运营商的提醒列表，支持按已读状态和分类筛选，支持分页",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商通知"
+                ],
+                "summary": "获取运营商通知列表",
+                "parameters": [
+                    {
+                        "type": "boolean",
+                        "description": "筛选读取状态: true-已读, false-未读",
+                        "name": "is_read",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "筛选分类: dispatch_timeout/system",
+                        "name": "category",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量(默认20, 最大100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "分页偏移量(默认0)",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.listOperatorNotificationsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operators/me/notifications/read-all": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "将当前运营商的所有未读提醒标记为已读",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商通知"
+                ],
+                "summary": "全部标记运营商通知已读",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.markAllAsReadResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operators/me/notifications/summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取当前运营商未读数和最近一条提醒",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商通知"
+                ],
+                "summary": "获取运营商通知摘要",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.operatorNotificationSummaryResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operators/me/notifications/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取当前运营商的一条提醒详情",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商通知"
+                ],
+                "summary": "获取运营商通知详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "通知ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.operatorNotificationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "通知不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operators/me/notifications/{id}/read": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "将指定运营商提醒标记为已读，仅能操作自己的提醒",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商通知"
+                ],
+                "summary": "标记运营商通知已读",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "通知ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.operatorNotificationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "通知不存在或已读",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -23326,6 +23886,326 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "配置不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/profit-sharing/receiver-lifecycle/repair": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "平台按 owner 维度重放分账接收方同步，不使用 payment_order 上下文，也不在 API 请求内直接调用微信",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "手工修复分账接收方生命周期",
+                "parameters": [
+                    {
+                        "description": "接收方生命周期修复请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.repairProfitSharingReceiverLifecycleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "已写入修复意图并入队",
+                        "schema": {
+                            "$ref": "#/definitions/api.repairProfitSharingReceiverLifecycleResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "owner不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/profit-sharing/receiver-lifecycle/targets": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "平台只读查询 receiver lifecycle target，用于排查 pending/failed/synced 状态；响应不返回 openid、receiver name、account hash、display name hash 或微信原始 payload",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取分账接收方生命周期 target 列表",
+                "parameters": [
+                    {
+                        "enum": [
+                            "operator",
+                            "rider"
+                        ],
+                        "type": "string",
+                        "description": "owner 类型",
+                        "name": "owner_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "owner ID",
+                        "name": "owner_id",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "pending",
+                            "processing",
+                            "synced",
+                            "failed",
+                            "skipped"
+                        ],
+                        "type": "string",
+                        "description": "同步状态",
+                        "name": "sync_status",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页数量",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "target 列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.listProfitSharingReceiverLifecycleTargetsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/profit-sharing/receiver-lifecycle/targets/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "平台只读查询单个 receiver lifecycle target；响应不返回 openid、receiver name、account hash、display name hash 或微信原始 payload",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取分账接收方生命周期 target 详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "target ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "target 详情",
+                        "schema": {
+                            "$ref": "#/definitions/api.getProfitSharingReceiverLifecycleTargetResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "target不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/profit-sharing/receiver-lifecycle/targets/{id}/attempts": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "平台只读查询单个 receiver lifecycle target 的 attempts；错误字段为服务端脱敏摘要，不包含微信原始 payload",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取分账接收方生命周期 target 执行记录",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "target ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页数量",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "attempt 列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.listProfitSharingReceiverLifecycleAttemptsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "target不存在",
                         "schema": {
                             "$ref": "#/definitions/api.errorRes"
                         }
@@ -27353,234 +28233,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/rider/appeals": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "骑手查看自己提交的申诉列表",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "骑手申诉管理"
-                ],
-                "summary": "获取申诉列表",
-                "parameters": [
-                    {
-                        "minimum": 1,
-                        "type": "integer",
-                        "description": "页码",
-                        "name": "page_id",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "maximum": 50,
-                        "minimum": 1,
-                        "type": "integer",
-                        "description": "每页数量",
-                        "name": "page_size",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "成功返回申诉列表",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "非骑手用户",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "骑手对与自己配送订单相关的索赔提交申诉，提交后由系统自动复核并写回最终结果",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "骑手申诉管理"
-                ],
-                "summary": "提交申诉",
-                "parameters": [
-                    {
-                        "description": "申诉请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.createRiderAppealRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "成功创建申诉",
-                        "schema": {
-                            "$ref": "#/definitions/api.appealResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "非骑手用户或索赔与骑手无关",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "索赔不存在",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "409": {
-                        "description": "已存在申诉",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/rider/appeals/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "骑手查看自己提交的申诉详细信息",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "骑手申诉管理"
-                ],
-                "summary": "获取申诉详情",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "申诉ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "成功返回申诉详情",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "非骑手用户",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "申诉不存在",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/v1/rider/application": {
             "get": {
                 "security": [
@@ -27916,7 +28568,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "骑手申诉管理"
+                    "骑手索赔管理"
                 ],
                 "summary": "获取骑手收到的索赔列表",
                 "parameters": [
@@ -27992,7 +28644,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "骑手申诉管理"
+                    "骑手索赔管理"
                 ],
                 "summary": "获取骑手索赔汇总",
                 "responses": {
@@ -28041,7 +28693,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "骑手申诉管理"
+                    "骑手索赔管理"
                 ],
                 "summary": "获取索赔详情",
                 "parameters": [
@@ -28114,7 +28766,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "骑手申诉管理"
+                    "骑手索赔管理"
                 ],
                 "summary": "获取索赔判定依据",
                 "parameters": [
@@ -28156,150 +28808,6 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "索赔不存在",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/rider/claims/{id}/recovery": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "骑手查看索赔对应的追偿单状态",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "骑手索赔管理"
-                ],
-                "summary": "骑手查看追偿单",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "索赔ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "追偿单详情",
-                        "schema": {
-                            "$ref": "#/definitions/api.claimRecoveryResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "非骑手用户或索赔不属于该骑手",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "追偿单不存在",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/rider/claims/{id}/recovery/pay": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "骑手为索赔追偿创建微信支付单，支付成功后系统再标记追偿单为已支付",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "骑手索赔管理"
-                ],
-                "summary": "骑手创建追偿支付单",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "索赔ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "支付单创建成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.claimRecoveryPaymentResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "403": {
-                        "description": "非骑手用户或索赔不属于该骑手",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "追偿单不存在",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -28429,7 +28937,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "分页查询当前骑手的押金变动流水记录，包括充值、提现、冻结、解冻、扣款等",
+                "description": "分页查询当前骑手的押金变动流水记录，包括充值、提现、配送冻结、解冻、扣款等；提现冻结中间流水不作为账单明细返回",
                 "consumes": [
                     "application/json"
                 ],
@@ -28720,6 +29228,389 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/rider/recoveries/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "骑手查看索赔对应的追偿单状态",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "骑手索赔管理"
+                ],
+                "summary": "骑手查看追偿单",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "追偿单ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "追偿单详情",
+                        "schema": {
+                            "$ref": "#/definitions/api.claimRecoveryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "非骑手用户或索赔不属于该骑手",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "追偿单不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/rider/recoveries/{id}/pay": {
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "骑手为索赔追偿创建微信支付单，支付成功后系统再标记追偿单为已支付",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "骑手索赔管理"
+                ],
+                "summary": "骑手创建追偿支付单",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "追偿单ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "支付单创建成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.claimRecoveryPaymentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "非骑手用户或索赔不属于该骑手",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "追偿单不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/rider/recovery-disputes": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "骑手查看自己提交的追偿争议列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "骑手追偿争议管理"
+                ],
+                "summary": "获取追偿争议列表",
+                "parameters": [
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "maximum": 50,
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "submitted",
+                            "approved",
+                            "rejected"
+                        ],
+                        "type": "string",
+                        "description": "状态筛选",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功返回追偿争议列表",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "非骑手用户",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "骑手对平台向自身发起的追偿提交争议，提交后由系统自动复核并写回最终结果",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "骑手追偿争议管理"
+                ],
+                "summary": "提交追偿争议",
+                "parameters": [
+                    {
+                        "description": "追偿争议请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.createRiderRecoveryDisputeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "成功创建追偿争议",
+                        "schema": {
+                            "$ref": "#/definitions/api.recoveryDisputeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "非骑手用户或追偿与骑手无关",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "追偿不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "已存在追偿争议",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/rider/recovery-disputes/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "骑手查看自己提交的追偿争议详细信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "骑手追偿争议管理"
+                ],
+                "summary": "获取追偿争议详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "追偿争议ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功返回追偿争议详情",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "非骑手用户",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "追偿争议不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/v1/rider/status": {
             "get": {
                 "security": [
@@ -28797,7 +29688,13 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "提现已提交或完成",
+                        "description": "提现已完成对账",
+                        "schema": {
+                            "$ref": "#/definitions/api.riderWithdrawResponse"
+                        }
+                    },
+                    "202": {
+                        "description": "提现请求已受理，等待异步终态",
                         "schema": {
                             "$ref": "#/definitions/api.riderWithdrawResponse"
                         }
@@ -28816,6 +29713,71 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "未注册骑手",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/rider/withdrawals/status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "按提现提交返回的 refund_order_ids 查询本次提现处理状态和金额汇总。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "骑手"
+                ],
+                "summary": "查询骑手押金提现状态",
+                "parameters": [
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "提现退款单ID，支持逗号或重复参数",
+                        "name": "refund_order_ids",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "提现状态",
+                        "schema": {
+                            "$ref": "#/definitions/api.riderWithdrawalStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未登录",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "未注册骑手或提现记录不存在",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -31180,6 +32142,9 @@ const docTemplate = `{
                     "description": "task enqueued time",
                     "type": "string"
                 },
+                "readiness": {
+                    "$ref": "#/definitions/api.OCRReadiness"
+                },
                 "reg_num": {
                     "description": "注册号",
                     "type": "string"
@@ -31307,6 +32272,9 @@ const docTemplate = `{
                     "description": "原始OCR文本",
                     "type": "string"
                 },
+                "readiness": {
+                    "$ref": "#/definitions/api.OCRReadiness"
+                },
                 "started_at": {
                     "description": "task started processing time",
                     "type": "string"
@@ -31358,6 +32326,9 @@ const docTemplate = `{
                 },
                 "queued_at": {
                     "type": "string"
+                },
+                "readiness": {
+                    "$ref": "#/definitions/api.OCRReadiness"
                 },
                 "started_at": {
                     "type": "string"
@@ -31416,6 +32387,9 @@ const docTemplate = `{
                 },
                 "queued_at": {
                     "type": "string"
+                },
+                "readiness": {
+                    "$ref": "#/definitions/api.OCRReadiness"
                 },
                 "started_at": {
                     "type": "string"
@@ -31491,6 +32465,9 @@ const docTemplate = `{
                     "description": "task enqueued time",
                     "type": "string"
                 },
+                "readiness": {
+                    "$ref": "#/definitions/api.OCRReadiness"
+                },
                 "started_at": {
                     "description": "task started processing time",
                     "type": "string"
@@ -31511,6 +32488,35 @@ const docTemplate = `{
                 "message": {
                     "type": "string",
                     "example": "ok"
+                }
+            }
+        },
+        "api.OCRReadiness": {
+            "type": "object",
+            "properties": {
+                "missing_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "reason_code": {
+                    "type": "string"
+                },
+                "required_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "state": {
+                    "type": "string"
+                },
+                "unparseable_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -31600,7 +32606,6 @@ const docTemplate = `{
                 "incident_type",
                 "merchant_id",
                 "order_id",
-                "reporter_id",
                 "severity_level"
             ],
             "properties": {
@@ -31625,10 +32630,6 @@ const docTemplate = `{
                     "type": "integer",
                     "minimum": 1
                 },
-                "reporter_id": {
-                    "type": "integer",
-                    "minimum": 1
-                },
                 "severity_level": {
                     "type": "integer",
                     "maximum": 5,
@@ -31639,6 +32640,9 @@ const docTemplate = `{
         "api.ReportFoodSafetyResponse": {
             "type": "object",
             "properties": {
+                "case_id": {
+                    "type": "integer"
+                },
                 "incident_id": {
                     "type": "integer"
                 },
@@ -31778,12 +32782,17 @@ const docTemplate = `{
                     "description": "merchant, rider, platform",
                     "type": "string"
                 },
-                "decision_status": {
-                    "description": "auto-adjudicated",
+                "compensation_status": {
                     "type": "string"
                 },
-                "payout_eta": {
-                    "description": "预计赔付时间",
+                "customer_action": {
+                    "type": "string"
+                },
+                "customer_action_required": {
+                    "type": "boolean"
+                },
+                "decision_status": {
+                    "description": "auto-adjudicated",
                     "type": "string"
                 },
                 "payout_status": {
@@ -31794,7 +32803,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "description": "accepted",
                     "type": "string"
                 },
                 "warning": {
@@ -31854,6 +32862,32 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.activeCredentialSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "days_until_expiry": {
+                    "type": "integer"
+                },
+                "document_type": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "last_reminded_at": {
+                    "type": "string"
+                },
+                "resumed_at": {
+                    "type": "string"
+                },
+                "suspended": {
+                    "type": "boolean"
+                },
+                "suspended_at": {
                     "type": "string"
                 }
             }
@@ -32101,70 +33135,6 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
-                }
-            }
-        },
-        "api.appealResponse": {
-            "type": "object",
-            "properties": {
-                "appellant_id": {
-                    "type": "integer"
-                },
-                "appellant_type": {
-                    "type": "string"
-                },
-                "claim_id": {
-                    "type": "integer"
-                },
-                "compensated_at": {
-                    "type": "string"
-                },
-                "compensation_amount": {
-                    "type": "integer"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "reason": {
-                    "type": "string"
-                },
-                "region_id": {
-                    "type": "integer"
-                },
-                "review_notes": {
-                    "type": "string"
-                },
-                "reviewed_at": {
-                    "type": "string"
-                },
-                "reviewer_id": {
-                    "type": "integer"
-                },
-                "status": {
-                    "type": "string"
-                }
-            }
-        },
-        "api.appealSummaryResponse": {
-            "type": "object",
-            "properties": {
-                "approved": {
-                    "type": "integer"
-                },
-                "compensated": {
-                    "type": "integer"
-                },
-                "pending": {
-                    "type": "integer"
-                },
-                "rejected": {
-                    "type": "integer"
-                },
-                "total": {
-                    "type": "integer"
                 }
             }
         },
@@ -33194,10 +34164,10 @@ const docTemplate = `{
         "api.claimSummaryResponse": {
             "type": "object",
             "properties": {
-                "appealed": {
+                "closed": {
                     "type": "integer"
                 },
-                "closed": {
+                "disputed": {
                     "type": "integer"
                 },
                 "pending_action": {
@@ -34080,24 +35050,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.createMerchantAppealRequest": {
-            "type": "object",
-            "required": [
-                "claim_id",
-                "reason"
-            ],
-            "properties": {
-                "claim_id": {
-                    "type": "integer",
-                    "minimum": 1
-                },
-                "reason": {
-                    "type": "string",
-                    "maxLength": 1000,
-                    "minLength": 10
-                }
-            }
-        },
         "api.createMerchantCancelWithdrawRequest": {
             "type": "object",
             "required": [
@@ -34141,6 +35093,24 @@ const docTemplate = `{
                         "NOT_APPLY_WITHDRAW",
                         "APPLY_WITHDRAW"
                     ]
+                }
+            }
+        },
+        "api.createMerchantRecoveryDisputeRequest": {
+            "type": "object",
+            "required": [
+                "claim_id",
+                "reason"
+            ],
+            "properties": {
+                "claim_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "reason": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "minLength": 10
                 }
             }
         },
@@ -34562,7 +35532,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api.createRiderAppealRequest": {
+        "api.createRiderRecoveryDisputeRequest": {
             "type": "object",
             "required": [
                 "claim_id",
@@ -35904,6 +36874,43 @@ const docTemplate = `{
                 }
             }
         },
+        "api.foodSafetyCaseDetailResponse": {
+            "type": "object",
+            "properties": {
+                "case": {
+                    "$ref": "#/definitions/api.operatorFoodSafetyCaseResponse"
+                },
+                "incidents": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.operatorFoodSafetyIncidentResponse"
+                    }
+                }
+            }
+        },
+        "api.foodSafetyCaseListResponse": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.operatorFoodSafetyCaseResponse"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.generateAppBindCodeResponse": {
             "type": "object",
             "properties": {
@@ -35992,6 +36999,14 @@ const docTemplate = `{
                 },
                 "voice_takeout": {
                     "type": "boolean"
+                }
+            }
+        },
+        "api.getProfitSharingReceiverLifecycleTargetResponse": {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "$ref": "#/definitions/api.profitSharingReceiverLifecycleTargetItem"
                 }
             }
         },
@@ -36264,6 +37279,19 @@ const docTemplate = `{
                 "unlimited_dishes": {
                     "description": "无限库存菜品数",
                     "type": "integer"
+                }
+            }
+        },
+        "api.investigateOperatorFoodSafetyCaseRequest": {
+            "type": "object",
+            "required": [
+                "investigation_report"
+            ],
+            "properties": {
+                "investigation_report": {
+                    "type": "string",
+                    "maxLength": 4000,
+                    "minLength": 10
                 }
             }
         },
@@ -36794,6 +37822,46 @@ const docTemplate = `{
                 }
             }
         },
+        "api.listOperatorNotificationsResponse": {
+            "type": "object",
+            "properties": {
+                "notifications": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.operatorNotificationResponse"
+                    }
+                },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.listOperatorPendingDispatchesResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.operatorPendingDispatchItemResponse"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.listOperatorProfitSharingConfigsResponse": {
             "type": "object",
             "properties": {
@@ -36981,6 +38049,61 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "page": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.listProfitSharingReceiverLifecycleAttemptsResponse": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.profitSharingReceiverLifecycleAttemptItem"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "target": {
+                    "$ref": "#/definitions/api.profitSharingReceiverLifecycleTargetItem"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.listProfitSharingReceiverLifecycleTargetsResponse": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.profitSharingReceiverLifecycleTargetItem"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "total_pages": {
                     "type": "integer"
                 }
             }
@@ -37319,6 +38442,12 @@ const docTemplate = `{
         "api.merchantApplicationDraftResponse": {
             "type": "object",
             "properties": {
+                "active_credentials": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.activeCredentialSummaryResponse"
+                    }
+                },
                 "business_address": {
                     "type": "string"
                 },
@@ -37393,6 +38522,9 @@ const docTemplate = `{
                 },
                 "reject_reason": {
                     "type": "string"
+                },
+                "review_summary": {
+                    "$ref": "#/definitions/api.onboardingReviewSummaryResponse"
                 },
                 "status": {
                     "type": "string"
@@ -39236,6 +40368,41 @@ const docTemplate = `{
                 }
             }
         },
+        "api.onboardingReviewSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "ocr_job_refs": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "outcome": {
+                    "type": "string"
+                },
+                "reason_code": {
+                    "type": "string"
+                },
+                "reason_message": {
+                    "type": "string"
+                },
+                "rule_hits": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "run_id": {
+                    "type": "integer"
+                },
+                "stage": {
+                    "type": "string"
+                }
+            }
+        },
         "api.openDiningSessionRequest": {
             "type": "object",
             "required": [
@@ -39479,6 +40646,94 @@ const docTemplate = `{
                 }
             }
         },
+        "api.operatorFoodSafetyCaseResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "investigation_report": {
+                    "type": "string"
+                },
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "merchant_rectification_report": {
+                    "type": "string"
+                },
+                "primary_product_key": {
+                    "type": "string"
+                },
+                "primary_product_label": {
+                    "type": "string"
+                },
+                "region_id": {
+                    "type": "integer"
+                },
+                "resolution": {
+                    "type": "string"
+                },
+                "resolved_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "suspended_at": {
+                    "type": "string"
+                },
+                "trigger_reason": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.operatorFoodSafetyIncidentResponse": {
+            "type": "object",
+            "properties": {
+                "case_id": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "incident_type": {
+                    "type": "string"
+                },
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "order_id": {
+                    "type": "integer"
+                },
+                "primary_product_key": {
+                    "type": "string"
+                },
+                "primary_product_label": {
+                    "type": "string"
+                },
+                "resolved_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.operatorMerchantRankingRow": {
             "type": "object",
             "properties": {
@@ -39518,6 +40773,131 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.operatorNotificationResponse": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_read": {
+                    "type": "boolean"
+                },
+                "level": {
+                    "type": "string"
+                },
+                "read_at": {
+                    "type": "string"
+                },
+                "region_id": {
+                    "type": "integer"
+                },
+                "region_name": {
+                    "type": "string"
+                },
+                "related_id": {
+                    "type": "integer"
+                },
+                "related_type": {
+                    "type": "string"
+                },
+                "summary": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "wait_minutes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.operatorNotificationSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "latest_notification": {
+                    "$ref": "#/definitions/api.operatorNotificationResponse"
+                },
+                "unread_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.operatorPendingDispatchItemResponse": {
+            "type": "object",
+            "properties": {
+                "delivery_fee": {
+                    "type": "integer"
+                },
+                "delivery_id": {
+                    "type": "integer"
+                },
+                "expected_pickup_at": {
+                    "type": "string"
+                },
+                "is_timeout_over_3m": {
+                    "type": "boolean"
+                },
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "merchant_name": {
+                    "type": "string"
+                },
+                "order_id": {
+                    "type": "integer"
+                },
+                "order_no": {
+                    "type": "string"
+                },
+                "region_id": {
+                    "type": "integer"
+                },
+                "region_name": {
+                    "type": "string"
+                },
+                "wait_seconds": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.operatorPendingDispatchSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "latest_refresh_at": {
+                    "type": "string"
+                },
+                "oldest_wait_seconds": {
+                    "type": "integer"
+                },
+                "pending_total": {
+                    "type": "integer"
+                },
+                "region_id": {
+                    "type": "integer"
+                },
+                "region_name": {
+                    "type": "string"
+                },
+                "timeout_over_3m_total": {
                     "type": "integer"
                 }
             }
@@ -40265,6 +41645,9 @@ const docTemplate = `{
         "api.paymentOrderWechatPayerResult": {
             "type": "object",
             "properties": {
+                "openid": {
+                    "type": "string"
+                },
                 "sp_openid": {
                     "type": "string"
                 },
@@ -40340,10 +41723,16 @@ const docTemplate = `{
                 "amount": {
                     "$ref": "#/definitions/api.paymentOrderWechatAmountResult"
                 },
+                "appid": {
+                    "type": "string"
+                },
                 "attach": {
                     "type": "string"
                 },
                 "bank_type": {
+                    "type": "string"
+                },
+                "mchid": {
                     "type": "string"
                 },
                 "out_trade_no": {
@@ -40961,6 +42350,129 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "status": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.profitSharingReceiverLifecycleAttemptItem": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "error_code": {
+                    "type": "string"
+                },
+                "error_message": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "idempotent_success": {
+                    "type": "boolean"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "target_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.profitSharingReceiverLifecycleTargetItem": {
+            "type": "object",
+            "properties": {
+                "appid": {
+                    "type": "string"
+                },
+                "attempt_count": {
+                    "type": "integer"
+                },
+                "channel": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "desired_state": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "last_attempt_at": {
+                    "type": "string"
+                },
+                "last_error_code": {
+                    "type": "string"
+                },
+                "last_error_message": {
+                    "type": "string"
+                },
+                "next_retry_at": {
+                    "type": "string"
+                },
+                "owner_id": {
+                    "type": "integer"
+                },
+                "owner_type": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "receiver_type": {
+                    "type": "string"
+                },
+                "skipped_at": {
+                    "type": "string"
+                },
+                "sync_status": {
+                    "type": "string"
+                },
+                "synced_at": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.profitSharingReceiverLifecycleTargetResponse": {
+            "type": "object",
+            "properties": {
+                "attempt_count": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "desired_state": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "owner_id": {
+                    "type": "integer"
+                },
+                "owner_type": {
+                    "type": "string"
+                },
+                "sync_status": {
                     "type": "string"
                 },
                 "updated_at": {
@@ -41587,6 +43099,67 @@ const docTemplate = `{
                 }
             }
         },
+        "api.recoveryDisputeResponse": {
+            "type": "object",
+            "properties": {
+                "appellant_id": {
+                    "type": "integer"
+                },
+                "appellant_type": {
+                    "type": "string"
+                },
+                "claim_id": {
+                    "type": "integer"
+                },
+                "compensated_at": {
+                    "type": "string"
+                },
+                "compensation_amount": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "region_id": {
+                    "type": "integer"
+                },
+                "review_notes": {
+                    "type": "string"
+                },
+                "reviewed_at": {
+                    "type": "string"
+                },
+                "reviewer_id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.recoveryDisputeSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "approved": {
+                    "type": "integer"
+                },
+                "rejected": {
+                    "type": "integer"
+                },
+                "submitted": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.refundOrderResponse": {
             "type": "object",
             "properties": {
@@ -41829,6 +43402,45 @@ const docTemplate = `{
                 },
                 "refresh_token_expires_at": {
                     "type": "string"
+                }
+            }
+        },
+        "api.repairProfitSharingReceiverLifecycleRequest": {
+            "type": "object",
+            "required": [
+                "desired_state",
+                "owner_id",
+                "owner_type"
+            ],
+            "properties": {
+                "desired_state": {
+                    "type": "string",
+                    "enum": [
+                        "present",
+                        "absent"
+                    ]
+                },
+                "owner_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "owner_type": {
+                    "type": "string",
+                    "enum": [
+                        "operator",
+                        "rider"
+                    ]
+                }
+            }
+        },
+        "api.repairProfitSharingReceiverLifecycleResponse": {
+            "type": "object",
+            "properties": {
+                "enqueued": {
+                    "type": "boolean"
+                },
+                "target": {
+                    "$ref": "#/definitions/api.profitSharingReceiverLifecycleTargetResponse"
                 }
             }
         },
@@ -42114,35 +43726,27 @@ const docTemplate = `{
                 }
             }
         },
-        "api.resolveSafetyReportRequest": {
+        "api.resolveOperatorFoodSafetyCaseRequest": {
             "type": "object",
             "required": [
-                "resolution_notes",
-                "status"
+                "merchant_rectification_report",
+                "resolution"
             ],
             "properties": {
-                "recover_merchant_ids": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "recover_reason": {
+                "investigation_report": {
                     "type": "string",
-                    "maxLength": 500,
-                    "minLength": 2
+                    "maxLength": 4000,
+                    "minLength": 10
                 },
-                "resolution_notes": {
+                "merchant_rectification_report": {
                     "type": "string",
-                    "maxLength": 1000,
+                    "maxLength": 4000,
+                    "minLength": 10
+                },
+                "resolution": {
+                    "type": "string",
+                    "maxLength": 2000,
                     "minLength": 5
-                },
-                "status": {
-                    "type": "string",
-                    "enum": [
-                        "resolved",
-                        "rejected"
-                    ]
                 }
             }
         },
@@ -42302,6 +43906,12 @@ const docTemplate = `{
         "api.riderApplicationResponse": {
             "type": "object",
             "properties": {
+                "active_credentials": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.activeCredentialSummaryResponse"
+                    }
+                },
                 "created_at": {
                     "type": "string"
                 },
@@ -42331,6 +43941,9 @@ const docTemplate = `{
                 },
                 "reject_reason": {
                     "type": "string"
+                },
+                "review_summary": {
+                    "$ref": "#/definitions/api.onboardingReviewSummaryResponse"
                 },
                 "status": {
                     "type": "string"
@@ -42630,6 +44243,76 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                }
+            }
+        },
+        "api.riderWithdrawalStatusRefundItemResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "out_refund_no": {
+                    "type": "string"
+                },
+                "out_trade_no": {
+                    "type": "string"
+                },
+                "payment_order_id": {
+                    "type": "integer"
+                },
+                "refund_id": {
+                    "type": "string"
+                },
+                "refund_order_id": {
+                    "type": "integer"
+                },
+                "refunded_at": {
+                    "type": "string"
+                },
+                "source_payment_amount": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "status_text": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.riderWithdrawalStatusResponse": {
+            "type": "object",
+            "properties": {
+                "accepted_amount": {
+                    "type": "integer"
+                },
+                "failed_amount": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "processing_amount": {
+                    "type": "integer"
+                },
+                "refunds": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.riderWithdrawalStatusRefundItemResponse"
+                    }
+                },
+                "status": {
+                    "type": "string"
+                },
+                "status_text": {
+                    "type": "string"
+                },
+                "success_amount": {
+                    "type": "integer"
                 }
             }
         },
@@ -43466,47 +45149,6 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "integer"
-                }
-            }
-        },
-        "api.submitSafetyReportRequest": {
-            "type": "object",
-            "required": [
-                "description",
-                "level",
-                "title"
-            ],
-            "properties": {
-                "description": {
-                    "type": "string",
-                    "minLength": 10
-                },
-                "images": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "level": {
-                    "type": "string",
-                    "enum": [
-                        "low",
-                        "medium",
-                        "high",
-                        "critical"
-                    ]
-                },
-                "merchant_ids": {
-                    "description": "涉及商户",
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "title": {
-                    "type": "string",
-                    "maxLength": 100,
-                    "minLength": 5
                 }
             }
         },
@@ -44898,8 +46540,17 @@ const docTemplate = `{
                 "claim_type": {
                     "type": "string"
                 },
+                "compensation_status": {
+                    "type": "string"
+                },
                 "created_at": {
                     "type": "string"
+                },
+                "customer_action": {
+                    "type": "string"
+                },
+                "customer_action_required": {
+                    "type": "boolean"
                 },
                 "decision_status": {
                     "description": "auto-adjudicated, rejected",
@@ -44914,9 +46565,6 @@ const docTemplate = `{
                 "order_id": {
                     "type": "integer"
                 },
-                "payout_eta": {
-                    "type": "string"
-                },
                 "payout_status": {
                     "description": "processing, paid",
                     "type": "string"
@@ -44928,7 +46576,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
-                    "description": "accepted, rejected",
                     "type": "string"
                 }
             }
@@ -45479,47 +47126,6 @@ const docTemplate = `{
                 }
             }
         },
-        "db.SafetyReport": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "level": {
-                    "type": "string"
-                },
-                "merchant_ids": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "region_id": {
-                    "type": "integer"
-                },
-                "reporter_id": {
-                    "type": "integer"
-                },
-                "resolution_notes": {
-                    "$ref": "#/definitions/pgtype.Text"
-                },
-                "status": {
-                    "type": "string"
-                },
-                "title": {
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                }
-            }
-        },
         "logic.AppliedPromotion": {
             "type": "object",
             "properties": {
@@ -45656,17 +47262,6 @@ const docTemplate = `{
                 "int64": {
                     "type": "integer",
                     "format": "int64"
-                },
-                "valid": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "pgtype.Text": {
-            "type": "object",
-            "properties": {
-                "string": {
-                    "type": "string"
                 },
                 "valid": {
                     "type": "boolean"

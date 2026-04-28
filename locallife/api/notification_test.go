@@ -134,6 +134,51 @@ func TestListNotificationsAPI(t *testing.T) {
 			},
 		},
 		{
+			name:  "InvalidExtraDataReturnsInternalServerError",
+			query: "?limit=10&offset=0",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				arg := db.ListUserNotificationsParams{
+					UserID: user.ID,
+					Limit:  10,
+					Offset: 0,
+				}
+
+				notifications := []db.Notification{{
+					ID:        1,
+					UserID:    user.ID,
+					Type:      "order",
+					Title:     "测试通知",
+					Content:   "测试内容",
+					ExtraData: []byte("not-json"),
+					IsRead:    false,
+					IsPushed:  false,
+					CreatedAt: time.Now(),
+				}}
+
+				store.EXPECT().
+					ListUserNotifications(gomock.Any(), gomock.Eq(arg)).
+					Times(1).
+					Return(notifications, nil)
+
+				countArg := db.CountUserNotificationsParams{
+					UserID: user.ID,
+				}
+				store.EXPECT().
+					CountUserNotifications(gomock.Any(), gomock.Eq(countArg)).
+					Times(1).
+					Return(int64(1), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				var response APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+				require.Equal(t, "internal server error", response.Message)
+			},
+		},
+		{
 			name:  "Unauthorized",
 			query: "?limit=10&offset=0",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
@@ -284,6 +329,48 @@ func TestListPlatformAlertsAPI(t *testing.T) {
 				require.Len(t, response.Alerts, 1)
 				require.Equal(t, "REFUND_FAILED", response.Alerts[0].AlertType)
 				require.Equal(t, "/v1/platform/refunds/abnormal", response.Alerts[0].Extra["abnormal_refund_api_path"])
+			},
+		},
+		{
+			name:  "InvalidExtraReturnsInternalServerError",
+			query: "?page_id=1&page_size=10",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return([]db.UserRole{{Role: RoleOperator, Status: "active"}}, nil)
+
+				store.EXPECT().
+					ListPlatformAlertEvents(gomock.Any(), gomock.Eq(db.ListPlatformAlertEventsParams{
+						Limit:  10,
+						Offset: 0,
+					})).
+					Times(1).
+					Return([]db.PlatformAlertEvent{{
+						ID:          1,
+						AlertType:   "REFUND_FAILED",
+						Level:       "warning",
+						Title:       "异常退款待处理",
+						Message:     "需要平台人工处理",
+						RelatedID:   99,
+						RelatedType: "refund_order",
+						Extra:       []byte("not-json"),
+						EmittedAt:   now,
+					}}, nil)
+
+				store.EXPECT().
+					CountPlatformAlertEvents(gomock.Any()).
+					Times(1).
+					Return(int64(1), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				var response APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+				require.Equal(t, "internal server error", response.Message)
 			},
 		},
 		{

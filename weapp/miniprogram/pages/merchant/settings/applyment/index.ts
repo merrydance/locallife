@@ -1,42 +1,50 @@
 import {
-  buildMerchantApplymentStatusView,
-  DEFAULT_MERCHANT_APPLYMENT_STATUS_VIEW,
-  type ApplymentStatusResponse,
-  getMerchantApplymentStatus
-} from '../../../../api/merchant-applyment'
+  buildMerchantApplymentWorkflowView,
+  fetchMerchantApplymentWorkflowView,
+  type MerchantApplymentTaskIntent,
+  type MerchantApplymentWorkflowSecondaryTask
+} from '../../../../services/merchant-applyment-workflow'
+import {
+  buildMerchantSettlementAccountView,
+  getMerchantSettlementAccount
+} from '../../../../api/merchant-settlement-account'
 import {
   ensureMerchantApplymentAccess,
   getMerchantConsoleAccessErrorMessage,
   isMerchantConsoleAccessDenied,
   isMerchantConsoleAccessGranted
 } from '../../../../utils/console-access'
-import { saveApplymentQRCodePosterToAlbum } from '../../../../utils/applyment-qrcode'
+import Toast from '../../../../miniprogram_npm/tdesign-miniprogram/toast/index'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 const APPLYMENT_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 const APPLYMENT_FORCE_REFRESH_STORAGE_KEY = 'merchantApplymentShouldRefresh'
-
-const EMPTY_APPLYMENT: ApplymentStatusResponse = {
-  status: '',
-  status_desc: ''
-}
-
-interface ApplymentQRCodeDialogState {
-  visible: boolean
-  title: string
-  description: string
-  hint: string
-  value: string
-  saving: boolean
-}
+const SUBMIT_PAGE_PATH = '/pages/merchant/settings/applyment/submit/index'
+const SETTLEMENT_ACCOUNT_PAGE_PATH = '/pages/merchant/settings/applyment/settlement-account/index'
+const EMPTY_WORKFLOW_VIEW = buildMerchantApplymentWorkflowView(null)
+const EMPTY_SETTLEMENT_ACCOUNT_VIEW = buildMerchantSettlementAccountView(null)
+const EMPTY_DISPLAY_STATUS_ITEMS: Array<{ label: string, value: string }> = []
+const TOAST_SELECTOR = '#t-toast'
 
 const getErrorMessage = getErrorUserMessage
 
 let applymentRequestPending = false
+let settlementRequestPending = false
 
-function copyText(data: string, successTitle: string) {
+function showResultToast(context: WechatMiniprogram.Page.TrivialInstance, message: string, theme: 'success' | 'warning' | 'error') {
+  Toast({
+    context,
+    selector: TOAST_SELECTOR,
+    message,
+    theme,
+    direction: 'column',
+    duration: 1800
+  })
+}
+
+function copyText(context: WechatMiniprogram.Page.TrivialInstance, data: string, successTitle: string) {
   const trimmed = String(data || '').trim()
   if (!trimmed) {
     return
@@ -45,31 +53,40 @@ function copyText(data: string, successTitle: string) {
   wx.setClipboardData({
     data: trimmed,
     success: () => {
-      wx.showToast({ title: successTitle, icon: 'success' })
+      showResultToast(context, successTitle, 'success')
     }
   })
 }
 
-function getMiniProgramErrorMessage(error: unknown): string {
-  if (typeof error === 'string') {
-    return error
-  }
-  if (error && typeof error === 'object' && 'errMsg' in error && typeof error.errMsg === 'string') {
-    return error.errMsg
-  }
-  if (error instanceof Error) {
-    return error.message
-  }
-  return ''
-}
-
-function isPermissionDeniedError(error: unknown): boolean {
-  const message = getMiniProgramErrorMessage(error)
-  return message.includes('auth deny') || message.includes('auth denied')
-}
-
 function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
   return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
+}
+
+function resolveCopySuccessTitle(taskType: string) {
+  switch (taskType) {
+    case 'copy_validation_account':
+      return '收款卡号已复制'
+    case 'copy_validation_remark':
+      return '汇款备注已复制'
+    default:
+      return '内容已复制'
+  }
+}
+
+function buildDisplayStatusItems(workflowView: typeof EMPTY_WORKFLOW_VIEW) {
+  return workflowView.statusItems.filter((item) => item.label !== '当前阶段' && item.label !== '状态说明')
+}
+
+function resolveWorkflowStagePath(workflowView: typeof EMPTY_WORKFLOW_VIEW) {
+  if (workflowView.currentTask.type === 'submit_material' || workflowView.currentTask.type === 'resubmit_after_reject') {
+    return SUBMIT_PAGE_PATH
+  }
+
+  if (workflowView.currentStage === 'action_required' && workflowView.primaryActionIntent === 'navigate' && workflowView.primaryActionPath) {
+    return workflowView.primaryActionPath
+  }
+
+  return ''
 }
 
 Page({
@@ -86,23 +103,23 @@ Page({
     loadingApplyment: false,
     lastLoadedAt: 0,
     statusLoaded: false,
-    applymentStatus: EMPTY_APPLYMENT as ApplymentStatusResponse | null,
-    applymentView: { ...DEFAULT_MERCHANT_APPLYMENT_STATUS_VIEW },
-    refreshingStatus: false,
-    qrCodeDialog: {
-      visible: false,
-      title: '签约二维码',
-      description: '',
-      hint: '',
-      value: '',
-      saving: false
-    } as ApplymentQRCodeDialogState
+    workflowView: { ...EMPTY_WORKFLOW_VIEW },
+    settlementAccountView: { ...EMPTY_SETTLEMENT_ACCOUNT_VIEW },
+    displayStatusItems: EMPTY_DISPLAY_STATUS_ITEMS,
+    settlementLoading: false,
+    settlementLoaded: false,
+    settlementErrorMessage: '',
+    refreshingStatus: false
   },
 
   async onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
     await this.bootstrapPage()
+  },
+
+  onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>) {
+    this.setData({ navBarHeight: e.detail.navBarHeight || 88 })
   },
 
   onShow() {
@@ -119,6 +136,11 @@ Page({
     const shouldForceRefresh = wx.getStorageSync(APPLYMENT_FORCE_REFRESH_STORAGE_KEY) === '1'
     if (shouldForceRefresh) {
       wx.removeStorageSync(APPLYMENT_FORCE_REFRESH_STORAGE_KEY)
+      void this.loadApplyment({ silent: this.data.statusLoaded, force: true })
+      return
+    }
+
+    if (this.data.workflowView.reentryPolicy === 'force_refresh_on_show') {
       void this.loadApplyment({ silent: this.data.statusLoaded, force: true })
       return
     }
@@ -155,17 +177,13 @@ Page({
       loadingApplyment: false,
       lastLoadedAt: 0,
       statusLoaded: false,
-      applymentStatus: EMPTY_APPLYMENT,
-      applymentView: { ...DEFAULT_MERCHANT_APPLYMENT_STATUS_VIEW },
-      refreshingStatus: false,
-      qrCodeDialog: {
-        visible: false,
-        title: '签约二维码',
-        description: '',
-        hint: '',
-        value: '',
-        saving: false
-      }
+      workflowView: { ...EMPTY_WORKFLOW_VIEW },
+      settlementAccountView: { ...EMPTY_SETTLEMENT_ACCOUNT_VIEW },
+      displayStatusItems: EMPTY_DISPLAY_STATUS_ITEMS,
+      settlementLoading: false,
+      settlementLoaded: false,
+      settlementErrorMessage: '',
+      refreshingStatus: false
     })
 
     const accessResult = await ensureMerchantApplymentAccess()
@@ -228,25 +246,38 @@ Page({
     })
 
     try {
-      const applymentStatus = await getMerchantApplymentStatus()
-      const applymentView = buildMerchantApplymentStatusView(applymentStatus)
+      const workflowView = await fetchMerchantApplymentWorkflowView()
+      const stagePath = resolveWorkflowStagePath(workflowView)
 
+      if (stagePath) {
+        wx.redirectTo({ url: stagePath })
+        return
+      }
+
+      const isOpened = workflowView.currentStage === 'opened'
       this.setData({
-        applymentStatus,
-        applymentView,
+        workflowView,
+        displayStatusItems: buildDisplayStatusItems(workflowView),
         statusLoaded: true,
         loadingApplyment: false,
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
         refreshErrorMessage: '',
-        lastLoadedAt: Date.now(),
-        qrCodeDialog: {
-          ...this.data.qrCodeDialog,
-          visible: false,
-          saving: false
-        }
+        ...(isOpened
+          ? {}
+          : {
+              settlementAccountView: { ...EMPTY_SETTLEMENT_ACCOUNT_VIEW },
+              settlementLoading: false,
+              settlementLoaded: false,
+              settlementErrorMessage: ''
+            }),
+        lastLoadedAt: Date.now()
       })
+
+      if (isOpened) {
+        void this.loadSettlementAccount({ force: true, silent: true })
+      }
     } catch (error: unknown) {
       logger.error('Load merchant applyment page failed', error, 'merchant-applyment-page')
       const message = getErrorMessage(error, '进件状态加载失败，请稍后重试')
@@ -272,6 +303,48 @@ Page({
     }
   },
 
+  async loadSettlementAccount(options?: { force?: boolean, silent?: boolean }) {
+    const { force = false, silent = false } = options || {}
+    if (!this.hasApplymentAccess() || this.data.workflowView.currentStage !== 'opened') {
+      return
+    }
+
+    if (settlementRequestPending) {
+      return
+    }
+
+    if (!force && this.data.settlementLoaded) {
+      return
+    }
+
+    settlementRequestPending = true
+    const hasTrustedData = this.data.settlementLoaded
+
+    this.setData({
+      settlementLoading: true,
+      ...(hasTrustedData || silent ? { settlementErrorMessage: '' } : {})
+    })
+
+    try {
+      const response = await getMerchantSettlementAccount()
+      this.setData({
+        settlementAccountView: buildMerchantSettlementAccountView(response),
+        settlementLoading: false,
+        settlementLoaded: true,
+        settlementErrorMessage: ''
+      })
+    } catch (error: unknown) {
+      logger.error('Load merchant settlement account failed', error, 'merchant-applyment-page')
+      const message = getErrorMessage(error, '结算账户加载失败，请稍后重试')
+      this.setData({
+        settlementLoading: false,
+        settlementErrorMessage: hasTrustedData ? `${message}，当前已保留上次同步结果` : message
+      })
+    } finally {
+      settlementRequestPending = false
+    }
+  },
+
   onRetryAccess() {
     void this.bootstrapPage()
   },
@@ -285,124 +358,47 @@ Page({
     void this.loadApplyment({ force: true })
   },
 
-  onRetryRefresh() {
-    if (!this.hasApplymentAccess()) {
-      wx.stopPullDownRefresh()
+  navigateByIntent(intent: MerchantApplymentTaskIntent, path: string) {
+    if (intent === 'refresh') {
+      void this.onRefreshStatus()
       return
     }
 
-    void this.loadApplyment({
-      silent: true,
-      force: true
-    })
-  },
-
-  onOpenSubmitPage() {
-    if (!this.data.applymentView.canSubmitOpenInfo) {
-      wx.showToast({
-        title: this.data.applymentView.blockReason || this.data.applymentView.guideText || '当前状态暂不支持重新提交',
-        icon: 'none'
-      })
+    if (intent !== 'navigate' || !path) {
       return
     }
 
-    wx.navigateTo({ url: '/pages/merchant/settings/applyment/submit/index' })
+    wx.navigateTo({ url: path })
   },
 
-  openQRCodeDialog(payload: Omit<ApplymentQRCodeDialogState, 'visible' | 'saving'>) {
-    if (!payload.value) {
+  onOpenPrimaryAction() {
+    this.navigateByIntent(this.data.workflowView.primaryActionIntent, this.data.workflowView.primaryActionPath)
+  },
+
+  onTapSecondaryTask(e: WechatMiniprogram.TouchEvent) {
+    const dataset = e.currentTarget.dataset as Partial<MerchantApplymentWorkflowSecondaryTask>
+    const intent = String(dataset.actionIntent || 'none') as MerchantApplymentTaskIntent
+    const taskType = String(dataset.type || '')
+    const value = String(dataset.value || '')
+    const path = String(dataset.actionPath || '')
+
+    if (intent === 'inline' && value) {
+      copyText(this, value, resolveCopySuccessTitle(taskType))
       return
     }
 
-    this.setData({
-      qrCodeDialog: {
-        ...payload,
-        visible: true,
-        saving: false
-      }
-    })
+    this.navigateByIntent(intent, path)
   },
 
-  onShowSignQRCode() {
-    this.openQRCodeDialog({
-      title: '微信支付签约二维码',
-      description: '请使用超级管理员微信扫码完成签约确认。',
-      hint: '如果当前手机就是签约微信，可先保存二维码到相册，再尝试通过微信扫一扫从相册识别。',
-      value: this.data.applymentView.signURL
-    })
+  onRetrySettlementAccount() {
+    void this.loadSettlementAccount({ force: true })
   },
 
-  onShowLegalValidationQRCode() {
-    this.openQRCodeDialog({
-      title: '法人验证二维码',
-      description: '请使用法人微信扫码完成验证。',
-      hint: '如果当前手机就是法人验证微信，可先保存二维码到相册，再尝试通过微信扫一扫从相册识别。',
-      value: this.data.applymentView.legalValidationURL
-    })
-  },
-
-  onCloseQRCodeDialog() {
-    if (this.data.qrCodeDialog.saving) {
+  onOpenSettlementAccountModify() {
+    if (!this.data.settlementAccountView.canEditSettlementAccount) {
       return
     }
-
-    this.setData({
-      'qrCodeDialog.visible': false,
-      'qrCodeDialog.saving': false
-    })
-  },
-
-  async onSaveQRCodeToAlbum() {
-    if (this.data.qrCodeDialog.saving || !this.data.qrCodeDialog.value) {
-      return
-    }
-
-    this.setData({ 'qrCodeDialog.saving': true })
-    wx.showLoading({ title: '保存中...' })
-
-    try {
-      await saveApplymentQRCodePosterToAlbum({
-        page: this,
-        canvasSelector: '#applymentQrcodePosterCanvas',
-        value: this.data.qrCodeDialog.value,
-        title: this.data.qrCodeDialog.title,
-        subtitle: this.data.qrCodeDialog.description
-      })
-      wx.showToast({ title: '二维码已保存到相册', icon: 'success' })
-    } catch (error: unknown) {
-      if (isPermissionDeniedError(error)) {
-        wx.showModal({
-          title: '需要相册权限',
-          content: '请在设置中开启“保存到相册”权限后重试。',
-          confirmText: '去设置',
-          success: (result) => {
-            if (result.confirm) {
-              wx.openSetting()
-            }
-          }
-        })
-      } else {
-        wx.showToast({
-          title: getErrorMessage(error, '保存二维码失败，请稍后重试'),
-          icon: 'none'
-        })
-      }
-    } finally {
-      wx.hideLoading()
-      this.setData({ 'qrCodeDialog.saving': false })
-    }
-  },
-
-  onCopyValidationAccountNumber() {
-    copyText(this.data.applymentView.accountValidation?.destinationAccountNumber || '', '收款卡号已复制')
-  },
-
-  onCopyValidationRemark() {
-    copyText(this.data.applymentView.accountValidation?.remark || '', '汇款备注已复制')
-  },
-
-  onGoSettlementAccount() {
-    wx.navigateTo({ url: '/pages/merchant/finance/settlement-account/index' })
+    wx.navigateTo({ url: SETTLEMENT_ACCOUNT_PAGE_PATH })
   },
 
   async onRefreshStatus() {

@@ -214,13 +214,25 @@ func main() {
 	schedulerManager.Register("session-cleanup", session.NewScheduler(store))
 	schedulerManager.Register("payment-recovery", worker.NewPaymentRecoveryScheduler(store, taskDistributor))
 	schedulerManager.Register("wechat-notification-recovery", worker.NewWechatNotificationRecoveryScheduler(store))
-	schedulerManager.Register("profit-sharing-recovery", worker.NewProfitSharingRecoveryScheduler(store, taskDistributor))
+	if paymentFactApplicationDistributor, ok := taskDistributor.(worker.PaymentFactApplicationTaskDistributor); ok {
+		schedulerManager.Register("payment-fact-application", worker.NewPaymentFactApplicationScheduler(store, paymentFactApplicationDistributor))
+	} else {
+		log.Warn().Msg("payment fact application scheduler disabled: task distributor does not support payment fact application tasks")
+	}
+	if paymentDomainOutboxDistributor, ok := taskDistributor.(worker.PaymentDomainOutboxTaskDistributor); ok {
+		schedulerManager.Register("payment-domain-outbox", worker.NewPaymentDomainOutboxScheduler(store, paymentDomainOutboxDistributor))
+	} else {
+		log.Warn().Msg("payment domain outbox scheduler disabled: task distributor does not support payment domain outbox tasks")
+	}
+	schedulerManager.Register("profit-sharing-recovery", worker.NewProfitSharingRecoveryScheduler(store, taskDistributor, ecommerceClient))
+	schedulerManager.Register("profit-sharing-receiver-lifecycle", worker.NewProfitSharingReceiverLifecycleScheduler(store, taskDistributor))
 	if directPaymentClient == nil {
 		log.Warn().Msg("refund recovery direct status branch disabled: payment client not configured")
 	}
 	if ecommerceClient == nil {
 		log.Warn().Msg("refund recovery ecommerce status branch disabled: ecommerce client not configured")
 		log.Warn().Msg("applyment recovery remote-query branch disabled: ecommerce client not configured")
+		log.Warn().Msg("profit sharing return recovery remote-query branch disabled: ecommerce client not configured")
 	}
 	schedulerManager.Register("refund-recovery", worker.NewRefundRecoveryScheduler(store, taskDistributor, directPaymentClient, ecommerceClient))
 	schedulerManager.Register("applyment-recovery", worker.NewApplymentRecoveryScheduler(store, taskDistributor, ecommerceClient))
@@ -236,7 +248,8 @@ func main() {
 	} else {
 		log.Warn().Msg("claim payout recovery scheduler disabled: transfer client not configured")
 	}
-	schedulerManager.Register("claim-recovery", worker.NewClaimRecoveryScheduler(store))
+	schedulerManager.Register("claim-behavior-action-recovery", worker.NewClaimBehaviorActionRecoveryScheduler(store, taskDistributor))
+	schedulerManager.Register("claim-recovery", worker.NewClaimRecoveryScheduler(store, taskDistributor))
 	schedulerManager.Register("merchant-open-status", scheduler.NewMerchantOpenStatusScheduler(store))
 	schedulerManager.Register("order-timeout", scheduler.NewOrderTimeoutScheduler(store))
 	schedulerManager.Register("takeout-auto-complete", scheduler.NewTakeoutAutoCompleteScheduler(store, taskDistributor))

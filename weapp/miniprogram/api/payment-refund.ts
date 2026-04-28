@@ -22,7 +22,6 @@ export {
   invokeWechatPay,
   pay,
   pollPaymentStatus,
-  processPayment,
   checkPaymentStatus,
   PaymentCancelledError
 } from './payment'

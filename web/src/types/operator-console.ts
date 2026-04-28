@@ -196,6 +196,51 @@ export interface SafetyReportListResponse {
   total: number;
 }
 
+export interface OperatorFoodSafetyCaseItem {
+  id: number;
+  merchant_id: number;
+  region_id: number;
+  primary_product_key: string;
+  primary_product_label: string;
+  status: string;
+  trigger_reason: string;
+  investigation_report?: string;
+  merchant_rectification_report?: string;
+  resolution?: string;
+  suspended_at: string;
+  resolved_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OperatorFoodSafetyIncidentItem {
+  id: number;
+  order_id: number;
+  merchant_id: number;
+  user_id: number;
+  incident_type: string;
+  description: string;
+  status: string;
+  primary_product_key: string;
+  primary_product_label: string;
+  case_id?: number;
+  created_at: string;
+  resolved_at?: string;
+}
+
+export interface OperatorFoodSafetyCaseListResponse {
+  items: OperatorFoodSafetyCaseItem[];
+  page: number;
+  limit: number;
+  has_more: boolean;
+  total: number;
+}
+
+export interface OperatorFoodSafetyCaseDetailResponse {
+  case: OperatorFoodSafetyCaseItem;
+  incidents: OperatorFoodSafetyIncidentItem[];
+}
+
 export interface PeakHourConfigResponse {
   id: number;
   region_id: number;

@@ -617,6 +617,41 @@ func TestListMerchantApplications(t *testing.T) {
 	}
 }
 
+func TestMerchantApplicationListQueriesUseIDTieBreaker(t *testing.T) {
+	app1 := createRandomMerchantApplication(t)
+	app2 := createRandomMerchantApplication(t)
+	tiedCreatedAt := time.Now().UTC().Add(24 * time.Hour).Truncate(time.Microsecond)
+
+	store, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+
+	_, err := store.connPool.Exec(context.Background(),
+		"UPDATE merchant_applications SET created_at = $1 WHERE id = ANY($2)",
+		tiedCreatedAt,
+		[]int64{app1.ID, app2.ID},
+	)
+	require.NoError(t, err)
+
+	allApps, err := testStore.ListAllMerchantApplications(context.Background(), ListAllMerchantApplicationsParams{
+		Limit:  2,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+	require.Len(t, allApps, 2)
+	require.Equal(t, app2.ID, allApps[0].ID)
+	require.Equal(t, app1.ID, allApps[1].ID)
+
+	draftApps, err := testStore.ListMerchantApplications(context.Background(), ListMerchantApplicationsParams{
+		Status: "draft",
+		Limit:  2,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+	require.Len(t, draftApps, 2)
+	require.Equal(t, app2.ID, draftApps[0].ID)
+	require.Equal(t, app1.ID, draftApps[1].ID)
+}
+
 func TestUpdateMerchantApplicationStatus(t *testing.T) {
 	app1 := createRandomMerchantApplication(t)
 	reviewer := createRandomUser(t)

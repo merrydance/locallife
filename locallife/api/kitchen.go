@@ -483,7 +483,9 @@ func (server *Server) convertToKitchenOrder(ctx *gin.Context, order db.Order) (k
 	for _, item := range items {
 		var customizations []orderCustomizationItem
 		if item.Customizations != nil {
-			_ = parseJSON(item.Customizations, &customizations)
+			if err := parseJSON(item.Customizations, &customizations); err != nil {
+				return kitchenOrderResponse{}, fmt.Errorf("decode kitchen order item %d customizations: %w", item.ID, err)
+			}
 		}
 
 		var imageAssetID *int64

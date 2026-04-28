@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
+export PATH="$HOME/go/bin:$PATH"
 
 required_tools=(
   "$HOME/go/bin/sqlc"
   "$HOME/go/bin/mockgen"
   "$HOME/go/bin/swag"
-  "/usr/local/go/bin/go"
 )
 
 for tool in "${required_tools[@]}"; do
@@ -16,6 +15,11 @@ for tool in "${required_tools[@]}"; do
     exit 1
   fi
 done
+
+if ! command -v go >/dev/null 2>&1; then
+	echo "missing required tool: go" >&2
+	exit 1
+fi
 
 generated_paths=(
   db/sqlc

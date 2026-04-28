@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX payment_domain_outbox_event_aggregate_uidx
+ON payment_domain_outbox(event_type, aggregate_type, aggregate_id);

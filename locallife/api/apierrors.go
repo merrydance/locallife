@@ -235,6 +235,8 @@ var (
 	ErrApplicationStateChanged  = apierr(40968, "application state has changed, action is no longer valid")
 	ErrAccountApplymentPending  = apierr(40969, "there is already an account registration application in progress")
 	ErrAccountAlreadyRegistered = apierr(40970, "account registration has already been completed")
+	ErrClaimCannotBeWithdrawn   = apierr(40971, "claim cannot be withdrawn after compensation has started or when no adjudicated compensation is pending")
+	ErrClaimCannotContinue      = apierr(40972, "claim cannot continue to compensation in its current state")
 )
 
 // ==================== 区域/运营商扩张 (Region / Operator Expansion) ====================

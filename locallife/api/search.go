@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"sync"
@@ -366,7 +367,11 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 			distanceMeters = dist
 		}
 
-		response[i] = newSearchDishResponseFromGlobalRow(dish, distanceMeters)
+		response[i], err = newSearchDishResponseFromGlobalRow(dish, distanceMeters)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 
 		// 使用路网距离计算配送费
 		feeResult, err := server.calculateDeliveryFeeInternal(ctx, dish.MerchantRegionID, dish.MerchantID, int32(distanceMeters), 0)
@@ -743,7 +748,10 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 		}
 
 		if row.Tags != nil {
-			_ = parseJSON(row.Tags, &response[i].Tags)
+			if err := parseJSON(row.Tags, &response[i].Tags); err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("decode search combo %d tags: %w", row.ID, err)))
+				return
+			}
 		}
 	}
 
@@ -786,7 +794,7 @@ func newSearchDishResponseFromDish(dish db.Dish) searchDishResponse {
 }
 
 // Helper for Global Search Row
-func newSearchDishResponseFromGlobalRow(row db.SearchDishesGlobalRow, distanceMeters int) searchDishResponse {
+func newSearchDishResponseFromGlobalRow(row db.SearchDishesGlobalRow, distanceMeters int) (searchDishResponse, error) {
 	// Calculate estimated delivery time (PrepareTime + Distance/Speed)
 	// Assume average speed 200m/min (12km/h) for simple estimation if real routing not available
 	deliveryTimeSeconds := int(row.PrepareTime) * 60
@@ -830,13 +838,17 @@ func newSearchDishResponseFromGlobalRow(row db.SearchDishesGlobalRow, distanceMe
 
 	// 解析 Tags 和 CustomizationGroups
 	if row.Tags != nil {
-		_ = parseJSON(row.Tags, &resp.Attributes)
+		if err := parseJSON(row.Tags, &resp.Attributes); err != nil {
+			return searchDishResponse{}, fmt.Errorf("decode search dish %d tags: %w", row.ID, err)
+		}
 	}
 	if row.CustomizationGroups != nil {
-		_ = parseJSON(row.CustomizationGroups, &resp.CustomizationGroups)
+		if err := parseJSON(row.CustomizationGroups, &resp.CustomizationGroups); err != nil {
+			return searchDishResponse{}, fmt.Errorf("decode search dish %d customization_groups: %w", row.ID, err)
+		}
 	}
 
-	return resp
+	return resp, nil
 }
 
 // assignMerchantLabels 对商户列表中复购率最高的标注"推荐"，销量最高（非推荐）的标注"热销"

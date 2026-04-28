@@ -1,0 +1,62 @@
+<custom-navbar title="待接单提醒" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view
+  class="page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter {{isLargeScreen ? 'large-screen' : ''}}"
+  style="--page-shell-nav-height: {{navBarHeight}}px"
+>
+  <view class="header-tools">
+    <view class="filter-tabs">
+      <t-tabs value="{{activeCategory}}" bind:change="onCategoryChange" t-class="tabs-container">
+        <t-tab-panel wx:for="{{tabs}}" wx:key="value" label="{{item.label}}" value="{{item.value}}" />
+      </t-tabs>
+    </view>
+
+    <t-button size="small" variant="outline" theme="primary" disabled="{{unreadCount === 0}}" bind:tap="onMarkAllRead">全部已读</t-button>
+  </view>
+
+  <view class="content">
+    <page-state wx:if="{{initialLoading}}" type="loading" loadingText="加载提醒中" />
+
+    <page-state wx:elif="{{error}}" icon="error-circle" description="{{error}}" actionText="重试" bind:action="onRetry" />
+
+    <scroll-view
+      wx:else
+      scroll-y
+      class="notifications-scroll"
+      bindscrolltolower="onLoadMore"
+      lower-threshold="100"
+      enable-back-to-top
+      refresher-enabled="{{true}}"
+      bindrefresherrefresh="onPullDownRefresh"
+      refresher-triggered="{{refreshing}}"
+    >
+      <view class="summary-strip">未读提醒 {{unreadCount}}</view>
+
+      <page-state wx:if="{{notifications.length === 0}}" description="当前没有待接单提醒" />
+
+      <view wx:else class="notification-list">
+        <view wx:for="{{notifications}}" wx:key="id" class="notification-card {{item.is_read ? 'is-read' : 'is-unread'}}" bind:tap="onTapNotification" data-id="{{item.id}}">
+          <view class="notification-card__head">
+            <view class="notification-card__title-wrap">
+              <view wx:if="{{!item.is_read}}" class="notification-dot"></view>
+              <text class="notification-card__title">{{item.title}}</text>
+            </view>
+            <text class="notification-card__time">{{item.timeDisplay}}</text>
+          </view>
+
+          <view class="notification-card__meta">
+            <text class="notification-card__region">{{item.regionText}}</text>
+            <text wx:if="{{item.waitText}}" class="notification-card__wait">{{item.waitText}}</text>
+          </view>
+
+          <view class="notification-card__summary">{{item.summaryText}}</view>
+        </view>
+
+        <view class="loading-wrap">
+          <t-loading wx:if="{{loadingMore}}" theme="circular" size="32rpx" />
+          <text wx:elif="{{!hasMore && notifications.length > 0}}" class="no-more-text">没有更多提醒了</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</view>

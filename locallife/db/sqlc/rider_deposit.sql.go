@@ -15,6 +15,7 @@ const countRiderDeposits = `-- name: CountRiderDeposits :one
 SELECT COUNT(*)::bigint
 FROM rider_deposits
 WHERE rider_id = $1
+    AND (type <> 'freeze' OR COALESCE(remark, '') <> '押金提现冻结')
 `
 
 func (q *Queries) CountRiderDeposits(ctx context.Context, riderID int64) (int64, error) {
@@ -139,10 +140,249 @@ func (q *Queries) GetRiderDepositStats(ctx context.Context, riderID int64) (GetR
 	return i, err
 }
 
+const listRiderDepositLedgerAnomalies = `-- name: ListRiderDepositLedgerAnomalies :many
+WITH rider_scope AS (
+    SELECT id, user_id, deposit_amount, frozen_deposit
+    FROM riders
+    WHERE $2::bigint IS NULL OR id = $2::bigint
+), credit_totals AS (
+    SELECT rdc.rider_id, COALESCE(SUM(rdc.refundable_amount), 0)::bigint AS refundable_credit_amount
+    FROM rider_deposit_credits rdc
+    JOIN rider_scope rs ON rs.id = rdc.rider_id
+    WHERE rdc.status IN ('active', 'partially_refunded', 'legacy')
+    GROUP BY rdc.rider_id
+), pending_refunds AS (
+    SELECT po.user_id, COALESCE(SUM(ro.refund_amount), 0)::bigint AS pending_refund_amount
+    FROM refund_orders ro
+    JOIN payment_orders po ON po.id = ro.payment_order_id
+    JOIN rider_scope rs ON rs.user_id = po.user_id
+    WHERE po.business_type = 'rider_deposit'
+      AND ro.refund_type = 'rider_deposit'
+      AND ro.status IN ('pending', 'processing')
+    GROUP BY po.user_id
+), success_refunds AS (
+    SELECT po.user_id, po.id AS payment_order_id, COALESCE(SUM(ro.refund_amount), 0)::bigint AS success_refund_amount
+    FROM refund_orders ro
+    JOIN payment_orders po ON po.id = ro.payment_order_id
+        JOIN rider_scope rs ON rs.user_id = po.user_id
+    WHERE po.business_type = 'rider_deposit'
+      AND ro.refund_type = 'rider_deposit'
+      AND ro.status = 'success'
+    GROUP BY po.user_id, po.id
+), withdraw_logs AS (
+        SELECT rd.rider_id, rd.payment_order_id, COALESCE(SUM(rd.amount), 0)::bigint AS withdraw_log_amount
+        FROM rider_deposits rd
+        JOIN rider_scope rs ON rs.id = rd.rider_id
+        WHERE rd.type IN ('withdraw', 'deduct')
+            AND rd.payment_order_id IS NOT NULL
+        GROUP BY rd.rider_id, rd.payment_order_id
+), duplicate_deposit_logs AS (
+        SELECT rd.rider_id, rd.payment_order_id, COUNT(*)::bigint AS duplicate_count, COALESCE(SUM(rd.amount), 0)::bigint AS duplicate_amount
+        FROM rider_deposits rd
+        JOIN rider_scope rs ON rs.id = rd.rider_id
+        WHERE rd.type = 'deposit'
+            AND rd.payment_order_id IS NOT NULL
+        GROUP BY rd.rider_id, rd.payment_order_id
+    HAVING COUNT(*) > 1
+), paid_unprocessed_artifacts AS (
+        SELECT
+            rs.id AS rider_id,
+            po.user_id,
+            po.id AS payment_order_id,
+            COUNT(DISTINCT rd.id)::bigint AS deposit_log_count,
+            COUNT(DISTINCT rdc.id)::bigint AS credit_count,
+            COALESCE((
+                SELECT SUM(rd2.amount)
+                FROM rider_deposits rd2
+                WHERE rd2.payment_order_id = po.id
+                    AND rd2.type = 'deposit'
+            ), 0)::bigint AS deposit_log_amount
+        FROM payment_orders po
+        JOIN rider_scope rs ON rs.user_id = po.user_id
+        LEFT JOIN rider_deposits rd ON rd.payment_order_id = po.id AND rd.type = 'deposit'
+        LEFT JOIN rider_deposit_credits rdc ON rdc.payment_order_id = po.id
+        WHERE po.business_type = 'rider_deposit'
+            AND po.status = 'paid'
+            AND po.processed_at IS NULL
+        GROUP BY rs.id, po.user_id, po.id
+        HAVING COUNT(DISTINCT rd.id) > 0 OR COUNT(DISTINCT rdc.id) > 0
+), anomalies AS (
+    SELECT
+        rs.id AS rider_id,
+        rs.user_id,
+        'deposit_amount_gt_refundable_credit'::text AS anomaly_type,
+        NULL::bigint AS payment_order_id,
+        rs.deposit_amount,
+        rs.frozen_deposit,
+        COALESCE(ct.refundable_credit_amount, 0)::bigint AS refundable_credit_amount,
+        COALESCE(pr.pending_refund_amount, 0)::bigint AS pending_refund_amount,
+        0::bigint AS success_refund_amount,
+        0::bigint AS ledger_amount,
+        (rs.deposit_amount - COALESCE(ct.refundable_credit_amount, 0) - COALESCE(pr.pending_refund_amount, 0))::bigint AS anomaly_amount
+    FROM rider_scope rs
+    LEFT JOIN credit_totals ct ON ct.rider_id = rs.id
+    LEFT JOIN pending_refunds pr ON pr.user_id = rs.user_id
+    WHERE rs.deposit_amount > COALESCE(ct.refundable_credit_amount, 0) + COALESCE(pr.pending_refund_amount, 0)
+
+    UNION ALL
+
+    SELECT
+        rs.id AS rider_id,
+        rs.user_id,
+        'refundable_credit_gt_deposit_amount'::text AS anomaly_type,
+        NULL::bigint AS payment_order_id,
+        rs.deposit_amount,
+        rs.frozen_deposit,
+        COALESCE(ct.refundable_credit_amount, 0)::bigint AS refundable_credit_amount,
+        COALESCE(pr.pending_refund_amount, 0)::bigint AS pending_refund_amount,
+        0::bigint AS success_refund_amount,
+        0::bigint AS ledger_amount,
+        (COALESCE(ct.refundable_credit_amount, 0) + COALESCE(pr.pending_refund_amount, 0) - rs.deposit_amount)::bigint AS anomaly_amount
+    FROM rider_scope rs
+    LEFT JOIN credit_totals ct ON ct.rider_id = rs.id
+    LEFT JOIN pending_refunds pr ON pr.user_id = rs.user_id
+    WHERE COALESCE(ct.refundable_credit_amount, 0) + COALESCE(pr.pending_refund_amount, 0) > rs.deposit_amount
+
+    UNION ALL
+
+    SELECT
+        rs.id AS rider_id,
+        rs.user_id,
+        'frozen_less_than_pending_refund'::text AS anomaly_type,
+        NULL::bigint AS payment_order_id,
+        rs.deposit_amount,
+        rs.frozen_deposit,
+        COALESCE(ct.refundable_credit_amount, 0)::bigint AS refundable_credit_amount,
+        COALESCE(pr.pending_refund_amount, 0)::bigint AS pending_refund_amount,
+        0::bigint AS success_refund_amount,
+        0::bigint AS ledger_amount,
+        (COALESCE(pr.pending_refund_amount, 0) - rs.frozen_deposit)::bigint AS anomaly_amount
+    FROM rider_scope rs
+    LEFT JOIN credit_totals ct ON ct.rider_id = rs.id
+    LEFT JOIN pending_refunds pr ON pr.user_id = rs.user_id
+    WHERE COALESCE(pr.pending_refund_amount, 0) > rs.frozen_deposit
+
+    UNION ALL
+
+    SELECT
+        rs.id AS rider_id,
+        rs.user_id,
+        'duplicate_deposit_log'::text AS anomaly_type,
+        ddl.payment_order_id,
+        rs.deposit_amount,
+        rs.frozen_deposit,
+        COALESCE(ct.refundable_credit_amount, 0)::bigint AS refundable_credit_amount,
+        COALESCE(pr.pending_refund_amount, 0)::bigint AS pending_refund_amount,
+        0::bigint AS success_refund_amount,
+        ddl.duplicate_amount::bigint AS ledger_amount,
+        ddl.duplicate_count::bigint AS anomaly_amount
+    FROM duplicate_deposit_logs ddl
+    JOIN rider_scope rs ON rs.id = ddl.rider_id
+    LEFT JOIN credit_totals ct ON ct.rider_id = rs.id
+    LEFT JOIN pending_refunds pr ON pr.user_id = rs.user_id
+
+    UNION ALL
+
+    SELECT
+        rs.id AS rider_id,
+        rs.user_id,
+        'paid_unprocessed_has_artifacts'::text AS anomaly_type,
+        pua.payment_order_id,
+        rs.deposit_amount,
+        rs.frozen_deposit,
+        COALESCE(ct.refundable_credit_amount, 0)::bigint AS refundable_credit_amount,
+        COALESCE(pr.pending_refund_amount, 0)::bigint AS pending_refund_amount,
+        0::bigint AS success_refund_amount,
+        pua.deposit_log_amount::bigint AS ledger_amount,
+        (pua.deposit_log_count + pua.credit_count)::bigint AS anomaly_amount
+    FROM paid_unprocessed_artifacts pua
+    JOIN rider_scope rs ON rs.id = pua.rider_id
+    LEFT JOIN credit_totals ct ON ct.rider_id = rs.id
+    LEFT JOIN pending_refunds pr ON pr.user_id = rs.user_id
+
+    UNION ALL
+
+    SELECT
+        rs.id AS rider_id,
+        rs.user_id,
+        'success_refund_not_settled'::text AS anomaly_type,
+        sr.payment_order_id,
+        rs.deposit_amount,
+        rs.frozen_deposit,
+        COALESCE(ct.refundable_credit_amount, 0)::bigint AS refundable_credit_amount,
+        COALESCE(pr.pending_refund_amount, 0)::bigint AS pending_refund_amount,
+        sr.success_refund_amount::bigint AS success_refund_amount,
+        COALESCE(wl.withdraw_log_amount, 0)::bigint AS ledger_amount,
+        (sr.success_refund_amount - COALESCE(wl.withdraw_log_amount, 0))::bigint AS anomaly_amount
+    FROM success_refunds sr
+    JOIN rider_scope rs ON rs.user_id = sr.user_id
+    LEFT JOIN withdraw_logs wl ON wl.rider_id = rs.id AND wl.payment_order_id = sr.payment_order_id
+    LEFT JOIN credit_totals ct ON ct.rider_id = rs.id
+    LEFT JOIN pending_refunds pr ON pr.user_id = rs.user_id
+    WHERE sr.success_refund_amount > COALESCE(wl.withdraw_log_amount, 0)
+)
+SELECT rider_id, user_id, anomaly_type, payment_order_id, deposit_amount, frozen_deposit, refundable_credit_amount, pending_refund_amount, success_refund_amount, ledger_amount, anomaly_amount
+FROM anomalies
+ORDER BY rider_id, anomaly_type, payment_order_id NULLS LAST
+LIMIT $1::int
+`
+
+type ListRiderDepositLedgerAnomaliesParams struct {
+	Limit   int32       `json:"limit"`
+	RiderID pgtype.Int8 `json:"rider_id"`
+}
+
+type ListRiderDepositLedgerAnomaliesRow struct {
+	RiderID                int64       `json:"rider_id"`
+	UserID                 int64       `json:"user_id"`
+	AnomalyType            string      `json:"anomaly_type"`
+	PaymentOrderID         pgtype.Int8 `json:"payment_order_id"`
+	DepositAmount          int64       `json:"deposit_amount"`
+	FrozenDeposit          int64       `json:"frozen_deposit"`
+	RefundableCreditAmount int64       `json:"refundable_credit_amount"`
+	PendingRefundAmount    int64       `json:"pending_refund_amount"`
+	SuccessRefundAmount    int64       `json:"success_refund_amount"`
+	LedgerAmount           int64       `json:"ledger_amount"`
+	AnomalyAmount          int64       `json:"anomaly_amount"`
+}
+
+func (q *Queries) ListRiderDepositLedgerAnomalies(ctx context.Context, arg ListRiderDepositLedgerAnomaliesParams) ([]ListRiderDepositLedgerAnomaliesRow, error) {
+	rows, err := q.db.Query(ctx, listRiderDepositLedgerAnomalies, arg.Limit, arg.RiderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRiderDepositLedgerAnomaliesRow{}
+	for rows.Next() {
+		var i ListRiderDepositLedgerAnomaliesRow
+		if err := rows.Scan(
+			&i.RiderID,
+			&i.UserID,
+			&i.AnomalyType,
+			&i.PaymentOrderID,
+			&i.DepositAmount,
+			&i.FrozenDeposit,
+			&i.RefundableCreditAmount,
+			&i.PendingRefundAmount,
+			&i.SuccessRefundAmount,
+			&i.LedgerAmount,
+			&i.AnomalyAmount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiderDeposits = `-- name: ListRiderDeposits :many
 SELECT id, rider_id, amount, type, related_order_id, balance_after, remark, created_at, payment_order_id FROM rider_deposits
 WHERE rider_id = $1
-ORDER BY created_at DESC
+    AND (type <> 'freeze' OR COALESCE(remark, '') <> '押金提现冻结')
+ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
 `
 

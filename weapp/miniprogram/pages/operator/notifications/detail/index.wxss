@@ -1,0 +1,61 @@
+.detail-card {
+  background: #ffffff;
+  border-radius: 28rpx;
+  padding: 32rpx;
+  box-shadow: 0 10rpx 28rpx rgba(15, 23, 42, 0.06);
+}
+
+.detail-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24rpx;
+  padding-bottom: 24rpx;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.detail-card__title {
+  color: #1f2329;
+  font-size: 34rpx;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.detail-card__time {
+  margin-top: 8rpx;
+  color: #8c8c8c;
+  font-size: 24rpx;
+}
+
+.detail-card__section {
+  padding-top: 24rpx;
+}
+
+.detail-card__label {
+  color: #8c8c8c;
+  font-size: 24rpx;
+  margin-bottom: 10rpx;
+}
+
+.detail-card__value,
+.detail-card__message {
+  color: #1f2329;
+  font-size: 28rpx;
+  line-height: 1.7;
+}
+
+.detail-card__value--emphasis {
+  color: #b45309;
+  font-weight: 600;
+}
+
+.detail-card__message--secondary {
+  margin-top: 12rpx;
+  color: #5f6368;
+}
+
+.detail-card__actions {
+  margin-top: 28rpx;
+  padding-top: 24rpx;
+  border-top: 1px solid #f0f0f0;
+}

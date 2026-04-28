@@ -101,6 +101,93 @@ func run() error {
 }"
 
 run_case \
+  ignored_parse_json_violation \
+  1 \
+  "ignores JSON decode errors" \
+  "package api
+
+func run() {}" \
+  "package api
+
+func run() {
+    _ = parseJSON(payload, &resp)
+}" \
+  "locallife/api/sample.go"
+
+run_case \
+  ignored_json_unmarshal_violation \
+  1 \
+  "ignores JSON decode errors" \
+  "package logic
+
+func run() {}" \
+  "package logic
+
+import \"encoding/json\"
+
+func run() {
+    _ = json.Unmarshal(data, &resp)
+}"
+
+run_case \
+  logic_request_error_5xx_violation \
+  1 \
+  "NewRequestError(...) with a 5xx status" \
+  "package logic
+
+func run() error { return nil }" \
+  "package logic
+
+func run() error {
+    return NewRequestError(http.StatusInternalServerError, errors.New(\"boom\"))
+}"
+
+run_case \
+  api_error_response_5xx_violation \
+  1 \
+  "ctx.JSON(..., errorResponse(...)) for a 5xx status" \
+  "package api
+
+func run() {}" \
+  "package api
+
+func run(ctx *gin.Context) {
+    ctx.JSON(http.StatusBadGateway, errorResponse(err))
+}" \
+  "locallife/api/sample.go"
+
+run_case \
+  api_internal_error_passes \
+  0 \
+  "Go guardrail passed" \
+  "package api
+
+func run() {}" \
+  "package api
+
+func run(ctx *gin.Context, err error) {
+    ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+}" \
+  "locallife/api/sample.go"
+
+run_case \
+  handled_parse_json_passes \
+  0 \
+  "Go guardrail passed" \
+  "package api
+
+func run() {}" \
+  "package api
+
+func run() error {
+    if err := parseJSON(payload, &resp); err != nil {
+        return err
+    }
+    return nil
+}" \
+  "locallife/api/sample.go"
+
+run_case \
   panic_allow_passes \
   0 \
   "Go guardrail passed" \

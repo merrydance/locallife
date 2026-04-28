@@ -1,13 +1,10 @@
 import { isLargeScreen } from '@/utils/responsive'
 import {
-  formatOnlineStatus,
-  getRiderStatusDisplay,
-  operatorRiderManagementService,
-  parseRiderStatusFilter,
-  RiderQueryParams,
-  RiderStatus,
-  OperatorRiderItem
-} from '../../../api/operator-rider-management'
+  loadOperatorRiderListPageData,
+  parseOperatorRiderStatusFilter,
+  type OperatorRiderFilterStatus,
+  type OperatorRiderListView
+} from '../../../services/operator-rider-management'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type RiderListPageOptions = {
@@ -18,50 +15,6 @@ type RiderListPageOptions = {
 type RiderListDataset = {
   id?: number
   name?: string
-}
-
-type RiderView = {
-  id: number
-  name: string
-  phone: string
-  status: string
-  status_label: string
-  status_theme: 'success' | 'warning' | 'danger' | 'default'
-  is_online: boolean
-  online_status_label: string
-  region_id: number
-  region_name: string
-  delivery_count: number
-  rating_display: string
-  total_earnings_display: string
-  can_suspend: boolean
-  can_resume: boolean
-}
-
-function adaptRider(item: Partial<OperatorRiderItem> & Record<string, unknown>): RiderView {
-  const name = String(item.name || item.real_name || '未命名骑手')
-  const onlineStatus = String(item.online_status || ((item.is_online as boolean) ? 'online' : 'offline'))
-  const isOnline = onlineStatus === 'online' || Boolean(item.is_online)
-  const deliveryCount = Number(item.delivery_count || item.total_orders || 0)
-  const statusDisplay = getRiderStatusDisplay(String(item.status || 'pending') as RiderStatus)
-
-  return {
-    id: Number(item.id || 0),
-    name,
-    phone: String(item.phone || '-'),
-    status: statusDisplay.normalizedStatus,
-    status_label: statusDisplay.label,
-    status_theme: statusDisplay.theme,
-    is_online: isOnline,
-    online_status_label: formatOnlineStatus(isOnline ? 'online' : 'offline'),
-    region_id: Number(item.region_id || 0),
-    region_name: String(item.region_name || `区域 ${Number(item.region_id || 0)}`),
-    delivery_count: deliveryCount,
-    rating_display: Number(item.rating || 0).toFixed(1),
-    total_earnings_display: `¥${(Number(item.total_earnings || 0) / 100).toFixed(2)}`,
-    can_suspend: statusDisplay.canSuspend,
-    can_resume: statusDisplay.canResume
-  }
 }
 
 Page({
@@ -77,20 +30,16 @@ Page({
     limit: 20,
     total: 0,
     hasMore: true,
-    riders: [] as RiderView[],
+    riders: [] as OperatorRiderListView[],
     regionId: 0,
-    statusFilter: '' as RiderStatus | '',
+    statusFilter: '' as OperatorRiderFilterStatus,
     searchKeyword: '',
-    searchTimer: null as number | null,
-    suspendDialogVisible: false,
-    resumeDialogVisible: false,
-    selectedRider: { id: 0, name: '' },
-    actionReason: ''
+    searchTimer: null as number | null
   },
 
   onLoad(options: RiderListPageOptions) {
     const regionId = options.region_id ? parseInt(options.region_id) : 0
-    const statusFilter = parseRiderStatusFilter(options.status)
+    const statusFilter = parseOperatorRiderStatusFilter(options.status)
     this.setData({
       isLargeScreen: isLargeScreen(),
       regionId,
@@ -127,24 +76,20 @@ Page({
         this.setData({ loadingMore: true })
       }
 
-      const params: RiderQueryParams = {
-        page: refresh ? 1 : this.data.page,
-        limit: this.data.limit,
-        keyword: this.data.searchKeyword || undefined,
-        status: this.data.statusFilter || undefined,
-        sort_by: 'created_at',
-        sort_order: 'desc',
-        ...(this.data.regionId ? { region_id: this.data.regionId } : {})
-      }
+      const result = await loadOperatorRiderListPageData({
+        pageId: refresh ? 1 : this.data.page,
+        pageSize: this.data.limit,
+        regionId: this.data.regionId,
+        statusFilter: this.data.statusFilter,
+        searchKeyword: this.data.searchKeyword
+      })
 
-      const res = await operatorRiderManagementService.getRiderList(params)
-      const incoming = (res.riders || []).map((item) => adaptRider(item as Partial<OperatorRiderItem> & Record<string, unknown>))
-      const riders = refresh ? incoming : [...this.data.riders, ...incoming]
-      const total = Number(res.total || riders.length)
+      const riders = refresh ? result.riders : [...this.data.riders, ...result.riders]
+      const total = refresh ? result.total : Number(result.total || riders.length)
 
       this.setData({
         riders,
-        page: refresh ? 2 : this.data.page + 1,
+        page: refresh ? result.nextPage : this.data.page + 1,
         total,
         hasMore: riders.length < total,
         loading: false,
@@ -187,7 +132,7 @@ Page({
     this.loadRiders(true)
   },
 
-  onStatusFilterChange(e: WechatMiniprogram.CustomEvent<{ value: RiderStatus | '' }>) {
+  onStatusFilterChange(e: WechatMiniprogram.CustomEvent<{ value: OperatorRiderFilterStatus }>) {
     this.setData({ statusFilter: e.detail.value })
     this.loadRiders(true)
   },
@@ -196,79 +141,5 @@ Page({
     const { id } = e.currentTarget.dataset as RiderListDataset
     if (!id) return
     wx.navigateTo({ url: `/pages/operator/riders/detail/index?id=${id}` })
-  },
-
-  onSuspendTap(e: WechatMiniprogram.TouchEvent) {
-    const { id, name } = e.currentTarget.dataset as RiderListDataset
-    if (!id || !name) return
-    this.setData({
-      selectedRider: { id, name },
-      suspendDialogVisible: true,
-      actionReason: ''
-    })
-  },
-
-  onResumeTap(e: WechatMiniprogram.TouchEvent) {
-    const { id, name } = e.currentTarget.dataset as RiderListDataset
-    if (!id || !name) return
-    this.setData({
-      selectedRider: { id, name },
-      resumeDialogVisible: true,
-      actionReason: ''
-    })
-  },
-
-  onReasonChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    this.setData({ actionReason: e.detail.value || '' })
-  },
-
-  async onSuspendConfirm() {
-    if (!this.data.actionReason.trim()) {
-      wx.showToast({ title: '请输入暂停原因', icon: 'none' })
-      return
-    }
-
-    try {
-      wx.showLoading({ title: '处理中...' })
-      await operatorRiderManagementService.suspendRider(this.data.selectedRider.id, {
-        reason: this.data.actionReason
-      })
-      this.setData({ suspendDialogVisible: false })
-      this.loadRiders(true)
-    } catch (error) {
-      console.error('暂停骑手失败:', error)
-      wx.showToast({ title: getErrorUserMessage(error, '暂停失败，请稍后重试'), icon: 'none' })
-    } finally {
-      wx.hideLoading()
-    }
-  },
-
-  async onResumeConfirm() {
-    const reason = this.data.actionReason.trim() || '运营恢复骑手接单'
-    try {
-      wx.showLoading({ title: '处理中...' })
-      await operatorRiderManagementService.resumeRider(this.data.selectedRider.id, {
-        reason
-      })
-      this.setData({ resumeDialogVisible: false })
-      this.loadRiders(true)
-    } catch (error) {
-      console.error('恢复骑手失败:', error)
-      wx.showToast({ title: getErrorUserMessage(error, '恢复失败，请稍后重试'), icon: 'none' })
-    } finally {
-      wx.hideLoading()
-    }
-  },
-
-  onSuspendCancel() {
-    this.setData({ suspendDialogVisible: false })
-  },
-
-  onResumeCancel() {
-    this.setData({ resumeDialogVisible: false })
-  },
-
-  stopPropagation() {
-    // 阻止事件冒泡
   }
 })

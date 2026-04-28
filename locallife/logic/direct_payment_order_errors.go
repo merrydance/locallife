@@ -59,3 +59,37 @@ func mapDirectWechatPaymentCreateError(err error) error {
 		return NewRequestErrorWithCause(http.StatusServiceUnavailable, errors.New("微信支付请求失败，请返回订单页重新查询支付状态"), err)
 	}
 }
+
+func mapDirectOrderQueryError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	var validationErr *wechatcontracts.DirectOrderQueryValidationError
+	if errors.As(err, &validationErr) {
+		return NewRequestErrorWithCause(http.StatusBadGateway, errors.New("支付查询参数准备不完整，请返回订单页后重新查询"), err)
+	}
+
+	var contractErr *wechatcontracts.DirectOrderQueryContractError
+	if errors.As(err, &contractErr) {
+		return NewRequestErrorWithCause(http.StatusBadGateway, errors.New("微信支付返回的订单状态不完整，请稍后刷新结果"), err)
+	}
+
+	var wxErr *wechat.WechatPayError
+	if !errors.As(err, &wxErr) {
+		return fmt.Errorf("query direct payment order: %w", err)
+	}
+
+	switch code := wechaterrorcodes.CanonicalDirectPaymentCode(wxErr.Code); {
+	case code == wechaterrorcodes.DirectPaymentCodeOrderNotExist:
+		return NewRequestErrorWithCause(http.StatusBadGateway, errors.New("微信侧暂未确认该支付单，请保留当前订单并稍后刷新结果"), err)
+	case code == wechaterrorcodes.DirectPaymentCodeParamError || code == wechaterrorcodes.DirectPaymentCodeInvalidRequest:
+		return NewRequestErrorWithCause(http.StatusBadGateway, errors.New("支付查询参数准备不完整，请返回订单页后重新查询"), err)
+	case code == wechaterrorcodes.DirectPaymentCodeMchNotExists || code == wechaterrorcodes.DirectPaymentCodeSignError:
+		return NewRequestErrorWithCause(http.StatusServiceUnavailable, errors.New("商户支付配置未完成，当前无法确认支付状态，请联系平台处理"), err)
+	case code == wechaterrorcodes.DirectPaymentCodeFrequencyLimited || code == wechaterrorcodes.DirectPaymentCodeSystemError:
+		return NewRequestErrorWithCause(http.StatusServiceUnavailable, errors.New("微信支付状态查询异常，请不要重复支付，返回订单页后重新查询"), err)
+	default:
+		return NewRequestErrorWithCause(http.StatusServiceUnavailable, errors.New("支付状态查询失败，请返回订单页后重新查询"), err)
+	}
+}

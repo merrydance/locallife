@@ -1,12 +1,15 @@
 import { isLargeScreen } from '@/utils/responsive'
+import { getConsoleDashboardErrorState } from '../../../utils/console-dashboard'
+import {
+  loadOperatorRegions,
+  type ConsoleRegionOption
+} from '../../../services/operator-regions'
 import {
   loadOperatorAnalyticsPageData,
-  loadOperatorRegions,
-  type ConsoleRegionOption,
   type OperatorAnalyticsRegionSummary,
   type OperatorMerchantRankingView,
   type OperatorRiderRankingView
-} from '../../../services/operator-console'
+} from '../../../services/operator-analytics-dashboard'
 
 type TimeDimension = 'day' | 'week' | 'month'
 type RankingType = 'merchant' | 'rider'
@@ -40,13 +43,24 @@ Page({
 
   async onLoad() {
     this.setData({ isLargeScreen: isLargeScreen() })
-    await this.loadRegions()
-    this.loadData()
+    await this.initPage()
   },
 
-  async loadRegions() {
-    const regionState = await loadOperatorRegions()
-    this.setData(regionState)
+  async initPage() {
+    this.setData({ initialLoading: true, loading: false, error: null })
+
+    try {
+      const regionState = await loadOperatorRegions()
+      this.setData(regionState)
+      await this.loadData()
+    } catch (error: unknown) {
+      const errorState = getConsoleDashboardErrorState('operator', error, '分析页面暂时无法加载，请稍后重试。')
+      this.setData({
+        initialLoading: false,
+        loading: false,
+        error: errorState.message
+      })
+    }
   },
 
   async loadData() {
@@ -63,18 +77,19 @@ Page({
         initialLoading: false,
         loading: false
       })
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorState = getConsoleDashboardErrorState('operator', error, '分析页面暂时无法加载，请稍后重试。')
       console.error('加载分析数据失败:', error)
       this.setData({
         initialLoading: false,
         loading: false,
-        error: '加载分析数据失败'
+        error: errorState.message
       })
     }
   },
 
   onRetry() {
-    this.loadData()
+    this.initPage()
   },
 
   onOpenRegionPicker() {

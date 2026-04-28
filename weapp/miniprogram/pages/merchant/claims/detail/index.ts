@@ -7,7 +7,8 @@ import {
   MerchantClaimDecisionResponse,
   validateAppealReason
 } from '../../../../api/appeals-customer-service'
-import { invokeWechatPay, isPaymentStatusSuccessful, pollPaymentStatus } from '../../../../api/payment'
+import { isPaymentStatusSuccessful } from '../../../../api/payment'
+import { completeClaimRecoveryPayment, isClaimRecoveryPaymentIncomplete } from '../../../../services/claim-recovery-payment'
 import { logger } from '../../../../utils/logger'
 import { isSettledFulfilled, isSettledRejected, settleAll } from '../../../../utils/promise'
 import { getStableBarHeights } from '../../../../utils/responsive'
@@ -47,6 +48,7 @@ Page({
     initialErrorMessage: '',
     refreshErrorMessage: '',
     actionNoticeMessage: '',
+    actionNoticeRefreshable: false,
     submitting: false,
     recoveryPaying: false,
     decisionLoading: false,
@@ -102,6 +104,7 @@ Page({
         initialErrorMessage: '',
         refreshErrorMessage: '',
         actionNoticeMessage: '',
+        actionNoticeRefreshable: false,
         decisionLoading: false,
         decisionError: false,
         decisionErrorMessage: '',
@@ -192,6 +195,7 @@ Page({
         initialErrorMessage: '',
         refreshErrorMessage: '',
         actionNoticeMessage: preserveActionNotice ? this.data.actionNoticeMessage : '',
+        actionNoticeRefreshable: preserveActionNotice ? this.data.actionNoticeRefreshable : false,
         appealReason: claim.appeal_reason || '',
         decisionLoading: false,
         decisionError,
@@ -220,6 +224,7 @@ Page({
           initialErrorMessage: message,
           refreshErrorMessage: '',
           actionNoticeMessage: '',
+          actionNoticeRefreshable: false,
           detail: null
         })
       } else {
@@ -250,24 +255,31 @@ Page({
       'detail.progressAppealText': formatTime(appeal.created_at),
       appealReason: appeal.reason || reason,
       actionNoticeMessage: '异议已提交，平台复核状态稍后同步',
+      actionNoticeRefreshable: false,
       refreshErrorMessage: ''
     })
   },
 
-  applyRecoveryPaymentState(recovery: ClaimRecoveryResponse, status: string) {
+  applyRecoveryPaymentState(recovery: ClaimRecoveryResponse, status: string, pendingConfirmation = false) {
     if (!this.data.detail) return
 
     const paymentSucceeded = isPaymentStatusSuccessful(status)
+    const paymentFailed = isClaimRecoveryPaymentIncomplete(status)
     const nextRecoveryStatus = paymentSucceeded ? 'paid' : recovery.status
+    const actionNoticeMessage = paymentSucceeded
+      ? '追偿支付已完成，页面状态稍后同步'
+      : paymentFailed
+        ? '追偿支付未完成，请刷新追偿状态后重试'
+        : '追偿支付已提交，系统正在确认到账结果'
+
     this.setData({
       'detail.recoveryStatusLabel': formatRecoveryStatus(nextRecoveryStatus),
       'detail.recoveryAmountText': formatMoney(recovery.recovery_amount),
       'detail.dueAtLabel': recovery.due_at ? formatTime(recovery.due_at) : undefined,
       'detail.canPayRecovery': false,
       'detail.progressCurrent': getMerchantClaimProgressCurrent(undefined, nextRecoveryStatus, this.data.detail.hasAppeal),
-      actionNoticeMessage: paymentSucceeded
-        ? '追偿支付已完成，页面状态稍后同步'
-        : '追偿支付已提交，页面状态稍后同步',
+      actionNoticeMessage,
+      actionNoticeRefreshable: pendingConfirmation || paymentFailed,
       refreshErrorMessage: ''
     })
   },
@@ -462,11 +474,11 @@ Page({
       this.setData({ recoveryPaying: true })
       wx.showLoading({ title: '拉起支付中...' })
       const paymentResult = await claimManagementService.payMerchantClaimRecovery(this.data.claimId)
-      const shouldSync = await this.handleRecoveryPayment(paymentResult)
-      if (!shouldSync) {
+      const workflowResult = await this.handleRecoveryPayment(paymentResult)
+      if (!workflowResult.shouldSync) {
         return
       }
-      this.applyRecoveryPaymentState(paymentResult.recovery, paymentResult.status)
+      this.applyRecoveryPaymentState(paymentResult.recovery, workflowResult.paymentStatus, workflowResult.pendingConfirmation)
       await this.loadDetail(true, true)
     } catch (error) {
       logger.error('Confirm merchant claim recovery failed', error)
@@ -478,33 +490,7 @@ Page({
   },
 
   async handleRecoveryPayment(paymentResult: ClaimRecoveryPaymentResponse) {
-    if (paymentResult.pay_params) {
-      try {
-        await invokeWechatPay(paymentResult.pay_params)
-      } catch (error: unknown) {
-        const wxError = error as { errMsg?: string }
-        if (wxError?.errMsg?.includes('cancel')) {
-          wx.showToast({ title: '已取消支付', icon: 'none' })
-          return false
-        }
-        throw error
-      }
-
-      try {
-        await pollPaymentStatus(paymentResult.payment_order_id, 5, 1500)
-      } catch (error) {
-        logger.error('Poll claim recovery payment status timeout', error)
-      }
-
-      return true
-    }
-
-    if (isPaymentStatusSuccessful(paymentResult.status)) {
-      return true
-    }
-
-    wx.showToast({ title: '支付单已创建，请稍后查看状态', icon: 'none' })
-    return true
+    return completeClaimRecoveryPayment(paymentResult, 'Poll claim recovery payment status timeout')
   },
 
   onViewAppealDetail() {

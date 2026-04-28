@@ -26,20 +26,56 @@ const AlertChannel = "notification:platform:alerts"
 type AlertType string
 
 const (
-	AlertTypePaymentTimeout      AlertType = "PAYMENT_TIMEOUT"
-	AlertTypeTaskEnqueueFailure  AlertType = "TASK_ENQUEUE_FAILURE"
-	AlertTypeProfitSharingFailed AlertType = "PROFIT_SHARING_FAILED"
-	AlertTypeRefundFailed        AlertType = "REFUND_FAILED"
-	AlertTypeWithdrawFailed      AlertType = "WITHDRAW_FAILED"
-	AlertTypeSystemError         AlertType = "SYSTEM_ERROR"
-	AlertTypeBillMismatch        AlertType = "BILL_MISMATCH"
-	AlertTypeRiderDepositExpiry  AlertType = "RIDER_DEPOSIT_EXPIRY"
-	AlertTypeOCRJobFailed        AlertType = "OCR_JOB_FAILED"
-	AlertTypeOCRRetryExhausted   AlertType = "OCR_RETRY_EXHAUSTED"
-	AlertTypePrintAnomalyTimeout AlertType = "PRINT_ANOMALY_TIMEOUT"
+	AlertTypePaymentTimeout              AlertType = "PAYMENT_TIMEOUT"
+	AlertTypeTaskEnqueueFailure          AlertType = "TASK_ENQUEUE_FAILURE"
+	AlertTypeProfitSharingFailed         AlertType = "PROFIT_SHARING_FAILED"
+	AlertTypeProfitSharingReceiverFailed AlertType = "PROFIT_SHARING_RECEIVER_FAILED"
+	AlertTypeRefundFailed                AlertType = "REFUND_FAILED"
+	AlertTypeWithdrawFailed              AlertType = "WITHDRAW_FAILED"
+	AlertTypeSystemError                 AlertType = "SYSTEM_ERROR"
+	AlertTypeBillMismatch                AlertType = "BILL_MISMATCH"
+	AlertTypeRiderDepositExpiry          AlertType = "RIDER_DEPOSIT_EXPIRY"
+	AlertTypeCredentialExpiry            AlertType = "CREDENTIAL_EXPIRY"
+	AlertTypeOCRJobFailed                AlertType = "OCR_JOB_FAILED"
+	AlertTypeOCRRetryExhausted           AlertType = "OCR_RETRY_EXHAUSTED"
+	AlertTypePrintAnomalyTimeout         AlertType = "PRINT_ANOMALY_TIMEOUT"
 )
 
-const profitSharingEnqueueDedupWindow = 12 * time.Minute
+const (
+	profitSharingEnqueueDedupWindow             = 12 * time.Minute
+	profitSharingResultNotificationDedupWindow  = 24 * time.Hour
+	profitSharingResultNotificationExpireWindow = 7 * 24 * time.Hour
+	riderNotificationEntityType                 = "rider"
+	riderNotificationChannelPrefix              = "notification:rider:"
+	riderDeliveryPoolUpdateMessageType          = "delivery_pool_update"
+	riderNewDeliveryOrderPayloadType            = "new_delivery_order"
+	riderHighValueDeliveryFeeThreshold          = int64(1000)
+	riderDeliverySearchStartDistanceM           = 100.0
+	riderDeliverySearchStepDistanceM            = 100.0
+	riderDeliverySearchMaxDistanceM             = 5000.0
+	riderDeliverySearchMinNotifyRiderCount      = 3
+)
+
+type riderDeliveryOrderNotificationPayload struct {
+	Type               string    `json:"type"`
+	OrderID            int64     `json:"order_id"`
+	DeliveryID         int64     `json:"delivery_id"`
+	MerchantID         int64     `json:"merchant_id"`
+	MerchantName       string    `json:"merchant_name"`
+	PickupAddress      string    `json:"pickup_address"`
+	PickupLongitude    float64   `json:"pickup_longitude"`
+	PickupLatitude     float64   `json:"pickup_latitude"`
+	DeliveryAddress    string    `json:"delivery_address"`
+	DeliveryLongitude  float64   `json:"delivery_longitude"`
+	DeliveryLatitude   float64   `json:"delivery_latitude"`
+	DeliveryFee        int64     `json:"delivery_fee"`
+	Distance           int32     `json:"distance"`
+	Priority           int32     `json:"priority"`
+	ExpectedPickupAt   time.Time `json:"expected_pickup_at"`
+	ExpectedDeliveryAt time.Time `json:"expected_delivery_at"`
+	IsHighValue        bool      `json:"is_high_value"`
+	CreatedAt          time.Time `json:"created_at"`
+}
 
 func shouldDispatchOrderProfitSharing(order db.Order) bool {
 	if order.ReservationID.Valid {
@@ -59,6 +95,16 @@ func withProfitSharingEnqueueDedup(opts ...asynq.Option) []asynq.Option {
 	merged = append(merged, opts...)
 	merged = append(merged, asynq.Unique(profitSharingEnqueueDedupWindow))
 	return merged
+}
+
+func profitSharingResultNotificationExpiresAt(order db.ProfitSharingOrder) time.Time {
+	if order.FinishedAt.Valid {
+		return order.FinishedAt.Time.Add(profitSharingResultNotificationExpireWindow)
+	}
+	if order.CreatedAt.IsZero() {
+		return time.Now().Add(profitSharingResultNotificationExpireWindow)
+	}
+	return order.CreatedAt.Add(profitSharingResultNotificationExpireWindow)
 }
 
 // AlertLevel 告警级别
@@ -224,17 +270,16 @@ func (processor *RedisTaskProcessor) resolveOperatorProfitSharingReceiver(ctx co
 
 func (processor *RedisTaskProcessor) finishProfitSharingOrder(
 	ctx context.Context,
-	profitSharingOrderID int64,
+	paymentOrder db.PaymentOrder,
+	profitSharingOrder db.ProfitSharingOrder,
 	subMchID string,
-	transactionID string,
-	outOrderNo string,
 	description string,
 ) error {
 	if processor.ecommerceClient == nil {
 		return fmt.Errorf("ecommerce client not configured for profit sharing: %w", asynq.SkipRetry)
 	}
 
-	resp, err := processor.ecommerceClient.FinishProfitSharing(ctx, subMchID, transactionID, outOrderNo, description)
+	resp, err := processor.ecommerceClient.FinishProfitSharing(ctx, subMchID, paymentOrder.TransactionID.String, profitSharingOrder.OutOrderNo, description)
 	if err != nil {
 		return fmt.Errorf("finish profit sharing: %w", err)
 	}
@@ -245,15 +290,27 @@ func (processor *RedisTaskProcessor) finishProfitSharingOrder(
 	}
 
 	if _, err := processor.store.UpdateProfitSharingOrderToProcessing(ctx, db.UpdateProfitSharingOrderToProcessingParams{
-		ID:             profitSharingOrderID,
+		ID:             profitSharingOrder.ID,
 		SharingOrderID: sharingOrderID,
 	}); err != nil {
 		return fmt.Errorf("update profit sharing order to processing: %w", err)
 	}
+	responseStatus := ""
+	if resp != nil {
+		responseStatus = resp.Status
+	}
+	recordProfitSharingCommandAccepted(ctx, processor.store, profitSharingOrder, db.ExternalPaymentCommandTypeFinishProfitSharing, sharingOrderID.String, responseStatus)
+	if logic.NormalizeProfitSharingTerminalStatus(responseStatus) == db.ExternalPaymentTerminalStatusSuccess {
+		application, factErr := recordProfitSharingCommandResponseFact(ctx, processor.store, paymentOrder, profitSharingOrder, resp, db.ExternalPaymentCommandTypeFinishProfitSharing, nil)
+		if factErr != nil {
+			return fmt.Errorf("record finish profit sharing command response fact: %w", factErr)
+		}
+		enqueueProfitSharingPaymentFactApplication(ctx, processor.distributor, application)
+	}
 
 	log.Info().
-		Int64("profit_sharing_order_id", profitSharingOrderID).
-		Str("out_order_no", outOrderNo).
+		Int64("profit_sharing_order_id", profitSharingOrder.ID).
+		Str("out_order_no", profitSharingOrder.OutOrderNo).
 		Str("wechat_order_id", sharingOrderID.String).
 		Msg("profit sharing finish order sent")
 
@@ -262,22 +319,13 @@ func (processor *RedisTaskProcessor) finishProfitSharingOrder(
 
 // 任务类型常量
 const (
-	TaskProcessPaymentSuccess            = "payment:process_success"
 	TaskProcessRefund                    = "payment:initiate_refund"
 	TaskProcessRefundResult              = "payment:process_refund"
 	TaskProcessProfitSharing             = "payment:process_profit_sharing"
 	TaskProcessApplymentResult           = "payment:process_applyment_result"             // 进件结果处理
-	TaskProcessProfitSharingResult       = "payment:process_profit_sharing_result"        // 分账结果处理
 	TaskProcessProfitSharingReturnResult = "payment:process_profit_sharing_return_result" // 分账回退结果处理
 	TaskProcessAnomalyRefund             = "payment:process_anomaly_refund"               // 已关闭订单异常退款
 )
-
-// PaymentSuccessPayload 支付成功任务载荷
-type PaymentSuccessPayload struct {
-	PaymentOrderID int64  `json:"payment_order_id"`
-	TransactionID  string `json:"transaction_id"`
-	BusinessType   string `json:"business_type"`
-}
 
 // PayloadProcessRefund 发起退款任务载荷
 type PayloadProcessRefund struct {
@@ -324,7 +372,7 @@ type ApplymentResultPayload struct {
 	SubjectID       int64  `json:"subject_id"`       // 主体ID
 }
 
-// ProfitSharingResultPayload 分账结果处理任务载荷
+// ProfitSharingResultPayload 分账结果 outbox 载荷
 type ProfitSharingResultPayload struct {
 	ProfitSharingOrderID int64  `json:"profit_sharing_order_id"` // 分账订单ID
 	OutOrderNo           string `json:"out_order_no"`            // 商户分账单号
@@ -341,33 +389,6 @@ type ProfitSharingReturnResultPayload struct {
 	SubMchID              string `json:"sub_mchid"`
 	RefundOrderID         int64  `json:"refund_order_id"`
 	RetryCount            int    `json:"retry_count"`
-}
-
-// DistributeTaskProcessPaymentSuccess 分发支付成功处理任务
-func (distributor *RedisTaskDistributor) DistributeTaskProcessPaymentSuccess(
-	ctx context.Context,
-	payload *PaymentSuccessPayload,
-	opts ...asynq.Option,
-) error {
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("marshal payload: %w", err)
-	}
-
-	task := asynq.NewTask(TaskProcessPaymentSuccess, jsonPayload, opts...)
-	info, err := distributor.enqueueTask(ctx, task)
-	if err != nil {
-		return fmt.Errorf("enqueue task: %w", err)
-	}
-
-	log.Info().
-		Str("type", task.Type()).
-		Str("queue", info.Queue).
-		Int64("payment_order_id", payload.PaymentOrderID).
-		Str("business_type", payload.BusinessType).
-		Msg("enqueued task")
-
-	return nil
 }
 
 // DistributeTaskProcessRefund 分发发起退款任务
@@ -517,33 +538,6 @@ func (distributor *RedisTaskDistributor) DistributeTaskProcessApplymentResult(
 	return nil
 }
 
-// DistributeTaskProcessProfitSharingResult 分发分账结果处理任务
-func (distributor *RedisTaskDistributor) DistributeTaskProcessProfitSharingResult(
-	ctx context.Context,
-	payload *ProfitSharingResultPayload,
-	opts ...asynq.Option,
-) error {
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("marshal payload: %w", err)
-	}
-
-	task := asynq.NewTask(TaskProcessProfitSharingResult, jsonPayload, opts...)
-	info, err := distributor.enqueueTask(ctx, task)
-	if err != nil {
-		return fmt.Errorf("enqueue task: %w", err)
-	}
-
-	log.Info().
-		Str("type", task.Type()).
-		Str("queue", info.Queue).
-		Int64("profit_sharing_order_id", payload.ProfitSharingOrderID).
-		Str("result", payload.Result).
-		Msg("enqueued profit sharing result task")
-
-	return nil
-}
-
 // DistributeTaskProcessProfitSharingReturnResult 分发分账回退结果处理任务
 func (distributor *RedisTaskDistributor) DistributeTaskProcessProfitSharingReturnResult(
 	ctx context.Context,
@@ -566,108 +560,6 @@ func (distributor *RedisTaskDistributor) DistributeTaskProcessProfitSharingRetur
 		Str("queue", info.Queue).
 		Str("out_return_no", payload.OutReturnNo).
 		Msg("enqueued profit sharing return result task")
-
-	return nil
-}
-
-// ProcessTaskPaymentSuccess 处理支付成功任务
-func (processor *RedisTaskProcessor) ProcessTaskPaymentSuccess(ctx context.Context, task *asynq.Task) error {
-	var payload PaymentSuccessPayload
-	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
-		return fmt.Errorf("unmarshal payload: %w", asynq.SkipRetry)
-	}
-
-	log.Info().
-		Int64("payment_order_id", payload.PaymentOrderID).
-		Str("business_type", payload.BusinessType).
-		Msg("processing payment success")
-
-	result, err := processor.store.ProcessPaymentSuccessTx(ctx, db.ProcessPaymentSuccessTxParams{
-		PaymentOrderID:     payload.PaymentOrderID,
-		RiderAverageSpeed:  processor.config.RiderAverageSpeed,
-		DefaultPrepareTime: processor.config.DefaultPrepareTime,
-	})
-	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			return fmt.Errorf("payment order %d not found: %w", payload.PaymentOrderID, asynq.SkipRetry)
-		}
-		if errors.Is(err, db.ErrPaymentMissingOrderID) {
-			return fmt.Errorf("payment order %d missing order_id: %w", payload.PaymentOrderID, asynq.SkipRetry)
-		}
-		return fmt.Errorf("process payment success: %w", err)
-	}
-
-	if !result.Processed {
-		log.Info().
-			Int64("payment_order_id", payload.PaymentOrderID).
-			Msg("payment order already processed or not eligible, skip")
-		return nil
-	}
-
-	paymentOrder := result.PaymentOrder
-
-	// 订单支付成功后，需要触发分账与通知
-	if paymentOrder.BusinessType == "order" && result.OrderResult != nil {
-		processor.sendOrderPaidNotifications(ctx, *result.OrderResult)
-		if paymentOrderUsesEcommerceChannel(paymentOrder) && paymentOrderRequiresProfitSharing(paymentOrder) && paymentOrder.OrderID.Valid && shouldDispatchOrderProfitSharing(result.OrderResult.Order) {
-			// 外卖订单：发货信息上报后微信会冻结资金48小时，由微信结算事件
-			// (trade_manage_order_settlement) 在用户确认收货或 T+2 自动确认后回调触发分账。
-			// 堂食/外带普通订单不进入分账；预定关联订单仍按预定链路分账。
-			return processor.distributor.DistributeTaskProcessProfitSharing(ctx, &ProfitSharingPayload{
-				PaymentOrderID: paymentOrder.ID,
-				OrderID:        paymentOrder.OrderID.Int64,
-			})
-		}
-	}
-
-	// 预定支付成功后，创建未到店提醒任务 (预定时间后30分钟)
-	if (paymentOrder.BusinessType == "reservation" || paymentOrder.BusinessType == "reservation_addon") && paymentOrder.ReservationID.Valid {
-		// 触发分账流程（用于财务统计，即使没有分账也会创建finished状态的记录）
-		if err := processor.distributor.DistributeTaskProcessProfitSharing(ctx, &ProfitSharingPayload{
-			PaymentOrderID: paymentOrder.ID,
-			ReservationID:  paymentOrder.ReservationID.Int64,
-		}); err != nil {
-			log.Error().Err(err).Int64("payment_order_id", paymentOrder.ID).Msg("distribute reservation profit sharing task failed")
-			// 不阻断后续逻辑
-		}
-
-		res, err := processor.store.GetTableReservation(ctx, paymentOrder.ReservationID.Int64)
-		if err == nil {
-			// 计算提醒时间：预定日期 + 预定时间
-			hours := res.ReservationTime.Microseconds / 1000000 / 3600
-			minutes := (res.ReservationTime.Microseconds / 1000000 % 3600) / 60
-			alertTime := time.Date(
-				res.ReservationDate.Time.Year(), res.ReservationDate.Time.Month(), res.ReservationDate.Time.Day(),
-				int(hours), int(minutes), 0, 0, time.Local,
-			)
-
-			_ = processor.distributor.DistributeTaskReservationNoShowAlert(
-				ctx,
-				&PayloadReservationNoShowAlert{ReservationID: res.ID},
-				asynq.ProcessAt(alertTime),
-			)
-		}
-	}
-
-	if paymentOrder.BusinessType == "rider_deposit" {
-		rider, riderErr := processor.store.GetRiderByUserID(ctx, paymentOrder.UserID)
-		if riderErr != nil {
-			log.Error().Err(riderErr).
-				Int64("payment_order_id", paymentOrder.ID).
-				Int64("user_id", paymentOrder.UserID).
-				Msg("get rider for profit sharing receiver sync failed")
-			return fmt.Errorf("get rider for receiver sync: %w", riderErr)
-		}
-
-		if err := processor.profitSharingReceiverSyncService().EnsureRiderReceiver(ctx, rider); err != nil {
-			log.Error().Err(err).
-				Int64("payment_order_id", paymentOrder.ID).
-				Int64("rider_id", rider.ID).
-				Int64("user_id", rider.UserID).
-				Msg("ensure rider profit sharing receiver after deposit payment failed")
-			return fmt.Errorf("ensure rider receiver after payment success: %w", err)
-		}
-	}
 
 	return nil
 }
@@ -852,18 +744,11 @@ func (processor *RedisTaskProcessor) notifyRidersNewDelivery(ctx context.Context
 	if processor.deliveryBroadcast != nil {
 		_ = processor.deliveryBroadcast.BroadcastNewOrderNotification(ctx, *poolItem, merchant.Name)
 	} else {
-		const (
-			startDistance = 100.0
-			stepDistance  = 100.0
-			maxDistance   = 5000.0
-			minRiderCount = 3
-		)
-
 		var ridersToNotify []int64
-		seenRiders := make(map[int64]struct{}, minRiderCount)
+		seenRiders := make(map[int64]struct{}, riderDeliverySearchMinNotifyRiderCount)
 		var usedDistance float64
 
-		for distance := startDistance; distance <= maxDistance; distance += stepDistance {
+		for distance := riderDeliverySearchStartDistanceM; distance <= riderDeliverySearchMaxDistanceM; distance += riderDeliverySearchStepDistanceM {
 			riders, err := processor.store.ListNearbyRiders(ctx, db.ListNearbyRidersParams{
 				CenterLat:   pickupLat.Float64,
 				CenterLng:   pickupLng.Float64,
@@ -884,7 +769,7 @@ func (processor *RedisTaskProcessor) notifyRidersNewDelivery(ctx context.Context
 				ridersToNotify = append(ridersToNotify, rider.ID)
 			}
 
-			if len(ridersToNotify) >= minRiderCount {
+			if len(ridersToNotify) >= riderDeliverySearchMinNotifyRiderCount {
 				break
 			}
 		}
@@ -898,41 +783,56 @@ func (processor *RedisTaskProcessor) notifyRidersNewDelivery(ctx context.Context
 			return
 		}
 
-		// 回退方案（保持兼容）
-		newOrderData := map[string]any{
-			"type":                 "new_delivery_order",
-			"order_id":             order.ID,
-			"delivery_id":          delivery.ID,
-			"merchant_id":          merchant.ID,
-			"merchant_name":        merchant.Name,
-			"pickup_address":       delivery.PickupAddress,
-			"pickup_longitude":     pickupLng.Float64,
-			"pickup_latitude":      pickupLat.Float64,
-			"delivery_address":     delivery.DeliveryAddress,
-			"delivery_longitude":   deliveryLng.Float64,
-			"delivery_latitude":    deliveryLat.Float64,
-			"delivery_fee":         order.DeliveryFee,
-			"distance":             poolItem.Distance,
-			"priority":             poolItem.Priority,
-			"expected_pickup_at":   poolItem.ExpectedPickupAt,
-			"expected_delivery_at": delivery.EstimatedDeliveryAt.Time,
-			"is_high_value":        order.DeliveryFee >= 1000,
-			"created_at":           poolItem.CreatedAt,
+		notificationData := riderDeliveryOrderNotificationPayload{
+			Type:               riderNewDeliveryOrderPayloadType,
+			OrderID:            order.ID,
+			DeliveryID:         delivery.ID,
+			MerchantID:         merchant.ID,
+			MerchantName:       merchant.Name,
+			PickupAddress:      delivery.PickupAddress,
+			PickupLongitude:    pickupLng.Float64,
+			PickupLatitude:     pickupLat.Float64,
+			DeliveryAddress:    delivery.DeliveryAddress,
+			DeliveryLongitude:  deliveryLng.Float64,
+			DeliveryLatitude:   deliveryLat.Float64,
+			DeliveryFee:        order.DeliveryFee,
+			Distance:           poolItem.Distance,
+			Priority:           poolItem.Priority,
+			ExpectedPickupAt:   poolItem.ExpectedPickupAt,
+			ExpectedDeliveryAt: delivery.EstimatedDeliveryAt.Time,
+			IsHighValue:        order.DeliveryFee >= riderHighValueDeliveryFeeThreshold,
+			CreatedAt:          poolItem.CreatedAt,
 		}
-		msgData, _ := json.Marshal(newOrderData)
+		msgData, err := json.Marshal(notificationData)
+		if err != nil {
+			log.Error().Err(err).
+				Int64("order_id", order.ID).
+				Int64("delivery_id", delivery.ID).
+				Msg("marshal rider delivery notification payload failed")
+			return
+		}
+		messageTimestamp := time.Now()
 
 		for _, riderID := range ridersToNotify {
 			pushMsg := websocket.NotificationPushMessage{
-				EntityType: "rider",
+				EntityType: riderNotificationEntityType,
 				EntityID:   riderID,
 				Message: websocket.Message{
-					Type:      "delivery_pool_update",
+					Type:      riderDeliveryPoolUpdateMessageType,
 					Data:      json.RawMessage(msgData),
-					Timestamp: time.Now(),
+					Timestamp: messageTimestamp,
 				},
 			}
-			wsMessageJSON, _ := json.Marshal(pushMsg)
-			channel := fmt.Sprintf("notification:rider:%d", riderID)
+			wsMessageJSON, err := json.Marshal(pushMsg)
+			if err != nil {
+				log.Error().Err(err).
+					Int64("order_id", order.ID).
+					Int64("delivery_id", delivery.ID).
+					Int64("rider_id", riderID).
+					Msg("marshal rider websocket push message failed")
+				continue
+			}
+			channel := fmt.Sprintf("%s%d", riderNotificationChannelPrefix, riderID)
 			processor.publishWSMessage(ctx, channel, wsMessageJSON)
 		}
 
@@ -941,8 +841,8 @@ func (processor *RedisTaskProcessor) notifyRidersNewDelivery(ctx context.Context
 			Int64("delivery_id", delivery.ID).
 			Float64("search_radius_m", usedDistance).
 			Int64("delivery_fee", order.DeliveryFee).
-			Bool("is_high_value", order.DeliveryFee >= 1000).
-			Msg("✅ new delivery order pushed to nearby riders via worker fallback")
+			Bool("is_high_value", order.DeliveryFee >= riderHighValueDeliveryFeeThreshold).
+			Msg("new delivery order pushed to nearby riders via worker pubsub path")
 	}
 }
 
@@ -981,27 +881,30 @@ func (processor *RedisTaskProcessor) ProcessTaskRefundResult(ctx context.Context
 	}
 
 	paymentOrder, paymentErr := processor.store.GetPaymentOrder(ctx, refundOrder.PaymentOrderID)
-	isRiderDepositRefund := paymentErr == nil && paymentOrder.BusinessType == "rider_deposit"
-	merchantID := int64(0)
-	if paymentErr == nil {
-		resolvedMerchantID, resolveErr := processor.resolveMerchantIDByPaymentOrder(ctx, paymentOrder)
-		if resolveErr != nil {
-			log.Warn().Err(resolveErr).Int64("payment_order_id", paymentOrder.ID).Msg("failed to resolve merchant for refund alert context")
-		} else {
-			merchantID = resolvedMerchantID
-		}
+	if paymentErr != nil {
+		return fmt.Errorf("get payment order for refund result routing: %w", paymentErr)
 	}
-	riderDepositRefundService := logic.NewRiderDepositRefundService(processor.store, nil, processor.ecommerceClient)
-
+	isRiderDepositRefund := paymentOrder.BusinessType == "rider_deposit"
+	if isRiderDepositRefund {
+		return fmt.Errorf("rider deposit refund results must be applied via payment fact application: %w", asynq.SkipRetry)
+	}
+	if paymentOrderUsesEcommerceChannel(paymentOrder) && paymentOrder.OrderID.Valid && !paymentOrder.ReservationID.Valid && paymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerOrder {
+		return fmt.Errorf("order refund results must be applied via payment fact application: %w", asynq.SkipRetry)
+	}
+	if isReservationRefundPayment(paymentOrder) {
+		return fmt.Errorf("reservation refund results must be applied via payment fact application: %w", asynq.SkipRetry)
+	}
+	merchantID := int64(0)
+	resolvedMerchantID, resolveErr := processor.resolveMerchantIDByPaymentOrder(ctx, paymentOrder)
+	if resolveErr != nil {
+		log.Warn().Err(resolveErr).Int64("payment_order_id", paymentOrder.ID).Msg("failed to resolve merchant for refund alert context")
+	} else {
+		merchantID = resolvedMerchantID
+	}
 	// 根据退款状态更新
 	switch payload.RefundStatus {
 	case "SUCCESS":
-		if isRiderDepositRefund {
-			err = riderDepositRefundService.ResolveRefund(ctx, refundOrder.ID, paymentOrder, "SUCCESS", payload.RefundID)
-			if err != nil {
-				return fmt.Errorf("resolve rider deposit refund success: %w", err)
-			}
-		} else if paymentErr == nil && isReservationRefundPayment(paymentOrder) {
+		if isReservationRefundPayment(paymentOrder) {
 			if err := processor.markReservationRefundSuccess(ctx, refundOrder, paymentOrder); err != nil {
 				return fmt.Errorf("mark reservation refund success: %w", err)
 			}
@@ -1012,7 +915,7 @@ func (processor *RedisTaskProcessor) ProcessTaskRefundResult(ctx context.Context
 			}
 		}
 
-		if paymentErr == nil && !isReservationRefundPayment(paymentOrder) && !isRiderDepositRefund {
+		if !isReservationRefundPayment(paymentOrder) {
 			processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
 			if processor.distributor != nil {
 				expiresAt := time.Now().Add(7 * 24 * time.Hour)
@@ -1034,16 +937,9 @@ func (processor *RedisTaskProcessor) ProcessTaskRefundResult(ctx context.Context
 		}
 
 	case "ABNORMAL":
-		if isRiderDepositRefund {
-			err = riderDepositRefundService.ResolveRefund(ctx, refundOrder.ID, paymentOrder, "ABNORMAL", payload.RefundID)
-			if err != nil {
-				return fmt.Errorf("resolve rider deposit refund abnormal: %w", err)
-			}
-		} else {
-			_, err = processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-			if err != nil {
-				return fmt.Errorf("update refund order to failed: %w", err)
-			}
+		_, err = processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		if err != nil {
+			return fmt.Errorf("update refund order to failed: %w", err)
 		}
 		log.Warn().Str("out_refund_no", payload.OutRefundNo).Msg("refund abnormal")
 
@@ -1064,16 +960,9 @@ func (processor *RedisTaskProcessor) ProcessTaskRefundResult(ctx context.Context
 		})
 
 	case "CLOSED":
-		if isRiderDepositRefund {
-			err = riderDepositRefundService.ResolveRefund(ctx, refundOrder.ID, paymentOrder, "CLOSED", payload.RefundID)
-			if err != nil {
-				return fmt.Errorf("resolve rider deposit refund closed: %w", err)
-			}
-		} else {
-			_, err = processor.store.UpdateRefundOrderToClosed(ctx, refundOrder.ID)
-			if err != nil {
-				return fmt.Errorf("update refund order to closed: %w", err)
-			}
+		_, err = processor.store.UpdateRefundOrderToClosed(ctx, refundOrder.ID)
+		if err != nil {
+			return fmt.Errorf("update refund order to closed: %w", err)
 		}
 		log.Info().Str("out_refund_no", payload.OutRefundNo).Msg("refund closed")
 	}
@@ -1414,10 +1303,11 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 
 	// 如果不需要分账（堂食/打包），直接完结分账
 	if !needProfitSharing {
-		if _, err := processor.store.UpdateProfitSharingOrderToFinished(ctx, profitSharingOrder.ID); err != nil && !errors.Is(err, db.ErrRecordNotFound) {
-			return fmt.Errorf("update profit sharing order to finished: %w", err)
+		err := processor.finishProfitSharingOrder(ctx, paymentOrder, profitSharingOrder, paymentConfig.SubMchID, "无需分账，解冻剩余资金")
+		if err != nil {
+			return err
 		}
-		log.Info().Int64("profit_sharing_order_id", profitSharingOrder.ID).Msg("no profit sharing needed, finished locally")
+		log.Info().Int64("profit_sharing_order_id", profitSharingOrder.ID).Msg("no profit sharing needed, finish order requested")
 		return nil
 	}
 
@@ -1469,7 +1359,7 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 
 	// 如果没有接收方，直接完结
 	if len(receivers) == 0 {
-		err = processor.finishProfitSharingOrder(ctx, profitSharingOrder.ID, paymentConfig.SubMchID, paymentOrder.TransactionID.String, outOrderNo, "无可用分账接收方，解冻剩余资金")
+		err = processor.finishProfitSharingOrder(ctx, paymentOrder, profitSharingOrder, paymentConfig.SubMchID, "无可用分账接收方，解冻剩余资金")
 		if err != nil {
 			return err
 		}
@@ -1539,6 +1429,14 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 	if err != nil {
 		return fmt.Errorf("update profit sharing order to processing: %w", err)
 	}
+	recordProfitSharingCommandAccepted(ctx, processor.store, profitSharingOrder, db.ExternalPaymentCommandTypeCreateProfitSharing, resp.OrderID, resp.Status)
+	if logic.NormalizeProfitSharingTerminalStatus(resp.Status) == db.ExternalPaymentTerminalStatusSuccess {
+		application, factErr := recordProfitSharingCommandResponseFact(ctx, processor.store, paymentOrder, profitSharingOrder, resp, db.ExternalPaymentCommandTypeCreateProfitSharing, profitSharingCommandResponseAmount(profitSharingOrder))
+		if factErr != nil {
+			return fmt.Errorf("record profit sharing command response fact: %w", factErr)
+		}
+		enqueueProfitSharingPaymentFactApplication(ctx, processor.distributor, application)
+	}
 
 	log.Info().
 		Int64("profit_sharing_order_id", profitSharingOrder.ID).
@@ -1564,7 +1462,11 @@ func (processor *RedisTaskProcessor) reconcileProcessingProfitSharing(
 		return fmt.Errorf("query profit sharing: %w", err)
 	}
 
-	finalResult, failReason := resolveProfitSharingQueryFinalResult(queryResp)
+	finalResult, failReason := logic.ResolveProfitSharingQueryFinalResult(queryResp)
+	paymentFactApplication, err := recordProfitSharingQueryFact(ctx, processor.store, paymentOrder, profitSharingOrder, queryResp, finalResult, failReason)
+	if err != nil {
+		return fmt.Errorf("record profit sharing query fact: %w", err)
+	}
 	switch finalResult {
 	case "PROCESSING":
 		log.Info().
@@ -1573,63 +1475,11 @@ func (processor *RedisTaskProcessor) reconcileProcessingProfitSharing(
 			Msg("profit sharing still processing after query")
 		return nil
 	case "SUCCESS":
-		if _, err := processor.store.UpdateProfitSharingOrderToFinished(ctx, profitSharingOrder.ID); err != nil && !errors.Is(err, db.ErrRecordNotFound) {
-			return fmt.Errorf("update profit sharing order to finished: %w", err)
-		}
 	case "FAILED":
-		if _, err := processor.store.UpdateProfitSharingOrderToFailed(ctx, profitSharingOrder.ID); err != nil && !errors.Is(err, db.ErrRecordNotFound) {
-			return fmt.Errorf("update profit sharing order to failed: %w", err)
-		}
-	default:
-		return fmt.Errorf("unknown profit sharing query result: %s", finalResult)
 	}
-
-	if processor.distributor != nil {
-		_ = processor.distributor.DistributeTaskProcessProfitSharingResult(ctx, &ProfitSharingResultPayload{
-			ProfitSharingOrderID: profitSharingOrder.ID,
-			OutOrderNo:           profitSharingOrder.OutOrderNo,
-			Result:               finalResult,
-			FailReason:           failReason,
-			MerchantID:           profitSharingOrder.MerchantID,
-		}, asynq.Queue(QueueDefault))
-	}
+	enqueueProfitSharingPaymentFactApplication(ctx, processor.distributor, paymentFactApplication)
 
 	return nil
-}
-
-func resolveProfitSharingQueryFinalResult(queryResp *wechatcontracts.ProfitSharingQueryResponse) (string, string) {
-	if queryResp == nil {
-		return "PROCESSING", ""
-	}
-
-	allSuccess := strings.ToUpper(queryResp.Status) == "FINISHED"
-	hasFailed := false
-	failedReasons := make([]string, 0)
-
-	for _, receiver := range queryResp.Receivers {
-		result := strings.ToUpper(receiver.Result)
-		switch result {
-		case "SUCCESS":
-			// pass
-		case "FAILED", "CLOSED":
-			hasFailed = true
-			allSuccess = false
-			if receiver.FailReason != "" {
-				failedReasons = append(failedReasons, receiver.FailReason)
-			}
-		default:
-			allSuccess = false
-		}
-	}
-
-	switch {
-	case hasFailed:
-		return "FAILED", strings.Join(failedReasons, ";")
-	case allSuccess:
-		return "SUCCESS", ""
-	default:
-		return "PROCESSING", ""
-	}
 }
 
 // ProcessTaskInitiateRefund 处理发起退款任务
@@ -1860,6 +1710,13 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 		}
 
 		hasProcessing := false
+		pendingReturnFactApplications := make([]*db.ExternalPaymentFactApplication, 0, 2)
+		profitSharingReturnTerminalFactQueuedErr := errors.New("profit sharing return terminal fact queued")
+		enqueuePendingProfitSharingReturnFactApplications := func() {
+			for _, application := range pendingReturnFactApplications {
+				enqueueProfitSharingReturnPaymentFactApplication(ctx, processor.distributor, application)
+			}
+		}
 		processReturn := func(outReturnNo, returnAccount, description string, amount int64) error {
 			// 幂等检查：如果该 outReturnNo 已有记录，且状态为 success/processing，直接跳过
 			// 这让 ProcessTaskInitiateRefund 在被重试时能从失败点继续，而非重新全量执行
@@ -1913,6 +1770,8 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 						ReturnID: pgtype.Text{},
 					}); dbErr != nil {
 						log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as processing")
+					} else {
+						recordWorkerProfitSharingReturnCommandUnknown(ctx, processor.store, returnRecord, err)
 					}
 					if processor.distributor != nil {
 						if enqErr := processor.distributor.DistributeTaskProcessProfitSharingReturnResult(
@@ -1934,34 +1793,51 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 					return nil
 				}
 
-				if _, dbErr := processor.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
-					ID:         returnRecord.ID,
-					FailReason: pgtype.Text{String: err.Error(), Valid: true},
-				}); dbErr != nil {
-					log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as failed")
+				recordWorkerProfitSharingReturnCommandRejected(ctx, processor.store, returnRecord, err)
+				if _, factErr := recordProfitSharingReturnCommandErrorFact(ctx, processor.store, returnRecord, err); factErr != nil {
+					return factErr
 				}
-				return err
+				return fmt.Errorf("profit sharing return command rejected: %w", err)
 			}
 
 			switch returnResp.Result {
 			case "SUCCESS":
-				if returnResp.ReturnID != "" {
-					if _, dbErr := processor.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
-						ID:       returnRecord.ID,
-						ReturnID: pgtype.Text{String: returnResp.ReturnID, Valid: true},
-					}); dbErr != nil {
-						log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as processing")
+				if _, dbErr := processor.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
+					ID:       returnRecord.ID,
+					ReturnID: pgtype.Text{String: returnResp.ReturnID, Valid: returnResp.ReturnID != ""},
+				}); dbErr != nil {
+					log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as processing")
+				} else {
+					recordWorkerProfitSharingReturnCommandAccepted(ctx, processor.store, returnRecord, returnResp)
+				}
+				if _, factErr := recordProfitSharingReturnCommandResponseFact(ctx, processor.store, returnRecord, returnResp); factErr != nil {
+					return fmt.Errorf("record profit sharing return success fact: %w", factErr)
+				}
+				if processor.distributor != nil {
+					if enqErr := processor.distributor.DistributeTaskProcessProfitSharingReturnResult(
+						ctx,
+						&ProfitSharingReturnResultPayload{
+							ProfitSharingReturnID: returnRecord.ID,
+							OutReturnNo:           returnRecord.OutReturnNo,
+							OutOrderNo:            returnRecord.OutOrderNo,
+							SubMchID:              returnRecord.SubMchid,
+							RefundOrderID:         returnRecord.RefundOrderID,
+							RetryCount:            0,
+						},
+						asynq.ProcessIn(processor.config.ProfitSharingReturnRetryInterval),
+					); enqErr != nil {
+						log.Error().Err(enqErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to enqueue profit sharing return result task")
 					}
 				}
-				if _, dbErr := processor.store.UpdateProfitSharingReturnToSuccess(ctx, returnRecord.ID); dbErr != nil {
-					log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as success")
-				}
+				hasProcessing = true
 			case "PROCESSING":
 				if _, dbErr := processor.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
 					ID:       returnRecord.ID,
 					ReturnID: pgtype.Text{String: returnResp.ReturnID, Valid: returnResp.ReturnID != ""},
 				}); dbErr != nil {
 					log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as processing")
+				} else {
+					recordWorkerProfitSharingReturnCommandAccepted(ctx, processor.store, returnRecord, returnResp)
 				}
 				if processor.distributor != nil {
 					if enqErr := processor.distributor.DistributeTaskProcessProfitSharingReturnResult(
@@ -1981,21 +1857,74 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 				}
 				hasProcessing = true
 			case "FAILED":
-				if _, dbErr := processor.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
-					ID:         returnRecord.ID,
-					FailReason: pgtype.Text{String: returnResp.FailReason, Valid: returnResp.FailReason != ""},
-				}); dbErr != nil {
-					log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as failed")
+				failedErr := errors.New("profit sharing return failed")
+				if returnResp.FailReason != "" {
+					failedErr = errors.New(returnResp.FailReason)
 				}
-				return fmt.Errorf("profit sharing return failed")
+				recordWorkerProfitSharingReturnCommandRejected(ctx, processor.store, returnRecord, failedErr)
+				if _, dbErr := processor.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
+					ID:       returnRecord.ID,
+					ReturnID: pgtype.Text{String: returnResp.ReturnID, Valid: returnResp.ReturnID != ""},
+				}); dbErr != nil {
+					log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as processing")
+				}
+				if _, factErr := recordProfitSharingReturnCommandResponseFact(ctx, processor.store, returnRecord, returnResp); factErr != nil {
+					return fmt.Errorf("record profit sharing return failed fact: %w", factErr)
+				}
+				if processor.distributor != nil {
+					if enqErr := processor.distributor.DistributeTaskProcessProfitSharingReturnResult(
+						ctx,
+						&ProfitSharingReturnResultPayload{
+							ProfitSharingReturnID: returnRecord.ID,
+							OutReturnNo:           returnRecord.OutReturnNo,
+							OutOrderNo:            returnRecord.OutOrderNo,
+							SubMchID:              returnRecord.SubMchid,
+							RefundOrderID:         returnRecord.RefundOrderID,
+							RetryCount:            0,
+						},
+						asynq.ProcessIn(processor.config.ProfitSharingReturnRetryInterval),
+					); enqErr != nil {
+						log.Error().Err(enqErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to enqueue profit sharing return result task")
+					}
+				}
+				hasProcessing = true
 			default:
-				if _, dbErr := processor.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
-					ID:         returnRecord.ID,
-					FailReason: pgtype.Text{String: "unknown return result", Valid: true},
+				unknownResultErr := fmt.Errorf("unknown return result: %s", returnResp.Result)
+				log.Warn().
+					Err(unknownResultErr).
+					Int64("profit_sharing_return_id", returnRecord.ID).
+					Str("out_return_no", returnRecord.OutReturnNo).
+					Str("result", returnResp.Result).
+					Msg("profit sharing return request returned unknown result, fallback to polling")
+				if _, dbErr := processor.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
+					ID:       returnRecord.ID,
+					ReturnID: pgtype.Text{String: returnResp.ReturnID, Valid: returnResp.ReturnID != ""},
 				}); dbErr != nil {
-					log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as failed")
+					log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as processing")
+				} else {
+					recordWorkerProfitSharingReturnCommandUnknown(ctx, processor.store, returnRecord, unknownResultErr)
+					if _, factErr := recordProfitSharingReturnCommandResponseFact(ctx, processor.store, returnRecord, returnResp); factErr != nil {
+						return fmt.Errorf("record profit sharing return unknown fact: %w", factErr)
+					}
 				}
-				return fmt.Errorf("profit sharing return unknown result")
+				if processor.distributor != nil {
+					if enqErr := processor.distributor.DistributeTaskProcessProfitSharingReturnResult(
+						ctx,
+						&ProfitSharingReturnResultPayload{
+							ProfitSharingReturnID: returnRecord.ID,
+							OutReturnNo:           returnRecord.OutReturnNo,
+							OutOrderNo:            returnRecord.OutOrderNo,
+							SubMchID:              returnRecord.SubMchid,
+							RefundOrderID:         returnRecord.RefundOrderID,
+							RetryCount:            0,
+						},
+						asynq.ProcessIn(processor.config.ProfitSharingReturnRetryInterval),
+					); enqErr != nil {
+						log.Error().Err(enqErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to enqueue profit sharing return result task")
+					}
+				}
+				hasProcessing = true
+				return nil
 			}
 
 			return nil
@@ -2004,6 +1933,10 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 		if profitSharingOrder.PlatformCommission > 0 {
 			outReturnNo := fmt.Sprintf("PR%dPL", refundOrder.ID)
 			if err := processReturn(outReturnNo, processor.ecommerceClient.GetSpMchID(), "平台分账回退", profitSharingOrder.PlatformCommission); err != nil {
+				enqueuePendingProfitSharingReturnFactApplications()
+				if errors.Is(err, profitSharingReturnTerminalFactQueuedErr) {
+					return nil
+				}
 				if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
 					return errors.Join(fmt.Errorf("profit sharing return failed"), fmt.Errorf("mark refund order as failed: %w", dbErr))
 				}
@@ -2013,6 +1946,10 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 		if profitSharingOrder.OperatorCommission > 0 {
 			outReturnNo := fmt.Sprintf("PR%dOP", refundOrder.ID)
 			if err := processReturn(outReturnNo, operatorTarget.Account, "运营商分账回退", profitSharingOrder.OperatorCommission); err != nil {
+				enqueuePendingProfitSharingReturnFactApplications()
+				if errors.Is(err, profitSharingReturnTerminalFactQueuedErr) {
+					return nil
+				}
 				if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
 					return errors.Join(fmt.Errorf("profit sharing return failed"), fmt.Errorf("mark refund order as failed: %w", dbErr))
 				}
@@ -2022,13 +1959,21 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 		if profitSharingOrder.RiderAmount > 0 {
 			outReturnNo := fmt.Sprintf("PR%dRD", refundOrder.ID)
 			if err := processReturn(outReturnNo, riderOpenID, "骑手分账回退", profitSharingOrder.RiderAmount); err != nil {
+				enqueuePendingProfitSharingReturnFactApplications()
+				if errors.Is(err, profitSharingReturnTerminalFactQueuedErr) {
+					return nil
+				}
 				if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
 					return errors.Join(fmt.Errorf("profit sharing return failed"), fmt.Errorf("mark refund order as failed: %w", dbErr))
 				}
 				return fmt.Errorf("profit sharing return failed")
 			}
 		}
+		enqueuePendingProfitSharingReturnFactApplications()
 		if hasProcessing {
+			return nil
+		}
+		if len(pendingReturnFactApplications) > 0 {
 			return nil
 		}
 	}
@@ -2061,6 +2006,7 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 		}); dbErr != nil {
 			return fmt.Errorf("mark refund order as processing: %w", dbErr)
 		}
+		recordWorkerEcommerceRefundCommandAccepted(ctx, processor.store, paymentOrder, refundOrder, refundResp.RefundID)
 		log.Info().
 			Int64("refund_order_id", refundOrder.ID).
 			Str("out_refund_no", outRefundNo).
@@ -2306,6 +2252,7 @@ func (processor *RedisTaskProcessor) processReservationRefund(ctx context.Contex
 	}); err != nil {
 		return fmt.Errorf("mark reservation refund as processing: %w", err)
 	}
+	recordWorkerEcommerceRefundCommandAccepted(ctx, processor.store, paymentOrder, refundOrder, refundResp.RefundID)
 
 	log.Info().
 		Int64("refund_order_id", refundOrder.ID).
@@ -2495,6 +2442,7 @@ func (processor *RedisTaskProcessor) ProcessTaskAnomalyRefund(ctx context.Contex
 		}); dbErr != nil {
 			return fmt.Errorf("mark refund order as processing: %w", dbErr)
 		}
+		recordWorkerEcommerceRefundCommandAccepted(ctx, processor.store, paymentOrder, refundOrder, refundResp.RefundID)
 		log.Info().
 			Int64("refund_order_id", refundOrder.ID).
 			Str("refund_id", refundResp.RefundID).
@@ -2560,6 +2508,284 @@ func (processor *RedisTaskProcessor) ProcessTaskAnomalyRefund(ctx context.Contex
 	}
 
 	return nil
+}
+
+func recordWorkerEcommerceRefundCommandAccepted(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder, refundID string) {
+	paymentCommandSvc := logic.NewPaymentCommandService(store)
+	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbWorkerEcommerceRefundCommandInput(
+		paymentOrder,
+		refundOrder,
+		db.ExternalPaymentCommandStatusAccepted,
+		workerStringPtrIfNotEmpty(refundID),
+		workerEcommerceRefundCommandSnapshot(map[string]string{
+			"out_refund_no": refundOrder.OutRefundNo,
+			"refund_id":     refundID,
+		}),
+	))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("refund_order_id", refundOrder.ID).
+			Str("out_refund_no", refundOrder.OutRefundNo).
+			Msg("record worker ecommerce refund command accepted failed")
+	}
+}
+
+func recordProfitSharingCommandAccepted(ctx context.Context, store db.Store, profitSharingOrder db.ProfitSharingOrder, commandType string, sharingOrderID string, status string) {
+	paymentCommandSvc := logic.NewPaymentCommandService(store)
+	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbProfitSharingCommandInput(
+		profitSharingOrder,
+		commandType,
+		workerStringPtrIfNotEmpty(sharingOrderID),
+		workerProfitSharingCommandSnapshot(map[string]string{
+			"out_order_no": profitSharingOrder.OutOrderNo,
+			"order_id":     sharingOrderID,
+			"status":       status,
+		}),
+	))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("profit_sharing_order_id", profitSharingOrder.ID).
+			Str("out_order_no", profitSharingOrder.OutOrderNo).
+			Str("command_type", commandType).
+			Msg("record profit sharing command accepted failed")
+	}
+}
+
+func recordWorkerProfitSharingReturnCommandAccepted(ctx context.Context, store db.Store, returnRecord db.ProfitSharingReturn, returnResp *wechatcontracts.ProfitSharingReturnResponse) {
+	returnID := ""
+	result := ""
+	if returnResp != nil {
+		returnID = returnResp.ReturnID
+		result = returnResp.Result
+	}
+	paymentCommandSvc := logic.NewPaymentCommandService(store)
+	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbWorkerProfitSharingReturnCommandInput(
+		returnRecord,
+		db.ExternalPaymentCommandStatusAccepted,
+		workerStringPtrIfNotEmpty(returnID),
+		nil,
+		nil,
+		workerProfitSharingReturnCommandSnapshot(map[string]string{
+			"out_return_no": returnRecord.OutReturnNo,
+			"out_order_no":  returnRecord.OutOrderNo,
+			"return_id":     returnID,
+			"result":        result,
+		}),
+	))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("profit_sharing_return_id", returnRecord.ID).
+			Str("out_return_no", returnRecord.OutReturnNo).
+			Msg("record worker profit sharing return command accepted failed")
+	}
+}
+
+func recordWorkerProfitSharingReturnCommandUnknown(ctx context.Context, store db.Store, returnRecord db.ProfitSharingReturn, commandErr error) {
+	errorCode, errorMessage := workerPaymentCommandErrorFields(commandErr)
+	paymentCommandSvc := logic.NewPaymentCommandService(store)
+	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbWorkerProfitSharingReturnCommandInput(
+		returnRecord,
+		db.ExternalPaymentCommandStatusUnknown,
+		nil,
+		errorCode,
+		errorMessage,
+		workerProfitSharingReturnCommandSnapshot(map[string]string{
+			"out_return_no": returnRecord.OutReturnNo,
+			"out_order_no":  returnRecord.OutOrderNo,
+			"error_code":    workerStringValue(errorCode),
+			"error_message": workerStringValue(errorMessage),
+		}),
+	))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("profit_sharing_return_id", returnRecord.ID).
+			Str("out_return_no", returnRecord.OutReturnNo).
+			Msg("record worker profit sharing return command unknown failed")
+	}
+}
+
+func recordWorkerProfitSharingReturnCommandRejected(ctx context.Context, store db.Store, returnRecord db.ProfitSharingReturn, commandErr error) {
+	errorCode, errorMessage := workerPaymentCommandErrorFields(commandErr)
+	paymentCommandSvc := logic.NewPaymentCommandService(store)
+	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbWorkerProfitSharingReturnCommandInput(
+		returnRecord,
+		db.ExternalPaymentCommandStatusRejected,
+		nil,
+		errorCode,
+		errorMessage,
+		workerProfitSharingReturnCommandSnapshot(map[string]string{
+			"out_return_no": returnRecord.OutReturnNo,
+			"out_order_no":  returnRecord.OutOrderNo,
+			"error_code":    workerStringValue(errorCode),
+			"error_message": workerStringValue(errorMessage),
+		}),
+	))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("profit_sharing_return_id", returnRecord.ID).
+			Str("out_return_no", returnRecord.OutReturnNo).
+			Msg("record worker profit sharing return command rejected failed")
+	}
+}
+
+func workerStringPtrIfNotEmpty(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func workerStringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func workerPaymentCommandErrorFields(err error) (*string, *string) {
+	var wxErr *wechat.WechatPayError
+	if errors.As(err, &wxErr) {
+		return workerStringPtrIfNotEmpty(wxErr.Code), workerStringPtrIfNotEmpty(wxErr.Message)
+	}
+	if err == nil {
+		return nil, nil
+	}
+	return nil, workerStringPtrIfNotEmpty(err.Error())
+}
+
+func dbWorkerEcommerceRefundCommandInput(
+	paymentOrder db.PaymentOrder,
+	refundOrder db.RefundOrder,
+	commandStatus string,
+	externalSecondaryKey *string,
+	responseSnapshot []byte,
+) logic.RecordExternalPaymentCommandInput {
+	businessObjectType := "refund_order"
+	businessObjectID := refundOrder.ID
+	return logic.RecordExternalPaymentCommandInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilityEcommerceRefund,
+		CommandType:          db.ExternalPaymentCommandTypeCreateRefund,
+		BusinessOwner:        workerEcommerceRefundBusinessOwner(paymentOrder),
+		BusinessObjectType:   &businessObjectType,
+		BusinessObjectID:     &businessObjectID,
+		ExternalObjectType:   db.ExternalPaymentObjectRefund,
+		ExternalObjectKey:    refundOrder.OutRefundNo,
+		ExternalSecondaryKey: externalSecondaryKey,
+		CommandStatus:        commandStatus,
+		ResponseSnapshot:     responseSnapshot,
+	}
+}
+
+func dbProfitSharingCommandInput(
+	profitSharingOrder db.ProfitSharingOrder,
+	commandType string,
+	externalSecondaryKey *string,
+	responseSnapshot []byte,
+) logic.RecordExternalPaymentCommandInput {
+	businessObjectType := "profit_sharing_order"
+	businessObjectID := profitSharingOrder.ID
+	return logic.RecordExternalPaymentCommandInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilityProfitSharing,
+		CommandType:          commandType,
+		BusinessOwner:        db.ExternalPaymentBusinessOwnerProfitSharing,
+		BusinessObjectType:   &businessObjectType,
+		BusinessObjectID:     &businessObjectID,
+		ExternalObjectType:   db.ExternalPaymentObjectProfitSharing,
+		ExternalObjectKey:    profitSharingOrder.OutOrderNo,
+		ExternalSecondaryKey: externalSecondaryKey,
+		CommandStatus:        db.ExternalPaymentCommandStatusAccepted,
+		ResponseSnapshot:     responseSnapshot,
+	}
+}
+
+func dbWorkerProfitSharingReturnCommandInput(
+	returnRecord db.ProfitSharingReturn,
+	commandStatus string,
+	externalSecondaryKey *string,
+	lastErrorCode *string,
+	lastErrorMessage *string,
+	responseSnapshot []byte,
+) logic.RecordExternalPaymentCommandInput {
+	businessObjectType := "profit_sharing_return"
+	businessObjectID := returnRecord.ID
+	return logic.RecordExternalPaymentCommandInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilityProfitSharing,
+		CommandType:          db.ExternalPaymentCommandTypeCreateProfitSharingReturn,
+		BusinessOwner:        db.ExternalPaymentBusinessOwnerProfitSharing,
+		BusinessObjectType:   &businessObjectType,
+		BusinessObjectID:     &businessObjectID,
+		ExternalObjectType:   db.ExternalPaymentObjectProfitSharingReturn,
+		ExternalObjectKey:    returnRecord.OutReturnNo,
+		ExternalSecondaryKey: externalSecondaryKey,
+		CommandStatus:        commandStatus,
+		LastErrorCode:        lastErrorCode,
+		LastErrorMessage:     lastErrorMessage,
+		ResponseSnapshot:     responseSnapshot,
+	}
+}
+
+func workerEcommerceRefundBusinessOwner(paymentOrder db.PaymentOrder) string {
+	if paymentOrder.BusinessType == "reservation" || paymentOrder.BusinessType == "reservation_addon" || paymentOrder.ReservationID.Valid {
+		return db.ExternalPaymentBusinessOwnerReservation
+	}
+	return db.ExternalPaymentBusinessOwnerOrder
+}
+
+func workerEcommerceRefundCommandSnapshot(values map[string]string) []byte {
+	filtered := make(map[string]string, len(values))
+	for key, value := range values {
+		if value != "" {
+			filtered[key] = value
+		}
+	}
+	if len(filtered) == 0 {
+		return []byte(`{}`)
+	}
+	data, err := json.Marshal(filtered)
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return data
+}
+
+func workerProfitSharingCommandSnapshot(values map[string]string) []byte {
+	filtered := make(map[string]string, len(values))
+	for key, value := range values {
+		if value != "" {
+			filtered[key] = value
+		}
+	}
+	if len(filtered) == 0 {
+		return []byte(`{}`)
+	}
+	data, err := json.Marshal(filtered)
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return data
+}
+
+func workerProfitSharingReturnCommandSnapshot(values map[string]string) []byte {
+	filtered := make(map[string]string, len(values))
+	for key, value := range values {
+		if value != "" {
+			filtered[key] = value
+		}
+	}
+	if len(filtered) == 0 {
+		return []byte(`{}`)
+	}
+	data, err := json.Marshal(filtered)
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return data
 }
 
 // ==================== 进件结果处理 ====================
@@ -2775,16 +3001,7 @@ func (processor *RedisTaskProcessor) handleApplymentTerminalState(ctx context.Co
 	return nil
 }
 
-// ==================== 分账结果处理 ====================
-
-// ProcessTaskProfitSharingResult 处理分账结果任务
-// 在分账回调后异步执行：发送通知
-func (processor *RedisTaskProcessor) ProcessTaskProfitSharingResult(ctx context.Context, task *asynq.Task) error {
-	var payload ProfitSharingResultPayload
-	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
-		return fmt.Errorf("unmarshal payload: %w", asynq.SkipRetry)
-	}
-
+func (processor *RedisTaskProcessor) processProfitSharingResultPayload(ctx context.Context, payload ProfitSharingResultPayload, requireEnqueueSuccess bool) error {
 	log.Info().
 		Int64("profit_sharing_order_id", payload.ProfitSharingOrderID).
 		Str("result", payload.Result).
@@ -2810,25 +3027,37 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharingResult(ctx context.
 	switch payload.Result {
 	case "SUCCESS":
 		// 分账成功，通知商户
-		if processor.distributor != nil {
-			expiresAt := time.Now().Add(7 * 24 * time.Hour)
-			_ = processor.distributor.DistributeTaskSendNotification(ctx, &SendNotificationPayload{
-				UserID:      merchant.OwnerUserID,
-				Type:        "finance",
-				Title:       "订单收入已到账",
-				Content:     fmt.Sprintf("您有一笔订单收入%.2f元已到账", float64(profitSharingOrder.MerchantAmount)/100),
-				RelatedType: "profit_sharing",
-				RelatedID:   payload.ProfitSharingOrderID,
-				ExtraData: map[string]any{
-					"merchant_amount":     profitSharingOrder.MerchantAmount,
-					"platform_commission": profitSharingOrder.PlatformCommission,
-					"operator_commission": profitSharingOrder.OperatorCommission,
-				},
-				ExpiresAt: &expiresAt,
-			})
+		if processor.distributor == nil {
+			if requireEnqueueSuccess {
+				return fmt.Errorf("task distributor not configured for profit sharing success notification")
+			}
+			return nil
+		}
+
+		expiresAt := profitSharingResultNotificationExpiresAt(profitSharingOrder)
+		err := processor.distributor.DistributeTaskSendNotification(ctx, &SendNotificationPayload{
+			UserID:      merchant.OwnerUserID,
+			Type:        "finance",
+			Title:       "订单收入已到账",
+			Content:     fmt.Sprintf("您有一笔订单收入%.2f元已到账", float64(profitSharingOrder.MerchantAmount)/100),
+			RelatedType: "profit_sharing",
+			RelatedID:   payload.ProfitSharingOrderID,
+			ExtraData: map[string]any{
+				"merchant_amount":     profitSharingOrder.MerchantAmount,
+				"platform_commission": profitSharingOrder.PlatformCommission,
+				"operator_commission": profitSharingOrder.OperatorCommission,
+			},
+			ExpiresAt: &expiresAt,
+		}, asynq.Unique(profitSharingResultNotificationDedupWindow))
+		if err != nil && requireEnqueueSuccess {
+			return fmt.Errorf("enqueue profit sharing success notification: %w", err)
 		}
 
 	case "CLOSED", "FAILED":
+		if processor.distributor == nil && requireEnqueueSuccess {
+			return fmt.Errorf("task distributor not configured for profit sharing retry")
+		}
+
 		// 分账失败，通知运营人员
 		log.Error().
 			Int64("profit_sharing_order_id", payload.ProfitSharingOrderID).
@@ -2855,25 +3084,42 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharingResult(ctx context.
 		// 自动重试队列（指数退避延迟，避免微信端短暂异常导致永久失败）
 		if processor.distributor != nil {
 			paymentOrder, err := processor.store.GetPaymentOrder(ctx, profitSharingOrder.PaymentOrderID)
-			if err == nil {
-				retryPayload, ok := buildProfitSharingPayloadFromPaymentOrder(paymentOrder)
-				if !ok {
-					log.Warn().
-						Int64("payment_order_id", profitSharingOrder.PaymentOrderID).
-						Msg("payment order missing order_id and reservation_id, skip profit sharing retry enqueue")
-					return nil
+			if err != nil {
+				if requireEnqueueSuccess {
+					return fmt.Errorf("get payment order for profit sharing retry: %w", err)
 				}
-				// 首次从回调失败进入 → 5min 延迟；Unique 防止重复入队
-				_ = processor.distributor.DistributeTaskProcessProfitSharing(
-					ctx,
-					&retryPayload,
-					asynq.Queue(QueueCritical),
-					asynq.ProcessIn(5*time.Minute),
-					asynq.MaxRetry(5),
-					asynq.Unique(6*time.Minute),
-				)
+				return nil
+			}
+			retryPayload, ok := buildProfitSharingPayloadFromPaymentOrder(paymentOrder)
+			if !ok {
+				log.Warn().
+					Int64("payment_order_id", profitSharingOrder.PaymentOrderID).
+					Msg("payment order missing order_id and reservation_id, skip profit sharing retry enqueue")
+				return nil
+			}
+			// 首次从回调失败进入 → 5min 延迟；Unique 防止重复入队
+			err = processor.distributor.DistributeTaskProcessProfitSharing(
+				ctx,
+				&retryPayload,
+				asynq.Queue(QueueCritical),
+				asynq.ProcessIn(5*time.Minute),
+				asynq.MaxRetry(5),
+				asynq.Unique(6*time.Minute),
+			)
+			if err != nil && requireEnqueueSuccess {
+				return fmt.Errorf("enqueue profit sharing retry after result failure: %w", err)
 			}
 		}
+
+	default:
+		if !requireEnqueueSuccess {
+			log.Warn().
+				Int64("profit_sharing_order_id", payload.ProfitSharingOrderID).
+				Str("result", payload.Result).
+				Msg("unsupported profit sharing result, skip legacy result task")
+			return nil
+		}
+		return fmt.Errorf("unsupported profit sharing result %q", payload.Result)
 	}
 
 	return nil
@@ -2914,15 +3160,11 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharingReturnResult(ctx co
 			log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as processing")
 		}
 		if payload.RetryCount+1 > processor.config.ProfitSharingReturnMaxRetries {
-			if _, dbErr := processor.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
-				ID:         returnRecord.ID,
-				FailReason: pgtype.Text{String: "max retries exceeded", Valid: true},
-			}); dbErr != nil {
-				log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as failed")
-			}
-			if _, dbErr := processor.store.UpdateRefundOrderToFailed(ctx, returnRecord.RefundOrderID); dbErr != nil {
-				log.Error().Err(dbErr).Int64("refund_order_id", returnRecord.RefundOrderID).Msg("failed to mark refund order as failed")
-			}
+			log.Warn().
+				Int64("profit_sharing_return_id", returnRecord.ID).
+				Int64("refund_order_id", returnRecord.RefundOrderID).
+				Int("retry_count", payload.RetryCount+1).
+				Msg("profit sharing return result poll reached max retries; keep processing for recovery scheduler")
 			return nil
 		}
 		if processor.distributor != nil {
@@ -2944,32 +3186,27 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharingReturnResult(ctx co
 		return nil
 
 	case "SUCCESS":
-		if resp.ReturnID != "" {
-			if _, dbErr := processor.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
-				ID:       returnRecord.ID,
-				ReturnID: pgtype.Text{String: resp.ReturnID, Valid: true},
-			}); dbErr != nil {
-				log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as processing")
-			}
+		application, factErr := recordProfitSharingReturnQueryFact(ctx, processor.store, returnRecord, resp)
+		if factErr != nil {
+			return fmt.Errorf("record profit sharing return success fact: %w", factErr)
 		}
-		if _, dbErr := processor.store.UpdateProfitSharingReturnToSuccess(ctx, returnRecord.ID); dbErr != nil {
-			log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as success")
-		}
-		return processor.tryInitiateRefundAfterReturns(ctx, returnRecord.RefundOrderID)
+		enqueueProfitSharingReturnPaymentFactApplication(ctx, processor.distributor, application)
+		return nil
 
 	case "FAILED":
-		if _, dbErr := processor.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
-			ID:         returnRecord.ID,
-			FailReason: pgtype.Text{String: resp.FailReason, Valid: resp.FailReason != ""},
-		}); dbErr != nil {
-			log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as failed")
+		application, factErr := recordProfitSharingReturnQueryFact(ctx, processor.store, returnRecord, resp)
+		if factErr != nil {
+			return fmt.Errorf("record profit sharing return failed fact: %w", factErr)
 		}
-		if _, dbErr := processor.store.UpdateRefundOrderToFailed(ctx, returnRecord.RefundOrderID); dbErr != nil {
-			log.Error().Err(dbErr).Int64("refund_order_id", returnRecord.RefundOrderID).Msg("failed to mark refund order as failed")
-		}
+		enqueueProfitSharingReturnPaymentFactApplication(ctx, processor.distributor, application)
 		return nil
 	default:
-		return fmt.Errorf("unknown profit sharing return result: %s", resp.Result)
+		log.Error().
+			Int64("profit_sharing_return_id", returnRecord.ID).
+			Str("out_return_no", returnRecord.OutReturnNo).
+			Str("result", resp.Result).
+			Msg("profit sharing return query returned unsupported result")
+		return fmt.Errorf("unknown profit sharing return result: %s: %w", resp.Result, asynq.SkipRetry)
 	}
 }
 
@@ -3009,108 +3246,4 @@ func profitSharingTaskIdempotencyKey(payload ProfitSharingPayload) string {
 		return fmt.Sprintf("profit_sharing:reservation:%d", payload.ReservationID)
 	}
 	return "profit_sharing:unknown"
-}
-
-func (processor *RedisTaskProcessor) tryInitiateRefundAfterReturns(ctx context.Context, refundOrderID int64) error {
-	refundOrder, err := processor.store.GetRefundOrder(ctx, refundOrderID)
-	if err != nil {
-		return fmt.Errorf("get refund order: %w", err)
-	}
-	if refundOrder.Status != "pending" {
-		return nil
-	}
-
-	totalCount, err := processor.store.CountProfitSharingReturnsByRefundOrder(ctx, refundOrderID)
-	if err != nil {
-		return fmt.Errorf("count profit sharing returns: %w", err)
-	}
-	if totalCount == 0 {
-		return nil
-	}
-
-	successCount, err := processor.store.CountProfitSharingReturnsByRefundOrderStatus(ctx, db.CountProfitSharingReturnsByRefundOrderStatusParams{
-		RefundOrderID: refundOrderID,
-		Status:        "success",
-	})
-	if err != nil {
-		return fmt.Errorf("count profit sharing returns success: %w", err)
-	}
-	failedCount, err := processor.store.CountProfitSharingReturnsByRefundOrderStatus(ctx, db.CountProfitSharingReturnsByRefundOrderStatusParams{
-		RefundOrderID: refundOrderID,
-		Status:        "failed",
-	})
-	if err != nil {
-		return fmt.Errorf("count profit sharing returns failed: %w", err)
-	}
-	if failedCount > 0 {
-		if _, dbErr := processor.store.UpdateRefundOrderToFailed(ctx, refundOrderID); dbErr != nil {
-			log.Error().Err(dbErr).Int64("refund_order_id", refundOrderID).Msg("failed to mark refund order as failed")
-		}
-		return nil
-	}
-	if successCount < totalCount {
-		return nil
-	}
-
-	if processor.ecommerceClient == nil {
-		return fmt.Errorf("ecommerce client not configured")
-	}
-
-	paymentOrder, err := processor.store.GetPaymentOrder(ctx, refundOrder.PaymentOrderID)
-	if err != nil {
-		return fmt.Errorf("get payment order: %w", err)
-	}
-	if paymentOrder.Status != "paid" {
-		return nil
-	}
-
-	if !paymentOrder.OrderID.Valid {
-		return fmt.Errorf("payment order has no order id")
-	}
-
-	order, err := processor.store.GetOrder(ctx, paymentOrder.OrderID.Int64)
-	if err != nil {
-		return fmt.Errorf("get order: %w", err)
-	}
-
-	paymentConfig, err := processor.store.GetMerchantPaymentConfig(ctx, order.MerchantID)
-	if err != nil {
-		return fmt.Errorf("get merchant payment config: %w", err)
-	}
-	if paymentConfig.SubMchID == "" {
-		return fmt.Errorf("merchant sub mchid not configured")
-	}
-
-	reason := ""
-	if refundOrder.RefundReason.Valid {
-		reason = refundOrder.RefundReason.String
-	}
-
-	refundResp, err := createEcommerceRefundContract(ctx, processor.ecommerceClient, &wechatcontracts.EcommerceRefundRequest{
-		SubMchID:    paymentConfig.SubMchID,
-		OutTradeNo:  paymentOrder.OutTradeNo,
-		OutRefundNo: refundOrder.OutRefundNo,
-		Reason:      reason,
-		Amount: &wechatcontracts.EcommerceRefundRequestAmount{
-			Refund:   refundOrder.RefundAmount,
-			Total:    paymentOrder.Amount,
-			Currency: wechatcontracts.EcommerceRefundCurrencyCNY,
-		},
-	})
-	if err != nil {
-		logRefundRequestFailure(refundOrder.ID, paymentOrder.ID, refundOrder.OutRefundNo, paymentOrder.PaymentType, err)
-		if _, dbErr := processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
-			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
-		}
-		return fmt.Errorf("call wechat refund API: %w", err)
-	}
-
-	if _, dbErr := processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
-		ID:       refundOrder.ID,
-		RefundID: pgtype.Text{String: refundResp.RefundID, Valid: refundResp.RefundID != ""},
-	}); dbErr != nil {
-		log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
-	}
-
-	return nil
 }

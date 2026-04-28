@@ -1,7 +1,7 @@
 import { request } from '../utils/request'
 import { uploadMedia } from '../utils/media'
 import { enqueueOCRJobAndRefresh } from './ocr-jobs'
-import { ApplicationStatus } from './onboarding'
+import type { ActiveCredentialSummary, ApplicationStatus, OnboardingReviewSummary } from './onboarding'
 import type { AgreementConsentPayload } from './agreement-consent'
 import { AppError, ErrorType } from '../utils/error-handler'
 
@@ -47,6 +47,8 @@ export interface RiderApplicationResponse {
   }
   status: ApplicationStatus
   reject_reason?: string
+  review_summary?: OnboardingReviewSummary | null
+  active_credentials?: ActiveCredentialSummary[] | null
   created_at: string
   updated_at?: string
   submitted_at?: string

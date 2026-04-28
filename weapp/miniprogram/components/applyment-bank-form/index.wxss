@@ -1,34 +1,13 @@
 .bank-form {
   display: flex;
   flex-direction: column;
-  gap: var(--spacer-md);
+  gap: var(--spacer-sm);
 }
 
-.section-panel,
 .popup-panel {
   background: var(--td-bg-color-container);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-}
-
-.section-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacer-md);
-  padding: var(--spacer-md);
-}
-
-.section-top {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.section-title {
-  font-size: var(--font-size-base);
-  line-height: 1.5;
-  font-weight: 700;
-  color: var(--td-text-color-primary);
 }
 
 .tag-check-list {

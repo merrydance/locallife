@@ -103,6 +103,8 @@ func TestProcessTaskRiderApplicationIDCardOCR_UsesOCRJob(t *testing.T) {
 			require.Equal(t, "done", payload.Status)
 			require.Equal(t, "张三", payload.Name)
 			require.Equal(t, "长期", payload.ValidEnd)
+			require.NotNil(t, payload.Readiness)
+			require.Equal(t, ocrReadinessStateReady, payload.Readiness.State)
 			require.NotNil(t, payload.OCRJobID)
 			require.Equal(t, int64(130), *payload.OCRJobID)
 			return db.RiderApplication{ID: 81}, nil

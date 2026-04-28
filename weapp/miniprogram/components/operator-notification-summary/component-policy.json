@@ -1,0 +1,10 @@
+{
+  "purpose": "Display-only operator dashboard reminder summary card.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "layout",
+    "tag"
+  ],
+  "decision": "local-component",
+  "rationale": "The dashboard needs a compact domain summary card with reminder emphasis. The component owns only display rhythm and emits a single tap intent."
+}

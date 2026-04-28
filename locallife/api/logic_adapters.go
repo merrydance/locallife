@@ -55,7 +55,25 @@ func (p apiOrderEventPublisher) PublishMerchantOrderSnapshot(ctx context.Context
 		return
 	}
 
-	payload, _ := json.Marshal(newOrderResponse(order))
+	response, err := newOrderResponse(order)
+	if err != nil {
+		log.Error().Err(err).
+			Int64("merchant_id", merchantID).
+			Int64("order_id", order.ID).
+			Str("message_type", messageType).
+			Msg("build merchant order snapshot failed")
+		return
+	}
+
+	payload, err := json.Marshal(response)
+	if err != nil {
+		log.Error().Err(err).
+			Int64("merchant_id", merchantID).
+			Int64("order_id", order.ID).
+			Str("message_type", messageType).
+			Msg("marshal merchant order snapshot failed")
+		return
+	}
 	p.server.wsHub.SendToMerchant(merchantID, websocket.Message{
 		Type:      messageType,
 		Data:      payload,
@@ -394,8 +412,8 @@ func (server *Server) buildRefundOrchestrator() logic.RefundOrchestrator {
 	)
 }
 
-func (server *Server) buildProfitSharingReceiverSyncService() *logic.ProfitSharingReceiverSyncService {
-	return logic.NewProfitSharingReceiverService(server.store, server.ecommerceClient)
+func (server *Server) buildProfitSharingReceiverLifecycleService() *logic.ProfitSharingReceiverLifecycleService {
+	return logic.NewProfitSharingReceiverLifecycleService(server.store, server.ecommerceClient)
 }
 
 func (server *Server) buildOperatorStatusService() *logic.OperatorStatusService {

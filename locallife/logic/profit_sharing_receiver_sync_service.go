@@ -63,18 +63,28 @@ func (s *ProfitSharingReceiverSyncService) DeleteRiderReceiver(ctx context.Conte
 }
 
 func (s *ProfitSharingReceiverSyncService) EnsurePersonalOpenIDReceiver(ctx context.Context, openID string, receiverName string) error {
-	if s.ecommerceClient == nil {
-		return fmt.Errorf("ecommerce client not configured")
+	_, err := ensurePersonalOpenIDReceiverWithResult(ctx, s.ecommerceClient, openID, receiverName)
+	return err
+}
+
+func (s *ProfitSharingReceiverSyncService) DeletePersonalOpenIDReceiver(ctx context.Context, openID string) error {
+	_, err := deletePersonalOpenIDReceiverWithResult(ctx, s.ecommerceClient, openID)
+	return err
+}
+
+func ensurePersonalOpenIDReceiverWithResult(ctx context.Context, ecommerceClient wechat.EcommerceClientInterface, openID string, receiverName string) (bool, error) {
+	if ecommerceClient == nil {
+		return false, fmt.Errorf("ecommerce client not configured")
 	}
 
 	trimmedOpenID := strings.TrimSpace(openID)
 	if trimmedOpenID == "" {
-		return NewRequestError(http.StatusBadRequest, ErrProfitSharingReceiverOpenIDRequired)
+		return false, NewRequestError(http.StatusBadRequest, ErrProfitSharingReceiverOpenIDRequired)
 	}
 
-	appID := strings.TrimSpace(s.ecommerceClient.GetSpAppID())
+	appID := strings.TrimSpace(ecommerceClient.GetSpAppID())
 	if appID == "" {
-		return fmt.Errorf("ecommerce client sp appid not configured")
+		return false, fmt.Errorf("ecommerce client sp appid not configured")
 	}
 
 	req := &wechatcontracts.AddReceiverRequest{
@@ -84,50 +94,50 @@ func (s *ProfitSharingReceiverSyncService) EnsurePersonalOpenIDReceiver(ctx cont
 		RelationType: wechatcontracts.RelationOthers,
 	}
 	if trimmedName := strings.TrimSpace(receiverName); trimmedName != "" {
-		encryptedName, err := s.ecommerceClient.EncryptSensitiveData(trimmedName)
+		encryptedName, err := ecommerceClient.EncryptSensitiveData(trimmedName)
 		if err != nil {
-			return fmt.Errorf("encrypt receiver name: %w", err)
+			return false, fmt.Errorf("encrypt receiver name: %w", err)
 		}
 		req.EncryptedName = encryptedName
 	}
 
-	if _, err := s.ecommerceClient.AddProfitSharingReceiver(ctx, req); err != nil {
+	if _, err := ecommerceClient.AddProfitSharingReceiver(ctx, req); err != nil {
 		if isIgnorableAddReceiverError(err) {
-			return nil
+			return true, nil
 		}
-		return fmt.Errorf("add profit sharing receiver: %w", err)
+		return false, fmt.Errorf("add profit sharing receiver: %w", err)
 	}
 
-	return nil
+	return false, nil
 }
 
-func (s *ProfitSharingReceiverSyncService) DeletePersonalOpenIDReceiver(ctx context.Context, openID string) error {
-	if s.ecommerceClient == nil {
-		return fmt.Errorf("ecommerce client not configured")
+func deletePersonalOpenIDReceiverWithResult(ctx context.Context, ecommerceClient wechat.EcommerceClientInterface, openID string) (bool, error) {
+	if ecommerceClient == nil {
+		return false, fmt.Errorf("ecommerce client not configured")
 	}
 
 	trimmedOpenID := strings.TrimSpace(openID)
 	if trimmedOpenID == "" {
-		return NewRequestError(http.StatusBadRequest, ErrProfitSharingReceiverOpenIDRequired)
+		return false, NewRequestError(http.StatusBadRequest, ErrProfitSharingReceiverOpenIDRequired)
 	}
 
-	appID := strings.TrimSpace(s.ecommerceClient.GetSpAppID())
+	appID := strings.TrimSpace(ecommerceClient.GetSpAppID())
 	if appID == "" {
-		return fmt.Errorf("ecommerce client sp appid not configured")
+		return false, fmt.Errorf("ecommerce client sp appid not configured")
 	}
 
-	if _, err := s.ecommerceClient.DeleteProfitSharingReceiver(ctx, &wechatcontracts.DeleteReceiverRequest{
+	if _, err := ecommerceClient.DeleteProfitSharingReceiver(ctx, &wechatcontracts.DeleteReceiverRequest{
 		AppID:   appID,
 		Type:    wechatcontracts.ReceiverTypePersonal,
 		Account: trimmedOpenID,
 	}); err != nil {
 		if isIgnorableDeleteReceiverError(err) {
-			return nil
+			return true, nil
 		}
-		return fmt.Errorf("delete profit sharing receiver: %w", err)
+		return false, fmt.Errorf("delete profit sharing receiver: %w", err)
 	}
 
-	return nil
+	return false, nil
 }
 
 func operatorReceiverDisplayName(operator db.Operator) string {

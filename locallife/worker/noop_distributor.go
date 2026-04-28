@@ -40,8 +40,8 @@ func (NoopTaskDistributor) DistributeTaskReservationNoShowAlert(ctx context.Cont
 	return nil
 }
 
-func (NoopTaskDistributor) DistributeTaskProcessPaymentSuccess(ctx context.Context, payload *PaymentSuccessPayload, opts ...asynq.Option) error {
-	return financialTaskDistributorUnavailable("payment success")
+func (NoopTaskDistributor) DistributeTaskReservationFoodSafetyAlert(ctx context.Context, payload *PayloadReservationFoodSafetyAlert, opts ...asynq.Option) error {
+	return nil
 }
 
 func (NoopTaskDistributor) DistributeTaskProcessRefund(ctx context.Context, payload *PayloadProcessRefund, opts ...asynq.Option) error {
@@ -56,12 +56,12 @@ func (NoopTaskDistributor) DistributeTaskProcessProfitSharing(ctx context.Contex
 	return financialTaskDistributorUnavailable("profit sharing")
 }
 
-func (NoopTaskDistributor) DistributeTaskProcessApplymentResult(ctx context.Context, payload *ApplymentResultPayload, opts ...asynq.Option) error {
-	return nil
+func (NoopTaskDistributor) DistributeTaskProcessProfitSharingReceiverTarget(ctx context.Context, payload *ProfitSharingReceiverTargetPayload, opts ...asynq.Option) error {
+	return financialTaskDistributorUnavailable("profit sharing receiver target")
 }
 
-func (NoopTaskDistributor) DistributeTaskProcessProfitSharingResult(ctx context.Context, payload *ProfitSharingResultPayload, opts ...asynq.Option) error {
-	return financialTaskDistributorUnavailable("profit sharing result")
+func (NoopTaskDistributor) DistributeTaskProcessApplymentResult(ctx context.Context, payload *ApplymentResultPayload, opts ...asynq.Option) error {
+	return nil
 }
 
 func (NoopTaskDistributor) DistributeTaskProcessProfitSharingReturnResult(ctx context.Context, payload *ProfitSharingReturnResultPayload, opts ...asynq.Option) error {
@@ -80,6 +80,10 @@ func (NoopTaskDistributor) DistributeTaskSendNotification(ctx context.Context, p
 	return nil
 }
 
+func (NoopTaskDistributor) DistributeTaskOperatorPendingDispatchAlert(ctx context.Context, payload *OperatorPendingDispatchAlertPayload, opts ...asynq.Option) error {
+	return nil
+}
+
 func (NoopTaskDistributor) DistributeTaskCheckMerchantForeignObject(ctx context.Context, merchantID int64, opts ...asynq.Option) error {
 	return nil
 }
@@ -88,16 +92,20 @@ func (NoopTaskDistributor) DistributeTaskCheckRiderDamage(ctx context.Context, r
 	return nil
 }
 
-func (NoopTaskDistributor) DistributeTaskProcessAppealResult(ctx context.Context, payload *ProcessAppealResultPayload, opts ...asynq.Option) error {
-	return errors.New("appeal result task distributor unavailable without redis")
+func (NoopTaskDistributor) DistributeTaskProcessRecoveryDisputeResult(ctx context.Context, payload *ProcessRecoveryDisputeResultPayload, opts ...asynq.Option) error {
+	return errors.New("recovery dispute result task distributor unavailable without redis")
 }
 
-func (NoopTaskDistributor) DistributeTaskAutomaticAppealResolution(ctx context.Context, payload *AutomaticAppealResolutionPayload, opts ...asynq.Option) error {
-	return errors.New("automatic appeal resolution task distributor unavailable without redis")
+func (NoopTaskDistributor) DistributeTaskAutomaticRecoveryDisputeResolution(ctx context.Context, payload *AutomaticRecoveryDisputeResolutionPayload, opts ...asynq.Option) error {
+	return errors.New("automatic recovery dispute resolution task distributor unavailable without redis")
 }
 
 func (NoopTaskDistributor) DistributeTaskClaimPayout(ctx context.Context, payload *ClaimPayoutPayload, opts ...asynq.Option) error {
 	return financialTaskDistributorUnavailable("claim payout")
+}
+
+func (NoopTaskDistributor) DistributeTaskClaimBehaviorAction(ctx context.Context, payload *ClaimBehaviorActionPayload, opts ...asynq.Option) error {
+	return errors.New("claim behavior action task distributor unavailable without redis")
 }
 
 func (NoopTaskDistributor) DistributeTaskMerchantApplicationBusinessLicenseOCR(ctx context.Context, applicationID int64, mediaAssetID int64, ocrJobID int64, opts ...asynq.Option) error {
@@ -126,6 +134,10 @@ func (NoopTaskDistributor) DistributeTaskRiderApplicationIDCardOCR(ctx context.C
 
 func (NoopTaskDistributor) DistributeTaskRiderApplicationHealthCertOCR(ctx context.Context, applicationID int64, mediaAssetID int64, ocrJobID int64, opts ...asynq.Option) error {
 	return nil
+}
+
+func (NoopTaskDistributor) DistributeTaskOnboardingReview(ctx context.Context, payload *OnboardingReviewPayload, opts ...asynq.Option) error {
+	return errors.New("onboarding review task distributor unavailable without redis")
 }
 
 func (NoopTaskDistributor) DistributeTaskGroupApplicationBusinessLicenseOCR(ctx context.Context, applicationID int64, mediaAssetID int64, ocrJobID int64, opts ...asynq.Option) error {

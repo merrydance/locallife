@@ -422,14 +422,17 @@ func createReservationAddonPaymentOrder(
 	})
 	if err != nil {
 		cleanupCtx := context.Background()
-		_, _ = store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID)
-		_, _ = store.UpdateCombinedPaymentOrderToClosed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
+		if closeReservationAddonPaymentCommandAnchor(cleanupCtx, store, txResult.PaymentOrder, txResult.CombinedPaymentOrder) {
+			recordReservationAddonCombinePaymentCommandRejected(cleanupCtx, store, txResult.PaymentOrder, txResult.CombinedPaymentOrder, err)
+		}
 		return db.PaymentOrder{}, nil, fmt.Errorf("create combine order: %w", err)
 	}
 	if combineResp == nil || combineResp.PrepayID == "" {
 		cleanupCtx := context.Background()
-		_, _ = store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID)
-		_, _ = store.UpdateCombinedPaymentOrderToClosed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
+		emptyPrepayErr := errors.New("create combine order: empty prepay id")
+		if closeReservationAddonPaymentCommandAnchor(cleanupCtx, store, txResult.PaymentOrder, txResult.CombinedPaymentOrder) {
+			recordReservationAddonCombinePaymentCommandRejected(cleanupCtx, store, txResult.PaymentOrder, txResult.CombinedPaymentOrder, emptyPrepayErr)
+		}
 		return db.PaymentOrder{}, nil, fmt.Errorf("create combine order: empty prepay id")
 	}
 
@@ -448,6 +451,97 @@ func createReservationAddonPaymentOrder(
 		ID:       txResult.CombinedPaymentOrder.ID,
 		PrepayID: pgtype.Text{String: combineResp.PrepayID, Valid: true},
 	})
+	recordReservationAddonCombinePaymentCommandAccepted(ctx, store, updatedPayment, txResult.CombinedPaymentOrder, combineResp.PrepayID)
 
 	return updatedPayment, payParams, nil
+}
+
+func closeReservationAddonPaymentCommandAnchor(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, combinedPayment db.CombinedPaymentOrder) bool {
+	allClosed := true
+	if _, closeErr := store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID); closeErr != nil {
+		allClosed = false
+		log.Error().Err(closeErr).Int64("payment_order_id", paymentOrder.ID).Msg("failed to close reservation addon payment order after create rejection")
+	}
+	if _, closeErr := store.UpdateCombinedPaymentOrderToClosed(ctx, combinedPayment.ID); closeErr != nil {
+		allClosed = false
+		log.Error().Err(closeErr).Int64("combined_payment_order_id", combinedPayment.ID).Msg("failed to close reservation addon combined payment order after create rejection")
+	}
+	return allClosed
+}
+
+func recordReservationAddonCombinePaymentCommandAccepted(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, combinedPayment db.CombinedPaymentOrder, prepayID string) {
+	paymentCommandSvc := NewPaymentCommandService(store)
+	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbReservationAddonCombinePaymentCommandInput(
+		paymentOrder,
+		combinedPayment,
+		db.ExternalPaymentCommandStatusAccepted,
+		stringPtrIfNotEmpty(prepayID),
+		nil,
+		nil,
+		combinePaymentCommandSnapshot(map[string]string{
+			"combine_out_trade_no": combinedPayment.CombineOutTradeNo,
+			"out_trade_no":         paymentOrder.OutTradeNo,
+			"prepay_id":            prepayID,
+		}),
+	))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("payment_order_id", paymentOrder.ID).
+			Str("combine_out_trade_no", combinedPayment.CombineOutTradeNo).
+			Msg("record reservation addon combine payment command accepted failed")
+	}
+}
+
+func recordReservationAddonCombinePaymentCommandRejected(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, combinedPayment db.CombinedPaymentOrder, paymentErr error) {
+	paymentCommandSvc := NewPaymentCommandService(store)
+	errorCode, errorMessage := partnerPaymentCommandErrorFields(paymentErr)
+	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbReservationAddonCombinePaymentCommandInput(
+		paymentOrder,
+		combinedPayment,
+		db.ExternalPaymentCommandStatusRejected,
+		nil,
+		errorCode,
+		errorMessage,
+		combinePaymentCommandSnapshot(map[string]string{
+			"combine_out_trade_no": combinedPayment.CombineOutTradeNo,
+			"out_trade_no":         paymentOrder.OutTradeNo,
+			"error_code":           stringValue(errorCode),
+			"error_message":        stringValue(errorMessage),
+		}),
+	))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("payment_order_id", paymentOrder.ID).
+			Str("combine_out_trade_no", combinedPayment.CombineOutTradeNo).
+			Msg("record reservation addon combine payment command rejected failed")
+	}
+}
+
+func dbReservationAddonCombinePaymentCommandInput(
+	paymentOrder db.PaymentOrder,
+	combinedPayment db.CombinedPaymentOrder,
+	commandStatus string,
+	externalSecondaryKey *string,
+	lastErrorCode *string,
+	lastErrorMessage *string,
+	responseSnapshot []byte,
+) RecordExternalPaymentCommandInput {
+	businessObjectType := "payment_order"
+	businessObjectID := paymentOrder.ID
+	return RecordExternalPaymentCommandInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilityCombinePayment,
+		CommandType:          db.ExternalPaymentCommandTypeCreatePayment,
+		BusinessOwner:        db.ExternalPaymentBusinessOwnerReservation,
+		BusinessObjectType:   &businessObjectType,
+		BusinessObjectID:     &businessObjectID,
+		ExternalObjectType:   db.ExternalPaymentObjectCombinedPayment,
+		ExternalObjectKey:    combinedPayment.CombineOutTradeNo,
+		ExternalSecondaryKey: externalSecondaryKey,
+		CommandStatus:        commandStatus,
+		LastErrorCode:        lastErrorCode,
+		LastErrorMessage:     lastErrorMessage,
+		ResponseSnapshot:     responseSnapshot,
+	}
 }

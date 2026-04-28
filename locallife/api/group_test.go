@@ -38,6 +38,16 @@ func randomGroupApplicationWithData(userID int64) db.MerchantGroupApplication {
 	return app
 }
 
+func TestNewGroupApplicationResponseRejectsInvalidApplicationData(t *testing.T) {
+	app := randomGroupApplication(1)
+	app.ApplicationData = []byte(`not-json`)
+
+	_, err := newGroupApplicationResponse(app)
+
+	require.Error(t, err)
+	require.ErrorContains(t, err, "decode group application")
+}
+
 func randomGroupJoinRequest(groupID, merchantID, userID int64) db.MerchantGroupJoinRequest {
 	return db.MerchantGroupJoinRequest{
 		ID:              util.RandomInt(1, 1000),

@@ -2,6 +2,7 @@ package logic
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -434,6 +435,7 @@ func (s *RefundService) processProfitSharingRefund(
 	}
 
 	hasProcessing := false
+	pendingReturnFactApplications := make([]db.ExternalPaymentFactApplication, 0, 2)
 	processReturn := func(outReturnNo, returnAccount, description string, amount int64, delay time.Duration) error {
 		// 幂等检查：如果该 outReturnNo 已有记录，且状态为 success/processing，直接跳过
 		// 这让 processProfitSharingRefund 在被重试时能从失败点继续，而非重新全量执行
@@ -487,6 +489,8 @@ func (s *RefundService) processProfitSharingRefund(
 					ReturnID: pgtype.Text{},
 				}); dbErr != nil {
 					log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as processing")
+				} else {
+					recordProfitSharingReturnCommandUnknown(ctx, s.store, returnRecord, returnErr)
 				}
 				if s.taskScheduler != nil {
 					if schedErr := s.taskScheduler.ScheduleProfitSharingReturnResult(ctx, ProfitSharingReturnResultTaskInput{
@@ -505,34 +509,54 @@ func (s *RefundService) processProfitSharingRefund(
 				return nil
 			}
 
-			if _, dbErr := s.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
-				ID:         returnRecord.ID,
-				FailReason: pgtype.Text{String: returnErr.Error(), Valid: true},
-			}); dbErr != nil {
-				log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as failed")
+			recordProfitSharingReturnCommandRejected(ctx, s.store, returnRecord, returnErr)
+			application, factErr := recordProfitSharingReturnCommandErrorFact(ctx, s.store, returnRecord, returnErr)
+			if factErr != nil {
+				return factErr
+			}
+			if application != nil {
+				if applyErr := s.applyProfitSharingReturnFactApplication(ctx, application.ID); applyErr != nil {
+					return applyErr
+				}
 			}
 			return returnErr
 		}
 
 		switch returnResp.Result {
 		case "SUCCESS":
-			if returnResp.ReturnID != "" {
-				if _, dbErr := s.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
-					ID:       returnRecord.ID,
-					ReturnID: pgtype.Text{String: returnResp.ReturnID, Valid: true},
-				}); dbErr != nil {
-					log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as processing")
+			if _, dbErr := s.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
+				ID:       returnRecord.ID,
+				ReturnID: pgtype.Text{String: returnResp.ReturnID, Valid: returnResp.ReturnID != ""},
+			}); dbErr != nil {
+				log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as processing")
+			} else {
+				recordProfitSharingReturnCommandAccepted(ctx, s.store, returnRecord, returnResp)
+			}
+			if _, factErr := recordProfitSharingReturnCommandResponseFact(ctx, s.store, returnRecord, returnResp); factErr != nil {
+				return factErr
+			}
+			if s.taskScheduler != nil {
+				if schedErr := s.taskScheduler.ScheduleProfitSharingReturnResult(ctx, ProfitSharingReturnResultTaskInput{
+					ProfitSharingReturnID: returnRecord.ID,
+					OutReturnNo:           returnRecord.OutReturnNo,
+					OutOrderNo:            returnRecord.OutOrderNo,
+					SubMchID:              returnRecord.SubMchid,
+					RefundOrderID:         returnRecord.RefundOrderID,
+					RetryCount:            0,
+					Delay:                 delay,
+				}); schedErr != nil {
+					log.Error().Err(schedErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to enqueue profit sharing return result task")
 				}
 			}
-			if _, dbErr := s.store.UpdateProfitSharingReturnToSuccess(ctx, returnRecord.ID); dbErr != nil {
-				log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as success")
-			}
+			hasProcessing = true
 		case "PROCESSING":
 			if _, dbErr := s.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
 				ID:       returnRecord.ID,
 				ReturnID: pgtype.Text{String: returnResp.ReturnID, Valid: returnResp.ReturnID != ""},
 			}); dbErr != nil {
 				log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as processing")
+			} else {
+				recordProfitSharingReturnCommandAccepted(ctx, s.store, returnRecord, returnResp)
 			}
 			if s.taskScheduler != nil {
 				if schedErr := s.taskScheduler.ScheduleProfitSharingReturnResult(ctx, ProfitSharingReturnResultTaskInput{
@@ -549,21 +573,69 @@ func (s *RefundService) processProfitSharingRefund(
 			}
 			hasProcessing = true
 		case "FAILED":
-			if _, dbErr := s.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
-				ID:         returnRecord.ID,
-				FailReason: pgtype.Text{String: returnResp.FailReason, Valid: returnResp.FailReason != ""},
-			}); dbErr != nil {
-				log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as failed")
+			failedErr := errors.New("profit sharing return failed")
+			if returnResp.FailReason != "" {
+				failedErr = errors.New(returnResp.FailReason)
 			}
-			return fmt.Errorf("profit sharing return failed")
+			recordProfitSharingReturnCommandRejected(ctx, s.store, returnRecord, failedErr)
+			if _, dbErr := s.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
+				ID:       returnRecord.ID,
+				ReturnID: pgtype.Text{String: returnResp.ReturnID, Valid: returnResp.ReturnID != ""},
+			}); dbErr != nil {
+				log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as processing")
+			}
+			if _, factErr := recordProfitSharingReturnCommandResponseFact(ctx, s.store, returnRecord, returnResp); factErr != nil {
+				return factErr
+			}
+			if s.taskScheduler != nil {
+				if schedErr := s.taskScheduler.ScheduleProfitSharingReturnResult(ctx, ProfitSharingReturnResultTaskInput{
+					ProfitSharingReturnID: returnRecord.ID,
+					OutReturnNo:           returnRecord.OutReturnNo,
+					OutOrderNo:            returnRecord.OutOrderNo,
+					SubMchID:              returnRecord.SubMchid,
+					RefundOrderID:         returnRecord.RefundOrderID,
+					RetryCount:            0,
+					Delay:                 delay,
+				}); schedErr != nil {
+					log.Error().Err(schedErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to enqueue profit sharing return result task")
+				}
+			}
+			hasProcessing = true
 		default:
-			if _, dbErr := s.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
-				ID:         returnRecord.ID,
-				FailReason: pgtype.Text{String: "unknown return result", Valid: true},
+			unknownResultErr := fmt.Errorf("unknown return result: %s", returnResp.Result)
+			log.Warn().
+				Err(unknownResultErr).
+				Int64("profit_sharing_return_id", returnRecord.ID).
+				Str("out_return_no", returnRecord.OutReturnNo).
+				Str("result", returnResp.Result).
+				Msg("profit sharing return request returned unknown result, fallback to polling")
+
+			if _, dbErr := s.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
+				ID:       returnRecord.ID,
+				ReturnID: pgtype.Text{String: returnResp.ReturnID, Valid: returnResp.ReturnID != ""},
 			}); dbErr != nil {
-				log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as failed")
+				log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as processing")
+			} else {
+				recordProfitSharingReturnCommandUnknown(ctx, s.store, returnRecord, unknownResultErr)
+				if _, factErr := recordProfitSharingReturnCommandResponseFact(ctx, s.store, returnRecord, returnResp); factErr != nil {
+					return factErr
+				}
 			}
-			return fmt.Errorf("profit sharing return unknown result")
+			if s.taskScheduler != nil {
+				if schedErr := s.taskScheduler.ScheduleProfitSharingReturnResult(ctx, ProfitSharingReturnResultTaskInput{
+					ProfitSharingReturnID: returnRecord.ID,
+					OutReturnNo:           returnRecord.OutReturnNo,
+					OutOrderNo:            returnRecord.OutOrderNo,
+					SubMchID:              returnRecord.SubMchid,
+					RefundOrderID:         returnRecord.RefundOrderID,
+					RetryCount:            0,
+					Delay:                 delay,
+				}); schedErr != nil {
+					log.Error().Err(schedErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to enqueue profit sharing return result task")
+				}
+			}
+			hasProcessing = true
+			return nil
 		}
 
 		return nil
@@ -577,6 +649,9 @@ func (s *RefundService) processProfitSharingRefund(
 	if profitSharingOrder.PlatformCommission > 0 {
 		outReturnNo := fmt.Sprintf("PR%dPL", refundOrder.ID)
 		if returnErr := processReturn(outReturnNo, s.paymentFacade.SpMchID(), "平台分账回退", profitSharingOrder.PlatformCommission, delay); returnErr != nil {
+			if applyErr := s.applyPendingProfitSharingReturnFactApplications(ctx, pendingReturnFactApplications); applyErr != nil {
+				return fmt.Errorf("apply pending profit sharing return facts: %w", applyErr)
+			}
 			// 单方失败：记录到 profit_sharing_return 记录，整体退款单标记为 partial_failed
 			// ProfitSharingRecoveryScheduler 会扫描并重试失败的回退单
 			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
@@ -588,6 +663,9 @@ func (s *RefundService) processProfitSharingRefund(
 	if profitSharingOrder.OperatorCommission > 0 {
 		outReturnNo := fmt.Sprintf("PR%dOP", refundOrder.ID)
 		if returnErr := processReturn(outReturnNo, operator.WechatMchID.String, "运营商分账回退", profitSharingOrder.OperatorCommission, delay); returnErr != nil {
+			if applyErr := s.applyPendingProfitSharingReturnFactApplications(ctx, pendingReturnFactApplications); applyErr != nil {
+				return fmt.Errorf("apply pending profit sharing return facts: %w", applyErr)
+			}
 			// 平台回退可能已成功，不在这里标记整体为 failed；仅标记本次尝试失败
 			// 后续退款单维持 pending 等 recovery 扫描到 failed 的 profit_sharing_return 后重试
 			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
@@ -596,7 +674,16 @@ func (s *RefundService) processProfitSharingRefund(
 			return fmt.Errorf("operator profit sharing return: %w", returnErr)
 		}
 	}
+	if applyErr := s.applyPendingProfitSharingReturnFactApplications(ctx, pendingReturnFactApplications); applyErr != nil {
+		if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+		}
+		return fmt.Errorf("apply profit sharing return terminal facts: %w", applyErr)
+	}
 	if hasProcessing {
+		return nil
+	}
+	if len(pendingReturnFactApplications) > 0 {
 		return nil
 	}
 
@@ -614,6 +701,8 @@ func (s *RefundService) processProfitSharingRefund(
 	if err != nil {
 		if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
 			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+		} else {
+			recordRefundServiceEcommerceRefundCommandRejected(ctx, s.store, paymentOrder, refundOrder, err)
 		}
 		return mapEcommerceRefundCreateError(err)
 	}
@@ -624,6 +713,352 @@ func (s *RefundService) processProfitSharingRefund(
 	}); dbErr != nil {
 		log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
 	}
+	recordRefundServiceEcommerceRefundCommandAccepted(ctx, s.store, paymentOrder, refundOrder, wxRefund.RefundID)
 
 	return nil
+}
+
+func recordRefundServiceEcommerceRefundCommandAccepted(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder, refundID string) {
+	paymentCommandSvc := NewPaymentCommandService(store)
+	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbRefundServiceEcommerceRefundCommandInput(
+		paymentOrder,
+		refundOrder,
+		db.ExternalPaymentCommandStatusAccepted,
+		stringPtrIfNotEmpty(refundID),
+		nil,
+		nil,
+		refundServiceEcommerceRefundCommandSnapshot(map[string]string{
+			"out_refund_no": refundOrder.OutRefundNo,
+			"refund_id":     refundID,
+		}),
+	))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("refund_order_id", refundOrder.ID).
+			Str("out_refund_no", refundOrder.OutRefundNo).
+			Msg("record refund service ecommerce refund command accepted failed")
+	}
+}
+
+func recordProfitSharingReturnCommandAccepted(ctx context.Context, store db.Store, returnRecord db.ProfitSharingReturn, returnResp *wechatcontracts.ProfitSharingReturnResponse) {
+	returnID := ""
+	result := ""
+	if returnResp != nil {
+		returnID = returnResp.ReturnID
+		result = returnResp.Result
+	}
+	paymentCommandSvc := NewPaymentCommandService(store)
+	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbProfitSharingReturnCommandInput(
+		returnRecord,
+		db.ExternalPaymentCommandStatusAccepted,
+		stringPtrIfNotEmpty(returnID),
+		nil,
+		nil,
+		profitSharingReturnCommandSnapshot(map[string]string{
+			"out_return_no": returnRecord.OutReturnNo,
+			"out_order_no":  returnRecord.OutOrderNo,
+			"return_id":     returnID,
+			"result":        result,
+		}),
+	))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("profit_sharing_return_id", returnRecord.ID).
+			Str("out_return_no", returnRecord.OutReturnNo).
+			Msg("record profit sharing return command accepted failed")
+	}
+}
+
+func recordProfitSharingReturnCommandUnknown(ctx context.Context, store db.Store, returnRecord db.ProfitSharingReturn, commandErr error) {
+	errorCode, errorMessage := partnerPaymentCommandErrorFields(commandErr)
+	paymentCommandSvc := NewPaymentCommandService(store)
+	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbProfitSharingReturnCommandInput(
+		returnRecord,
+		db.ExternalPaymentCommandStatusUnknown,
+		nil,
+		errorCode,
+		errorMessage,
+		profitSharingReturnCommandSnapshot(map[string]string{
+			"out_return_no": returnRecord.OutReturnNo,
+			"out_order_no":  returnRecord.OutOrderNo,
+			"error_code":    stringValue(errorCode),
+			"error_message": stringValue(errorMessage),
+		}),
+	))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("profit_sharing_return_id", returnRecord.ID).
+			Str("out_return_no", returnRecord.OutReturnNo).
+			Msg("record profit sharing return command unknown failed")
+	}
+}
+
+func recordProfitSharingReturnCommandRejected(ctx context.Context, store db.Store, returnRecord db.ProfitSharingReturn, commandErr error) {
+	errorCode, errorMessage := partnerPaymentCommandErrorFields(commandErr)
+	paymentCommandSvc := NewPaymentCommandService(store)
+	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbProfitSharingReturnCommandInput(
+		returnRecord,
+		db.ExternalPaymentCommandStatusRejected,
+		nil,
+		errorCode,
+		errorMessage,
+		profitSharingReturnCommandSnapshot(map[string]string{
+			"out_return_no": returnRecord.OutReturnNo,
+			"out_order_no":  returnRecord.OutOrderNo,
+			"error_code":    stringValue(errorCode),
+			"error_message": stringValue(errorMessage),
+		}),
+	))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("profit_sharing_return_id", returnRecord.ID).
+			Str("out_return_no", returnRecord.OutReturnNo).
+			Msg("record profit sharing return command rejected failed")
+	}
+}
+
+func recordProfitSharingReturnCommandResponseFact(ctx context.Context, store db.Store, returnRecord db.ProfitSharingReturn, returnResp *wechatcontracts.ProfitSharingReturnResponse) (*db.ExternalPaymentFactApplication, error) {
+	if returnResp == nil {
+		return nil, nil
+	}
+
+	amount := returnRecord.Amount
+	if returnResp.Amount > 0 {
+		amount = returnResp.Amount
+	}
+
+	result, err := NewPaymentFactService(store).RecordExternalPaymentFact(ctx, RecordExternalPaymentFactInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilityProfitSharing,
+		FactSource:           db.ExternalPaymentFactSourceCommandResponse,
+		ExternalObjectType:   db.ExternalPaymentObjectProfitSharingReturn,
+		ExternalObjectKey:    returnRecord.OutReturnNo,
+		ExternalSecondaryKey: stringPtrIfNotEmpty(returnResp.ReturnID),
+		BusinessOwner:        stringPtrIfNotEmpty(db.ExternalPaymentBusinessOwnerProfitSharing),
+		BusinessObjectType:   stringPtrIfNotEmpty(paymentFactBusinessObjectProfitSharingReturn),
+		BusinessObjectID:     int64PtrIfNotZero(returnRecord.ID),
+		UpstreamState:        returnResp.Result,
+		TerminalStatus:       db.ExternalPaymentTerminalStatusUnknown,
+		Amount:               int64PtrIfNotZero(amount),
+		Currency:             "CNY",
+		RawResource:          profitSharingReturnCommandResponseFactResource(returnRecord, returnResp),
+		DedupeKey:            profitSharingReturnCommandResponseFactDedupeKey(returnRecord.OutReturnNo, returnResp.Result),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Application, nil
+}
+
+func recordProfitSharingReturnCommandErrorFact(ctx context.Context, store db.Store, returnRecord db.ProfitSharingReturn, commandErr error) (*db.ExternalPaymentFactApplication, error) {
+	errorCode, errorMessage := partnerPaymentCommandErrorFields(commandErr)
+	failReason := stringValue(errorMessage)
+	if failReason == "" && commandErr != nil {
+		failReason = commandErr.Error()
+	}
+
+	result, err := NewPaymentFactService(store).RecordExternalPaymentFact(ctx, RecordExternalPaymentFactInput{
+		Provider:           db.ExternalPaymentProviderWechat,
+		Channel:            db.PaymentChannelEcommerce,
+		Capability:         db.ExternalPaymentCapabilityProfitSharing,
+		FactSource:         db.ExternalPaymentFactSourceCommandResponse,
+		ExternalObjectType: db.ExternalPaymentObjectProfitSharingReturn,
+		ExternalObjectKey:  returnRecord.OutReturnNo,
+		BusinessOwner:      stringPtrIfNotEmpty(db.ExternalPaymentBusinessOwnerProfitSharing),
+		BusinessObjectType: stringPtrIfNotEmpty(paymentFactBusinessObjectProfitSharingReturn),
+		BusinessObjectID:   int64PtrIfNotZero(returnRecord.ID),
+		UpstreamState:      db.ExternalPaymentTerminalStatusFailed,
+		TerminalStatus:     db.ExternalPaymentTerminalStatusUnknown,
+		Amount:             int64PtrIfNotZero(returnRecord.Amount),
+		Currency:           "CNY",
+		RawResource:        profitSharingReturnCommandErrorFactResource(returnRecord, errorCode, errorMessage, failReason),
+		DedupeKey:          profitSharingReturnCommandResponseFactDedupeKey(returnRecord.OutReturnNo, db.ExternalPaymentCommandStatusRejected),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Application, nil
+}
+
+func (s *RefundService) applyPendingProfitSharingReturnFactApplications(ctx context.Context, applications []db.ExternalPaymentFactApplication) error {
+	for _, application := range applications {
+		if err := s.applyProfitSharingReturnFactApplication(ctx, application.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *RefundService) applyProfitSharingReturnFactApplication(ctx context.Context, applicationID int64) error {
+	_, err := NewPaymentFactService(s.store).WithRefundCreator(s.paymentFacade).ApplyExternalPaymentFactApplication(ctx, applicationID)
+	return err
+}
+
+func profitSharingReturnCommandResponseFactDedupeKey(outReturnNo, terminalStatus string) string {
+	return "wechat:command_response:ecommerce:profit_sharing_return:" + outReturnNo + ":" + terminalStatus
+}
+
+func profitSharingReturnCommandResponseFactResource(returnRecord db.ProfitSharingReturn, returnResp *wechatcontracts.ProfitSharingReturnResponse) []byte {
+	data, err := json.Marshal(map[string]any{
+		"profit_sharing_return_id": returnRecord.ID,
+		"refund_order_id":          returnRecord.RefundOrderID,
+		"out_order_no":             returnRecord.OutOrderNo,
+		"out_return_no":            returnRecord.OutReturnNo,
+		"sub_mch_id":               returnResp.SubMchID,
+		"return_id":                returnResp.ReturnID,
+		"amount":                   returnResp.Amount,
+		"result":                   returnResp.Result,
+		"fail_reason":              returnResp.FailReason,
+	})
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return data
+}
+
+func profitSharingReturnCommandErrorFactResource(returnRecord db.ProfitSharingReturn, errorCode, errorMessage *string, failReason string) []byte {
+	data, err := json.Marshal(map[string]any{
+		"profit_sharing_return_id": returnRecord.ID,
+		"refund_order_id":          returnRecord.RefundOrderID,
+		"out_order_no":             returnRecord.OutOrderNo,
+		"out_return_no":            returnRecord.OutReturnNo,
+		"amount":                   returnRecord.Amount,
+		"error_code":               stringValue(errorCode),
+		"error_message":            stringValue(errorMessage),
+		"fail_reason":              failReason,
+	})
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return data
+}
+
+func int64PtrIfNotZero(value int64) *int64 {
+	if value == 0 {
+		return nil
+	}
+	return &value
+}
+
+func dbProfitSharingReturnCommandInput(
+	returnRecord db.ProfitSharingReturn,
+	commandStatus string,
+	externalSecondaryKey *string,
+	lastErrorCode *string,
+	lastErrorMessage *string,
+	responseSnapshot []byte,
+) RecordExternalPaymentCommandInput {
+	businessObjectType := "profit_sharing_return"
+	businessObjectID := returnRecord.ID
+	return RecordExternalPaymentCommandInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilityProfitSharing,
+		CommandType:          db.ExternalPaymentCommandTypeCreateProfitSharingReturn,
+		BusinessOwner:        db.ExternalPaymentBusinessOwnerProfitSharing,
+		BusinessObjectType:   &businessObjectType,
+		BusinessObjectID:     &businessObjectID,
+		ExternalObjectType:   db.ExternalPaymentObjectProfitSharingReturn,
+		ExternalObjectKey:    returnRecord.OutReturnNo,
+		ExternalSecondaryKey: externalSecondaryKey,
+		CommandStatus:        commandStatus,
+		LastErrorCode:        lastErrorCode,
+		LastErrorMessage:     lastErrorMessage,
+		ResponseSnapshot:     responseSnapshot,
+	}
+}
+
+func profitSharingReturnCommandSnapshot(values map[string]string) []byte {
+	filtered := make(map[string]string, len(values))
+	for key, value := range values {
+		if value != "" {
+			filtered[key] = value
+		}
+	}
+	if len(filtered) == 0 {
+		return []byte(`{}`)
+	}
+	data, err := json.Marshal(filtered)
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return data
+}
+
+func recordRefundServiceEcommerceRefundCommandRejected(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder, refundErr error) {
+	paymentCommandSvc := NewPaymentCommandService(store)
+	errorCode, errorMessage := ecommerceRefundCommandErrorFields(refundErr)
+	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbRefundServiceEcommerceRefundCommandInput(
+		paymentOrder,
+		refundOrder,
+		db.ExternalPaymentCommandStatusRejected,
+		nil,
+		errorCode,
+		errorMessage,
+		refundServiceEcommerceRefundCommandSnapshot(map[string]string{
+			"out_refund_no": refundOrder.OutRefundNo,
+			"error_code":    stringValue(errorCode),
+			"error_message": stringValue(errorMessage),
+		}),
+	))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("refund_order_id", refundOrder.ID).
+			Str("out_refund_no", refundOrder.OutRefundNo).
+			Msg("record refund service ecommerce refund command rejected failed")
+	}
+}
+
+func dbRefundServiceEcommerceRefundCommandInput(
+	paymentOrder db.PaymentOrder,
+	refundOrder db.RefundOrder,
+	commandStatus string,
+	externalSecondaryKey *string,
+	lastErrorCode *string,
+	lastErrorMessage *string,
+	responseSnapshot []byte,
+) RecordExternalPaymentCommandInput {
+	businessObjectType := "refund_order"
+	businessObjectID := refundOrder.ID
+	return RecordExternalPaymentCommandInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilityEcommerceRefund,
+		CommandType:          db.ExternalPaymentCommandTypeCreateRefund,
+		BusinessOwner:        refundServiceEcommerceRefundBusinessOwner(paymentOrder),
+		BusinessObjectType:   &businessObjectType,
+		BusinessObjectID:     &businessObjectID,
+		ExternalObjectType:   db.ExternalPaymentObjectRefund,
+		ExternalObjectKey:    refundOrder.OutRefundNo,
+		ExternalSecondaryKey: externalSecondaryKey,
+		CommandStatus:        commandStatus,
+		LastErrorCode:        lastErrorCode,
+		LastErrorMessage:     lastErrorMessage,
+		ResponseSnapshot:     responseSnapshot,
+	}
+}
+
+func refundServiceEcommerceRefundBusinessOwner(paymentOrder db.PaymentOrder) string {
+	if paymentOrder.BusinessType == businessTypeReservation || paymentOrder.ReservationID.Valid {
+		return db.ExternalPaymentBusinessOwnerReservation
+	}
+	return db.ExternalPaymentBusinessOwnerOrder
+}
+
+func refundServiceEcommerceRefundCommandSnapshot(values map[string]string) []byte {
+	filtered := make(map[string]string, len(values))
+	for key, value := range values {
+		if value != "" {
+			filtered[key] = value
+		}
+	}
+	if len(filtered) == 0 {
+		return []byte(`{}`)
+	}
+	data, err := json.Marshal(filtered)
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return data
 }

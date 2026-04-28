@@ -138,6 +138,9 @@ func GrabDeliveryOrder(ctx context.Context, store db.Store, input GrabOrderInput
 		FreezeAmount: freezeAmount,
 	})
 	if err != nil {
+		if errors.Is(err, db.ErrTakeoutOrderPausedByFoodSafety) {
+			return result, NewRequestError(http.StatusForbidden, errors.New("该外卖订单因食安事件已暂停履约，请等待平台处理"))
+		}
 		return result, err
 	}
 	order = txResult.Order

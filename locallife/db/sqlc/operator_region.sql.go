@@ -136,6 +136,63 @@ func (q *Queries) GetOperatorRegion(ctx context.Context, arg GetOperatorRegionPa
 	return i, err
 }
 
+const listActiveOperatorNotificationRecipientsByRegion = `-- name: ListActiveOperatorNotificationRecipientsByRegion :many
+SELECT
+        o.id AS operator_id,
+        o.user_id,
+        or_t.region_id,
+        r.name AS region_name,
+        o.name AS operator_name,
+        o.contact_name,
+        o.contact_phone
+FROM operator_regions or_t
+JOIN operators o ON or_t.operator_id = o.id
+JOIN regions r ON r.id = or_t.region_id
+WHERE or_t.region_id = $1
+    AND or_t.status = 'active'
+    AND o.status = 'active'
+ORDER BY o.id ASC
+`
+
+type ListActiveOperatorNotificationRecipientsByRegionRow struct {
+	OperatorID   int64  `json:"operator_id"`
+	UserID       int64  `json:"user_id"`
+	RegionID     int64  `json:"region_id"`
+	RegionName   string `json:"region_name"`
+	OperatorName string `json:"operator_name"`
+	ContactName  string `json:"contact_name"`
+	ContactPhone string `json:"contact_phone"`
+}
+
+// 列出区域内可接收提醒的运营商用户
+func (q *Queries) ListActiveOperatorNotificationRecipientsByRegion(ctx context.Context, regionID int64) ([]ListActiveOperatorNotificationRecipientsByRegionRow, error) {
+	rows, err := q.db.Query(ctx, listActiveOperatorNotificationRecipientsByRegion, regionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActiveOperatorNotificationRecipientsByRegionRow{}
+	for rows.Next() {
+		var i ListActiveOperatorNotificationRecipientsByRegionRow
+		if err := rows.Scan(
+			&i.OperatorID,
+			&i.UserID,
+			&i.RegionID,
+			&i.RegionName,
+			&i.OperatorName,
+			&i.ContactName,
+			&i.ContactPhone,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAllOperatorRegions = `-- name: ListAllOperatorRegions :many
 SELECT or_t.id, or_t.operator_id, or_t.region_id, or_t.status, or_t.created_at,
     o.name as operator_name, 

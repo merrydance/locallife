@@ -1,6 +1,8 @@
 package api
 
 import (
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -182,6 +184,37 @@ func TestCasbinEnforce(t *testing.T) {
 			allowed, err := enforcer.Enforce(tc.sub, tc.obj, tc.act)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, allowed, "expected %v for %s %s %s", tc.expected, tc.sub, tc.obj, tc.act)
+		})
+	}
+}
+
+func TestProductionCasbinPolicyIncludesOperatorFoodSafetyCases(t *testing.T) {
+	_, currentFile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+
+	casbinDir := filepath.Join(filepath.Dir(currentFile), "..", "casbin")
+	enforcer, err := NewCasbinEnforcer(
+		filepath.Join(casbinDir, "model.conf"),
+		filepath.Join(casbinDir, "policy.csv"),
+	)
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name   string
+		path   string
+		method string
+	}{
+		{name: "list food safety cases", path: "/v1/operator/food-safety/cases", method: "GET"},
+		{name: "get food safety case detail", path: "/v1/operator/food-safety/cases/81", method: "GET"},
+		{name: "investigate food safety case", path: "/v1/operator/food-safety/cases/81/investigate", method: "POST"},
+		{name: "resolve food safety case", path: "/v1/operator/food-safety/cases/81/resolve", method: "POST"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			allowed, err := enforcer.Enforce("operator", tc.path, tc.method)
+			require.NoError(t, err)
+			require.True(t, allowed)
 		})
 	}
 }

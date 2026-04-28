@@ -20,6 +20,7 @@ Open the smallest relevant backend deep docs for the current task instead of rea
 - `RUNTIME_ARCHITECTURE.md`: real entrypoints, async boundaries, and takeover or high-risk path tracing
 - `WORKFLOW_AND_VALIDATION.md`: regeneration triggers, local commands, and validation depth
 - `API_CONTRACT_STANDARDS.md`: contract semantics, status codes, empty states, and route behavior
+- `ERROR_HANDLING.md`: logging boundary, public error semantics, and safe 4xx/5xx handling when a task changes error paths or caller-facing failure behavior
 - `SYSTEM_PROMPT.md`: detailed layering, middleware, DTO, and implementation-shape rules when a task truly needs the deeper contract
 - matching `domain README`: payment, media, OCR, and other high-risk domains
 
@@ -42,7 +43,10 @@ Prompt routing defaults for this area:
 - Keep the HTTP three-layer split: `api/` for transport, `logic/` for business rules, `db/sqlc/` for persistence.
 - Do not put business logic in handlers.
 - Inject dependencies through constructors or service structs. Do not add package-level runtime globals.
+- Keep modules cohesive around business capabilities. If a change needs multiple unrelated packages to mutate the same core status, stop and re-check ownership before coding.
+- Prefer a single writer for important state transitions. Other modules should call the owning capability instead of writing the same status directly through side paths.
 - Prefer small, caller-shaped interfaces over broad implementation-shaped interfaces when introducing a new abstraction boundary.
+- Do not create new `common`, `shared`, or helper-style abstractions just for speculative reuse; wait for stable demand from multiple real callers.
 - Core functions should accept `context.Context` as the first argument.
 - Do not store `context.Context` in struct fields or replace upstream context with `context.Background()` in ordinary request or task flows.
 - Use `db/sqlc/constants.go` as the single source of truth for business status constants.
@@ -51,6 +55,9 @@ Prompt routing defaults for this area:
 
 - Reuse existing request error mapping patterns instead of inventing a new API error shape.
 - Use structured logging. Do not add `fmt.Println` or other unstructured logging in request paths.
+- Do not silently swallow unexpected errors, collapse `nil` / zero-row / missing-dependency cases into implicit success, or convert infrastructure failures into vague business success without an explicit contract that says the no-op is intentional.
+- Do not ignore JSON decode or encode errors for persisted data, response-building blobs, or upstream payload fragments that affect outward behavior or stored state. Best-effort downgrade is allowed only when the contract explicitly says the field is optional and the degraded semantics are still correct.
+- Unexpected failures must propagate to one deliberate logging boundary with enough context for diagnosis. Caller-facing responses and UI-visible messages must stay stable and semantically clear without exposing raw SQL, driver, provider, or stack details.
 - Do not add fire-and-forget goroutines in request paths; if work must outlive the request, move it to a worker, scheduler, outbox, or another explicit background boundary.
 - Do not replace upstream request or task context with `context.Background()` in ordinary flows; keep cancellation, timeout, and tracing semantics threaded through the call chain.
 - Do not store `context.Context` in struct fields.
@@ -66,6 +73,7 @@ Prompt routing defaults for this area:
 ## High-Risk Change Gates
 
 - For payment, refund, callback, webhook, upload, media, OCR, or other externally triggered flows, verify the server-side trust boundary explicitly instead of relying on client-provided identity, status, or ownership fields.
+- For API and async failure-path changes, preserve the backend error-handling contract: business errors should stay machine- and caller-meaningful, infrastructure failures should still be observable in logs, and internal details should not leak into user-facing responses.
 - For money movement, status transitions, and async recovery paths, make the persistence boundary explicit. Important state changes must be backed by persisted records, idempotency guards, and auditable transitions instead of in-memory assumptions.
 - For order, delivery, reservation, and inventory work, treat conditional state updates, exclusivity rules, and release/recovery behavior as first-class concerns; do not rely on transaction-external checks or process-local state to keep them correct.
 - For worker, scheduler, outbox, retry, or callback-triggered work, define duplicate-delivery behavior and failure recovery behavior deliberately. Do not leave repeated execution semantics implicit.
@@ -86,6 +94,7 @@ Prompt routing defaults for this area:
 
 - Prefer `make test-unit` for focused validation.
 - Run `make test-integration` only when the change touches integration flows or database-backed behavior.
+- When changing backend error handling, response builders, or persisted-data decoding paths, run at least one focused failure-path regression for the affected dependency, malformed blob, or degraded branch instead of validating only the happy path.
 - Common local commands: `make server`, `make test`, `make migrateup`, `make new_migration name=<name>`.
 - Use `.github/standards/backend/BACKEND_CHANGE_SAFETY_CHECKLIST.md` before closing a non-trivial backend implementation or fix.
 - Use `.github/standards/backend/BACKEND_REVIEW_CLOSEOUT_CHECKLIST.md` after formal backend review or subsystem audit.

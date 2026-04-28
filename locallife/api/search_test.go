@@ -145,6 +145,40 @@ func TestSearchDishesAPI(t *testing.T) {
 				require.Equal(t, http.StatusInternalServerError, recorder.Code)
 			},
 		},
+		{
+			name:  "InvalidCustomizationGroupsJSON_GlobalSearch",
+			query: "?keyword=鸡&region_id=1&page_id=1&page_size=10",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					SearchDishesGlobal(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.SearchDishesGlobalRow{{
+						ID:                  util.RandomInt(1, 1000),
+						MerchantID:          merchant.ID,
+						Name:                "香辣鸡腿堡",
+						Price:               1999,
+						IsAvailable:         true,
+						IsOnline:            true,
+						SortOrder:           1,
+						PrepareTime:         12,
+						MerchantName:        merchant.Name,
+						MerchantRegionID:    merchant.RegionID,
+						MerchantIsOpen:      true,
+						CustomizationGroups: []byte(`not-json`),
+					}}, nil)
+
+				store.EXPECT().
+					CountSearchDishesGlobal(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(1), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				var resp APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.Equal(t, "internal server error", resp.Message)
+			},
+		},
 	}
 
 	for i := range testCases {
@@ -404,6 +438,40 @@ func TestSearchCombosAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+			},
+		},
+		{
+			name:  "InvalidTagsJSON",
+			query: "?keyword=套餐&region_id=1&page_id=1&page_size=10",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					SearchCombosGlobal(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.SearchCombosGlobalRow{{
+						ID:               util.RandomInt(1, 1000),
+						MerchantID:       merchant.ID,
+						Name:             "超值套餐",
+						OriginalPrice:    5000,
+						ComboPrice:       4000,
+						IsOnline:         true,
+						MerchantName:     merchant.Name,
+						MerchantRegionID: merchant.RegionID,
+						MerchantIsOpen:   true,
+						MonthlySales:     10,
+						Distance:         0,
+						Tags:             []byte(`not-json`),
+					}}, nil)
+
+				store.EXPECT().
+					CountSearchCombosGlobal(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(1), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				var resp APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.Equal(t, "internal server error", resp.Message)
 			},
 		},
 	}

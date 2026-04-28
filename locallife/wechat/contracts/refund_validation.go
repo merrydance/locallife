@@ -505,6 +505,81 @@ func ValidateDirectQueryRefundByOutRefundNoInput(outRefundNo string) (string, er
 }
 
 func ValidateDirectRefundResponse(operation string, resp *DirectRefundResponse) error {
+	return ValidateDirectRefundQueryResponse(operation, resp)
+}
+
+func ValidateDirectRefundCreateResponse(operation string, resp *DirectRefundResponse) error {
+	if resp == nil {
+		return newRefundContractError(operation, "empty wechat response")
+	}
+	if err := validateRequiredContractString(operation, "refund_id", resp.RefundID, refundIDMaxLength); err != nil {
+		return err
+	}
+	if err := validateRequiredContractString(operation, "out_refund_no", resp.OutRefundNo, refundOutRefundNoMaxLength); err != nil {
+		return err
+	}
+	if err := validateRequiredContractString(operation, "transaction_id", resp.TransactionID, refundIDMaxLength); err != nil {
+		return err
+	}
+	if err := validateRequiredContractString(operation, "out_trade_no", resp.OutTradeNo, refundOutTradeNoMaxLength); err != nil {
+		return err
+	}
+	if err := validateOptionalContractEnum(operation, "channel", resp.Channel, allowedDirectRefundChannels); err != nil {
+		return err
+	}
+	if err := validateOptionalContractString(operation, "user_received_account", resp.UserReceivedAccount, 0); err != nil {
+		return err
+	}
+	if err := validateRFC3339(operation, "success_time", resp.SuccessTime, false); err != nil {
+		return err
+	}
+	if err := validateRFC3339(operation, "create_time", resp.CreateTime, true); err != nil {
+		return err
+	}
+	if err := validateRequiredContractEnum(operation, "status", resp.Status, allowedDirectRefundStatuses); err != nil {
+		return err
+	}
+	if err := validateOptionalContractEnum(operation, "funds_account", resp.FundsAccount, allowedDirectRefundFundsAccounts); err != nil {
+		return err
+	}
+	if err := validateDirectRefundCreateAmountContract(operation, "amount", &resp.Amount); err != nil {
+		return err
+	}
+	for index, detail := range resp.PromotionDetail {
+		if strings.TrimSpace(detail.PromotionID) == "" {
+			return newRefundContractError(operation, "promotion_detail[%d].promotion_id is required", index)
+		}
+		if err := validateRequiredContractEnum(operation, fmt.Sprintf("promotion_detail[%d].scope", index), detail.Scope, allowedDirectRefundPromotionScopes); err != nil {
+			return err
+		}
+		if err := validateRequiredContractEnum(operation, fmt.Sprintf("promotion_detail[%d].type", index), detail.Type, allowedDirectRefundPromotionTypes); err != nil {
+			return err
+		}
+		if detail.Amount <= 0 {
+			return newRefundContractError(operation, "promotion_detail[%d].amount must be positive", index)
+		}
+		if detail.RefundAmount <= 0 {
+			return newRefundContractError(operation, "promotion_detail[%d].refund_amount must be positive", index)
+		}
+		for goodsIndex, goods := range detail.GoodsDetail {
+			if strings.TrimSpace(goods.MerchantGoodsID) == "" {
+				return newRefundContractError(operation, "promotion_detail[%d].goods_detail[%d].merchant_goods_id is required", index, goodsIndex)
+			}
+			if goods.UnitPrice <= 0 {
+				return newRefundContractError(operation, "promotion_detail[%d].goods_detail[%d].unit_price must be positive", index, goodsIndex)
+			}
+			if goods.RefundAmount <= 0 {
+				return newRefundContractError(operation, "promotion_detail[%d].goods_detail[%d].refund_amount must be positive", index, goodsIndex)
+			}
+			if goods.RefundQuantity <= 0 {
+				return newRefundContractError(operation, "promotion_detail[%d].goods_detail[%d].refund_quantity must be positive", index, goodsIndex)
+			}
+		}
+	}
+	return nil
+}
+
+func ValidateDirectRefundQueryResponse(operation string, resp *DirectRefundResponse) error {
 	if resp == nil {
 		return newRefundContractError(operation, "empty wechat response")
 	}
@@ -785,6 +860,48 @@ func validateDirectRefundAmountContract(operation, field string, amount *DirectR
 	return nil
 }
 
+func validateDirectRefundCreateAmountContract(operation, field string, amount *DirectRefundAmount) error {
+	if amount == nil {
+		return newRefundContractError(operation, "%s is required", field)
+	}
+	if amount.Refund <= 0 {
+		return newRefundContractError(operation, "%s.refund must be positive", field)
+	}
+	for index, from := range amount.From {
+		if err := validateRequiredContractEnum(operation, fmt.Sprintf("%s.from[%d].account", field, index), from.Account, allowedDirectRefundAmountAccounts); err != nil {
+			return err
+		}
+		if from.Amount <= 0 {
+			return newRefundContractError(operation, "%s.from[%d].amount must be positive", field, index)
+		}
+	}
+	if amount.Total < 0 {
+		return newRefundContractError(operation, "%s.total must be non-negative", field)
+	}
+	if amount.PayerTotal < 0 {
+		return newRefundContractError(operation, "%s.payer_total must be non-negative", field)
+	}
+	if amount.PayerRefund < 0 {
+		return newRefundContractError(operation, "%s.payer_refund must be non-negative", field)
+	}
+	if amount.SettlementRefund < 0 {
+		return newRefundContractError(operation, "%s.settlement_refund must be non-negative", field)
+	}
+	if amount.SettlementTotal < 0 {
+		return newRefundContractError(operation, "%s.settlement_total must be non-negative", field)
+	}
+	if amount.DiscountRefund < 0 {
+		return newRefundContractError(operation, "%s.discount_refund must be non-negative", field)
+	}
+	if trimmedCurrency := strings.TrimSpace(amount.Currency); trimmedCurrency != "" && trimmedCurrency != DirectRefundCurrencyCNY {
+		return newRefundContractError(operation, "%s.currency must be %q", field, DirectRefundCurrencyCNY)
+	}
+	if amount.RefundFee < 0 {
+		return newRefundContractError(operation, "%s.refund_fee must be non-negative", field)
+	}
+	return nil
+}
+
 func validateRefundNotifyURL(operation, raw string, disallowQuery bool) error {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -865,6 +982,17 @@ func validateRequiredContractString(operation, field, value string, maxLength in
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
 		return newRefundContractError(operation, "%s is required", field)
+	}
+	if maxLength > 0 && len(trimmed) > maxLength {
+		return newRefundContractError(operation, "%s must not exceed %d characters", field, maxLength)
+	}
+	return nil
+}
+
+func validateOptionalContractString(operation, field, value string, maxLength int) error {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
 	}
 	if maxLength > 0 && len(trimmed) > maxLength {
 		return newRefundContractError(operation, "%s must not exceed %d characters", field, maxLength)

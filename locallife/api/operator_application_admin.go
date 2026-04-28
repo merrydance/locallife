@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -227,7 +228,11 @@ func (server *Server) getOperatorApplicationDetailAdmin(ctx *gin.Context) {
 	}
 
 	regionName := server.getRegionName(ctx, app.RegionID)
-	resp := newOperatorApplicationResponse(app, regionName)
+	resp, err := newOperatorApplicationResponse(app, regionName)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
 	applicantName, applicantPhone := server.loadOperatorApplicationApplicant(ctx, app.UserID)
 
 	type adminOperatorApplicationDetailResponse struct {
@@ -319,7 +324,6 @@ func buildAdminOperatorStatusResponse(operator db.Operator) adminOperatorStatusR
 
 func (server *Server) mapOperatorStatusUpdateError(ctx *gin.Context, operator db.Operator, targetStatus string, err error) (int, ErrorResponse) {
 	var conflictErr *logic.OperatorActiveRegionConflictError
-	var receiverSyncErr *logic.OperatorReceiverSyncError
 
 	switch {
 	case errors.Is(err, logic.ErrUnsupportedOperatorStatus):
@@ -333,13 +337,6 @@ func (server *Server) mapOperatorStatusUpdateError(ctx *gin.Context, operator db
 			Str("target_status", targetStatus).
 			Msg("operator status update rejected because receiver openid is missing")
 		return http.StatusBadRequest, errorResponse(err)
-	case errors.As(err, &receiverSyncErr):
-		log.Error().Err(err).
-			Int64("operator_id", operator.ID).
-			Int64("user_id", operator.UserID).
-			Str("target_status", targetStatus).
-			Msg("operator status updated but receiver sync failed")
-		return http.StatusBadGateway, errorResponse(err)
 	default:
 		log.Error().Err(err).
 			Int64("operator_id", operator.ID).
@@ -555,25 +552,6 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 	_ = endDate.Scan(end)
 
 	if txStore, ok := server.store.(operatorApprovalTxStore); ok {
-		receiverSync := server.buildProfitSharingReceiverSyncService()
-		receiverName := contactName
-		if receiverName == "" {
-			receiverName = operatorName
-		}
-
-		if err := receiverSync.EnsurePersonalOpenIDReceiver(ctx, strings.TrimSpace(user.WechatOpenid), receiverName); err != nil {
-			log.Error().Err(err).
-				Int64("application_id", app.ID).
-				Int64("user_id", app.UserID).
-				Msg("ensure operator profit sharing receiver failed before approval transaction")
-			if errors.Is(err, logic.ErrProfitSharingReceiverOpenIDRequired) {
-				ctx.JSON(http.StatusBadRequest, errorResponse(err))
-				return
-			}
-			ctx.JSON(http.StatusBadGateway, errorResponse(err))
-			return
-		}
-
 		result, txErr := txStore.ApproveOperatorApplicationTx(ctx, db.ApproveOperatorApplicationTxParams{
 			ApplicationID:     app.ID,
 			ReviewedBy:        pgtype.Int8{Int64: authPayload.UserID, Valid: true},
@@ -585,20 +563,17 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 			ContractYears:     years,
 		})
 		if txErr != nil {
-			rollbackCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			defer cancel()
-			if rollbackErr := receiverSync.DeletePersonalOpenIDReceiver(rollbackCtx, strings.TrimSpace(user.WechatOpenid)); rollbackErr != nil {
-				log.Error().Err(rollbackErr).
-					Int64("application_id", app.ID).
-					Int64("user_id", app.UserID).
-					Msg("rollback operator profit sharing receiver failed after approval transaction error")
-			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, txErr))
 			return
 		}
 
+		if err := server.recordApprovedOperatorReceiverIntent(ctx, result.Operator); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
 		regionName := server.getRegionName(ctx, result.Application.RegionID)
-		ctx.JSON(http.StatusOK, newOperatorApplicationResponse(result.Application, regionName))
+		server.writeOperatorApplicationResponse(ctx, http.StatusOK, result.Application, regionName)
 		return
 	}
 
@@ -667,21 +642,26 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 		}
 	}
 
-	if err := server.buildProfitSharingReceiverSyncService().EnsureOperatorReceiver(ctx, operator); err != nil {
-		log.Error().Err(err).
-			Int64("operator_id", operator.ID).
-			Int64("user_id", operator.UserID).
-			Msg("ensure operator profit sharing receiver failed after approval")
-		if errors.Is(err, logic.ErrProfitSharingReceiverOpenIDRequired) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(err))
-			return
-		}
-		ctx.JSON(http.StatusBadGateway, errorResponse(err))
+	if err := server.recordApprovedOperatorReceiverIntent(ctx, operator); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
 	regionName := server.getRegionName(ctx, approved.RegionID)
-	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(approved, regionName))
+	server.writeOperatorApplicationResponse(ctx, http.StatusOK, approved, regionName)
+}
+
+func (server *Server) recordApprovedOperatorReceiverIntent(ctx *gin.Context, operator db.Operator) error {
+	_, err := server.buildProfitSharingReceiverLifecycleService().RequestOperatorReceiverPresent(ctx, operator)
+	if err != nil {
+		log.Error().Err(err).
+			Int64("operator_id", operator.ID).
+			Int64("user_id", operator.UserID).
+			Msg("record operator profit sharing receiver target intent failed after approval")
+		return fmt.Errorf("record operator receiver target intent: %w", err)
+	}
+
+	return nil
 }
 
 func (server *Server) rejectOperatorApplicationAdmin(ctx *gin.Context) {
@@ -720,5 +700,5 @@ func (server *Server) rejectOperatorApplicationAdmin(ctx *gin.Context) {
 	}
 
 	regionName := server.getRegionName(ctx, rejected.RegionID)
-	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(rejected, regionName))
+	server.writeOperatorApplicationResponse(ctx, http.StatusOK, rejected, regionName)
 }

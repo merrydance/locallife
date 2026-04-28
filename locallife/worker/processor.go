@@ -35,16 +35,20 @@ type TaskProcessor interface {
 	ProcessTaskReservationPaymentTimeout(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskReservationNoShowAlert 处理预定未到店提醒任务
 	ProcessTaskReservationNoShowAlert(ctx context.Context, task *asynq.Task) error
-	// ProcessTaskPaymentSuccess 处理支付成功任务
-	ProcessTaskPaymentSuccess(ctx context.Context, task *asynq.Task) error
+	// ProcessTaskReservationFoodSafetyAlert 处理食安停业预订提醒任务
+	ProcessTaskReservationFoodSafetyAlert(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskRefundResult 处理退款结果任务
 	ProcessTaskRefundResult(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskProfitSharing 处理分账任务
 	ProcessTaskProfitSharing(ctx context.Context, task *asynq.Task) error
+	// ProcessTaskProfitSharingReceiverTarget 处理分账接收方生命周期同步任务
+	ProcessTaskProfitSharingReceiverTarget(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskProfitSharingReturnResult 处理分账回退结果任务
 	ProcessTaskProfitSharingReturnResult(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskClaimPayout 处理索赔平台赔付任务
 	ProcessTaskClaimPayout(ctx context.Context, task *asynq.Task) error
+	// ProcessTaskPaymentFactApplication 处理外部支付事实应用任务
+	ProcessTaskPaymentFactApplication(ctx context.Context, task *asynq.Task) error
 }
 
 type RedisTaskProcessor struct {
@@ -59,6 +63,10 @@ type RedisTaskProcessor struct {
 	deliveryBroadcast   *logic.DeliveryBroadcastLogic
 	mediaRegistry       *media.Registry
 	ocrService          *ocr.Service
+	onboardingReviewSvc *logic.OnboardingReviewService
+	credentialGovSvc    *logic.CredentialGovernanceService
+	merchantReviewSvc   *logic.MerchantOnboardingReviewService
+	riderReviewSvc      *logic.RiderOnboardingReviewService
 	printerClient       cloudprint.Client
 	config              util.Config
 	roleCache           map[int64]cachedUserRoles
@@ -127,22 +135,28 @@ func NewRedisTaskProcessor(
 	if err != nil {
 		log.Fatal().Err(err).Msg("cannot create food permit ocr service for task processor")
 	}
+	onboardingReviewSvc := logic.NewOnboardingReviewService(store)
+	credentialGovSvc := logic.NewCredentialGovernanceService(store)
 
 	return &RedisTaskProcessor{
-		server:            server,
-		store:             store,
-		distributor:       distributor,
-		wechatClient:      wechatClient,
-		transferClient:    nil,
-		ecommerceClient:   ecommerceClient,
-		pubSubPublisher:   pubSubPublisher,
-		deliveryBroadcast: deliveryBroadcast,
-		mediaRegistry:     mediaRegistry,
-		ocrService:        ocrService,
-		printerClient:     cloudprint.NewFeieyunClientFromConfig(config),
-		config:            config,
-		roleCache:         make(map[int64]cachedUserRoles),
-		roleCacheTTL:      1 * time.Minute,
+		server:              server,
+		store:               store,
+		distributor:         distributor,
+		wechatClient:        wechatClient,
+		transferClient:      nil,
+		ecommerceClient:     ecommerceClient,
+		pubSubPublisher:     pubSubPublisher,
+		deliveryBroadcast:   deliveryBroadcast,
+		mediaRegistry:       mediaRegistry,
+		ocrService:          ocrService,
+		onboardingReviewSvc: onboardingReviewSvc,
+		credentialGovSvc:    credentialGovSvc,
+		merchantReviewSvc:   logic.NewMerchantOnboardingReviewService(store, onboardingReviewSvc, credentialGovSvc),
+		riderReviewSvc:      logic.NewRiderOnboardingReviewService(store, onboardingReviewSvc, credentialGovSvc),
+		printerClient:       cloudprint.NewFeieyunClientFromConfig(config),
+		config:              config,
+		roleCache:           make(map[int64]cachedUserRoles),
+		roleCacheTTL:        1 * time.Minute,
 	}
 }
 
@@ -170,16 +184,22 @@ func NewTestTaskProcessor(
 		store = testStoreWithNoopPlatformAlertPersistence{Store: store}
 	}
 	ocrService, _ := newMerchantApplicationOCRService(store, nil, wechatClient, util.Config{})
+	onboardingReviewSvc := logic.NewOnboardingReviewService(store)
+	credentialGovSvc := logic.NewCredentialGovernanceService(store)
 	p := &RedisTaskProcessor{
-		store:           store,
-		distributor:     distributor,
-		wechatClient:    wechatClient,
-		ecommerceClient: ecommerceClient,
-		ocrService:      ocrService,
-		printerClient:   nil,
-		pubSubPublisher: websocket.NoopPublisher{},
-		roleCache:       make(map[int64]cachedUserRoles),
-		roleCacheTTL:    1 * time.Minute,
+		store:               store,
+		distributor:         distributor,
+		wechatClient:        wechatClient,
+		ecommerceClient:     ecommerceClient,
+		ocrService:          ocrService,
+		onboardingReviewSvc: onboardingReviewSvc,
+		credentialGovSvc:    credentialGovSvc,
+		merchantReviewSvc:   logic.NewMerchantOnboardingReviewService(store, onboardingReviewSvc, credentialGovSvc),
+		riderReviewSvc:      logic.NewRiderOnboardingReviewService(store, onboardingReviewSvc, credentialGovSvc),
+		printerClient:       nil,
+		pubSubPublisher:     websocket.NoopPublisher{},
+		roleCache:           make(map[int64]cachedUserRoles),
+		roleCacheTTL:        1 * time.Minute,
 	}
 	if len(paymentClient) > 0 {
 		p.directPaymentClient = paymentClient[0]
@@ -223,11 +243,13 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskReservationPaymentTimeout, processor.ProcessTaskReservationPaymentTimeout)
 	mux.HandleFunc(TaskOrderPaymentTimeout, processor.ProcessTaskOrderPaymentTimeout)
 	mux.HandleFunc(TaskReservationNoShowAlert, processor.ProcessTaskReservationNoShowAlert)
-	mux.HandleFunc(TaskProcessPaymentSuccess, processor.ProcessTaskPaymentSuccess)
+	mux.HandleFunc(TaskReservationFoodSafetyAlert, processor.ProcessTaskReservationFoodSafetyAlert)
 	mux.HandleFunc(TaskProcessRefund, processor.ProcessTaskInitiateRefund)
 	mux.HandleFunc(TaskProcessRefundResult, processor.ProcessTaskRefundResult)
 	mux.HandleFunc(TaskProcessProfitSharing, processor.ProcessTaskProfitSharing)
+	mux.HandleFunc(TaskProcessProfitSharingReceiverTarget, processor.ProcessTaskProfitSharingReceiverTarget)
 	mux.HandleFunc(TaskSendNotification, processor.ProcessTaskSendNotification)
+	mux.HandleFunc(TaskOperatorPendingDispatchAlert, processor.ProcessTaskOperatorPendingDispatchAlert)
 	mux.HandleFunc(TaskProcessProfitSharingReturnResult, processor.ProcessTaskProfitSharingReturnResult)
 	mux.HandleFunc(TaskProcessMerchantWithdrawResult, processor.ProcessTaskMerchantWithdrawResult)
 	mux.HandleFunc(TaskProcessMerchantCancelWithdrawResult, processor.ProcessTaskMerchantCancelWithdrawResult)
@@ -238,16 +260,18 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TypeCheckMerchantForeignObject, processor.HandleCheckMerchantForeignObject)
 	mux.HandleFunc(TypeCheckRiderDamage, processor.HandleCheckRiderDamage)
 
-	// 申诉处理任务
-	mux.HandleFunc(TaskAutomaticAppealResolution, processor.ProcessTaskAutomaticAppealResolution)
-	mux.HandleFunc(TaskProcessAppealResult, processor.ProcessTaskProcessAppealResult)
+	// 追偿争议处理任务
+	mux.HandleFunc(TaskAutomaticRecoveryDisputeResolution, processor.ProcessTaskAutomaticRecoveryDisputeResolution)
+	mux.HandleFunc(TaskProcessRecoveryDisputeResult, processor.ProcessTaskRecoveryDisputeResult)
 
 	// 索赔退款任务
+	mux.HandleFunc(TaskClaimBehaviorAction, processor.ProcessTaskClaimBehaviorAction)
 	mux.HandleFunc(TaskClaimPayout, processor.ProcessTaskClaimPayout)
 
-	// 进件/分账结果处理任务
+	// 进件结果和支付事实/outbox 处理任务
 	mux.HandleFunc(TaskProcessApplymentResult, processor.ProcessTaskApplymentResult)
-	mux.HandleFunc(TaskProcessProfitSharingResult, processor.ProcessTaskProfitSharingResult)
+	mux.HandleFunc(TaskProcessPaymentFactApplication, processor.ProcessTaskPaymentFactApplication)
+	mux.HandleFunc(TaskProcessPaymentDomainOutbox, processor.ProcessTaskPaymentDomainOutbox)
 
 	// 商户入驻证照OCR任务
 	mux.HandleFunc(TaskMerchantApplicationBusinessLicenseOCR, processor.ProcessTaskMerchantApplicationBusinessLicenseOCR)
@@ -257,6 +281,7 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskOperatorApplicationIDCardOCR, processor.ProcessTaskOperatorApplicationIDCardOCR)
 	mux.HandleFunc(TaskRiderApplicationIDCardOCR, processor.ProcessTaskRiderApplicationIDCardOCR)
 	mux.HandleFunc(TaskRiderApplicationHealthCertOCR, processor.ProcessTaskRiderApplicationHealthCertOCR)
+	mux.HandleFunc(TaskOnboardingReview, processor.ProcessTaskOnboardingReview)
 	mux.HandleFunc(TaskGroupApplicationBusinessLicenseOCR, processor.ProcessTaskGroupApplicationBusinessLicenseOCR)
 	mux.HandleFunc(TaskGroupApplicationIDCardOCR, processor.ProcessTaskGroupApplicationIDCardOCR)
 

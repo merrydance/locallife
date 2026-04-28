@@ -1,0 +1,17 @@
+<view class="page-state">
+  <view wx:if="{{type === 'loading'}}" class="page-state__surface page-state__surface--center">
+    <t-loading theme="circular" size="40rpx" text="{{loadingText}}" />
+  </view>
+
+  <view wx:elif="{{icon}}" class="page-state__surface page-state__surface--center">
+    <t-empty icon="{{icon}}" description="{{description}}">
+      <t-button wx:if="{{actionText}}" slot="action" theme="primary" bind:tap="onAction">{{actionText}}</t-button>
+    </t-empty>
+  </view>
+
+  <view wx:else class="page-state__surface page-state__surface--center">
+    <t-empty description="{{description}}">
+      <t-button wx:if="{{actionText}}" slot="action" theme="primary" bind:tap="onAction">{{actionText}}</t-button>
+    </t-empty>
+  </view>
+</view>

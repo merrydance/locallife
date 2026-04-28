@@ -1044,6 +1044,38 @@ func TestGetOperatorApplicationAPI_ReturnsAsyncOCRFields(t *testing.T) {
 	require.Equal(t, ocrJobID, *resp.IDCardBackOCR.OCRJobID)
 }
 
+func TestGetOperatorApplicationAPI_ReturnsInternalServerErrorOnInvalidBusinessLicenseOCR(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomOperatorApplicationDraft(user.ID, 1)
+	app.BusinessLicenseOcr = []byte(`not-json`)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetOperatorApplicationByUserID(gomock.Any(), user.ID).
+		Times(1).
+		Return(app, nil)
+	store.EXPECT().
+		GetRegion(gomock.Any(), gomock.Eq(int64(1))).
+		Times(1).
+		Return(db.Region{}, db.ErrRecordNotFound)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/operator/application", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "internal server error", resp.Message)
+}
+
 func TestDeleteOperatorApplicationDocumentAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	region := randomRegion()

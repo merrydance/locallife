@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -139,7 +140,7 @@ type brandTemplateResponse struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-func newGroupApplicationResponse(app db.MerchantGroupApplication) groupApplicationResponse {
+func newGroupApplicationResponse(app db.MerchantGroupApplication) (groupApplicationResponse, error) {
 	resp := groupApplicationResponse{
 		ID:              app.ID,
 		ApplicantUserID: app.ApplicantUserID,
@@ -159,7 +160,9 @@ func newGroupApplicationResponse(app db.MerchantGroupApplication) groupApplicati
 
 	var payload groupApplicationDataPayload
 	if len(app.ApplicationData) > 0 {
-		_ = json.Unmarshal(app.ApplicationData, &payload)
+		if err := json.Unmarshal(app.ApplicationData, &payload); err != nil {
+			return groupApplicationResponse{}, fmt.Errorf("decode group application %d application_data: %w", app.ID, err)
+		}
 	}
 	resp.BusinessLicenseOCR = payload.BusinessLicenseOCR
 	resp.LegalPersonName = payload.LegalPersonName
@@ -174,7 +177,17 @@ func newGroupApplicationResponse(app db.MerchantGroupApplication) groupApplicati
 	resp.IDCardBackAssetID = payload.IDCardBackAssetID
 	resp.IDCardFrontOCR = payload.IDCardFrontOCR
 	resp.IDCardBackOCR = payload.IDCardBackOCR
-	return resp
+	return resp, nil
+}
+
+func (server *Server) writeGroupApplicationResponse(ctx *gin.Context, status int, app db.MerchantGroupApplication) bool {
+	resp, err := newGroupApplicationResponse(app)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return false
+	}
+	ctx.JSON(status, resp)
+	return true
 }
 
 func newGroupResponse(group db.MerchantGroup) groupResponse {
@@ -293,7 +306,7 @@ func (server *Server) createGroupApplicationDraft(ctx *gin.Context) {
 	existing, err := server.store.GetLatestGroupApplicationByApplicant(ctx, authPayload.UserID)
 	if err == nil && existing.Status == "draft" {
 		// 已存在草稿，直接返回 200（这是 get-or-create 的 found 分支，不是新建资源）
-		ctx.JSON(http.StatusOK, newGroupApplicationResponse(existing))
+		server.writeGroupApplicationResponse(ctx, http.StatusOK, existing)
 		return
 	}
 	if err != nil && !isNotFoundError(err) {
@@ -307,7 +320,7 @@ func (server *Server) createGroupApplicationDraft(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusCreated, newGroupApplicationResponse(app))
+	server.writeGroupApplicationResponse(ctx, http.StatusCreated, app)
 }
 
 // getOrCreateGroupApplicationDraft godoc
@@ -337,7 +350,7 @@ func (server *Server) getOrCreateGroupApplicationDraft(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, newGroupApplicationResponse(app))
+	server.writeGroupApplicationResponse(ctx, http.StatusOK, app)
 }
 
 type updateGroupApplicationBasicRequest struct {
@@ -419,7 +432,7 @@ func (server *Server) updateGroupApplicationBasic(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newGroupApplicationResponse(updated))
+	server.writeGroupApplicationResponse(ctx, http.StatusOK, updated)
 }
 
 func (server *Server) deleteGroupApplicationDocumentByType(ctx *gin.Context, documentType groupApplicationDocumentType) {
@@ -455,7 +468,11 @@ func (server *Server) deleteGroupApplicationDocumentByType(ctx *gin.Context, doc
 		}
 	}
 
-	resp := newGroupApplicationResponse(app)
+	resp, err := newGroupApplicationResponse(app)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
 	var (
 		updated db.MerchantGroupApplication
 		assetID int64
@@ -489,7 +506,7 @@ func (server *Server) deleteGroupApplicationDocumentByType(ctx *gin.Context, doc
 		}
 	}
 
-	ctx.JSON(http.StatusOK, newGroupApplicationResponse(updated))
+	server.writeGroupApplicationResponse(ctx, http.StatusOK, updated)
 }
 
 // deleteGroupApplicationDocument godoc
@@ -557,7 +574,7 @@ func (server *Server) submitGroupApplication(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newGroupApplicationResponse(updated))
+	server.writeGroupApplicationResponse(ctx, http.StatusOK, updated)
 }
 
 type reviewGroupApplicationRequest struct {
@@ -621,8 +638,13 @@ func (server *Server) reviewGroupApplication(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
+		resp, err := newGroupApplicationResponse(result.Application)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 		ctx.JSON(http.StatusOK, groupApplicationReviewResponse{
-			Application: newGroupApplicationResponse(result.Application),
+			Application: resp,
 			Group:       newGroupResponse(result.Group),
 		})
 	case "rejected":
@@ -652,7 +674,7 @@ func (server *Server) reviewGroupApplication(ctx *gin.Context) {
 			return
 		}
 
-		ctx.JSON(http.StatusOK, newGroupApplicationResponse(updated))
+		server.writeGroupApplicationResponse(ctx, http.StatusOK, updated)
 	default:
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid status")))
 	}

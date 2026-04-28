@@ -41,7 +41,7 @@ func pgtypeTimestamptzPtr(v pgtype.Timestamptz) *time.Time {
 // 用于统一从 db.Order / GetOrderWithDetailsRow / ListOrdersByUserWithFiltersRow 构建 response。
 type orderNullableFields struct {
 	AddressID           pgtype.Int8
-	DeliveryDistance     pgtype.Int4
+	DeliveryDistance    pgtype.Int4
 	TableID             pgtype.Int8
 	ReservationID       pgtype.Int8
 	PaymentMethod       pgtype.Text
@@ -60,7 +60,7 @@ type orderNullableFields struct {
 	ClaimChannel        pgtype.Text
 	PrepStartAt         pgtype.Timestamptz
 	ReadyAt             pgtype.Timestamptz
-	CourierAcceptAt      pgtype.Timestamptz
+	CourierAcceptAt     pgtype.Timestamptz
 	PickedAt            pgtype.Timestamptz
 	RiderDeliveredAt    pgtype.Timestamptz
 	UserDeliveredAt     pgtype.Timestamptz
@@ -70,7 +70,7 @@ type orderNullableFields struct {
 }
 
 // applyTo 将所有可选字段从 pgtype 转换并写入 orderResponse。
-func (f orderNullableFields) applyTo(resp *orderResponse) {
+func (f orderNullableFields) applyTo(resp *orderResponse) error {
 	resp.AddressID = pgtypeInt8Ptr(f.AddressID)
 	resp.DeliveryDistance = pgtypeInt4Ptr(f.DeliveryDistance)
 	resp.TableID = pgtypeInt8Ptr(f.TableID)
@@ -104,7 +104,11 @@ func (f orderNullableFields) applyTo(resp *orderResponse) {
 
 	// Badges
 	if len(f.Badges) > 0 {
-		resp.Badges = decodeOrderBadges(f.Badges)
+		badges, err := decodeOrderBadges(f.Badges)
+		if err != nil {
+			return err
+		}
+		resp.Badges = badges
 	}
 
 	// DeliveryEtaMinutes 从 DeliveryDuration 推算
@@ -112,4 +116,6 @@ func (f orderNullableFields) applyTo(resp *orderResponse) {
 		etaMinutes := f.DeliveryDuration.Int32 / 60
 		resp.DeliveryEtaMinutes = &etaMinutes
 	}
+
+	return nil
 }

@@ -2,6 +2,7 @@ package logic
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -33,6 +34,7 @@ var (
 )
 
 type ApplymentSubmissionStore interface {
+	CreateExternalPaymentCommand(ctx context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error)
 	UpdateEcommerceApplymentToSubmitted(ctx context.Context, arg db.UpdateEcommerceApplymentToSubmittedParams) (db.EcommerceApplyment, error)
 	UpdateEcommerceApplymentStatus(ctx context.Context, arg db.UpdateEcommerceApplymentStatusParams) (db.EcommerceApplyment, error)
 }
@@ -639,6 +641,7 @@ func SubmitEcommerceApplyment(
 		}
 		return result, fmt.Errorf("同步微信进件提交状态失败: %w", err)
 	}
+	recordEcommerceApplymentCommandAccepted(ctx, store, input.Applyment, resp)
 
 	if updateSubjectStatus != nil {
 		_ = updateSubjectStatus(ctx, ApplymentSubjectStatusBindbankSubmitted)
@@ -680,6 +683,73 @@ func SubmitEcommerceApplyment(
 	}
 
 	return result, nil
+}
+
+func recordEcommerceApplymentCommandAccepted(ctx context.Context, store ApplymentSubmissionStore, applyment db.EcommerceApplyment, resp *wechatcontracts.EcommerceApplymentResponse) {
+	if resp == nil {
+		return
+	}
+	outRequestNo := strings.TrimSpace(applyment.OutRequestNo)
+	if outRequestNo == "" {
+		outRequestNo = strings.TrimSpace(resp.OutRequestNo)
+	}
+	applymentID := ""
+	if resp.ApplymentID > 0 {
+		applymentID = fmt.Sprintf("%d", resp.ApplymentID)
+	}
+	secondaryKey := applymentStringPtrIfNotEmpty(applymentID)
+	businessObjectType := "ecommerce_applyment"
+	businessObjectID := applyment.ID
+	if _, err := NewPaymentCommandService(store).RecordExternalPaymentCommand(ctx, RecordExternalPaymentCommandInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilityApplyment,
+		CommandType:          db.ExternalPaymentCommandTypeCreateApplyment,
+		BusinessOwner:        db.ExternalPaymentBusinessOwnerApplyment,
+		BusinessObjectType:   &businessObjectType,
+		BusinessObjectID:     &businessObjectID,
+		ExternalObjectType:   db.ExternalPaymentObjectApplyment,
+		ExternalObjectKey:    outRequestNo,
+		ExternalSecondaryKey: secondaryKey,
+		CommandStatus:        db.ExternalPaymentCommandStatusAccepted,
+		ResponseSnapshot: ecommerceApplymentCommandSnapshot(map[string]string{
+			"out_request_no":          outRequestNo,
+			"response_out_request_no": strings.TrimSpace(resp.OutRequestNo),
+			"applyment_id":            applymentID,
+			"applyment_status":        ApplymentSubmissionResultStatus,
+		}),
+	}); err != nil {
+		log.Warn().Err(err).
+			Int64("applyment_id", applyment.ID).
+			Str("out_request_no", outRequestNo).
+			Msg("record ecommerce applyment command accepted failed")
+	}
+}
+
+func ecommerceApplymentCommandSnapshot(values map[string]string) []byte {
+	filtered := make(map[string]string, len(values))
+	for key, value := range values {
+		trimmedValue := strings.TrimSpace(value)
+		if trimmedValue != "" {
+			filtered[key] = trimmedValue
+		}
+	}
+	if len(filtered) == 0 {
+		return []byte(`{}`)
+	}
+	data, err := json.Marshal(filtered)
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return data
+}
+
+func applymentStringPtrIfNotEmpty(value string) *string {
+	trimmedValue := strings.TrimSpace(value)
+	if trimmedValue == "" {
+		return nil
+	}
+	return &trimmedValue
 }
 
 func queryInitialApplymentStatus(

@@ -50,6 +50,10 @@ func (store *SQLStore) AcceptTakeoutOrderTx(ctx context.Context, arg AcceptTakeo
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
 
+		if err := ensureFoodSafetyTakeoutProgressAllowed(ctx, q, arg.OrderID); err != nil {
+			return err
+		}
+
 		result.Order, err = q.UpdateOrderStatus(ctx, UpdateOrderStatusParams{
 			ID:                arg.OrderID,
 			Status:            OrderStatusPreparing,
@@ -82,6 +86,10 @@ func (store *SQLStore) MarkTakeoutOrderReadyTx(ctx context.Context, arg MarkTake
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
+
+		if err := ensureFoodSafetyTakeoutProgressAllowed(ctx, q, arg.OrderID); err != nil {
+			return err
+		}
 
 		result.Order, err = q.UpdateOrderStatus(ctx, UpdateOrderStatusParams{
 			ID:                arg.OrderID,
@@ -118,6 +126,27 @@ func (store *SQLStore) MarkTakeoutOrderReadyTx(ctx context.Context, arg MarkTake
 	})
 
 	return result, err
+}
+
+func ensureFoodSafetyTakeoutProgressAllowed(ctx context.Context, q *Queries, orderID int64) error {
+	order, err := q.GetOrderForUpdate(ctx, orderID)
+	if err != nil {
+		return fmt.Errorf("get takeout order for food safety gate: %w", err)
+	}
+
+	merchantProfile, err := q.GetMerchantProfile(ctx, order.MerchantID)
+	if err != nil {
+		if errors.Is(err, ErrRecordNotFound) {
+			return nil
+		}
+		return fmt.Errorf("get merchant profile for food safety gate: %w", err)
+	}
+
+	if merchantProfile.IsTakeoutSuspended && isFoodSafetySuspendReasonText(merchantProfile.TakeoutSuspendReason) {
+		return ErrTakeoutOrderPausedByFoodSafety
+	}
+
+	return nil
 }
 
 func ensureTakeoutDeliveryCreated(ctx context.Context, q *Queries, order Order) (Delivery, error) {

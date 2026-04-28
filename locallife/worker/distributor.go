@@ -44,10 +44,10 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
-	// DistributeTaskProcessPaymentSuccess 分发支付成功处理任务
-	DistributeTaskProcessPaymentSuccess(
+	// DistributeTaskReservationFoodSafetyAlert 分发食安停业预订提醒任务
+	DistributeTaskReservationFoodSafetyAlert(
 		ctx context.Context,
-		payload *PaymentSuccessPayload,
+		payload *PayloadReservationFoodSafetyAlert,
 		opts ...asynq.Option,
 	) error
 
@@ -72,17 +72,17 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
+	// DistributeTaskProcessProfitSharingReceiverTarget 分发分账接收方生命周期同步任务
+	DistributeTaskProcessProfitSharingReceiverTarget(
+		ctx context.Context,
+		payload *ProfitSharingReceiverTargetPayload,
+		opts ...asynq.Option,
+	) error
+
 	// DistributeTaskProcessApplymentResult 分发进件结果处理任务
 	DistributeTaskProcessApplymentResult(
 		ctx context.Context,
 		payload *ApplymentResultPayload,
-		opts ...asynq.Option,
-	) error
-
-	// DistributeTaskProcessProfitSharingResult 分发分账结果处理任务
-	DistributeTaskProcessProfitSharingResult(
-		ctx context.Context,
-		payload *ProfitSharingResultPayload,
 		opts ...asynq.Option,
 	) error
 
@@ -114,6 +114,13 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
+	// DistributeTaskOperatorPendingDispatchAlert 分发运营商待接单超时提醒任务
+	DistributeTaskOperatorPendingDispatchAlert(
+		ctx context.Context,
+		payload *OperatorPendingDispatchAlertPayload,
+		opts ...asynq.Option,
+	) error
+
 	// DistributeTaskCheckMerchantForeignObject 分发商户异物索赔检查任务
 	DistributeTaskCheckMerchantForeignObject(
 		ctx context.Context,
@@ -128,17 +135,17 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
-	// DistributeTaskProcessAppealResult 分发申诉审核结果处理任务
-	DistributeTaskProcessAppealResult(
+	// DistributeTaskProcessRecoveryDisputeResult 分发追偿争议审核结果处理任务
+	DistributeTaskProcessRecoveryDisputeResult(
 		ctx context.Context,
-		payload *ProcessAppealResultPayload,
+		payload *ProcessRecoveryDisputeResultPayload,
 		opts ...asynq.Option,
 	) error
 
-	// DistributeTaskAutomaticAppealResolution 分发申诉自动复核重试任务
-	DistributeTaskAutomaticAppealResolution(
+	// DistributeTaskAutomaticRecoveryDisputeResolution 分发追偿争议自动复核重试任务
+	DistributeTaskAutomaticRecoveryDisputeResolution(
 		ctx context.Context,
-		payload *AutomaticAppealResolutionPayload,
+		payload *AutomaticRecoveryDisputeResolutionPayload,
 		opts ...asynq.Option,
 	) error
 
@@ -146,6 +153,13 @@ type TaskDistributor interface {
 	DistributeTaskClaimPayout(
 		ctx context.Context,
 		payload *ClaimPayoutPayload,
+		opts ...asynq.Option,
+	) error
+
+	// DistributeTaskClaimBehaviorAction 分发索赔行为动作执行任务
+	DistributeTaskClaimBehaviorAction(
+		ctx context.Context,
+		payload *ClaimBehaviorActionPayload,
 		opts ...asynq.Option,
 	) error
 
@@ -214,6 +228,13 @@ type TaskDistributor interface {
 		applicationID int64,
 		mediaAssetID int64,
 		ocrJobID int64,
+		opts ...asynq.Option,
+	) error
+
+	// DistributeTaskOnboardingReview 分发入驻审核任务
+	DistributeTaskOnboardingReview(
+		ctx context.Context,
+		payload *OnboardingReviewPayload,
 		opts ...asynq.Option,
 	) error
 

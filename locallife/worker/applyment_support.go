@@ -61,6 +61,18 @@ func applymentStatusNeedsRemoteQuery(status string) bool {
 	}
 }
 
+func applymentStatusHandledByFact(status, subMchID string) bool {
+	if status == "finish" && strings.TrimSpace(subMchID) != "" {
+		return true
+	}
+	switch status {
+	case "account_need_verify", "to_be_confirmed", "to_be_signed", "rejected", "frozen", "canceled":
+		return true
+	default:
+		return false
+	}
+}
+
 func getRejectReasonFromApplymentAuditDetail(details []wechatcontracts.ApplymentAuditDetail) pgtype.Text {
 	if len(details) == 0 {
 		return pgtype.Text{}

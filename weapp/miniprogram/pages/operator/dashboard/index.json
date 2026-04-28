@@ -2,17 +2,16 @@
     "navigationBarTitleText": "运营中心",
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
+        "page-state": "/components/page-state/index",
+        "operator-finance-overview": "/components/operator-finance-overview/index",
+        "operator-notification-summary": "/components/operator-notification-summary/index",
+        "operator-ranking-panel": "/components/operator-ranking-panel/index",
         "t-icon": "tdesign-miniprogram/icon/icon",
         "t-button": "tdesign-miniprogram/button/button",
-        "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
         "t-picker": "tdesign-miniprogram/picker/picker",
         "t-picker-item": "tdesign-miniprogram/picker-item/picker-item",
-        "t-tag": "tdesign-miniprogram/tag/tag",
         "t-tabs": "tdesign-miniprogram/tabs/tabs",
         "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
-        "t-badge": "tdesign-miniprogram/badge/badge",
-        "t-empty": "tdesign-miniprogram/empty/empty",
-        "t-loading": "tdesign-miniprogram/loading/loading",
         "card-skeleton": "/components/card-skeleton/index",
         "list-skeleton": "/components/list-skeleton/index"
     }

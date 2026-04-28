@@ -51,6 +51,9 @@
 - ownership checks inconsistent across entrypoints
 - worker/scheduler paths forgotten during fixes
 - generated artifacts frequently left stale
+- silent error swallowing or nil-as-success fallbacks
+- missing structured logging boundary for unexpected failures
+- caller-facing error semantics that leak internal detail or stay too vague to act on
 
 ### 2.3 Audit run log
 
@@ -89,4 +92,10 @@
 ## 5. Practical Rule
 
 如果某条 backend review finding 的价值高到足以在未来再次节省事故、回归或审查成本，它就不应该只留在一次聊天输出里。
+
+对错误处理类 findings，durable 写回默认至少覆盖三件事中的一件，必要时同时覆盖：
+
+- 标准或 instructions：明确业务错误、基础设施错误、日志边界和对前端语义的长期规则。
+- prompts 或 checklist：让实现与 review 在默认入口就会主动检查静默吞错、5xx 跳过日志和错误语义泄漏。
+- workflow、guard 或 focused tests：把高信噪比反模式做成可执行门禁，而不是完全依赖 reviewer 记忆。
 

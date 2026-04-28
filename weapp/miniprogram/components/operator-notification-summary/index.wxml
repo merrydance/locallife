@@ -1,0 +1,15 @@
+<view class="notification-section">
+  <view class="section-header">
+    <view class="section-title">待接单提醒</view>
+    <view class="view-all" bind:tap="onTap">查看全部</view>
+  </view>
+
+  <view class="notification-card" bind:tap="onTap">
+    <view class="notification-card__head">
+      <view class="notification-card__badge">未读 {{unreadCount}}</view>
+      <text wx:if="{{latestCreatedAt}}" class="notification-card__time">{{latestCreatedAt}}</text>
+    </view>
+    <view class="notification-card__title">{{latestTitle}}</view>
+    <view class="notification-card__summary">{{latestSummary}}</view>
+  </view>
+</view>

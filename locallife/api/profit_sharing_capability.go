@@ -34,7 +34,8 @@ type profitSharingAmountsResponse struct {
 // @Router /v1/operators/me/payment-orders/{id}/profit-sharing/amounts [get]
 func (server *Server) getProfitSharingAmounts(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("payment service not configured")))
+		err := errors.New("payment service not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service not configured", "query profit sharing amounts payment service not configured"))
 		return
 	}
 
@@ -65,11 +66,12 @@ func (server *Server) getProfitSharingAmounts(ctx *gin.Context) {
 
 	resp, err := server.ecommerceClient.QueryProfitSharingAmounts(ctx, paymentOrder.TransactionID.String)
 	if err != nil {
-		ctx.JSON(http.StatusBadGateway, errorResponse(errors.New("query profit sharing amounts api unavailable")))
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "query profit sharing amounts api unavailable", "query profit sharing amounts api failed"))
 		return
 	}
 	if resp == nil {
-		ctx.JSON(http.StatusBadGateway, errorResponse(errors.New("query profit sharing amounts api unavailable")))
+		err := errors.New("query profit sharing amounts returned nil response")
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "query profit sharing amounts api unavailable", "query profit sharing amounts returned nil response"))
 		return
 	}
 
@@ -108,7 +110,8 @@ type deleteProfitSharingReceiverResponse struct {
 // @Router /v1/operators/me/payment-orders/{id}/profit-sharing/receivers/delete [post]
 func (server *Server) deleteProfitSharingReceiver(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("payment service not configured")))
+		err := errors.New("payment service not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service not configured", "delete profit sharing receiver payment service not configured"))
 		return
 	}
 
@@ -149,11 +152,12 @@ func (server *Server) deleteProfitSharingReceiver(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(validationErr))
 			return
 		}
-		ctx.JSON(http.StatusBadGateway, errorResponse(errors.New("delete profit sharing receiver api unavailable")))
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "delete profit sharing receiver api unavailable", "delete profit sharing receiver api failed"))
 		return
 	}
 	if resp == nil {
-		ctx.JSON(http.StatusBadGateway, errorResponse(errors.New("delete profit sharing receiver api unavailable")))
+		err := errors.New("delete profit sharing receiver returned nil response")
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "delete profit sharing receiver api unavailable", "delete profit sharing receiver returned nil response"))
 		return
 	}
 

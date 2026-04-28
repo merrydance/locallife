@@ -14,5 +14,6 @@
         "t-loading": "tdesign-miniprogram/loading/loading",
         "t-image": "tdesign-miniprogram/image/image",
         "list-skeleton": "../../components/list-skeleton/index"
-    }
+    },
+    "navigationStyle": "custom"
 }

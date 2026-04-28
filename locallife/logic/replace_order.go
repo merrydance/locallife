@@ -3,6 +3,7 @@ package logic
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -199,6 +200,8 @@ func ReplaceReservationOrder(
 				if refundErr != nil {
 					if _, dbErr := store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
 						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+					} else {
+						recordReplaceReservationRefundCommandRejected(ctx, store, refundOrder, outRefundNo, refundErr)
 					}
 					return ReplaceOrderResult{}, refundErr
 				}
@@ -211,6 +214,7 @@ func ReplaceReservationOrder(
 					if _, dbErr := store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{ID: refundOrder.ID, RefundID: pgtype.Text{String: refundID, Valid: refundID != ""}}); dbErr != nil {
 						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
 					}
+					recordReplaceReservationRefundCommandAccepted(ctx, store, refundOrder, outRefundNo, refundID)
 				}
 				result.RefundInitiated = true
 			}
@@ -287,13 +291,22 @@ func createReplaceOrderEcommercePayment(
 	})
 	if err != nil {
 		cleanupCtx := context.Background()
-		_, _ = store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID)
+		if _, closeErr := store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID); closeErr != nil {
+			log.Error().Err(closeErr).Int64("payment_order_id", txResult.PaymentOrder.ID).Msg("failed to close replace reservation payment order after create rejection")
+		} else {
+			recordPartnerJSAPIPaymentCommandRejected(cleanupCtx, store, txResult.PaymentOrder, db.ExternalPaymentBusinessOwnerReservation, err)
+		}
 		return db.PaymentOrder{}, fmt.Errorf("create partner jsapi order: %w", err)
 	}
 	if orderResp == nil || orderResp.PrepayID == "" {
 		cleanupCtx := context.Background()
-		_, _ = store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID)
-		return db.PaymentOrder{}, fmt.Errorf("create partner jsapi order: empty prepay id")
+		emptyPrepayErr := errors.New("create partner jsapi order: empty prepay id")
+		if _, closeErr := store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID); closeErr != nil {
+			log.Error().Err(closeErr).Int64("payment_order_id", txResult.PaymentOrder.ID).Msg("failed to close replace reservation payment order after empty prepay id")
+		} else {
+			recordPartnerJSAPIPaymentCommandRejected(cleanupCtx, store, txResult.PaymentOrder, db.ExternalPaymentBusinessOwnerReservation, emptyPrepayErr)
+		}
+		return db.PaymentOrder{}, emptyPrepayErr
 	}
 
 	updatedPayment, err := store.UpdatePaymentOrderPrepayId(ctx, db.UpdatePaymentOrderPrepayIdParams{
@@ -308,6 +321,7 @@ func createReplaceOrderEcommercePayment(
 		}
 		return db.PaymentOrder{}, fmt.Errorf("update prepay id: %w", err)
 	}
+	recordPartnerJSAPIPaymentCommandAccepted(ctx, store, txResult.PaymentOrder, db.ExternalPaymentBusinessOwnerReservation, orderResp.PrepayID)
 
 	return updatedPayment, nil
 }
@@ -348,6 +362,110 @@ func processReplaceOrderRefund(
 		return "", "", mapEcommerceRefundCreateError(err)
 	}
 	return wechatcontracts.EcommerceRefundStatusProcessing, refundResp.RefundID, nil
+}
+
+func recordReplaceReservationRefundCommandAccepted(ctx context.Context, store db.Store, refundOrder db.RefundOrder, outRefundNo string, refundID string) {
+	paymentCommandSvc := NewPaymentCommandService(store)
+	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbReplaceReservationRefundCommandInput(
+		refundOrder,
+		outRefundNo,
+		db.ExternalPaymentCommandStatusAccepted,
+		stringPtrIfNotEmpty(refundID),
+		nil,
+		nil,
+		replaceReservationRefundCommandSnapshot(map[string]string{
+			"out_refund_no": outRefundNo,
+			"refund_id":     refundID,
+		}),
+	))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("refund_order_id", refundOrder.ID).
+			Str("out_refund_no", outRefundNo).
+			Msg("record replace reservation ecommerce refund command accepted failed")
+	}
+}
+
+func recordReplaceReservationRefundCommandRejected(ctx context.Context, store db.Store, refundOrder db.RefundOrder, outRefundNo string, refundErr error) {
+	paymentCommandSvc := NewPaymentCommandService(store)
+	errorCode, errorMessage := ecommerceRefundCommandErrorFields(refundErr)
+	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbReplaceReservationRefundCommandInput(
+		refundOrder,
+		outRefundNo,
+		db.ExternalPaymentCommandStatusRejected,
+		nil,
+		errorCode,
+		errorMessage,
+		replaceReservationRefundCommandSnapshot(map[string]string{
+			"out_refund_no": outRefundNo,
+			"error_code":    stringValue(errorCode),
+			"error_message": stringValue(errorMessage),
+		}),
+	))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("refund_order_id", refundOrder.ID).
+			Str("out_refund_no", outRefundNo).
+			Msg("record replace reservation ecommerce refund command rejected failed")
+	}
+}
+
+func dbReplaceReservationRefundCommandInput(
+	refundOrder db.RefundOrder,
+	outRefundNo string,
+	commandStatus string,
+	externalSecondaryKey *string,
+	lastErrorCode *string,
+	lastErrorMessage *string,
+	responseSnapshot []byte,
+) RecordExternalPaymentCommandInput {
+	businessObjectType := "refund_order"
+	businessObjectID := refundOrder.ID
+	return RecordExternalPaymentCommandInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilityEcommerceRefund,
+		CommandType:          db.ExternalPaymentCommandTypeCreateRefund,
+		BusinessOwner:        db.ExternalPaymentBusinessOwnerReservation,
+		BusinessObjectType:   &businessObjectType,
+		BusinessObjectID:     &businessObjectID,
+		ExternalObjectType:   db.ExternalPaymentObjectRefund,
+		ExternalObjectKey:    outRefundNo,
+		ExternalSecondaryKey: externalSecondaryKey,
+		CommandStatus:        commandStatus,
+		LastErrorCode:        lastErrorCode,
+		LastErrorMessage:     lastErrorMessage,
+		ResponseSnapshot:     responseSnapshot,
+	}
+}
+
+func ecommerceRefundCommandErrorFields(err error) (*string, *string) {
+	loggableErr := LoggableError(err)
+	var wxErr *wechat.WechatPayError
+	if errors.As(loggableErr, &wxErr) {
+		return stringPtrIfNotEmpty(wxErr.Code), stringPtrIfNotEmpty(wxErr.Message)
+	}
+	if loggableErr == nil {
+		return nil, nil
+	}
+	return nil, stringPtrIfNotEmpty(loggableErr.Error())
+}
+
+func replaceReservationRefundCommandSnapshot(values map[string]string) []byte {
+	filtered := make(map[string]string, len(values))
+	for key, value := range values {
+		if value != "" {
+			filtered[key] = value
+		}
+	}
+	if len(filtered) == 0 {
+		return []byte(`{}`)
+	}
+	data, err := json.Marshal(filtered)
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return data
 }
 
 func generateOrderNo() (string, error) {

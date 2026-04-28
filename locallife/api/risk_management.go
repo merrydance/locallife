@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -120,37 +122,37 @@ func applyClaimRuleDecisionOverride(decision *algorithm.Decision, ruleDecision r
 	// 真正的正式副作用仍以下游事务返回的 persisted behavior decision/action 为准，
 	// 这里不要重新派生 payout/recovery/block/notify 等执行动作。
 	normalizedAction := normalizeClaimRuleAction(ruleDecision.Action)
+	appliedAction := ""
 	switch normalizedAction {
-	case "platform-fallback":
-		decision.Type = algorithm.DecisionModePlatformFallback
-		decision.Approved = true
-		decision.CompensationSource = algorithm.CompensationSourcePlatform
-		decision.NeedsReview = false
 	case "merchant-recovery":
+		appliedAction = normalizedAction
 		decision.Type = algorithm.DecisionModeMerchantRecovery
 		decision.Approved = true
 		decision.CompensationSource = algorithm.CompensationSourceMerchant
 	case "rider-recovery":
+		appliedAction = normalizedAction
 		decision.Type = algorithm.DecisionModeRiderRecovery
 		decision.Approved = true
 		decision.CompensationSource = algorithm.CompensationSourceRider
 	case "user-restricted":
+		appliedAction = normalizedAction
 		decision.Type = algorithm.DecisionModeUserRestricted
 		decision.Approved = true
 		decision.BehaviorStatus = algorithm.ClaimBehaviorUserRestricted
 		decision.CompensationSource = algorithm.CompensationSourcePlatform
 	case "instant", "auto":
+		appliedAction = normalizedAction
 		decision.Type = normalizedAction
 	}
 
-	if ruleDecision.Reason != "" && normalizedAction != "" {
+	if ruleDecision.Reason != "" && appliedAction != "" {
 		decision.Reason = ruleDecision.Reason
-		if normalizedAction == "platform-fallback" || normalizedAction == "user-restricted" {
+		if appliedAction == "user-restricted" {
 			decision.Warning = ruleDecision.Reason
 		}
 	}
 
-	return normalizedAction
+	return appliedAction
 }
 
 // SubmitClaimRequest 提交索赔请求
@@ -164,43 +166,74 @@ type SubmitClaimRequest struct {
 
 // SubmitClaimResponse 索赔响应
 type SubmitClaimResponse struct {
-	ClaimID            int64   `json:"claim_id"`
-	Status             string  `json:"status"`                    // accepted
-	DecisionStatus     string  `json:"decision_status,omitempty"` // auto-adjudicated
-	PayoutStatus       string  `json:"payout_status,omitempty"`   // processing, paid
-	ApprovedAmount     *int64  `json:"approved_amount,omitempty"`
-	CompensationSource string  `json:"compensation_source,omitempty"` // merchant, rider, platform
-	Reason             string  `json:"reason"`
-	PayoutETA          *string `json:"payout_eta,omitempty"` // 预计赔付时间
-	Warning            *string `json:"warning,omitempty"`    // 警告信息
+	ClaimID                int64   `json:"claim_id"`
+	Status                 string  `json:"status"`
+	DecisionStatus         string  `json:"decision_status,omitempty"` // auto-adjudicated
+	CompensationStatus     string  `json:"compensation_status,omitempty"`
+	PayoutStatus           string  `json:"payout_status,omitempty"` // processing, paid
+	CustomerActionRequired bool    `json:"customer_action_required"`
+	CustomerAction         string  `json:"customer_action,omitempty"`
+	ApprovedAmount         *int64  `json:"approved_amount,omitempty"`
+	CompensationSource     string  `json:"compensation_source,omitempty"` // merchant, rider, platform
+	Reason                 string  `json:"reason"`
+	Warning                *string `json:"warning,omitempty"` // 警告信息
 }
 
 const (
-	submitClaimStatusAccepted                = "accepted"
-	submitClaimStatusRejected                = "rejected"
-	submitClaimDecisionStatusAutoAdjudicated = "auto-adjudicated"
-	submitClaimDecisionStatusRejected        = "rejected"
-	submitClaimPayoutStatusProcessing        = "processing"
-	submitClaimPayoutStatusPaid              = "paid"
+	submitClaimStatusAccepted                 = "accepted"
+	submitClaimStatusRejected                 = "rejected"
+	submitClaimStatusClosed                   = "closed"
+	submitClaimStatusWaitingCustomerConfirm   = "warned_waiting_customer_confirmation"
+	submitClaimDecisionStatusAutoAdjudicated  = "auto-adjudicated"
+	submitClaimDecisionStatusRejected         = "rejected"
+	submitClaimCompensationStatusAwaiting     = "awaiting_compensation"
+	submitClaimCompensationStatusCompensating = "compensating"
+	submitClaimCompensationStatusCompensated  = "compensated"
+	submitClaimPayoutStatusProcessing         = "processing"
+	submitClaimPayoutStatusPaid               = "paid"
+	claimCustomerActionConfirmContinue        = "confirm_continue"
+	claimReviewNoteCustomerWithdrawn          = "claim withdrawn by customer before compensation execution"
+	claimReasonCustomerWithdrawn              = "用户已主动撤回索赔，未进入补偿执行"
 )
 
-func submitClaimPayoutETA(decisionType string) *string {
-	eta := "1-3个工作日"
-	if decisionType == algorithm.ApprovalTypeInstant {
-		eta = "即时到账"
-	}
-	return &eta
+func claimWasWithdrawnByCustomer(claim db.Claim) bool {
+	return claim.Status == db.ClaimStatusWithdrawn
 }
 
-func claimApprovalTypeValue(claim db.Claim) string {
-	if claim.ApprovalType.Valid {
-		return claim.ApprovalType.String
+func claimAwaitingCustomerConfirmation(claim db.Claim) bool {
+	if !claim.ApprovedAmount.Valid || claim.ApprovedAmount.Int64 <= 0 || claim.PaidAt.Valid {
+		return false
 	}
-	return ""
+
+	return claim.Status == db.ClaimStatusWaitingCustomerConfirmation
+}
+
+func isDuplicateOrderClaimError(err error) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+	if pgErr.Code != db.UniqueViolation {
+		return false
+	}
+	return strings.Contains(pgErr.ConstraintName, "claims_order_id_unique")
+}
+
+// claimLegacyCompensating keeps pre-confirmation rollout rows readable as processing.
+// New compensation writes must not treat auto-approved as an executable state.
+func claimLegacyCompensating(claim db.Claim) bool {
+	if !claim.ApprovedAmount.Valid || claim.ApprovedAmount.Int64 <= 0 || claim.PaidAt.Valid {
+		return false
+	}
+
+	return claim.Status == db.ClaimStatusAutoApproved
 }
 
 func userClaimReason(claim db.Claim) string {
-	if claim.Status == "rejected" {
+	if claimWasWithdrawnByCustomer(claim) {
+		return claimReasonCustomerWithdrawn
+	}
+	if claim.Status == db.ClaimStatusRejected {
 		if claim.RejectionReason.Valid && claim.RejectionReason.String != "" {
 			return claim.RejectionReason.String
 		}
@@ -221,6 +254,9 @@ func userClaimReason(claim db.Claim) string {
 }
 
 func userClaimProcessedAt(claim db.Claim) *time.Time {
+	if claimWasWithdrawnByCustomer(claim) && claim.ReviewedAt.Valid {
+		return &claim.ReviewedAt.Time
+	}
 	if claim.PaidAt.Valid {
 		return &claim.PaidAt.Time
 	}
@@ -230,27 +266,43 @@ func userClaimProcessedAt(claim db.Claim) *time.Time {
 	return nil
 }
 
-func userClaimLifecycleFromClaim(claim db.Claim) (string, string, string, *string) {
-	if claim.Status == "rejected" {
-		return submitClaimStatusRejected, submitClaimDecisionStatusRejected, "", nil
+func userClaimLifecycleFromClaim(claim db.Claim) (string, string, string, string, bool, string) {
+	if claimWasWithdrawnByCustomer(claim) {
+		decisionStatus := ""
+		if claim.ApprovedAmount.Valid && claim.ApprovedAmount.Int64 > 0 {
+			decisionStatus = submitClaimDecisionStatusAutoAdjudicated
+		}
+		return submitClaimStatusClosed, decisionStatus, "", "", false, ""
+	}
+
+	if claim.Status == db.ClaimStatusRejected {
+		return submitClaimStatusRejected, submitClaimDecisionStatusRejected, "", "", false, ""
 	}
 
 	status := submitClaimStatusAccepted
 	decisionStatus := ""
+	compensationStatus := ""
 	payoutStatus := ""
-	var payoutETA *string
+	customerActionRequired := false
+	customerAction := ""
 
 	if claim.ApprovedAmount.Valid && claim.ApprovedAmount.Int64 > 0 {
 		decisionStatus = submitClaimDecisionStatusAutoAdjudicated
 		if claim.PaidAt.Valid {
+			compensationStatus = submitClaimCompensationStatusCompensated
 			payoutStatus = submitClaimPayoutStatusPaid
-		} else {
+		} else if claim.Status == db.ClaimStatusApproved || claimLegacyCompensating(claim) {
+			compensationStatus = submitClaimCompensationStatusCompensating
 			payoutStatus = submitClaimPayoutStatusProcessing
-			payoutETA = submitClaimPayoutETA(claimApprovalTypeValue(claim))
+		} else if claimAwaitingCustomerConfirmation(claim) {
+			status = submitClaimStatusWaitingCustomerConfirm
+			compensationStatus = submitClaimCompensationStatusAwaiting
+			customerActionRequired = true
+			customerAction = claimCustomerActionConfirmContinue
 		}
 	}
 
-	return status, decisionStatus, payoutStatus, payoutETA
+	return status, decisionStatus, compensationStatus, payoutStatus, customerActionRequired, customerAction
 }
 
 // SubmitClaim 提交索赔
@@ -463,16 +515,11 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		}
 		decision, err := server.rulesEngine.Evaluate(ctx, ruleInput)
 		if err != nil {
-			// 规则引擎故障时仍继续自动裁定，不再转人工审核。
+			// 规则引擎故障时仍继续 deterministic claims adjudication，不允许回落到平台兜底模式。
 			log.Error().Err(err).
 				Int64("order_id", req.OrderID).
 				Int64("user_id", authPayload.UserID).
-				Msg("Rules engine evaluation failed, falling back to deterministic platform_fallback adjudication")
-
-			ruleDecision = rules.Decision{
-				Action: "platform-fallback",
-				Reason: "系统风控服务暂时不可用，已按平台自动裁定继续处理",
-			}
+				Msg("Rules engine evaluation failed, continuing deterministic claims adjudication")
 		} else {
 			server.recordRuleHit(ctx, ruleInput, decision, RoleCustomer)
 			ruleDecision = decision
@@ -555,13 +602,18 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 	recoveryAmount := decision.Amount
 	if ruleDecision.Meta != nil {
 		if v, ok := ruleDecision.Meta["responsible_party"].(string); ok && v != "" {
-			responsibleParty = v
+			switch v {
+			case "merchant", "rider", "user":
+				responsibleParty = v
+			}
 		}
 		if v, ok := ruleDecision.Meta["recovery_required"].(bool); ok {
 			recoveryRequired = v
 		}
 		if v, ok := ruleDecision.Meta["recovery_target"].(string); ok && v != "" {
-			recoveryTarget = v
+			if v == "merchant" || v == "rider" {
+				recoveryTarget = v
+			}
 		}
 		if v, ok := ruleDecision.Meta["recovery_amount"].(float64); ok {
 			recoveryAmount = int64(v)
@@ -570,12 +622,6 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 			recoveryAmount = v
 		}
 	}
-	if responsibleParty == "platform_fallback" {
-		decision.CompensationSource = algorithm.CompensationSourcePlatform
-		decision.Type = algorithm.DecisionModePlatformFallback
-		recoveryRequired = false
-		recoveryTarget = ""
-	}
 	if responsibleParty == "unknown" && decision.CompensationSource != "" {
 		switch decision.CompensationSource {
 		case algorithm.CompensationSourceMerchant:
@@ -583,12 +629,10 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		case algorithm.CompensationSourceRider:
 			responsibleParty = "rider"
 		case algorithm.CompensationSourcePlatform:
-			responsibleParty = "platform_fallback"
+			if decision.Type == algorithm.DecisionModeUserRestricted || decision.BehaviorStatus == algorithm.ClaimBehaviorUserRestricted {
+				responsibleParty = "user"
+			}
 		}
-	}
-	if responsibleParty == "platform_fallback" {
-		recoveryRequired = false
-		recoveryTarget = ""
 	}
 	if !recoveryRequired {
 		recoveryRequired = responsibleParty == "merchant" || responsibleParty == "rider"
@@ -623,11 +667,6 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 			DecisionSnapshot: decisionSnapshotJSON,
 		}
 	}
-	if decision.Approved && decision.Amount > 0 && server.transferClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrClaimPayoutServiceUnavailable))
-		return
-	}
-
 	// 创建索赔记录（必要时在同一事务中创建追偿单）
 	claim, err := approver.CreateClaimWithDecisionAndEvidence(
 		ctx,
@@ -641,23 +680,30 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		recoveryPlan,
 	)
 	if err != nil {
+		if isDuplicateOrderClaimError(err) {
+			ctx.JSON(http.StatusConflict, errorResponse(ErrOrderAlreadyHasClaim))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create claim with decision: %w", err)))
 		return
 	}
 
 	// 构造响应
+	status, decisionStatus, compensationStatus, payoutStatus, customerActionRequired, customerAction := userClaimLifecycleFromClaim(*claim)
 	resp := SubmitClaimResponse{
-		ClaimID:            claim.ID,
-		Status:             submitClaimStatusAccepted,
-		CompensationSource: decision.CompensationSource,
-		Reason:             decision.Reason,
+		ClaimID:                claim.ID,
+		Status:                 status,
+		DecisionStatus:         decisionStatus,
+		CompensationStatus:     compensationStatus,
+		PayoutStatus:           payoutStatus,
+		CustomerActionRequired: customerActionRequired,
+		CustomerAction:         customerAction,
+		CompensationSource:     decision.CompensationSource,
+		Reason:                 decision.Reason,
 	}
 
 	if decision.Approved {
 		resp.ApprovedAmount = &decision.Amount
-		resp.DecisionStatus = submitClaimDecisionStatusAutoAdjudicated
-		resp.PayoutStatus = submitClaimPayoutStatusProcessing
-		resp.PayoutETA = submitClaimPayoutETA(algorithm.DecisionApprovalType(decision.Type))
 	}
 
 	// 如果有警告信息，添加到响应
@@ -670,14 +716,11 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		"claim_type":          req.ClaimType,
 		"status":              resp.Status,
 		"decision_status":     resp.DecisionStatus,
-		"payout_status":       resp.PayoutStatus,
+		"compensation_status": resp.CompensationStatus,
 		"compensation_source": resp.CompensationSource,
 		"requested_amount":    req.ClaimAmount,
 		"approved_amount":     decision.Amount,
 		"auto_adjudicated":    decision.Approved,
-	}
-	if resp.PayoutETA != nil {
-		metadata["payout_eta"] = *resp.PayoutETA
 	}
 	if resp.Warning != nil {
 		metadata["warning"] = *resp.Warning
@@ -722,7 +765,6 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 
 // ReportFoodSafetyRequest 上报食安请求
 type ReportFoodSafetyRequest struct {
-	ReporterID    int64  `json:"reporter_id" binding:"required,min=1"`
 	MerchantID    int64  `json:"merchant_id" binding:"required,min=1"`
 	OrderID       int64  `json:"order_id" binding:"required,min=1"`
 	IncidentType  string `json:"incident_type" binding:"required,oneof=foreign-object contamination expired"`
@@ -733,9 +775,23 @@ type ReportFoodSafetyRequest struct {
 // ReportFoodSafetyResponse 食安上报响应
 type ReportFoodSafetyResponse struct {
 	IncidentID        int64  `json:"incident_id"`
+	CaseID            *int64 `json:"case_id,omitempty"`
 	MerchantSuspended bool   `json:"merchant_suspended"`
 	SuspendDuration   *int   `json:"suspend_duration,omitempty"` // 小时
 	Message           string `json:"message"`
+}
+
+func canReportFoodSafetyForOrder(order db.Order) bool {
+	switch order.OrderType {
+	case OrderTypeTakeout:
+		return order.Status == OrderStatusRiderDelivered ||
+			order.Status == OrderStatusUserDelivered ||
+			order.Status == OrderStatusCompleted
+	case OrderTypeTakeaway, OrderTypeDineIn, OrderTypeReservation:
+		return order.Status == OrderStatusCompleted
+	default:
+		return order.Status == OrderStatusCompleted
+	}
 }
 
 // ReportFoodSafety 上报食安问题
@@ -757,70 +813,351 @@ func (server *Server) ReportFoodSafety(ctx *gin.Context) {
 		return
 	}
 
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
 	// 验证严重程度
 	if req.SeverityLevel < 1 || req.SeverityLevel > 5 {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("severity_level must be between 1 and 5")))
 		return
 	}
 
+	order, err := server.store.GetOrder(ctx, req.OrderID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrOrderNotFound))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get order: %w", err)))
+		return
+	}
+
+	if order.UserID != authPayload.UserID {
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrOrderNotOwned))
+		return
+	}
+
+	if order.MerchantID != req.MerchantID {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order does not belong to the provided merchant")))
+		return
+	}
+
+	if !canReportFoodSafetyForOrder(order) {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("food safety reports require a fulfilled order")))
+		return
+	}
+
+	orderItems, err := server.store.ListOrderItemsWithDishByOrder(ctx, order.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list order items for food safety report %d: %w", order.ID, err)))
+		return
+	}
+
+	orderSnapshot, merchantSnapshot, riderSnapshot, err := buildFoodSafetyIncidentSnapshots(order, orderItems, authPayload.UserID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("build food safety incident snapshots for order %d: %w", order.ID, err)))
+		return
+	}
+	productKey, productLabel := buildFoodSafetyPrimaryProduct(orderItems)
+
 	// 创建食安处理器
 	handler := algorithm.NewFoodSafetyHandler(server.store, server.wsHub)
 
-	// 评估食安举报（无证据输入）
+	// 评估食安举报
 	result, err := handler.EvaluateFoodSafetyReport(
 		ctx,
-		req.ReporterID,
-		req.MerchantID,
-		nil,
+		algorithm.FoodSafetyReportInput{
+			ReporterUserID: authPayload.UserID,
+			MerchantID:     req.MerchantID,
+			Order:          order,
+		},
 	)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("evaluate food safety report for order %d: %w", req.OrderID, err)))
 		return
 	}
 
-	// 创建食安事件记录
-	incident, err := server.store.CreateFoodSafetyIncident(ctx, db.CreateFoodSafetyIncidentParams{
-		UserID:           req.ReporterID,
-		MerchantID:       req.MerchantID,
-		OrderID:          req.OrderID,
-		IncidentType:     req.IncidentType,
-		Description:      req.Description,
-		OrderSnapshot:    []byte{},
-		MerchantSnapshot: []byte{},
-		RiderSnapshot:    []byte{},
-		Status:           "pending",
-		CreatedAt:        time.Now(),
+	txResult, err := server.store.ReportFoodSafetyIncidentTx(ctx, db.ReportFoodSafetyIncidentTxParams{
+		CreateFoodSafetyIncidentParams: db.CreateFoodSafetyIncidentParams{
+			UserID:           authPayload.UserID,
+			MerchantID:       order.MerchantID,
+			OrderID:          order.ID,
+			IncidentType:     req.IncidentType,
+			Description:      req.Description,
+			OrderSnapshot:    orderSnapshot,
+			MerchantSnapshot: merchantSnapshot,
+			RiderSnapshot:    riderSnapshot,
+			Status:           foodSafetyIncidentStatusFromResult(result),
+			CreatedAt:        time.Now(),
+		},
+		ProductKey:                productKey,
+		ProductLabel:              productLabel,
+		ShouldCircuitBreak:        result.ShouldCircuitBreak,
+		CircuitBreakReason:        fmt.Sprintf("同商户1小时内多名顾客食安举报触发熔断（订单ID: %d）", order.ID),
+		CircuitBreakDurationHours: result.DurationHours,
 	})
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create food safety incident for order %d: %w", req.OrderID, err)))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("report food safety incident for order %d: %w", req.OrderID, err)))
 		return
 	}
 
-	// 执行熔断
-	if result.ShouldCircuitBreak {
-		err = handler.CircuitBreakMerchant(
-			ctx,
-			req.MerchantID,
-			fmt.Sprintf("食安举报确认（事件ID: %d）", incident.ID),
-			result.DurationHours,
-		)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("circuit break merchant %d: %w", req.MerchantID, err)))
-			return
+	if result.ShouldCircuitBreak && txResult.OpenedNewCase {
+		if server.wsHub != nil {
+			handler.NotifyMerchantCircuitBreak(order.MerchantID)
 		}
+		server.dispatchFoodSafetySuspensionFollowUps(ctx, txResult)
+	}
+
+	merchantSuspended := txResult.Case != nil && txResult.Case.Status != "resolved"
+	responseMessage := result.Message
+	if txResult.ReusedExistingIncident {
+		responseMessage = "当前订单已有有效食安上报，已复用现有记录"
 	}
 
 	resp := ReportFoodSafetyResponse{
-		IncidentID:        incident.ID,
-		MerchantSuspended: result.ShouldCircuitBreak,
-		Message:           result.Message,
+		IncidentID:        txResult.Incident.ID,
+		MerchantSuspended: merchantSuspended,
+		Message:           responseMessage,
+	}
+	if txResult.Case != nil {
+		resp.CaseID = &txResult.Case.ID
 	}
 
-	if result.ShouldCircuitBreak {
+	if merchantSuspended && txResult.OpenedNewCase {
 		resp.SuspendDuration = &result.DurationHours
 	}
 
 	ctx.JSON(http.StatusOK, resp)
+}
+
+func (server *Server) dispatchFoodSafetySuspensionFollowUps(ctx *gin.Context, txResult db.ReportFoodSafetyIncidentTxResult) {
+	if server.taskDistributor == nil || txResult.Case == nil {
+		return
+	}
+
+	merchant, err := server.store.GetMerchant(ctx, txResult.Case.MerchantID)
+	if err != nil {
+		log.Error().Err(err).Int64("merchant_id", txResult.Case.MerchantID).Msg("get merchant for food safety follow-up failed")
+		return
+	}
+
+	server.enqueueFoodSafetyNotification(ctx, &worker.SendNotificationPayload{
+		UserID:            merchant.OwnerUserID,
+		Type:              "food_safety",
+		Title:             "食安停业告警",
+		Content:           "您的店铺已因顾客食安上报触发停业，请立即停止外卖履约并联系平台处理。",
+		RelatedType:       "merchant",
+		RelatedID:         merchant.ID,
+		IgnorePreferences: true,
+		ExtraData: map[string]any{
+			"case_id":        txResult.Case.ID,
+			"merchant_id":    merchant.ID,
+			"scene":          "food_safety_suspension",
+			"trigger_reason": txResult.Case.TriggerReason,
+		},
+	})
+
+	for _, reservation := range txResult.AffectedReservations {
+		server.scheduleFoodSafetyReservationAlert(ctx, reservation)
+	}
+
+	for _, pausedOrder := range txResult.AffectedTakeoutOrders {
+		server.enqueueFoodSafetyNotification(ctx, &worker.SendNotificationPayload{
+			UserID:            pausedOrder.UserID,
+			Type:              "food_safety",
+			Title:             "订单暂停提醒",
+			Content:           "商户因食安事件暂停营业，您的外卖订单已暂停履约。请等待商家或平台联系；退款需由您或商家主动发起。",
+			RelatedType:       "order",
+			RelatedID:         pausedOrder.ID,
+			IgnorePreferences: true,
+			ExtraData: map[string]any{
+				"order_id":    pausedOrder.ID,
+				"merchant_id": pausedOrder.MerchantID,
+				"scene":       "food_safety_order_paused",
+			},
+		})
+
+		delivery, err := server.store.GetDeliveryByOrderID(ctx, pausedOrder.ID)
+		if err != nil || !delivery.RiderID.Valid {
+			continue
+		}
+
+		rider, err := server.store.GetRider(ctx, delivery.RiderID.Int64)
+		if err != nil {
+			log.Error().Err(err).Int64("order_id", pausedOrder.ID).Int64("rider_id", delivery.RiderID.Int64).Msg("get rider for food safety pause notification failed")
+			continue
+		}
+
+		server.enqueueFoodSafetyNotification(ctx, &worker.SendNotificationPayload{
+			UserID:            rider.UserID,
+			Type:              "food_safety",
+			Title:             "订单暂停提醒",
+			Content:           "关联商户因食安事件暂停营业，请立即停止继续履约并等待平台或商家进一步处理。",
+			RelatedType:       "delivery",
+			RelatedID:         delivery.ID,
+			IgnorePreferences: true,
+			ExtraData: map[string]any{
+				"order_id":    pausedOrder.ID,
+				"delivery_id": delivery.ID,
+				"merchant_id": pausedOrder.MerchantID,
+				"scene":       "food_safety_order_paused",
+			},
+		})
+	}
+}
+
+func (server *Server) scheduleFoodSafetyReservationAlert(ctx *gin.Context, reservation db.TableReservation) {
+	if server.taskDistributor == nil {
+		return
+	}
+
+	reservationTime := time.Date(
+		reservation.ReservationDate.Time.Year(), reservation.ReservationDate.Time.Month(), reservation.ReservationDate.Time.Day(),
+		int(reservation.ReservationTime.Microseconds/1000000/3600), int((reservation.ReservationTime.Microseconds/1000000%3600)/60), 0, 0, time.Local,
+	)
+	alertTime := reservationTime.Add(-3 * time.Hour)
+	options := []asynq.Option{
+		asynq.Queue(worker.QueueDefault),
+		asynq.MaxRetry(3),
+		asynq.Unique(45 * 24 * time.Hour),
+	}
+	if alertTime.After(time.Now()) {
+		options = append(options, asynq.ProcessAt(alertTime))
+	} else {
+		options = append(options, asynq.ProcessIn(0))
+	}
+
+	if err := server.taskDistributor.DistributeTaskReservationFoodSafetyAlert(ctx, &worker.PayloadReservationFoodSafetyAlert{
+		ReservationID: reservation.ID,
+	}, options...); err != nil {
+		log.Error().Err(err).Int64("reservation_id", reservation.ID).Msg("enqueue reservation food safety alert failed")
+	}
+}
+
+func (server *Server) enqueueFoodSafetyNotification(ctx *gin.Context, payload *worker.SendNotificationPayload) {
+	if server.taskDistributor == nil {
+		return
+	}
+	if err := server.taskDistributor.DistributeTaskSendNotification(
+		ctx,
+		payload,
+		asynq.Queue(worker.QueueDefault),
+		asynq.MaxRetry(3),
+	); err != nil {
+		log.Error().Err(err).Int64("user_id", payload.UserID).Str("title", payload.Title).Msg("enqueue food safety notification failed")
+	}
+}
+
+func buildFoodSafetyPrimaryProduct(items []db.ListOrderItemsWithDishByOrderRow) (string, string) {
+	keys := make([]string, 0, len(items))
+	labels := make([]string, 0, len(items))
+
+	for _, item := range items {
+		name := strings.TrimSpace(item.Name)
+		switch {
+		case item.DishID.Valid:
+			keys = appendUniqueFoodSafetyStrings(keys, fmt.Sprintf("dish:%d", item.DishID.Int64))
+		case item.ComboID.Valid:
+			keys = appendUniqueFoodSafetyStrings(keys, fmt.Sprintf("combo:%d", item.ComboID.Int64))
+		case name != "":
+			keys = appendUniqueFoodSafetyStrings(keys, "name:"+strings.ToLower(name))
+		}
+		if name != "" {
+			labels = appendUniqueFoodSafetyStrings(labels, name)
+		}
+	}
+
+	if len(keys) == 1 {
+		label := ""
+		if len(labels) > 0 {
+			label = labels[0]
+		}
+		return keys[0], label
+	}
+
+	if len(labels) == 0 {
+		return "", ""
+	}
+
+	return "", strings.Join(labels, "、")
+}
+
+func appendUniqueFoodSafetyStrings(values []string, candidate string) []string {
+	candidate = strings.TrimSpace(candidate)
+	if candidate == "" {
+		return values
+	}
+	for _, value := range values {
+		if value == candidate {
+			return values
+		}
+	}
+	return append(values, candidate)
+}
+
+func foodSafetyIncidentStatusFromResult(result *algorithm.FoodSafetyCheckResult) string {
+	if result != nil && result.IsMalicious {
+		return "rejected"
+	}
+	return "reported"
+}
+
+func buildFoodSafetyIncidentSnapshots(order db.Order, items []db.ListOrderItemsWithDishByOrderRow, reporterUserID int64) ([]byte, []byte, []byte, error) {
+	var addressID *int64
+	if order.AddressID.Valid {
+		addressID = &order.AddressID.Int64
+	}
+
+	itemPayload := make([]map[string]interface{}, 0, len(items))
+	for _, item := range items {
+		payload := map[string]interface{}{
+			"name":       item.Name,
+			"quantity":   item.Quantity,
+			"subtotal":   item.Subtotal,
+			"dish_id":    nil,
+			"combo_id":   nil,
+			"created_at": item.CreatedAt,
+		}
+		if item.DishID.Valid {
+			payload["dish_id"] = item.DishID.Int64
+		}
+		if item.ComboID.Valid {
+			payload["combo_id"] = item.ComboID.Int64
+		}
+		itemPayload = append(itemPayload, payload)
+	}
+
+	orderSnapshot, err := json.Marshal(map[string]interface{}{
+		"order_id":         order.ID,
+		"order_no":         order.OrderNo,
+		"user_id":          order.UserID,
+		"reporter_user_id": reporterUserID,
+		"merchant_id":      order.MerchantID,
+		"order_type":       order.OrderType,
+		"address_id":       addressID,
+		"status":           order.Status,
+		"total_amount":     order.TotalAmount,
+		"delivery_fee":     order.DeliveryFee,
+		"created_at":       order.CreatedAt,
+		"completed_at":     order.CompletedAt,
+		"items":            itemPayload,
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	merchantSnapshot, err := json.Marshal(map[string]interface{}{
+		"merchant_id": order.MerchantID,
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	riderSnapshot, err := json.Marshal(map[string]interface{}{})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return orderSnapshot, merchantSnapshot, riderSnapshot, nil
 }
 
 // TriggerFraudDetectionRequest 触发欺诈检测请求
@@ -937,66 +1274,6 @@ func (server *Server) SuspendMerchant(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, successMessage(fmt.Sprintf("商户 %d 已熔断 %d 小时", merchantID, req.DurationHours)))
 }
 
-// ResumeMerchantRequest 恢复商户请求
-type ResumeMerchantRequest struct {
-	Reason string `json:"reason" binding:"required,min=5,max=500"`
-}
-
-// ResumeMerchant 恢复商户上线（运营商）
-func (server *Server) ResumeMerchant(ctx *gin.Context) {
-	merchantIDStr := ctx.Param("id")
-	merchantID, err := strconv.ParseInt(merchantIDStr, 10, 64)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	var req ResumeMerchantRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 获取商户信息以验证区域
-	merchant, err := server.store.GetMerchant(ctx, merchantID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant %d: %w", merchantID, err)))
-		return
-	}
-
-	// 验证 operator 是否管理该商户的区域
-	if _, err := server.checkOperatorManagesRegion(ctx, merchant.RegionID); err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
-		return
-	}
-
-	if err = server.store.UnsuspendMerchant(ctx, merchantID); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("unsuspend merchant %d: %w", merchantID, err)))
-		return
-	}
-
-	if err = server.store.UnsuspendMerchantTakeout(ctx, merchantID); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("unsuspend merchant takeout %d: %w", merchantID, err)))
-		return
-	}
-
-	// 更新商户状态为正常
-	_, err = server.store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{
-		ID:     merchantID,
-		Status: "active",
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("resume merchant %d: %w", merchantID, err)))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, successMessage(fmt.Sprintf("商户 %d 已恢复上线", merchantID)))
-}
-
 // SuspendRiderRequest 暂停骑手请求
 type SuspendRiderRequest struct {
 	Reason        string `json:"reason" binding:"required,min=5,max=500"`
@@ -1056,80 +1333,24 @@ func (server *Server) SuspendRider(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, riderSuspendResponse{Message: fmt.Sprintf("骑手 %d 已暂停 %d 小时", riderID, req.DurationHours), Reason: req.Reason, DurationHours: req.DurationHours})
 }
 
-// ResumeRiderRequest 恢复骑手请求
-type ResumeRiderRequest struct {
-	Reason string `json:"reason" binding:"required,min=5,max=500"`
-}
-
-// ResumeRider 恢复骑手上线（运营商）
-func (server *Server) ResumeRider(ctx *gin.Context) {
-	riderIDStr := ctx.Param("id")
-	riderID, err := strconv.ParseInt(riderIDStr, 10, 64)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	var req ResumeRiderRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 获取骑手信息以验证区域
-	rider, err := server.store.GetRider(ctx, riderID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("rider not found")))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get rider %d: %w", riderID, err)))
-		return
-	}
-
-	// 验证骑手有区域且 operator 管理该区域
-	if !rider.RegionID.Valid {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("rider has no assigned region")))
-		return
-	}
-	if _, err := server.checkOperatorManagesRegion(ctx, rider.RegionID.Int64); err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
-		return
-	}
-
-	// 恢复后先回到 approved，再按押金阈值统一收敛为 approved/active。
-	restoredRider, err := server.store.UpdateRiderStatus(ctx, db.UpdateRiderStatusParams{
-		ID:     riderID,
-		Status: db.RiderStatusApproved,
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("resume rider %d: %w", riderID, err)))
-		return
-	}
-	if _, err = db.ReconcileRiderOperationalStatus(ctx, server.store, restoredRider); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("reconcile resumed rider %d: %w", riderID, err)))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, successMessage(fmt.Sprintf("骑手 %d 已恢复上线", riderID)))
-}
-
 // ==================== 用户索赔查询 API ====================
 
 type userClaimResponse struct {
-	ID             int64      `json:"id"`
-	OrderID        int64      `json:"order_id"`
-	ClaimType      string     `json:"claim_type"`
-	Description    string     `json:"description"`
-	ClaimAmount    int64      `json:"claim_amount"`
-	ApprovedAmount *int64     `json:"approved_amount,omitempty"`
-	Status         string     `json:"status"`                    // accepted, rejected
-	DecisionStatus string     `json:"decision_status,omitempty"` // auto-adjudicated, rejected
-	PayoutStatus   string     `json:"payout_status,omitempty"`   // processing, paid
-	Reason         string     `json:"reason,omitempty"`
-	PayoutETA      *string    `json:"payout_eta,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	ProcessedAt    *time.Time `json:"processed_at,omitempty"`
+	ID                     int64      `json:"id"`
+	OrderID                int64      `json:"order_id"`
+	ClaimType              string     `json:"claim_type"`
+	Description            string     `json:"description"`
+	ClaimAmount            int64      `json:"claim_amount"`
+	ApprovedAmount         *int64     `json:"approved_amount,omitempty"`
+	Status                 string     `json:"status"`
+	DecisionStatus         string     `json:"decision_status,omitempty"` // auto-adjudicated, rejected
+	CompensationStatus     string     `json:"compensation_status,omitempty"`
+	PayoutStatus           string     `json:"payout_status,omitempty"` // processing, paid
+	CustomerActionRequired bool       `json:"customer_action_required"`
+	CustomerAction         string     `json:"customer_action,omitempty"`
+	Reason                 string     `json:"reason,omitempty"`
+	CreatedAt              time.Time  `json:"created_at"`
+	ProcessedAt            *time.Time `json:"processed_at,omitempty"`
 }
 
 type riderSuspendResponse struct {
@@ -1146,20 +1367,22 @@ type userClaimsListResponse struct {
 }
 
 func newUserClaimResponse(claim db.Claim) userClaimResponse {
-	status, decisionStatus, payoutStatus, payoutETA := userClaimLifecycleFromClaim(claim)
+	status, decisionStatus, compensationStatus, payoutStatus, customerActionRequired, customerAction := userClaimLifecycleFromClaim(claim)
 	resp := userClaimResponse{
-		ID:             claim.ID,
-		OrderID:        claim.OrderID,
-		ClaimType:      claim.ClaimType,
-		Description:    claim.Description,
-		ClaimAmount:    claim.ClaimAmount,
-		Status:         status,
-		DecisionStatus: decisionStatus,
-		PayoutStatus:   payoutStatus,
-		Reason:         userClaimReason(claim),
-		PayoutETA:      payoutETA,
-		CreatedAt:      claim.CreatedAt,
-		ProcessedAt:    userClaimProcessedAt(claim),
+		ID:                     claim.ID,
+		OrderID:                claim.OrderID,
+		ClaimType:              claim.ClaimType,
+		Description:            claim.Description,
+		ClaimAmount:            claim.ClaimAmount,
+		Status:                 status,
+		DecisionStatus:         decisionStatus,
+		CompensationStatus:     compensationStatus,
+		PayoutStatus:           payoutStatus,
+		CustomerActionRequired: customerActionRequired,
+		CustomerAction:         customerAction,
+		Reason:                 userClaimReason(claim),
+		CreatedAt:              claim.CreatedAt,
+		ProcessedAt:            userClaimProcessedAt(claim),
 	}
 
 	if claim.ApprovedAmount.Valid {
@@ -1167,6 +1390,142 @@ func newUserClaimResponse(claim db.Claim) userClaimResponse {
 	}
 
 	return resp
+}
+
+func (server *Server) enqueueClaimCompensationActions(ctx context.Context, result db.CreateClaimCompensationTxResult) error {
+	if server.taskDistributor == nil {
+		return fmt.Errorf("task distributor unavailable")
+	}
+
+	if result.RestrictionAction != nil {
+		if err := server.taskDistributor.DistributeTaskClaimBehaviorAction(
+			ctx,
+			&worker.ClaimBehaviorActionPayload{ActionID: result.RestrictionAction.ID},
+			asynq.Queue(worker.QueueCritical),
+			asynq.MaxRetry(10),
+		); err != nil {
+			return fmt.Errorf("enqueue claim restriction action %d: %w", result.RestrictionAction.ID, err)
+		}
+	}
+
+	if result.RecoveryAction != nil {
+		if err := server.taskDistributor.DistributeTaskClaimBehaviorAction(
+			ctx,
+			&worker.ClaimBehaviorActionPayload{ActionID: result.RecoveryAction.ID},
+			asynq.Queue(worker.QueueCritical),
+			asynq.MaxRetry(10),
+		); err != nil {
+			return fmt.Errorf("enqueue claim recovery action %d: %w", result.RecoveryAction.ID, err)
+		}
+	}
+
+	if result.NotificationAction != nil {
+		if err := server.taskDistributor.DistributeTaskClaimBehaviorAction(
+			ctx,
+			&worker.ClaimBehaviorActionPayload{ActionID: result.NotificationAction.ID},
+			asynq.Queue(worker.QueueDefault),
+			asynq.MaxRetry(5),
+		); err != nil {
+			return fmt.Errorf("enqueue claim notification action %d: %w", result.NotificationAction.ID, err)
+		}
+	}
+
+	if result.PayoutAction != nil {
+		if err := server.taskDistributor.DistributeTaskClaimPayout(
+			ctx,
+			&worker.ClaimPayoutPayload{ActionID: result.PayoutAction.ID},
+			asynq.Queue(worker.QueueCritical),
+			asynq.MaxRetry(10),
+		); err != nil {
+			return fmt.Errorf("enqueue claim payout action %d: %w", result.PayoutAction.ID, err)
+		}
+	}
+
+	return nil
+}
+
+// WithdrawClaim 撤回尚未进入补偿执行的索赔
+// @Summary 撤回索赔
+// @Description 用户撤回已完成判责但尚未进入补偿执行的索赔
+// @Tags 索赔管理
+// @Accept json
+// @Produce json
+// @Param id path int true "索赔ID"
+// @Success 200 {object} userClaimResponse "索赔状态"
+// @Failure 400 {object} ErrorResponse "无效的索赔ID"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "该索赔不属于当前用户"
+// @Failure 404 {object} ErrorResponse "索赔不存在"
+// @Failure 409 {object} ErrorResponse "当前索赔状态不允许撤回"
+// @Failure 500 {object} ErrorResponse "内部错误"
+// @Router /v1/claims/{id}/withdraw [post]
+// @Security BearerAuth
+func (server *Server) WithdrawClaim(ctx *gin.Context) {
+	claimIDStr := ctx.Param("id")
+	claimID, err := strconv.ParseInt(claimIDStr, 10, 64)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidClaimID))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	claim, err := server.store.GetClaim(ctx, claimID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrClaimNotFound))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get claim %d: %w", claimID, err)))
+		return
+	}
+
+	if claim.UserID != authPayload.UserID {
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrClaimNotOwned))
+		return
+	}
+
+	if claimWasWithdrawnByCustomer(claim) {
+		ctx.JSON(http.StatusOK, newUserClaimResponse(claim))
+		return
+	}
+
+	if claim.Status == db.ClaimStatusApproved || claim.PaidAt.Valid || claim.Status == db.ClaimStatusRejected || !claim.ApprovedAmount.Valid || claim.ApprovedAmount.Int64 <= 0 || !claimAwaitingCustomerConfirmation(claim) {
+		ctx.JSON(http.StatusConflict, errorResponse(ErrClaimCannotBeWithdrawn))
+		return
+	}
+
+	withdrewAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	updatedClaim, err := server.store.UpdateClaimStatusIfCurrent(ctx, db.UpdateClaimStatusIfCurrentParams{
+		ID:            claim.ID,
+		CurrentStatus: claim.Status,
+		Status:        db.ClaimStatusWithdrawn,
+		ReviewNotes:   pgtype.Text{String: claimReviewNoteCustomerWithdrawn, Valid: true},
+		ReviewedAt:    withdrewAt,
+	})
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusConflict, errorResponse(ErrClaimCannotBeWithdrawn))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("withdraw claim %d: %w", claim.ID, err)))
+		return
+	}
+
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "customer",
+		Action:      "user_claim_withdrawn",
+		TargetType:  "claim",
+		TargetID:    &claim.ID,
+		Metadata: map[string]any{
+			"claim_id": claim.ID,
+			"order_id": claim.OrderID,
+			"status":   submitClaimStatusClosed,
+		},
+	})
+
+	ctx.JSON(http.StatusOK, newUserClaimResponse(updatedClaim))
 }
 
 // ListUserClaims 获取用户的索赔列表
@@ -1270,4 +1629,100 @@ func (server *Server) GetClaimDetail(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, newUserClaimResponse(claim))
+}
+
+// ConfirmContinueClaim 确认继续索赔并进入补偿阶段
+// @Summary 确认继续索赔
+// @Description 用户确认继续已完成判责的索赔，系统进入补偿执行阶段
+// @Tags 索赔管理
+// @Accept json
+// @Produce json
+// @Param id path int true "索赔ID"
+// @Success 200 {object} userClaimResponse "索赔状态"
+// @Failure 400 {object} ErrorResponse "无效的索赔ID"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "该索赔不属于当前用户"
+// @Failure 404 {object} ErrorResponse "索赔不存在"
+// @Failure 409 {object} ErrorResponse "当前索赔状态不允许继续"
+// @Failure 500 {object} ErrorResponse "内部错误"
+// @Router /v1/claims/{id}/confirm-continue [post]
+// @Security BearerAuth
+func (server *Server) ConfirmContinueClaim(ctx *gin.Context) {
+	claimIDStr := ctx.Param("id")
+	claimID, err := strconv.ParseInt(claimIDStr, 10, 64)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidClaimID))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	claim, err := server.store.GetClaim(ctx, claimID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrClaimNotFound))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get claim %d: %w", claimID, err)))
+		return
+	}
+
+	if claim.UserID != authPayload.UserID {
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrClaimNotOwned))
+		return
+	}
+
+	if claimWasWithdrawnByCustomer(claim) || claim.Status == db.ClaimStatusRejected || !claim.ApprovedAmount.Valid || claim.ApprovedAmount.Int64 <= 0 {
+		ctx.JSON(http.StatusConflict, errorResponse(ErrClaimCannotContinue))
+		return
+	}
+
+	if claim.PaidAt.Valid {
+		ctx.JSON(http.StatusOK, newUserClaimResponse(claim))
+		return
+	}
+
+	if claim.Status != db.ClaimStatusApproved && !claimAwaitingCustomerConfirmation(claim) {
+		ctx.JSON(http.StatusConflict, errorResponse(ErrClaimCannotContinue))
+		return
+	}
+
+	result, err := server.store.CreateClaimCompensationTx(ctx, db.CreateClaimCompensationTxParams{ClaimID: claim.ID})
+	if err != nil {
+		if db.IsClaimCompensationNotEligible(err) {
+			ctx.JSON(http.StatusConflict, errorResponse(ErrClaimCannotContinue))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create claim compensation tx: %w", err)))
+		return
+	}
+
+	enqueueDeferred := false
+	if err := server.enqueueClaimCompensationActions(ctx, result); err != nil {
+		enqueueDeferred = true
+		log.Warn().Err(err).
+			Int64("claim_id", claim.ID).
+			Bool("payout_action_created", result.PayoutAction != nil).
+			Bool("recovery_action_created", result.RecoveryAction != nil).
+			Bool("restriction_action_created", result.RestrictionAction != nil).
+			Bool("notification_action_created", result.NotificationAction != nil).
+			Msg("failed to enqueue claim compensation actions after compensation state was persisted")
+	}
+
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "customer",
+		Action:      "user_claim_continue_confirmed",
+		TargetType:  "claim",
+		TargetID:    &claim.ID,
+		Metadata: map[string]any{
+			"claim_id":               claim.ID,
+			"compensation_triggered": result.PayoutAction != nil,
+			"recovery_created":       result.RecoveryAction != nil,
+			"restriction_created":    result.RestrictionAction != nil,
+			"dispatch_deferred":      enqueueDeferred,
+		},
+	})
+
+	ctx.JSON(http.StatusOK, newUserClaimResponse(result.Claim))
 }

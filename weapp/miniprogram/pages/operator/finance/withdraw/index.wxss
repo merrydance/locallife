@@ -45,6 +45,10 @@
   padding: var(--spacer-sm);
 }
 
+.metrics-row--secondary {
+  margin-top: var(--spacer-sm);
+}
+
 .metric-item {
   flex: 1;
   display: flex;
@@ -111,21 +115,6 @@
   color: var(--td-text-color-secondary);
 }
 
-.hint-row {
-  margin: var(--spacer-sm) 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: var(--font-size-xs);
-  color: var(--td-text-color-secondary);
-}
-
-.error-text {
-  margin-bottom: var(--spacer-sm);
-  font-size: var(--font-size-xs);
-  color: var(--td-error-color);
-}
-
 .state-wrap {
   padding: var(--spacer-sm) 0;
 }
@@ -158,11 +147,6 @@
 .skeleton-input {
   width: 100%;
   height: 80rpx;
-}
-
-.skeleton-btn {
-  width: 100%;
-  height: 88rpx;
 }
 
 .safe-bottom {

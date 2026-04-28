@@ -106,6 +106,61 @@ func TestCreateReviewAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "AddReviewImageFailure",
+			body: map[string]interface{}{
+				"order_id":        order.ID,
+				"content":         "Great food with photos!",
+				"media_asset_ids": []int64{101},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(order.ID)).
+					Times(1).
+					Return(order, nil)
+
+				store.EXPECT().
+					GetReviewByOrderID(gomock.Any(), gomock.Eq(order.ID)).
+					Times(1).
+					Return(db.Review{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					GetUser(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(user, nil)
+
+				store.EXPECT().
+					CreateReview(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Review{
+						ID:         1,
+						OrderID:    order.ID,
+						UserID:     user.ID,
+						MerchantID: merchant.ID,
+						Content:    "Great food with photos!",
+						IsVisible:  true,
+						CreatedAt:  time.Now(),
+					}, nil)
+
+				store.EXPECT().
+					AddReviewImage(gomock.Any(), gomock.Eq(db.AddReviewImageParams{
+						ReviewID:     1,
+						MediaAssetID: 101,
+						SortOrder:    0,
+					})).
+					Times(1).
+					Return(db.ReviewImage{}, fmt.Errorf("insert review image failed"))
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				var resp APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.Equal(t, "internal server error", resp.Message)
+			},
+		},
+		{
 			name: "OrderNotBelongToUser",
 			body: map[string]interface{}{
 				"order_id": order.ID,
@@ -226,6 +281,11 @@ func TestCreateReviewAPI(t *testing.T) {
 			case "OK":
 				wechatClient.EXPECT().
 					MsgSecCheck(gomock.Any(), gomock.Eq(user.WechatOpenid), gomock.Eq(2), gomock.Eq("Great food and service!")).
+					Times(1).
+					Return(nil)
+			case "AddReviewImageFailure":
+				wechatClient.EXPECT().
+					MsgSecCheck(gomock.Any(), gomock.Eq(user.WechatOpenid), gomock.Eq(2), gomock.Eq("Great food with photos!")).
 					Times(1).
 					Return(nil)
 			}

@@ -28,6 +28,9 @@
       "pages": [
         "analytics/index",
         "dashboard/index",
+        "dispatch-hall/index",
+        "notifications/index",
+        "notifications/detail/index",
         "merchants/index",
         "merchants/detail/index",
         "riders/index",
@@ -40,8 +43,6 @@
         "safety/report/index",
         "safety/detail/index",
         "finance/withdraw/index",
-        "appeal/list/index",
-        "appeal/detail/index",
         "region-expansion/index"
       ],
       "independent": false
@@ -80,9 +81,13 @@
       "pages": [
         "detail/index",
         "list/index",
-        "tracking/index",
-        "success/index"
+        "tracking/index"
       ]
+    },
+    {
+      "root": "pages/payment",
+      "name": "payment",
+      "pages": ["result/index"]
     },
     {
       "root": "pages/dine-in",
@@ -90,8 +95,7 @@
       "pages": [
         "scan-entry/scan-entry",
         "menu/menu",
-        "checkout/checkout",
-        "payment-success/payment-success"
+        "checkout/checkout"
       ]
     },
     {
@@ -175,7 +179,9 @@
         "settings/recharge-rules/edit/index",
         "settings/application/index",
         "settings/applyment/index",
+        "settings/applyment/action/index",
         "settings/applyment/submit/index",
+        "settings/applyment/settlement-account/index",
         "settings/display-config/index",
         "group/application/index",
         "group/join/index",
@@ -186,16 +192,6 @@
         "claims/detail/index",
         "appeals/index",
         "appeals/detail/index",
-        "finance/index",
-        "finance/bills/index",
-        "finance/settlement-account/index",
-        "finance/settlement-account/edit/index",
-        "finance/orders/index",
-        "finance/service-fees/index",
-        "finance/promotions/index",
-        "finance/daily/index",
-        "finance/settlements/index",
-        "finance/timeline/index",
         "reviews/index",
         "dishes/index",
         "dishes/categories/index",

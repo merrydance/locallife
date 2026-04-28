@@ -1,14 +1,18 @@
 package api
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/rs/zerolog/log"
 )
@@ -98,7 +102,8 @@ type createSubsidyRequest struct {
 // 商户只能发起一次补差；失败后仅允许用相同参数和原补差单号重入。
 func (server *Server) createSubsidy(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("payment service not configured")))
+		err := errors.New("payment service not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service not configured", "create subsidy payment service not configured"))
 		return
 	}
 
@@ -200,30 +205,32 @@ func (server *Server) createSubsidy(ctx *gin.Context) {
 	})
 
 	if wxErr != nil {
-		log.Error().Err(wxErr).Str("out_subsidy_no", outSubsidyNo).Msg("create subsidy: wxpay api failed")
 		// 标记失败，让运营商知晓
-		_, _ = server.store.UpdateSubsidyOrderToFailed(ctx, db.UpdateSubsidyOrderToFailedParams{
+		if _, err := server.store.UpdateSubsidyOrderToFailed(ctx, db.UpdateSubsidyOrderToFailedParams{
 			ID:         subsidyOrder.ID,
 			FailReason: pgtype.Text{String: wxErr.Error(), Valid: true},
-		})
-		ctx.JSON(http.StatusBadGateway, errorResponse(errors.New("subsidy api unavailable")))
+		}); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("mark subsidy order failed after wxpay error: %w", err)))
+			return
+		}
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, wxErr, "subsidy api unavailable", "create subsidy: wxpay api failed"))
 		return
 	}
 
-	result := ""
-	if wxResp != nil {
-		result = wxResp.Result
-	}
-	if wxResp == nil || result != wechatcontracts.SubsidyResultSuccess {
+	result := subsidyResponseResult(wxResp)
+	if wxResp == nil || (result != "" && result != wechatcontracts.SubsidyResultSuccess) {
 		failReason := "subsidy result is not SUCCESS"
 		if result != "" {
 			failReason = fmt.Sprintf("subsidy result is %s", result)
 		}
 		log.Error().Str("out_subsidy_no", outSubsidyNo).Str("result", result).Msg("create subsidy: wxpay returned non-success result")
-		_, _ = server.store.UpdateSubsidyOrderToFailed(ctx, db.UpdateSubsidyOrderToFailedParams{
+		if _, err := server.store.UpdateSubsidyOrderToFailed(ctx, db.UpdateSubsidyOrderToFailedParams{
 			ID:         subsidyOrder.ID,
 			FailReason: pgtype.Text{String: failReason, Valid: true},
-		})
+		}); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("mark subsidy order failed after non-success wxpay result: %w", err)))
+			return
+		}
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("subsidy request did not succeed")))
 		return
 	}
@@ -243,6 +250,7 @@ func (server *Server) createSubsidy(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+	recordSubsidyCreateCommandAccepted(ctx, server.store, updated, wxResp)
 
 	ctx.JSON(http.StatusCreated, toSubsidyOrderResponse(updated))
 }
@@ -259,7 +267,8 @@ type returnSubsidyRequest struct {
 // POST /v1/operator/payment-orders/:id/subsidies/return
 func (server *Server) returnSubsidy(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("payment service not configured")))
+		err := errors.New("payment service not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service not configured", "return subsidy payment service not configured"))
 		return
 	}
 
@@ -352,12 +361,14 @@ func (server *Server) returnSubsidy(ctx *gin.Context) {
 	})
 
 	if wxErr != nil {
-		log.Error().Err(wxErr).Str("out_return_no", outReturnNo).Msg("return subsidy: wxpay api failed")
-		_, _ = server.store.UpdateSubsidyReturnToFailed(ctx, db.UpdateSubsidyReturnToFailedParams{
+		if _, err := server.store.UpdateSubsidyReturnToFailed(ctx, db.UpdateSubsidyReturnToFailedParams{
 			OutReturnNo:      pgtype.Text{String: outReturnNo, Valid: true},
 			ReturnFailReason: pgtype.Text{String: wxErr.Error(), Valid: true},
-		})
-		ctx.JSON(http.StatusBadGateway, errorResponse(errors.New("subsidy return api unavailable")))
+		}); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("mark subsidy return failed after wxpay error: %w", err)))
+			return
+		}
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, wxErr, "subsidy return api unavailable", "return subsidy: wxpay api failed"))
 		return
 	}
 
@@ -371,10 +382,13 @@ func (server *Server) returnSubsidy(ctx *gin.Context) {
 			failReason = fmt.Sprintf("subsidy return result is %s", result)
 		}
 		log.Error().Str("out_return_no", outReturnNo).Str("result", result).Msg("return subsidy: wxpay returned non-success result")
-		_, _ = server.store.UpdateSubsidyReturnToFailed(ctx, db.UpdateSubsidyReturnToFailedParams{
+		if _, err := server.store.UpdateSubsidyReturnToFailed(ctx, db.UpdateSubsidyReturnToFailedParams{
 			OutReturnNo:      pgtype.Text{String: outReturnNo, Valid: true},
 			ReturnFailReason: pgtype.Text{String: failReason, Valid: true},
-		})
+		}); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("mark subsidy return failed after non-success wxpay result: %w", err)))
+			return
+		}
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("subsidy return did not succeed")))
 		return
 	}
@@ -393,6 +407,7 @@ func (server *Server) returnSubsidy(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+	recordSubsidyReturnCommandAccepted(ctx, server.store, updated, wxResp)
 
 	ctx.JSON(http.StatusOK, toSubsidyOrderResponse(updated))
 }
@@ -403,7 +418,8 @@ func (server *Server) returnSubsidy(ctx *gin.Context) {
 // POST /v1/operator/payment-orders/:id/subsidies/cancel
 func (server *Server) cancelSubsidy(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("payment service not configured")))
+		err := errors.New("payment service not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service not configured", "cancel subsidy payment service not configured"))
 		return
 	}
 
@@ -444,8 +460,7 @@ func (server *Server) cancelSubsidy(ctx *gin.Context) {
 		Description:   "operator cancel",
 	})
 	if wxErr != nil {
-		log.Error().Err(wxErr).Str("out_subsidy_no", subsidyOrder.OutSubsidyNo).Msg("cancel subsidy: wxpay api failed")
-		ctx.JSON(http.StatusBadGateway, errorResponse(errors.New("cancel subsidy api unavailable")))
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, wxErr, "cancel subsidy api unavailable", "cancel subsidy: wxpay api failed"))
 		return
 	}
 	result := ""
@@ -465,8 +480,144 @@ func (server *Server) cancelSubsidy(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+	recordSubsidyCancelCommandAccepted(ctx, server.store, updated, wxResp)
 
 	ctx.JSON(http.StatusOK, toSubsidyOrderResponse(updated))
+}
+
+func recordSubsidyCreateCommandAccepted(ctx context.Context, store db.Store, subsidyOrder db.SubsidyOrder, resp *wechatcontracts.SubsidyResponse) {
+	if _, err := logic.NewPaymentCommandService(store).RecordExternalPaymentCommand(ctx, dbSubsidyCommandInput(
+		subsidyOrder,
+		db.ExternalPaymentCommandTypeCreateSubsidy,
+		db.ExternalPaymentObjectSubsidy,
+		strings.TrimSpace(subsidyOrder.OutSubsidyNo),
+		stringPtrIfNotEmpty(strings.TrimSpace(subsidyOrder.WxpaySubsidyID.String)),
+		subsidyCommandSnapshot(map[string]string{
+			"out_subsidy_no":   strings.TrimSpace(subsidyOrder.OutSubsidyNo),
+			"sub_mchid":        strings.TrimSpace(subsidyOrder.SubMchID),
+			"transaction_id":   strings.TrimSpace(subsidyOrder.TransactionID.String),
+			"wxpay_subsidy_id": strings.TrimSpace(subsidyOrder.WxpaySubsidyID.String),
+			"result":           subsidyResponseResult(resp),
+			"amount":           fmt.Sprintf("%d", subsidyOrder.Amount),
+		}),
+	)); err != nil {
+		log.Warn().Err(err).
+			Int64("subsidy_order_id", subsidyOrder.ID).
+			Str("out_subsidy_no", strings.TrimSpace(subsidyOrder.OutSubsidyNo)).
+			Msg("record subsidy create command accepted failed")
+	}
+}
+
+func recordSubsidyReturnCommandAccepted(ctx context.Context, store db.Store, subsidyOrder db.SubsidyOrder, resp *wechatcontracts.SubsidyReturnResponse) {
+	if !subsidyOrder.OutReturnNo.Valid {
+		return
+	}
+	if _, err := logic.NewPaymentCommandService(store).RecordExternalPaymentCommand(ctx, dbSubsidyCommandInput(
+		subsidyOrder,
+		db.ExternalPaymentCommandTypeReturnSubsidy,
+		db.ExternalPaymentObjectSubsidyReturn,
+		strings.TrimSpace(subsidyOrder.OutReturnNo.String),
+		stringPtrIfNotEmpty(strings.TrimSpace(subsidyOrder.ReturnWxpayID.String)),
+		subsidyCommandSnapshot(map[string]string{
+			"out_return_no":     strings.TrimSpace(subsidyOrder.OutReturnNo.String),
+			"out_subsidy_no":    strings.TrimSpace(subsidyOrder.OutSubsidyNo),
+			"sub_mchid":         strings.TrimSpace(subsidyOrder.SubMchID),
+			"transaction_id":    strings.TrimSpace(subsidyOrder.TransactionID.String),
+			"subsidy_refund_id": strings.TrimSpace(subsidyOrder.ReturnWxpayID.String),
+			"result":            subsidyReturnResponseResult(resp),
+			"amount":            fmt.Sprintf("%d", subsidyOrder.ReturnAmount.Int64),
+		}),
+	)); err != nil {
+		log.Warn().Err(err).
+			Int64("subsidy_order_id", subsidyOrder.ID).
+			Str("out_return_no", strings.TrimSpace(subsidyOrder.OutReturnNo.String)).
+			Msg("record subsidy return command accepted failed")
+	}
+}
+
+func recordSubsidyCancelCommandAccepted(ctx context.Context, store db.Store, subsidyOrder db.SubsidyOrder, resp *wechatcontracts.SubsidyCancelResponse) {
+	if _, err := logic.NewPaymentCommandService(store).RecordExternalPaymentCommand(ctx, dbSubsidyCommandInput(
+		subsidyOrder,
+		db.ExternalPaymentCommandTypeCancelSubsidy,
+		db.ExternalPaymentObjectSubsidy,
+		strings.TrimSpace(subsidyOrder.OutSubsidyNo),
+		nil,
+		subsidyCommandSnapshot(map[string]string{
+			"out_subsidy_no": strings.TrimSpace(subsidyOrder.OutSubsidyNo),
+			"sub_mchid":      strings.TrimSpace(subsidyOrder.SubMchID),
+			"transaction_id": strings.TrimSpace(subsidyOrder.TransactionID.String),
+			"result":         subsidyCancelResponseResult(resp),
+		}),
+	)); err != nil {
+		log.Warn().Err(err).
+			Int64("subsidy_order_id", subsidyOrder.ID).
+			Str("out_subsidy_no", strings.TrimSpace(subsidyOrder.OutSubsidyNo)).
+			Msg("record subsidy cancel command accepted failed")
+	}
+}
+
+func dbSubsidyCommandInput(
+	subsidyOrder db.SubsidyOrder,
+	commandType string,
+	externalObjectType string,
+	externalObjectKey string,
+	externalSecondaryKey *string,
+	responseSnapshot []byte,
+) logic.RecordExternalPaymentCommandInput {
+	businessObjectType := "subsidy_order"
+	businessObjectID := subsidyOrder.ID
+	return logic.RecordExternalPaymentCommandInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelEcommerce,
+		Capability:           db.ExternalPaymentCapabilitySubsidy,
+		CommandType:          commandType,
+		BusinessOwner:        db.ExternalPaymentBusinessOwnerSubsidy,
+		BusinessObjectType:   &businessObjectType,
+		BusinessObjectID:     &businessObjectID,
+		ExternalObjectType:   externalObjectType,
+		ExternalObjectKey:    strings.TrimSpace(externalObjectKey),
+		ExternalSecondaryKey: externalSecondaryKey,
+		CommandStatus:        db.ExternalPaymentCommandStatusAccepted,
+		ResponseSnapshot:     responseSnapshot,
+	}
+}
+
+func subsidyCommandSnapshot(values map[string]string) []byte {
+	filtered := make(map[string]string, len(values))
+	for key, value := range values {
+		if strings.TrimSpace(value) != "" && strings.TrimSpace(value) != "0" {
+			filtered[key] = strings.TrimSpace(value)
+		}
+	}
+	if len(filtered) == 0 {
+		return []byte(`{}`)
+	}
+	data, err := json.Marshal(filtered)
+	if err != nil {
+		return []byte(`{}`)
+	}
+	return data
+}
+
+func subsidyResponseResult(resp *wechatcontracts.SubsidyResponse) string {
+	if resp == nil {
+		return ""
+	}
+	return strings.TrimSpace(resp.Result)
+}
+
+func subsidyReturnResponseResult(resp *wechatcontracts.SubsidyReturnResponse) string {
+	if resp == nil {
+		return ""
+	}
+	return strings.TrimSpace(resp.Result)
+}
+
+func subsidyCancelResponseResult(resp *wechatcontracts.SubsidyCancelResponse) string {
+	if resp == nil {
+		return ""
+	}
+	return strings.TrimSpace(resp.Result)
 }
 
 func validateSubsidyRetryMatch(existing db.SubsidyOrder, req createSubsidyRequest, subMchID, transactionID string) error {

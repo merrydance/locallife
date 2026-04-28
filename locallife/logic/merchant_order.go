@@ -55,6 +55,9 @@ func AcceptMerchantOrder(ctx context.Context, store db.Store, input MerchantOrde
 			OperatorType: "merchant",
 		})
 		if err != nil {
+			if errors.Is(err, db.ErrTakeoutOrderPausedByFoodSafety) {
+				return MerchantOrderUpdateResult{}, NewRequestError(http.StatusForbidden, errors.New("食安暂停期间不可继续处理外卖订单"))
+			}
 			return MerchantOrderUpdateResult{}, err
 		}
 
@@ -136,6 +139,9 @@ func MarkMerchantOrderReady(ctx context.Context, store db.Store, input MerchantO
 			OperatorType: "merchant",
 		})
 		if err != nil {
+			if errors.Is(err, db.ErrTakeoutOrderPausedByFoodSafety) {
+				return MerchantOrderUpdateResult{}, NewRequestError(http.StatusForbidden, errors.New("食安暂停期间不可继续处理外卖订单"))
+			}
 			return MerchantOrderUpdateResult{}, err
 		}
 

@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -67,11 +68,10 @@ type behaviorDecisionFactSnapshot struct {
 	PayoutMode           string                      `json:"payout_mode"`
 	RecoveryTarget       string                      `json:"recovery_target,omitempty"`
 	RecoveryAmount       int64                       `json:"recovery_amount,omitempty"`
+	RecoveryDueAt        *time.Time                  `json:"recovery_due_at,omitempty"`
 	ApprovedAmount       int64                       `json:"approved_amount,omitempty"`
 	Associations         behaviorAssociationPayload  `json:"associations"`
 	ResponsibilityFacts  behaviorResponsibilityFacts `json:"responsibility_facts"`
-	PlatformFallbackHint bool                        `json:"platform_fallback_hint,omitempty"`
-	FallbackHintReasons  []string                    `json:"fallback_hint_reasons,omitempty"`
 }
 
 type behaviorTraceMetricPayload struct {
@@ -79,7 +79,6 @@ type behaviorTraceMetricPayload struct {
 	ClaimAttempts            int32 `json:"claim_attempts,omitempty"`
 	EffectiveClaims          int32 `json:"effective_claims,omitempty"`
 	EffectiveLiabilityClaims int32 `json:"effective_liability_claims,omitempty"`
-	PlatformFallbackClaims   int32 `json:"platform_fallback_claims,omitempty"`
 	MaliciousConfirmedClaims int32 `json:"malicious_confirmed_claims,omitempty"`
 	MerchantRecoveredClaims  int32 `json:"merchant_recovered_claims,omitempty"`
 	RiderRecoveredClaims     int32 `json:"rider_recovered_claims,omitempty"`
@@ -129,19 +128,7 @@ type claimRecoveryEventPayload struct {
 	RecoveryAmount int64  `json:"recovery_amount"`
 }
 
-type behaviorDecisionScores struct {
-	ConfidenceScore        int32
-	UserRiskScore          int32
-	MerchantLiabilityScore int32
-	RiderLiabilityScore    int32
-}
-
 const (
-	behaviorDecisionLiabilityThreshold  = int32(70)
-	behaviorDecisionConfidenceThreshold = int32(60)
-	behaviorDecisionUserRiskThreshold   = int32(80)
-	behaviorDecisionUserRiskLeadMargin  = int32(20)
-	behaviorDecisionRestrictConfidence  = int32(70)
 	behaviorDecisionRepeatRiskThreshold = int32(3)
 )
 
@@ -179,6 +166,7 @@ type behaviorDecisionResolution struct {
 	CreateRecovery       bool
 	RecoveryTarget       string
 	RecoveryAmount       int64
+	RecoveryDueAt        *time.Time
 }
 
 type CreateClaimWithBehaviorTxParams struct {
@@ -208,12 +196,38 @@ type CreateClaimWithBehaviorTxParams struct {
 	RecoveryAmount     int64
 	RecoveryDueAt      *time.Time
 	DecisionSnapshot   []byte
+	SkipActionCreation bool
 }
 
 type CreateClaimWithBehaviorTxResult struct {
 	Claim              Claim
 	BehaviorDecision   BehaviorDecision
 	PayoutAction       *BehaviorAction
+	RecoveryAction     *BehaviorAction
+	RestrictionAction  *BehaviorAction
+	NotificationAction *BehaviorAction
+}
+
+type CreateClaimCompensationTxParams struct {
+	ClaimID int64
+}
+
+type CreateClaimCompensationTxResult struct {
+	Claim              Claim
+	BehaviorDecision   BehaviorDecision
+	PayoutAction       *BehaviorAction
+	RecoveryAction     *BehaviorAction
+	RestrictionAction  *BehaviorAction
+	NotificationAction *BehaviorAction
+}
+
+type FinalizeClaimCompensationAfterPayoutTxParams struct {
+	ClaimID int64
+}
+
+type FinalizeClaimCompensationAfterPayoutTxResult struct {
+	Claim              Claim
+	BehaviorDecision   BehaviorDecision
 	RecoveryAction     *BehaviorAction
 	RestrictionAction  *BehaviorAction
 	NotificationAction *BehaviorAction
@@ -259,33 +273,9 @@ func (store *SQLStore) CreateClaimWithBehaviorTx(ctx context.Context, arg Create
 		if err != nil {
 			return err
 		}
-		responsibilityFacts, fallbackHintReasons := buildResponsibilityFacts(order, delivery, decisionResolution.ResponsibilityDomain)
+		responsibilityFacts, _ := buildResponsibilityFacts(order, delivery, decisionResolution.ResponsibilityDomain)
 
 		userScoreSummary, err := loadBehaviorEffectSummary(ctx, q, "user", arg.UserID, 30, now)
-		if err != nil {
-			return err
-		}
-		merchantScoreSummary, err := loadBehaviorEffectSummary(ctx, q, "merchant", order.MerchantID, 30, now)
-		if err != nil {
-			return err
-		}
-		var riderScoreSummary GetBehaviorEffectSummaryRow
-		if riderID.Valid {
-			riderScoreSummary, err = loadBehaviorEffectSummary(ctx, q, "rider", riderID.Int64, 30, now)
-			if err != nil {
-				return err
-			}
-		}
-
-		candidateDecisionScores, _, err := buildBehaviorDecisionScores(
-			arg.ClaimType,
-			decisionResolution,
-			associationPayload,
-			responsibilityFacts,
-			userScoreSummary,
-			merchantScoreSummary,
-			riderScoreSummary,
-		)
 		if err != nil {
 			return err
 		}
@@ -294,34 +284,13 @@ func (store *SQLStore) CreateClaimWithBehaviorTx(ctx context.Context, arg Create
 			arg.Status,
 			arg.ApprovedAmount,
 			decisionResolution,
-			candidateDecisionScores,
 			associationPayload,
 			userScoreSummary,
 		)
-		decisionResolution = promoteBehaviorPlatformFallback(
-			arg.ClaimType,
-			arg.Status,
-			arg.ApprovedAmount,
-			decisionResolution,
-			responsibilityFacts,
-			candidateDecisionScores,
-		)
-		if decisionResolution.DecisionMode == BehaviorDecisionModePlatformFallback {
-			fallbackHintReasons = appendBehaviorFallbackHintReason(fallbackHintReasons, decisionResolution.FallbackReason)
-		}
-
-		decisionScores, scoreBreakdownJSON, err := buildBehaviorDecisionScores(
-			arg.ClaimType,
-			decisionResolution,
-			associationPayload,
-			responsibilityFacts,
-			userScoreSummary,
-			merchantScoreSummary,
-			riderScoreSummary,
-		)
-		if err != nil {
+		if err := validateClaimCompensationTargets(decisionResolution, riderID); err != nil {
 			return err
 		}
+		scoreBreakdownJSON := []byte(`{"version":"claims_rules_v1"}`)
 
 		claimParams := CreateClaimParams{
 			OrderID:            arg.OrderID,
@@ -362,11 +331,10 @@ func (store *SQLStore) CreateClaimWithBehaviorTx(ctx context.Context, arg Create
 			PayoutMode:           decisionResolution.PayoutMode,
 			RecoveryTarget:       decisionResolution.RecoveryTarget,
 			RecoveryAmount:       decisionResolution.RecoveryAmount,
+			RecoveryDueAt:        decisionResolution.RecoveryDueAt,
 			ApprovedAmount:       approvedAmountValue(arg.ApprovedAmount),
 			Associations:         associationPayload,
 			ResponsibilityFacts:  responsibilityFacts,
-			PlatformFallbackHint: decisionResolution.DecisionMode == BehaviorDecisionModePlatformFallback || len(fallbackHintReasons) > 0,
-			FallbackHintReasons:  fallbackHintReasons,
 		})
 		if err != nil {
 			return err
@@ -388,10 +356,10 @@ func (store *SQLStore) CreateClaimWithBehaviorTx(ctx context.Context, arg Create
 			DecisionMode:           pgtype.Text{String: decisionResolution.DecisionMode, Valid: decisionResolution.DecisionMode != ""},
 			ResponsibilityDomain:   pgtype.Text{String: decisionResolution.ResponsibilityDomain, Valid: decisionResolution.ResponsibilityDomain != ""},
 			PayoutMode:             pgtype.Text{String: decisionResolution.PayoutMode, Valid: decisionResolution.PayoutMode != ""},
-			ConfidenceScore:        pgtype.Int4{Int32: decisionScores.ConfidenceScore, Valid: true},
-			UserRiskScore:          pgtype.Int4{Int32: decisionScores.UserRiskScore, Valid: true},
-			MerchantLiabilityScore: pgtype.Int4{Int32: decisionScores.MerchantLiabilityScore, Valid: true},
-			RiderLiabilityScore:    pgtype.Int4{Int32: decisionScores.RiderLiabilityScore, Valid: true},
+			ConfidenceScore:        pgtype.Int4{},
+			UserRiskScore:          pgtype.Int4{},
+			MerchantLiabilityScore: pgtype.Int4{},
+			RiderLiabilityScore:    pgtype.Int4{},
 			FallbackReason:         pgtype.Text{String: decisionResolution.FallbackReason, Valid: decisionResolution.FallbackReason != ""},
 			RestrictionReason:      pgtype.Text{String: decisionResolution.RestrictionReason, Valid: decisionResolution.RestrictionReason != ""},
 			LiabilityShares:        []byte(`{}`),
@@ -401,32 +369,6 @@ func (store *SQLStore) CreateClaimWithBehaviorTx(ctx context.Context, arg Create
 		})
 		if err != nil {
 			return err
-		}
-
-		if arg.ApprovedAmount != nil && *arg.ApprovedAmount > 0 {
-			detail, err := json.Marshal(behaviorPayoutActionDetail{
-				Action:     "platform_payout",
-				ClaimID:    claim.ID,
-				UserID:     arg.UserID,
-				Amount:     *arg.ApprovedAmount,
-				SourceType: "platform",
-				SourceID:   0,
-				Remark:     "platform payout",
-			})
-			if err != nil {
-				return err
-			}
-			action, err := q.CreateBehaviorAction(ctx, CreateBehaviorActionParams{
-				DecisionID:   decision.ID,
-				ActionType:   "payout",
-				TargetEntity: "user",
-				Status:       "created",
-				Detail:       detail,
-			})
-			if err != nil {
-				return err
-			}
-			result.PayoutAction = &action
 		}
 
 		if err := createDecisionEffects(ctx, q, decision.ID, arg.UserID, order.MerchantID, riderID, decisionResolution.DecisionMode, arg.ApprovedAmount); err != nil {
@@ -492,112 +434,559 @@ func (store *SQLStore) CreateClaimWithBehaviorTx(ctx context.Context, arg Create
 		result.Claim = claim
 		result.BehaviorDecision = decision
 
-		if decisionResolution.CreateRecovery {
-			dueAt := now.Add(24 * time.Hour)
-			if arg.RecoveryDueAt != nil {
-				dueAt = *arg.RecoveryDueAt
-			}
-			recovery, err := q.CreateClaimRecovery(ctx, CreateClaimRecoveryParams{
-				ClaimID:          claim.ID,
-				OrderID:          arg.OrderID,
-				DecisionID:       pgtype.Int8{Int64: decision.ID, Valid: true},
-				ResponsibleParty: decisionResolution.ResponsibleParty,
-				RecoveryTarget:   pgtype.Text{String: decisionResolution.RecoveryTarget, Valid: decisionResolution.RecoveryTarget != ""},
-				RecoveryAmount:   decisionResolution.RecoveryAmount,
-				Status:           "pending",
-				DueAt:            dueAt,
-				DecisionSnapshot: arg.DecisionSnapshot,
-				RecoveryBasis:    pgtype.Text{String: recoveryBasisFromDecisionMode(decisionResolution.DecisionMode), Valid: recoveryBasisFromDecisionMode(decisionResolution.DecisionMode) != ""},
+		if !arg.SkipActionCreation {
+			artifacts, err := ensureClaimCompensationStartArtifacts(ctx, q, claimCompensationArtifactParams{
+				Claim:              claim,
+				BehaviorDecision:   decision,
+				Order:              order,
+				RiderID:            riderID,
+				ApprovedAmount:     arg.ApprovedAmount,
+				DecisionResolution: decisionResolution,
+				DecisionSnapshot:   arg.DecisionSnapshot,
+				RecoveryDueAt:      arg.RecoveryDueAt,
 			})
 			if err != nil {
 				return err
 			}
-			recoveryEventPayload, err := json.Marshal(claimRecoveryEventPayload{
-				RecoveryTarget: decisionResolution.RecoveryTarget,
-				RecoveryBasis:  recoveryBasisFromDecisionMode(decisionResolution.DecisionMode),
-				RecoveryAmount: decisionResolution.RecoveryAmount,
-			})
-			if err != nil {
-				return err
-			}
-			if _, err := q.CreateClaimRecoveryEvent(ctx, CreateClaimRecoveryEventParams{
-				RecoveryID: recovery.ID,
-				DecisionID: pgtype.Int8{Int64: decision.ID, Valid: true},
-				EventType:  ClaimRecoveryEventTypeCreated,
-				Payload:    recoveryEventPayload,
-			}); err != nil {
-				return err
-			}
-
-			targetID := int64(0)
-			if decisionResolution.RecoveryTarget == "merchant" {
-				targetID = order.MerchantID
-			}
-			if decisionResolution.RecoveryTarget == "rider" && riderID.Valid {
-				targetID = riderID.Int64
-			}
-			recoveryActionDetail, err := json.Marshal(behaviorRecoveryActionDetail{
-				Action:         "claim_recovery",
-				ClaimID:        claim.ID,
-				RecoveryID:     recovery.ID,
-				TargetEntity:   decisionResolution.RecoveryTarget,
-				TargetID:       targetID,
-				RecoveryBasis:  recoveryBasisFromDecisionMode(decisionResolution.DecisionMode),
-				RecoveryAmount: decisionResolution.RecoveryAmount,
-				DueAt:          dueAt,
-				Remark:         "claim recovery created",
-			})
-			if err != nil {
-				return err
-			}
-			recoveryAction, err := q.CreateBehaviorAction(ctx, CreateBehaviorActionParams{
-				DecisionID:   decision.ID,
-				ActionType:   "recovery",
-				TargetEntity: decisionResolution.RecoveryTarget,
-				Status:       "created",
-				Detail:       recoveryActionDetail,
-			})
-			if err != nil {
-				return err
-			}
-			result.RecoveryAction = &recoveryAction
+			result.PayoutAction = artifacts.PayoutAction
+			result.RecoveryAction = artifacts.RecoveryAction
+			result.RestrictionAction = artifacts.RestrictionAction
+			result.NotificationAction = artifacts.NotificationAction
 		}
-
-		if decisionResolution.DecisionMode == BehaviorDecisionModeUserRestricted {
-			restrictionDetail, err := json.Marshal(behaviorRestrictionActionDetail{
-				Action:            "apply_user_restriction",
-				ClaimID:           claim.ID,
-				UserID:            arg.UserID,
-				DecisionMode:      decisionResolution.DecisionMode,
-				RestrictionReason: decisionResolution.RestrictionReason,
-				Remark:            "user restricted action created",
-			})
-			if err != nil {
-				return err
-			}
-			restrictionAction, err := q.CreateBehaviorAction(ctx, CreateBehaviorActionParams{
-				DecisionID:   decision.ID,
-				ActionType:   "block",
-				TargetEntity: "user",
-				Status:       "created",
-				Detail:       restrictionDetail,
-			})
-			if err != nil {
-				return err
-			}
-			result.RestrictionAction = &restrictionAction
-		}
-
-		notificationAction, err := createBehaviorNotificationAction(ctx, q, decision.ID, claim, arg.UserID, order, riderID, decisionResolution)
-		if err != nil {
-			return err
-		}
-		result.NotificationAction = notificationAction
 
 		return nil
 	})
 
 	return result, err
+}
+
+func (store *SQLStore) CreateClaimCompensationTx(ctx context.Context, arg CreateClaimCompensationTxParams) (CreateClaimCompensationTxResult, error) {
+	var result CreateClaimCompensationTxResult
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		claim, err := q.GetClaimForUpdate(ctx, arg.ClaimID)
+		if err != nil {
+			return err
+		}
+
+		if !claim.ApprovedAmount.Valid || claim.ApprovedAmount.Int64 <= 0 {
+			return ErrClaimCompensationNotEligible
+		}
+
+		if claim.Status == ClaimStatusRejected || claim.Status == ClaimStatusWithdrawn || claim.Status == ClaimStatusPending {
+			return ErrClaimCompensationNotEligible
+		}
+
+		if !claim.PaidAt.Valid && claim.Status != ClaimStatusApproved && claim.Status != ClaimStatusWaitingCustomerConfirmation {
+			return ErrClaimCompensationNotEligible
+		}
+
+		decision, err := q.GetLatestBehaviorDecisionByClaimID(ctx, pgtype.Int8{Int64: arg.ClaimID, Valid: true})
+		if err != nil {
+			return err
+		}
+
+		order, err := q.GetOrder(ctx, claim.OrderID)
+		if err != nil {
+			return err
+		}
+
+		var riderID pgtype.Int8
+		if order.OrderType == "takeout" {
+			delivery, err := q.GetDeliveryByOrderID(ctx, order.ID)
+			if err == nil && delivery.RiderID.Valid {
+				riderID = pgtype.Int8{Int64: delivery.RiderID.Int64, Valid: true}
+			}
+		}
+
+		actions, err := q.ListBehaviorActionsByDecision(ctx, decision.ID)
+		if err != nil {
+			return err
+		}
+
+		var recovery *ClaimRecovery
+		existingRecovery, err := q.GetClaimRecoveryByClaimID(ctx, claim.ID)
+		if err == nil {
+			recovery = &existingRecovery
+		} else if err != ErrRecordNotFound {
+			return err
+		}
+
+		if claim.PaidAt.Valid || claim.Status == ClaimStatusApproved {
+			decisionResolution := persistedBehaviorDecisionResolution(claim, decision, recovery)
+			result.Claim = claim
+			result.BehaviorDecision = decision
+			result.PayoutAction = findBehaviorAction(actions, "payout", "user")
+			result.RecoveryAction = findBehaviorAction(actions, "recovery", decisionResolution.RecoveryTarget)
+			return nil
+		}
+
+		artifacts, err := ensureClaimCompensationStartArtifacts(ctx, q, claimCompensationArtifactParams{
+			Claim:              claim,
+			BehaviorDecision:   decision,
+			Order:              order,
+			RiderID:            riderID,
+			ApprovedAmount:     approvedClaimAmountPointer(claim),
+			DecisionResolution: persistedBehaviorDecisionResolution(claim, decision, recovery),
+			DecisionSnapshot:   decisionSnapshotForCompensation(decision),
+			ExistingActions:    actions,
+			ExistingRecovery:   recovery,
+		})
+		if err != nil {
+			return err
+		}
+
+		if claim.Status != ClaimStatusApproved && !claim.PaidAt.Valid && claim.ApprovedAmount.Valid && claim.ApprovedAmount.Int64 > 0 {
+			if err := q.UpdateClaimStatus(ctx, UpdateClaimStatusParams{
+				ID:     claim.ID,
+				Status: ClaimStatusApproved,
+			}); err != nil {
+				return err
+			}
+			claim.Status = ClaimStatusApproved
+		}
+
+		result.Claim = claim
+		result.BehaviorDecision = decision
+		result.PayoutAction = artifacts.PayoutAction
+		result.RecoveryAction = artifacts.RecoveryAction
+		result.RestrictionAction = artifacts.RestrictionAction
+		result.NotificationAction = artifacts.NotificationAction
+		return nil
+	})
+
+	return result, err
+}
+
+func (store *SQLStore) FinalizeClaimCompensationAfterPayoutTx(ctx context.Context, arg FinalizeClaimCompensationAfterPayoutTxParams) (FinalizeClaimCompensationAfterPayoutTxResult, error) {
+	var result FinalizeClaimCompensationAfterPayoutTxResult
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		claim, err := q.GetClaimForUpdate(ctx, arg.ClaimID)
+		if err != nil {
+			return err
+		}
+		if !claim.PaidAt.Valid {
+			return ErrClaimCompensationNotEligible
+		}
+
+		decision, err := q.GetLatestBehaviorDecisionByClaimID(ctx, pgtype.Int8{Int64: arg.ClaimID, Valid: true})
+		if err != nil {
+			return err
+		}
+
+		order, err := q.GetOrder(ctx, claim.OrderID)
+		if err != nil {
+			return err
+		}
+
+		var riderID pgtype.Int8
+		if order.OrderType == "takeout" {
+			delivery, err := q.GetDeliveryByOrderID(ctx, order.ID)
+			if err == nil && delivery.RiderID.Valid {
+				riderID = pgtype.Int8{Int64: delivery.RiderID.Int64, Valid: true}
+			}
+		}
+
+		actions, err := q.ListBehaviorActionsByDecision(ctx, decision.ID)
+		if err != nil {
+			return err
+		}
+
+		var recovery *ClaimRecovery
+		existingRecovery, err := q.GetClaimRecoveryByClaimID(ctx, claim.ID)
+		if err == nil {
+			recovery = &existingRecovery
+		} else if err != ErrRecordNotFound {
+			return err
+		}
+
+		artifacts, err := ensureClaimCompensationPostPayoutArtifacts(ctx, q, claimCompensationArtifactParams{
+			Claim:              claim,
+			BehaviorDecision:   decision,
+			Order:              order,
+			RiderID:            riderID,
+			ApprovedAmount:     approvedClaimAmountPointer(claim),
+			DecisionResolution: persistedBehaviorDecisionResolution(claim, decision, recovery),
+			DecisionSnapshot:   decisionSnapshotForCompensation(decision),
+			ExistingActions:    actions,
+			ExistingRecovery:   recovery,
+		})
+		if err != nil {
+			return err
+		}
+
+		result.Claim = claim
+		result.BehaviorDecision = decision
+		result.RecoveryAction = recoveryActionFromArtifactsOrExisting(artifacts, actions, persistedBehaviorDecisionResolution(claim, decision, recovery))
+		result.RestrictionAction = artifacts.RestrictionAction
+		result.NotificationAction = artifacts.NotificationAction
+		return nil
+	})
+
+	return result, err
+}
+
+func IsClaimCompensationNotEligible(err error) bool {
+	return errors.Is(err, ErrClaimCompensationNotEligible)
+}
+
+type claimCompensationArtifactParams struct {
+	Claim              Claim
+	BehaviorDecision   BehaviorDecision
+	Order              Order
+	RiderID            pgtype.Int8
+	ApprovedAmount     *int64
+	DecisionResolution behaviorDecisionResolution
+	DecisionSnapshot   []byte
+	RecoveryDueAt      *time.Time
+	ExistingActions    []BehaviorAction
+	ExistingRecovery   *ClaimRecovery
+}
+
+type claimCompensationArtifacts struct {
+	PayoutAction       *BehaviorAction
+	RecoveryAction     *BehaviorAction
+	RestrictionAction  *BehaviorAction
+	NotificationAction *BehaviorAction
+}
+
+func ensureClaimCompensationStartArtifacts(ctx context.Context, q *Queries, arg claimCompensationArtifactParams) (claimCompensationArtifacts, error) {
+	artifacts := claimCompensationArtifacts{
+		PayoutAction:       findBehaviorAction(arg.ExistingActions, "payout", "user"),
+		RecoveryAction:     findBehaviorAction(arg.ExistingActions, "recovery", arg.DecisionResolution.RecoveryTarget),
+		RestrictionAction:  findBehaviorAction(arg.ExistingActions, "block", "user"),
+		NotificationAction: findBehaviorAction(arg.ExistingActions, "notify", notificationTargetEntity(arg.DecisionResolution)),
+	}
+
+	if err := validateClaimCompensationTargets(arg.DecisionResolution, arg.RiderID); err != nil {
+		return artifacts, err
+	}
+
+	if artifacts.PayoutAction == nil && arg.ApprovedAmount != nil && *arg.ApprovedAmount > 0 {
+		detail, err := json.Marshal(behaviorPayoutActionDetail{
+			Action:     "platform_payout",
+			ClaimID:    arg.Claim.ID,
+			UserID:     arg.Claim.UserID,
+			Amount:     *arg.ApprovedAmount,
+			SourceType: "platform",
+			SourceID:   0,
+			Remark:     "platform payout",
+		})
+		if err != nil {
+			return artifacts, err
+		}
+		createdAction, err := q.CreateBehaviorAction(ctx, CreateBehaviorActionParams{
+			DecisionID:   arg.BehaviorDecision.ID,
+			ActionType:   "payout",
+			TargetEntity: "user",
+			Status:       "created",
+			Detail:       detail,
+		})
+		if err != nil {
+			return artifacts, err
+		}
+		artifacts.PayoutAction = &createdAction
+	}
+
+	if artifacts.RestrictionAction == nil && arg.DecisionResolution.DecisionMode == BehaviorDecisionModeUserRestricted && arg.Claim.Status != ClaimStatusWaitingCustomerConfirmation {
+		restrictionDetail, err := json.Marshal(behaviorRestrictionActionDetail{
+			Action:            "apply_user_restriction",
+			ClaimID:           arg.Claim.ID,
+			UserID:            arg.Claim.UserID,
+			DecisionMode:      arg.DecisionResolution.DecisionMode,
+			RestrictionReason: arg.DecisionResolution.RestrictionReason,
+			Remark:            "user restricted action created",
+		})
+		if err != nil {
+			return artifacts, err
+		}
+		createdAction, err := q.CreateBehaviorAction(ctx, CreateBehaviorActionParams{
+			DecisionID:   arg.BehaviorDecision.ID,
+			ActionType:   "block",
+			TargetEntity: "user",
+			Status:       "created",
+			Detail:       restrictionDetail,
+		})
+		if err != nil {
+			return artifacts, err
+		}
+		artifacts.RestrictionAction = &createdAction
+	}
+
+	if artifacts.NotificationAction == nil && arg.DecisionResolution.DecisionMode == BehaviorDecisionModeUserRestricted && arg.Claim.Status != ClaimStatusWaitingCustomerConfirmation {
+		notificationAction, err := createBehaviorNotificationAction(ctx, q, arg.BehaviorDecision.ID, arg.Claim, arg.Claim.UserID, arg.Order, arg.RiderID, arg.DecisionResolution)
+		if err != nil {
+			return artifacts, err
+		}
+		artifacts.NotificationAction = notificationAction
+	}
+
+	return artifacts, nil
+}
+
+func ensureClaimCompensationPostPayoutArtifacts(ctx context.Context, q *Queries, arg claimCompensationArtifactParams) (claimCompensationArtifacts, error) {
+	artifacts := claimCompensationArtifacts{
+		RecoveryAction:     findBehaviorAction(arg.ExistingActions, "recovery", arg.DecisionResolution.RecoveryTarget),
+		RestrictionAction:  findBehaviorAction(arg.ExistingActions, "block", "user"),
+		NotificationAction: findBehaviorAction(arg.ExistingActions, "notify", notificationTargetEntity(arg.DecisionResolution)),
+	}
+
+	if err := validateClaimCompensationTargets(arg.DecisionResolution, arg.RiderID); err != nil {
+		return artifacts, err
+	}
+
+	if arg.DecisionResolution.CreateRecovery {
+		recovery := arg.ExistingRecovery
+		if recovery == nil {
+			createdRecovery, err := q.CreateClaimRecovery(ctx, CreateClaimRecoveryParams{
+				ClaimID:          arg.Claim.ID,
+				OrderID:          arg.Claim.OrderID,
+				DecisionID:       pgtype.Int8{Int64: arg.BehaviorDecision.ID, Valid: true},
+				ResponsibleParty: arg.DecisionResolution.ResponsibleParty,
+				RecoveryTarget:   pgtype.Text{String: arg.DecisionResolution.RecoveryTarget, Valid: arg.DecisionResolution.RecoveryTarget != ""},
+				RecoveryAmount:   arg.DecisionResolution.RecoveryAmount,
+				Status:           "pending",
+				DueAt:            resolveClaimRecoveryDueAt(arg),
+				DecisionSnapshot: arg.DecisionSnapshot,
+				RecoveryBasis:    pgtype.Text{String: recoveryBasisFromDecisionMode(arg.DecisionResolution.DecisionMode), Valid: recoveryBasisFromDecisionMode(arg.DecisionResolution.DecisionMode) != ""},
+			})
+			if err != nil {
+				return artifacts, err
+			}
+			recovery = &createdRecovery
+			if err := WriteClaimRecoveryEvent(ctx, q, *recovery, ClaimRecoveryEventTypeCreated, claimRecoveryEventPayload{
+				RecoveryTarget: arg.DecisionResolution.RecoveryTarget,
+				RecoveryBasis:  recoveryBasisFromDecisionMode(arg.DecisionResolution.DecisionMode),
+				RecoveryAmount: arg.DecisionResolution.RecoveryAmount,
+			}); err != nil {
+				return artifacts, err
+			}
+			if err := WriteClaimRecoveryEvent(ctx, q, *recovery, ClaimRecoveryEventTypePayable, claimRecoveryEventPayload{
+				RecoveryTarget: arg.DecisionResolution.RecoveryTarget,
+				RecoveryBasis:  recoveryBasisFromDecisionMode(arg.DecisionResolution.DecisionMode),
+				RecoveryAmount: arg.DecisionResolution.RecoveryAmount,
+			}); err != nil {
+				return artifacts, err
+			}
+		}
+
+		if artifacts.RecoveryAction == nil && recovery != nil {
+			targetID := int64(0)
+			if arg.DecisionResolution.RecoveryTarget == "merchant" {
+				targetID = arg.Order.MerchantID
+			}
+			if arg.DecisionResolution.RecoveryTarget == "rider" && arg.RiderID.Valid {
+				targetID = arg.RiderID.Int64
+			}
+			recoveryActionDetail, err := json.Marshal(behaviorRecoveryActionDetail{
+				Action:         "claim_recovery",
+				ClaimID:        arg.Claim.ID,
+				RecoveryID:     recovery.ID,
+				TargetEntity:   arg.DecisionResolution.RecoveryTarget,
+				TargetID:       targetID,
+				RecoveryBasis:  recoveryBasisFromDecisionMode(arg.DecisionResolution.DecisionMode),
+				RecoveryAmount: recovery.RecoveryAmount,
+				DueAt:          recovery.DueAt,
+				Remark:         "claim recovery created after payout",
+			})
+			if err != nil {
+				return artifacts, err
+			}
+			createdAction, err := q.CreateBehaviorAction(ctx, CreateBehaviorActionParams{
+				DecisionID:   arg.BehaviorDecision.ID,
+				ActionType:   "recovery",
+				TargetEntity: arg.DecisionResolution.RecoveryTarget,
+				Status:       "created",
+				Detail:       recoveryActionDetail,
+			})
+			if err != nil {
+				return artifacts, err
+			}
+			artifacts.RecoveryAction = &createdAction
+		}
+	}
+
+	if artifacts.RestrictionAction == nil && arg.DecisionResolution.DecisionMode == BehaviorDecisionModeUserRestricted {
+		restrictionDetail, err := json.Marshal(behaviorRestrictionActionDetail{
+			Action:            "apply_user_restriction",
+			ClaimID:           arg.Claim.ID,
+			UserID:            arg.Claim.UserID,
+			DecisionMode:      arg.DecisionResolution.DecisionMode,
+			RestrictionReason: arg.DecisionResolution.RestrictionReason,
+			Remark:            "user restricted action created after payout",
+		})
+		if err != nil {
+			return artifacts, err
+		}
+		createdAction, err := q.CreateBehaviorAction(ctx, CreateBehaviorActionParams{
+			DecisionID:   arg.BehaviorDecision.ID,
+			ActionType:   "block",
+			TargetEntity: "user",
+			Status:       "created",
+			Detail:       restrictionDetail,
+		})
+		if err != nil {
+			return artifacts, err
+		}
+		artifacts.RestrictionAction = &createdAction
+	}
+
+	if artifacts.NotificationAction == nil {
+		notificationAction, err := createBehaviorNotificationAction(ctx, q, arg.BehaviorDecision.ID, arg.Claim, arg.Claim.UserID, arg.Order, arg.RiderID, arg.DecisionResolution)
+		if err != nil {
+			return artifacts, err
+		}
+		artifacts.NotificationAction = notificationAction
+	}
+
+	return artifacts, nil
+}
+
+func recoveryActionFromArtifactsOrExisting(artifacts claimCompensationArtifacts, actions []BehaviorAction, resolution behaviorDecisionResolution) *BehaviorAction {
+	if artifacts.RecoveryAction != nil {
+		return artifacts.RecoveryAction
+	}
+	return findBehaviorAction(actions, "recovery", resolution.RecoveryTarget)
+}
+
+func persistedBehaviorDecisionResolution(claim Claim, decision BehaviorDecision, existingRecovery *ClaimRecovery) behaviorDecisionResolution {
+	resolution := behaviorDecisionResolution{
+		ResponsibleParty:   decision.ResponsibleParty,
+		CompensationSource: decision.CompensationSource,
+		TraceSummary:       persistedBehaviorDecisionTraceSummary(decision),
+	}
+	if decision.DecisionMode.Valid {
+		resolution.DecisionMode = decision.DecisionMode.String
+	}
+	if decision.ResponsibilityDomain.Valid {
+		resolution.ResponsibilityDomain = decision.ResponsibilityDomain.String
+	}
+	if decision.PayoutMode.Valid {
+		resolution.PayoutMode = decision.PayoutMode.String
+	}
+	if decision.FallbackReason.Valid {
+		resolution.FallbackReason = decision.FallbackReason.String
+	}
+	if decision.RestrictionReason.Valid {
+		resolution.RestrictionReason = decision.RestrictionReason.String
+	}
+
+	if existingRecovery != nil {
+		resolution.CreateRecovery = true
+		resolution.RecoveryTarget = existingRecovery.RecoveryTarget.String
+		resolution.RecoveryAmount = existingRecovery.RecoveryAmount
+		recoveryDueAt := existingRecovery.DueAt
+		resolution.RecoveryDueAt = &recoveryDueAt
+		return resolution
+	}
+
+	switch resolution.DecisionMode {
+	case BehaviorDecisionModeMerchantRecovery:
+		resolution.CreateRecovery = true
+		resolution.RecoveryTarget = "merchant"
+	case BehaviorDecisionModeRiderRecovery:
+		resolution.CreateRecovery = true
+		resolution.RecoveryTarget = "rider"
+	}
+
+	if len(decision.FactSnapshot) > 0 {
+		var factSnapshot behaviorDecisionFactSnapshot
+		if err := json.Unmarshal(decision.FactSnapshot, &factSnapshot); err == nil {
+			if factSnapshot.RecoveryTarget != "" {
+				resolution.RecoveryTarget = factSnapshot.RecoveryTarget
+			}
+			if factSnapshot.RecoveryAmount > 0 {
+				resolution.RecoveryAmount = factSnapshot.RecoveryAmount
+			}
+			if factSnapshot.RecoveryDueAt != nil {
+				recoveryDueAt := *factSnapshot.RecoveryDueAt
+				resolution.RecoveryDueAt = &recoveryDueAt
+			}
+		}
+	}
+
+	if resolution.CreateRecovery && resolution.RecoveryAmount <= 0 {
+		if approvedAmount := approvedClaimAmountPointer(claim); approvedAmount != nil {
+			resolution.RecoveryAmount = *approvedAmount
+		}
+	}
+
+	return resolution
+}
+
+func persistedBehaviorDecisionTraceSummary(decision BehaviorDecision) string {
+	if decision.TraceSummary.Valid && decision.TraceSummary.String != "" {
+		return decision.TraceSummary.String
+	}
+	if decision.FallbackReason.Valid && decision.FallbackReason.String != "" {
+		return decision.FallbackReason.String
+	}
+	if decision.RestrictionReason.Valid && decision.RestrictionReason.String != "" {
+		return decision.RestrictionReason.String
+	}
+	return ""
+}
+
+func approvedClaimAmountPointer(claim Claim) *int64 {
+	if !claim.ApprovedAmount.Valid || claim.ApprovedAmount.Int64 <= 0 {
+		return nil
+	}
+	amount := claim.ApprovedAmount.Int64
+	return &amount
+}
+
+func resolveClaimRecoveryDueAt(arg claimCompensationArtifactParams) time.Time {
+	if arg.RecoveryDueAt != nil {
+		return *arg.RecoveryDueAt
+	}
+	if arg.DecisionResolution.RecoveryDueAt != nil {
+		return *arg.DecisionResolution.RecoveryDueAt
+	}
+	return time.Now().Add(24 * time.Hour)
+}
+
+func decisionSnapshotForCompensation(decision BehaviorDecision) []byte {
+	if len(decision.FactSnapshot) > 0 {
+		return decision.FactSnapshot
+	}
+	return []byte(`{}`)
+}
+
+func findBehaviorAction(actions []BehaviorAction, actionType string, targetEntity string) *BehaviorAction {
+	for _, action := range actions {
+		if action.ActionType != actionType {
+			continue
+		}
+		if targetEntity != "" && action.TargetEntity != targetEntity {
+			continue
+		}
+		copied := action
+		return &copied
+	}
+	return nil
+}
+
+func validateClaimCompensationTargets(decisionResolution behaviorDecisionResolution, riderID pgtype.Int8) error {
+	requiresConcreteRider := decisionResolution.DecisionMode == BehaviorDecisionModeRiderRecovery ||
+		(decisionResolution.CreateRecovery && decisionResolution.RecoveryTarget == "rider")
+	if requiresConcreteRider && !riderID.Valid {
+		return ErrClaimResponsibleRiderMissing
+	}
+	return nil
+}
+
+func notificationTargetEntity(decisionResolution behaviorDecisionResolution) string {
+	switch decisionResolution.DecisionMode {
+	case BehaviorDecisionModeMerchantRecovery:
+		return "merchant"
+	case BehaviorDecisionModeRiderRecovery:
+		return "rider"
+	case BehaviorDecisionModeUserRestricted:
+		return "user"
+	default:
+		return ""
+	}
 }
 
 func createBehaviorNotificationAction(ctx context.Context, q *Queries, decisionID int64, claim Claim, userID int64, order Order, riderID pgtype.Int8, decisionResolution behaviorDecisionResolution) (*BehaviorAction, error) {
@@ -738,7 +1127,6 @@ func createUserTraceSnapshots(ctx context.Context, q *Queries, decisionID int64,
 		CompletedOrders:          totalOrders,
 		ClaimAttempts:            int32Value(netSummary.ClaimAttempts),
 		EffectiveClaims:          int32Value(netSummary.EffectiveClaims),
-		PlatformFallbackClaims:   int32Value(netSummary.PlatformFallbackClaims),
 		MaliciousConfirmedClaims: int32Value(netSummary.MaliciousConfirmedClaims),
 		MerchantRecoveredClaims:  int32Value(netSummary.MerchantRecoveredClaims),
 		RiderRecoveredClaims:     int32Value(netSummary.RiderRecoveredClaims),
@@ -775,7 +1163,6 @@ func createEntityTraceSnapshots(ctx context.Context, q *Queries, decisionID int6
 	netPayload, err := json.Marshal(behaviorTraceMetricPayload{
 		CompletedOrders:          summary.TotalOrders,
 		EffectiveLiabilityClaims: int32Value(netSummary.EffectiveLiabilityClaims),
-		PlatformFallbackClaims:   int32Value(netSummary.PlatformFallbackClaims),
 	})
 	if err != nil {
 		return err
@@ -946,7 +1333,7 @@ func countOtherUsers(userIDs []int64, targetUserID int64) int32 {
 }
 
 func userNetAbnormalCount(summary GetBehaviorEffectSummaryRow) int32 {
-	return int32Value(summary.EffectiveClaims + summary.PlatformFallbackClaims)
+	return int32Value(summary.EffectiveClaims)
 }
 
 func int32Value(value int64) int32 {
@@ -1047,18 +1434,6 @@ func createDecisionEffects(ctx context.Context, q *Queries, decisionID int64, us
 				return err
 			}
 		}
-	case BehaviorDecisionModePlatformFallback:
-		if _, err := q.CreateBehaviorDecisionEffect(ctx, CreateBehaviorDecisionEffectParams{
-			DecisionID: decisionID,
-			EntityType: "user",
-			EntityID:   userID,
-			MetricKey:  "platform_fallback_claims",
-			DeltaValue: 1,
-			Status:     BehaviorDecisionEffectStatusApplied,
-			Note:       pgtype.Text{String: "phase1 dual-write platform fallback", Valid: true},
-		}); err != nil {
-			return err
-		}
 	case BehaviorDecisionModeUserRestricted:
 		if _, err := q.CreateBehaviorDecisionEffect(ctx, CreateBehaviorDecisionEffectParams{
 			DecisionID: decisionID,
@@ -1079,9 +1454,6 @@ func createDecisionEffects(ctx context.Context, q *Queries, decisionID int64, us
 func deriveBehaviorDecisionMode(responsibleParty string, recoveryTarget string, createRecovery bool) string {
 	if responsibleParty == "user" {
 		return BehaviorDecisionModeUserRestricted
-	}
-	if responsibleParty == "platform_fallback" {
-		return BehaviorDecisionModePlatformFallback
 	}
 	if createRecovery && recoveryTarget == "merchant" {
 		return BehaviorDecisionModeMerchantRecovery
@@ -1115,48 +1487,20 @@ func deriveBehaviorDecisionResolution(arg CreateClaimWithBehaviorTxParams) behav
 		CreateRecovery:       arg.CreateRecovery,
 		RecoveryTarget:       arg.RecoveryTarget,
 		RecoveryAmount:       arg.RecoveryAmount,
+		RecoveryDueAt:        arg.RecoveryDueAt,
 	}
 }
 
-func promoteBehaviorPlatformFallback(claimType string, status string, approvedAmount *int64, resolution behaviorDecisionResolution, responsibilityFacts behaviorResponsibilityFacts, scores behaviorDecisionScores) behaviorDecisionResolution {
+func promoteBehaviorUserRestricted(status string, approvedAmount *int64, resolution behaviorDecisionResolution, associations behaviorAssociationPayload, userSummary GetBehaviorEffectSummaryRow) behaviorDecisionResolution {
 	if resolution.DecisionMode == BehaviorDecisionModeUserRestricted {
 		return resolution
 	}
 
-	fallbackReason, shouldPromote := shouldPromoteBehaviorPlatformFallback(resolution.DecisionMode, responsibilityFacts, scores)
-	if !shouldPromote {
+	if _, shouldPromote := shouldPromoteBehaviorUserRestricted(associations, userSummary); !shouldPromote {
 		return resolution
 	}
 
-	message := behaviorFallbackReasonMessage(claimType, fallbackReason)
-
-	resolution.ResponsibleParty = "platform_fallback"
-	resolution.CompensationSource = "platform"
-	resolution.ApprovalType = "auto"
-	resolution.AutoApprovalReason = message
-	resolution.TraceSummary = message
-	resolution.DecisionMode = BehaviorDecisionModePlatformFallback
-	resolution.ResponsibilityDomain = BehaviorResponsibilityDomainUnknown
-	resolution.PayoutMode = deriveBehaviorPayoutMode(status, resolution.ApprovalType, approvedAmount)
-	resolution.FallbackReason = fallbackReason
-	resolution.RestrictionReason = ""
-	resolution.CreateRecovery = false
-	resolution.RecoveryTarget = ""
-	resolution.RecoveryAmount = 0
-
-	return resolution
-}
-
-func promoteBehaviorUserRestricted(status string, approvedAmount *int64, resolution behaviorDecisionResolution, scores behaviorDecisionScores, associations behaviorAssociationPayload, userSummary GetBehaviorEffectSummaryRow) behaviorDecisionResolution {
-	if resolution.DecisionMode == BehaviorDecisionModeUserRestricted {
-		return resolution
-	}
-
-	if _, shouldPromote := shouldPromoteBehaviorUserRestricted(scores, associations, userSummary); !shouldPromote {
-		return resolution
-	}
-
-	message := "您的账号因索赔行为异常已被限制服务，本次索赔由平台兜底处理。"
+	message := "您的账号因索赔行为异常已被限制服务；若确认继续索赔，平台将先行赔付并停止后续服务。"
 	resolution.ResponsibleParty = "user"
 	resolution.CompensationSource = "platform"
 	resolution.ApprovalType = "auto"
@@ -1178,180 +1522,8 @@ func normalizeBehaviorApprovalType(approvalType string) string {
 	return approvalType
 }
 
-func buildBehaviorDecisionScores(
-	claimType string,
-	resolution behaviorDecisionResolution,
-	associations behaviorAssociationPayload,
-	responsibilityFacts behaviorResponsibilityFacts,
-	userSummary GetBehaviorEffectSummaryRow,
-	merchantSummary GetBehaviorEffectSummaryRow,
-	riderSummary GetBehaviorEffectSummaryRow,
-) (behaviorDecisionScores, []byte, error) {
-	breakdown := behaviorDecisionScoreBreakdown{Version: "phase2_bridge_v1"}
-	breakdown.UserRisk = buildUserRiskScoreDetail(resolution.DecisionMode, associations, userSummary)
-	breakdown.MerchantLiability = buildMerchantLiabilityScoreDetail(claimType, resolution.DecisionMode, merchantSummary)
-	breakdown.RiderLiability = buildRiderLiabilityScoreDetail(claimType, resolution.DecisionMode, responsibilityFacts, riderSummary)
-	breakdown.Confidence = buildConfidenceScoreDetail(claimType, resolution.DecisionMode, responsibilityFacts)
-
-	payload, err := json.Marshal(breakdown)
-	if err != nil {
-		return behaviorDecisionScores{}, nil, err
-	}
-
-	return behaviorDecisionScores{
-		ConfidenceScore:        breakdown.Confidence.Score,
-		UserRiskScore:          breakdown.UserRisk.Score,
-		MerchantLiabilityScore: breakdown.MerchantLiability.Score,
-		RiderLiabilityScore:    breakdown.RiderLiability.Score,
-	}, payload, nil
-}
-
-func buildUserRiskScoreDetail(decisionMode string, associations behaviorAssociationPayload, summary GetBehaviorEffectSummaryRow) behaviorDecisionScoreDetail {
-	detail := behaviorDecisionScoreDetail{}
-	addBehaviorDecisionSignal(&detail, "shared_device_other_users", minBehaviorScore(associations.SharedDeviceOtherUsers*6, 18), associations.SharedDeviceOtherUsers, associations.SharedDeviceOtherUsers > 0)
-	addBehaviorDecisionSignal(&detail, "shared_address_other_users", minBehaviorScore(associations.SharedAddressOtherUsers*5, 15), associations.SharedAddressOtherUsers, associations.SharedAddressOtherUsers > 0)
-	addBehaviorDecisionSignal(&detail, "historical_platform_fallback", minBehaviorScore(int32(summary.PlatformFallbackClaims)*10, 20), int32(summary.PlatformFallbackClaims), summary.PlatformFallbackClaims > 0)
-	addBehaviorDecisionSignal(&detail, "historical_malicious_confirmed", minBehaviorScore(int32(summary.MaliciousConfirmedClaims)*35, 70), int32(summary.MaliciousConfirmedClaims), summary.MaliciousConfirmedClaims > 0)
-	if decisionMode == BehaviorDecisionModeUserRestricted && detail.Score < 80 {
-		addBehaviorDecisionSignal(&detail, "user_restricted_mode_floor", 80-detail.Score, 1, true)
-	}
-	detail.Score = clampBehaviorScore(detail.Score)
-	return detail
-}
-
-func buildMerchantLiabilityScoreDetail(claimType string, decisionMode string, summary GetBehaviorEffectSummaryRow) behaviorDecisionScoreDetail {
-	detail := behaviorDecisionScoreDetail{}
-	if claimType != "foreign-object" {
-		return detail
-	}
-	addBehaviorDecisionSignal(&detail, "historical_merchant_liability", minBehaviorScore(int32(summary.EffectiveLiabilityClaims)*12, 36), int32(summary.EffectiveLiabilityClaims), summary.EffectiveLiabilityClaims > 0)
-	addBehaviorDecisionSignal(&detail, "claim_type_foreign_object", 15, 1, true)
-	if decisionMode == BehaviorDecisionModeMerchantRecovery {
-		addBehaviorDecisionSignal(&detail, "merchant_recovery_mode", 40, 1, true)
-	}
-	detail.Score = clampBehaviorScore(detail.Score)
-	return detail
-}
-
-func buildRiderLiabilityScoreDetail(claimType string, decisionMode string, responsibilityFacts behaviorResponsibilityFacts, summary GetBehaviorEffectSummaryRow) behaviorDecisionScoreDetail {
-	detail := behaviorDecisionScoreDetail{}
-	if claimType != "damage" && claimType != "timeout" {
-		return detail
-	}
-	addBehaviorDecisionSignal(&detail, "historical_rider_liability", minBehaviorScore(int32(summary.EffectiveLiabilityClaims)*12, 36), int32(summary.EffectiveLiabilityClaims), summary.EffectiveLiabilityClaims > 0)
-	addBehaviorDecisionSignal(&detail, "delivery_exists", 10, 1, responsibilityFacts.DeliveryExists)
-	addBehaviorDecisionSignal(&detail, "rider_assigned", 10, 1, responsibilityFacts.RiderAssigned)
-	addBehaviorDecisionSignal(&detail, "pickup_confirmed", 20, 1, responsibilityFacts.PickupConfirmed)
-	addBehaviorDecisionSignal(&detail, "delivery_status_present", 10, 1, responsibilityFacts.DeliveryStatus != "")
-	if decisionMode == BehaviorDecisionModeRiderRecovery {
-		addBehaviorDecisionSignal(&detail, "rider_recovery_mode", 30, 1, true)
-	}
-	if len(responsibilityFacts.MissingCriticalFacts) > 0 {
-		addBehaviorDecisionSignal(&detail, "missing_critical_facts_penalty", -minBehaviorScore(int32(len(responsibilityFacts.MissingCriticalFacts))*20, 60), int32(len(responsibilityFacts.MissingCriticalFacts)), true)
-	}
-	detail.Score = clampBehaviorScore(detail.Score)
-	return detail
-}
-
-func buildConfidenceScoreDetail(claimType string, decisionMode string, responsibilityFacts behaviorResponsibilityFacts) behaviorDecisionScoreDetail {
-	detail := behaviorDecisionScoreDetail{}
-	addBehaviorDecisionSignal(&detail, "base_confidence", 40, 1, true)
-	if claimType == "foreign-object" {
-		addBehaviorDecisionSignal(&detail, "merchant_domain_claim", 10, 1, true)
-	}
-	if decisionMode == BehaviorDecisionModeMerchantRecovery {
-		addBehaviorDecisionSignal(&detail, "merchant_recovery_mode", 25, 1, true)
-	}
-	if decisionMode == BehaviorDecisionModeRiderRecovery {
-		addBehaviorDecisionSignal(&detail, "rider_recovery_mode", 20, 1, true)
-	}
-	if decisionMode == BehaviorDecisionModePlatformFallback {
-		addBehaviorDecisionSignal(&detail, "platform_fallback_mode", 10, 1, true)
-	}
-	if decisionMode == BehaviorDecisionModeUserRestricted {
-		addBehaviorDecisionSignal(&detail, "user_restricted_mode", 20, 1, true)
-	}
-	addBehaviorDecisionSignal(&detail, "delivery_exists", 10, 1, responsibilityFacts.DeliveryExists)
-	addBehaviorDecisionSignal(&detail, "rider_assigned", 10, 1, responsibilityFacts.RiderAssigned)
-	addBehaviorDecisionSignal(&detail, "pickup_confirmed", 10, 1, responsibilityFacts.PickupConfirmed)
-	addBehaviorDecisionSignal(&detail, "delivery_status_present", 10, 1, responsibilityFacts.DeliveryStatus != "")
-	if len(responsibilityFacts.MissingCriticalFacts) > 0 {
-		addBehaviorDecisionSignal(&detail, "missing_critical_facts_penalty", -minBehaviorScore(int32(len(responsibilityFacts.MissingCriticalFacts))*15, 45), int32(len(responsibilityFacts.MissingCriticalFacts)), true)
-	}
-	detail.Score = clampBehaviorScore(detail.Score)
-	if decisionMode == BehaviorDecisionModeUserRestricted && detail.Score < 70 {
-		addBehaviorDecisionSignal(&detail, "user_restricted_confidence_floor", 70-detail.Score, 1, true)
-		detail.Score = 70
-	}
-	return detail
-}
-
-func addBehaviorDecisionSignal(detail *behaviorDecisionScoreDetail, code string, weight int32, count int32, active bool) {
-	if !active || weight == 0 {
-		return
-	}
-	detail.Score += weight
-	detail.Signals = append(detail.Signals, behaviorDecisionSignal{
-		Code:   code,
-		Weight: weight,
-		Count:  count,
-		Active: true,
-	})
-}
-
-func clampBehaviorScore(score int32) int32 {
-	if score < 0 {
-		return 0
-	}
-	if score > 100 {
-		return 100
-	}
-	return score
-}
-
-func minBehaviorScore(value int32, upper int32) int32 {
-	if value > upper {
-		return upper
-	}
-	return value
-}
-
-func shouldPromoteBehaviorPlatformFallback(decisionMode string, responsibilityFacts behaviorResponsibilityFacts, scores behaviorDecisionScores) (string, bool) {
-	if decisionMode != BehaviorDecisionModeMerchantRecovery && decisionMode != BehaviorDecisionModeRiderRecovery {
-		return "", false
-	}
-	if len(responsibilityFacts.MissingCriticalFacts) > 0 {
-		return primaryBehaviorFallbackReason(responsibilityFacts.MissingCriticalFacts), true
-	}
-	if decisionMode == BehaviorDecisionModeMerchantRecovery && scores.MerchantLiabilityScore < behaviorDecisionLiabilityThreshold {
-		return "low_merchant_liability_score", true
-	}
-	if decisionMode == BehaviorDecisionModeRiderRecovery && scores.RiderLiabilityScore < behaviorDecisionLiabilityThreshold {
-		return "low_rider_liability_score", true
-	}
-	if scores.ConfidenceScore < behaviorDecisionConfidenceThreshold {
-		return "low_confidence_score", true
-	}
-	return "", false
-}
-
-func shouldPromoteBehaviorUserRestricted(scores behaviorDecisionScores, associations behaviorAssociationPayload, userSummary GetBehaviorEffectSummaryRow) (string, bool) {
-	if scores.UserRiskScore < behaviorDecisionUserRiskThreshold {
-		return "", false
-	}
-	if scores.ConfidenceScore < behaviorDecisionRestrictConfidence {
-		return "", false
-	}
-	if scores.UserRiskScore < scores.MerchantLiabilityScore+behaviorDecisionUserRiskLeadMargin {
-		return "", false
-	}
-	if scores.UserRiskScore < scores.RiderLiabilityScore+behaviorDecisionUserRiskLeadMargin {
-		return "", false
-	}
-	if confirmationReason, ok := strongBehaviorUserRiskConfirmationReason(associations, userSummary); ok {
-		return confirmationReason, true
-	}
-	return "", false
+func shouldPromoteBehaviorUserRestricted(associations behaviorAssociationPayload, userSummary GetBehaviorEffectSummaryRow) (string, bool) {
+	return strongBehaviorUserRiskConfirmationReason(associations, userSummary)
 }
 
 func strongBehaviorUserRiskConfirmationReason(associations behaviorAssociationPayload, userSummary GetBehaviorEffectSummaryRow) (string, bool) {
@@ -1397,54 +1569,11 @@ func normalizeBehaviorReasonCodes(reasonCodes []string, resolution behaviorDecis
 
 func isBehaviorDecisionModeCode(code string) bool {
 	switch code {
-	case BehaviorDecisionModeMerchantRecovery, BehaviorDecisionModeRiderRecovery, BehaviorDecisionModePlatformFallback, BehaviorDecisionModeUserRestricted:
+	case BehaviorDecisionModeMerchantRecovery, BehaviorDecisionModeRiderRecovery, BehaviorDecisionModeUserRestricted:
 		return true
 	default:
 		return false
 	}
-}
-
-func primaryBehaviorFallbackReason(missingFacts []string) string {
-	if len(missingFacts) == 0 {
-		return "missing_critical_facts"
-	}
-	return missingFacts[0]
-}
-
-func behaviorFallbackReasonMessage(claimType string, fallbackReason string) string {
-	switch fallbackReason {
-	case "missing_delivery_chain":
-		return "当前订单缺少完整配送链路，本次不向服务方追责，已由平台兜底处理"
-	case "missing_rider_assignment":
-		return "当前订单缺少有效骑手指派事实，本次不向服务方追责，已由平台兜底处理"
-	case "missing_pickup_confirmation":
-		if claimType == "timeout" {
-			return "当前订单缺少取餐确认等关键履约事实，本次不向服务方追责，已由平台兜底处理"
-		}
-		return "当前订单缺少取餐确认等关键责任事实，本次不向服务方追责，已由平台兜底处理"
-	case "missing_delivery_status":
-		return "当前订单缺少有效配送状态事实，本次不向服务方追责，已由平台兜底处理"
-	case "low_merchant_liability_score":
-		return "当前订单商户责任画像尚未达到稳定追责阈值，本次不向服务方追责，已由平台兜底处理"
-	case "low_rider_liability_score":
-		return "当前订单骑手责任画像尚未达到稳定追责阈值，本次不向服务方追责，已由平台兜底处理"
-	case "low_confidence_score":
-		return "当前订单关键责任证据尚未达到追责阈值，本次不向服务方追责，已由平台兜底处理"
-	default:
-		return "当前订单缺少关键责任事实，本次不向服务方追责，已由平台兜底处理"
-	}
-}
-
-func appendBehaviorFallbackHintReason(reasons []string, reason string) []string {
-	if reason == "" {
-		return reasons
-	}
-	for _, existing := range reasons {
-		if existing == reason {
-			return reasons
-		}
-	}
-	return append(reasons, reason)
 }
 
 func deriveBehaviorResponsibilityDomain(decisionMode string) string {
@@ -1455,8 +1584,6 @@ func deriveBehaviorResponsibilityDomain(decisionMode string) string {
 		return BehaviorResponsibilityDomainRider
 	case BehaviorDecisionModeUserRestricted:
 		return BehaviorResponsibilityDomainUser
-	case BehaviorDecisionModePlatformFallback:
-		return BehaviorResponsibilityDomainUnknown
 	default:
 		return ""
 	}
@@ -1472,10 +1599,7 @@ func deriveBehaviorPayoutMode(status string, approvalType string, approvedAmount
 	return BehaviorPayoutModeLimitedPaid
 }
 
-func deriveBehaviorFallbackReason(decisionMode string) string {
-	if decisionMode == BehaviorDecisionModePlatformFallback {
-		return "insufficient_recovery_confidence"
-	}
+func deriveBehaviorFallbackReason(_ string) string {
 	return ""
 }
 

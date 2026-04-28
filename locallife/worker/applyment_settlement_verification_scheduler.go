@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/robfig/cron/v3"
@@ -20,6 +22,7 @@ import (
 const (
 	applymentSettlementVerificationCron       = "15 * * * *"
 	applymentSettlementVerificationBatchLimit = int32(100)
+	settlementVerificationFactConsumerDomain  = "settlement_domain"
 )
 
 type ApplymentSettlementVerificationScheduler struct {
@@ -80,6 +83,14 @@ func (s *ApplymentSettlementVerificationScheduler) RunOnce() {
 	s.runOnce(context.Background())
 }
 
+func (s *ApplymentSettlementVerificationScheduler) SetNowFuncForTest(now func() time.Time) {
+	if now == nil {
+		s.now = time.Now
+		return
+	}
+	s.now = now
+}
+
 func (s *ApplymentSettlementVerificationScheduler) runOnce(ctx context.Context) {
 	if !s.runMu.TryLock() {
 		log.Warn().Msg("applyment settlement verification already running, skipping concurrent execution")
@@ -137,20 +148,23 @@ func (s *ApplymentSettlementVerificationScheduler) verifyApplymentSettlement(ctx
 	}
 
 	status, failReason := resolveSettlementVerificationState(resp, int(item.SettlementVerifyCheckCount)+1)
-	_, err = s.store.UpdateEcommerceApplymentSettlementVerification(ctx, db.UpdateEcommerceApplymentSettlementVerificationParams{
-		ID:                            item.ID,
-		SettlementVerifyFirstTradeAt:  pgtype.Timestamptz{Time: firstTradeAt, Valid: true},
-		SettlementVerifyLastCheckedAt: pgtype.Timestamptz{Time: runAt, Valid: true},
-		SettlementVerifyCheckCount:    pgtype.Int4{Int32: item.SettlementVerifyCheckCount + 1, Valid: true},
-		SettlementVerifyStatus:        pgtype.Text{String: status, Valid: status != ""},
-		SettlementVerifyFailReason:    pgtype.Text{String: failReason, Valid: failReason != ""},
-	})
+	application, err := s.recordSettlementVerificationQueryFact(ctx, runAt, item, resp)
 	if err != nil {
 		log.Error().Err(err).
 			Int64("applyment_id", item.ID).
 			Str("verify_result", resp.VerifyResult).
-			Msg("update settlement verification tracking failed")
+			Msg("record settlement verification fact failed")
 		return
+	}
+	if application != nil {
+		if _, err := logic.NewPaymentFactService(s.store).ApplyExternalPaymentFactApplication(ctx, application.ID); err != nil {
+			log.Error().Err(err).
+				Int64("applyment_id", item.ID).
+				Int64("payment_fact_application_id", application.ID).
+				Str("verify_result", resp.VerifyResult).
+				Msg("apply settlement verification fact failed")
+			return
+		}
 	}
 
 	logger := log.Info()
@@ -167,7 +181,7 @@ func (s *ApplymentSettlementVerificationScheduler) verifyApplymentSettlement(ctx
 		Str("verify_result", strings.TrimSpace(resp.VerifyResult)).
 		Str("settlement_verify_status", status).
 		Bool("has_verify_fail_reason", failReason != "").
-		Msg("settlement verification state updated")
+		Msg("settlement verification fact applied")
 
 	if status != "fail" || item.SettlementVerifyFailedNotifiedAt.Valid {
 		return
@@ -208,6 +222,44 @@ func (s *ApplymentSettlementVerificationScheduler) verifyApplymentSettlement(ctx
 	if _, err := s.store.MarkEcommerceApplymentSettlementVerifyFailedNotified(ctx, item.ID); err != nil {
 		log.Error().Err(err).Int64("applyment_id", item.ID).Msg("mark settlement verification failure notified failed")
 	}
+}
+
+func (s *ApplymentSettlementVerificationScheduler) recordSettlementVerificationQueryFact(ctx context.Context, runAt time.Time, item db.ListMerchantApplymentsPendingSettlementVerificationRow, resp *wechatcontracts.SubMerchantSettlementResponse) (*db.ExternalPaymentFactApplication, error) {
+	service := logic.NewPaymentFactService(s.store)
+	subMchID := strings.TrimSpace(textValue(item.SubMchID))
+	checkCount := item.SettlementVerifyCheckCount + 1
+	firstTradeAt := item.FirstPaidAt
+	if item.SettlementVerifyFirstTradeAt.Valid {
+		firstTradeAt = item.SettlementVerifyFirstTradeAt.Time
+	}
+	result, err := service.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
+		Provider:                    db.ExternalPaymentProviderWechat,
+		Channel:                     db.PaymentChannelEcommerce,
+		Capability:                  db.ExternalPaymentCapabilitySettlement,
+		FactSource:                  db.ExternalPaymentFactSourceQuery,
+		ExternalObjectType:          db.ExternalPaymentObjectSettlement,
+		ExternalObjectKey:           subMchID,
+		BusinessOwner:               settlementVerificationStringPtr(db.ExternalPaymentBusinessOwnerMerchantFunds),
+		BusinessObjectType:          settlementVerificationStringPtr("ecommerce_applyment"),
+		BusinessObjectID:            settlementVerificationInt64Ptr(item.ID),
+		UpstreamState:               strings.TrimSpace(resp.VerifyResult),
+		TerminalStatus:              settlementVerificationTerminalStatus(resp.VerifyResult),
+		Currency:                    "CNY",
+		OccurredAt:                  settlementVerificationTimePtr(runAt.UTC()),
+		UpstreamUpdatedAt:           settlementVerificationTimePtr(runAt.UTC()),
+		RawResource:                 settlementVerificationQueryFactResource(runAt, item, firstTradeAt, checkCount, resp),
+		DedupeKey:                   fmt.Sprintf("wechat:query:ecommerce:settlement_verification:%d:%d:%s", item.ID, checkCount, strings.TrimSpace(resp.VerifyResult)),
+		AllowNonTerminalApplication: true,
+		Application: &logic.ExternalPaymentFactApplicationTarget{
+			Consumer:           settlementVerificationFactConsumerDomain,
+			BusinessObjectType: "ecommerce_applyment",
+			BusinessObjectID:   item.ID,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Application, nil
 }
 
 func (s *ApplymentSettlementVerificationScheduler) markSettlementVerificationInternalFailure(ctx context.Context, runAt time.Time, item db.ListMerchantApplymentsPendingSettlementVerificationRow, subMchID, failReason string, cause error) {
@@ -257,6 +309,58 @@ func settlementVerificationTerminalFailureReason(err error) (string, bool) {
 	}
 
 	return "", false
+}
+
+func settlementVerificationQueryFactResource(runAt time.Time, item db.ListMerchantApplymentsPendingSettlementVerificationRow, firstTradeAt time.Time, checkCount int32, resp *wechatcontracts.SubMerchantSettlementResponse) []byte {
+	raw, err := json.Marshal(map[string]any{
+		"applyment_id":                      item.ID,
+		"merchant_id":                       item.SubjectID,
+		"sub_mch_id":                        strings.TrimSpace(textValue(item.SubMchID)),
+		"verify_result":                     strings.TrimSpace(resp.VerifyResult),
+		"verify_fail_reason":                strings.TrimSpace(resp.VerifyFailReason),
+		"settlement_verify_first_trade_at":  firstTradeAt.UTC().Format(time.RFC3339Nano),
+		"settlement_verify_last_checked_at": runAt.UTC().Format(time.RFC3339Nano),
+		"settlement_verify_check_count":     checkCount,
+	})
+	if err != nil {
+		return nil
+	}
+	return raw
+}
+
+func settlementVerificationTerminalStatus(verifyResult string) string {
+	switch strings.TrimSpace(verifyResult) {
+	case wechatcontracts.SubMerchantSettlementVerifyResultSuccess:
+		return db.ExternalPaymentTerminalStatusSuccess
+	case wechatcontracts.SubMerchantSettlementVerifyResultFail:
+		return db.ExternalPaymentTerminalStatusFailed
+	case wechatcontracts.SubMerchantSettlementVerifyResultVerifying:
+		return db.ExternalPaymentTerminalStatusProcessing
+	default:
+		return db.ExternalPaymentTerminalStatusUnknown
+	}
+}
+
+func settlementVerificationStringPtr(value string) *string {
+	trimmedValue := strings.TrimSpace(value)
+	if trimmedValue == "" {
+		return nil
+	}
+	return &trimmedValue
+}
+
+func settlementVerificationInt64Ptr(value int64) *int64 {
+	if value == 0 {
+		return nil
+	}
+	return &value
+}
+
+func settlementVerificationTimePtr(value time.Time) *time.Time {
+	if value.IsZero() {
+		return nil
+	}
+	return &value
 }
 
 func resolveSettlementVerificationState(resp *wechatcontracts.SubMerchantSettlementResponse, checkCount int) (string, string) {

@@ -1,9 +1,9 @@
 import { ReservationService } from '../../../api/reservation'
-import { processPayment, PaymentCancelledError, isPaymentProcessFailed, isPaymentProcessSuccessful } from '../../../api/payment'
 import Navigation from '../../../utils/navigation'
 import { ReservationCardAdapter, ReservationDetailViewModel } from '../../../adapters/reservation-card'
 import { logger } from '../../../utils/logger'
 import { getErrorUserMessage } from '../../../utils/user-facing'
+import { startPaymentOrderWorkflow } from '../../../services/payment-workflow'
 
 const getErrorMessage = getErrorUserMessage
 
@@ -155,24 +155,26 @@ Page({
         if (!this.data.reservation || this.data.paying) return
         this.setData({ paying: true })
         try {
-            const paymentResult = await processPayment(this.data.reservation.id, 'reservation')
-            const paymentOutcome = isPaymentProcessSuccessful(paymentResult)
-                ? 'success'
-                : (isPaymentProcessFailed(paymentResult) ? 'failed' : 'unknown')
+            const paymentResult = await startPaymentOrderWorkflow({
+                orderId: this.data.reservation.id,
+                businessType: 'reservation'
+            })
 
-            Navigation.toReservationPaymentResult({
-                reservationId: String(this.data.id),
-                amount: this.data.reservation.depositDisplay?.replace('¥', '') || '0.00',
-                result: paymentOutcome,
-                source: 'detail'
+            Navigation.toPaymentResult({
+                status: paymentResult.status,
+                paymentOrderId: paymentResult.paymentOrderId,
+                businessId: this.data.id,
+                businessType: 'reservation',
+                orderNo: paymentResult.outTradeNo,
+                amount: this.data.reservation.depositDisplay?.replace('¥', '') || '0.00'
             })
         } catch (e) {
             logger.error('Pay failed', e)
-            Navigation.toReservationPaymentResult({
-                reservationId: String(this.data.id),
-                amount: this.data.reservation.depositDisplay?.replace('¥', '') || '0.00',
-                result: e instanceof PaymentCancelledError ? 'cancelled' : 'unknown',
-                source: 'detail'
+            Navigation.toPaymentResult({
+                status: 'pending_confirmation',
+                businessId: this.data.id,
+                businessType: 'reservation',
+                amount: this.data.reservation.depositDisplay?.replace('¥', '') || '0.00'
             })
         } finally {
             this.setData({ paying: false })

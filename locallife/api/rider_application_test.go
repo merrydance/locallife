@@ -2,16 +2,22 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/worker"
+	mockworker "github.com/merrydance/locallife/worker/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -41,85 +47,22 @@ func randomRiderApplicationWithData(userID int64) db.RiderApplication {
 	}
 }
 
-func TestCheckRiderApplicationApproval_PermanentIDCardStillRequiresHealthCertValidation(t *testing.T) {
-	server := &Server{}
+func TestValidateRiderApplicationSubmissionReadiness_UsesIDCardReadiness(t *testing.T) {
 	app := randomRiderApplicationWithData(1)
-	app.IDCardOcr = []byte(`{"name":"张三","id_number":"110101199001011234","valid_end":"长期"}`)
-	app.HealthCertOcr = []byte(`{"name":"李四","valid_end":"2030年12月31日"}`)
+	app.IDCardOcr = []byte(`{"name":"张三","id_number":"110101199001011234","readiness":{"state":"partial","reason_code":"required_field_missing","missing_fields":["valid_end"]}}`)
 
-	approved, rejectReason := server.checkRiderApplicationApproval(app)
+	_, err := validateRiderApplicationSubmissionReadiness(app)
 
-	require.False(t, approved)
-	require.Equal(t, "健康证姓名与身份证姓名不一致", rejectReason)
+	require.EqualError(t, err, "身份证有效期未识别，请上传身份证背面照片")
 }
 
-func TestCheckRiderApplicationApproval_IgnoresHealthCertIDNumber(t *testing.T) {
-	server := &Server{}
+func TestValidateRiderApplicationSubmissionReadiness_UsesHealthCertProviderFailure(t *testing.T) {
 	app := randomRiderApplicationWithData(1)
-	app.HealthCertOcr = []byte(`{"name":"张三","id_number":"320101199001011234","valid_end":"2030年12月31日"}`)
+	app.HealthCertOcr = []byte(`{"name":"张三","valid_end":"2030年12月31日","readiness":{"state":"provider_failed","reason_code":"provider_error"}}`)
 
-	approved, rejectReason := server.checkRiderApplicationApproval(app)
+	_, err := validateRiderApplicationSubmissionReadiness(app)
 
-	require.True(t, approved)
-	require.Empty(t, rejectReason)
-}
-
-func TestCheckRiderApplicationApproval_AcceptsIDCardDateRangeWithDots(t *testing.T) {
-	server := &Server{}
-	app := randomRiderApplicationWithData(1)
-	app.IDCardOcr = []byte(`{"name":"张三","id_number":"110101199001011234","valid_end":"2020.01.01-2035.01.01"}`)
-
-	approved, rejectReason := server.checkRiderApplicationApproval(app)
-
-	require.True(t, approved)
-	require.Empty(t, rejectReason)
-}
-
-func TestCheckRiderApplicationApproval_AcceptsStringifiedHealthCertOCR(t *testing.T) {
-	server := &Server{}
-	app := randomRiderApplicationWithData(1)
-	wrapped, err := json.Marshal(`{"name":"张三","id_number":"110101199001011234","valid_end":"2030年12月31日"}`)
-	require.NoError(t, err)
-	app.HealthCertOcr = wrapped
-
-	approved, rejectReason := server.checkRiderApplicationApproval(app)
-
-	require.True(t, approved)
-	require.Empty(t, rejectReason)
-}
-
-func TestCheckRiderApplicationApproval_AcceptsHealthCertDateWithDots(t *testing.T) {
-	server := &Server{}
-	app := randomRiderApplicationWithData(1)
-	app.HealthCertOcr = []byte(`{"name":"张三","id_number":"110101199001011234","valid_end":"2030.12.31"}`)
-
-	approved, rejectReason := server.checkRiderApplicationApproval(app)
-
-	require.True(t, approved)
-	require.Empty(t, rejectReason)
-}
-
-func TestCheckRiderApplicationApproval_FallsBackToApplicationRealName(t *testing.T) {
-	server := &Server{}
-	app := randomRiderApplicationWithData(1)
-	app.IDCardOcr = []byte(`{"id_number":"110101199001011234","valid_end":"20350101"}`)
-	app.RealName = pgtype.Text{String: "张三", Valid: true}
-
-	approved, rejectReason := server.checkRiderApplicationApproval(app)
-
-	require.True(t, approved)
-	require.Empty(t, rejectReason)
-}
-
-func TestCheckRiderApplicationApproval_RejectsMissingIDNumber(t *testing.T) {
-	server := &Server{}
-	app := randomRiderApplicationWithData(1)
-	app.IDCardOcr = []byte(`{"name":"张三","valid_end":"20350101"}`)
-
-	approved, rejectReason := server.checkRiderApplicationApproval(app)
-
-	require.False(t, approved)
-	require.Equal(t, "身份证号未识别，请重新上传清晰的身份证正面照片", rejectReason)
+	require.EqualError(t, err, "健康证OCR处理失败，请重新上传清晰的健康证照片")
 }
 
 // ==================== 创建/获取草稿测试 ====================
@@ -854,6 +797,179 @@ func TestSubmitRiderApplication(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestSubmitRiderApplication_QueuesOnboardingReviewWhenAsyncAvailable(t *testing.T) {
+	user, _ := randomUser(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	application := randomRiderApplicationWithData(user.ID)
+	store.EXPECT().
+		GetRiderApplicationByUserID(gomock.Any(), user.ID).
+		Return(application, nil)
+
+	submitted := application
+	submitted.Status = db.RiderApplicationStatusSubmitted
+	store.EXPECT().
+		SubmitRiderApplication(gomock.Any(), application.ID).
+		Return(submitted, nil)
+
+	store.EXPECT().
+		CreateRiderOnboardingReviewRun(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateRiderOnboardingReviewRunParams) (db.OnboardingReviewRun, error) {
+			require.Equal(t, submitted.ID, arg.RiderApplicationID.Int64)
+			require.Equal(t, "queued", arg.RunStatus)
+			return db.OnboardingReviewRun{ID: 801, ApplicationType: "rider", RunStatus: "queued", Stage: "review", CreatedAt: time.Now()}, nil
+		})
+
+	store.EXPECT().
+		UpdateRiderApplicationReviewSummary(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.UpdateRiderApplicationReviewSummaryParams) (db.RiderApplication, error) {
+			require.Equal(t, submitted.ID, arg.ID)
+			return db.RiderApplication{ID: submitted.ID, ReviewSummary: arg.ReviewSummary}, nil
+		})
+
+	distributor.EXPECT().
+		DistributeTaskOnboardingReview(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, payload *worker.OnboardingReviewPayload, _ ...asynq.Option) error {
+			require.Equal(t, int64(801), payload.ReviewRunID)
+			require.Equal(t, submitted.ID, payload.ApplicationID)
+			require.Equal(t, "rider", payload.ApplicationType)
+			require.Equal(t, user.ID, payload.RequestedBy)
+			return nil
+		})
+
+	server := newTestServerWithTaskDistributor(t, store, distributor)
+	server.onboardingReviewService = logic.NewOnboardingReviewService(store)
+
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/rider/application/submit", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp riderApplicationResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, db.RiderApplicationStatusSubmitted, resp.Status)
+	if resp.ReviewSummary != nil {
+		require.Equal(t, int64(801), resp.ReviewSummary.RunID)
+	}
+}
+
+func TestSubmitRiderApplication_FallsBackToSyncReviewWhenEnqueueFails(t *testing.T) {
+	user, _ := randomUser(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	application := randomRiderApplicationWithData(user.ID)
+	store.EXPECT().
+		GetRiderApplicationByUserID(gomock.Any(), user.ID).
+		Return(application, nil)
+
+	submitted := application
+	submitted.Status = db.RiderApplicationStatusSubmitted
+	store.EXPECT().
+		SubmitRiderApplication(gomock.Any(), application.ID).
+		Return(submitted, nil)
+
+	queuedAt := time.Now()
+	store.EXPECT().
+		CreateRiderOnboardingReviewRun(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateRiderOnboardingReviewRunParams) (db.OnboardingReviewRun, error) {
+			require.Equal(t, submitted.ID, arg.RiderApplicationID.Int64)
+			require.Equal(t, "queued", arg.RunStatus)
+			return db.OnboardingReviewRun{ID: 901, ApplicationType: "rider", RunStatus: "queued", Stage: "review", CreatedAt: queuedAt}, nil
+		})
+
+	store.EXPECT().
+		UpdateRiderApplicationReviewSummary(gomock.Any(), gomock.Any()).
+		Times(2).
+		DoAndReturn(func() func(context.Context, db.UpdateRiderApplicationReviewSummaryParams) (db.RiderApplication, error) {
+			callCount := 0
+			return func(_ context.Context, arg db.UpdateRiderApplicationReviewSummaryParams) (db.RiderApplication, error) {
+				callCount++
+				var summary map[string]any
+				require.NoError(t, json.Unmarshal(arg.ReviewSummary, &summary))
+				require.Equal(t, submitted.ID, arg.ID)
+				switch callCount {
+				case 1:
+					require.Equal(t, float64(901), summary["run_id"])
+					require.Equal(t, "", summary["outcome"])
+				case 2:
+					require.Equal(t, float64(901), summary["run_id"])
+					require.Equal(t, "approved", summary["outcome"])
+					require.Equal(t, "auto_approved", summary["reason_code"])
+				default:
+					t.Fatalf("unexpected review summary update call %d", callCount)
+				}
+				return db.RiderApplication{ID: submitted.ID, ReviewSummary: arg.ReviewSummary}, nil
+			}
+		}())
+
+	distributor.EXPECT().
+		DistributeTaskOnboardingReview(gomock.Any(), gomock.Any()).
+		Return(errors.New("redis unavailable"))
+
+	approved := submitted
+	approved.Status = db.RiderApplicationStatusApproved
+	rider := randomRider(user.ID)
+	store.EXPECT().
+		ApproveRiderApplicationTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.ApproveRiderApplicationTxParams) (db.ApproveRiderApplicationTxResult, error) {
+			require.Equal(t, submitted.ID, arg.ApplicationID)
+			return db.ApproveRiderApplicationTxResult{Application: approved, Rider: rider}, nil
+		})
+
+	store.EXPECT().
+		MarkOnboardingReviewRunProcessing(gomock.Any(), int64(901)).
+		Return(db.OnboardingReviewRun{ID: 901, ApplicationType: "rider", RunStatus: "processing", Stage: "review", CreatedAt: queuedAt}, nil)
+
+	store.EXPECT().
+		CompleteOnboardingReviewRun(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CompleteOnboardingReviewRunParams) (db.OnboardingReviewRun, error) {
+			require.Equal(t, int64(901), arg.ID)
+			require.Equal(t, "approved", arg.Outcome.String)
+			require.Equal(t, "auto_approved", arg.ReasonCode.String)
+			return db.OnboardingReviewRun{
+				ID:         901,
+				Stage:      "review",
+				RunStatus:  "completed",
+				Outcome:    pgtype.Text{String: "approved", Valid: true},
+				ReasonCode: pgtype.Text{String: "auto_approved", Valid: true},
+				CreatedAt:  queuedAt,
+				UpdatedAt:  queuedAt,
+			}, nil
+		})
+
+	server := newTestServerWithTaskDistributor(t, store, distributor)
+	server.onboardingReviewService = logic.NewOnboardingReviewService(store)
+
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/rider/application/submit", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp riderApplicationResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, db.RiderApplicationStatusApproved, resp.Status)
+	if resp.ReviewSummary == nil {
+		t.Fatal("expected review summary after sync fallback completion")
+	}
+	require.Equal(t, int64(901), resp.ReviewSummary.RunID)
+	require.Equal(t, "approved", resp.ReviewSummary.Outcome)
+	require.Equal(t, "auto_approved", resp.ReviewSummary.ReasonCode)
 }
 
 // ==================== 重置申请测试 ====================

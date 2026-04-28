@@ -1,5 +1,10 @@
 import type { OperatorApplicationResponse } from '../api/operator-application'
 
+export type ProvinceOption = {
+  label: string
+  value: number
+}
+
 export type CityOption = {
   label: string
   value: number
@@ -178,6 +183,30 @@ export function buildCityOptionsPatch(cities: CityOption[], currentSelectedCityI
   }
 }
 
+export function buildProvinceOptionsPatch(provinces: ProvinceOption[], currentSelectedProvinceId: number) {
+  const selectedProvinceId = currentSelectedProvinceId || (provinces[0]?.value || 0)
+  const selectedProvinceIndex = Math.max(0, provinces.findIndex((item) => item.value === selectedProvinceId))
+  return {
+    provinceOptions: provinces,
+    provincePickerVisible: false,
+    selectedProvinceIndex,
+    selectedProvinceId,
+    selectedProvinceName: provinces[selectedProvinceIndex]?.label || ''
+  }
+}
+
+export function findMatchedProvinceOption(provinceOptions: ProvinceOption[], provinceName: string): ProvinceOption | null {
+  if (!provinceName || !provinceOptions.length) {
+    return null
+  }
+
+  const target = normalizeRegionText(provinceName)
+  return provinceOptions.find((province) => {
+    const current = normalizeRegionText(province.label)
+    return current === target || current.includes(target) || target.includes(current)
+  }) || null
+}
+
 export function findMatchedCityOption(cityOptions: CityOption[], cityName: string): CityOption | null {
   if (!cityName || !cityOptions.length) {
     return null
@@ -211,17 +240,9 @@ export function findMatchedDistrictOption(regionOptions: RegionOption[], distric
   }) || null
 }
 
-export function buildAvailableRegionsPatch(districts: RegionOption[], keyword: string) {
-  const normalizedKeyword = keyword.trim()
+export function buildAvailableRegionsPatch(districts: RegionOption[]) {
   return {
-    regionOptions: districts,
-    filteredRegions: normalizedKeyword
-      ? districts.filter((item) =>
-          item.label.toLowerCase().includes(normalizedKeyword.toLowerCase())
-          || item.secondary.toLowerCase().includes(normalizedKeyword.toLowerCase())
-        )
-      : districts,
-    regionKeyword: normalizedKeyword
+    regionOptions: districts
   }
 }
 
@@ -307,10 +328,15 @@ export function buildOperatorApplicationPatch(params: {
   res: OperatorApplicationResponse
   regionOptions: RegionOption[]
   phoneError: string
+  currentFormData: FormDataValue
   uploads: { license: UploadFieldValue, idFront: UploadFieldValue, idBack: UploadFieldValue }
 }) {
   let regionName = String(params.res.region_name || '')
   const regionId = Number(params.res.region_id || 0)
+  const preservedContactName = String(params.currentFormData.contactName || '')
+  const preservedContactPhone = String(params.currentFormData.contactPhone || '')
+  const nextContactName = preservedContactName.trim() || String(params.res.contact_name || '')
+  const nextContactPhone = preservedContactPhone.trim() || String(params.res.contact_phone || '')
   if (!regionName && regionId && params.regionOptions.length > 0) {
     const matched = params.regionOptions.find((region) => Number(region.value) === regionId)
     if (matched) {
@@ -327,10 +353,11 @@ export function buildOperatorApplicationPatch(params: {
   const patch: Record<string, unknown> = {
     'formData.regionId': regionId,
     'formData.name': String(params.res.name || ''),
-    'formData.contactName': String(params.res.contact_name || ''),
-    'formData.contactPhone': String(params.res.contact_phone || ''),
+    'formData.contactName': nextContactName,
+    'formData.contactPhone': nextContactPhone,
     'formData.years': Number(params.res.requested_contract_years || 3),
-    phoneError: String(params.res.contact_phone || '').trim() ? '' : params.phoneError,
+    selectedDistrictName: '',
+    phoneError: nextContactPhone.trim() ? '' : params.phoneError,
     idFront: { url: '', assetId: params.res.id_card_front_asset_id },
     idBack: { url: '', assetId: params.res.id_card_back_asset_id },
     license: { url: '', assetId: params.res.business_license_asset_id },
@@ -340,6 +367,9 @@ export function buildOperatorApplicationPatch(params: {
 
   if (regionName) {
     patch['formData.regionName'] = regionName
+    patch.selectedDistrictName = regionName.includes(' - ')
+      ? regionName.split(' - ').pop() || ''
+      : regionName
   }
 
   return patch
@@ -376,31 +406,6 @@ export function getOperatorDocumentRemovalData(field: OperatorUploadField) {
   return documentMap[field]
 }
 
-export function extractRegionSearchKeyword(detail: unknown): string {
-  const rawValue = typeof detail === 'string'
-    ? detail
-    : detail && typeof detail === 'object' && 'value' in detail
-      ? String((detail as { value?: string }).value || '')
-      : ''
-  const normalizedValue = rawValue === 'undefined' ? '' : rawValue
-  return normalizedValue.trim()
-}
-
-export function buildCityChangePatch(city: CityOption) {
-  return {
-    selectedCityId: city.value,
-    selectedCityName: city.label,
-    regionKeyword: '',
-    regionSearchTimer: null,
-    lastRegionSearchKeyword: '',
-    lastRegionSearchCityId: city.value,
-    regionOptions: [],
-    filteredRegions: [],
-    'formData.regionId': 0,
-    'formData.regionName': ''
-  }
-}
-
 export function buildSelectedRegionPatch(params: {
   region: RegionOption
   cityOptions: CityOption[]
@@ -425,9 +430,11 @@ export function buildSelectedRegionPatch(params: {
 
   return {
     ...cityState,
+    selectedDistrictName: params.region.label,
     'formData.regionId': params.region.value,
     'formData.regionName': fullName,
-    regionPopupVisible: false
+    regionPopupVisible: false,
+    districtPickerVisible: false
   }
 }
 

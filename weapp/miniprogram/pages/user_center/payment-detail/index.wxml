@@ -46,8 +46,8 @@
             </view>
             <t-divider dashed />
             <view class="info-row">
-              <text class="label">订单编号</text>
-              <text class="value copyable">{{payment.order_id}}</text>
+              <text class="label">{{referenceLabel}}</text>
+              <text class="value copyable">{{referenceValue}}</text>
             </view>
             <t-divider dashed />
             <view class="info-row" wx:if="{{payment.transaction_id}}">
@@ -90,7 +90,7 @@
               <text class="refund-card-amount">- ¥{{item._amountDisplay}}</text>
             </view>
             <view class="refund-card-body">
-              <text class="refund-reason">{{item.reason || '常规退款'}}</text>
+              <text class="refund-reason">{{item._reasonText}}</text>
               <text class="refund-time">{{item.created_at}}</text>
             </view>
             <t-icon name="chevron-right" size="32rpx" color="#DDD" class="arrow" />
@@ -102,7 +102,7 @@
       <view class="bottom-action-bar animate-slide-up" wx:if="{{showCloseButton || showPayButton}}">
         <view class="action-buttons">
           <t-button wx:if="{{showPayButton}}" theme="primary" shape="round" block size="large" bindtap="onContinuePay" loading="{{paying}}" disabled="{{paying}}">继续支付</t-button>
-          <t-button wx:if="{{showCloseButton}}" theme="primary" shape="round" block size="large" bindtap="onClosePayment" disabled="{{paying}}">关闭支付详情</t-button>
+          <t-button wx:if="{{showCloseButton}}" theme="danger" variant="outline" shape="round" block size="large" bindtap="onClosePayment" disabled="{{paying}}">关闭支付单</t-button>
         </view>
       </view>
     </view>

@@ -1,0 +1,11 @@
+{
+  "purpose": "Reusable page-level state surface for loading, empty, and error rendering on non-consumer pages.",
+  "tdesignGroup": "feedback",
+  "tdesignCandidates": [
+    "loading",
+    "empty",
+    "button"
+  ],
+  "decision": "tdesign-wrapper",
+  "rationale": "The component only standardizes the shared state surface rhythm around TDesign feedback primitives. It does not own requests, routing, or page orchestration."
+}

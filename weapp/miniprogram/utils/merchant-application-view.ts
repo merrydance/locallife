@@ -3,6 +3,8 @@ import {
   buildMerchantApplicationOCRStatusView,
   buildMerchantApplicationOCRSubmitBlockMessage,
   buildMerchantApplicationStatusView,
+  buildActiveCredentialDisplays,
+  buildOnboardingReviewDisplay,
   type MerchantApplicationDraftResponse,
   type OCRStatus as MerchantApplicationOCRStatus
 } from '../api/onboarding'
@@ -303,7 +305,9 @@ export function buildMerchantApplicationDraftPatch(
     foodPermitOcrTheme: getOcrTagTheme(draft.food_permit_ocr?.status),
     idCardFrontOcrTheme: getOcrTagTheme(draft.id_card_front_ocr?.status),
     idCardBackOcrTheme: getOcrTagTheme(draft.id_card_back_ocr?.status),
-    ocrNoticeMessage: buildMerchantApplicationOCRNoticeMessage(ocrStatuses)
+    ocrNoticeMessage: buildMerchantApplicationOCRNoticeMessage(ocrStatuses),
+    reviewDisplay: buildOnboardingReviewDisplay(draft.review_summary, draft.status),
+    activeCredentialDisplays: buildActiveCredentialDisplays(draft.active_credentials)
   }
 }
 
@@ -382,6 +386,8 @@ export function buildMerchantApplicationOcrMergePatch(
     foodPermitOcrTheme: getOcrTagTheme(draft.food_permit_ocr?.status || snapshot.foodPermitOcrStatus || ''),
     idCardFrontOcrTheme: getOcrTagTheme(draft.id_card_front_ocr?.status || snapshot.idCardFrontOcrStatus || ''),
     idCardBackOcrTheme: getOcrTagTheme(draft.id_card_back_ocr?.status || snapshot.idCardBackOcrStatus || ''),
-    ocrNoticeMessage: buildMerchantApplicationOCRNoticeMessage(ocrStatuses)
+    ocrNoticeMessage: buildMerchantApplicationOCRNoticeMessage(ocrStatuses),
+    reviewDisplay: buildOnboardingReviewDisplay(draft.review_summary, nextStatus),
+    activeCredentialDisplays: buildActiveCredentialDisplays(draft.active_credentials)
   }
 }
