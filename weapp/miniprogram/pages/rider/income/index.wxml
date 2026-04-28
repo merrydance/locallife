@@ -1,0 +1,138 @@
+<custom-navbar title="配送费结算" showBack="{{true}}" />
+
+<view class="income-page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载结算账本中..." layout="vertical" />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '配送费结算加载失败，请重试'}}" />
+    <t-button theme="primary" bindtap="onRetryPage">重新加载</t-button>
+  </view>
+
+  <block wx:else>
+    <view class="page-content income-content">
+      <view wx:if="{{refreshErrorMessage}}" class="sync-state">
+        <t-icon name="error-circle" size="32rpx" />
+        <text class="sync-state__text">{{refreshErrorMessage}}</text>
+        <t-button size="small" theme="primary" variant="text" icon="refresh" bindtap="onRetryRefresh">重试</t-button>
+      </view>
+
+      <view class="summary-section">
+        <view class="summary-main">
+          <text class="summary-label">已到账分账</text>
+          <text class="summary-amount">¥{{summary.totalRiderIncomeDisplay}}</text>
+          <text class="summary-range">{{dateRangeLabel}}</text>
+        </view>
+        <view class="summary-metrics">
+          <view class="summary-metric">
+            <text class="summary-metric__value">{{summary.totalDeliveries}}</text>
+            <text class="summary-metric__label">已到账单</text>
+          </view>
+          <view class="summary-metric">
+            <text class="summary-metric__value">¥{{summary.settlingAmountDisplay}}</text>
+            <text class="summary-metric__label">待结算/处理中</text>
+          </view>
+          <view class="summary-metric">
+            <text class="summary-metric__value">{{summary.failedCount}}</text>
+            <text class="summary-metric__label">待处理</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="status-grid">
+        <view wx:for="{{summary.statusSummary}}" wx:key="status" class="status-item">
+          <view class="status-item__head">
+            <text class="status-item__label">{{item.label}}</text>
+            <t-tag size="small" theme="{{item.theme}}" variant="light">{{item.orderCount}} 单</t-tag>
+          </view>
+          <text class="status-item__amount">¥{{item.riderAmountDisplay}}</text>
+          <text class="status-item__sub">配送费 ¥{{item.deliveryFeeDisplay}}</text>
+        </view>
+      </view>
+
+      <view wx:if="{{dailyItems.length > 0}}" class="daily-section">
+        <view class="section-title-row">
+          <text class="section-title">最近到账日</text>
+        </view>
+        <view class="daily-list">
+          <view wx:for="{{dailyItems}}" wx:key="dateLabel" class="daily-row">
+            <view>
+              <text class="daily-date">{{item.dateLabel}}</text>
+              <text class="daily-count">{{item.deliveryCountText}}</text>
+            </view>
+            <text class="daily-amount">{{item.dailyIncomeDisplay}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="ledger-section">
+        <view class="section-title-row">
+          <text class="section-title">结算明细</text>
+          <text class="section-meta">共 {{total}} 条</text>
+        </view>
+
+        <t-tabs value="{{statusTab}}" bind:change="onStatusTabChange" theme="tag" space-evenly="{{false}}" split="{{false}}" t-class="income-tabs">
+          <t-tab-panel label="全部" value="all"><view /></t-tab-panel>
+          <t-tab-panel label="待结算" value="pending"><view /></t-tab-panel>
+          <t-tab-panel label="分账中" value="processing"><view /></t-tab-panel>
+          <t-tab-panel label="已到账" value="finished"><view /></t-tab-panel>
+          <t-tab-panel label="待处理" value="failed"><view /></t-tab-panel>
+        </t-tabs>
+
+        <view wx:if="{{loading && ledgerItems.length === 0}}" class="state-block state-block-compact">
+          <t-loading theme="circular" size="40rpx" text="刷新明细中..." layout="vertical" />
+        </view>
+
+        <view wx:elif="{{listErrorMessage && ledgerItems.length === 0}}" class="state-block state-block-compact">
+          <t-empty icon="error-circle" description="{{listErrorMessage}}" />
+          <t-button theme="primary" bindtap="onRetryLedger">重新加载明细</t-button>
+        </view>
+
+        <view wx:elif="{{ledgerItems.length > 0}}" class="ledger-list">
+          <view wx:for="{{ledgerItems}}" wx:key="id" class="ledger-item">
+            <view class="ledger-item__main">
+              <view class="ledger-item__title-row">
+                <text class="ledger-item__title">{{item.orderTitle}}</text>
+                <t-tag size="small" theme="{{item.statusTheme}}" variant="light">{{item.statusLabel}}</t-tag>
+              </view>
+              <text class="ledger-item__merchant">{{item.merchantName}}</text>
+            </view>
+            <text class="ledger-item__amount">{{item.amountDisplay}}</text>
+            <view class="ledger-item__meta">
+              <view class="ledger-meta-row">
+                <text>配送费</text>
+                <text>{{item.deliveryFeeDisplay}}</text>
+              </view>
+              <view class="ledger-meta-row">
+                <text>骑手分账</text>
+                <text>{{item.riderAmountDisplay}}</text>
+              </view>
+              <view class="ledger-meta-row">
+                <text>账本时间</text>
+                <text>{{item.createdAtLabel}}</text>
+              </view>
+              <view class="ledger-meta-row">
+                <text>到账时间</text>
+                <text>{{item.finishedAtLabel}}</text>
+              </view>
+            </view>
+          </view>
+
+          <view wx:if="{{loadingMore}}" class="list-footer">
+            <t-loading theme="circular" size="32rpx" text="加载更多中..." layout="vertical" />
+          </view>
+          <view wx:elif="{{loadMoreErrorMessage}}" class="list-footer list-footer-error">
+            <text>{{loadMoreErrorMessage}}</text>
+            <t-button size="small" theme="primary" variant="outline" bindtap="onRetryLoadMore">重试</t-button>
+          </view>
+          <view wx:elif="{{!hasMore}}" class="list-footer list-footer-end">没有更多结算记录了</view>
+        </view>
+
+        <view wx:else class="state-block state-block-compact">
+          <t-empty icon="info-circle" description="{{emptyDescription}}" />
+        </view>
+      </view>
+    </view>
+  </block>
+</view>
