@@ -565,25 +565,37 @@ func (distributor *RedisTaskDistributor) DistributeTaskProcessProfitSharingRetur
 }
 
 // sendOrderPaidNotifications 发送订单支付成功的实时通知
-func (processor *RedisTaskProcessor) sendOrderPaidNotifications(ctx context.Context, result db.ProcessOrderPaymentTxResult) {
+func (processor *RedisTaskProcessor) sendOrderPaidNotifications(ctx context.Context, result db.ProcessOrderPaymentTxResult) error {
 	// 1. 通知商户：有新订单
-	processor.notifyMerchantNewOrder(ctx, result.Order)
+	if err := processor.notifyMerchantNewOrder(ctx, result.Order); err != nil {
+		return fmt.Errorf("notify merchant new order: %w", err)
+	}
 
 	// 2. 如果是外卖订单，通知区域内骑手：订单池有新单
 	if result.Delivery != nil && result.PoolItem != nil {
 		processor.notifyRidersNewDelivery(ctx, result.Order, result.Delivery, result.PoolItem)
 	}
+
+	return nil
 }
 
 // notifyMerchantNewOrder 通知商户有新订单
-func (processor *RedisTaskProcessor) notifyMerchantNewOrder(ctx context.Context, order db.Order) {
+func (processor *RedisTaskProcessor) notifyMerchantNewOrder(ctx context.Context, order db.Order) error {
 	// 获取商户信息
 	merchant, err := processor.store.GetMerchant(ctx, order.MerchantID)
 	if err != nil {
-		log.Error().Err(err).Int64("merchant_id", order.MerchantID).Msg("get merchant for notification failed")
-		return
+		return fmt.Errorf("get merchant for notification: %w", err)
 	}
-	merchantAppPayload := logic.BuildMerchantAppNewOrderNotification(order, merchant.Name)
+	merchantPayload := logic.BuildMerchantNewOrderNotification(order, merchant.Name)
+
+	items, err := processor.store.ListOrderItemsWithDishByOrder(ctx, order.ID)
+	if err != nil {
+		return fmt.Errorf("load order items for merchant new order snapshot: %w", err)
+	}
+	itemViews, err := logic.BuildOrderItemViews(items)
+	if err != nil {
+		return fmt.Errorf("build order items for merchant new order snapshot: %w", err)
+	}
 
 	// 通过异步任务发送通知给商户
 	expiresAt := time.Now().Add(24 * time.Hour)
@@ -591,21 +603,21 @@ func (processor *RedisTaskProcessor) notifyMerchantNewOrder(ctx context.Context,
 		UserID:      merchant.OwnerUserID,
 		Type:        "order",
 		Title:       "🆕 新订单",
-		Content:     merchantAppPayload.Content,
+		Content:     merchantPayload.Content,
 		RelatedType: "order",
 		RelatedID:   order.ID,
 		ExtraData: map[string]any{
-			"message_id":   merchantAppPayload.MessageID,
+			"message_id":   merchantPayload.MessageID,
 			"order_no":     order.OrderNo,
 			"order_type":   order.OrderType,
 			"total_amount": order.TotalAmount,
-			"shop_name":    merchantAppPayload.ShopName,
+			"shop_name":    merchantPayload.ShopName,
 		},
 		ExpiresAt: &expiresAt,
 	}, asynq.Queue(QueueDefault))
 
 	if err != nil {
-		log.Error().Err(err).Int64("order_id", order.ID).Msg("distribute merchant notification task failed")
+		return fmt.Errorf("distribute merchant notification task: %w", err)
 	} else {
 		log.Info().
 			Int64("order_id", order.ID).
@@ -614,21 +626,17 @@ func (processor *RedisTaskProcessor) notifyMerchantNewOrder(ctx context.Context,
 			Msg("✅ merchant new order notification task distributed")
 	}
 
-	items, itemsErr := processor.store.ListOrderItemsWithDishByOrder(ctx, order.ID)
-	if itemsErr != nil {
-		log.Warn().Err(itemsErr).Int64("order_id", order.ID).Msg("load order items for ws snapshot failed")
-	}
-	orderSnapshot := buildOrderSnapshotPayload(order, items)
-	orderSnapshot["message_id"] = merchantAppPayload.MessageID
-	orderSnapshot["event"] = merchantAppPayload.Event
-	orderSnapshot["order_id"] = merchantAppPayload.OrderID
-	orderSnapshot["title"] = merchantAppPayload.Title
-	orderSnapshot["content"] = merchantAppPayload.Content
-	orderSnapshot["amount"] = merchantAppPayload.Amount
-	orderSnapshot["shop_name"] = merchantAppPayload.ShopName
+	orderSnapshot := buildOrderSnapshotPayload(order, itemViews)
+	orderSnapshot["message_id"] = merchantPayload.MessageID
+	orderSnapshot["event"] = merchantPayload.Event
+	orderSnapshot["order_id"] = merchantPayload.OrderID
+	orderSnapshot["title"] = merchantPayload.Title
+	orderSnapshot["content"] = merchantPayload.Content
+	orderSnapshot["amount"] = merchantPayload.Amount
+	orderSnapshot["shop_name"] = merchantPayload.ShopName
 	payload, _ := json.Marshal(orderSnapshot)
 	wsMessage := websocket.Message{
-		ID:        merchantAppPayload.MessageID,
+		ID:        merchantPayload.MessageID,
 		Type:      "new_order",
 		Data:      json.RawMessage(payload),
 		Timestamp: time.Now(),
@@ -641,21 +649,22 @@ func (processor *RedisTaskProcessor) notifyMerchantNewOrder(ctx context.Context,
 	wsMessageJSON, _ := json.Marshal(pushMsg)
 	channel := fmt.Sprintf("notification:merchant:%d", merchant.ID)
 	processor.publishWSMessage(ctx, channel, wsMessageJSON)
+	return nil
 }
 
 type orderItemSnapshot struct {
-	ID             int64       `json:"id"`
-	Name           string      `json:"name"`
-	UnitPrice      int64       `json:"unit_price"`
-	Quantity       int16       `json:"quantity"`
-	Subtotal       int64       `json:"subtotal"`
-	DishID         *int64      `json:"dish_id,omitempty"`
-	ComboID        *int64      `json:"combo_id,omitempty"`
-	ImageURL       *string     `json:"image_url,omitempty"`
-	Customizations interface{} `json:"customizations,omitempty"`
+	ID             int64                          `json:"id"`
+	Name           string                         `json:"name"`
+	UnitPrice      int64                          `json:"unit_price"`
+	Quantity       int16                          `json:"quantity"`
+	Subtotal       int64                          `json:"subtotal"`
+	SpecsText      string                         `json:"specs_text"`
+	DishID         *int64                         `json:"dish_id,omitempty"`
+	ComboID        *int64                         `json:"combo_id,omitempty"`
+	Customizations []logic.OrderItemCustomization `json:"customizations,omitempty"`
 }
 
-func buildOrderSnapshotPayload(order db.Order, items []db.ListOrderItemsWithDishByOrderRow) map[string]any {
+func buildOrderSnapshotPayload(order db.Order, items []logic.OrderItemView) map[string]any {
 	payload := map[string]any{
 		"id":                    order.ID,
 		"order_no":              order.OrderNo,
@@ -705,29 +714,19 @@ func buildOrderSnapshotPayload(order db.Order, items []db.ListOrderItemsWithDish
 	if order.UpdatedAt.Valid {
 		payload["updated_at"] = order.UpdatedAt.Time
 	}
-
 	if len(items) > 0 {
 		respItems := make([]orderItemSnapshot, len(items))
-		for i, item := range items {
-			respItems[i] = orderItemSnapshot{
-				ID:        item.ID,
-				Name:      item.Name,
-				UnitPrice: item.UnitPrice,
-				Quantity:  item.Quantity,
-				Subtotal:  item.Subtotal,
-			}
-			if item.DishID.Valid {
-				respItems[i].DishID = &item.DishID.Int64
-			}
-			if item.ComboID.Valid {
-				respItems[i].ComboID = &item.ComboID.Int64
-			}
-			// Note: image_media_asset_id resolution skipped here;
-			// ImageURL is populated by API layer with CDN URLs.
-			if item.Customizations != nil {
-				var customizations interface{}
-				_ = json.Unmarshal(item.Customizations, &customizations)
-				respItems[i].Customizations = customizations
+		for index, item := range items {
+			respItems[index] = orderItemSnapshot{
+				ID:             item.ID,
+				Name:           item.Name,
+				UnitPrice:      item.UnitPrice,
+				Quantity:       item.Quantity,
+				Subtotal:       item.Subtotal,
+				SpecsText:      item.SpecsText,
+				DishID:         item.DishID,
+				ComboID:        item.ComboID,
+				Customizations: item.Customizations,
 			}
 		}
 		payload["items"] = respItems

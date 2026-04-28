@@ -7,7 +7,9 @@ import 'package:merchant_app/core/print/esc_pos_utils.dart'; // We will create t
 import 'package:merchant_app/models/order.dart';
 import 'package:merchant_app/models/push_message.dart'; // For order details
 
-final printerProvider = StateNotifierProvider<PrinterNotifier, PrinterState>((ref) {
+final printerProvider = StateNotifierProvider<PrinterNotifier, PrinterState>((
+  ref,
+) {
   return PrinterNotifier();
 });
 
@@ -146,15 +148,21 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
       state = state.copyWith(error: "打印机未连接");
       return;
     }
+    if (message.itemsLoadFailed) {
+      state = state.copyWith(error: "订单明细仍在同步，暂不打印小票");
+      return;
+    }
 
     try {
       // Find write characteristic
-      List<BluetoothService> services = await state.connectedDevice!.discoverServices();
+      List<BluetoothService> services = await state.connectedDevice!
+          .discoverServices();
       BluetoothCharacteristic? writeCharacteristic;
 
       for (var service in services) {
         for (var characteristic in service.characteristics) {
-          if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
+          if (characteristic.properties.write ||
+              characteristic.properties.writeWithoutResponse) {
             writeCharacteristic = characteristic;
             break;
           }
@@ -173,9 +181,11 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
       int chunkSize = 20;
       for (int i = 0; i < bytes.length; i += chunkSize) {
         int end = (i + chunkSize < bytes.length) ? i + chunkSize : bytes.length;
-        await writeCharacteristic.write(bytes.sublist(i, end), withoutResponse: writeCharacteristic.properties.writeWithoutResponse);
+        await writeCharacteristic.write(
+          bytes.sublist(i, end),
+          withoutResponse: writeCharacteristic.properties.writeWithoutResponse,
+        );
       }
-
     } catch (e) {
       state = state.copyWith(error: "打印失败: $e");
     }
@@ -185,15 +195,25 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
     OrderModel order, {
     required String shopName,
   }) async {
-    final normalizedShopName = shopName.trim().isNotEmpty ? shopName.trim() : '商户工作台';
+    if (!order.hasReliableItems) {
+      state = state.copyWith(error: "订单明细仍在同步，暂不打印小票");
+      return;
+    }
+    final normalizedShopName = shopName.trim().isNotEmpty
+        ? shopName.trim()
+        : '商户工作台';
     await printReceipt(
       PushMessage(
         messageId: 'accepted-${order.id}',
-        orderId: order.orderNum.isNotEmpty ? order.orderNum : order.id,
+        orderId: order.id,
+        orderNumber: order.orderNum,
         title: '订单已接单',
         content: '订单已确认，准备打印小票',
         amount: order.amount,
         shopName: normalizedShopName,
+        note: order.note,
+        items: order.items,
+        itemsLoadFailed: order.itemsLoadFailed,
       ),
     );
   }

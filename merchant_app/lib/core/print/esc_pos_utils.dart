@@ -17,6 +17,10 @@ class EscPosUtils {
   /// For simplicity, we assume UTF-8 is supported or it's a generic text transmission.
   /// (In a production app, we would use a charset conversion library for GBK).
   static List<int> generateOrderReceipt(PushMessage message) {
+    if (message.itemsLoadFailed) {
+      throw StateError('订单明细未完成同步，不能打印小票');
+    }
+
     List<int> bytes = [];
 
     // Init printer
@@ -37,7 +41,29 @@ class EscPosUtils {
     bytes.addAll(_encode("订单编号: ${message.displayOrderNumber}\n"));
     bytes.addAll(_encode("--------------------------------\n"));
 
-    // Items (PushMessage currently doesn't carry items array, so we just show amount)
+    if (message.items.isEmpty) {
+      bytes.addAll(_encode("商品明细: 暂无\n"));
+    } else {
+      bytes.addAll(_boldOn);
+      bytes.addAll(_encode("商品明细\n"));
+      bytes.addAll(_boldOff);
+      for (final item in message.items) {
+        bytes.addAll(_encode("${item.name} x${item.quantity}\n"));
+        if (item.specsText.trim().isNotEmpty) {
+          bytes.addAll(_encode("  规格: ${item.specsText.trim()}\n"));
+        }
+        bytes.addAll(
+          _encode(
+            "  单价: ¥${item.price.toStringAsFixed(2)}  小计: ¥${item.lineTotal.toStringAsFixed(2)}\n",
+          ),
+        );
+      }
+    }
+
+    if ((message.note ?? '').trim().isNotEmpty) {
+      bytes.addAll(_encode("备注: ${message.note!.trim()}\n"));
+    }
+    bytes.addAll(_encode("--------------------------------\n"));
     bytes.addAll(_boldOn);
     bytes.addAll(_encode("订单总额: ¥${message.amount.toStringAsFixed(2)}\n"));
     bytes.addAll(_boldOff);

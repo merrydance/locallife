@@ -1,12 +1,12 @@
-# Merchant App Backend Interface Requirements
+# Merchant Client Backend Interface Requirements
 
-本文档面向 `merchant_app/` 对应后端能力排期与接口对接，记录当前 Android 商户端真实依赖的后端契约。
+本文档面向商户端共用后端能力排期与接口对接，覆盖 Android 商户 App `merchant_app/` 和微信小程序商户侧 `weapp/miniprogram/pages/merchant/**` 的共同订单、通知、接单、拒单契约。移动厂商 Push 仅适用于 App；WebSocket 新订单事件和订单明细结构必须由 App 与小程序共用。
 
 重要技术路线：JPush 已彻底废弃。商户端推送改为直连各手机厂商原生通道，包括华为 HMS、小米 MiPush、OPPO Push、vivo Push、荣耀 Push 等。后端不得再按 JPush registration_id、JPush REST API、JPush third_party_channel 或 `/v1/push/devices/*` 设计新能力。
 
 ## 1. 客户端范围
 
-- 客户端：Android 商户端 `merchant_app`
+- 客户端：Android 商户端 `merchant_app`；微信小程序商户侧 `weapp/miniprogram/pages/merchant/**`
 - 包名：`com.merrydance.locallife.merchant`
 - 当前版本：`1.0.0+1`
 - 接口基路径：`/v1`
@@ -25,7 +25,7 @@
 4. 商户订单列表
 5. 商户接单
 6. 商户拒单
-7. 实时新订单通知（WebSocket / 厂商 Push payload 契约）
+7. 实时新订单通知（商户 WebSocket 共用 payload / App 厂商 Push payload 契约）
 8. 协议详情查询
 
 ### 2.2 P1 建议补齐
@@ -226,27 +226,33 @@
 - Path: `/v1/merchant/orders`
 - Auth: Bearer
 
-#### 当前前端依赖的订单 DTO
+#### 后端订单 DTO
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | `id` | `string 或 number` | 是 | 订单主键，前端统一转字符串 |
-| `order_num` | `string` | 是 | 订单号 |
-| `amount` | `number` | 是 | 订单金额 |
+| `order_no` | `string` | 是 | 后端订单号；App 兼容旧字段 `order_num` |
+| `total_amount` | `number` | 是 | 订单总金额，单位为分；App 兼容旧字段 `amount` |
 | `status` | `string` | 是 | 见订单状态枚举 |
 | `created_at` | `string(datetime)` | 是 | 订单创建时间 |
 | `user_name` | `string 或 null` | 否 | 顾客姓名 |
 | `user_phone` | `string 或 null` | 否 | 顾客电话 |
-| `note` | `string 或 null` | 否 | 顾客备注 |
-| `items` | `OrderItem[]` | 是 | 商品列表 |
+| `notes` | `string 或 null` | 否 | 顾客备注；App 兼容旧字段 `note` |
+| `items` | `OrderItem[]` | 是 | 商品列表。商户订单列表和详情都应返回当前订单明细 |
 
 #### OrderItem DTO
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
+| `id` | `string 或 number` | 是 | 订单明细主键 |
 | `name` | `string` | 是 | 商品名 |
 | `quantity` | `int` | 是 | 数量 |
-| `price` | `number` | 是 | 单价 |
+| `unit_price` | `number` | 是 | 单价，单位为分；App 兼容旧字段 `price` |
+| `subtotal` | `number` | 是 | 小计，单位为分 |
+| `specs_text` | `string` | 是 | 用户下单时选择的规格摘要。菜品没有规格时为空字符串；只要有规格选择就必须返回可展示文本 |
+| `customizations` | `array 或 object` | 否 | 原始规格/定制化结构，供后续 UI 扩展；App 不得直接显示 JSON |
+
+规格真相来源：后端以订单创建时写入 `order_items.customizations.meta_specs` 的摘要为优先来源，该摘要来自已校验的规格组和规格项选择，和小程序下单使用同一规格选择数据源。App 订单流必须展示 `specs_text`。商品图片不属于商户新订单、订单列表、订单详情、接单或打印所需结构，不应出现在商户订单明细契约里。
 
 #### 前端当前支持的订单状态
 
@@ -399,12 +405,12 @@
 
 ## 5. 实时新订单通知契约
 
-商户端当前同时消费 Push 与 WebSocket，新订单通知 payload 需要字段一致。后端已为支付成功后的 WebSocket `new_order` 消息补齐稳定业务字段；厂商 Push 投递网关仍在后续阶段实现，但必须复用同一 payload 契约。
+商户端当前至少需要消费 WebSocket；Android 商户 App 还需要厂商 Push 作为离线兜底。新订单通知 payload 必须保持同一份商户订单事件结构，供 App 与小程序商户侧共用。后端已为支付成功后的 WebSocket `new_order` 消息补齐稳定业务字段；厂商 Push 投递网关仍在后续阶段实现，但必须复用同一 payload 契约。
 
 ### 5.1 投递要求
 
-- 新订单创建后，后端应同时具备 WebSocket 和厂商原生 Push 投递能力。
-- 当商户 App 不在线或 WebSocket 断开时，厂商原生 Push 是关键兜底，不是可选优化。
+- 新订单创建后，后端应通过商户 WebSocket 发布同一 `new_order` 事件，App 与小程序都按此结构消费。
+- Android 商户 App 不在线或 WebSocket 断开时，厂商原生 Push 是关键兜底，不是可选优化。
 - 后端已具备原生 Push provider 边界、no-op/test provider、活动设备查询和分发编排；真实厂商 REST 客户端仍需后续接入。
 - 同一订单通过多个通道到达时，payload 中 `message_id` 必须一致。
 - 后端不得再通过 JPush 聚合通道发商户 App 新订单消息。
@@ -413,12 +419,16 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `message_id` | `string` | 是 | 幂等去重 ID，当前格式为 `merchant_app:new_order:{order_id}` |
+| `message_id` | `string` | 是 | 幂等去重 ID，当前格式为 `merchant:new_order:{order_id}` |
 | `order_id` | `string 或 number` | 是 | 订单主键 |
 | `title` | `string` | 是 | 通知标题 |
 | `content` | `string` | 是 | 通知正文 |
 | `amount` | `number 或 string` | 是 | 订单金额 |
 | `shop_name` | `string` | 是 | 门店名称 |
+| `items` | `OrderItem[]` | 是 | 新订单快照明细；有规格的菜品必须包含 `specs_text`。后端必须先成功加载和解析明细，再发布 `new_order` |
+| `notes` | `string` | 否 | 顾客备注 |
+
+后端不得把明细加载或规格解析失败的订单作为不完整 `new_order` 发布给商户端；该类失败必须留在服务端 outbox/worker 重试边界内恢复。客户端仍兼容历史 `items_load_failed=true` 字段，但只能用于自动后台水合和降级展示，不能要求商户手动同步。
 
 ### 5.3 WebSocket message envelope
 
@@ -426,26 +436,38 @@ WebSocket 新订单消息当前使用以下 envelope：
 
 ```json
 {
-  "id": "merchant_app:new_order:10001",
+  "id": "merchant:new_order:10001",
   "type": "new_order",
   "data": {
-    "message_id": "merchant_app:new_order:10001",
+    "message_id": "merchant:new_order:10001",
     "event": "new_order",
     "order_id": 10001,
     "title": "新订单",
     "content": "您有一笔新订单 ORD10001，请及时处理",
     "amount": 4850,
-    "shop_name": "乐客来福示例门店"
+    "shop_name": "乐客来福示例门店",
+    "notes": "少放葱",
+    "items": [
+      {
+        "id": 20001,
+        "name": "招牌牛肉面",
+        "quantity": 2,
+        "unit_price": 2400,
+        "subtotal": 4800,
+        "specs_text": "大份 / 少辣"
+      }
+    ]
   }
 }
 ```
 
-`data` 中仍保留后端现有订单快照字段，例如 `id`、`order_no`、`merchant_id`、`order_type`、`total_amount`、`status`、`created_at` 和 `items`。
+`data` 中仍保留后端现有订单快照字段，例如 `id`、`order_no`、`merchant_id`、`order_type`、`total_amount`、`status`、`created_at` 和 `items`。如果客户端收到历史兼容字段 `items_load_failed=true`，必须按 `order_id` 自动请求 `/v1/merchant/orders/{id}` 补齐明细，不能暴露为商户手动同步动作。
 
 ### 5.4 厂商 Push payload 要求
 
 - 各厂商通知或透传消息必须携带上述业务字段，不能只把订单信息放在通知文案里。
 - `message_id` 必须稳定，前端已用它做去重。
+- 厂商 Push payload 的业务数据结构必须与商户 WebSocket `new_order` 的 `data` 结构一致；小程序不消费厂商 Push，但消费同一 WebSocket 结构。
 - `amount` 如果不是数字，至少要是可解析的数字字符串。
 - 厂商通道差异只能在后端推送网关或 Android 原生接入层消化，不应泄漏到 Flutter 业务层。
 - 后端推送网关按设备注册时持久化的 `provider` 选择 provider，不接受通知发送时临时覆盖 provider。

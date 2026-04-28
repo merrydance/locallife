@@ -16,7 +16,9 @@ import 'package:merchant_app/features/settings/notification_settings_provider.da
 import 'package:merchant_app/models/order.dart';
 import 'package:merchant_app/models/push_message.dart';
 
-final localNotificationServiceProvider = Provider<LocalNotificationService>((ref) {
+final localNotificationServiceProvider = Provider<LocalNotificationService>((
+  ref,
+) {
   return LocalNotificationService();
 });
 
@@ -34,10 +36,12 @@ class OrderAlertCoordinator {
     PushMessage message, {
     required bool showLocalNotification,
   }) async {
+    final hydratedMessage = await _hydrateIncomingOrder(message);
+
     if (showLocalNotification) {
       await _ref
           .read(localNotificationServiceProvider)
-          .showNewOrderNotification(message);
+          .showNewOrderNotification(hydratedMessage);
     }
 
     final notificationSettings = _ref.read(notificationSettingsProvider);
@@ -46,25 +50,66 @@ class OrderAlertCoordinator {
     }
     if (notificationSettings.voiceEnabled) {
       await TtsService.speakOrderAlert(
-        message.displayOrderNumber,
-        message.amount,
+        hydratedMessage.displayOrderNumber,
+        hydratedMessage.amount,
       );
     }
 
     if (notificationSettings.autoAcceptEnabled) {
-      final accepted = await _acceptAndPrint(message);
+      final accepted = await _acceptAndPrint(hydratedMessage);
       if (accepted) {
         return;
       }
     }
 
-    _presentAlert(message);
+    _presentAlert(hydratedMessage);
+  }
+
+  Future<PushMessage> _hydrateIncomingOrder(PushMessage message) async {
+    if (message.items.isNotEmpty || message.itemsLoadFailed) {
+      _ref
+          .read(orderProvider.notifier)
+          .addOrUpdateOrder(
+            OrderModel(
+              id: message.orderId,
+              orderNum: message.orderNumber,
+              amount: message.amount,
+              status: OrderStatus.pending,
+              createdAt: message.timestamp,
+              items: message.items,
+              note: message.note,
+              itemsLoadFailed: message.itemsLoadFailed,
+            ),
+          );
+    }
+
+    final order = await _ref
+        .read(orderProvider.notifier)
+        .fetchOrderDetail(message.orderId);
+    return order == null ? message : message.withOrderSnapshot(order);
   }
 
   Future<void> handleNotificationTap(PushMessage message) async {
+    final hydratedOrder = await _ref
+        .read(orderProvider.notifier)
+        .fetchOrderDetail(message.orderId);
+    if (hydratedOrder != null) {
+      if (hydratedOrder.status == OrderStatus.pending) {
+        _presentAlert(message.withOrderSnapshot(hydratedOrder));
+        return;
+      }
+
+      _presentOrderDetail(hydratedOrder);
+      return;
+    }
+
     await _ref.read(orderProvider.notifier).fetchOrders();
 
-    final order = _ref.read(orderProvider).orders.cast<OrderModel?>().firstWhere(
+    final order = _ref
+        .read(orderProvider)
+        .orders
+        .cast<OrderModel?>()
+        .firstWhere(
           (candidate) => candidate?.id == message.orderId,
           orElse: () => null,
         );
@@ -75,13 +120,14 @@ class OrderAlertCoordinator {
     }
 
     if (order.status == OrderStatus.pending) {
-      final pendingMessage = message.withOrderNumber(
-        order.orderNum.isNotEmpty ? order.orderNum : message.orderNumber,
-      );
-      _presentAlert(pendingMessage);
+      _presentAlert(message.withOrderSnapshot(order));
       return;
     }
 
+    _presentOrderDetail(order);
+  }
+
+  void _presentOrderDetail(OrderModel order) {
     final navigator = rootNavigatorKey.currentState;
     final context = navigator?.context;
     if (navigator == null || context == null) {
@@ -89,9 +135,7 @@ class OrderAlertCoordinator {
     }
 
     navigator.push(
-      MaterialPageRoute(
-        builder: (_) => OrderDetailPage(order: order),
-      ),
+      MaterialPageRoute(builder: (_) => OrderDetailPage(order: order)),
     );
   }
 
@@ -105,10 +149,7 @@ class OrderAlertCoordinator {
     );
 
     for (final order in newlyPendingOrders) {
-      final message = PushMessage.fromOrder(
-        order,
-        shopName: _merchantName,
-      );
+      final message = PushMessage.fromOrder(order, shopName: _merchantName);
       await handleIncomingOrder(message, showLocalNotification: true);
     }
   }
@@ -122,10 +163,11 @@ class OrderAlertCoordinator {
         .map((order) => order.id)
         .toSet();
 
-    final latestPendingOrders = latestOrders
-        .where((order) => order.status == OrderStatus.pending)
-        .toList()
-      ..sort((left, right) => left.createdAt.compareTo(right.createdAt));
+    final latestPendingOrders =
+        latestOrders
+            .where((order) => order.status == OrderStatus.pending)
+            .toList()
+          ..sort((left, right) => left.createdAt.compareTo(right.createdAt));
 
     return latestPendingOrders
         .where((order) => !previousPendingIds.contains(order.id))

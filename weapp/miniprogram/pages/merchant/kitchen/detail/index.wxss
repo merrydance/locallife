@@ -180,18 +180,6 @@
   background: var(--td-bg-color-secondarycontainer);
 }
 
-.item-image-placeholder {
-  width: 120rpx;
-  height: 120rpx;
-  border-radius: var(--radius-md);
-  background: var(--td-bg-color-component);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--td-text-color-placeholder);
-  flex-shrink: 0;
-}
-
 .item-main {
   flex: 1;
   min-width: 0;

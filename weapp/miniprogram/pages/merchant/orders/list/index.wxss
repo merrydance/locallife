@@ -139,13 +139,27 @@
 .dish-item {
   display: flex;
   justify-content: space-between;
+  gap: 16rpx;
   margin-bottom: 8rpx;
+}
+
+.dish-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .dish-name {
   font-size: 28rpx;
   color: var(--td-text-color-primary);
   font-weight: 500;
+}
+
+.dish-specs {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  line-height: 1.4;
+  color: var(--td-text-color-placeholder);
 }
 
 .dish-qty {

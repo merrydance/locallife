@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -119,14 +120,24 @@ func TestNotifyMerchantNewOrder_PublishesMerchantAppPayload(t *testing.T) {
 	merchant := db.Merchant{ID: 601, OwnerUserID: 701, Name: "测试商户"}
 
 	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(merchant, nil)
-	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return([]db.ListOrderItemsWithDishByOrderRow{{
+		ID:             801,
+		OrderID:        order.ID,
+		DishID:         pgtype.Int8{Int64: 901, Valid: true},
+		Name:           "测试菜品",
+		UnitPrice:      2800,
+		Quantity:       2,
+		Subtotal:       5600,
+		Customizations: []byte(`{"501":601,"502":602,"meta_specs":"大份 / 少辣"}`),
+	}}, nil)
 
-	processor.notifyMerchantNewOrder(context.Background(), order)
+	err := processor.notifyMerchantNewOrder(context.Background(), order)
+	require.NoError(t, err)
 
 	require.NotNil(t, distributor.payload)
 	require.Equal(t, merchant.OwnerUserID, distributor.payload.UserID)
 	require.Equal(t, "🆕 新订单", distributor.payload.Title)
-	require.Equal(t, "merchant_app:new_order:501", distributor.payload.ExtraData["message_id"])
+	require.Equal(t, "merchant:new_order:501", distributor.payload.ExtraData["message_id"])
 	require.Equal(t, "测试商户", distributor.payload.ExtraData["shop_name"])
 
 	require.Len(t, publisher.records, 1)
@@ -136,15 +147,46 @@ func TestNotifyMerchantNewOrder_PublishesMerchantAppPayload(t *testing.T) {
 	require.NoError(t, json.Unmarshal(publisher.records[0].payload, &push))
 	require.Equal(t, websocket.EntityMerchant, push.EntityType)
 	require.Equal(t, merchant.ID, push.EntityID)
-	require.Equal(t, "merchant_app:new_order:501", push.Message.ID)
+	require.Equal(t, "merchant:new_order:501", push.Message.ID)
 	require.Equal(t, "new_order", push.Message.Type)
 
 	var data map[string]any
 	require.NoError(t, json.Unmarshal(push.Message.Data, &data))
-	require.Equal(t, "merchant_app:new_order:501", data["message_id"])
+	require.Equal(t, "merchant:new_order:501", data["message_id"])
 	require.Equal(t, "new_order", data["event"])
 	require.Equal(t, float64(order.ID), data["order_id"])
 	require.Equal(t, "新订单", data["title"])
 	require.Equal(t, float64(order.TotalAmount), data["amount"])
 	require.Equal(t, merchant.Name, data["shop_name"])
+	require.Nil(t, data["items_load_failed"])
+	items, ok := data["items"].([]any)
+	require.True(t, ok)
+	require.Len(t, items, 1)
+	item, ok := items[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "测试菜品", item["name"])
+	require.Equal(t, "大份 / 少辣", item["specs_text"])
+}
+
+func TestNotifyMerchantNewOrder_ReturnsErrorBeforePublishingWhenItemsFail(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &merchantNotificationRecorder{}
+	publisher := &recordingPublisher{}
+	processor := NewTestTaskProcessor(store, distributor, nil, nil)
+	processor.pubSubPublisher = publisher
+
+	order := db.Order{ID: 502, MerchantID: 602, OrderNo: "ORD502", OrderType: "takeout", TotalAmount: 9900}
+	merchant := db.Merchant{ID: 602, OwnerUserID: 702, Name: "测试商户"}
+
+	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(merchant, nil)
+	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return(nil, errors.New("database unavailable"))
+
+	err := processor.notifyMerchantNewOrder(context.Background(), order)
+
+	require.ErrorContains(t, err, "load order items for merchant new order snapshot")
+	require.Nil(t, distributor.payload)
+	require.Empty(t, publisher.records)
 }

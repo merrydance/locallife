@@ -314,8 +314,9 @@ type ListMerchantOrdersQueryInput struct {
 }
 
 type ListMerchantOrdersQueryResult struct {
-	Orders     []db.Order
-	TotalCount int64
+	Orders         []db.Order
+	ItemsByOrderID map[int64][]db.ListOrderItemsWithDishByOrderIDsRow
+	TotalCount     int64
 }
 
 type GetMerchantOrderStatsQueryInput struct {

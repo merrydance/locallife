@@ -79,7 +79,10 @@
 
               <view class="dish-list">
                 <view class="dish-item" wx:for="{{item.items}}" wx:for-item="dish" wx:key="id">
-                  <text class="dish-name">{{dish.name}}</text>
+                  <view class="dish-main">
+                    <text class="dish-name">{{dish.name}}</text>
+                    <text class="dish-specs" wx:if="{{dish.specs_text}}">{{dish.specs_text}}</text>
+                  </view>
                   <text class="dish-qty">x{{dish.quantity}}</text>
                 </view>
               </view>

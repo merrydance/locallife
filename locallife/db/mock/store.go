@@ -14497,6 +14497,21 @@ func (mr *MockStoreMockRecorder) ListOrderItemsWithDishByOrder(ctx, orderID any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOrderItemsWithDishByOrder", reflect.TypeOf((*MockStore)(nil).ListOrderItemsWithDishByOrder), ctx, orderID)
 }
 
+// ListOrderItemsWithDishByOrderIDs mocks base method.
+func (m *MockStore) ListOrderItemsWithDishByOrderIDs(ctx context.Context, dollar_1 []int64) ([]db.ListOrderItemsWithDishByOrderIDsRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListOrderItemsWithDishByOrderIDs", ctx, dollar_1)
+	ret0, _ := ret[0].([]db.ListOrderItemsWithDishByOrderIDsRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListOrderItemsWithDishByOrderIDs indicates an expected call of ListOrderItemsWithDishByOrderIDs.
+func (mr *MockStoreMockRecorder) ListOrderItemsWithDishByOrderIDs(ctx, dollar_1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOrderItemsWithDishByOrderIDs", reflect.TypeOf((*MockStore)(nil).ListOrderItemsWithDishByOrderIDs), ctx, dollar_1)
+}
+
 // ListOrderStatusLogs mocks base method.
 func (m *MockStore) ListOrderStatusLogs(ctx context.Context, orderID int64) ([]db.OrderStatusLog, error) {
 	m.ctrl.T.Helper()

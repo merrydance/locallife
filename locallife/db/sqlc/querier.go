@@ -1372,6 +1372,7 @@ type Querier interface {
 	ListOperators(ctx context.Context, arg ListOperatorsParams) ([]ListOperatorsRow, error)
 	ListOrderItemsByOrder(ctx context.Context, orderID int64) ([]OrderItem, error)
 	ListOrderItemsWithDishByOrder(ctx context.Context, orderID int64) ([]ListOrderItemsWithDishByOrderRow, error)
+	ListOrderItemsWithDishByOrderIDs(ctx context.Context, dollar_1 []int64) ([]ListOrderItemsWithDishByOrderIDsRow, error)
 	ListOrderStatusLogs(ctx context.Context, orderID int64) ([]OrderStatusLog, error)
 	ListOrderStatusLogsWithOperator(ctx context.Context, orderID int64) ([]ListOrderStatusLogsWithOperatorRow, error)
 	ListOrdersByMerchant(ctx context.Context, arg ListOrdersByMerchantParams) ([]Order, error)

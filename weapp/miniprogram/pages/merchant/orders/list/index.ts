@@ -14,10 +14,12 @@ import {
   isMerchantConsoleAccessDenied,
   isMerchantConsoleAccessGranted
 } from '../../../../utils/console-access'
+import { wsManager, WSMessageType } from '../../../../utils/websocket'
 
 type OrderStatus = OrderResponse['status']
 type OrderStatusFilter = '' | OrderStatus
 type OrderTypeFilter = '' | OrderResponse['order_type']
+type WsUnsubscribe = () => void
 
 interface OrderTypeOption {
   label: string
@@ -61,7 +63,18 @@ interface LoadOrdersOptions {
   preserveCurrent?: boolean
 }
 
+interface MerchantNewOrderPayload {
+  id?: number | string
+  message_id?: string
+  order_id?: number | string
+  event?: string
+  type?: string
+}
+
 let orderListRequestPending = false
+let realtimeRefreshPending = false
+let realtimeRefreshTimer: ReturnType<typeof setTimeout> | null = null
+const realtimeMessageIds = new Set<string>()
 
 Page({
   data: {
@@ -81,7 +94,8 @@ Page({
     pageTitle: '订单中心',
     page: 1,
     pageSize: 10,
-    hasMore: true
+    hasMore: true,
+    _wsListeners: [] as WsUnsubscribe[]
   },
 
   async onLoad(options: OrdersPageOptions) {
@@ -106,10 +120,20 @@ Page({
       return
     }
 
+    this.initWebSocket()
+
     await this.loadOrders(true, {
       showLoading: false,
       preserveCurrent: this.data.orders.length > 0
     })
+  },
+
+  onHide() {
+    this.stopRealtimeRuntime()
+  },
+
+  onUnload() {
+    this.stopRealtimeRuntime()
   },
 
   async initializePage() {
@@ -119,7 +143,105 @@ Page({
       return false
     }
 
-    return this.loadOrders(true)
+    const loaded = await this.loadOrders(true)
+    this.initWebSocket()
+    return loaded
+  },
+
+  initWebSocket() {
+    this.cleanupWebSocket()
+    wsManager.connect()
+
+    const newOrderSub = wsManager.on(WSMessageType.NEW_ORDER, (data) => {
+      this.handleRealtimeNewOrder(data)
+    })
+
+    const notificationSub = wsManager.on(WSMessageType.NOTIFICATION, (data) => {
+      const notification = typeof data === 'object' && data !== null
+        ? (data as MerchantNewOrderPayload)
+        : {}
+      if (notification.event === 'new_order' || notification.type === 'order') {
+        this.handleRealtimeNewOrder(notification)
+      }
+    })
+
+    const blockedSub = wsManager.on(WSMessageType.CONNECTION_BLOCKED, (payload) => {
+      const message = typeof payload === 'object' && payload !== null && 'message' in payload
+        ? String((payload as { message?: unknown }).message || '')
+        : ''
+      if (!message) {
+        return
+      }
+      this.setData({ refreshErrorMessage: message })
+    })
+
+    this.data._wsListeners = [newOrderSub, notificationSub, blockedSub]
+  },
+
+  cleanupWebSocket() {
+    if (this.data._wsListeners?.length) {
+      this.data._wsListeners.forEach((unsubscribe) => unsubscribe())
+      this.data._wsListeners = []
+    }
+  },
+
+  stopRealtimeRuntime() {
+    this.cleanupWebSocket()
+    if (realtimeRefreshTimer) {
+      clearTimeout(realtimeRefreshTimer)
+      realtimeRefreshTimer = null
+    }
+    realtimeRefreshPending = false
+    wsManager.disconnect()
+  },
+
+  handleRealtimeNewOrder(data: unknown) {
+    const payload = typeof data === 'object' && data !== null
+      ? (data as MerchantNewOrderPayload)
+      : {}
+    const messageId = typeof payload.message_id === 'string'
+      ? payload.message_id
+      : ''
+    if (messageId) {
+      if (realtimeMessageIds.has(messageId)) {
+        return
+      }
+      realtimeMessageIds.add(messageId)
+      if (realtimeMessageIds.size > 100) {
+        const oldest = realtimeMessageIds.values().next().value
+        if (oldest) realtimeMessageIds.delete(oldest)
+      }
+    }
+
+    this.refreshOrdersFromRealtime()
+  },
+
+  refreshOrdersFromRealtime() {
+    if (realtimeRefreshPending) {
+      return
+    }
+    realtimeRefreshPending = true
+
+    const refresh = async () => {
+      try {
+        await this.loadOrders(true, {
+          showLoading: false,
+          preserveCurrent: this.data.orders.length > 0
+        })
+      } finally {
+        realtimeRefreshPending = false
+      }
+    }
+
+    if (orderListRequestPending) {
+      realtimeRefreshTimer = setTimeout(() => {
+        realtimeRefreshTimer = null
+        void refresh()
+      }, 500)
+      return
+    }
+
+    void refresh()
   },
 
   async syncAccessState() {

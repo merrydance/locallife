@@ -12,8 +12,10 @@ enum OrderStatus {
   const OrderStatus(this.label);
 
   static OrderStatus fromString(String value) {
+    final normalized = value.toLowerCase();
+    if (normalized == 'paid') return OrderStatus.pending;
     return OrderStatus.values.firstWhere(
-      (e) => e.name == value.toLowerCase(),
+      (e) => e.name == normalized,
       orElse: () => OrderStatus.pending,
     );
   }
@@ -29,6 +31,7 @@ class OrderModel {
   final String? userPhone;
   final List<OrderItem> items;
   final String? note;
+  final bool itemsLoadFailed;
 
   OrderModel({
     required this.id,
@@ -40,41 +43,127 @@ class OrderModel {
     this.userPhone,
     required this.items,
     this.note,
+    this.itemsLoadFailed = false,
   });
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
     return OrderModel(
-      id: json['id']?.toString() ?? '',
-      orderNum: json['order_num']?.toString() ?? '',
-      amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
+      id: _firstString(json, const ['id', 'order_id']),
+      orderNum: _firstString(json, const [
+        'order_no',
+        'order_num',
+        'order_number',
+      ]),
+      amount: _moneyYuan(
+        json,
+        centsKeys: const ['total_amount'],
+        yuanKeys: const ['amount'],
+      ),
       status: OrderStatus.fromString(json['status']?.toString() ?? 'pending'),
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ?? DateTime.now(),
-      userName: json['user_name'],
-      userPhone: json['user_phone'],
-      items: (json['items'] as List?)?.map((i) => OrderItem.fromJson(i)).toList() ?? [],
-      note: json['note'],
+      createdAt:
+          DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+          DateTime.now(),
+      userName: json['user_name']?.toString(),
+      userPhone: json['user_phone']?.toString(),
+      items:
+          (json['items'] as List?)
+              ?.whereType<Map>()
+              .map(
+                (item) => OrderItem.fromJson(Map<String, dynamic>.from(item)),
+              )
+              .toList() ??
+          [],
+      note: _firstNullableString(json, const ['notes', 'note']),
+      itemsLoadFailed: json['items_load_failed'] == true,
     );
   }
 
   String get formattedDate => DateFormat('MM-dd HH:mm').format(createdAt);
+
+  bool get hasReliableItems => !itemsLoadFailed;
 }
 
 class OrderItem {
   final String name;
   final int quantity;
   final double price;
+  final double subtotal;
+  final int unitPriceCents;
+  final int subtotalCents;
+  final String specsText;
 
   OrderItem({
     required this.name,
     required this.quantity,
     required this.price,
+    this.subtotal = 0.0,
+    this.unitPriceCents = 0,
+    this.subtotalCents = 0,
+    this.specsText = '',
   });
 
   factory OrderItem.fromJson(Map<String, dynamic> json) {
+    final unitPriceCents = _firstInt(json, const ['unit_price']);
+    final subtotalCents = _firstInt(json, const ['subtotal']);
     return OrderItem(
       name: json['name']?.toString() ?? '',
-      quantity: json['quantity'] as int? ?? 1,
-      price: (json['price'] as num?)?.toDouble() ?? 0.0,
+      quantity: _firstInt(json, const ['quantity'], fallback: 1),
+      price: unitPriceCents > 0
+          ? unitPriceCents / 100.0
+          : _moneyYuan(json, yuanKeys: const ['price']),
+      subtotal: subtotalCents > 0
+          ? subtotalCents / 100.0
+          : _moneyYuan(json, yuanKeys: const ['subtotal_price']),
+      unitPriceCents: unitPriceCents,
+      subtotalCents: subtotalCents,
+      specsText: json['specs_text']?.toString() ?? '',
     );
   }
+
+  double get lineTotal => subtotal > 0 ? subtotal : price * quantity;
+}
+
+String _firstString(Map<String, dynamic> json, List<String> keys) {
+  return _firstNullableString(json, keys) ?? '';
+}
+
+String? _firstNullableString(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value != null && value.toString().isNotEmpty) return value.toString();
+  }
+  return null;
+}
+
+int _firstInt(
+  Map<String, dynamic> json,
+  List<String> keys, {
+  int fallback = 0,
+}) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    final parsed = int.tryParse(value?.toString() ?? '');
+    if (parsed != null) return parsed;
+  }
+  return fallback;
+}
+
+double _moneyYuan(
+  Map<String, dynamic> json, {
+  List<String> centsKeys = const [],
+  List<String> yuanKeys = const [],
+}) {
+  for (final key in centsKeys) {
+    final cents = _firstInt(json, [key], fallback: -1);
+    if (cents >= 0) return cents / 100.0;
+  }
+  for (final key in yuanKeys) {
+    final value = json[key];
+    if (value is num) return value.toDouble();
+    final parsed = double.tryParse(value?.toString() ?? '');
+    if (parsed != null) return parsed;
+  }
+  return 0.0;
 }

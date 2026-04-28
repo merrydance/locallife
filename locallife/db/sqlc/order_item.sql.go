@@ -213,3 +213,59 @@ func (q *Queries) ListOrderItemsWithDishByOrder(ctx context.Context, orderID int
 	}
 	return items, nil
 }
+
+const listOrderItemsWithDishByOrderIDs = `-- name: ListOrderItemsWithDishByOrderIDs :many
+SELECT
+    oi.id, oi.order_id, oi.dish_id, oi.combo_id, oi.name, oi.unit_price, oi.quantity, oi.subtotal, oi.customizations, oi.created_at,
+    d.image_media_asset_id as dish_image_media_asset_id
+FROM order_items oi
+LEFT JOIN dishes d ON oi.dish_id = d.id
+WHERE oi.order_id = ANY($1::bigint[])
+ORDER BY oi.order_id, oi.id
+`
+
+type ListOrderItemsWithDishByOrderIDsRow struct {
+	ID                    int64       `json:"id"`
+	OrderID               int64       `json:"order_id"`
+	DishID                pgtype.Int8 `json:"dish_id"`
+	ComboID               pgtype.Int8 `json:"combo_id"`
+	Name                  string      `json:"name"`
+	UnitPrice             int64       `json:"unit_price"`
+	Quantity              int16       `json:"quantity"`
+	Subtotal              int64       `json:"subtotal"`
+	Customizations        []byte      `json:"customizations"`
+	CreatedAt             time.Time   `json:"created_at"`
+	DishImageMediaAssetID pgtype.Int8 `json:"dish_image_media_asset_id"`
+}
+
+func (q *Queries) ListOrderItemsWithDishByOrderIDs(ctx context.Context, dollar_1 []int64) ([]ListOrderItemsWithDishByOrderIDsRow, error) {
+	rows, err := q.db.Query(ctx, listOrderItemsWithDishByOrderIDs, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListOrderItemsWithDishByOrderIDsRow{}
+	for rows.Next() {
+		var i ListOrderItemsWithDishByOrderIDsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderID,
+			&i.DishID,
+			&i.ComboID,
+			&i.Name,
+			&i.UnitPrice,
+			&i.Quantity,
+			&i.Subtotal,
+			&i.Customizations,
+			&i.CreatedAt,
+			&i.DishImageMediaAssetID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

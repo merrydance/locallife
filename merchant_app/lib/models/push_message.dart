@@ -1,3 +1,5 @@
+import 'order.dart';
+
 class PushMessage {
   final String messageId;
   final String orderId;
@@ -6,6 +8,9 @@ class PushMessage {
   final String content;
   final double amount;
   final String shopName;
+  final String? note;
+  final List<OrderItem> items;
+  final bool itemsLoadFailed;
   final DateTime timestamp;
 
   PushMessage({
@@ -16,33 +21,45 @@ class PushMessage {
     required this.content,
     required this.amount,
     required this.shopName,
+    this.note,
+    this.items = const <OrderItem>[],
+    this.itemsLoadFailed = false,
     DateTime? timestamp,
   }) : timestamp = timestamp ?? DateTime.now();
 
   factory PushMessage.fromJson(Map<String, dynamic> json) {
+    final order = OrderModel.fromJson(json);
     return PushMessage(
       messageId: json['message_id'] ?? '',
-      orderId: json['order_id'] ?? '',
-      orderNumber: json['order_num'] ?? json['order_number'] ?? json['order_id'] ?? '',
+      orderId: json['order_id']?.toString() ?? order.id,
+      orderNumber: order.orderNum.isNotEmpty
+          ? order.orderNum
+          : json['order_id']?.toString() ?? '',
       title: json['title'] ?? '',
       content: json['content'] ?? '',
-      amount: double.tryParse(json['amount']?.toString() ?? '0') ?? 0.0,
+      amount: json.containsKey('total_amount')
+          ? order.amount
+          : _amountFromPush(json),
       shopName: json['shop_name'] ?? '',
+      note: order.note,
+      items: order.items,
+      itemsLoadFailed: order.itemsLoadFailed,
     );
   }
 
-  factory PushMessage.fromOrder(
-    dynamic order, {
-    required String shopName,
-  }) {
+  factory PushMessage.fromOrder(dynamic order, {required String shopName}) {
     return PushMessage(
       messageId: 'polled-${order.id}',
       orderId: order.id,
       orderNumber: order.orderNum,
       title: '您有新的订单',
-      content: '订单号 ${order.orderNum.isNotEmpty ? order.orderNum : order.id}，请及时处理',
+      content:
+          '订单号 ${order.orderNum.isNotEmpty ? order.orderNum : order.id}，请及时处理',
       amount: order.amount,
       shopName: shopName,
+      note: order.note,
+      items: order.items,
+      itemsLoadFailed: order.itemsLoadFailed,
       timestamp: order.createdAt,
     );
   }
@@ -56,6 +73,25 @@ class PushMessage {
       content: content,
       amount: amount,
       shopName: shopName,
+      note: note,
+      items: items,
+      itemsLoadFailed: itemsLoadFailed,
+      timestamp: timestamp,
+    );
+  }
+
+  PushMessage withOrderSnapshot(OrderModel order) {
+    return PushMessage(
+      messageId: messageId,
+      orderId: order.id.isNotEmpty ? order.id : orderId,
+      orderNumber: order.orderNum.isNotEmpty ? order.orderNum : orderNumber,
+      title: title,
+      content: content,
+      amount: order.amount > 0 ? order.amount : amount,
+      shopName: shopName,
+      note: order.note ?? note,
+      items: order.items,
+      itemsLoadFailed: order.itemsLoadFailed,
       timestamp: timestamp,
     );
   }
@@ -69,10 +105,33 @@ class PushMessage {
       'content': content,
       'amount': amount,
       'shop_name': shopName,
+      'notes': note,
+      'items': items
+          .map(
+            (item) => {
+              'name': item.name,
+              'quantity': item.quantity,
+              'unit_price': item.unitPriceCents,
+              'subtotal': item.subtotalCents,
+              'specs_text': item.specsText,
+            },
+          )
+          .toList(),
+      'items_load_failed': itemsLoadFailed,
     };
   }
 
-  String get displayOrderNumber => orderNumber.isNotEmpty ? orderNumber : orderId;
+  String get displayOrderNumber =>
+      orderNumber.isNotEmpty ? orderNumber : orderId;
 
   int get notificationId => Object.hash(orderId, messageId);
+}
+
+double _amountFromPush(Map<String, dynamic> json) {
+  final raw = json['amount'];
+  if (raw is int) return raw / 100.0;
+  if (raw is num) return raw.toDouble();
+  final parsed = double.tryParse(raw?.toString() ?? '');
+  if (parsed == null) return 0.0;
+  return parsed >= 100 ? parsed / 100.0 : parsed;
 }

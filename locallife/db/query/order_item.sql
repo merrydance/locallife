@@ -44,6 +44,15 @@ LEFT JOIN dishes d ON oi.dish_id = d.id
 WHERE oi.order_id = $1
 ORDER BY oi.id;
 
+-- name: ListOrderItemsWithDishByOrderIDs :many
+SELECT
+    oi.id, oi.order_id, oi.dish_id, oi.combo_id, oi.name, oi.unit_price, oi.quantity, oi.subtotal, oi.customizations, oi.created_at,
+    d.image_media_asset_id as dish_image_media_asset_id
+FROM order_items oi
+LEFT JOIN dishes d ON oi.dish_id = d.id
+WHERE oi.order_id = ANY($1::bigint[])
+ORDER BY oi.order_id, oi.id;
+
 -- name: DeleteOrderItems :exec
 DELETE FROM order_items
 WHERE order_id = $1;

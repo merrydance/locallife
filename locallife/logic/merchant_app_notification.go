@@ -7,9 +7,11 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 )
 
-const MerchantAppNotificationEventNewOrder = "new_order"
+const MerchantNotificationEventNewOrder = "new_order"
 
-type MerchantAppNotificationPayload struct {
+const MerchantAppNotificationEventNewOrder = MerchantNotificationEventNewOrder
+
+type MerchantNewOrderNotificationPayload struct {
 	MessageID string `json:"message_id"`
 	Event     string `json:"event"`
 	OrderID   int64  `json:"order_id"`
@@ -20,15 +22,17 @@ type MerchantAppNotificationPayload struct {
 	ShopName  string `json:"shop_name"`
 }
 
-func BuildMerchantAppNewOrderNotification(order db.Order, shopName string) MerchantAppNotificationPayload {
+type MerchantAppNotificationPayload = MerchantNewOrderNotificationPayload
+
+func BuildMerchantNewOrderNotification(order db.Order, shopName string) MerchantNewOrderNotificationPayload {
 	shopName = strings.TrimSpace(shopName)
 	if shopName == "" {
 		shopName = "商户"
 	}
 
-	return MerchantAppNotificationPayload{
-		MessageID: fmt.Sprintf("merchant_app:new_order:%d", order.ID),
-		Event:     MerchantAppNotificationEventNewOrder,
+	return MerchantNewOrderNotificationPayload{
+		MessageID: fmt.Sprintf("merchant:new_order:%d", order.ID),
+		Event:     MerchantNotificationEventNewOrder,
 		OrderID:   order.ID,
 		OrderNo:   order.OrderNo,
 		Title:     "新订单",
@@ -36,4 +40,8 @@ func BuildMerchantAppNewOrderNotification(order db.Order, shopName string) Merch
 		Amount:    order.TotalAmount,
 		ShopName:  shopName,
 	}
+}
+
+func BuildMerchantAppNewOrderNotification(order db.Order, shopName string) MerchantAppNotificationPayload {
+	return BuildMerchantNewOrderNotification(order, shopName)
 }

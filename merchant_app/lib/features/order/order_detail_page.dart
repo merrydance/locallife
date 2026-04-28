@@ -18,26 +18,35 @@ class OrderDetailPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final currentOrder =
+        ref.watch(
+          orderProvider.select(
+            (state) => state.orders.cast<OrderModel?>().firstWhere(
+              (candidate) => candidate?.id == order.id,
+              orElse: () => null,
+            ),
+          ),
+        ) ??
+        order;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('订单详情'),
-      ),
+      appBar: AppBar(title: const Text('订单详情')),
       body: SingleChildScrollView(
         child: MerchantContentShell(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildStatusCard(context),
+              _buildStatusCard(context, currentOrder),
               const SizedBox(height: AppSpacing.lg),
-              _buildCustomerInfoCard(context),
+              _buildCustomerInfoCard(context, currentOrder),
               const SizedBox(height: AppSpacing.lg),
-              _buildItemsCard(context),
-              if ((order.note ?? '').trim().isNotEmpty) ...[
+              _buildItemsCard(context, currentOrder),
+              if ((currentOrder.note ?? '').trim().isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.lg),
-                _buildNoteCard(context),
+                _buildNoteCard(context, currentOrder),
               ],
               const SizedBox(height: AppSpacing.xl),
-              _buildActionButtons(context, ref),
+              _buildActionButtons(context, ref, currentOrder),
               const SizedBox(height: AppSpacing.xl),
             ],
           ),
@@ -46,7 +55,7 @@ class OrderDetailPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildStatusCard(BuildContext context) {
+  Widget _buildStatusCard(BuildContext context, OrderModel order) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.xl),
@@ -127,7 +136,9 @@ class OrderDetailPage extends ConsumerWidget {
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       Text(
-                        '${order.items.length} 件',
+                        order.hasReliableItems
+                            ? '${order.items.length} 件'
+                            : '同步中',
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
@@ -144,7 +155,7 @@ class OrderDetailPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildCustomerInfoCard(BuildContext context) {
+  Widget _buildCustomerInfoCard(BuildContext context, OrderModel order) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.xl),
@@ -159,13 +170,17 @@ class OrderDetailPage extends ConsumerWidget {
             _buildInfoRow(
               icon: Icons.person_outline,
               label: '联系人',
-              value: order.userName?.isNotEmpty == true ? order.userName! : '匿名客户',
+              value: order.userName?.isNotEmpty == true
+                  ? order.userName!
+                  : '匿名客户',
             ),
             const SizedBox(height: AppSpacing.md),
             _buildInfoRow(
               icon: Icons.phone_outlined,
               label: '联系电话',
-              value: order.userPhone?.isNotEmpty == true ? order.userPhone! : '暂无电话',
+              value: order.userPhone?.isNotEmpty == true
+                  ? order.userPhone!
+                  : '暂无电话',
             ),
           ],
         ),
@@ -173,7 +188,7 @@ class OrderDetailPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildItemsCard(BuildContext context) {
+  Widget _buildItemsCard(BuildContext context, OrderModel order) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.xl),
@@ -185,51 +200,12 @@ class OrderDetailPage extends ConsumerWidget {
               style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
             ),
             const SizedBox(height: AppSpacing.lg),
-            ...order.items.map((item) => Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                  child: Container(
-                    padding: const EdgeInsets.all(AppSpacing.lg),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceLow,
-                      borderRadius: BorderRadius.circular(AppRadius.lg),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item.name,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: AppSpacing.xs),
-                              Text(
-                                '数量 x${item.quantity}',
-                                style: const TextStyle(
-                                  color: AppColors.onSurfaceVariant,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.md),
-                        Text(
-                          '¥${(item.price * item.quantity).toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )),
+            if (!order.hasReliableItems)
+              _buildItemsStateText('订单明细正在自动同步，请稍候。')
+            else if (order.items.isEmpty)
+              _buildItemsStateText('暂无商品明细')
+            else
+              ...order.items.map((item) => _buildItemRow(item)),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -250,7 +226,79 @@ class OrderDetailPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildNoteCard(BuildContext context) {
+  Widget _buildItemRow(OrderItem item) {
+    final specsText = item.specsText.trim();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceLow,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.name,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (specsText.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      specsText,
+                      style: const TextStyle(
+                        color: AppColors.onSurfaceVariant,
+                        fontSize: 13,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    '数量 x${item.quantity}  单价 ¥${item.price.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      color: AppColors.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Text(
+              '¥${item.lineTotal.toStringAsFixed(2)}',
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildItemsStateText(String text) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceLow,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(color: AppColors.onSurfaceVariant, height: 1.45),
+      ),
+    );
+  }
+
+  Widget _buildNoteCard(BuildContext context, OrderModel order) {
     return Card(
       color: AppColors.warningSoft,
       child: Padding(
@@ -283,10 +331,18 @@ class OrderDetailPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildActionButtons(BuildContext context, WidgetRef ref) {
-    final isAuthenticated = ref.watch(authProvider.select((state) => state.isAuthenticated));
+  Widget _buildActionButtons(
+    BuildContext context,
+    WidgetRef ref,
+    OrderModel order,
+  ) {
+    final isAuthenticated = ref.watch(
+      authProvider.select((state) => state.isAuthenticated),
+    );
     final isProcessing = ref.watch(
-      orderProvider.select((state) => state.actionInFlightOrderIds.contains(order.id)),
+      orderProvider.select(
+        (state) => state.actionInFlightOrderIds.contains(order.id),
+      ),
     );
 
     if (order.status != OrderStatus.pending || !isAuthenticated) {
@@ -299,26 +355,30 @@ class OrderDetailPage extends ConsumerWidget {
           child: MerchantSecondaryButton(
             expand: true,
             label: isProcessing ? '处理中...' : '暂不接单',
-              onPressed: isProcessing ? null : () async {
-                final reason = await _showRejectReasonDialog(context);
-                if (reason == null || reason.trim().isEmpty || !context.mounted) {
-                  return;
-                }
-                final success = await ref
-                    .read(orderProvider.notifier)
-                    .rejectOrder(order.id, reason: reason.trim());
-                if (!context.mounted) {
-                  return;
-                }
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(success ? '已拒绝订单' : '拒绝订单失败，请稍后再试'),
-                  ),
-                );
-                if (success) {
-                  Navigator.of(context).pop();
-                }
-            },
+            onPressed: isProcessing
+                ? null
+                : () async {
+                    final reason = await _showRejectReasonDialog(context);
+                    if (reason == null ||
+                        reason.trim().isEmpty ||
+                        !context.mounted) {
+                      return;
+                    }
+                    final success = await ref
+                        .read(orderProvider.notifier)
+                        .rejectOrder(order.id, reason: reason.trim());
+                    if (!context.mounted) {
+                      return;
+                    }
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(success ? '已拒绝订单' : '拒绝订单失败，请稍后再试'),
+                      ),
+                    );
+                    if (success) {
+                      Navigator.of(context).pop();
+                    }
+                  },
           ),
         ),
         const SizedBox(width: AppSpacing.md),
@@ -328,30 +388,39 @@ class OrderDetailPage extends ConsumerWidget {
             expand: true,
             label: isProcessing ? '正在接单...' : '立即接单',
             isLoading: isProcessing,
-            onPressed: isProcessing ? null : () async {
-              final success = await ref.read(orderProvider.notifier).acceptOrder(order.id);
-              if (success) {
-                final notificationSettings = ref.read(notificationSettingsProvider);
-                final printerState = ref.read(printerProvider);
-                final merchantName = ref.read(authProvider).merchantName ?? '商户工作台';
-                if (notificationSettings.autoPrintAfterAcceptEnabled &&
-                    printerState.connectedDevice != null) {
-                  await ref
-                      .read(printerProvider.notifier)
-                      .printAcceptedOrder(order, shopName: merchantName);
-                }
-              }
-              if (context.mounted && !success) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(ref.read(orderProvider).error ?? '接单失败，请稍后再试'),
-                  ),
-                );
-              }
-              if (context.mounted && success) {
-                Navigator.of(context).pop();
-              }
-            },
+            onPressed: isProcessing
+                ? null
+                : () async {
+                    final success = await ref
+                        .read(orderProvider.notifier)
+                        .acceptOrder(order.id);
+                    if (success) {
+                      final notificationSettings = ref.read(
+                        notificationSettingsProvider,
+                      );
+                      final printerState = ref.read(printerProvider);
+                      final merchantName =
+                          ref.read(authProvider).merchantName ?? '商户工作台';
+                      if (notificationSettings.autoPrintAfterAcceptEnabled &&
+                          printerState.connectedDevice != null) {
+                        await ref
+                            .read(printerProvider.notifier)
+                            .printAcceptedOrder(order, shopName: merchantName);
+                      }
+                    }
+                    if (context.mounted && !success) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            ref.read(orderProvider).error ?? '接单失败，请稍后再试',
+                          ),
+                        ),
+                      );
+                    }
+                    if (context.mounted && success) {
+                      Navigator.of(context).pop();
+                    }
+                  },
           ),
         ),
       ],
@@ -400,9 +469,7 @@ class OrderDetailPage extends ConsumerWidget {
             controller: controller,
             maxLines: 3,
             autofocus: true,
-            decoration: const InputDecoration(
-              hintText: '例如：菜品已售罄、设备故障、门店临时打烊',
-            ),
+            decoration: const InputDecoration(hintText: '例如：菜品已售罄、设备故障、门店临时打烊'),
             validator: (value) {
               final text = value?.trim() ?? '';
               if (text.isEmpty) {

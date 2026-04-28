@@ -41546,6 +41546,11 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 2
                 },
+                "specs_text": {
+                    "description": "规格文本（商户端稳定展示字段，无规格时为空字符串）",
+                    "type": "string",
+                    "example": "规格：大份 / 辣度：微辣"
+                },
                 "subtotal": {
                     "description": "小计金额 (单位：分，含定制化加价)",
                     "type": "integer",

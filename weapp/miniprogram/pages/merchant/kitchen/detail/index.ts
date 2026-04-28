@@ -14,7 +14,6 @@ interface KitchenDetailItemView extends KitchenOrderItem {
   categoryLabel: string
   prepareTimeLabel: string
   customizationSummary: string
-  hasImage: boolean
 }
 
 interface KitchenDetailView extends KitchenOrderResponse {
@@ -48,15 +47,14 @@ function formatTime(value?: string) {
 
 function formatKitchenItem(item: KitchenOrderItem): KitchenDetailItemView {
   const customizationSummary = Array.isArray(item.customizations) && item.customizations.length
-    ? item.customizations.map((option) => option.option_name).join('、')
+    ? item.customizations.map((option) => option.value || option.name).filter(Boolean).join('、')
     : ''
 
   return {
     ...item,
     categoryLabel: item.category_name || '未分类商品',
     prepareTimeLabel: `${item.prepare_time || 0} 分钟`,
-    customizationSummary,
-    hasImage: Boolean(item.image_url)
+    customizationSummary
   }
 }
 

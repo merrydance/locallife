@@ -238,7 +238,7 @@ Goal: lock the backend-side payload consumed by WebSocket and future native push
 Task cards:
 
 - Card 3.1 audit current order-created/payment-success notification path. Status: complete.
-- Card 3.2 define typed merchant app notification payload builder. Status: complete.
+- Card 3.2 define typed merchant notification payload builder. Status: complete.
 - Card 3.3 add focused tests for payload fields and `message_id` stability. Status: complete.
 - Card 3.4 stage review and docs sync. Status: complete.
 
@@ -251,14 +251,14 @@ Acceptance highlights:
 Current review result:
 
 - Stage 3 audit confirmed the real merchant new-order path is payment-success worker dispatch, not order creation itself.
-- Added a typed `BuildMerchantAppNewOrderNotification` payload builder with stable `merchant_app:new_order:{order_id}` message IDs.
+- Added a typed merchant new-order payload builder. This contract has since been generalized for both Android merchant App and Mini Program merchant-side WebSocket consumers, with stable `merchant:new_order:{order_id}` message IDs.
 - WebSocket `new_order` messages now set `websocket.Message.ID` and include `message_id`, `event`, `order_id`, `title`, `content`, `amount`, and `shop_name` in `data` while retaining the existing order snapshot fields.
 - Review found an accidental station-notification title behavior change; the existing `🆕 新订单` title was restored before docs sync.
 - `merchant_app/docs/backend-interface-requirements.md` has been synced from pending contract to locked new-order payload details.
 
 Validation completed:
 
-- `go test ./logic -run 'TestBuildMerchantAppNewOrderNotification'`
+- `go test ./logic -run 'TestBuildMerchantNewOrderNotification'`
 - `go test ./worker -run 'TestNotifyMerchantNewOrder_PublishesMerchantAppPayload|TestProcessTaskPaymentDomainOutbox_PublishesOrderPaymentSucceeded'`
 - `go test ./logic`
 - `go test ./worker -run 'TestNotifyMerchantNewOrder_PublishesMerchantAppPayload|TestProcessTaskPaymentDomainOutbox_PublishesOrderPaymentSucceeded|Test.*OrderPayment'`
@@ -295,7 +295,7 @@ Current review result:
 
 Validation completed:
 
-- `go test ./logic -run 'TestMerchantAppPushDispatcher|TestBuildMerchantAppNewOrderNotification|TestGetLatestAppVersion|Test.*MerchantAppDevice'`
+- `go test ./logic -run 'TestMerchantAppPushDispatcher|TestBuildMerchantNewOrderNotification|TestGetLatestAppVersion|Test.*MerchantAppDevice'`
 - `go test ./logic`
 
 Residual risks:

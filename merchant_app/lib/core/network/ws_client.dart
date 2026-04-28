@@ -77,14 +77,17 @@ class WsClient {
   Future<void> _handleMessage(dynamic message) async {
     try {
       final data = jsonDecode(message);
-      // Assuming the format from Go backend
-      if (data['type'] == 'order_notification' || data['type'] == 'notification') {
-        final payload = data['data'];
-        if (payload is! Map) {
-          return;
-        }
+      if (data is! Map) {
+        return;
+      }
+
+      final payload = extractMerchantNewOrderPayload(
+        Map<String, dynamic>.from(data),
+      );
+      if (payload != null) {
         final messageId = payload['message_id']?.toString();
-        final orderId = payload['order_id']?.toString();
+        final orderId =
+            payload['order_id']?.toString() ?? payload['id']?.toString();
 
         if (messageId != null &&
             orderId != null &&
@@ -92,7 +95,9 @@ class WsClient {
               MessageDeduplicator.messageKey(messageId),
               MessageDeduplicator.orderKey(orderId),
             ])) {
-          final pushMsg = PushMessage.fromJson(Map<String, dynamic>.from(payload));
+          final pushMsg = PushMessage.fromJson(
+            Map<String, dynamic>.from(payload),
+          );
           onNewOrder?.call(pushMsg);
         }
       } else if (data['type'] == 'table_status_change') {
@@ -133,4 +138,34 @@ class WsClient {
     _isDisposed = true;
     disconnect();
   }
+}
+
+@visibleForTesting
+Map<String, dynamic>? extractMerchantNewOrderPayload(
+  Map<String, dynamic> data,
+) {
+  final outerType = data['type']?.toString();
+  final rawPayload = data['data'];
+  final payload = rawPayload is Map
+      ? Map<String, dynamic>.from(rawPayload)
+      : Map<String, dynamic>.from(data);
+  final innerType = payload['type']?.toString();
+  final event = payload['event']?.toString();
+
+  final isNewOrder =
+      outerType == 'new_order' ||
+      innerType == 'new_order' ||
+      event == 'new_order' ||
+      outerType == 'order_notification' ||
+      outerType == 'notification';
+  if (!isNewOrder) {
+    return null;
+  }
+
+  final messageId = payload['message_id']?.toString() ?? data['id']?.toString();
+  if (messageId != null && messageId.isNotEmpty) {
+    payload['message_id'] = messageId;
+  }
+  payload['order_id'] ??= payload['id'];
+  return payload;
 }

@@ -1293,6 +1293,7 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 		randomOrder(otherUser.ID, merchant.ID),
 		randomOrder(otherUser.ID, merchant.ID),
 	}
+	listItemCustomizations := []byte(`{"501":601,"502":602,"meta_specs":"大份 / 少辣"}`)
 
 	testCases := []struct {
 		name          string
@@ -1329,9 +1330,30 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 					})).
 					Times(1).
 					Return(int64(len(orders)), nil)
+
+				store.EXPECT().
+					ListOrderItemsWithDishByOrderIDs(gomock.Any(), gomock.Eq([]int64{orders[0].ID, orders[1].ID})).
+					Times(1).
+					Return([]db.ListOrderItemsWithDishByOrderIDsRow{{
+						ID:                    7001,
+						OrderID:               orders[0].ID,
+						DishID:                pgtype.Int8{Int64: 9001, Valid: true},
+						Name:                  "测试菜品",
+						UnitPrice:             2800,
+						Quantity:              2,
+						Subtotal:              5600,
+						Customizations:        listItemCustomizations,
+						DishImageMediaAssetID: pgtype.Int8{Int64: 9901, Valid: true},
+					}}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp listMerchantOrdersResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.Orders, 2)
+				require.Len(t, resp.Orders[0].Items, 1)
+				require.Equal(t, "大份 / 少辣", resp.Orders[0].Items[0].SpecsText)
+				require.Empty(t, resp.Orders[0].Items[0].ImageURL)
 			},
 		},
 		{
@@ -1388,6 +1410,11 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 					}).
 					Times(1).
 					Return(int64(len(orders)), nil)
+
+				store.EXPECT().
+					ListOrderItemsWithDishByOrderIDs(gomock.Any(), gomock.Eq([]int64{orders[0].ID, orders[1].ID})).
+					Times(1).
+					Return([]db.ListOrderItemsWithDishByOrderIDsRow{}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -2233,10 +2260,25 @@ func TestGetMerchantOrderAPI(t *testing.T) {
 				store.EXPECT().
 					ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).
 					Times(1).
-					Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+					Return([]db.ListOrderItemsWithDishByOrderRow{{
+						ID:                    601,
+						OrderID:               order.ID,
+						DishID:                pgtype.Int8{Int64: 701, Valid: true},
+						Name:                  "测试菜品",
+						UnitPrice:             1000,
+						Quantity:              1,
+						Subtotal:              1000,
+						Customizations:        []byte(`{"501":601,"meta_specs":"大份"}`),
+						DishImageMediaAssetID: pgtype.Int8{Int64: 9902, Valid: true},
+					}}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp orderResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.Items, 1)
+				require.Equal(t, "大份", resp.Items[0].SpecsText)
+				require.Empty(t, resp.Items[0].ImageURL)
 			},
 		},
 		{

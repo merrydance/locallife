@@ -79,9 +79,9 @@ export interface OrderItemResponse {
     customizations?: OrderItemCustomization[]    // 定制化选项列表
     dish_id?: number                             // 菜品ID（菜品订单时有值）
     id: number                                   // 订单明细ID
-    image_url: string                            // 商品图片URL
     name: string                                 // 商品名称
     quantity: number                             // 数量
+    specs_text: string                           // 用户下单时选择的规格摘要，无规格为空字符串
     subtotal: number                             // 小计金额（分，含定制化加价）
     unit_price: number                           // 单价（分）
 }
@@ -90,9 +90,12 @@ export interface OrderItemResponse {
  * 订单商品定制化 - 完全对齐 api.orderItemCustomization
  */
 export interface OrderItemCustomization {
-    group_name: string                           // 定制分组名称
-    option_name: string                          // 定制选项名称
-    price_adjustment: number                     // 价格调整（分）
+    group_id?: number                            // 定制分组ID
+    option_id?: number                           // 定制选项ID
+    tag_id?: number                              // 标签ID
+    name: string                                 // 定制分组名称
+    value: string                                // 定制选项名称
+    extra_price: number                          // 价格调整（分）
 }
 
 /**
@@ -234,7 +237,6 @@ export interface KitchenOrderItem {
     category_name?: string                        // 商品分类名称
     customizations?: OrderItemCustomization[]    // 定制化选项
     id: number                                   // 商品项ID
-    image_url: string                            // 商品图片URL
     name: string                                 // 商品名称
     prepare_time: number                         // 预估制作时间（分钟）
     quantity: number                             // 数量

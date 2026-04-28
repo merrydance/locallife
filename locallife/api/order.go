@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
-	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/rules"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/worker"
@@ -156,6 +155,9 @@ type orderItemResponse struct {
 
 	// 小计金额 (单位：分，含定制化加价)
 	Subtotal int64 `json:"subtotal" example:"5760"`
+
+	// 规格文本（商户端稳定展示字段，无规格时为空字符串）
+	SpecsText string `json:"specs_text" example:"规格：大份 / 辣度：微辣"`
 
 	// 定制化选项列表
 	Customizations []orderCustomizationItem `json:"customizations,omitempty"`
@@ -669,42 +671,15 @@ func (server *Server) getOrder(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	items := result.Items
-	resp.Items = make([]orderItemResponse, len(items))
-	for i, item := range items {
-		resp.Items[i] = orderItemResponse{
-			ID:        item.ID,
-			Name:      item.Name,
-			UnitPrice: item.UnitPrice,
-			Quantity:  item.Quantity,
-			Subtotal:  item.Subtotal,
-		}
-		if item.DishID.Valid {
-			resp.Items[i].DishID = &item.DishID.Int64
-		}
-		if item.ComboID.Valid {
-			resp.Items[i].ComboID = &item.ComboID.Int64
-		}
-		if item.DishImageMediaAssetID.Valid {
-			v := item.DishImageMediaAssetID.Int64
-			resp.Items[i].ImageAssetID = &v
-		}
-		if item.Customizations != nil {
-			if err := json.Unmarshal(item.Customizations, &resp.Items[i].Customizations); err != nil {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("decode order item customizations for item %d: %w", item.ID, err)))
-				return
-			}
-		}
+	itemViews, err := logic.BuildOrderItemViews(result.Items)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
 	}
+	resp.Items = server.newOrderItemResponses(ctx, itemViews, true)
 	resp.DeliveryEtaMinutes = result.DeliveryEtaMinutes
 	resp.EstimatedDeliveryAt = result.EstimatedDeliveryAt
 	resp.WechatTransactionID = result.WechatTransactionID
-
-	for i := range resp.Items {
-		if resp.Items[i].ImageAssetID != nil {
-			resp.Items[i].ImageURL = server.publicImageURL(ctx, resp.Items[i].ImageAssetID, media.VariantCard)
-		}
-	}
 
 	ctx.JSON(http.StatusOK, resp)
 }
@@ -1146,13 +1121,20 @@ func (server *Server) listMerchantOrders(ctx *gin.Context) {
 
 	orders := result.Orders
 	resp := make([]orderResponse, len(orders))
-	for i, o := range orders {
-		orderResp, err := newOrderResponse(o)
+	for index, order := range orders {
+		orderResp, err := newOrderResponse(order)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-		resp[i] = orderResp
+		itemRows := result.ItemsByOrderID[order.ID]
+		itemViews, err := logic.BuildOrderItemViewsFromOrderIDs(itemRows)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		orderResp.Items = server.newOrderItemResponses(ctx, itemViews, false)
+		resp[index] = orderResp
 	}
 
 	ctx.JSON(http.StatusOK, listMerchantOrdersResponse{
@@ -1239,39 +1221,12 @@ func (server *Server) getMerchantOrder(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	items := result.Items
-	resp.Items = make([]orderItemResponse, len(items))
-	for i, item := range items {
-		resp.Items[i] = orderItemResponse{
-			ID:        item.ID,
-			Name:      item.Name,
-			UnitPrice: item.UnitPrice,
-			Quantity:  item.Quantity,
-			Subtotal:  item.Subtotal,
-		}
-		if item.DishID.Valid {
-			resp.Items[i].DishID = &item.DishID.Int64
-		}
-		if item.ComboID.Valid {
-			resp.Items[i].ComboID = &item.ComboID.Int64
-		}
-		if item.DishImageMediaAssetID.Valid {
-			v := item.DishImageMediaAssetID.Int64
-			resp.Items[i].ImageAssetID = &v
-		}
-		if item.Customizations != nil {
-			if err := json.Unmarshal(item.Customizations, &resp.Items[i].Customizations); err != nil {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("decode order item customizations for item %d: %w", item.ID, err)))
-				return
-			}
-		}
+	itemViews, err := logic.BuildOrderItemViews(result.Items)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
 	}
-
-	for i := range resp.Items {
-		if resp.Items[i].ImageAssetID != nil {
-			resp.Items[i].ImageURL = server.publicImageURL(ctx, resp.Items[i].ImageAssetID, media.VariantCard)
-		}
-	}
+	resp.Items = server.newOrderItemResponses(ctx, itemViews, false)
 
 	ctx.JSON(http.StatusOK, resp)
 }

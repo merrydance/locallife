@@ -3,7 +3,10 @@ package api
 import (
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/logic"
+	"github.com/merrydance/locallife/media"
 )
 
 // ==================== pgtype → 指针 转换 helpers ====================
@@ -118,4 +121,38 @@ func (f orderNullableFields) applyTo(resp *orderResponse) error {
 	}
 
 	return nil
+}
+
+func (server *Server) newOrderItemResponses(ctx *gin.Context, views []logic.OrderItemView, includeImages bool) []orderItemResponse {
+	responses := make([]orderItemResponse, len(views))
+	for index, view := range views {
+		customizations := make([]orderCustomizationItem, len(view.Customizations))
+		for customizationIndex, customization := range view.Customizations {
+			customizations[customizationIndex] = orderCustomizationItem{
+				GroupID:    customization.GroupID,
+				OptionID:   customization.OptionID,
+				TagID:      customization.TagID,
+				Name:       customization.Name,
+				Value:      customization.Value,
+				ExtraPrice: customization.ExtraPrice,
+			}
+		}
+
+		responses[index] = orderItemResponse{
+			ID:             view.ID,
+			DishID:         view.DishID,
+			ComboID:        view.ComboID,
+			Name:           view.Name,
+			UnitPrice:      view.UnitPrice,
+			Quantity:       view.Quantity,
+			Subtotal:       view.Subtotal,
+			SpecsText:      view.SpecsText,
+			Customizations: customizations,
+			ImageAssetID:   view.ImageAssetID,
+		}
+		if includeImages && view.ImageAssetID != nil {
+			responses[index].ImageURL = server.publicImageURL(ctx, view.ImageAssetID, media.VariantCard)
+		}
+	}
+	return responses
 }

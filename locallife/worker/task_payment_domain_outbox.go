@@ -405,7 +405,9 @@ func (processor *RedisTaskProcessor) dispatchOrderPaymentSucceededOutbox(ctx con
 	if err != nil {
 		return err
 	}
-	processor.sendOrderPaidNotifications(ctx, result)
+	if err := processor.sendOrderPaidNotifications(ctx, result); err != nil {
+		return err
+	}
 	return nil
 }
 

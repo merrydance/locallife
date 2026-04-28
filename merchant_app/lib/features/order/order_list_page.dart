@@ -43,9 +43,10 @@ class _OrderListPageState extends ConsumerState<OrderListPage> {
     final isAuthenticated = authState.isAuthenticated;
     final merchantName = authState.merchantName;
     final canReceiveOrders = isAuthenticated && isWorking;
-    final displayTitle = (merchantName != null && merchantName.trim().isNotEmpty)
+    final displayTitle =
+        (merchantName != null && merchantName.trim().isNotEmpty)
         ? merchantName.trim()
-      : (isAuthenticated ? '商户工作台' : '未绑定商户');
+        : (isAuthenticated ? '商户工作台' : '未绑定商户');
 
     final showWsWarning = canReceiveOrders && hasNetwork && !isWsConnected;
 
@@ -56,7 +57,9 @@ class _OrderListPageState extends ConsumerState<OrderListPage> {
           title: Text(
             canReceiveOrders
                 ? '$displayTitle (在线营业)'
-                : (isAuthenticated ? '$displayTitle (离线打烊)' : '$displayTitle (待绑定)'),
+                : (isAuthenticated
+                      ? '$displayTitle (离线打烊)'
+                      : '$displayTitle (待绑定)'),
           ),
           backgroundColor: canReceiveOrders
               ? Theme.of(context).colorScheme.surface
@@ -178,177 +181,199 @@ class _OrderListPageState extends ConsumerState<OrderListPage> {
           ),
         ),
         body: !isAuthenticated
-          ? MerchantContentShell(
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.all(AppSpacing.xxl),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerLowest,
-                    borderRadius: BorderRadius.circular(AppRadius.xl),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 88,
-                        height: 88,
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceLow,
-                          borderRadius: BorderRadius.circular(AppRadius.xl),
-                        ),
-                        child: Icon(
-                          Icons.lock_person_outlined,
-                          size: 44,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.xl),
-                      const Text(
-                        '尚未绑定商户',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      Text(
-                        '绑定商户后可开始接单、上线营业和同步订单。当前可以先查看协议、保活指引、通知设置和蓝牙打印机设置。',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          height: 1.5,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.xl),
-                      MerchantPrimaryButton(
-                        label: '立即绑定商户',
-                        onPressed: () => context.push('/login'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            )
-          : !isWorking
-          ? MerchantContentShell(
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.all(AppSpacing.xxl),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerLowest,
-                    borderRadius: BorderRadius.circular(AppRadius.xl),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 88,
-                        height: 88,
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceLow,
-                          borderRadius: BorderRadius.circular(AppRadius.xl),
-                        ),
-                        child: Icon(
-                          Icons.store_mall_directory_outlined,
-                          size: 44,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.xl),
-                      const Text(
-                        '当前处于打烊状态',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      Text(
-                        '上线营业后才能接收新订单和断线补单。',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          height: 1.5,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.xl),
-                      MerchantPrimaryButton(
-                        label: '立即上线营业',
-                        onPressed: () {
-                          ref.read(workingStatusProvider.notifier).setStatus(true);
-                          ref.read(orderProvider.notifier).fetchOrders();
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            )
-          : Column(
-              children: [
-                if (!hasNetwork || showWsWarning)
-                  Container(
-                    color: !hasNetwork
-                        ? AppColors.dangerSoft
-                        : AppColors.warningSoft,
-                    padding: const EdgeInsets.all(8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+            ? MerchantContentShell(
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(AppSpacing.xxl),
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerLowest,
+                      borderRadius: BorderRadius.circular(AppRadius.xl),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          Icons.warning_amber_rounded,
-                          color: !hasNetwork
-                              ? AppColors.tertiary
-                              : AppColors.secondary,
+                        Container(
+                          width: 88,
+                          height: 88,
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceLow,
+                            borderRadius: BorderRadius.circular(AppRadius.xl),
+                          ),
+                          child: Icon(
+                            Icons.lock_person_outlined,
+                            size: 44,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          !hasNetwork
-                            ? '无网络连接，可能漏单请检查网络'
-                            : '服务器已断开，正在重连...',
+                        const SizedBox(height: AppSpacing.xl),
+                        const Text(
+                          '尚未绑定商户',
                           style: TextStyle(
-                            color: !hasNetwork
-                                ? AppColors.tertiary
-                                : AppColors.onSurface,
+                            fontSize: 20,
                             fontWeight: FontWeight.w700,
                           ),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        Text(
+                          '绑定商户后可开始接单、上线营业和同步订单。当前可以先查看协议、保活指引、通知设置和蓝牙打印机设置。',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
+                        MerchantPrimaryButton(
+                          label: '立即绑定商户',
+                          onPressed: () => context.push('/login'),
                         ),
                       ],
                     ),
                   ),
-                Expanded(
-                  child: orderState.isLoading && orderState.orders.isEmpty
-                    ? const Center(child: CircularProgressIndicator())
-                    : TabBarView(
+                ),
+              )
+            : !isWorking
+            ? MerchantContentShell(
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(AppSpacing.xxl),
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerLowest,
+                      borderRadius: BorderRadius.circular(AppRadius.xl),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 88,
+                          height: 88,
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceLow,
+                            borderRadius: BorderRadius.circular(AppRadius.xl),
+                          ),
+                          child: Icon(
+                            Icons.store_mall_directory_outlined,
+                            size: 44,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
+                        const Text(
+                          '当前处于打烊状态',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        Text(
+                          '上线营业后才能接收新订单和断线补单。',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
+                        MerchantPrimaryButton(
+                          label: '立即上线营业',
+                          onPressed: () {
+                            ref
+                                .read(workingStatusProvider.notifier)
+                                .setStatus(true);
+                            ref.read(orderProvider.notifier).fetchOrders();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            : Column(
+                children: [
+                  if (!hasNetwork || showWsWarning)
+                    Container(
+                      color: !hasNetwork
+                          ? AppColors.dangerSoft
+                          : AppColors.warningSoft,
+                      padding: const EdgeInsets.all(8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          _OrderList(
-                            orders: orderState.orders
-                                .where((o) => o.status == OrderStatus.pending)
-                                .toList(),
-                            canOpenDetail: isAuthenticated,
+                          Icon(
+                            Icons.warning_amber_rounded,
+                            color: !hasNetwork
+                                ? AppColors.tertiary
+                                : AppColors.secondary,
                           ),
-                          _OrderList(
-                            orders: orderState.orders
-                                .where((o) =>
-                                    o.status != OrderStatus.pending &&
-                                    o.status != OrderStatus.completed &&
-                                    o.status != OrderStatus.cancelled)
-                                .toList(),
-                            canOpenDetail: isAuthenticated,
-                          ),
-                          _OrderList(
-                            orders: orderState.orders
-                                .where((o) =>
-                                    o.status == OrderStatus.completed ||
-                                    o.status == OrderStatus.cancelled)
-                                .toList(),
-                            canOpenDetail: isAuthenticated,
+                          const SizedBox(width: 8),
+                          Text(
+                            !hasNetwork ? '无网络连接，可能漏单请检查网络' : '服务器已断开，正在重连...',
+                            style: TextStyle(
+                              color: !hasNetwork
+                                  ? AppColors.tertiary
+                                  : AppColors.onSurface,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ],
                       ),
-                ),
-              ],
-            ),
+                    ),
+                  Expanded(
+                    child: orderState.isLoading && orderState.orders.isEmpty
+                        ? const Center(child: CircularProgressIndicator())
+                        : TabBarView(
+                            children: [
+                              _OrderList(
+                                orders: orderState.orders
+                                    .where(
+                                      (o) => o.status == OrderStatus.pending,
+                                    )
+                                    .toList(),
+                                canOpenDetail: isAuthenticated,
+                              ),
+                              _OrderList(
+                                orders: orderState.orders
+                                    .where(
+                                      (o) =>
+                                          o.status != OrderStatus.pending &&
+                                          o.status != OrderStatus.completed &&
+                                          o.status != OrderStatus.cancelled,
+                                    )
+                                    .toList(),
+                                canOpenDetail: isAuthenticated,
+                              ),
+                              _OrderList(
+                                orders: orderState.orders
+                                    .where(
+                                      (o) =>
+                                          o.status == OrderStatus.completed ||
+                                          o.status == OrderStatus.cancelled,
+                                    )
+                                    .toList(),
+                                canOpenDetail: isAuthenticated,
+                              ),
+                            ],
+                          ),
+                  ),
+                ],
+              ),
       ),
     );
   }
-
 }
-
 
 class _OrderList extends ConsumerWidget {
   final List<OrderModel> orders;
@@ -431,26 +456,14 @@ class _OrderList extends ConsumerWidget {
                     ),
                     child: Column(
                       children: [
-                        ...order.items.map(
-                          (item) => Padding(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: AppSpacing.xs,
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    '${item.name} x${item.quantity}',
-                                    style: const TextStyle(height: 1.4),
-                                  ),
-                                ),
-                                const SizedBox(width: AppSpacing.md),
-                                Text('¥${item.price.toStringAsFixed(2)}'),
-                              ],
-                            ),
+                        if (!order.hasReliableItems)
+                          const _OrderItemsDegradedText()
+                        else if (order.items.isEmpty)
+                          const _OrderItemsEmptyText()
+                        else
+                          ...order.items.map(
+                            (item) => _OrderItemLine(item: item),
                           ),
-                        ),
                         if ((order.note ?? '').trim().isNotEmpty) ...[
                           const SizedBox(height: AppSpacing.md),
                           Align(
@@ -462,8 +475,9 @@ class _OrderList extends ConsumerWidget {
                               ),
                               decoration: BoxDecoration(
                                 color: Colors.white,
-                                borderRadius:
-                                    BorderRadius.circular(AppRadius.md),
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.md,
+                                ),
                               ),
                               child: Text(
                                 '备注：${order.note!.trim()}',
@@ -487,7 +501,9 @@ class _OrderList extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '${order.items.length} 件商品',
+                            order.hasReliableItems
+                                ? '${order.items.length} 件商品'
+                                : '明细同步中',
                             style: const TextStyle(
                               color: AppColors.onSurfaceVariant,
                               fontSize: 12,
@@ -524,16 +540,21 @@ class _OrderList extends ConsumerWidget {
                               .read(orderProvider.notifier)
                               .acceptOrder(order.id);
                           if (success) {
-                            final notificationSettings =
-                                ref.read(notificationSettingsProvider);
+                            final notificationSettings = ref.read(
+                              notificationSettingsProvider,
+                            );
                             final printerState = ref.read(printerProvider);
                             final merchantName =
                                 ref.read(authProvider).merchantName ?? '商户工作台';
-                            if (notificationSettings.autoPrintAfterAcceptEnabled &&
+                            if (notificationSettings
+                                    .autoPrintAfterAcceptEnabled &&
                                 printerState.connectedDevice != null) {
                               await ref
                                   .read(printerProvider.notifier)
-                                  .printAcceptedOrder(order, shopName: merchantName);
+                                  .printAcceptedOrder(
+                                    order,
+                                    shopName: merchantName,
+                                  );
                             }
                           }
                         },
@@ -545,6 +566,78 @@ class _OrderList extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _OrderItemLine extends StatelessWidget {
+  final OrderItem item;
+
+  const _OrderItemLine({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final specsText = item.specsText.trim();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${item.name} x${item.quantity}',
+                  style: const TextStyle(height: 1.4),
+                ),
+                if (specsText.isNotEmpty)
+                  Text(
+                    specsText,
+                    style: const TextStyle(
+                      color: AppColors.onSurfaceVariant,
+                      fontSize: 12,
+                      height: 1.35,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Text('¥${item.lineTotal.toStringAsFixed(2)}'),
+        ],
+      ),
+    );
+  }
+}
+
+class _OrderItemsDegradedText extends StatelessWidget {
+  const _OrderItemsDegradedText();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Align(
+      alignment: Alignment.centerLeft,
+      child: Text(
+        '订单明细正在自动同步，请稍候。',
+        style: TextStyle(color: AppColors.onSurfaceVariant, height: 1.45),
+      ),
+    );
+  }
+}
+
+class _OrderItemsEmptyText extends StatelessWidget {
+  const _OrderItemsEmptyText();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Align(
+      alignment: Alignment.centerLeft,
+      child: Text(
+        '暂无商品明细',
+        style: TextStyle(color: AppColors.onSurfaceVariant, height: 1.45),
+      ),
     );
   }
 }

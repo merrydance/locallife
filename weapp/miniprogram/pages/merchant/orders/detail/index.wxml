@@ -46,15 +46,12 @@
       <view class="card-wrap items-card">
         <view class="card-title">商品清单</view>
         <view class="dish-item" wx:for="{{order.items}}" wx:key="id">
-          <t-image src="{{item.image_url}}" mode="aspectFill" width="100rpx" height="100rpx" shape="round" />
           <view class="dish-info">
             <view class="dish-name-row">
               <text class="dish-name">{{item.name}}</text>
               <text class="dish-price">¥{{item.unit_price / 100}}</text>
             </view>
-            <view class="dish-specs" wx:if="{{item.customizations.length}}">
-              <text wx:for="{{item.customizations}}" wx:for-item="spec" wx:key="index">{{spec.option_name}} </text>
-            </view>
+            <view class="dish-specs" wx:if="{{item.specs_text}}">{{item.specs_text}}</view>
             <view class="dish-qty">x{{item.quantity}}</view>
           </view>
         </view>

@@ -29,6 +29,7 @@ func TestOrderServiceListMerchantOrders_WithOrderTypeFilter(t *testing.T) {
 	}
 
 	expectedOrders := []db.Order{{ID: 901, MerchantID: input.MerchantID, Status: status, OrderType: orderType}}
+	expectedItems := []db.ListOrderItemsWithDishByOrderIDsRow{{ID: 3001, OrderID: expectedOrders[0].ID, Name: "测试菜品", Quantity: 1}}
 	store.EXPECT().
 		ListOrdersByMerchantWithFilters(gomock.Any(), db.ListOrdersByMerchantWithFiltersParams{
 			MerchantID: input.MerchantID,
@@ -47,10 +48,15 @@ func TestOrderServiceListMerchantOrders_WithOrderTypeFilter(t *testing.T) {
 		}).
 		Times(1).
 		Return(int64(21), nil)
+	store.EXPECT().
+		ListOrderItemsWithDishByOrderIDs(gomock.Any(), gomock.Eq([]int64{expectedOrders[0].ID})).
+		Times(1).
+		Return(expectedItems, nil)
 
 	result, err := service.ListMerchantOrders(context.Background(), input)
 	require.NoError(t, err)
 	require.Equal(t, expectedOrders, result.Orders)
+	require.Equal(t, expectedItems, result.ItemsByOrderID[expectedOrders[0].ID])
 	require.Equal(t, int64(21), result.TotalCount)
 }
 

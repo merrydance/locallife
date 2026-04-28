@@ -38,8 +38,8 @@ func TestMerchantAppPushDispatcherDispatch(t *testing.T) {
 	})
 
 	payload := MerchantAppNotificationPayload{
-		MessageID: "merchant_app:new_order:501",
-		Event:     MerchantAppNotificationEventNewOrder,
+		MessageID: "merchant:new_order:501",
+		Event:     MerchantNotificationEventNewOrder,
 		OrderID:   501,
 		OrderNo:   "ORD501",
 		Title:     "新订单",

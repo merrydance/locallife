@@ -193,6 +193,38 @@ func TestProcessTaskPaymentDomainOutbox_PublishesOrderPaymentSucceeded(t *testin
 	require.NoError(t, err)
 }
 
+func TestProcessTaskPaymentDomainOutbox_OrderItemLoadFailureMarksFailed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	outbox := buildOrderPaymentSucceededOutbox(t, 911, 402, 502, 602)
+	paymentOrder := db.PaymentOrder{ID: 402, OrderID: pgtype.Int8{Int64: 502, Valid: true}, PaymentChannel: db.PaymentChannelDirect, BusinessType: db.ExternalPaymentBusinessOwnerOrder}
+	order := db.Order{ID: 502, MerchantID: 602, OrderNo: "ORD502", OrderType: "dinein", TotalAmount: 9900}
+	merchant := db.Merchant{ID: 602, OwnerUserID: 702}
+
+	store.EXPECT().ClaimPaymentDomainOutbox(gomock.Any(), gomock.Any()).Return(outbox, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), int64(402)).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), int64(502)).Return(order, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), int64(602)).Return(merchant, nil)
+	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return(nil, errors.New("database unavailable"))
+	store.EXPECT().MarkPaymentDomainOutboxFailed(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.MarkPaymentDomainOutboxFailedParams) (db.PaymentDomainOutbox, error) {
+		require.Equal(t, outbox.ID, arg.ID)
+		require.True(t, arg.LastError.Valid)
+		require.Contains(t, arg.LastError.String, "load order items for merchant new order snapshot")
+		require.True(t, arg.NextRetryAt.Valid)
+		return db.PaymentDomainOutbox{ID: outbox.ID, Status: db.PaymentDomainOutboxStatusFailed}, nil
+	})
+
+	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
+	payload, err := json.Marshal(worker.PaymentDomainOutboxPayload{OutboxID: outbox.ID})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskPaymentDomainOutbox(context.Background(), asynq.NewTask(worker.TaskProcessPaymentDomainOutbox, payload))
+	require.NoError(t, err)
+}
+
 func TestProcessTaskPaymentDomainOutbox_PublishesReservationPaymentSucceeded(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

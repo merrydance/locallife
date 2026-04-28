@@ -185,7 +185,23 @@ func (s *OrderService) ListMerchantOrders(ctx context.Context, input ListMerchan
 		return ListMerchantOrdersQueryResult{}, err
 	}
 
-	return ListMerchantOrdersQueryResult{Orders: orders, TotalCount: total}, nil
+	itemsByOrderID := map[int64][]db.ListOrderItemsWithDishByOrderIDsRow{}
+	if len(orders) > 0 {
+		orderIDs := make([]int64, len(orders))
+		for i, order := range orders {
+			orderIDs[i] = order.ID
+		}
+
+		items, err := s.store.ListOrderItemsWithDishByOrderIDs(ctx, orderIDs)
+		if err != nil {
+			return ListMerchantOrdersQueryResult{}, err
+		}
+		for _, item := range items {
+			itemsByOrderID[item.OrderID] = append(itemsByOrderID[item.OrderID], item)
+		}
+	}
+
+	return ListMerchantOrdersQueryResult{Orders: orders, ItemsByOrderID: itemsByOrderID, TotalCount: total}, nil
 }
 
 func (s *OrderService) GetMerchantOrderStats(ctx context.Context, input GetMerchantOrderStatsQueryInput) (GetMerchantOrderStatsQueryResult, error) {

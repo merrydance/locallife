@@ -46,6 +46,7 @@ export interface OrderItemResponse {
   image_url?: string      // 商品图片URL
   quantity: number
   unit_price: number      // 单价（分）
+  specs_text: string      // 用户下单时选择的规格摘要，无规格为空字符串
   subtotal: number        // 小计金额（分，含定制化加价）
   customizations?: OrderCustomizationItem[]
 }
