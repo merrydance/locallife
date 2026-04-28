@@ -2,8 +2,8 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        // 小米推送
-        maven { url = uri("https://sdk.it.mi.com/maven") }
+        // OPPO / Heytap Push
+        maven { url = uri("https://artifact.bytedance.com/repository/Volcengine/") }
         // 荣耀推送
         maven { url = uri("https://developer.hihonor.com/repo") }
     }

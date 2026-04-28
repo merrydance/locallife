@@ -22,8 +22,7 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "getRegistrationId" -> {
-                    // Logic to return current cached ID
-                    result.success(null)
+                    result.success(PushManager.getRegistrationId())
                 }
                 else -> {
                     result.notImplemented()

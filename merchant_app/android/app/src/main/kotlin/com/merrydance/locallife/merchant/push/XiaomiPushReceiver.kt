@@ -2,21 +2,25 @@ package com.merrydance.locallife.merchant.push
 
 import android.content.Context
 import android.util.Log
+import com.xiaomi.mipush.sdk.MiPushClient
 import com.xiaomi.mipush.sdk.MiPushCommandMessage
 import com.xiaomi.mipush.sdk.MiPushMessage
 import com.xiaomi.mipush.sdk.PushMessageReceiver
+import org.json.JSONObject
 
 class XiaomiPushReceiver : PushMessageReceiver() {
     override fun onReceivePassThroughMessage(context: Context, message: MiPushMessage) {
         val payload = message.content
         Log.d("XiaomiPushReceiver", "Received payload: $payload")
-        // Typically messages are JSON string in 'content'
-        // For simplicity, we pass extras as the map
-        PushManager.onMessageReceived(message.extra.mapValues { it.value })
+        PushManager.onMessageReceived(newPayload(message))
     }
 
     override fun onNotificationMessageClicked(context: Context, message: MiPushMessage) {
-        // Handle click if needed
+        PushManager.onMessageReceived(newPayload(message))
+    }
+
+    override fun onNotificationMessageArrived(context: Context, message: MiPushMessage) {
+        PushManager.onMessageReceived(newPayload(message))
     }
 
     override fun onCommandResult(context: Context, message: MiPushCommandMessage) {
@@ -26,5 +30,27 @@ class XiaomiPushReceiver : PushMessageReceiver() {
             val regId = arguments[0]
             PushManager.onTokenRegistered(regId, "xiaomi")
         }
+    }
+
+    override fun onReceiveRegisterResult(context: Context, message: MiPushCommandMessage) {
+        val command = message.command
+        val arguments = message.commandArguments
+        if (MiPushClient.COMMAND_REGISTER == command && arguments != null && arguments.isNotEmpty()) {
+            PushManager.onTokenRegistered(arguments[0], "xiaomi")
+        }
+    }
+
+    private fun newPayload(message: MiPushMessage): Map<String, Any> {
+        val payload = message.extra.toMutableMap<String, Any>()
+        payload.putAll(parseJsonObject(message.content.orEmpty()))
+        return payload
+    }
+
+    private fun parseJsonObject(raw: String): Map<String, Any> {
+        if (raw.isBlank()) return emptyMap()
+        return runCatching {
+            val json = JSONObject(raw)
+            json.keys().asSequence().associateWith { key -> json.get(key) }
+        }.getOrDefault(emptyMap())
     }
 }

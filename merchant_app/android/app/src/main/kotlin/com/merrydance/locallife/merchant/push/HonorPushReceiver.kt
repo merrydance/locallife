@@ -1,22 +1,28 @@
 package com.merrydance.locallife.merchant.push
 
-import android.content.Context
 import android.util.Log
-import com.hihonor.mcs.push.HonorPushClient
-import com.hihonor.mcs.receiver.MessageReceiver
+import com.hihonor.push.sdk.HonorMessageService
+import com.hihonor.push.sdk.HonorPushDataMsg
+import org.json.JSONObject
 
-class HonorPushReceiver : MessageReceiver() {
-    override fun onToken(context: Context, token: String) {
+class HonorPushReceiver : HonorMessageService() {
+    override fun onNewToken(token: String) {
         PushManager.onTokenRegistered(token, "honor")
     }
 
-    override fun onMessageReceived(context: Context, message: com.hihonor.mcs.model.Message) {
-        Log.d("HonorPushReceiver", "Received message: ${message.data}")
-        // message.data is the payload
-        // Need to convert to Map<String, Any>
-        // Depending on SDK version, might need parsing
-        val data = mutableMapOf<String, Any>()
-        // Assuming data is a simple string for now, but usually it's JSON
-        PushManager.onMessageReceived(data)
+    override fun onMessageReceived(message: HonorPushDataMsg) {
+        val data = parseJsonObject(message.data.orEmpty())
+        Log.d("HonorPushReceiver", "Received payload keys: ${data.keys}")
+        if (data.isNotEmpty()) {
+            PushManager.onMessageReceived(data)
+        }
+    }
+
+    private fun parseJsonObject(raw: String): Map<String, Any> {
+        if (raw.isBlank()) return emptyMap()
+        return runCatching {
+            val json = JSONObject(raw)
+            json.keys().asSequence().associateWith { key -> json.get(key) }
+        }.getOrDefault(emptyMap())
     }
 }

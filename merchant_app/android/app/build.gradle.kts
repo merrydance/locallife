@@ -96,15 +96,12 @@ flutter {
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 
-    // 小米推送 (Maven 仓库访问失败，请检查网络或使用本地依赖)
-    // implementation("com.xiaomi.mipush.sdk:mipush:5.0.8-C")
+    // 小米 / vivo 客户端 SDK 由官方 AAR 放入 libs/。
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar", "*.aar"))))
 
     // 荣耀推送 (Maven)
     implementation("com.hihonor.mcs:push:7.0.41.301")
 
-    // vivo 推送 (vivo 不提供公共 Maven 仓库，请将 SDK AAR 文件放入 libs/ 目录并使用本地依赖)
-    // implementation("com.vivo.push:sdk:3.0.0.4")
-
-    // OPPO 推送 (由于 OPPO SDK 常规不发 Maven，通常需要放在 libs/ 下)
-    // implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar", "*.aar"))))
+    // OPPO / Heytap Push (Volcengine Maven)
+    implementation("com.heytap.msp:push:3.0.0")
 }
