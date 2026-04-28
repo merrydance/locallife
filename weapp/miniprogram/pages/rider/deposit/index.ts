@@ -14,23 +14,15 @@ import {
     type RiderDepositRechargeWorkflowResult
 } from '../../../services/rider-deposit-payment'
 import {
-    buildPendingRiderDepositWithdrawalContext,
-    buildRiderDepositWithdrawalStatusData,
-    buildSubmittedRiderDepositWithdrawalView,
-    clearPendingRiderDepositWithdrawal,
-    buildStoredRiderDepositWithdrawalSyncFailedView,
-    recoverStoredRiderDepositWithdrawalStatus,
-    savePendingRiderDepositWithdrawal,
+    buildRiderDepositWithdrawalStatusData, clearPendingRiderDepositWithdrawal,
+    buildStoredRiderDepositWithdrawalSyncFailedView, recoverStoredRiderDepositWithdrawalStatus,
+    waitForSubmittedRiderDepositWithdrawalTerminalStatus,
     type RiderDepositWithdrawalStatusView
 } from '../../../services/rider-deposit-withdrawal'
 import Toast, { hideToast } from '../../../miniprogram_npm/tdesign-miniprogram/toast/index'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { decorateDepositRecord, formatFenValue, type DepositRecordView } from '../../../utils/rider-deposit-record-view'
-
-interface AmountInputDetail {
-    value: string
-}
 
 interface AmountInputDataset {
     field?: 'rechargeAmount' | 'withdrawAmount'
@@ -45,10 +37,7 @@ interface RechargeWorkflowOptions {
     refreshIfNeeded?: boolean
 }
 
-interface WithdrawalStatusOptions {
-    silent?: boolean
-    refreshIfTerminal?: boolean
-}
+type WithdrawalStatusOptions = { silent?: boolean, refreshIfTerminal?: boolean, waitForTerminal?: boolean }
 
 type ActionFeedbackTheme = 'success' | 'warning'
 
@@ -317,7 +306,7 @@ Page({
     async syncPendingWithdrawalState(options: WithdrawalStatusOptions = {}) {
         this.setData({ syncingPendingWithdrawal: true })
         try {
-            const result = await recoverStoredRiderDepositWithdrawalStatus()
+            const result = await recoverStoredRiderDepositWithdrawalStatus({ waitForTerminal: options.waitForTerminal })
             if (!result) {
                 this.applyWithdrawalStatusView(null)
                 return
@@ -426,7 +415,12 @@ Page({
         }
 
         this.clearActionFeedback()
-        await this.syncPendingWithdrawalState({ silent: false, refreshIfTerminal: true })
+        showDepositLoadingToast(this, '正在等待微信提现结果...')
+        try {
+            await this.syncPendingWithdrawalState({ silent: false, refreshIfTerminal: true, waitForTerminal: true })
+        } finally {
+            hideDepositToast(this)
+        }
     },
 
     onShowRecharge() {
@@ -449,7 +443,7 @@ Page({
         this.setData({ isWithdrawVisible: true, withdrawAmount: '', withdrawErrorMessage: '' })
     },
 
-    onInputAmount(e: WechatMiniprogram.CustomEvent<AmountInputDetail>) {
+    onInputAmount(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
         const { field } = e.currentTarget.dataset as AmountInputDataset
         if (!field) {
             return
@@ -585,21 +579,40 @@ Page({
             })
             hideDepositToast(this)
             const withdrawStatusView = getRiderDepositWithdrawStatusView(result.status)
-            const pendingWithdrawal = buildPendingRiderDepositWithdrawalContext(result)
-            const submittedWithdrawalView = buildSubmittedRiderDepositWithdrawalView(result)
+            const hasPendingWithdrawal = result.status !== 'success' && (result.refunds || []).length > 0
 
-            if (pendingWithdrawal && submittedWithdrawalView) {
-                savePendingRiderDepositWithdrawal(pendingWithdrawal)
-                this.applyWithdrawalStatusView(submittedWithdrawalView)
+            if (hasPendingWithdrawal) {
+                showDepositLoadingToast(this, '提现已受理，正在等待微信确认...')
+                const terminalResult = await waitForSubmittedRiderDepositWithdrawalTerminalStatus(result)
+                hideDepositToast(this)
+                if (!terminalResult) {
+                    throw new Error('提现状态同步失败')
+                }
+
+                this.applyWithdrawalStatusView(terminalResult.view)
+                this.setActionFeedback(
+                    terminalResult.isTerminal
+                        ? terminalResult.view.feedbackMessage
+                        : '微信仍在处理本次提现，请稍后刷新状态或查看账单明细。',
+                    terminalResult.view.feedbackTheme
+                )
+                this.setData({ isWithdrawVisible: false, withdrawAmount: '' })
+                if (terminalResult.shouldRefreshFinance) {
+                    await this.refreshFinanceSurfaces()
+                }
+                if (!terminalResult.isTerminal) {
+                    this.scheduleFinanceRefresh()
+                }
+                return
             } else {
                 clearPendingRiderDepositWithdrawal()
                 this.applyWithdrawalStatusView(null)
+                this.setActionFeedback(withdrawStatusView.feedbackMessage, withdrawStatusView.feedbackTheme)
             }
 
-            this.setActionFeedback(withdrawStatusView.feedbackMessage, withdrawStatusView.feedbackTheme)
             this.setData({ isWithdrawVisible: false, withdrawAmount: '' })
             await this.refreshFinanceSurfaces()
-            if (withdrawStatusView.shouldScheduleRefresh || pendingWithdrawal) {
+            if (withdrawStatusView.shouldScheduleRefresh || hasPendingWithdrawal) {
                 this.scheduleFinanceRefresh()
             }
         } catch (err: unknown) {

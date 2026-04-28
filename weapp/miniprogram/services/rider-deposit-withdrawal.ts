@@ -4,6 +4,8 @@ import RiderService, {
 } from '../api/rider'
 
 const STORAGE_KEY = 'riderDepositPendingWithdrawal'
+const TERMINAL_WAIT_MAX_ATTEMPTS = 45
+const TERMINAL_WAIT_INTERVAL_MS = 2000
 
 export interface RiderDepositPendingWithdrawalContext {
   refundOrderIds: number[]
@@ -29,6 +31,19 @@ export interface RiderDepositWithdrawalRecoveryResult {
   view: RiderDepositWithdrawalStatusView
   isTerminal: boolean
   shouldRefreshFinance: boolean
+}
+
+export interface RiderDepositWithdrawalTerminalWaitResult extends RiderDepositWithdrawalRecoveryResult {
+  timedOut: boolean
+}
+
+export interface RiderDepositWithdrawalTerminalWaitOptions {
+  maxAttempts?: number
+  intervalMs?: number
+}
+
+export interface RecoverStoredRiderDepositWithdrawalOptions extends RiderDepositWithdrawalTerminalWaitOptions {
+  waitForTerminal?: boolean
 }
 
 export interface RiderDepositWithdrawalStatusData {
@@ -71,6 +86,10 @@ function isValidPendingWithdrawalContext(value: unknown): value is RiderDepositP
     && uniquePositiveIds(candidate.refundOrderIds).length > 0
     && Number.isFinite(candidate.acceptedAmount)
     && typeof candidate.updatedAt === 'string'
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 export function buildPendingRiderDepositWithdrawalContext(
@@ -126,10 +145,16 @@ export async function recoverPendingRiderDepositWithdrawal(
   return RiderService.getWithdrawalStatus(context.refundOrderIds)
 }
 
-export async function recoverStoredRiderDepositWithdrawalStatus(): Promise<RiderDepositWithdrawalRecoveryResult | null> {
+export async function recoverStoredRiderDepositWithdrawalStatus(
+  options: RecoverStoredRiderDepositWithdrawalOptions = {}
+): Promise<RiderDepositWithdrawalRecoveryResult | null> {
   const pendingWithdrawal = getPendingRiderDepositWithdrawal()
   if (!pendingWithdrawal) {
     return null
+  }
+
+  if (options.waitForTerminal) {
+    return waitForRiderDepositWithdrawalTerminalStatus(pendingWithdrawal, options)
   }
 
   const result = await recoverPendingRiderDepositWithdrawal(pendingWithdrawal)
@@ -142,6 +167,67 @@ export async function recoverStoredRiderDepositWithdrawalStatus(): Promise<Rider
     view,
     isTerminal: view.isTerminal,
     shouldRefreshFinance: view.shouldRefreshFinance
+  }
+}
+
+export async function waitForSubmittedRiderDepositWithdrawalTerminalStatus(
+  response: RiderWithdrawResponse,
+  options: RiderDepositWithdrawalTerminalWaitOptions = {}
+): Promise<RiderDepositWithdrawalTerminalWaitResult | null> {
+  const context = buildPendingRiderDepositWithdrawalContext(response)
+  if (!context) {
+    return null
+  }
+
+  savePendingRiderDepositWithdrawal(context)
+  return waitForRiderDepositWithdrawalTerminalStatus(context, options)
+}
+
+export async function waitForRiderDepositWithdrawalTerminalStatus(
+  context: RiderDepositPendingWithdrawalContext,
+  options: RiderDepositWithdrawalTerminalWaitOptions = {}
+): Promise<RiderDepositWithdrawalTerminalWaitResult> {
+  const maxAttempts = Math.max(1, options.maxAttempts || TERMINAL_WAIT_MAX_ATTEMPTS)
+  const intervalMs = Math.max(500, options.intervalMs || TERMINAL_WAIT_INTERVAL_MS)
+  let latestView: RiderDepositWithdrawalStatusView | null = null
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      const result = await recoverPendingRiderDepositWithdrawal(context)
+      latestView = buildRiderDepositWithdrawalStatusView(result, context.acceptedAmount)
+
+      if (latestView.isTerminal) {
+        clearPendingRiderDepositWithdrawal()
+        return {
+          view: latestView,
+          isTerminal: true,
+          shouldRefreshFinance: latestView.shouldRefreshFinance,
+          timedOut: false
+        }
+      }
+    } catch (_error: unknown) {
+      latestView = latestView || buildRiderDepositWithdrawalSyncFailedView(context)
+    }
+
+    if (attempt < maxAttempts - 1) {
+      await wait(intervalMs)
+    }
+  }
+
+  if (latestView) {
+    return {
+      view: latestView,
+      isTerminal: false,
+      shouldRefreshFinance: latestView.shouldRefreshFinance,
+      timedOut: true
+    }
+  }
+
+  return {
+    view: buildRiderDepositWithdrawalSyncFailedView(context),
+    isTerminal: false,
+    shouldRefreshFinance: false,
+    timedOut: true
   }
 }
 
@@ -178,6 +264,13 @@ export function buildStoredRiderDepositWithdrawalSyncFailedView(): RiderDepositW
   if (!pendingWithdrawal) {
     return null
   }
+
+  return buildRiderDepositWithdrawalSyncFailedView(pendingWithdrawal)
+}
+
+function buildRiderDepositWithdrawalSyncFailedView(
+  pendingWithdrawal: RiderDepositPendingWithdrawalContext
+): RiderDepositWithdrawalStatusView {
 
   return {
     title: '提现状态同步失败',
