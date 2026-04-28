@@ -238,6 +238,7 @@ type Querier interface {
 	// 骑手收到的索赔计数
 	CountRiderClaimsForRider(ctx context.Context, arg CountRiderClaimsForRiderParams) (int64, error)
 	CountRiderCompletedDeliveries(ctx context.Context, riderID pgtype.Int8) (int64, error)
+	CountRiderCompletedDeliveriesInRange(ctx context.Context, arg CountRiderCompletedDeliveriesInRangeParams) (int64, error)
 	// ==========================================
 	// 骑手统计查询（保留用于统计展示）
 	// ==========================================
@@ -246,6 +247,8 @@ type Querier interface {
 	CountRiderDeliveries(ctx context.Context, riderID pgtype.Int8) (int64, error)
 	CountRiderDeposits(ctx context.Context, riderID int64) (int64, error)
 	CountRiderLocations(ctx context.Context, riderID int64) (int64, error)
+	// 骑手配送费明细总数
+	CountRiderProfitSharingOrders(ctx context.Context, arg CountRiderProfitSharingOrdersParams) (int64, error)
 	// 骑手追偿争议计数
 	CountRiderRecoveryDisputes(ctx context.Context, arg CountRiderRecoveryDisputesParams) (int64, error)
 	// 统计区域内骑手数量
@@ -1036,6 +1039,8 @@ type Querier interface {
 	// ==================== 骑手分账查询 ====================
 	// 骑手配送费收入统计
 	GetRiderProfitSharingStats(ctx context.Context, arg GetRiderProfitSharingStatsParams) (GetRiderProfitSharingStatsRow, error)
+	// 骑手配送费按分账状态汇总
+	GetRiderProfitSharingStatusSummary(ctx context.Context, arg GetRiderProfitSharingStatusSummaryParams) ([]GetRiderProfitSharingStatusSummaryRow, error)
 	// 骑手查看自己的追偿争议详情
 	GetRiderRecoveryDisputeDetail(ctx context.Context, arg GetRiderRecoveryDisputeDetailParams) (GetRiderRecoveryDisputeDetailRow, error)
 	// ============ Customer-side Room Queries (C端包间查询) ============

@@ -29260,6 +29260,231 @@
                 }
             }
         },
+        "/v1/rider/income/daily": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "按日期范围获取当前骑手已完成分账收入的日汇总",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "骑手"
+                ],
+                "summary": "获取骑手每日分账收入",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "开始日期，格式 YYYY-MM-DD",
+                        "name": "start_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束日期，格式 YYYY-MM-DD",
+                        "name": "end_date",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "骑手每日分账收入",
+                        "schema": {
+                            "$ref": "#/definitions/api.riderIncomeDailyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "骑手资料不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/rider/income/ledger": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "分页获取当前骑手基于 profit sharing 的收入账本，可按分账状态筛选",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "骑手"
+                ],
+                "summary": "获取骑手分账收入账本",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "开始日期，格式 YYYY-MM-DD",
+                        "name": "start_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束日期，格式 YYYY-MM-DD",
+                        "name": "end_date",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "pending",
+                            "processing",
+                            "finished",
+                            "failed"
+                        ],
+                        "type": "string",
+                        "description": "分账状态",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page_id",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 50,
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "每页条数",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "骑手分账收入账本",
+                        "schema": {
+                            "$ref": "#/definitions/api.riderIncomeLedgerResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "骑手资料不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/rider/income/summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "按日期范围获取当前骑手基于分账账本的已完成收入和状态汇总",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "骑手"
+                ],
+                "summary": "获取骑手分账收入汇总",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "开始日期，格式 YYYY-MM-DD",
+                        "name": "start_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束日期，格式 YYYY-MM-DD",
+                        "name": "end_date",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "骑手分账收入汇总",
+                        "schema": {
+                            "$ref": "#/definitions/api.riderIncomeSummaryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "骑手资料不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/rider/location": {
             "post": {
                 "security": [
@@ -30043,6 +30268,52 @@
                     },
                     "500": {
                         "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/rider/workbench/summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取当前骑手首屏经营摘要，聚合状态、当前任务、订单池、配送费结算、押金、追偿和通知摘要",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "骑手"
+                ],
+                "summary": "获取骑手工作台摘要",
+                "responses": {
+                    "200": {
+                        "description": "骑手工作台摘要",
+                        "schema": {
+                            "$ref": "#/definitions/api.riderWorkbenchSummaryResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "骑手资料不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -44431,6 +44702,141 @@
                 }
             }
         },
+        "api.riderIncomeDailyItemResponse": {
+            "type": "object",
+            "properties": {
+                "daily_income": {
+                    "type": "integer"
+                },
+                "date": {
+                    "type": "string"
+                },
+                "delivery_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.riderIncomeDailyResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.riderIncomeDailyItemResponse"
+                    }
+                }
+            }
+        },
+        "api.riderIncomeLedgerItemResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "delivery_fee": {
+                    "type": "integer"
+                },
+                "distributable_amount": {
+                    "type": "integer"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "merchant_name": {
+                    "type": "string"
+                },
+                "order_id": {
+                    "type": "integer"
+                },
+                "order_no": {
+                    "type": "string"
+                },
+                "out_order_no": {
+                    "type": "string"
+                },
+                "payment_order_id": {
+                    "type": "integer"
+                },
+                "rider_amount": {
+                    "type": "integer"
+                },
+                "sharing_order_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "total_amount": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.riderIncomeLedgerResponse": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.riderIncomeLedgerItemResponse"
+                    }
+                },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.riderIncomeStatusSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "delivery_fee": {
+                    "type": "integer"
+                },
+                "order_count": {
+                    "type": "integer"
+                },
+                "rider_amount": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.riderIncomeSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "status_summary": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.riderIncomeStatusSummaryResponse"
+                    }
+                },
+                "total_deliveries": {
+                    "type": "integer"
+                },
+                "total_delivery_fee": {
+                    "type": "integer"
+                },
+                "total_rider_income": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.riderListItem": {
             "type": "object",
             "properties": {
@@ -44726,6 +45132,226 @@
                 },
                 "success_amount": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.riderWorkbenchClaimsResponse": {
+            "type": "object",
+            "properties": {
+                "pending_action_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.riderWorkbenchCurrentDeliveriesResponse": {
+            "type": "object",
+            "properties": {
+                "active_count": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.riderWorkbenchDeliveryItemResponse"
+                    }
+                }
+            }
+        },
+        "api.riderWorkbenchDeliveryItemResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "delivered_at": {
+                    "type": "string"
+                },
+                "delivery_address": {
+                    "type": "string"
+                },
+                "delivery_fee": {
+                    "type": "integer"
+                },
+                "estimated_delivery_at": {
+                    "type": "string"
+                },
+                "estimated_pickup_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "order_id": {
+                    "type": "integer"
+                },
+                "picked_at": {
+                    "type": "string"
+                },
+                "pickup_address": {
+                    "type": "string"
+                },
+                "rider_earnings": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.riderWorkbenchDepositResponse": {
+            "type": "object",
+            "properties": {
+                "available_deposit": {
+                    "type": "integer"
+                },
+                "delivery_frozen_deposit": {
+                    "type": "integer"
+                },
+                "deposit_refund_processing_amount": {
+                    "type": "integer"
+                },
+                "frozen_deposit": {
+                    "type": "integer"
+                },
+                "threshold_amount": {
+                    "type": "integer"
+                },
+                "total_deposit": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.riderWorkbenchIncomeResponse": {
+            "type": "object",
+            "properties": {
+                "failed_count": {
+                    "type": "integer"
+                },
+                "pending_rider_amount": {
+                    "type": "integer"
+                },
+                "processing_rider_amount": {
+                    "type": "integer"
+                },
+                "total_deliveries": {
+                    "type": "integer"
+                },
+                "total_delivery_fee": {
+                    "type": "integer"
+                },
+                "total_rider_income": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.riderWorkbenchNotificationsResponse": {
+            "type": "object",
+            "properties": {
+                "unread_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.riderWorkbenchOrderPoolResponse": {
+            "type": "object",
+            "properties": {
+                "available_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.riderWorkbenchRiderStatusResponse": {
+            "type": "object",
+            "properties": {
+                "active_deliveries": {
+                    "type": "integer"
+                },
+                "can_go_offline": {
+                    "type": "boolean"
+                },
+                "can_go_online": {
+                    "type": "boolean"
+                },
+                "current_latitude": {
+                    "type": "number"
+                },
+                "current_longitude": {
+                    "type": "number"
+                },
+                "is_online": {
+                    "type": "boolean"
+                },
+                "location_updated_at": {
+                    "type": "string"
+                },
+                "online_block_reason": {
+                    "type": "string"
+                },
+                "online_status": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.riderWorkbenchSectionStatusResponse": {
+            "type": "object",
+            "properties": {
+                "available": {
+                    "type": "boolean"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "section": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.riderWorkbenchSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "claims": {
+                    "$ref": "#/definitions/api.riderWorkbenchClaimsResponse"
+                },
+                "current_deliveries": {
+                    "$ref": "#/definitions/api.riderWorkbenchCurrentDeliveriesResponse"
+                },
+                "deposit": {
+                    "$ref": "#/definitions/api.riderWorkbenchDepositResponse"
+                },
+                "income": {
+                    "$ref": "#/definitions/api.riderWorkbenchIncomeResponse"
+                },
+                "notifications": {
+                    "$ref": "#/definitions/api.riderWorkbenchNotificationsResponse"
+                },
+                "order_pool": {
+                    "$ref": "#/definitions/api.riderWorkbenchOrderPoolResponse"
+                },
+                "rider_status": {
+                    "$ref": "#/definitions/api.riderWorkbenchRiderStatusResponse"
+                },
+                "sections": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.riderWorkbenchSectionStatusResponse"
+                    }
+                },
+                "today": {
+                    "$ref": "#/definitions/api.riderWorkbenchTodayResponse"
+                }
+            }
+        },
+        "api.riderWorkbenchTodayResponse": {
+            "type": "object",
+            "properties": {
+                "completed_deliveries": {
+                    "type": "integer"
+                },
+                "date": {
+                    "type": "string"
                 }
             }
         },

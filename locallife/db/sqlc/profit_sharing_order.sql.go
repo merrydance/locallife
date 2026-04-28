@@ -79,6 +79,34 @@ func (q *Queries) CountMerchantSettlementsByStatus(ctx context.Context, arg Coun
 	return column_1, err
 }
 
+const countRiderProfitSharingOrders = `-- name: CountRiderProfitSharingOrders :one
+SELECT COUNT(*)::bigint
+FROM profit_sharing_orders
+WHERE rider_id = $1
+  AND ($2::text IS NULL OR status = $2::text)
+  AND created_at >= $3 AND created_at <= $4
+`
+
+type CountRiderProfitSharingOrdersParams struct {
+	RiderID pgtype.Int8 `json:"rider_id"`
+	Status  pgtype.Text `json:"status"`
+	StartAt time.Time   `json:"start_at"`
+	EndAt   time.Time   `json:"end_at"`
+}
+
+// 骑手配送费明细总数
+func (q *Queries) CountRiderProfitSharingOrders(ctx context.Context, arg CountRiderProfitSharingOrdersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRiderProfitSharingOrders,
+		arg.RiderID,
+		arg.Status,
+		arg.StartAt,
+		arg.EndAt,
+	)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createProfitSharingOrder = `-- name: CreateProfitSharingOrder :one
 INSERT INTO profit_sharing_orders (
     payment_order_id,
@@ -814,6 +842,58 @@ func (q *Queries) GetRiderProfitSharingStats(ctx context.Context, arg GetRiderPr
 	return i, err
 }
 
+const getRiderProfitSharingStatusSummary = `-- name: GetRiderProfitSharingStatusSummary :many
+SELECT
+    status,
+    COUNT(*)::bigint as order_count,
+    COALESCE(SUM(rider_amount), 0)::bigint as rider_amount,
+    COALESCE(SUM(delivery_fee), 0)::bigint as delivery_fee
+FROM profit_sharing_orders
+WHERE rider_id = $1
+  AND created_at >= $2 AND created_at <= $3
+GROUP BY status
+ORDER BY status
+`
+
+type GetRiderProfitSharingStatusSummaryParams struct {
+	RiderID pgtype.Int8 `json:"rider_id"`
+	StartAt time.Time   `json:"start_at"`
+	EndAt   time.Time   `json:"end_at"`
+}
+
+type GetRiderProfitSharingStatusSummaryRow struct {
+	Status      string `json:"status"`
+	OrderCount  int64  `json:"order_count"`
+	RiderAmount int64  `json:"rider_amount"`
+	DeliveryFee int64  `json:"delivery_fee"`
+}
+
+// 骑手配送费按分账状态汇总
+func (q *Queries) GetRiderProfitSharingStatusSummary(ctx context.Context, arg GetRiderProfitSharingStatusSummaryParams) ([]GetRiderProfitSharingStatusSummaryRow, error) {
+	rows, err := q.db.Query(ctx, getRiderProfitSharingStatusSummary, arg.RiderID, arg.StartAt, arg.EndAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetRiderProfitSharingStatusSummaryRow{}
+	for rows.Next() {
+		var i GetRiderProfitSharingStatusSummaryRow
+		if err := rows.Scan(
+			&i.Status,
+			&i.OrderCount,
+			&i.RiderAmount,
+			&i.DeliveryFee,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCompletedOrdersMissingProfitSharing = `-- name: ListCompletedOrdersMissingProfitSharing :many
 SELECT po.id AS payment_order_id, po.order_id
 FROM payment_orders po
@@ -1301,13 +1381,15 @@ JOIN payment_orders po ON po.id = p.payment_order_id
 JOIN orders o ON o.id = po.order_id
 JOIN merchants m ON m.id = p.merchant_id
 WHERE p.rider_id = $1
-  AND p.created_at >= $2 AND p.created_at <= $3
-ORDER BY p.created_at DESC
-LIMIT $5 OFFSET $4
+  AND ($2::text IS NULL OR p.status = $2::text)
+  AND p.created_at >= $3 AND p.created_at <= $4
+ORDER BY p.created_at DESC, p.id DESC
+LIMIT $6 OFFSET $5
 `
 
 type ListRiderProfitSharingOrdersParams struct {
 	RiderID pgtype.Int8 `json:"rider_id"`
+	Status  pgtype.Text `json:"status"`
 	StartAt time.Time   `json:"start_at"`
 	EndAt   time.Time   `json:"end_at"`
 	Offset  int32       `json:"offset"`
@@ -1344,6 +1426,7 @@ type ListRiderProfitSharingOrdersRow struct {
 func (q *Queries) ListRiderProfitSharingOrders(ctx context.Context, arg ListRiderProfitSharingOrdersParams) ([]ListRiderProfitSharingOrdersRow, error) {
 	rows, err := q.db.Query(ctx, listRiderProfitSharingOrders,
 		arg.RiderID,
+		arg.Status,
 		arg.StartAt,
 		arg.EndAt,
 		arg.Offset,

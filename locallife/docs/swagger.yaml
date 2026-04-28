@@ -8261,6 +8261,94 @@ definitions:
       user_id:
         type: integer
     type: object
+  api.riderIncomeDailyItemResponse:
+    properties:
+      daily_income:
+        type: integer
+      date:
+        type: string
+      delivery_count:
+        type: integer
+    type: object
+  api.riderIncomeDailyResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/api.riderIncomeDailyItemResponse'
+        type: array
+    type: object
+  api.riderIncomeLedgerItemResponse:
+    properties:
+      created_at:
+        type: string
+      delivery_fee:
+        type: integer
+      distributable_amount:
+        type: integer
+      finished_at:
+        type: string
+      id:
+        type: integer
+      merchant_id:
+        type: integer
+      merchant_name:
+        type: string
+      order_id:
+        type: integer
+      order_no:
+        type: string
+      out_order_no:
+        type: string
+      payment_order_id:
+        type: integer
+      rider_amount:
+        type: integer
+      sharing_order_id:
+        type: string
+      status:
+        type: string
+      total_amount:
+        type: integer
+    type: object
+  api.riderIncomeLedgerResponse:
+    properties:
+      has_more:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/api.riderIncomeLedgerItemResponse'
+        type: array
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+    type: object
+  api.riderIncomeStatusSummaryResponse:
+    properties:
+      delivery_fee:
+        type: integer
+      order_count:
+        type: integer
+      rider_amount:
+        type: integer
+      status:
+        type: string
+    type: object
+  api.riderIncomeSummaryResponse:
+    properties:
+      status_summary:
+        items:
+          $ref: '#/definitions/api.riderIncomeStatusSummaryResponse'
+        type: array
+      total_deliveries:
+        type: integer
+      total_delivery_fee:
+        type: integer
+      total_rider_income:
+        type: integer
+    type: object
   api.riderListItem:
     properties:
       created_at:
@@ -8460,6 +8548,149 @@ definitions:
         type: string
       success_amount:
         type: integer
+    type: object
+  api.riderWorkbenchClaimsResponse:
+    properties:
+      pending_action_count:
+        type: integer
+    type: object
+  api.riderWorkbenchCurrentDeliveriesResponse:
+    properties:
+      active_count:
+        type: integer
+      items:
+        items:
+          $ref: '#/definitions/api.riderWorkbenchDeliveryItemResponse'
+        type: array
+    type: object
+  api.riderWorkbenchDeliveryItemResponse:
+    properties:
+      created_at:
+        type: string
+      delivered_at:
+        type: string
+      delivery_address:
+        type: string
+      delivery_fee:
+        type: integer
+      estimated_delivery_at:
+        type: string
+      estimated_pickup_at:
+        type: string
+      id:
+        type: integer
+      order_id:
+        type: integer
+      picked_at:
+        type: string
+      pickup_address:
+        type: string
+      rider_earnings:
+        type: integer
+      status:
+        type: string
+    type: object
+  api.riderWorkbenchDepositResponse:
+    properties:
+      available_deposit:
+        type: integer
+      delivery_frozen_deposit:
+        type: integer
+      deposit_refund_processing_amount:
+        type: integer
+      frozen_deposit:
+        type: integer
+      threshold_amount:
+        type: integer
+      total_deposit:
+        type: integer
+    type: object
+  api.riderWorkbenchIncomeResponse:
+    properties:
+      failed_count:
+        type: integer
+      pending_rider_amount:
+        type: integer
+      processing_rider_amount:
+        type: integer
+      total_deliveries:
+        type: integer
+      total_delivery_fee:
+        type: integer
+      total_rider_income:
+        type: integer
+    type: object
+  api.riderWorkbenchNotificationsResponse:
+    properties:
+      unread_count:
+        type: integer
+    type: object
+  api.riderWorkbenchOrderPoolResponse:
+    properties:
+      available_count:
+        type: integer
+    type: object
+  api.riderWorkbenchRiderStatusResponse:
+    properties:
+      active_deliveries:
+        type: integer
+      can_go_offline:
+        type: boolean
+      can_go_online:
+        type: boolean
+      current_latitude:
+        type: number
+      current_longitude:
+        type: number
+      is_online:
+        type: boolean
+      location_updated_at:
+        type: string
+      online_block_reason:
+        type: string
+      online_status:
+        type: string
+      status:
+        type: string
+    type: object
+  api.riderWorkbenchSectionStatusResponse:
+    properties:
+      available:
+        type: boolean
+      message:
+        type: string
+      section:
+        type: string
+    type: object
+  api.riderWorkbenchSummaryResponse:
+    properties:
+      claims:
+        $ref: '#/definitions/api.riderWorkbenchClaimsResponse'
+      current_deliveries:
+        $ref: '#/definitions/api.riderWorkbenchCurrentDeliveriesResponse'
+      deposit:
+        $ref: '#/definitions/api.riderWorkbenchDepositResponse'
+      income:
+        $ref: '#/definitions/api.riderWorkbenchIncomeResponse'
+      notifications:
+        $ref: '#/definitions/api.riderWorkbenchNotificationsResponse'
+      order_pool:
+        $ref: '#/definitions/api.riderWorkbenchOrderPoolResponse'
+      rider_status:
+        $ref: '#/definitions/api.riderWorkbenchRiderStatusResponse'
+      sections:
+        items:
+          $ref: '#/definitions/api.riderWorkbenchSectionStatusResponse'
+        type: array
+      today:
+        $ref: '#/definitions/api.riderWorkbenchTodayResponse'
+    type: object
+  api.riderWorkbenchTodayResponse:
+    properties:
+      completed_deliveries:
+        type: integer
+      date:
+        type: string
     type: object
   api.rollbackRuleRequest:
     properties:
@@ -29551,6 +29782,152 @@ paths:
       summary: 查询押金流水
       tags:
       - 骑手
+  /v1/rider/income/daily:
+    get:
+      consumes:
+      - application/json
+      description: 按日期范围获取当前骑手已完成分账收入的日汇总
+      parameters:
+      - description: 开始日期，格式 YYYY-MM-DD
+        in: query
+        name: start_date
+        type: string
+      - description: 结束日期，格式 YYYY-MM-DD
+        in: query
+        name: end_date
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 骑手每日分账收入
+          schema:
+            $ref: '#/definitions/api.riderIncomeDailyResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 骑手资料不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取骑手每日分账收入
+      tags:
+      - 骑手
+  /v1/rider/income/ledger:
+    get:
+      consumes:
+      - application/json
+      description: 分页获取当前骑手基于 profit sharing 的收入账本，可按分账状态筛选
+      parameters:
+      - description: 开始日期，格式 YYYY-MM-DD
+        in: query
+        name: start_date
+        type: string
+      - description: 结束日期，格式 YYYY-MM-DD
+        in: query
+        name: end_date
+        type: string
+      - description: 分账状态
+        enum:
+        - pending
+        - processing
+        - finished
+        - failed
+        in: query
+        name: status
+        type: string
+      - description: 页码
+        in: query
+        minimum: 1
+        name: page_id
+        type: integer
+      - description: 每页条数
+        in: query
+        maximum: 50
+        minimum: 1
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 骑手分账收入账本
+          schema:
+            $ref: '#/definitions/api.riderIncomeLedgerResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 骑手资料不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取骑手分账收入账本
+      tags:
+      - 骑手
+  /v1/rider/income/summary:
+    get:
+      consumes:
+      - application/json
+      description: 按日期范围获取当前骑手基于分账账本的已完成收入和状态汇总
+      parameters:
+      - description: 开始日期，格式 YYYY-MM-DD
+        in: query
+        name: start_date
+        type: string
+      - description: 结束日期，格式 YYYY-MM-DD
+        in: query
+        name: end_date
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 骑手分账收入汇总
+          schema:
+            $ref: '#/definitions/api.riderIncomeSummaryResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 骑手资料不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取骑手分账收入汇总
+      tags:
+      - 骑手
   /v1/rider/location:
     post:
       consumes:
@@ -30066,6 +30443,35 @@ paths:
       security:
       - BearerAuth: []
       summary: 查询骑手押金提现状态
+      tags:
+      - 骑手
+  /v1/rider/workbench/summary:
+    get:
+      consumes:
+      - application/json
+      description: 获取当前骑手首屏经营摘要，聚合状态、当前任务、订单池、配送费结算、押金、追偿和通知摘要
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 骑手工作台摘要
+          schema:
+            $ref: '#/definitions/api.riderWorkbenchSummaryResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 骑手资料不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取骑手工作台摘要
       tags:
       - 骑手
   /v1/role-access:

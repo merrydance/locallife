@@ -1096,6 +1096,14 @@ func (server *Server) setupRouter() {
 		riderGroup.GET("/withdrawals/status", server.getRiderWithdrawalStatus)
 		riderGroup.GET("/deposits", server.listRiderDeposits)
 
+		// 分账收入账本
+		riderGroup.GET("/income/summary", server.getRiderIncomeSummary)
+		riderGroup.GET("/income/ledger", server.listRiderIncomeLedger)
+		riderGroup.GET("/income/daily", server.getRiderIncomeDaily)
+
+		// 工作台摘要
+		riderGroup.GET("/workbench/summary", server.getRiderWorkbenchSummary)
+
 		// 上下线与状态
 		riderGroup.GET("/status", server.getRiderStatus)
 		riderGroup.POST("/online", server.goOnline)

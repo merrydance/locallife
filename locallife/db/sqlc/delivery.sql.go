@@ -76,6 +76,27 @@ func (q *Queries) CountRiderCompletedDeliveries(ctx context.Context, riderID pgt
 	return count, err
 }
 
+const countRiderCompletedDeliveriesInRange = `-- name: CountRiderCompletedDeliveriesInRange :one
+SELECT COUNT(*) FROM deliveries
+WHERE rider_id = $1
+    AND status = 'completed'
+    AND completed_at >= $2
+    AND completed_at < $3
+`
+
+type CountRiderCompletedDeliveriesInRangeParams struct {
+	RiderID pgtype.Int8        `json:"rider_id"`
+	StartAt pgtype.Timestamptz `json:"start_at"`
+	EndAt   pgtype.Timestamptz `json:"end_at"`
+}
+
+func (q *Queries) CountRiderCompletedDeliveriesInRange(ctx context.Context, arg CountRiderCompletedDeliveriesInRangeParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRiderCompletedDeliveriesInRange, arg.RiderID, arg.StartAt, arg.EndAt)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countRiderDeliveries = `-- name: CountRiderDeliveries :one
 SELECT COUNT(*) FROM deliveries
 WHERE rider_id = $1

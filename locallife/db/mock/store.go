@@ -2568,6 +2568,21 @@ func (mr *MockStoreMockRecorder) CountRiderCompletedDeliveries(ctx, riderID any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountRiderCompletedDeliveries", reflect.TypeOf((*MockStore)(nil).CountRiderCompletedDeliveries), ctx, riderID)
 }
 
+// CountRiderCompletedDeliveriesInRange mocks base method.
+func (m *MockStore) CountRiderCompletedDeliveriesInRange(ctx context.Context, arg db.CountRiderCompletedDeliveriesInRangeParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountRiderCompletedDeliveriesInRange", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountRiderCompletedDeliveriesInRange indicates an expected call of CountRiderCompletedDeliveriesInRange.
+func (mr *MockStoreMockRecorder) CountRiderCompletedDeliveriesInRange(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountRiderCompletedDeliveriesInRange", reflect.TypeOf((*MockStore)(nil).CountRiderCompletedDeliveriesInRange), ctx, arg)
+}
+
 // CountRiderDamageClaims mocks base method.
 func (m *MockStore) CountRiderDamageClaims(ctx context.Context, arg db.CountRiderDamageClaimsParams) (int64, error) {
 	m.ctrl.T.Helper()
@@ -2626,6 +2641,21 @@ func (m *MockStore) CountRiderLocations(ctx context.Context, riderID int64) (int
 func (mr *MockStoreMockRecorder) CountRiderLocations(ctx, riderID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountRiderLocations", reflect.TypeOf((*MockStore)(nil).CountRiderLocations), ctx, riderID)
+}
+
+// CountRiderProfitSharingOrders mocks base method.
+func (m *MockStore) CountRiderProfitSharingOrders(ctx context.Context, arg db.CountRiderProfitSharingOrdersParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountRiderProfitSharingOrders", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountRiderProfitSharingOrders indicates an expected call of CountRiderProfitSharingOrders.
+func (mr *MockStoreMockRecorder) CountRiderProfitSharingOrders(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountRiderProfitSharingOrders", reflect.TypeOf((*MockStore)(nil).CountRiderProfitSharingOrders), ctx, arg)
 }
 
 // CountRiderRecoveryDisputes mocks base method.
@@ -10735,6 +10765,21 @@ func (m *MockStore) GetRiderProfitSharingStats(ctx context.Context, arg db.GetRi
 func (mr *MockStoreMockRecorder) GetRiderProfitSharingStats(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRiderProfitSharingStats", reflect.TypeOf((*MockStore)(nil).GetRiderProfitSharingStats), ctx, arg)
+}
+
+// GetRiderProfitSharingStatusSummary mocks base method.
+func (m *MockStore) GetRiderProfitSharingStatusSummary(ctx context.Context, arg db.GetRiderProfitSharingStatusSummaryParams) ([]db.GetRiderProfitSharingStatusSummaryRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRiderProfitSharingStatusSummary", ctx, arg)
+	ret0, _ := ret[0].([]db.GetRiderProfitSharingStatusSummaryRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRiderProfitSharingStatusSummary indicates an expected call of GetRiderProfitSharingStatusSummary.
+func (mr *MockStoreMockRecorder) GetRiderProfitSharingStatusSummary(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRiderProfitSharingStatusSummary", reflect.TypeOf((*MockStore)(nil).GetRiderProfitSharingStatusSummary), ctx, arg)
 }
 
 // GetRiderRecoveryDisputeDetail mocks base method.

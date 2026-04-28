@@ -290,9 +290,31 @@ JOIN payment_orders po ON po.id = p.payment_order_id
 JOIN orders o ON o.id = po.order_id
 JOIN merchants m ON m.id = p.merchant_id
 WHERE p.rider_id = sqlc.arg('rider_id')
+  AND (sqlc.narg('status')::text IS NULL OR p.status = sqlc.narg('status')::text)
   AND p.created_at >= sqlc.arg('start_at') AND p.created_at <= sqlc.arg('end_at')
-ORDER BY p.created_at DESC
+ORDER BY p.created_at DESC, p.id DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: CountRiderProfitSharingOrders :one
+-- 骑手配送费明细总数
+SELECT COUNT(*)::bigint
+FROM profit_sharing_orders
+WHERE rider_id = sqlc.arg('rider_id')
+  AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status')::text)
+  AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at');
+
+-- name: GetRiderProfitSharingStatusSummary :many
+-- 骑手配送费按分账状态汇总
+SELECT
+    status,
+    COUNT(*)::bigint as order_count,
+    COALESCE(SUM(rider_amount), 0)::bigint as rider_amount,
+    COALESCE(SUM(delivery_fee), 0)::bigint as delivery_fee
+FROM profit_sharing_orders
+WHERE rider_id = sqlc.arg('rider_id')
+  AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at')
+GROUP BY status
+ORDER BY status;
 
 -- name: GetRiderDailyIncome :many
 -- 骑手每日收入汇总
