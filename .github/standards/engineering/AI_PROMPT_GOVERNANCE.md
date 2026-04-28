@@ -75,6 +75,7 @@
 - Backend: `backend-implementation.prompt.md`, `backend-review-closure.prompt.md`, `backend-bugfix.prompt.md`, `backend-takeover.prompt.md`
 - Web: `web-implementation.prompt.md`, `web-review.prompt.md`
 - Weapp: `weapp-implementation.prompt.md`, `weapp-review.prompt.md`
+- Flutter Merchant App: `flutter-implementation.prompt.md`, `flutter-review.prompt.md`, `flutter-bugfix.prompt.md`
 
 业务域层模板：
 
@@ -161,7 +162,13 @@ Prompt 库必须接受和代码同等级的基础门禁。
 | --- | --- | --- | --- |
 | Weapp | 以后端契约为唯一真相；先盘点后端能力并组合成任务域，再决定组件边界和一页还是一组页面；service / state / handlers / WXML / WXSS / feedback 一起改；显式处理 loading / success / empty / error / retry / re-entry；说明弱网、重复点击与冷启动恢复；默认不要主动生成说明性文案，先用结构、状态、标签、字段名和动作层级把任务讲清；只有风险告知、状态承接、字段约束或下一步动作规则在不写出来会造成理解错误时，才允许补一条最短必要说明；同一信息不要在标题、副标题、note、notice、卡片说明里重复解释；非顾客侧局部动作默认用 TDesign 图标按钮或 icon-led small button；优先用 page shell + 内容容器 + TDesign 组件表达，而不是再包本地视觉壳 | 不要猜后端字段、状态、权限或统计语义；不要按接口数量机械拆页面；不要把所有能力堆进同一页面；不要只改 WXML / WXSS；不要把金额语义、角色边界或结果语义混掉；不要把重写 TDesign 内部样式当常规方案；不要在单任务页首屏堆解释卡或说明块；不要为了“显得完整”补充不改变用户决策的说明文字；不要把“这里主要用于…/你可以在这里…”一类边界解释写成默认页面文案；不要默认保留文本型局部编辑/删除/测试/状态按钮；不要为了“更完整”再叠局部卡片壳和说明壳 | 能力组合是否合理；组件与页面边界是否清楚；setData 粒度、状态恢复、弱网与重入、支付结果、角色边界、页面壳一致性、反馈通道是否正确；是否出现解释卡漂移、说明文案堆叠、重复解释、文本动作漂移和本地视觉壳膨胀 |
 
-### 3.4 Cross-Stack Rules
+### 3.4 Flutter Merchant App
+
+| Area | Implementation Must Push | Implementation Must Not | Review Must Check |
+| --- | --- | --- | --- |
+| Flutter Merchant App | 按 disconnected edge client 建模；说明 state owner、recovery boundary、失败模式；把 service / provider / persistence / lifecycle / UI 贯通；关键链路显式处理 duplicate、retry、cold start、re-entry；按风险说明真实验证和残余风险 | 不要把业务逻辑和副作用塞进 Widget；不要假设单通道可靠或 exactly-once；不要为 `G2`/`G3` 路径做乐观成功；不要发明后端语义；不要省略真机、弱网、恢复路径的未验证说明 | 状态所有者是否清晰；去重、重试、冷启动、后台恢复是否被 deliberate 处理；push、foreground service、auth refresh、accept-order 等链路是否闭环；高风险设备或厂商路径是否仍未验证 |
+
+### 3.5 Cross-Stack Rules
 
 | Area | Implementation Must Push | Implementation Must Not | Review Must Check |
 | --- | --- | --- | --- |

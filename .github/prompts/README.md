@@ -6,7 +6,7 @@ This directory contains reusable prompt templates with normalized names.
 
 - Use `<scope>-<intent>.prompt.md`
 - Use `general-` for cross-workspace prompts
-- Use `backend-`, `web-`, or `weapp-` when the prompt is area-specific
+- Use `backend-`, `flutter-`, `web-`, or `weapp-` when the prompt is area-specific
 
 ## Current Templates
 
@@ -26,6 +26,9 @@ The files listed here are the active reusable prompt set for this workspace. Pro
 - `backend-takeover.prompt.md`
 - `business-flow-mermaid.prompt.md`
 - `general-task-loop.prompt.md`
+- `flutter-bugfix.prompt.md`
+- `flutter-implementation.prompt.md`
+- `flutter-review.prompt.md`
 - `web-implementation.prompt.md`
 - `web-review.prompt.md`
 - `weapp-implementation.prompt.md`
@@ -40,7 +43,7 @@ Prefer the most specific prompt template that matches the task. If the task is g
 Treat this directory as a logical layered system even though files are stored flat.
 
 - Protocol layer: `general-implementation.prompt.md`, `general-review.prompt.md`, `general-incident-followup.prompt.md`, `general-task-loop.prompt.md`
-- Stack layer: `backend-implementation.prompt.md`, `backend-review-closure.prompt.md`, `backend-bugfix.prompt.md`, `backend-takeover.prompt.md`, `web-implementation.prompt.md`, `web-review.prompt.md`, `weapp-implementation.prompt.md`, `weapp-review.prompt.md`
+- Stack layer: `backend-implementation.prompt.md`, `backend-review-closure.prompt.md`, `backend-bugfix.prompt.md`, `backend-takeover.prompt.md`, `flutter-bugfix.prompt.md`, `flutter-implementation.prompt.md`, `flutter-review.prompt.md`, `web-implementation.prompt.md`, `web-review.prompt.md`, `weapp-implementation.prompt.md`, `weapp-review.prompt.md`
 - Domain / workflow layer: `backend-payment-domain.prompt.md`, `backend-sql-review.prompt.md`, `backend-integration-test.prompt.md`, `backend-task-card-implementation.prompt.md`, `backend-phase-batch-implementation.prompt.md`, `business-flow-mermaid.prompt.md`
 
 Layering rules:
@@ -65,8 +68,10 @@ Use this order to avoid prompt collisions:
 6. If the request is backend task-card or phase-map driven, use the matching task-card or phase prompt.
 7. If the request is an ordered task list that should be completed through implement, review, fix, and doc-sync stages, use `general-task-loop.prompt.md`.
 8. If the request is about incident follow-up, escaped defect closure, or turning a postmortem into standards/gates/tests, use `general-incident-followup.prompt.md`.
-9. Otherwise use the area-specific implementation or review prompt.
-10. Use `general-implementation.prompt.md` or `general-review.prompt.md` only when the request spans multiple areas or the target area is still ambiguous.
+9. If the request is clearly about a Flutter merchant app regression or production reliability bug, use `flutter-bugfix.prompt.md`.
+10. If the request is clearly about `merchant_app/` or Flutter merchant app reliability work, use the matching Flutter implementation or review prompt.
+11. Otherwise use the area-specific implementation or review prompt.
+12. Use `general-implementation.prompt.md` or `general-review.prompt.md` only when the request spans multiple areas or the target area is still ambiguous.
 
 ## Prompt Boundaries
 
@@ -79,6 +84,9 @@ Use this order to avoid prompt collisions:
 - `backend-takeover.prompt.md`: backend onboarding or new-owner context-building requests before implementation starts.
 - `backend-sql-review.prompt.md`: backend SQL, migration, sqlc propagation, index, or persistence-focused review requests.
 - `backend-payment-domain.prompt.md`: WeChat payment or platform-ecommerce work, including applyment, settlement account, closeout, callback, refund, profit sharing, withdraw, complaint, or audit-ledger paths.
+- `flutter-bugfix.prompt.md`: Flutter merchant app regression,漏单、重复提醒、auth refresh、keep-alive、dedup、接单链路等根因修复请求。
+- `flutter-implementation.prompt.md`: all Flutter merchant app implementation requests, including auth binding, push, keep-alive, order alert, dedup, and weak-network recovery work.
+- `flutter-review.prompt.md`: all Flutter merchant app review requests, especially reliability-sensitive flows such as dedup, auth refresh, keep-alive, and accept-order paths.
 - `weapp-implementation.prompt.md`: all Mini Program implementation requests, including diagnosis-first page方案, payment-adjacent flows, and normal page or component implementation.
 - `weapp-review.prompt.md`: all Mini Program review requests, including overall upgrade audits and payment-flow review.
 
@@ -128,16 +136,25 @@ Expected target: `weapp-implementation.prompt.md`
 12. "从整体升级角度审查一下 weapp 的交互和风格，既看现行规范，也看后端真相、页面连贯性和常见低质量模式。"
 Expected target: `weapp-review.prompt.md`
 
-13. "这个需求要同时改 backend 和 web，帮我整理一份实现请求。"
+13. "给 merchant_app 做绑定码登录、推送注册和前台服务的实现请求模板。"
+Expected target: `flutter-implementation.prompt.md`
+
+14. "修这个 Flutter 商户端漏单问题，先追真实根因，再说明为什么不能只在 Widget 打补丁。"
+Expected target: `flutter-bugfix.prompt.md`
+
+15. "审查这个 Flutter 商户端改动，重点看 provider wiring、消息去重、弱网恢复和接单链路。"
+Expected target: `flutter-review.prompt.md`
+
+16. "这个需求要同时改 backend 和 web，帮我整理一份实现请求。"
 Expected target: `general-implementation.prompt.md`
 
-14. "把这段报销审批流程整理成 Mermaid，补上驳回和超时分支。"
+17. "把这段报销审批流程整理成 Mermaid，补上驳回和超时分支。"
 Expected target: `business-flow-mermaid.prompt.md`
 
-15. "把这组任务按 开发 -> review -> 修复 -> review -> 文档同步 的顺序跑完，直到任务清单完成。"
+18. "把这组任务按 开发 -> review -> 修复 -> review -> 文档同步 的顺序跑完，直到任务清单完成。"
 Expected target: `general-task-loop.prompt.md`
 
-16. "把这次线上事故的结论落成规则、workflow、测试和 runbook 更新清单。"
+19. "把这次线上事故的结论落成规则、workflow、测试和 runbook 更新清单。"
 Expected target: `general-incident-followup.prompt.md`
 
 ## Maintenance Rule

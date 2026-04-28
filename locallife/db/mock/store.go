@@ -5118,6 +5118,20 @@ func (mr *MockStoreMockRecorder) DeactivateMerchantActiveCredentialLedger(ctx, a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeactivateMerchantActiveCredentialLedger", reflect.TypeOf((*MockStore)(nil).DeactivateMerchantActiveCredentialLedger), ctx, arg)
 }
 
+// DeactivateMerchantAppDevicesByPushToken mocks base method.
+func (m *MockStore) DeactivateMerchantAppDevicesByPushToken(ctx context.Context, arg db.DeactivateMerchantAppDevicesByPushTokenParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeactivateMerchantAppDevicesByPushToken", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeactivateMerchantAppDevicesByPushToken indicates an expected call of DeactivateMerchantAppDevicesByPushToken.
+func (mr *MockStoreMockRecorder) DeactivateMerchantAppDevicesByPushToken(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeactivateMerchantAppDevicesByPushToken", reflect.TypeOf((*MockStore)(nil).DeactivateMerchantAppDevicesByPushToken), ctx, arg)
+}
+
 // DeactivateRiderActiveCredentialLedger mocks base method.
 func (m *MockStore) DeactivateRiderActiveCredentialLedger(ctx context.Context, arg db.DeactivateRiderActiveCredentialLedgerParams) (int64, error) {
 	m.ctrl.T.Helper()
@@ -6206,6 +6220,21 @@ func (m *MockStore) GetActiveFoodSafetyIncidents(ctx context.Context, limit int3
 func (mr *MockStoreMockRecorder) GetActiveFoodSafetyIncidents(ctx, limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveFoodSafetyIncidents", reflect.TypeOf((*MockStore)(nil).GetActiveFoodSafetyIncidents), ctx, limit)
+}
+
+// GetActiveMerchantAppDevice mocks base method.
+func (m *MockStore) GetActiveMerchantAppDevice(ctx context.Context, arg db.GetActiveMerchantAppDeviceParams) (db.MerchantAppDevice, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetActiveMerchantAppDevice", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantAppDevice)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetActiveMerchantAppDevice indicates an expected call of GetActiveMerchantAppDevice.
+func (mr *MockStoreMockRecorder) GetActiveMerchantAppDevice(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveMerchantAppDevice", reflect.TypeOf((*MockStore)(nil).GetActiveMerchantAppDevice), ctx, arg)
 }
 
 // GetActiveMerchantCredentialLedgers mocks base method.
@@ -7781,6 +7810,21 @@ func (m *MockStore) GetInventoryStats(ctx context.Context, arg db.GetInventorySt
 func (mr *MockStoreMockRecorder) GetInventoryStats(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInventoryStats", reflect.TypeOf((*MockStore)(nil).GetInventoryStats), ctx, arg)
+}
+
+// GetLatestActiveAppVersion mocks base method.
+func (m *MockStore) GetLatestActiveAppVersion(ctx context.Context, arg db.GetLatestActiveAppVersionParams) (db.AppVersion, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLatestActiveAppVersion", ctx, arg)
+	ret0, _ := ret[0].(db.AppVersion)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLatestActiveAppVersion indicates an expected call of GetLatestActiveAppVersion.
+func (mr *MockStoreMockRecorder) GetLatestActiveAppVersion(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestActiveAppVersion", reflect.TypeOf((*MockStore)(nil).GetLatestActiveAppVersion), ctx, arg)
 }
 
 // GetLatestBehaviorDecisionByClaimID mocks base method.
@@ -12171,6 +12215,36 @@ func (m *MockStore) ListActiveDiscountRules(ctx context.Context, merchantID int6
 func (mr *MockStoreMockRecorder) ListActiveDiscountRules(ctx, merchantID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListActiveDiscountRules", reflect.TypeOf((*MockStore)(nil).ListActiveDiscountRules), ctx, merchantID)
+}
+
+// ListActiveMerchantAppDevicesByMerchant mocks base method.
+func (m *MockStore) ListActiveMerchantAppDevicesByMerchant(ctx context.Context, merchantID int64) ([]db.MerchantAppDevice, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListActiveMerchantAppDevicesByMerchant", ctx, merchantID)
+	ret0, _ := ret[0].([]db.MerchantAppDevice)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListActiveMerchantAppDevicesByMerchant indicates an expected call of ListActiveMerchantAppDevicesByMerchant.
+func (mr *MockStoreMockRecorder) ListActiveMerchantAppDevicesByMerchant(ctx, merchantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListActiveMerchantAppDevicesByMerchant", reflect.TypeOf((*MockStore)(nil).ListActiveMerchantAppDevicesByMerchant), ctx, merchantID)
+}
+
+// ListActiveMerchantAppDevicesByMerchantAndProvider mocks base method.
+func (m *MockStore) ListActiveMerchantAppDevicesByMerchantAndProvider(ctx context.Context, arg db.ListActiveMerchantAppDevicesByMerchantAndProviderParams) ([]db.MerchantAppDevice, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListActiveMerchantAppDevicesByMerchantAndProvider", ctx, arg)
+	ret0, _ := ret[0].([]db.MerchantAppDevice)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListActiveMerchantAppDevicesByMerchantAndProvider indicates an expected call of ListActiveMerchantAppDevicesByMerchantAndProvider.
+func (mr *MockStoreMockRecorder) ListActiveMerchantAppDevicesByMerchantAndProvider(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListActiveMerchantAppDevicesByMerchantAndProvider", reflect.TypeOf((*MockStore)(nil).ListActiveMerchantAppDevicesByMerchantAndProvider), ctx, arg)
 }
 
 // ListActiveOperatorNotificationRecipientsByRegion mocks base method.
@@ -17056,6 +17130,36 @@ func (mr *MockStoreMockRecorder) RefundTx(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefundTx", reflect.TypeOf((*MockStore)(nil).RefundTx), ctx, arg)
 }
 
+// RegisterMerchantAppDevice mocks base method.
+func (m *MockStore) RegisterMerchantAppDevice(ctx context.Context, arg db.RegisterMerchantAppDeviceParams) (db.MerchantAppDevice, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RegisterMerchantAppDevice", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantAppDevice)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RegisterMerchantAppDevice indicates an expected call of RegisterMerchantAppDevice.
+func (mr *MockStoreMockRecorder) RegisterMerchantAppDevice(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterMerchantAppDevice", reflect.TypeOf((*MockStore)(nil).RegisterMerchantAppDevice), ctx, arg)
+}
+
+// RegisterMerchantAppDeviceTx mocks base method.
+func (m *MockStore) RegisterMerchantAppDeviceTx(ctx context.Context, arg db.RegisterMerchantAppDeviceParams) (db.MerchantAppDevice, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RegisterMerchantAppDeviceTx", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantAppDevice)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RegisterMerchantAppDeviceTx indicates an expected call of RegisterMerchantAppDeviceTx.
+func (mr *MockStoreMockRecorder) RegisterMerchantAppDeviceTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterMerchantAppDeviceTx", reflect.TypeOf((*MockStore)(nil).RegisterMerchantAppDeviceTx), ctx, arg)
+}
+
 // RejectMerchantApplication mocks base method.
 func (m *MockStore) RejectMerchantApplication(ctx context.Context, arg db.RejectMerchantApplicationParams) (db.MerchantApplication, error) {
 	m.ctrl.T.Helper()
@@ -18523,6 +18627,21 @@ func (mr *MockStoreMockRecorder) UnlinkMerchantDishCategory(ctx, arg any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnlinkMerchantDishCategory", reflect.TypeOf((*MockStore)(nil).UnlinkMerchantDishCategory), ctx, arg)
 }
 
+// UnregisterMerchantAppDevice mocks base method.
+func (m *MockStore) UnregisterMerchantAppDevice(ctx context.Context, arg db.UnregisterMerchantAppDeviceParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UnregisterMerchantAppDevice", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnregisterMerchantAppDevice indicates an expected call of UnregisterMerchantAppDevice.
+func (mr *MockStoreMockRecorder) UnregisterMerchantAppDevice(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterMerchantAppDevice", reflect.TypeOf((*MockStore)(nil).UnregisterMerchantAppDevice), ctx, arg)
+}
+
 // UnsuspendMerchant mocks base method.
 func (m *MockStore) UnsuspendMerchant(ctx context.Context, merchantID int64) error {
 	m.ctrl.T.Helper()
@@ -19448,6 +19567,36 @@ func (m *MockStore) UpdateMerchant(ctx context.Context, arg db.UpdateMerchantPar
 func (mr *MockStoreMockRecorder) UpdateMerchant(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchant", reflect.TypeOf((*MockStore)(nil).UpdateMerchant), ctx, arg)
+}
+
+// UpdateMerchantAppDeviceHeartbeat mocks base method.
+func (m *MockStore) UpdateMerchantAppDeviceHeartbeat(ctx context.Context, arg db.UpdateMerchantAppDeviceHeartbeatParams) (db.MerchantAppDevice, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateMerchantAppDeviceHeartbeat", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantAppDevice)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateMerchantAppDeviceHeartbeat indicates an expected call of UpdateMerchantAppDeviceHeartbeat.
+func (mr *MockStoreMockRecorder) UpdateMerchantAppDeviceHeartbeat(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantAppDeviceHeartbeat", reflect.TypeOf((*MockStore)(nil).UpdateMerchantAppDeviceHeartbeat), ctx, arg)
+}
+
+// UpdateMerchantAppDeviceHeartbeatTx mocks base method.
+func (m *MockStore) UpdateMerchantAppDeviceHeartbeatTx(ctx context.Context, arg db.UpdateMerchantAppDeviceHeartbeatParams) (db.MerchantAppDevice, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateMerchantAppDeviceHeartbeatTx", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantAppDevice)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateMerchantAppDeviceHeartbeatTx indicates an expected call of UpdateMerchantAppDeviceHeartbeatTx.
+func (mr *MockStoreMockRecorder) UpdateMerchantAppDeviceHeartbeatTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantAppDeviceHeartbeatTx", reflect.TypeOf((*MockStore)(nil).UpdateMerchantAppDeviceHeartbeatTx), ctx, arg)
 }
 
 // UpdateMerchantApplicationBasicInfo mocks base method.

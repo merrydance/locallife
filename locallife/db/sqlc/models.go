@@ -33,6 +33,27 @@ type Agreement struct {
 	UpdatedAt   time.Time   `json:"updated_at"`
 }
 
+// Published mobile app versions for update checks
+type AppVersion struct {
+	ID       int64  `json:"id"`
+	Platform string `json:"platform"`
+	// Client channel, currently merchant_app
+	Channel     string `json:"channel"`
+	PackageName string `json:"package_name"`
+	VersionCode int32  `json:"version_code"`
+	VersionName string `json:"version_name"`
+	// Public APK download URL for active releases
+	DownloadUrl    string      `json:"download_url"`
+	Changelog      string      `json:"changelog"`
+	IsForce        bool        `json:"is_force"`
+	FileSizeBytes  pgtype.Int8 `json:"file_size_bytes"`
+	ChecksumSha256 pgtype.Text `json:"checksum_sha256"`
+	Status         string      `json:"status"`
+	PublishedAt    time.Time   `json:"published_at"`
+	CreatedAt      time.Time   `json:"created_at"`
+	UpdatedAt      time.Time   `json:"updated_at"`
+}
+
 // 申诉表 - 商户/骑手对索赔的申诉
 type Appeal struct {
 	ID      int64 `json:"id"`
@@ -1002,6 +1023,29 @@ type Merchant struct {
 	LogoMediaAssetID pgtype.Int8 `json:"logo_media_asset_id"`
 	// 是否按营业时间自动切换营业状态
 	AutoOpenByBusinessHours bool `json:"auto_open_by_business_hours"`
+}
+
+// Android merchant app native push device registry
+type MerchantAppDevice struct {
+	ID         int64 `json:"id"`
+	MerchantID int64 `json:"merchant_id"`
+	UserID     int64 `json:"user_id"`
+	// Client-persisted app install identifier
+	DeviceID string `json:"device_id"`
+	Platform string `json:"platform"`
+	// Native push provider: huawei, honor, xiaomi, oppo, vivo, or unknown
+	Provider string `json:"provider"`
+	// Native vendor push token; never log raw value
+	PushToken        string             `json:"push_token"`
+	Status           string             `json:"status"`
+	DeviceModel      pgtype.Text        `json:"device_model"`
+	OsVersion        pgtype.Text        `json:"os_version"`
+	AppVersion       pgtype.Text        `json:"app_version"`
+	LastRegisteredAt time.Time          `json:"last_registered_at"`
+	LastActiveAt     time.Time          `json:"last_active_at"`
+	UnregisteredAt   pgtype.Timestamptz `json:"unregistered_at"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        time.Time          `json:"updated_at"`
 }
 
 type MerchantApplication struct {

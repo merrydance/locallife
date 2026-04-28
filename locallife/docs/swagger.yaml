@@ -3424,6 +3424,36 @@ definitions:
       voice_takeout:
         type: boolean
     type: object
+  api.getLatestAppVersionResponse:
+    properties:
+      changelog:
+        example: 修复蓝牙连接稳定性
+        type: string
+      download_url:
+        example: https://example.com/merchant-app-1.0.1.apk
+        type: string
+      file_size_bytes:
+        example: 48392120
+        type: integer
+      has_update:
+        example: true
+        type: boolean
+      is_force:
+        example: false
+        type: boolean
+      published_at:
+        example: "2026-04-12T12:00:00Z"
+        type: string
+      sha256:
+        example: 3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7
+        type: string
+      version_code:
+        example: 2
+        type: integer
+      version_name:
+        example: 1.0.1
+        type: string
+    type: object
   api.getProfitSharingReceiverLifecycleTargetResponse:
     properties:
       target:
@@ -3571,6 +3601,38 @@ definitions:
       date:
         description: 日期
         type: string
+    type: object
+  api.heartbeatMerchantAppDeviceRequest:
+    properties:
+      app_version:
+        example: 1.0.0
+        type: string
+      device_id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      device_model:
+        example: Redmi K70
+        type: string
+      os_version:
+        example: Android 15
+        type: string
+      provider:
+        example: xiaomi
+        type: string
+      push_token:
+        example: vendor-token
+        type: string
+    required:
+    - device_id
+    type: object
+  api.heartbeatMerchantAppDeviceResponse:
+    properties:
+      device_id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      heartbeat:
+        example: true
+        type: boolean
     type: object
   api.hourlyDistributionRow:
     properties:
@@ -7703,6 +7765,52 @@ definitions:
       total_orders:
         type: integer
     type: object
+  api.registerMerchantAppDeviceRequest:
+    properties:
+      app_version:
+        example: 1.0.0
+        type: string
+      device_id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      device_model:
+        example: Redmi K70
+        type: string
+      os_version:
+        example: Android 15
+        type: string
+      platform:
+        example: android
+        type: string
+      provider:
+        example: xiaomi
+        type: string
+      push_token:
+        example: vendor-token
+        type: string
+    required:
+    - device_id
+    - platform
+    - push_token
+    type: object
+  api.registerMerchantAppDeviceResponse:
+    properties:
+      device_id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      merchant_id:
+        example: 2001
+        type: integer
+      merchant_name:
+        example: 示例门店
+        type: string
+      provider:
+        example: xiaomi
+        type: string
+      registered:
+        example: true
+        type: boolean
+    type: object
   api.rejectGroupJoinRequestRequest:
     properties:
       reason:
@@ -9077,6 +9185,15 @@ definitions:
     properties:
       count:
         type: integer
+    type: object
+  api.unregisterMerchantAppDeviceResponse:
+    properties:
+      device_id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      unregistered:
+        example: true
+        type: boolean
     type: object
   api.updateCartItemRequest:
     properties:
@@ -10828,6 +10945,57 @@ paths:
       summary: Get active agreement by type
       tags:
       - agreements
+  /v1/app/version/latest:
+    get:
+      description: 按平台、渠道、包名和当前版本码查询是否存在可升级版本；无更新时返回 200 和 has_update=false
+      parameters:
+      - description: 平台
+        enum:
+        - android
+        in: query
+        name: platform
+        required: true
+        type: string
+      - description: 渠道
+        enum:
+        - merchant_app
+        in: query
+        name: channel
+        required: true
+        type: string
+      - description: 包名
+        in: query
+        name: package_name
+        required: true
+        type: string
+      - description: 当前版本码
+        in: query
+        minimum: 1
+        name: version_code
+        required: true
+        type: integer
+      - description: 当前展示版本
+        in: query
+        name: version_name
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.getLatestAppVersionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+      summary: 查询 App 最新版本
+      tags:
+      - app-version
   /v1/auth/app-bind/code:
     post:
       description: 商户在小程序端调用，生成 6 位数字绑定码供 App 输入验证。需要 merchant 角色。
@@ -17023,6 +17191,127 @@ paths:
       summary: 获取商户投诉汇总
       tags:
       - 商户投诉管理
+  /v1/merchant/device/{device_id}:
+    delete:
+      description: 登出、设备失效或切换商户时失效当前登录商户下的设备推送绑定
+      parameters:
+      - description: 设备 ID
+        in: path
+        name: device_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.unregisterMerchantAppDeviceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+      security:
+      - BearerAuth: []
+      summary: 解绑商户 App 原生推送设备
+      tags:
+      - merchant-app-device
+  /v1/merchant/device/heartbeat:
+    put:
+      consumes:
+      - application/json
+      description: 更新当前登录商户设备的活跃时间、App 版本、设备信息和可选推送 token
+      parameters:
+      - description: 设备心跳请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.heartbeatMerchantAppDeviceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.heartbeatMerchantAppDeviceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+      security:
+      - BearerAuth: []
+      summary: 上报商户 App 设备心跳
+      tags:
+      - merchant-app-device
+  /v1/merchant/device/register:
+    post:
+      consumes:
+      - application/json
+      description: 将当前登录商户、登录用户、设备 ID 与厂商原生推送 token 建立幂等绑定
+      parameters:
+      - description: 设备注册请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.registerMerchantAppDeviceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.registerMerchantAppDeviceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+      security:
+      - BearerAuth: []
+      summary: 注册商户 App 原生推送设备
+      tags:
+      - merchant-app-device
   /v1/merchant/devices:
     get:
       consumes:

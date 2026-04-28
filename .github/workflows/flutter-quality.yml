@@ -1,0 +1,63 @@
+name: flutter-quality
+
+on:
+  pull_request:
+    paths:
+      - 'merchant_app/**'
+      - '.github/workflows/flutter-quality.yml'
+      - '.github/scripts/flutter_changed_architecture_guard.sh'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'merchant_app/**'
+      - '.github/workflows/flutter-quality.yml'
+      - '.github/scripts/flutter_changed_architecture_guard.sh'
+  workflow_dispatch:
+
+jobs:
+  architecture-guard:
+    name: Flutter changed-file guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Flutter changed-file guard
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_ref="${{ github.event.pull_request.base.sha }}"
+          else
+            base_ref="${{ github.event.before }}"
+          fi
+
+          bash .github/scripts/flutter_changed_architecture_guard.sh "$base_ref" "${{ github.sha }}"
+
+  quality:
+    name: Flutter analyze and test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: merchant_app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run analyzer
+        run: flutter analyze
+
+      - name: Run tests
+        run: flutter test

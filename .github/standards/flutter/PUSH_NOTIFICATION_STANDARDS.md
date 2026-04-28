@@ -9,7 +9,7 @@
 | 通道 | 特性 | 延迟 | 可靠性 |
 |---|---|---|---|
 | ① WebSocket | App 前台时实时推送 | <100ms | 依赖网络连接，App 被杀后不可用 |
-| ② 厂商推送 (JPush) | 系统级推送，穿透进程生死 | 1-3s | App 被杀也能收到（依赖厂商通道） |
+| ② 厂商原生推送 | 系统级推送，穿透进程生死 | 1-3s | App 被杀也能收到（依赖华为/荣耀/小米/OPPO/vivo 等厂商通道） |
 | ③ 轮询兜底 | 每 30s 拉取未处理订单列表 | ≤30s | 最终一致，不依赖任何推送通道 |
 
 ### 后端投递流程
@@ -95,29 +95,32 @@
 - 播报时临时提升系统音量到 80%，播完恢复。
 - 如果正在播报时又有新订单，加入队列依次播报，不中断当前播报。
 
-## 5. 厂商推送 (JPush) 集成规范
+## 5. 厂商原生推送集成规范
+
+JPush 已废弃。商户端不得再引入 JPush SDK、JPush registration_id、JPush REST API 或 JPush third_party_channel 聚合通道。推送路线固定为 Android 原生层直连各手机厂商通道，Flutter 层通过 `NativePushManager` 统一接收 token 和消息。
 
 ### 5.1 Token 注册
 
-- App 启动时获取 JPush Registration ID
+- App 启动时由原生层按设备厂商初始化对应 SDK，并获取厂商 push token
 - 调用 `POST /v1/merchant/device/register` 上报给后端
-- Token 变化时（JPush 回调）立即重新上报
+- Token 变化时由原生回调通知 Flutter，并立即重新上报
+- 上报 payload 应包含 `device_id`、`push_token`、`provider`、`platform`、`app_version`、`device_model`、`os_version`
 
 ### 5.2 消息处理
 
-JPush 消息分两类：
+厂商推送消息分两类：
 
 | 类型 | 说明 | 处理方式 |
 |---|---|---|
-| 通知消息 (Notification) | 系统通知栏展示 | 用户点击后进入 App，App 解析 `extras` 中的 `message_id` 和 `order_id` |
-| 自定义消息 (Custom Message) | App 在前台时直接收到 | 直接走去重 → 播报流程 |
+| 通知消息 (Notification) | 系统通知栏展示 | 用户点击后进入 App，App 解析厂商 extras 中的 `message_id` 和 `order_id` |
+| 透传/自定义消息 | App 在前台或被厂商通道唤醒时收到 | 直接走去重 → 播报流程 |
 
 ### 5.3 后端推送规则
 
-- 使用 JPush 的 `registration_id` 精准推送，不用广播。
-- 推送 priority 设为 HIGH。
-- 必须在 `extras` 中携带 `message_id`、`order_id`、`type`。
-- 启用所有厂商的第三方通道（`third_party_channel`）。
+- 按 `provider` 选择华为/荣耀/小米/OPPO/vivo 等厂商 REST API，精准推送到已注册的 `push_token`，不用广播。
+- 推送优先级按各厂商即时消息/高优先级能力配置。
+- 必须在 extras 或透传 payload 中携带 `message_id`、`order_id`、`type`，不能只把业务数据放在通知文案里。
+- 同一订单通过 WebSocket、厂商推送、轮询到达时必须复用同一个 `message_id`，保证 App 可去重。
 
 ## 6. Monitor & Alerting
 

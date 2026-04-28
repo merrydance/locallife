@@ -106,6 +106,9 @@ type Store interface {
 	UpdateProfitSharingConfigStatusTx(ctx context.Context, arg UpdateProfitSharingConfigStatusTxParams) (UpdateProfitSharingConfigStatusTxResult, error)
 	// Session transactions
 	RefreshSessionTx(ctx context.Context, arg RefreshSessionTxParams) (RefreshSessionTxResult, error)
+	// Merchant app device transactions
+	RegisterMerchantAppDeviceTx(ctx context.Context, arg RegisterMerchantAppDeviceParams) (MerchantAppDevice, error)
+	UpdateMerchantAppDeviceHeartbeatTx(ctx context.Context, arg UpdateMerchantAppDeviceHeartbeatParams) (MerchantAppDevice, error)
 	// Order replacement transaction
 	ReplaceOrderTx(ctx context.Context, arg ReplaceOrderTxParams) (ReplaceOrderTxResult, error)
 	// Food safety transactions

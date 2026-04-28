@@ -515,6 +515,7 @@ type Querier interface {
 	CreateWechatNotification(ctx context.Context, arg CreateWechatNotificationParams) (WechatNotification, error)
 	CreateWithdrawalRecord(ctx context.Context, arg CreateWithdrawalRecordParams) (WithdrawalRecord, error)
 	DeactivateMerchantActiveCredentialLedger(ctx context.Context, arg DeactivateMerchantActiveCredentialLedgerParams) (int64, error)
+	DeactivateMerchantAppDevicesByPushToken(ctx context.Context, arg DeactivateMerchantAppDevicesByPushTokenParams) error
 	DeactivateRiderActiveCredentialLedger(ctx context.Context, arg DeactivateRiderActiveCredentialLedgerParams) (int64, error)
 	DecrementMembershipBalance(ctx context.Context, arg DecrementMembershipBalanceParams) (MerchantMembership, error)
 	DecrementVoucherUsedQuantity(ctx context.Context, id int64) (Voucher, error)
@@ -604,6 +605,7 @@ type Querier interface {
 	GetActiveDiningSessionByReservation(ctx context.Context, reservationID pgtype.Int8) (DiningSession, error)
 	GetActiveDiningSessionByTable(ctx context.Context, tableID int64) (DiningSession, error)
 	GetActiveFoodSafetyIncidents(ctx context.Context, limit int32) ([]GetActiveFoodSafetyIncidentsRow, error)
+	GetActiveMerchantAppDevice(ctx context.Context, arg GetActiveMerchantAppDeviceParams) (MerchantAppDevice, error)
 	GetActiveMerchantCredentialLedgers(ctx context.Context, merchantID pgtype.Int8) ([]CredentialLedger, error)
 	// 根据区域获取运营商（通过operator_regions表，支持多区域）
 	GetActiveOperatorByRegion(ctx context.Context, regionID int64) (Operator, error)
@@ -745,6 +747,7 @@ type Querier interface {
 	GetHourlyDistribution(ctx context.Context, arg GetHourlyDistributionParams) ([]GetHourlyDistributionRow, error)
 	GetIngredient(ctx context.Context, id int64) (Ingredient, error)
 	GetInventoryStats(ctx context.Context, arg GetInventoryStatsParams) (GetInventoryStatsRow, error)
+	GetLatestActiveAppVersion(ctx context.Context, arg GetLatestActiveAppVersionParams) (AppVersion, error)
 	GetLatestBehaviorDecisionByClaimID(ctx context.Context, claimID pgtype.Int8) (BehaviorDecision, error)
 	GetLatestEcommerceApplymentBySubject(ctx context.Context, arg GetLatestEcommerceApplymentBySubjectParams) (EcommerceApplyment, error)
 	GetLatestGroupApplicationByApplicant(ctx context.Context, applicantUserID int64) (MerchantGroupApplication, error)
@@ -1163,6 +1166,8 @@ type Querier interface {
 	ListActiveDeliveryFeeConfigs(ctx context.Context) ([]DeliveryFeeConfig, error)
 	ListActiveDeliveryPromotionsByMerchant(ctx context.Context, merchantID int64) ([]MerchantDeliveryPromotion, error)
 	ListActiveDiscountRules(ctx context.Context, merchantID int64) ([]DiscountRule, error)
+	ListActiveMerchantAppDevicesByMerchant(ctx context.Context, merchantID int64) ([]MerchantAppDevice, error)
+	ListActiveMerchantAppDevicesByMerchantAndProvider(ctx context.Context, arg ListActiveMerchantAppDevicesByMerchantAndProviderParams) ([]MerchantAppDevice, error)
 	// 列出区域内可接收提醒的运营商用户
 	ListActiveOperatorNotificationRecipientsByRegion(ctx context.Context, regionID int64) ([]ListActiveOperatorNotificationRecipientsByRegionRow, error)
 	ListActivePeakHourConfigsByRegion(ctx context.Context, regionID int64) ([]PeakHourConfig, error)
@@ -1563,6 +1568,7 @@ type Querier interface {
 	MarkUserVoucherAsUsed(ctx context.Context, arg MarkUserVoucherAsUsedParams) (UserVoucher, error)
 	// 浏览历史查询
 	RecordBrowseHistory(ctx context.Context, arg RecordBrowseHistoryParams) (BrowseHistory, error)
+	RegisterMerchantAppDevice(ctx context.Context, arg RegisterMerchantAppDeviceParams) (MerchantAppDevice, error)
 	// 拒绝商户申请
 	RejectMerchantApplication(ctx context.Context, arg RejectMerchantApplicationParams) (MerchantApplication, error)
 	// 拒绝运营商申请（平台管理员操作）
@@ -1682,6 +1688,7 @@ type Querier interface {
 	// 解冻用户余额（提现失败时）
 	UnfreezeUserBalance(ctx context.Context, arg UnfreezeUserBalanceParams) (UserBalance, error)
 	UnlinkMerchantDishCategory(ctx context.Context, arg UnlinkMerchantDishCategoryParams) error
+	UnregisterMerchantAppDevice(ctx context.Context, arg UnregisterMerchantAppDeviceParams) (int64, error)
 	UnsuspendMerchant(ctx context.Context, merchantID int64) error
 	UnsuspendMerchantTakeout(ctx context.Context, merchantID int64) error
 	UnsuspendRider(ctx context.Context, riderID int64) error
@@ -1742,6 +1749,7 @@ type Querier interface {
 	UpdateMembershipBalance(ctx context.Context, arg UpdateMembershipBalanceParams) (MerchantMembership, error)
 	// ✅ P1-2: 使用乐观锁(version)防止并发更新丢失
 	UpdateMerchant(ctx context.Context, arg UpdateMerchantParams) (Merchant, error)
+	UpdateMerchantAppDeviceHeartbeat(ctx context.Context, arg UpdateMerchantAppDeviceHeartbeatParams) (MerchantAppDevice, error)
 	// 更新基础信息（商户名、联系电话、地址、经纬度、区域、人工修正字段）
 	UpdateMerchantApplicationBasicInfo(ctx context.Context, arg UpdateMerchantApplicationBasicInfoParams) (MerchantApplication, error)
 	// 更新营业执照信息（图片URL和OCR结果）
