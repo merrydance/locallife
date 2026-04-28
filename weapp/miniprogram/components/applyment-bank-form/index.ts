@@ -270,40 +270,67 @@ function findSelectedBranchIndex(branches: ApplymentBranchOption[], form: Applym
   return index >= 0 ? index : 0
 }
 
-function canSubmitForm(form: ApplymentBindBankDraft, showContactFields?: boolean, requireAccountName: boolean = true): boolean {
-  const baseValid = Boolean(
-    form.account_bank.trim() &&
-    form.account_number.trim() &&
-    (!requireAccountName || form.account_name.trim())
-  )
+function getSubmitBlockMessage(
+  form: ApplymentBindBankDraft,
+  showContactFields?: boolean,
+  requireAccountName: boolean = true
+): string {
+  if (!form.account_number.trim()) {
+    return '请先填写银行账号'
+  }
 
-  if (!baseValid) {
-    return false
+  if (requireAccountName && !form.account_name.trim()) {
+    return '请先填写开户名称'
+  }
+
+  if (!form.account_bank.trim()) {
+    return form.account_type === 'ACCOUNT_TYPE_PRIVATE'
+      ? '请先识别或选择开户银行'
+      : '请先选择开户银行'
   }
 
   if (requiresSuperContactFields(form, showContactFields)) {
-    if (
-      !form.contact_name.trim() ||
-      !form.contact_id_card_number.trim() ||
-      !form.contact_id_doc_copy_asset_id ||
-      !form.contact_id_doc_copy_back_asset_id ||
-      !form.contact_id_doc_period_begin.trim() ||
-      !form.contact_id_doc_period_end.trim()
-    ) {
-      return false
+    if (!form.contact_name.trim()) {
+      return '请先填写超级管理员姓名'
+    }
+    if (!form.contact_id_card_number.trim()) {
+      return '请先填写超级管理员身份证号'
+    }
+    if (!form.contact_id_doc_copy_asset_id) {
+      return '请先上传超级管理员身份证人像面'
+    }
+    if (!form.contact_id_doc_copy_back_asset_id) {
+      return '请先上传超级管理员身份证国徽面'
+    }
+    if (!form.contact_id_doc_period_begin.trim()) {
+      return '请先填写超级管理员证件有效期开始时间'
+    }
+    if (!form.contact_id_doc_period_end.trim()) {
+      return '请先填写超级管理员证件有效期结束时间'
     }
   }
 
   if (!form.need_bank_branch) {
-    return true
+    return ''
   }
 
-  return Boolean(
-    form.bank_address_code.trim() &&
-    form.bank_branch_id.trim() &&
-    form.bank_name.trim() &&
-    form.bank_alias_code.trim()
-  )
+  if (!form.bank_address_code.trim()) {
+    return '请先选择开户地址城市'
+  }
+
+  if (!form.bank_alias_code.trim()) {
+    return '请重新选择开户银行'
+  }
+
+  if (!form.bank_branch_id.trim() || !form.bank_name.trim()) {
+    return '请先选择开户支行'
+  }
+
+  return ''
+}
+
+function canSubmitForm(form: ApplymentBindBankDraft, showContactFields?: boolean, requireAccountName: boolean = true): boolean {
+  return !getSubmitBlockMessage(form, showContactFields, requireAccountName)
 }
 
 Component({
@@ -390,6 +417,7 @@ Component({
     contactDocCopyBackFeedbackTitle: '',
     contactDocCopyBackFeedbackDescription: '',
     canSubmit: false,
+    submitBlockMessage: '',
     selectedBankLabel: '',
     hasSelectedBank: false
   },
@@ -432,7 +460,10 @@ Component({
       const accountType = properties.defaultAccountType
       const initialDraft = normalizeDraft(accountType, properties.initialDraft)
 
-      this.setFormState(initialDraft, { canSubmit: canSubmitForm(initialDraft, properties.showContactFields, properties.requireAccountName) }, { emitDraft: false, syncSubmit: false })
+      this.setFormState(initialDraft, {
+        canSubmit: canSubmitForm(initialDraft, properties.showContactFields, properties.requireAccountName),
+        submitBlockMessage: getSubmitBlockMessage(initialDraft, properties.showContactFields, properties.requireAccountName)
+      }, { emitDraft: false, syncSubmit: false })
 
       await this.restoreDraftSelection(initialDraft)
       if (properties.preloadCatalogs) {
@@ -565,7 +596,9 @@ Component({
 
     syncCanSubmit(nextForm?: ApplymentBindBankDraft) {
       const form = nextForm || (this.data.form as ApplymentBindBankDraft)
-      this.setData({ canSubmit: canSubmitForm(form, this.properties.showContactFields, this.properties.requireAccountName) })
+      const canSubmit = canSubmitForm(form, this.properties.showContactFields, this.properties.requireAccountName)
+      const submitBlockMessage = getSubmitBlockMessage(form, this.properties.showContactFields, this.properties.requireAccountName)
+      this.setData({ canSubmit, submitBlockMessage })
     },
 
     async restoreDraftSelection(draft: ApplymentBindBankDraft) {
@@ -1310,8 +1343,9 @@ Component({
     onSubmit() {
       const form = this.readForm()
       const properties = this.properties as unknown as ApplymentBankFormProperties
-      if (!canSubmitForm(form, properties.showContactFields, properties.requireAccountName)) {
-        wx.showToast({ title: '请先补全必填信息', icon: 'none' })
+      const submitBlockMessage = getSubmitBlockMessage(form, properties.showContactFields, properties.requireAccountName)
+      if (submitBlockMessage) {
+        wx.showToast({ title: submitBlockMessage, icon: 'none' })
         return
       }
 

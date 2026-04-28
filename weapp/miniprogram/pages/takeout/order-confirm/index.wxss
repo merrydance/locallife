@@ -40,7 +40,7 @@
   background: var(--td-bg-color-container);
   border-radius: var(--radius-md);
   padding: var(--spacer-md);
-  margin: var(--spacer-sm) var(--spacer-md);
+  margin: var(--spacer-sm) 0;
   box-shadow: var(--shadow-sm);
 }
 
@@ -137,10 +137,16 @@
   padding: var(--spacer-sm) 0;
 }
 
-.balance-note {
-  font-size: 22rpx;
-  color: var(--td-text-color-placeholder);
-  margin-top: 4rpx;
+.payment-method-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-sm);
+  min-height: 72rpx;
+}
+
+.payment-method-name {
+  font-size: var(--font-size-base);
+  color: var(--td-text-color-primary);
 }
 
 /* 配送时间 */

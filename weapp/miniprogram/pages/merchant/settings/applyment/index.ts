@@ -10,7 +10,7 @@ import {
   isMerchantConsoleAccessDenied,
   isMerchantConsoleAccessGranted
 } from '../../../../utils/console-access'
-import Toast from 'tdesign-miniprogram/toast/index'
+import Toast from '../../../../miniprogram_npm/tdesign-miniprogram/toast/index'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'

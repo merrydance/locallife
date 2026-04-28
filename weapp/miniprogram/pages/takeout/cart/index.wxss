@@ -4,7 +4,6 @@
 .page-container {
   min-height: 100vh;
   background-color: var(--td-bg-color-page);
-  padding: 0 var(--spacer-md);
 }
 
 /* 骨架屏布局 */

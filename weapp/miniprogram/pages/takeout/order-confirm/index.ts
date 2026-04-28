@@ -51,10 +51,8 @@ Page({
     summarySubtotalDisplay: '0.00',
     summaryDeliveryDisplay: '待计算',
     
-    // 支付及会员相关
-    selectedPaymentMethod: 'wechat', // 'wechat' | 'balance'
+    // 会员优惠相关
     memberBalances: {} as Record<number, number>, // merchantId -> balance
-    memberBalanceDisplays: {} as Record<number, string>,
     membershipIds: {} as Record<number, number>
   },
 
@@ -414,8 +412,7 @@ Page({
         const order = await createOrder(buildTakeoutCreateOrderRequest({
           cart,
           addressId: address.id,
-          note: remarks[cart.merchantId] || '',
-          useBalance: carts.length === 1 && this.data.selectedPaymentMethod === 'balance'
+          note: remarks[cart.merchantId] || ''
         }))
         ordersCreated.push(order.id)
 
@@ -546,13 +543,6 @@ Page({
         wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` })
       }
     })
-  },
-
-  /**
-   * 切换支付方式
-   */
-  onPaymentMethodChange(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ selectedPaymentMethod: e.detail.value })
   },
 
   /**

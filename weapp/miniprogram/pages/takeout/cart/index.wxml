@@ -1,7 +1,7 @@
 <custom-navbar title="购物车" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view
-  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe"
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
   style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 140rpx;"
 >
   <!-- 骨架屏加载状态 (App Shell + Skeleton) -->

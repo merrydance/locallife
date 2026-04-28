@@ -177,9 +177,11 @@
   </view>
 
   <view class="form-actions">
-    <t-button theme="primary" loading="{{submitting}}" disabled="{{submitting || !canSubmit}}" bind:tap="onSubmit">{{submitLabel}}</t-button>
+    <t-button theme="primary" loading="{{submitting}}" disabled="{{submitting}}" bind:tap="onSubmit">{{submitLabel}}</t-button>
     <t-button theme="default" variant="outline" disabled="{{submitting}}" bind:tap="onCancel">取消</t-button>
   </view>
+
+  <view wx:if="{{!canSubmit && submitBlockMessage}}" class="submit-block-message">{{submitBlockMessage}}</view>
 
   <t-popup wx:if="{{showBankPicker}}" visible="{{showBankPicker}}" placement="bottom" using-custom-navbar="{{true}}" bind:visible-change="onBankPickerVisibleChange">
     <view class="popup-panel selector-popup">

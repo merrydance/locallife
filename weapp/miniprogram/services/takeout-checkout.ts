@@ -1,12 +1,10 @@
 import AddressService, { type Address } from '../api/address'
 import { getMyMemberships } from '../api/personal'
-import { formatPriceNoSymbol } from '../utils/util'
 
 export type CheckoutAddress = Address
 
 export interface TakeoutMembershipState {
   memberBalances: Record<number, number>
-  memberBalanceDisplays: Record<number, string>
   membershipIds: Record<number, number>
 }
 
@@ -21,7 +19,6 @@ export function getCheckoutAddressDetail(addressId: number) {
 export async function loadTakeoutMembershipState(merchantIds: number[]): Promise<TakeoutMembershipState> {
   const result = await getMyMemberships()
   const memberBalances: Record<number, number> = {}
-  const memberBalanceDisplays: Record<number, string> = {}
   const membershipIds: Record<number, number> = {}
 
   merchantIds.forEach((merchantId) => {
@@ -31,13 +28,11 @@ export async function loadTakeoutMembershipState(merchantIds: number[]): Promise
     }
 
     memberBalances[merchantId] = membership.balance
-    memberBalanceDisplays[merchantId] = formatPriceNoSymbol(membership.balance)
     membershipIds[merchantId] = membership.id
   })
 
   return {
     memberBalances,
-    memberBalanceDisplays,
     membershipIds
   }
 }

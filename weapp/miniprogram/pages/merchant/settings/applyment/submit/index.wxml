@@ -40,7 +40,7 @@
       apiBasePath="/v1/merchant/applyment"
       uploadBusinessType="merchant"
       initialDraft="{{bindBankDraft}}"
-      defaultAccountType="ACCOUNT_TYPE_BUSINESS"
+      defaultAccountType="ACCOUNT_TYPE_PRIVATE"
       showContactFields="{{false}}"
       submitLabel="提交银行账户信息"
       submitting="{{submitting}}"
@@ -48,5 +48,12 @@
       bind:cancel="onBackToStatus"
       bind:draftchange="onBindDraftChange"
     />
+
+    <view wx:if="{{submitErrorMessage}}" class="submit-error-panel">
+      <view class="submit-error-title">{{submitErrorMessage}}</view>
+      <view class="submit-error-actions">
+        <t-button theme="light" size="small" shape="round" open-type="contact">联系平台客服</t-button>
+      </view>
+    </view>
   </view>
 </view>

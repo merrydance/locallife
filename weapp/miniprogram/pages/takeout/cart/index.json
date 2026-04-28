@@ -9,5 +9,6 @@
         "t-loading": "tdesign-miniprogram/loading/loading",
         "t-icon": "tdesign-miniprogram/icon/icon",
         "t-tag": "tdesign-miniprogram/tag/tag"
-    }
+    },
+    "navigationStyle": "custom"
 }

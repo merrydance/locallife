@@ -12,7 +12,7 @@ import {
   isMerchantConsoleAccessGranted
 } from '../../../../../utils/console-access'
 import { saveApplymentQRCodePosterToAlbum } from '../../../../../utils/applyment-qrcode'
-import Toast, { hideToast } from 'tdesign-miniprogram/toast/index'
+import Toast, { hideToast } from '../../../../../miniprogram_npm/tdesign-miniprogram/toast/index'
 import { logger } from '../../../../../utils/logger'
 import { getStableBarHeights } from '../../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../../utils/user-facing'
