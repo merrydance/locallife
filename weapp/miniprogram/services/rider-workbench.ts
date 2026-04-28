@@ -4,11 +4,13 @@ import type {
   RiderWorkbenchSectionStatus,
   RiderWorkbenchSummaryResponse
 } from '../api/rider-workbench'
+import type { ClaimResponse } from '../api/appeals-customer-service'
 import type { DashboardDeliveryView, TagTheme } from '../utils/rider-dashboard-runtime'
 import { getDeliveryStatusDisplay } from '../api/delivery'
 import { formatPriceNoSymbol } from '../utils/util'
 import { resolveStatusTagTheme } from '../utils/status-tag'
 import { buildRiderDepositWorkbenchSummaryView } from './rider-deposit-finance'
+import { getRiderClaimActionHint } from '../utils/rider-claims-view'
 
 export interface RiderWorkbenchMetricView {
   key: string
@@ -113,7 +115,23 @@ function buildDashboardDelivery(item: RiderWorkbenchDeliveryItem): DashboardDeli
   }
 }
 
-export function buildRiderWorkbenchDashboardView(summary: RiderWorkbenchSummaryResponse): RiderWorkbenchDashboardView {
+function buildClaimActionNote(pendingClaims: number, latestClaim?: ClaimResponse | null) {
+  if (latestClaim) {
+    const orderLabel = latestClaim.order_no || `#${latestClaim.order_id}`
+    return `${orderLabel}：${getRiderClaimActionHint(latestClaim)}`
+  }
+
+  if (pendingClaims > 0) {
+    return '进入索赔与申诉处理追偿或提交申诉'
+  }
+
+  return '暂无待处理'
+}
+
+export function buildRiderWorkbenchDashboardView(
+  summary: RiderWorkbenchSummaryResponse,
+  latestPendingClaim?: ClaimResponse | null
+): RiderWorkbenchDashboardView {
   const availableOrderCount = Number(summary.order_pool?.available_count || 0)
   const activeDeliveryCount = Number(summary.current_deliveries?.active_count || 0)
   const todayCompletedDeliveries = Number(summary.today?.completed_deliveries || 0)
@@ -176,10 +194,10 @@ export function buildRiderWorkbenchDashboardView(summary: RiderWorkbenchSummaryR
         key: 'claims',
         label: '待处理追偿',
         value: String(pendingClaims),
-        note: pendingClaims > 0 ? '需及时处理' : '暂无待处理',
+        note: buildClaimActionNote(pendingClaims, latestPendingClaim),
         highlight: pendingClaims > 0,
         highlightClass: pendingClaims > 0 ? 'is-highlight' : '',
-        actionText: ''
+        actionText: pendingClaims > 0 ? '去处理' : '查看'
       },
       {
         key: 'income_pending',

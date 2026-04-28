@@ -2,6 +2,7 @@ import RiderService, { RiderInfo, RiderStatus } from '../api/rider'
 import RiderWorkbenchService from '../api/rider-workbench'
 import DeliveryService, { RecommendedOrder, Delivery, getDeliveryStatusDisplay } from '../api/delivery'
 import { deliveryTaskManagementService } from '../api/delivery-task-management'
+import { claimManagementService } from '../api/appeals-customer-service'
 import { buildRiderWorkbenchDashboardView } from '../services/rider-workbench'
 import { logger } from './logger'
 import { locationService } from './location'
@@ -330,12 +331,18 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
   },
 
   async refreshRiderOverview() {
-    const [info, workbenchSummary] = await Promise.all([
+    const [info, workbenchSummary, latestPendingClaim] = await Promise.all([
       RiderService.getMe(),
-      RiderWorkbenchService.getSummary()
+      RiderWorkbenchService.getSummary(),
+      claimManagementService.getRiderClaims({ page_id: 1, page_size: 1, bucket: 'pending_action' })
+        .then((result) => (result.claims || [])[0] || null)
+        .catch((err: unknown) => {
+          logger.warn('Load latest rider claim action failed', { err }, 'RiderDashboard')
+          return null
+        })
     ])
 
-    const workbench = buildRiderWorkbenchDashboardView(workbenchSummary)
+    const workbench = buildRiderWorkbenchDashboardView(workbenchSummary, latestPendingClaim)
     const status = workbench.riderStatus
     const statusViewData = this.buildStatusViewData(status, info)
     const currentDelivery = this.data.currentDelivery || null
@@ -919,6 +926,11 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
     const { key } = e.currentTarget.dataset as { key?: string }
     if (key === 'deposit') {
       this.onGoToDeposit()
+      return
+    }
+
+    if (key === 'claims') {
+      this.onGoToClaims()
     }
   },
 

@@ -1043,3 +1043,37 @@ Residual risk:
 - The mini-program project currently has no unit-test runner or service test convention, so the new deposit summary branches were validated through TypeScript compilation, quality gates, review, and focused boundary inspection rather than automated unit tests.
 
 No WEAPP-05 blockers remain. The next stage can proceed to `WEAPP-06` for rider claim and appeal action summary without expanding deposit workflow scope.
+
+## 18. Stage 3 WEAPP-06 Implementation Review
+
+Date: 2026-04-28
+Status: pass
+
+Implemented:
+
+- Extended the rider workbench dashboard view builder to accept the latest pending rider claim and render a recent action hint in the existing claims risk item.
+- Dashboard refresh now fetches one pending-action rider claim alongside the workbench summary; if that optional fetch fails, the workbench still renders the backend pending count with a generic action hint.
+- Added `claims` handling to the workbench risk tap router so the dashboard summary routes into `pages/rider/claims/index` instead of duplicating list, payment, or appeal workflows.
+- Kept claim list, claim detail, recovery payment, and appeal submission ownership inside the existing claims pages.
+
+Review checklist:
+
+- [x] Dashboard shows pending rider recovery count from the backend workbench summary.
+- [x] Dashboard shows the latest pending claim action hint when the focused claim fetch succeeds, with a safe generic fallback when it fails.
+- [x] Returning to dashboard after claim or appeal work is covered by the existing dashboard `onShow` refresh path.
+- [x] Claims pages remain the owner for list, detail, recovery payment, and appeal actions.
+- [x] No customer-service ticket surface, consumer-claim adjudication rule, platform dispatch, WeChat same-city reporting, freeze, or unfreeze coupling was introduced.
+
+Validation:
+
+- VS Code diagnostics on touched WEAPP-06 files: pass
+- `npm run compile`: pass
+- `npm run quality:check`: pass
+- `git diff --check`: pass
+- Boundary keyword grep on touched WEAPP-06 files: pass
+
+Residual risk:
+
+- The latest pending-claim hint is loaded through a separate focused claims request while the count comes from the workbench summary. The UI degrades to the count plus generic action hint on mismatch or optional request failure, but the exact cross-request race remains a manual verification case.
+
+No WEAPP-06 blockers remain. The next stage can proceed to `WEAPP-07` for rider key notification entry and recovery routing.
