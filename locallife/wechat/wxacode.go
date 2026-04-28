@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	_ "image/jpeg"
+	"image/png"
 	"io"
 	"net/http"
 	"strings"
@@ -20,6 +23,7 @@ const (
 )
 
 var pngSignature = []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}
+var jpegSignature = []byte{0xff, 0xd8, 0xff}
 
 // WXACodeRequest 小程序码请求参数
 type WXACodeRequest struct {
@@ -126,9 +130,31 @@ func (c *Client) doWXACodeRequest(ctx context.Context, accessToken string, req *
 	}
 
 	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
+	if bytes.HasPrefix(body, jpegSignature) || strings.HasPrefix(strings.ToLower(contentType), "image/jpeg") {
+		pngData, err := normalizeWXACodeJPEGToPNG(body)
+		if err != nil {
+			return nil, err
+		}
+		return pngData, nil
+	}
+
 	if contentType != "" {
 		return nil, fmt.Errorf("unexpected wxa code response content type %q", contentType)
 	}
 
 	return nil, errors.New("unexpected non-png wxa code response")
+}
+
+func normalizeWXACodeJPEGToPNG(body []byte) ([]byte, error) {
+	img, _, err := image.Decode(bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode wxa code jpeg response: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return nil, fmt.Errorf("failed to encode wxa code jpeg response as png: %w", err)
+	}
+
+	return buf.Bytes(), nil
 }
