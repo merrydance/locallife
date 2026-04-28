@@ -518,6 +518,7 @@ func (server *Server) setupRouter() {
 
 	// 元数据：角色访问矩阵（供前端/SDK消费）
 	v1.GET("/role-access", server.getRoleAccessMetadata)
+	v1.GET("/app/version/latest", server.getLatestAppVersion)
 
 	// 微信认证路由(无需认证，但需要额外的速率限制)
 	authPublicGroup := v1.Group("/auth")
@@ -1010,6 +1011,14 @@ func (server *Server) setupRouter() {
 		merchantOrdersGroup.POST("/:id/complete", server.completeOrder)
 		merchantOrdersGroup.POST("/:id/print-jobs", server.printMerchantOrder)
 		merchantOrdersGroup.GET("/stats", server.getOrderStats)
+	}
+
+	merchantAppDeviceGroup := authGroup.Group("/merchant/device")
+	merchantAppDeviceGroup.Use(server.MerchantStaffMiddleware("owner", "manager", "cashier", "chef"))
+	{
+		merchantAppDeviceGroup.POST("/register", server.registerMerchantAppDevice)
+		merchantAppDeviceGroup.PUT("/heartbeat", server.heartbeatMerchantAppDevice)
+		merchantAppDeviceGroup.DELETE("/:device_id", server.unregisterMerchantAppDevice)
 	}
 
 	// M7-KDS: 厨房显示系统路由

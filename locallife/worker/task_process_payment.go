@@ -583,6 +583,7 @@ func (processor *RedisTaskProcessor) notifyMerchantNewOrder(ctx context.Context,
 		log.Error().Err(err).Int64("merchant_id", order.MerchantID).Msg("get merchant for notification failed")
 		return
 	}
+	merchantAppPayload := logic.BuildMerchantAppNewOrderNotification(order, merchant.Name)
 
 	// 通过异步任务发送通知给商户
 	expiresAt := time.Now().Add(24 * time.Hour)
@@ -590,13 +591,15 @@ func (processor *RedisTaskProcessor) notifyMerchantNewOrder(ctx context.Context,
 		UserID:      merchant.OwnerUserID,
 		Type:        "order",
 		Title:       "🆕 新订单",
-		Content:     fmt.Sprintf("您有一笔新订单 %s，请及时处理", order.OrderNo),
+		Content:     merchantAppPayload.Content,
 		RelatedType: "order",
 		RelatedID:   order.ID,
 		ExtraData: map[string]any{
+			"message_id":   merchantAppPayload.MessageID,
 			"order_no":     order.OrderNo,
 			"order_type":   order.OrderType,
 			"total_amount": order.TotalAmount,
+			"shop_name":    merchantAppPayload.ShopName,
 		},
 		ExpiresAt: &expiresAt,
 	}, asynq.Queue(QueueDefault))
@@ -616,8 +619,16 @@ func (processor *RedisTaskProcessor) notifyMerchantNewOrder(ctx context.Context,
 		log.Warn().Err(itemsErr).Int64("order_id", order.ID).Msg("load order items for ws snapshot failed")
 	}
 	orderSnapshot := buildOrderSnapshotPayload(order, items)
+	orderSnapshot["message_id"] = merchantAppPayload.MessageID
+	orderSnapshot["event"] = merchantAppPayload.Event
+	orderSnapshot["order_id"] = merchantAppPayload.OrderID
+	orderSnapshot["title"] = merchantAppPayload.Title
+	orderSnapshot["content"] = merchantAppPayload.Content
+	orderSnapshot["amount"] = merchantAppPayload.Amount
+	orderSnapshot["shop_name"] = merchantAppPayload.ShopName
 	payload, _ := json.Marshal(orderSnapshot)
 	wsMessage := websocket.Message{
+		ID:        merchantAppPayload.MessageID,
 		Type:      "new_order",
 		Data:      json.RawMessage(payload),
 		Timestamp: time.Now(),

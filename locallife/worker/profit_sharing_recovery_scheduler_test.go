@@ -11,7 +11,6 @@ import (
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/merrydance/locallife/worker"
-	mockwk "github.com/merrydance/locallife/worker/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -21,7 +20,7 @@ func TestProfitSharingRecoverySchedulerRunOnceEnqueuesCompletedOrdersMissingProf
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	distributor := &profitSharingProcessEnqueueRecorder{}
 
 	store.EXPECT().
 		ListProfitSharingOrdersForRetry(gomock.Any(), gomock.Any()).
@@ -32,20 +31,13 @@ func TestProfitSharingRecoverySchedulerRunOnceEnqueuesCompletedOrdersMissingProf
 			PaymentOrderID: 301,
 			OrderID:        pgtype.Int8{Int64: 401, Valid: true},
 		}}, nil)
-	distributor.EXPECT().
-		DistributeTaskProcessProfitSharing(
-			gomock.Any(),
-			gomock.AssignableToTypeOf(&worker.ProfitSharingPayload{}),
-			gomock.Any(),
-			gomock.Any(),
-		).
-		Return(nil)
 	store.EXPECT().
 		ListStuckProcessingProfitSharingReturns(gomock.Any(), gomock.Any()).
 		Return([]db.ProfitSharingReturn{}, nil)
 
 	scheduler := worker.NewProfitSharingRecoveryScheduler(store, distributor, nil)
 	scheduler.RunOnce()
+	require.Equal(t, 1, distributor.calls)
 }
 
 func TestProfitSharingRecoverySchedulerRunOnceEnqueuesReservationProfitSharingRetry(t *testing.T) {
@@ -53,7 +45,13 @@ func TestProfitSharingRecoverySchedulerRunOnceEnqueuesReservationProfitSharingRe
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	distributor := &profitSharingProcessEnqueueRecorder{
+		validate: func(payload *worker.ProfitSharingPayload) {
+			require.Equal(t, int64(301), payload.PaymentOrderID)
+			require.Equal(t, int64(901), payload.ReservationID)
+			require.Zero(t, payload.OrderID)
+		},
+	}
 
 	store.EXPECT().
 		ListProfitSharingOrdersForRetry(gomock.Any(), gomock.Any()).
@@ -61,19 +59,6 @@ func TestProfitSharingRecoverySchedulerRunOnceEnqueuesReservationProfitSharingRe
 	store.EXPECT().
 		GetPaymentOrder(gomock.Any(), int64(301)).
 		Return(db.PaymentOrder{ID: 301, ReservationID: pgtype.Int8{Int64: 901, Valid: true}}, nil)
-	distributor.EXPECT().
-		DistributeTaskProcessProfitSharing(
-			gomock.Any(),
-			gomock.AssignableToTypeOf(&worker.ProfitSharingPayload{}),
-			gomock.Any(),
-			gomock.Any(),
-		).
-		DoAndReturn(func(_ interface{}, payload *worker.ProfitSharingPayload, _ ...asynq.Option) error {
-			if payload.PaymentOrderID != 301 || payload.ReservationID != 901 || payload.OrderID != 0 {
-				t.Fatalf("unexpected payload: %+v", payload)
-			}
-			return nil
-		})
 	store.EXPECT().
 		ListCompletedOrdersMissingProfitSharing(gomock.Any(), gomock.Any()).
 		Return([]db.ListCompletedOrdersMissingProfitSharingRow{}, nil)
@@ -83,6 +68,21 @@ func TestProfitSharingRecoverySchedulerRunOnceEnqueuesReservationProfitSharingRe
 
 	scheduler := worker.NewProfitSharingRecoveryScheduler(store, distributor, nil)
 	scheduler.RunOnce()
+	require.Equal(t, 1, distributor.calls)
+}
+
+type profitSharingProcessEnqueueRecorder struct {
+	worker.NoopTaskDistributor
+	calls    int
+	validate func(*worker.ProfitSharingPayload)
+}
+
+func (d *profitSharingProcessEnqueueRecorder) DistributeTaskProcessProfitSharing(_ context.Context, payload *worker.ProfitSharingPayload, _ ...asynq.Option) error {
+	d.calls++
+	if d.validate != nil {
+		d.validate(payload)
+	}
+	return nil
 }
 
 func TestProfitSharingRecoverySchedulerRunOnceRecordsStuckReturnFactInsteadOfLegacyResultTask(t *testing.T) {

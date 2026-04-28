@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -22,6 +23,16 @@ type publishedMessageRecord struct {
 
 type recordingPublisher struct {
 	records []publishedMessageRecord
+}
+
+type merchantNotificationRecorder struct {
+	NoopTaskDistributor
+	payload *SendNotificationPayload
+}
+
+func (d *merchantNotificationRecorder) DistributeTaskSendNotification(_ context.Context, payload *SendNotificationPayload, _ ...asynq.Option) error {
+	d.payload = payload
+	return nil
 }
 
 func (p *recordingPublisher) Publish(_ context.Context, channel string, payload []byte) error {
@@ -92,4 +103,48 @@ func TestNotifyRidersNewDelivery_PublishesStructuredPayload(t *testing.T) {
 		require.Equal(t, poolItem.CreatedAt, payload.CreatedAt)
 		require.True(t, payload.IsHighValue)
 	}
+}
+
+func TestNotifyMerchantNewOrder_PublishesMerchantAppPayload(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &merchantNotificationRecorder{}
+	publisher := &recordingPublisher{}
+	processor := NewTestTaskProcessor(store, distributor, nil, nil)
+	processor.pubSubPublisher = publisher
+
+	order := db.Order{ID: 501, MerchantID: 601, OrderNo: "ORD501", OrderType: "takeout", TotalAmount: 8800}
+	merchant := db.Merchant{ID: 601, OwnerUserID: 701, Name: "测试商户"}
+
+	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(merchant, nil)
+	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+
+	processor.notifyMerchantNewOrder(context.Background(), order)
+
+	require.NotNil(t, distributor.payload)
+	require.Equal(t, merchant.OwnerUserID, distributor.payload.UserID)
+	require.Equal(t, "🆕 新订单", distributor.payload.Title)
+	require.Equal(t, "merchant_app:new_order:501", distributor.payload.ExtraData["message_id"])
+	require.Equal(t, "测试商户", distributor.payload.ExtraData["shop_name"])
+
+	require.Len(t, publisher.records, 1)
+	require.Equal(t, "notification:merchant:601", publisher.records[0].channel)
+
+	var push websocket.NotificationPushMessage
+	require.NoError(t, json.Unmarshal(publisher.records[0].payload, &push))
+	require.Equal(t, websocket.EntityMerchant, push.EntityType)
+	require.Equal(t, merchant.ID, push.EntityID)
+	require.Equal(t, "merchant_app:new_order:501", push.Message.ID)
+	require.Equal(t, "new_order", push.Message.Type)
+
+	var data map[string]any
+	require.NoError(t, json.Unmarshal(push.Message.Data, &data))
+	require.Equal(t, "merchant_app:new_order:501", data["message_id"])
+	require.Equal(t, "new_order", data["event"])
+	require.Equal(t, float64(order.ID), data["order_id"])
+	require.Equal(t, "新订单", data["title"])
+	require.Equal(t, float64(order.TotalAmount), data["amount"])
+	require.Equal(t, merchant.Name, data["shop_name"])
 }

@@ -11,6 +11,25 @@ const (
 	MerchantStaffRoleOwner    = "owner"
 	MerchantStaffStatusActive = "active"
 
+	MerchantAppDevicePlatformAndroid = "android"
+
+	MerchantAppDeviceProviderHuawei  = "huawei"
+	MerchantAppDeviceProviderHonor   = "honor"
+	MerchantAppDeviceProviderXiaomi  = "xiaomi"
+	MerchantAppDeviceProviderOppo    = "oppo"
+	MerchantAppDeviceProviderVivo    = "vivo"
+	MerchantAppDeviceProviderUnknown = "unknown"
+
+	MerchantAppDeviceStatusActive   = "active"
+	MerchantAppDeviceStatusInactive = "inactive"
+
+	AppVersionPlatformAndroid = "android"
+	AppVersionChannelMerchant = "merchant_app"
+
+	AppVersionStatusDraft    = "draft"
+	AppVersionStatusActive   = "active"
+	AppVersionStatusDisabled = "disabled"
+
 	// Order statuses (SSOT — 所有层引用此处)
 	OrderStatusPending                  = "pending"
 	OrderStatusPaid                     = "paid"

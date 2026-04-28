@@ -43,15 +43,15 @@
 | --- | --- | --- | --- | --- |
 | P0 | 已有 | `POST` | `/v1/auth/app-bind/verify` | 绑定码登录并下发 token |
 | P0 | 已有 | `POST` | `/v1/auth/refresh` | 刷新 access token |
-| P0 | 需确认/补齐 | `POST` | `/v1/merchant/device/register` | 注册或更新厂商原生推送 token |
-| P0 | 需确认/补齐 | `DELETE` | `/v1/merchant/device/{device_id}` | 设备登出或失效时解绑推送目标 |
-| P0 | 需确认/补齐 | `PUT` | `/v1/merchant/device/heartbeat` | 上报设备在线状态、App 版本和推送 token 状态 |
+| P0 | 已实现 | `POST` | `/v1/merchant/device/register` | 注册或更新厂商原生推送 token |
+| P0 | 已实现 | `DELETE` | `/v1/merchant/device/{device_id}` | 设备登出或失效时解绑推送目标 |
+| P0 | 已实现 | `PUT` | `/v1/merchant/device/heartbeat` | 上报设备在线状态、App 版本和推送 token 状态 |
 | P0 | 已有 | `GET` | `/v1/merchant/orders` | 获取商户订单列表 |
 | P0 | 已有 | `POST` | `/v1/merchant/orders/{id}/accept` | 商户接单 |
 | P0 | 已有 | `POST` | `/v1/merchant/orders/{id}/reject` | 商户拒单 |
 | P0 | 已有 | `GET` | `/v1/agreements/{type}` | 获取协议详情 |
-| P0 | 需锁定契约 | `WS / Push` | 新订单通知消息 | 新订单实时提醒 |
-| P1 | 缺失 | `GET` | `/v1/app/version/latest` | 检查新版本并返回 APK 下载信息 |
+| P0 | 契约已锁定 | `WS / Push` | 新订单通知消息 | 新订单实时提醒 |
+| P1 | 已实现 | `GET` | `/v1/app/version/latest` | 检查新版本并返回 APK 下载信息 |
 | P1 | 已有/需 App 对齐 | `GET` | `/v1/tables` | 商户桌台列表 |
 | P1 | 已有/需 App 对齐 | `POST` | `/v1/tables` | 新增桌台 |
 | P1 | 已有/需 App 对齐 | `PUT` | `/v1/tables/{id}` | 编辑桌台 |
@@ -135,7 +135,7 @@
 | `device_id` | `string` | 是 | `550e8400-e29b-41d4-a716-446655440000` | 客户端持久化设备 ID |
 | `push_token` | `string` | 是 | `vendor-token` | 当前厂商通道返回的设备 token |
 | `platform` | `string` | 是 | `android` | 平台 |
-| `provider` | `string` | 否 | `xiaomi` | 建议补充，取值如 `huawei`、`honor`、`xiaomi`、`oppo`、`vivo` |
+| `provider` | `string` | 否 | `xiaomi` | 取值 `huawei`、`honor`、`xiaomi`、`oppo`、`vivo`、`unknown`；省略时后端记为 `unknown` |
 | `app_version` | `string` | 否 | `1.0.0` | 当前应用版本 |
 | `device_model` | `string` | 否 | `Redmi K70` | 设备型号 |
 | `os_version` | `string` | 否 | `Android 15` | 系统版本 |
@@ -160,6 +160,7 @@
 - 同一设备重复注册时保持幂等。
 - Token 变化时覆盖旧 token，避免向失效 token 持续投递。
 - 如果商户切换账号，应覆盖旧商户绑定，避免错发。
+- 响应体不返回原始 `push_token`。
 - 后端推送网关应按 `provider` 选择对应厂商 REST API，而不是走 JPush 聚合通道。
 
 ### 4.4 厂商原生推送设备解绑
@@ -168,11 +169,24 @@
 - Path: `/v1/merchant/device/{device_id}`
 - Auth: Bearer
 
+#### Response body
+
+```json
+{
+  "data": {
+    "device_id": "550e8400-e29b-41d4-a716-446655440000",
+    "unregistered": true
+  }
+}
+```
+
+`unregistered=false` 表示当前登录商户下该设备没有活动绑定或已经解绑；接口仍返回 200，方便前端登出流程幂等收尾。
+
 #### 后端能力要求
 
 - 登出、设备失效、商户切换时支持解绑。
 - 解绑失败不能影响前端退出登录，但服务端应保证最终一致回收。
-- 若同一设备存在多个厂商 token 历史记录，应按当前商户和 `device_id` 全部失效。
+- 按当前登录商户和 `device_id` 失效活动绑定，不接受客户端传入 `merchant_id`。
 
 ### 4.5 设备心跳
 
@@ -181,6 +195,30 @@
 - Auth: Bearer
 
 心跳用于更新 `last_active`、当前 App 版本、设备型号、系统版本和推送 token 状态，方便后端判断商户端是否在线、是否具备推送兜底能力。
+
+#### Request body
+
+| 字段 | 类型 | 必填 | 示例 | 说明 |
+| --- | --- | --- | --- | --- |
+| `device_id` | `string` | 是 | `550e8400-e29b-41d4-a716-446655440000` | 客户端持久化设备 ID |
+| `provider` | `string` | 否 | `vivo` | 省略时保持原 provider 不变 |
+| `push_token` | `string` | 否 | `vendor-token` | token 刷新后可随心跳上报；省略时保持原 token 不变 |
+| `app_version` | `string` | 否 | `1.0.1` | 当前应用版本 |
+| `device_model` | `string` | 否 | `Redmi K70` | 设备型号 |
+| `os_version` | `string` | 否 | `Android 15` | 系统版本 |
+
+#### Response body
+
+```json
+{
+  "data": {
+    "device_id": "550e8400-e29b-41d4-a716-446655440000",
+    "heartbeat": true
+  }
+}
+```
+
+如果当前登录商户下不存在该 `device_id` 的活动绑定，返回 404；前端应重新注册设备后再继续心跳。
 
 ### 4.6 商户订单列表
 
@@ -273,11 +311,11 @@
 
 ### 4.10 在线升级版本查询
 
-当前后端未提供，属于本轮明确新增需求。
+当前后端已提供该接口。无可用新版本时返回 200 和 `has_update=false`，不使用 404 表达“无更新”。
 
 - Method: `GET`
 - Path: `/v1/app/version/latest`
-- Auth: Bearer 或公开访问均可，建议允许带 token 访问。
+- Auth: 公开访问；客户端带 token 访问也可正常请求。
 
 #### Query parameters
 
@@ -294,6 +332,7 @@
 ```json
 {
   "data": {
+    "has_update": true,
     "version_code": 2,
     "version_name": "1.0.1",
     "download_url": "https://example.com/merchant-app-1.0.1.apk",
@@ -302,6 +341,21 @@
     "published_at": "2026-04-12T12:00:00Z",
     "file_size_bytes": 48392120,
     "sha256": "optional checksum"
+  }
+}
+```
+
+无更新时返回：
+
+```json
+{
+  "data": {
+    "has_update": false,
+    "version_code": 1,
+    "version_name": "1.0.0",
+    "download_url": "",
+    "changelog": "",
+    "is_force": false
   }
 }
 ```
@@ -345,12 +399,13 @@
 
 ## 5. 实时新订单通知契约
 
-商户端当前同时消费 Push 与 WebSocket，新订单通知 payload 需要字段一致。
+商户端当前同时消费 Push 与 WebSocket，新订单通知 payload 需要字段一致。后端已为支付成功后的 WebSocket `new_order` 消息补齐稳定业务字段；厂商 Push 投递网关仍在后续阶段实现，但必须复用同一 payload 契约。
 
 ### 5.1 投递要求
 
 - 新订单创建后，后端应同时具备 WebSocket 和厂商原生 Push 投递能力。
 - 当商户 App 不在线或 WebSocket 断开时，厂商原生 Push 是关键兜底，不是可选优化。
+- 后端已具备原生 Push provider 边界、no-op/test provider、活动设备查询和分发编排；真实厂商 REST 客户端仍需后续接入。
 - 同一订单通过多个通道到达时，payload 中 `message_id` 必须一致。
 - 后端不得再通过 JPush 聚合通道发商户 App 新订单消息。
 
@@ -358,7 +413,7 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `message_id` | `string` | 是 | 幂等去重 ID |
+| `message_id` | `string` | 是 | 幂等去重 ID，当前格式为 `merchant_app:new_order:{order_id}` |
 | `order_id` | `string 或 number` | 是 | 订单主键 |
 | `title` | `string` | 是 | 通知标题 |
 | `content` | `string` | 是 | 通知正文 |
@@ -367,26 +422,25 @@
 
 ### 5.3 WebSocket message envelope
 
-前端当前兼容以下 envelope：
+WebSocket 新订单消息当前使用以下 envelope：
 
 ```json
 {
-  "type": "order_notification",
+  "id": "merchant_app:new_order:10001",
+  "type": "new_order",
   "data": {
-    "message_id": "msg_123",
-    "order_id": "10001",
-    "title": "您有新的订单",
-    "content": "请及时接单",
-    "amount": 48.5,
+    "message_id": "merchant_app:new_order:10001",
+    "event": "new_order",
+    "order_id": 10001,
+    "title": "新订单",
+    "content": "您有一笔新订单 ORD10001，请及时处理",
+    "amount": 4850,
     "shop_name": "乐客来福示例门店"
   }
 }
 ```
 
-其中 `type` 当前至少兼容：
-
-- `order_notification`
-- `notification`
+`data` 中仍保留后端现有订单快照字段，例如 `id`、`order_no`、`merchant_id`、`order_type`、`total_amount`、`status`、`created_at` 和 `items`。
 
 ### 5.4 厂商 Push payload 要求
 
@@ -394,6 +448,8 @@
 - `message_id` 必须稳定，前端已用它做去重。
 - `amount` 如果不是数字，至少要是可解析的数字字符串。
 - 厂商通道差异只能在后端推送网关或 Android 原生接入层消化，不应泄漏到 Flutter 业务层。
+- 后端推送网关按设备注册时持久化的 `provider` 选择 provider，不接受通知发送时临时覆盖 provider。
+- 分发结果只返回安全分类，不透传厂商原始错误、原始 token 或原始 provider payload。
 
 ## 6. 通用错误语义
 

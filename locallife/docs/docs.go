@@ -723,6 +723,81 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/app/version/latest": {
+            "get": {
+                "description": "按平台、渠道、包名和当前版本码查询是否存在可升级版本；无更新时返回 200 和 has_update=false",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "app-version"
+                ],
+                "summary": "查询 App 最新版本",
+                "parameters": [
+                    {
+                        "enum": [
+                            "android"
+                        ],
+                        "type": "string",
+                        "description": "平台",
+                        "name": "platform",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "merchant_app"
+                        ],
+                        "type": "string",
+                        "description": "渠道",
+                        "name": "channel",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "包名",
+                        "name": "package_name",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "当前版本码",
+                        "name": "version_code",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "当前展示版本",
+                        "name": "version_name",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.getLatestAppVersionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/auth/app-bind/code": {
             "post": {
                 "security": [
@@ -10302,6 +10377,196 @@ const docTemplate = `{
                         "description": "支付服务未配置",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/device/heartbeat": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "更新当前登录商户设备的活跃时间、App 版本、设备信息和可选推送 token",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "merchant-app-device"
+                ],
+                "summary": "上报商户 App 设备心跳",
+                "parameters": [
+                    {
+                        "description": "设备心跳请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.heartbeatMerchantAppDeviceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.heartbeatMerchantAppDeviceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/device/register": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "将当前登录商户、登录用户、设备 ID 与厂商原生推送 token 建立幂等绑定",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "merchant-app-device"
+                ],
+                "summary": "注册商户 App 原生推送设备",
+                "parameters": [
+                    {
+                        "description": "设备注册请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.registerMerchantAppDeviceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.registerMerchantAppDeviceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/device/{device_id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "登出、设备失效或切换商户时失效当前登录商户下的设备推送绑定",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "merchant-app-device"
+                ],
+                "summary": "解绑商户 App 原生推送设备",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "设备 ID",
+                        "name": "device_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.unregisterMerchantAppDeviceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
                         }
                     }
                 }
@@ -37002,6 +37267,47 @@ const docTemplate = `{
                 }
             }
         },
+        "api.getLatestAppVersionResponse": {
+            "type": "object",
+            "properties": {
+                "changelog": {
+                    "type": "string",
+                    "example": "修复蓝牙连接稳定性"
+                },
+                "download_url": {
+                    "type": "string",
+                    "example": "https://example.com/merchant-app-1.0.1.apk"
+                },
+                "file_size_bytes": {
+                    "type": "integer",
+                    "example": 48392120
+                },
+                "has_update": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "is_force": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "published_at": {
+                    "type": "string",
+                    "example": "2026-04-12T12:00:00Z"
+                },
+                "sha256": {
+                    "type": "string",
+                    "example": "3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7"
+                },
+                "version_code": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "version_name": {
+                    "type": "string",
+                    "example": "1.0.1"
+                }
+            }
+        },
         "api.getProfitSharingReceiverLifecycleTargetResponse": {
             "type": "object",
             "properties": {
@@ -37224,6 +37530,51 @@ const docTemplate = `{
                 "date": {
                     "description": "日期",
                     "type": "string"
+                }
+            }
+        },
+        "api.heartbeatMerchantAppDeviceRequest": {
+            "type": "object",
+            "required": [
+                "device_id"
+            ],
+            "properties": {
+                "app_version": {
+                    "type": "string",
+                    "example": "1.0.0"
+                },
+                "device_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "device_model": {
+                    "type": "string",
+                    "example": "Redmi K70"
+                },
+                "os_version": {
+                    "type": "string",
+                    "example": "Android 15"
+                },
+                "provider": {
+                    "type": "string",
+                    "example": "xiaomi"
+                },
+                "push_token": {
+                    "type": "string",
+                    "example": "vendor-token"
+                }
+            }
+        },
+        "api.heartbeatMerchantAppDeviceResponse": {
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "heartbeat": {
+                    "type": "boolean",
+                    "example": true
                 }
             }
         },
@@ -43352,6 +43703,69 @@ const docTemplate = `{
                 }
             }
         },
+        "api.registerMerchantAppDeviceRequest": {
+            "type": "object",
+            "required": [
+                "device_id",
+                "platform",
+                "push_token"
+            ],
+            "properties": {
+                "app_version": {
+                    "type": "string",
+                    "example": "1.0.0"
+                },
+                "device_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "device_model": {
+                    "type": "string",
+                    "example": "Redmi K70"
+                },
+                "os_version": {
+                    "type": "string",
+                    "example": "Android 15"
+                },
+                "platform": {
+                    "type": "string",
+                    "example": "android"
+                },
+                "provider": {
+                    "type": "string",
+                    "example": "xiaomi"
+                },
+                "push_token": {
+                    "type": "string",
+                    "example": "vendor-token"
+                }
+            }
+        },
+        "api.registerMerchantAppDeviceResponse": {
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "merchant_id": {
+                    "type": "integer",
+                    "example": 2001
+                },
+                "merchant_name": {
+                    "type": "string",
+                    "example": "示例门店"
+                },
+                "provider": {
+                    "type": "string",
+                    "example": "xiaomi"
+                },
+                "registered": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
         "api.rejectGroupJoinRequestRequest": {
             "type": "object",
             "properties": {
@@ -45412,6 +45826,19 @@ const docTemplate = `{
             "properties": {
                 "count": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.unregisterMerchantAppDeviceResponse": {
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "unregistered": {
+                    "type": "boolean",
+                    "example": true
                 }
             }
         },
