@@ -2,6 +2,8 @@
 
 > 作用：定义 LocalLife Flutter 移动端的分层架构、状态管理、依赖注入和目录组织约定。
 
+跨前端的任务驱动、ViewState、API 平铺反模式和 Repository / Use Case / Presentation / UI 边界见 `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md`。本文件负责 Flutter 端的具体落地方式。
+
 ## 1. 技术栈
 
 | 层 | 技术 | 说明 |
@@ -51,6 +53,8 @@ features/order/
 ├── order_provider.dart           # 逻辑层：Riverpod providers
 └── order_repository.dart         # 数据层：API 调用封装（可选）
 ```
+
+实现顺序必须先从商户当前任务和 ViewState 开始，再决定 provider、repository 与页面结构。不要把后端订单 entity、接口返回块或字段组直接铺成 Widget 树。
 
 ### 3.2 core/ 是共享基础设施
 

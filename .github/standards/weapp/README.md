@@ -12,6 +12,7 @@
 
 ## 默认权威入口
 
+- 跨前端架构基线：`.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md`
 - 页面与组件交付的默认主标准：`.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
 - 顾客侧视觉、token、页面壳、触控热区和组件视觉模式：`.github/standards/weapp/DESIGN_SYSTEM.md`
 - 非顾客侧视觉、page shell、克制型 TDesign-first 表达与组件视觉模式：`.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
@@ -28,6 +29,7 @@
 ## 默认实现热路径
 
 - 页面与组件的非视觉交付，默认先读 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`。
+- 涉及页面结构、能力接入、组件边界或跨接口组合时，先按 `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md` 判断是否存在 API 平铺、任务域不清或 ViewState 缺失。
 - 顾客侧页面 UI 结构、小屏手感、品牌化视觉与组件视觉基线，读 `.github/standards/weapp/DESIGN_SYSTEM.md`。
 - 商户、运营、平台、骑手等非顾客侧页面的 UI 结构、小屏手感、page shell 与克制型 TDesign-first 表达，读 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`。
 - 非顾客侧页面若处于实现收口、样式统一或快速自检阶段，再补读 `.github/standards/weapp/NON_CONSUMER_PAGE_EXECUTION_CHECKLIST.md` 作为执行压缩清单；它是辅助收口文档，不是新的并行权威层。
@@ -99,11 +101,12 @@
 当任务涉及 `weapp/` 时，建议按以下顺序读取：
 
 1. `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
-2. 顾客侧任务读 `.github/standards/weapp/DESIGN_SYSTEM.md`；非顾客侧任务读 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
-3. `.github/standards/weapp/REVIEW_CHECKLIST.md`（当任务是 review 或复审时读取）
-4. `.github/standards/weapp/README.md`
-5. `weapp/miniprogram/utils/user-facing.ts`（仅在需要核对错误对象与用户文案映射实现时读取）
-6. `weapp/miniprogram/utils/prompt-feedback.ts`（仅在需要核对 Toast/Modal 去重守卫时读取）
+2. `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md`（当任务涉及页面结构、能力接入、组件边界或跨接口组合时读取）
+3. 顾客侧任务读 `.github/standards/weapp/DESIGN_SYSTEM.md`；非顾客侧任务读 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
+4. `.github/standards/weapp/REVIEW_CHECKLIST.md`（当任务是 review 或复审时读取）
+5. `.github/standards/weapp/README.md`
+6. `weapp/miniprogram/utils/user-facing.ts`（仅在需要核对错误对象与用户文案映射实现时读取）
+7. `weapp/miniprogram/utils/prompt-feedback.ts`（仅在需要核对 Toast/Modal 去重守卫时读取）
 
 ## 文档归属规则
 

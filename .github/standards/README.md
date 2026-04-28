@@ -5,6 +5,7 @@ This directory is the canonical home for project-owned standards and normative d
 ## Layout
 
 - `engineering/`: cross-cutting engineering governance for security, consistency, resilience, validation, release readiness, and incident feedback.
+- `frontend/`: cross-frontend architecture and feedback standards shared by Web, Mini Program, and Flutter merchant app.
 - `backend/`: backend engineering standards and API contract standards.
 - `web/`: web UI standards and design guardrails.
 - `weapp/`: Mini Program design standards and API-facing project conventions.

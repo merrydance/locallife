@@ -6,6 +6,7 @@ description: "Use when drafting a Flutter implementation request for merchant_ap
 
 Use this template when asking for a concrete Flutter change in `merchant_app/`.
 
+Use `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md` as the cross-frontend baseline for user-task-first design, repository/use-case/presentation boundaries, ViewState modeling, and API-flattening anti-patterns.
 Use the Flutter Merchant App row in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` as the shared source for implementation push items, prohibited shortcuts, and review-ready hand-off expectations.
 Use `.github/standards/flutter/README.md` as the standards index, `.github/standards/flutter/PRODUCTION_ROBUSTNESS_BASELINE.md` as the default reliability baseline, and the smallest relevant deep doc such as visual design, architecture, push, auth, or keep-alive instead of copying the full standards body here.
 Classify the task as `G0`, `G1`, `G2`, or `G3` using `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md`, then choose validation depth and residual-risk wording using `.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md`.
@@ -24,6 +25,7 @@ Request:
 Implementation must push:
 
 - Treat the merchant app as a lossy edge client where duplicate delivery, reconnect, process death, and delayed backend truth are normal conditions
+- Start from the merchant's task and ViewState before designing screens; do not mirror API/entity models directly into Widgets
 - When the task changes UI or component hierarchy, follow `.github/standards/flutter/FLUTTER_UI_DESIGN_STANDARDS.md` so visual polish does not drift away from operational clarity
 - Name the state owner for the touched flow and keep business state out of Widgets
 - Keep the flow closed across service, provider, persistence, lifecycle hooks, and user-visible feedback

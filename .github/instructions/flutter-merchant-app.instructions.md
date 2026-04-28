@@ -8,6 +8,7 @@ Apply these rules for files under `merchant_app/`.
 
 ## Read First
 
+- `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md`
 - `.github/standards/flutter/README.md`
 
 Open the smallest relevant Flutter deep docs for the current task:
@@ -21,6 +22,7 @@ Open the smallest relevant Flutter deep docs for the current task:
 
 ## Architecture Boundaries
 
+- Use `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md` as the shared frontend rule for user-task-first design, repository/use-case/presentation boundaries, ViewState modeling, and API-flattening anti-patterns.
 - Use Riverpod for state management. Do not use Provider, GetX, or BLoC.
 - Use feature-first directory structure: `lib/features/<feature>/`.
 - Keep UI, business logic, and data layers separated within each feature.
@@ -31,6 +33,7 @@ Open the smallest relevant Flutter deep docs for the current task:
 
 - All user-facing strings must be in Chinese.
 - Treat `merchant_app/` as a lossy edge client: duplicate delivery, reconnect, process death, and permission loss are default assumptions.
+- Model the merchant's task before mirroring backend entities into screens; repository/API models must be adapted through feature state or use-case objects before Widgets render them.
 - For UI work, use Flutter design tokens and stable spacing hierarchy; do not transplant web-only concepts like hover-dependent behavior or CSS blur defaults into Flutter screens.
 - Message deduplication by `message_id` is mandatory for all delivery channels.
 - Do not assume WebSocket is always connected; design for disconnection as normal state.

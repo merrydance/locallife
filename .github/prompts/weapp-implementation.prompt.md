@@ -9,6 +9,7 @@ Use this template when asking for a concrete Mini Program change in `weapp/`.
 This is the default implementation prompt for Mini Program page work, including new non-consumer pages, management surfaces, diagnosis-first page方案, and payment-adjacent flows.
 
 Use the Mini Program row in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` as the shared source for implementation push items, prohibited shortcuts, and review-ready hand-off expectations.
+Use `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md` as the cross-frontend baseline for user-task-first design, ViewState modeling, domain ownership, and API-flattening anti-patterns.
 Use `.github/standards/weapp/README.md` as the weapp standards index, `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` as the default page-delivery baseline, and the role-matched design document for visual rules instead of restating the full standards body here.
 Classify the task as `G0`, `G1`, `G2`, or `G3` using `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md`, then choose validation depth and residual-risk wording using `.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md`.
 
@@ -26,6 +27,7 @@ Request:
 Implementation must push:
 
 - Start from backend-supported capabilities and the user task before coding or styling
+- Treat API flattening as an architecture defect: endpoint count, DTO shape, handler names, service method names, and old WXML structure must not decide page sections, cards, tabs, or component boundaries
 - Treat the real backend contract as the only source of truth for fields, statuses, permissions, pagination, and metric meaning
 - First inventory backend entities, fields, states, actions, permissions, and async outcomes; then group them into task domains before deciding any view structure
 - Name the task-domain owner explicitly when the capability set is non-trivial, and decide whether that owner is one page, a page group, a domain component, or a workflow/controller before coding

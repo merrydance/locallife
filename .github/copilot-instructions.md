@@ -93,6 +93,7 @@ Backend generation and validation rules:
 Read these first when changing the web app:
 
 - `.github/standards/engineering/README.md`
+- `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md`
 - `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
 - `web/README.md`
 - `.github/standards/web/WEB_UI_STANDARDS.md`
@@ -107,6 +108,7 @@ Common commands:
 
 Web conventions:
 
+- Start from the user's task and ViewState before mirroring backend API shapes into page structure.
 - Preserve the existing visual system and component patterns.
 - Prefer existing components in `web/src/components/ui/` before creating new primitives.
 - Do not hardcode one-off colors or typography tokens when a semantic utility already exists.
@@ -118,6 +120,7 @@ Web conventions:
 Read these first when changing the Flutter merchant app:
 
 - `.github/standards/engineering/README.md`
+- `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md`
 - `.github/standards/flutter/README.md`
 
 Common commands:
@@ -131,6 +134,7 @@ Common commands:
 Flutter conventions:
 
 - Use Riverpod for state management.
+- Model merchant tasks and ViewState before turning API/entity models into screens.
 - Feature-first directory structure: `lib/features/<feature>/`.
 - Message deduplication is mandatory across all three delivery channels (WebSocket, push, polling).
 - All user-facing strings must be in Chinese.
@@ -141,6 +145,7 @@ Flutter conventions:
 Read these first when changing the Mini Program:
 
 - `.github/standards/engineering/README.md`
+- `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md`
 - `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
 - `.github/standards/weapp/README.md`
 
@@ -154,6 +159,7 @@ Common commands:
 Mini Program conventions:
 
 - Treat the backend contract as the sole source of truth for capabilities, fields, enums, and state semantics.
+- Treat API flattening as an architecture defect; page structure must come from user tasks, task domains, and ViewState.
 - Prefer TDesign Miniprogram before introducing local UI primitives or wrappers. Use the TDesign MCP component list and docs to inspect component groups by use, then choose the closest existing component.
 - Keep page shell spacing consistent: the gap below the top navigation must follow one approved spacing pattern, horizontal page gutters must stay consistent across pages, and bottom content or actions must include safe-area handling.
 - Treat user-facing copy as product copy, not developer terminology.
@@ -171,5 +177,6 @@ Use these docs as references instead of rewriting them:
 
 - For backend tasks, inspect existing files in the same domain package before adding new abstractions.
 - For frontend tasks, inspect adjacent route segments or pages before creating new layout patterns.
+- For frontend tasks, identify the user task, task-domain owner, and ViewState before deciding page, component, or API wiring shape.
 - For generated-code workflows, update source files first, then regenerate, then run the smallest relevant validation command.
 - Avoid broad refactors unless the task explicitly asks for them.

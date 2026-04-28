@@ -10,18 +10,20 @@
 ## 推荐阅读顺序
 
 1. `.github/standards/engineering/README.md`
-2. `.github/standards/flutter/PRODUCTION_ROBUSTNESS_BASELINE.md`
-3. `.github/standards/flutter/FLUTTER_UI_DESIGN_STANDARDS.md`
-4. `.github/standards/flutter/FLUTTER_APP_ARCHITECTURE.md`
-5. `.github/standards/flutter/APP_AUTH_BINDING.md`
-6. `.github/standards/flutter/PUSH_NOTIFICATION_STANDARDS.md`
-7. `.github/standards/flutter/ANDROID_KEEP_ALIVE_GUIDE.md`
-8. `.github/standards/flutter/REVIEW_CHECKLIST.md`
-9. `.github/standards/flutter/TASK_ANNOTATION_TEMPLATE.md`
+2. `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md`
+3. `.github/standards/flutter/PRODUCTION_ROBUSTNESS_BASELINE.md`
+4. `.github/standards/flutter/FLUTTER_UI_DESIGN_STANDARDS.md`
+5. `.github/standards/flutter/FLUTTER_APP_ARCHITECTURE.md`
+6. `.github/standards/flutter/APP_AUTH_BINDING.md`
+7. `.github/standards/flutter/PUSH_NOTIFICATION_STANDARDS.md`
+8. `.github/standards/flutter/ANDROID_KEEP_ALIVE_GUIDE.md`
+9. `.github/standards/flutter/REVIEW_CHECKLIST.md`
+10. `.github/standards/flutter/TASK_ANNOTATION_TEMPLATE.md`
 
 ## 文档角色
 
 - `PRODUCTION_ROBUSTNESS_BASELINE.md`: 生产级鲁棒性默认基线、失败模型、禁止项、风险提示、验证深度、任务标注字段。
+- `../frontend/FRONTEND_ARCHITECTURE_BASELINE.md`: 跨前端任务驱动、Repository/Use Case/Presentation/UI 分层、ViewState 和 API 平铺反模式基线。
 - `FLUTTER_UI_DESIGN_STANDARDS.md`: merchant_app 的长期视觉与交互设计基线，解决 DESIGN.md 不足以直接落地的问题。
 - `FLUTTER_APP_ARCHITECTURE.md`: 分层架构、状态管理、依赖注入、目录约定。
 - `APP_AUTH_BINDING.md`: 绑定码认证方案、Token 管理、安全设计。
@@ -33,6 +35,7 @@
 ## 使用规则
 
 - 先看本目录和 engineering index，再下钻到某个特定 feature 的实现。
+- 非平凡页面或工作流先按 `FRONTEND_ARCHITECTURE_BASELINE.md` 建模商户任务、ViewState 和 owner，再进入 Flutter 目录结构与 Widget 实现。
 - 非平凡实现或 review 先用 `PRODUCTION_ROBUSTNESS_BASELINE.md` 统一风险、恢复、失败模型和验证语言，再进入专题文档。
 - 任何涉及页面布局、视觉层级、状态呈现、按钮优先级、中文可读性的任务，都要同时看 `FLUTTER_UI_DESIGN_STANDARDS.md`。
 - `G2` / `G3` review 默认使用 `REVIEW_CHECKLIST.md`，避免 review 只看代码风格不看恢复与误操作风险。

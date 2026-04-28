@@ -9,6 +9,8 @@
 - 产品级页面底线：安全、优雅、一致、小屏可用，不交付 demo 感、玩具感、后台字段面板感的页面
 - 工程级交付底线：后端真值、状态恢复、请求预算、异步结果与防重入
 
+跨前端的架构底线见 `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md`。小程序不得把 API、DTO、handler 或旧 WXML 结构直接平铺成页面；页面必须先从用户任务、人的行为目标和 ViewState 推导，再落到 TDesign 组件与样式。
+
 详细视觉 token、组件视觉模式和页面基础构图细节由角色侧对应的设计文档补充：顾客侧看 `.github/standards/weapp/DESIGN_SYSTEM.md`，非顾客侧看 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`；两者都不得削弱本文件中的硬性要求。
 
 ## 1. Goal
@@ -32,6 +34,7 @@
 - 若使用原生或本地重写控件替代 TDesign，必须能说明为什么现有组件和外层组合都不能满足，且例外范围已经收敛到最小。
 - 页面必须具备清晰主次。一个视图只能有一个明确主任务和一个清晰主操作。不得把所有区块、所有按钮、所有卡片做成同等视觉重量。
 - 页面首屏不得默认采用“顶部解释性大卡片 + 下方真实任务区”的结构，尤其是单任务页、设置页、编辑页和确认页。解释性文案默认应下沉到标题、副标题、字段 note、状态横幅或相关动作附近；只有当解释本身就是任务主体时，才允许把说明放到首屏主位。
+- 顶部解释性大卡片通常是信息架构没有讲清任务边界的症状，不得作为默认补救手段。若删掉说明卡后页面就无法被理解，应先重做任务分组、状态呈现和动作层级，而不是继续加说明。
 - 页面不得做成按钮墙、卡片墙、入口墙或字段面板。高频任务与关键状态必须优先进入首屏，低频能力必须主动降级或下沉。
 - 页面必须服务小屏设备，不得默认采用桌面式密度、过多并列区块或需要精细点击的小热区布局。
 - 用户可见文案必须是产品文案，不得使用开发占位语、后台术语、接口字段语义替代页面表达。
@@ -60,6 +63,7 @@
 ### 3.1 Capability Composition Before Views
 
 - 后端提供的是能力真值，不是页面边界。前端默认先分析能力如何组合成用户任务，再决定视图如何承接。
+- API 平铺是架构缺陷，不是审美选择。不得让接口数量、DTO 字段组、handler 命名、旧页面文件结构或现成 service 方法决定页面分区、卡片数量、Tab 数量或组件边界。
 - 默认开发顺序必须是：盘点后端提供的实体、字段、状态、动作、权限和异步结果；把必须一起出现才好用的能力组合成任务域；判断哪些任务域需要独立组件；再决定这些任务域应该落成一个页面还是一组页面；最后才进入 TDesign 选型和编码。
 - 任务域是比页面更高一层的交付单元。若一组能力共同服务同一个连续用户目标、依赖同一组关键后端真值、共享同一组主要动作或状态流转、且失败与恢复方式高度相似，默认先把它们收敛成同一个任务域，再判断视图落点。
 - 不允许按“一个接口一个页面”机械落地，也不允许因为后端能力很多就把所有能力堆进同一页面。
@@ -156,6 +160,6 @@
 
 - 运行命令应从 `weapp/` 目录执行。
 - 常用校验命令：`npm run compile`、`npm run lint`、`npm run lint:fix`、`npm run quality:check`。
-- `npm run gate:weapp` 按当前脚本配置运行页面门禁，包含 page shell、WXML 表达式安全、共享组件政策、TDesign 组件声明一致性、TDesign 边界、non-consumer-ui-patterns、页面职责、页面复杂度、super-service-boundary、请求边界、角色契约、业务状态边界和支付工作流边界门禁；其中 `gate:non-consumer-ui-patterns` 当前按 changed-only 模式阻止新增漂移，历史页面整治仍需结合专项改造逐步收口。
+- `npm run gate:weapp` 按当前脚本配置运行页面门禁，包含 page shell、WXML 表达式安全、共享组件政策、TDesign 组件声明一致性、TDesign 边界、non-consumer-ui-patterns、frontend-architecture-boundary、页面职责、页面复杂度、super-service-boundary、请求边界、角色契约、业务状态边界和支付工作流边界门禁；其中 `gate:non-consumer-ui-patterns` 和 `gate:frontend-architecture-boundary` 当前按 changed-only 模式阻止新增漂移，历史页面整治仍需结合专项改造逐步收口。
 - 涉及多个页面、角色工作流、请求边界、恢复路径或共享组件的变更，必须优先运行 `npm run quality:check`，除非有明确说明当前环境无法执行。
 - 高风险改动的验证说明、未验证路径与剩余风险表达，统一按 `.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md` 执行。

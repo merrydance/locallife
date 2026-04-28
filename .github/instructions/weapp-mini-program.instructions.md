@@ -10,8 +10,10 @@ More specific Mini Program instruction files under `.github/instructions/` take 
 
 ## Read First
 
+- `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md`
 - `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
 
+Use `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md` as the cross-frontend baseline for user-task-first design, domain ownership, ViewState boundaries, and API-flattening anti-patterns.
 Use `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` as the single non-visual hot path for `weapp/` page and component work.
 When the task touches visual structure, page shell, spacing rhythm, or component visual baseline, choose the role-matched design document explicitly: consumer surfaces use `.github/standards/weapp/DESIGN_SYSTEM.md`; merchant, operator, platform, rider, and other non-consumer surfaces use `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`.
 When the task is a non-consumer page cleanup, TDesign-first refactor, or style convergence pass, also read `.github/standards/weapp/NON_CONSUMER_PAGE_EXECUTION_CHECKLIST.md` as the compressed execution checklist.
@@ -27,6 +29,7 @@ Use `.github/prompts/weapp-implementation.prompt.md` for all Mini Program implem
 
 - Treat the backend contract as the sole source of truth. Do not invent fields, states, permissions, pagination conclusions, or business semantics in page code.
 - Start from backend-supported capabilities and the user's real task before layout or styling. First-screen essentials come before secondary capability coverage.
+- Treat API flattening as an architecture defect: do not let endpoint count, DTO shape, handler names, service method names, or old WXML structure determine page sections, cards, tabs, or component boundaries.
 - For UI refactor, style unification, or TDesign-first rebuild requests, default to a whole-page information architecture and layout rethink rather than a local patch unless the user explicitly limits scope.
 - Use this default sequence for weapp development: inventory backend entities, fields, states, actions, permissions, and async outcomes; group them into user task domains; decide which task domains need dedicated domain components; decide whether those task domains belong in one page or a page group; then choose TDesign composition; then implement.
 - Do not map one backend interface to one page by default, and do not pack every available capability into one oversized page just because the entity is the same.
@@ -52,6 +55,7 @@ Use `.github/prompts/weapp-implementation.prompt.md` for all Mini Program implem
 ## High-Risk Anti-Patterns
 
 - Fake truth: optimistic copy, local-only `setData`, fake permission states, or filtered totals that drift from backend truth.
+- API-flattened UI: endpoint lists, response blocks, DTO field groups, or backend entity tables are mirrored into page sections before the user task and task-domain owner are clear.
 - Boundary drift: stuffing future capabilities, unsupported backend gaps, or cross-role capabilities into the current page just to make it look more complete.
 - Interface-to-page mapping: turning each backend interface into its own page without first checking whether those capabilities should be combined into one user task.
 - Capability pile-up: keeping unrelated or low-frequency abilities in one page even after the page no longer has a single clear primary task.
@@ -71,6 +75,6 @@ Use `.github/prompts/weapp-implementation.prompt.md` for all Mini Program implem
 
 - Run commands from `weapp/`.
 - Common commands: `npm run compile`, `npm run lint`, `npm run lint:fix`, `npm run quality:check`.
-- `npm run gate:weapp` runs the configured gate set for page-shell, WXML expression safety, component policy, tdesign-component-declarations, tdesign-boundary, non-consumer-ui-patterns, page-responsibility, page-complexity, super-service-boundary, request-boundary, role-contract, and business-status-boundary; note that `gate:non-consumer-ui-patterns` is currently changed-only so new drift is blocked while historical cleanup continues.
+- `npm run gate:weapp` runs the configured gate set for page-shell, WXML expression safety, component policy, tdesign-component-declarations, tdesign-boundary, non-consumer-ui-patterns, frontend-architecture-boundary, page-responsibility, page-complexity, super-service-boundary, request-boundary, role-contract, business-status-boundary, and payment-workflow-boundary; note that `gate:non-consumer-ui-patterns` and `gate:frontend-architecture-boundary` are currently changed-only so new drift is blocked while historical cleanup continues.
 - Prefer `npm run quality:check` before handing off changes that touch multiple Mini Program files or shared components.
 - In hand-off, follow the engineering governance wording for risk and residual risk, and still call out any remaining weak-network, re-entry, duplicate-tap, or state-recovery risk using concrete paths.

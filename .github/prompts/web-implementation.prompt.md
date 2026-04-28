@@ -13,6 +13,7 @@ Use the web row in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` as th
 Request:
 
 - Update <route or component>
+- Follow `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md` for user-task-first design, ViewState modeling, and API-flattening anti-patterns
 - Follow `.github/standards/web/WEB_UI_STANDARDS.md` and `.github/standards/web/DESIGN_GUARDRAILS.md`
 - Reuse existing components from `web/src/components/ui/` before creating new primitives
 - Keep page-level data logic out of presentational components when nearby code already separates them
@@ -30,6 +31,7 @@ Optional context:
 
 Acceptance checklist:
 
+- Page structure is driven by the user's task and ViewState, not by endpoint count, DTO field groups, or raw API response shape
 - Page still follows `PageHeader + PageContent`
 - New fields and statuses are threaded through types, API calls, state, rendering, and copy
 - Loading, empty, error, and validation states are complete where relevant

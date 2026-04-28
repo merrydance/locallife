@@ -11,6 +11,7 @@ More specific web instruction files under `.github/instructions/` take precedenc
 ## Read First
 
 - `.github/standards/engineering/README.md`
+- `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md`
 - `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
 - `web/README.md`
 - `.github/standards/web/WEB_UI_STANDARDS.md`
@@ -18,6 +19,7 @@ More specific web instruction files under `.github/instructions/` take precedenc
 - `.github/standards/web/design-system.md`
 
 Use `.github/standards/engineering/README.md` as the stable governance index, then open the baseline or validation matrix when the active change needs deeper risk or release-readiness guidance.
+Use `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md` before designing non-trivial Web pages, multi-state flows, operator/merchant workflows, or any UI that aggregates multiple backend capabilities.
 
 ## Risk Classification
 
@@ -29,6 +31,7 @@ Use `.github/standards/engineering/README.md` as the stable governance index, th
 ## Working Style
 
 - Preserve the existing visual system and component patterns.
+- Start from the user's task and the required ViewState before deciding page sections or component boundaries; do not mirror API shape into the route by default.
 - Prefer existing components in `web/src/components/ui/` before creating new primitives.
 - Do not hardcode one-off colors or typography tokens when a semantic utility already exists.
 - Check the existing route segment and nearby pages before introducing a new layout pattern.
@@ -44,6 +47,7 @@ Use `.github/standards/engineering/README.md` as the stable governance index, th
 - Treat feedback behavior as a system rule: no raw backend errors in UI, no redundant success prompt after navigation or structural page update, and no Toast-only handling for first-screen failures.
 - Do not use developer-facing phrasing such as `debug`, `fallback`, `proxy`, or “与小程序一致” in operator-facing or merchant-facing UI copy.
 - Any user-visible status or field added in a high-risk flow must be threaded through types, API calls, page state, loading/empty/error branches, dangerous-action confirmation, and disabled/in-flight states as applicable.
+- API responses must be adapted into business-readable view models or domain objects before presentational components render them; raw DTO field groups should not become the visual architecture.
 - For `G2` and `G3` changes, explicitly check what the user sees during submit, timeout, retry, partial failure, and refresh-after-action scenarios.
 
 ## Validation Defaults

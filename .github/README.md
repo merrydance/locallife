@@ -97,6 +97,7 @@ Cross-cutting engineering governance:
 
 Web:
 
+- `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md`
 - `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
 - `.github/standards/web/WEB_UI_STANDARDS.md`
 - `.github/standards/web/DESIGN_GUARDRAILS.md`
@@ -104,11 +105,13 @@ Web:
 
 Mini Program:
 
+- `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md`
 - `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
 - `.github/standards/weapp/README.md`
 
 Flutter Merchant App:
 
+- `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md`
 - `.github/standards/flutter/README.md`
 - `.github/standards/flutter/PRODUCTION_ROBUSTNESS_BASELINE.md`
 - `.github/standards/flutter/FLUTTER_UI_DESIGN_STANDARDS.md`

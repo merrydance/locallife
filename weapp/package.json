@@ -14,6 +14,7 @@
     "gate:tdesign-component-declarations": "node scripts/check-tdesign-component-declarations.js",
     "gate:tdesign-boundary": "node scripts/check-tdesign-boundary.js",
     "gate:non-consumer-ui-patterns": "node scripts/check-non-consumer-ui-patterns.js --changed-only",
+    "gate:frontend-architecture-boundary": "node scripts/check-frontend-architecture-boundary.js",
     "gate:page-responsibility": "node scripts/check-page-responsibility.js",
     "gate:page-complexity": "node scripts/check-page-complexity.js",
     "gate:super-service-boundary": "node scripts/check-super-service-boundary.js",
@@ -21,7 +22,7 @@
     "gate:role-contract": "node scripts/check-role-contract.js",
     "gate:business-status-boundary": "node scripts/check-business-status-boundary.js",
     "gate:payment-workflow-boundary": "node scripts/check-payment-workflow-boundary.js",
-    "gate:weapp": "npm run gate:page-shell && npm run gate:wxml-expression-safety && npm run gate:component-policy && npm run gate:tdesign-component-declarations && npm run gate:tdesign-boundary && npm run gate:non-consumer-ui-patterns && npm run gate:page-responsibility && npm run gate:page-complexity && npm run gate:super-service-boundary && npm run gate:request-boundary && npm run gate:role-contract && npm run gate:business-status-boundary && npm run gate:payment-workflow-boundary",
+    "gate:weapp": "npm run gate:page-shell && npm run gate:wxml-expression-safety && npm run gate:component-policy && npm run gate:tdesign-component-declarations && npm run gate:tdesign-boundary && npm run gate:non-consumer-ui-patterns && npm run gate:frontend-architecture-boundary && npm run gate:page-responsibility && npm run gate:page-complexity && npm run gate:super-service-boundary && npm run gate:request-boundary && npm run gate:role-contract && npm run gate:business-status-boundary && npm run gate:payment-workflow-boundary",
     "quality:check": "npm run lint:all && npm run compile && npm run gate:weapp"
   },
   "keywords": [],
