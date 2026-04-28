@@ -81,8 +81,7 @@
       "pages": [
         "detail/index",
         "list/index",
-        "tracking/index",
-        "success/index"
+        "tracking/index"
       ]
     },
     {
