@@ -2,10 +2,6 @@
   background: var(--td-bg-color-page);
 }
 
-.income-content {
-  padding-bottom: calc(var(--spacer-lg) + var(--safe-area-bottom));
-}
-
 .state-block {
   display: flex;
   flex-direction: column;

@@ -11,52 +11,54 @@
   </view>
 
   <block wx:elif="{{delivery}}">
-    <map
-      class="navigation-map"
-      latitude="{{mapCenter.latitude}}"
-      longitude="{{mapCenter.longitude}}"
-      scale="{{mapScale}}"
-      markers="{{markers}}"
-      polyline="{{polyline}}"
-      include-points="{{includePoints}}"
-      show-location="false"
-    />
+    <view class="page-content navigation-content">
+      <map
+        class="navigation-map"
+        latitude="{{mapCenter.latitude}}"
+        longitude="{{mapCenter.longitude}}"
+        scale="{{mapScale}}"
+        markers="{{markers}}"
+        polyline="{{polyline}}"
+        include-points="{{includePoints}}"
+        show-location="false"
+      />
 
-    <view class="panel-sheet">
-      <view class="panel-header">
-        <view>
-          <view class="panel-title">{{nextStopTitle}}</view>
-          <view class="panel-address">{{nextStopAddress}}</view>
+      <view class="panel-sheet">
+        <view class="panel-header">
+          <view>
+            <view class="panel-title">{{nextStopTitle}}</view>
+            <view class="panel-address">{{nextStopAddress}}</view>
+          </view>
+          <t-tag theme="{{locationStatusTheme}}" variant="light" size="small">{{locationStatusText}}</t-tag>
         </view>
-        <t-tag theme="{{locationStatusTheme}}" variant="light" size="small">{{locationStatusText}}</t-tag>
-      </view>
 
-      <view class="panel-meta">
-        <text>{{routeSummary}}</text>
-        <text>{{latestUpdateText}}</text>
-      </view>
+        <view class="panel-meta">
+          <text>{{routeSummary}}</text>
+          <text>{{latestUpdateText}}</text>
+        </view>
 
-      <view class="pending-strip" wx:if="{{pendingText}}">
-        <t-icon name="time" size="28rpx" color="var(--td-warning-color-7)" />
-        <text>{{pendingText}}</text>
-      </view>
+        <view class="pending-strip" wx:if="{{pendingText}}">
+          <t-icon name="time" size="28rpx" color="var(--td-warning-color-7)" />
+          <text>{{pendingText}}</text>
+        </view>
 
-      <view class="sync-warning-strip" wx:if="{{syncWarningMessage}}">
-        <t-icon name="error-circle" size="28rpx" />
-        <text>{{syncWarningMessage}}</text>
-        <t-button theme="primary" variant="text" size="small" bindtap="onRetry">重试</t-button>
-      </view>
+        <view class="sync-warning-strip" wx:if="{{syncWarningMessage}}">
+          <t-icon name="error-circle" size="28rpx" />
+          <text>{{syncWarningMessage}}</text>
+          <t-button theme="primary" variant="text" size="small" bindtap="onRetry">重试</t-button>
+        </view>
 
-      <view class="primary-action-row">
-        <t-button theme="primary" size="large" block bindtap="onOpenNextStop">导航到下一站</t-button>
-      </view>
+        <view class="primary-action-row">
+          <t-button theme="primary" size="large" block bindtap="onOpenNextStop">导航到下一站</t-button>
+        </view>
 
-      <view class="secondary-actions">
-        <t-button theme="primary" variant="outline" bindtap="onOpenMerchant">到商家</t-button>
-        <t-button theme="primary" variant="outline" bindtap="onOpenCustomer">到顾客</t-button>
-        <t-button theme="default" variant="text" loading="{{locationRetrying}}" disabled="{{locationRetrying}}" bindtap="onRetryLocation">
-          {{needsLocationPermission ? '开启定位' : '刷新定位'}}
-        </t-button>
+        <view class="secondary-actions">
+          <t-button theme="primary" variant="outline" bindtap="onOpenMerchant">到商家</t-button>
+          <t-button theme="primary" variant="outline" bindtap="onOpenCustomer">到顾客</t-button>
+          <t-button theme="default" variant="text" loading="{{locationRetrying}}" disabled="{{locationRetrying}}" bindtap="onRetryLocation">
+            {{needsLocationPermission ? '开启定位' : '刷新定位'}}
+          </t-button>
+        </view>
       </view>
     </view>
   </block>

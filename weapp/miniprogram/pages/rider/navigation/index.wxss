@@ -9,19 +9,22 @@
   flex-direction: column;
   align-items: center;
   gap: var(--spacer-md);
-  padding: 160rpx var(--spacer-md);
+  padding: 160rpx 0;
+}
+
+.navigation-content {
+  gap: var(--spacer-sm);
 }
 
 .navigation-map {
   width: 100%;
-  height: calc(100vh - 420rpx);
+  height: 52vh;
+  min-height: 360rpx;
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
 
 .panel-sheet {
-  position: fixed;
-  left: var(--spacer-md);
-  right: var(--spacer-md);
-  bottom: calc(var(--spacer-sm) + env(safe-area-inset-bottom));
   padding: var(--spacer-md);
   background: var(--td-bg-color-container);
   border-radius: var(--radius-md);

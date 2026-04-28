@@ -11,7 +11,7 @@
   </view>
 
   <block wx:else>
-    <view class="page-content income-content">
+    <view class="page-content">
       <view wx:if="{{refreshErrorMessage}}" class="sync-state">
         <t-icon name="error-circle" size="32rpx" />
         <text class="sync-state__text">{{refreshErrorMessage}}</text>

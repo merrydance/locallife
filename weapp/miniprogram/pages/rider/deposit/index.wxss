@@ -3,10 +3,14 @@
 .deposit-page {
   background: var(--td-bg-color-page);
   min-height: 100vh;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .deposit-scroll {
-  height: calc(100vh - var(--page-shell-nav-height, 88px) - var(--spacer-sm));
+  flex: 1;
+  min-height: 0;
 }
 
 .state-shell,
