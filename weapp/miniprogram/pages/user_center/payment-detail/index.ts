@@ -1,4 +1,4 @@
-import { BusinessType, closePayment, getPaymentById, getPaymentRefunds, getPayments, getPaymentStatusView, getRefundStatusView, PaymentOrder, RefundOrder } from '../../../api/payment'
+import { BusinessType, closePayment, getPaymentById, getPaymentRefunds, getPayments, getPaymentStatusView, getRefundStatusView, isRefundStatusTerminal, PaymentOrder, RefundOrder } from '../../../api/payment'
 import {
     continuePendingRiderDepositRecharge,
     getRiderDepositRechargeWorkflowStatusView,
@@ -194,8 +194,13 @@ Page({
                 }
 
                 if (rechargeStatusView.isPendingConfirmation) {
-                    wx.showToast({ title: '支付已提交，请稍后确认', icon: 'none' })
-                    await this.loadPaymentDetail()
+                    Navigation.toPaymentResult({
+                        status: 'pending_confirmation',
+                        paymentOrderId: rechargeResult.paymentOrderId,
+                        businessType: 'rider_deposit',
+                        orderNo: payment.out_trade_no,
+                        amount: (rechargeResult.amount / 100).toFixed(2)
+                    })
                     return
                 }
 
@@ -212,9 +217,7 @@ Page({
             const paymentResult = await startPaymentOrderWorkflow({
                 orderId: payment.order_id,
                 paymentType: 'miniprogram',
-                businessType: normalizeBusinessType(payment.business_type),
-                maxAttempts: 5,
-                interval: 1500
+                businessType: normalizeBusinessType(payment.business_type)
             })
 
             if (paymentResult.paymentOrderId) {
@@ -242,16 +245,18 @@ Page({
         try {
             const refundsResponse = await getPaymentRefunds(this.data.paymentId)
             // 处理退款显示字段
-            const processedRefunds: RefundView[] = refundsResponse.refund_orders.map((refund) => {
-                const statusView = getRefundStatusView(refund.status)
-                return {
-                    ...refund,
-                    _amountDisplay: (refund.refund_amount / 100).toFixed(2),
-                    _statusText: statusView.text,
-                    _statusClass: statusView.className,
-                    _statusTheme: statusView.theme
-                }
-            })
+            const processedRefunds: RefundView[] = refundsResponse.refund_orders
+                .filter((refund) => isRefundStatusTerminal(refund.status))
+                .map((refund) => {
+                    const statusView = getRefundStatusView(refund.status)
+                    return {
+                        ...refund,
+                        _amountDisplay: (refund.refund_amount / 100).toFixed(2),
+                        _statusText: statusView.text,
+                        _statusClass: statusView.className,
+                        _statusTheme: statusView.theme
+                    }
+                })
             this.setData({ refunds: processedRefunds, showRefundList: processedRefunds.length > 0 })
         } catch (error) {
             logger.error('加载退款列表失败', error, 'payment-detail.loadRefunds')

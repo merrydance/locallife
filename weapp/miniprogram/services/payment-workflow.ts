@@ -70,6 +70,15 @@ export interface StartPaymentOrderWorkflowParams {
   interval?: number
 }
 
+export interface PaymentTerminalWaitOptions {
+  maxAttempts?: number
+  interval?: number
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 function toPaymentWorkflowKind(businessType?: BusinessType | string): PaymentWorkflowKind {
   switch (businessType) {
     case 'reservation':
@@ -136,6 +145,19 @@ export function buildPaymentWorkflowResultFromPayment(
 export async function queryPaymentWorkflowResult(paymentOrderId: number): Promise<PaymentWorkflowResult> {
   const payment = await getPaymentDetail(paymentOrderId)
   return buildPaymentWorkflowResultFromPayment(payment)
+}
+
+export async function waitForPaymentWorkflowTerminalResult(
+  paymentOrderId: number,
+  options: PaymentTerminalWaitOptions = {}
+): Promise<PaymentWorkflowResult> {
+  const finalStatus = await pollPaymentStatus(
+    paymentOrderId,
+    options.maxAttempts ?? PAYMENT_STATUS_POLL_MAX_ATTEMPTS,
+    options.interval ?? PAYMENT_STATUS_POLL_INTERVAL_MS
+  )
+  const payment = await getPaymentDetail(paymentOrderId)
+  return buildPaymentWorkflowResultFromPayment(payment, mapPaymentStatusToWorkflowStatus(finalStatus))
 }
 
 export async function completePaymentWorkflow(
@@ -222,6 +244,27 @@ function buildCombinedPaymentWorkflowResult(
   }
 }
 
+async function waitForCombinedPaymentWorkflowResult(
+  combinedPaymentId: number,
+  options: PaymentTerminalWaitOptions = {}
+): Promise<CombinedPaymentWorkflowResult> {
+  const maxAttempts = options.maxAttempts ?? PAYMENT_STATUS_POLL_MAX_ATTEMPTS
+  const interval = options.interval ?? PAYMENT_STATUS_POLL_INTERVAL_MS
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const recoveredPayment = await recoverCombinedPaymentOrder(combinedPaymentId)
+    if (isCombinedPaymentSuccessful(recoveredPayment) || shouldRecreateCombinedPayment(recoveredPayment)) {
+      return buildCombinedPaymentWorkflowResult(recoveredPayment)
+    }
+
+    if (attempt < maxAttempts - 1) {
+      await delay(interval)
+    }
+  }
+
+  throw new Error('合单支付状态检查超时')
+}
+
 function isWechatPaymentCancelled(error: unknown): boolean {
   if (error instanceof PaymentCancelledError) {
     return true
@@ -253,6 +296,10 @@ export async function completeCombinedPaymentWorkflow(
     return buildCombinedPaymentWorkflowResult(recoveredPayment)
   }
 
-  const recoveredPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
-  return buildCombinedPaymentWorkflowResult(recoveredPayment)
+  try {
+    return await waitForCombinedPaymentWorkflowResult(combinedPayment.id)
+  } catch {
+    const recoveredPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
+    return buildCombinedPaymentWorkflowResult(recoveredPayment, 'pending_confirmation')
+  }
 }

@@ -17,6 +17,22 @@
   padding: var(--spacer-md) 0;
 }
 
+.terminal-waiting {
+  min-height: 360rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacer-md);
+}
+
+.status-note {
+  color: var(--td-text-color-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  text-align: center;
+}
+
 /* 状态卡片 */
 .status-card {
   background: #FFFFFF;

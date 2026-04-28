@@ -3,7 +3,7 @@ import { getPaymentLedger, PaymentLedgerEntry } from '../../../api/payment'
 import ConsumerProfileAdapter from '../../../adapters/consumer-profile'
 import MembershipService from '../../../api/membership'
 import Navigation from '../../../utils/navigation'
-import { getPaymentLedgerStatusView } from '../../../utils/payment-ledger-view'
+import { getPaymentLedgerStatusView, isPaymentLedgerEntryTerminal } from '../../../utils/payment-ledger-view'
 import { MEMBERSHIP_RECHARGE_PAUSED_MESSAGE } from '../../../utils/membership-recharge-pause'
 
 interface MembershipDisplay {
@@ -125,7 +125,9 @@ Page({
       const totalBalance = (membershipRes.memberships || []).reduce((sum, m) => sum + (m.balance || 0), 0)
       const totalRecharged = (membershipRes.memberships || []).reduce((sum, m) => sum + (m.total_recharged || 0), 0)
 
-      const transactions: TransactionDisplay[] = (paymentRes.entries || []).map((entry) => mapTransactionDisplay(entry))
+      const transactions: TransactionDisplay[] = (paymentRes.entries || [])
+        .filter((entry) => isPaymentLedgerEntryTerminal(entry))
+        .map((entry) => mapTransactionDisplay(entry))
 
       this.setData({
         balance: totalBalance,

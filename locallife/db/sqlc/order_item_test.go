@@ -235,6 +235,71 @@ func TestListPaymentOrdersByUser(t *testing.T) {
 	}
 }
 
+func TestListPaymentLedgerEntriesByUser_TerminalOnly(t *testing.T) {
+	user := createRandomUser(t)
+
+	pendingPayment := createRandomPaymentOrder(t, user.ID)
+	paidPayment := createRandomPaymentOrder(t, user.ID)
+	closedPayment := createRandomPaymentOrder(t, user.ID)
+	failedPayment := createRandomPaymentOrder(t, user.ID)
+
+	_, err := testStore.UpdatePaymentOrderToPaid(context.Background(), UpdatePaymentOrderToPaidParams{
+		ID:            paidPayment.ID,
+		TransactionID: pgtype.Text{String: util.RandomString(32), Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdatePaymentOrderToClosed(context.Background(), closedPayment.ID)
+	require.NoError(t, err)
+
+	_, err = testStore.UpdatePaymentOrderToFailed(context.Background(), failedPayment.ID)
+	require.NoError(t, err)
+
+	pendingRefund := createRandomRefundOrder(t, paidPayment.ID, paidPayment.Amount/4)
+	processingRefund := createRandomRefundOrder(t, paidPayment.ID, paidPayment.Amount/4)
+	successRefund := createRandomRefundOrder(t, paidPayment.ID, paidPayment.Amount/4)
+
+	_, err = testStore.UpdateRefundOrderToProcessing(context.Background(), UpdateRefundOrderToProcessingParams{
+		ID:       processingRefund.ID,
+		RefundID: pgtype.Text{String: util.RandomString(32), Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdateRefundOrderToSuccess(context.Background(), successRefund.ID)
+	require.NoError(t, err)
+
+	entries, err := testStore.ListPaymentLedgerEntriesByUser(context.Background(), ListPaymentLedgerEntriesByUserParams{
+		UserID: user.ID,
+		Limit:  20,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+
+	total, err := testStore.CountPaymentLedgerEntriesByUser(context.Background(), user.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(4), total)
+	require.Len(t, entries, 4)
+
+	excludedPaymentIDs := map[int64]bool{pendingPayment.ID: true}
+	excludedRefundIDs := map[int64]bool{pendingRefund.ID: true, processingRefund.ID: true}
+	seenStatuses := make(map[string]bool)
+	for _, entry := range entries {
+		if entry.EntryType == "payment" {
+			require.False(t, excludedPaymentIDs[entry.PaymentOrderID])
+		}
+		if entry.EntryType == "refund" {
+			require.True(t, entry.RefundOrderID.Valid)
+			require.False(t, excludedRefundIDs[entry.RefundOrderID.Int64])
+		}
+		seenStatuses[entry.EntryType+":"+entry.Status] = true
+	}
+
+	require.True(t, seenStatuses["payment:paid"])
+	require.True(t, seenStatuses["payment:closed"])
+	require.True(t, seenStatuses["payment:failed"])
+	require.True(t, seenStatuses["refund:success"])
+}
+
 func TestUpdatePaymentOrderToPaid(t *testing.T) {
 	user := createRandomUser(t)
 	payment := createRandomPaymentOrder(t, user.ID)

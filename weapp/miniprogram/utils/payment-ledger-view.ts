@@ -1,10 +1,16 @@
-import { getPaymentStatusView, getRefundStatusView, PaymentLedgerEntry } from '../api/payment'
+import { getPaymentStatusView, getRefundStatusView, isPaymentStatusTerminal, isRefundStatusTerminal, PaymentLedgerEntry } from '../api/payment'
 
 export type PaymentLedgerStatusTheme = 'primary' | 'success' | 'warning' | 'error' | 'default'
 
 interface PaymentLedgerStatusView {
   statusName: string
   statusTheme: PaymentLedgerStatusTheme
+}
+
+export function isPaymentLedgerEntryTerminal(entry: Pick<PaymentLedgerEntry, 'entry_type' | 'status'>): boolean {
+  return entry.entry_type === 'refund'
+    ? isRefundStatusTerminal(entry.status)
+    : isPaymentStatusTerminal(entry.status)
 }
 
 export function getPaymentLedgerStatusView(entry: Pick<PaymentLedgerEntry, 'entry_type' | 'status'>): PaymentLedgerStatusView {
@@ -16,7 +22,7 @@ export function getPaymentLedgerStatusView(entry: Pick<PaymentLedgerEntry, 'entr
     }
 
     if (refundStatusView.isProcessing) {
-      return { statusName: '退款中', statusTheme: 'warning' }
+      return { statusName: '状态同步中', statusTheme: 'default' }
     }
 
     if (refundStatusView.isFailed) {
@@ -41,7 +47,7 @@ export function getPaymentLedgerStatusView(entry: Pick<PaymentLedgerEntry, 'entr
   }
 
   if (paymentStatusView.normalizedStatus === 'pending') {
-    return { statusName: '待支付', statusTheme: 'warning' }
+    return { statusName: '状态同步中', statusTheme: 'default' }
   }
 
   if (paymentStatusView.normalizedStatus === 'failed') {

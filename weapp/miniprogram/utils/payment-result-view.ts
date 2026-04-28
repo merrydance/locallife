@@ -60,13 +60,13 @@ export function buildPaymentResultView(status?: string): PaymentResultView {
     case 'pending_confirmation':
       return {
         navTitle: '支付确认中',
-        title: '支付结果确认中',
-        description: '支付已提交，系统正在同步微信支付结果。若暂未更新，请稍后刷新或查看订单详情。',
-        theme: 'warning',
-        primaryButtonText: '刷新状态',
-        primaryAction: 'refresh_status',
-        secondaryButtonText: '查看详情',
-        secondaryAction: 'detail_page'
+        title: '',
+        description: '',
+        theme: 'default',
+        primaryButtonText: '查看详情',
+        primaryAction: 'detail_page',
+        secondaryButtonText: '返回订单列表',
+        secondaryAction: 'list_page'
       }
     case 'create_failed':
       return {

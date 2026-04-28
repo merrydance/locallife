@@ -15,6 +15,11 @@
       <list-skeleton row="6" t-class="skeleton-item" />
     </view>
 
+    <view wx:elif="{{waitingForTerminal}}" class="terminal-waiting">
+      <t-loading theme="circular" size="56rpx" text="正在确认退款结果..." />
+      <view class="status-note" wx:if="{{statusNote}}">{{statusNote}}</view>
+    </view>
+
     <view wx:elif="{{refund}}" class="detail-content animate-fade-in">
       <!-- 退款状态卡片 -->
       <view class="status-card {{statusClass}}">

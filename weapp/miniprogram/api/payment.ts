@@ -274,6 +274,15 @@ export function isPaymentStatusFailed(status?: string): boolean {
   return !!status && FAILED_PAYMENT_STATUSES.has(status as PaymentStatus)
 }
 
+export function isPaymentStatusTerminal(status?: string): boolean {
+  return isPaymentStatusSuccessful(status) || isPaymentStatusFailed(status) || status === 'cancelled'
+}
+
+export function isRefundStatusTerminal(status?: string): boolean {
+  const normalizedStatus = String(status || '').trim().toLowerCase()
+  return normalizedStatus === 'success' || normalizedStatus === 'failed' || normalizedStatus === 'closed'
+}
+
 export function getPaymentStatusView(status?: PaymentStatus | string) {
   const normalizedStatus = String(status || '').trim().toLowerCase()
 

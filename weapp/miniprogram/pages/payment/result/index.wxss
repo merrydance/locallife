@@ -9,6 +9,13 @@
   padding: var(--spacer-xl) 0 var(--spacer-lg);
 }
 
+.terminal-waiting {
+  min-height: 240rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .result-summary {
   margin-top: var(--spacer-lg);
   padding: var(--spacer-md);

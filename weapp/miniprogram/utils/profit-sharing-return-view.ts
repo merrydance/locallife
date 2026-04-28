@@ -26,3 +26,12 @@ export function getProfitSharingReturnStatusView(status?: string): ProfitSharing
 
   return { statusText: '状态同步中', statusTheme: 'default' }
 }
+
+export function isProfitSharingReturnTerminal(status?: string): boolean {
+  const normalizedStatus = String(status || '').trim().toLowerCase()
+  return normalizedStatus === 'success'
+    || normalizedStatus === 'return_success'
+    || normalizedStatus === 'failed'
+    || normalizedStatus === 'return_failed'
+    || normalizedStatus === 'closed'
+}

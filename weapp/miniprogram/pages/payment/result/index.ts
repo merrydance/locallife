@@ -1,4 +1,4 @@
-import { queryPaymentWorkflowResult } from '../../../services/payment-workflow'
+import { waitForPaymentWorkflowTerminalResult } from '../../../services/payment-workflow'
 import { buildPaymentResultView, normalizePaymentWorkflowStatus, PaymentResultAction, PaymentWorkflowStatus } from '../../../utils/payment-result-view'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
@@ -12,12 +12,18 @@ function buildReservationListUrl(returnStatus?: string): string {
   return `/pages/user_center/reservations/index?status=${encodeURIComponent(status)}`
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+let terminalWaitToken = 0
+
 Page({
   data: {
     navBarHeight: 88,
     navTitle: '支付结果',
-    title: '支付结果确认中',
-    description: '支付已提交，系统正在同步微信支付结果。',
+    title: '',
+    description: '',
     theme: 'warning',
     primaryButtonText: '刷新状态',
     primaryAction: 'refresh_status' as PaymentResultAction,
@@ -32,6 +38,7 @@ Page({
     amount: '',
     statusNote: '',
     refreshing: false,
+    waitingForTerminal: false,
     showSummary: false
   },
 
@@ -62,8 +69,75 @@ Page({
       ...view
     })
 
-    if (status === 'pending_confirmation' && paymentOrderId) {
-      this.refreshPaymentStatus(true)
+    if (status === 'pending_confirmation') {
+      if (paymentOrderId) {
+        this.startTerminalWait()
+      } else {
+        this.applyMissingPaymentOrderState()
+      }
+    }
+  },
+
+  onUnload() {
+    terminalWaitToken += 1
+  },
+
+  applyMissingPaymentOrderState() {
+    const view = buildPaymentResultView('pay_params_missing')
+    this.setData({
+      status: 'pay_params_missing',
+      statusNote: '缺少可查询的支付单，请返回详情页查看最新状态。',
+      waitingForTerminal: false,
+      refreshing: false,
+      ...view
+    })
+  },
+
+  startTerminalWait() {
+    const token = terminalWaitToken + 1
+    terminalWaitToken = token
+    this.setData({
+      navTitle: '支付确认中',
+      status: 'pending_confirmation',
+      statusNote: '',
+      refreshing: true,
+      waitingForTerminal: true
+    })
+    void this.waitForTerminalPaymentResult(token)
+  },
+
+  async waitForTerminalPaymentResult(token: number) {
+    while (token === terminalWaitToken && this.data.paymentOrderId) {
+      try {
+        const result = await waitForPaymentWorkflowTerminalResult(this.data.paymentOrderId)
+        if (token !== terminalWaitToken) {
+          return
+        }
+
+        const view = buildPaymentResultView(result.status)
+        this.setData({
+          status: result.status,
+          businessId: result.businessId ? String(result.businessId) : this.data.businessId,
+          businessType: result.businessType ? String(result.businessType) : this.data.businessType,
+          orderNo: result.outTradeNo || this.data.orderNo,
+          amount: this.data.amount || formatAmount(result.amountFen),
+          showSummary: Boolean(this.data.amount || result.amountFen || result.outTradeNo || this.data.orderNo || this.data.paymentOrderId),
+          statusNote: '',
+          refreshing: false,
+          waitingForTerminal: false,
+          ...view
+        })
+        return
+      } catch (error) {
+        if (token !== terminalWaitToken) {
+          return
+        }
+
+        this.setData({
+          statusNote: getErrorUserMessage(error, '支付结果还没有回写完成，系统正在继续确认。')
+        })
+        await delay(1500)
+      }
     }
   },
 
@@ -75,10 +149,15 @@ Page({
       return
     }
 
+    if (this.data.status === 'pending_confirmation') {
+      this.startTerminalWait()
+      return
+    }
+
     this.setData({ refreshing: true, statusNote: silent ? this.data.statusNote : '' })
 
     try {
-      const result = await queryPaymentWorkflowResult(this.data.paymentOrderId)
+      const result = await waitForPaymentWorkflowTerminalResult(this.data.paymentOrderId, { maxAttempts: 1, interval: 0 })
       const view = buildPaymentResultView(result.status)
       this.setData({
         status: result.status,
@@ -87,7 +166,7 @@ Page({
         orderNo: result.outTradeNo || this.data.orderNo,
         amount: this.data.amount || formatAmount(result.amountFen),
         showSummary: Boolean(this.data.amount || result.amountFen || result.outTradeNo || this.data.orderNo || this.data.paymentOrderId),
-        statusNote: result.status === 'pending_confirmation' ? '支付结果仍在同步中，请稍后刷新。' : '',
+        statusNote: '',
         refreshing: false,
         ...view
       })
