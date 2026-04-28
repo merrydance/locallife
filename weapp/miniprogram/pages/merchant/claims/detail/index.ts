@@ -7,8 +7,8 @@ import {
   MerchantClaimDecisionResponse,
   validateAppealReason
 } from '../../../../api/appeals-customer-service'
-import { isPaymentStatusFailed, isPaymentStatusSuccessful } from '../../../../api/payment'
-import { completeClaimRecoveryPayment } from '../../../../services/claim-recovery-payment'
+import { isPaymentStatusSuccessful } from '../../../../api/payment'
+import { completeClaimRecoveryPayment, isClaimRecoveryPaymentIncomplete } from '../../../../services/claim-recovery-payment'
 import { logger } from '../../../../utils/logger'
 import { isSettledFulfilled, isSettledRejected, settleAll } from '../../../../utils/promise'
 import { getStableBarHeights } from '../../../../utils/responsive'
@@ -264,7 +264,7 @@ Page({
     if (!this.data.detail) return
 
     const paymentSucceeded = isPaymentStatusSuccessful(status)
-    const paymentFailed = isPaymentStatusFailed(status)
+    const paymentFailed = isClaimRecoveryPaymentIncomplete(status)
     const nextRecoveryStatus = paymentSucceeded ? 'paid' : recovery.status
     const actionNoticeMessage = paymentSucceeded
       ? '追偿支付已完成，页面状态稍后同步'

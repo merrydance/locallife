@@ -284,7 +284,7 @@ Page({
         } catch (payErr) {
           console.error('[预订支付] 支付失败或取消:', payErr)
           Navigation.toPaymentResult({
-            status: 'pending_confirmation',
+            status: 'create_failed',
             businessId: reservation.id,
             businessType: 'reservation',
             amount: resultAmount

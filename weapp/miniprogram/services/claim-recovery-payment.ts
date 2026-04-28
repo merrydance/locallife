@@ -1,17 +1,22 @@
 import type { ClaimRecoveryPaymentResponse } from '../api/appeals-customer-service'
 import {
   invokeWechatPay,
-  isPaymentStatusSuccessful,
+  isPaymentStatusFailed,
   PAYMENT_STATUS_POLL_INTERVAL_MS,
   PAYMENT_STATUS_POLL_MAX_ATTEMPTS,
   pollPaymentStatus
 } from '../api/payment'
+import { mapPaymentStatusToWorkflowStatus, type PaymentWorkflowStatus } from './payment-workflow'
 import { logger } from '../utils/logger'
 
 export interface ClaimRecoveryPaymentWorkflowResult {
   shouldSync: boolean
-  paymentStatus: string
+  paymentStatus: PaymentWorkflowStatus
   pendingConfirmation: boolean
+}
+
+export function isClaimRecoveryPaymentIncomplete(status: string): boolean {
+  return isPaymentStatusFailed(status) || status === 'closed' || status === 'cancelled'
 }
 
 export async function completeClaimRecoveryPayment(
@@ -27,7 +32,7 @@ export async function completeClaimRecoveryPayment(
         wx.showToast({ title: '已取消支付', icon: 'none' })
         return {
           shouldSync: false,
-          paymentStatus: paymentResult.status,
+          paymentStatus: 'cancelled',
           pendingConfirmation: false
         }
       }
@@ -40,24 +45,26 @@ export async function completeClaimRecoveryPayment(
         PAYMENT_STATUS_POLL_MAX_ATTEMPTS,
         PAYMENT_STATUS_POLL_INTERVAL_MS
       )
+      const workflowStatus = mapPaymentStatusToWorkflowStatus(finalStatus)
       return {
         shouldSync: true,
-        paymentStatus: finalStatus,
-        pendingConfirmation: !isPaymentStatusSuccessful(finalStatus)
+        paymentStatus: workflowStatus,
+        pendingConfirmation: workflowStatus === 'pending_confirmation'
       }
     } catch (error) {
       logger.error(logContext, error)
       return {
         shouldSync: true,
-        paymentStatus: paymentResult.status,
+        paymentStatus: 'pending_confirmation',
         pendingConfirmation: true
       }
     }
   }
 
+  const workflowStatus = mapPaymentStatusToWorkflowStatus(paymentResult.status)
   return {
     shouldSync: true,
-    paymentStatus: paymentResult.status,
-    pendingConfirmation: !isPaymentStatusSuccessful(paymentResult.status)
+    paymentStatus: workflowStatus,
+    pendingConfirmation: workflowStatus === 'pending_confirmation'
   }
 }

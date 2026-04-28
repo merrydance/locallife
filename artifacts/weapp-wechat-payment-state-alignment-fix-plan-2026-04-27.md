@@ -1302,3 +1302,23 @@ rg "status: 'unknown'" weapp/miniprogram/api weapp/miniprogram/services
 阶段 3 剩余风险：
 
 - 合单非终态当前回订单列表/详情刷新承接，不进入支付结果页；这符合“不中间态页面级停留”的最新规则，但真实微信设备上的合单延迟回写仍需要手工场景验证。
+
+### 2026-04-28 阶段 4：预订、追偿、押金状态模型
+
+状态：已落地，待阶段复审。
+
+变更：
+
+1. 预订确认页 `pages/reservation/confirm/index.ts` 的支付异常兜底从 `pending_confirmation` 改为 `create_failed`，避免创建/拉起异常进入确认中停留语义。
+2. 追偿支付 helper `services/claim-recovery-payment.ts` 已返回通用 `PaymentWorkflowStatus`；轮询超时统一返回 `pending_confirmation`，明确由详情页动作提示承接。
+3. 商户和骑手追偿详情页现在把 `closed`、`cancelled` 与失败状态同样视为“追偿支付未完成，可刷新后重试”，避免关闭类状态落入不可操作的确认中提示。
+4. 押金充值状态枚举已在阶段 1 对齐通用 `PaymentWorkflowStatus`；提现提交后已在前序修复中等待终态并保留页内刷新入口，本阶段未重复改动押金代码。
+
+已验证：
+
+- `npm run compile` 通过。
+
+阶段 4 剩余风险：
+
+- 追偿支付轮询超时后的业务域状态刷新依赖详情页 `loadDetail(true, true)` 和用户手动刷新；真实延迟到账场景仍需要微信设备和后端回调联调验证。
+- 押金后端账务不变量仍归入阶段 8 的 G3 专项，不能用本阶段前端状态收敛替代。
