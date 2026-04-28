@@ -95,8 +95,7 @@
       "pages": [
         "scan-entry/scan-entry",
         "menu/menu",
-        "checkout/checkout",
-        "payment-success/payment-success"
+        "checkout/checkout"
       ]
     },
     {

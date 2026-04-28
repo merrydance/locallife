@@ -126,17 +126,6 @@ export class Navigation {
     wx.redirectTo({ url: `/pages/payment/result/index?${query.join('&')}` })
   }
 
-  static toDineInPaymentSuccess(params: { orderId: string, amount: string, merchantName?: string, tableNumber?: string }) {
-    let url = `/pages/dine-in/payment-success/payment-success?order_id=${params.orderId}&amount=${params.amount}&confirmed=1`
-    if (params.merchantName) {
-      url += `&merchant_name=${encodeURIComponent(params.merchantName)}`
-    }
-    if (params.tableNumber) {
-      url += `&table_number=${encodeURIComponent(params.tableNumber)}`
-    }
-    wx.redirectTo({ url })
-  }
-
   /**
      * 跳转到订单列表页
      */

@@ -2,7 +2,6 @@ import { formatPriceNoSymbol } from '../../../utils/util'
 import Navigation from '../../../utils/navigation'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import { getDineInSessionContext, saveDineInSessionFromMenu } from '../../../services/dine-in-session'
-import { isPaymentWorkflowPaid } from '../../../services/payment-workflow'
 import {
     calculateCheckoutCart,
     completeCheckoutPayment,
@@ -270,23 +269,13 @@ Page({
             const result = await completeCheckoutPayment(payment)
             const paymentAmount = formatPriceNoSymbol(result.amountFen || payment.amount || this.data.calculation.total_amount || 0)
 
-            if (!isPaymentWorkflowPaid(result.status)) {
-                Navigation.toPaymentResult({
-                    status: result.status,
-                    paymentOrderId: result.paymentOrderId || payment.id,
-                    businessId: orderId,
-                    businessType: String(result.businessType || payment.business_type || 'order'),
-                    orderNo: result.outTradeNo || payment.out_trade_no,
-                    amount: paymentAmount
-                })
-                return
-            }
-
-            Navigation.toDineInPaymentSuccess({
-                orderId: String(orderId),
-                amount: paymentAmount,
-                merchantName: this.data.merchantInfo?.name,
-                tableNumber: String((this.data.tableInfo?.table_no as string | undefined) || '')
+            Navigation.toPaymentResult({
+                status: result.status,
+                paymentOrderId: result.paymentOrderId || payment.id,
+                businessId: orderId,
+                businessType: String(result.businessType || payment.business_type || 'order'),
+                orderNo: result.outTradeNo || payment.out_trade_no,
+                amount: paymentAmount
             })
         } catch (error) {
             console.error('支付失败', error)

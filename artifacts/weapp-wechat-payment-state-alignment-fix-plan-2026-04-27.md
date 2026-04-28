@@ -1279,3 +1279,26 @@ rg "status: 'unknown'" weapp/miniprogram/api weapp/miniprogram/services
 阶段 2 剩余风险：
 
 - 堂食仍保留 `pages/dine-in/payment-success` 作为已确认成功后的专属成功页；它已有 `confirmed=1` 防护，不属于当前假成功缺陷，但后续阶段 3 可继续清理为统一结果页，减少 success 语义残留。
+
+### 2026-04-28 阶段 3：订单支付入口
+
+状态：已落地，待阶段复审。
+
+变更：
+
+1. 外卖确认页、订单详情页、订单列表页已经通过 `services/payment-workflow.ts` 完成普通支付和合单支付终态确认；页面层不直接调用 `invokeWechatPay`。
+2. 堂食结账页 `pages/dine-in/checkout/checkout.ts` 已改为支付后统一跳转 `pages/payment/result`，不再进入专属 success 页面。
+3. 旧堂食成功页 `pages/dine-in/payment-success/*` 已删除，`app.json` 路由和 `Navigation.toDineInPaymentSuccess` helper 已清理。
+
+当前 grep 基线：
+
+- 主小程序中未发现 `toDineInPaymentSuccess`。
+- 主小程序中未发现 `payment-success/payment-success` 或 `pages/dine-in/payment-success` 路由引用。
+
+已验证：
+
+- `npm run compile` 通过。
+
+阶段 3 剩余风险：
+
+- 合单非终态当前回订单列表/详情刷新承接，不进入支付结果页；这符合“不中间态页面级停留”的最新规则，但真实微信设备上的合单延迟回写仍需要手工场景验证。
