@@ -931,6 +931,11 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
 
     if (key === 'claims') {
       this.onGoToClaims()
+      return
+    }
+
+    if (key === 'notifications') {
+      wx.navigateTo({ url: '/pages/notification/index?mode=rider' })
     }
   },
 

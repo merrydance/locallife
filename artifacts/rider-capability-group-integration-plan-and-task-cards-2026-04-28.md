@@ -1077,3 +1077,43 @@ Residual risk:
 - The latest pending-claim hint is loaded through a separate focused claims request while the count comes from the workbench summary. The UI degrades to the count plus generic action hint on mismatch or optional request failure, but the exact cross-request race remains a manual verification case.
 
 No WEAPP-06 blockers remain. The next stage can proceed to `WEAPP-07` for rider key notification entry and recovery routing.
+
+## 19. Stage 3 WEAPP-07 Implementation Review
+
+Date: 2026-04-28
+Status: pass
+
+Implemented:
+
+- Reused the existing top-level notification page and notification API for rider critical notifications instead of adding a rider-specific backend contract.
+- Added rider-mode notification tabs for orders, income, deposit, and claims/recovery, backed by existing notification `related_type`, `extra_data`, and existing type fields with text fallback only for legacy messages.
+- Added rider notification routing so order notifications can recover into the rider task detail when an order ID is available, delivery notifications fall back safely to the rider task list when only a delivery ID is present, income notifications route to the income ledger, deposit notifications route to the deposit page, and claim/recovery notifications route to the claims flow.
+- Updated the rider dashboard unread-notification risk item with an explicit action affordance and routed it to `pages/notification/index?mode=rider`.
+- Preserved generic notification behavior for non-rider users, including existing order and delivery related-page routing and mark-read behavior.
+
+Review checklist:
+
+- [x] The rider notification center reuses the existing notification API and page shell; no backend notification route, DTO, or storage contract was expanded.
+- [x] Dashboard unread notification summary remains a compact risk-grid item and does not replace the real-time order pool or active delivery task surfaces.
+- [x] Rider categories are grouped by business capability instead of exposing raw notification types to riders.
+- [x] Category pagination reads forward through existing notification pages until the selected category has results or the server has no more pages, avoiding a false empty state when the first server page does not contain that category.
+- [x] Delivery notification routing respects that backend `related_id` can be a delivery ID; task detail navigation is used only when an order ID is available.
+- [x] Notification click recovery routes to existing business pages and does not add customer-service ticket handling, consumer-claim adjudication, dispatch, rider income withdrawal, or new payment workflow logic.
+
+Review fix:
+
+- During review, delivery notifications were found to use `related_type=delivery` with `related_id` set to the delivery ID, while the rider task-detail page expects an order ID. The rider notification resolver now uses `extra_data.order_id` for task-detail navigation when available and falls back to the rider task list otherwise.
+- During review, sparse category filtering was checked for false-empty behavior. The rider-mode loader now scans forward through server pages while the selected category has no matched notification and the server still reports more pages.
+
+Validation:
+
+- VS Code diagnostics on touched WEAPP-07 files: pass
+- `npm run quality:check`: pass
+- `git diff --check`: pass
+- Boundary keyword grep on touched WEAPP-07 files: pass; the only wallet-related hit is the pre-existing generic payment icon name in the shared notification page.
+
+Residual risk:
+
+- Existing notifications do not yet carry a dedicated rider notification category field. The rider-mode classifier therefore prefers structured `related_type` and `extra_data` keys, but still keeps text fallback for legacy or loosely typed messages. A future backend category field would make filtering fully deterministic, but this stage intentionally avoids expanding the backend notification contract.
+
+No WEAPP-07 blockers remain. The next stage can proceed to the next rider capability task without expanding the notification boundary.

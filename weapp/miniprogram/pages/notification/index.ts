@@ -1,5 +1,12 @@
 import { notificationService, Notification, NotificationType } from '../../api/notification'
 
+type NotificationCategory = '' | 'orders' | 'income' | 'deposit' | 'claims'
+
+interface NotificationPageOptions {
+  mode?: string
+  category?: NotificationCategory
+}
+
 const TYPE_ICON_MAP: Record<string, string> = {
   order: 'order-adjustment',
   payment: 'wallet',
@@ -24,6 +31,14 @@ const TYPE_TABS = [
   { label: '系统', value: 'system' }
 ]
 
+const RIDER_TYPE_TABS: Array<{ label: string, value: NotificationCategory }> = [
+  { label: '全部', value: '' },
+  { label: '订单', value: 'orders' },
+  { label: '收入', value: 'income' },
+  { label: '押金', value: 'deposit' },
+  { label: '追偿', value: 'claims' }
+]
+
 const RELATED_TYPE_URL_MAP: Record<string, string> = {
   order: '/pages/orders/detail/index?id=',
   delivery: '/pages/orders/tracking/index?orderId='
@@ -34,6 +49,8 @@ interface NotifView extends Notification {
   typeClass: string
   timeDisplay: string
 }
+
+type NotificationPageResult = Awaited<ReturnType<typeof notificationService.getNotifications>>
 
 function formatTime(isoStr: string): string {
   const date = new Date(isoStr)
@@ -49,11 +66,80 @@ function formatTime(isoStr: string): string {
   return `${mm}-${dd}`
 }
 
+function getNotificationSearchText(item: Notification): string {
+  return `${item.title || ''} ${item.content || ''} ${item.related_type || ''}`.toLowerCase()
+}
+
+function getExtraNumber(item: Notification, key: string): number {
+  const value = item.extra_data?.[key]
+  const numberValue = typeof value === 'number' ? value : Number(value || 0)
+  return Number.isFinite(numberValue) ? numberValue : 0
+}
+
+function getRiderNotificationCategory(item: Notification): NotificationCategory {
+  const relatedType = String(item.related_type || '').toLowerCase()
+  const text = getNotificationSearchText(item)
+  const extra = item.extra_data || {}
+
+  if (relatedType.includes('claim') || relatedType.includes('appeal') || extra.claim_id || extra.recovery_id || extra.appeal_id || text.includes('追偿') || text.includes('申诉') || text.includes('索赔')) {
+    return 'claims'
+  }
+
+  if (relatedType.includes('deposit') || extra.credit_id || extra.deposit_id || text.includes('押金')) {
+    return 'deposit'
+  }
+
+  if (relatedType.includes('income') || relatedType.includes('profit') || extra.profit_sharing_order_id || text.includes('分账') || text.includes('结算') || text.includes('配送费')) {
+    return 'income'
+  }
+
+  if (item.type === 'order' || item.type === 'delivery' || relatedType.includes('order') || relatedType.includes('delivery')) {
+    return 'orders'
+  }
+
+  return ''
+}
+
+function matchesRiderCategory(item: Notification, category: NotificationCategory): boolean {
+  return !category || getRiderNotificationCategory(item) === category
+}
+
+function resolveRiderNotificationUrl(item: Notification): string {
+  const relatedType = String(item.related_type || '').toLowerCase()
+  const category = getRiderNotificationCategory(item)
+
+  if (category === 'claims') {
+    const claimID = relatedType === 'claim' || relatedType === 'rider_claim' ? item.related_id : getExtraNumber(item, 'claim_id')
+    return claimID ? `/pages/rider/claims/detail/index?id=${claimID}` : '/pages/rider/claims/index'
+  }
+
+  if (category === 'deposit') {
+    return '/pages/rider/deposit/index'
+  }
+
+  if (category === 'income') {
+    return '/pages/rider/income/index'
+  }
+
+  if (category === 'orders') {
+    const orderID = relatedType.includes('order') ? item.related_id : getExtraNumber(item, 'order_id')
+    return orderID ? `/pages/rider/task-detail/index?id=${orderID}` : '/pages/rider/tasks/index'
+  }
+
+  if (relatedType === 'rider') {
+    return '/pages/rider/dashboard/index'
+  }
+
+  return ''
+}
+
 Page({
   data: {
     navBarHeight: 88,
     activeType: '' as NotificationType | '',
+    activeCategory: '' as NotificationCategory,
     typeTabs: TYPE_TABS,
+    isRiderMode: false,
     notifications: [] as NotifView[],
     unreadCount: 0,
     initialLoading: true,
@@ -64,7 +150,14 @@ Page({
     total: 0
   },
 
-  onLoad() {
+  onLoad(options: NotificationPageOptions = {}) {
+    const isRiderMode = options.mode === 'rider'
+    this.setData({
+      isRiderMode,
+      typeTabs: isRiderMode ? RIDER_TYPE_TABS : TYPE_TABS,
+      activeCategory: isRiderMode ? (options.category || '') : '',
+      activeType: isRiderMode ? '' : (options.category as NotificationType || '')
+    })
     this.loadNotifications(true)
   },
 
@@ -73,7 +166,11 @@ Page({
   },
 
   onTypeChange(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ activeType: e.detail.value, page: 1 })
+    if (this.data.isRiderMode) {
+      this.setData({ activeCategory: e.detail.value as NotificationCategory, page: 1 })
+    } else {
+      this.setData({ activeType: e.detail.value, page: 1 })
+    }
     this.loadNotifications(true)
   },
 
@@ -84,18 +181,50 @@ Page({
     try {
       const page = reset ? 1 : this.data.page
       const type = this.data.activeType as NotificationType | undefined
-      const [res, unreadResult] = await Promise.all([
-        notificationService.getNotifications({
+      const unreadCountPromise = reset
+        ? notificationService.getUnreadCount().catch(() => ({ count: this.data.unreadCount }))
+        : Promise.resolve({ count: this.data.unreadCount })
+
+      let res: NotificationPageResult
+      let sourceNotifications: Notification[] = []
+
+      if (this.data.isRiderMode) {
+        let nextPage = page
+        let lastResult: NotificationPageResult | null = null
+        const activeCategory = this.data.activeCategory as NotificationCategory
+        let shouldContinue = true
+
+        while (shouldContinue) {
+          lastResult = await notificationService.getNotifications({
+            page_id: nextPage,
+            page_size: 20
+          })
+          sourceNotifications = sourceNotifications.concat((lastResult.notifications || []).filter((n: Notification) => matchesRiderCategory(n, activeCategory)))
+          nextPage = lastResult.page + 1
+
+          shouldContinue = Boolean(activeCategory && sourceNotifications.length === 0 && lastResult.hasMore)
+        }
+
+        res = lastResult || {
+          items: [],
+          notifications: [],
+          total: 0,
+          page,
+          pageSize: 20,
+          hasMore: false
+        }
+      } else {
+        res = await notificationService.getNotifications({
           page_id: page,
           page_size: 20,
           type: type || undefined
-        }),
-        reset
-          ? notificationService.getUnreadCount().catch(() => ({ count: this.data.unreadCount }))
-          : Promise.resolve({ count: this.data.unreadCount })
-      ])
+        })
+        sourceNotifications = res.notifications || []
+      }
 
-      const notifs: NotifView[] = (res.notifications || []).map((n: Notification) => ({
+      const unreadResult = await unreadCountPromise
+
+      const notifs: NotifView[] = sourceNotifications.map((n: Notification) => ({
         ...n,
         typeIcon: TYPE_ICON_MAP[n.type] || 'notification',
         typeClass: TYPE_CLASS_MAP[n.type] || 'icon-gray',
@@ -142,9 +271,20 @@ Page({
 
     // 跳转关联页
     if (item.related_type && item.related_id) {
+      const riderUrl = this.data.isRiderMode ? resolveRiderNotificationUrl(item) : ''
+      if (riderUrl) {
+        wx.navigateTo({ url: riderUrl })
+        return
+      }
+
       const base = RELATED_TYPE_URL_MAP[item.related_type]
       if (base) {
         wx.navigateTo({ url: `${base}${item.related_id}` })
+      }
+    } else if (this.data.isRiderMode) {
+      const riderUrl = resolveRiderNotificationUrl(item)
+      if (riderUrl) {
+        wx.navigateTo({ url: riderUrl })
       }
     }
   },

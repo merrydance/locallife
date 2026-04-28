@@ -4,7 +4,7 @@
 
   <!-- 筛选 Tabs -->
   <view class="tabs-bar">
-    <t-tabs value="{{activeType}}" bind:change="onTypeChange" theme="tag" space-evenly="{{false}}">
+    <t-tabs value="{{isRiderMode ? activeCategory : activeType}}" bind:change="onTypeChange" theme="tag" space-evenly="{{false}}">
       <t-tab-panel wx:for="{{typeTabs}}" wx:key="value" label="{{item.label}}" value="{{item.value}}" />
     </t-tabs>
     <view class="read-all-btn" bindtap="onMarkAllRead" wx:if="{{unreadCount > 0}}">
@@ -26,7 +26,7 @@
   <block wx:else>
     <!-- 空状态 -->
     <view wx:if="{{notifications.length === 0}}" class="empty-state">
-      <t-empty icon="notification" description="暂无消息通知" />
+      <t-empty icon="notification" description="{{isRiderMode ? '当前分类暂无骑手通知' : '暂无消息通知'}}" />
     </view>
 
     <!-- 通知列表 -->

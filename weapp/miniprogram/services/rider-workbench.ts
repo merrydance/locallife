@@ -215,7 +215,7 @@ export function buildRiderWorkbenchDashboardView(
         note: unreadNotifications > 0 ? '有新提醒' : '暂无新提醒',
         highlight: unreadNotifications > 0,
         highlightClass: unreadNotifications > 0 ? 'is-highlight' : '',
-        actionText: ''
+        actionText: unreadNotifications > 0 ? '查看通知' : '查看'
       }
     ],
     currentDelivery: (summary.current_deliveries?.items || [])[0]
