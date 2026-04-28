@@ -119,7 +119,7 @@
 - 登录失效必须被识别为独立状态；关键动作在登录恢复后不能无提示自动重提。
 - 乐观更新只适用于回滚成本可控且页面能承接回读的场景；不能把纯本地 `setData` 假装成后端真值。
 - 对支付、退款、权限变更、审核流等高风险动作，默认不使用未经约束的乐观成功。
-- 页面不得在 `wx.requestPayment` 或封装后的 `invokeWechatPay` 成功回调后直接展示业务成功；必须先回查后端支付单、合单或业务详情终态。若短轮询未确认终态，应展示确认中和刷新入口。
+- 页面不得在 `wx.requestPayment` 或封装后的 `invokeWechatPay` 成功回调后直接展示业务成功；必须先回查后端支付单、合单或业务详情终态。支付、退款、提现等资金结果页不得把中间态当成可停留的页面级结果；等待终态时应保持 loading 或页内动作状态，明细列表不得展示处理中流水。
 - 异步作业必须区分“已提交”“处理中”“最终完成”“最终失败”“结果未知”。
 - 未知结果不是失败的同义词，必须提供回查、重试或稍后确认路径。
 - 所有会改动后端状态的请求都必须有明确的防重入和重试语义。
@@ -156,6 +156,6 @@
 
 - 运行命令应从 `weapp/` 目录执行。
 - 常用校验命令：`npm run compile`、`npm run lint`、`npm run lint:fix`、`npm run quality:check`。
-- `npm run gate:weapp` 按当前脚本配置运行页面门禁，包含 page shell、WXML 表达式安全、共享组件政策、TDesign 组件声明一致性、TDesign 边界、non-consumer-ui-patterns、页面职责、页面复杂度、super-service-boundary、请求边界、角色契约和业务状态边界门禁；其中 `gate:non-consumer-ui-patterns` 当前按 changed-only 模式阻止新增漂移，历史页面整治仍需结合专项改造逐步收口。
+- `npm run gate:weapp` 按当前脚本配置运行页面门禁，包含 page shell、WXML 表达式安全、共享组件政策、TDesign 组件声明一致性、TDesign 边界、non-consumer-ui-patterns、页面职责、页面复杂度、super-service-boundary、请求边界、角色契约、业务状态边界和支付工作流边界门禁；其中 `gate:non-consumer-ui-patterns` 当前按 changed-only 模式阻止新增漂移，历史页面整治仍需结合专项改造逐步收口。
 - 涉及多个页面、角色工作流、请求边界、恢复路径或共享组件的变更，必须优先运行 `npm run quality:check`，除非有明确说明当前环境无法执行。
 - 高风险改动的验证说明、未验证路径与剩余风险表达，统一按 `.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md` 执行。

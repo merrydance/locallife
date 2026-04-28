@@ -1209,3 +1209,29 @@ rg "status: 'unknown'" weapp/miniprogram/api weapp/miniprogram/services
 当前最大风险不是某个页面少了一次刷新，而是支付结果语义散落在页面中，导致多个入口把“支付交互完成”误当成“业务终态成功”。修复应先建立统一支付工作流和结果页语义，再逐页接入。
 
 第一版建议以“普通订单、合单、堂食、支付详情”作为支付结果语义主战场，因为这些页面直接产生假成功体验；同时快速修会员充值入口和退款字段漂移，消除明确契约错误。骑手押金需要单独升级为资金账务闭环专项：先确认后端主余额、冻结金额、可退款 credit、refund order 和流水的一致性，再做小程序页内状态组件和刷新承接。预订链路已有较好样板，应保留其回查和 pending 承接思路，并逐步并入统一结果模型。
+
+## 15. 落地进度
+
+### 2026-04-28 阶段 0：冻结旧支付成功模式
+
+状态：已落地，待阶段复审。
+
+变更：
+
+1. `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` 已收紧支付、退款、提现结果展示规则：资金结果页不得把中间态当成可停留的页面级结果，等待终态时保持 loading 或页内动作状态，明细列表不得展示处理中流水。
+2. `weapp/scripts/check-payment-workflow-boundary.js` 已新增支付工作流边界门禁，阻止页面/组件直接调用 `invokeWechatPay`，阻止页面/组件继续使用 legacy `processPayment`，阻止旧 `Navigation.toPaymentSuccess` 或 `pages/orders/success` 路由回流。
+3. `weapp/package.json` 已把 `gate:payment-workflow-boundary` 接入 `gate:weapp` 和 `quality:check`。
+
+当前 grep 基线：
+
+- `invokeWechatPay(` 只剩 `api/payment.ts` 定义，以及 `services/payment-workflow.ts`、`services/rider-deposit-payment.ts`、`services/claim-recovery-payment.ts` 三个允许的服务边界调用。
+- 主小程序页面和组件中未发现直接 `invokeWechatPay(` 调用。
+- 主小程序中未发现 `Navigation.toPaymentSuccess` 或 `pages/orders/success` 旧支付成功路由。
+
+已验证：
+
+- `npm run gate:payment-workflow-boundary` 通过。
+
+阶段 0 剩余风险：
+
+- `services/claim-recovery-payment.ts` 仍作为迁移期允许例外保留，后续阶段 4 需要决定迁入通用 payment workflow，或在标准中保留更窄的正式例外说明。
