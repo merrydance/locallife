@@ -1004,3 +1004,42 @@ Validation:
 - Boundary grep for dispatch, wallet/withdrawal, same-city reporting, freeze, and unfreeze terms in touched rider pages: pass; the only existing match remains the dashboard page title text.
 
 No WEAPP-04 blockers remain. The next stage can proceed to the next selected rider capability task without expanding the WEAPP-04 boundary.
+
+## 17. Stage 3 WEAPP-05 Implementation Review
+
+Date: 2026-04-28
+Status: pass
+
+Implemented:
+
+- Added `buildRiderDepositWorkbenchSummaryView` in the rider deposit finance view-model service so dashboard deposit copy and state derive from the deposit domain model instead of ad hoc workbench string assembly.
+- Updated the rider workbench view builder to expose deposit summary through the existing risk grid with available deposit, threshold, delivery frozen deposit, and deposit withdrawal processing semantics.
+- Added a compact deposit action affordance on the dashboard risk item that routes to `pages/rider/deposit/index` for recharge or deposit withdrawal handling.
+- Preserved the existing online-blocking reminder card as the primary entrance when deposit prevents going online.
+
+Review checklist:
+
+- [x] Deposit summary is generated from the deposit finance view model; dashboard does not reimplement deposit payment or withdrawal workflow.
+- [x] Dashboard shows whether deposit affects going online and routes blocked riders to the deposit page.
+- [x] Delivery frozen deposit and deposit withdrawal processing states are visible in the compact dashboard summary when present.
+- [x] Non-blocking deposit state remains a compact risk-grid item and does not take over the main task area.
+- [x] Copy remains scoped to deposit and does not expose a rider income wallet or delivery-income withdrawal surface.
+- [x] No backend, payment workflow, platform dispatch, WeChat same-city reporting, freeze, or unfreeze boundary was changed.
+
+Review fix:
+
+- During review, the dashboard deposit blocking signal was found to rely too heavily on the backend reason text containing “押金”. The view model now also treats below-threshold deposit facts as a deposit-blocking signal when `can_go_online` is false.
+
+Validation:
+
+- VS Code diagnostics on touched WEAPP-05 files: pass
+- `npm run compile`: pass
+- `npm run quality:check`: pass
+- `git diff --check`: pass
+- Boundary keyword grep on touched WEAPP-05 files: pass; hits are deposit-domain withdrawal/frozen copy and an existing dashboard style comment.
+
+Residual risk:
+
+- The mini-program project currently has no unit-test runner or service test convention, so the new deposit summary branches were validated through TypeScript compilation, quality gates, review, and focused boundary inspection rather than automated unit tests.
+
+No WEAPP-05 blockers remain. The next stage can proceed to `WEAPP-06` for rider claim and appeal action summary without expanding deposit workflow scope.

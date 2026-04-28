@@ -915,6 +915,13 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
     wx.navigateTo({ url: '/pages/rider/deposit/index' })
   },
 
+  onWorkbenchRiskTap(e: WechatMiniprogram.TouchEvent) {
+    const { key } = e.currentTarget.dataset as { key?: string }
+    if (key === 'deposit') {
+      this.onGoToDeposit()
+    }
+  },
+
   showDepositBlockedModal(message: string) {
     wx.showModal({
       title: '暂时无法上线',

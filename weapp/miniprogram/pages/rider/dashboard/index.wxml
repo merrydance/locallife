@@ -38,10 +38,11 @@
       </view>
 
       <view class="workbench-risk-grid">
-        <view wx:for="{{workbench.risks}}" wx:key="key" class="workbench-risk-item {{item.highlightClass}}">
+        <view wx:for="{{workbench.risks}}" wx:key="key" class="workbench-risk-item {{item.highlightClass}}" bindtap="onWorkbenchRiskTap" data-key="{{item.key}}">
           <text class="workbench-risk-label">{{item.label}}</text>
           <text class="workbench-risk-value">{{item.value}}</text>
           <text class="workbench-risk-note">{{item.note}}</text>
+          <text wx:if="{{item.actionText}}" class="workbench-risk-action">{{item.actionText}}</text>
         </view>
       </view>
     </view>

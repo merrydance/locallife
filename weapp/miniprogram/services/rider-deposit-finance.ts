@@ -16,6 +16,14 @@ export interface RiderDepositWithdrawStatusView {
   shouldScheduleRefresh: boolean
 }
 
+export interface RiderDepositWorkbenchSummaryView {
+  value: string
+  note: string
+  highlight: boolean
+  highlightClass: string
+  actionText: string
+}
+
 function formatFenToYuan(amount: number): string {
   return `¥${(Math.max(amount, 0) / 100).toFixed(2)}`
 }
@@ -100,6 +108,45 @@ export function buildRiderDepositFinanceView(input: {
     pendingRechargeTitle: '有一笔押金充值待确认',
     pendingRechargeDescription: '支付已发起但结果还未最终确认，可继续支付或查看支付进度。',
     pendingRechargeAmountDisplay: formatFenToYuan(input.pendingRecharge.amount)
+  }
+}
+
+export function buildRiderDepositWorkbenchSummaryView(input: {
+  availableDeposit: number
+  deliveryFrozenDeposit: number
+  withdrawalProcessingAmount: number
+  thresholdAmount: number
+  activeDeliveries: number
+  canGoOnline: boolean
+  onlineBlockReason: string
+}): RiderDepositWorkbenchSummaryView {
+  const hasProcessingWithdrawal = input.withdrawalProcessingAmount > 0
+  const hasDeliveryFrozen = input.deliveryFrozenDeposit > 0
+  const financeView = buildRiderDepositFinanceView({
+    availableDeposit: input.availableDeposit,
+    deliveryFrozenDeposit: input.deliveryFrozenDeposit,
+    withdrawalProcessingAmount: input.withdrawalProcessingAmount,
+    activeDeliveries: hasProcessingWithdrawal || hasDeliveryFrozen ? 0 : input.activeDeliveries,
+    pendingRecharge: null
+  })
+  const belowThreshold = input.availableDeposit < input.thresholdAmount
+  const blockedByDeposit = !input.canGoOnline && (/押金/.test(input.onlineBlockReason || '') || belowThreshold)
+
+  let note = `门槛 ${formatFenToYuan(input.thresholdAmount)}`
+  if (blockedByDeposit) {
+    note = input.onlineBlockReason || '可用押金不足，补足后可上线接单'
+  } else if (hasProcessingWithdrawal || hasDeliveryFrozen) {
+    note = financeView.withdrawHint
+  }
+
+  const highlight = blockedByDeposit || belowThreshold
+
+  return {
+    value: formatFenToYuan(input.availableDeposit),
+    note,
+    highlight,
+    highlightClass: highlight ? 'is-highlight' : '',
+    actionText: blockedByDeposit ? '去充值' : '查看押金'
   }
 }
 

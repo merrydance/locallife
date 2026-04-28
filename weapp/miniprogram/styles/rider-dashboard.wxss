@@ -219,6 +219,14 @@
   letter-spacing: 2rpx;
 }
 
+
+.workbench-risk-action {
+  display: block;
+  margin-top: 10rpx;
+  font-size: var(--font-size-xxs);
+  font-weight: 600;
+  color: var(--td-brand-color);
+}
 .tool-shortcuts {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

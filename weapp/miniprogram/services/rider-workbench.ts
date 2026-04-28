@@ -8,6 +8,7 @@ import type { DashboardDeliveryView, TagTheme } from '../utils/rider-dashboard-r
 import { getDeliveryStatusDisplay } from '../api/delivery'
 import { formatPriceNoSymbol } from '../utils/util'
 import { resolveStatusTagTheme } from '../utils/status-tag'
+import { buildRiderDepositWorkbenchSummaryView } from './rider-deposit-finance'
 
 export interface RiderWorkbenchMetricView {
   key: string
@@ -24,6 +25,7 @@ export interface RiderWorkbenchRiskView {
   note: string
   highlight: boolean
   highlightClass: string
+  actionText: string
 }
 
 export interface RiderWorkbenchDashboardView {
@@ -128,6 +130,15 @@ export function buildRiderWorkbenchDashboardView(summary: RiderWorkbenchSummaryR
     available_deposit: 0,
     threshold_amount: 0
   }
+  const depositSummary = buildRiderDepositWorkbenchSummaryView({
+    availableDeposit: deposit.available_deposit || 0,
+    deliveryFrozenDeposit: deposit.delivery_frozen_deposit || 0,
+    withdrawalProcessingAmount: deposit.deposit_refund_processing_amount || 0,
+    thresholdAmount: deposit.threshold_amount || 0,
+    activeDeliveries: activeDeliveryCount,
+    canGoOnline: !!summary.rider_status?.can_go_online,
+    onlineBlockReason: summary.rider_status?.online_block_reason || ''
+  })
 
   return {
     riderStatus: toRiderStatus(summary),
@@ -155,12 +166,11 @@ export function buildRiderWorkbenchDashboardView(summary: RiderWorkbenchSummaryR
       {
         key: 'deposit',
         label: '可用押金',
-        value: `¥${formatPriceNoSymbol(deposit.available_deposit || 0)}`,
-        note: deposit.deposit_refund_processing_amount > 0
-          ? `押金退款处理中 ¥${formatPriceNoSymbol(deposit.deposit_refund_processing_amount)}`
-          : `门槛 ¥${formatPriceNoSymbol(deposit.threshold_amount || 0)}`,
-        highlight: (deposit.available_deposit || 0) < (deposit.threshold_amount || 0),
-        highlightClass: (deposit.available_deposit || 0) < (deposit.threshold_amount || 0) ? 'is-highlight' : ''
+        value: depositSummary.value,
+        note: depositSummary.note,
+        highlight: depositSummary.highlight,
+        highlightClass: depositSummary.highlightClass,
+        actionText: depositSummary.actionText
       },
       {
         key: 'claims',
@@ -168,7 +178,8 @@ export function buildRiderWorkbenchDashboardView(summary: RiderWorkbenchSummaryR
         value: String(pendingClaims),
         note: pendingClaims > 0 ? '需及时处理' : '暂无待处理',
         highlight: pendingClaims > 0,
-        highlightClass: pendingClaims > 0 ? 'is-highlight' : ''
+        highlightClass: pendingClaims > 0 ? 'is-highlight' : '',
+        actionText: ''
       },
       {
         key: 'income_pending',
@@ -176,7 +187,8 @@ export function buildRiderWorkbenchDashboardView(summary: RiderWorkbenchSummaryR
         value: `¥${formatPriceNoSymbol(pendingIncome)}`,
         note: failedIncomeCount > 0 ? `${failedIncomeCount} 单待平台处理` : '分账完成后入账',
         highlight: failedIncomeCount > 0,
-        highlightClass: failedIncomeCount > 0 ? 'is-highlight' : ''
+        highlightClass: failedIncomeCount > 0 ? 'is-highlight' : '',
+        actionText: ''
       },
       {
         key: 'notifications',
@@ -184,7 +196,8 @@ export function buildRiderWorkbenchDashboardView(summary: RiderWorkbenchSummaryR
         value: String(unreadNotifications),
         note: unreadNotifications > 0 ? '有新提醒' : '暂无新提醒',
         highlight: unreadNotifications > 0,
-        highlightClass: unreadNotifications > 0 ? 'is-highlight' : ''
+        highlightClass: unreadNotifications > 0 ? 'is-highlight' : '',
+        actionText: ''
       }
     ],
     currentDelivery: (summary.current_deliveries?.items || [])[0]
