@@ -1322,3 +1322,21 @@ rg "status: 'unknown'" weapp/miniprogram/api weapp/miniprogram/services
 
 - 追偿支付轮询超时后的业务域状态刷新依赖详情页 `loadDetail(true, true)` 和用户手动刷新；真实延迟到账场景仍需要微信设备和后端回调联调验证。
 - 押金后端账务不变量仍归入阶段 8 的 G3 专项，不能用本阶段前端状态收敛替代。
+
+### 2026-04-28 阶段 5：会员充值入口
+
+状态：已复核通过，无新增代码改动。
+
+当前实现：
+
+1. `pages/user_center/membership/index.wxml` 的会员卡按钮已显示“联系商户充值”，不再展示“立即充值”。
+2. `pages/user_center/membership/index.ts` 的手动充值和 `autoRecharge=1` 入口均调用 `showMembershipRechargePausedMessage()`，不进入选择金额或微信支付流程。
+3. `pages/user_center/wallet/index.ts` 的快捷充值入口统一展示 `MEMBERSHIP_RECHARGE_PAUSED_MESSAGE`，并在有会员卡上下文时提供查看商户动作。
+4. `api/personal.ts` 的 `rechargeMembership` 只作为兼容 API 保留，页面层没有依赖它拉起支付。
+
+已验证：
+
+- `rg "立即充值|startRecharge|createRecharge|rechargeMembership|autoRecharge|MEMBERSHIP_RECHARGE_PAUSED_MESSAGE|会员线上充值已暂停" weapp/miniprogram --glob '*.{ts,wxml}'` 确认会员充值入口均落到暂停提示，未发现页面继续发起会员线上充值支付。
+- 阶段 5 未改业务代码；沿用阶段 4 的 `npm run quality:check` 通过结果作为当前基线。
+
+阶段 5 剩余风险：无新增残留。若未来恢复会员线上充值，需要重新定义后端终态真值和页面等待策略后再开启入口。
