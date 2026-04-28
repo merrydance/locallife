@@ -1259,3 +1259,23 @@ rg "status: 'unknown'" weapp/miniprogram/api weapp/miniprogram/services
 阶段 1 剩余风险：
 
 - 押金充值仍是独立 domain workflow，尚未复用普通支付结果页；这是保留的领域边界，后续阶段 4 和阶段 8 再决定是否进一步并入通用 workflow 或保留正式例外。
+
+### 2026-04-28 阶段 2：通用支付结果页
+
+状态：已复核通过，当前实现满足最新规则。
+
+当前实现：
+
+1. `weapp/miniprogram/pages/payment/result/index.ts` 已作为通用支付结果页 owner，支持 `status`、`paymentOrderId`、`businessType`、`businessId`、`orderNo`、`amount` 和 `returnStatus` 入参。
+2. `pending_confirmation` 不再渲染页面级结果卡；有 `paymentOrderId` 时进入 `waitingForTerminal` loading 并持续等待后端终态，没有 `paymentOrderId` 时降级为 `pay_params_missing`，避免把无法查询的支付展示成确认中。
+3. `weapp/miniprogram/pages/payment/result/index.wxml` 只在 `waitingForTerminal=false` 时渲染 `t-result` 和结果操作按钮。
+4. 合单支付当前不把非终态送入结果页停留；合单成功后才使用通用结果页，非终态由订单列表/详情刷新承接。
+
+已验证：
+
+- 代码复核确认 `pending_confirmation` 分支只展示 TDesign loading，不展示 `t-result` 中间态。
+- 阶段 2 未改业务代码；沿用阶段 1 的 `npm run quality:check` 通过结果作为当前基线。
+
+阶段 2 剩余风险：
+
+- 堂食仍保留 `pages/dine-in/payment-success` 作为已确认成功后的专属成功页；它已有 `confirmed=1` 防护，不属于当前假成功缺陷，但后续阶段 3 可继续清理为统一结果页，减少 success 语义残留。
