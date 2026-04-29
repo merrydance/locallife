@@ -19,7 +19,7 @@ export interface MediaUploadOptions {
   businessType: string
   /** 媒体分类，如 'logo' | 'dish' | 'combo' | 'table' | 'review' | 'avatar'
    *  | 'business_license' | 'food_permit' | 'id_card_front' | 'id_card_back'
-   *  | 'health_cert' */
+   *  | 'health_cert' | 'group_license' | 'safety_report' | 'merchant_cancel_withdraw' */
   mediaCategory: string
   /** MIME 类型，默认 'image/jpeg' */
   contentType?: string

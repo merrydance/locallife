@@ -1,0 +1,26 @@
+<custom-navbar title="申请提现" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: var(--spacer-lg);">
+  <view wx:if="{{!accessReady}}" class="page-content"><t-loading theme="circular" size="40rpx" text="校验商户权限中..." vertical /></view>
+  <view wx:elif="{{accessDenied}}" class="page-content"><t-empty icon="lock-on" description="当前账号无商户权限，请返回“我的”切换身份" /></view>
+  <view wx:elif="{{accessErrorMessage}}" class="page-content"><t-empty icon="error-circle" description="{{accessErrorMessage}}" /><t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button></view>
+  <view wx:elif="{{initialLoading}}" class="page-content"><t-loading theme="circular" size="40rpx" text="加载账户余额中..." vertical /></view>
+  <view wx:elif="{{initialError}}" class="page-content"><t-empty icon="error-circle" description="{{initialErrorMessage || '账户余额加载失败，请重试'}}" /><t-button theme="primary" bind:tap="onRetry">重新加载</t-button></view>
+
+  <view wx:else class="page-content">
+    <t-cell-group>
+      <t-cell title="当前可提现" note="{{balanceView.withdrawableAmount.text}}" />
+      <t-cell wx:if="{{balanceView.statusDesc}}" title="账户状态" note="{{balanceView.statusDesc}}" />
+    </t-cell-group>
+
+    <t-cell-group>
+      <t-input label="提现金额" type="digit" value="{{amountText}}" placeholder="请输入金额" suffix="元" bind:change="onAmountChange" />
+      <t-textarea label="备注" value="{{remark}}" placeholder="选填" maxlength="32" indicator="{{false}}" bind:change="onRemarkChange" />
+    </t-cell-group>
+
+    <t-cell-group wx:if="{{formErrorMessage}}"><t-cell title="无法提交" note="{{formErrorMessage}}" /></t-cell-group>
+    <t-cell-group wx:if="{{submitResultMessage}}"><t-cell title="提交状态" note="{{submitResultMessage}}" /></t-cell-group>
+
+    <t-button theme="primary" loading="{{submitting}}" disabled="{{submitting || !balanceView.isActive}}" bind:tap="onSubmit">提交提现</t-button>
+  </view>
+</view>

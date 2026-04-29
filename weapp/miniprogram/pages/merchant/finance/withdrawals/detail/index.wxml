@@ -1,0 +1,106 @@
+<custom-navbar title="提现详情" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: var(--spacer-lg);">
+  <view wx:if="{{initialLoading}}" class="page-content"><t-loading theme="circular" size="40rpx" text="加载提现详情中..." vertical /></view>
+  <view wx:elif="{{initialError}}" class="page-content"><t-empty icon="error-circle" description="{{initialErrorMessage || '提现详情加载失败，请重试'}}" /><t-button theme="primary" bind:tap="onRetry">重新加载</t-button></view>
+
+  <view wx:else class="page-content">
+    <t-cell-group wx:if="{{refreshErrorMessage}}">
+      <t-cell title="同步失败" note="{{refreshErrorMessage}}"><view slot="right-icon"><t-button size="extra-small" theme="primary" variant="text" loading="{{loadingDetail}}" bind:tap="onRetry">重试</t-button></view></t-cell>
+    </t-cell-group>
+
+    <t-cell-group>
+      <t-cell title="提现金额" note="{{withdrawal.amount.text}}">
+        <view slot="right-icon"><t-tag theme="{{withdrawal.status.theme}}" size="small">{{withdrawal.status.text}}</t-tag></view>
+      </t-cell>
+      <t-cell wx:if="{{withdrawal.reasonText}}" title="处理说明" note="{{withdrawal.reasonText}}" />
+      <t-cell title="渠道" note="{{withdrawal.channelText}}" />
+      <t-cell title="创建时间" note="{{withdrawal.createdAtText}}" />
+      <t-cell title="更新时间" note="{{withdrawal.updatedAtText}}" />
+    </t-cell-group>
+
+    <view>
+      <t-cell-group title="注销提现">
+        <t-cell title="资格状态" note="{{cancelEligibility.eligible ? '当前可申请' : (cancelWithdrawUnavailableNote || '暂不可申请')}}">
+          <view slot="right-icon"><t-tag theme="{{cancelEligibility.eligible ? 'success' : 'warning'}}" size="small">{{cancelEligibility.eligible ? '可申请' : '不可申请'}}</t-tag></view>
+        </t-cell>
+        <t-cell wx:if="{{cancelEligibility.accountAmountText}}" title="账户余额" note="{{cancelEligibility.accountAmountText}}" />
+      </t-cell-group>
+
+      <block wx:if="{{canSubmitCancelWithdraw}}">
+        <t-cell-group>
+          <t-cell title="注销方式" note="{{hasFundsToWithdraw ? '账户仍有余额，需提现后注销' : '按账户余额选择注销方式'}}" />
+          <view><t-radio-group value="{{cancelForm.withdraw}}" options="{{withdrawModeOptions}}" bind:change="onWithdrawModeChange" /></view>
+        </t-cell-group>
+
+        <block wx:if="{{showApplyWithdrawForm}}">
+          <t-cell-group>
+            <t-cell title="营业执照状态" note="{{proofMediaRequired ? '请上传注销提现证明材料' : '用于后端材料校验'}}" />
+            <view><t-radio-group value="{{cancelForm.businessLicenseStatusDeclaration}}" options="{{licenseStatusOptions}}" bind:change="onLicenseStatusChange" /></view>
+          </t-cell-group>
+
+          <t-cell-group>
+            <t-cell title="收款账户类型" />
+            <view><t-radio-group value="{{cancelForm.accountType}}" options="{{accountTypeOptions}}" bind:change="onAccountTypeChange" /></view>
+            <t-input label="户名" value="{{cancelForm.accountName}}" placeholder="请输入收款户名" data-field="accountName" bind:change="onCancelFormInput" />
+            <t-input label="开户银行" value="{{cancelForm.accountBank}}" placeholder="请输入开户银行" data-field="accountBank" bind:change="onCancelFormInput" />
+            <t-input label="银行账号" value="{{cancelForm.accountNumber}}" placeholder="请输入银行账号" data-field="accountNumber" bind:change="onCancelFormInput" />
+            <t-input label="支行号" value="{{cancelForm.bankBranchId}}" placeholder="选填" data-field="bankBranchId" bind:change="onCancelFormInput" />
+            <t-input label="支行名称" value="{{cancelForm.bankBranchName}}" placeholder="选填" data-field="bankBranchName" bind:change="onCancelFormInput" />
+          </t-cell-group>
+
+          <t-cell-group wx:if="{{showPersonalIdentityForm}}">
+            <t-cell title="个人证件类型" />
+            <view><t-radio-group value="{{cancelForm.idDocType}}" options="{{idDocTypeOptions}}" bind:change="onIdDocTypeChange" /></view>
+            <t-input label="证件姓名" value="{{cancelForm.identificationName}}" placeholder="请输入证件姓名" data-field="identificationName" bind:change="onCancelFormInput" />
+            <t-input label="证件号码" value="{{cancelForm.identificationNo}}" placeholder="请输入证件号码" data-field="identificationNo" bind:change="onCancelFormInput" />
+          </t-cell-group>
+
+          <t-cell-group>
+            <t-cell title="注销提现证明" note="{{proofMediaRequired ? '必传 1 张' : '如微信要求可补充'}}" />
+            <view>
+              <t-upload files="{{proofMediaFiles}}" max="1" mediaType="{{uploadMediaType}}" gridConfig="{{uploadGridConfig}}" disabled="{{cancelSubmitting || uploadingProofMedia}}" bind:add="onAddProofMedia" bind:remove="onRemoveProofMedia" />
+              <view wx:if="{{uploadingProofMedia}}"><t-loading theme="circular" size="28rpx" text="上传中..." /></view>
+            </view>
+          </t-cell-group>
+
+          <t-cell-group>
+            <t-cell title="补充材料" note="最多 10 张" />
+            <view>
+              <t-upload files="{{additionalMaterialFiles}}" max="10" mediaType="{{uploadMediaType}}" gridConfig="{{uploadGridConfig}}" disabled="{{cancelSubmitting || uploadingAdditionalMaterial}}" bind:add="onAddAdditionalMaterial" bind:remove="onRemoveAdditionalMaterial" />
+              <view wx:if="{{uploadingAdditionalMaterial}}"><t-loading theme="circular" size="28rpx" text="上传中..." /></view>
+            </view>
+          </t-cell-group>
+        </block>
+
+        <t-cell-group>
+          <t-textarea label="备注" value="{{cancelForm.remark}}" placeholder="选填，最多 32 个中文、数字或字母" maxlength="32" indicator="{{false}}" data-field="remark" bind:change="onCancelFormInput" />
+        </t-cell-group>
+
+        <t-cell-group wx:if="{{cancelFormErrorMessage}}"><t-cell title="无法提交" note="{{cancelFormErrorMessage}}" /></t-cell-group>
+        <t-cell-group wx:if="{{cancelSyncMessage}}"><t-cell title="提交状态" note="{{cancelSyncMessage}}" /></t-cell-group>
+        <t-button theme="primary" loading="{{cancelSubmitting}}" disabled="{{cancelSubmitting || uploadingProofMedia || uploadingAdditionalMaterial}}" bind:tap="onOpenCancelDialog">提交注销提现申请</t-button>
+      </block>
+    </view>
+
+    <view>
+      <t-empty wx:if="{{!cancelApplications.length}}" description="暂无注销提现申请" />
+      <t-cell-group wx:else title="最近申请">
+        <t-cell wx:for="{{cancelApplications}}" wx:key="id" title="{{item.modeText}}" description="{{item.createdAtText}}" hover arrow data-id="{{item.id}}" bind:click="onTapCancelApplication">
+          <view slot="right-icon"><t-tag theme="{{item.status.theme}}" size="small">{{item.status.text}}</t-tag></view>
+        </t-cell>
+      </t-cell-group>
+    </view>
+  </view>
+
+  <t-dialog
+    visible="{{cancelDialogVisible}}"
+    title="确认申请"
+    content="提交后将以微信与后端同步结果为准，处理中状态可在本页刷新查看。"
+    confirm-btn="提交"
+    cancel-btn="取消"
+    bind:confirm="onConfirmCancelWithdraw"
+    bind:cancel="onCancelDialogClose"
+    bind:close="onCancelDialogClose"
+  />
+</view>

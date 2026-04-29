@@ -212,6 +212,7 @@ const DASHBOARD_SECTIONS: DashboardSectionDefinition[] = [
     id: 'finance',
     title: '财务',
     items: [
+      { id: 'finance-home', title: '资金账户', icon: createIcon('money', 'var(--td-brand-color)'), path: '/pages/merchant/finance/index' },
       { id: 'application', title: '主体资料', icon: createIcon('personal-information', 'var(--td-brand-color)'), path: '/pages/merchant/settings/application/index' },
       { id: 'applyment', title: '收付通进件', icon: createIcon('creditcard-add', 'var(--td-brand-color)'), path: '/pages/merchant/settings/applyment/index' }
     ]

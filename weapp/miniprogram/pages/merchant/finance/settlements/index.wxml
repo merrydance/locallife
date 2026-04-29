@@ -1,0 +1,26 @@
+<custom-navbar title="结算记录" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: var(--spacer-lg);">
+  <view wx:if="{{initialLoading}}" class="page-content"><t-loading theme="circular" size="40rpx" text="加载结算记录中..." vertical /></view>
+  <view wx:elif="{{initialError}}" class="page-content"><t-empty icon="error-circle" description="{{initialErrorMessage || '结算记录加载失败，请重试'}}" /><t-button theme="primary" bind:tap="onRetry">重新加载</t-button></view>
+
+  <view wx:else class="page-content">
+    <t-cell-group wx:if="{{summaryText}}">
+      <t-cell title="近 30 天已结算入账" note="{{summaryText}}" />
+    </t-cell-group>
+
+    <t-cell-group wx:if="{{refreshErrorMessage}}">
+      <t-cell title="刷新失败" note="{{refreshErrorMessage}}">
+        <view slot="right-icon"><t-button size="extra-small" theme="primary" variant="text" loading="{{loadingSettlements}}" bind:tap="onRetry">重试</t-button></view>
+      </t-cell>
+    </t-cell-group>
+
+    <t-empty wx:if="{{!rows.length}}" description="当前区间暂无结算单" />
+    <t-cell-group wx:else>
+      <t-cell wx:for="{{rows}}" wx:key="id" title="{{item.title}}" description="{{item.note}}" note="{{item.amountText}}">
+        <view slot="right-icon"><t-tag theme="{{item.statusTheme}}" size="small">{{item.statusText}}</t-tag></view>
+      </t-cell>
+    </t-cell-group>
+    <t-button wx:if="{{hasMore}}" theme="default" loading="{{loadingSettlements}}" bind:tap="onLoadMore">加载更多</t-button>
+  </view>
+</view>

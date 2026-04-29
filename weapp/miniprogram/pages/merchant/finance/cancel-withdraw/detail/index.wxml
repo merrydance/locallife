@@ -1,0 +1,40 @@
+<custom-navbar title="注销提现申请" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: var(--spacer-lg);">
+  <view wx:if="{{initialLoading}}" class="page-content"><t-loading theme="circular" size="40rpx" text="加载申请状态中..." vertical /></view>
+  <view wx:elif="{{initialError}}" class="page-content"><t-empty icon="error-circle" description="{{initialErrorMessage || '申请状态加载失败，请重试'}}" /><t-button theme="primary" bind:tap="onRetry">重新加载</t-button></view>
+
+  <view wx:else class="page-content">
+    <t-cell-group wx:if="{{refreshErrorMessage}}">
+      <t-cell title="同步失败" note="{{refreshErrorMessage}}"><view slot="right-icon"><t-button size="extra-small" theme="primary" variant="text" loading="{{loadingApplication}}" bind:tap="onRetry">重试</t-button></view></t-cell>
+    </t-cell-group>
+
+    <t-cell-group>
+      <t-cell title="申请状态" note="{{application.status.text}}">
+        <view slot="right-icon"><t-tag theme="{{application.status.theme}}" size="small">{{application.modeText}}</t-tag></view>
+      </t-cell>
+      <t-cell wx:if="{{application.description}}" title="状态说明" note="{{application.description}}" />
+      <t-cell wx:if="{{application.lastErrorText}}" title="同步失败" note="{{application.lastErrorText}}" />
+      <t-cell title="提现状态" note="{{application.withdrawStatus.text}}">
+        <view slot="right-icon"><t-tag theme="{{application.withdrawStatus.theme}}" size="small">{{application.withdrawStatus.text}}</t-tag></view>
+      </t-cell>
+      <t-cell title="本地申请号" note="{{application.outRequestNo}}" />
+      <t-cell wx:if="{{application.applymentId}}" title="微信申请号" note="{{application.applymentId}}" />
+      <t-cell title="营业执照状态" note="{{application.businessLicenseStatusText}}" />
+      <t-cell title="证明材料" note="{{application.proofMediaCountText}}" />
+      <t-cell title="补充材料" note="{{application.additionalMaterialCountText}}" />
+      <t-cell title="账户余额" note="{{application.accountInfoText}}" />
+      <t-cell title="提现结果" note="{{application.accountWithdrawResultText}}" />
+      <t-cell title="创建时间" note="{{application.createdAtText}}" />
+      <t-cell title="更新时间" note="{{application.updatedAtText}}" />
+    </t-cell-group>
+
+    <t-cell-group wx:if="{{application.confirmCancelUrl}}">
+      <t-cell title="待商户确认" note="请复制链接后完成微信确认">
+        <view slot="right-icon"><t-button size="extra-small" theme="primary" variant="text" bind:tap="onCopyConfirmUrl">复制链接</t-button></view>
+      </t-cell>
+    </t-cell-group>
+
+    <t-button wx:if="{{application.canRefresh}}" theme="primary" loading="{{loadingApplication}}" bind:tap="onRetry">刷新状态</t-button>
+  </view>
+</view>

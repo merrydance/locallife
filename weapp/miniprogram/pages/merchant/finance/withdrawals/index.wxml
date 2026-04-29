@@ -1,0 +1,47 @@
+<custom-navbar title="提现记录" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: var(--spacer-lg);">
+  <view wx:if="{{!accessReady}}" class="page-content">
+    <t-loading theme="circular" size="40rpx" text="校验商户权限中..." vertical />
+  </view>
+
+  <view wx:elif="{{accessDenied}}" class="page-content">
+    <t-empty icon="lock-on" description="当前账号无商户权限，请返回“我的”切换身份" />
+  </view>
+
+  <view wx:elif="{{accessErrorMessage}}" class="page-content">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" bind:tap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{initialLoading}}" class="page-content">
+    <t-loading theme="circular" size="40rpx" text="加载提现记录中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="page-content">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '提现记录加载失败，请重试'}}" />
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
+  </view>
+
+  <view wx:else class="page-content">
+    <t-cell-group>
+      <t-cell title="可提现余额" note="{{balanceView.withdrawableAmount.text}}">
+        <view slot="right-icon"><t-button theme="primary" size="small" bind:tap="onCreateWithdrawal" disabled="{{!balanceView.isActive}}">提现</t-button></view>
+      </t-cell>
+    </t-cell-group>
+
+    <t-cell-group wx:if="{{refreshErrorMessage}}">
+      <t-cell title="刷新失败" note="{{refreshErrorMessage}}">
+        <view slot="right-icon"><t-button size="extra-small" theme="primary" variant="text" loading="{{loadingWithdrawals}}" bind:tap="onRetry">重试</t-button></view>
+      </t-cell>
+    </t-cell-group>
+
+    <t-empty wx:if="{{!withdrawals.length}}" description="暂无提现记录" />
+    <t-cell-group wx:else>
+      <t-cell wx:for="{{withdrawals}}" wx:key="id" title="{{item.amount.text}}" description="{{item.createdAtText}} · {{item.channelText}}" hover arrow data-id="{{item.id}}" bind:click="onTapWithdrawal">
+        <view slot="right-icon"><t-tag theme="{{item.status.theme}}" size="small">{{item.status.text}}</t-tag></view>
+      </t-cell>
+    </t-cell-group>
+    <t-button wx:if="{{hasMore}}" theme="default" loading="{{loadingWithdrawals}}" bind:tap="onLoadMore">加载更多</t-button>
+  </view>
+</view>

@@ -167,6 +167,13 @@
       "name": "merchant",
       "pages": [
         "dashboard/index",
+        "finance/index",
+        "finance/withdrawals/index",
+        "finance/withdrawals/create/index",
+        "finance/withdrawals/detail/index",
+        "finance/cancel-withdraw/detail/index",
+        "finance/bills/index",
+        "finance/settlements/index",
         "kitchen/index",
         "kitchen/detail/index",
         "stats/index",
