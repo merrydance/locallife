@@ -41,20 +41,16 @@ func randomRider(userID int64) db.Rider {
 	}
 }
 
-func expectRiderThresholdFromOperator(store *mockdb.MockStore, rider db.Rider, threshold int64) {
+func expectRiderThresholdFromPlatformDefault(store *mockdb.MockStore, rider db.Rider, threshold int64) {
 	store.EXPECT().
-		GetActiveOperatorByRegion(gomock.Any(), rider.RegionID.Int64).
+		GetRegionRuleConfigByRegion(gomock.Any(), rider.RegionID.Int64).
 		Times(1).
-		Return(db.Operator{ID: 1, RiderDeposit: threshold}, nil)
-	if threshold == db.DefaultRiderDepositThresholdFen {
-		store.EXPECT().
-			GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
-				ConfigKey: db.PlatformConfigKeyRiderDepositFen,
-				ScopeType: db.PlatformConfigScopeOperator,
-				ScopeID:   pgtype.Int8{Int64: 1, Valid: true},
-			}).
-			Times(1).
-			Return(db.PlatformConfig{}, db.ErrRecordNotFound)
+		Return(db.RegionRuleConfig{}, db.ErrRecordNotFound)
+	if threshold > 0 && threshold != db.DefaultRiderDepositThresholdFen {
+		thresholdConfig, err := json.Marshal(depositConfigValue{AmountFen: threshold})
+		if err != nil {
+			panic(err)
+		}
 		store.EXPECT().
 			GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
 				ConfigKey: db.PlatformConfigKeyRiderDepositFen,
@@ -62,8 +58,17 @@ func expectRiderThresholdFromOperator(store *mockdb.MockStore, rider db.Rider, t
 				ScopeID:   pgtype.Int8{Valid: false},
 			}).
 			Times(1).
-			Return(db.PlatformConfig{}, db.ErrRecordNotFound)
+			Return(db.PlatformConfig{ConfigValue: thresholdConfig}, nil)
+		return
 	}
+	store.EXPECT().
+		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
+			ConfigKey: db.PlatformConfigKeyRiderDepositFen,
+			ScopeType: db.PlatformConfigScopeGlobal,
+			ScopeID:   pgtype.Int8{Valid: false},
+		}).
+		Times(1).
+		Return(db.PlatformConfig{}, db.ErrRecordNotFound)
 }
 
 func TestGetRiderMeAPI(t *testing.T) {
@@ -159,7 +164,7 @@ func TestGoOnlineAPI(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(rider, nil)
-				expectRiderThresholdFromOperator(store, rider, db.DefaultRiderDepositThresholdFen)
+				expectRiderThresholdFromPlatformDefault(store, rider, db.DefaultRiderDepositThresholdFen)
 
 				updatedRider := rider
 				updatedRider.IsOnline = true
@@ -209,7 +214,7 @@ func TestGoOnlineAPI(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(insufficientRider, nil)
-				expectRiderThresholdFromOperator(store, insufficientRider, db.DefaultRiderDepositThresholdFen)
+				expectRiderThresholdFromPlatformDefault(store, insufficientRider, db.DefaultRiderDepositThresholdFen)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -286,9 +291,9 @@ func TestGoOnlineAPI_UsesConfiguredDepositThreshold(t *testing.T) {
 		Times(1).
 		Return(rider, nil)
 	store.EXPECT().
-		GetActiveOperatorByRegion(gomock.Any(), int64(66)).
+		GetRegionRuleConfigByRegion(gomock.Any(), int64(66)).
 		Times(1).
-		Return(db.Operator{}, db.ErrRecordNotFound)
+		Return(db.RegionRuleConfig{}, db.ErrRecordNotFound)
 	store.EXPECT().
 		GetPlatformConfig(gomock.Any(), gomock.Any()).
 		Times(1).
@@ -1580,7 +1585,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.Delivery{}, nil)
-				expectRiderThresholdFromOperator(store, rider, db.DefaultRiderDepositThresholdFen)
+				expectRiderThresholdFromPlatformDefault(store, rider, db.DefaultRiderDepositThresholdFen)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1609,7 +1614,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.Delivery{{ID: 1}}, nil)
-				expectRiderThresholdFromOperator(store, rider, db.DefaultRiderDepositThresholdFen)
+				expectRiderThresholdFromPlatformDefault(store, rider, db.DefaultRiderDepositThresholdFen)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1637,7 +1642,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.Delivery{}, nil)
-				expectRiderThresholdFromOperator(store, offlineRider, db.DefaultRiderDepositThresholdFen)
+				expectRiderThresholdFromPlatformDefault(store, offlineRider, db.DefaultRiderDepositThresholdFen)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1665,7 +1670,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.Delivery{}, nil)
-				expectRiderThresholdFromOperator(store, insufficientRider, db.DefaultRiderDepositThresholdFen)
+				expectRiderThresholdFromPlatformDefault(store, insufficientRider, db.DefaultRiderDepositThresholdFen)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1693,7 +1698,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.Delivery{}, nil)
-				expectRiderThresholdFromOperator(store, approvedRider, db.DefaultRiderDepositThresholdFen)
+				expectRiderThresholdFromPlatformDefault(store, approvedRider, db.DefaultRiderDepositThresholdFen)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

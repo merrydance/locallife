@@ -710,6 +710,18 @@ func TestCreateClaimWithBehaviorTx_RiderRecoveryWritesRiderArtifacts(t *testing.
 	rider7NetPayload := decodeTraceMetricPayload(t, rider7Net.MetricPayload)
 	require.Equal(t, int32(1), rider7NetPayload.EffectiveLiabilityClaims)
 
+	user7Raw, ok := snapshotByKey["user:7d:raw"]
+	require.True(t, ok)
+	require.Equal(t, user.ID, user7Raw.ActorID.Int64)
+	user7RawPayload := decodeTraceMetricPayload(t, user7Raw.MetricPayload)
+	require.Equal(t, user7Raw.AbnormalCount, user7RawPayload.ClaimAttempts)
+
+	merchant7Raw, ok := snapshotByKey["merchant:7d:raw"]
+	require.True(t, ok)
+	require.Equal(t, merchant.ID, merchant7Raw.ActorID.Int64)
+	merchant7RawPayload := decodeTraceMetricPayload(t, merchant7Raw.MetricPayload)
+	require.Equal(t, merchant7Raw.AbnormalCount, merchant7RawPayload.EffectiveLiabilityClaims)
+
 	effects, err := testStore.ListBehaviorDecisionEffectsByDecision(ctx, decision.ID)
 	require.NoError(t, err)
 	require.Len(t, effects, 4)

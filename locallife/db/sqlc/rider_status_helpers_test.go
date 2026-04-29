@@ -11,6 +11,8 @@ import (
 )
 
 type stubRiderDepositThresholdReader struct {
+	regionRuleConfig   RegionRuleConfig
+	regionErr          error
 	activeOperator     Operator
 	operatorErr        error
 	platformConfig     PlatformConfig
@@ -53,6 +55,10 @@ func (s stubRiderDepositThresholdReader) GetPlatformConfig(_ context.Context, ar
 	return s.platformConfig, s.platformErr
 }
 
+func (s stubRiderDepositThresholdReader) GetRegionRuleConfigByRegion(context.Context, int64) (RegionRuleConfig, error) {
+	return s.regionRuleConfig, s.regionErr
+}
+
 func (s stubRiderDepositThresholdReader) GetActiveOperatorByRegion(context.Context, int64) (Operator, error) {
 	return s.activeOperator, s.operatorErr
 }
@@ -90,24 +96,31 @@ func (s *stubRiderOperationalStatusReconciler) ListRiderActiveDeliveries(context
 
 func TestGetEffectiveRiderDepositThreshold_FallsBackToDefaultWithoutOperatorOrPlatformConfig(t *testing.T) {
 	threshold, err := GetEffectiveRiderDepositThreshold(context.Background(), stubRiderDepositThresholdReader{
-		operatorErr: ErrRecordNotFound,
+		regionErr:   ErrRecordNotFound,
 		platformErr: ErrRecordNotFound,
 	}, pgtype.Int8{Int64: 11, Valid: true})
 	require.NoError(t, err)
 	require.Equal(t, int64(DefaultRiderDepositThresholdFen), threshold)
 }
 
-func TestGetEffectiveRiderDepositThreshold_UsesOperatorConfigForRegion(t *testing.T) {
+func TestGetEffectiveRiderDepositThreshold_UsesRegionConfigBeforeOperatorOrPlatform(t *testing.T) {
 	threshold, err := GetEffectiveRiderDepositThreshold(context.Background(), stubRiderDepositThresholdReader{
-		activeOperator: Operator{ID: 9, RiderDeposit: 26000},
+		regionRuleConfig: RegionRuleConfig{RegionID: 11, RiderDeposit: 33000},
+		activeOperator:   Operator{ID: 9, RiderDeposit: 26000},
+		platformConfig: PlatformConfig{
+			ConfigKey:   PlatformConfigKeyRiderDepositFen,
+			ScopeType:   PlatformConfigScopeGlobal,
+			ScopeID:     pgtype.Int8{Valid: false},
+			ConfigValue: []byte(`{"amount_fen":28000}`),
+		},
 	}, pgtype.Int8{Int64: 11, Valid: true})
 	require.NoError(t, err)
-	require.Equal(t, int64(26000), threshold)
+	require.Equal(t, int64(33000), threshold)
 }
 
-func TestGetEffectiveRiderDepositThreshold_UsesPlatformFallbackWhenOperatorStillOnLegacyDefault(t *testing.T) {
+func TestGetEffectiveRiderDepositThreshold_UsesPlatformFallbackWhenRegionConfigMissing(t *testing.T) {
 	threshold, err := GetEffectiveRiderDepositThreshold(context.Background(), stubRiderDepositThresholdReader{
-		activeOperator: Operator{ID: 9, RiderDeposit: DefaultRiderDepositThresholdFen},
+		regionErr: ErrRecordNotFound,
 		platformConfigs: map[string]PlatformConfig{
 			depositScopeKey(GetPlatformConfigParams{
 				ConfigKey: PlatformConfigKeyRiderDepositFen,
@@ -125,39 +138,9 @@ func TestGetEffectiveRiderDepositThreshold_UsesPlatformFallbackWhenOperatorStill
 	require.Equal(t, int64(32000), threshold)
 }
 
-func TestGetEffectiveRiderDepositThreshold_UsesOperatorScopedConfigAtLegacyDefaultValue(t *testing.T) {
-	threshold, err := GetEffectiveRiderDepositThreshold(context.Background(), stubRiderDepositThresholdReader{
-		activeOperator: Operator{ID: 9, RiderDeposit: DefaultRiderDepositThresholdFen},
-		platformConfigs: map[string]PlatformConfig{
-			depositScopeKey(GetPlatformConfigParams{
-				ConfigKey: PlatformConfigKeyRiderDepositFen,
-				ScopeType: PlatformConfigScopeOperator,
-				ScopeID:   pgtype.Int8{Int64: 9, Valid: true},
-			}): {
-				ConfigKey:   PlatformConfigKeyRiderDepositFen,
-				ScopeType:   PlatformConfigScopeOperator,
-				ScopeID:     pgtype.Int8{Int64: 9, Valid: true},
-				ConfigValue: []byte(`{"amount_fen":20000}`),
-			},
-			depositScopeKey(GetPlatformConfigParams{
-				ConfigKey: PlatformConfigKeyRiderDepositFen,
-				ScopeType: PlatformConfigScopeGlobal,
-				ScopeID:   pgtype.Int8{Valid: false},
-			}): {
-				ConfigKey:   PlatformConfigKeyRiderDepositFen,
-				ScopeType:   PlatformConfigScopeGlobal,
-				ScopeID:     pgtype.Int8{Valid: false},
-				ConfigValue: []byte(`{"amount_fen":32000}`),
-			},
-		},
-	}, pgtype.Int8{Int64: 11, Valid: true})
-	require.NoError(t, err)
-	require.Equal(t, int64(DefaultRiderDepositThresholdFen), threshold)
-}
-
 func TestGetEffectiveRiderDepositThreshold_UsesPlatformFallbackWhenOperatorMissing(t *testing.T) {
 	threshold, err := GetEffectiveRiderDepositThreshold(context.Background(), stubRiderDepositThresholdReader{
-		operatorErr: ErrRecordNotFound,
+		regionErr:   ErrRecordNotFound,
 		platformErr: nil,
 		platformConfig: PlatformConfig{
 			ConfigKey:   PlatformConfigKeyRiderDepositFen,
@@ -170,9 +153,9 @@ func TestGetEffectiveRiderDepositThreshold_UsesPlatformFallbackWhenOperatorMissi
 	require.Equal(t, int64(28000), threshold)
 }
 
-func TestGetEffectiveRiderDepositThreshold_IgnoresZeroOperatorConfigAndFallsBackToPlatform(t *testing.T) {
+func TestGetEffectiveRiderDepositThreshold_IgnoresZeroRegionConfigAndFallsBackToPlatform(t *testing.T) {
 	threshold, err := GetEffectiveRiderDepositThreshold(context.Background(), stubRiderDepositThresholdReader{
-		activeOperator: Operator{ID: 9, RiderDeposit: 0},
+		regionRuleConfig: RegionRuleConfig{RegionID: 11, RiderDeposit: 0},
 		platformConfig: PlatformConfig{
 			ConfigKey:   PlatformConfigKeyRiderDepositFen,
 			ScopeType:   PlatformConfigScopeGlobal,
@@ -184,10 +167,10 @@ func TestGetEffectiveRiderDepositThreshold_IgnoresZeroOperatorConfigAndFallsBack
 	require.Equal(t, int64(32000), threshold)
 }
 
-func TestGetEffectiveRiderDepositThreshold_ReturnsOperatorLookupError(t *testing.T) {
+func TestGetEffectiveRiderDepositThreshold_ReturnsRegionLookupError(t *testing.T) {
 	boom := errors.New("boom")
 	_, err := GetEffectiveRiderDepositThreshold(context.Background(), stubRiderDepositThresholdReader{
-		operatorErr: boom,
+		regionErr: boom,
 	}, pgtype.Int8{Int64: 11, Valid: true})
 	require.ErrorIs(t, err, boom)
 }
@@ -195,7 +178,7 @@ func TestGetEffectiveRiderDepositThreshold_ReturnsOperatorLookupError(t *testing
 func TestReconcileRiderOperationalStatus_DemotesActiveRiderAndForcesOffline(t *testing.T) {
 	reconciler := &stubRiderOperationalStatusReconciler{
 		stubRiderDepositThresholdReader: stubRiderDepositThresholdReader{
-			activeOperator: Operator{ID: 9, RiderDeposit: 26000},
+			regionRuleConfig: RegionRuleConfig{RegionID: 11, RiderDeposit: 26000},
 		},
 		statusResult: Rider{
 			ID:            33,
@@ -230,7 +213,7 @@ func TestReconcileRiderOperationalStatus_DemotesActiveRiderAndForcesOffline(t *t
 func TestReconcileRiderOperationalStatus_PromotesApprovedRiderWhenPlatformThresholdSatisfied(t *testing.T) {
 	reconciler := &stubRiderOperationalStatusReconciler{
 		stubRiderDepositThresholdReader: stubRiderDepositThresholdReader{
-			operatorErr: ErrRecordNotFound,
+			regionErr: ErrRecordNotFound,
 			platformConfig: PlatformConfig{
 				ConfigKey:   PlatformConfigKeyRiderDepositFen,
 				ScopeType:   PlatformConfigScopeGlobal,
@@ -263,7 +246,7 @@ func TestReconcileRiderOperationalStatus_PromotesApprovedRiderWhenPlatformThresh
 func TestReconcileRiderOperationalStatus_DemotesActiveRiderWithActiveDeliveriesKeepsOnline(t *testing.T) {
 	reconciler := &stubRiderOperationalStatusReconciler{
 		stubRiderDepositThresholdReader: stubRiderDepositThresholdReader{
-			activeOperator: Operator{ID: 9, RiderDeposit: 26000},
+			regionRuleConfig: RegionRuleConfig{RegionID: 11, RiderDeposit: 26000},
 		},
 		activeDeliveries: []Delivery{{ID: 91}},
 		statusResult: Rider{

@@ -79,10 +79,6 @@ func (server *Server) getOperatorGlobalDepositFen(ctx *gin.Context, configKey st
 	return server.getScopedDepositFen(ctx, configKey, db.PlatformConfigScopeGlobal, pgtype.Int8{Valid: false})
 }
 
-func (server *Server) getOperatorScopedDepositFen(ctx *gin.Context, configKey string, operatorID int64) (int64, bool, error) {
-	return server.getScopedDepositFen(ctx, configKey, db.PlatformConfigScopeOperator, pgtype.Int8{Int64: operatorID, Valid: true})
-}
-
 func (server *Server) upsertOperatorScopedDepositFen(ctx *gin.Context, configKey string, operatorID int64, amountFen int64) error {
 	payload, err := json.Marshal(operatorDepositConfigValue{AmountFen: amountFen})
 	if err != nil {
@@ -98,26 +94,20 @@ func (server *Server) upsertOperatorScopedDepositFen(ctx *gin.Context, configKey
 	return err
 }
 
-func (server *Server) getOperatorRiderDepositThreshold(ctx *gin.Context, operator db.Operator) (int64, db.RiderDepositThresholdSource, error) {
-	configured, ok, err := server.getOperatorScopedDepositFen(ctx, operatorRiderDepositConfigKey, operator.ID)
+func (server *Server) getOperatorRiderDepositThreshold(ctx *gin.Context, regionRuleConfig *db.RegionRuleConfig) (int64, db.RiderDepositThresholdSource, error) {
+	if regionRuleConfig != nil && regionRuleConfig.RiderDeposit > 0 {
+		return regionRuleConfig.RiderDeposit, db.RiderDepositThresholdSourceRegion, nil
+	}
+
+	configured, ok, err := server.getOperatorGlobalDepositFen(ctx, operatorRiderDepositConfigKey)
 	if err != nil {
 		return 0, "", err
 	}
 	if ok && configured > 0 {
-		return configured, db.RiderDepositThresholdSourceOperator, nil
+		return configured, db.RiderDepositThresholdSourcePlatform, nil
 	}
 
-	globalConfigured := int64(0)
-	globalOK := false
-	if operator.RiderDeposit <= 0 || operator.RiderDeposit == db.DefaultRiderDepositThresholdFen {
-		var err error
-		globalConfigured, globalOK, err = server.getOperatorGlobalDepositFen(ctx, operatorRiderDepositConfigKey)
-		if err != nil {
-			return 0, "", err
-		}
-	}
-
-	threshold, source := db.ResolveRiderDepositThreshold(operator.RiderDeposit, globalConfigured, globalOK)
+	threshold, source := db.ResolveRiderDepositThreshold(0, false)
 	return threshold, source, nil
 }
 
@@ -267,11 +257,6 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 
 	rules := []RuleItem{}
 
-	riderDepositValue, riderDepositSource, err := server.getOperatorRiderDepositThreshold(ctx, operator)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
 	regionRuleConfig, configErr := server.store.GetRegionRuleConfigByRegion(ctx, targetRegionID)
 	var regionRuleConfigPtr *db.RegionRuleConfig
 	if configErr != nil && !isNotFoundError(configErr) {
@@ -280,6 +265,11 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 	}
 	if configErr == nil {
 		regionRuleConfigPtr = &regionRuleConfig
+	}
+	riderDepositValue, riderDepositSource, err := server.getOperatorRiderDepositThreshold(ctx, regionRuleConfigPtr)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
 	}
 
 	// 运营商抽成比例直接从 profit_sharing_configs 读取，与平台侧保持同源
@@ -328,9 +318,9 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 		}
 	}
 
-	// 1. 骑手入驻押金（运营商优先，平台默认值兜底）
+	// 1. 骑手入驻押金（区域优先，平台默认值兜底）
 	riderDeposit := fenToYuanString(riderDepositValue, 2)
-	riderDepositDesc := "当前运营商配置，直接决定本运营商骑手押金门槛"
+	riderDepositDesc := "当前区域配置，直接决定本区域骑手押金门槛"
 	switch riderDepositSource {
 	case db.RiderDepositThresholdSourcePlatform:
 		riderDepositDesc = "当前使用平台默认值，运营商可单独修改覆盖"
@@ -652,6 +642,14 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
+		_, err = server.store.UpsertRegionRuleConfig(ctx, db.UpsertRegionRuleConfigParams{
+			RegionID:     targetRegionID,
+			RiderDeposit: pgtype.Int8{Int64: amountFen, Valid: true},
+		})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 		if err := server.syncRiderOperationalStatusesByRegion(ctx, targetRegionID); err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
@@ -661,6 +659,7 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 		auditMetadata["value_fen"] = amountFen
 		auditMetadata["platform_config_scope_type"] = db.PlatformConfigScopeOperator
 		auditMetadata["platform_config_scope_id"] = operator.ID
+		auditMetadata["region_rule_config"] = true
 
 	case "BASE_DELIVERY_FEE", "BASE_DISTANCE", "EXTRA_FEE_PER_KM", "MIN_DELIVERY_FEE", "MAX_DELIVERY_FEE", "DELIVERY_VALUE_RATIO":
 		// 1. 获取现有配置或初始化

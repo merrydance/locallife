@@ -734,32 +734,6 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		Metadata:    metadata,
 	})
 
-	// 📢 异步执行商户/骑手索赔历史检查（避免阻塞API响应）
-	if server.taskDistributor != nil {
-		// 异物索赔：检查商户历史
-		if req.ClaimType == "foreign-object" {
-			_ = server.taskDistributor.DistributeTaskCheckMerchantForeignObject(
-				ctx,
-				order.MerchantID,
-				asynq.Queue(worker.QueueDefault),
-				asynq.MaxRetry(3),
-			)
-		}
-		// 餐损/超时索赔：如果是外卖订单，检查骑手历史
-		if (req.ClaimType == "damage" || req.ClaimType == "timeout") && order.OrderType == "takeout" {
-			// 获取骑手ID
-			delivery, err := server.store.GetDeliveryByOrderID(ctx, order.ID)
-			if err == nil && delivery.RiderID.Valid {
-				_ = server.taskDistributor.DistributeTaskCheckRiderDamage(
-					ctx,
-					delivery.RiderID.Int64,
-					asynq.Queue(worker.QueueDefault),
-					asynq.MaxRetry(3),
-				)
-			}
-		}
-	}
-
 	ctx.JSON(http.StatusOK, resp)
 }
 

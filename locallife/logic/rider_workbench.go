@@ -31,7 +31,7 @@ type RiderWorkbenchStore interface {
 	GetRiderProfitSharingStats(ctx context.Context, arg db.GetRiderProfitSharingStatsParams) (db.GetRiderProfitSharingStatsRow, error)
 	GetRiderProfitSharingStatusSummary(ctx context.Context, arg db.GetRiderProfitSharingStatusSummaryParams) ([]db.GetRiderProfitSharingStatusSummaryRow, error)
 	GetPendingRiderDepositRefundAmountByUserID(ctx context.Context, userID int64) (int64, error)
-	GetActiveOperatorByRegion(ctx context.Context, regionID int64) (db.Operator, error)
+	GetRegionRuleConfigByRegion(ctx context.Context, regionID int64) (db.RegionRuleConfig, error)
 	GetPlatformConfig(ctx context.Context, arg db.GetPlatformConfigParams) (db.PlatformConfig, error)
 	CountRiderClaimsForRider(ctx context.Context, arg db.CountRiderClaimsForRiderParams) (int64, error)
 	CountUnreadNotifications(ctx context.Context, userID int64) (int64, error)

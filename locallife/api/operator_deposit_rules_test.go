@@ -53,7 +53,17 @@ func mustMarshalDeliveryFeeDefaultConfig(t *testing.T, value deliveryFeeDefaultC
 	return payload
 }
 
-func TestListOperatorRules_RiderDepositUsesOperatorConfig(t *testing.T) {
+func weatherOnlyRegionRuleConfig(regionID int64) db.RegionRuleConfig {
+	return db.RegionRuleConfig{
+		RegionID:             regionID,
+		WeatherCoeffExtreme:  numericFromFloat(2.0),
+		WeatherCoeffHeavy:    numericFromFloat(1.8),
+		WeatherCoeffModerate: numericFromFloat(1.5),
+		WeatherCoeffLight:    numericFromFloat(1.2),
+	}
+}
+
+func TestListOperatorRules_RiderDepositUsesRegionConfigBeforeOperatorConfig(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -81,13 +91,6 @@ func TestListOperatorRules_RiderDepositUsesOperatorConfig(t *testing.T) {
 		GetActiveProfitSharingConfig(gomock.Any(), gomock.Any()).
 		Return(db.ProfitSharingConfig{}, db.ErrRecordNotFound)
 	store.EXPECT().
-		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
-			ConfigKey: operatorRiderDepositConfigKey,
-			ScopeType: db.PlatformConfigScopeOperator,
-			ScopeID:   pgtype.Int8{Int64: operator.ID, Valid: true},
-		}).
-		Return(db.PlatformConfig{}, db.ErrRecordNotFound)
-	store.EXPECT().
 		GetDeliveryFeeConfigByRegion(gomock.Any(), int64(12)).
 		Return(db.DeliveryFeeConfig{}, db.ErrRecordNotFound)
 	store.EXPECT().
@@ -110,9 +113,9 @@ func TestListOperatorRules_RiderDepositUsesOperatorConfig(t *testing.T) {
 	var resp ListRulesResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	rule := findRuleByKey(t, resp.Rules, "RIDER_DEPOSIT")
-	require.Equal(t, "260.00", rule.Value)
+	require.Equal(t, "990.00", rule.Value)
 	require.True(t, rule.Editable)
-	require.Contains(t, rule.Desc, "当前运营商配置")
+	require.Contains(t, rule.Desc, "当前区域配置")
 }
 
 func TestListOperatorRules_RiderDepositUsesPlatformDefaultWhenOperatorStillOnLegacyBaseline(t *testing.T) {
@@ -131,24 +134,10 @@ func TestListOperatorRules_RiderDepositUsesPlatformDefaultWhenOperatorStillOnLeg
 
 	store.EXPECT().
 		GetRegionRuleConfigByRegion(gomock.Any(), int64(12)).
-		Return(db.RegionRuleConfig{
-			RegionID:             12,
-			RiderDeposit:         db.DefaultRiderDepositThresholdFen,
-			WeatherCoeffExtreme:  numericFromFloat(2.0),
-			WeatherCoeffHeavy:    numericFromFloat(1.8),
-			WeatherCoeffModerate: numericFromFloat(1.5),
-			WeatherCoeffLight:    numericFromFloat(1.2),
-		}, nil)
+		Return(weatherOnlyRegionRuleConfig(12), nil)
 	store.EXPECT().
 		GetActiveProfitSharingConfig(gomock.Any(), gomock.Any()).
 		Return(db.ProfitSharingConfig{}, db.ErrRecordNotFound)
-	store.EXPECT().
-		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
-			ConfigKey: operatorRiderDepositConfigKey,
-			ScopeType: db.PlatformConfigScopeOperator,
-			ScopeID:   pgtype.Int8{Int64: operator.ID, Valid: true},
-		}).
-		Return(db.PlatformConfig{}, db.ErrRecordNotFound)
 	riderConfig, err := json.Marshal(operatorDepositConfigValue{AmountFen: 31000})
 	require.NoError(t, err)
 	store.EXPECT().
@@ -201,24 +190,10 @@ func TestListOperatorRules_RiderDepositUsesSystemDefaultWhenNoOverridesExist(t *
 
 	store.EXPECT().
 		GetRegionRuleConfigByRegion(gomock.Any(), int64(12)).
-		Return(db.RegionRuleConfig{
-			RegionID:             12,
-			RiderDeposit:         db.DefaultRiderDepositThresholdFen,
-			WeatherCoeffExtreme:  numericFromFloat(2.0),
-			WeatherCoeffHeavy:    numericFromFloat(1.8),
-			WeatherCoeffModerate: numericFromFloat(1.5),
-			WeatherCoeffLight:    numericFromFloat(1.2),
-		}, nil)
+		Return(weatherOnlyRegionRuleConfig(12), nil)
 	store.EXPECT().
 		GetActiveProfitSharingConfig(gomock.Any(), gomock.Any()).
 		Return(db.ProfitSharingConfig{}, db.ErrRecordNotFound)
-	store.EXPECT().
-		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
-			ConfigKey: operatorRiderDepositConfigKey,
-			ScopeType: db.PlatformConfigScopeOperator,
-			ScopeID:   pgtype.Int8{Int64: operator.ID, Valid: true},
-		}).
-		Return(db.PlatformConfig{}, db.ErrRecordNotFound)
 	store.EXPECT().
 		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
 			ConfigKey: operatorRiderDepositConfigKey,
@@ -253,7 +228,7 @@ func TestListOperatorRules_RiderDepositUsesSystemDefaultWhenNoOverridesExist(t *
 	require.Contains(t, rule.Desc, "当前使用系统默认值")
 }
 
-func TestUpdateOperatorRule_RiderDepositUpdatesOperatorOnlyWithoutTouchingPlatformDefault(t *testing.T) {
+func TestUpdateOperatorRule_RiderDepositUpdatesRegionWithoutTouchingPlatformDefault(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -278,6 +253,14 @@ func TestUpdateOperatorRule_RiderDepositUpdatesOperatorOnlyWithoutTouchingPlatfo
 		}).
 		Return(db.PlatformConfig{}, nil)
 	store.EXPECT().
+		UpsertRegionRuleConfig(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ any, arg db.UpsertRegionRuleConfigParams) (db.RegionRuleConfig, error) {
+			require.Equal(t, int64(12), arg.RegionID)
+			require.True(t, arg.RiderDeposit.Valid)
+			require.Equal(t, int64(27000), arg.RiderDeposit.Int64)
+			return db.RegionRuleConfig{RegionID: 12, RiderDeposit: 27000}, nil
+		})
+	store.EXPECT().
 		ListRidersByRegion(gomock.Any(), db.ListRidersByRegionParams{
 			RegionID: pgtype.Int8{Int64: 12, Valid: true},
 			Limit:    riderOperationalStatusSyncPageSize,
@@ -294,7 +277,7 @@ func TestUpdateOperatorRule_RiderDepositUpdatesOperatorOnlyWithoutTouchingPlatfo
 	require.Equal(t, http.StatusOK, recorder.Code)
 }
 
-func TestListOperatorRules_RiderDepositUsesExplicitOperatorScopedConfigAtLegacyDefaultValue(t *testing.T) {
+func TestListOperatorRules_RiderDepositIgnoresOperatorScopedConfigAndUsesPlatformDefault(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -310,24 +293,17 @@ func TestListOperatorRules_RiderDepositUsesExplicitOperatorScopedConfigAtLegacyD
 
 	store.EXPECT().
 		GetRegionRuleConfigByRegion(gomock.Any(), int64(12)).
-		Return(db.RegionRuleConfig{
-			RegionID:             12,
-			RiderDeposit:         db.DefaultRiderDepositThresholdFen,
-			WeatherCoeffExtreme:  numericFromFloat(2.0),
-			WeatherCoeffHeavy:    numericFromFloat(1.8),
-			WeatherCoeffModerate: numericFromFloat(1.5),
-			WeatherCoeffLight:    numericFromFloat(1.2),
-		}, nil)
+		Return(weatherOnlyRegionRuleConfig(12), nil)
 	store.EXPECT().
 		GetActiveProfitSharingConfig(gomock.Any(), gomock.Any()).
 		Return(db.ProfitSharingConfig{}, db.ErrRecordNotFound)
-	riderConfig, err := json.Marshal(operatorDepositConfigValue{AmountFen: db.DefaultRiderDepositThresholdFen})
+	riderConfig, err := json.Marshal(operatorDepositConfigValue{AmountFen: 31000})
 	require.NoError(t, err)
 	store.EXPECT().
 		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
 			ConfigKey: operatorRiderDepositConfigKey,
-			ScopeType: db.PlatformConfigScopeOperator,
-			ScopeID:   pgtype.Int8{Int64: operator.ID, Valid: true},
+			ScopeType: db.PlatformConfigScopeGlobal,
+			ScopeID:   pgtype.Int8{Valid: false},
 		}).
 		Return(db.PlatformConfig{ConfigValue: riderConfig}, nil)
 	store.EXPECT().
@@ -353,8 +329,8 @@ func TestListOperatorRules_RiderDepositUsesExplicitOperatorScopedConfigAtLegacyD
 	var resp ListRulesResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	rule := findRuleByKey(t, resp.Rules, "RIDER_DEPOSIT")
-	require.Equal(t, "200.00", rule.Value)
-	require.Contains(t, rule.Desc, "当前运营商配置")
+	require.Equal(t, "310.00", rule.Value)
+	require.Contains(t, rule.Desc, "当前使用平台默认值")
 }
 
 func TestListPlatformOperatorRules_RiderDepositUsesPlatformDefaultInsteadOfBaseline(t *testing.T) {
@@ -502,6 +478,14 @@ func TestUpdateOperatorRule_RiderDepositDemotesOnlineRiderWhenThresholdIncreases
 		}).
 		Return(db.PlatformConfig{}, nil)
 	store.EXPECT().
+		UpsertRegionRuleConfig(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ any, arg db.UpsertRegionRuleConfigParams) (db.RegionRuleConfig, error) {
+			require.Equal(t, int64(12), arg.RegionID)
+			require.True(t, arg.RiderDeposit.Valid)
+			require.Equal(t, int64(27000), arg.RiderDeposit.Int64)
+			return db.RegionRuleConfig{RegionID: 12, RiderDeposit: 27000}, nil
+		})
+	store.EXPECT().
 		ListRidersByRegion(gomock.Any(), db.ListRidersByRegionParams{
 			RegionID: pgtype.Int8{Int64: 12, Valid: true},
 			Limit:    riderOperationalStatusSyncPageSize,
@@ -509,8 +493,8 @@ func TestUpdateOperatorRule_RiderDepositDemotesOnlineRiderWhenThresholdIncreases
 		}).
 		Return([]db.Rider{rider}, nil)
 	store.EXPECT().
-		GetActiveOperatorByRegion(gomock.Any(), int64(12)).
-		Return(db.Operator{ID: 8, RegionID: 12, RiderDeposit: 27000}, nil)
+		GetRegionRuleConfigByRegion(gomock.Any(), int64(12)).
+		Return(db.RegionRuleConfig{RegionID: 12, RiderDeposit: 27000}, nil)
 	store.EXPECT().
 		UpdateRiderStatus(gomock.Any(), db.UpdateRiderStatusParams{ID: rider.ID, Status: db.RiderStatusApproved}).
 		Return(db.Rider{
@@ -573,8 +557,8 @@ func TestUpdatePlatformOperationalConfig_RiderDepositPromotesApprovedRiderUsingP
 		}).
 		Return([]db.Rider{}, nil)
 	store.EXPECT().
-		GetActiveOperatorByRegion(gomock.Any(), int64(18)).
-		Return(db.Operator{}, db.ErrRecordNotFound)
+		GetRegionRuleConfigByRegion(gomock.Any(), int64(18)).
+		Return(db.RegionRuleConfig{}, db.ErrRecordNotFound)
 	store.EXPECT().
 		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
 			ConfigKey: riderDepositConfigKey,
@@ -619,8 +603,8 @@ func TestListOperatorRules_DeliveryFeeUsesPlatformDefaultWhenRegionConfigMissing
 	store.EXPECT().
 		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
 			ConfigKey: operatorRiderDepositConfigKey,
-			ScopeType: db.PlatformConfigScopeOperator,
-			ScopeID:   pgtype.Int8{Int64: operator.ID, Valid: true},
+			ScopeType: db.PlatformConfigScopeGlobal,
+			ScopeID:   pgtype.Int8{Valid: false},
 		}).
 		Return(db.PlatformConfig{}, db.ErrRecordNotFound)
 	store.EXPECT().
@@ -684,8 +668,8 @@ func TestListOperatorRules_WeatherUsesCityScopedPlatformDefaultWhenRegionRuleMis
 	store.EXPECT().
 		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
 			ConfigKey: operatorRiderDepositConfigKey,
-			ScopeType: db.PlatformConfigScopeOperator,
-			ScopeID:   pgtype.Int8{Int64: operator.ID, Valid: true},
+			ScopeType: db.PlatformConfigScopeGlobal,
+			ScopeID:   pgtype.Int8{Valid: false},
 		}).
 		Return(db.PlatformConfig{}, db.ErrRecordNotFound)
 	for _, tc := range []struct {

@@ -15,14 +15,14 @@ type riderDepositConfigValue struct {
 type RiderDepositThresholdSource string
 
 const (
-	RiderDepositThresholdSourceOperator RiderDepositThresholdSource = "operator"
+	RiderDepositThresholdSourceRegion   RiderDepositThresholdSource = "region"
 	RiderDepositThresholdSourcePlatform RiderDepositThresholdSource = "platform"
 	RiderDepositThresholdSourceDefault  RiderDepositThresholdSource = "default"
 )
 
 type riderDepositThresholdReader interface {
+	GetRegionRuleConfigByRegion(ctx context.Context, regionID int64) (RegionRuleConfig, error)
 	GetPlatformConfig(ctx context.Context, arg GetPlatformConfigParams) (PlatformConfig, error)
-	GetActiveOperatorByRegion(ctx context.Context, regionID int64) (Operator, error)
 }
 
 type riderOperationalStatusReconciler interface {
@@ -56,17 +56,7 @@ func maybeSetRiderOfflineWhenNotEligible(ctx context.Context, q riderOperational
 	return updatedRider, nil
 }
 
-func ResolveRiderDepositThreshold(operatorDeposit int64, platformDeposit int64, hasPlatformConfig bool) (int64, RiderDepositThresholdSource) {
-	if operatorDeposit > 0 {
-		if operatorDeposit != DefaultRiderDepositThresholdFen {
-			return operatorDeposit, RiderDepositThresholdSourceOperator
-		}
-		if hasPlatformConfig && platformDeposit > 0 {
-			return platformDeposit, RiderDepositThresholdSourcePlatform
-		}
-		return operatorDeposit, RiderDepositThresholdSourceDefault
-	}
-
+func ResolveRiderDepositThreshold(platformDeposit int64, hasPlatformConfig bool) (int64, RiderDepositThresholdSource) {
 	if hasPlatformConfig && platformDeposit > 0 {
 		return platformDeposit, RiderDepositThresholdSourcePlatform
 	}
@@ -91,36 +81,14 @@ func decodeRiderDepositConfigAmount(config PlatformConfig) (int64, bool, error) 
 }
 
 func GetEffectiveRiderDepositThreshold(ctx context.Context, q riderDepositThresholdReader, regionID pgtype.Int8) (int64, error) {
-	operatorDeposit := int64(0)
-	operatorID := int64(0)
 	if regionID.Valid && regionID.Int64 > 0 {
-		operator, err := q.GetActiveOperatorByRegion(ctx, regionID.Int64)
+		regionConfig, err := q.GetRegionRuleConfigByRegion(ctx, regionID.Int64)
 		if err == nil {
-			operatorID = operator.ID
-			operatorDeposit = operator.RiderDeposit
-			if operatorID > 0 && operatorDeposit == DefaultRiderDepositThresholdFen {
-				config, configErr := q.GetPlatformConfig(ctx, GetPlatformConfigParams{
-					ConfigKey: PlatformConfigKeyRiderDepositFen,
-					ScopeType: PlatformConfigScopeOperator,
-					ScopeID:   pgtype.Int8{Int64: operatorID, Valid: true},
-				})
-				if configErr == nil {
-					amountFen, configured, decodeErr := decodeRiderDepositConfigAmount(config)
-					if decodeErr != nil {
-						return 0, decodeErr
-					}
-					if configured {
-						return amountFen, nil
-					}
-				} else if configErr != ErrRecordNotFound {
-					return 0, fmt.Errorf("get operator-scoped rider deposit config: %w", configErr)
-				}
-			}
-			if operatorDeposit > 0 && operatorDeposit != DefaultRiderDepositThresholdFen {
-				return operatorDeposit, nil
+			if regionConfig.RiderDeposit > 0 {
+				return regionConfig.RiderDeposit, nil
 			}
 		} else if err != ErrRecordNotFound {
-			return 0, fmt.Errorf("get active operator by region: %w", err)
+			return 0, fmt.Errorf("get region rider deposit config: %w", err)
 		}
 	}
 
@@ -133,7 +101,7 @@ func GetEffectiveRiderDepositThreshold(ctx context.Context, q riderDepositThresh
 	})
 	if err != nil {
 		if err == ErrRecordNotFound {
-			threshold, _ := ResolveRiderDepositThreshold(operatorDeposit, 0, false)
+			threshold, _ := ResolveRiderDepositThreshold(0, false)
 			return threshold, nil
 		}
 		return 0, fmt.Errorf("get rider deposit platform config: %w", err)
@@ -148,7 +116,7 @@ func GetEffectiveRiderDepositThreshold(ctx context.Context, q riderDepositThresh
 		hasPlatformConfig = true
 	}
 
-	threshold, _ := ResolveRiderDepositThreshold(operatorDeposit, platformDeposit, hasPlatformConfig)
+	threshold, _ := ResolveRiderDepositThreshold(platformDeposit, hasPlatformConfig)
 	return threshold, nil
 }
 

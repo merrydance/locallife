@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/websocket"
 )
@@ -142,55 +141,11 @@ func (caa *ClaimAutoApproval) EvaluateClaim(
 	}, nil
 }
 
-// CheckRiderDamageHistory 检查骑手餐损历史（异步）
-// 触发条件：骑手被索赔餐损时异步调用
-// 功能：检查7天内餐损次数，达到阈值则记录并通知
-// 注意：追偿单与结算调整在索赔链路执行，此处只处理风险记录
+// CheckRiderDamageHistory 是历史异步风险任务入口；当前索赔判责与后续动作由行为追溯主链处理。
 func (caa *ClaimAutoApproval) CheckRiderDamageHistory(
 	ctx context.Context,
 	riderID int64,
 ) error {
-	// 查询骑手最近7天的餐损索赔
-	startTime := time.Now().Add(-Recent7Days)
-	claims, err := caa.store.ListRiderClaims(ctx, db.ListRiderClaimsParams{
-		RiderID:   pgtype.Int8{Int64: riderID, Valid: true},
-		CreatedAt: startTime,
-	})
-	if err != nil {
-		return err
-	}
-
-	// 过滤餐损索赔
-	damageCount := 0
-	for _, claim := range claims {
-		if claim.ClaimType == ClaimTypeDamage {
-			damageCount++
-		}
-	}
-
-	// 达到3次：记录并警告
-	if damageCount >= DamageIncidentsIn7Days {
-		// 1. 更新骑手profile统计
-		err = caa.store.IncrementRiderDamageIncident(ctx, riderID)
-		if err != nil {
-			return err
-		}
-
-		// 2. 餐损高发：暂停接单
-		reason := fmt.Sprintf("damage claims high: %d in 7 days", damageCount)
-		_ = caa.store.SuspendRider(ctx, db.SuspendRiderParams{
-			RiderID:       riderID,
-			SuspendReason: pgtype.Text{String: reason, Valid: true},
-			SuspendUntil:  pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true},
-		})
-
-		// 3. 发送通知给骑手（风险警告）
-		go caa.sendNotification("rider", "餐损索赔警告",
-			fmt.Sprintf("您近7天内发生%d次餐损索赔，请注意配送安全", damageCount), riderID)
-
-		// 注意：追偿单与结算调整在索赔链路执行，此处不重复处理
-	}
-
 	return nil
 }
 

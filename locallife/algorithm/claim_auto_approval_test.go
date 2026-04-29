@@ -200,7 +200,7 @@ func TestEvaluateClaim_CapsRequestedAmountByEligibleOrderAmount(t *testing.T) {
 // CheckRiderDamageHistory 测试
 // ========================================
 
-func TestCheckRiderDamageHistory_BelowThreshold(t *testing.T) {
+func TestCheckRiderDamageHistory_LegacyNoop(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -208,64 +208,9 @@ func TestCheckRiderDamageHistory_BelowThreshold(t *testing.T) {
 	wsHub := NewMockWebSocketHub()
 	caa := NewClaimAutoApproval(store, wsHub)
 
-	// 骑手最近7天只有2次餐损，低于阈值
-	store.EXPECT().ListRiderClaims(gomock.Any(), gomock.Any()).Return([]db.Claim{
-		{ClaimType: ClaimTypeDamage},
-		{ClaimType: ClaimTypeDamage},
-	}, nil)
-
 	err := caa.CheckRiderDamageHistory(context.Background(), 1)
 	require.NoError(t, err)
-}
-
-func TestCheckRiderDamageHistory_AtThreshold_TriggerPenalty(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-	wsHub := NewMockWebSocketHub()
-	caa := NewClaimAutoApproval(store, wsHub)
-
-	// 骑手最近7天有3次餐损，达到阈值
-	store.EXPECT().ListRiderClaims(gomock.Any(), gomock.Any()).Return([]db.Claim{
-		{ClaimType: ClaimTypeDamage},
-		{ClaimType: ClaimTypeDamage},
-		{ClaimType: ClaimTypeDamage},
-	}, nil)
-
-	// 记录餐损统计
-	store.EXPECT().IncrementRiderDamageIncident(gomock.Any(), int64(1)).Return(nil)
-	store.EXPECT().SuspendRider(gomock.Any(), gomock.Any()).Return(nil)
-
-	err := caa.CheckRiderDamageHistory(context.Background(), 1)
-	require.NoError(t, err)
-
-	// 等待异步通知
-	time.Sleep(100 * time.Millisecond)
-
-	// 验证骑手收到通知
-	require.Len(t, wsHub.riderMessages[1], 1)
-}
-
-func TestCheckRiderDamageHistory_MixedClaimTypes(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-	wsHub := NewMockWebSocketHub()
-	caa := NewClaimAutoApproval(store, wsHub)
-
-	// 骑手有多种索赔类型，只有2次是餐损
-	store.EXPECT().ListRiderClaims(gomock.Any(), gomock.Any()).Return([]db.Claim{
-		{ClaimType: ClaimTypeDamage},
-		{ClaimType: ClaimTypeTimeout}, // 超时不算餐损
-		{ClaimType: ClaimTypeDamage},
-		{ClaimType: ClaimTypeTimeout},
-	}, nil)
-
-	err := caa.CheckRiderDamageHistory(context.Background(), 1)
-	require.NoError(t, err)
-	// 只有2次餐损，不触发处罚
+	require.Empty(t, wsHub.riderMessages[1])
 }
 
 // ========================================

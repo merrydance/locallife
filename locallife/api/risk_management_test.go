@@ -235,7 +235,8 @@ func TestSubmitClaimAPI_PayoutDispatchUsesTxActionWithoutBehaviorReload(t *testi
 	store.EXPECT().ListBehaviorActionsByDecision(gomock.Any(), gomock.Any()).Times(0)
 
 	taskDistributor := mockworker.NewMockTaskDistributor(ctrl)
-	taskDistributor.EXPECT().DistributeTaskCheckMerchantForeignObject(gomock.Any(), order.MerchantID, gomock.Any(), gomock.Any()).Return(nil)
+	taskDistributor.EXPECT().DistributeTaskCheckMerchantForeignObject(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	taskDistributor.EXPECT().DistributeTaskCheckRiderDamage(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
 	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
 	server.SetTransferClientForTest(mockwechat.NewMockTransferClientInterface(ctrl))
@@ -331,16 +332,8 @@ func TestSubmitClaimAPI_UsesPersistedRiderRecoveryOutcome(t *testing.T) {
 	)
 
 	taskDistributor := mockworker.NewMockTaskDistributor(ctrl)
-	store.EXPECT().GetDeliveryByOrderID(gomock.Any(), order.ID).Return(db.Delivery{
-		OrderID: order.ID,
-		RiderID: pgtype.Int8{Int64: 919, Valid: true},
-	}, nil)
-	taskDistributor.EXPECT().DistributeTaskCheckRiderDamage(
-		gomock.Any(),
-		int64(919),
-		gomock.Any(),
-		gomock.Any(),
-	).Return(nil)
+	taskDistributor.EXPECT().DistributeTaskCheckMerchantForeignObject(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	taskDistributor.EXPECT().DistributeTaskCheckRiderDamage(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
 	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
 	server.SetTransferClientForTest(mockwechat.NewMockTransferClientInterface(ctrl))
@@ -418,7 +411,7 @@ func TestSubmitClaimAPI_LegacyPlatformRuleDoesNotOverrideDeterministicRecovery(t
 	store.EXPECT().GetDeliveryByOrderID(gomock.Any(), order.ID).Return(db.Delivery{
 		OrderID: order.ID,
 		RiderID: pgtype.Int8{Int64: 0, Valid: false},
-	}, nil).Times(2)
+	}, nil)
 	store.EXPECT().GetDevicesByUserID(gomock.Any(), user.ID).Return([]db.UserDevice{}, nil)
 	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ any, arg db.CreateClaimWithBehaviorTxParams) (db.CreateClaimWithBehaviorTxResult, error) {
@@ -781,7 +774,7 @@ func TestSubmitClaimAPI_RuleActionRiderRecoveryUsesFormalMode(t *testing.T) {
 	store.EXPECT().GetDeliveryByOrderID(gomock.Any(), order.ID).Return(db.Delivery{
 		OrderID: order.ID,
 		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
-	}, nil).Times(2)
+	}, nil)
 	store.EXPECT().GetDevicesByUserID(gomock.Any(), user.ID).Return([]db.UserDevice{}, nil)
 	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ any, arg db.CreateClaimWithBehaviorTxParams) (db.CreateClaimWithBehaviorTxResult, error) {
@@ -836,7 +829,8 @@ func TestSubmitClaimAPI_RuleActionRiderRecoveryUsesFormalMode(t *testing.T) {
 
 	taskDistributor := mockworker.NewMockTaskDistributor(ctrl)
 	taskDistributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.Any()).Times(0)
-	taskDistributor.EXPECT().DistributeTaskCheckRiderDamage(gomock.Any(), rider.ID, gomock.Any(), gomock.Any()).Return(nil)
+	taskDistributor.EXPECT().DistributeTaskCheckMerchantForeignObject(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	taskDistributor.EXPECT().DistributeTaskCheckRiderDamage(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
 	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
 	server.config.RulesEngineEnabled = true
@@ -920,7 +914,7 @@ func TestSubmitClaimAPI_RuleOverrideDoesNotDispatchNotificationWithoutPersistedA
 	store.EXPECT().GetDeliveryByOrderID(gomock.Any(), order.ID).Return(db.Delivery{
 		OrderID: order.ID,
 		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
-	}, nil).Times(2)
+	}, nil)
 	store.EXPECT().GetDevicesByUserID(gomock.Any(), user.ID).Return([]db.UserDevice{}, nil)
 	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ any, arg db.CreateClaimWithBehaviorTxParams) (db.CreateClaimWithBehaviorTxResult, error) {
@@ -956,7 +950,8 @@ func TestSubmitClaimAPI_RuleOverrideDoesNotDispatchNotificationWithoutPersistedA
 
 	taskDistributor := mockworker.NewMockTaskDistributor(ctrl)
 	taskDistributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.Any()).Times(0)
-	taskDistributor.EXPECT().DistributeTaskCheckRiderDamage(gomock.Any(), rider.ID, gomock.Any(), gomock.Any()).Return(nil)
+	taskDistributor.EXPECT().DistributeTaskCheckMerchantForeignObject(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	taskDistributor.EXPECT().DistributeTaskCheckRiderDamage(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
 	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
 	server.config.RulesEngineEnabled = true
@@ -1118,7 +1113,8 @@ func TestSubmitClaimAPI_RuleActionUserRestrictedUsesFormalMode(t *testing.T) {
 
 	taskDistributor := mockworker.NewMockTaskDistributor(ctrl)
 	taskDistributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.Any()).Times(0)
-	taskDistributor.EXPECT().DistributeTaskCheckMerchantForeignObject(gomock.Any(), order.MerchantID, gomock.Any(), gomock.Any()).Return(nil)
+	taskDistributor.EXPECT().DistributeTaskCheckMerchantForeignObject(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	taskDistributor.EXPECT().DistributeTaskCheckRiderDamage(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
 	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
 	server.config.RulesEngineEnabled = true
@@ -1235,7 +1231,8 @@ func TestSubmitClaimAPI_RuleOverrideDoesNotApplyRestrictionWithoutPersistedActio
 
 	taskDistributor := mockworker.NewMockTaskDistributor(ctrl)
 	taskDistributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.Any()).Times(0)
-	taskDistributor.EXPECT().DistributeTaskCheckMerchantForeignObject(gomock.Any(), order.MerchantID, gomock.Any(), gomock.Any()).Return(nil)
+	taskDistributor.EXPECT().DistributeTaskCheckMerchantForeignObject(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	taskDistributor.EXPECT().DistributeTaskCheckRiderDamage(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
 	server := newTestServerWithTaskDistributor(t, store, taskDistributor)
 	server.config.RulesEngineEnabled = true

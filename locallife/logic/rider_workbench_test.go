@@ -26,6 +26,8 @@ type riderWorkbenchStoreStub struct {
 	incomeStatusErr          error
 	pendingRefundAmount      int64
 	pendingRefundErr         error
+	regionRuleConfig         db.RegionRuleConfig
+	regionRuleErr            error
 	operator                 db.Operator
 	operatorErr              error
 	platformConfig           db.PlatformConfig
@@ -64,6 +66,10 @@ func (stub *riderWorkbenchStoreStub) GetRiderProfitSharingStatusSummary(ctx cont
 
 func (stub *riderWorkbenchStoreStub) GetPendingRiderDepositRefundAmountByUserID(ctx context.Context, userID int64) (int64, error) {
 	return stub.pendingRefundAmount, stub.pendingRefundErr
+}
+
+func (stub *riderWorkbenchStoreStub) GetRegionRuleConfigByRegion(ctx context.Context, regionID int64) (db.RegionRuleConfig, error) {
+	return stub.regionRuleConfig, stub.regionRuleErr
 }
 
 func (stub *riderWorkbenchStoreStub) GetActiveOperatorByRegion(ctx context.Context, regionID int64) (db.Operator, error) {

@@ -908,6 +908,16 @@ func TestQueryPaymentOrderAPI_ServiceUnavailableWhenEcommerceClientMissing(t *te
 	server := newTestServer(t, store)
 	recorder := httptest.NewRecorder()
 
+	store.EXPECT().
+		GetPaymentOrder(gomock.Any(), int64(123)).
+		Return(db.PaymentOrder{
+			ID:             123,
+			UserID:         1001,
+			PaymentType:    PaymentTypeProfitShare,
+			PaymentChannel: db.PaymentChannelEcommerce,
+			BusinessType:   BusinessTypeOrder,
+		}, nil)
+
 	request, err := http.NewRequest(http.MethodGet, "/v1/payments/123/query", nil)
 	require.NoError(t, err)
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, 1001, time.Minute)
@@ -1229,7 +1239,7 @@ func TestQueryPaymentOrderAPI_DirectPaymentReturnsClearError(t *testing.T) {
 	var resp APIResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Equal(t, CodeBadRequest, resp.Code)
-	require.Equal(t, "仅收付通普通支付订单支持微信远端查询", resp.Message)
+	require.Equal(t, "当前支付通道不支持微信远端查询", resp.Message)
 }
 
 func TestCreateCombinedPaymentOrderAPI_ServiceUnavailableWhenEcommerceClientMissing(t *testing.T) {

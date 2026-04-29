@@ -4,12 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/merrydance/locallife/algorithm"
-	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/rs/zerolog/log"
 )
 
@@ -37,57 +33,14 @@ func NewCheckMerchantForeignObjectTask(merchantID int64) (*asynq.Task, error) {
 	return asynq.NewTask(TypeCheckMerchantForeignObject, payload), nil
 }
 
-// HandleCheckMerchantForeignObject 处理商户异物索赔检查任务
-// 业务逻辑：异物索赔只通知整改，不扣分不停业（食安问题走食安熔断流程）
+// HandleCheckMerchantForeignObject 保留 legacy task 消费能力；当前索赔判责由行为追溯主链处理。
 func (processor *RedisTaskProcessor) HandleCheckMerchantForeignObject(ctx context.Context, task *asynq.Task) error {
 	var payload CheckMerchantForeignObjectPayload
 	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 		return fmt.Errorf("json.Unmarshal failed: %w", asynq.SkipRetry)
 	}
 
-	// 使用 MerchantForeignObjectTracker 检查状态
-	tracker := algorithm.NewMerchantForeignObjectTracker(processor.store)
-	result, err := tracker.CheckMerchantForeignObjectStatus(ctx, payload.MerchantID)
-	if err != nil {
-		return fmt.Errorf("failed to check merchant foreign object status: %w", err)
-	}
-
-	// 如果需要通知整改，暂停外卖并发送站内信给商户负责人
-	if result.ShouldNotify {
-		// 异物高发：触发外卖熔断（不影响堂食），暂停 24 小时
-		reason := fmt.Sprintf("foreign object claims high: %d in %d days", result.ForeignObjectNum, result.WindowDays)
-		if err := processor.store.SuspendMerchantTakeout(ctx, db.SuspendMerchantTakeoutParams{
-			MerchantID:           payload.MerchantID,
-			TakeoutSuspendReason: pgtype.Text{String: reason, Valid: true},
-			TakeoutSuspendUntil:  pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true},
-		}); err != nil {
-			return fmt.Errorf("suspend merchant %d takeout: %w", payload.MerchantID, err)
-		}
-
-		// 获取商户负责人，向其发送站内信通知
-		merchant, err := processor.store.GetMerchant(ctx, payload.MerchantID)
-		if err != nil {
-			// 通知失败不影响熔断结果，记录日志后继续
-			log.Error().Err(err).Int64("merchant_id", payload.MerchantID).Msg("failed to get merchant for foreign object notification")
-		} else {
-			title := "您的外卖服务已被暂停整改"
-			content := fmt.Sprintf(
-				"您的店铺近 %d 天内收到 %d 次异物投诉，外卖服务已暂停 24 小时，请尽快自查整改。",
-				result.WindowDays, result.ForeignObjectNum,
-			)
-			if err := processor.distributor.DistributeTaskSendNotification(ctx, &SendNotificationPayload{
-				UserID:            merchant.OwnerUserID,
-				Type:              "system",
-				Title:             title,
-				Content:           content,
-				RelatedType:       "merchant",
-				RelatedID:         payload.MerchantID,
-				IgnorePreferences: true, // 食安/风控类关键通知，不受免打扰设置限制
-			}); err != nil {
-				log.Error().Err(err).Int64("merchant_id", payload.MerchantID).Msg("failed to enqueue foreign object notification")
-			}
-		}
-	}
+	log.Info().Int64("merchant_id", payload.MerchantID).Msg("legacy merchant foreign object risk task ignored; claim behavior trace handles adjudication")
 
 	return nil
 }
@@ -108,19 +61,14 @@ func NewCheckRiderDamageTask(riderID int64) (*asynq.Task, error) {
 	return asynq.NewTask(TypeCheckRiderDamage, payload), nil
 }
 
-// HandleCheckRiderDamage 处理骑手餐损检查任务
+// HandleCheckRiderDamage 保留 legacy task 消费能力；当前索赔判责由行为追溯主链处理。
 func (processor *RedisTaskProcessor) HandleCheckRiderDamage(ctx context.Context, task *asynq.Task) error {
 	var payload CheckRiderDamagePayload
 	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 		return fmt.Errorf("json.Unmarshal failed: %w", asynq.SkipRetry)
 	}
 
-	// Worker后台任务不需要WebSocket实时通知，传nil
-	approver := algorithm.NewClaimAutoApproval(processor.store, nil)
-	err := approver.CheckRiderDamageHistory(ctx, payload.RiderID)
-	if err != nil {
-		return fmt.Errorf("failed to check rider damage history: %w", err)
-	}
+	log.Info().Int64("rider_id", payload.RiderID).Msg("legacy rider damage risk task ignored; claim behavior trace handles adjudication")
 
 	return nil
 }
