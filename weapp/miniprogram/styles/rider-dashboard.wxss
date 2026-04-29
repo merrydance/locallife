@@ -30,7 +30,7 @@
 .inline-sync-state__text {
   flex: 1;
   min-width: 0;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   line-height: 1.5;
 }
 
@@ -71,7 +71,7 @@
 }
 
 .workbench-rider-sub {
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -103,7 +103,7 @@
 .workbench-risk-label {
   display: block;
   color: var(--td-text-color-secondary);
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-sm);
   line-height: 1.4;
 }
 
@@ -126,7 +126,7 @@
   display: block;
   margin-top: 4rpx;
   color: var(--td-text-color-placeholder);
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-xs);
   line-height: 1.4;
 }
 
@@ -158,7 +158,7 @@
 }
 
 .credit-tag {
-  font-size: 20rpx;
+  font-size: var(--font-size-xs);
   color: var(--td-text-color-secondary);
   background: var(--td-bg-color-secondarycontainer);
   border: 1rpx solid var(--td-border-level-1-color);
@@ -182,7 +182,7 @@
 }
 
 .header-side-label {
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-xs);
   color: var(--td-text-color-secondary);
 }
 
@@ -210,7 +210,7 @@
 }
 
 .stats-label {
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-xs);
   color: var(--td-text-color-secondary);
   margin-top: 8rpx;
   text-transform: uppercase;
@@ -221,7 +221,7 @@
 .workbench-risk-action {
   display: block;
   margin-top: 10rpx;
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--td-brand-color);
 }
@@ -243,7 +243,7 @@
   background: var(--td-bg-color-container);
   color: var(--td-text-color-primary);
   border: 1rpx solid var(--td-border-level-1-color);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
 }
 
 .stats-divider {
@@ -301,12 +301,12 @@
 }
 
 .runtime-status-desc {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
 }
 
 .runtime-status-pending {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-warning-color-7);
 }
 
@@ -377,7 +377,7 @@
 }
 
 .online-reminder-tip {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
   line-height: 1.5;
 }
@@ -456,7 +456,7 @@
 
 .current-mission-subtitle {
   margin-top: 8rpx;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -505,7 +505,7 @@
 }
 
 .hall-entry-meta {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -533,13 +533,13 @@
 }
 
 .current-mission-name {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-base);
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
 
 .current-mission-address {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   line-height: 1.6;
   color: var(--td-text-color-secondary);
 }
@@ -568,12 +568,12 @@
 }
 
 .meta-label {
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
 }
 
 .meta-value {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-base);
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
@@ -640,12 +640,12 @@
 }
 
 .location-runtime-meta {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
 }
 
 .location-runtime-pending {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-warning-color-7);
 }
 
@@ -667,7 +667,7 @@
 }
 
 .earnings-box .label {
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
   text-transform: uppercase;
   letter-spacing: 1rpx;
@@ -725,7 +725,7 @@
 }
 
 .addr-desc {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
   margin-top: 4rpx;
 }
@@ -736,7 +736,7 @@
 }
 
 .distance-tag {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-placeholder);
   background: var(--td-bg-color-page);
   padding: 4rpx 12rpx;
@@ -760,7 +760,7 @@
 }
 
 .arrival-time .label {
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-xs);
   color: var(--td-text-color-placeholder);
   line-height: 1.2;
 }
@@ -788,7 +788,7 @@
 }
 
 .route-divider .mid-dist {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-placeholder);
   margin-left: 24rpx;
   margin-top: -30rpx;
@@ -808,7 +808,7 @@
 }
 
 .item-count {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -865,7 +865,7 @@
 }
 
 .notes-label {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-placeholder);
   font-weight: 500;
 }
@@ -909,7 +909,7 @@
 
 .item-count.no-data {
   color: var(--td-text-color-placeholder);
-  font-size: 20rpx;
+  font-size: var(--font-size-xs);
   background: #F0F0F0;
   padding: 2rpx 10rpx;
   border-radius: 4rpx;
@@ -941,7 +941,7 @@
   display: flex;
   align-items: center;
   margin-top: 24rpx;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
   background: var(--td-bg-color-page);
   padding: 12rpx 24rpx;
@@ -990,7 +990,7 @@
 }
 
 .refresh-btn {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-brand-color);
   padding: 6rpx 16rpx;
   border-radius: var(--radius-round);

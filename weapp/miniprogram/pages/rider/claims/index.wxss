@@ -36,7 +36,7 @@
 .sync-state__text {
   flex: 1;
   min-width: 0;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   line-height: 1.5;
 }
 
@@ -72,7 +72,7 @@
 
 .summary-label {
   display: block;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -109,7 +109,7 @@
   justify-content: center;
   padding: var(--spacer-md) 0 var(--spacer-lg);
   color: var(--td-text-color-secondary);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
 }
 
 .list-footer-end {
@@ -160,13 +160,13 @@
 }
 
 .label {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
   white-space: nowrap;
 }
 
 .value {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-base);
   color: var(--td-text-color-primary);
   text-align: right;
   line-height: 1.5;

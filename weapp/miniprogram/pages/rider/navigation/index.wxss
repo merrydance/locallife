@@ -56,7 +56,7 @@
   flex-direction: column;
   gap: 8rpx;
   margin-top: var(--spacer-sm);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -69,7 +69,7 @@
   border-radius: var(--radius-md);
   background: var(--td-warning-color-light);
   color: var(--td-warning-color-7);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
 }
 
 .sync-warning-strip {
@@ -81,7 +81,7 @@
   border-radius: var(--radius-md);
   background: var(--td-warning-color-1);
   color: var(--td-text-color-primary);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   line-height: 1.5;
 }
 

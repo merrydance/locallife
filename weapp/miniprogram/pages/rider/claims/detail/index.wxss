@@ -33,7 +33,7 @@
 .sync-state__text {
   flex: 1;
   min-width: 0;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   line-height: 1.5;
 }
 
@@ -58,7 +58,7 @@
 }
 
 .hero-status {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -73,7 +73,7 @@
   padding: var(--spacer-xs) var(--spacer-sm);
   border-radius: 999rpx;
   background: var(--td-bg-color-secondarycontainer);
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-xs);
 }
 
 .hero-amounts {
@@ -85,7 +85,7 @@
 
 .amount-label {
   display: block;
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -123,7 +123,7 @@
 }
 
 .card-subtitle {
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -135,13 +135,13 @@
 }
 
 .label {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
   white-space: nowrap;
 }
 
 .value {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-base);
   color: var(--td-text-color-primary);
   text-align: right;
   line-height: 1.5;
@@ -156,13 +156,13 @@
 
 .desc-label {
   display: block;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
   margin-bottom: 8rpx;
 }
 
 .desc-value {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-base);
   color: var(--td-text-color-primary);
   line-height: 1.7;
 }
@@ -229,7 +229,7 @@
 }
 
 .behavior-label {
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -241,13 +241,13 @@
 
 .behavior-hint {
   margin-top: var(--spacer-sm);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
   line-height: 1.6;
 }
 
 .pending-tip {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   line-height: 1.6;
   color: var(--td-text-color-secondary);
   background: var(--td-bg-color-secondarycontainer);

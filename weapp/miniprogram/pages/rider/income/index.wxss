@@ -28,7 +28,7 @@
 .sync-state__text {
   flex: 1;
   min-width: 0;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   line-height: 1.5;
 }
 
@@ -59,7 +59,7 @@
 .ledger-item__merchant,
 .ledger-meta-row {
   color: var(--td-text-color-secondary);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
 }
 
 .summary-amount {
@@ -92,7 +92,7 @@
   display: block;
   margin-top: var(--spacer-xxs);
   color: var(--td-text-color-placeholder);
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-sm);
   line-height: 1.4;
 }
 
@@ -262,7 +262,7 @@
   gap: var(--spacer-sm);
   padding: var(--spacer-md) 0 var(--spacer-sm);
   color: var(--td-text-color-secondary);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
 }
 
 .list-footer-error {
