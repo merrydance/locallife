@@ -1,7 +1,7 @@
 import { formatPriceNoSymbol } from '../../../utils/util'
 import Navigation from '../../../utils/navigation'
 import { getErrorUserMessage } from '../../../utils/user-facing'
-import { getDineInSessionContext, saveDineInSessionFromMenu } from '../../../services/dine-in-session'
+import { getDineInSessionContext, saveDineInSessionFromMenu, savePendingDineInCheckoutContext } from '../../../services/dine-in-session'
 import {
     calculateCheckoutCart,
     completeCheckoutPayment,
@@ -268,6 +268,13 @@ Page({
             const payment = await createCheckoutOrderPayment(orderId)
             const result = await completeCheckoutPayment(payment)
             const paymentAmount = formatPriceNoSymbol(result.amountFen || payment.amount || this.data.calculation.total_amount || 0)
+            if (this.data.sessionId > 0) {
+                savePendingDineInCheckoutContext({
+                    session_id: this.data.sessionId,
+                    order_id: orderId,
+                    payment_order_id: result.paymentOrderId || payment.id
+                })
+            }
 
             Navigation.toPaymentResult({
                 status: result.status,

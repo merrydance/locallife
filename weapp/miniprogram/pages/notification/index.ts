@@ -299,6 +299,35 @@ Page({
     }
   },
 
+  onDeleteNotification(e: WechatMiniprogram.CustomEvent) {
+    const item: NotifView = e.currentTarget.dataset.item
+    if (!item?.id) return
+    wx.showModal({
+      title: '删除通知',
+      content: '删除后该通知将不再显示。',
+      confirmText: '删除',
+      confirmColor: '#d32f2f',
+      success: (res) => {
+        if (res.confirm) {
+          void this.deleteNotification(item)
+        }
+      }
+    })
+  },
+
+  async deleteNotification(item: NotifView) {
+    try {
+      await notificationService.deleteNotification(item.id)
+      this.setData({
+        notifications: this.data.notifications.filter((notification) => notification.id !== item.id),
+        unreadCount: item.is_read ? this.data.unreadCount : Math.max(0, this.data.unreadCount - 1),
+        total: Math.max(0, this.data.total - 1)
+      })
+    } catch (err) {
+      wx.showToast({ title: '删除失败，请重试', icon: 'none' })
+    }
+  },
+
   onReachBottom() {
     if (this.data.hasMore && !this.data.loading) {
       this.loadNotifications(false)

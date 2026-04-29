@@ -1,0 +1,45 @@
+.coupon-strip {
+  display: flex;
+  gap: var(--spacer-sm);
+  margin: var(--spacer-md) var(--spacer-md) 0;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.coupon-strip-item {
+  flex: 0 0 280rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacer-xs);
+  padding: 18rpx;
+  border: 1rpx solid var(--td-error-color-2);
+  border-radius: var(--radius-md);
+  background: var(--td-error-color-1);
+}
+
+.coupon-strip-main {
+  min-width: 0;
+}
+
+.coupon-strip-value {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--td-error-color-7);
+}
+
+.coupon-strip-title,
+.coupon-strip-condition {
+  max-width: 150rpx;
+  font-size: var(--font-size-xs);
+}
+
+.coupon-strip-title {
+  margin-top: 4rpx;
+  color: var(--td-text-color-primary);
+}
+
+.coupon-strip-condition {
+  margin-top: 2rpx;
+  color: var(--td-text-color-secondary);
+}

@@ -1,0 +1,7 @@
+{
+  "purpose": "餐厅详情页的顾客可领券领域条，用于展示商户可领券并向页面发出领取动作。",
+  "tdesignGroup": "data",
+  "tdesignCandidates": ["t-cell", "t-tag", "t-button", "t-popup"],
+  "decision": "local-component",
+  "rationale": "该区域需要横向展示多张券的金额、门槛和领取状态，并保持页面复杂度在 gate 阈值内；TDesign 没有现成优惠券条组件，直接放在页面会扩大页面责任。"
+}

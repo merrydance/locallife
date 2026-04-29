@@ -1,6 +1,6 @@
 import type { OrderCardViewModel } from '../adapters/order-card'
 import type { CombinedPaymentOrderResponse } from '../api/payment'
-import type { OrderResponse, OrderType } from '../api/order'
+import type { OrderResponse, OrderStatus, OrderType } from '../api/order'
 import Navigation from './navigation'
 import { getCombinedPaymentFollowupMessage, isCombinedPaymentSuccessful, shouldRecreateCombinedPayment } from '../api/payment'
 
@@ -23,14 +23,30 @@ export const CANCEL_REASONS = [
 
 export const ORDER_REQUEST_DEDUP_MS = 800
 export type OrderTypeFilter = OrderType | ''
+export type OrderStatusFilter = OrderStatus | ''
 
 const VALID_ORDER_TYPES: OrderType[] = ['takeout', 'reservation', 'dine_in', 'takeaway']
+const VALID_STATUS_FILTERS: OrderStatus[] = ['pending', 'preparing', 'delivering', 'completed', 'cancelled']
 
 export const normalizeOrderType = (value?: string): OrderTypeFilter => {
   if (value && VALID_ORDER_TYPES.includes(value as OrderType)) {
     return value as OrderType
   }
   return ''
+}
+
+export const normalizeOrderStatusFilter = (value?: string): OrderStatusFilter => {
+  if (!value || value === 'all') {
+    return ''
+  }
+  if (VALID_STATUS_FILTERS.includes(value as OrderStatus)) {
+    return value as OrderStatus
+  }
+  return ''
+}
+
+export const normalizeSelectMode = (value?: string): boolean => {
+  return value === '1' || value === 'true'
 }
 
 export const getDatasetId = (event: WechatMiniprogram.BaseEvent): number | null => {

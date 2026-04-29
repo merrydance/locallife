@@ -1,6 +1,7 @@
 import { claimManagementService, getUserClaimPresentation } from '../../../../api/appeals-customer-service'
 import type { UserClaimResponse } from '../../../../api/appeals-customer-service'
 import { logger } from '../../../../utils/logger'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 /** 索赔类型 → 中文显示（涵盖所有 claim_type 值） */
 const CLAIM_TYPE_DISPLAY: Record<string, string> = {
@@ -47,6 +48,8 @@ interface DisplayClaimDetail {
   createTimeDisplay: string
   processedAtDisplay: string | null
   payoutEta: string | null
+  canConfirmContinue: boolean
+  canWithdraw: boolean
 }
 
 function adaptClaimDetail(c: UserClaimResponse): DisplayClaimDetail {
@@ -67,7 +70,9 @@ function adaptClaimDetail(c: UserClaimResponse): DisplayClaimDetail {
     orderId: c.order_id,
     createTimeDisplay: formatDateTime(c.created_at),
     processedAtDisplay: c.processed_at ? formatDateTime(c.processed_at) : null,
-    payoutEta: c.payout_eta || null
+    payoutEta: c.payout_eta || null,
+    canConfirmContinue: c.customer_action_required === true && c.customer_action === 'confirm_continue',
+    canWithdraw: c.customer_action_required === true && c.customer_action === 'confirm_continue'
   }
 }
 
@@ -80,7 +85,9 @@ Page({
     claim: null as DisplayClaimDetail | null,
     statusIcon: '',
     statusColor: '',
-    claimId: 0
+    claimId: 0,
+    actionSubmitting: false,
+    actionError: ''
   },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight: number }>) {
@@ -102,21 +109,69 @@ Page({
     this.setData({ loading: true, isError: false })
     try {
       const claim = await claimManagementService.getClaimDetail(this.data.claimId)
-      const displayClaim = adaptClaimDetail(claim)
-      const presentation = getUserClaimPresentation(claim)
-
-      this.setData({
-        claim: displayClaim,
-        statusIcon: presentation.statusIcon,
-        statusColor: presentation.statusColor,
-        loading: false
-      })
+      this.applyClaimDetail(claim, { loading: false, actionError: '' })
     } catch (err) {
       logger.error('[ClaimDetail] loadDetail failed', err)
       this.setData({
         loading: false,
         isError: true,
         errorMsg: '加载失败，请稍后重试'
+      })
+    }
+  },
+
+  applyClaimDetail(claim: UserClaimResponse, patch: Record<string, unknown> = {}) {
+    const displayClaim = adaptClaimDetail(claim)
+    const presentation = getUserClaimPresentation(claim)
+
+    this.setData({
+      claim: displayClaim,
+      statusIcon: presentation.statusIcon,
+      statusColor: presentation.statusColor,
+      ...patch
+    })
+  },
+
+  async onConfirmContinue() {
+    if (this.data.actionSubmitting || !this.data.claim?.canConfirmContinue) return
+    this.setData({ actionSubmitting: true, actionError: '' })
+    try {
+      const claim = await claimManagementService.confirmContinueClaim(this.data.claimId)
+      this.applyClaimDetail(claim, { actionSubmitting: false })
+    } catch (err) {
+      logger.error('[ClaimDetail] confirm continue failed', err)
+      this.setData({
+        actionSubmitting: false,
+        actionError: getErrorUserMessage(err, '当前工单暂不能继续处理，请刷新后重试')
+      })
+    }
+  },
+
+  async onWithdraw() {
+    if (this.data.actionSubmitting || !this.data.claim?.canWithdraw) return
+    wx.showModal({
+      title: '撤回反馈',
+      content: '撤回后本次反馈不会继续赔付处理。',
+      confirmText: '撤回',
+      confirmColor: '#d32f2f',
+      success: (res) => {
+        if (res.confirm) {
+          void this.submitWithdraw()
+        }
+      }
+    })
+  },
+
+  async submitWithdraw() {
+    this.setData({ actionSubmitting: true, actionError: '' })
+    try {
+      const claim = await claimManagementService.withdrawClaim(this.data.claimId)
+      this.applyClaimDetail(claim, { actionSubmitting: false })
+    } catch (err) {
+      logger.error('[ClaimDetail] withdraw failed', err)
+      this.setData({
+        actionSubmitting: false,
+        actionError: getErrorUserMessage(err, '当前工单暂不能撤回，请刷新后重试')
       })
     }
   }

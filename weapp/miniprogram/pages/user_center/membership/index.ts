@@ -36,7 +36,9 @@ Page({
   },
 
   onShow() {
-    // Refresh if needed, or just keep loaded
+    if (!this.data.initialLoading && !this.data.loading) {
+      this.loadMemberships(true)
+    }
   },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent) {

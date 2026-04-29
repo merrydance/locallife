@@ -1,0 +1,109 @@
+@import '../../../../styles/customer.wxss';
+
+.page-container {
+  min-height: 100vh;
+  background: #f5f5f5;
+  padding-bottom: calc(40rpx + env(safe-area-inset-bottom));
+}
+
+.loading-container,
+.empty-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32rpx;
+  padding: 96rpx 0;
+}
+
+.form-container,
+.result-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.order-card,
+.form-card,
+.result-card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 28rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+
+.order-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.order-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  min-width: 0;
+}
+
+.order-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #222;
+}
+
+.order-subtitle {
+  font-size: 24rpx;
+  color: #777;
+}
+
+.card-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 20rpx;
+}
+
+.option-group {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16rpx;
+}
+
+.severity-group {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.form-error {
+  font-size: 26rpx;
+  color: #d54941;
+  padding: 0 8rpx;
+}
+
+.submit-area {
+  padding-top: 8rpx;
+}
+
+.result-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16rpx;
+  padding: 56rpx 32rpx;
+}
+
+.result-title {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #222;
+}
+
+.result-desc,
+.result-meta {
+  font-size: 26rpx;
+  color: #666;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.result-meta {
+  color: #999;
+}

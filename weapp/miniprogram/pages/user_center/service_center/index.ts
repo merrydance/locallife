@@ -1,6 +1,7 @@
 import { claimManagementService, getUserClaimPresentation } from '../../../api/appeals-customer-service'
 import type { UserClaimResponse, UserClaimType } from '../../../api/appeals-customer-service'
 import { logger } from '../../../utils/logger'
+import Navigation from '../../../utils/navigation'
 
 const PAGE_SIZE = 20
 
@@ -125,9 +126,23 @@ Page({
 
   /** 快捷入口点击 */
   onQuickEntry(e: WechatMiniprogram.BaseEvent) {
-    const claimType = e.currentTarget.dataset.type as UserClaimType
+    const claimType = e.currentTarget.dataset.type as string
+    if (claimType === 'food-safety-report') {
+      wx.navigateTo({
+        url: '/pages/orders/list/index?status=completed&selectMode=1',
+        events: {
+          onOrderSelected: (order: { id: number }) => {
+            setTimeout(() => {
+              Navigation.toFoodSafetyReport({ orderId: order.id })
+            }, 100)
+          }
+        }
+      })
+      return
+    }
+
     wx.navigateTo({
-      url: `/pages/user_center/service_center/submit/index?claimType=${claimType}`
+      url: `/pages/user_center/service_center/submit/index?claimType=${claimType as UserClaimType}`
     })
   },
 

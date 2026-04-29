@@ -19,13 +19,14 @@ export type AppellantType = 'merchant' | 'rider' | 'user'
 export type ClaimStatus = 'pending' | 'approved' | 'rejected' | 'compensated'
 
 /** 用户侧索赔生命周期状态 */
-export type UserClaimStatus = 'accepted' | 'rejected'
+export type UserClaimStatus = 'accepted' | 'rejected' | 'warned_waiting_customer_confirmation' | 'withdrawn'
 
 /** 用户侧索赔裁定状态 */
 export type UserClaimDecisionStatus = 'auto-adjudicated' | 'rejected'
 
 /** 用户侧索赔赔付状态 */
 export type UserClaimPayoutStatus = 'processing' | 'paid'
+export type UserClaimCompensationStatus = 'awaiting_compensation' | 'compensating' | 'compensated'
 
 /** 索赔类型枚举 */
 export type ClaimType = 'refund' | 'compensation' | 'quality_issue' | 'delivery_issue'
@@ -229,7 +230,10 @@ export interface UserClaimResponse {
     approved_amount?: number
     status: UserClaimStatus
     decision_status?: UserClaimDecisionStatus
+    compensation_status?: UserClaimCompensationStatus
     payout_status?: UserClaimPayoutStatus
+    customer_action_required?: boolean
+    customer_action?: string
     reason?: string
     payout_eta?: string
     created_at: string
@@ -492,6 +496,20 @@ export class ClaimManagementService {
         return request({
             url: `/v1/claims/${claimId}`,
             method: 'GET'
+        })
+    }
+
+    async confirmContinueClaim(claimId: number): Promise<UserClaimResponse> {
+        return request({
+            url: `/v1/claims/${claimId}/confirm-continue`,
+            method: 'POST'
+        })
+    }
+
+    async withdrawClaim(claimId: number): Promise<UserClaimResponse> {
+        return request({
+            url: `/v1/claims/${claimId}/withdraw`,
+            method: 'POST'
         })
     }
 
@@ -999,7 +1017,27 @@ export function formatClaimStatus(status: ClaimStatus): string {
     return statusMap[status] || status
 }
 
-export function getUserClaimPresentation(claim: Pick<UserClaimResponse, 'status' | 'decision_status' | 'payout_status'>): UserClaimPresentation {
+export function getUserClaimPresentation(claim: Pick<UserClaimResponse, 'status' | 'decision_status' | 'payout_status' | 'customer_action_required' | 'customer_action'>): UserClaimPresentation {
+    if (claim.status === 'withdrawn') {
+        return {
+            statusText: '已撤回',
+            statusTheme: 'warning',
+            statusIcon: 'rollback',
+            statusColor: '#ff9800',
+            summary: '您已撤回本次反馈，系统不会继续赔付处理。'
+        }
+    }
+
+    if (claim.customer_action_required && claim.customer_action === 'confirm_continue') {
+        return {
+            statusText: '待确认赔付',
+            statusTheme: 'warning',
+            statusIcon: 'time-filled',
+            statusColor: '#ff9800',
+            summary: '平台已完成核验，请确认是否继续进入赔付处理。'
+        }
+    }
+
     if (claim.status === 'rejected' || claim.decision_status === 'rejected') {
         return {
             statusText: '未支持赔付',

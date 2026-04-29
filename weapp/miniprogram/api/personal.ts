@@ -802,7 +802,7 @@ export function getMyAvailableVouchers(params: VouchersParams = {}): Promise<Lis
     const pageId = params.page ?? 1
     const pageSize = params.page_size ?? 20
     return request({
-        url: '/v1/vouchers/me/available',
+        url: '/v1/vouchers/available',
         method: 'GET',
         data: {
             page_id: pageId,

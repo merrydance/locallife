@@ -382,6 +382,10 @@ Page({
   },
 
   async onSubmitOrder() {
+    if (this.data.loading) {
+      return
+    }
+
     const { carts, address, remarks, loadError, pricingError } = this.data
 
     if (loadError) {

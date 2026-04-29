@@ -11,6 +11,7 @@ import {
   OrderType,
   isCompletedOrderStatus,
   isPendingOrderStatus,
+  isFoodSafetyReportableOrder,
   isReadyOrderStatus,
   isTrackableOrderStatus
 } from '../../../api/order'
@@ -68,6 +69,7 @@ Page({
     showReviewButton: false,
     showPickupConfirmButton: false,
     showReorderButton: false,
+    showFoodSafetyButton: false,
     isReviewed: false,
     paying: false,
     statusHeaderDesc: '',
@@ -121,6 +123,7 @@ Page({
       const showUrgeButton = actions.includes('urge')
       const showPickupConfirmButton = orderDTO.order_type === 'takeaway' && isReadyOrderStatus(orderDTO.status)
       const showReorderButton = isCompletedOrderStatus(orderDTO.status)
+      const showFoodSafetyButton = isFoodSafetyReportableOrder(orderDTO)
 
       let statusHeaderDesc = `订单编号: ${order.orderNo}`
       if (order.expectDeliverTime) {
@@ -158,6 +161,7 @@ Page({
         showReviewButton: isCompletedOrderStatus(orderDTO.status),
         showPickupConfirmButton,
         showReorderButton,
+        showFoodSafetyButton,
         statusHeaderDesc,
         statusHeaderIcon
       })
@@ -258,6 +262,20 @@ Page({
     const orderId = this.data.orderId
     wx.navigateTo({
       url: `/pages/user_center/service_center/index${orderId ? '?orderId=' + orderId : ''}`
+    })
+  },
+
+  onReportFoodSafety() {
+    const { orderDTO, orderId } = this.data
+    if (!orderDTO || !isFoodSafetyReportableOrder(orderDTO)) {
+      wx.showToast({ title: '该订单暂不支持食安反馈', icon: 'none' })
+      return
+    }
+
+    Navigation.toFoodSafetyReport({
+      orderId,
+      merchantId: orderDTO.merchant_id,
+      merchantName: orderDTO.merchant_name || this.data.order?.merchantName
     })
   },
 

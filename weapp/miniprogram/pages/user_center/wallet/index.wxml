@@ -44,41 +44,11 @@
             </view>
           </view>
         </view>
-        <!-- 背景装饰 -->
-        <view class="card-bg-decoration"></view>
-      </view>
-    </view>
-
-    <!-- 快捷操作栏 -->
-    <view class="action-grid animate-fade-in" style="animation-delay: 0.1s;">
-      <view class="action-item" bindtap="onTopUp">
-        <view class="icon-wrap recharge">
-          <t-image src="/assets/icons/topup-money.svg" mode="aspectFit" width="48rpx" height="48rpx" />
-        </view>
-        <text>快速充值</text>
-      </view>
-      <view class="action-item" bindtap="onWithdraw">
-        <view class="icon-wrap withdraw">
-          <t-image src="/assets/icons/withdraw-out.svg" mode="aspectFit" width="48rpx" height="48rpx" />
-        </view>
-        <text>提现</text>
-      </view>
-      <view class="action-item" bindtap="onGoToCoupons">
-        <view class="icon-wrap coupon">
-          <t-image src="/assets/icons/coupon-ticket.svg" mode="aspectFit" width="48rpx" height="48rpx" />
-        </view>
-        <text>优惠券</text>
-      </view>
-      <view class="action-item" bindtap="onShowBill">
-        <view class="icon-wrap bill">
-          <t-image src="/assets/icons/bill-list.svg" mode="aspectFit" width="48rpx" height="48rpx" />
-        </view>
-        <text>账单</text>
       </view>
     </view>
 
     <!-- 会员资产列表 -->
-    <view class="section-container animate-fade-in" style="animation-delay: 0.2s;">
+    <view class="section-container animate-fade-in" style="animation-delay: 0.1s;">
       <view class="section-header">
         <text class="section-title">我的资产</text>
         <view class="section-more" bindtap="onManageMembership">
@@ -103,7 +73,6 @@
               </view>
               <view class="asset-balance">
                 <text class="asset-amount">¥{{item.balance_display}}</text>
-                <t-tag variant="dark" theme="primary" size="extra-small" catchtap="onTopUp" data-id="{{item.id}}">充值</t-tag>
               </view>
             </view>
           </block>
@@ -115,7 +84,7 @@
     </view>
 
     <!-- 最近交易 -->
-    <view class="section-container animate-fade-in" style="animation-delay: 0.3s;">
+    <view class="section-container animate-fade-in" style="animation-delay: 0.2s;">
       <view class="section-header">
         <text class="section-title">最近交易记录</text>
       </view>

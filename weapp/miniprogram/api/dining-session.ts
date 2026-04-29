@@ -172,6 +172,13 @@ export async function transferDiningSessionTable(sessionId: number, data: Transf
   })
 }
 
+export async function checkoutDiningSession(sessionId: number): Promise<DiningSessionDTO> {
+  return request({
+    url: `/v1/dining-sessions/${sessionId}/checkout`,
+    method: 'POST'
+  })
+}
+
 /** 基于用餐会话创建堂食订单（占位，调用通用订单创建接口） */
 export async function createDiningOrder(payload: CreateDiningOrderRequest): Promise<OrderResponse> {
   const { merchant_id, table_id, reservation_id, items, notes, order_type = 'dine_in', billing_group_id } = payload
@@ -196,5 +203,6 @@ export default {
   precheckDiningSession,
   openDiningSession,
   transferDiningSessionTable,
+  checkoutDiningSession,
   createDiningOrder
 }

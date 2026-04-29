@@ -3,6 +3,7 @@
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
         "cart-bar": "/components/cart-bar/index",
+        "merchant-coupon-strip": "/components/merchant-coupon-strip/index",
         "t-image": "tdesign-miniprogram/image/image",
         "t-tag": "tdesign-miniprogram/tag/tag",
         "t-button": "tdesign-miniprogram/button/button",

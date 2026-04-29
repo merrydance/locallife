@@ -152,10 +152,6 @@ Page({
     this.cleanupWebSocket()
     wsManager.connect()
 
-    const newOrderSub = wsManager.on(WSMessageType.NEW_ORDER, (data) => {
-      this.handleRealtimeNewOrder(data)
-    })
-
     const notificationSub = wsManager.on(WSMessageType.NOTIFICATION, (data) => {
       const notification = typeof data === 'object' && data !== null
         ? (data as MerchantNewOrderPayload)
@@ -175,7 +171,7 @@ Page({
       this.setData({ refreshErrorMessage: message })
     })
 
-    this.data._wsListeners = [newOrderSub, notificationSub, blockedSub]
+    this.data._wsListeners = [notificationSub, blockedSub]
   },
 
   cleanupWebSocket() {

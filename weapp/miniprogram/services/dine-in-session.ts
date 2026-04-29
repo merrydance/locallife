@@ -1,13 +1,15 @@
-import type {
-  BillingGroupDTO,
-  DiningSessionDTO,
-  DiningSessionEntrySessionSummary,
-  DiningSessionMenuResponse,
-  OpenDiningSessionResponse
+import {
+  checkoutDiningSession,
+  type BillingGroupDTO,
+  type DiningSessionDTO,
+  type DiningSessionEntrySessionSummary,
+  type DiningSessionMenuResponse,
+  type OpenDiningSessionResponse
 } from '../api/dining-session'
 import type { ScanTableMerchantInfo, ScanTableTableInfo } from '../api/table'
 
 const STORAGE_KEY = 'dineInSessionContext'
+const CHECKOUT_STORAGE_KEY = 'dineInPendingCheckoutContext'
 
 export interface DineInSessionContext {
   session_id: number
@@ -19,6 +21,13 @@ export interface DineInSessionContext {
   merchant_name: string
   merchant_logo_url?: string
   status: string
+  updated_at: string
+}
+
+export interface DineInPendingCheckoutContext {
+  session_id: number
+  order_id: number
+  payment_order_id?: number
   updated_at: string
 }
 
@@ -64,6 +73,51 @@ export function clearDineInSessionContext() {
   } catch (_error) {
     return
   }
+}
+
+export function savePendingDineInCheckoutContext(context: Omit<DineInPendingCheckoutContext, 'updated_at'>) {
+  wx.setStorageSync(CHECKOUT_STORAGE_KEY, {
+    ...context,
+    updated_at: new Date().toISOString()
+  })
+}
+
+export function getPendingDineInCheckoutContext(): DineInPendingCheckoutContext | null {
+  try {
+    const context = wx.getStorageSync(CHECKOUT_STORAGE_KEY) as DineInPendingCheckoutContext | null
+    if (!context || !context.session_id || !context.order_id) {
+      return null
+    }
+    return context
+  } catch (_error) {
+    return null
+  }
+}
+
+export function clearPendingDineInCheckoutContext() {
+  try {
+    wx.removeStorageSync(CHECKOUT_STORAGE_KEY)
+  } catch (_error) {
+    return
+  }
+}
+
+export async function checkoutPaidDineInSession(params: { orderId?: number, paymentOrderId?: number }): Promise<boolean> {
+  const context = getPendingDineInCheckoutContext()
+  if (!context) {
+    return false
+  }
+  if (params.orderId && context.order_id !== params.orderId) {
+    return false
+  }
+  if (params.paymentOrderId && context.payment_order_id && context.payment_order_id !== params.paymentOrderId) {
+    return false
+  }
+
+  await checkoutDiningSession(context.session_id)
+  clearPendingDineInCheckoutContext()
+  clearDineInSessionContext()
+  return true
 }
 
 export function saveDineInSessionFromOpenResponse(

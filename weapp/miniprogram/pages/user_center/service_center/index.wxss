@@ -64,6 +64,11 @@
   color: #fff;
 }
 
+.entry-icon--safety {
+  background: linear-gradient(135deg, #ff6f61, #d54941);
+  color: #fff;
+}
+
 .entry-label {
   font-size: 24rpx;
   color: #666;

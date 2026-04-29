@@ -45,6 +45,21 @@
   line-height: 1.6;
 }
 
+.claim-actions {
+  display: flex;
+  justify-content: center;
+  gap: 20rpx;
+  margin-top: 8rpx;
+}
+
+.action-error {
+  margin-top: 8rpx;
+  font-size: 26rpx;
+  color: #d32f2f;
+  text-align: center;
+  line-height: 1.5;
+}
+
 /* ========== Info Card ========== */
 .info-card {
   background: #fff;

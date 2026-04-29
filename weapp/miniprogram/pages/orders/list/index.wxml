@@ -25,7 +25,7 @@
     <!-- 1. 错误状态 -->
     <view wx:if="{{isError}}" class="error-container">
       <t-empty icon="info-circle" description="{{errorMsg}}" />
-      <t-button theme="primary" size="small" bindtap="loadOrders" data-retry="true" style="margin-top: 24rpx;" shape="round">重试</t-button>
+      <t-button theme="primary" size="small" bindtap="onRetryRefresh" style="margin-top: 24rpx;" shape="round">重试</t-button>
     </view>
 
     <!-- 2. 骨架屏加载 (App Shell + Skeleton) -->
@@ -46,7 +46,7 @@
       </view>
 
       <!-- 订单卡片 -->
-      <view class="order-card" wx:for="{{orders}}" wx:key="uniqueId" bindtap="onViewOrder" data-id="{{item.id}}" hover-class="order-card-hover">
+      <view class="order-card" wx:for="{{orders}}" wx:key="id" bindtap="onViewOrder" data-id="{{item.id}}" hover-class="order-card-hover">
         <!-- 头部：商户信息 + 状态 -->
         <view class="card-header">
           <view class="merchant-info">
@@ -66,7 +66,7 @@
         </view>
 
         <!-- 底部：操作按钮 -->
-        <view class="card-footer" catchtap="preventBubble">
+        <view wx:if="{{!isSelectMode}}" class="card-footer" catchtap="preventBubble">
           <view class="footer-actions">
             <t-button wx:if="{{item.canCancel}}" size="small" shape="round" catchtap="onCancelOrder" data-id="{{item.id}}" t-class="action-btn">取消订单</t-button>
 

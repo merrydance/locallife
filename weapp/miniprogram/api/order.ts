@@ -72,6 +72,7 @@ const CANCELLED_ORDER_STATUSES = new Set<OrderStatus>(['cancelled'])
 const PENDING_ORDER_STATUSES = new Set<OrderStatus>(['pending'])
 const READY_ORDER_STATUSES = new Set<OrderStatus>(['ready'])
 const DELIVERING_ORDER_STATUSES = new Set<OrderStatus>(['delivering'])
+const FOOD_SAFETY_REPORTABLE_TAKEOUT_STATUSES = new Set<OrderStatus>(['rider_delivered', 'user_delivered', 'completed'])
 
 /** 订单响应 - 对齐swagger api.orderResponse */
 export interface OrderResponse {
@@ -164,6 +165,14 @@ export function isReadyOrderStatus(status?: string): boolean {
 
 export function isDeliveringOrderStatus(status?: string): boolean {
   return !!status && DELIVERING_ORDER_STATUSES.has(status as OrderStatus)
+}
+
+export function isFoodSafetyReportableOrder(order?: Pick<OrderResponse, 'order_type' | 'status'> | null): boolean {
+  if (!order) return false
+  if (order.order_type === 'takeout') {
+    return FOOD_SAFETY_REPORTABLE_TAKEOUT_STATUSES.has(order.status)
+  }
+  return isCompletedOrderStatus(order.status)
 }
 
 /** 创建订单请求 - 对齐 api.createOrderRequest */

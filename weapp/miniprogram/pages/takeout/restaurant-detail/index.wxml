@@ -79,6 +79,8 @@
       <view class="suspension-banner-desc">该商户暂时无法下外卖单或预订包间，恢复后会自动恢复可下单状态。</view>
     </view>
 
+    <merchant-coupon-strip coupons="{{coupons}}" claiming-coupon-id="{{claimingCouponId}}" bind:claim="onClaimCoupon" />
+
     <!-- 菜品列表 Tab -->
     <view wx:if="{{activeTab === 'dishes'}}" class="dishes-tab">
       <view class="dishes-container">

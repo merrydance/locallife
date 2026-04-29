@@ -3,10 +3,23 @@
  * 使用真实后端API
  */
 
-import { getPublicMerchantDetail, getPublicMerchantDishes, getPublicMerchantCombos, PublicMerchantDetail, PublicDishCategory, PublicDish, PublicCombo } from '../../../api/merchant'
-import { getPublicMerchantRooms, PublicRoom } from '../../../api/room'
-import { getUserCarts } from '../../../api/cart'
 import CartService from '../../../services/cart'
+import {
+  claimCustomerCoupon,
+  loadCustomerMerchantCombos,
+  loadCustomerMerchantCouponViews,
+  loadCustomerMerchantDetail,
+  loadCustomerMerchantDishes,
+  loadCustomerMerchantRooms,
+  loadTakeoutCartSummary,
+  markCustomerCouponClaimed,
+  type CustomerCombo,
+  type CustomerDish,
+  type CustomerDishCategory,
+  type CustomerMerchantCouponView,
+  type CustomerMerchantDetail,
+  type CustomerRoom
+} from '../../../services/customer-discovery-workflow'
 import ConsumerMerchantDetailAdapter, { type ConsumerMerchantDetailViewModel } from '../../../adapters/consumer-merchant-detail'
 import { getPublicImageUrl } from '../../../utils/image'
 import { formatPriceNoSymbol } from '../../../utils/util'
@@ -44,7 +57,7 @@ interface ComboView {
   original_price: number
   originalPriceDisplay: string
   savingsDisplay: string
-  dishes: PublicCombo['dishes']
+  dishes: CustomerCombo['dishes']
   dish_images: string[] // 新增：包含菜品的图片列表
 }
 
@@ -88,11 +101,15 @@ Page({
     restaurant: null as RestaurantViewModel | null,
     activeTab: 'dishes' as 'dishes' | 'combos' | 'rooms',
     activeCategoryId: '' as string | number,
-    categories: [] as PublicDishCategory[],
+    categories: [] as CustomerDishCategory[],
     dishes: [] as DishView[],
     filteredDishes: [] as DishView[],
     combos: [] as ComboView[],
-    rooms: [] as PublicRoom[],
+    rooms: [] as CustomerRoom[],
+    coupons: [] as CustomerMerchantCouponView[],
+    couponLoading: false,
+    couponError: '',
+    claimingCouponId: 0,
     cartCount: 0,
     cartPrice: 0,
     cartPriceDisplay: '0.00',
@@ -145,11 +162,12 @@ Page({
       const merchantId = parseInt(this.data.restaurantId)
 
       // 并行加载商户信息、菜品、套餐和包间
-      const [merchantResult, dishesResult, combosResultFirstPass, roomsResult] = await Promise.all([
+      const [merchantResult, dishesResult, combosResultFirstPass, roomsResult, couponsResult] = await Promise.all([
         this.loadMerchantInfo(merchantId),
         this.loadDishes(merchantId),
         this.loadCombos(merchantId),
-        this.loadRooms(merchantId)
+        this.loadRooms(merchantId),
+        this.loadMerchantCoupons(merchantId)
       ])
 
       if (!merchantResult) {
@@ -179,6 +197,8 @@ Page({
         dishes: dishesResult.dishes,
         combos: combosResult,
         rooms: roomsResult,
+        coupons: couponsResult.coupons,
+        couponError: couponsResult.error,
         activeCategoryId: firstCategoryId,
         loading: false
       })
@@ -194,9 +214,32 @@ Page({
     }
   },
 
+  loadMerchantCoupons(merchantId: number) {
+    return loadCustomerMerchantCouponViews(merchantId)
+  },
+
+  async onClaimCoupon(e: WechatMiniprogram.CustomEvent) {
+    const couponId = Number(e.detail?.id)
+    if (!Number.isFinite(couponId) || this.data.claimingCouponId) return
+
+    this.setData({ claimingCouponId: couponId })
+    try {
+      await claimCustomerCoupon(couponId)
+      this.setData({
+        coupons: markCustomerCouponClaimed(this.data.coupons, couponId),
+        claimingCouponId: 0,
+        couponError: ''
+      })
+      wx.showToast({ title: '已领取', icon: 'success' })
+    } catch (error) {
+      this.setData({ claimingCouponId: 0 })
+      wx.showToast({ title: getErrorMessage(error, '领取失败，请稍后重试'), icon: 'none' })
+    }
+  },
+
   async loadMerchantInfo(merchantId: number): Promise<RestaurantViewModel | null> {
     try {
-      const merchant: PublicMerchantDetail = await getPublicMerchantDetail(merchantId)
+      const merchant: CustomerMerchantDetail = await loadCustomerMerchantDetail(merchantId)
       return merchant ? ConsumerMerchantDetailAdapter.toViewModel(merchant) : null
     } catch (error) {
       console.error('加载商户信息失败:', error)
@@ -204,10 +247,10 @@ Page({
     }
   },
 
-  async loadDishes(merchantId: number): Promise<{ dishes: DishView[], categories: PublicDishCategory[] }> {
+  async loadDishes(merchantId: number): Promise<{ dishes: DishView[], categories: CustomerDishCategory[] }> {
     try {
-      const result = await getPublicMerchantDishes(merchantId)
-      const dishes: DishView[] = (result.dishes || []).map((dish: PublicDish) => ({
+      const result = await loadCustomerMerchantDishes(merchantId)
+      const dishes: DishView[] = (result.dishes || []).map((dish: CustomerDish) => ({
         id: dish.id,
         name: dish.name,
         image_url: getPublicImageUrl(dish.image_url || ''),
@@ -234,8 +277,8 @@ Page({
 
   async loadCombos(merchantId: number): Promise<ComboView[]> {
     try {
-      const result = await getPublicMerchantCombos(merchantId)
-      return (result.combos || []).map((combo: PublicCombo) => {
+      const result = await loadCustomerMerchantCombos(merchantId)
+      return (result.combos || []).map((combo: CustomerCombo) => {
         // 优先使用后端返回的图片列表，如果没有则回退到前端拼接逻辑(兼容旧数据)
         let dishImages: string[] = []
         if (combo.dish_images && combo.dish_images.length > 0) {
@@ -262,11 +305,11 @@ Page({
     }
   },
 
-  async loadRooms(merchantId: number): Promise<PublicRoom[]> {
+  async loadRooms(merchantId: number): Promise<CustomerRoom[]> {
     try {
-      const result = await getPublicMerchantRooms(merchantId)
+      const result = await loadCustomerMerchantRooms(merchantId)
       // 包间图片是公共图片，使用getPublicImageUrl处理
-      return (result.rooms || []).map((room: PublicRoom) => ({
+      return (result.rooms || []).map((room: CustomerRoom) => ({
         ...room,
         primary_image: room.primary_image ? getPublicImageUrl(room.primary_image) : '',
         minimum_spend: room.minimum_spend || 0,
@@ -278,8 +321,8 @@ Page({
     }
   },
 
-  extractCategories(dishesResult: { dishes: DishView[], categories: PublicDishCategory[] }): PublicDishCategory[] {
-    const categoryMap = new Map<number, PublicDishCategory>()
+  extractCategories(dishesResult: { dishes: DishView[], categories: CustomerDishCategory[] }): CustomerDishCategory[] {
+    const categoryMap = new Map<number, CustomerDishCategory>()
     categoryMap.set(0, { id: 0, name: '全部', sort_order: -1 })
 
     // 优先使用API返回的分类
@@ -396,7 +439,7 @@ Page({
   async updateCartDisplay() {
     try {
       // 使用与外卖首页相同的方式获取购物车状态
-      const userCarts = await getUserCarts('takeout')
+      const userCarts = await loadTakeoutCartSummary()
       const totalCount = userCarts.summary?.total_items || 0
       const totalPrice = userCarts.summary?.total_amount || 0
 

@@ -1,5 +1,5 @@
 import {
-  getOrders,
+  getOrderList,
   cancelOrder,
   OrderStatus,
   getOrderDetail,
@@ -35,6 +35,8 @@ import {
   isOrderResponse,
   navigateToCombinedPaymentSuccess,
   normalizeOrderType,
+  normalizeOrderStatusFilter,
+  normalizeSelectMode,
   ORDER_REQUEST_DEDUP_MS,
   type OrderTypeFilter,
   STATUS_TABS
@@ -62,16 +64,19 @@ Page({
     statusTabs: STATUS_TABS,
     currentStatus: '' as OrderStatus | '',
     orderType: '' as OrderTypeFilter,
+    isSelectMode: false,
     pageTitle: '我的订单'
   },
 
-  onLoad(options: { order_type?: string }) {
+  onLoad(options: { order_type?: string, orderType?: string, type?: string, tab?: string, status?: string, selectMode?: string, select_mode?: string }) {
     wx.showShareMenu({
       withShareTicket: true,
       menus: ['shareAppMessage', 'shareTimeline']
     })
 
-    const orderType = normalizeOrderType(options?.order_type)
+    const orderType = normalizeOrderType(options?.order_type || options?.orderType || options?.type)
+    const currentStatus = normalizeOrderStatusFilter(options?.tab || options?.status)
+    const isSelectMode = normalizeSelectMode(options?.selectMode || options?.select_mode)
     
     // 根据订单类型设置标题
     const titleMap: Record<string, string> = {
@@ -88,8 +93,10 @@ Page({
     
     this.setData({
       orderType,
+      currentStatus,
+      isSelectMode,
       statusTabs,
-      pageTitle: titleMap[orderType] || '我的订单'
+      pageTitle: isSelectMode ? '选择订单' : titleMap[orderType] || '我的订单'
     })
     
     this.loadOrders(true)
@@ -163,7 +170,7 @@ Page({
         ...(orderType ? { order_type: orderType } : {})
       }
       
-      const result = await getOrders(params)
+      const result = await getOrderList(params)
 
       // (unwrap logic remains same)
       const unwrap = (payload: unknown): unknown[] => {
@@ -318,6 +325,21 @@ Page({
   onViewOrder(e: WechatMiniprogram.BaseEvent) {
     const id = getDatasetId(e)
     if (!id) return
+    if (this.data.isSelectMode) {
+      const selectedOrder = this.data.orders.find((order) => order.id === id)
+      if (!selectedOrder) {
+        wx.showToast({ title: '订单信息异常', icon: 'none' })
+        return
+      }
+      const eventChannel = this.getOpenerEventChannel()
+      eventChannel.emit?.('onOrderSelected', {
+        id: selectedOrder.id,
+        orderNo: selectedOrder.orderNo,
+        totalAmount: selectedOrder.totalAmount
+      })
+      wx.navigateBack()
+      return
+    }
     wx.navigateTo({ url: `/pages/orders/detail/index?id=${id}` })
   },
 

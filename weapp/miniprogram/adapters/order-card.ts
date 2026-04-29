@@ -16,6 +16,7 @@ export interface OrderCardViewModel {
     highlight: string
     createTimeDisplay: string
     totalDisplay: string
+    totalAmount: number
     badges: string[]
     previewItems: PreviewItemViewModel[]
     canReorder: boolean
@@ -54,6 +55,7 @@ export const OrderCardAdapter = {
             highlight: generateHighlight(order),
             createTimeDisplay: formatCreatedAt(order.created_at),
             totalDisplay: formatPrice(getPayableAmount(order)),
+            totalAmount: order.total_amount,
             badges: generateBadges(order),
             previewItems: extractPreviewItems(order),
             canReorder: ['completed', 'cancelled', 'user_delivered'].includes(order.status),

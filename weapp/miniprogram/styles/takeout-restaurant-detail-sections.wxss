@@ -1,3 +1,45 @@
+.suspension-banner {
+  margin: var(--spacer-md) var(--spacer-md) 0;
+  padding: 24rpx;
+  border-radius: var(--radius-md);
+  background: var(--td-error-color-1);
+  box-shadow: var(--shadow-sm);
+}
+
+.suspension-banner-title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--td-error-color-7);
+}
+
+.suspension-banner-desc {
+  margin-top: 8rpx;
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary);
+  line-height: 1.6;
+}
+
+.store-closed-banner {
+  margin: var(--spacer-md) var(--spacer-md) 0;
+  padding: 24rpx;
+  border-radius: var(--radius-md);
+  background: var(--td-warning-color-1);
+  box-shadow: var(--shadow-sm);
+}
+
+.store-closed-banner-title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--td-warning-color-7);
+}
+
+.store-closed-banner-desc {
+  margin-top: 8rpx;
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary);
+  line-height: 1.6;
+}
+
 .action-area {
   align-self: flex-end;
   flex-shrink: 0;

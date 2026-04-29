@@ -1,0 +1,19 @@
+<view wx:if="{{coupons.length > 0}}" class="coupon-strip">
+  <view wx:for="{{coupons}}" wx:key="id" class="coupon-strip-item">
+    <view class="coupon-strip-main">
+      <view class="coupon-strip-value">¥{{item.valueDisplay}}</view>
+      <view class="coupon-strip-title text-ellipsis">{{item.title}}</view>
+      <view class="coupon-strip-condition">满{{item.minSpendDisplay}}可用</view>
+    </view>
+    <t-button
+      size="extra-small"
+      theme="primary"
+      variant="outline"
+      shape="round"
+      disabled="{{!item.claimable || claimingCouponId > 0}}"
+      loading="{{claimingCouponId === item.id}}"
+      data-id="{{item.id}}"
+      catchtap="onClaimCoupon"
+    >{{item.statusText}}</t-button>
+  </view>
+</view>

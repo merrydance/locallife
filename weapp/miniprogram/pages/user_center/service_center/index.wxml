@@ -23,6 +23,12 @@
         </view>
         <text class="entry-label">配送超时</text>
       </view>
+      <view class="entry-item" bindtap="onQuickEntry" data-type="food-safety-report">
+        <view class="entry-icon entry-icon--safety">
+          <t-icon name="error-circle" size="48rpx" />
+        </view>
+        <text class="entry-label">食品安全</text>
+      </view>
     </view>
   </view>
 

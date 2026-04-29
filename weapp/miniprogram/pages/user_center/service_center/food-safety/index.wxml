@@ -1,0 +1,65 @@
+<custom-navbar title="食品安全反馈" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
+  <view wx:if="{{loading}}" class="loading-container">
+    <t-loading theme="circular" size="40rpx" text="加载中..." />
+  </view>
+
+  <view wx:elif="{{loadError}}" class="empty-container">
+    <t-empty icon="error-circle" description="{{loadError}}" />
+    <t-button theme="primary" shape="round" bindtap="onRetryLoad">选择订单</t-button>
+  </view>
+
+  <view wx:elif="{{submitResult}}" class="result-container">
+    <view class="result-card">
+      <t-icon name="{{submitResult.merchant_suspended ? 'error-circle' : 'check-circle'}}" size="108rpx" color="{{submitResult.merchant_suspended ? '#d54941' : '#2ba471'}}" />
+      <text class="result-title">{{resultTitle}}</text>
+      <text class="result-desc">{{resultSummary}}</text>
+      <text wx:if="{{submitResult.incident_id}}" class="result-meta">反馈编号：{{submitResult.incident_id}}</text>
+      <text wx:if="{{submitResult.case_id}}" class="result-meta">食安案件：{{submitResult.case_id}}</text>
+    </view>
+    <t-button theme="primary" shape="round" block bindtap="onBackToCenter">返回客服中心</t-button>
+  </view>
+
+  <view wx:else class="form-container">
+    <view class="order-card" bindtap="onSelectOrder">
+      <view class="order-main">
+        <text class="order-title">{{merchantName}}</text>
+        <text class="order-subtitle">订单 {{orderNo}}</text>
+      </view>
+      <t-icon name="chevron-right" size="36rpx" color="#999" />
+    </view>
+
+    <view class="form-card">
+      <view class="card-title">问题类型</view>
+      <t-radio-group value="{{incidentType}}" bind:change="onIncidentTypeChange" class="option-group">
+        <t-radio wx:for="{{incidentTypeOptions}}" wx:key="value" label="{{item.label}}" value="{{item.value}}" />
+      </t-radio-group>
+    </view>
+
+    <view class="form-card">
+      <view class="card-title">影响程度</view>
+      <t-radio-group value="{{severityLevel}}" bind:change="onSeverityChange" class="option-group severity-group">
+        <t-radio wx:for="{{severityOptions}}" wx:key="value" label="{{item.label}}" value="{{item.value}}" />
+      </t-radio-group>
+    </view>
+
+    <view class="form-card">
+      <view class="card-title">具体情况</view>
+      <t-textarea
+        placeholder="请描述发现时间、餐品、症状或现场情况（至少10个字）"
+        maxlength="{{1000}}"
+        value="{{description}}"
+        bind:change="onDescriptionInput"
+        autosize
+        style="--td-textarea-background-color: #f8f8f8; border-radius: 12rpx;"
+      />
+    </view>
+
+    <view wx:if="{{submitError}}" class="form-error">{{submitError}}</view>
+
+    <view class="submit-area">
+      <t-button theme="danger" shape="round" block loading="{{submitting}}" disabled="{{!canSubmit}}" bindtap="onSubmit">提交食安反馈</t-button>
+    </view>
+  </view>
+</view>

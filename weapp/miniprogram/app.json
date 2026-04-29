@@ -160,7 +160,7 @@
     },
     {
       "root": "pages/user_center/service_center",
-      "pages": ["index", "submit/index", "detail/index"]
+      "pages": ["index", "submit/index", "detail/index", "food-safety/index"]
     },
     {
       "root": "pages/merchant",

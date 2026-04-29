@@ -4,13 +4,7 @@
 .page-container {
   min-height: 100vh;
   background-color: var(--td-bg-color-page);
-  padding: 0 var(--spacer-md) var(--spacer-lg); /* Added horizontal and bottom padding */
   box-sizing: border-box;
-}
-
-.balance-card {
-  background-color: var(--td-bg-color-page);
-  padding: 0 var(--spacer-md);
 }
 
 /* 总资产卡片 */
@@ -99,78 +93,12 @@
   margin: 0 var(--spacer-md);
 }
 
-.card-bg-decoration {
-  position: absolute;
-  right: -40rpx;
-  top: -40rpx;
-  width: 200rpx;
-  height: 200rpx;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 50%;
-  z-index: 1;
-}
-
-.card-bg-decoration::after {
-  content: '';
-  position: absolute;
-  left: -80rpx;
-  bottom: -160rpx;
-  width: 300rpx;
-  height: 300rpx;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 50%;
-}
-
-/* 快捷操作栏 */
-.action-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  background: var(--td-bg-color-container);
-  padding: var(--spacer-md) 0;
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-  margin-bottom: var(--spacer-md);
-}
-
-.action-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.icon-wrap {
-  width: 96rpx;
-  height: 96rpx;
-  border-radius: var(--radius-md); /* Changed to small round for modern look */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 12rpx;
-  background: #FFF5F3; /* Light brand background */
-  transition: all 0.2s ease;
-}
-
-.icon-wrap.withdraw { background: #F5F5F5; }
-.icon-wrap.coupon { background: #FFF9F0; }
-.icon-wrap.bill { background: #F0FFF4; }
-
-.action-item:active .icon-wrap {
-  transform: scale(0.9);
-  opacity: 0.8;
-}
-
-.action-item text {
-  font-size: var(--font-size-xs);
-  color: var(--td-text-color-primary);
-}
-
-.action-item text.disabled {
-  color: var(--td-text-color-placeholder);
-}
-
 /* 通用区块样式 */
 .section-container {
+  margin-top: 0;
+}
+
+.section-container + .section-container {
   margin-top: var(--spacer-md);
 }
 

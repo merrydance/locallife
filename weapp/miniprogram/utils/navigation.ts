@@ -354,6 +354,16 @@ export class Navigation {
     wx.navigateTo({ url })
   }
 
+  static toFoodSafetyReport(options: { orderId?: number | string, merchantId?: number | string, merchantName?: string } = {}) {
+    const params: string[] = []
+    if (options.orderId) params.push(`orderId=${options.orderId}`)
+    if (options.merchantId) params.push(`merchantId=${options.merchantId}`)
+    if (options.merchantName) params.push(`merchantName=${encodeURIComponent(options.merchantName)}`)
+    wx.navigateTo({
+      url: `/pages/user_center/service_center/food-safety/index${params.length ? `?${params.join('&')}` : ''}`
+    })
+  }
+
   /**
    * 跳转到索赔详情页
    */

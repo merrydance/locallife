@@ -212,7 +212,7 @@
     shape="round"
     size="large"
     loading="{{loading}}"
-    disabled="{{!!loadError || !!pricingError || !(address && address.id) || !(carts && carts.length)}}"
+    disabled="{{loading || !!loadError || !!pricingError || !(address && address.id) || !(carts && carts.length)}}"
     bindtap="onSubmitOrder"
   >
     去支付

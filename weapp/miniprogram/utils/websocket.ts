@@ -9,7 +9,6 @@ import { mapBackendMessageToUserMessage } from './user-facing'
 export enum WSMessageType {
   ALERT = 'alert',
   NOTIFICATION = 'notification',
-  NEW_ORDER = 'new_order',
   PING = 'ping',
   PONG = 'pong',
   CONNECTION_BLOCKED = 'connection_blocked',

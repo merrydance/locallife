@@ -1,4 +1,5 @@
-import { waitForPaymentWorkflowTerminalResult } from '../../../services/payment-workflow'
+import { isPaymentWorkflowPaid, waitForPaymentWorkflowTerminalResult } from '../../../services/payment-workflow'
+import { checkoutPaidDineInSession } from '../../../services/dine-in-session'
 import { buildPaymentResultView, normalizePaymentWorkflowStatus, PaymentResultAction, PaymentWorkflowStatus } from '../../../utils/payment-result-view'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
@@ -17,6 +18,7 @@ function delay(ms: number): Promise<void> {
 }
 
 let terminalWaitToken = 0
+let dineInCheckoutClosing = false
 
 Page({
   data: {
@@ -75,6 +77,8 @@ Page({
       } else {
         this.applyMissingPaymentOrderState()
       }
+    } else if (isPaymentWorkflowPaid(status)) {
+      void this.closeDineInCheckoutSessionIfNeeded()
     }
   },
 
@@ -127,6 +131,9 @@ Page({
           waitingForTerminal: false,
           ...view
         })
+        if (isPaymentWorkflowPaid(result.status)) {
+          void this.closeDineInCheckoutSessionIfNeeded()
+        }
         return
       } catch (error) {
         if (token !== terminalWaitToken) {
@@ -170,11 +177,31 @@ Page({
         refreshing: false,
         ...view
       })
+      if (isPaymentWorkflowPaid(result.status)) {
+        void this.closeDineInCheckoutSessionIfNeeded()
+      }
     } catch (error) {
       this.setData({
         statusNote: getErrorUserMessage(error, '支付结果暂未同步，请稍后刷新。'),
         refreshing: false
       })
+    }
+  },
+
+  async closeDineInCheckoutSessionIfNeeded() {
+    if (dineInCheckoutClosing) return
+    dineInCheckoutClosing = true
+    try {
+      await checkoutPaidDineInSession({
+        orderId: Number(this.data.businessId) || undefined,
+        paymentOrderId: this.data.paymentOrderId || undefined
+      })
+    } catch (error) {
+      this.setData({
+        statusNote: getErrorUserMessage(error, '支付已完成，桌台状态正在同步，请稍后刷新。')
+      })
+    } finally {
+      dineInCheckoutClosing = false
     }
   },
 

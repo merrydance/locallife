@@ -4,7 +4,6 @@ import ConsumerProfileAdapter from '../../../adapters/consumer-profile'
 import MembershipService from '../../../api/membership'
 import Navigation from '../../../utils/navigation'
 import { getPaymentLedgerStatusView, isPaymentLedgerEntryTerminal } from '../../../utils/payment-ledger-view'
-import { MEMBERSHIP_RECHARGE_PAUSED_MESSAGE } from '../../../utils/membership-recharge-pause'
 
 interface MembershipDisplay {
   id: number
@@ -161,71 +160,6 @@ Page({
       showCancel: false,
       confirmText: '我知道了'
     })
-  },
-
-  onTopUp(e: MembershipEvent) {
-    const id = e.currentTarget.dataset.id
-    if (id) {
-       const m = this.data.memberships.find((item) => item.id === id)
-       if (m) {
-         this.showRechargePaused(m)
-         return
-       }
-    }
-    
-    if (this.data.memberships.length === 0) {
-      wx.showModal({
-        title: '暂无会员卡',
-        content: '您目前还没有会员卡，去喜欢的餐厅看看吧',
-        confirmText: '去逛逛',
-        success: (res) => {
-          if (res.confirm) Navigation.toTakeoutHome()
-        }
-      })
-      return
-    }
-
-    // General selection
-    const names = this.data.memberships.map((m) => m.merchant_name)
-    wx.showActionSheet({
-      itemList: names.slice(0, 6), // Wechat limit is 6
-      success: (res) => {
-        const m = this.data.memberships[res.tapIndex]
-        this.showRechargePaused(m)
-      }
-    })
-  },
-
-  showRechargePaused(membership?: MembershipDisplay) {
-    wx.showModal({
-      title: '线上充值已暂停',
-      content: MEMBERSHIP_RECHARGE_PAUSED_MESSAGE,
-      cancelText: '我知道了',
-      confirmText: membership ? '查看商户' : '我知道了',
-      showCancel: !!membership,
-      success: (res) => {
-        if (res.confirm && membership) {
-          Navigation.toRestaurantDetail(membership.merchant_id)
-        }
-      }
-    })
-  },
-
-  onWithdraw() {
-    wx.showModal({
-      title: '暂未开放',
-      content: '提现功能正在安全评估中，敬请期待。',
-      showCancel: false,
-      confirmText: '我知道了'
-    })
-  },
-
-  onGoToCoupons() {
-    Navigation.toCoupons()
-  },
-
-  onShowBill() {
-    wx.showToast({ title: '完整账单生成中', icon: 'none' })
   },
 
   onManageMembership() {

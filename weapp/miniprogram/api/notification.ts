@@ -31,6 +31,17 @@ export interface NotificationListResult extends PaginatedListResult<Notification
     notifications: Notification[]
 }
 
+export interface NotificationPreferences {
+    order_updates?: boolean
+    payment_updates?: boolean
+    delivery_updates?: boolean
+    system_updates?: boolean
+    food_safety_updates?: boolean
+    quiet_hours_enabled?: boolean
+    quiet_hours_start?: string
+    quiet_hours_end?: string
+}
+
 type NotificationListResponse = PaginationEnvelope & {
     notifications?: Notification[]
 }
@@ -78,6 +89,28 @@ export class NotificationService {
         return request<{ count: number }>({
             url: '/v1/notifications/unread/count',
             method: 'GET'
+        })
+    }
+
+    async deleteNotification(id: number): Promise<void> {
+        await request({
+            url: `/v1/notifications/${id}`,
+            method: 'DELETE'
+        })
+    }
+
+    async getPreferences(): Promise<NotificationPreferences> {
+        return request({
+            url: '/v1/notifications/preferences',
+            method: 'GET'
+        })
+    }
+
+    async updatePreferences(preferences: NotificationPreferences): Promise<NotificationPreferences> {
+        return request({
+            url: '/v1/notifications/preferences',
+            method: 'PUT',
+            data: preferences
         })
     }
 }

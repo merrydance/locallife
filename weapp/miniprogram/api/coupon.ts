@@ -29,6 +29,7 @@ interface BackendVoucher {
     status_label?: string
     status_theme?: MerchantVoucherStatusTheme
     allowed_order_types?: string[]
+    is_claimed?: boolean
 }
 
 interface BackendUserVoucher {
@@ -218,7 +219,7 @@ function normalizeVoucherToCoupon(item: BackendVoucher): Coupon {
         end_time: item.valid_until || '',
         total_count: item.total_quantity || 0,
         claimed_count: item.claimed_quantity || 0,
-        is_claimed: false
+        is_claimed: item.is_claimed === true
     }
 }
 
@@ -329,7 +330,7 @@ export class CouponService {
         }
 
         const res = await request<VoucherListResponse<BackendUserVoucher>>({
-            url: '/v1/vouchers/me/available',
+            url: '/v1/vouchers/available',
             method: 'GET',
             data: params
         })
@@ -342,11 +343,11 @@ export class CouponService {
 
     /**
      * 获取我的可用优惠券列表
-     * GET /v1/vouchers/me/available
+     * GET /v1/vouchers/available
      */
     static async getMyAvailableCoupons(params: MyCouponParams): Promise<UserCouponListResult> {
         const res = await request<VoucherListResponse<BackendUserVoucher>>({
-            url: '/v1/vouchers/me/available',
+            url: '/v1/vouchers/available',
             method: 'GET',
             data: params
         })
