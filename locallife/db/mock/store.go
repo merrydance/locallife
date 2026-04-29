@@ -416,6 +416,21 @@ func (mr *MockStoreMockRecorder) ApproveOperatorRegionApplication(ctx, id any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApproveOperatorRegionApplication", reflect.TypeOf((*MockStore)(nil).ApproveOperatorRegionApplication), ctx, id)
 }
 
+// ApproveOperatorRegionApplicationTx mocks base method.
+func (m *MockStore) ApproveOperatorRegionApplicationTx(ctx context.Context, applicationID int64) (db.ApproveOperatorRegionApplicationTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApproveOperatorRegionApplicationTx", ctx, applicationID)
+	ret0, _ := ret[0].(db.ApproveOperatorRegionApplicationTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ApproveOperatorRegionApplicationTx indicates an expected call of ApproveOperatorRegionApplicationTx.
+func (mr *MockStoreMockRecorder) ApproveOperatorRegionApplicationTx(ctx, applicationID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApproveOperatorRegionApplicationTx", reflect.TypeOf((*MockStore)(nil).ApproveOperatorRegionApplicationTx), ctx, applicationID)
+}
+
 // ApproveRiderApplication mocks base method.
 func (m *MockStore) ApproveRiderApplication(ctx context.Context, arg db.ApproveRiderApplicationParams) (db.RiderApplication, error) {
 	m.ctrl.T.Helper()

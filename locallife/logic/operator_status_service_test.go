@@ -79,6 +79,35 @@ func TestOperatorStatusService_UpdateStatus_SuspendRoleFailureDoesNotPersistOper
 	require.Contains(t, err.Error(), "update operator user role status")
 }
 
+func TestOperatorStatusService_UpdateStatus_RepeatedSuspendDoesNotRewriteOperatorStatus(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	service := NewOperatorStatusService(store, ecommerceClient)
+
+	operator := db.Operator{
+		ID:          63,
+		UserID:      163,
+		RegionID:    73,
+		Name:        "运营商丙",
+		ContactName: "运营商丙",
+		Status:      operatorStatusSuspended,
+	}
+	role := db.UserRole{ID: 263, UserID: operator.UserID, Role: operatorRole, Status: operatorStatusSuspended}
+	user := db.User{ID: operator.UserID, WechatOpenid: "operator-openid-163"}
+
+	store.EXPECT().
+		GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{UserID: operator.UserID, Role: operatorRole}).
+		Return(role, nil)
+	expectLogicOperatorReceiverTargetIntent(t, store, ecommerceClient, operator, user, db.ProfitSharingReceiverDesiredStateAbsent)
+
+	result, err := service.UpdateStatus(context.Background(), operator, operatorStatusSuspended)
+	require.NoError(t, err)
+	require.Equal(t, operatorStatusSuspended, result.Status)
+}
+
 func expectLogicOperatorReceiverTargetIntent(
 	t *testing.T,
 	store *mockdb.MockStore,

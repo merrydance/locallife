@@ -335,21 +335,16 @@ func (server *Server) approveRegionApplicationAdmin(ctx *gin.Context) {
 		return
 	}
 
-	// 将区域加入运营商
-	if _, err := server.store.AddOperatorRegion(ctx, db.AddOperatorRegionParams{
-		OperatorID: app.OperatorID,
-		RegionID:   app.RegionID,
-	}); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 更新申请状态
-	approved, err := server.store.ApproveOperatorRegionApplication(ctx, uriReq.ID)
+	result, err := server.store.ApproveOperatorRegionApplicationTx(ctx, uriReq.ID)
 	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotPending))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+	approved := result.Application
 
 	regionName := server.getRegionName(ctx, approved.RegionID)
 	ctx.JSON(http.StatusOK, newRegionExpansionResponse(approved, regionName))

@@ -114,6 +114,7 @@ type Store interface {
 	// Food safety transactions
 	ReportFoodSafetyIncidentTx(ctx context.Context, arg ReportFoodSafetyIncidentTxParams) (ReportFoodSafetyIncidentTxResult, error)
 	ResolveFoodSafetyCaseTx(ctx context.Context, arg ResolveFoodSafetyCaseTxParams) (ResolveFoodSafetyCaseTxResult, error)
+	ApproveOperatorRegionApplicationTx(ctx context.Context, applicationID int64) (ApproveOperatorRegionApplicationTxResult, error)
 }
 
 // SQLStore provides all functions to execute SQL queries and transactions

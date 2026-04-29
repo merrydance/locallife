@@ -507,6 +507,11 @@ weapp 范围：
 
 - 审批通过、拒绝、重复审批、失败回滚都有测试证据。
 
+关闭进展（2026-04-29）：
+
+- 证据：`locallife/api/operator_application_admin_test.go` 覆盖 admin 审批通过写 receiver intent、receiver intent 失败返回 500、状态变更批处理；`locallife/db/sqlc/tx_operator_application_test.go` 覆盖审批事务内创建 operator、operator_regions、user_role。
+- 结论：入驻申请审批链路已按后台治理能力闭环，不进入 operator weapp；后续 admin UI 只应承接后台审批任务，不复用运营商小程序任务模型。
+
 ### OP-CAP-10B Admin 运营商状态变更回归
 
 风险：G2，角色/区域/状态同步。
@@ -516,6 +521,12 @@ weapp 范围：
 验收标准：
 
 - 暂停、恢复、失活和重复操作都有测试证据。
+
+关闭进展（2026-04-29）：
+
+- 变更文件：`locallife/logic/operator_status_service_test.go` 新增重复暂停回归，确认重复操作不会重写 operator status，同时仍记录 receiver absent intent。
+- 证据：`locallife/api/operator_application_admin_test.go` 覆盖暂停、恢复、区域冲突和批量混合结果；`locallife/scheduler/operator_contract_expiry_scheduler_test.go` 覆盖合同到期自动暂停、失败继续和 receiver intent 失败后本地暂停保持。
+- 结论：当前生产状态语义为 active/suspended；合同到期以自动 suspended 收口，未发现独立 inactive 生产入口，本轮不造新状态。
 
 ### OP-CAP-10C Admin 区域扩展审批回归
 
@@ -527,6 +538,12 @@ weapp 范围：
 
 - 区域申请审批、拒绝、重复审批和跨区域读取都有测试证据。
 
+关闭进展（2026-04-29）：
+
+- 变更文件：`locallife/db/query/operator_region_application.sql`、`locallife/db/sqlc/tx_operator_region_application.go`、`locallife/api/operator_region_expansion.go`、`locallife/api/operator_region_expansion_test.go`、`locallife/db/sqlc/tx_operator_region_application_test.go`。
+- 修复：区域扩展 approve 从“先写 operator_regions、再更新 application”改为事务内先 pending-only approve、再写 operator_regions；如果重复审批或 operator_regions 写入失败，事务回滚，不留下未经完成审批的区域权限。
+- 证据：API 测试覆盖审批、拒绝和重复审批拒绝；DB 事务测试覆盖审批写入、重复审批不写区域、写区域失败回滚 approval。跨区域读取由既有 operator_regions 消费路径承接，本轮聚焦回归纳入 OperatorRegion/RegionApplication 相关测试。
+
 ### OP-CAP-10D Admin receiver lifecycle 可追踪性
 
 风险：G2/G3，分账接收方生命周期。
@@ -537,6 +554,11 @@ weapp 范围：
 
 - receiver intent、worker 执行、失败重试和最终状态可查询。
 - 不强塞到 operator weapp；web/admin 或后台治理界面另行承接。
+
+关闭进展（2026-04-29）：
+
+- 证据：`locallife/api/profit_sharing_receiver_lifecycle_test.go` 覆盖 target 列表/详情、attempt 分页、operator/rider repair 写 target 并入队、错误脱敏和审计；`locallife/logic/profit_sharing_receiver_lifecycle_service_test.go` 覆盖 present/absent 处理、幂等成功、缺 openid 失败；`locallife/worker/profit_sharing_receiver_lifecycle_scheduler_test.go` 覆盖失败/待重试 target 重新入队；`locallife/worker/task_profit_sharing_receiver_lifecycle_test.go` 覆盖 worker 失败告警阈值。
+- 结论：receiver lifecycle 属于平台后台治理与资金域可观察能力，不进入 operator weapp；后续 web/admin 承接应以 target/attempt ViewState 建模。
 
 ## 关闭任务的统一要求
 

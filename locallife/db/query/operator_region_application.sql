@@ -56,14 +56,14 @@ WHERE (sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status));
 -- 审批通过区域扩展申请
 UPDATE operator_region_applications
 SET status = 'approved', updated_at = now()
-WHERE id = $1
+WHERE id = $1 AND status = 'pending'
 RETURNING *;
 
 -- name: RejectOperatorRegionApplication :one
 -- 审批拒绝区域扩展申请
 UPDATE operator_region_applications
 SET status = 'rejected', reject_reason = $2, updated_at = now()
-WHERE id = $1
+WHERE id = $1 AND status = 'pending'
 RETURNING *;
 
 -- name: DeleteOperatorRegionApplication :exec

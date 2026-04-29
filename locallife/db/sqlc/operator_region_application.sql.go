@@ -15,7 +15,7 @@ import (
 const approveOperatorRegionApplication = `-- name: ApproveOperatorRegionApplication :one
 UPDATE operator_region_applications
 SET status = 'approved', updated_at = now()
-WHERE id = $1
+WHERE id = $1 AND status = 'pending'
 RETURNING id, operator_id, region_id, status, reject_reason, created_at, updated_at
 `
 
@@ -328,7 +328,7 @@ func (q *Queries) ListPendingRegionApplications(ctx context.Context, arg ListPen
 const rejectOperatorRegionApplication = `-- name: RejectOperatorRegionApplication :one
 UPDATE operator_region_applications
 SET status = 'rejected', reject_reason = $2, updated_at = now()
-WHERE id = $1
+WHERE id = $1 AND status = 'pending'
 RETURNING id, operator_id, region_id, status, reject_reason, created_at, updated_at
 `
 

@@ -33,7 +33,7 @@
 | 能力域 | 后端闭环 | 主流程接入 | weapp 承接 | 风险 | 结论 |
 | --- | --- | --- | --- | --- | --- |
 | 运营商入驻申请 | 完整 | 已接入审批、角色、区域、receiver intent | 已承接注册页 | G2 | 可用，需持续验证审批后角色/分账接收方链路 |
-| 区域扩展 | 完整 | 已接入 admin 审批与 operator_regions | 已承接 | G1 | 可用 |
+| 区域扩展 | 完整 | 已接入 admin 审批与 operator_regions，审批写入已事务化 | 已承接 | G2 | 可用，重复审批和写区域失败有回滚证据 |
 | 区域、统计、实时、趋势、排行 | 完整 | 查询真实区域/订单/商户/骑手事实 | 已承接 dashboard/analytics | G1 | 可用 |
 | 待接单派单监控 | 完整 | 接入 deliveries/orders/merchants 和超时提醒 worker | 已承接 dispatch hall | G2 | 可用，需保留超时告警验证 |
 | 运营商通知 | 完整 | 已被派单超时等 worker 写入 | 已承接 | G1 | 可用 |
@@ -44,7 +44,7 @@
 | 财务概览/佣金 | 完整 | 查询区域经营与分账统计事实 | 部分承接 finance | G1 | 可用 |
 | 分账配置 | 完整 | 查询平台级配置事实 | 可只读查看 | G1/G2 | 不是运营商配置能力，只读可见即可 |
 | operators/me 规则代理 | 完整 | 版本、发布、回滚、禁用、命中查询具备区域约束 | 不进任何前端，未来评估是否保留后端能力 | G2 | 通用规则工作台能力，不等于当前轻量运营规则配置 |
-| Admin 运营商申请/状态/区域申请 | 完整 | 接入 operator 状态、user_role、receiver sync | web/admin 范畴 | G2 | 平台后台治理链路，不属于 operator weapp |
+| Admin 运营商申请/状态/区域申请 | 完整 | 接入 operator 状态、user_role、operator_regions、receiver sync | web/admin 范畴 | G2 | 平台后台治理链路，不属于 operator weapp；OP-CAP-10 已补齐区域扩展事务证据 |
 
 ## 能力域审计明细
 
@@ -67,6 +67,8 @@
 
 主流程接入：已接入。该能力不是孤立申请表，而是接入登录角色、区域权限和后续分账接收方生命周期。
 
+2026-04-29 关闭证据：`locallife/api/operator_application_admin_test.go` 覆盖审批通过、receiver intent 失败、暂停/恢复和批量混合结果；`locallife/db/sqlc/tx_operator_application_test.go` 覆盖审批事务内同步 operator、operator_regions、user_role；`locallife/scheduler/operator_contract_expiry_scheduler_test.go` 覆盖合同到期自动暂停和 receiver absent intent。
+
 剩余风险：这是 G2 链路，审批后角色同步、receiver intent 后续处理和失败恢复应作为回归验证重点。
 
 ### 2. 区域扩展
@@ -82,6 +84,8 @@
 闭环判断：完整。申请、列表、审批后写入 operator region 关系具备源码路径。
 
 主流程接入：已接入 operator_regions，后续统计、规则、商户/骑手、派单监控均依赖区域权限。
+
+2026-04-29 关闭证据：审批通过已改为 `ApproveOperatorRegionApplicationTx`，在事务内 pending-only 更新申请并写入 `operator_regions`；`locallife/api/operator_region_expansion_test.go` 覆盖 approve/reject/repeat；`locallife/db/sqlc/tx_operator_region_application_test.go` 覆盖重复审批不写区域和写区域失败回滚 approval。
 
 ### 3. 区域、统计、实时、趋势、排行
 
