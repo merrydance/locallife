@@ -184,6 +184,12 @@ weapp 范围：
 - 从当前前端差距和任务队列中移出。
 - 后续若评估保留，需要单独回答：真实生产调用点、规则治理 owner、发布风险、是否仍需要运营商区域代理入口。
 
+2026-04-29 关闭进展：
+
+- 后端 `operators/me/rules` 仍是通用规则引擎区域代理能力，读写 `rules`、`rule_versions`、`rule_audits`、`rule_hits`，不是轻量区域规则 `/v1/operator/rules`。
+- 当前 weapp 仅承接 `/v1/operator/rules` 轻量配置；未发现 `operators/me/rules` 前端入口，符合“不进当前前端队列”的边界。
+- 聚焦回归 `go test ./api -run 'TestListOperatorRulesProxyAPI|TestCreateOperatorRuleVersionProxyAPI|TestListOperatorRuleHitsProxyAPI|TestDBRulesEngineEvaluate' -count=1` 已通过。
+
 ### OP-CAP-05A 收口商户/骑手管理语义
 
 风险：G1，能力边界漂移。
