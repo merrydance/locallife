@@ -537,16 +537,35 @@ func (server *Server) handleComplaintNotify(ctx *gin.Context) {
 		WxpayUpdateTime: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	})
 	if updateErr != nil && !isNotFoundError(updateErr) {
-		// 本地无此投诉记录时触发后台同步拉取
-		log.Warn().Err(updateErr).Str("complaint_id", complaintNotification.ComplaintID).Msg("complaint notify: db update failed, will enqueue sync")
+		log.Error().Err(updateErr).Str("complaint_id", complaintNotification.ComplaintID).Msg("complaint notify: db update failed")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "update complaint state failed"})
+		return
 	}
 
 	// 若本地无此投诉，入队同步任务拉取完整数据
 	if isNotFoundError(updateErr) {
-		_ = server.taskDistributor.DistributeTaskSyncComplaints(ctx, &worker.SyncComplaintsPayload{
+		if server.taskDistributor == nil {
+			log.Error().Str("complaint_id", complaintNotification.ComplaintID).Msg("complaint notify: sync distributor not configured")
+			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "sync distributor not configured"})
+			return
+		}
+		if err := server.taskDistributor.DistributeTaskSyncComplaints(ctx, &worker.SyncComplaintsPayload{
 			BeginDate: time.Now().AddDate(0, 0, -1).Format("2006-01-02"),
 			EndDate:   time.Now().Format("2006-01-02"),
-		})
+		}); err != nil {
+			log.Error().Err(err).Str("complaint_id", complaintNotification.ComplaintID).Msg("complaint notify: enqueue sync failed")
+			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "enqueue complaint sync failed"})
+			return
+		}
+	}
+
+	if _, err := server.store.CreateWechatNotification(ctx, db.CreateWechatNotificationParams{
+		ID:           notification.ID,
+		EventType:    notification.EventType,
+		ResourceType: pgtype.Text{String: notification.ResourceType, Valid: notification.ResourceType != ""},
+		Summary:      pgtype.Text{String: notification.Summary, Valid: notification.Summary != ""},
+	}); err != nil && db.ErrorCode(err) != db.UniqueViolation {
+		log.Error().Err(err).Str("notification_id", notification.ID).Msg("complaint notify: record notification failed")
 	}
 
 	// 快速响应微信，返回 200

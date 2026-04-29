@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,7 +14,10 @@ import (
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/wechat"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	"github.com/merrydance/locallife/worker"
+	mockworker "github.com/merrydance/locallife/worker/mock"
 
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -58,6 +62,95 @@ func TestHandleComplaintNotify_SerialHeaderForwarded(t *testing.T) {
 		require.Equal(t, string(wechat.ComplaintStateProcessing), arg.ComplaintState)
 		require.True(t, arg.WxpayUpdateTime.Valid)
 		return randomWechatComplaintForTest(0), nil
+	})
+	store.EXPECT().CreateWechatNotification(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.CreateWechatNotificationParams) (db.WechatNotification, error) {
+		require.Equal(t, "complaint-notify-001", arg.ID)
+		require.Equal(t, "COMPLAINT.STATE_CHANGE", arg.EventType)
+		require.Equal(t, "encrypt-resource", arg.ResourceType.String)
+		require.Equal(t, "complaint notify", arg.Summary.String)
+		return db.WechatNotification{ID: arg.ID, EventType: arg.EventType}, nil
+	})
+
+	recorder := httptest.NewRecorder()
+	req := newComplaintNotifyRequest(t)
+	server.router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.JSONEq(t, `{"code":"SUCCESS","message":"OK"}`, recorder.Body.String())
+}
+
+func TestHandleComplaintNotify_InvalidSignatureFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	ecommerce.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(assertAnError("bad signature"))
+
+	recorder := httptest.NewRecorder()
+	req := newComplaintNotifyRequest(t)
+	server.router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusUnauthorized, recorder.Code)
+	require.JSONEq(t, `{"code":"FAIL","message":"signature verification failed"}`, recorder.Body.String())
+}
+
+func TestHandleComplaintNotify_DuplicateNotificationShortCircuits(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	ecommerce.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil)
+	store.EXPECT().CheckNotificationExists(gomock.Any(), "complaint-notify-001").Return(true, nil)
+
+	recorder := httptest.NewRecorder()
+	req := newComplaintNotifyRequest(t)
+	server.router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.JSONEq(t, `{"code":"SUCCESS","message":"OK"}`, recorder.Body.String())
+}
+
+func TestHandleComplaintNotify_UnknownComplaintEnqueuesSyncAndRecordsNotification(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+	server := newTestServerWithTaskDistributor(t, store, distributor)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	ecommerce.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil)
+	store.EXPECT().CheckNotificationExists(gomock.Any(), "complaint-notify-001").Return(false, nil)
+	ecommerce.EXPECT().DecryptComplaintNotification(gomock.Any()).Return(&wechat.ComplaintNotification{
+		ComplaintID: "complaint_missing_001",
+		ActionType:  "COMPLAINT_STATE_CHANGE",
+		State:       wechat.ComplaintStatePendingResponse,
+	}, nil)
+	store.EXPECT().UpdateWechatComplaintState(gomock.Any(), gomock.Any()).Return(db.WechatComplaint{}, db.ErrRecordNotFound)
+	distributor.EXPECT().DistributeTaskSyncComplaints(gomock.Any(), gomock.AssignableToTypeOf(&worker.SyncComplaintsPayload{})).DoAndReturn(func(_ context.Context, syncPayload *worker.SyncComplaintsPayload, _ ...asynq.Option) error {
+		require.NotEmpty(t, syncPayload.BeginDate)
+		require.NotEmpty(t, syncPayload.EndDate)
+		return nil
+	})
+	store.EXPECT().CreateWechatNotification(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.CreateWechatNotificationParams) (db.WechatNotification, error) {
+		require.Equal(t, "complaint-notify-001", arg.ID)
+		require.Equal(t, "COMPLAINT.STATE_CHANGE", arg.EventType)
+		return db.WechatNotification{ID: arg.ID, EventType: arg.EventType}, nil
 	})
 
 	recorder := httptest.NewRecorder()

@@ -54,6 +54,12 @@
 - 后端测试覆盖 webhook 签名失败、重复通知、未知投诉入队同步、operator 完结权限。
 - 文档记录投诉状态枚举与前端状态映射。
 
+2026-04-29 关闭进展：
+
+- 投诉 webhook 成功处理后写入 `wechat_notifications`，使 `CheckNotificationExists` 幂等检查有真实落点；重复通知会在签名验证和幂等检查后直接成功返回。
+- 未知投诉状态通知会入队 `payment:sync_complaints` 拉取完整微信投诉记录；同步任务分发失败时返回 `FAIL` 让微信侧可重试，避免本地没有记录也吞掉通知。
+- 已补充 `api/complaint_test.go` 覆盖签名失败、重复通知短路、未知投诉入队同步并记录通知，以及既有运营商完结权限。
+
 ### OP-CAP-01B 微信支付投诉只读监管视图预案
 
 风险：G2/G3，只读暴露外部投诉记录。
@@ -99,6 +105,11 @@ weapp 范围：
 - 明确 operator 不做人工裁决；不需要展示则从 weapp 差距中移除。
 - 后端测试覆盖自动裁决触发、worker 后处理、重复任务、失败恢复和状态不倒退。
 
+2026-04-29 关闭进展：
+
+- 复核现有测试已覆盖商户/骑手创建争议后的自动裁决 best-effort、失败时后台任务兜底、已 resolved 争议重放后处理、释放/继续追偿/补偿/处罚失败传播，以及追偿状态不倒退保护。
+- 聚焦回归 `go test ./api ./logic ./worker -run 'RecoveryDispute|ProcessRecoveryDispute|AutomaticRecoveryDispute' -count=1` 已通过；未发现需要新增 operator 人工入口。
+
 ### OP-CAP-02B 追偿争议只读审计视图预案
 
 风险：G2，只读暴露追偿争议与后处理状态。
@@ -138,6 +149,12 @@ weapp 范围：
 - 不提供分账金额手工查询、receiver 删除、补差等操作入口。
 - 若展示分账配置，必须是只读事实，不暗示运营商可修改资金链路；不得渲染成配置表单、开关或编辑入口。
 - 若不展示，在能力文档中标注为系统自动资金域，不作为 weapp 缺口。
+
+2026-04-29 关闭进展：
+
+- 后端 `GET /v1/operators/me/profit-sharing/configs` 只读查询 `ListProfitSharingConfigsForRegion`，返回本区域和全局配置事实，不提供 operator 写入口。
+- weapp 运营商侧没有对应配置表单、receiver 删除、补差或手工分账金额查询入口；保持不承接为默认缺口。
+- 聚焦回归 `go test ./api -run 'TestListOperatorProfitSharingConfigsAPI|TestListProfitSharingConfigs' -count=1` 已通过。
 
 ### OP-CAP-04A operators/me 规则代理后端保留评估
 
@@ -196,6 +213,12 @@ weapp 范围：
 - dashboard 移除“待办审批”语义，不再把商户/骑手展示为运营商待处理事项。
 - 页面标题、入口名称、空态和按钮文案不得出现“管理/审批/处置”暗示。
 
+2026-04-29 关闭进展：
+
+- 已将 operator dashboard 的商户/骑手入口收口为“商户档案”“骑手档案”，移除“待办审批”聚合和商户/骑手待审跳转。
+- 商户/骑手页面标题收口为档案/档案详情，只保留只读查看语义。
+- 提交：`811ba1e1 fix operator weapp readonly merchant rider views`。
+
 ### OP-CAP-05B 商户/骑手只读字段契约收口
 
 风险：G1，能力边界漂移 + 前端伪字段。
@@ -221,6 +244,12 @@ weapp 范围：
 - 保留 loading、empty、first-screen error、refresh error、只读详情状态。
 - 视觉上遵守非顾客侧 TDesign-first 和 page shell 规则，不使用顶部解释性大卡片说明“只读”。
 
+2026-04-29 关闭进展：
+
+- 已将 weapp operator merchant/rider API 与 service view model 收口到后端 list/detail 真实字段；经营统计仍仅来自独立 stats endpoint。
+- 已删除商户评分、分类、GMV/佣金、区域名、联系人/营业时间/佣金费率，以及骑手评分、车辆、紧急联系人等伪字段展示。
+- `npm run compile`、`npm run lint`、`npm run quality:check` 已通过。
+
 ## P2 / G1-G2 结构完善
 
 ### OP-CAP-06 清理死契约 `/v1/operators/me` root wrapper
@@ -238,6 +267,11 @@ weapp 范围：
 - 删除未被页面使用的 `getOperatorInfo`、`updateOperatorInfo` 或改为真实后端契约。
 - 如果 `getOperatorDashboard` 依赖它，应同步删除或改造。
 - `npm run compile` 和相关 lint 不出现类型缺口。
+
+2026-04-29 关闭进展：
+
+- 已删除 weapp `operator-basic-management.ts` 中不存在的 `GET/PATCH /v1/operators/me` wrapper、`OperatorResponse`/`UpdateOperatorRequest`、以及依赖该死契约的 `getOperatorDashboard` helper。
+- `npm run compile`、`npm run lint`、`npm run quality:check` 已通过。
 
 ### OP-CAP-07A 运费配置消费链路回归
 
