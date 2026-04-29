@@ -53,7 +53,7 @@
 
 /* List */
 .address-list {
-  padding-top: var(--spacer-md);
+  padding-top: 0;
 }
 
 /* Card */
@@ -63,17 +63,17 @@
   padding: 0 var(--spacer-md);
   margin-bottom: var(--spacer-md);
   box-shadow: var(--shadow-sm);
-  transition: all 0.2s ease;
   overflow: hidden;
-}
-
-.card-hover {
-  transform: scale(0.99);
-  background: var(--td-bg-color-secondarycontainer);
 }
 
 .card-main {
   padding: 28rpx 0;
+  border-radius: var(--radius-sm);
+  transition: opacity 0.16s ease;
+}
+
+.card-main-hover {
+  opacity: 0.72;
 }
 
 .info-header {
@@ -179,7 +179,7 @@
 
 /* 骨架屏 */
 .address-skeleton-list {
-  padding-top: var(--spacer-md);
+  padding-top: 0;
 }
 
 .skeleton-item {

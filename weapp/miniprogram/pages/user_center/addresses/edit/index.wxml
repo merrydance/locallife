@@ -17,7 +17,7 @@
 
     <!-- Main Form Content -->
     <block wx:else>
-      <view class="form-title">联系人</view>
+      <view class="form-title form-title--first">联系人</view>
       <view class="form-card">
         <t-input
           label="姓名"
@@ -67,7 +67,7 @@
         />
       </view>
 
-      <view class="form-card" style="margin-top: 32rpx;">
+      <view class="form-card default-card">
         <t-cell title="设为默认地址" bordered="{{false}}">
           <t-switch value="{{isDefault}}" bind:change="onDefaultChange" slot="note" />
         </t-cell>

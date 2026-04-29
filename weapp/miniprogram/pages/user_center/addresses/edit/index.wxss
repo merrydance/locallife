@@ -4,8 +4,6 @@
 .page-container {
   min-height: 100vh;
   background-color: var(--td-bg-color-page);
-  padding: var(--spacer-md);
-  padding-bottom: calc(180rpx + env(safe-area-inset-bottom));
 }
 
 .form-title {
@@ -13,8 +11,20 @@
   color: var(--td-text-color-secondary);
   margin: var(--spacer-lg) 0 var(--spacer-sm) var(--spacer-sm);
 }
-.form-title:first-child {
+
+.form-title--first {
   margin-top: 0;
+}
+
+.form-card {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.default-card {
+  margin-top: var(--spacer-lg);
 }
 
 .form-hint {
@@ -61,9 +71,10 @@
   gap: var(--spacer-md);
 }
 
-.delete-btn-area {
-  margin-top: var(--spacer-xl);
-  padding: 0 var(--spacer-md);
+.delete-section {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--spacer-lg);
 }
 
 /* weapp-gate allow-tdesign-internal-class: 地址编辑页单选组需要横向紧凑排布，待抽成地址偏好选项容器后移除 */
@@ -87,7 +98,7 @@
 
 /* 骨架屏 */
 .form-skeleton {
-  padding: var(--spacer-md);
+  padding: 0;
 }
 
 .skeleton-item {

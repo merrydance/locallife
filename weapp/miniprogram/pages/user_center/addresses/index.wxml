@@ -25,13 +25,13 @@
     <!-- Address List -->
     <view wx:else class="address-list animate-fade-in">
       <block wx:for="{{addresses}}" wx:key="id">
-        <view 
-          class="address-card {{isSelectMode ? 'selectable' : ''}}" 
-          bindtap="onSelectAddress" 
-          data-id="{{item.id}}"
-          hover-class="card-hover"
-        >
-          <view class="card-main">
+        <view class="address-card {{isSelectMode ? 'selectable' : ''}}">
+          <view
+            class="card-main"
+            bindtap="onSelectAddress"
+            data-id="{{item.id}}"
+            hover-class="{{isSelectMode ? 'card-main-hover' : 'none'}}"
+          >
             <view class="info-header">
                <view class="user-info">
                  <text class="name">{{item.contact_name}}</text>
