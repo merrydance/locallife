@@ -10,18 +10,6 @@ import {
 
 type TimeDimension = 'day' | 'week' | 'month'
 
-interface PendingSummary {
-  merchants: number
-  riders: number
-}
-
-interface PendingApprovalItem {
-  id: number
-  type: 'MERCHANT' | 'RIDER'
-  name: string
-  time: string
-}
-
 interface NotificationSummary {
   unreadCount: number
   latestTitle: string
@@ -59,13 +47,6 @@ Page({
     // 筛选维度: day | week | month
     timeDimension: 'day' as TimeDimension,
     
-    // 待办事项
-    pending_approvals: [] as PendingApprovalItem[],
-    pending_count: 0,
-    pendingSummary: {
-      merchants: 0,
-      riders: 0
-    } as PendingSummary,
     notificationSummary: {
       unreadCount: 0,
       latestTitle: '暂无待接单提醒',
@@ -239,53 +220,6 @@ Page({
     }, () => {
       if (region?.id) {
         this.loadDashboardData()
-      }
-    })
-  },
-
-  /**
-   * 处理待办点击
-   */
-  onPendingTap(e: WechatMiniprogram.TouchEvent) {
-    const { id, type } = e.currentTarget.dataset as { id?: number, type?: PendingApprovalItem['type'] }
-    let url = ''
-    if (type === 'MERCHANT') url = `/pages/operator/merchants/detail/index?id=${id}`
-    else if (type === 'RIDER') url = `/pages/operator/riders/detail/index?id=${id}`
-    
-    if (url) wx.navigateTo({ url })
-  },
-
-  onPendingViewAll() {
-    const { selectedRegionId } = this.data
-    const query = selectedRegionId ? `region_id=${selectedRegionId}` : ''
-    const actions = [
-      {
-        label: `商户待审 (${this.data.pendingSummary.merchants})`,
-        enabled: this.data.pendingSummary.merchants > 0,
-        url: `/pages/operator/merchants/index?${query}${query ? '&' : ''}status=pending`
-      },
-      {
-        label: `骑手待审 (${this.data.pendingSummary.riders})`,
-        enabled: this.data.pendingSummary.riders > 0,
-        url: `/pages/operator/riders/index?${query}${query ? '&' : ''}status=pending_approval`
-      }
-    ].filter((item) => item.enabled)
-
-    if (actions.length === 0) {
-      return
-    }
-
-    if (actions.length === 1) {
-      wx.navigateTo({ url: actions[0].url })
-      return
-    }
-
-    wx.showActionSheet({
-      itemList: actions.map((item) => item.label),
-      success: ({ tapIndex }) => {
-        const target = actions[tapIndex]
-        if (!target) return
-        wx.navigateTo({ url: target.url })
       }
     })
   },

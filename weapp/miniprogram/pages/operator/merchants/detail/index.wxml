@@ -1,4 +1,4 @@
-<custom-navbar title="商户详情" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="商户档案详情" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view
   class="page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
@@ -36,16 +36,12 @@
 
       <view class="section-title">基本资料</view>
       <view class="row"><text class="label">联系电话</text><text class="value">{{detail.phone}}</text></view>
-      <view class="row"><text class="label">联系人</text><text class="value">{{detail.contact_person || '-'}}</text></view>
-      <view class="row"><text class="label">联系人电话</text><text class="value">{{detail.contact_phone || '-'}}</text></view>
-      <view class="row"><text class="label">所属区域</text><text class="value">{{detail.region_name}}</text></view>
-      <view class="row"><text class="label">商户分类</text><text class="value">{{detail.category}}</text></view>
-      <view class="row"><text class="label">营业时间</text><text class="value">{{detail.business_hours}}</text></view>
-      <view class="row"><text class="label">佣金费率</text><text class="value">{{detail.commission_rate_display}}</text></view>
+      <view class="row"><text class="label">所属区域ID</text><text class="value">{{detail.region_id}}</text></view>
+      <view class="row"><text class="label">营业状态</text><text class="value">{{detail.business_state_label}}</text></view>
       <view class="row"><text class="label">入驻时间</text><text class="value">{{detail.created_at}}</text></view>
       <view class="row"><text class="label">地址</text><text class="value">{{detail.address}}</text></view>
       <view class="row"><text class="label">坐标</text><text class="value small-text">{{detail.latitude}}, {{detail.longitude}}</text></view>
-      <view class="row"><text class="label">最近活跃</text><text class="value">{{detail.last_active_at || '-'}}</text></view>
+      <view class="row"><text class="label">更新时间</text><text class="value">{{detail.updated_at}}</text></view>
     </view>
 
     <!-- 经营情况 -->

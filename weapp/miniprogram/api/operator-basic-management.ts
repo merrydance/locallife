@@ -125,30 +125,6 @@ export interface CommissionQueryParams extends Record<string, unknown> {
     limit?: number
 }
 
-// ==================== 运营商信息相关类型 ====================
-
-/** 运营商信息响应 - 基于swagger api.operatorResponse */
-export interface OperatorResponse {
-    id: number
-    user_id: number
-    name: string
-    phone: string
-    email?: string
-    region_ids: number[]
-    status: OperatorStatus
-    commission_rate: number
-    created_at: string
-    updated_at: string
-}
-
-/** 运营商更新请求 */
-export interface UpdateOperatorRequest extends Record<string, unknown> {
-    name?: string
-    phone?: string
-    email?: string
-    commission_rate?: number
-}
-
 export type OperatorFoodSafetyCaseStatus = 'merchant-suspended' | 'investigating' | 'resolved'
 export type OperatorFoodSafetyCaseStatusTheme = 'danger' | 'warning' | 'success'
 
@@ -326,28 +302,6 @@ export class OperatorBasicManagementService {
                 start_date: start,
                 end_date: end
             }
-        })
-    }
-
-    /**
-     * 获取运营商信息
-     */
-    async getOperatorInfo(): Promise<OperatorResponse> {
-        return request({
-            url: '/v1/operators/me',
-            method: 'GET'
-        })
-    }
-
-    /**
-     * 更新运营商信息
-     * @param updateData 更新数据
-     */
-    async updateOperatorInfo(updateData: UpdateOperatorRequest): Promise<OperatorResponse> {
-        return request({
-            url: '/v1/operators/me',
-            method: 'PATCH',
-            data: updateData
         })
     }
 
@@ -702,34 +656,6 @@ export class OperatorBasicManagementAdapter {
         }
     }
 
-    /**
-     * 适配运营商响应数据
-     */
-    static adaptOperatorResponse(data: OperatorResponse): {
-        id: number
-        userId: number
-        name: string
-        phone: string
-        email?: string
-        regionIds: number[]
-        status: OperatorStatus
-        commissionRate: number
-        createdAt: string
-        updatedAt: string
-    } {
-        return {
-            id: data.id,
-            userId: data.user_id,
-            name: data.name,
-            phone: data.phone,
-            email: data.email,
-            regionIds: data.region_ids,
-            status: data.status,
-            commissionRate: data.commission_rate,
-            createdAt: data.created_at,
-            updatedAt: data.updated_at
-        }
-    }
 }
 
 // ==================== 导出服务实例 ====================
@@ -738,47 +664,6 @@ export const operatorBasicManagementService = new OperatorBasicManagementService
 export const regionAnalyticsService = new RegionAnalyticsService()
 
 // ==================== 便捷函数 ====================
-
-/**
- * 获取运营商工作台数据
- */
-export async function getOperatorDashboard(): Promise<{
-    operatorInfo: OperatorResponse
-    financeOverview: OperatorFinanceOverviewResponse
-    regionStats: RegionStatsResponse[]
-    regionPerformance: ReturnType<RegionAnalyticsService['compareRegionPerformance']>
-    recentCommissions: OperatorCommissionResponse[]
-}> {
-    const [operatorInfo, financeOverview, regions] = await Promise.all([
-        operatorBasicManagementService.getOperatorInfo(),
-        operatorBasicManagementService.getFinanceOverview(),
-        operatorBasicManagementService.getOperatorRegions({ limit: 100 })
-    ])
-
-    // 获取各区域统计数据（单个区域失败不影响整体，兼容 ES2018）
-    const regionStatsPromises = regions.regions.map((region) =>
-        operatorBasicManagementService.getRegionStats(region.id).catch(() => null)
-    )
-    const regionStatsRaw = await Promise.all(regionStatsPromises)
-    const regionStats = regionStatsRaw.filter((s): s is RegionStatsResponse => s !== null)
-
-    // 分析区域绩效
-    const regionPerformance = regionAnalyticsService.compareRegionPerformance(regionStats)
-
-    // 获取最近的佣金记录
-    const commissionResult = await operatorBasicManagementService.getCommissionList({
-        page: 1,
-        limit: 10
-    })
-
-    return {
-        operatorInfo,
-        financeOverview,
-        regionStats,
-        regionPerformance,
-        recentCommissions: commissionResult.commissions
-    }
-}
 
 /**
  * 格式化区域状态显示

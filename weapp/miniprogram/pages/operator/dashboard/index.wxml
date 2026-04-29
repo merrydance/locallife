@@ -57,26 +57,6 @@
         </view>
       </view>
 
-      <!-- 3. 待办事项 (Critical Actions) -->
-      <view class="todo-section" wx:if="{{pending_count > 0}}">
-        <view class="section-header">
-          <view class="section-title">待办审批 {{pending_count}}</view>
-          <view class="view-all" bindtap="onPendingViewAll">查看全部</view>
-        </view>
-        <view class="approval-list">
-          <view wx:for="{{pending_approvals}}" wx:key="id" class="approval-item" bindtap="onPendingTap" data-id="{{item.id}}" data-type="{{item.type}}">
-            <view class="item-icon-box type-{{item.type}}">
-              <t-icon name="{{item.type === 'MERCHANT' ? 'shop' : 'user-circle'}}" size="32rpx" color="#fff" />
-            </view>
-            <view class="item-content">
-              <view class="item-name">{{item.name}}</view>
-              <view class="item-time">申请时间: {{item.time}}</view>
-            </view>
-            <t-icon name="chevron-right" size="32rpx" color="#BBBBBB" />
-          </view>
-        </view>
-      </view>
-
       <operator-notification-summary
         unreadCount="{{notificationSummary.unreadCount}}"
         latestTitle="{{notificationSummary.latestTitle}}"
@@ -88,7 +68,7 @@
       <!-- 4. 快捷功能矩阵 (Premium Icons) -->
       <view class="menu-section">
         <view class="section-header">
-          <view class="section-title">业务管理</view>
+          <view class="section-title">业务工具</view>
         </view>
         <view class="menu-grid">
           <navigator url="/pages/operator/analytics/index" class="menu-item">
@@ -101,13 +81,13 @@
             <view class="menu-icon-bg color-info">
               <t-icon name="shop" size="48rpx" />
             </view>
-            <text>商户管理</text>
+            <text>商户档案</text>
           </navigator>
           <navigator url="/pages/operator/riders/index?region_id={{selectedRegionId}}" class="menu-item">
             <view class="menu-icon-bg color-warning">
               <t-icon name="user-circle" size="48rpx" />
             </view>
-            <text>骑手管理</text>
+            <text>骑手档案</text>
           </navigator>
           <navigator url="/pages/operator/region/index" class="menu-item">
             <view class="menu-icon-bg color-error">

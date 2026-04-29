@@ -11,9 +11,6 @@ import { request } from '../utils/request'
 /** 商户状态枚举 */
 export type MerchantStatus = 'approved' | 'suspended' | 'pending' | 'rejected' | 'closed'
 
-/** 商户类型枚举 */
-export type MerchantType = 'restaurant' | 'grocery' | 'pharmacy' | 'convenience' | 'other'
-
 // ==================== 商户管理相关类型 ====================
 
 /** 运营商商户列表响应 - 基于swagger api.listOperatorMerchantsResponse */
@@ -46,57 +43,25 @@ export interface OperatorMerchantItem {
     latitude: number         // 纬度
     longitude: number        // 经度
     created_at: string       // 创建时间
-    // 以下字段后端暂未返回，标为可选
-    region_name?: string
-    category?: string
-    type?: MerchantType
-    rating?: number
-    order_count?: number
-    total_gmv?: number
-    commission_amount?: number
-    updated_at?: string
-    last_active_at?: string
 }
 
-/** 商户详情响应 - 基于swagger api.operatorMerchantDetailResponse */
+/** 商户详情响应 - 对齐后端 merchantDetailResponse */
 export interface OperatorMerchantDetailResponse {
     id: number
-    user_id: number
     name: string
+    description?: string
+    logo_url?: string
     phone: string
-    email?: string
     address: string
+    status: string
+    is_open: boolean
+    owner_user_id: number
+    region_id: number
     latitude: number
     longitude: number
-    region_id: number
-    region_name: string
-    category: string
-    type: MerchantType
-    status: MerchantStatus
-    rating: number
-    review_count: number
-    business_hours: string
-    description?: string
-    images: string[]
-    license_number?: string
-    contact_person: string
-    contact_phone: string
-    bank_account?: string
-    commission_rate: number
+    version: number
     created_at: string
     updated_at: string
-    last_active_at?: string
-    stats: {
-        total_orders: number
-        completed_orders: number
-        cancelled_orders: number
-        total_gmv: number
-        avg_order_value: number
-        completion_rate: number
-        responseTime: number
-        dish_count: number
-        active_dish_count: number
-    }
 }
 
 /** 商户排行响应 - 基于swagger api.operatorMerchantRankingResponse */
@@ -125,14 +90,10 @@ export interface OperatorMerchantRankingItem {
 export interface MerchantQueryParams extends Record<string, unknown> {
     region_id?: number
     status?: MerchantStatus
-    type?: MerchantType
-    category?: string
     keyword?: string
-    rating_min?: number
-    rating_max?: number
     start_date?: string
     end_date?: string
-    sort_by?: 'created_at' | 'order_count' | 'total_gmv' | 'rating' | 'last_active_at'
+    sort_by?: 'created_at'
     sort_order?: 'asc' | 'desc'
     page?: number
     limit?: number
@@ -270,8 +231,8 @@ export function formatMerchantStatus(status: MerchantStatus): string {
         active: '正常营业',
         approved: '正常营业',
         suspended: '暂停营业',
-        pending: '待审核',
-        rejected: '审核拒绝',
+        pending: '待入驻',
+        rejected: '未通过',
         closed: '已关闭'
     }
     return statusMap[status] || status

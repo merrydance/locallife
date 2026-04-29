@@ -8,19 +8,15 @@ import {
   type OperatorMerchantDetailResponse,
   type OperatorMerchantItem
 } from '../api/operator-merchant-management'
-import { formatPrice, formatPriceNoSymbol } from '../utils/util'
+import { formatPriceNoSymbol } from '../utils/util'
 
 export type OperatorMerchantFilterStatus = MerchantStatus | ''
 
 export interface OperatorMerchantListView extends OperatorMerchantItem {
   status_label: string
   status_theme: 'success' | 'warning' | 'default'
-  rating_display: string
-  order_count_display: number
-  total_gmv_display: string
-  commission_amount_display: string
-  region_name_display: string
-  category_display: string
+  business_state_label: string
+  business_state_theme: 'success' | 'default'
 }
 
 export interface OperatorMerchantListPageData {
@@ -36,24 +32,17 @@ export interface OperatorMerchantDetailView {
   description?: string
   logo_url?: string
   phone: string
-  contact_person?: string
-  contact_phone?: string
   address: string
   status: MerchantStatus | string
   status_theme: 'success' | 'warning' | 'default'
-  category: string
-  business_hours: string
   is_open: boolean
   business_state_label: string
   business_state_theme: 'success' | 'default'
   region_id: number
-  region_name: string
   latitude: number
   longitude: number
-  commission_rate_display: string
   created_at: string
   updated_at: string
-  last_active_at?: string
   status_label: string
 }
 
@@ -73,12 +62,8 @@ function adaptMerchantItem(item: OperatorMerchantItem): OperatorMerchantListView
     status: statusDisplay.normalizedStatus,
     status_label: statusDisplay.label,
     status_theme: statusDisplay.theme,
-    rating_display: Number(item.rating || 0).toFixed(1),
-    order_count_display: Number(item.order_count || 0),
-    total_gmv_display: formatPrice(Number(item.total_gmv || 0)),
-    commission_amount_display: formatPrice(Number(item.commission_amount || 0)),
-    region_name_display: item.region_name || `区域 ${item.region_id}`,
-    category_display: item.category || '未分类'
+    business_state_label: item.is_open ? '营业中' : '未营业',
+    business_state_theme: item.is_open ? 'success' : 'default'
   }
 }
 
@@ -90,26 +75,19 @@ function adaptMerchantDetail(detail: OperatorMerchantDetailResponse & Record<str
     id: Number(detail.id || 0),
     name: String(detail.name || '未命名商户'),
     description: detail.description ? String(detail.description) : '',
-    logo_url: Array.isArray(detail.images) && detail.images.length > 0 ? String(detail.images[0]) : '',
-    phone: String(detail.phone || detail.contact_phone || '-'),
-    contact_person: detail.contact_person ? String(detail.contact_person) : '',
-    contact_phone: detail.contact_phone ? String(detail.contact_phone) : '',
+    logo_url: detail.logo_url ? String(detail.logo_url) : '',
+    phone: String(detail.phone || '-'),
     address: String(detail.address || '-'),
     status: statusDisplay.normalizedStatus,
     status_theme: statusDisplay.theme,
-    category: String(detail.category || '未分类'),
-    business_hours: String(detail.business_hours || '-'),
-    is_open: statusDisplay.isOpen,
-    business_state_label: statusDisplay.businessStateLabel,
-    business_state_theme: statusDisplay.businessStateTheme,
+    is_open: Boolean(detail.is_open),
+    business_state_label: detail.is_open ? '营业中' : '未营业',
+    business_state_theme: detail.is_open ? 'success' : 'default',
     region_id: Number(detail.region_id || 0),
-    region_name: String(detail.region_name || `区域 ${Number(detail.region_id || 0)}`),
     latitude: Number(detail.latitude || 0),
     longitude: Number(detail.longitude || 0),
-    commission_rate_display: `${(Number(detail.commission_rate || 0) / 100).toFixed(2)}%`,
     created_at: String(detail.created_at || ''),
     updated_at: String(detail.updated_at || ''),
-    last_active_at: detail.last_active_at ? String(detail.last_active_at) : '',
     status_label: statusDisplay.label
   }
 }

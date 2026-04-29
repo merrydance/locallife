@@ -37,74 +37,38 @@ export interface OperatorRiderSummaryResponse {
 /** 运营商骑手项 - 基于swagger api.operatorRiderItem */
 export interface OperatorRiderItem {
     id: number
-    name: string
+    user_id: number
+    real_name: string
     phone: string
+    status: string
+    is_online: boolean
     region_id: number
-    region_name: string
-    status: RiderStatus
-    online_status: RiderOnlineStatus
-    rating: number
-    score: number
-    delivery_count: number
-    completion_rate: number
-    avg_delivery_time: number
+    deposit_amount: number
+    total_orders: number
     total_earnings: number
     created_at: string
-    updated_at: string
-    last_active_at?: string
-    last_location?: {
-        latitude: number
-        longitude: number
-        updated_at: string
-    }
 }
 
-/** 骑手详情响应 - 基于swagger api.operatorRiderDetailResponse */
+/** 骑手详情响应 - 对齐后端 riderDetailResponse */
 export interface OperatorRiderDetailResponse {
     id: number
     user_id: number
-    name: string
+    real_name: string
     phone: string
-    email?: string
-    id_card: string
+    id_card_no?: string
     region_id: number
-    region_name: string
-    status: RiderStatus
-    online_status: RiderOnlineStatus
-    rating: number
-    score: number
-    vehicle_type: 'bicycle' | 'electric' | 'motorcycle'
-    vehicle_number?: string
-    emergency_contact: string
-    emergency_phone: string
-    bank_account?: string
+    status: string
+    is_online: boolean
+    deposit_amount: number
+    frozen_deposit: number
+    total_orders: number
+    total_earnings: number
+    current_latitude?: number
+    current_longitude?: number
+    location_updated_at?: string
+    credit_score: number
     created_at: string
     updated_at: string
-    last_active_at?: string
-    last_location?: {
-        latitude: number
-        longitude: number
-        address: string
-        updated_at: string
-    }
-    stats: {
-        total_deliveries: number
-        completed_deliveries: number
-        cancelled_deliveries: number
-        completion_rate: number
-        avg_delivery_time: number
-        avg_rating: number
-        total_earnings: number
-        total_distance: number
-        online_hours: number
-        punctuality_rate: number
-    }
-    documents: {
-        id_card_front?: string
-        id_card_back?: string
-        health_certificate?: string
-        vehicle_license?: string
-    }
 }
 
 /** 骑手排行响应 - 基于swagger api.operatorRiderRankingResponse */
@@ -135,15 +99,10 @@ export interface RiderQueryParams extends Record<string, unknown> {
     region_id?: number
     status?: RiderStatus
     online_status?: RiderOnlineStatus
-    vehicle_type?: 'bicycle' | 'electric' | 'motorcycle'
     keyword?: string
-    rating_min?: number
-    rating_max?: number
-    score_min?: number
-    score_max?: number
     start_date?: string
     end_date?: string
-    sort_by?: 'created_at' | 'delivery_count' | 'rating' | 'score' | 'last_active_at'
+    sort_by?: 'created_at'
     sort_order?: 'asc' | 'desc'
     page?: number
     limit?: number
@@ -315,191 +274,6 @@ export class OperatorRiderManagementService {
     }
 }
 
-// ==================== 数据适配器 ====================
-
-/**
- * 运营商骑手管理数据适配器
- * 处理前端数据格式与后端API数据格式的转换
- */
-export class OperatorRiderManagementAdapter {
-    /**
-     * 适配骑手列表项数据
-     */
-    static adaptRiderItem(data: OperatorRiderItem): {
-        id: number
-        name: string
-        phone: string
-        regionId: number
-        regionName: string
-        status: RiderStatus
-        onlineStatus: RiderOnlineStatus
-        rating: number
-        score: number
-        deliveryCount: number
-        completionRate: number
-        avgDeliveryTime: number
-        totalEarnings: number
-        createdAt: string
-        updatedAt: string
-        lastActiveAt?: string
-        lastLocation?: {
-            latitude: number
-            longitude: number
-            updatedAt: string
-        }
-    } {
-        return {
-            id: data.id,
-            name: data.name,
-            phone: data.phone,
-            regionId: data.region_id,
-            regionName: data.region_name,
-            status: data.status,
-            onlineStatus: data.online_status,
-            rating: data.rating,
-            score: data.score,
-            deliveryCount: data.delivery_count,
-            completionRate: data.completion_rate,
-            avgDeliveryTime: data.avg_delivery_time,
-            totalEarnings: data.total_earnings,
-            createdAt: data.created_at,
-            updatedAt: data.updated_at,
-            lastActiveAt: data.last_active_at,
-            lastLocation: data.last_location ? {
-                latitude: data.last_location.latitude,
-                longitude: data.last_location.longitude,
-                updatedAt: data.last_location.updated_at
-            } : undefined
-        }
-    }
-
-    /**
-     * 适配骑手详情数据
-     */
-    static adaptRiderDetail(data: OperatorRiderDetailResponse): {
-        id: number
-        userId: number
-        name: string
-        phone: string
-        email?: string
-        idCard: string
-        regionId: number
-        regionName: string
-        status: RiderStatus
-        onlineStatus: RiderOnlineStatus
-        rating: number
-        score: number
-        vehicleType: 'bicycle' | 'electric' | 'motorcycle'
-        vehicleNumber?: string
-        emergencyContact: string
-        emergencyPhone: string
-        bankAccount?: string
-        createdAt: string
-        updatedAt: string
-        lastActiveAt?: string
-        lastLocation?: {
-            latitude: number
-            longitude: number
-            address: string
-            updatedAt: string
-        }
-        stats: {
-            totalDeliveries: number
-            completedDeliveries: number
-            cancelledDeliveries: number
-            completionRate: number
-            avgDeliveryTime: number
-            avgRating: number
-            totalEarnings: number
-            totalDistance: number
-            onlineHours: number
-            punctualityRate: number
-        }
-        documents: {
-            idCardFront?: string
-            idCardBack?: string
-            healthCertificate?: string
-            vehicleLicense?: string
-        }
-    } {
-        return {
-            id: data.id,
-            userId: data.user_id,
-            name: data.name,
-            phone: data.phone,
-            email: data.email,
-            idCard: data.id_card,
-            regionId: data.region_id,
-            regionName: data.region_name,
-            status: data.status,
-            onlineStatus: data.online_status,
-            rating: data.rating,
-            score: data.score,
-            vehicleType: data.vehicle_type,
-            vehicleNumber: data.vehicle_number,
-            emergencyContact: data.emergency_contact,
-            emergencyPhone: data.emergency_phone,
-            bankAccount: data.bank_account,
-            createdAt: data.created_at,
-            updatedAt: data.updated_at,
-            lastActiveAt: data.last_active_at,
-            lastLocation: data.last_location ? {
-                latitude: data.last_location.latitude,
-                longitude: data.last_location.longitude,
-                address: data.last_location.address,
-                updatedAt: data.last_location.updated_at
-            } : undefined,
-            stats: {
-                totalDeliveries: data.stats.total_deliveries,
-                completedDeliveries: data.stats.completed_deliveries,
-                cancelledDeliveries: data.stats.cancelled_deliveries,
-                completionRate: data.stats.completion_rate,
-                avgDeliveryTime: data.stats.avg_delivery_time,
-                avgRating: data.stats.avg_rating,
-                totalEarnings: data.stats.total_earnings,
-                totalDistance: data.stats.total_distance,
-                onlineHours: data.stats.online_hours,
-                punctualityRate: data.stats.punctuality_rate
-            },
-            documents: {
-                idCardFront: data.documents.id_card_front,
-                idCardBack: data.documents.id_card_back,
-                healthCertificate: data.documents.health_certificate,
-                vehicleLicense: data.documents.vehicle_license
-            }
-        }
-    }
-
-    /**
-     * 适配骑手排行项数据
-     */
-    static adaptRiderRankingItem(data: OperatorRiderRankingItem): {
-        rank: number
-        riderId: number
-        riderName: string
-        regionName: string
-        deliveryCount: number
-        completionRate: number
-        avgDeliveryTime: number
-        rating: number
-        totalEarnings: number
-        efficiencyScore: number
-    } {
-        return {
-            rank: data.rank,
-            riderId: data.rider_id,
-            riderName: data.rider_name,
-            regionName: data.region_name,
-            deliveryCount: data.delivery_count,
-            completionRate: data.completion_rate,
-            avgDeliveryTime: data.avg_delivery_time,
-            rating: data.rating,
-            totalEarnings: data.total_earnings,
-            efficiencyScore: data.efficiency_score
-        }
-    }
-}
-
 export const operatorRiderManagementService = new OperatorRiderManagementService()
 
 /**
@@ -509,10 +283,10 @@ export const operatorRiderManagementService = new OperatorRiderManagementService
 export function formatRiderStatus(status: RiderStatus): string {
     const statusMap: Record<RiderStatus, string> = {
         active: '正常',
-        pending: '待处理',
+        pending: '待入驻',
         suspended: '暂停',
-        pending_approval: '待审核',
-        rejected: '审核拒绝',
+        pending_approval: '待入驻',
+        rejected: '未通过',
         offline: '离线'
     }
     return statusMap[status] || status
@@ -550,45 +324,4 @@ export function formatOnlineStatus(status: RiderOnlineStatus): string {
         break: '休息'
     }
     return statusMap[status] || status
-}
-
-/**
- * 格式化车辆类型显示
- * @param type 车辆类型
- */
-export function formatVehicleType(type: 'bicycle' | 'electric' | 'motorcycle'): string {
-    const typeMap = {
-        bicycle: '自行车',
-        electric: '电动车',
-        motorcycle: '摩托车'
-    }
-    return typeMap[type] || type
-}
-
-/**
- * 格式化时间显示（秒转分钟）
- * @param seconds 秒数
- */
-export function formatDeliveryTime(seconds: number): string {
-    const minutes = Math.round(seconds / 60)
-    if (minutes < 60) {
-        return `${minutes}分钟`
-    } else {
-        const hours = Math.floor(minutes / 60)
-        const remainingMinutes = minutes % 60
-        return `${hours}小时${remainingMinutes}分钟`
-    }
-}
-
-/**
- * 格式化距离显示（米转公里）
- * @param meters 米数
- */
-export function formatDistance(meters: number): string {
-    if (meters < 1000) {
-        return `${meters}米`
-    } else {
-        const km = (meters / 1000).toFixed(1)
-        return `${km}公里`
-    }
 }

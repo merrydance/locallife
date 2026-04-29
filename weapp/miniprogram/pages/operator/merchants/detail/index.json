@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "商户详情",
+  "navigationBarTitleText": "商户档案详情",
   "usingComponents": {
     "custom-navbar": "/components/custom-navbar/index",
     "t-tag": "tdesign-miniprogram/tag/tag",

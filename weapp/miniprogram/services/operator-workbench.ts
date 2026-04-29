@@ -10,18 +10,6 @@ import { formatPriceNoSymbol } from '../utils/util'
 
 type OperatorTimeDimension = 'day' | 'week' | 'month'
 
-export interface OperatorPendingSummary {
-  merchants: number
-  riders: number
-}
-
-export interface OperatorPendingApprovalItem {
-  id: number
-  type: 'MERCHANT' | 'RIDER'
-  name: string
-  time: string
-}
-
 export interface OperatorCenterStats {
   total_gmv_display: string
   total_orders: number
@@ -47,9 +35,6 @@ export interface OperatorCenterPageData {
   finance: OperatorCenterFinance
   merchantRankings: Array<Record<string, unknown>>
   riderRankings: OperatorCenterRiderRankingItem[]
-  pending_approvals: OperatorPendingApprovalItem[]
-  pending_count: number
-  pendingSummary: OperatorPendingSummary
   notificationSummary: OperatorNotificationSummaryCard
 }
 
@@ -110,10 +95,6 @@ export async function loadOperatorCenterPageData(params: {
   const [
     financeOverview,
     realtimeStats,
-    merchantSummary,
-    riderSummary,
-    merchantsPending,
-    ridersPending,
     merchantRanking,
     riderRanking,
     dailyTrends,
@@ -121,14 +102,6 @@ export async function loadOperatorCenterPageData(params: {
   ] = await Promise.all([
     operatorBasicManagementService.getFinanceOverview(undefined, undefined, regionId).catch(() => null),
     operatorAnalyticsService.getRealtimeStats(regionId),
-    operatorMerchantManagementService.getMerchantSummary(regionId)
-      .catch(() => ({ total: 0, pending: 0, approved: 0, rejected: 0, suspended: 0 })),
-    operatorRiderManagementService.getRiderSummary(regionId)
-      .catch(() => ({ total: 0, pending_approval: 0, active: 0, rejected: 0, suspended: 0, online: 0 })),
-    operatorMerchantManagementService.getMerchantList({ page: 1, limit: 5, status: 'pending', region_id: regionId })
-      .catch(() => ({ merchants: [] as Array<{ id: number, name: string, created_at: string }>, total: 0 })),
-    operatorRiderManagementService.getRiderList({ page: 1, limit: 5, status: 'pending_approval', region_id: regionId })
-      .catch(() => ({ riders: [] as Array<{ id: number, name: string, created_at: string }>, total: 0 })),
     operatorMerchantManagementService.getMerchantRanking({ start_date: startDate, end_date: endDate, limit: 5, region_id: regionId })
       .catch(() => ({ rankings: [] })),
     operatorRiderManagementService.getRiderRanking({ start_date: startDate, end_date: endDate, limit: 5, region_id: regionId })
@@ -152,18 +125,6 @@ export async function loadOperatorCenterPageData(params: {
     completion_rate: typeof item.completion_rate === 'number' ? item.completion_rate.toFixed(1) : '0.0'
   }))
 
-  const pendingSummary: OperatorPendingSummary = {
-    merchants: Number(merchantSummary.pending || 0),
-    riders: Number((riderSummary as { pending_approval?: number }).pending_approval || 0)
-  }
-
-  const pendingItems: OperatorPendingApprovalItem[] = [
-    ...(merchantsPending.merchants || []).map((item: { id: number, name: string, created_at: string }) => ({ id: item.id, type: 'MERCHANT' as const, name: item.name, time: item.created_at })),
-    ...(ridersPending.riders || []).map((item: { id: number, name: string, created_at: string }) => ({ id: item.id, type: 'RIDER' as const, name: item.name, time: item.created_at }))
-  ]
-
-  pendingItems.sort((left, right) => new Date(right.time).getTime() - new Date(left.time).getTime())
-
   return {
     stats: {
       total_gmv_display: formatPriceNoSymbol(currentPeriodSummary.totalGmv),
@@ -181,9 +142,6 @@ export async function loadOperatorCenterPageData(params: {
     },
     merchantRankings,
     riderRankings,
-    pending_approvals: pendingItems.slice(0, 5),
-    pending_count: pendingSummary.merchants + pendingSummary.riders,
-    pendingSummary,
     notificationSummary
   }
 }

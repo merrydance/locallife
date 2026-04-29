@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "骑手管理",
+  "navigationBarTitleText": "骑手档案",
   "usingComponents": {
     "custom-navbar": "/components/custom-navbar/index",
     "t-tag": "tdesign-miniprogram/tag/tag",

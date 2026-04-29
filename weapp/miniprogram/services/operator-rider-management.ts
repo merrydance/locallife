@@ -1,6 +1,5 @@
 import {
   formatOnlineStatus,
-  formatVehicleType,
   getRiderStatusDisplay,
   operatorRiderManagementService,
   parseRiderStatusFilter,
@@ -24,9 +23,7 @@ export interface OperatorRiderListView {
   is_online: boolean
   online_status_label: string
   region_id: number
-  region_name: string
   delivery_count: number
-  rating_display: string
   total_earnings_display: string
 }
 
@@ -49,16 +46,10 @@ export interface OperatorRiderDetailView {
   online_status_label: string
   online_status_theme: 'success' | 'default'
   region_id: number
-  region_name: string
   deposit_amount: number
   frozen_deposit: number
   total_orders: number
   total_earnings: number
-  rating_display: string
-  score_display: string
-  vehicle_type_display: string
-  emergency_contact: string
-  emergency_phone: string
   current_latitude?: number
   current_longitude?: number
   location_updated_at?: string
@@ -78,10 +69,10 @@ export type OperatorRiderStatsView = RiderStatsResponse & {
 }
 
 function adaptOperatorRider(item: Partial<OperatorRiderItem> & Record<string, unknown>): OperatorRiderListView {
-  const name = String(item.name || item.real_name || '未命名骑手')
+  const name = String(item.real_name || '未命名骑手')
   const onlineStatus = String(item.online_status || ((item.is_online as boolean) ? 'online' : 'offline'))
   const isOnline = onlineStatus === 'online' || Boolean(item.is_online)
-  const deliveryCount = Number(item.delivery_count || item.total_orders || 0)
+  const deliveryCount = Number(item.total_orders || 0)
   const statusDisplay = getRiderStatusDisplay(String(item.status || 'pending') as RiderStatus)
 
   return {
@@ -94,9 +85,7 @@ function adaptOperatorRider(item: Partial<OperatorRiderItem> & Record<string, un
     is_online: isOnline,
     online_status_label: formatOnlineStatus(isOnline ? 'online' : 'offline'),
     region_id: Number(item.region_id || 0),
-    region_name: String(item.region_name || `区域 ${Number(item.region_id || 0)}`),
     delivery_count: deliveryCount,
-    rating_display: Number(item.rating || 0).toFixed(1),
     total_earnings_display: formatPrice(Number(item.total_earnings || 0))
   }
 }
@@ -151,42 +140,36 @@ export async function loadOperatorRiderStatsView(id: number, days = 30): Promise
 
 function adaptOperatorRiderDetail(detail: OperatorRiderDetailResponse & Record<string, unknown>): OperatorRiderDetailView {
   const status = String(detail.status || 'pending') as RiderStatus | string
-  const onlineStatus = detail.online_status || ((detail.is_online as boolean) ? 'online' : 'offline')
+  const onlineStatus = detail.is_online ? 'online' : 'offline'
   const statusDisplay = getRiderStatusDisplay(status as RiderStatus)
-  const totalOrders = Number(detail.stats?.total_deliveries || detail.total_orders || 0)
-  const totalEarnings = Number(detail.stats?.total_earnings || detail.total_earnings || 0)
+  const totalOrders = Number(detail.total_orders || 0)
+  const totalEarnings = Number(detail.total_earnings || 0)
   const depositAmount = Number(detail.deposit_amount || 0)
   const frozenDeposit = Number(detail.frozen_deposit || 0)
-  const currentLatitude = detail.last_location?.latitude ?? Number(detail.current_latitude || 0)
-  const currentLongitude = detail.last_location?.longitude ?? Number(detail.current_longitude || 0)
-  const locationUpdatedAt = detail.last_location?.updated_at || String(detail.location_updated_at || '')
+  const currentLatitude = Number(detail.current_latitude || 0)
+  const currentLongitude = Number(detail.current_longitude || 0)
+  const locationUpdatedAt = String(detail.location_updated_at || '')
 
   return {
     id: Number(detail.id || 0),
     user_id: Number(detail.user_id || 0),
-    real_name: String(detail.name || detail.real_name || '未命名骑手'),
+    real_name: String(detail.real_name || '未命名骑手'),
     phone: String(detail.phone || '-'),
-    id_card_no: detail.id_card ? String(detail.id_card) : String(detail.id_card_no || ''),
+    id_card_no: String(detail.id_card_no || ''),
     status: statusDisplay.normalizedStatus,
     status_theme: statusDisplay.theme,
     is_online: onlineStatus === 'online',
     online_status_label: formatOnlineStatus(onlineStatus),
     online_status_theme: onlineStatus === 'online' ? 'success' : 'default',
     region_id: Number(detail.region_id || 0),
-    region_name: String(detail.region_name || `区域 ${Number(detail.region_id || 0)}`),
     deposit_amount: depositAmount,
     frozen_deposit: frozenDeposit,
     total_orders: totalOrders,
     total_earnings: totalEarnings,
-    rating_display: Number(detail.rating || detail.stats?.avg_rating || 0).toFixed(1),
-    score_display: Number(detail.score || detail.credit_score || 0).toFixed(0),
-    vehicle_type_display: detail.vehicle_type ? formatVehicleType(detail.vehicle_type) : '-',
-    emergency_contact: String(detail.emergency_contact || '-'),
-    emergency_phone: String(detail.emergency_phone || '-'),
     current_latitude: currentLatitude || undefined,
     current_longitude: currentLongitude || undefined,
     location_updated_at: locationUpdatedAt,
-    credit_score: Number(detail.score || detail.credit_score || 0),
+    credit_score: Number(detail.credit_score || 0),
     created_at: String(detail.created_at || ''),
     updated_at: String(detail.updated_at || ''),
     deposit_amount_display: formatPriceNoSymbol(depositAmount),

@@ -1,4 +1,4 @@
-<custom-navbar title="商户管理" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="商户档案" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view
   class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter {{isLargeScreen ? 'large-screen' : ''}}"
@@ -19,7 +19,7 @@
         <t-tab-panel label="全部" value="" />
         <t-tab-panel label="正常" value="approved" />
         <t-tab-panel label="暂停" value="suspended" />
-        <t-tab-panel label="待审核" value="pending" />
+        <t-tab-panel label="待入驻" value="pending" />
       </t-tabs>
     </view>
   </view>
@@ -74,10 +74,7 @@
                     {{item.status_label}}
                   </t-tag>
                 </view>
-                <view class="merchant-rating">
-                  <t-icon name="star-filled" size="16px" color="#faad14" />
-                  <text class="rating-text">{{item.rating_display}}</text>
-                </view>
+                <t-tag theme="{{item.business_state_theme}}" size="small" variant="light">{{item.business_state_label}}</t-tag>
               </view>
 
               <view class="merchant-details">
@@ -90,23 +87,8 @@
                   <text class="detail-text">{{item.phone}}</text>
                 </view>
                 <view class="detail-row">
-                  <t-icon name="shop" size="14px" color="#999" />
-                  <text class="detail-text">{{item.category_display}} · {{item.region_name_display}}</text>
-                </view>
-              </view>
-
-              <view class="merchant-stats">
-                <view class="stat-item">
-                  <text class="stat-value">{{item.order_count_display}}</text>
-                  <text class="stat-label">订单数</text>
-                </view>
-                <view class="stat-item">
-                  <text class="stat-value">{{item.total_gmv_display}}</text>
-                  <text class="stat-label">GMV</text>
-                </view>
-                <view class="stat-item">
-                  <text class="stat-value">{{item.commission_amount_display}}</text>
-                  <text class="stat-label">佣金</text>
+                  <t-icon name="time" size="14px" color="#999" />
+                  <text class="detail-text">入驻时间：{{item.created_at}}</text>
                 </view>
               </view>
             </view>

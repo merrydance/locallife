@@ -1,4 +1,4 @@
-<custom-navbar title="骑手管理" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="骑手档案" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view
   class="page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter {{isLargeScreen ? 'large-screen' : ''}}"
@@ -19,7 +19,7 @@
         <t-tab-panel label="全部" value="" />
         <t-tab-panel label="正常" value="active" />
         <t-tab-panel label="暂停" value="suspended" />
-        <t-tab-panel label="待审核" value="pending" />
+        <t-tab-panel label="待入驻" value="pending" />
       </t-tabs>
     </view>
   </view>
@@ -55,7 +55,7 @@
           <view class="title-row">
             <view class="title-main">
               <text class="title">{{item.name}}</text>
-              <text class="region-text">{{item.region_name}}</text>
+              <text class="region-text">区域ID {{item.region_id}}</text>
             </view>
             <t-tag theme="{{item.status_theme}}" variant="dark">{{item.status_label}}</t-tag>
           </view>
@@ -69,10 +69,6 @@
             <view class="stat-item">
               <text class="stat-value">{{item.delivery_count}}</text>
               <text class="stat-label">配送单</text>
-            </view>
-            <view class="stat-item">
-              <text class="stat-value">{{item.rating_display}}</text>
-              <text class="stat-label">评分</text>
             </view>
             <view class="stat-item">
               <text class="stat-value">{{item.total_earnings_display}}</text>
