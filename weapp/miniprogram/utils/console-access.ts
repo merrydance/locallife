@@ -178,11 +178,12 @@ function getRecentUserInfo() {
   })
 
   userInfoPromise = requestPromise
-  requestPromise.finally(() => {
+  const clearUserInfoPromise = () => {
     if (userInfoPromise === requestPromise) {
       userInfoPromise = null
     }
-  })
+  }
+  void requestPromise.then(clearUserInfoPromise, clearUserInfoPromise)
 
   return requestPromise
 }
@@ -206,11 +207,12 @@ export async function getRecentMerchantDeviceAccess(force = false) {
   })
 
   merchantDeviceAccessPromise = requestPromise
-  requestPromise.finally(() => {
+  const clearMerchantDeviceAccessPromise = () => {
     if (merchantDeviceAccessPromise === requestPromise) {
       merchantDeviceAccessPromise = null
     }
-  })
+  }
+  void requestPromise.then(clearMerchantDeviceAccessPromise, clearMerchantDeviceAccessPromise)
 
   return requestPromise
 }

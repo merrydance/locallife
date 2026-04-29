@@ -767,12 +767,13 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
 
   if (singleFlightKey) {
     _inflightGetRequests.set(singleFlightKey, requestPromise as Promise<unknown>)
-    requestPromise.finally(() => {
+    const clearSingleFlightRequest = () => {
       const current = _inflightGetRequests.get(singleFlightKey)
       if (current === requestPromise) {
         _inflightGetRequests.delete(singleFlightKey)
       }
-    })
+    }
+    void requestPromise.then(clearSingleFlightRequest, clearSingleFlightRequest)
   }
 
   return requestPromise

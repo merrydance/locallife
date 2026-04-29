@@ -206,23 +206,6 @@ function buildCouponListResult<T>(coupons: T[], response: VoucherListResponse<un
     }
 }
 
-function normalizeVoucherToCoupon(item: BackendVoucher): Coupon {
-    return {
-        id: item.id,
-        merchant_id: item.merchant_id,
-        merchant_name: item.merchant_name || '商家',
-        title: item.name,
-        type: 'amount',
-        value: item.amount,
-        min_spend: item.min_order_amount,
-        start_time: item.valid_from || '',
-        end_time: item.valid_until || '',
-        total_count: item.total_quantity || 0,
-        claimed_count: item.claimed_quantity || 0,
-        is_claimed: item.is_claimed === true
-    }
-}
-
 function normalizeMerchantVoucher(item: BackendVoucher): MerchantVoucher {
     const normalizedVoucher = {
         id: item.id,
@@ -293,7 +276,6 @@ function normalizeUserVoucher(item: BackendUserVoucher): UserCoupon {
  * 优惠券列表查询参数
  */
 export interface CouponListParams {
-    merchant_id?: number
     page_id: number
     page_size: number
 }
@@ -312,23 +294,9 @@ export interface MyCouponParams {
 export class CouponService {
 
     /**
-     * 获取可领取的优惠券列表
-     * 优先使用商户可领券接口；无 merchant_id 时回退为“我的可用券”列表
+     * 获取我的可用优惠券列表
      */
     static async getAvailableCoupons(params: CouponListParams): Promise<CouponListResult> {
-        if (params.merchant_id) {
-            const res = await request<VoucherListResponse<BackendVoucher>>({
-                url: `/v1/merchants/${params.merchant_id}/vouchers/active`,
-                method: 'GET',
-                data: params
-            })
-
-            const vouchers = Array.isArray(res?.vouchers) ? res.vouchers : []
-            const coupons = vouchers.map(normalizeVoucherToCoupon)
-
-            return buildCouponListResult(coupons, res, params)
-        }
-
         const res = await request<VoucherListResponse<BackendUserVoucher>>({
             url: '/v1/vouchers/available',
             method: 'GET',

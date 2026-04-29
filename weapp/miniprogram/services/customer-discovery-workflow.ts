@@ -1,5 +1,5 @@
 import { getUserCarts } from '../api/cart'
-import CouponService, { type Coupon } from '../api/coupon'
+import CouponService from '../api/coupon'
 import {
   getPublicMerchantCombos,
   getPublicMerchantDetail,
@@ -11,12 +11,12 @@ import {
 } from '../api/merchant'
 import { getPublicMerchantRooms, type PublicRoom } from '../api/room'
 
-export type CustomerCoupon = Coupon
 export type CustomerMerchantDetail = PublicMerchantDetail
 export type CustomerDish = PublicDish
 export type CustomerDishCategory = PublicDishCategory
 export type CustomerCombo = PublicCombo
 export type CustomerRoom = PublicRoom
+export type CustomerCoupon = NonNullable<PublicMerchantDetail['vouchers']>[number]
 
 export interface CustomerMerchantCouponView {
   id: number
@@ -43,25 +43,14 @@ export async function loadCustomerMerchantRooms(merchantId: number) {
   return getPublicMerchantRooms(merchantId)
 }
 
-export async function loadCustomerMerchantCoupons(merchantId: number) {
-  return CouponService.getAvailableCoupons({
-    merchant_id: merchantId,
-    page_id: 1,
-    page_size: 3
-  })
-}
-
-export async function loadCustomerMerchantCouponViews(merchantId: number): Promise<{ coupons: CustomerMerchantCouponView[], error: string }> {
-  try {
-    const result = await loadCustomerMerchantCoupons(merchantId)
-    return {
-      coupons: result.coupons.map(mapCustomerMerchantCouponView),
-      error: ''
-    }
-  } catch (error) {
-    console.error('加载优惠券失败:', error)
-    return { coupons: [], error: '优惠券刷新失败' }
+export function buildCustomerMerchantCouponViews(
+  vouchers?: PublicMerchantDetail['vouchers']
+): CustomerMerchantCouponView[] {
+  if (!vouchers || vouchers.length === 0) {
+    return []
   }
+
+  return vouchers.slice(0, 3).map(mapCustomerMerchantCouponView)
 }
 
 export function markCustomerCouponClaimed(coupons: CustomerMerchantCouponView[], couponId: number): CustomerMerchantCouponView[] {
@@ -70,16 +59,14 @@ export function markCustomerCouponClaimed(coupons: CustomerMerchantCouponView[],
     : coupon)
 }
 
-function mapCustomerMerchantCouponView(coupon: Coupon): CustomerMerchantCouponView {
-  const remaining = coupon.total_count > 0 ? coupon.total_count - coupon.claimed_count : 1
-  const claimable = !coupon.is_claimed && remaining > 0
+function mapCustomerMerchantCouponView(coupon: CustomerCoupon): CustomerMerchantCouponView {
   return {
     id: coupon.id,
-    title: coupon.title,
-    valueDisplay: formatFen(coupon.value),
-    minSpendDisplay: formatFen(coupon.min_spend),
-    statusText: coupon.is_claimed ? '已领取' : claimable ? '领取' : '已领完',
-    claimable
+    title: coupon.name,
+    valueDisplay: formatFen(coupon.amount),
+    minSpendDisplay: formatFen(coupon.min_order_amount),
+    statusText: '领取',
+    claimable: true
   }
 }
 

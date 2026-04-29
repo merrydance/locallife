@@ -5,9 +5,9 @@
 
 import CartService from '../../../services/cart'
 import {
+  buildCustomerMerchantCouponViews,
   claimCustomerCoupon,
   loadCustomerMerchantCombos,
-  loadCustomerMerchantCouponViews,
   loadCustomerMerchantDetail,
   loadCustomerMerchantDishes,
   loadCustomerMerchantRooms,
@@ -162,12 +162,11 @@ Page({
       const merchantId = parseInt(this.data.restaurantId)
 
       // 并行加载商户信息、菜品、套餐和包间
-      const [merchantResult, dishesResult, combosResultFirstPass, roomsResult, couponsResult] = await Promise.all([
+      const [merchantResult, dishesResult, combosResultFirstPass, roomsResult] = await Promise.all([
         this.loadMerchantInfo(merchantId),
         this.loadDishes(merchantId),
         this.loadCombos(merchantId),
-        this.loadRooms(merchantId),
-        this.loadMerchantCoupons(merchantId)
+        this.loadRooms(merchantId)
       ])
 
       if (!merchantResult) {
@@ -190,6 +189,7 @@ Page({
       // 从菜品中提取分类
       const categories = this.extractCategories(dishesResult)
       const firstCategoryId = categories[0]?.id || ''
+      const coupons = buildCustomerMerchantCouponViews(merchantResult.vouchers)
 
       this.setData({
         restaurant: merchantResult,
@@ -197,8 +197,8 @@ Page({
         dishes: dishesResult.dishes,
         combos: combosResult,
         rooms: roomsResult,
-        coupons: couponsResult.coupons,
-        couponError: couponsResult.error,
+        coupons,
+        couponError: '',
         activeCategoryId: firstCategoryId,
         loading: false
       })
@@ -212,10 +212,6 @@ Page({
         errorMsg: getErrorMessage(error, '数据请求失败，请检查网络')
       })
     }
-  },
-
-  loadMerchantCoupons(merchantId: number) {
-    return loadCustomerMerchantCouponViews(merchantId)
   },
 
   async onClaimCoupon(e: WechatMiniprogram.CustomEvent) {
