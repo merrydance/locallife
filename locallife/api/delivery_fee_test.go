@@ -16,9 +16,42 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
+	"github.com/merrydance/locallife/weather"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
+
+type testWeatherCache struct {
+	coefficient    *weather.CachedCoefficient
+	getErr         error
+	setErr         error
+	deleteErr      error
+	deletedRegions []int64
+}
+
+func (c *testWeatherCache) Get(ctx context.Context, regionID int64) (*weather.CachedCoefficient, error) {
+	if c.getErr != nil {
+		return nil, c.getErr
+	}
+	return c.coefficient, nil
+}
+
+func (c *testWeatherCache) Set(ctx context.Context, regionID int64, coef *weather.CachedCoefficient) error {
+	if c.setErr != nil {
+		return c.setErr
+	}
+	c.coefficient = coef
+	return nil
+}
+
+func (c *testWeatherCache) Delete(ctx context.Context, regionID int64) error {
+	if c.deleteErr != nil {
+		return c.deleteErr
+	}
+	c.deletedRegions = append(c.deletedRegions, regionID)
+	c.coefficient = nil
+	return nil
+}
 
 // ==================== 测试数据生成 ====================
 
@@ -748,6 +781,65 @@ func TestCalculateDeliveryFeeInternal_UsesPlatformDefaultWhenRegionConfigMissing
 	require.NotNil(t, result)
 	require.Equal(t, int64(800), result.BaseFee)
 	require.Greater(t, result.FinalFee, int64(800))
+	require.False(t, result.DeliverySuspended)
+}
+
+func TestCalculateDeliveryFeeInternal_ConsumesRegionWeatherAndPeakRules(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	regionID := int64(18)
+	merchantID := int64(9)
+
+	config := db.DeliveryFeeConfig{
+		ID:            88,
+		RegionID:      regionID,
+		BaseFee:       500,
+		BaseDistance:  3000,
+		ExtraFeePerKm: 100,
+		ValueRatio:    numericFromFloat(0.01),
+		MinFee:        300,
+		IsActive:      true,
+	}
+	weatherCoefficient := db.WeatherCoefficient{
+		RegionID:          regionID,
+		FinalCoefficient:  numericFromFloat(1.2),
+		DeliverySuspended: false,
+	}
+	now := time.Now()
+	peakConfig := db.PeakHourConfig{
+		RegionID:    regionID,
+		StartTime:   pgtype.Time{Microseconds: 0, Valid: true},
+		EndTime:     pgtype.Time{Microseconds: int64(23*time.Hour+59*time.Minute) / int64(time.Microsecond), Valid: true},
+		Coefficient: numericFromFloat(1.5),
+		DaysOfWeek:  []int16{int16(now.Weekday())},
+		IsActive:    true,
+	}
+
+	store.EXPECT().
+		GetDeliveryFeeConfigByRegion(gomock.Any(), regionID).
+		Return(config, nil)
+	store.EXPECT().
+		GetLatestWeatherCoefficient(gomock.Any(), regionID).
+		Return(weatherCoefficient, nil)
+	store.EXPECT().
+		ListPeakHourConfigsByRegion(gomock.Any(), regionID).
+		Return([]db.PeakHourConfig{peakConfig}, nil)
+	store.EXPECT().
+		ListActiveDeliveryPromotionsByMerchant(gomock.Any(), merchantID).
+		Return([]db.MerchantDeliveryPromotion{}, nil)
+
+	result, err := server.calculateDeliveryFeeInternal(context.Background(), regionID, merchantID, 5000, 10000)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, int64(500), result.BaseFee)
+	require.Equal(t, int64(200), result.DistanceFee)
+	require.Equal(t, int64(100), result.ValueFee)
+	require.InDelta(t, 1.2, result.WeatherCoefficient, 0.0001)
+	require.InDelta(t, 1.5, result.PeakHourCoefficient, 0.0001)
+	require.Equal(t, int64(1440), result.FinalFee)
 	require.False(t, result.DeliverySuspended)
 }
 

@@ -11,11 +11,6 @@ import (
 
 const credentialReminderWindowDays = 7
 
-func credentialLedgerStartOfDay(value time.Time) time.Time {
-	utc := value.UTC()
-	return time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, time.UTC)
-}
-
 func TestCreateMerchantCredentialLedger_RejectsDuplicateActiveDocument(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
@@ -50,9 +45,11 @@ func TestCreateMerchantCredentialLedger_RejectsDuplicateActiveDocument(t *testin
 }
 
 func TestCredentialLedgerScans_FilterByWindowAndActiveStatus(t *testing.T) {
-	now := time.Now().UTC()
-	windowStart := credentialLedgerStartOfDay(now).AddDate(0, 0, credentialReminderWindowDays)
+	now := time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC).Add(time.Duration(time.Now().UnixNano()))
+	windowStart := now.AddDate(0, 0, credentialReminderWindowDays)
 	windowEnd := windowStart.Add(24 * time.Hour)
+	expiredCursor := windowEnd
+	expiredBefore := expiredCursor.Add(time.Hour)
 
 	ownerOne := createRandomUser(t)
 	merchantOne := createRandomMerchantWithOwner(t, ownerOne.ID)
@@ -64,7 +61,7 @@ func TestCredentialLedgerScans_FilterByWindowAndActiveStatus(t *testing.T) {
 		MerchantApplicationID: pgtype.Int8{Int64: applicationOne.ID, Valid: true},
 		MediaAssetID:          expiringAsset.ID,
 		NormalizedPayload:     []byte(`{"state":"expiring"}`),
-		ExpiresAt:             pgtype.Timestamptz{Time: windowStart.Add(2 * time.Hour), Valid: true},
+		ExpiresAt:             pgtype.Timestamptz{Time: windowStart.Add(time.Millisecond), Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -78,12 +75,12 @@ func TestCredentialLedgerScans_FilterByWindowAndActiveStatus(t *testing.T) {
 		MerchantApplicationID: pgtype.Int8{Int64: applicationTwo.ID, Valid: true},
 		MediaAssetID:          remindedAsset.ID,
 		NormalizedPayload:     []byte(`{"state":"reminded"}`),
-		ExpiresAt:             pgtype.Timestamptz{Time: windowStart.Add(4 * time.Hour), Valid: true},
+		ExpiresAt:             pgtype.Timestamptz{Time: windowStart.Add(2 * time.Millisecond), Valid: true},
 	})
 	require.NoError(t, err)
 	_, err = testStore.MarkCredentialLedgerReminderSent(context.Background(), MarkCredentialLedgerReminderSentParams{
 		ID:             remindedLedger.ID,
-		LastRemindedAt: pgtype.Timestamptz{Time: windowStart.Add(time.Minute), Valid: true},
+		LastRemindedAt: pgtype.Timestamptz{Time: windowStart.Add(time.Millisecond), Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -97,7 +94,7 @@ func TestCredentialLedgerScans_FilterByWindowAndActiveStatus(t *testing.T) {
 		MerchantApplicationID: pgtype.Int8{Int64: applicationThree.ID, Valid: true},
 		MediaAssetID:          expiredAsset.ID,
 		NormalizedPayload:     []byte(`{"state":"expired"}`),
-		ExpiresAt:             pgtype.Timestamptz{Time: now.Add(-2 * time.Hour), Valid: true},
+		ExpiresAt:             pgtype.Timestamptz{Time: expiredCursor.Add(time.Millisecond), Valid: true},
 	})
 	require.NoError(t, err)
 
@@ -111,7 +108,7 @@ func TestCredentialLedgerScans_FilterByWindowAndActiveStatus(t *testing.T) {
 		MerchantApplicationID: pgtype.Int8{Int64: applicationFour.ID, Valid: true},
 		MediaAssetID:          inactiveAsset.ID,
 		NormalizedPayload:     []byte(`{"state":"inactive"}`),
-		ExpiresAt:             pgtype.Timestamptz{Time: now.Add(-4 * time.Hour), Valid: true},
+		ExpiresAt:             pgtype.Timestamptz{Time: expiredCursor.Add(2 * time.Millisecond), Valid: true},
 	})
 	require.NoError(t, err)
 	deactivatedAt := now.Add(-time.Hour)
@@ -138,8 +135,8 @@ func TestCredentialLedgerScans_FilterByWindowAndActiveStatus(t *testing.T) {
 	require.NotContains(t, reminderWindowIDs, inactiveLedger.ID)
 
 	expiredRows, err := testStore.ListExpiredActiveCredentialLedgers(context.Background(), ListExpiredActiveCredentialLedgersParams{
-		ExpiredBefore: pgtype.Timestamptz{Time: now, Valid: true},
-		LastExpiresAt: pgtype.Timestamptz{},
+		ExpiredBefore: pgtype.Timestamptz{Time: expiredBefore, Valid: true},
+		LastExpiresAt: pgtype.Timestamptz{Time: expiredCursor, Valid: true},
 		LastID:        0,
 		PageLimit:     20,
 	})

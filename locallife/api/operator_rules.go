@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/rs/zerolog/log"
 )
 
 // ListRulesResponse 规则列表响应
@@ -815,6 +816,11 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
+		}
+		if server.weatherCache != nil {
+			if err := server.weatherCache.Delete(ctx, targetRegionID); err != nil {
+				log.Warn().Err(err).Int64("region_id", targetRegionID).Str("rule_key", key).Msg("invalidate weather coefficient cache failed after operator rule update")
+			}
 		}
 
 	default:

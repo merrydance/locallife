@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -821,6 +822,61 @@ func TestUpdateOperatorRule_WeatherDoesNotOverwritePlatformCityDefault(t *testin
 			require.NoError(t, err)
 			require.InDelta(t, 1.9, value.Float64, 0.00001)
 			return db.RegionRuleConfig{RegionID: 12}, nil
+		})
+
+	ctx, recorder := newJSONTestContext(http.MethodPatch, "/v1/operator/rules/WEATHER_COEFF_HEAVY", `{"value":"1.9"}`)
+	ctx.Params = gin.Params{{Key: "key", Value: "WEATHER_COEFF_HEAVY"}}
+	ctx.Set(operatorKey, operator)
+
+	server.updateOperatorRule(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
+func TestUpdateOperatorRule_WeatherCoefficientInvalidatesWeatherCache(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	cache := &testWeatherCache{}
+	server.weatherCache = cache
+	operator := db.Operator{ID: 8, UserID: 88, RegionID: 12}
+
+	store.EXPECT().
+		UpsertRegionRuleConfig(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ any, arg db.UpsertRegionRuleConfigParams) (db.RegionRuleConfig, error) {
+			require.Equal(t, int64(12), arg.RegionID)
+			value, err := arg.WeatherCoeffHeavy.Float64Value()
+			require.NoError(t, err)
+			require.InDelta(t, 1.9, value.Float64, 0.0001)
+			return db.RegionRuleConfig{RegionID: arg.RegionID}, nil
+		})
+
+	ctx, recorder := newJSONTestContext(http.MethodPatch, "/v1/operator/rules/WEATHER_COEFF_HEAVY", `{"value":"1.9"}`)
+	ctx.Params = gin.Params{{Key: "key", Value: "WEATHER_COEFF_HEAVY"}}
+	ctx.Set(operatorKey, operator)
+
+	server.updateOperatorRule(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, []int64{12}, cache.deletedRegions)
+}
+
+func TestUpdateOperatorRule_WeatherCoefficientCacheDeleteFailureIsNonFatal(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.weatherCache = &testWeatherCache{deleteErr: errors.New("redis unavailable")}
+	operator := db.Operator{ID: 8, UserID: 88, RegionID: 12}
+
+	store.EXPECT().
+		UpsertRegionRuleConfig(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ any, arg db.UpsertRegionRuleConfigParams) (db.RegionRuleConfig, error) {
+			require.Equal(t, int64(12), arg.RegionID)
+			return db.RegionRuleConfig{RegionID: arg.RegionID}, nil
 		})
 
 	ctx, recorder := newJSONTestContext(http.MethodPatch, "/v1/operator/rules/WEATHER_COEFF_HEAVY", `{"value":"1.9"}`)
