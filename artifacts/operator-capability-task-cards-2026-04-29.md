@@ -2,6 +2,8 @@
 
 日期：2026-04-29
 
+整体状态：本轮必须执行的后端闭环、weapp 边界收口和后台治理任务已完成。OP-CAP-01B、OP-CAP-02B 保留为未来可选只读视图预案，不计入当前未完成任务。
+
 ## 使用方式
 
 这些任务卡来自 `operator-capability-backend-audit-2026-04-29.md`。每张卡都要求先验证后端能力是否完整可用，再决定 weapp 是否承接。不要直接按接口平铺页面；所有前端承接都必须先定义运营商任务、ViewState、确认/失败/恢复状态。
@@ -20,15 +22,15 @@
 | 分账配置 | 只读事实 | 可在 finance 中展示只读事实，不做配置入口 |
 | `operators/me/rules` 通用规则代理 | 不进任何前端，未来评估是否保留 | 不进入 operator weapp/web；后续单独评估后端保留价值 |
 | 补差/分账金额/receiver 删除 | 后端自动执行 | 不进前端；另归系统资金域后端审计 |
-| 规则、运费、高峰时段 | 先做 OP-CAP-07 剩余后端验证 | 后端验证完成前不推进 weapp 页面调整 |
-| Admin 运营商治理 | 未来专项 | 不纳入本轮 operator weapp；后续单独做 admin 专项 |
+| 规则、运费、高峰时段 | 已完成 OP-CAP-07 后端验证 | 可按现有 operator weapp 轻量区域配置继续维护，不引入通用规则代理 |
+| Admin 运营商治理 | 已完成 OP-CAP-10 后台治理审计 | 不纳入 operator weapp；后续 web/admin 承接需另建后台任务 ViewState |
 
-## 当前执行顺序
+## 执行完成状态
 
-1. OP-CAP-07A/07B/07C/07D：先完成规则、运费、天气、高峰时段剩余后端验证和消费矩阵。
-2. OP-CAP-05A/05B 与 OP-CAP-06：在后端规则验证后，收口 operator weapp 中商户/骑手只读边界和死契约。
-3. OP-CAP-01A/01B、OP-CAP-02A/02B、OP-CAP-03A：按只读监管/只读审计/只读事实准备，不进入主导航或待办语义。
-4. OP-CAP-04A、OP-CAP-09A-E、OP-CAP-10A-D：作为后续专项或后台治理任务，不抢占当前执行队列。
+1. OP-CAP-07A/07B/07C/07D：规则、运费、天气、高峰时段后端验证和消费矩阵已完成。
+2. OP-CAP-05A/05B 与 OP-CAP-06：operator weapp 商户/骑手只读边界和死契约已收口。
+3. OP-CAP-01A、OP-CAP-02A、OP-CAP-03A、OP-CAP-04A：后端闭环和前端边界已确认；OP-CAP-01B、OP-CAP-02B 仅作为未来可选只读预案保留。
+4. OP-CAP-08、OP-CAP-09A-E、OP-CAP-10A-D：派单监控、食安高风险链路和后台治理专项已完成验证与文档回填。
 
 ## P0 / G2-G3 高风险回归与边界确认
 
@@ -405,6 +407,13 @@ weapp 范围：
 - 测试覆盖区域过滤、超时阈值、无运营商收件人、重复扫描去重或可接受重复策略。
 - weapp dispatch hall 能区分加载失败、空列表和真实无待接单。
 
+2026-04-29 关闭进展：
+
+- 后端链路已形成闭环：`DataCleanupScheduler.enqueueOperatorPendingDispatchAlerts` 每分钟扫描超过 3 分钟未接单的 pending delivery，查询层通过 `ListPendingDeliveriesBeforeWithoutAlert` 在 SQL 中排除已有 `delivery_timeout_alerts` 的同一 `alert_key`，再写入去重账本并派发 `operator:pending_dispatch_alert` worker。
+- worker 处理时重新读取 delivery/order/merchant 当前事实，确认仍为 pending 且达到阈值后按商户区域查询 active operator 收件人，并写入 delivery 类型站内通知；无收件人、delivery/order/merchant 不存在、状态已变化或未达阈值均稳定跳过。
+- 已补充 `locallife/scheduler/operator_dispatch_alert_test.go` 覆盖扫描参数、重复账本 unique violation 去重、入队失败后删除账本回滚；`locallife/worker/task_operator_pending_dispatch_alert_test.go` 覆盖通知写入、未达阈值跳过、无 active operator 收件人跳过；`locallife/api/operator_dispatch_monitor_test.go` 保留区域权限、摘要和列表分页契约验证。
+- 验证命令：`go test ./scheduler ./worker ./api -run 'OperatorPendingDispatch|PendingDispatch' -count=1`。
+
 ### OP-CAP-09A 食安重复 resolve 回归
 
 风险：G3，商户暂停/恢复。
@@ -561,6 +570,8 @@ weapp 范围：
 - 结论：receiver lifecycle 属于平台后台治理与资金域可观察能力，不进入 operator weapp；后续 web/admin 承接应以 target/attempt ViewState 建模。
 
 ## 关闭任务的统一要求
+
+当前完成状态：本文件内强制执行任务已全部关闭；未来仅在产品明确需要时重新启动 OP-CAP-01B/02B 只读视图预案，或在 web/admin 承接后台治理时另建任务卡。
 
 - 每张卡关闭时回填：变更文件、验证命令、剩余风险。
 - G2/G3 任务没有测试证据不得标记完成。

@@ -54,3 +54,43 @@ func TestProcessTaskOperatorPendingDispatchAlert_CreatesOperatorNotification(t *
 	err = processor.ProcessTaskOperatorPendingDispatchAlert(context.Background(), asynq.NewTask(TaskOperatorPendingDispatchAlert, payloadBytes))
 	require.NoError(t, err)
 }
+
+func TestProcessTaskOperatorPendingDispatchAlert_SkipsBeforeThreshold(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	processor := &RedisTaskProcessor{store: store, roleCache: map[int64]cachedUserRoles{}}
+
+	delivery := db.Delivery{ID: 102, OrderID: 202, Status: "pending", CreatedAt: time.Now().Add(-1 * time.Minute)}
+	store.EXPECT().GetDelivery(gomock.Any(), delivery.ID).Return(delivery, nil)
+
+	payloadBytes, err := json.Marshal(&OperatorPendingDispatchAlertPayload{DeliveryID: delivery.ID, AlertKey: "pending_dispatch_3m", ThresholdMinutes: 3})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskOperatorPendingDispatchAlert(context.Background(), asynq.NewTask(TaskOperatorPendingDispatchAlert, payloadBytes))
+	require.NoError(t, err)
+}
+
+func TestProcessTaskOperatorPendingDispatchAlert_SkipsWhenNoActiveOperatorRecipients(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	processor := &RedisTaskProcessor{store: store, roleCache: map[int64]cachedUserRoles{}}
+
+	delivery := db.Delivery{ID: 103, OrderID: 203, Status: "pending", CreatedAt: time.Now().Add(-5 * time.Minute)}
+	order := db.Order{ID: 203, MerchantID: 303}
+	merchant := db.Merchant{ID: 303, RegionID: 403}
+
+	store.EXPECT().GetDelivery(gomock.Any(), delivery.ID).Return(delivery, nil)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), merchant.ID).Return(merchant, nil)
+	store.EXPECT().ListActiveOperatorNotificationRecipientsByRegion(gomock.Any(), merchant.RegionID).Return([]db.ListActiveOperatorNotificationRecipientsByRegionRow{}, nil)
+
+	payloadBytes, err := json.Marshal(&OperatorPendingDispatchAlertPayload{DeliveryID: delivery.ID, AlertKey: "pending_dispatch_3m", ThresholdMinutes: 3})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskOperatorPendingDispatchAlert(context.Background(), asynq.NewTask(TaskOperatorPendingDispatchAlert, payloadBytes))
+	require.NoError(t, err)
+}
