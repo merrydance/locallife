@@ -1,110 +1,112 @@
 <custom-navbar title="{{pageTitle}}" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
+<view class="page-container page-shell page-shell--with-nav" style="--page-shell-nav-height: {{navBarHeight}}px; --submit-content-bottom-offset: {{submitResult ? 0 : 112}}rpx;">
   <!-- 提交成功结果 -->
   <view wx:if="{{submitResult}}" class="result-container animate-fade-in">
-    <view class="result-card">
-      <t-icon
-        name="{{resultIcon}}"
-        size="120rpx"
-        color="{{resultColor}}"
-      />
-      <text class="result-title">{{resultTitle}}</text>
-      <text class="result-desc">{{resultSummary}}</text>
-      <text class="result-desc">{{submitResult.reason}}</text>
+    <t-result theme="{{resultTheme}}" title="{{resultTitle}}" description="{{resultSummary}}" />
 
+    <view class="result-detail-card">
+      <text wx:if="{{submitResult.reason}}" class="result-detail-text">{{submitResult.reason}}</text>
       <view wx:if="{{submitResult.approved_amount}}" class="result-amount">
         <text class="result-amount-label">赔付金额</text>
         <text class="result-amount-value">¥{{approvedAmountDisplay}}</text>
       </view>
 
       <view wx:if="{{submitResult.payout_eta}}" class="result-eta">
-        <t-icon name="time" size="28rpx" color="#666" />
         <text>预计赔付时间：{{submitResult.payout_eta}}</text>
       </view>
 
       <view wx:if="{{submitResult.warning}}" class="result-warning">
-        <t-icon name="error-circle" size="28rpx" color="#ff9800" />
         <text>{{submitResult.warning}}</text>
       </view>
     </view>
 
-    <t-button theme="primary" shape="round" block bindtap="onBackToCenter" style="margin-top: 48rpx;">
+    <t-button theme="primary" block bindtap="onBackToCenter" t-class="result-action">
       返回客服中心
     </t-button>
   </view>
 
   <!-- 提交表单 -->
   <view wx:else class="form-container">
-    <!-- 问题类型标签 -->
-    <view class="type-badge">
-      <view class="type-badge-icon {{typeClass}}">
-        <t-icon name="{{typeIcon}}" size="36rpx" />
-      </view>
-      <text class="type-badge-text">{{claimTypeText}}</text>
+    <view class="field-group">
+      <t-cell
+        wx:if="{{selectedOrder}}"
+        title="{{selectedOrder.merchantName}}"
+        note="¥{{selectedOrder.amountDisplay}}"
+        arrow
+        hover
+        bindtap="onSelectOrder"
+      />
+      <t-cell
+        wx:else
+        title="选择可索赔订单"
+        arrow
+        hover
+        bindtap="onSelectOrder"
+      />
     </view>
 
-    <!-- 选择关联订单 -->
-    <view class="form-card">
-      <view class="card-title">关联订单</view>
-      <view wx:if="{{selectedOrder}}" class="selected-order" bindtap="onSelectOrder">
-        <view class="order-info">
-          <text class="order-no">{{selectedOrder.orderNo}}</text>
-          <text class="order-amount">¥{{selectedOrder.amountDisplay}}</text>
-        </view>
-        <t-icon name="chevron-right" size="36rpx" color="#999" />
-      </view>
-      <view wx:else class="select-order-btn" bindtap="onSelectOrder">
-        <t-icon name="add" size="36rpx" color="#0052D9" />
-        <text class="select-order-text">选择已完成的订单</text>
-      </view>
+    <view class="field-group">
+      <t-cell title="索赔金额" note="{{selectedOrder ? '¥' + selectedOrder.amountDisplay : '-'}}" />
     </view>
 
-    <!-- 索赔金额 -->
-    <view class="form-card">
-      <view class="card-title">
-        索赔金额
-        <text wx:if="{{selectedOrder}}" class="amount-hint">(最高 ¥{{selectedOrder.amountDisplay}})</text>
-      </view>
-      <view class="amount-input-wrapper">
-        <text class="amount-prefix">¥</text>
-        <t-input
-          class="amount-input"
-          type="digit"
-          placeholder="请输入索赔金额"
-          value="{{amountInput}}"
-          borderless
-          align="center"
-          bind:change="onAmountInput"
-        ></t-input>
-      </view>
-    </view>
-
-    <!-- 问题描述 -->
-    <view class="form-card">
-      <view class="card-title">问题描述</view>
+    <view class="field-group field-group--textarea">
+      <view class="field-label">问题描述</view>
       <t-textarea
+        class="claim-textarea"
         placeholder="请详细描述您遇到的问题（至少5个字）"
         maxlength="{{1000}}"
         value="{{reasonInput}}"
         bind:change="onReasonInput"
         autosize
-        style="--td-textarea-background-color: #f8f8f8; border-radius: 12rpx;"
       />
-    </view>
-
-    <!-- 提交按钮 -->
-    <view class="submit-area">
-      <t-button
-        theme="primary"
-        shape="round"
-        block
-        loading="{{submitting}}"
-        disabled="{{!canSubmit}}"
-        bindtap="onSubmit"
-      >
-        提交
-      </t-button>
     </view>
   </view>
 </view>
+
+<view wx:if="{{!submitResult}}" class="bottom-bar">
+  <t-button
+    theme="primary"
+    block
+    loading="{{submitting}}"
+    disabled="{{!canSubmit}}"
+    bindtap="onSubmit"
+  >提交</t-button>
+</view>
+
+<t-popup
+  visible="{{orderPickerVisible}}"
+  placement="bottom"
+  close-on-overlay-click="{{true}}"
+  using-custom-navbar="{{true}}"
+  bind:visible-change="onOrderPickerVisibleChange"
+>
+  <view class="order-picker">
+    <view class="order-picker-close">
+      <t-icon name="close" size="44rpx" bind:click="closeOrderPicker" />
+    </view>
+
+    <view wx:if="{{orderCandidatesLoading}}" class="order-picker-state">
+      <t-loading theme="circular" size="40rpx" text="正在加载订单" />
+    </view>
+
+    <t-empty wx:elif="{{orderCandidatesError}}" icon="info-circle" description="{{orderCandidatesError}}">
+      <t-button slot="action" theme="primary" variant="text" bindtap="onRetryClaimOrders">重试</t-button>
+    </t-empty>
+
+    <t-empty wx:elif="{{orderCandidates.length === 0}}" icon="order-adjustment" description="暂无可索赔订单" />
+
+    <scroll-view wx:else scroll-y class="order-picker-list">
+      <t-cell
+        wx:for="{{orderCandidates}}"
+        wx:key="id"
+        title="{{item.merchantName}}"
+        note="¥{{item.amountDisplay}}"
+        right-icon="{{item.selected ? 'check-circle-filled' : ''}}"
+        hover
+        data-id="{{item.id}}"
+        bindtap="onChooseOrder"
+      />
+    </scroll-view>
+  </view>
+</t-popup>

@@ -53,26 +53,23 @@
           <t-divider dashed />
 
           <view class="card-actions" catchtap="preventBubble">
-             <!-- Left: Set Default -->
-             <view class="action-left" catchtap="onSetDefault" data-id="{{item.id}}" wx:if="{{!isSelectMode}}">
-               <t-icon name="{{item.is_default ? 'check-circle-filled' : 'circle'}}" size="36rpx" color="{{item.is_default ? 'var(--td-brand-color)' : '#999'}}" />
-               <text class="action-text {{item.is_default ? 'active' : ''}}">{{item.is_default ? '默认地址' : '设为默认'}}</text>
-             </view>
-             <view class="action-left" wx:else>
-                <!-- Selector Placeholder -->
-             </view>
+            <view class="action-left">
+              <t-button
+                wx:if="{{!isSelectMode}}"
+                size="small"
+                variant="text"
+                theme="{{item.is_default ? 'primary' : 'default'}}"
+                icon="{{item.is_default ? 'check-circle-filled' : 'circle'}}"
+                catchtap="onSetDefault"
+                data-id="{{item.id}}"
+                t-class="action-btn"
+              >{{item.is_default ? '默认地址' : '设为默认'}}</t-button>
+            </view>
 
-             <!-- Right: Edit/Delete -->
-             <view class="action-right">
-               <view class="btn-icon" catchtap="onEditAddress" data-id="{{item.id}}">
-                 <t-icon name="edit" size="32rpx" color="#666" />
-                 <text>编辑</text>
-               </view>
-               <view class="btn-icon" catchtap="onDeleteAddress" data-id="{{item.id}}">
-                 <t-icon name="delete" size="32rpx" color="#666" />
-                 <text>删除</text>
-               </view>
-             </view>
+            <view class="action-right">
+              <t-button size="small" variant="text" icon="edit" catchtap="onEditAddress" data-id="{{item.id}}" t-class="action-btn">编辑</t-button>
+              <t-button size="small" variant="text" theme="danger" icon="delete" catchtap="onDeleteAddress" data-id="{{item.id}}" t-class="action-btn">删除</t-button>
+            </view>
           </view>
         </view>
       </block>
@@ -83,8 +80,5 @@
 <!-- Bottom Fixed Bar -->
 <view class="bottom-bar">
   <t-button block theme="primary" size="large" shape="round" icon="add" bindtap="onAddAddress">{{isSelectMode ? '新建并使用地址' : '新建收货地址'}}</t-button>
-  <view class="wechat-btn" bindtap="onImportWechatAddress">
-     <t-icon name="logo-wechat" size="32rpx" color="#07C160" />
-      <text>{{isSelectMode ? '微信导入并使用' : '从微信导入'}}</text>
-  </view>
+  <t-button block theme="default" variant="outline" size="large" shape="round" icon="logo-wechat" bindtap="onImportWechatAddress">{{isSelectMode ? '微信导入并使用' : '从微信导入'}}</t-button>
 </view>

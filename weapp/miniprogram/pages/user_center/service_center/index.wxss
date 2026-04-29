@@ -9,7 +9,7 @@
 /* ========== Quick Entry ========== */
 .quick-entry-section {
   background: #fff;
-  margin: 24rpx;
+  margin-bottom: 24rpx;
   border-radius: 16rpx;
   padding: 32rpx;
   box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
@@ -77,7 +77,7 @@
 
 /* ========== Claims Section ========== */
 .claims-section {
-  margin: 0 24rpx;
+  margin: 0;
 }
 
 .claims-section .section-title {

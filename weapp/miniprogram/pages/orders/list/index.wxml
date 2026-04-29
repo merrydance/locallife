@@ -1,7 +1,7 @@
 <custom-navbar title="{{pageTitle}}" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view
-  class="page page-shell page-shell--with-nav page-shell--bottom-safe"
+  class="page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
   style="--page-shell-nav-height: {{navBarHeight}}px"
 >
   <!-- 顶部状态栏 -->
@@ -47,27 +47,39 @@
 
       <!-- 订单卡片 -->
       <view class="order-card" wx:for="{{orders}}" wx:key="id" bindtap="onViewOrder" data-id="{{item.id}}" hover-class="order-card-hover">
-        <!-- 头部：商户信息 + 状态 -->
-        <view class="card-header">
-          <view class="merchant-info">
-            <text class="merchant-name">{{item.merchantName}}</text>
-            <t-icon name="chevron-right" size="32rpx" color="#999" />
+        <view class="order-card-main">
+          <!-- 头部：商户信息 + 状态 -->
+          <view class="card-header">
+            <view wx:if="{{isSelectMode}}" class="merchant-info">
+              <text class="merchant-name">{{item.merchantName}}</text>
+            </view>
+            <view
+              wx:else
+              class="merchant-info merchant-link"
+              catchtap="onEnterMerchant"
+              data-id="{{item.merchantId}}"
+              hover-class="merchant-info-hover"
+              hover-stop-propagation="{{true}}"
+            >
+              <text class="merchant-name">{{item.merchantName}}</text>
+              <t-icon name="chevron-right" size="32rpx" color="#999" />
+            </view>
+            <t-tag size="small" variant="dark" theme="default" shape="round" class="status-tag {{item.statusClass}}">{{item.statusLabel}}</t-tag>
           </view>
-          <t-tag size="small" variant="dark" theme="default" shape="round" class="status-tag {{item.statusClass}}">{{item.statusLabel}}</t-tag>
-        </view>
 
-        <!-- 内容区：紧凑元信息 -->
-        <view class="card-meta">
-          <view class="meta-info">
-            <text wx:if="{{item.highlight}}" class="meta-highlight">{{item.highlight}}</text>
-            <text class="meta-time">{{item.createTimeDisplay}}</text>
+          <!-- 内容区：紧凑元信息 -->
+          <view class="card-meta">
+            <view class="meta-info">
+              <text wx:if="{{item.highlight}}" class="meta-highlight">{{item.highlight}}</text>
+              <text class="meta-time">{{item.createTimeDisplay}}</text>
+            </view>
+            <text class="meta-total">{{item.totalDisplay}}</text>
           </view>
-          <text class="meta-total">{{item.totalDisplay}}</text>
         </view>
 
         <!-- 底部：操作按钮 -->
-        <view wx:if="{{!isSelectMode}}" class="card-footer" catchtap="preventBubble">
-          <view class="footer-actions">
+        <view wx:if="{{!isSelectMode}}" class="card-footer">
+          <view class="footer-actions" catchtap="preventBubble" hover-stop-propagation="{{true}}">
             <t-button wx:if="{{item.canCancel}}" size="small" shape="round" catchtap="onCancelOrder" data-id="{{item.id}}" t-class="action-btn">取消订单</t-button>
 
             <t-button wx:if="{{orderType === 'dine_in' || orderType === 'reservation'}}" size="small" icon="call" shape="round" catchtap="onCallMerchant" data-phone="{{item.merchantPhone}}" t-class="action-btn">联系商家</t-button>

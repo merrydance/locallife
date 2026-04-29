@@ -2,10 +2,10 @@
   "usingComponents": {
     "custom-navbar": "/components/custom-navbar/index",
     "t-button": "tdesign-miniprogram/button/button",
-    "t-input": "tdesign-miniprogram/input/input",
     "t-textarea": "tdesign-miniprogram/textarea/textarea",
     "t-cell": "tdesign-miniprogram/cell/cell",
-    "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
+    "t-popup": "tdesign-miniprogram/popup/popup",
+    "t-empty": "tdesign-miniprogram/empty/empty",
     "t-result": "tdesign-miniprogram/result/result",
     "t-loading": "tdesign-miniprogram/loading/loading",
     "t-icon": "tdesign-miniprogram/icon/icon"

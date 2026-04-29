@@ -3,7 +3,7 @@
 <view class="page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <!-- 顶部状态栏 -->
   <view class="tabs-wrapper">
-    <t-tabs value="{{currentStatus}}" bind:change="onStatusChange" theme="tag" space-evenly="{{false}}">
+    <t-tabs value="{{currentStatus}}" bind:change="onStatusChange" theme="tag" space-evenly="{{false}}" split="{{false}}">
       <t-tab-panel wx:for="{{statusTabs}}" wx:key="value" label="{{item.label}}" value="{{item.value}}" />
     </t-tabs>
   </view>
@@ -30,40 +30,44 @@
 
       <!-- 预订卡片列表 -->
       <view wx:else class="card-list animate-fade-in">
-        <view class="reservation-card" wx:for="{{reservations}}" wx:key="id" bindtap="onViewDetail" data-id="{{item.id}}" hover-class="card-hover">
-          <!-- 卡片头部: 商户信息 + 状态 -->
-          <view class="card-header">
-             <view class="merchant-info">
-               <text class="merchant-name">{{item.merchantName}}</text>
-               <t-icon name="chevron-right" size="32rpx" color="#999" />
-             </view>
-             <t-tag variant="dark" theme="{{item.statusTagTheme}}">{{item.statusText}}</t-tag>
-          </view>
+          <view class="reservation-card" wx:for="{{reservations}}" wx:key="id">
+           <view class="reservation-card-main" bindtap="onViewDetail" data-id="{{item.id}}" hover-class="reservation-card-main-hover">
+            <!-- 卡片头部: 商户信息 + 状态 -->
+            <view class="card-header">
+              <view class="merchant-info">
+                <text class="merchant-name">{{item.merchantName}}</text>
+                <t-icon name="chevron-right" size="32rpx" color="#999" />
+              </view>
+              <t-tag variant="dark" theme="{{item.statusTagTheme}}">{{item.statusText}}</t-tag>
+            </view>
 
-          <!-- 卡片内容: 时间、人数、信息 -->
-          <view class="card-body">
-             <view class="info-primary">
+            <!-- 卡片内容: 时间、人数、信息 -->
+            <view class="card-body">
+              <view class="info-primary">
                 <view class="time-display">{{item.dateTimeDisplay}}</view>
                 <view class="guest-info">{{item.guestCount}}人</view>
-             </view>
-             
-             <view class="info-secondary" wx:if="{{item.itemsPreview}}">
+              </view>
+               
+              <view class="info-secondary" wx:if="{{item.itemsPreview}}">
                 <t-icon name="view-list" size="28rpx" color="#999" />
                 <text class="items-text">{{item.itemsPreview}}</text>
-             </view>
+              </view>
 
-             <view class="info-secondary" wx:if="{{item.depositDisplay}}">
+              <view class="info-secondary" wx:if="{{item.depositDisplay}}">
                 <text>需付定金</text>
                 <text class="price-val">{{item.depositDisplay}}</text>
-             </view>
+              </view>
+            </view>
           </view>
 
           <!-- 卡片底部: 操作按钮 -->
-          <view class="card-footer" catchtap="preventBubble">
-             <t-button wx:if="{{item.canCancel}}" size="small" shape="round" catchtap="onCancelReservation" data-id="{{item.id}}">取消</t-button>
-             <t-button wx:if="{{item.canViewDetail}}" size="small" shape="round" catchtap="onViewDetail" data-id="{{item.id}}">详情</t-button>
-             <t-button wx:if="{{item.canPay}}" size="small" theme="primary" shape="round" loading="{{payingReservationId === item.id}}" disabled="{{payingReservationId > 0}}" catchtap="onPayReservation" data-id="{{item.id}}">去支付</t-button>
-             <t-button wx:if="{{item.canOrder}}" size="small" theme="primary" shape="round" catchtap="onGoToOrder" data-item="{{item}}">加菜/点餐</t-button>
+           <view class="card-footer">
+            <view class="footer-actions" catchtap="preventBubble">
+              <t-button wx:if="{{item.canCancel}}" size="small" shape="round" catchtap="onCancelReservation" data-id="{{item.id}}" t-class="action-btn">取消</t-button>
+              <t-button wx:if="{{item.canViewDetail}}" size="small" shape="round" catchtap="onViewDetail" data-id="{{item.id}}" t-class="action-btn">详情</t-button>
+              <t-button wx:if="{{item.canPay}}" size="small" theme="primary" shape="round" loading="{{payingReservationId === item.id}}" disabled="{{payingReservationId > 0}}" catchtap="onPayReservation" data-id="{{item.id}}" t-class="action-btn">去支付</t-button>
+              <t-button wx:if="{{item.canOrder}}" size="small" theme="primary" shape="round" catchtap="onGoToOrder" data-item="{{item}}" t-class="action-btn">加菜/点餐</t-button>
+            </view>
           </view>
         </view>
 

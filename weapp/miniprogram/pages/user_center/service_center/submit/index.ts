@@ -1,8 +1,17 @@
 import { claimManagementService } from '../../../../api/appeals-customer-service'
-import type { UserClaimType, SubmitClaimResponse } from '../../../../api/appeals-customer-service'
-import { getOrderDetail } from '../../../../api/order'
+import type { UserClaimResponse, UserClaimType, SubmitClaimResponse } from '../../../../api/appeals-customer-service'
+import { getOrderDetail, getOrderList } from '../../../../api/order'
 import { logger } from '../../../../utils/logger'
-import { getSubmitResultPresentation } from '../../../../utils/user-claim-submit-view'
+import {
+  buildClaimOrderOptions,
+  formatClaimAmount,
+  getClaimCandidateOrderListParams,
+  getSubmitResultPresentation,
+  isClaimCandidateOrder,
+  toSelectedClaimOrder,
+  type ClaimOrderOption,
+  type SelectedClaimOrder
+} from '../../../../utils/user-claim-submit-view'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 const SUPPORTED_USER_CLAIM_TYPES: UserClaimType[] = ['foreign-object', 'damage', 'timeout']
@@ -12,24 +21,6 @@ function normalizeUserClaimType(claimType?: string): UserClaimType | null {
     return claimType as UserClaimType
   }
   return null
-}
-
-/** 用户索赔类型 → 中文显示 */
-const USER_CLAIM_TYPE_MAP: Record<UserClaimType, string> = {
-  'foreign-object': '异物问题',
-  'damage': '餐品损坏',
-	'timeout': '配送超时'
-}
-
-function formatUserClaimType(type: UserClaimType): string {
-  return USER_CLAIM_TYPE_MAP[type] || type
-}
-
-/** 索赔类型 → 图标映射 */
-const TYPE_ICON_MAP: Record<UserClaimType, string> = {
-  'foreign-object': 'search',
-  'damage': 'heart-filled',
-  'timeout': 'time'
 }
 
 /** 索赔类型 → 页面标题映射 */
@@ -42,33 +33,34 @@ const TYPE_TITLE_MAP: Record<UserClaimType, string> = {
 /** 最小索赔原因字数 */
 const MIN_REASON_LENGTH = 5
 
-/** 格式化金额（分→元） */
-function formatAmount(fen: number): string {
-  return (fen / 100).toFixed(2)
+function getEventOrderId(event: WechatMiniprogram.BaseEvent): number {
+  const dataset = event.currentTarget.dataset as { id?: string | number }
+  const id = typeof dataset.id === 'number' ? dataset.id : Number(dataset.id)
+  return Number.isFinite(id) ? id : 0
 }
 
 Page({
   data: {
     navBarHeight: 88,
     claimType: '' as UserClaimType,
-    claimTypeText: '',
     pageTitle: '提交反馈',
-    typeIcon: '',
-    typeClass: '',
 
     // 订单
-    selectedOrder: null as { id: number, orderNo: string, amount: number, amountDisplay: string } | null,
+    selectedOrder: null as SelectedClaimOrder | null,
+    orderPickerVisible: false,
+    orderCandidates: [] as ClaimOrderOption[],
+    orderCandidatesLoading: false,
+    orderCandidatesLoaded: false,
+    orderCandidatesError: '',
 
     // 表单
-    amountInput: '',
     reasonInput: '',
     canSubmit: false,
     submitting: false,
 
     // 结果
     submitResult: null as SubmitClaimResponse | null,
-    resultIcon: '',
-    resultColor: '',
+    resultTheme: 'default' as 'default' | 'success' | 'warning' | 'error',
     resultTitle: '',
     resultSummary: '',
     approvedAmountDisplay: ''
@@ -81,72 +73,135 @@ Page({
   },
 
   onLoad(options: { claimType?: string, orderId?: string }) {
-	const claimType = normalizeUserClaimType(options.claimType)
-  if (!claimType) {
-    logger.warn('[SubmitClaim] unsupported claim type', options.claimType)
-    wx.showToast({ title: '暂不支持该反馈类型', icon: 'none', duration: 2000 })
-    setTimeout(() => {
-    wx.navigateBack({
-      fail: () => {
-      wx.redirectTo({ url: '/pages/user_center/service_center/index' })
-      }
-    })
-    }, 2000)
-    return
-  }
+    const claimType = normalizeUserClaimType(options.claimType)
+    if (!claimType) {
+      logger.warn('[SubmitClaim] unsupported claim type', options.claimType)
+      wx.showToast({ title: '暂不支持该反馈类型', icon: 'none', duration: 2000 })
+      setTimeout(() => {
+        wx.navigateBack({
+          fail: () => {
+            wx.redirectTo({ url: '/pages/user_center/service_center/index' })
+          }
+        })
+      }, 2000)
+      return
+    }
     this.setData({
       claimType,
-      claimTypeText: formatUserClaimType(claimType),
-      pageTitle: TYPE_TITLE_MAP[claimType] || '提交反馈',
-      typeIcon: TYPE_ICON_MAP[claimType] || 'info-circle',
-      typeClass: `type-${claimType}`
+      pageTitle: TYPE_TITLE_MAP[claimType] || '提交反馈'
     })
 
-    // 如果从订单详情跳转，自动关联订单
     if (options.orderId) {
-      this.loadOrder(parseInt(options.orderId))
+      this.loadOrder(parseInt(options.orderId, 10))
     }
+  },
+
+  async loadUserClaimsForEligibility(): Promise<UserClaimResponse[]> {
+    const claims: UserClaimResponse[] = []
+    const pageSize = 100
+    const maxPages = 5
+
+    for (let page = 1; page <= maxPages; page += 1) {
+      const result = await claimManagementService.getUserClaims({ page, page_size: pageSize })
+      const pageClaims = result.claims || []
+      claims.push(...pageClaims)
+      if (claims.length >= result.total || pageClaims.length < pageSize) break
+    }
+
+    return claims
+  },
+
+  applySelectedOrder(selectedOrder: SelectedClaimOrder) {
+    const nextCandidates = this.data.orderCandidates.map((order) => ({
+      ...order,
+      selected: order.id === selectedOrder.id
+    }))
+
+    this.setData({
+      selectedOrder,
+      orderCandidates: nextCandidates,
+      orderPickerVisible: false
+    })
+    this.validateForm()
   },
 
   async loadOrder(orderId: number) {
     try {
-      const order = await getOrderDetail(orderId)
-      this.setData({
-        selectedOrder: {
-          id: orderId,
-          orderNo: order.order_no,
-          amount: order.total_amount,
-          amountDisplay: formatAmount(order.total_amount)
-        }
-      })
-      this.validateForm()
+      const [order, claims] = await Promise.all([
+        getOrderDetail(orderId),
+        this.loadUserClaimsForEligibility()
+      ])
+
+      if (!isClaimCandidateOrder(order)) {
+        wx.showToast({ title: '该订单暂不支持索赔', icon: 'none' })
+        return
+      }
+
+      if (claims.some((claim) => claim.order_id === orderId)) {
+        wx.showToast({ title: '该订单已提交过索赔', icon: 'none' })
+        return
+      }
+
+      this.applySelectedOrder(toSelectedClaimOrder(order))
     } catch (err) {
       logger.error('[SubmitClaim] loadOrder failed', err)
+      wx.showToast({ title: getErrorUserMessage(err, '订单信息加载失败'), icon: 'none' })
     }
   },
 
   onSelectOrder() {
-    wx.navigateTo({
-      url: '/pages/orders/list/index?tab=completed&selectMode=1',
-      events: {
-        onOrderSelected: (order: { id: number, orderNo: string, totalAmount: number }) => {
-          this.setData({
-            selectedOrder: {
-              id: order.id,
-              orderNo: order.orderNo,
-              amount: order.totalAmount,
-              amountDisplay: formatAmount(order.totalAmount)
-            }
-          })
-          this.validateForm()
-        }
-      }
-    })
+    this.setData({ orderPickerVisible: true })
+    if (!this.data.orderCandidatesLoaded && !this.data.orderCandidatesLoading) {
+      void this.loadClaimOrderCandidates()
+    }
   },
 
-  onAmountInput(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
-    this.setData({ amountInput: e.detail.value })
-    this.validateForm()
+  onOrderPickerVisibleChange(e: WechatMiniprogram.CustomEvent<{ visible: boolean }>) {
+    this.setData({ orderPickerVisible: e.detail.visible })
+  },
+
+  closeOrderPicker() {
+    this.setData({ orderPickerVisible: false })
+  },
+
+  async loadClaimOrderCandidates() {
+    this.setData({ orderCandidatesLoading: true, orderCandidatesError: '' })
+    try {
+      const [orderResult, claims] = await Promise.all([
+        getOrderList(getClaimCandidateOrderListParams()),
+        this.loadUserClaimsForEligibility()
+      ])
+      const candidates = buildClaimOrderOptions(
+        orderResult.orders || [],
+        claims,
+        this.data.selectedOrder?.id
+      )
+
+      this.setData({
+        orderCandidates: candidates,
+        orderCandidatesLoading: false,
+        orderCandidatesLoaded: true
+      })
+    } catch (err) {
+      logger.error('[SubmitClaim] load claim order candidates failed', err)
+      this.setData({
+        orderCandidatesLoading: false,
+        orderCandidatesLoaded: true,
+        orderCandidatesError: getErrorUserMessage(err, '订单加载失败，请稍后重试')
+      })
+    }
+  },
+
+  onRetryClaimOrders() {
+    void this.loadClaimOrderCandidates()
+  },
+
+  onChooseOrder(e: WechatMiniprogram.BaseEvent) {
+    const id = getEventOrderId(e)
+    if (!id) return
+    const selectedOrder = this.data.orderCandidates.find((order) => order.id === id)
+    if (!selectedOrder) return
+    this.applySelectedOrder(selectedOrder)
   },
 
   onReasonInput(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
@@ -155,27 +210,16 @@ Page({
   },
 
   validateForm() {
-    const { selectedOrder, amountInput, reasonInput } = this.data
-    const amount = parseFloat(amountInput)
-    const hasOrder = selectedOrder !== null
-    const hasValidAmount = !isNaN(amount) && amount > 0
+    const { selectedOrder, reasonInput } = this.data
     const hasValidReason = reasonInput.trim().length >= MIN_REASON_LENGTH
-    const notExceedMax = !hasOrder || (amount * 100) <= selectedOrder!.amount
 
     this.setData({
-      canSubmit: hasOrder && hasValidAmount && hasValidReason && notExceedMax
+      canSubmit: !!selectedOrder && selectedOrder.amount > 0 && hasValidReason
     })
   },
 
   async onSubmit() {
     if (this.data.submitting || !this.data.canSubmit || !this.data.selectedOrder) return
-
-    const amountFen = Math.round(parseFloat(this.data.amountInput) * 100)
-
-    if (amountFen > this.data.selectedOrder.amount) {
-      wx.showToast({ title: '金额不能超过订单总额', icon: 'none' })
-      return
-    }
 
     this.setData({ submitting: true })
 
@@ -183,7 +227,7 @@ Page({
       const result = await claimManagementService.submitClaim({
         order_id: this.data.selectedOrder.id,
         claim_type: this.data.claimType,
-        claim_amount: amountFen,
+        claim_amount: this.data.selectedOrder.amount,
         claim_reason: this.data.reasonInput.trim()
       })
 
@@ -191,13 +235,12 @@ Page({
 
       this.setData({
         submitResult: result,
-        resultIcon: presentation.icon,
-        resultColor: presentation.color,
+        resultTheme: presentation.theme,
         resultTitle: presentation.title,
         resultSummary: presentation.summary,
         approvedAmountDisplay:
           result.approved_amount !== null && result.approved_amount !== undefined
-            ? formatAmount(result.approved_amount)
+            ? formatClaimAmount(result.approved_amount)
             : '',
         submitting: false
       })

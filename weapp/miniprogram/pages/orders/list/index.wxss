@@ -18,7 +18,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24rpx 16rpx;
+  padding: 0 0 16rpx;
 }
 
 .batch-tip {
@@ -29,7 +29,7 @@
 }
 
 .order-list {
-  padding: 24rpx;
+  padding-top: var(--spacer-md);
 }
 
 .inline-banner {
@@ -70,12 +70,15 @@
   padding: 24rpx;
   margin-bottom: 24rpx;
   box-shadow: var(--shadow-sm);
-  transition: all 0.2s ease;
+  transition: opacity 0.16s ease;
+}
+
+.order-card-main {
+  border-radius: var(--radius-sm);
 }
 
 .order-card-hover {
-  transform: scale(0.99);
-  background-color: var(--td-bg-color-page);
+  opacity: 0.72;
 }
 
 /* Header */
@@ -92,6 +95,15 @@
   font-size: 30rpx;
   font-weight: 600;
   color: var(--td-text-color-primary);
+}
+
+.merchant-link {
+  max-width: 70%;
+  transition: opacity 0.16s ease;
+}
+
+.merchant-info-hover {
+  opacity: 0.72;
 }
 
 .merchant-name {
