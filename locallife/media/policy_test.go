@@ -38,7 +38,7 @@ func TestPolicy_AllCategoriesAreRegistered(t *testing.T) {
 		CategoryTableImage, CategoryReviewImage, CategoryAvatar,
 		CategoryBusinessLicense, CategoryFoodPermit, CategoryIDCardFront,
 		CategoryIDCardBack, CategoryHealthCert, CategoryGroupLicense,
-		CategorySafetyReportImage,
+		CategorySafetyReportImage, CategoryMerchantCancelWithdrawMaterial,
 	}
 	for _, cat := range known {
 		_, _, err := p.Lookup(cat)
@@ -57,7 +57,7 @@ func TestPolicy_VisibilityMapping(t *testing.T) {
 	privateCats := []Category{
 		CategoryIDCardFront,
 		CategoryIDCardBack, CategoryHealthCert, CategoryGroupLicense,
-		CategorySafetyReportImage,
+		CategorySafetyReportImage, CategoryMerchantCancelWithdrawMaterial,
 	}
 
 	for _, cat := range publicCats {
@@ -139,9 +139,9 @@ func TestPolicy_ObjectKey(t *testing.T) {
 	})
 
 	t.Run("private category uses correct prefix", func(t *testing.T) {
-		key, err := p.ObjectKey(CategoryBusinessLicense, 99, "up_lic", "jpg", fixedTime)
+		key, err := p.ObjectKey(CategoryMerchantCancelWithdrawMaterial, 99, "up_cancel", "jpg", fixedTime)
 		require.NoError(t, err)
-		require.Equal(t, "merchant/license/business/99/20260318/up_lic.jpg", key)
+		require.Equal(t, "merchant/cancel_withdraw/99/20260318/up_cancel.jpg", key)
 	})
 
 	t.Run("storefront category uses merchant storefront prefix", func(t *testing.T) {
@@ -165,6 +165,12 @@ func TestPolicy_BucketFor(t *testing.T) {
 		bucket, err := p.BucketFor(CategoryBusinessLicense, ls)
 		require.NoError(t, err)
 		require.Equal(t, ls.PublicBucket(), bucket)
+	})
+
+	t.Run("cancel withdraw material category returns private bucket", func(t *testing.T) {
+		bucket, err := p.BucketFor(CategoryMerchantCancelWithdrawMaterial, ls)
+		require.NoError(t, err)
+		require.Equal(t, ls.PrivateBucket(), bucket)
 	})
 
 	t.Run("unknown category returns error", func(t *testing.T) {

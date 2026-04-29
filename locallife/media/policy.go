@@ -10,21 +10,22 @@ import (
 type Category string
 
 const (
-	CategoryMerchantLogo      Category = "logo"
-	CategoryStorefrontImage   Category = "storefront"
-	CategoryEnvironmentImage  Category = "environment"
-	CategoryDishImage         Category = "dish"
-	CategoryComboImage        Category = "combo"
-	CategoryTableImage        Category = "table"
-	CategoryReviewImage       Category = "review"
-	CategoryAvatar            Category = "avatar"
-	CategoryBusinessLicense   Category = "business_license"
-	CategoryFoodPermit        Category = "food_permit"
-	CategoryIDCardFront       Category = "id_card_front"
-	CategoryIDCardBack        Category = "id_card_back"
-	CategoryHealthCert        Category = "health_cert"
-	CategoryGroupLicense      Category = "group_license"
-	CategorySafetyReportImage Category = "safety_report"
+	CategoryMerchantLogo                   Category = "logo"
+	CategoryStorefrontImage                Category = "storefront"
+	CategoryEnvironmentImage               Category = "environment"
+	CategoryDishImage                      Category = "dish"
+	CategoryComboImage                     Category = "combo"
+	CategoryTableImage                     Category = "table"
+	CategoryReviewImage                    Category = "review"
+	CategoryAvatar                         Category = "avatar"
+	CategoryBusinessLicense                Category = "business_license"
+	CategoryFoodPermit                     Category = "food_permit"
+	CategoryIDCardFront                    Category = "id_card_front"
+	CategoryIDCardBack                     Category = "id_card_back"
+	CategoryHealthCert                     Category = "health_cert"
+	CategoryGroupLicense                   Category = "group_license"
+	CategorySafetyReportImage              Category = "safety_report"
+	CategoryMerchantCancelWithdrawMaterial Category = "merchant_cancel_withdraw"
 )
 
 // Visibility 对应 media_assets.visibility 列。
@@ -44,21 +45,22 @@ type categoryMeta struct {
 
 // registry 是全局 category 策略表。
 var registry = map[Category]categoryMeta{
-	CategoryMerchantLogo:      {VisibilityPublic, "merchant/logo", imageTypes},
-	CategoryStorefrontImage:   {VisibilityPublic, "merchant/storefront", imageTypes},
-	CategoryEnvironmentImage:  {VisibilityPublic, "merchant/environment", imageTypes},
-	CategoryDishImage:         {VisibilityPublic, "merchant/dish", imageTypes},
-	CategoryComboImage:        {VisibilityPublic, "merchant/combo", imageTypes},
-	CategoryTableImage:        {VisibilityPublic, "merchant/table", imageTypes},
-	CategoryReviewImage:       {VisibilityPublic, "user/review", imageTypes},
-	CategoryAvatar:            {VisibilityPublic, "user/avatar", imageTypes},
-	CategoryBusinessLicense:   {VisibilityPublic, "merchant/license/business", imageTypes},
-	CategoryFoodPermit:        {VisibilityPublic, "merchant/license/food", imageTypes},
-	CategoryIDCardFront:       {VisibilityPrivate, "id_card/front", imageTypes},
-	CategoryIDCardBack:        {VisibilityPrivate, "id_card/back", imageTypes},
-	CategoryHealthCert:        {VisibilityPrivate, "rider/health_cert", imageTypes},
-	CategoryGroupLicense:      {VisibilityPrivate, "group/license", imageTypes},
-	CategorySafetyReportImage: {VisibilityPrivate, "operator/safety", imageTypes},
+	CategoryMerchantLogo:                   {VisibilityPublic, "merchant/logo", imageTypes},
+	CategoryStorefrontImage:                {VisibilityPublic, "merchant/storefront", imageTypes},
+	CategoryEnvironmentImage:               {VisibilityPublic, "merchant/environment", imageTypes},
+	CategoryDishImage:                      {VisibilityPublic, "merchant/dish", imageTypes},
+	CategoryComboImage:                     {VisibilityPublic, "merchant/combo", imageTypes},
+	CategoryTableImage:                     {VisibilityPublic, "merchant/table", imageTypes},
+	CategoryReviewImage:                    {VisibilityPublic, "user/review", imageTypes},
+	CategoryAvatar:                         {VisibilityPublic, "user/avatar", imageTypes},
+	CategoryBusinessLicense:                {VisibilityPublic, "merchant/license/business", imageTypes},
+	CategoryFoodPermit:                     {VisibilityPublic, "merchant/license/food", imageTypes},
+	CategoryIDCardFront:                    {VisibilityPrivate, "id_card/front", imageTypes},
+	CategoryIDCardBack:                     {VisibilityPrivate, "id_card/back", imageTypes},
+	CategoryHealthCert:                     {VisibilityPrivate, "rider/health_cert", imageTypes},
+	CategoryGroupLicense:                   {VisibilityPrivate, "group/license", imageTypes},
+	CategorySafetyReportImage:              {VisibilityPrivate, "operator/safety", imageTypes},
+	CategoryMerchantCancelWithdrawMaterial: {VisibilityPrivate, "merchant/cancel_withdraw", imageTypes},
 }
 
 var imageTypes = []string{
