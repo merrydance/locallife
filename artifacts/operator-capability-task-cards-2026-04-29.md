@@ -423,6 +423,11 @@ weapp 范围：
 - 重复 resolve 有稳定业务响应或幂等结果。
 - 不重复清理非本案件拥有的暂停原因。
 
+2026-04-29 关闭进展：
+
+- 重复结案稳定返回业务错误 `already resolved`，不会再次执行恢复事务。
+- 集成测试在首轮结案后追加重复 resolve，确认商户仍保持已恢复状态且不会重复清理。
+
 ### OP-CAP-09B 食安跨区域权限回归
 
 风险：G3，商户暂停/恢复 + 区域权限。
@@ -433,6 +438,11 @@ weapp 范围：
 
 - 测试覆盖列表、详情、investigate、resolve 的跨区域拒绝。
 
+2026-04-29 关闭进展：
+
+- 列表继续通过 `ListFoodSafetyCasesByRegion` 只查当前运营商区域。
+- 已补充详情、investigate、resolve 跨区域 403 回归，防止跨区查看或处置。
+
 ### OP-CAP-09C 食安调查材料缺失回归
 
 风险：G3，恢复门槛。
@@ -442,6 +452,11 @@ weapp 范围：
 验收标准：
 
 - 测试覆盖缺关键材料时的业务错误和状态不变。
+
+2026-04-29 关闭进展：
+
+- 已有 `TestResolveOperatorFoodSafetyCase_RejectsMissingInvestigationReport` 覆盖缺调查报告时拒绝结案且不进入恢复事务。
+- `UpdateFoodSafetyCaseInvestigation` 增加 `status <> 'resolved'` 条件，补上并发结案后 investigate 不能把案件写回调查中的状态保护。
 
 ### OP-CAP-09D 食安非食安暂停保护回归
 
@@ -454,11 +469,20 @@ weapp 范围：
 - 保留既有测试。
 - 覆盖商户、外卖、订单维度的非食安暂停不被误恢复。
 
+2026-04-29 关闭进展：
+
+- 保留并扩展 `TestFoodSafetyCaseResolutionDoesNotClearNonFoodSafetySuspension`：商户级暂停、外卖暂停和订单级人工暂停被其他流程接管后，食安结案不会误恢复或清空这些非食安状态。
+
 ### OP-CAP-09E 食安只读/状态页预案
 
 风险：G2/G3，weapp 承接高风险状态。
 
 目标：若未来继续承接 operator 食安案件页面，详情页必须区分处理中、失败、已恢复、不可恢复状态。
+
+2026-04-29 关闭进展：
+
+- 当前后端食安案件只暴露 `merchant-suspended`、`investigating`、`resolved` 三种状态；weapp 仅映射这三种真实状态，已结案详情进入只读结果展示，加载失败走页面错误态。
+- 暂未新增“失败/不可恢复”前端状态；后续若后端新增对应枚举，weapp 需要先建 ViewState 再承接，不能用文案兜底伪造状态。
 
 验收标准：
 

@@ -169,6 +169,22 @@ func TestFoodSafetyCaseClosedLoopIntegration(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, profileAfterResolve.IsSuspended)
 	require.False(t, profileAfterResolve.IsTakeoutSuspended)
+
+	duplicateRecorder := resolveOperatorFoodSafetyCaseRawIntegration(
+		t,
+		server,
+		operatorUser.ID,
+		*triggerResp.CaseID,
+		investigationReport,
+		merchantRectificationReport,
+		resolution,
+	)
+	require.Equal(t, http.StatusBadRequest, duplicateRecorder.Code)
+	require.Contains(t, duplicateRecorder.Body.String(), "already resolved")
+
+	merchantAfterDuplicateResolve, err := store.GetMerchant(ctx, merchant.ID)
+	require.NoError(t, err)
+	require.Equal(t, "active", merchantAfterDuplicateResolve.Status)
 }
 
 func TestFoodSafetyReportDuplicateOrderReusesOpenIncident(t *testing.T) {
@@ -242,6 +258,7 @@ func TestFoodSafetyCaseResolutionDoesNotClearNonFoodSafetySuspension(t *testing.
 	}
 
 	var triggerResp foodSafetyReportAPIResponse
+	activeOrder := createIntegrationActiveFoodSafetyTakeoutOrder(t, store, reporters[0].ID, merchant.ID, sharedDish, addresses[0], "manual-order-guard")
 	for idx, order := range targetOrders {
 		resp := reportFoodSafetyIntegration(t, server, reporters[idx].ID, merchant.ID, order.ID)
 		if idx == len(targetOrders)-1 {
@@ -256,12 +273,25 @@ func TestFoodSafetyCaseResolutionDoesNotClearNonFoodSafetySuspension(t *testing.
 	updatedCase := investigateOperatorFoodSafetyCaseIntegration(t, server, operatorUser.ID, *triggerResp.CaseID, investigationReport)
 	require.Equal(t, "investigating", updatedCase.Status)
 
+	pausedOrder, err := store.GetOrder(ctx, activeOrder.ID)
+	require.NoError(t, err)
+	require.Equal(t, db.OrderExceptionStateFoodSafetyPaused, pausedOrder.ExceptionState.String)
+
 	_, err = integrationPool.Exec(ctx, `
 		UPDATE merchant_profiles
 		SET suspend_reason = 'manual compliance hold',
 		    takeout_suspend_reason = 'manual compliance hold'
 		WHERE merchant_id = $1
 	`, merchant.ID)
+	require.NoError(t, err)
+
+	_, err = integrationPool.Exec(ctx, `
+		UPDATE orders
+		SET exception_state = 'manual_paused',
+		    status_hint = '人工合规暂停履约',
+		    claim_channel = 'manual_review'
+		WHERE id = $1
+	`, activeOrder.ID)
 	require.NoError(t, err)
 
 	_, err = integrationPool.Exec(ctx, `UPDATE merchants SET status = 'suspended' WHERE id = $1`, merchant.ID)
@@ -288,6 +318,12 @@ func TestFoodSafetyCaseResolutionDoesNotClearNonFoodSafetySuspension(t *testing.
 	require.True(t, profileAfterResolve.IsTakeoutSuspended)
 	require.Equal(t, "manual compliance hold", strings.TrimSpace(profileAfterResolve.SuspendReason.String))
 	require.Equal(t, "manual compliance hold", strings.TrimSpace(profileAfterResolve.TakeoutSuspendReason.String))
+
+	orderAfterResolve, err := store.GetOrder(ctx, activeOrder.ID)
+	require.NoError(t, err)
+	require.Equal(t, "manual_paused", strings.TrimSpace(orderAfterResolve.ExceptionState.String))
+	require.Equal(t, "人工合规暂停履约", strings.TrimSpace(orderAfterResolve.StatusHint.String))
+	require.Equal(t, "manual_review", strings.TrimSpace(orderAfterResolve.ClaimChannel.String))
 }
 
 func createIntegrationOperator(t *testing.T, store *db.SQLStore, userID, regionID int64) db.Operator {
@@ -376,6 +412,45 @@ func createIntegrationFoodSafetyOrder(t *testing.T, store *db.SQLStore, userID, 
 	return updatedOrder
 }
 
+func createIntegrationActiveFoodSafetyTakeoutOrder(t *testing.T, store *db.SQLStore, userID, merchantID int64, dish db.Dish, address db.UserAddress, suffix string) db.Order {
+	t.Helper()
+
+	result, err := store.CreateOrderTx(context.Background(), db.CreateOrderTxParams{
+		CreateOrderParams: db.CreateOrderParams{
+			OrderNo:                      fmt.Sprintf("fs-active-%s-%s", suffix, util.RandomString(10)),
+			UserID:                       userID,
+			MerchantID:                   merchantID,
+			OrderType:                    db.OrderTypeTakeout,
+			AddressID:                    pgtype.Int8{Int64: address.ID, Valid: true},
+			DeliveryContactNameSnapshot:  pgtype.Text{String: address.ContactName, Valid: true},
+			DeliveryContactPhoneSnapshot: pgtype.Text{String: address.ContactPhone, Valid: true},
+			DeliveryAddressSnapshot:      pgtype.Text{String: address.DetailAddress, Valid: true},
+			DeliveryLongitudeSnapshot:    address.Longitude,
+			DeliveryLatitudeSnapshot:     address.Latitude,
+			DeliveryFee:                  0,
+			Subtotal:                     dish.Price,
+			DiscountAmount:               0,
+			DeliveryFeeDiscount:          0,
+			TotalAmount:                  dish.Price,
+			Status:                       db.OrderStatusPaid,
+			FulfillmentStatus:            "pending",
+			Notes:                        pgtype.Text{String: "food safety active order integration", Valid: true},
+		},
+		Items: []db.CreateOrderItemParams{
+			{
+				DishID:    pgtype.Int8{Int64: dish.ID, Valid: true},
+				Name:      dish.Name,
+				UnitPrice: dish.Price,
+				Quantity:  1,
+				Subtotal:  dish.Price,
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	return result.Order
+}
+
 func reportFoodSafetyIntegration(t *testing.T, server *api.Server, userID, merchantID, orderID int64) foodSafetyReportAPIResponse {
 	t.Helper()
 
@@ -461,6 +536,17 @@ func investigateOperatorFoodSafetyCaseIntegration(t *testing.T, server *api.Serv
 func resolveOperatorFoodSafetyCaseIntegration(t *testing.T, server *api.Server, operatorUserID, caseID int64, investigationReport, merchantRectificationReport, resolution string) operatorFoodSafetyCaseItem {
 	t.Helper()
 
+	recorder := resolveOperatorFoodSafetyCaseRawIntegration(t, server, operatorUserID, caseID, investigationReport, merchantRectificationReport, resolution)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response operatorFoodSafetyCaseItem
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	return response
+}
+
+func resolveOperatorFoodSafetyCaseRawIntegration(t *testing.T, server *api.Server, operatorUserID, caseID int64, investigationReport, merchantRectificationReport, resolution string) *httptest.ResponseRecorder {
+	t.Helper()
+
 	body, err := json.Marshal(map[string]any{
 		"investigation_report":          investigationReport,
 		"merchant_rectification_report": merchantRectificationReport,
@@ -476,9 +562,5 @@ func resolveOperatorFoodSafetyCaseIntegration(t *testing.T, server *api.Server, 
 
 	recorder := httptest.NewRecorder()
 	server.Handler().ServeHTTP(recorder, req)
-	require.Equal(t, http.StatusOK, recorder.Code)
-
-	var response operatorFoodSafetyCaseItem
-	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-	return response
+	return recorder
 }

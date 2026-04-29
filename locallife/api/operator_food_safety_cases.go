@@ -341,6 +341,10 @@ func (server *Server) investigateOperatorFoodSafetyCase(ctx *gin.Context) {
 		InvestigationReport: pgtype.Text{String: investigationReport, Valid: true},
 	})
 	if err != nil {
+		if isNotFoundError(err) || errors.Is(err, db.ErrRecordNotFound) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("resolved case cannot be investigated again")))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}

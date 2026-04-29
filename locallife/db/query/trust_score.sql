@@ -417,6 +417,7 @@ SET status = 'investigating',
     investigation_report = $2,
     updated_at = NOW()
 WHERE id = $1
+  AND status <> 'resolved'
 RETURNING id, merchant_id, region_id, primary_product_key, primary_product_label, status, trigger_reason, investigation_report, merchant_rectification_report, resolution, suspended_at, resolved_at, created_at, updated_at;
 
 -- name: ResolveFoodSafetyCase :one
