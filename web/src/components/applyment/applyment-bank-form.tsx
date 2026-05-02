@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { getUserFacingErrorMessage } from "@/lib/user-facing-errors";
 import type {
   ApplymentAccountType,
   ApplymentBankListResponse,
@@ -154,7 +155,13 @@ export function ApplymentBankForm({
         );
         setBanksByType((prev) => ({ ...prev, [accountType]: response.banks }));
       } catch (error: unknown) {
-        toast.error(error instanceof Error ? error.message : "加载银行列表失败");
+        console.error("Failed to load applyment bank list", error);
+        toast.error(
+          getUserFacingErrorMessage(
+            error,
+            "加载开户银行列表失败，请稍后重试；如持续失败请联系平台管理员处理。",
+          ),
+        );
       } finally {
         setLoadingBanks(false);
       }
@@ -173,7 +180,13 @@ export function ApplymentBankForm({
       );
       setProvinces(response.provinces);
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "加载省份列表失败");
+      console.error("Failed to load applyment province list", error);
+      toast.error(
+        getUserFacingErrorMessage(
+          error,
+          "加载开户地区列表失败，请稍后重试；如持续失败请联系平台管理员处理。",
+        ),
+      );
     } finally {
       setLoadingProvinces(false);
     }
@@ -190,7 +203,13 @@ export function ApplymentBankForm({
       );
       setCities(response.cities);
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "加载城市列表失败");
+      console.error("Failed to load applyment city list", error);
+      toast.error(
+        getUserFacingErrorMessage(
+          error,
+          "加载开户城市列表失败，请稍后重试；如持续失败请联系平台管理员处理。",
+        ),
+      );
     } finally {
       setLoadingCities(false);
     }
@@ -215,7 +234,13 @@ export function ApplymentBankForm({
         bank_alias_code: response.bank_alias_code || prev.bank_alias_code,
       }));
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "加载支行列表失败");
+      console.error("Failed to load applyment branch list", error);
+      toast.error(
+        getUserFacingErrorMessage(
+          error,
+          "加载开户支行列表失败，请稍后重试；如持续失败请联系平台管理员处理。",
+        ),
+      );
     } finally {
       setLoadingBranches(false);
     }
@@ -304,7 +329,13 @@ export function ApplymentBankForm({
         setRecognitionHint("暂时无法识别这张卡的开户银行，请在下方手动搜索选择。");
       }
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "识别开户银行失败");
+      console.error("Failed to recognize applyment bank", error);
+      toast.error(
+        getUserFacingErrorMessage(
+          error,
+          "识别开户银行失败，请手动搜索选择；如持续失败请联系平台管理员处理。",
+        ),
+      );
     } finally {
       setRecognizingBank(false);
     }

@@ -24,6 +24,7 @@ export interface MediaImageProps extends Omit<ImageProps, "src"> {
  * - 加载出错时回退到占位图
  */
 export function MediaImage({ src, alt = "", variant: _variant, ...rest }: MediaImageProps) {
+  void _variant;
   const resolved = getMediaDisplayUrl(src) || PLACEHOLDER;
   const [imgSrc, setImgSrc] = useState(resolved);
 

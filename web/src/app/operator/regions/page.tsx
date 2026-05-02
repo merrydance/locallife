@@ -157,7 +157,7 @@ export default function OperatorRegionsPage() {
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "城市列表加载失败");
     }
-  }, [cityOptions.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cityOptions.length]);
 
   const loadDistricts = async (cityId: number) => {
     setDistrictLoading(true);

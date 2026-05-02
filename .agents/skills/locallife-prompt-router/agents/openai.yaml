@@ -1,0 +1,4 @@
+interface:
+  display_name: "LocalLife Prompt Router"
+  short_description: "Route LocalLife prompt files"
+  default_prompt: "Use $locallife-prompt-router to choose the right LocalLife instructions, prompts, standards, and validation path."
