@@ -12,6 +12,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	mockordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/mock"
 	"github.com/merrydance/locallife/worker"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -39,11 +40,12 @@ func TestProcessTaskCombinedPaymentOrderTimeout_RemotePaidReconcilesInsteadOfClo
 		ExpiresAt:         pgtype.Timestamptz{Time: time.Now().Add(-1 * time.Minute), Valid: true},
 	}
 	pendingPaymentOrder := db.PaymentOrder{
-		ID:           3001,
-		OutTradeNo:   "PO_REMOTE_PAID_1",
-		Amount:       5000,
-		Status:       "pending",
-		BusinessType: "order",
+		ID:             3001,
+		OutTradeNo:     "PO_REMOTE_PAID_1",
+		Amount:         5000,
+		Status:         "pending",
+		PaymentChannel: db.PaymentChannelEcommerce,
+		BusinessType:   "order",
 	}
 	paidPaymentOrder := pendingPaymentOrder
 	paidPaymentOrder.Status = "paid"
@@ -57,6 +59,7 @@ func TestProcessTaskCombinedPaymentOrderTimeout_RemotePaidReconcilesInsteadOfClo
 		Status:            combinedOrder.Status,
 		SubOrders:         subOrders,
 	}, nil)
+	store.EXPECT().GetPaymentOrderByOutTradeNo(gomock.Any(), "PO_REMOTE_PAID_1").Return(pendingPaymentOrder, nil)
 	ecommerceClient.EXPECT().QueryCombineOrder(gomock.Any(), "CP_REMOTE_PAID_1").Return(&wechatcontracts.CombineQueryResponse{
 		CombineOutTradeNo: "CP_REMOTE_PAID_1",
 		SubOrders: []wechatcontracts.CombineSubOrderResult{{
@@ -146,11 +149,12 @@ func TestProcessTaskCombinedPaymentOrderTimeout_ClosedMainOrderRemotePaidReconci
 		ExpiresAt:         pgtype.Timestamptz{Time: time.Now().Add(-1 * time.Minute), Valid: true},
 	}
 	pendingPaymentOrder := db.PaymentOrder{
-		ID:           3002,
-		OutTradeNo:   "PO_REMOTE_PAID_2",
-		Amount:       6800,
-		Status:       "pending",
-		BusinessType: "order",
+		ID:             3002,
+		OutTradeNo:     "PO_REMOTE_PAID_2",
+		Amount:         6800,
+		Status:         "pending",
+		PaymentChannel: db.PaymentChannelEcommerce,
+		BusinessType:   "order",
 	}
 	paidPaymentOrder := pendingPaymentOrder
 	paidPaymentOrder.Status = "paid"
@@ -164,6 +168,7 @@ func TestProcessTaskCombinedPaymentOrderTimeout_ClosedMainOrderRemotePaidReconci
 		Status:            combinedOrder.Status,
 		SubOrders:         subOrders,
 	}, nil)
+	store.EXPECT().GetPaymentOrderByOutTradeNo(gomock.Any(), "PO_REMOTE_PAID_2").Return(pendingPaymentOrder, nil)
 	ecommerceClient.EXPECT().QueryCombineOrder(gomock.Any(), "CP_REMOTE_PAID_2").Return(&wechatcontracts.CombineQueryResponse{
 		CombineOutTradeNo: "CP_REMOTE_PAID_2",
 		SubOrders: []wechatcontracts.CombineSubOrderResult{{
@@ -243,6 +248,7 @@ func TestProcessTaskCombinedPaymentOrderTimeout_RemotePaidReservationReconcilesT
 
 	store.EXPECT().GetCombinedPaymentOrderByOutTradeNo(gomock.Any(), combinedOrder.CombineOutTradeNo).Return(combinedOrder, nil)
 	store.EXPECT().GetCombinedPaymentOrderWithSubOrders(gomock.Any(), combinedOrder.ID).Return(db.GetCombinedPaymentOrderWithSubOrdersRow{ID: combinedOrder.ID, CombineOutTradeNo: combinedOrder.CombineOutTradeNo, Status: combinedOrder.Status, SubOrders: subOrders}, nil)
+	store.EXPECT().GetPaymentOrderByOutTradeNo(gomock.Any(), pendingPaymentOrder.OutTradeNo).Return(pendingPaymentOrder, nil)
 	ecommerceClient.EXPECT().QueryCombineOrder(gomock.Any(), combinedOrder.CombineOutTradeNo).Return(&wechatcontracts.CombineQueryResponse{
 		CombineOutTradeNo: combinedOrder.CombineOutTradeNo,
 		SubOrders: []wechatcontracts.CombineSubOrderResult{{
@@ -278,6 +284,64 @@ func TestProcessTaskCombinedPaymentOrderTimeout_RemotePaidReservationReconcilesT
 	store.EXPECT().UpdateCombinedPaymentOrderToPaid(gomock.Any(), db.UpdateCombinedPaymentOrderToPaidParams{ID: combinedOrder.ID, TransactionID: pgtype.Text{Valid: false}}).Return(db.CombinedPaymentOrder{ID: combinedOrder.ID, Status: "paid"}, nil)
 
 	task := asynq.NewTask(worker.TaskCombinedPaymentOrderTimeout, mustMarshalJSON(t, worker.PayloadCombinedPaymentOrderTimeout{CombineOutTradeNo: combinedOrder.CombineOutTradeNo}))
+	err = processor.ProcessTaskCombinedPaymentOrderTimeout(context.Background(), task)
+	require.NoError(t, err)
+}
+
+func TestProcessTaskCombinedPaymentOrderTimeout_RoutesHistoricalEcommerceBySubOrderChannel(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
+	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
+	processor.SetOrdinaryServiceProviderClient(ordinaryClient)
+
+	combinedOrder := db.CombinedPaymentOrder{
+		ID:                2004,
+		CombineOutTradeNo: "CP_ECOMMERCE_COLD_1",
+		Status:            "pending",
+		ExpiresAt:         pgtype.Timestamptz{Time: time.Now().Add(-1 * time.Minute), Valid: true},
+	}
+	subOrders, err := json.Marshal([]map[string]any{{
+		"sub_mchid":    "1900004444",
+		"out_trade_no": "PO_ECOMMERCE_COLD_1",
+	}})
+	require.NoError(t, err)
+	paymentOrder := db.PaymentOrder{
+		ID:             3004,
+		OutTradeNo:     "PO_ECOMMERCE_COLD_1",
+		PaymentChannel: db.PaymentChannelEcommerce,
+		Amount:         3200,
+		Status:         "pending",
+		BusinessType:   "order",
+	}
+
+	store.EXPECT().GetCombinedPaymentOrderByOutTradeNo(gomock.Any(), combinedOrder.CombineOutTradeNo).Return(combinedOrder, nil)
+	store.EXPECT().GetCombinedPaymentOrderWithSubOrders(gomock.Any(), combinedOrder.ID).Return(db.GetCombinedPaymentOrderWithSubOrdersRow{
+		ID:                combinedOrder.ID,
+		CombineOutTradeNo: combinedOrder.CombineOutTradeNo,
+		Status:            combinedOrder.Status,
+		SubOrders:         subOrders,
+	}, nil)
+	store.EXPECT().GetPaymentOrderByOutTradeNo(gomock.Any(), paymentOrder.OutTradeNo).Return(paymentOrder, nil)
+	ecommerceClient.EXPECT().QueryCombineOrder(gomock.Any(), combinedOrder.CombineOutTradeNo).Return(&wechatcontracts.CombineQueryResponse{
+		CombineOutTradeNo: combinedOrder.CombineOutTradeNo,
+		SubOrders: []wechatcontracts.CombineSubOrderResult{{
+			SubMchID:   "1900004444",
+			OutTradeNo: paymentOrder.OutTradeNo,
+			TradeState: "NOTPAY",
+		}},
+	}, nil)
+	ecommerceClient.EXPECT().CloseCombineOrder(gomock.Any(), combinedOrder.CombineOutTradeNo, gomock.Any()).Return(nil)
+	store.EXPECT().UpdateCombinedPaymentOrderToClosed(gomock.Any(), combinedOrder.ID).Return(db.CombinedPaymentOrder{ID: combinedOrder.ID, Status: "closed"}, nil)
+	store.EXPECT().GetPaymentOrderByOutTradeNo(gomock.Any(), paymentOrder.OutTradeNo).Return(paymentOrder, nil)
+	store.EXPECT().UpdatePaymentOrderToClosed(gomock.Any(), paymentOrder.ID).Return(db.PaymentOrder{ID: paymentOrder.ID, Status: "closed"}, nil)
+
+	task := asynq.NewTask(worker.TaskCombinedPaymentOrderTimeout, mustMarshalJSON(t, worker.PayloadCombinedPaymentOrderTimeout{
+		CombineOutTradeNo: combinedOrder.CombineOutTradeNo,
+	}))
 	err = processor.ProcessTaskCombinedPaymentOrderTimeout(context.Background(), task)
 	require.NoError(t, err)
 }

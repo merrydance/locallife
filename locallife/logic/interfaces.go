@@ -8,6 +8,7 @@ import (
 	"github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/rules"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 )
 
 type OrderCommandService interface {
@@ -47,9 +48,13 @@ type PaymentFacade interface {
 
 	CreateRefund(ctx context.Context, req *wechatcontracts.DirectRefundRequest) (*wechatcontracts.DirectRefundResponse, error)
 	CreateEcommerceRefund(ctx context.Context, req *wechatcontracts.EcommerceRefundRequest) (*wechatcontracts.EcommerceRefundCreateResponse, error)
+	CreateOrdinaryServiceProviderRefund(ctx context.Context, req ospcontracts.RefundCreateRequest) (*ospcontracts.RefundResponse, error)
+	OrdinaryServiceProviderRefundNotifyURL() string
+	CreateOrdinaryServiceProviderProfitSharingReturn(ctx context.Context, req ospcontracts.ProfitSharingReturnRequest) (*ospcontracts.ProfitSharingReturnResponse, error)
 	ApplyEcommerceAbnormalRefund(ctx context.Context, req *wechatcontracts.EcommerceAbnormalRefundRequest) (*wechatcontracts.EcommerceRefundQueryResponse, error)
 	CreateProfitSharingReturn(ctx context.Context, req *wechatcontracts.ProfitSharingReturnRequest) (*wechatcontracts.ProfitSharingReturnResponse, error)
 	SpMchID() string
+	OrdinaryServiceProviderMchID() string
 }
 
 type RefundOrchestrator interface {

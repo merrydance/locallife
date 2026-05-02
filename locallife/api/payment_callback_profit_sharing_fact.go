@@ -78,14 +78,14 @@ func profitSharingFactAmount(queryResp *wechatcontracts.ProfitSharingQueryRespon
 	return paymentFactInt64Ptr(amount)
 }
 
-func (server *Server) recordProfitSharingCallbackFact(ctx context.Context, notification wechat.PaymentNotification, profitSharingOrder db.ProfitSharingOrder, resource *wechatcontracts.ProfitSharingNotification, queryResp *wechatcontracts.ProfitSharingQueryResponse, finalResult, finalFailReason string) (*db.ExternalPaymentFactApplication, error) {
+func (server *Server) recordProfitSharingCallbackFact(ctx context.Context, channel string, notification wechat.PaymentNotification, profitSharingOrder db.ProfitSharingOrder, resource *wechatcontracts.ProfitSharingNotification, queryResp *wechatcontracts.ProfitSharingQueryResponse, finalResult, finalFailReason string) (*db.ExternalPaymentFactApplication, error) {
 	if server.paymentFactService == nil || resource == nil || queryResp == nil {
 		return nil, nil
 	}
 	occurredAt := parseWechatFactTime(resource.SuccessTime)
 	result, err := server.paymentFactService.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
 		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              db.PaymentChannelEcommerce,
+		Channel:              channel,
 		Capability:           db.ExternalPaymentCapabilityProfitSharing,
 		FactSource:           db.ExternalPaymentFactSourceCallback,
 		SourceEventID:        paymentFactStringPtr(notification.ID),
@@ -103,7 +103,7 @@ func (server *Server) recordProfitSharingCallbackFact(ctx context.Context, notif
 		OccurredAt:           occurredAt,
 		UpstreamUpdatedAt:    occurredAt,
 		RawResource:          profitSharingFactResource(resource, queryResp, finalResult, finalFailReason),
-		DedupeKey:            fmt.Sprintf("wechat:callback:profit_sharing:%s", notification.ID),
+		DedupeKey:            fmt.Sprintf("wechat:callback:%s:profit_sharing:%s", channel, notification.ID),
 		Application: &logic.ExternalPaymentFactApplicationTarget{
 			Consumer:           paymentFactConsumerProfitSharingDomain,
 			BusinessObjectType: paymentFactBusinessObjectProfitSharingOrder,

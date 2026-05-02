@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/http"
@@ -13,9 +14,341 @@ import (
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
+
+type fakeOrdinaryPaymentClient struct {
+	createPaymentRequest         *ospcontracts.PaymentPrepayRequest
+	createPaymentResponse        *ospcontracts.PaymentPrepayResponse
+	createPaymentErr             error
+	queryPaymentRequest          *ospcontracts.PaymentQueryRequest
+	queryPaymentResponse         *ospcontracts.PaymentQueryResponse
+	closePaymentRequest          *ospcontracts.PaymentCloseRequest
+	createCombinePaymentRequest  *ospcontracts.CombinePrepayRequest
+	createCombinePaymentResponse *ospcontracts.CombinePrepayResponse
+	createCombinePaymentErr      error
+	queryCombinePaymentRequest   *ospcontracts.CombineQueryRequest
+	queryCombinePaymentResponse  *ospcontracts.CombineQueryResponse
+	closeCombinePaymentRequest   *ospcontracts.CombineCloseRequest
+	closeCombinePaymentErr       error
+	createRefundRequest          *ospcontracts.RefundCreateRequest
+	createRefundResponse         *ospcontracts.RefundResponse
+	createRefundErr              error
+	closePaymentErr              error
+	createReturnRequest          *ospcontracts.ProfitSharingReturnRequest
+	createReturnResponse         *ospcontracts.ProfitSharingReturnResponse
+	createReturnErr              error
+}
+
+func (c *fakeOrdinaryPaymentClient) ServiceProviderAppID() string { return "wxsp_app" }
+func (c *fakeOrdinaryPaymentClient) ServiceProviderMchID() string { return "1900000109" }
+func (c *fakeOrdinaryPaymentClient) PaymentNotifyURL() string {
+	return "https://api.example.com/v1/webhooks/wechat-ordinary/payment-notify"
+}
+func (c *fakeOrdinaryPaymentClient) CombineNotifyURL() string {
+	return "https://api.example.com/v1/webhooks/wechat-ordinary/combine-notify"
+}
+func (c *fakeOrdinaryPaymentClient) RefundNotifyURL() string {
+	return "https://api.example.com/v1/webhooks/wechat-ordinary/refund-notify"
+}
+
+func (c *fakeOrdinaryPaymentClient) CreatePayment(_ context.Context, req ospcontracts.PaymentPrepayRequest) (*ospcontracts.PaymentPrepayResponse, error) {
+	c.createPaymentRequest = &req
+	if c.createPaymentErr != nil {
+		return nil, c.createPaymentErr
+	}
+	if c.createPaymentResponse != nil {
+		return c.createPaymentResponse, nil
+	}
+	return &ospcontracts.PaymentPrepayResponse{PrepayID: "prepay-ordinary"}, nil
+}
+
+func (c *fakeOrdinaryPaymentClient) QueryPayment(_ context.Context, req ospcontracts.PaymentQueryRequest) (*ospcontracts.PaymentQueryResponse, error) {
+	c.queryPaymentRequest = &req
+	return c.queryPaymentResponse, nil
+}
+
+func (c *fakeOrdinaryPaymentClient) ClosePayment(_ context.Context, req ospcontracts.PaymentCloseRequest) error {
+	c.closePaymentRequest = &req
+	return c.closePaymentErr
+}
+
+func (c *fakeOrdinaryPaymentClient) CreateCombinePayment(_ context.Context, req ospcontracts.CombinePrepayRequest) (*ospcontracts.CombinePrepayResponse, error) {
+	c.createCombinePaymentRequest = &req
+	if c.createCombinePaymentErr != nil {
+		return nil, c.createCombinePaymentErr
+	}
+	if c.createCombinePaymentResponse != nil {
+		return c.createCombinePaymentResponse, nil
+	}
+	return &ospcontracts.CombinePrepayResponse{PrepayID: "prepay-combine-ordinary"}, nil
+}
+
+func (c *fakeOrdinaryPaymentClient) QueryCombinePayment(_ context.Context, req ospcontracts.CombineQueryRequest) (*ospcontracts.CombineQueryResponse, error) {
+	c.queryCombinePaymentRequest = &req
+	return c.queryCombinePaymentResponse, nil
+}
+
+func (c *fakeOrdinaryPaymentClient) CloseCombinePayment(_ context.Context, req ospcontracts.CombineCloseRequest) error {
+	c.closeCombinePaymentRequest = &req
+	return c.closeCombinePaymentErr
+}
+
+func (c *fakeOrdinaryPaymentClient) CreateRefund(_ context.Context, req ospcontracts.RefundCreateRequest) (*ospcontracts.RefundResponse, error) {
+	c.createRefundRequest = &req
+	if c.createRefundErr != nil {
+		return nil, c.createRefundErr
+	}
+	if c.createRefundResponse != nil {
+		return c.createRefundResponse, nil
+	}
+	return &ospcontracts.RefundResponse{RefundID: "refund-ordinary", OutRefundNo: req.OutRefundNo}, nil
+}
+
+func (c *fakeOrdinaryPaymentClient) CreateProfitSharingReturn(_ context.Context, req ospcontracts.ProfitSharingReturnRequest) (*ospcontracts.ProfitSharingReturnResponse, error) {
+	c.createReturnRequest = &req
+	if c.createReturnErr != nil {
+		return nil, c.createReturnErr
+	}
+	if c.createReturnResponse != nil {
+		return c.createReturnResponse, nil
+	}
+	return &ospcontracts.ProfitSharingReturnResponse{
+		SubMchID:    req.SubMchID,
+		OrderID:     req.OrderID,
+		OutOrderNo:  req.OutOrderNo,
+		OutReturnNo: req.OutReturnNo,
+		ReturnID:    "return-ordinary",
+		ReturnMchID: req.ReturnMchID,
+		Amount:      req.Amount,
+		State:       ospcontracts.ProfitSharingReturnStateProcessing,
+	}, nil
+}
+
+func (c *fakeOrdinaryPaymentClient) GenerateJSAPIPayParams(prepayID string) (*ospcontracts.JSAPIPayParams, error) {
+	return &ospcontracts.JSAPIPayParams{Package: "prepay_id=" + prepayID, NonceStr: "nonce-ordinary"}, nil
+}
+
+func TestPaymentOrderServiceCreatePaymentOrder_UsesOrdinaryServiceProviderForMainBusiness(t *testing.T) {
+	input := CreatePaymentOrderInput{
+		UserID:       1001,
+		OrderID:      2001,
+		PaymentType:  paymentTypeMiniProgram,
+		BusinessType: businessTypeOrder,
+		ClientIP:     "127.0.0.1",
+	}
+	order := db.Order{
+		ID:          input.OrderID,
+		UserID:      input.UserID,
+		MerchantID:  3001,
+		OrderType:   orderTypeTakeaway,
+		Status:      "pending",
+		TotalAmount: 1000,
+	}
+	txPayment := db.PaymentOrder{
+		ID:             4002,
+		UserID:         input.UserID,
+		Status:         paymentStatusPending,
+		PaymentType:    paymentTypeMiniProgram,
+		PaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
+		Amount:         1000,
+		OutTradeNo:     "ordinary-out-trade-no",
+		Attach:         pgtype.Text{String: "order_id:2001;sub_mchid:sub-ordinary", Valid: true},
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{}
+
+	store.EXPECT().GetOrder(gomock.Any(), input.OrderID).Return(order, nil)
+	store.EXPECT().GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: input.OrderID, Valid: true},
+		BusinessType: businessTypeOrder,
+	}).Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().GetUser(gomock.Any(), input.UserID).Return(db.User{ID: input.UserID, WechatOpenid: "openid"}, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(db.Merchant{ID: order.MerchantID, Name: "Merchant A"}, nil)
+	store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreatePartnerPaymentTxParams) (db.CreatePartnerPaymentTxResult, error) {
+		require.Equal(t, "order_id:2001", arg.Attach)
+		return db.CreatePartnerPaymentTxResult{PaymentOrder: txPayment, SubMchID: "sub-ordinary"}, nil
+	})
+	store.EXPECT().UpdatePaymentOrderPrepayId(gomock.Any(), db.UpdatePaymentOrderPrepayIdParams{
+		ID:       txPayment.ID,
+		PrepayID: pgtype.Text{String: "prepay-ordinary", Valid: true},
+	}).Return(db.PaymentOrder{ID: txPayment.ID, PaymentChannel: db.PaymentChannelOrdinaryServiceProvider, PrepayID: pgtype.Text{String: "prepay-ordinary", Valid: true}}, nil)
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
+		require.Equal(t, db.PaymentChannelOrdinaryServiceProvider, arg.Channel)
+		require.Equal(t, db.ExternalPaymentCapabilityPartnerJSAPIPayment, arg.Capability)
+		require.Equal(t, db.ExternalPaymentCommandTypeCreatePayment, arg.CommandType)
+		require.Equal(t, db.ExternalPaymentBusinessOwnerOrder, arg.BusinessOwner)
+		require.Equal(t, txPayment.OutTradeNo, arg.ExternalObjectKey)
+		require.Equal(t, db.ExternalPaymentCommandStatusAccepted, arg.CommandStatus)
+		require.True(t, arg.ExternalSecondaryKey.Valid)
+		require.Equal(t, "prepay-ordinary", arg.ExternalSecondaryKey.String)
+		return db.ExternalPaymentCommand{ID: 9700}, nil
+	})
+
+	svc := NewPaymentOrderServiceWithOrdinaryServiceProvider(store, nil, ordinaryClient)
+	result, err := svc.CreatePaymentOrder(context.Background(), input)
+
+	require.NoError(t, err)
+	require.Equal(t, db.PaymentChannelOrdinaryServiceProvider, result.PaymentOrder.PaymentChannel)
+	require.NotNil(t, result.PayParams)
+	require.NotNil(t, ordinaryClient.createPaymentRequest)
+	require.Equal(t, "wxsp_app", ordinaryClient.createPaymentRequest.SpAppID)
+	require.Equal(t, "1900000109", ordinaryClient.createPaymentRequest.SpMchID)
+	require.Equal(t, "sub-ordinary", ordinaryClient.createPaymentRequest.SubMchID)
+	require.Equal(t, "Merchant A - Order Payment", ordinaryClient.createPaymentRequest.Description)
+	require.Equal(t, "ordinary-out-trade-no", ordinaryClient.createPaymentRequest.OutTradeNo)
+	require.Equal(t, int64(1000), ordinaryClient.createPaymentRequest.Amount.Total)
+	require.Equal(t, "openid", ordinaryClient.createPaymentRequest.Payer.SpOpenID)
+	require.Equal(t, "127.0.0.1", ordinaryClient.createPaymentRequest.SceneInfo.PayerClientIP)
+	require.Equal(t, "https://api.example.com/v1/webhooks/wechat-ordinary/payment-notify", ordinaryClient.createPaymentRequest.NotifyURL)
+	require.False(t, ordinaryClient.createPaymentRequest.SettleInfo.ProfitSharing)
+}
+
+func TestPaymentOrderServiceCreatePaymentOrder_LogsOrdinaryMarkFailedCleanupError(t *testing.T) {
+	input := CreatePaymentOrderInput{
+		UserID:       1001,
+		OrderID:      2001,
+		PaymentType:  paymentTypeMiniProgram,
+		BusinessType: businessTypeOrder,
+		ClientIP:     "127.0.0.1",
+	}
+	order := db.Order{
+		ID:          input.OrderID,
+		UserID:      input.UserID,
+		MerchantID:  3001,
+		OrderType:   orderTypeTakeaway,
+		Status:      "pending",
+		TotalAmount: 1000,
+	}
+	txPayment := db.PaymentOrder{
+		ID:             4012,
+		UserID:         input.UserID,
+		Status:         paymentStatusPending,
+		PaymentType:    paymentTypeMiniProgram,
+		PaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
+		Amount:         1000,
+		OutTradeNo:     "ordinary-cleanup-out-trade-no",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var logs bytes.Buffer
+	previousLogger := log.Logger
+	log.Logger = zerolog.New(&logs)
+	t.Cleanup(func() { log.Logger = previousLogger })
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{}
+
+	store.EXPECT().GetOrder(gomock.Any(), input.OrderID).Return(order, nil)
+	store.EXPECT().GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: input.OrderID, Valid: true},
+		BusinessType: businessTypeOrder,
+	}).Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().GetUser(gomock.Any(), input.UserID).Return(db.User{ID: input.UserID, WechatOpenid: "openid"}, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(db.Merchant{ID: order.MerchantID, Name: "Merchant A"}, nil)
+	store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).Return(db.CreatePartnerPaymentTxResult{
+		PaymentOrder: txPayment,
+		SubMchID:     "sub-ordinary",
+	}, nil)
+	store.EXPECT().UpdatePaymentOrderPrepayId(gomock.Any(), db.UpdatePaymentOrderPrepayIdParams{
+		ID:       txPayment.ID,
+		PrepayID: pgtype.Text{String: "prepay-ordinary", Valid: true},
+	}).Return(db.PaymentOrder{}, errors.New("prepay write failed"))
+	store.EXPECT().UpdatePaymentOrderToFailed(gomock.Any(), txPayment.ID).Return(db.PaymentOrder{}, errors.New("mark failed failed"))
+
+	svc := NewPaymentOrderServiceWithOrdinaryServiceProvider(store, nil, ordinaryClient)
+	_, err := svc.CreatePaymentOrder(context.Background(), input)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "update prepay id")
+	require.Contains(t, logs.String(), "failed to mark ordinary service provider payment order failed after prepay update failure")
+	require.Contains(t, logs.String(), "mark failed failed")
+	require.NotNil(t, ordinaryClient.closePaymentRequest)
+}
+
+func TestPaymentOrderServiceClosePaymentOrder_OrdinaryServiceProviderCallsRemoteClose(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{}
+	svc := NewPaymentOrderServiceWithOrdinaryServiceProvider(store, nil, ordinaryClient)
+	paymentOrder := db.PaymentOrder{
+		ID:             4101,
+		UserID:         1001,
+		Status:         paymentStatusPending,
+		PaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
+		OutTradeNo:     "ordinary-out-trade-no",
+		Attach:         pgtype.Text{String: "order_id:2001;sub_mchid:sub-ordinary", Valid: true},
+		PrepayID:       pgtype.Text{String: "prepay-ordinary", Valid: true},
+	}
+
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().UpdatePaymentOrderToClosed(gomock.Any(), paymentOrder.ID).Return(db.PaymentOrder{ID: paymentOrder.ID, Status: "closed"}, nil)
+
+	result, err := svc.ClosePaymentOrder(context.Background(), ClosePaymentOrderInput{UserID: 1001, PaymentOrderID: paymentOrder.ID})
+
+	require.NoError(t, err)
+	require.Equal(t, "closed", result.PaymentOrder.Status)
+	require.NotNil(t, ordinaryClient.closePaymentRequest)
+	require.Equal(t, "1900000109", ordinaryClient.closePaymentRequest.SpMchID)
+	require.Equal(t, "sub-ordinary", ordinaryClient.closePaymentRequest.SubMchID)
+	require.Equal(t, "ordinary-out-trade-no", ordinaryClient.closePaymentRequest.OutTradeNo)
+}
+
+func TestPaymentOrderServiceQueryPaymentOrder_OrdinaryServiceProviderUsesRemoteQuery(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{
+		queryPaymentResponse: &ospcontracts.PaymentQueryResponse{
+			SpAppID:        "wxsp_app",
+			SpMchID:        "1900000109",
+			SubMchID:       "sub-ordinary",
+			OutTradeNo:     "ordinary-out-trade-no",
+			TradeState:     ospcontracts.PaymentTradeStateNotPay,
+			TradeStateDesc: "NOTPAY",
+			Amount:         &ospcontracts.PaymentAmount{Total: 1000, Currency: ospcontracts.CurrencyCNY},
+		},
+	}
+	svc := NewPaymentOrderServiceWithOrdinaryServiceProvider(store, nil, ordinaryClient)
+	svc.now = func() time.Time { return time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC) }
+	paymentOrder := db.PaymentOrder{
+		ID:             4102,
+		UserID:         1001,
+		Status:         paymentStatusPending,
+		PaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
+		OutTradeNo:     "ordinary-out-trade-no",
+		Attach:         pgtype.Text{String: "order_id:2001;sub_mchid:sub-ordinary", Valid: true},
+		PrepayID:       pgtype.Text{String: "prepay-ordinary", Valid: true},
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Date(2026, 5, 1, 12, 30, 0, 0, time.UTC), Valid: true},
+	}
+
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+
+	result, err := svc.QueryPaymentOrder(context.Background(), QueryPaymentOrderInput{UserID: 1001, PaymentOrderID: paymentOrder.ID})
+
+	require.NoError(t, err)
+	require.NotNil(t, ordinaryClient.queryPaymentRequest)
+	require.Equal(t, "sub-ordinary", ordinaryClient.queryPaymentRequest.SubMchID)
+	require.Equal(t, "ordinary-out-trade-no", ordinaryClient.queryPaymentRequest.OutTradeNo)
+	require.Equal(t, "ordinary-out-trade-no", result.WechatOrder.OutTradeNo)
+	require.Equal(t, "NOTPAY", result.WechatOrder.TradeState)
+	require.NotNil(t, result.PayParams)
+	require.Equal(t, "prepay_id=prepay-ordinary", result.PayParams.Package)
+}
 
 func TestPaymentOrderServiceCreatePaymentOrder_RecreatesPendingOrderWhenAmountChanged(t *testing.T) {
 	input := CreatePaymentOrderInput{

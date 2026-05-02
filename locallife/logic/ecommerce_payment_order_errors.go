@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"strings"
 
+	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 	wechaterrorcodes "github.com/merrydance/locallife/wechat/errorcodes"
+	ordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider"
 )
 
 func mapPartnerJSAPIOrderCreateError(err error) error {
@@ -60,6 +62,15 @@ func mapCombineOrderQueryError(err error) error {
 	return fmt.Errorf("query combine order: %w", err)
 }
 
+func mapOrdinaryAwareCombineOrderQueryError(err error, paymentChannel string) error {
+	if paymentChannel == db.PaymentChannelOrdinaryServiceProvider {
+		if mapped := mapOrdinaryProviderPaymentError(err, "合单支付状态查询失败，请返回订单页后重新查询"); mapped != nil {
+			return mapped
+		}
+	}
+	return mapCombineOrderQueryError(err)
+}
+
 func mapPartnerOrderQueryError(err error) error {
 	if err == nil {
 		return nil
@@ -80,6 +91,45 @@ func mapPartnerOrderQueryError(err error) error {
 	}
 
 	return fmt.Errorf("query partner order: %w", err)
+}
+
+func mapOrdinaryServiceProviderPaymentQueryError(err error) error {
+	if mapped := mapOrdinaryProviderPaymentError(err, "支付状态查询失败，请返回订单页后重新查询"); mapped != nil {
+		return mapped
+	}
+	return mapPartnerOrderQueryError(err)
+}
+
+func mapOrdinaryProviderPaymentError(err error, fallbackMessage string) error {
+	if err == nil {
+		return nil
+	}
+	var providerErr *ordinaryserviceprovider.ProviderError
+	if !errors.As(err, &providerErr) {
+		return nil
+	}
+
+	message := strings.TrimSpace(providerErr.Frontend.Message)
+	if action := strings.TrimSpace(providerErr.Frontend.Action); action != "" {
+		message = strings.TrimSpace(message + "，" + action)
+	}
+	if message == "" {
+		message = fallbackMessage
+	}
+
+	status := http.StatusServiceUnavailable
+	switch providerErr.Category {
+	case ordinaryserviceprovider.ErrorCategoryValidation,
+		ordinaryserviceprovider.ErrorCategoryProvider:
+		status = http.StatusBadGateway
+	case ordinaryserviceprovider.ErrorCategoryBusinessConflict,
+		ordinaryserviceprovider.ErrorCategoryMerchantControl:
+		status = http.StatusConflict
+	case ordinaryserviceprovider.ErrorCategoryAuthConfig,
+		ordinaryserviceprovider.ErrorCategoryRetryableProvider:
+		status = http.StatusServiceUnavailable
+	}
+	return NewRequestErrorWithCause(status, errors.New(message), err)
 }
 
 func mapPartnerOrderCloseError(err error) error {

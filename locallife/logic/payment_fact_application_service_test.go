@@ -46,6 +46,33 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_ProfitSharingSucc
 	require.Equal(t, db.ExternalPaymentFactApplicationStatusApplied, result.Application.Status)
 }
 
+func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrdinaryProfitSharingSuccessFinishesOrder(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	now := time.Date(2026, 4, 26, 11, 2, 0, 0, time.UTC)
+	application := buildProfitSharingFactApplication(1701, 1601, db.ExternalPaymentFactApplicationStatusProcessing)
+	fact := buildProfitSharingFact(1601, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess)
+	fact.Channel = db.PaymentChannelOrdinaryServiceProvider
+
+	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
+	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().GetProfitSharingOrder(gomock.Any(), application.BusinessObjectID).Return(buildProfitSharingOrderForApplication(application, db.ProfitSharingOrderStatusProcessing), nil)
+	store.EXPECT().UpdateProfitSharingOrderToFinished(gomock.Any(), application.BusinessObjectID).Return(buildProfitSharingOrderForApplication(application, db.ProfitSharingOrderStatusFinished), nil)
+	expectProfitSharingResultOutbox(t, store, application, fact, "SUCCESS", "")
+	expectFactTerminalized(t, store, fact.ID, now)
+	expectApplicationApplied(t, store, application, now)
+
+	svc := NewPaymentFactService(store)
+	svc.now = func() time.Time { return now }
+
+	result, err := svc.ApplyExternalPaymentFactApplication(context.Background(), application.ID)
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+	require.Equal(t, db.ExternalPaymentFactApplicationStatusApplied, result.Application.Status)
+}
+
 func TestPaymentFactServiceApplyExternalPaymentFactApplication_ProfitSharingSuccessRejectsPendingOrder(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -107,7 +134,7 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_ProfitSharingRetu
 	updatedReturn := returnRecord
 	updatedReturn.Status = "success"
 	refundOrder := db.RefundOrder{ID: returnRecord.RefundOrderID, PaymentOrderID: returnRecord.PaymentOrderID, Status: "pending", OutRefundNo: "RF3001", RefundAmount: 300, RefundReason: pgtype.Text{String: "用户取消", Valid: true}}
-	paymentOrder := db.PaymentOrder{ID: refundOrder.PaymentOrderID, OrderID: pgtype.Int8{Int64: 6101, Valid: true}, OutTradeNo: "TRADE3001", Amount: 1000, Status: "paid"}
+	paymentOrder := db.PaymentOrder{ID: refundOrder.PaymentOrderID, OrderID: pgtype.Int8{Int64: 6101, Valid: true}, OutTradeNo: "TRADE3001", Amount: 1000, Status: "paid", PaymentChannel: db.PaymentChannelEcommerce}
 	order := db.Order{ID: 6101, MerchantID: 7101}
 
 	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
@@ -150,6 +177,61 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_ProfitSharingRetu
 	require.Nil(t, result.Outbox)
 }
 
+func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrdinaryProfitSharingReturnSuccessContinuesOrdinaryRefund(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{}
+	now := time.Date(2026, 4, 26, 11, 10, 35, 0, time.UTC)
+	application := buildProfitSharingReturnFactApplication(714, 614, db.ExternalPaymentFactApplicationStatusProcessing)
+	fact := buildProfitSharingReturnFact(614, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess, "SUCCESS", "WX_RETURN_3011")
+	returnRecord := db.ProfitSharingReturn{ID: application.BusinessObjectID, RefundOrderID: 4111, PaymentOrderID: 5111, OutReturnNo: "PR3011", Status: "processing"}
+	updatedReturn := returnRecord
+	updatedReturn.Status = "success"
+	refundOrder := db.RefundOrder{ID: returnRecord.RefundOrderID, PaymentOrderID: returnRecord.PaymentOrderID, Status: "pending", OutRefundNo: "RF3011", RefundAmount: 330, RefundReason: pgtype.Text{String: "用户取消", Valid: true}}
+	paymentOrder := db.PaymentOrder{ID: refundOrder.PaymentOrderID, OrderID: pgtype.Int8{Int64: 6111, Valid: true}, OutTradeNo: "TRADE3011", Amount: 1100, Status: "paid", PaymentChannel: db.PaymentChannelOrdinaryServiceProvider}
+	order := db.Order{ID: 6111, MerchantID: 7111}
+
+	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
+	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().GetProfitSharingReturn(gomock.Any(), application.BusinessObjectID).Return(returnRecord, nil)
+	store.EXPECT().UpdateProfitSharingReturnToProcessing(gomock.Any(), db.UpdateProfitSharingReturnToProcessingParams{
+		ID:       returnRecord.ID,
+		ReturnID: pgtype.Text{String: "WX_RETURN_3011", Valid: true},
+	}).Return(returnRecord, nil)
+	store.EXPECT().UpdateProfitSharingReturnToSuccess(gomock.Any(), returnRecord.ID).Return(updatedReturn, nil)
+	store.EXPECT().GetRefundOrder(gomock.Any(), refundOrder.ID).Return(refundOrder, nil)
+	store.EXPECT().CountProfitSharingReturnsByRefundOrder(gomock.Any(), refundOrder.ID).Return(int32(1), nil)
+	store.EXPECT().CountProfitSharingReturnsByRefundOrderStatus(gomock.Any(), db.CountProfitSharingReturnsByRefundOrderStatusParams{RefundOrderID: refundOrder.ID, Status: "success"}).Return(int32(1), nil)
+	store.EXPECT().CountProfitSharingReturnsByRefundOrderStatus(gomock.Any(), db.CountProfitSharingReturnsByRefundOrderStatusParams{RefundOrderID: refundOrder.ID, Status: "failed"}).Return(int32(0), nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), order.MerchantID).Return(db.MerchantPaymentConfig{MerchantID: order.MerchantID, SubMchID: "sub-mchid-3011"}, nil)
+	store.EXPECT().UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
+		ID:       refundOrder.ID,
+		RefundID: pgtype.Text{String: "refund-ordinary", Valid: true},
+	}).Return(db.RefundOrder{ID: refundOrder.ID, Status: "processing"}, nil)
+	expectFactTerminalized(t, store, fact.ID, now)
+	expectApplicationApplied(t, store, application, now)
+
+	svc := NewPaymentFactService(store).WithRefundCreator(NewDefaultPaymentFacadeWithOrdinaryServiceProvider(store, nil, nil, ordinaryClient))
+	svc.now = func() time.Time { return now }
+
+	result, err := svc.ApplyExternalPaymentFactApplication(context.Background(), application.ID)
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+	require.Nil(t, result.Outbox)
+	require.NotNil(t, ordinaryClient.createRefundRequest)
+	require.Equal(t, "sub-mchid-3011", ordinaryClient.createRefundRequest.SubMchID)
+	require.Equal(t, paymentOrder.OutTradeNo, ordinaryClient.createRefundRequest.OutTradeNo)
+	require.Equal(t, refundOrder.OutRefundNo, ordinaryClient.createRefundRequest.OutRefundNo)
+	require.Equal(t, refundOrder.RefundReason.String, ordinaryClient.createRefundRequest.Reason)
+	require.Equal(t, ordinaryClient.RefundNotifyURL(), ordinaryClient.createRefundRequest.NotifyURL)
+	require.Equal(t, refundOrder.RefundAmount, ordinaryClient.createRefundRequest.Amount.Refund)
+	require.Equal(t, paymentOrder.Amount, ordinaryClient.createRefundRequest.Amount.Total)
+}
+
 func TestPaymentFactServiceApplyExternalPaymentFactApplication_ProfitSharingReturnFailedFailsRefund(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -183,7 +265,7 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_ProfitSharingRetu
 	require.Nil(t, result.Outbox)
 }
 
-func TestPaymentFactServiceApplyExternalPaymentFactApplication_RiderDepositPaymentSuccessWritesReceiverPresentTarget(t *testing.T) {
+func TestPaymentFactServiceApplyExternalPaymentFactApplication_RiderDepositPaymentSuccessDoesNotWriteReceiverTarget(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -193,8 +275,6 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_RiderDepositPayme
 	application := buildRiderDepositPaymentFactApplication(801, 701, db.ExternalPaymentFactApplicationStatusProcessing)
 	fact := buildRiderDepositPaymentFact(701, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess)
 	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, UserID: 77, BusinessType: db.ExternalPaymentBusinessOwnerRiderDeposit}
-	rider := db.Rider{ID: 31, UserID: paymentOrder.UserID, RealName: "骑手王"}
-	user := db.User{ID: paymentOrder.UserID, WechatOpenid: "rider-openid-77"}
 
 	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
 	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
@@ -202,18 +282,6 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_RiderDepositPayme
 		Processed:    true,
 		PaymentOrder: paymentOrder,
 	}, nil)
-	store.EXPECT().GetRiderByUserID(gomock.Any(), paymentOrder.UserID).Return(rider, nil)
-	ecommerceClient.EXPECT().GetSpAppID().Return("wx_sp_app_123")
-	store.EXPECT().GetUser(gomock.Any(), paymentOrder.UserID).Return(user, nil)
-	store.EXPECT().UpsertProfitSharingReceiverTarget(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.UpsertProfitSharingReceiverTargetParams) (db.ProfitSharingReceiverTarget, error) {
-		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
-		require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
-		require.Equal(t, db.ProfitSharingReceiverOwnerTypeRider, arg.OwnerType)
-		require.Equal(t, rider.ID, arg.OwnerID)
-		require.Equal(t, db.ProfitSharingReceiverDesiredStatePresent, arg.DesiredState)
-		require.True(t, arg.DisplayNameHash.Valid)
-		return db.ProfitSharingReceiverTarget{ID: 901, OwnerType: arg.OwnerType, OwnerID: arg.OwnerID, DesiredState: arg.DesiredState}, nil
-	})
 	expectFactTerminalized(t, store, fact.ID, now)
 	expectApplicationApplied(t, store, application, now)
 
@@ -226,41 +294,7 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_RiderDepositPayme
 	require.Nil(t, result.Outbox)
 }
 
-func TestPaymentFactServiceApplyExternalPaymentFactApplication_RiderDepositPaymentReceiverTargetFailureSchedulesRetry(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	now := time.Date(2026, 4, 26, 11, 11, 30, 0, time.UTC)
-	application := buildRiderDepositPaymentFactApplication(802, 702, db.ExternalPaymentFactApplicationStatusProcessing)
-	fact := buildRiderDepositPaymentFact(702, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess)
-	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, UserID: 78, BusinessType: db.ExternalPaymentBusinessOwnerRiderDeposit}
-	rider := db.Rider{ID: 32, UserID: paymentOrder.UserID, RealName: "骑手赵"}
-	user := db.User{ID: paymentOrder.UserID, WechatOpenid: "rider-openid-78"}
-
-	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
-	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
-	store.EXPECT().ProcessPaymentSuccessTx(gomock.Any(), db.ProcessPaymentSuccessTxParams{PaymentOrderID: application.BusinessObjectID}).Return(db.ProcessPaymentSuccessTxResult{
-		Processed:    true,
-		PaymentOrder: paymentOrder,
-	}, nil)
-	store.EXPECT().GetRiderByUserID(gomock.Any(), paymentOrder.UserID).Return(rider, nil)
-	ecommerceClient.EXPECT().GetSpAppID().Return("wx_sp_app_123")
-	store.EXPECT().GetUser(gomock.Any(), paymentOrder.UserID).Return(user, nil)
-	store.EXPECT().UpsertProfitSharingReceiverTarget(gomock.Any(), gomock.Any()).Return(db.ProfitSharingReceiverTarget{}, assertAnError("receiver target store unavailable"))
-	expectApplicationFailed(t, store, application, now, "write rider profit sharing receiver present target")
-
-	svc := NewPaymentFactService(store).WithEcommerceClient(ecommerceClient)
-	svc.now = func() time.Time { return now }
-
-	result, err := svc.ApplyExternalPaymentFactApplication(context.Background(), application.ID)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "write rider profit sharing receiver present target")
-	require.False(t, result.Applied)
-}
-
-func TestPaymentFactServiceApplyExternalPaymentFactApplication_RiderDepositPaymentRetryWritesReceiverPresentTarget(t *testing.T) {
+func TestPaymentFactServiceApplyExternalPaymentFactApplication_RiderDepositPaymentRetryDoesNotWriteReceiverTarget(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -275,8 +309,6 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_RiderDepositPayme
 		BusinessType: db.ExternalPaymentBusinessOwnerRiderDeposit,
 		ProcessedAt:  pgtype.Timestamptz{Time: now.Add(-time.Minute), Valid: true},
 	}
-	rider := db.Rider{ID: 33, UserID: paymentOrder.UserID, RealName: "骑手钱"}
-	user := db.User{ID: paymentOrder.UserID, WechatOpenid: "rider-openid-79"}
 
 	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
 	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
@@ -284,10 +316,6 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_RiderDepositPayme
 		Processed:    false,
 		PaymentOrder: paymentOrder,
 	}, nil)
-	store.EXPECT().GetRiderByUserID(gomock.Any(), paymentOrder.UserID).Return(rider, nil)
-	ecommerceClient.EXPECT().GetSpAppID().Return("wx_sp_app_123")
-	store.EXPECT().GetUser(gomock.Any(), paymentOrder.UserID).Return(user, nil)
-	store.EXPECT().UpsertProfitSharingReceiverTarget(gomock.Any(), gomock.Any()).Return(db.ProfitSharingReceiverTarget{ID: 9021}, nil)
 	expectFactTerminalized(t, store, fact.ID, now)
 	expectApplicationApplied(t, store, application, now)
 
@@ -350,7 +378,7 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_ClaimRecoveryPaym
 	require.True(t, result.ClaimRecoveryPayment.Processed)
 }
 
-func TestPaymentFactServiceApplyExternalPaymentFactApplication_ApplymentSuccessActivatesMerchantAndCreatesOutbox(t *testing.T) {
+func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrdinaryApplymentFinishWithoutAuthorizationDoesNotActivate(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -358,10 +386,12 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_ApplymentSuccessA
 	now := time.Date(2026, 4, 26, 11, 12, 0, 0, time.UTC)
 	application := buildApplymentFactApplication(850, 750, db.ExternalPaymentFactApplicationStatusProcessing)
 	fact := buildApplymentFact(750, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess, "sub_mch_850")
+	fact.Channel = db.PaymentChannelOrdinaryServiceProvider
 	applymentBefore := db.EcommerceApplyment{ID: application.BusinessObjectID, SubjectType: "merchant", SubjectID: 910, OutRequestNo: "APPLY_M_850", Status: "submitted"}
 	applymentAfter := applymentBefore
 	applymentAfter.Status = "finish"
 	applymentAfter.SubMchID = pgtype.Text{String: "sub_mch_850", Valid: true}
+	applymentAfter.AccountAuthorizeState = pgtype.Text{String: "AUTHORIZE_STATE_UNAUTHORIZED", Valid: true}
 
 	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
 	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
@@ -372,6 +402,103 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_ApplymentSuccessA
 		SubjectType:       "merchant",
 		SubjectID:         applymentBefore.SubjectID,
 		SubMchID:          "sub_mch_850",
+	}).Return(nil)
+	store.EXPECT().GetEcommerceApplyment(gomock.Any(), application.BusinessObjectID).Return(applymentAfter, nil)
+	expectFactTerminalized(t, store, fact.ID, now)
+	expectApplicationApplied(t, store, application, now)
+
+	svc := NewPaymentFactService(store)
+	svc.now = func() time.Time { return now }
+
+	result, err := svc.ApplyExternalPaymentFactApplication(context.Background(), application.ID)
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+	require.Nil(t, result.Outbox)
+}
+
+func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrdinaryApplymentFinishWithStoredAuthorizationActivatesMerchant(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	now := time.Date(2026, 4, 26, 11, 12, 30, 0, time.UTC)
+	application := buildApplymentFactApplication(858, 758, db.ExternalPaymentFactApplicationStatusProcessing)
+	fact := buildApplymentFact(758, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess, "sub_mch_858")
+	fact.Channel = db.PaymentChannelOrdinaryServiceProvider
+	applymentBefore := db.EcommerceApplyment{
+		ID:                    application.BusinessObjectID,
+		SubjectType:           "merchant",
+		SubjectID:             918,
+		OutRequestNo:          "APPLY_M_858",
+		Status:                "submitted",
+		AccountAuthorizeState: pgtype.Text{String: "AUTHORIZE_STATE_AUTHORIZED", Valid: true},
+	}
+	applymentAfter := applymentBefore
+	applymentAfter.Status = "finish"
+	applymentAfter.SubMchID = pgtype.Text{String: "sub_mch_858", Valid: true}
+
+	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
+	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().GetEcommerceApplyment(gomock.Any(), application.BusinessObjectID).Return(applymentBefore, nil)
+	store.EXPECT().ApplymentSubMchActivationTx(gomock.Any(), db.ApplymentSubMchActivationTxParams{
+		ApplymentID:           application.BusinessObjectID,
+		WechatApplymentID:     pgtype.Int8{Int64: application.BusinessObjectID, Valid: true},
+		SubjectType:           "merchant",
+		SubjectID:             applymentBefore.SubjectID,
+		SubMchID:              "sub_mch_858",
+		AccountAuthorizeState: "AUTHORIZE_STATE_AUTHORIZED",
+	}).Return(nil)
+	store.EXPECT().GetEcommerceApplyment(gomock.Any(), application.BusinessObjectID).Return(applymentAfter, nil)
+	expectApplymentActivatedOutbox(t, store, application, fact, applymentAfter)
+	expectFactTerminalized(t, store, fact.ID, now)
+	expectApplicationApplied(t, store, application, now)
+
+	svc := NewPaymentFactService(store)
+	svc.now = func() time.Time { return now }
+
+	result, err := svc.ApplyExternalPaymentFactApplication(context.Background(), application.ID)
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+	require.NotNil(t, result.Outbox)
+}
+
+func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrdinaryApplymentFactAuthorizationActivatesMerchant(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	now := time.Date(2026, 4, 26, 11, 12, 45, 0, time.UTC)
+	application := buildApplymentFactApplication(859, 759, db.ExternalPaymentFactApplicationStatusProcessing)
+	fact := buildApplymentFact(759, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess, "sub_mch_859")
+	fact.Channel = db.PaymentChannelOrdinaryServiceProvider
+	raw := map[string]any{
+		"applyment_id":            application.BusinessObjectID,
+		"sub_mch_id":              "sub_mch_859",
+		"account_authorize_state": db.AccountAuthorizeStateAuthorized,
+	}
+	fact.RawResource, _ = json.Marshal(raw)
+	applymentBefore := db.EcommerceApplyment{
+		ID:                    application.BusinessObjectID,
+		SubjectType:           "merchant",
+		SubjectID:             919,
+		OutRequestNo:          "APPLY_M_859",
+		Status:                "finish",
+		SubMchID:              pgtype.Text{String: "sub_mch_859", Valid: true},
+		AccountAuthorizeState: pgtype.Text{String: db.AccountAuthorizeStateUnauthorized, Valid: true},
+	}
+	applymentAfter := applymentBefore
+	applymentAfter.AccountAuthorizeState = pgtype.Text{String: db.AccountAuthorizeStateAuthorized, Valid: true}
+
+	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
+	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().GetEcommerceApplyment(gomock.Any(), application.BusinessObjectID).Return(applymentBefore, nil)
+	store.EXPECT().ApplymentSubMchActivationTx(gomock.Any(), db.ApplymentSubMchActivationTxParams{
+		ApplymentID:           application.BusinessObjectID,
+		WechatApplymentID:     pgtype.Int8{Int64: application.BusinessObjectID, Valid: true},
+		SubjectType:           "merchant",
+		SubjectID:             applymentBefore.SubjectID,
+		SubMchID:              "sub_mch_859",
+		AccountAuthorizeState: db.AccountAuthorizeStateAuthorized,
 	}).Return(nil)
 	store.EXPECT().GetEcommerceApplyment(gomock.Any(), application.BusinessObjectID).Return(applymentAfter, nil)
 	expectApplymentActivatedOutbox(t, store, application, fact, applymentAfter)
@@ -520,6 +647,49 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrderPaymentSucce
 	require.True(t, result.OrderPayment.Processed)
 	require.NotNil(t, result.OrderPayment.OrderResult)
 	require.Equal(t, orderResult.Order.ID, result.OrderPayment.OrderResult.Order.ID)
+}
+
+func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrderOrdinaryPaymentSuccessProcessesOrder(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	now := time.Date(2026, 5, 1, 10, 30, 0, 0, time.UTC)
+	application := buildOrderPaymentFactApplication(813, 713, db.ExternalPaymentFactApplicationStatusProcessing)
+	fact := buildOrderPaymentFact(713, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess)
+	fact.Channel = db.PaymentChannelOrdinaryServiceProvider
+	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, BusinessType: db.ExternalPaymentBusinessOwnerOrder, PaymentChannel: db.PaymentChannelOrdinaryServiceProvider}
+	orderResult := db.ProcessOrderPaymentTxResult{Order: db.Order{ID: 6301, MerchantID: 7201, OrderNo: "ORD6301"}}
+
+	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
+	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().ProcessPaymentSuccessTx(gomock.Any(), db.ProcessPaymentSuccessTxParams{
+		PaymentOrderID:     application.BusinessObjectID,
+		RiderAverageSpeed:  15000,
+		DefaultPrepareTime: 20,
+	}).Return(db.ProcessPaymentSuccessTxResult{
+		Processed:    true,
+		PaymentOrder: paymentOrder,
+		OrderResult:  &orderResult,
+	}, nil)
+	store.EXPECT().CreatePaymentDomainOutboxOnce(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreatePaymentDomainOutboxOnceParams) (db.PaymentDomainOutbox, error) {
+		require.Equal(t, db.PaymentDomainOutboxEventOrderPaymentSucceeded, arg.EventType)
+		require.Equal(t, paymentOrder.ID, arg.AggregateID)
+		return db.PaymentDomainOutbox{ID: 8301, EventType: arg.EventType, AggregateType: arg.AggregateType, AggregateID: arg.AggregateID, Payload: arg.Payload, Status: arg.Status}, nil
+	})
+	expectFactTerminalized(t, store, fact.ID, now)
+	expectApplicationApplied(t, store, application, now)
+
+	svc := NewPaymentFactService(store).WithPaymentSuccessConfig(15000, 20)
+	svc.now = func() time.Time { return now }
+
+	result, err := svc.ApplyExternalPaymentFactApplication(context.Background(), application.ID)
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+	require.NotNil(t, result.OrderPayment)
+	require.True(t, result.OrderPayment.Processed)
+	require.NotNil(t, result.Outbox)
+	require.Equal(t, db.PaymentDomainOutboxEventOrderPaymentSucceeded, result.Outbox.EventType)
 }
 
 func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrderPaymentOutboxRetryAfterProcessed(t *testing.T) {
@@ -832,6 +1002,64 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrderRefundSucces
 		require.Equal(t, refundOrder.ID, arg.AggregateID)
 		require.Equal(t, db.PaymentDomainOutboxStatusPending, arg.Status)
 		return db.PaymentDomainOutbox{ID: 8103, EventType: arg.EventType, AggregateType: arg.AggregateType, AggregateID: arg.AggregateID, Payload: arg.Payload, Status: arg.Status}, nil
+	})
+	expectFactTerminalized(t, store, fact.ID, now)
+	expectApplicationApplied(t, store, application, now)
+
+	svc := NewPaymentFactService(store)
+	svc.now = func() time.Time { return now }
+
+	result, err := svc.ApplyExternalPaymentFactApplication(context.Background(), application.ID)
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+	require.NotNil(t, result.Outbox)
+	require.Equal(t, db.PaymentDomainOutboxEventOrderRefundSucceeded, result.Outbox.EventType)
+}
+
+func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrderOrdinaryRefundSuccessCreatesOutbox(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	now := time.Date(2026, 4, 26, 11, 12, 50, 0, time.UTC)
+	application := db.ExternalPaymentFactApplication{
+		ID:                 1814,
+		FactID:             1714,
+		Consumer:           paymentFactConsumerOrderDomain,
+		BusinessObjectType: paymentFactBusinessObjectRefundOrder,
+		BusinessObjectID:   14201,
+		Status:             db.ExternalPaymentFactApplicationStatusProcessing,
+	}
+	fact := db.ExternalPaymentFact{
+		ID:                   1714,
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelOrdinaryServiceProvider,
+		Capability:           db.ExternalPaymentCapabilityPartnerRefund,
+		ExternalObjectType:   db.ExternalPaymentObjectRefund,
+		ExternalSecondaryKey: pgtype.Text{String: "WX_ORDINARY_REFUND_4201", Valid: true},
+		BusinessOwner:        pgtype.Text{String: db.ExternalPaymentBusinessOwnerOrder, Valid: true},
+		BusinessObjectType:   pgtype.Text{String: paymentFactBusinessObjectRefundOrder, Valid: true},
+		BusinessObjectID:     pgtype.Int8{Int64: 14201, Valid: true},
+		UpstreamState:        riderDepositRefundStatusSuccess,
+		TerminalStatus:       db.ExternalPaymentTerminalStatusSuccess,
+		IsTerminal:           true,
+	}
+	refundOrder := db.RefundOrder{ID: 14201, PaymentOrderID: 15201, RefundAmount: 500, OutRefundNo: "RFD14201", Status: "processing"}
+	paymentOrder := db.PaymentOrder{ID: 15201, OrderID: pgtype.Int8{Int64: 16201, Valid: true}, Amount: 500, BusinessType: db.ExternalPaymentBusinessOwnerOrder, UserID: 177}
+
+	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
+	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().GetRefundOrder(gomock.Any(), application.BusinessObjectID).Return(refundOrder, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), refundOrder.PaymentOrderID).Return(paymentOrder, nil)
+	store.EXPECT().UpdateRefundOrderToSuccess(gomock.Any(), refundOrder.ID).Return(db.RefundOrder{ID: refundOrder.ID, PaymentOrderID: refundOrder.PaymentOrderID, RefundAmount: refundOrder.RefundAmount, OutRefundNo: refundOrder.OutRefundNo, Status: riderDepositRefundStatusSuccess}, nil)
+	store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(int64(500), nil)
+	store.EXPECT().UpdatePaymentOrderToRefunded(gomock.Any(), paymentOrder.ID).Return(db.PaymentOrder{ID: paymentOrder.ID, Status: "refunded"}, nil)
+	store.EXPECT().CreatePaymentDomainOutboxOnce(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreatePaymentDomainOutboxOnceParams) (db.PaymentDomainOutbox, error) {
+		require.Equal(t, db.PaymentDomainOutboxEventOrderRefundSucceeded, arg.EventType)
+		require.Equal(t, db.PaymentDomainOutboxAggregateRefundOrder, arg.AggregateType)
+		require.Equal(t, refundOrder.ID, arg.AggregateID)
+		require.Equal(t, db.PaymentDomainOutboxStatusPending, arg.Status)
+		return db.PaymentDomainOutbox{ID: 18103, EventType: arg.EventType, AggregateType: arg.AggregateType, AggregateID: arg.AggregateID, Payload: arg.Payload, Status: arg.Status}, nil
 	})
 	expectFactTerminalized(t, store, fact.ID, now)
 	expectApplicationApplied(t, store, application, now)
@@ -1613,7 +1841,7 @@ func buildSettlementVerificationFact(factID, applymentID int64, terminalStatus, 
 	return db.ExternalPaymentFact{
 		ID:                 factID,
 		Provider:           db.ExternalPaymentProviderWechat,
-		Channel:            db.PaymentChannelEcommerce,
+		Channel:            db.PaymentChannelOrdinaryServiceProvider,
 		Capability:         db.ExternalPaymentCapabilitySettlement,
 		FactSource:         db.ExternalPaymentFactSourceQuery,
 		ExternalObjectType: db.ExternalPaymentObjectSettlement,
@@ -1636,7 +1864,7 @@ func buildSettlementApplicationFact(factID, paymentConfigID int64, terminalStatu
 	return db.ExternalPaymentFact{
 		ID:                   factID,
 		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              db.PaymentChannelEcommerce,
+		Channel:              db.PaymentChannelOrdinaryServiceProvider,
 		Capability:           db.ExternalPaymentCapabilitySettlement,
 		FactSource:           db.ExternalPaymentFactSourceQuery,
 		ExternalObjectType:   db.ExternalPaymentObjectSettlement,

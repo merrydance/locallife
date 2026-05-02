@@ -163,6 +163,49 @@ func TestDeleteProfitSharingReceiver_ValidationErrorReturnsBadRequest(t *testing
 	server.deleteProfitSharingReceiver(ctx)
 
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	var response ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Equal(t, "分账接收方信息不符合微信要求，请核对接收方类型、账号和 AppID 后重试", response.Error)
+	require.NotContains(t, response.Error, "appid is required")
+	require.NotContains(t, response.Error, "provider")
+	require.NotContains(t, response.Error, "request_id")
+}
+
+func TestDeleteProfitSharingReceiver_UpstreamFailureReturnsChineseGuidance(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	store.EXPECT().
+		GetPaymentOrder(gomock.Any(), int64(307)).
+		Return(db.PaymentOrder{ID: 307, PaymentType: PaymentTypeProfitShare, PaymentChannel: db.PaymentChannelEcommerce, RequiresProfitSharing: true}, nil)
+	ecommerce.EXPECT().
+		DeleteProfitSharingReceiver(gomock.Any(), &wechatcontracts.DeleteReceiverRequest{
+			AppID:   "wx_app_307",
+			Type:    wechatcontracts.ReceiverTypeMerchant,
+			Account: "1900000007",
+		}).
+		Return(nil, errors.New("wechat unavailable"))
+
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	request, err := http.NewRequest(http.MethodPost, "/v1/operators/me/payment-orders/307/profit-sharing/receivers/delete", strings.NewReader(`{"appid":"wx_app_307","type":"MERCHANT_ID","account":"1900000007"}`))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	ctx.Request = request
+	ctx.Params = gin.Params{{Key: "id", Value: "307"}}
+
+	server.deleteProfitSharingReceiver(ctx)
+
+	require.Equal(t, http.StatusBadGateway, recorder.Code)
+	var response ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Equal(t, "微信分账接收方删除失败，请稍后重试；如持续失败请联系平台管理员排查微信请求记录", response.Error)
 }
 
 func TestGetProfitSharingAmounts_PaymentServiceUnavailable(t *testing.T) {
@@ -170,6 +213,9 @@ func TestGetProfitSharingAmounts_PaymentServiceUnavailable(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetPaymentOrder(gomock.Any(), int64(305)).
+		Return(db.PaymentOrder{ID: 305, PaymentType: PaymentTypeProfitShare, PaymentChannel: db.PaymentChannelEcommerce, RequiresProfitSharing: true, TransactionID: pgtype.Text{String: "wx_tx_305", Valid: true}}, nil)
 	server := newTestServer(t, store)
 	server.SetEcommerceClientForTest(nil)
 
@@ -185,7 +231,7 @@ func TestGetProfitSharingAmounts_PaymentServiceUnavailable(t *testing.T) {
 	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
 	var response ErrorResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
-	require.Equal(t, "payment service not configured", response.Error)
+	require.Equal(t, "分账服务暂不可用，请稍后重试或联系平台管理员检查微信支付配置", response.Error)
 }
 
 func TestGetProfitSharingAmounts_UpstreamFailureReturnsBadGatewayMessage(t *testing.T) {
@@ -221,5 +267,5 @@ func TestGetProfitSharingAmounts_UpstreamFailureReturnsBadGatewayMessage(t *test
 	require.Equal(t, http.StatusBadGateway, recorder.Code)
 	var response ErrorResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
-	require.Equal(t, "query profit sharing amounts api unavailable", response.Error)
+	require.Equal(t, "微信分账金额查询暂不可用，请稍后重试；如持续失败请联系平台管理员排查微信请求记录", response.Error)
 }

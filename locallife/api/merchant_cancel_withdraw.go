@@ -200,7 +200,7 @@ func merchantCancelWithdrawConflictResponse(err error) ErrorResponse {
 }
 
 // @Summary 查询商户注销提现资格
-// @Description 查询当前商户的收付通账户状态与微信注销提现资格校验结果。若收付通账户未激活，则返回 200 且 eligible=false，不触发微信调用。
+// @Description 查询历史平台收付通账户状态与微信注销提现资格校验结果；普通服务商模式不支持平台内注销提现，路由会返回明确行动指引。
 // @Tags 商户财务
 // @Produce json
 // @Success 200 {object} merchantCancelWithdrawEligibilityResponse
@@ -258,7 +258,7 @@ func (server *Server) getMerchantCancelWithdrawEligibility(ctx *gin.Context) {
 }
 
 // @Summary 查询商户注销提现申请列表
-// @Description 返回当前商户的注销提现申请列表。若收付通账户未激活，则返回空列表并带 account_status/status_desc。
+// @Description 返回历史平台收付通注销提现申请列表；普通服务商模式不支持平台内注销提现，路由会返回明确行动指引。
 // @Tags 商户财务
 // @Produce json
 // @Param page query int false "页码" minimum(1) default(1)

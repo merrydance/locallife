@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -11,7 +12,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -148,7 +150,7 @@ func (server *Server) getApplymentCatalogCache() *applymentCatalogCache {
 }
 
 // @Summary 查询进件银行列表
-// @Description 查询微信收付通支持的对公或对私开户银行列表，返回后端缓存快照
+// @Description 查询微信普通服务商支持的对公或对私开户银行列表，返回后端缓存快照
 // @Tags 开户
 // @Accept json
 // @Produce json
@@ -160,21 +162,21 @@ func (server *Server) getApplymentCatalogCache() *applymentCatalogCache {
 // @Router /v1/merchant/applyment/banks [get]
 // @Security BearerAuth
 func (server *Server) listApplymentBanks(ctx *gin.Context) {
-	if server.ecommerceClient == nil {
-		err := fmt.Errorf("wechat ecommerce client is not configured")
-		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "wechat ecommerce client is not configured", "list applyment banks ecommerce client not configured"))
+	if server.ordinarySPClient == nil {
+		err := fmt.Errorf("ordinary service provider client not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "普通服务商开户银行目录暂不可用，请联系平台管理员检查微信支付普通服务商配置后重试", "list applyment banks ordinary service provider client not configured"))
 		return
 	}
 
 	var req applymentBankQuery
 	if err := ctx.ShouldBindQuery(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondApplymentCatalogClientError(ctx, err, "请选择开户账户类型后再查询银行目录", "list_applyment_banks")
 		return
 	}
 
 	banks, refreshedAt, err := server.loadApplymentBanks(ctx.Request.Context(), req.AccountType)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		respondApplymentCatalogProviderError(ctx, err, "普通服务商开户银行目录查询失败，请稍后重试；如持续失败请联系平台管理员检查微信支付银行目录服务日志", "list_applyment_banks")
 		return
 	}
 
@@ -199,21 +201,21 @@ func (server *Server) listApplymentBanks(ctx *gin.Context) {
 // @Router /v1/merchant/applyment/banks/search-by-bank-account [get]
 // @Security BearerAuth
 func (server *Server) searchApplymentBanksByAccount(ctx *gin.Context) {
-	if server.ecommerceClient == nil {
-		err := fmt.Errorf("wechat ecommerce client is not configured")
-		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "wechat ecommerce client is not configured", "search applyment banks by account ecommerce client not configured"))
+	if server.ordinarySPClient == nil {
+		err := fmt.Errorf("ordinary service provider client not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "普通服务商开户银行识别暂不可用，请联系平台管理员检查微信支付普通服务商配置后重试", "search applyment banks by account ordinary service provider client not configured"))
 		return
 	}
 
 	var req applymentBankSearchQuery
 	if err := ctx.ShouldBindQuery(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondApplymentCatalogClientError(ctx, err, "请填写开户账户类型和银行卡号后再识别开户银行", "search_applyment_banks_by_account")
 		return
 	}
 
 	accountNumber := strings.TrimSpace(req.AccountNumber)
 	if accountNumber == "" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("account_number is required")))
+		respondApplymentCatalogClientError(ctx, errors.New("account_number is required"), "请填写开户账户类型和银行卡号后再识别开户银行", "search_applyment_banks_by_account")
 		return
 	}
 
@@ -228,7 +230,7 @@ func (server *Server) searchApplymentBanksByAccount(ctx *gin.Context) {
 
 	banks, refreshedAt, err := server.searchApplymentBanksByAccountNumber(ctx.Request.Context(), accountNumber)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		respondApplymentCatalogProviderError(ctx, err, "普通服务商开户银行识别失败，请稍后重试；如持续失败请联系平台管理员检查微信支付银行识别服务日志", "search_applyment_banks_by_account")
 		return
 	}
 
@@ -240,7 +242,7 @@ func (server *Server) searchApplymentBanksByAccount(ctx *gin.Context) {
 }
 
 // @Summary 查询开户省份列表
-// @Description 查询微信收付通支行检索所需的省份列表
+// @Description 查询微信普通服务商支行检索所需的省份列表
 // @Tags 开户
 // @Accept json
 // @Produce json
@@ -250,15 +252,15 @@ func (server *Server) searchApplymentBanksByAccount(ctx *gin.Context) {
 // @Router /v1/merchant/applyment/areas/provinces [get]
 // @Security BearerAuth
 func (server *Server) listApplymentProvinces(ctx *gin.Context) {
-	if server.ecommerceClient == nil {
-		err := fmt.Errorf("wechat ecommerce client is not configured")
-		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "wechat ecommerce client is not configured", "list applyment provinces ecommerce client not configured"))
+	if server.ordinarySPClient == nil {
+		err := fmt.Errorf("ordinary service provider client not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "普通服务商开户省市目录暂不可用，请联系平台管理员检查微信支付普通服务商配置后重试", "list applyment provinces ordinary service provider client not configured"))
 		return
 	}
 
 	provinces, refreshedAt, err := server.loadApplymentProvinces(ctx.Request.Context())
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		respondApplymentCatalogProviderError(ctx, err, "普通服务商开户省份目录查询失败，请稍后重试；如持续失败请联系平台管理员检查微信支付省市目录服务日志", "list_applyment_provinces")
 		return
 	}
 
@@ -270,7 +272,7 @@ func (server *Server) listApplymentProvinces(ctx *gin.Context) {
 }
 
 // @Summary 查询开户城市列表
-// @Description 根据省份编码查询微信收付通支行检索所需的城市列表
+// @Description 根据省份编码查询微信普通服务商支行检索所需的城市列表
 // @Tags 开户
 // @Accept json
 // @Produce json
@@ -282,21 +284,21 @@ func (server *Server) listApplymentProvinces(ctx *gin.Context) {
 // @Router /v1/merchant/applyment/areas/provinces/{province_code}/cities [get]
 // @Security BearerAuth
 func (server *Server) listApplymentCities(ctx *gin.Context) {
-	if server.ecommerceClient == nil {
-		err := fmt.Errorf("wechat ecommerce client is not configured")
-		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "wechat ecommerce client is not configured", "list applyment cities ecommerce client not configured"))
+	if server.ordinarySPClient == nil {
+		err := fmt.Errorf("ordinary service provider client not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "普通服务商开户城市目录暂不可用，请联系平台管理员检查微信支付普通服务商配置后重试", "list applyment cities ordinary service provider client not configured"))
 		return
 	}
 
 	provinceCode, err := strconv.Atoi(ctx.Param("province_code"))
 	if err != nil || provinceCode <= 0 {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid province_code")))
+		respondApplymentCatalogClientError(ctx, errors.New("invalid province_code"), "省份编码无效，请返回省份列表重新选择", "list_applyment_cities")
 		return
 	}
 
 	cities, refreshedAt, err := server.loadApplymentCities(ctx.Request.Context(), provinceCode)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		respondApplymentCatalogProviderError(ctx, err, "普通服务商开户城市目录查询失败，请稍后重试；如持续失败请联系平台管理员检查微信支付城市目录服务日志", "list_applyment_cities")
 		return
 	}
 
@@ -308,7 +310,7 @@ func (server *Server) listApplymentCities(ctx *gin.Context) {
 }
 
 // @Summary 查询开户支行列表
-// @Description 根据银行别名编码和城市编码查询微信收付通支行列表
+// @Description 根据银行别名编码和城市编码查询微信普通服务商支行列表
 // @Tags 开户
 // @Accept json
 // @Produce json
@@ -321,27 +323,27 @@ func (server *Server) listApplymentCities(ctx *gin.Context) {
 // @Router /v1/merchant/applyment/banks/{bank_alias_code}/branches [get]
 // @Security BearerAuth
 func (server *Server) listApplymentBankBranches(ctx *gin.Context) {
-	if server.ecommerceClient == nil {
-		err := fmt.Errorf("wechat ecommerce client is not configured")
-		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "wechat ecommerce client is not configured", "list applyment bank branches ecommerce client not configured"))
+	if server.ordinarySPClient == nil {
+		err := fmt.Errorf("ordinary service provider client not configured")
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "普通服务商开户支行目录暂不可用，请联系平台管理员检查微信支付普通服务商配置后重试", "list applyment bank branches ordinary service provider client not configured"))
 		return
 	}
 
 	bankAliasCode := strings.TrimSpace(ctx.Param("bank_alias_code"))
 	if bankAliasCode == "" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("bank_alias_code is required")))
+		respondApplymentCatalogClientError(ctx, errors.New("bank_alias_code is required"), "银行别名编码缺失，请返回银行列表重新选择", "list_applyment_bank_branches")
 		return
 	}
 
 	var req applymentBranchQuery
 	if err := ctx.ShouldBindQuery(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondApplymentCatalogClientError(ctx, err, "城市编码无效，请返回城市列表重新选择后再查询支行", "list_applyment_bank_branches")
 		return
 	}
 
 	branches, refreshedAt, err := server.loadApplymentBranches(ctx.Request.Context(), bankAliasCode, req.CityCode)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		respondApplymentCatalogProviderError(ctx, err, "普通服务商开户支行目录查询失败，请稍后重试；如持续失败请联系平台管理员检查微信支付支行目录服务日志", "list_applyment_bank_branches")
 		return
 	}
 
@@ -356,6 +358,21 @@ func (server *Server) listApplymentBankBranches(ctx *gin.Context) {
 	})
 }
 
+func respondApplymentCatalogClientError(ctx *gin.Context, err error, publicMessage string, operation string) {
+	_ = ctx.Error(err)
+	log.Warn().
+		Err(err).
+		Str("request_id", GetRequestID(ctx)).
+		Str("operation", operation).
+		Str("path", ctx.Request.URL.Path).
+		Msg("applyment catalog request rejected")
+	ctx.JSON(http.StatusBadRequest, errorResponse(errors.New(publicMessage)))
+}
+
+func respondApplymentCatalogProviderError(ctx *gin.Context, err error, publicMessage string, operation string) {
+	ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, publicMessage, operation+" ordinary service provider catalog request failed"))
+}
+
 func (server *Server) loadApplymentBanks(ctx context.Context, accountType string) ([]applymentBankOption, time.Time, error) {
 	cache := server.getApplymentCatalogCache()
 	now := time.Now()
@@ -368,14 +385,14 @@ func (server *Server) loadApplymentBanks(ctx context.Context, accountType string
 	}
 
 	var (
-		fetch func(context.Context, int, int) (*wechatcontracts.CapitalBankListResponse, error)
+		fetch func(context.Context, int, int) (*ospcontracts.CapitalBankListResponse, error)
 		items []applymentBankOption
 	)
 
 	if accountType == "ACCOUNT_TYPE_PRIVATE" {
-		fetch = server.ecommerceClient.ListPersonalBankingBanks
+		fetch = server.ordinarySPClient.ListPersonalBankingBanks
 	} else {
-		fetch = server.ecommerceClient.ListCorporateBankingBanks
+		fetch = server.ordinarySPClient.ListCorporateBankingBanks
 	}
 
 	for offset := 0; ; {
@@ -390,10 +407,11 @@ func (server *Server) loadApplymentBanks(ctx context.Context, accountType string
 			}
 			items = append(items, option)
 		}
-		if len(resp.Data) == 0 || offset+resp.Count >= resp.TotalCount {
+		count := int(resp.Count)
+		if len(resp.Data) == 0 || int64(offset)+resp.Count >= resp.TotalCount || count <= 0 {
 			break
 		}
-		offset += resp.Count
+		offset += count
 	}
 
 	sort.SliceStable(items, func(i, j int) bool {
@@ -420,7 +438,7 @@ func (server *Server) searchApplymentBanksByAccountNumber(ctx context.Context, a
 		return entry.items, entry.refreshed, nil
 	}
 
-	resp, err := server.ecommerceClient.SearchBanksByBankAccount(ctx, accountNumber)
+	resp, err := server.ordinarySPClient.SearchBanksByBankAccount(ctx, accountNumber)
 	if err != nil {
 		return nil, time.Time{}, fmt.Errorf("search applyment banks by account number: %w", err)
 	}
@@ -449,7 +467,7 @@ func (server *Server) loadApplymentProvinces(ctx context.Context) ([]applymentPr
 		return entry.items, entry.refreshed, nil
 	}
 
-	resp, err := server.ecommerceClient.ListProvinceAreas(ctx)
+	resp, err := server.ordinarySPClient.ListProvinceAreas(ctx)
 	if err != nil {
 		return nil, time.Time{}, fmt.Errorf("load applyment provinces: %w", err)
 	}
@@ -485,7 +503,7 @@ func (server *Server) loadApplymentCities(ctx context.Context, provinceCode int)
 		return entry.items, entry.refreshed, nil
 	}
 
-	resp, err := server.ecommerceClient.ListCityAreas(ctx, provinceCode)
+	resp, err := server.ordinarySPClient.ListCityAreas(ctx, provinceCode)
 	if err != nil {
 		return nil, time.Time{}, fmt.Errorf("load applyment cities: %w", err)
 	}
@@ -528,7 +546,7 @@ func (server *Server) loadApplymentBranches(ctx context.Context, bankAliasCode s
 	var bankAlias string
 
 	for offset := 0; ; {
-		resp, err := server.ecommerceClient.ListBankBranches(ctx, bankAliasCode, cityCode, offset, applymentCatalogPageSize)
+		resp, err := server.ordinarySPClient.ListBankBranches(ctx, bankAliasCode, cityCode, offset, applymentCatalogPageSize)
 		if err != nil {
 			return cachedBranchEntry{}, time.Time{}, fmt.Errorf("load applyment branches: %w", err)
 		}
@@ -541,10 +559,11 @@ func (server *Server) loadApplymentBranches(ctx context.Context, bankAliasCode s
 				BankBranchID:   branch.BankBranchID,
 			})
 		}
-		if len(resp.Data) == 0 || offset+resp.Count >= resp.TotalCount {
+		count := int(resp.Count)
+		if len(resp.Data) == 0 || int64(offset)+resp.Count >= resp.TotalCount || count <= 0 {
 			break
 		}
-		offset += resp.Count
+		offset += count
 	}
 
 	sort.SliceStable(items, func(i, j int) bool {
@@ -567,7 +586,7 @@ func (server *Server) loadApplymentBranches(ctx context.Context, bankAliasCode s
 	return entry, entry.refreshed, nil
 }
 
-func mapCapitalBankOption(bank wechatcontracts.CapitalBank) applymentBankOption {
+func mapCapitalBankOption(bank ospcontracts.CapitalBank) applymentBankOption {
 	return applymentBankOption{
 		BankAlias:       bank.BankAlias,
 		BankAliasCode:   bank.BankAliasCode,

@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,9 @@ import (
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -701,6 +705,120 @@ func expectCombinePaymentCommand(t *testing.T, store *mockdb.MockStore, combined
 		require.NotContains(t, string(arg.ResponseSnapshot), "paySign")
 		return db.ExternalPaymentCommand{ID: commandID}, nil
 	})
+}
+
+func TestCreateCombinedPaymentOrder_UsesOrdinaryServiceProvider(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{}
+	svc := NewCombinedPaymentServiceWithOrdinaryServiceProvider(store, ordinaryClient)
+	svc.now = func() time.Time { return time.Date(2026, 3, 1, 11, 0, 0, 0, time.UTC) }
+
+	input := CreateCombinedPaymentOrderInput{UserID: 1001, OrderIDs: []int64{22, 11, 11}, ClientIP: "127.0.0.1"}
+	capturedCombineOutTradeNo := ""
+	store.EXPECT().GetUser(gomock.Any(), input.UserID).Return(db.User{ID: input.UserID, WechatOpenid: "openid-ok"}, nil)
+	store.EXPECT().CreateCombinedPaymentTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateCombinedPaymentTxParams) (db.CreateCombinedPaymentTxResult, error) {
+		require.Equal(t, []int64{11, 22}, arg.OrderIDs)
+		require.True(t, strings.HasPrefix(arg.CombineOutTradeNo, "CP"))
+		capturedCombineOutTradeNo = arg.CombineOutTradeNo
+		return db.CreateCombinedPaymentTxResult{
+			CombinedPaymentOrder: db.CombinedPaymentOrder{ID: 9001, UserID: 1001, CombineOutTradeNo: arg.CombineOutTradeNo, Status: paymentStatusPending},
+			OrderInfos: []db.CombinedPaymentOrderInfo{
+				{
+					Order:         db.Order{ID: 11, MerchantID: 501},
+					PaymentOrder:  db.PaymentOrder{ID: 7101, PaymentChannel: db.PaymentChannelOrdinaryServiceProvider, RequiresProfitSharing: true, Amount: 3200, OutTradeNo: "PO-11", Attach: pgtype.Text{String: "attach-11", Valid: true}},
+					PaymentConfig: db.MerchantPaymentConfig{SubMchID: "190001"},
+					Merchant:      db.Merchant{Name: "merchant-1"},
+				},
+				{
+					Order:         db.Order{ID: 22, MerchantID: 502},
+					PaymentOrder:  db.PaymentOrder{ID: 7102, PaymentChannel: db.PaymentChannelOrdinaryServiceProvider, RequiresProfitSharing: false, Amount: 4800, OutTradeNo: "PO-22", Attach: pgtype.Text{String: "attach-22", Valid: true}},
+					PaymentConfig: db.MerchantPaymentConfig{SubMchID: "190002"},
+					Merchant:      db.Merchant{Name: "merchant-2"},
+				},
+			},
+		}, nil
+	})
+	store.EXPECT().UpdateCombinedPaymentOrderPrepay(gomock.Any(), db.UpdateCombinedPaymentOrderPrepayParams{
+		ID:       9001,
+		PrepayID: pgtype.Text{String: "prepay-combine-ordinary", Valid: true},
+	}).Return(db.CombinedPaymentOrder{ID: 9001, Status: paymentStatusPending, PrepayID: pgtype.Text{String: "prepay-combine-ordinary", Valid: true}}, nil)
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
+		require.Equal(t, db.PaymentChannelOrdinaryServiceProvider, arg.Channel)
+		require.Equal(t, db.ExternalPaymentCapabilityCombinePayment, arg.Capability)
+		require.Equal(t, db.ExternalPaymentCommandStatusAccepted, arg.CommandStatus)
+		require.Equal(t, capturedCombineOutTradeNo, arg.ExternalObjectKey)
+		require.True(t, arg.ExternalSecondaryKey.Valid)
+		require.Equal(t, "prepay-combine-ordinary", arg.ExternalSecondaryKey.String)
+		return db.ExternalPaymentCommand{ID: 9900}, nil
+	})
+
+	result, err := svc.CreateCombinedPaymentOrder(context.Background(), input)
+
+	require.NoError(t, err)
+	require.Equal(t, int64(9001), result.CombinedPayment.ID)
+	require.NotNil(t, result.PayParams)
+	require.NotNil(t, ordinaryClient.createCombinePaymentRequest)
+	require.Equal(t, "wxsp_app", ordinaryClient.createCombinePaymentRequest.CombineAppID)
+	require.Equal(t, "1900000109", ordinaryClient.createCombinePaymentRequest.CombineMchID)
+	require.Equal(t, capturedCombineOutTradeNo, ordinaryClient.createCombinePaymentRequest.CombineOutTradeNo)
+	require.Equal(t, "openid-ok", ordinaryClient.createCombinePaymentRequest.CombinePayerInfo.OpenID)
+	require.Equal(t, "127.0.0.1", ordinaryClient.createCombinePaymentRequest.SceneInfo.PayerClientIP)
+	require.Equal(t, "https://api.example.com/v1/webhooks/wechat-ordinary/combine-notify", ordinaryClient.createCombinePaymentRequest.NotifyURL)
+	require.Len(t, ordinaryClient.createCombinePaymentRequest.SubOrders, 2)
+	require.Equal(t, "1900000109", ordinaryClient.createCombinePaymentRequest.SubOrders[0].MchID)
+	require.Equal(t, "190001", ordinaryClient.createCombinePaymentRequest.SubOrders[0].SubMchID)
+	require.Equal(t, "PO-11", ordinaryClient.createCombinePaymentRequest.SubOrders[0].OutTradeNo)
+	require.Equal(t, int64(3200), ordinaryClient.createCombinePaymentRequest.SubOrders[0].Amount.TotalAmount)
+	require.True(t, ordinaryClient.createCombinePaymentRequest.SubOrders[0].SettleInfo.ProfitSharing)
+	require.False(t, ordinaryClient.createCombinePaymentRequest.SubOrders[1].SettleInfo.ProfitSharing)
+}
+
+func TestCreateCombinedPaymentOrder_LogsOrdinaryCleanupFailuresAfterPrepayUpdateError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var logs bytes.Buffer
+	previousLogger := log.Logger
+	log.Logger = zerolog.New(&logs)
+	t.Cleanup(func() { log.Logger = previousLogger })
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{}
+	svc := NewCombinedPaymentServiceWithOrdinaryServiceProvider(store, ordinaryClient)
+
+	input := CreateCombinedPaymentOrderInput{UserID: 1001, OrderIDs: []int64{11}, ClientIP: "127.0.0.1"}
+	store.EXPECT().GetUser(gomock.Any(), input.UserID).Return(db.User{ID: input.UserID, WechatOpenid: "openid-ok"}, nil)
+	store.EXPECT().CreateCombinedPaymentTx(gomock.Any(), gomock.Any()).Return(db.CreateCombinedPaymentTxResult{
+		CombinedPaymentOrder: db.CombinedPaymentOrder{ID: 9101, UserID: 1001, CombineOutTradeNo: "CP20260301112233", Status: paymentStatusPending},
+		OrderInfos: []db.CombinedPaymentOrderInfo{
+			{
+				Order:         db.Order{ID: 11, MerchantID: 501},
+				PaymentOrder:  db.PaymentOrder{ID: 7201, PaymentChannel: db.PaymentChannelOrdinaryServiceProvider, RequiresProfitSharing: true, Amount: 3200, OutTradeNo: "PO-11", Attach: pgtype.Text{String: "attach-11", Valid: true}},
+				PaymentConfig: db.MerchantPaymentConfig{SubMchID: "190001"},
+				Merchant:      db.Merchant{Name: "merchant-1"},
+			},
+		},
+	}, nil)
+	store.EXPECT().UpdateCombinedPaymentOrderPrepay(gomock.Any(), db.UpdateCombinedPaymentOrderPrepayParams{
+		ID:       9101,
+		PrepayID: pgtype.Text{String: "prepay-combine-ordinary", Valid: true},
+	}).Return(db.CombinedPaymentOrder{}, errors.New("update combined prepay failed"))
+	store.EXPECT().UpdatePaymentOrderToFailed(gomock.Any(), int64(7201)).Return(db.PaymentOrder{}, errors.New("mark child failed"))
+	store.EXPECT().UpdateCombinedPaymentOrderToFailed(gomock.Any(), int64(9101)).Return(db.CombinedPaymentOrder{}, errors.New("mark combined failed"))
+
+	_, err := svc.CreateCombinedPaymentOrder(context.Background(), input)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "update combined payment prepay")
+	require.Contains(t, logs.String(), "failed to mark child payment order failed after combine prepay update failure")
+	require.Contains(t, logs.String(), "mark child failed")
+	require.Contains(t, logs.String(), "failed to mark combined payment order failed after prepay update failure")
+	require.Contains(t, logs.String(), "mark combined failed")
+	require.NotNil(t, ordinaryClient.closeCombinePaymentRequest)
 }
 
 func TestCreateCombinedPaymentOrder_ConcurrentPendingCombinedSigningFailureReturnsError(t *testing.T) {
@@ -1426,6 +1544,82 @@ func TestCloseCombinedPaymentOrder(t *testing.T) {
 			tc.check(t, result, err)
 		})
 	}
+}
+
+func TestQueryCombinedPaymentOrder_UsesOrdinaryServiceProvider(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{
+		queryCombinePaymentResponse: &ospcontracts.CombineQueryResponse{
+			CombineAppID:      "wxsp_app",
+			CombineMchID:      "1900000109",
+			CombineOutTradeNo: "C202605010001",
+			TradeState:        ospcontracts.PaymentTradeStateNotPay,
+			SubOrders: []ospcontracts.CombineOrderState{
+				{SubMchID: "sub-1", OutTradeNo: "P-1", TradeState: ospcontracts.PaymentTradeStateNotPay},
+			},
+		},
+	}
+	svc := NewCombinedPaymentServiceWithOrdinaryServiceProvider(store, ordinaryClient)
+	svc.now = func() time.Time { return time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC) }
+	combinedRow := db.GetCombinedPaymentOrderWithSubOrdersRow{
+		ID:                2002,
+		UserID:            1002,
+		Status:            paymentStatusPending,
+		CombineOutTradeNo: "C202605010001",
+		PrepayID:          pgtype.Text{String: "prepay-combine-ordinary", Valid: true},
+		ExpiresAt:         pgtype.Timestamptz{Time: time.Date(2026, 5, 1, 12, 30, 0, 0, time.UTC), Valid: true},
+		SubOrders:         []byte(`[{}]`),
+	}
+	store.EXPECT().GetCombinedPaymentOrderWithSubOrders(gomock.Any(), combinedRow.ID).Return(combinedRow, nil)
+
+	result, err := svc.QueryCombinedPaymentOrder(context.Background(), QueryCombinedPaymentOrderInput{UserID: combinedRow.UserID, CombinedPaymentID: combinedRow.ID})
+
+	require.NoError(t, err)
+	require.NotNil(t, ordinaryClient.queryCombinePaymentRequest)
+	require.Equal(t, "1900000109", ordinaryClient.queryCombinePaymentRequest.CombineMchID)
+	require.Equal(t, "C202605010001", ordinaryClient.queryCombinePaymentRequest.CombineOutTradeNo)
+	require.Equal(t, "pending", result.WechatOrder.AggregateTradeState)
+	require.NotNil(t, result.PayParams)
+	require.Equal(t, "prepay_id=prepay-combine-ordinary", result.PayParams.Package)
+}
+
+func TestCloseCombinedPaymentOrder_UsesOrdinaryServiceProvider(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{}
+	svc := NewCombinedPaymentServiceWithOrdinaryServiceProvider(store, ordinaryClient)
+	combinedRow := db.GetCombinedPaymentOrderWithSubOrdersRow{
+		ID:                2002,
+		UserID:            1002,
+		Status:            paymentStatusPending,
+		CombineOutTradeNo: "C202605010001",
+		SubOrders:         []byte(`[{"order_id":11,"payment_order_id":22,"merchant_id":33,"sub_mch_id":"sub-1","amount":5000,"out_trade_no":"P-1","description":"test-sub-order"}]`),
+	}
+	store.EXPECT().GetCombinedPaymentOrderWithSubOrders(gomock.Any(), combinedRow.ID).Return(combinedRow, nil)
+	store.EXPECT().CloseCombinedPaymentOrderTx(gomock.Any(), db.CloseCombinedPaymentOrderTxParams{
+		CombinedPaymentOrderID: combinedRow.ID,
+		SubOrderOutTradeNos:    []string{"P-1"},
+	}).Return(db.CloseCombinedPaymentOrderTxResult{
+		CombinedPaymentOrder: db.CombinedPaymentOrder{ID: combinedRow.ID, Status: "closed"},
+	}, nil)
+
+	result, err := svc.CloseCombinedPaymentOrder(context.Background(), CloseCombinedPaymentOrderInput{UserID: combinedRow.UserID, CombinedPaymentID: combinedRow.ID})
+
+	require.NoError(t, err)
+	require.Equal(t, "closed", result.CombinedPayment.Status)
+	require.NotNil(t, ordinaryClient.closeCombinePaymentRequest)
+	require.Equal(t, "wxsp_app", ordinaryClient.closeCombinePaymentRequest.CombineAppID)
+	require.Equal(t, "1900000109", ordinaryClient.closeCombinePaymentRequest.CombineMchID)
+	require.Equal(t, "C202605010001", ordinaryClient.closeCombinePaymentRequest.CombineOutTradeNo)
+	require.Len(t, ordinaryClient.closeCombinePaymentRequest.SubOrders, 1)
+	require.Equal(t, "1900000109", ordinaryClient.closeCombinePaymentRequest.SubOrders[0].MchID)
+	require.Equal(t, "sub-1", ordinaryClient.closeCombinePaymentRequest.SubOrders[0].SubMchID)
+	require.Equal(t, "P-1", ordinaryClient.closeCombinePaymentRequest.SubOrders[0].OutTradeNo)
 }
 
 func TestDedupePositiveIDs(t *testing.T) {

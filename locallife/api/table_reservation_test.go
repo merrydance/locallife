@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,22 @@ import (
 )
 
 // ==================== 测试数据生成 ====================
+
+func TestWriteReservationPaymentConfigErrorReturnsActionable503(t *testing.T) {
+	w := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(w)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/reservations/123/cancel", nil)
+
+	handled := writeReservationPaymentConfigError(ctx, errors.New("ordinary service provider client: not configured"), "cancel reservation")
+	require.True(t, handled)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Contains(t, resp.Error, "商户支付能力未完成配置")
+	require.Contains(t, resp.Error, "联系平台")
+	require.Contains(t, resp.Error, "重试")
+}
 
 func randomReservation(tableID, userID, merchantID int64) db.TableReservation {
 	now := time.Now()

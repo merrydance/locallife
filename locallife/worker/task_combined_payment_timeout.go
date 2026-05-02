@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -63,10 +64,6 @@ func (p *RedisTaskProcessor) ProcessTaskCombinedPaymentOrderTimeout(ctx context.
 		Str("combine_out_trade_no", payload.CombineOutTradeNo).
 		Msg("processing combined payment order timeout task")
 
-	if p.ecommerceClient == nil {
-		return fmt.Errorf("ecommerce client not configured")
-	}
-
 	combined, err := p.store.GetCombinedPaymentOrderByOutTradeNo(ctx, payload.CombineOutTradeNo)
 	if err != nil {
 		return fmt.Errorf("get combined payment order: %w", err)
@@ -113,21 +110,25 @@ func (p *RedisTaskProcessor) ProcessTaskCombinedPaymentOrderTimeout(ctx context.
 		return fmt.Errorf("unmarshal combined sub orders: %w", err)
 	}
 
-	closeSubs := make([]wechatcontracts.SubOrderClose, 0, len(subOrders))
+	timeoutSubOrders := make([]combinedPaymentTimeoutSubOrder, 0, len(subOrders))
 	for _, sub := range subOrders {
 		if sub.SubMchID == "" || sub.OutTradeNo == "" {
 			continue
 		}
-		closeSubs = append(closeSubs, wechatcontracts.SubOrderClose{
+		timeoutSubOrders = append(timeoutSubOrders, combinedPaymentTimeoutSubOrder{
 			SubMchID:   sub.SubMchID,
 			OutTradeNo: sub.OutTradeNo,
 		})
 	}
-	if len(closeSubs) == 0 {
+	route, err := p.resolveCombinedPaymentTimeoutRoute(ctx, timeoutSubOrders)
+	if err != nil {
+		return err
+	}
+	if len(route.subOrders) == 0 {
 		return fmt.Errorf("no sub orders to close")
 	}
 
-	queryResp, err := p.ecommerceClient.QueryCombineOrder(ctx, combined.CombineOutTradeNo)
+	queryResp, err := p.queryCombinedPaymentOrderForTimeout(ctx, combined.CombineOutTradeNo, route.paymentChannel)
 	if err != nil {
 		return fmt.Errorf("query combine order before timeout close: %w", err)
 	}
@@ -158,7 +159,7 @@ func (p *RedisTaskProcessor) ProcessTaskCombinedPaymentOrderTimeout(ctx context.
 
 	// 只有 pending 状态才需要调用微信关单 API（closed 说明已经调用过了）
 	if combined.Status == "pending" {
-		if err := p.ecommerceClient.CloseCombineOrder(ctx, combined.CombineOutTradeNo, closeSubs); err != nil {
+		if err := p.closeCombinedPaymentOrderForTimeout(ctx, combined.CombineOutTradeNo, route); err != nil {
 			return fmt.Errorf("close combine order: %w", err)
 		}
 
@@ -168,7 +169,7 @@ func (p *RedisTaskProcessor) ProcessTaskCombinedPaymentOrderTimeout(ctx context.
 	}
 
 	// 逐个关闭仍处于 pending 状态的子支付单（重试安全：已 closed 的子单会被跳过）
-	for _, sub := range closeSubs {
+	for _, sub := range route.subOrders {
 		paymentOrder, err := p.store.GetPaymentOrderByOutTradeNo(ctx, sub.OutTradeNo)
 		if err != nil {
 			if errors.Is(err, db.ErrRecordNotFound) {
@@ -206,6 +207,122 @@ func (p *RedisTaskProcessor) ProcessTaskCombinedPaymentOrderTimeout(ctx context.
 		Msg("combined payment order timeout processed successfully")
 
 	return nil
+}
+
+type combinedPaymentTimeoutSubOrder struct {
+	SubMchID   string
+	OutTradeNo string
+}
+
+type combinedPaymentTimeoutRoute struct {
+	paymentChannel    string
+	subOrders         []combinedPaymentTimeoutSubOrder
+	ecommerceCloseSub []wechatcontracts.SubOrderClose
+	ordinaryCloseSub  []ospcontracts.CombineCloseSubOrder
+}
+
+func (p *RedisTaskProcessor) resolveCombinedPaymentTimeoutRoute(ctx context.Context, subOrders []combinedPaymentTimeoutSubOrder) (combinedPaymentTimeoutRoute, error) {
+	route := combinedPaymentTimeoutRoute{subOrders: make([]combinedPaymentTimeoutSubOrder, 0, len(subOrders))}
+	for _, sub := range subOrders {
+		paymentOrder, err := p.store.GetPaymentOrderByOutTradeNo(ctx, sub.OutTradeNo)
+		if err != nil {
+			return route, fmt.Errorf("get payment order for combined timeout route %s: %w", sub.OutTradeNo, err)
+		}
+		if route.paymentChannel == "" {
+			route.paymentChannel = paymentOrder.PaymentChannel
+		} else if route.paymentChannel != paymentOrder.PaymentChannel {
+			return route, fmt.Errorf("combined payment %s has mixed payment channels %s and %s", sub.OutTradeNo, route.paymentChannel, paymentOrder.PaymentChannel)
+		}
+		route.subOrders = append(route.subOrders, sub)
+
+		switch paymentOrder.PaymentChannel {
+		case db.PaymentChannelOrdinaryServiceProvider:
+			if p.ordinarySPClient == nil {
+				return route, fmt.Errorf("ordinary service provider client not configured for combined payment timeout")
+			}
+			route.ordinaryCloseSub = append(route.ordinaryCloseSub, ospcontracts.CombineCloseSubOrder{
+				MchID:      p.ordinarySPClient.ServiceProviderMchID(),
+				SubMchID:   sub.SubMchID,
+				OutTradeNo: sub.OutTradeNo,
+			})
+		case db.PaymentChannelEcommerce:
+			if p.ecommerceClient == nil {
+				return route, fmt.Errorf("ecommerce client not configured for combined payment timeout")
+			}
+			route.ecommerceCloseSub = append(route.ecommerceCloseSub, wechatcontracts.SubOrderClose{
+				SubMchID:   sub.SubMchID,
+				OutTradeNo: sub.OutTradeNo,
+			})
+		default:
+			return route, fmt.Errorf("combined payment sub order %s uses unsupported payment channel %s", sub.OutTradeNo, paymentOrder.PaymentChannel)
+		}
+	}
+	return route, nil
+}
+
+func (p *RedisTaskProcessor) queryCombinedPaymentOrderForTimeout(ctx context.Context, combineOutTradeNo string, paymentChannel string) (*wechatcontracts.CombineQueryResponse, error) {
+	switch paymentChannel {
+	case db.PaymentChannelOrdinaryServiceProvider:
+		if p.ordinarySPClient == nil {
+			return nil, fmt.Errorf("ordinary service provider client not configured")
+		}
+		resp, err := p.ordinarySPClient.QueryCombinePayment(ctx, ospcontracts.CombineQueryRequest{
+			CombineMchID:      p.ordinarySPClient.ServiceProviderMchID(),
+			CombineOutTradeNo: combineOutTradeNo,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return mapOrdinaryServiceProviderCombineTimeoutQueryResponse(resp), nil
+	case db.PaymentChannelEcommerce:
+		if p.ecommerceClient == nil {
+			return nil, fmt.Errorf("ecommerce client not configured")
+		}
+		return p.ecommerceClient.QueryCombineOrder(ctx, combineOutTradeNo)
+	default:
+		return nil, fmt.Errorf("combined payment channel %s does not support remote timeout query", paymentChannel)
+	}
+}
+
+func (p *RedisTaskProcessor) closeCombinedPaymentOrderForTimeout(ctx context.Context, combineOutTradeNo string, route combinedPaymentTimeoutRoute) error {
+	switch route.paymentChannel {
+	case db.PaymentChannelOrdinaryServiceProvider:
+		if p.ordinarySPClient == nil {
+			return fmt.Errorf("ordinary service provider client not configured")
+		}
+		return p.ordinarySPClient.CloseCombinePayment(ctx, ospcontracts.CombineCloseRequest{
+			CombineAppID:      p.ordinarySPClient.ServiceProviderAppID(),
+			CombineMchID:      p.ordinarySPClient.ServiceProviderMchID(),
+			CombineOutTradeNo: combineOutTradeNo,
+			SubOrders:         route.ordinaryCloseSub,
+		})
+	case db.PaymentChannelEcommerce:
+		if p.ecommerceClient == nil {
+			return fmt.Errorf("ecommerce client not configured")
+		}
+		return p.ecommerceClient.CloseCombineOrder(ctx, combineOutTradeNo, route.ecommerceCloseSub)
+	default:
+		return fmt.Errorf("combined payment channel %s does not support remote timeout close", route.paymentChannel)
+	}
+}
+
+func mapOrdinaryServiceProviderCombineTimeoutQueryResponse(resp *ospcontracts.CombineQueryResponse) *wechatcontracts.CombineQueryResponse {
+	if resp == nil {
+		return nil
+	}
+	subOrders := make([]wechatcontracts.CombineSubOrderResult, 0, len(resp.SubOrders))
+	for _, sub := range resp.SubOrders {
+		subOrders = append(subOrders, wechatcontracts.CombineSubOrderResult{
+			SubMchID:      sub.SubMchID,
+			OutTradeNo:    sub.OutTradeNo,
+			TransactionID: sub.TransactionID,
+			TradeState:    string(sub.TradeState),
+		})
+	}
+	return &wechatcontracts.CombineQueryResponse{
+		CombineOutTradeNo: resp.CombineOutTradeNo,
+		SubOrders:         subOrders,
+	}
 }
 
 const (

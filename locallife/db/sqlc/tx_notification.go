@@ -3,6 +3,8 @@ package db
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -60,18 +62,19 @@ func (store *SQLStore) MarkWechatNotificationProcessed(ctx context.Context, id, 
 
 // ApplymentSubMchActivationTxParams 进件开通二级商户号事务参数
 type ApplymentSubMchActivationTxParams struct {
-	ApplymentID       int64
-	WechatApplymentID pgtype.Int8
-	SubjectType       string
-	SubjectID         int64
-	SubMchID          string
+	ApplymentID           int64
+	WechatApplymentID     pgtype.Int8
+	SubjectType           string
+	SubjectID             int64
+	SubMchID              string
+	AccountAuthorizeState string
 }
 
-// ApplymentSubMchActivationTx 在单个事务中完成进件开通后的三步 DB 更新。
+// ApplymentSubMchActivationTx 在单个事务中同步进件完成、二级商户号和开户意愿授权状态。
 //
-// 修复 CB-4：原先 handleApplymentStateNotify 中三步更新（UpdateEcommerceApplymentSubMchID,
-// UpdateMerchantPaymentConfig, UpdateMerchantStatus）是非原子分散调用，任意一步失败
-// 会导致数据不一致。此事务确保三步要么全部成功，要么全部回滚。
+// 进件 FINISH 只代表微信已生成特约商户号，不代表商户已完成开户意愿确认。
+// 只有 account_authorize_state=AUTHORIZE_STATE_AUTHORIZED 时才激活商户交易能力；
+// 否则支付配置停留在 pending_authorization，商户状态不升级为 active。
 func (store *SQLStore) ApplymentSubMchActivationTx(ctx context.Context, arg ApplymentSubMchActivationTxParams) error {
 	return store.execTx(ctx, func(q *Queries) error {
 		applyment, err := q.GetEcommerceApplyment(ctx, arg.ApplymentID)
@@ -83,18 +86,27 @@ func (store *SQLStore) ApplymentSubMchActivationTx(ctx context.Context, arg Appl
 		if !resolvedWechatApplymentID.Valid && arg.WechatApplymentID.Valid {
 			resolvedWechatApplymentID = arg.WechatApplymentID
 		}
+		accountAuthorizeState := strings.TrimSpace(arg.AccountAuthorizeState)
+		if accountAuthorizeState == "" && applyment.AccountAuthorizeState.Valid {
+			accountAuthorizeState = strings.TrimSpace(applyment.AccountAuthorizeState.String)
+		}
+		if accountAuthorizeState == "" {
+			accountAuthorizeState = AccountAuthorizeStateUnauthorized
+		}
 
 		// step 1: 在激活事务内同步进件完成状态与 sub_mch_id，避免 finish owner path 漏写终态。
 		if _, err := q.UpdateEcommerceApplymentStatus(ctx, UpdateEcommerceApplymentStatusParams{
-			ID:                 arg.ApplymentID,
-			ApplymentID:        resolvedWechatApplymentID,
-			Status:             "finish",
-			RejectReason:       applyment.RejectReason,
-			SignUrl:            applyment.SignUrl,
-			SignState:          applyment.SignState,
-			LegalValidationUrl: applyment.LegalValidationUrl,
-			AccountValidation:  applyment.AccountValidation,
-			SubMchID:           pgtype.Text{String: arg.SubMchID, Valid: true},
+			ID:                             arg.ApplymentID,
+			ApplymentID:                    resolvedWechatApplymentID,
+			Status:                         "finish",
+			RejectReason:                   applyment.RejectReason,
+			SignUrl:                        applyment.SignUrl,
+			SignState:                      applyment.SignState,
+			LegalValidationUrl:             applyment.LegalValidationUrl,
+			AccountValidation:              applyment.AccountValidation,
+			SubMchID:                       pgtype.Text{String: arg.SubMchID, Valid: true},
+			AccountAuthorizeState:          pgtype.Text{String: accountAuthorizeState, Valid: accountAuthorizeState != ""},
+			AccountAuthorizeStateCheckedAt: pgtype.Timestamptz{Time: time.Now(), Valid: accountAuthorizeState != ""},
 		}); err != nil {
 			return fmt.Errorf("update applyment status to finish: %w", err)
 		}
@@ -103,19 +115,28 @@ func (store *SQLStore) ApplymentSubMchActivationTx(ctx context.Context, arg Appl
 			return nil
 		}
 
-		// step 2: 更新商户支付配置
+		paymentConfigStatus := MerchantPaymentConfigStatusPendingAuthorization
+		authorized := accountAuthorizeState == AccountAuthorizeStateAuthorized
+		if authorized {
+			paymentConfigStatus = MerchantPaymentConfigStatusActive
+		}
+
+		// step 2: 更新商户支付配置。未完成开户意愿授权时不得开放交易能力。
 		if _, err := q.UpdateMerchantPaymentConfig(ctx, UpdateMerchantPaymentConfigParams{
 			MerchantID: arg.SubjectID,
 			SubMchID:   pgtype.Text{String: arg.SubMchID, Valid: true},
-			Status:     pgtype.Text{String: "active", Valid: true},
+			Status:     pgtype.Text{String: paymentConfigStatus, Valid: true},
 		}); err != nil {
 			return fmt.Errorf("update merchant payment config: %w", err)
 		}
+		if !authorized {
+			return nil
+		}
 
-		// step 3: 更新商户状态为 active
+		// step 3: 授权完成后才更新商户状态为 active
 		if _, err := q.UpdateMerchantStatus(ctx, UpdateMerchantStatusParams{
 			ID:     arg.SubjectID,
-			Status: "active",
+			Status: MerchantStatusActive,
 		}); err != nil {
 			return fmt.Errorf("update merchant status: %w", err)
 		}

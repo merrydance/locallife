@@ -8,9 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/wechat"
-	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
-	wechatmock "github.com/merrydance/locallife/wechat/mock"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -63,7 +61,7 @@ func TestOrderServiceReplaceOrderSchedulesPaymentTimeout(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := wechatmock.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{createPaymentResponse: &ospcontracts.PaymentPrepayResponse{PrepayID: "prepay-replace-1"}}
 	taskScheduler := &replaceOrderTaskSchedulerStub{}
 
 	orderID := int64(10)
@@ -98,7 +96,7 @@ func TestOrderServiceReplaceOrderSchedulesPaymentTimeout(t *testing.T) {
 		UserID:         userID,
 		OrderID:        pgtype.Int8{Int64: 111, Valid: true},
 		PaymentType:    "profit_sharing",
-		PaymentChannel: db.PaymentChannelEcommerce,
+		PaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
 		BusinessType:   "order",
 		Amount:         500,
 		OutTradeNo:     "RO111202603230001",
@@ -133,19 +131,15 @@ func TestOrderServiceReplaceOrderSchedulesPaymentTimeout(t *testing.T) {
 		require.Equal(t, reservationID, arg.ReservationID)
 		return db.CreatePartnerPaymentTxResult{PaymentOrder: paymentOrder, SubMchID: "1900000109"}, nil
 	})
-	ecommerceClient.EXPECT().CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, req *wechatcontracts.PartnerJSAPIOrderRequest) (*wechatcontracts.PartnerJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
-		require.True(t, req.ProfitSharing)
-		return &wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay-replace-1"}, &wechat.JSAPIPayParams{}, nil
-	})
 	store.EXPECT().UpdatePaymentOrderPrepayId(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.UpdatePaymentOrderPrepayIdParams) (db.PaymentOrder, error) {
 		updated := paymentOrder
 		updated.PrepayID = arg.PrepayID
 		return updated, nil
 	})
-	expectPartnerJSAPIPaymentCommand(t, store, paymentOrder.ID, paymentOrder.OutTradeNo, "prepay-replace-1", db.ExternalPaymentBusinessOwnerReservation, db.ExternalPaymentCommandStatusAccepted, "", 9803)
+	expectReplaceReservationPaymentCommand(t, store, paymentOrder.ID, paymentOrder.OutTradeNo, "prepay-replace-1", db.ExternalPaymentBusinessOwnerReservation, db.ExternalPaymentCommandStatusAccepted, "", db.PaymentChannelOrdinaryServiceProvider, 9803)
 	store.EXPECT().GetPaymentOrder(gomock.Any(), int64(222)).Times(1).Return(paymentOrder, nil)
 
-	service := NewOrderService(store, nil, nil, nil, taskScheduler, replaceOrderNormalizerStub{}, nil, ecommerceClient, nil, nil, nil)
+	service := NewOrderService(store, nil, nil, nil, taskScheduler, replaceOrderNormalizerStub{}, nil, nil, nil, nil, nil, ordinaryClient)
 	result, err := service.ReplaceOrder(context.Background(), ReplaceOrderInput{
 		UserID:  userID,
 		OrderID: orderID,
@@ -159,4 +153,7 @@ func TestOrderServiceReplaceOrderSchedulesPaymentTimeout(t *testing.T) {
 	require.True(t, taskScheduler.called)
 	require.Equal(t, "RO111202603230001", taskScheduler.paymentOrderNo)
 	require.True(t, taskScheduler.at.Equal(expiresAt))
+	require.NotNil(t, ordinaryClient.createPaymentRequest)
+	require.Equal(t, "1900000109", ordinaryClient.createPaymentRequest.SubMchID)
+	require.True(t, ordinaryClient.createPaymentRequest.SettleInfo.ProfitSharing)
 }

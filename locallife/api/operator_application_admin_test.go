@@ -2,15 +2,12 @@ package api
 
 import (
 	"bytes"
-	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
-	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -113,8 +110,7 @@ func TestApproveOperatorApplicationAdmin_WritesProfitSharingReceiverTargetIntent
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	server := newTestServer(t, store)
 
 	application := db.OperatorApplication{
 		ID:                     11,
@@ -173,7 +169,6 @@ func TestApproveOperatorApplicationAdmin_WritesProfitSharingReceiverTargetIntent
 	store.EXPECT().
 		CreateUserRole(gomock.Any(), gomock.Any()).
 		Return(db.UserRole{UserID: application.UserID, Role: RoleOperator, Status: "active"}, nil)
-	expectOperatorReceiverTargetIntent(t, store, ecommerceClient, operator, user, db.ProfitSharingReceiverDesiredStatePresent, 701)
 	store.EXPECT().
 		GetRegion(gomock.Any(), application.RegionID).
 		Return(db.Region{ID: application.RegionID, Name: "测试区域"}, nil)
@@ -192,93 +187,13 @@ func TestApproveOperatorApplicationAdmin_WritesProfitSharingReceiverTargetIntent
 	require.Equal(t, "approved", resp.Status)
 }
 
-func TestApproveOperatorApplicationAdmin_ReceiverIntentFailureReturnsInternalError(t *testing.T) {
+func TestUpdateOperatorStatusAdmin_SuspendsWithoutReceiverTarget(t *testing.T) {
 	admin, _ := randomUser(t)
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
-
-	application := db.OperatorApplication{
-		ID:                     12,
-		UserID:                 89,
-		RegionID:               67,
-		Name:                   pgtype.Text{String: "华东运营商", Valid: true},
-		ContactName:            pgtype.Text{String: "李运营", Valid: true},
-		ContactPhone:           pgtype.Text{String: "13800138111", Valid: true},
-		RequestedContractYears: 2,
-		Status:                 "submitted",
-	}
-	approved := application
-	approved.Status = "approved"
-	operator := db.Operator{
-		ID:           100,
-		UserID:       application.UserID,
-		RegionID:     application.RegionID,
-		Name:         "华东运营商",
-		ContactName:  "李运营",
-		ContactPhone: "13800138111",
-		Status:       "active",
-	}
-	user := db.User{ID: application.UserID, WechatOpenid: "operator-openid-89"}
-
-	store.EXPECT().
-		ListUserRoles(gomock.Any(), admin.ID).
-		Return([]db.UserRole{{UserID: admin.ID, Role: RoleAdmin, Status: "active"}}, nil)
-	store.EXPECT().
-		GetOperatorApplicationByID(gomock.Any(), application.ID).
-		Return(application, nil)
-	store.EXPECT().
-		GetOperatorByUser(gomock.Any(), application.UserID).
-		Return(db.Operator{}, db.ErrRecordNotFound)
-	store.EXPECT().
-		GetActiveOperatorByRegion(gomock.Any(), application.RegionID).
-		Return(db.Operator{}, db.ErrRecordNotFound)
-	store.EXPECT().
-		GetUser(gomock.Any(), application.UserID).
-		Return(user, nil)
-	store.EXPECT().
-		ApproveOperatorApplication(gomock.Any(), gomock.Any()).
-		Return(approved, nil)
-	store.EXPECT().
-		CreateOperator(gomock.Any(), gomock.Any()).
-		Return(operator, nil)
-	store.EXPECT().
-		AddOperatorRegion(gomock.Any(), db.AddOperatorRegionParams{OperatorID: operator.ID, RegionID: application.RegionID}).
-		Return(db.OperatorRegion{OperatorID: operator.ID, RegionID: application.RegionID}, nil)
-	store.EXPECT().
-		GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{UserID: application.UserID, Role: RoleOperator}).
-		Return(db.UserRole{}, db.ErrRecordNotFound)
-	store.EXPECT().
-		CreateUserRole(gomock.Any(), gomock.Any()).
-		Return(db.UserRole{UserID: application.UserID, Role: RoleOperator, Status: "active"}, nil)
-	store.EXPECT().GetUser(gomock.Any(), application.UserID).Return(user, nil)
-	ecommerceClient.EXPECT().GetSpAppID().Return("wx_sp_app_123")
-	store.EXPECT().UpsertProfitSharingReceiverTarget(gomock.Any(), gomock.Any()).Return(db.ProfitSharingReceiverTarget{}, errors.New("intent table unavailable"))
-
-	recorder := httptest.NewRecorder()
-	request, err := http.NewRequest(http.MethodPost, "/v1/admin/operators/applications/12/approve", nil)
-	require.NoError(t, err)
-	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, admin.ID, time.Minute)
-
-	server.router.ServeHTTP(recorder, request)
-	require.Equal(t, http.StatusInternalServerError, recorder.Code)
-
-	var resp APIResponse
-	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
-	require.Equal(t, CodeInternalError, resp.Code)
-}
-
-func TestUpdateOperatorStatusAdmin_SuspendWritesAbsentReceiverIntent(t *testing.T) {
-	admin, _ := randomUser(t)
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	server := newTestServer(t, store)
 
 	operator := db.Operator{
 		ID:          35,
@@ -289,7 +204,6 @@ func TestUpdateOperatorStatusAdmin_SuspendWritesAbsentReceiverIntent(t *testing.
 		Status:      "active",
 	}
 	role := db.UserRole{ID: 91, UserID: operator.UserID, Role: RoleOperator, Status: "active"}
-	user := db.User{ID: operator.UserID, WechatOpenid: "operator-openid-88"}
 
 	store.EXPECT().
 		ListUserRoles(gomock.Any(), admin.ID).
@@ -304,7 +218,6 @@ func TestUpdateOperatorStatusAdmin_SuspendWritesAbsentReceiverIntent(t *testing.
 	store.EXPECT().
 		UpdateUserRoleStatus(gomock.Any(), db.UpdateUserRoleStatusParams{ID: role.ID, Status: "suspended"}).
 		Return(db.UserRole{ID: role.ID, UserID: operator.UserID, Role: RoleOperator, Status: "suspended"}, nil)
-	expectOperatorReceiverTargetIntent(t, store, ecommerceClient, operator, user, db.ProfitSharingReceiverDesiredStateAbsent, 703)
 
 	body := bytes.NewBufferString(`{"status":"suspended"}`)
 	request, err := http.NewRequest(http.MethodPost, "/v1/admin/operators/35/status", body)
@@ -356,14 +269,13 @@ func TestUpdateOperatorStatusAdmin_ActivateChecksRegionConflict(t *testing.T) {
 	require.Equal(t, http.StatusConflict, recorder.Code)
 }
 
-func TestUpdateOperatorStatusAdmin_ActivateReenablesRoleAndWritesReceiverIntent(t *testing.T) {
+func TestUpdateOperatorStatusAdmin_ActivateReenablesRoleWithoutReceiverTarget(t *testing.T) {
 	admin, _ := randomUser(t)
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	server := newTestServer(t, store)
 
 	operator := db.Operator{
 		ID:          37,
@@ -374,7 +286,6 @@ func TestUpdateOperatorStatusAdmin_ActivateReenablesRoleAndWritesReceiverIntent(
 		Status:      "suspended",
 	}
 	role := db.UserRole{ID: 92, UserID: operator.UserID, Role: RoleOperator, Status: "suspended"}
-	user := db.User{ID: operator.UserID, WechatOpenid: "operator-openid-90"}
 
 	store.EXPECT().
 		ListUserRoles(gomock.Any(), admin.ID).
@@ -391,7 +302,6 @@ func TestUpdateOperatorStatusAdmin_ActivateReenablesRoleAndWritesReceiverIntent(
 	store.EXPECT().
 		UpdateUserRoleStatus(gomock.Any(), db.UpdateUserRoleStatusParams{ID: role.ID, Status: "active"}).
 		Return(db.UserRole{ID: role.ID, UserID: operator.UserID, Role: RoleOperator, Status: "active"}, nil)
-	expectOperatorReceiverTargetIntent(t, store, ecommerceClient, operator, user, db.ProfitSharingReceiverDesiredStatePresent, 704)
 
 	body := bytes.NewBufferString(`{"status":"active"}`)
 	request, err := http.NewRequest(http.MethodPost, "/v1/admin/operators/37/status", body)
@@ -415,15 +325,12 @@ func TestBatchUpdateOperatorStatusAdmin_SuspendContinuesAfterFailure(t *testing.
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	server := newTestServer(t, store)
 
 	first := db.Operator{ID: 41, UserID: 141, RegionID: 66, Name: "运营商甲", ContactName: "运营商甲", Status: "active"}
 	third := db.Operator{ID: 43, UserID: 143, RegionID: 68, Name: "运营商丙", ContactName: "运营商丙", Status: "active"}
 	firstRole := db.UserRole{ID: 301, UserID: first.UserID, Role: RoleOperator, Status: "active"}
 	thirdRole := db.UserRole{ID: 303, UserID: third.UserID, Role: RoleOperator, Status: "active"}
-	firstUser := db.User{ID: first.UserID, WechatOpenid: "operator-openid-141"}
-	thirdUser := db.User{ID: third.UserID, WechatOpenid: "operator-openid-143"}
 
 	store.EXPECT().
 		ListUserRoles(gomock.Any(), admin.ID).
@@ -438,7 +345,6 @@ func TestBatchUpdateOperatorStatusAdmin_SuspendContinuesAfterFailure(t *testing.
 	store.EXPECT().
 		UpdateUserRoleStatus(gomock.Any(), db.UpdateUserRoleStatusParams{ID: firstRole.ID, Status: "suspended"}).
 		Return(db.UserRole{ID: firstRole.ID, UserID: first.UserID, Role: RoleOperator, Status: "suspended"}, nil)
-	expectOperatorReceiverTargetIntent(t, store, ecommerceClient, first, firstUser, db.ProfitSharingReceiverDesiredStateAbsent, 705)
 
 	store.EXPECT().GetOperator(gomock.Any(), int64(42)).Return(db.Operator{}, db.ErrRecordNotFound)
 
@@ -451,10 +357,7 @@ func TestBatchUpdateOperatorStatusAdmin_SuspendContinuesAfterFailure(t *testing.
 		Return(db.UserRole{ID: thirdRole.ID, UserID: third.UserID, Role: RoleOperator, Status: "suspended"}, nil)
 	store.EXPECT().
 		UpdateOperatorStatus(gomock.Any(), db.UpdateOperatorStatusParams{ID: third.ID, Status: "suspended"}).
-		Return(db.Operator{ID: third.ID, UserID: third.UserID, RegionID: third.RegionID, Name: third.Name, ContactName: third.ContactName, Status: "suspended"}, nil)
-	store.EXPECT().GetUser(gomock.Any(), third.UserID).Return(thirdUser, nil)
-	ecommerceClient.EXPECT().GetSpAppID().Return("wx_sp_app_123")
-	store.EXPECT().UpsertProfitSharingReceiverTarget(gomock.Any(), gomock.Any()).Return(db.ProfitSharingReceiverTarget{}, errors.New("intent table unavailable"))
+		Return(db.Operator{}, assertAnError("update operator status failed"))
 
 	body := bytes.NewBufferString(`{"operator_ids":[41,42,43],"status":"suspended"}`)
 	request, err := http.NewRequest(http.MethodPost, "/v1/admin/operators/batch/status", body)
@@ -484,14 +387,12 @@ func TestBatchUpdateOperatorStatusAdmin_ActivateMixedResults(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	server := newTestServer(t, store)
 
 	first := db.Operator{ID: 51, UserID: 151, RegionID: 71, Status: "suspended"}
 	second := db.Operator{ID: 52, UserID: 152, RegionID: 72, Name: "运营商乙", ContactName: "李运营", Status: "suspended"}
 	otherActiveOperator := db.Operator{ID: 99, UserID: 199, RegionID: first.RegionID, Status: "active"}
 	secondRole := db.UserRole{ID: 352, UserID: second.UserID, Role: RoleOperator, Status: "suspended"}
-	secondUser := db.User{ID: second.UserID, WechatOpenid: "operator-openid-152"}
 
 	store.EXPECT().
 		ListUserRoles(gomock.Any(), admin.ID).
@@ -513,7 +414,6 @@ func TestBatchUpdateOperatorStatusAdmin_ActivateMixedResults(t *testing.T) {
 	store.EXPECT().
 		UpdateUserRoleStatus(gomock.Any(), db.UpdateUserRoleStatusParams{ID: secondRole.ID, Status: "active"}).
 		Return(db.UserRole{ID: secondRole.ID, UserID: second.UserID, Role: RoleOperator, Status: "active"}, nil)
-	expectOperatorReceiverTargetIntent(t, store, ecommerceClient, second, secondUser, db.ProfitSharingReceiverDesiredStatePresent, 706)
 
 	body := bytes.NewBufferString(`{"operator_ids":[51,52],"status":"active"}`)
 	request, err := http.NewRequest(http.MethodPost, "/v1/admin/operators/batch/status", body)
@@ -533,32 +433,4 @@ func TestBatchUpdateOperatorStatusAdmin_ActivateMixedResults(t *testing.T) {
 	require.Equal(t, first.ID, resp.Failed[0].OperatorID)
 	require.Equal(t, ErrRegionHasOperator.Code, resp.Failed[0].Code)
 	require.Equal(t, ErrRegionHasOperator.Message, resp.Failed[0].Error)
-}
-
-func expectOperatorReceiverTargetIntent(
-	t *testing.T,
-	store *mockdb.MockStore,
-	ecommerceClient *mockwechat.MockEcommerceClientInterface,
-	operator db.Operator,
-	user db.User,
-	desiredState string,
-	targetID int64,
-) {
-	t.Helper()
-
-	store.EXPECT().GetUser(gomock.Any(), operator.UserID).Return(user, nil)
-	ecommerceClient.EXPECT().GetSpAppID().Return("wx_sp_app_123")
-	store.EXPECT().UpsertProfitSharingReceiverTarget(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertProfitSharingReceiverTargetParams) (db.ProfitSharingReceiverTarget, error) {
-		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
-		require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
-		require.Equal(t, db.ProfitSharingReceiverOwnerTypeOperator, arg.OwnerType)
-		require.Equal(t, operator.ID, arg.OwnerID)
-		require.Equal(t, db.ProfitSharingReceiverTypePersonalOpenID, arg.ReceiverType)
-		require.Equal(t, "wx_sp_app_123", arg.Appid)
-		require.Equal(t, desiredState, arg.DesiredState)
-		require.NotEmpty(t, arg.AccountHash)
-		require.NotContains(t, arg.AccountHash, user.WechatOpenid)
-		require.NotContains(t, arg.DisplayNameHash.String, operator.ContactName)
-		return db.ProfitSharingReceiverTarget{ID: targetID, DesiredState: desiredState, SyncStatus: db.ProfitSharingReceiverSyncStatusPending}, nil
-	})
 }

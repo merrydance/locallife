@@ -103,7 +103,7 @@ type createSubsidyRequest struct {
 func (server *Server) createSubsidy(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
 		err := errors.New("payment service not configured")
-		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service not configured", "create subsidy payment service not configured"))
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "补差服务暂不可用；普通服务商模式不支持平台补差，请不要在前端展示补差入口", "create subsidy payment service not configured"))
 		return
 	}
 
@@ -213,7 +213,7 @@ func (server *Server) createSubsidy(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("mark subsidy order failed after wxpay error: %w", err)))
 			return
 		}
-		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, wxErr, "subsidy api unavailable", "create subsidy: wxpay api failed"))
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, wxErr, "微信补差接口暂不可用；普通服务商模式不支持补差，请联系平台管理员确认该入口是否应下线", "create subsidy: wxpay api failed"))
 		return
 	}
 
@@ -268,7 +268,7 @@ type returnSubsidyRequest struct {
 func (server *Server) returnSubsidy(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
 		err := errors.New("payment service not configured")
-		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service not configured", "return subsidy payment service not configured"))
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "补差回退服务暂不可用；普通服务商模式不支持补差回退，请不要在前端展示补差入口", "return subsidy payment service not configured"))
 		return
 	}
 
@@ -368,7 +368,7 @@ func (server *Server) returnSubsidy(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("mark subsidy return failed after wxpay error: %w", err)))
 			return
 		}
-		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, wxErr, "subsidy return api unavailable", "return subsidy: wxpay api failed"))
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, wxErr, "微信补差回退接口暂不可用；普通服务商模式不支持补差回退，请联系平台管理员确认该入口是否应下线", "return subsidy: wxpay api failed"))
 		return
 	}
 
@@ -419,7 +419,7 @@ func (server *Server) returnSubsidy(ctx *gin.Context) {
 func (server *Server) cancelSubsidy(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
 		err := errors.New("payment service not configured")
-		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service not configured", "cancel subsidy payment service not configured"))
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "补差取消服务暂不可用；普通服务商模式不支持取消补差，请不要在前端展示补差入口", "cancel subsidy payment service not configured"))
 		return
 	}
 
@@ -460,7 +460,7 @@ func (server *Server) cancelSubsidy(ctx *gin.Context) {
 		Description:   "operator cancel",
 	})
 	if wxErr != nil {
-		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, wxErr, "cancel subsidy api unavailable", "cancel subsidy: wxpay api failed"))
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, wxErr, "微信取消补差接口暂不可用；普通服务商模式不支持补差，请联系平台管理员确认该入口是否应下线", "cancel subsidy: wxpay api failed"))
 		return
 	}
 	result := ""

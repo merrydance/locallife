@@ -15,6 +15,7 @@ import (
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/wechat"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -58,7 +59,8 @@ type RedisTaskProcessor struct {
 	wechatClient        wechat.WechatClient                 // 微信小程序客户端（用于证照OCR等）
 	directPaymentClient wechat.DirectPaymentClientInterface // 直连支付客户端（骑手押金/追偿退款）
 	transferClient      wechat.TransferClientInterface      // 商家转账客户端（索赔赔付到零钱）
-	ecommerceClient     wechat.EcommerceClientInterface     // 平台收付通客户端（分账）
+	ecommerceClient     wechat.EcommerceClientInterface     // 平台收付通客户端（历史/冷备路径）
+	ordinarySPClient    OrdinaryServiceProviderWorkerClient // 普通服务商支付客户端（商户主业务支付）
 	pubSubPublisher     websocket.PubSubPublisher           // Pub/Sub 发布器（用于推送通知）
 	deliveryBroadcast   *logic.DeliveryBroadcastLogic
 	mediaRegistry       *media.Registry
@@ -89,6 +91,27 @@ func (s testStoreWithNoopPlatformAlertPersistence) MarkEcommerceApplymentResultP
 type cachedUserRoles struct {
 	roles     []db.UserRole
 	expiresAt time.Time
+}
+
+type OrdinaryServiceProviderWorkerClient interface {
+	ServiceProviderAppID() string
+	ServiceProviderMchID() string
+	ServiceProviderMchName() string
+	QueryPayment(ctx context.Context, req ospcontracts.PaymentQueryRequest) (*ospcontracts.PaymentQueryResponse, error)
+	ClosePayment(ctx context.Context, req ospcontracts.PaymentCloseRequest) error
+	QueryCombinePayment(ctx context.Context, req ospcontracts.CombineQueryRequest) (*ospcontracts.CombineQueryResponse, error)
+	CloseCombinePayment(ctx context.Context, req ospcontracts.CombineCloseRequest) error
+	RefundNotifyURL() string
+	CreateRefund(ctx context.Context, req ospcontracts.RefundCreateRequest) (*ospcontracts.RefundResponse, error)
+	QueryRefund(ctx context.Context, req ospcontracts.RefundQueryRequest) (*ospcontracts.RefundResponse, error)
+	AddProfitSharingReceiver(ctx context.Context, req ospcontracts.ProfitSharingReceiverAddRequest) (*ospcontracts.ProfitSharingReceiverResponse, error)
+	DeleteProfitSharingReceiver(ctx context.Context, req ospcontracts.ProfitSharingReceiverDeleteRequest) (*ospcontracts.ProfitSharingReceiverResponse, error)
+	CreateProfitSharingOrder(ctx context.Context, req ospcontracts.ProfitSharingOrderRequest) (*ospcontracts.ProfitSharingOrderResponse, error)
+	QueryProfitSharingOrder(ctx context.Context, req ospcontracts.ProfitSharingQueryRequest) (*ospcontracts.ProfitSharingOrderResponse, error)
+	CreateProfitSharingReturn(ctx context.Context, req ospcontracts.ProfitSharingReturnRequest) (*ospcontracts.ProfitSharingReturnResponse, error)
+	QueryProfitSharingReturn(ctx context.Context, req ospcontracts.ProfitSharingReturnQueryRequest) (*ospcontracts.ProfitSharingReturnResponse, error)
+	UnfreezeProfitSharing(ctx context.Context, req ospcontracts.ProfitSharingUnfreezeRequest) (*ospcontracts.ProfitSharingUnfreezeResponse, error)
+	QueryProfitSharingRemainingAmount(ctx context.Context, req ospcontracts.ProfitSharingRemainingAmountRequest) (*ospcontracts.ProfitSharingRemainingAmountResponse, error)
 }
 
 func NewRedisTaskProcessor(
@@ -166,6 +189,10 @@ func (processor *RedisTaskProcessor) SetDirectPaymentClient(directPaymentClient 
 
 func (processor *RedisTaskProcessor) SetTransferClient(transferClient wechat.TransferClientInterface) {
 	processor.transferClient = transferClient
+}
+
+func (processor *RedisTaskProcessor) SetOrdinaryServiceProviderClient(client OrdinaryServiceProviderWorkerClient) {
+	processor.ordinarySPClient = client
 }
 
 func (processor *RedisTaskProcessor) SetPrinterClientForTest(client cloudprint.Client) {

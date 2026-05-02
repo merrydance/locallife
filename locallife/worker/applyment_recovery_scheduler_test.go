@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
-	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
-	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
+	mockordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/mock"
 	"github.com/merrydance/locallife/worker"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -68,13 +68,74 @@ func TestApplymentRecoverySchedulerRunOnceRequeuesLocalUnprocessedFollowUp(t *te
 	scheduler.RunOnce()
 }
 
+func TestApplymentRecoverySchedulerRunOnceQueriesFinishAuthorizationAndReconcilesFactApplication(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &applymentRecoveryTestDistributor{}
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
+
+	store.EXPECT().
+		ListEcommerceApplymentsPendingFollowUp(gomock.Any(), gomock.Any()).
+		Return([]db.EcommerceApplymentPendingFollowUp{{
+			ID:                    21,
+			SubjectType:           "merchant",
+			SubjectID:             31,
+			OutRequestNo:          "APPLY_RECOVERY_AUTH_001",
+			ApplymentID:           pgtype.Int8{Int64: 881, Valid: true},
+			Status:                "finish",
+			SubMchID:              pgtype.Text{String: "sub_mch_auth_001", Valid: true},
+			AccountAuthorizeState: pgtype.Text{String: db.AccountAuthorizeStateUnauthorized, Valid: true},
+			UpdatedAt:             time.Now().Add(-5 * time.Minute),
+		}}, nil)
+
+	ordinaryClient.EXPECT().
+		QueryAccountAuthorizeState(gomock.Any(), ospcontracts.AccountAuthorizeStateRequest{SubMchID: "sub_mch_auth_001"}).
+		Return(&ospcontracts.AccountAuthorizeStateResponse{AuthorizeState: ospcontracts.AccountAuthorizeStateAuthorized}, nil)
+
+	store.EXPECT().
+		CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+			require.Equal(t, db.ExternalPaymentCapabilityApplyment, arg.Capability)
+			require.Equal(t, db.ExternalPaymentFactSourceQuery, arg.FactSource)
+			require.Equal(t, db.ExternalPaymentObjectApplyment, arg.ExternalObjectType)
+			require.Equal(t, "APPLY_RECOVERY_AUTH_001", arg.ExternalObjectKey)
+			require.Equal(t, "881", arg.ExternalSecondaryKey.String)
+			require.Equal(t, string(ospcontracts.ApplymentStateFinished), arg.UpstreamState)
+			require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
+			require.Contains(t, arg.DedupeKey, "authorize_state_authorized")
+			var raw map[string]any
+			require.NoError(t, json.Unmarshal(arg.RawResource, &raw))
+			require.Equal(t, db.AccountAuthorizeStateAuthorized, raw["account_authorize_state"])
+			return db.ExternalPaymentFact{ID: 9021, IsTerminal: true}, nil
+		})
+	store.EXPECT().
+		CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
+			FactID:             9021,
+			Consumer:           "applyment_domain",
+			BusinessObjectType: "ordinary_service_provider_applyment",
+			BusinessObjectID:   21,
+			Status:             db.ExternalPaymentFactApplicationStatusPending,
+		}).
+		Return(db.ExternalPaymentFactApplication{ID: 9121, FactID: 9021, Consumer: "applyment_domain", BusinessObjectType: "ordinary_service_provider_applyment", BusinessObjectID: 21, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
+
+	distributor.onProcessFactApplication = func(_ context.Context, payload *worker.PaymentFactApplicationPayload, _ ...asynq.Option) error {
+		require.Equal(t, int64(9121), payload.ApplicationID)
+		return nil
+	}
+
+	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, ordinaryClient)
+	scheduler.RunOnce()
+}
+
 func TestApplymentRecoverySchedulerRunOnceQueriesSubmittedMerchantAndReconcilesSuccess(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
 	distributor := &applymentRecoveryTestDistributor{}
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
 
 	store.EXPECT().
 		ListEcommerceApplymentsPendingFollowUp(gomock.Any(), gomock.Any()).
@@ -88,12 +149,12 @@ func TestApplymentRecoverySchedulerRunOnceQueriesSubmittedMerchantAndReconcilesS
 			UpdatedAt:    time.Now().Add(-5 * time.Minute),
 		}}, nil)
 
-	ecommerceClient.EXPECT().
-		QueryEcommerceApplymentByID(gomock.Any(), int64(991)).
-		Return(&wechatcontracts.EcommerceApplymentQueryResponse{
+	ordinaryClient.EXPECT().
+		QueryApplymentByID(gomock.Any(), ospcontracts.ApplymentQueryByIDRequest{ApplymentID: 991}).
+		Return(&ospcontracts.ApplymentQueryResponse{
 			ApplymentID:    991,
-			OutRequestNo:   "APPLY_RECOVERY_002",
-			ApplymentState: "FINISH",
+			BusinessCode:   "APPLY_RECOVERY_002",
+			ApplymentState: ospcontracts.ApplymentStateFinished,
 			SubMchID:       "sub_mch_991",
 		}, nil)
 
@@ -105,9 +166,9 @@ func TestApplymentRecoverySchedulerRunOnceQueriesSubmittedMerchantAndReconcilesS
 			require.Equal(t, db.ExternalPaymentObjectApplyment, arg.ExternalObjectType)
 			require.Equal(t, "APPLY_RECOVERY_002", arg.ExternalObjectKey)
 			require.Equal(t, db.ExternalPaymentBusinessOwnerApplyment, arg.BusinessOwner.String)
-			require.Equal(t, "ecommerce_applyment", arg.BusinessObjectType.String)
+			require.Equal(t, "ordinary_service_provider_applyment", arg.BusinessObjectType.String)
 			require.Equal(t, int64(31), arg.BusinessObjectID.Int64)
-			require.Equal(t, "FINISH", arg.UpstreamState)
+			require.Equal(t, string(ospcontracts.ApplymentStateFinished), arg.UpstreamState)
 			require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
 			return db.ExternalPaymentFact{ID: 9031, IsTerminal: true}, nil
 		})
@@ -115,18 +176,18 @@ func TestApplymentRecoverySchedulerRunOnceQueriesSubmittedMerchantAndReconcilesS
 		CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
 			FactID:             9031,
 			Consumer:           "applyment_domain",
-			BusinessObjectType: "ecommerce_applyment",
+			BusinessObjectType: "ordinary_service_provider_applyment",
 			BusinessObjectID:   31,
 			Status:             db.ExternalPaymentFactApplicationStatusPending,
 		}).
-		Return(db.ExternalPaymentFactApplication{ID: 9131, FactID: 9031, Consumer: "applyment_domain", BusinessObjectType: "ecommerce_applyment", BusinessObjectID: 31, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
+		Return(db.ExternalPaymentFactApplication{ID: 9131, FactID: 9031, Consumer: "applyment_domain", BusinessObjectType: "ordinary_service_provider_applyment", BusinessObjectID: 31, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
 
 	distributor.onProcessFactApplication = func(_ context.Context, payload *worker.PaymentFactApplicationPayload, _ ...asynq.Option) error {
 		require.Equal(t, int64(9131), payload.ApplicationID)
 		return nil
 	}
 
-	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, ecommerceClient)
+	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, ordinaryClient)
 	scheduler.RunOnce()
 }
 
@@ -136,8 +197,7 @@ func TestApplymentRecoverySchedulerRunOnceQueriesPendingMerchantAndReconcilesFac
 
 	store := mockdb.NewMockStore(ctrl)
 	distributor := &applymentRecoveryTestDistributor{}
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	accountValidation := &wechatcontracts.EcommerceApplymentAccountValidation{AccountName: "测试商户有限公司", Remark: "请汇款 0.01 元"}
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
 
 	store.EXPECT().
 		ListEcommerceApplymentsPendingFollowUp(gomock.Any(), gomock.Any()).
@@ -151,16 +211,14 @@ func TestApplymentRecoverySchedulerRunOnceQueriesPendingMerchantAndReconcilesFac
 			UpdatedAt:    time.Now().Add(-5 * time.Minute),
 		}}, nil)
 
-	ecommerceClient.EXPECT().
-		QueryEcommerceApplymentByID(gomock.Any(), int64(992)).
-		Return(&wechatcontracts.EcommerceApplymentQueryResponse{
-			ApplymentID:        992,
-			OutRequestNo:       "APPLY_RECOVERY_002_PENDING",
-			ApplymentState:     "ACCOUNT_NEED_VERIFY",
-			SignURL:            "https://pay.weixin.qq.com/sign/992",
-			SignState:          "UNSIGNED",
-			LegalValidationURL: "https://wx.example.com/legal-992",
-			AccountValidation:  accountValidation,
+	ordinaryClient.EXPECT().
+		QueryApplymentByID(gomock.Any(), ospcontracts.ApplymentQueryByIDRequest{ApplymentID: 992}).
+		Return(&ospcontracts.ApplymentQueryResponse{
+			ApplymentID:       992,
+			BusinessCode:      "APPLY_RECOVERY_002_PENDING",
+			ApplymentState:    ospcontracts.ApplymentStateToBeConfirmed,
+			ApplymentStateMsg: "待超级管理员确认",
+			SignURL:           "https://pay.weixin.qq.com/sign/992",
 		}, nil)
 
 	store.EXPECT().
@@ -171,31 +229,30 @@ func TestApplymentRecoverySchedulerRunOnceQueriesPendingMerchantAndReconcilesFac
 			require.Equal(t, db.ExternalPaymentObjectApplyment, arg.ExternalObjectType)
 			require.Equal(t, "APPLY_RECOVERY_002_PENDING", arg.ExternalObjectKey)
 			require.Equal(t, db.ExternalPaymentBusinessOwnerApplyment, arg.BusinessOwner.String)
-			require.Equal(t, "ecommerce_applyment", arg.BusinessObjectType.String)
+			require.Equal(t, "ordinary_service_provider_applyment", arg.BusinessObjectType.String)
 			require.Equal(t, int64(32), arg.BusinessObjectID.Int64)
-			require.Equal(t, "ACCOUNT_NEED_VERIFY", arg.UpstreamState)
+			require.Equal(t, string(ospcontracts.ApplymentStateToBeConfirmed), arg.UpstreamState)
 			require.Equal(t, db.ExternalPaymentTerminalStatusProcessing, arg.TerminalStatus)
 			require.False(t, arg.IsTerminal)
-			require.Contains(t, string(arg.RawResource), "legal_validation_url")
-			require.Contains(t, string(arg.RawResource), "account_validation")
+			require.Contains(t, string(arg.RawResource), "applyment_state_msg")
 			return db.ExternalPaymentFact{ID: 9032, IsTerminal: false}, nil
 		})
 	store.EXPECT().
 		CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
 			FactID:             9032,
 			Consumer:           "applyment_domain",
-			BusinessObjectType: "ecommerce_applyment",
+			BusinessObjectType: "ordinary_service_provider_applyment",
 			BusinessObjectID:   32,
 			Status:             db.ExternalPaymentFactApplicationStatusPending,
 		}).
-		Return(db.ExternalPaymentFactApplication{ID: 9132, FactID: 9032, Consumer: "applyment_domain", BusinessObjectType: "ecommerce_applyment", BusinessObjectID: 32, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
+		Return(db.ExternalPaymentFactApplication{ID: 9132, FactID: 9032, Consumer: "applyment_domain", BusinessObjectType: "ordinary_service_provider_applyment", BusinessObjectID: 32, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
 
 	distributor.onProcessFactApplication = func(_ context.Context, payload *worker.PaymentFactApplicationPayload, _ ...asynq.Option) error {
 		require.Equal(t, int64(9132), payload.ApplicationID)
 		return nil
 	}
 
-	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, ecommerceClient)
+	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, ordinaryClient)
 	scheduler.RunOnce()
 }
 
@@ -250,7 +307,7 @@ func TestApplymentRecoverySchedulerRunOnceFallsBackToOutRequestNoAfterIDQueryFai
 
 	store := mockdb.NewMockStore(ctrl)
 	distributor := &applymentRecoveryTestDistributor{}
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
 
 	store.EXPECT().
 		ListEcommerceApplymentsPendingFollowUp(gomock.Any(), gomock.Any()).
@@ -264,17 +321,16 @@ func TestApplymentRecoverySchedulerRunOnceFallsBackToOutRequestNoAfterIDQueryFai
 			UpdatedAt:    time.Now().Add(-5 * time.Minute),
 		}}, nil)
 
-	ecommerceClient.EXPECT().
-		QueryEcommerceApplymentByID(gomock.Any(), int64(9901)).
+	ordinaryClient.EXPECT().
+		QueryApplymentByID(gomock.Any(), ospcontracts.ApplymentQueryByIDRequest{ApplymentID: 9901}).
 		Return(nil, errors.New("wechat id lookup failed"))
 
-	ecommerceClient.EXPECT().
-		QueryEcommerceApplymentByOutRequestNo(gomock.Any(), "APPLY_RECOVERY_005").
-		Return(&wechatcontracts.EcommerceApplymentQueryResponse{
+	ordinaryClient.EXPECT().
+		QueryApplymentByBusinessCode(gomock.Any(), ospcontracts.ApplymentQueryByBusinessCodeRequest{BusinessCode: "APPLY_RECOVERY_005"}).
+		Return(&ospcontracts.ApplymentQueryResponse{
 			ApplymentID:    9901,
-			OutRequestNo:   "APPLY_RECOVERY_005",
-			ApplymentState: "AUDITING",
-			SignState:      "UNSIGNED",
+			BusinessCode:   "APPLY_RECOVERY_005",
+			ApplymentState: ospcontracts.ApplymentStateAuditing,
 		}, nil)
 
 	store.EXPECT().
@@ -282,18 +338,18 @@ func TestApplymentRecoverySchedulerRunOnceFallsBackToOutRequestNoAfterIDQueryFai
 		DoAndReturn(func(_ context.Context, arg db.UpdateEcommerceApplymentStatusParams) (db.EcommerceApplyment, error) {
 			require.Equal(t, int64(91), arg.ID)
 			require.Equal(t, "auditing", arg.Status)
-			require.Equal(t, pgtype.Text{String: "UNSIGNED", Valid: true}, arg.SignState)
+			require.False(t, arg.SignState.Valid)
 			return db.EcommerceApplyment{ID: arg.ID, Status: arg.Status}, nil
 		})
 
 	distributor.onProcessApplymentResult = func(_ context.Context, payload *worker.ApplymentResultPayload, _ ...asynq.Option) error {
-		require.Equal(t, "AUDITING", payload.ApplymentState)
-		require.Equal(t, "UNSIGNED", payload.SignState)
+		require.Equal(t, string(ospcontracts.ApplymentStateAuditing), payload.ApplymentState)
+		require.Empty(t, payload.SignState)
 		require.Equal(t, "auditing", payload.ApplymentStatus)
 		return nil
 	}
 
-	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, ecommerceClient)
+	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, ordinaryClient)
 	scheduler.RunOnce()
 }
 
@@ -312,7 +368,7 @@ func TestApplymentRecoverySchedulerRunOnceAlertsUnsupportedStateWithoutLegacySta
 			return nil
 		},
 	}
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
 
 	store.EXPECT().
 		ListEcommerceApplymentsPendingFollowUp(gomock.Any(), gomock.Any()).
@@ -327,15 +383,14 @@ func TestApplymentRecoverySchedulerRunOnceAlertsUnsupportedStateWithoutLegacySta
 			UpdatedAt:    time.Now().Add(-5 * time.Minute),
 		}}, nil)
 
-	ecommerceClient.EXPECT().
-		QueryEcommerceApplymentByID(gomock.Any(), int64(9903)).
-		Return(&wechatcontracts.EcommerceApplymentQueryResponse{
-			ApplymentID:        9903,
-			OutRequestNo:       "APPLY_RECOVERY_UNSUPPORTED_001",
-			ApplymentState:     "NEW_UPSTREAM_STATE",
-			ApplymentStateDesc: "new state from wechat",
-			SignState:          "UNSIGNED",
-			SubMchID:           "sub_mch_new",
+	ordinaryClient.EXPECT().
+		QueryApplymentByID(gomock.Any(), ospcontracts.ApplymentQueryByIDRequest{ApplymentID: 9903}).
+		Return(&ospcontracts.ApplymentQueryResponse{
+			ApplymentID:       9903,
+			BusinessCode:      "APPLY_RECOVERY_UNSUPPORTED_001",
+			ApplymentState:    ospcontracts.ApplymentState("NEW_UPSTREAM_STATE"),
+			ApplymentStateMsg: "new state from wechat",
+			SubMchID:          "sub_mch_new",
 		}, nil)
 
 	store.EXPECT().
@@ -344,7 +399,7 @@ func TestApplymentRecoverySchedulerRunOnceAlertsUnsupportedStateWithoutLegacySta
 			require.Equal(t, string(worker.AlertTypeSystemError), arg.AlertType)
 			require.Equal(t, string(worker.AlertLevelCritical), arg.Level)
 			require.Equal(t, int64(93), arg.RelatedID)
-			require.Equal(t, "ecommerce_applyment", arg.RelatedType)
+			require.Equal(t, "ordinary_service_provider_applyment", arg.RelatedType)
 
 			var extra map[string]any
 			require.NoError(t, json.Unmarshal(arg.Extra, &extra))
@@ -354,11 +409,11 @@ func TestApplymentRecoverySchedulerRunOnceAlertsUnsupportedStateWithoutLegacySta
 			return db.PlatformAlertEvent{ID: 9301}, nil
 		})
 
-	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, ecommerceClient)
+	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, ordinaryClient)
 	scheduler.RunOnce()
 }
 
-func TestApplymentRecoverySchedulerRunOnceSkipsRemoteQueryWithoutEcommerceClient(t *testing.T) {
+func TestApplymentRecoverySchedulerRunOnceSkipsRemoteQueryWithoutOrdinaryServiceProviderClient(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -371,7 +426,7 @@ func TestApplymentRecoverySchedulerRunOnceSkipsRemoteQueryWithoutEcommerceClient
 			ID:           101,
 			SubjectType:  "merchant",
 			SubjectID:    102,
-			OutRequestNo: "APPLY_RECOVERY_NO_ECOM_001",
+			OutRequestNo: "APPLY_RECOVERY_NO_ORDINARY_SP_001",
 			ApplymentID:  pgtype.Int8{Int64: 9101, Valid: true},
 			Status:       "submitted",
 			UpdatedAt:    time.Now().Add(-5 * time.Minute),
@@ -387,7 +442,7 @@ func TestApplymentRecoverySchedulerRunOnceEnqueuesFrozenFollowUp(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	distributor := &applymentRecoveryTestDistributor{}
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
 
 	store.EXPECT().
 		ListEcommerceApplymentsPendingFollowUp(gomock.Any(), gomock.Any()).
@@ -401,15 +456,15 @@ func TestApplymentRecoverySchedulerRunOnceEnqueuesFrozenFollowUp(t *testing.T) {
 			UpdatedAt:    time.Now().Add(-5 * time.Minute),
 		}}, nil)
 
-	ecommerceClient.EXPECT().
-		QueryEcommerceApplymentByID(gomock.Any(), int64(6060)).
-		Return(&wechatcontracts.EcommerceApplymentQueryResponse{
-			ApplymentID:        6060,
-			OutRequestNo:       "APPLY_RECOVERY_006",
-			ApplymentState:     "FROZEN",
-			ApplymentStateDesc: "已冻结",
-			AuditDetail: []wechatcontracts.ApplymentAuditDetail{{
-				ParamName:    "id_card_copy",
+	ordinaryClient.EXPECT().
+		QueryApplymentByID(gomock.Any(), ospcontracts.ApplymentQueryByIDRequest{ApplymentID: 6060}).
+		Return(&ospcontracts.ApplymentQueryResponse{
+			ApplymentID:       6060,
+			BusinessCode:      "APPLY_RECOVERY_006",
+			ApplymentState:    ospcontracts.ApplymentStateCanceled,
+			ApplymentStateMsg: "已作废",
+			AuditDetail: []ospcontracts.ApplymentAuditDetail{{
+				FieldName:    "id_card_copy",
 				RejectReason: "身份证图片存在问题",
 			}},
 		}, nil)
@@ -417,7 +472,7 @@ func TestApplymentRecoverySchedulerRunOnceEnqueuesFrozenFollowUp(t *testing.T) {
 	store.EXPECT().
 		CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).
 		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
-			require.Equal(t, "FROZEN", arg.UpstreamState)
+			require.Equal(t, string(ospcontracts.ApplymentStateCanceled), arg.UpstreamState)
 			require.Equal(t, db.ExternalPaymentTerminalStatusClosed, arg.TerminalStatus)
 			return db.ExternalPaymentFact{ID: 9111, IsTerminal: true}, nil
 		})
@@ -426,17 +481,17 @@ func TestApplymentRecoverySchedulerRunOnceEnqueuesFrozenFollowUp(t *testing.T) {
 		CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
 			FactID:             9111,
 			Consumer:           "applyment_domain",
-			BusinessObjectType: "ecommerce_applyment",
+			BusinessObjectType: "ordinary_service_provider_applyment",
 			BusinessObjectID:   111,
 			Status:             db.ExternalPaymentFactApplicationStatusPending,
 		}).
-		Return(db.ExternalPaymentFactApplication{ID: 9211, FactID: 9111, Consumer: "applyment_domain", BusinessObjectType: "ecommerce_applyment", BusinessObjectID: 111, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
+		Return(db.ExternalPaymentFactApplication{ID: 9211, FactID: 9111, Consumer: "applyment_domain", BusinessObjectType: "ordinary_service_provider_applyment", BusinessObjectID: 111, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
 
 	distributor.onProcessFactApplication = func(_ context.Context, payload *worker.PaymentFactApplicationPayload, _ ...asynq.Option) error {
 		require.Equal(t, int64(9211), payload.ApplicationID)
 		return nil
 	}
 
-	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, ecommerceClient)
+	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, ordinaryClient)
 	scheduler.RunOnce()
 }

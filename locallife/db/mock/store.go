@@ -19436,6 +19436,36 @@ func (mr *MockStoreMockRecorder) UpdateDishesCategory(ctx, arg any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDishesCategory", reflect.TypeOf((*MockStore)(nil).UpdateDishesCategory), ctx, arg)
 }
 
+// UpdateEcommerceApplymentAccountAuthorizeState mocks base method.
+func (m *MockStore) UpdateEcommerceApplymentAccountAuthorizeState(ctx context.Context, arg db.UpdateEcommerceApplymentAccountAuthorizeStateParams) (db.EcommerceApplyment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateEcommerceApplymentAccountAuthorizeState", ctx, arg)
+	ret0, _ := ret[0].(db.EcommerceApplyment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateEcommerceApplymentAccountAuthorizeState indicates an expected call of UpdateEcommerceApplymentAccountAuthorizeState.
+func (mr *MockStoreMockRecorder) UpdateEcommerceApplymentAccountAuthorizeState(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateEcommerceApplymentAccountAuthorizeState", reflect.TypeOf((*MockStore)(nil).UpdateEcommerceApplymentAccountAuthorizeState), ctx, arg)
+}
+
+// UpdateEcommerceApplymentAccountWillingness mocks base method.
+func (m *MockStore) UpdateEcommerceApplymentAccountWillingness(ctx context.Context, arg db.UpdateEcommerceApplymentAccountWillingnessParams) (db.EcommerceApplyment, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateEcommerceApplymentAccountWillingness", ctx, arg)
+	ret0, _ := ret[0].(db.EcommerceApplyment)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateEcommerceApplymentAccountWillingness indicates an expected call of UpdateEcommerceApplymentAccountWillingness.
+func (mr *MockStoreMockRecorder) UpdateEcommerceApplymentAccountWillingness(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateEcommerceApplymentAccountWillingness", reflect.TypeOf((*MockStore)(nil).UpdateEcommerceApplymentAccountWillingness), ctx, arg)
+}
+
 // UpdateEcommerceApplymentSettlementVerification mocks base method.
 func (m *MockStore) UpdateEcommerceApplymentSettlementVerification(ctx context.Context, arg db.UpdateEcommerceApplymentSettlementVerificationParams) (db.EcommerceApplyment, error) {
 	m.ctrl.T.Helper()

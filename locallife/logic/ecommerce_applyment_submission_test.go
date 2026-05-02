@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,6 +15,8 @@ import (
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -267,7 +270,7 @@ func TestUploadApplymentAssetValidationErrorBecomesRequestError(t *testing.T) {
 	var reqErr *RequestError
 	require.ErrorAs(t, err, &reqErr)
 	require.Equal(t, http.StatusBadRequest, reqErr.Status)
-	require.ErrorContains(t, reqErr.Err, "file is empty")
+	require.ErrorContains(t, reqErr.Err, "图片文件为空")
 }
 
 func TestEncryptApplymentWechatSensitiveFields(t *testing.T) {
@@ -332,6 +335,29 @@ func TestSubmitEcommerceApplymentWithoutEcommerceClient(t *testing.T) {
 	require.Equal(t, applyment.ID, result.ApplymentID)
 	require.Equal(t, ApplymentSubmissionResultStatus, result.Status)
 	require.Equal(t, ApplymentSubmissionFallbackMessage, result.Message)
+}
+
+func TestSubmitOrdinaryServiceProviderApplymentWithoutOrdinaryClientReturnsError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var logs bytes.Buffer
+	previousLogger := log.Logger
+	log.Logger = zerolog.New(&logs)
+	t.Cleanup(func() { log.Logger = previousLogger })
+
+	store := mockdb.NewMockStore(ctrl)
+	applyment := db.EcommerceApplyment{ID: 88}
+
+	result, err := SubmitOrdinaryServiceProviderApplyment(context.Background(), store, nil, func(_ context.Context, status string) error {
+		t.Fatalf("missing ordinary service provider client must not advance subject status to %s", status)
+		return nil
+	}, SubmitOrdinaryServiceProviderApplymentInput{Applyment: applyment})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "ordinary service provider client not configured")
+	require.Zero(t, result.ApplymentID)
+	require.NotContains(t, logs.String(), ApplymentSubjectStatusBindbankSubmitted)
 }
 
 func TestSubmitEcommerceApplymentSubmittedSyncFailure(t *testing.T) {

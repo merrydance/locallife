@@ -19,6 +19,17 @@ const (
 	orderPaymentFactBusinessObjectOrder = "payment_order"
 )
 
+func paymentOrderUsesMainBusinessPaymentChannel(paymentOrder db.PaymentOrder) bool {
+	return db.PaymentOrderUsesEcommerceChannel(paymentOrder) || db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder)
+}
+
+func paymentCallbackFactDedupeChannel(paymentOrder db.PaymentOrder) string {
+	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
+		return db.PaymentChannelOrdinaryServiceProvider
+	}
+	return db.PaymentChannelEcommerce
+}
+
 func (server *Server) recordOrderPaymentCallbackFact(ctx context.Context, notification wechat.PaymentNotification, paymentOrder db.PaymentOrder, resource *wechatcontracts.PartnerPaymentNotificationResource) (*db.ExternalPaymentFactApplication, error) {
 	if server.paymentFactService == nil || resource == nil {
 		return nil, nil
@@ -26,7 +37,7 @@ func (server *Server) recordOrderPaymentCallbackFact(ctx context.Context, notifi
 	occurredAt := parseWechatFactTime(resource.SuccessTime)
 	result, err := server.paymentFactService.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
 		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              db.PaymentChannelEcommerce,
+		Channel:              paymentCallbackFactDedupeChannel(paymentOrder),
 		Capability:           db.ExternalPaymentCapabilityPartnerJSAPIPayment,
 		FactSource:           db.ExternalPaymentFactSourceCallback,
 		SourceEventID:        paymentFactStringPtr(notification.ID),
@@ -44,7 +55,7 @@ func (server *Server) recordOrderPaymentCallbackFact(ctx context.Context, notifi
 		OccurredAt:           occurredAt,
 		UpstreamUpdatedAt:    occurredAt,
 		RawResource:          orderPaymentCallbackFactResource(paymentOrder, resource),
-		DedupeKey:            fmt.Sprintf("wechat:callback:ecommerce:order_payment:%s", notification.ID),
+		DedupeKey:            fmt.Sprintf("wechat:callback:%s:order_payment:%s", paymentCallbackFactDedupeChannel(paymentOrder), notification.ID),
 		Application: &logic.ExternalPaymentFactApplicationTarget{
 			Consumer:           orderPaymentFactConsumerDomain,
 			BusinessObjectType: orderPaymentFactBusinessObjectOrder,
@@ -67,7 +78,7 @@ func (server *Server) recordCombinedOrderPaymentCallbackFact(ctx context.Context
 	occurredAt := parseWechatFactTime(subOrder.SuccessTime)
 	result, err := server.paymentFactService.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
 		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              db.PaymentChannelEcommerce,
+		Channel:              paymentCallbackFactDedupeChannel(paymentOrder),
 		Capability:           db.ExternalPaymentCapabilityCombinePayment,
 		FactSource:           db.ExternalPaymentFactSourceCallback,
 		SourceEventID:        paymentFactStringPtr(notification.ID),
@@ -85,7 +96,7 @@ func (server *Server) recordCombinedOrderPaymentCallbackFact(ctx context.Context
 		OccurredAt:           occurredAt,
 		UpstreamUpdatedAt:    occurredAt,
 		RawResource:          combinedOrderPaymentCallbackFactResource(combined, paymentOrder, subOrder),
-		DedupeKey:            fmt.Sprintf("wechat:callback:ecommerce:combine_order_payment:%s:%s", notification.ID, subOrder.OutTradeNo),
+		DedupeKey:            fmt.Sprintf("wechat:callback:%s:combine_order_payment:%s:%s", paymentCallbackFactDedupeChannel(paymentOrder), notification.ID, subOrder.OutTradeNo),
 		Application: &logic.ExternalPaymentFactApplicationTarget{
 			Consumer:           orderPaymentFactConsumerDomain,
 			BusinessObjectType: orderPaymentFactBusinessObjectOrder,

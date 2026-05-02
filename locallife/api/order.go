@@ -926,13 +926,13 @@ func (server *Server) replaceOrder(ctx *gin.Context) {
 		ID int64 `uri:"id" binding:"required,min=1"`
 	}
 	if err := ctx.ShouldBindUri(&uriReq); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondPaymentRequestError(ctx, "replace_order_bind_uri", err, "改菜订单编号无效，请刷新页面后重试")
 		return
 	}
 
 	var req replaceOrderRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondPaymentRequestError(ctx, "replace_order_bind_request", err, "改菜请求参数格式无效，请至少选择一个菜品后重试")
 		return
 	}
 
@@ -944,6 +944,10 @@ func (server *Server) replaceOrder(ctx *gin.Context) {
 		Notes:   req.Notes,
 	})
 	if err != nil {
+		if isEcommerceClientNotConfigured(err) {
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "商户支付能力未完成配置，当前无法处理改菜支付或退款，请联系平台处理后重试", "replace order payment client not configured"))
+			return
+		}
 		if writeLogicRequestError(ctx, err) {
 			return
 		}

@@ -1740,6 +1740,8 @@ type Querier interface {
 	UpdateDishOnlineStatus(ctx context.Context, arg UpdateDishOnlineStatusParams) error
 	UpdateDishStats(ctx context.Context, arg UpdateDishStatsParams) error
 	UpdateDishesCategory(ctx context.Context, arg UpdateDishesCategoryParams) error
+	UpdateEcommerceApplymentAccountAuthorizeState(ctx context.Context, arg UpdateEcommerceApplymentAccountAuthorizeStateParams) (EcommerceApplyment, error)
+	UpdateEcommerceApplymentAccountWillingness(ctx context.Context, arg UpdateEcommerceApplymentAccountWillingnessParams) (EcommerceApplyment, error)
 	UpdateEcommerceApplymentSettlementVerification(ctx context.Context, arg UpdateEcommerceApplymentSettlementVerificationParams) (EcommerceApplyment, error)
 	UpdateEcommerceApplymentStatus(ctx context.Context, arg UpdateEcommerceApplymentStatusParams) (EcommerceApplyment, error)
 	UpdateEcommerceApplymentSubMchID(ctx context.Context, arg UpdateEcommerceApplymentSubMchIDParams) (EcommerceApplyment, error)

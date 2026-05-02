@@ -471,7 +471,7 @@ func TestCreateSubsidy_WechatFailureReturnsBadGatewayMessage(t *testing.T) {
 	require.Equal(t, http.StatusBadGateway, recorder.Code)
 	var response ErrorResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
-	require.Equal(t, "subsidy api unavailable", response.Error)
+	require.Equal(t, "微信补差接口暂不可用；普通服务商模式不支持补差，请联系平台管理员确认该入口是否应下线", response.Error)
 }
 
 func TestCreateSubsidy_MarkFailedErrorReturnsInternalServerError(t *testing.T) {

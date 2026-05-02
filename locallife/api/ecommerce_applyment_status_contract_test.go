@@ -59,7 +59,7 @@ func TestMerchantApplymentSubmitCapability(t *testing.T) {
 			merchantStatus:    "suspended",
 			applymentStatus:   "not_applied",
 			expectedCanSubmit: false,
-			expectedReason:    "当前商户状态不可用，暂不支持提交收付通进件。",
+			expectedReason:    "当前商户状态不可用，暂不支持提交普通服务商进件。",
 		},
 	}
 

@@ -4,19 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
-	"github.com/merrydance/locallife/worker"
 	mockwk "github.com/merrydance/locallife/worker/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -228,101 +225,38 @@ func TestGetProfitSharingReceiverLifecycleTargetAPI_NotFound(t *testing.T) {
 
 func TestRepairProfitSharingReceiverLifecycleAPI_OperatorPresentWritesTargetAndEnqueues(t *testing.T) {
 	admin, _ := randomUser(t)
-	operatorUser := db.User{ID: 2101, WechatOpenid: "operator-openid-repair"}
-	operator := randomOperator(operatorUser.ID)
-	target := profitSharingReceiverLifecycleRepairTarget(operator.ID, db.ProfitSharingReceiverOwnerTypeOperator, db.ProfitSharingReceiverDesiredStatePresent)
-	auditWriter := &auditSpyWriter{}
 
 	recorder := performProfitSharingReceiverLifecycleRepairRequest(t, profitSharingReceiverLifecycleRepairRequestTestCase{
-		admin:       admin,
-		auditWriter: auditWriter,
+		admin: admin,
 		body: map[string]any{
 			"owner_type":    db.ProfitSharingReceiverOwnerTypeOperator,
-			"owner_id":      operator.ID,
+			"owner_id":      int64(2101),
 			"desired_state": db.ProfitSharingReceiverDesiredStatePresent,
 		},
-		buildStubs: func(store *mockdb.MockStore, distributor *mockwk.MockTaskDistributor, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+		buildStubs: func(store *mockdb.MockStore, _ *mockwk.MockTaskDistributor, _ *mockwechat.MockEcommerceClientInterface) {
 			expectAdminRole(store, admin.ID)
-			store.EXPECT().GetOperator(gomock.Any(), operator.ID).Return(operator, nil)
-			store.EXPECT().GetUser(gomock.Any(), operator.UserID).Return(operatorUser, nil)
-			ecommerceClient.EXPECT().GetSpAppID().Return("wx_sp_app_repair")
-			store.EXPECT().UpsertProfitSharingReceiverTarget(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.UpsertProfitSharingReceiverTargetParams) (db.ProfitSharingReceiverTarget, error) {
-				require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
-				require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
-				require.Equal(t, db.ProfitSharingReceiverOwnerTypeOperator, arg.OwnerType)
-				require.Equal(t, operator.ID, arg.OwnerID)
-				require.Equal(t, db.ProfitSharingReceiverTypePersonalOpenID, arg.ReceiverType)
-				require.Equal(t, "wx_sp_app_repair", arg.Appid)
-				require.Equal(t, db.ProfitSharingReceiverDesiredStatePresent, arg.DesiredState)
-				require.NotEmpty(t, arg.AccountHash)
-				require.NotContains(t, arg.AccountHash, operatorUser.WechatOpenid)
-				return target, nil
-			})
-			expectReceiverTargetEnqueued(t, distributor, target.ID, nil)
 		},
 	})
 
-	require.Equal(t, http.StatusAccepted, recorder.Code)
-	var resp repairProfitSharingReceiverLifecycleResponse
-	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-	require.True(t, resp.Enqueued)
-	require.Equal(t, target.ID, resp.Target.ID)
-	require.Equal(t, db.ProfitSharingReceiverOwnerTypeOperator, resp.Target.OwnerType)
-	require.NotContains(t, recorder.Body.String(), operatorUser.WechatOpenid)
-
-	entries := auditWriter.Entries()
-	require.Len(t, entries, 1)
-	require.Equal(t, admin.ID, entries[0].ActorUserID)
-	require.Equal(t, "platform", entries[0].ActorRole)
-	require.Equal(t, "profit_sharing_receiver_lifecycle_repair_requested", entries[0].Action)
-	require.Equal(t, "profit_sharing_receiver_target", entries[0].TargetType)
-	require.NotNil(t, entries[0].TargetID)
-	require.Equal(t, target.ID, *entries[0].TargetID)
-	require.Equal(t, db.ProfitSharingReceiverOwnerTypeOperator, entries[0].Metadata["owner_type"])
-	require.Equal(t, operator.ID, entries[0].Metadata["owner_id"])
-	require.Equal(t, db.ProfitSharingReceiverDesiredStatePresent, entries[0].Metadata["desired_state"])
-	require.Equal(t, true, entries[0].Metadata["enqueued"])
+	requireOrdinaryUnsupportedReceiverLifecycleAPIResponse(t, recorder)
 }
-
 func TestRepairProfitSharingReceiverLifecycleAPI_RiderAbsentWritesTargetAndEnqueues(t *testing.T) {
 	admin, _ := randomUser(t)
-	riderUser := db.User{ID: 2201, WechatOpenid: "rider-openid-repair"}
-	rider := randomRider(riderUser.ID)
-	target := profitSharingReceiverLifecycleRepairTarget(rider.ID, db.ProfitSharingReceiverOwnerTypeRider, db.ProfitSharingReceiverDesiredStateAbsent)
 
 	recorder := performProfitSharingReceiverLifecycleRepairRequest(t, profitSharingReceiverLifecycleRepairRequestTestCase{
 		admin: admin,
 		body: map[string]any{
 			"owner_type":    db.ProfitSharingReceiverOwnerTypeRider,
-			"owner_id":      rider.ID,
+			"owner_id":      int64(2201),
 			"desired_state": db.ProfitSharingReceiverDesiredStateAbsent,
 		},
-		buildStubs: func(store *mockdb.MockStore, distributor *mockwk.MockTaskDistributor, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+		buildStubs: func(store *mockdb.MockStore, _ *mockwk.MockTaskDistributor, _ *mockwechat.MockEcommerceClientInterface) {
 			expectAdminRole(store, admin.ID)
-			store.EXPECT().GetRider(gomock.Any(), rider.ID).Return(rider, nil)
-			store.EXPECT().GetUser(gomock.Any(), rider.UserID).Return(riderUser, nil)
-			ecommerceClient.EXPECT().GetSpAppID().Return("wx_sp_app_repair")
-			store.EXPECT().UpsertProfitSharingReceiverTarget(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.UpsertProfitSharingReceiverTargetParams) (db.ProfitSharingReceiverTarget, error) {
-				require.Equal(t, db.ProfitSharingReceiverOwnerTypeRider, arg.OwnerType)
-				require.Equal(t, rider.ID, arg.OwnerID)
-				require.Equal(t, db.ProfitSharingReceiverDesiredStateAbsent, arg.DesiredState)
-				require.NotEmpty(t, arg.DisplayNameHash.String)
-				require.NotContains(t, arg.DisplayNameHash.String, rider.RealName)
-				return target, nil
-			})
-			expectReceiverTargetEnqueued(t, distributor, target.ID, nil)
 		},
 	})
 
-	require.Equal(t, http.StatusAccepted, recorder.Code)
-	var resp repairProfitSharingReceiverLifecycleResponse
-	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-	require.True(t, resp.Enqueued)
-	require.Equal(t, db.ProfitSharingReceiverOwnerTypeRider, resp.Target.OwnerType)
-	require.Equal(t, db.ProfitSharingReceiverDesiredStateAbsent, resp.Target.DesiredState)
-	require.NotContains(t, recorder.Body.String(), riderUser.WechatOpenid)
+	requireOrdinaryUnsupportedReceiverLifecycleAPIResponse(t, recorder)
 }
-
 func TestRepairProfitSharingReceiverLifecycleAPI_InvalidRequest(t *testing.T) {
 	admin, _ := randomUser(t)
 
@@ -330,7 +264,7 @@ func TestRepairProfitSharingReceiverLifecycleAPI_InvalidRequest(t *testing.T) {
 		admin: admin,
 		body: map[string]any{
 			"owner_type":    "payment_order",
-			"owner_id":      1,
+			"owner_id":      int64(1),
 			"desired_state": db.ProfitSharingReceiverDesiredStatePresent,
 		},
 		buildStubs: func(store *mockdb.MockStore, _ *mockwk.MockTaskDistributor, _ *mockwechat.MockEcommerceClientInterface) {
@@ -338,90 +272,67 @@ func TestRepairProfitSharingReceiverLifecycleAPI_InvalidRequest(t *testing.T) {
 		},
 	})
 
-	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	requireOrdinaryUnsupportedReceiverLifecycleAPIResponse(t, recorder)
 }
-
 func TestRepairProfitSharingReceiverLifecycleAPI_OwnerNotFound(t *testing.T) {
 	admin, _ := randomUser(t)
-	operatorID := int64(2401)
-	auditWriter := &auditSpyWriter{}
 
 	recorder := performProfitSharingReceiverLifecycleRepairRequest(t, profitSharingReceiverLifecycleRepairRequestTestCase{
-		admin:       admin,
-		auditWriter: auditWriter,
+		admin: admin,
 		body: map[string]any{
 			"owner_type":    db.ProfitSharingReceiverOwnerTypeOperator,
-			"owner_id":      operatorID,
+			"owner_id":      int64(2401),
 			"desired_state": db.ProfitSharingReceiverDesiredStatePresent,
 		},
 		buildStubs: func(store *mockdb.MockStore, _ *mockwk.MockTaskDistributor, _ *mockwechat.MockEcommerceClientInterface) {
 			expectAdminRole(store, admin.ID)
-			store.EXPECT().GetOperator(gomock.Any(), operatorID).Return(db.Operator{}, db.ErrRecordNotFound)
 		},
 	})
 
-	require.Equal(t, http.StatusNotFound, recorder.Code)
-	require.Empty(t, auditWriter.Entries())
+	requireOrdinaryUnsupportedReceiverLifecycleAPIResponse(t, recorder)
 }
-
 func TestRepairProfitSharingReceiverLifecycleAPI_MissingOpenIDReturnsBadRequest(t *testing.T) {
 	admin, _ := randomUser(t)
-	riderUser := db.User{ID: 2501, WechatOpenid: " "}
-	rider := randomRider(riderUser.ID)
-	auditWriter := &auditSpyWriter{}
 
 	recorder := performProfitSharingReceiverLifecycleRepairRequest(t, profitSharingReceiverLifecycleRepairRequestTestCase{
-		admin:       admin,
-		auditWriter: auditWriter,
+		admin: admin,
 		body: map[string]any{
 			"owner_type":    db.ProfitSharingReceiverOwnerTypeRider,
-			"owner_id":      rider.ID,
+			"owner_id":      int64(2501),
 			"desired_state": db.ProfitSharingReceiverDesiredStatePresent,
 		},
-		buildStubs: func(store *mockdb.MockStore, _ *mockwk.MockTaskDistributor, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+		buildStubs: func(store *mockdb.MockStore, _ *mockwk.MockTaskDistributor, _ *mockwechat.MockEcommerceClientInterface) {
 			expectAdminRole(store, admin.ID)
-			store.EXPECT().GetRider(gomock.Any(), rider.ID).Return(rider, nil)
-			ecommerceClient.EXPECT().GetSpAppID().Return("wx_sp_app_repair")
-			store.EXPECT().GetUser(gomock.Any(), rider.UserID).Return(riderUser, nil)
 		},
 	})
 
-	require.Equal(t, http.StatusBadRequest, recorder.Code)
-	require.Empty(t, auditWriter.Entries())
+	requireOrdinaryUnsupportedReceiverLifecycleAPIResponse(t, recorder)
 }
-
 func TestRepairProfitSharingReceiverLifecycleAPI_EnqueueFailure(t *testing.T) {
 	admin, _ := randomUser(t)
-	riderUser := db.User{ID: 2301, WechatOpenid: "rider-openid-enqueue-failed"}
-	rider := randomRider(riderUser.ID)
-	target := profitSharingReceiverLifecycleRepairTarget(rider.ID, db.ProfitSharingReceiverOwnerTypeRider, db.ProfitSharingReceiverDesiredStatePresent)
-	auditWriter := &auditSpyWriter{}
 
 	recorder := performProfitSharingReceiverLifecycleRepairRequest(t, profitSharingReceiverLifecycleRepairRequestTestCase{
-		admin:       admin,
-		auditWriter: auditWriter,
+		admin: admin,
 		body: map[string]any{
 			"owner_type":    db.ProfitSharingReceiverOwnerTypeRider,
-			"owner_id":      rider.ID,
+			"owner_id":      int64(2301),
 			"desired_state": db.ProfitSharingReceiverDesiredStatePresent,
 		},
-		buildStubs: func(store *mockdb.MockStore, distributor *mockwk.MockTaskDistributor, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+		buildStubs: func(store *mockdb.MockStore, _ *mockwk.MockTaskDistributor, _ *mockwechat.MockEcommerceClientInterface) {
 			expectAdminRole(store, admin.ID)
-			store.EXPECT().GetRider(gomock.Any(), rider.ID).Return(rider, nil)
-			store.EXPECT().GetUser(gomock.Any(), rider.UserID).Return(riderUser, nil)
-			ecommerceClient.EXPECT().GetSpAppID().Return("wx_sp_app_repair")
-			store.EXPECT().UpsertProfitSharingReceiverTarget(gomock.Any(), gomock.Any()).Return(target, nil)
-			expectReceiverTargetEnqueued(t, distributor, target.ID, errors.New("redis unavailable"))
 		},
 	})
 
-	require.Equal(t, http.StatusInternalServerError, recorder.Code)
-	require.NotContains(t, recorder.Body.String(), "redis unavailable")
+	requireOrdinaryUnsupportedReceiverLifecycleAPIResponse(t, recorder)
+}
 
-	entries := auditWriter.Entries()
-	require.Len(t, entries, 1)
-	require.Equal(t, target.ID, *entries[0].TargetID)
-	require.Equal(t, false, entries[0].Metadata["enqueued"])
+func requireOrdinaryUnsupportedReceiverLifecycleAPIResponse(t *testing.T, recorder *httptest.ResponseRecorder) {
+	t.Helper()
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, CodeServiceUnavail, resp.Code)
+	require.Equal(t, ordinaryServiceProviderUnsupportedReceiverLifecycleMessage, resp.Message)
 }
 
 type profitSharingReceiverLifecycleRepairRequestTestCase struct {
@@ -465,20 +376,6 @@ func expectAdminRole(store *mockdb.MockStore, userID int64) {
 	store.EXPECT().
 		ListUserRoles(gomock.Any(), userID).
 		Return([]db.UserRole{{UserID: userID, Role: "admin", Status: "active"}}, nil)
-}
-
-func expectReceiverTargetEnqueued(t *testing.T, distributor *mockwk.MockTaskDistributor, targetID int64, enqueueErr error) {
-	t.Helper()
-
-	distributor.EXPECT().DistributeTaskProcessProfitSharingReceiverTarget(
-		gomock.Any(),
-		gomock.AssignableToTypeOf(&worker.ProfitSharingReceiverTargetPayload{}),
-		gomock.Any(),
-		gomock.Any(),
-	).DoAndReturn(func(_ context.Context, payload *worker.ProfitSharingReceiverTargetPayload, _ ...asynq.Option) error {
-		require.Equal(t, targetID, payload.TargetID)
-		return enqueueErr
-	})
 }
 
 func profitSharingReceiverLifecycleRepairTarget(ownerID int64, ownerType string, desiredState string) db.ProfitSharingReceiverTarget {

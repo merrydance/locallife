@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -47,8 +46,9 @@ func TestUpdateMerchantOpenStatus_RequireApplymentWhenOpen_NoPaymentConfig(t *te
 
 	server.router.ServeHTTP(recorder, req)
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
-	require.Contains(t, strings.ToLower(recorder.Body.String()), "收付通")
-	require.Contains(t, recorder.Body.String(), "进件")
+	require.Contains(t, recorder.Body.String(), "普通服务商")
+	require.Contains(t, recorder.Body.String(), "完成微信支付进件")
+	require.Contains(t, recorder.Body.String(), "结算账户")
 }
 
 func TestUpdateMerchantOpenStatus_RequireApplymentWhenOpen_InactivePaymentConfig(t *testing.T) {
@@ -86,6 +86,7 @@ func TestUpdateMerchantOpenStatus_RequireApplymentWhenOpen_InactivePaymentConfig
 
 	server.router.ServeHTTP(recorder, req)
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
-	require.Contains(t, recorder.Body.String(), "收付通账户未激活")
-	require.Contains(t, recorder.Body.String(), "进件签约")
+	require.Contains(t, recorder.Body.String(), "普通服务商特约商户未激活")
+	require.Contains(t, recorder.Body.String(), "开户意愿授权")
+	require.Contains(t, recorder.Body.String(), "结算账户")
 }

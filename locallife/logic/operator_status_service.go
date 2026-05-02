@@ -28,14 +28,13 @@ func (e *OperatorActiveRegionConflictError) Error() string {
 }
 
 type OperatorStatusService struct {
-	store             db.Store
-	receiverLifecycle *ProfitSharingReceiverLifecycleService
+	store db.Store
 }
 
 func NewOperatorStatusService(store db.Store, ecommerceClient wechat.EcommerceClientInterface) *OperatorStatusService {
+	_ = ecommerceClient
 	return &OperatorStatusService{
-		store:             store,
-		receiverLifecycle: NewProfitSharingReceiverLifecycleService(store, ecommerceClient),
+		store: store,
 	}
 }
 
@@ -73,28 +72,7 @@ func (s *OperatorStatusService) UpdateStatus(ctx context.Context, operator db.Op
 		}
 	}
 
-	if err := s.recordOperatorReceiverIntent(ctx, updatedOperator, targetStatus); err != nil {
-		return db.Operator{}, err
-	}
-
 	return updatedOperator, nil
-}
-
-func (s *OperatorStatusService) recordOperatorReceiverIntent(ctx context.Context, operator db.Operator, targetStatus string) error {
-	switch targetStatus {
-	case operatorStatusActive:
-		_, err := s.receiverLifecycle.RequestOperatorReceiverPresent(ctx, operator)
-		if err != nil {
-			return fmt.Errorf("record operator receiver present intent: %w", err)
-		}
-	case operatorStatusSuspended:
-		_, err := s.receiverLifecycle.RequestOperatorReceiverAbsent(ctx, operator)
-		if err != nil {
-			return fmt.Errorf("record operator receiver absent intent: %w", err)
-		}
-	}
-
-	return nil
 }
 
 func (s *OperatorStatusService) ensureManagedRegionsHaveNoOtherActiveOperator(ctx context.Context, operator db.Operator) error {

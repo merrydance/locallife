@@ -11,6 +11,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/merrydance/locallife/worker"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -77,6 +78,73 @@ func TestProcessTaskInitiateRefund_EcommerceRefundAcceptedRecordsCommand(t *test
 
 	err = processor.ProcessTaskInitiateRefund(context.Background(), asynq.NewTask(worker.TaskProcessRefund, payloadBytes))
 	require.NoError(t, err)
+}
+
+func TestProcessTaskInitiateRefund_OrdinaryServiceProviderRefundAcceptedRecordsCommand(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := &refundRecoveryOrdinaryClient{createRefundResponse: &ospcontracts.RefundResponse{RefundID: "orefund_worker_accepted"}}
+
+	paymentOrder := db.PaymentOrder{
+		ID:             1812,
+		OutTradeNo:     "PAY_WORKER_ORDINARY_REFUND_ACCEPTED",
+		Amount:         2000,
+		Status:         "paid",
+		BusinessType:   "order",
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
+		OrderID:        pgtype.Int8{Int64: 1912, Valid: true},
+	}
+	order := db.Order{ID: 1912, MerchantID: 1712}
+	refundOrder := db.RefundOrder{ID: 2012, PaymentOrderID: paymentOrder.ID, Status: "pending", OutRefundNo: "RF1812_1912"}
+	profitSharingOrder := db.ProfitSharingOrder{
+		ID:             2112,
+		PaymentOrderID: paymentOrder.ID,
+		MerchantID:     order.MerchantID,
+		OutOrderNo:     "PS_WORKER_ORDINARY_REFUND_ACCEPTED",
+		SharingOrderID: pgtype.Text{String: "wx-ordinary-ps-worker-refund", Valid: true},
+	}
+
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().GetRefundOrderByOutRefundNo(gomock.Any(), refundOrder.OutRefundNo).Return(db.RefundOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().CreateRefundOrderTx(gomock.Any(), db.CreateRefundOrderTxParams{
+		PaymentOrderID: paymentOrder.ID,
+		RefundType:     "user_cancel",
+		RefundAmount:   500,
+		RefundReason:   "用户取消",
+		OutRefundNo:    refundOrder.OutRefundNo,
+	}).Return(db.CreateRefundOrderTxResult{RefundOrder: refundOrder}, nil)
+	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), order.MerchantID).Return(db.MerchantPaymentConfig{MerchantID: order.MerchantID, SubMchID: "sub-mchid-worker-ordinary-refund"}, nil)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(profitSharingOrder, nil)
+	store.EXPECT().UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
+		ID:       refundOrder.ID,
+		RefundID: pgtype.Text{String: "orefund_worker_accepted", Valid: true},
+	}).Return(db.RefundOrder{ID: refundOrder.ID, Status: "processing", OutRefundNo: refundOrder.OutRefundNo}, nil)
+	expectWorkerExternalRefundAcceptedCommand(t, store, db.PaymentChannelOrdinaryServiceProvider, db.ExternalPaymentCapabilityPartnerRefund, refundOrder.ID, refundOrder.OutRefundNo, "orefund_worker_accepted", db.ExternalPaymentBusinessOwnerOrder, 9701)
+
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
+	processor.SetOrdinaryServiceProviderClient(ordinaryClient)
+	payloadBytes, err := json.Marshal(worker.PayloadProcessRefund{
+		PaymentOrderID: paymentOrder.ID,
+		RefundAmount:   500,
+		Reason:         "用户取消",
+	})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskInitiateRefund(context.Background(), asynq.NewTask(worker.TaskProcessRefund, payloadBytes))
+	require.NoError(t, err)
+	require.NotNil(t, ordinaryClient.createRefundRequest)
+	require.Equal(t, "sub-mchid-worker-ordinary-refund", ordinaryClient.createRefundRequest.SubMchID)
+	require.Equal(t, paymentOrder.OutTradeNo, ordinaryClient.createRefundRequest.OutTradeNo)
+	require.Equal(t, refundOrder.OutRefundNo, ordinaryClient.createRefundRequest.OutRefundNo)
+	require.Equal(t, "用户取消", ordinaryClient.createRefundRequest.Reason)
+	require.Equal(t, ordinaryClient.RefundNotifyURL(), ordinaryClient.createRefundRequest.NotifyURL)
+	require.Equal(t, int64(500), ordinaryClient.createRefundRequest.Amount.Refund)
+	require.Equal(t, paymentOrder.Amount, ordinaryClient.createRefundRequest.Amount.Total)
+	require.Equal(t, ospcontracts.CurrencyCNY, ordinaryClient.createRefundRequest.Amount.Currency)
 }
 
 func TestProcessTaskInitiateRefund_EcommerceRefundAPIFailureSkipsCommand(t *testing.T) {
@@ -182,11 +250,16 @@ func TestProcessTaskAnomalyRefund_EcommerceRefundAcceptedRecordsCommand(t *testi
 
 func expectWorkerEcommerceRefundAcceptedCommand(t *testing.T, store *mockdb.MockStore, refundOrderID int64, outRefundNo string, refundID string, businessOwner string, commandID int64) {
 	t.Helper()
+	expectWorkerExternalRefundAcceptedCommand(t, store, db.PaymentChannelEcommerce, db.ExternalPaymentCapabilityEcommerceRefund, refundOrderID, outRefundNo, refundID, businessOwner, commandID)
+}
+
+func expectWorkerExternalRefundAcceptedCommand(t *testing.T, store *mockdb.MockStore, channel string, capability string, refundOrderID int64, outRefundNo string, refundID string, businessOwner string, commandID int64) {
+	t.Helper()
 
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
 		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
-		require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
-		require.Equal(t, db.ExternalPaymentCapabilityEcommerceRefund, arg.Capability)
+		require.Equal(t, channel, arg.Channel)
+		require.Equal(t, capability, arg.Capability)
 		require.Equal(t, db.ExternalPaymentCommandTypeCreateRefund, arg.CommandType)
 		require.Equal(t, businessOwner, arg.BusinessOwner)
 		require.True(t, arg.BusinessObjectType.Valid)

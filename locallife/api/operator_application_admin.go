@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -651,16 +650,11 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 	server.writeOperatorApplicationResponse(ctx, http.StatusOK, approved, regionName)
 }
 
-func (server *Server) recordApprovedOperatorReceiverIntent(ctx *gin.Context, operator db.Operator) error {
-	_, err := server.buildProfitSharingReceiverLifecycleService().RequestOperatorReceiverPresent(ctx, operator)
-	if err != nil {
-		log.Error().Err(err).
-			Int64("operator_id", operator.ID).
-			Int64("user_id", operator.UserID).
-			Msg("record operator profit sharing receiver target intent failed after approval")
-		return fmt.Errorf("record operator receiver target intent: %w", err)
-	}
-
+func (server *Server) recordApprovedOperatorReceiverIntent(_ *gin.Context, operator db.Operator) error {
+	log.Info().
+		Int64("operator_id", operator.ID).
+		Int64("user_id", operator.UserID).
+		Msg("skip global profit sharing receiver target intent after operator approval; ordinary service provider receiver sync is payment-order scoped")
 	return nil
 }
 

@@ -9382,7 +9382,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "查询微信收付通支行检索所需的省份列表",
+                "description": "查询微信普通服务商支行检索所需的省份列表",
                 "consumes": [
                     "application/json"
                 ],
@@ -9422,7 +9422,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "根据省份编码查询微信收付通支行检索所需的城市列表",
+                "description": "根据省份编码查询微信普通服务商支行检索所需的城市列表",
                 "consumes": [
                     "application/json"
                 ],
@@ -9477,7 +9477,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "查询微信收付通支持的对公或对私开户银行列表，返回后端缓存快照",
+                "description": "查询微信普通服务商支持的对公或对私开户银行列表，返回后端缓存快照",
                 "consumes": [
                     "application/json"
                 ],
@@ -9602,7 +9602,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "根据银行别名编码和城市编码查询微信收付通支行列表",
+                "description": "根据银行别名编码和城市编码查询微信普通服务商支行列表",
                 "consumes": [
                     "application/json"
                 ],
@@ -9664,7 +9664,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "商户审核通过后，绑定银行卡信息并提交微信二级商户进件。\n错误语义与当前实现保持一致：本地资料校验失败、微信 PARAM_ERROR、INVALID_REQUEST、RESOURCE_ALREADY_EXISTS 返回 400；微信 SIGN_ERROR 返回 401；微信 NO_AUTH 返回 403；微信 RESOURCE_NOT_EXISTS 返回 404；本地存在进行中的申请或已完成开户返回 409；微信 SYSTEM_ERROR 或服务端内部失败返回 500。\n所有错误均写入请求日志，响应中的 error 字段会返回清晰的说明或操作指引。",
+                "description": "商户审核通过后，绑定结算账户信息并提交微信普通服务商特约商户进件。\n本地资料校验失败、微信参数校验失败返回 400；微信签名失败返回 401；微信权限或商户管控返回 403；微信申请不存在返回 404；已有进行中的申请或已完成开户返回 409；微信临时不可用或本地配置缺失返回 502/503 并给出可执行处理指引。\n所有意外错误均写入结构化请求日志，响应 message/error 字段只返回稳定、清晰且不泄漏内部细节的说明或操作指引。",
                 "consumes": [
                     "application/json"
                 ],
@@ -9723,8 +9723,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
-                    "500": {
-                        "description": "Internal Server Error",
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -11403,7 +11409,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "返回当前商户的注销提现申请列表。若收付通账户未激活，则返回空列表并带 account_status/status_desc。",
+                "description": "返回历史平台收付通注销提现申请列表；普通服务商模式不支持平台内注销提现，路由会返回明确行动指引。",
                 "produces": [
                     "application/json"
                 ],
@@ -11662,7 +11668,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "查询当前商户的收付通账户状态与微信注销提现资格校验结果。若收付通账户未激活，则返回 200 且 eligible=false，不触发微信调用。",
+                "description": "查询历史平台收付通账户状态与微信注销提现资格校验结果；普通服务商模式不支持平台内注销提现，路由会返回明确行动指引。",
                 "produces": [
                     "application/json"
                 ],
@@ -11729,7 +11735,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "商户查询自己的收付通结算账户（银行账户）信息，商户号从认证 session 取",
+                "description": "商户查询自己的普通服务商特约商户结算账户（银行账户）信息，商户号从认证 session 取",
                 "produces": [
                     "application/json"
                 ],
@@ -11772,7 +11778,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "商户修改自己的收付通结算银行账户。account_number 传入明文后由服务端加密；account_name 仅在需要修改开户名称时传明文，未传时保持当前开户名称不变。",
+                "description": "商户修改自己的普通服务商特约商户结算银行账户。account_number 传入明文后由服务端加密；account_name 仅在需要修改开户名称时传明文，未传时保持当前开户名称不变。",
                 "consumes": [
                     "application/json"
                 ],
@@ -11826,7 +11832,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "商户收付通账户未激活",
+                        "description": "商户普通服务商特约商户账户未激活",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -11918,7 +11924,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "商户收付通账户未激活",
+                        "description": "商户普通服务商特约商户账户未激活",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -21006,7 +21012,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "运营商按支付单查询微信侧剩余待分账金额，仅适用于收付通分账订单",
+                "description": "运营商按支付单查询微信侧剩余待分账金额，适用于普通服务商分账订单；平台收付通仅作为历史冷备订单能力保留",
                 "consumes": [
                     "application/json"
                 ],
@@ -21061,7 +21067,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "运营商按支付单上下文删除微信分账接收方关系，仅适用于收付通分账订单",
+                "description": "运营商按支付单上下文删除微信分账接收方关系，适用于普通服务商分账订单；平台收付通仅作为历史冷备订单能力保留",
                 "consumes": [
                     "application/json"
                 ],
@@ -22452,7 +22458,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "为订单或预定创建支付订单，当前主路径会按业务类型自动选择真实支付链路。\n\n` + "`" + `payment_type` + "`" + ` 为兼容字段，可不传；当前 ` + "`" + `order` + "`" + ` 和 ` + "`" + `reservation` + "`" + ` 主支付统一走平台收付通普通支付。\n\n**业务类型：**\n- order: 订单支付\n- reservation: 预定押金\n\n**幂等性：** 如果已存在待支付的支付订单，将直接返回该订单。\n\n**安全限制：**\n- 订单必须属于当前用户\n- 订单必须处于pending状态",
+                "description": "为订单或预定创建支付订单，当前主路径会按业务类型自动选择真实支付链路。\n\n` + "`" + `payment_type` + "`" + ` 为兼容字段，可不传；当前 ` + "`" + `order` + "`" + ` 和 ` + "`" + `reservation` + "`" + ` 主支付统一走普通服务商小程序支付。\n\n**业务类型：**\n- order: 订单支付\n- reservation: 预定押金\n\n**幂等性：** 如果已存在待支付的支付订单，将直接返回该订单。\n\n**安全限制：**\n- 订单必须属于当前用户\n- 订单必须处于pending状态",
                 "consumes": [
                     "application/json"
                 ],
@@ -22521,7 +22527,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "为单次结算中的多个订单创建平台收付通合单支付订单，当前主要用于多商户外卖一起结算",
+                "description": "为单次结算中的多个订单创建普通服务商合单支付订单，当前主要用于多商户外卖一起结算；平台收付通仅作为历史冷备通道保留",
                 "consumes": [
                     "application/json"
                 ],
@@ -22988,7 +22994,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "查询本地普通支付订单详情，并拉取微信收付通单笔支付最新状态，供小程序恢复支付或判断后续动作",
+                "description": "查询本地普通支付订单详情，并按支付通道拉取微信普通服务商、平台收付通冷备或直连支付最新状态，供小程序恢复支付或判断后续动作",
                 "consumes": [
                     "application/json"
                 ],
@@ -23191,7 +23197,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "管理员查询平台商户号微信支付账户实时余额；传入 date 时查询指定日期日终余额",
+                "description": "管理员查询历史平台收付通商户号微信支付账户实时余额；普通服务商模式不支持平台内余额查询，应前往微信支付商户平台/商家助手处理",
                 "produces": [
                     "application/json"
                 ],
@@ -23259,7 +23265,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "管理员查询微信支付平台收付通商户违规通知回调地址；未配置时返回 configured=false",
+                "description": "管理员查询微信支付平台收付通或普通服务商商户处置通知回调地址；未配置时返回 configured=false",
                 "produces": [
                     "application/json"
                 ],
@@ -23306,7 +23312,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "管理员更新微信支付平台收付通商户违规通知回调地址；未传 notify_url 时使用当前服务配置",
+                "description": "管理员更新微信支付平台收付通或普通服务商商户处置通知回调地址；未传 notify_url 时使用当前服务配置",
                 "consumes": [
                     "application/json"
                 ],
@@ -23372,7 +23378,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "管理员在微信支付平台收付通侧创建商户违规通知回调地址；未传 notify_url 时使用当前服务配置",
+                "description": "管理员在微信支付平台收付通或普通服务商侧创建商户处置通知回调地址；未传 notify_url 时使用当前服务配置",
                 "consumes": [
                     "application/json"
                 ],
@@ -23438,7 +23444,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "管理员删除微信支付平台收付通商户违规通知回调地址；若微信侧已不存在则幂等返回 204",
+                "description": "管理员删除微信支付平台收付通或普通服务商商户处置通知回调地址；若微信侧已不存在则幂等返回 204",
                 "tags": [
                     "平台财务"
                 ],
@@ -23481,7 +23487,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "管理员分页查看微信支付平台收付通商户违规记录，支持按 merchant_id、sub_mch_id、event_type、risk_type 过滤",
+                "description": "管理员分页查看微信支付平台收付通或普通服务商商户处置记录，支持按 merchant_id、sub_mch_id、event_type、risk_type 过滤",
                 "produces": [
                     "application/json"
                 ],
@@ -23568,7 +23574,590 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "管理员按 record_id 查询单条微信支付平台收付通商户违规记录",
+                "description": "管理员按 record_id 查询单条微信支付平台收付通或普通服务商商户处置记录",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "获取商户违规记录详情",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "微信侧违规记录ID",
+                        "name": "record_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.platformWechatMerchantViolationResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "违规记录不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/finance/wechat-ordinary/merchant-limitations/{sub_mch_id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员按特约商户号查询微信普通服务商商户管控能力、原因和恢复动作",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "查询普通服务商商户管控诊断",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "特约商户号",
+                        "name": "sub_mch_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.ordinaryMerchantLimitationDiagnosticResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付调用失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "支付服务未配置",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/finance/wechat-ordinary/merchant-limitations/{sub_mch_id}/inactive-identity-verifications": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "仅当商户管控诊断返回 VERIFY_INACTIVE_MERCHANT_IDENTITY 解脱路径时，管理员可发起身份核实",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "发起不活跃商户身份核实",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "特约商户号",
+                        "name": "sub_mch_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "业务申请编号",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.createInactiveMerchantIdentityVerificationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.inactiveMerchantIdentityVerificationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "当前商户不允许发起身份核实",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付调用失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "支付服务未配置",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/finance/wechat-ordinary/merchant-limitations/{sub_mch_id}/inactive-identity-verifications/{verification_id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员查询普通服务商不活跃商户身份核实状态",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "查询不活跃商户身份核实状态",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "特约商户号",
+                        "name": "sub_mch_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "身份核实单号",
+                        "name": "verification_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.inactiveMerchantIdentityVerificationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付调用失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "支付服务未配置",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/finance/wechat-ordinary/violation-notification": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员查询微信支付平台收付通或普通服务商商户处置通知回调地址；未配置时返回 configured=false",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "查询商户违规通知回调地址",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.platformViolationNotificationConfigResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付调用失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "支付服务未配置",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员更新微信支付平台收付通或普通服务商商户处置通知回调地址；未传 notify_url 时使用当前服务配置",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "更新商户违规通知回调地址",
+                "parameters": [
+                    {
+                        "description": "回调地址配置",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.platformViolationNotificationConfigRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.platformViolationNotificationConfigResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付调用失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "支付服务未配置",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员在微信支付平台收付通或普通服务商侧创建商户处置通知回调地址；未传 notify_url 时使用当前服务配置",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "创建商户违规通知回调地址",
+                "parameters": [
+                    {
+                        "description": "回调地址配置",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.platformViolationNotificationConfigRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.platformViolationNotificationConfigResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付调用失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "支付服务未配置",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员删除微信支付平台收付通或普通服务商商户处置通知回调地址；若微信侧已不存在则幂等返回 204",
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "删除商户违规通知回调地址",
+                "responses": {
+                    "204": {
+                        "description": "删除成功"
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付调用失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "支付服务未配置",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/finance/wechat-ordinary/violations": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员分页查看微信支付平台收付通或普通服务商商户处置记录，支持按 merchant_id、sub_mch_id、event_type、risk_type 过滤",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "查询商户违规记录列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "商户ID",
+                        "name": "merchant_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "二级商户号",
+                        "name": "sub_mch_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "违规事件类型",
+                        "name": "event_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "风险类型",
+                        "name": "risk_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码，默认 1",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量，默认 20，最大 100",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.listPlatformWechatMerchantViolationsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/finance/wechat-ordinary/violations/{record_id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员按 record_id 查询单条微信支付平台收付通或普通服务商商户处置记录",
                 "produces": [
                     "application/json"
                 ],
@@ -35586,6 +36175,14 @@ const docTemplate = `{
                 }
             }
         },
+        "api.createInactiveMerchantIdentityVerificationRequest": {
+            "type": "object",
+            "properties": {
+                "business_code": {
+                    "type": "string"
+                }
+            }
+        },
         "api.createMerchantCancelWithdrawRequest": {
             "type": "object",
             "required": [
@@ -37866,6 +38463,38 @@ const docTemplate = `{
                 }
             }
         },
+        "api.inactiveMerchantIdentityVerificationResponse": {
+            "type": "object",
+            "properties": {
+                "action_guide": {
+                    "type": "string"
+                },
+                "create_time": {
+                    "type": "string"
+                },
+                "fail_reason": {
+                    "type": "string"
+                },
+                "finish_time": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "sub_mch_id": {
+                    "type": "string"
+                },
+                "verification_id": {
+                    "type": "string"
+                },
+                "verify_id": {
+                    "type": "string"
+                }
+            }
+        },
         "api.ingredient": {
             "type": "object",
             "properties": {
@@ -39168,6 +39797,10 @@ const docTemplate = `{
         "api.merchantApplymentStatusResponse": {
             "type": "object",
             "properties": {
+                "account_authorize_state": {
+                    "description": "普通服务商开户意愿授权状态",
+                    "type": "string"
+                },
                 "account_validation": {
                     "description": "汇款验证信息",
                     "allOf": [
@@ -39175,6 +39808,10 @@ const docTemplate = `{
                             "$ref": "#/definitions/api.applymentAccountValidationResponse"
                         }
                     ]
+                },
+                "action_hint": {
+                    "description": "前端/商户下一步行动指引",
+                    "type": "string"
                 },
                 "block_reason": {
                     "description": "不允许提交时的阻塞原因",
@@ -39258,6 +39895,10 @@ const docTemplate = `{
                 },
                 "bank_name": {
                     "type": "string"
+                },
+                "contact_email": {
+                    "type": "string",
+                    "maxLength": 128
                 },
                 "contact_id_card_number": {
                     "type": "string",
@@ -42124,6 +42765,111 @@ const docTemplate = `{
                 },
                 "ready_count": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.ordinaryMerchantLimitationDTO": {
+            "type": "object",
+            "properties": {
+                "capability": {
+                    "type": "string"
+                },
+                "limited": {
+                    "type": "boolean"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "recover_actions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "api.ordinaryMerchantLimitationDiagnosticResponse": {
+            "type": "object",
+            "properties": {
+                "can_verify_inactive_merchant_identity": {
+                    "type": "boolean"
+                },
+                "inactive_merchant_identity_action_guide": {
+                    "type": "string"
+                },
+                "limitations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.ordinaryMerchantLimitationDTO"
+                    }
+                },
+                "limited_functions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "mch_id": {
+                    "type": "string"
+                },
+                "merchant_control_action_guide": {
+                    "type": "string"
+                },
+                "other_limited_functions": {
+                    "type": "string"
+                },
+                "recovery_specifications": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.ordinaryMerchantRecoverySpecificationDTO"
+                    }
+                },
+                "sub_mch_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.ordinaryMerchantRecoverySpecificationDTO": {
+            "type": "object",
+            "properties": {
+                "limitation_action_type": {
+                    "type": "string"
+                },
+                "limitation_case_id": {
+                    "type": "string"
+                },
+                "limitation_date": {
+                    "type": "string"
+                },
+                "limitation_reason": {
+                    "type": "string"
+                },
+                "limitation_reason_describe": {
+                    "type": "string"
+                },
+                "limitation_reason_type": {
+                    "type": "string"
+                },
+                "limitation_start_date": {
+                    "type": "string"
+                },
+                "other_relate_limitations": {
+                    "type": "string"
+                },
+                "recover_help_url": {
+                    "type": "string"
+                },
+                "recover_way": {
+                    "type": "string"
+                },
+                "recover_way_param": {
+                    "type": "string"
+                },
+                "relate_limitations": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },

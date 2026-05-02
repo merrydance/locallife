@@ -84,7 +84,8 @@ func TestRegisterMerchantAppDeviceAPI(t *testing.T) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 				var response APIResponse
 				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
-				require.Equal(t, "unsupported provider", response.Message)
+				require.Equal(t, "设备推送服务商不支持，请更新商户端后重试；如仍失败请联系平台处理", response.Message)
+				require.NotContains(t, response.Message, "unsupported provider")
 			},
 		},
 		{

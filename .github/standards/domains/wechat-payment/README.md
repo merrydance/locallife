@@ -6,10 +6,13 @@
 
 本平台是一个外卖和到店服务平台。
 
-支付能力分为两条主线：
+支付能力分为三类边界：
 
-- 平台收付通：用于为餐饮、零售等商户提供支付、退款、分账、进件、资金管理、投诉等能力。
+- 普通服务商特约商户：迁移目标，用于餐饮、零售等商户主业务支付、退款、分账、进件、账单和上线后商户管理。
+- 平台收付通：原商户主业务能力来源。迁移完成后不承载新链路、不设计老商户兼容，仅作为冷备代码和文档能力保留，以便微信支付政策再次变化时评估。
 - 直连支付：用于骑手保证金缴纳与赎回，以及商户、骑手追偿向平台付款。
+
+迁移目标：如果微信支付不允许继续使用平台收付通，餐饮、零售等商户主业务支付应切换到普通服务商特约商户模式。直连支付能力保持不变，不纳入普通服务商迁移范围。
 
 当前分账接收方固定为三个：
 
@@ -23,7 +26,15 @@
 
 ### 2.1 后端规则
 
-- 先抽象微信支付客户端，明确区分直连支付客户端与平台收付通客户端。
+- 先抽象微信支付客户端，明确区分普通服务商特约商户、直连支付与平台收付通客户端。
+- 普通服务商特约商户按独立 bounded module 开发，模块根包使用 `locallife/wechat/ordinaryserviceprovider`，对外 Go 类型使用 `OrdinaryServiceProvider` 前缀；模块外文件若必须表达该能力，使用 `ordinary_service_provider` 前缀。
+- 普通服务商交易数据通道命名必须使用 `ordinary_service_provider`，不使用 `partner` 或复用 `ecommerce`。
+- 普通服务商模块必须高内聚拥有自己的 client、contracts、errorcodes、notification 解密、validation、error mapping 和测试，不把这些真值散落进共享的 `wechat/contracts`、`wechat/errorcodes` 或既有支付 client 中。
+- 普通服务商模块不得依赖直连支付或平台收付通实现作为行为模板；实现依据只来自官方普通服务商文档、本 README 和后端工程标准。若复用代码，只允许复用不含支付能力语义的 API v3 签名、证书、HTTP transport 等基础设施，并且边界必须有单元测试保护。
+- 普通服务商模块对业务层只暴露最小能力接口，业务层不得直接依赖微信官方请求/响应结构、错误码字符串或模块内部 helper。
+- 默认不 fork `wechatpay-go`。普通服务商模块可以引入官方 `github.com/wechatpay-apiv3/wechatpay-go` 作为模块私有 adapter 依赖，复用其 `core.Client`、签名、验签、证书/公钥、`core/notify`、敏感字段加解密、`APIError` 和已覆盖的 `services/*`，但不得让 SDK DTO、`core.APIResult` 或 `core.APIError` 穿透到 `logic/`、`api/`、`worker/` 或 `db/` 层。
+- `wechatpay-go` 已覆盖的普通服务商支付、退款、分账能力，应在 `ordinaryserviceprovider` 内包装为本项目自己的 capability 方法；SDK 未覆盖的特约商户进件、合单支付、开户意愿确认、商户管控查询、商户平台处置通知、不活跃商户身份核实，应使用官方 `core.Client.Request` 或等价中性 transport 加本模块自有 contracts/errorcodes 实现。
+- 只有当普通服务商缺口能力膨胀到需要长期维护通用 SDK、并准备向官方仓库 upstream PR 或内部正式维护 SDK 时，才重新评估 fork `wechatpay-go`；在此之前不得用 fork 替换官方 SDK 依赖。
 - 按能力组组织支付文档，而不是按零散接口组织。
 - 每个能力组中的官方文档，都是该能力组请求结构、响应结构、条件必填、状态、枚举、错误码的唯一真值来源。
 - 进件只允许个体工商户和企业，这是业务设计，不是错误。
@@ -41,7 +52,7 @@
 
 ### 3.1 平台收付通
 
-使用微信支付平台收付通工具箱，为餐饮、零售等客户提供：
+使用微信支付平台收付通工具箱，原计划为餐饮、零售等客户提供：
 
 - 预订、堂食、自取、外卖等商户业务支付
 - 商户进件
@@ -53,6 +64,8 @@
 - 消费者投诉 2.0
 - 商户注销提现
 
+平台收付通下线后，不作为老商户兼容链路继续开发；已有代码可冷备保留，但新商户主业务不得再新增依赖。
+
 ### 3.2 直连支付
 
 使用微信支付直连支付，处理：
@@ -62,6 +75,36 @@
 - 商户追偿向平台付款
 - 骑手追偿向平台付款
 - 与这些直连支付主链路配套的查单、关单、退款、异常退款、通知
+
+### 3.3 普通服务商（迁移目标）
+
+使用普通服务商特约商户模式替代餐饮、零售等商户主业务的平台收付通交易能力，覆盖：
+
+- 特约商户进件与结算账户查询、修改
+- 商户开户意愿确认
+- 商户平台处置通知
+- 商户被管控能力及原因查询
+- 不活跃商户身份核实
+- 普通小程序支付
+- 小程序合单支付
+- 交易退款与退款通知
+- 分账、分账回退、剩余资金解冻、分账接收方管理
+- 交易账单、资金账单、分账账单
+
+普通服务商迁移不承接以下平台收付通能力：
+
+- 平台收付通 180 天账期
+- 补差、补差回退、取消补差
+- 平台收付通垫付退款与垫付回补
+- 二级商户余额查询、平台账户余额查询
+- 二级商户预约提现、平台预约提现
+- 注销后余额提现
+
+商户资金出口应以普通服务商特约商户的结算银行账户、微信支付商户平台或微信支付商家助手为准。平台小程序不再承诺代商户发起提现或提供平台资金管理能力。
+
+普通服务商分账接收方按具体支付单与特约商户号同步。平台收付通时代的全局分账接收方预热、修复和 worker lifecycle 仅可作为历史/cold-reserve 排障入口保留；普通服务商启用时不得作为新商户分账前置入口，API/UI 必须给出“按支付单自动同步、必要时做商户管控诊断”的明确指引。
+
+本系统不存在需要继续兼容的平台收付通老商户；迁移实现只需要建设新的普通服务商特约商户模块，并把相关业务链路切换到该模块。平台收付通代码不必完全删除，但不得作为支付、退款、分账、进件或商户管理的新路径。
 
 ## 4. 能力组文档索引
 
@@ -209,7 +252,157 @@
 - 消费者投诉-商户反馈图片-图片上传接口：https://pay.weixin.qq.com/doc/v3/partner/4012467222.md
 - 消费者投诉-商户反馈图片-图片请求接口：https://pay.weixin.qq.com/doc/v3/partner/4012467223.md
 
-### 4.10 直连支付组
+### 4.10 普通服务商迁移能力组
+
+#### 4.10.1 普通服务商产品与安全基础
+
+- 合作伙伴平台文档中心：https://pay.weixin.qq.com/doc/v3/partner/llms.txt
+- 微信支付 AI Agent Skills 知识库：https://github.com/wechatpay-apiv3/wechatpay-skills（仅作为官方示例、流程、排障和质量检查参考，不作为生产依赖）
+- 微信支付 API v3 Go SDK：https://github.com/wechatpay-apiv3/wechatpay-go（仅作为普通服务商模块私有 adapter 依赖或结构参考，不作为业务层 contract）
+- API V3 概述：https://pay.weixin.qq.com/doc/v3/partner/4012081673.md
+- API V3 接口规则：https://pay.weixin.qq.com/doc/v3/partner/4012081726.md
+- 如何构造接口请求签名-Path 参数：https://pay.weixin.qq.com/doc/v3/partner/4012365862.md
+- 如何构造接口请求签名-Body 参数：https://pay.weixin.qq.com/doc/v3/partner/4012365864.md
+- 如何构造接口请求签名-Query 参数：https://pay.weixin.qq.com/doc/v3/partner/4012365865.md
+- 小程序调起支付签名：https://pay.weixin.qq.com/doc/v3/partner/4012365869.md
+- 如何使用微信支付公钥验签：https://pay.weixin.qq.com/doc/v3/partner/4013059017.md
+- 如何使用微信支付公钥加密敏感字段：https://pay.weixin.qq.com/doc/v3/partner/4013059044.md
+- 如何解密回调报文和平台证书：https://pay.weixin.qq.com/doc/v3/partner/4012082320.md
+
+#### 4.10.2 普通服务商商户管理、特约商户进件与结算账户
+
+普通服务商商户管理能力中，特约商户进件和商户开户意愿确认属于新商户准入主链路；商户被管控能力及原因查询、商户平台处置通知属于上线后的风控运营与异常恢复主链路；不活跃商户身份核实只在商户因长期无交易被管控且解脱路径要求身份核实时使用。
+
+- 特约商户进件-产品介绍：https://pay.weixin.qq.com/doc/v3/partner/4012062365.md
+- 特约商户进件-接入前准备：https://pay.weixin.qq.com/doc/v3/partner/4012062375.md
+- 特约商户进件-开发指引：https://pay.weixin.qq.com/doc/v3/partner/4012062379.md
+- 特约商户进件-常见问题：https://pay.weixin.qq.com/doc/v3/partner/4016058480.md
+- 特约商户进件-提交申请单：https://pay.weixin.qq.com/doc/v3/partner/4012719997.md
+- 特约商户进件-申请单号查询申请状态：https://pay.weixin.qq.com/doc/v3/partner/4012697052.md
+- 特约商户进件-业务申请编号查询申请状态：https://pay.weixin.qq.com/doc/v3/partner/4012697168.md
+- 特约商户进件-修改结算账户：https://pay.weixin.qq.com/doc/v3/partner/4012761102.md
+- 特约商户进件-查询结算账户：https://pay.weixin.qq.com/doc/v3/partner/4012761113.md
+- 特约商户进件-查询结算账户修改申请状态：https://pay.weixin.qq.com/doc/v3/partner/4012761120.md
+- 特约商户进件-图片上传：https://pay.weixin.qq.com/doc/v3/partner/4012760490.md
+- 特约商户进件-视频上传：https://pay.weixin.qq.com/doc/v3/partner/4012761084.md
+- 商户开户意愿确认-产品介绍：https://pay.weixin.qq.com/doc/v3/partner/4012064820.md
+- 商户开户意愿确认-流程指引：https://pay.weixin.qq.com/doc/v3/partner/4012064824.md
+- 商户开户意愿确认-接入前准备：https://pay.weixin.qq.com/doc/v3/partner/4012064828.md
+- 商户开户意愿确认-开发指引：https://pay.weixin.qq.com/doc/v3/partner/4012064832.md
+- 商户开户意愿确认-常见问题：https://pay.weixin.qq.com/doc/v3/partner/4016644196.md
+- 商户开户意愿确认-提交申请单：https://pay.weixin.qq.com/doc/v3/partner/4012722388.md
+- 商户开户意愿确认-撤销申请单：https://pay.weixin.qq.com/doc/v3/partner/4012697627.md
+- 商户开户意愿确认-查询申请单审核结果：https://pay.weixin.qq.com/doc/v3/partner/4012697715.md
+- 商户开户意愿确认-获取商户开户意愿确认状态：https://pay.weixin.qq.com/doc/v3/partner/4012467549.md
+- 商户开户意愿确认-图片上传：https://pay.weixin.qq.com/doc/v3/partner/4012760509.md
+- 商户平台处置通知-产品介绍：https://pay.weixin.qq.com/doc/v3/partner/4012064844.md
+- 商户平台处置通知-接入前准备：https://pay.weixin.qq.com/doc/v3/partner/4012064851.md
+- 商户平台处置通知-开发指引：https://pay.weixin.qq.com/doc/v3/partner/4012064853.md
+- 商户平台处置通知-业务示例代码：https://pay.weixin.qq.com/doc/v3/partner/4015949382.md
+- 商户平台处置通知-查询商户违规通知回调地址：https://pay.weixin.qq.com/doc/v3/partner/4012471327.md
+- 商户平台处置通知-修改商户违规通知回调地址：https://pay.weixin.qq.com/doc/v3/partner/4012471330.md
+- 商户平台处置通知-创建商户违规通知回调地址：https://pay.weixin.qq.com/doc/v3/partner/4012471333.md
+- 商户平台处置通知-删除商户违规通知回调地址：https://pay.weixin.qq.com/doc/v3/partner/4012471334.md
+- 商户平台处置通知-商户平台处置记录回调通知：https://pay.weixin.qq.com/doc/v3/partner/4012079216.md
+- 商户被管控能力及原因查询-产品介绍：https://pay.weixin.qq.com/doc/v3/partner/4012165270.md
+- 商户被管控能力及原因查询-查询子商户管控情况：https://pay.weixin.qq.com/doc/v3/partner/4012803072.md
+- 不活跃商户身份核实-产品介绍：https://pay.weixin.qq.com/doc/v3/partner/4012064898.md
+- 不活跃商户身份核实-接入前准备：https://pay.weixin.qq.com/doc/v3/partner/4012064902.md
+- 不活跃商户身份核实-关键概念：https://pay.weixin.qq.com/doc/v3/partner/4012064904.md
+- 不活跃商户身份核实-开发指引：https://pay.weixin.qq.com/doc/v3/partner/4012064909.md
+- 不活跃商户身份核实-常见问题：https://pay.weixin.qq.com/doc/v3/partner/4012064915.md
+- 不活跃商户身份核实-发起不活跃商户身份核实：https://pay.weixin.qq.com/doc/v3/partner/4012471357.md
+- 不活跃商户身份核实-查询不活跃商户身份核实结果：https://pay.weixin.qq.com/doc/v3/partner/4012471359.md
+
+#### 4.10.3 普通服务商小程序支付
+
+- 小程序支付-产品介绍：https://pay.weixin.qq.com/doc/v3/partner/4012085810.md
+- 小程序支付-权限申请：https://pay.weixin.qq.com/doc/v3/partner/4012076731.md
+- 小程序支付-开发指引：https://pay.weixin.qq.com/doc/v3/partner/4012076732.md
+- 小程序支付-常见问题：https://pay.weixin.qq.com/doc/v3/partner/4013352071.md
+- 小程序支付-JSAPI/小程序下单：https://pay.weixin.qq.com/doc/v3/partner/4012759974.md
+- 小程序支付-小程序调起支付：https://pay.weixin.qq.com/doc/v3/partner/4012085827.md
+- 小程序支付-支付成功回调通知：https://pay.weixin.qq.com/doc/v3/partner/4012085801.md
+- 小程序支付-微信支付订单号查询订单：https://pay.weixin.qq.com/doc/v3/partner/4012738973.md
+- 小程序支付-商户订单号查询订单：https://pay.weixin.qq.com/doc/v3/partner/4012760115.md
+- 小程序支付-关闭订单：https://pay.weixin.qq.com/doc/v3/partner/4012760108.md
+- 小程序支付-申请退款：https://pay.weixin.qq.com/doc/v3/partner/4012760121.md
+- 小程序支付-查询单笔退款（通过商户退款单号）：https://pay.weixin.qq.com/doc/v3/partner/4012760128.md
+- 小程序支付-发起异常退款：https://pay.weixin.qq.com/doc/v3/partner/4013352278.md
+- 小程序支付-退款结果回调通知：https://pay.weixin.qq.com/doc/v3/partner/4012085802.md
+- 小程序支付-申请所有/单个子商户交易账单：https://pay.weixin.qq.com/doc/v3/partner/4012760132.md
+- 小程序支付-申请服务商资金账单：https://pay.weixin.qq.com/doc/v3/partner/4012760136.md
+- 小程序支付-下载账单：https://pay.weixin.qq.com/doc/v3/partner/4012085803.md
+
+#### 4.10.4 普通服务商小程序合单支付
+
+- 合单支付-产品介绍：https://pay.weixin.qq.com/doc/v3/partner/4012079378.md
+- 合单支付-权限申请：https://pay.weixin.qq.com/doc/v3/partner/4013461849.md
+- 小程序合单支付-产品介绍：https://pay.weixin.qq.com/doc/v3/partner/4012079334.md
+- 小程序合单支付-开发指引：https://pay.weixin.qq.com/doc/v3/partner/4012166836.md
+- 小程序合单支付-常见问题：https://pay.weixin.qq.com/doc/v3/partner/4013462619.md
+- 小程序合单支付-小程序合单下单：https://pay.weixin.qq.com/doc/v3/partner/4012758246.md
+- 小程序合单支付-小程序调起支付：https://pay.weixin.qq.com/doc/v3/partner/4012166847.md
+- 小程序合单支付-查询合单订单：https://pay.weixin.qq.com/doc/v3/partner/4013462520.md
+- 小程序合单支付-关闭合单订单：https://pay.weixin.qq.com/doc/v3/partner/4013462566.md
+- 小程序合单支付-合单订单支付成功回调通知：https://pay.weixin.qq.com/doc/v3/partner/4013462574.md
+- 小程序合单支付-申请退款：https://pay.weixin.qq.com/doc/v3/partner/4013462579.md
+- 小程序合单支付-查询单笔退款（按商户退款单号）：https://pay.weixin.qq.com/doc/v3/partner/4013462581.md
+- 小程序合单支付-发起异常退款：https://pay.weixin.qq.com/doc/v3/partner/4013462582.md
+- 小程序合单支付-退款结果回调通知：https://pay.weixin.qq.com/doc/v3/partner/4013462586.md
+- 小程序合单支付-申请所有/单个子商户交易账单：https://pay.weixin.qq.com/doc/v3/partner/4013462604.md
+- 小程序合单支付-申请服务商资金账单：https://pay.weixin.qq.com/doc/v3/partner/4013462607.md
+- 小程序合单支付-下载账单：https://pay.weixin.qq.com/doc/v3/partner/4013462614.md
+- 合单支付-商户号绑定 AppID 操作说明：https://pay.weixin.qq.com/doc/v3/partner/4013462628.md
+
+#### 4.10.5 普通服务商订单退款
+
+- 订单退款-产品介绍：https://pay.weixin.qq.com/doc/v3/partner/4013080622.md
+- 订单退款-权限申请/解除：https://pay.weixin.qq.com/doc/v3/partner/4013080630.md
+- 订单退款-开发指引：https://pay.weixin.qq.com/doc/v3/partner/4013080623.md
+- 订单退款-业务示例代码：https://pay.weixin.qq.com/doc/v3/partner/4015217325.md
+- 订单退款-常见问题：https://pay.weixin.qq.com/doc/v3/partner/4013080629.md
+- 订单退款-申请退款：https://pay.weixin.qq.com/doc/v3/partner/4013080625.md
+- 订单退款-查询单笔退款（通过商户退款单号）：https://pay.weixin.qq.com/doc/v3/partner/4013080626.md
+- 订单退款-发起异常退款：https://pay.weixin.qq.com/doc/v3/partner/4013080627.md
+- 订单退款-退款结果通知：https://pay.weixin.qq.com/doc/v3/partner/4013080628.md
+- 订单退款-退款操作指引：https://pay.weixin.qq.com/doc/v3/partner/4013080632.md
+- 订单退款-微信支付退款最佳实践：https://pay.weixin.qq.com/doc/v3/partner/4014960215.md
+
+#### 4.10.6 普通服务商分账
+
+- 分账-产品介绍：https://pay.weixin.qq.com/doc/v3/partner/4012072582.md
+- 分账-接入前准备：https://pay.weixin.qq.com/doc/v3/partner/4012072589.md
+- 分账-开发指引：https://pay.weixin.qq.com/doc/v3/partner/4012072601.md
+- 分账-常见问题：https://pay.weixin.qq.com/doc/v3/partner/4014547107.md
+- 分账-请求分账：https://pay.weixin.qq.com/doc/v3/partner/4012690683.md
+- 分账-查询分账结果：https://pay.weixin.qq.com/doc/v3/partner/4012466850.md
+- 分账-请求分账回退：https://pay.weixin.qq.com/doc/v3/partner/4012466854.md
+- 分账-查询分账回退结果：https://pay.weixin.qq.com/doc/v3/partner/4012466858.md
+- 分账-解冻剩余资金：https://pay.weixin.qq.com/doc/v3/partner/4012466860.md
+- 分账-查询剩余待分金额：https://pay.weixin.qq.com/doc/v3/partner/4012457927.md
+- 分账-查询最大分账比例：https://pay.weixin.qq.com/doc/v3/partner/4012466864.md
+- 分账-添加分账接收方：https://pay.weixin.qq.com/doc/v3/partner/4012690944.md
+- 分账-删除分账接收方：https://pay.weixin.qq.com/doc/v3/partner/4012466868.md
+- 分账-分账动账通知：https://pay.weixin.qq.com/doc/v3/partner/4012075216.md
+- 分账-申请分账账单：https://pay.weixin.qq.com/doc/v3/partner/4012761140.md
+- 分账-下载账单：https://pay.weixin.qq.com/doc/v3/partner/4012075366.md
+- 分账-分账失败处理指引：https://pay.weixin.qq.com/doc/v3/partner/4015504885.md
+
+#### 4.10.7 普通服务商账单下载
+
+- 下载账单-产品介绍：https://pay.weixin.qq.com/doc/v3/partner/4013080592.md
+- 下载账单-开发指引：https://pay.weixin.qq.com/doc/v3/partner/4013080593.md
+- 下载账单-业务示例代码：https://pay.weixin.qq.com/doc/v3/partner/4015988147.md
+- 下载账单-常见问题：https://pay.weixin.qq.com/doc/v3/partner/4013080602.md
+- 下载账单-申请所有/单个特约商户交易账单：https://pay.weixin.qq.com/doc/v3/partner/4013080595.md
+- 下载账单-申请服务商资金账单：https://pay.weixin.qq.com/doc/v3/partner/4013080596.md
+- 下载账单-下载账单：https://pay.weixin.qq.com/doc/v3/partner/4013080597.md
+- 下载账单-交易账单详细说明：https://pay.weixin.qq.com/doc/v3/partner/4013080599.md
+- 下载账单-资金账单详细说明：https://pay.weixin.qq.com/doc/v3/partner/4013080600.md
+- 下载账单-平台下载账单操作指引：https://pay.weixin.qq.com/doc/v3/partner/4013080601.md
+
+### 4.11 直连支付组
 
 - 小程序支付-产品介绍：https://pay.weixin.qq.com/doc/v3/merchant/4012791894.md
 - 小程序支付-快速开始：https://pay.weixin.qq.com/doc/v3/merchant/4015459512.md

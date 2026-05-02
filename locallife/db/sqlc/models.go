@@ -741,6 +741,20 @@ type EcommerceApplyment struct {
 	LegalValidationUrl pgtype.Text `json:"legal_validation_url"`
 	// 微信进件返回的汇款账户验证原始信息，敏感字段保持微信返回密文
 	AccountValidation []byte `json:"account_validation"`
+	// 普通服务商开户意愿确认业务申请编号
+	AccountWillingnessBusinessCode pgtype.Text `json:"account_willingness_business_code"`
+	// 普通服务商开户意愿确认微信申请单号
+	AccountWillingnessApplymentID pgtype.Int8 `json:"account_willingness_applyment_id"`
+	// 普通服务商开户意愿确认审核状态
+	AccountWillingnessState pgtype.Text `json:"account_willingness_state"`
+	// 普通服务商开户意愿确认二维码数据
+	AccountWillingnessQrcodeData pgtype.Text `json:"account_willingness_qrcode_data"`
+	// 普通服务商开户意愿确认驳回原因
+	AccountWillingnessRejectReason pgtype.Text `json:"account_willingness_reject_reason"`
+	// 普通服务商特约商户开户意愿授权状态
+	AccountAuthorizeState pgtype.Text `json:"account_authorize_state"`
+	// 最近一次查询普通服务商开户意愿授权状态的时间
+	AccountAuthorizeStateCheckedAt pgtype.Timestamptz `json:"account_authorize_state_checked_at"`
 }
 
 type ExternalPaymentCommand struct {
@@ -2699,7 +2713,7 @@ type WechatComplaint struct {
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
 }
 
-// 微信支付平台收付通商户违规通知记录；由违规 webhook 持久化，供平台审计与运营处理
+// 微信支付商户处置通知记录；平台收付通与普通服务商 webhook 共用，按微信 record_id 幂等持久化，供平台审计与运营处理
 type WechatMerchantViolation struct {
 	ID                   int64              `json:"id"`
 	RecordID             string             `json:"record_id"`

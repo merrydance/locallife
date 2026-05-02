@@ -29,11 +29,12 @@ func recordProfitSharingQueryFact(ctx context.Context, store db.Store, paymentOr
 	if queryResp == nil {
 		return nil, nil
 	}
+	channel := profitSharingPaymentChannel(paymentOrder)
 	service := logic.NewPaymentFactService(store)
 	sharingOrderID := profitSharingFactSharingOrderID(profitSharingOrder, queryResp)
 	result, err := service.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
 		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              db.PaymentChannelEcommerce,
+		Channel:              channel,
 		Capability:           db.ExternalPaymentCapabilityProfitSharing,
 		FactSource:           db.ExternalPaymentFactSourceQuery,
 		ExternalObjectType:   db.ExternalPaymentObjectProfitSharing,
@@ -47,7 +48,7 @@ func recordProfitSharingQueryFact(ctx context.Context, store db.Store, paymentOr
 		Amount:               profitSharingFactAmount(queryResp),
 		Currency:             "CNY",
 		RawResource:          profitSharingQueryFactResource(paymentOrder, profitSharingOrder, queryResp, sharingOrderID, finalResult, finalFailReason),
-		DedupeKey:            profitSharingQueryFactDedupeKey(profitSharingOrder.OutOrderNo, finalResult),
+		DedupeKey:            profitSharingQueryFactDedupeKey(channel, profitSharingOrder.OutOrderNo, finalResult),
 		Application: &logic.ExternalPaymentFactApplicationTarget{
 			Consumer:           profitSharingFactConsumerDomain,
 			BusinessObjectType: profitSharingFactBusinessObjectOrder,
@@ -64,11 +65,12 @@ func recordProfitSharingCommandResponseFact(ctx context.Context, store db.Store,
 	if resp == nil {
 		return nil, nil
 	}
+	channel := profitSharingPaymentChannel(paymentOrder)
 	service := logic.NewPaymentFactService(store)
 
 	result, err := service.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
 		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              db.PaymentChannelEcommerce,
+		Channel:              channel,
 		Capability:           db.ExternalPaymentCapabilityProfitSharing,
 		FactSource:           db.ExternalPaymentFactSourceCommandResponse,
 		ExternalObjectType:   db.ExternalPaymentObjectProfitSharing,
@@ -82,7 +84,7 @@ func recordProfitSharingCommandResponseFact(ctx context.Context, store db.Store,
 		Amount:               amount,
 		Currency:             "CNY",
 		RawResource:          profitSharingCommandResponseFactResource(paymentOrder, profitSharingOrder, resp, commandType, amount),
-		DedupeKey:            profitSharingCommandResponseFactDedupeKey(profitSharingOrder.OutOrderNo, commandType, resp.Status),
+		DedupeKey:            profitSharingCommandResponseFactDedupeKey(channel, profitSharingOrder.OutOrderNo, commandType, resp.Status),
 	})
 	if err != nil {
 		return nil, err
@@ -90,7 +92,7 @@ func recordProfitSharingCommandResponseFact(ctx context.Context, store db.Store,
 	return result.Application, nil
 }
 
-func recordProfitSharingReturnQueryFact(ctx context.Context, store db.Store, returnRecord db.ProfitSharingReturn, queryResp *wechatcontracts.ProfitSharingReturnResponse) (*db.ExternalPaymentFactApplication, error) {
+func recordProfitSharingReturnQueryFact(ctx context.Context, store db.Store, channel string, returnRecord db.ProfitSharingReturn, queryResp *wechatcontracts.ProfitSharingReturnResponse) (*db.ExternalPaymentFactApplication, error) {
 	if queryResp == nil {
 		return nil, nil
 	}
@@ -98,7 +100,7 @@ func recordProfitSharingReturnQueryFact(ctx context.Context, store db.Store, ret
 	amount := profitSharingReturnFactAmount(returnRecord, queryResp)
 	result, err := service.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
 		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              db.PaymentChannelEcommerce,
+		Channel:              channel,
 		Capability:           db.ExternalPaymentCapabilityProfitSharing,
 		FactSource:           db.ExternalPaymentFactSourceQuery,
 		ExternalObjectType:   db.ExternalPaymentObjectProfitSharingReturn,
@@ -112,7 +114,7 @@ func recordProfitSharingReturnQueryFact(ctx context.Context, store db.Store, ret
 		Amount:               amount,
 		Currency:             "CNY",
 		RawResource:          profitSharingReturnQueryFactResource(returnRecord, queryResp),
-		DedupeKey:            profitSharingReturnQueryFactDedupeKey(returnRecord.OutReturnNo, queryResp.Result),
+		DedupeKey:            profitSharingReturnQueryFactDedupeKey(channel, returnRecord.OutReturnNo, queryResp.Result),
 		Application: &logic.ExternalPaymentFactApplicationTarget{
 			Consumer:           profitSharingFactConsumerDomain,
 			BusinessObjectType: profitSharingReturnFactBusinessObject,
@@ -125,7 +127,7 @@ func recordProfitSharingReturnQueryFact(ctx context.Context, store db.Store, ret
 	return result.Application, nil
 }
 
-func recordProfitSharingReturnCommandResponseFact(ctx context.Context, store db.Store, returnRecord db.ProfitSharingReturn, returnResp *wechatcontracts.ProfitSharingReturnResponse) (*db.ExternalPaymentFactApplication, error) {
+func recordProfitSharingReturnCommandResponseFact(ctx context.Context, store db.Store, channel string, returnRecord db.ProfitSharingReturn, returnResp *wechatcontracts.ProfitSharingReturnResponse) (*db.ExternalPaymentFactApplication, error) {
 	if returnResp == nil {
 		return nil, nil
 	}
@@ -134,7 +136,7 @@ func recordProfitSharingReturnCommandResponseFact(ctx context.Context, store db.
 
 	result, err := service.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
 		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              db.PaymentChannelEcommerce,
+		Channel:              channel,
 		Capability:           db.ExternalPaymentCapabilityProfitSharing,
 		FactSource:           db.ExternalPaymentFactSourceCommandResponse,
 		ExternalObjectType:   db.ExternalPaymentObjectProfitSharingReturn,
@@ -148,7 +150,7 @@ func recordProfitSharingReturnCommandResponseFact(ctx context.Context, store db.
 		Amount:               amount,
 		Currency:             "CNY",
 		RawResource:          profitSharingReturnCommandResponseFactResource(returnRecord, returnResp),
-		DedupeKey:            profitSharingReturnCommandResponseFactDedupeKey(returnRecord.OutReturnNo, returnResp.Result),
+		DedupeKey:            profitSharingReturnCommandResponseFactDedupeKey(channel, returnRecord.OutReturnNo, returnResp.Result),
 	})
 	if err != nil {
 		return nil, err
@@ -156,7 +158,7 @@ func recordProfitSharingReturnCommandResponseFact(ctx context.Context, store db.
 	return result.Application, nil
 }
 
-func recordProfitSharingReturnCommandErrorFact(ctx context.Context, store db.Store, returnRecord db.ProfitSharingReturn, commandErr error) (*db.ExternalPaymentFactApplication, error) {
+func recordProfitSharingReturnCommandErrorFact(ctx context.Context, store db.Store, channel string, returnRecord db.ProfitSharingReturn, commandErr error) (*db.ExternalPaymentFactApplication, error) {
 	errorCode, errorMessage := workerPaymentCommandErrorFields(commandErr)
 	failReason := workerStringValue(errorMessage)
 	if failReason == "" && commandErr != nil {
@@ -166,7 +168,7 @@ func recordProfitSharingReturnCommandErrorFact(ctx context.Context, store db.Sto
 	service := logic.NewPaymentFactService(store)
 	result, err := service.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
 		Provider:           db.ExternalPaymentProviderWechat,
-		Channel:            db.PaymentChannelEcommerce,
+		Channel:            channel,
 		Capability:         db.ExternalPaymentCapabilityProfitSharing,
 		FactSource:         db.ExternalPaymentFactSourceCommandResponse,
 		ExternalObjectType: db.ExternalPaymentObjectProfitSharingReturn,
@@ -179,7 +181,7 @@ func recordProfitSharingReturnCommandErrorFact(ctx context.Context, store db.Sto
 		Amount:             paymentFactInt64Ptr(returnRecord.Amount),
 		Currency:           "CNY",
 		RawResource:        profitSharingReturnCommandErrorFactResource(returnRecord, errorCode, errorMessage, failReason),
-		DedupeKey:          profitSharingReturnCommandResponseFactDedupeKey(returnRecord.OutReturnNo, db.ExternalPaymentCommandStatusRejected),
+		DedupeKey:          profitSharingReturnCommandResponseFactDedupeKey(channel, returnRecord.OutReturnNo, db.ExternalPaymentCommandStatusRejected),
 	})
 	if err != nil {
 		return nil, err
@@ -312,12 +314,19 @@ func profitSharingFactSharingOrderID(profitSharingOrder db.ProfitSharingOrder, q
 	return ""
 }
 
-func profitSharingQueryFactDedupeKey(outOrderNo, upstreamState string) string {
-	return "wechat:query:ecommerce:profit_sharing:" + outOrderNo + ":" + logic.NormalizeProfitSharingTerminalStatus(upstreamState)
+func profitSharingPaymentChannel(paymentOrder db.PaymentOrder) string {
+	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
+		return db.PaymentChannelOrdinaryServiceProvider
+	}
+	return db.PaymentChannelEcommerce
 }
 
-func profitSharingCommandResponseFactDedupeKey(outOrderNo, commandType, terminalStatus string) string {
-	return "wechat:command_response:ecommerce:profit_sharing:" + commandType + ":" + outOrderNo + ":" + terminalStatus
+func profitSharingQueryFactDedupeKey(channel, outOrderNo, upstreamState string) string {
+	return "wechat:query:" + channel + ":profit_sharing:" + outOrderNo + ":" + logic.NormalizeProfitSharingTerminalStatus(upstreamState)
+}
+
+func profitSharingCommandResponseFactDedupeKey(channel, outOrderNo, commandType, terminalStatus string) string {
+	return "wechat:command_response:" + channel + ":profit_sharing:" + commandType + ":" + outOrderNo + ":" + terminalStatus
 }
 
 func profitSharingFactAmount(queryResp *wechatcontracts.ProfitSharingQueryResponse) *int64 {
@@ -410,12 +419,12 @@ func profitSharingCommandResponseFactResource(paymentOrder db.PaymentOrder, prof
 	return raw
 }
 
-func profitSharingReturnQueryFactDedupeKey(outReturnNo, upstreamState string) string {
-	return "wechat:query:ecommerce:profit_sharing_return:" + outReturnNo + ":" + logic.NormalizeProfitSharingTerminalStatus(upstreamState)
+func profitSharingReturnQueryFactDedupeKey(channel, outReturnNo, upstreamState string) string {
+	return "wechat:query:" + channel + ":profit_sharing_return:" + outReturnNo + ":" + logic.NormalizeProfitSharingTerminalStatus(upstreamState)
 }
 
-func profitSharingReturnCommandResponseFactDedupeKey(outReturnNo, terminalStatus string) string {
-	return "wechat:command_response:ecommerce:profit_sharing_return:" + outReturnNo + ":" + terminalStatus
+func profitSharingReturnCommandResponseFactDedupeKey(channel, outReturnNo, terminalStatus string) string {
+	return "wechat:command_response:" + channel + ":profit_sharing_return:" + outReturnNo + ":" + terminalStatus
 }
 
 func profitSharingReturnQueryFactResource(returnRecord db.ProfitSharingReturn, queryResp *wechatcontracts.ProfitSharingReturnResponse) []byte {

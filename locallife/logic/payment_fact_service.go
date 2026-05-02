@@ -10,10 +10,16 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 )
 
 type paymentFactRefundCreator interface {
 	CreateEcommerceRefund(ctx context.Context, req *wechatcontracts.EcommerceRefundRequest) (*wechatcontracts.EcommerceRefundCreateResponse, error)
+}
+
+type paymentFactOrdinaryRefundCreator interface {
+	CreateOrdinaryServiceProviderRefund(ctx context.Context, req ospcontracts.RefundCreateRequest) (*ospcontracts.RefundResponse, error)
+	OrdinaryServiceProviderRefundNotifyURL() string
 }
 
 type paymentFactEcommerceRefundCreatorAdapter struct {

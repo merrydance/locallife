@@ -8,6 +8,7 @@ import (
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	wechaterrorcodes "github.com/merrydance/locallife/wechat/errorcodes"
+	ordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider"
 )
 
 func isDirectRefundAlreadyFullyRefundedError(err error) bool {
@@ -100,6 +101,42 @@ func mapEcommerceRefundCreateError(err error) error {
 	default:
 		return NewRequestErrorWithCause(http.StatusServiceUnavailable, errors.New("微信收付通退款请求失败，请稍后刷新退款状态"), err)
 	}
+}
+
+func mapOrdinaryServiceProviderRefundCreateError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	if message := strings.ToLower(err.Error()); strings.Contains(message, "ordinary service provider") && strings.Contains(message, "not configured") {
+		return NewRequestErrorWithCause(http.StatusServiceUnavailable, errors.New("微信服务商退款配置未完成，当前无法发起退款，请联系平台处理"), err)
+	}
+
+	var providerErr *ordinaryserviceprovider.ProviderError
+	if !errors.As(err, &providerErr) {
+		return err
+	}
+
+	message := strings.TrimSpace(providerErr.Frontend.Message)
+	if providerErr.Frontend.Action != "" {
+		message = strings.TrimSpace(message + "，" + providerErr.Frontend.Action)
+	}
+	if message == "" {
+		message = "微信服务商退款请求失败，请稍后刷新退款状态"
+	}
+
+	status := http.StatusServiceUnavailable
+	switch providerErr.Category {
+	case ordinaryserviceprovider.ErrorCategoryValidation:
+		status = http.StatusBadRequest
+	case ordinaryserviceprovider.ErrorCategoryBusinessConflict,
+		ordinaryserviceprovider.ErrorCategoryMerchantControl:
+		status = http.StatusConflict
+	case ordinaryserviceprovider.ErrorCategoryProvider:
+		status = http.StatusBadGateway
+	}
+
+	return NewRequestErrorWithCause(status, errors.New(message), err)
 }
 
 func mapEcommerceAbnormalRefundError(err error) error {

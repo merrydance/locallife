@@ -17,13 +17,17 @@ func paymentOrderRequiresProfitSharing(paymentOrder db.PaymentOrder) bool {
 }
 
 func refundTypeForPaymentOrder(paymentOrder db.PaymentOrder) string {
-	if paymentOrderUsesEcommerceChannel(paymentOrder) {
+	if paymentOrderUsesEcommerceChannel(paymentOrder) || db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
 		return paymentTypeEcommerce
 	}
 	if paymentOrder.PaymentType == "native" {
 		return "miniprogram"
 	}
 	return paymentOrder.PaymentType
+}
+
+func paymentOrderUsesMainBusinessRefundChannel(paymentOrder db.PaymentOrder) bool {
+	return paymentOrderUsesEcommerceChannel(paymentOrder) || db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder)
 }
 
 func requiresEcommerceRefund(paymentOrder db.PaymentOrder) bool {
@@ -35,5 +39,5 @@ func requiresEcommerceRefund(paymentOrder db.PaymentOrder) bool {
 }
 
 func mainBusinessRefundChannelDriftError(paymentOrder db.PaymentOrder, action string) error {
-	return fmt.Errorf("main-business payment order %d with payment_channel %s and payment_type %s cannot %s outside ecommerce channel", paymentOrder.ID, paymentOrder.PaymentChannel, paymentOrder.PaymentType, action)
+	return fmt.Errorf("main-business payment order %d with payment_channel %s and payment_type %s cannot %s outside wechat service provider channel", paymentOrder.ID, paymentOrder.PaymentChannel, paymentOrder.PaymentType, action)
 }

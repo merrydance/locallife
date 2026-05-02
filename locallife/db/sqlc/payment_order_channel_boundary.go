@@ -4,8 +4,12 @@ func PaymentOrderUsesEcommerceChannel(paymentOrder PaymentOrder) bool {
 	return paymentOrder.PaymentChannel == PaymentChannelEcommerce
 }
 
+func PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder PaymentOrder) bool {
+	return paymentOrder.PaymentChannel == PaymentChannelOrdinaryServiceProvider
+}
+
 func PaymentOrderRequiresProfitSharing(paymentOrder PaymentOrder) bool {
-	return paymentOrder.PaymentChannel == PaymentChannelEcommerce && paymentOrder.RequiresProfitSharing
+	return (paymentOrder.PaymentChannel == PaymentChannelEcommerce || paymentOrder.PaymentChannel == PaymentChannelOrdinaryServiceProvider) && paymentOrder.RequiresProfitSharing
 }
 
 func OrderRequiresProfitSharing(order Order) bool {

@@ -24,6 +24,7 @@ type CreateEcommercePaymentTxParams struct {
 	OutTradeNo        string // 子单号（对应 payment_orders.out_trade_no 及微信 sub_out_trade_no）
 	ExpiresAt         time.Time
 	Attach            string // 附加信息（可空）
+	PaymentChannel    string // empty keeps historical ecommerce behavior; active merchant callers pass ordinary_service_provider
 }
 
 // CreateEcommercePaymentTxResult 事务结果
@@ -60,11 +61,16 @@ func (store *SQLStore) CreateEcommercePaymentTx(ctx context.Context, arg CreateE
 			return fmt.Errorf("create combined payment order: %w", err)
 		}
 
+		paymentChannel := arg.PaymentChannel
+		if paymentChannel == "" {
+			paymentChannel = PaymentChannelEcommerce
+		}
+
 		// 3. 创建 payment_orders 子单
 		createParams := CreatePaymentOrderParams{
 			UserID:         arg.UserID,
 			PaymentType:    "miniprogram",
-			PaymentChannel: PaymentChannelEcommerce,
+			PaymentChannel: paymentChannel,
 			BusinessType:   arg.BusinessType,
 			Amount:         arg.Amount,
 			OutTradeNo:     arg.OutTradeNo,

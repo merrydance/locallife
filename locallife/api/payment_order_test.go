@@ -19,8 +19,10 @@ import (
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
-	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	ordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
+	mockordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -58,6 +60,36 @@ func randomRefundOrder(paymentOrderID int64, amount int64) db.RefundOrder {
 	}
 }
 
+func TestWriteLogicRequestErrorSanitizesLegacyEnglishMessages(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/payments", nil)
+
+	handled := writeLogicRequestError(ctx, logic.NewRequestError(http.StatusNotFound, errors.New("payment order not found")))
+
+	require.True(t, handled)
+	require.Equal(t, http.StatusNotFound, recorder.Code)
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "未找到支付单，请刷新页面后重试", resp.Error)
+	require.NotContains(t, resp.Error, "payment")
+	require.NotContains(t, resp.Error, "not found")
+}
+
+func TestWriteLogicRequestErrorKeepsChineseActionMessages(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/payments", nil)
+
+	handled := writeLogicRequestError(ctx, logic.NewRequestError(http.StatusConflict, errors.New("支付单仍在准备中，请稍后重试")))
+
+	require.True(t, handled)
+	require.Equal(t, http.StatusConflict, recorder.Code)
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "支付单仍在准备中，请稍后重试", resp.Error)
+}
+
 func TestNewPaymentOrderWechatQueryResultSupportsDirectPayment(t *testing.T) {
 	query := &logic.QueryPaymentOrderWechatOrder{
 		AppID:          "wx-app",
@@ -83,6 +115,31 @@ func TestNewPaymentOrderWechatQueryResultSupportsDirectPayment(t *testing.T) {
 	require.Equal(t, int64(1000), resp.Amount.Total)
 }
 
+func TestCreatePaymentOrderAPI_InvalidPayloadReturnsChineseGuidance(t *testing.T) {
+	user, _ := randomUser(t)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/payments", bytes.NewReader([]byte(`{"order_id":0,"payment_type":"native","business_type":"invalid"}`)))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "支付请求参数格式无效，请选择订单并确认支付类型后重试", resp.Message)
+	require.NotContains(t, resp.Message, "PaymentType")
+	require.NotContains(t, resp.Message, "binding")
+	require.NotContains(t, resp.Message, "provider")
+}
+
 // randomPaymentTestOrder creates a random order for payment testing
 // Named differently to avoid conflict with randomOrder in order_test.go
 func randomPaymentTestOrder(userID, merchantID int64) db.Order {
@@ -97,6 +154,13 @@ func randomPaymentTestOrder(userID, merchantID int64) db.Order {
 		Status:      "pending",
 		CreatedAt:   time.Now(),
 	}
+}
+
+func newTestServerWithOrdinaryServiceProvider(t *testing.T, store db.Store, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) *Server {
+	t.Helper()
+	server := newTestServer(t, store)
+	server.SetOrdinaryServiceProviderClientForTest(ordinaryClient)
+	return server
 }
 
 type stubRefundOrchestrator struct {
@@ -134,7 +198,7 @@ func expectOrderPaymentCommandAccepted(t *testing.T, store *mockdb.MockStore, pa
 		Times(1).
 		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
 			require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
-			require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
+			require.Equal(t, paymentOrder.PaymentChannel, arg.Channel)
 			require.Equal(t, db.ExternalPaymentCapabilityPartnerJSAPIPayment, arg.Capability)
 			require.Equal(t, db.ExternalPaymentCommandTypeCreatePayment, arg.CommandType)
 			require.Equal(t, db.ExternalPaymentBusinessOwnerOrder, arg.BusinessOwner)
@@ -164,9 +228,9 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 	paymentOrder := randomPaymentOrder(user.ID, &order.ID)
 	paymentOrder.Amount = order.TotalAmount
 	paymentOrder.PaymentType = PaymentTypeProfitShare
-	paymentOrder.PaymentChannel = db.PaymentChannelEcommerce
+	paymentOrder.PaymentChannel = db.PaymentChannelOrdinaryServiceProvider
 	paymentOrder.CombinedPaymentID = pgtype.Int8{Int64: util.RandomInt(1, 1000), Valid: true}
-	payParams := &wechat.JSAPIPayParams{
+	payParams := &ospcontracts.JSAPIPayParams{
 		TimeStamp: "1234567890",
 		NonceStr:  "nonce",
 		Package:   "prepay_id=wx123",
@@ -178,7 +242,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 		name          string
 		body          gin.H
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface)
+		buildStubs    func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
@@ -190,7 +254,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), order.ID).
 					Times(1).
@@ -219,10 +283,35 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 						SubMchID:     "1900000109",
 					}, nil)
 
-				ecommerceClient.EXPECT().
-					CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
+				ordinaryClient.EXPECT().
+					ServiceProviderAppID().
+					AnyTimes().
+					Return("wx-service-app")
+				ordinaryClient.EXPECT().
+					ServiceProviderMchID().
+					AnyTimes().
+					Return("1900000001")
+				ordinaryClient.EXPECT().
+					PaymentNotifyURL().
+					AnyTimes().
+					Return("https://api.example.com/v1/webhooks/wechat-ordinary/payment-notify")
+				ordinaryClient.EXPECT().
+					CreatePayment(gomock.Any(), gomock.AssignableToTypeOf(ospcontracts.PaymentPrepayRequest{})).
 					Times(1).
-					Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "wx123"}, payParams, nil)
+					DoAndReturn(func(_ context.Context, req ospcontracts.PaymentPrepayRequest) (*ospcontracts.PaymentPrepayResponse, error) {
+						require.Equal(t, "wx-service-app", req.SpAppID)
+						require.Equal(t, "1900000001", req.SpMchID)
+						require.Equal(t, "1900000109", req.SubMchID)
+						require.Equal(t, paymentOrder.OutTradeNo, req.OutTradeNo)
+						require.Equal(t, paymentOrder.Amount, req.Amount.Total)
+						require.NotNil(t, req.SettleInfo)
+						require.False(t, req.SettleInfo.ProfitSharing)
+						return &ospcontracts.PaymentPrepayResponse{PrepayID: "wx123"}, nil
+					})
+				ordinaryClient.EXPECT().
+					GenerateJSAPIPayParams("wx123").
+					Times(1).
+					Return(payParams, nil)
 
 				store.EXPECT().
 					UpdatePaymentOrderPrepayId(gomock.Any(), gomock.Any()).
@@ -254,7 +343,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, _ *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), order.ID).
 					Times(1).
@@ -274,7 +363,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, otherUser.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, _ *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), order.ID).
 					Times(1).
@@ -294,7 +383,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, _ *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				paidOrder := order
 				paidOrder.Status = "paid"
 				store.EXPECT().
@@ -316,7 +405,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				existingPendingPayment := paymentOrder
 				existingPendingPayment.PrepayID = pgtype.Text{String: "wx123", Valid: true}
 
@@ -331,7 +420,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 					Times(1).
 					Return(existingPendingPayment, nil)
 
-				ecommerceClient.EXPECT().
+				ordinaryClient.EXPECT().
 					GenerateJSAPIPayParams(gomock.Any()).
 					Times(1).
 					Return(payParams, nil)
@@ -354,7 +443,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				existingPendingPayment := paymentOrder
 				existingPendingPayment.PrepayID = pgtype.Text{String: "wx123", Valid: true}
 
@@ -368,13 +457,13 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 						Times(1).
 						Return(db.PaymentOrder{}, db.ErrRecordNotFound),
 					store.EXPECT().
-						GetUser(gomock.Any(), user.ID).
-						Times(1).
-						Return(user, nil),
-					store.EXPECT().
 						GetMerchant(gomock.Any(), merchant.ID).
 						Times(1).
 						Return(merchant, nil),
+					store.EXPECT().
+						GetUser(gomock.Any(), user.ID).
+						Times(1).
+						Return(user, nil),
 					store.EXPECT().
 						CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).
 						Times(1).
@@ -383,7 +472,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 						GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
 						Times(1).
 						Return(existingPendingPayment, nil),
-					ecommerceClient.EXPECT().
+					ordinaryClient.EXPECT().
 						GenerateJSAPIPayParams("wx123").
 						Times(1).
 						Return(payParams, nil),
@@ -409,7 +498,8 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {},
+			buildStubs: func(store *mockdb.MockStore, _ *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -424,7 +514,8 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {},
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -439,7 +530,8 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {},
+			buildStubs: func(store *mockdb.MockStore, _ *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -454,7 +546,8 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {},
+			buildStubs: func(store *mockdb.MockStore, _ *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -466,8 +559,9 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 				"payment_type":  "miniprogram",
 				"business_type": "order",
 			},
-			setupAuth:  func(t *testing.T, request *http.Request, tokenMaker token.Maker) {},
-			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {},
+			buildStubs: func(store *mockdb.MockStore, _ *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
+			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
 			},
@@ -482,11 +576,10 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
-			ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-			tc.buildStubs(store, ecommerceClient)
+			ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
+			tc.buildStubs(store, ordinaryClient)
 
-			server := newTestServer(t, store)
-			server.SetEcommerceClientForTest(ecommerceClient)
+			server := newTestServerWithOrdinaryServiceProvider(t, store, ordinaryClient)
 			server.SetTaskDistributorForTest(nil)
 			recorder := httptest.NewRecorder()
 
@@ -936,8 +1029,8 @@ func TestQueryPaymentOrderAPI_RemotePendingReturnsWechatQueryAndPayParams(t *tes
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
+	server := newTestServerWithOrdinaryServiceProvider(t, store, ordinaryClient)
 	recorder := httptest.NewRecorder()
 
 	store.EXPECT().
@@ -946,7 +1039,7 @@ func TestQueryPaymentOrderAPI_RemotePendingReturnsWechatQueryAndPayParams(t *tes
 			ID:             123,
 			UserID:         1001,
 			PaymentType:    PaymentTypeProfitShare,
-			PaymentChannel: db.PaymentChannelEcommerce,
+			PaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
 			BusinessType:   BusinessTypeOrder,
 			Amount:         5000,
 			OutTradeNo:     "OC20260415000001",
@@ -961,21 +1054,20 @@ func TestQueryPaymentOrderAPI_RemotePendingReturnsWechatQueryAndPayParams(t *tes
 	store.EXPECT().
 		GetMerchantPaymentConfig(gomock.Any(), int64(88)).
 		Return(db.MerchantPaymentConfig{MerchantID: 88, SubMchID: "1900000109"}, nil)
-	ecommerceClient.EXPECT().
-		QueryPartnerOrderByOutTradeNo(gomock.Any(), "OC20260415000001", "1900000109").
-		Return(&wechatcontracts.PartnerOrderQueryResponse{
+	ordinaryClient.EXPECT().
+		QueryPayment(gomock.Any(), ospcontracts.PaymentQueryRequest{SubMchID: "1900000109", OutTradeNo: "OC20260415000001"}).
+		Return(&ospcontracts.PaymentQueryResponse{
 			SpAppID:        "wx-service-app",
 			SpMchID:        "1900000001",
 			SubMchID:       "1900000109",
 			OutTradeNo:     "OC20260415000001",
-			TradeType:      "JSAPI",
-			TradeState:     "NOTPAY",
+			TradeState:     ospcontracts.PaymentTradeStateNotPay,
 			TradeStateDesc: "待支付",
-			Payer:          wechatcontracts.PartnerOrderPayerInfo{SpOpenID: "openid-1"},
+			Amount:         &ospcontracts.PaymentAmount{Total: 5000, Currency: ospcontracts.CurrencyCNY},
 		}, nil)
-	ecommerceClient.EXPECT().
+	ordinaryClient.EXPECT().
 		GenerateJSAPIPayParams("prepay-123").
-		Return(&wechat.JSAPIPayParams{TimeStamp: "1", NonceStr: "nonce", Package: "prepay_id=prepay-123", SignType: "RSA", PaySign: "sign"}, nil)
+		Return(&ospcontracts.JSAPIPayParams{TimeStamp: "1", NonceStr: "nonce", Package: "prepay_id=prepay-123", SignType: "RSA", PaySign: "sign"}, nil)
 
 	request, err := http.NewRequest(http.MethodGet, "/v1/payments/123/query", nil)
 	require.NoError(t, err)
@@ -997,8 +1089,8 @@ func TestQueryPaymentOrderAPI_UsesTransactionIDQueryWhenAvailable(t *testing.T) 
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
+	server := newTestServerWithOrdinaryServiceProvider(t, store, ordinaryClient)
 	recorder := httptest.NewRecorder()
 
 	store.EXPECT().
@@ -1007,7 +1099,7 @@ func TestQueryPaymentOrderAPI_UsesTransactionIDQueryWhenAvailable(t *testing.T) 
 			ID:             123,
 			UserID:         1001,
 			PaymentType:    PaymentTypeProfitShare,
-			PaymentChannel: db.PaymentChannelEcommerce,
+			PaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
 			BusinessType:   BusinessTypeOrder,
 			Amount:         5000,
 			OutTradeNo:     "OC20260415000011",
@@ -1021,16 +1113,16 @@ func TestQueryPaymentOrderAPI_UsesTransactionIDQueryWhenAvailable(t *testing.T) 
 	store.EXPECT().
 		GetMerchantPaymentConfig(gomock.Any(), int64(88)).
 		Return(db.MerchantPaymentConfig{MerchantID: 88, SubMchID: "1900000109"}, nil)
-	ecommerceClient.EXPECT().
-		QueryPartnerOrderByTransactionID(gomock.Any(), "wx-transaction-001", "1900000109").
-		Return(&wechatcontracts.PartnerOrderQueryResponse{
+	ordinaryClient.EXPECT().
+		QueryPayment(gomock.Any(), ospcontracts.PaymentQueryRequest{SubMchID: "1900000109", TransactionID: "wx-transaction-001", OutTradeNo: "OC20260415000011"}).
+		Return(&ospcontracts.PaymentQueryResponse{
 			SpAppID:        "wx-service-app",
 			SpMchID:        "1900000001",
 			SubMchID:       "1900000109",
 			OutTradeNo:     "OC20260415000011",
 			TransactionID:  "wx-transaction-001",
 			TradeType:      "JSAPI",
-			TradeState:     "SUCCESS",
+			TradeState:     ospcontracts.PaymentTradeStateSuccess,
 			TradeStateDesc: "支付成功",
 		}, nil)
 
@@ -1054,8 +1146,8 @@ func TestQueryPaymentOrderAPI_OutTradeNoQueryPreservesWechatFields(t *testing.T)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
+	server := newTestServerWithOrdinaryServiceProvider(t, store, ordinaryClient)
 	recorder := httptest.NewRecorder()
 
 	store.EXPECT().
@@ -1064,7 +1156,7 @@ func TestQueryPaymentOrderAPI_OutTradeNoQueryPreservesWechatFields(t *testing.T)
 			ID:             123,
 			UserID:         1001,
 			PaymentType:    PaymentTypeProfitShare,
-			PaymentChannel: db.PaymentChannelEcommerce,
+			PaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
 			BusinessType:   BusinessTypeOrder,
 			Amount:         5000,
 			OutTradeNo:     "OC20260415000021",
@@ -1077,9 +1169,9 @@ func TestQueryPaymentOrderAPI_OutTradeNoQueryPreservesWechatFields(t *testing.T)
 	store.EXPECT().
 		GetMerchantPaymentConfig(gomock.Any(), int64(88)).
 		Return(db.MerchantPaymentConfig{MerchantID: 88, SubMchID: "1900000109"}, nil)
-	ecommerceClient.EXPECT().
-		QueryPartnerOrderByOutTradeNo(gomock.Any(), "OC20260415000021", "1900000109").
-		Return(&wechatcontracts.PartnerOrderQueryResponse{
+	ordinaryClient.EXPECT().
+		QueryPayment(gomock.Any(), ospcontracts.PaymentQueryRequest{SubMchID: "1900000109", OutTradeNo: "OC20260415000021"}).
+		Return(&ospcontracts.PaymentQueryResponse{
 			SpAppID:        "wx-service-app",
 			SpMchID:        "1900000001",
 			SubAppID:       "wx-sub-app",
@@ -1087,20 +1179,20 @@ func TestQueryPaymentOrderAPI_OutTradeNoQueryPreservesWechatFields(t *testing.T)
 			OutTradeNo:     "OC20260415000021",
 			TransactionID:  "wx-transaction-021",
 			TradeType:      "JSAPI",
-			TradeState:     "SUCCESS",
+			TradeState:     ospcontracts.PaymentTradeStateSuccess,
 			TradeStateDesc: "支付成功",
 			BankType:       "OTHERS",
 			Attach:         "order=77",
 			SuccessTime:    "2026-04-15T12:00:00+08:00",
-			Payer:          wechatcontracts.PartnerOrderPayerInfo{SpOpenID: "openid-1"},
-			Amount: wechatcontracts.PartnerOrderQueryAmount{
+			Payer:          ospcontracts.PaymentPayer{SpOpenID: "openid-1"},
+			Amount: &ospcontracts.PaymentAmount{
 				Total:         5000,
 				PayerTotal:    4800,
-				Currency:      "CNY",
-				PayerCurrency: "CNY",
+				Currency:      ospcontracts.CurrencyCNY,
+				PayerCurrency: ospcontracts.CurrencyCNY,
 			},
-			SceneInfo: &wechatcontracts.PartnerOrderQuerySceneInfo{DeviceID: "device-77"},
-			PromotionDetail: []wechatcontracts.PartnerPromotionDetail{{
+			SceneInfo: &ospcontracts.PaymentSceneInfo{DeviceID: "device-77"},
+			PromotionDetail: []ospcontracts.PaymentPromotionDetail{{
 				CouponID:           "coupon-1",
 				Name:               "满减券",
 				Scope:              "GLOBAL",
@@ -1109,7 +1201,7 @@ func TestQueryPaymentOrderAPI_OutTradeNoQueryPreservesWechatFields(t *testing.T)
 				StockID:            "stock-1",
 				MerchantContribute: 200,
 				Currency:           "CNY",
-				GoodsDetail:        []wechatcontracts.PartnerPromotionGoodsDetail{{GoodsID: "dish-1", Quantity: 1, UnitPrice: 5000, DiscountAmount: 200, GoodsRemark: "招牌菜"}},
+				GoodsDetail:        []ospcontracts.PaymentPromotionGoodsDetail{{GoodsID: "dish-1", Quantity: 1, UnitPrice: 5000, DiscountAmount: 200, GoodsRemark: "招牌菜"}},
 			}},
 		}, nil)
 
@@ -1140,8 +1232,8 @@ func TestQueryPaymentOrderAPI_ContractDriftReturnsClearError(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
+	server := newTestServerWithOrdinaryServiceProvider(t, store, ordinaryClient)
 	recorder := httptest.NewRecorder()
 
 	store.EXPECT().
@@ -1150,7 +1242,7 @@ func TestQueryPaymentOrderAPI_ContractDriftReturnsClearError(t *testing.T) {
 			ID:             123,
 			UserID:         1001,
 			PaymentType:    PaymentTypeProfitShare,
-			PaymentChannel: db.PaymentChannelEcommerce,
+			PaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
 			BusinessType:   BusinessTypeOrder,
 			Amount:         5000,
 			OutTradeNo:     "OC20260415000031",
@@ -1163,9 +1255,14 @@ func TestQueryPaymentOrderAPI_ContractDriftReturnsClearError(t *testing.T) {
 	store.EXPECT().
 		GetMerchantPaymentConfig(gomock.Any(), int64(88)).
 		Return(db.MerchantPaymentConfig{MerchantID: 88, SubMchID: "1900000109"}, nil)
-	ecommerceClient.EXPECT().
-		QueryPartnerOrderByOutTradeNo(gomock.Any(), "OC20260415000031", "1900000109").
-		Return(nil, &wechat.PartnerOrderQueryContractError{Message: "query partner order by out_trade_no: wechat response missing trade_state"})
+	ordinaryClient.EXPECT().
+		QueryPayment(gomock.Any(), ospcontracts.PaymentQueryRequest{SubMchID: "1900000109", OutTradeNo: "OC20260415000031"}).
+		Return(nil, &ordinaryserviceprovider.ProviderError{
+			Operation:    "query_payment",
+			Category:     ordinaryserviceprovider.ErrorCategoryProvider,
+			Frontend:     ordinaryserviceprovider.FrontendGuidance{Message: "微信支付状态返回异常", Action: "请不要重复支付，返回订单页后重新查询"},
+			ProviderCode: "RESPONSE_SCHEMA_DRIFT",
+		})
 
 	request, err := http.NewRequest(http.MethodGet, "/v1/payments/123/query", nil)
 	require.NoError(t, err)
@@ -1185,8 +1282,8 @@ func TestQueryPaymentOrderAPI_CombinedPaymentReturnsClearError(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
+	server := newTestServerWithOrdinaryServiceProvider(t, store, ordinaryClient)
 	recorder := httptest.NewRecorder()
 
 	store.EXPECT().
@@ -1217,8 +1314,8 @@ func TestQueryPaymentOrderAPI_DirectPaymentReturnsClearError(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
+	server := newTestServerWithOrdinaryServiceProvider(t, store, ordinaryClient)
 	recorder := httptest.NewRecorder()
 
 	store.EXPECT().
@@ -1314,8 +1411,8 @@ func TestQueryCombinedPaymentOrderAPI_ContractDriftReturnsClearError(t *testing.
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
+	server := newTestServerWithOrdinaryServiceProvider(t, store, ordinaryClient)
 	recorder := httptest.NewRecorder()
 
 	subOrders, err := json.Marshal([]map[string]any{{
@@ -1342,10 +1439,18 @@ func TestQueryCombinedPaymentOrderAPI_ContractDriftReturnsClearError(t *testing.
 			ExpiresAt:         pgtype.Timestamptz{Time: time.Now().Add(10 * time.Minute), Valid: true},
 			SubOrders:         subOrders,
 		}, nil)
-	ecommerceClient.EXPECT().
-		QueryCombineOrder(gomock.Any(), "CP20260406000001").
+	ordinaryClient.EXPECT().
+		ServiceProviderMchID().
+		Return("1900000001")
+	ordinaryClient.EXPECT().
+		QueryCombinePayment(gomock.Any(), ospcontracts.CombineQueryRequest{CombineMchID: "1900000001", CombineOutTradeNo: "CP20260406000001"}).
 		Times(1).
-		Return(nil, &wechat.CombineOrderQueryContractError{Message: "query combine order: wechat response missing combine_mchid"})
+		Return(nil, &ordinaryserviceprovider.ProviderError{
+			Operation:    "query_combine_payment",
+			Category:     ordinaryserviceprovider.ErrorCategoryProvider,
+			Frontend:     ordinaryserviceprovider.FrontendGuidance{Message: "微信支付状态返回异常", Action: "请不要重复支付，返回订单页后重新查询"},
+			ProviderCode: "RESPONSE_SCHEMA_DRIFT",
+		})
 
 	request, err := http.NewRequest(http.MethodGet, "/v1/payments/combined/123/query", nil)
 	require.NoError(t, err)
@@ -1365,8 +1470,8 @@ func TestQueryCombinedPaymentOrderAPI_RemotePaidOmitsPayParams(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
+	server := newTestServerWithOrdinaryServiceProvider(t, store, ordinaryClient)
 	recorder := httptest.NewRecorder()
 
 	subOrders, err := json.Marshal([]map[string]any{{
@@ -1393,34 +1498,32 @@ func TestQueryCombinedPaymentOrderAPI_RemotePaidOmitsPayParams(t *testing.T) {
 			ExpiresAt:         pgtype.Timestamptz{Time: time.Now().Add(10 * time.Minute), Valid: true},
 			SubOrders:         subOrders,
 		}, nil)
-	ecommerceClient.EXPECT().
-		QueryCombineOrder(gomock.Any(), "CP20260406000001").
+	ordinaryClient.EXPECT().
+		ServiceProviderMchID().
+		Return("1900000001")
+	ordinaryClient.EXPECT().
+		QueryCombinePayment(gomock.Any(), ospcontracts.CombineQueryRequest{CombineMchID: "1900000001", CombineOutTradeNo: "CP20260406000001"}).
 		Times(1).
-		Return(&wechatcontracts.CombineQueryResponse{
+		Return(&ospcontracts.CombineQueryResponse{
+			CombineMchID:      "1900000001",
 			CombineOutTradeNo: "CP20260406000001",
-			SubOrders: []wechatcontracts.CombineSubOrderResult{{
+			SubOrders: []ospcontracts.CombineOrderState{{
 				MchID:         "service-mchid-001",
 				SubMchID:      "1900001111",
 				OutTradeNo:    "P202001010000000001",
 				TransactionID: "wx-txn-123",
 				TradeType:     "JSAPI",
-				TradeState:    "SUCCESS",
-				PromotionDetail: []wechatcontracts.PartnerPromotionDetail{{
+				TradeState:    ospcontracts.PaymentTradeStateSuccess,
+				PromotionDetail: []ospcontracts.PaymentPromotionDetail{{
 					CouponID: "coupon-1",
 					Amount:   300,
 					Currency: "CNY",
 				}},
-				Amount: struct {
-					TotalAmount    int64  `json:"total_amount"`
-					PayerAmount    int64  `json:"payer_amount"`
-					Currency       string `json:"currency"`
-					PayerCurrency  string `json:"payer_currency"`
-					SettlementRate int64  `json:"settlement_rate"`
-				}{
+				Amount: ospcontracts.CombineAmount{
 					TotalAmount:   5000,
 					PayerAmount:   5000,
-					Currency:      "CNY",
-					PayerCurrency: "CNY",
+					Currency:      ospcontracts.CurrencyCNY,
+					PayerCurrency: ospcontracts.CurrencyCNY,
 				},
 			}},
 		}, nil)
@@ -1802,6 +1905,7 @@ func TestGetRefundOrderAPI(t *testing.T) {
 func TestListRefundOrdersByPaymentAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	otherUser, _ := randomUser(t)
+	otherUser.ID = user.ID + 100000
 	merchant := randomMerchant(user.ID)
 	order := randomPaymentTestOrder(user.ID, merchant.ID)
 	order.MerchantID = merchant.ID
@@ -1926,21 +2030,9 @@ func TestApplyPlatformAbnormalRefundAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	order := randomPaymentTestOrder(user.ID, util.RandomInt(1, 1000))
 	paymentOrder := randomPaymentOrder(user.ID, &order.ID)
-	paymentOrder.PaymentType = "profit_sharing"
-	paymentOrder.PaymentChannel = db.PaymentChannelEcommerce
-	paymentOrder.RequiresProfitSharing = true
-	paymentOrder.Status = "paid"
 	refundOrder := randomRefundOrder(paymentOrder.ID, paymentOrder.Amount)
 	refundOrder.Status = "failed"
 	refundOrder.RefundID = pgtype.Text{String: "wx_refund_001", Valid: true}
-	updatedRefund := refundOrder
-	updatedRefund.Status = "processing"
-	merchantConfig := db.MerchantPaymentConfig{
-		ID:         util.RandomInt(1, 1000),
-		MerchantID: order.MerchantID,
-		SubMchID:   "1900000109",
-		Status:     "active",
-	}
 
 	testCases := []struct {
 		name          string
@@ -1958,57 +2050,9 @@ func TestApplyPlatformAbnormalRefundAPI(t *testing.T) {
 					ListUserRoles(gomock.Any(), admin.ID).
 					Times(1).
 					Return([]db.UserRole{{UserID: admin.ID, Role: RoleAdmin, Status: "active"}}, nil)
-
-				store.EXPECT().
-					GetRefundOrder(gomock.Any(), refundOrder.ID).
-					Times(1).
-					Return(refundOrder, nil)
-
-				store.EXPECT().
-					GetPaymentOrder(gomock.Any(), paymentOrder.ID).
-					Times(1).
-					Return(paymentOrder, nil)
-
-				store.EXPECT().
-					GetOrder(gomock.Any(), order.ID).
-					Times(1).
-					Return(order, nil)
-
-				store.EXPECT().
-					GetMerchantPaymentConfig(gomock.Any(), order.MerchantID).
-					Times(1).
-					Return(merchantConfig, nil)
-
-				ecommerceClient.EXPECT().
-					ApplyEcommerceAbnormalRefund(gomock.Any(), gomock.Any()).
-					Times(1).
-					DoAndReturn(func(_ any, req *wechat.EcommerceAbnormalRefundRequest) (*wechat.EcommerceRefundResponse, error) {
-						require.Equal(t, refundOrder.RefundID.String, req.RefundID)
-						require.Equal(t, refundOrder.OutRefundNo, req.OutRefundNo)
-						require.Equal(t, merchantConfig.SubMchID, req.SubMchID)
-						require.Equal(t, wechat.EcommerceAbnormalRefundTypeMerchantBankCard, req.Type)
-						return &wechat.EcommerceRefundResponse{
-							RefundID: refundOrder.RefundID.String,
-							Status:   wechat.RefundStatusProcessing,
-						}, nil
-					})
-
-				store.EXPECT().
-					UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
-						ID:       refundOrder.ID,
-						RefundID: pgtype.Text{String: refundOrder.RefundID.String, Valid: true},
-					}).
-					Times(1).
-					Return(updatedRefund, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var response applyAbnormalRefundResponse
-				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-				require.Equal(t, updatedRefund.ID, response.RefundOrder.ID)
-				require.Equal(t, "processing", response.RefundOrder.Status)
-				require.Equal(t, wechat.RefundStatusProcessing, response.Wechat.Status)
+				requireOrdinaryUnsupportedFundsAPIResponse(t, recorder)
 			},
 		},
 		{

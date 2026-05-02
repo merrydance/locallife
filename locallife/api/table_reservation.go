@@ -37,6 +37,19 @@ const (
 	ReservationDurationHours = 4                // 用餐时段时长：4小时（用于时间段冲突检测）
 )
 
+func writeReservationPaymentConfigError(ctx *gin.Context, err error, operation string) bool {
+	if !isEcommerceClientNotConfigured(err) {
+		return false
+	}
+	ctx.JSON(http.StatusServiceUnavailable, loggedServerError(
+		ctx,
+		err,
+		"商户支付能力未完成配置，当前无法处理线上支付或退款，请联系平台处理后重试",
+		operation+" payment client not configured",
+	))
+	return true
+}
+
 type createReservationRequest struct {
 	TableID      int64             `json:"table_id" binding:"required,min=1"`
 	Date         string            `json:"date" binding:"required"` // YYYY-MM-DD
@@ -1355,8 +1368,11 @@ func (server *Server) cancelReservation(ctx *gin.Context) {
 		MerchantBeforeDeadlinePercent: server.config.ReservationMerchantRefundPercentBeforeDeadline,
 		MerchantAfterDeadlinePercent:  server.config.ReservationMerchantRefundPercentAfterDeadline,
 	}
-	result, err := logic.CancelReservation(ctx, server.store, server.ecommerceClient, authPayload.UserID, uriReq.ID, req.Reason, policy, time.Now())
+	result, err := logic.CancelReservationWithOrdinaryServiceProvider(ctx, server.store, server.ecommerceClient, server.ordinarySPClient, authPayload.UserID, uriReq.ID, req.Reason, policy, time.Now())
 	if err != nil {
+		if writeReservationPaymentConfigError(ctx, err, "cancel reservation") {
+			return
+		}
 		if writeLogicRequestError(ctx, err) {
 			return
 		}
@@ -1519,9 +1535,13 @@ func (server *Server) addDishesToReservation(ctx *gin.Context) {
 		Items:           addItems,
 		Now:             time.Now(),
 		EcommerceClient: server.ecommerceClient,
+		OrdinaryClient:  server.ordinarySPClient,
 		ClientIP:        ctx.ClientIP(),
 	})
 	if err != nil {
+		if writeReservationPaymentConfigError(ctx, err, "add reservation dishes") {
+			return
+		}
 		if writeLogicRequestError(ctx, err) {
 			return
 		}
@@ -1611,10 +1631,14 @@ func (server *Server) modifyReservationDishes(ctx *gin.Context) {
 		Items:           modifyItems,
 		Now:             time.Now(),
 		EcommerceClient: server.ecommerceClient,
+		OrdinaryClient:  server.ordinarySPClient,
 		ClientIP:        ctx.ClientIP(),
 		TaskScheduler:   apiTaskScheduler{server: server},
 	})
 	if err != nil {
+		if writeReservationPaymentConfigError(ctx, err, "modify reservation dishes") {
+			return
+		}
 		if writeLogicRequestError(ctx, err) {
 			return
 		}

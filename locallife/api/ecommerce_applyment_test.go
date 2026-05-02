@@ -20,8 +20,9 @@ import (
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
-	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
+	mockordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -39,6 +40,12 @@ func newTestServerWithEcommerce(t *testing.T, store db.Store, ecommerceClient we
 
 	server, err := NewServer(config, store, nil, nil, NewNoopAuditWriter())
 	require.NoError(t, err)
+	server.config.WechatMiniAppID = "wx-mini-test"
+	server.config.WechatOrdinaryApplymentContactEmail = "applyment-contact@test.example.com"
+	server.config.WechatOrdinaryApplymentSettlementIDIndividual = "719"
+	server.config.WechatOrdinaryApplymentSettlementIDEnterprise = "716"
+	server.config.WechatOrdinaryApplymentQualification = "餐饮"
+	server.config.WechatOrdinaryApplymentServicePhone = "13800138000"
 	server.SetEcommerceClientForTest(ecommerceClient)
 	server.wsHub = nil
 	server.wsPubSub = nil
@@ -57,6 +64,12 @@ func newTestServerWithEcommerce(t *testing.T, store db.Store, ecommerceClient we
 	return server
 }
 
+func newTestServerWithOrdinaryApplyment(t *testing.T, store db.Store, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) *Server {
+	server := newTestServerWithEcommerce(t, store, nil)
+	server.SetOrdinaryServiceProviderClientForTest(ordinaryClient)
+	return server
+}
+
 func expectMerchantApplymentCommandAccepted(t *testing.T, store *mockdb.MockStore, upstreamApplymentID string) {
 	t.Helper()
 
@@ -65,12 +78,12 @@ func expectMerchantApplymentCommandAccepted(t *testing.T, store *mockdb.MockStor
 		Times(1).
 		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
 			require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
-			require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
+			require.Equal(t, db.PaymentChannelOrdinaryServiceProvider, arg.Channel)
 			require.Equal(t, db.ExternalPaymentCapabilityApplyment, arg.Capability)
 			require.Equal(t, db.ExternalPaymentCommandTypeCreateApplyment, arg.CommandType)
 			require.Equal(t, db.ExternalPaymentBusinessOwnerApplyment, arg.BusinessOwner)
 			require.True(t, arg.BusinessObjectType.Valid)
-			require.Equal(t, "ecommerce_applyment", arg.BusinessObjectType.String)
+			require.Equal(t, "ordinary_service_provider_applyment", arg.BusinessObjectType.String)
 			require.True(t, arg.BusinessObjectID.Valid)
 			require.Equal(t, db.ExternalPaymentObjectApplyment, arg.ExternalObjectType)
 			require.NotEmpty(t, arg.ExternalObjectKey)
@@ -140,6 +153,57 @@ func randomEcommerceApplymentForTest(subjectType string, subjectID int64) db.Eco
 
 // ==================== 商户开户测试 ====================
 
+func TestResolveOrdinaryApplymentSettlementID(t *testing.T) {
+	t.Parallel()
+
+	config := util.Config{
+		WechatOrdinaryApplymentSettlementIDIndividual: " 719 ",
+		WechatOrdinaryApplymentSettlementIDEnterprise: " 716 ",
+	}
+
+	testCases := []struct {
+		name             string
+		organizationType string
+		config           util.Config
+		want             string
+		wantErr          string
+	}{
+		{
+			name:             "IndividualUsesIndividualSettlementRule",
+			organizationType: "4",
+			config:           config,
+			want:             "719",
+		},
+		{
+			name:             "EnterpriseUsesEnterpriseSettlementRule",
+			organizationType: "2",
+			config:           config,
+			want:             "716",
+		},
+		{
+			name:             "MissingEnterpriseRuleNamesRequiredEnv",
+			organizationType: "2",
+			config: util.Config{
+				WechatOrdinaryApplymentSettlementIDIndividual: "719",
+			},
+			wantErr: "WECHAT_ORDINARY_APPLYMENT_SETTLEMENT_ID_ENTERPRISE",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := resolveOrdinaryApplymentSettlementID(tc.config, tc.organizationType)
+			if tc.wantErr != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
 func TestMerchantBindBankAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchantForApplyment(user.ID)
@@ -151,13 +215,13 @@ func TestMerchantBindBankAPI(t *testing.T) {
 		name             string
 		body             gin.H
 		setupAuth        func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs       func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface)
+		buildStubs       func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface)
 		buildWechatStubs func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient)
 		prepareServer    func(t *testing.T, server *Server)
 		checkResponse    func(recorder *httptest.ResponseRecorder)
 	}{
 		{
-			name: "OK_WithEcommerceClient",
+			name: "OK_WithOrdinaryServiceProviderClient",
 			body: gin.H{
 				"account_type":      "ACCOUNT_TYPE_PRIVATE",
 				"account_bank":      "其他银行",
@@ -174,7 +238,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				// 获取商户
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
@@ -206,45 +270,47 @@ func TestMerchantBindBankAPI(t *testing.T) {
 						require.True(t, arg.BankBranchID.Valid)
 						require.Equal(t, "402584040001", arg.BankBranchID.String)
 						require.Equal(t, applicationWithTestURL.ContactPhone, arg.MobilePhone)
-						require.False(t, arg.ContactEmail.Valid)
+						require.True(t, arg.ContactEmail.Valid)
+						require.Equal(t, "applyment-contact@test.example.com", arg.ContactEmail.String)
 						return randomEcommerceApplymentForTest("merchant", merchant.ID), nil
 					})
 
 				// Mock 加密
-				ecommerceClient.EXPECT().
+				ordinaryClient.EXPECT().
 					EncryptSensitiveData(gomock.Any()).
 					Times(7). // 法人信息、联系人信息、账户名、账号、手机
 					Return("encrypted_data", nil)
 
 				expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
-				ecommerceClient.EXPECT().
+				ordinaryClient.EXPECT().
 					UploadImage(gomock.Any(), path.Base(expectedObjectKey), gomock.Any()).
 					Times(1).
-					DoAndReturn(func(_ context.Context, filename string, fileData []byte) (*wechat.ImageUploadResponse, error) {
+					DoAndReturn(func(_ context.Context, filename string, fileData []byte) (*ospcontracts.MediaUploadResponse, error) {
 						require.Equal(t, path.Base(expectedObjectKey), filename)
 						require.NotEmpty(t, fileData)
-						return &wechat.ImageUploadResponse{MediaID: "wx_store_qr_media_id"}, nil
+						return &ospcontracts.MediaUploadResponse{MediaID: "wx_store_qr_media_id"}, nil
 					})
 
 				// Mock 提交进件
-				ecommerceClient.EXPECT().
-					CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
+				ordinaryClient.EXPECT().
+					SubmitApplyment(gomock.Any(), gomock.Any()).
 					Times(1).
-					DoAndReturn(func(_ any, req *wechat.EcommerceApplymentRequest) (*wechatcontracts.EcommerceApplymentResponse, error) {
-						require.Equal(t, "4", req.OrganizationType)
-						require.NotNil(t, req.AccountInfo)
-						require.Equal(t, "其他银行", req.AccountInfo.AccountBank)
-						require.Equal(t, "402584040001", req.AccountInfo.BankBranchID)
-						require.NotNil(t, req.IDCardInfo)
-						require.Equal(t, "2020-01-01", req.IDCardInfo.IDCardValidTimeBegin)
-						require.Equal(t, "2030-01-01", req.IDCardInfo.IDCardValidTime)
-						require.NotNil(t, req.ContactInfo)
+					DoAndReturn(func(_ context.Context, req ospcontracts.ApplymentSubmitRequest) (*ospcontracts.ApplymentSubmitResponse, error) {
+						require.Equal(t, ospcontracts.SubjectTypeIndividual, req.SubjectInfo.SubjectType)
+						require.Equal(t, "其他银行", req.BankAccountInfo.AccountBank)
+						require.Equal(t, "402584040001", req.BankAccountInfo.BankBranchID)
+						require.NotNil(t, req.SubjectInfo.IdentityInfo.IDCardInfo)
+						require.Equal(t, "2020-01-01", req.SubjectInfo.IdentityInfo.IDCardInfo.CardPeriodBegin)
+						require.Equal(t, "2030-01-01", req.SubjectInfo.IdentityInfo.IDCardInfo.CardPeriodEnd)
 						require.Equal(t, "encrypted_data", req.ContactInfo.MobilePhone)
-						require.NotNil(t, req.SalesSceneInfo)
-						require.Equal(t, applicationWithTestURL.MerchantName, req.SalesSceneInfo.StoreName)
-						require.Empty(t, req.SalesSceneInfo.StoreURL)
-						require.Equal(t, "wx_store_qr_media_id", req.SalesSceneInfo.StoreQRCode)
-						return &wechatcontracts.EcommerceApplymentResponse{ApplymentID: 123456789}, nil
+						require.NotNil(t, req.BusinessInfo.SalesInfo.MiniProgramInfo)
+						require.Equal(t, "wx-mini-test", req.BusinessInfo.SalesInfo.MiniProgramInfo.MiniProgramAppID)
+						require.NotNil(t, req.BusinessInfo.SalesInfo.StoreInfo)
+						require.Equal(t, applicationWithTestURL.MerchantName, req.BusinessInfo.SalesInfo.StoreInfo.StoreName)
+						require.Contains(t, req.BusinessInfo.SalesInfo.StoreInfo.StoreEntrancePic, "wx_store_qr_media_id")
+						require.Equal(t, "719", req.SettlementInfo.SettlementID)
+						require.Equal(t, "餐饮", req.SettlementInfo.QualificationType)
+						return &ospcontracts.ApplymentSubmitResponse{ApplymentID: 123456789}, nil
 					})
 
 				// 更新进件状态
@@ -266,12 +332,12 @@ func TestMerchantBindBankAPI(t *testing.T) {
 					Times(1).
 					Return(db.EcommerceApplyment{}, nil)
 
-				ecommerceClient.EXPECT().
-					QueryEcommerceApplymentByID(gomock.Any(), int64(123456789)).
+				ordinaryClient.EXPECT().
+					QueryApplymentByID(gomock.Any(), ospcontracts.ApplymentQueryByIDRequest{ApplymentID: 123456789}).
 					Times(1).
-					Return(&wechatcontracts.EcommerceApplymentQueryResponse{
+					Return(&ospcontracts.ApplymentQueryResponse{
 						ApplymentID:    123456789,
-						ApplymentState: "NEED_SIGN",
+						ApplymentState: ospcontracts.ApplymentStateToBeSigned,
 						SignURL:        "https://wx.example.com/sign/merchant",
 					}, nil)
 			},
@@ -354,7 +420,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
@@ -405,43 +471,42 @@ func TestMerchantBindBankAPI(t *testing.T) {
 						return randomEcommerceApplymentForTest("merchant", merchant.ID), nil
 					})
 
-				ecommerceClient.EXPECT().
+				ordinaryClient.EXPECT().
 					EncryptSensitiveData(gomock.Any()).
 					Times(7).
 					Return("encrypted_data", nil)
 
 				expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
-				ecommerceClient.EXPECT().
+				ordinaryClient.EXPECT().
 					UploadImage(gomock.Any(), "contact-front.png", gomock.Any()).
 					Times(1).
-					Return(&wechat.ImageUploadResponse{MediaID: "wx_super_contact_front_media_id"}, nil)
-				ecommerceClient.EXPECT().
+					Return(&ospcontracts.MediaUploadResponse{MediaID: "wx_super_contact_front_media_id"}, nil)
+				ordinaryClient.EXPECT().
 					UploadImage(gomock.Any(), "contact-back.png", gomock.Any()).
 					Times(1).
-					Return(&wechat.ImageUploadResponse{MediaID: "wx_super_contact_back_media_id"}, nil)
-				ecommerceClient.EXPECT().
+					Return(&ospcontracts.MediaUploadResponse{MediaID: "wx_super_contact_back_media_id"}, nil)
+				ordinaryClient.EXPECT().
 					UploadImage(gomock.Any(), path.Base(expectedObjectKey), gomock.Any()).
 					Times(1).
-					DoAndReturn(func(_ context.Context, filename string, fileData []byte) (*wechat.ImageUploadResponse, error) {
+					DoAndReturn(func(_ context.Context, filename string, fileData []byte) (*ospcontracts.MediaUploadResponse, error) {
 						require.Equal(t, path.Base(expectedObjectKey), filename)
 						require.NotEmpty(t, fileData)
-						return &wechat.ImageUploadResponse{MediaID: "wx_store_qr_media_id"}, nil
+						return &ospcontracts.MediaUploadResponse{MediaID: "wx_store_qr_media_id"}, nil
 					})
 
-				ecommerceClient.EXPECT().
-					CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
+				ordinaryClient.EXPECT().
+					SubmitApplyment(gomock.Any(), gomock.Any()).
 					Times(1).
-					DoAndReturn(func(_ any, req *wechat.EcommerceApplymentRequest) (*wechatcontracts.EcommerceApplymentResponse, error) {
-						require.NotNil(t, req.ContactInfo)
-						require.Equal(t, "SUPER", req.ContactInfo.ContactType)
+					DoAndReturn(func(_ context.Context, req ospcontracts.ApplymentSubmitRequest) (*ospcontracts.ApplymentSubmitResponse, error) {
+						require.Equal(t, ospcontracts.ContactTypeSuper, req.ContactInfo.ContactType)
 						require.Equal(t, "encrypted_data", req.ContactInfo.ContactName)
-						require.Equal(t, "IDENTIFICATION_TYPE_MAINLAND_IDCARD", req.ContactInfo.ContactIDDocType)
-						require.Equal(t, "encrypted_data", req.ContactInfo.ContactIDCardNumber)
+						require.Equal(t, ospcontracts.IdentificationTypeIDCard, req.ContactInfo.ContactIDDocType)
+						require.Equal(t, "encrypted_data", req.ContactInfo.ContactIDNumber)
 						require.Equal(t, "wx_super_contact_front_media_id", req.ContactInfo.ContactIDDocCopy)
 						require.Equal(t, "wx_super_contact_back_media_id", req.ContactInfo.ContactIDDocCopyBack)
-						require.Equal(t, "2020-01-01", req.ContactInfo.ContactIDDocPeriodBegin)
-						require.Equal(t, "2030-01-01", req.ContactInfo.ContactIDDocPeriodEnd)
-						return &wechatcontracts.EcommerceApplymentResponse{ApplymentID: 22334455}, nil
+						require.Equal(t, "2020-01-01", req.ContactInfo.ContactPeriodBegin)
+						require.Equal(t, "2030-01-01", req.ContactInfo.ContactPeriodEnd)
+						return &ospcontracts.ApplymentSubmitResponse{ApplymentID: 22334455}, nil
 					})
 
 				store.EXPECT().
@@ -461,12 +526,12 @@ func TestMerchantBindBankAPI(t *testing.T) {
 					Times(1).
 					Return(db.EcommerceApplyment{}, nil)
 
-				ecommerceClient.EXPECT().
-					QueryEcommerceApplymentByID(gomock.Any(), int64(22334455)).
+				ordinaryClient.EXPECT().
+					QueryApplymentByID(gomock.Any(), ospcontracts.ApplymentQueryByIDRequest{ApplymentID: 22334455}).
 					Times(1).
-					Return(&wechatcontracts.EcommerceApplymentQueryResponse{
+					Return(&ospcontracts.ApplymentQueryResponse{
 						ApplymentID:    22334455,
-						ApplymentState: "AUDITING",
+						ApplymentState: ospcontracts.ApplymentStateAuditing,
 					}, nil)
 			},
 			buildWechatStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
@@ -528,7 +593,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
@@ -571,7 +636,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
@@ -616,22 +681,22 @@ func TestMerchantBindBankAPI(t *testing.T) {
 					Times(1).
 					Return(randomEcommerceApplymentForTest("merchant", merchant.ID), nil)
 
-				ecommerceClient.EXPECT().
+				ordinaryClient.EXPECT().
 					EncryptSensitiveData(gomock.Any()).
 					Times(7).
 					Return("encrypted_data", nil)
 
 				expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
-				ecommerceClient.EXPECT().
+				ordinaryClient.EXPECT().
 					UploadImage(gomock.Any(), path.Base(expectedObjectKey), gomock.Any()).
 					Times(1).
-					DoAndReturn(func(_ context.Context, filename string, fileData []byte) (*wechat.ImageUploadResponse, error) {
+					DoAndReturn(func(_ context.Context, filename string, fileData []byte) (*ospcontracts.MediaUploadResponse, error) {
 						require.Equal(t, path.Base(expectedObjectKey), filename)
 						require.NotEmpty(t, fileData)
-						return &wechat.ImageUploadResponse{MediaID: "wx_store_qr_media_id"}, nil
+						return &ospcontracts.MediaUploadResponse{MediaID: "wx_store_qr_media_id"}, nil
 					})
 
-				ecommerceClient.EXPECT().
+				ordinaryClient.EXPECT().
 					UploadImage(gomock.Any(), "contact-front.png", gomock.Any()).
 					Times(1).
 					Return(nil, &wechat.UploadImageValidationError{Message: "upload image: file is empty; provide a non-empty JPG, JPEG, PNG, or BMP image"})
@@ -667,7 +732,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
-				require.Contains(t, recorder.Body.String(), "upload image: file is empty; provide a non-empty JPG, JPEG, PNG, or BMP image")
+				require.Contains(t, recorder.Body.String(), "图片文件为空，请上传非空的 JPG、JPEG、PNG 或 BMP 图片后重试")
 			},
 		},
 		{
@@ -682,7 +747,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
@@ -701,7 +766,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
@@ -720,7 +785,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				invalidMerchant := merchant
 				invalidMerchant.Status = "pending" // 还未审核通过
 				expectResolveSingleOwnedMerchant(store, user.ID, invalidMerchant)
@@ -745,7 +810,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				// 已有进行中的申请
@@ -772,7 +837,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				existingApplyment := randomEcommerceApplymentForTest("merchant", merchant.ID)
@@ -798,7 +863,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				existingApplyment := randomEcommerceApplymentForTest("merchant", merchant.ID)
@@ -824,7 +889,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				existingApplyment := randomEcommerceApplymentForTest("merchant", merchant.ID)
@@ -850,7 +915,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
@@ -885,7 +950,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
@@ -920,7 +985,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
@@ -955,7 +1020,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
@@ -990,7 +1055,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				// 已完成
@@ -1017,7 +1082,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				// No auth
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				// No stubs needed
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
@@ -1032,7 +1097,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
@@ -1048,14 +1113,14 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
-			ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+			ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
 			wechatClient := mockwechat.NewMockWechatClient(ctrl)
-			tc.buildStubs(store, ecommerceClient)
+			tc.buildStubs(store, ordinaryClient)
 			if tc.buildWechatStubs != nil {
 				tc.buildWechatStubs(store, wechatClient)
 			}
 
-			server := newTestServerWithEcommerce(t, store, ecommerceClient)
+			server := newTestServerWithOrdinaryApplyment(t, store, ordinaryClient)
 			server.wechatClient = wechatClient
 			if tc.prepareServer != nil {
 				tc.prepareServer(t, server)
@@ -1275,7 +1340,7 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "not_applied", response.Status)
 				require.False(t, response.CanSubmit)
-				require.Equal(t, "当前商户状态不可用，暂不支持提交收付通进件。", response.BlockReason)
+				require.Equal(t, "当前商户状态不可用，暂不支持提交普通服务商进件。", response.BlockReason)
 			},
 		},
 		{
@@ -1324,7 +1389,7 @@ func TestGetMerchantApplymentStatusNormalizesFinishWithoutSubMchID(t *testing.T)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
 
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
@@ -1338,13 +1403,13 @@ func TestGetMerchantApplymentStatusNormalizesFinishWithoutSubMchID(t *testing.T)
 		Times(1).
 		Return(applyment, nil)
 
-	ecommerceClient.EXPECT().
-		QueryEcommerceApplymentByID(gomock.Any(), int64(123456789)).
+	ordinaryClient.EXPECT().
+		QueryApplymentByID(gomock.Any(), ospcontracts.ApplymentQueryByIDRequest{ApplymentID: 123456789}).
 		Times(1).
-		Return(&wechatcontracts.EcommerceApplymentQueryResponse{
+		Return(&ospcontracts.ApplymentQueryResponse{
 			ApplymentID:    123456789,
-			OutRequestNo:   "APPLYMENT_STATUS_001",
-			ApplymentState: "FINISH",
+			BusinessCode:   "APPLYMENT_STATUS_001",
+			ApplymentState: ospcontracts.ApplymentStateFinished,
 		}, nil)
 
 	store.EXPECT().
@@ -1358,7 +1423,7 @@ func TestGetMerchantApplymentStatusNormalizesFinishWithoutSubMchID(t *testing.T)
 			return db.EcommerceApplyment{ID: arg.ID, Status: arg.Status}, nil
 		})
 
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	server := newTestServerWithOrdinaryApplyment(t, store, ordinaryClient)
 	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/applyment/status", nil)
 	require.NoError(t, err)
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -1373,7 +1438,7 @@ func TestGetMerchantApplymentStatusNormalizesFinishWithoutSubMchID(t *testing.T)
 	require.False(t, response.CanSubmit)
 }
 
-func TestGetMerchantApplymentStatusUsesActivationTxForFinishedApplyment(t *testing.T) {
+func TestGetMerchantApplymentStatusOrdinaryFinishRequiresAccountAuthorization(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchantForApplyment(user.ID)
 
@@ -1381,7 +1446,7 @@ func TestGetMerchantApplymentStatusUsesActivationTxForFinishedApplyment(t *testi
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
 
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
@@ -1395,14 +1460,23 @@ func TestGetMerchantApplymentStatusUsesActivationTxForFinishedApplyment(t *testi
 		Times(1).
 		Return(applyment, nil)
 
-	ecommerceClient.EXPECT().
-		QueryEcommerceApplymentByID(gomock.Any(), int64(22334455)).
+	ordinaryClient.EXPECT().
+		QueryApplymentByID(gomock.Any(), ospcontracts.ApplymentQueryByIDRequest{ApplymentID: 22334455}).
 		Times(1).
-		Return(&wechatcontracts.EcommerceApplymentQueryResponse{
+		Return(&ospcontracts.ApplymentQueryResponse{
 			ApplymentID:    22334455,
-			OutRequestNo:   "APPLYMENT_STATUS_002",
-			ApplymentState: "FINISH",
+			BusinessCode:   "APPLYMENT_STATUS_002",
+			ApplymentState: ospcontracts.ApplymentStateFinished,
 			SubMchID:       "sub_mch_22334455",
+		}, nil)
+
+	ordinaryClient.EXPECT().
+		QueryAccountAuthorizeState(gomock.Any(), ospcontracts.AccountAuthorizeStateRequest{SubMchID: "sub_mch_22334455"}).
+		Times(1).
+		Return(&ospcontracts.AccountAuthorizeStateResponse{
+			SubMchID:       "sub_mch_22334455",
+			AuthorizeState: ospcontracts.AccountAuthorizeStateUnauthorized,
+			Authorized:     false,
 		}, nil)
 
 	store.EXPECT().
@@ -1417,15 +1491,16 @@ func TestGetMerchantApplymentStatusUsesActivationTxForFinishedApplyment(t *testi
 
 	store.EXPECT().
 		ApplymentSubMchActivationTx(gomock.Any(), db.ApplymentSubMchActivationTxParams{
-			ApplymentID: applyment.ID,
-			SubjectType: applyment.SubjectType,
-			SubjectID:   applyment.SubjectID,
-			SubMchID:    "sub_mch_22334455",
+			ApplymentID:           applyment.ID,
+			SubjectType:           applyment.SubjectType,
+			SubjectID:             applyment.SubjectID,
+			SubMchID:              "sub_mch_22334455",
+			AccountAuthorizeState: db.AccountAuthorizeStateUnauthorized,
 		}).
 		Times(1).
 		Return(nil)
 
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	server := newTestServerWithOrdinaryApplyment(t, store, ordinaryClient)
 	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/applyment/status", nil)
 	require.NoError(t, err)
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -1437,8 +1512,83 @@ func TestGetMerchantApplymentStatusUsesActivationTxForFinishedApplyment(t *testi
 	var response merchantApplymentStatusResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 	require.Equal(t, "finish", response.Status)
+	require.Equal(t, db.AccountAuthorizeStateUnauthorized, response.AccountAuthorizeState)
+	require.Contains(t, response.StatusDesc, "开户意愿确认")
+	require.Contains(t, response.ActionHint, "完成开户意愿确认")
 	require.NotNil(t, response.SubMchID)
 	require.Equal(t, "sub_mch_22334455", *response.SubMchID)
+}
+
+func TestGetMerchantApplymentStatusOrdinaryAuthorizeStateFailureReturnsRetryGuidance(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchantForApplyment(user.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
+
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+	applyment := randomEcommerceApplymentForTest("merchant", merchant.ID)
+	applyment.Status = "auditing"
+	applyment.OutRequestNo = "APPLYMENT_STATUS_AUTH_FAIL"
+	applyment.ApplymentID = pgtype.Int8{Int64: 33445566, Valid: true}
+
+	store.EXPECT().
+		GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(applyment, nil)
+
+	ordinaryClient.EXPECT().
+		QueryApplymentByID(gomock.Any(), ospcontracts.ApplymentQueryByIDRequest{ApplymentID: 33445566}).
+		Times(1).
+		Return(&ospcontracts.ApplymentQueryResponse{
+			ApplymentID:    33445566,
+			BusinessCode:   "APPLYMENT_STATUS_AUTH_FAIL",
+			ApplymentState: ospcontracts.ApplymentStateFinished,
+			SubMchID:       "sub_mch_auth_fail",
+		}, nil)
+
+	ordinaryClient.EXPECT().
+		QueryAccountAuthorizeState(gomock.Any(), ospcontracts.AccountAuthorizeStateRequest{SubMchID: "sub_mch_auth_fail"}).
+		Times(1).
+		Return(nil, &wechat.WechatPayError{StatusCode: http.StatusInternalServerError, Code: "SYSTEM_ERROR", Message: "系统异常"})
+
+	store.EXPECT().
+		UpdateEcommerceApplymentStatus(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateEcommerceApplymentStatusParams{})).
+		Times(1).
+		Return(db.EcommerceApplyment{ID: applyment.ID, Status: "finish"}, nil)
+
+	store.EXPECT().
+		ApplymentSubMchActivationTx(gomock.Any(), db.ApplymentSubMchActivationTxParams{
+			ApplymentID:           applyment.ID,
+			SubjectType:           applyment.SubjectType,
+			SubjectID:             applyment.SubjectID,
+			SubMchID:              "sub_mch_auth_fail",
+			AccountAuthorizeState: db.AccountAuthorizeStateUnauthorized,
+		}).
+		Times(1).
+		Return(nil)
+
+	server := newTestServerWithOrdinaryApplyment(t, store, ordinaryClient)
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/applyment/status", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response merchantApplymentStatusResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Equal(t, "finish", response.Status)
+	require.Equal(t, db.AccountAuthorizeStateUnauthorized, response.AccountAuthorizeState)
+	require.Contains(t, response.StatusDesc, "暂时无法确认开户意愿授权状态")
+	require.Contains(t, response.ActionHint, "稍后刷新")
+	require.NotNil(t, response.SubMchID)
+	require.Equal(t, "sub_mch_auth_fail", *response.SubMchID)
 }
 
 func TestMapWechatApplymentStatus(t *testing.T) {
@@ -1589,16 +1739,16 @@ func TestListMerchantApplymentBanksAPI(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
 
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
-	ecommerceClient.EXPECT().
+	ordinaryClient.EXPECT().
 		ListPersonalBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).
 		Times(1).
-		Return(&wechatcontracts.CapitalBankListResponse{
+		Return(&ospcontracts.CapitalBankListResponse{
 			TotalCount: 2,
 			Count:      2,
-			Data: []wechatcontracts.CapitalBank{{
+			Data: []ospcontracts.CapitalBank{{
 				BankAlias:       "其他银行",
 				BankAliasCode:   "1099",
 				AccountBank:     "其他银行",
@@ -1613,7 +1763,7 @@ func TestListMerchantApplymentBanksAPI(t *testing.T) {
 			}},
 		}, nil)
 
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	server := newTestServerWithOrdinaryApplyment(t, store, ordinaryClient)
 	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/applyment/banks?account_type=ACCOUNT_TYPE_PRIVATE", nil)
 	require.NoError(t, err)
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -1630,9 +1780,9 @@ func TestListMerchantApplymentBanksAPI(t *testing.T) {
 	require.Equal(t, int64(1001), response.Banks[0].AccountBankCode)
 }
 
-// ==================== 无 ecommerceClient 时的降级测试 ====================
+// ==================== 无普通服务商 client 时的失败指引测试 ====================
 
-func TestMerchantBindBankWithoutEcommerceClient(t *testing.T) {
+func TestMerchantBindBankWithoutOrdinaryServiceProviderClient(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchantForApplyment(user.ID)
 	application := randomMerchantApplicationForApplyment(user.ID)
@@ -1657,19 +1807,7 @@ func TestMerchantBindBankWithoutEcommerceClient(t *testing.T) {
 		Times(1).
 		Return(application, nil)
 
-	// 创建进件记录
-	store.EXPECT().
-		CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(randomEcommerceApplymentForTest("merchant", merchant.ID), nil)
-
-	// 更新商户状态（降级处理）
-	store.EXPECT().
-		UpdateMerchantStatus(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(db.Merchant{}, nil)
-
-	// 创建不带 ecommerceClient 的服务器
+	// 创建不带普通服务商 client 的服务器，不能降级为“待人工处理”。
 	server := newTestServer(t, store)
 
 	body := gin.H{
@@ -1692,12 +1830,9 @@ func TestMerchantBindBankWithoutEcommerceClient(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	server.router.ServeHTTP(recorder, request)
 
-	// 应该成功但返回降级消息
-	require.Equal(t, http.StatusOK, recorder.Code)
-	var response merchantBindBankResponse
-	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-	require.Equal(t, "submitted", response.Status)
-	require.Contains(t, response.Message, "待人工处理")
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "普通服务商进件服务暂不可用")
+	require.Contains(t, recorder.Body.String(), "检查微信支付普通服务商证书、公钥、进件和回调配置")
 }
 
 // ==================== 加密失败测试 ====================
@@ -1713,7 +1848,7 @@ func TestMerchantBindBankEncryptFailed(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
 
 	// 获取商户
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
@@ -1737,12 +1872,12 @@ func TestMerchantBindBankEncryptFailed(t *testing.T) {
 		Return(randomEcommerceApplymentForTest("merchant", merchant.ID), nil)
 
 	// Mock 加密失败
-	ecommerceClient.EXPECT().
+	ordinaryClient.EXPECT().
 		EncryptSensitiveData(gomock.Any()).
 		Times(1).
 		Return("", fmt.Errorf("encrypt failed"))
 
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	server := newTestServerWithOrdinaryApplyment(t, store, ordinaryClient)
 
 	body := gin.H{
 		"account_type":      "ACCOUNT_TYPE_PRIVATE",
@@ -1764,7 +1899,9 @@ func TestMerchantBindBankEncryptFailed(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	server.router.ServeHTTP(recorder, request)
 
-	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "商户开户资料加密失败")
+	require.Contains(t, recorder.Body.String(), "检查微信支付敏感信息加密配置")
 }
 
 func TestRespondApplymentWechatError(t *testing.T) {
@@ -1848,11 +1985,12 @@ func TestRespondApplymentWechatError(t *testing.T) {
 			require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 			require.Equal(t, tc.expectedCode, resp.Code)
 			require.Equal(t, tc.expectedError, resp.Error)
+			require.NotContains(t, resp.Error, "request_id")
 		})
 	}
 }
 
-func TestMerchantBindBankReturnsRequestIDWhenContactDocumentUploadFails(t *testing.T) {
+func TestMerchantBindBankReturnsActionableMessageWithoutRequestIDWhenContactDocumentUploadFails(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchantForApplyment(user.ID)
 	application := randomMerchantApplicationForApplyment(user.ID)
@@ -1862,7 +2000,7 @@ func TestMerchantBindBankReturnsRequestIDWhenContactDocumentUploadFails(t *testi
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
 	wechatClient := mockwechat.NewMockWechatClient(ctrl)
 
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
@@ -1909,18 +2047,18 @@ func TestMerchantBindBankReturnsRequestIDWhenContactDocumentUploadFails(t *testi
 		Times(1).
 		Return(randomEcommerceApplymentForTest("merchant", merchant.ID), nil)
 
-	ecommerceClient.EXPECT().
+	ordinaryClient.EXPECT().
 		EncryptSensitiveData(gomock.Any()).
 		Times(7).
 		Return("encrypted_data", nil)
 
 	expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
 	requestID := "req-contact-upload-001"
-	ecommerceClient.EXPECT().
+	ordinaryClient.EXPECT().
 		UploadImage(gomock.Any(), path.Base(expectedObjectKey), gomock.Any()).
 		Times(1).
-		Return(&wechat.ImageUploadResponse{MediaID: "wx_store_qr_media_id"}, nil)
-	ecommerceClient.EXPECT().
+		Return(&ospcontracts.MediaUploadResponse{MediaID: "wx_store_qr_media_id"}, nil)
+	ordinaryClient.EXPECT().
 		UploadImage(gomock.Any(), "contact-front.png", gomock.Any()).
 		Times(1).
 		Return(nil, fmt.Errorf("request_id=%s: upload image: failed to generate signing nonce: boom", requestID))
@@ -1943,7 +2081,7 @@ func TestMerchantBindBankReturnsRequestIDWhenContactDocumentUploadFails(t *testi
 		Times(1).
 		Return(db.MediaAsset{ID: util.RandomInt(1, 1000), ModerationStatus: "approved"}, nil)
 
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	server := newTestServerWithOrdinaryApplyment(t, store, ordinaryClient)
 	server.wechatClient = wechatClient
 	content := buildTestQRCodePNG(t)
 	seedPrivateContactDocumentAsset(t, server, "id_card/front/1/20240101/contact-front.png", content)
@@ -1981,12 +2119,14 @@ func TestMerchantBindBankReturnsRequestIDWhenContactDocumentUploadFails(t *testi
 	recorder := httptest.NewRecorder()
 	server.router.ServeHTTP(recorder, request)
 
-	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
 	var response APIResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
-	require.Equal(t, CodeInternalError, response.Code)
+	require.Equal(t, CodeServiceUnavail, response.Code)
 	require.Contains(t, response.Message, "超级管理员证件图片上传到微信失败")
-	require.Contains(t, response.Message, "request_id="+requestID)
+	require.Contains(t, response.Message, "请联系平台管理员")
+	require.NotContains(t, response.Message, "request_id")
+	require.NotContains(t, response.Message, requestID)
 }
 
 func TestMerchantBindBankReturnsConfigGuidanceWhenStoreQRCodeUploadFails(t *testing.T) {
@@ -1999,7 +2139,7 @@ func TestMerchantBindBankReturnsConfigGuidanceWhenStoreQRCodeUploadFails(t *test
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
 	wechatClient := mockwechat.NewMockWechatClient(ctrl)
 
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
@@ -2019,14 +2159,14 @@ func TestMerchantBindBankReturnsConfigGuidanceWhenStoreQRCodeUploadFails(t *test
 		Times(1).
 		Return(randomEcommerceApplymentForTest("merchant", merchant.ID), nil)
 
-	ecommerceClient.EXPECT().
+	ordinaryClient.EXPECT().
 		EncryptSensitiveData(gomock.Any()).
 		Times(7).
 		Return("encrypted_data", nil)
 
 	expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
 	requestID := "req-store-qr-002"
-	ecommerceClient.EXPECT().
+	ordinaryClient.EXPECT().
 		UploadImage(gomock.Any(), path.Base(expectedObjectKey), gomock.Any()).
 		Times(1).
 		Return(nil, fmt.Errorf("request_id=%s: upload image: service provider merchant id must be configured explicitly for /v3/merchant/media/upload", requestID))
@@ -2049,7 +2189,7 @@ func TestMerchantBindBankReturnsConfigGuidanceWhenStoreQRCodeUploadFails(t *test
 		Times(1).
 		Return(db.MediaAsset{ID: util.RandomInt(1, 1000), ModerationStatus: "approved"}, nil)
 
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	server := newTestServerWithOrdinaryApplyment(t, store, ordinaryClient)
 	server.wechatClient = wechatClient
 
 	body := gin.H{
@@ -2070,13 +2210,15 @@ func TestMerchantBindBankReturnsConfigGuidanceWhenStoreQRCodeUploadFails(t *test
 	recorder := httptest.NewRecorder()
 	server.router.ServeHTTP(recorder, request)
 
-	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
 	var response APIResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
-	require.Equal(t, CodeInternalError, response.Code)
+	require.Equal(t, CodeServiceUnavail, response.Code)
 	require.Contains(t, response.Message, "店铺首页二维码上传到微信失败")
-	require.Contains(t, response.Message, "平台收付通图片上传配置不完整")
-	require.Contains(t, response.Message, "request_id="+requestID)
+	require.Contains(t, response.Message, "普通服务商图片上传配置不完整")
+	require.Contains(t, response.Message, "请联系平台管理员")
+	require.NotContains(t, response.Message, "request_id")
+	require.NotContains(t, response.Message, requestID)
 }
 
 func TestMerchantBindBankSubmittedStateSyncFailed(t *testing.T) {
@@ -2090,7 +2232,7 @@ func TestMerchantBindBankSubmittedStateSyncFailed(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
 	wechatClient := mockwechat.NewMockWechatClient(ctrl)
 
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
@@ -2110,7 +2252,7 @@ func TestMerchantBindBankSubmittedStateSyncFailed(t *testing.T) {
 		Times(1).
 		Return(applyment, nil)
 
-	ecommerceClient.EXPECT().
+	ordinaryClient.EXPECT().
 		EncryptSensitiveData(gomock.Any()).
 		Times(7).
 		Return("encrypted_data", nil)
@@ -2138,15 +2280,15 @@ func TestMerchantBindBankSubmittedStateSyncFailed(t *testing.T) {
 		Times(1).
 		Return(db.MediaAsset{ID: util.RandomInt(1, 1000), ModerationStatus: "approved"}, nil)
 
-	ecommerceClient.EXPECT().
+	ordinaryClient.EXPECT().
 		UploadImage(gomock.Any(), path.Base(expectedObjectKey), gomock.Any()).
 		Times(1).
-		Return(&wechat.ImageUploadResponse{MediaID: "wx_store_qr_media_id"}, nil)
+		Return(&ospcontracts.MediaUploadResponse{MediaID: "wx_store_qr_media_id"}, nil)
 
-	ecommerceClient.EXPECT().
-		CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
+	ordinaryClient.EXPECT().
+		SubmitApplyment(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechatcontracts.EcommerceApplymentResponse{ApplymentID: 123456789}, nil)
+		Return(&ospcontracts.ApplymentSubmitResponse{ApplymentID: 123456789}, nil)
 
 	store.EXPECT().
 		UpdateEcommerceApplymentToSubmitted(gomock.Any(), gomock.Any()).
@@ -2161,7 +2303,7 @@ func TestMerchantBindBankSubmittedStateSyncFailed(t *testing.T) {
 		Times(1).
 		Return(db.Merchant{}, nil)
 
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	server := newTestServerWithOrdinaryApplyment(t, store, ordinaryClient)
 	server.wechatClient = wechatClient
 
 	body := gin.H{
@@ -2182,5 +2324,7 @@ func TestMerchantBindBankSubmittedStateSyncFailed(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	server.router.ServeHTTP(recorder, request)
 
-	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "微信支付开户申请已提交前后发生状态同步异常")
+	require.Contains(t, recorder.Body.String(), "避免重复提交")
 }

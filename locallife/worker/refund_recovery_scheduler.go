@@ -13,6 +13,7 @@ import (
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 )
@@ -26,6 +27,7 @@ const (
 var (
 	errRefundRecoveryPaymentClientMissing   = errors.New("refund recovery payment client not configured")
 	errRefundRecoveryEcommerceClientMissing = errors.New("refund recovery ecommerce client not configured")
+	errRefundRecoveryOrdinaryClientMissing  = errors.New("refund recovery ordinary service provider client not configured")
 	errRefundRecoverySubMchIDMissing        = errors.New("refund recovery sub mchid missing")
 	errRefundRecoveryMerchantUnresolved     = errors.New("refund recovery merchant could not be resolved")
 )
@@ -41,6 +43,7 @@ type RefundRecoveryScheduler struct {
 	distributor     TaskDistributor
 	paymentClient   wechat.DirectPaymentClientInterface
 	ecommerceClient wechat.EcommerceClientInterface
+	ordinaryClient  OrdinaryServiceProviderWorkerClient
 	paymentFactSvc  *logic.PaymentFactService
 }
 
@@ -65,6 +68,10 @@ func NewRefundRecoveryScheduler(
 		ecommerceClient: ecommerceClient,
 		paymentFactSvc:  logic.NewPaymentFactService(store),
 	}
+}
+
+func (s *RefundRecoveryScheduler) SetOrdinaryServiceProviderClient(client OrdinaryServiceProviderWorkerClient) {
+	s.ordinaryClient = client
 }
 
 // Start 启动调度器
@@ -441,13 +448,19 @@ func (s *RefundRecoveryScheduler) persistUnsupportedRefundRecoveryFactAlert(ctx 
 }
 
 func (s *RefundRecoveryScheduler) validateStatusRecoveryCapability(paymentOrder db.PaymentOrder) error {
-	if requiresEcommerceRefund(paymentOrder) && !paymentOrderUsesEcommerceChannel(paymentOrder) {
+	if requiresEcommerceRefund(paymentOrder) && !paymentOrderUsesMainBusinessRefundChannel(paymentOrder) {
 		return mainBusinessRefundChannelDriftError(paymentOrder, "query refund status")
 	}
 
 	if paymentOrderUsesEcommerceChannel(paymentOrder) {
 		if s.ecommerceClient == nil {
 			return errRefundRecoveryEcommerceClientMissing
+		}
+		return nil
+	}
+	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
+		if s.ordinaryClient == nil {
+			return errRefundRecoveryOrdinaryClientMissing
 		}
 		return nil
 	}
@@ -472,6 +485,21 @@ func (s *RefundRecoveryScheduler) queryRefundStatus(ctx context.Context, payment
 			return "", "", err
 		}
 		return resp.Status, resp.RefundID, nil
+	}
+
+	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
+		subMchID, err := s.resolveSubMchID(ctx, paymentOrder)
+		if err != nil {
+			return "", "", err
+		}
+		resp, err := s.ordinaryClient.QueryRefund(ctx, ospcontracts.RefundQueryRequest{
+			SubMchID:    subMchID,
+			OutRefundNo: refundOrder.OutRefundNo,
+		})
+		if err != nil {
+			return "", "", err
+		}
+		return string(resp.Status), resp.RefundID, nil
 	}
 
 	resp, err := s.paymentClient.QueryRefund(ctx, refundOrder.OutRefundNo)
@@ -516,14 +544,15 @@ func (s *RefundRecoveryScheduler) recordRiderDepositDirectRefundQueryFact(ctx co
 }
 
 func (s *RefundRecoveryScheduler) recordReservationEcommerceRefundQueryFact(ctx context.Context, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder, refundStatus, refundID string) (*db.ExternalPaymentFactApplication, error) {
-	if s.paymentFactSvc == nil || !paymentOrderUsesEcommerceChannel(paymentOrder) || !isReservationRefundPayment(paymentOrder) {
+	if s.paymentFactSvc == nil || !paymentOrderUsesMainBusinessRefundChannel(paymentOrder) || !isReservationRefundPayment(paymentOrder) {
 		return nil, nil
 	}
+	channel, capability := mainBusinessRefundFactChannelCapability(paymentOrder.PaymentChannel)
 	amount := refundOrder.RefundAmount
 	result, err := s.paymentFactSvc.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
 		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              db.PaymentChannelEcommerce,
-		Capability:           db.ExternalPaymentCapabilityEcommerceRefund,
+		Channel:              channel,
+		Capability:           capability,
 		FactSource:           db.ExternalPaymentFactSourceQuery,
 		ExternalObjectType:   db.ExternalPaymentObjectRefund,
 		ExternalObjectKey:    refundOrder.OutRefundNo,
@@ -535,8 +564,8 @@ func (s *RefundRecoveryScheduler) recordReservationEcommerceRefundQueryFact(ctx 
 		TerminalStatus:       logic.NormalizeEcommerceRefundTerminalStatus(refundStatus),
 		Amount:               &amount,
 		Currency:             "CNY",
-		RawResource:          ecommerceRefundQueryFactResource(refundOrder.OutRefundNo, refundID, refundStatus),
-		DedupeKey:            ecommerceRefundQueryFactDedupeKey(refundOrder.OutRefundNo, refundStatus),
+		RawResource:          mainBusinessRefundQueryFactResource(refundOrder.OutRefundNo, refundID, refundStatus),
+		DedupeKey:            mainBusinessRefundQueryFactDedupeKey(channel, refundOrder.OutRefundNo, refundStatus),
 		Application: &logic.ExternalPaymentFactApplicationTarget{
 			Consumer:           reservationRefundFactConsumerDomain,
 			BusinessObjectType: reservationRefundFactBusinessObjectOrder,
@@ -550,14 +579,15 @@ func (s *RefundRecoveryScheduler) recordReservationEcommerceRefundQueryFact(ctx 
 }
 
 func (s *RefundRecoveryScheduler) recordOrderEcommerceRefundQueryFact(ctx context.Context, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder, refundStatus, refundID string) (*db.ExternalPaymentFactApplication, error) {
-	if s.paymentFactSvc == nil || !paymentOrderUsesEcommerceChannel(paymentOrder) || !paymentOrder.OrderID.Valid || paymentOrder.ReservationID.Valid || paymentOrder.BusinessType != db.ExternalPaymentBusinessOwnerOrder {
+	if s.paymentFactSvc == nil || !paymentOrderUsesMainBusinessRefundChannel(paymentOrder) || !paymentOrder.OrderID.Valid || paymentOrder.ReservationID.Valid || paymentOrder.BusinessType != db.ExternalPaymentBusinessOwnerOrder {
 		return nil, nil
 	}
+	channel, capability := mainBusinessRefundFactChannelCapability(paymentOrder.PaymentChannel)
 	amount := refundOrder.RefundAmount
 	result, err := s.paymentFactSvc.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
 		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              db.PaymentChannelEcommerce,
-		Capability:           db.ExternalPaymentCapabilityEcommerceRefund,
+		Channel:              channel,
+		Capability:           capability,
 		FactSource:           db.ExternalPaymentFactSourceQuery,
 		ExternalObjectType:   db.ExternalPaymentObjectRefund,
 		ExternalObjectKey:    refundOrder.OutRefundNo,
@@ -569,8 +599,8 @@ func (s *RefundRecoveryScheduler) recordOrderEcommerceRefundQueryFact(ctx contex
 		TerminalStatus:       logic.NormalizeEcommerceRefundTerminalStatus(refundStatus),
 		Amount:               &amount,
 		Currency:             "CNY",
-		RawResource:          ecommerceRefundQueryFactResource(refundOrder.OutRefundNo, refundID, refundStatus),
-		DedupeKey:            ecommerceRefundQueryFactDedupeKey(refundOrder.OutRefundNo, refundStatus),
+		RawResource:          mainBusinessRefundQueryFactResource(refundOrder.OutRefundNo, refundID, refundStatus),
+		DedupeKey:            mainBusinessRefundQueryFactDedupeKey(channel, refundOrder.OutRefundNo, refundStatus),
 		Application: &logic.ExternalPaymentFactApplicationTarget{
 			Consumer:           orderRefundFactConsumerDomain,
 			BusinessObjectType: orderRefundFactBusinessObjectOrder,
@@ -588,7 +618,11 @@ func directRefundQueryFactDedupeKey(outRefundNo, refundStatus string) string {
 }
 
 func ecommerceRefundQueryFactDedupeKey(outRefundNo, refundStatus string) string {
-	return "wechat:query:ecommerce:refund:" + outRefundNo + ":" + logic.NormalizeEcommerceRefundTerminalStatus(refundStatus)
+	return mainBusinessRefundQueryFactDedupeKey(db.PaymentChannelEcommerce, outRefundNo, refundStatus)
+}
+
+func mainBusinessRefundQueryFactDedupeKey(channel, outRefundNo, refundStatus string) string {
+	return "wechat:query:" + channel + ":refund:" + outRefundNo + ":" + logic.NormalizeEcommerceRefundTerminalStatus(refundStatus)
 }
 
 func directRefundQueryFactResource(outRefundNo, refundID, refundStatus string) []byte {
@@ -605,6 +639,10 @@ func directRefundQueryFactResource(outRefundNo, refundID, refundStatus string) [
 }
 
 func ecommerceRefundQueryFactResource(outRefundNo, refundID, refundStatus string) []byte {
+	return mainBusinessRefundQueryFactResource(outRefundNo, refundID, refundStatus)
+}
+
+func mainBusinessRefundQueryFactResource(outRefundNo, refundID, refundStatus string) []byte {
 	raw, err := json.Marshal(map[string]any{
 		"out_refund_no": outRefundNo,
 		"refund_id":     refundID,
@@ -615,6 +653,13 @@ func ecommerceRefundQueryFactResource(outRefundNo, refundID, refundStatus string
 		return nil
 	}
 	return raw
+}
+
+func mainBusinessRefundFactChannelCapability(channel string) (string, string) {
+	if channel == db.PaymentChannelOrdinaryServiceProvider {
+		return db.PaymentChannelOrdinaryServiceProvider, db.ExternalPaymentCapabilityPartnerRefund
+	}
+	return db.PaymentChannelEcommerce, db.ExternalPaymentCapabilityEcommerceRefund
 }
 
 func paymentFactStringPtr(value string) *string {

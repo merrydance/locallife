@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 )
@@ -23,14 +25,15 @@ const (
 
 // ProfitSharingRecoveryScheduler scans failed/stale profit sharing orders and re-enqueues processing.
 type ProfitSharingRecoveryScheduler struct {
-	cron            *cron.Cron
-	wg              sync.WaitGroup
-	stopCtx         context.Context
-	stopCancel      context.CancelFunc
-	runMu           sync.Mutex
-	store           db.Store
-	distributor     TaskDistributor
-	ecommerceClient wechat.EcommerceClientInterface
+	cron             *cron.Cron
+	wg               sync.WaitGroup
+	stopCtx          context.Context
+	stopCancel       context.CancelFunc
+	runMu            sync.Mutex
+	store            db.Store
+	distributor      TaskDistributor
+	ecommerceClient  wechat.EcommerceClientInterface
+	ordinarySPClient OrdinaryServiceProviderWorkerClient
 }
 
 // NewProfitSharingRecoveryScheduler creates a new scheduler for profit sharing recovery.
@@ -47,6 +50,10 @@ func NewProfitSharingRecoveryScheduler(store db.Store, distributor TaskDistribut
 		distributor:     distributor,
 		ecommerceClient: ecommerceClient,
 	}
+}
+
+func (s *ProfitSharingRecoveryScheduler) SetOrdinaryServiceProviderClient(client OrdinaryServiceProviderWorkerClient) {
+	s.ordinarySPClient = client
 }
 
 // Start starts the recovery scheduler.
@@ -187,11 +194,12 @@ func (s *ProfitSharingRecoveryScheduler) runOnce(ctx context.Context) {
 	}
 
 	for _, r := range stuckReturns {
-		if s.ecommerceClient == nil {
-			log.Warn().
+		paymentOrder, err := s.store.GetPaymentOrder(ctx, r.PaymentOrderID)
+		if err != nil {
+			log.Error().Err(err).
 				Int64("profit_sharing_return_id", r.ID).
-				Int64("refund_order_id", r.RefundOrderID).
-				Msg("skip stuck profit sharing return recovery because ecommerce client is unavailable")
+				Int64("payment_order_id", r.PaymentOrderID).
+				Msg("resolve stuck profit sharing return payment order failed")
 			continue
 		}
 
@@ -201,7 +209,7 @@ func (s *ProfitSharingRecoveryScheduler) runOnce(ctx context.Context) {
 			Time("updated_at", r.UpdatedAt).
 			Msg("found stuck processing profit sharing return, querying upstream result")
 
-		resp, err := s.ecommerceClient.QueryProfitSharingReturn(ctx, r.SubMchid, r.OutReturnNo, r.OutOrderNo)
+		resp, err := s.queryWechatProfitSharingReturn(ctx, paymentOrder, r)
 		if err != nil {
 			log.Error().Err(err).
 				Int64("profit_sharing_return_id", r.ID).
@@ -210,11 +218,32 @@ func (s *ProfitSharingRecoveryScheduler) runOnce(ctx context.Context) {
 			continue
 		}
 
-		s.handleStuckProfitSharingReturnQueryResult(ctx, r, resp)
+		s.handleStuckProfitSharingReturnQueryResult(ctx, r, paymentOrder, resp)
 	}
 }
 
-func (s *ProfitSharingRecoveryScheduler) handleStuckProfitSharingReturnQueryResult(ctx context.Context, returnRecord db.ProfitSharingReturn, resp *wechatcontracts.ProfitSharingReturnResponse) {
+func (s *ProfitSharingRecoveryScheduler) queryWechatProfitSharingReturn(ctx context.Context, paymentOrder db.PaymentOrder, returnRecord db.ProfitSharingReturn) (*wechatcontracts.ProfitSharingReturnResponse, error) {
+	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
+		if s.ordinarySPClient == nil {
+			return nil, fmt.Errorf("ordinary service provider client not configured for profit sharing return recovery query")
+		}
+		resp, err := s.ordinarySPClient.QueryProfitSharingReturn(ctx, ospcontracts.ProfitSharingReturnQueryRequest{
+			SubMchID:    returnRecord.SubMchid,
+			OutReturnNo: returnRecord.OutReturnNo,
+			OutOrderNo:  returnRecord.OutOrderNo,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return ordinaryProfitSharingReturnResponse(resp, ""), nil
+	}
+	if s.ecommerceClient == nil {
+		return nil, fmt.Errorf("ecommerce client not configured for profit sharing return recovery query")
+	}
+	return s.ecommerceClient.QueryProfitSharingReturn(ctx, returnRecord.SubMchid, returnRecord.OutReturnNo, returnRecord.OutOrderNo)
+}
+
+func (s *ProfitSharingRecoveryScheduler) handleStuckProfitSharingReturnQueryResult(ctx context.Context, returnRecord db.ProfitSharingReturn, paymentOrder db.PaymentOrder, resp *wechatcontracts.ProfitSharingReturnResponse) {
 	if resp == nil {
 		log.Warn().
 			Int64("profit_sharing_return_id", returnRecord.ID).
@@ -243,7 +272,7 @@ func (s *ProfitSharingRecoveryScheduler) handleStuckProfitSharingReturnQueryResu
 			Msg("stuck profit sharing return still processing; keep waiting")
 		return
 	case wechatcontracts.ProfitSharingReturnResultSuccess, wechatcontracts.ProfitSharingReturnResultFailed:
-		application, err := recordProfitSharingReturnQueryFact(ctx, s.store, returnRecord, resp)
+		application, err := recordProfitSharingReturnQueryFact(ctx, s.store, paymentOrder.PaymentChannel, returnRecord, resp)
 		if err != nil {
 			log.Error().Err(err).
 				Int64("profit_sharing_return_id", returnRecord.ID).

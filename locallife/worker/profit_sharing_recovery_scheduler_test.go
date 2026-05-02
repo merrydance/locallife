@@ -10,6 +10,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/merrydance/locallife/worker"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -114,6 +115,9 @@ func TestProfitSharingRecoverySchedulerRunOnceRecordsStuckReturnFactInsteadOfLeg
 	store.EXPECT().
 		ListStuckProcessingProfitSharingReturns(gomock.Any(), gomock.Any()).
 		Return([]db.ProfitSharingReturn{returnRecord}, nil)
+	store.EXPECT().
+		GetPaymentOrder(gomock.Any(), returnRecord.PaymentOrderID).
+		Return(db.PaymentOrder{ID: returnRecord.PaymentOrderID, PaymentChannel: db.PaymentChannelEcommerce}, nil)
 	ecommerceClient.EXPECT().
 		QueryProfitSharingReturn(gomock.Any(), returnRecord.SubMchid, returnRecord.OutReturnNo, returnRecord.OutOrderNo).
 		Return(&wechatcontracts.ProfitSharingReturnResponse{
@@ -131,6 +135,53 @@ func TestProfitSharingRecoverySchedulerRunOnceRecordsStuckReturnFactInsteadOfLeg
 	scheduler.RunOnce()
 
 	require.Equal(t, []int64{10188}, distributor.applicationIDs)
+}
+
+func TestProfitSharingRecoverySchedulerRunOnceQueriesOrdinaryServiceProviderStuckReturn(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &profitSharingFactApplicationEnqueueRecorder{}
+	ordinaryClient := &refundRecoveryOrdinaryClient{
+		queryProfitSharingReturnResponse: &ospcontracts.ProfitSharingReturnResponse{
+			SubMchID:    "sub-mchid-ordinary-188",
+			OutOrderNo:  "PSO188",
+			OutReturnNo: "PRO188",
+			ReturnID:    "wx-return-ordinary-188",
+			ReturnMchID: "1900000109",
+			Amount:      520,
+			State:       ospcontracts.ProfitSharingReturnStateSuccess,
+		},
+	}
+	returnRecord := db.ProfitSharingReturn{
+		ID:                   198,
+		RefundOrderID:        298,
+		ProfitSharingOrderID: 398,
+		PaymentOrderID:       498,
+		SubMchid:             "sub-mchid-ordinary-188",
+		OutOrderNo:           "PSO188",
+		OutReturnNo:          "PRO188",
+		ReturnMchid:          "1900000109",
+		Amount:               520,
+		Status:               "processing",
+	}
+
+	store.EXPECT().ListProfitSharingOrdersForRetry(gomock.Any(), gomock.Any()).Return([]db.ProfitSharingOrder{}, nil)
+	store.EXPECT().ListCompletedOrdersMissingProfitSharing(gomock.Any(), gomock.Any()).Return([]db.ListCompletedOrdersMissingProfitSharingRow{}, nil)
+	store.EXPECT().ListStuckProcessingProfitSharingReturns(gomock.Any(), gomock.Any()).Return([]db.ProfitSharingReturn{returnRecord}, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), returnRecord.PaymentOrderID).Return(db.PaymentOrder{ID: returnRecord.PaymentOrderID, PaymentChannel: db.PaymentChannelOrdinaryServiceProvider}, nil)
+	expectProfitSharingReturnQueryFactForChannel(t, store, db.PaymentChannelOrdinaryServiceProvider, returnRecord, "wx-return-ordinary-188", wechatcontracts.ProfitSharingReturnResultSuccess, db.ExternalPaymentTerminalStatusSuccess, "")
+
+	scheduler := worker.NewProfitSharingRecoveryScheduler(store, distributor, nil)
+	scheduler.SetOrdinaryServiceProviderClient(ordinaryClient)
+	scheduler.RunOnce()
+
+	require.Equal(t, []int64{10198}, distributor.applicationIDs)
+	require.NotNil(t, ordinaryClient.queryProfitSharingReturnRequest)
+	require.Equal(t, returnRecord.SubMchid, ordinaryClient.queryProfitSharingReturnRequest.SubMchID)
+	require.Equal(t, returnRecord.OutReturnNo, ordinaryClient.queryProfitSharingReturnRequest.OutReturnNo)
+	require.Equal(t, returnRecord.OutOrderNo, ordinaryClient.queryProfitSharingReturnRequest.OutOrderNo)
 }
 
 func TestProfitSharingRecoverySchedulerRunOnceKeepsProcessingReturnWithoutLegacyResultTask(t *testing.T) {
@@ -153,6 +204,7 @@ func TestProfitSharingRecoverySchedulerRunOnceKeepsProcessingReturnWithoutLegacy
 	store.EXPECT().ListProfitSharingOrdersForRetry(gomock.Any(), gomock.Any()).Return([]db.ProfitSharingOrder{}, nil)
 	store.EXPECT().ListCompletedOrdersMissingProfitSharing(gomock.Any(), gomock.Any()).Return([]db.ListCompletedOrdersMissingProfitSharingRow{}, nil)
 	store.EXPECT().ListStuckProcessingProfitSharingReturns(gomock.Any(), gomock.Any()).Return([]db.ProfitSharingReturn{returnRecord}, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), returnRecord.PaymentOrderID).Return(db.PaymentOrder{ID: returnRecord.PaymentOrderID, PaymentChannel: db.PaymentChannelEcommerce}, nil)
 	ecommerceClient.EXPECT().
 		QueryProfitSharingReturn(gomock.Any(), returnRecord.SubMchid, returnRecord.OutReturnNo, returnRecord.OutOrderNo).
 		Return(&wechatcontracts.ProfitSharingReturnResponse{

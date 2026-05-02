@@ -13,8 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
-	"github.com/merrydance/locallife/wechat"
-	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 )
@@ -26,30 +26,30 @@ const (
 )
 
 type ApplymentSettlementVerificationScheduler struct {
-	cron            *cron.Cron
-	wg              sync.WaitGroup
-	stopCtx         context.Context
-	stopCancel      context.CancelFunc
-	runMu           sync.Mutex
-	store           db.Store
-	distributor     TaskDistributor
-	ecommerceClient wechat.EcommerceClientInterface
-	now             func() time.Time
+	cron           *cron.Cron
+	wg             sync.WaitGroup
+	stopCtx        context.Context
+	stopCancel     context.CancelFunc
+	runMu          sync.Mutex
+	store          db.Store
+	distributor    TaskDistributor
+	ordinaryClient ordinaryserviceprovider.OrdinaryServiceProviderClientInterface
+	now            func() time.Time
 }
 
-func NewApplymentSettlementVerificationScheduler(store db.Store, distributor TaskDistributor, ecommerceClient wechat.EcommerceClientInterface) *ApplymentSettlementVerificationScheduler {
+func NewApplymentSettlementVerificationScheduler(store db.Store, distributor TaskDistributor, ordinaryClient ordinaryserviceprovider.OrdinaryServiceProviderClientInterface) *ApplymentSettlementVerificationScheduler {
 	stopCtx, stopCancel := context.WithCancel(context.Background())
 	return &ApplymentSettlementVerificationScheduler{
 		cron: cron.New(cron.WithChain(
 			cron.SkipIfStillRunning(cron.DefaultLogger),
 			cron.Recover(cron.DefaultLogger),
 		)),
-		stopCtx:         stopCtx,
-		stopCancel:      stopCancel,
-		store:           store,
-		distributor:     distributor,
-		ecommerceClient: ecommerceClient,
-		now:             time.Now,
+		stopCtx:        stopCtx,
+		stopCancel:     stopCancel,
+		store:          store,
+		distributor:    distributor,
+		ordinaryClient: ordinaryClient,
+		now:            time.Now,
 	}
 }
 
@@ -98,8 +98,8 @@ func (s *ApplymentSettlementVerificationScheduler) runOnce(ctx context.Context) 
 	}
 	defer s.runMu.Unlock()
 
-	if s.ecommerceClient == nil {
-		log.Warn().Msg("ecommerce client not configured, skip applyment settlement verification")
+	if s.ordinaryClient == nil {
+		log.Warn().Msg("ordinary service provider client not configured, skip applyment settlement verification")
 		return
 	}
 
@@ -127,7 +127,7 @@ func (s *ApplymentSettlementVerificationScheduler) verifyApplymentSettlement(ctx
 		return
 	}
 
-	resp, err := s.ecommerceClient.QuerySubMerchantSettlement(ctx, subMchID, "")
+	resp, err := s.ordinaryClient.QuerySettlement(ctx, ospcontracts.SettlementQueryRequest{SubMchID: subMchID})
 	if err != nil {
 		if reason, ok := settlementVerificationTerminalFailureReason(err); ok {
 			s.markSettlementVerificationInternalFailure(ctx, runAt, item, subMchID, reason, err)
@@ -152,7 +152,7 @@ func (s *ApplymentSettlementVerificationScheduler) verifyApplymentSettlement(ctx
 	if err != nil {
 		log.Error().Err(err).
 			Int64("applyment_id", item.ID).
-			Str("verify_result", resp.VerifyResult).
+			Str("verify_result", string(resp.VerifyResult)).
 			Msg("record settlement verification fact failed")
 		return
 	}
@@ -161,7 +161,7 @@ func (s *ApplymentSettlementVerificationScheduler) verifyApplymentSettlement(ctx
 			log.Error().Err(err).
 				Int64("applyment_id", item.ID).
 				Int64("payment_fact_application_id", application.ID).
-				Str("verify_result", resp.VerifyResult).
+				Str("verify_result", string(resp.VerifyResult)).
 				Msg("apply settlement verification fact failed")
 			return
 		}
@@ -178,7 +178,7 @@ func (s *ApplymentSettlementVerificationScheduler) verifyApplymentSettlement(ctx
 		Time("first_trade_at", firstTradeAt).
 		Time("checked_at", runAt).
 		Int32("check_count", item.SettlementVerifyCheckCount+1).
-		Str("verify_result", strings.TrimSpace(resp.VerifyResult)).
+		Str("verify_result", strings.TrimSpace(string(resp.VerifyResult))).
 		Str("settlement_verify_status", status).
 		Bool("has_verify_fail_reason", failReason != "").
 		Msg("settlement verification fact applied")
@@ -224,7 +224,7 @@ func (s *ApplymentSettlementVerificationScheduler) verifyApplymentSettlement(ctx
 	}
 }
 
-func (s *ApplymentSettlementVerificationScheduler) recordSettlementVerificationQueryFact(ctx context.Context, runAt time.Time, item db.ListMerchantApplymentsPendingSettlementVerificationRow, resp *wechatcontracts.SubMerchantSettlementResponse) (*db.ExternalPaymentFactApplication, error) {
+func (s *ApplymentSettlementVerificationScheduler) recordSettlementVerificationQueryFact(ctx context.Context, runAt time.Time, item db.ListMerchantApplymentsPendingSettlementVerificationRow, resp *ospcontracts.SettlementQueryResponse) (*db.ExternalPaymentFactApplication, error) {
 	service := logic.NewPaymentFactService(s.store)
 	subMchID := strings.TrimSpace(textValue(item.SubMchID))
 	checkCount := item.SettlementVerifyCheckCount + 1
@@ -234,25 +234,25 @@ func (s *ApplymentSettlementVerificationScheduler) recordSettlementVerificationQ
 	}
 	result, err := service.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
 		Provider:                    db.ExternalPaymentProviderWechat,
-		Channel:                     db.PaymentChannelEcommerce,
+		Channel:                     db.PaymentChannelOrdinaryServiceProvider,
 		Capability:                  db.ExternalPaymentCapabilitySettlement,
 		FactSource:                  db.ExternalPaymentFactSourceQuery,
 		ExternalObjectType:          db.ExternalPaymentObjectSettlement,
 		ExternalObjectKey:           subMchID,
 		BusinessOwner:               settlementVerificationStringPtr(db.ExternalPaymentBusinessOwnerMerchantFunds),
-		BusinessObjectType:          settlementVerificationStringPtr("ecommerce_applyment"),
+		BusinessObjectType:          settlementVerificationStringPtr(applymentFactBusinessObjectApplyment),
 		BusinessObjectID:            settlementVerificationInt64Ptr(item.ID),
-		UpstreamState:               strings.TrimSpace(resp.VerifyResult),
-		TerminalStatus:              settlementVerificationTerminalStatus(resp.VerifyResult),
+		UpstreamState:               strings.TrimSpace(string(resp.VerifyResult)),
+		TerminalStatus:              settlementVerificationTerminalStatus(string(resp.VerifyResult)),
 		Currency:                    "CNY",
 		OccurredAt:                  settlementVerificationTimePtr(runAt.UTC()),
 		UpstreamUpdatedAt:           settlementVerificationTimePtr(runAt.UTC()),
 		RawResource:                 settlementVerificationQueryFactResource(runAt, item, firstTradeAt, checkCount, resp),
-		DedupeKey:                   fmt.Sprintf("wechat:query:ecommerce:settlement_verification:%d:%d:%s", item.ID, checkCount, strings.TrimSpace(resp.VerifyResult)),
+		DedupeKey:                   fmt.Sprintf("wechat:query:ordinary_service_provider:settlement_verification:%d:%d:%s", item.ID, checkCount, strings.TrimSpace(string(resp.VerifyResult))),
 		AllowNonTerminalApplication: true,
 		Application: &logic.ExternalPaymentFactApplicationTarget{
 			Consumer:           settlementVerificationFactConsumerDomain,
-			BusinessObjectType: "ecommerce_applyment",
+			BusinessObjectType: applymentFactBusinessObjectApplyment,
 			BusinessObjectID:   item.ID,
 		},
 	})
@@ -298,25 +298,31 @@ func (s *ApplymentSettlementVerificationScheduler) markSettlementVerificationInt
 }
 
 func settlementVerificationTerminalFailureReason(err error) (string, bool) {
-	var validationErr *wechatcontracts.SubMerchantSettlementQueryValidationError
-	if errors.As(err, &validationErr) {
-		return "结算卡验卡巡检请求无效，请联系平台处理微信二级商户号数据", true
-	}
-
-	var contractErr *wechatcontracts.SubMerchantSettlementContractError
-	if errors.As(err, &contractErr) {
-		return "微信结算卡查询响应不符合预期，请联系平台处理", true
+	var providerErr *ordinaryserviceprovider.ProviderError
+	if errors.As(err, &providerErr) {
+		switch providerErr.Category {
+		case ordinaryserviceprovider.ErrorCategoryValidation:
+			return "结算卡验卡巡检请求无效，请联系平台核验微信二级商户号和请求参数", true
+		case ordinaryserviceprovider.ErrorCategoryAuthConfig:
+			return "微信普通服务商配置或特约商户授权异常，请核验服务商证书、权限和特约商户绑定关系", true
+		case ordinaryserviceprovider.ErrorCategoryMerchantControl:
+			return "特约商户结算能力被微信支付限制，请先查询商户管控原因并按微信解脱路径处理", true
+		case ordinaryserviceprovider.ErrorCategoryProvider:
+			if strings.HasPrefix(strings.TrimSpace(providerErr.ProviderCode), "LOCAL_RESPONSE_") || strings.TrimSpace(providerErr.ProviderCode) == "LOCAL_EMPTY_RESPONSE" {
+				return "微信结算卡查询响应不符合预期，请联系平台处理", true
+			}
+		}
 	}
 
 	return "", false
 }
 
-func settlementVerificationQueryFactResource(runAt time.Time, item db.ListMerchantApplymentsPendingSettlementVerificationRow, firstTradeAt time.Time, checkCount int32, resp *wechatcontracts.SubMerchantSettlementResponse) []byte {
+func settlementVerificationQueryFactResource(runAt time.Time, item db.ListMerchantApplymentsPendingSettlementVerificationRow, firstTradeAt time.Time, checkCount int32, resp *ospcontracts.SettlementQueryResponse) []byte {
 	raw, err := json.Marshal(map[string]any{
 		"applyment_id":                      item.ID,
 		"merchant_id":                       item.SubjectID,
 		"sub_mch_id":                        strings.TrimSpace(textValue(item.SubMchID)),
-		"verify_result":                     strings.TrimSpace(resp.VerifyResult),
+		"verify_result":                     strings.TrimSpace(string(resp.VerifyResult)),
 		"verify_fail_reason":                strings.TrimSpace(resp.VerifyFailReason),
 		"settlement_verify_first_trade_at":  firstTradeAt.UTC().Format(time.RFC3339Nano),
 		"settlement_verify_last_checked_at": runAt.UTC().Format(time.RFC3339Nano),
@@ -330,11 +336,11 @@ func settlementVerificationQueryFactResource(runAt time.Time, item db.ListMercha
 
 func settlementVerificationTerminalStatus(verifyResult string) string {
 	switch strings.TrimSpace(verifyResult) {
-	case wechatcontracts.SubMerchantSettlementVerifyResultSuccess:
+	case string(ospcontracts.SettlementVerifyResultSuccess):
 		return db.ExternalPaymentTerminalStatusSuccess
-	case wechatcontracts.SubMerchantSettlementVerifyResultFail:
+	case string(ospcontracts.SettlementVerifyResultFail):
 		return db.ExternalPaymentTerminalStatusFailed
-	case wechatcontracts.SubMerchantSettlementVerifyResultVerifying:
+	case string(ospcontracts.SettlementVerifyResultIng):
 		return db.ExternalPaymentTerminalStatusProcessing
 	default:
 		return db.ExternalPaymentTerminalStatusUnknown
@@ -363,17 +369,17 @@ func settlementVerificationTimePtr(value time.Time) *time.Time {
 	return &value
 }
 
-func resolveSettlementVerificationState(resp *wechatcontracts.SubMerchantSettlementResponse, checkCount int) (string, string) {
+func resolveSettlementVerificationState(resp *ospcontracts.SettlementQueryResponse, checkCount int) (string, string) {
 	if resp == nil {
 		return "", ""
 	}
 
-	switch strings.TrimSpace(resp.VerifyResult) {
-	case "VERIFY_FAIL":
+	switch strings.TrimSpace(string(resp.VerifyResult)) {
+	case string(ospcontracts.SettlementVerifyResultFail):
 		return "fail", strings.TrimSpace(resp.VerifyFailReason)
-	case "VERIFY_SUCCESS":
+	case string(ospcontracts.SettlementVerifyResultSuccess):
 		return "success", ""
-	case "VERIFYING":
+	case string(ospcontracts.SettlementVerifyResultIng):
 		if checkCount >= 3 {
 			return "success", ""
 		}

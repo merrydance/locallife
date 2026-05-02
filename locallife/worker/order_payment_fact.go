@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -11,6 +12,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 )
 
 const (
@@ -39,7 +41,7 @@ func recordCombinedOrderPaymentQueryFact(ctx context.Context, store db.Store, co
 	service := logic.NewPaymentFactService(store)
 	result, err := service.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
 		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              db.PaymentChannelEcommerce,
+		Channel:              paymentFactChannel(paymentOrder.PaymentChannel, db.PaymentChannelEcommerce),
 		Capability:           db.ExternalPaymentCapabilityCombinePayment,
 		FactSource:           db.ExternalPaymentFactSourceQuery,
 		ExternalObjectType:   db.ExternalPaymentObjectCombinedPayment,
@@ -55,7 +57,7 @@ func recordCombinedOrderPaymentQueryFact(ctx context.Context, store db.Store, co
 		OccurredAt:           orderPaymentParseFactTime(subOrder.SuccessTime),
 		UpstreamUpdatedAt:    orderPaymentParseFactTime(subOrder.SuccessTime),
 		RawResource:          combinedOrderPaymentQueryFactResource(combined, paymentOrder, subOrder),
-		DedupeKey:            fmt.Sprintf("wechat:query:ecommerce:combine_order_payment:%s:%s:success", combined.CombineOutTradeNo, subOrder.OutTradeNo),
+		DedupeKey:            fmt.Sprintf("wechat:query:%s:combine_order_payment:%s:%s:success", paymentFactChannel(paymentOrder.PaymentChannel, db.PaymentChannelEcommerce), combined.CombineOutTradeNo, subOrder.OutTradeNo),
 		Application: &logic.ExternalPaymentFactApplicationTarget{
 			Consumer:           orderPaymentFactConsumerDomain,
 			BusinessObjectType: orderPaymentFactBusinessObjectOrder,
@@ -77,7 +79,7 @@ func recordOrderPaymentQueryFact(ctx context.Context, store db.Store, paymentOrd
 	service := logic.NewPaymentFactService(store)
 	result, err := service.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
 		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              db.PaymentChannelEcommerce,
+		Channel:              paymentFactChannel(paymentOrder.PaymentChannel, db.PaymentChannelEcommerce),
 		Capability:           db.ExternalPaymentCapabilityPartnerJSAPIPayment,
 		FactSource:           db.ExternalPaymentFactSourceQuery,
 		ExternalObjectType:   db.ExternalPaymentObjectPayment,
@@ -93,7 +95,48 @@ func recordOrderPaymentQueryFact(ctx context.Context, store db.Store, paymentOrd
 		OccurredAt:           occurredAt,
 		UpstreamUpdatedAt:    occurredAt,
 		RawResource:          orderPaymentQueryFactResource(paymentOrder, queryResp),
-		DedupeKey:            fmt.Sprintf("wechat:query:ecommerce:partner_order_payment:%s:success", objectKey),
+		DedupeKey:            fmt.Sprintf("wechat:query:%s:partner_order_payment:%s:success", paymentFactChannel(paymentOrder.PaymentChannel, db.PaymentChannelEcommerce), objectKey),
+		Application: &logic.ExternalPaymentFactApplicationTarget{
+			Consumer:           orderPaymentFactConsumerDomain,
+			BusinessObjectType: orderPaymentFactBusinessObjectOrder,
+			BusinessObjectID:   paymentOrder.ID,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Application, nil
+}
+
+func recordOrdinaryServiceProviderPaymentTimeoutQueryFact(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, queryResp *ospcontracts.PaymentQueryResponse) (*db.ExternalPaymentFactApplication, error) {
+	if paymentOrder.BusinessType != db.ExternalPaymentBusinessOwnerOrder {
+		return nil, fmt.Errorf("unsupported ordinary service provider payment timeout fact owner %q for payment order %d", paymentOrder.BusinessType, paymentOrder.ID)
+	}
+	if queryResp == nil || queryResp.Amount == nil {
+		return nil, fmt.Errorf("ordinary service provider payment timeout query response missing amount for payment order %d", paymentOrder.ID)
+	}
+	objectKey := paymentOrder.OutTradeNo
+	if queryResp.OutTradeNo != "" {
+		objectKey = queryResp.OutTradeNo
+	}
+	service := logic.NewPaymentFactService(store)
+	result, err := service.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelOrdinaryServiceProvider,
+		Capability:           db.ExternalPaymentCapabilityPartnerJSAPIPayment,
+		FactSource:           db.ExternalPaymentFactSourceQuery,
+		ExternalObjectType:   db.ExternalPaymentObjectPayment,
+		ExternalObjectKey:    objectKey,
+		ExternalSecondaryKey: orderPaymentStringPtr(queryResp.TransactionID),
+		BusinessOwner:        orderPaymentStringPtr(db.ExternalPaymentBusinessOwnerOrder),
+		BusinessObjectType:   orderPaymentStringPtr(orderPaymentFactBusinessObjectOrder),
+		BusinessObjectID:     orderPaymentInt64Ptr(paymentOrder.ID),
+		UpstreamState:        string(queryResp.TradeState),
+		TerminalStatus:       db.ExternalPaymentTerminalStatusSuccess,
+		Amount:               orderPaymentInt64Ptr(queryResp.Amount.Total),
+		Currency:             "CNY",
+		RawResource:          ordinaryServiceProviderPaymentQueryFactResource(paymentOrder, queryResp),
+		DedupeKey:            fmt.Sprintf("wechat:query:%s:partner_order_payment:%s:success", db.PaymentChannelOrdinaryServiceProvider, objectKey),
 		Application: &logic.ExternalPaymentFactApplicationTarget{
 			Consumer:           orderPaymentFactConsumerDomain,
 			BusinessObjectType: orderPaymentFactBusinessObjectOrder,
@@ -136,6 +179,32 @@ func orderPaymentQueryFactResource(paymentOrder db.PaymentOrder, queryResp *wech
 		return nil
 	}
 	return raw
+}
+
+func ordinaryServiceProviderPaymentQueryFactResource(paymentOrder db.PaymentOrder, queryResp *ospcontracts.PaymentQueryResponse) []byte {
+	amount := int64(0)
+	if queryResp.Amount != nil {
+		amount = queryResp.Amount.Total
+	}
+	raw, err := json.Marshal(map[string]any{
+		"payment_order_id": paymentOrder.ID,
+		"out_trade_no":     paymentOrder.OutTradeNo,
+		"transaction_id":   queryResp.TransactionID,
+		"trade_state":      queryResp.TradeState,
+		"amount":           amount,
+		"payment_channel":  db.PaymentChannelOrdinaryServiceProvider,
+	})
+	if err != nil {
+		return nil
+	}
+	return raw
+}
+
+func paymentFactChannel(channel string, fallback string) string {
+	if strings.TrimSpace(channel) != "" {
+		return channel
+	}
+	return fallback
 }
 
 func recoveredOrderPaymentFactResource(order db.PaymentOrder) []byte {

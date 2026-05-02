@@ -38,30 +38,48 @@ type Config struct {
 	QweatherAPIHost string `mapstructure:"QWEATHER_API_HOST"`
 
 	// 微信支付配置
-	WechatPayMchID                         string        `mapstructure:"WECHAT_PAY_MCH_ID"`                            // 商户号
-	WechatPaySerialNumber                  string        `mapstructure:"WECHAT_PAY_SERIAL_NUMBER"`                     // 商户API证书序列号
-	WechatPayPrivateKeyPath                string        `mapstructure:"WECHAT_PAY_PRIVATE_KEY_PATH"`                  // 商户API私钥文件路径
-	WechatPayAPIV3Key                      string        `mapstructure:"WECHAT_PAY_API_V3_KEY"`                        // APIv3密钥
-	WechatPayNotifyURL                     string        `mapstructure:"WECHAT_PAY_NOTIFY_URL"`                        // 支付回调URL
-	WechatPayRefundNotifyURL               string        `mapstructure:"WECHAT_PAY_REFUND_NOTIFY_URL"`                 // 退款回调URL
-	WechatPayMerchantTransferNotifyURL     string        `mapstructure:"WECHAT_PAY_MERCHANT_TRANSFER_NOTIFY_URL"`      // 商家转账回调URL
-	WechatShippingSettleNotifyURL          string        `mapstructure:"WECHAT_SHIPPING_SETTLE_NOTIFY_URL"`            // 发货结算事件回调URL（trade_manage_order_settlement）
-	WechatPayPlatformPublicKeyPath         string        `mapstructure:"WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH"`          // 微信支付平台公钥路径（推荐）
-	WechatPayPlatformPublicKeyID           string        `mapstructure:"WECHAT_PAY_PLATFORM_PUBLIC_KEY_ID"`            // 微信支付平台公钥ID
-	WechatPayHTTPTimeout                   time.Duration `mapstructure:"WECHAT_PAY_HTTP_TIMEOUT"`                      // HTTP请求超时时间
-	WechatEcommerceSpMchID                 string        `mapstructure:"WECHAT_ECOMMERCE_SP_MCHID"`                    // 收付通服务商商户号
-	WechatEcommerceSpAppID                 string        `mapstructure:"WECHAT_ECOMMERCE_SP_APPID"`                    // 收付通服务商 AppID
-	WechatEcommercePaymentNotifyURL        string        `mapstructure:"WECHAT_ECOMMERCE_PAYMENT_NOTIFY_URL"`          // 收付通普通支付回调URL
-	WechatEcommerceCombineNotifyURL        string        `mapstructure:"WECHAT_ECOMMERCE_COMBINE_NOTIFY_URL"`          // 收付通合单支付回调URL
-	WechatEcommerceRefundNotifyURL         string        `mapstructure:"WECHAT_ECOMMERCE_REFUND_NOTIFY_URL"`           // 收付通退款回调URL
-	WechatEcommerceWithdrawNotifyURL       string        `mapstructure:"WECHAT_ECOMMERCE_WITHDRAW_NOTIFY_URL"`         // 收付通提现回调URL
-	WechatEcommerceViolationNotifyURL      string        `mapstructure:"WECHAT_ECOMMERCE_VIOLATION_NOTIFY_URL"`        // 收付通商户违规通知回调URL
-	WechatEcommerceSpName                  string        `mapstructure:"WECHAT_ECOMMERCE_SP_NAME"`                     // 收付通服务商主体全称（可选，用于分账接收方姓名）
-	WechatEcommerceSpSerialNumber          string        `mapstructure:"WECHAT_ECOMMERCE_SP_SERIAL_NUMBER"`            // 收付通服务商 API 证书序列号
-	WechatEcommerceSpPrivateKeyPath        string        `mapstructure:"WECHAT_ECOMMERCE_SP_PRIVATE_KEY_PATH"`         // 收付通服务商 API 私钥文件路径
-	WechatEcommerceSpAPIV3Key              string        `mapstructure:"WECHAT_ECOMMERCE_SP_API_V3_KEY"`               // 收付通服务商 APIv3 密钥
-	WechatEcommerceSpPlatformPublicKeyPath string        `mapstructure:"WECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_PATH"` // 收付通服务商平台公钥路径
-	WechatEcommerceSpPlatformPublicKeyID   string        `mapstructure:"WECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_ID"`   // 收付通服务商平台公钥ID
+	WechatPayMchID                                string        `mapstructure:"WECHAT_PAY_MCH_ID"`                                  // 商户号
+	WechatPaySerialNumber                         string        `mapstructure:"WECHAT_PAY_SERIAL_NUMBER"`                           // 商户API证书序列号
+	WechatPayPrivateKeyPath                       string        `mapstructure:"WECHAT_PAY_PRIVATE_KEY_PATH"`                        // 商户API私钥文件路径
+	WechatPayAPIV3Key                             string        `mapstructure:"WECHAT_PAY_API_V3_KEY"`                              // APIv3密钥
+	WechatPayNotifyURL                            string        `mapstructure:"WECHAT_PAY_NOTIFY_URL"`                              // 支付回调URL
+	WechatPayRefundNotifyURL                      string        `mapstructure:"WECHAT_PAY_REFUND_NOTIFY_URL"`                       // 退款回调URL
+	WechatPayMerchantTransferNotifyURL            string        `mapstructure:"WECHAT_PAY_MERCHANT_TRANSFER_NOTIFY_URL"`            // 商家转账回调URL
+	WechatShippingSettleNotifyURL                 string        `mapstructure:"WECHAT_SHIPPING_SETTLE_NOTIFY_URL"`                  // 发货结算事件回调URL（trade_manage_order_settlement）
+	WechatPayPlatformPublicKeyPath                string        `mapstructure:"WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH"`                // 微信支付平台公钥路径（推荐）
+	WechatPayPlatformPublicKeyID                  string        `mapstructure:"WECHAT_PAY_PLATFORM_PUBLIC_KEY_ID"`                  // 微信支付平台公钥ID
+	WechatPayHTTPTimeout                          time.Duration `mapstructure:"WECHAT_PAY_HTTP_TIMEOUT"`                            // HTTP请求超时时间
+	WechatEcommerceSpMchID                        string        `mapstructure:"WECHAT_ECOMMERCE_SP_MCHID"`                          // 收付通服务商商户号
+	WechatEcommerceSpAppID                        string        `mapstructure:"WECHAT_ECOMMERCE_SP_APPID"`                          // 收付通服务商 AppID
+	WechatEcommercePaymentNotifyURL               string        `mapstructure:"WECHAT_ECOMMERCE_PAYMENT_NOTIFY_URL"`                // 收付通普通支付回调URL
+	WechatEcommerceCombineNotifyURL               string        `mapstructure:"WECHAT_ECOMMERCE_COMBINE_NOTIFY_URL"`                // 收付通合单支付回调URL
+	WechatEcommerceRefundNotifyURL                string        `mapstructure:"WECHAT_ECOMMERCE_REFUND_NOTIFY_URL"`                 // 收付通退款回调URL
+	WechatEcommerceWithdrawNotifyURL              string        `mapstructure:"WECHAT_ECOMMERCE_WITHDRAW_NOTIFY_URL"`               // 收付通提现回调URL
+	WechatEcommerceViolationNotifyURL             string        `mapstructure:"WECHAT_ECOMMERCE_VIOLATION_NOTIFY_URL"`              // 收付通商户违规通知回调URL
+	WechatEcommerceSpName                         string        `mapstructure:"WECHAT_ECOMMERCE_SP_NAME"`                           // 收付通服务商主体全称（可选，用于分账接收方姓名）
+	WechatEcommerceSpSerialNumber                 string        `mapstructure:"WECHAT_ECOMMERCE_SP_SERIAL_NUMBER"`                  // 收付通服务商 API 证书序列号
+	WechatEcommerceSpPrivateKeyPath               string        `mapstructure:"WECHAT_ECOMMERCE_SP_PRIVATE_KEY_PATH"`               // 收付通服务商 API 私钥文件路径
+	WechatEcommerceSpAPIV3Key                     string        `mapstructure:"WECHAT_ECOMMERCE_SP_API_V3_KEY"`                     // 收付通服务商 APIv3 密钥
+	WechatEcommerceSpPlatformPublicKeyPath        string        `mapstructure:"WECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_PATH"`       // 收付通服务商平台公钥路径
+	WechatEcommerceSpPlatformPublicKeyID          string        `mapstructure:"WECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_ID"`         // 收付通服务商平台公钥ID
+	WechatOrdinarySpMchID                         string        `mapstructure:"WECHAT_ORDINARY_SP_MCHID"`                           // 普通服务商商户号
+	WechatOrdinarySpAppID                         string        `mapstructure:"WECHAT_ORDINARY_SP_APPID"`                           // 普通服务商 AppID
+	WechatOrdinarySpName                          string        `mapstructure:"WECHAT_ORDINARY_SP_NAME"`                            // 普通服务商主体全称
+	WechatOrdinarySpSerialNumber                  string        `mapstructure:"WECHAT_ORDINARY_SP_SERIAL_NUMBER"`                   // 普通服务商 API 证书序列号
+	WechatOrdinarySpPrivateKeyPath                string        `mapstructure:"WECHAT_ORDINARY_SP_PRIVATE_KEY_PATH"`                // 普通服务商 API 私钥文件路径
+	WechatOrdinarySpAPIV3Key                      string        `mapstructure:"WECHAT_ORDINARY_SP_API_V3_KEY"`                      // 普通服务商 APIv3 密钥
+	WechatOrdinarySpPlatformPublicKeyPath         string        `mapstructure:"WECHAT_ORDINARY_SP_PLATFORM_PUBLIC_KEY_PATH"`        // 普通服务商平台公钥路径
+	WechatOrdinarySpPlatformPublicKeyID           string        `mapstructure:"WECHAT_ORDINARY_SP_PLATFORM_PUBLIC_KEY_ID"`          // 普通服务商平台公钥ID
+	WechatOrdinaryPaymentNotifyURL                string        `mapstructure:"WECHAT_ORDINARY_PAYMENT_NOTIFY_URL"`                 // 普通服务商支付回调URL
+	WechatOrdinaryCombineNotifyURL                string        `mapstructure:"WECHAT_ORDINARY_COMBINE_NOTIFY_URL"`                 // 普通服务商合单回调URL
+	WechatOrdinaryRefundNotifyURL                 string        `mapstructure:"WECHAT_ORDINARY_REFUND_NOTIFY_URL"`                  // 普通服务商退款回调URL
+	WechatOrdinaryProfitSharingNotifyURL          string        `mapstructure:"WECHAT_ORDINARY_PROFIT_SHARING_NOTIFY_URL"`          // 普通服务商分账回调URL
+	WechatOrdinaryViolationNotifyURL              string        `mapstructure:"WECHAT_ORDINARY_VIOLATION_NOTIFY_URL"`               // 普通服务商违规通知回调URL
+	WechatOrdinaryApplymentSettlementIDIndividual string        `mapstructure:"WECHAT_ORDINARY_APPLYMENT_SETTLEMENT_ID_INDIVIDUAL"` // 普通服务商个体工商户进件结算规则ID
+	WechatOrdinaryApplymentSettlementIDEnterprise string        `mapstructure:"WECHAT_ORDINARY_APPLYMENT_SETTLEMENT_ID_ENTERPRISE"` // 普通服务商企业进件结算规则ID
+	WechatOrdinaryApplymentQualification          string        `mapstructure:"WECHAT_ORDINARY_APPLYMENT_QUALIFICATION_TYPE"`       // 普通服务商进件结算资质类型
+	WechatOrdinaryApplymentContactEmail           string        `mapstructure:"WECHAT_ORDINARY_APPLYMENT_CONTACT_EMAIL"`            // 普通服务商进件默认联系人邮箱
+	WechatOrdinaryApplymentServicePhone           string        `mapstructure:"WECHAT_ORDINARY_APPLYMENT_SERVICE_PHONE"`            // 普通服务商进件默认客服电话
 
 	// 数据加密配置
 	DataEncryptionKey string `mapstructure:"DATA_ENCRYPTION_KEY"` // 本地数据加密密钥（16/24/32字节）
@@ -200,6 +218,26 @@ func (c Config) EffectiveWechatPayMerchantTransferNotifyURL() string {
 	return strings.TrimSpace(c.WechatPayMerchantTransferNotifyURL)
 }
 
+func (c Config) EffectiveWechatOrdinaryPaymentNotifyURL() string {
+	return strings.TrimSpace(c.WechatOrdinaryPaymentNotifyURL)
+}
+
+func (c Config) EffectiveWechatOrdinaryCombineNotifyURL() string {
+	return strings.TrimSpace(c.WechatOrdinaryCombineNotifyURL)
+}
+
+func (c Config) EffectiveWechatOrdinaryRefundNotifyURL() string {
+	return strings.TrimSpace(c.WechatOrdinaryRefundNotifyURL)
+}
+
+func (c Config) EffectiveWechatOrdinaryProfitSharingNotifyURL() string {
+	return strings.TrimSpace(c.WechatOrdinaryProfitSharingNotifyURL)
+}
+
+func (c Config) EffectiveWechatOrdinaryViolationNotifyURL() string {
+	return strings.TrimSpace(c.WechatOrdinaryViolationNotifyURL)
+}
+
 func (c Config) HasWechatPayRuntimeConfig() bool {
 	return strings.TrimSpace(c.WechatPayMchID) != "" ||
 		strings.TrimSpace(c.WechatPaySerialNumber) != "" ||
@@ -218,6 +256,27 @@ func (c Config) HasWechatEcommerceRuntimeConfig() bool {
 		strings.TrimSpace(c.WechatEcommerceSpPlatformPublicKeyPath) != "" ||
 		strings.TrimSpace(c.WechatEcommerceSpPlatformPublicKeyID) != "" ||
 		strings.TrimSpace(c.WechatEcommerceSpName) != ""
+}
+
+func (c Config) HasWechatOrdinaryServiceProviderRuntimeConfig() bool {
+	return strings.TrimSpace(c.WechatOrdinarySpMchID) != "" ||
+		strings.TrimSpace(c.WechatOrdinarySpAppID) != "" ||
+		strings.TrimSpace(c.WechatOrdinarySpSerialNumber) != "" ||
+		strings.TrimSpace(c.WechatOrdinarySpPrivateKeyPath) != "" ||
+		strings.TrimSpace(c.WechatOrdinarySpAPIV3Key) != "" ||
+		strings.TrimSpace(c.WechatOrdinarySpPlatformPublicKeyPath) != "" ||
+		strings.TrimSpace(c.WechatOrdinarySpPlatformPublicKeyID) != "" ||
+		strings.TrimSpace(c.WechatOrdinarySpName) != "" ||
+		strings.TrimSpace(c.WechatOrdinaryPaymentNotifyURL) != "" ||
+		strings.TrimSpace(c.WechatOrdinaryCombineNotifyURL) != "" ||
+		strings.TrimSpace(c.WechatOrdinaryRefundNotifyURL) != "" ||
+		strings.TrimSpace(c.WechatOrdinaryProfitSharingNotifyURL) != "" ||
+		strings.TrimSpace(c.WechatOrdinaryViolationNotifyURL) != "" ||
+		strings.TrimSpace(c.WechatOrdinaryApplymentSettlementIDIndividual) != "" ||
+		strings.TrimSpace(c.WechatOrdinaryApplymentSettlementIDEnterprise) != "" ||
+		strings.TrimSpace(c.WechatOrdinaryApplymentQualification) != "" ||
+		strings.TrimSpace(c.WechatOrdinaryApplymentContactEmail) != "" ||
+		strings.TrimSpace(c.WechatOrdinaryApplymentServicePhone) != ""
 }
 
 func (c Config) ValidateWechatPayConfig() error {
@@ -311,6 +370,56 @@ func (c Config) ValidateWechatEcommerceConfig() error {
 	}
 	if err := validateRequiredAbsoluteConfigURL("WECHAT_ECOMMERCE_VIOLATION_NOTIFY_URL", c.WechatEcommerceViolationNotifyURL, "wechat ecommerce is enabled"); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (c Config) ValidateWechatOrdinaryServiceProviderConfig() error {
+	if !c.HasWechatOrdinaryServiceProviderRuntimeConfig() {
+		return nil
+	}
+
+	if c.WechatOrdinarySpMchID == "" || c.WechatOrdinarySpAppID == "" {
+		return fmt.Errorf("WECHAT_ORDINARY_SP_MCHID and WECHAT_ORDINARY_SP_APPID are required when ordinary service provider pay is enabled")
+	}
+	if strings.TrimSpace(c.WechatMiniAppID) == "" {
+		return fmt.Errorf("WECHAT_MINI_APP_ID is required when ordinary service provider pay is enabled")
+	}
+	if strings.TrimSpace(c.WechatOrdinarySpAppID) != strings.TrimSpace(c.WechatMiniAppID) {
+		return fmt.Errorf("WECHAT_ORDINARY_SP_APPID must match WECHAT_MINI_APP_ID when ordinary service provider pay uses the project mini program appid")
+	}
+
+	if c.WechatOrdinarySpSerialNumber == "" || c.WechatOrdinarySpPrivateKeyPath == "" || c.WechatOrdinarySpAPIV3Key == "" {
+		return fmt.Errorf("WECHAT_ORDINARY_SP_SERIAL_NUMBER, WECHAT_ORDINARY_SP_PRIVATE_KEY_PATH and WECHAT_ORDINARY_SP_API_V3_KEY are required when ordinary service provider pay is enabled")
+	}
+
+	if c.WechatOrdinarySpPlatformPublicKeyPath == "" || c.WechatOrdinarySpPlatformPublicKeyID == "" {
+		return fmt.Errorf("WECHAT_ORDINARY_SP_PLATFORM_PUBLIC_KEY_PATH and WECHAT_ORDINARY_SP_PLATFORM_PUBLIC_KEY_ID are required when ordinary service provider pay is enabled")
+	}
+
+	if err := validateRequiredAbsoluteConfigURL("WECHAT_ORDINARY_PAYMENT_NOTIFY_URL", c.WechatOrdinaryPaymentNotifyURL, "ordinary service provider pay is enabled"); err != nil {
+		return err
+	}
+	if err := validateRequiredAbsoluteConfigURL("WECHAT_ORDINARY_COMBINE_NOTIFY_URL", c.WechatOrdinaryCombineNotifyURL, "ordinary service provider pay is enabled"); err != nil {
+		return err
+	}
+	if err := validateRequiredAbsoluteConfigURL("WECHAT_ORDINARY_REFUND_NOTIFY_URL", c.WechatOrdinaryRefundNotifyURL, "ordinary service provider pay is enabled"); err != nil {
+		return err
+	}
+	if err := validateRequiredAbsoluteConfigURL("WECHAT_ORDINARY_PROFIT_SHARING_NOTIFY_URL", c.WechatOrdinaryProfitSharingNotifyURL, "ordinary service provider pay is enabled"); err != nil {
+		return err
+	}
+	if err := validateRequiredAbsoluteConfigURL("WECHAT_ORDINARY_VIOLATION_NOTIFY_URL", c.WechatOrdinaryViolationNotifyURL, "ordinary service provider pay is enabled"); err != nil {
+		return err
+	}
+	if strings.TrimSpace(c.WechatOrdinaryApplymentSettlementIDIndividual) == "" ||
+		strings.TrimSpace(c.WechatOrdinaryApplymentSettlementIDEnterprise) == "" ||
+		strings.TrimSpace(c.WechatOrdinaryApplymentQualification) == "" {
+		return fmt.Errorf("WECHAT_ORDINARY_APPLYMENT_SETTLEMENT_ID_INDIVIDUAL, WECHAT_ORDINARY_APPLYMENT_SETTLEMENT_ID_ENTERPRISE and WECHAT_ORDINARY_APPLYMENT_QUALIFICATION_TYPE are required when ordinary service provider applyment is enabled")
+	}
+	if strings.TrimSpace(c.WechatOrdinaryApplymentContactEmail) == "" {
+		return fmt.Errorf("WECHAT_ORDINARY_APPLYMENT_CONTACT_EMAIL is required when ordinary service provider applyment is enabled")
 	}
 
 	return nil

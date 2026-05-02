@@ -186,7 +186,7 @@ func createClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClie
 		PrepayID: pgtype.Text{String: wxResp.PrepayID, Valid: true},
 	})
 	if err != nil {
-		_, _ = store.UpdatePaymentOrderToFailed(ctx, paymentOrder.ID)
+		markClaimRecoveryPaymentOrderFailedForCleanup(ctx, store, paymentOrder.ID)
 		if closeErr := paymentClient.CloseOrder(ctx, outTradeNo); closeErr != nil {
 			log.Warn().Err(closeErr).Str("out_trade_no", outTradeNo).Msg("close claim recovery wechat order after prepay update failure")
 		}
@@ -204,6 +204,14 @@ func createClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClie
 	}
 
 	return ClaimRecoveryPaymentResult{Recovery: recovery, PaymentOrder: updatedPaymentOrder, PayParams: payParams}, nil
+}
+
+func markClaimRecoveryPaymentOrderFailedForCleanup(ctx context.Context, store db.Store, paymentOrderID int64) {
+	if _, err := store.UpdatePaymentOrderToFailed(ctx, paymentOrderID); err != nil {
+		log.Error().Err(err).
+			Int64("payment_order_id", paymentOrderID).
+			Msg("failed to mark claim recovery payment order failed after prepay update failure")
+	}
 }
 
 func recordClaimRecoveryPaymentCommandAccepted(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, prepayID string) {
