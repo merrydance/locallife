@@ -269,6 +269,10 @@
 - 如何使用微信支付公钥加密敏感字段：https://pay.weixin.qq.com/doc/v3/partner/4013059044.md
 - 如何解密回调报文和平台证书：https://pay.weixin.qq.com/doc/v3/partner/4012082320.md
 
+普通服务商模块的 `contracts`、`errorcodes` 和 endpoint path 必须以本节列出的官方 endpoint 文档为唯一结构真值；不得从平台收付通、直连支付、历史 artifact 或本地业务 DTO 反推字段名、错误码或嵌套结构。每次修改 `locallife/wechat/ordinaryserviceprovider/**` 时，必须复核对应官方页面的请求参数、应答参数、回调解密后资源结构和错误码，并用模块测试固定官方字段名，避免以“能编译/能反序列化”为准。生产代码必须在普通服务商模块内维护可执行的能力组契约映射：按能力组列出 endpoint ID、method/path、operation、请求/响应 contract 类型、状态归属和 request validation 入口；这不是官方 URL 文档目录，官方页面 URL 仍只保留在本 README、snapshot 和测试夹具中。`errorcodes` 必须按能力组和 endpoint 维护 DocumentedCodes 集合，保留官方原始错误码拼写及 canonical alias 匹配，让主业务层只调用普通服务商模块能力，不直接拼微信字段、猜错误码或依赖旧平台收付通/直连 DTO。
+
+当前普通服务商上线测试收口范围以商户进件/开户意愿确认、结算账户、商户管控与处置通知、小程序支付、合单支付、退款、分账/回退/解冻/剩余待分金额/接收方/通知为主。交易账单、资金账单、分账账单申请与下载，以及分账最大比例查询暂不作为本轮上线测试阻塞项；后续启用这些能力时，必须先按本节同样规则补齐 `contracts`、`errorcodes`、client runtime coverage、后端 API/任务入口和前端业务任务说明。
+
 #### 4.10.2 普通服务商商户管理、特约商户进件与结算账户
 
 普通服务商商户管理能力中，特约商户进件和商户开户意愿确认属于新商户准入主链路；商户被管控能力及原因查询、商户平台处置通知属于上线后的风控运营与异常恢复主链路；不活跃商户身份核实只在商户因长期无交易被管控且解脱路径要求身份核实时使用。

@@ -5,6 +5,7 @@ This directory is the normalized entrypoint for AI-facing workspace rules, promp
 ## Directory Layout
 
 - `copilot-instructions.md`: workspace-wide default instructions.
+- `AGENTS.md`: Codex directory-local entrypoint for maintaining `.github` AI assets.
 - `standards/`: canonical project-owned engineering and domain standards.
 - `instructions/`: auto-matched rules using `applyTo` patterns.
 - `agents/`: narrowly scoped custom agents kept only when a dedicated tool boundary or read-only mode is required.
@@ -21,6 +22,7 @@ Use these naming patterns for new files under `.github/`:
 - Instructions: `<scope>-<area>.instructions.md`
 - Prompts: `<scope>-<intent>.prompt.md`
 - Agents: `<workflow-or-domain>.agent.md`
+- Codex directory guides: `AGENTS.md`
 - Shared indexes: `README.md`
 
 Examples:
@@ -32,6 +34,7 @@ Examples:
 - `wechat-mini-program-audit.agent.md`
 - `backend-review-closure.prompt.md`
 - `general-review.prompt.md`
+- `AGENTS.md`
 
 ## Routing Rules
 
@@ -52,6 +55,7 @@ Practical defaults for this workspace:
 - Keep agent count minimal. In this workspace, default to prompts and instructions unless a future workflow adds real repository-backed agent files.
 - Do not use `prompts/` as a task archive. One-off planning notes and temporary implementation breakdowns should stay in session state or an existing design document unless the user explicitly asks to persist them.
 - When a prompt is worth keeping, prefer updating an existing reusable prompt over adding another near-duplicate file.
+- Keep Codex-specific `AGENTS.md` files as thin routing guides that link to this `.github` source of truth instead of duplicating standards or prompts into a separate `.codex/` tree.
 
 There is currently no repository-backed custom agent file set under `.github/agents/`; keep routing prompt-first unless a future workflow lands real agent assets.
 

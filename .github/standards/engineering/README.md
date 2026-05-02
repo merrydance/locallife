@@ -7,6 +7,7 @@
 - `locallife/`
 - `web/`
 - `weapp/`
+- `merchant_app/`
 - 与上述代码路径直接相关的 `.github/` 规则、Prompt、Workflow 与交付流程
 
 ## 目录角色
@@ -27,7 +28,7 @@
 
 - 高安全要求
 - 生产级鲁棒性
-- 跨 backend/web/weapp 的一致性治理
+- 跨 backend/web/weapp/Flutter merchant app 的一致性治理
 - 测试矩阵、发布就绪、事故复盘与规则回灌
 - 需要判断某项要求应落在 standards、instructions、prompts 还是 workflows
 
@@ -38,14 +39,14 @@
 3. `AI_PROMPT_GOVERNANCE.md`（当任务涉及 `.github/` Prompt、Instruction、Agent 或治理门禁时）
 4. `UNREACHABLE_DEPENDENCY_RISK_REGISTER.md`
 5. `INCIDENT_FEEDBACK_LOOP.md`
-6. 对应 area-specific 标准：backend、web、weapp 或 domain docs
+6. 对应 area-specific 标准：backend、web、weapp、flutter 或 domain docs
 
 仅在需要追溯治理建设顺序或阶段验收历史时，再查看 `historical/GOVERNANCE_ROADMAP.md`。
 
 ## 文档边界
 
 - 本目录只放长期有效的跨层治理标准。
-- area-specific 实现细节继续放在 `.github/standards/backend/`、`.github/standards/web/`、`.github/standards/weapp/` 与 domain 目录。
+- area-specific 实现细节继续放在 `.github/standards/backend/`、`.github/standards/web/`、`.github/standards/weapp/`、`.github/standards/flutter/` 与 domain 目录。
 - 高频执行约束应镜像到 `.github/instructions/`。
 - 高频任务入口应镜像到 `.github/prompts/`。
 - 能自动化的门禁应优先落到 `.github/workflows/` 或脚本校验中。

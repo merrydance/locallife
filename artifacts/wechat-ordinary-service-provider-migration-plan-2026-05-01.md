@@ -935,6 +935,43 @@
 
 **Review Result:** No unresolved local code review findings remain after the applyment nil-client fix, applyment bank catalog error-contract fix, ordinary-service-provider JSAPI pay params boundary fix, replace-order/payment-request error-contract fixes, Mini Program unsupported API removal, Web lint cleanup, table-comment migration and full local validation. Release remains blocked only on Card 7.2 external sandbox/live evidence.
 
+**Additional Contract Alignment Review: 2026-05-02**
+
+- Finding fixed: `locallife/wechat/ordinaryserviceprovider/errorcodes` 未覆盖 README 4.10 已实现官方 endpoint 文档中的全部错误码。已补齐并分类 `APPLYMENT_NOTEXIST`、`APPLYMENT_NOT_EXIST`、`ALREADY_EXISTS`、`NOT_FOUND`、`OPENID_MISMATCH`、`FREQENCY_LIMIT`、`FREQUENCY_LIMIT_EXCEED` 等官方返回码，保持结构化日志里的 provider code/request id，同时前端仍收到稳定中文行动指引。
+- Finding fixed: 普通服务商开户意愿确认契约曾把官方嵌套 `contact_info` 简化成字符串，且缺少 `subject_info.assist_prove_info`、`identification_info`、`addition_info.confirm_mchid_list` 等官方结构。已改为模块内自有 contract 类型，不再使用本地简化 DTO 作为微信请求结构。
+- Finding fixed: 普通服务商查询剩余待分金额官方应答字段是 `unsplit_amount`，本地 contract 曾使用 `amount`。已改为 `UnsplitAmount json:"unsplit_amount"`，调用方同步读取官方字段。
+- Finding fixed: 特约商户进件 `biz_store_info` 一旦出现，官方要求 `biz_store_name`、`biz_address_code`、`biz_store_address`、`store_entrance_pic`、`indoor_pic` 完整。已在 contract `Validate` 中 fail closed，避免再次向微信发送半截门店结构；当前业务只申报小程序场景时不再把店铺二维码伪装为线下场所门头图。
+- Finding fixed: 支付、退款、合单、分账和商户处置通知缺少官方加密通知 envelope / 解密后 payload 的 module-owned contract 类型。已补 `NotificationRequest`、`NotificationResource`、`RefundNotificationPayload`、`ProfitSharingNotificationPayload`、`MerchantViolationNotificationPayload` 等结构，并用字段名测试固定。
+- Evidence: 生成 `artifacts/wechat-ordinary-service-provider-official-contract-snapshot-2026-05-02.json`，来源为本 README 4.10 中普通服务商已实现 endpoint 的官方文档链接；自动比对后，除文件上传 multipart 字段外，本地 contracts 的 JSON 字段名覆盖官方请求、应答和通知 payload 叶子字段。
+- Guidance updated: `.github/standards/domains/wechat-payment/README.md` 明确普通服务商模块 `contracts/errorcodes/endpoint path` 必须以官方 endpoint 文档为唯一结构真值，禁止从平台收付通、直连支付、历史 artifact 或本地业务 DTO 反推字段。
+
+**Additional Contract Anti-Drift Review: 2026-05-02**
+
+- Finding fixed: 普通服务商 `errorcodes` 只有通用 `Classify`，没有像上层 `wechat/errorcodes` 一样把每个官方 endpoint 的错误码表固化为独立 code set。已新增 `DocumentedCodeSet`、官方原始错误码常量、canonical alias（`NOAUTH`/`NO_AUTH`、`RULELIMIT`/`RULE_LIMIT`、`SYSTEMERROR`/`SYSTEM_ERROR`、`FREQENCY_LIMIT`/`FREQUENCY_LIMIT`、`APPLYMENT_NOTEXIST`/`APPLYMENT_NOT_EXIST`）以及已实现 endpoint 的专用 `*DocumentedCodes` 集合；测试逐项断言 README 4.10 snapshot 中的官方错误码列表。
+- Finding corrected after review: endpoint 级官方 URL 文档目录不应进入生产代码，但普通服务商模块必须有可执行的能力组契约映射。已移除生产 `contracts.OfficialEndpoints` / `errorcodes.OfficialEndpointCodeSets` 文档注册表，改为在 `contracts.CapabilityGroups` / `EndpointContracts` 中按能力组固化 endpoint ID、method/path、operation、请求/响应 contract 类型、状态归属和 request validation 入口；`errorcodes.CapabilityCodeSetGroups` / `EndpointCodeSets` 按能力组固化每个有错误码表接口的 DocumentedCodes。官方标题/URL 仍只在 README、snapshot 和 `_test.go` 夹具中用于反漂移验证。
+- Finding fixed: 文件上传是 multipart 官方请求结构，之前只有响应 `MediaUploadResponse`，registry 无法引用请求 contract。已补 `MediaUploadRequestMultipart` / `MediaUploadMeta`，明确 `file` 和 `meta.filename` / `meta.sha256` 的官方结构。
+- Finding fixed: 不活跃商户身份核实创建请求曾把本地 `business_code` 发给微信；官方文档该请求只包含 `sub_mchid`。已将 `BusinessCode` 标记为 `json:"-"`，保留本地关联值但禁止进入微信请求体。
+- Finding fixed: 合单查询官方响应包含 `combine_payer_info` 和 `scene_info`，本地 response 缺少这两个官方结构。已补入 `CombineQueryResponse`，避免后续业务从 map 或旧 ecommerce DTO 反推字段。
+- Finding fixed: 退款申请官方请求包含可选 `funds_account`，旧测试用“业务当前不用资金账户”为理由禁止 contract 暴露该字段。已按官方文档恢复 `RefundCreateRequest.FundsAccount json:"funds_account,omitempty"`，业务层可以继续不传，但 contract 不再删减官方结构。
+- Evidence: `contracts` 包测试确认 `artifacts/wechat-ordinary-service-provider-official-contract-snapshot-2026-05-02.json` 中 48 个 endpoint 标题与测试夹具完全一致，且本地 request/response struct JSON 字段覆盖官方字段；生产包暴露的是可执行 contract/errorcode 映射和 validation，不暴露官方 URL 文档目录。
+
+**Additional Validation Run: 2026-05-02**
+
+- `/usr/local/go/bin/go test ./wechat/ordinaryserviceprovider/... -count=1`
+- `/usr/local/go/bin/go test ./logic ./api -run 'Applyment|Inactive|Violation|PaymentOrder|ProfitSharing|MerchantBindBank' -count=1`
+- `contracts` anti-drift tests: snapshot endpoint count 48, test-only binding count 48, missing `[]`, extra `[]`；生产 `contracts` 包包含可执行能力组 contract map，不包含官方 URL 文档目录。
+- Previous focused regression retained: `go test ./wechat/ordinaryserviceprovider/... ./logic ./api -run 'TestClassify|TestAccountWillingnessSubmitRequestJSONUsesOfficialNestedStructure|TestProfitSharingRemainingAmountResponseUsesOfficialUnsplitAmountField|TestApplymentSubmitRequestValidatesOfficialStoreSceneFields|TestClientRoutesApplymentSettlementAndMerchantManagementEndpoints|TestBuildOrdinaryServiceProviderApplymentRequestIncludesDiscountActivities|TestSubmitMerchantApplyment|TestApplyment|TestMerchantBindBank' -count=1`
+
+**Residual Risk:** 本次为本地 contract/errorcode 对齐和字段名覆盖验证；仍未替代 Card 7.2 的真实微信 sandbox/live 请求、回调投递和 provider request id 证据。
+
+**Additional Runtime Contract Wiring Review: 2026-05-02**
+
+- Scope decision: 当前上线测试收口不实现交易账单、资金账单、分账账单申请/下载和分账最大比例查询；这些官方文档继续保留在 README 4.10 作为后续能力来源，但不计入本轮 live test 前阻塞项。
+- Finding fixed: 普通服务商生产 client 方法此前仍有局部手写 validation，未统一走 `contracts.EndpointContracts` 中的 endpoint request validator。已将已实现 client endpoint 的请求校验改为 `contracts.ValidateEndpointRequest(endpointID, req)` 入口，主业务层继续只调用普通服务商模块能力方法。
+- Finding fixed: 普通服务商 provider error 只有 operation，没有 endpoint/capability/code-set 元数据。已在 `ProviderError` 中补 `EndpointID`、`CapabilityID`、`DocumentedCodeSet` 和 `DocumentedProviderCode`，SDK APIError、local response decode error、validation error、媒体上传 error 都携带 endpoint-aware 诊断；日志边界会输出 endpoint/capability、官方错误码表和 provider code 是否属于该 endpoint 的 DocumentedCodes。
+- Finding fixed: 缺少“契约里有但无运行时入口”的防线。已新增 `client_capability_alignment_test.go`，要求每个已映射 `EndpointContract` 都有 client method、local JSAPI pay params 生成器或 callback route owner；callback endpoint 明确归属到 `ParseNotification + api` 回调处理路径。
+- Evidence: 新增红绿测试覆盖 validation failure 和 SDK provider failure 的 endpoint/capability/error-code-set 元数据；`UploadImage` 也按 `EndpointMerchantMediaUpload` 进入 endpoint-aware validation/error path。
+
 ## 7. Recommended Execution Order
 
 1. Phase 0: 文档、SDK 策略、review 闭环。
