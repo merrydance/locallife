@@ -9,6 +9,7 @@ import {
 export type MerchantApplymentStage =
   | 'submit_required'
   | 'action_required'
+  | 'awaiting_confirmation'
   | 'reviewing'
   | 'rejected'
   | 'opened'
@@ -18,6 +19,7 @@ export type MerchantApplymentTaskType =
   | 'sign_agreement'
   | 'legal_validation'
   | 'bank_transfer_validation'
+  | 'account_confirmation'
   | 'wait_review'
   | 'resubmit_after_reject'
   | 'view_settlement'
@@ -99,6 +101,10 @@ function resolveCurrentStage(statusView: MerchantApplymentStatusView): MerchantA
     return 'rejected'
   }
 
+  if (statusView.needsConfirmation) {
+    return 'awaiting_confirmation'
+  }
+
   if (statusView.needsAccountValidation || statusView.needsSign) {
     return 'action_required'
   }
@@ -133,8 +139,8 @@ function buildRequestedActionTask(statusView: MerchantApplymentStatusView, taskT
       return {
         type: 'legal_validation',
         title: '先完成法人验证',
-        description: '请使用法人微信扫码完成验证；完成后回到开户首页查看最新状态。',
-        actionText: '去完成法人验证',
+        description: '保存二维码后用法人微信扫一扫，并按微信提示完成。',
+        actionText: '查看二维码',
         actionIntent: 'navigate',
         actionPath: buildActionTaskPath('legal_validation')
       }
@@ -142,7 +148,7 @@ function buildRequestedActionTask(statusView: MerchantApplymentStatusView, taskT
       return {
         type: 'bank_transfer_validation',
         title: '先完成账户验证',
-        description: '请按微信支付提供的汇款信息完成验证，完成后回到开户首页刷新状态。',
+        description: '请按微信支付提供的信息完成验证。',
         actionText: '去完成账户验证',
         actionIntent: 'navigate',
         actionPath: buildActionTaskPath('bank_transfer_validation')
@@ -150,9 +156,9 @@ function buildRequestedActionTask(statusView: MerchantApplymentStatusView, taskT
     case 'sign_agreement':
       return {
         type: 'sign_agreement',
-        title: '先完成签约',
-        description: '请使用超级管理员微信扫码完成签约确认，完成后回到开户首页查看状态。',
-        actionText: '去完成签约',
+        title: '完成微信待办',
+        description: '保存二维码后用微信扫一扫，从相册选择二维码并按微信提示完成。',
+        actionText: '查看二维码',
         actionIntent: 'navigate',
         actionPath: buildActionTaskPath('sign_agreement')
       }
@@ -170,7 +176,7 @@ function buildCurrentTask(
     return {
       type: 'none',
       title: '收款能力已开通',
-      description: '收付通已开通，后续开户状态与微信待办统一在进件页查看。',
+      description: '微信支付已开通。',
       actionText: '返回开户首页',
       actionIntent: 'navigate',
       actionPath: APPLYMENT_HOME_PAGE_PATH
@@ -194,10 +200,21 @@ function buildCurrentTask(
     return {
       type: 'submit_material',
       title: '先提交开户资料',
-      description: '填写结算账户资料后提交；仅当联系人不是法人时，再补充超级管理员资料。',
+      description: '填写结算账户资料后提交开户申请。',
       actionText: statusView.submitActionLabel,
       actionIntent: 'navigate',
       actionPath: SUBMIT_PAGE_PATH
+    }
+  }
+
+  if (currentStage === 'awaiting_confirmation') {
+    return {
+      type: 'account_confirmation',
+      title: '完成微信确认',
+      description: statusView.actionHint || '完成微信确认后回到本页，系统会自动刷新。',
+      actionText: '',
+      actionIntent: 'none',
+      actionPath: ''
     }
   }
 
@@ -210,8 +227,8 @@ function buildCurrentTask(
     return {
       type: 'legal_validation',
       title: '先完成法人验证',
-      description: '请使用法人微信扫码完成验证；完成后回到开户首页查看最新状态。',
-      actionText: '去完成法人验证',
+      description: '保存二维码后用法人微信扫一扫，并按微信提示完成。',
+      actionText: '查看二维码',
       actionIntent: 'navigate',
       actionPath: buildActionTaskPath('legal_validation')
     }
@@ -221,7 +238,7 @@ function buildCurrentTask(
     return {
       type: 'bank_transfer_validation',
       title: '先完成账户验证',
-      description: '请按微信支付提供的汇款信息完成验证，完成后回到开户首页刷新状态。',
+      description: '请按微信支付提供的信息完成验证。',
       actionText: '去完成账户验证',
       actionIntent: 'navigate',
       actionPath: buildActionTaskPath('bank_transfer_validation')
@@ -231,9 +248,9 @@ function buildCurrentTask(
   if (statusView.needsSign) {
     return {
       type: 'sign_agreement',
-      title: '先完成签约',
-      description: '请使用超级管理员微信扫码完成签约确认，完成后回到开户首页查看状态。',
-      actionText: '去完成签约',
+      title: '完成微信待办',
+      description: '保存二维码后用微信扫一扫，从相册选择二维码并按微信提示完成。',
+      actionText: '查看二维码',
       actionIntent: 'navigate',
       actionPath: buildActionTaskPath('sign_agreement')
     }
@@ -242,7 +259,7 @@ function buildCurrentTask(
   return {
     type: 'wait_review',
     title: '等待微信审核',
-    description: statusView.statusDesc || '微信支付正在审核进件资料，审核期间无需重复提交。',
+    description: statusView.statusDesc || '微信支付正在审核开户资料，审核期间无需重复提交。',
     actionText: '刷新最新状态',
     actionIntent: 'refresh',
     actionPath: ''
@@ -256,7 +273,7 @@ function buildSecondaryTasks(
 ): MerchantApplymentWorkflowSecondaryTask[] {
   const tasks: MerchantApplymentWorkflowSecondaryTask[] = []
 
-  if (statusView.hasApplyment && currentStage !== 'opened') {
+  if (statusView.hasApplyment && currentStage !== 'opened' && currentStage !== 'action_required' && currentStage !== 'awaiting_confirmation') {
     tasks.push({
       type: 'refresh_status',
       label: '刷新开户状态',
@@ -268,7 +285,7 @@ function buildSecondaryTasks(
   if (statusView.needsSign && currentTask.type !== 'sign_agreement') {
     tasks.push({
       type: 'sign_agreement',
-      label: '查看签约待办',
+      label: '查看微信待办',
       actionIntent: 'navigate',
       actionPath: buildActionTaskPath('sign_agreement')
     })
@@ -321,12 +338,14 @@ function buildStageDescription(statusView: MerchantApplymentStatusView, currentT
       return '主体审核通过后，先补齐开户资料，再进入微信处理阶段。'
     case 'action_required':
       return currentTask.description
+    case 'awaiting_confirmation':
+      return currentTask.description
     case 'reviewing':
       return '微信支付正在审核资料；此阶段只保留状态回查，不再重复提交。'
     case 'rejected':
       return currentTask.description
     case 'opened':
-      return '开户已完成，首页只保留开通摘要和后续资金账户入口。'
+      return '微信支付已开通。'
     default:
       return statusView.statusDesc
   }
@@ -340,10 +359,6 @@ function buildStatusItems(statusView: MerchantApplymentStatusView, currentStage:
 
   if (statusView.signStateText) {
     items.push({ label: '签约状态', value: statusView.signStateText })
-  }
-
-  if (statusView.subMchId !== '-') {
-    items.push({ label: '子商户号', value: statusView.subMchId })
   }
 
   if (currentStage === 'rejected' && statusView.showRejectReason) {
@@ -365,7 +380,7 @@ export function buildMerchantApplymentWorkflowView(
     ? 'completed'
     : currentStage === 'rejected'
       ? 'failed'
-      : currentStage === 'action_required'
+      : currentStage === 'action_required' || currentStage === 'awaiting_confirmation'
         ? 'action_required'
         : currentStage === 'reviewing'
           ? 'processing'
@@ -374,6 +389,7 @@ export function buildMerchantApplymentWorkflowView(
   const stageTitleMap: Record<MerchantApplymentStage, string> = {
     submit_required: '资料提交阶段',
     action_required: '微信待办阶段',
+    awaiting_confirmation: '微信确认阶段',
     reviewing: '审核结果阶段',
     rejected: '审核结果阶段',
     opened: '开通完成阶段'
@@ -381,7 +397,7 @@ export function buildMerchantApplymentWorkflowView(
 
   const headline = currentTask.title
   const summary = currentStage === 'opened'
-    ? '收款能力已开通，后续状态统一在开户首页承接。'
+    ? '收款能力已开通。'
     : currentStage === 'reviewing'
       ? '资料已提交，当前以微信审核结果为准。'
       : currentTask.description
@@ -393,7 +409,7 @@ export function buildMerchantApplymentWorkflowView(
     currentTask,
     secondaryTasks,
     resultState,
-    reentryPolicy: currentStage === 'action_required' ? 'force_refresh_on_show' : 'refresh_within_window',
+    reentryPolicy: currentStage === 'action_required' || currentStage === 'awaiting_confirmation' ? 'force_refresh_on_show' : 'refresh_within_window',
     headline,
     summary,
     stageTitle: stageTitleMap[currentStage],
@@ -409,9 +425,9 @@ export function buildMerchantApplymentWorkflowView(
         ? statusView.legalValidationURL
         : '',
     currentTaskQRCodeHint: currentTask.type === 'sign_agreement'
-      ? '保存二维码后，请退出小程序，打开微信扫一扫，从相册选择该二维码，并按微信提示完成签约。'
+      ? '保存后用微信扫一扫，从相册选择二维码并按微信提示完成。'
       : currentTask.type === 'legal_validation'
-        ? '保存二维码后，请退出小程序，打开微信扫一扫，从相册选择该二维码，并按微信提示完成法人验证。'
+        ? '保存后用法人微信扫一扫，从相册选择二维码并按微信提示完成。'
         : ''
   }
 }

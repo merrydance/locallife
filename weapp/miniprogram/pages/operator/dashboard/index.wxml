@@ -2,7 +2,7 @@
 
 <view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <!-- Loading (Skeleton) -->
-  <view wx:if="{{initialLoading}}" class="skeleton-container animate-fade-in">
+  <view wx:if="{{initialLoading}}" class="page-content skeleton-container animate-fade-in">
     <view class="skeleton-header-card"></view>
     <view class="stats-skeleton">
       <card-skeleton wx:for="{{4}}" wx:key="index" t-class="stat-skeleton-item" />
@@ -10,134 +10,135 @@
     <list-skeleton row="3" t-class="section-skeleton" />
   </view>
 
-  <view wx:elif="{{error}}" class="content animate-fade-in">
-      <page-state icon="info-circle" description="{{error}}" actionText="{{errorCanRetry ? '重新加载' : ''}}" bind:action="onRetry" />
+  <view wx:elif="{{error}}" class="page-content animate-fade-in">
+    <page-state icon="info-circle" description="{{error}}" actionText="{{errorCanRetry ? '重新加载' : ''}}" bind:action="onRetry" />
   </view>
 
-  <view wx:else class="content animate-fade-in">
-      <operator-finance-overview
-        regions="{{regions}}"
-        selectedRegionIdx="{{selectedRegionIdx}}"
-        totalIncomeDisplay="{{finance.total_income_display}}"
-        todayIncomeDisplay="{{stats.today_income_display}}"
-        currentMonthIncomeDisplay="{{finance.current_month_income_display}}"
-        bind:regiontap="onOpenRegionPicker"
-        bind:financetap="onOpenFinanceOverview"
-      />
+  <view wx:else class="page-content animate-fade-in">
+    <operator-finance-overview
+      regions="{{regions}}"
+      selectedRegionIdx="{{selectedRegionIdx}}"
+      totalIncomeDisplay="{{finance.total_income_display}}"
+      todayIncomeDisplay="{{stats.today_income_display}}"
+      currentMonthIncomeDisplay="{{finance.current_month_income_display}}"
+      bind:regiontap="onOpenRegionPicker"
+      bind:financetap="onOpenFinanceOverview"
+    />
 
-      <!-- 2. 数据维度切换与核心指标 -->
-      <view class="data-section">
-        <view class="section-header">
-          <view class="section-title">运营概览</view>
-          <navigator url="/pages/operator/analytics/index" class="section-link">查看分析</navigator>
-          <t-tabs t-class="dimension-tabs" value="{{timeDimension}}" bindchange="onTimeDimensionChange" theme="tag" space-evenly="{{false}}">
-            <t-tab-panel label="今日" value="day" />
-            <t-tab-panel label="近7天" value="week" />
-            <t-tab-panel label="近30天" value="month" />
-          </t-tabs>
-        </view>
-
-        <view class="stats-grid">
-          <view class="stat-item">
-            <text class="stat-label">GMV (元)</text>
-            <text class="stat-value">{{timeDimension === 'day' ? stats.today_gmv_display : stats.total_gmv_display}}</text>
-          </view>
-          <view class="stat-item">
-            <text class="stat-label">订单量 (单)</text>
-            <text class="stat-value">{{timeDimension === 'day' ? stats.today_orders : stats.total_orders}}</text>
-          </view>
-          <view class="stat-item">
-            <text class="stat-label">活跃商户</text>
-            <text class="stat-value">{{stats.active_merchants}}</text>
-          </view>
-          <view class="stat-item">
-            <text class="stat-label">活跃骑手</text>
-            <text class="stat-value">{{stats.active_riders}}</text>
-          </view>
-        </view>
+    <!-- 2. 数据维度切换与核心指标 -->
+    <view class="data-section">
+      <view class="section-header section-header--overview">
+        <view class="section-title">运营概览</view>
+        <navigator url="/pages/operator/analytics/index" class="section-link">查看分析</navigator>
+      </view>
+      <view class="dimension-tabs-row">
+        <t-tabs t-class="dimension-tabs" value="{{timeDimension}}" bindchange="onTimeDimensionChange" theme="tag" space-evenly="{{false}}">
+          <t-tab-panel label="今日" value="day" />
+          <t-tab-panel label="近7天" value="week" />
+          <t-tab-panel label="近30天" value="month" />
+        </t-tabs>
       </view>
 
-      <operator-notification-summary
-        unreadCount="{{notificationSummary.unreadCount}}"
-        latestTitle="{{notificationSummary.latestTitle}}"
-        latestSummary="{{notificationSummary.latestSummary}}"
-        latestCreatedAt="{{notificationSummary.latestCreatedAt}}"
-        bind:tap="onOpenNotifications"
-      />
-
-      <!-- 4. 快捷功能矩阵 (Premium Icons) -->
-      <view class="menu-section">
-        <view class="section-header">
-          <view class="section-title">业务工具</view>
+      <view class="stats-grid">
+        <view class="stat-item">
+          <text class="stat-label">GMV (元)</text>
+          <text class="stat-value">{{timeDimension === 'day' ? stats.today_gmv_display : stats.total_gmv_display}}</text>
         </view>
-        <view class="menu-grid">
-          <navigator url="/pages/operator/analytics/index" class="menu-item">
-            <view class="menu-icon-bg color-primary">
-              <t-icon name="chart-bar" size="48rpx" />
-            </view>
-            <text>数据分析</text>
-          </navigator>
-          <navigator url="/pages/operator/merchants/index?region_id={{selectedRegionId}}" class="menu-item">
-            <view class="menu-icon-bg color-info">
-              <t-icon name="shop" size="48rpx" />
-            </view>
-            <text>商户档案</text>
-          </navigator>
-          <navigator url="/pages/operator/riders/index?region_id={{selectedRegionId}}" class="menu-item">
-            <view class="menu-icon-bg color-warning">
-              <t-icon name="user-circle" size="48rpx" />
-            </view>
-            <text>骑手档案</text>
-          </navigator>
-          <navigator url="/pages/operator/region/index" class="menu-item">
-            <view class="menu-icon-bg color-error">
-              <t-icon name="location" size="48rpx" />
-            </view>
-            <text>区域配置</text>
-          </navigator>
-          <navigator url="/pages/operator/safety/report/index" class="menu-item">
-            <view class="menu-icon-bg color-danger">
-              <t-icon name="error-circle" size="48rpx" />
-            </view>
-            <text>食安熔断</text>
-          </navigator>
-          <navigator url="/pages/operator/finance/withdraw/index" class="menu-item">
-            <view class="menu-icon-bg color-success">
-              <t-icon name="chart-bar" size="48rpx" />
-            </view>
-            <text>财务概览</text>
-          </navigator>
-          <navigator url="/pages/operator/notifications/index" class="menu-item">
-            <view class="menu-icon-bg color-warning">
-              <t-icon name="notification" size="48rpx" />
-            </view>
-            <text>待接单提醒</text>
-          </navigator>
-          <navigator url="/pages/operator/rules/index?region_id={{selectedRegionId}}&region_name={{regions[selectedRegionIdx].name}}" class="menu-item">
-            <view class="menu-icon-bg color-default">
-              <t-icon name="setting" size="48rpx" />
-            </view>
-            <text>规则配置</text>
-          </navigator>
-          <navigator url="/pages/operator/region-expansion/index" class="menu-item">
-            <view class="menu-icon-bg color-primary">
-              <t-icon name="location" size="48rpx" />
-            </view>
-            <text>申请更多区域</text>
-          </navigator>
+        <view class="stat-item">
+          <text class="stat-label">订单量 (单)</text>
+          <text class="stat-value">{{timeDimension === 'day' ? stats.today_orders : stats.total_orders}}</text>
+        </view>
+        <view class="stat-item">
+          <text class="stat-label">活跃商户</text>
+          <text class="stat-value">{{stats.active_merchants}}</text>
+        </view>
+        <view class="stat-item">
+          <text class="stat-label">活跃骑手</text>
+          <text class="stat-value">{{stats.active_riders}}</text>
         </view>
       </view>
-      
-      <!-- 5. 榜单统计 (Comparison) -->
-      <operator-ranking-panel
-        rankingType="{{rankingType}}"
-        timeLabel="{{timeDimension === 'day' ? '今日排行' : (timeDimension === 'week' ? '本周排行' : '本月排行')}}"
-        merchantRankings="{{merchantRankings}}"
-        riderRankings="{{riderRankings}}"
-        bind:typechange="onRankingTypeChange"
-      />
+    </view>
 
-      <view class="safe-bottom"></view>
+    <operator-notification-summary
+      unreadCount="{{notificationSummary.unreadCount}}"
+      latestTitle="{{notificationSummary.latestTitle}}"
+      latestSummary="{{notificationSummary.latestSummary}}"
+      latestCreatedAt="{{notificationSummary.latestCreatedAt}}"
+      bind:tap="onOpenNotifications"
+    />
+
+    <!-- 4. 快捷功能矩阵 -->
+    <view class="menu-section">
+      <view class="section-header">
+        <view class="section-title">业务工具</view>
+      </view>
+      <view class="menu-grid">
+        <navigator url="/pages/operator/analytics/index" class="menu-item">
+          <view class="menu-icon-bg color-primary">
+            <t-icon name="chart-bar" size="48rpx" />
+          </view>
+          <text>数据分析</text>
+        </navigator>
+        <navigator url="/pages/operator/merchants/index?region_id={{selectedRegionId}}" class="menu-item">
+          <view class="menu-icon-bg color-info">
+            <t-icon name="shop" size="48rpx" />
+          </view>
+          <text>商户档案</text>
+        </navigator>
+        <navigator url="/pages/operator/riders/index?region_id={{selectedRegionId}}" class="menu-item">
+          <view class="menu-icon-bg color-warning">
+            <t-icon name="user-circle" size="48rpx" />
+          </view>
+          <text>骑手档案</text>
+        </navigator>
+        <navigator url="/pages/operator/region/index" class="menu-item">
+          <view class="menu-icon-bg color-error">
+            <t-icon name="location" size="48rpx" />
+          </view>
+          <text>区域配置</text>
+        </navigator>
+        <navigator url="/pages/operator/safety/report/index" class="menu-item">
+          <view class="menu-icon-bg color-danger">
+            <t-icon name="error-circle" size="48rpx" />
+          </view>
+          <text>食安熔断</text>
+        </navigator>
+        <navigator url="/pages/operator/finance/withdraw/index" class="menu-item">
+          <view class="menu-icon-bg color-success">
+            <t-icon name="chart-bar" size="48rpx" />
+          </view>
+          <text>财务概览</text>
+        </navigator>
+        <navigator url="/pages/operator/notifications/index" class="menu-item">
+          <view class="menu-icon-bg color-warning">
+            <t-icon name="notification" size="48rpx" />
+          </view>
+          <text>待接单提醒</text>
+        </navigator>
+        <navigator url="/pages/operator/rules/index?region_id={{selectedRegionId}}&region_name={{regions[selectedRegionIdx].name}}" class="menu-item">
+          <view class="menu-icon-bg color-default">
+            <t-icon name="setting" size="48rpx" />
+          </view>
+          <text>规则配置</text>
+        </navigator>
+        <navigator url="/pages/operator/region-expansion/index" class="menu-item">
+          <view class="menu-icon-bg color-primary">
+            <t-icon name="location" size="48rpx" />
+          </view>
+          <text>申请更多区域</text>
+        </navigator>
+      </view>
+    </view>
+
+    <!-- 5. 榜单统计 -->
+    <operator-ranking-panel
+      rankingType="{{rankingType}}"
+      timeLabel="{{timeDimension === 'day' ? '今日排行' : (timeDimension === 'week' ? '本周排行' : '本月排行')}}"
+      merchantRankings="{{merchantRankings}}"
+      riderRankings="{{riderRankings}}"
+      bind:typechange="onRankingTypeChange"
+    />
+
   </view>
 
   <t-picker

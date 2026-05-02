@@ -3,12 +3,12 @@
     <view class="finance-header">
       <view class="balance-title">收入概览</view>
       <view wx:if="{{regions.length > 1}}" class="region-pill" bind:tap="onRegionTap">
-        <t-icon name="map" size="26rpx" color="rgba(255,255,255,0.85)" />
+        <t-icon name="map" size="26rpx" color="var(--td-brand-color)" />
         <text class="region-pill-name">{{regions[selectedRegionIdx].name}}</text>
-        <t-icon name="chevron-down" size="22rpx" color="rgba(255,255,255,0.85)" />
+        <t-icon name="chevron-down" size="22rpx" color="var(--td-brand-color)" />
       </view>
       <view wx:elif="{{regions.length === 1}}" class="region-pill region-pill--static">
-        <t-icon name="map" size="26rpx" color="rgba(255,255,255,0.8)" />
+        <t-icon name="map" size="26rpx" color="var(--td-text-color-secondary)" />
         <text class="region-pill-name">{{regions[0].name}}</text>
       </view>
     </view>

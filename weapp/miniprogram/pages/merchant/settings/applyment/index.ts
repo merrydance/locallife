@@ -280,7 +280,7 @@ Page({
       }
     } catch (error: unknown) {
       logger.error('Load merchant applyment page failed', error, 'merchant-applyment-page')
-      const message = getErrorMessage(error, '进件状态加载失败，请稍后重试')
+      const message = getErrorMessage(error, '开户状态加载失败，请稍后重试')
 
       if (!hasTrustedData) {
         this.setData({

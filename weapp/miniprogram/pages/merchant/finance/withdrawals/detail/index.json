@@ -4,15 +4,7 @@
     "t-button": "tdesign-miniprogram/button/button",
     "t-cell": "tdesign-miniprogram/cell/cell",
     "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
-    "t-dialog": "tdesign-miniprogram/dialog/dialog",
-    "t-empty": "tdesign-miniprogram/empty/empty",
-    "t-input": "tdesign-miniprogram/input/input",
-    "t-loading": "tdesign-miniprogram/loading/loading",
-    "t-radio-group": "tdesign-miniprogram/radio-group/radio-group",
-    "t-textarea": "tdesign-miniprogram/textarea/textarea",
-    "t-upload": "tdesign-miniprogram/upload/upload",
-    "t-tag": "tdesign-miniprogram/tag/tag"
+    "t-empty": "tdesign-miniprogram/empty/empty"
   },
-  "navigationStyle": "custom",
-  "enablePullDownRefresh": true
+  "navigationStyle": "custom"
 }

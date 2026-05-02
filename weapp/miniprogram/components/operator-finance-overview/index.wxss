@@ -1,118 +1,114 @@
 .finance-section {
-  padding: 24rpx 0;
+  display: block;
 }
 
 .finance-card {
-  background: linear-gradient(135deg, #ff6b58 0%, #ff8d7f 100%);
-  border-radius: 32rpx;
-  padding: 40rpx;
-  color: #ffffff;
-  box-shadow: 0 16rpx 32rpx rgba(255, 107, 88, 0.3);
-  position: relative;
-  overflow: hidden;
-}
-
-.finance-card::after {
-  content: '';
-  position: absolute;
-  top: -50rpx;
-  right: -50rpx;
-  width: 200rpx;
-  height: 200rpx;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 100rpx;
-  pointer-events: none;
+  padding: var(--spacer-lg);
+  border: 1rpx solid var(--td-brand-color-2);
+  border-radius: var(--radius-card);
+  background: var(--td-bg-color-container);
+  box-sizing: border-box;
 }
 
 .finance-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 12rpx;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+  margin-bottom: var(--spacer-sm);
 }
 
 .balance-title {
   font-size: var(--font-size-sm);
-  opacity: 0.9;
+  color: var(--td-text-color-secondary);
 }
 
 .region-pill {
   display: flex;
   flex-direction: row;
   align-items: center;
+  max-width: 260rpx;
+  padding: 8rpx 18rpx;
   gap: 6rpx;
-  background: rgba(255, 255, 255, 0.18);
-  border-radius: 100rpx;
-  padding: 6rpx 18rpx;
-  max-width: 240rpx;
+  border-radius: var(--radius-round);
+  background: var(--td-brand-color-1);
+  color: var(--td-brand-color);
+  box-sizing: border-box;
 }
 
 .region-pill--static {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--td-bg-color-secondarycontainer);
+  color: var(--td-text-color-secondary);
 }
 
 .region-pill-name {
-  font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.9);
+  max-width: 168rpx;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 150rpx;
+  font-size: var(--font-size-xs);
+  color: currentColor;
 }
 
 .balance-value {
-  font-size: 72rpx;
-  font-weight: bold;
-  margin-bottom: 40rpx;
+  margin-bottom: var(--spacer-lg);
+  font-size: 64rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
   font-family: 'DIN Alternate', sans-serif;
+  line-height: 1.1;
 }
 
 .income-row {
   display: flex;
   align-items: center;
-  background: rgba(0, 0, 0, 0.05);
-  padding: 24rpx;
-  border-radius: 20rpx;
+  padding: var(--spacer-md);
+  border-radius: var(--radius-lg);
+  background: var(--td-bg-color-secondarycontainer);
 }
 
 .income-item {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .income-label {
+  margin-bottom: var(--spacer-xxs);
   font-size: var(--font-size-xxs);
-  opacity: 0.8;
-  margin-bottom: 4rpx;
+  color: var(--td-text-color-secondary);
 }
 
 .income-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--font-size-base);
   font-weight: 600;
+  color: var(--td-text-color-primary);
 }
 
 .divider-v {
   width: 1rpx;
   height: 40rpx;
-  background: rgba(255, 255, 255, 0.2);
-  margin: 0 32rpx;
+  margin: 0 var(--spacer-md);
+  background: var(--td-text-color-disabled);
+  opacity: 0.35;
 }
 
 .finance-actions {
   display: flex;
-  gap: 16rpx;
-  margin-top: 20rpx;
+  margin-top: var(--spacer-md);
 }
 
 .finance-link-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 12rpx 24rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.18);
-  border: 1rpx solid rgba(255, 255, 255, 0.3);
-  color: #fff;
-  font-size: 24rpx;
+  padding: 10rpx 20rpx;
+  border-radius: var(--radius-round);
+  background: var(--td-brand-color-1);
+  color: var(--td-brand-color);
+  font-size: var(--font-size-xs);
 }

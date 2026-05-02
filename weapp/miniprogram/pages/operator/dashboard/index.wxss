@@ -1,2 +1,1 @@
-@import "../../../styles/operator-dashboard-sections.wxss";
 @import "../../../styles/operator-dashboard-index.wxss";

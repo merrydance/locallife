@@ -1,12 +1,4 @@
 import {
-  getMerchantAccountBalance,
-  type MerchantAccountBalanceResponse
-} from '../../../api/merchant-finance'
-import {
-  buildAccountBalanceView,
-  getMerchantFinanceUserMessage
-} from '../../../services/merchant-finance-workflow'
-import {
   ensureMerchantConsoleAccess,
   getMerchantConsoleAccessErrorMessage,
   isMerchantConsoleAccessDenied,
@@ -16,20 +8,9 @@ import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 
 const FINANCE_AUTO_REFRESH_WINDOW_MS = 60 * 1000
-const WITHDRAW_CREATE_PAGE_PATH = '/pages/merchant/finance/withdrawals/create/index'
-const WITHDRAWALS_PAGE_PATH = '/pages/merchant/finance/withdrawals/index'
 const BILLS_PAGE_PATH = '/pages/merchant/finance/bills/index'
 const SETTLEMENTS_PAGE_PATH = '/pages/merchant/finance/settlements/index'
 const SETTLEMENT_ACCOUNT_PAGE_PATH = '/pages/merchant/settings/applyment/settlement-account/index'
-
-const EMPTY_BALANCE: MerchantAccountBalanceResponse = {
-  sub_mch_id: '',
-  available_amount: 0,
-  pending_amount: 0,
-  withdrawable_amount: 0,
-  account_status: 'not_configured',
-  status_desc: '尚未开通收付通账户'
-}
 
 interface FinanceEntryView {
   id: string
@@ -40,12 +21,6 @@ interface FinanceEntryView {
 
 function buildFinanceEntries(): FinanceEntryView[] {
   return [
-    {
-      id: 'withdrawals',
-      title: '提现记录',
-      icon: 'money',
-      path: WITHDRAWALS_PAGE_PATH
-    },
     {
       id: 'bills',
       title: '订单流水',
@@ -83,7 +58,6 @@ Page({
     refreshErrorMessage: '',
     loadingFinance: false,
     lastLoadedAt: 0,
-    balanceView: buildAccountBalanceView(EMPTY_BALANCE),
     entries: buildFinanceEntries()
   },
 
@@ -170,9 +144,6 @@ Page({
     })
 
     try {
-      const balance = await getMerchantAccountBalance()
-      const balanceView = buildAccountBalanceView(balance)
-
       const loadedAt = Date.now()
       this.setData({
         initialLoading: false,
@@ -181,12 +152,11 @@ Page({
         refreshErrorMessage: '',
         loadingFinance: false,
         lastLoadedAt: loadedAt,
-        balanceView,
         entries: buildFinanceEntries()
       })
     } catch (error) {
-      logger.warn('Merchant finance account balance load failed', error)
-      const message = getMerchantFinanceUserMessage(error, '财务信息加载失败，请稍后重试')
+      logger.warn('Merchant finance guidance load failed', error)
+      const message = '财务信息加载失败，请稍后重试'
       this.setData({
         initialLoading: false,
         initialError: !hasTrustedData,
@@ -209,9 +179,5 @@ Page({
 
   onManualRefresh() {
     void this.loadFinance({ silent: this.data.lastLoadedAt > 0, force: true })
-  },
-
-  onCreateWithdrawal() {
-    wx.navigateTo({ url: WITHDRAW_CREATE_PAGE_PATH })
   }
 })

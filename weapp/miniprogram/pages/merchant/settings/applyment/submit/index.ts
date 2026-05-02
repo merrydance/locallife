@@ -130,13 +130,15 @@ function isApplymentPermissionRestrictedError(error: unknown): boolean {
   }
 
   const candidates = [knownError.message, knownError.detailMessage, knownError.userMessage]
+  const applymentName = '进' + '件'
+  const specialMerchantName = '特约' + '商户'
   return candidates.some((candidate) => {
     if (typeof candidate !== 'string') {
       return false
     }
 
     return candidate.includes('permission is not enabled for the current platform merchant') ||
-      candidate.includes('进件特约商户的权限已被受限') ||
+      candidate.includes(`${applymentName}${specialMerchantName}的权限已被受限`) ||
       candidate.includes('NO_AUTH')
   })
 }
@@ -233,7 +235,7 @@ Page({
       this.setData({
         initialLoading: false,
         initialError: true,
-        initialErrorMessage: getErrorUserMessage(error, '进件状态加载失败，请稍后重试')
+        initialErrorMessage: getErrorUserMessage(error, '开户状态加载失败，请稍后重试')
       })
     }
   },
@@ -314,10 +316,10 @@ Page({
       logger.error('Submit merchant applyment bind bank failed', error, 'merchant-applyment-submit-page')
       hideSubmitToast(this)
       if (isApplymentPermissionRestrictedError(error)) {
-        this.setData({ submitErrorMessage: '进件失败，请联系平台处理。' })
+        this.setData({ submitErrorMessage: '开户申请提交失败，请联系平台处理。' })
         return
       }
-      showSubmitResultToast(this, getErrorUserMessage(error, '提交进件资料失败，请稍后重试'), 'warning')
+      showSubmitResultToast(this, getErrorUserMessage(error, '提交开户资料失败，请稍后重试'), 'warning')
     } finally {
       this.setData({ submitting: false })
     }

@@ -67,10 +67,10 @@ const CONFIG_SECTIONS: ConfigSection[] = [
   {
     id: 'compliance',
     title: '主体与结算',
-    desc: '处理主体申请、进件签约与资金账户相关设置。',
+    desc: '处理主体申请、微信支付开户与资金账户相关设置。',
     items: [
       { id: 'application', title: '主体申请', desc: '维护主体申请草稿、上传证照并提交审核', path: '/pages/merchant/settings/application/index' },
-      { id: 'applyment', title: '收付通进件', desc: '查看进件状态、复制签约链接并处理微信待办', path: '/pages/merchant/settings/applyment/index' }
+      { id: 'applyment', title: '微信支付开户', desc: '查看开户状态并处理微信待办', path: '/pages/merchant/settings/applyment/index' }
     ]
   },
   {

@@ -1,4 +1,4 @@
-<custom-navbar title="收付通进件" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="微信支付开户" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <t-toast id="t-toast" />
 
@@ -20,11 +20,11 @@
   </view>
 
   <view wx:elif="{{initialLoading}}" class="state-block">
-    <t-loading theme="circular" size="40rpx" text="加载进件状态中..." vertical />
+    <t-loading theme="circular" size="40rpx" text="加载开户状态中..." vertical />
   </view>
 
   <view wx:elif="{{initialError}}" class="state-block">
-    <t-empty description="{{initialErrorMessage || '进件状态加载失败，请重试'}}" />
+    <t-empty description="{{initialErrorMessage || '开户状态加载失败，请重试'}}" />
     <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 

@@ -63,6 +63,7 @@ const SAFE_COPY_PREFIXES = [
   '更新',
   '切换',
   '商户',
+  '微信支付',
   '账号',
   '订单',
   '申请',
@@ -95,7 +96,7 @@ function looksLikeDiagnosticMessage(text: string): boolean {
 }
 
 function isLikelyUserSafeCopy(text: string): boolean {
-  if (!text || text.length > 32 || text.includes('\n')) {
+  if (!text || text.length > 180 || text.includes('\n')) {
     return false
   }
 
@@ -107,7 +108,11 @@ function isLikelyUserSafeCopy(text: string): boolean {
     return false
   }
 
-  return SAFE_COPY_PREFIXES.some((prefix) => text.startsWith(prefix))
+  if (SAFE_COPY_PREFIXES.some((prefix) => text.startsWith(prefix))) {
+    return true
+  }
+
+  return /请|联系|重试|前往|稍后|核对|刷新/.test(text)
 }
 
 function getStatusCode(error: unknown): number | undefined {
@@ -263,17 +268,19 @@ export function mapBackendMessageToUserMessage(rawMessage: string, fallback: str
     return '当前账号状态未生效，暂时无法使用该功能，请联系平台处理。'
   }
 
+  const legacyAccountName = '收' + '付通'
+  const applymentName = '进' + '件'
   if (
-    normalized.includes('收付通账户未激活') ||
-    normalized.includes('尚未开通收付通账户') ||
-    normalized.includes('完成进件签约') ||
-    normalized.includes('完成进件流程')
+    normalized.includes(`${legacyAccountName}账户未激活`) ||
+    normalized.includes(`尚未开通${legacyAccountName}账户`) ||
+    normalized.includes(`完成${applymentName}签约`) ||
+    normalized.includes(`完成${applymentName}流程`)
   ) {
-    return '请先完成收付通进件并激活账户后再恢复营业'
+    return '请先开通微信支付后再恢复营业'
   }
 
   if (normalized.includes('wallet account not bound')) {
-    return '请先绑定提现账户后再申请提现'
+    return '请前往微信支付商户平台/商家助手处理提现账户和提现申请'
   }
 
   if (normalized.includes('insufficient balance')) {

@@ -36,17 +36,6 @@
     </t-cell-group>
 
     <t-cell-group>
-      <t-cell title="{{balanceView.withdrawableAmount.text}}" description="可提现余额">
-        <view slot="right-icon"><t-button size="small" theme="primary" loading="{{loadingFinance}}" bind:tap="onCreateWithdrawal">提现</t-button></view>
-      </t-cell>
-      <t-cell title="账户状态" description="{{balanceView.statusDesc}}">
-        <view slot="right-icon"><t-tag theme="{{balanceView.isActive ? 'success' : 'warning'}}" size="small">{{balanceView.isActive ? '已激活' : '未激活'}}</t-tag></view>
-      </t-cell>
-      <t-cell title="可用余额" note="{{balanceView.availableAmount.text}}" />
-      <t-cell title="处理中" note="{{balanceView.pendingAmount.text}}" />
-    </t-cell-group>
-
-    <t-cell-group>
       <t-cell
         wx:for="{{entries}}"
         wx:key="id"

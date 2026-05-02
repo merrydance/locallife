@@ -131,7 +131,7 @@ export function getMerchantDeviceManagementErrorMessage(result: MerchantDeviceMa
 }
 
 export function getMerchantApplymentAccessDeniedMessage() {
-  return '收付通进件仅支持老板账号维护，请联系老板处理。'
+  return '微信支付开户仅支持老板账号维护，请联系老板处理。'
 }
 
 function getFreshCachedUserInfo() {

@@ -1,15 +1,16 @@
 .ranking-section {
+  padding: var(--spacer-md);
+  border: 1rpx solid var(--td-bg-color-secondarycontainer);
+  border-radius: var(--radius-card);
   background: var(--td-bg-color-container);
-  border-radius: var(--radius-md);
-  margin-top: 32rpx;
-  padding: 32rpx;
+  box-sizing: border-box;
 }
 
 .section-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 16rpx;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
 }
 
 .section-header--compact {
@@ -22,15 +23,17 @@
 }
 
 .ranking-label {
+  flex-shrink: 0;
   font-size: var(--font-size-xxs);
-  color: #999;
+  color: var(--td-text-color-placeholder);
 }
 
 .ranking-item {
   display: flex;
   align-items: center;
-  padding: 24rpx 0;
-  border-bottom: 1rpx solid #f5f5f5;
+  min-width: 0;
+  padding: var(--spacer-md) 0;
+  border-bottom: 1rpx solid var(--td-bg-color-secondarycontainer);
 }
 
 .ranking-item:last-child {
@@ -43,43 +46,48 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: bold;
-  color: #999;
-  margin-right: 24rpx;
+  flex-shrink: 0;
+  margin-right: var(--spacer-md);
+  border-radius: var(--radius-round);
+  background: var(--td-bg-color-secondarycontainer);
+  color: var(--td-text-color-secondary);
+  font-weight: 600;
 }
 
-.top-1 {
-  color: #ffd700;
-  font-size: 36rpx;
-}
-
-.top-2 {
-  color: #c0c0c0;
-  font-size: 34rpx;
-}
-
+.top-1,
+.top-2,
 .top-3 {
-  color: #cd7f32;
-  font-size: 32rpx;
+  background: var(--td-brand-color-1);
+  color: var(--td-brand-color);
 }
 
 .rank-main {
   flex: 1;
+  min-width: 0;
 }
 
 .rank-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--font-size-base);
   font-weight: 500;
-  color: #333;
+  color: var(--td-text-color-primary);
 }
 
 .rank-sub {
+  margin-top: var(--spacer-xxs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--font-size-xxs);
-  color: #999;
+  color: var(--td-text-color-placeholder);
 }
 
 .rank-val {
-  font-weight: bold;
-  color: var(--td-brand-color);
+  flex-shrink: 0;
+  margin-left: var(--spacer-sm);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
   font-family: 'DIN Alternate', sans-serif;
 }
