@@ -26,6 +26,7 @@ import (
 	"github.com/merrydance/locallife/weather"
 	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/wechat"
+	ordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider"
 	"github.com/merrydance/locallife/worker"
 	"github.com/rs/zerolog/log"
 	swaggerFiles "github.com/swaggo/files"
@@ -64,11 +65,12 @@ type Server struct {
 	tokenMaker                  token.Maker
 	auditWriter                 AuditWriter
 	wechatClient                wechat.WechatClient
-	directPaymentClient         wechat.DirectPaymentClientInterface // 小程序直连支付（骑手押金、追偿付款）
-	transferClient              wechat.TransferClientInterface      // 商家转账到零钱（索赔赔付）
-	ecommerceClient             wechat.EcommerceClientInterface     // 平台收付通（订单支付分账）
-	dataEncryptor               util.DataEncryptor                  // 敏感数据加密器（本地存储加密）
-	mapClient                   maps.TencentMapClientInterface      // 地图客户端（自建 OSM）
+	directPaymentClient         wechat.DirectPaymentClientInterface                            // 小程序直连支付（骑手押金、追偿付款）
+	transferClient              wechat.TransferClientInterface                                 // 商家转账到零钱（索赔赔付）
+	ecommerceClient             wechat.EcommerceClientInterface                                // 平台收付通（历史/冷备路径）
+	ordinarySPClient            ordinaryserviceprovider.OrdinaryServiceProviderClientInterface // 普通服务商支付（商户主业务支付）
+	dataEncryptor               util.DataEncryptor                                             // 敏感数据加密器（本地存储加密）
+	mapClient                   maps.TencentMapClientInterface                                 // 地图客户端（自建 OSM）
 	weatherCache                weather.WeatherCache
 	taskDistributor             worker.TaskDistributor
 	wsHub                       *websocket.Hub           // WebSocket连接管理（骑手和商户）
@@ -157,6 +159,17 @@ func (server *Server) SetEcommerceClientForTest(client wechat.EcommerceClientInt
 	server.refundOrchestrator = nil
 }
 
+func (server *Server) SetOrdinaryServiceProviderClientForTest(client ordinaryserviceprovider.OrdinaryServiceProviderClientInterface) {
+	server.ordinarySPClient = client
+	newSvc := server.buildOrderCommandService()
+	server.orderCommandSvc = newSvc
+	if qs, ok := newSvc.(logic.OrderQueryService); ok {
+		server.orderQuerySvc = qs
+	}
+	server.paymentFacade = nil
+	server.refundOrchestrator = nil
+}
+
 func (server *Server) SetPrinterClientForTest(client cloudprint.Client) {
 	server.printerClient = client
 }
@@ -177,6 +190,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	var paymentClient wechat.DirectPaymentClientInterface
 	var transferClient wechat.TransferClientInterface
 	var ecommerceClient wechat.EcommerceClientInterface
+	var ordinarySPClient ordinaryserviceprovider.OrdinaryServiceProviderClientInterface
 	if config.HasWechatPayRuntimeConfig() {
 		if err := config.ValidateWechatPayConfig(); err != nil {
 			return nil, err
@@ -207,6 +221,12 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		ecommerceClient, err = wechatruntime.BuildEcommerceClient(config)
 		if err != nil {
 			return nil, fmt.Errorf("cannot create ecommerce client: %w", err)
+		}
+	}
+	if config.HasWechatOrdinaryServiceProviderRuntimeConfig() {
+		ordinarySPClient, err = wechatruntime.BuildOrdinaryServiceProviderClient(config)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create ordinary service provider client: %w", err)
 		}
 	}
 
@@ -315,6 +335,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		directPaymentClient:         paymentClient,
 		transferClient:              transferClient,
 		ecommerceClient:             ecommerceClient,
+		ordinarySPClient:            ordinarySPClient,
 		dataEncryptor:               dataEncryptor,
 		mapClient:                   mapClient,
 		weatherCache:                weatherCache,
@@ -548,6 +569,12 @@ func (server *Server) setupRouter() {
 		webhooksGroup.POST("/wechat-ecommerce/withdraw-notify", server.handleEcommerceWithdrawNotify)
 		webhooksGroup.POST("/wechat-ecommerce/applyment-notify", server.handleApplymentStateNotify)
 		webhooksGroup.POST("/wechat-ecommerce/profit-sharing-notify", server.handleProfitSharingNotify)
+		// 普通服务商回调
+		webhooksGroup.POST("/wechat-ordinary/payment-notify", server.handleOrdinaryServiceProviderPaymentNotify)
+		webhooksGroup.POST("/wechat-ordinary/combine-notify", server.handleOrdinaryServiceProviderCombinePaymentNotify)
+		webhooksGroup.POST("/wechat-ordinary/refund-notify", server.handleOrdinaryServiceProviderRefundNotify)
+		webhooksGroup.POST("/wechat-ordinary/profit-sharing-notify", server.handleOrdinaryServiceProviderProfitSharingNotify)
+		webhooksGroup.POST("/wechat-ordinary/violation-notify", server.handleOrdinaryServiceProviderViolationNotify)
 		// 微信用户投诉通知（合规要求，状态变更实时推送）
 		webhooksGroup.POST("/wechat-ecommerce/complaint-notify", server.handleComplaintNotify)
 		webhooksGroup.POST("/wechat-ecommerce/violation-notify", server.handleViolationNotify)
@@ -1240,20 +1267,20 @@ func (server *Server) setupRouter() {
 		merchantFinanceGroup.GET("/daily", server.listMerchantDailyFinance)
 		merchantFinanceGroup.GET("/settlements", server.listMerchantSettlements)
 		merchantFinanceGroup.GET("/settlement-timeline", server.listMerchantSettlementTimeline)
-		merchantFinanceGroup.GET("/account/balance", server.getMerchantAccountBalance)
+		merchantFinanceGroup.GET("/account/balance", server.gateEcommerceFundManagementWhenOrdinaryActive("merchant account balance", server.getMerchantAccountBalance))
 		merchantFinanceGroup.GET("/account/settlement-account", server.getMerchantSettlementAccount)
-		merchantFinanceGroup.GET("/account/cancel-withdraw/eligibility", server.getMerchantCancelWithdrawEligibility)
-		merchantFinanceGroup.GET("/account/cancel-withdraw/applications", server.listMerchantCancelWithdrawApplications)
-		merchantFinanceGroup.GET("/account/cancel-withdraw/applications/:id", server.getMerchantCancelWithdrawApplication)
-		merchantFinanceGroup.GET("/account/withdrawals", server.listMerchantAccountWithdrawals)
-		merchantFinanceGroup.GET("/account/withdrawals/:id", server.getMerchantAccountWithdrawal)
+		merchantFinanceGroup.GET("/account/cancel-withdraw/eligibility", server.gateEcommerceFundManagementWhenOrdinaryActive("merchant cancel-withdraw eligibility", server.getMerchantCancelWithdrawEligibility))
+		merchantFinanceGroup.GET("/account/cancel-withdraw/applications", server.gateEcommerceFundManagementWhenOrdinaryActive("merchant cancel-withdraw application list", server.listMerchantCancelWithdrawApplications))
+		merchantFinanceGroup.GET("/account/cancel-withdraw/applications/:id", server.gateEcommerceFundManagementWhenOrdinaryActive("merchant cancel-withdraw application detail", server.getMerchantCancelWithdrawApplication))
+		merchantFinanceGroup.GET("/account/withdrawals", server.gateEcommerceFundManagementWhenOrdinaryActive("merchant withdrawal list", server.listMerchantAccountWithdrawals))
+		merchantFinanceGroup.GET("/account/withdrawals/:id", server.gateEcommerceFundManagementWhenOrdinaryActive("merchant withdrawal detail", server.getMerchantAccountWithdrawal))
 	}
 
 	merchantFinanceOwnerGroup := authGroup.Group("/merchant/finance")
 	merchantFinanceOwnerGroup.Use(server.MerchantStaffMiddleware("owner"))
 	{
-		merchantFinanceOwnerGroup.POST("/account/withdraw", server.createMerchantAccountWithdraw)
-		merchantFinanceOwnerGroup.POST("/account/cancel-withdraw/applications", server.createMerchantCancelWithdrawApplication)
+		merchantFinanceOwnerGroup.POST("/account/withdraw", server.gateEcommerceFundManagementWhenOrdinaryActive("merchant withdrawal create", server.createMerchantAccountWithdraw))
+		merchantFinanceOwnerGroup.POST("/account/cancel-withdraw/applications", server.gateEcommerceFundManagementWhenOrdinaryActive("merchant cancel-withdraw create", server.createMerchantCancelWithdrawApplication))
 		merchantFinanceOwnerGroup.POST("/account/settlement-account", server.modifyMerchantSettlementAccount)
 		merchantFinanceOwnerGroup.GET("/account/settlement-account/applications/:application_no", server.getMerchantSettlementApplication)
 	}
@@ -1366,9 +1393,9 @@ func (server *Server) setupRouter() {
 		{
 			operatorPaymentGroup.GET("/profit-sharing/amounts", server.getProfitSharingAmounts)
 			operatorPaymentGroup.POST("/profit-sharing/receivers/delete", server.deleteProfitSharingReceiver)
-			operatorPaymentGroup.POST("/subsidies", server.createSubsidy)
-			operatorPaymentGroup.POST("/subsidies/return", server.returnSubsidy)
-			operatorPaymentGroup.POST("/subsidies/cancel", server.cancelSubsidy)
+			operatorPaymentGroup.POST("/subsidies", server.gateEcommerceFundManagementWhenOrdinaryActive("operator subsidy create", server.createSubsidy))
+			operatorPaymentGroup.POST("/subsidies/return", server.gateEcommerceFundManagementWhenOrdinaryActive("operator subsidy return", server.returnSubsidy))
+			operatorPaymentGroup.POST("/subsidies/cancel", server.gateEcommerceFundManagementWhenOrdinaryActive("operator subsidy cancel", server.cancelSubsidy))
 		}
 
 		operatorRulesProxyGroup := operatorsGroup.Group("/rules")
@@ -1415,7 +1442,7 @@ func (server *Server) setupRouter() {
 		platformProfitSharingGroup.GET("/receiver-lifecycle/targets", server.listProfitSharingReceiverLifecycleTargets)
 		platformProfitSharingGroup.GET("/receiver-lifecycle/targets/:id", server.getProfitSharingReceiverLifecycleTarget)
 		platformProfitSharingGroup.GET("/receiver-lifecycle/targets/:id/attempts", server.listProfitSharingReceiverLifecycleAttempts)
-		platformProfitSharingGroup.POST("/receiver-lifecycle/repair", server.repairProfitSharingReceiverLifecycle)
+		platformProfitSharingGroup.POST("/receiver-lifecycle/repair", server.gateEcommerceReceiverLifecycleWhenOrdinaryActive("profit-sharing receiver lifecycle repair", server.repairProfitSharingReceiverLifecycle))
 	}
 
 	platformRulesGroup := authGroup.Group("/platform/rules")
@@ -1434,13 +1461,22 @@ func (server *Server) setupRouter() {
 	platformFinanceGroup := authGroup.Group("/platform/finance")
 	platformFinanceGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
 	{
-		platformFinanceGroup.GET("/account/balance", server.getPlatformAccountBalance)
+		platformFinanceGroup.GET("/account/balance", server.gateEcommerceFundManagementWhenOrdinaryActive("platform account balance", server.getPlatformAccountBalance))
 		platformFinanceGroup.GET("/wechat-ecommerce/violation-notification", server.getPlatformViolationNotificationConfig)
 		platformFinanceGroup.POST("/wechat-ecommerce/violation-notification", server.createPlatformViolationNotificationConfig)
 		platformFinanceGroup.PUT("/wechat-ecommerce/violation-notification", server.updatePlatformViolationNotificationConfig)
 		platformFinanceGroup.DELETE("/wechat-ecommerce/violation-notification", server.deletePlatformViolationNotificationConfig)
 		platformFinanceGroup.GET("/wechat-ecommerce/violations", server.listPlatformWechatMerchantViolations)
 		platformFinanceGroup.GET("/wechat-ecommerce/violations/:record_id", server.getPlatformWechatMerchantViolation)
+		platformFinanceGroup.GET("/wechat-ordinary/violation-notification", server.getPlatformViolationNotificationConfig)
+		platformFinanceGroup.POST("/wechat-ordinary/violation-notification", server.createPlatformViolationNotificationConfig)
+		platformFinanceGroup.PUT("/wechat-ordinary/violation-notification", server.updatePlatformViolationNotificationConfig)
+		platformFinanceGroup.DELETE("/wechat-ordinary/violation-notification", server.deletePlatformViolationNotificationConfig)
+		platformFinanceGroup.GET("/wechat-ordinary/violations", server.listPlatformWechatMerchantViolations)
+		platformFinanceGroup.GET("/wechat-ordinary/violations/:record_id", server.getPlatformWechatMerchantViolation)
+		platformFinanceGroup.GET("/wechat-ordinary/merchant-limitations/:sub_mch_id", server.getOrdinaryMerchantLimitationDiagnostic)
+		platformFinanceGroup.POST("/wechat-ordinary/merchant-limitations/:sub_mch_id/inactive-identity-verifications", server.createInactiveMerchantIdentityVerification)
+		platformFinanceGroup.GET("/wechat-ordinary/merchant-limitations/:sub_mch_id/inactive-identity-verifications/:verification_id", server.getInactiveMerchantIdentityVerification)
 	}
 
 	platformOperatorRulesGroup := authGroup.Group("/platform/operator-rules")
@@ -1460,7 +1496,7 @@ func (server *Server) setupRouter() {
 	platformRefundGroup := authGroup.Group("/platform/refunds")
 	platformRefundGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
 	{
-		platformRefundGroup.POST("/:id/apply-abnormal-refund", server.applyPlatformAbnormalRefund)
+		platformRefundGroup.POST("/:id/apply-abnormal-refund", server.gateEcommerceFundManagementWhenOrdinaryActive("platform abnormal refund", server.applyPlatformAbnormalRefund))
 	}
 
 	// 用户索赔路由

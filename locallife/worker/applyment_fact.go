@@ -9,11 +9,11 @@ import (
 	"github.com/hibiken/asynq"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
-	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 )
 
 const (
-	applymentFactBusinessObjectApplyment = "ecommerce_applyment"
+	applymentFactBusinessObjectApplyment = "ordinary_service_provider_applyment"
 	applymentFactConsumerDomain          = "applyment_domain"
 )
 
@@ -71,11 +71,32 @@ func recordApplymentStatusFact(
 	sourceEventType string,
 	rawResource []byte,
 ) (*db.ExternalPaymentFactApplication, error) {
+	return recordApplymentStatusFactWithDedupeSuffix(ctx, store, outRequestNo, upstreamApplymentID, applymentID, applymentState, subMchID, factSource, sourceEventID, sourceEventType, rawResource, "")
+}
+
+func recordApplymentStatusFactWithDedupeSuffix(
+	ctx context.Context,
+	store db.Store,
+	outRequestNo string,
+	upstreamApplymentID string,
+	applymentID int64,
+	applymentState string,
+	subMchID string,
+	factSource string,
+	sourceEventID string,
+	sourceEventType string,
+	rawResource []byte,
+	dedupeSuffix string,
+) (*db.ExternalPaymentFactApplication, error) {
 	service := logic.NewPaymentFactService(store)
 	terminalStatus := applymentFactTerminalStatus(applymentState)
+	dedupeKey := applymentTerminalFactDedupeKey(factSource, outRequestNo, applymentState, subMchID, sourceEventID)
+	if strings.TrimSpace(dedupeSuffix) != "" {
+		dedupeKey += ":" + strings.ToLower(strings.TrimSpace(dedupeSuffix))
+	}
 	result, err := service.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
 		Provider:                    db.ExternalPaymentProviderWechat,
-		Channel:                     db.PaymentChannelEcommerce,
+		Channel:                     db.PaymentChannelOrdinaryServiceProvider,
 		Capability:                  db.ExternalPaymentCapabilityApplyment,
 		FactSource:                  factSource,
 		SourceEventID:               applymentFactStringPtrIfNotEmpty(sourceEventID),
@@ -90,7 +111,7 @@ func recordApplymentStatusFact(
 		TerminalStatus:              terminalStatus,
 		Currency:                    "CNY",
 		RawResource:                 rawResource,
-		DedupeKey:                   applymentTerminalFactDedupeKey(factSource, outRequestNo, applymentState, subMchID, sourceEventID),
+		DedupeKey:                   dedupeKey,
 		AllowNonTerminalApplication: terminalStatus == db.ExternalPaymentTerminalStatusProcessing,
 		Application: &logic.ExternalPaymentFactApplicationTarget{
 			Consumer:           applymentFactConsumerDomain,
@@ -104,31 +125,31 @@ func recordApplymentStatusFact(
 	return result.Application, nil
 }
 
-func recordApplymentActivatedQueryFact(ctx context.Context, store db.Store, applyment db.EcommerceApplymentPendingFollowUp, queryResp *wechatcontracts.EcommerceApplymentQueryResponse) (*db.ExternalPaymentFactApplication, error) {
-	rawResource := applymentQueryFactResource(applyment, queryResp)
+func recordApplymentActivatedQueryFact(ctx context.Context, store db.Store, applyment db.EcommerceApplymentPendingFollowUp, queryResp *ospcontracts.ApplymentQueryResponse, accountAuthorizeState string) (*db.ExternalPaymentFactApplication, error) {
+	rawResource := applymentQueryFactResource(applyment, queryResp, accountAuthorizeState)
 	upstreamApplymentID := ""
 	if queryResp != nil && queryResp.ApplymentID > 0 {
 		upstreamApplymentID = fmt.Sprintf("%d", queryResp.ApplymentID)
 	}
-	return recordApplymentStatusFact(ctx, store, applyment.OutRequestNo, upstreamApplymentID, applyment.ID, "FINISH", strings.TrimSpace(queryResp.SubMchID), db.ExternalPaymentFactSourceQuery, "", "", rawResource)
+	return recordApplymentStatusFactWithDedupeSuffix(ctx, store, applyment.OutRequestNo, upstreamApplymentID, applyment.ID, string(queryResp.ApplymentState), strings.TrimSpace(queryResp.SubMchID), db.ExternalPaymentFactSourceQuery, "", "", rawResource, accountAuthorizeState)
 }
 
-func recordApplymentTerminalQueryFact(ctx context.Context, store db.Store, applyment db.EcommerceApplymentPendingFollowUp, queryResp *wechatcontracts.EcommerceApplymentQueryResponse) (*db.ExternalPaymentFactApplication, error) {
-	rawResource := applymentQueryFactResource(applyment, queryResp)
+func recordApplymentTerminalQueryFact(ctx context.Context, store db.Store, applyment db.EcommerceApplymentPendingFollowUp, queryResp *ospcontracts.ApplymentQueryResponse) (*db.ExternalPaymentFactApplication, error) {
+	rawResource := applymentQueryFactResource(applyment, queryResp, "")
 	upstreamApplymentID := ""
 	if queryResp != nil && queryResp.ApplymentID > 0 {
 		upstreamApplymentID = fmt.Sprintf("%d", queryResp.ApplymentID)
 	}
-	return recordApplymentStatusFact(ctx, store, applyment.OutRequestNo, upstreamApplymentID, applyment.ID, queryResp.ApplymentState, strings.TrimSpace(queryResp.SubMchID), db.ExternalPaymentFactSourceQuery, "", "", rawResource)
+	return recordApplymentStatusFact(ctx, store, applyment.OutRequestNo, upstreamApplymentID, applyment.ID, string(queryResp.ApplymentState), strings.TrimSpace(queryResp.SubMchID), db.ExternalPaymentFactSourceQuery, "", "", rawResource)
 }
 
-func recordApplymentPendingQueryFact(ctx context.Context, store db.Store, applyment db.EcommerceApplymentPendingFollowUp, queryResp *wechatcontracts.EcommerceApplymentQueryResponse) (*db.ExternalPaymentFactApplication, error) {
-	rawResource := applymentQueryFactResource(applyment, queryResp)
+func recordApplymentPendingQueryFact(ctx context.Context, store db.Store, applyment db.EcommerceApplymentPendingFollowUp, queryResp *ospcontracts.ApplymentQueryResponse) (*db.ExternalPaymentFactApplication, error) {
+	rawResource := applymentQueryFactResource(applyment, queryResp, "")
 	upstreamApplymentID := ""
 	if queryResp != nil && queryResp.ApplymentID > 0 {
 		upstreamApplymentID = fmt.Sprintf("%d", queryResp.ApplymentID)
 	}
-	return recordApplymentStatusFact(ctx, store, applyment.OutRequestNo, upstreamApplymentID, applyment.ID, queryResp.ApplymentState, strings.TrimSpace(queryResp.SubMchID), db.ExternalPaymentFactSourceQuery, "", "", rawResource)
+	return recordApplymentStatusFact(ctx, store, applyment.OutRequestNo, upstreamApplymentID, applyment.ID, string(queryResp.ApplymentState), strings.TrimSpace(queryResp.SubMchID), db.ExternalPaymentFactSourceQuery, "", "", rawResource)
 }
 
 func EnqueueApplymentPaymentFactApplication(ctx context.Context, distributor any, application *db.ExternalPaymentFactApplication) error {
@@ -190,7 +211,7 @@ func applymentCallbackFactResource(applyment db.EcommerceApplyment, resource any
 	return upstreamApplymentID, raw
 }
 
-func applymentQueryFactResource(applyment db.EcommerceApplymentPendingFollowUp, queryResp *wechatcontracts.EcommerceApplymentQueryResponse) []byte {
+func applymentQueryFactResource(applyment db.EcommerceApplymentPendingFollowUp, queryResp *ospcontracts.ApplymentQueryResponse, accountAuthorizeState string) []byte {
 	payload := map[string]any{
 		"local_applyment_id": applyment.ID,
 		"out_request_no":     applyment.OutRequestNo,
@@ -200,20 +221,20 @@ func applymentQueryFactResource(applyment db.EcommerceApplymentPendingFollowUp, 
 	}
 	if queryResp != nil {
 		payload["applyment_id"] = queryResp.ApplymentID
-		payload["applyment_state"] = queryResp.ApplymentState
-		payload["applyment_state_desc"] = queryResp.ApplymentStateDesc
-		payload["reject_reason"] = getRejectReasonFromApplymentAuditDetail(queryResp.AuditDetail).String
-		payload["sign_state"] = queryResp.SignState
+		payload["business_code"] = queryResp.BusinessCode
+		payload["applyment_state"] = string(queryResp.ApplymentState)
+		payload["applyment_state_msg"] = queryResp.ApplymentStateMsg
+		payload["reject_reason"] = getRejectReasonFromOrdinaryApplymentAuditDetail(queryResp.AuditDetail).String
 		payload["sub_mch_id"] = queryResp.SubMchID
 		if queryResp.SignURL != "" {
 			payload["sign_url"] = queryResp.SignURL
 		}
-		if queryResp.LegalValidationURL != "" {
-			payload["legal_validation_url"] = queryResp.LegalValidationURL
+		if len(queryResp.AuditDetail) > 0 {
+			payload["audit_detail"] = queryResp.AuditDetail
 		}
-		if queryResp.AccountValidation != nil {
-			payload["account_validation"] = queryResp.AccountValidation
-		}
+	}
+	if strings.TrimSpace(accountAuthorizeState) != "" {
+		payload["account_authorize_state"] = strings.TrimSpace(accountAuthorizeState)
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -223,7 +244,11 @@ func applymentQueryFactResource(applyment db.EcommerceApplymentPendingFollowUp, 
 }
 
 func applymentFactTerminalStatus(applymentState string) string {
-	switch logic.MapWechatApplymentStateToStatus(applymentState) {
+	status := logic.MapOrdinaryApplymentStateToStatus(ospcontracts.ApplymentState(strings.TrimSpace(applymentState)))
+	if status == "" {
+		status = logic.MapWechatApplymentStateToStatus(applymentState)
+	}
+	switch status {
 	case "finish":
 		return db.ExternalPaymentTerminalStatusSuccess
 	case "account_need_verify", "to_be_confirmed", "to_be_signed":
@@ -242,5 +267,5 @@ func applymentTerminalFactDedupeKey(factSource, outRequestNo, applymentState, su
 	if sourceEventID != "" {
 		return fmt.Sprintf("wechat:%s:applyment:%s:%s:%s", factSource, sourceEventID, normalizedState, strings.TrimSpace(subMchID))
 	}
-	return fmt.Sprintf("wechat:%s:ecommerce:applyment:%s:%s:%s", factSource, outRequestNo, normalizedState, strings.TrimSpace(subMchID))
+	return fmt.Sprintf("wechat:%s:ordinary_service_provider:applyment:%s:%s:%s", factSource, outRequestNo, normalizedState, strings.TrimSpace(subMchID))
 }

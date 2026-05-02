@@ -10,10 +10,7 @@ import (
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
-	"github.com/merrydance/locallife/wechat"
-	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
-	wechaterrorcodes "github.com/merrydance/locallife/wechat/errorcodes"
-	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	mockosp "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -25,7 +22,7 @@ func TestGetPlatformAccountBalanceAPI(t *testing.T) {
 		name          string
 		query         string
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore, ecommerce *mockwechat.MockEcommerceClientInterface)
+		buildStubs    func(store *mockdb.MockStore)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
@@ -34,25 +31,13 @@ func TestGetPlatformAccountBalanceAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, admin.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerce *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					ListUserRoles(gomock.Any(), admin.ID).
 					Return([]db.UserRole{{UserID: admin.ID, Role: RoleAdmin, Status: "active"}}, nil)
-
-				ecommerce.EXPECT().
-					QueryPlatformFundBalance(gomock.Any(), "OPERATION").
-					Return(&wechat.PlatformFundBalanceResponse{
-						AvailableAmount: 32100,
-						PendingAmount:   12,
-					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-				var resp platformAccountBalanceResponse
-				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-				require.Equal(t, "OPERATION", resp.AccountType)
-				require.Equal(t, int64(32100), resp.AvailableAmount)
-				require.Equal(t, int64(12), resp.PendingAmount)
+				requireOrdinaryUnsupportedFundsAPIResponse(t, recorder)
 			},
 		},
 		{
@@ -61,25 +46,13 @@ func TestGetPlatformAccountBalanceAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, admin.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerce *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					ListUserRoles(gomock.Any(), admin.ID).
 					Return([]db.UserRole{{UserID: admin.ID, Role: RoleAdmin, Status: "active"}}, nil)
-
-				ecommerce.EXPECT().
-					QueryPlatformFundDayEndBalance(gomock.Any(), "FEES", "2026-04-05").
-					Return(&wechat.PlatformFundBalanceResponse{
-						AvailableAmount: 1200,
-						PendingAmount:   3,
-					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-				var resp platformAccountBalanceResponse
-				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-				require.Equal(t, "FEES", resp.AccountType)
-				require.Equal(t, "2026-04-05", resp.BalanceDate)
-				require.Equal(t, int64(1200), resp.AvailableAmount)
+				requireOrdinaryUnsupportedFundsAPIResponse(t, recorder)
 			},
 		},
 		{
@@ -88,13 +61,13 @@ func TestGetPlatformAccountBalanceAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, admin.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore, ecommerce *mockwechat.MockEcommerceClientInterface) {
+			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					ListUserRoles(gomock.Any(), admin.ID).
 					Return([]db.UserRole{{UserID: admin.ID, Role: RoleAdmin, Status: "active"}}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				requireOrdinaryUnsupportedFundsAPIResponse(t, recorder)
 			},
 		},
 	}
@@ -105,11 +78,9 @@ func TestGetPlatformAccountBalanceAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
-			ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
-			tc.buildStubs(store, ecommerce)
+			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
-			server.SetEcommerceClientForTest(ecommerce)
 
 			recorder := httptest.NewRecorder()
 			request, err := http.NewRequest(http.MethodGet, "/v1/platform/finance/account/balance"+tc.query, nil)
@@ -129,18 +100,11 @@ func TestGetPlatformAccountBalanceAPINoAuthReturnsExplicitMessage(t *testing.T) 
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
-
 	store.EXPECT().
 		ListUserRoles(gomock.Any(), admin.ID).
 		Return([]db.UserRole{{UserID: admin.ID, Role: RoleAdmin, Status: "active"}}, nil)
 
-	ecommerce.EXPECT().
-		QueryPlatformFundBalance(gomock.Any(), wechatcontracts.FundManagementAccountTypeBasic).
-		Return(nil, &wechat.WechatPayError{StatusCode: http.StatusForbidden, Code: wechaterrorcodes.FundManagementCodeNoAuth, Message: "no auth"})
-
 	server := newTestServer(t, store)
-	server.SetEcommerceClientForTest(ecommerce)
 
 	recorder := httptest.NewRecorder()
 	request, err := http.NewRequest(http.MethodGet, "/v1/platform/finance/account/balance", nil)
@@ -149,10 +113,7 @@ func TestGetPlatformAccountBalanceAPINoAuthReturnsExplicitMessage(t *testing.T) 
 
 	server.router.ServeHTTP(recorder, request)
 
-	require.Equal(t, http.StatusBadGateway, recorder.Code)
-	var resp APIResponse
-	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
-	require.Equal(t, "微信侧暂无该账户查询权限，请联系管理员检查收付通配置", resp.Message)
+	requireOrdinaryUnsupportedFundsAPIResponse(t, recorder)
 }
 
 func TestGetPlatformAccountBalanceAPIEcommerceClientUnavailable(t *testing.T) {
@@ -176,9 +137,33 @@ func TestGetPlatformAccountBalanceAPIEcommerceClientUnavailable(t *testing.T) {
 
 	server.router.ServeHTTP(recorder, request)
 
+	requireOrdinaryUnsupportedFundsAPIResponse(t, recorder)
+}
+
+func TestGetPlatformAccountBalanceAPIOrdinaryServiceProviderGatesUnsupportedFundManagement(t *testing.T) {
+	admin, _ := randomUser(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), admin.ID).
+		Return([]db.UserRole{{UserID: admin.ID, Role: RoleAdmin, Status: "active"}}, nil)
+
+	server := newTestServer(t, store)
+	server.SetOrdinaryServiceProviderClientForTest(mockosp.NewMockOrdinaryServiceProviderClientInterface(ctrl))
+
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/platform/finance/account/balance", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, admin.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
 	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
 	var resp APIResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Equal(t, CodeServiceUnavail, resp.Code)
-	require.Equal(t, "微信支付服务暂不可用，请稍后重试", resp.Message)
+	require.Equal(t, ordinaryServiceProviderUnsupportedFundsMessage, resp.Message)
 }

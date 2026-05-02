@@ -223,11 +223,6 @@ func (s *DataCleanupScheduler) markExpiredOperators() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	if s.ecommerceClient == nil {
-		log.Error().Msg("skip expiring operators: ecommerce client not configured")
-		return
-	}
-
 	rows, err := s.store.ListExpiredOperators(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to list expired operators")

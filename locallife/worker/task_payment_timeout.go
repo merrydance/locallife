@@ -13,6 +13,8 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -148,6 +150,7 @@ func (p *RedisTaskProcessor) ProcessTaskPaymentOrderTimeout(ctx context.Context,
 type paymentOrderTimeoutRemoteClose struct {
 	required bool
 	direct   bool
+	ordinary bool
 	subMchID string
 }
 
@@ -155,10 +158,37 @@ func (p *RedisTaskProcessor) preparePaymentOrderTimeoutClose(ctx context.Context
 	if paymentOrderUsesEcommerceChannel(paymentOrder) {
 		return p.prepareEcommercePaymentOrderTimeoutClose(ctx, paymentOrder)
 	}
+	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
+		return p.prepareOrdinaryServiceProviderPaymentOrderTimeoutClose(ctx, paymentOrder)
+	}
 	if paymentOrder.PaymentChannel == db.PaymentChannelDirect {
 		return p.prepareDirectPaymentOrderTimeoutClose(ctx, paymentOrder)
 	}
 	return paymentOrderTimeoutRemoteClose{}, false, nil
+}
+
+func (p *RedisTaskProcessor) prepareOrdinaryServiceProviderPaymentOrderTimeoutClose(ctx context.Context, paymentOrder db.PaymentOrder) (paymentOrderTimeoutRemoteClose, bool, error) {
+	if p.ordinarySPClient == nil {
+		return paymentOrderTimeoutRemoteClose{}, false, fmt.Errorf("ordinary service provider client not configured for payment timeout query")
+	}
+	subMchID, err := p.resolvePaymentOrderTimeoutSubMchID(ctx, paymentOrder)
+	if err != nil {
+		return paymentOrderTimeoutRemoteClose{}, false, fmt.Errorf("resolve ordinary payment timeout sub_mchid: %w", err)
+	}
+
+	queryResp, err := p.queryOrdinaryServiceProviderPaymentOrderForTimeout(ctx, paymentOrder, subMchID)
+	if err != nil {
+		return paymentOrderTimeoutRemoteClose{}, false, fmt.Errorf("query ordinary service provider payment order before timeout close: %w", err)
+	}
+	if queryResp == nil {
+		return paymentOrderTimeoutRemoteClose{}, false, fmt.Errorf("query ordinary service provider payment order before timeout close returned nil response")
+	}
+
+	stop, err := p.handleOrdinaryServiceProviderPaymentTimeoutQueryResult(ctx, paymentOrder, queryResp)
+	if err != nil || stop {
+		return paymentOrderTimeoutRemoteClose{}, stop, err
+	}
+	return paymentOrderTimeoutRemoteClose{required: true, ordinary: true, subMchID: subMchID}, false, nil
 }
 
 func (p *RedisTaskProcessor) prepareEcommercePaymentOrderTimeoutClose(ctx context.Context, paymentOrder db.PaymentOrder) (paymentOrderTimeoutRemoteClose, bool, error) {
@@ -210,6 +240,15 @@ func (p *RedisTaskProcessor) queryEcommercePaymentOrderForTimeout(ctx context.Co
 		return p.ecommerceClient.QueryPartnerOrderByTransactionID(ctx, paymentOrder.TransactionID.String, subMchID)
 	}
 	return p.ecommerceClient.QueryPartnerOrderByOutTradeNo(ctx, paymentOrder.OutTradeNo, subMchID)
+}
+
+func (p *RedisTaskProcessor) queryOrdinaryServiceProviderPaymentOrderForTimeout(ctx context.Context, paymentOrder db.PaymentOrder, subMchID string) (*ospcontracts.PaymentQueryResponse, error) {
+	req := ospcontracts.PaymentQueryRequest{SubMchID: subMchID, OutTradeNo: paymentOrder.OutTradeNo}
+	if paymentOrder.TransactionID.Valid && strings.TrimSpace(paymentOrder.TransactionID.String) != "" {
+		req.TransactionID = paymentOrder.TransactionID.String
+		req.OutTradeNo = ""
+	}
+	return p.ordinarySPClient.QueryPayment(ctx, req)
 }
 
 func (p *RedisTaskProcessor) handleEcommercePaymentTimeoutQueryResult(ctx context.Context, paymentOrder db.PaymentOrder, queryResp *wechatcontracts.PartnerOrderQueryResponse) (bool, error) {
@@ -290,6 +329,55 @@ func (p *RedisTaskProcessor) handleDirectPaymentTimeoutQueryResult(ctx context.C
 	}
 }
 
+func (p *RedisTaskProcessor) handleOrdinaryServiceProviderPaymentTimeoutQueryResult(ctx context.Context, paymentOrder db.PaymentOrder, queryResp *ospcontracts.PaymentQueryResponse) (bool, error) {
+	tradeState := normalizePaymentTimeoutTradeState(string(queryResp.TradeState))
+	switch tradeState {
+	case "SUCCESS":
+		if queryResp.Amount == nil {
+			p.publishPaymentTimeoutUnexpectedRemoteStateAlert(ctx, paymentOrder, "SUCCESS_WITHOUT_AMOUNT")
+			return true, nil
+		}
+		if queryResp.Amount.Total != paymentOrder.Amount {
+			p.publishPaymentTimeoutRemoteAmountMismatchAlert(ctx, paymentOrder, queryResp.Amount.Total, tradeState)
+			return true, nil
+		}
+		updatedPaymentOrder, err := p.store.UpdatePaymentOrderToPaid(ctx, db.UpdatePaymentOrderToPaidParams{
+			ID:            paymentOrder.ID,
+			TransactionID: pgtype.Text{String: queryResp.TransactionID, Valid: queryResp.TransactionID != ""},
+		})
+		if err != nil {
+			return false, fmt.Errorf("mark ordinary service provider payment order %d paid from timeout query: %w", paymentOrder.ID, err)
+		}
+		paymentOrder = updatedPaymentOrder
+		var application *db.ExternalPaymentFactApplication
+		var factErr error
+		if shouldRecordReservationPaymentFactForOrder(paymentOrder) {
+			application, factErr = recordOrdinaryServiceProviderReservationPaymentTimeoutQueryFact(ctx, p.store, paymentOrder, queryResp)
+		} else {
+			application, factErr = recordOrdinaryServiceProviderPaymentTimeoutQueryFact(ctx, p.store, paymentOrder, queryResp)
+		}
+		if factErr != nil {
+			return false, fmt.Errorf("record ordinary service provider payment timeout query fact: %w", factErr)
+		}
+		if err := enqueueOrderPaymentFactApplication(ctx, p.distributor, application); err != nil {
+			return false, fmt.Errorf("enqueue ordinary service provider payment timeout query fact application: %w", err)
+		}
+		log.Info().
+			Int64("payment_order_id", paymentOrder.ID).
+			Str("out_trade_no", paymentOrder.OutTradeNo).
+			Str("transaction_id", queryResp.TransactionID).
+			Msg("payment timeout query found remote paid ordinary service provider order; local close skipped")
+		return true, nil
+	case "NOTPAY", "CLOSED", "PAYERROR", "REVOKED":
+		return false, nil
+	case "USERPAYING":
+		return false, fmt.Errorf("payment order %s remote state USERPAYING blocks timeout close", paymentOrder.OutTradeNo)
+	default:
+		p.publishPaymentTimeoutUnexpectedRemoteStateAlert(ctx, paymentOrder, tradeState)
+		return true, nil
+	}
+}
+
 func (p *RedisTaskProcessor) closeRemotePaymentOrderForTimeout(ctx context.Context, paymentOrder db.PaymentOrder, remoteClose paymentOrderTimeoutRemoteClose) error {
 	if !remoteClose.required {
 		return nil
@@ -297,6 +385,16 @@ func (p *RedisTaskProcessor) closeRemotePaymentOrderForTimeout(ctx context.Conte
 	if remoteClose.direct {
 		if err := p.directPaymentClient.CloseOrder(ctx, paymentOrder.OutTradeNo); err != nil && !wechatPayErrorCodeIs(err, "ORDER_CLOSED") {
 			return fmt.Errorf("close direct payment order before local timeout close: %w", err)
+		}
+		return nil
+	}
+	if remoteClose.ordinary {
+		if err := p.ordinarySPClient.ClosePayment(ctx, ospcontracts.PaymentCloseRequest{
+			SpMchID:    p.ordinarySPClient.ServiceProviderMchID(),
+			SubMchID:   remoteClose.subMchID,
+			OutTradeNo: paymentOrder.OutTradeNo,
+		}); err != nil && !ordinaryProviderErrorCodeIs(err, "ORDER_CLOSED") {
+			return fmt.Errorf("close ordinary service provider payment order before local timeout close: %w", err)
 		}
 		return nil
 	}
@@ -376,6 +474,14 @@ func wechatPayErrorCodeIs(err error, code string) bool {
 		return false
 	}
 	return strings.EqualFold(strings.TrimSpace(wxErr.Code), code)
+}
+
+func ordinaryProviderErrorCodeIs(err error, code string) bool {
+	var providerErr *ordinaryserviceprovider.ProviderError
+	if !errors.As(err, &providerErr) {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(providerErr.ProviderCode), code)
 }
 
 func (p *RedisTaskProcessor) publishPaymentTimeoutRemoteAmountMismatchAlert(ctx context.Context, paymentOrder db.PaymentOrder, remoteAmount int64, remoteState string) {

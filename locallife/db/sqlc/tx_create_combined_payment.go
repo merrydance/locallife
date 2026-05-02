@@ -152,7 +152,7 @@ func (store *SQLStore) CreateCombinedPaymentTx(ctx context.Context, arg CreateCo
 				ReservationID:         info.Order.ReservationID,
 				UserID:                arg.UserID,
 				PaymentType:           "miniprogram",
-				PaymentChannel:        PaymentChannelEcommerce,
+				PaymentChannel:        PaymentChannelOrdinaryServiceProvider,
 				RequiresProfitSharing: OrderRequiresProfitSharing(info.Order),
 				BusinessType:          "order",
 				Amount:                info.PayAmount,

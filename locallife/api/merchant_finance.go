@@ -1310,12 +1310,15 @@ func (server *Server) getOwnerMerchantWithActivePaymentConfig(ctx *gin.Context, 
 
 func getMerchantFinanceAccountStatus(paymentConfig *db.MerchantPaymentConfig) (string, string) {
 	if paymentConfig == nil {
-		return "not_configured", "尚未开通收付通账户"
+		return "not_configured", "尚未开通普通服务商特约商户账户"
+	}
+	if paymentConfig.SubMchID != "" && paymentConfig.Status == "pending_authorization" {
+		return "inactive", "普通服务商特约商户号已生成，待商户完成微信开户意愿确认后可使用结算账户能力"
 	}
 	if paymentConfig.SubMchID == "" || paymentConfig.Status != "active" {
-		return "inactive", "收付通账户未激活，完成进件签约后可查看余额并提现"
+		return "inactive", "普通服务商特约商户账户未激活，请先完成进件、签约、账户验证和开户意愿确认"
 	}
-	return "active", "收付通账户已激活"
+	return "active", "普通服务商特约商户账户已激活"
 }
 
 func (server *Server) getFinanceViewerPaymentConfigState(ctx *gin.Context, userID int64) (db.Merchant, *db.MerchantPaymentConfig, string, string, error) {
@@ -1337,11 +1340,11 @@ func (server *Server) getFinanceViewerPaymentConfigState(ctx *gin.Context, userI
 	return merchant, &paymentConfig, status, desc, nil
 }
 
-// getMerchantAccountBalance 查询商户收付通账户余额
+// getMerchantAccountBalance 查询历史平台收付通商户账户余额；普通服务商模式由路由 gate 拦截并指引商户到微信支付商户平台/商家助手处理资金操作。
 func (server *Server) getMerchantAccountBalance(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
 		err := errors.New("ecommerce client not configured")
-		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "ecommerce client not configured", "merchant account balance ecommerce client not configured"))
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "商户收付通资金管理服务未配置；普通服务商模式请前往微信支付商户平台/商家助手处理资金操作", "merchant account balance ecommerce client not configured"))
 		return
 	}
 
@@ -1393,11 +1396,11 @@ func (server *Server) getMerchantAccountBalance(ctx *gin.Context) {
 	})
 }
 
-// createMerchantAccountWithdraw 发起商户收付通提现
+// createMerchantAccountWithdraw 发起历史平台收付通商户提现；普通服务商模式不支持平台内提现。
 func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
 		err := errors.New("ecommerce client not configured")
-		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "ecommerce client not configured", "merchant account withdraw ecommerce client not configured"))
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "商户收付通提现服务未配置；普通服务商模式请前往微信支付商户平台/商家助手处理提现", "merchant account withdraw ecommerce client not configured"))
 		return
 	}
 
@@ -1748,7 +1751,7 @@ type getMerchantWithdrawalRequest struct {
 func (server *Server) getMerchantAccountWithdrawal(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
 		err := errors.New("ecommerce client not configured")
-		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "ecommerce client not configured", "merchant account withdrawal detail ecommerce client not configured"))
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "商户收付通提现查询服务未配置；普通服务商模式请前往微信支付商户平台/商家助手查看提现状态", "merchant account withdrawal detail ecommerce client not configured"))
 		return
 	}
 

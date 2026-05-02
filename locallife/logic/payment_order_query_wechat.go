@@ -12,6 +12,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 )
 
 func (svc *PaymentOrderService) QueryPaymentOrder(ctx context.Context, input QueryPaymentOrderInput) (QueryPaymentOrderResult, error) {
@@ -29,6 +30,9 @@ func (svc *PaymentOrderService) QueryPaymentOrder(ctx context.Context, input Que
 	}
 	if paymentOrderUsesEcommerceChannel(paymentOrder) {
 		return svc.queryEcommercePaymentOrder(ctx, paymentOrder)
+	}
+	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
+		return svc.queryOrdinaryServiceProviderPaymentOrder(ctx, paymentOrder)
 	}
 	if paymentOrder.PaymentChannel == db.PaymentChannelDirect {
 		return svc.queryDirectPaymentOrder(ctx, paymentOrder)
@@ -63,6 +67,43 @@ func (svc *PaymentOrderService) queryEcommercePaymentOrder(ctx context.Context, 
 		PaymentOrder: paymentOrder,
 		PayParams:    payParams,
 		WechatOrder:  mapPartnerPaymentWechatOrder(queryResp),
+	}, nil
+}
+
+func (svc *PaymentOrderService) queryOrdinaryServiceProviderPaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder) (QueryPaymentOrderResult, error) {
+	if svc.ordinaryProviderPayClient == nil {
+		return QueryPaymentOrderResult{}, fmt.Errorf("ordinary service provider client: not configured")
+	}
+
+	subMchID, err := svc.resolvePaymentOrderSubMchID(ctx, paymentOrder)
+	if err != nil {
+		return QueryPaymentOrderResult{}, fmt.Errorf("resolve payment order sub_mchid: %w", err)
+	}
+
+	queryResp, err := svc.ordinaryProviderPayClient.QueryPayment(ctx, ospcontracts.PaymentQueryRequest{
+		SubMchID:      subMchID,
+		TransactionID: strings.TrimSpace(paymentOrder.TransactionID.String),
+		OutTradeNo:    paymentOrder.OutTradeNo,
+	})
+	if err != nil {
+		return QueryPaymentOrderResult{}, mapOrdinaryServiceProviderPaymentQueryError(err)
+	}
+
+	wechatOrder := mapOrdinaryServiceProviderPaymentWechatOrder(queryResp)
+	var payParams *wechat.JSAPIPayParams
+	if svc.shouldExposeDirectPaymentPayParams(paymentOrder, wechatOrder) {
+		ordinaryPayParams, signErr := svc.ordinaryProviderPayClient.GenerateJSAPIPayParams(paymentOrder.PrepayID.String)
+		err = signErr
+		if err != nil {
+			return QueryPaymentOrderResult{}, fmt.Errorf("sign ordinary service provider payment order: %w", err)
+		}
+		payParams = ordinaryJSAPIPayParamsToWechat(ordinaryPayParams)
+	}
+
+	return QueryPaymentOrderResult{
+		PaymentOrder: paymentOrder,
+		PayParams:    payParams,
+		WechatOrder:  wechatOrder,
 	}, nil
 }
 
@@ -177,6 +218,76 @@ func mapPartnerPaymentWechatOrder(resp *wechatcontracts.PartnerOrderQueryRespons
 		SceneDeviceID:   deviceID,
 		PromotionDetail: resp.PromotionDetail,
 	}
+}
+
+func mapOrdinaryServiceProviderPaymentWechatOrder(resp *ospcontracts.PaymentQueryResponse) *QueryPaymentOrderWechatOrder {
+	if resp == nil {
+		return nil
+	}
+	amount := QueryPaymentOrderWechatAmount{}
+	if resp.Amount != nil {
+		amount.Total = resp.Amount.Total
+		amount.PayerTotal = resp.Amount.PayerTotal
+		amount.Currency = string(resp.Amount.Currency)
+		amount.PayerCurrency = string(resp.Amount.PayerCurrency)
+	}
+	deviceID := ""
+	if resp.SceneInfo != nil {
+		deviceID = resp.SceneInfo.DeviceID
+	}
+	return &QueryPaymentOrderWechatOrder{
+		SpAppID:         resp.SpAppID,
+		SpMchID:         resp.SpMchID,
+		SubAppID:        resp.SubAppID,
+		SubMchID:        resp.SubMchID,
+		OutTradeNo:      resp.OutTradeNo,
+		TransactionID:   resp.TransactionID,
+		TradeType:       resp.TradeType,
+		TradeState:      string(resp.TradeState),
+		TradeStateDesc:  resp.TradeStateDesc,
+		BankType:        resp.BankType,
+		Attach:          resp.Attach,
+		SuccessTime:     resp.SuccessTime,
+		Payer:           QueryPaymentOrderWechatPayer{SpOpenID: resp.Payer.SpOpenID, SubOpenID: resp.Payer.SubOpenID},
+		Amount:          amount,
+		SceneDeviceID:   deviceID,
+		PromotionDetail: ordinaryPaymentPromotionDetails(resp.PromotionDetail),
+	}
+}
+
+func ordinaryPaymentPromotionDetails(details []ospcontracts.PaymentPromotionDetail) []wechatcontracts.PartnerPromotionDetail {
+	if len(details) == 0 {
+		return nil
+	}
+	result := make([]wechatcontracts.PartnerPromotionDetail, 0, len(details))
+	for _, promotion := range details {
+		item := wechatcontracts.PartnerPromotionDetail{
+			CouponID:            promotion.CouponID,
+			Name:                promotion.Name,
+			Scope:               promotion.Scope,
+			Type:                promotion.Type,
+			Amount:              promotion.Amount,
+			StockID:             promotion.StockID,
+			WechatpayContribute: promotion.WechatpayContribute,
+			MerchantContribute:  promotion.MerchantContribute,
+			OtherContribute:     promotion.OtherContribute,
+			Currency:            promotion.Currency,
+		}
+		if len(promotion.GoodsDetail) > 0 {
+			item.GoodsDetail = make([]wechatcontracts.PartnerPromotionGoodsDetail, 0, len(promotion.GoodsDetail))
+			for _, goods := range promotion.GoodsDetail {
+				item.GoodsDetail = append(item.GoodsDetail, wechatcontracts.PartnerPromotionGoodsDetail{
+					GoodsID:        goods.GoodsID,
+					Quantity:       goods.Quantity,
+					UnitPrice:      goods.UnitPrice,
+					DiscountAmount: goods.DiscountAmount,
+					GoodsRemark:    goods.GoodsRemark,
+				})
+			}
+		}
+		result = append(result, item)
+	}
+	return result
 }
 
 func mapDirectPaymentWechatOrder(resp *wechatcontracts.DirectOrderQueryResponse) *QueryPaymentOrderWechatOrder {

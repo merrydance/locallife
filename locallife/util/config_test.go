@@ -105,6 +105,24 @@ func TestLoadConfig_ReadsWechatPaymentAndEcommerceConfig(t *testing.T) {
 	require.True(t, config.RedisRequired)
 }
 
+func TestLoadConfig_ReadsWechatOrdinaryApplymentSettlementConfig(t *testing.T) {
+	configDir := writeTestConfigFile(t, strings.Join([]string{
+		"ENVIRONMENT=test",
+		"DB_SOURCE=postgresql:///test",
+		"MIGRATION_URL=file://db/migration",
+		"WECHAT_ORDINARY_APPLYMENT_QUALIFICATION_TYPE=餐饮",
+		"WECHAT_ORDINARY_APPLYMENT_SETTLEMENT_ID_INDIVIDUAL=719",
+		"WECHAT_ORDINARY_APPLYMENT_SETTLEMENT_ID_ENTERPRISE=716",
+	}, "\n")+"\n")
+
+	config, err := LoadConfig(configDir)
+	require.NoError(t, err)
+
+	require.Equal(t, "餐饮", config.WechatOrdinaryApplymentQualification)
+	require.Equal(t, "719", config.WechatOrdinaryApplymentSettlementIDIndividual)
+	require.Equal(t, "716", config.WechatOrdinaryApplymentSettlementIDEnterprise)
+}
+
 func TestEffectiveWechatEcommerceNotifyURLs(t *testing.T) {
 	config := Config{
 		WechatEcommercePaymentNotifyURL:    "https://example.com/v1/webhooks/wechat-ecommerce/payment-notify",
@@ -503,6 +521,64 @@ func TestValidateWechatPayConfig(t *testing.T) {
 			require.Contains(t, err.Error(), tc.want)
 		})
 	}
+}
+
+func TestValidateWechatOrdinaryServiceProviderConfigRejectsMiniAppMismatch(t *testing.T) {
+	config := Config{
+		WechatMiniAppID:                               "wx-mini-app",
+		WechatOrdinarySpMchID:                         "1900000109",
+		WechatOrdinarySpAppID:                         "wx-other-app",
+		WechatOrdinarySpName:                          "普通服务商",
+		WechatOrdinarySpSerialNumber:                  "ordinary-serial-001",
+		WechatOrdinarySpPrivateKeyPath:                "./certs/ordinary_key.pem",
+		WechatOrdinarySpAPIV3Key:                      testWeChatKey("ordinary-service-provider"),
+		WechatOrdinarySpPlatformPublicKeyPath:         "./certs/ordinary-platform.pem",
+		WechatOrdinarySpPlatformPublicKeyID:           "PUB_KEY_ID_ORDINARY_001",
+		WechatOrdinaryPaymentNotifyURL:                "https://example.com/ordinary/payment",
+		WechatOrdinaryCombineNotifyURL:                "https://example.com/ordinary/combine",
+		WechatOrdinaryRefundNotifyURL:                 "https://example.com/ordinary/refund",
+		WechatOrdinaryProfitSharingNotifyURL:          "https://example.com/ordinary/profit-sharing",
+		WechatOrdinaryViolationNotifyURL:              "https://example.com/ordinary/violation",
+		WechatOrdinaryApplymentSettlementIDIndividual: "719",
+		WechatOrdinaryApplymentSettlementIDEnterprise: "716",
+		WechatOrdinaryApplymentQualification:          "餐饮",
+		WechatOrdinaryApplymentContactEmail:           "ops@example.com",
+		WechatOrdinaryApplymentServicePhone:           "13800138000",
+	}
+
+	err := config.ValidateWechatOrdinaryServiceProviderConfig()
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "WECHAT_ORDINARY_SP_APPID must match WECHAT_MINI_APP_ID")
+}
+
+func TestValidateWechatOrdinaryServiceProviderConfigRequiresSubjectSettlementIDs(t *testing.T) {
+	config := Config{
+		WechatMiniAppID:                               "wx-mini-app",
+		WechatOrdinarySpMchID:                         "1900000109",
+		WechatOrdinarySpAppID:                         "wx-mini-app",
+		WechatOrdinarySpName:                          "普通服务商",
+		WechatOrdinarySpSerialNumber:                  "ordinary-serial-001",
+		WechatOrdinarySpPrivateKeyPath:                "./certs/ordinary_key.pem",
+		WechatOrdinarySpAPIV3Key:                      testWeChatKey("ordinary-service-provider"),
+		WechatOrdinarySpPlatformPublicKeyPath:         "./certs/ordinary-platform.pem",
+		WechatOrdinarySpPlatformPublicKeyID:           "PUB_KEY_ID_ORDINARY_001",
+		WechatOrdinaryPaymentNotifyURL:                "https://example.com/ordinary/payment",
+		WechatOrdinaryCombineNotifyURL:                "https://example.com/ordinary/combine",
+		WechatOrdinaryRefundNotifyURL:                 "https://example.com/ordinary/refund",
+		WechatOrdinaryProfitSharingNotifyURL:          "https://example.com/ordinary/profit-sharing",
+		WechatOrdinaryViolationNotifyURL:              "https://example.com/ordinary/violation",
+		WechatOrdinaryApplymentSettlementIDIndividual: "719",
+		WechatOrdinaryApplymentQualification:          "餐饮",
+		WechatOrdinaryApplymentContactEmail:           "ops@example.com",
+		WechatOrdinaryApplymentServicePhone:           "13800138000",
+	}
+
+	err := config.ValidateWechatOrdinaryServiceProviderConfig()
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "WECHAT_ORDINARY_APPLYMENT_SETTLEMENT_ID_INDIVIDUAL")
+	require.Contains(t, err.Error(), "WECHAT_ORDINARY_APPLYMENT_SETTLEMENT_ID_ENTERPRISE")
 }
 
 func TestLoadConfig_ReadsAliyunOCRConfig(t *testing.T) {

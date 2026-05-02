@@ -7,6 +7,9 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/merrydance/locallife/logic"
+	"github.com/merrydance/locallife/wechat"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -55,6 +58,10 @@ func (processor *RedisTaskProcessor) ProcessTaskPaymentFactApplication(ctx conte
 
 	service := logic.NewPaymentFactService(processor.store).
 		WithEcommerceClient(processor.ecommerceClient).
+		WithRefundCreator(paymentFactApplicationRefundCreator{
+			ecommerceClient: processor.ecommerceClient,
+			ordinaryClient:  processor.ordinarySPClient,
+		}).
 		WithPaymentSuccessConfig(processor.config.RiderAverageSpeed, processor.config.DefaultPrepareTime)
 	result, err := service.ApplyExternalPaymentFactApplication(ctx, payload.ApplicationID)
 	if err != nil {
@@ -72,4 +79,27 @@ func (processor *RedisTaskProcessor) ProcessTaskPaymentFactApplication(ctx conte
 		Int64("business_object_id", result.Application.BusinessObjectID).
 		Msg("payment fact application applied")
 	return nil
+}
+
+type paymentFactApplicationRefundCreator struct {
+	ecommerceClient wechat.EcommerceClientInterface
+	ordinaryClient  OrdinaryServiceProviderWorkerClient
+}
+
+func (c paymentFactApplicationRefundCreator) CreateEcommerceRefund(ctx context.Context, req *wechatcontracts.EcommerceRefundRequest) (*wechatcontracts.EcommerceRefundCreateResponse, error) {
+	return createEcommerceRefundContract(ctx, c.ecommerceClient, req)
+}
+
+func (c paymentFactApplicationRefundCreator) CreateOrdinaryServiceProviderRefund(ctx context.Context, req ospcontracts.RefundCreateRequest) (*ospcontracts.RefundResponse, error) {
+	if c.ordinaryClient == nil {
+		return nil, fmt.Errorf("ordinary service provider refund client not configured")
+	}
+	return c.ordinaryClient.CreateRefund(ctx, req)
+}
+
+func (c paymentFactApplicationRefundCreator) OrdinaryServiceProviderRefundNotifyURL() string {
+	if c.ordinaryClient == nil {
+		return ""
+	}
+	return c.ordinaryClient.RefundNotifyURL()
 }

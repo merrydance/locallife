@@ -297,7 +297,7 @@ func sleepWithContext(ctx context.Context, d time.Duration) bool {
 // @Summary 创建支付订单
 // @Description 为订单或预定创建支付订单，当前主路径会按业务类型自动选择真实支付链路。
 // @Description
-// @Description `payment_type` 为兼容字段，可不传；当前 `order` 和 `reservation` 主支付统一走平台收付通普通支付。
+// @Description `payment_type` 为兼容字段，可不传；当前 `order` 和 `reservation` 主支付统一走普通服务商小程序支付。
 // @Description
 // @Description **业务类型：**
 // @Description - order: 订单支付
@@ -323,7 +323,7 @@ func sleepWithContext(ctx context.Context, d time.Duration) bool {
 func (server *Server) createPaymentOrder(ctx *gin.Context) {
 	var req createPaymentOrderRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondPaymentRequestError(ctx, "create_payment_order_bind_request", err, "支付请求参数格式无效，请选择订单并确认支付类型后重试")
 		return
 	}
 
@@ -344,7 +344,7 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isEcommerceClientNotConfigured(err) {
-			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "商户支付能力未完成配置，请联系平台处理", "partner payment ecommerce client not configured"))
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "商户支付能力未完成配置，请联系平台处理", "merchant payment client not configured"))
 			return
 		}
 		if writeLogicRequestError(ctx, err) {
@@ -372,7 +372,7 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 
 // queryPaymentOrder godoc
 // @Summary 查询支付订单远端状态
-// @Description 查询本地普通支付订单详情，并拉取微信收付通单笔支付最新状态，供小程序恢复支付或判断后续动作
+// @Description 查询本地普通支付订单详情，并按支付通道拉取微信普通服务商、平台收付通冷备或直连支付最新状态，供小程序恢复支付或判断后续动作
 // @Tags 支付管理
 // @Accept json
 // @Produce json
@@ -388,7 +388,7 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 func (server *Server) queryPaymentOrder(ctx *gin.Context) {
 	var req getPaymentOrderRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondPaymentRequestError(ctx, "query_payment_order_bind_uri", err, "支付单编号无效，请刷新页面后重试")
 		return
 	}
 
@@ -404,7 +404,7 @@ func (server *Server) queryPaymentOrder(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isEcommerceClientNotConfigured(err) {
-			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "商户支付能力未完成配置，当前无法确认支付状态，请联系平台处理", "query payment ecommerce client not configured"))
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "商户支付能力未完成配置，当前无法确认支付状态，请联系平台处理", "query payment client not configured"))
 			return
 		}
 		if writeLogicRequestError(ctx, err) {
@@ -469,9 +469,147 @@ func writeLogicRequestError(ctx *gin.Context, err error) bool {
 		Str("path", ctx.Request.URL.Path).
 		Str("method", ctx.Request.Method).
 		Int("status", reqErr.Status).
-		Msg("payment request rejected")
-	ctx.JSON(reqErr.Status, errorResponse(reqErr.Err))
+		Msg("logic request rejected")
+	ctx.JSON(reqErr.Status, errorResponse(errors.New(logicRequestErrorPublicMessage(reqErr))))
 	return true
+}
+
+func logicRequestErrorPublicMessage(reqErr *logic.RequestError) string {
+	if reqErr == nil || reqErr.Err == nil {
+		return "操作未完成，请稍后重试；如持续失败请联系平台处理"
+	}
+
+	message := strings.TrimSpace(reqErr.Err.Error())
+	if message == "" {
+		return "操作未完成，请稍后重试；如持续失败请联系平台处理"
+	}
+	if containsNonASCII(message) {
+		return message
+	}
+
+	normalized := strings.ToLower(message)
+	if mapped := legacyPaymentRequestMessage(normalized); mapped != "" {
+		return mapped
+	}
+
+	switch reqErr.Status {
+	case http.StatusBadRequest:
+		return "请求参数或当前状态不满足操作条件，请刷新页面后重试；如仍失败请联系平台处理"
+	case http.StatusForbidden:
+		return "当前账号无权执行该操作，请确认登录账号后重试"
+	case http.StatusNotFound:
+		return "未找到要操作的记录，请刷新页面后重试"
+	case http.StatusConflict:
+		return "当前状态已变化，请刷新页面确认后重试"
+	case http.StatusRequestTimeout:
+		return "请求已取消，请重新发起操作"
+	default:
+		return "操作未完成，请稍后重试；如持续失败请联系平台处理"
+	}
+}
+
+func containsNonASCII(message string) bool {
+	for _, r := range message {
+		if r > 127 {
+			return true
+		}
+	}
+	return false
+}
+
+func legacyPaymentRequestMessage(normalized string) string {
+	switch normalized {
+	case "invalid business type":
+		return "支付业务类型无效，请返回订单页重新发起支付"
+	case "reservation not found":
+		return "未找到预订，请刷新页面后重试"
+	case "reservation does not belong to you":
+		return "当前预订不属于你，无法操作"
+	case "reservation is not in pending status":
+		return "当前预订已不在待支付状态，请刷新页面确认"
+	case "order not found":
+		return "未找到订单，请刷新页面后重试"
+	case "order does not belong to you", "order does not belong to your merchant":
+		return "当前订单不属于你，无法操作"
+	case "order is not in pending status":
+		return "当前订单已不在待支付状态，请刷新页面确认"
+	case "payment amount must be greater than 0":
+		return "支付金额必须大于 0，请刷新订单后重试"
+	case "wechat openid not found":
+		return "未获取到微信用户标识，请重新登录小程序后重试"
+	case "payment order is being recreated, please retry", "payment order is still preparing, please retry":
+		return "支付单仍在准备中，请稍后刷新后重试"
+	case "payment order not found":
+		return "未找到支付单，请刷新页面后重试"
+	case "payment order does not belong to you":
+		return "当前支付单不属于你，无法操作"
+	case "payment order is not paid":
+		return "支付单尚未完成支付，无法继续操作"
+	case "payment order has no associated order":
+		return "支付单缺少关联订单，请联系平台处理"
+	case "only pending payment orders can be closed":
+		return "只有待支付的支付单可以关闭，请刷新状态后重试"
+	case "no sub orders available to close":
+		return "未找到可关闭的合单子单，请刷新支付状态后重试"
+	case "invalid order ids":
+		return "请选择需要合并支付的订单后重试"
+	case "orders are already preparing in another combined payment, please retry":
+		return "订单正在准备合单支付，请稍后重试"
+	case "combined payment order does not belong to you":
+		return "当前合单支付不属于你，无法操作"
+	case "combined payment order is still preparing, please retry":
+		return "合单支付仍在准备中，请稍后刷新后重试"
+	case "combined payment order not found":
+		return "未找到合单支付单，请刷新页面后重试"
+	case "only pending combined payment orders can be closed":
+		return "只有待支付的合单支付单可以关闭，请刷新状态后重试"
+	case "you are not a merchant":
+		return "当前账号不是商户账号，无法执行该操作"
+	case "refund amount exceeds payment amount":
+		return "退款金额不能超过支付金额，请重新输入后重试"
+	case "refund order not found":
+		return "未找到退款单，请刷新页面后重试"
+	case "refund order has no associated order":
+		return "退款单缺少关联订单，请联系平台处理"
+	case "refund order does not belong to your merchant":
+		return "退款单不属于当前商户，无法操作"
+	case "refund order is not in failed state":
+		return "退款单未处于失败状态，请刷新后确认是否仍需异常退款"
+	case "refund order has no wechat refund id":
+		return "退款单缺少微信退款号，请联系平台处理"
+	case "refund order is not an ecommerce refund":
+		return "当前退款单不支持异常退款处理，请刷新退款状态"
+	case "access denied":
+		return "当前账号无权查看该记录"
+	case "unsupported provider":
+		return "设备推送服务商不支持，请更新商户端后重试；如仍失败请联系平台处理"
+	case "merchant sub mchid not configured":
+		return "商户微信支付商户号未配置，请联系平台处理"
+	case "profit sharing order not found":
+		return "未找到分账单，请刷新后重试"
+	case "profit sharing order id missing":
+		return "分账单缺少微信分账单号，请联系平台处理"
+	case "operator not found for profit sharing":
+		return "未找到分账运营商，请联系平台处理"
+	case "operator wechat mchid not configured":
+		return "运营商微信商户号未配置，请联系平台处理"
+	case "request canceled":
+		return "请求已取消，请重新发起操作"
+	default:
+		return ""
+	}
+}
+
+func respondPaymentRequestError(ctx *gin.Context, operation string, err error, publicMessage string) {
+	_ = ctx.Error(err)
+	log.Warn().
+		Err(err).
+		Str("request_id", GetRequestID(ctx)).
+		Str("path", ctx.Request.URL.Path).
+		Str("method", ctx.Request.Method).
+		Str("operation", operation).
+		Msg("payment request rejected")
+	ctx.JSON(http.StatusBadRequest, errorResponse(errors.New(publicMessage)))
 }
 
 func isEcommerceClientNotConfigured(err error) bool {
@@ -479,12 +617,12 @@ func isEcommerceClientNotConfigured(err error) bool {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "ecommerce client") && strings.Contains(msg, "not configured")
+	return (strings.Contains(msg, "ecommerce client") || strings.Contains(msg, "ordinary service provider client")) && strings.Contains(msg, "not configured")
 }
 
-// createCombinedPaymentOrder 创建平台收付通多订单合单支付订单
+// createCombinedPaymentOrder 创建普通服务商多订单合单支付订单
 // @Summary 创建多订单合单支付订单
-// @Description 为单次结算中的多个订单创建平台收付通合单支付订单，当前主要用于多商户外卖一起结算
+// @Description 为单次结算中的多个订单创建普通服务商合单支付订单，当前主要用于多商户外卖一起结算；平台收付通仅作为历史冷备通道保留
 // @Tags 支付管理
 // @Accept json
 // @Produce json
@@ -500,7 +638,7 @@ func isEcommerceClientNotConfigured(err error) bool {
 func (server *Server) createCombinedPaymentOrder(ctx *gin.Context) {
 	var req createCombinedPaymentOrderRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondPaymentRequestError(ctx, "create_combined_payment_order_bind_request", err, "合单支付请求参数格式无效，请选择至少一个订单后重试")
 		return
 	}
 
@@ -518,7 +656,7 @@ func (server *Server) createCombinedPaymentOrder(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isEcommerceClientNotConfigured(err) {
-			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "合单支付能力未完成配置，请联系平台处理", "combined payment ecommerce client not configured"))
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "合单支付能力未完成配置，请联系平台处理", "combined payment client not configured"))
 			return
 		}
 		if writeLogicRequestError(ctx, err) {
@@ -602,7 +740,7 @@ type getCombinedPaymentOrderRequest struct {
 func (server *Server) getCombinedPaymentOrder(ctx *gin.Context) {
 	var req getCombinedPaymentOrderRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondPaymentRequestError(ctx, "get_combined_payment_order_bind_uri", err, "合单支付单编号无效，请刷新页面后重试")
 		return
 	}
 
@@ -651,7 +789,7 @@ func (server *Server) getCombinedPaymentOrder(ctx *gin.Context) {
 func (server *Server) queryCombinedPaymentOrder(ctx *gin.Context) {
 	var req getCombinedPaymentOrderRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondPaymentRequestError(ctx, "query_combined_payment_order_bind_uri", err, "合单支付单编号无效，请刷新页面后重试")
 		return
 	}
 
@@ -667,7 +805,7 @@ func (server *Server) queryCombinedPaymentOrder(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isEcommerceClientNotConfigured(err) {
-			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "合单支付能力未完成配置，当前无法确认支付状态，请联系平台处理", "query combined payment ecommerce client not configured"))
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "合单支付能力未完成配置，当前无法确认支付状态，请联系平台处理", "query combined payment client not configured"))
 			return
 		}
 		if writeLogicRequestError(ctx, err) {
@@ -710,7 +848,7 @@ type closeCombinedPaymentOrderRequest struct {
 func (server *Server) closeCombinedPaymentOrder(ctx *gin.Context) {
 	var req closeCombinedPaymentOrderRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondPaymentRequestError(ctx, "close_combined_payment_order_bind_uri", err, "合单支付单编号无效，请刷新页面后重试")
 		return
 	}
 
@@ -726,7 +864,7 @@ func (server *Server) closeCombinedPaymentOrder(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isEcommerceClientNotConfigured(err) {
-			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "合单支付能力未完成配置，当前无法关闭支付单，请联系平台处理", "close combined payment ecommerce client not configured"))
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "合单支付能力未完成配置，当前无法关闭支付单，请联系平台处理", "close combined payment client not configured"))
 			return
 		}
 		if writeLogicRequestError(ctx, err) {
@@ -791,7 +929,7 @@ type getPaymentOrderRequest struct {
 func (server *Server) getPaymentOrder(ctx *gin.Context) {
 	var req getPaymentOrderRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondPaymentRequestError(ctx, "get_payment_order_bind_uri", err, "支付单编号无效，请刷新页面后重试")
 		return
 	}
 
@@ -851,7 +989,7 @@ type listPaymentOrdersResponse struct {
 func (server *Server) listPaymentOrders(ctx *gin.Context) {
 	var req listPaymentOrdersRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondPaymentRequestError(ctx, "list_payment_orders_bind_query", err, "支付记录查询条件无效，请调整分页条件后重试")
 		return
 	}
 
@@ -923,7 +1061,7 @@ type closePaymentOrderRequest struct {
 func (server *Server) closePaymentOrder(ctx *gin.Context) {
 	var req closePaymentOrderRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondPaymentRequestError(ctx, "close_payment_order_bind_uri", err, "支付单编号无效，请刷新页面后重试")
 		return
 	}
 
@@ -940,7 +1078,7 @@ func (server *Server) closePaymentOrder(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isEcommerceClientNotConfigured(err) {
-			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "支付关闭服务暂不可用，请稍后重试", "close payment ecommerce client not configured"))
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "支付关闭服务暂不可用，请稍后重试", "close payment client not configured"))
 			return
 		}
 		if writeLogicRequestError(ctx, err) {
@@ -1067,13 +1205,13 @@ func newRefundOrderResponse(r db.RefundOrder) refundOrderResponse {
 func (server *Server) applyPlatformAbnormalRefund(ctx *gin.Context) {
 	var uriReq applyAbnormalRefundURIRequest
 	if err := ctx.ShouldBindUri(&uriReq); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondPaymentRequestError(ctx, "apply_abnormal_refund_bind_uri", err, "退款单编号无效，请刷新页面后重试")
 		return
 	}
 
 	var bodyReq applyAbnormalRefundBodyRequest
 	if err := ctx.ShouldBindJSON(&bodyReq); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondPaymentRequestError(ctx, "apply_abnormal_refund_bind_request", err, "异常退款处理参数格式无效，请核对收款账户类型和银行卡信息后重试")
 		return
 	}
 
@@ -1132,7 +1270,7 @@ type createRefundOrderRequest struct {
 func (server *Server) createRefundOrder(ctx *gin.Context) {
 	var req createRefundOrderRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondPaymentRequestError(ctx, "create_refund_order_bind_request", err, "退款申请参数格式无效，请选择支付单、退款类型和退款金额后重试")
 		return
 	}
 
@@ -1184,7 +1322,7 @@ type listProfitSharingReturnsByRefundRequest struct {
 func (server *Server) listProfitSharingReturnsByRefund(ctx *gin.Context) {
 	var req listProfitSharingReturnsByRefundRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondPaymentRequestError(ctx, "list_profit_sharing_returns_bind_uri", err, "退款单编号无效，请刷新页面后重试")
 		return
 	}
 
@@ -1237,7 +1375,7 @@ type getRefundOrderRequest struct {
 func (server *Server) getRefundOrder(ctx *gin.Context) {
 	var req getRefundOrderRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondPaymentRequestError(ctx, "get_refund_order_bind_uri", err, "退款单编号无效，请刷新页面后重试")
 		return
 	}
 
@@ -1290,7 +1428,7 @@ type listRefundOrdersByPaymentResponse struct {
 func (server *Server) listRefundOrdersByPayment(ctx *gin.Context) {
 	var req listRefundOrdersByPaymentRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		respondPaymentRequestError(ctx, "list_refund_orders_by_payment_bind_uri", err, "支付单编号无效，请刷新页面后重试")
 		return
 	}
 

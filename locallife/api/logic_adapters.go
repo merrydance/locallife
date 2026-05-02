@@ -350,6 +350,7 @@ func (server *Server) buildOrderCommandService() logic.OrderCommandService {
 		nil,
 		nil,
 		nil,
+		server.ordinarySPClient,
 	)
 	if service == nil {
 		log.Error().Msg("buildOrderCommandService: failed to initialize service")
@@ -381,6 +382,7 @@ func (server *Server) buildOrderQueryService() logic.OrderQueryService {
 		nil,
 		nil,
 		nil,
+		server.ordinarySPClient,
 	)
 	if service == nil {
 		log.Error().Msg("buildOrderQueryService: failed to initialize service")
@@ -389,13 +391,13 @@ func (server *Server) buildOrderQueryService() logic.OrderQueryService {
 }
 
 func (server *Server) buildPaymentFacade() logic.PaymentFacade {
-	return logic.NewDefaultPaymentFacade(server.store, server.directPaymentClient, server.ecommerceClient)
+	return logic.NewDefaultPaymentFacadeWithOrdinaryServiceProvider(server.store, server.directPaymentClient, server.ecommerceClient, server.ordinarySPClient)
 }
 
 func (server *Server) buildRefundOrchestrator() logic.RefundOrchestrator {
 	var paymentFacade logic.PaymentFacade
-	if server.directPaymentClient != nil || server.ecommerceClient != nil {
-		paymentFacade = logic.NewDefaultPaymentFacade(server.store, server.directPaymentClient, server.ecommerceClient)
+	if server.directPaymentClient != nil || server.ecommerceClient != nil || server.ordinarySPClient != nil {
+		paymentFacade = logic.NewDefaultPaymentFacadeWithOrdinaryServiceProvider(server.store, server.directPaymentClient, server.ecommerceClient, server.ordinarySPClient)
 	}
 
 	var taskScheduler logic.TaskScheduler

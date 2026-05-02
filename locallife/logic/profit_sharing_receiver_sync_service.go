@@ -10,6 +10,8 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 )
 
 var ErrProfitSharingReceiverOpenIDRequired = errors.New("profit sharing receiver wechat openid is required")
@@ -17,6 +19,12 @@ var ErrProfitSharingReceiverOpenIDRequired = errors.New("profit sharing receiver
 type ProfitSharingReceiverSyncService struct {
 	store           db.Store
 	ecommerceClient wechat.EcommerceClientInterface
+}
+
+type OrdinaryProfitSharingReceiverClient interface {
+	ServiceProviderAppID() string
+	AddProfitSharingReceiver(ctx context.Context, req ospcontracts.ProfitSharingReceiverAddRequest) (*ospcontracts.ProfitSharingReceiverResponse, error)
+	DeleteProfitSharingReceiver(ctx context.Context, req ospcontracts.ProfitSharingReceiverDeleteRequest) (*ospcontracts.ProfitSharingReceiverResponse, error)
 }
 
 func NewProfitSharingReceiverService(store db.Store, ecommerceClient wechat.EcommerceClientInterface) *ProfitSharingReceiverSyncService {
@@ -140,6 +148,64 @@ func deletePersonalOpenIDReceiverWithResult(ctx context.Context, ecommerceClient
 	return false, nil
 }
 
+func ensureOrdinaryPersonalOpenIDReceiverWithResult(ctx context.Context, ordinaryClient OrdinaryProfitSharingReceiverClient, subMchID string, openID string, receiverName string) (bool, error) {
+	if ordinaryClient == nil {
+		return false, fmt.Errorf("ordinary service provider client not configured")
+	}
+	trimmedOpenID := strings.TrimSpace(openID)
+	if trimmedOpenID == "" {
+		return false, NewRequestError(http.StatusBadRequest, ErrProfitSharingReceiverOpenIDRequired)
+	}
+	appID := strings.TrimSpace(ordinaryClient.ServiceProviderAppID())
+	if appID == "" {
+		return false, fmt.Errorf("ordinary service provider appid not configured")
+	}
+
+	_, err := ordinaryClient.AddProfitSharingReceiver(ctx, ospcontracts.ProfitSharingReceiverAddRequest{
+		SubMchID:     strings.TrimSpace(subMchID),
+		AppID:        appID,
+		Type:         ospcontracts.ReceiverTypePersonalOpenID,
+		Account:      trimmedOpenID,
+		Name:         strings.TrimSpace(receiverName),
+		RelationType: ospcontracts.ProfitSharingRelationStaff,
+	})
+	if err != nil {
+		if isIgnorableOrdinaryAddReceiverError(err) {
+			return true, nil
+		}
+		return false, fmt.Errorf("add ordinary profit sharing receiver: %w", err)
+	}
+	return false, nil
+}
+
+func deleteOrdinaryPersonalOpenIDReceiverWithResult(ctx context.Context, ordinaryClient OrdinaryProfitSharingReceiverClient, subMchID string, openID string) (bool, error) {
+	if ordinaryClient == nil {
+		return false, fmt.Errorf("ordinary service provider client not configured")
+	}
+	trimmedOpenID := strings.TrimSpace(openID)
+	if trimmedOpenID == "" {
+		return false, NewRequestError(http.StatusBadRequest, ErrProfitSharingReceiverOpenIDRequired)
+	}
+	appID := strings.TrimSpace(ordinaryClient.ServiceProviderAppID())
+	if appID == "" {
+		return false, fmt.Errorf("ordinary service provider appid not configured")
+	}
+
+	_, err := ordinaryClient.DeleteProfitSharingReceiver(ctx, ospcontracts.ProfitSharingReceiverDeleteRequest{
+		SubMchID: strings.TrimSpace(subMchID),
+		AppID:    appID,
+		Type:     ospcontracts.ReceiverTypePersonalOpenID,
+		Account:  trimmedOpenID,
+	})
+	if err != nil {
+		if isIgnorableOrdinaryDeleteReceiverError(err) {
+			return true, nil
+		}
+		return false, fmt.Errorf("delete ordinary profit sharing receiver: %w", err)
+	}
+	return false, nil
+}
+
 func operatorReceiverDisplayName(operator db.Operator) string {
 	if name := strings.TrimSpace(operator.ContactName); name != "" {
 		return name
@@ -178,5 +244,34 @@ func isIgnorableDeleteReceiverError(err error) bool {
 		return false
 	}
 
+	return strings.Contains(message, "not exist") || strings.Contains(message, "no relation")
+}
+
+func isIgnorableOrdinaryAddReceiverError(err error) bool {
+	var providerErr *ordinaryserviceprovider.ProviderError
+	if !errors.As(err, &providerErr) {
+		return false
+	}
+	code := strings.ToUpper(strings.TrimSpace(providerErr.ProviderCode))
+	message := strings.ToLower(strings.TrimSpace(providerErr.ProviderMessage + " " + providerErr.Frontend.Message))
+	if code == "RESOURCE_ALREADY_EXISTS" || code == "RELATION_EXISTS" {
+		return true
+	}
+	return code == "INVALID_REQUEST" && strings.Contains(message, "exist")
+}
+
+func isIgnorableOrdinaryDeleteReceiverError(err error) bool {
+	var providerErr *ordinaryserviceprovider.ProviderError
+	if !errors.As(err, &providerErr) {
+		return false
+	}
+	code := strings.ToUpper(strings.TrimSpace(providerErr.ProviderCode))
+	message := strings.ToLower(strings.TrimSpace(providerErr.ProviderMessage + " " + providerErr.Frontend.Message))
+	if code == "RESOURCE_NOT_EXISTS" || code == "NO_RELATION" {
+		return true
+	}
+	if code != "INVALID_REQUEST" {
+		return false
+	}
 	return strings.Contains(message, "not exist") || strings.Contains(message, "no relation")
 }

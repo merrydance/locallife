@@ -2,9 +2,7 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,57 +12,11 @@ import (
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
-	"github.com/merrydance/locallife/wechat"
-	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
-	wechaterrorcodes "github.com/merrydance/locallife/wechat/errorcodes"
-	mockwechat "github.com/merrydance/locallife/wechat/mock"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
-
-func expectMerchantWithdrawQueryFact(t *testing.T, store *mockdb.MockStore, record db.WithdrawalRecord, accountInfo merchantWithdrawAccountInfo, withdrawID string, wechatStatus string, reason string, applicationID int64) {
-	t.Helper()
-	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
-		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
-		require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
-		require.Equal(t, db.ExternalPaymentCapabilityWithdraw, arg.Capability)
-		require.Equal(t, db.ExternalPaymentFactSourceQuery, arg.FactSource)
-		require.Equal(t, db.ExternalPaymentObjectWithdraw, arg.ExternalObjectType)
-		require.Equal(t, accountInfo.OutRequestNo, arg.ExternalObjectKey)
-		require.Equal(t, withdrawID, arg.ExternalSecondaryKey.String)
-		require.Equal(t, db.ExternalPaymentBusinessOwnerMerchantFunds, arg.BusinessOwner.String)
-		require.Equal(t, merchantWithdrawFactBusinessObject, arg.BusinessObjectType.String)
-		require.Equal(t, record.ID, arg.BusinessObjectID.Int64)
-		require.Equal(t, wechatStatus, arg.UpstreamState)
-		require.Equal(t, merchantWithdrawTerminalStatus(wechatStatus), arg.TerminalStatus)
-		require.Equal(t, merchantWithdrawQueryFactDedupeKey(accountInfo.OutRequestNo, wechatStatus, withdrawID, reason), arg.DedupeKey)
-		var payload map[string]any
-		require.NoError(t, json.Unmarshal(arg.RawResource, &payload))
-		require.EqualValues(t, record.ID, payload["withdrawal_record_id"])
-		require.Equal(t, accountInfo.SubMchID, payload["sub_mch_id"])
-		require.Equal(t, accountInfo.OutRequestNo, payload["out_request_no"])
-		require.Equal(t, withdrawID, payload["withdraw_id"])
-		require.Equal(t, wechatStatus, payload["wechat_status"])
-		require.Equal(t, reason, payload["reason"])
-		return db.ExternalPaymentFact{ID: 9901, DedupeKey: arg.DedupeKey, IsTerminal: arg.IsTerminal, TerminalStatus: arg.TerminalStatus}, nil
-	})
-	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
-		FactID:             9901,
-		Consumer:           merchantWithdrawFactConsumerDomain,
-		BusinessObjectType: merchantWithdrawFactBusinessObject,
-		BusinessObjectID:   record.ID,
-		Status:             db.ExternalPaymentFactApplicationStatusPending,
-	}).Return(db.ExternalPaymentFactApplication{
-		ID:                 applicationID,
-		FactID:             9901,
-		Consumer:           merchantWithdrawFactConsumerDomain,
-		BusinessObjectType: merchantWithdrawFactBusinessObject,
-		BusinessObjectID:   record.ID,
-		Status:             db.ExternalPaymentFactApplicationStatusPending,
-	}, nil)
-}
 
 func expectMerchantWithdrawFactApplySuccess(t *testing.T, store *mockdb.MockStore, applicationID int64, factID int64, currentRecord db.WithdrawalRecord, outRequestNo string, withdrawID string, wechatStatus string, reason string, updatedRecord *db.WithdrawalRecord) {
 	t.Helper()
@@ -196,10 +148,10 @@ func TestGetMerchantAccountBalanceAPIEcommerceClientUnavailable(t *testing.T) {
 	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
 	var resp ErrorResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
-	require.Equal(t, "ecommerce client not configured", resp.Error)
+	require.Equal(t, "商户收付通资金管理服务未配置；普通服务商模式请前往微信支付商户平台/商家助手处理资金操作", resp.Error)
 }
 
-func TestGetMerchantAccountBalanceAPINotConfigured(t *testing.T) {
+func TestGetMerchantAccountBalanceAPIOrdinaryServiceProviderGateSkipsLegacyConfigLookup(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          1,
@@ -215,17 +167,10 @@ func TestGetMerchantAccountBalanceAPINotConfigured(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
-	store.EXPECT().
-		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
-		Times(1).
-		Return(db.MerchantPaymentConfig{}, db.ErrRecordNotFound)
-
 	server := newTestServer(t, store)
-	server.SetEcommerceClientForTest(ecommerce)
 
 	recorder := httptest.NewRecorder()
 	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/balance", nil)
@@ -233,16 +178,10 @@ func TestGetMerchantAccountBalanceAPINotConfigured(t *testing.T) {
 	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, req)
-	require.Equal(t, http.StatusOK, recorder.Code)
-
-	var resp merchantAccountBalanceResponse
-	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-	require.Equal(t, "not_configured", resp.AccountStatus)
-	require.Equal(t, int64(0), resp.AvailableAmount)
-	require.Equal(t, "", resp.SubMchID)
+	requireOrdinaryUnsupportedFundsAPIResponse(t, recorder)
 }
 
-func TestGetMerchantAccountBalanceAPI_WithDayEndBalance(t *testing.T) {
+func TestGetMerchantAccountBalanceAPIOrdinaryServiceProviderGateSkipsLegacyDayEndBalance(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          1,
@@ -253,36 +192,15 @@ func TestGetMerchantAccountBalanceAPI_WithDayEndBalance(t *testing.T) {
 		IsOpen:      true,
 		CreatedAt:   time.Now(),
 	}
-	paymentConfig := db.MerchantPaymentConfig{
-		MerchantID: merchant.ID,
-		SubMchID:   "sub_mch_merchant_001",
-		Status:     "active",
-	}
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
-	store.EXPECT().
-		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
-		Times(1).
-		Return(paymentConfig, nil)
-
-	ecommerce.EXPECT().
-		QueryEcommerceFundDayEndBalance(gomock.Any(), paymentConfig.SubMchID, "2026-04-05", "DEPOSIT").
-		Return(&wechat.EcommerceFundBalanceResponse{
-			SubMchID:        paymentConfig.SubMchID,
-			AvailableAmount: 45678,
-			PendingAmount:   9,
-			AccountType:     "DEPOSIT",
-		}, nil)
-
 	server := newTestServer(t, store)
-	server.SetEcommerceClientForTest(ecommerce)
 
 	recorder := httptest.NewRecorder()
 	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/balance?date=2026-04-05&account_type=deposit", nil)
@@ -290,19 +208,10 @@ func TestGetMerchantAccountBalanceAPI_WithDayEndBalance(t *testing.T) {
 	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, req)
-	require.Equal(t, http.StatusOK, recorder.Code)
-
-	var resp merchantAccountBalanceResponse
-	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-	require.Equal(t, paymentConfig.SubMchID, resp.SubMchID)
-	require.Equal(t, "DEPOSIT", resp.AccountType)
-	require.Equal(t, "2026-04-05", resp.BalanceDate)
-	require.Equal(t, int64(45678), resp.AvailableAmount)
-	require.Equal(t, int64(45678), resp.WithdrawableAmount)
-	require.Equal(t, "active", resp.AccountStatus)
+	requireOrdinaryUnsupportedFundsAPIResponse(t, recorder)
 }
 
-func TestGetMerchantAccountBalanceAPI_InvalidDayEndAccountType(t *testing.T) {
+func TestGetMerchantAccountBalanceAPIOrdinaryServiceProviderGateRunsBeforeLegacyDayEndValidation(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          1,
@@ -318,12 +227,10 @@ func TestGetMerchantAccountBalanceAPI_InvalidDayEndAccountType(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 	server := newTestServer(t, store)
-	server.SetEcommerceClientForTest(ecommerce)
 
 	recorder := httptest.NewRecorder()
 	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/balance?date=2026-04-05&account_type=fees", nil)
@@ -331,10 +238,10 @@ func TestGetMerchantAccountBalanceAPI_InvalidDayEndAccountType(t *testing.T) {
 	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, req)
-	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	requireOrdinaryUnsupportedFundsAPIResponse(t, recorder)
 }
 
-func TestGetMerchantAccountBalanceAPI_NoAuthReturnsExplicitMessage(t *testing.T) {
+func TestGetMerchantAccountBalanceAPIOrdinaryServiceProviderGateSkipsLegacyNoAuthMapping(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          1,
@@ -345,31 +252,15 @@ func TestGetMerchantAccountBalanceAPI_NoAuthReturnsExplicitMessage(t *testing.T)
 		IsOpen:      true,
 		CreatedAt:   time.Now(),
 	}
-	paymentConfig := db.MerchantPaymentConfig{
-		MerchantID: merchant.ID,
-		SubMchID:   "sub_mch_merchant_001",
-		Status:     "active",
-	}
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
-	store.EXPECT().
-		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
-		Times(1).
-		Return(paymentConfig, nil)
-
-	ecommerce.EXPECT().
-		QueryEcommerceFundBalanceByAccountType(gomock.Any(), paymentConfig.SubMchID, wechatcontracts.FundManagementAccountTypeBasic).
-		Return(nil, &wechat.WechatPayError{StatusCode: http.StatusForbidden, Code: wechaterrorcodes.FundManagementCodeNoAuth, Message: "no auth"})
-
 	server := newTestServer(t, store)
-	server.SetEcommerceClientForTest(ecommerce)
 
 	recorder := httptest.NewRecorder()
 	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/balance", nil)
@@ -377,11 +268,16 @@ func TestGetMerchantAccountBalanceAPI_NoAuthReturnsExplicitMessage(t *testing.T)
 	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, req)
-	require.Equal(t, http.StatusBadGateway, recorder.Code)
+	requireOrdinaryUnsupportedFundsAPIResponse(t, recorder)
+}
 
+func requireOrdinaryUnsupportedFundsAPIResponse(t *testing.T, recorder *httptest.ResponseRecorder) {
+	t.Helper()
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
 	var resp APIResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
-	require.Equal(t, "微信侧暂无该账户查询权限，请联系管理员检查收付通配置", resp.Message)
+	require.Equal(t, CodeServiceUnavail, resp.Code)
+	require.Equal(t, ordinaryServiceProviderUnsupportedFundsMessage, resp.Message)
 }
 
 func TestListMerchantAccountWithdrawalsAPIInactiveConfig(t *testing.T) {
@@ -395,27 +291,14 @@ func TestListMerchantAccountWithdrawalsAPIInactiveConfig(t *testing.T) {
 		IsOpen:      true,
 		CreatedAt:   time.Now(),
 	}
-	paymentConfig := db.MerchantPaymentConfig{
-		MerchantID: merchant.ID,
-		SubMchID:   "sub_mch_123",
-		Status:     "pending",
-	}
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
-
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
-	store.EXPECT().
-		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
-		Times(1).
-		Return(paymentConfig, nil)
-
 	server := newTestServer(t, store)
-	server.SetEcommerceClientForTest(ecommerce)
 
 	recorder := httptest.NewRecorder()
 	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/withdrawals?page=1&limit=20", nil)
@@ -423,15 +306,8 @@ func TestListMerchantAccountWithdrawalsAPIInactiveConfig(t *testing.T) {
 	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, req)
-	require.Equal(t, http.StatusOK, recorder.Code)
-
-	var resp merchantWithdrawalsResponse
-	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-	require.Equal(t, "inactive", resp.AccountStatus)
-	require.Len(t, resp.Withdrawals, 0)
-	require.Equal(t, int64(0), resp.Total)
+	requireOrdinaryUnsupportedFundsAPIResponse(t, recorder)
 }
-
 func TestCreateMerchantAccountWithdrawAPIManagerForbidden(t *testing.T) {
 	owner, _ := randomUser(t)
 	manager, _ := randomUser(t)
@@ -484,107 +360,14 @@ func TestCreateMerchantAccountWithdrawAPIRecordsAcceptedCommand(t *testing.T) {
 		IsOpen:      true,
 		CreatedAt:   time.Now(),
 	}
-	paymentConfig := db.MerchantPaymentConfig{
-		MerchantID: merchant.ID,
-		SubMchID:   "sub_mch_123",
-		Status:     "active",
-	}
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
-
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
-	store.EXPECT().
-		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
-		Times(1).
-		Return(paymentConfig, nil)
-
-	store.EXPECT().
-		GetWithdrawalRecordByOutRequestNo(gomock.Any(), gomock.Any()).
-		Return(db.WithdrawalRecord{}, db.ErrRecordNotFound)
-
-	store.EXPECT().
-		CreateWithdrawalRecord(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.CreateWithdrawalRecordParams) (db.WithdrawalRecord, error) {
-			require.Equal(t, int64(1200), arg.Amount)
-			require.Equal(t, "pending", arg.Status)
-			require.Equal(t, merchantWithdrawChannel, arg.Channel)
-			require.Equal(t, "MW-20260425-001", arg.OutRequestNo.String)
-			return db.WithdrawalRecord{
-				ID:           77,
-				UserID:       user.ID,
-				Amount:       arg.Amount,
-				Status:       arg.Status,
-				Channel:      arg.Channel,
-				AccountInfo:  arg.AccountInfo,
-				CreatedAt:    time.Now(),
-				UpdatedAt:    time.Now(),
-				OutRequestNo: pgtype.Text{String: arg.OutRequestNo.String, Valid: arg.OutRequestNo.Valid},
-			}, nil
-		})
-
-	ecommerce.EXPECT().
-		CreateEcommerceWithdraw(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg *wechatcontracts.EcommerceWithdrawRequest) (*wechatcontracts.EcommerceWithdrawCreateResponse, error) {
-			require.Equal(t, paymentConfig.SubMchID, arg.SubMchID)
-			require.Equal(t, "MW-20260425-001", arg.OutRequestNo)
-			require.Equal(t, int64(1200), arg.Amount)
-			return &wechatcontracts.EcommerceWithdrawCreateResponse{
-				SubMchID:     paymentConfig.SubMchID,
-				OutRequestNo: arg.OutRequestNo,
-				WithdrawID:   "withdraw_merchant_001",
-			}, nil
-		})
-
-	store.EXPECT().
-		UpdateWithdrawalAccountInfo(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.UpdateWithdrawalAccountInfoParams) (db.WithdrawalRecord, error) {
-			require.Equal(t, int64(77), arg.ID)
-			info := parseMerchantWithdrawAccountInfo(arg.AccountInfo)
-			require.Equal(t, merchant.ID, info.MerchantID)
-			require.Equal(t, paymentConfig.SubMchID, info.SubMchID)
-			require.Equal(t, "MW-20260425-001", info.OutRequestNo)
-			require.Equal(t, "withdraw_merchant_001", info.WithdrawID)
-			return db.WithdrawalRecord{
-				ID:           77,
-				UserID:       user.ID,
-				Amount:       1200,
-				Status:       "pending",
-				Channel:      merchantWithdrawChannel,
-				AccountInfo:  arg.AccountInfo,
-				CreatedAt:    time.Now(),
-				UpdatedAt:    time.Now(),
-				OutRequestNo: pgtype.Text{String: "MW-20260425-001", Valid: true},
-			}, nil
-		})
-
-	store.EXPECT().
-		CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
-			require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
-			require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
-			require.Equal(t, db.ExternalPaymentCapabilityWithdraw, arg.Capability)
-			require.Equal(t, db.ExternalPaymentCommandTypeCreateWithdraw, arg.CommandType)
-			require.Equal(t, db.ExternalPaymentBusinessOwnerMerchantFunds, arg.BusinessOwner)
-			require.Equal(t, "withdrawal_record", arg.BusinessObjectType.String)
-			require.Equal(t, int64(77), arg.BusinessObjectID.Int64)
-			require.Equal(t, db.ExternalPaymentObjectWithdraw, arg.ExternalObjectType)
-			require.Equal(t, "MW-20260425-001", arg.ExternalObjectKey)
-			require.Equal(t, "withdraw_merchant_001", arg.ExternalSecondaryKey.String)
-			require.Equal(t, db.ExternalPaymentCommandStatusAccepted, arg.CommandStatus)
-			require.False(t, arg.LastErrorCode.Valid)
-			snapshot := string(arg.ResponseSnapshot)
-			require.Contains(t, snapshot, "MW-20260425-001")
-			require.Contains(t, snapshot, "withdraw_merchant_001")
-			require.NotContains(t, snapshot, "测试提现")
-			return db.ExternalPaymentCommand{ID: 9701}, nil
-		})
 
 	server := newTestServer(t, store)
-	server.SetEcommerceClientForTest(ecommerce)
 	server.SetTaskDistributorForTest(nil)
 
 	body := []byte(`{"amount":1200,"remark":"测试提现","out_request_no":"MW-20260425-001"}`)
@@ -595,16 +378,8 @@ func TestCreateMerchantAccountWithdrawAPIRecordsAcceptedCommand(t *testing.T) {
 	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, req)
-	require.Equal(t, http.StatusCreated, recorder.Code)
-
-	var resp merchantWithdrawCreateResponse
-	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-	require.Equal(t, int64(77), resp.Withdrawal.ID)
-	require.Equal(t, "pending", resp.Withdrawal.Status)
-	require.Equal(t, "MW-20260425-001", resp.Withdrawal.OutRequestNo)
-	require.Equal(t, "withdraw_merchant_001", resp.Withdrawal.WithdrawID)
+	requireOrdinaryUnsupportedFundsAPIResponse(t, recorder)
 }
-
 func TestListMerchantAccountWithdrawalsAPIManagerCanReadOwnRecords(t *testing.T) {
 	owner, _ := randomUser(t)
 	manager, _ := randomUser(t)
@@ -617,29 +392,12 @@ func TestListMerchantAccountWithdrawalsAPIManagerCanReadOwnRecords(t *testing.T)
 		IsOpen:      true,
 		CreatedAt:   time.Now(),
 	}
-	paymentConfig := db.MerchantPaymentConfig{
-		MerchantID: merchant.ID,
-		SubMchID:   "sub_mch_123",
-		Status:     "active",
-	}
-	record := db.WithdrawalRecord{
-		ID:        10,
-		UserID:    manager.ID,
-		Amount:    5000,
-		Status:    "success",
-		Channel:   "wechat_ecommerce_fund",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
-
 	expectResolveSingleStaffMerchant(store, manager.ID, merchant)
-
 	store.EXPECT().
 		GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
 			MerchantID: merchant.ID,
@@ -648,31 +406,7 @@ func TestListMerchantAccountWithdrawalsAPIManagerCanReadOwnRecords(t *testing.T)
 		Times(1).
 		Return("manager", nil)
 
-	store.EXPECT().
-		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
-		Times(1).
-		Return(paymentConfig, nil)
-
-	store.EXPECT().
-		ListWithdrawalRecords(gomock.Any(), gomock.Eq(db.ListWithdrawalRecordsParams{
-			UserID:  manager.ID,
-			Channel: "wechat_ecommerce_fund",
-			Limit:   20,
-			Offset:  0,
-		})).
-		Times(1).
-		Return([]db.WithdrawalRecord{record}, nil)
-
-	store.EXPECT().
-		CountWithdrawalRecords(gomock.Any(), gomock.Eq(db.CountWithdrawalRecordsParams{
-			UserID:  manager.ID,
-			Channel: "wechat_ecommerce_fund",
-		})).
-		Times(1).
-		Return(int64(1), nil)
-
 	server := newTestServer(t, store)
-	server.SetEcommerceClientForTest(ecommerce)
 
 	recorder := httptest.NewRecorder()
 	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/withdrawals?page=1&limit=20", nil)
@@ -680,16 +414,8 @@ func TestListMerchantAccountWithdrawalsAPIManagerCanReadOwnRecords(t *testing.T)
 	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, manager.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, req)
-	require.Equal(t, http.StatusOK, recorder.Code)
-
-	var resp merchantWithdrawalsResponse
-	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-	require.Equal(t, "active", resp.AccountStatus)
-	require.Len(t, resp.Withdrawals, 1)
-	require.Equal(t, record.ID, resp.Withdrawals[0].ID)
-	require.Equal(t, manager.ID, record.UserID)
+	requireOrdinaryUnsupportedFundsAPIResponse(t, recorder)
 }
-
 func TestGetMerchantAccountWithdrawalAPI_PersistsWithdrawIDFromWechat(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
@@ -701,89 +427,14 @@ func TestGetMerchantAccountWithdrawalAPI_PersistsWithdrawIDFromWechat(t *testing
 		IsOpen:      true,
 		CreatedAt:   time.Now(),
 	}
-	paymentConfig := db.MerchantPaymentConfig{
-		MerchantID: merchant.ID,
-		SubMchID:   "sub_mch_123",
-		Status:     "active",
-	}
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
-
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
-	store.EXPECT().
-		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
-		Times(1).
-		Return(paymentConfig, nil)
-
-	accountInfoBytes, err := json.Marshal(merchantWithdrawAccountInfo{
-		MerchantID:   merchant.ID,
-		SubMchID:     paymentConfig.SubMchID,
-		OutRequestNo: "MW1001",
-	})
-	require.NoError(t, err)
-
-	store.EXPECT().
-		GetWithdrawalRecord(gomock.Any(), int64(88)).
-		Return(db.WithdrawalRecord{
-			ID:          88,
-			UserID:      user.ID,
-			Amount:      1200,
-			Status:      "pending",
-			Channel:     "wechat_ecommerce_fund",
-			AccountInfo: accountInfoBytes,
-			CreatedAt:   time.Now(),
-			UpdatedAt:   time.Now(),
-		}, nil)
-
-	ecommerce.EXPECT().
-		QueryEcommerceWithdrawByOutRequestNo(gomock.Any(), paymentConfig.SubMchID, "MW1001").
-		Return(&wechat.EcommerceWithdrawResponse{
-			SubMchID:     paymentConfig.SubMchID,
-			OutRequestNo: "MW1001",
-			WithdrawID:   "withdraw_test_merchant_001",
-			Amount:       1200,
-			Status:       "CREATE_SUCCESS",
-		}, nil)
-
-	updatedAccountInfoBytes, err := json.Marshal(merchantWithdrawAccountInfo{
-		MerchantID:   merchant.ID,
-		SubMchID:     paymentConfig.SubMchID,
-		OutRequestNo: "MW1001",
-		WithdrawID:   "withdraw_test_merchant_001",
-	})
-	require.NoError(t, err)
-	updatedRecord := db.WithdrawalRecord{
-		ID:          88,
-		UserID:      user.ID,
-		Amount:      1200,
-		Status:      "pending",
-		Channel:     "wechat_ecommerce_fund",
-		AccountInfo: updatedAccountInfoBytes,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
-	}
-	store.EXPECT().
-		UpdateWithdrawalAccountInfo(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ interface{}, arg db.UpdateWithdrawalAccountInfoParams) (db.WithdrawalRecord, error) {
-			require.Equal(t, int64(88), arg.ID)
-			info := parseMerchantWithdrawAccountInfo(arg.AccountInfo)
-			require.Equal(t, "withdraw_test_merchant_001", info.WithdrawID)
-			return updatedRecord, nil
-		})
-	expectMerchantWithdrawQueryFact(t, store, updatedRecord, merchantWithdrawAccountInfo{
-		MerchantID:   merchant.ID,
-		SubMchID:     paymentConfig.SubMchID,
-		OutRequestNo: "MW1001",
-		WithdrawID:   "withdraw_test_merchant_001",
-	}, "withdraw_test_merchant_001", "CREATE_SUCCESS", "", 9911)
-	expectMerchantWithdrawFactApplySuccess(t, store, 9911, 9901, updatedRecord, "MW1001", "withdraw_test_merchant_001", "CREATE_SUCCESS", "", nil)
 
 	server := newTestServer(t, store)
-	server.SetEcommerceClientForTest(ecommerce)
 
 	recorder := httptest.NewRecorder()
 	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/withdrawals/88", nil)
@@ -791,13 +442,8 @@ func TestGetMerchantAccountWithdrawalAPI_PersistsWithdrawIDFromWechat(t *testing
 	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, req)
-	require.Equal(t, http.StatusOK, recorder.Code)
-
-	var resp merchantWithdrawItem
-	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-	require.Equal(t, "withdraw_test_merchant_001", resp.WithdrawID)
+	requireOrdinaryUnsupportedFundsAPIResponse(t, recorder)
 }
-
 func TestCreateMerchantAccountWithdrawAPIReturnsPendingConfirmationWhenWechatCreateAndQueryFail(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
@@ -809,110 +455,14 @@ func TestCreateMerchantAccountWithdrawAPIReturnsPendingConfirmationWhenWechatCre
 		IsOpen:      true,
 		CreatedAt:   time.Now(),
 	}
-	paymentConfig := db.MerchantPaymentConfig{
-		MerchantID: merchant.ID,
-		SubMchID:   "sub_mch_123",
-		Status:     "active",
-	}
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
-
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
-	store.EXPECT().
-		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
-		Times(1).
-		Return(paymentConfig, nil)
-
-	store.EXPECT().
-		GetWithdrawalRecordByOutRequestNo(gomock.Any(), gomock.Any()).
-		Return(db.WithdrawalRecord{}, db.ErrRecordNotFound)
-
-	store.EXPECT().
-		CreateWithdrawalRecord(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ interface{}, arg db.CreateWithdrawalRecordParams) (db.WithdrawalRecord, error) {
-			return db.WithdrawalRecord{
-				ID:          77,
-				UserID:      user.ID,
-				Amount:      arg.Amount,
-				Status:      arg.Status,
-				Channel:     arg.Channel,
-				AccountInfo: arg.AccountInfo,
-				CreatedAt:   time.Now(),
-				UpdatedAt:   time.Now(),
-				OutRequestNo: pgtype.Text{
-					String: arg.OutRequestNo.String,
-					Valid:  arg.OutRequestNo.Valid,
-				},
-			}, nil
-		})
-
-	ecommerce.EXPECT().
-		CreateEcommerceWithdraw(gomock.Any(), gomock.Any()).
-		Return(nil, errors.New("create timeout"))
-
-	ecommerce.EXPECT().
-		QueryEcommerceWithdrawByOutRequestNo(gomock.Any(), paymentConfig.SubMchID, "MW-20260415-001").
-		Return(nil, errors.New("query timeout"))
-
-	store.EXPECT().
-		UpdateWithdrawalStatus(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ interface{}, arg db.UpdateWithdrawalStatusParams) (db.WithdrawalRecord, error) {
-			require.Equal(t, int64(77), arg.ID)
-			require.Equal(t, "pending", arg.Status)
-			require.True(t, arg.Reason.Valid)
-			require.Equal(t, "withdraw request submitted, awaiting wechat confirmation", arg.Reason.String)
-			accountInfoBytes, marshalErr := json.Marshal(merchantWithdrawAccountInfo{
-				MerchantID:   merchant.ID,
-				SubMchID:     paymentConfig.SubMchID,
-				OutRequestNo: "MW-20260415-001",
-				Remark:       "测试提现",
-			})
-			require.NoError(t, marshalErr)
-			return db.WithdrawalRecord{
-				ID:          77,
-				UserID:      user.ID,
-				Amount:      1200,
-				Status:      "pending",
-				Channel:     merchantWithdrawChannel,
-				AccountInfo: accountInfoBytes,
-				Reason:      pgtype.Text{String: arg.Reason.String, Valid: true},
-				CreatedAt:   time.Now(),
-				UpdatedAt:   time.Now(),
-				OutRequestNo: pgtype.Text{
-					String: "MW-20260415-001",
-					Valid:  true,
-				},
-			}, nil
-		})
-
-	store.EXPECT().
-		CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
-			require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
-			require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
-			require.Equal(t, db.ExternalPaymentCapabilityWithdraw, arg.Capability)
-			require.Equal(t, db.ExternalPaymentCommandTypeCreateWithdraw, arg.CommandType)
-			require.Equal(t, db.ExternalPaymentBusinessOwnerMerchantFunds, arg.BusinessOwner)
-			require.Equal(t, "withdrawal_record", arg.BusinessObjectType.String)
-			require.Equal(t, int64(77), arg.BusinessObjectID.Int64)
-			require.Equal(t, db.ExternalPaymentObjectWithdraw, arg.ExternalObjectType)
-			require.Equal(t, "MW-20260415-001", arg.ExternalObjectKey)
-			require.False(t, arg.ExternalSecondaryKey.Valid)
-			require.Equal(t, db.ExternalPaymentCommandStatusUnknown, arg.CommandStatus)
-			require.True(t, arg.LastErrorMessage.Valid)
-			require.Contains(t, arg.LastErrorMessage.String, "create timeout")
-			snapshot := string(arg.ResponseSnapshot)
-			require.Contains(t, snapshot, "MW-20260415-001")
-			require.Contains(t, snapshot, "query timeout")
-			return db.ExternalPaymentCommand{ID: 9702}, nil
-		})
 
 	server := newTestServer(t, store)
-	server.SetEcommerceClientForTest(ecommerce)
 	server.SetTaskDistributorForTest(nil)
 
 	body := []byte(`{"amount":1200,"remark":"测试提现","out_request_no":"MW-20260415-001"}`)
@@ -923,16 +473,8 @@ func TestCreateMerchantAccountWithdrawAPIReturnsPendingConfirmationWhenWechatCre
 	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, req)
-	require.Equal(t, http.StatusAccepted, recorder.Code)
-
-	var resp merchantWithdrawCreateResponse
-	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-	require.Equal(t, merchantWithdrawSyncStatePendingConfirmation, resp.Withdrawal.SyncState)
-	require.Equal(t, "微信提现已提交，但微信侧结果暂未确认，系统将继续同步状态。", resp.Withdrawal.SyncMessage)
-	require.Equal(t, "withdraw request submitted, awaiting wechat confirmation", resp.Withdrawal.Reason)
-	require.Nil(t, resp.Wechat)
+	requireOrdinaryUnsupportedFundsAPIResponse(t, recorder)
 }
-
 func TestGetMerchantAccountWithdrawalAPIReturnsStaleSyncStateWhenWechatQueryFails(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
@@ -944,50 +486,14 @@ func TestGetMerchantAccountWithdrawalAPIReturnsStaleSyncStateWhenWechatQueryFail
 		IsOpen:      true,
 		CreatedAt:   time.Now(),
 	}
-	paymentConfig := db.MerchantPaymentConfig{
-		MerchantID: merchant.ID,
-		SubMchID:   "sub_mch_123",
-		Status:     "active",
-	}
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
-
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
-	store.EXPECT().
-		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
-		Times(1).
-		Return(paymentConfig, nil)
-
-	accountInfoBytes, err := json.Marshal(merchantWithdrawAccountInfo{
-		MerchantID:   merchant.ID,
-		SubMchID:     paymentConfig.SubMchID,
-		OutRequestNo: "MW1002",
-	})
-	require.NoError(t, err)
-
-	store.EXPECT().
-		GetWithdrawalRecord(gomock.Any(), int64(89)).
-		Return(db.WithdrawalRecord{
-			ID:          89,
-			UserID:      user.ID,
-			Amount:      1200,
-			Status:      "pending",
-			Channel:     merchantWithdrawChannel,
-			AccountInfo: accountInfoBytes,
-			CreatedAt:   time.Now(),
-			UpdatedAt:   time.Now(),
-		}, nil)
-
-	ecommerce.EXPECT().
-		QueryEcommerceWithdrawByOutRequestNo(gomock.Any(), paymentConfig.SubMchID, "MW1002").
-		Return(nil, errors.New("wechat timeout"))
 
 	server := newTestServer(t, store)
-	server.SetEcommerceClientForTest(ecommerce)
 
 	recorder := httptest.NewRecorder()
 	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/withdrawals/89", nil)
@@ -995,16 +501,8 @@ func TestGetMerchantAccountWithdrawalAPIReturnsStaleSyncStateWhenWechatQueryFail
 	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, req)
-	require.Equal(t, http.StatusOK, recorder.Code)
-
-	var resp merchantWithdrawItem
-	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-	require.Equal(t, merchantWithdrawSyncStateStale, resp.SyncState)
-	require.Equal(t, "微信提现状态同步失败，当前展示的是本地缓存结果，请稍后刷新。", resp.SyncMessage)
-	require.Equal(t, "pending", resp.Status)
-	require.Equal(t, "MW1002", resp.OutRequestNo)
+	requireOrdinaryUnsupportedFundsAPIResponse(t, recorder)
 }
-
 func TestGetMerchantFinanceOverviewAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{

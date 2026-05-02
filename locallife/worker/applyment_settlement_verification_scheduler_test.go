@@ -10,8 +10,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
-	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
-	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	ordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
+	mockordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/mock"
 	"github.com/merrydance/locallife/worker"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -37,7 +38,7 @@ func expectSettlementVerificationFactApplied(t *testing.T, store *mockdb.MockSto
 		require.Equal(t, db.ExternalPaymentObjectSettlement, arg.ExternalObjectType)
 		require.Equal(t, item.SubMchID.String, arg.ExternalObjectKey)
 		require.Equal(t, db.ExternalPaymentBusinessOwnerMerchantFunds, arg.BusinessOwner.String)
-		require.Equal(t, "ecommerce_applyment", arg.BusinessObjectType.String)
+		require.Equal(t, "ordinary_service_provider_applyment", arg.BusinessObjectType.String)
 		require.Equal(t, item.ID, arg.BusinessObjectID.Int64)
 		require.Equal(t, verifyResult, arg.UpstreamState)
 		var payload map[string]any
@@ -53,11 +54,11 @@ func expectSettlementVerificationFactApplied(t *testing.T, store *mockdb.MockSto
 	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
 		FactID:             9031,
 		Consumer:           "settlement_domain",
-		BusinessObjectType: "ecommerce_applyment",
+		BusinessObjectType: "ordinary_service_provider_applyment",
 		BusinessObjectID:   item.ID,
 		Status:             db.ExternalPaymentFactApplicationStatusPending,
-	}).Return(db.ExternalPaymentFactApplication{ID: applicationID, FactID: 9031, Consumer: "settlement_domain", BusinessObjectType: "ecommerce_applyment", BusinessObjectID: item.ID, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
-	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), applicationID).Return(db.ExternalPaymentFactApplication{ID: applicationID, FactID: 9031, Consumer: "settlement_domain", BusinessObjectType: "ecommerce_applyment", BusinessObjectID: item.ID, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
+	}).Return(db.ExternalPaymentFactApplication{ID: applicationID, FactID: 9031, Consumer: "settlement_domain", BusinessObjectType: "ordinary_service_provider_applyment", BusinessObjectID: item.ID, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
+	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), applicationID).Return(db.ExternalPaymentFactApplication{ID: applicationID, FactID: 9031, Consumer: "settlement_domain", BusinessObjectType: "ordinary_service_provider_applyment", BusinessObjectID: item.ID, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
 	rawResource, err := json.Marshal(map[string]any{
 		"applyment_id":                      item.ID,
 		"merchant_id":                       item.SubjectID,
@@ -79,7 +80,7 @@ func expectSettlementVerificationFactApplied(t *testing.T, store *mockdb.MockSto
 	store.EXPECT().GetExternalPaymentFact(gomock.Any(), int64(9031)).Return(db.ExternalPaymentFact{
 		ID:                 9031,
 		Provider:           db.ExternalPaymentProviderWechat,
-		Channel:            db.PaymentChannelEcommerce,
+		Channel:            db.PaymentChannelOrdinaryServiceProvider,
 		Capability:         db.ExternalPaymentCapabilitySettlement,
 		ExternalObjectType: db.ExternalPaymentObjectSettlement,
 		ExternalObjectKey:  item.SubMchID.String,
@@ -106,7 +107,7 @@ func expectSettlementVerificationFactApplied(t *testing.T, store *mockdb.MockSto
 		return db.EcommerceApplyment{ID: item.ID, SubjectType: "merchant", SubjectID: item.SubjectID, SubMchID: item.SubMchID}, nil
 	})
 	store.EXPECT().UpdateExternalPaymentFactProcessingStatus(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateExternalPaymentFactProcessingStatusParams{})).Return(db.ExternalPaymentFact{ID: 9031, ProcessingStatus: db.ExternalPaymentFactProcessingStatusTerminalized}, nil)
-	store.EXPECT().MarkExternalPaymentFactApplicationApplied(gomock.Any(), gomock.AssignableToTypeOf(db.MarkExternalPaymentFactApplicationAppliedParams{})).Return(db.ExternalPaymentFactApplication{ID: applicationID, FactID: 9031, Consumer: "settlement_domain", BusinessObjectType: "ecommerce_applyment", BusinessObjectID: item.ID, Status: db.ExternalPaymentFactApplicationStatusApplied}, nil)
+	store.EXPECT().MarkExternalPaymentFactApplicationApplied(gomock.Any(), gomock.AssignableToTypeOf(db.MarkExternalPaymentFactApplicationAppliedParams{})).Return(db.ExternalPaymentFactApplication{ID: applicationID, FactID: 9031, Consumer: "settlement_domain", BusinessObjectType: "ordinary_service_provider_applyment", BusinessObjectID: item.ID, Status: db.ExternalPaymentFactApplicationStatusApplied}, nil)
 }
 
 func TestApplymentSettlementVerificationSchedulerMarksVerifyingCandidate(t *testing.T) {
@@ -115,7 +116,7 @@ func TestApplymentSettlementVerificationSchedulerMarksVerifyingCandidate(t *test
 
 	store := mockdb.NewMockStore(ctrl)
 	distributor := applymentSettlementVerificationTestDistributor{}
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
 	runAt := time.Date(2026, 4, 26, 13, 0, 0, 0, time.UTC)
 	firstTradeAt := runAt.Add(-2 * time.Hour)
 	item := db.ListMerchantApplymentsPendingSettlementVerificationRow{
@@ -130,12 +131,12 @@ func TestApplymentSettlementVerificationSchedulerMarksVerifyingCandidate(t *test
 		ListMerchantApplymentsPendingSettlementVerification(gomock.Any(), gomock.Any()).
 		Return([]db.ListMerchantApplymentsPendingSettlementVerificationRow{item}, nil)
 
-	ecommerceClient.EXPECT().
-		QuerySubMerchantSettlement(gomock.Any(), "sub_mch_21", "").
-		Return(&wechatcontracts.SubMerchantSettlementResponse{VerifyResult: "VERIFYING"}, nil)
+	ordinaryClient.EXPECT().
+		QuerySettlement(gomock.Any(), ospcontracts.SettlementQueryRequest{SubMchID: "sub_mch_21"}).
+		Return(&ospcontracts.SettlementQueryResponse{VerifyResult: ospcontracts.SettlementVerifyResultIng}, nil)
 	expectSettlementVerificationFactApplied(t, store, 9131, item, "VERIFYING", "", runAt, firstTradeAt, 1, "verifying")
 
-	scheduler := worker.NewApplymentSettlementVerificationScheduler(store, distributor, ecommerceClient)
+	scheduler := worker.NewApplymentSettlementVerificationScheduler(store, distributor, ordinaryClient)
 	scheduler.SetNowFuncForTest(func() time.Time { return runAt })
 	scheduler.RunOnce()
 }
@@ -158,7 +159,7 @@ func TestApplymentSettlementVerificationSchedulerNotifiesOperatorOnFailure(t *te
 			return nil
 		},
 	}
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
 	runAt := time.Date(2026, 4, 26, 14, 0, 0, 0, time.UTC)
 	firstTradeAt := runAt.Add(-24 * time.Hour)
 	item := db.ListMerchantApplymentsPendingSettlementVerificationRow{
@@ -173,10 +174,10 @@ func TestApplymentSettlementVerificationSchedulerNotifiesOperatorOnFailure(t *te
 		ListMerchantApplymentsPendingSettlementVerification(gomock.Any(), gomock.Any()).
 		Return([]db.ListMerchantApplymentsPendingSettlementVerificationRow{item}, nil)
 
-	ecommerceClient.EXPECT().
-		QuerySubMerchantSettlement(gomock.Any(), "sub_mch_41", "").
-		Return(&wechatcontracts.SubMerchantSettlementResponse{
-			VerifyResult:     "VERIFY_FAIL",
+	ordinaryClient.EXPECT().
+		QuerySettlement(gomock.Any(), ospcontracts.SettlementQueryRequest{SubMchID: "sub_mch_41"}).
+		Return(&ospcontracts.SettlementQueryResponse{
+			VerifyResult:     ospcontracts.SettlementVerifyResultFail,
 			VerifyFailReason: "银行卡户名不一致",
 		}, nil)
 	expectSettlementVerificationFactApplied(t, store, 9132, item, "VERIFY_FAIL", "银行卡户名不一致", runAt, firstTradeAt, 2, "fail")
@@ -193,7 +194,7 @@ func TestApplymentSettlementVerificationSchedulerNotifiesOperatorOnFailure(t *te
 		MarkEcommerceApplymentSettlementVerifyFailedNotified(gomock.Any(), int64(31)).
 		Return(db.EcommerceApplyment{ID: 31}, nil)
 
-	scheduler := worker.NewApplymentSettlementVerificationScheduler(store, distributor, ecommerceClient)
+	scheduler := worker.NewApplymentSettlementVerificationScheduler(store, distributor, ordinaryClient)
 	scheduler.SetNowFuncForTest(func() time.Time { return runAt })
 	scheduler.RunOnce()
 }
@@ -204,7 +205,7 @@ func TestApplymentSettlementVerificationSchedulerMarksTerminalFailureOnInvalidSe
 
 	store := mockdb.NewMockStore(ctrl)
 	distributor := applymentSettlementVerificationTestDistributor{}
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
 
 	store.EXPECT().
 		ListMerchantApplymentsPendingSettlementVerification(gomock.Any(), gomock.Any()).
@@ -216,9 +217,13 @@ func TestApplymentSettlementVerificationSchedulerMarksTerminalFailureOnInvalidSe
 			FirstPaidAt:                time.Now().Add(-4 * time.Hour),
 		}}, nil)
 
-	ecommerceClient.EXPECT().
-		QuerySubMerchantSettlement(gomock.Any(), "sub_mch_61", "").
-		Return(nil, wechatcontracts.NewSubMerchantSettlementQueryValidationError("sub_mchid must contain only digits"))
+	ordinaryClient.EXPECT().
+		QuerySettlement(gomock.Any(), ospcontracts.SettlementQueryRequest{SubMchID: "sub_mch_61"}).
+		Return(nil, &ordinaryserviceprovider.ProviderError{
+			Operation:    "query ordinary service provider settlement",
+			Category:     ordinaryserviceprovider.ErrorCategoryValidation,
+			ProviderCode: "LOCAL_VALIDATION_ERROR",
+		})
 
 	store.EXPECT().
 		UpdateEcommerceApplymentSettlementVerification(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateEcommerceApplymentSettlementVerificationParams{})).
@@ -226,11 +231,11 @@ func TestApplymentSettlementVerificationSchedulerMarksTerminalFailureOnInvalidSe
 			require.Equal(t, int64(51), arg.ID)
 			require.Equal(t, int32(1), arg.SettlementVerifyCheckCount.Int32)
 			require.Equal(t, "fail", arg.SettlementVerifyStatus.String)
-			require.Equal(t, "结算卡验卡巡检请求无效，请联系平台处理微信二级商户号数据", arg.SettlementVerifyFailReason.String)
+			require.Equal(t, "结算卡验卡巡检请求无效，请联系平台核验微信二级商户号和请求参数", arg.SettlementVerifyFailReason.String)
 			return db.EcommerceApplyment{ID: 51}, nil
 		})
 
-	scheduler := worker.NewApplymentSettlementVerificationScheduler(store, distributor, ecommerceClient)
+	scheduler := worker.NewApplymentSettlementVerificationScheduler(store, distributor, ordinaryClient)
 	scheduler.RunOnce()
 }
 
@@ -240,7 +245,7 @@ func TestApplymentSettlementVerificationSchedulerMarksTerminalFailureOnSettlemen
 
 	store := mockdb.NewMockStore(ctrl)
 	distributor := applymentSettlementVerificationTestDistributor{}
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
 
 	store.EXPECT().
 		ListMerchantApplymentsPendingSettlementVerification(gomock.Any(), gomock.Any()).
@@ -252,9 +257,13 @@ func TestApplymentSettlementVerificationSchedulerMarksTerminalFailureOnSettlemen
 			FirstPaidAt:                time.Now().Add(-6 * time.Hour),
 		}}, nil)
 
-	ecommerceClient.EXPECT().
-		QuerySubMerchantSettlement(gomock.Any(), "1900000081", "").
-		Return(nil, wechatcontracts.NewSubMerchantSettlementContractError("unsupported verify_result %q", ""))
+	ordinaryClient.EXPECT().
+		QuerySettlement(gomock.Any(), ospcontracts.SettlementQueryRequest{SubMchID: "1900000081"}).
+		Return(nil, &ordinaryserviceprovider.ProviderError{
+			Operation:    "query ordinary service provider settlement",
+			Category:     ordinaryserviceprovider.ErrorCategoryProvider,
+			ProviderCode: "LOCAL_RESPONSE_DECODE_ERROR",
+		})
 
 	store.EXPECT().
 		UpdateEcommerceApplymentSettlementVerification(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateEcommerceApplymentSettlementVerificationParams{})).
@@ -266,11 +275,11 @@ func TestApplymentSettlementVerificationSchedulerMarksTerminalFailureOnSettlemen
 			return db.EcommerceApplyment{ID: 71}, nil
 		})
 
-	scheduler := worker.NewApplymentSettlementVerificationScheduler(store, distributor, ecommerceClient)
+	scheduler := worker.NewApplymentSettlementVerificationScheduler(store, distributor, ordinaryClient)
 	scheduler.RunOnce()
 }
 
-func TestApplymentSettlementVerificationSchedulerRunOnceSkipsWithoutEcommerceClient(t *testing.T) {
+func TestApplymentSettlementVerificationSchedulerRunOnceSkipsWithoutOrdinaryServiceProviderClient(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 

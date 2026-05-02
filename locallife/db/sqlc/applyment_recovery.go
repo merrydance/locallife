@@ -18,6 +18,7 @@ type EcommerceApplymentPendingFollowUp struct {
 	SignState                pgtype.Text        `json:"sign_state"`
 	RejectReason             pgtype.Text        `json:"reject_reason"`
 	SubMchID                 pgtype.Text        `json:"sub_mch_id"`
+	AccountAuthorizeState    pgtype.Text        `json:"account_authorize_state"`
 	UpdatedAt                time.Time          `json:"updated_at"`
 	ResultTaskProcessedState pgtype.Text        `json:"result_task_processed_state"`
 	ResultTaskProcessedAt    pgtype.Timestamptz `json:"result_task_processed_at"`
@@ -30,8 +31,8 @@ type ListEcommerceApplymentsPendingFollowUpParams struct {
 
 func (store *SQLStore) ListEcommerceApplymentsPendingFollowUp(ctx context.Context, arg ListEcommerceApplymentsPendingFollowUpParams) ([]EcommerceApplymentPendingFollowUp, error) {
 	rows, err := store.connPool.Query(ctx, `
-		SELECT id, subject_type, subject_id, out_request_no, applyment_id, status, sign_url, sign_state,
-		       reject_reason, sub_mch_id, updated_at, result_task_processed_state, result_task_processed_at
+			SELECT id, subject_type, subject_id, out_request_no, applyment_id, status, sign_url, sign_state,
+			       reject_reason, sub_mch_id, account_authorize_state, updated_at, result_task_processed_state, result_task_processed_at
 		FROM ecommerce_applyments
 		WHERE updated_at <= $1
 		  AND subject_type = 'merchant'
@@ -60,6 +61,7 @@ func (store *SQLStore) ListEcommerceApplymentsPendingFollowUp(ctx context.Contex
 			&item.SignState,
 			&item.RejectReason,
 			&item.SubMchID,
+			&item.AccountAuthorizeState,
 			&item.UpdatedAt,
 			&item.ResultTaskProcessedState,
 			&item.ResultTaskProcessedAt,

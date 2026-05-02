@@ -1,7 +1,9 @@
 package worker_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -12,8 +14,11 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/merrydance/locallife/worker"
 	mockwk "github.com/merrydance/locallife/worker/mock"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -43,9 +48,200 @@ type orderRefundFactApplicationRecorder struct {
 	applicationIDs []int64
 }
 
+type refundRecoveryOrdinaryClient struct {
+	createRefundRequest               *ospcontracts.RefundCreateRequest
+	createRefundResponse              *ospcontracts.RefundResponse
+	createRefundErr                   error
+	queryRefundRequest                *ospcontracts.RefundQueryRequest
+	queryRefundResponse               *ospcontracts.RefundResponse
+	addProfitSharingReceiverRequests  []ospcontracts.ProfitSharingReceiverAddRequest
+	addProfitSharingReceiverErrs      []error
+	createProfitSharingOrderRequest   *ospcontracts.ProfitSharingOrderRequest
+	createProfitSharingOrderResponse  *ospcontracts.ProfitSharingOrderResponse
+	createProfitSharingOrderErrs      []error
+	createProfitSharingReturnRequest  *ospcontracts.ProfitSharingReturnRequest
+	createProfitSharingReturnResponse *ospcontracts.ProfitSharingReturnResponse
+	createProfitSharingReturnErr      error
+	queryProfitSharingReturnRequest   *ospcontracts.ProfitSharingReturnQueryRequest
+	queryProfitSharingReturnResponse  *ospcontracts.ProfitSharingReturnResponse
+	queryProfitSharingReturnErr       error
+}
+
+func (c *refundRecoveryOrdinaryClient) ServiceProviderAppID() string   { return "wxsp_app" }
+func (c *refundRecoveryOrdinaryClient) ServiceProviderMchID() string   { return "1900000109" }
+func (c *refundRecoveryOrdinaryClient) ServiceProviderMchName() string { return "LocalLife" }
+func (c *refundRecoveryOrdinaryClient) RefundNotifyURL() string {
+	return "https://api.example.com/v1/webhooks/wechat-ordinary/refund-notify"
+}
+func (c *refundRecoveryOrdinaryClient) QueryPayment(context.Context, ospcontracts.PaymentQueryRequest) (*ospcontracts.PaymentQueryResponse, error) {
+	return nil, nil
+}
+func (c *refundRecoveryOrdinaryClient) ClosePayment(context.Context, ospcontracts.PaymentCloseRequest) error {
+	return nil
+}
+func (c *refundRecoveryOrdinaryClient) QueryCombinePayment(context.Context, ospcontracts.CombineQueryRequest) (*ospcontracts.CombineQueryResponse, error) {
+	return nil, nil
+}
+func (c *refundRecoveryOrdinaryClient) CloseCombinePayment(context.Context, ospcontracts.CombineCloseRequest) error {
+	return nil
+}
+func (c *refundRecoveryOrdinaryClient) CreateRefund(_ context.Context, req ospcontracts.RefundCreateRequest) (*ospcontracts.RefundResponse, error) {
+	c.createRefundRequest = &req
+	if c.createRefundErr != nil {
+		return nil, c.createRefundErr
+	}
+	if c.createRefundResponse != nil {
+		return c.createRefundResponse, nil
+	}
+	return &ospcontracts.RefundResponse{RefundID: "refund-ordinary", OutRefundNo: req.OutRefundNo}, nil
+}
+func (c *refundRecoveryOrdinaryClient) QueryRefund(_ context.Context, req ospcontracts.RefundQueryRequest) (*ospcontracts.RefundResponse, error) {
+	c.queryRefundRequest = &req
+	return c.queryRefundResponse, nil
+}
+func (c *refundRecoveryOrdinaryClient) AddProfitSharingReceiver(_ context.Context, req ospcontracts.ProfitSharingReceiverAddRequest) (*ospcontracts.ProfitSharingReceiverResponse, error) {
+	c.addProfitSharingReceiverRequests = append(c.addProfitSharingReceiverRequests, req)
+	if len(c.addProfitSharingReceiverErrs) > 0 {
+		err := c.addProfitSharingReceiverErrs[0]
+		c.addProfitSharingReceiverErrs = c.addProfitSharingReceiverErrs[1:]
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &ospcontracts.ProfitSharingReceiverResponse{SubMchID: req.SubMchID, Type: req.Type, Account: req.Account, Name: req.Name, RelationType: req.RelationType}, nil
+}
+func (c *refundRecoveryOrdinaryClient) DeleteProfitSharingReceiver(context.Context, ospcontracts.ProfitSharingReceiverDeleteRequest) (*ospcontracts.ProfitSharingReceiverResponse, error) {
+	return nil, nil
+}
+func (c *refundRecoveryOrdinaryClient) CreateProfitSharingOrder(_ context.Context, req ospcontracts.ProfitSharingOrderRequest) (*ospcontracts.ProfitSharingOrderResponse, error) {
+	c.createProfitSharingOrderRequest = &req
+	if len(c.createProfitSharingOrderErrs) > 0 {
+		err := c.createProfitSharingOrderErrs[0]
+		c.createProfitSharingOrderErrs = c.createProfitSharingOrderErrs[1:]
+		if err != nil {
+			return nil, err
+		}
+	}
+	if c.createProfitSharingOrderResponse != nil {
+		return c.createProfitSharingOrderResponse, nil
+	}
+	return &ospcontracts.ProfitSharingOrderResponse{SubMchID: req.SubMchID, TransactionID: req.TransactionID, OutOrderNo: req.OutOrderNo, OrderID: "ps-ordinary", State: ospcontracts.ProfitSharingOrderStateProcessing}, nil
+}
+func (c *refundRecoveryOrdinaryClient) QueryProfitSharingOrder(context.Context, ospcontracts.ProfitSharingQueryRequest) (*ospcontracts.ProfitSharingOrderResponse, error) {
+	return nil, nil
+}
+func (c *refundRecoveryOrdinaryClient) CreateProfitSharingReturn(_ context.Context, req ospcontracts.ProfitSharingReturnRequest) (*ospcontracts.ProfitSharingReturnResponse, error) {
+	c.createProfitSharingReturnRequest = &req
+	if c.createProfitSharingReturnErr != nil {
+		return nil, c.createProfitSharingReturnErr
+	}
+	if c.createProfitSharingReturnResponse != nil {
+		return c.createProfitSharingReturnResponse, nil
+	}
+	return &ospcontracts.ProfitSharingReturnResponse{SubMchID: req.SubMchID, OrderID: req.OrderID, OutOrderNo: req.OutOrderNo, OutReturnNo: req.OutReturnNo, ReturnMchID: req.ReturnMchID, Amount: req.Amount, State: ospcontracts.ProfitSharingReturnStateProcessing}, nil
+}
+func (c *refundRecoveryOrdinaryClient) QueryProfitSharingReturn(_ context.Context, req ospcontracts.ProfitSharingReturnQueryRequest) (*ospcontracts.ProfitSharingReturnResponse, error) {
+	c.queryProfitSharingReturnRequest = &req
+	if c.queryProfitSharingReturnErr != nil {
+		return nil, c.queryProfitSharingReturnErr
+	}
+	return c.queryProfitSharingReturnResponse, nil
+}
+func (c *refundRecoveryOrdinaryClient) UnfreezeProfitSharing(context.Context, ospcontracts.ProfitSharingUnfreezeRequest) (*ospcontracts.ProfitSharingUnfreezeResponse, error) {
+	return nil, nil
+}
+func (c *refundRecoveryOrdinaryClient) QueryProfitSharingRemainingAmount(context.Context, ospcontracts.ProfitSharingRemainingAmountRequest) (*ospcontracts.ProfitSharingRemainingAmountResponse, error) {
+	return nil, nil
+}
+
 func (r *orderRefundFactApplicationRecorder) DistributeTaskProcessPaymentFactApplication(_ context.Context, payload *worker.PaymentFactApplicationPayload, _ ...asynq.Option) error {
 	r.applicationIDs = append(r.applicationIDs, payload.ApplicationID)
 	return nil
+}
+
+func TestProcessTaskProfitSharingLogsRetryReceiverEnsureFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var logs bytes.Buffer
+	previousLogger := log.Logger
+	log.Logger = zerolog.New(&logs)
+	t.Cleanup(func() { log.Logger = previousLogger })
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := &refundRecoveryOrdinaryClient{
+		addProfitSharingReceiverErrs: []error{
+			nil,
+			errors.New("retry receiver ensure failed"),
+		},
+		createProfitSharingOrderErrs: []error{
+			errors.New("receiver missing before retry"),
+			nil,
+		},
+		createProfitSharingOrderResponse: &ospcontracts.ProfitSharingOrderResponse{
+			SubMchID:      "sub_mch_retry_ordinary",
+			TransactionID: "wx_txn_retry_ordinary",
+			OutOrderNo:    "PS91779",
+			OrderID:       "ps_retry_ordinary",
+			State:         ospcontracts.ProfitSharingOrderStateProcessing,
+		},
+	}
+
+	paymentOrder := db.PaymentOrder{
+		ID:             917,
+		Amount:         10000,
+		PaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
+		TransactionID:  pgtype.Text{String: "wx_txn_retry_ordinary", Valid: true},
+	}
+	order := db.Order{ID: 79, MerchantID: 17, TotalAmount: 10000, DeliveryFee: 0, OrderType: "takeout"}
+	merchant := db.Merchant{ID: 17, RegionID: 14, Name: "商户重试"}
+	operator := db.Operator{ID: 45, UserID: 450, Name: "区域运营商重试"}
+	operatorUser := db.User{ID: operator.UserID, WechatOpenid: "operator_openid_retry", FullName: "区域运营商重试"}
+
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), merchant.ID).Return(merchant, nil)
+	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchant.ID).Return(db.MerchantPaymentConfig{MerchantID: merchant.ID, SubMchID: "sub_mch_retry_ordinary"}, nil)
+	store.EXPECT().GetActiveProfitSharingConfig(gomock.Any(), db.GetActiveProfitSharingConfigParams{
+		OrderSource: order.OrderType,
+		MerchantID:  pgtype.Int8{Int64: merchant.ID, Valid: true},
+		RegionID:    pgtype.Int8{Int64: merchant.RegionID, Valid: true},
+	}).Return(db.ProfitSharingConfig{PlatformRate: 0, OperatorRate: 20, RiderEnabled: false}, nil)
+	store.EXPECT().GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).Return(operator, nil)
+	store.EXPECT().GetUser(gomock.Any(), operator.UserID).Return(operatorUser, nil)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(db.ProfitSharingOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().CreateProfitSharingOrder(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateProfitSharingOrderParams) (db.ProfitSharingOrder, error) {
+		require.Equal(t, int64(2000), arg.OperatorCommission)
+		require.Equal(t, int64(8000), arg.MerchantAmount)
+		return db.ProfitSharingOrder{ID: 3017, OutOrderNo: arg.OutOrderNo}, nil
+	})
+	store.EXPECT().UpdateProfitSharingOrderToProcessing(gomock.Any(), db.UpdateProfitSharingOrderToProcessingParams{
+		ID:             3017,
+		SharingOrderID: pgtype.Text{String: "ps_retry_ordinary", Valid: true},
+	}).Return(db.ProfitSharingOrder{ID: 3017, Status: "processing"}, nil)
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
+		require.Equal(t, db.PaymentChannelOrdinaryServiceProvider, arg.Channel)
+		require.Equal(t, db.ExternalPaymentCapabilityProfitSharing, arg.Capability)
+		require.Equal(t, db.ExternalPaymentCommandTypeCreateProfitSharing, arg.CommandType)
+		require.Equal(t, db.ExternalPaymentObjectProfitSharing, arg.ExternalObjectType)
+		require.Equal(t, "PS91779", arg.ExternalObjectKey)
+		require.Equal(t, db.ExternalPaymentCommandStatusAccepted, arg.CommandStatus)
+		require.True(t, arg.ExternalSecondaryKey.Valid)
+		require.Equal(t, "ps_retry_ordinary", arg.ExternalSecondaryKey.String)
+		return db.ExternalPaymentCommand{ID: 9937}, nil
+	})
+
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
+	processor.SetOrdinaryServiceProviderClient(ordinaryClient)
+	payloadBytes, err := json.Marshal(worker.ProfitSharingPayload{PaymentOrderID: paymentOrder.ID, OrderID: order.ID})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskProfitSharing(context.Background(), asynq.NewTask(worker.TaskProcessProfitSharing, payloadBytes))
+	require.NoError(t, err)
+	require.Len(t, ordinaryClient.addProfitSharingReceiverRequests, 2)
+	require.Contains(t, logs.String(), "re-ensure operator profit sharing receiver failed before retry")
+	require.Contains(t, logs.String(), "retry receiver ensure failed")
 }
 
 func TestRefundRecoverySchedulerRunOnceProcessesPendingReservationRefundsWithoutOrderRefunds(t *testing.T) {
@@ -518,6 +714,70 @@ func TestRefundRecoverySchedulerRunOnceQueriesEcommerceRefundStatusByOrder(t *te
 	scheduler := worker.NewRefundRecoveryScheduler(store, distributor, nil, ecommerceClient)
 	scheduler.RunOnce()
 	require.Equal(t, []int64{912}, distributor.applicationIDs)
+}
+
+func TestRefundRecoverySchedulerRunOnceQueriesOrdinaryRefundStatusByOrder(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &orderRefundFactApplicationRecorder{}
+	ordinaryClient := &refundRecoveryOrdinaryClient{queryRefundResponse: &ospcontracts.RefundResponse{RefundID: "wx_refund_ordinary_order_001", Status: ospcontracts.RefundStatusAbnormal}}
+
+	stuckRefund := db.RefundOrder{
+		ID:             163,
+		PaymentOrderID: 193,
+		OutRefundNo:    "RFD_STUCK_ORDINARY_ORDER_001",
+		Status:         "processing",
+		RefundAmount:   880,
+	}
+	paymentOrder := db.PaymentOrder{
+		ID:             193,
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
+		BusinessType:   db.ExternalPaymentBusinessOwnerOrder,
+		OrderID:        pgtype.Int8{Int64: 1501, Valid: true},
+	}
+
+	store.EXPECT().ListPaidUnrefundedPaymentOrders(gomock.Any(), int32(50)).Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().ListPaidUnrefundedReservationPaymentOrders(gomock.Any(), int32(50)).Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().ListPendingReservationRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingReservationRefundOrdersForRecoveryRow{}, nil)
+	store.EXPECT().ListStuckProcessingRefundOrders(gomock.Any(), gomock.Any()).Return([]db.ListStuckProcessingRefundOrdersRow{{
+		ID:          stuckRefund.ID,
+		OutRefundNo: stuckRefund.OutRefundNo,
+		Status:      stuckRefund.Status,
+		CreatedAt:   time.Now().Add(-20 * time.Minute),
+		PaymentType: paymentOrder.PaymentType,
+	}}, nil)
+	store.EXPECT().GetRefundOrder(gomock.Any(), stuckRefund.ID).Return(stuckRefund, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), int64(1501)).Return(db.Order{ID: 1501, MerchantID: 17001}, nil)
+	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), int64(17001)).Return(db.MerchantPaymentConfig{MerchantID: 17001, SubMchID: "sub_mch_ordinary_7001"}, nil)
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+		require.Equal(t, db.PaymentChannelOrdinaryServiceProvider, arg.Channel)
+		require.Equal(t, db.ExternalPaymentCapabilityPartnerRefund, arg.Capability)
+		require.Equal(t, stuckRefund.OutRefundNo, arg.ExternalObjectKey)
+		require.Equal(t, db.ExternalPaymentTerminalStatusFailed, arg.TerminalStatus)
+		require.Equal(t, stuckRefund.ID, arg.BusinessObjectID.Int64)
+		require.Equal(t, db.ExternalPaymentBusinessOwnerOrder, arg.BusinessOwner.String)
+		require.Equal(t, "wechat:query:ordinary_service_provider:refund:"+stuckRefund.OutRefundNo+":"+db.ExternalPaymentTerminalStatusFailed, arg.DedupeKey)
+		return db.ExternalPaymentFact{ID: 1812, DedupeKey: arg.DedupeKey, IsTerminal: true}, nil
+	})
+	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
+		FactID:             1812,
+		Consumer:           "order_domain",
+		BusinessObjectType: "refund_order",
+		BusinessObjectID:   stuckRefund.ID,
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}).Return(db.ExternalPaymentFactApplication{ID: 1912, FactID: 1812, Consumer: "order_domain", BusinessObjectType: "refund_order", BusinessObjectID: stuckRefund.ID, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
+
+	scheduler := worker.NewRefundRecoveryScheduler(store, distributor, nil, nil)
+	scheduler.SetOrdinaryServiceProviderClient(ordinaryClient)
+	scheduler.RunOnce()
+	require.Equal(t, []int64{1912}, distributor.applicationIDs)
+	require.NotNil(t, ordinaryClient.queryRefundRequest)
+	require.Equal(t, "sub_mch_ordinary_7001", ordinaryClient.queryRefundRequest.SubMchID)
+	require.Equal(t, stuckRefund.OutRefundNo, ordinaryClient.queryRefundRequest.OutRefundNo)
 }
 
 func TestRefundRecoverySchedulerRunOnceKeepsWaitingWhenEcommerceRefundStillProcessing(t *testing.T) {

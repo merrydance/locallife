@@ -11,13 +11,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
-	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/rs/zerolog/log"
 )
 
 const (
 	settlementFactBusinessObjectMerchantPaymentConfig = "merchant_payment_config"
-	settlementFactBusinessObjectApplyment             = "ecommerce_applyment"
+	settlementFactBusinessObjectApplyment             = "ordinary_service_provider_applyment"
 	settlementFactConsumerDomain                      = "settlement_domain"
 )
 
@@ -58,7 +58,7 @@ func (server *Server) updateMerchantSettlementApplicationTracking(ctx context.Co
 	return err
 }
 
-func (server *Server) recordMerchantSettlementApplicationQueryFact(ctx context.Context, merchantID int64, paymentConfig db.MerchantPaymentConfig, applicationNo string, resp *wechatcontracts.QuerySubMerchantSettlementApplicationResponse) (*db.ExternalPaymentFactApplication, error) {
+func (server *Server) recordMerchantSettlementApplicationQueryFact(ctx context.Context, merchantID int64, paymentConfig db.MerchantPaymentConfig, applicationNo string, resp *ospcontracts.SettlementModificationQueryResponse) (*db.ExternalPaymentFactApplication, error) {
 	trimmedSubMchID := strings.TrimSpace(paymentConfig.SubMchID)
 	trimmedApplicationNo := strings.TrimSpace(applicationNo)
 	if server.paymentFactService == nil || trimmedSubMchID == "" || trimmedApplicationNo == "" || resp == nil {
@@ -68,14 +68,14 @@ func (server *Server) recordMerchantSettlementApplicationQueryFact(ctx context.C
 	businessOwner := db.ExternalPaymentBusinessOwnerMerchantFunds
 	businessObjectType := settlementFactBusinessObjectMerchantPaymentConfig
 	businessObjectID := paymentConfig.ID
-	verifyResult := strings.TrimSpace(resp.VerifyResult)
+	verifyResult := strings.TrimSpace(string(resp.VerifyResult))
 	verifyFailReason := strings.TrimSpace(resp.VerifyFailReason)
 	verifyFinishTime := strings.TrimSpace(resp.VerifyFinishTime)
 	factTime := parseSettlementApplicationFactTime(verifyFinishTime)
 
 	result, err := server.paymentFactService.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
 		Provider:                    db.ExternalPaymentProviderWechat,
-		Channel:                     db.PaymentChannelEcommerce,
+		Channel:                     db.PaymentChannelOrdinaryServiceProvider,
 		Capability:                  db.ExternalPaymentCapabilitySettlement,
 		FactSource:                  db.ExternalPaymentFactSourceQuery,
 		ExternalObjectType:          db.ExternalPaymentObjectSettlement,
@@ -104,7 +104,7 @@ func (server *Server) recordMerchantSettlementApplicationQueryFact(ctx context.C
 	return result.Application, nil
 }
 
-func (server *Server) recordMerchantSettlementAccountQueryFact(ctx context.Context, merchantID int64, paymentConfig db.MerchantPaymentConfig, latestApplicationNo string, resp *wechatcontracts.SubMerchantSettlementResponse) (*db.ExternalPaymentFactApplication, error) {
+func (server *Server) recordMerchantSettlementAccountQueryFact(ctx context.Context, merchantID int64, paymentConfig db.MerchantPaymentConfig, latestApplicationNo string, resp *ospcontracts.SettlementQueryResponse) (*db.ExternalPaymentFactApplication, error) {
 	trimmedSubMchID := strings.TrimSpace(paymentConfig.SubMchID)
 	if server.paymentFactService == nil || trimmedSubMchID == "" || resp == nil {
 		return nil, nil
@@ -113,7 +113,7 @@ func (server *Server) recordMerchantSettlementAccountQueryFact(ctx context.Conte
 	businessOwner := db.ExternalPaymentBusinessOwnerMerchantFunds
 	businessObjectType := settlementFactBusinessObjectMerchantPaymentConfig
 	businessObjectID := paymentConfig.ID
-	verifyResult := strings.TrimSpace(resp.VerifyResult)
+	verifyResult := strings.TrimSpace(string(resp.VerifyResult))
 	verifyFailReason := strings.TrimSpace(resp.VerifyFailReason)
 	trimmedLatestApplicationNo := strings.TrimSpace(latestApplicationNo)
 	applicationTarget, err := server.resolveMerchantSettlementVerificationApplicationTarget(ctx, merchantID, trimmedSubMchID)
@@ -123,7 +123,7 @@ func (server *Server) recordMerchantSettlementAccountQueryFact(ctx context.Conte
 
 	result, err := server.paymentFactService.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
 		Provider:                    db.ExternalPaymentProviderWechat,
-		Channel:                     db.PaymentChannelEcommerce,
+		Channel:                     db.PaymentChannelOrdinaryServiceProvider,
 		Capability:                  db.ExternalPaymentCapabilitySettlement,
 		FactSource:                  db.ExternalPaymentFactSourceQuery,
 		ExternalObjectType:          db.ExternalPaymentObjectSettlement,
@@ -176,11 +176,11 @@ func (server *Server) resolveMerchantSettlementVerificationApplicationTarget(ctx
 
 func settlementAccountQueryTerminalStatus(verifyResult string) string {
 	switch strings.TrimSpace(verifyResult) {
-	case wechatcontracts.SubMerchantSettlementVerifyResultSuccess:
+	case string(ospcontracts.SettlementVerifyResultSuccess):
 		return db.ExternalPaymentTerminalStatusSuccess
-	case wechatcontracts.SubMerchantSettlementVerifyResultFail:
+	case string(ospcontracts.SettlementVerifyResultFail):
 		return db.ExternalPaymentTerminalStatusFailed
-	case wechatcontracts.SubMerchantSettlementVerifyResultVerifying:
+	case string(ospcontracts.SettlementVerifyResultIng):
 		return db.ExternalPaymentTerminalStatusProcessing
 	default:
 		return db.ExternalPaymentTerminalStatusUnknown
@@ -189,11 +189,11 @@ func settlementAccountQueryTerminalStatus(verifyResult string) string {
 
 func settlementApplicationQueryTerminalStatus(verifyResult string) string {
 	switch strings.TrimSpace(verifyResult) {
-	case wechatcontracts.SubMerchantSettlementApplicationAuditSuccess:
+	case string(ospcontracts.SettlementAuditResultSuccess):
 		return db.ExternalPaymentTerminalStatusSuccess
-	case wechatcontracts.SubMerchantSettlementApplicationAuditFail:
+	case string(ospcontracts.SettlementAuditResultFail):
 		return db.ExternalPaymentTerminalStatusFailed
-	case wechatcontracts.SubMerchantSettlementApplicationAuditing:
+	case string(ospcontracts.SettlementAuditResultAuditing):
 		return db.ExternalPaymentTerminalStatusProcessing
 	default:
 		return db.ExternalPaymentTerminalStatusUnknown
@@ -212,18 +212,18 @@ func parseSettlementApplicationFactTime(value string) *time.Time {
 	return &parsedTime
 }
 
-func settlementApplicationQueryFactResource(merchantID int64, subMchID string, applicationNo string, resp *wechatcontracts.QuerySubMerchantSettlementApplicationResponse) []byte {
+func settlementApplicationQueryFactResource(merchantID int64, subMchID string, applicationNo string, resp *ospcontracts.SettlementModificationQueryResponse) []byte {
 	raw, err := json.Marshal(map[string]any{
 		"merchant_id":        merchantID,
 		"sub_mch_id":         strings.TrimSpace(subMchID),
 		"application_no":     strings.TrimSpace(applicationNo),
 		"account_name":       strings.TrimSpace(resp.AccountName),
-		"account_type":       strings.TrimSpace(resp.AccountType),
+		"account_type":       strings.TrimSpace(string(resp.AccountType)),
 		"account_bank":       strings.TrimSpace(resp.AccountBank),
 		"bank_name":          strings.TrimSpace(resp.BankName),
 		"bank_branch_id":     strings.TrimSpace(resp.BankBranchID),
 		"account_number":     strings.TrimSpace(resp.AccountNumber),
-		"verify_result":      strings.TrimSpace(resp.VerifyResult),
+		"verify_result":      strings.TrimSpace(string(resp.VerifyResult)),
 		"verify_fail_reason": strings.TrimSpace(resp.VerifyFailReason),
 		"verify_finish_time": strings.TrimSpace(resp.VerifyFinishTime),
 	})
@@ -233,17 +233,17 @@ func settlementApplicationQueryFactResource(merchantID int64, subMchID string, a
 	return raw
 }
 
-func settlementAccountQueryFactResource(merchantID int64, subMchID string, latestApplicationNo string, applicationTarget *logic.ExternalPaymentFactApplicationTarget, resp *wechatcontracts.SubMerchantSettlementResponse) []byte {
+func settlementAccountQueryFactResource(merchantID int64, subMchID string, latestApplicationNo string, applicationTarget *logic.ExternalPaymentFactApplicationTarget, resp *ospcontracts.SettlementQueryResponse) []byte {
 	resource := map[string]any{
 		"merchant_id":           merchantID,
 		"sub_mch_id":            strings.TrimSpace(subMchID),
 		"latest_application_no": strings.TrimSpace(latestApplicationNo),
-		"account_type":          strings.TrimSpace(resp.AccountType),
+		"account_type":          strings.TrimSpace(string(resp.AccountType)),
 		"account_bank":          strings.TrimSpace(resp.AccountBank),
 		"bank_name":             strings.TrimSpace(resp.BankName),
 		"bank_branch_id":        strings.TrimSpace(resp.BankBranchID),
 		"account_number":        strings.TrimSpace(resp.AccountNumber),
-		"verify_result":         strings.TrimSpace(resp.VerifyResult),
+		"verify_result":         strings.TrimSpace(string(resp.VerifyResult)),
 		"verify_fail_reason":    strings.TrimSpace(resp.VerifyFailReason),
 	}
 	if applicationTarget != nil {
@@ -276,7 +276,7 @@ func settlementAccountQueryFactDedupeKey(subMchID string, verifyResult string, l
 	if suffix == "" {
 		suffix = "current"
 	}
-	return fmt.Sprintf("wechat:query:ecommerce:settlement_account:%s:%s:%s", strings.TrimSpace(subMchID), strings.TrimSpace(verifyResult), suffix)
+	return fmt.Sprintf("wechat:query:ordinary_service_provider:settlement_account:%s:%s:%s", strings.TrimSpace(subMchID), strings.TrimSpace(verifyResult), suffix)
 }
 
 func settlementApplicationQueryFactDedupeKey(subMchID string, applicationNo string, verifyResult string, verifyFinishTime string, verifyFailReason string) string {
@@ -287,7 +287,7 @@ func settlementApplicationQueryFactDedupeKey(subMchID string, applicationNo stri
 	if suffix == "" {
 		suffix = "current"
 	}
-	return fmt.Sprintf("wechat:query:ecommerce:settlement_application:%s:%s:%s:%s", strings.TrimSpace(subMchID), strings.TrimSpace(applicationNo), strings.TrimSpace(verifyResult), suffix)
+	return fmt.Sprintf("wechat:query:ordinary_service_provider:settlement_application:%s:%s:%s:%s", strings.TrimSpace(subMchID), strings.TrimSpace(applicationNo), strings.TrimSpace(verifyResult), suffix)
 }
 
 func settlementStringPtr(value string) *string {

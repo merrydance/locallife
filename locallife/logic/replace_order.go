@@ -13,6 +13,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 
 	"github.com/rs/zerolog/log"
 )
@@ -38,6 +39,17 @@ func ReplaceReservationOrder(
 	ctx context.Context,
 	store db.Store,
 	ecommerceClient wechat.EcommerceClientInterface,
+	input ReplaceOrderInput,
+	normalize NormalizeDishCustomizationsFunc,
+) (ReplaceOrderResult, error) {
+	return ReplaceReservationOrderWithOrdinaryServiceProvider(ctx, store, ecommerceClient, nil, input, normalize)
+}
+
+func ReplaceReservationOrderWithOrdinaryServiceProvider(
+	ctx context.Context,
+	store db.Store,
+	ecommerceClient wechat.EcommerceClientInterface,
+	ordinaryClient ordinaryServiceProviderOrderClient,
 	input ReplaceOrderInput,
 	normalize NormalizeDishCustomizationsFunc,
 ) (ReplaceOrderResult, error) {
@@ -114,6 +126,32 @@ func ReplaceReservationOrder(
 	if delta > 0 {
 		newStatus = "pending"
 		newFulfillment = "scheduled"
+		if ordinaryClient == nil {
+			return ReplaceOrderResult{}, fmt.Errorf("ordinary service provider client: not configured")
+		}
+	}
+
+	var refundAllocations []reservationRefundAllocation
+	if delta < 0 {
+		refundAmount := -delta
+		if refundAmount > 0 {
+			refundAllocations, err = buildReservationRefundAllocations(ctx, store, reservation.ID, refundAmount)
+			if err != nil {
+				return ReplaceOrderResult{}, err
+			}
+			allocatedRefundAmount := sumReservationRefundAllocations(refundAllocations)
+			if allocatedRefundAmount != refundAmount {
+				return ReplaceOrderResult{}, NewRequestError(http.StatusConflict, errors.New("reservation refund funding chain changed, please retry"))
+			}
+			for _, allocation := range refundAllocations {
+				if allocation.RefundAmount <= 0 {
+					continue
+				}
+				if err := ensureWechatServiceProviderRefundClientConfigured(allocation.PaymentOrder, ecommerceClient, ordinaryClient, "处理改菜退款"); err != nil {
+					return ReplaceOrderResult{}, err
+				}
+			}
+		}
 	}
 
 	orderNo, err := generateOrderNo()
@@ -155,22 +193,14 @@ func ReplaceReservationOrder(
 	}
 
 	if delta > 0 {
-		payOrder, createErr := createReplaceOrderEcommercePayment(ctx, store, ecommerceClient, input.UserID, replaceTx.NewOrder, delta)
+		payOrder, createErr := createReplaceOrderOrdinaryServiceProviderPayment(ctx, store, ordinaryClient, input.UserID, replaceTx.NewOrder, delta)
 		if createErr != nil {
 			return ReplaceOrderResult{}, createErr
 		}
 		result.PaymentOrderID = &payOrder.ID
 	} else if delta < 0 {
 		refundAmount := -delta
-		if refundAmount > 0 && ecommerceClient != nil {
-			refundAllocations, err := buildReservationRefundAllocations(ctx, store, reservation.ID, refundAmount)
-			if err != nil {
-				return ReplaceOrderResult{}, err
-			}
-			allocatedRefundAmount := sumReservationRefundAllocations(refundAllocations)
-			if allocatedRefundAmount != refundAmount {
-				return ReplaceOrderResult{}, NewRequestError(http.StatusConflict, errors.New("reservation refund funding chain changed, please retry"))
-			}
+		if refundAmount > 0 {
 			for _, allocation := range refundAllocations {
 				if allocation.RefundAmount <= 0 {
 					continue
@@ -181,9 +211,6 @@ func ReplaceReservationOrder(
 					return ReplaceOrderResult{}, fmt.Errorf("generate out refund no: %w", err)
 				}
 
-				if !paymentOrderUsesEcommerceChannel(allocation.PaymentOrder) {
-					return ReplaceOrderResult{}, mainBusinessEcommerceOnlyError("处理改菜退款")
-				}
 				refundOrder, err := store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
 					PaymentOrderID: allocation.PaymentOrder.ID,
 					RefundType:     paymentTypeProfitSharing,
@@ -196,12 +223,12 @@ func ReplaceReservationOrder(
 					return ReplaceOrderResult{}, err
 				}
 
-				refundStatus, refundID, refundErr := processReplaceOrderRefund(ctx, store, ecommerceClient, oldOrder.MerchantID, allocation.PaymentOrder, outRefundNo, refundReason, allocation.RefundAmount)
+				refundStatus, refundID, refundErr := processReplaceOrderRefundWithOrdinaryServiceProvider(ctx, store, ecommerceClient, ordinaryClient, oldOrder.MerchantID, allocation.PaymentOrder, outRefundNo, refundReason, allocation.RefundAmount)
 				if refundErr != nil {
 					if _, dbErr := store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
 						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
 					} else {
-						recordReplaceReservationRefundCommandRejected(ctx, store, refundOrder, outRefundNo, refundErr)
+						recordReplaceReservationRefundCommandRejected(ctx, store, allocation.PaymentOrder, refundOrder, outRefundNo, refundErr)
 					}
 					return ReplaceOrderResult{}, refundErr
 				}
@@ -214,7 +241,7 @@ func ReplaceReservationOrder(
 					if _, dbErr := store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{ID: refundOrder.ID, RefundID: pgtype.Text{String: refundID, Valid: refundID != ""}}); dbErr != nil {
 						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
 					}
-					recordReplaceReservationRefundCommandAccepted(ctx, store, refundOrder, outRefundNo, refundID)
+					recordReplaceReservationRefundCommandAccepted(ctx, store, allocation.PaymentOrder, refundOrder, outRefundNo, refundID)
 				}
 				result.RefundInitiated = true
 			}
@@ -315,7 +342,7 @@ func createReplaceOrderEcommercePayment(
 	})
 	if err != nil {
 		cleanupCtx := context.Background()
-		_, _ = store.UpdatePaymentOrderToFailed(cleanupCtx, txResult.PaymentOrder.ID)
+		markReplaceReservationPaymentOrderFailedForCleanup(cleanupCtx, store, txResult.PaymentOrder.ID)
 		if closeErr := ecommerceClient.ClosePartnerOrder(cleanupCtx, txResult.PaymentOrder.OutTradeNo, txResult.SubMchID); closeErr != nil {
 			log.Warn().Err(closeErr).Str("out_trade_no", txResult.PaymentOrder.OutTradeNo).Msg("close partner order after prepay update failure")
 		}
@@ -324,6 +351,127 @@ func createReplaceOrderEcommercePayment(
 	recordPartnerJSAPIPaymentCommandAccepted(ctx, store, txResult.PaymentOrder, db.ExternalPaymentBusinessOwnerReservation, orderResp.PrepayID)
 
 	return updatedPayment, nil
+}
+
+func createReplaceOrderOrdinaryServiceProviderPayment(
+	ctx context.Context,
+	store db.Store,
+	ordinaryClient ordinaryServiceProviderOrderClient,
+	userID int64,
+	order db.Order,
+	amount int64,
+) (db.PaymentOrder, error) {
+	if ordinaryClient == nil {
+		return db.PaymentOrder{}, fmt.Errorf("ordinary service provider client: not configured")
+	}
+
+	user, err := store.GetUser(ctx, userID)
+	if err != nil {
+		return db.PaymentOrder{}, fmt.Errorf("get user: %w", err)
+	}
+	if user.WechatOpenid == "" {
+		return db.PaymentOrder{}, NewRequestError(http.StatusBadRequest, errors.New("wechat openid not found"))
+	}
+
+	expiresAt := time.Now().Add(30 * time.Minute)
+	merchantName := "Order Payment"
+	if merchant, err := store.GetMerchant(ctx, order.MerchantID); err == nil && merchant.Name != "" {
+		merchantName = merchant.Name + " - Reservation Adjustment"
+	}
+
+	var txResult db.CreatePartnerPaymentTxResult
+	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
+		outTradeNo, genErr := generateOutTradeNoWithPrefix("RO")
+		if genErr != nil {
+			return db.PaymentOrder{}, fmt.Errorf("generate out trade no: %w", genErr)
+		}
+		txResult, err = store.CreatePartnerPaymentTx(ctx, db.CreatePartnerPaymentTxParams{
+			UserID:        userID,
+			MerchantID:    order.MerchantID,
+			OrderID:       order.ID,
+			ReservationID: order.ReservationID.Int64,
+			BusinessType:  businessTypeOrder,
+			Amount:        amount,
+			OutTradeNo:    outTradeNo,
+			ExpiresAt:     expiresAt,
+			Attach:        fmt.Sprintf("order_id:%d", order.ID),
+		})
+		if err == nil {
+			break
+		}
+		if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
+			continue
+		}
+		if status, ok := db.IsPartnerPaymentRequestError(err); ok {
+			return db.PaymentOrder{}, NewRequestError(status, errors.New(err.Error()))
+		}
+		return db.PaymentOrder{}, fmt.Errorf("create ordinary service provider payment: %w", err)
+	}
+
+	attach := fmt.Sprintf("order_id:%d", order.ID)
+	if txResult.PaymentOrder.Attach.Valid && txResult.PaymentOrder.Attach.String != "" {
+		attach = txResult.PaymentOrder.Attach.String
+	}
+	orderResp, err := ordinaryClient.CreatePayment(ctx, ospcontracts.PaymentPrepayRequest{
+		SpAppID:     ordinaryClient.ServiceProviderAppID(),
+		SpMchID:     ordinaryClient.ServiceProviderMchID(),
+		SubMchID:    txResult.SubMchID,
+		Description: merchantName,
+		OutTradeNo:  txResult.PaymentOrder.OutTradeNo,
+		TimeExpire:  expiresAt.Format(time.RFC3339),
+		Attach:      attach,
+		NotifyURL:   ordinaryClient.PaymentNotifyURL(),
+		SettleInfo:  &ospcontracts.PaymentSettleInfo{ProfitSharing: order.ReservationID.Valid || shouldEnableOrderProfitSharing(order.OrderType)},
+		Amount:      ospcontracts.PaymentAmount{Total: amount, Currency: ospcontracts.CurrencyCNY},
+		Payer:       ospcontracts.PaymentPayer{SpOpenID: user.WechatOpenid},
+	})
+	if err != nil {
+		cleanupCtx := context.Background()
+		if _, closeErr := store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID); closeErr != nil {
+			log.Error().Err(closeErr).Int64("payment_order_id", txResult.PaymentOrder.ID).Msg("failed to close replace reservation ordinary service provider payment order after create rejection")
+		} else {
+			recordPartnerJSAPIPaymentCommandRejected(cleanupCtx, store, txResult.PaymentOrder, db.ExternalPaymentBusinessOwnerReservation, err)
+		}
+		return db.PaymentOrder{}, mapPartnerJSAPIOrderCreateError(err)
+	}
+	if orderResp == nil || orderResp.PrepayID == "" {
+		cleanupCtx := context.Background()
+		emptyPrepayErr := errors.New("create ordinary service provider payment: empty prepay id")
+		if _, closeErr := store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID); closeErr != nil {
+			log.Error().Err(closeErr).Int64("payment_order_id", txResult.PaymentOrder.ID).Msg("failed to close replace reservation ordinary service provider payment order after empty prepay id")
+		} else {
+			recordPartnerJSAPIPaymentCommandRejected(cleanupCtx, store, txResult.PaymentOrder, db.ExternalPaymentBusinessOwnerReservation, emptyPrepayErr)
+		}
+		return db.PaymentOrder{}, mapPartnerJSAPIOrderCreateError(emptyPrepayErr)
+	}
+
+	updatedPayment, err := store.UpdatePaymentOrderPrepayId(ctx, db.UpdatePaymentOrderPrepayIdParams{
+		ID:       txResult.PaymentOrder.ID,
+		PrepayID: pgtype.Text{String: orderResp.PrepayID, Valid: true},
+	})
+	if err != nil {
+		cleanupCtx := context.Background()
+		markReplaceReservationPaymentOrderFailedForCleanup(cleanupCtx, store, txResult.PaymentOrder.ID)
+		if closeErr := ordinaryClient.ClosePayment(cleanupCtx, ospcontracts.PaymentCloseRequest{
+			SpMchID:    ordinaryClient.ServiceProviderMchID(),
+			SubMchID:   txResult.SubMchID,
+			OutTradeNo: txResult.PaymentOrder.OutTradeNo,
+		}); closeErr != nil {
+			log.Warn().Err(closeErr).Str("out_trade_no", txResult.PaymentOrder.OutTradeNo).Msg("close ordinary service provider order after prepay update failure")
+		}
+		return db.PaymentOrder{}, fmt.Errorf("update prepay id: %w", err)
+	}
+	recordPartnerJSAPIPaymentCommandAccepted(ctx, store, txResult.PaymentOrder, db.ExternalPaymentBusinessOwnerReservation, orderResp.PrepayID)
+
+	return updatedPayment, nil
+}
+
+func markReplaceReservationPaymentOrderFailedForCleanup(ctx context.Context, store db.Store, paymentOrderID int64) {
+	if _, err := store.UpdatePaymentOrderToFailed(ctx, paymentOrderID); err != nil {
+		log.Error().Err(err).
+			Int64("payment_order_id", paymentOrderID).
+			Msg("failed to mark replace reservation payment order failed after prepay update failure")
+	}
 }
 
 func processReplaceOrderRefund(
@@ -364,9 +512,53 @@ func processReplaceOrderRefund(
 	return wechatcontracts.EcommerceRefundStatusProcessing, refundResp.RefundID, nil
 }
 
-func recordReplaceReservationRefundCommandAccepted(ctx context.Context, store db.Store, refundOrder db.RefundOrder, outRefundNo string, refundID string) {
+func processReplaceOrderRefundWithOrdinaryServiceProvider(
+	ctx context.Context,
+	store db.Store,
+	ecommerceClient wechat.EcommerceClientInterface,
+	ordinaryClient ordinaryServiceProviderOrderClient,
+	merchantID int64,
+	paymentOrder db.PaymentOrder,
+	outRefundNo string,
+	reason string,
+	refundAmount int64,
+) (string, string, error) {
+	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
+		if ordinaryClient == nil {
+			return "", "", errors.New("ordinary service provider client not configured")
+		}
+		paymentConfig, err := store.GetMerchantPaymentConfig(ctx, merchantID)
+		if err != nil {
+			return "", "", fmt.Errorf("get merchant payment config: %w", err)
+		}
+		refundResp, err := ordinaryClient.CreateRefund(ctx, ospcontracts.RefundCreateRequest{
+			SubMchID:    paymentConfig.SubMchID,
+			OutTradeNo:  paymentOrder.OutTradeNo,
+			OutRefundNo: outRefundNo,
+			Reason:      reason,
+			NotifyURL:   ordinaryClient.RefundNotifyURL(),
+			Amount: ospcontracts.RefundAmountRequest{
+				Refund:   refundAmount,
+				Total:    paymentOrder.Amount,
+				Currency: ospcontracts.CurrencyCNY,
+			},
+		})
+		if err != nil {
+			return "", "", mapOrdinaryServiceProviderRefundCreateError(err)
+		}
+		refundID := ""
+		if refundResp != nil {
+			refundID = refundResp.RefundID
+		}
+		return string(ospcontracts.RefundStatusProcessing), refundID, nil
+	}
+	return processReplaceOrderRefund(ctx, store, ecommerceClient, merchantID, paymentOrder, outRefundNo, reason, refundAmount)
+}
+
+func recordReplaceReservationRefundCommandAccepted(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder, outRefundNo string, refundID string) {
 	paymentCommandSvc := NewPaymentCommandService(store)
 	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbReplaceReservationRefundCommandInput(
+		paymentOrder,
 		refundOrder,
 		outRefundNo,
 		db.ExternalPaymentCommandStatusAccepted,
@@ -382,14 +574,16 @@ func recordReplaceReservationRefundCommandAccepted(ctx context.Context, store db
 		log.Error().Err(err).
 			Int64("refund_order_id", refundOrder.ID).
 			Str("out_refund_no", outRefundNo).
-			Msg("record replace reservation ecommerce refund command accepted failed")
+			Str("payment_channel", paymentOrder.PaymentChannel).
+			Msg("record replace reservation refund command accepted failed")
 	}
 }
 
-func recordReplaceReservationRefundCommandRejected(ctx context.Context, store db.Store, refundOrder db.RefundOrder, outRefundNo string, refundErr error) {
+func recordReplaceReservationRefundCommandRejected(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder, outRefundNo string, refundErr error) {
 	paymentCommandSvc := NewPaymentCommandService(store)
-	errorCode, errorMessage := ecommerceRefundCommandErrorFields(refundErr)
+	errorCode, errorMessage := partnerPaymentCommandErrorFields(refundErr)
 	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbReplaceReservationRefundCommandInput(
+		paymentOrder,
 		refundOrder,
 		outRefundNo,
 		db.ExternalPaymentCommandStatusRejected,
@@ -406,11 +600,13 @@ func recordReplaceReservationRefundCommandRejected(ctx context.Context, store db
 		log.Error().Err(err).
 			Int64("refund_order_id", refundOrder.ID).
 			Str("out_refund_no", outRefundNo).
-			Msg("record replace reservation ecommerce refund command rejected failed")
+			Str("payment_channel", paymentOrder.PaymentChannel).
+			Msg("record replace reservation refund command rejected failed")
 	}
 }
 
 func dbReplaceReservationRefundCommandInput(
+	paymentOrder db.PaymentOrder,
 	refundOrder db.RefundOrder,
 	outRefundNo string,
 	commandStatus string,
@@ -423,8 +619,8 @@ func dbReplaceReservationRefundCommandInput(
 	businessObjectID := refundOrder.ID
 	return RecordExternalPaymentCommandInput{
 		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              db.PaymentChannelEcommerce,
-		Capability:           db.ExternalPaymentCapabilityEcommerceRefund,
+		Channel:              paymentOrder.PaymentChannel,
+		Capability:           refundServiceCreateRefundCapability(paymentOrder.PaymentChannel),
 		CommandType:          db.ExternalPaymentCommandTypeCreateRefund,
 		BusinessOwner:        db.ExternalPaymentBusinessOwnerReservation,
 		BusinessObjectType:   &businessObjectType,

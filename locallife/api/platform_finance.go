@@ -93,7 +93,7 @@ func respondFundBalanceQueryError(ctx *gin.Context, operation string, err error)
 
 // getPlatformAccountBalance 查询平台微信支付账户余额
 // @Summary 查询平台微信支付账户余额
-// @Description 管理员查询平台商户号微信支付账户实时余额；传入 date 时查询指定日期日终余额
+// @Description 管理员查询历史平台收付通商户号微信支付账户实时余额；普通服务商模式不支持平台内余额查询，应前往微信支付商户平台/商家助手处理
 // @Tags 平台财务
 // @Produce json
 // @Param account_type query string false "账户类型，默认 BASIC" Enums(BASIC,OPERATION,FEES)
@@ -108,7 +108,7 @@ func respondFundBalanceQueryError(ctx *gin.Context, operation string, err error)
 func (server *Server) getPlatformAccountBalance(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
 		err := errors.New("ecommerce client not configured")
-		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "ecommerce client not configured", "platform account balance ecommerce client not configured"))
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "平台收付通资金查询服务未配置；普通服务商模式请前往微信支付商户平台/商家助手处理资金操作", "platform account balance ecommerce client not configured"))
 		return
 	}
 

@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -12,6 +13,8 @@ import (
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -240,6 +243,65 @@ func TestCreateMerchantClaimRecoveryPaymentSuccess(t *testing.T) {
 	require.Equal(t, updatedPayment.ID, result.PaymentOrder.ID)
 	require.NotNil(t, result.PayParams)
 	require.Equal(t, "prepay_id=prepay_claim_recovery_001", result.PayParams.Package)
+}
+
+func TestCreateMerchantClaimRecoveryPaymentLogsCleanupFailureAfterPrepayUpdateError(t *testing.T) {
+	claimID := int64(10)
+	merchantID := int64(20)
+	payerUserID := int64(21)
+	recovery := db.ClaimRecovery{
+		ID:             30,
+		ClaimID:        claimID,
+		OrderID:        40,
+		RecoveryAmount: 500,
+		Status:         "pending",
+		RecoveryTarget: pgtype.Text{String: "merchant", Valid: true},
+	}
+	createdPayment := db.PaymentOrder{
+		ID:           100,
+		UserID:       payerUserID,
+		Amount:       recovery.RecoveryAmount,
+		BusinessType: businessTypeClaimRecovery,
+		Status:       "pending",
+		OutTradeNo:   "CR_test_cleanup",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var logs bytes.Buffer
+	previousLogger := log.Logger
+	log.Logger = zerolog.New(&logs)
+	t.Cleanup(func() { log.Logger = previousLogger })
+
+	store := mockdb.NewMockStore(ctrl)
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
+	store.EXPECT().GetClaimRecoveryContextByID(gomock.Any(), claimID).Return(claimRecoveryContextFor(recovery, merchantID, 99, nil), nil)
+	store.EXPECT().GetLatestPaymentOrderByBusinessTypeAndAttach(gomock.Any(), gomock.Any()).Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().GetUser(gomock.Any(), payerUserID).Return(db.User{ID: payerUserID, WechatOpenid: "openid_merchant_payer"}, nil)
+	store.EXPECT().CreatePaymentOrder(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreatePaymentOrderParams) (db.PaymentOrder, error) {
+		createdPayment.OutTradeNo = arg.OutTradeNo
+		return createdPayment, nil
+	})
+	paymentClient.EXPECT().CreateJSAPIOrder(gomock.Any(), gomock.Any()).Return(&wechatcontracts.DirectJSAPIOrderResponse{PrepayID: "prepay_claim_recovery_cleanup"}, &wechat.JSAPIPayParams{Package: "prepay_id=prepay_claim_recovery_cleanup"}, nil)
+	store.EXPECT().UpdatePaymentOrderPrepayId(gomock.Any(), db.UpdatePaymentOrderPrepayIdParams{
+		ID:       createdPayment.ID,
+		PrepayID: pgtype.Text{String: "prepay_claim_recovery_cleanup", Valid: true},
+	}).Return(db.PaymentOrder{}, errors.New("update prepay failed"))
+	store.EXPECT().UpdatePaymentOrderToFailed(gomock.Any(), createdPayment.ID).Return(db.PaymentOrder{}, errors.New("mark claim recovery failed"))
+	paymentClient.EXPECT().CloseOrder(gomock.Any(), gomock.Any()).Return(nil)
+
+	_, err := CreateMerchantClaimRecoveryPayment(context.Background(), store, paymentClient, CreateMerchantClaimRecoveryPaymentInput{
+		RecoveryID:  claimID,
+		MerchantID:  merchantID,
+		PayerUserID: payerUserID,
+		ClientIP:    "127.0.0.1",
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "update claim recovery prepay id")
+	require.Contains(t, logs.String(), "failed to mark claim recovery payment order failed after prepay update failure")
+	require.Contains(t, logs.String(), "mark claim recovery failed")
 }
 
 func TestCreateMerchantClaimRecoveryPaymentWechatRejectedRecordsCommand(t *testing.T) {

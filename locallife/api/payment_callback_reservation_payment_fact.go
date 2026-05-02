@@ -21,7 +21,7 @@ const (
 )
 
 func shouldRecordReservationPaymentFact(paymentOrder db.PaymentOrder) bool {
-	return paymentOrder.PaymentChannel == db.PaymentChannelEcommerce &&
+	return paymentOrderUsesMainBusinessPaymentChannel(paymentOrder) &&
 		paymentOrder.ReservationID.Valid &&
 		(paymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerReservation || paymentOrder.BusinessType == reservationAddonBusinessType)
 }
@@ -33,7 +33,7 @@ func (server *Server) recordReservationPaymentCallbackFact(ctx context.Context, 
 	occurredAt := parseWechatFactTime(resource.SuccessTime)
 	result, err := server.paymentFactService.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
 		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              db.PaymentChannelEcommerce,
+		Channel:              paymentCallbackFactDedupeChannel(paymentOrder),
 		Capability:           db.ExternalPaymentCapabilityPartnerJSAPIPayment,
 		FactSource:           db.ExternalPaymentFactSourceCallback,
 		SourceEventID:        paymentFactStringPtr(notification.ID),
@@ -51,7 +51,7 @@ func (server *Server) recordReservationPaymentCallbackFact(ctx context.Context, 
 		OccurredAt:           occurredAt,
 		UpstreamUpdatedAt:    occurredAt,
 		RawResource:          reservationPaymentCallbackFactResource(paymentOrder, resource),
-		DedupeKey:            fmt.Sprintf("wechat:callback:ecommerce:reservation_payment:%s", notification.ID),
+		DedupeKey:            fmt.Sprintf("wechat:callback:%s:reservation_payment:%s", paymentCallbackFactDedupeChannel(paymentOrder), notification.ID),
 		Application: &logic.ExternalPaymentFactApplicationTarget{
 			Consumer:           reservationPaymentFactConsumerDomain,
 			BusinessObjectType: reservationPaymentFactBusinessObjectOrder,
@@ -74,7 +74,7 @@ func (server *Server) recordCombinedReservationPaymentCallbackFact(ctx context.C
 	occurredAt := parseWechatFactTime(subOrder.SuccessTime)
 	result, err := server.paymentFactService.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
 		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              db.PaymentChannelEcommerce,
+		Channel:              paymentCallbackFactDedupeChannel(paymentOrder),
 		Capability:           db.ExternalPaymentCapabilityCombinePayment,
 		FactSource:           db.ExternalPaymentFactSourceCallback,
 		SourceEventID:        paymentFactStringPtr(notification.ID),
@@ -92,7 +92,7 @@ func (server *Server) recordCombinedReservationPaymentCallbackFact(ctx context.C
 		OccurredAt:           occurredAt,
 		UpstreamUpdatedAt:    occurredAt,
 		RawResource:          combinedReservationPaymentCallbackFactResource(combined, paymentOrder, subOrder),
-		DedupeKey:            fmt.Sprintf("wechat:callback:ecommerce:combine_reservation_payment:%s:%s", notification.ID, subOrder.OutTradeNo),
+		DedupeKey:            fmt.Sprintf("wechat:callback:%s:combine_reservation_payment:%s:%s", paymentCallbackFactDedupeChannel(paymentOrder), notification.ID, subOrder.OutTradeNo),
 		Application: &logic.ExternalPaymentFactApplicationTarget{
 			Consumer:           reservationPaymentFactConsumerDomain,
 			BusinessObjectType: reservationPaymentFactBusinessObjectOrder,

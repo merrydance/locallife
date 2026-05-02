@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"errors"
 	"net/http"
 	"testing"
 
@@ -35,6 +36,16 @@ func TestMapEcommerceAbnormalRefundErrorPreservesValidationCause(t *testing.T) {
 	var unwrapped *wechatcontracts.RefundValidationError
 	require.ErrorAs(t, err, &unwrapped)
 	require.Same(t, validationErr, unwrapped)
+}
+
+func TestMapOrdinaryRefundCreateErrorMapsMissingClientToActionableRequestError(t *testing.T) {
+	configErr := errors.New("ordinary service provider client not configured")
+	err := mapOrdinaryServiceProviderRefundCreateError(configErr)
+	reqErr := assertRequestError(t, err)
+
+	require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
+	require.EqualError(t, reqErr.Err, "微信服务商退款配置未完成，当前无法发起退款，请联系平台处理")
+	require.Same(t, configErr, LoggableError(err))
 }
 
 func TestMapWechatPaymentCreateErrorPreservesWechatCause(t *testing.T) {

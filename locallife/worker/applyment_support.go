@@ -8,6 +8,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 )
 
 func applymentNeedsSignFollowUp(status, signState string) bool {
@@ -16,6 +17,10 @@ func applymentNeedsSignFollowUp(status, signState string) bool {
 
 func mapWechatApplymentStateToStatus(wechatState string) string {
 	return logic.MapWechatApplymentStateToStatus(wechatState)
+}
+
+func mapOrdinaryApplymentStateToStatus(state ospcontracts.ApplymentState) string {
+	return logic.MapOrdinaryApplymentStateToStatus(state)
 }
 
 func normalizeApplymentFollowUpStatus(status, subMchID string) string {
@@ -83,6 +88,33 @@ func getRejectReasonFromApplymentAuditDetail(details []wechatcontracts.Applyment
 		parts = append(parts, fmt.Sprintf("%s: %s", detail.ParamName, detail.RejectReason))
 	}
 
+	return pgtype.Text{String: strings.Join(parts, "; "), Valid: true}
+}
+
+func getRejectReasonFromOrdinaryApplymentAuditDetail(details []ospcontracts.ApplymentAuditDetail) pgtype.Text {
+	if len(details) == 0 {
+		return pgtype.Text{}
+	}
+
+	parts := make([]string, 0, len(details))
+	for _, detail := range details {
+		fieldName := strings.TrimSpace(detail.FieldName)
+		if fieldName == "" {
+			fieldName = strings.TrimSpace(detail.Field)
+		}
+		reason := strings.TrimSpace(detail.RejectReason)
+		if reason == "" {
+			continue
+		}
+		if fieldName == "" {
+			parts = append(parts, reason)
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s: %s", fieldName, reason))
+	}
+	if len(parts) == 0 {
+		return pgtype.Text{}
+	}
 	return pgtype.Text{String: strings.Join(parts, "; "), Valid: true}
 }
 

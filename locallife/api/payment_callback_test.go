@@ -1843,6 +1843,215 @@ func TestHandleEcommerceRefundNotify_ReservationRefundRecordsFactApplication(t *
 	require.Equal(t, []int64{211}, taskDistributor.applicationIDs)
 }
 
+func TestRecordOrderOrdinaryRefundCallbackFactCreatesPartnerRefundFact(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	server := newTestServer(t, store)
+	notification := wechat.PaymentNotification{ID: "ordinary-refund-notify-1", EventType: "REFUND.SUCCESS"}
+	refundOrder := db.RefundOrder{ID: 501, PaymentOrderID: 901, OutRefundNo: "ORD_REFUND_1", RefundAmount: 288}
+	paymentOrder := db.PaymentOrder{
+		ID:             901,
+		OutTradeNo:     "ORD_ORDER_1",
+		PaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
+		BusinessType:   db.ExternalPaymentBusinessOwnerOrder,
+		OrderID:        pgtype.Int8{Int64: 1001, Valid: true},
+	}
+	resource := &ordinaryRefundNotificationResource{
+		SpMchID:       "sp_expected",
+		SubMchID:      "sub-001",
+		OutTradeNo:    "ORD_ORDER_1",
+		TransactionID: "WX_TX_ORD_1",
+		OutRefundNo:   "ORD_REFUND_1",
+		RefundID:      "WX_ORD_REFUND_1",
+		RefundStatus:  wechat.RefundStatusSuccess,
+		Amount:        ordinaryRefundNotificationAmount{Refund: 288},
+	}
+
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).DoAndReturn(
+		func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+			require.Equal(t, db.PaymentChannelOrdinaryServiceProvider, arg.Channel)
+			require.Equal(t, db.ExternalPaymentCapabilityPartnerRefund, arg.Capability)
+			require.Equal(t, db.ExternalPaymentFactSourceCallback, arg.FactSource)
+			require.Equal(t, db.ExternalPaymentObjectRefund, arg.ExternalObjectType)
+			require.Equal(t, "ORD_REFUND_1", arg.ExternalObjectKey)
+			require.Equal(t, "WX_ORD_REFUND_1", arg.ExternalSecondaryKey.String)
+			require.Equal(t, db.ExternalPaymentBusinessOwnerOrder, arg.BusinessOwner.String)
+			require.Equal(t, int64(501), arg.BusinessObjectID.Int64)
+			require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
+			require.Equal(t, int64(288), arg.Amount.Int64)
+			require.Equal(t, "wechat:callback:ordinary_service_provider_refund:ordinary-refund-notify-1", arg.DedupeKey)
+			return db.ExternalPaymentFact{ID: 151, DedupeKey: arg.DedupeKey, IsTerminal: true}, nil
+		})
+	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
+		FactID:             151,
+		Consumer:           paymentFactConsumerOrderDomain,
+		BusinessObjectType: paymentFactBusinessObjectRefundOrder,
+		BusinessObjectID:   int64(501),
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}).Return(db.ExternalPaymentFactApplication{ID: 251, FactID: 151, Consumer: paymentFactConsumerOrderDomain, BusinessObjectType: paymentFactBusinessObjectRefundOrder, BusinessObjectID: 501, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
+
+	application, err := server.recordOrderOrdinaryRefundCallbackFact(context.Background(), notification, refundOrder, paymentOrder, resource)
+	require.NoError(t, err)
+	require.NotNil(t, application)
+	require.Equal(t, int64(251), application.ID)
+}
+
+func TestRecordReservationOrdinaryRefundCallbackFactCreatesPartnerRefundFact(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	server := newTestServer(t, store)
+	notification := wechat.PaymentNotification{ID: "ordinary-reservation-refund-notify-1", EventType: "REFUND.CLOSED"}
+	refundOrder := db.RefundOrder{ID: 502, PaymentOrderID: 902, OutRefundNo: "ORD_RES_REFUND_1", RefundAmount: 388}
+	paymentOrder := db.PaymentOrder{
+		ID:             902,
+		OutTradeNo:     "ORD_RES_ORDER_1",
+		PaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
+		BusinessType:   "reservation_addon",
+		ReservationID:  pgtype.Int8{Int64: 1002, Valid: true},
+	}
+	resource := &ordinaryRefundNotificationResource{
+		SpMchID:       "sp_expected",
+		SubMchID:      "sub-001",
+		OutTradeNo:    "ORD_RES_ORDER_1",
+		TransactionID: "WX_TX_ORD_RES_1",
+		OutRefundNo:   "ORD_RES_REFUND_1",
+		RefundID:      "WX_ORD_RES_REFUND_1",
+		RefundStatus:  wechat.RefundStatusClosed,
+		Amount:        ordinaryRefundNotificationAmount{Refund: 388},
+	}
+
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).DoAndReturn(
+		func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+			require.Equal(t, db.PaymentChannelOrdinaryServiceProvider, arg.Channel)
+			require.Equal(t, db.ExternalPaymentCapabilityPartnerRefund, arg.Capability)
+			require.Equal(t, db.ExternalPaymentBusinessOwnerReservation, arg.BusinessOwner.String)
+			require.Equal(t, db.ExternalPaymentTerminalStatusClosed, arg.TerminalStatus)
+			require.Equal(t, "ORD_RES_REFUND_1", arg.ExternalObjectKey)
+			require.Equal(t, "wechat:callback:ordinary_service_provider_refund:ordinary-reservation-refund-notify-1", arg.DedupeKey)
+			return db.ExternalPaymentFact{ID: 152, DedupeKey: arg.DedupeKey, IsTerminal: true}, nil
+		})
+	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
+		FactID:             152,
+		Consumer:           paymentFactConsumerReservationDomain,
+		BusinessObjectType: paymentFactBusinessObjectRefundOrder,
+		BusinessObjectID:   int64(502),
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}).Return(db.ExternalPaymentFactApplication{ID: 252, FactID: 152, Consumer: paymentFactConsumerReservationDomain, BusinessObjectType: paymentFactBusinessObjectRefundOrder, BusinessObjectID: 502, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
+
+	application, err := server.recordReservationOrdinaryRefundCallbackFact(context.Background(), notification, refundOrder, paymentOrder, resource)
+	require.NoError(t, err)
+	require.NotNil(t, application)
+	require.Equal(t, int64(252), application.ID)
+}
+
+func TestRecordOrderPaymentCallbackFact_OrdinaryServiceProviderCreatesOrdinaryFact(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	server := newTestServer(t, store)
+	notification := wechat.PaymentNotification{ID: "ordinary-payment-notify-1", EventType: "TRANSACTION.SUCCESS"}
+	paymentOrder := db.PaymentOrder{
+		ID:             601,
+		OutTradeNo:     "ORD_PAY_1",
+		PaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
+		BusinessType:   db.ExternalPaymentBusinessOwnerOrder,
+		OrderID:        pgtype.Int8{Int64: 1601, Valid: true},
+	}
+	resource := &wechatcontracts.PartnerPaymentNotificationResource{
+		SpAppID:       "wxsp_app",
+		SpMchID:       "1900000109",
+		SubMchID:      "sub-001",
+		OutTradeNo:    "ORD_PAY_1",
+		TransactionID: "WX_ORD_PAY_1",
+		TradeType:     "JSAPI",
+		TradeState:    "SUCCESS",
+		SuccessTime:   time.Now().UTC().Format(time.RFC3339),
+		Amount:        wechatcontracts.PartnerOrderQueryAmount{Total: 688, PayerTotal: 688, Currency: "CNY", PayerCurrency: "CNY"},
+	}
+
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).DoAndReturn(
+		func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+			require.Equal(t, db.PaymentChannelOrdinaryServiceProvider, arg.Channel)
+			require.Equal(t, db.ExternalPaymentCapabilityPartnerJSAPIPayment, arg.Capability)
+			require.Equal(t, db.ExternalPaymentObjectPayment, arg.ExternalObjectType)
+			require.Equal(t, "ORD_PAY_1", arg.ExternalObjectKey)
+			require.Equal(t, "WX_ORD_PAY_1", arg.ExternalSecondaryKey.String)
+			require.Equal(t, db.ExternalPaymentBusinessOwnerOrder, arg.BusinessOwner.String)
+			require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
+			require.Equal(t, "wechat:callback:ordinary_service_provider:order_payment:ordinary-payment-notify-1", arg.DedupeKey)
+			return db.ExternalPaymentFact{ID: 161, DedupeKey: arg.DedupeKey, IsTerminal: true}, nil
+		})
+	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
+		FactID:             161,
+		Consumer:           orderPaymentFactConsumerDomain,
+		BusinessObjectType: orderPaymentFactBusinessObjectOrder,
+		BusinessObjectID:   int64(601),
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}).Return(db.ExternalPaymentFactApplication{ID: 261, FactID: 161, Consumer: orderPaymentFactConsumerDomain, BusinessObjectType: orderPaymentFactBusinessObjectOrder, BusinessObjectID: 601, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
+
+	application, err := server.recordOrderPaymentCallbackFact(context.Background(), notification, paymentOrder, resource)
+	require.NoError(t, err)
+	require.NotNil(t, application)
+	require.Equal(t, int64(261), application.ID)
+}
+
+func TestRecordCombinedReservationPaymentCallbackFact_OrdinaryServiceProviderCreatesOrdinaryFact(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	server := newTestServer(t, store)
+	notification := wechat.PaymentNotification{ID: "ordinary-combine-notify-1", EventType: "TRANSACTION.SUCCESS"}
+	combinedOrder := db.CombinedPaymentOrder{ID: 701, CombineOutTradeNo: "ORD_COMB_1"}
+	paymentOrder := db.PaymentOrder{
+		ID:                602,
+		OutTradeNo:        "ORD_COMB_SUB_1",
+		PaymentChannel:    db.PaymentChannelOrdinaryServiceProvider,
+		BusinessType:      db.ExternalPaymentBusinessOwnerReservation,
+		ReservationID:     pgtype.Int8{Int64: 2602, Valid: true},
+		CombinedPaymentID: pgtype.Int8{Int64: 701, Valid: true},
+	}
+	subOrder := wechatcontracts.CombinePaymentNotificationSubOrder{
+		SubMchID:      "sub-001",
+		OutTradeNo:    "ORD_COMB_SUB_1",
+		TransactionID: "WX_ORD_COMB_SUB_1",
+		TradeState:    "SUCCESS",
+		SuccessTime:   time.Now().UTC().Format(time.RFC3339),
+	}
+	subOrder.Amount.TotalAmount = 788
+	subOrder.Amount.Currency = "CNY"
+
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).DoAndReturn(
+		func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+			require.Equal(t, db.PaymentChannelOrdinaryServiceProvider, arg.Channel)
+			require.Equal(t, db.ExternalPaymentCapabilityCombinePayment, arg.Capability)
+			require.Equal(t, db.ExternalPaymentObjectCombinedPayment, arg.ExternalObjectType)
+			require.Equal(t, "ORD_COMB_1", arg.ExternalObjectKey)
+			require.Equal(t, "ORD_COMB_SUB_1", arg.ExternalSecondaryKey.String)
+			require.Equal(t, db.ExternalPaymentBusinessOwnerReservation, arg.BusinessOwner.String)
+			require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
+			require.Equal(t, "wechat:callback:ordinary_service_provider:combine_reservation_payment:ordinary-combine-notify-1:ORD_COMB_SUB_1", arg.DedupeKey)
+			return db.ExternalPaymentFact{ID: 162, DedupeKey: arg.DedupeKey, IsTerminal: true}, nil
+		})
+	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
+		FactID:             162,
+		Consumer:           reservationPaymentFactConsumerDomain,
+		BusinessObjectType: reservationPaymentFactBusinessObjectOrder,
+		BusinessObjectID:   int64(602),
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}).Return(db.ExternalPaymentFactApplication{ID: 262, FactID: 162, Consumer: reservationPaymentFactConsumerDomain, BusinessObjectType: reservationPaymentFactBusinessObjectOrder, BusinessObjectID: 602, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
+
+	application, err := server.recordCombinedReservationPaymentCallbackFact(context.Background(), &notification, combinedOrder, paymentOrder, subOrder)
+	require.NoError(t, err)
+	require.NotNil(t, application)
+	require.Equal(t, int64(262), application.ID)
+}
+
 func TestHandleEcommerceRefundNotify_OrderRefundPaymentLookupFailureReturnsFail(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -3968,7 +4177,7 @@ func TestHandleApplymentStateNotify_AccountNeedVerifyRoutesToPendingFactApplicat
 			require.Equal(t, db.ExternalPaymentObjectApplyment, arg.ExternalObjectType)
 			require.Equal(t, applyment.OutRequestNo, arg.ExternalObjectKey)
 			require.Equal(t, db.ExternalPaymentBusinessOwnerApplyment, arg.BusinessOwner.String)
-			require.Equal(t, "ecommerce_applyment", arg.BusinessObjectType.String)
+			require.Equal(t, "ordinary_service_provider_applyment", arg.BusinessObjectType.String)
 			require.Equal(t, applyment.ID, arg.BusinessObjectID.Int64)
 			require.Equal(t, "ACCOUNT_NEED_VERIFY", arg.UpstreamState)
 			require.Equal(t, db.ExternalPaymentTerminalStatusProcessing, arg.TerminalStatus)
@@ -3981,11 +4190,11 @@ func TestHandleApplymentStateNotify_AccountNeedVerifyRoutesToPendingFactApplicat
 		CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
 			FactID:             7088,
 			Consumer:           "applyment_domain",
-			BusinessObjectType: "ecommerce_applyment",
+			BusinessObjectType: "ordinary_service_provider_applyment",
 			BusinessObjectID:   applyment.ID,
 			Status:             db.ExternalPaymentFactApplicationStatusPending,
 		}).
-		Return(db.ExternalPaymentFactApplication{ID: 8088, FactID: 7088, Consumer: "applyment_domain", BusinessObjectType: "ecommerce_applyment", BusinessObjectID: applyment.ID, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
+		Return(db.ExternalPaymentFactApplication{ID: 8088, FactID: 7088, Consumer: "applyment_domain", BusinessObjectType: "ordinary_service_provider_applyment", BusinessObjectID: applyment.ID, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
 
 	recorder := httptest.NewRecorder()
 	requestBody := map[string]interface{}{
@@ -4143,11 +4352,11 @@ func TestHandleApplymentStateNotify_EnqueueFailureReturnsFail(t *testing.T) {
 		CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
 			FactID:             7089,
 			Consumer:           "applyment_domain",
-			BusinessObjectType: "ecommerce_applyment",
+			BusinessObjectType: "ordinary_service_provider_applyment",
 			BusinessObjectID:   applyment.ID,
 			Status:             db.ExternalPaymentFactApplicationStatusPending,
 		}).
-		Return(db.ExternalPaymentFactApplication{ID: 8089, FactID: 7089, Consumer: "applyment_domain", BusinessObjectType: "ecommerce_applyment", BusinessObjectID: applyment.ID, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
+		Return(db.ExternalPaymentFactApplication{ID: 8089, FactID: 7089, Consumer: "applyment_domain", BusinessObjectType: "ordinary_service_provider_applyment", BusinessObjectID: applyment.ID, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
 
 	store.EXPECT().
 		ReleaseWechatNotificationClaim(gomock.Any(), notificationID).
@@ -4231,7 +4440,7 @@ func TestHandleApplymentStateNotify_FinishRoutesToFactApplication(t *testing.T) 
 			require.Equal(t, db.ExternalPaymentObjectApplyment, arg.ExternalObjectType)
 			require.Equal(t, applyment.OutRequestNo, arg.ExternalObjectKey)
 			require.Equal(t, db.ExternalPaymentBusinessOwnerApplyment, arg.BusinessOwner.String)
-			require.Equal(t, "ecommerce_applyment", arg.BusinessObjectType.String)
+			require.Equal(t, "ordinary_service_provider_applyment", arg.BusinessObjectType.String)
 			require.Equal(t, applyment.ID, arg.BusinessObjectID.Int64)
 			require.Equal(t, "FINISH", arg.UpstreamState)
 			require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
@@ -4243,11 +4452,11 @@ func TestHandleApplymentStateNotify_FinishRoutesToFactApplication(t *testing.T) 
 		CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
 			FactID:             7090,
 			Consumer:           "applyment_domain",
-			BusinessObjectType: "ecommerce_applyment",
+			BusinessObjectType: "ordinary_service_provider_applyment",
 			BusinessObjectID:   applyment.ID,
 			Status:             db.ExternalPaymentFactApplicationStatusPending,
 		}).
-		Return(db.ExternalPaymentFactApplication{ID: 8090, FactID: 7090, Consumer: "applyment_domain", BusinessObjectType: "ecommerce_applyment", BusinessObjectID: applyment.ID, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
+		Return(db.ExternalPaymentFactApplication{ID: 8090, FactID: 7090, Consumer: "applyment_domain", BusinessObjectType: "ordinary_service_provider_applyment", BusinessObjectID: applyment.ID, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
 
 	recorder := httptest.NewRecorder()
 	requestBody := map[string]interface{}{
@@ -4328,11 +4537,11 @@ func TestHandleApplymentStateNotify_RejectedRoutesToFactApplication(t *testing.T
 		CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
 			FactID:             7091,
 			Consumer:           "applyment_domain",
-			BusinessObjectType: "ecommerce_applyment",
+			BusinessObjectType: "ordinary_service_provider_applyment",
 			BusinessObjectID:   applyment.ID,
 			Status:             db.ExternalPaymentFactApplicationStatusPending,
 		}).
-		Return(db.ExternalPaymentFactApplication{ID: 8091, FactID: 7091, Consumer: "applyment_domain", BusinessObjectType: "ecommerce_applyment", BusinessObjectID: applyment.ID, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
+		Return(db.ExternalPaymentFactApplication{ID: 8091, FactID: 7091, Consumer: "applyment_domain", BusinessObjectType: "ordinary_service_provider_applyment", BusinessObjectID: applyment.ID, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
 
 	recorder := httptest.NewRecorder()
 	requestBody := map[string]interface{}{
@@ -4544,7 +4753,7 @@ func expectProfitSharingCallbackFact(t *testing.T, store *mockdb.MockStore, noti
 			require.Equal(t, terminalStatus, arg.TerminalStatus)
 			require.Equal(t, amount, arg.Amount.Int64)
 			require.Equal(t, "CNY", arg.Currency)
-			require.Equal(t, "wechat:callback:profit_sharing:"+notificationID, arg.DedupeKey)
+			require.Equal(t, "wechat:callback:ecommerce:profit_sharing:"+notificationID, arg.DedupeKey)
 			raw := string(arg.RawResource)
 			require.Contains(t, raw, "receiver_results")
 			require.NotContains(t, raw, "receiver_account")

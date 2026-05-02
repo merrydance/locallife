@@ -13,6 +13,7 @@ import (
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/merrydance/locallife/worker"
 	mockwk "github.com/merrydance/locallife/worker/mock"
 	"github.com/stretchr/testify/require"
@@ -233,6 +234,64 @@ func TestProcessTaskInitiateRefund_ProfitSharingReturnProcessingRecordsAcceptedC
 	task := asynq.NewTask(worker.TaskProcessRefund, payloadBytes)
 	err = processor.ProcessTaskInitiateRefund(context.Background(), task)
 	require.NoError(t, err)
+}
+
+func TestProcessTaskInitiateRefund_OrdinaryProfitSharingReturnUsesOrdinaryServiceProviderMchID(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	ordinaryClient := &refundRecoveryOrdinaryClient{
+		createProfitSharingReturnResponse: &ospcontracts.ProfitSharingReturnResponse{
+			SubMchID:    "sub-mchid-ordinary-012",
+			OrderID:     "wx-ps-ordinary-012",
+			OutOrderNo:  "PSO12",
+			OutReturnNo: "PR145PL",
+			ReturnID:    "wx-return-ordinary-012",
+			ReturnMchID: "1900000109",
+			Amount:      300,
+			State:       ospcontracts.ProfitSharingReturnStateProcessing,
+		},
+	}
+
+	paymentOrder := db.PaymentOrder{
+		ID:             111,
+		OutTradeNo:     "PAY_ORDINARY_111",
+		Amount:         1000,
+		Status:         "paid",
+		BusinessType:   "takeout",
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
+		OrderID:        pgtype.Int8{Int64: 122, Valid: true},
+	}
+	order := db.Order{ID: 122, MerchantID: 133}
+	refundOrder := db.RefundOrder{ID: 145, PaymentOrderID: paymentOrder.ID, Status: "pending", OutRefundNo: "RF111_122"}
+	profitSharingOrder := db.ProfitSharingOrder{ID: 155, MerchantID: order.MerchantID, OutOrderNo: "PSO12", SharingOrderID: pgtype.Text{String: "wx-ps-ordinary-012", Valid: true}, PlatformCommission: 300}
+	returnRecord := db.ProfitSharingReturn{ID: 166, RefundOrderID: refundOrder.ID, ProfitSharingOrderID: profitSharingOrder.ID, PaymentOrderID: paymentOrder.ID, SubMchid: "sub-mchid-ordinary-012", OutOrderNo: profitSharingOrder.OutOrderNo, OutReturnNo: "PR145PL"}
+
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), order.MerchantID).Return(db.MerchantPaymentConfig{MerchantID: order.MerchantID, SubMchID: "sub-mchid-ordinary-012"}, nil)
+	store.EXPECT().GetRefundOrderByOutRefundNo(gomock.Any(), refundOrder.OutRefundNo).Return(db.RefundOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().CreateRefundOrderTx(gomock.Any(), db.CreateRefundOrderTxParams{PaymentOrderID: paymentOrder.ID, RefundType: "user_cancel", RefundAmount: 300, RefundReason: "用户取消", OutRefundNo: refundOrder.OutRefundNo}).Return(db.CreateRefundOrderTxResult{RefundOrder: refundOrder}, nil)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(profitSharingOrder, nil)
+	store.EXPECT().GetProfitSharingReturnByOutReturnNo(gomock.Any(), returnRecord.OutReturnNo).Return(db.ProfitSharingReturn{}, db.ErrRecordNotFound)
+	store.EXPECT().CreateProfitSharingReturn(gomock.Any(), db.CreateProfitSharingReturnParams{RefundOrderID: refundOrder.ID, ProfitSharingOrderID: profitSharingOrder.ID, PaymentOrderID: paymentOrder.ID, SubMchid: "sub-mchid-ordinary-012", OutOrderNo: profitSharingOrder.OutOrderNo, OutReturnNo: returnRecord.OutReturnNo, ReturnMchid: ordinaryClient.ServiceProviderMchID(), Amount: profitSharingOrder.PlatformCommission, Status: "pending"}).Return(returnRecord, nil)
+	store.EXPECT().UpdateProfitSharingReturnToProcessing(gomock.Any(), db.UpdateProfitSharingReturnToProcessingParams{ID: returnRecord.ID, ReturnID: pgtype.Text{String: "wx-return-ordinary-012", Valid: true}}).Return(returnRecord, nil)
+	expectWorkerProfitSharingReturnCommandForChannel(t, store, db.PaymentChannelOrdinaryServiceProvider, returnRecord.ID, returnRecord.OutReturnNo, returnRecord.OutOrderNo, "wx-return-ordinary-012", db.ExternalPaymentCommandStatusAccepted, "", 9712)
+	distributor.EXPECT().DistributeTaskProcessProfitSharingReturnResult(gomock.Any(), gomock.AssignableToTypeOf(&worker.ProfitSharingReturnResultPayload{}), gomock.Any()).Return(nil)
+
+	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
+	processor.SetOrdinaryServiceProviderClient(ordinaryClient)
+	payloadBytes, err := json.Marshal(worker.PayloadProcessRefund{PaymentOrderID: paymentOrder.ID, RefundAmount: 300, Reason: "用户取消"})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskInitiateRefund(context.Background(), asynq.NewTask(worker.TaskProcessRefund, payloadBytes))
+	require.NoError(t, err)
+	require.NotNil(t, ordinaryClient.createProfitSharingReturnRequest)
+	require.Equal(t, ordinaryClient.ServiceProviderMchID(), ordinaryClient.createProfitSharingReturnRequest.ReturnMchID)
+	require.Equal(t, returnRecord.SubMchid, ordinaryClient.createProfitSharingReturnRequest.SubMchID)
 }
 
 func TestProcessTaskInitiateRefund_ProfitSharingReturnSuccessSchedulesQueryAndSkipsDirectRefund(t *testing.T) {
@@ -656,11 +715,15 @@ func TestProcessTaskProfitSharingReturnResult_UnknownResultSkipsRetry(t *testing
 }
 
 func expectWorkerProfitSharingReturnCommand(t *testing.T, store *mockdb.MockStore, returnID int64, outReturnNo string, outOrderNo string, secondaryKey string, status string, errorCode string, commandID int64) {
+	expectWorkerProfitSharingReturnCommandForChannel(t, store, db.PaymentChannelEcommerce, returnID, outReturnNo, outOrderNo, secondaryKey, status, errorCode, commandID)
+}
+
+func expectWorkerProfitSharingReturnCommandForChannel(t *testing.T, store *mockdb.MockStore, channel string, returnID int64, outReturnNo string, outOrderNo string, secondaryKey string, status string, errorCode string, commandID int64) {
 	t.Helper()
 
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
 		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
-		require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
+		require.Equal(t, channel, arg.Channel)
 		require.Equal(t, db.ExternalPaymentCapabilityProfitSharing, arg.Capability)
 		require.Equal(t, db.ExternalPaymentCommandTypeCreateProfitSharingReturn, arg.CommandType)
 		require.Equal(t, db.ExternalPaymentBusinessOwnerProfitSharing, arg.BusinessOwner)
@@ -695,12 +758,16 @@ func expectWorkerProfitSharingReturnCommand(t *testing.T, store *mockdb.MockStor
 }
 
 func expectProfitSharingReturnQueryFact(t *testing.T, store *mockdb.MockStore, returnRecord db.ProfitSharingReturn, secondaryKey string, upstreamState string, terminalStatus string, failReason string) {
+	expectProfitSharingReturnQueryFactForChannel(t, store, db.PaymentChannelEcommerce, returnRecord, secondaryKey, upstreamState, terminalStatus, failReason)
+}
+
+func expectProfitSharingReturnQueryFactForChannel(t *testing.T, store *mockdb.MockStore, channel string, returnRecord db.ProfitSharingReturn, secondaryKey string, upstreamState string, terminalStatus string, failReason string) {
 	t.Helper()
 
 	factID := int64(9000) + returnRecord.ID
 	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
 		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
-		require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
+		require.Equal(t, channel, arg.Channel)
 		require.Equal(t, db.ExternalPaymentCapabilityProfitSharing, arg.Capability)
 		require.Equal(t, db.ExternalPaymentFactSourceQuery, arg.FactSource)
 		require.Equal(t, db.ExternalPaymentObjectProfitSharingReturn, arg.ExternalObjectType)
@@ -721,7 +788,7 @@ func expectProfitSharingReturnQueryFact(t *testing.T, store *mockdb.MockStore, r
 		require.Equal(t, terminalStatus, arg.TerminalStatus)
 		require.True(t, arg.Amount.Valid)
 		require.Equal(t, returnRecord.Amount, arg.Amount.Int64)
-		require.Equal(t, "wechat:query:ecommerce:profit_sharing_return:"+returnRecord.OutReturnNo+":"+terminalStatus, arg.DedupeKey)
+		require.Equal(t, "wechat:query:"+channel+":profit_sharing_return:"+returnRecord.OutReturnNo+":"+terminalStatus, arg.DedupeKey)
 		raw := string(arg.RawResource)
 		require.Contains(t, raw, returnRecord.OutReturnNo)
 		require.Contains(t, raw, upstreamState)

@@ -11,6 +11,15 @@ const (
 	MerchantStaffRoleOwner    = "owner"
 	MerchantStaffStatusActive = "active"
 
+	MerchantStatusActive            = "active"
+	MerchantStatusBindbankSubmitted = "bindbank_submitted"
+
+	MerchantPaymentConfigStatusActive               = "active"
+	MerchantPaymentConfigStatusPendingAuthorization = "pending_authorization"
+
+	AccountAuthorizeStateUnauthorized = "AUTHORIZE_STATE_UNAUTHORIZED"
+	AccountAuthorizeStateAuthorized   = "AUTHORIZE_STATE_AUTHORIZED"
+
 	MerchantAppDevicePlatformAndroid = "android"
 
 	MerchantAppDeviceProviderHuawei  = "huawei"
@@ -148,8 +157,9 @@ const (
 	MerchantCancelStateFundProcessing         = "FUND_PROCESSING"
 	MerchantCancelStateFinish                 = "FINISH"
 
-	PaymentChannelDirect    = "direct"
-	PaymentChannelEcommerce = "ecommerce"
+	PaymentChannelDirect                  = "direct"
+	PaymentChannelEcommerce               = "ecommerce"
+	PaymentChannelOrdinaryServiceProvider = "ordinary_service_provider"
 
 	ExternalPaymentProviderWechat = "wechat"
 
@@ -180,6 +190,7 @@ const (
 	ExternalPaymentCapabilityDirectJSAPIPayment  = "direct_jsapi_payment"
 	ExternalPaymentCapabilityDirectRefund        = "direct_refund"
 	ExternalPaymentCapabilityPartnerJSAPIPayment = "partner_jsapi_payment"
+	ExternalPaymentCapabilityPartnerRefund       = "partner_refund"
 	ExternalPaymentCapabilityCombinePayment      = "combine_payment"
 	ExternalPaymentCapabilityEcommerceRefund     = "ecommerce_refund"
 	ExternalPaymentCapabilityProfitSharing       = "profit_sharing"

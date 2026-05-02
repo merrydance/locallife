@@ -83,7 +83,7 @@ func TestCreateCombinedPaymentTx(t *testing.T) {
 		require.NotEmpty(t, po)
 		require.Equal(t, user.ID, po.UserID)
 		require.Equal(t, "miniprogram", po.PaymentType)
-		require.Equal(t, PaymentChannelEcommerce, po.PaymentChannel)
+		require.Equal(t, PaymentChannelOrdinaryServiceProvider, po.PaymentChannel)
 		require.True(t, po.RequiresProfitSharing)
 		require.Equal(t, "order", po.BusinessType)
 		require.Equal(t, result.CombinedPaymentOrder.ID, po.CombinedPaymentID.Int64)

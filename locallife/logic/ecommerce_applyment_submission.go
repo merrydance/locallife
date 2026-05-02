@@ -14,6 +14,8 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -58,12 +60,38 @@ type SubmitEcommerceApplymentInput struct {
 	WechatRequest *wechat.EcommerceApplymentRequest
 }
 
+type SubmitOrdinaryServiceProviderApplymentInput struct {
+	Applyment     db.EcommerceApplyment
+	WechatRequest ospcontracts.ApplymentSubmitRequest
+}
+
 type SubmitEcommerceApplymentResult struct {
 	ApplymentID          int64
 	Status               string
 	StatusDesc           string
 	Message              string
 	InitialQueryResponse *wechatcontracts.EcommerceApplymentQueryResponse
+}
+
+type SubmitOrdinaryServiceProviderApplymentResult struct {
+	ApplymentID          int64
+	Status               string
+	StatusDesc           string
+	Message              string
+	InitialQueryResponse *ospcontracts.ApplymentQueryResponse
+}
+
+func updateApplymentSubjectStatusWithLog(ctx context.Context, updater ApplymentSubjectStatusUpdater, localApplymentID int64, status, reason string) {
+	if updater == nil {
+		return
+	}
+	if err := updater(ctx, status); err != nil {
+		log.Error().Err(err).
+			Int64("local_applyment_id", localApplymentID).
+			Str("subject_status", status).
+			Str("reason", reason).
+			Msg("update applyment subject status failed")
+	}
 }
 
 func waitApplymentInitialQuery(ctx context.Context, delay time.Duration) error {
@@ -162,6 +190,7 @@ type ApplymentLocalRecordInput struct {
 	ContactName         string
 	ContactIDCardNumber string
 	MobilePhone         string
+	ContactEmail        string
 	MerchantShortname   string
 }
 
@@ -198,6 +227,49 @@ type ApplymentWechatRequestInput struct {
 	StoreName         string
 	StoreURL          string
 	StoreQRCode       string
+}
+
+type ApplymentOrdinaryRequestInput struct {
+	BusinessCode      string
+	OrganizationType  string
+	BusinessLicense   ApplymentBusinessLicenseOCRInput
+	BusinessLicenseID string
+	LicenseCopy       string
+	MerchantName      string
+	LegalPerson       string
+	BusinessAddress   string
+	MerchantShortname string
+	ServicePhone      string
+	MiniProgramAppID  string
+	StoreName         string
+	StoreQRCode       string
+	IDCardInfo        ApplymentOrdinaryIDCardInput
+	AccountInfo       ApplymentWechatAccountInput
+	ContactInfo       ApplymentOrdinaryContactInput
+	SettlementID      string
+	QualificationType string
+}
+
+type ApplymentOrdinaryIDCardInput struct {
+	IDCardCopy      string
+	IDCardNational  string
+	IDCardName      string
+	IDCardNumber    string
+	CardPeriodBegin string
+	CardPeriodEnd   string
+}
+
+type ApplymentOrdinaryContactInput struct {
+	ContactType          string
+	ContactName          string
+	ContactIDDocType     string
+	ContactIDNumber      string
+	ContactIDDocCopy     string
+	ContactIDDocCopyBack string
+	ContactPeriodBegin   string
+	ContactPeriodEnd     string
+	MobilePhone          string
+	ContactEmail         string
 }
 
 type ApplymentBusinessLicenseOCRInput struct {
@@ -282,6 +354,7 @@ func BuildCreateEcommerceApplymentParams(input ApplymentLocalRecordInput) db.Cre
 		ContactName:           input.ContactName,
 		ContactIDCardNumber:   pgtype.Text{String: input.ContactIDCardNumber, Valid: input.ContactIDCardNumber != ""},
 		MobilePhone:           input.MobilePhone,
+		ContactEmail:          pgtype.Text{String: input.ContactEmail, Valid: strings.TrimSpace(input.ContactEmail) != ""},
 		MerchantShortname:     input.MerchantShortname,
 		Qualifications:        []byte("[]"),
 		BusinessAdditionPics:  []string{},
@@ -345,6 +418,128 @@ func BuildWechatApplymentRequest(input ApplymentWechatRequestInput) *wechat.Ecom
 	}
 
 	return request
+}
+
+func BuildOrdinaryServiceProviderApplymentRequest(input ApplymentOrdinaryRequestInput) ospcontracts.ApplymentSubmitRequest {
+	licensePeriodBegin, licensePeriodEnd := parseApplymentDateRange(input.BusinessLicense.ValidPeriod)
+	licenseAddress := strings.TrimSpace(input.BusinessLicense.Address)
+	if licenseAddress == "" {
+		licenseAddress = strings.TrimSpace(input.BusinessAddress)
+	}
+
+	request := ospcontracts.ApplymentSubmitRequest{
+		BusinessCode: strings.TrimSpace(input.BusinessCode),
+		ContactInfo: ospcontracts.ApplymentContactInfo{
+			ContactType:          mapOrdinaryApplymentContactType(input.ContactInfo.ContactType),
+			ContactName:          strings.TrimSpace(input.ContactInfo.ContactName),
+			ContactIDDocType:     mapOrdinaryApplymentIdentificationType(input.ContactInfo.ContactIDDocType),
+			ContactIDNumber:      strings.TrimSpace(input.ContactInfo.ContactIDNumber),
+			ContactIDDocCopy:     strings.TrimSpace(input.ContactInfo.ContactIDDocCopy),
+			ContactIDDocCopyBack: strings.TrimSpace(input.ContactInfo.ContactIDDocCopyBack),
+			ContactPeriodBegin:   strings.TrimSpace(input.ContactInfo.ContactPeriodBegin),
+			ContactPeriodEnd:     strings.TrimSpace(input.ContactInfo.ContactPeriodEnd),
+			MobilePhone:          strings.TrimSpace(input.ContactInfo.MobilePhone),
+			ContactEmail:         strings.TrimSpace(input.ContactInfo.ContactEmail),
+		},
+		SubjectInfo: ospcontracts.ApplymentSubjectInfo{
+			SubjectType:        mapOrdinaryApplymentSubjectType(input.OrganizationType),
+			FinanceInstitution: false,
+			BusinessLicenseInfo: &ospcontracts.ApplymentBusinessLicenseInfo{
+				LicenseCopy:    strings.TrimSpace(input.LicenseCopy),
+				LicenseNumber:  strings.TrimSpace(input.BusinessLicenseID),
+				MerchantName:   strings.TrimSpace(input.MerchantName),
+				LegalPerson:    strings.TrimSpace(input.LegalPerson),
+				LicenseAddress: licenseAddress,
+				PeriodBegin:    licensePeriodBegin,
+				PeriodEnd:      licensePeriodEnd,
+			},
+			IdentityInfo: ospcontracts.ApplymentIdentityInfo{
+				IDHolderType: ospcontracts.ContactTypeLegal,
+				IDDocType:    ospcontracts.IdentificationTypeIDCard,
+				IDCardInfo: &ospcontracts.ApplymentIDCardInfo{
+					IDCardCopy:      strings.TrimSpace(input.IDCardInfo.IDCardCopy),
+					IDCardNational:  strings.TrimSpace(input.IDCardInfo.IDCardNational),
+					IDCardName:      strings.TrimSpace(input.IDCardInfo.IDCardName),
+					IDCardNumber:    strings.TrimSpace(input.IDCardInfo.IDCardNumber),
+					CardPeriodBegin: strings.TrimSpace(input.IDCardInfo.CardPeriodBegin),
+					CardPeriodEnd:   strings.TrimSpace(input.IDCardInfo.CardPeriodEnd),
+				},
+			},
+		},
+		BusinessInfo: ospcontracts.ApplymentBusinessInfo{
+			MerchantShortname: strings.TrimSpace(input.MerchantShortname),
+			ServicePhone:      strings.TrimSpace(input.ServicePhone),
+			SalesInfo: ospcontracts.ApplymentSalesInfo{
+				SalesScenesType: []ospcontracts.ApplymentSalesSceneType{ospcontracts.SalesSceneMiniProgram},
+				MiniProgramInfo: &ospcontracts.ApplymentMiniProgramInfo{
+					MiniProgramAppID: strings.TrimSpace(input.MiniProgramAppID),
+				},
+			},
+		},
+		SettlementInfo: ospcontracts.ApplymentSettlementInfo{
+			SettlementID:      strings.TrimSpace(input.SettlementID),
+			QualificationType: strings.TrimSpace(input.QualificationType),
+		},
+		BankAccountInfo: ospcontracts.ApplymentBankAccountInfo{
+			BankAccountType: mapOrdinaryApplymentBankAccountType(input.AccountInfo.AccountType),
+			AccountName:     strings.TrimSpace(input.AccountInfo.AccountName),
+			AccountBank:     strings.TrimSpace(input.AccountInfo.AccountBank),
+			BankAddressCode: strings.TrimSpace(input.AccountInfo.BankAddressCode),
+			BankBranchID:    strings.TrimSpace(input.AccountInfo.BankBranchID),
+			BankName:        strings.TrimSpace(input.AccountInfo.BankName),
+			AccountNumber:   strings.TrimSpace(input.AccountInfo.AccountNumber),
+		},
+	}
+
+	if storeQRCode := strings.TrimSpace(input.StoreQRCode); storeQRCode != "" {
+		request.BusinessInfo.SalesInfo.MiniProgramInfo.MiniProgramPics = []string{storeQRCode}
+		request.BusinessInfo.SalesInfo.StoreInfo = &ospcontracts.ApplymentStoreInfo{
+			StoreName:        strings.TrimSpace(input.StoreName),
+			StoreEntrancePic: []string{storeQRCode},
+		}
+	}
+
+	return request
+}
+
+func mapOrdinaryApplymentSubjectType(organizationType string) ospcontracts.SubjectType {
+	switch strings.TrimSpace(organizationType) {
+	case "4":
+		return ospcontracts.SubjectTypeIndividual
+	case "2":
+		return ospcontracts.SubjectTypeEnterprise
+	default:
+		return ospcontracts.SubjectType("")
+	}
+}
+
+func mapOrdinaryApplymentBankAccountType(accountType string) ospcontracts.BankAccountType {
+	switch strings.TrimSpace(accountType) {
+	case "ACCOUNT_TYPE_BUSINESS":
+		return ospcontracts.BankAccountTypeCorporate
+	case "ACCOUNT_TYPE_PRIVATE":
+		return ospcontracts.BankAccountTypePersonal
+	default:
+		return ospcontracts.BankAccountType("")
+	}
+}
+
+func mapOrdinaryApplymentContactType(contactType string) ospcontracts.ContactType {
+	switch strings.ToUpper(strings.TrimSpace(contactType)) {
+	case "SUPER", "66":
+		return ospcontracts.ContactTypeSuper
+	default:
+		return ospcontracts.ContactTypeLegal
+	}
+}
+
+func mapOrdinaryApplymentIdentificationType(docType string) ospcontracts.IdentificationType {
+	switch strings.ToUpper(strings.TrimSpace(docType)) {
+	case "", "IDENTIFICATION_TYPE_MAINLAND_IDCARD", "IDENTIFICATION_TYPE_IDCARD":
+		return ospcontracts.IdentificationTypeIDCard
+	default:
+		return ospcontracts.IdentificationType(docType)
+	}
 }
 
 func ParseApplymentIDCardValidPeriod(validDate string) (string, string) {
@@ -434,7 +629,7 @@ func UploadApplymentAsset(ctx context.Context, downloader ApplymentAssetDownload
 	response, err := uploader.UploadImage(ctx, filename, fileData)
 	if err != nil {
 		if wechat.IsUploadImageValidationError(err) {
-			return "", NewRequestError(http.StatusBadRequest, err)
+			return "", NewRequestError(http.StatusBadRequest, errors.New(applymentImageUploadValidationMessage(err)))
 		}
 		return "", err
 	}
@@ -443,6 +638,25 @@ func UploadApplymentAsset(ctx context.Context, downloader ApplymentAssetDownload
 	}
 
 	return strings.TrimSpace(response.MediaID), nil
+}
+
+func applymentImageUploadValidationMessage(err error) string {
+	if err == nil {
+		return "图片上传校验失败，请上传 JPG、JPEG、PNG 或 BMP 格式图片后重试"
+	}
+	lowerMessage := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(lowerMessage, "file is empty"):
+		return "图片文件为空，请上传非空的 JPG、JPEG、PNG 或 BMP 图片后重试"
+	case strings.Contains(lowerMessage, "filename is required"):
+		return "图片文件名缺失或格式不支持，请上传 JPG、JPEG、PNG 或 BMP 图片后重试"
+	case strings.Contains(lowerMessage, "2mb"):
+		return "图片超过微信支付 2MB 限制，请压缩后重新上传"
+	case strings.Contains(lowerMessage, "does not match"):
+		return "图片内容与文件扩展名不一致，请重新上传真实的图片文件后重试"
+	default:
+		return "图片格式不符合微信支付上传要求，请上传 JPG、JPEG、PNG 或 BMP 图片后重试"
+	}
 }
 
 func EncryptApplymentWechatSensitiveFields(encryptor ApplymentSensitiveEncryptor, input ApplymentWechatSensitiveInput) (ApplymentWechatSensitiveOutput, error) {
@@ -616,9 +830,7 @@ func SubmitEcommerceApplyment(
 	var result SubmitEcommerceApplymentResult
 
 	if ecommerceClient == nil {
-		if updateSubjectStatus != nil {
-			_ = updateSubjectStatus(ctx, ApplymentSubjectStatusBindbankSubmitted)
-		}
+		updateApplymentSubjectStatusWithLog(ctx, updateSubjectStatus, input.Applyment.ID, ApplymentSubjectStatusBindbankSubmitted, "ecommerce_client_missing")
 		result.ApplymentID = input.Applyment.ID
 		result.Status = ApplymentSubmissionResultStatus
 		result.StatusDesc = ApplymentSubmissionFallbackMessage
@@ -636,16 +848,12 @@ func SubmitEcommerceApplyment(
 		ApplymentID: pgtype.Int8{Int64: resp.ApplymentID, Valid: resp.ApplymentID > 0},
 	})
 	if err != nil {
-		if updateSubjectStatus != nil {
-			_ = updateSubjectStatus(ctx, ApplymentSubjectStatusBindbankSubmitted)
-		}
+		updateApplymentSubjectStatusWithLog(ctx, updateSubjectStatus, input.Applyment.ID, ApplymentSubjectStatusBindbankSubmitted, "submitted_state_sync_failed")
 		return result, fmt.Errorf("同步微信进件提交状态失败: %w", err)
 	}
 	recordEcommerceApplymentCommandAccepted(ctx, store, input.Applyment, resp)
 
-	if updateSubjectStatus != nil {
-		_ = updateSubjectStatus(ctx, ApplymentSubjectStatusBindbankSubmitted)
-	}
+	updateApplymentSubjectStatusWithLog(ctx, updateSubjectStatus, input.Applyment.ID, ApplymentSubjectStatusBindbankSubmitted, "submit_applyment_accepted")
 
 	result.ApplymentID = resp.ApplymentID
 	result.Status = ApplymentSubmissionResultStatus
@@ -683,6 +891,238 @@ func SubmitEcommerceApplyment(
 	}
 
 	return result, nil
+}
+
+func SubmitOrdinaryServiceProviderApplyment(
+	ctx context.Context,
+	store ApplymentSubmissionStore,
+	ordinaryClient ordinaryserviceprovider.OrdinaryServiceProviderClientInterface,
+	updateSubjectStatus ApplymentSubjectStatusUpdater,
+	input SubmitOrdinaryServiceProviderApplymentInput,
+) (SubmitOrdinaryServiceProviderApplymentResult, error) {
+	var result SubmitOrdinaryServiceProviderApplymentResult
+
+	if ordinaryClient == nil {
+		return result, fmt.Errorf("ordinary service provider client not configured")
+	}
+
+	resp, err := ordinaryClient.SubmitApplyment(ctx, input.WechatRequest)
+	if err != nil {
+		return result, fmt.Errorf("submit ordinary service provider applyment: %w", err)
+	}
+
+	_, err = store.UpdateEcommerceApplymentToSubmitted(ctx, db.UpdateEcommerceApplymentToSubmittedParams{
+		ID:          input.Applyment.ID,
+		ApplymentID: pgtype.Int8{Int64: resp.ApplymentID, Valid: resp.ApplymentID > 0},
+	})
+	if err != nil {
+		updateApplymentSubjectStatusWithLog(ctx, updateSubjectStatus, input.Applyment.ID, ApplymentSubjectStatusBindbankSubmitted, "ordinary_submitted_state_sync_failed")
+		return result, fmt.Errorf("sync ordinary service provider applyment submitted state: %w", err)
+	}
+	recordOrdinaryServiceProviderApplymentCommandAccepted(ctx, store, input.Applyment, resp)
+
+	updateApplymentSubjectStatusWithLog(ctx, updateSubjectStatus, input.Applyment.ID, ApplymentSubjectStatusBindbankSubmitted, "ordinary_submit_applyment_accepted")
+
+	result.ApplymentID = resp.ApplymentID
+	result.Status = ApplymentSubmissionResultStatus
+	result.StatusDesc = ApplymentSubmissionSuccessMessage
+	result.Message = ApplymentSubmissionSuccessMessage
+	if err := waitApplymentInitialQuery(ctx, applymentInitialQueryDelay); err != nil {
+		return result, nil
+	}
+
+	initialQueryResp, err := queryInitialOrdinaryApplymentStatus(ctx, ordinaryClient, resp.ApplymentID, input.Applyment.OutRequestNo)
+	if err == nil && initialQueryResp != nil {
+		resolvedStatus := NormalizeResolvedApplymentStatus(
+			MapOrdinaryApplymentStateToStatus(initialQueryResp.ApplymentState),
+			strings.TrimSpace(initialQueryResp.SubMchID) != "",
+		)
+		if resolvedStatus == "" {
+			resolvedStatus = ApplymentSubmissionResultStatus
+		}
+		statusDesc := getApplymentSubmissionStatusDesc(resolvedStatus)
+		if statusDesc == "未知状态" && strings.TrimSpace(initialQueryResp.ApplymentStateMsg) != "" {
+			statusDesc = strings.TrimSpace(initialQueryResp.ApplymentStateMsg)
+		}
+
+		result.Status = resolvedStatus
+		result.StatusDesc = statusDesc
+		result.Message = OrdinaryApplymentFrontendMessage(resolvedStatus)
+		result.InitialQueryResponse = initialQueryResp
+
+		if syncErr := syncInitialOrdinaryApplymentQueryResult(ctx, store, input.Applyment.ID, initialQueryResp); syncErr != nil {
+			log.Error().Err(syncErr).
+				Int64("local_applyment_id", input.Applyment.ID).
+				Int64("wechat_applyment_id", initialQueryResp.ApplymentID).
+				Msg("sync initial ordinary service provider applyment query result failed")
+		}
+	}
+
+	return result, nil
+}
+
+func syncInitialOrdinaryApplymentQueryResult(
+	ctx context.Context,
+	store ApplymentSubmissionStore,
+	localApplymentID int64,
+	queryResp *ospcontracts.ApplymentQueryResponse,
+) error {
+	if queryResp == nil {
+		return nil
+	}
+	resolvedStatus := NormalizeResolvedApplymentStatus(
+		MapOrdinaryApplymentStateToStatus(queryResp.ApplymentState),
+		strings.TrimSpace(queryResp.SubMchID) != "",
+	)
+	if resolvedStatus == "" {
+		resolvedStatus = ApplymentSubmissionResultStatus
+	}
+	_, err := store.UpdateEcommerceApplymentStatus(ctx, db.UpdateEcommerceApplymentStatusParams{
+		ID:          localApplymentID,
+		ApplymentID: pgtype.Int8{Int64: queryResp.ApplymentID, Valid: queryResp.ApplymentID > 0},
+		Status:      resolvedStatus,
+		RejectReason: pgtype.Text{
+			String: ordinaryApplymentRejectReason(queryResp.AuditDetail),
+			Valid:  ordinaryApplymentRejectReason(queryResp.AuditDetail) != "",
+		},
+		SignUrl:            buildApplymentSubmissionText(queryResp.SignURL),
+		SignState:          pgtype.Text{},
+		LegalValidationUrl: pgtype.Text{},
+		AccountValidation:  nil,
+		SubMchID:           buildApplymentSubmissionText(queryResp.SubMchID),
+	})
+	return err
+}
+
+func recordOrdinaryServiceProviderApplymentCommandAccepted(ctx context.Context, store ApplymentSubmissionStore, applyment db.EcommerceApplyment, resp *ospcontracts.ApplymentSubmitResponse) {
+	if resp == nil {
+		return
+	}
+	outRequestNo := strings.TrimSpace(applyment.OutRequestNo)
+	applymentID := ""
+	if resp.ApplymentID > 0 {
+		applymentID = fmt.Sprintf("%d", resp.ApplymentID)
+	}
+	secondaryKey := applymentStringPtrIfNotEmpty(applymentID)
+	businessObjectType := "ordinary_service_provider_applyment"
+	businessObjectID := applyment.ID
+	if _, err := NewPaymentCommandService(store).RecordExternalPaymentCommand(ctx, RecordExternalPaymentCommandInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelOrdinaryServiceProvider,
+		Capability:           db.ExternalPaymentCapabilityApplyment,
+		CommandType:          db.ExternalPaymentCommandTypeCreateApplyment,
+		BusinessOwner:        db.ExternalPaymentBusinessOwnerApplyment,
+		BusinessObjectType:   &businessObjectType,
+		BusinessObjectID:     &businessObjectID,
+		ExternalObjectType:   db.ExternalPaymentObjectApplyment,
+		ExternalObjectKey:    outRequestNo,
+		ExternalSecondaryKey: secondaryKey,
+		CommandStatus:        db.ExternalPaymentCommandStatusAccepted,
+		ResponseSnapshot: ecommerceApplymentCommandSnapshot(map[string]string{
+			"out_request_no":   outRequestNo,
+			"applyment_id":     applymentID,
+			"applyment_status": ApplymentSubmissionResultStatus,
+		}),
+	}); err != nil {
+		log.Warn().Err(err).
+			Int64("applyment_id", applyment.ID).
+			Str("out_request_no", outRequestNo).
+			Msg("record ordinary service provider applyment command accepted failed")
+	}
+}
+
+func queryInitialOrdinaryApplymentStatus(
+	ctx context.Context,
+	ordinaryClient ordinaryserviceprovider.OrdinaryServiceProviderClientInterface,
+	applymentID int64,
+	outRequestNo string,
+) (*ospcontracts.ApplymentQueryResponse, error) {
+	if ordinaryClient == nil {
+		return nil, nil
+	}
+	if applymentID > 0 {
+		resp, err := ordinaryClient.QueryApplymentByID(ctx, ospcontracts.ApplymentQueryByIDRequest{ApplymentID: applymentID})
+		if err == nil {
+			log.Info().
+				Str("query_key", "applyment_id").
+				Int64("wechat_applyment_id", resp.ApplymentID).
+				Str("business_code", strings.TrimSpace(resp.BusinessCode)).
+				Str("applyment_state", string(resp.ApplymentState)).
+				Msg("query initial ordinary service provider applyment status succeeded")
+			return resp, nil
+		}
+		if strings.TrimSpace(outRequestNo) == "" {
+			return nil, err
+		}
+	}
+	resp, err := ordinaryClient.QueryApplymentByBusinessCode(ctx, ospcontracts.ApplymentQueryByBusinessCodeRequest{BusinessCode: outRequestNo})
+	if err == nil {
+		log.Info().
+			Str("query_key", "business_code").
+			Int64("wechat_applyment_id", resp.ApplymentID).
+			Str("business_code", strings.TrimSpace(resp.BusinessCode)).
+			Str("applyment_state", string(resp.ApplymentState)).
+			Msg("query initial ordinary service provider applyment status succeeded")
+	}
+	return resp, err
+}
+
+func MapOrdinaryApplymentStateToStatus(state ospcontracts.ApplymentState) string {
+	switch state {
+	case ospcontracts.ApplymentStateEditing:
+		return "submitted"
+	case ospcontracts.ApplymentStateAuditing:
+		return "auditing"
+	case ospcontracts.ApplymentStateRejected:
+		return "rejected"
+	case ospcontracts.ApplymentStateToBeConfirmed:
+		return "to_be_confirmed"
+	case ospcontracts.ApplymentStateToBeSigned:
+		return "to_be_signed"
+	case ospcontracts.ApplymentStateSigning:
+		return "signing"
+	case ospcontracts.ApplymentStateFinished:
+		return "finish"
+	case ospcontracts.ApplymentStateCanceled:
+		return "canceled"
+	default:
+		return ""
+	}
+}
+
+func ordinaryApplymentRejectReason(details []ospcontracts.ApplymentAuditDetail) string {
+	parts := make([]string, 0, len(details))
+	for _, detail := range details {
+		reason := strings.TrimSpace(detail.RejectReason)
+		if reason == "" {
+			continue
+		}
+		fieldName := strings.TrimSpace(detail.FieldName)
+		if fieldName == "" {
+			fieldName = strings.TrimSpace(detail.Field)
+		}
+		if fieldName != "" {
+			parts = append(parts, fmt.Sprintf("%s: %s", fieldName, reason))
+		} else {
+			parts = append(parts, reason)
+		}
+	}
+	return strings.Join(parts, "; ")
+}
+
+func OrdinaryApplymentFrontendMessage(status string) string {
+	switch strings.TrimSpace(status) {
+	case "finish":
+		return "进件已通过，正在确认微信开户意愿授权状态；授权完成后平台会开通普通服务商交易能力"
+	case "to_be_confirmed":
+		return "进件待商户确认，请按微信支付页面提示完成确认后刷新状态"
+	case "to_be_signed", "signing":
+		return "进件进入签约环节，请打开签约链接完成签约后刷新状态"
+	case "rejected":
+		return "进件被微信驳回，请根据驳回原因修正资料后重新提交"
+	default:
+		return getApplymentSubmissionStatusDesc(status)
+	}
 }
 
 func recordEcommerceApplymentCommandAccepted(ctx context.Context, store ApplymentSubmissionStore, applyment db.EcommerceApplyment, resp *wechatcontracts.EcommerceApplymentResponse) {

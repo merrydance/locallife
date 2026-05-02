@@ -12,6 +12,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 )
 
 const (
@@ -27,7 +28,7 @@ const (
 	paymentFactBusinessObjectRefundOrder            = "refund_order"
 	paymentFactBusinessObjectProfitSharingOrder     = "profit_sharing_order"
 	paymentFactBusinessObjectProfitSharingReturn    = "profit_sharing_return"
-	paymentFactBusinessObjectApplyment              = "ecommerce_applyment"
+	paymentFactBusinessObjectApplyment              = "ordinary_service_provider_applyment"
 	paymentFactBusinessObjectMerchantPaymentConfig  = "merchant_payment_config"
 	paymentFactBusinessObjectMerchantCancelWithdraw = "merchant_cancel_withdraw_application"
 	paymentFactBusinessObjectWithdrawalRecord       = "withdrawal_record"
@@ -479,12 +480,17 @@ func (svc *PaymentFactService) applyApplymentFact(ctx context.Context, applicati
 		if subMchID == "" {
 			return result, fmt.Errorf("applyment fact %d missing sub_mch_id", fact.ID)
 		}
+		accountAuthorizeState := applymentFactPayloadAccountAuthorizeState(fact.RawResource)
+		if accountAuthorizeState == "" {
+			accountAuthorizeState = strings.TrimSpace(applyment.AccountAuthorizeState.String)
+		}
 		if err := svc.store.ApplymentSubMchActivationTx(ctx, db.ApplymentSubMchActivationTxParams{
-			ApplymentID:       applyment.ID,
-			WechatApplymentID: resolvedWechatApplymentID,
-			SubjectType:       applyment.SubjectType,
-			SubjectID:         applyment.SubjectID,
-			SubMchID:          subMchID,
+			ApplymentID:           applyment.ID,
+			WechatApplymentID:     resolvedWechatApplymentID,
+			SubjectType:           applyment.SubjectType,
+			SubjectID:             applyment.SubjectID,
+			SubMchID:              subMchID,
+			AccountAuthorizeState: accountAuthorizeState,
 		}); err != nil {
 			return result, fmt.Errorf("activate applyment: %w", err)
 		}
@@ -496,7 +502,7 @@ func (svc *PaymentFactService) applyApplymentFact(ctx context.Context, applicati
 		result = applymentDomainResult{
 			Applyment:  updatedApplyment,
 			MerchantID: updatedApplyment.SubjectID,
-			Activated:  true,
+			Activated:  strings.TrimSpace(updatedApplyment.AccountAuthorizeState.String) == db.AccountAuthorizeStateAuthorized,
 		}
 		return result, nil
 	case "rejected", "frozen", "canceled":
@@ -567,8 +573,11 @@ func (svc *PaymentFactService) applyApplymentFact(ctx context.Context, applicati
 }
 
 func validateApplymentFactApplication(application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) error {
-	if fact.Provider != db.ExternalPaymentProviderWechat || fact.Channel != db.PaymentChannelEcommerce || fact.Capability != db.ExternalPaymentCapabilityApplyment {
-		return fmt.Errorf("payment fact %d is not a wechat ecommerce applyment fact", fact.ID)
+	if fact.Provider != db.ExternalPaymentProviderWechat || fact.Capability != db.ExternalPaymentCapabilityApplyment {
+		return fmt.Errorf("payment fact %d is not a wechat applyment fact", fact.ID)
+	}
+	if fact.Channel != db.PaymentChannelEcommerce && fact.Channel != db.PaymentChannelOrdinaryServiceProvider {
+		return fmt.Errorf("payment fact %d applyment channel %q is not supported", fact.ID, fact.Channel)
 	}
 	if fact.ExternalObjectType != db.ExternalPaymentObjectApplyment {
 		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)
@@ -642,8 +651,8 @@ func (svc *PaymentFactService) applySettlementApplicationFact(ctx context.Contex
 }
 
 func validateSettlementApplicationFactApplication(application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) error {
-	if fact.Provider != db.ExternalPaymentProviderWechat || fact.Channel != db.PaymentChannelEcommerce || fact.Capability != db.ExternalPaymentCapabilitySettlement {
-		return fmt.Errorf("payment fact %d is not a wechat ecommerce settlement fact", fact.ID)
+	if fact.Provider != db.ExternalPaymentProviderWechat || fact.Channel != db.PaymentChannelOrdinaryServiceProvider || fact.Capability != db.ExternalPaymentCapabilitySettlement {
+		return fmt.Errorf("payment fact %d is not a wechat ordinary service provider settlement fact", fact.ID)
 	}
 	if fact.ExternalObjectType != db.ExternalPaymentObjectSettlement {
 		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)
@@ -767,8 +776,8 @@ func (svc *PaymentFactService) applySettlementVerificationFact(ctx context.Conte
 }
 
 func validateSettlementVerificationFactApplication(application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) error {
-	if fact.Provider != db.ExternalPaymentProviderWechat || fact.Channel != db.PaymentChannelEcommerce || fact.Capability != db.ExternalPaymentCapabilitySettlement {
-		return fmt.Errorf("payment fact %d is not a wechat ecommerce settlement fact", fact.ID)
+	if fact.Provider != db.ExternalPaymentProviderWechat || fact.Channel != db.PaymentChannelOrdinaryServiceProvider || fact.Capability != db.ExternalPaymentCapabilitySettlement {
+		return fmt.Errorf("payment fact %d is not a wechat ordinary service provider settlement fact", fact.ID)
 	}
 	if fact.ExternalObjectType != db.ExternalPaymentObjectSettlement {
 		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)
@@ -1096,11 +1105,8 @@ func validateOrderPaymentFactApplication(application db.ExternalPaymentFactAppli
 	if fact.TerminalStatus != db.ExternalPaymentTerminalStatusSuccess {
 		return fmt.Errorf("payment fact %d terminal status %q is not success", fact.ID, fact.TerminalStatus)
 	}
-	if fact.Provider != db.ExternalPaymentProviderWechat || fact.Channel != db.PaymentChannelEcommerce {
-		return fmt.Errorf("payment fact %d is not a wechat ecommerce payment fact", fact.ID)
-	}
-	if fact.Capability != db.ExternalPaymentCapabilityPartnerJSAPIPayment && fact.Capability != db.ExternalPaymentCapabilityCombinePayment {
-		return fmt.Errorf("payment fact %d capability %q is not supported for order payment", fact.ID, fact.Capability)
+	if !isWechatMainBusinessPaymentFact(fact) {
+		return fmt.Errorf("payment fact %d is not a supported wechat main business payment fact", fact.ID)
 	}
 	if fact.ExternalObjectType != db.ExternalPaymentObjectPayment && fact.ExternalObjectType != db.ExternalPaymentObjectCombinedPayment {
 		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)
@@ -1150,11 +1156,8 @@ func validateReservationPaymentFactApplication(application db.ExternalPaymentFac
 	if fact.TerminalStatus != db.ExternalPaymentTerminalStatusSuccess {
 		return fmt.Errorf("payment fact %d terminal status %q is not success", fact.ID, fact.TerminalStatus)
 	}
-	if fact.Provider != db.ExternalPaymentProviderWechat || fact.Channel != db.PaymentChannelEcommerce {
-		return fmt.Errorf("payment fact %d is not a wechat ecommerce payment fact", fact.ID)
-	}
-	if fact.Capability != db.ExternalPaymentCapabilityPartnerJSAPIPayment && fact.Capability != db.ExternalPaymentCapabilityCombinePayment {
-		return fmt.Errorf("payment fact %d capability %q is not supported for reservation payment", fact.ID, fact.Capability)
+	if !isWechatMainBusinessPaymentFact(fact) {
+		return fmt.Errorf("payment fact %d is not a supported wechat main business payment fact", fact.ID)
 	}
 	if fact.ExternalObjectType != db.ExternalPaymentObjectPayment && fact.ExternalObjectType != db.ExternalPaymentObjectCombinedPayment {
 		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)
@@ -1169,6 +1172,23 @@ func validateReservationPaymentFactApplication(application db.ExternalPaymentFac
 		return fmt.Errorf("payment fact %d business object id %d does not match application object id %d", fact.ID, fact.BusinessObjectID.Int64, application.BusinessObjectID)
 	}
 	return nil
+}
+
+func isWechatMainBusinessPaymentFact(fact db.ExternalPaymentFact) bool {
+	if fact.Provider != db.ExternalPaymentProviderWechat {
+		return false
+	}
+	if fact.Capability != db.ExternalPaymentCapabilityPartnerJSAPIPayment && fact.Capability != db.ExternalPaymentCapabilityCombinePayment {
+		return false
+	}
+	return fact.Channel == db.PaymentChannelEcommerce || fact.Channel == db.PaymentChannelOrdinaryServiceProvider
+}
+
+func isWechatMainBusinessProfitSharingFact(fact db.ExternalPaymentFact) bool {
+	if fact.Provider != db.ExternalPaymentProviderWechat || fact.Capability != db.ExternalPaymentCapabilityProfitSharing {
+		return false
+	}
+	return fact.Channel == db.PaymentChannelEcommerce || fact.Channel == db.PaymentChannelOrdinaryServiceProvider
 }
 
 func (svc *PaymentFactService) applyRiderDepositPaymentFact(ctx context.Context, application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) (riderDepositPaymentDomainResult, error) {
@@ -1398,8 +1418,8 @@ func validateOrderRefundFactApplication(application db.ExternalPaymentFactApplic
 	if !fact.IsTerminal {
 		return fmt.Errorf("payment fact %d is not terminal", fact.ID)
 	}
-	if fact.Provider != db.ExternalPaymentProviderWechat || fact.Channel != db.PaymentChannelEcommerce || fact.Capability != db.ExternalPaymentCapabilityEcommerceRefund {
-		return fmt.Errorf("payment fact %d is not a wechat ecommerce refund fact", fact.ID)
+	if !isWechatMainBusinessRefundFact(fact) {
+		return fmt.Errorf("payment fact %d is not a wechat main-business refund fact", fact.ID)
 	}
 	if fact.ExternalObjectType != db.ExternalPaymentObjectRefund {
 		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)
@@ -1497,8 +1517,8 @@ func validateReservationRefundFactApplication(application db.ExternalPaymentFact
 	if !fact.IsTerminal {
 		return fmt.Errorf("payment fact %d is not terminal", fact.ID)
 	}
-	if fact.Provider != db.ExternalPaymentProviderWechat || fact.Channel != db.PaymentChannelEcommerce || fact.Capability != db.ExternalPaymentCapabilityEcommerceRefund {
-		return fmt.Errorf("payment fact %d is not a wechat ecommerce refund fact", fact.ID)
+	if !isWechatMainBusinessRefundFact(fact) {
+		return fmt.Errorf("payment fact %d is not a wechat main-business refund fact", fact.ID)
 	}
 	if fact.ExternalObjectType != db.ExternalPaymentObjectRefund {
 		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)
@@ -1518,6 +1538,16 @@ func validateReservationRefundFactApplication(application db.ExternalPaymentFact
 func isReservationRefundPaymentOrder(paymentOrder db.PaymentOrder) bool {
 	return paymentOrder.ReservationID.Valid &&
 		(paymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerReservation || paymentOrder.BusinessType == reservationAddonBusiness)
+}
+
+func isWechatMainBusinessRefundFact(fact db.ExternalPaymentFact) bool {
+	if fact.Provider != db.ExternalPaymentProviderWechat {
+		return false
+	}
+	if fact.Channel == db.PaymentChannelEcommerce && fact.Capability == db.ExternalPaymentCapabilityEcommerceRefund {
+		return true
+	}
+	return fact.Channel == db.PaymentChannelOrdinaryServiceProvider && fact.Capability == db.ExternalPaymentCapabilityPartnerRefund
 }
 
 func isOrderRefundPaymentOrder(paymentOrder db.PaymentOrder) bool {
@@ -1558,8 +1588,8 @@ func validateProfitSharingFactApplication(application db.ExternalPaymentFactAppl
 	if !fact.IsTerminal {
 		return fmt.Errorf("payment fact %d is not terminal", fact.ID)
 	}
-	if fact.Provider != db.ExternalPaymentProviderWechat || fact.Channel != db.PaymentChannelEcommerce || fact.Capability != db.ExternalPaymentCapabilityProfitSharing {
-		return fmt.Errorf("payment fact %d is not a wechat ecommerce profit sharing fact", fact.ID)
+	if !isWechatMainBusinessProfitSharingFact(fact) {
+		return fmt.Errorf("payment fact %d is not a supported wechat profit sharing fact", fact.ID)
 	}
 	if fact.ExternalObjectType != db.ExternalPaymentObjectProfitSharing {
 		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)
@@ -1682,8 +1712,8 @@ func validateProfitSharingReturnFactApplication(application db.ExternalPaymentFa
 	if !fact.IsTerminal {
 		return fmt.Errorf("payment fact %d is not terminal", fact.ID)
 	}
-	if fact.Provider != db.ExternalPaymentProviderWechat || fact.Channel != db.PaymentChannelEcommerce || fact.Capability != db.ExternalPaymentCapabilityProfitSharing {
-		return fmt.Errorf("payment fact %d is not a wechat ecommerce profit sharing return fact", fact.ID)
+	if !isWechatMainBusinessProfitSharingFact(fact) {
+		return fmt.Errorf("payment fact %d is not a supported wechat profit sharing return fact", fact.ID)
 	}
 	if fact.ExternalObjectType != db.ExternalPaymentObjectProfitSharingReturn {
 		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)
@@ -1741,10 +1771,6 @@ func (svc *PaymentFactService) tryInitiateRefundAfterProfitSharingReturns(ctx co
 		return nil
 	}
 
-	if svc.refundCreator == nil {
-		return fmt.Errorf("ecommerce client not configured")
-	}
-
 	paymentOrder, err := svc.store.GetPaymentOrder(ctx, refundOrder.PaymentOrderID)
 	if err != nil {
 		return fmt.Errorf("get payment order: %w", err)
@@ -1767,14 +1793,69 @@ func (svc *PaymentFactService) tryInitiateRefundAfterProfitSharingReturns(ctx co
 	if paymentConfig.SubMchID == "" {
 		return fmt.Errorf("merchant sub mchid not configured")
 	}
+	if svc.refundCreator == nil {
+		return fmt.Errorf("wechat refund client not configured for payment channel %q", paymentOrder.PaymentChannel)
+	}
 
 	reason := ""
 	if refundOrder.RefundReason.Valid {
 		reason = refundOrder.RefundReason.String
 	}
 
+	refundID, err := svc.createRefundAfterProfitSharingReturns(ctx, paymentOrder, refundOrder, paymentConfig.SubMchID, reason)
+	if err != nil {
+		if _, dbErr := svc.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+			return fmt.Errorf("call wechat refund API: %w; update refund order to failed: %v", err, dbErr)
+		}
+		return fmt.Errorf("call wechat refund API: %w", err)
+	}
+
+	if _, err := svc.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+		ID:       refundOrder.ID,
+		RefundID: pgtype.Text{String: refundID, Valid: refundID != ""},
+	}); err != nil {
+		return fmt.Errorf("update refund order to processing: %w", err)
+	}
+	return nil
+}
+
+func (svc *PaymentFactService) createRefundAfterProfitSharingReturns(
+	ctx context.Context,
+	paymentOrder db.PaymentOrder,
+	refundOrder db.RefundOrder,
+	subMchID string,
+	reason string,
+) (string, error) {
+	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
+		ordinaryCreator, ok := svc.refundCreator.(paymentFactOrdinaryRefundCreator)
+		if !ok {
+			return "", fmt.Errorf("ordinary service provider refund client not configured")
+		}
+		refundResp, err := ordinaryCreator.CreateOrdinaryServiceProviderRefund(ctx, ospcontracts.RefundCreateRequest{
+			SubMchID:    subMchID,
+			OutTradeNo:  paymentOrder.OutTradeNo,
+			OutRefundNo: refundOrder.OutRefundNo,
+			Reason:      reason,
+			NotifyURL:   ordinaryCreator.OrdinaryServiceProviderRefundNotifyURL(),
+			Amount: ospcontracts.RefundAmountRequest{
+				Refund:   refundOrder.RefundAmount,
+				Total:    paymentOrder.Amount,
+				Currency: ospcontracts.CurrencyCNY,
+			},
+		})
+		if err != nil {
+			return "", mapOrdinaryServiceProviderRefundCreateError(err)
+		}
+		if refundResp == nil {
+			return "", nil
+		}
+		return refundResp.RefundID, nil
+	}
+	if !paymentOrderUsesEcommerceChannel(paymentOrder) {
+		return "", fmt.Errorf("payment channel %q does not support refund after profit sharing return", paymentOrder.PaymentChannel)
+	}
 	refundResp, err := svc.refundCreator.CreateEcommerceRefund(ctx, &wechatcontracts.EcommerceRefundRequest{
-		SubMchID:    paymentConfig.SubMchID,
+		SubMchID:    subMchID,
 		OutTradeNo:  paymentOrder.OutTradeNo,
 		OutRefundNo: refundOrder.OutRefundNo,
 		Reason:      reason,
@@ -1785,19 +1866,12 @@ func (svc *PaymentFactService) tryInitiateRefundAfterProfitSharingReturns(ctx co
 		},
 	})
 	if err != nil {
-		if _, dbErr := svc.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
-			return fmt.Errorf("call wechat refund API: %w; update refund order to failed: %v", err, dbErr)
-		}
-		return fmt.Errorf("call wechat refund API: %w", err)
+		return "", err
 	}
-
-	if _, err := svc.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
-		ID:       refundOrder.ID,
-		RefundID: pgtype.Text{String: refundResp.RefundID, Valid: refundResp.RefundID != ""},
-	}); err != nil {
-		return fmt.Errorf("update refund order to processing: %w", err)
+	if refundResp == nil {
+		return "", nil
 	}
-	return nil
+	return refundResp.RefundID, nil
 }
 
 func (svc *PaymentFactService) createPaymentDomainOutboxForAppliedFact(ctx context.Context, application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact, domainResult appliedPaymentFactDomainResult) (*db.PaymentDomainOutbox, error) {
@@ -2096,6 +2170,19 @@ func applymentFactPayloadAccountValidation(raw []byte) []byte {
 	return wechat.MarshalEcommerceApplymentAccountValidation(validation)
 }
 
+func applymentFactPayloadAccountAuthorizeState(raw []byte) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var payload struct {
+		AccountAuthorizeState string `json:"account_authorize_state"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(payload.AccountAuthorizeState)
+}
+
 func (svc *PaymentFactService) createOrderPaymentOutbox(ctx context.Context, application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact, orderPayment ApplyOrderPaymentFactResult) (*db.PaymentDomainOutbox, error) {
 	if !orderPayment.Processed || orderPayment.OrderResult == nil {
 		return nil, nil
@@ -2216,19 +2303,7 @@ func (svc *PaymentFactService) createOrderRefundOutbox(ctx context.Context, appl
 	return &outbox, nil
 }
 
-func (svc *PaymentFactService) maybeRequestRiderReceiverPresent(ctx context.Context, paymentOrder db.PaymentOrder) error {
-	if svc.ecommerceClient == nil || paymentOrder.BusinessType != db.ExternalPaymentBusinessOwnerRiderDeposit {
-		return nil
-	}
-
-	rider, err := svc.store.GetRiderByUserID(ctx, paymentOrder.UserID)
-	if err != nil {
-		return fmt.Errorf("get rider for receiver present target intent: %w", err)
-	}
-
-	if _, err := NewProfitSharingReceiverLifecycleService(svc.store, svc.ecommerceClient).RequestRiderReceiverPresent(ctx, rider); err != nil {
-		return fmt.Errorf("write rider profit sharing receiver present target: %w", err)
-	}
+func (svc *PaymentFactService) maybeRequestRiderReceiverPresent(_ context.Context, _ db.PaymentOrder) error {
 	return nil
 }
 

@@ -26,8 +26,8 @@ func TestPaymentFactApplicationSchedulerRunOnceEnqueuesConfiguredTargets(t *test
 	}{
 		{consumer: "profit_sharing_domain", businessObjectType: "profit_sharing_order", applicationID: 801},
 		{consumer: "profit_sharing_domain", businessObjectType: "profit_sharing_return", applicationID: 802},
-		{consumer: "applyment_domain", businessObjectType: "ecommerce_applyment", applicationID: 803},
-		{consumer: "settlement_domain", businessObjectType: "ecommerce_applyment", applicationID: 804},
+		{consumer: "applyment_domain", businessObjectType: "ordinary_service_provider_applyment", applicationID: 803},
+		{consumer: "settlement_domain", businessObjectType: "ordinary_service_provider_applyment", applicationID: 804},
 		{consumer: "settlement_domain", businessObjectType: "merchant_payment_config", applicationID: 805},
 		{consumer: "merchant_funds_domain", businessObjectType: "withdrawal_record", applicationID: 806},
 		{consumer: "merchant_funds_domain", businessObjectType: "merchant_cancel_withdraw_application", applicationID: 807},

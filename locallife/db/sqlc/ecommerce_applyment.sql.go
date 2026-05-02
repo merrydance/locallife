@@ -63,7 +63,7 @@ INSERT INTO ecommerce_applyments (
     $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
     $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
     $31, 'pending'
-) RETURNING id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation
+) RETURNING id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation, account_willingness_business_code, account_willingness_applyment_id, account_willingness_state, account_willingness_qrcode_data, account_willingness_reject_reason, account_authorize_state, account_authorize_state_checked_at
 `
 
 type CreateEcommerceApplymentParams struct {
@@ -188,12 +188,19 @@ func (q *Queries) CreateEcommerceApplyment(ctx context.Context, arg CreateEcomme
 		&i.SettlementVerifyFailedNotifiedAt,
 		&i.LegalValidationUrl,
 		&i.AccountValidation,
+		&i.AccountWillingnessBusinessCode,
+		&i.AccountWillingnessApplymentID,
+		&i.AccountWillingnessState,
+		&i.AccountWillingnessQrcodeData,
+		&i.AccountWillingnessRejectReason,
+		&i.AccountAuthorizeState,
+		&i.AccountAuthorizeStateCheckedAt,
 	)
 	return i, err
 }
 
 const getEcommerceApplyment = `-- name: GetEcommerceApplyment :one
-SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation FROM ecommerce_applyments
+SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation, account_willingness_business_code, account_willingness_applyment_id, account_willingness_state, account_willingness_qrcode_data, account_willingness_reject_reason, account_authorize_state, account_authorize_state_checked_at FROM ecommerce_applyments
 WHERE id = $1 LIMIT 1
 `
 
@@ -253,12 +260,19 @@ func (q *Queries) GetEcommerceApplyment(ctx context.Context, id int64) (Ecommerc
 		&i.SettlementVerifyFailedNotifiedAt,
 		&i.LegalValidationUrl,
 		&i.AccountValidation,
+		&i.AccountWillingnessBusinessCode,
+		&i.AccountWillingnessApplymentID,
+		&i.AccountWillingnessState,
+		&i.AccountWillingnessQrcodeData,
+		&i.AccountWillingnessRejectReason,
+		&i.AccountAuthorizeState,
+		&i.AccountAuthorizeStateCheckedAt,
 	)
 	return i, err
 }
 
 const getEcommerceApplymentByApplymentID = `-- name: GetEcommerceApplymentByApplymentID :one
-SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation FROM ecommerce_applyments
+SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation, account_willingness_business_code, account_willingness_applyment_id, account_willingness_state, account_willingness_qrcode_data, account_willingness_reject_reason, account_authorize_state, account_authorize_state_checked_at FROM ecommerce_applyments
 WHERE applyment_id = $1 LIMIT 1
 `
 
@@ -318,12 +332,19 @@ func (q *Queries) GetEcommerceApplymentByApplymentID(ctx context.Context, applym
 		&i.SettlementVerifyFailedNotifiedAt,
 		&i.LegalValidationUrl,
 		&i.AccountValidation,
+		&i.AccountWillingnessBusinessCode,
+		&i.AccountWillingnessApplymentID,
+		&i.AccountWillingnessState,
+		&i.AccountWillingnessQrcodeData,
+		&i.AccountWillingnessRejectReason,
+		&i.AccountAuthorizeState,
+		&i.AccountAuthorizeStateCheckedAt,
 	)
 	return i, err
 }
 
 const getEcommerceApplymentByOutRequestNo = `-- name: GetEcommerceApplymentByOutRequestNo :one
-SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation FROM ecommerce_applyments
+SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation, account_willingness_business_code, account_willingness_applyment_id, account_willingness_state, account_willingness_qrcode_data, account_willingness_reject_reason, account_authorize_state, account_authorize_state_checked_at FROM ecommerce_applyments
 WHERE out_request_no = $1 LIMIT 1
 `
 
@@ -383,12 +404,19 @@ func (q *Queries) GetEcommerceApplymentByOutRequestNo(ctx context.Context, outRe
 		&i.SettlementVerifyFailedNotifiedAt,
 		&i.LegalValidationUrl,
 		&i.AccountValidation,
+		&i.AccountWillingnessBusinessCode,
+		&i.AccountWillingnessApplymentID,
+		&i.AccountWillingnessState,
+		&i.AccountWillingnessQrcodeData,
+		&i.AccountWillingnessRejectReason,
+		&i.AccountAuthorizeState,
+		&i.AccountAuthorizeStateCheckedAt,
 	)
 	return i, err
 }
 
 const getEcommerceApplymentBySubject = `-- name: GetEcommerceApplymentBySubject :one
-SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation FROM ecommerce_applyments
+SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation, account_willingness_business_code, account_willingness_applyment_id, account_willingness_state, account_willingness_qrcode_data, account_willingness_reject_reason, account_authorize_state, account_authorize_state_checked_at FROM ecommerce_applyments
 WHERE subject_type = $1 AND subject_id = $2
 ORDER BY created_at DESC, id DESC
 LIMIT 1
@@ -455,12 +483,19 @@ func (q *Queries) GetEcommerceApplymentBySubject(ctx context.Context, arg GetEco
 		&i.SettlementVerifyFailedNotifiedAt,
 		&i.LegalValidationUrl,
 		&i.AccountValidation,
+		&i.AccountWillingnessBusinessCode,
+		&i.AccountWillingnessApplymentID,
+		&i.AccountWillingnessState,
+		&i.AccountWillingnessQrcodeData,
+		&i.AccountWillingnessRejectReason,
+		&i.AccountAuthorizeState,
+		&i.AccountAuthorizeStateCheckedAt,
 	)
 	return i, err
 }
 
 const getLatestEcommerceApplymentBySubject = `-- name: GetLatestEcommerceApplymentBySubject :one
-SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation FROM ecommerce_applyments
+SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation, account_willingness_business_code, account_willingness_applyment_id, account_willingness_state, account_willingness_qrcode_data, account_willingness_reject_reason, account_authorize_state, account_authorize_state_checked_at FROM ecommerce_applyments
 WHERE subject_type = $1 AND subject_id = $2
 ORDER BY created_at DESC, id DESC
 LIMIT 1
@@ -527,12 +562,19 @@ func (q *Queries) GetLatestEcommerceApplymentBySubject(ctx context.Context, arg 
 		&i.SettlementVerifyFailedNotifiedAt,
 		&i.LegalValidationUrl,
 		&i.AccountValidation,
+		&i.AccountWillingnessBusinessCode,
+		&i.AccountWillingnessApplymentID,
+		&i.AccountWillingnessState,
+		&i.AccountWillingnessQrcodeData,
+		&i.AccountWillingnessRejectReason,
+		&i.AccountAuthorizeState,
+		&i.AccountAuthorizeStateCheckedAt,
 	)
 	return i, err
 }
 
 const listEcommerceApplymentsByStatus = `-- name: ListEcommerceApplymentsByStatus :many
-SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation FROM ecommerce_applyments
+SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation, account_willingness_business_code, account_willingness_applyment_id, account_willingness_state, account_willingness_qrcode_data, account_willingness_reject_reason, account_authorize_state, account_authorize_state_checked_at FROM ecommerce_applyments
 WHERE status = $1
 ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
@@ -606,6 +648,13 @@ func (q *Queries) ListEcommerceApplymentsByStatus(ctx context.Context, arg ListE
 			&i.SettlementVerifyFailedNotifiedAt,
 			&i.LegalValidationUrl,
 			&i.AccountValidation,
+			&i.AccountWillingnessBusinessCode,
+			&i.AccountWillingnessApplymentID,
+			&i.AccountWillingnessState,
+			&i.AccountWillingnessQrcodeData,
+			&i.AccountWillingnessRejectReason,
+			&i.AccountAuthorizeState,
+			&i.AccountAuthorizeStateCheckedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -618,7 +667,7 @@ func (q *Queries) ListEcommerceApplymentsByStatus(ctx context.Context, arg ListE
 }
 
 const listEcommerceApplymentsBySubject = `-- name: ListEcommerceApplymentsBySubject :many
-SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation FROM ecommerce_applyments
+SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation, account_willingness_business_code, account_willingness_applyment_id, account_willingness_state, account_willingness_qrcode_data, account_willingness_reject_reason, account_authorize_state, account_authorize_state_checked_at FROM ecommerce_applyments
 WHERE subject_type = $1 AND subject_id = $2
 ORDER BY created_at DESC, id DESC
 `
@@ -690,6 +739,13 @@ func (q *Queries) ListEcommerceApplymentsBySubject(ctx context.Context, arg List
 			&i.SettlementVerifyFailedNotifiedAt,
 			&i.LegalValidationUrl,
 			&i.AccountValidation,
+			&i.AccountWillingnessBusinessCode,
+			&i.AccountWillingnessApplymentID,
+			&i.AccountWillingnessState,
+			&i.AccountWillingnessQrcodeData,
+			&i.AccountWillingnessRejectReason,
+			&i.AccountAuthorizeState,
+			&i.AccountAuthorizeStateCheckedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -814,7 +870,7 @@ func (q *Queries) ListMerchantApplymentsPendingSettlementVerification(ctx contex
 }
 
 const listPendingEcommerceApplyments = `-- name: ListPendingEcommerceApplyments :many
-SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation FROM ecommerce_applyments
+SELECT id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation, account_willingness_business_code, account_willingness_applyment_id, account_willingness_state, account_willingness_qrcode_data, account_willingness_reject_reason, account_authorize_state, account_authorize_state_checked_at FROM ecommerce_applyments
 WHERE status IN ('submitted', 'checking', 'auditing', 'account_need_verify', 'to_be_confirmed', 'to_be_signed', 'signing')
 ORDER BY created_at ASC, id ASC
 LIMIT $1 OFFSET $2
@@ -887,6 +943,13 @@ func (q *Queries) ListPendingEcommerceApplyments(ctx context.Context, arg ListPe
 			&i.SettlementVerifyFailedNotifiedAt,
 			&i.LegalValidationUrl,
 			&i.AccountValidation,
+			&i.AccountWillingnessBusinessCode,
+			&i.AccountWillingnessApplymentID,
+			&i.AccountWillingnessState,
+			&i.AccountWillingnessQrcodeData,
+			&i.AccountWillingnessRejectReason,
+			&i.AccountAuthorizeState,
+			&i.AccountAuthorizeStateCheckedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -904,7 +967,7 @@ SET
     settlement_verify_failed_notified_at = now(),
     updated_at = now()
 WHERE id = $1
-RETURNING id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation
+RETURNING id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation, account_willingness_business_code, account_willingness_applyment_id, account_willingness_state, account_willingness_qrcode_data, account_willingness_reject_reason, account_authorize_state, account_authorize_state_checked_at
 `
 
 func (q *Queries) MarkEcommerceApplymentSettlementVerifyFailedNotified(ctx context.Context, id int64) (EcommerceApplyment, error) {
@@ -963,6 +1026,192 @@ func (q *Queries) MarkEcommerceApplymentSettlementVerifyFailedNotified(ctx conte
 		&i.SettlementVerifyFailedNotifiedAt,
 		&i.LegalValidationUrl,
 		&i.AccountValidation,
+		&i.AccountWillingnessBusinessCode,
+		&i.AccountWillingnessApplymentID,
+		&i.AccountWillingnessState,
+		&i.AccountWillingnessQrcodeData,
+		&i.AccountWillingnessRejectReason,
+		&i.AccountAuthorizeState,
+		&i.AccountAuthorizeStateCheckedAt,
+	)
+	return i, err
+}
+
+const updateEcommerceApplymentAccountAuthorizeState = `-- name: UpdateEcommerceApplymentAccountAuthorizeState :one
+UPDATE ecommerce_applyments
+SET
+    account_authorize_state = $2,
+    account_authorize_state_checked_at = COALESCE($3, now()),
+    updated_at = now()
+WHERE id = $1
+RETURNING id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation, account_willingness_business_code, account_willingness_applyment_id, account_willingness_state, account_willingness_qrcode_data, account_willingness_reject_reason, account_authorize_state, account_authorize_state_checked_at
+`
+
+type UpdateEcommerceApplymentAccountAuthorizeStateParams struct {
+	ID                             int64              `json:"id"`
+	AccountAuthorizeState          pgtype.Text        `json:"account_authorize_state"`
+	AccountAuthorizeStateCheckedAt pgtype.Timestamptz `json:"account_authorize_state_checked_at"`
+}
+
+func (q *Queries) UpdateEcommerceApplymentAccountAuthorizeState(ctx context.Context, arg UpdateEcommerceApplymentAccountAuthorizeStateParams) (EcommerceApplyment, error) {
+	row := q.db.QueryRow(ctx, updateEcommerceApplymentAccountAuthorizeState, arg.ID, arg.AccountAuthorizeState, arg.AccountAuthorizeStateCheckedAt)
+	var i EcommerceApplyment
+	err := row.Scan(
+		&i.ID,
+		&i.SubjectType,
+		&i.SubjectID,
+		&i.OutRequestNo,
+		&i.ApplymentID,
+		&i.OrganizationType,
+		&i.BusinessLicenseNumber,
+		&i.BusinessLicenseCopy,
+		&i.MerchantName,
+		&i.LegalPerson,
+		&i.IDCardNumber,
+		&i.IDCardName,
+		&i.IDCardValidTime,
+		&i.IDCardFrontCopy,
+		&i.IDCardBackCopy,
+		&i.AccountType,
+		&i.AccountBank,
+		&i.BankAddressCode,
+		&i.BankName,
+		&i.AccountNumber,
+		&i.AccountName,
+		&i.ContactName,
+		&i.ContactIDCardNumber,
+		&i.MobilePhone,
+		&i.ContactEmail,
+		&i.MerchantShortname,
+		&i.Qualifications,
+		&i.BusinessAdditionPics,
+		&i.BusinessAdditionDesc,
+		&i.Status,
+		&i.SignUrl,
+		&i.SignState,
+		&i.RejectReason,
+		&i.SubMchID,
+		&i.CreatedAt,
+		&i.SubmittedAt,
+		&i.AuditedAt,
+		&i.UpdatedAt,
+		&i.ResultTaskProcessedState,
+		&i.ResultTaskProcessedAt,
+		&i.AccountBankCode,
+		&i.BankAlias,
+		&i.BankAliasCode,
+		&i.BankBranchID,
+		&i.SettlementVerifyFirstTradeAt,
+		&i.SettlementVerifyLastCheckedAt,
+		&i.SettlementVerifyCheckCount,
+		&i.SettlementVerifyStatus,
+		&i.SettlementVerifyFailReason,
+		&i.SettlementVerifyFailedNotifiedAt,
+		&i.LegalValidationUrl,
+		&i.AccountValidation,
+		&i.AccountWillingnessBusinessCode,
+		&i.AccountWillingnessApplymentID,
+		&i.AccountWillingnessState,
+		&i.AccountWillingnessQrcodeData,
+		&i.AccountWillingnessRejectReason,
+		&i.AccountAuthorizeState,
+		&i.AccountAuthorizeStateCheckedAt,
+	)
+	return i, err
+}
+
+const updateEcommerceApplymentAccountWillingness = `-- name: UpdateEcommerceApplymentAccountWillingness :one
+UPDATE ecommerce_applyments
+SET
+    account_willingness_business_code = COALESCE($1, account_willingness_business_code),
+    account_willingness_applyment_id = COALESCE($2, account_willingness_applyment_id),
+    account_willingness_state = COALESCE($3, account_willingness_state),
+    account_willingness_qrcode_data = COALESCE($4, account_willingness_qrcode_data),
+    account_willingness_reject_reason = COALESCE($5, account_willingness_reject_reason),
+    updated_at = now()
+WHERE id = $6
+RETURNING id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation, account_willingness_business_code, account_willingness_applyment_id, account_willingness_state, account_willingness_qrcode_data, account_willingness_reject_reason, account_authorize_state, account_authorize_state_checked_at
+`
+
+type UpdateEcommerceApplymentAccountWillingnessParams struct {
+	AccountWillingnessBusinessCode pgtype.Text `json:"account_willingness_business_code"`
+	AccountWillingnessApplymentID  pgtype.Int8 `json:"account_willingness_applyment_id"`
+	AccountWillingnessState        pgtype.Text `json:"account_willingness_state"`
+	AccountWillingnessQrcodeData   pgtype.Text `json:"account_willingness_qrcode_data"`
+	AccountWillingnessRejectReason pgtype.Text `json:"account_willingness_reject_reason"`
+	ID                             int64       `json:"id"`
+}
+
+func (q *Queries) UpdateEcommerceApplymentAccountWillingness(ctx context.Context, arg UpdateEcommerceApplymentAccountWillingnessParams) (EcommerceApplyment, error) {
+	row := q.db.QueryRow(ctx, updateEcommerceApplymentAccountWillingness,
+		arg.AccountWillingnessBusinessCode,
+		arg.AccountWillingnessApplymentID,
+		arg.AccountWillingnessState,
+		arg.AccountWillingnessQrcodeData,
+		arg.AccountWillingnessRejectReason,
+		arg.ID,
+	)
+	var i EcommerceApplyment
+	err := row.Scan(
+		&i.ID,
+		&i.SubjectType,
+		&i.SubjectID,
+		&i.OutRequestNo,
+		&i.ApplymentID,
+		&i.OrganizationType,
+		&i.BusinessLicenseNumber,
+		&i.BusinessLicenseCopy,
+		&i.MerchantName,
+		&i.LegalPerson,
+		&i.IDCardNumber,
+		&i.IDCardName,
+		&i.IDCardValidTime,
+		&i.IDCardFrontCopy,
+		&i.IDCardBackCopy,
+		&i.AccountType,
+		&i.AccountBank,
+		&i.BankAddressCode,
+		&i.BankName,
+		&i.AccountNumber,
+		&i.AccountName,
+		&i.ContactName,
+		&i.ContactIDCardNumber,
+		&i.MobilePhone,
+		&i.ContactEmail,
+		&i.MerchantShortname,
+		&i.Qualifications,
+		&i.BusinessAdditionPics,
+		&i.BusinessAdditionDesc,
+		&i.Status,
+		&i.SignUrl,
+		&i.SignState,
+		&i.RejectReason,
+		&i.SubMchID,
+		&i.CreatedAt,
+		&i.SubmittedAt,
+		&i.AuditedAt,
+		&i.UpdatedAt,
+		&i.ResultTaskProcessedState,
+		&i.ResultTaskProcessedAt,
+		&i.AccountBankCode,
+		&i.BankAlias,
+		&i.BankAliasCode,
+		&i.BankBranchID,
+		&i.SettlementVerifyFirstTradeAt,
+		&i.SettlementVerifyLastCheckedAt,
+		&i.SettlementVerifyCheckCount,
+		&i.SettlementVerifyStatus,
+		&i.SettlementVerifyFailReason,
+		&i.SettlementVerifyFailedNotifiedAt,
+		&i.LegalValidationUrl,
+		&i.AccountValidation,
+		&i.AccountWillingnessBusinessCode,
+		&i.AccountWillingnessApplymentID,
+		&i.AccountWillingnessState,
+		&i.AccountWillingnessQrcodeData,
+		&i.AccountWillingnessRejectReason,
+		&i.AccountAuthorizeState,
+		&i.AccountAuthorizeStateCheckedAt,
 	)
 	return i, err
 }
@@ -977,7 +1226,7 @@ SET
     settlement_verify_fail_reason = COALESCE($5, settlement_verify_fail_reason),
     updated_at = now()
 WHERE id = $6
-RETURNING id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation
+RETURNING id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation, account_willingness_business_code, account_willingness_applyment_id, account_willingness_state, account_willingness_qrcode_data, account_willingness_reject_reason, account_authorize_state, account_authorize_state_checked_at
 `
 
 type UpdateEcommerceApplymentSettlementVerificationParams struct {
@@ -1052,6 +1301,13 @@ func (q *Queries) UpdateEcommerceApplymentSettlementVerification(ctx context.Con
 		&i.SettlementVerifyFailedNotifiedAt,
 		&i.LegalValidationUrl,
 		&i.AccountValidation,
+		&i.AccountWillingnessBusinessCode,
+		&i.AccountWillingnessApplymentID,
+		&i.AccountWillingnessState,
+		&i.AccountWillingnessQrcodeData,
+		&i.AccountWillingnessRejectReason,
+		&i.AccountAuthorizeState,
+		&i.AccountAuthorizeStateCheckedAt,
 	)
 	return i, err
 }
@@ -1067,22 +1323,26 @@ SET
     legal_validation_url = $7,
     account_validation = $8,
     sub_mch_id = $9,
+    account_authorize_state = COALESCE($10, account_authorize_state),
+    account_authorize_state_checked_at = COALESCE($11, account_authorize_state_checked_at),
     audited_at = CASE WHEN $2 IN ('rejected', 'frozen', 'to_be_signed', 'finish') THEN now() ELSE audited_at END,
     updated_at = now()
 WHERE id = $1
-RETURNING id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation
+RETURNING id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation, account_willingness_business_code, account_willingness_applyment_id, account_willingness_state, account_willingness_qrcode_data, account_willingness_reject_reason, account_authorize_state, account_authorize_state_checked_at
 `
 
 type UpdateEcommerceApplymentStatusParams struct {
-	ID                 int64       `json:"id"`
-	Status             string      `json:"status"`
-	ApplymentID        pgtype.Int8 `json:"applyment_id"`
-	RejectReason       pgtype.Text `json:"reject_reason"`
-	SignUrl            pgtype.Text `json:"sign_url"`
-	SignState          pgtype.Text `json:"sign_state"`
-	LegalValidationUrl pgtype.Text `json:"legal_validation_url"`
-	AccountValidation  []byte      `json:"account_validation"`
-	SubMchID           pgtype.Text `json:"sub_mch_id"`
+	ID                             int64              `json:"id"`
+	Status                         string             `json:"status"`
+	ApplymentID                    pgtype.Int8        `json:"applyment_id"`
+	RejectReason                   pgtype.Text        `json:"reject_reason"`
+	SignUrl                        pgtype.Text        `json:"sign_url"`
+	SignState                      pgtype.Text        `json:"sign_state"`
+	LegalValidationUrl             pgtype.Text        `json:"legal_validation_url"`
+	AccountValidation              []byte             `json:"account_validation"`
+	SubMchID                       pgtype.Text        `json:"sub_mch_id"`
+	AccountAuthorizeState          pgtype.Text        `json:"account_authorize_state"`
+	AccountAuthorizeStateCheckedAt pgtype.Timestamptz `json:"account_authorize_state_checked_at"`
 }
 
 func (q *Queries) UpdateEcommerceApplymentStatus(ctx context.Context, arg UpdateEcommerceApplymentStatusParams) (EcommerceApplyment, error) {
@@ -1096,6 +1356,8 @@ func (q *Queries) UpdateEcommerceApplymentStatus(ctx context.Context, arg Update
 		arg.LegalValidationUrl,
 		arg.AccountValidation,
 		arg.SubMchID,
+		arg.AccountAuthorizeState,
+		arg.AccountAuthorizeStateCheckedAt,
 	)
 	var i EcommerceApplyment
 	err := row.Scan(
@@ -1151,6 +1413,13 @@ func (q *Queries) UpdateEcommerceApplymentStatus(ctx context.Context, arg Update
 		&i.SettlementVerifyFailedNotifiedAt,
 		&i.LegalValidationUrl,
 		&i.AccountValidation,
+		&i.AccountWillingnessBusinessCode,
+		&i.AccountWillingnessApplymentID,
+		&i.AccountWillingnessState,
+		&i.AccountWillingnessQrcodeData,
+		&i.AccountWillingnessRejectReason,
+		&i.AccountAuthorizeState,
+		&i.AccountAuthorizeStateCheckedAt,
 	)
 	return i, err
 }
@@ -1163,7 +1432,7 @@ SET
     audited_at = now(),
     updated_at = now()
 WHERE id = $1
-RETURNING id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation
+RETURNING id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation, account_willingness_business_code, account_willingness_applyment_id, account_willingness_state, account_willingness_qrcode_data, account_willingness_reject_reason, account_authorize_state, account_authorize_state_checked_at
 `
 
 type UpdateEcommerceApplymentSubMchIDParams struct {
@@ -1227,6 +1496,13 @@ func (q *Queries) UpdateEcommerceApplymentSubMchID(ctx context.Context, arg Upda
 		&i.SettlementVerifyFailedNotifiedAt,
 		&i.LegalValidationUrl,
 		&i.AccountValidation,
+		&i.AccountWillingnessBusinessCode,
+		&i.AccountWillingnessApplymentID,
+		&i.AccountWillingnessState,
+		&i.AccountWillingnessQrcodeData,
+		&i.AccountWillingnessRejectReason,
+		&i.AccountAuthorizeState,
+		&i.AccountAuthorizeStateCheckedAt,
 	)
 	return i, err
 }
@@ -1239,7 +1515,7 @@ SET
     submitted_at = now(),
     updated_at = now()
 WHERE id = $1
-RETURNING id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation
+RETURNING id, subject_type, subject_id, out_request_no, applyment_id, organization_type, business_license_number, business_license_copy, merchant_name, legal_person, id_card_number, id_card_name, id_card_valid_time, id_card_front_copy, id_card_back_copy, account_type, account_bank, bank_address_code, bank_name, account_number, account_name, contact_name, contact_id_card_number, mobile_phone, contact_email, merchant_shortname, qualifications, business_addition_pics, business_addition_desc, status, sign_url, sign_state, reject_reason, sub_mch_id, created_at, submitted_at, audited_at, updated_at, result_task_processed_state, result_task_processed_at, account_bank_code, bank_alias, bank_alias_code, bank_branch_id, settlement_verify_first_trade_at, settlement_verify_last_checked_at, settlement_verify_check_count, settlement_verify_status, settlement_verify_fail_reason, settlement_verify_failed_notified_at, legal_validation_url, account_validation, account_willingness_business_code, account_willingness_applyment_id, account_willingness_state, account_willingness_qrcode_data, account_willingness_reject_reason, account_authorize_state, account_authorize_state_checked_at
 `
 
 type UpdateEcommerceApplymentToSubmittedParams struct {
@@ -1303,6 +1579,13 @@ func (q *Queries) UpdateEcommerceApplymentToSubmitted(ctx context.Context, arg U
 		&i.SettlementVerifyFailedNotifiedAt,
 		&i.LegalValidationUrl,
 		&i.AccountValidation,
+		&i.AccountWillingnessBusinessCode,
+		&i.AccountWillingnessApplymentID,
+		&i.AccountWillingnessState,
+		&i.AccountWillingnessQrcodeData,
+		&i.AccountWillingnessRejectReason,
+		&i.AccountAuthorizeState,
+		&i.AccountAuthorizeStateCheckedAt,
 	)
 	return i, err
 }

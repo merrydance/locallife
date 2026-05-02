@@ -17,6 +17,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 )
 
 const (
@@ -26,17 +27,39 @@ const (
 
 // CombinedPaymentService encapsulates combined payment order logic.
 type CombinedPaymentService struct {
-	store           db.Store
-	ecommerceClient wechat.EcommerceClientInterface
-	now             func() time.Time
+	store                      db.Store
+	ecommerceClient            wechat.EcommerceClientInterface
+	ordinaryProviderPayClient  ordinaryServiceProviderCombineClient
+	mainBusinessPaymentChannel string
+	now                        func() time.Time
+}
+
+type ordinaryServiceProviderCombineClient interface {
+	ServiceProviderAppID() string
+	ServiceProviderMchID() string
+	CombineNotifyURL() string
+	CreateCombinePayment(ctx context.Context, req ospcontracts.CombinePrepayRequest) (*ospcontracts.CombinePrepayResponse, error)
+	QueryCombinePayment(ctx context.Context, req ospcontracts.CombineQueryRequest) (*ospcontracts.CombineQueryResponse, error)
+	CloseCombinePayment(ctx context.Context, req ospcontracts.CombineCloseRequest) error
+	GenerateJSAPIPayParams(prepayID string) (*ospcontracts.JSAPIPayParams, error)
 }
 
 // NewCombinedPaymentService creates a combined payment service.
 func NewCombinedPaymentService(store db.Store, ecommerceClient wechat.EcommerceClientInterface) *CombinedPaymentService {
 	return &CombinedPaymentService{
-		store:           store,
-		ecommerceClient: ecommerceClient,
-		now:             time.Now,
+		store:                      store,
+		ecommerceClient:            ecommerceClient,
+		mainBusinessPaymentChannel: db.PaymentChannelEcommerce,
+		now:                        time.Now,
+	}
+}
+
+func NewCombinedPaymentServiceWithOrdinaryServiceProvider(store db.Store, ordinaryClient ordinaryServiceProviderCombineClient) *CombinedPaymentService {
+	return &CombinedPaymentService{
+		store:                      store,
+		ordinaryProviderPayClient:  ordinaryClient,
+		mainBusinessPaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
+		now:                        time.Now,
 	}
 }
 
@@ -143,7 +166,10 @@ type combinedSubOrderPayload struct {
 func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Context, input CreateCombinedPaymentOrderInput) (CreateCombinedPaymentOrderResult, error) {
 	var result CreateCombinedPaymentOrderResult
 
-	if svc.ecommerceClient == nil {
+	if svc.mainBusinessPaymentChannel == db.PaymentChannelOrdinaryServiceProvider && svc.ordinaryProviderPayClient == nil {
+		return result, fmt.Errorf("ordinary service provider client: not configured")
+	}
+	if svc.mainBusinessPaymentChannel != db.PaymentChannelOrdinaryServiceProvider && svc.ecommerceClient == nil {
 		return result, fmt.Errorf("ecommerce client: not configured")
 	}
 
@@ -204,6 +230,7 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 	}
 
 	wechatSubOrders := make([]wechatcontracts.SubOrder, 0, len(txResult.OrderInfos))
+	ordinarySubOrders := make([]ospcontracts.CombineSubOrder, 0, len(txResult.OrderInfos))
 	subOrders := make([]CombinedSubOrder, 0, len(txResult.OrderInfos))
 	for _, info := range txResult.OrderInfos {
 		description := fmt.Sprintf("%s - Order Payment", info.Merchant.Name)
@@ -213,6 +240,15 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 			OutTradeNo:  info.PaymentOrder.OutTradeNo,
 			Description: description,
 			Attach:      info.PaymentOrder.Attach.String,
+		})
+		ordinarySubOrders = append(ordinarySubOrders, ospcontracts.CombineSubOrder{
+			MchID:       svc.ordinaryCombineMchID(),
+			SubMchID:    info.PaymentConfig.SubMchID,
+			Amount:      ospcontracts.CombineAmount{TotalAmount: info.PaymentOrder.Amount, Currency: ospcontracts.CurrencyCNY},
+			OutTradeNo:  info.PaymentOrder.OutTradeNo,
+			Description: description,
+			Attach:      info.PaymentOrder.Attach.String,
+			SettleInfo:  &ospcontracts.CombineSettleInfo{ProfitSharing: info.PaymentOrder.RequiresProfitSharing},
 		})
 		subOrders = append(subOrders, CombinedSubOrder{
 			OrderID:        info.Order.ID,
@@ -225,36 +261,28 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 		})
 	}
 
-	combineResp, payParams, err := svc.ecommerceClient.CreateCombineOrder(ctx, &wechatcontracts.CombineOrderRequest{
-		CombineOutTradeNo: txResult.CombinedPaymentOrder.CombineOutTradeNo,
-		SubOrders:         wechatSubOrders,
-		PayerOpenID:       user.WechatOpenid,
-		ExpireTime:        expiresAt,
-		SceneInfo: &wechatcontracts.CombineSceneInfo{
-			PayerClientIP: input.ClientIP,
-		},
-	})
+	prepayID, payParams, err := svc.createRemoteCombinedPayment(ctx, txResult.CombinedPaymentOrder.CombineOutTradeNo, user.WechatOpenid, input.ClientIP, expiresAt, wechatSubOrders, ordinarySubOrders)
 	if err != nil {
 		// 微信下单失败：将本地创建的合单和子支付单标记为 closed，避免僵尸记录
 		// 超时任务（payment_timeout）会兜底，但主动清理能减少脏数据积压
 		cleanupCtx := context.Background() // 使用新 context，避免父 ctx 已取消时清理失败
 		if svc.closeCombinedPaymentCommandAnchor(cleanupCtx, txResult) {
-			recordCombinePaymentCommandRejected(cleanupCtx, svc.store, txResult.CombinedPaymentOrder, err)
+			recordCombinePaymentCommandRejected(cleanupCtx, svc.store, txResult.CombinedPaymentOrder, svc.mainBusinessPaymentChannel, err)
 		}
 		return result, mapCombineOrderCreateError(err)
 	}
-	if combineResp == nil || strings.TrimSpace(combineResp.PrepayID) == "" {
+	if strings.TrimSpace(prepayID) == "" {
 		cleanupCtx := context.Background()
 		emptyPrepayErr := errors.New("create combine order: empty prepay id")
 		if svc.closeCombinedPaymentCommandAnchor(cleanupCtx, txResult) {
-			recordCombinePaymentCommandRejected(cleanupCtx, svc.store, txResult.CombinedPaymentOrder, emptyPrepayErr)
+			recordCombinePaymentCommandRejected(cleanupCtx, svc.store, txResult.CombinedPaymentOrder, svc.mainBusinessPaymentChannel, emptyPrepayErr)
 		}
 		return result, mapCombineOrderCreateError(emptyPrepayErr)
 	}
 
 	updatedCombined, err := svc.store.UpdateCombinedPaymentOrderPrepay(ctx, db.UpdateCombinedPaymentOrderPrepayParams{
 		ID:       txResult.CombinedPaymentOrder.ID,
-		PrepayID: pgtype.Text{String: combineResp.PrepayID, Valid: true},
+		PrepayID: pgtype.Text{String: prepayID, Valid: true},
 	})
 	if err != nil {
 		// 微信合单下单已成功但本地更新失败。
@@ -262,10 +290,23 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 		// 微信合单即使不主动关闭，也会在过期后自动关闭（用户无 prepay_id 无法调起支付）。
 		cleanupCtx := context.Background()
 		for _, info := range txResult.OrderInfos {
-			_, _ = svc.store.UpdatePaymentOrderToFailed(cleanupCtx, info.PaymentOrder.ID)
+			svc.markCombinedChildPaymentOrderFailedForCleanup(cleanupCtx, info.PaymentOrder.ID, txResult.CombinedPaymentOrder.ID)
 		}
-		_, _ = svc.store.UpdateCombinedPaymentOrderToFailed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
-		if svc.ecommerceClient != nil {
+		svc.markCombinedPaymentOrderFailedForCleanup(cleanupCtx, txResult.CombinedPaymentOrder.ID)
+		if svc.mainBusinessPaymentChannel == db.PaymentChannelOrdinaryServiceProvider && svc.ordinaryProviderPayClient != nil {
+			closeSubs := make([]ospcontracts.CombineCloseSubOrder, 0, len(ordinarySubOrders))
+			for _, sub := range ordinarySubOrders {
+				closeSubs = append(closeSubs, ospcontracts.CombineCloseSubOrder{MchID: sub.MchID, SubMchID: sub.SubMchID, SubAppID: sub.SubAppID, OutTradeNo: sub.OutTradeNo})
+			}
+			if closeErr := svc.ordinaryProviderPayClient.CloseCombinePayment(cleanupCtx, ospcontracts.CombineCloseRequest{
+				CombineAppID:      svc.ordinaryProviderPayClient.ServiceProviderAppID(),
+				CombineMchID:      svc.ordinaryProviderPayClient.ServiceProviderMchID(),
+				CombineOutTradeNo: txResult.CombinedPaymentOrder.CombineOutTradeNo,
+				SubOrders:         closeSubs,
+			}); closeErr != nil {
+				log.Warn().Err(closeErr).Str("combine_out_trade_no", txResult.CombinedPaymentOrder.CombineOutTradeNo).Msg("close ordinary service provider combine order after prepay update failure")
+			}
+		} else if svc.ecommerceClient != nil {
 			closeSubs := make([]wechatcontracts.SubOrderClose, 0, len(wechatSubOrders))
 			for _, sub := range wechatSubOrders {
 				closeSubs = append(closeSubs, wechatcontracts.SubOrderClose{MchID: sub.MchID, SubMchID: sub.SubMchID, SubAppID: sub.SubAppID, OutTradeNo: sub.OutTradeNo})
@@ -276,12 +317,87 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 		}
 		return result, fmt.Errorf("update combined payment prepay: %w", err)
 	}
-	recordCombinePaymentCommandAccepted(ctx, svc.store, txResult.CombinedPaymentOrder, combineResp.PrepayID)
+	recordCombinePaymentCommandAccepted(ctx, svc.store, txResult.CombinedPaymentOrder, svc.mainBusinessPaymentChannel, prepayID)
 
 	result.CombinedPayment = updatedCombined
 	result.SubOrders = subOrders
 	result.PayParams = payParams
 	return result, nil
+}
+
+func (svc *CombinedPaymentService) ordinaryCombineMchID() string {
+	if svc.mainBusinessPaymentChannel == db.PaymentChannelOrdinaryServiceProvider && svc.ordinaryProviderPayClient != nil {
+		return svc.ordinaryProviderPayClient.ServiceProviderMchID()
+	}
+	return ""
+}
+
+func (svc *CombinedPaymentService) markCombinedChildPaymentOrderFailedForCleanup(ctx context.Context, paymentOrderID int64, combinedPaymentOrderID int64) {
+	if _, err := svc.store.UpdatePaymentOrderToFailed(ctx, paymentOrderID); err != nil {
+		log.Error().Err(err).
+			Int64("payment_order_id", paymentOrderID).
+			Int64("combined_payment_order_id", combinedPaymentOrderID).
+			Msg("failed to mark child payment order failed after combine prepay update failure")
+	}
+}
+
+func (svc *CombinedPaymentService) markCombinedPaymentOrderFailedForCleanup(ctx context.Context, combinedPaymentOrderID int64) {
+	if _, err := svc.store.UpdateCombinedPaymentOrderToFailed(ctx, combinedPaymentOrderID); err != nil {
+		log.Error().Err(err).
+			Int64("combined_payment_order_id", combinedPaymentOrderID).
+			Msg("failed to mark combined payment order failed after prepay update failure")
+	}
+}
+
+func (svc *CombinedPaymentService) createRemoteCombinedPayment(
+	ctx context.Context,
+	combineOutTradeNo string,
+	payerOpenID string,
+	clientIP string,
+	expiresAt time.Time,
+	wechatSubOrders []wechatcontracts.SubOrder,
+	ordinarySubOrders []ospcontracts.CombineSubOrder,
+) (string, *wechat.JSAPIPayParams, error) {
+	if svc.mainBusinessPaymentChannel == db.PaymentChannelOrdinaryServiceProvider {
+		combineResp, err := svc.ordinaryProviderPayClient.CreateCombinePayment(ctx, ospcontracts.CombinePrepayRequest{
+			CombineAppID:      svc.ordinaryProviderPayClient.ServiceProviderAppID(),
+			CombineMchID:      svc.ordinaryProviderPayClient.ServiceProviderMchID(),
+			CombineOutTradeNo: combineOutTradeNo,
+			CombinePayerInfo:  ospcontracts.CombinePayerInfo{OpenID: payerOpenID},
+			SceneInfo:         &ospcontracts.CombineSceneInfo{PayerClientIP: clientIP},
+			SubOrders:         ordinarySubOrders,
+			TimeExpire:        expiresAt.Format(time.RFC3339),
+			NotifyURL:         svc.ordinaryProviderPayClient.CombineNotifyURL(),
+		})
+		if err != nil {
+			return "", nil, err
+		}
+		if combineResp == nil || strings.TrimSpace(combineResp.PrepayID) == "" {
+			return "", nil, nil
+		}
+		payParams, err := svc.ordinaryProviderPayClient.GenerateJSAPIPayParams(combineResp.PrepayID)
+		if err != nil {
+			return "", nil, fmt.Errorf("generate ordinary service provider combine pay params: %w", err)
+		}
+		return combineResp.PrepayID, ordinaryJSAPIPayParamsToWechat(payParams), nil
+	}
+
+	combineResp, payParams, err := svc.ecommerceClient.CreateCombineOrder(ctx, &wechatcontracts.CombineOrderRequest{
+		CombineOutTradeNo: combineOutTradeNo,
+		SubOrders:         wechatSubOrders,
+		PayerOpenID:       payerOpenID,
+		ExpireTime:        expiresAt,
+		SceneInfo: &wechatcontracts.CombineSceneInfo{
+			PayerClientIP: clientIP,
+		},
+	})
+	if err != nil {
+		return "", nil, err
+	}
+	if combineResp == nil {
+		return "", payParams, nil
+	}
+	return combineResp.PrepayID, payParams, nil
 }
 
 func (svc *CombinedPaymentService) closeCombinedPaymentCommandAnchor(ctx context.Context, txResult db.CreateCombinedPaymentTxResult) bool {
@@ -299,10 +415,11 @@ func (svc *CombinedPaymentService) closeCombinedPaymentCommandAnchor(ctx context
 	return allClosed
 }
 
-func recordCombinePaymentCommandAccepted(ctx context.Context, store db.Store, combinedPayment db.CombinedPaymentOrder, prepayID string) {
+func recordCombinePaymentCommandAccepted(ctx context.Context, store db.Store, combinedPayment db.CombinedPaymentOrder, paymentChannel string, prepayID string) {
 	paymentCommandSvc := NewPaymentCommandService(store)
 	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbCombinePaymentCommandInput(
 		combinedPayment,
+		paymentChannel,
 		db.ExternalPaymentCommandStatusAccepted,
 		stringPtrIfNotEmpty(prepayID),
 		nil,
@@ -320,11 +437,12 @@ func recordCombinePaymentCommandAccepted(ctx context.Context, store db.Store, co
 	}
 }
 
-func recordCombinePaymentCommandRejected(ctx context.Context, store db.Store, combinedPayment db.CombinedPaymentOrder, paymentErr error) {
+func recordCombinePaymentCommandRejected(ctx context.Context, store db.Store, combinedPayment db.CombinedPaymentOrder, paymentChannel string, paymentErr error) {
 	paymentCommandSvc := NewPaymentCommandService(store)
 	errorCode, errorMessage := partnerPaymentCommandErrorFields(paymentErr)
 	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbCombinePaymentCommandInput(
 		combinedPayment,
+		paymentChannel,
 		db.ExternalPaymentCommandStatusRejected,
 		nil,
 		errorCode,
@@ -345,6 +463,7 @@ func recordCombinePaymentCommandRejected(ctx context.Context, store db.Store, co
 
 func dbCombinePaymentCommandInput(
 	combinedPayment db.CombinedPaymentOrder,
+	paymentChannel string,
 	commandStatus string,
 	externalSecondaryKey *string,
 	lastErrorCode *string,
@@ -355,7 +474,7 @@ func dbCombinePaymentCommandInput(
 	businessObjectID := combinedPayment.ID
 	return RecordExternalPaymentCommandInput{
 		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              db.PaymentChannelEcommerce,
+		Channel:              paymentChannel,
 		Capability:           db.ExternalPaymentCapabilityCombinePayment,
 		CommandType:          db.ExternalPaymentCommandTypeCreatePayment,
 		BusinessOwner:        db.ExternalPaymentBusinessOwnerOrder,
@@ -512,7 +631,10 @@ func (svc *CombinedPaymentService) GetCombinedPaymentOrder(ctx context.Context, 
 }
 
 func (svc *CombinedPaymentService) QueryCombinedPaymentOrder(ctx context.Context, input QueryCombinedPaymentOrderInput) (QueryCombinedPaymentOrderResult, error) {
-	if svc.ecommerceClient == nil {
+	if svc.mainBusinessPaymentChannel == db.PaymentChannelOrdinaryServiceProvider && svc.ordinaryProviderPayClient == nil {
+		return QueryCombinedPaymentOrderResult{}, fmt.Errorf("ordinary service provider client: not configured")
+	}
+	if svc.mainBusinessPaymentChannel != db.PaymentChannelOrdinaryServiceProvider && svc.ecommerceClient == nil {
 		return QueryCombinedPaymentOrderResult{}, fmt.Errorf("ecommerce client: not configured")
 	}
 
@@ -524,11 +646,10 @@ func (svc *CombinedPaymentService) QueryCombinedPaymentOrder(ctx context.Context
 		return QueryCombinedPaymentOrderResult{}, err
 	}
 
-	queryResp, err := svc.ecommerceClient.QueryCombineOrder(ctx, detail.CombinedPayment.CombineOutTradeNo)
+	wechatOrder, err := svc.queryRemoteCombinedPayment(ctx, detail.CombinedPayment.CombineOutTradeNo)
 	if err != nil {
-		return QueryCombinedPaymentOrderResult{}, mapCombineOrderQueryError(err)
+		return QueryCombinedPaymentOrderResult{}, mapOrdinaryAwareCombineOrderQueryError(err, svc.mainBusinessPaymentChannel)
 	}
-	wechatOrder := mapCombinedWechatOrder(queryResp)
 
 	var payParams *wechat.JSAPIPayParams
 	if svc.shouldExposeCombinedPaymentPayParams(detail.CombinedPayment, wechatOrder) {
@@ -545,8 +666,30 @@ func (svc *CombinedPaymentService) QueryCombinedPaymentOrder(ctx context.Context
 	}, nil
 }
 
+func (svc *CombinedPaymentService) queryRemoteCombinedPayment(ctx context.Context, combineOutTradeNo string) (*QueryCombinedPaymentWechatOrder, error) {
+	if svc.mainBusinessPaymentChannel == db.PaymentChannelOrdinaryServiceProvider {
+		queryResp, err := svc.ordinaryProviderPayClient.QueryCombinePayment(ctx, ospcontracts.CombineQueryRequest{
+			CombineMchID:      svc.ordinaryProviderPayClient.ServiceProviderMchID(),
+			CombineOutTradeNo: combineOutTradeNo,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return mapOrdinaryServiceProviderCombinedWechatOrder(queryResp), nil
+	}
+
+	queryResp, err := svc.ecommerceClient.QueryCombineOrder(ctx, combineOutTradeNo)
+	if err != nil {
+		return nil, err
+	}
+	return mapCombinedWechatOrder(queryResp), nil
+}
+
 func (svc *CombinedPaymentService) CloseCombinedPaymentOrder(ctx context.Context, input CloseCombinedPaymentOrderInput) (CloseCombinedPaymentOrderResult, error) {
-	if svc.ecommerceClient == nil {
+	if svc.mainBusinessPaymentChannel == db.PaymentChannelOrdinaryServiceProvider && svc.ordinaryProviderPayClient == nil {
+		return CloseCombinedPaymentOrderResult{}, fmt.Errorf("ordinary service provider client: not configured")
+	}
+	if svc.mainBusinessPaymentChannel != db.PaymentChannelOrdinaryServiceProvider && svc.ecommerceClient == nil {
 		return CloseCombinedPaymentOrderResult{}, fmt.Errorf("ecommerce client: not configured")
 	}
 
@@ -572,18 +715,31 @@ func (svc *CombinedPaymentService) CloseCombinedPaymentOrder(ctx context.Context
 	}
 
 	closeSubs := make([]wechatcontracts.SubOrderClose, 0, len(subPayloads))
+	ordinaryCloseSubs := make([]ospcontracts.CombineCloseSubOrder, 0, len(subPayloads))
 	for _, sub := range subPayloads {
 		if sub.SubMchID == "" || sub.OutTradeNo == "" {
 			continue
 		}
 		closeSubs = append(closeSubs, wechatcontracts.SubOrderClose{SubMchID: sub.SubMchID, OutTradeNo: sub.OutTradeNo})
+		ordinaryCloseSubs = append(ordinaryCloseSubs, ospcontracts.CombineCloseSubOrder{MchID: svc.ordinaryCombineMchID(), SubMchID: sub.SubMchID, OutTradeNo: sub.OutTradeNo})
 	}
 	if len(closeSubs) == 0 {
 		return CloseCombinedPaymentOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("no sub orders available to close"))
 	}
 
-	if err := svc.ecommerceClient.CloseCombineOrder(ctx, combinedRow.CombineOutTradeNo, closeSubs); err != nil {
-		return CloseCombinedPaymentOrderResult{}, mapCombineOrderCloseError(err)
+	if svc.mainBusinessPaymentChannel == db.PaymentChannelOrdinaryServiceProvider {
+		if err := svc.ordinaryProviderPayClient.CloseCombinePayment(ctx, ospcontracts.CombineCloseRequest{
+			CombineAppID:      svc.ordinaryProviderPayClient.ServiceProviderAppID(),
+			CombineMchID:      svc.ordinaryProviderPayClient.ServiceProviderMchID(),
+			CombineOutTradeNo: combinedRow.CombineOutTradeNo,
+			SubOrders:         ordinaryCloseSubs,
+		}); err != nil {
+			return CloseCombinedPaymentOrderResult{}, mapCombineOrderCloseError(err)
+		}
+	} else {
+		if err := svc.ecommerceClient.CloseCombineOrder(ctx, combinedRow.CombineOutTradeNo, closeSubs); err != nil {
+			return CloseCombinedPaymentOrderResult{}, mapCombineOrderCloseError(err)
+		}
 	}
 
 	// 收集子单 OutTradeNo 用于事务关闭
@@ -724,6 +880,16 @@ func (svc *CombinedPaymentService) signExistingCombinedPaymentOrder(combinedRow 
 	if !svc.canResumeCombinedPaymentLocally(combinedRow) {
 		return nil, nil
 	}
+	if svc.mainBusinessPaymentChannel == db.PaymentChannelOrdinaryServiceProvider {
+		if svc.ordinaryProviderPayClient == nil {
+			return nil, nil
+		}
+		payParams, err := svc.ordinaryProviderPayClient.GenerateJSAPIPayParams(combinedRow.PrepayID.String)
+		if err != nil {
+			return nil, err
+		}
+		return ordinaryJSAPIPayParamsToWechat(payParams), nil
+	}
 	if svc.ecommerceClient == nil {
 		return nil, nil
 	}
@@ -792,6 +958,48 @@ func mapCombinedWechatOrder(queryResp *wechatcontracts.CombineQueryResponse) *Qu
 				PayerCurrency: subOrder.Amount.PayerCurrency,
 			},
 		})
+	}
+
+	return &QueryCombinedPaymentWechatOrder{
+		CombineOutTradeNo:   queryResp.CombineOutTradeNo,
+		AggregateTradeState: aggregateCombinedTradeState(tradeStates),
+		SubOrders:           subOrders,
+	}
+}
+
+func mapOrdinaryServiceProviderCombinedWechatOrder(queryResp *ospcontracts.CombineQueryResponse) *QueryCombinedPaymentWechatOrder {
+	if queryResp == nil {
+		return nil
+	}
+
+	subOrders := make([]QueryCombinedPaymentWechatSubOrder, 0, len(queryResp.SubOrders))
+	tradeStates := make([]string, 0, len(queryResp.SubOrders))
+	for _, subOrder := range queryResp.SubOrders {
+		tradeState := string(subOrder.TradeState)
+		tradeStates = append(tradeStates, tradeState)
+		subOrders = append(subOrders, QueryCombinedPaymentWechatSubOrder{
+			MchID:           subOrder.MchID,
+			SubMchID:        subOrder.SubMchID,
+			SubAppID:        subOrder.SubAppID,
+			SubOpenID:       subOrder.SubOpenID,
+			OutTradeNo:      subOrder.OutTradeNo,
+			TransactionID:   subOrder.TransactionID,
+			TradeType:       subOrder.TradeType,
+			TradeState:      tradeState,
+			BankType:        subOrder.BankType,
+			Attach:          subOrder.Attach,
+			SuccessTime:     subOrder.SuccessTime,
+			PromotionDetail: ordinaryPaymentPromotionDetails(subOrder.PromotionDetail),
+			Amount: QueryCombinedPaymentWechatAmount{
+				TotalAmount:   subOrder.Amount.TotalAmount,
+				PayerAmount:   subOrder.Amount.PayerAmount,
+				Currency:      string(subOrder.Amount.Currency),
+				PayerCurrency: string(subOrder.Amount.PayerCurrency),
+			},
+		})
+	}
+	if len(tradeStates) == 0 && queryResp.TradeState != "" {
+		tradeStates = append(tradeStates, string(queryResp.TradeState))
 	}
 
 	return &QueryCombinedPaymentWechatOrder{

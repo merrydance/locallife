@@ -15,6 +15,8 @@ import (
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -36,10 +38,23 @@ const (
 
 // PaymentOrderService encapsulates payment order creation logic.
 type PaymentOrderService struct {
-	store               db.Store
-	directPaymentClient wechat.DirectPaymentClientInterface
-	ecommerceClient     wechat.EcommerceClientInterface
-	now                 func() time.Time
+	store                      db.Store
+	directPaymentClient        wechat.DirectPaymentClientInterface
+	ecommerceClient            wechat.EcommerceClientInterface
+	ordinaryProviderPayClient  ordinaryServiceProviderPaymentClient
+	mainBusinessPaymentChannel string
+	now                        func() time.Time
+}
+
+type ordinaryServiceProviderPaymentClient interface {
+	ServiceProviderAppID() string
+	ServiceProviderMchID() string
+	PaymentNotifyURL() string
+	CreatePayment(ctx context.Context, req ospcontracts.PaymentPrepayRequest) (*ospcontracts.PaymentPrepayResponse, error)
+	QueryPayment(ctx context.Context, req ospcontracts.PaymentQueryRequest) (*ospcontracts.PaymentQueryResponse, error)
+	ClosePayment(ctx context.Context, req ospcontracts.PaymentCloseRequest) error
+	CloseCombinePayment(ctx context.Context, req ospcontracts.CombineCloseRequest) error
+	GenerateJSAPIPayParams(prepayID string) (*ospcontracts.JSAPIPayParams, error)
 }
 
 // NewPaymentOrderService creates a payment order service.
@@ -50,10 +65,21 @@ func NewPaymentOrderService(store db.Store, ecommerceClient wechat.EcommerceClie
 // NewPaymentOrderServiceWithClients creates a payment order service with all payment clients.
 func NewPaymentOrderServiceWithClients(store db.Store, directPaymentClient wechat.DirectPaymentClientInterface, ecommerceClient wechat.EcommerceClientInterface) *PaymentOrderService {
 	return &PaymentOrderService{
-		store:               store,
-		directPaymentClient: directPaymentClient,
-		ecommerceClient:     ecommerceClient,
-		now:                 time.Now,
+		store:                      store,
+		directPaymentClient:        directPaymentClient,
+		ecommerceClient:            ecommerceClient,
+		mainBusinessPaymentChannel: db.PaymentChannelEcommerce,
+		now:                        time.Now,
+	}
+}
+
+func NewPaymentOrderServiceWithOrdinaryServiceProvider(store db.Store, directPaymentClient wechat.DirectPaymentClientInterface, ordinaryClient ordinaryServiceProviderPaymentClient) *PaymentOrderService {
+	return &PaymentOrderService{
+		store:                      store,
+		directPaymentClient:        directPaymentClient,
+		ordinaryProviderPayClient:  ordinaryClient,
+		mainBusinessPaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
+		now:                        time.Now,
 	}
 }
 
@@ -200,7 +226,7 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 		})
 	}
 	if err == nil && existingPayment.Status == paymentStatusPending {
-		if !paymentOrderUsesEcommerceChannel(existingPayment) {
+		if !svc.paymentOrderUsesMainBusinessChannel(existingPayment) {
 			if closeErr := svc.supersedePendingPaymentOrder(ctx, existingPayment); closeErr != nil {
 				return result, closeErr
 			}
@@ -233,7 +259,16 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 
 	expiresAt := svc.now().Add(30 * time.Minute)
 
-	// ==================== 单订单/预定走收付通单笔支付 ====================
+	if svc.mainBusinessPaymentChannel == db.PaymentChannelOrdinaryServiceProvider {
+		if input.BusinessType == businessTypeReservation {
+			return svc.createReservationOrdinaryServiceProviderPayment(ctx, input, merchantID, merchantName, reservationPaymentMode, amount, attach, expiresAt)
+		}
+		if input.BusinessType == businessTypeOrder {
+			return svc.createOrderOrdinaryServiceProviderPayment(ctx, input, merchantID, merchantName, reservationLinkedOrder || shouldEnableOrderProfitSharing(orderType), amount, attach, expiresAt)
+		}
+	}
+
+	// ==================== 历史收付通冷备路径 ====================
 	if input.BusinessType == businessTypeReservation {
 		return svc.createReservationEcommercePayment(ctx, input, merchantID, merchantName, reservationPaymentMode, amount, attach, expiresAt)
 	}
@@ -242,6 +277,247 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 	}
 
 	return result, fmt.Errorf("unsupported business type after validation: %s", input.BusinessType)
+}
+
+func (svc *PaymentOrderService) paymentOrderUsesMainBusinessChannel(paymentOrder db.PaymentOrder) bool {
+	switch svc.mainBusinessPaymentChannel {
+	case db.PaymentChannelOrdinaryServiceProvider:
+		return db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder)
+	case db.PaymentChannelEcommerce:
+		return paymentOrderUsesEcommerceChannel(paymentOrder)
+	default:
+		return false
+	}
+}
+
+func (svc *PaymentOrderService) createReservationOrdinaryServiceProviderPayment(
+	ctx context.Context,
+	input CreatePaymentOrderInput,
+	merchantID int64,
+	merchantName string,
+	paymentMode string,
+	amount int64,
+	attach string,
+	expiresAt time.Time,
+) (CreatePaymentOrderResult, error) {
+	if svc.ordinaryProviderPayClient == nil {
+		return CreatePaymentOrderResult{}, fmt.Errorf("ordinary service provider client: not configured")
+	}
+	if merchantID > 0 {
+		merchant, err := svc.store.GetMerchant(ctx, merchantID)
+		if err == nil {
+			if paymentMode == paymentModeFull {
+				merchantName = merchant.Name + " - Reservation Prepaid"
+			} else {
+				merchantName = merchant.Name + " - Reservation Deposit"
+			}
+		}
+	}
+	return svc.createOrdinaryServiceProviderPayment(ctx, ordinaryPaymentCreateInput{
+		CreatePaymentOrderInput: input,
+		MerchantID:              merchantID,
+		MerchantName:            merchantName,
+		PaymentMode:             paymentMode,
+		Amount:                  amount,
+		Attach:                  attach,
+		ExpiresAt:               expiresAt,
+		BusinessOwner:           db.ExternalPaymentBusinessOwnerReservation,
+		ProfitSharing:           true,
+	})
+}
+
+func (svc *PaymentOrderService) createOrderOrdinaryServiceProviderPayment(
+	ctx context.Context,
+	input CreatePaymentOrderInput,
+	merchantID int64,
+	merchantName string,
+	profitSharing bool,
+	expectedAmount int64,
+	attach string,
+	expiresAt time.Time,
+) (CreatePaymentOrderResult, error) {
+	if svc.ordinaryProviderPayClient == nil {
+		return CreatePaymentOrderResult{}, fmt.Errorf("ordinary service provider client: not configured")
+	}
+	if merchantID > 0 {
+		merchant, err := svc.store.GetMerchant(ctx, merchantID)
+		if err == nil {
+			merchantName = merchant.Name + " - Order Payment"
+		}
+	}
+	return svc.createOrdinaryServiceProviderPayment(ctx, ordinaryPaymentCreateInput{
+		CreatePaymentOrderInput: input,
+		MerchantID:              merchantID,
+		MerchantName:            merchantName,
+		Amount:                  expectedAmount,
+		Attach:                  attach,
+		ExpiresAt:               expiresAt,
+		BusinessOwner:           db.ExternalPaymentBusinessOwnerOrder,
+		ProfitSharing:           profitSharing,
+	})
+}
+
+type ordinaryPaymentCreateInput struct {
+	CreatePaymentOrderInput
+	MerchantID    int64
+	MerchantName  string
+	PaymentMode   string
+	Amount        int64
+	Attach        string
+	ExpiresAt     time.Time
+	BusinessOwner string
+	ProfitSharing bool
+}
+
+func (svc *PaymentOrderService) createOrdinaryServiceProviderPayment(ctx context.Context, createInput ordinaryPaymentCreateInput) (CreatePaymentOrderResult, error) {
+	var result CreatePaymentOrderResult
+	if svc.ordinaryProviderPayClient == nil {
+		return result, fmt.Errorf("ordinary service provider client: not configured")
+	}
+
+	user, err := svc.store.GetUser(ctx, createInput.UserID)
+	if err != nil {
+		return result, fmt.Errorf("get user: %w", err)
+	}
+	if user.WechatOpenid == "" {
+		return result, NewRequestError(http.StatusBadRequest, errors.New("wechat openid not found"))
+	}
+
+	var txResult db.CreatePartnerPaymentTxResult
+	for attempt := 1; attempt <= concurrentPaymentRetry; attempt++ {
+		prefix := "OC"
+		orderID := createInput.OrderID
+		reservationID := int64(0)
+		if createInput.BusinessType == businessTypeReservation {
+			prefix = "RS"
+			orderID = 0
+			reservationID = createInput.OrderID
+		}
+		outTradeNo, genErr := generateOutTradeNoWithPrefix(prefix)
+		if genErr != nil {
+			return result, fmt.Errorf("generate out trade no: %w", genErr)
+		}
+		txResult, err = svc.store.CreatePartnerPaymentTx(ctx, db.CreatePartnerPaymentTxParams{
+			UserID:        createInput.UserID,
+			MerchantID:    createInput.MerchantID,
+			OrderID:       orderID,
+			ReservationID: reservationID,
+			PaymentMode:   createInput.PaymentMode,
+			BusinessType:  createInput.BusinessType,
+			Amount:        createInput.Amount,
+			OutTradeNo:    outTradeNo,
+			ExpiresAt:     createInput.ExpiresAt,
+			Attach:        createInput.Attach,
+		})
+		if err == nil {
+			break
+		}
+		if errors.Is(err, db.ErrOrderPendingPaymentConflict) {
+			if createInput.BusinessType == businessTypeReservation {
+				resolved, handled, resolveErr := svc.resolveConcurrentReservationPayment(ctx, createInput.CreatePaymentOrderInput, createInput.Amount, createInput.Attach)
+				if resolveErr != nil {
+					return result, resolveErr
+				}
+				if handled {
+					return resolved, nil
+				}
+			} else {
+				resolved, handled, resolveErr := svc.resolveConcurrentOrderPayment(ctx, createInput.CreatePaymentOrderInput, createInput.Amount)
+				if resolveErr != nil {
+					return result, resolveErr
+				}
+				if handled {
+					return resolved, nil
+				}
+			}
+			if attempt < concurrentPaymentRetry {
+				continue
+			}
+			return result, NewRequestError(http.StatusConflict, errors.New("payment order is being recreated, please retry"))
+		}
+		if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
+			if !sleepWithContext(ctx, outTradeNoRetryBaseBack*time.Duration(attempt)) {
+				return result, NewRequestError(http.StatusRequestTimeout, errors.New("request canceled"))
+			}
+			continue
+		}
+		return result, mapReservationEcommerceError(err)
+	}
+
+	result.PaymentOrder = txResult.PaymentOrder
+	paymentAttach := createInput.Attach
+	if txResult.PaymentOrder.Attach.Valid && strings.TrimSpace(txResult.PaymentOrder.Attach.String) != "" {
+		paymentAttach = txResult.PaymentOrder.Attach.String
+	}
+
+	orderResp, err := svc.ordinaryProviderPayClient.CreatePayment(ctx, ospcontracts.PaymentPrepayRequest{
+		SpAppID:     svc.ordinaryProviderPayClient.ServiceProviderAppID(),
+		SpMchID:     svc.ordinaryProviderPayClient.ServiceProviderMchID(),
+		SubMchID:    txResult.SubMchID,
+		Description: createInput.MerchantName,
+		OutTradeNo:  txResult.PaymentOrder.OutTradeNo,
+		TimeExpire:  createInput.ExpiresAt.Format(time.RFC3339),
+		Attach:      paymentAttach,
+		NotifyURL:   svc.ordinaryProviderPayClient.PaymentNotifyURL(),
+		SettleInfo:  &ospcontracts.PaymentSettleInfo{ProfitSharing: createInput.ProfitSharing},
+		Amount:      ospcontracts.PaymentAmount{Total: txResult.PaymentOrder.Amount, Currency: ospcontracts.CurrencyCNY},
+		Payer:       ospcontracts.PaymentPayer{SpOpenID: user.WechatOpenid},
+		SceneInfo:   &ospcontracts.PaymentSceneInfo{PayerClientIP: createInput.ClientIP},
+	})
+	if err != nil {
+		cleanupCtx := context.Background()
+		if _, closeErr := svc.store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID); closeErr != nil {
+			log.Error().Err(closeErr).Int64("payment_order_id", txResult.PaymentOrder.ID).Msg("failed to close ordinary service provider payment order after create rejection")
+		} else {
+			recordPartnerJSAPIPaymentCommandRejected(cleanupCtx, svc.store, txResult.PaymentOrder, createInput.BusinessOwner, err)
+		}
+		return result, mapPartnerJSAPIOrderCreateError(err)
+	}
+	if orderResp == nil || strings.TrimSpace(orderResp.PrepayID) == "" {
+		cleanupCtx := context.Background()
+		emptyPrepayErr := errors.New("create ordinary service provider payment: empty prepay id")
+		if _, closeErr := svc.store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID); closeErr != nil {
+			log.Error().Err(closeErr).Int64("payment_order_id", txResult.PaymentOrder.ID).Msg("failed to close ordinary service provider payment order after empty prepay id")
+		} else {
+			recordPartnerJSAPIPaymentCommandRejected(cleanupCtx, svc.store, txResult.PaymentOrder, createInput.BusinessOwner, emptyPrepayErr)
+		}
+		return result, mapPartnerJSAPIOrderCreateError(emptyPrepayErr)
+	}
+
+	payParams, err := svc.ordinaryProviderPayClient.GenerateJSAPIPayParams(orderResp.PrepayID)
+	if err != nil {
+		return result, fmt.Errorf("generate ordinary service provider pay params: %w", err)
+	}
+
+	updatedPayment, err := svc.store.UpdatePaymentOrderPrepayId(ctx, db.UpdatePaymentOrderPrepayIdParams{
+		ID:       txResult.PaymentOrder.ID,
+		PrepayID: pgtype.Text{String: orderResp.PrepayID, Valid: true},
+	})
+	if err != nil {
+		cleanupCtx := context.Background()
+		svc.markPaymentOrderFailedForCleanup(cleanupCtx, txResult.PaymentOrder.ID, "failed to mark ordinary service provider payment order failed after prepay update failure")
+		if closeErr := svc.ordinaryProviderPayClient.ClosePayment(cleanupCtx, ospcontracts.PaymentCloseRequest{
+			SpMchID:    svc.ordinaryProviderPayClient.ServiceProviderMchID(),
+			SubMchID:   txResult.SubMchID,
+			OutTradeNo: txResult.PaymentOrder.OutTradeNo,
+		}); closeErr != nil {
+			log.Warn().Err(closeErr).Str("out_trade_no", txResult.PaymentOrder.OutTradeNo).Msg("close ordinary service provider order after prepay update failure")
+		}
+		return result, fmt.Errorf("update prepay id: %w", err)
+	}
+	recordPartnerJSAPIPaymentCommandAccepted(ctx, svc.store, txResult.PaymentOrder, createInput.BusinessOwner, orderResp.PrepayID)
+
+	result.PaymentOrder = updatedPayment
+	result.PayParams = ordinaryJSAPIPayParamsToWechat(payParams)
+	return result, nil
+}
+
+func (svc *PaymentOrderService) markPaymentOrderFailedForCleanup(ctx context.Context, paymentOrderID int64, message string) {
+	if _, err := svc.store.UpdatePaymentOrderToFailed(ctx, paymentOrderID); err != nil {
+		log.Error().Err(err).
+			Int64("payment_order_id", paymentOrderID).
+			Msg(message)
+	}
 }
 
 // createReservationEcommercePayment 通过收付通单笔支付创建预定支付单。
@@ -366,7 +642,7 @@ func (svc *PaymentOrderService) createReservationEcommercePayment(
 	})
 	if err != nil {
 		cleanupCtx := context.Background()
-		_, _ = svc.store.UpdatePaymentOrderToFailed(cleanupCtx, txResult.PaymentOrder.ID)
+		svc.markPaymentOrderFailedForCleanup(cleanupCtx, txResult.PaymentOrder.ID, "failed to mark ecommerce reservation payment order failed after prepay update failure")
 		if closeErr := svc.ecommerceClient.ClosePartnerOrder(cleanupCtx, txResult.PaymentOrder.OutTradeNo, txResult.SubMchID); closeErr != nil {
 			log.Warn().Err(closeErr).Str("out_trade_no", txResult.PaymentOrder.OutTradeNo).Msg("close partner order after prepay update failure")
 		}
@@ -492,7 +768,7 @@ func (svc *PaymentOrderService) createOrderEcommercePayment(
 	})
 	if err != nil {
 		cleanupCtx := context.Background()
-		_, _ = svc.store.UpdatePaymentOrderToFailed(cleanupCtx, txResult.PaymentOrder.ID)
+		svc.markPaymentOrderFailedForCleanup(cleanupCtx, txResult.PaymentOrder.ID, "failed to mark ecommerce payment order failed after prepay update failure")
 		if closeErr := svc.ecommerceClient.ClosePartnerOrder(cleanupCtx, txResult.PaymentOrder.OutTradeNo, txResult.SubMchID); closeErr != nil {
 			log.Warn().Err(closeErr).Str("out_trade_no", txResult.PaymentOrder.OutTradeNo).Msg("close partner order after prepay update failure")
 		}
@@ -564,7 +840,7 @@ func dbPartnerJSAPIPaymentCommandInput(
 	businessObjectID := paymentOrder.ID
 	return RecordExternalPaymentCommandInput{
 		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              db.PaymentChannelEcommerce,
+		Channel:              paymentOrder.PaymentChannel,
 		Capability:           db.ExternalPaymentCapabilityPartnerJSAPIPayment,
 		CommandType:          db.ExternalPaymentCommandTypeCreatePayment,
 		BusinessOwner:        partnerJSAPIPaymentBusinessOwner(paymentOrder, businessOwner),
@@ -596,10 +872,22 @@ func partnerPaymentCommandErrorFields(err error) (*string, *string) {
 	if errors.As(loggableErr, &wxErr) {
 		return stringPtrIfNotEmpty(wxErr.Code), stringPtrIfNotEmpty(wxErr.Message)
 	}
+	var ordinaryErr *ordinaryserviceprovider.ProviderError
+	if errors.As(loggableErr, &ordinaryErr) {
+		return stringPtrIfNotEmpty(ordinaryErr.ProviderCode), stringPtrIfNotEmpty(ordinaryProviderFrontendCommandMessage(ordinaryErr.Frontend))
+	}
 	if loggableErr == nil {
 		return nil, nil
 	}
 	return nil, stringPtrIfNotEmpty(loggableErr.Error())
+}
+
+func ordinaryProviderFrontendCommandMessage(frontend ordinaryserviceprovider.FrontendGuidance) string {
+	message := strings.TrimSpace(frontend.Message)
+	if action := strings.TrimSpace(frontend.Action); action != "" {
+		message = strings.TrimSpace(message + "，" + action)
+	}
+	return message
 }
 
 func partnerJSAPIPaymentCommandSnapshot(values map[string]string) []byte {
@@ -623,12 +911,19 @@ func (svc *PaymentOrderService) signExistingPaymentOrder(paymentOrder db.Payment
 	if !paymentOrder.PrepayID.Valid {
 		return nil, nil
 	}
-	if svc.ecommerceClient != nil {
+	if paymentOrderUsesEcommerceChannel(paymentOrder) && svc.ecommerceClient != nil {
 		payParams, err := svc.ecommerceClient.GenerateJSAPIPayParams(paymentOrder.PrepayID.String)
 		if err != nil {
 			return nil, err
 		}
 		return payParams, nil
+	}
+	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) && svc.ordinaryProviderPayClient != nil {
+		payParams, err := svc.ordinaryProviderPayClient.GenerateJSAPIPayParams(paymentOrder.PrepayID.String)
+		if err != nil {
+			return nil, err
+		}
+		return ordinaryJSAPIPayParamsToWechat(payParams), nil
 	}
 
 	return nil, nil
@@ -927,6 +1222,12 @@ func (svc *PaymentOrderService) ClosePaymentOrder(ctx context.Context, input Clo
 }
 
 func (svc *PaymentOrderService) closePendingPaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder) (ClosePaymentOrderResult, error) {
+	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
+		if paymentOrder.CombinedPaymentID.Valid {
+			return svc.closeCombinedPaymentOrder(ctx, paymentOrder)
+		}
+		return svc.closeOrdinaryServiceProviderPaymentOrder(ctx, paymentOrder)
+	}
 	if paymentOrder.CombinedPaymentID.Valid && paymentOrderUsesEcommerceChannel(paymentOrder) {
 		return svc.closeCombinedPaymentOrder(ctx, paymentOrder)
 	}
@@ -945,6 +1246,28 @@ func (svc *PaymentOrderService) closePendingPaymentOrder(ctx context.Context, pa
 			Msg("close pending main-business payment order without partner remote close because payment type is not profit_sharing")
 	}
 
+	return ClosePaymentOrderResult{PaymentOrder: updatedPayment}, nil
+}
+
+func (svc *PaymentOrderService) closeOrdinaryServiceProviderPaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder) (ClosePaymentOrderResult, error) {
+	if svc.ordinaryProviderPayClient == nil {
+		return ClosePaymentOrderResult{}, fmt.Errorf("ordinary service provider client: not configured")
+	}
+	subMchID, resolveErr := svc.resolvePaymentOrderSubMchID(ctx, paymentOrder)
+	if resolveErr != nil {
+		return ClosePaymentOrderResult{}, fmt.Errorf("resolve payment order sub_mchid: %w", resolveErr)
+	}
+	if err := svc.ordinaryProviderPayClient.ClosePayment(ctx, ospcontracts.PaymentCloseRequest{
+		SpMchID:    svc.ordinaryProviderPayClient.ServiceProviderMchID(),
+		SubMchID:   subMchID,
+		OutTradeNo: paymentOrder.OutTradeNo,
+	}); err != nil {
+		return ClosePaymentOrderResult{}, mapPartnerOrderCloseError(err)
+	}
+	updatedPayment, err := svc.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
+	if err != nil {
+		return ClosePaymentOrderResult{}, err
+	}
 	return ClosePaymentOrderResult{PaymentOrder: updatedPayment}, nil
 }
 
@@ -1032,7 +1355,11 @@ func (svc *PaymentOrderService) resolvePaymentOrderSubMchID(ctx context.Context,
 }
 
 func (svc *PaymentOrderService) closeCombinedPaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder) (ClosePaymentOrderResult, error) {
-	if svc.ecommerceClient == nil {
+	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
+		if svc.ordinaryProviderPayClient == nil {
+			return ClosePaymentOrderResult{}, fmt.Errorf("ordinary service provider client: not configured")
+		}
+	} else if svc.ecommerceClient == nil {
 		return ClosePaymentOrderResult{}, fmt.Errorf("ecommerce client: not configured")
 	}
 
@@ -1049,20 +1376,44 @@ func (svc *PaymentOrderService) closeCombinedPaymentOrder(ctx context.Context, p
 		return ClosePaymentOrderResult{}, err
 	}
 	closeSubs := make([]wechatcontracts.SubOrderClose, 0, len(subOrders))
+	ordinaryCloseSubs := make([]ospcontracts.CombineCloseSubOrder, 0, len(subOrders))
 	subOutTradeNos := make([]string, 0, len(subOrders))
+	usesOrdinary := db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder)
+	ordinaryMchID := ""
+	if usesOrdinary {
+		ordinaryMchID = svc.ordinaryProviderPayClient.ServiceProviderMchID()
+	}
 	for _, sub := range subOrders {
 		if sub.SubMchid == "" || sub.OutTradeNo == "" {
 			continue
 		}
 		closeSubs = append(closeSubs, wechatcontracts.SubOrderClose{SubMchID: sub.SubMchid, OutTradeNo: sub.OutTradeNo})
+		if usesOrdinary {
+			ordinaryCloseSubs = append(ordinaryCloseSubs, ospcontracts.CombineCloseSubOrder{
+				MchID:      ordinaryMchID,
+				SubMchID:   sub.SubMchid,
+				OutTradeNo: sub.OutTradeNo,
+			})
+		}
 		subOutTradeNos = append(subOutTradeNos, sub.OutTradeNo)
 	}
 	if len(closeSubs) == 0 {
 		return ClosePaymentOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("no sub orders available to close"))
 	}
 
-	if err := svc.ecommerceClient.CloseCombineOrder(ctx, combinedPayment.CombineOutTradeNo, closeSubs); err != nil {
-		return ClosePaymentOrderResult{}, mapCombineOrderCloseError(err)
+	if usesOrdinary {
+		if err := svc.ordinaryProviderPayClient.CloseCombinePayment(ctx, ospcontracts.CombineCloseRequest{
+			CombineAppID:      svc.ordinaryProviderPayClient.ServiceProviderAppID(),
+			CombineMchID:      svc.ordinaryProviderPayClient.ServiceProviderMchID(),
+			CombineOutTradeNo: combinedPayment.CombineOutTradeNo,
+			SubOrders:         ordinaryCloseSubs,
+		}); err != nil {
+			return ClosePaymentOrderResult{}, mapCombineOrderCloseError(err)
+		}
+	} else {
+		if err := svc.ecommerceClient.CloseCombineOrder(ctx, combinedPayment.CombineOutTradeNo, closeSubs); err != nil {
+			return ClosePaymentOrderResult{}, mapCombineOrderCloseError(err)
+		}
 	}
 
 	if _, err := svc.store.CloseCombinedPaymentOrderTx(ctx, db.CloseCombinedPaymentOrderTxParams{

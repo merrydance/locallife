@@ -2,7 +2,9 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -16,6 +18,7 @@ import (
 
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/worker"
@@ -54,6 +57,119 @@ func expectNoPackagingPolicy(store *mockdb.MockStore) {
 		CountActivePackagingDishesByMerchant(gomock.Any(), gomock.Any()).
 		AnyTimes().
 		Return(int64(0), nil)
+}
+
+type replaceOrderErrorCommandService struct {
+	err error
+}
+
+func (s replaceOrderErrorCommandService) CreateOrder(context.Context, logic.CreateOrderCommandInput) (logic.CreateOrderCommandResult, error) {
+	return logic.CreateOrderCommandResult{}, nil
+}
+
+func (s replaceOrderErrorCommandService) CancelOrder(context.Context, logic.CancelOrderInput) (logic.CancelOrderResult, error) {
+	return logic.CancelOrderResult{}, nil
+}
+
+func (s replaceOrderErrorCommandService) UrgeOrder(context.Context, logic.UrgeOrderInput) (logic.UrgeOrderResult, error) {
+	return logic.UrgeOrderResult{}, nil
+}
+
+func (s replaceOrderErrorCommandService) ReplaceOrder(context.Context, logic.ReplaceOrderInput) (logic.ReplaceOrderResult, error) {
+	return logic.ReplaceOrderResult{}, s.err
+}
+
+func (s replaceOrderErrorCommandService) ConfirmOrder(context.Context, logic.ConfirmOrderInput) (logic.ConfirmOrderResult, error) {
+	return logic.ConfirmOrderResult{}, nil
+}
+
+func (s replaceOrderErrorCommandService) AcceptMerchantOrder(context.Context, logic.MerchantOrderUpdateInput) (logic.MerchantOrderUpdateResult, error) {
+	return logic.MerchantOrderUpdateResult{}, nil
+}
+
+func (s replaceOrderErrorCommandService) RejectMerchantOrder(context.Context, logic.MerchantOrderUpdateInput) (logic.MerchantOrderUpdateResult, error) {
+	return logic.MerchantOrderUpdateResult{}, nil
+}
+
+func (s replaceOrderErrorCommandService) MarkMerchantOrderReady(context.Context, logic.MerchantOrderUpdateInput) (logic.MerchantOrderUpdateResult, error) {
+	return logic.MerchantOrderUpdateResult{}, nil
+}
+
+func (s replaceOrderErrorCommandService) CompleteMerchantOrder(context.Context, logic.MerchantOrderUpdateInput) (logic.MerchantOrderUpdateResult, error) {
+	return logic.MerchantOrderUpdateResult{}, nil
+}
+
+func (s replaceOrderErrorCommandService) PrintMerchantOrder(context.Context, logic.MerchantOrderPrintInput) (logic.MerchantOrderPrintResult, error) {
+	return logic.MerchantOrderPrintResult{}, nil
+}
+
+func TestReplaceOrderPaymentClientMissingReturnsActionableChinese(t *testing.T) {
+	user, _ := randomUser(t)
+	server := newTestServer(t, nil)
+	server.orderCommandSvc = replaceOrderErrorCommandService{
+		err: errors.New("ordinary service provider client: not configured"),
+	}
+
+	body := `{"items":[{"dish_id":1001,"quantity":1}]}`
+	req, err := http.NewRequest(http.MethodPost, "/v1/orders/123/replace", strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Contains(t, resp.Message, "商户支付能力未完成配置")
+	require.Contains(t, resp.Message, "联系平台")
+	require.NotContains(t, resp.Message, "ordinary service provider")
+	require.NotContains(t, resp.Message, "not configured")
+}
+
+func TestReplaceOrderInvalidRequestReturnsActionableChinese(t *testing.T) {
+	user, _ := randomUser(t)
+	testCases := []struct {
+		name        string
+		path        string
+		body        string
+		wantMessage string
+	}{
+		{
+			name:        "invalid_order_id",
+			path:        "/v1/orders/bad/replace",
+			body:        `{"items":[{"dish_id":1001,"quantity":1}]}`,
+			wantMessage: "改菜订单编号无效，请刷新页面后重试",
+		},
+		{
+			name:        "missing_items",
+			path:        "/v1/orders/123/replace",
+			body:        `{}`,
+			wantMessage: "改菜请求参数格式无效，请至少选择一个菜品后重试",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := newTestServer(t, nil)
+			req, err := http.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
+			require.NoError(t, err)
+			req.Header.Set("Content-Type", "application/json")
+			addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+			recorder := httptest.NewRecorder()
+			server.router.ServeHTTP(recorder, req)
+
+			require.Equal(t, http.StatusBadRequest, recorder.Code)
+			var resp APIResponse
+			require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+			require.Equal(t, tc.wantMessage, resp.Message)
+			require.NotContains(t, resp.Message, "binding")
+			require.NotContains(t, resp.Message, "replaceOrderRequest")
+			require.NotContains(t, resp.Message, "Items")
+		})
+	}
 }
 
 func orderWithDetailsFromOrder(order db.Order) db.GetOrderWithDetailsRow {

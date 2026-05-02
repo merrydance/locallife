@@ -83,7 +83,7 @@ func TestCancelReservation_EcommerceRefundAcceptedRecordsCommand(t *testing.T) {
 		ID:       601,
 		RefundID: pgtype.Text{String: "erefund_cancel_1", Valid: true},
 	}).Return(db.RefundOrder{ID: 601, Status: "processing"}, nil)
-	expectCancelReservationRefundAcceptedCommand(t, store, 601, &capturedOutRefundNo, "erefund_cancel_1", 9401)
+	expectCancelReservationRefundAcceptedCommand(t, store, 601, &capturedOutRefundNo, "erefund_cancel_1", db.PaymentChannelEcommerce, db.ExternalPaymentCapabilityEcommerceRefund, 9401)
 
 	result, err := CancelReservation(
 		context.Background(),
@@ -98,6 +98,144 @@ func TestCancelReservation_EcommerceRefundAcceptedRecordsCommand(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, reservationStatusCancelled, result.Reservation.Status)
 	require.True(t, result.RefundEligible)
+}
+
+func TestCancelReservation_OrdinaryRefundAcceptedRecordsOrdinaryCommand(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{}
+
+	userID := int64(12)
+	reservationID := int64(22)
+	merchantID := int64(32)
+	tableID := int64(42)
+	now := time.Date(2026, 4, 25, 12, 5, 0, 0, time.UTC)
+	reservation := db.TableReservation{
+		ID:             reservationID,
+		UserID:         userID,
+		MerchantID:     merchantID,
+		TableID:        tableID,
+		Status:         reservationStatusPaid,
+		RefundDeadline: now.Add(time.Hour),
+	}
+	cancelledReservation := reservation
+	cancelledReservation.Status = reservationStatusCancelled
+	paymentOrder := db.PaymentOrder{
+		ID:             503,
+		ReservationID:  pgtype.Int8{Int64: reservationID, Valid: true},
+		BusinessType:   businessTypeReservation,
+		Status:         paymentStatusPaid,
+		OutTradeNo:     "reservation_paid_ordinary",
+		Amount:         2500,
+		PaymentType:    paymentTypeProfitSharing,
+		PaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
+	}
+	capturedOutRefundNo := ""
+
+	store.EXPECT().GetTableReservationForUpdate(gomock.Any(), reservationID).Return(reservation, nil)
+	store.EXPECT().GetTable(gomock.Any(), tableID).Return(db.Table{ID: tableID, CurrentReservationID: pgtype.Int8{Int64: reservationID, Valid: true}}, nil)
+	store.EXPECT().CancelReservationTx(gomock.Any(), db.CancelReservationTxParams{
+		ReservationID:        reservationID,
+		TableID:              tableID,
+		CancelReason:         "change of plan",
+		CurrentReservationID: pgtype.Int8{Int64: reservationID, Valid: true},
+		ReleaseInventory:     true,
+	}).Return(db.CancelReservationTxResult{Reservation: cancelledReservation}, nil)
+	store.EXPECT().GetLatestPaymentOrderByReservation(gomock.Any(), db.GetLatestPaymentOrderByReservationParams{
+		ReservationID: pgtype.Int8{Int64: reservationID, Valid: true},
+		BusinessType:  businessTypeReservation,
+	}).Return(paymentOrder, nil)
+	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchantID).Return(db.MerchantPaymentConfig{MerchantID: merchantID, SubMchID: "sub-mch-ordinary", Status: "active"}, nil)
+	store.EXPECT().CreateRefundOrderTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateRefundOrderTxParams) (db.CreateRefundOrderTxResult, error) {
+		require.Equal(t, paymentOrder.ID, arg.PaymentOrderID)
+		require.Equal(t, paymentTypeProfitSharing, arg.RefundType)
+		require.Equal(t, int64(2500), arg.RefundAmount)
+		require.Equal(t, "预定取消退款", arg.RefundReason)
+		require.NotEmpty(t, arg.OutRefundNo)
+		capturedOutRefundNo = arg.OutRefundNo
+		return db.CreateRefundOrderTxResult{RefundOrder: db.RefundOrder{ID: 603, OutRefundNo: arg.OutRefundNo}}, nil
+	})
+	store.EXPECT().UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
+		ID:       603,
+		RefundID: pgtype.Text{String: "refund-ordinary", Valid: true},
+	}).Return(db.RefundOrder{ID: 603, Status: "processing"}, nil)
+	expectCancelReservationRefundAcceptedCommand(t, store, 603, &capturedOutRefundNo, "refund-ordinary", db.PaymentChannelOrdinaryServiceProvider, db.ExternalPaymentCapabilityPartnerRefund, 9402)
+
+	result, err := CancelReservationWithOrdinaryServiceProvider(
+		context.Background(),
+		store,
+		nil,
+		ordinaryClient,
+		userID,
+		reservationID,
+		"change of plan",
+		ReservationRefundPolicy{UserBeforeDeadlinePercent: 100},
+		now,
+	)
+	require.NoError(t, err)
+	require.Equal(t, reservationStatusCancelled, result.Reservation.Status)
+	require.True(t, result.RefundEligible)
+	require.NotNil(t, ordinaryClient.createRefundRequest)
+	require.Equal(t, "sub-mch-ordinary", ordinaryClient.createRefundRequest.SubMchID)
+	require.Equal(t, paymentOrder.OutTradeNo, ordinaryClient.createRefundRequest.OutTradeNo)
+	require.Equal(t, capturedOutRefundNo, ordinaryClient.createRefundRequest.OutRefundNo)
+	require.Equal(t, ordinaryClient.RefundNotifyURL(), ordinaryClient.createRefundRequest.NotifyURL)
+	require.Equal(t, int64(2500), ordinaryClient.createRefundRequest.Amount.Refund)
+	require.Equal(t, paymentOrder.Amount, ordinaryClient.createRefundRequest.Amount.Total)
+}
+
+func TestCancelReservation_OrdinaryPaymentMissingClientFailsBeforeCancel(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+
+	userID := int64(13)
+	reservationID := int64(23)
+	merchantID := int64(33)
+	tableID := int64(43)
+	now := time.Date(2026, 4, 25, 12, 15, 0, 0, time.UTC)
+	reservation := db.TableReservation{
+		ID:             reservationID,
+		UserID:         userID,
+		MerchantID:     merchantID,
+		TableID:        tableID,
+		Status:         reservationStatusPaid,
+		RefundDeadline: now.Add(time.Hour),
+	}
+	paymentOrder := db.PaymentOrder{
+		ID:             504,
+		ReservationID:  pgtype.Int8{Int64: reservationID, Valid: true},
+		BusinessType:   businessTypeReservation,
+		Status:         paymentStatusPaid,
+		OutTradeNo:     "reservation_paid_missing_ordinary_client",
+		Amount:         2600,
+		PaymentType:    paymentTypeProfitSharing,
+		PaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
+	}
+
+	store.EXPECT().GetTableReservationForUpdate(gomock.Any(), reservationID).Return(reservation, nil)
+	store.EXPECT().GetLatestPaymentOrderByReservation(gomock.Any(), db.GetLatestPaymentOrderByReservationParams{
+		ReservationID: pgtype.Int8{Int64: reservationID, Valid: true},
+		BusinessType:  businessTypeReservation,
+	}).Return(paymentOrder, nil)
+
+	_, err := CancelReservationWithOrdinaryServiceProvider(
+		context.Background(),
+		store,
+		nil,
+		nil,
+		userID,
+		reservationID,
+		"change of plan",
+		ReservationRefundPolicy{UserBeforeDeadlinePercent: 100},
+		now,
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "ordinary service provider client")
+	require.Contains(t, err.Error(), "not configured")
 }
 
 func TestCancelReservation_EcommerceRefundAPIFailureKeepsPendingWithoutCommand(t *testing.T) {
@@ -156,13 +294,13 @@ func TestCancelReservation_EcommerceRefundAPIFailureKeepsPendingWithoutCommand(t
 	require.True(t, result.RefundEligible)
 }
 
-func expectCancelReservationRefundAcceptedCommand(t *testing.T, store *mockdb.MockStore, refundOrderID int64, outRefundNo *string, refundID string, commandID int64) {
+func expectCancelReservationRefundAcceptedCommand(t *testing.T, store *mockdb.MockStore, refundOrderID int64, outRefundNo *string, refundID string, expectedChannel string, expectedCapability string, commandID int64) {
 	t.Helper()
 
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
 		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
-		require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
-		require.Equal(t, db.ExternalPaymentCapabilityEcommerceRefund, arg.Capability)
+		require.Equal(t, expectedChannel, arg.Channel)
+		require.Equal(t, expectedCapability, arg.Capability)
 		require.Equal(t, db.ExternalPaymentCommandTypeCreateRefund, arg.CommandType)
 		require.Equal(t, db.ExternalPaymentBusinessOwnerReservation, arg.BusinessOwner)
 		require.True(t, arg.BusinessObjectType.Valid)

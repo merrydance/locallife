@@ -94,6 +94,7 @@ func TestCreatePartnerPaymentTx_CopiesReservationIDFromOrder(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, result.PaymentOrder.ReservationID.Valid)
 	require.Equal(t, reservation.ID, result.PaymentOrder.ReservationID.Int64)
+	require.Equal(t, PaymentChannelOrdinaryServiceProvider, result.PaymentOrder.PaymentChannel)
 	require.Equal(t, paymentConfig.SubMchID, result.SubMchID)
 }
 

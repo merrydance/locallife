@@ -3,6 +3,7 @@ package logic
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -59,7 +60,7 @@ func TestProcessMerchantRejectRefund_NotPaid(t *testing.T) {
 	require.Nil(t, result.RefundOrder)
 }
 
-func TestProcessMerchantRejectRefund_RejectsNonEcommercePaymentOrder(t *testing.T) {
+func TestProcessMerchantRejectRefund_RejectsNonWechatServiceProviderPaymentOrder(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -80,7 +81,7 @@ func TestProcessMerchantRejectRefund_RejectsNonEcommercePaymentOrder(t *testing.
 	)
 	reqErr := assertRequestError(t, err)
 	require.Equal(t, 409, reqErr.Status)
-	require.Equal(t, "当前主营业务支付单不属于收付通链路，无法处理商户拒单退款，请联系平台处理", reqErr.Err.Error())
+	require.Equal(t, "当前主营业务支付单不属于微信服务商链路，无法处理商户拒单退款，请联系平台处理", reqErr.Err.Error())
 }
 
 // --- 收付通合单支付路径（paymentTypeProfitSharing）---
@@ -128,7 +129,7 @@ func TestProcessMerchantRejectRefund_ProfitSharing_EcommerceSuccess(t *testing.T
 		}).
 		Times(1).
 		Return(db.RefundOrder{}, nil)
-	expectMerchantRejectRefundAcceptedCommand(t, store, 200, &capturedOutRefundNo, "erefund_1", 9201)
+	expectMerchantRejectRefundAcceptedCommand(t, store, 200, &capturedOutRefundNo, "erefund_1", db.PaymentChannelEcommerce, db.ExternalPaymentCapabilityEcommerceRefund, 9201)
 
 	result, err := ProcessMerchantRejectRefund(
 		context.Background(),
@@ -139,6 +140,72 @@ func TestProcessMerchantRejectRefund_ProfitSharing_EcommerceSuccess(t *testing.T
 	require.NoError(t, err)
 	require.NotNil(t, result.PaymentOrder)
 	require.NotNil(t, result.RefundOrder)
+}
+
+func TestProcessMerchantRejectRefund_OrdinarySuccessRecordsOrdinaryCommand(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{}
+
+	paymentOrder := db.PaymentOrder{ID: 14, Status: "paid", OutTradeNo: "ordinary_reject_1", Amount: 2100, PaymentType: "profit_sharing", PaymentChannel: db.PaymentChannelOrdinaryServiceProvider}
+	capturedOutRefundNo := ""
+
+	store.EXPECT().GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).Return(paymentOrder, nil)
+	store.EXPECT().CreateRefundOrderTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateRefundOrderTxParams) (db.CreateRefundOrderTxResult, error) {
+		require.Equal(t, paymentOrder.ID, arg.PaymentOrderID)
+		require.Equal(t, int64(2100), arg.RefundAmount)
+		require.NotEmpty(t, arg.OutRefundNo)
+		capturedOutRefundNo = arg.OutRefundNo
+		return db.CreateRefundOrderTxResult{RefundOrder: db.RefundOrder{ID: 204}}, nil
+	})
+	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), int64(7)).Return(db.MerchantPaymentConfig{SubMchID: "sub_mch_ordinary"}, nil)
+	store.EXPECT().UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
+		ID:       204,
+		RefundID: pgtype.Text{String: "refund-ordinary", Valid: true},
+	}).Return(db.RefundOrder{}, nil)
+	expectMerchantRejectRefundAcceptedCommand(t, store, 204, &capturedOutRefundNo, "refund-ordinary", db.PaymentChannelOrdinaryServiceProvider, db.ExternalPaymentCapabilityPartnerRefund, 9203)
+
+	result, err := ProcessMerchantRejectRefundWithOrdinaryServiceProvider(
+		context.Background(),
+		store,
+		nil,
+		ordinaryClient,
+		MerchantRejectRefundInput{MerchantID: 7, OrderID: 24, Reason: "out of stock"},
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result.PaymentOrder)
+	require.NotNil(t, result.RefundOrder)
+	require.NotNil(t, ordinaryClient.createRefundRequest)
+	require.Equal(t, "sub_mch_ordinary", ordinaryClient.createRefundRequest.SubMchID)
+	require.Equal(t, paymentOrder.OutTradeNo, ordinaryClient.createRefundRequest.OutTradeNo)
+	require.Equal(t, capturedOutRefundNo, ordinaryClient.createRefundRequest.OutRefundNo)
+	require.Equal(t, ordinaryClient.RefundNotifyURL(), ordinaryClient.createRefundRequest.NotifyURL)
+	require.Equal(t, paymentOrder.Amount, ordinaryClient.createRefundRequest.Amount.Refund)
+	require.Equal(t, paymentOrder.Amount, ordinaryClient.createRefundRequest.Amount.Total)
+}
+
+func TestProcessMerchantRejectRefund_OrdinaryClientMissingReturnsActionableError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	paymentOrder := db.PaymentOrder{ID: 15, Status: "paid", OutTradeNo: "ordinary_reject_missing_client", Amount: 2100, PaymentType: "profit_sharing", PaymentChannel: db.PaymentChannelOrdinaryServiceProvider}
+
+	store.EXPECT().GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).Return(paymentOrder, nil)
+	store.EXPECT().CreateRefundOrderTx(gomock.Any(), gomock.Any()).Return(db.CreateRefundOrderTxResult{RefundOrder: db.RefundOrder{ID: 205}}, nil)
+
+	_, err := ProcessMerchantRejectRefundWithOrdinaryServiceProvider(
+		context.Background(),
+		store,
+		nil,
+		nil,
+		MerchantRejectRefundInput{MerchantID: 7, OrderID: 25, Reason: "out of stock"},
+	)
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
+	require.Equal(t, "微信服务商退款配置未完成，当前无法发起退款，请联系平台处理", reqErr.Err.Error())
 }
 
 func TestProcessMerchantRejectRefund_ProfitSharing_EcommerceProcessing(t *testing.T) {
@@ -178,7 +245,7 @@ func TestProcessMerchantRejectRefund_ProfitSharing_EcommerceProcessing(t *testin
 		}).
 		Times(1).
 		Return(db.RefundOrder{}, nil)
-	expectMerchantRejectRefundAcceptedCommand(t, store, 201, &capturedOutRefundNo, "erefund_2", 9202)
+	expectMerchantRejectRefundAcceptedCommand(t, store, 201, &capturedOutRefundNo, "erefund_2", db.PaymentChannelEcommerce, db.ExternalPaymentCapabilityEcommerceRefund, 9202)
 
 	_, err := ProcessMerchantRejectRefund(
 		context.Background(),
@@ -258,7 +325,7 @@ func TestProcessMerchantRejectRefund_ProfitSharing_NoPaymentConfig(t *testing.T)
 	require.Contains(t, err.Error(), "get merchant payment config")
 }
 
-func expectMerchantRejectRefundAcceptedCommand(t *testing.T, store *mockdb.MockStore, refundOrderID int64, outRefundNo *string, refundID string, commandID int64) {
+func expectMerchantRejectRefundAcceptedCommand(t *testing.T, store *mockdb.MockStore, refundOrderID int64, outRefundNo *string, refundID string, expectedChannel string, expectedCapability string, commandID int64) {
 	t.Helper()
 
 	store.EXPECT().
@@ -266,8 +333,8 @@ func expectMerchantRejectRefundAcceptedCommand(t *testing.T, store *mockdb.MockS
 		Times(1).
 		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
 			require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
-			require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
-			require.Equal(t, db.ExternalPaymentCapabilityEcommerceRefund, arg.Capability)
+			require.Equal(t, expectedChannel, arg.Channel)
+			require.Equal(t, expectedCapability, arg.Capability)
 			require.Equal(t, db.ExternalPaymentCommandTypeCreateRefund, arg.CommandType)
 			require.Equal(t, db.ExternalPaymentBusinessOwnerOrder, arg.BusinessOwner)
 			require.True(t, arg.BusinessObjectType.Valid)

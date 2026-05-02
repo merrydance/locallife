@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -9,9 +10,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/wechat"
-	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -74,9 +76,9 @@ func TestCreateReservationAddonPaymentOrder_SuccessRecordsAcceptedCommand(t *tes
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{createCombinePaymentResponse: &ospcontracts.CombinePrepayResponse{PrepayID: "addon-prepay-1"}}
 	reservation := db.TableReservation{ID: 88, MerchantID: 501}
-	paymentOrder := db.PaymentOrder{ID: 7101, Amount: 3600, OutTradeNo: "RA-7101"}
+	paymentOrder := db.PaymentOrder{ID: 7101, Amount: 3600, OutTradeNo: "RA-7101", PaymentChannel: db.PaymentChannelOrdinaryServiceProvider}
 	updatedPayment := paymentOrder
 	updatedPayment.PrepayID = pgtype.Text{String: "addon-prepay-1", Valid: true}
 	combinedPayment := db.CombinedPaymentOrder{ID: 9101, UserID: 1001, CombineOutTradeNo: "CPRA20260425120000", Status: paymentStatusPending}
@@ -91,24 +93,164 @@ func TestCreateReservationAddonPaymentOrder_SuccessRecordsAcceptedCommand(t *tes
 		require.NotEmpty(t, arg.CombineOutTradeNo)
 		capturedCombineOutTradeNo = arg.CombineOutTradeNo
 		combinedPayment.CombineOutTradeNo = arg.CombineOutTradeNo
-		return db.CreateEcommercePaymentTxResult{PaymentOrder: paymentOrder, CombinedPaymentOrder: combinedPayment, SubMchID: "190001"}, nil
-	})
-	ecommerceClient.EXPECT().CreateCombineOrder(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *wechatcontracts.CombineOrderRequest) (*wechatcontracts.CombineOrderResponse, *wechat.JSAPIPayParams, error) {
-		require.Equal(t, capturedCombineOutTradeNo, req.CombineOutTradeNo)
-		require.Equal(t, "openid-addon", req.PayerOpenID)
-		require.Len(t, req.SubOrders, 1)
-		require.Equal(t, paymentOrder.OutTradeNo, req.SubOrders[0].OutTradeNo)
-		return &wechatcontracts.CombineOrderResponse{PrepayID: "addon-prepay-1"}, &wechat.JSAPIPayParams{Package: "prepay_id=addon-prepay-1"}, nil
+		require.Equal(t, db.PaymentChannelOrdinaryServiceProvider, arg.PaymentChannel)
+		return db.CreateEcommercePaymentTxResult{PaymentOrder: paymentOrder, CombinedPaymentOrder: combinedPayment, SubMchID: "sub-ordinary-addon"}, nil
 	})
 	store.EXPECT().UpdatePaymentOrderPrepayId(gomock.Any(), db.UpdatePaymentOrderPrepayIdParams{ID: paymentOrder.ID, PrepayID: pgtype.Text{String: "addon-prepay-1", Valid: true}}).Return(updatedPayment, nil)
 	store.EXPECT().UpdateCombinedPaymentOrderPrepay(gomock.Any(), db.UpdateCombinedPaymentOrderPrepayParams{ID: combinedPayment.ID, PrepayID: pgtype.Text{String: "addon-prepay-1", Valid: true}}).Return(combinedPayment, nil)
-	expectReservationAddonCombineCommand(t, store, paymentOrder.ID, paymentOrder.OutTradeNo, &capturedCombineOutTradeNo, "addon-prepay-1", db.ExternalPaymentCommandStatusAccepted, "", 9911)
+	expectReservationAddonCombineCommand(t, store, paymentOrder.ID, paymentOrder.OutTradeNo, &capturedCombineOutTradeNo, "addon-prepay-1", db.ExternalPaymentCommandStatusAccepted, "", db.PaymentChannelOrdinaryServiceProvider, 9911)
 
-	resultPayment, payParams, err := createReservationAddonPaymentOrder(context.Background(), store, ecommerceClient, reservation, 1001, 3600, time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC), "127.0.0.1")
+	resultPayment, payParams, err := createReservationAddonPaymentOrder(context.Background(), store, nil, ordinaryClient, reservation, 1001, 3600, time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC), "127.0.0.1")
 	require.NoError(t, err)
 	require.Equal(t, updatedPayment.ID, resultPayment.ID)
 	require.NotNil(t, payParams)
 	require.Equal(t, "prepay_id=addon-prepay-1", payParams.Package)
+	require.NotNil(t, ordinaryClient.createCombinePaymentRequest)
+	require.Equal(t, capturedCombineOutTradeNo, ordinaryClient.createCombinePaymentRequest.CombineOutTradeNo)
+	require.Len(t, ordinaryClient.createCombinePaymentRequest.SubOrders, 1)
+	require.Equal(t, paymentOrder.OutTradeNo, ordinaryClient.createCombinePaymentRequest.SubOrders[0].OutTradeNo)
+}
+
+func TestCreateReservationAddonPaymentOrder_OrdinaryAcceptedRecordsOrdinaryCommand(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{}
+	reservation := db.TableReservation{ID: 89, MerchantID: 502}
+	paymentOrder := db.PaymentOrder{ID: 7111, Amount: 4200, OutTradeNo: "RA-7111", PaymentChannel: db.PaymentChannelOrdinaryServiceProvider}
+	updatedPayment := paymentOrder
+	updatedPayment.PrepayID = pgtype.Text{String: "prepay-combine-ordinary", Valid: true}
+	combinedPayment := db.CombinedPaymentOrder{ID: 9111, UserID: 1002, CombineOutTradeNo: "CPRA20260425121000", Status: paymentStatusPending}
+	capturedCombineOutTradeNo := ""
+
+	store.EXPECT().GetUser(gomock.Any(), int64(1002)).Return(db.User{ID: 1002, WechatOpenid: "openid-ordinary-addon"}, nil)
+	store.EXPECT().CreateEcommercePaymentTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateEcommercePaymentTxParams) (db.CreateEcommercePaymentTxResult, error) {
+		require.Equal(t, reservation.MerchantID, arg.MerchantID)
+		require.Equal(t, reservationAddonBusiness, arg.BusinessType)
+		require.Equal(t, reservation.ID, arg.ReservationID)
+		require.Equal(t, int64(4200), arg.Amount)
+		require.Equal(t, db.PaymentChannelOrdinaryServiceProvider, arg.PaymentChannel)
+		require.NotEmpty(t, arg.CombineOutTradeNo)
+		capturedCombineOutTradeNo = arg.CombineOutTradeNo
+		combinedPayment.CombineOutTradeNo = arg.CombineOutTradeNo
+		return db.CreateEcommercePaymentTxResult{PaymentOrder: paymentOrder, CombinedPaymentOrder: combinedPayment, SubMchID: "sub-ordinary"}, nil
+	})
+	store.EXPECT().UpdatePaymentOrderPrepayId(gomock.Any(), db.UpdatePaymentOrderPrepayIdParams{ID: paymentOrder.ID, PrepayID: pgtype.Text{String: "prepay-combine-ordinary", Valid: true}}).Return(updatedPayment, nil)
+	store.EXPECT().UpdateCombinedPaymentOrderPrepay(gomock.Any(), db.UpdateCombinedPaymentOrderPrepayParams{ID: combinedPayment.ID, PrepayID: pgtype.Text{String: "prepay-combine-ordinary", Valid: true}}).Return(combinedPayment, nil)
+	expectReservationAddonCombineCommand(t, store, paymentOrder.ID, paymentOrder.OutTradeNo, &capturedCombineOutTradeNo, "prepay-combine-ordinary", db.ExternalPaymentCommandStatusAccepted, "", db.PaymentChannelOrdinaryServiceProvider, 9914)
+
+	resultPayment, payParams, err := createReservationAddonPaymentOrder(context.Background(), store, nil, ordinaryClient, reservation, 1002, 4200, time.Date(2026, 4, 25, 12, 10, 0, 0, time.UTC), "127.0.0.1")
+	require.NoError(t, err)
+	require.Equal(t, updatedPayment.ID, resultPayment.ID)
+	require.NotNil(t, payParams)
+	require.Equal(t, "prepay_id=prepay-combine-ordinary", payParams.Package)
+	require.NotNil(t, ordinaryClient.createCombinePaymentRequest)
+	require.Equal(t, ordinaryClient.ServiceProviderAppID(), ordinaryClient.createCombinePaymentRequest.CombineAppID)
+	require.Equal(t, ordinaryClient.ServiceProviderMchID(), ordinaryClient.createCombinePaymentRequest.CombineMchID)
+	require.Equal(t, capturedCombineOutTradeNo, ordinaryClient.createCombinePaymentRequest.CombineOutTradeNo)
+	require.Equal(t, "openid-ordinary-addon", ordinaryClient.createCombinePaymentRequest.CombinePayerInfo.OpenID)
+	require.Len(t, ordinaryClient.createCombinePaymentRequest.SubOrders, 1)
+	require.Equal(t, ordinaryClient.ServiceProviderMchID(), ordinaryClient.createCombinePaymentRequest.SubOrders[0].MchID)
+	require.Equal(t, "sub-ordinary", ordinaryClient.createCombinePaymentRequest.SubOrders[0].SubMchID)
+	require.Equal(t, paymentOrder.OutTradeNo, ordinaryClient.createCombinePaymentRequest.SubOrders[0].OutTradeNo)
+	require.Equal(t, int64(4200), ordinaryClient.createCombinePaymentRequest.SubOrders[0].Amount.TotalAmount)
+	require.Equal(t, ordinaryClient.CombineNotifyURL(), ordinaryClient.createCombinePaymentRequest.NotifyURL)
+}
+
+func TestCreateReservationAddonPaymentOrder_LogsCleanupFailuresAfterPrepayUpdateError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var logs bytes.Buffer
+	previousLogger := log.Logger
+	log.Logger = zerolog.New(&logs)
+	t.Cleanup(func() { log.Logger = previousLogger })
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{}
+	reservation := db.TableReservation{ID: 91, MerchantID: 504}
+	paymentOrder := db.PaymentOrder{ID: 7121, Amount: 4300, OutTradeNo: "RA-7121", PaymentChannel: db.PaymentChannelOrdinaryServiceProvider}
+	combinedPayment := db.CombinedPaymentOrder{ID: 9121, UserID: 1004, CombineOutTradeNo: "CPRA20260425123000", Status: paymentStatusPending}
+
+	store.EXPECT().GetUser(gomock.Any(), int64(1004)).Return(db.User{ID: 1004, WechatOpenid: "openid-cleanup"}, nil)
+	store.EXPECT().CreateEcommercePaymentTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateEcommercePaymentTxParams) (db.CreateEcommercePaymentTxResult, error) {
+		require.Equal(t, db.PaymentChannelOrdinaryServiceProvider, arg.PaymentChannel)
+		combinedPayment.CombineOutTradeNo = arg.CombineOutTradeNo
+		return db.CreateEcommercePaymentTxResult{PaymentOrder: paymentOrder, CombinedPaymentOrder: combinedPayment, SubMchID: "sub-cleanup"}, nil
+	})
+	store.EXPECT().UpdatePaymentOrderPrepayId(gomock.Any(), db.UpdatePaymentOrderPrepayIdParams{
+		ID:       paymentOrder.ID,
+		PrepayID: pgtype.Text{String: "prepay-combine-ordinary", Valid: true},
+	}).Return(db.PaymentOrder{}, errors.New("update prepay failed"))
+	store.EXPECT().UpdatePaymentOrderToFailed(gomock.Any(), paymentOrder.ID).Return(db.PaymentOrder{}, errors.New("mark payment failed"))
+	store.EXPECT().UpdateCombinedPaymentOrderToFailed(gomock.Any(), combinedPayment.ID).Return(db.CombinedPaymentOrder{}, errors.New("mark combined failed"))
+
+	_, _, err := createReservationAddonPaymentOrder(context.Background(), store, nil, ordinaryClient, reservation, 1004, 4300, time.Date(2026, 4, 25, 12, 30, 0, 0, time.UTC), "127.0.0.1")
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "update prepay id")
+	require.Contains(t, logs.String(), "failed to mark reservation addon payment order failed after prepay update failure")
+	require.Contains(t, logs.String(), "mark payment failed")
+	require.Contains(t, logs.String(), "failed to mark reservation addon combined payment order failed after prepay update failure")
+	require.Contains(t, logs.String(), "mark combined failed")
+	require.NotNil(t, ordinaryClient.closeCombinePaymentRequest)
+}
+
+func TestCreateReservationAddonPaymentOrder_CombinedPrepayUpdateErrorClosesRemoteAndFailsLocal(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{}
+	reservation := db.TableReservation{ID: 92, MerchantID: 505}
+	paymentOrder := db.PaymentOrder{ID: 7131, Amount: 4400, OutTradeNo: "RA-7131", PaymentChannel: db.PaymentChannelOrdinaryServiceProvider}
+	updatedPayment := paymentOrder
+	updatedPayment.PrepayID = pgtype.Text{String: "prepay-combine-ordinary", Valid: true}
+	combinedPayment := db.CombinedPaymentOrder{ID: 9131, UserID: 1005, CombineOutTradeNo: "CPRA20260425124000", Status: paymentStatusPending}
+	capturedCombineOutTradeNo := ""
+
+	store.EXPECT().GetUser(gomock.Any(), int64(1005)).Return(db.User{ID: 1005, WechatOpenid: "openid-combined-cleanup"}, nil)
+	store.EXPECT().CreateEcommercePaymentTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateEcommercePaymentTxParams) (db.CreateEcommercePaymentTxResult, error) {
+		require.Equal(t, db.PaymentChannelOrdinaryServiceProvider, arg.PaymentChannel)
+		capturedCombineOutTradeNo = arg.CombineOutTradeNo
+		combinedPayment.CombineOutTradeNo = arg.CombineOutTradeNo
+		return db.CreateEcommercePaymentTxResult{PaymentOrder: paymentOrder, CombinedPaymentOrder: combinedPayment, SubMchID: "sub-combined-cleanup"}, nil
+	})
+	store.EXPECT().UpdatePaymentOrderPrepayId(gomock.Any(), db.UpdatePaymentOrderPrepayIdParams{
+		ID:       paymentOrder.ID,
+		PrepayID: pgtype.Text{String: "prepay-combine-ordinary", Valid: true},
+	}).Return(updatedPayment, nil)
+	store.EXPECT().UpdateCombinedPaymentOrderPrepay(gomock.Any(), db.UpdateCombinedPaymentOrderPrepayParams{
+		ID:       combinedPayment.ID,
+		PrepayID: pgtype.Text{String: "prepay-combine-ordinary", Valid: true},
+	}).Return(db.CombinedPaymentOrder{}, errors.New("update combined prepay failed"))
+	store.EXPECT().UpdatePaymentOrderToFailed(gomock.Any(), paymentOrder.ID).Return(db.PaymentOrder{}, nil)
+	store.EXPECT().UpdateCombinedPaymentOrderToFailed(gomock.Any(), combinedPayment.ID).Return(db.CombinedPaymentOrder{}, nil)
+
+	_, _, err := createReservationAddonPaymentOrder(context.Background(), store, nil, ordinaryClient, reservation, 1005, 4400, time.Date(2026, 4, 25, 12, 40, 0, 0, time.UTC), "127.0.0.1")
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "update combined payment prepay")
+	require.NotNil(t, ordinaryClient.closeCombinePaymentRequest)
+	require.Equal(t, capturedCombineOutTradeNo, ordinaryClient.closeCombinePaymentRequest.CombineOutTradeNo)
+	require.Len(t, ordinaryClient.closeCombinePaymentRequest.SubOrders, 1)
+	require.Equal(t, "sub-combined-cleanup", ordinaryClient.closeCombinePaymentRequest.SubOrders[0].SubMchID)
+	require.Equal(t, paymentOrder.OutTradeNo, ordinaryClient.closeCombinePaymentRequest.SubOrders[0].OutTradeNo)
+}
+
+func TestCreateReservationAddonPaymentOrder_MissingOrdinaryClientDoesNotFallbackToEcommerce(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	reservation := db.TableReservation{ID: 90, MerchantID: 503}
+
+	_, _, err := createReservationAddonPaymentOrder(context.Background(), store, ecommerceClient, nil, reservation, 1003, 4500, time.Date(2026, 4, 25, 12, 20, 0, 0, time.UTC), "127.0.0.1")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "ordinary service provider client")
+	require.Contains(t, err.Error(), "not configured")
 }
 
 func TestCreateReservationAddonPaymentOrder_CreateErrorRecordsRejectedCommand(t *testing.T) {
@@ -116,24 +258,24 @@ func TestCreateReservationAddonPaymentOrder_CreateErrorRecordsRejectedCommand(t 
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{createCombinePaymentErr: errors.New("ordinary create combine failed")}
 	reservation := db.TableReservation{ID: 88, MerchantID: 501}
-	paymentOrder := db.PaymentOrder{ID: 7102, Amount: 3600, OutTradeNo: "RA-7102"}
+	paymentOrder := db.PaymentOrder{ID: 7102, Amount: 3600, OutTradeNo: "RA-7102", PaymentChannel: db.PaymentChannelOrdinaryServiceProvider}
 	combinedPayment := db.CombinedPaymentOrder{ID: 9102, UserID: 1001, CombineOutTradeNo: "CPRA20260425120100", Status: paymentStatusPending}
 	capturedCombineOutTradeNo := ""
 
 	store.EXPECT().GetUser(gomock.Any(), int64(1001)).Return(db.User{ID: 1001, WechatOpenid: "openid-addon"}, nil)
 	store.EXPECT().CreateEcommercePaymentTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateEcommercePaymentTxParams) (db.CreateEcommercePaymentTxResult, error) {
+		require.Equal(t, db.PaymentChannelOrdinaryServiceProvider, arg.PaymentChannel)
 		capturedCombineOutTradeNo = arg.CombineOutTradeNo
 		combinedPayment.CombineOutTradeNo = arg.CombineOutTradeNo
-		return db.CreateEcommercePaymentTxResult{PaymentOrder: paymentOrder, CombinedPaymentOrder: combinedPayment, SubMchID: "190001"}, nil
+		return db.CreateEcommercePaymentTxResult{PaymentOrder: paymentOrder, CombinedPaymentOrder: combinedPayment, SubMchID: "sub-ordinary-addon"}, nil
 	})
-	ecommerceClient.EXPECT().CreateCombineOrder(gomock.Any(), gomock.Any()).Return(nil, nil, errors.New("wechat create combine failed"))
 	store.EXPECT().UpdatePaymentOrderToClosed(gomock.Any(), paymentOrder.ID).Return(db.PaymentOrder{}, nil)
 	store.EXPECT().UpdateCombinedPaymentOrderToClosed(gomock.Any(), combinedPayment.ID).Return(db.CombinedPaymentOrder{}, nil)
-	expectReservationAddonCombineCommand(t, store, paymentOrder.ID, paymentOrder.OutTradeNo, &capturedCombineOutTradeNo, "", db.ExternalPaymentCommandStatusRejected, "", 9912)
+	expectReservationAddonCombineCommand(t, store, paymentOrder.ID, paymentOrder.OutTradeNo, &capturedCombineOutTradeNo, "", db.ExternalPaymentCommandStatusRejected, "", db.PaymentChannelOrdinaryServiceProvider, 9912)
 
-	_, _, err := createReservationAddonPaymentOrder(context.Background(), store, ecommerceClient, reservation, 1001, 3600, time.Date(2026, 4, 25, 12, 1, 0, 0, time.UTC), "127.0.0.1")
+	_, _, err := createReservationAddonPaymentOrder(context.Background(), store, nil, ordinaryClient, reservation, 1001, 3600, time.Date(2026, 4, 25, 12, 1, 0, 0, time.UTC), "127.0.0.1")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "create combine order")
 }
@@ -143,24 +285,24 @@ func TestCreateReservationAddonPaymentOrder_EmptyPrepayRecordsRejectedCommand(t 
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{createCombinePaymentResponse: &ospcontracts.CombinePrepayResponse{}}
 	reservation := db.TableReservation{ID: 88, MerchantID: 501}
-	paymentOrder := db.PaymentOrder{ID: 7103, Amount: 3600, OutTradeNo: "RA-7103"}
+	paymentOrder := db.PaymentOrder{ID: 7103, Amount: 3600, OutTradeNo: "RA-7103", PaymentChannel: db.PaymentChannelOrdinaryServiceProvider}
 	combinedPayment := db.CombinedPaymentOrder{ID: 9103, UserID: 1001, CombineOutTradeNo: "CPRA20260425120200", Status: paymentStatusPending}
 	capturedCombineOutTradeNo := ""
 
 	store.EXPECT().GetUser(gomock.Any(), int64(1001)).Return(db.User{ID: 1001, WechatOpenid: "openid-addon"}, nil)
 	store.EXPECT().CreateEcommercePaymentTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateEcommercePaymentTxParams) (db.CreateEcommercePaymentTxResult, error) {
+		require.Equal(t, db.PaymentChannelOrdinaryServiceProvider, arg.PaymentChannel)
 		capturedCombineOutTradeNo = arg.CombineOutTradeNo
 		combinedPayment.CombineOutTradeNo = arg.CombineOutTradeNo
-		return db.CreateEcommercePaymentTxResult{PaymentOrder: paymentOrder, CombinedPaymentOrder: combinedPayment, SubMchID: "190001"}, nil
+		return db.CreateEcommercePaymentTxResult{PaymentOrder: paymentOrder, CombinedPaymentOrder: combinedPayment, SubMchID: "sub-ordinary-addon"}, nil
 	})
-	ecommerceClient.EXPECT().CreateCombineOrder(gomock.Any(), gomock.Any()).Return(&wechatcontracts.CombineOrderResponse{}, &wechat.JSAPIPayParams{}, nil)
 	store.EXPECT().UpdatePaymentOrderToClosed(gomock.Any(), paymentOrder.ID).Return(db.PaymentOrder{}, nil)
 	store.EXPECT().UpdateCombinedPaymentOrderToClosed(gomock.Any(), combinedPayment.ID).Return(db.CombinedPaymentOrder{}, nil)
-	expectReservationAddonCombineCommand(t, store, paymentOrder.ID, paymentOrder.OutTradeNo, &capturedCombineOutTradeNo, "", db.ExternalPaymentCommandStatusRejected, "", 9913)
+	expectReservationAddonCombineCommand(t, store, paymentOrder.ID, paymentOrder.OutTradeNo, &capturedCombineOutTradeNo, "", db.ExternalPaymentCommandStatusRejected, "", db.PaymentChannelOrdinaryServiceProvider, 9913)
 
-	_, _, err := createReservationAddonPaymentOrder(context.Background(), store, ecommerceClient, reservation, 1001, 3600, time.Date(2026, 4, 25, 12, 2, 0, 0, time.UTC), "127.0.0.1")
+	_, _, err := createReservationAddonPaymentOrder(context.Background(), store, nil, ordinaryClient, reservation, 1001, 3600, time.Date(2026, 4, 25, 12, 2, 0, 0, time.UTC), "127.0.0.1")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "empty prepay id")
 }
@@ -170,28 +312,27 @@ func TestCreateReservationAddonPaymentOrder_CreateRejectedSkipsCommandWhenCloseF
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{createCombinePaymentErr: errors.New("ordinary create combine failed")}
 	reservation := db.TableReservation{ID: 88, MerchantID: 501}
-	paymentOrder := db.PaymentOrder{ID: 7104, Amount: 3600, OutTradeNo: "RA-7104"}
+	paymentOrder := db.PaymentOrder{ID: 7104, Amount: 3600, OutTradeNo: "RA-7104", PaymentChannel: db.PaymentChannelOrdinaryServiceProvider}
 	combinedPayment := db.CombinedPaymentOrder{ID: 9104, UserID: 1001, CombineOutTradeNo: "CPRA20260425120300", Status: paymentStatusPending}
 
 	store.EXPECT().GetUser(gomock.Any(), int64(1001)).Return(db.User{ID: 1001, WechatOpenid: "openid-addon"}, nil)
-	store.EXPECT().CreateEcommercePaymentTx(gomock.Any(), gomock.Any()).Return(db.CreateEcommercePaymentTxResult{PaymentOrder: paymentOrder, CombinedPaymentOrder: combinedPayment, SubMchID: "190001"}, nil)
-	ecommerceClient.EXPECT().CreateCombineOrder(gomock.Any(), gomock.Any()).Return(nil, nil, errors.New("wechat create combine failed"))
+	store.EXPECT().CreateEcommercePaymentTx(gomock.Any(), gomock.Any()).Return(db.CreateEcommercePaymentTxResult{PaymentOrder: paymentOrder, CombinedPaymentOrder: combinedPayment, SubMchID: "sub-ordinary-addon"}, nil)
 	store.EXPECT().UpdatePaymentOrderToClosed(gomock.Any(), paymentOrder.ID).Return(db.PaymentOrder{}, errors.New("close payment failed"))
 	store.EXPECT().UpdateCombinedPaymentOrderToClosed(gomock.Any(), combinedPayment.ID).Return(db.CombinedPaymentOrder{}, nil)
 
-	_, _, err := createReservationAddonPaymentOrder(context.Background(), store, ecommerceClient, reservation, 1001, 3600, time.Date(2026, 4, 25, 12, 3, 0, 0, time.UTC), "127.0.0.1")
+	_, _, err := createReservationAddonPaymentOrder(context.Background(), store, nil, ordinaryClient, reservation, 1001, 3600, time.Date(2026, 4, 25, 12, 3, 0, 0, time.UTC), "127.0.0.1")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "create combine order")
 }
 
-func expectReservationAddonCombineCommand(t *testing.T, store *mockdb.MockStore, paymentOrderID int64, outTradeNo string, combineOutTradeNo *string, secondaryKey string, status string, errorCode string, commandID int64) {
+func expectReservationAddonCombineCommand(t *testing.T, store *mockdb.MockStore, paymentOrderID int64, outTradeNo string, combineOutTradeNo *string, secondaryKey string, status string, errorCode string, expectedChannel string, commandID int64) {
 	t.Helper()
 
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
 		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
-		require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
+		require.Equal(t, expectedChannel, arg.Channel)
 		require.Equal(t, db.ExternalPaymentCapabilityCombinePayment, arg.Capability)
 		require.Equal(t, db.ExternalPaymentCommandTypeCreatePayment, arg.CommandType)
 		require.Equal(t, db.ExternalPaymentBusinessOwnerReservation, arg.BusinessOwner)

@@ -36,7 +36,6 @@ type RiderDepositRefundService struct {
 	store             db.Store
 	paymentClient     wechat.DirectPaymentClientInterface
 	paymentCommandSvc *PaymentCommandService
-	receiverLifecycle *ProfitSharingReceiverLifecycleService
 }
 
 type SubmitRiderDepositWithdrawalInput struct {
@@ -63,16 +62,12 @@ func NewRiderDepositRefundService(
 	paymentClient wechat.DirectPaymentClientInterface,
 	ecommerceClients ...wechat.EcommerceClientInterface,
 ) *RiderDepositRefundService {
-	var receiverLifecycle *ProfitSharingReceiverLifecycleService
-	if len(ecommerceClients) > 0 && ecommerceClients[0] != nil {
-		receiverLifecycle = NewProfitSharingReceiverLifecycleService(store, ecommerceClients[0])
-	}
+	_ = ecommerceClients
 
 	return &RiderDepositRefundService{
 		store:             store,
 		paymentClient:     paymentClient,
 		paymentCommandSvc: NewPaymentCommandService(store),
-		receiverLifecycle: receiverLifecycle,
 	}
 }
 
@@ -396,25 +391,8 @@ func (s *RiderDepositRefundService) ResolveRefund(ctx context.Context, refundOrd
 }
 
 func (s *RiderDepositRefundService) maybeRequestRiderReceiverAbsent(ctx context.Context, userID int64) {
-	if s.receiverLifecycle == nil {
-		return
-	}
-
-	rider, err := s.store.GetRiderByUserID(ctx, userID)
-	if err != nil {
-		log.Error().Err(err).Int64("user_id", userID).Msg("get rider for receiver absent target failed")
-		return
-	}
-	if rider.DepositAmount > 0 || rider.FrozenDeposit > 0 {
-		return
-	}
-
-	if _, err := s.receiverLifecycle.RequestRiderReceiverAbsent(ctx, rider); err != nil {
-		log.Error().Err(err).
-			Int64("rider_id", rider.ID).
-			Int64("user_id", rider.UserID).
-			Msg("write rider profit sharing receiver absent target failed")
-	}
+	_ = ctx
+	_ = userID
 }
 
 func (s *RiderDepositRefundService) maybeMarkPaymentOrderRefunded(ctx context.Context, paymentOrderID int64, paymentAmount int64) {

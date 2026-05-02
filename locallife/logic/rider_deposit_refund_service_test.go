@@ -504,13 +504,12 @@ func TestRiderDepositRefundService_SubmitWithdrawal_CreateRefundTerminalResponse
 	}
 }
 
-func TestRiderDepositRefundService_ResolveRefund_WritesReceiverAbsentTargetWhenBalanceZero(t *testing.T) {
+func TestRiderDepositRefundService_ResolveRefund_DoesNotWriteReceiverAbsentTargetWhenBalanceZero(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	service := NewRiderDepositRefundService(store, nil, ecommerceClient)
+	service := NewRiderDepositRefundService(store, nil)
 
 	paymentOrder := db.PaymentOrder{
 		ID:           801,
@@ -519,15 +518,6 @@ func TestRiderDepositRefundService_ResolveRefund_WritesReceiverAbsentTargetWhenB
 		Status:       "paid",
 		BusinessType: "rider_deposit",
 	}
-	rider := db.Rider{
-		ID:            71,
-		UserID:        paymentOrder.UserID,
-		RealName:      "骑手甲",
-		DepositAmount: 0,
-		FrozenDeposit: 0,
-	}
-	user := db.User{ID: paymentOrder.UserID, WechatOpenid: "rider-openid-901"}
-
 	gomock.InOrder(
 		store.EXPECT().ResolveRiderDepositRefundTx(gomock.Any(), db.ResolveRiderDepositRefundTxParams{
 			RefundOrderID: 701,
@@ -536,47 +526,8 @@ func TestRiderDepositRefundService_ResolveRefund_WritesReceiverAbsentTargetWhenB
 		}).Return(db.ResolveRiderDepositRefundTxResult{}, nil),
 		store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder.Amount, nil),
 		store.EXPECT().UpdatePaymentOrderToRefunded(gomock.Any(), paymentOrder.ID).Return(db.PaymentOrder{ID: paymentOrder.ID, Status: "refunded"}, nil),
-		store.EXPECT().GetRiderByUserID(gomock.Any(), paymentOrder.UserID).Return(rider, nil),
-		ecommerceClient.EXPECT().GetSpAppID().Return("wx_sp_app_123"),
-		store.EXPECT().GetUser(gomock.Any(), paymentOrder.UserID).Return(user, nil),
-		store.EXPECT().UpsertProfitSharingReceiverTarget(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.UpsertProfitSharingReceiverTargetParams) (db.ProfitSharingReceiverTarget, error) {
-			require.Equal(t, db.ProfitSharingReceiverOwnerTypeRider, arg.OwnerType)
-			require.Equal(t, rider.ID, arg.OwnerID)
-			require.Equal(t, db.ProfitSharingReceiverDesiredStateAbsent, arg.DesiredState)
-			return db.ProfitSharingReceiverTarget{ID: 903, OwnerType: arg.OwnerType, OwnerID: arg.OwnerID, DesiredState: arg.DesiredState}, nil
-		}),
 	)
 
 	err := service.ResolveRefund(context.Background(), 701, paymentOrder, riderDepositRefundStatusSuccess, "WX_REFUND_701")
-	require.NoError(t, err)
-}
-
-func TestRiderDepositRefundService_ResolveRefund_ReceiverAbsentTargetFailureDoesNotBlock(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	service := NewRiderDepositRefundService(store, nil, ecommerceClient)
-
-	paymentOrder := db.PaymentOrder{ID: 802, UserID: 902, Amount: 30000, Status: "paid", BusinessType: "rider_deposit"}
-	rider := db.Rider{ID: 72, UserID: paymentOrder.UserID, RealName: "骑手乙", DepositAmount: 0, FrozenDeposit: 0}
-	user := db.User{ID: paymentOrder.UserID, WechatOpenid: "rider-openid-902"}
-
-	gomock.InOrder(
-		store.EXPECT().ResolveRiderDepositRefundTx(gomock.Any(), db.ResolveRiderDepositRefundTxParams{
-			RefundOrderID: 702,
-			RefundStatus:  riderDepositRefundStatusSuccess,
-			RefundID:      "WX_REFUND_702",
-		}).Return(db.ResolveRiderDepositRefundTxResult{}, nil),
-		store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder.Amount, nil),
-		store.EXPECT().UpdatePaymentOrderToRefunded(gomock.Any(), paymentOrder.ID).Return(db.PaymentOrder{ID: paymentOrder.ID, Status: "refunded"}, nil),
-		store.EXPECT().GetRiderByUserID(gomock.Any(), paymentOrder.UserID).Return(rider, nil),
-		ecommerceClient.EXPECT().GetSpAppID().Return("wx_sp_app_123"),
-		store.EXPECT().GetUser(gomock.Any(), paymentOrder.UserID).Return(user, nil),
-		store.EXPECT().UpsertProfitSharingReceiverTarget(gomock.Any(), gomock.Any()).Return(db.ProfitSharingReceiverTarget{}, errors.New("receiver target store unavailable")),
-	)
-
-	err := service.ResolveRefund(context.Background(), 702, paymentOrder, riderDepositRefundStatusSuccess, "WX_REFUND_702")
 	require.NoError(t, err)
 }

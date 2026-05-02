@@ -106,27 +106,32 @@ func TestBuildEcommerceClient_RequiresExplicitNotifyURLs(t *testing.T) {
 	require.Contains(t, err.Error(), "WECHAT_ECOMMERCE_PAYMENT_NOTIFY_URL")
 }
 
-func TestValidateProductionPaymentRuntime_RequiresEcommerceInProduction(t *testing.T) {
+func TestValidateProductionPaymentRuntime_RequiresOrdinaryServiceProviderInProduction(t *testing.T) {
 	err := validateProductionPaymentRuntime(util.Config{Environment: "production"})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "wechat ecommerce runtime config is required in production")
+	require.Contains(t, err.Error(), "wechat ordinary service provider runtime config is required in production")
 }
 
-func TestValidateProductionPaymentRuntime_AllowsConfiguredProductionEcommerce(t *testing.T) {
+func TestValidateProductionPaymentRuntime_AllowsConfiguredProductionOrdinaryServiceProvider(t *testing.T) {
 	err := validateProductionPaymentRuntime(util.Config{
-		Environment:                            "production",
-		WechatEcommerceSpMchID:                 "service-mchid-001",
-		WechatEcommerceSpAppID:                 "service-appid-001",
-		WechatEcommerceSpSerialNumber:          "sp-serial-001",
-		WechatEcommerceSpPrivateKeyPath:        "./certs/sp_apiclient_key.pem",
-		WechatEcommerceSpAPIV3Key:              "12345678901234567890123456789012",
-		WechatEcommercePaymentNotifyURL:        "https://example.com/ecommerce/payment-notify",
-		WechatEcommerceCombineNotifyURL:        "https://example.com/ecommerce/combine-notify",
-		WechatEcommerceRefundNotifyURL:         "https://example.com/ecommerce/refund-notify",
-		WechatEcommerceWithdrawNotifyURL:       "https://example.com/ecommerce/withdraw-notify",
-		WechatEcommerceViolationNotifyURL:      "https://example.com/ecommerce/violation-notify",
-		WechatEcommerceSpPlatformPublicKeyPath: "./certs/sp-platform.pem",
-		WechatEcommerceSpPlatformPublicKeyID:   "PUB_KEY_ID_SP_001",
+		Environment:                                   "production",
+		WechatMiniAppID:                               "wx-mini-appid-001",
+		WechatOrdinarySpMchID:                         "service-mchid-001",
+		WechatOrdinarySpAppID:                         "wx-mini-appid-001",
+		WechatOrdinarySpSerialNumber:                  "sp-serial-001",
+		WechatOrdinarySpPrivateKeyPath:                "./certs/sp_apiclient_key.pem",
+		WechatOrdinarySpAPIV3Key:                      "12345678901234567890123456789012",
+		WechatOrdinaryPaymentNotifyURL:                "https://example.com/ordinary/payment-notify",
+		WechatOrdinaryCombineNotifyURL:                "https://example.com/ordinary/combine-notify",
+		WechatOrdinaryRefundNotifyURL:                 "https://example.com/ordinary/refund-notify",
+		WechatOrdinaryProfitSharingNotifyURL:          "https://example.com/ordinary/profit-sharing-notify",
+		WechatOrdinaryViolationNotifyURL:              "https://example.com/ordinary/violation-notify",
+		WechatOrdinaryApplymentSettlementIDIndividual: "719",
+		WechatOrdinaryApplymentSettlementIDEnterprise: "716",
+		WechatOrdinaryApplymentQualification:          "餐饮",
+		WechatOrdinaryApplymentContactEmail:           "merchant@example.com",
+		WechatOrdinarySpPlatformPublicKeyPath:         "./certs/sp-platform.pem",
+		WechatOrdinarySpPlatformPublicKeyID:           "PUB_KEY_ID_SP_001",
 	})
 	require.NoError(t, err)
 }

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -10,8 +11,8 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/wechat"
-	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 )
@@ -23,28 +24,28 @@ const (
 )
 
 type ApplymentRecoveryScheduler struct {
-	cron            *cron.Cron
-	wg              sync.WaitGroup
-	stopCtx         context.Context
-	stopCancel      context.CancelFunc
-	runMu           sync.Mutex
-	store           db.Store
-	distributor     TaskDistributor
-	ecommerceClient wechat.EcommerceClientInterface
+	cron           *cron.Cron
+	wg             sync.WaitGroup
+	stopCtx        context.Context
+	stopCancel     context.CancelFunc
+	runMu          sync.Mutex
+	store          db.Store
+	distributor    TaskDistributor
+	ordinaryClient ordinaryserviceprovider.OrdinaryServiceProviderClientInterface
 }
 
-func NewApplymentRecoveryScheduler(store db.Store, distributor TaskDistributor, ecommerceClient wechat.EcommerceClientInterface) *ApplymentRecoveryScheduler {
+func NewApplymentRecoveryScheduler(store db.Store, distributor TaskDistributor, ordinaryClient ordinaryserviceprovider.OrdinaryServiceProviderClientInterface) *ApplymentRecoveryScheduler {
 	stopCtx, stopCancel := context.WithCancel(context.Background())
 	return &ApplymentRecoveryScheduler{
 		cron: cron.New(cron.WithChain(
 			cron.SkipIfStillRunning(cron.DefaultLogger),
 			cron.Recover(cron.DefaultLogger),
 		)),
-		stopCtx:         stopCtx,
-		stopCancel:      stopCancel,
-		store:           store,
-		distributor:     distributor,
-		ecommerceClient: ecommerceClient,
+		stopCtx:        stopCtx,
+		stopCancel:     stopCancel,
+		store:          store,
+		distributor:    distributor,
+		ordinaryClient: ordinaryClient,
 	}
 }
 
@@ -132,11 +133,26 @@ func (s *ApplymentRecoveryScheduler) runOnce(ctx context.Context) {
 			}
 		}
 
+		if applymentNeedsAccountAuthorizeRecovery(status, textValue(applyment.SubMchID), textValue(applyment.AccountAuthorizeState)) {
+			if s.ordinaryClient == nil {
+				log.Warn().Int64("applyment_id", applyment.ID).Msg("ordinary service provider client not configured, cannot query account authorize recovery state")
+				continue
+			}
+			if err := s.recoverApplymentAccountAuthorizeState(ctx, applyment); err != nil {
+				log.Error().Err(err).
+					Int64("applyment_id", applyment.ID).
+					Str("out_request_no", applyment.OutRequestNo).
+					Str("sub_mch_id", textValue(applyment.SubMchID)).
+					Msg("recover applyment account authorize state failed")
+			}
+			continue
+		}
+
 		if !applymentStatusNeedsRemoteQuery(status) {
 			continue
 		}
-		if s.ecommerceClient == nil {
-			log.Warn().Int64("applyment_id", applyment.ID).Msg("ecommerce client not configured, cannot query applyment recovery status")
+		if s.ordinaryClient == nil {
+			log.Warn().Int64("applyment_id", applyment.ID).Msg("ordinary service provider client not configured, cannot query applyment recovery status")
 			continue
 		}
 
@@ -160,29 +176,26 @@ func (s *ApplymentRecoveryScheduler) runOnce(ctx context.Context) {
 
 		resolvedFollowUpState := resolveApplymentResultStatus(ApplymentResultPayload{
 			ApplymentStatus: resolvedStatus,
-			SignState:       queryResp.SignState,
+			ApplymentState:  string(queryResp.ApplymentState),
 			SubMchID:        resolvedSubMchID,
 		})
-		if applymentStatusNeedsAsyncFollowUp(resolvedStatus, queryResp.SignState) && resolvedProcessedState != resolvedFollowUpState && !applymentStatusHandledByFact(resolvedStatus, resolvedSubMchID) {
-			s.enqueueApplymentFollowUp(ctx, applyment, queryResp.ApplymentState, resolvedStatus, queryResp.SignState, resolvedSubMchID)
+		if applymentStatusNeedsAsyncFollowUp(resolvedStatus, "") && resolvedProcessedState != resolvedFollowUpState && !applymentStatusHandledByFact(resolvedStatus, resolvedSubMchID) {
+			s.enqueueApplymentFollowUp(ctx, applyment, string(queryResp.ApplymentState), resolvedStatus, "", resolvedSubMchID)
 		}
 	}
 }
 
-func (s *ApplymentRecoveryScheduler) queryApplymentStatus(ctx context.Context, applyment db.EcommerceApplymentPendingFollowUp) (*wechatcontracts.EcommerceApplymentQueryResponse, error) {
+func (s *ApplymentRecoveryScheduler) queryApplymentStatus(ctx context.Context, applyment db.EcommerceApplymentPendingFollowUp) (*ospcontracts.ApplymentQueryResponse, error) {
 	if applyment.ApplymentID.Valid {
-		resp, err := s.ecommerceClient.QueryEcommerceApplymentByID(ctx, applyment.ApplymentID.Int64)
+		resp, err := s.ordinaryClient.QueryApplymentByID(ctx, ospcontracts.ApplymentQueryByIDRequest{ApplymentID: applyment.ApplymentID.Int64})
 		if err == nil {
 			log.Info().
 				Int64("applyment_id", applyment.ID).
 				Str("query_key", "applyment_id").
 				Int64("wechat_applyment_id", resp.ApplymentID).
-				Str("out_request_no", strings.TrimSpace(resp.OutRequestNo)).
-				Str("applyment_state", strings.TrimSpace(resp.ApplymentState)).
-				Str("sign_state", strings.TrimSpace(resp.SignState)).
+				Str("business_code", strings.TrimSpace(resp.BusinessCode)).
+				Str("applyment_state", strings.TrimSpace(string(resp.ApplymentState))).
 				Bool("has_sign_url", strings.TrimSpace(resp.SignURL) != "").
-				Bool("has_legal_validation_url", strings.TrimSpace(resp.LegalValidationURL) != "").
-				Bool("has_account_validation", resp.AccountValidation != nil).
 				Msg("query applyment recovery status succeeded")
 			return resp, nil
 		}
@@ -194,33 +207,30 @@ func (s *ApplymentRecoveryScheduler) queryApplymentStatus(ctx context.Context, a
 			Int64("applyment_id", applyment.ID).
 			Int64("wechat_applyment_id", applyment.ApplymentID.Int64).
 			Str("out_request_no", applyment.OutRequestNo).
-			Msg("query applyment recovery by id failed, fallback to out_request_no")
+			Msg("query applyment recovery by id failed, fallback to business_code")
 	}
-	resp, err := s.ecommerceClient.QueryEcommerceApplymentByOutRequestNo(ctx, applyment.OutRequestNo)
+	resp, err := s.ordinaryClient.QueryApplymentByBusinessCode(ctx, ospcontracts.ApplymentQueryByBusinessCodeRequest{BusinessCode: applyment.OutRequestNo})
 	if err == nil {
 		log.Info().
 			Int64("applyment_id", applyment.ID).
-			Str("query_key", "out_request_no").
+			Str("query_key", "business_code").
 			Int64("wechat_applyment_id", resp.ApplymentID).
-			Str("out_request_no", strings.TrimSpace(resp.OutRequestNo)).
-			Str("applyment_state", strings.TrimSpace(resp.ApplymentState)).
-			Str("sign_state", strings.TrimSpace(resp.SignState)).
+			Str("business_code", strings.TrimSpace(resp.BusinessCode)).
+			Str("applyment_state", strings.TrimSpace(string(resp.ApplymentState))).
 			Bool("has_sign_url", strings.TrimSpace(resp.SignURL) != "").
-			Bool("has_legal_validation_url", strings.TrimSpace(resp.LegalValidationURL) != "").
-			Bool("has_account_validation", resp.AccountValidation != nil).
 			Msg("query applyment recovery status succeeded")
 	}
 	return resp, err
 }
 
-func (s *ApplymentRecoveryScheduler) reconcileApplymentStatus(ctx context.Context, applyment db.EcommerceApplymentPendingFollowUp, queryResp *wechatcontracts.EcommerceApplymentQueryResponse) (string, string, error) {
-	mappedStatus := mapWechatApplymentStateToStatus(queryResp.ApplymentState)
+func (s *ApplymentRecoveryScheduler) reconcileApplymentStatus(ctx context.Context, applyment db.EcommerceApplymentPendingFollowUp, queryResp *ospcontracts.ApplymentQueryResponse) (string, string, error) {
+	mappedStatus := mapOrdinaryApplymentStateToStatus(queryResp.ApplymentState)
 	if mappedStatus == "" {
 		s.persistUnsupportedApplymentRecoveryStateAlert(ctx, applyment, queryResp)
 		log.Warn().
 			Int64("applyment_id", applyment.ID).
 			Str("out_request_no", applyment.OutRequestNo).
-			Str("applyment_state", strings.TrimSpace(queryResp.ApplymentState)).
+			Str("applyment_state", strings.TrimSpace(string(queryResp.ApplymentState))).
 			Msg("applyment recovery query returned unsupported upstream state; local status update skipped")
 		return "", "", nil
 	}
@@ -228,7 +238,7 @@ func (s *ApplymentRecoveryScheduler) reconcileApplymentStatus(ctx context.Contex
 	resolvedSubMchID := queryResp.SubMchID
 
 	if resolvedStatus == "finish" && resolvedSubMchID != "" {
-		application, err := recordApplymentActivatedQueryFact(ctx, s.store, applyment, queryResp)
+		application, err := recordApplymentActivatedQueryFact(ctx, s.store, applyment, queryResp, "")
 		if err != nil {
 			return "", "", err
 		}
@@ -265,11 +275,11 @@ func (s *ApplymentRecoveryScheduler) reconcileApplymentStatus(ctx context.Contex
 		ID:                 applyment.ID,
 		ApplymentID:        pgtype.Int8{Int64: queryResp.ApplymentID, Valid: queryResp.ApplymentID > 0},
 		Status:             resolvedStatus,
-		RejectReason:       getRejectReasonFromApplymentAuditDetail(queryResp.AuditDetail),
+		RejectReason:       getRejectReasonFromOrdinaryApplymentAuditDetail(queryResp.AuditDetail),
 		SignUrl:            pgtype.Text{String: queryResp.SignURL, Valid: queryResp.SignURL != ""},
-		SignState:          pgtype.Text{String: queryResp.SignState, Valid: queryResp.SignState != ""},
-		LegalValidationUrl: pgtype.Text{String: queryResp.LegalValidationURL, Valid: queryResp.LegalValidationURL != ""},
-		AccountValidation:  wechat.MarshalEcommerceApplymentAccountValidation(queryResp.AccountValidation),
+		SignState:          pgtype.Text{},
+		LegalValidationUrl: pgtype.Text{},
+		AccountValidation:  nil,
 		SubMchID:           pgtype.Text{String: resolvedSubMchID, Valid: resolvedSubMchID != ""},
 	}); err != nil {
 		return "", "", err
@@ -278,7 +288,46 @@ func (s *ApplymentRecoveryScheduler) reconcileApplymentStatus(ctx context.Contex
 	return resolvedStatus, resolvedSubMchID, nil
 }
 
-func (s *ApplymentRecoveryScheduler) persistUnsupportedApplymentRecoveryStateAlert(ctx context.Context, applyment db.EcommerceApplymentPendingFollowUp, queryResp *wechatcontracts.EcommerceApplymentQueryResponse) {
+func applymentNeedsAccountAuthorizeRecovery(status, subMchID, accountAuthorizeState string) bool {
+	if status != "finish" || strings.TrimSpace(subMchID) == "" {
+		return false
+	}
+	return strings.TrimSpace(accountAuthorizeState) != db.AccountAuthorizeStateAuthorized
+}
+
+func (s *ApplymentRecoveryScheduler) recoverApplymentAccountAuthorizeState(ctx context.Context, applyment db.EcommerceApplymentPendingFollowUp) error {
+	subMchID := strings.TrimSpace(textValue(applyment.SubMchID))
+	if subMchID == "" {
+		return errors.New("applyment sub_mch_id missing")
+	}
+	authResp, err := s.ordinaryClient.QueryAccountAuthorizeState(ctx, ospcontracts.AccountAuthorizeStateRequest{SubMchID: subMchID})
+	if err != nil {
+		return fmt.Errorf("query account authorize state: %w", err)
+	}
+	accountAuthorizeState := ""
+	if authResp != nil {
+		accountAuthorizeState = strings.TrimSpace(string(authResp.AuthorizeState))
+	}
+	if accountAuthorizeState == "" {
+		return errors.New("account authorize state missing")
+	}
+	queryResp := &ospcontracts.ApplymentQueryResponse{
+		ApplymentID:    applyment.ApplymentID.Int64,
+		BusinessCode:   applyment.OutRequestNo,
+		ApplymentState: ospcontracts.ApplymentStateFinished,
+		SubMchID:       subMchID,
+	}
+	application, err := recordApplymentActivatedQueryFact(ctx, s.store, applyment, queryResp, accountAuthorizeState)
+	if err != nil {
+		return err
+	}
+	if err := EnqueueApplymentPaymentFactApplication(ctx, s.distributor, application); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *ApplymentRecoveryScheduler) persistUnsupportedApplymentRecoveryStateAlert(ctx context.Context, applyment db.EcommerceApplymentPendingFollowUp, queryResp *ospcontracts.ApplymentQueryResponse) {
 	applymentState := ""
 	stateDesc := ""
 	signState := ""
@@ -286,11 +335,10 @@ func (s *ApplymentRecoveryScheduler) persistUnsupportedApplymentRecoveryStateAle
 	wechatOutRequestNo := ""
 	subMchID := textValue(applyment.SubMchID)
 	if queryResp != nil {
-		applymentState = strings.TrimSpace(queryResp.ApplymentState)
-		stateDesc = strings.TrimSpace(queryResp.ApplymentStateDesc)
-		signState = strings.TrimSpace(queryResp.SignState)
+		applymentState = strings.TrimSpace(string(queryResp.ApplymentState))
+		stateDesc = strings.TrimSpace(queryResp.ApplymentStateMsg)
 		wechatApplymentID = queryResp.ApplymentID
-		wechatOutRequestNo = strings.TrimSpace(queryResp.OutRequestNo)
+		wechatOutRequestNo = strings.TrimSpace(queryResp.BusinessCode)
 		if strings.TrimSpace(queryResp.SubMchID) != "" {
 			subMchID = strings.TrimSpace(queryResp.SubMchID)
 		}
@@ -304,7 +352,7 @@ func (s *ApplymentRecoveryScheduler) persistUnsupportedApplymentRecoveryStateAle
 		"进件恢复查询返回未知状态",
 		fmt.Sprintf("进件申请 %s 查询微信侧返回未知状态 %s，系统已停止直接更新本地状态，请人工核对并补齐状态映射或 terminalizer。", applyment.OutRequestNo, applymentState),
 		applyment.ID,
-		"ecommerce_applyment",
+		applymentFactBusinessObjectApplyment,
 		map[string]any{
 			"applyment_id":          applyment.ID,
 			"out_request_no":        applyment.OutRequestNo,

@@ -161,7 +161,8 @@ func isExternalPaymentProvider(provider string) bool {
 func isExternalPaymentChannel(channel string) bool {
 	switch channel {
 	case db.PaymentChannelDirect,
-		db.PaymentChannelEcommerce:
+		db.PaymentChannelEcommerce,
+		db.PaymentChannelOrdinaryServiceProvider:
 		return true
 	default:
 		return false
@@ -173,6 +174,7 @@ func isExternalPaymentCapability(capability string) bool {
 	case db.ExternalPaymentCapabilityDirectJSAPIPayment,
 		db.ExternalPaymentCapabilityDirectRefund,
 		db.ExternalPaymentCapabilityPartnerJSAPIPayment,
+		db.ExternalPaymentCapabilityPartnerRefund,
 		db.ExternalPaymentCapabilityCombinePayment,
 		db.ExternalPaymentCapabilityEcommerceRefund,
 		db.ExternalPaymentCapabilityProfitSharing,

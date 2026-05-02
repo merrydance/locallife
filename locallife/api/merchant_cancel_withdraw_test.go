@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -262,129 +261,14 @@ func TestRespondMerchantCancelWithdrawWechatError(t *testing.T) {
 func TestCreateMerchantCancelWithdrawApplicationRecordsAcceptedCommand(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{ID: 11, RegionID: 1, OwnerUserID: user.ID, Name: "测试商户", Status: "approved", IsOpen: true}
-	paymentConfig := db.MerchantPaymentConfig{MerchantID: merchant.ID, SubMchID: "1900000109", Status: "active"}
-	record := db.MerchantCancelWithdrawApplication{
-		ID:                         301,
-		MerchantID:                 merchant.ID,
-		CreatedByUserID:            user.ID,
-		SubMchID:                   paymentConfig.SubMchID,
-		OutRequestNo:               "MCW20260425001",
-		Withdraw:                   db.MerchantCancelWithdrawModeNoWithdraw,
-		ProofMediaAssetIds:         []byte(`[]`),
-		AdditionalMaterialAssetIds: []byte(`[]`),
-		LocalSyncState:             db.MerchantCancelWithdrawLocalSyncStateCreated,
-		CreatedAt:                  time.Now(),
-		UpdatedAt:                  time.Now(),
-	}
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
-
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
-	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchant.ID).Return(paymentConfig, nil)
-	store.EXPECT().GetLatestEcommerceApplymentBySubject(gomock.Any(), db.GetLatestEcommerceApplymentBySubjectParams{SubjectType: "merchant", SubjectID: merchant.ID}).Return(db.EcommerceApplyment{OrganizationType: "4"}, nil)
-	ecommerce.EXPECT().ValidateEcommerceCancelWithdraw(gomock.Any(), paymentConfig.SubMchID).Return(&wechatcontracts.CancelWithdrawEligibilityResponse{ValidateResult: "ALLOW_CANCEL_WITHDRAW"}, nil)
-	store.EXPECT().GetMerchantCancelWithdrawApplicationByOutRequestNo(gomock.Any(), "MCW20260425001").Return(db.MerchantCancelWithdrawApplication{}, db.ErrRecordNotFound)
-	store.EXPECT().CreateMerchantCancelWithdrawApplication(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateMerchantCancelWithdrawApplicationParams) (db.MerchantCancelWithdrawApplication, error) {
-		require.Equal(t, merchant.ID, arg.MerchantID)
-		require.Equal(t, user.ID, arg.CreatedByUserID)
-		require.Equal(t, paymentConfig.SubMchID, arg.SubMchID)
-		require.Equal(t, "MCW20260425001", arg.OutRequestNo)
-		require.Equal(t, db.MerchantCancelWithdrawModeNoWithdraw, arg.Withdraw)
-		require.Equal(t, db.MerchantCancelWithdrawLocalSyncStateCreated, arg.LocalSyncState)
-		return record, nil
-	})
-	ecommerce.EXPECT().CreateEcommerceCancelWithdraw(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *wechatcontracts.CancelWithdrawRequest) (*wechatcontracts.CancelWithdrawCreateResponse, error) {
-		require.Equal(t, paymentConfig.SubMchID, req.SubMchID)
-		require.Equal(t, "MCW20260425001", req.OutRequestNo)
-		require.Equal(t, db.MerchantCancelWithdrawModeNoWithdraw, req.Withdraw)
-		require.Nil(t, req.PayeeInfo)
-		return &wechatcontracts.CancelWithdrawCreateResponse{ApplymentID: "applyment_301", OutRequestNo: req.OutRequestNo}, nil
-	})
-	ecommerce.EXPECT().QueryEcommerceCancelWithdrawByApplymentID(gomock.Any(), "applyment_301").Return(&wechatcontracts.CancelWithdrawQueryResponse{
-		ApplymentID:            "applyment_301",
-		OutRequestNo:           "MCW20260425001",
-		SubMchID:               paymentConfig.SubMchID,
-		CancelState:            db.MerchantCancelStateAccepted,
-		CancelStateDescription: "已受理",
-		Withdraw:               db.MerchantCancelWithdrawModeNoWithdraw,
-	}, nil)
-	queryResp := &wechatcontracts.CancelWithdrawQueryResponse{
-		ApplymentID:            "applyment_301",
-		OutRequestNo:           "MCW20260425001",
-		SubMchID:               paymentConfig.SubMchID,
-		CancelState:            db.MerchantCancelStateAccepted,
-		CancelStateDescription: "已受理",
-		Withdraw:               db.MerchantCancelWithdrawModeNoWithdraw,
-	}
-	expectMerchantCancelWithdrawQueryFact(t, store, record, queryResp, db.ExternalPaymentTerminalStatusProcessing, false)
-	store.EXPECT().UpdateMerchantCancelWithdrawApplicationSync(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.UpdateMerchantCancelWithdrawApplicationSyncParams) (db.MerchantCancelWithdrawApplication, error) {
-		require.Equal(t, record.ID, arg.ID)
-		require.Equal(t, db.MerchantCancelWithdrawLocalSyncStateSubmitSucceeded, arg.LocalSyncState)
-		require.True(t, arg.MarkSubmitted)
-		require.Equal(t, "applyment_301", arg.ApplymentID.String)
-		updated := record
-		updated.ApplymentID = arg.ApplymentID
-		updated.LocalSyncState = arg.LocalSyncState
-		updated.SubmittedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
-		return updated, nil
-	})
-	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), int64(9102)).Return(db.ExternalPaymentFactApplication{
-		ID:                 9102,
-		FactID:             9101,
-		Consumer:           merchantCancelWithdrawFactConsumerDomain,
-		BusinessObjectType: merchantCancelWithdrawFactBusinessObject,
-		BusinessObjectID:   record.ID,
-		Status:             db.ExternalPaymentFactApplicationStatusPending,
-	}, nil)
-	store.EXPECT().GetExternalPaymentFact(gomock.Any(), int64(9101)).Return(db.ExternalPaymentFact{
-		ID:                   9101,
-		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              db.PaymentChannelEcommerce,
-		Capability:           db.ExternalPaymentCapabilityCancelWithdraw,
-		ExternalObjectType:   db.ExternalPaymentObjectCancelWithdraw,
-		ExternalObjectKey:    record.OutRequestNo,
-		ExternalSecondaryKey: pgtype.Text{String: queryResp.ApplymentID, Valid: true},
-		BusinessOwner:        pgtype.Text{String: db.ExternalPaymentBusinessOwnerMerchantFunds, Valid: true},
-		BusinessObjectType:   pgtype.Text{String: merchantCancelWithdrawFactBusinessObject, Valid: true},
-		BusinessObjectID:     pgtype.Int8{Int64: record.ID, Valid: true},
-		UpstreamState:        queryResp.CancelState,
-		TerminalStatus:       db.ExternalPaymentTerminalStatusProcessing,
-		IsTerminal:           false,
-		RawResource:          merchantCancelWithdrawQueryFactResource(record, queryResp),
-	}, nil)
-	store.EXPECT().GetMerchantCancelWithdrawApplication(gomock.Any(), record.ID).Return(db.MerchantCancelWithdrawApplication{
-		ID:             record.ID,
-		MerchantID:     record.MerchantID,
-		SubMchID:       record.SubMchID,
-		OutRequestNo:   record.OutRequestNo,
-		ApplymentID:    pgtype.Text{String: "applyment_301", Valid: true},
-		LocalSyncState: db.MerchantCancelWithdrawLocalSyncStateSubmitSucceeded,
-		SubmittedAt:    pgtype.Timestamptz{Time: time.Now(), Valid: true},
-	}, nil)
-	store.EXPECT().UpdateMerchantCancelWithdrawApplicationSync(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateMerchantCancelWithdrawApplicationSyncParams{})).DoAndReturn(func(_ context.Context, arg db.UpdateMerchantCancelWithdrawApplicationSyncParams) (db.MerchantCancelWithdrawApplication, error) {
-		require.Equal(t, record.ID, arg.ID)
-		require.Equal(t, db.MerchantCancelWithdrawLocalSyncStateSubmitSucceeded, arg.LocalSyncState)
-		require.Equal(t, "applyment_301", arg.ApplymentID.String)
-		require.Equal(t, db.MerchantCancelStateAccepted, arg.CancelState.String)
-		require.False(t, arg.MarkSubmitted)
-		updated := record
-		updated.ApplymentID = arg.ApplymentID
-		updated.LocalSyncState = arg.LocalSyncState
-		updated.CancelState = arg.CancelState
-		updated.CancelStateDescription = arg.CancelStateDescription
-		updated.SubmittedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
-		return updated, nil
-	})
-	store.EXPECT().UpdateExternalPaymentFactProcessingStatus(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateExternalPaymentFactProcessingStatusParams{})).Return(db.ExternalPaymentFact{ID: 9101}, nil)
-	store.EXPECT().MarkExternalPaymentFactApplicationApplied(gomock.Any(), gomock.AssignableToTypeOf(db.MarkExternalPaymentFactApplicationAppliedParams{})).Return(db.ExternalPaymentFactApplication{ID: 9102}, nil)
-	expectMerchantCancelWithdrawCommand(t, store, record.ID, "MCW20260425001", "applyment_301", db.ExternalPaymentCommandStatusAccepted, "", 9801)
 
 	server := newTestServer(t, store)
-	server.SetEcommerceClientForTest(ecommerce)
 	server.SetTaskDistributorForTest(nil)
 
 	body := []byte(`{"out_request_no":"MCW20260425001","withdraw":"NOT_APPLY_WITHDRAW"}`)
@@ -395,100 +279,18 @@ func TestCreateMerchantCancelWithdrawApplicationRecordsAcceptedCommand(t *testin
 	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, req)
-	require.Equal(t, http.StatusCreated, recorder.Code)
-
-	var resp merchantCancelWithdrawCreateResponse
-	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-	require.Equal(t, record.ID, resp.Application.ID)
-	require.Equal(t, db.MerchantCancelWithdrawLocalSyncStateSubmitSucceeded, resp.Application.LocalSyncState)
+	requireOrdinaryUnsupportedFundsAPIResponse(t, recorder)
 }
-
 func TestGetMerchantCancelWithdrawApplicationSyncsLiveQueryAndRecordsFact(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{ID: 11, RegionID: 1, OwnerUserID: user.ID, Name: "测试商户", Status: "approved", IsOpen: true}
-	record := db.MerchantCancelWithdrawApplication{
-		ID:                         21,
-		MerchantID:                 merchant.ID,
-		SubMchID:                   "1900000109",
-		OutRequestNo:               "MCW202604220001",
-		ProofMediaAssetIds:         []byte(`[]`),
-		AdditionalMaterialAssetIds: []byte(`[]`),
-		LocalSyncState:             db.MerchantCancelWithdrawLocalSyncStateSubmitUnknown,
-		CancelState:                pgtype.Text{String: db.MerchantCancelStateReviewing, Valid: true},
-	}
-	queryResp := &wechatcontracts.CancelWithdrawQueryResponse{
-		ApplymentID:              "WX-CANCEL-21",
-		OutRequestNo:             record.OutRequestNo,
-		SubMchID:                 record.SubMchID,
-		CancelState:              db.MerchantCancelStateFinish,
-		CancelStateDescription:   "完成",
-		WithdrawState:            db.MerchantCancelWithdrawStateSucceed,
-		WithdrawStateDescription: "提现成功",
-		ModifyTime:               "2026-04-26T12:00:00+08:00",
-	}
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
 	server := newTestServer(t, store)
-	server.SetEcommerceClientForTest(ecommerce)
-
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
-	store.EXPECT().
-		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
-		Return(db.MerchantPaymentConfig{MerchantID: merchant.ID, SubMchID: record.SubMchID, Status: "active"}, nil)
-	store.EXPECT().
-		GetMerchantCancelWithdrawApplication(gomock.Any(), record.ID).
-		Return(record, nil)
-	ecommerce.EXPECT().QueryEcommerceCancelWithdrawByOutRequestNo(gomock.Any(), record.OutRequestNo).Return(queryResp, nil)
-	expectMerchantCancelWithdrawQueryFact(t, store, record, queryResp, db.ExternalPaymentTerminalStatusSuccess, true)
-	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), int64(9102)).Return(db.ExternalPaymentFactApplication{
-		ID:                 9102,
-		FactID:             9101,
-		Consumer:           merchantCancelWithdrawFactConsumerDomain,
-		BusinessObjectType: merchantCancelWithdrawFactBusinessObject,
-		BusinessObjectID:   record.ID,
-		Status:             db.ExternalPaymentFactApplicationStatusPending,
-	}, nil)
-	store.EXPECT().GetExternalPaymentFact(gomock.Any(), int64(9101)).Return(db.ExternalPaymentFact{
-		ID:                   9101,
-		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              db.PaymentChannelEcommerce,
-		Capability:           db.ExternalPaymentCapabilityCancelWithdraw,
-		ExternalObjectType:   db.ExternalPaymentObjectCancelWithdraw,
-		ExternalObjectKey:    record.OutRequestNo,
-		ExternalSecondaryKey: pgtype.Text{String: queryResp.ApplymentID, Valid: true},
-		BusinessOwner:        pgtype.Text{String: db.ExternalPaymentBusinessOwnerMerchantFunds, Valid: true},
-		BusinessObjectType:   pgtype.Text{String: merchantCancelWithdrawFactBusinessObject, Valid: true},
-		BusinessObjectID:     pgtype.Int8{Int64: record.ID, Valid: true},
-		UpstreamState:        queryResp.CancelState,
-		TerminalStatus:       db.ExternalPaymentTerminalStatusSuccess,
-		IsTerminal:           true,
-		RawResource:          merchantCancelWithdrawQueryFactResource(record, queryResp),
-	}, nil)
-	store.EXPECT().GetMerchantCancelWithdrawApplication(gomock.Any(), record.ID).Return(record, nil)
-	store.EXPECT().
-		UpdateMerchantCancelWithdrawApplicationSync(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateMerchantCancelWithdrawApplicationSyncParams{})).
-		DoAndReturn(func(_ context.Context, arg db.UpdateMerchantCancelWithdrawApplicationSyncParams) (db.MerchantCancelWithdrawApplication, error) {
-			require.Equal(t, record.ID, arg.ID)
-			require.Equal(t, db.MerchantCancelWithdrawLocalSyncStateSubmitSucceeded, arg.LocalSyncState)
-			require.Equal(t, queryResp.ApplymentID, arg.ApplymentID.String)
-			require.Equal(t, queryResp.CancelState, arg.CancelState.String)
-			require.Equal(t, queryResp.WithdrawState, arg.WithdrawState.String)
-			updated := record
-			updated.ApplymentID = pgtype.Text{String: queryResp.ApplymentID, Valid: true}
-			updated.LocalSyncState = db.MerchantCancelWithdrawLocalSyncStateSubmitSucceeded
-			updated.CancelState = pgtype.Text{String: queryResp.CancelState, Valid: true}
-			updated.CancelStateDescription = pgtype.Text{String: queryResp.CancelStateDescription, Valid: true}
-			updated.WithdrawState = pgtype.Text{String: queryResp.WithdrawState, Valid: true}
-			updated.WithdrawStateDescription = pgtype.Text{String: queryResp.WithdrawStateDescription, Valid: true}
-			updated.LastQueryAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
-			return updated, nil
-		})
-	store.EXPECT().UpdateExternalPaymentFactProcessingStatus(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateExternalPaymentFactProcessingStatusParams{})).Return(db.ExternalPaymentFact{ID: 9101}, nil)
-	store.EXPECT().MarkExternalPaymentFactApplicationApplied(gomock.Any(), gomock.AssignableToTypeOf(db.MarkExternalPaymentFactApplicationAppliedParams{})).Return(db.ExternalPaymentFactApplication{ID: 9102}, nil)
 
 	recorder := httptest.NewRecorder()
 	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/cancel-withdraw/applications/21", nil)
@@ -496,12 +298,8 @@ func TestGetMerchantCancelWithdrawApplicationSyncsLiveQueryAndRecordsFact(t *tes
 	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 	server.router.ServeHTTP(recorder, req)
 
-	require.Equal(t, http.StatusOK, recorder.Code)
-	require.Contains(t, recorder.Body.String(), `"applyment_id":"WX-CANCEL-21"`)
-	require.Contains(t, recorder.Body.String(), `"cancel_state":"FINISH"`)
-	require.Contains(t, recorder.Body.String(), `"withdraw_state":"WITHDRAW_SUCCEED"`)
+	requireOrdinaryUnsupportedFundsAPIResponse(t, recorder)
 }
-
 func TestCreateMerchantCancelWithdrawApplicationRecordsUnknownCommand(t *testing.T) {
 	testCreateMerchantCancelWithdrawApplicationRecordsSubmitFailureCommand(
 		t,
@@ -533,49 +331,22 @@ func testCreateMerchantCancelWithdrawApplicationRecordsSubmitFailureCommand(
 	commandID int64,
 ) {
 	t.Helper()
+	_ = createErr
+	_ = localSyncState
+	_ = commandStatus
+	_ = expectedHTTPStatus
+	_ = commandID
+
 	user, _ := randomUser(t)
 	merchant := db.Merchant{ID: 12, RegionID: 1, OwnerUserID: user.ID, Name: "测试商户", Status: "approved", IsOpen: true}
-	paymentConfig := db.MerchantPaymentConfig{MerchantID: merchant.ID, SubMchID: "1900000109", Status: "active"}
-	record := db.MerchantCancelWithdrawApplication{
-		ID:                         302,
-		MerchantID:                 merchant.ID,
-		CreatedByUserID:            user.ID,
-		SubMchID:                   paymentConfig.SubMchID,
-		OutRequestNo:               "MCW20260425002",
-		Withdraw:                   db.MerchantCancelWithdrawModeNoWithdraw,
-		ProofMediaAssetIds:         []byte(`[]`),
-		AdditionalMaterialAssetIds: []byte(`[]`),
-		LocalSyncState:             db.MerchantCancelWithdrawLocalSyncStateCreated,
-		CreatedAt:                  time.Now(),
-		UpdatedAt:                  time.Now(),
-	}
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
-
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
-	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchant.ID).Return(paymentConfig, nil)
-	store.EXPECT().GetLatestEcommerceApplymentBySubject(gomock.Any(), db.GetLatestEcommerceApplymentBySubjectParams{SubjectType: "merchant", SubjectID: merchant.ID}).Return(db.EcommerceApplyment{OrganizationType: "4"}, nil)
-	ecommerce.EXPECT().ValidateEcommerceCancelWithdraw(gomock.Any(), paymentConfig.SubMchID).Return(&wechatcontracts.CancelWithdrawEligibilityResponse{ValidateResult: "ALLOW_CANCEL_WITHDRAW"}, nil)
-	store.EXPECT().GetMerchantCancelWithdrawApplicationByOutRequestNo(gomock.Any(), "MCW20260425002").Return(db.MerchantCancelWithdrawApplication{}, db.ErrRecordNotFound)
-	store.EXPECT().CreateMerchantCancelWithdrawApplication(gomock.Any(), gomock.Any()).Return(record, nil)
-	ecommerce.EXPECT().CreateEcommerceCancelWithdraw(gomock.Any(), gomock.Any()).Return(nil, createErr)
-	ecommerce.EXPECT().QueryEcommerceCancelWithdrawByOutRequestNo(gomock.Any(), "MCW20260425002").Return(nil, errors.New("query timeout"))
-	store.EXPECT().UpdateMerchantCancelWithdrawApplicationSync(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.UpdateMerchantCancelWithdrawApplicationSyncParams) (db.MerchantCancelWithdrawApplication, error) {
-		require.Equal(t, record.ID, arg.ID)
-		require.Equal(t, localSyncState, arg.LocalSyncState)
-		updated := record
-		updated.LocalSyncState = arg.LocalSyncState
-		updated.LastError = arg.LastError
-		return updated, nil
-	})
-	expectMerchantCancelWithdrawCommand(t, store, record.ID, "MCW20260425002", "", commandStatus, wechatErrorCode(createErr), commandID)
 
 	server := newTestServer(t, store)
-	server.SetEcommerceClientForTest(ecommerce)
 	server.SetTaskDistributorForTest(nil)
 
 	body := []byte(`{"out_request_no":"MCW20260425002","withdraw":"NOT_APPLY_WITHDRAW"}`)
@@ -586,84 +357,8 @@ func testCreateMerchantCancelWithdrawApplicationRecordsSubmitFailureCommand(
 	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, req)
-	require.Equal(t, expectedHTTPStatus, recorder.Code)
+	requireOrdinaryUnsupportedFundsAPIResponse(t, recorder)
 }
-
-func expectMerchantCancelWithdrawCommand(t *testing.T, store *mockdb.MockStore, applicationID int64, outRequestNo, applymentID, status, errorCode string, commandID int64) {
-	t.Helper()
-	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
-		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
-		require.Equal(t, db.PaymentChannelEcommerce, arg.Channel)
-		require.Equal(t, db.ExternalPaymentCapabilityCancelWithdraw, arg.Capability)
-		require.Equal(t, db.ExternalPaymentCommandTypeCreateCancelWithdraw, arg.CommandType)
-		require.Equal(t, db.ExternalPaymentBusinessOwnerMerchantFunds, arg.BusinessOwner)
-		require.Equal(t, "merchant_cancel_withdraw_application", arg.BusinessObjectType.String)
-		require.Equal(t, applicationID, arg.BusinessObjectID.Int64)
-		require.Equal(t, db.ExternalPaymentObjectCancelWithdraw, arg.ExternalObjectType)
-		require.Equal(t, outRequestNo, arg.ExternalObjectKey)
-		require.Equal(t, status, arg.CommandStatus)
-		if applymentID != "" {
-			require.Equal(t, applymentID, arg.ExternalSecondaryKey.String)
-		} else {
-			require.False(t, arg.ExternalSecondaryKey.Valid)
-		}
-		if errorCode != "" {
-			require.Equal(t, errorCode, arg.LastErrorCode.String)
-			require.Contains(t, string(arg.ResponseSnapshot), errorCode)
-		} else {
-			require.False(t, arg.LastErrorCode.Valid)
-		}
-		snapshot := string(arg.ResponseSnapshot)
-		require.Contains(t, snapshot, outRequestNo)
-		require.NotContains(t, snapshot, "payee_info")
-		require.NotContains(t, snapshot, "account_number")
-		return db.ExternalPaymentCommand{ID: commandID}, nil
-	})
-}
-
-func expectMerchantCancelWithdrawQueryFact(t *testing.T, store *mockdb.MockStore, record db.MerchantCancelWithdrawApplication, queryResp *wechatcontracts.CancelWithdrawQueryResponse, expectedTerminalStatus string, expectedTerminal bool) {
-	t.Helper()
-	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
-		require.Equal(t, db.ExternalPaymentCapabilityCancelWithdraw, arg.Capability)
-		require.Equal(t, db.ExternalPaymentFactSourceQuery, arg.FactSource)
-		require.Equal(t, db.ExternalPaymentObjectCancelWithdraw, arg.ExternalObjectType)
-		require.Equal(t, record.OutRequestNo, arg.ExternalObjectKey)
-		require.Equal(t, queryResp.ApplymentID, arg.ExternalSecondaryKey.String)
-		require.Equal(t, db.ExternalPaymentBusinessOwnerMerchantFunds, arg.BusinessOwner.String)
-		require.Equal(t, merchantCancelWithdrawFactBusinessObject, arg.BusinessObjectType.String)
-		require.Equal(t, record.ID, arg.BusinessObjectID.Int64)
-		require.Equal(t, queryResp.CancelState, arg.UpstreamState)
-		require.Equal(t, expectedTerminalStatus, arg.TerminalStatus)
-		require.Equal(t, expectedTerminal, arg.IsTerminal)
-		require.Equal(t, merchantCancelWithdrawQueryFactDedupeKey(record.OutRequestNo, queryResp.CancelState, queryResp.WithdrawState, queryResp.ApplymentID), arg.DedupeKey)
-		var payload map[string]any
-		require.NoError(t, json.Unmarshal(arg.RawResource, &payload))
-		require.EqualValues(t, record.ID, payload["application_id"])
-		require.EqualValues(t, record.MerchantID, payload["merchant_id"])
-		require.Equal(t, record.SubMchID, payload["sub_mch_id"])
-		require.Equal(t, queryResp.OutRequestNo, payload["out_request_no"])
-		require.Equal(t, queryResp.ApplymentID, payload["applyment_id"])
-		require.Equal(t, queryResp.CancelState, payload["cancel_state"])
-		return db.ExternalPaymentFact{ID: 9101, TerminalStatus: arg.TerminalStatus, IsTerminal: arg.IsTerminal}, nil
-	})
-	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactApplicationParams{})).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactApplicationParams) (db.ExternalPaymentFactApplication, error) {
-		require.Equal(t, int64(9101), arg.FactID)
-		require.Equal(t, merchantCancelWithdrawFactConsumerDomain, arg.Consumer)
-		require.Equal(t, merchantCancelWithdrawFactBusinessObject, arg.BusinessObjectType)
-		require.Equal(t, record.ID, arg.BusinessObjectID)
-		require.Equal(t, db.ExternalPaymentFactApplicationStatusPending, arg.Status)
-		return db.ExternalPaymentFactApplication{ID: 9102, FactID: arg.FactID, Consumer: arg.Consumer, BusinessObjectType: arg.BusinessObjectType, BusinessObjectID: arg.BusinessObjectID, Status: arg.Status}, nil
-	})
-}
-
-func wechatErrorCode(err error) string {
-	var wxErr *wechat.WechatPayError
-	if errors.As(err, &wxErr) && wxErr != nil {
-		return wxErr.Code
-	}
-	return ""
-}
-
 func TestToMerchantCancelWithdrawItem_InvalidProofMediaJSONReturnsError(t *testing.T) {
 	_, err := toMerchantCancelWithdrawItem(db.MerchantCancelWithdrawApplication{
 		ID:                 301,

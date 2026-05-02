@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// CreatePartnerPaymentTxParams 为收付通单笔支付创建本地 payment_order。
+// CreatePartnerPaymentTxParams 为服务商单笔支付创建本地 payment_order。
 // 该事务仅创建 payment_orders，不创建 combined_payment_orders。
 type CreatePartnerPaymentTxParams struct {
 	UserID        int64
@@ -25,13 +25,13 @@ type CreatePartnerPaymentTxParams struct {
 	Attach        string
 }
 
-// CreatePartnerPaymentTxResult 返回创建结果及商户收付通配置。
+// CreatePartnerPaymentTxResult 返回创建结果及商户服务商配置。
 type CreatePartnerPaymentTxResult struct {
 	PaymentOrder PaymentOrder
 	SubMchID     string
 }
 
-// CreatePartnerPaymentTx 创建收付通单笔支付记录并校验商户配置与并发 pending 冲突。
+// CreatePartnerPaymentTx 创建服务商单笔支付记录并校验商户配置与并发 pending 冲突。
 func (store *SQLStore) CreatePartnerPaymentTx(ctx context.Context, arg CreatePartnerPaymentTxParams) (CreatePartnerPaymentTxResult, error) {
 	var result CreatePartnerPaymentTxResult
 	var linkedReservationID pgtype.Int8
@@ -139,7 +139,7 @@ func (store *SQLStore) CreatePartnerPaymentTx(ctx context.Context, arg CreatePar
 		createParams := CreatePaymentOrderParams{
 			UserID:                arg.UserID,
 			PaymentType:           "miniprogram",
-			PaymentChannel:        PaymentChannelEcommerce,
+			PaymentChannel:        PaymentChannelOrdinaryServiceProvider,
 			RequiresProfitSharing: requiresProfitSharing,
 			BusinessType:          arg.BusinessType,
 			Amount:                arg.Amount,
