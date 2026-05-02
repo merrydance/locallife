@@ -73,7 +73,7 @@ export const EMPTY_MERCHANT: MerchantStorefrontProfile = {
   updated_at: ''
 }
 
-const PRE_OPEN_PREPARATION_HINT = '主体审核通过后，可先完善菜品、桌台、套餐和门店配置；准备收款前再完成收付通进件。'
+const PRE_OPEN_PREPARATION_HINT = '主体审核通过后，可先完善菜品、桌台、套餐和门店配置；准备收款前再完成微信支付开户。'
 
 export function buildMerchantBusinessStateView(params: {
   merchantStatus?: string
@@ -100,14 +100,14 @@ export function buildMerchantBusinessStateView(params: {
   if (applymentView?.isOpened) {
     return {
       title: '打烊中',
-      hint: '收付通已开通，当前是自主打烊状态，可随时恢复营业。'
+      hint: '微信支付已开通，当前是自主打烊状态，可随时恢复营业。'
     }
   }
 
   if (merchantStatus === 'bindbank_submitted') {
     return {
       title: '待开通',
-      hint: '收付通进件审核中，可继续完善菜品、桌台、套餐和门店配置。'
+      hint: '微信支付开户审核中，可继续完善菜品、桌台、套餐和门店配置。'
     }
   }
 
@@ -122,14 +122,14 @@ export function buildMerchantBusinessStateView(params: {
     if (applymentView?.isInReview) {
       return {
         title: '待开通',
-        hint: '收付通进件审核中，可继续完善菜品、桌台、套餐和门店配置。'
+        hint: '微信支付开户审核中，可继续完善菜品、桌台、套餐和门店配置。'
       }
     }
 
     if (applymentView?.normalizedStatus === 'rejected') {
       return {
         title: '待处理',
-        hint: '收付通资料已被驳回，请修改后重新提交。'
+        hint: '开户资料已被驳回，请修改后重新提交。'
       }
     }
 
@@ -212,9 +212,9 @@ const DASHBOARD_SECTIONS: DashboardSectionDefinition[] = [
     id: 'finance',
     title: '财务',
     items: [
-      { id: 'finance-home', title: '资金账户', icon: createIcon('money', 'var(--td-brand-color)'), path: '/pages/merchant/finance/index' },
+      { id: 'finance-home', title: '结算账户', icon: createIcon('money', 'var(--td-brand-color)'), path: '/pages/merchant/finance/index' },
       { id: 'application', title: '主体资料', icon: createIcon('personal-information', 'var(--td-brand-color)'), path: '/pages/merchant/settings/application/index' },
-      { id: 'applyment', title: '收付通进件', icon: createIcon('creditcard-add', 'var(--td-brand-color)'), path: '/pages/merchant/settings/applyment/index' }
+      { id: 'applyment', title: '微信支付开户', icon: createIcon('creditcard-add', 'var(--td-brand-color)'), path: '/pages/merchant/settings/applyment/index' }
     ]
   }
 ]
