@@ -15,6 +15,8 @@ const emptyWorkbenchView: RiderWorkbenchDashboardView = {
     is_online: false,
     online_status: 'offline',
     active_deliveries: 0,
+    current_region_id: 0,
+    required_deposit: 0,
     can_go_online: false,
     can_go_offline: false
   },

@@ -3,6 +3,7 @@ import { request } from '../utils/request'
 export interface RiderInfo {
     id: number
     user_id: number
+    region_id: number
     real_name: string
     phone: string
     deposit_amount: number
@@ -24,6 +25,8 @@ export interface RiderStatus {
     is_online: boolean
     online_status: 'offline' | 'online' | 'delivering'
     active_deliveries: number
+    current_region_id: number
+    required_deposit: number
     current_longitude?: number
     current_latitude?: number
     location_updated_at?: string
@@ -33,6 +36,8 @@ export interface RiderStatus {
 }
 
 export interface RiderDepositBalance {
+    current_region_id: number
+    required_deposit: number
     total_deposit: number
     frozen_deposit: number
     delivery_frozen_deposit?: number
@@ -115,8 +120,20 @@ export class RiderService {
         return await request({ url: '/v1/rider/status', method: 'GET' })
     }
 
-    static async goOnline(): Promise<RiderInfo> {
-        return await request({ url: '/v1/rider/online', method: 'POST' })
+    static async syncCurrentRegion(regionId: number): Promise<RiderInfo> {
+        return await request({
+            url: '/v1/rider/current-region',
+            method: 'PATCH',
+            data: { region_id: regionId }
+        })
+    }
+
+    static async goOnline(regionId: number): Promise<RiderInfo> {
+        return await request({
+            url: '/v1/rider/online',
+            method: 'POST',
+            data: { region_id: regionId }
+        })
     }
 
     static async goOffline(): Promise<RiderInfo> {
@@ -159,7 +176,7 @@ export class RiderService {
         })
     }
 
-    static async updateLocation(locations: Array<{
+    static async updateLocation(regionId: number, locations: Array<{
         longitude: number
         latitude: number
         recorded_at: string
@@ -172,7 +189,7 @@ export class RiderService {
         return await request({
             url: '/v1/rider/location',
             method: 'POST',
-            data: { locations }
+            data: { region_id: regionId, locations }
         })
     }
     static async request<T = unknown>(

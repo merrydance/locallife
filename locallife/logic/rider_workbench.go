@@ -140,6 +140,9 @@ func (service *RiderWorkbenchService) GetSummary(ctx context.Context, userID int
 		}
 		return RiderWorkbenchSummary{}, err
 	}
+	if !rider.RegionID.Valid || rider.RegionID.Int64 <= 0 {
+		return RiderWorkbenchSummary{}, NewRequestError(http.StatusBadRequest, errors.New("当前定位区域未同步，请重新进入骑手中心"))
+	}
 
 	result := RiderWorkbenchSummary{
 		RiderStatus: newRiderWorkbenchRiderStatus(rider),

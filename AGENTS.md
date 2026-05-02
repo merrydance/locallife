@@ -40,6 +40,7 @@ High-risk backend paths include payment, refund, profit sharing, withdrawal, del
 ## Validation Baseline
 
 - Run commands from the project directory that owns the change.
+- Local developer tools may live in `$HOME/.local/bin`; if `node`, `npm`, or `npx` is not found, rerun frontend validation with `PATH="$HOME/.local/bin:$PATH"` before concluding the toolchain is unavailable.
 - Prefer the smallest relevant validation command first.
 - Regenerate artifacts when source files require it, for example `make sqlc`, `make mock`, or `make swagger` in `locallife/`.
 - In the final handoff, state what changed, what was validated, what was not validated, and any residual risk.

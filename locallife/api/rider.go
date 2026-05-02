@@ -130,6 +130,7 @@ type riderWithdrawResponse struct {
 type riderResponse struct {
 	ID                int64      `json:"id"`
 	UserID            int64      `json:"user_id"`
+	RegionID          int64      `json:"region_id"`
 	RealName          string     `json:"real_name"`
 	Phone             string     `json:"phone"`
 	DepositAmount     int64      `json:"deposit_amount"`
@@ -150,6 +151,7 @@ func newRiderResponse(rider db.Rider) riderResponse {
 	resp := riderResponse{
 		ID:             rider.ID,
 		UserID:         rider.UserID,
+		RegionID:       rider.RegionID.Int64,
 		RealName:       rider.RealName,
 		Phone:          rider.Phone,
 		DepositAmount:  rider.DepositAmount,
@@ -176,6 +178,85 @@ func newRiderResponse(rider db.Rider) riderResponse {
 	}
 
 	return resp
+}
+
+type syncRiderCurrentRegionRequest struct {
+	RegionID int64 `json:"region_id" binding:"required,gt=0"`
+}
+
+func (server *Server) syncRiderCurrentRegion(ctx context.Context, rider db.Rider, regionID int64) (db.Rider, error) {
+	if _, err := server.store.GetRegion(ctx, regionID); err != nil {
+		return db.Rider{}, fmt.Errorf("get current rider region %d: %w", regionID, err)
+	}
+
+	updated := rider
+	if !rider.RegionID.Valid || rider.RegionID.Int64 != regionID {
+		var err error
+		updated, err = server.store.UpdateRiderRegion(ctx, db.UpdateRiderRegionParams{
+			ID:       rider.ID,
+			RegionID: pgtype.Int8{Int64: regionID, Valid: true},
+		})
+		if err != nil {
+			return db.Rider{}, fmt.Errorf("update rider current region: %w", err)
+		}
+	}
+
+	switch updated.Status {
+	case db.RiderStatusApproved, db.RiderStatusActive, db.RiderStatusSuspended:
+		var err error
+		updated, err = db.ReconcileRiderOperationalStatus(ctx, server.store, updated)
+		if err != nil {
+			return db.Rider{}, fmt.Errorf("reconcile rider operational status: %w", err)
+		}
+	}
+
+	return updated, nil
+}
+
+// syncCurrentRiderRegion godoc
+// @Summary 同步骑手当前运营区域
+// @Description 将骑手当前运营区域更新为小程序定位匹配出的 region_id，并按该区域押金规则刷新运营状态
+// @Tags 骑手
+// @Accept json
+// @Produce json
+// @Param request body syncRiderCurrentRegionRequest true "当前运营区域"
+// @Success 200 {object} riderResponse "骑手信息"
+// @Failure 400 {object} ErrorResponse "参数错误或区域不存在"
+// @Failure 401 {object} ErrorResponse "未登录"
+// @Failure 404 {object} ErrorResponse "未注册骑手"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/rider/current-region [patch]
+// @Security BearerAuth
+func (server *Server) syncCurrentRiderRegion(ctx *gin.Context) {
+	var req syncRiderCurrentRegionRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	updated, err := server.syncRiderCurrentRegion(ctx, rider, req.RegionID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrRegionNotFound))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, newRiderResponse(updated))
 }
 
 // getRiderMe godoc
@@ -242,6 +323,8 @@ type depositResponse struct {
 
 // depositBalanceResponse 押金余额响应
 type depositBalanceResponse struct {
+	CurrentRegionID            int64 `json:"current_region_id"`            // 当前运营区域
+	RequiredDeposit            int64 `json:"required_deposit"`             // 当前区域上线所需押金
 	TotalDeposit               int64 `json:"total_deposit"`                // 总押金
 	FrozenDeposit              int64 `json:"frozen_deposit"`               // 冻结押金（兼容字段，等于配送冻结+提现处理中）
 	DeliveryFrozenDeposit      int64 `json:"delivery_frozen_deposit"`      // 配送冻结
@@ -521,6 +604,10 @@ func (server *Server) getRiderDepositBalance(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+	if !rider.RegionID.Valid || rider.RegionID.Int64 <= 0 {
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderNoRegionAssigned))
+		return
+	}
 
 	withdrawalProcessingAmount, err := server.store.GetPendingRiderDepositRefundAmountByUserID(ctx, authPayload.UserID)
 	if err != nil {
@@ -528,9 +615,17 @@ func (server *Server) getRiderDepositBalance(ctx *gin.Context) {
 		return
 	}
 
+	threshold, err := server.getRiderDepositThreshold(ctx, rider)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get rider deposit threshold: %w", err)))
+		return
+	}
+
 	availability := db.CalculateRiderDepositAvailability(rider, withdrawalProcessingAmount)
 
 	response := depositBalanceResponse{
+		CurrentRegionID:            rider.RegionID.Int64,
+		RequiredDeposit:            threshold,
 		TotalDeposit:               rider.DepositAmount,
 		FrozenDeposit:              rider.FrozenDeposit,
 		DeliveryFrozenDeposit:      availability.DeliveryFrozenDeposit,
@@ -622,12 +717,18 @@ func (server *Server) listRiderDeposits(ctx *gin.Context) {
 
 // ==================== 上下线管理 ====================
 
+type goOnlineRequest struct {
+	RegionID int64 `json:"region_id" binding:"required,gt=0"`
+}
+
 // riderStatusResponse 骑手状态响应
 type riderStatusResponse struct {
 	Status            string     `json:"status"`            // 账号状态：approved/active/suspended
 	IsOnline          bool       `json:"is_online"`         // 是否在线
 	OnlineStatus      string     `json:"online_status"`     // 在线状态描述：offline/online/delivering
 	ActiveDeliveries  int        `json:"active_deliveries"` // 当前配送中订单数量
+	CurrentRegionID   int64      `json:"current_region_id"`
+	RequiredDeposit   int64      `json:"required_deposit"`
 	CurrentLongitude  *float64   `json:"current_longitude,omitempty"`
 	CurrentLatitude   *float64   `json:"current_latitude,omitempty"`
 	LocationUpdatedAt *time.Time `json:"location_updated_at,omitempty"`
@@ -660,6 +761,10 @@ func (server *Server) getRiderStatus(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+	if !rider.RegionID.Valid || rider.RegionID.Int64 <= 0 {
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderNoRegionAssigned))
+		return
+	}
 
 	// 获取活跃配送数量
 	activeDeliveries, err := server.store.ListRiderActiveDeliveries(ctx, pgtype.Int8{Int64: rider.ID, Valid: true})
@@ -668,10 +773,18 @@ func (server *Server) getRiderStatus(ctx *gin.Context) {
 		return
 	}
 
+	threshold, err := server.getRiderDepositThreshold(ctx, rider)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get rider deposit threshold: %w", err)))
+		return
+	}
+
 	resp := riderStatusResponse{
 		Status:           rider.Status,
 		IsOnline:         rider.IsOnline,
 		ActiveDeliveries: len(activeDeliveries),
+		CurrentRegionID:  rider.RegionID.Int64,
+		RequiredDeposit:  threshold,
 	}
 
 	// 确定在线状态描述
@@ -694,12 +807,6 @@ func (server *Server) getRiderStatus(ctx *gin.Context) {
 	}
 	if rider.LocationUpdatedAt.Valid {
 		resp.LocationUpdatedAt = &rider.LocationUpdatedAt.Time
-	}
-
-	threshold, err := server.getRiderDepositThreshold(ctx, rider)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get rider deposit threshold: %w", err)))
-		return
 	}
 
 	// 判断是否可以上线/下线
@@ -729,6 +836,7 @@ func (server *Server) getRiderStatus(ctx *gin.Context) {
 // @Tags 骑手
 // @Accept json
 // @Produce json
+// @Param request body goOnlineRequest true "当前运营区域"
 // @Success 200 {object} riderResponse "上线成功"
 // @Failure 400 {object} ErrorResponse "账号未激活或押金不足"
 // @Failure 401 {object} ErrorResponse "未登录"
@@ -737,12 +845,28 @@ func (server *Server) getRiderStatus(ctx *gin.Context) {
 // @Router /v1/rider/online [post]
 // @Security BearerAuth
 func (server *Server) goOnline(ctx *gin.Context) {
+	var req goOnlineRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	rider, err = server.syncRiderCurrentRegion(ctx, rider, req.RegionID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrRegionNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -840,6 +964,7 @@ func (server *Server) goOffline(ctx *gin.Context) {
 // ==================== 位置上报 ====================
 
 type updateLocationRequest struct {
+	RegionID  int64           `json:"region_id" binding:"required,gt=0"`
 	Locations []locationPoint `json:"locations" binding:"required,min=1,max=100,dive"`
 }
 
@@ -973,7 +1098,7 @@ func (server *Server) updateRiderLocation(ctx *gin.Context) {
 	}
 
 	// 更新骑手最新位置
-	_, err = server.store.UpdateRiderLocation(ctx, db.UpdateRiderLocationParams{
+	updatedRider, err := server.store.UpdateRiderLocation(ctx, db.UpdateRiderLocationParams{
 		ID:               rider.ID,
 		CurrentLongitude: numericFromFloat(latestLocation.Longitude),
 		CurrentLatitude:  numericFromFloat(latestLocation.Latitude),
@@ -983,8 +1108,18 @@ func (server *Server) updateRiderLocation(ctx *gin.Context) {
 		return
 	}
 
+	updatedRider, err = server.syncRiderCurrentRegion(ctx, updatedRider, req.RegionID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrRegionNotFound))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
 	if activeDeliveryID != nil {
-		server.processDeliveryLocationEvents(ctx, rider, *activeDeliveryID, latestLocation)
+		server.processDeliveryLocationEvents(ctx, updatedRider, *activeDeliveryID, latestLocation)
 	}
 
 	ctx.JSON(http.StatusOK, riderLocationUpdateResponse{

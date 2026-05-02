@@ -40,7 +40,7 @@ func TestGetRiderWorkbenchSummaryAPI(t *testing.T) {
 				store.EXPECT().GetRiderByUserID(gomock.Any(), user.ID).Return(rider, nil)
 				store.EXPECT().ListRiderActiveDeliveries(gomock.Any(), riderID).Return([]db.Delivery{activeDelivery}, nil)
 				store.EXPECT().GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), user.ID).Return(int64(0), nil)
-				expectRiderThresholdFromPlatformDefault(store, rider, db.DefaultRiderDepositThresholdFen)
+				expectRiderThresholdFromRegionRule(store, rider, 200*fenPerYuan)
 				store.EXPECT().CountDeliveryPool(gomock.Any()).Return(int64(3), nil)
 				store.EXPECT().CountRiderCompletedDeliveriesInRange(gomock.Any(), gomock.Any()).Return(int64(2), nil)
 				store.EXPECT().GetRiderProfitSharingStats(gomock.Any(), gomock.Any()).Return(db.GetRiderProfitSharingStatsRow{TotalDeliveries: 2, TotalRiderIncome: 1800, TotalDeliveryFee: 2000}, nil)
@@ -72,7 +72,7 @@ func TestGetRiderWorkbenchSummaryAPI(t *testing.T) {
 				store.EXPECT().GetRiderByUserID(gomock.Any(), user.ID).Return(rider, nil)
 				store.EXPECT().ListRiderActiveDeliveries(gomock.Any(), riderID).Return(nil, errors.New("delivery unavailable"))
 				store.EXPECT().GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), user.ID).Return(int64(0), nil)
-				expectRiderThresholdFromPlatformDefault(store, rider, db.DefaultRiderDepositThresholdFen)
+				expectRiderThresholdFromRegionRule(store, rider, 200*fenPerYuan)
 				store.EXPECT().CountDeliveryPool(gomock.Any()).Return(int64(3), nil)
 				store.EXPECT().CountRiderCompletedDeliveriesInRange(gomock.Any(), gomock.Any()).Return(int64(2), nil)
 				store.EXPECT().GetRiderProfitSharingStats(gomock.Any(), gomock.Any()).Return(db.GetRiderProfitSharingStatsRow{}, nil)
@@ -100,6 +100,20 @@ func TestGetRiderWorkbenchSummaryAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
+			},
+		},
+		{
+			name: "NoCurrentRegion",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				noRegionRider := rider
+				noRegionRider.RegionID = pgtype.Int8{Valid: false}
+				store.EXPECT().GetRiderByUserID(gomock.Any(), user.ID).Return(noRegionRider, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 	}

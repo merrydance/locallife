@@ -1,5 +1,6 @@
 import RiderService from '@/api/rider'
 import { locationService } from './location'
+import { resolveCurrentRegionId } from './current-region'
 
 export function normalizeLocationError(error: unknown): Error {
     if (error && typeof error === 'object' && 'errMsg' in error) {
@@ -28,7 +29,8 @@ export async function syncRiderDeliveryLocation(deliveryId: number, source: stri
         throw normalizeLocationError(error)
     }
 
-    await RiderService.updateLocation([
+    const regionId = await resolveCurrentRegionId()
+    await RiderService.updateLocation(regionId, [
         {
             longitude: location.longitude,
             latitude: location.latitude,

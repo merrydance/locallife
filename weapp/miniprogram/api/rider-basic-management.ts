@@ -5,11 +5,12 @@
  */
 
 import { request } from '../utils/request'
+import { resolveCurrentRegionId } from '../utils/current-region'
 
 // ==================== 数据类型定义 ====================
 
 /** 骑手状态枚举 */
-export type RiderStatus = 'pending' | 'active' | 'suspended' | 'rejected'
+export type RiderStatus = 'pending' | 'approved' | 'active' | 'suspended' | 'rejected'
 
 /** 在线状态枚举 */
 export type OnlineStatus = 'offline' | 'online' | 'delivering'
@@ -20,6 +21,7 @@ export type OnlineStatus = 'offline' | 'online' | 'delivering'
 export interface RiderResponse {
     id: number
     user_id: number
+    region_id: number
     real_name: string
     phone: string
     status: RiderStatus
@@ -41,6 +43,8 @@ export interface RiderStatusResponse {
     is_online: boolean
     online_status: OnlineStatus
     status: RiderStatus
+    current_region_id: number
+    required_deposit: number
     current_latitude?: number
     current_longitude?: number
     location_updated_at?: string
@@ -64,6 +68,7 @@ export interface LocationPoint {
 
 /** 更新位置请求 - 基于swagger api.updateLocationRequest */
 export interface UpdateLocationRequest extends Record<string, unknown> {
+    region_id: number
     locations: LocationPoint[]
 }
 
@@ -105,10 +110,19 @@ export class RiderBasicManagementService {
     /**
      * 骑手上线
      */
-    async goOnline(): Promise<RiderResponse> {
+    async syncCurrentRegion(regionId: number): Promise<RiderResponse> {
+        return request({
+            url: '/v1/rider/current-region',
+            method: 'PATCH',
+            data: { region_id: regionId }
+        })
+    }
+
+    async goOnline(regionId: number): Promise<RiderResponse> {
         return request({
             url: '/v1/rider/online',
-            method: 'POST'
+            method: 'POST',
+            data: { region_id: regionId }
         })
     }
 
@@ -147,11 +161,11 @@ export class LocationManagementService {
      * 批量上报位置点
      * @param locations 位置点数组
      */
-    async batchUpdateLocation(locations: LocationPoint[]): Promise<LocationUpdateResponse> {
+    async batchUpdateLocation(regionId: number, locations: LocationPoint[]): Promise<LocationUpdateResponse> {
         return request({
             url: '/v1/rider/location',
             method: 'POST',
-            data: { locations }
+            data: { region_id: regionId, locations }
         })
     }
 
@@ -160,7 +174,8 @@ export class LocationManagementService {
      * @param location 单个位置点
      */
     async updateSingleLocation(location: LocationPoint): Promise<LocationUpdateResponse> {
-        return this.batchUpdateLocation([location])
+        const regionId = await resolveCurrentRegionId()
+        return this.batchUpdateLocation(regionId, [location])
     }
 
     /**
@@ -338,7 +353,8 @@ export async function smartOnlineManagement(action: 'online' | 'offline'): Promi
                 }
             }
 
-            const riderInfo = await riderBasicManagementService.goOnline()
+            const regionId = await resolveCurrentRegionId()
+            const riderInfo = await riderBasicManagementService.goOnline(regionId)
             return {
                 success: true,
                 message: '上线成功',
@@ -462,6 +478,7 @@ export class LocationReportManager {
 export function formatRiderStatus(status: RiderStatus): string {
     const statusMap: Record<RiderStatus, string> = {
         pending: '待审核',
+        approved: '已通过',
         active: '正常',
         suspended: '已暂停',
         rejected: '已拒绝'

@@ -71,6 +71,8 @@ function toRiderStatus(summary: RiderWorkbenchSummaryResponse): RiderStatus {
     is_online: status.is_online,
     online_status: status.online_status,
     active_deliveries: status.active_deliveries,
+    current_region_id: status.current_region_id,
+    required_deposit: status.required_deposit,
     current_longitude: status.current_longitude,
     current_latitude: status.current_latitude,
     location_updated_at: status.location_updated_at,

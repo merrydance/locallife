@@ -71,6 +71,21 @@ func expectRiderThresholdFromPlatformDefault(store *mockdb.MockStore, rider db.R
 		Return(db.PlatformConfig{}, db.ErrRecordNotFound)
 }
 
+func expectRiderThresholdFromRegionRule(store *mockdb.MockStore, rider db.Rider, threshold int64) {
+	store.EXPECT().
+		GetRegionRuleConfigByRegion(gomock.Any(), rider.RegionID.Int64).
+		Times(1).
+		Return(db.RegionRuleConfig{RegionID: rider.RegionID.Int64, RiderDeposit: threshold}, nil)
+}
+
+func expectCurrentRiderRegionSyncNoChange(store *mockdb.MockStore, rider db.Rider, threshold int64) {
+	store.EXPECT().
+		GetRegion(gomock.Any(), rider.RegionID.Int64).
+		Times(1).
+		Return(db.Region{ID: rider.RegionID.Int64, Name: "测试区"}, nil)
+	expectRiderThresholdFromRegionRule(store, rider, threshold)
+}
+
 func TestGetRiderMeAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	rider := randomRider(user.ID)
@@ -142,6 +157,8 @@ func TestGoOnlineAPI(t *testing.T) {
 	rider := randomRider(user.ID)
 	rider.Status = "active"
 	rider.DepositAmount = 30000 // 押金足够
+	rider.RegionID = pgtype.Int8{Int64: 12, Valid: true}
+	targetRegionID := int64(596)
 
 	testCases := []struct {
 		name          string
@@ -153,8 +170,7 @@ func TestGoOnlineAPI(t *testing.T) {
 		{
 			name: "OK",
 			body: map[string]interface{}{
-				"longitude": 116.404,
-				"latitude":  39.915,
+				"region_id": targetRegionID,
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -164,9 +180,26 @@ func TestGoOnlineAPI(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(rider, nil)
-				expectRiderThresholdFromPlatformDefault(store, rider, db.DefaultRiderDepositThresholdFen)
+				store.EXPECT().
+					GetRegion(gomock.Any(), targetRegionID).
+					Times(1).
+					Return(db.Region{ID: targetRegionID, Name: "测试区"}, nil)
 
-				updatedRider := rider
+				updatedRegionRider := rider
+				updatedRegionRider.RegionID = pgtype.Int8{Int64: targetRegionID, Valid: true}
+				store.EXPECT().
+					UpdateRiderRegion(gomock.Any(), db.UpdateRiderRegionParams{
+						ID:       rider.ID,
+						RegionID: pgtype.Int8{Int64: targetRegionID, Valid: true},
+					}).
+					Times(1).
+					Return(updatedRegionRider, nil)
+				store.EXPECT().
+					GetRegionRuleConfigByRegion(gomock.Any(), targetRegionID).
+					Times(2).
+					Return(db.RegionRuleConfig{RegionID: targetRegionID, RiderDeposit: 20000}, nil)
+
+				updatedRider := updatedRegionRider
 				updatedRider.IsOnline = true
 				store.EXPECT().
 					UpdateRiderOnlineStatus(gomock.Any(), gomock.Any()).
@@ -178,10 +211,21 @@ func TestGoOnlineAPI(t *testing.T) {
 			},
 		},
 		{
-			name: "BadRequest_ApprovedRider",
+			name: "MissingRegion",
+			body: map[string]interface{}{},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "ApprovedRiderPromotedByCurrentRegionDeposit",
 			body: map[string]interface{}{
-				"longitude": 116.404,
-				"latitude":  39.915,
+				"region_id": targetRegionID,
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -193,28 +237,83 @@ func TestGoOnlineAPI(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(approvedRider, nil)
+				store.EXPECT().
+					GetRegion(gomock.Any(), targetRegionID).
+					Times(1).
+					Return(db.Region{ID: targetRegionID, Name: "测试区"}, nil)
+
+				updatedRegionRider := approvedRider
+				updatedRegionRider.RegionID = pgtype.Int8{Int64: targetRegionID, Valid: true}
+				store.EXPECT().
+					UpdateRiderRegion(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(updatedRegionRider, nil)
+				store.EXPECT().
+					GetRegionRuleConfigByRegion(gomock.Any(), targetRegionID).
+					Times(2).
+					Return(db.RegionRuleConfig{RegionID: targetRegionID, RiderDeposit: 20000}, nil)
+
+				activeRider := updatedRegionRider
+				activeRider.Status = db.RiderStatusActive
+				store.EXPECT().
+					UpdateRiderStatus(gomock.Any(), db.UpdateRiderStatusParams{
+						ID:     rider.ID,
+						Status: db.RiderStatusActive,
+					}).
+					Times(1).
+					Return(activeRider, nil)
+
+				onlineRider := activeRider
+				onlineRider.IsOnline = true
+				store.EXPECT().
+					UpdateRiderOnlineStatus(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(onlineRider, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
 		{
-			name: "InsufficientDeposit",
+			name: "InsufficientDepositInCurrentRegionDemotesRider",
 			body: map[string]interface{}{
-				"longitude": 116.404,
-				"latitude":  39.915,
+				"region_id": targetRegionID,
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockDirectPaymentClientInterface) {
 				insufficientRider := rider
-				insufficientRider.DepositAmount = 0
+				insufficientRider.DepositAmount = 10000
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(insufficientRider, nil)
-				expectRiderThresholdFromPlatformDefault(store, insufficientRider, db.DefaultRiderDepositThresholdFen)
+				store.EXPECT().
+					GetRegion(gomock.Any(), targetRegionID).
+					Times(1).
+					Return(db.Region{ID: targetRegionID, Name: "测试区"}, nil)
+
+				updatedRegionRider := insufficientRider
+				updatedRegionRider.RegionID = pgtype.Int8{Int64: targetRegionID, Valid: true}
+				store.EXPECT().
+					UpdateRiderRegion(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(updatedRegionRider, nil)
+				store.EXPECT().
+					GetRegionRuleConfigByRegion(gomock.Any(), targetRegionID).
+					Times(1).
+					Return(db.RegionRuleConfig{RegionID: targetRegionID, RiderDeposit: 20000}, nil)
+
+				approvedRider := updatedRegionRider
+				approvedRider.Status = db.RiderStatusApproved
+				store.EXPECT().
+					UpdateRiderStatus(gomock.Any(), db.UpdateRiderStatusParams{
+						ID:     rider.ID,
+						Status: db.RiderStatusApproved,
+					}).
+					Times(1).
+					Return(approvedRider, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -223,8 +322,7 @@ func TestGoOnlineAPI(t *testing.T) {
 		{
 			name: "NotApproved",
 			body: map[string]interface{}{
-				"longitude": 116.404,
-				"latitude":  39.915,
+				"region_id": targetRegionID,
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -236,6 +334,17 @@ func TestGoOnlineAPI(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(pendingRider, nil)
+				store.EXPECT().
+					GetRegion(gomock.Any(), targetRegionID).
+					Times(1).
+					Return(db.Region{ID: targetRegionID, Name: "测试区"}, nil)
+
+				updatedRegionRider := pendingRider
+				updatedRegionRider.RegionID = pgtype.Int8{Int64: targetRegionID, Valid: true}
+				store.EXPECT().
+					UpdateRiderRegion(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(updatedRegionRider, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -291,6 +400,10 @@ func TestGoOnlineAPI_UsesConfiguredDepositThreshold(t *testing.T) {
 		Times(1).
 		Return(rider, nil)
 	store.EXPECT().
+		GetRegion(gomock.Any(), int64(66)).
+		Times(1).
+		Return(db.Region{ID: 66, Name: "测试区"}, nil)
+	store.EXPECT().
 		GetRegionRuleConfigByRegion(gomock.Any(), int64(66)).
 		Times(1).
 		Return(db.RegionRuleConfig{}, db.ErrRecordNotFound)
@@ -298,6 +411,15 @@ func TestGoOnlineAPI_UsesConfiguredDepositThreshold(t *testing.T) {
 		GetPlatformConfig(gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(db.PlatformConfig{ConfigValue: thresholdConfig}, nil)
+	approvedRider := rider
+	approvedRider.Status = db.RiderStatusApproved
+	store.EXPECT().
+		UpdateRiderStatus(gomock.Any(), db.UpdateRiderStatusParams{
+			ID:     rider.ID,
+			Status: db.RiderStatusApproved,
+		}).
+		Times(1).
+		Return(approvedRider, nil)
 	store.EXPECT().
 		UpdateRiderOnlineStatus(gomock.Any(), gomock.Any()).
 		Times(0)
@@ -305,7 +427,7 @@ func TestGoOnlineAPI_UsesConfiguredDepositThreshold(t *testing.T) {
 	server := newTestServer(t, store)
 	recorder := httptest.NewRecorder()
 
-	request, err := http.NewRequest(http.MethodPost, "/v1/rider/online", bytes.NewReader([]byte(`{}`)))
+	request, err := http.NewRequest(http.MethodPost, "/v1/rider/online", bytes.NewReader([]byte(`{"region_id":66}`)))
 	require.NoError(t, err)
 	request.Header.Set("Content-Type", "application/json")
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -313,6 +435,116 @@ func TestGoOnlineAPI_UsesConfiguredDepositThreshold(t *testing.T) {
 	server.router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
+func TestSyncCurrentRiderRegionAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	rider := randomRider(user.ID)
+	rider.RegionID = pgtype.Int8{Int64: 12, Valid: true}
+	targetRegionID := int64(596)
+
+	testCases := []struct {
+		name          string
+		body          string
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name: "OK_UpdatesRegionAndReconciles",
+			body: `{"region_id":596}`,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(rider, nil)
+				store.EXPECT().
+					GetRegion(gomock.Any(), targetRegionID).
+					Times(1).
+					Return(db.Region{ID: targetRegionID, Name: "测试区"}, nil)
+
+				updated := rider
+				updated.RegionID = pgtype.Int8{Int64: targetRegionID, Valid: true}
+				store.EXPECT().
+					UpdateRiderRegion(gomock.Any(), db.UpdateRiderRegionParams{
+						ID:       rider.ID,
+						RegionID: pgtype.Int8{Int64: targetRegionID, Valid: true},
+					}).
+					Times(1).
+					Return(updated, nil)
+				store.EXPECT().
+					GetRegionRuleConfigByRegion(gomock.Any(), targetRegionID).
+					Times(1).
+					Return(db.RegionRuleConfig{RegionID: targetRegionID, RiderDeposit: 20000}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp struct {
+					RegionID int64 `json:"region_id"`
+				}
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, targetRegionID, resp.RegionID)
+			},
+		},
+		{
+			name: "UnknownRegion",
+			body: `{"region_id":596}`,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(rider, nil)
+				store.EXPECT().
+					GetRegion(gomock.Any(), targetRegionID).
+					Times(1).
+					Return(db.Region{}, db.ErrRecordNotFound)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "MissingRegion",
+			body: `{}`,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			request, err := http.NewRequest(http.MethodPatch, "/v1/rider/current-region", bytes.NewReader([]byte(tc.body)))
+			require.NoError(t, err)
+			request.Header.Set("Content-Type", "application/json")
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
 }
 
 func TestGoOfflineAPI(t *testing.T) {
@@ -749,11 +981,14 @@ func TestGetRiderDepositBalanceAPI(t *testing.T) {
 					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(int64(20*fenPerYuan), nil)
+				expectRiderThresholdFromRegionRule(store, rider, 200*fenPerYuan)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp depositBalanceResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, rider.RegionID.Int64, resp.CurrentRegionID)
+				require.Equal(t, int64(200*fenPerYuan), resp.RequiredDeposit)
 				require.Equal(t, int64(500*fenPerYuan), resp.TotalDeposit)
 				require.Equal(t, int64(50*fenPerYuan), resp.FrozenDeposit)
 				require.Equal(t, int64(30*fenPerYuan), resp.DeliveryFrozenDeposit)
@@ -783,11 +1018,14 @@ func TestGetRiderDepositBalanceAPI(t *testing.T) {
 					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(int64(100*fenPerYuan), nil)
+				expectRiderThresholdFromRegionRule(store, legacyRider, 200*fenPerYuan)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp depositBalanceResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, rider.RegionID.Int64, resp.CurrentRegionID)
+				require.Equal(t, int64(200*fenPerYuan), resp.RequiredDeposit)
 				require.Equal(t, int64(500*fenPerYuan), resp.TotalDeposit)
 				require.Equal(t, int64(0), resp.FrozenDeposit)
 				require.Equal(t, int64(0), resp.DeliveryFrozenDeposit)
@@ -814,6 +1052,32 @@ func TestGetRiderDepositBalanceAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+			},
+		},
+		{
+			name: "NoCurrentRegion",
+			rider: func() db.Rider {
+				noRegionRider := rider
+				noRegionRider.RegionID = pgtype.Int8{Valid: false}
+				return noRegionRider
+			}(),
+			pendingAmount: 0,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				noRegionRider := rider
+				noRegionRider.RegionID = pgtype.Int8{Valid: false}
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(noRegionRider, nil)
+				store.EXPECT().
+					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 		{
@@ -1585,7 +1849,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.Delivery{}, nil)
-				expectRiderThresholdFromPlatformDefault(store, rider, db.DefaultRiderDepositThresholdFen)
+				expectRiderThresholdFromRegionRule(store, rider, 200*fenPerYuan)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1595,6 +1859,8 @@ func TestGetRiderStatusAPI(t *testing.T) {
 				require.True(t, resp.IsOnline)
 				require.Equal(t, "online", resp.OnlineStatus)
 				require.Equal(t, 0, resp.ActiveDeliveries)
+				require.Equal(t, rider.RegionID.Int64, resp.CurrentRegionID)
+				require.Equal(t, int64(200*fenPerYuan), resp.RequiredDeposit)
 				require.True(t, resp.CanGoOnline)
 				require.True(t, resp.CanGoOffline)
 			},
@@ -1614,7 +1880,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.Delivery{{ID: 1}}, nil)
-				expectRiderThresholdFromPlatformDefault(store, rider, db.DefaultRiderDepositThresholdFen)
+				expectRiderThresholdFromRegionRule(store, rider, 200*fenPerYuan)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1642,7 +1908,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.Delivery{}, nil)
-				expectRiderThresholdFromPlatformDefault(store, offlineRider, db.DefaultRiderDepositThresholdFen)
+				expectRiderThresholdFromRegionRule(store, offlineRider, 200*fenPerYuan)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1670,7 +1936,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.Delivery{}, nil)
-				expectRiderThresholdFromPlatformDefault(store, insufficientRider, db.DefaultRiderDepositThresholdFen)
+				expectRiderThresholdFromRegionRule(store, insufficientRider, 200*fenPerYuan)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1698,7 +1964,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.Delivery{}, nil)
-				expectRiderThresholdFromPlatformDefault(store, approvedRider, db.DefaultRiderDepositThresholdFen)
+				expectRiderThresholdFromRegionRule(store, approvedRider, 200*fenPerYuan)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1722,6 +1988,26 @@ func TestGetRiderStatusAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
+			},
+		},
+		{
+			name: "NoCurrentRegion",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				noRegionRider := rider
+				noRegionRider.RegionID = pgtype.Int8{Valid: false}
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(noRegionRider, nil)
+				store.EXPECT().
+					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 		{
@@ -1778,6 +2064,7 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 		{
 			name: "OK_SingleLocation",
 			body: map[string]interface{}{
+				"region_id": rider.RegionID.Int64,
 				"locations": []map[string]interface{}{
 					{
 						"longitude":   116.404,
@@ -1812,6 +2099,8 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 					UpdateRiderLocation(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(rider, nil)
+
+				expectCurrentRiderRegionSyncNoChange(store, rider, 200*fenPerYuan)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1822,8 +2111,29 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "MissingRegion",
+			body: map[string]interface{}{
+				"locations": []map[string]interface{}{
+					{
+						"longitude":   116.404,
+						"latitude":    39.915,
+						"recorded_at": time.Now().Add(-1 * time.Minute).Format(time.RFC3339),
+					},
+				},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
 			name: "OK_BatchLocations",
 			body: map[string]interface{}{
+				"region_id": rider.RegionID.Int64,
 				"locations": []map[string]interface{}{
 					{
 						"longitude":   116.404,
@@ -1865,6 +2175,8 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 					UpdateRiderLocation(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(rider, nil)
+
+				expectCurrentRiderRegionSyncNoChange(store, rider, 200*fenPerYuan)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1876,6 +2188,7 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 		{
 			name: "NotOnline",
 			body: map[string]interface{}{
+				"region_id": rider.RegionID.Int64,
 				"locations": []map[string]interface{}{
 					{
 						"longitude":   116.404,
@@ -1902,6 +2215,7 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 		{
 			name: "FutureTime",
 			body: map[string]interface{}{
+				"region_id": rider.RegionID.Int64,
 				"locations": []map[string]interface{}{
 					{
 						"longitude":   116.404,
@@ -1922,6 +2236,7 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 		{
 			name: "TooOldTime",
 			body: map[string]interface{}{
+				"region_id": rider.RegionID.Int64,
 				"locations": []map[string]interface{}{
 					{
 						"longitude":   116.404,
@@ -1942,6 +2257,7 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 		{
 			name: "InvalidLongitude",
 			body: map[string]interface{}{
+				"region_id": rider.RegionID.Int64,
 				"locations": []map[string]interface{}{
 					{
 						"longitude":   200.0, // 超出范围
@@ -1962,6 +2278,7 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 		{
 			name: "InvalidLatitude",
 			body: map[string]interface{}{
+				"region_id": rider.RegionID.Int64,
 				"locations": []map[string]interface{}{
 					{
 						"longitude":   116.404,
@@ -1982,6 +2299,7 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 		{
 			name: "EmptyLocations",
 			body: map[string]interface{}{
+				"region_id": rider.RegionID.Int64,
 				"locations": []map[string]interface{}{},
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
@@ -1996,6 +2314,7 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 		{
 			name: "RiderNotFound",
 			body: map[string]interface{}{
+				"region_id": rider.RegionID.Int64,
 				"locations": []map[string]interface{}{
 					{
 						"longitude":   116.404,
@@ -2020,6 +2339,7 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 		{
 			name: "NoAuthorization",
 			body: map[string]interface{}{
+				"region_id": rider.RegionID.Int64,
 				"locations": []map[string]interface{}{
 					{
 						"longitude":   116.404,
@@ -2086,6 +2406,7 @@ func TestUpdateRiderLocationGeofenceEvents(t *testing.T) {
 	}
 
 	body := map[string]interface{}{
+		"region_id": rider.RegionID.Int64,
 		"locations": []map[string]interface{}{
 			{
 				"delivery_id": deliveryID,
@@ -2122,6 +2443,8 @@ func TestUpdateRiderLocationGeofenceEvents(t *testing.T) {
 		UpdateRiderLocation(gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(rider, nil)
+
+	expectCurrentRiderRegionSyncNoChange(store, rider, 200*fenPerYuan)
 
 	store.EXPECT().
 		GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).

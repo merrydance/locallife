@@ -14,6 +14,10 @@ interface StoreState {
   }
   latitude: number | null
   longitude: number | null
+  currentRegion: {
+    id: number
+    name: string
+  } | null
   navBarHeight: number
   cart: {
     items: unknown[]
@@ -38,6 +42,7 @@ class GlobalStore {
       location: { name: loc.name || '', address: loc.address },
       latitude: app?.globalData?.latitude || null,
       longitude: app?.globalData?.longitude || null,
+      currentRegion: app?.globalData?.currentRegion || null,
       navBarHeight: 88, // 默认值
       cart: {
         items: [],
@@ -153,6 +158,9 @@ class GlobalStore {
             break
           case 'longitude':
             app.globalData.longitude = value as typeof app.globalData.longitude
+            break
+          case 'currentRegion':
+            app.globalData.currentRegion = value as typeof app.globalData.currentRegion
             break
         }
       }

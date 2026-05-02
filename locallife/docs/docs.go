@@ -29677,6 +29677,69 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/rider/current-region": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "将骑手当前运营区域更新为小程序定位匹配出的 region_id，并按该区域押金规则刷新运营状态",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "骑手"
+                ],
+                "summary": "同步骑手当前运营区域",
+                "parameters": [
+                    {
+                        "description": "当前运营区域",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.syncRiderCurrentRegionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "骑手信息",
+                        "schema": {
+                            "$ref": "#/definitions/api.riderResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误或区域不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未登录",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "未注册骑手",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/rider/deposit": {
             "get": {
                 "security": [
@@ -30273,6 +30336,17 @@ const docTemplate = `{
                     "骑手"
                 ],
                 "summary": "骑手上线",
+                "parameters": [
+                    {
+                        "description": "当前运营区域",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.goOnlineRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "上线成功",
@@ -37428,12 +37502,20 @@ const docTemplate = `{
                     "description": "可用押金",
                     "type": "integer"
                 },
+                "current_region_id": {
+                    "description": "当前运营区域",
+                    "type": "integer"
+                },
                 "delivery_frozen_deposit": {
                     "description": "配送冻结",
                     "type": "integer"
                 },
                 "frozen_deposit": {
                     "description": "冻结押金（兼容字段，等于配送冻结+提现处理中）",
+                    "type": "integer"
+                },
+                "required_deposit": {
+                    "description": "当前区域上线所需押金",
                     "type": "integer"
                 },
                 "total_deposit": {
@@ -38181,6 +38263,17 @@ const docTemplate = `{
             "properties": {
                 "target": {
                     "$ref": "#/definitions/api.profitSharingReceiverLifecycleTargetItem"
+                }
+            }
+        },
+        "api.goOnlineRequest": {
+            "type": "object",
+            "required": [
+                "region_id"
+            ],
+            "properties": {
+                "region_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -45695,6 +45788,9 @@ const docTemplate = `{
                 "real_name": {
                     "type": "string"
                 },
+                "region_id": {
+                    "type": "integer"
+                },
                 "status": {
                     "type": "string"
                 },
@@ -45756,6 +45852,9 @@ const docTemplate = `{
                 "current_longitude": {
                     "type": "number"
                 },
+                "current_region_id": {
+                    "type": "integer"
+                },
                 "is_online": {
                     "description": "是否在线",
                     "type": "boolean"
@@ -45770,6 +45869,9 @@ const docTemplate = `{
                 "online_status": {
                     "description": "在线状态描述：offline/online/delivering",
                     "type": "string"
+                },
+                "required_deposit": {
+                    "type": "integer"
                 },
                 "status": {
                     "description": "账号状态：approved/active/suspended",
@@ -46951,6 +47053,17 @@ const docTemplate = `{
                 }
             }
         },
+        "api.syncRiderCurrentRegionRequest": {
+            "type": "object",
+            "required": [
+                "region_id"
+            ],
+            "properties": {
+                "region_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.tableImageResponse": {
             "type": "object",
             "properties": {
@@ -47615,7 +47728,8 @@ const docTemplate = `{
         "api.updateLocationRequest": {
             "type": "object",
             "required": [
-                "locations"
+                "locations",
+                "region_id"
             ],
             "properties": {
                 "locations": {
@@ -47625,6 +47739,9 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/api.locationPoint"
                     }
+                },
+                "region_id": {
+                    "type": "integer"
                 }
             }
         },

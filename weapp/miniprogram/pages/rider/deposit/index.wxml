@@ -147,7 +147,7 @@
         bind:change="onInputAmount"
         t-class="amount-input"
       />
-      <view class="dialog-tips">上线需保持押金不少于 100.00 元</view>
+      <view class="dialog-tips">上线前需满足对应运营区域押金要求</view>
     </view>
   </t-dialog>
 

@@ -3,6 +3,7 @@ import { networkMonitor } from './network-monitor'
 import { locationService } from './location'
 import { logger } from './logger'
 import { normalizeLocationError } from './rider-location'
+import { resolveCurrentRegionId } from './current-region'
 
 type UploadState = 'idle' | 'starting' | 'tracking' | 'uploading' | 'retrying' | 'permission_required' | 'stopped'
 type SessionListener = (state: RiderLiveLocationState) => void
@@ -159,7 +160,8 @@ class RiderLiveLocationSession {
     this.notify()
 
     try {
-      await RiderService.updateLocation(batch)
+      const regionId = await resolveCurrentRegionId()
+      await RiderService.updateLocation(regionId, batch)
       this.queue.splice(0, batch.length)
       this.persistQueue()
 

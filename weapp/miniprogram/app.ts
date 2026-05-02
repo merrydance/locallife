@@ -6,6 +6,7 @@ import { AppError, ErrorHandler, ErrorType } from './utils/error-handler'
 import { networkMonitor } from './utils/network-monitor'
 import { themeManager } from './utils/theme'
 import { locationService } from './utils/location'
+import { getCurrentRegion } from './api/location'
 import { confirmOrder } from './api/order'
 import { getErrorDebugMessage, isRetryableNetworkError } from './utils/user-facing'
 import { installPromptFeedbackGuards } from './utils/prompt-feedback'
@@ -20,6 +21,7 @@ App<IAppOption>({
     location: { name: '' } as { name?: string, address?: string },
     latitude: null,
     longitude: null,
+    currentRegion: undefined as { id: number, name: string } | undefined,
     userRole: 'guest',
     userRoles: [] as string[],
     userWorkbenches: [] as UserResponse['workbenches'],
@@ -607,6 +609,18 @@ App<IAppOption>({
         longitude: this.globalData.longitude,
         waitedTime: `${(retryCount * RETRY_INTERVAL) / 1000}秒`
       }, 'reverseGeocodeWhenReady')
+
+      try {
+        const region = await getCurrentRegion({
+          latitude: this.globalData.latitude,
+          longitude: this.globalData.longitude
+        })
+        this.globalData.currentRegion = { id: Number(region.region_id || 0), name: region.region_name || '' }
+        const { globalStore } = require('./utils/global-store')
+        globalStore.set('currentRegion', this.globalData.currentRegion)
+      } catch (regionErr) {
+        logger.warn('当前运营区域匹配失败', regionErr, 'reverseGeocodeWhenReady')
+      }
 
       const locationInfo = await locationService.reverseGeocode(
         this.globalData.latitude,

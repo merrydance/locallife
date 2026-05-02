@@ -35,6 +35,7 @@ Use `../.github/prompts/weapp-implementation.prompt.md` for implementation reque
 
 Run commands from `weapp/` and choose the smallest relevant check first:
 
+- If `node`, `npm`, or `npx` is not found, first prepend the local tool path: `PATH="$HOME/.local/bin:$PATH"`. This workspace has the Mini Program Node/npm toolchain available there.
 - `npm run compile`
 - `npm run lint`
 - `npm run quality:check`

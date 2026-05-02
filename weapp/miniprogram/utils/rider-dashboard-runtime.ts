@@ -14,6 +14,7 @@ import { resolveStatusTagTheme, type StatusTagTheme } from './status-tag'
 import { wsManager, WSMessageType } from './websocket'
 import { networkMonitor } from './network-monitor'
 import { getConsoleDashboardErrorMessage, getConsoleDashboardErrorState } from './console-dashboard'
+import { resolveCurrentRegionId } from './current-region'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RiderDashboardPageContext = WechatMiniprogram.Page.Instance<Record<string, any>, Record<string, any>> & Record<string, any>
@@ -331,6 +332,9 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
   },
 
   async refreshRiderOverview() {
+    const currentRegionId = await resolveCurrentRegionId()
+    await RiderService.syncCurrentRegion(currentRegionId)
+
     const [info, workbenchSummary, latestPendingClaim] = await Promise.all([
       RiderService.getMe(),
       RiderWorkbenchService.getSummary(),
@@ -751,7 +755,8 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
 
       let info: RiderInfo
       if (targetOnline) {
-        info = await RiderService.goOnline()
+        const currentRegionId = await resolveCurrentRegionId()
+        info = await RiderService.goOnline(currentRegionId)
       } else {
         info = await RiderService.goOffline()
         wx.showToast({ title: '已下线', icon: 'none' })

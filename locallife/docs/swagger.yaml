@@ -2957,11 +2957,17 @@ definitions:
       available_deposit:
         description: 可用押金
         type: integer
+      current_region_id:
+        description: 当前运营区域
+        type: integer
       delivery_frozen_deposit:
         description: 配送冻结
         type: integer
       frozen_deposit:
         description: 冻结押金（兼容字段，等于配送冻结+提现处理中）
+        type: integer
+      required_deposit:
+        description: 当前区域上线所需押金
         type: integer
       total_deposit:
         description: 总押金
@@ -3463,6 +3469,13 @@ definitions:
     properties:
       target:
         $ref: '#/definitions/api.profitSharingReceiverLifecycleTargetItem'
+    type: object
+  api.goOnlineRequest:
+    properties:
+      region_id:
+        type: integer
+    required:
+    - region_id
     type: object
   api.groupApplicationResponse:
     properties:
@@ -8525,6 +8538,8 @@ definitions:
         type: string
       real_name:
         type: string
+      region_id:
+        type: integer
       status:
         type: string
       total_earnings:
@@ -8566,6 +8581,8 @@ definitions:
         type: number
       current_longitude:
         type: number
+      current_region_id:
+        type: integer
       is_online:
         description: 是否在线
         type: boolean
@@ -8577,6 +8594,8 @@ definitions:
       online_status:
         description: 在线状态描述：offline/online/delivering
         type: string
+      required_deposit:
+        type: integer
       status:
         description: 账号状态：approved/active/suspended
         type: string
@@ -9358,6 +9377,13 @@ definitions:
       message:
         type: string
     type: object
+  api.syncRiderCurrentRegionRequest:
+    properties:
+      region_id:
+        type: integer
+    required:
+    - region_id
+    type: object
   api.tableImageResponse:
     properties:
       id:
@@ -9816,8 +9842,11 @@ definitions:
         maxItems: 100
         minItems: 1
         type: array
+      region_id:
+        type: integer
     required:
     - locations
+    - region_id
     type: object
   api.updateMembershipSettingsRequest:
     properties:
@@ -30150,6 +30179,46 @@ paths:
       summary: 获取骑手索赔汇总
       tags:
       - 骑手索赔管理
+  /v1/rider/current-region:
+    patch:
+      consumes:
+      - application/json
+      description: 将骑手当前运营区域更新为小程序定位匹配出的 region_id，并按该区域押金规则刷新运营状态
+      parameters:
+      - description: 当前运营区域
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.syncRiderCurrentRegionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 骑手信息
+          schema:
+            $ref: '#/definitions/api.riderResponse'
+        "400":
+          description: 参数错误或区域不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未登录
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 未注册骑手
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 同步骑手当前运营区域
+      tags:
+      - 骑手
   /v1/rider/deposit:
     get:
       consumes:
@@ -30527,6 +30596,13 @@ paths:
       consumes:
       - application/json
       description: 设置骑手状态为在线，开始接受订单。需要骑手处于 active 且可用押金达到平台阈值
+      parameters:
+      - description: 当前运营区域
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.goOnlineRequest'
       produces:
       - application/json
       responses:

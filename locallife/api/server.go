@@ -1115,6 +1115,7 @@ func (server *Server) setupRouter() {
 		riderGroup.POST("/application/submit", server.submitRiderApplication) // 提交申请
 		riderGroup.POST("/application/reset", server.resetRiderApplication)   // 重置待处理申请
 		riderGroup.GET("/me", server.getRiderMe)
+		riderGroup.PATCH("/current-region", server.syncCurrentRiderRegion)
 
 		// 押金管理
 		riderGroup.GET("/deposit", server.getRiderDepositBalance)

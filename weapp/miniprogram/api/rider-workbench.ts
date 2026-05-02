@@ -21,6 +21,8 @@ export interface RiderWorkbenchRiderStatus {
   is_online: boolean
   online_status: 'offline' | 'online' | 'delivering'
   active_deliveries: number
+  current_region_id: number
+  required_deposit: number
   current_longitude?: number
   current_latitude?: number
   location_updated_at?: string
