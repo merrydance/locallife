@@ -1022,7 +1022,12 @@ func respondApplymentOrdinaryProviderError(ctx *gin.Context, merchantID int64, b
 		Str("wechat_operation", providerErr.Operation).
 		Str("wechat_request_id", providerErr.RequestID).
 		Str("wechat_error_code", providerErr.ProviderCode).
+		Str("wechat_error_message", strings.TrimSpace(providerErr.ProviderMessage)).
 		Str("error_category", string(providerErr.Category)).
+		Str("frontend_code", strings.TrimSpace(providerErr.Frontend.Code)).
+		Str("frontend_message", strings.TrimSpace(providerErr.Frontend.Message)).
+		Str("frontend_action", strings.TrimSpace(providerErr.Frontend.Action)).
+		Bool("retryable", providerErr.Frontend.Retryable).
 		Msg("ordinary service provider applyment request failed")
 
 	switch providerErr.Category {
