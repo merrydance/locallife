@@ -93,11 +93,12 @@ type applymentBranchQuery struct {
 }
 
 type applymentCatalogCache struct {
-	mu        sync.RWMutex
-	banks     map[string]cachedBankEntry
-	provinces cachedProvinceEntry
-	cities    map[int]cachedCityEntry
-	branches  map[string]cachedBranchEntry
+	mu             sync.RWMutex
+	banks          map[string]cachedBankEntry
+	provinces      cachedProvinceEntry
+	cities         map[int]cachedCityEntry
+	branches       map[string]cachedBranchEntry
+	accountLookups map[string]cachedBankEntry
 }
 
 type cachedBankEntry struct {
@@ -130,9 +131,10 @@ type cachedBranchEntry struct {
 
 func newApplymentCatalogCache() *applymentCatalogCache {
 	return &applymentCatalogCache{
-		banks:    make(map[string]cachedBankEntry),
-		cities:   make(map[int]cachedCityEntry),
-		branches: make(map[string]cachedBranchEntry),
+		banks:          make(map[string]cachedBankEntry),
+		cities:         make(map[int]cachedCityEntry),
+		branches:       make(map[string]cachedBranchEntry),
+		accountLookups: make(map[string]cachedBankEntry),
 	}
 }
 
@@ -226,7 +228,7 @@ func (server *Server) searchApplymentBanksByAccount(ctx *gin.Context) {
 		return
 	}
 
-	banks, refreshedAt, err := server.loadApplymentBanks(ctx.Request.Context(), req.AccountType)
+	banks, refreshedAt, err := server.searchApplymentBanksByAccountNumber(ctx.Request.Context(), accountNumber)
 	if err != nil {
 		respondApplymentCatalogProviderError(ctx, err, "普通服务商开户银行识别失败，请稍后重试；如持续失败请联系平台管理员检查微信支付银行识别服务日志", "search_applyment_banks_by_account")
 		return
@@ -419,6 +421,36 @@ func (server *Server) loadApplymentBanks(ctx context.Context, accountType string
 	entry = cachedBankEntry{items: items, refreshed: now, expiresAt: now.Add(applymentCatalogTTL)}
 	cache.mu.Lock()
 	cache.banks[accountType] = entry
+	cache.mu.Unlock()
+
+	return entry.items, entry.refreshed, nil
+}
+
+func (server *Server) searchApplymentBanksByAccountNumber(ctx context.Context, accountNumber string) ([]applymentBankOption, time.Time, error) {
+	cache := server.getApplymentCatalogCache()
+	now := time.Now()
+	cacheKey := accountNumber
+
+	cache.mu.RLock()
+	entry, ok := cache.accountLookups[cacheKey]
+	cache.mu.RUnlock()
+	if ok && now.Before(entry.expiresAt) {
+		return entry.items, entry.refreshed, nil
+	}
+
+	resp, err := server.ordinarySPClient.SearchBanksByBankAccount(ctx, accountNumber)
+	if err != nil {
+		return nil, time.Time{}, fmt.Errorf("search applyment banks by account number: %w", err)
+	}
+
+	items := make([]applymentBankOption, 0, len(resp.Data))
+	for _, bank := range resp.Data {
+		items = append(items, mapCapitalBankOption(bank))
+	}
+
+	entry = cachedBankEntry{items: items, refreshed: now, expiresAt: now.Add(30 * time.Minute)}
+	cache.mu.Lock()
+	cache.accountLookups[cacheKey] = entry
 	cache.mu.Unlock()
 
 	return entry.items, entry.refreshed, nil
