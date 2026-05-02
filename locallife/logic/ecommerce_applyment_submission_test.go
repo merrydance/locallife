@@ -235,6 +235,57 @@ func TestBuildOrdinaryServiceProviderApplymentRequestIncludesDiscountActivities(
 	require.Nil(t, request.BusinessInfo.SalesInfo.StoreInfo)
 }
 
+func TestBuildOrdinaryServiceProviderApplymentRequestNormalizesDateFields(t *testing.T) {
+	t.Parallel()
+
+	request := BuildOrdinaryServiceProviderApplymentRequest(ApplymentOrdinaryRequestInput{
+		BusinessCode:      "ORDINARY_DATES_001",
+		OrganizationType:  "2",
+		BusinessLicense:   ApplymentBusinessLicenseOCRInput{ValidPeriod: "2020年01月01日至长期"},
+		BusinessLicenseID: "91440300MA00000000",
+		LicenseCopy:       "license-media",
+		MerchantName:      "测试餐饮有限公司",
+		LegalPerson:       "张三",
+		BusinessAddress:   "深圳市南山区",
+		MerchantShortname: "测试餐饮",
+		ServicePhone:      "13800138000",
+		MiniProgramAppID:  "wx-mini-app",
+		IDCardInfo: ApplymentOrdinaryIDCardInput{
+			IDCardCopy:      "id-front",
+			IDCardNational:  "id-back",
+			IDCardName:      "enc-name",
+			IDCardNumber:    "enc-id",
+			CardPeriodBegin: "2020年1月2日",
+			CardPeriodEnd:   "2030.03.04",
+		},
+		AccountInfo: ApplymentWechatAccountInput{
+			AccountType:   "ACCOUNT_TYPE_BUSINESS",
+			AccountBank:   "招商银行",
+			AccountName:   "enc-account-name",
+			AccountNumber: "enc-account-number",
+		},
+		ContactInfo: ApplymentOrdinaryContactInput{
+			ContactType:        "SUPER",
+			ContactName:        "enc-contact-name",
+			ContactIDDocType:   "IDENTIFICATION_TYPE_MAINLAND_IDCARD",
+			ContactIDNumber:    "enc-contact-id",
+			ContactPeriodBegin: "2021/5/6",
+			ContactPeriodEnd:   "长期",
+			MobilePhone:        "enc-phone",
+			ContactEmail:       "ops@example.com",
+		},
+		SettlementID:      "716",
+		QualificationType: "餐饮",
+	})
+
+	require.Equal(t, "2020-01-01", request.SubjectInfo.BusinessLicenseInfo.PeriodBegin)
+	require.Equal(t, "长期", request.SubjectInfo.BusinessLicenseInfo.PeriodEnd)
+	require.Equal(t, "2020-01-02", request.SubjectInfo.IdentityInfo.IDCardInfo.CardPeriodBegin)
+	require.Equal(t, "2030-03-04", request.SubjectInfo.IdentityInfo.IDCardInfo.CardPeriodEnd)
+	require.Equal(t, "2021-05-06", request.ContactInfo.ContactPeriodBegin)
+	require.Equal(t, "长期", request.ContactInfo.ContactPeriodEnd)
+}
+
 func TestResolveApplymentOrganizationType(t *testing.T) {
 	t.Parallel()
 
