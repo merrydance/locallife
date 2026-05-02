@@ -120,19 +120,6 @@ func pickSettlementBankOption(options []applymentBankOption, accountBank string)
 }
 
 func (server *Server) resolveSettlementBankOption(ctx context.Context, req modifySettlementAccountRequest) (*applymentBankOption, error) {
-	if req.AccountType == "ACCOUNT_TYPE_PRIVATE" && req.AccountNumber != "" {
-		matches, _, err := server.searchApplymentBanksByAccountNumber(ctx, req.AccountNumber)
-		if err != nil {
-			return nil, fmt.Errorf("search settlement bank by account number: %w", err)
-		}
-		if option, ok := pickSettlementBankOption(matches, req.AccountBank); ok {
-			return &option, nil
-		}
-		if len(matches) == 1 {
-			return &matches[0], nil
-		}
-	}
-
 	banks, _, err := server.loadApplymentBanks(ctx, req.AccountType)
 	if err != nil {
 		return nil, fmt.Errorf("load settlement banks: %w", err)

@@ -161,6 +161,42 @@ func TestSearchApplymentBanksBusinessAccountSkipsProviderLookup(t *testing.T) {
 	require.Equal(t, []applymentBankOption{}, response.Matches)
 }
 
+func TestSearchApplymentBanksPrivateAccountUsesBankListCatalog(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := mockosp.NewMockOrdinaryServiceProviderClientInterface(ctrl)
+	server := newTestServer(t, store)
+	server.SetOrdinaryServiceProviderClientForTest(ordinaryClient)
+
+	ordinaryClient.EXPECT().
+		ListPersonalBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).
+		Return(&ospcontracts.CapitalBankListResponse{
+			Data: []ospcontracts.CapitalBank{
+				{
+					BankAlias:       "测试银行",
+					BankAliasCode:   "TEST",
+					AccountBank:     "测试银行",
+					AccountBankCode: 1001,
+					NeedBankBranch:  false,
+				},
+			},
+			Count:      1,
+			TotalCount: 1,
+		}, nil)
+
+	recorder, ctx := applymentCatalogRequest(t, http.MethodGet, "/v1/merchant/applyment/banks/search-by-bank-account?account_type=ACCOUNT_TYPE_PRIVATE&account_number=6222020202020202")
+
+	server.searchApplymentBanksByAccount(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response applymentBankSearchResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Equal(t, 1, response.Total)
+	require.Equal(t, "测试银行", response.Matches[0].BankAlias)
+}
+
 func TestListApplymentBanksSuccessUsesOrdinaryProvider(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
