@@ -75,6 +75,120 @@ func TestProfitSharingOrderRequestValidation(t *testing.T) {
 	}
 }
 
+func TestProfitSharingOrderRequestValidationEnforcesConditionalOfficialFields(t *testing.T) {
+	req := validProfitSharingOrderRequest()
+	req.AppID = ""
+	req.Receivers[0].Type = ReceiverTypePersonalOpenID
+	req.Receivers[0].Name = ""
+
+	err := req.Validate()
+	if err == nil || !strings.Contains(err.Error(), "appid") {
+		t.Fatalf("expected PERSONAL_OPENID receiver to require appid, got %v", err)
+	}
+
+	req = validProfitSharingOrderRequest()
+	req.SubAppID = ""
+	req.Receivers[0].Type = ReceiverTypePersonalSubOpenID
+	req.Receivers[0].Name = ""
+
+	err = req.Validate()
+	if err == nil || !strings.Contains(err.Error(), "sub_appid") {
+		t.Fatalf("expected PERSONAL_SUB_OPENID receiver to require sub_appid, got %v", err)
+	}
+}
+
+func TestProfitSharingReceiverAddRequestValidationMatchesOfficialContract(t *testing.T) {
+	req := validProfitSharingReceiverAddRequest()
+	req.AppID = ""
+
+	err := ValidateEndpointRequest(EndpointProfitSharingReceiverAdd, req)
+	if err == nil || !strings.Contains(err.Error(), "appid") {
+		t.Fatalf("expected add receiver to require official appid, got %v", err)
+	}
+
+	req = validProfitSharingReceiverAddRequest()
+	req.RelationType = "NOT_A_RELATION"
+	err = ValidateEndpointRequest(EndpointProfitSharingReceiverAdd, req)
+	if err == nil || !strings.Contains(err.Error(), "relation_type") {
+		t.Fatalf("expected add receiver to reject unsupported relation_type, got %v", err)
+	}
+
+	for _, relation := range []ProfitSharingReceiverRelationType{
+		ProfitSharingRelationServiceProvider,
+		ProfitSharingRelationStore,
+		ProfitSharingRelationStaff,
+		ProfitSharingRelationStoreOwner,
+		ProfitSharingRelationPartner,
+		ProfitSharingRelationHeadquarter,
+		ProfitSharingRelationBrand,
+		ProfitSharingRelationDistributor,
+		ProfitSharingRelationUser,
+		ProfitSharingRelationSupplier,
+		ProfitSharingRelationCustom,
+	} {
+		req = validProfitSharingReceiverAddRequest()
+		req.RelationType = relation
+		if relation == ProfitSharingRelationCustom {
+			req.CustomRelation = "配送员"
+		}
+		if err := ValidateEndpointRequest(EndpointProfitSharingReceiverAdd, req); err != nil {
+			t.Fatalf("expected official relation_type %s to pass, got %v", relation, err)
+		}
+	}
+}
+
+func TestProfitSharingReceiverAddRequestValidationEnforcesConditionalOfficialFields(t *testing.T) {
+	req := validProfitSharingReceiverAddRequest()
+	req.Type = ReceiverTypePersonalSubOpenID
+	req.SubAppID = ""
+
+	err := ValidateEndpointRequest(EndpointProfitSharingReceiverAdd, req)
+	if err == nil || !strings.Contains(err.Error(), "sub_appid") {
+		t.Fatalf("expected PERSONAL_SUB_OPENID to require sub_appid, got %v", err)
+	}
+
+	req = validProfitSharingReceiverAddRequest()
+	req.Type = ReceiverTypeMerchantID
+	req.Name = ""
+	err = ValidateEndpointRequest(EndpointProfitSharingReceiverAdd, req)
+	if err == nil || !strings.Contains(err.Error(), "name") {
+		t.Fatalf("expected MERCHANT_ID to require encrypted name, got %v", err)
+	}
+
+	req = validProfitSharingReceiverAddRequest()
+	req.RelationType = ProfitSharingRelationCustom
+	req.CustomRelation = ""
+	err = ValidateEndpointRequest(EndpointProfitSharingReceiverAdd, req)
+	if err == nil || !strings.Contains(err.Error(), "custom_relation") {
+		t.Fatalf("expected CUSTOM relation_type to require custom_relation, got %v", err)
+	}
+}
+
+func TestProfitSharingReceiverDeleteRequestValidationMatchesOfficialContract(t *testing.T) {
+	req := validProfitSharingReceiverDeleteRequest()
+	req.AppID = ""
+
+	err := ValidateEndpointRequest(EndpointProfitSharingReceiverDelete, req)
+	if err == nil || !strings.Contains(err.Error(), "appid") {
+		t.Fatalf("expected delete receiver to require official appid, got %v", err)
+	}
+
+	req = validProfitSharingReceiverDeleteRequest()
+	req.Type = ReceiverType("NOT_A_TYPE")
+	err = ValidateEndpointRequest(EndpointProfitSharingReceiverDelete, req)
+	if err == nil || !strings.Contains(err.Error(), "type") {
+		t.Fatalf("expected delete receiver to reject unsupported type, got %v", err)
+	}
+
+	req = validProfitSharingReceiverDeleteRequest()
+	req.Type = ReceiverTypePersonalSubOpenID
+	req.SubAppID = ""
+	err = ValidateEndpointRequest(EndpointProfitSharingReceiverDelete, req)
+	if err == nil || !strings.Contains(err.Error(), "sub_appid") {
+		t.Fatalf("expected PERSONAL_SUB_OPENID delete to require sub_appid, got %v", err)
+	}
+}
+
 func validRefundCreateRequest() RefundCreateRequest {
 	return RefundCreateRequest{
 		SubMchID:      "1900000109",
@@ -87,6 +201,28 @@ func validRefundCreateRequest() RefundCreateRequest {
 			Total:    100,
 			Currency: CurrencyCNY,
 		},
+	}
+}
+
+func validProfitSharingReceiverAddRequest() ProfitSharingReceiverAddRequest {
+	return ProfitSharingReceiverAddRequest{
+		SubMchID:     "1900000109",
+		AppID:        "wx8888888888888888",
+		SubAppID:     "wx8888888888888889",
+		Type:         ReceiverTypeMerchantID,
+		Account:      "1900000200",
+		Name:         "encrypted-merchant-name",
+		RelationType: ProfitSharingRelationServiceProvider,
+	}
+}
+
+func validProfitSharingReceiverDeleteRequest() ProfitSharingReceiverDeleteRequest {
+	return ProfitSharingReceiverDeleteRequest{
+		SubMchID: "1900000109",
+		AppID:    "wx8888888888888888",
+		SubAppID: "wx8888888888888889",
+		Type:     ReceiverTypeMerchantID,
+		Account:  "1900000200",
 	}
 }
 

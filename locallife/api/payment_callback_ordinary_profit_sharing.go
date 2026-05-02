@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -38,7 +39,7 @@ func (server *Server) handleOrdinaryServiceProviderProfitSharingNotify(ctx *gin.
 	if err := server.validateOrdinaryProfitSharingOwnership(resource); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("ordinary_profit_sharing", "ownership").Inc()
 		log.Error().Err(err).
-			Str("sp_mch_id", resource.SPMchID).
+			Str("sp_mch_id", resource.SpMchID).
 			Str("sub_mch_id", resource.SubMchID).
 			Str("out_order_no", resource.OutOrderNo).
 			Msg("ordinary profit sharing notification ownership validation failed")
@@ -46,13 +47,13 @@ func (server *Server) handleOrdinaryServiceProviderProfitSharingNotify(ctx *gin.
 			AlertType:   websocket.AlertTypeSystemError,
 			Level:       websocket.AlertLevelCritical,
 			Title:       "普通服务商分账回调归属校验失败",
-			Message:     fmt.Sprintf("普通服务商分账回调 out_order_no=%s 归属校验失败，sp_mch_id=%s, sub_mch_id=%s。系统已返回 FAIL 等待微信重试。", resource.OutOrderNo, resource.SPMchID, resource.SubMchID),
+			Message:     fmt.Sprintf("普通服务商分账回调 out_order_no=%s 归属校验失败，sp_mch_id=%s, sub_mch_id=%s。系统已返回 FAIL 等待微信重试。", resource.OutOrderNo, resource.SpMchID, resource.SubMchID),
 			RelatedID:   0,
 			RelatedType: "profit_sharing_order",
 			Extra: map[string]interface{}{
 				"out_order_no": resource.OutOrderNo,
 				"order_id":     resource.OrderID,
-				"sp_mch_id":    resource.SPMchID,
+				"sp_mch_id":    resource.SpMchID,
 				"sub_mch_id":   resource.SubMchID,
 			},
 		})
@@ -60,7 +61,6 @@ func (server *Server) handleOrdinaryServiceProviderProfitSharingNotify(ctx *gin.
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "ownership validation failed"})
 		return
 	}
-
 	profitSharingOrder, err := server.store.GetProfitSharingOrderByOutOrderNo(ctx, resource.OutOrderNo)
 	if err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("ordinary_profit_sharing", "query_profit_sharing_order").Inc()
@@ -96,7 +96,7 @@ func (server *Server) handleOrdinaryServiceProviderProfitSharingNotify(ctx *gin.
 		return
 	}
 
-	if err := server.validateProfitSharingSubMerchantOwnership(ctx, resource, profitSharingOrder); err != nil {
+	if err := server.validateOrdinaryProfitSharingSubMerchantOwnership(ctx, resource, profitSharingOrder); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("ordinary_profit_sharing", "sub_merchant_ownership").Inc()
 		log.Error().Err(err).
 			Int64("profit_sharing_order_id", profitSharingOrder.ID).
@@ -127,7 +127,7 @@ func (server *Server) handleOrdinaryServiceProviderProfitSharingNotify(ctx *gin.
 	canonicalQuery := ordinaryProfitSharingQueryResponse(queryResp)
 	finalResult, finalFailReason := logic.ResolveProfitSharingQueryFinalResult(canonicalQuery)
 
-	paymentFactApplication, err := server.recordProfitSharingCallbackFact(ctx, db.PaymentChannelOrdinaryServiceProvider, notification, profitSharingOrder, resource, canonicalQuery, finalResult, finalFailReason)
+	paymentFactApplication, err := server.recordOrdinaryProfitSharingCallbackFact(ctx, notification, profitSharingOrder, resource, queryResp, finalResult, finalFailReason)
 	if err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("ordinary_profit_sharing", "record_fact").Inc()
 		log.Error().Err(err).
@@ -144,7 +144,7 @@ func (server *Server) handleOrdinaryServiceProviderProfitSharingNotify(ctx *gin.
 	server.markNotificationProcessed(ctx, notification.ID, "", resource.TransactionID)
 }
 
-func ordinaryProfitSharingResourceFromEnvelope(envelope *ordinaryserviceprovider.NotificationEnvelope) (*wechatcontracts.ProfitSharingNotification, error) {
+func ordinaryProfitSharingResourceFromEnvelope(envelope *ordinaryserviceprovider.NotificationEnvelope) (*ospcontracts.ProfitSharingNotificationPayload, error) {
 	if envelope == nil {
 		return nil, errors.New("ordinary profit sharing notification envelope is nil")
 	}
@@ -152,28 +152,51 @@ func ordinaryProfitSharingResourceFromEnvelope(envelope *ordinaryserviceprovider
 	if err != nil {
 		return nil, err
 	}
-	resource := &wechatcontracts.ProfitSharingNotification{}
+	resource := &ospcontracts.ProfitSharingNotificationPayload{}
 	if err := json.Unmarshal(data, resource); err != nil {
 		return nil, fmt.Errorf("decode ordinary profit sharing notification resource: %w", err)
 	}
-	if err := wechatcontracts.ValidateProfitSharingNotification("ordinary profit sharing notification", resource); err != nil {
+	if err := ospcontracts.ValidateProfitSharingNotificationPayload(*resource); err != nil {
 		return nil, err
 	}
 	return resource, nil
 }
 
-func (server *Server) validateOrdinaryProfitSharingOwnership(resource *wechatcontracts.ProfitSharingNotification) error {
+func (server *Server) validateOrdinaryProfitSharingOwnership(resource *ospcontracts.ProfitSharingNotificationPayload) error {
 	if server.ordinarySPClient == nil {
 		return errors.New("ordinary service provider client not configured")
 	}
 	if resource == nil {
 		return errors.New("ordinary profit sharing resource is nil")
 	}
-	if resource.SPMchID == "" {
+	if resource.SpMchID == "" {
 		return errors.New("sp_mchid missing")
 	}
-	if resource.SPMchID != server.ordinarySPClient.ServiceProviderMchID() {
+	if resource.SpMchID != server.ordinarySPClient.ServiceProviderMchID() {
 		return fmt.Errorf("mchid mismatch")
+	}
+	return nil
+}
+
+func (server *Server) validateOrdinaryProfitSharingSubMerchantOwnership(ctx context.Context, resource *ospcontracts.ProfitSharingNotificationPayload, order db.ProfitSharingOrder) error {
+	if resource == nil {
+		return errors.New("profit sharing resource is nil")
+	}
+	if resource.SubMchID == "" {
+		return errors.New("sub_mchid missing")
+	}
+	if order.MerchantID == 0 {
+		return errors.New("profit sharing order missing merchant_id")
+	}
+	paymentConfig, err := server.store.GetMerchantPaymentConfig(ctx, order.MerchantID)
+	if err != nil {
+		return fmt.Errorf("get merchant payment config: %w", err)
+	}
+	if paymentConfig.SubMchID == "" {
+		return errors.New("merchant payment config sub_mchid missing")
+	}
+	if resource.SubMchID != paymentConfig.SubMchID {
+		return fmt.Errorf("sub_mchid mismatch")
 	}
 	return nil
 }

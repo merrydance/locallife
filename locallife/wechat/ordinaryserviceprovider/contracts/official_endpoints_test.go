@@ -169,10 +169,176 @@ func TestOfficialRequestContractsDoNotExposeUnofficialJSONFields(t *testing.T) {
 	}
 }
 
+func TestOfficialSnapshotMapsFieldMetadataFromWechatDocs(t *testing.T) {
+	snapshot := loadOfficialSnapshot(t)
+
+	for _, endpoint := range officialContractBindings {
+		entry, ok := snapshot[endpoint.Title]
+		if !ok {
+			t.Fatalf("missing snapshot entry for %s", endpoint.Title)
+		}
+		if entry.Method == "" || entry.Path == "" {
+			t.Fatalf("%s snapshot must keep the official method/path or callback/local path", endpoint.Title)
+		}
+		if !entry.Audit.LegacyFieldsCoverAllNonHeaderPaths {
+			t.Fatalf("%s legacy fields must cover every non-header official request/response/notification path", endpoint.Title)
+		}
+		if !entry.Audit.LegacyErrorCodesCoverOfficialCodes {
+			t.Fatalf("%s legacy error_codes must cover every official error code", endpoint.Title)
+		}
+
+		metadataByPath := map[string]officialSnapshotField{}
+		for _, field := range entry.nonHeaderMetadataFields() {
+			if field.Path == "" || field.Type == "" || field.Description == "" {
+				t.Fatalf("%s has incomplete official field metadata: %+v", endpoint.Title, field)
+			}
+			if field.ConditionalRequired != "" && field.Required {
+				t.Fatalf("%s marks required field %s as conditionally required", endpoint.Title, field.Path)
+			}
+			metadataByPath[field.Path] = field
+		}
+		if len(metadataByPath) != entry.Audit.OfficialNonHeaderPathCount {
+			t.Fatalf("%s official metadata path count = %d, want audit count %d", endpoint.Title, len(metadataByPath), entry.Audit.OfficialNonHeaderPathCount)
+		}
+
+		for _, field := range entry.Fields {
+			if _, ok := metadataByPath[field]; !ok {
+				t.Fatalf("%s legacy snapshot field %s lacks official type/required metadata", endpoint.Title, field)
+			}
+		}
+		if uniqueStringCount(entry.Fields) != entry.Audit.LegacyFieldCount {
+			t.Fatalf("%s legacy unique field count = %d, want audit count %d", endpoint.Title, uniqueStringCount(entry.Fields), entry.Audit.LegacyFieldCount)
+		}
+
+		errorDetailsByCode := map[string]struct{}{}
+		for _, detail := range entry.ErrorCodeDetails {
+			if detail.Code == "" || detail.StatusCode == "" || detail.Description == "" || detail.Solution == "" {
+				t.Fatalf("%s has incomplete official error-code metadata: %+v", endpoint.Title, detail)
+			}
+			errorDetailsByCode[detail.Code] = struct{}{}
+		}
+		for _, code := range entry.ErrorCodes {
+			if _, ok := errorDetailsByCode[code]; !ok {
+				t.Fatalf("%s legacy error code %s lacks official status/description/solution metadata", endpoint.Title, code)
+			}
+		}
+	}
+}
+
+func TestOfficialSnapshotFieldTypesMatchGoContractTypes(t *testing.T) {
+	snapshot := loadOfficialSnapshot(t)
+	typesByName := ordinaryContractTypesByName()
+
+	for _, endpoint := range officialContractBindings {
+		entry, ok := snapshot[endpoint.Title]
+		if !ok {
+			t.Fatalf("missing snapshot entry for %s", endpoint.Title)
+		}
+		contractTypes := map[string][]reflect.Type{}
+		for _, name := range append(endpoint.RequestContracts, endpoint.ResponseContracts...) {
+			typ, ok := typesByName[name]
+			if !ok {
+				t.Fatalf("%s references missing contract type %s", endpoint.Title, name)
+			}
+			for path, fieldTypes := range collectJSONFieldTypes(typ, "") {
+				contractTypes[path] = append(contractTypes[path], fieldTypes...)
+			}
+		}
+
+		var mismatches []string
+		for _, official := range entry.nonHeaderMetadataFields() {
+			goTypes, ok := contractTypes[official.Path]
+			if !ok {
+				mismatches = append(mismatches, official.Path+" missing Go field")
+				continue
+			}
+			if !anyGoTypeMatchesOfficialType(official.Type, goTypes) {
+				mismatches = append(mismatches, official.Path+" official "+official.Type+" != Go "+formatReflectTypes(goTypes))
+			}
+		}
+		if len(mismatches) > 0 {
+			sort.Strings(mismatches)
+			t.Fatalf("%s official field types do not match Go contracts: %v", endpoint.Title, mismatches)
+		}
+	}
+}
+
 type officialSnapshotEntry struct {
-	Title      string   `json:"title"`
-	Fields     []string `json:"fields"`
-	ErrorCodes []string `json:"error_codes"`
+	Title            string                        `json:"title"`
+	Method           string                        `json:"method"`
+	Path             string                        `json:"path"`
+	Request          officialSnapshotRequest       `json:"request"`
+	Response         officialSnapshotResponse      `json:"response"`
+	Notification     officialSnapshotNotification  `json:"notification"`
+	Fields           []string                      `json:"fields"`
+	ErrorCodes       []string                      `json:"error_codes"`
+	ErrorCodeDetails []officialSnapshotErrorDetail `json:"error_code_details"`
+	Audit            officialSnapshotAudit         `json:"audit"`
+}
+
+type officialSnapshotRequest struct {
+	Header []officialSnapshotField `json:"header"`
+	Path   []officialSnapshotField `json:"path"`
+	Query  []officialSnapshotField `json:"query"`
+	Body   []officialSnapshotField `json:"body"`
+}
+
+type officialSnapshotResponse struct {
+	Body []officialSnapshotField `json:"body"`
+}
+
+type officialSnapshotNotification struct {
+	SignatureHeaders []officialSnapshotField `json:"signature_headers"`
+	Envelope         []officialSnapshotField `json:"envelope"`
+	DecryptedPayload []officialSnapshotField `json:"decrypted_resource"`
+	Response         []officialSnapshotField `json:"response"`
+}
+
+type officialSnapshotField struct {
+	Path                string `json:"path"`
+	Type                string `json:"type"`
+	Required            bool   `json:"required"`
+	ConditionalRequired string `json:"conditional_required"`
+	ConditionalReturn   string `json:"conditional_return"`
+	Description         string `json:"description"`
+}
+
+type officialSnapshotErrorDetail struct {
+	StatusCode  string `json:"status_code"`
+	Code        string `json:"code"`
+	Description string `json:"description"`
+	Solution    string `json:"solution"`
+}
+
+type officialSnapshotAudit struct {
+	Source                             string `json:"source"`
+	FetchedOn                          string `json:"fetched_on"`
+	LegacyFieldsCoverAllNonHeaderPaths bool   `json:"legacy_fields_cover_all_non_header_official_paths"`
+	LegacyErrorCodesCoverOfficialCodes bool   `json:"legacy_error_codes_cover_official_codes"`
+	OfficialNonHeaderPathCount         int    `json:"official_non_header_path_count"`
+	LegacyFieldCount                   int    `json:"legacy_field_count"`
+	OfficialErrorCodeCount             int    `json:"official_error_code_count"`
+	LegacyErrorCodeCount               int    `json:"legacy_error_code_count"`
+}
+
+func (entry officialSnapshotEntry) nonHeaderMetadataFields() []officialSnapshotField {
+	var fields []officialSnapshotField
+	fields = append(fields, entry.Request.Path...)
+	fields = append(fields, entry.Request.Query...)
+	fields = append(fields, entry.Request.Body...)
+	fields = append(fields, entry.Response.Body...)
+	fields = append(fields, entry.Notification.Envelope...)
+	fields = append(fields, entry.Notification.DecryptedPayload...)
+	fields = append(fields, entry.Notification.Response...)
+	return fields
+}
+
+func uniqueStringCount(values []string) int {
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		seen[value] = struct{}{}
+	}
+	return len(seen)
 }
 
 func loadOfficialSnapshot(t *testing.T) map[string]officialSnapshotEntry {
@@ -224,6 +390,76 @@ func collectJSONFieldPaths(typ reflect.Type, prefix string) map[string]struct{} 
 		}
 	}
 	return paths
+}
+
+func collectJSONFieldTypes(typ reflect.Type, prefix string) map[string][]reflect.Type {
+	for typ.Kind() == reflect.Pointer || typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array {
+		typ = typ.Elem()
+	}
+	paths := map[string][]reflect.Type{}
+	if typ.Kind() != reflect.Struct || typ == reflect.TypeOf(Currency("")) {
+		return paths
+	}
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		if field.PkgPath != "" {
+			continue
+		}
+		name := jsonFieldName(field)
+		if name == "" || name == "-" {
+			continue
+		}
+		path := name
+		if prefix != "" {
+			path = prefix + "." + name
+		}
+		paths[path] = append(paths[path], field.Type)
+		for child, childTypes := range collectJSONFieldTypes(field.Type, path) {
+			paths[child] = append(paths[child], childTypes...)
+		}
+	}
+	return paths
+}
+
+func anyGoTypeMatchesOfficialType(officialType string, goTypes []reflect.Type) bool {
+	for _, goType := range goTypes {
+		if goTypeMatchesOfficialType(officialType, goType) {
+			return true
+		}
+	}
+	return false
+}
+
+func goTypeMatchesOfficialType(officialType string, goType reflect.Type) bool {
+	officialType = strings.ToLower(strings.TrimSpace(officialType))
+	for goType.Kind() == reflect.Pointer {
+		goType = goType.Elem()
+	}
+	switch {
+	case strings.HasPrefix(officialType, "string"):
+		return goType.Kind() == reflect.String
+	case officialType == "integer" || officialType == "int" || officialType == "int64":
+		return goType.Kind() >= reflect.Int && goType.Kind() <= reflect.Int64
+	case officialType == "boolean":
+		return goType.Kind() == reflect.Bool
+	case officialType == "object":
+		return goType.Kind() == reflect.Struct || goType.Kind() == reflect.Map
+	case strings.HasPrefix(officialType, "array"):
+		return goType.Kind() == reflect.Slice || goType.Kind() == reflect.Array
+	case officialType == "message":
+		return (goType.Kind() == reflect.Slice || goType.Kind() == reflect.Array) && goType.Elem().Kind() == reflect.Uint8
+	default:
+		return false
+	}
+}
+
+func formatReflectTypes(types []reflect.Type) string {
+	names := make([]string, 0, len(types))
+	for _, typ := range types {
+		names = append(names, typ.String())
+	}
+	sort.Strings(names)
+	return strings.Join(names, "|")
 }
 
 func jsonFieldName(field reflect.StructField) string {
@@ -284,12 +520,14 @@ func ordinaryContractTypesByName() map[string]reflect.Type {
 		reflect.TypeOf((*PaymentPrepayResponse)(nil)).Elem(),
 		reflect.TypeOf((*PaymentQueryRequest)(nil)).Elem(),
 		reflect.TypeOf((*PaymentQueryResponse)(nil)).Elem(),
+		reflect.TypeOf((*PaymentNotificationPayload)(nil)).Elem(),
 		reflect.TypeOf((*PaymentCloseRequest)(nil)).Elem(),
 		reflect.TypeOf((*JSAPIPayParams)(nil)).Elem(),
 		reflect.TypeOf((*CombinePrepayRequest)(nil)).Elem(),
 		reflect.TypeOf((*CombinePrepayResponse)(nil)).Elem(),
 		reflect.TypeOf((*CombineQueryRequest)(nil)).Elem(),
 		reflect.TypeOf((*CombineQueryResponse)(nil)).Elem(),
+		reflect.TypeOf((*CombinePaymentNotificationPayload)(nil)).Elem(),
 		reflect.TypeOf((*CombineCloseRequest)(nil)).Elem(),
 		reflect.TypeOf((*RefundCreateRequest)(nil)).Elem(),
 		reflect.TypeOf((*RefundQueryRequest)(nil)).Elem(),

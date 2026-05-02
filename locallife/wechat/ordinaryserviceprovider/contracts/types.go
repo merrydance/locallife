@@ -1059,6 +1059,27 @@ type PaymentQueryResponse struct {
 	PromotionDetail []PaymentPromotionDetail `json:"promotion_detail,omitempty"`
 }
 
+// PaymentNotificationPayload is the decrypted resource payload from the
+// ordinary service provider payment notification.
+type PaymentNotificationPayload struct {
+	SpAppID         string                   `json:"sp_appid,omitempty"`
+	SpMchID         string                   `json:"sp_mchid,omitempty"`
+	SubAppID        string                   `json:"sub_appid,omitempty"`
+	SubMchID        string                   `json:"sub_mchid,omitempty"`
+	OutTradeNo      string                   `json:"out_trade_no,omitempty"`
+	TransactionID   string                   `json:"transaction_id,omitempty"`
+	TradeType       string                   `json:"trade_type,omitempty"`
+	TradeState      PaymentTradeState        `json:"trade_state,omitempty"`
+	TradeStateDesc  string                   `json:"trade_state_desc,omitempty"`
+	BankType        string                   `json:"bank_type,omitempty"`
+	Attach          string                   `json:"attach,omitempty"`
+	SuccessTime     string                   `json:"success_time,omitempty"`
+	Payer           PaymentPayer             `json:"payer,omitempty"`
+	Amount          *PaymentAmount           `json:"amount,omitempty"`
+	SceneInfo       *PaymentSceneInfo        `json:"scene_info,omitempty"`
+	PromotionDetail []PaymentPromotionDetail `json:"promotion_detail,omitempty"`
+}
+
 type PaymentCloseRequest struct {
 	SpMchID    string `json:"sp_mchid,omitempty"`
 	SubMchID   string `json:"sub_mchid,omitempty"`
@@ -1166,6 +1187,17 @@ type CombineQueryResponse struct {
 	TradeState        PaymentTradeState   `json:"trade_state,omitempty"`
 	SceneInfo         *CombineSceneInfo   `json:"scene_info,omitempty"`
 	SubOrders         []CombineOrderState `json:"sub_orders,omitempty"`
+}
+
+// CombinePaymentNotificationPayload is the decrypted resource payload from the
+// ordinary service provider combine-payment notification.
+type CombinePaymentNotificationPayload struct {
+	CombineAppID      string              `json:"combine_appid,omitempty"`
+	CombineMchID      string              `json:"combine_mchid,omitempty"`
+	CombineOutTradeNo string              `json:"combine_out_trade_no,omitempty"`
+	SceneInfo         *CombineSceneInfo   `json:"scene_info,omitempty"`
+	SubOrders         []CombineOrderState `json:"sub_orders,omitempty"`
+	CombinePayerInfo  CombinePayerInfo    `json:"combine_payer_info,omitempty"`
 }
 
 type CombineOrderState struct {
@@ -1404,10 +1436,14 @@ const (
 	ProfitSharingRelationServiceProvider ProfitSharingReceiverRelationType = "SERVICE_PROVIDER"
 	ProfitSharingRelationStore           ProfitSharingReceiverRelationType = "STORE"
 	ProfitSharingRelationStaff           ProfitSharingReceiverRelationType = "STAFF"
+	ProfitSharingRelationStoreOwner      ProfitSharingReceiverRelationType = "STORE_OWNER"
 	ProfitSharingRelationPartner         ProfitSharingReceiverRelationType = "PARTNER"
+	ProfitSharingRelationHeadquarter     ProfitSharingReceiverRelationType = "HEADQUARTER"
+	ProfitSharingRelationBrand           ProfitSharingReceiverRelationType = "BRAND"
 	ProfitSharingRelationUser            ProfitSharingReceiverRelationType = "USER"
 	ProfitSharingRelationSupplier        ProfitSharingReceiverRelationType = "SUPPLIER"
 	ProfitSharingRelationDistributor     ProfitSharingReceiverRelationType = "DISTRIBUTOR"
+	ProfitSharingRelationCustom          ProfitSharingReceiverRelationType = "CUSTOM"
 )
 
 type ProfitSharingReceiverAddRequest struct {
@@ -1596,6 +1632,12 @@ func (r ProfitSharingOrderRequest) Validate() error {
 		if err := receiver.validate(fmt.Sprintf("receivers[%d]", index)); err != nil {
 			return err
 		}
+		if receiver.Type == ReceiverTypePersonalOpenID && strings.TrimSpace(r.AppID) == "" {
+			return missing("appid")
+		}
+		if receiver.Type == ReceiverTypePersonalSubOpenID && strings.TrimSpace(r.SubAppID) == "" {
+			return missing("sub_appid")
+		}
 	}
 	return nil
 }
@@ -1618,6 +1660,173 @@ func (r ProfitSharingReceiver) validate(prefix string) error {
 		}
 	}
 	return requirePositiveInt(prefix+".amount", r.Amount)
+}
+
+func ValidatePaymentNotificationPayload(payload PaymentNotificationPayload) error {
+	for _, field := range []struct{ name, value string }{
+		{"sp_appid", payload.SpAppID},
+		{"sp_mchid", payload.SpMchID},
+		{"sub_mchid", payload.SubMchID},
+		{"out_trade_no", payload.OutTradeNo},
+		{"transaction_id", payload.TransactionID},
+		{"trade_type", payload.TradeType},
+		{"trade_state", string(payload.TradeState)},
+		{"trade_state_desc", payload.TradeStateDesc},
+		{"bank_type", payload.BankType},
+		{"success_time", payload.SuccessTime},
+	} {
+		if err := requireString(field.name, field.value); err != nil {
+			return err
+		}
+	}
+	if !validPaymentTradeState(payload.TradeState) {
+		return invalidEnum("trade_state")
+	}
+	if strings.TrimSpace(payload.Payer.SpOpenID) == "" && strings.TrimSpace(payload.Payer.SubOpenID) == "" {
+		return missing("payer.sp_openid_or_sub_openid")
+	}
+	if payload.Amount == nil {
+		return missing("amount")
+	}
+	if err := requirePositiveInt("amount.total", payload.Amount.Total); err != nil {
+		return err
+	}
+	if err := requirePositiveInt("amount.payer_total", payload.Amount.PayerTotal); err != nil {
+		return err
+	}
+	if err := validateCurrency("amount.currency", payload.Amount.Currency, true); err != nil {
+		return err
+	}
+	return validateCurrency("amount.payer_currency", payload.Amount.PayerCurrency, true)
+}
+
+func ValidateCombinePaymentNotificationPayload(payload CombinePaymentNotificationPayload) error {
+	for _, field := range []struct{ name, value string }{
+		{"combine_appid", payload.CombineAppID},
+		{"combine_mchid", payload.CombineMchID},
+		{"combine_out_trade_no", payload.CombineOutTradeNo},
+		{"combine_payer_info.openid", payload.CombinePayerInfo.OpenID},
+	} {
+		if err := requireString(field.name, field.value); err != nil {
+			return err
+		}
+	}
+	if len(payload.SubOrders) == 0 {
+		return missing("sub_orders")
+	}
+	for index, order := range payload.SubOrders {
+		prefix := fmt.Sprintf("sub_orders[%d]", index)
+		for _, field := range []struct{ name, value string }{
+			{prefix + ".mchid", order.MchID},
+			{prefix + ".sub_mchid", order.SubMchID},
+			{prefix + ".out_trade_no", order.OutTradeNo},
+			{prefix + ".transaction_id", order.TransactionID},
+			{prefix + ".trade_type", order.TradeType},
+			{prefix + ".trade_state", string(order.TradeState)},
+			{prefix + ".bank_type", order.BankType},
+			{prefix + ".success_time", order.SuccessTime},
+		} {
+			if err := requireString(field.name, field.value); err != nil {
+				return err
+			}
+		}
+		if !validPaymentTradeState(order.TradeState) {
+			return invalidEnum(prefix + ".trade_state")
+		}
+		if err := requirePositiveInt(prefix+".amount.total_amount", order.Amount.TotalAmount); err != nil {
+			return err
+		}
+		if err := requirePositiveInt(prefix+".amount.payer_amount", order.Amount.PayerAmount); err != nil {
+			return err
+		}
+		if err := validateCurrency(prefix+".amount.currency", order.Amount.Currency, true); err != nil {
+			return err
+		}
+		if err := validateCurrency(prefix+".amount.payer_currency", order.Amount.PayerCurrency, true); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ValidateRefundNotificationPayload(payload RefundNotificationPayload) error {
+	for _, field := range []struct{ name, value string }{
+		{"sp_mchid", payload.SpMchID},
+		{"sub_mchid", payload.SubMchID},
+		{"out_trade_no", payload.OutTradeNo},
+		{"transaction_id", payload.TransactionID},
+		{"out_refund_no", payload.OutRefundNo},
+		{"refund_id", payload.RefundID},
+		{"refund_status", string(payload.RefundStatus)},
+	} {
+		if err := requireString(field.name, field.value); err != nil {
+			return err
+		}
+	}
+	if !validRefundStatus(payload.RefundStatus) {
+		return invalidEnum("refund_status")
+	}
+	if payload.Amount == nil {
+		return missing("amount.refund")
+	}
+	return requirePositiveInt("amount.refund", payload.Amount.Refund)
+}
+
+func ValidateProfitSharingNotificationPayload(payload ProfitSharingNotificationPayload) error {
+	for _, field := range []struct{ name, value string }{
+		{"sp_mchid", payload.SpMchID},
+		{"sub_mchid", payload.SubMchID},
+		{"transaction_id", payload.TransactionID},
+		{"order_id", payload.OrderID},
+		{"out_order_no", payload.OutOrderNo},
+		{"receiver.type", string(payload.Receiver.Type)},
+		{"receiver.account", payload.Receiver.Account},
+		{"receiver.description", payload.Receiver.Description},
+	} {
+		if err := requireString(field.name, field.value); err != nil {
+			return err
+		}
+	}
+	if !validReceiverType(payload.Receiver.Type) {
+		return invalidEnum("receiver.type")
+	}
+	return requirePositiveInt("receiver.amount", payload.Receiver.Amount)
+}
+
+func validPaymentTradeState(state PaymentTradeState) bool {
+	switch state {
+	case PaymentTradeStateSuccess, PaymentTradeStateRefund, PaymentTradeStateNotPay, PaymentTradeStateClosed, PaymentTradeStateRevoked, PaymentTradeStateUserPaying, PaymentTradeStatePayError:
+		return true
+	default:
+		return false
+	}
+}
+
+func validRefundStatus(status RefundStatus) bool {
+	switch status {
+	case RefundStatusSuccess, RefundStatusClosed, RefundStatusProcessing, RefundStatusAbnormal:
+		return true
+	default:
+		return false
+	}
+}
+
+func validReceiverType(receiverType ReceiverType) bool {
+	switch receiverType {
+	case ReceiverTypeMerchantID, ReceiverTypePersonalOpenID, ReceiverTypePersonalSubOpenID:
+		return true
+	default:
+		return false
+	}
+}
+
+func validProfitSharingRelationType(relationType ProfitSharingReceiverRelationType) bool {
+	switch relationType {
+	case ProfitSharingRelationServiceProvider, ProfitSharingRelationStore, ProfitSharingRelationStaff, ProfitSharingRelationStoreOwner, ProfitSharingRelationPartner, ProfitSharingRelationHeadquarter, ProfitSharingRelationBrand, ProfitSharingRelationDistributor, ProfitSharingRelationUser, ProfitSharingRelationSupplier, ProfitSharingRelationCustom:
+		return true
+	default:
+		return false
+	}
 }
 
 func salesSceneSelected(scenes []ApplymentSalesSceneType, target ApplymentSalesSceneType) bool {

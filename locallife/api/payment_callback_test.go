@@ -19,6 +19,7 @@ import (
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/merrydance/locallife/worker"
 	mockwk "github.com/merrydance/locallife/worker/mock"
 	"github.com/stretchr/testify/require"
@@ -1858,15 +1859,15 @@ func TestRecordOrderOrdinaryRefundCallbackFactCreatesPartnerRefundFact(t *testin
 		BusinessType:   db.ExternalPaymentBusinessOwnerOrder,
 		OrderID:        pgtype.Int8{Int64: 1001, Valid: true},
 	}
-	resource := &ordinaryRefundNotificationResource{
+	resource := &ospcontracts.RefundNotificationPayload{
 		SpMchID:       "sp_expected",
 		SubMchID:      "sub-001",
 		OutTradeNo:    "ORD_ORDER_1",
 		TransactionID: "WX_TX_ORD_1",
 		OutRefundNo:   "ORD_REFUND_1",
 		RefundID:      "WX_ORD_REFUND_1",
-		RefundStatus:  wechat.RefundStatusSuccess,
-		Amount:        ordinaryRefundNotificationAmount{Refund: 288},
+		RefundStatus:  ospcontracts.RefundStatusSuccess,
+		Amount:        &ospcontracts.RefundAmount{Refund: 288},
 	}
 
 	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).DoAndReturn(
@@ -1913,15 +1914,15 @@ func TestRecordReservationOrdinaryRefundCallbackFactCreatesPartnerRefundFact(t *
 		BusinessType:   "reservation_addon",
 		ReservationID:  pgtype.Int8{Int64: 1002, Valid: true},
 	}
-	resource := &ordinaryRefundNotificationResource{
+	resource := &ospcontracts.RefundNotificationPayload{
 		SpMchID:       "sp_expected",
 		SubMchID:      "sub-001",
 		OutTradeNo:    "ORD_RES_ORDER_1",
 		TransactionID: "WX_TX_ORD_RES_1",
 		OutRefundNo:   "ORD_RES_REFUND_1",
 		RefundID:      "WX_ORD_RES_REFUND_1",
-		RefundStatus:  wechat.RefundStatusClosed,
-		Amount:        ordinaryRefundNotificationAmount{Refund: 388},
+		RefundStatus:  ospcontracts.RefundStatusClosed,
+		Amount:        &ospcontracts.RefundAmount{Refund: 388},
 	}
 
 	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).DoAndReturn(
@@ -1962,16 +1963,16 @@ func TestRecordOrderPaymentCallbackFact_OrdinaryServiceProviderCreatesOrdinaryFa
 		BusinessType:   db.ExternalPaymentBusinessOwnerOrder,
 		OrderID:        pgtype.Int8{Int64: 1601, Valid: true},
 	}
-	resource := &wechatcontracts.PartnerPaymentNotificationResource{
+	resource := &ospcontracts.PaymentNotificationPayload{
 		SpAppID:       "wxsp_app",
 		SpMchID:       "1900000109",
 		SubMchID:      "sub-001",
 		OutTradeNo:    "ORD_PAY_1",
 		TransactionID: "WX_ORD_PAY_1",
 		TradeType:     "JSAPI",
-		TradeState:    "SUCCESS",
+		TradeState:    ospcontracts.PaymentTradeStateSuccess,
 		SuccessTime:   time.Now().UTC().Format(time.RFC3339),
-		Amount:        wechatcontracts.PartnerOrderQueryAmount{Total: 688, PayerTotal: 688, Currency: "CNY", PayerCurrency: "CNY"},
+		Amount:        &ospcontracts.PaymentAmount{Total: 688, PayerTotal: 688, Currency: ospcontracts.CurrencyCNY, PayerCurrency: ospcontracts.CurrencyCNY},
 	}
 
 	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).DoAndReturn(
@@ -1994,7 +1995,7 @@ func TestRecordOrderPaymentCallbackFact_OrdinaryServiceProviderCreatesOrdinaryFa
 		Status:             db.ExternalPaymentFactApplicationStatusPending,
 	}).Return(db.ExternalPaymentFactApplication{ID: 261, FactID: 161, Consumer: orderPaymentFactConsumerDomain, BusinessObjectType: orderPaymentFactBusinessObjectOrder, BusinessObjectID: 601, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
 
-	application, err := server.recordOrderPaymentCallbackFact(context.Background(), notification, paymentOrder, resource)
+	application, err := server.recordOrdinaryOrderPaymentCallbackFact(context.Background(), notification, paymentOrder, resource)
 	require.NoError(t, err)
 	require.NotNil(t, application)
 	require.Equal(t, int64(261), application.ID)
@@ -2016,15 +2017,15 @@ func TestRecordCombinedReservationPaymentCallbackFact_OrdinaryServiceProviderCre
 		ReservationID:     pgtype.Int8{Int64: 2602, Valid: true},
 		CombinedPaymentID: pgtype.Int8{Int64: 701, Valid: true},
 	}
-	subOrder := wechatcontracts.CombinePaymentNotificationSubOrder{
+	subOrder := ospcontracts.CombineOrderState{
 		SubMchID:      "sub-001",
 		OutTradeNo:    "ORD_COMB_SUB_1",
 		TransactionID: "WX_ORD_COMB_SUB_1",
-		TradeState:    "SUCCESS",
+		TradeState:    ospcontracts.PaymentTradeStateSuccess,
 		SuccessTime:   time.Now().UTC().Format(time.RFC3339),
 	}
 	subOrder.Amount.TotalAmount = 788
-	subOrder.Amount.Currency = "CNY"
+	subOrder.Amount.Currency = ospcontracts.CurrencyCNY
 
 	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).DoAndReturn(
 		func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
@@ -2046,7 +2047,7 @@ func TestRecordCombinedReservationPaymentCallbackFact_OrdinaryServiceProviderCre
 		Status:             db.ExternalPaymentFactApplicationStatusPending,
 	}).Return(db.ExternalPaymentFactApplication{ID: 262, FactID: 162, Consumer: reservationPaymentFactConsumerDomain, BusinessObjectType: reservationPaymentFactBusinessObjectOrder, BusinessObjectID: 602, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
 
-	application, err := server.recordCombinedReservationPaymentCallbackFact(context.Background(), &notification, combinedOrder, paymentOrder, subOrder)
+	application, err := server.recordOrdinaryCombinedReservationPaymentCallbackFact(context.Background(), &notification, combinedOrder, paymentOrder, subOrder)
 	require.NoError(t, err)
 	require.NotNil(t, application)
 	require.Equal(t, int64(262), application.ID)

@@ -124,7 +124,7 @@ var endpointContracts = map[EndpointID]EndpointContract{
 	EndpointInactiveMerchantVerificationCreate: endpoint(EndpointInactiveMerchantVerificationCreate, CapabilityMerchantManagement, "create ordinary service provider inactive merchant identity verification", http.MethodPost, "/v3/compliance/inactive-merchant-identity-verification/merchants", []any{InactiveMerchantIdentityVerificationCreateRequest{}}, []any{InactiveMerchantIdentityVerificationCreateResponse{}}, nil, validateTyped(validateInactiveMerchantIdentityVerificationCreateRequest)),
 	EndpointInactiveMerchantVerificationQuery:  endpoint(EndpointInactiveMerchantVerificationQuery, CapabilityMerchantManagement, "query ordinary service provider inactive merchant identity verification", http.MethodGet, "/v3/compliance/inactive-merchant-identity-verification/merchants/{sub_mchid}/verifications/{verification_id}", []any{InactiveMerchantIdentityVerificationQueryRequest{}}, []any{InactiveMerchantIdentityVerificationQueryResponse{}}, []string{"InactiveMerchantIdentityVerificationState"}, validateTyped(validateInactiveMerchantIdentityVerificationQueryRequest)),
 	EndpointPaymentPrepay:                      endpoint(EndpointPaymentPrepay, CapabilityPayment, "create ordinary service provider payment", http.MethodPost, "/v3/pay/partner/transactions/jsapi", []any{PaymentPrepayRequest{}}, []any{PaymentPrepayResponse{}}, nil, validateTyped(func(r PaymentPrepayRequest) error { return r.Validate() })),
-	EndpointPaymentNotify:                      endpoint(EndpointPaymentNotify, CapabilityPayment, "ordinary service provider payment notification", "CALLBACK", "configured payment notify_url", []any{NotificationRequest{}, NotificationResource{}}, []any{PaymentQueryResponse{}, WechatErrorResponse{}}, []string{"PaymentTradeState"}, validateNotificationRequest),
+	EndpointPaymentNotify:                      endpoint(EndpointPaymentNotify, CapabilityPayment, "ordinary service provider payment notification", "CALLBACK", "configured payment notify_url", []any{NotificationRequest{}, NotificationResource{}}, []any{PaymentNotificationPayload{}, WechatErrorResponse{}}, []string{"PaymentTradeState"}, validateNotificationRequest),
 	EndpointPaymentQueryByTransactionID:        endpoint(EndpointPaymentQueryByTransactionID, CapabilityPayment, "query ordinary service provider payment by transaction id", http.MethodGet, "/v3/pay/partner/transactions/id/{transaction_id}", []any{PaymentQueryRequest{}}, []any{PaymentQueryResponse{}}, []string{"PaymentTradeState"}, validateTyped(validatePaymentQueryByTransactionIDRequest)),
 	EndpointPaymentQueryByOutTradeNo:           endpoint(EndpointPaymentQueryByOutTradeNo, CapabilityPayment, "query ordinary service provider payment by out trade no", http.MethodGet, "/v3/pay/partner/transactions/out-trade-no/{out_trade_no}", []any{PaymentQueryRequest{}}, []any{PaymentQueryResponse{}}, []string{"PaymentTradeState"}, validateTyped(validatePaymentQueryByOutTradeNoRequest)),
 	EndpointPaymentClose:                       endpoint(EndpointPaymentClose, CapabilityPayment, "close ordinary service provider payment", http.MethodPost, "/v3/pay/partner/transactions/out-trade-no/{out_trade_no}/close", []any{PaymentCloseRequest{}}, []any{NoResponseBody{}}, nil, validateTyped(validatePaymentCloseRequest)),
@@ -135,7 +135,7 @@ var endpointContracts = map[EndpointID]EndpointContract{
 	EndpointCombineJSAPIPayParams:              endpoint(EndpointCombineJSAPIPayParams, CapabilityCombinePayment, "ordinary service provider combine jsapi pay params", "LOCAL", "wx.requestPayment parameters", nil, []any{JSAPIPayParams{}}, nil, nil),
 	EndpointCombineQuery:                       endpoint(EndpointCombineQuery, CapabilityCombinePayment, "query ordinary service provider combine payment", http.MethodGet, "/v3/combine-transactions/out-trade-no/{combine_out_trade_no}", []any{CombineQueryRequest{}}, []any{CombineQueryResponse{}}, []string{"PaymentTradeState"}, validateTyped(validateCombineQueryRequest)),
 	EndpointCombineClose:                       endpoint(EndpointCombineClose, CapabilityCombinePayment, "close ordinary service provider combine payment", http.MethodPost, "/v3/combine-transactions/out-trade-no/{combine_out_trade_no}/close", []any{CombineCloseRequest{}}, []any{NoResponseBody{}}, nil, validateTyped(validateCombineCloseRequest)),
-	EndpointCombineNotify:                      endpoint(EndpointCombineNotify, CapabilityCombinePayment, "ordinary service provider combine payment notification", "CALLBACK", "configured combine payment notify_url", []any{NotificationRequest{}, NotificationResource{}}, []any{CombineQueryResponse{}, WechatErrorResponse{}}, []string{"PaymentTradeState"}, validateNotificationRequest),
+	EndpointCombineNotify:                      endpoint(EndpointCombineNotify, CapabilityCombinePayment, "ordinary service provider combine payment notification", "CALLBACK", "configured combine payment notify_url", []any{NotificationRequest{}, NotificationResource{}}, []any{CombinePaymentNotificationPayload{}, WechatErrorResponse{}}, []string{"PaymentTradeState"}, validateNotificationRequest),
 	EndpointCombineRefundCreate:                endpoint(EndpointCombineRefundCreate, CapabilityCombinePayment, "create ordinary service provider combine refund", http.MethodPost, "/v3/refund/domestic/refunds", []any{RefundCreateRequest{}}, []any{RefundResponse{}}, []string{"RefundStatus"}, validateTyped(func(r RefundCreateRequest) error { return r.Validate() })),
 	EndpointCombineRefundQuery:                 endpoint(EndpointCombineRefundQuery, CapabilityCombinePayment, "query ordinary service provider combine refund", http.MethodGet, "/v3/refund/domestic/refunds/{out_refund_no}", []any{RefundQueryRequest{}}, []any{RefundResponse{}}, []string{"RefundStatus"}, validateTyped(validateRefundQueryRequest)),
 	EndpointCombineRefundNotify:                endpoint(EndpointCombineRefundNotify, CapabilityCombinePayment, "ordinary service provider combine refund notification", "CALLBACK", "configured refund notify_url", []any{NotificationRequest{}, NotificationResource{}}, []any{RefundNotificationPayload{}, WechatErrorResponse{}}, []string{"RefundStatus"}, validateNotificationRequest),
@@ -395,24 +395,46 @@ func validateRefundQueryRequest(r RefundQueryRequest) error {
 }
 
 func validateProfitSharingReceiverAddRequest(r ProfitSharingReceiverAddRequest) error {
-	if err := validateProfitSharingReceiverFields(r.SubMchID, string(r.Type), r.Account); err != nil {
+	if err := validateProfitSharingReceiverFields(r.SubMchID, r.AppID, r.SubAppID, r.Type, r.Account); err != nil {
+		return err
+	}
+	if err := requireMerchantReceiverName(r.Type, r.Name); err != nil {
 		return err
 	}
 	if r.RelationType == "" {
 		return missing("relation_type")
 	}
+	if !validProfitSharingRelationType(r.RelationType) {
+		return invalidEnum("relation_type")
+	}
+	if r.RelationType == ProfitSharingRelationCustom && strings.TrimSpace(r.CustomRelation) == "" {
+		return missing("custom_relation")
+	}
 	return nil
 }
 
 func validateProfitSharingReceiverDeleteRequest(r ProfitSharingReceiverDeleteRequest) error {
-	return validateProfitSharingReceiverFields(r.SubMchID, string(r.Type), r.Account)
+	return validateProfitSharingReceiverFields(r.SubMchID, r.AppID, r.SubAppID, r.Type, r.Account)
 }
 
-func validateProfitSharingReceiverFields(subMchID, receiverType, account string) error {
-	for _, field := range []struct{ name, value string }{{"sub_mchid", subMchID}, {"type", receiverType}, {"account", account}} {
+func validateProfitSharingReceiverFields(subMchID, appID, subAppID string, receiverType ReceiverType, account string) error {
+	for _, field := range []struct{ name, value string }{{"sub_mchid", subMchID}, {"appid", appID}, {"type", string(receiverType)}, {"account", account}} {
 		if err := requireString(field.name, field.value); err != nil {
 			return err
 		}
+	}
+	if !validReceiverType(receiverType) {
+		return invalidEnum("type")
+	}
+	if receiverType == ReceiverTypePersonalSubOpenID && strings.TrimSpace(subAppID) == "" {
+		return missing("sub_appid")
+	}
+	return nil
+}
+
+func requireMerchantReceiverName(receiverType ReceiverType, name string) error {
+	if receiverType == ReceiverTypeMerchantID {
+		return requireString("name", name)
 	}
 	return nil
 }

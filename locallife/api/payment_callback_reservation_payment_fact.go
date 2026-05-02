@@ -11,6 +11,7 @@ import (
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/merrydance/locallife/worker"
 )
 
@@ -64,6 +65,51 @@ func (server *Server) recordReservationPaymentCallbackFact(ctx context.Context, 
 	return result.Application, nil
 }
 
+func (server *Server) recordReservationPaymentCallbackFactByChannel(ctx context.Context, notification wechat.PaymentNotification, paymentOrder db.PaymentOrder, resource *wechatcontracts.PartnerPaymentNotificationResource) (*db.ExternalPaymentFactApplication, error) {
+	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
+		return server.recordOrdinaryReservationPaymentCallbackFact(ctx, notification, paymentOrder, ordinaryPaymentNotificationFromPartnerResource(resource))
+	}
+	return server.recordReservationPaymentCallbackFact(ctx, notification, paymentOrder, resource)
+}
+
+func (server *Server) recordOrdinaryReservationPaymentCallbackFact(ctx context.Context, notification wechat.PaymentNotification, paymentOrder db.PaymentOrder, resource *ospcontracts.PaymentNotificationPayload) (*db.ExternalPaymentFactApplication, error) {
+	if server.paymentFactService == nil || resource == nil || !shouldRecordReservationPaymentFact(paymentOrder) {
+		return nil, nil
+	}
+	occurredAt := parseWechatFactTime(resource.SuccessTime)
+	result, err := server.paymentFactService.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelOrdinaryServiceProvider,
+		Capability:           db.ExternalPaymentCapabilityPartnerJSAPIPayment,
+		FactSource:           db.ExternalPaymentFactSourceCallback,
+		SourceEventID:        paymentFactStringPtr(notification.ID),
+		SourceEventType:      paymentFactStringPtr(notification.EventType),
+		ExternalObjectType:   db.ExternalPaymentObjectPayment,
+		ExternalObjectKey:    paymentOrder.OutTradeNo,
+		ExternalSecondaryKey: paymentFactStringPtr(resource.TransactionID),
+		BusinessOwner:        paymentFactStringPtr(db.ExternalPaymentBusinessOwnerReservation),
+		BusinessObjectType:   paymentFactStringPtr(reservationPaymentFactBusinessObjectOrder),
+		BusinessObjectID:     paymentFactInt64Ptr(paymentOrder.ID),
+		UpstreamState:        string(resource.TradeState),
+		TerminalStatus:       db.ExternalPaymentTerminalStatusSuccess,
+		Amount:               paymentFactInt64Ptr(ordinaryPaymentNotificationAmountTotal(resource)),
+		Currency:             "CNY",
+		OccurredAt:           occurredAt,
+		UpstreamUpdatedAt:    occurredAt,
+		RawResource:          ordinaryReservationPaymentCallbackFactResource(paymentOrder, resource),
+		DedupeKey:            fmt.Sprintf("wechat:callback:%s:reservation_payment:%s", db.PaymentChannelOrdinaryServiceProvider, notification.ID),
+		Application: &logic.ExternalPaymentFactApplicationTarget{
+			Consumer:           reservationPaymentFactConsumerDomain,
+			BusinessObjectType: reservationPaymentFactBusinessObjectOrder,
+			BusinessObjectID:   paymentOrder.ID,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Application, nil
+}
+
 func (server *Server) recordCombinedReservationPaymentCallbackFact(ctx context.Context, notification *wechat.PaymentNotification, combined db.CombinedPaymentOrder, paymentOrder db.PaymentOrder, subOrder wechatcontracts.CombinePaymentNotificationSubOrder) (*db.ExternalPaymentFactApplication, error) {
 	if server.paymentFactService == nil || !shouldRecordReservationPaymentFact(paymentOrder) {
 		return nil, nil
@@ -93,6 +139,54 @@ func (server *Server) recordCombinedReservationPaymentCallbackFact(ctx context.C
 		UpstreamUpdatedAt:    occurredAt,
 		RawResource:          combinedReservationPaymentCallbackFactResource(combined, paymentOrder, subOrder),
 		DedupeKey:            fmt.Sprintf("wechat:callback:%s:combine_reservation_payment:%s:%s", paymentCallbackFactDedupeChannel(paymentOrder), notification.ID, subOrder.OutTradeNo),
+		Application: &logic.ExternalPaymentFactApplicationTarget{
+			Consumer:           reservationPaymentFactConsumerDomain,
+			BusinessObjectType: reservationPaymentFactBusinessObjectOrder,
+			BusinessObjectID:   paymentOrder.ID,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Application, nil
+}
+
+func (server *Server) recordCombinedReservationPaymentCallbackFactByChannel(ctx context.Context, notification *wechat.PaymentNotification, combined db.CombinedPaymentOrder, paymentOrder db.PaymentOrder, subOrder wechatcontracts.CombinePaymentNotificationSubOrder) (*db.ExternalPaymentFactApplication, error) {
+	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
+		return server.recordOrdinaryCombinedReservationPaymentCallbackFact(ctx, notification, combined, paymentOrder, ordinaryCombineOrderStateFromLegacy(subOrder))
+	}
+	return server.recordCombinedReservationPaymentCallbackFact(ctx, notification, combined, paymentOrder, subOrder)
+}
+
+func (server *Server) recordOrdinaryCombinedReservationPaymentCallbackFact(ctx context.Context, notification *wechat.PaymentNotification, combined db.CombinedPaymentOrder, paymentOrder db.PaymentOrder, subOrder ospcontracts.CombineOrderState) (*db.ExternalPaymentFactApplication, error) {
+	if server.paymentFactService == nil || !shouldRecordReservationPaymentFact(paymentOrder) {
+		return nil, nil
+	}
+	if notification == nil {
+		return nil, fmt.Errorf("notification is required")
+	}
+	occurredAt := parseWechatFactTime(subOrder.SuccessTime)
+	result, err := server.paymentFactService.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelOrdinaryServiceProvider,
+		Capability:           db.ExternalPaymentCapabilityCombinePayment,
+		FactSource:           db.ExternalPaymentFactSourceCallback,
+		SourceEventID:        paymentFactStringPtr(notification.ID),
+		SourceEventType:      paymentFactStringPtr(notification.EventType),
+		ExternalObjectType:   db.ExternalPaymentObjectCombinedPayment,
+		ExternalObjectKey:    combined.CombineOutTradeNo,
+		ExternalSecondaryKey: paymentFactStringPtr(subOrder.OutTradeNo),
+		BusinessOwner:        paymentFactStringPtr(db.ExternalPaymentBusinessOwnerReservation),
+		BusinessObjectType:   paymentFactStringPtr(reservationPaymentFactBusinessObjectOrder),
+		BusinessObjectID:     paymentFactInt64Ptr(paymentOrder.ID),
+		UpstreamState:        string(subOrder.TradeState),
+		TerminalStatus:       db.ExternalPaymentTerminalStatusSuccess,
+		Amount:               paymentFactInt64Ptr(subOrder.Amount.TotalAmount),
+		Currency:             "CNY",
+		OccurredAt:           occurredAt,
+		UpstreamUpdatedAt:    occurredAt,
+		RawResource:          ordinaryCombinedReservationPaymentCallbackFactResource(combined, paymentOrder, subOrder),
+		DedupeKey:            fmt.Sprintf("wechat:callback:%s:combine_reservation_payment:%s:%s", db.PaymentChannelOrdinaryServiceProvider, notification.ID, subOrder.OutTradeNo),
 		Application: &logic.ExternalPaymentFactApplicationTarget{
 			Consumer:           reservationPaymentFactConsumerDomain,
 			BusinessObjectType: reservationPaymentFactBusinessObjectOrder,
@@ -149,6 +243,51 @@ func reservationPaymentCallbackFactResource(paymentOrder db.PaymentOrder, resour
 }
 
 func combinedReservationPaymentCallbackFactResource(combined db.CombinedPaymentOrder, paymentOrder db.PaymentOrder, subOrder wechatcontracts.CombinePaymentNotificationSubOrder) []byte {
+	payload := map[string]any{
+		"combined_payment_id":  combined.ID,
+		"combine_out_trade_no": combined.CombineOutTradeNo,
+		"payment_order_id":     paymentOrder.ID,
+		"business_type":        paymentOrder.BusinessType,
+		"out_trade_no":         paymentOrder.OutTradeNo,
+		"transaction_id":       subOrder.TransactionID,
+		"trade_state":          subOrder.TradeState,
+		"success_time":         subOrder.SuccessTime,
+		"amount":               subOrder.Amount.TotalAmount,
+	}
+	if paymentOrder.ReservationID.Valid {
+		payload["reservation_id"] = paymentOrder.ReservationID.Int64
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return nil
+	}
+	return raw
+}
+
+func ordinaryReservationPaymentCallbackFactResource(paymentOrder db.PaymentOrder, resource *ospcontracts.PaymentNotificationPayload) []byte {
+	payload := map[string]any{
+		"payment_order_id": paymentOrder.ID,
+		"business_type":    paymentOrder.BusinessType,
+		"out_trade_no":     paymentOrder.OutTradeNo,
+		"transaction_id":   resource.TransactionID,
+		"trade_state":      resource.TradeState,
+		"trade_state_desc": resource.TradeStateDesc,
+		"success_time":     resource.SuccessTime,
+		"amount":           ordinaryPaymentNotificationAmountTotal(resource),
+		"sp_mchid":         resource.SpMchID,
+		"sub_mchid":        resource.SubMchID,
+	}
+	if paymentOrder.ReservationID.Valid {
+		payload["reservation_id"] = paymentOrder.ReservationID.Int64
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return nil
+	}
+	return raw
+}
+
+func ordinaryCombinedReservationPaymentCallbackFactResource(combined db.CombinedPaymentOrder, paymentOrder db.PaymentOrder, subOrder ospcontracts.CombineOrderState) []byte {
 	payload := map[string]any{
 		"combined_payment_id":  combined.ID,
 		"combine_out_trade_no": combined.CombineOutTradeNo,

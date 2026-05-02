@@ -8,8 +8,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
-	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	ordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	mockordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -19,7 +19,6 @@ func TestOrdinaryRefundResourceFromEnvelopeRequiresOwnershipAndPaymentFields(t *
 	base := map[string]any{
 		"sp_mchid":       "sp-mch-001",
 		"sub_mchid":      "sub-mch-001",
-		"mchid":          "sub-mch-001",
 		"out_trade_no":   "trade-001",
 		"transaction_id": "wx-txn-001",
 		"out_refund_no":  "refund-001",
@@ -35,7 +34,7 @@ func TestOrdinaryRefundResourceFromEnvelopeRequiresOwnershipAndPaymentFields(t *
 		want      string
 	}{
 		{name: "missing provider mchid", removeKey: "sp_mchid", want: "sp_mchid"},
-		{name: "missing sub mchid", removeKey: "sub_mchid", want: "sub_mchid_or_mchid"},
+		{name: "missing sub mchid", removeKey: "sub_mchid", want: "sub_mchid"},
 		{name: "missing out trade no", removeKey: "out_trade_no", want: "out_trade_no"},
 		{name: "missing transaction id", removeKey: "transaction_id", want: "transaction_id"},
 		{name: "missing refund id", removeKey: "refund_id", want: "refund_id"},
@@ -57,44 +56,21 @@ func TestOrdinaryRefundResourceFromEnvelopeRequiresOwnershipAndPaymentFields(t *
 	}
 }
 
-func TestOrdinaryRefundResourceFromEnvelopeRejectsConflictingMerchantFields(t *testing.T) {
-	envelope := ordinaryNotificationEnvelopeForTest(t, map[string]any{
-		"sp_mchid":       "sp-mch-001",
-		"sub_mchid":      "sub-mch-001",
-		"mchid":          "sub-mch-002",
-		"out_trade_no":   "trade-001",
-		"transaction_id": "wx-txn-001",
-		"out_refund_no":  "refund-001",
-		"refund_id":      "wx-refund-001",
-		"refund_status":  "SUCCESS",
-		"amount": map[string]any{
-			"refund": float64(100),
-		},
-	})
-
-	resource, err := ordinaryRefundResourceFromEnvelope(envelope)
-
-	require.Nil(t, resource)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "sub_mchid mismatch mchid")
-}
-
 func TestValidateOrdinaryRefundLocalOwnershipChecksSubMerchantAndAmount(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
 	server := &Server{store: store}
-	resource := &ordinaryRefundNotificationResource{
+	resource := &ospcontracts.RefundNotificationPayload{
 		SpMchID:       "sp-mch-001",
 		SubMchID:      "sub-mch-001",
-		MchID:         "sub-mch-001",
 		OutTradeNo:    "trade-001",
 		TransactionID: "wx-txn-001",
 		OutRefundNo:   "refund-001",
 		RefundID:      "wx-refund-001",
-		RefundStatus:  "SUCCESS",
-		Amount:        ordinaryRefundNotificationAmount{Refund: 100},
+		RefundStatus:  ospcontracts.RefundStatusSuccess,
+		Amount:        &ospcontracts.RefundAmount{Refund: 100},
 	}
 	refundOrder := db.RefundOrder{ID: 61, PaymentOrderID: 71, OutRefundNo: "refund-001", RefundAmount: 100}
 	paymentOrder := db.PaymentOrder{
@@ -110,7 +86,6 @@ func TestValidateOrdinaryRefundLocalOwnershipChecksSubMerchantAndAmount(t *testi
 	require.NoError(t, server.validateOrdinaryRefundLocalOwnership(context.Background(), resource, refundOrder, paymentOrder))
 
 	resource.SubMchID = "sub-mch-other"
-	resource.MchID = "sub-mch-other"
 	err := server.validateOrdinaryRefundLocalOwnership(context.Background(), resource, refundOrder, paymentOrder)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "sub_mchid mismatch")
@@ -161,7 +136,7 @@ func TestValidateOrdinaryProfitSharingOwnershipRejectsMissingProviderIdentity(t 
 
 	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
 	server := &Server{ordinarySPClient: ordinaryClient}
-	resource := &wechatcontracts.ProfitSharingNotification{SubMchID: "sub-mch-001", OutOrderNo: "profit-sharing-001"}
+	resource := &ospcontracts.ProfitSharingNotificationPayload{SubMchID: "sub-mch-001", OutOrderNo: "profit-sharing-001"}
 
 	err := server.validateOrdinaryProfitSharingOwnership(resource)
 
