@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // NoRequestBody and NoResponseBody make body-less official endpoints explicit
@@ -335,6 +336,15 @@ func (i ApplymentContactInfo) validate() error {
 			return err
 		}
 	}
+	if i.ContactType == ContactTypeSuper {
+		if err := validateApplymentContractDateWindow("contact_info.contact_period_begin", i.ContactPeriodBegin, "contact_info.contact_period_end", i.ContactPeriodEnd, true); err != nil {
+			return err
+		}
+	} else if strings.TrimSpace(i.ContactPeriodBegin) != "" || strings.TrimSpace(i.ContactPeriodEnd) != "" {
+		if err := validateApplymentContractDateWindow("contact_info.contact_period_begin", i.ContactPeriodBegin, "contact_info.contact_period_end", i.ContactPeriodEnd, true); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -362,6 +372,11 @@ func (i ApplymentBusinessLicenseInfo) validate() error {
 			return err
 		}
 	}
+	if strings.TrimSpace(i.PeriodBegin) != "" || strings.TrimSpace(i.PeriodEnd) != "" {
+		if err := validateApplymentContractDateWindow("subject_info.business_license_info.period_begin", i.PeriodBegin, "subject_info.business_license_info.period_end", i.PeriodEnd, true); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -375,7 +390,18 @@ func (i ApplymentIdentityInfo) validate() error {
 	if i.IDDocType != IdentificationTypeIDCard && i.IDDocInfo == nil {
 		return missing("subject_info.identity_info.id_doc_info")
 	}
-	return nil
+	if i.IDDocType == IdentificationTypeIDCard {
+		return i.IDCardInfo.validate()
+	}
+	return i.IDDocInfo.validate()
+}
+
+func (i ApplymentIDCardInfo) validate() error {
+	return validateApplymentContractDateWindow("subject_info.identity_info.id_card_info.card_period_begin", i.CardPeriodBegin, "subject_info.identity_info.id_card_info.card_period_end", i.CardPeriodEnd, true)
+}
+
+func (i ApplymentIDDocInfo) validate() error {
+	return validateApplymentContractDateWindow("subject_info.identity_info.id_doc_info.doc_period_begin", i.DocPeriodBegin, "subject_info.identity_info.id_doc_info.doc_period_end", i.DocPeriodEnd, true)
 }
 
 func (i ApplymentBusinessInfo) validate() error {
@@ -1865,6 +1891,66 @@ func validateHTTPSURL(field string, value string, required bool) error {
 		return ValidationError{Field: field, Code: "https_url_required", Message: "must be an https URL"}
 	}
 	return nil
+}
+
+func validateApplymentContractDateWindow(beginField, beginValue, endField, endValue string, required bool) error {
+	begin := strings.TrimSpace(beginValue)
+	end := strings.TrimSpace(endValue)
+	if begin == "" || end == "" {
+		if required {
+			if begin == "" {
+				return missing(beginField)
+			}
+			return missing(endField)
+		}
+		return nil
+	}
+
+	parsedBegin, err := parseApplymentContractDate(begin)
+	if err != nil {
+		return invalidApplymentContractDate(beginField, "must be a valid YYYY-MM-DD date")
+	}
+	minDate := time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC)
+	if parsedBegin.Before(minDate) {
+		return invalidApplymentContractDate(beginField, "must not be earlier than 1900-01-01")
+	}
+	today, err := time.Parse("2006-01-02", time.Now().Format("2006-01-02"))
+	if err != nil {
+		return invalidApplymentContractDate(beginField, "must be a valid YYYY-MM-DD date")
+	}
+	if !parsedBegin.Before(today) {
+		return invalidApplymentContractDate(beginField, "must be earlier than current date")
+	}
+
+	if end == "长期" {
+		return nil
+	}
+	parsedEnd, err := parseApplymentContractDate(end)
+	if err != nil {
+		return invalidApplymentContractDate(endField, "must be a valid YYYY-MM-DD date or 长期")
+	}
+	if !parsedEnd.After(parsedBegin) {
+		return invalidApplymentContractDate(endField, "must be later than begin date")
+	}
+	return nil
+}
+
+func parseApplymentContractDate(value string) (time.Time, error) {
+	if len(value) != len("2006-01-02") {
+		return time.Time{}, fmt.Errorf("invalid date length")
+	}
+	parsed, err := time.Parse("2006-01-02", value)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if parsed.Format("2006-01-02") != value {
+		return time.Time{}, fmt.Errorf("invalid date format")
+	}
+	return parsed, nil
+}
+
+func invalidApplymentContractDate(field string, message string) ValidationError {
+	return ValidationError{Field: field, Code: "invalid_date", Message: message}
 }
 
 func validateCurrency(field string, value Currency, required bool) error {

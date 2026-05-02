@@ -55,6 +55,72 @@ func TestApplymentSubmitRequestValidatesOfficialStoreSceneFields(t *testing.T) {
 	}
 }
 
+func TestApplymentSubmitRequestRejectsUnformattedDateFields(t *testing.T) {
+	testCases := []struct {
+		name      string
+		mutate    func(*ApplymentSubmitRequest)
+		wantField string
+	}{
+		{
+			name: "BusinessLicensePeriodBegin",
+			mutate: func(req *ApplymentSubmitRequest) {
+				req.SubjectInfo.BusinessLicenseInfo.PeriodBegin = "2020年01月01日"
+				req.SubjectInfo.BusinessLicenseInfo.PeriodEnd = "长期"
+			},
+			wantField: "subject_info.business_license_info.period_begin",
+		},
+		{
+			name: "IDCardPeriodBegin",
+			mutate: func(req *ApplymentSubmitRequest) {
+				req.SubjectInfo.IdentityInfo.IDCardInfo.CardPeriodBegin = "2020.01.01"
+			},
+			wantField: "subject_info.identity_info.id_card_info.card_period_begin",
+		},
+		{
+			name: "SuperContactPeriodBegin",
+			mutate: func(req *ApplymentSubmitRequest) {
+				req.ContactInfo.ContactType = ContactTypeSuper
+				req.ContactInfo.ContactIDDocType = IdentificationTypeIDCard
+				req.ContactInfo.ContactIDNumber = "encrypted-contact-id"
+				req.ContactInfo.ContactIDDocCopy = "media-contact-front"
+				req.ContactInfo.ContactIDDocCopyBack = "media-contact-back"
+				req.ContactInfo.ContactPeriodBegin = "2021/05/06"
+				req.ContactInfo.ContactPeriodEnd = "长期"
+			},
+			wantField: "contact_info.contact_period_begin",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := validApplymentSubmitRequest()
+			tc.mutate(&req)
+
+			err := req.Validate()
+			if err == nil {
+				t.Fatal("expected unformatted date to fail validation")
+			}
+			if !strings.Contains(err.Error(), tc.wantField) {
+				t.Fatalf("expected %s in validation error, got %v", tc.wantField, err)
+			}
+		})
+	}
+}
+
+func TestApplymentSubmitRequestRejectsInvalidDateWindow(t *testing.T) {
+	req := validApplymentSubmitRequest()
+	req.SubjectInfo.BusinessLicenseInfo.PeriodBegin = "2020-01-01"
+	req.SubjectInfo.BusinessLicenseInfo.PeriodEnd = "2019-12-31"
+
+	err := req.Validate()
+	if err == nil {
+		t.Fatal("expected invalid date window to fail validation")
+	}
+	if !strings.Contains(err.Error(), "subject_info.business_license_info.period_end") {
+		t.Fatalf("expected period_end in validation error, got %v", err)
+	}
+}
+
 func TestApplymentSubmitRequestJSONUsesOfficialFields(t *testing.T) {
 	req := validApplymentSubmitRequest()
 	body, err := json.Marshal(req)
