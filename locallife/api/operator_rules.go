@@ -80,21 +80,6 @@ func (server *Server) getOperatorGlobalDepositFen(ctx *gin.Context, configKey st
 	return server.getScopedDepositFen(ctx, configKey, db.PlatformConfigScopeGlobal, pgtype.Int8{Valid: false})
 }
 
-func (server *Server) upsertOperatorScopedDepositFen(ctx *gin.Context, configKey string, operatorID int64, amountFen int64) error {
-	payload, err := json.Marshal(operatorDepositConfigValue{AmountFen: amountFen})
-	if err != nil {
-		return err
-	}
-
-	_, err = server.store.UpsertPlatformConfig(ctx, db.UpsertPlatformConfigParams{
-		ConfigKey:   configKey,
-		ConfigValue: payload,
-		ScopeType:   db.PlatformConfigScopeOperator,
-		ScopeID:     pgtype.Int8{Int64: operatorID, Valid: true},
-	})
-	return err
-}
-
 func (server *Server) getOperatorRiderDepositThreshold(ctx *gin.Context, regionRuleConfig *db.RegionRuleConfig) (int64, db.RiderDepositThresholdSource, error) {
 	if regionRuleConfig != nil && regionRuleConfig.RiderDeposit > 0 {
 		return regionRuleConfig.RiderDeposit, db.RiderDepositThresholdSourceRegion, nil
@@ -639,10 +624,6 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-		if err := server.upsertOperatorScopedDepositFen(ctx, operatorRiderDepositConfigKey, operator.ID, amountFen); err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
 		_, err = server.store.UpsertRegionRuleConfig(ctx, db.UpsertRegionRuleConfigParams{
 			RegionID:     targetRegionID,
 			RiderDeposit: pgtype.Int8{Int64: amountFen, Valid: true},
@@ -658,8 +639,6 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 
 		auditMetadata["operator_id"] = operator.ID
 		auditMetadata["value_fen"] = amountFen
-		auditMetadata["platform_config_scope_type"] = db.PlatformConfigScopeOperator
-		auditMetadata["platform_config_scope_id"] = operator.ID
 		auditMetadata["region_rule_config"] = true
 
 	case "BASE_DELIVERY_FEE", "BASE_DISTANCE", "EXTRA_FEE_PER_KM", "MIN_DELIVERY_FEE", "MAX_DELIVERY_FEE", "DELIVERY_VALUE_RATIO":

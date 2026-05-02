@@ -246,14 +246,6 @@ func TestUpdateOperatorRule_RiderDepositUpdatesRegionWithoutTouchingPlatformDefa
 			return operator, nil
 		})
 	store.EXPECT().
-		UpsertPlatformConfig(gomock.Any(), db.UpsertPlatformConfigParams{
-			ConfigKey:   operatorRiderDepositConfigKey,
-			ConfigValue: []byte(`{"amount_fen":27000}`),
-			ScopeType:   db.PlatformConfigScopeOperator,
-			ScopeID:     pgtype.Int8{Int64: operator.ID, Valid: true},
-		}).
-		Return(db.PlatformConfig{}, nil)
-	store.EXPECT().
 		UpsertRegionRuleConfig(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ any, arg db.UpsertRegionRuleConfigParams) (db.RegionRuleConfig, error) {
 			require.Equal(t, int64(12), arg.RegionID)
@@ -470,14 +462,6 @@ func TestUpdateOperatorRule_RiderDepositDemotesOnlineRiderWhenThresholdIncreases
 	store.EXPECT().
 		UpdateOperatorRules(gomock.Any(), gomock.Any()).
 		Return(operator, nil)
-	store.EXPECT().
-		UpsertPlatformConfig(gomock.Any(), db.UpsertPlatformConfigParams{
-			ConfigKey:   operatorRiderDepositConfigKey,
-			ConfigValue: []byte(`{"amount_fen":27000}`),
-			ScopeType:   db.PlatformConfigScopeOperator,
-			ScopeID:     pgtype.Int8{Int64: operator.ID, Valid: true},
-		}).
-		Return(db.PlatformConfig{}, nil)
 	store.EXPECT().
 		UpsertRegionRuleConfig(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ any, arg db.UpsertRegionRuleConfigParams) (db.RegionRuleConfig, error) {
