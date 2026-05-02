@@ -235,6 +235,49 @@ func TestBuildOrdinaryServiceProviderApplymentRequestIncludesDiscountActivities(
 	require.Nil(t, request.BusinessInfo.SalesInfo.StoreInfo)
 }
 
+func TestBuildOrdinaryServiceProviderApplymentRequestOmitsBusinessLicensePeriodWhenOnlyLongTerm(t *testing.T) {
+	t.Parallel()
+
+	request := BuildOrdinaryServiceProviderApplymentRequest(ApplymentOrdinaryRequestInput{
+		BusinessCode:      "ORDINARY_LICENSE_LONG_ONLY",
+		OrganizationType:  "2",
+		BusinessLicense:   ApplymentBusinessLicenseOCRInput{ValidPeriod: "长期"},
+		BusinessLicenseID: "91440300MA00000000",
+		LicenseCopy:       "license-media",
+		MerchantName:      "测试餐饮有限公司",
+		LegalPerson:       "张三",
+		BusinessAddress:   "深圳市南山区",
+		MerchantShortname: "测试餐饮",
+		ServicePhone:      "13800138000",
+		MiniProgramAppID:  "wx-mini-app",
+		IDCardInfo: ApplymentOrdinaryIDCardInput{
+			IDCardCopy:      "id-front",
+			IDCardNational:  "id-back",
+			IDCardName:      "enc-name",
+			IDCardNumber:    "enc-id",
+			CardPeriodBegin: "2020-01-01",
+			CardPeriodEnd:   "2030-01-01",
+		},
+		AccountInfo: ApplymentWechatAccountInput{
+			AccountType:   "ACCOUNT_TYPE_BUSINESS",
+			AccountBank:   "招商银行",
+			AccountName:   "enc-account-name",
+			AccountNumber: "enc-account-number",
+		},
+		ContactInfo: ApplymentOrdinaryContactInput{
+			ContactType:  "LEGAL",
+			ContactName:  "enc-contact-name",
+			MobilePhone:  "enc-phone",
+			ContactEmail: "ops@example.com",
+		},
+		SettlementID:      "716",
+		QualificationType: "餐饮",
+	})
+
+	require.Empty(t, request.SubjectInfo.BusinessLicenseInfo.PeriodBegin)
+	require.Empty(t, request.SubjectInfo.BusinessLicenseInfo.PeriodEnd)
+}
+
 func TestBuildOrdinaryServiceProviderApplymentRequestNormalizesDateFields(t *testing.T) {
 	t.Parallel()
 

@@ -428,6 +428,9 @@ func BuildWechatApplymentRequest(input ApplymentWechatRequestInput) *wechat.Ecom
 
 func BuildOrdinaryServiceProviderApplymentRequest(input ApplymentOrdinaryRequestInput) ospcontracts.ApplymentSubmitRequest {
 	licensePeriodBegin, licensePeriodEnd := parseApplymentDateRange(input.BusinessLicense.ValidPeriod)
+	if licensePeriodBegin == "" {
+		licensePeriodEnd = ""
+	}
 	licenseAddress := strings.TrimSpace(input.BusinessLicense.Address)
 	if licenseAddress == "" {
 		licenseAddress = strings.TrimSpace(input.BusinessAddress)
