@@ -614,8 +614,12 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 			MobilePhone:          contactInfo.MobilePhone,
 			ContactEmail:         contactEmail,
 		},
-		SettlementID:      settlementID,
-		QualificationType: qualificationType,
+		SettlementID:         settlementID,
+		QualificationType:    qualificationType,
+		ActivitiesID:         server.config.WechatOrdinaryApplymentActivitiesID,
+		DebitActivitiesRate:  server.config.WechatOrdinaryApplymentDebitActivitiesRate,
+		CreditActivitiesRate: server.config.WechatOrdinaryApplymentCreditActivitiesRate,
+		ActivitiesAdditions:  splitOrdinaryApplymentActivitiesAdditions(server.config.WechatOrdinaryApplymentActivitiesAdditions),
 	})
 
 	submissionResult, err := logic.SubmitOrdinaryServiceProviderApplyment(ctx, server.store, server.ordinarySPClient, updateMerchantStatus, logic.SubmitOrdinaryServiceProviderApplymentInput{
@@ -1466,6 +1470,27 @@ func resolveOrdinaryApplymentSettlementID(config util.Config, organizationType s
 		return "", fmt.Errorf("%s is required for ordinary service provider applyment organization type %s", fieldName, organizationType)
 	}
 	return settlementID, nil
+}
+
+func splitOrdinaryApplymentActivitiesAdditions(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n' || r == '\r'
+	})
+	additions := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			additions = append(additions, trimmed)
+		}
+	}
+	if len(additions) == 0 {
+		return nil
+	}
+	return additions
 }
 
 // getApplymentStatusDesc 获取进件状态描述

@@ -181,6 +181,58 @@ func TestBuildApplymentBusinessTime(t *testing.T) {
 	require.Equal(t, `["2020-01-01","长期"]`, BuildApplymentBusinessTime("2020年01月01日至长期"))
 }
 
+func TestBuildOrdinaryServiceProviderApplymentRequestIncludesDiscountActivities(t *testing.T) {
+	t.Parallel()
+
+	request := BuildOrdinaryServiceProviderApplymentRequest(ApplymentOrdinaryRequestInput{
+		BusinessCode:      "ORDINARY_001",
+		OrganizationType:  "2",
+		BusinessLicenseID: "91440300MA00000000",
+		LicenseCopy:       "license-media",
+		MerchantName:      "测试餐饮有限公司",
+		LegalPerson:       "张三",
+		BusinessAddress:   "深圳市南山区",
+		MerchantShortname: "测试餐饮",
+		ServicePhone:      "13800138000",
+		MiniProgramAppID:  "wx-mini-app",
+		StoreName:         "测试门店",
+		StoreQRCode:       "store-qr-media",
+		IDCardInfo: ApplymentOrdinaryIDCardInput{
+			IDCardCopy:      "id-front",
+			IDCardNational:  "id-back",
+			IDCardName:      "enc-name",
+			IDCardNumber:    "enc-id",
+			CardPeriodBegin: "2020-01-01",
+			CardPeriodEnd:   "2030-01-01",
+		},
+		AccountInfo: ApplymentWechatAccountInput{
+			AccountType:   "ACCOUNT_TYPE_BUSINESS",
+			AccountBank:   "招商银行",
+			AccountName:   "enc-account-name",
+			AccountNumber: "enc-account-number",
+		},
+		ContactInfo: ApplymentOrdinaryContactInput{
+			ContactType:  "LEGAL",
+			ContactName:  "enc-contact-name",
+			MobilePhone:  "enc-phone",
+			ContactEmail: "ops@example.com",
+		},
+		SettlementID:          "716",
+		QualificationType:     "餐饮",
+		ActivitiesID:          "20191030111cff5b5e",
+		DebitActivitiesRate:   "0.38",
+		CreditActivitiesRate:  "0.38",
+		ActivitiesAdditions:   []string{"media-a", "media-b"},
+	})
+
+	require.Equal(t, "716", request.SettlementInfo.SettlementID)
+	require.Equal(t, "餐饮", request.SettlementInfo.QualificationType)
+	require.Equal(t, "20191030111cff5b5e", request.SettlementInfo.ActivitiesID)
+	require.Equal(t, "0.38", request.SettlementInfo.DebitActivitiesRate)
+	require.Equal(t, "0.38", request.SettlementInfo.CreditActivitiesRate)
+	require.Equal(t, []string{"media-a", "media-b"}, request.SettlementInfo.ActivitiesAdditions)
+}
+
 func TestResolveApplymentOrganizationType(t *testing.T) {
 	t.Parallel()
 

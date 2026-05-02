@@ -246,8 +246,12 @@ type ApplymentOrdinaryRequestInput struct {
 	IDCardInfo        ApplymentOrdinaryIDCardInput
 	AccountInfo       ApplymentWechatAccountInput
 	ContactInfo       ApplymentOrdinaryContactInput
-	SettlementID      string
-	QualificationType string
+	SettlementID         string
+	QualificationType    string
+	ActivitiesID         string
+	DebitActivitiesRate  string
+	CreditActivitiesRate string
+	ActivitiesAdditions  []string
 }
 
 type ApplymentOrdinaryIDCardInput struct {
@@ -477,8 +481,12 @@ func BuildOrdinaryServiceProviderApplymentRequest(input ApplymentOrdinaryRequest
 			},
 		},
 		SettlementInfo: ospcontracts.ApplymentSettlementInfo{
-			SettlementID:      strings.TrimSpace(input.SettlementID),
-			QualificationType: strings.TrimSpace(input.QualificationType),
+			SettlementID:         strings.TrimSpace(input.SettlementID),
+			QualificationType:    strings.TrimSpace(input.QualificationType),
+			ActivitiesID:         strings.TrimSpace(input.ActivitiesID),
+			DebitActivitiesRate:  strings.TrimSpace(input.DebitActivitiesRate),
+			CreditActivitiesRate: strings.TrimSpace(input.CreditActivitiesRate),
+			ActivitiesAdditions:  trimOrdinaryApplymentActivitiesAdditions(input.ActivitiesAdditions),
 		},
 		BankAccountInfo: ospcontracts.ApplymentBankAccountInfo{
 			BankAccountType: mapOrdinaryApplymentBankAccountType(input.AccountInfo.AccountType),
@@ -500,6 +508,24 @@ func BuildOrdinaryServiceProviderApplymentRequest(input ApplymentOrdinaryRequest
 	}
 
 	return request
+}
+
+func trimOrdinaryApplymentActivitiesAdditions(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	additions := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			additions = append(additions, trimmed)
+		}
+	}
+	if len(additions) == 0 {
+		return nil
+	}
+	return additions
 }
 
 func mapOrdinaryApplymentSubjectType(organizationType string) ospcontracts.SubjectType {

@@ -80,6 +80,10 @@ type Config struct {
 	WechatOrdinaryApplymentQualification          string        `mapstructure:"WECHAT_ORDINARY_APPLYMENT_QUALIFICATION_TYPE"`       // 普通服务商进件结算资质类型
 	WechatOrdinaryApplymentContactEmail           string        `mapstructure:"WECHAT_ORDINARY_APPLYMENT_CONTACT_EMAIL"`            // 普通服务商进件默认联系人邮箱
 	WechatOrdinaryApplymentServicePhone           string        `mapstructure:"WECHAT_ORDINARY_APPLYMENT_SERVICE_PHONE"`            // 普通服务商进件默认客服电话
+	WechatOrdinaryApplymentActivitiesID           string        `mapstructure:"WECHAT_ORDINARY_APPLYMENT_ACTIVITIES_ID"`            // 普通服务商进件优惠费率活动ID
+	WechatOrdinaryApplymentDebitActivitiesRate    string        `mapstructure:"WECHAT_ORDINARY_APPLYMENT_DEBIT_ACTIVITIES_RATE"`    // 普通服务商进件非信用卡活动费率
+	WechatOrdinaryApplymentCreditActivitiesRate   string        `mapstructure:"WECHAT_ORDINARY_APPLYMENT_CREDIT_ACTIVITIES_RATE"`   // 普通服务商进件信用卡活动费率
+	WechatOrdinaryApplymentActivitiesAdditions    string        `mapstructure:"WECHAT_ORDINARY_APPLYMENT_ACTIVITIES_ADDITIONS"`     // 普通服务商进件优惠费率补充材料 media_id，逗号分隔
 
 	// 数据加密配置
 	DataEncryptionKey string `mapstructure:"DATA_ENCRYPTION_KEY"` // 本地数据加密密钥（16/24/32字节）
@@ -276,7 +280,11 @@ func (c Config) HasWechatOrdinaryServiceProviderRuntimeConfig() bool {
 		strings.TrimSpace(c.WechatOrdinaryApplymentSettlementIDEnterprise) != "" ||
 		strings.TrimSpace(c.WechatOrdinaryApplymentQualification) != "" ||
 		strings.TrimSpace(c.WechatOrdinaryApplymentContactEmail) != "" ||
-		strings.TrimSpace(c.WechatOrdinaryApplymentServicePhone) != ""
+		strings.TrimSpace(c.WechatOrdinaryApplymentServicePhone) != "" ||
+		strings.TrimSpace(c.WechatOrdinaryApplymentActivitiesID) != "" ||
+		strings.TrimSpace(c.WechatOrdinaryApplymentDebitActivitiesRate) != "" ||
+		strings.TrimSpace(c.WechatOrdinaryApplymentCreditActivitiesRate) != "" ||
+		strings.TrimSpace(c.WechatOrdinaryApplymentActivitiesAdditions) != ""
 }
 
 func (c Config) ValidateWechatPayConfig() error {
@@ -420,6 +428,27 @@ func (c Config) ValidateWechatOrdinaryServiceProviderConfig() error {
 	}
 	if strings.TrimSpace(c.WechatOrdinaryApplymentContactEmail) == "" {
 		return fmt.Errorf("WECHAT_ORDINARY_APPLYMENT_CONTACT_EMAIL is required when ordinary service provider applyment is enabled")
+	}
+	if err := validateOrdinaryApplymentActivitiesConfig(c); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func validateOrdinaryApplymentActivitiesConfig(c Config) error {
+	hasActivitiesConfig := strings.TrimSpace(c.WechatOrdinaryApplymentActivitiesID) != "" ||
+		strings.TrimSpace(c.WechatOrdinaryApplymentDebitActivitiesRate) != "" ||
+		strings.TrimSpace(c.WechatOrdinaryApplymentCreditActivitiesRate) != "" ||
+		strings.TrimSpace(c.WechatOrdinaryApplymentActivitiesAdditions) != ""
+	if !hasActivitiesConfig {
+		return nil
+	}
+
+	if strings.TrimSpace(c.WechatOrdinaryApplymentActivitiesID) == "" ||
+		strings.TrimSpace(c.WechatOrdinaryApplymentDebitActivitiesRate) == "" ||
+		strings.TrimSpace(c.WechatOrdinaryApplymentCreditActivitiesRate) == "" {
+		return fmt.Errorf("WECHAT_ORDINARY_APPLYMENT_ACTIVITIES_ID, WECHAT_ORDINARY_APPLYMENT_DEBIT_ACTIVITIES_RATE and WECHAT_ORDINARY_APPLYMENT_CREDIT_ACTIVITIES_RATE are required when ordinary service provider applyment discount activities are configured")
 	}
 
 	return nil

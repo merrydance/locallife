@@ -113,6 +113,10 @@ func TestLoadConfig_ReadsWechatOrdinaryApplymentSettlementConfig(t *testing.T) {
 		"WECHAT_ORDINARY_APPLYMENT_QUALIFICATION_TYPE=餐饮",
 		"WECHAT_ORDINARY_APPLYMENT_SETTLEMENT_ID_INDIVIDUAL=719",
 		"WECHAT_ORDINARY_APPLYMENT_SETTLEMENT_ID_ENTERPRISE=716",
+		"WECHAT_ORDINARY_APPLYMENT_ACTIVITIES_ID=20191030111cff5b5e",
+		"WECHAT_ORDINARY_APPLYMENT_DEBIT_ACTIVITIES_RATE=0.38",
+		"WECHAT_ORDINARY_APPLYMENT_CREDIT_ACTIVITIES_RATE=0.38",
+		"WECHAT_ORDINARY_APPLYMENT_ACTIVITIES_ADDITIONS=media-a, media-b",
 	}, "\n")+"\n")
 
 	config, err := LoadConfig(configDir)
@@ -121,6 +125,10 @@ func TestLoadConfig_ReadsWechatOrdinaryApplymentSettlementConfig(t *testing.T) {
 	require.Equal(t, "餐饮", config.WechatOrdinaryApplymentQualification)
 	require.Equal(t, "719", config.WechatOrdinaryApplymentSettlementIDIndividual)
 	require.Equal(t, "716", config.WechatOrdinaryApplymentSettlementIDEnterprise)
+	require.Equal(t, "20191030111cff5b5e", config.WechatOrdinaryApplymentActivitiesID)
+	require.Equal(t, "0.38", config.WechatOrdinaryApplymentDebitActivitiesRate)
+	require.Equal(t, "0.38", config.WechatOrdinaryApplymentCreditActivitiesRate)
+	require.Equal(t, "media-a, media-b", config.WechatOrdinaryApplymentActivitiesAdditions)
 }
 
 func TestEffectiveWechatEcommerceNotifyURLs(t *testing.T) {
@@ -579,6 +587,36 @@ func TestValidateWechatOrdinaryServiceProviderConfigRequiresSubjectSettlementIDs
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "WECHAT_ORDINARY_APPLYMENT_SETTLEMENT_ID_INDIVIDUAL")
 	require.Contains(t, err.Error(), "WECHAT_ORDINARY_APPLYMENT_SETTLEMENT_ID_ENTERPRISE")
+}
+
+func TestValidateWechatOrdinaryServiceProviderConfigRequiresCompleteActivitiesConfig(t *testing.T) {
+	config := Config{
+		WechatMiniAppID:                               "wx-mini-app",
+		WechatOrdinarySpMchID:                         "1900000109",
+		WechatOrdinarySpAppID:                         "wx-mini-app",
+		WechatOrdinarySpName:                          "普通服务商",
+		WechatOrdinarySpSerialNumber:                  "ordinary-serial-001",
+		WechatOrdinarySpPrivateKeyPath:                "./certs/ordinary_key.pem",
+		WechatOrdinarySpAPIV3Key:                      testWeChatKey("ordinary-service-provider"),
+		WechatOrdinarySpPlatformPublicKeyPath:         "./certs/ordinary-platform.pem",
+		WechatOrdinarySpPlatformPublicKeyID:           "PUB_KEY_ID_ORDINARY_001",
+		WechatOrdinaryPaymentNotifyURL:                "https://example.com/ordinary/payment",
+		WechatOrdinaryCombineNotifyURL:                "https://example.com/ordinary/combine",
+		WechatOrdinaryRefundNotifyURL:                 "https://example.com/ordinary/refund",
+		WechatOrdinaryProfitSharingNotifyURL:          "https://example.com/ordinary/profit-sharing",
+		WechatOrdinaryViolationNotifyURL:              "https://example.com/ordinary/violation",
+		WechatOrdinaryApplymentSettlementIDIndividual: "719",
+		WechatOrdinaryApplymentSettlementIDEnterprise: "716",
+		WechatOrdinaryApplymentQualification:          "餐饮",
+		WechatOrdinaryApplymentContactEmail:           "ops@example.com",
+		WechatOrdinaryApplymentActivitiesID:           "20191030111cff5b5e",
+		WechatOrdinaryApplymentDebitActivitiesRate:    "0.38",
+	}
+
+	err := config.ValidateWechatOrdinaryServiceProviderConfig()
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "WECHAT_ORDINARY_APPLYMENT_CREDIT_ACTIVITIES_RATE")
 }
 
 func TestLoadConfig_ReadsAliyunOCRConfig(t *testing.T) {

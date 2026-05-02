@@ -204,6 +204,16 @@ func TestResolveOrdinaryApplymentSettlementID(t *testing.T) {
 	}
 }
 
+func TestSplitOrdinaryApplymentActivitiesAdditions(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t,
+		[]string{"media-a", "media-b", "media-c"},
+		splitOrdinaryApplymentActivitiesAdditions(" media-a,media-b; media-c\n"),
+	)
+	require.Nil(t, splitOrdinaryApplymentActivitiesAdditions(" , ; \n "))
+}
+
 func TestMerchantBindBankAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchantForApplyment(user.ID)
@@ -310,6 +320,10 @@ func TestMerchantBindBankAPI(t *testing.T) {
 						require.Contains(t, req.BusinessInfo.SalesInfo.StoreInfo.StoreEntrancePic, "wx_store_qr_media_id")
 						require.Equal(t, "719", req.SettlementInfo.SettlementID)
 						require.Equal(t, "餐饮", req.SettlementInfo.QualificationType)
+						require.Equal(t, "20191030111cff5b5e", req.SettlementInfo.ActivitiesID)
+						require.Equal(t, "0.38", req.SettlementInfo.DebitActivitiesRate)
+						require.Equal(t, "0.38", req.SettlementInfo.CreditActivitiesRate)
+						require.Equal(t, []string{"media-a", "media-b"}, req.SettlementInfo.ActivitiesAdditions)
 						return &ospcontracts.ApplymentSubmitResponse{ApplymentID: 123456789}, nil
 					})
 
@@ -382,6 +396,12 @@ func TestMerchantBindBankAPI(t *testing.T) {
 						require.Equal(t, "approved", arg.ModerationStatus)
 						return db.MediaAsset{ID: arg.ID, ModerationStatus: arg.ModerationStatus}, nil
 					})
+			},
+			prepareServer: func(t *testing.T, server *Server) {
+				server.config.WechatOrdinaryApplymentActivitiesID = "20191030111cff5b5e"
+				server.config.WechatOrdinaryApplymentDebitActivitiesRate = "0.38"
+				server.config.WechatOrdinaryApplymentCreditActivitiesRate = "0.38"
+				server.config.WechatOrdinaryApplymentActivitiesAdditions = "media-a, media-b"
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
