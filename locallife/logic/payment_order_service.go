@@ -460,7 +460,7 @@ func (svc *PaymentOrderService) createOrdinaryServiceProviderPayment(ctx context
 		Attach:      paymentAttach,
 		NotifyURL:   svc.ordinaryProviderPayClient.PaymentNotifyURL(),
 		SettleInfo:  &ospcontracts.PaymentSettleInfo{ProfitSharing: createInput.ProfitSharing},
-		Amount:      ospcontracts.PaymentAmount{Total: txResult.PaymentOrder.Amount, Currency: ospcontracts.CurrencyCNY},
+		Amount:      ospcontracts.PaymentPrepayAmount{Total: txResult.PaymentOrder.Amount, Currency: ospcontracts.CurrencyCNY},
 		Payer:       ospcontracts.PaymentPayer{SpOpenID: user.WechatOpenid},
 		SceneInfo:   &ospcontracts.PaymentSceneInfo{PayerClientIP: createInput.ClientIP},
 	})

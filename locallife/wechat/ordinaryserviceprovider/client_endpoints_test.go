@@ -23,10 +23,14 @@ type capturedSDKRequest struct {
 
 type captureSDKClient struct {
 	responses []string
+	err       error
 	calls     []capturedSDKRequest
 }
 
 func (c *captureSDKClient) Request(ctx context.Context, method, requestPath string, headerParams http.Header, queryParams url.Values, postBody interface{}, contentType string) (*core.APIResult, error) {
+	if c.err != nil {
+		return nil, c.err
+	}
 	responseBody := "{}"
 	if len(c.responses) > 0 {
 		responseBody = c.responses[0]
@@ -43,6 +47,9 @@ func (c *captureSDKClient) Request(ctx context.Context, method, requestPath stri
 }
 
 func (c *captureSDKClient) Upload(ctx context.Context, requestURL, meta, reqBody, formContentType string) (*core.APIResult, error) {
+	if c.err != nil {
+		return nil, c.err
+	}
 	c.calls = append(c.calls, capturedSDKRequest{
 		method:      http.MethodPost,
 		path:        requestURL,
@@ -71,7 +78,7 @@ func TestClientRoutesPaymentRefundAndProfitSharingEndpoints(t *testing.T) {
 		`{"sub_mchid":"1900000109","out_order_no":"ps-001","out_return_no":"return-001","return_id":"R001"}`,
 		`{"sub_mchid":"1900000109","out_order_no":"ps-001","out_return_no":"return-001","return_id":"R001"}`,
 		`{"sub_mchid":"1900000109","transaction_id":"tx-001","out_order_no":"ps-unfreeze-001","order_id":"300845075"}`,
-		`{"sub_mchid":"1900000109","transaction_id":"tx-001","amount":88}`,
+		`{"sub_mchid":"1900000109","transaction_id":"tx-001","unsplit_amount":88}`,
 	}}
 	client := endpointTestClient(t, fake)
 	ctx := context.Background()
@@ -115,7 +122,7 @@ func TestClientRoutesPaymentRefundAndProfitSharingEndpoints(t *testing.T) {
 
 	remainingResp, err := client.QueryProfitSharingRemainingAmount(ctx, contracts.ProfitSharingRemainingAmountRequest{SubMchID: "1900000109", TransactionID: "tx-001"})
 	require.NoError(t, err)
-	require.Equal(t, int64(88), remainingResp.Amount)
+	require.Equal(t, int64(88), remainingResp.UnsplitAmount)
 
 	requireEndpointCall(t, fake.calls[0], http.MethodPost, DefaultBaseURL+"/v3/pay/partner/transactions/jsapi")
 	requireEndpointCall(t, fake.calls[1], http.MethodGet, DefaultBaseURL+"/v3/pay/partner/transactions/out-trade-no/order-001")
@@ -212,7 +219,16 @@ func TestClientRoutesApplymentSettlementAndMerchantManagementEndpoints(t *testin
 	_, err = client.QuerySettlementModification(ctx, contracts.SettlementModificationQueryRequest{SubMchID: "1900000109", ApplicationNo: "settle-app-001"})
 	require.NoError(t, err)
 
-	_, err = client.SubmitAccountWillingness(ctx, contracts.AccountWillingnessSubmitRequest{BusinessCode: "will-001", ContactInfo: "encrypted-contact"})
+	_, err = client.SubmitAccountWillingness(ctx, contracts.AccountWillingnessSubmitRequest{
+		BusinessCode: "will-001",
+		ContactInfo: contracts.AccountWillingnessContactInfo{
+			Name:   "encrypted-contact",
+			Mobile: "encrypted-mobile",
+		},
+		SubjectInfo: contracts.AccountWillingnessSubjectInfo{
+			SubjectType: contracts.SubjectTypeEnterprise,
+		},
+	})
 	require.NoError(t, err)
 
 	_, err = client.CancelAccountWillingness(ctx, contracts.AccountWillingnessCancelRequest{BusinessCode: "will-001"})
@@ -277,8 +293,53 @@ func TestClientValidationFailureReturnsProviderErrorBeforeRequest(t *testing.T) 
 	var providerErr *ProviderError
 	require.ErrorAs(t, err, &providerErr)
 	require.Equal(t, ErrorCategoryValidation, providerErr.Category)
+	require.Equal(t, contracts.EndpointPaymentPrepay, providerErr.EndpointID)
+	require.Equal(t, contracts.CapabilityPayment, providerErr.CapabilityID)
 	require.Equal(t, "WECHAT_REQUEST_INVALID", providerErr.Frontend.Code)
 	require.Empty(t, fake.calls)
+}
+
+func TestClientProviderErrorIncludesEndpointCodeSetMetadata(t *testing.T) {
+	fake := &captureSDKClient{err: &core.APIError{
+		StatusCode: http.StatusBadRequest,
+		Header:     http.Header{"Request-Id": []string{"req-endpoint-001"}},
+		Code:       "PARAM_ERROR",
+		Message:    "invalid request body",
+	}}
+	client := endpointTestClient(t, fake)
+
+	_, err := client.CreatePayment(context.Background(), validEndpointPaymentRequest())
+
+	var providerErr *ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, contracts.EndpointPaymentPrepay, providerErr.EndpointID)
+	require.Equal(t, contracts.CapabilityPayment, providerErr.CapabilityID)
+	require.Equal(t, "PaymentPrepayDocumentedCodes", providerErr.DocumentedCodeSet)
+	require.True(t, providerErr.DocumentedProviderCode)
+	require.Equal(t, "req-endpoint-001", providerErr.RequestID)
+}
+
+func TestUploadImageProviderErrorIncludesMediaEndpointMetadata(t *testing.T) {
+	fake := &captureSDKClient{err: &core.APIError{
+		StatusCode: http.StatusBadRequest,
+		Header:     http.Header{"Request-Id": []string{"req-upload-001"}},
+		Code:       "PARAM_ERROR",
+		Message:    "invalid media",
+	}}
+	client := endpointTestClient(t, fake)
+
+	_, err := client.UploadImage(context.Background(), "storefront.png", []byte{
+		0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+		0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+	})
+
+	var providerErr *ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, contracts.EndpointMerchantMediaUpload, providerErr.EndpointID)
+	require.Equal(t, contracts.CapabilityApplyment, providerErr.CapabilityID)
+	require.Equal(t, "MerchantMediaUploadDocumentedCodes", providerErr.DocumentedCodeSet)
+	require.True(t, providerErr.DocumentedProviderCode)
+	require.Equal(t, "req-upload-001", providerErr.RequestID)
 }
 
 func endpointTestClient(t *testing.T, sdk sdkClient) *Client {
@@ -304,7 +365,7 @@ func validEndpointPaymentRequest() contracts.PaymentPrepayRequest {
 		OutTradeNo:  "order-001",
 		NotifyURL:   "https://example.test/wechat/pay",
 		SettleInfo:  &contracts.PaymentSettleInfo{ProfitSharing: true},
-		Amount:      contracts.PaymentAmount{Total: 100, Currency: contracts.CurrencyCNY},
+		Amount:      contracts.PaymentPrepayAmount{Total: 100, Currency: contracts.CurrencyCNY},
 		Payer:       contracts.PaymentPayer{SubOpenID: "sub-openid"},
 	}
 }
@@ -322,7 +383,7 @@ func validEndpointCombineRequest() contracts.CombinePrepayRequest {
 			OutTradeNo:  "order-001",
 			Attach:      "local-life-order-001",
 			Description: "本地生活合单子单",
-			Amount:      contracts.CombineAmount{TotalAmount: 100, Currency: contracts.CurrencyCNY},
+			Amount:      contracts.CombineSubOrderAmount{TotalAmount: 100, Currency: contracts.CurrencyCNY},
 		}},
 	}
 }

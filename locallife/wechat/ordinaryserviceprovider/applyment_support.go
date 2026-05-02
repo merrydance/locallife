@@ -20,56 +20,64 @@ import (
 const ordinaryMerchantMediaUploadPath = "/v3/merchant/media/upload"
 
 func (c *Client) UploadImage(ctx context.Context, filename string, fileData []byte) (*contracts.MediaUploadResponse, error) {
+	endpointID := contracts.EndpointMerchantMediaUpload
+	operation := "upload ordinary service provider media image"
 	if c == nil || c.sdk == nil {
-		return nil, &ProviderError{
-			Operation: "upload ordinary service provider media image",
+		return nil, withEndpointMetadata(&ProviderError{
+			Operation: operation,
 			Category:  ErrorCategoryAuthConfig,
 			Frontend:  frontendGuidanceForCategory(ErrorCategoryAuthConfig),
 			cause:     fmt.Errorf("ordinary service provider sdk client is not configured"),
-		}
+		}, endpointID)
 	}
 	normalizedFilename, contentType, err := validateOrdinaryMediaUploadImage(filename, fileData)
 	if err != nil {
-		return nil, validationProviderError("upload ordinary service provider media image", err)
+		return nil, validationProviderEndpointError(operation, endpointID, err)
 	}
 	meta := map[string]string{
 		"filename": normalizedFilename,
 		"sha256":   fmt.Sprintf("%x", sha256.Sum256(fileData)),
 	}
+	if err := validateClientEndpointRequest(endpointID, contracts.MediaUploadRequestMultipart{
+		File: fileData,
+		Meta: contracts.MediaUploadMeta{Filename: meta["filename"], SHA256: meta["sha256"]},
+	}); err != nil {
+		return nil, err
+	}
 	metaBytes, err := json.Marshal(meta)
 	if err != nil {
-		return nil, localProviderError("upload ordinary service provider media image", "LOCAL_REQUEST_ENCODE_ERROR", err)
+		return nil, localProviderEndpointError(operation, endpointID, "LOCAL_REQUEST_ENCODE_ERROR", err)
 	}
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	if err := writeOrdinaryUploadField(writer, "meta", "", "application/json", metaBytes); err != nil {
-		return nil, localProviderError("upload ordinary service provider media image", "LOCAL_MULTIPART_ERROR", err)
+		return nil, localProviderEndpointError(operation, endpointID, "LOCAL_MULTIPART_ERROR", err)
 	}
 	if err := writeOrdinaryUploadField(writer, "file", normalizedFilename, contentType, fileData); err != nil {
-		return nil, localProviderError("upload ordinary service provider media image", "LOCAL_MULTIPART_ERROR", err)
+		return nil, localProviderEndpointError(operation, endpointID, "LOCAL_MULTIPART_ERROR", err)
 	}
 	if err := writer.Close(); err != nil {
-		return nil, localProviderError("upload ordinary service provider media image", "LOCAL_MULTIPART_ERROR", err)
+		return nil, localProviderEndpointError(operation, endpointID, "LOCAL_MULTIPART_ERROR", err)
 	}
 
 	result, err := c.sdk.Upload(ctx, strings.TrimRight(c.config.BaseURL, "/")+ordinaryMerchantMediaUploadPath, string(metaBytes), body.String(), writer.FormDataContentType())
 	if err != nil {
-		return nil, mapSDKAPIError("upload ordinary service provider media image", err)
+		return nil, mapSDKAPIEndpointError(operation, endpointID, err)
 	}
 	if result == nil || result.Response == nil || result.Response.Body == nil {
-		return nil, localProviderError("upload ordinary service provider media image", "LOCAL_EMPTY_RESPONSE", fmt.Errorf("empty upload response"))
+		return nil, localProviderEndpointError(operation, endpointID, "LOCAL_EMPTY_RESPONSE", fmt.Errorf("empty upload response"))
 	}
 	defer result.Response.Body.Close()
 	respBody, err := io.ReadAll(result.Response.Body)
 	if err != nil {
-		return nil, localProviderError("upload ordinary service provider media image", "LOCAL_RESPONSE_READ_ERROR", err)
+		return nil, localProviderEndpointError(operation, endpointID, "LOCAL_RESPONSE_READ_ERROR", err)
 	}
 	var response contracts.MediaUploadResponse
 	if err := json.Unmarshal(respBody, &response); err != nil {
-		return nil, localProviderError("upload ordinary service provider media image", "LOCAL_RESPONSE_DECODE_ERROR", err)
+		return nil, localProviderEndpointError(operation, endpointID, "LOCAL_RESPONSE_DECODE_ERROR", err)
 	}
 	if strings.TrimSpace(response.MediaID) == "" {
-		return nil, localProviderError("upload ordinary service provider media image", "LOCAL_EMPTY_MEDIA_ID", fmt.Errorf("wechat upload returned empty media_id"))
+		return nil, localProviderEndpointError(operation, endpointID, "LOCAL_EMPTY_MEDIA_ID", fmt.Errorf("wechat upload returned empty media_id"))
 	}
 	return &response, nil
 }

@@ -217,12 +217,12 @@ func TestBuildOrdinaryServiceProviderApplymentRequestIncludesDiscountActivities(
 			MobilePhone:  "enc-phone",
 			ContactEmail: "ops@example.com",
 		},
-		SettlementID:          "716",
-		QualificationType:     "餐饮",
-		ActivitiesID:          "20191030111cff5b5e",
-		DebitActivitiesRate:   "0.38",
-		CreditActivitiesRate:  "0.38",
-		ActivitiesAdditions:   []string{"media-a", "media-b"},
+		SettlementID:         "716",
+		QualificationType:    "餐饮",
+		ActivitiesID:         "20191030111cff5b5e",
+		DebitActivitiesRate:  "0.38",
+		CreditActivitiesRate: "0.38",
+		ActivitiesAdditions:  []string{"media-a", "media-b"},
 	})
 
 	require.Equal(t, "716", request.SettlementInfo.SettlementID)
@@ -231,6 +231,8 @@ func TestBuildOrdinaryServiceProviderApplymentRequestIncludesDiscountActivities(
 	require.Equal(t, "0.38", request.SettlementInfo.DebitActivitiesRate)
 	require.Equal(t, "0.38", request.SettlementInfo.CreditActivitiesRate)
 	require.Equal(t, []string{"media-a", "media-b"}, request.SettlementInfo.ActivitiesAdditions)
+	require.Equal(t, []string{"store-qr-media"}, request.BusinessInfo.SalesInfo.MiniProgramInfo.MiniProgramPics)
+	require.Nil(t, request.BusinessInfo.SalesInfo.StoreInfo)
 }
 
 func TestResolveApplymentOrganizationType(t *testing.T) {

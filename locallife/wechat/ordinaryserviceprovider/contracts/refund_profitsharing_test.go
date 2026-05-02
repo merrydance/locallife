@@ -7,18 +7,24 @@ import (
 	"testing"
 )
 
-func TestRefundCreateRequestDoesNotExposeFundsAccount(t *testing.T) {
+func TestRefundCreateRequestExposesOfficialFundsAccountWhenSet(t *testing.T) {
 	requestType := reflect.TypeOf(RefundCreateRequest{})
-	if _, ok := requestType.FieldByName("FundsAccount"); ok {
-		t.Fatal("ordinary service provider refund request must not expose funds_account; local business does not use platform advance or funding-source control")
+	field, ok := requestType.FieldByName("FundsAccount")
+	if !ok {
+		t.Fatal("ordinary service provider refund request must expose official funds_account")
+	}
+	if field.Tag.Get("json") != "funds_account,omitempty" {
+		t.Fatalf("FundsAccount json tag = %q, want funds_account,omitempty", field.Tag.Get("json"))
 	}
 
-	body, err := json.Marshal(validRefundCreateRequest())
+	req := validRefundCreateRequest()
+	req.FundsAccount = RefundFundsAccountAvailable
+	body, err := json.Marshal(req)
 	if err != nil {
 		t.Fatalf("marshal refund request: %v", err)
 	}
-	if strings.Contains(string(body), "funds_account") {
-		t.Fatalf("refund request JSON must not contain funds_account, got %s", string(body))
+	if !strings.Contains(string(body), "funds_account") {
+		t.Fatalf("refund request JSON must contain official funds_account when set, got %s", string(body))
 	}
 }
 

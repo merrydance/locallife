@@ -244,7 +244,7 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 		ordinarySubOrders = append(ordinarySubOrders, ospcontracts.CombineSubOrder{
 			MchID:       svc.ordinaryCombineMchID(),
 			SubMchID:    info.PaymentConfig.SubMchID,
-			Amount:      ospcontracts.CombineAmount{TotalAmount: info.PaymentOrder.Amount, Currency: ospcontracts.CurrencyCNY},
+			Amount:      ospcontracts.CombineSubOrderAmount{TotalAmount: info.PaymentOrder.Amount, Currency: ospcontracts.CurrencyCNY},
 			OutTradeNo:  info.PaymentOrder.OutTradeNo,
 			Description: description,
 			Attach:      info.PaymentOrder.Attach.String,

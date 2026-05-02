@@ -6,6 +6,11 @@ import (
 	"strings"
 )
 
+// NoRequestBody and NoResponseBody make body-less official endpoints explicit
+// in the capability registry without inventing fields absent from WeChat docs.
+type NoRequestBody struct{}
+type NoResponseBody struct{}
+
 type Currency string
 
 const CurrencyCNY Currency = "CNY"
@@ -397,6 +402,33 @@ func (i ApplymentSalesInfo) validate() error {
 			return missing("business_info.sales_info.mini_program_info.mini_program_appid")
 		}
 	}
+	if salesSceneSelected(i.SalesScenesType, SalesSceneStore) && i.StoreInfo == nil {
+		return missing("business_info.sales_info.biz_store_info")
+	}
+	if i.StoreInfo != nil {
+		if err := i.StoreInfo.validate(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (i ApplymentStoreInfo) validate() error {
+	for _, field := range []struct{ name, value string }{
+		{"business_info.sales_info.biz_store_info.biz_store_name", i.StoreName},
+		{"business_info.sales_info.biz_store_info.biz_address_code", i.AddressCode},
+		{"business_info.sales_info.biz_store_info.biz_store_address", i.StoreAddress},
+	} {
+		if err := requireString(field.name, field.value); err != nil {
+			return err
+		}
+	}
+	if len(i.StoreEntrancePic) == 0 {
+		return missing("business_info.sales_info.biz_store_info.store_entrance_pic")
+	}
+	if len(i.IndoorPic) == 0 {
+		return missing("business_info.sales_info.biz_store_info.indoor_pic")
+	}
 	return nil
 }
 
@@ -510,9 +542,94 @@ type SettlementModificationQueryResponse struct {
 }
 
 type AccountWillingnessSubmitRequest struct {
-	BusinessCode string `json:"business_code,omitempty"`
-	SubMchID     string `json:"sub_mchid,omitempty"`
-	ContactInfo  string `json:"contact_info,omitempty"`
+	ChannelID          string                               `json:"channel_id,omitempty"`
+	BusinessCode       string                               `json:"business_code,omitempty"`
+	ContactInfo        AccountWillingnessContactInfo        `json:"contact_info,omitempty"`
+	SubjectInfo        AccountWillingnessSubjectInfo        `json:"subject_info,omitempty"`
+	IdentificationInfo AccountWillingnessIdentificationInfo `json:"identification_info,omitempty"`
+	AdditionInfo       *AccountWillingnessAdditionInfo      `json:"addition_info,omitempty"`
+	UBOInfoList        []ApplymentUBOInfo                   `json:"ubo_info_list,omitempty"`
+}
+
+type AccountWillingnessContactInfo struct {
+	Name                 string             `json:"name,omitempty"`
+	Mobile               string             `json:"mobile,omitempty"`
+	IDCardNumber         string             `json:"id_card_number,omitempty"`
+	ContactType          ContactType        `json:"contact_type,omitempty"`
+	ContactIDDocType     IdentificationType `json:"contact_id_doc_type,omitempty"`
+	ContactIDDocCopy     string             `json:"contact_id_doc_copy,omitempty"`
+	ContactIDDocCopyBack string             `json:"contact_id_doc_copy_back,omitempty"`
+	ContactPeriodBegin   string             `json:"contact_period_begin,omitempty"`
+	ContactPeriodEnd     string             `json:"contact_period_end,omitempty"`
+}
+
+type AccountWillingnessSubjectInfo struct {
+	SubjectType            SubjectType                            `json:"subject_type,omitempty"`
+	IsFinanceInstitution   bool                                   `json:"is_finance_institution,omitempty"`
+	BusinessLicenceInfo    *AccountWillingnessBusinessLicenceInfo `json:"business_licence_info,omitempty"`
+	CertificateInfo        *AccountWillingnessCertificateInfo     `json:"certificate_info,omitempty"`
+	CompanyProveCopy       string                                 `json:"company_prove_copy,omitempty"`
+	AssistProveInfo        *AccountWillingnessAssistProveInfo     `json:"assist_prove_info,omitempty"`
+	SpecialOperationList   []AccountWillingnessSpecialOperation   `json:"special_operation_list,omitempty"`
+	FinanceInstitutionInfo *ApplymentFinanceInstitutionInfo       `json:"finance_institution_info,omitempty"`
+}
+
+type AccountWillingnessBusinessLicenceInfo struct {
+	LicenceNumber    string `json:"licence_number,omitempty"`
+	LicenceCopy      string `json:"licence_copy,omitempty"`
+	MerchantName     string `json:"merchant_name,omitempty"`
+	LegalPerson      string `json:"legal_person,omitempty"`
+	CompanyAddress   string `json:"company_address,omitempty"`
+	LicenceValidDate string `json:"licence_valid_date,omitempty"`
+}
+
+type AccountWillingnessCertificateInfo struct {
+	CertType       string `json:"cert_type,omitempty"`
+	CertNumber     string `json:"cert_number,omitempty"`
+	CertCopy       string `json:"cert_copy,omitempty"`
+	MerchantName   string `json:"merchant_name,omitempty"`
+	LegalPerson    string `json:"legal_person,omitempty"`
+	CompanyAddress string `json:"company_address,omitempty"`
+	CertValidDate  string `json:"cert_valid_date,omitempty"`
+}
+
+type MicroBizType string
+
+const (
+	MicroBizTypeStore  MicroBizType = "MICRO_TYPE_STORE"
+	MicroBizTypeMobile MicroBizType = "MICRO_TYPE_MOBILE"
+	MicroBizTypeOnline MicroBizType = "MICRO_TYPE_ONLINE"
+)
+
+type AccountWillingnessAssistProveInfo struct {
+	MicroBizType     MicroBizType `json:"micro_biz_type,omitempty"`
+	StoreName        string       `json:"store_name,omitempty"`
+	StoreAddressCode string       `json:"store_address_code,omitempty"`
+	StoreAddress     string       `json:"store_address,omitempty"`
+	StoreHeaderCopy  string       `json:"store_header_copy,omitempty"`
+	StoreIndoorCopy  string       `json:"store_indoor_copy,omitempty"`
+}
+
+type AccountWillingnessSpecialOperation struct {
+	CategoryID        int64    `json:"category_id,omitempty"`
+	OperationCopyList []string `json:"operation_copy_list,omitempty"`
+}
+
+type AccountWillingnessIdentificationInfo struct {
+	IDHolderType            ContactType        `json:"id_holder_type,omitempty"`
+	IdentificationType      IdentificationType `json:"identification_type,omitempty"`
+	IdentificationName      string             `json:"identification_name,omitempty"`
+	IdentificationNumber    string             `json:"identification_number,omitempty"`
+	IdentificationValidDate string             `json:"identification_valid_date,omitempty"`
+	IdentificationFrontCopy string             `json:"identification_front_copy,omitempty"`
+	IdentificationBackCopy  string             `json:"identification_back_copy,omitempty"`
+	AuthorizeLetterCopy     string             `json:"authorize_letter_copy,omitempty"`
+	Owner                   bool               `json:"owner,omitempty"`
+	IdentificationAddress   string             `json:"identification_address,omitempty"`
+}
+
+type AccountWillingnessAdditionInfo struct {
+	ConfirmMchIDList []string `json:"confirm_mchid_list,omitempty"`
 }
 
 type AccountWillingnessSubmitResponse struct {
@@ -525,6 +642,7 @@ type AccountWillingnessCancelRequest struct {
 
 type AccountWillingnessCancelResponse struct {
 	BusinessCode string `json:"business_code,omitempty"`
+	ApplymentID  int64  `json:"applyment_id,omitempty"`
 }
 
 type AccountWillingnessQueryRequest struct {
@@ -626,8 +744,11 @@ type ViolationNotificationConfigResponse struct {
 }
 
 type InactiveMerchantIdentityVerificationCreateRequest struct {
-	SubMchID     string `json:"sub_mchid,omitempty"`
-	BusinessCode string `json:"business_code,omitempty"`
+	SubMchID string `json:"sub_mchid,omitempty"`
+
+	// BusinessCode is a LocalLife caller correlation value only; the official
+	// WeChat request body for this endpoint contains sub_mchid and must not send it.
+	BusinessCode string `json:"-"`
 }
 
 type InactiveMerchantIdentityVerificationCreateResponse struct {
@@ -658,6 +779,16 @@ type InactiveMerchantIdentityVerificationQueryResponse struct {
 	Reason         string                                    `json:"reason,omitempty"`
 	CreateTime     string                                    `json:"create_time,omitempty"`
 	FinishTime     string                                    `json:"finish_time,omitempty"`
+}
+
+type MediaUploadRequestMultipart struct {
+	File []byte          `json:"file,omitempty"`
+	Meta MediaUploadMeta `json:"meta,omitempty"`
+}
+
+type MediaUploadMeta struct {
+	Filename string `json:"filename,omitempty"`
+	SHA256   string `json:"sha256,omitempty"`
 }
 
 type MediaUploadResponse struct {
@@ -731,23 +862,79 @@ type PageLinks struct {
 	Self string `json:"self,omitempty"`
 }
 
+type WechatErrorResponse struct {
+	Code    string `json:"code,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+type NotificationRequest struct {
+	ID           string                `json:"id,omitempty"`
+	CreateTime   string                `json:"create_time,omitempty"`
+	EventType    string                `json:"event_type,omitempty"`
+	ResourceType string                `json:"resource_type,omitempty"`
+	Summary      string                `json:"summary,omitempty"`
+	Resource     *NotificationResource `json:"resource,omitempty"`
+}
+
+type NotificationResource struct {
+	Algorithm      string `json:"algorithm,omitempty"`
+	Ciphertext     string `json:"ciphertext,omitempty"`
+	OriginalType   string `json:"original_type,omitempty"`
+	AssociatedData string `json:"associated_data,omitempty"`
+	Nonce          string `json:"nonce,omitempty"`
+}
+
+type RefundNotificationPayload struct {
+	SpMchID             string        `json:"sp_mchid,omitempty"`
+	SubMchID            string        `json:"sub_mchid,omitempty"`
+	OutTradeNo          string        `json:"out_trade_no,omitempty"`
+	TransactionID       string        `json:"transaction_id,omitempty"`
+	OutRefundNo         string        `json:"out_refund_no,omitempty"`
+	RefundID            string        `json:"refund_id,omitempty"`
+	RefundStatus        RefundStatus  `json:"refund_status,omitempty"`
+	SuccessTime         string        `json:"success_time,omitempty"`
+	UserReceivedAccount string        `json:"user_received_account,omitempty"`
+	Amount              *RefundAmount `json:"amount,omitempty"`
+}
+
+type ProfitSharingNotificationPayload struct {
+	SpMchID       string                      `json:"sp_mchid,omitempty"`
+	SubMchID      string                      `json:"sub_mchid,omitempty"`
+	TransactionID string                      `json:"transaction_id,omitempty"`
+	OrderID       string                      `json:"order_id,omitempty"`
+	OutOrderNo    string                      `json:"out_order_no,omitempty"`
+	Receiver      ProfitSharingReceiverDetail `json:"receiver,omitempty"`
+	SuccessTime   string                      `json:"success_time,omitempty"`
+}
+
+type MerchantViolationNotificationPayload struct {
+	SubMchID          string `json:"sub_mchid,omitempty"`
+	CompanyName       string `json:"company_name,omitempty"`
+	RecordID          string `json:"record_id,omitempty"`
+	PunishPlan        string `json:"punish_plan,omitempty"`
+	PunishTime        string `json:"punish_time,omitempty"`
+	PunishDescription string `json:"punish_description,omitempty"`
+	RiskType          string `json:"risk_type,omitempty"`
+	RiskDescription   string `json:"risk_description,omitempty"`
+}
+
 type PaymentPrepayRequest struct {
-	SpAppID       string             `json:"sp_appid,omitempty"`
-	SpMchID       string             `json:"sp_mchid,omitempty"`
-	SubAppID      string             `json:"sub_appid,omitempty"`
-	SubMchID      string             `json:"sub_mchid,omitempty"`
-	Description   string             `json:"description,omitempty"`
-	OutTradeNo    string             `json:"out_trade_no,omitempty"`
-	TimeExpire    string             `json:"time_expire,omitempty"`
-	Attach        string             `json:"attach,omitempty"`
-	NotifyURL     string             `json:"notify_url,omitempty"`
-	GoodsTag      string             `json:"goods_tag,omitempty"`
-	SettleInfo    *PaymentSettleInfo `json:"settle_info,omitempty"`
-	SupportFapiao bool               `json:"support_fapiao,omitempty"`
-	Amount        PaymentAmount      `json:"amount,omitempty"`
-	Payer         PaymentPayer       `json:"payer,omitempty"`
-	Detail        *PaymentDetail     `json:"detail,omitempty"`
-	SceneInfo     *PaymentSceneInfo  `json:"scene_info,omitempty"`
+	SpAppID       string              `json:"sp_appid,omitempty"`
+	SpMchID       string              `json:"sp_mchid,omitempty"`
+	SubAppID      string              `json:"sub_appid,omitempty"`
+	SubMchID      string              `json:"sub_mchid,omitempty"`
+	Description   string              `json:"description,omitempty"`
+	OutTradeNo    string              `json:"out_trade_no,omitempty"`
+	TimeExpire    string              `json:"time_expire,omitempty"`
+	Attach        string              `json:"attach,omitempty"`
+	NotifyURL     string              `json:"notify_url,omitempty"`
+	GoodsTag      string              `json:"goods_tag,omitempty"`
+	SettleInfo    *PaymentSettleInfo  `json:"settle_info,omitempty"`
+	SupportFapiao bool                `json:"support_fapiao,omitempty"`
+	Amount        PaymentPrepayAmount `json:"amount,omitempty"`
+	Payer         PaymentPayer        `json:"payer,omitempty"`
+	Detail        *PaymentDetail      `json:"detail,omitempty"`
+	SceneInfo     *PaymentSceneInfo   `json:"scene_info,omitempty"`
 }
 
 type PaymentPrepayResponse struct {
@@ -767,6 +954,11 @@ type JSAPIPayParams struct {
 
 type PaymentSettleInfo struct {
 	ProfitSharing bool `json:"profit_sharing,omitempty"`
+}
+
+type PaymentPrepayAmount struct {
+	Total    int64    `json:"total,omitempty"`
+	Currency Currency `json:"currency,omitempty"`
 }
 
 type PaymentAmount struct {
@@ -900,7 +1092,7 @@ func (r PaymentPrepayRequest) Validate() error {
 	return nil
 }
 
-func (a PaymentAmount) validate(field string, allowEmptyCurrency bool) error {
+func (a PaymentPrepayAmount) validate(field string, allowEmptyCurrency bool) error {
 	if err := requirePositiveInt(field+".total", a.Total); err != nil {
 		return err
 	}
@@ -933,16 +1125,20 @@ type CombineSceneInfo struct {
 }
 
 type CombineSubOrder struct {
-	MchID       string             `json:"mchid,omitempty"`
-	SubMchID    string             `json:"sub_mchid,omitempty"`
-	SubAppID    string             `json:"sub_appid,omitempty"`
-	OutTradeNo  string             `json:"out_trade_no,omitempty"`
-	Amount      CombineAmount      `json:"amount,omitempty"`
-	Attach      string             `json:"attach,omitempty"`
-	Description string             `json:"description,omitempty"`
-	Detail      string             `json:"detail,omitempty"`
-	GoodsTag    string             `json:"goods_tag,omitempty"`
-	SettleInfo  *CombineSettleInfo `json:"settle_info,omitempty"`
+	MchID       string                `json:"mchid,omitempty"`
+	SubMchID    string                `json:"sub_mchid,omitempty"`
+	SubAppID    string                `json:"sub_appid,omitempty"`
+	OutTradeNo  string                `json:"out_trade_no,omitempty"`
+	Amount      CombineSubOrderAmount `json:"amount,omitempty"`
+	Attach      string                `json:"attach,omitempty"`
+	Description string                `json:"description,omitempty"`
+	GoodsTag    string                `json:"goods_tag,omitempty"`
+	SettleInfo  *CombineSettleInfo    `json:"settle_info,omitempty"`
+}
+
+type CombineSubOrderAmount struct {
+	TotalAmount int64    `json:"total_amount,omitempty"`
+	Currency    Currency `json:"currency,omitempty"`
 }
 
 type CombineAmount struct {
@@ -966,7 +1162,9 @@ type CombineQueryResponse struct {
 	CombineAppID      string              `json:"combine_appid,omitempty"`
 	CombineMchID      string              `json:"combine_mchid,omitempty"`
 	CombineOutTradeNo string              `json:"combine_out_trade_no,omitempty"`
+	CombinePayerInfo  CombinePayerInfo    `json:"combine_payer_info,omitempty"`
 	TradeState        PaymentTradeState   `json:"trade_state,omitempty"`
+	SceneInfo         *CombineSceneInfo   `json:"scene_info,omitempty"`
 	SubOrders         []CombineOrderState `json:"sub_orders,omitempty"`
 }
 
@@ -988,7 +1186,7 @@ type CombineOrderState struct {
 
 type CombineCloseRequest struct {
 	CombineAppID      string                 `json:"combine_appid,omitempty"`
-	CombineMchID      string                 `json:"combine_mchid,omitempty"`
+	CombineMchID      string                 `json:"-"`
 	CombineOutTradeNo string                 `json:"combine_out_trade_no,omitempty"`
 	SubOrders         []CombineCloseSubOrder `json:"sub_orders,omitempty"`
 }
@@ -1065,6 +1263,7 @@ type RefundCreateRequest struct {
 	OutRefundNo   string              `json:"out_refund_no,omitempty"`
 	Reason        string              `json:"reason,omitempty"`
 	NotifyURL     string              `json:"notify_url,omitempty"`
+	FundsAccount  RefundFundsAccount  `json:"funds_account,omitempty"`
 	Amount        RefundAmountRequest `json:"amount,omitempty"`
 	GoodsDetail   []RefundGoodsDetail `json:"goods_detail,omitempty"`
 }
@@ -1214,6 +1413,7 @@ const (
 type ProfitSharingReceiverAddRequest struct {
 	SubMchID       string                            `json:"sub_mchid,omitempty"`
 	AppID          string                            `json:"appid,omitempty"`
+	SubAppID       string                            `json:"sub_appid,omitempty"`
 	Type           ReceiverType                      `json:"type,omitempty"`
 	Account        string                            `json:"account,omitempty"`
 	Name           string                            `json:"name,omitempty"`
@@ -1224,6 +1424,7 @@ type ProfitSharingReceiverAddRequest struct {
 type ProfitSharingReceiverDeleteRequest struct {
 	SubMchID string       `json:"sub_mchid,omitempty"`
 	AppID    string       `json:"appid,omitempty"`
+	SubAppID string       `json:"sub_appid,omitempty"`
 	Type     ReceiverType `json:"type,omitempty"`
 	Account  string       `json:"account,omitempty"`
 }
@@ -1344,7 +1545,8 @@ type ProfitSharingReturnResponse struct {
 	ReturnMchID string                   `json:"return_mchid,omitempty"`
 	Amount      int64                    `json:"amount,omitempty"`
 	Description string                   `json:"description,omitempty"`
-	State       ProfitSharingReturnState `json:"state,omitempty"`
+	Result      ProfitSharingReturnState `json:"result,omitempty"`
+	State       ProfitSharingReturnState `json:"-"`
 	FailReason  string                   `json:"fail_reason,omitempty"`
 	CreateTime  string                   `json:"create_time,omitempty"`
 	FinishTime  string                   `json:"finish_time,omitempty"`
@@ -1358,11 +1560,12 @@ type ProfitSharingUnfreezeRequest struct {
 }
 
 type ProfitSharingUnfreezeResponse struct {
-	SubMchID      string                  `json:"sub_mchid,omitempty"`
-	TransactionID string                  `json:"transaction_id,omitempty"`
-	OutOrderNo    string                  `json:"out_order_no,omitempty"`
-	OrderID       string                  `json:"order_id,omitempty"`
-	State         ProfitSharingOrderState `json:"state,omitempty"`
+	SubMchID      string                        `json:"sub_mchid,omitempty"`
+	TransactionID string                        `json:"transaction_id,omitempty"`
+	OutOrderNo    string                        `json:"out_order_no,omitempty"`
+	OrderID       string                        `json:"order_id,omitempty"`
+	State         ProfitSharingOrderState       `json:"state,omitempty"`
+	Receivers     []ProfitSharingReceiverDetail `json:"receivers,omitempty"`
 }
 
 type ProfitSharingRemainingAmountRequest struct {
@@ -1373,7 +1576,7 @@ type ProfitSharingRemainingAmountRequest struct {
 type ProfitSharingRemainingAmountResponse struct {
 	SubMchID      string `json:"sub_mchid,omitempty"`
 	TransactionID string `json:"transaction_id,omitempty"`
-	Amount        int64  `json:"amount,omitempty"`
+	UnsplitAmount int64  `json:"unsplit_amount,omitempty"`
 }
 
 func (r ProfitSharingOrderRequest) Validate() error {

@@ -481,7 +481,7 @@ func createRemoteReservationAddonPayment(
 				{
 					MchID:       ordinaryClient.ServiceProviderMchID(),
 					SubMchID:    subMchID,
-					Amount:      ospcontracts.CombineAmount{TotalAmount: amount, Currency: ospcontracts.CurrencyCNY},
+					Amount:      ospcontracts.CombineSubOrderAmount{TotalAmount: amount, Currency: ospcontracts.CurrencyCNY},
 					OutTradeNo:  outTradeNo,
 					Description: "Reservation add-on",
 				},

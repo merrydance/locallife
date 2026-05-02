@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/merrydance/locallife/wechat/ordinaryserviceprovider/errorcodes"
 	"github.com/rs/zerolog"
 	"github.com/wechatpay-apiv3/wechatpay-go/core"
@@ -30,14 +31,18 @@ type FrontendGuidance struct {
 }
 
 type ProviderError struct {
-	Operation       string
-	StatusCode      int
-	RequestID       string
-	ProviderCode    string
-	ProviderMessage string
-	Category        ErrorCategory
-	Frontend        FrontendGuidance
-	cause           error
+	Operation              string
+	EndpointID             contracts.EndpointID
+	CapabilityID           contracts.CapabilityID
+	StatusCode             int
+	RequestID              string
+	ProviderCode           string
+	ProviderMessage        string
+	DocumentedCodeSet      string
+	DocumentedProviderCode bool
+	Category               ErrorCategory
+	Frontend               FrontendGuidance
+	cause                  error
 }
 
 func (e *ProviderError) Error() string {
@@ -64,6 +69,10 @@ type ErrorLogContext struct {
 }
 
 func mapSDKAPIError(operation string, err error) error {
+	return mapSDKAPIEndpointError(operation, "", err)
+}
+
+func mapSDKAPIEndpointError(operation string, endpointID contracts.EndpointID, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -71,7 +80,7 @@ func mapSDKAPIError(operation string, err error) error {
 	var apiErr *core.APIError
 	if errors.As(err, &apiErr) {
 		metadata := errorcodes.Classify(apiErr.Code, apiErr.StatusCode)
-		return &ProviderError{
+		return withEndpointMetadata(&ProviderError{
 			Operation:       strings.TrimSpace(operation),
 			StatusCode:      apiErr.StatusCode,
 			RequestID:       requestIDFromHeader(apiErr.Header),
@@ -80,15 +89,15 @@ func mapSDKAPIError(operation string, err error) error {
 			Category:        metadata.Category,
 			Frontend:        frontendGuidanceFromMetadata(metadata),
 			cause:           err,
-		}
+		}, endpointID)
 	}
 
-	return &ProviderError{
+	return withEndpointMetadata(&ProviderError{
 		Operation: strings.TrimSpace(operation),
 		Category:  ErrorCategoryRetryableProvider,
 		Frontend:  frontendGuidanceForCategory(ErrorCategoryRetryableProvider),
 		cause:     err,
-	}
+	}, endpointID)
 }
 
 func LogProviderError(logger zerolog.Logger, err error, context ErrorLogContext) {
@@ -101,9 +110,13 @@ func LogProviderError(logger zerolog.Logger, err error, context ErrorLogContext)
 	if errors.As(err, &providerErr) {
 		event = event.
 			Str("wechat_operation", providerErr.Operation).
+			Str("wechat_endpoint", string(providerErr.EndpointID)).
+			Str("wechat_capability", string(providerErr.CapabilityID)).
 			Str("request_id", providerErr.RequestID).
 			Str("wechat_code", providerErr.ProviderCode).
 			Str("wechat_message", providerErr.ProviderMessage).
+			Str("documented_code_set", providerErr.DocumentedCodeSet).
+			Bool("documented_provider_code", providerErr.DocumentedProviderCode).
 			Str("error_category", string(providerErr.Category)).
 			Str("frontend_code", providerErr.Frontend.Code).
 			Bool("retryable", providerErr.Frontend.Retryable)
@@ -149,4 +162,22 @@ func requestIDFromHeader(header http.Header) string {
 		}
 	}
 	return ""
+}
+
+func withEndpointMetadata(providerErr *ProviderError, endpointID contracts.EndpointID) *ProviderError {
+	if providerErr == nil {
+		return nil
+	}
+	if endpointID == "" {
+		return providerErr
+	}
+	providerErr.EndpointID = endpointID
+	if contract, ok := contracts.EndpointContractByID(endpointID); ok {
+		providerErr.CapabilityID = contract.Capability
+	}
+	if codeSet, ok := errorcodes.EndpointCodeSetByID(errorcodes.EndpointID(endpointID)); ok {
+		providerErr.DocumentedCodeSet = codeSet.Name
+		providerErr.DocumentedProviderCode = providerErr.ProviderCode != "" && codeSet.Has(providerErr.ProviderCode)
+	}
+	return providerErr
 }

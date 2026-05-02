@@ -32,6 +32,29 @@ func TestApplymentSubmitRequestRequiresMiniProgramSceneBinding(t *testing.T) {
 	}
 }
 
+func TestApplymentSubmitRequestValidatesOfficialStoreSceneFields(t *testing.T) {
+	req := validApplymentSubmitRequest()
+	req.BusinessInfo.SalesInfo.StoreInfo = &ApplymentStoreInfo{
+		StoreName:        "测试门店",
+		StoreEntrancePic: []string{"store-front-media"},
+	}
+
+	err := req.Validate()
+	if err == nil {
+		t.Fatal("expected partial biz_store_info to fail validation")
+	}
+	if !strings.Contains(err.Error(), "business_info.sales_info.biz_store_info.biz_address_code") {
+		t.Fatalf("expected biz_address_code in validation error, got %v", err)
+	}
+
+	req.BusinessInfo.SalesInfo.StoreInfo.AddressCode = "440305"
+	req.BusinessInfo.SalesInfo.StoreInfo.StoreAddress = "深圳市南山区测试路100号"
+	req.BusinessInfo.SalesInfo.StoreInfo.IndoorPic = []string{"store-indoor-media"}
+	if err := req.Validate(); err != nil {
+		t.Fatalf("complete official biz_store_info should pass validation: %v", err)
+	}
+}
+
 func TestApplymentSubmitRequestJSONUsesOfficialFields(t *testing.T) {
 	req := validApplymentSubmitRequest()
 	body, err := json.Marshal(req)

@@ -230,22 +230,22 @@ type ApplymentWechatRequestInput struct {
 }
 
 type ApplymentOrdinaryRequestInput struct {
-	BusinessCode      string
-	OrganizationType  string
-	BusinessLicense   ApplymentBusinessLicenseOCRInput
-	BusinessLicenseID string
-	LicenseCopy       string
-	MerchantName      string
-	LegalPerson       string
-	BusinessAddress   string
-	MerchantShortname string
-	ServicePhone      string
-	MiniProgramAppID  string
-	StoreName         string
-	StoreQRCode       string
-	IDCardInfo        ApplymentOrdinaryIDCardInput
-	AccountInfo       ApplymentWechatAccountInput
-	ContactInfo       ApplymentOrdinaryContactInput
+	BusinessCode         string
+	OrganizationType     string
+	BusinessLicense      ApplymentBusinessLicenseOCRInput
+	BusinessLicenseID    string
+	LicenseCopy          string
+	MerchantName         string
+	LegalPerson          string
+	BusinessAddress      string
+	MerchantShortname    string
+	ServicePhone         string
+	MiniProgramAppID     string
+	StoreName            string
+	StoreQRCode          string
+	IDCardInfo           ApplymentOrdinaryIDCardInput
+	AccountInfo          ApplymentWechatAccountInput
+	ContactInfo          ApplymentOrdinaryContactInput
 	SettlementID         string
 	QualificationType    string
 	ActivitiesID         string
@@ -501,10 +501,6 @@ func BuildOrdinaryServiceProviderApplymentRequest(input ApplymentOrdinaryRequest
 
 	if storeQRCode := strings.TrimSpace(input.StoreQRCode); storeQRCode != "" {
 		request.BusinessInfo.SalesInfo.MiniProgramInfo.MiniProgramPics = []string{storeQRCode}
-		request.BusinessInfo.SalesInfo.StoreInfo = &ospcontracts.ApplymentStoreInfo{
-			StoreName:        strings.TrimSpace(input.StoreName),
-			StoreEntrancePic: []string{storeQRCode},
-		}
 	}
 
 	return request

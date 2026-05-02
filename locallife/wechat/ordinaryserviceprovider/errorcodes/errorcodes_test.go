@@ -15,7 +15,12 @@ func TestClassifyProviderCodePreservesFrontendGuidance(t *testing.T) {
 	}{
 		{code: "NO_AUTH", statusCode: 403, wantCategory: CategoryAuthConfig, wantFrontend: "WECHAT_AUTH_CONFIG_REQUIRED"},
 		{code: "SYSTEM_ERROR", statusCode: 500, wantCategory: CategoryRetryableProvider, wantFrontend: "WECHAT_PROVIDER_RETRYABLE", wantRetry: true},
+		{code: "FREQENCY_LIMIT", statusCode: 429, wantCategory: CategoryRetryableProvider, wantFrontend: "WECHAT_PROVIDER_RETRYABLE", wantRetry: true},
+		{code: "FREQUENCY_LIMIT_EXCEED", statusCode: 429, wantCategory: CategoryRetryableProvider, wantFrontend: "WECHAT_PROVIDER_RETRYABLE", wantRetry: true},
 		{code: "NOT_ENOUGH", statusCode: 403, wantCategory: CategoryBusinessConflict, wantFrontend: "WECHAT_BUSINESS_CONFLICT"},
+		{code: "APPLYMENT_NOT_EXIST", statusCode: 400, wantCategory: CategoryBusinessConflict, wantFrontend: "WECHAT_BUSINESS_CONFLICT"},
+		{code: "ALREADY_EXISTS", statusCode: 409, wantCategory: CategoryBusinessConflict, wantFrontend: "WECHAT_BUSINESS_CONFLICT"},
+		{code: "OPENID_MISMATCH", statusCode: 400, wantCategory: CategoryBusinessConflict, wantFrontend: "WECHAT_BUSINESS_CONFLICT"},
 		{code: "REQUEST_BLOCKED", statusCode: 403, wantCategory: CategoryMerchantControl, wantFrontend: "WECHAT_MERCHANT_CONTROLLED"},
 	}
 
@@ -32,6 +37,52 @@ func TestClassifyProviderCodePreservesFrontendGuidance(t *testing.T) {
 		}
 		if got.FrontendMessage == "" || got.OperatorAction == "" {
 			t.Fatalf("Classify(%q) must include frontend message and operator action: %+v", tt.code, got)
+		}
+	}
+}
+
+func TestClassifyCoversOfficialOrdinaryServiceProviderErrorCodes(t *testing.T) {
+	// Sourced from .github/standards/domains/wechat-payment/README.md 4.10 official endpoint docs.
+	officialCodes := []string{
+		"ALREADY_EXISTS",
+		"APPID_MCHID_NOT_MATCH",
+		"APPLYMENT_NOTEXIST",
+		"APPLYMENT_NOT_EXIST",
+		"FREQENCY_LIMIT",
+		"FREQUENCY_LIMITED",
+		"FREQUENCY_LIMIT_EXCEED",
+		"INVALID_REQUEST",
+		"MCH_NOT_EXISTS",
+		"NOAUTH",
+		"NOT_ENOUGH",
+		"NOT_FOUND",
+		"NO_AUTH",
+		"OPENID_MISMATCH",
+		"ORDER_CLOSED",
+		"ORDER_NOT_EXIST",
+		"OUT_TRADE_NO_USED",
+		"PARAM_ERROR",
+		"PROCESSING",
+		"RATELIMIT_EXCEEDED",
+		"RATE_LIMITED",
+		"REQUEST_BLOCKED",
+		"RESOURCE_NOT_EXISTS",
+		"RULELIMIT",
+		"RULE_LIMIT",
+		"SIGN_ERROR",
+		"SYSTEMERROR",
+		"SYSTEM_ERROR",
+		"TRADE_ERROR",
+		"USER_ACCOUNT_ABNORMAL",
+	}
+
+	for _, code := range officialCodes {
+		got := Classify(code, 400)
+		if got.ProviderCode != code {
+			t.Fatalf("Classify(%q) provider code = %q", code, got.ProviderCode)
+		}
+		if got.FrontendCode == "" || got.FrontendMessage == "" || got.OperatorAction == "" {
+			t.Fatalf("Classify(%q) must return actionable frontend/operator guidance: %+v", code, got)
 		}
 	}
 }

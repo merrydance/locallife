@@ -91,7 +91,7 @@ func validPaymentPrepayRequest() PaymentPrepayRequest {
 		SettleInfo: &PaymentSettleInfo{
 			ProfitSharing: true,
 		},
-		Amount: PaymentAmount{
+		Amount: PaymentPrepayAmount{
 			Total:    100,
 			Currency: CurrencyCNY,
 		},
@@ -114,7 +114,7 @@ func validCombinePrepayRequest() CombinePrepayRequest {
 				OutTradeNo:  "order-001",
 				Attach:      "merchant-001",
 				Description: "本地生活订单",
-				Amount: CombineAmount{
+				Amount: CombineSubOrderAmount{
 					TotalAmount: 100,
 					Currency:    CurrencyCNY,
 				},

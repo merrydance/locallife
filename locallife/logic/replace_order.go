@@ -422,7 +422,7 @@ func createReplaceOrderOrdinaryServiceProviderPayment(
 		Attach:      attach,
 		NotifyURL:   ordinaryClient.PaymentNotifyURL(),
 		SettleInfo:  &ospcontracts.PaymentSettleInfo{ProfitSharing: order.ReservationID.Valid || shouldEnableOrderProfitSharing(order.OrderType)},
-		Amount:      ospcontracts.PaymentAmount{Total: amount, Currency: ospcontracts.CurrencyCNY},
+		Amount:      ospcontracts.PaymentPrepayAmount{Total: amount, Currency: ospcontracts.CurrencyCNY},
 		Payer:       ospcontracts.PaymentPayer{SpOpenID: user.WechatOpenid},
 	})
 	if err != nil {

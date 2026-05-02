@@ -110,7 +110,7 @@ func (server *Server) getProfitSharingAmounts(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, queryProfitSharingAmountsUnavailableMessage, "query ordinary profit sharing amounts returned nil response"))
 			return
 		}
-		unsplitAmount = resp.Amount
+		unsplitAmount = resp.UnsplitAmount
 	} else {
 		if server.ecommerceClient == nil {
 			err := errors.New("ecommerce payment service not configured")
