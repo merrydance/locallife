@@ -289,6 +289,7 @@ type ApplymentWechatSensitiveInput struct {
 	AccountName         string
 	AccountNumber       string
 	MobilePhone         string
+	ContactEmail        string
 }
 
 type ApplymentWechatSensitiveOutput struct {
@@ -299,6 +300,7 @@ type ApplymentWechatSensitiveOutput struct {
 	AccountName         string
 	AccountNumber       string
 	MobilePhone         string
+	ContactEmail        string
 }
 
 type ApplymentSensitiveEncryptionError struct {
@@ -712,6 +714,9 @@ func EncryptApplymentWechatSensitiveFields(encryptor ApplymentSensitiveEncryptor
 		return ApplymentWechatSensitiveOutput{}, err
 	}
 	if output.MobilePhone, err = encryptField("mobile_phone", input.MobilePhone); err != nil {
+		return ApplymentWechatSensitiveOutput{}, err
+	}
+	if output.ContactEmail, err = encryptField("contact_email", input.ContactEmail); err != nil {
 		return ApplymentWechatSensitiveOutput{}, err
 	}
 

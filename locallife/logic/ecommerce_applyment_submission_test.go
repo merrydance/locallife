@@ -338,10 +338,11 @@ func TestEncryptApplymentWechatSensitiveFields(t *testing.T) {
 		AccountName:         "张三",
 		AccountNumber:       "6222000000000000",
 		MobilePhone:         "13800138000",
+		ContactEmail:        "merchant@example.com",
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, []string{"张三", "110101199001011234", "李四", "110101199002021234", "张三", "6222000000000000", "13800138000"}, encryptor.inputs)
+	require.Equal(t, []string{"张三", "110101199001011234", "李四", "110101199002021234", "张三", "6222000000000000", "13800138000", "merchant@example.com"}, encryptor.inputs)
 	require.Equal(t, "enc:张三", output.IDCardName)
 	require.Equal(t, "enc:110101199001011234", output.IDCardNumber)
 	require.Equal(t, "enc:李四", output.ContactName)
@@ -349,6 +350,7 @@ func TestEncryptApplymentWechatSensitiveFields(t *testing.T) {
 	require.Equal(t, "enc:张三", output.AccountName)
 	require.Equal(t, "enc:6222000000000000", output.AccountNumber)
 	require.Equal(t, "enc:13800138000", output.MobilePhone)
+	require.Equal(t, "enc:merchant@example.com", output.ContactEmail)
 }
 
 func TestEncryptApplymentWechatSensitiveFieldsFailure(t *testing.T) {
@@ -362,6 +364,7 @@ func TestEncryptApplymentWechatSensitiveFieldsFailure(t *testing.T) {
 		AccountName:         "张三",
 		AccountNumber:       "6222000000000000",
 		MobilePhone:         "13800138000",
+		ContactEmail:        "merchant@example.com",
 	})
 
 	require.Error(t, err)

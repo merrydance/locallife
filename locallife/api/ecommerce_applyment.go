@@ -500,6 +500,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		AccountName:         req.AccountName,
 		AccountNumber:       req.AccountNumber,
 		MobilePhone:         contactPhone,
+		ContactEmail:        contactEmail,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "商户开户资料加密失败，请稍后重试；如持续失败请联系平台管理员检查微信支付敏感信息加密配置", "encrypt ordinary service provider applyment sensitive fields failed"))
@@ -612,7 +613,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 			ContactIDDocCopy:     contactInfo.ContactIDDocCopy,
 			ContactIDDocCopyBack: contactInfo.ContactIDDocCopyBack,
 			MobilePhone:          contactInfo.MobilePhone,
-			ContactEmail:         contactEmail,
+			ContactEmail:         encryptedWechatFields.ContactEmail,
 		},
 		SettlementID:         settlementID,
 		QualificationType:    qualificationType,

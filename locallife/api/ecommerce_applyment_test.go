@@ -288,7 +288,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				// Mock 加密
 				ordinaryClient.EXPECT().
 					EncryptSensitiveData(gomock.Any()).
-					Times(7). // 法人信息、联系人信息、账户名、账号、手机
+					Times(8). // 法人信息、联系人信息、账户名、账号、手机、邮箱
 					Return("encrypted_data", nil)
 
 				expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
@@ -313,6 +313,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 						require.Equal(t, "2020-01-01", req.SubjectInfo.IdentityInfo.IDCardInfo.CardPeriodBegin)
 						require.Equal(t, "2030-01-01", req.SubjectInfo.IdentityInfo.IDCardInfo.CardPeriodEnd)
 						require.Equal(t, "encrypted_data", req.ContactInfo.MobilePhone)
+						require.Equal(t, "encrypted_data", req.ContactInfo.ContactEmail)
 						require.NotNil(t, req.BusinessInfo.SalesInfo.MiniProgramInfo)
 						require.Equal(t, "wx-mini-test", req.BusinessInfo.SalesInfo.MiniProgramInfo.MiniProgramAppID)
 						require.Contains(t, req.BusinessInfo.SalesInfo.MiniProgramInfo.MiniProgramPics, "wx_store_qr_media_id")
@@ -492,7 +493,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 
 				ordinaryClient.EXPECT().
 					EncryptSensitiveData(gomock.Any()).
-					Times(7).
+					Times(8).
 					Return("encrypted_data", nil)
 
 				expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
@@ -702,7 +703,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 
 				ordinaryClient.EXPECT().
 					EncryptSensitiveData(gomock.Any()).
-					Times(7).
+					Times(8).
 					Return("encrypted_data", nil)
 
 				expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
@@ -2068,7 +2069,7 @@ func TestMerchantBindBankReturnsActionableMessageWithoutRequestIDWhenContactDocu
 
 	ordinaryClient.EXPECT().
 		EncryptSensitiveData(gomock.Any()).
-		Times(7).
+		Times(8).
 		Return("encrypted_data", nil)
 
 	expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
@@ -2180,7 +2181,7 @@ func TestMerchantBindBankReturnsConfigGuidanceWhenStoreQRCodeUploadFails(t *test
 
 	ordinaryClient.EXPECT().
 		EncryptSensitiveData(gomock.Any()).
-		Times(7).
+		Times(8).
 		Return("encrypted_data", nil)
 
 	expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
@@ -2273,7 +2274,7 @@ func TestMerchantBindBankSubmittedStateSyncFailed(t *testing.T) {
 
 	ordinaryClient.EXPECT().
 		EncryptSensitiveData(gomock.Any()).
-		Times(7).
+		Times(8).
 		Return("encrypted_data", nil)
 
 	expectedObjectKey := buildMerchantStorefrontQRCodeObjectKey(merchant.ID)
