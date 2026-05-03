@@ -164,12 +164,7 @@ func resolveBaofuProfitSharingReceiver(ctx context.Context, store baofuProfitSha
 
 func baofuProfitSharingReceiverID(binding db.BaofuAccountBinding) string {
 	if binding.SharingMerID.Valid {
-		if receiverID := strings.TrimSpace(binding.SharingMerID.String); receiverID != "" {
-			return receiverID
-		}
-	}
-	if binding.ContractNo.Valid {
-		return strings.TrimSpace(binding.ContractNo.String)
+		return strings.TrimSpace(binding.SharingMerID.String)
 	}
 	return ""
 }

@@ -51,6 +51,20 @@ func TestBaofuAccountServiceRiderPaymentReadinessDoesNotRequireWechatSubMchID(t 
 	require.NoError(t, service.ValidatePaymentReady(binding))
 }
 
+func TestBaofuAccountServicePaymentReadinessRequiresCanonicalSharingMerID(t *testing.T) {
+	service := NewBaofuAccountService(nil, nil)
+	binding := db.BaofuAccountBinding{
+		OwnerType:   db.BaofuAccountOwnerTypeRider,
+		OpenState:   db.BaofuAccountOpenStateActive,
+		ContractNo:  pgtype.Text{String: "CP123", Valid: true},
+		AccountType: db.BaofuAccountTypePersonal,
+	}
+
+	err := service.ValidatePaymentReady(binding)
+
+	require.ErrorIs(t, err, ErrBaofuAccountReceiverRequired)
+}
+
 func TestBaofuAccountServiceOpenAccountRecordsCommandBeforeClientCall(t *testing.T) {
 	store := &fakeBaofuAccountStore{}
 	client := &fakeBaofuAccountClient{result: &baofucontracts.AccountResult{

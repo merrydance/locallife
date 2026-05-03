@@ -71,11 +71,11 @@ func TestCalculateBaofuProfitSharingAmountsRejectsNegativeMerchantAmount(t *test
 	require.ErrorIs(t, err, ErrBaofuProfitSharingMerchantAmountNegative)
 }
 
-func TestResolveBaofuProfitSharingReceiversUsesSharingMerIDAndContractFallback(t *testing.T) {
+func TestResolveBaofuProfitSharingReceiversUsesCanonicalSharingMerID(t *testing.T) {
 	store := &fakeBaofuProfitSharingReceiverStore{
 		bindings: map[string]db.BaofuAccountBinding{
 			"merchant:101": activeBaofuReceiverBinding(db.BaofuAccountOwnerTypeMerchant, 101, "MER_CONTRACT", "MER_SHARE"),
-			"rider:202":    activeBaofuReceiverBinding(db.BaofuAccountOwnerTypeRider, 202, "RIDER_CONTRACT", ""),
+			"rider:202":    activeBaofuReceiverBinding(db.BaofuAccountOwnerTypeRider, 202, "RIDER_CONTRACT", "RIDER_SHARE"),
 			"operator:303": activeBaofuReceiverBinding(
 				db.BaofuAccountOwnerTypeOperator,
 				303,
@@ -94,7 +94,7 @@ func TestResolveBaofuProfitSharingReceiversUsesSharingMerIDAndContractFallback(t
 
 	require.NoError(t, err)
 	require.Equal(t, "MER_SHARE", receivers.MerchantSharingMerID)
-	require.Equal(t, "RIDER_CONTRACT", receivers.RiderSharingMerID)
+	require.Equal(t, "RIDER_SHARE", receivers.RiderSharingMerID)
 	require.Equal(t, "OP_SHARE", receivers.OperatorSharingMerID)
 	require.Equal(t, "PLATFORM_SHARE", receivers.PlatformSharingMerID)
 }
@@ -108,6 +108,25 @@ func TestResolveBaofuProfitSharingReceiversRejectsInactiveReceiver(t *testing.T)
 				AccountType:  db.BaofuAccountTypeBusiness,
 				OpenState:    db.BaofuAccountOpenStateProcessing,
 				SharingMerID: pgtype.Text{String: "MER_SHARE", Valid: true},
+			},
+			"platform:0": activeBaofuReceiverBinding(db.BaofuAccountOwnerTypePlatform, 0, "PLATFORM_CONTRACT", "PLATFORM_SHARE"),
+		},
+	}
+
+	_, err := ResolveBaofuProfitSharingReceivers(context.Background(), store, BaofuProfitSharingReceiverInput{MerchantID: 101})
+
+	require.ErrorIs(t, err, ErrBaofuAccountReceiverRequired)
+}
+
+func TestResolveBaofuProfitSharingReceiversRejectsContractOnlyReceiver(t *testing.T) {
+	store := &fakeBaofuProfitSharingReceiverStore{
+		bindings: map[string]db.BaofuAccountBinding{
+			"merchant:101": {
+				OwnerType:   db.BaofuAccountOwnerTypeMerchant,
+				OwnerID:     101,
+				AccountType: db.BaofuAccountTypeBusiness,
+				OpenState:   db.BaofuAccountOpenStateActive,
+				ContractNo:  pgtype.Text{String: "MER_CONTRACT", Valid: true},
 			},
 			"platform:0": activeBaofuReceiverBinding(db.BaofuAccountOwnerTypePlatform, 0, "PLATFORM_CONTRACT", "PLATFORM_SHARE"),
 		},

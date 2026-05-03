@@ -16,7 +16,8 @@
 - 首版切换方式：未正式开展业务，宝付链路上线即全量承接主业务交易；不做微信普通服务商分账灰度并行。
 - 固定业务规则：开户验证费由平台承担；支付手续费 0.3% 由商户承担；分账后不退款；骑手必须开宝付个人二级户才可接收配送费分账。
 - 账户边界：宝付收款商户号用于开户、转账、支付、分账；宝付支付商户号用于提现、提现查询，并承接平台预存的开户验证费。
-- 分账接收方：`sharingMerId` 使用宝付/宝财通二级户接收方标识，本地保存 `contract_no` 与 `sharing_mer_id`，不得使用微信 `openid` 或微信报备 `subMchId` 作为分账接收方。
+- 分账接收方：已确认分账接口直接上送开户接口返回的二级商户号。本地用 `sharing_mer_id` 作为分账接收方规范字段；若开户/查询回包字段名为 `contractNo`，解析层必须同步写入 `sharing_mer_id`，后续分账只读 `sharing_mer_id`。不得使用微信 `openid`、微信报备 `subMchId` 或平台宝付收款商户号作为分账接收方。
+- 平台佣金接收方：平台也必须为平台自己开一个平台名下宝付二级户并保存到 `owner_type=platform, owner_id=0`，不能直接使用平台宝付收款商户号收平台 2% 分账。
 
 ## 1. Target File Map
 
@@ -206,7 +207,7 @@ CREATE TABLE IF NOT EXISTS baofu_account_bindings (
     CONSTRAINT baofu_account_bindings_contract_uidx UNIQUE (contract_no),
     CONSTRAINT baofu_account_bindings_sharing_uidx UNIQUE (sharing_mer_id),
     CONSTRAINT baofu_account_bindings_active_receiver_check CHECK (
-        open_state <> 'active' OR length(trim(COALESCE(sharing_mer_id, contract_no, ''))) > 0
+        open_state <> 'active' OR length(trim(COALESCE(sharing_mer_id, ''))) > 0
     )
 );
 
@@ -423,7 +424,7 @@ Expected: all Baofu package tests pass.
 
 - [x] **Step 1: Add sqlc account binding queries**
 
-Create `locallife/db/query/baofu_account_binding.sql` with queries for upsert by owner, get by owner, get by contract, mark processing, mark active, mark failed, list processing for recovery. `MarkBaofuAccountBindingActive` must write both `contract_no` and `sharing_mer_id`.
+Create `locallife/db/query/baofu_account_binding.sql` with queries for upsert by owner, get by owner, get by contract, mark processing, mark active, mark failed, list processing for recovery. `MarkBaofuAccountBindingActive` must write `sharing_mer_id` with the开户接口返回的二级商户号；如果回包字段名为 `contractNo`，同步写入 `contract_no` 和 `sharing_mer_id`。
 
 - [x] **Step 2: Define account contract DTOs**
 
@@ -465,7 +466,7 @@ merchant -> business account required
 operator -> business or platform account allowed
 platform -> platform account required
 rider -> personal account required
-active account -> contract_no or sharing_mer_id required
+active account -> sharing_mer_id required
 rider active account -> no wechat_sub_mch_id requirement
 merchant active account -> wechat_sub_mch_id required before payment creation, not before account opening
 ```
@@ -516,7 +517,7 @@ Extend account readiness so a business owner is considered Baofu-ready only when
 
 ```text
 baofu_account_bindings.open_state = active
-sharing_mer_id or contract_no is present
+sharing_mer_id is present
 merchant payment creation additionally has wechat_sub_mch_id present
 ```
 
@@ -659,7 +660,7 @@ Service must reject negative merchant amount before writing a share order.
 
 - [ ] **Step 3: Resolve receivers from Baofu bindings**
 
-Resolve merchant, rider, operator and platform receiver IDs from `baofu_account_bindings.sharing_mer_id`, falling back to `contract_no` only when `sharing_mer_id` is empty. Store the resolved IDs in `profit_sharing_orders.*_sharing_mer_id` and in `sharing_detail_snapshot`.
+Resolve merchant, rider, operator and platform receiver IDs from `baofu_account_bindings.sharing_mer_id`. Do not fall back to `contract_no` at分账创建 time;开户/查询同步层 must already normalize the returned二级商户号 into `sharing_mer_id`. Store the resolved IDs in `profit_sharing_orders.*_sharing_mer_id` and in `sharing_detail_snapshot`.
 
 - [ ] **Step 4: Record fee ledger rows**
 
@@ -975,7 +976,7 @@ Expected: changed app commands exit 0. If a toolchain is unavailable on the impl
 
 ## 3. Cross-Task Invariants
 
-- No code path writes `openid`, `sub_openid`, or `subMchId` into `sharing_mer_id`.
+- No code path writes `openid`, `sub_openid`, `subMchId`, or the platform Baofu collect merchant ID into `sharing_mer_id`.
 - No withdrawal request uses the collect merchant ID.
 - No account opening, payment, or profit sharing request uses the payout merchant ID.
 - No Baofu callback mutates business state before its verified payload is persisted to `external_payment_facts`.
@@ -1200,8 +1201,17 @@ make test-integration
 ### 2026-05-03 Task 5 Partial - Receiver Resolution
 
 - Added `logic.ResolveBaofuProfitSharingReceivers` to resolve merchant, rider, operator, and platform Baofu receiver IDs from `baofu_account_bindings`.
-- Receiver resolution uses `sharing_mer_id` first and falls back to `contract_no` only when `sharing_mer_id` is empty, matching the documented `sharingMerId` boundary that receivers are Baofu/BaoCaiTong secondary-account identifiers rather than WeChat openid/subMchId.
+- Receiver resolution uses canonical `sharing_mer_id` only. The account opening/query layer is responsible for syncing the开户接口返回的二级商户号 into `sharing_mer_id`; resolver deliberately rejects active rows that only have `contract_no`, so分账创建 cannot accidentally use an unsynchronized/account-query-only field.
 - Resolver requires active Baofu bindings and rejects inactive, missing, or receiver-less bindings before a future share order can be written.
 - Platform receiver resolution defaults to the platform singleton owner (`owner_type=platform`, `owner_id=0`); rider/operator receiver resolution is conditional on the caller providing a rider/operator ID.
 - TDD verification: first run failed with missing `ResolveBaofuProfitSharingReceivers` and `BaofuProfitSharingReceiverInput`; after implementation, `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestResolveBaofuProfitSharingReceivers|TestCalculateBaofu' -count=1` passed.
 - Residual risk: this slice resolves receivers only. It does not yet persist the resolved IDs into `profit_sharing_orders.*_sharing_mer_id`, build `sharing_detail_snapshot`, write fee ledger rows, or create the Baofu share command.
+
+### 2026-05-03 Receiver Field Correction - Canonical Secondary Merchant ID
+
+- Incorporated the confirmed Baofu guidance: the profit-sharing receiver is the secondary merchant ID returned by the account-opening interface. The local canonical field for that value is `baofu_account_bindings.sharing_mer_id`.
+- Updated `BaofuAccountService` readiness so an active account with only `contract_no` is not payment/share-ready; account-opening/query normalization must sync the returned secondary merchant ID into `sharing_mer_id` first.
+- Updated receiver resolution so share creation reads only `sharing_mer_id` and never falls back to `contract_no`, `openid`, `sub_openid`, merchant `subMchId`, or the platform Baofu collect merchant ID.
+- Added migration `000228_require_baofu_sharing_mer_id` to backfill active rows from `contract_no` once, then tighten `baofu_account_bindings_active_receiver_check` so future active rows require `sharing_mer_id`.
+- Updated the integration design to state that the platform commission receiver must also be a platform-owned Baofu secondary account (`owner_type=platform`, `owner_id=0`), not the platform collect merchant account.
+- TDD verification: first run failed because contract-only active rows were still treated as ready/resolvable; after implementation, `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestBaofuAccountService|TestResolveBaofuProfitSharingReceivers|TestCalculateBaofu' -count=1` passed.

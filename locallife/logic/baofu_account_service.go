@@ -81,7 +81,7 @@ func (s *BaofuAccountService) ValidatePaymentReady(binding db.BaofuAccountBindin
 	if strings.TrimSpace(binding.OpenState) != db.BaofuAccountOpenStateActive {
 		return ErrBaofuAccountInactive
 	}
-	if strings.TrimSpace(binding.SharingMerID.String) == "" && strings.TrimSpace(binding.ContractNo.String) == "" {
+	if strings.TrimSpace(binding.SharingMerID.String) == "" {
 		return ErrBaofuAccountReceiverRequired
 	}
 	if strings.TrimSpace(binding.OwnerType) == db.BaofuAccountOwnerTypeMerchant && strings.TrimSpace(binding.WechatSubMchID.String) == "" {
@@ -103,7 +103,7 @@ func (s *BaofuAccountService) ReadinessFromBinding(binding db.BaofuAccountBindin
 	case db.BaofuAccountOpenStateProcessing:
 		return baofuAccountReadiness(BaofuOnboardingStateOpeningProcessing, false)
 	case db.BaofuAccountOpenStateActive:
-		if strings.TrimSpace(binding.SharingMerID.String) == "" && strings.TrimSpace(binding.ContractNo.String) == "" {
+		if strings.TrimSpace(binding.SharingMerID.String) == "" {
 			return baofuAccountReadiness(BaofuOnboardingStateOpenFailed, false)
 		}
 		if requireWechatSubMchID && strings.TrimSpace(binding.WechatSubMchID.String) == "" {
