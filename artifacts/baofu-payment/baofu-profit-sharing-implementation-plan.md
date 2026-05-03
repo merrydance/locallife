@@ -539,6 +539,7 @@ Expose states to clients as product terms:
 Do not expose `contractNo`, `sharingMerId`, or raw upstream error payloads to ordinary users. Operator/admin views may display masked IDs.
 
 Current backend status: rider status now returns sanitized `settlement_account` readiness (`state`, `label`, `payment_ready`) and aligns `can_go_online` / `online_block_reason` with the same Baofu settlement guard. Merchant/operator/platform and frontend surfaces remain in later Task 3 slices.
+Merchant open status now also checks Baofu merchant readiness before allowing open-for-business: ordinary service provider channel identity must be active, Baofu merchant account binding must be active, and the binding must carry a WeChat channel identity. Merchant/operator/platform status response surfaces remain in later Task 3 slices.
 
 - [ ] **Step 4: Validate API and onboarding workers**
 
@@ -1079,3 +1080,12 @@ make test-integration
 - Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestBaofuAccountReadinessStates' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestGetRiderStatusAPI|TestGoOnlineAPI' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestBaofuAccount(Readiness|Service)' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestGrabDeliveryOrder_BlocksMissingBaofuSettlementAccount|TestGrabDeliveryOrder_Success' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestGrabDeliveryOrder' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestGrabOrderAPI' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api ./logic -run 'TestGetRiderStatusAPI|TestGoOnlineAPI|TestGrabDeliveryOrder|TestGrabOrderAPI|TestBaofuAccountReadiness' -count=1`; `git diff --check`.
 - Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on 71 pre-existing oversized Go files, including existing `api/rider.go` and `api/delivery.go`; this slice keeps new Baofu helper files small but still touches existing oversized handlers/tests.
 - Residual risk: Task 3 still needs merchant/operator/platform onboarding propagation, payment-creation merchant readiness enforcement, onboarding worker propagation, and frontend display/wizard updates before Baofu readiness is end-to-end complete.
+
+### 2026-05-03 Task 3 Partial - Merchant Open Readiness Guard
+
+- Added the merchant-side Baofu readiness gate to `PATCH /v1/merchants/me/status` when opening the merchant.
+- Opening now requires the existing ordinary service provider payment config to be active and the merchant Baofu account binding to be payment-ready with a WeChat channel identity on the binding.
+- Public errors stay product-facing: `商户结算账户未开通，暂不能开业接收分账订单` and `商户微信渠道待报备，暂不能开业接收微信生态支付订单`; raw `contractNo`, `sharingMerId`, upstream payloads, bank/card/ID/phone details remain hidden.
+- Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestUpdateMerchantOpenStatus_RequireBaofuAccountWhenOpen' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestUpdateMerchantOpenStatus' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api ./worker -run 'TestProfitSharingCapability|TestOnboardingReview|TestRider|TestUpdateMerchantOpenStatus' -count=1`; `git diff --check`.
+- Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on the same 71 pre-existing oversized Go files, including existing `api/merchant.go`; the new merchant Baofu helper is in a small separate file.
+- Residual risk: this is an open-for-business guard, not yet the payment-creation guard. Task 3/4 still need direct Baofu payment-create enforcement, merchant/operator/platform readiness response surfaces, onboarding worker propagation, and frontend display/wizard updates.

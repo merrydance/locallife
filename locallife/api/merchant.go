@@ -560,6 +560,15 @@ func (server *Server) updateMerchantOpenStatus(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("普通服务商特约商户未激活，请先完成微信支付进件和结算账户配置后再开业")))
 			return
 		}
+
+		if err := server.ensureMerchantBaofuPaymentReady(ctx, merchant); err != nil {
+			if errors.Is(err, errMerchantBaofuAccountMissing) || errors.Is(err, errMerchantBaofuWechatChannelPending) {
+				ctx.JSON(http.StatusBadRequest, errorResponse(err))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 	}
 
 	// 解析自动打烊时间
