@@ -19,6 +19,20 @@ var (
 	ErrBaofuAccountOutRequestNoRequired = errors.New("baofu account out request no is required")
 )
 
+const (
+	BaofuOnboardingStateProfilePending       = "profile_pending"
+	BaofuOnboardingStateOpeningProcessing    = "baofu_opening_processing"
+	BaofuOnboardingStateWechatChannelPending = "wechat_channel_pending"
+	BaofuOnboardingStateReady                = "ready"
+	BaofuOnboardingStateOpenFailed           = "open_failed"
+)
+
+type BaofuAccountReadiness struct {
+	State        string
+	Label        string
+	PaymentReady bool
+}
+
 type baofuAccountStore interface {
 	UpsertBaofuAccountBinding(ctx context.Context, arg db.UpsertBaofuAccountBindingParams) (db.BaofuAccountBinding, error)
 	CreateExternalPaymentCommand(ctx context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error)
@@ -74,6 +88,31 @@ func (s *BaofuAccountService) ValidatePaymentReady(binding db.BaofuAccountBindin
 		return ErrBaofuAccountWechatSubMchRequired
 	}
 	return nil
+}
+
+func (s *BaofuAccountService) ReadinessFromBinding(binding db.BaofuAccountBinding, found bool, requireWechatSubMchID bool) BaofuAccountReadiness {
+	if !found {
+		return baofuAccountReadiness(BaofuOnboardingStateProfilePending, false)
+	}
+	if strings.TrimSpace(binding.OwnerType) != "" || strings.TrimSpace(binding.AccountType) != "" {
+		if err := s.ValidateOwnerAccount(binding.OwnerType, binding.AccountType); err != nil {
+			return baofuAccountReadiness(BaofuOnboardingStateOpenFailed, false)
+		}
+	}
+	switch strings.TrimSpace(binding.OpenState) {
+	case db.BaofuAccountOpenStateProcessing:
+		return baofuAccountReadiness(BaofuOnboardingStateOpeningProcessing, false)
+	case db.BaofuAccountOpenStateActive:
+		if strings.TrimSpace(binding.SharingMerID.String) == "" && strings.TrimSpace(binding.ContractNo.String) == "" {
+			return baofuAccountReadiness(BaofuOnboardingStateOpenFailed, false)
+		}
+		if requireWechatSubMchID && strings.TrimSpace(binding.WechatSubMchID.String) == "" {
+			return baofuAccountReadiness(BaofuOnboardingStateWechatChannelPending, false)
+		}
+		return baofuAccountReadiness(BaofuOnboardingStateReady, true)
+	default:
+		return baofuAccountReadiness(BaofuOnboardingStateOpenFailed, false)
+	}
 }
 
 func (s *BaofuAccountService) OpenAccount(ctx context.Context, req baofucontracts.OpenAccountRequest) (*baofucontracts.AccountResult, error) {
@@ -140,6 +179,29 @@ func (s *BaofuAccountService) OpenAccount(ctx context.Context, req baofucontract
 		return nil, err
 	}
 	return &normalized, nil
+}
+
+func baofuAccountReadiness(state string, paymentReady bool) BaofuAccountReadiness {
+	return BaofuAccountReadiness{
+		State:        state,
+		Label:        baofuOnboardingStateLabel(state),
+		PaymentReady: paymentReady,
+	}
+}
+
+func baofuOnboardingStateLabel(state string) string {
+	switch state {
+	case BaofuOnboardingStateOpeningProcessing:
+		return "宝付开户处理中"
+	case BaofuOnboardingStateWechatChannelPending:
+		return "微信渠道待报备"
+	case BaofuOnboardingStateReady:
+		return "结算账户可用"
+	case BaofuOnboardingStateOpenFailed:
+		return "开通失败"
+	default:
+		return "资料待提交"
+	}
 }
 
 func baofuAccountRawSnapshot(raw []byte) []byte {

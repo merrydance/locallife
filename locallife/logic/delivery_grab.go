@@ -70,6 +70,13 @@ func GrabDeliveryOrder(ctx context.Context, store db.Store, input GrabOrderInput
 	if suspension != nil {
 		return result, NewRequestError(http.StatusForbidden, errors.New("骑手接单已暂停"))
 	}
+	settlementReadiness, err := riderBaofuSettlementReadiness(ctx, store, rider)
+	if err != nil {
+		return result, err
+	}
+	if !settlementReadiness.PaymentReady {
+		return result, NewRequestError(http.StatusBadRequest, errors.New("骑手结算账户未开通，暂不能接收配送费分账订单"))
+	}
 
 	availableDeposit := rider.DepositAmount - rider.FrozenDeposit
 
@@ -155,4 +162,19 @@ func GrabDeliveryOrder(ctx context.Context, store db.Store, input GrabOrderInput
 	}
 
 	return result, nil
+}
+
+func riderBaofuSettlementReadiness(ctx context.Context, store db.Store, rider db.Rider) (BaofuAccountReadiness, error) {
+	service := NewBaofuAccountService(nil, nil)
+	binding, err := store.GetBaofuAccountBindingByOwner(ctx, db.GetBaofuAccountBindingByOwnerParams{
+		OwnerType: db.BaofuAccountOwnerTypeRider,
+		OwnerID:   rider.ID,
+	})
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return service.ReadinessFromBinding(db.BaofuAccountBinding{}, false, false), nil
+		}
+		return BaofuAccountReadiness{}, err
+	}
+	return service.ReadinessFromBinding(binding, true, false), nil
 }

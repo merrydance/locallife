@@ -510,7 +510,7 @@ Expected: account service rejects invalid owner/account combinations, callback d
 - Test: `locallife/api/profit_sharing_capability_test.go`
 - Test: `locallife/worker/task_onboarding_review_test.go`
 
-- [ ] **Step 1: Add backend readiness checks**
+- [x] **Step 1: Add backend readiness checks**
 
 Extend account readiness so a business owner is considered Baofu-ready only when:
 
@@ -520,7 +520,7 @@ sharing_mer_id or contract_no is present
 merchant payment creation additionally has wechat_sub_mch_id present
 ```
 
-- [ ] **Step 2: Block rider assignment without active Baofu account**
+- [x] **Step 2: Block rider assignment without active Baofu account**
 
 In delivery/rider eligibility code, reject riders whose `baofu_account_bindings` row is missing or not active. User-facing Chinese copy: `骑手结算账户未开通，暂不能接收配送费分账订单`.
 
@@ -537,6 +537,8 @@ Expose states to clients as product terms:
 ```
 
 Do not expose `contractNo`, `sharingMerId`, or raw upstream error payloads to ordinary users. Operator/admin views may display masked IDs.
+
+Current backend status: rider status now returns sanitized `settlement_account` readiness (`state`, `label`, `payment_ready`) and aligns `can_go_online` / `online_block_reason` with the same Baofu settlement guard. Merchant/operator/platform and frontend surfaces remain in later Task 3 slices.
 
 - [ ] **Step 4: Validate API and onboarding workers**
 
@@ -1066,3 +1068,14 @@ make test-integration
 - Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestGoOnlineAPI/BaofuAccountMissing|TestGoOnlineAPI/OK|TestGoOnlineAPI/ApprovedRiderPromotedByCurrentRegionDeposit' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestGoOnlineAPI' -count=1`; `git diff --check`.
 - Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on 71 pre-existing oversized Go files; this partial moved the Baofu readiness helper to a new small file and only added the necessary call site to the existing `api/rider.go`.
 - Residual risk: this is only Task 3's rider-online guard. Merchant/operator/platform onboarding surfaces, worker propagation, rider status display, and delivery assignment/query paths still need the remaining Task 3 work before the Baofu readiness story is complete.
+
+### 2026-05-03 Task 3 Partial - Rider Readiness Status And Assignment Guard
+
+- Added `logic.BaofuAccountService.ReadinessFromBinding` with product-facing states: `资料待提交`, `宝付开户处理中`, `微信渠道待报备`, `结算账户可用`, `开通失败`.
+- `GET /v1/rider/status` now returns sanitized `settlement_account` readiness and blocks `can_go_online` with `骑手结算账户未开通，暂不能接收配送费分账订单` when the rider lacks a ready Baofu personal account.
+- `logic.GrabDeliveryOrder` now blocks rider assignment before pool/order mutation if the rider Baofu settlement account is missing or not payment-ready; the response uses the same safe product copy and does not expose contract numbers, sharing IDs, raw upstream payloads, cards, ID numbers, or phone numbers.
+- Delivery API tests now model the new Baofu readiness store read before grab-order flow proceeds to pool, merchant, deposit, and transaction checks.
+- Assignment-path review: current rider order assignment entrypoint is `api.grabOrder` -> `logic.GrabDeliveryOrder` -> `db.GrabOrderTx`; no separate worker/scheduler auto-assignment path was found in this slice.
+- Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestBaofuAccountReadinessStates' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestGetRiderStatusAPI|TestGoOnlineAPI' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestBaofuAccount(Readiness|Service)' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestGrabDeliveryOrder_BlocksMissingBaofuSettlementAccount|TestGrabDeliveryOrder_Success' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestGrabDeliveryOrder' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestGrabOrderAPI' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api ./logic -run 'TestGetRiderStatusAPI|TestGoOnlineAPI|TestGrabDeliveryOrder|TestGrabOrderAPI|TestBaofuAccountReadiness' -count=1`; `git diff --check`.
+- Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on 71 pre-existing oversized Go files, including existing `api/rider.go` and `api/delivery.go`; this slice keeps new Baofu helper files small but still touches existing oversized handlers/tests.
+- Residual risk: Task 3 still needs merchant/operator/platform onboarding propagation, payment-creation merchant readiness enforcement, onboarding worker propagation, and frontend display/wizard updates before Baofu readiness is end-to-end complete.

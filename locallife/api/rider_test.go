@@ -103,6 +103,16 @@ func expectActiveRiderBaofuAccount(store *mockdb.MockStore, riderID int64) {
 		}, nil)
 }
 
+func expectMissingRiderBaofuAccount(store *mockdb.MockStore, riderID int64) {
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeRider,
+			OwnerID:   riderID,
+		}).
+		Times(1).
+		Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
+}
+
 func TestGetRiderMeAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	rider := randomRider(user.ID)
@@ -1910,6 +1920,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					Times(1).
 					Return([]db.Delivery{}, nil)
 				expectRiderThresholdFromRegionRule(store, rider, 200*fenPerYuan)
+				expectActiveRiderBaofuAccount(store, rider.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1923,6 +1934,8 @@ func TestGetRiderStatusAPI(t *testing.T) {
 				require.Equal(t, int64(200*fenPerYuan), resp.RequiredDeposit)
 				require.True(t, resp.CanGoOnline)
 				require.True(t, resp.CanGoOffline)
+				require.NotNil(t, resp.SettlementAccount)
+				require.Equal(t, "结算账户可用", resp.SettlementAccount.Label)
 			},
 		},
 		{
@@ -1941,6 +1954,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					Times(1).
 					Return([]db.Delivery{{ID: 1}}, nil)
 				expectRiderThresholdFromRegionRule(store, rider, 200*fenPerYuan)
+				expectActiveRiderBaofuAccount(store, rider.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1969,6 +1983,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					Times(1).
 					Return([]db.Delivery{}, nil)
 				expectRiderThresholdFromRegionRule(store, offlineRider, 200*fenPerYuan)
+				expectActiveRiderBaofuAccount(store, offlineRider.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1997,6 +2012,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					Times(1).
 					Return([]db.Delivery{}, nil)
 				expectRiderThresholdFromRegionRule(store, insufficientRider, 200*fenPerYuan)
+				expectActiveRiderBaofuAccount(store, insufficientRider.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -2004,6 +2020,36 @@ func TestGetRiderStatusAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.False(t, resp.CanGoOnline)
 				require.Contains(t, resp.OnlineBlockReason, "押金不足")
+			},
+		},
+		{
+			name: "OK_MissingSettlementAccountBlocksGoOnline",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				offlineRider := rider
+				offlineRider.IsOnline = false
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(offlineRider, nil)
+
+				store.EXPECT().
+					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.Delivery{}, nil)
+				expectRiderThresholdFromRegionRule(store, offlineRider, 200*fenPerYuan)
+				expectMissingRiderBaofuAccount(store, offlineRider.ID)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp riderStatusResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.False(t, resp.CanGoOnline)
+				require.Equal(t, "骑手结算账户未开通，暂不能接收配送费分账订单", resp.OnlineBlockReason)
+				require.NotNil(t, resp.SettlementAccount)
+				require.Equal(t, "资料待提交", resp.SettlementAccount.Label)
 			},
 		},
 		{
@@ -2025,6 +2071,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					Times(1).
 					Return([]db.Delivery{}, nil)
 				expectRiderThresholdFromRegionRule(store, approvedRider, 200*fenPerYuan)
+				expectMissingRiderBaofuAccount(store, approvedRider.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -2033,6 +2080,8 @@ func TestGetRiderStatusAPI(t *testing.T) {
 				require.Equal(t, "approved", resp.Status)
 				require.False(t, resp.CanGoOnline)
 				require.Contains(t, resp.OnlineBlockReason, "押金不足")
+				require.NotNil(t, resp.SettlementAccount)
+				require.Equal(t, "资料待提交", resp.SettlementAccount.Label)
 			},
 		},
 		{

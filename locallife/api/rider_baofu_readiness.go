@@ -2,28 +2,41 @@ package api
 
 import (
 	"context"
-	"errors"
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 )
 
 func (server *Server) ensureRiderBaofuSettlementReady(ctx context.Context, rider db.Rider) error {
+	readiness, err := server.getRiderBaofuSettlementReadiness(ctx, rider)
+	if err != nil {
+		return err
+	}
+	if !readiness.PaymentReady {
+		return ErrRiderBaofuAccountMissing
+	}
+	return nil
+}
+
+func (server *Server) getRiderBaofuSettlementReadiness(ctx context.Context, rider db.Rider) (logic.BaofuAccountReadiness, error) {
 	binding, err := server.store.GetBaofuAccountBindingByOwner(ctx, db.GetBaofuAccountBindingByOwnerParams{
 		OwnerType: db.BaofuAccountOwnerTypeRider,
 		OwnerID:   rider.ID,
 	})
+	service := logic.NewBaofuAccountService(nil, nil)
 	if err != nil {
 		if isNotFoundError(err) {
-			return ErrRiderBaofuAccountMissing
+			return service.ReadinessFromBinding(db.BaofuAccountBinding{}, false, false), nil
 		}
-		return err
+		return logic.BaofuAccountReadiness{}, err
 	}
-	if err := logic.NewBaofuAccountService(nil, nil).ValidatePaymentReady(binding); err != nil {
-		if errors.Is(err, logic.ErrBaofuAccountInactive) || errors.Is(err, logic.ErrBaofuAccountReceiverRequired) {
-			return ErrRiderBaofuAccountMissing
-		}
-		return err
+	return service.ReadinessFromBinding(binding, true, false), nil
+}
+
+func newBaofuSettlementReadinessResponse(readiness logic.BaofuAccountReadiness) *baofuSettlementReadinessResponse {
+	return &baofuSettlementReadinessResponse{
+		State:        readiness.State,
+		Label:        readiness.Label,
+		PaymentReady: readiness.PaymentReady,
 	}
-	return nil
 }

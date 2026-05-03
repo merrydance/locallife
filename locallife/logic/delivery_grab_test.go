@@ -21,6 +21,23 @@ func numericFromFloatGrab(v float64) pgtype.Numeric {
 	return pgtype.Numeric{Int: intVal, Exp: -scale, Valid: true}
 }
 
+func expectActiveRiderBaofuBindingForGrab(store *mockdb.MockStore, riderID int64) {
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeRider,
+			OwnerID:   riderID,
+		}).
+		Times(1).
+		Return(db.BaofuAccountBinding{
+			OwnerType:    db.BaofuAccountOwnerTypeRider,
+			OwnerID:      riderID,
+			AccountType:  db.BaofuAccountTypePersonal,
+			OpenState:    db.BaofuAccountOpenStateActive,
+			ContractNo:   pgtype.Text{String: "CP123", Valid: true},
+			SharingMerID: pgtype.Text{String: "CP123", Valid: true},
+		}, nil)
+}
+
 func TestGrabDeliveryOrder_NotRider(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -53,6 +70,7 @@ func TestGrabDeliveryOrder_NoRegionStillChecksDistance(t *testing.T) {
 		GetRiderProfile(gomock.Any(), rider.ID).
 		Times(1).
 		Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+	expectActiveRiderBaofuBindingForGrab(store, rider.ID)
 	store.EXPECT().
 		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
 		Times(1).
@@ -84,6 +102,7 @@ func TestGrabDeliveryOrder_DistanceTooFar(t *testing.T) {
 		GetRiderProfile(gomock.Any(), rider.ID).
 		Times(1).
 		Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+	expectActiveRiderBaofuBindingForGrab(store, rider.ID)
 	store.EXPECT().
 		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
 		Times(1).
@@ -116,6 +135,7 @@ func TestGrabDeliveryOrder_Success(t *testing.T) {
 		GetRiderProfile(gomock.Any(), rider.ID).
 		Times(1).
 		Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+	expectActiveRiderBaofuBindingForGrab(store, rider.ID)
 	store.EXPECT().
 		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
 		Times(1).
@@ -143,6 +163,35 @@ func TestGrabDeliveryOrder_Success(t *testing.T) {
 	require.Equal(t, db.OrderStatusCourierAccepted, result.Order.Status)
 }
 
+func TestGrabDeliveryOrder_BlocksMissingBaofuSettlementAccount(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	rider := db.Rider{ID: 10, UserID: 1, Status: db.RiderStatusActive, IsOnline: true, DepositAmount: 1000}
+
+	store.EXPECT().
+		GetRiderByUserID(gomock.Any(), int64(1)).
+		Times(1).
+		Return(rider, nil)
+	store.EXPECT().
+		GetRiderProfile(gomock.Any(), rider.ID).
+		Times(1).
+		Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeRider,
+			OwnerID:   rider.ID,
+		}).
+		Times(1).
+		Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
+
+	_, err := GrabDeliveryOrder(context.Background(), store, GrabOrderInput{UserID: 1, OrderID: 2})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "骑手结算账户未开通，暂不能接收配送费分账订单", reqErr.Err.Error())
+}
+
 func TestGrabDeliveryOrder_PreparingOrderRejected(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -161,6 +210,7 @@ func TestGrabDeliveryOrder_PreparingOrderRejected(t *testing.T) {
 		GetRiderProfile(gomock.Any(), rider.ID).
 		Times(1).
 		Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+	expectActiveRiderBaofuBindingForGrab(store, rider.ID)
 	store.EXPECT().
 		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
 		Times(1).
@@ -202,6 +252,7 @@ func TestGrabDeliveryOrder_PaidOrderRejected(t *testing.T) {
 		GetRiderProfile(gomock.Any(), rider.ID).
 		Times(1).
 		Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+	expectActiveRiderBaofuBindingForGrab(store, rider.ID)
 	store.EXPECT().
 		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
 		Times(1).
@@ -284,6 +335,7 @@ func TestGrabDeliveryOrder_Expired(t *testing.T) {
 		GetRiderProfile(gomock.Any(), rider.ID).
 		Times(1).
 		Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+	expectActiveRiderBaofuBindingForGrab(store, rider.ID)
 	store.EXPECT().
 		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
 		Times(1).
@@ -312,6 +364,7 @@ func TestGrabDeliveryOrder_GrabTxError(t *testing.T) {
 		GetRiderProfile(gomock.Any(), rider.ID).
 		Times(1).
 		Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+	expectActiveRiderBaofuBindingForGrab(store, rider.ID)
 	store.EXPECT().
 		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
 		Times(1).
