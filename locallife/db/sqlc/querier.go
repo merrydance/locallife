@@ -291,6 +291,7 @@ type Querier interface {
 	CountWechatMerchantViolations(ctx context.Context, arg CountWechatMerchantViolationsParams) (int64, error)
 	CountWithdrawalRecords(ctx context.Context, arg CountWithdrawalRecordsParams) (int64, error)
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error)
+	CreateBaofuFeeLedger(ctx context.Context, arg CreateBaofuFeeLedgerParams) (BaofuFeeLedger, error)
 	// ==============================
 	// behavior_actions
 	// ==============================
@@ -620,6 +621,8 @@ type Querier interface {
 	GetBaofuAccountBinding(ctx context.Context, id int64) (BaofuAccountBinding, error)
 	GetBaofuAccountBindingByContractNo(ctx context.Context, contractNo pgtype.Text) (BaofuAccountBinding, error)
 	GetBaofuAccountBindingByOwner(ctx context.Context, arg GetBaofuAccountBindingByOwnerParams) (BaofuAccountBinding, error)
+	GetBaofuFeeLedger(ctx context.Context, id int64) (BaofuFeeLedger, error)
+	GetBaofuFeeLedgerByBusinessObject(ctx context.Context, arg GetBaofuFeeLedgerByBusinessObjectParams) (BaofuFeeLedger, error)
 	GetBehaviorAction(ctx context.Context, id int64) (BehaviorAction, error)
 	GetBehaviorDecision(ctx context.Context, id int64) (BehaviorDecision, error)
 	GetBehaviorEffectSummary(ctx context.Context, arg GetBehaviorEffectSummaryParams) (GetBehaviorEffectSummaryRow, error)
@@ -1198,6 +1201,7 @@ type Querier interface {
 	ListAvailableRooms(ctx context.Context, merchantID int64) ([]Table, error)
 	// 获取商户的可用包间列表（含主图）供顾客查看
 	ListAvailableRoomsForCustomer(ctx context.Context, merchantID int64) ([]ListAvailableRoomsForCustomerRow, error)
+	ListBaofuFeeLedgerByPayer(ctx context.Context, arg ListBaofuFeeLedgerByPayerParams) ([]BaofuFeeLedger, error)
 	ListBehaviorActionsByDecision(ctx context.Context, decisionID int64) ([]BehaviorAction, error)
 	ListBehaviorActionsByStatusAndType(ctx context.Context, arg ListBehaviorActionsByStatusAndTypeParams) ([]BehaviorAction, error)
 	ListBehaviorAppealsByEntity(ctx context.Context, arg ListBehaviorAppealsByEntityParams) ([]BehaviorAppeal, error)

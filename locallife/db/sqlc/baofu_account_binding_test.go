@@ -68,3 +68,22 @@ func TestMarkBaofuAccountBindingActiveRequiresReceiver(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, "23514", ErrorCode(err))
 }
+
+func TestMarkBaofuAccountBindingActiveRejectsContractOnlyReceiver(t *testing.T) {
+	binding, err := testStore.UpsertBaofuAccountBinding(context.Background(), UpsertBaofuAccountBindingParams{
+		OwnerType:   BaofuAccountOwnerTypeMerchant,
+		OwnerID:     time.Now().UnixNano(),
+		AccountType: BaofuAccountTypeBusiness,
+		OpenState:   BaofuAccountOpenStateProcessing,
+		RawSnapshot: []byte(`{}`),
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.MarkBaofuAccountBindingActive(context.Background(), MarkBaofuAccountBindingActiveParams{
+		ID:          binding.ID,
+		ContractNo:  pgtype.Text{String: "CONTRACT_ONLY", Valid: true},
+		RawSnapshot: []byte(`{}`),
+	})
+	require.Error(t, err)
+	require.Equal(t, "23514", ErrorCode(err))
+}

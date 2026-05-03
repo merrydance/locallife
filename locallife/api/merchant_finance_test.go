@@ -551,6 +551,7 @@ func TestGetMerchantFinanceOverviewAPI(t *testing.T) {
 						TotalIncome:      950000,
 						TotalPlatformFee: 20000,
 						TotalOperatorFee: 30000,
+						TotalPaymentFee:  3000,
 						PendingIncome:    50000,
 					}, nil)
 
@@ -583,6 +584,8 @@ func TestGetMerchantFinanceOverviewAPI(t *testing.T) {
 				require.Equal(t, int64(100), resp.CompletedOrders)
 				require.Equal(t, int64(1000000), resp.TotalGMV)
 				require.Equal(t, int64(50000), resp.TotalServiceFee)
+				require.Equal(t, int64(3000), resp.TotalPaymentFee)
+				require.Equal(t, int64(53000), resp.TotalDeductionFee)
 				require.Equal(t, int64(940000), resp.NetIncome) // 950000 - 10000
 			},
 		},
@@ -737,7 +740,8 @@ func TestListMerchantFinanceOrdersAPI(t *testing.T) {
 							TotalAmount:        10000,
 							PlatformCommission: 200,
 							OperatorCommission: 300,
-							MerchantAmount:     9500,
+							PaymentFee:         30,
+							MerchantAmount:     9470,
 							Status:             "finished",
 							CreatedAt:          time.Now(),
 							OrderID:            pgtype.Int8{Int64: 1000, Valid: true},
@@ -758,6 +762,9 @@ func TestListMerchantFinanceOrdersAPI(t *testing.T) {
 
 				var resp map[string]interface{}
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				orders := resp["orders"].([]interface{})
+				firstOrder := orders[0].(map[string]interface{})
+				require.Equal(t, float64(30), firstOrder["payment_fee"])
 				require.NotNil(t, resp["orders"])
 				require.Equal(t, float64(1), resp["total"])
 			},
@@ -905,6 +912,7 @@ func TestListMerchantServiceFeesAPI(t *testing.T) {
 							TotalAmount: 500000,
 							PlatformFee: 10000,
 							OperatorFee: 15000,
+							PaymentFee:  3000,
 						},
 					}, nil)
 			},
@@ -917,6 +925,8 @@ func TestListMerchantServiceFeesAPI(t *testing.T) {
 				require.Equal(t, float64(10000), resp["total_platform_fee"])
 				require.Equal(t, float64(15000), resp["total_operator_fee"])
 				require.Equal(t, float64(25000), resp["total_service_fee"])
+				require.Equal(t, float64(3000), resp["total_payment_fee"])
+				require.Equal(t, float64(28000), resp["total_deduction_fee"])
 			},
 		},
 		{
@@ -1078,11 +1088,13 @@ func TestListMerchantDailyFinanceAPI(t *testing.T) {
 					Times(1).
 					Return([]db.GetMerchantDailyFinanceRow{
 						{
-							Date:           pgtype.Date{Time: time.Date(2025, 11, 15, 0, 0, 0, 0, time.UTC), Valid: true},
-							OrderCount:     100,
-							TotalGmv:       1000000,
-							MerchantIncome: 950000,
-							TotalFee:       50000,
+							Date:              pgtype.Date{Time: time.Date(2025, 11, 15, 0, 0, 0, 0, time.UTC), Valid: true},
+							OrderCount:        100,
+							TotalGmv:          1000000,
+							MerchantIncome:    950000,
+							PaymentFee:        3000,
+							ServiceFee:        50000,
+							TotalDeductionFee: 53000,
 						},
 					}, nil)
 
@@ -1163,7 +1175,8 @@ func TestListMerchantSettlementsAPI(t *testing.T) {
 							TotalAmount:        10000,
 							PlatformCommission: 200,
 							OperatorCommission: 300,
-							MerchantAmount:     9500,
+							PaymentFee:         30,
+							MerchantAmount:     9470,
 							OutOrderNo:         "PSO20251115001",
 							Status:             "finished",
 							CreatedAt:          time.Now(),
@@ -1216,7 +1229,8 @@ func TestListMerchantSettlementsAPI(t *testing.T) {
 							TotalAmount:        10000,
 							PlatformCommission: 200,
 							OperatorCommission: 300,
-							MerchantAmount:     9500,
+							PaymentFee:         30,
+							MerchantAmount:     9470,
 							OutOrderNo:         "PSO20251115001",
 							Status:             "finished",
 							CreatedAt:          time.Now(),

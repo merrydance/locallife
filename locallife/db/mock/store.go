@@ -3063,6 +3063,36 @@ func (mr *MockStoreMockRecorder) CreateAuditLog(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateAuditLog", reflect.TypeOf((*MockStore)(nil).CreateAuditLog), ctx, arg)
 }
 
+// CreateBaofuFeeLedger mocks base method.
+func (m *MockStore) CreateBaofuFeeLedger(ctx context.Context, arg db.CreateBaofuFeeLedgerParams) (db.BaofuFeeLedger, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateBaofuFeeLedger", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuFeeLedger)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateBaofuFeeLedger indicates an expected call of CreateBaofuFeeLedger.
+func (mr *MockStoreMockRecorder) CreateBaofuFeeLedger(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBaofuFeeLedger", reflect.TypeOf((*MockStore)(nil).CreateBaofuFeeLedger), ctx, arg)
+}
+
+// CreateBaofuProfitSharingOrderTx mocks base method.
+func (m *MockStore) CreateBaofuProfitSharingOrderTx(ctx context.Context, arg db.CreateBaofuProfitSharingOrderTxParams) (db.CreateBaofuProfitSharingOrderTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateBaofuProfitSharingOrderTx", ctx, arg)
+	ret0, _ := ret[0].(db.CreateBaofuProfitSharingOrderTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateBaofuProfitSharingOrderTx indicates an expected call of CreateBaofuProfitSharingOrderTx.
+func (mr *MockStoreMockRecorder) CreateBaofuProfitSharingOrderTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBaofuProfitSharingOrderTx", reflect.TypeOf((*MockStore)(nil).CreateBaofuProfitSharingOrderTx), ctx, arg)
+}
+
 // CreateBehaviorAction mocks base method.
 func (m *MockStore) CreateBehaviorAction(ctx context.Context, arg db.CreateBehaviorActionParams) (db.BehaviorAction, error) {
 	m.ctrl.T.Helper()
@@ -6415,6 +6445,36 @@ func (m *MockStore) GetBaofuAccountBindingByOwner(ctx context.Context, arg db.Ge
 func (mr *MockStoreMockRecorder) GetBaofuAccountBindingByOwner(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuAccountBindingByOwner", reflect.TypeOf((*MockStore)(nil).GetBaofuAccountBindingByOwner), ctx, arg)
+}
+
+// GetBaofuFeeLedger mocks base method.
+func (m *MockStore) GetBaofuFeeLedger(ctx context.Context, id int64) (db.BaofuFeeLedger, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuFeeLedger", ctx, id)
+	ret0, _ := ret[0].(db.BaofuFeeLedger)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuFeeLedger indicates an expected call of GetBaofuFeeLedger.
+func (mr *MockStoreMockRecorder) GetBaofuFeeLedger(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuFeeLedger", reflect.TypeOf((*MockStore)(nil).GetBaofuFeeLedger), ctx, id)
+}
+
+// GetBaofuFeeLedgerByBusinessObject mocks base method.
+func (m *MockStore) GetBaofuFeeLedgerByBusinessObject(ctx context.Context, arg db.GetBaofuFeeLedgerByBusinessObjectParams) (db.BaofuFeeLedger, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuFeeLedgerByBusinessObject", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuFeeLedger)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuFeeLedgerByBusinessObject indicates an expected call of GetBaofuFeeLedgerByBusinessObject.
+func (mr *MockStoreMockRecorder) GetBaofuFeeLedgerByBusinessObject(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuFeeLedgerByBusinessObject", reflect.TypeOf((*MockStore)(nil).GetBaofuFeeLedgerByBusinessObject), ctx, arg)
 }
 
 // GetBehaviorAction mocks base method.
@@ -12592,6 +12652,21 @@ func (mr *MockStoreMockRecorder) ListAvailableRoomsForCustomer(ctx, merchantID a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListAvailableRoomsForCustomer", reflect.TypeOf((*MockStore)(nil).ListAvailableRoomsForCustomer), ctx, merchantID)
 }
 
+// ListBaofuFeeLedgerByPayer mocks base method.
+func (m *MockStore) ListBaofuFeeLedgerByPayer(ctx context.Context, arg db.ListBaofuFeeLedgerByPayerParams) ([]db.BaofuFeeLedger, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListBaofuFeeLedgerByPayer", ctx, arg)
+	ret0, _ := ret[0].([]db.BaofuFeeLedger)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListBaofuFeeLedgerByPayer indicates an expected call of ListBaofuFeeLedgerByPayer.
+func (mr *MockStoreMockRecorder) ListBaofuFeeLedgerByPayer(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListBaofuFeeLedgerByPayer", reflect.TypeOf((*MockStore)(nil).ListBaofuFeeLedgerByPayer), ctx, arg)
+}
+
 // ListBehaviorActionsByDecision mocks base method.
 func (m *MockStore) ListBehaviorActionsByDecision(ctx context.Context, decisionID int64) ([]db.BehaviorAction, error) {
 	m.ctrl.T.Helper()
@@ -16623,6 +16698,21 @@ func (m *MockStore) MarkBaofuAccountBindingActive(ctx context.Context, arg db.Ma
 func (mr *MockStoreMockRecorder) MarkBaofuAccountBindingActive(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBaofuAccountBindingActive", reflect.TypeOf((*MockStore)(nil).MarkBaofuAccountBindingActive), ctx, arg)
+}
+
+// MarkBaofuAccountBindingActiveWithFeeLedgerTx mocks base method.
+func (m *MockStore) MarkBaofuAccountBindingActiveWithFeeLedgerTx(ctx context.Context, arg db.MarkBaofuAccountBindingActiveWithFeeLedgerTxParams) (db.MarkBaofuAccountBindingActiveWithFeeLedgerTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkBaofuAccountBindingActiveWithFeeLedgerTx", ctx, arg)
+	ret0, _ := ret[0].(db.MarkBaofuAccountBindingActiveWithFeeLedgerTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkBaofuAccountBindingActiveWithFeeLedgerTx indicates an expected call of MarkBaofuAccountBindingActiveWithFeeLedgerTx.
+func (mr *MockStoreMockRecorder) MarkBaofuAccountBindingActiveWithFeeLedgerTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBaofuAccountBindingActiveWithFeeLedgerTx", reflect.TypeOf((*MockStore)(nil).MarkBaofuAccountBindingActiveWithFeeLedgerTx), ctx, arg)
 }
 
 // MarkBaofuAccountBindingFailed mocks base method.

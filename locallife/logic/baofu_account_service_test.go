@@ -90,6 +90,12 @@ func TestBaofuAccountServiceOpenAccountRecordsCommandBeforeClientCall(t *testing
 	require.Equal(t, db.ExternalPaymentCapabilityBaofuAccount, store.lastCommand.Capability)
 	require.Equal(t, db.ExternalPaymentCommandTypeOpenBaofuAccount, store.lastCommand.CommandType)
 	require.JSONEq(t, `{}`, string(store.lastActive.RawSnapshot))
+	require.Equal(t, db.BaofuFeeTypeAccountOpenVerifyFee, store.lastFeeLedger.FeeType)
+	require.Equal(t, db.BaofuFeePayerTypePlatform, store.lastFeeLedger.PayerType)
+	require.False(t, store.lastFeeLedger.PayerID.Valid)
+	require.Equal(t, "baofu_account_binding", store.lastFeeLedger.BusinessObjectType)
+	require.Equal(t, int64(7), store.lastFeeLedger.BusinessObjectID)
+	require.Equal(t, int64(100), store.lastFeeLedger.Amount)
 }
 
 func TestBaofuAccountServiceOpenAccountRequiresOutRequestNo(t *testing.T) {
@@ -107,6 +113,7 @@ func TestBaofuAccountServiceOpenAccountRequiresOutRequestNo(t *testing.T) {
 type fakeBaofuAccountStore struct {
 	lastCommand                    db.CreateExternalPaymentCommandParams
 	lastActive                     db.MarkBaofuAccountBindingActiveParams
+	lastFeeLedger                  db.CreateBaofuFeeLedgerParams
 	commandCreatedBeforeClientCall bool
 }
 
@@ -120,9 +127,13 @@ func (s *fakeBaofuAccountStore) CreateExternalPaymentCommand(ctx context.Context
 	return db.ExternalPaymentCommand{ID: 9, Provider: arg.Provider, Channel: arg.Channel, Capability: arg.Capability, CommandType: arg.CommandType}, nil
 }
 
-func (s *fakeBaofuAccountStore) MarkBaofuAccountBindingActive(ctx context.Context, arg db.MarkBaofuAccountBindingActiveParams) (db.BaofuAccountBinding, error) {
-	s.lastActive = arg
-	return db.BaofuAccountBinding{ID: arg.ID, OpenState: db.BaofuAccountOpenStateActive, ContractNo: arg.ContractNo, SharingMerID: arg.SharingMerID}, nil
+func (s *fakeBaofuAccountStore) MarkBaofuAccountBindingActiveWithFeeLedgerTx(ctx context.Context, arg db.MarkBaofuAccountBindingActiveWithFeeLedgerTxParams) (db.MarkBaofuAccountBindingActiveWithFeeLedgerTxResult, error) {
+	s.lastActive = arg.ActiveBinding
+	s.lastFeeLedger = arg.AccountOpenFeeLedger
+	return db.MarkBaofuAccountBindingActiveWithFeeLedgerTxResult{
+		Binding:              db.BaofuAccountBinding{ID: arg.ActiveBinding.ID, OpenState: db.BaofuAccountOpenStateActive, ContractNo: arg.ActiveBinding.ContractNo, SharingMerID: arg.ActiveBinding.SharingMerID},
+		AccountOpenFeeLedger: db.BaofuFeeLedger{ID: 11, FeeType: arg.AccountOpenFeeLedger.FeeType, PayerType: arg.AccountOpenFeeLedger.PayerType, Amount: arg.AccountOpenFeeLedger.Amount},
+	}, nil
 }
 
 func (s *fakeBaofuAccountStore) MarkBaofuAccountBindingFailed(ctx context.Context, arg db.MarkBaofuAccountBindingFailedParams) (db.BaofuAccountBinding, error) {

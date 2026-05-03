@@ -15,9 +15,42 @@ INSERT INTO profit_sharing_orders (
     operator_commission,
     merchant_amount,
     out_order_no,
-    status
+    status,
+    payment_fee,
+    payment_fee_rate_bps,
+    provider,
+    channel,
+    merchant_sharing_mer_id,
+    rider_sharing_mer_id,
+    operator_sharing_mer_id,
+    platform_sharing_mer_id,
+    sharing_detail_snapshot
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+    sqlc.arg(payment_order_id),
+    sqlc.arg(merchant_id),
+    sqlc.narg(operator_id),
+    sqlc.arg(order_source),
+    sqlc.arg(total_amount),
+    sqlc.arg(delivery_fee),
+    sqlc.narg(rider_id),
+    sqlc.arg(rider_amount),
+    sqlc.arg(distributable_amount),
+    sqlc.arg(platform_rate),
+    sqlc.arg(operator_rate),
+    sqlc.arg(platform_commission),
+    sqlc.arg(operator_commission),
+    sqlc.arg(merchant_amount),
+    sqlc.arg(out_order_no),
+    sqlc.arg(status),
+    COALESCE(sqlc.narg(payment_fee), 0),
+    COALESCE(sqlc.narg(payment_fee_rate_bps), 30),
+    COALESCE(sqlc.narg(provider), 'wechat'),
+    COALESCE(sqlc.narg(channel), 'ecommerce'),
+    sqlc.narg(merchant_sharing_mer_id),
+    sqlc.narg(rider_sharing_mer_id),
+    sqlc.narg(operator_sharing_mer_id),
+    sqlc.narg(platform_sharing_mer_id),
+    COALESCE(sqlc.narg(sharing_detail_snapshot), '{}'::jsonb)
 ) RETURNING *;
 
 -- name: CreateProfitSharingOrderSimple :one
@@ -170,6 +203,7 @@ SELECT
     p.total_amount,
     p.platform_commission,
     p.operator_commission,
+    p.payment_fee,
     p.merchant_amount,
     p.status,
     p.created_at,
@@ -198,6 +232,7 @@ SELECT
     COALESCE(SUM(CASE WHEN status = 'finished' THEN merchant_amount ELSE 0 END), 0)::bigint as total_income,
     COALESCE(SUM(CASE WHEN status = 'finished' THEN platform_commission ELSE 0 END), 0)::bigint as total_platform_fee,
     COALESCE(SUM(CASE WHEN status = 'finished' THEN operator_commission ELSE 0 END), 0)::bigint as total_operator_fee,
+    COALESCE(SUM(CASE WHEN status = 'finished' THEN payment_fee ELSE 0 END), 0)::bigint as total_payment_fee,
     COALESCE(SUM(CASE WHEN status = 'pending' THEN merchant_amount ELSE 0 END), 0)::bigint as pending_income
 FROM profit_sharing_orders
 WHERE merchant_id = sqlc.arg('merchant_id')
@@ -211,7 +246,8 @@ SELECT
     COUNT(*) as order_count,
     COALESCE(SUM(total_amount), 0)::bigint as total_amount,
     COALESCE(SUM(platform_commission), 0)::bigint as platform_fee,
-    COALESCE(SUM(operator_commission), 0)::bigint as operator_fee
+    COALESCE(SUM(operator_commission), 0)::bigint as operator_fee,
+    COALESCE(SUM(payment_fee), 0)::bigint as payment_fee
 FROM profit_sharing_orders
 WHERE merchant_id = sqlc.arg('merchant_id')
   AND status = 'finished'
@@ -226,7 +262,9 @@ SELECT
     COUNT(*) as order_count,
     COALESCE(SUM(total_amount), 0)::bigint as total_gmv,
     COALESCE(SUM(merchant_amount), 0)::bigint as merchant_income,
-    COALESCE(SUM(platform_commission + operator_commission), 0)::bigint as total_fee
+    COALESCE(SUM(payment_fee), 0)::bigint as payment_fee,
+    COALESCE(SUM(platform_commission + operator_commission), 0)::bigint as service_fee,
+    COALESCE(SUM(platform_commission + operator_commission + payment_fee), 0)::bigint as total_deduction_fee
 FROM profit_sharing_orders
 WHERE merchant_id = sqlc.arg('merchant_id')
   AND status = 'finished'

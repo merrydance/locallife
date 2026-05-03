@@ -48,12 +48,14 @@ type financeOverviewResponse struct {
 	PendingOrders   int64 `json:"pending_orders"`
 
 	// 金额统计（分）
-	TotalGMV         int64 `json:"total_gmv"`          // 总交易额
-	TotalIncome      int64 `json:"total_income"`       // 商户净收入
-	TotalPlatformFee int64 `json:"total_platform_fee"` // 平台服务费
-	TotalOperatorFee int64 `json:"total_operator_fee"` // 运营商服务费
-	TotalServiceFee  int64 `json:"total_service_fee"`  // 总服务费（平台+运营商）
-	PendingIncome    int64 `json:"pending_income"`     // 待结算收入
+	TotalGMV          int64 `json:"total_gmv"`           // 总交易额
+	TotalIncome       int64 `json:"total_income"`        // 商户净收入
+	TotalPlatformFee  int64 `json:"total_platform_fee"`  // 平台服务费
+	TotalOperatorFee  int64 `json:"total_operator_fee"`  // 运营商服务费
+	TotalPaymentFee   int64 `json:"total_payment_fee"`   // 宝付支付手续费
+	TotalServiceFee   int64 `json:"total_service_fee"`   // 总服务费（平台+运营商）
+	TotalDeductionFee int64 `json:"total_deduction_fee"` // 总扣减（平台+运营商+支付手续费）
+	PendingIncome     int64 `json:"pending_income"`      // 待结算收入
 
 	// 满返支出统计
 	PromotionOrders   int64 `json:"promotion_orders"`    // 满返订单数
@@ -141,6 +143,7 @@ func (server *Server) getMerchantFinanceOverview(ctx *gin.Context) {
 	}
 
 	totalServiceFee := financeStats.TotalPlatformFee + financeStats.TotalOperatorFee
+	totalDeductionFee := totalServiceFee + financeStats.TotalPaymentFee
 	totalIncome := financeStats.TotalIncome + adjustmentTotal
 	netIncome := totalIncome - promoStats.TotalDiscount
 
@@ -151,7 +154,9 @@ func (server *Server) getMerchantFinanceOverview(ctx *gin.Context) {
 		TotalIncome:       totalIncome,
 		TotalPlatformFee:  financeStats.TotalPlatformFee,
 		TotalOperatorFee:  financeStats.TotalOperatorFee,
+		TotalPaymentFee:   financeStats.TotalPaymentFee,
 		TotalServiceFee:   totalServiceFee,
+		TotalDeductionFee: totalDeductionFee,
 		PendingIncome:     financeStats.PendingIncome,
 		PromotionOrders:   promoStats.PromoOrderCount,
 		TotalPromotionExp: promoStats.TotalDiscount,
@@ -178,6 +183,7 @@ type financeOrderItem struct {
 	TotalAmount        int64  `json:"total_amount"`
 	PlatformCommission int64  `json:"platform_commission"`
 	OperatorCommission int64  `json:"operator_commission"`
+	PaymentFee         int64  `json:"payment_fee"`
 	MerchantAmount     int64  `json:"merchant_amount"`
 	Status             string `json:"status"`
 	CreatedAt          string `json:"created_at"`
@@ -293,6 +299,7 @@ func (server *Server) listMerchantFinanceOrders(ctx *gin.Context) {
 			TotalAmount:        order.TotalAmount,
 			PlatformCommission: order.PlatformCommission,
 			OperatorCommission: order.OperatorCommission,
+			PaymentFee:         order.PaymentFee,
 			MerchantAmount:     order.MerchantAmount,
 			Status:             order.Status,
 			CreatedAt:          order.CreatedAt.Format(time.RFC3339),
@@ -317,20 +324,24 @@ type listServiceFeesRequest struct {
 }
 
 type serviceFeeItem struct {
-	Date        string `json:"date"`
-	OrderSource string `json:"order_source"`
-	OrderCount  int64  `json:"order_count"`
-	TotalAmount int64  `json:"total_amount"`
-	PlatformFee int64  `json:"platform_fee"`
-	OperatorFee int64  `json:"operator_fee"`
-	TotalFee    int64  `json:"total_fee"`
+	Date              string `json:"date"`
+	OrderSource       string `json:"order_source"`
+	OrderCount        int64  `json:"order_count"`
+	TotalAmount       int64  `json:"total_amount"`
+	PlatformFee       int64  `json:"platform_fee"`
+	OperatorFee       int64  `json:"operator_fee"`
+	PaymentFee        int64  `json:"payment_fee"`
+	TotalFee          int64  `json:"total_fee"`
+	TotalDeductionFee int64  `json:"total_deduction_fee"`
 }
 
 type serviceFeeSummaryResponse struct {
-	Details          []serviceFeeItem `json:"details"`
-	TotalPlatformFee int64            `json:"total_platform_fee"`
-	TotalOperatorFee int64            `json:"total_operator_fee"`
-	TotalServiceFee  int64            `json:"total_service_fee"`
+	Details           []serviceFeeItem `json:"details"`
+	TotalPlatformFee  int64            `json:"total_platform_fee"`
+	TotalOperatorFee  int64            `json:"total_operator_fee"`
+	TotalPaymentFee   int64            `json:"total_payment_fee"`
+	TotalServiceFee   int64            `json:"total_service_fee"`
+	TotalDeductionFee int64            `json:"total_deduction_fee"`
 }
 
 // listMerchantServiceFees 获取商户服务费明细
@@ -389,29 +400,35 @@ func (server *Server) listMerchantServiceFees(ctx *gin.Context) {
 	}
 
 	// 计算汇总
-	var totalPlatformFee, totalOperatorFee int64
+	var totalPlatformFee, totalOperatorFee, totalPaymentFee int64
 	result := make([]serviceFeeItem, len(fees))
 	for i, fee := range fees {
 		totalFee := fee.PlatformFee + fee.OperatorFee
+		totalDeductionFee := totalFee + fee.PaymentFee
 		totalPlatformFee += fee.PlatformFee
 		totalOperatorFee += fee.OperatorFee
+		totalPaymentFee += fee.PaymentFee
 
 		result[i] = serviceFeeItem{
-			Date:        fee.Date.Time.Format("2006-01-02"),
-			OrderSource: fee.OrderSource,
-			OrderCount:  fee.OrderCount,
-			TotalAmount: fee.TotalAmount,
-			PlatformFee: fee.PlatformFee,
-			OperatorFee: fee.OperatorFee,
-			TotalFee:    totalFee,
+			Date:              fee.Date.Time.Format("2006-01-02"),
+			OrderSource:       fee.OrderSource,
+			OrderCount:        fee.OrderCount,
+			TotalAmount:       fee.TotalAmount,
+			PlatformFee:       fee.PlatformFee,
+			OperatorFee:       fee.OperatorFee,
+			PaymentFee:        fee.PaymentFee,
+			TotalFee:          totalFee,
+			TotalDeductionFee: totalDeductionFee,
 		}
 	}
 
 	ctx.JSON(http.StatusOK, serviceFeeSummaryResponse{
-		Details:          result,
-		TotalPlatformFee: totalPlatformFee,
-		TotalOperatorFee: totalOperatorFee,
-		TotalServiceFee:  totalPlatformFee + totalOperatorFee,
+		Details:           result,
+		TotalPlatformFee:  totalPlatformFee,
+		TotalOperatorFee:  totalOperatorFee,
+		TotalPaymentFee:   totalPaymentFee,
+		TotalServiceFee:   totalPlatformFee + totalOperatorFee,
+		TotalDeductionFee: totalPlatformFee + totalOperatorFee + totalPaymentFee,
 	})
 }
 
@@ -577,11 +594,14 @@ type listDailyFinanceRequest struct {
 }
 
 type dailyFinanceItem struct {
-	Date           string `json:"date"`
-	OrderCount     int64  `json:"order_count"`
-	TotalGMV       int64  `json:"total_gmv"`
-	MerchantIncome int64  `json:"merchant_income"`
-	TotalFee       int64  `json:"total_fee"`
+	Date              string `json:"date"`
+	OrderCount        int64  `json:"order_count"`
+	TotalGMV          int64  `json:"total_gmv"`
+	MerchantIncome    int64  `json:"merchant_income"`
+	PaymentFee        int64  `json:"payment_fee"`
+	ServiceFee        int64  `json:"service_fee"`
+	TotalFee          int64  `json:"total_fee"`
+	TotalDeductionFee int64  `json:"total_deduction_fee"`
 }
 
 type dailyFinanceSummaryResponse struct {
@@ -657,11 +677,14 @@ func (server *Server) listMerchantDailyFinance(ctx *gin.Context) {
 	for _, stat := range dailyStats {
 		dateKey := stat.Date.Time.Format("2006-01-02")
 		resultMap[dateKey] = &dailyFinanceItem{
-			Date:           dateKey,
-			OrderCount:     stat.OrderCount,
-			TotalGMV:       stat.TotalGmv,
-			MerchantIncome: stat.MerchantIncome,
-			TotalFee:       stat.TotalFee,
+			Date:              dateKey,
+			OrderCount:        stat.OrderCount,
+			TotalGMV:          stat.TotalGmv,
+			MerchantIncome:    stat.MerchantIncome,
+			PaymentFee:        stat.PaymentFee,
+			ServiceFee:        stat.ServiceFee,
+			TotalFee:          stat.ServiceFee,
+			TotalDeductionFee: stat.TotalDeductionFee,
 		}
 	}
 

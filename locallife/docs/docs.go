@@ -38120,6 +38120,10 @@ const docTemplate = `{
                     "description": "满返支出统计",
                     "type": "integer"
                 },
+                "total_deduction_fee": {
+                    "description": "总扣减（平台+运营商+支付手续费）",
+                    "type": "integer"
+                },
                 "total_gmv": {
                     "description": "金额统计（分）",
                     "type": "integer"
@@ -38130,6 +38134,10 @@ const docTemplate = `{
                 },
                 "total_operator_fee": {
                     "description": "运营商服务费",
+                    "type": "integer"
+                },
+                "total_payment_fee": {
+                    "description": "宝付支付手续费",
                     "type": "integer"
                 },
                 "total_platform_fee": {

@@ -16,7 +16,7 @@
 - 首版切换方式：未正式开展业务，宝付链路上线即全量承接主业务交易；不做微信普通服务商分账灰度并行。
 - 固定业务规则：开户验证费由平台承担；支付手续费 0.3% 由商户承担；分账后不退款；骑手必须开宝付个人二级户才可接收配送费分账。
 - 账户边界：宝付收款商户号用于开户、转账、支付、分账；宝付支付商户号用于提现、提现查询，并承接平台预存的开户验证费。
-- 分账接收方：已确认分账接口直接上送开户接口返回的二级商户号。本地用 `sharing_mer_id` 作为分账接收方规范字段；若开户/查询回包字段名为 `contractNo`，解析层必须同步写入 `sharing_mer_id`，后续分账只读 `sharing_mer_id`。不得使用微信 `openid`、微信报备 `subMchId` 或平台宝付收款商户号作为分账接收方。
+- 分账接收方：已确认分账接口直接上送开户接口返回的二级商户号。本地用 `sharing_mer_id` 作为分账接收方规范字段；开户/查询解析层必须把宝付返回的二级商户号写入 `sharing_mer_id`，后续分账只读 `sharing_mer_id`。`contract_no` 只保留上游开户/查询字段和对账留痕，不作为分账创建兜底字段。不得使用微信 `openid`、微信报备 `subMchId` 或平台宝付收款商户号作为分账接收方。
 - 平台佣金接收方：平台也必须为平台自己开一个平台名下宝付二级户并保存到 `owner_type=platform, owner_id=0`，不能直接使用平台宝付收款商户号收平台 2% 分账。
 
 ## 1. Target File Map
@@ -424,7 +424,7 @@ Expected: all Baofu package tests pass.
 
 - [x] **Step 1: Add sqlc account binding queries**
 
-Create `locallife/db/query/baofu_account_binding.sql` with queries for upsert by owner, get by owner, get by contract, mark processing, mark active, mark failed, list processing for recovery. `MarkBaofuAccountBindingActive` must write `sharing_mer_id` with the开户接口返回的二级商户号；如果回包字段名为 `contractNo`，同步写入 `contract_no` 和 `sharing_mer_id`。
+Create `locallife/db/query/baofu_account_binding.sql` with queries for upsert by owner, get by owner, get by contract, mark processing, mark active, mark failed, list processing for recovery. `MarkBaofuAccountBindingActive` must write `sharing_mer_id` with the开户接口返回的二级商户号；`contract_no` 仅保留上游开户/查询字段和对账留痕，不作为分账创建兜底字段。
 
 - [x] **Step 2: Define account contract DTOs**
 
@@ -658,11 +658,11 @@ merchant_amount = 8970
 
 Service must reject negative merchant amount before writing a share order.
 
-- [ ] **Step 3: Resolve receivers from Baofu bindings**
+- [x] **Step 3: Resolve receivers from Baofu bindings**
 
 Resolve merchant, rider, operator and platform receiver IDs from `baofu_account_bindings.sharing_mer_id`. Do not fall back to `contract_no` at分账创建 time;开户/查询同步层 must already normalize the returned二级商户号 into `sharing_mer_id`. Store the resolved IDs in `profit_sharing_orders.*_sharing_mer_id` and in `sharing_detail_snapshot`.
 
-- [ ] **Step 4: Record fee ledger rows**
+- [x] **Step 4: Record fee ledger rows**
 
 For every Baofu profit-sharing order, insert one payment-fee ledger row:
 
@@ -687,7 +687,7 @@ business_object_id = baofu_account_bindings.id
 amount = 100
 ```
 
-- [ ] **Step 5: Validate calculation and finance display**
+- [x] **Step 5: Validate calculation and finance display**
 
 Run from `locallife/`:
 
@@ -1065,7 +1065,7 @@ make test-integration
 
 ### 2026-05-03 Task 3 Partial - Rider Online Readiness
 
-- Added the first onboarding propagation guard: `POST /v1/rider/online` now requires an active rider BaoCaiTong personal account with `contract_no` or `sharing_mer_id` before the rider can go online to receive delivery-fee profit-sharing orders.
+- Added the first onboarding propagation guard: `POST /v1/rider/online` now requires an active rider BaoCaiTong personal account with `sharing_mer_id` before the rider can go online to receive delivery-fee profit-sharing orders.
 - The public error is semantic and product-facing: `骑手结算账户未开通，暂不能接收配送费分账订单`; internal storage errors still flow to the existing logged internal-error boundary.
 - Added rider API regression coverage for a missing Baofu account and updated successful online cases to require an active Baofu rider binding.
 - Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestGoOnlineAPI/BaofuAccountMissing|TestGoOnlineAPI/OK|TestGoOnlineAPI/ApprovedRiderPromotedByCurrentRegionDeposit' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestGoOnlineAPI' -count=1`; `git diff --check`.
@@ -1105,7 +1105,7 @@ make test-integration
 ### 2026-05-03 Task 3 Partial - Combined Payment Readiness Guard
 
 - Added a combined-payment Baofu readiness guard in `logic.CombinedPaymentService` for the ordinary service provider main-business channel.
-- The guard deduplicates order IDs, reads each order to resolve unique merchant IDs, verifies ownership, then requires each merchant Baofu binding to be active with `contract_no` or `sharing_mer_id` and `wechat_sub_mch_id` before `CreateCombinedPaymentTx`.
+- The guard deduplicates order IDs, reads each order to resolve unique merchant IDs, verifies ownership, then requires each merchant Baofu binding to be active with `sharing_mer_id` and `wechat_sub_mch_id` before `CreateCombinedPaymentTx`.
 - Missing/unready merchant Baofu account returns `商户结算账户未开通，暂不能创建支付订单`; missing WeChat channel identity returns `商户微信渠道待报备，暂不能创建微信生态支付订单`. The new path does not expose contract numbers, sharing IDs, raw upstream payloads, card/ID/phone data, or provider internals.
 - The pre-transaction strategy intentionally stops before local combined payment and child `payment_orders` rows are created, so a blocked merchant does not leave pending local payment anchors or trigger upstream combine payment.
 - Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestCreateCombinedPaymentOrder_OrdinaryServiceProviderRequiresMerchantBaofuReadiness' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestCreateCombinedPaymentOrder' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestCreateCombinedPaymentOrder|TestPaymentOrderServiceCreatePaymentOrder|TestBaofuAccountReadiness' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestCreateCombinedPaymentOrderAPI_BaofuReadinessErrorIsSanitized' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api ./logic -run 'TestCreateCombinedPaymentOrderAPI|TestCreateCombinedPaymentOrder|TestCreatePaymentOrderAPI|TestPaymentOrderServiceCreatePaymentOrder|TestBaofuAccountReadiness|TestUpdateMerchantOpenStatus' -count=1`; `git diff --check`.
@@ -1215,3 +1215,15 @@ make test-integration
 - Added migration `000228_require_baofu_sharing_mer_id` to backfill active rows from `contract_no` once, then tighten `baofu_account_bindings_active_receiver_check` so future active rows require `sharing_mer_id`.
 - Updated the integration design to state that the platform commission receiver must also be a platform-owned Baofu secondary account (`owner_type=platform`, `owner_id=0`), not the platform collect merchant account.
 - TDD verification: first run failed because contract-only active rows were still treated as ready/resolvable; after implementation, `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestBaofuAccountService|TestResolveBaofuProfitSharingReceivers|TestCalculateBaofu' -count=1` passed.
+
+### 2026-05-03 Task 5 - Receiver Snapshot And Fee Ledger Persistence
+
+- Tightened the confirmed receiver contract: account active state now requires canonical `sharing_mer_id`; `MarkBaofuAccountBindingActive` no longer silently falls back from `contract_no` to `sharing_mer_id`. The account-open/query parser must pass the Baofu-returned secondary merchant ID as `sharing_mer_id`; `contract_no` remains query/audit trace only.
+- Extended `CreateProfitSharingOrder` so Baofu orders persist merchant-borne `payment_fee`, rate bps, provider/channel, four resolved receiver IDs, and `sharing_detail_snapshot` while existing WeChat callers keep defaults.
+- Added `baofu_fee_ledger` sqlc queries plus an atomic `CreateBaofuProfitSharingOrderTx` that creates the Baofu profit-sharing order and merchant payment-fee ledger row in one DB transaction.
+- Added `BaofuProfitSharingService.CreatePendingOrder` to calculate the split, resolve receivers from `sharing_mer_id`, build a deterministic snapshot, and persist the share order plus fee ledger row.
+- Account opening now records the platform-borne 1 RMB account-open verification fee ledger row in the same DB transaction that marks the binding active, so an active Baofu account cannot be committed without its opening-fee ledger row.
+- Merchant finance overview, order details, service-fee details, and daily finance responses now expose Baofu payment fee separately from platform/operator service fees; platform 2% and operator 3% are not reduced by the 0.3% payment fee.
+- Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" make sqlc`; `PATH="/usr/local/go/bin:$PATH" go test ./db/sqlc -run 'TestCreateProfitSharingOrderPersistsBaofuFields|TestCreateBaofuFeeLedger|TestGetBaofuFeeLedger|TestMarkBaofuAccountBindingActiveRejectsContractOnlyReceiver|TestMarkBaofuAccountBindingActiveWithFeeLedgerTx' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestBaofuProfitSharingServiceCreatePendingOrderPersistsSnapshotAndFeeLedger|TestBaofuAccountServiceOpenAccountRecordsCommandBeforeClientCall' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./logic ./api ./db/sqlc -run 'TestBaofuProfitSharing|TestMerchantFinance|TestProfitSharingOrder|TestCreateBaofuFeeLedger|TestGetBaofuFeeLedger|TestCreateBaofuProfitSharingOrderTx|TestBaofuAccountServiceOpenAccount|TestMarkBaofuAccountBindingActive' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestGetMerchantFinanceOverviewAPI|TestListMerchantFinanceOrdersAPI|TestListMerchantServiceFeesAPI|TestListMerchantDailyFinanceAPI' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./db/sqlc ./logic ./api -count=1`; `PATH="/usr/local/go/bin:$PATH" make check-generated`; `git diff --check`.
+- Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on the same pre-existing 71 oversized Go files, including existing `api/merchant_finance.go`; this slice adds only the fields needed for Baofu fee display.
+- Residual risk: this slice persists the pending Baofu share order and fee ledger. It does not yet run the share worker, call Baofu `share_after_pay`, apply share callbacks, or enforce refund-before-sharing concurrency; those remain Task 6 and Task 7.

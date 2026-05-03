@@ -20,6 +20,8 @@ var (
 )
 
 const (
+	BaofuAccountOpenVerifyFeeFen = 100
+
 	BaofuOnboardingStateProfilePending       = "profile_pending"
 	BaofuOnboardingStateOpeningProcessing    = "baofu_opening_processing"
 	BaofuOnboardingStateWechatChannelPending = "wechat_channel_pending"
@@ -36,7 +38,7 @@ type BaofuAccountReadiness struct {
 type baofuAccountStore interface {
 	UpsertBaofuAccountBinding(ctx context.Context, arg db.UpsertBaofuAccountBindingParams) (db.BaofuAccountBinding, error)
 	CreateExternalPaymentCommand(ctx context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error)
-	MarkBaofuAccountBindingActive(ctx context.Context, arg db.MarkBaofuAccountBindingActiveParams) (db.BaofuAccountBinding, error)
+	MarkBaofuAccountBindingActiveWithFeeLedgerTx(ctx context.Context, arg db.MarkBaofuAccountBindingActiveWithFeeLedgerTxParams) (db.MarkBaofuAccountBindingActiveWithFeeLedgerTxResult, error)
 	MarkBaofuAccountBindingFailed(ctx context.Context, arg db.MarkBaofuAccountBindingFailedParams) (db.BaofuAccountBinding, error)
 }
 
@@ -166,11 +168,22 @@ func (s *BaofuAccountService) OpenAccount(ctx context.Context, req baofucontract
 	normalized := result.Normalized()
 	switch normalized.OpenState {
 	case db.BaofuAccountOpenStateActive:
-		_, err = s.store.MarkBaofuAccountBindingActive(ctx, db.MarkBaofuAccountBindingActiveParams{
-			ID:           binding.ID,
-			ContractNo:   pgtype.Text{String: normalized.ContractNo, Valid: normalized.ContractNo != ""},
-			SharingMerID: pgtype.Text{String: normalized.SharingMerID, Valid: normalized.SharingMerID != ""},
-			RawSnapshot:  baofuAccountRawSnapshot(normalized.Raw),
+		_, err = s.store.MarkBaofuAccountBindingActiveWithFeeLedgerTx(ctx, db.MarkBaofuAccountBindingActiveWithFeeLedgerTxParams{
+			ActiveBinding: db.MarkBaofuAccountBindingActiveParams{
+				ID:           binding.ID,
+				ContractNo:   pgtype.Text{String: normalized.ContractNo, Valid: normalized.ContractNo != ""},
+				SharingMerID: pgtype.Text{String: normalized.SharingMerID, Valid: normalized.SharingMerID != ""},
+				RawSnapshot:  baofuAccountRawSnapshot(normalized.Raw),
+			},
+			AccountOpenFeeLedger: db.CreateBaofuFeeLedgerParams{
+				FeeType:            db.BaofuFeeTypeAccountOpenVerifyFee,
+				PayerType:          db.BaofuFeePayerTypePlatform,
+				PayerID:            pgtype.Int8{Valid: false},
+				BusinessObjectType: "baofu_account_binding",
+				BusinessObjectID:   binding.ID,
+				Amount:             BaofuAccountOpenVerifyFeeFen,
+				Status:             "recorded",
+			},
 		})
 	case db.BaofuAccountOpenStateFailed:
 		_, err = s.store.MarkBaofuAccountBindingFailed(ctx, db.MarkBaofuAccountBindingFailedParams{ID: binding.ID, RawSnapshot: baofuAccountRawSnapshot(normalized.Raw)})

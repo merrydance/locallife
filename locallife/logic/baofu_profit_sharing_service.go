@@ -2,10 +2,12 @@ package logic
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 )
 
@@ -17,6 +19,141 @@ var (
 	ErrBaofuProfitSharingInvalidAmount          = errors.New("baofu profit sharing amount input is invalid")
 	ErrBaofuProfitSharingMerchantAmountNegative = errors.New("baofu profit sharing merchant amount is negative")
 )
+
+type baofuProfitSharingOrderStore interface {
+	baofuProfitSharingReceiverStore
+	CreateBaofuProfitSharingOrderTx(ctx context.Context, arg db.CreateBaofuProfitSharingOrderTxParams) (db.CreateBaofuProfitSharingOrderTxResult, error)
+}
+
+type BaofuProfitSharingService struct {
+	store baofuProfitSharingOrderStore
+}
+
+type BaofuProfitSharingOrderInput struct {
+	PaymentOrderID  int64
+	MerchantID      int64
+	RiderID         int64
+	OperatorID      int64
+	PlatformOwnerID int64
+	OrderSource     string
+	TotalAmountFen  int64
+	DeliveryFeeFen  int64
+	PlatformRateBps int32
+	OperatorRateBps int32
+	OutOrderNo      string
+}
+
+type baofuSharingDetailSnapshot struct {
+	Provider          string                          `json:"provider"`
+	Channel           string                          `json:"channel"`
+	PaymentFee        int64                           `json:"payment_fee"`
+	PaymentFeeRateBps int32                           `json:"payment_fee_rate_bps"`
+	Receivers         []baofuSharingDetailSnapshotRow `json:"receivers"`
+}
+
+type baofuSharingDetailSnapshotRow struct {
+	Role         string `json:"role"`
+	SharingMerID string `json:"sharing_mer_id"`
+	Amount       int64  `json:"amount"`
+}
+
+func NewBaofuProfitSharingService(store baofuProfitSharingOrderStore) *BaofuProfitSharingService {
+	return &BaofuProfitSharingService{store: store}
+}
+
+func (s *BaofuProfitSharingService) CreatePendingOrder(ctx context.Context, input BaofuProfitSharingOrderInput) (db.CreateBaofuProfitSharingOrderTxResult, error) {
+	if s == nil || s.store == nil || input.PaymentOrderID <= 0 || input.MerchantID <= 0 || strings.TrimSpace(input.OutOrderNo) == "" {
+		return db.CreateBaofuProfitSharingOrderTxResult{}, ErrBaofuProfitSharingInvalidAmount
+	}
+
+	receivers, err := ResolveBaofuProfitSharingReceivers(ctx, s.store, BaofuProfitSharingReceiverInput{
+		MerchantID:      input.MerchantID,
+		RiderID:         input.RiderID,
+		OperatorID:      input.OperatorID,
+		PlatformOwnerID: input.PlatformOwnerID,
+	})
+	if err != nil {
+		return db.CreateBaofuProfitSharingOrderTxResult{}, err
+	}
+	amounts, err := CalculateBaofuProfitSharingAmounts(BaofuProfitSharingAmountInput{
+		TotalAmountFen:      input.TotalAmountFen,
+		DeliveryFeeFen:      input.DeliveryFeeFen,
+		PlatformRateBps:     input.PlatformRateBps,
+		OperatorRateBps:     input.OperatorRateBps,
+		HasRiderReceiver:    input.RiderID > 0,
+		HasOperatorReceiver: input.OperatorID > 0,
+		RedirectMissingOperatorCommissionToPlatform: true,
+	})
+	if err != nil {
+		return db.CreateBaofuProfitSharingOrderTxResult{}, err
+	}
+	snapshot, err := buildBaofuSharingDetailSnapshot(amounts, receivers)
+	if err != nil {
+		return db.CreateBaofuProfitSharingOrderTxResult{}, err
+	}
+
+	return s.store.CreateBaofuProfitSharingOrderTx(ctx, db.CreateBaofuProfitSharingOrderTxParams{
+		ProfitSharingOrder: db.CreateProfitSharingOrderParams{
+			PaymentOrderID:        input.PaymentOrderID,
+			MerchantID:            input.MerchantID,
+			OperatorID:            pgtype.Int8{Int64: input.OperatorID, Valid: input.OperatorID > 0},
+			OrderSource:           strings.TrimSpace(input.OrderSource),
+			TotalAmount:           amounts.TotalAmountFen,
+			DeliveryFee:           amounts.DeliveryFeeFen,
+			RiderID:               pgtype.Int8{Int64: input.RiderID, Valid: input.RiderID > 0},
+			RiderAmount:           amounts.RiderAmountFen,
+			DistributableAmount:   amounts.DistributableAmountFen,
+			PlatformRate:          amounts.PlatformRateBps,
+			OperatorRate:          amounts.OperatorRateBps,
+			PlatformCommission:    amounts.PlatformCommissionFen,
+			OperatorCommission:    amounts.OperatorCommissionFen,
+			MerchantAmount:        amounts.MerchantAmountFen,
+			OutOrderNo:            strings.TrimSpace(input.OutOrderNo),
+			Status:                db.ProfitSharingOrderStatusPending,
+			PaymentFee:            amounts.PaymentFeeFen,
+			PaymentFeeRateBps:     amounts.PaymentFeeRateBps,
+			Provider:              db.ExternalPaymentProviderBaofu,
+			Channel:               db.PaymentChannelBaofuAggregate,
+			MerchantSharingMerID:  pgtype.Text{String: receivers.MerchantSharingMerID, Valid: receivers.MerchantSharingMerID != ""},
+			RiderSharingMerID:     pgtype.Text{String: receivers.RiderSharingMerID, Valid: receivers.RiderSharingMerID != ""},
+			OperatorSharingMerID:  pgtype.Text{String: receivers.OperatorSharingMerID, Valid: receivers.OperatorSharingMerID != ""},
+			PlatformSharingMerID:  pgtype.Text{String: receivers.PlatformSharingMerID, Valid: receivers.PlatformSharingMerID != ""},
+			SharingDetailSnapshot: snapshot,
+		},
+		PaymentFeeLedger: db.CreateBaofuFeeLedgerParams{
+			FeeType:            db.BaofuFeeTypePaymentFee,
+			PayerType:          db.BaofuFeePayerTypeMerchant,
+			PayerID:            pgtype.Int8{Int64: input.MerchantID, Valid: true},
+			BusinessObjectType: "payment_order",
+			BusinessObjectID:   input.PaymentOrderID,
+			Amount:             amounts.PaymentFeeFen,
+			FeeRateBps:         pgtype.Int4{Int32: amounts.PaymentFeeRateBps, Valid: true},
+			Status:             "recorded",
+		},
+	})
+}
+
+func buildBaofuSharingDetailSnapshot(amounts BaofuProfitSharingAmountResult, receivers BaofuProfitSharingReceiverResult) ([]byte, error) {
+	snapshot := baofuSharingDetailSnapshot{
+		Provider:          db.ExternalPaymentProviderBaofu,
+		Channel:           db.PaymentChannelBaofuAggregate,
+		PaymentFee:        amounts.PaymentFeeFen,
+		PaymentFeeRateBps: amounts.PaymentFeeRateBps,
+		Receivers: []baofuSharingDetailSnapshotRow{
+			{Role: "merchant", SharingMerID: receivers.MerchantSharingMerID, Amount: amounts.MerchantAmountFen},
+		},
+	}
+	if amounts.RiderAmountFen > 0 {
+		snapshot.Receivers = append(snapshot.Receivers, baofuSharingDetailSnapshotRow{Role: "rider", SharingMerID: receivers.RiderSharingMerID, Amount: amounts.RiderAmountFen})
+	}
+	if amounts.OperatorCommissionFen > 0 {
+		snapshot.Receivers = append(snapshot.Receivers, baofuSharingDetailSnapshotRow{Role: "operator", SharingMerID: receivers.OperatorSharingMerID, Amount: amounts.OperatorCommissionFen})
+	}
+	if amounts.PlatformCommissionFen > 0 {
+		snapshot.Receivers = append(snapshot.Receivers, baofuSharingDetailSnapshotRow{Role: "platform", SharingMerID: receivers.PlatformSharingMerID, Amount: amounts.PlatformCommissionFen})
+	}
+	return json.Marshal(snapshot)
+}
 
 type BaofuProfitSharingAmountInput struct {
 	TotalAmountFen                              int64

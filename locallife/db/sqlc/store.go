@@ -61,10 +61,12 @@ type Store interface {
 	CreateReservationTx(ctx context.Context, arg CreateReservationTxParams) (CreateReservationTxResult, error)
 	ReplaceReservationItemsTx(ctx context.Context, arg ReplaceReservationItemsTxParams) (ReplaceReservationItemsTxResult, error)
 	// Payment transactions
+	MarkBaofuAccountBindingActiveWithFeeLedgerTx(ctx context.Context, arg MarkBaofuAccountBindingActiveWithFeeLedgerTxParams) (MarkBaofuAccountBindingActiveWithFeeLedgerTxResult, error)
 	CreateCombinedPaymentTx(ctx context.Context, arg CreateCombinedPaymentTxParams) (CreateCombinedPaymentTxResult, error)
 	CreateEcommercePaymentTx(ctx context.Context, arg CreateEcommercePaymentTxParams) (CreateEcommercePaymentTxResult, error)
 	CreatePartnerPaymentTx(ctx context.Context, arg CreatePartnerPaymentTxParams) (CreatePartnerPaymentTxResult, error)
 	CloseCombinedPaymentOrderTx(ctx context.Context, arg CloseCombinedPaymentOrderTxParams) (CloseCombinedPaymentOrderTxResult, error)
+	CreateBaofuProfitSharingOrderTx(ctx context.Context, arg CreateBaofuProfitSharingOrderTxParams) (CreateBaofuProfitSharingOrderTxResult, error)
 	// Notification idempotency transactions
 	TryClaimWechatNotification(ctx context.Context, arg CreateWechatNotificationParams) (bool, error)
 	ReleaseWechatNotificationClaim(ctx context.Context, id string) error

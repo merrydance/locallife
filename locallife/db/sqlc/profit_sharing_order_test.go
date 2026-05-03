@@ -115,3 +115,48 @@ func TestProfitSharingListQueriesUseIDTieBreaker(t *testing.T) {
 	require.Equal(t, secondOrder.ID, financeOrders[0].ID)
 	require.Equal(t, firstOrder.ID, financeOrders[1].ID)
 }
+
+func TestCreateProfitSharingOrderPersistsBaofuFields(t *testing.T) {
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	operator := createRandomOperatorForRegion(t, merchant.RegionID)
+	paymentOrder := createRandomPaymentOrder(t, createRandomUser(t).ID)
+	snapshot := []byte(`{"receivers":[{"role":"merchant","sharing_mer_id":"MER_SHARE","amount":8970},{"role":"rider","sharing_mer_id":"RIDER_SHARE","amount":500},{"role":"operator","sharing_mer_id":"OP_SHARE","amount":300},{"role":"platform","sharing_mer_id":"PLATFORM_SHARE","amount":200}],"payment_fee":30,"payment_fee_rate_bps":30}`)
+
+	profitSharingOrder, err := testStore.CreateProfitSharingOrder(context.Background(), CreateProfitSharingOrderParams{
+		PaymentOrderID:        paymentOrder.ID,
+		MerchantID:            merchant.ID,
+		OperatorID:            pgtype.Int8{Int64: operator.ID, Valid: true},
+		OrderSource:           "takeout",
+		TotalAmount:           10000,
+		DeliveryFee:           500,
+		RiderID:               pgtype.Int8{Int64: 202, Valid: true},
+		RiderAmount:           500,
+		DistributableAmount:   9500,
+		PlatformRate:          200,
+		OperatorRate:          300,
+		PlatformCommission:    200,
+		OperatorCommission:    300,
+		MerchantAmount:        8970,
+		OutOrderNo:            "pso_baofu_" + util.RandomString(16),
+		Status:                ProfitSharingOrderStatusPending,
+		PaymentFee:            30,
+		PaymentFeeRateBps:     30,
+		Provider:              ExternalPaymentProviderBaofu,
+		Channel:               PaymentChannelBaofuAggregate,
+		MerchantSharingMerID:  pgtype.Text{String: "MER_SHARE", Valid: true},
+		RiderSharingMerID:     pgtype.Text{String: "RIDER_SHARE", Valid: true},
+		OperatorSharingMerID:  pgtype.Text{String: "OP_SHARE", Valid: true},
+		PlatformSharingMerID:  pgtype.Text{String: "PLATFORM_SHARE", Valid: true},
+		SharingDetailSnapshot: snapshot,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(30), profitSharingOrder.PaymentFee)
+	require.Equal(t, int32(30), profitSharingOrder.PaymentFeeRateBps)
+	require.Equal(t, ExternalPaymentProviderBaofu, profitSharingOrder.Provider)
+	require.Equal(t, PaymentChannelBaofuAggregate, profitSharingOrder.Channel)
+	require.Equal(t, "MER_SHARE", profitSharingOrder.MerchantSharingMerID.String)
+	require.Equal(t, "RIDER_SHARE", profitSharingOrder.RiderSharingMerID.String)
+	require.Equal(t, "OP_SHARE", profitSharingOrder.OperatorSharingMerID.String)
+	require.Equal(t, "PLATFORM_SHARE", profitSharingOrder.PlatformSharingMerID.String)
+	require.JSONEq(t, string(snapshot), string(profitSharingOrder.SharingDetailSnapshot))
+}

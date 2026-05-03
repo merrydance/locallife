@@ -157,7 +157,7 @@ const markBaofuAccountBindingActive = `-- name: MarkBaofuAccountBindingActive :o
 UPDATE baofu_account_bindings
 SET open_state = 'active',
     contract_no = $1,
-    sharing_mer_id = COALESCE(NULLIF($2::text, ''), NULLIF($1::text, '')),
+    sharing_mer_id = NULLIF($2::text, ''),
     raw_snapshot = $3,
     updated_at = now()
 WHERE id = $4

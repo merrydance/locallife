@@ -157,3 +157,55 @@ func activeBaofuReceiverBinding(ownerType string, ownerID int64, contractNo stri
 		SharingMerID: pgtype.Text{String: sharingMerID, Valid: sharingMerID != ""},
 	}
 }
+
+func TestBaofuProfitSharingServiceCreatePendingOrderPersistsSnapshotAndFeeLedger(t *testing.T) {
+	store := &fakeBaofuProfitSharingOrderStore{
+		fakeBaofuProfitSharingReceiverStore: fakeBaofuProfitSharingReceiverStore{bindings: map[string]db.BaofuAccountBinding{
+			"merchant:101": activeBaofuReceiverBinding(db.BaofuAccountOwnerTypeMerchant, 101, "MER_CONTRACT", "MER_SHARE"),
+			"rider:202":    activeBaofuReceiverBinding(db.BaofuAccountOwnerTypeRider, 202, "RIDER_CONTRACT", "RIDER_SHARE"),
+			"operator:303": activeBaofuReceiverBinding(db.BaofuAccountOwnerTypeOperator, 303, "OP_CONTRACT", "OP_SHARE"),
+			"platform:0":   activeBaofuReceiverBinding(db.BaofuAccountOwnerTypePlatform, 0, "PLATFORM_CONTRACT", "PLATFORM_SHARE"),
+		}},
+	}
+	service := NewBaofuProfitSharingService(store)
+
+	_, err := service.CreatePendingOrder(context.Background(), BaofuProfitSharingOrderInput{
+		PaymentOrderID:  9001,
+		MerchantID:      101,
+		RiderID:         202,
+		OperatorID:      303,
+		OrderSource:     "takeout",
+		TotalAmountFen:  10000,
+		DeliveryFeeFen:  500,
+		PlatformRateBps: 200,
+		OperatorRateBps: 300,
+		OutOrderNo:      "BAOFU_SHARE_9001",
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(9001), store.lastTx.ProfitSharingOrder.PaymentOrderID)
+	require.Equal(t, int64(30), store.lastTx.ProfitSharingOrder.PaymentFee)
+	require.Equal(t, int32(30), store.lastTx.ProfitSharingOrder.PaymentFeeRateBps)
+	require.Equal(t, db.ExternalPaymentProviderBaofu, store.lastTx.ProfitSharingOrder.Provider)
+	require.Equal(t, db.PaymentChannelBaofuAggregate, store.lastTx.ProfitSharingOrder.Channel)
+	require.Equal(t, "MER_SHARE", store.lastTx.ProfitSharingOrder.MerchantSharingMerID.String)
+	require.Equal(t, "RIDER_SHARE", store.lastTx.ProfitSharingOrder.RiderSharingMerID.String)
+	require.Equal(t, "OP_SHARE", store.lastTx.ProfitSharingOrder.OperatorSharingMerID.String)
+	require.Equal(t, "PLATFORM_SHARE", store.lastTx.ProfitSharingOrder.PlatformSharingMerID.String)
+	require.JSONEq(t, `{"provider":"baofu","channel":"baofu_aggregate","payment_fee":30,"payment_fee_rate_bps":30,"receivers":[{"role":"merchant","sharing_mer_id":"MER_SHARE","amount":8970},{"role":"rider","sharing_mer_id":"RIDER_SHARE","amount":500},{"role":"operator","sharing_mer_id":"OP_SHARE","amount":300},{"role":"platform","sharing_mer_id":"PLATFORM_SHARE","amount":200}]}`, string(store.lastTx.ProfitSharingOrder.SharingDetailSnapshot.([]byte)))
+	require.Equal(t, db.BaofuFeeTypePaymentFee, store.lastTx.PaymentFeeLedger.FeeType)
+	require.Equal(t, db.BaofuFeePayerTypeMerchant, store.lastTx.PaymentFeeLedger.PayerType)
+	require.Equal(t, int64(101), store.lastTx.PaymentFeeLedger.PayerID.Int64)
+	require.Equal(t, "payment_order", store.lastTx.PaymentFeeLedger.BusinessObjectType)
+	require.Equal(t, int64(9001), store.lastTx.PaymentFeeLedger.BusinessObjectID)
+	require.Equal(t, int64(30), store.lastTx.PaymentFeeLedger.Amount)
+}
+
+type fakeBaofuProfitSharingOrderStore struct {
+	fakeBaofuProfitSharingReceiverStore
+	lastTx db.CreateBaofuProfitSharingOrderTxParams
+}
+
+func (s *fakeBaofuProfitSharingOrderStore) CreateBaofuProfitSharingOrderTx(_ context.Context, arg db.CreateBaofuProfitSharingOrderTxParams) (db.CreateBaofuProfitSharingOrderTxResult, error) {
+	s.lastTx = arg
+	return db.CreateBaofuProfitSharingOrderTxResult{ProfitSharingOrder: db.ProfitSharingOrder{PaymentOrderID: arg.ProfitSharingOrder.PaymentOrderID}, PaymentFeeLedger: db.BaofuFeeLedger{Amount: arg.PaymentFeeLedger.Amount}}, nil
+}

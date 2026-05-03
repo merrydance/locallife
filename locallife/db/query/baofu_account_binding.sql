@@ -60,7 +60,7 @@ RETURNING id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, l
 UPDATE baofu_account_bindings
 SET open_state = 'active',
     contract_no = sqlc.narg(contract_no),
-    sharing_mer_id = COALESCE(NULLIF(sqlc.narg(sharing_mer_id)::text, ''), NULLIF(sqlc.narg(contract_no)::text, '')),
+    sharing_mer_id = NULLIF(sqlc.narg(sharing_mer_id)::text, ''),
     raw_snapshot = sqlc.arg(raw_snapshot),
     updated_at = now()
 WHERE id = sqlc.arg(id)
