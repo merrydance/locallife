@@ -27,6 +27,46 @@ const (
 	appRefreshTokenDuration = 365 * 24 * time.Hour
 )
 
+const saveOrReuseAppBindCodeScript = `
+local userKey = KEYS[1]
+local candidateCodeKey = KEYS[2]
+local candidateCode = ARGV[1]
+local bindData = ARGV[2]
+local ttlSeconds = tonumber(ARGV[3])
+local codePrefix = ARGV[4]
+
+local existingCode = redis.call("GET", userKey)
+if existingCode and existingCode ~= "" then
+	local existingCodeKey = codePrefix .. existingCode
+	local existingBindData = redis.call("GET", existingCodeKey)
+	local userTTL = redis.call("TTL", userKey)
+	local codeTTL = redis.call("TTL", existingCodeKey)
+	if existingBindData and userTTL > 0 and codeTTL > 0 then
+		local ttl = userTTL
+		if codeTTL < ttl then
+			ttl = codeTTL
+		end
+		return {"reused", existingCode, ttl}
+	end
+	redis.call("DEL", userKey)
+	redis.call("DEL", existingCodeKey)
+end
+
+if redis.call("EXISTS", candidateCodeKey) == 1 then
+	return {"collision", "", 0}
+end
+
+redis.call("SET", candidateCodeKey, bindData, "EX", ttlSeconds)
+redis.call("SET", userKey, candidateCode, "EX", ttlSeconds)
+return {"generated", candidateCode, ttlSeconds}
+`
+
+type appBindCodePersistenceResult struct {
+	code      string
+	expiresIn int
+	reused    bool
+}
+
 func makeAppBindSessionUserAgent(userAgent string) string {
 	trimmed := strings.TrimSpace(userAgent)
 	if trimmed == "" {
@@ -90,47 +130,19 @@ func (server *Server) generateAppBindCode(ctx *gin.Context) {
 		return
 	}
 
-	// 幂等：同一用户在有效期内重复调用，返回同一个码
+	// 幂等索引仅在 app_bind:<code> 验证源也存在且 TTL 正常时才能复用。
 	existingKey := fmt.Sprintf("%suser:%d", appBindCodePrefix, userID)
-	existingCode, err := server.redisClient.Get(ctx, existingKey).Result()
-	if err == nil && existingCode != "" {
-		ttl, _ := server.redisClient.TTL(ctx, existingKey).Result()
-		ctx.JSON(http.StatusOK, generateAppBindCodeResponse{
-			Code:      existingCode,
-			ExpiresIn: int(ttl.Seconds()),
-		})
-		return
-	}
-
-	// 生成 6 位随机数字码
-	code, err := generateRandomDigitCode(appBindCodeLength)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("生成绑定码失败: %w", err)))
-		return
-	}
-
-	// 检查码是否已存在（极低概率碰撞），最多重试 5 次
-	codeKey := appBindCodePrefix + code
-	for i := 0; i < 5; i++ {
-		exists, _ := server.redisClient.Exists(ctx, codeKey).Result()
-		if exists == 0 {
-			break
-		}
-		code, err = generateRandomDigitCode(appBindCodeLength)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("生成绑定码失败: %w", err)))
-			return
-		}
-		codeKey = appBindCodePrefix + code
-	}
-
-	// 存储码 → 用户映射
 	bindData := fmt.Sprintf("%d:%d", userID, merchantID)
-	pipe := server.redisClient.Pipeline()
-	pipe.Set(ctx, codeKey, bindData, appBindCodeTTL)
-	pipe.Set(ctx, existingKey, code, appBindCodeTTL) // 反向索引，幂等用
-	if _, err := pipe.Exec(ctx); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("保存绑定码失败: %w", err)))
+	result, err := server.saveOrReuseAppBindCode(ctx, existingKey, bindData)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if result.reused {
+		ctx.JSON(http.StatusOK, generateAppBindCodeResponse{
+			Code:      result.code,
+			ExpiresIn: result.expiresIn,
+		})
 		return
 	}
 
@@ -140,9 +152,84 @@ func (server *Server) generateAppBindCode(ctx *gin.Context) {
 		Msg("app bind code generated")
 
 	ctx.JSON(http.StatusOK, generateAppBindCodeResponse{
-		Code:      code,
-		ExpiresIn: int(appBindCodeTTL.Seconds()),
+		Code:      result.code,
+		ExpiresIn: result.expiresIn,
 	})
+}
+
+func (server *Server) saveOrReuseAppBindCode(ctx *gin.Context, userKey string, bindData string) (appBindCodePersistenceResult, error) {
+	ttlSeconds := int(appBindCodeTTL / time.Second)
+	for i := 0; i < 5; i++ {
+		code, err := generateRandomDigitCode(appBindCodeLength)
+		if err != nil {
+			return appBindCodePersistenceResult{}, fmt.Errorf("生成绑定码失败: %w", err)
+		}
+		codeKey := appBindCodePrefix + code
+
+		raw, err := server.redisClient.Eval(ctx, saveOrReuseAppBindCodeScript, []string{userKey, codeKey}, code, bindData, ttlSeconds, appBindCodePrefix).Result()
+		if err != nil {
+			return appBindCodePersistenceResult{}, fmt.Errorf("保存绑定码失败: %w", err)
+		}
+
+		parsed, err := parseAppBindCodePersistenceResult(raw)
+		if err != nil {
+			return appBindCodePersistenceResult{}, fmt.Errorf("保存绑定码失败: %w", err)
+		}
+		if parsed.code == "" {
+			continue
+		}
+		return parsed, nil
+	}
+
+	return appBindCodePersistenceResult{}, fmt.Errorf("生成绑定码失败: 绑定码冲突重试次数过多")
+}
+
+func parseAppBindCodePersistenceResult(raw interface{}) (appBindCodePersistenceResult, error) {
+	values, ok := raw.([]interface{})
+	if !ok || len(values) != 3 {
+		return appBindCodePersistenceResult{}, fmt.Errorf("unexpected redis script result")
+	}
+
+	status, ok := values[0].(string)
+	if !ok {
+		return appBindCodePersistenceResult{}, fmt.Errorf("unexpected redis script status")
+	}
+	code, ok := values[1].(string)
+	if !ok {
+		return appBindCodePersistenceResult{}, fmt.Errorf("unexpected redis script code")
+	}
+	expiresIn, err := parseRedisScriptInt(values[2])
+	if err != nil {
+		return appBindCodePersistenceResult{}, err
+	}
+
+	switch status {
+	case "generated":
+		return appBindCodePersistenceResult{code: code, expiresIn: expiresIn}, nil
+	case "reused":
+		return appBindCodePersistenceResult{code: code, expiresIn: expiresIn, reused: true}, nil
+	case "collision":
+		return appBindCodePersistenceResult{}, nil
+	default:
+		return appBindCodePersistenceResult{}, fmt.Errorf("unexpected redis script status %q", status)
+	}
+}
+
+func parseRedisScriptInt(value interface{}) (int, error) {
+	switch v := value.(type) {
+	case int64:
+		return int(v), nil
+	case int:
+		return v, nil
+	case string:
+		parsed, err := strconv.Atoi(v)
+		if err != nil {
+			return 0, fmt.Errorf("unexpected redis script integer %q", v)
+		}
+		return parsed, nil
+	default:
+		return 0, fmt.Errorf("unexpected redis script integer")
+	}
 }
 
 type generateAppBindCodeResponse struct {
