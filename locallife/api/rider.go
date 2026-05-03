@@ -890,6 +890,15 @@ func (server *Server) goOnline(ctx *gin.Context) {
 		return
 	}
 
+	if err := server.ensureRiderBaofuSettlementReady(ctx, rider); err != nil {
+		if errors.Is(err, ErrRiderBaofuAccountMissing) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderBaofuAccountMissing))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
 	if rider.IsOnline {
 		ctx.JSON(http.StatusOK, newRiderResponse(rider))
 		return

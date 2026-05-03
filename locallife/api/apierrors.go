@@ -157,6 +157,7 @@ var (
 	ErrRiderHasActiveOrders     = apierr(40015, "cannot perform this action while you have active delivery orders")
 	ErrRiderNoRegionAssigned    = apierr(40016, "rider has no region assigned")
 	ErrRiderDepositFrozen       = apierr(40971, "cannot withdraw while deposit is frozen")
+	ErrRiderBaofuAccountMissing = apierr(40062, "骑手结算账户未开通，暂不能接收配送费分账订单")
 )
 
 // ==================== 金融/金额 (Finance) ====================
