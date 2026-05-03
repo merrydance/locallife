@@ -151,7 +151,8 @@ func validateRecordExternalPaymentCommandInput(input RecordExternalPaymentComman
 
 func isExternalPaymentProvider(provider string) bool {
 	switch provider {
-	case db.ExternalPaymentProviderWechat:
+	case db.ExternalPaymentProviderWechat,
+		db.ExternalPaymentProviderBaofu:
 		return true
 	default:
 		return false
@@ -162,7 +163,8 @@ func isExternalPaymentChannel(channel string) bool {
 	switch channel {
 	case db.PaymentChannelDirect,
 		db.PaymentChannelEcommerce,
-		db.PaymentChannelOrdinaryServiceProvider:
+		db.PaymentChannelOrdinaryServiceProvider,
+		db.PaymentChannelBaofuAggregate:
 		return true
 	default:
 		return false
@@ -183,7 +185,11 @@ func isExternalPaymentCapability(capability string) bool {
 		db.ExternalPaymentCapabilitySettlement,
 		db.ExternalPaymentCapabilityWithdraw,
 		db.ExternalPaymentCapabilityCancelWithdraw,
-		db.ExternalPaymentCapabilityMerchantTransfer:
+		db.ExternalPaymentCapabilityMerchantTransfer,
+		db.ExternalPaymentCapabilityBaofuAccount,
+		db.ExternalPaymentCapabilityBaofuPayment,
+		db.ExternalPaymentCapabilityBaofuProfitSharing,
+		db.ExternalPaymentCapabilityBaofuWithdraw:
 		return true
 	default:
 		return false
@@ -205,7 +211,12 @@ func isExternalPaymentCommandType(commandType string) bool {
 		db.ExternalPaymentCommandTypeCreateSettlement,
 		db.ExternalPaymentCommandTypeCreateWithdraw,
 		db.ExternalPaymentCommandTypeCreateCancelWithdraw,
-		db.ExternalPaymentCommandTypeCreateTransfer:
+		db.ExternalPaymentCommandTypeCreateTransfer,
+		db.ExternalPaymentCommandTypeOpenBaofuAccount,
+		db.ExternalPaymentCommandTypeQueryBaofuAccount,
+		db.ExternalPaymentCommandTypeQueryBaofuBalance,
+		db.ExternalPaymentCommandTypeCreateBaofuWithdraw,
+		db.ExternalPaymentCommandTypeQueryBaofuWithdraw:
 		return true
 	default:
 		return false
@@ -243,7 +254,8 @@ func isExternalPaymentObjectType(objectType string) bool {
 		db.ExternalPaymentObjectMerchantTransfer,
 		db.ExternalPaymentObjectComplaint,
 		db.ExternalPaymentObjectViolation,
-		db.ExternalPaymentObjectSettlement:
+		db.ExternalPaymentObjectSettlement,
+		db.ExternalPaymentObjectBaofuPaymentOrder:
 		return true
 	default:
 		return false

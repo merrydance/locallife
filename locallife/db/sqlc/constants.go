@@ -273,6 +273,7 @@ const (
 	ExternalPaymentObjectComplaint           = "complaint"
 	ExternalPaymentObjectViolation           = "violation"
 	ExternalPaymentObjectSettlement          = "settlement"
+	ExternalPaymentObjectBaofuPaymentOrder   = "baofu_payment_order"
 
 	ExternalPaymentCommandStatusSubmitted = "submitted"
 	ExternalPaymentCommandStatusAccepted  = "accepted"
