@@ -631,7 +631,7 @@ Expected: payment creation refuses missing merchant Baofu readiness, stores comm
 - Test: `locallife/db/sqlc/profit_sharing_order_test.go`
 - Test: `locallife/api/merchant_finance_test.go`
 
-- [ ] **Step 1: Implement deterministic fee calculation**
+- [x] **Step 1: Implement deterministic fee calculation**
 
 Use basis points and fen integer math:
 
@@ -643,7 +643,7 @@ func CalculateBaofuPaymentFeeFen(totalAmountFen int64) int64 {
 
 This rounds 0.3% up to fen so the merchant deduction is never lower than configured fee. Store `payment_fee_rate_bps = 30` and `payment_fee` on `profit_sharing_orders`.
 
-- [ ] **Step 2: Implement split formula**
+- [x] **Step 2: Implement split formula**
 
 For an order paid 10000 fen with delivery fee 500 fen, assert:
 
@@ -1186,3 +1186,13 @@ make test-integration
 - Public callback responses stay generic (`SUCCESS/FAIL`) while logs use sanitized order/payment identifiers; no `openid`, `contractNo`, `sharingMerId`, bank/card/ID/phone, signatures, or raw upstream payloads are exposed in normal responses.
 - TDD verification: first run failed with missing `SetBaofuAggregatePaymentNotificationParserForTest`; after implementation, `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestBaofuPaymentCallbackPersistsFactAndEnqueuesApplication' -count=1` passed.
 - Residual risk: the parser is still a project-owned notification parser without real Baofu aggregate-payment signature verification wired into runtime config; server production wiring still needs to install the real parser and Baofu payment route dependencies.
+
+### 2026-05-03 Task 5 Partial - Fee And Split Calculation
+
+- Added `logic.CalculateBaofuPaymentFeeFen` with the fixed 30 bps merchant-borne payment fee, rounded up to fen so the merchant deduction is never below the configured 0.3%.
+- Added `logic.CalculateBaofuProfitSharingAmounts` for deterministic Baofu split math. Platform 2% and operator 3% are calculated from the paid order total, rider delivery fee is deducted separately, and the payment fee is deducted from the merchant share.
+- Locked the sample formula from the implementation plan: 10000 fen total + 500 fen delivery fee produces rider 500, platform 200, operator 300, payment fee 30, and merchant 8970.
+- Missing operator commission can be redirected to platform when requested, preserving the existing operational fallback without reducing merchant-borne payment fee accounting.
+- The calculator rejects negative merchant amount before any future share-order write path can persist an invalid split.
+- TDD verification: first run failed with missing `CalculateBaofuPaymentFeeFen`, `CalculateBaofuProfitSharingAmounts`, `BaofuProfitSharingAmountInput`, and `ErrBaofuProfitSharingMerchantAmountNegative`; after implementation, `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestCalculateBaofu' -count=1` passed.
+- Residual risk: this slice is pure calculation only. It does not yet resolve Baofu receiver IDs, write `profit_sharing_orders` Baofu receiver/fee columns, write `baofu_fee_ledger`, or update finance API display.
