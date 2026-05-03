@@ -5891,6 +5891,8 @@ definitions:
         type: integer
       reviewed_at:
         type: string
+      settlement_account:
+        $ref: '#/definitions/api.baofuSettlementReadinessResponse'
       status:
         type: string
       submitted_at:

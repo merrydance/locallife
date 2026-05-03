@@ -538,8 +538,8 @@ Expose states to clients as product terms:
 
 Do not expose `contractNo`, `sharingMerId`, or raw upstream error payloads to ordinary users. Operator/admin views may display masked IDs.
 
-Current backend status: rider status now returns sanitized `settlement_account` readiness (`state`, `label`, `payment_ready`) and aligns `can_go_online` / `online_block_reason` with the same Baofu settlement guard. Merchant open status now returns the same sanitized readiness shape for the merchant Baofu settlement account. Operator/platform and frontend surfaces remain in later Task 3 slices.
-Merchant open status now also checks Baofu merchant readiness before allowing open-for-business: ordinary service provider channel identity must be active, Baofu merchant account binding must be active, and the binding must carry a WeChat channel identity. Operator/platform status response surfaces remain in later Task 3 slices.
+Current backend status: rider status now returns sanitized `settlement_account` readiness (`state`, `label`, `payment_ready`) and aligns `can_go_online` / `online_block_reason` with the same Baofu settlement guard. Merchant open status now returns the same sanitized readiness shape for the merchant Baofu settlement account. Operator application status now returns sanitized readiness after the approved application has a formal operator account. Platform and frontend surfaces remain in later Task 3 slices.
+Merchant open status now also checks Baofu merchant readiness before allowing open-for-business: ordinary service provider channel identity must be active, Baofu merchant account binding must be active, and the binding must carry a WeChat channel identity. Operator readiness display does not require a WeChat channel identity because operator commission is received into the Baofu secondary account.
 Single-order and combined-payment main-business payment creation now check merchant Baofu readiness before creating new local payment rows or calling the upstream payment API. Combined payment uses a pre-transaction order-to-merchant lookup so an unready merchant cannot leave local pending child payment rows behind.
 
 - [ ] **Step 4: Validate API and onboarding workers**
@@ -1111,3 +1111,13 @@ make test-integration
 - Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on the same 71 pre-existing oversized Go files, including existing `api/payment_order.go` and `logic/combined_payment_service.go`; this slice keeps the shared readiness helper small and only adds the necessary call site/test coverage to existing oversized payment files.
 - API regression now verifies the combined payment readiness error is exposed as safe frontend-facing Chinese copy and does not include `contract`, `sharing`, `baofu`, or provider internals.
 - Residual risk: this slice covers backend logic and API creation-time blocking. It does not yet add merchant/operator/platform onboarding status surfaces or frontend display/wizard updates.
+
+### 2026-05-03 Task 3 Partial - Operator Application Readiness Display
+
+- `GET /v1/operator/application` now returns sanitized `settlement_account` readiness after an approved application has a formal operator account, using the same `state`, `label`, `payment_ready` response shape as merchant and rider status surfaces.
+- Operator readiness checks the Baofu operator binding with `owner_type=operator` and does not require `wechat_sub_mch_id`; operator commission is received into the Baofu secondary account rather than a WeChat secondary merchant account.
+- Store errors from `GetOperatorByUser` or Baofu binding lookup now go through the existing logged internal-error boundary instead of being silently ignored on approved applications.
+- API regression coverage verifies the response exposes the product state `宝付开户处理中` while hiding `contract_no`, `sharing_mer_id`, `contractNo`, `sharingMerId`, and concrete upstream receiver identifiers.
+- Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestGetOperatorApplicationAPI_IncludesBaofuSettlementReadiness' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestGetOperatorApplicationAPI_IncludesBaofuSettlementReadiness|TestGetOperatorApplicationAPI' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api ./logic -run 'TestGetOperatorApplicationAPI|TestBaofuAccountReadiness|TestGetMerchantOpenStatus|TestGetRiderStatusAPI' -count=1`; `PATH="/usr/local/go/bin:$PATH" make swagger`; `PATH="/usr/local/go/bin:$PATH" make check-generated`; `git diff --check`.
+- Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on the same 71 pre-existing oversized Go files, including existing `api/operator_application.go`; the new operator Baofu helper is in a small separate file.
+- Residual risk: Task 3 still needs platform readiness response surfaces, onboarding worker propagation, and frontend display/wizard updates.

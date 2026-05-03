@@ -49,7 +49,8 @@ type operatorApplicationResponse struct {
 	SubmittedAt            *time.Time              `json:"submitted_at,omitempty"`
 	ReviewedAt             *time.Time              `json:"reviewed_at,omitempty"`
 	// IsOperator 表示申请已通过且运营商账号已建立（即用户已是正式运营商）
-	IsOperator bool `json:"is_operator,omitempty"`
+	IsOperator        bool                              `json:"is_operator,omitempty"`
+	SettlementAccount *baofuSettlementReadinessResponse `json:"settlement_account,omitempty"`
 }
 
 // OperatorIDCardOCRData 运营商身份证正面OCR数据
@@ -328,8 +329,18 @@ func (server *Server) getOperatorApplication(ctx *gin.Context) {
 	}
 	// 若申请已通过，进一步检查运营商账号是否已建立
 	if app.Status == "approved" {
-		if _, opErr := server.store.GetOperatorByUser(ctx, authPayload.UserID); opErr == nil {
+		operator, opErr := server.store.GetOperatorByUser(ctx, authPayload.UserID)
+		if opErr == nil {
 			resp.IsOperator = true
+			readiness, readinessErr := server.getOperatorBaofuSettlementReadiness(ctx, operator)
+			if readinessErr != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, readinessErr))
+				return
+			}
+			resp.SettlementAccount = newBaofuSettlementReadinessResponse(readiness)
+		} else if !isNotFoundError(opErr) {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, opErr))
+			return
 		}
 	}
 	ctx.JSON(http.StatusOK, resp)

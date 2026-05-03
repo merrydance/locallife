@@ -41878,6 +41878,9 @@ const docTemplate = `{
                 "reviewed_at": {
                     "type": "string"
                 },
+                "settlement_account": {
+                    "$ref": "#/definitions/api.baofuSettlementReadinessResponse"
+                },
                 "status": {
                     "type": "string"
                 },
