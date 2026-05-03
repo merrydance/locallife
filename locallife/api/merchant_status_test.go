@@ -186,3 +186,54 @@ func TestUpdateMerchantOpenStatus_RequireBaofuAccountWhenOpen_WechatChannelPendi
 	require.Contains(t, recorder.Body.String(), "微信渠道待报备")
 	require.NotContains(t, recorder.Body.String(), "CM91")
 }
+
+func TestGetMerchantOpenStatus_IncludesBaofuSettlementReadiness(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := db.Merchant{
+		ID:          92,
+		OwnerUserID: user.ID,
+		RegionID:    1,
+		Status:      "active",
+		Name:        "商户E",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetMerchantIsOpen(gomock.Any(), merchant.ID).
+		Return(db.GetMerchantIsOpenRow{ID: merchant.ID, IsOpen: false}, nil)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+		OwnerType: db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:   merchant.ID,
+	}).Return(db.BaofuAccountBinding{
+		OwnerType:    db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:      merchant.ID,
+		AccountType:  db.BaofuAccountTypeBusiness,
+		OpenState:    db.BaofuAccountOpenStateActive,
+		ContractNo:   pgtype.Text{String: "CM92", Valid: true},
+		SharingMerID: pgtype.Text{String: "CM92", Valid: true},
+	}, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodGet, "/v1/merchants/me/status", nil)
+	require.NoError(t, err)
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var resp merchantStatusResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.False(t, resp.IsOpen)
+	require.NotNil(t, resp.SettlementAccount)
+	require.Equal(t, "wechat_channel_pending", resp.SettlementAccount.State)
+	require.Equal(t, "微信渠道待报备", resp.SettlementAccount.Label)
+	require.False(t, resp.SettlementAccount.PaymentReady)
+	require.NotContains(t, recorder.Body.String(), "CM92")
+	require.NotContains(t, recorder.Body.String(), "contract")
+	require.NotContains(t, recorder.Body.String(), "sharing")
+}

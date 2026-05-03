@@ -491,9 +491,10 @@ type updateMerchantStatusRequest struct {
 }
 
 type merchantStatusResponse struct {
-	IsOpen      bool       `json:"is_open"`
-	AutoCloseAt *time.Time `json:"auto_close_at,omitempty"`
-	Message     string     `json:"message"`
+	IsOpen            bool                              `json:"is_open"`
+	AutoCloseAt       *time.Time                        `json:"auto_close_at,omitempty"`
+	Message           string                            `json:"message"`
+	SettlementAccount *baofuSettlementReadinessResponse `json:"settlement_account,omitempty"`
 }
 
 // updateMerchantOpenStatus godoc
@@ -668,6 +669,12 @@ func (server *Server) getMerchantOpenStatus(ctx *gin.Context) {
 	if status.AutoCloseAt.Valid {
 		resp.AutoCloseAt = &status.AutoCloseAt.Time
 	}
+	readiness, err := server.getMerchantBaofuSettlementReadiness(ctx, merchant)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	resp.SettlementAccount = newBaofuSettlementReadinessResponse(readiness)
 
 	ctx.JSON(http.StatusOK, resp)
 }

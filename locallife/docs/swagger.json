@@ -34570,6 +34570,20 @@
                 }
             }
         },
+        "api.baofuSettlementReadinessResponse": {
+            "type": "object",
+            "properties": {
+                "label": {
+                    "type": "string"
+                },
+                "payment_ready": {
+                    "type": "boolean"
+                },
+                "state": {
+                    "type": "string"
+                }
+            }
+        },
         "api.batchAdminOperatorStatusFailure": {
             "type": "object",
             "properties": {
@@ -41402,6 +41416,9 @@
                 },
                 "message": {
                     "type": "string"
+                },
+                "settlement_account": {
+                    "$ref": "#/definitions/api.baofuSettlementReadinessResponse"
                 }
             }
         },
@@ -45866,6 +45883,9 @@
                 },
                 "required_deposit": {
                     "type": "integer"
+                },
+                "settlement_account": {
+                    "$ref": "#/definitions/api.baofuSettlementReadinessResponse"
                 },
                 "status": {
                     "description": "账号状态：approved/active/suspended",

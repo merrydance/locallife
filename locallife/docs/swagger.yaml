@@ -915,6 +915,15 @@ definitions:
       brand_id:
         type: integer
     type: object
+  api.baofuSettlementReadinessResponse:
+    properties:
+      label:
+        type: string
+      payment_ready:
+        type: boolean
+      state:
+        type: string
+    type: object
   api.batchAdminOperatorStatusFailure:
     properties:
       code:
@@ -5578,6 +5587,8 @@ definitions:
         type: boolean
       message:
         type: string
+      settlement_account:
+        $ref: '#/definitions/api.baofuSettlementReadinessResponse'
     type: object
   api.merchantTagsResponse:
     properties:
@@ -8596,6 +8607,8 @@ definitions:
         type: string
       required_deposit:
         type: integer
+      settlement_account:
+        $ref: '#/definitions/api.baofuSettlementReadinessResponse'
       status:
         description: 账号状态：approved/active/suspended
         type: string

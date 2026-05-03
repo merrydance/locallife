@@ -35,3 +35,18 @@ func (server *Server) ensureMerchantBaofuPaymentReady(ctx context.Context, merch
 	}
 	return errMerchantBaofuAccountMissing
 }
+
+func (server *Server) getMerchantBaofuSettlementReadiness(ctx context.Context, merchant db.Merchant) (logic.BaofuAccountReadiness, error) {
+	binding, err := server.store.GetBaofuAccountBindingByOwner(ctx, db.GetBaofuAccountBindingByOwnerParams{
+		OwnerType: db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:   merchant.ID,
+	})
+	service := logic.NewBaofuAccountService(nil, nil)
+	if err != nil {
+		if isNotFoundError(err) {
+			return service.ReadinessFromBinding(db.BaofuAccountBinding{}, false, true), nil
+		}
+		return logic.BaofuAccountReadiness{}, err
+	}
+	return service.ReadinessFromBinding(binding, true, true), nil
+}
