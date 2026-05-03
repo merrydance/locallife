@@ -95,6 +95,19 @@ SELECT COALESCE(SUM(refund_amount), 0)::bigint as total_refunded
 FROM refund_orders
 WHERE payment_order_id = $1 AND status IN ('pending', 'processing', 'success');
 
+-- name: GetBaofuPaymentOrderRefundGuardForUpdate :one
+SELECT po.id,
+       po.status,
+       po.payment_channel,
+       EXISTS (
+           SELECT 1 FROM profit_sharing_orders pso
+           WHERE pso.payment_order_id = po.id
+             AND pso.status IN ('pending', 'processing', 'finished')
+       ) AS has_started_profit_sharing
+FROM payment_orders po
+WHERE po.id = $1
+FOR UPDATE;
+
 -- name: GetPendingRiderDepositRefundAmountByUserID :one
 SELECT COALESCE(SUM(ro.refund_amount), 0)::bigint AS pending_rider_deposit_refund_amount
 FROM refund_orders ro

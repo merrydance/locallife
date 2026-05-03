@@ -772,7 +772,7 @@ Expected: share command is emitted once, processing query is retryable, success 
 - Test: `locallife/worker/task_process_payment_ecommerce_refund_command_test.go`
 - Test: `locallife/api/payment_order_test.go`
 
-- [ ] **Step 1: Add refund guard query**
+- [x] **Step 1: Add refund guard query**
 
 Add a sqlc query that locks payment order and checks no share has started:
 
@@ -791,15 +791,15 @@ WHERE po.id = $1
 FOR UPDATE;
 ```
 
-- [ ] **Step 2: Reject refund after share starts**
+- [x] **Step 2: Reject refund after share starts**
 
 Refund API and worker must return a business error when `has_started_profit_sharing = true`. Chinese user copy: `订单已进入结算分账流程，不支持退款`.
 
-- [ ] **Step 3: Keep Baofu split-refund out of first version**
+- [x] **Step 3: Keep Baofu split-refund out of first version**
 
 Do not call Baofu `sharingRefundInfo`, `part_share_refund_info`, or `advanceAmt` fields in first version. If a payment was refunded before sharing, mark payment/refund facts and prevent share order creation.
 
-- [ ] **Step 4: Validate race safety**
+- [x] **Step 4: Validate race safety**
 
 Run from `locallife/` with a DB-backed test database:
 
@@ -1273,3 +1273,14 @@ make test-integration
 - Ran the Task 6 validation command from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./worker ./logic -run 'TestBaofuProfitSharing|TestBaofuPaymentRecovery' -count=1`.
 - Verified the current Baofu share workflow coverage: share command worker emits `share_after_pay` once for the pending share order under test, processing/success share query recovery persists facts and enqueues application only for terminal facts, and success fact application terminalizes the local share order through the existing single-writer path.
 - Remaining Task 6 gap is limited to withdrawal query recovery and production aggregatepay client runtime wiring; refund/share API concurrency is tracked in Task 7.
+
+
+### 2026-05-03 Task 7 - Refund Before Sharing Guard
+
+- Added `GetBaofuPaymentOrderRefundGuardForUpdate` and wired it into `CreateRefundOrderTx`; Baofu payment orders now lock the payment row and reject refund creation once any local `profit_sharing_orders` row is `pending`, `processing`, or `finished`.
+- Added DB regressions proving a started Baofu share blocks refund creation with `订单已进入结算分账流程，不支持退款`, while a failed share order alone does not consume the refund/share mutex.
+- Updated the merchant refund service and refund API error path so Baofu share-started refunds return a Chinese business error without exposing `sharing_mer_id`, `contractNo`, upstream payloads, signatures, or internal SQL/provider details.
+- Kept Baofu split-refund fields out of the first-version code path: no implementation sends `sharingRefundInfo`, `part_share_refund_info`, or `advanceAmt`. The share creation selector already excludes payment orders with `refund_orders.status IN ('pending','processing','success')` so a durable pre-share refund row prevents later share creation.
+- Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./db/sqlc ./worker ./api -run 'TestBaofuRefund|TestProfitSharingOrder|TestRefund|TestCreateRefundOrderTx_Baofu|TestCreateRefundOrderAPI/BaofuShareStarted' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'Test.*Refund|TestBaofu' -count=1`; `PATH="/usr/local/go/bin:$PATH" make check-generated`; `git diff --check`.
+- Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on the pre-existing 71 oversized Go files, including existing `api/payment_order.go`, `logic/refund_service.go`, `worker/task_process_payment.go`, and `worker/refund_recovery_scheduler.go`.
+- Residual risk: this slice enforces the refund/share mutex and user-facing rejection. Direct Baofu pre-share refund command submission is still not wired as a transport capability; until that is added, the API returns a semantic conflict for Baofu refunds that have not yet entered sharing.

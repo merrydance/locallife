@@ -95,7 +95,9 @@ func (s *RefundService) CreateRefundOrder(ctx context.Context, input CreateRefun
 	if !paymentOrder.OrderID.Valid {
 		return CreateRefundOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("payment order has no associated order"))
 	}
-	if !paymentOrderUsesEcommerceChannel(paymentOrder) && !db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
+	if !paymentOrderUsesEcommerceChannel(paymentOrder) &&
+		!db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) &&
+		!paymentOrderUsesBaofuAggregateChannel(paymentOrder) {
 		return CreateRefundOrderResult{}, mainBusinessEcommerceOnlyError("发起退款")
 	}
 
@@ -110,6 +112,17 @@ func (s *RefundService) CreateRefundOrder(ctx context.Context, input CreateRefun
 
 	if input.RefundAmount > paymentOrder.Amount {
 		return CreateRefundOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("refund amount exceeds payment amount"))
+	}
+
+	if paymentOrderUsesBaofuAggregateChannel(paymentOrder) {
+		guard, err := s.store.GetBaofuPaymentOrderRefundGuardForUpdate(ctx, paymentOrder.ID)
+		if err != nil {
+			return CreateRefundOrderResult{}, fmt.Errorf("get baofu refund guard: %w", err)
+		}
+		if guard.HasStartedProfitSharing {
+			return CreateRefundOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("订单已进入结算分账流程，不支持退款"))
+		}
+		return CreateRefundOrderResult{}, NewRequestError(http.StatusConflict, errors.New("宝付支付退款能力尚未接入，请联系平台处理"))
 	}
 
 	outRefundNo, err := s.idGenerator.OutRefundNo(s.clock.Now())

@@ -1789,6 +1789,28 @@ func TestCreateRefundOrderAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "BaofuShareStarted",
+			body: gin.H{
+				"payment_order_id": paymentOrder.ID,
+				"refund_type":      "partial",
+				"refund_amount":    1000,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(orchestrator *stubRefundOrchestrator) {
+				orchestrator.createRefundOrderFunc = func(context.Context, logic.CreateRefundOrderInput) (logic.CreateRefundOrderResult, error) {
+					return logic.CreateRefundOrderResult{}, logic.NewRequestError(http.StatusBadRequest, errors.New("订单已进入结算分账流程，不支持退款"))
+				}
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "订单已进入结算分账流程，不支持退款")
+				require.NotContains(t, recorder.Body.String(), "sharing_mer_id")
+				require.NotContains(t, recorder.Body.String(), "contractNo")
+			},
+		},
+		{
 			name: "InvalidRefundType",
 			body: gin.H{
 				"payment_order_id": paymentOrder.ID,

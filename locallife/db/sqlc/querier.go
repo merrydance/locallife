@@ -623,6 +623,7 @@ type Querier interface {
 	GetBaofuAccountBindingByOwner(ctx context.Context, arg GetBaofuAccountBindingByOwnerParams) (BaofuAccountBinding, error)
 	GetBaofuFeeLedger(ctx context.Context, id int64) (BaofuFeeLedger, error)
 	GetBaofuFeeLedgerByBusinessObject(ctx context.Context, arg GetBaofuFeeLedgerByBusinessObjectParams) (BaofuFeeLedger, error)
+	GetBaofuPaymentOrderRefundGuardForUpdate(ctx context.Context, id int64) (GetBaofuPaymentOrderRefundGuardForUpdateRow, error)
 	GetBehaviorAction(ctx context.Context, id int64) (BehaviorAction, error)
 	GetBehaviorDecision(ctx context.Context, id int64) (BehaviorDecision, error)
 	GetBehaviorEffectSummary(ctx context.Context, arg GetBehaviorEffectSummaryParams) (GetBehaviorEffectSummaryRow, error)

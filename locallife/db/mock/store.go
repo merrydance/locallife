@@ -6477,6 +6477,21 @@ func (mr *MockStoreMockRecorder) GetBaofuFeeLedgerByBusinessObject(ctx, arg any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuFeeLedgerByBusinessObject", reflect.TypeOf((*MockStore)(nil).GetBaofuFeeLedgerByBusinessObject), ctx, arg)
 }
 
+// GetBaofuPaymentOrderRefundGuardForUpdate mocks base method.
+func (m *MockStore) GetBaofuPaymentOrderRefundGuardForUpdate(ctx context.Context, id int64) (db.GetBaofuPaymentOrderRefundGuardForUpdateRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuPaymentOrderRefundGuardForUpdate", ctx, id)
+	ret0, _ := ret[0].(db.GetBaofuPaymentOrderRefundGuardForUpdateRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuPaymentOrderRefundGuardForUpdate indicates an expected call of GetBaofuPaymentOrderRefundGuardForUpdate.
+func (mr *MockStoreMockRecorder) GetBaofuPaymentOrderRefundGuardForUpdate(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuPaymentOrderRefundGuardForUpdate", reflect.TypeOf((*MockStore)(nil).GetBaofuPaymentOrderRefundGuardForUpdate), ctx, id)
+}
+
 // GetBehaviorAction mocks base method.
 func (m *MockStore) GetBehaviorAction(ctx context.Context, id int64) (db.BehaviorAction, error) {
 	m.ctrl.T.Helper()

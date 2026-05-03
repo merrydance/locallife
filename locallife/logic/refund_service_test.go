@@ -164,6 +164,59 @@ func TestRefundServiceApplyAbnormalRefundRejectsNonFailedRefund(t *testing.T) {
 	require.Equal(t, 400, requestErr.Status)
 }
 
+func TestCreateRefundOrder_BaofuShareStartedReturnsSettlementBusinessError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	service := NewRefundService(
+		store,
+		nil,
+		nil,
+		nil,
+		refundServiceIDGeneratorStub{outRefundNo: "RF-baofu-share-started"},
+	)
+
+	merchant := db.Merchant{ID: 644, OwnerUserID: 67}
+	paymentOrder := db.PaymentOrder{
+		ID:                    622,
+		Amount:                1000,
+		Status:                "paid",
+		PaymentType:           "miniprogram",
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+		BusinessType:          businessTypeOrder,
+		OrderID:               pgtype.Int8{Int64: 633, Valid: true},
+	}
+	order := db.Order{ID: 633, MerchantID: merchant.ID}
+
+	store.EXPECT().GetMerchantByOwner(gomock.Any(), merchant.OwnerUserID).Return(merchant, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().
+		GetBaofuPaymentOrderRefundGuardForUpdate(gomock.Any(), paymentOrder.ID).
+		Return(db.GetBaofuPaymentOrderRefundGuardForUpdateRow{
+			ID:                      paymentOrder.ID,
+			Status:                  paymentOrder.Status,
+			PaymentChannel:          db.PaymentChannelBaofuAggregate,
+			HasStartedProfitSharing: true,
+		}, nil)
+
+	_, err := service.CreateRefundOrder(context.Background(), CreateRefundOrderInput{
+		ActorUserID:    merchant.OwnerUserID,
+		PaymentOrderID: paymentOrder.ID,
+		RefundType:     "full",
+		RefundAmount:   300,
+		RefundReason:   "用户申请退款",
+	})
+	require.Error(t, err)
+
+	var requestErr *RequestError
+	require.True(t, errors.As(err, &requestErr))
+	require.Equal(t, http.StatusBadRequest, requestErr.Status)
+	require.EqualError(t, requestErr.Err, "订单已进入结算分账流程，不支持退款")
+}
+
 func TestCreateRefundOrder_ProfitSharingReturnNotEnoughFallsBackToPolling(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
