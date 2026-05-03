@@ -176,8 +176,8 @@ func TestGetPlatformBaofuSettlementStatusAPI_IncludesSanitizedReadiness(t *testi
 		OwnerType:    db.BaofuAccountOwnerTypePlatform,
 		OwnerID:      platformBaofuAccountOwnerID,
 		AccountType:  db.BaofuAccountTypePlatform,
-		ContractNo:   pgtype.Text{String: "PF5301", Valid: true},
-		SharingMerID: pgtype.Text{String: "PS5301", Valid: true},
+		ContractNo:   pgtype.Text{String: "PF5301ABC", Valid: true},
+		SharingMerID: pgtype.Text{String: "PS5301XYZ", Valid: true},
 		OpenState:    db.BaofuAccountOpenStateActive,
 	}
 
@@ -205,12 +205,10 @@ func TestGetPlatformBaofuSettlementStatusAPI_IncludesSanitizedReadiness(t *testi
 	server.router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
-	require.NotContains(t, recorder.Body.String(), "PF5301")
-	require.NotContains(t, recorder.Body.String(), "PS5301")
+	require.NotContains(t, recorder.Body.String(), "PF5301ABC")
+	require.NotContains(t, recorder.Body.String(), "PS5301XYZ")
 	require.NotContains(t, recorder.Body.String(), "contractNo")
 	require.NotContains(t, recorder.Body.String(), "sharingMerId")
-	require.NotContains(t, recorder.Body.String(), "contract_no")
-	require.NotContains(t, recorder.Body.String(), "sharing_mer_id")
 
 	var resp platformBaofuSettlementStatusResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
@@ -218,4 +216,6 @@ func TestGetPlatformBaofuSettlementStatusAPI_IncludesSanitizedReadiness(t *testi
 	require.Equal(t, "ready", resp.SettlementAccount.State)
 	require.Equal(t, "结算账户可用", resp.SettlementAccount.Label)
 	require.True(t, resp.SettlementAccount.PaymentReady)
+	require.Equal(t, "PF5****ABC", resp.MaskedContractNo)
+	require.Equal(t, "PS5****XYZ", resp.MaskedSharingMerID)
 }

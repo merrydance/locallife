@@ -18,6 +18,11 @@
         <t-button size="small" theme="primary" variant="text" icon="refresh" bindtap="onRetryRefresh">重试</t-button>
       </view>
 
+      <view wx:if="{{settlementNotice}}" class="sync-state">
+        <t-icon name="error-circle-filled" size="32rpx" />
+        <text class="sync-state__text">{{settlementNotice}}</text>
+      </view>
+
       <view class="summary-section">
         <view class="summary-main">
           <text class="summary-label">已到账分账</text>

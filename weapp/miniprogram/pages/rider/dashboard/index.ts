@@ -47,6 +47,8 @@ Page({
     myLoadError: '',
     isRefresherTriggered: false,
     statusText: '休息中 - 点击上线',
+    showSettlementReminder: false,
+    settlementReminderText: '',
     showDepositReminder: false,
     depositReminderText: '',
     onlineStatusLabel: '休息中',

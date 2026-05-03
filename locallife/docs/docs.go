@@ -23265,7 +23265,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "管理员查询平台佣金接收方宝付二级户开通状态；响应只返回产品状态，不暴露宝付账户号、分账接收方标识或上游原始数据",
+                "description": "管理员查询平台佣金接收方宝付二级户开通状态；响应只返回产品状态和脱敏账户标识，不暴露宝付账户号、分账接收方标识或上游原始数据",
                 "produces": [
                     "application/json"
                 ],
@@ -43530,6 +43530,12 @@ const docTemplate = `{
         "api.platformBaofuSettlementStatusResponse": {
             "type": "object",
             "properties": {
+                "masked_contract_no": {
+                    "type": "string"
+                },
+                "masked_sharing_mer_id": {
+                    "type": "string"
+                },
                 "settlement_account": {
                     "$ref": "#/definitions/api.baofuSettlementReadinessResponse"
                 }

@@ -33,6 +33,13 @@ export interface RiderStatus {
     can_go_online: boolean
     can_go_offline: boolean
     online_block_reason?: string
+    settlement_account?: BaofuSettlementReadiness
+}
+
+export interface BaofuSettlementReadiness {
+    state: string
+    label: string
+    payment_ready: boolean
 }
 
 export interface RiderDepositBalance {

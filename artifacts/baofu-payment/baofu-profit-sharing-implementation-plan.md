@@ -525,7 +525,7 @@ merchant payment creation additionally has wechat_sub_mch_id present
 
 In delivery/rider eligibility code, reject riders whose `baofu_account_bindings` row is missing or not active. User-facing Chinese copy: `骑手结算账户未开通，暂不能接收配送费分账订单`.
 
-- [ ] **Step 3: Surface onboarding states**
+- [x] **Step 3: Surface onboarding states**
 
 Expose states to clients as product terms:
 
@@ -539,11 +539,11 @@ Expose states to clients as product terms:
 
 Do not expose `contractNo`, `sharingMerId`, or raw upstream error payloads to ordinary users. Operator/admin views may display masked IDs.
 
-Current backend status: rider status now returns sanitized `settlement_account` readiness (`state`, `label`, `payment_ready`) and aligns `can_go_online` / `online_block_reason` with the same Baofu settlement guard. Merchant open status now returns the same sanitized readiness shape for the merchant Baofu settlement account. Operator application status now returns sanitized readiness after the approved application has a formal operator account. Platform finance status now returns sanitized readiness for the platform singleton account (`owner_type=platform`, `owner_id=0`). Frontend surfaces remain in later Task 3 slices.
+Current backend/frontend status: rider status now returns sanitized `settlement_account` readiness (`state`, `label`, `payment_ready`) and aligns `can_go_online` / `online_block_reason` with the same Baofu settlement guard. Merchant open status returns the same sanitized readiness shape for the merchant Baofu settlement account. Operator application status returns sanitized readiness after the approved application has a formal operator account. Platform finance status returns sanitized readiness plus masked platform `contract_no` / `sharing_mer_id` for the platform singleton account (`owner_type=platform`, `owner_id=0`). Mini Program rider dashboard/order-hall/income pages now display the settlement-account block message without exposing provider internals.
 Merchant open status now also checks Baofu merchant readiness before allowing open-for-business: ordinary service provider channel identity must be active, Baofu merchant account binding must be active, and the binding must carry a WeChat channel identity. Operator readiness display does not require a WeChat channel identity because operator commission is received into the Baofu secondary account.
 Single-order and combined-payment main-business payment creation now check merchant Baofu readiness before creating new local payment rows or calling the upstream payment API. Combined payment uses a pre-transaction order-to-merchant lookup so an unready merchant cannot leave local pending child payment rows behind.
 
-- [ ] **Step 4: Validate API and onboarding workers**
+- [x] **Step 4: Validate API and onboarding workers**
 
 Run from `locallife/`:
 
@@ -581,7 +581,7 @@ subMchId = merchant channel report ID
 
 `sub_openid` is payer identity only. It must never be written as a profit-sharing receiver.
 
-- [ ] **Step 2: Route main business order payment to Baofu**
+- [x] **Step 2: Route main business order payment to Baofu**
 
 For main business orders, create `payment_orders` with:
 
@@ -594,7 +594,7 @@ business_type = order
 
 Return `chlRetParam.wc_pay_data` to the mini program in the existing payment response envelope.
 
-- [ ] **Step 3: Persist payment commands and facts**
+- [x] **Step 3: Persist payment commands and facts**
 
 For create-payment command use provider `baofu`, channel `baofu_aggregate`, capability `baofu_payment`, command type `create_payment`, external object type `baofu_payment_order`, external key `out_trade_no`. Payment callbacks and payment queries insert facts with terminal status mapping:
 
@@ -607,11 +607,11 @@ REFUND -> success only for pre-share refund facts handled by refund path
 ABNORMAL -> unknown
 ```
 
-- [ ] **Step 4: Apply payment success idempotently**
+- [x] **Step 4: Apply payment success idempotently**
 
 `task_baofu_payment_fact_application.go` must lock `payment_orders` by out trade number, update pending to paid once, store Baofu transaction ID, and enqueue outbox event for profit sharing. Duplicate success facts become ignored applications.
 
-- [ ] **Step 5: Validate payment path**
+- [x] **Step 5: Validate payment path**
 
 Run from `locallife/`:
 
@@ -739,7 +739,7 @@ ABNORMAL -> unknown
 
 Only `SUCCESS` marks `profit_sharing_orders.status = finished`. `PROCESSING` stays processing and is picked by recovery query.
 
-- [ ] **Step 4: Add recovery scheduler**
+- [x] **Step 4: Add recovery scheduler**
 
 Scheduler scans:
 
@@ -934,11 +934,11 @@ Expected: metrics and alerts include provider/channel labels and never include p
 - Modify: `web/src` operator/merchant/platform finance and account status views
 - Test: app-specific existing lint/build/test targets
 
-- [ ] **Step 1: Mini program payment response handling**
+- [x] **Step 1: Mini program payment response handling**
 
 Mini program must pass backend Baofu-provided WeChat payment payload into the existing `wx.requestPayment` flow. It must not construct nonce, package, sign type, or pay sign locally.
 
-- [ ] **Step 2: Merchant app onboarding and finance copy**
+- [x] **Step 2: Merchant app onboarding and finance copy**
 
 Use these Chinese labels consistently:
 
@@ -954,15 +954,15 @@ Use these Chinese labels consistently:
 提现退回
 ```
 
-- [ ] **Step 3: Rider onboarding and income gating**
+- [x] **Step 3: Rider onboarding and income gating**
 
 When rider Baofu account is not active, display: `结算账户未开通，暂不能接收配送费分账订单` and hide withdrawal action.
 
-- [ ] **Step 4: Web operator/platform pages**
+- [x] **Step 4: Web operator/platform pages**
 
 Operator/admin views display masked `contract_no`, masked `sharing_mer_id`, fee ledger rows, withdrawal order states, and reconciliation anomaly counts.
 
-- [ ] **Step 5: Validate frontend surfaces**
+- [x] **Step 5: Validate frontend surfaces**
 
 Run the smallest relevant commands from each changed app:
 
@@ -1306,3 +1306,15 @@ make test-integration
 - Corrected the receiver-field migration note and migration source: `000228_require_baofu_sharing_mer_id` now requires explicit `sharing_mer_id` for active rows and does not copy `contract_no` into `sharing_mer_id`.
 - Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./api ./worker -run 'TestPlatformStats|TestAlertPayload|TestBaofu' -count=1`; `PATH="/usr/local/go/bin:$PATH" make swagger`; `PATH="/usr/local/go/bin:$PATH" make check-generated`; `git diff --check`.
 - Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on the pre-existing 71 oversized Go files; this slice keeps the new reconciliation handler in a small dedicated API file and only extends existing server routing for the new route.
+
+
+### 2026-05-04 Task 10 - Frontend Payment, Settlement, Finance, And Reconciliation Surfaces
+
+- Mini Program payment invocation now normalizes the backend-returned WeChat payment payload into the exact `wx.requestPayment` fields (`timeStamp`, `nonceStr`, `package`, `signType`, `paySign`) and does not construct nonce/package/sign locally. Missing fields fail with `支付参数缺失，请重新发起支付`.
+- Mini Program rider surfaces now carry sanitized `settlement_account` readiness through rider status/workbench types. Rider dashboard, order hall, and income page display `结算账户未开通，暂不能接收配送费分账订单` when the BaoCaiTong personal account is not payment-ready; no `contractNo`, `sharingMerId`, raw payload, card, ID, phone, signature, or provider diagnostic is shown.
+- Merchant Flutter app added a settings entry and `结算账户` page with the agreed labels: `宝付支付开通`、`微信渠道报备`、`结算账户可用`、`支付手续费`、`待结算金额`、`可提现金额`、`提现中`、`提现成功`、`提现退回`. This page is product-copy only and does not invent unsupported withdrawal API calls.
+- Web merchant finance types and page now display merchant-borne `支付手续费` separately in overview, daily stats, order income rows, and service-fee/deduction views; `待结算收入` copy was changed to `待结算金额`.
+- Web platform reconciliation now loads `GET /v1/platform/stats/baofu/reconciliation/daily` and `GET /v1/platform/finance/settlement-account/status`, displays Baofu daily payment fees, withdrawal processing/succeeded amounts, anomaly counts, and the platform commission receiver as masked `contract_no` / `sharing_mer_id`. The backend status response now returns only masked identifiers and sanitized readiness.
+- Web operator finance copy now reflects the Baofu/BaoCaiTong funds model instead of ordinary-service-provider/WeChat balance handling and avoids exposing upstream identifiers.
+- Verification run: `PATH="$HOME/.local/bin:$PATH" npm run compile` from `weapp/`; `PATH="$HOME/.local/bin:$PATH" npm run lint` from `weapp/`; `PATH="$HOME/.local/bin:$PATH" npm run lint` from `web/`; `PATH="$HOME/.local/bin:$PATH" flutter analyze` from `merchant_app/` (exit 0, with pub.dev advisory decode warnings before analyze); `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestGetPlatformBaofuSettlementStatus|TestPlatformStats' -count=1` from `locallife/`; `PATH="/usr/local/go/bin:$PATH" make check-generated` from `locallife/`; `git diff --check`.
+- Residual UX scope: platform/admin currently shows masked platform receiver identifiers and aggregate anomaly/withdrawal/fee information. Raw fee-ledger and withdrawal row drill-downs remain intentionally unexposed until a dedicated sanitized admin list contract is added; ordinary users still never receive raw Baofu identifiers.

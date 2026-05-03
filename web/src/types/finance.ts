@@ -18,7 +18,9 @@ export interface FinanceOverviewResponse {
   total_income: number;       // 商户净收入 (int64)
   total_platform_fee: number; // 平台服务费 (int64)
   total_operator_fee: number; // 运营商服务费 (int64)
+  total_payment_fee: number;  // 宝付支付手续费 (int64)
   total_service_fee: number;  // 总服务费（平台+运营商）(int64)
+  total_deduction_fee: number;// 总扣减（平台+运营商+支付手续费）(int64)
   pending_income: number;     // 待结算收入 (int64)
 
   // 满返支出统计
@@ -42,6 +44,7 @@ export interface FinanceOrderItem {
   total_amount: number;          // 订单金额 (分, int64)
   platform_commission: number;   // 平台佣金 (分, int64)
   operator_commission: number;   // 运营商佣金 (分, int64)
+  payment_fee: number;           // 宝付支付手续费 (分, int64)
   merchant_amount: number;       // 商户到账 (分, int64)
   status: string;                // 状态
   created_at: string;            // 创建时间 (RFC3339)
@@ -73,7 +76,9 @@ export interface ServiceFeeItem {
   total_amount: number;   // 订单金额 (分, int64)
   platform_fee: number;   // 平台服务费 (分, int64)
   operator_fee: number;   // 运营商服务费 (分, int64)
+  payment_fee: number;    // 宝付支付手续费 (分, int64)
   total_fee: number;      // 总服务费 (分, int64)
+  total_deduction_fee: number; // 总扣减（平台+运营商+支付手续费）(分, int64)
 }
 
 /**
@@ -83,7 +88,9 @@ export interface ServiceFeesResponse {
   details: ServiceFeeItem[];
   total_platform_fee: number;
   total_operator_fee: number;
+  total_payment_fee: number;
   total_service_fee: number;
+  total_deduction_fee: number;
 }
 
 // ==================== 满返支出明细 ====================
@@ -128,7 +135,10 @@ export interface DailyFinanceItem {
   order_count: number;    // 订单数 (int64)
   total_gmv: number;      // 总交易额 (分, int64)
   merchant_income: number;// 商户收入 (分, int64)
+  payment_fee: number;    // 宝付支付手续费 (分, int64)
+  service_fee: number;    // 服务费 (分, int64)
   total_fee: number;      // 总服务费 (分, int64)
+  total_deduction_fee: number; // 总扣减（平台+运营商+支付手续费）(分, int64)
 }
 
 /**

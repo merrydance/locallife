@@ -21,6 +21,7 @@ type RiderDashboardPageContext = WechatMiniprogram.Page.Instance<Record<string, 
 
 const MAX_GRAB_DISTANCE = 5000
 const DEPOSIT_BLOCK_REASON_PATTERN = /押金不足/
+const BAOFU_SETTLEMENT_BLOCK_MESSAGE = '结算账户未开通，暂不能接收配送费分账订单'
 
 let runtimeNetworkUnsubscribe: null | (() => void) = null
 let dashboardLocationUnsubscribe: null | (() => void) = null
@@ -308,17 +309,35 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
     return reason || '可用押金不足，请先补足押金后再尝试上线'
   },
 
+  getSettlementReminderText(status: RiderStatus | null) {
+    if (!status || status.is_online || status.can_go_online) return ''
+
+    const readiness = status.settlement_account
+    if (readiness && readiness.payment_ready) return ''
+
+    const reason = status.online_block_reason || ''
+    if (reason.includes('结算账户') || readiness?.payment_ready === false) {
+      return BAOFU_SETTLEMENT_BLOCK_MESSAGE
+    }
+
+    return ''
+  },
+
   buildStatusViewData(status: RiderStatus | null, riderInfo?: RiderInfo | null) {
     const currentRiderInfo = riderInfo === undefined ? this.data.riderInfo : riderInfo
     const isOnline = !!status?.is_online
     const depositReminderText = this.getDepositReminderText(status, currentRiderInfo)
+    const settlementReminderText = this.getSettlementReminderText(status)
+    const blockedText = settlementReminderText || depositReminderText
 
     return {
       riderStatus: status,
       isOnline,
       onlineStatusLabel: isOnline ? '在线接单' : '休息中',
       onlineStatusTheme: isOnline ? 'success' : 'default',
-      statusText: isOnline ? '正在接单中' : (depositReminderText ? '暂不能上线' : '休息中 - 点击上线'),
+      statusText: isOnline ? '正在接单中' : (blockedText ? '暂不能上线' : '休息中 - 点击上线'),
+      showSettlementReminder: !!settlementReminderText,
+      settlementReminderText,
       showDepositReminder: !!depositReminderText,
       depositReminderText
     }

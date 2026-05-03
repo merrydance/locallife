@@ -148,7 +148,9 @@ export function FinancePageClient() {
   const [serviceFeeSummary, setServiceFeeSummary] = useState({
     total_platform_fee: 0,
     total_operator_fee: 0,
+    total_payment_fee: 0,
     total_service_fee: 0,
+    total_deduction_fee: 0,
   });
 
   // 满返支出
@@ -233,7 +235,9 @@ export function FinancePageClient() {
       setServiceFeeSummary({
         total_platform_fee: data.total_platform_fee || 0,
         total_operator_fee: data.total_operator_fee || 0,
+        total_payment_fee: data.total_payment_fee || 0,
         total_service_fee: data.total_service_fee || 0,
+        total_deduction_fee: data.total_deduction_fee || 0,
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "加载服务费明细失败";
@@ -355,11 +359,18 @@ export function FinancePageClient() {
         highlight: true,
       },
       {
-        title: "待结算收入",
+        title: "待结算金额",
         value: overview.pending_income,
         icon: Clock,
         color: "text-amber-600",
         bgColor: "bg-amber-50",
+      },
+      {
+        title: "支付手续费",
+        value: overview.total_payment_fee,
+        icon: BadgePercent,
+        color: "text-orange-600",
+        bgColor: "bg-orange-50",
       },
       {
         title: "总服务费",
@@ -427,7 +438,7 @@ export function FinancePageClient() {
             {/* 统计卡片 */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {loading
-                ? Array(4).fill(0).map((_, i) => <StatCardSkeleton key={i} />)
+                ? Array(5).fill(0).map((_, i) => <StatCardSkeleton key={i} />)
                 : overviewCards.map((card, i) => (
                     <Card
                       key={i}
@@ -505,6 +516,10 @@ export function FinancePageClient() {
                       <span className="font-medium text-rose-600">-¥{formatAmount(overview.total_operator_fee)}</span>
                     </div>
                     <div className="flex justify-between items-center py-2 border-b">
+                      <span className="text-sm text-muted-foreground">支付手续费</span>
+                      <span className="font-medium text-rose-600">-¥{formatAmount(overview.total_payment_fee)}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b">
                       <span className="text-sm text-muted-foreground">满返支出</span>
                       <span className="font-medium text-rose-600">-¥{formatAmount(overview.total_promotion_exp)}</span>
                     </div>
@@ -537,14 +552,15 @@ export function FinancePageClient() {
                       <TableHead className="text-right">交易额</TableHead>
                       <TableHead className="text-right">商户收入</TableHead>
                       <TableHead className="text-right">服务费</TableHead>
+                      <TableHead className="text-right">支付手续费</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
-                      <TableSkeleton rows={7} cols={5} />
+                      <TableSkeleton rows={7} cols={6} />
                     ) : dailyStats.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">
+                        <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
                           暂无数据
                         </TableCell>
                       </TableRow>
@@ -559,6 +575,9 @@ export function FinancePageClient() {
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">
                             ¥{formatAmount(item.total_fee)}
+                          </TableCell>
+                          <TableCell className="text-right text-orange-600">
+                            ¥{formatAmount(item.payment_fee)}
                           </TableCell>
                         </TableRow>
                       ))
@@ -587,6 +606,7 @@ export function FinancePageClient() {
                       <TableHead>来源</TableHead>
                       <TableHead className="text-right">订单金额</TableHead>
                       <TableHead className="text-right">服务费</TableHead>
+                      <TableHead className="text-right">支付手续费</TableHead>
                       <TableHead className="text-right">到账金额</TableHead>
                       <TableHead>状态</TableHead>
                       <TableHead className="text-right">时间</TableHead>
@@ -594,10 +614,10 @@ export function FinancePageClient() {
                   </TableHeader>
                   <TableBody>
                     {loading ? (
-                      <TableSkeleton rows={5} cols={7} />
+                      <TableSkeleton rows={5} cols={8} />
                     ) : orders.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
+                        <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
                           暂无数据
                         </TableCell>
                       </TableRow>
@@ -617,6 +637,9 @@ export function FinancePageClient() {
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">
                             ¥{formatAmount(item.platform_commission + item.operator_commission)}
+                          </TableCell>
+                          <TableCell className="text-right text-orange-600">
+                            ¥{formatAmount(item.payment_fee)}
                           </TableCell>
                           <TableCell className="text-right text-emerald-600 font-medium">
                             ¥{formatAmount(item.merchant_amount)}
@@ -670,7 +693,7 @@ export function FinancePageClient() {
           <TabsContent value="fees" className="space-y-6 mt-6">
             {/* 服务费汇总 */}
             {!loading && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card className="bg-white rounded-xl border shadow-sm">
                   <CardContent className="p-5">
                     <p className="text-xs text-muted-foreground mb-1">平台服务费</p>
@@ -695,6 +718,14 @@ export function FinancePageClient() {
                     </p>
                   </CardContent>
                 </Card>
+                <Card className="bg-white rounded-xl border shadow-sm">
+                  <CardContent className="p-5">
+                    <p className="text-xs text-muted-foreground mb-1">支付手续费</p>
+                    <p className="text-xl font-bold text-orange-600">
+                      ¥{formatAmount(serviceFeeSummary.total_payment_fee)}
+                    </p>
+                  </CardContent>
+                </Card>
               </div>
             )}
 
@@ -716,15 +747,16 @@ export function FinancePageClient() {
                       <TableHead className="text-right">订单金额</TableHead>
                       <TableHead className="text-right">平台费</TableHead>
                       <TableHead className="text-right">运营商费</TableHead>
-                      <TableHead className="text-right">合计</TableHead>
+                      <TableHead className="text-right">支付手续费</TableHead>
+                      <TableHead className="text-right">扣减合计</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
-                      <TableSkeleton rows={5} cols={7} />
+                      <TableSkeleton rows={5} cols={8} />
                     ) : serviceFees.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
+                        <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
                           暂无数据
                         </TableCell>
                       </TableRow>
@@ -745,8 +777,11 @@ export function FinancePageClient() {
                           <TableCell className="text-right text-purple-600">
                             ¥{formatAmount(item.operator_fee)}
                           </TableCell>
+                          <TableCell className="text-right text-orange-600">
+                            ¥{formatAmount(item.payment_fee)}
+                          </TableCell>
                           <TableCell className="text-right font-medium">
-                            ¥{formatAmount(item.total_fee)}
+                            ¥{formatAmount(item.total_deduction_fee)}
                           </TableCell>
                         </TableRow>
                       ))

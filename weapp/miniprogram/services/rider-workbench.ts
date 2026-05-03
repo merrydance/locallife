@@ -78,7 +78,8 @@ function toRiderStatus(summary: RiderWorkbenchSummaryResponse): RiderStatus {
     location_updated_at: status.location_updated_at,
     can_go_online: status.can_go_online,
     can_go_offline: status.can_go_offline,
-    online_block_reason: status.online_block_reason
+    online_block_reason: status.online_block_reason,
+    settlement_account: status.settlement_account
   }
 }
 
@@ -159,6 +160,8 @@ export function buildRiderWorkbenchDashboardView(
     canGoOnline: !!summary.rider_status?.can_go_online,
     onlineBlockReason: summary.rider_status?.online_block_reason || ''
   })
+  const settlementAccount = summary.rider_status?.settlement_account
+  const settlementReady = settlementAccount?.payment_ready !== false
 
   return {
     riderStatus: toRiderStatus(summary),
@@ -183,6 +186,15 @@ export function buildRiderWorkbenchDashboardView(
       }
     ],
     risks: [
+      ...(settlementReady ? [] : [{
+        key: 'settlement_account',
+        label: '结算账户',
+        value: settlementAccount?.label || '未开通',
+        note: '结算账户未开通，暂不能接收配送费分账订单',
+        highlight: true,
+        highlightClass: 'is-highlight',
+        actionText: ''
+      }]),
       {
         key: 'deposit',
         label: '可用押金',

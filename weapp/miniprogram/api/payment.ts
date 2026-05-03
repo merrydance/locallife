@@ -27,6 +27,30 @@ export interface MiniProgramPayParams {
   paySign: string
 }
 
+export function buildBackendWechatPayRequestOptions(
+  paymentParams: MiniProgramPayParams
+): Pick<WechatMiniprogram.RequestPaymentOption, 'timeStamp' | 'nonceStr' | 'package' | 'signType' | 'paySign'> {
+  const {
+    timeStamp,
+    nonceStr,
+    package: packageValue,
+    signType,
+    paySign
+  } = paymentParams || {}
+
+  if (!timeStamp || !nonceStr || !packageValue || !paySign) {
+    throw new Error('支付参数缺失，请重新发起支付')
+  }
+
+  return {
+    timeStamp,
+    nonceStr,
+    package: packageValue,
+    signType,
+    paySign
+  }
+}
+
 export interface PaymentOrder {
   id: number
   user_id: number
@@ -656,9 +680,10 @@ export async function createReservationPayment(reservationId: number): Promise<P
 }
 
 export async function invokeWechatPay(paymentParams: MiniProgramPayParams): Promise<void> {
+  const requestOptions = buildBackendWechatPayRequestOptions(paymentParams)
   return new Promise((resolve, reject) => {
     wx.requestPayment({
-      ...paymentParams,
+      ...requestOptions,
       success: () => resolve(),
       fail: (error) => reject(error)
     })

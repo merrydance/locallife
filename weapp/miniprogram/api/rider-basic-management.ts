@@ -52,6 +52,13 @@ export interface RiderStatusResponse {
     can_go_online: boolean
     can_go_offline: boolean
     online_block_reason?: string
+    settlement_account?: BaofuSettlementReadiness
+}
+
+export interface BaofuSettlementReadiness {
+    state: string
+    label: string
+    payment_ready: boolean
 }
 
 // ==================== 位置管理相关类型 ====================
@@ -257,6 +264,7 @@ export class RiderBasicManagementAdapter {
         canGoOnline: boolean
         canGoOffline: boolean
         onlineBlockReason?: string
+        settlementAccount?: BaofuSettlementReadiness
     } {
         return {
             isOnline: data.is_online,
@@ -268,7 +276,8 @@ export class RiderBasicManagementAdapter {
             activeDeliveries: data.active_deliveries,
             canGoOnline: data.can_go_online,
             canGoOffline: data.can_go_offline,
-            onlineBlockReason: data.online_block_reason
+            onlineBlockReason: data.online_block_reason,
+            settlementAccount: data.settlement_account
         }
     }
 
