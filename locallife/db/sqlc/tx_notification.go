@@ -70,11 +70,10 @@ type ApplymentSubMchActivationTxParams struct {
 	AccountAuthorizeState string
 }
 
-// ApplymentSubMchActivationTx 在单个事务中同步进件完成、二级商户号和开户意愿授权状态。
+// ApplymentSubMchActivationTx 在单个事务中同步普通服务商进件完成和二级商户号。
 //
-// 进件 FINISH 只代表微信已生成特约商户号，不代表商户已完成开户意愿确认。
-// 只有 account_authorize_state=AUTHORIZE_STATE_AUTHORIZED 时才激活商户交易能力；
-// 否则支付配置停留在 pending_authorization，商户状态不升级为 active。
+// 普通服务商特约商户进件以 APPLYMENT_STATE_FINISHED + sub_mchid 作为开户完成点；
+// 渠道商开户意愿授权状态不得作为本项目普通服务商交易能力激活门槛。
 func (store *SQLStore) ApplymentSubMchActivationTx(ctx context.Context, arg ApplymentSubMchActivationTxParams) error {
 	return store.execTx(ctx, func(q *Queries) error {
 		applyment, err := q.GetEcommerceApplyment(ctx, arg.ApplymentID)
@@ -89,9 +88,6 @@ func (store *SQLStore) ApplymentSubMchActivationTx(ctx context.Context, arg Appl
 		accountAuthorizeState := strings.TrimSpace(arg.AccountAuthorizeState)
 		if accountAuthorizeState == "" && applyment.AccountAuthorizeState.Valid {
 			accountAuthorizeState = strings.TrimSpace(applyment.AccountAuthorizeState.String)
-		}
-		if accountAuthorizeState == "" {
-			accountAuthorizeState = AccountAuthorizeStateUnauthorized
 		}
 
 		// step 1: 在激活事务内同步进件完成状态与 sub_mch_id，避免 finish owner path 漏写终态。
@@ -115,25 +111,16 @@ func (store *SQLStore) ApplymentSubMchActivationTx(ctx context.Context, arg Appl
 			return nil
 		}
 
-		paymentConfigStatus := MerchantPaymentConfigStatusPendingAuthorization
-		authorized := accountAuthorizeState == AccountAuthorizeStateAuthorized
-		if authorized {
-			paymentConfigStatus = MerchantPaymentConfigStatusActive
-		}
-
-		// step 2: 更新商户支付配置。未完成开户意愿授权时不得开放交易能力。
+		// step 2: 更新商户支付配置。普通服务商完成态不再等待渠道商开户意愿授权。
 		if _, err := q.UpdateMerchantPaymentConfig(ctx, UpdateMerchantPaymentConfigParams{
 			MerchantID: arg.SubjectID,
 			SubMchID:   pgtype.Text{String: arg.SubMchID, Valid: true},
-			Status:     pgtype.Text{String: paymentConfigStatus, Valid: true},
+			Status:     pgtype.Text{String: MerchantPaymentConfigStatusActive, Valid: true},
 		}); err != nil {
 			return fmt.Errorf("update merchant payment config: %w", err)
 		}
-		if !authorized {
-			return nil
-		}
 
-		// step 3: 授权完成后才更新商户状态为 active
+		// step 3: 更新商户状态为 active
 		if _, err := q.UpdateMerchantStatus(ctx, UpdateMerchantStatusParams{
 			ID:     arg.SubjectID,
 			Status: MerchantStatusActive,

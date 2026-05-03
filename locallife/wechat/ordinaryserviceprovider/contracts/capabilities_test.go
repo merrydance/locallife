@@ -2,13 +2,13 @@ package contracts
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
 func TestCapabilityGroupsExposeExecutableContracts(t *testing.T) {
 	tests := map[CapabilityID]int{
 		CapabilityApplyment:          7,
-		CapabilityAccountWillingness: 5,
 		CapabilityMerchantManagement: 8,
 		CapabilityPayment:            8,
 		CapabilityCombinePayment:     8,
@@ -59,6 +59,17 @@ func TestCapabilityGroupsExposeExecutableContracts(t *testing.T) {
 	}
 	if len(seenEndpoints) != len(EndpointContracts()) {
 		t.Fatalf("grouped endpoint count = %d, contract map count = %d", len(seenEndpoints), len(EndpointContracts()))
+	}
+}
+
+func TestEndpointContractsExcludeNonOrdinaryServiceProviderAccountWillingness(t *testing.T) {
+	for id, contract := range EndpointContracts() {
+		if string(contract.Capability) == "account_willingness" {
+			t.Fatalf("%s must not expose channel/institution account willingness capability in ordinary service provider runtime contracts", id)
+		}
+		if strings.Contains(contract.Path, "/v3/apply4subject/") {
+			t.Fatalf("%s must not expose apply4subject endpoint in ordinary service provider runtime contracts: %s", id, contract.Path)
+		}
 	}
 }
 

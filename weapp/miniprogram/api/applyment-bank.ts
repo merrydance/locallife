@@ -73,6 +73,7 @@ export interface ApplymentBindBankPayload {
   bank_name?: string
   account_number: string
   account_name?: string
+  contact_email?: string
   contact_type?: ApplymentContactType
   contact_name?: string
   contact_id_doc_type?: ApplymentContactDocType

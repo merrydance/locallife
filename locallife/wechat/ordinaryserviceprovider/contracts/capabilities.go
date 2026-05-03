@@ -11,7 +11,6 @@ type CapabilityID string
 
 const (
 	CapabilityApplyment          CapabilityID = "applyment"
-	CapabilityAccountWillingness CapabilityID = "account_willingness"
 	CapabilityMerchantManagement CapabilityID = "merchant_management"
 	CapabilityPayment            CapabilityID = "payment"
 	CapabilityCombinePayment     CapabilityID = "combine_payment"
@@ -29,11 +28,6 @@ const (
 	EndpointSettlementQuery                    EndpointID = "applyment.settlement_query"
 	EndpointSettlementModificationQuery        EndpointID = "applyment.settlement_modification_query"
 	EndpointMerchantMediaUpload                EndpointID = "applyment.media_upload"
-	EndpointAccountWillingnessSubmit           EndpointID = "account_willingness.submit"
-	EndpointAccountWillingnessCancel           EndpointID = "account_willingness.cancel"
-	EndpointAccountWillingnessQuery            EndpointID = "account_willingness.query"
-	EndpointAccountAuthorizeState              EndpointID = "account_willingness.authorize_state"
-	EndpointAccountWillingnessMediaUpload      EndpointID = "account_willingness.media_upload"
 	EndpointViolationNotificationConfigQuery   EndpointID = "merchant_management.violation_notification_config_query"
 	EndpointViolationNotificationConfigUpdate  EndpointID = "merchant_management.violation_notification_config_update"
 	EndpointViolationNotificationConfigCreate  EndpointID = "merchant_management.violation_notification_config_create"
@@ -94,7 +88,6 @@ type CapabilityGroup struct {
 
 var capabilityGroups = []CapabilityGroup{
 	{ID: CapabilityApplyment, Name: "特约商户进件与结算账户", Endpoints: []EndpointID{EndpointApplymentSubmit, EndpointApplymentQueryByID, EndpointApplymentQueryByBusinessCode, EndpointSettlementModify, EndpointSettlementQuery, EndpointSettlementModificationQuery, EndpointMerchantMediaUpload}},
-	{ID: CapabilityAccountWillingness, Name: "商户开户意愿确认", Endpoints: []EndpointID{EndpointAccountWillingnessSubmit, EndpointAccountWillingnessCancel, EndpointAccountWillingnessQuery, EndpointAccountAuthorizeState, EndpointAccountWillingnessMediaUpload}},
 	{ID: CapabilityMerchantManagement, Name: "商户管控、商户平台处置通知与不活跃核实", Endpoints: []EndpointID{EndpointViolationNotificationConfigQuery, EndpointViolationNotificationConfigUpdate, EndpointViolationNotificationConfigCreate, EndpointViolationNotificationConfigDelete, EndpointMerchantViolationNotification, EndpointMerchantLimitationQuery, EndpointInactiveMerchantVerificationCreate, EndpointInactiveMerchantVerificationQuery}},
 	{ID: CapabilityPayment, Name: "小程序支付", Endpoints: []EndpointID{EndpointPaymentPrepay, EndpointPaymentNotify, EndpointPaymentQueryByTransactionID, EndpointPaymentQueryByOutTradeNo, EndpointPaymentClose, EndpointPaymentRefundCreate, EndpointPaymentRefundQuery, EndpointPaymentRefundNotify}},
 	{ID: CapabilityCombinePayment, Name: "小程序合单支付", Endpoints: []EndpointID{EndpointCombinePrepay, EndpointCombineJSAPIPayParams, EndpointCombineQuery, EndpointCombineClose, EndpointCombineNotify, EndpointCombineRefundCreate, EndpointCombineRefundQuery, EndpointCombineRefundNotify}},
@@ -110,11 +103,6 @@ var endpointContracts = map[EndpointID]EndpointContract{
 	EndpointSettlementQuery:                    endpoint(EndpointSettlementQuery, CapabilityApplyment, "query ordinary service provider settlement", http.MethodGet, "/v3/apply4sub/sub_merchants/{sub_mchid}/settlement", []any{SettlementQueryRequest{}}, []any{SettlementQueryResponse{}}, []string{"SettlementVerifyResult"}, validateTyped(validateSettlementQueryRequest)),
 	EndpointSettlementModificationQuery:        endpoint(EndpointSettlementModificationQuery, CapabilityApplyment, "query ordinary service provider settlement modification", http.MethodGet, "/v3/apply4sub/sub_merchants/{sub_mchid}/application/{application_no}", []any{SettlementModificationQueryRequest{}}, []any{SettlementModificationQueryResponse{}}, []string{"SettlementVerifyResult", "SettlementAuditResult"}, validateTyped(validateSettlementModificationQueryRequest)),
 	EndpointMerchantMediaUpload:                endpoint(EndpointMerchantMediaUpload, CapabilityApplyment, "upload ordinary service provider applyment image", http.MethodPost, "/v3/merchant/media/upload", []any{MediaUploadRequestMultipart{}}, []any{MediaUploadResponse{}}, nil, validateTyped(validateMediaUploadRequest)),
-	EndpointAccountWillingnessSubmit:           endpoint(EndpointAccountWillingnessSubmit, CapabilityAccountWillingness, "submit ordinary service provider account willingness", http.MethodPost, "/v3/apply4subject/applyment/", []any{AccountWillingnessSubmitRequest{}}, []any{AccountWillingnessSubmitResponse{}}, nil, validateTyped(validateAccountWillingnessSubmitRequest)),
-	EndpointAccountWillingnessCancel:           endpoint(EndpointAccountWillingnessCancel, CapabilityAccountWillingness, "cancel ordinary service provider account willingness", http.MethodPost, "/v3/apply4subject/applyment/{business_code}/cancel", []any{AccountWillingnessCancelRequest{}}, []any{AccountWillingnessCancelResponse{}}, nil, validateTyped(validateAccountWillingnessCancelRequest)),
-	EndpointAccountWillingnessQuery:            endpoint(EndpointAccountWillingnessQuery, CapabilityAccountWillingness, "query ordinary service provider account willingness", http.MethodGet, "/v3/apply4subject/applyment?business_code={business_code}", []any{AccountWillingnessQueryRequest{}}, []any{AccountWillingnessQueryResponse{}}, []string{"AccountWillingnessState"}, validateTyped(validateAccountWillingnessQueryRequest)),
-	EndpointAccountAuthorizeState:              endpoint(EndpointAccountAuthorizeState, CapabilityAccountWillingness, "query ordinary service provider account authorize state", http.MethodGet, "/v3/apply4subject/applyment/merchants/{sub_mchid}/state", []any{AccountAuthorizeStateRequest{}}, []any{AccountAuthorizeStateResponse{}}, []string{"AccountAuthorizeState"}, validateTyped(validateAccountAuthorizeStateRequest)),
-	EndpointAccountWillingnessMediaUpload:      endpoint(EndpointAccountWillingnessMediaUpload, CapabilityAccountWillingness, "upload ordinary service provider account willingness image", http.MethodPost, "/v3/merchant/media/upload", []any{MediaUploadRequestMultipart{}}, []any{MediaUploadResponse{}}, nil, validateTyped(validateMediaUploadRequest)),
 	EndpointViolationNotificationConfigQuery:   endpoint(EndpointViolationNotificationConfigQuery, CapabilityMerchantManagement, "query ordinary service provider violation notification config", http.MethodGet, "/v3/merchant-risk-manage/violation-notifications", []any{NoRequestBody{}}, []any{ViolationNotificationConfigResponse{}}, nil, validateNoRequestBody),
 	EndpointViolationNotificationConfigUpdate:  endpoint(EndpointViolationNotificationConfigUpdate, CapabilityMerchantManagement, "update ordinary service provider violation notification config", http.MethodPut, "/v3/merchant-risk-manage/violation-notifications", []any{ViolationNotificationConfigRequest{}}, []any{ViolationNotificationConfigResponse{}}, nil, validateTyped(validateViolationNotificationConfigRequest)),
 	EndpointViolationNotificationConfigCreate:  endpoint(EndpointViolationNotificationConfigCreate, CapabilityMerchantManagement, "create ordinary service provider violation notification config", http.MethodPost, "/v3/merchant-risk-manage/violation-notifications", []any{ViolationNotificationConfigRequest{}}, []any{ViolationNotificationConfigResponse{}}, nil, validateTyped(validateViolationNotificationConfigRequest)),
@@ -295,28 +283,6 @@ func validateMediaUploadRequest(r MediaUploadRequestMultipart) error {
 	return requireString("meta.sha256", r.Meta.SHA256)
 }
 
-func validateAccountWillingnessSubmitRequest(r AccountWillingnessSubmitRequest) error {
-	if err := requireString("business_code", r.BusinessCode); err != nil {
-		return err
-	}
-	if err := requireString("contact_info.name", r.ContactInfo.Name); err != nil {
-		return err
-	}
-	if err := requireString("contact_info.mobile", r.ContactInfo.Mobile); err != nil {
-		return err
-	}
-	return requireString("subject_info.subject_type", string(r.SubjectInfo.SubjectType))
-}
-
-func validateAccountWillingnessCancelRequest(r AccountWillingnessCancelRequest) error {
-	return requireString("business_code", r.BusinessCode)
-}
-func validateAccountWillingnessQueryRequest(r AccountWillingnessQueryRequest) error {
-	return requireString("business_code", r.BusinessCode)
-}
-func validateAccountAuthorizeStateRequest(r AccountAuthorizeStateRequest) error {
-	return requireString("sub_mchid", r.SubMchID)
-}
 func validateMerchantLimitationQueryRequest(r MerchantLimitationQueryRequest) error {
 	return requireString("sub_mchid", r.SubMchID)
 }

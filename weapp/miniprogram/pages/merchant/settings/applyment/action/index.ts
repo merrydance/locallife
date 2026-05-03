@@ -25,6 +25,34 @@ const getErrorMessage = getErrorUserMessage
 
 let workflowRequestPending = false
 
+interface ApplymentActionStepView {
+  title: string
+  description: string
+}
+
+interface ApplymentActionTaskView {
+  eyebrow: string
+  title: string
+  description: string
+  statusNote: string
+  qrTitle: string
+  saveQRCodeLabel: string
+  steps: ApplymentActionStepView[]
+}
+
+const EMPTY_ACTION_TASK_VIEW: ApplymentActionTaskView = {
+  eyebrow: '微信侧待办',
+  title: '处理微信待办',
+  description: '请按微信支付页面提示完成当前待办。',
+  statusNote: '完成后回到本页，系统会自动刷新开户状态。',
+  qrTitle: '待办二维码',
+  saveQRCodeLabel: '保存二维码',
+  steps: [
+    { title: '处理微信待办', description: '按页面提示完成签约、法人验证或账户验证。' },
+    { title: '回到开户页', description: '完成后回到本页或开户首页查看最新状态。' }
+  ]
+}
+
 function normalizePreferredTaskType(task?: string): MerchantApplymentTaskType | '' {
   switch (String(task || '').trim()) {
     case 'sign_agreement':
@@ -104,6 +132,59 @@ function goBackHome() {
   wx.redirectTo({ url: HOME_PAGE_PATH })
 }
 
+function buildApplymentActionTaskView(workflowView: typeof EMPTY_WORKFLOW_VIEW): ApplymentActionTaskView {
+  switch (workflowView.currentTask.type) {
+    case 'sign_agreement':
+      return {
+        eyebrow: '微信侧待办',
+        title: '完成微信支付签约',
+        description: '保存二维码后用微信扫一扫，从相册识别二维码，并按微信支付提示完成商户签约。',
+        statusNote: '签约完成后回到本页，系统会自动刷新开户状态。',
+        qrTitle: '签约二维码',
+        saveQRCodeLabel: '保存签约二维码',
+        steps: [
+          { title: '保存二维码', description: '将签约二维码保存到手机相册。' },
+          { title: '微信识别处理', description: '退出小程序，用微信扫一扫从相册识别二维码并完成签约。' },
+          { title: '返回查看状态', description: '完成后回到本页，系统会自动同步最新开户状态。' }
+        ]
+      }
+    case 'legal_validation':
+      return {
+        eyebrow: '微信侧待办',
+        title: '完成法人扫码验证',
+        description: '保存二维码后用法人微信扫一扫，从相册识别二维码，并按微信支付提示完成法人验证。',
+        statusNote: '法人验证完成后回到本页，系统会自动刷新开户状态。',
+        qrTitle: '法人验证二维码',
+        saveQRCodeLabel: '保存法人验证二维码',
+        steps: [
+          { title: '保存二维码', description: '将法人验证二维码保存到手机相册。' },
+          { title: '法人微信识别', description: '请法人用微信扫一扫从相册识别二维码并完成验证。' },
+          { title: '返回查看状态', description: '完成后回到本页，系统会自动同步最新开户状态。' }
+        ]
+      }
+    case 'bank_transfer_validation':
+      return {
+        eyebrow: '微信侧待办',
+        title: '完成账户验证',
+        description: '请按微信支付提供的收款账户、金额和备注完成汇款验证。',
+        statusNote: '汇款完成后回到本页，系统会自动刷新开户状态。',
+        qrTitle: '',
+        saveQRCodeLabel: '',
+        steps: [
+          { title: '核对汇款信息', description: '确认付款户名、付款卡号、收款卡号、金额和备注。' },
+          { title: '完成验证汇款', description: '使用进件结算账户按微信要求汇款。' },
+          { title: '返回查看状态', description: '完成后回到本页，系统会自动同步最新开户状态。' }
+        ]
+      }
+    default:
+      return {
+        ...EMPTY_ACTION_TASK_VIEW,
+        title: workflowView.currentTask.title || EMPTY_ACTION_TASK_VIEW.title,
+        description: workflowView.currentTask.description || EMPTY_ACTION_TASK_VIEW.description
+      }
+  }
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -119,6 +200,7 @@ Page({
     workflowLoaded: false,
     preferredTaskType: '',
     workflowView: { ...EMPTY_WORKFLOW_VIEW },
+    actionTaskView: { ...EMPTY_ACTION_TASK_VIEW },
     refreshingStatus: false,
     savingQRCode: false,
     albumPermissionDialogVisible: false
@@ -176,6 +258,7 @@ Page({
       loadingWorkflow: false,
       workflowLoaded: false,
       workflowView: { ...EMPTY_WORKFLOW_VIEW },
+      actionTaskView: { ...EMPTY_ACTION_TASK_VIEW },
       refreshingStatus: false,
       savingQRCode: false,
       albumPermissionDialogVisible: false
@@ -245,6 +328,7 @@ Page({
 
       this.setData({
         workflowView,
+        actionTaskView: buildApplymentActionTaskView(workflowView),
         workflowLoaded: true,
         loadingWorkflow: false,
         initialLoading: false,
@@ -341,8 +425,8 @@ Page({
         page: this,
         canvasSelector: '#applymentActionPosterCanvas',
         value: this.data.workflowView.currentTaskQRCodeValue,
-        title: this.data.workflowView.currentTask.title,
-        subtitle: this.data.workflowView.currentTask.description
+        title: this.data.actionTaskView.title,
+        subtitle: this.data.actionTaskView.description
       })
       hideActionToast(this)
       showActionToast(this, '二维码已保存，请退出小程序后用微信扫一扫从相册识别', 'success', { duration: 2600 })

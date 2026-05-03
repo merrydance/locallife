@@ -89,7 +89,28 @@
 
     <block wx:if="{{workflowView.currentStage === 'opened'}}">
       <t-cell-group theme="card">
-        <t-cell title="结算账户" note="{{settlementAccountView.statusDesc || settlementAccountView.statusText}}">
+        <t-cell
+          title="{{openedSummary.title}}"
+          note="{{openedSummary.description}}"
+          bordered="{{false}}"
+        >
+          <view slot="right-icon">
+            <t-tag theme="success" size="small">已开通</t-tag>
+          </view>
+        </t-cell>
+        <t-cell title="微信支付商户号" note="{{openedSummary.subMchId}}" />
+        <t-cell title="后续说明" note="{{openedSummary.financeHint}}" />
+        <t-cell title="资金管理" note="{{openedSummary.merchantAssistantHint}}" />
+      </t-cell-group>
+
+      <t-cell-group theme="card">
+        <t-cell
+          title="结算账户"
+          note="{{settlementAccountView.statusDesc || settlementAccountView.statusText}}"
+          hover
+          arrow
+          bind:click="onOpenSettlementAccountPage"
+        >
           <view slot="right-icon">
             <t-tag theme="{{settlementAccountView.tagTheme}}" size="small">{{settlementAccountView.statusText}}</t-tag>
           </view>
@@ -118,11 +139,10 @@
       </t-cell-group>
 
       <t-button
-        wx:if="{{settlementAccountView.canEditSettlementAccount}}"
         theme="primary"
         block
-        bind:tap="onOpenSettlementAccountModify"
-      >修改结算账户</t-button>
+        bind:tap="onOpenSettlementAccountPage"
+      >{{openedSummary.settlementActionText}}</t-button>
     </block>
 
     <t-cell-group wx:if="{{workflowView.secondaryTasks.length}}" theme="card">

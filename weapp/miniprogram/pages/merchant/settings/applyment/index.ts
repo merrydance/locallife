@@ -33,6 +33,24 @@ const getErrorMessage = getErrorUserMessage
 let applymentRequestPending = false
 let settlementRequestPending = false
 
+interface ApplymentOpenedSummaryView {
+  title: string
+  description: string
+  subMchId: string
+  settlementActionText: string
+  financeHint: string
+  merchantAssistantHint: string
+}
+
+const EMPTY_OPENED_SUMMARY_VIEW: ApplymentOpenedSummaryView = {
+  title: '',
+  description: '',
+  subMchId: '-',
+  settlementActionText: '查看/修改结算账户',
+  financeHint: '',
+  merchantAssistantHint: ''
+}
+
 function showResultToast(context: WechatMiniprogram.Page.TrivialInstance, message: string, theme: 'success' | 'warning' | 'error') {
   Toast({
     context,
@@ -77,6 +95,21 @@ function buildDisplayStatusItems(workflowView: typeof EMPTY_WORKFLOW_VIEW) {
   return workflowView.statusItems.filter((item) => item.label !== '当前阶段' && item.label !== '状态说明')
 }
 
+function buildApplymentOpenedSummaryView(workflowView: typeof EMPTY_WORKFLOW_VIEW): ApplymentOpenedSummaryView {
+  if (workflowView.currentStage !== 'opened') {
+    return { ...EMPTY_OPENED_SUMMARY_VIEW }
+  }
+
+  return {
+    title: '微信支付已开通',
+    description: '可使用平台收款能力。',
+    subMchId: workflowView.statusView.subMchId || '-',
+    settlementActionText: '查看/修改结算账户',
+    financeHint: '订单流水和平台内结算记录可在财务页查看。',
+    merchantAssistantHint: '商户余额、提现和商户平台操作请前往微信支付商户平台或微信支付商家助手处理。'
+  }
+}
+
 function resolveWorkflowStagePath(workflowView: typeof EMPTY_WORKFLOW_VIEW) {
   if (workflowView.currentTask.type === 'submit_material' || workflowView.currentTask.type === 'resubmit_after_reject') {
     return SUBMIT_PAGE_PATH
@@ -104,6 +137,7 @@ Page({
     lastLoadedAt: 0,
     statusLoaded: false,
     workflowView: { ...EMPTY_WORKFLOW_VIEW },
+    openedSummary: { ...EMPTY_OPENED_SUMMARY_VIEW },
     settlementAccountView: { ...EMPTY_SETTLEMENT_ACCOUNT_VIEW },
     displayStatusItems: EMPTY_DISPLAY_STATUS_ITEMS,
     settlementLoading: false,
@@ -178,6 +212,7 @@ Page({
       lastLoadedAt: 0,
       statusLoaded: false,
       workflowView: { ...EMPTY_WORKFLOW_VIEW },
+      openedSummary: { ...EMPTY_OPENED_SUMMARY_VIEW },
       settlementAccountView: { ...EMPTY_SETTLEMENT_ACCOUNT_VIEW },
       displayStatusItems: EMPTY_DISPLAY_STATUS_ITEMS,
       settlementLoading: false,
@@ -257,6 +292,7 @@ Page({
       const isOpened = workflowView.currentStage === 'opened'
       this.setData({
         workflowView,
+        openedSummary: buildApplymentOpenedSummaryView(workflowView),
         displayStatusItems: buildDisplayStatusItems(workflowView),
         statusLoaded: true,
         loadingApplyment: false,
@@ -267,6 +303,7 @@ Page({
         ...(isOpened
           ? {}
           : {
+              openedSummary: { ...EMPTY_OPENED_SUMMARY_VIEW },
               settlementAccountView: { ...EMPTY_SETTLEMENT_ACCOUNT_VIEW },
               settlementLoading: false,
               settlementLoaded: false,
@@ -394,10 +431,7 @@ Page({
     void this.loadSettlementAccount({ force: true })
   },
 
-  onOpenSettlementAccountModify() {
-    if (!this.data.settlementAccountView.canEditSettlementAccount) {
-      return
-    }
+  onOpenSettlementAccountPage() {
     wx.navigateTo({ url: SETTLEMENT_ACCOUNT_PAGE_PATH })
   },
 

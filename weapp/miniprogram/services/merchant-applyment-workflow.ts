@@ -9,7 +9,6 @@ import {
 export type MerchantApplymentStage =
   | 'submit_required'
   | 'action_required'
-  | 'awaiting_confirmation'
   | 'reviewing'
   | 'rejected'
   | 'opened'
@@ -19,7 +18,6 @@ export type MerchantApplymentTaskType =
   | 'sign_agreement'
   | 'legal_validation'
   | 'bank_transfer_validation'
-  | 'account_confirmation'
   | 'wait_review'
   | 'resubmit_after_reject'
   | 'view_settlement'
@@ -99,10 +97,6 @@ function resolveCurrentStage(statusView: MerchantApplymentStatusView): MerchantA
 
   if (statusView.normalizedStatus === 'rejected' || statusView.normalizedStatus === 'cancelled' || statusView.normalizedStatus === 'frozen') {
     return 'rejected'
-  }
-
-  if (statusView.needsConfirmation) {
-    return 'awaiting_confirmation'
   }
 
   if (statusView.needsAccountValidation || statusView.needsSign) {
@@ -207,17 +201,6 @@ function buildCurrentTask(
     }
   }
 
-  if (currentStage === 'awaiting_confirmation') {
-    return {
-      type: 'account_confirmation',
-      title: '完成微信确认',
-      description: statusView.actionHint || '完成微信确认后回到本页，系统会自动刷新。',
-      actionText: '',
-      actionIntent: 'none',
-      actionPath: ''
-    }
-  }
-
   const requestedTask = buildRequestedActionTask(statusView, preferredTaskType)
   if (requestedTask) {
     return requestedTask
@@ -273,7 +256,7 @@ function buildSecondaryTasks(
 ): MerchantApplymentWorkflowSecondaryTask[] {
   const tasks: MerchantApplymentWorkflowSecondaryTask[] = []
 
-  if (statusView.hasApplyment && currentStage !== 'opened' && currentStage !== 'action_required' && currentStage !== 'awaiting_confirmation') {
+  if (statusView.hasApplyment && currentStage !== 'opened' && currentStage !== 'action_required') {
     tasks.push({
       type: 'refresh_status',
       label: '刷新开户状态',
@@ -338,8 +321,6 @@ function buildStageDescription(statusView: MerchantApplymentStatusView, currentT
       return '主体审核通过后，先补齐开户资料，再进入微信处理阶段。'
     case 'action_required':
       return currentTask.description
-    case 'awaiting_confirmation':
-      return currentTask.description
     case 'reviewing':
       return '微信支付正在审核资料；此阶段只保留状态回查，不再重复提交。'
     case 'rejected':
@@ -380,7 +361,7 @@ export function buildMerchantApplymentWorkflowView(
     ? 'completed'
     : currentStage === 'rejected'
       ? 'failed'
-      : currentStage === 'action_required' || currentStage === 'awaiting_confirmation'
+      : currentStage === 'action_required'
         ? 'action_required'
         : currentStage === 'reviewing'
           ? 'processing'
@@ -389,7 +370,6 @@ export function buildMerchantApplymentWorkflowView(
   const stageTitleMap: Record<MerchantApplymentStage, string> = {
     submit_required: '资料提交阶段',
     action_required: '微信待办阶段',
-    awaiting_confirmation: '微信确认阶段',
     reviewing: '审核结果阶段',
     rejected: '审核结果阶段',
     opened: '开通完成阶段'
@@ -409,7 +389,7 @@ export function buildMerchantApplymentWorkflowView(
     currentTask,
     secondaryTasks,
     resultState,
-    reentryPolicy: currentStage === 'action_required' || currentStage === 'awaiting_confirmation' ? 'force_refresh_on_show' : 'refresh_within_window',
+    reentryPolicy: currentStage === 'action_required' ? 'force_refresh_on_show' : 'refresh_within_window',
     headline,
     summary,
     stageTitle: stageTitleMap[currentStage],

@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -133,17 +132,28 @@ func (s *ApplymentRecoveryScheduler) runOnce(ctx context.Context) {
 			}
 		}
 
-		if applymentNeedsAccountAuthorizeRecovery(status, textValue(applyment.SubMchID), textValue(applyment.AccountAuthorizeState)) {
-			if s.ordinaryClient == nil {
-				log.Warn().Int64("applyment_id", applyment.ID).Msg("ordinary service provider client not configured, cannot query account authorize recovery state")
-				continue
+		if applymentNeedsFinishedActivationRecovery(status, textValue(applyment.SubMchID), resolvedProcessedState) {
+			queryResp := &ospcontracts.ApplymentQueryResponse{
+				ApplymentID:    applyment.ApplymentID.Int64,
+				BusinessCode:   applyment.OutRequestNo,
+				ApplymentState: ospcontracts.ApplymentStateFinished,
+				SubMchID:       textValue(applyment.SubMchID),
 			}
-			if err := s.recoverApplymentAccountAuthorizeState(ctx, applyment); err != nil {
+			application, err := recordApplymentActivatedQueryFact(ctx, s.store, applyment, queryResp, "")
+			if err != nil {
 				log.Error().Err(err).
 					Int64("applyment_id", applyment.ID).
 					Str("out_request_no", applyment.OutRequestNo).
 					Str("sub_mch_id", textValue(applyment.SubMchID)).
-					Msg("recover applyment account authorize state failed")
+					Msg("recover finished applyment activation fact failed")
+				continue
+			}
+			if err := EnqueueApplymentPaymentFactApplication(ctx, s.distributor, application); err != nil {
+				log.Error().Err(err).
+					Int64("applyment_id", applyment.ID).
+					Str("out_request_no", applyment.OutRequestNo).
+					Str("sub_mch_id", textValue(applyment.SubMchID)).
+					Msg("enqueue finished applyment activation fact application failed")
 			}
 			continue
 		}
@@ -288,43 +298,11 @@ func (s *ApplymentRecoveryScheduler) reconcileApplymentStatus(ctx context.Contex
 	return resolvedStatus, resolvedSubMchID, nil
 }
 
-func applymentNeedsAccountAuthorizeRecovery(status, subMchID, accountAuthorizeState string) bool {
+func applymentNeedsFinishedActivationRecovery(status, subMchID, processedState string) bool {
 	if status != "finish" || strings.TrimSpace(subMchID) == "" {
 		return false
 	}
-	return strings.TrimSpace(accountAuthorizeState) != db.AccountAuthorizeStateAuthorized
-}
-
-func (s *ApplymentRecoveryScheduler) recoverApplymentAccountAuthorizeState(ctx context.Context, applyment db.EcommerceApplymentPendingFollowUp) error {
-	subMchID := strings.TrimSpace(textValue(applyment.SubMchID))
-	if subMchID == "" {
-		return errors.New("applyment sub_mch_id missing")
-	}
-	authResp, err := s.ordinaryClient.QueryAccountAuthorizeState(ctx, ospcontracts.AccountAuthorizeStateRequest{SubMchID: subMchID})
-	if err != nil {
-		return fmt.Errorf("query account authorize state: %w", err)
-	}
-	accountAuthorizeState := ""
-	if authResp != nil {
-		accountAuthorizeState = strings.TrimSpace(string(authResp.AuthorizeState))
-	}
-	if accountAuthorizeState == "" {
-		return errors.New("account authorize state missing")
-	}
-	queryResp := &ospcontracts.ApplymentQueryResponse{
-		ApplymentID:    applyment.ApplymentID.Int64,
-		BusinessCode:   applyment.OutRequestNo,
-		ApplymentState: ospcontracts.ApplymentStateFinished,
-		SubMchID:       subMchID,
-	}
-	application, err := recordApplymentActivatedQueryFact(ctx, s.store, applyment, queryResp, accountAuthorizeState)
-	if err != nil {
-		return err
-	}
-	if err := EnqueueApplymentPaymentFactApplication(ctx, s.distributor, application); err != nil {
-		return err
-	}
-	return nil
+	return strings.TrimSpace(processedState) != "finish"
 }
 
 func (s *ApplymentRecoveryScheduler) persistUnsupportedApplymentRecoveryStateAlert(ctx context.Context, applyment db.EcommerceApplymentPendingFollowUp, queryResp *ospcontracts.ApplymentQueryResponse) {

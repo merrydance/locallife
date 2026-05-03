@@ -39885,7 +39885,7 @@
             "type": "object",
             "properties": {
                 "account_authorize_state": {
-                    "description": "普通服务商开户意愿授权状态",
+                    "description": "兼容旧前端字段；普通服务商完成态不再依赖该字段",
                     "type": "string"
                 },
                 "account_validation": {

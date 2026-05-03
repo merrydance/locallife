@@ -21,10 +21,15 @@
 }
 
 .document-hint,
-.document-tip {
+.document-tip,
+.contact-email-tip {
   font-size: var(--font-size-sm);
   line-height: 1.6;
   color: var(--td-text-color-secondary);
+}
+
+.contact-email-tip {
+  padding: 0 var(--spacer-xs);
 }
 
 .document-grid {

@@ -184,10 +184,6 @@ func TestClientRoutesApplymentSettlementAndMerchantManagementEndpoints(t *testin
 		`{"account_type":"ACCOUNT_TYPE_BUSINESS","account_bank":"工商银行","account_number":"62********78","verify_result":"VERIFY_SUCCESS"}`,
 		`{"application_no":"settle-app-001"}`,
 		`{"verify_result":"AUDITING","verify_fail_reason":""}`,
-		`{"applyment_id":20000000022222}`,
-		`{}`,
-		`{"applyment_state":"APPLYMENT_STATE_PASSED","qrcode_data":"base64-qrcode"}`,
-		`{"authorize_state":"AUTHORIZE_STATE_AUTHORIZED"}`,
 		`{"mchid":"1900000109","limited_functions":["NO_REFUND"],"recovery_specifications":[{"recover_way":"VERIFY_INACTIVE_MERCHANT_IDENTITY"}]}`,
 		`{"notify_url":"https://api.example.com/wechat/ordinary/merchant-violation"}`,
 		`{"notify_url":"https://api.example.com/wechat/ordinary/merchant-violation"}`,
@@ -219,29 +215,6 @@ func TestClientRoutesApplymentSettlementAndMerchantManagementEndpoints(t *testin
 	_, err = client.QuerySettlementModification(ctx, contracts.SettlementModificationQueryRequest{SubMchID: "1900000109", ApplicationNo: "settle-app-001"})
 	require.NoError(t, err)
 
-	_, err = client.SubmitAccountWillingness(ctx, contracts.AccountWillingnessSubmitRequest{
-		BusinessCode: "will-001",
-		ContactInfo: contracts.AccountWillingnessContactInfo{
-			Name:   "encrypted-contact",
-			Mobile: "encrypted-mobile",
-		},
-		SubjectInfo: contracts.AccountWillingnessSubjectInfo{
-			SubjectType: contracts.SubjectTypeEnterprise,
-		},
-	})
-	require.NoError(t, err)
-
-	_, err = client.CancelAccountWillingness(ctx, contracts.AccountWillingnessCancelRequest{BusinessCode: "will-001"})
-	require.NoError(t, err)
-
-	_, err = client.QueryAccountWillingness(ctx, contracts.AccountWillingnessQueryRequest{BusinessCode: "will-001"})
-	require.NoError(t, err)
-
-	authorizeResp, err := client.QueryAccountAuthorizeState(ctx, contracts.AccountAuthorizeStateRequest{SubMchID: "1900000109"})
-	require.NoError(t, err)
-	require.True(t, authorizeResp.Authorized)
-	require.Equal(t, contracts.AccountAuthorizeStateAuthorized, authorizeResp.AuthorizeState)
-
 	_, err = client.QueryMerchantLimitation(ctx, contracts.MerchantLimitationQueryRequest{SubMchID: "1900000109"})
 	require.NoError(t, err)
 
@@ -270,18 +243,13 @@ func TestClientRoutesApplymentSettlementAndMerchantManagementEndpoints(t *testin
 	requireEndpointCall(t, fake.calls[3], http.MethodGet, DefaultBaseURL+"/v3/apply4sub/sub_merchants/1900000109/settlement")
 	requireEndpointCall(t, fake.calls[4], http.MethodPost, DefaultBaseURL+"/v3/apply4sub/sub_merchants/1900000109/modify-settlement")
 	requireEndpointCall(t, fake.calls[5], http.MethodGet, DefaultBaseURL+"/v3/apply4sub/sub_merchants/1900000109/application/settle-app-001")
-	requireEndpointCall(t, fake.calls[6], http.MethodPost, DefaultBaseURL+"/v3/apply4subject/applyment/")
-	requireEndpointCall(t, fake.calls[7], http.MethodPost, DefaultBaseURL+"/v3/apply4subject/applyment/will-001/cancel")
-	requireEndpointCall(t, fake.calls[8], http.MethodGet, DefaultBaseURL+"/v3/apply4subject/applyment")
-	require.Equal(t, "will-001", fake.calls[8].query.Get("business_code"))
-	requireEndpointCall(t, fake.calls[9], http.MethodGet, DefaultBaseURL+"/v3/apply4subject/applyment/merchants/1900000109/state")
-	requireEndpointCall(t, fake.calls[10], http.MethodGet, DefaultBaseURL+"/v3/mch-operation-manage/merchant-limitations/sub-mchid/1900000109")
-	requireEndpointCall(t, fake.calls[11], http.MethodPost, DefaultBaseURL+"/v3/merchant-risk-manage/violation-notifications")
-	requireEndpointCall(t, fake.calls[12], http.MethodGet, DefaultBaseURL+"/v3/merchant-risk-manage/violation-notifications")
-	requireEndpointCall(t, fake.calls[13], http.MethodPut, DefaultBaseURL+"/v3/merchant-risk-manage/violation-notifications")
-	requireEndpointCall(t, fake.calls[14], http.MethodDelete, DefaultBaseURL+"/v3/merchant-risk-manage/violation-notifications")
-	requireEndpointCall(t, fake.calls[15], http.MethodPost, DefaultBaseURL+"/v3/compliance/inactive-merchant-identity-verification/merchants")
-	requireEndpointCall(t, fake.calls[16], http.MethodGet, DefaultBaseURL+"/v3/compliance/inactive-merchant-identity-verification/merchants/1900000109/verifications/verify-001")
+	requireEndpointCall(t, fake.calls[6], http.MethodGet, DefaultBaseURL+"/v3/mch-operation-manage/merchant-limitations/sub-mchid/1900000109")
+	requireEndpointCall(t, fake.calls[7], http.MethodPost, DefaultBaseURL+"/v3/merchant-risk-manage/violation-notifications")
+	requireEndpointCall(t, fake.calls[8], http.MethodGet, DefaultBaseURL+"/v3/merchant-risk-manage/violation-notifications")
+	requireEndpointCall(t, fake.calls[9], http.MethodPut, DefaultBaseURL+"/v3/merchant-risk-manage/violation-notifications")
+	requireEndpointCall(t, fake.calls[10], http.MethodDelete, DefaultBaseURL+"/v3/merchant-risk-manage/violation-notifications")
+	requireEndpointCall(t, fake.calls[11], http.MethodPost, DefaultBaseURL+"/v3/compliance/inactive-merchant-identity-verification/merchants")
+	requireEndpointCall(t, fake.calls[12], http.MethodGet, DefaultBaseURL+"/v3/compliance/inactive-merchant-identity-verification/merchants/1900000109/verifications/verify-001")
 }
 
 func TestClientValidationFailureReturnsProviderErrorBeforeRequest(t *testing.T) {
@@ -432,7 +400,12 @@ func validEndpointApplymentRequest() contracts.ApplymentSubmitRequest {
 		SubjectInfo: contracts.ApplymentSubjectInfo{
 			SubjectType:         contracts.SubjectTypeEnterprise,
 			BusinessLicenseInfo: &contracts.ApplymentBusinessLicenseInfo{LicenseCopy: "media-license", LicenseNumber: "91310000MA1K000000", MerchantName: "本地生活测试商户", LegalPerson: "张三"},
-			IdentityInfo:        contracts.ApplymentIdentityInfo{IDDocType: contracts.IdentificationTypeIDCard, IDCardInfo: &contracts.ApplymentIDCardInfo{IDCardCopy: "media-front", IDCardNational: "media-back"}},
+			IdentityInfo: contracts.ApplymentIdentityInfo{IDDocType: contracts.IdentificationTypeIDCard, IDCardInfo: &contracts.ApplymentIDCardInfo{
+				IDCardCopy:      "media-front",
+				IDCardNational:  "media-back",
+				CardPeriodBegin: "2020-01-01",
+				CardPeriodEnd:   "长期",
+			}},
 		},
 		BusinessInfo:    contracts.ApplymentBusinessInfo{MerchantShortname: "本地生活", ServicePhone: "07550000000", SalesInfo: contracts.ApplymentSalesInfo{SalesScenesType: []contracts.ApplymentSalesSceneType{contracts.SalesSceneMiniProgram}, MiniProgramInfo: &contracts.ApplymentMiniProgramInfo{MiniProgramAppID: "wx-sp-appid"}}},
 		SettlementInfo:  contracts.ApplymentSettlementInfo{SettlementID: "719", QualificationType: "餐饮"},

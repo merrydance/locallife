@@ -42,6 +42,7 @@
       initialDraft="{{bindBankDraft}}"
       defaultAccountType="ACCOUNT_TYPE_PRIVATE"
       showContactFields="{{false}}"
+      requireContactEmail="{{true}}"
       submitLabel="提交银行账户信息"
       submitting="{{submitting}}"
       bind:submit="onSubmitBindBank"

@@ -29,6 +29,18 @@
     />
 
     <t-input
+      wx:if="{{requireContactEmail}}"
+      label="管理员邮箱"
+      placeholder="请输入商户自己的邮箱"
+      value="{{form.contact_email}}"
+      data-field="contact_email"
+      bind:change="onTextFieldChange"
+      required
+    />
+
+    <view wx:if="{{requireContactEmail}}" class="contact-email-tip">用于接收微信支付开户邮件和业务通知，请填写商户自己的邮箱。</view>
+
+    <t-input
       label="银行账号"
       placeholder="{{form.account_type === 'ACCOUNT_TYPE_PRIVATE' ? '请输入银行账户号码' : '请输入对公银行账户号码'}}"
       value="{{form.account_number}}"

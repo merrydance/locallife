@@ -34,11 +34,6 @@ type OrdinaryServiceProviderClientInterface interface {
 	ModifySettlement(ctx context.Context, req contracts.SettlementModifyRequest) (*contracts.SettlementModifyResponse, error)
 	QuerySettlementModification(ctx context.Context, req contracts.SettlementModificationQueryRequest) (*contracts.SettlementModificationQueryResponse, error)
 
-	SubmitAccountWillingness(ctx context.Context, req contracts.AccountWillingnessSubmitRequest) (*contracts.AccountWillingnessSubmitResponse, error)
-	CancelAccountWillingness(ctx context.Context, req contracts.AccountWillingnessCancelRequest) (*contracts.AccountWillingnessCancelResponse, error)
-	QueryAccountWillingness(ctx context.Context, req contracts.AccountWillingnessQueryRequest) (*contracts.AccountWillingnessQueryResponse, error)
-	QueryAccountAuthorizeState(ctx context.Context, req contracts.AccountAuthorizeStateRequest) (*contracts.AccountAuthorizeStateResponse, error)
-
 	QueryMerchantLimitation(ctx context.Context, req contracts.MerchantLimitationQueryRequest) (*contracts.MerchantLimitationQueryResponse, error)
 	CreateViolationNotificationConfig(ctx context.Context, req contracts.ViolationNotificationConfigRequest) (*contracts.ViolationNotificationConfigResponse, error)
 	QueryViolationNotificationConfig(ctx context.Context) (*contracts.ViolationNotificationConfigResponse, error)

@@ -3,7 +3,6 @@ package logic
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -1941,10 +1940,6 @@ func buildMerchantCancelWithdrawFact(factID, applicationID int64, terminalStatus
 		IsTerminal:           terminalStatus != db.ExternalPaymentTerminalStatusProcessing,
 		RawResource:          raw,
 	}
-}
-
-func assertAnError(message string) error {
-	return errors.New(message)
 }
 
 func buildProfitSharingOrderForApplication(application db.ExternalPaymentFactApplication, status string) db.ProfitSharingOrder {

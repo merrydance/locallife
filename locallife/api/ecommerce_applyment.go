@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/mail"
 	"path"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
@@ -93,6 +95,46 @@ func (f *applymentContactFields) normalize() {
 	f.ContactEmail = strings.TrimSpace(f.ContactEmail)
 	f.ContactIDDocPeriodBegin = strings.TrimSpace(f.ContactIDDocPeriodBegin)
 	f.ContactIDDocPeriodEnd = strings.TrimSpace(f.ContactIDDocPeriodEnd)
+}
+
+func validateApplymentContactEmail(contactEmail string, required bool) error {
+	contactEmail = strings.TrimSpace(contactEmail)
+	if contactEmail == "" {
+		if required {
+			return fmt.Errorf("请填写超级管理员邮箱")
+		}
+		return nil
+	}
+	if len([]rune(contactEmail)) > 128 {
+		return fmt.Errorf("超级管理员邮箱不能超过128个字符")
+	}
+	if !strings.Contains(contactEmail, "@") {
+		return fmt.Errorf("请填写正确的邮箱地址")
+	}
+	address, err := mail.ParseAddress(contactEmail)
+	if err != nil || address == nil || address.Address != contactEmail {
+		return fmt.Errorf("请填写正确的邮箱地址")
+	}
+	return nil
+}
+
+func translateApplymentBindBankBindingError(err error) error {
+	var validationErrors validator.ValidationErrors
+	if !errors.As(err, &validationErrors) {
+		return err
+	}
+	for _, fieldError := range validationErrors {
+		if fieldError.Field() != "ContactEmail" {
+			continue
+		}
+		switch fieldError.Tag() {
+		case "email":
+			return fmt.Errorf("请填写正确的邮箱地址")
+		case "max":
+			return fmt.Errorf("超级管理员邮箱不能超过128个字符")
+		}
+	}
+	return err
 }
 
 func (f applymentContactFields) resolve(legalPersonName, legalPersonIDNumber string) (resolvedApplymentContact, error) {
@@ -241,12 +283,16 @@ type merchantBindBankResponse struct {
 func (server *Server) merchantBindBank(ctx *gin.Context) {
 	var req merchantBindBankRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		respondApplymentClientError(ctx, http.StatusBadRequest, err)
+		respondApplymentClientError(ctx, http.StatusBadRequest, translateApplymentBindBankBindingError(err))
 		return
 	}
 	req.applymentBindBankFields.normalize()
 	req.applymentContactFields.normalize()
 	if err := req.validateSelection(); err != nil {
+		respondApplymentClientError(ctx, http.StatusBadRequest, err)
+		return
+	}
+	if err := validateApplymentContactEmail(req.applymentContactFields.ContactEmail, false); err != nil {
 		respondApplymentClientError(ctx, http.StatusBadRequest, err)
 		return
 	}
@@ -360,12 +406,9 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "普通服务商进件服务暂不可用，请联系平台管理员检查微信支付普通服务商证书、公钥、进件和回调配置后重试", "merchant applyment ordinary service provider client not configured"))
 		return
 	}
-	contactEmail := strings.TrimSpace(req.ContactEmail)
-	if contactEmail == "" {
-		contactEmail = strings.TrimSpace(server.config.WechatOrdinaryApplymentContactEmail)
-	}
-	if contactEmail == "" {
-		respondApplymentClientError(ctx, http.StatusBadRequest, fmt.Errorf("普通服务商进件联系人邮箱缺失，请填写商户联系人邮箱，或联系平台管理员配置 WECHAT_ORDINARY_APPLYMENT_CONTACT_EMAIL 后重试"))
+	contactEmail := strings.TrimSpace(req.applymentContactFields.ContactEmail)
+	if err := validateApplymentContactEmail(contactEmail, true); err != nil {
+		respondApplymentClientError(ctx, http.StatusBadRequest, err)
 		return
 	}
 	settlementID, settlementErr := resolveOrdinaryApplymentSettlementID(server.config, organizationType)
@@ -668,7 +711,7 @@ type merchantApplymentStatusResponse struct {
 	StatusDesc            string                              `json:"status_desc"`                       // 状态描述
 	CanSubmit             bool                                `json:"can_submit"`                        // 是否允许提交或重新提交进件
 	BlockReason           string                              `json:"block_reason,omitempty"`            // 不允许提交时的阻塞原因
-	AccountAuthorizeState string                              `json:"account_authorize_state,omitempty"` // 普通服务商开户意愿授权状态
+	AccountAuthorizeState string                              `json:"account_authorize_state,omitempty"` // 兼容旧前端字段；普通服务商完成态不再依赖该字段
 	ActionHint            string                              `json:"action_hint,omitempty"`             // 前端/商户下一步行动指引
 	SignURL               *string                             `json:"sign_url,omitempty"`                // 签约链接
 	SignState             *string                             `json:"sign_state,omitempty"`              // 签约状态
@@ -883,22 +926,17 @@ func (server *Server) queryOrdinaryApplymentStatus(ctx context.Context, applymen
 	return resp, err
 }
 
-func applymentAuthorizationActionHint(status, accountAuthorizeState string, authorizeStateQueryFailed bool) string {
+func applymentActionHint(status string, activationSyncFailed bool) string {
 	switch strings.TrimSpace(status) {
 	case "finish":
-		if authorizeStateQueryFailed {
-			return "暂时无法确认开户意愿授权状态，请稍后刷新；如果持续失败，请联系平台管理员核对微信支付普通服务商配置和商户号状态"
+		if activationSyncFailed {
+			return "微信支付已完成，平台正在同步收款配置，请稍后刷新"
 		}
-		if strings.TrimSpace(accountAuthorizeState) == db.AccountAuthorizeStateAuthorized {
-			return "普通服务商特约商户账户已完成开户意愿确认，可以使用交易、退款、分账和结算账户能力"
-		}
-		return "请商户负责人进入微信支付商户平台或微信支付商家助手完成开户意愿确认；完成后返回本页刷新状态"
+		return "微信支付已开通，可使用平台收款能力"
 	case "submitted", "checking", "auditing":
-		return "请等待微信支付审核；如微信返回签约、确认或账户验证链接，请按页面提示完成"
-	case "account_need_verify":
-		return "请按微信页面提示完成汇款账户验证，完成后刷新状态"
-	case "to_be_confirmed":
-		return "请商户负责人按微信支付页面提示完成确认，完成后刷新状态"
+		return "请等待微信支付审核；如微信返回签约或账户验证链接，请按页面提示完成"
+	case "account_need_verify", "to_be_confirmed":
+		return "请按微信页面提示完成账户验证，完成后刷新状态"
 	case "to_be_signed", "signing":
 		return "请点击签约链接完成微信支付签约，完成后刷新状态"
 	case "rejected":
@@ -1156,7 +1194,7 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 	}
 
 	var remoteStatusDesc string
-	accountAuthorizeStateQueryFailed := false
+	activationSyncFailed := false
 	decryptor := resolveApplymentSensitiveDecryptor(server.ordinarySPClient)
 
 	// 进件处理中时优先查询微信普通服务商实时状态；若本地丢失 applyment_id，则回退到 business_code。
@@ -1222,72 +1260,47 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 				remoteStatusDesc = strings.TrimSpace(wxResp.ApplymentStateMsg)
 			}
 
-			// 进件完成后必须继续确认开户意愿授权状态；未授权时仅保存 sub_mch_id，不开放交易能力。
-			if updateStatus == "finish" && nextSubMchID.Valid {
-				accountAuthorizeState := strings.TrimSpace(applyment.AccountAuthorizeState.String)
-				if accountAuthorizeState == "" {
-					accountAuthorizeState = db.AccountAuthorizeStateUnauthorized
-				}
-				authResp, authErr := server.ordinarySPClient.QueryAccountAuthorizeState(ctx, ospcontracts.AccountAuthorizeStateRequest{SubMchID: nextSubMchID.String})
-				if authErr != nil {
-					accountAuthorizeStateQueryFailed = true
-					log.Error().Err(authErr).
-						Int64("applyment_id", applyment.ID).
-						Int64("merchant_id", merchant.ID).
-						Str("sub_mch_id", nextSubMchID.String).
-						Msg("query ordinary service provider account authorize state failed")
-				} else if authResp != nil && strings.TrimSpace(string(authResp.AuthorizeState)) != "" {
-					accountAuthorizeState = strings.TrimSpace(string(authResp.AuthorizeState))
-				}
-
+			// 普通服务商进件完成以 FINISHED + sub_mchid 为准，不再查询渠道商开户意愿授权状态。
+			if updateStatus == "finish" && nextSubMchID.Valid && strings.TrimSpace(nextSubMchID.String) != "" {
 				err = server.store.ApplymentSubMchActivationTx(ctx, db.ApplymentSubMchActivationTxParams{
-					ApplymentID:           applyment.ID,
-					SubjectType:           applyment.SubjectType,
-					SubjectID:             applyment.SubjectID,
-					SubMchID:              nextSubMchID.String,
-					AccountAuthorizeState: accountAuthorizeState,
+					ApplymentID: applyment.ID,
+					SubjectType: applyment.SubjectType,
+					SubjectID:   applyment.SubjectID,
+					SubMchID:    nextSubMchID.String,
 				})
 				if err != nil {
+					activationSyncFailed = true
 					log.Error().Err(err).
 						Int64("applyment_id", applyment.ID).
 						Int64("merchant_id", merchant.ID).
 						Str("sub_mch_id", nextSubMchID.String).
-						Str("account_authorize_state", accountAuthorizeState).
-						Msg("sync merchant applyment completion and authorization state failed")
+						Msg("sync merchant applyment completion failed")
 				} else {
-					applyment.AccountAuthorizeState = buildApplymentText(accountAuthorizeState)
-					applyment.AccountAuthorizeStateCheckedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
-					if accountAuthorizeState == db.AccountAuthorizeStateAuthorized {
-						merchant.Status = db.MerchantStatusActive
-					}
+					merchant.Status = db.MerchantStatusActive
 				}
 			}
 		}
 	}
 
 	normalizedStatus := logic.NormalizeResolvedApplymentStatus(applyment.Status, applyment.SubMchID.Valid && applyment.SubMchID.String != "")
-	accountAuthorizeState := strings.TrimSpace(applyment.AccountAuthorizeState.String)
 	statusDesc := getApplymentStatusDesc(normalizedStatus)
 	if remoteStatusDesc != "" {
 		statusDesc = remoteStatusDesc
 	}
 	if normalizedStatus == "finish" {
-		if accountAuthorizeStateQueryFailed {
-			statusDesc = "进件已完成，但暂时无法确认开户意愿授权状态"
-		} else if accountAuthorizeState == db.AccountAuthorizeStateAuthorized {
-			statusDesc = "普通服务商账户已开通"
+		if activationSyncFailed {
+			statusDesc = "微信支付已完成，平台正在同步收款配置"
 		} else {
-			statusDesc = "进件已完成，待商户完成微信开户意愿确认"
+			statusDesc = "微信支付已开通"
 		}
 	}
 	canSubmit, blockReason := getMerchantApplymentSubmitCapability(merchant.Status, normalizedStatus)
 	resp := merchantApplymentStatusResponse{
-		Status:                normalizedStatus,
-		StatusDesc:            statusDesc,
-		CanSubmit:             canSubmit,
-		BlockReason:           blockReason,
-		AccountAuthorizeState: accountAuthorizeState,
-		ActionHint:            applymentAuthorizationActionHint(normalizedStatus, accountAuthorizeState, accountAuthorizeStateQueryFailed),
+		Status:      normalizedStatus,
+		StatusDesc:  statusDesc,
+		CanSubmit:   canSubmit,
+		BlockReason: blockReason,
+		ActionHint:  applymentActionHint(normalizedStatus, activationSyncFailed),
 	}
 
 	if applyment.SignUrl.Valid && applyment.SignUrl.String != "" {

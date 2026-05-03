@@ -1143,9 +1143,9 @@ func ordinaryApplymentRejectReason(details []ospcontracts.ApplymentAuditDetail) 
 func OrdinaryApplymentFrontendMessage(status string) string {
 	switch strings.TrimSpace(status) {
 	case "finish":
-		return "进件已通过，正在确认微信开户意愿授权状态；授权完成后平台会开通普通服务商交易能力"
+		return "微信支付已开通，可使用平台收款能力"
 	case "to_be_confirmed":
-		return "进件待商户确认，请按微信支付页面提示完成确认后刷新状态"
+		return "待账户验证，请超级管理员打开微信签约链接并按页面提示完成"
 	case "to_be_signed", "signing":
 		return "进件进入签约环节，请打开签约链接完成签约后刷新状态"
 	case "rejected":

@@ -19,10 +19,6 @@ const (
 	operationQuerySettlement                    = "query ordinary service provider settlement"
 	operationModifySettlement                   = "modify ordinary service provider settlement"
 	operationQuerySettlementModification        = "query ordinary service provider settlement modification"
-	operationSubmitAccountWillingness           = "submit ordinary service provider account willingness"
-	operationCancelAccountWillingness           = "cancel ordinary service provider account willingness"
-	operationQueryAccountWillingness            = "query ordinary service provider account willingness"
-	operationQueryAccountAuthorizeState         = "query ordinary service provider account authorize state"
 	operationQueryMerchantLimitation            = "query ordinary service provider merchant limitation"
 	operationCreateViolationNotificationConfig  = "create ordinary service provider violation notification config"
 	operationQueryViolationNotificationConfig   = "query ordinary service provider violation notification config"
@@ -136,61 +132,6 @@ func (c *Client) QuerySettlementModification(ctx context.Context, req contracts.
 	if response.ApplicationNo == "" {
 		response.ApplicationNo = applicationNo
 	}
-	return response, nil
-}
-
-func (c *Client) SubmitAccountWillingness(ctx context.Context, req contracts.AccountWillingnessSubmitRequest) (*contracts.AccountWillingnessSubmitResponse, error) {
-	if err := validateClientEndpointRequest(contracts.EndpointAccountWillingnessSubmit, req); err != nil {
-		return nil, err
-	}
-	response := &contracts.AccountWillingnessSubmitResponse{}
-	if err := c.requestEndpointJSON(ctx, contracts.EndpointAccountWillingnessSubmit, operationSubmitAccountWillingness, http.MethodPost, "/v3/apply4subject/applyment/", nil, req, response); err != nil {
-		return nil, err
-	}
-	return response, nil
-}
-
-func (c *Client) CancelAccountWillingness(ctx context.Context, req contracts.AccountWillingnessCancelRequest) (*contracts.AccountWillingnessCancelResponse, error) {
-	if err := validateClientEndpointRequest(contracts.EndpointAccountWillingnessCancel, req); err != nil {
-		return nil, err
-	}
-	response := &contracts.AccountWillingnessCancelResponse{}
-	path := "/v3/apply4subject/applyment/" + url.PathEscape(req.BusinessCode) + "/cancel"
-	if err := c.requestEndpointJSON(ctx, contracts.EndpointAccountWillingnessCancel, operationCancelAccountWillingness, http.MethodPost, path, nil, nil, response); err != nil {
-		return nil, err
-	}
-	if response.BusinessCode == "" {
-		response.BusinessCode = req.BusinessCode
-	}
-	return response, nil
-}
-
-func (c *Client) QueryAccountWillingness(ctx context.Context, req contracts.AccountWillingnessQueryRequest) (*contracts.AccountWillingnessQueryResponse, error) {
-	if err := validateClientEndpointRequest(contracts.EndpointAccountWillingnessQuery, req); err != nil {
-		return nil, err
-	}
-	query := url.Values{"business_code": []string{req.BusinessCode}}
-	response := &contracts.AccountWillingnessQueryResponse{}
-	if err := c.requestEndpointJSON(ctx, contracts.EndpointAccountWillingnessQuery, operationQueryAccountWillingness, http.MethodGet, "/v3/apply4subject/applyment", query, nil, response); err != nil {
-		return nil, err
-	}
-	if response.State == "" {
-		response.State = response.ApplymentState
-	}
-	return response, nil
-}
-
-func (c *Client) QueryAccountAuthorizeState(ctx context.Context, req contracts.AccountAuthorizeStateRequest) (*contracts.AccountAuthorizeStateResponse, error) {
-	if err := validateClientEndpointRequest(contracts.EndpointAccountAuthorizeState, req); err != nil {
-		return nil, err
-	}
-	response := &contracts.AccountAuthorizeStateResponse{}
-	path := "/v3/apply4subject/applyment/merchants/" + url.PathEscape(req.SubMchID) + "/state"
-	if err := c.requestEndpointJSON(ctx, contracts.EndpointAccountAuthorizeState, operationQueryAccountAuthorizeState, http.MethodGet, path, nil, nil, response); err != nil {
-		return nil, err
-	}
-	response.SubMchID = req.SubMchID
-	response.Authorized = response.AuthorizeState == contracts.AccountAuthorizeStateAuthorized
 	return response, nil
 }
 

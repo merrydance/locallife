@@ -12,7 +12,8 @@ import {
 import type { ApplymentBindBankDraftPayload, ApplymentBindBankPayload } from '../../../../../api/applyment-bank'
 import {
   buildMerchantApplymentWorkflowView,
-  fetchMerchantApplymentWorkflowView
+  fetchMerchantApplymentWorkflowView,
+  type MerchantApplymentWorkflowView
 } from '../../../../../services/merchant-applyment-workflow'
 import {
   ensureMerchantApplymentAccess,
@@ -28,6 +29,8 @@ import { shouldFallbackToLatestApplication } from '../../../../../utils/merchant
 
 const APPLYMENT_FORCE_REFRESH_STORAGE_KEY = 'merchantApplymentShouldRefresh'
 const APPLYMENT_PERMISSION_RESTRICTED_CODE = 40363
+const APPLYMENT_SUBMIT_STATUS_POLL_INTERVAL_MS = 3000
+const APPLYMENT_SUBMIT_STATUS_POLL_TIMEOUT_MS = 27000
 const EMPTY_WORKFLOW_VIEW = buildMerchantApplymentWorkflowView(null)
 const TOAST_SELECTOR = '#t-toast'
 
@@ -72,7 +75,7 @@ function buildStatusResponseFromBindBank(response: MerchantBindBankResponse): Ap
   }
 }
 
-function resolveSubmittedWorkflowPath(workflowView: typeof EMPTY_WORKFLOW_VIEW) {
+function resolveSubmittedWorkflowPath(workflowView: MerchantApplymentWorkflowView) {
   if (workflowView.currentStage === 'action_required' && workflowView.primaryActionIntent === 'navigate' && workflowView.primaryActionPath) {
     return workflowView.primaryActionPath
   }
@@ -85,6 +88,18 @@ function showSubmitLoadingToast(context: WechatMiniprogram.Page.TrivialInstance)
     context,
     selector: TOAST_SELECTOR,
     message: '提交中...',
+    theme: 'loading',
+    direction: 'column',
+    duration: 0,
+    preventScrollThrough: true
+  })
+}
+
+function showSubmitSyncingToast(context: WechatMiniprogram.Page.TrivialInstance) {
+  Toast({
+    context,
+    selector: TOAST_SELECTOR,
+    message: '已提交，正在同步微信待办...',
     theme: 'loading',
     direction: 'column',
     duration: 0,
@@ -141,6 +156,14 @@ function isApplymentPermissionRestrictedError(error: unknown): boolean {
       candidate.includes(`${applymentName}${specialMerchantName}的权限已被受限`) ||
       candidate.includes('NO_AUTH')
   })
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function shouldPollSubmittedApplymentStatus(workflowView: MerchantApplymentWorkflowView): boolean {
+  return workflowView.currentStage === 'reviewing' || workflowView.resultState === 'processing'
 }
 
 Page({
@@ -276,6 +299,44 @@ Page({
     this.setData({ bindBankDraft: e.detail })
   },
 
+  async pollSubmittedApplymentStatus(initialWorkflowView: MerchantApplymentWorkflowView): Promise<MerchantApplymentWorkflowView> {
+    let latestWorkflowView = initialWorkflowView
+    if (!shouldPollSubmittedApplymentStatus(latestWorkflowView)) {
+      return latestWorkflowView
+    }
+
+    const deadlineAt = Date.now() + APPLYMENT_SUBMIT_STATUS_POLL_TIMEOUT_MS
+    while (Date.now() < deadlineAt) {
+      await sleep(APPLYMENT_SUBMIT_STATUS_POLL_INTERVAL_MS)
+      try {
+        latestWorkflowView = await fetchMerchantApplymentWorkflowView()
+        if (!shouldPollSubmittedApplymentStatus(latestWorkflowView)) {
+          return latestWorkflowView
+        }
+      } catch (error: unknown) {
+        logger.warn('Poll merchant applyment status after submit failed', error, 'merchant-applyment-submit-page')
+      }
+    }
+
+    return latestWorkflowView
+  },
+
+  redirectAfterSubmittedWorkflow(workflowView: MerchantApplymentWorkflowView) {
+    wx.setStorageSync(APPLYMENT_FORCE_REFRESH_STORAGE_KEY, '1')
+    const redirectPath = resolveSubmittedWorkflowPath(workflowView)
+    if (workflowView.currentStage === 'action_required') {
+      wx.redirectTo({ url: redirectPath })
+      return
+    }
+
+    showSubmitResultToast(
+      this,
+      '开户资料已提交，平台正在同步微信待办。',
+      'success',
+      () => wx.redirectTo({ url: redirectPath })
+    )
+  },
+
   async onSubmitBindBank(e: WechatMiniprogram.CustomEvent<ApplymentBindBankPayload>) {
     if (this.data.submitting) {
       return
@@ -297,6 +358,7 @@ Page({
         bank_name: e.detail.bank_name,
         account_number: e.detail.account_number,
         account_name: String(e.detail.account_name || '').trim(),
+        contact_email: String(e.detail.contact_email || '').trim(),
         contact_type: e.detail.contact_type,
         contact_name: e.detail.contact_name,
         contact_id_doc_type: e.detail.contact_id_doc_type,
@@ -308,10 +370,11 @@ Page({
       }
 
       const response = await merchantBindBank(requestPayload)
-      const workflowView = buildMerchantApplymentWorkflowView(buildStatusResponseFromBindBank(response))
+      const initialWorkflowView = buildMerchantApplymentWorkflowView(buildStatusResponseFromBindBank(response))
+      showSubmitSyncingToast(this)
+      const workflowView = await this.pollSubmittedApplymentStatus(initialWorkflowView)
       hideSubmitToast(this)
-      wx.setStorageSync(APPLYMENT_FORCE_REFRESH_STORAGE_KEY, '1')
-      wx.redirectTo({ url: resolveSubmittedWorkflowPath(workflowView) })
+      this.redirectAfterSubmittedWorkflow(workflowView)
     } catch (error: unknown) {
       logger.error('Submit merchant applyment bind bank failed', error, 'merchant-applyment-submit-page')
       hideSubmitToast(this)

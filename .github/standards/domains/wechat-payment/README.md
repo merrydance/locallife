@@ -33,7 +33,8 @@
 - 普通服务商模块不得依赖直连支付或平台收付通实现作为行为模板；实现依据只来自官方普通服务商文档、本 README 和后端工程标准。若复用代码，只允许复用不含支付能力语义的 API v3 签名、证书、HTTP transport 等基础设施，并且边界必须有单元测试保护。
 - 普通服务商模块对业务层只暴露最小能力接口，业务层不得直接依赖微信官方请求/响应结构、错误码字符串或模块内部 helper。
 - 默认不 fork `wechatpay-go`。普通服务商模块可以引入官方 `github.com/wechatpay-apiv3/wechatpay-go` 作为模块私有 adapter 依赖，复用其 `core.Client`、签名、验签、证书/公钥、`core/notify`、敏感字段加解密、`APIError` 和已覆盖的 `services/*`，但不得让 SDK DTO、`core.APIResult` 或 `core.APIError` 穿透到 `logic/`、`api/`、`worker/` 或 `db/` 层。
-- `wechatpay-go` 已覆盖的普通服务商支付、退款、分账能力，应在 `ordinaryserviceprovider` 内包装为本项目自己的 capability 方法；SDK 未覆盖的特约商户进件、合单支付、开户意愿确认、商户管控查询、商户平台处置通知、不活跃商户身份核实，应使用官方 `core.Client.Request` 或等价中性 transport 加本模块自有 contracts/errorcodes 实现。
+- `wechatpay-go` 已覆盖的普通服务商支付、退款、分账能力，应在 `ordinaryserviceprovider` 内包装为本项目自己的 capability 方法；SDK 未覆盖且官方明确支持【普通服务商】的特约商户进件、合单支付、商户管控查询、商户平台处置通知等能力，应使用官方 `core.Client.Request` 或等价中性 transport 加本模块自有 contracts/errorcodes 实现。
+- 本项目当前只接入【普通服务商】身份，不是【渠道商】、【从业机构（银行）】、【从业机构（支付机构）】或【平台商户】。官方文档 `支持商户` 未包含【普通服务商】的接口，不得放入 `ordinaryserviceprovider` 生产主链路；若未来获得其他身份，必须先新增独立 bounded module 和独立标准。
 - 只有当普通服务商缺口能力膨胀到需要长期维护通用 SDK、并准备向官方仓库 upstream PR 或内部正式维护 SDK 时，才重新评估 fork `wechatpay-go`；在此之前不得用 fork 替换官方 SDK 依赖。
 - 按能力组组织支付文档，而不是按零散接口组织。
 - 每个能力组中的官方文档，都是该能力组请求结构、响应结构、条件必填、状态、枚举、错误码的唯一真值来源。
@@ -81,10 +82,8 @@
 使用普通服务商特约商户模式替代餐饮、零售等商户主业务的平台收付通交易能力，覆盖：
 
 - 特约商户进件与结算账户查询、修改
-- 商户开户意愿确认
 - 商户平台处置通知
 - 商户被管控能力及原因查询
-- 不活跃商户身份核实
 - 普通小程序支付
 - 小程序合单支付
 - 交易退款与退款通知
@@ -259,6 +258,7 @@
 - 合作伙伴平台文档中心：https://pay.weixin.qq.com/doc/v3/partner/llms.txt
 - 微信支付 AI Agent Skills 知识库：https://github.com/wechatpay-apiv3/wechatpay-skills（仅作为官方示例、流程、排障和质量检查参考，不作为生产依赖）
 - 微信支付 API v3 Go SDK：https://github.com/wechatpay-apiv3/wechatpay-go（仅作为普通服务商模块私有 adapter 依赖或结构参考，不作为业务层 contract）
+- 微信支付接入模式：https://pay.weixin.qq.com/doc/v3/partner/4012081931.md（用于区分普通服务商、渠道商、从业机构、平台商户等身份边界）
 - API V3 概述：https://pay.weixin.qq.com/doc/v3/partner/4012081673.md
 - API V3 接口规则：https://pay.weixin.qq.com/doc/v3/partner/4012081726.md
 - 如何构造接口请求签名-Path 参数：https://pay.weixin.qq.com/doc/v3/partner/4012365862.md
@@ -271,11 +271,27 @@
 
 普通服务商模块的 `contracts`、`errorcodes` 和 endpoint path 必须以本节列出的官方 endpoint 文档为唯一结构真值；不得从平台收付通、直连支付、历史 artifact 或本地业务 DTO 反推字段名、错误码或嵌套结构。每次修改 `locallife/wechat/ordinaryserviceprovider/**` 时，必须复核对应官方页面的请求参数、应答参数、回调解密后资源结构和错误码，并用模块测试固定官方字段名，避免以“能编译/能反序列化”为准。生产代码必须在普通服务商模块内维护可执行的能力组契约映射：按能力组列出 endpoint ID、method/path、operation、请求/响应 contract 类型、状态归属和 request validation 入口；这不是官方 URL 文档目录，官方页面 URL 仍只保留在本 README、snapshot 和测试夹具中。`errorcodes` 必须按能力组和 endpoint 维护 DocumentedCodes 集合，保留官方原始错误码拼写及 canonical alias 匹配，让主业务层只调用普通服务商模块能力，不直接拼微信字段、猜错误码或依赖旧平台收付通/直连 DTO。
 
-当前普通服务商上线测试收口范围以商户进件/开户意愿确认、结算账户、商户管控与处置通知、小程序支付、合单支付、退款、分账/回退/解冻/剩余待分金额/接收方/通知为主。交易账单、资金账单、分账账单申请与下载，以及分账最大比例查询暂不作为本轮上线测试阻塞项；后续启用这些能力时，必须先按本节同样规则补齐 `contracts`、`errorcodes`、client runtime coverage、后端 API/任务入口和前端业务任务说明。
+当前普通服务商上线测试收口范围以商户进件、结算账户、商户管控与处置通知、小程序支付、合单支付、退款、分账/回退/解冻/剩余待分金额/接收方/通知为主。交易账单、资金账单、分账账单申请与下载，以及分账最大比例查询暂不作为本轮上线测试阻塞项；后续启用这些能力时，必须先按本节同样规则补齐 `contracts`、`errorcodes`、client runtime coverage、后端 API/任务入口和前端业务任务说明。`商户开户意愿确认` 与 `不活跃商户身份核实` 当前不得计入普通服务商上线范围，除非官方接口页的 `支持商户` 明确包含【普通服务商】并完成本 README 复核更新。
 
 #### 4.10.2 普通服务商商户管理、特约商户进件与结算账户
 
-普通服务商商户管理能力中，特约商户进件和商户开户意愿确认属于新商户准入主链路；商户被管控能力及原因查询、商户平台处置通知属于上线后的风控运营与异常恢复主链路；不活跃商户身份核实只在商户因长期无交易被管控且解脱路径要求身份核实时使用。
+普通服务商商户管理能力中，特约商户进件属于新商户准入主链路；商户被管控能力及原因查询、商户平台处置通知属于上线后的风控运营与异常恢复主链路。`商户开户意愿确认` 是渠道商/从业机构能力组，不是当前普通服务商能力；`不活跃商户身份核实` API 当前标注为【平台商户】，也不是当前普通服务商能力。4.10 中凡标注“非普通服务商”的文档只能作为角色边界参考，不得生成 `ordinaryserviceprovider` contracts、errorcodes、API、worker 或前端入口。
+
+普通服务商开户流程的项目内完成态规则：
+
+- 提交申请单使用特约商户进件 `applyment4sub`，`contact_info.contact_email` 必须由商户填写超级管理员邮箱；后端和前端都不得使用平台管理员邮箱、配置邮箱或服务商人员邮箱兜底。
+- `APPLYMENT_STATE_TO_BE_CONFIRMED` 在本项目普通服务商链路中解释为待账户验证，前端应引导法人扫码验证或账户汇款验证，不得展示“开户意愿确认”。
+- `APPLYMENT_STATE_TO_BE_SIGNED` 和签约链接表示待商户签约；`APPLYMENT_STATE_SIGNING` 表示微信侧开通权限中；这些都是微信侧待办或处理中状态，不是本地开户完成。
+- 开户完成点是微信申请单进入 `APPLYMENT_STATE_FINISHED` 且返回 `sub_mchid`，并且本地商户支付配置激活成功；普通服务商完成态不得再查询或等待 `AUTHORIZE_STATE_AUTHORIZED`。
+- `apply4subject`、`商户开户意愿确认`、`AUTHORIZE_STATE_*` 不属于当前普通服务商进件完成门槛；不得在 `ordinaryserviceprovider` 生产 contracts/client/errorcodes、worker 恢复、API 状态聚合或小程序页面中重新引入。
+
+商户小程序开户用户流程摘要：
+
+1. 商户在提交页填写结算账户资料和超级管理员邮箱，提交后页面保持短时间长 loading，并自动轮询申请单状态。
+2. 若微信返回签约、法人扫码验证或账户验证待办，小程序自动进入微信待办页，展示二维码、汇款账号/备注等必要动作，并提供“完成后刷新状态”。
+3. 若微信仍在审核或开通中，小程序回到开户首页展示处理中状态，不要求用户用“手动刷新”作为正常路径；页面重入和返回时按状态刷新策略恢复。
+4. 当状态进入 `APPLYMENT_STATE_FINISHED + sub_mchid` 且本地激活成功，开户首页展示“微信支付已开通”、微信支付商户号、结算账户入口和后续说明。
+5. 终态页只说明平台内订单流水/结算记录查看路径；商户余额、提现和微信商户平台操作以微信支付商户平台或微信支付商家助手为准，平台小程序不得承诺代商户提现。
 
 - 特约商户进件-产品介绍：https://pay.weixin.qq.com/doc/v3/partner/4012062365.md
 - 特约商户进件-接入前准备：https://pay.weixin.qq.com/doc/v3/partner/4012062375.md
@@ -289,16 +305,16 @@
 - 特约商户进件-查询结算账户修改申请状态：https://pay.weixin.qq.com/doc/v3/partner/4012761120.md
 - 特约商户进件-图片上传：https://pay.weixin.qq.com/doc/v3/partner/4012760490.md
 - 特约商户进件-视频上传：https://pay.weixin.qq.com/doc/v3/partner/4012761084.md
-- 商户开户意愿确认-产品介绍：https://pay.weixin.qq.com/doc/v3/partner/4012064820.md
-- 商户开户意愿确认-流程指引：https://pay.weixin.qq.com/doc/v3/partner/4012064824.md
-- 商户开户意愿确认-接入前准备：https://pay.weixin.qq.com/doc/v3/partner/4012064828.md
-- 商户开户意愿确认-开发指引：https://pay.weixin.qq.com/doc/v3/partner/4012064832.md
-- 商户开户意愿确认-常见问题：https://pay.weixin.qq.com/doc/v3/partner/4016644196.md
-- 商户开户意愿确认-提交申请单：https://pay.weixin.qq.com/doc/v3/partner/4012722388.md
-- 商户开户意愿确认-撤销申请单：https://pay.weixin.qq.com/doc/v3/partner/4012697627.md
-- 商户开户意愿确认-查询申请单审核结果：https://pay.weixin.qq.com/doc/v3/partner/4012697715.md
-- 商户开户意愿确认-获取商户开户意愿确认状态：https://pay.weixin.qq.com/doc/v3/partner/4012467549.md
-- 商户开户意愿确认-图片上传：https://pay.weixin.qq.com/doc/v3/partner/4012760509.md
+- 商户开户意愿确认-产品介绍：https://pay.weixin.qq.com/doc/v3/partner/4012064820.md（非普通服务商：产品主体为渠道商）
+- 商户开户意愿确认-流程指引：https://pay.weixin.qq.com/doc/v3/partner/4012064824.md（非普通服务商：流程主体为渠道商）
+- 商户开户意愿确认-接入前准备：https://pay.weixin.qq.com/doc/v3/partner/4012064828.md（非普通服务商主链路：属于开户意愿确认能力组，仅作角色边界参考）
+- 商户开户意愿确认-开发指引：https://pay.weixin.qq.com/doc/v3/partner/4012064832.md（非普通服务商：开发主体为渠道商/从业机构）
+- 商户开户意愿确认-常见问题：https://pay.weixin.qq.com/doc/v3/partner/4016644196.md（非普通服务商：开户意愿确认能力组参考）
+- 商户开户意愿确认-提交申请单：https://pay.weixin.qq.com/doc/v3/partner/4012722388.md（非普通服务商接口：支持商户为【渠道商】【从业机构（银行）】【从业机构（支付机构）】）
+- 商户开户意愿确认-撤销申请单：https://pay.weixin.qq.com/doc/v3/partner/4012697627.md（非普通服务商接口：支持商户为【渠道商】【从业机构（银行）】【从业机构（支付机构）】）
+- 商户开户意愿确认-查询申请单审核结果：https://pay.weixin.qq.com/doc/v3/partner/4012697715.md（非普通服务商接口：支持商户为【渠道商】【从业机构（银行）】【从业机构（支付机构）】）
+- 商户开户意愿确认-获取商户开户意愿确认状态：https://pay.weixin.qq.com/doc/v3/partner/4012467549.md（非普通服务商接口：支持商户为【渠道商】【从业机构（银行）】【从业机构（支付机构）】）
+- 商户开户意愿确认-图片上传：https://pay.weixin.qq.com/doc/v3/partner/4012760509.md（注意：该上传接口页标注支持【普通服务商】，但其所在开户意愿确认能力组不适用于当前身份；普通服务商进件图片上传使用“特约商户进件-图片上传”）
 - 商户平台处置通知-产品介绍：https://pay.weixin.qq.com/doc/v3/partner/4012064844.md
 - 商户平台处置通知-接入前准备：https://pay.weixin.qq.com/doc/v3/partner/4012064851.md
 - 商户平台处置通知-开发指引：https://pay.weixin.qq.com/doc/v3/partner/4012064853.md
@@ -310,13 +326,13 @@
 - 商户平台处置通知-商户平台处置记录回调通知：https://pay.weixin.qq.com/doc/v3/partner/4012079216.md
 - 商户被管控能力及原因查询-产品介绍：https://pay.weixin.qq.com/doc/v3/partner/4012165270.md
 - 商户被管控能力及原因查询-查询子商户管控情况：https://pay.weixin.qq.com/doc/v3/partner/4012803072.md
-- 不活跃商户身份核实-产品介绍：https://pay.weixin.qq.com/doc/v3/partner/4012064898.md
-- 不活跃商户身份核实-接入前准备：https://pay.weixin.qq.com/doc/v3/partner/4012064902.md
-- 不活跃商户身份核实-关键概念：https://pay.weixin.qq.com/doc/v3/partner/4012064904.md
-- 不活跃商户身份核实-开发指引：https://pay.weixin.qq.com/doc/v3/partner/4012064909.md
-- 不活跃商户身份核实-常见问题：https://pay.weixin.qq.com/doc/v3/partner/4012064915.md
-- 不活跃商户身份核实-发起不活跃商户身份核实：https://pay.weixin.qq.com/doc/v3/partner/4012471357.md
-- 不活跃商户身份核实-查询不活跃商户身份核实结果：https://pay.weixin.qq.com/doc/v3/partner/4012471359.md
+- 不活跃商户身份核实-产品介绍：https://pay.weixin.qq.com/doc/v3/partner/4012064898.md（非当前普通服务商主链路：API 页未标注【普通服务商】）
+- 不活跃商户身份核实-接入前准备：https://pay.weixin.qq.com/doc/v3/partner/4012064902.md（非当前普通服务商主链路：API 页未标注【普通服务商】）
+- 不活跃商户身份核实-关键概念：https://pay.weixin.qq.com/doc/v3/partner/4012064904.md（非当前普通服务商主链路：API 页未标注【普通服务商】）
+- 不活跃商户身份核实-开发指引：https://pay.weixin.qq.com/doc/v3/partner/4012064909.md（非当前普通服务商主链路：API 页未标注【普通服务商】）
+- 不活跃商户身份核实-常见问题：https://pay.weixin.qq.com/doc/v3/partner/4012064915.md（非当前普通服务商主链路：API 页未标注【普通服务商】）
+- 不活跃商户身份核实-发起不活跃商户身份核实：https://pay.weixin.qq.com/doc/v3/partner/4012471357.md（非普通服务商接口：支持商户为【平台商户】）
+- 不活跃商户身份核实-查询不活跃商户身份核实结果：https://pay.weixin.qq.com/doc/v3/partner/4012471359.md（非普通服务商接口：支持商户为【平台商户】）
 
 #### 4.10.3 普通服务商小程序支付
 

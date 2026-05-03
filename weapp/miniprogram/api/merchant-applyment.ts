@@ -41,6 +41,7 @@ export interface MerchantBindBankRequest {
   bank_name?: string
   account_number: string
   account_name: string
+  contact_email: string
   contact_type?: ApplymentContactType
   contact_name?: string
   contact_id_doc_type?: ApplymentContactDocType
@@ -119,12 +120,9 @@ export interface MerchantApplymentStatusView {
   isInReview: boolean
   needsSign: boolean
   needsAccountValidation: boolean
-  needsConfirmation: boolean
   needsLegalValidation: boolean
   hasPendingActions: boolean
-  accountAuthorizeState: string
   actionHint: string
-  isAccountAuthorized: boolean
   showRejectReason: boolean
   hasApplyment: boolean
   guideTheme: MerchantApplymentGuideTheme
@@ -158,12 +156,9 @@ export const DEFAULT_MERCHANT_APPLYMENT_STATUS_VIEW: MerchantApplymentStatusView
   isInReview: false,
   needsSign: false,
   needsAccountValidation: false,
-  needsConfirmation: false,
   needsLegalValidation: false,
   hasPendingActions: false,
-  accountAuthorizeState: '',
   actionHint: '',
-  isAccountAuthorized: false,
   showRejectReason: false,
   hasApplyment: false,
   guideTheme: 'primary',
@@ -298,10 +293,6 @@ function normalizeMerchantApplymentActionText(text?: string): string {
   return normalized.trim()
 }
 
-function isMerchantApplymentAccountAuthorized(state?: string): boolean {
-  return String(state || '').trim().toUpperCase() === 'AUTHORIZE_STATE_AUTHORIZED'
-}
-
 function getDefaultMerchantApplymentStatusDesc(statusCode: string): string {
   const statusDescMap: Record<string, string> = {
     not_applied: '尚未提交开户申请',
@@ -311,7 +302,7 @@ function getDefaultMerchantApplymentStatusDesc(statusCode: string): string {
     checking: '资料校验中',
     auditing: '审核中',
     account_need_verify: '待账户验证',
-    to_be_confirmed: '待确认',
+    to_be_confirmed: '待账户验证',
     to_be_signed: '待处理，请按微信提示完成',
     signing: '处理中',
     need_sign: '待处理，请按微信提示完成',
@@ -336,7 +327,7 @@ function getDefaultMerchantApplymentTagText(statusCode: string): string {
     checking: '校验中',
     auditing: '审核中',
     account_need_verify: '待验证',
-    to_be_confirmed: '待确认',
+    to_be_confirmed: '待验证',
     to_be_signed: '待处理',
     signing: '处理中',
     need_sign: '待处理',
@@ -386,7 +377,6 @@ function getDefaultMerchantApplymentBlockReason(
   statusCode: string,
   options: {
     needsAccountValidation: boolean
-    needsConfirmation: boolean
     needsSign: boolean
   }
 ) {
@@ -395,9 +385,6 @@ function getDefaultMerchantApplymentBlockReason(
   }
   if (options.needsSign) {
     return '当前申请有微信待办，请按微信提示完成。'
-  }
-  if (options.needsConfirmation) {
-    return '当前申请待微信确认，完成后回到本页会自动刷新。'
   }
   switch (normalizedStatus) {
     case 'in_review':
@@ -426,7 +413,6 @@ function getMerchantApplymentGuideTitle(options: {
   headline: string
   canSubmitOpenInfo: boolean
   needsAccountValidation: boolean
-  needsConfirmation: boolean
   needsSign: boolean
   isInReview: boolean
   isOpened: boolean
@@ -445,10 +431,6 @@ function getMerchantApplymentGuideTitle(options: {
 
   if (options.needsAccountValidation) {
     return '完成账户验证'
-  }
-
-  if (options.needsConfirmation) {
-    return '完成微信确认'
   }
 
   if (options.needsSign) {
@@ -493,7 +475,6 @@ function buildMerchantApplymentHeadline(options: {
   normalizedStatus: MerchantApplymentNormalizedStatus
   canSubmitOpenInfo: boolean
   needsAccountValidation: boolean
-  needsConfirmation: boolean
   needsSign: boolean
   isInReview: boolean
   isOpened: boolean
@@ -555,7 +536,6 @@ function buildMerchantApplymentPrimaryActionText(options: {
   canSubmitOpenInfo: boolean
   submitActionLabel: string
   needsAccountValidation: boolean
-  needsConfirmation: boolean
   needsSign: boolean
   isInReview: boolean
   isOpened: boolean
@@ -568,7 +548,7 @@ function buildMerchantApplymentPrimaryActionText(options: {
     return options.submitActionLabel
   }
 
-  if (options.needsAccountValidation || options.needsSign || options.needsConfirmation) {
+  if (options.needsAccountValidation || options.needsSign) {
     return '处理当前待办'
   }
 
@@ -583,12 +563,11 @@ function buildMerchantApplymentFlowSteps(options: {
   canSubmitOpenInfo: boolean
   hasApplyment: boolean
   needsAccountValidation: boolean
-  needsConfirmation: boolean
   needsSign: boolean
   isInReview: boolean
   isOpened: boolean
 }): MerchantApplymentFlowStepView[] {
-  const isActionStage = options.needsAccountValidation || options.needsSign || options.needsConfirmation
+  const isActionStage = options.needsAccountValidation || options.needsSign
 
   const submitState: MerchantApplymentFlowStepState = options.hasApplyment && !options.canSubmitOpenInfo
     ? 'done'
@@ -622,7 +601,7 @@ function buildMerchantApplymentFlowSteps(options: {
     {
       key: 'verify',
       title: '微信待办',
-      description: '根据微信返回结果完成确认或账户验证。',
+      description: '根据微信返回结果完成账户验证或签约。',
       state: verifyState,
       stateText: getMerchantApplymentFlowStepStateText(verifyState)
     },
@@ -687,7 +666,6 @@ function resolveMerchantApplymentStatusDesc(
   statusCode: string,
   options: {
     needsAccountValidation: boolean
-    needsConfirmation: boolean
     needsSign: boolean
     needsLegalValidation: boolean
   }
@@ -703,11 +681,7 @@ function resolveMerchantApplymentStatusDesc(
   }
 
   if (statusCode === 'to_be_confirmed') {
-    return rawStatusDesc || '待完成微信确认。'
-  }
-
-  if (statusCode === 'finish' && options.needsConfirmation) {
-    return rawStatusDesc || '待完成微信确认。'
+    return rawStatusDesc || '当前申请待账户验证，请按微信提示完成。'
   }
 
   if (options.needsSign) {
@@ -731,32 +705,26 @@ export function buildMerchantApplymentStatusView(
   const accountValidation = buildMerchantApplymentAccountValidationView(status.account_validation)
   const signURL = status.sign_url || ''
   const legalValidationURL = status.legal_validation_url || ''
-  const accountAuthorizeState = String(status.account_authorize_state || '').trim()
   const actionHint = normalizeMerchantApplymentActionText(status.action_hint)
-  const isAccountAuthorized = isMerchantApplymentAccountAuthorized(accountAuthorizeState)
-  const needsOpenConfirmation = statusCode === 'finish' && !isAccountAuthorized
-  const needsAccountValidation = Boolean(accountValidation) || Boolean(legalValidationURL)
-  const needsConfirmation = statusCode === 'to_be_confirmed' || needsOpenConfirmation
+  const needsAccountValidation = Boolean(accountValidation) || Boolean(legalValidationURL) || statusCode === 'to_be_confirmed' || statusCode === 'account_need_verify'
   const needsLegalValidation = Boolean(legalValidationURL)
   const needsSign = Boolean(signURL) && shouldMerchantApplymentNeedSign(signState, statusCode)
   const statusDesc = normalizeMerchantApplymentActionText(resolveMerchantApplymentStatusDesc(status.status_desc || '', statusCode, {
     needsAccountValidation,
-    needsConfirmation,
     needsSign,
     needsLegalValidation
   }))
-  const hasPendingActions = needsAccountValidation || needsSign || needsConfirmation
+  const hasPendingActions = needsAccountValidation || needsSign
   const canSubmitOpenInfo = typeof status.can_submit === 'boolean'
     ? status.can_submit
     : normalizedStatus === 'pending' || normalizedStatus === 'rejected' || normalizedStatus === 'cancelled'
   const rejectReason = normalizeMerchantApplymentActionText(status.reject_reason) || '-'
   const blockReason = normalizeMerchantApplymentActionText(status.block_reason) || getDefaultMerchantApplymentBlockReason(normalizedStatus, statusDesc, statusCode, {
     needsAccountValidation,
-    needsConfirmation,
     needsSign
   })
   const subMchId = status.sub_mch_id || '-'
-  const isOpened = normalizedStatus === 'opened' && isAccountAuthorized
+  const isOpened = normalizedStatus === 'opened'
   const isInReview = normalizedStatus === 'in_review' && !hasPendingActions
   const showRejectReason = normalizedStatus === 'rejected' && rejectReason !== '-'
   const hasApplyment = normalizedStatus !== 'pending'
@@ -790,11 +758,6 @@ export function buildMerchantApplymentStatusView(
     guideTheme = 'warning'
     tagTheme = 'primary'
     tagText = '待处理'
-  } else if (needsConfirmation) {
-    guideText = actionHint || '请完成微信确认后回到本页，系统会自动刷新。'
-    guideTheme = 'warning'
-    tagTheme = 'primary'
-    tagText = '待确认'
   } else if (normalizedStatus === 'in_review') {
     guideText = '微信支付正在审核开户资料，审核期间无需重复提交。'
     guideTheme = 'warning'
@@ -821,7 +784,6 @@ export function buildMerchantApplymentStatusView(
     normalizedStatus,
     canSubmitOpenInfo,
     needsAccountValidation,
-    needsConfirmation,
     needsSign,
     isInReview,
     isOpened
@@ -835,7 +797,6 @@ export function buildMerchantApplymentStatusView(
     canSubmitOpenInfo,
     submitActionLabel,
     needsAccountValidation,
-    needsConfirmation,
     needsSign,
     isInReview,
     isOpened
@@ -844,7 +805,6 @@ export function buildMerchantApplymentStatusView(
     headline,
     canSubmitOpenInfo,
     needsAccountValidation,
-    needsConfirmation,
     needsSign,
     isInReview,
     isOpened
@@ -858,7 +818,6 @@ export function buildMerchantApplymentStatusView(
     canSubmitOpenInfo,
     hasApplyment,
     needsAccountValidation,
-    needsConfirmation,
     needsSign,
     isInReview,
     isOpened
@@ -886,12 +845,9 @@ export function buildMerchantApplymentStatusView(
     isInReview,
     needsSign,
     needsAccountValidation,
-    needsConfirmation,
     needsLegalValidation,
     hasPendingActions,
-    accountAuthorizeState,
     actionHint,
-    isAccountAuthorized,
     showRejectReason,
     hasApplyment,
     guideTheme,

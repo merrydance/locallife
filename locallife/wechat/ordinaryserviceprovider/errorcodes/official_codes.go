@@ -99,12 +99,6 @@ var (
 	SettlementModificationQueryDocumentedCodes = documentedCodeSet("SettlementModificationQueryDocumentedCodes", CodeParamError, CodeInvalidRequest, CodeSignError, CodeSystemError, CodeNoAuth, CodeOrderNotExist)
 	MerchantMediaUploadDocumentedCodes         = documentedCodeSet("MerchantMediaUploadDocumentedCodes", CodeParamError, CodeInvalidRequest, CodeSignError, CodeSystemError, CodeFrequencyLimitExceed, CodeNoAuth)
 
-	AccountWillingnessSubmitDocumentedCodes      = documentedCodeSet("AccountWillingnessSubmitDocumentedCodes", CodeParamError, CodeInvalidRequest, CodeSignError, CodeSystemError, CodeNoAuth)
-	AccountWillingnessCancelDocumentedCodes      = documentedCodeSet("AccountWillingnessCancelDocumentedCodes", CodeParamError, CodeInvalidRequest, CodeSignError, CodeSystemError, CodeNoAuth)
-	AccountWillingnessQueryDocumentedCodes       = documentedCodeSet("AccountWillingnessQueryDocumentedCodes", CodeParamError, CodeInvalidRequest, CodeSignError, CodeSystemError, CodeNoAuth)
-	AccountAuthorizeStateDocumentedCodes         = documentedCodeSet("AccountAuthorizeStateDocumentedCodes", CodeParamError, CodeInvalidRequest, CodeSignError, CodeSystemError, CodeNoAuth)
-	AccountWillingnessMediaUploadDocumentedCodes = documentedCodeSet("AccountWillingnessMediaUploadDocumentedCodes", CodeParamError, CodeInvalidRequest, CodeSignError, CodeSystemError, CodeFrequencyLimitExceed, CodeNoAuth)
-
 	ViolationNotificationConfigQueryDocumentedCodes           = documentedCodeSet("ViolationNotificationConfigQueryDocumentedCodes", CodeParamError, CodeInvalidRequest, CodeSignError, CodeSystemError, CodeNoAuth, CodeNotFound, CodeFrequencyLimited)
 	ViolationNotificationConfigUpdateDocumentedCodes          = documentedCodeSet("ViolationNotificationConfigUpdateDocumentedCodes", CodeParamError, CodeInvalidRequest, CodeSignError, CodeSystemError, CodeNoAuth, CodeNotFound, CodeFrequencyLimited)
 	ViolationNotificationConfigCreateDocumentedCodes          = documentedCodeSet("ViolationNotificationConfigCreateDocumentedCodes", CodeParamError, CodeInvalidRequest, CodeSignError, CodeSystemError, CodeNoAuth, CodeAlreadyExists, CodeFrequencyLimited)

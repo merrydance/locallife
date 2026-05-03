@@ -31,7 +31,6 @@ type officialContractCapabilityGroup struct {
 // officialContractCapabilityGroups groups test fixtures by ordinary-service-provider capability.
 var officialContractCapabilityGroups = []officialContractCapabilityGroup{
 	{Name: "特约商户进件与结算账户", Bindings: officialCapabilityApplyment},
-	{Name: "商户开户意愿确认", Bindings: officialCapabilityAccountWillingness},
 	{Name: "商户管控、商户平台处置通知与不活跃核实", Bindings: officialCapabilityMerchantManagement},
 	{Name: "小程序支付", Bindings: officialCapabilityPayment},
 	{Name: "小程序合单支付", Bindings: officialCapabilityCombinePayment},
@@ -47,14 +46,6 @@ var officialCapabilityApplyment = []officialContractBinding{
 	{Title: "特约商户进件-查询结算账户", URL: "https://pay.weixin.qq.com/doc/v3/partner/4012761113.md", Method: methodGet, Path: "/v3/apply4sub/sub_merchants/{sub_mchid}/settlement", RequestContracts: []string{"SettlementQueryRequest"}, ResponseContracts: []string{"SettlementQueryResponse"}, StatusConstants: []string{"SettlementVerifyResult"}, ErrorCodeSet: "SettlementQueryDocumentedCodes"},
 	{Title: "特约商户进件-查询结算账户修改申请状态", URL: "https://pay.weixin.qq.com/doc/v3/partner/4012761120.md", Method: methodGet, Path: "/v3/apply4sub/sub_merchants/{sub_mchid}/application/{application_no}", RequestContracts: []string{"SettlementModificationQueryRequest"}, ResponseContracts: []string{"SettlementModificationQueryResponse"}, StatusConstants: []string{"SettlementVerifyResult", "SettlementAuditResult"}, ErrorCodeSet: "SettlementModificationQueryDocumentedCodes"},
 	{Title: "特约商户进件-图片上传", URL: "https://pay.weixin.qq.com/doc/v3/partner/4012760490.md", Method: methodPost, Path: "/v3/merchant/media/upload", RequestContracts: []string{"MediaUploadRequestMultipart"}, ResponseContracts: []string{"MediaUploadResponse"}, ErrorCodeSet: "MerchantMediaUploadDocumentedCodes"},
-}
-
-var officialCapabilityAccountWillingness = []officialContractBinding{
-	{Title: "商户开户意愿确认-提交申请单", URL: "https://pay.weixin.qq.com/doc/v3/partner/4012722388.md", Method: methodPost, Path: "/v3/apply4subject/applyment/", RequestContracts: []string{"AccountWillingnessSubmitRequest"}, ResponseContracts: []string{"AccountWillingnessSubmitResponse"}, ErrorCodeSet: "AccountWillingnessSubmitDocumentedCodes"},
-	{Title: "商户开户意愿确认-撤销申请单", URL: "https://pay.weixin.qq.com/doc/v3/partner/4012697627.md", Method: methodPost, Path: "/v3/apply4subject/applyment/{business_code}/cancel", RequestContracts: []string{"AccountWillingnessCancelRequest"}, ResponseContracts: []string{"AccountWillingnessCancelResponse"}, ErrorCodeSet: "AccountWillingnessCancelDocumentedCodes"},
-	{Title: "商户开户意愿确认-查询申请单审核结果", URL: "https://pay.weixin.qq.com/doc/v3/partner/4012697715.md", Method: methodGet, Path: "/v3/apply4subject/applyment?business_code={business_code}", RequestContracts: []string{"AccountWillingnessQueryRequest"}, ResponseContracts: []string{"AccountWillingnessQueryResponse"}, StatusConstants: []string{"AccountWillingnessState"}, ErrorCodeSet: "AccountWillingnessQueryDocumentedCodes"},
-	{Title: "商户开户意愿确认-获取商户开户意愿确认状态", URL: "https://pay.weixin.qq.com/doc/v3/partner/4012467549.md", Method: methodGet, Path: "/v3/apply4subject/applyment/merchants/{sub_mchid}/state", RequestContracts: []string{"AccountAuthorizeStateRequest"}, ResponseContracts: []string{"AccountAuthorizeStateResponse"}, StatusConstants: []string{"AccountAuthorizeState"}, ErrorCodeSet: "AccountAuthorizeStateDocumentedCodes"},
-	{Title: "商户开户意愿确认-图片上传", URL: "https://pay.weixin.qq.com/doc/v3/partner/4012760509.md", Method: methodPost, Path: "/v3/merchant/media/upload", RequestContracts: []string{"MediaUploadRequestMultipart"}, ResponseContracts: []string{"MediaUploadResponse"}, ErrorCodeSet: "AccountWillingnessMediaUploadDocumentedCodes"},
 }
 
 var officialCapabilityMerchantManagement = []officialContractBinding{

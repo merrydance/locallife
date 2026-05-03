@@ -58,21 +58,6 @@ func (mr *MockOrdinaryServiceProviderClientInterfaceMockRecorder) AddProfitShari
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddProfitSharingReceiver", reflect.TypeOf((*MockOrdinaryServiceProviderClientInterface)(nil).AddProfitSharingReceiver), ctx, req)
 }
 
-// CancelAccountWillingness mocks base method.
-func (m *MockOrdinaryServiceProviderClientInterface) CancelAccountWillingness(ctx context.Context, req contracts.AccountWillingnessCancelRequest) (*contracts.AccountWillingnessCancelResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CancelAccountWillingness", ctx, req)
-	ret0, _ := ret[0].(*contracts.AccountWillingnessCancelResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CancelAccountWillingness indicates an expected call of CancelAccountWillingness.
-func (mr *MockOrdinaryServiceProviderClientInterfaceMockRecorder) CancelAccountWillingness(ctx, req any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelAccountWillingness", reflect.TypeOf((*MockOrdinaryServiceProviderClientInterface)(nil).CancelAccountWillingness), ctx, req)
-}
-
 // CloseCombinePayment mocks base method.
 func (m *MockOrdinaryServiceProviderClientInterface) CloseCombinePayment(ctx context.Context, req contracts.CombineCloseRequest) error {
 	m.ctrl.T.Helper()
@@ -427,36 +412,6 @@ func (mr *MockOrdinaryServiceProviderClientInterfaceMockRecorder) ProfitSharingN
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProfitSharingNotifyURL", reflect.TypeOf((*MockOrdinaryServiceProviderClientInterface)(nil).ProfitSharingNotifyURL))
 }
 
-// QueryAccountAuthorizeState mocks base method.
-func (m *MockOrdinaryServiceProviderClientInterface) QueryAccountAuthorizeState(ctx context.Context, req contracts.AccountAuthorizeStateRequest) (*contracts.AccountAuthorizeStateResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "QueryAccountAuthorizeState", ctx, req)
-	ret0, _ := ret[0].(*contracts.AccountAuthorizeStateResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// QueryAccountAuthorizeState indicates an expected call of QueryAccountAuthorizeState.
-func (mr *MockOrdinaryServiceProviderClientInterfaceMockRecorder) QueryAccountAuthorizeState(ctx, req any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryAccountAuthorizeState", reflect.TypeOf((*MockOrdinaryServiceProviderClientInterface)(nil).QueryAccountAuthorizeState), ctx, req)
-}
-
-// QueryAccountWillingness mocks base method.
-func (m *MockOrdinaryServiceProviderClientInterface) QueryAccountWillingness(ctx context.Context, req contracts.AccountWillingnessQueryRequest) (*contracts.AccountWillingnessQueryResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "QueryAccountWillingness", ctx, req)
-	ret0, _ := ret[0].(*contracts.AccountWillingnessQueryResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// QueryAccountWillingness indicates an expected call of QueryAccountWillingness.
-func (mr *MockOrdinaryServiceProviderClientInterfaceMockRecorder) QueryAccountWillingness(ctx, req any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryAccountWillingness", reflect.TypeOf((*MockOrdinaryServiceProviderClientInterface)(nil).QueryAccountWillingness), ctx, req)
-}
-
 // QueryApplymentByBusinessCode mocks base method.
 func (m *MockOrdinaryServiceProviderClientInterface) QueryApplymentByBusinessCode(ctx context.Context, req contracts.ApplymentQueryByBusinessCodeRequest) (*contracts.ApplymentQueryResponse, error) {
 	m.ctrl.T.Helper()
@@ -721,21 +676,6 @@ func (m *MockOrdinaryServiceProviderClientInterface) ServiceProviderMchName() st
 func (mr *MockOrdinaryServiceProviderClientInterfaceMockRecorder) ServiceProviderMchName() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ServiceProviderMchName", reflect.TypeOf((*MockOrdinaryServiceProviderClientInterface)(nil).ServiceProviderMchName))
-}
-
-// SubmitAccountWillingness mocks base method.
-func (m *MockOrdinaryServiceProviderClientInterface) SubmitAccountWillingness(ctx context.Context, req contracts.AccountWillingnessSubmitRequest) (*contracts.AccountWillingnessSubmitResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitAccountWillingness", ctx, req)
-	ret0, _ := ret[0].(*contracts.AccountWillingnessSubmitResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SubmitAccountWillingness indicates an expected call of SubmitAccountWillingness.
-func (mr *MockOrdinaryServiceProviderClientInterfaceMockRecorder) SubmitAccountWillingness(ctx, req any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitAccountWillingness", reflect.TypeOf((*MockOrdinaryServiceProviderClientInterface)(nil).SubmitAccountWillingness), ctx, req)
 }
 
 // SubmitApplyment mocks base method.

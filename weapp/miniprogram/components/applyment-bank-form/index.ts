@@ -17,6 +17,7 @@ import { uploadMedia } from '../../utils/media'
 import { getErrorUserMessage } from '../../utils/user-facing'
 
 const DEFAULT_CONTACT_DOC_TYPE: ApplymentContactDocType = 'IDENTIFICATION_TYPE_MAINLAND_IDCARD'
+const CONTACT_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 type ContactDocumentKind = 'front' | 'back'
 
@@ -32,6 +33,7 @@ interface ApplymentBindBankDraft {
   bank_name: string
   account_number: string
   account_name: string
+  contact_email: string
   contact_type: ApplymentContactType
   contact_name: string
   contact_id_doc_type: ApplymentContactDocType
@@ -54,6 +56,7 @@ interface ApplymentBankFormProperties {
   defaultAccountType: ApplymentAccountType
   preloadCatalogs?: boolean
   showContactFields?: boolean
+  requireContactEmail?: boolean
   requireAccountName?: boolean
   uploadBusinessType?: string
 }
@@ -96,6 +99,7 @@ function createEmptyDraft(accountType: ApplymentAccountType): ApplymentBindBankD
     bank_name: '',
     account_number: '',
     account_name: '',
+    contact_email: '',
     contact_type: 'LEGAL',
     contact_name: '',
     contact_id_doc_type: DEFAULT_CONTACT_DOC_TYPE,
@@ -164,6 +168,7 @@ function normalizeDraft(
     bank_name: typeof draft.bank_name === 'string' ? draft.bank_name : '',
     account_number: typeof draft.account_number === 'string' ? draft.account_number : '',
     account_name: typeof draft.account_name === 'string' ? draft.account_name : '',
+    contact_email: typeof draft.contact_email === 'string' ? draft.contact_email : '',
     contact_type: normalizeContactType(draft.contact_type),
     contact_name: typeof draft.contact_name === 'string' ? draft.contact_name : '',
     contact_id_doc_type: normalizeContactDocType(draft.contact_id_doc_type),
@@ -277,6 +282,7 @@ function findSelectedBranchIndex(branches: ApplymentBranchOption[], form: Applym
 function getSubmitBlockMessage(
   form: ApplymentBindBankDraft,
   showContactFields?: boolean,
+  requireContactEmail?: boolean,
   requireAccountName: boolean = true
 ): string {
   if (!form.account_number.trim()) {
@@ -285,6 +291,15 @@ function getSubmitBlockMessage(
 
   if (requireAccountName && !form.account_name.trim()) {
     return '请先填写开户名称'
+  }
+
+  if (requireContactEmail) {
+    if (!form.contact_email.trim()) {
+      return '请填写超级管理员邮箱'
+    }
+    if (!CONTACT_EMAIL_PATTERN.test(form.contact_email.trim())) {
+      return '请填写正确的邮箱地址'
+    }
   }
 
   if (!form.account_bank.trim()) {
@@ -333,8 +348,13 @@ function getSubmitBlockMessage(
   return ''
 }
 
-function canSubmitForm(form: ApplymentBindBankDraft, showContactFields?: boolean, requireAccountName: boolean = true): boolean {
-  return !getSubmitBlockMessage(form, showContactFields, requireAccountName)
+function canSubmitForm(
+  form: ApplymentBindBankDraft,
+  showContactFields?: boolean,
+  requireContactEmail?: boolean,
+  requireAccountName: boolean = true
+): boolean {
+  return !getSubmitBlockMessage(form, showContactFields, requireContactEmail, requireAccountName)
 }
 
 Component({
@@ -364,10 +384,14 @@ Component({
       type: Boolean,
       value: false
     },
-      requireAccountName: {
-        type: Boolean,
-        value: true
-      },
+    requireContactEmail: {
+      type: Boolean,
+      value: false
+    },
+    requireAccountName: {
+      type: Boolean,
+      value: true
+    },
     uploadBusinessType: {
       type: String,
       value: ''
@@ -465,8 +489,18 @@ Component({
       const initialDraft = normalizeDraft(accountType, properties.initialDraft)
 
       this.setFormState(initialDraft, {
-        canSubmit: canSubmitForm(initialDraft, properties.showContactFields, properties.requireAccountName),
-        submitBlockMessage: getSubmitBlockMessage(initialDraft, properties.showContactFields, properties.requireAccountName)
+        canSubmit: canSubmitForm(
+          initialDraft,
+          properties.showContactFields,
+          properties.requireContactEmail,
+          properties.requireAccountName
+        ),
+        submitBlockMessage: getSubmitBlockMessage(
+          initialDraft,
+          properties.showContactFields,
+          properties.requireContactEmail,
+          properties.requireAccountName
+        )
       }, { emitDraft: false, syncSubmit: false })
 
       await this.restoreDraftSelection(initialDraft)
@@ -596,8 +630,18 @@ Component({
 
     syncCanSubmit(nextForm?: ApplymentBindBankDraft) {
       const form = nextForm || (this.data.form as ApplymentBindBankDraft)
-      const canSubmit = canSubmitForm(form, this.properties.showContactFields, this.properties.requireAccountName)
-      const submitBlockMessage = getSubmitBlockMessage(form, this.properties.showContactFields, this.properties.requireAccountName)
+      const canSubmit = canSubmitForm(
+        form,
+        this.properties.showContactFields,
+        this.properties.requireContactEmail,
+        this.properties.requireAccountName
+      )
+      const submitBlockMessage = getSubmitBlockMessage(
+        form,
+        this.properties.showContactFields,
+        this.properties.requireContactEmail,
+        this.properties.requireAccountName
+      )
       this.setData({ canSubmit, submitBlockMessage })
     },
 
@@ -1347,7 +1391,12 @@ Component({
     onSubmit() {
       const form = this.readForm()
       const properties = this.properties as unknown as ApplymentBankFormProperties
-      const submitBlockMessage = getSubmitBlockMessage(form, properties.showContactFields, properties.requireAccountName)
+      const submitBlockMessage = getSubmitBlockMessage(
+        form,
+        properties.showContactFields,
+        properties.requireContactEmail,
+        properties.requireAccountName
+      )
       if (submitBlockMessage) {
         wx.showToast({ title: submitBlockMessage, icon: 'none' })
         return
@@ -1364,7 +1413,8 @@ Component({
         bank_branch_id: form.bank_branch_id.trim() || undefined,
         bank_name: form.bank_name.trim() || undefined,
         account_number: form.account_number.trim(),
-          account_name: form.account_name.trim() || undefined
+        account_name: form.account_name.trim() || undefined,
+        contact_email: form.contact_email.trim() || undefined
       }
 
       if (properties.showContactFields && form.contact_type === 'SUPER') {

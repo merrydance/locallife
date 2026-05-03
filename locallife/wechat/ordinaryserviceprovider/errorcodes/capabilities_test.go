@@ -4,8 +4,8 @@ import "testing"
 
 func TestCapabilityCodeSetsMapEndpointCodes(t *testing.T) {
 	groups := CapabilityCodeSetGroups()
-	if len(groups) != 7 {
-		t.Fatalf("capability code set group count = %d, want 7", len(groups))
+	if len(groups) != 6 {
+		t.Fatalf("capability code set group count = %d, want 6", len(groups))
 	}
 
 	seen := map[EndpointID]struct{}{}

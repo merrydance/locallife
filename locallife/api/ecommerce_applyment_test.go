@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -244,6 +245,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				"bank_name":         "深圳前海微众银行深圳南山支行",
 				"account_number":    "6214830012345678",
 				"account_name":      "张三",
+				"contact_email":     "merchant-admin@example.com",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -281,7 +283,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 						require.Equal(t, "402584040001", arg.BankBranchID.String)
 						require.Equal(t, applicationWithTestURL.ContactPhone, arg.MobilePhone)
 						require.True(t, arg.ContactEmail.Valid)
-						require.Equal(t, "applyment-contact@test.example.com", arg.ContactEmail.String)
+						require.Equal(t, "merchant-admin@example.com", arg.ContactEmail.String)
 						return randomEcommerceApplymentForTest("merchant", merchant.ID), nil
 					})
 
@@ -415,6 +417,72 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "BadRequest_MissingContactEmailDoesNotFallbackToPlatformEmail",
+			body: gin.H{
+				"account_type":      "ACCOUNT_TYPE_PRIVATE",
+				"account_bank":      "其他银行",
+				"account_bank_code": 1099,
+				"bank_alias":        "深圳前海微众银行",
+				"bank_alias_code":   "1000009561",
+				"need_bank_branch":  true,
+				"bank_address_code": "440300",
+				"bank_branch_id":    "402584040001",
+				"bank_name":         "深圳前海微众银行深圳南山支行",
+				"account_number":    "6214830012345678",
+				"account_name":      "张三",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					GetUserMerchantApplication(gomock.Any(), user.ID).
+					Times(1).
+					Return(applicationWithTestURL, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "请填写超级管理员邮箱")
+				require.NotContains(t, recorder.Body.String(), "WECHAT_ORDINARY_APPLYMENT_CONTACT_EMAIL")
+				require.NotContains(t, recorder.Body.String(), "平台管理员")
+			},
+		},
+		{
+			name: "BadRequest_InvalidContactEmailReturnsUserFacingMessage",
+			body: gin.H{
+				"account_type":      "ACCOUNT_TYPE_PRIVATE",
+				"account_bank":      "其他银行",
+				"account_bank_code": 1099,
+				"bank_alias":        "深圳前海微众银行",
+				"bank_alias_code":   "1000009561",
+				"need_bank_branch":  true,
+				"bank_address_code": "440300",
+				"bank_branch_id":    "402584040001",
+				"bank_name":         "深圳前海微众银行深圳南山支行",
+				"account_number":    "6214830012345678",
+				"account_name":      "张三",
+				"contact_email":     "not-an-email",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "请填写正确的邮箱地址")
+				require.NotContains(t, recorder.Body.String(), "ContactEmail")
+			},
+		},
+		{
 			name: "OK_WithSuperAdministratorContact",
 			body: gin.H{
 				"account_type":                      "ACCOUNT_TYPE_PRIVATE",
@@ -436,6 +504,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				"contact_id_doc_copy_back_asset_id": 502,
 				"contact_id_doc_period_begin":       "2020-01-01",
 				"contact_id_doc_period_end":         "2030-01-01",
+				"contact_email":                     "merchant-super@example.com",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -652,6 +721,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				"contact_id_doc_copy_back_asset_id": 502,
 				"contact_id_doc_period_begin":       "2020-01-01",
 				"contact_id_doc_period_end":         "2030-01-01",
+				"contact_email":                     "merchant-upload@example.com",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -1458,7 +1528,7 @@ func TestGetMerchantApplymentStatusNormalizesFinishWithoutSubMchID(t *testing.T)
 	require.False(t, response.CanSubmit)
 }
 
-func TestGetMerchantApplymentStatusOrdinaryFinishRequiresAccountAuthorization(t *testing.T) {
+func TestGetMerchantApplymentStatusOrdinaryFinishActivatesWithSubMchID(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchantForApplyment(user.ID)
 
@@ -1490,15 +1560,6 @@ func TestGetMerchantApplymentStatusOrdinaryFinishRequiresAccountAuthorization(t 
 			SubMchID:       "sub_mch_22334455",
 		}, nil)
 
-	ordinaryClient.EXPECT().
-		QueryAccountAuthorizeState(gomock.Any(), ospcontracts.AccountAuthorizeStateRequest{SubMchID: "sub_mch_22334455"}).
-		Times(1).
-		Return(&ospcontracts.AccountAuthorizeStateResponse{
-			SubMchID:       "sub_mch_22334455",
-			AuthorizeState: ospcontracts.AccountAuthorizeStateUnauthorized,
-			Authorized:     false,
-		}, nil)
-
 	store.EXPECT().
 		UpdateEcommerceApplymentStatus(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateEcommerceApplymentStatusParams{})).
 		Times(1).
@@ -1515,7 +1576,7 @@ func TestGetMerchantApplymentStatusOrdinaryFinishRequiresAccountAuthorization(t 
 			SubjectType:           applyment.SubjectType,
 			SubjectID:             applyment.SubjectID,
 			SubMchID:              "sub_mch_22334455",
-			AccountAuthorizeState: db.AccountAuthorizeStateUnauthorized,
+			AccountAuthorizeState: "",
 		}).
 		Times(1).
 		Return(nil)
@@ -1532,14 +1593,15 @@ func TestGetMerchantApplymentStatusOrdinaryFinishRequiresAccountAuthorization(t 
 	var response merchantApplymentStatusResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 	require.Equal(t, "finish", response.Status)
-	require.Equal(t, db.AccountAuthorizeStateUnauthorized, response.AccountAuthorizeState)
-	require.Contains(t, response.StatusDesc, "开户意愿确认")
-	require.Contains(t, response.ActionHint, "完成开户意愿确认")
+	require.Empty(t, response.AccountAuthorizeState)
+	require.Contains(t, response.StatusDesc, "微信支付已开通")
+	require.NotContains(t, response.StatusDesc, "开户意愿")
+	require.NotContains(t, response.ActionHint, "开户意愿")
 	require.NotNil(t, response.SubMchID)
 	require.Equal(t, "sub_mch_22334455", *response.SubMchID)
 }
 
-func TestGetMerchantApplymentStatusOrdinaryAuthorizeStateFailureReturnsRetryGuidance(t *testing.T) {
+func TestGetMerchantApplymentStatusOrdinaryFinishActivationFailureReturnsSyncingGuidance(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchantForApplyment(user.ID)
 
@@ -1553,7 +1615,7 @@ func TestGetMerchantApplymentStatusOrdinaryAuthorizeStateFailureReturnsRetryGuid
 
 	applyment := randomEcommerceApplymentForTest("merchant", merchant.ID)
 	applyment.Status = "auditing"
-	applyment.OutRequestNo = "APPLYMENT_STATUS_AUTH_FAIL"
+	applyment.OutRequestNo = "APPLYMENT_STATUS_ACTIVATION_FAIL"
 	applyment.ApplymentID = pgtype.Int8{Int64: 33445566, Valid: true}
 
 	store.EXPECT().
@@ -1566,15 +1628,10 @@ func TestGetMerchantApplymentStatusOrdinaryAuthorizeStateFailureReturnsRetryGuid
 		Times(1).
 		Return(&ospcontracts.ApplymentQueryResponse{
 			ApplymentID:    33445566,
-			BusinessCode:   "APPLYMENT_STATUS_AUTH_FAIL",
+			BusinessCode:   "APPLYMENT_STATUS_ACTIVATION_FAIL",
 			ApplymentState: ospcontracts.ApplymentStateFinished,
-			SubMchID:       "sub_mch_auth_fail",
+			SubMchID:       "sub_mch_activation_fail",
 		}, nil)
-
-	ordinaryClient.EXPECT().
-		QueryAccountAuthorizeState(gomock.Any(), ospcontracts.AccountAuthorizeStateRequest{SubMchID: "sub_mch_auth_fail"}).
-		Times(1).
-		Return(nil, &wechat.WechatPayError{StatusCode: http.StatusInternalServerError, Code: "SYSTEM_ERROR", Message: "系统异常"})
 
 	store.EXPECT().
 		UpdateEcommerceApplymentStatus(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateEcommerceApplymentStatusParams{})).
@@ -1586,11 +1643,11 @@ func TestGetMerchantApplymentStatusOrdinaryAuthorizeStateFailureReturnsRetryGuid
 			ApplymentID:           applyment.ID,
 			SubjectType:           applyment.SubjectType,
 			SubjectID:             applyment.SubjectID,
-			SubMchID:              "sub_mch_auth_fail",
-			AccountAuthorizeState: db.AccountAuthorizeStateUnauthorized,
+			SubMchID:              "sub_mch_activation_fail",
+			AccountAuthorizeState: "",
 		}).
 		Times(1).
-		Return(nil)
+		Return(errors.New("activation failed"))
 
 	server := newTestServerWithOrdinaryApplyment(t, store, ordinaryClient)
 	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/applyment/status", nil)
@@ -1604,11 +1661,12 @@ func TestGetMerchantApplymentStatusOrdinaryAuthorizeStateFailureReturnsRetryGuid
 	var response merchantApplymentStatusResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 	require.Equal(t, "finish", response.Status)
-	require.Equal(t, db.AccountAuthorizeStateUnauthorized, response.AccountAuthorizeState)
-	require.Contains(t, response.StatusDesc, "暂时无法确认开户意愿授权状态")
-	require.Contains(t, response.ActionHint, "稍后刷新")
+	require.Empty(t, response.AccountAuthorizeState)
+	require.Contains(t, response.StatusDesc, "平台正在同步收款配置")
+	require.Contains(t, response.ActionHint, "稍后")
+	require.NotContains(t, response.StatusDesc, "开户意愿")
 	require.NotNil(t, response.SubMchID)
-	require.Equal(t, "sub_mch_auth_fail", *response.SubMchID)
+	require.Equal(t, "sub_mch_activation_fail", *response.SubMchID)
 }
 
 func TestMapWechatApplymentStatus(t *testing.T) {
@@ -1836,6 +1894,7 @@ func TestMerchantBindBankWithoutOrdinaryServiceProviderClient(t *testing.T) {
 		"bank_address_code": "440300",
 		"account_number":    "6214830012345678",
 		"account_name":      "张三",
+		"contact_email":     "merchant-admin@example.com",
 	}
 	data, err := json.Marshal(body)
 	require.NoError(t, err)
@@ -1905,6 +1964,7 @@ func TestMerchantBindBankEncryptFailed(t *testing.T) {
 		"bank_address_code": "440300",
 		"account_number":    "6214830012345678",
 		"account_name":      "张三",
+		"contact_email":     "merchant-admin@example.com",
 	}
 	data, err := json.Marshal(body)
 	require.NoError(t, err)
@@ -2127,6 +2187,7 @@ func TestMerchantBindBankReturnsActionableMessageWithoutRequestIDWhenContactDocu
 		"contact_id_doc_copy_back_asset_id": 502,
 		"contact_id_doc_period_begin":       "2020-01-01",
 		"contact_id_doc_period_end":         "2030-01-01",
+		"contact_email":                     "merchant-contact@example.com",
 	}
 	data, err := json.Marshal(body)
 	require.NoError(t, err)
@@ -2218,6 +2279,7 @@ func TestMerchantBindBankReturnsConfigGuidanceWhenStoreQRCodeUploadFails(t *test
 		"bank_address_code": "440300",
 		"account_number":    "6214830012345678",
 		"account_name":      "张三",
+		"contact_email":     "merchant-admin@example.com",
 	}
 	data, err := json.Marshal(body)
 	require.NoError(t, err)
@@ -2332,6 +2394,7 @@ func TestMerchantBindBankSubmittedStateSyncFailed(t *testing.T) {
 		"bank_address_code": "440300",
 		"account_number":    "6214830012345678",
 		"account_name":      "张三",
+		"contact_email":     "merchant-admin@example.com",
 	}
 	data, err := json.Marshal(body)
 	require.NoError(t, err)

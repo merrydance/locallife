@@ -38,16 +38,21 @@
     </t-cell-group>
 
     <t-cell-group theme="card">
-      <t-cell title="当前待办" note="{{workflowView.currentTask.title}}">
+      <t-cell title="{{actionTaskView.eyebrow}}" note="{{actionTaskView.title}}">
         <view slot="right-icon">
           <t-tag theme="{{workflowView.statusView.tagTheme}}" size="small">{{workflowView.statusView.tagText}}</t-tag>
         </view>
       </t-cell>
-      <t-cell title="处理说明" note="{{workflowView.currentTask.description}}" />
+      <t-cell title="处理说明" note="{{actionTaskView.description}}" />
+      <t-cell title="状态同步" note="{{actionTaskView.statusNote}}" />
     </t-cell-group>
 
-    <view wx:if="{{workflowView.currentTaskQRCodeValue}}" class="qrcode-block">
-      <t-qrcode value="{{workflowView.currentTaskQRCodeValue}}" size="220" level="M" borderless="{{true}}" />
+    <view wx:if="{{workflowView.currentTaskQRCodeValue}}" class="qrcode-panel">
+      <view class="qrcode-panel__title">{{actionTaskView.qrTitle}}</view>
+      <view class="qrcode-panel__body">
+        <t-qrcode value="{{workflowView.currentTaskQRCodeValue}}" size="220" level="M" borderless="{{true}}" />
+      </view>
+      <view class="qrcode-panel__hint">{{workflowView.currentTaskQRCodeHint}}</view>
     </view>
 
     <t-cell-group wx:if="{{workflowView.currentTask.type === 'bank_transfer_validation' && workflowView.accountValidation}}" theme="card">
@@ -71,6 +76,15 @@
       />
     </t-cell-group>
 
+    <t-cell-group wx:if="{{actionTaskView.steps.length > 0}}" theme="card">
+      <t-cell
+        wx:for="{{actionTaskView.steps}}"
+        wx:key="title"
+        title="{{item.title}}"
+        note="{{item.description}}"
+      />
+    </t-cell-group>
+
     <t-cell-group wx:if="{{workflowView.secondaryTasks.length > 0}}" theme="card">
       <t-cell
         wx:for="{{workflowView.secondaryTasks}}"
@@ -87,14 +101,10 @@
       />
     </t-cell-group>
 
-    <view wx:if="{{workflowView.currentTaskQRCodeValue}}" class="qrcode-next-step">
-      <view class="qrcode-next-step__title">保存后继续处理</view>
-      <view class="qrcode-next-step__text">{{workflowView.currentTaskQRCodeHint}}</view>
-      <view class="qrcode-next-step__text">完成后回到本页或开户首页，系统会自动刷新开户状态。</view>
-    </view>
-
-    <view wx:if="{{workflowView.currentTaskQRCodeValue}}" class="action-buttons">
-      <t-button wx:if="{{workflowView.currentTaskQRCodeValue}}" theme="default" variant="outline" bind:tap="onSaveQRCodeToAlbum" loading="{{savingQRCode}}">保存二维码</t-button>
+    <view class="action-buttons">
+      <t-button wx:if="{{workflowView.currentTaskQRCodeValue}}" theme="primary" bind:tap="onSaveQRCodeToAlbum" loading="{{savingQRCode}}">{{actionTaskView.saveQRCodeLabel}}</t-button>
+      <t-button theme="default" variant="outline" bind:tap="onRefreshStatus" loading="{{refreshingStatus}}">完成后刷新状态</t-button>
+      <t-button theme="default" variant="text" bind:tap="onBackHome">返回开户首页</t-button>
     </view>
 
     <view class="qr-poster-canvas-shell" aria-hidden="true">

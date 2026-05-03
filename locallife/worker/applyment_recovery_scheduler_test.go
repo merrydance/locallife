@@ -38,7 +38,7 @@ func (d *applymentRecoveryTestDistributor) DistributeTaskProcessPaymentFactAppli
 	return nil
 }
 
-func TestApplymentRecoverySchedulerRunOnceRequeuesLocalUnprocessedFollowUp(t *testing.T) {
+func TestApplymentRecoverySchedulerRunOnceSkipsAlreadyProcessedFinishedSubMchID(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -48,27 +48,21 @@ func TestApplymentRecoverySchedulerRunOnceRequeuesLocalUnprocessedFollowUp(t *te
 	store.EXPECT().
 		ListEcommerceApplymentsPendingFollowUp(gomock.Any(), gomock.Any()).
 		Return([]db.EcommerceApplymentPendingFollowUp{{
-			ID:           11,
-			SubjectType:  "merchant",
-			SubjectID:    22,
-			OutRequestNo: "APPLY_RECOVERY_001",
-			Status:       "finish",
-			SubMchID:     pgtype.Text{String: "sub_mch_001", Valid: true},
-			UpdatedAt:    time.Now().Add(-5 * time.Minute),
+			ID:                       11,
+			SubjectType:              "merchant",
+			SubjectID:                22,
+			OutRequestNo:             "APPLY_RECOVERY_001",
+			Status:                   "finish",
+			SubMchID:                 pgtype.Text{String: "sub_mch_001", Valid: true},
+			ResultTaskProcessedState: pgtype.Text{String: "finish", Valid: true},
+			UpdatedAt:                time.Now().Add(-5 * time.Minute),
 		}}, nil)
-
-	distributor.onProcessApplymentResult = func(_ context.Context, payload *worker.ApplymentResultPayload, _ ...asynq.Option) error {
-		require.Equal(t, int64(11), payload.ApplymentID)
-		require.Equal(t, "finish", payload.ApplymentStatus)
-		require.Equal(t, "sub_mch_001", payload.SubMchID)
-		return nil
-	}
 
 	scheduler := worker.NewApplymentRecoveryScheduler(store, distributor, nil)
 	scheduler.RunOnce()
 }
 
-func TestApplymentRecoverySchedulerRunOnceQueriesFinishAuthorizationAndReconcilesFactApplication(t *testing.T) {
+func TestApplymentRecoverySchedulerRunOnceReconcilesFinishedSubMchIDWithoutAccountAuthorization(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -82,17 +76,13 @@ func TestApplymentRecoverySchedulerRunOnceQueriesFinishAuthorizationAndReconcile
 			ID:                    21,
 			SubjectType:           "merchant",
 			SubjectID:             31,
-			OutRequestNo:          "APPLY_RECOVERY_AUTH_001",
+			OutRequestNo:          "APPLY_RECOVERY_FINISH_001",
 			ApplymentID:           pgtype.Int8{Int64: 881, Valid: true},
 			Status:                "finish",
-			SubMchID:              pgtype.Text{String: "sub_mch_auth_001", Valid: true},
+			SubMchID:              pgtype.Text{String: "sub_mch_finish_001", Valid: true},
 			AccountAuthorizeState: pgtype.Text{String: db.AccountAuthorizeStateUnauthorized, Valid: true},
 			UpdatedAt:             time.Now().Add(-5 * time.Minute),
 		}}, nil)
-
-	ordinaryClient.EXPECT().
-		QueryAccountAuthorizeState(gomock.Any(), ospcontracts.AccountAuthorizeStateRequest{SubMchID: "sub_mch_auth_001"}).
-		Return(&ospcontracts.AccountAuthorizeStateResponse{AuthorizeState: ospcontracts.AccountAuthorizeStateAuthorized}, nil)
 
 	store.EXPECT().
 		CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).
@@ -100,14 +90,15 @@ func TestApplymentRecoverySchedulerRunOnceQueriesFinishAuthorizationAndReconcile
 			require.Equal(t, db.ExternalPaymentCapabilityApplyment, arg.Capability)
 			require.Equal(t, db.ExternalPaymentFactSourceQuery, arg.FactSource)
 			require.Equal(t, db.ExternalPaymentObjectApplyment, arg.ExternalObjectType)
-			require.Equal(t, "APPLY_RECOVERY_AUTH_001", arg.ExternalObjectKey)
+			require.Equal(t, "APPLY_RECOVERY_FINISH_001", arg.ExternalObjectKey)
 			require.Equal(t, "881", arg.ExternalSecondaryKey.String)
 			require.Equal(t, string(ospcontracts.ApplymentStateFinished), arg.UpstreamState)
 			require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
-			require.Contains(t, arg.DedupeKey, "authorize_state_authorized")
+			require.NotContains(t, arg.DedupeKey, "authorize_state")
 			var raw map[string]any
 			require.NoError(t, json.Unmarshal(arg.RawResource, &raw))
-			require.Equal(t, db.AccountAuthorizeStateAuthorized, raw["account_authorize_state"])
+			require.NotContains(t, raw, "account_authorize_state")
+			require.Equal(t, "sub_mch_finish_001", raw["sub_mch_id"])
 			return db.ExternalPaymentFact{ID: 9021, IsTerminal: true}, nil
 		})
 	store.EXPECT().

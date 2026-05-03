@@ -16,12 +16,11 @@ import (
 func TestOfficialContractCapabilityGroupsMatchOrdinaryServiceProviderCapabilities(t *testing.T) {
 	tests := map[string]int{
 		"特约商户进件与结算账户":         7,
-		"商户开户意愿确认":            5,
 		"商户管控、商户平台处置通知与不活跃核实": 8,
-		"小程序支付":               8,
-		"小程序合单支付":             8,
-		"订单退款":                3,
-		"分账":                  9,
+		"小程序支付":   8,
+		"小程序合单支付": 8,
+		"订单退款":    3,
+		"分账":      9,
 	}
 
 	if len(officialContractCapabilityGroups) != len(tests) {
@@ -44,8 +43,8 @@ func TestOfficialContractCapabilityGroupsMatchOrdinaryServiceProviderCapabilitie
 }
 
 func TestOfficialContractBindingsCoverImplementedOrdinaryDocs(t *testing.T) {
-	if len(officialContractBindings) != 48 {
-		t.Fatalf("official contract binding count = %d, want 48", len(officialContractBindings))
+	if len(officialContractBindings) != 43 {
+		t.Fatalf("official contract binding count = %d, want 43", len(officialContractBindings))
 	}
 
 	seenTitles := map[string]struct{}{}
@@ -79,8 +78,6 @@ func TestOfficialContractBindingsCoverImplementedOrdinaryDocs(t *testing.T) {
 func TestOfficialContractBindingsNameStateOwnersForStatefulDocs(t *testing.T) {
 	tests := map[string]string{
 		"特约商户进件-申请单号查询申请状态":       "ApplymentState",
-		"商户开户意愿确认-查询申请单审核结果":      "AccountWillingnessState",
-		"商户开户意愿确认-获取商户开户意愿确认状态":   "AccountAuthorizeState",
 		"不活跃商户身份核实-查询不活跃商户身份核实结果": "InactiveMerchantIdentityVerificationState",
 		"小程序支付-微信支付订单号查询订单":       "PaymentTradeState",
 		"小程序合单支付-查询合单订单":          "PaymentTradeState",
@@ -471,14 +468,6 @@ func jsonFieldName(field reflect.StructField) string {
 	return name
 }
 
-func ordinaryContractTypeNames() map[string]struct{} {
-	names := make(map[string]struct{}, len(ordinaryContractTypesByName()))
-	for name := range ordinaryContractTypesByName() {
-		names[name] = struct{}{}
-	}
-	return names
-}
-
 func ordinaryContractTypesByName() map[string]reflect.Type {
 	types := []reflect.Type{
 		reflect.TypeOf((*NoRequestBody)(nil)).Elem(),
@@ -494,14 +483,6 @@ func ordinaryContractTypesByName() map[string]reflect.Type {
 		reflect.TypeOf((*SettlementModifyResponse)(nil)).Elem(),
 		reflect.TypeOf((*SettlementModificationQueryRequest)(nil)).Elem(),
 		reflect.TypeOf((*SettlementModificationQueryResponse)(nil)).Elem(),
-		reflect.TypeOf((*AccountWillingnessSubmitRequest)(nil)).Elem(),
-		reflect.TypeOf((*AccountWillingnessSubmitResponse)(nil)).Elem(),
-		reflect.TypeOf((*AccountWillingnessCancelRequest)(nil)).Elem(),
-		reflect.TypeOf((*AccountWillingnessCancelResponse)(nil)).Elem(),
-		reflect.TypeOf((*AccountWillingnessQueryRequest)(nil)).Elem(),
-		reflect.TypeOf((*AccountWillingnessQueryResponse)(nil)).Elem(),
-		reflect.TypeOf((*AccountAuthorizeStateRequest)(nil)).Elem(),
-		reflect.TypeOf((*AccountAuthorizeStateResponse)(nil)).Elem(),
 		reflect.TypeOf((*MerchantLimitationQueryRequest)(nil)).Elem(),
 		reflect.TypeOf((*MerchantLimitationQueryResponse)(nil)).Elem(),
 		reflect.TypeOf((*ViolationNotificationConfigRequest)(nil)).Elem(),
@@ -564,11 +545,6 @@ func ordinaryEndpointErrorCodeSetNames() map[string]struct{} {
 		osperrorcodes.SettlementQueryDocumentedCodes,
 		osperrorcodes.SettlementModificationQueryDocumentedCodes,
 		osperrorcodes.MerchantMediaUploadDocumentedCodes,
-		osperrorcodes.AccountWillingnessSubmitDocumentedCodes,
-		osperrorcodes.AccountWillingnessCancelDocumentedCodes,
-		osperrorcodes.AccountWillingnessQueryDocumentedCodes,
-		osperrorcodes.AccountAuthorizeStateDocumentedCodes,
-		osperrorcodes.AccountWillingnessMediaUploadDocumentedCodes,
 		osperrorcodes.ViolationNotificationConfigQueryDocumentedCodes,
 		osperrorcodes.ViolationNotificationConfigUpdateDocumentedCodes,
 		osperrorcodes.ViolationNotificationConfigCreateDocumentedCodes,

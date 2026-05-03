@@ -15,6 +15,7 @@ import (
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
@@ -740,4 +741,24 @@ func TestMapWechatApplymentStateToSubmissionStatus(t *testing.T) {
 	require.Equal(t, "to_be_signed", MapWechatApplymentStateToStatus("NEED_SIGN"))
 	require.Equal(t, "", MapWechatApplymentStateToStatus("NEW_UPSTREAM_STATE"))
 	require.Equal(t, "to_be_signed", ResolveWechatApplymentStatus("submitted", "NEED_SIGN", "UNSIGNED"))
+}
+
+func TestOrdinaryApplymentFinishedFrontendMessageUsesOpenedSemantics(t *testing.T) {
+	message := OrdinaryApplymentFrontendMessage("finish")
+
+	require.Contains(t, message, "微信支付已开通")
+	require.NotContains(t, message, "开户意愿")
+	require.NotContains(t, message, "授权")
+}
+
+func TestOrdinaryApplymentToBeConfirmedFrontendMessageUsesAccountValidationSemantics(t *testing.T) {
+	message := OrdinaryApplymentFrontendMessage("to_be_confirmed")
+
+	require.Contains(t, message, "账户验证")
+	require.NotContains(t, message, "开户意愿")
+}
+
+func TestMapOrdinaryApplymentStateToStatusKeepsFinishedAsTerminalStatus(t *testing.T) {
+	require.Equal(t, "finish", MapOrdinaryApplymentStateToStatus(ospcontracts.ApplymentStateFinished))
+	require.Equal(t, "to_be_confirmed", MapOrdinaryApplymentStateToStatus(ospcontracts.ApplymentStateToBeConfirmed))
 }

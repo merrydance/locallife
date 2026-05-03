@@ -6,7 +6,6 @@ type EndpointID string
 
 const (
 	CapabilityApplyment          CapabilityID = "applyment"
-	CapabilityAccountWillingness CapabilityID = "account_willingness"
 	CapabilityMerchantManagement CapabilityID = "merchant_management"
 	CapabilityPayment            CapabilityID = "payment"
 	CapabilityCombinePayment     CapabilityID = "combine_payment"
@@ -22,11 +21,6 @@ const (
 	EndpointSettlementQuery                    EndpointID = "applyment.settlement_query"
 	EndpointSettlementModificationQuery        EndpointID = "applyment.settlement_modification_query"
 	EndpointMerchantMediaUpload                EndpointID = "applyment.media_upload"
-	EndpointAccountWillingnessSubmit           EndpointID = "account_willingness.submit"
-	EndpointAccountWillingnessCancel           EndpointID = "account_willingness.cancel"
-	EndpointAccountWillingnessQuery            EndpointID = "account_willingness.query"
-	EndpointAccountAuthorizeState              EndpointID = "account_willingness.authorize_state"
-	EndpointAccountWillingnessMediaUpload      EndpointID = "account_willingness.media_upload"
 	EndpointViolationNotificationConfigQuery   EndpointID = "merchant_management.violation_notification_config_query"
 	EndpointViolationNotificationConfigUpdate  EndpointID = "merchant_management.violation_notification_config_update"
 	EndpointViolationNotificationConfigCreate  EndpointID = "merchant_management.violation_notification_config_create"
@@ -65,7 +59,6 @@ type CapabilityCodeSetGroup struct {
 
 var capabilityCodeSetGroups = []CapabilityCodeSetGroup{
 	{ID: CapabilityApplyment, Name: "特约商户进件与结算账户", Endpoints: []EndpointID{EndpointApplymentSubmit, EndpointApplymentQueryByID, EndpointApplymentQueryByBusinessCode, EndpointSettlementModify, EndpointSettlementQuery, EndpointSettlementModificationQuery, EndpointMerchantMediaUpload}},
-	{ID: CapabilityAccountWillingness, Name: "商户开户意愿确认", Endpoints: []EndpointID{EndpointAccountWillingnessSubmit, EndpointAccountWillingnessCancel, EndpointAccountWillingnessQuery, EndpointAccountAuthorizeState, EndpointAccountWillingnessMediaUpload}},
 	{ID: CapabilityMerchantManagement, Name: "商户管控、商户平台处置通知与不活跃核实", Endpoints: []EndpointID{EndpointViolationNotificationConfigQuery, EndpointViolationNotificationConfigUpdate, EndpointViolationNotificationConfigCreate, EndpointViolationNotificationConfigDelete, EndpointMerchantLimitationQuery, EndpointInactiveMerchantVerificationCreate, EndpointInactiveMerchantVerificationQuery}},
 	{ID: CapabilityPayment, Name: "小程序支付", Endpoints: []EndpointID{EndpointPaymentPrepay, EndpointPaymentQueryByTransactionID, EndpointPaymentQueryByOutTradeNo, EndpointPaymentClose, EndpointPaymentRefundCreate, EndpointPaymentRefundQuery}},
 	{ID: CapabilityCombinePayment, Name: "小程序合单支付", Endpoints: []EndpointID{EndpointCombinePrepay, EndpointCombineQuery, EndpointCombineClose, EndpointCombineRefundCreate, EndpointCombineRefundQuery}},
@@ -81,11 +74,6 @@ var endpointCodeSets = map[EndpointID]DocumentedCodeSet{
 	EndpointSettlementQuery:                    SettlementQueryDocumentedCodes,
 	EndpointSettlementModificationQuery:        SettlementModificationQueryDocumentedCodes,
 	EndpointMerchantMediaUpload:                MerchantMediaUploadDocumentedCodes,
-	EndpointAccountWillingnessSubmit:           AccountWillingnessSubmitDocumentedCodes,
-	EndpointAccountWillingnessCancel:           AccountWillingnessCancelDocumentedCodes,
-	EndpointAccountWillingnessQuery:            AccountWillingnessQueryDocumentedCodes,
-	EndpointAccountAuthorizeState:              AccountAuthorizeStateDocumentedCodes,
-	EndpointAccountWillingnessMediaUpload:      AccountWillingnessMediaUploadDocumentedCodes,
 	EndpointViolationNotificationConfigQuery:   ViolationNotificationConfigQueryDocumentedCodes,
 	EndpointViolationNotificationConfigUpdate:  ViolationNotificationConfigUpdateDocumentedCodes,
 	EndpointViolationNotificationConfigCreate:  ViolationNotificationConfigCreateDocumentedCodes,
