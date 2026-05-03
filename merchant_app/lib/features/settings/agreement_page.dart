@@ -30,18 +30,23 @@ class AgreementDetail {
   }
 }
 
-final agreementProvider =
-    FutureProvider.family<AgreementDetail, String>((ref, type) async {
+final agreementProvider = FutureProvider.family<AgreementDetail, String>((
+  ref,
+  type,
+) async {
   final apiClient = ref.watch(apiClientProvider);
   final response = await apiClient.get('/agreements/$type');
-  return AgreementDetail.fromJson(Map<String, dynamic>.from(response.data));
+
+  final responseData = response.data;
+  final dynamic data = (responseData is Map && responseData.containsKey('data'))
+      ? responseData['data']
+      : responseData;
+
+  return AgreementDetail.fromJson(Map<String, dynamic>.from(data));
 });
 
 class AgreementPage extends ConsumerWidget {
-  const AgreementPage({
-    required this.agreementType,
-    super.key,
-  });
+  const AgreementPage({required this.agreementType, super.key});
 
   final String agreementType;
 
@@ -50,9 +55,7 @@ class AgreementPage extends ConsumerWidget {
     final agreementAsync = ref.watch(agreementProvider(agreementType));
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('协议详情'),
-      ),
+      appBar: AppBar(title: const Text('协议详情')),
       body: agreementAsync.when(
         data: (agreement) => SingleChildScrollView(
           child: MerchantContentShell(
@@ -118,10 +121,7 @@ class AgreementPage extends ConsumerWidget {
                 const SizedBox(height: AppSpacing.lg),
                 const Text(
                   '协议内容加载失败',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
@@ -143,9 +143,15 @@ class AgreementPage extends ConsumerWidget {
   static String _htmlToReadableText(String html) {
     var text = html
         .replaceAll(RegExp(r'<style[\s\S]*?</style>', caseSensitive: false), '')
-        .replaceAll(RegExp(r'<script[\s\S]*?</script>', caseSensitive: false), '')
+        .replaceAll(
+          RegExp(r'<script[\s\S]*?</script>', caseSensitive: false),
+          '',
+        )
         .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
-        .replaceAll(RegExp(r'</p>|</div>|</h1>|</h2>|</h3>|</li>', caseSensitive: false), '\n')
+        .replaceAll(
+          RegExp(r'</p>|</div>|</h1>|</h2>|</h3>|</li>', caseSensitive: false),
+          '\n',
+        )
         .replaceAll(RegExp(r'<li[^>]*>', caseSensitive: false), '• ')
         .replaceAll(RegExp(r'<[^>]+>'), '')
         .replaceAll('&nbsp;', ' ')

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:uuid/uuid.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:merchant_app/core/network/api_client.dart';
 
@@ -27,7 +28,11 @@ class AuthService {
     };
   }
 
-  Future<void> saveTokens(String access, String refresh, {String? merchantName}) async {
+  Future<void> saveTokens(
+    String access,
+    String refresh, {
+    String? merchantName,
+  }) async {
     await _storage.write(key: _accessTokenKey, value: access);
     await _storage.write(key: _refreshTokenKey, value: refresh);
     if (merchantName != null && merchantName.trim().isNotEmpty) {
@@ -58,14 +63,19 @@ class AuthService {
     String osVersion = 'Unknown';
 
     try {
-      if (Platform.isAndroid) {
-        final androidInfo = await deviceInfo.androidInfo;
-        deviceModel = androidInfo.model;
-        osVersion = 'Android ${androidInfo.version.release}';
-      } else if (Platform.isIOS) {
-        final iosInfo = await deviceInfo.iosInfo;
-        deviceModel = iosInfo.model;
-        osVersion = 'iOS ${iosInfo.systemVersion}';
+      if (!kIsWeb) {
+        if (Platform.isAndroid) {
+          final androidInfo = await deviceInfo.androidInfo;
+          deviceModel = androidInfo.model;
+          osVersion = 'Android ${androidInfo.version.release}';
+        } else if (Platform.isIOS) {
+          final iosInfo = await deviceInfo.iosInfo;
+          deviceModel = iosInfo.model;
+          osVersion = 'iOS ${iosInfo.systemVersion}';
+        }
+      } else {
+        deviceModel = 'Web Browser';
+        osVersion = 'Web';
       }
     } catch (e) {
       // Ignored
@@ -79,13 +89,17 @@ class AuthService {
       // Ignored
     }
 
-    final response = await _apiClient.post('/auth/app-bind/verify', requiresAuth: false, data: {
-      'code': code,
-      'device_id': deviceId,
-      'device_model': deviceModel,
-      'os_version': osVersion,
-      'app_version': appVersion,
-    });
+    final response = await _apiClient.post(
+      '/auth/app-bind/verify',
+      requiresAuth: false,
+      data: {
+        'code': code,
+        'device_id': deviceId,
+        'device_model': deviceModel,
+        'os_version': osVersion,
+        'app_version': appVersion,
+      },
+    );
 
     final envelope = response.data;
     if (envelope is Map && envelope.containsKey('data')) {
@@ -96,9 +110,11 @@ class AuthService {
 
   /// Refresh access token using refresh token
   Future<Map<String, dynamic>> refreshToken(String refreshToken) async {
-    final response = await _apiClient.post('/auth/refresh', requiresAuth: false, data: {
-      'refresh_token': refreshToken,
-    });
+    final response = await _apiClient.post(
+      '/auth/refresh',
+      requiresAuth: false,
+      data: {'refresh_token': refreshToken},
+    );
     final envelope = response.data;
     if (envelope is Map && envelope.containsKey('data')) {
       return envelope['data'] as Map<String, dynamic>;
