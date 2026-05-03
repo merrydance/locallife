@@ -1159,3 +1159,12 @@ make test-integration
 - Dedupe keys are deterministic: callback facts use `baofu:callback:payment:<outTradeNo>:<notifyId>` and query facts use `baofu:query:payment:<outTradeNo>:<tradeNo-or-state>`.
 - TDD verification: first run failed with missing `NewParser`, `ErrPaymentNotificationOutTradeNoRequired`, `RecordPaymentFact`, and `RecordBaofuPaymentFactInput`; after implementation, `PATH="/usr/local/go/bin:$PATH" go test ./baofu/aggregatepay/notification ./logic -run 'TestParserParsePaymentNotification|TestBaofuPaymentServiceRecordPayment' -count=1` passed.
 - Residual risk: this slice does not yet expose the Baofu payment callback HTTP route, does not verify real Baofu aggregate-payment callback signatures, does not enqueue the worker task after application creation, and does not implement the fact application worker that updates `payment_orders`.
+
+### 2026-05-03 Task 4 Partial - Baofu Payment Fact Application
+
+- Extended the existing payment fact application service to accept Baofu main-business payment facts in addition to WeChat ordinary/ecommerce payment facts.
+- Baofu successful payment facts now mark the local `payment_orders` row paid with the Baofu `tradeNo` as `transaction_id` before running the existing idempotent `ProcessPaymentSuccessTx` order-domain transition.
+- The existing order payment outbox path is reused, so a processed Baofu main-business payment emits `order_payment_succeeded` for later profit-sharing work instead of adding a parallel worker path.
+- The Baofu paid update is idempotency-aware: if the conditional pending->paid update has already happened, the service reloads the payment order and only proceeds when the current state is already `paid`.
+- TDD verification: first run failed because Baofu facts were rejected as unsupported WeChat-only main-business payment facts; after implementation, `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuOrderPaymentSuccessMarksPaidAndProcessesOrder|TestPaymentFactServiceApplyExternalPaymentFactApplication_OrderPaymentSuccessProcessesOrder|TestPaymentFactServiceApplyExternalPaymentFactApplication_OrderOrdinaryPaymentSuccessProcessesOrder' -count=1` passed.
+- Residual risk: this slice still depends on a future Baofu callback route or recovery scheduler to enqueue the application task, and it does not yet cover closed/failed Baofu payment facts or combined-payment routing.

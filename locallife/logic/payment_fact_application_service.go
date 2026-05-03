@@ -428,6 +428,11 @@ func (svc *PaymentFactService) applyOrderPaymentFact(ctx context.Context, applic
 	if err := validateOrderPaymentFactApplication(application, fact); err != nil {
 		return result, err
 	}
+	if isBaofuMainBusinessPaymentFact(fact) {
+		if _, err := svc.markBaofuPaymentOrderPaid(ctx, application, fact); err != nil {
+			return result, err
+		}
+	}
 
 	paymentResult, err := svc.store.ProcessPaymentSuccessTx(ctx, db.ProcessPaymentSuccessTxParams{
 		PaymentOrderID:     application.BusinessObjectID,
@@ -1105,10 +1110,12 @@ func validateOrderPaymentFactApplication(application db.ExternalPaymentFactAppli
 	if fact.TerminalStatus != db.ExternalPaymentTerminalStatusSuccess {
 		return fmt.Errorf("payment fact %d terminal status %q is not success", fact.ID, fact.TerminalStatus)
 	}
-	if !isWechatMainBusinessPaymentFact(fact) {
-		return fmt.Errorf("payment fact %d is not a supported wechat main business payment fact", fact.ID)
+	if !isSupportedMainBusinessPaymentFact(fact) {
+		return fmt.Errorf("payment fact %d is not a supported main business payment fact", fact.ID)
 	}
-	if fact.ExternalObjectType != db.ExternalPaymentObjectPayment && fact.ExternalObjectType != db.ExternalPaymentObjectCombinedPayment {
+	if fact.ExternalObjectType != db.ExternalPaymentObjectPayment &&
+		fact.ExternalObjectType != db.ExternalPaymentObjectCombinedPayment &&
+		fact.ExternalObjectType != db.ExternalPaymentObjectBaofuPaymentOrder {
 		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)
 	}
 	if fact.BusinessOwner.Valid && fact.BusinessOwner.String != db.ExternalPaymentBusinessOwnerOrder {

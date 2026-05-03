@@ -692,6 +692,53 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrderOrdinaryPaym
 	require.Equal(t, db.PaymentDomainOutboxEventOrderPaymentSucceeded, result.Outbox.EventType)
 }
 
+func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuOrderPaymentSuccessMarksPaidAndProcessesOrder(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	now := time.Date(2026, 5, 3, 11, 0, 0, 0, time.UTC)
+	application := buildOrderPaymentFactApplication(823, 723, db.ExternalPaymentFactApplicationStatusProcessing)
+	fact := buildBaofuOrderPaymentFact(723, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess)
+	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, BusinessType: db.ExternalPaymentBusinessOwnerOrder, PaymentChannel: db.PaymentChannelBaofuAggregate}
+	orderResult := db.ProcessOrderPaymentTxResult{Order: db.Order{ID: 6401, MerchantID: 7301, OrderNo: "ORD6401"}}
+
+	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
+	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().UpdatePaymentOrderToPaid(gomock.Any(), db.UpdatePaymentOrderToPaidParams{
+		ID:            application.BusinessObjectID,
+		TransactionID: pgtype.Text{String: "BFPAY_6401", Valid: true},
+	}).Return(paymentOrder, nil)
+	store.EXPECT().ProcessPaymentSuccessTx(gomock.Any(), db.ProcessPaymentSuccessTxParams{
+		PaymentOrderID:     application.BusinessObjectID,
+		RiderAverageSpeed:  15000,
+		DefaultPrepareTime: 20,
+	}).Return(db.ProcessPaymentSuccessTxResult{
+		Processed:    true,
+		PaymentOrder: paymentOrder,
+		OrderResult:  &orderResult,
+	}, nil)
+	store.EXPECT().CreatePaymentDomainOutboxOnce(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreatePaymentDomainOutboxOnceParams) (db.PaymentDomainOutbox, error) {
+		require.Equal(t, db.PaymentDomainOutboxEventOrderPaymentSucceeded, arg.EventType)
+		require.Equal(t, db.PaymentDomainOutboxAggregatePaymentOrder, arg.AggregateType)
+		require.Equal(t, paymentOrder.ID, arg.AggregateID)
+		return db.PaymentDomainOutbox{ID: 8401, EventType: arg.EventType, AggregateType: arg.AggregateType, AggregateID: arg.AggregateID, Payload: arg.Payload, Status: arg.Status}, nil
+	})
+	expectFactTerminalized(t, store, fact.ID, now)
+	expectApplicationApplied(t, store, application, now)
+
+	svc := NewPaymentFactService(store).WithPaymentSuccessConfig(15000, 20)
+	svc.now = func() time.Time { return now }
+
+	result, err := svc.ApplyExternalPaymentFactApplication(context.Background(), application.ID)
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+	require.NotNil(t, result.OrderPayment)
+	require.True(t, result.OrderPayment.Processed)
+	require.NotNil(t, result.Outbox)
+	require.Equal(t, db.PaymentDomainOutboxEventOrderPaymentSucceeded, result.Outbox.EventType)
+}
+
 func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrderPaymentOutboxRetryAfterProcessed(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -1726,6 +1773,25 @@ func buildOrderPaymentFact(factID, paymentOrderID int64, terminalStatus string) 
 		TerminalStatus:       terminalStatus,
 		IsTerminal:           true,
 		RawResource:          []byte(`{}`),
+	}
+}
+
+func buildBaofuOrderPaymentFact(factID, paymentOrderID int64, terminalStatus string) db.ExternalPaymentFact {
+	return db.ExternalPaymentFact{
+		ID:                   factID,
+		Provider:             db.ExternalPaymentProviderBaofu,
+		Channel:              db.PaymentChannelBaofuAggregate,
+		Capability:           db.ExternalPaymentCapabilityBaofuPayment,
+		ExternalObjectType:   db.ExternalPaymentObjectBaofuPaymentOrder,
+		ExternalObjectKey:    "PO6401",
+		ExternalSecondaryKey: pgtype.Text{String: "BFPAY_6401", Valid: true},
+		BusinessOwner:        pgtype.Text{String: db.ExternalPaymentBusinessOwnerOrder, Valid: true},
+		BusinessObjectType:   pgtype.Text{String: paymentFactBusinessObjectPaymentOrder, Valid: true},
+		BusinessObjectID:     pgtype.Int8{Int64: paymentOrderID, Valid: true},
+		UpstreamState:        "SUCCESS",
+		TerminalStatus:       terminalStatus,
+		IsTerminal:           true,
+		RawResource:          []byte(`{"tradeNo":"BFPAY_6401","txnState":"SUCCESS"}`),
 	}
 }
 
