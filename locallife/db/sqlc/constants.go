@@ -159,8 +159,34 @@ const (
 	PaymentChannelDirect                  = "direct"
 	PaymentChannelEcommerce               = "ecommerce"
 	PaymentChannelOrdinaryServiceProvider = "ordinary_service_provider"
+	PaymentChannelBaofuAggregate          = "baofu_aggregate"
 
 	ExternalPaymentProviderWechat = "wechat"
+	ExternalPaymentProviderBaofu  = "baofu"
+
+	BaofuAccountOwnerTypeMerchant = "merchant"
+	BaofuAccountOwnerTypeRider    = "rider"
+	BaofuAccountOwnerTypeOperator = "operator"
+	BaofuAccountOwnerTypePlatform = "platform"
+
+	BaofuAccountTypePersonal = "personal"
+	BaofuAccountTypeBusiness = "business"
+	BaofuAccountTypePlatform = "platform"
+
+	BaofuAccountOpenStateProcessing = "processing"
+	BaofuAccountOpenStateActive     = "active"
+	BaofuAccountOpenStateFailed     = "failed"
+	BaofuAccountOpenStateAbnormal   = "abnormal"
+
+	BaofuFeeTypePaymentFee           = "payment_fee"
+	BaofuFeeTypeAccountOpenVerifyFee = "account_open_verify_fee"
+	BaofuFeePayerTypeMerchant        = "merchant"
+	BaofuFeePayerTypePlatform        = "platform"
+
+	BaofuWithdrawalStatusProcessing = "processing"
+	BaofuWithdrawalStatusSucceeded  = "succeeded"
+	BaofuWithdrawalStatusFailed     = "failed"
+	BaofuWithdrawalStatusReturned   = "returned"
 
 	ProfitSharingReceiverOwnerTypeRider    = "rider"
 	ProfitSharingReceiverOwnerTypeOperator = "operator"
@@ -199,6 +225,10 @@ const (
 	ExternalPaymentCapabilityWithdraw            = "withdraw"
 	ExternalPaymentCapabilityCancelWithdraw      = "cancel_withdraw"
 	ExternalPaymentCapabilityMerchantTransfer    = "merchant_transfer"
+	ExternalPaymentCapabilityBaofuAccount        = "baofu_account"
+	ExternalPaymentCapabilityBaofuPayment        = "baofu_payment"
+	ExternalPaymentCapabilityBaofuProfitSharing  = "baofu_profit_sharing"
+	ExternalPaymentCapabilityBaofuWithdraw       = "baofu_withdraw"
 
 	ExternalPaymentCommandTypeCreatePayment             = "create_payment"
 	ExternalPaymentCommandTypeClosePayment              = "close_payment"
@@ -214,6 +244,11 @@ const (
 	ExternalPaymentCommandTypeCreateWithdraw            = "create_withdraw"
 	ExternalPaymentCommandTypeCreateCancelWithdraw      = "create_cancel_withdraw"
 	ExternalPaymentCommandTypeCreateTransfer            = "create_transfer"
+	ExternalPaymentCommandTypeOpenBaofuAccount          = "open_baofu_account"
+	ExternalPaymentCommandTypeQueryBaofuAccount         = "query_baofu_account"
+	ExternalPaymentCommandTypeQueryBaofuBalance         = "query_baofu_balance"
+	ExternalPaymentCommandTypeCreateBaofuWithdraw       = "create_baofu_withdraw"
+	ExternalPaymentCommandTypeQueryBaofuWithdraw        = "query_baofu_withdraw"
 
 	ExternalPaymentBusinessOwnerRiderDeposit  = "rider_deposit"
 	ExternalPaymentBusinessOwnerOrder         = "order"

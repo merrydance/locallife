@@ -91,6 +91,53 @@ type AuditLog struct {
 	CreatedAt   time.Time   `json:"created_at"`
 }
 
+type BaofuAccountBinding struct {
+	ID                    int64       `json:"id"`
+	OwnerType             string      `json:"owner_type"`
+	OwnerID               int64       `json:"owner_id"`
+	AccountType           string      `json:"account_type"`
+	ContractNo            pgtype.Text `json:"contract_no"`
+	SharingMerID          pgtype.Text `json:"sharing_mer_id"`
+	LoginNo               pgtype.Text `json:"login_no"`
+	OpenState             string      `json:"open_state"`
+	WechatSubMchID        pgtype.Text `json:"wechat_sub_mch_id"`
+	BankCardLast4         pgtype.Text `json:"bank_card_last4"`
+	LastOpenTransSerialNo pgtype.Text `json:"last_open_trans_serial_no"`
+	RawSnapshot           []byte      `json:"raw_snapshot"`
+	CreatedAt             time.Time   `json:"created_at"`
+	UpdatedAt             time.Time   `json:"updated_at"`
+}
+
+type BaofuFeeLedger struct {
+	ID                 int64       `json:"id"`
+	FeeType            string      `json:"fee_type"`
+	PayerType          string      `json:"payer_type"`
+	PayerID            pgtype.Int8 `json:"payer_id"`
+	BusinessObjectType string      `json:"business_object_type"`
+	BusinessObjectID   int64       `json:"business_object_id"`
+	Amount             int64       `json:"amount"`
+	FeeRateBps         pgtype.Int4 `json:"fee_rate_bps"`
+	ProviderBillNo     pgtype.Text `json:"provider_bill_no"`
+	Status             string      `json:"status"`
+	CreatedAt          time.Time   `json:"created_at"`
+	UpdatedAt          time.Time   `json:"updated_at"`
+}
+
+type BaofuWithdrawalOrder struct {
+	ID               int64              `json:"id"`
+	OwnerType        string             `json:"owner_type"`
+	OwnerID          int64              `json:"owner_id"`
+	AccountBindingID int64              `json:"account_binding_id"`
+	OutRequestNo     string             `json:"out_request_no"`
+	BaofuWithdrawNo  pgtype.Text        `json:"baofu_withdraw_no"`
+	Amount           int64              `json:"amount"`
+	Status           string             `json:"status"`
+	RawSnapshot      []byte             `json:"raw_snapshot"`
+	FinishedAt       pgtype.Timestamptz `json:"finished_at"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        time.Time          `json:"updated_at"`
+}
+
 type BehaviorAction struct {
 	ID           int64              `json:"id"`
 	DecisionID   int64              `json:"decision_id"`
@@ -1854,7 +1901,16 @@ type ProfitSharingOrder struct {
 	// 平台分账比例（百分比），默认2%
 	PlatformRate int32 `json:"platform_rate"`
 	// 运营商分账比例（百分比），默认3%
-	OperatorRate int32 `json:"operator_rate"`
+	OperatorRate          int32       `json:"operator_rate"`
+	PaymentFee            int64       `json:"payment_fee"`
+	PaymentFeeRateBps     int32       `json:"payment_fee_rate_bps"`
+	Provider              string      `json:"provider"`
+	Channel               string      `json:"channel"`
+	MerchantSharingMerID  pgtype.Text `json:"merchant_sharing_mer_id"`
+	RiderSharingMerID     pgtype.Text `json:"rider_sharing_mer_id"`
+	OperatorSharingMerID  pgtype.Text `json:"operator_sharing_mer_id"`
+	PlatformSharingMerID  pgtype.Text `json:"platform_sharing_mer_id"`
+	SharingDetailSnapshot []byte      `json:"sharing_detail_snapshot"`
 }
 
 type ProfitSharingReceiverAttempt struct {

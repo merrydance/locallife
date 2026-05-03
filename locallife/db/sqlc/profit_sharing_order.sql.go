@@ -127,7 +127,7 @@ INSERT INTO profit_sharing_orders (
     status
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
-) RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate
+) RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot
 `
 
 type CreateProfitSharingOrderParams struct {
@@ -190,6 +190,15 @@ func (q *Queries) CreateProfitSharingOrder(ctx context.Context, arg CreateProfit
 		&i.DistributableAmount,
 		&i.PlatformRate,
 		&i.OperatorRate,
+		&i.PaymentFee,
+		&i.PaymentFeeRateBps,
+		&i.Provider,
+		&i.Channel,
+		&i.MerchantSharingMerID,
+		&i.RiderSharingMerID,
+		&i.OperatorSharingMerID,
+		&i.PlatformSharingMerID,
+		&i.SharingDetailSnapshot,
 	)
 	return i, err
 }
@@ -212,7 +221,7 @@ INSERT INTO profit_sharing_orders (
     status
 ) VALUES (
     $1, $2, $3, $4, $5, 0, $5, $6, $7, $8, $9, $10, $11, $12
-) RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate
+) RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot
 `
 
 type CreateProfitSharingOrderSimpleParams struct {
@@ -268,6 +277,15 @@ func (q *Queries) CreateProfitSharingOrderSimple(ctx context.Context, arg Create
 		&i.DistributableAmount,
 		&i.PlatformRate,
 		&i.OperatorRate,
+		&i.PaymentFee,
+		&i.PaymentFeeRateBps,
+		&i.Provider,
+		&i.Channel,
+		&i.MerchantSharingMerID,
+		&i.RiderSharingMerID,
+		&i.OperatorSharingMerID,
+		&i.PlatformSharingMerID,
+		&i.SharingDetailSnapshot,
 	)
 	return i, err
 }
@@ -540,7 +558,7 @@ func (q *Queries) GetOperatorProfitSharingStatsByRegion(ctx context.Context, arg
 }
 
 const getProfitSharingOrder = `-- name: GetProfitSharingOrder :one
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot FROM profit_sharing_orders
 WHERE id = $1 LIMIT 1
 `
 
@@ -568,12 +586,21 @@ func (q *Queries) GetProfitSharingOrder(ctx context.Context, id int64) (ProfitSh
 		&i.DistributableAmount,
 		&i.PlatformRate,
 		&i.OperatorRate,
+		&i.PaymentFee,
+		&i.PaymentFeeRateBps,
+		&i.Provider,
+		&i.Channel,
+		&i.MerchantSharingMerID,
+		&i.RiderSharingMerID,
+		&i.OperatorSharingMerID,
+		&i.PlatformSharingMerID,
+		&i.SharingDetailSnapshot,
 	)
 	return i, err
 }
 
 const getProfitSharingOrderByOutOrderNo = `-- name: GetProfitSharingOrderByOutOrderNo :one
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot FROM profit_sharing_orders
 WHERE out_order_no = $1 LIMIT 1
 `
 
@@ -601,12 +628,21 @@ func (q *Queries) GetProfitSharingOrderByOutOrderNo(ctx context.Context, outOrde
 		&i.DistributableAmount,
 		&i.PlatformRate,
 		&i.OperatorRate,
+		&i.PaymentFee,
+		&i.PaymentFeeRateBps,
+		&i.Provider,
+		&i.Channel,
+		&i.MerchantSharingMerID,
+		&i.RiderSharingMerID,
+		&i.OperatorSharingMerID,
+		&i.PlatformSharingMerID,
+		&i.SharingDetailSnapshot,
 	)
 	return i, err
 }
 
 const getProfitSharingOrderByPaymentOrder = `-- name: GetProfitSharingOrderByPaymentOrder :one
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot FROM profit_sharing_orders
 WHERE payment_order_id = $1 LIMIT 1
 `
 
@@ -634,12 +670,21 @@ func (q *Queries) GetProfitSharingOrderByPaymentOrder(ctx context.Context, payme
 		&i.DistributableAmount,
 		&i.PlatformRate,
 		&i.OperatorRate,
+		&i.PaymentFee,
+		&i.PaymentFeeRateBps,
+		&i.Provider,
+		&i.Channel,
+		&i.MerchantSharingMerID,
+		&i.RiderSharingMerID,
+		&i.OperatorSharingMerID,
+		&i.PlatformSharingMerID,
+		&i.SharingDetailSnapshot,
 	)
 	return i, err
 }
 
 const getProfitSharingOrderForUpdate = `-- name: GetProfitSharingOrderForUpdate :one
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot FROM profit_sharing_orders
 WHERE id = $1 LIMIT 1
 FOR UPDATE
 `
@@ -668,6 +713,15 @@ func (q *Queries) GetProfitSharingOrderForUpdate(ctx context.Context, id int64) 
 		&i.DistributableAmount,
 		&i.PlatformRate,
 		&i.OperatorRate,
+		&i.PaymentFee,
+		&i.PaymentFeeRateBps,
+		&i.Provider,
+		&i.Channel,
+		&i.MerchantSharingMerID,
+		&i.RiderSharingMerID,
+		&i.OperatorSharingMerID,
+		&i.PlatformSharingMerID,
+		&i.SharingDetailSnapshot,
 	)
 	return i, err
 }
@@ -1022,7 +1076,7 @@ func (q *Queries) ListMerchantFinanceOrders(ctx context.Context, arg ListMerchan
 }
 
 const listMerchantSettlements = `-- name: ListMerchantSettlements :many
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot
 FROM profit_sharing_orders
 WHERE merchant_id = $1
   AND created_at >= $2 AND created_at <= $3
@@ -1075,6 +1129,15 @@ func (q *Queries) ListMerchantSettlements(ctx context.Context, arg ListMerchantS
 			&i.DistributableAmount,
 			&i.PlatformRate,
 			&i.OperatorRate,
+			&i.PaymentFee,
+			&i.PaymentFeeRateBps,
+			&i.Provider,
+			&i.Channel,
+			&i.MerchantSharingMerID,
+			&i.RiderSharingMerID,
+			&i.OperatorSharingMerID,
+			&i.PlatformSharingMerID,
+			&i.SharingDetailSnapshot,
 		); err != nil {
 			return nil, err
 		}
@@ -1087,7 +1150,7 @@ func (q *Queries) ListMerchantSettlements(ctx context.Context, arg ListMerchantS
 }
 
 const listMerchantSettlementsByStatus = `-- name: ListMerchantSettlementsByStatus :many
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot
 FROM profit_sharing_orders
 WHERE merchant_id = $1
   AND status = $2
@@ -1143,6 +1206,15 @@ func (q *Queries) ListMerchantSettlementsByStatus(ctx context.Context, arg ListM
 			&i.DistributableAmount,
 			&i.PlatformRate,
 			&i.OperatorRate,
+			&i.PaymentFee,
+			&i.PaymentFeeRateBps,
+			&i.Provider,
+			&i.Channel,
+			&i.MerchantSharingMerID,
+			&i.RiderSharingMerID,
+			&i.OperatorSharingMerID,
+			&i.PlatformSharingMerID,
+			&i.SharingDetailSnapshot,
 		); err != nil {
 			return nil, err
 		}
@@ -1155,7 +1227,7 @@ func (q *Queries) ListMerchantSettlementsByStatus(ctx context.Context, arg ListM
 }
 
 const listProfitSharingOrdersByMerchant = `-- name: ListProfitSharingOrdersByMerchant :many
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot FROM profit_sharing_orders
 WHERE merchant_id = $1
 ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
@@ -1197,6 +1269,15 @@ func (q *Queries) ListProfitSharingOrdersByMerchant(ctx context.Context, arg Lis
 			&i.DistributableAmount,
 			&i.PlatformRate,
 			&i.OperatorRate,
+			&i.PaymentFee,
+			&i.PaymentFeeRateBps,
+			&i.Provider,
+			&i.Channel,
+			&i.MerchantSharingMerID,
+			&i.RiderSharingMerID,
+			&i.OperatorSharingMerID,
+			&i.PlatformSharingMerID,
+			&i.SharingDetailSnapshot,
 		); err != nil {
 			return nil, err
 		}
@@ -1209,7 +1290,7 @@ func (q *Queries) ListProfitSharingOrdersByMerchant(ctx context.Context, arg Lis
 }
 
 const listProfitSharingOrdersByOperator = `-- name: ListProfitSharingOrdersByOperator :many
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot FROM profit_sharing_orders
 WHERE operator_id = $1
 ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
@@ -1251,6 +1332,15 @@ func (q *Queries) ListProfitSharingOrdersByOperator(ctx context.Context, arg Lis
 			&i.DistributableAmount,
 			&i.PlatformRate,
 			&i.OperatorRate,
+			&i.PaymentFee,
+			&i.PaymentFeeRateBps,
+			&i.Provider,
+			&i.Channel,
+			&i.MerchantSharingMerID,
+			&i.RiderSharingMerID,
+			&i.OperatorSharingMerID,
+			&i.PlatformSharingMerID,
+			&i.SharingDetailSnapshot,
 		); err != nil {
 			return nil, err
 		}
@@ -1263,7 +1353,7 @@ func (q *Queries) ListProfitSharingOrdersByOperator(ctx context.Context, arg Lis
 }
 
 const listProfitSharingOrdersByStatus = `-- name: ListProfitSharingOrdersByStatus :many
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot FROM profit_sharing_orders
 WHERE status = $1
 ORDER BY created_at ASC, id ASC
 LIMIT $2 OFFSET $3
@@ -1305,6 +1395,15 @@ func (q *Queries) ListProfitSharingOrdersByStatus(ctx context.Context, arg ListP
 			&i.DistributableAmount,
 			&i.PlatformRate,
 			&i.OperatorRate,
+			&i.PaymentFee,
+			&i.PaymentFeeRateBps,
+			&i.Provider,
+			&i.Channel,
+			&i.MerchantSharingMerID,
+			&i.RiderSharingMerID,
+			&i.OperatorSharingMerID,
+			&i.PlatformSharingMerID,
+			&i.SharingDetailSnapshot,
 		); err != nil {
 			return nil, err
 		}
@@ -1317,7 +1416,7 @@ func (q *Queries) ListProfitSharingOrdersByStatus(ctx context.Context, arg ListP
 }
 
 const listProfitSharingOrdersForRetry = `-- name: ListProfitSharingOrdersForRetry :many
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot FROM profit_sharing_orders
 WHERE status IN ('pending', 'failed', 'processing')
   AND created_at <= $1
 ORDER BY created_at ASC, id ASC
@@ -1359,6 +1458,15 @@ func (q *Queries) ListProfitSharingOrdersForRetry(ctx context.Context, arg ListP
 			&i.DistributableAmount,
 			&i.PlatformRate,
 			&i.OperatorRate,
+			&i.PaymentFee,
+			&i.PaymentFeeRateBps,
+			&i.Provider,
+			&i.Channel,
+			&i.MerchantSharingMerID,
+			&i.RiderSharingMerID,
+			&i.OperatorSharingMerID,
+			&i.PlatformSharingMerID,
+			&i.SharingDetailSnapshot,
 		); err != nil {
 			return nil, err
 		}
@@ -1372,7 +1480,7 @@ func (q *Queries) ListProfitSharingOrdersForRetry(ctx context.Context, arg ListP
 
 const listRiderProfitSharingOrders = `-- name: ListRiderProfitSharingOrders :many
 SELECT 
-  p.id, p.payment_order_id, p.merchant_id, p.operator_id, p.order_source, p.total_amount, p.platform_commission, p.operator_commission, p.merchant_amount, p.out_order_no, p.sharing_order_id, p.status, p.finished_at, p.created_at, p.delivery_fee, p.rider_id, p.rider_amount, p.distributable_amount, p.platform_rate, p.operator_rate,
+  p.id, p.payment_order_id, p.merchant_id, p.operator_id, p.order_source, p.total_amount, p.platform_commission, p.operator_commission, p.merchant_amount, p.out_order_no, p.sharing_order_id, p.status, p.finished_at, p.created_at, p.delivery_fee, p.rider_id, p.rider_amount, p.distributable_amount, p.platform_rate, p.operator_rate, p.payment_fee, p.payment_fee_rate_bps, p.provider, p.channel, p.merchant_sharing_mer_id, p.rider_sharing_mer_id, p.operator_sharing_mer_id, p.platform_sharing_mer_id, p.sharing_detail_snapshot,
     po.order_id,
     o.order_no,
     m.name as merchant_name
@@ -1397,29 +1505,38 @@ type ListRiderProfitSharingOrdersParams struct {
 }
 
 type ListRiderProfitSharingOrdersRow struct {
-	ID                  int64              `json:"id"`
-	PaymentOrderID      int64              `json:"payment_order_id"`
-	MerchantID          int64              `json:"merchant_id"`
-	OperatorID          pgtype.Int8        `json:"operator_id"`
-	OrderSource         string             `json:"order_source"`
-	TotalAmount         int64              `json:"total_amount"`
-	PlatformCommission  int64              `json:"platform_commission"`
-	OperatorCommission  int64              `json:"operator_commission"`
-	MerchantAmount      int64              `json:"merchant_amount"`
-	OutOrderNo          string             `json:"out_order_no"`
-	SharingOrderID      pgtype.Text        `json:"sharing_order_id"`
-	Status              string             `json:"status"`
-	FinishedAt          pgtype.Timestamptz `json:"finished_at"`
-	CreatedAt           time.Time          `json:"created_at"`
-	DeliveryFee         int64              `json:"delivery_fee"`
-	RiderID             pgtype.Int8        `json:"rider_id"`
-	RiderAmount         int64              `json:"rider_amount"`
-	DistributableAmount int64              `json:"distributable_amount"`
-	PlatformRate        int32              `json:"platform_rate"`
-	OperatorRate        int32              `json:"operator_rate"`
-	OrderID             pgtype.Int8        `json:"order_id"`
-	OrderNo             string             `json:"order_no"`
-	MerchantName        string             `json:"merchant_name"`
+	ID                    int64              `json:"id"`
+	PaymentOrderID        int64              `json:"payment_order_id"`
+	MerchantID            int64              `json:"merchant_id"`
+	OperatorID            pgtype.Int8        `json:"operator_id"`
+	OrderSource           string             `json:"order_source"`
+	TotalAmount           int64              `json:"total_amount"`
+	PlatformCommission    int64              `json:"platform_commission"`
+	OperatorCommission    int64              `json:"operator_commission"`
+	MerchantAmount        int64              `json:"merchant_amount"`
+	OutOrderNo            string             `json:"out_order_no"`
+	SharingOrderID        pgtype.Text        `json:"sharing_order_id"`
+	Status                string             `json:"status"`
+	FinishedAt            pgtype.Timestamptz `json:"finished_at"`
+	CreatedAt             time.Time          `json:"created_at"`
+	DeliveryFee           int64              `json:"delivery_fee"`
+	RiderID               pgtype.Int8        `json:"rider_id"`
+	RiderAmount           int64              `json:"rider_amount"`
+	DistributableAmount   int64              `json:"distributable_amount"`
+	PlatformRate          int32              `json:"platform_rate"`
+	OperatorRate          int32              `json:"operator_rate"`
+	PaymentFee            int64              `json:"payment_fee"`
+	PaymentFeeRateBps     int32              `json:"payment_fee_rate_bps"`
+	Provider              string             `json:"provider"`
+	Channel               string             `json:"channel"`
+	MerchantSharingMerID  pgtype.Text        `json:"merchant_sharing_mer_id"`
+	RiderSharingMerID     pgtype.Text        `json:"rider_sharing_mer_id"`
+	OperatorSharingMerID  pgtype.Text        `json:"operator_sharing_mer_id"`
+	PlatformSharingMerID  pgtype.Text        `json:"platform_sharing_mer_id"`
+	SharingDetailSnapshot []byte             `json:"sharing_detail_snapshot"`
+	OrderID               pgtype.Int8        `json:"order_id"`
+	OrderNo               string             `json:"order_no"`
+	MerchantName          string             `json:"merchant_name"`
 }
 
 // 骑手配送费明细
@@ -1460,6 +1577,15 @@ func (q *Queries) ListRiderProfitSharingOrders(ctx context.Context, arg ListRide
 			&i.DistributableAmount,
 			&i.PlatformRate,
 			&i.OperatorRate,
+			&i.PaymentFee,
+			&i.PaymentFeeRateBps,
+			&i.Provider,
+			&i.Channel,
+			&i.MerchantSharingMerID,
+			&i.RiderSharingMerID,
+			&i.OperatorSharingMerID,
+			&i.PlatformSharingMerID,
+			&i.SharingDetailSnapshot,
 			&i.OrderID,
 			&i.OrderNo,
 			&i.MerchantName,
@@ -1479,7 +1605,7 @@ UPDATE profit_sharing_orders
 SET
     status = 'failed'
 WHERE id = $1
-RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate
+RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot
 `
 
 func (q *Queries) UpdateProfitSharingOrderToFailed(ctx context.Context, id int64) (ProfitSharingOrder, error) {
@@ -1506,6 +1632,15 @@ func (q *Queries) UpdateProfitSharingOrderToFailed(ctx context.Context, id int64
 		&i.DistributableAmount,
 		&i.PlatformRate,
 		&i.OperatorRate,
+		&i.PaymentFee,
+		&i.PaymentFeeRateBps,
+		&i.Provider,
+		&i.Channel,
+		&i.MerchantSharingMerID,
+		&i.RiderSharingMerID,
+		&i.OperatorSharingMerID,
+		&i.PlatformSharingMerID,
+		&i.SharingDetailSnapshot,
 	)
 	return i, err
 }
@@ -1516,7 +1651,7 @@ SET
     status = 'finished',
     finished_at = now()
 WHERE id = $1 AND status = 'processing'
-RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate
+RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot
 `
 
 func (q *Queries) UpdateProfitSharingOrderToFinished(ctx context.Context, id int64) (ProfitSharingOrder, error) {
@@ -1543,6 +1678,15 @@ func (q *Queries) UpdateProfitSharingOrderToFinished(ctx context.Context, id int
 		&i.DistributableAmount,
 		&i.PlatformRate,
 		&i.OperatorRate,
+		&i.PaymentFee,
+		&i.PaymentFeeRateBps,
+		&i.Provider,
+		&i.Channel,
+		&i.MerchantSharingMerID,
+		&i.RiderSharingMerID,
+		&i.OperatorSharingMerID,
+		&i.PlatformSharingMerID,
+		&i.SharingDetailSnapshot,
 	)
 	return i, err
 }
@@ -1553,7 +1697,7 @@ SET
     status = 'processing',
     sharing_order_id = $2
 WHERE id = $1 AND status IN ('pending', 'failed')
-RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate
+RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot
 `
 
 type UpdateProfitSharingOrderToProcessingParams struct {
@@ -1585,6 +1729,15 @@ func (q *Queries) UpdateProfitSharingOrderToProcessing(ctx context.Context, arg 
 		&i.DistributableAmount,
 		&i.PlatformRate,
 		&i.OperatorRate,
+		&i.PaymentFee,
+		&i.PaymentFeeRateBps,
+		&i.Provider,
+		&i.Channel,
+		&i.MerchantSharingMerID,
+		&i.RiderSharingMerID,
+		&i.OperatorSharingMerID,
+		&i.PlatformSharingMerID,
+		&i.SharingDetailSnapshot,
 	)
 	return i, err
 }
