@@ -7,8 +7,8 @@ class MerchantContentShell extends StatelessWidget {
     super.key,
     this.maxWidth = 420,
     this.padding = const EdgeInsets.symmetric(
-      horizontal: AppSpacing.xl,
-      vertical: AppSpacing.xl,
+      horizontal: AppSpacing.viewportHorizontal,
+      vertical: AppSpacing.viewportVertical,
     ),
   });
 
@@ -23,10 +23,7 @@ class MerchantContentShell extends StatelessWidget {
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: maxWidth),
-          child: Padding(
-            padding: padding,
-            child: child,
-          ),
+          child: Padding(padding: padding, child: child),
         ),
       ),
     );

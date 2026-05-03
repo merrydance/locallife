@@ -87,6 +87,13 @@ lib/
 !merchant_app/lib/
 !merchant_app/lib/**
 
+# 移动端安装包 / 发布归档（本地构建产物）
+*.apk
+*.apks
+*.aab
+*.ipa
+*.xcarchive
+
 # 微信小程序本地文件
 weapp/project.private.config.json
 weapp/miniprogram/.tmp/

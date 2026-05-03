@@ -3,46 +3,42 @@ class TableTagInfo {
   final String name;
   final String type;
 
-  TableTagInfo({
-    required this.id,
-    required this.name,
-    required this.type,
-  });
+  TableTagInfo({required this.id, required this.name, required this.type});
 
   factory TableTagInfo.fromJson(Map<String, dynamic> json) {
     return TableTagInfo(
       id: json['id'] as int,
       name: json['name'] as String,
-      type: json['type'] as String,
+      type: json['type'] as String? ?? '',
     );
   }
 }
 
 class ReservationInfo {
   final int id;
-  final int userId;
-  final String userName;
-  final String userPhone;
-  final String date;
-  final String time;
+  final String contactName;
+  final String contactPhone;
+  final int guestCount;
+  final String reservationTime;
+  final String? notes;
 
   ReservationInfo({
     required this.id,
-    required this.userId,
-    required this.userName,
-    required this.userPhone,
-    required this.date,
-    required this.time,
+    required this.contactName,
+    required this.contactPhone,
+    required this.guestCount,
+    required this.reservationTime,
+    this.notes,
   });
 
   factory ReservationInfo.fromJson(Map<String, dynamic> json) {
     return ReservationInfo(
       id: json['id'] as int,
-      userId: json['user_id'] as int,
-      userName: json['user_name'] as String? ?? '',
-      userPhone: json['user_phone'] as String? ?? '',
-      date: json['date'] as String? ?? '',
-      time: json['time'] as String? ?? '',
+      contactName: json['contact_name'] as String? ?? '',
+      contactPhone: json['contact_phone'] as String? ?? '',
+      guestCount: json['guest_count'] as int? ?? 0,
+      reservationTime: json['reservation_time'] as String? ?? '',
+      notes: json['notes'] as String?,
     );
   }
 }
@@ -92,7 +88,7 @@ class TableModel {
   final TableStatus status;
   final int? currentReservationId;
   final ReservationInfo? currentReservation;
-  final String? primaryImageUrl;
+  final String? imageUrl;
   final List<TableTagInfo> tags;
 
   TableModel({
@@ -107,7 +103,7 @@ class TableModel {
     required this.status,
     this.currentReservationId,
     this.currentReservation,
-    this.primaryImageUrl,
+    this.imageUrl,
     this.tags = const [],
   });
 
@@ -126,8 +122,9 @@ class TableModel {
       currentReservation: json['current_reservation'] != null
           ? ReservationInfo.fromJson(json['current_reservation'])
           : null,
-      primaryImageUrl: json['primary_image_url'] as String?,
-      tags: (json['tags'] as List<dynamic>?)
+      imageUrl: json['image_url'] as String?,
+      tags:
+          (json['tags'] as List<dynamic>?)
               ?.map((e) => TableTagInfo.fromJson(e))
               .toList() ??
           [],
@@ -146,7 +143,7 @@ class TableModel {
     TableStatus? status,
     int? currentReservationId,
     ReservationInfo? currentReservation,
-    String? primaryImageUrl,
+    String? imageUrl,
     List<TableTagInfo>? tags,
   }) {
     return TableModel(
@@ -161,7 +158,7 @@ class TableModel {
       status: status ?? this.status,
       currentReservationId: currentReservationId ?? this.currentReservationId,
       currentReservation: currentReservation ?? this.currentReservation,
-      primaryImageUrl: primaryImageUrl ?? this.primaryImageUrl,
+      imageUrl: imageUrl ?? this.imageUrl,
       tags: tags ?? this.tags,
     );
   }

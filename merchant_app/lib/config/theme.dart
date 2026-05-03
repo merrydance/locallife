@@ -26,6 +26,11 @@ class AppSpacing {
   static const lg = 16.0;
   static const xl = 24.0;
   static const xxl = 32.0;
+
+  static const viewportHorizontal = lg;
+  static const viewportVertical = md;
+  static const cardGap = md;
+  static const cardPadding = lg;
 }
 
 class AppRadius {
