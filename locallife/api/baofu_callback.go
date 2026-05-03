@@ -10,12 +10,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	baofunotification "github.com/merrydance/locallife/baofu/account/notification"
+	baofuaggregatenotification "github.com/merrydance/locallife/baofu/aggregatepay/notification"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/rs/zerolog/log"
 )
 
 type baofuAccountNotificationParser interface {
 	ParseOpenAccountNotification(body []byte) (*baofunotification.AccountNotification, error)
+}
+
+type baofuAggregatePaymentNotificationParser interface {
+	ParsePaymentNotification(body []byte) (*baofuaggregatenotification.PaymentNotification, error)
 }
 
 type baofuCallbackResponse struct {
@@ -25,6 +31,10 @@ type baofuCallbackResponse struct {
 
 func (server *Server) SetBaofuAccountNotificationParserForTest(parser baofuAccountNotificationParser) {
 	server.baofuAccountNotificationParser = parser
+}
+
+func (server *Server) SetBaofuAggregatePaymentNotificationParserForTest(parser baofuAggregatePaymentNotificationParser) {
+	server.baofuPaymentNotificationParser = parser
 }
 
 func (server *Server) handleBaofuAccountOpenNotify(ctx *gin.Context) {
@@ -64,6 +74,60 @@ func (server *Server) handleBaofuAccountOpenNotify(ctx *gin.Context) {
 		Str("out_request_no", strings.TrimSpace(notification.OutRequestNo)).
 		Str("baofu_open_state", strings.TrimSpace(notification.OpenState)).
 		Msg("baofu account callback fact persisted")
+	ctx.JSON(http.StatusOK, baofuCallbackResponse{Code: "SUCCESS", Message: "OK"})
+}
+
+func (server *Server) handleBaofuPaymentNotify(ctx *gin.Context) {
+	if server.baofuPaymentNotificationParser == nil {
+		log.Error().Msg("baofu payment callback received but parser is not configured")
+		ctx.JSON(http.StatusServiceUnavailable, baofuCallbackResponse{Code: "FAIL", Message: "baofu payment callback service unavailable"})
+		return
+	}
+	body, status, err := readWebhookBody(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("read baofu payment callback body failed")
+		ctx.JSON(status, baofuCallbackResponse{Code: "FAIL", Message: "read callback body failed"})
+		return
+	}
+	notification, err := server.baofuPaymentNotificationParser.ParsePaymentNotification(body)
+	if err != nil {
+		log.Error().Err(err).Msg("parse baofu payment callback failed")
+		ctx.JSON(http.StatusUnauthorized, baofuCallbackResponse{Code: "FAIL", Message: "callback verification failed"})
+		return
+	}
+	if notification == nil {
+		log.Error().Msg("parse baofu payment callback returned empty notification")
+		ctx.JSON(http.StatusBadRequest, baofuCallbackResponse{Code: "FAIL", Message: "callback content invalid"})
+		return
+	}
+	paymentOrder, err := server.store.GetPaymentOrderByOutTradeNo(ctx.Request.Context(), strings.TrimSpace(notification.Fact.OutTradeNo))
+	if err != nil {
+		log.Error().Err(err).Str("out_trade_no", strings.TrimSpace(notification.Fact.OutTradeNo)).Msg("load baofu payment order for callback failed")
+		ctx.JSON(http.StatusInternalServerError, baofuCallbackResponse{Code: "FAIL", Message: "persist callback failed"})
+		return
+	}
+	service := logic.NewBaofuPaymentService(server.store, nil, logic.BaofuPaymentServiceConfig{})
+	result, err := service.RecordPaymentFact(ctx.Request.Context(), logic.RecordBaofuPaymentFactInput{
+		PaymentOrder:    paymentOrder,
+		Fact:            notification.Fact,
+		FactSource:      db.ExternalPaymentFactSourceCallback,
+		SourceEventID:   strings.TrimSpace(notification.NotifyID),
+		SourceEventType: strings.TrimSpace(notification.NotifyType),
+		OccurredAt:      notification.OccurredAt,
+	})
+	if err != nil {
+		log.Error().Err(err).Str("out_trade_no", strings.TrimSpace(notification.Fact.OutTradeNo)).Msg("persist baofu payment callback fact failed")
+		ctx.JSON(http.StatusInternalServerError, baofuCallbackResponse{Code: "FAIL", Message: "persist callback failed"})
+		return
+	}
+	if err := server.enqueueOrderPaymentFactApplication(ctx.Request.Context(), result.Application); err != nil {
+		log.Warn().Err(err).Int64("payment_fact_id", result.Fact.ID).Msg("enqueue baofu payment fact application failed; scheduler will retry")
+	}
+	log.Info().
+		Int64("payment_fact_id", result.Fact.ID).
+		Str("out_trade_no", strings.TrimSpace(notification.Fact.OutTradeNo)).
+		Str("baofu_payment_state", strings.TrimSpace(notification.Fact.TransactionState)).
+		Msg("baofu payment callback fact persisted")
 	ctx.JSON(http.StatusOK, baofuCallbackResponse{Code: "SUCCESS", Message: "OK"})
 }
 

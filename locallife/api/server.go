@@ -91,6 +91,7 @@ type Server struct {
 	onboardingReviewService        *logic.OnboardingReviewService
 	credentialGovernanceService    *logic.CredentialGovernanceService
 	baofuAccountNotificationParser baofuAccountNotificationParser
+	baofuPaymentNotificationParser baofuAggregatePaymentNotificationParser
 	mediaStorage                   media.ObjectStorage
 	printerClient                  cloudprint.Client
 	router                         *gin.Engine
@@ -578,6 +579,7 @@ func (server *Server) setupRouter() {
 		webhooksGroup.POST("/wechat-ordinary/violation-notify", server.handleOrdinaryServiceProviderViolationNotify)
 		// 宝付宝财通回调
 		webhooksGroup.POST("/baofu/account/open", server.handleBaofuAccountOpenNotify)
+		webhooksGroup.POST("/baofu/payment", server.handleBaofuPaymentNotify)
 		// 微信用户投诉通知（合规要求，状态变更实时推送）
 		webhooksGroup.POST("/wechat-ecommerce/complaint-notify", server.handleComplaintNotify)
 		webhooksGroup.POST("/wechat-ecommerce/violation-notify", server.handleViolationNotify)

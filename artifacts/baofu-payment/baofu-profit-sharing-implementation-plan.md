@@ -1177,3 +1177,12 @@ make test-integration
 - The Baofu path forces profit sharing for main-business payments, matching the full-switch design where merchant, rider, operator, and platform receivers are all Baofu secondary-account receivers.
 - TDD verification: first run failed with missing `CreatePartnerPaymentTxParams.PaymentChannel`, `CreatePartnerPaymentTxParams.RequiresProfitSharing`, and `NewPaymentOrderServiceWithBaofu`; after implementation, `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestPaymentOrderServiceCreatePaymentOrder_UsesBaofuForMainBusiness' -count=1` passed.
 - Residual risk: runtime server wiring still constructs the ordinary-service-provider payment service; existing-pending Baofu payment re-signing is not supported because `wc_pay_data` is not persisted; combined payment routing remains on the existing channel until a dedicated Baofu combined/single-order policy is implemented.
+
+### 2026-05-03 Task 4 Partial - Baofu Payment Callback Route
+
+- Added `POST /v1/webhooks/baofu/payment` to receive Baofu aggregate payment notifications.
+- The callback reads the request body, uses the Baofu aggregate payment notification parser, loads the local `payment_orders` row by `outTradeNo`, records the Baofu payment callback fact through `logic.BaofuPaymentService.RecordPaymentFact`, and enqueues the existing `payment:process_fact_application` worker when a terminal application is created.
+- The callback ACKs only after fact persistence succeeds. If worker enqueue fails after persistence, it still returns success and relies on the existing fact-application scheduler to retry.
+- Public callback responses stay generic (`SUCCESS/FAIL`) while logs use sanitized order/payment identifiers; no `openid`, `contractNo`, `sharingMerId`, bank/card/ID/phone, signatures, or raw upstream payloads are exposed in normal responses.
+- TDD verification: first run failed with missing `SetBaofuAggregatePaymentNotificationParserForTest`; after implementation, `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestBaofuPaymentCallbackPersistsFactAndEnqueuesApplication' -count=1` passed.
+- Residual risk: the parser is still a project-owned notification parser without real Baofu aggregate-payment signature verification wired into runtime config; server production wiring still needs to install the real parser and Baofu payment route dependencies.

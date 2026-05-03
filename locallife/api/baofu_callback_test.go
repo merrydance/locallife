@@ -10,6 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	baofunotification "github.com/merrydance/locallife/baofu/account/notification"
+	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
+	baofuaggregatenotification "github.com/merrydance/locallife/baofu/aggregatepay/notification"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/stretchr/testify/require"
@@ -47,6 +49,55 @@ func TestBaofuAccountOpenCallbackPersistsFactBeforeAck(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), "SUCCESS")
 }
 
+func TestBaofuPaymentCallbackPersistsFactAndEnqueuesApplication(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAggregatePaymentNotificationParserForTest(fakeBaofuPaymentParser{})
+	taskRecorder := &refundFactApplicationEnqueueRecorder{}
+	server.taskDistributor = taskRecorder
+
+	paymentOrder := db.PaymentOrder{
+		ID:             4001,
+		OutTradeNo:     "PO_BAOFU_4001",
+		Amount:         1200,
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+		BusinessType:   "order",
+	}
+	store.EXPECT().GetPaymentOrderByOutTradeNo(gomock.Any(), "PO_BAOFU_4001").Return(paymentOrder, nil)
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ any, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+			require.Equal(t, db.ExternalPaymentProviderBaofu, arg.Provider)
+			require.Equal(t, db.PaymentChannelBaofuAggregate, arg.Channel)
+			require.Equal(t, db.ExternalPaymentCapabilityBaofuPayment, arg.Capability)
+			require.Equal(t, db.ExternalPaymentFactSourceCallback, arg.FactSource)
+			require.Equal(t, db.ExternalPaymentObjectBaofuPaymentOrder, arg.ExternalObjectType)
+			require.Equal(t, "PO_BAOFU_4001", arg.ExternalObjectKey)
+			require.Equal(t, "BFPAY_4001", arg.ExternalSecondaryKey.String)
+			require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
+			require.True(t, arg.IsTerminal)
+			require.Equal(t, int64(1200), arg.Amount.Int64)
+			require.Equal(t, "baofu:callback:payment:PO_BAOFU_4001:BFN_4001", arg.DedupeKey)
+			return db.ExternalPaymentFact{ID: 501, IsTerminal: true, DedupeKey: arg.DedupeKey}, nil
+		})
+	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
+		FactID:             501,
+		Consumer:           paymentFactConsumerOrderDomain,
+		BusinessObjectType: paymentFactBusinessObjectPaymentOrder,
+		BusinessObjectID:   paymentOrder.ID,
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}).Return(db.ExternalPaymentFactApplication{ID: 601, FactID: 501, Consumer: paymentFactConsumerOrderDomain, BusinessObjectType: paymentFactBusinessObjectPaymentOrder, BusinessObjectID: paymentOrder.ID}, nil)
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/payment", bytes.NewBufferString(`{"notifyId":"BFN_4001"}`))
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "SUCCESS")
+	require.Equal(t, []int64{601}, taskRecorder.applicationIDs)
+}
+
 type fakeBaofuOpenAccountParser struct{}
 
 func (fakeBaofuOpenAccountParser) ParseOpenAccountNotification(body []byte) (*baofunotification.AccountNotification, error) {
@@ -58,6 +109,27 @@ func (fakeBaofuOpenAccountParser) ParseOpenAccountNotification(body []byte) (*ba
 		OpenState:     db.BaofuAccountOpenStateActive,
 		OccurredAt:    time.Now().UTC(),
 		Raw:           []byte(`{"outRequestNo":"OPEN123","status":"1"}`),
+	}, nil
+}
+
+type fakeBaofuPaymentParser struct{}
+
+func (fakeBaofuPaymentParser) ParsePaymentNotification(body []byte) (*baofuaggregatenotification.PaymentNotification, error) {
+	return &baofuaggregatenotification.PaymentNotification{
+		NotifyID:       "BFN_4001",
+		NotifyType:     "PAYMENT.SUCCESS",
+		TerminalStatus: db.ExternalPaymentTerminalStatusSuccess,
+		IsTerminal:     true,
+		OccurredAt:     time.Now().UTC(),
+		Raw:            []byte(`{"notifyId":"BFN_4001","outTradeNo":"PO_BAOFU_4001","tradeNo":"BFPAY_4001","txnState":"SUCCESS"}`),
+		Fact: aggregatecontracts.PaymentFact{
+			OutTradeNo:       "PO_BAOFU_4001",
+			TradeNo:          "BFPAY_4001",
+			TransactionState: aggregatecontracts.PaymentStateSuccess,
+			SuccessAmountFen: 1200,
+			FeeAmountFen:     4,
+			Raw:              []byte(`{"notifyId":"BFN_4001","outTradeNo":"PO_BAOFU_4001","tradeNo":"BFPAY_4001","txnState":"SUCCESS"}`),
+		},
 	}, nil
 }
 
