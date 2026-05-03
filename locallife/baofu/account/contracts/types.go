@@ -3,6 +3,8 @@ package contracts
 import (
 	"encoding/json"
 	"strings"
+
+	db "github.com/merrydance/locallife/db/sqlc"
 )
 
 const (
@@ -29,6 +31,49 @@ type OpenAccountRequest struct {
 type QueryAccountRequest struct {
 	OutRequestNo string
 	ContractNo   string
+}
+
+type BalanceQueryRequest struct {
+	MerchantID string
+	TerminalID string
+	ContractNo string
+}
+
+type BalanceResult struct {
+	ContractNo         string
+	AvailableAmountFen int64
+	PendingAmountFen   int64
+	LedgerAmountFen    int64
+	FrozenAmountFen    int64
+	UpstreamAvailable  string
+	UpstreamPending    string
+	UpstreamLedger     string
+	UpstreamFrozen     string
+	Raw                json.RawMessage
+}
+
+type WithdrawRequest struct {
+	MerchantID    string
+	TerminalID    string
+	ContractNo    string
+	TransSerialNo string
+	AmountFen     int64
+	NotifyURL     string
+}
+
+type WithdrawQueryRequest struct {
+	MerchantID    string
+	TerminalID    string
+	TransSerialNo string
+}
+
+type WithdrawResult struct {
+	TransSerialNo   string
+	BaofuWithdrawNo string
+	ContractNo      string
+	UpstreamState   string
+	Status          string
+	Raw             json.RawMessage
 }
 
 type AccountResult struct {
@@ -68,5 +113,20 @@ func OpenStateFromUpstream(state string) string {
 		return OpenStateAbnormal
 	default:
 		return OpenStateAbnormal
+	}
+}
+
+func WithdrawStatusFromUpstream(state string) string {
+	switch strings.TrimSpace(state) {
+	case "1":
+		return db.BaofuWithdrawalStatusSucceeded
+	case "0":
+		return db.BaofuWithdrawalStatusFailed
+	case "2":
+		return db.BaofuWithdrawalStatusProcessing
+	case "3":
+		return db.BaofuWithdrawalStatusReturned
+	default:
+		return db.BaofuWithdrawalStatusProcessing
 	}
 }

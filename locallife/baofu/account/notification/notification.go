@@ -70,9 +70,6 @@ func (p *Parser) ParseOpenAccountNotification(body []byte) (*AccountNotification
 	}
 	sharingMerID := strings.TrimSpace(payload.SharingMerID)
 	contractNo := strings.TrimSpace(payload.ContractNo)
-	if sharingMerID == "" {
-		sharingMerID = contractNo
-	}
 	return &AccountNotification{
 		OutRequestNo:  outRequestNo,
 		ContractNo:    contractNo,

@@ -14,6 +14,7 @@ func TestParserParsesOpenAccountNotification(t *testing.T) {
 	envelope, err := codec.SealEnvelope("102004465", "200005200", map[string]any{
 		"outRequestNo": "OPEN123",
 		"contractNo":   "CP123",
+		"sharingMerId": "CM_SHARE_123",
 		"status":       "1",
 	})
 	require.NoError(t, err)
@@ -26,8 +27,29 @@ func TestParserParsesOpenAccountNotification(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "OPEN123", notification.OutRequestNo)
 	require.Equal(t, "CP123", notification.ContractNo)
+	require.Equal(t, "CM_SHARE_123", notification.SharingMerID)
 	require.Equal(t, "active", notification.OpenState)
 	require.True(t, json.Valid(notification.Raw))
+}
+
+func TestParserDoesNotFallbackSharingMerIDFromContractNo(t *testing.T) {
+	codec, err := baofucrypto.NewUnionGWCodec("0123456789abcdef0123456789abcdef")
+	require.NoError(t, err)
+	envelope, err := codec.SealEnvelope("102004465", "200005200", map[string]any{
+		"outRequestNo": "OPEN_CONTRACT_ONLY",
+		"contractNo":   "CP_ONLY",
+		"status":       "1",
+	})
+	require.NoError(t, err)
+	body, err := json.Marshal(envelope)
+	require.NoError(t, err)
+
+	parser := NewParser(codec)
+	notification, err := parser.ParseOpenAccountNotification(body)
+
+	require.NoError(t, err)
+	require.Equal(t, "CP_ONLY", notification.ContractNo)
+	require.Empty(t, notification.SharingMerID)
 }
 
 func TestParserRejectsMissingCodec(t *testing.T) {

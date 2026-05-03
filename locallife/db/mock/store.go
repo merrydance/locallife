@@ -3093,6 +3093,21 @@ func (mr *MockStoreMockRecorder) CreateBaofuProfitSharingOrderTx(ctx, arg any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBaofuProfitSharingOrderTx", reflect.TypeOf((*MockStore)(nil).CreateBaofuProfitSharingOrderTx), ctx, arg)
 }
 
+// CreateBaofuWithdrawalOrder mocks base method.
+func (m *MockStore) CreateBaofuWithdrawalOrder(ctx context.Context, arg db.CreateBaofuWithdrawalOrderParams) (db.BaofuWithdrawalOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateBaofuWithdrawalOrder", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuWithdrawalOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateBaofuWithdrawalOrder indicates an expected call of CreateBaofuWithdrawalOrder.
+func (mr *MockStoreMockRecorder) CreateBaofuWithdrawalOrder(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBaofuWithdrawalOrder", reflect.TypeOf((*MockStore)(nil).CreateBaofuWithdrawalOrder), ctx, arg)
+}
+
 // CreateBehaviorAction mocks base method.
 func (m *MockStore) CreateBehaviorAction(ctx context.Context, arg db.CreateBehaviorActionParams) (db.BehaviorAction, error) {
 	m.ctrl.T.Helper()
@@ -6490,6 +6505,36 @@ func (m *MockStore) GetBaofuPaymentOrderRefundGuardForUpdate(ctx context.Context
 func (mr *MockStoreMockRecorder) GetBaofuPaymentOrderRefundGuardForUpdate(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuPaymentOrderRefundGuardForUpdate", reflect.TypeOf((*MockStore)(nil).GetBaofuPaymentOrderRefundGuardForUpdate), ctx, id)
+}
+
+// GetBaofuWithdrawalOrder mocks base method.
+func (m *MockStore) GetBaofuWithdrawalOrder(ctx context.Context, id int64) (db.BaofuWithdrawalOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuWithdrawalOrder", ctx, id)
+	ret0, _ := ret[0].(db.BaofuWithdrawalOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuWithdrawalOrder indicates an expected call of GetBaofuWithdrawalOrder.
+func (mr *MockStoreMockRecorder) GetBaofuWithdrawalOrder(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuWithdrawalOrder", reflect.TypeOf((*MockStore)(nil).GetBaofuWithdrawalOrder), ctx, id)
+}
+
+// GetBaofuWithdrawalOrderByOutRequestNo mocks base method.
+func (m *MockStore) GetBaofuWithdrawalOrderByOutRequestNo(ctx context.Context, outRequestNo string) (db.BaofuWithdrawalOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuWithdrawalOrderByOutRequestNo", ctx, outRequestNo)
+	ret0, _ := ret[0].(db.BaofuWithdrawalOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuWithdrawalOrderByOutRequestNo indicates an expected call of GetBaofuWithdrawalOrderByOutRequestNo.
+func (mr *MockStoreMockRecorder) GetBaofuWithdrawalOrderByOutRequestNo(ctx, outRequestNo any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuWithdrawalOrderByOutRequestNo", reflect.TypeOf((*MockStore)(nil).GetBaofuWithdrawalOrderByOutRequestNo), ctx, outRequestNo)
 }
 
 // GetBehaviorAction mocks base method.
@@ -12727,6 +12772,21 @@ func (mr *MockStoreMockRecorder) ListBaofuProcessingProfitSharingOrdersForRecove
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListBaofuProcessingProfitSharingOrdersForRecovery", reflect.TypeOf((*MockStore)(nil).ListBaofuProcessingProfitSharingOrdersForRecovery), ctx, arg)
 }
 
+// ListBaofuWithdrawalOrdersByOwner mocks base method.
+func (m *MockStore) ListBaofuWithdrawalOrdersByOwner(ctx context.Context, arg db.ListBaofuWithdrawalOrdersByOwnerParams) ([]db.BaofuWithdrawalOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListBaofuWithdrawalOrdersByOwner", ctx, arg)
+	ret0, _ := ret[0].([]db.BaofuWithdrawalOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListBaofuWithdrawalOrdersByOwner indicates an expected call of ListBaofuWithdrawalOrdersByOwner.
+func (mr *MockStoreMockRecorder) ListBaofuWithdrawalOrdersByOwner(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListBaofuWithdrawalOrdersByOwner", reflect.TypeOf((*MockStore)(nil).ListBaofuWithdrawalOrdersByOwner), ctx, arg)
+}
+
 // ListBehaviorActionsByDecision mocks base method.
 func (m *MockStore) ListBehaviorActionsByDecision(ctx context.Context, decisionID int64) ([]db.BehaviorAction, error) {
 	m.ctrl.T.Helper()
@@ -15305,6 +15365,21 @@ func (m *MockStore) ListProcessingBaofuAccountBindings(ctx context.Context, arg 
 func (mr *MockStoreMockRecorder) ListProcessingBaofuAccountBindings(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListProcessingBaofuAccountBindings", reflect.TypeOf((*MockStore)(nil).ListProcessingBaofuAccountBindings), ctx, arg)
+}
+
+// ListProcessingBaofuWithdrawalOrdersForRecovery mocks base method.
+func (m *MockStore) ListProcessingBaofuWithdrawalOrdersForRecovery(ctx context.Context, arg db.ListProcessingBaofuWithdrawalOrdersForRecoveryParams) ([]db.BaofuWithdrawalOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListProcessingBaofuWithdrawalOrdersForRecovery", ctx, arg)
+	ret0, _ := ret[0].([]db.BaofuWithdrawalOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListProcessingBaofuWithdrawalOrdersForRecovery indicates an expected call of ListProcessingBaofuWithdrawalOrdersForRecovery.
+func (mr *MockStoreMockRecorder) ListProcessingBaofuWithdrawalOrdersForRecovery(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListProcessingBaofuWithdrawalOrdersForRecovery", reflect.TypeOf((*MockStore)(nil).ListProcessingBaofuWithdrawalOrdersForRecovery), ctx, arg)
 }
 
 // ListProfitSharingConfigAudits mocks base method.
@@ -19012,6 +19087,36 @@ func (m *MockStore) UnsuspendRider(ctx context.Context, riderID int64) error {
 func (mr *MockStoreMockRecorder) UnsuspendRider(ctx, riderID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnsuspendRider", reflect.TypeOf((*MockStore)(nil).UnsuspendRider), ctx, riderID)
+}
+
+// UpdateBaofuWithdrawalOrderStatus mocks base method.
+func (m *MockStore) UpdateBaofuWithdrawalOrderStatus(ctx context.Context, arg db.UpdateBaofuWithdrawalOrderStatusParams) (db.BaofuWithdrawalOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateBaofuWithdrawalOrderStatus", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuWithdrawalOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateBaofuWithdrawalOrderStatus indicates an expected call of UpdateBaofuWithdrawalOrderStatus.
+func (mr *MockStoreMockRecorder) UpdateBaofuWithdrawalOrderStatus(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateBaofuWithdrawalOrderStatus", reflect.TypeOf((*MockStore)(nil).UpdateBaofuWithdrawalOrderStatus), ctx, arg)
+}
+
+// UpdateBaofuWithdrawalOrderToProcessing mocks base method.
+func (m *MockStore) UpdateBaofuWithdrawalOrderToProcessing(ctx context.Context, arg db.UpdateBaofuWithdrawalOrderToProcessingParams) (db.BaofuWithdrawalOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateBaofuWithdrawalOrderToProcessing", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuWithdrawalOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateBaofuWithdrawalOrderToProcessing indicates an expected call of UpdateBaofuWithdrawalOrderToProcessing.
+func (mr *MockStoreMockRecorder) UpdateBaofuWithdrawalOrderToProcessing(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateBaofuWithdrawalOrderToProcessing", reflect.TypeOf((*MockStore)(nil).UpdateBaofuWithdrawalOrderToProcessing), ctx, arg)
 }
 
 // UpdateBehaviorActionExecution mocks base method.

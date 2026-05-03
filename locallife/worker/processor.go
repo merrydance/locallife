@@ -310,6 +310,7 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskProcessPaymentFactApplication, processor.ProcessTaskPaymentFactApplication)
 	mux.HandleFunc(TaskProcessPaymentDomainOutbox, processor.ProcessTaskPaymentDomainOutbox)
 	mux.HandleFunc(TaskProcessBaofuProfitSharing, processor.ProcessTaskBaofuProfitSharing)
+	mux.HandleFunc(TaskProcessBaofuWithdrawalFactApplication, processor.ProcessTaskBaofuWithdrawalFactApplication)
 
 	// 商户入驻证照OCR任务
 	mux.HandleFunc(TaskMerchantApplicationBusinessLicenseOCR, processor.ProcessTaskMerchantApplicationBusinessLicenseOCR)

@@ -821,11 +821,11 @@ Expected: concurrent refund and share creation leaves exactly one path accepted;
 - Test: `locallife/logic/baofu_withdraw_service_test.go`
 - Test: `locallife/worker/task_baofu_withdrawal_fact_application_test.go`
 
-- [ ] **Step 1: Enforce payout merchant for withdrawal**
+- [x] **Step 1: Enforce payout merchant for withdrawal**
 
 `CreateWithdraw` and `QueryWithdraw` must use `Config.PayoutMerchantID` and `Config.PayoutTerminalID`. Account open, balance query, payment and sharing must not use payout merchant credentials.
 
-- [ ] **Step 2: Implement balance query**
+- [x] **Step 2: Implement balance query**
 
 Return both in-transit and available balances when Baofu provides them. API response labels:
 
@@ -836,7 +836,7 @@ Return both in-transit and available balances when Baofu provides them. API resp
 已提现金额
 ```
 
-- [ ] **Step 3: Implement withdrawal lifecycle**
+- [x] **Step 3: Implement withdrawal lifecycle**
 
 Create `baofu_withdrawal_orders` row before calling Baofu withdrawal. Synchronous accepted result leaves status `processing`. Callback/query facts map:
 
@@ -847,7 +847,7 @@ Create `baofu_withdrawal_orders` row before calling Baofu withdrawal. Synchronou
 3 -> returned
 ```
 
-- [ ] **Step 4: Validate payout boundary**
+- [x] **Step 4: Validate payout boundary**
 
 Run from `locallife/`:
 
@@ -1284,3 +1284,15 @@ make test-integration
 - Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./db/sqlc ./worker ./api -run 'TestBaofuRefund|TestProfitSharingOrder|TestRefund|TestCreateRefundOrderTx_Baofu|TestCreateRefundOrderAPI/BaofuShareStarted' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'Test.*Refund|TestBaofu' -count=1`; `PATH="/usr/local/go/bin:$PATH" make check-generated`; `git diff --check`.
 - Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on the pre-existing 71 oversized Go files, including existing `api/payment_order.go`, `logic/refund_service.go`, `worker/task_process_payment.go`, and `worker/refund_recovery_scheduler.go`.
 - Residual risk: this slice enforces the refund/share mutex and user-facing rejection. Direct Baofu pre-share refund command submission is still not wired as a transport capability; until that is added, the API returns a semantic conflict for Baofu refunds that have not yet entered sharing.
+
+
+### 2026-05-03 Task 8 Partial - Balance And Withdrawal Core Boundary
+
+- Added BaoCaiTong account contract DTOs for balance query, withdrawal, withdrawal query, and withdrawal state mapping: `1 -> succeeded`, `0 -> failed`, `2 -> processing`, `3 -> returned`.
+- Added `baofu_withdrawal_orders` sqlc queries for create, owner list, processing recovery list, lookup, processing update, and terminal status update; regenerated sqlc and mocks.
+- Added `logic.BaofuWithdrawService` for account-bound balance and withdrawal orchestration. Balance query uses collect merchant/terminal credentials; withdrawal creation uses payout merchant/terminal credentials and writes the local withdrawal row plus external command before calling the client.
+- Added `TaskProcessBaofuWithdrawalFactApplication` to apply normalized withdrawal query/callback states to `baofu_withdrawal_orders`, including the `returned` state required by BaoCaiTong 4.2.0 withdrawal notifications.
+- Corrected BaoCaiTong account-open notification parsing so it no longer falls back from `contractNo` to `sharingMerId`; the parser must receive the secondary merchant id as `sharingMerId` before the account can become share-ready.
+- Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./baofu/account ./baofu/account/contracts ./baofu/account/notification ./logic ./worker -run 'TestBaofuWithdraw|TestParserDoesNotFallback|TestProcessTaskBaofuWithdrawal|TestBaofuWithdrawService' -count=1`; `PATH="/usr/local/go/bin:$PATH" make check-generated`; `git diff --check`.
+- Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on the pre-existing 71 oversized Go files.
+- Residual risk: this slice establishes the persistence, service, and worker boundary only. Public merchant/rider withdrawal routes, real BaoCaiTong transport implementation, callback route parsing/persistence, and scheduler query wiring still need follow-up before production withdrawal traffic is enabled.

@@ -292,6 +292,7 @@ type Querier interface {
 	CountWithdrawalRecords(ctx context.Context, arg CountWithdrawalRecordsParams) (int64, error)
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error)
 	CreateBaofuFeeLedger(ctx context.Context, arg CreateBaofuFeeLedgerParams) (BaofuFeeLedger, error)
+	CreateBaofuWithdrawalOrder(ctx context.Context, arg CreateBaofuWithdrawalOrderParams) (BaofuWithdrawalOrder, error)
 	// ==============================
 	// behavior_actions
 	// ==============================
@@ -624,6 +625,8 @@ type Querier interface {
 	GetBaofuFeeLedger(ctx context.Context, id int64) (BaofuFeeLedger, error)
 	GetBaofuFeeLedgerByBusinessObject(ctx context.Context, arg GetBaofuFeeLedgerByBusinessObjectParams) (BaofuFeeLedger, error)
 	GetBaofuPaymentOrderRefundGuardForUpdate(ctx context.Context, id int64) (GetBaofuPaymentOrderRefundGuardForUpdateRow, error)
+	GetBaofuWithdrawalOrder(ctx context.Context, id int64) (BaofuWithdrawalOrder, error)
+	GetBaofuWithdrawalOrderByOutRequestNo(ctx context.Context, outRequestNo string) (BaofuWithdrawalOrder, error)
 	GetBehaviorAction(ctx context.Context, id int64) (BehaviorAction, error)
 	GetBehaviorDecision(ctx context.Context, id int64) (BehaviorDecision, error)
 	GetBehaviorEffectSummary(ctx context.Context, arg GetBehaviorEffectSummaryParams) (GetBehaviorEffectSummaryRow, error)
@@ -1206,6 +1209,7 @@ type Querier interface {
 	ListBaofuOrdersReadyForProfitSharing(ctx context.Context, arg ListBaofuOrdersReadyForProfitSharingParams) ([]ListBaofuOrdersReadyForProfitSharingRow, error)
 	ListBaofuPendingPaymentOrdersForRecovery(ctx context.Context, arg ListBaofuPendingPaymentOrdersForRecoveryParams) ([]PaymentOrder, error)
 	ListBaofuProcessingProfitSharingOrdersForRecovery(ctx context.Context, arg ListBaofuProcessingProfitSharingOrdersForRecoveryParams) ([]ProfitSharingOrder, error)
+	ListBaofuWithdrawalOrdersByOwner(ctx context.Context, arg ListBaofuWithdrawalOrdersByOwnerParams) ([]BaofuWithdrawalOrder, error)
 	ListBehaviorActionsByDecision(ctx context.Context, decisionID int64) ([]BehaviorAction, error)
 	ListBehaviorActionsByStatusAndType(ctx context.Context, arg ListBehaviorActionsByStatusAndTypeParams) ([]BehaviorAction, error)
 	ListBehaviorAppealsByEntity(ctx context.Context, arg ListBehaviorAppealsByEntityParams) ([]BehaviorAppeal, error)
@@ -1434,6 +1438,7 @@ type Querier interface {
 	ListPrintLogsByOrder(ctx context.Context, orderID int64) ([]ListPrintLogsByOrderRow, error)
 	ListPrintLogsByPrinter(ctx context.Context, arg ListPrintLogsByPrinterParams) ([]PrintLog, error)
 	ListProcessingBaofuAccountBindings(ctx context.Context, arg ListProcessingBaofuAccountBindingsParams) ([]BaofuAccountBinding, error)
+	ListProcessingBaofuWithdrawalOrdersForRecovery(ctx context.Context, arg ListProcessingBaofuWithdrawalOrdersForRecoveryParams) ([]BaofuWithdrawalOrder, error)
 	ListProfitSharingConfigAudits(ctx context.Context, arg ListProfitSharingConfigAuditsParams) ([]ProfitSharingConfigAudit, error)
 	ListProfitSharingConfigs(ctx context.Context, arg ListProfitSharingConfigsParams) ([]ProfitSharingConfig, error)
 	ListProfitSharingConfigsForRegion(ctx context.Context, arg ListProfitSharingConfigsForRegionParams) ([]ProfitSharingConfig, error)
@@ -1713,6 +1718,8 @@ type Querier interface {
 	UnsuspendMerchant(ctx context.Context, merchantID int64) error
 	UnsuspendMerchantTakeout(ctx context.Context, merchantID int64) error
 	UnsuspendRider(ctx context.Context, riderID int64) error
+	UpdateBaofuWithdrawalOrderStatus(ctx context.Context, arg UpdateBaofuWithdrawalOrderStatusParams) (BaofuWithdrawalOrder, error)
+	UpdateBaofuWithdrawalOrderToProcessing(ctx context.Context, arg UpdateBaofuWithdrawalOrderToProcessingParams) (BaofuWithdrawalOrder, error)
 	UpdateBehaviorActionExecution(ctx context.Context, arg UpdateBehaviorActionExecutionParams) error
 	UpdateBehaviorActionExecutionIfCurrent(ctx context.Context, arg UpdateBehaviorActionExecutionIfCurrentParams) (BehaviorAction, error)
 	UpdateBehaviorActionStatus(ctx context.Context, arg UpdateBehaviorActionStatusParams) error
