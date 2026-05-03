@@ -869,7 +869,7 @@ Expected: tests prove withdrawal requests use payout merchant ID and account/pay
 - Test: `locallife/api/platform_stats_test.go`
 - Test: `locallife/worker/alert_payloads_test.go`
 
-- [ ] **Step 1: Add reconciliation views**
+- [x] **Step 1: Add reconciliation views**
 
 Platform finance should expose daily sums by provider/channel:
 
@@ -886,7 +886,7 @@ unapplied_fact_count
 unknown_command_count
 ```
 
-- [ ] **Step 2: Add alerts**
+- [x] **Step 2: Add alerts**
 
 Alert when:
 
@@ -898,7 +898,7 @@ external_payment_facts processing_status = failed
 baofu_fee_ledger amount mismatch against profit_sharing_orders.payment_fee
 ```
 
-- [ ] **Step 3: Write production first-order checklist**
+- [x] **Step 3: Write production first-order checklist**
 
 Create `artifacts/baofu-payment/baofu-production-first-order-checklist.md` with check items for:
 
@@ -916,7 +916,7 @@ merchant/rider/operator/platform balances match expected formula
 withdraw test amount succeeds
 ```
 
-- [ ] **Step 4: Validate finance and alert views**
+- [x] **Step 4: Validate finance and alert views**
 
 Run from `locallife/`:
 
@@ -1212,7 +1212,7 @@ make test-integration
 - Incorporated the confirmed Baofu guidance: the profit-sharing receiver is the secondary merchant ID returned by the account-opening interface. The local canonical field for that value is `baofu_account_bindings.sharing_mer_id`.
 - Updated `BaofuAccountService` readiness so an active account with only `contract_no` is not payment/share-ready; account-opening/query normalization must sync the returned secondary merchant ID into `sharing_mer_id` first.
 - Updated receiver resolution so share creation reads only `sharing_mer_id` and never falls back to `contract_no`, `openid`, `sub_openid`, merchant `subMchId`, or the platform Baofu collect merchant ID.
-- Added migration `000228_require_baofu_sharing_mer_id` to backfill active rows from `contract_no` once, then tighten `baofu_account_bindings_active_receiver_check` so future active rows require `sharing_mer_id`.
+- Added migration `000228_require_baofu_sharing_mer_id` to tighten `baofu_account_bindings_active_receiver_check` so active rows require explicit `sharing_mer_id`; it does not backfill from `contract_no`, because `contract_no` is query/audit trace only.
 - Updated the integration design to state that the platform commission receiver must also be a platform-owned Baofu secondary account (`owner_type=platform`, `owner_id=0`), not the platform collect merchant account.
 - TDD verification: first run failed because contract-only active rows were still treated as ready/resolvable; after implementation, `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestBaofuAccountService|TestResolveBaofuProfitSharingReceivers|TestCalculateBaofu' -count=1` passed.
 
@@ -1296,3 +1296,13 @@ make test-integration
 - Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./baofu/account ./baofu/account/contracts ./baofu/account/notification ./logic ./worker -run 'TestBaofuWithdraw|TestParserDoesNotFallback|TestProcessTaskBaofuWithdrawal|TestBaofuWithdrawService' -count=1`; `PATH="/usr/local/go/bin:$PATH" make check-generated`; `git diff --check`.
 - Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on the pre-existing 71 oversized Go files.
 - Residual risk: this slice establishes the persistence, service, and worker boundary only. Public merchant/rider withdrawal routes, real BaoCaiTong transport implementation, callback route parsing/persistence, and scheduler query wiring still need follow-up before production withdrawal traffic is enabled.
+
+### 2026-05-03 Task 9 Partial - Baofu Reconciliation, Alerts, And First-Order Checklist
+
+- Added `GetBaofuDailyReconciliation` to aggregate Baofu daily reconciliation rows by provider/channel, including paid amount, payment fee, merchant/rider/platform/operator splits, succeeded/processing withdrawal amounts, failed fact count, unknown command count, and fee-ledger mismatch count.
+- Added admin route `GET /v1/platform/stats/baofu/reconciliation/daily`. The response returns only aggregate amounts/counts and provider/channel labels; it does not expose `contract_no`, `sharing_mer_id`, `contractNo`, `sharingMerId`, upstream raw payloads, cards, IDs, phones, signatures, or keys.
+- Added sanitized Baofu alert payload builders for the five planned conditions: payment callback missing after SLA, share processing SLA exceeded, withdrawal processing SLA exceeded, failed external payment fact application, and payment-fee ledger mismatch.
+- Created `artifacts/baofu-payment/baofu-production-first-order-checklist.md` covering collect/payout merchant checks, prefunded account-opening fees, merchant/rider/operator/platform account readiness, payment callback persistence, refund-closed share creation, formula/balance checks, withdrawal smoke test, and post-first-order observation.
+- Corrected the receiver-field migration note and migration source: `000228_require_baofu_sharing_mer_id` now requires explicit `sharing_mer_id` for active rows and does not copy `contract_no` into `sharing_mer_id`.
+- Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./api ./worker -run 'TestPlatformStats|TestAlertPayload|TestBaofu' -count=1`; `PATH="/usr/local/go/bin:$PATH" make swagger`; `PATH="/usr/local/go/bin:$PATH" make check-generated`; `git diff --check`.
+- Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on the pre-existing 71 oversized Go files; this slice keeps the new reconciliation handler in a small dedicated API file and only extends existing server routing for the new route.

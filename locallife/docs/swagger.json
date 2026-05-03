@@ -25384,6 +25384,77 @@
                 }
             }
         },
+        "/v1/platform/stats/baofu/reconciliation/daily": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员查看宝付支付、分账、提现与异常事实每日汇总；响应只返回聚合金额和计数，不返回分账接收方、合同号或上游原始数据",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取宝付每日对账汇总",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "开始日期 (格式: 2025-01-01)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束日期 (格式: 2025-01-31)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "宝付每日对账汇总",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.platformBaofuDailyReconciliationRow"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/platform/stats/categories": {
             "get": {
                 "security": [
@@ -43400,6 +43471,53 @@
                 },
                 "title": {
                     "type": "string"
+                }
+            }
+        },
+        "api.platformBaofuDailyReconciliationRow": {
+            "type": "object",
+            "properties": {
+                "channel": {
+                    "type": "string"
+                },
+                "date": {
+                    "type": "string"
+                },
+                "fee_ledger_mismatch_count": {
+                    "type": "integer"
+                },
+                "merchant_amount": {
+                    "type": "integer"
+                },
+                "operator_commission": {
+                    "type": "integer"
+                },
+                "paid_amount": {
+                    "type": "integer"
+                },
+                "payment_fee": {
+                    "type": "integer"
+                },
+                "platform_commission": {
+                    "type": "integer"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "rider_amount": {
+                    "type": "integer"
+                },
+                "unapplied_fact_count": {
+                    "type": "integer"
+                },
+                "unknown_command_count": {
+                    "type": "integer"
+                },
+                "withdraw_processing_amount": {
+                    "type": "integer"
+                },
+                "withdraw_succeeded_amount": {
+                    "type": "integer"
                 }
             }
         },

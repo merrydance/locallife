@@ -432,6 +432,71 @@ func TestGetPlatformProfitSharingReconciliationAPI(t *testing.T) {
 	}
 }
 
+func TestGetPlatformBaofuDailyReconciliationAPI(t *testing.T) {
+	admin, _ := randomUser(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), admin.ID).
+		Return([]db.UserRole{{
+			UserID: admin.ID,
+			Role:   "admin",
+			Status: "active",
+		}}, nil)
+	store.EXPECT().
+		GetBaofuDailyReconciliation(gomock.Any(), gomock.Any()).
+		Return([]db.GetBaofuDailyReconciliationRow{{
+			Date:                     pgtype.Date{Time: time.Date(2026, 5, 3, 0, 0, 0, 0, time.UTC), Valid: true},
+			Provider:                 db.ExternalPaymentProviderBaofu,
+			Channel:                  db.PaymentChannelBaofuAggregate,
+			PaidAmount:               10000,
+			PaymentFee:               30,
+			MerchantAmount:           8970,
+			RiderAmount:              500,
+			PlatformCommission:       200,
+			OperatorCommission:       300,
+			WithdrawSucceededAmount:  6000,
+			WithdrawProcessingAmount: 1500,
+			UnappliedFactCount:       2,
+			UnknownCommandCount:      1,
+			FeeLedgerMismatchCount:   1,
+		}}, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/platform/stats/baofu/reconciliation/daily?start_date=2026-05-03&end_date=2026-05-03", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, admin.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.NotContains(t, recorder.Body.String(), "sharing_mer_id")
+	require.NotContains(t, recorder.Body.String(), "contract_no")
+	require.NotContains(t, recorder.Body.String(), "contractNo")
+
+	var resp []platformBaofuDailyReconciliationRow
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Len(t, resp, 1)
+	require.Equal(t, "2026-05-03", resp[0].Date)
+	require.Equal(t, db.ExternalPaymentProviderBaofu, resp[0].Provider)
+	require.Equal(t, db.PaymentChannelBaofuAggregate, resp[0].Channel)
+	require.Equal(t, int64(10000), resp[0].PaidAmount)
+	require.Equal(t, int64(30), resp[0].PaymentFee)
+	require.Equal(t, int64(8970), resp[0].MerchantAmount)
+	require.Equal(t, int64(500), resp[0].RiderAmount)
+	require.Equal(t, int64(200), resp[0].PlatformCommission)
+	require.Equal(t, int64(300), resp[0].OperatorCommission)
+	require.Equal(t, int64(6000), resp[0].WithdrawSucceededAmount)
+	require.Equal(t, int64(1500), resp[0].WithdrawProcessingAmount)
+	require.Equal(t, int64(2), resp[0].UnappliedFactCount)
+	require.Equal(t, int64(1), resp[0].UnknownCommandCount)
+	require.Equal(t, int64(1), resp[0].FeeLedgerMismatchCount)
+}
+
 // ============================================================================
 // 平台分账 SLA 汇总测试
 // ============================================================================

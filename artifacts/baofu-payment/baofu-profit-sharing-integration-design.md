@@ -172,6 +172,10 @@ merchant_amount = 10000 - 500 - 200 - 300 - 30 = 8970
   -> 提现流水
 ```
 
+平台侧提供宝付每日对账聚合视图 `GET /v1/platform/stats/baofu/reconciliation/daily`，按 provider/channel 输出支付金额、宝付手续费、商户/骑手/平台/运营商分账金额、提现成功/处理中金额、失败事实数、未知命令数和手续费台账不一致数。该视图只输出聚合金额和计数，不输出 `contract_no`、`sharing_mer_id`、银行卡、身份证、手机号、签名材料或宝付原始载荷。
+
+平台告警口径覆盖五类首版必须盯盘的异常：宝付支付回调超过 SLA 未到达、宝付分账处理中超过 SLA、宝付提现处理中超过 SLA、`external_payment_facts.processing_status=failed`、`baofu_fee_ledger.amount` 与 `profit_sharing_orders.payment_fee` 不一致。告警 payload 固定带 provider/channel 标签，并过滤分账接收方、合同号和上游原始数据。
+
 ## 6. 主链路流程
 
 ### 6.1 宝财通三段式业务流程

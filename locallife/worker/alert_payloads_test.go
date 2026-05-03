@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -94,6 +95,54 @@ func TestAbnormalRefundActionExtra_SkipsNonEcommerceRefund(t *testing.T) {
 	}
 
 	require.Nil(t, abnormalRefundActionExtra(paymentOrder, refundOrder))
+}
+
+func TestBaofuAlertExtraIncludesProviderChannelAndSanitizesSensitiveFields(t *testing.T) {
+	extra := baofuReconciliationAlertExtra(map[string]interface{}{
+		"payment_order_id": 11,
+		"provider":         "bad-provider",
+		"channel":          "bad-channel",
+		"contract_no":      "CONTRACT-SECRET",
+		"sharing_mer_id":   "SHARE-SECRET",
+		"sharingMerId":     "SHARE-SECRET",
+		"raw_resource":     map[string]any{"id_card": "secret"},
+		"signature":        "SIGN",
+	})
+
+	require.Equal(t, db.ExternalPaymentProviderBaofu, extra["provider"])
+	require.Equal(t, db.PaymentChannelBaofuAggregate, extra["channel"])
+	require.EqualValues(t, int64(11), extra["payment_order_id"])
+	require.NotContains(t, extra, "contract_no")
+	require.NotContains(t, extra, "sharing_mer_id")
+	require.NotContains(t, extra, "sharingMerId")
+	require.NotContains(t, extra, "raw_resource")
+	require.NotContains(t, extra, "signature")
+}
+
+func TestBaofuReconciliationAlertsUseSanitizedProviderPayloads(t *testing.T) {
+	now := time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)
+
+	alerts := []AlertData{
+		newBaofuPaymentCallbackMissingAlert(db.PaymentOrder{ID: 11, Status: "pending", CreatedAt: now.Add(-2 * time.Hour)}, time.Hour),
+		newBaofuProfitSharingProcessingSLAAlert(db.ProfitSharingOrder{ID: 12, PaymentOrderID: 11, Status: db.ProfitSharingOrderStatusProcessing, CreatedAt: now.Add(-2 * time.Hour)}, time.Hour),
+		newBaofuWithdrawalProcessingSLAAlert(db.BaofuWithdrawalOrder{ID: 13, Status: db.BaofuWithdrawalStatusProcessing, CreatedAt: now.Add(-2 * time.Hour), Amount: 5000}, time.Hour),
+		newBaofuFailedFactAlert(db.ExternalPaymentFact{ID: 14, Provider: db.ExternalPaymentProviderBaofu, Channel: db.PaymentChannelBaofuAggregate, ProcessingStatus: db.ExternalPaymentFactProcessingStatusFailed}),
+		newBaofuFeeLedgerMismatchAlert(15, 11, 30, 29),
+	}
+
+	require.Equal(t, AlertTypeBaofuPaymentCallbackMissing, alerts[0].AlertType)
+	require.Equal(t, AlertTypeBaofuShareProcessingSLA, alerts[1].AlertType)
+	require.Equal(t, AlertTypeBaofuWithdrawalProcessingSLA, alerts[2].AlertType)
+	require.Equal(t, AlertTypeBaofuFactApplicationFailed, alerts[3].AlertType)
+	require.Equal(t, AlertTypeBaofuFeeLedgerMismatch, alerts[4].AlertType)
+	for _, alert := range alerts {
+		require.Equal(t, AlertLevelWarning, alert.Level)
+		require.Equal(t, db.ExternalPaymentProviderBaofu, alert.Extra["provider"])
+		require.Equal(t, db.PaymentChannelBaofuAggregate, alert.Extra["channel"])
+		require.NotContains(t, alert.Extra, "contract_no")
+		require.NotContains(t, alert.Extra, "sharing_mer_id")
+		require.NotContains(t, alert.Extra, "raw_resource")
+	}
 }
 
 func TestProcessTaskRefundResult_AbnormalPublishesActionableAlertForEcommerceRefund(t *testing.T) {

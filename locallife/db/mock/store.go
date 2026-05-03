@@ -6462,6 +6462,21 @@ func (mr *MockStoreMockRecorder) GetBaofuAccountBindingByOwner(ctx, arg any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuAccountBindingByOwner", reflect.TypeOf((*MockStore)(nil).GetBaofuAccountBindingByOwner), ctx, arg)
 }
 
+// GetBaofuDailyReconciliation mocks base method.
+func (m *MockStore) GetBaofuDailyReconciliation(ctx context.Context, arg db.GetBaofuDailyReconciliationParams) ([]db.GetBaofuDailyReconciliationRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuDailyReconciliation", ctx, arg)
+	ret0, _ := ret[0].([]db.GetBaofuDailyReconciliationRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuDailyReconciliation indicates an expected call of GetBaofuDailyReconciliation.
+func (mr *MockStoreMockRecorder) GetBaofuDailyReconciliation(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuDailyReconciliation", reflect.TypeOf((*MockStore)(nil).GetBaofuDailyReconciliation), ctx, arg)
+}
+
 // GetBaofuFeeLedger mocks base method.
 func (m *MockStore) GetBaofuFeeLedger(ctx context.Context, id int64) (db.BaofuFeeLedger, error) {
 	m.ctrl.T.Helper()

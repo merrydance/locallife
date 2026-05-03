@@ -6912,6 +6912,37 @@ definitions:
       title:
         type: string
     type: object
+  api.platformBaofuDailyReconciliationRow:
+    properties:
+      channel:
+        type: string
+      date:
+        type: string
+      fee_ledger_mismatch_count:
+        type: integer
+      merchant_amount:
+        type: integer
+      operator_commission:
+        type: integer
+      paid_amount:
+        type: integer
+      payment_fee:
+        type: integer
+      platform_commission:
+        type: integer
+      provider:
+        type: string
+      rider_amount:
+        type: integer
+      unapplied_fact_count:
+        type: integer
+      unknown_command_count:
+        type: integer
+      withdraw_processing_amount:
+        type: integer
+      withdraw_succeeded_amount:
+        type: integer
+    type: object
   api.platformBaofuSettlementStatusResponse:
     properties:
       settlement_account:
@@ -27416,6 +27447,52 @@ paths:
       summary: 查询规则命中记录
       tags:
       - 规则引擎
+  /v1/platform/stats/baofu/reconciliation/daily:
+    get:
+      consumes:
+      - application/json
+      description: 管理员查看宝付支付、分账、提现与异常事实每日汇总；响应只返回聚合金额和计数，不返回分账接收方、合同号或上游原始数据
+      parameters:
+      - description: '开始日期 (格式: 2025-01-01)'
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: '结束日期 (格式: 2025-01-31)'
+        in: query
+        name: end_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 宝付每日对账汇总
+          schema:
+            items:
+              $ref: '#/definitions/api.platformBaofuDailyReconciliationRow'
+            type: array
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取宝付每日对账汇总
+      tags:
+      - Platform
   /v1/platform/stats/categories:
     get:
       consumes:

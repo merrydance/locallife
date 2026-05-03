@@ -622,6 +622,7 @@ type Querier interface {
 	GetBaofuAccountBinding(ctx context.Context, id int64) (BaofuAccountBinding, error)
 	GetBaofuAccountBindingByContractNo(ctx context.Context, contractNo pgtype.Text) (BaofuAccountBinding, error)
 	GetBaofuAccountBindingByOwner(ctx context.Context, arg GetBaofuAccountBindingByOwnerParams) (BaofuAccountBinding, error)
+	GetBaofuDailyReconciliation(ctx context.Context, arg GetBaofuDailyReconciliationParams) ([]GetBaofuDailyReconciliationRow, error)
 	GetBaofuFeeLedger(ctx context.Context, id int64) (BaofuFeeLedger, error)
 	GetBaofuFeeLedgerByBusinessObject(ctx context.Context, arg GetBaofuFeeLedgerByBusinessObjectParams) (BaofuFeeLedger, error)
 	GetBaofuPaymentOrderRefundGuardForUpdate(ctx context.Context, id int64) (GetBaofuPaymentOrderRefundGuardForUpdateRow, error)
