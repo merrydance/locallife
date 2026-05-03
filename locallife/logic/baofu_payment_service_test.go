@@ -101,6 +101,93 @@ func TestBaofuPaymentServiceCreateWechatJSAPIOrderRejectsMissingWechatPayData(t 
 	require.ErrorIs(t, err, ErrBaofuPaymentWechatPayDataRequired)
 }
 
+func TestBaofuPaymentServiceRecordPaymentCallbackFactCreatesTerminalApplication(t *testing.T) {
+	store := &fakeBaofuPaymentStore{}
+	now := time.Date(2026, 5, 3, 10, 20, 0, 0, time.UTC)
+	occurredAt := time.Date(2026, 5, 3, 10, 15, 0, 0, time.UTC)
+	service := NewBaofuPaymentService(store, nil, BaofuPaymentServiceConfig{})
+	service.now = func() time.Time { return now }
+
+	result, err := service.RecordPaymentFact(context.Background(), RecordBaofuPaymentFactInput{
+		PaymentOrder: db.PaymentOrder{
+			ID:         88,
+			Amount:     12345,
+			OutTradeNo: "PO202605030001",
+		},
+		FactSource:      db.ExternalPaymentFactSourceCallback,
+		SourceEventID:   "BFN202605030001",
+		SourceEventType: "PAYMENT.SUCCESS",
+		OccurredAt:      occurredAt,
+		Fact: aggregatecontracts.PaymentFact{
+			OutTradeNo:       "PO202605030001",
+			TradeNo:          "BFPAY202605030001",
+			TransactionState: aggregatecontracts.PaymentStateSuccess,
+			SuccessAmountFen: 12345,
+			FeeAmountFen:     37,
+			Raw:              json.RawMessage(`{"outTradeNo":"PO202605030001","tradeNo":"BFPAY202605030001","txnState":"SUCCESS","sub_openid":"payer-openid-secret"}`),
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(501), result.Fact.ID)
+	require.NotNil(t, result.Application)
+	require.Equal(t, int64(601), result.Application.ID)
+	require.Equal(t, db.ExternalPaymentProviderBaofu, store.lastFact.Provider)
+	require.Equal(t, db.PaymentChannelBaofuAggregate, store.lastFact.Channel)
+	require.Equal(t, db.ExternalPaymentCapabilityBaofuPayment, store.lastFact.Capability)
+	require.Equal(t, db.ExternalPaymentFactSourceCallback, store.lastFact.FactSource)
+	require.Equal(t, "BFN202605030001", store.lastFact.SourceEventID.String)
+	require.Equal(t, "PAYMENT.SUCCESS", store.lastFact.SourceEventType.String)
+	require.Equal(t, db.ExternalPaymentObjectBaofuPaymentOrder, store.lastFact.ExternalObjectType)
+	require.Equal(t, "PO202605030001", store.lastFact.ExternalObjectKey)
+	require.Equal(t, "BFPAY202605030001", store.lastFact.ExternalSecondaryKey.String)
+	require.Equal(t, db.ExternalPaymentBusinessOwnerOrder, store.lastFact.BusinessOwner.String)
+	require.Equal(t, "payment_order", store.lastFact.BusinessObjectType.String)
+	require.Equal(t, int64(88), store.lastFact.BusinessObjectID.Int64)
+	require.Equal(t, aggregatecontracts.PaymentStateSuccess, store.lastFact.UpstreamState)
+	require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, store.lastFact.TerminalStatus)
+	require.True(t, store.lastFact.IsTerminal)
+	require.Equal(t, int64(12345), store.lastFact.Amount.Int64)
+	require.Equal(t, "CNY", store.lastFact.Currency)
+	require.Equal(t, occurredAt, store.lastFact.OccurredAt.Time)
+	require.Equal(t, now, store.lastFact.ObservedAt)
+	require.Equal(t, "baofu:callback:payment:PO202605030001:BFN202605030001", store.lastFact.DedupeKey)
+	require.NotContains(t, string(store.lastFact.RawResource), "sharingMerId")
+	require.Equal(t, int64(501), store.lastApplication.FactID)
+	require.Equal(t, "order_domain", store.lastApplication.Consumer)
+	require.Equal(t, "payment_order", store.lastApplication.BusinessObjectType)
+	require.Equal(t, int64(88), store.lastApplication.BusinessObjectID)
+}
+
+func TestBaofuPaymentServiceRecordPaymentQueryFactSkipsProcessingApplication(t *testing.T) {
+	store := &fakeBaofuPaymentStore{}
+	now := time.Date(2026, 5, 3, 10, 25, 0, 0, time.UTC)
+	service := NewBaofuPaymentService(store, nil, BaofuPaymentServiceConfig{})
+	service.now = func() time.Time { return now }
+
+	result, err := service.RecordPaymentFact(context.Background(), RecordBaofuPaymentFactInput{
+		PaymentOrder: db.PaymentOrder{
+			ID:         88,
+			Amount:     12345,
+			OutTradeNo: "PO202605030001",
+		},
+		FactSource: db.ExternalPaymentFactSourceQuery,
+		Fact: aggregatecontracts.PaymentFact{
+			OutTradeNo:       "PO202605030001",
+			TransactionState: aggregatecontracts.PaymentStateWaitPaying,
+			Raw:              json.RawMessage(`{"outTradeNo":"PO202605030001","txnState":"WAIT_PAYING"}`),
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(501), result.Fact.ID)
+	require.Nil(t, result.Application)
+	require.Equal(t, db.ExternalPaymentTerminalStatusProcessing, store.lastFact.TerminalStatus)
+	require.False(t, store.lastFact.IsTerminal)
+	require.Equal(t, "baofu:query:payment:PO202605030001:WAIT_PAYING", store.lastFact.DedupeKey)
+	require.False(t, store.applicationCreated)
+}
+
 func TestPaymentCommandServiceRecordExternalPaymentCommand_AcceptsBaofuPaymentCommand(t *testing.T) {
 	store := &fakeBaofuPaymentCommandStore{}
 	now := time.Date(2026, 5, 3, 10, 30, 0, 0, time.UTC)
@@ -134,13 +221,47 @@ func TestPaymentCommandServiceRecordExternalPaymentCommand_AcceptsBaofuPaymentCo
 
 type fakeBaofuPaymentStore struct {
 	lastCommand                    db.CreateExternalPaymentCommandParams
+	lastFact                       db.CreateExternalPaymentFactParams
+	lastApplication                db.CreateExternalPaymentFactApplicationParams
 	commandCreatedBeforeClientCall bool
+	applicationCreated             bool
 }
 
 func (s *fakeBaofuPaymentStore) CreateExternalPaymentCommand(ctx context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
 	s.lastCommand = arg
 	s.commandCreatedBeforeClientCall = true
 	return db.ExternalPaymentCommand{ID: 99, ExternalObjectKey: arg.ExternalObjectKey, CommandStatus: arg.CommandStatus}, nil
+}
+
+func (s *fakeBaofuPaymentStore) CreateExternalPaymentFact(ctx context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+	s.lastFact = arg
+	return db.ExternalPaymentFact{
+		ID:                 501,
+		Provider:           arg.Provider,
+		Channel:            arg.Channel,
+		Capability:         arg.Capability,
+		FactSource:         arg.FactSource,
+		ExternalObjectType: arg.ExternalObjectType,
+		ExternalObjectKey:  arg.ExternalObjectKey,
+		UpstreamState:      arg.UpstreamState,
+		TerminalStatus:     arg.TerminalStatus,
+		IsTerminal:         arg.IsTerminal,
+		DedupeKey:          arg.DedupeKey,
+		ProcessingStatus:   arg.ProcessingStatus,
+	}, nil
+}
+
+func (s *fakeBaofuPaymentStore) CreateExternalPaymentFactApplication(ctx context.Context, arg db.CreateExternalPaymentFactApplicationParams) (db.ExternalPaymentFactApplication, error) {
+	s.lastApplication = arg
+	s.applicationCreated = true
+	return db.ExternalPaymentFactApplication{
+		ID:                 601,
+		FactID:             arg.FactID,
+		Consumer:           arg.Consumer,
+		BusinessObjectType: arg.BusinessObjectType,
+		BusinessObjectID:   arg.BusinessObjectID,
+		Status:             arg.Status,
+	}, nil
 }
 
 type fakeBaofuAggregatePaymentClient struct {

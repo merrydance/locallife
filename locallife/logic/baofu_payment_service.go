@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -22,6 +23,16 @@ var (
 type baofuPaymentStore interface {
 	CreateExternalPaymentCommand(ctx context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error)
 }
+
+type baofuPaymentFactStore interface {
+	CreateExternalPaymentFact(ctx context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error)
+	CreateExternalPaymentFactApplication(ctx context.Context, arg db.CreateExternalPaymentFactApplicationParams) (db.ExternalPaymentFactApplication, error)
+}
+
+const (
+	baofuOrderPaymentFactConsumerDomain = "order_domain"
+	baofuPaymentFactBusinessObjectOrder = "payment_order"
+)
 
 type BaofuPaymentServiceConfig struct {
 	CollectMerchantID string
@@ -61,6 +72,16 @@ type CreateBaofuWechatJSAPIOrderResult struct {
 	PaymentOrder  db.PaymentOrder
 	BaofuTradeNo  string
 	WechatPayData json.RawMessage
+}
+
+type RecordBaofuPaymentFactInput struct {
+	PaymentOrder    db.PaymentOrder
+	Fact            aggregatecontracts.PaymentFact
+	FactSource      string
+	SourceEventID   string
+	SourceEventType string
+	OccurredAt      time.Time
+	ObservedAt      time.Time
 }
 
 func (s *BaofuPaymentService) CreateWechatJSAPIOrder(ctx context.Context, input CreateBaofuWechatJSAPIOrderInput) (CreateBaofuWechatJSAPIOrderResult, error) {
@@ -132,6 +153,92 @@ func (s *BaofuPaymentService) CreateWechatJSAPIOrder(ctx context.Context, input 
 	return result, nil
 }
 
+func (s *BaofuPaymentService) RecordPaymentFact(ctx context.Context, input RecordBaofuPaymentFactInput) (RecordExternalPaymentFactResult, error) {
+	var result RecordExternalPaymentFactResult
+	if s == nil || s.store == nil {
+		return result, ErrBaofuPaymentServiceNotConfigured
+	}
+	factStore, ok := s.store.(baofuPaymentFactStore)
+	if !ok {
+		return result, ErrBaofuPaymentServiceNotConfigured
+	}
+	if err := validateRecordBaofuPaymentFactInput(input); err != nil {
+		return result, err
+	}
+
+	paymentOrder := input.PaymentOrder
+	paymentFact := input.Fact
+	outTradeNo := strings.TrimSpace(paymentFact.OutTradeNo)
+	if outTradeNo == "" {
+		outTradeNo = strings.TrimSpace(paymentOrder.OutTradeNo)
+	}
+	upstreamState := strings.TrimSpace(paymentFact.TransactionState)
+	terminalStatus := aggregatecontracts.NormalizePaymentTerminalStatus(upstreamState)
+	observedAt := input.ObservedAt
+	if observedAt.IsZero() {
+		observedAt = s.now().UTC()
+	}
+	occurredAt := input.OccurredAt
+	occurredAtParam := pgtype.Timestamptz{}
+	if !occurredAt.IsZero() {
+		occurredAtParam = pgtype.Timestamptz{Time: occurredAt.UTC(), Valid: true}
+	}
+	amount := paymentFact.SuccessAmountFen
+	if amount <= 0 {
+		amount = paymentOrder.Amount
+	}
+	sourceEventID := strings.TrimSpace(input.SourceEventID)
+	sourceEventType := strings.TrimSpace(input.SourceEventType)
+	rawResource := paymentFact.Raw
+	if len(rawResource) == 0 {
+		rawResource = []byte(`{}`)
+	}
+
+	fact, err := factStore.CreateExternalPaymentFact(ctx, db.CreateExternalPaymentFactParams{
+		Provider:             db.ExternalPaymentProviderBaofu,
+		Channel:              db.PaymentChannelBaofuAggregate,
+		Capability:           db.ExternalPaymentCapabilityBaofuPayment,
+		FactSource:           strings.TrimSpace(input.FactSource),
+		SourceEventID:        pgtype.Text{String: sourceEventID, Valid: sourceEventID != ""},
+		SourceEventType:      pgtype.Text{String: sourceEventType, Valid: sourceEventType != ""},
+		ExternalObjectType:   db.ExternalPaymentObjectBaofuPaymentOrder,
+		ExternalObjectKey:    outTradeNo,
+		ExternalSecondaryKey: pgtype.Text{String: strings.TrimSpace(paymentFact.TradeNo), Valid: strings.TrimSpace(paymentFact.TradeNo) != ""},
+		BusinessOwner:        pgtype.Text{String: db.ExternalPaymentBusinessOwnerOrder, Valid: true},
+		BusinessObjectType:   pgtype.Text{String: baofuPaymentFactBusinessObjectOrder, Valid: true},
+		BusinessObjectID:     pgtype.Int8{Int64: paymentOrder.ID, Valid: true},
+		UpstreamState:        upstreamState,
+		TerminalStatus:       terminalStatus,
+		IsTerminal:           isExternalPaymentTerminalStatus(terminalStatus),
+		Amount:               pgtype.Int8{Int64: amount, Valid: amount > 0},
+		Currency:             "CNY",
+		OccurredAt:           occurredAtParam,
+		ObservedAt:           observedAt.UTC(),
+		RawResource:          rawResource,
+		DedupeKey:            baofuPaymentFactDedupeKey(input, outTradeNo, upstreamState),
+		ProcessingStatus:     db.ExternalPaymentFactProcessingStatusReceived,
+	})
+	if err != nil {
+		return result, err
+	}
+	result.Fact = fact
+	if !fact.IsTerminal {
+		return result, nil
+	}
+	application, err := factStore.CreateExternalPaymentFactApplication(ctx, db.CreateExternalPaymentFactApplicationParams{
+		FactID:             fact.ID,
+		Consumer:           baofuOrderPaymentFactConsumerDomain,
+		BusinessObjectType: baofuPaymentFactBusinessObjectOrder,
+		BusinessObjectID:   paymentOrder.ID,
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	})
+	if err != nil {
+		return result, err
+	}
+	result.Application = &application
+	return result, nil
+}
+
 func validateCreateBaofuWechatJSAPIOrderInput(input CreateBaofuWechatJSAPIOrderInput) error {
 	paymentOrder := input.PaymentOrder
 	if paymentOrder.ID == 0 || strings.TrimSpace(paymentOrder.OutTradeNo) == "" || paymentOrder.Amount <= 0 {
@@ -141,6 +248,23 @@ func validateCreateBaofuWechatJSAPIOrderInput(input CreateBaofuWechatJSAPIOrderI
 		return ErrBaofuAccountWechatSubMchRequired
 	}
 	if strings.TrimSpace(input.PayerOpenID) == "" || strings.TrimSpace(input.Body) == "" {
+		return ErrBaofuPaymentInvalidInput
+	}
+	return nil
+}
+
+func validateRecordBaofuPaymentFactInput(input RecordBaofuPaymentFactInput) error {
+	if input.PaymentOrder.ID == 0 || strings.TrimSpace(input.PaymentOrder.OutTradeNo) == "" {
+		return ErrBaofuPaymentInvalidInput
+	}
+	if !isExternalPaymentFactSource(input.FactSource) {
+		return fmt.Errorf("unsupported fact source %q", input.FactSource)
+	}
+	outTradeNo := strings.TrimSpace(input.Fact.OutTradeNo)
+	if outTradeNo != "" && outTradeNo != strings.TrimSpace(input.PaymentOrder.OutTradeNo) {
+		return ErrBaofuPaymentInvalidInput
+	}
+	if strings.TrimSpace(input.Fact.TransactionState) == "" {
 		return ErrBaofuPaymentInvalidInput
 	}
 	return nil
@@ -182,4 +306,16 @@ func buildBaofuUnifiedOrderCommandSnapshot(paymentOrder db.PaymentOrder) []byte 
 		return []byte(`{"provider":"baofu","operation":"unified_order"}`)
 	}
 	return raw
+}
+
+func baofuPaymentFactDedupeKey(input RecordBaofuPaymentFactInput, outTradeNo string, upstreamState string) string {
+	source := strings.TrimSpace(input.FactSource)
+	if source == db.ExternalPaymentFactSourceCallback && strings.TrimSpace(input.SourceEventID) != "" {
+		return fmt.Sprintf("baofu:callback:payment:%s:%s", outTradeNo, strings.TrimSpace(input.SourceEventID))
+	}
+	secondary := strings.TrimSpace(input.Fact.TradeNo)
+	if secondary == "" {
+		secondary = strings.TrimSpace(upstreamState)
+	}
+	return fmt.Sprintf("baofu:%s:payment:%s:%s", source, outTradeNo, secondary)
 }
