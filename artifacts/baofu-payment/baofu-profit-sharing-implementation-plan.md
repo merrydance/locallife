@@ -722,7 +722,7 @@ no refund_orders row in pending, processing, success
 no existing profit_sharing_orders row for payment_order_id
 ```
 
-- [ ] **Step 2: Create `share_after_pay` command**
+- [x] **Step 2: Create `share_after_pay` command**
 
 Call Baofu confirm profit sharing with original Baofu payment reference, local unique share out order number, and `sharingDetails` generated from `sharing_detail_snapshot`. Command row uses capability `baofu_profit_sharing` and command type `create_profit_sharing`.
 
@@ -1238,3 +1238,13 @@ make test-integration
 - Focused verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./baofu/aggregatepay/notification -run 'TestParserParseShareNotification' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuProfitSharingSuccessFinishesOrder' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestBaofuProfitSharingServiceRecordShareFactCreatesApplicationForTerminalShare' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestBaofuShareCallbackPersistsFactAndEnqueuesApplication|TestBaofuPaymentCallbackPersistsFactAndEnqueuesApplication' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestBaofuShareCallbackUsesDefaultParser|TestBaofuShareCallbackPersistsFactAndEnqueuesApplication|TestBaofuPaymentCallbackPersistsFactAndEnqueuesApplication' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./baofu/aggregatepay ./baofu/aggregatepay/contracts ./baofu/aggregatepay/notification ./logic -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestBaofu(AccountOpen|Payment|Share)Callback' -count=1`; `PATH="/usr/local/go/bin:$PATH" make check-generated`; `git diff --check`.
 - Broader validation notes: `PATH="/usr/local/go/bin:$PATH" go test ./baofu/aggregatepay ./baofu/aggregatepay/contracts ./baofu/aggregatepay/notification ./logic ./api -count=1` failed in the broad `./api` suite at `TestWechatLoginAPI` with `sql: connection is already closed`; rerunning the isolated `TestWechatLoginAPI` passed. `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on the same 71 pre-existing oversized files, including existing `api/server.go`, `api/payment_callback.go`, `logic/payment_fact_application_service.go`, and `worker/task_process_payment.go`.
 - Residual risk: this slice maps and applies Baofu share facts, but it does not yet create the `share_after_pay` command from pending orders, query processing share orders, add recovery scans, or enforce refund/share DB concurrency; those remain Task 6 Step 1/2/4 and Task 7.
+
+### 2026-05-03 Task 6 Partial - Create Share Command Worker
+
+- Added `TaskProcessBaofuProfitSharing` and `BaofuProfitSharingPayload` to process an already-created pending Baofu `profit_sharing_orders` row.
+- The worker loads the Baofu profit-sharing order and payment order, decodes `sharing_detail_snapshot`, builds `share_after_pay` with `originTradeNo` from the Baofu payment `transaction_id` when present, and sends only the canonical `sharing_mer_id` values captured in the snapshot as `sharingDetails[].sharingMerId`.
+- The worker writes an `external_payment_commands` row before calling Baofu with provider `baofu`, channel `baofu_aggregate`, capability `baofu_profit_sharing`, command type `create_profit_sharing`, business object `profit_sharing_order`, and external object `profit_sharing`. Its command snapshot records counts and IDs only, not raw receiver IDs.
+- After Baofu accepts the command, the worker updates the local share order to `processing` with the upstream share id (`tradeNo`, falling back to returned `outTradeNo` only when `tradeNo` is empty). It does not call Baofu from inside a DB transaction.
+- Added a worker regression test for the command payload, receiver details, sanitized command snapshot, and processing transition.
+- Focused verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./worker -run 'TestProcessTaskBaofuProfitSharingCreatesShareCommand' -count=1`.
+- Residual risk: this slice assumes a pending Baofu share order already exists. It does not yet add the selector that gates creation on completed/refund-closed orders, does not query processing share orders, and does not add recovery scheduling.
