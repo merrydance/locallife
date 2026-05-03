@@ -332,7 +332,7 @@ Expected: `make sqlc` regenerates sqlc files, `make check-generated` exits 0, fo
 - Test: `locallife/baofu/signing_test.go`
 - Test: `locallife/baofu/crypto/uniongw_test.go`
 
-- [ ] **Step 1: Define config with two merchant IDs**
+- [x] **Step 1: Define config with two merchant IDs**
 
 Implement `Config` with these explicit fields:
 
@@ -365,7 +365,7 @@ func (c Config) Validate() error {
 }
 ```
 
-- [ ] **Step 2: Write tests for merchant boundary**
+- [x] **Step 2: Write tests for merchant boundary**
 
 Add tests asserting:
 
@@ -377,11 +377,11 @@ func TestConfigValidateRequiresSeparatedMerchants(t *testing.T) {
 }
 ```
 
-- [ ] **Step 3: Implement HTTP transport and signing helpers**
+- [x] **Step 3: Implement HTTP transport and signing helpers**
 
 Implement deterministic request serialization, signature generation, signature verification, and sanitized logging. Log metadata must include provider `baofu`, capability, out request number, HTTP status, and upstream code; it must not log ID card numbers, bank cards, phone numbers, plaintext AES keys, or private keys.
 
-- [ ] **Step 4: Implement union-gw crypto helpers**
+- [x] **Step 4: Implement union-gw crypto helpers**
 
 Implement helpers for BaoCaiTong account API encryption/decryption and signature wrapping:
 
@@ -397,7 +397,7 @@ type UnionGWEnvelope struct {
 
 Tests must cover round-trip encrypt/decrypt with fixture keys and reject tampered signatures.
 
-- [ ] **Step 5: Run focused package tests**
+- [x] **Step 5: Run focused package tests**
 
 Run from `locallife/`:
 
@@ -1040,3 +1040,12 @@ make test-integration
 - Added `TestBaofuPaymentConstantsAreExplicit`, `TestCreateExternalPaymentCommand_AcceptsBaofuAggregateChannel`, and `TestCreateExternalPaymentFact_AcceptsBaofuAggregateChannel` to lock provider, channel, capability strings, and DB channel constraints.
 - Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" make sqlc`; `PATH="/usr/local/go/bin:$PATH" make check-generated`; `PATH="/usr/local/go/bin:$PATH" go test ./db/sqlc -run 'TestPaymentOrderChannelBoundary|TestExternalPaymentFact|TestBaofuPaymentConstantsAreExplicit|TestCreateExternalPayment(Command|Fact)_AcceptsBaofuAggregateChannel' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./db/sqlc -run 'TestPaymentOrderChannelBoundary|TestExternalPaymentFact' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./worker -run '^$' -count=1`; `git diff --check`.
 - Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on 71 pre-existing oversized Go files; Task 0 does not add or enlarge those files.
+
+
+### 2026-05-03 Task 1
+
+- Added `locallife/baofu` foundation with config validation, explicit collect/payout merchant separation, client construction, sanitized request metadata, provider error logging boundary, canonical JSON, and RSA SHA256 signing helpers.
+- Added `locallife/baofu/crypto` union-gw envelope foundation with AES-GCM payload encryption and envelope signature verification; tampered envelopes return `ErrInvalidEnvelopeSignature`.
+- Added placeholder package roots for account and aggregate payment submodules so subsequent task cards can add contracts without changing package layout.
+- Added tests for config merchant separation, default normalization, deterministic JSON, RSA sign/verify, sensitive log field redaction, union-gw round trip, and tamper rejection.
+- Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" gofmt -w locallife/baofu`; `PATH="/usr/local/go/bin:$PATH" go test ./baofu ./baofu/crypto ./baofu/account ./baofu/account/contracts ./baofu/account/notification ./baofu/aggregatepay ./baofu/aggregatepay/contracts ./baofu/aggregatepay/notification -count=1`; `git diff --check`.
