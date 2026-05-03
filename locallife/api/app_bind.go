@@ -178,6 +178,12 @@ func (server *Server) verifyAppBindCode(ctx *gin.Context) {
 	codeKey := appBindCodePrefix + req.Code
 	bindData, err := server.redisClient.Get(ctx, codeKey).Result()
 	if err == redis.Nil {
+		log.Warn().
+			Str("device_id", req.DeviceID).
+			Str("client_ip", ctx.ClientIP()).
+			Str("user_agent", ctx.Request.UserAgent()).
+			Str("reason", "redis_nil").
+			Msg("app bind code verify rejected")
 		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("绑定码无效或已过期")))
 		return
 	}
@@ -198,7 +204,10 @@ func (server *Server) verifyAppBindCode(ctx *gin.Context) {
 	pipe := server.redisClient.Pipeline()
 	pipe.Del(ctx, codeKey)
 	pipe.Del(ctx, userKey)
-	pipe.Exec(ctx)
+	if _, err := pipe.Exec(ctx); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("删除绑定码失败: %w", err)))
+		return
+	}
 
 	// 二次校验：确认用户仍有 merchant 角色
 	roles, err := server.store.ListUserRoles(ctx, userID)
