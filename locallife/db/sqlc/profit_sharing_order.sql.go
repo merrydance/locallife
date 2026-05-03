@@ -1064,6 +1064,72 @@ func (q *Queries) ListBaofuOrdersReadyForProfitSharing(ctx context.Context, arg 
 	return items, nil
 }
 
+const listBaofuProcessingProfitSharingOrdersForRecovery = `-- name: ListBaofuProcessingProfitSharingOrdersForRecovery :many
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot
+FROM profit_sharing_orders
+WHERE provider = 'baofu'
+  AND channel = 'baofu_aggregate'
+  AND status = 'processing'
+  AND created_at <= $1
+ORDER BY created_at ASC, id ASC
+LIMIT $2::int
+`
+
+type ListBaofuProcessingProfitSharingOrdersForRecoveryParams struct {
+	CreatedBefore time.Time `json:"created_before"`
+	Limit         int32     `json:"limit"`
+}
+
+func (q *Queries) ListBaofuProcessingProfitSharingOrdersForRecovery(ctx context.Context, arg ListBaofuProcessingProfitSharingOrdersForRecoveryParams) ([]ProfitSharingOrder, error) {
+	rows, err := q.db.Query(ctx, listBaofuProcessingProfitSharingOrdersForRecovery, arg.CreatedBefore, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProfitSharingOrder{}
+	for rows.Next() {
+		var i ProfitSharingOrder
+		if err := rows.Scan(
+			&i.ID,
+			&i.PaymentOrderID,
+			&i.MerchantID,
+			&i.OperatorID,
+			&i.OrderSource,
+			&i.TotalAmount,
+			&i.PlatformCommission,
+			&i.OperatorCommission,
+			&i.MerchantAmount,
+			&i.OutOrderNo,
+			&i.SharingOrderID,
+			&i.Status,
+			&i.FinishedAt,
+			&i.CreatedAt,
+			&i.DeliveryFee,
+			&i.RiderID,
+			&i.RiderAmount,
+			&i.DistributableAmount,
+			&i.PlatformRate,
+			&i.OperatorRate,
+			&i.PaymentFee,
+			&i.PaymentFeeRateBps,
+			&i.Provider,
+			&i.Channel,
+			&i.MerchantSharingMerID,
+			&i.RiderSharingMerID,
+			&i.OperatorSharingMerID,
+			&i.PlatformSharingMerID,
+			&i.SharingDetailSnapshot,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCompletedOrdersMissingProfitSharing = `-- name: ListCompletedOrdersMissingProfitSharing :many
 SELECT po.id AS payment_order_id, po.order_id
 FROM payment_orders po

@@ -186,6 +186,15 @@ WHERE status = 'pending' AND expires_at < now()
 ORDER BY created_at ASC, id ASC
 LIMIT $1;
 
+-- name: ListBaofuPendingPaymentOrdersForRecovery :many
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing
+FROM payment_orders
+WHERE status = 'pending'
+  AND payment_channel = 'baofu_aggregate'
+  AND created_at <= sqlc.arg(created_before)
+ORDER BY created_at ASC, id ASC
+LIMIT sqlc.arg('limit')::int;
+
 -- name: ListPaidUnprocessedPaymentOrders :many
 SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE status = 'paid'
@@ -272,4 +281,3 @@ WHERE payment_channel = 'direct'
   AND status IN ('paid', 'refunded')
   AND paid_at >= $1
   AND paid_at < $2;
-

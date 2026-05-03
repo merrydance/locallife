@@ -287,6 +287,10 @@ func (c *fakeBaofuAggregatePaymentClient) CreateProfitSharing(ctx context.Contex
 	return nil, errors.New("not implemented in payment tests")
 }
 
+func (c *fakeBaofuAggregatePaymentClient) QueryPayment(ctx context.Context, req aggregatecontracts.PaymentQueryRequest) (*aggregatecontracts.UnifiedOrderResult, error) {
+	return nil, errors.New("not implemented in payment tests")
+}
+
 func (c *fakeBaofuAggregatePaymentClient) QueryProfitSharing(ctx context.Context, req aggregatecontracts.ShareQueryRequest) (*aggregatecontracts.ShareResult, error) {
 	return nil, errors.New("not implemented in payment tests")
 }

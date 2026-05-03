@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/baofu/aggregatepay"
+	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/robfig/cron/v3"
@@ -31,6 +34,8 @@ type BaofuPaymentRecoveryScheduler struct {
 	runMu       sync.Mutex
 	store       db.Store
 	distributor TaskDistributor
+	client      aggregatepay.Client
+	shareConfig BaofuProfitSharingWorkerConfig
 }
 
 func NewBaofuPaymentRecoveryScheduler(store db.Store, distributor TaskDistributor) *BaofuPaymentRecoveryScheduler {
@@ -45,6 +50,11 @@ func NewBaofuPaymentRecoveryScheduler(store db.Store, distributor TaskDistributo
 		store:       store,
 		distributor: distributor,
 	}
+}
+
+func (s *BaofuPaymentRecoveryScheduler) SetBaofuAggregateClientForTest(client aggregatepay.Client, config BaofuProfitSharingWorkerConfig) {
+	s.client = client
+	s.shareConfig = config.normalized()
 }
 
 func (s *BaofuPaymentRecoveryScheduler) Start() error {
@@ -93,6 +103,12 @@ func (s *BaofuPaymentRecoveryScheduler) runOnce(ctx context.Context) {
 
 	if err := s.createReadyProfitSharingOrders(ctx); err != nil {
 		log.Error().Err(err).Msg("baofu ready profit sharing scan failed")
+	}
+	if err := s.queryProcessingProfitSharingOrders(ctx); err != nil {
+		log.Error().Err(err).Msg("baofu processing profit sharing recovery scan failed")
+	}
+	if err := s.queryPendingPaymentOrders(ctx); err != nil {
+		log.Error().Err(err).Msg("baofu pending payment recovery scan failed")
 	}
 }
 
@@ -199,4 +215,191 @@ func (s *BaofuPaymentRecoveryScheduler) resolveBaofuProfitSharingRider(ctx conte
 		return 0, fmt.Errorf("baofu profit sharing requires rider for order %d", order.ID)
 	}
 	return delivery.RiderID.Int64, nil
+}
+
+func (s *BaofuPaymentRecoveryScheduler) queryProcessingProfitSharingOrders(ctx context.Context) error {
+	if s.client == nil {
+		log.Warn().Msg("baofu aggregate client not configured, skip baofu profit sharing query recovery")
+		return nil
+	}
+	cfg := s.shareConfig.normalized()
+	if cfg.CollectMerchantID == "" || cfg.CollectTerminalID == "" {
+		log.Warn().Msg("baofu collect merchant config not configured, skip baofu profit sharing query recovery")
+		return nil
+	}
+	factDistributor, ok := s.distributor.(PaymentFactApplicationTaskDistributor)
+	if !ok {
+		log.Warn().Msg("payment fact application distributor not configured, skip baofu profit sharing fact application enqueue")
+		return nil
+	}
+
+	orders, err := s.store.ListBaofuProcessingProfitSharingOrdersForRecovery(ctx, db.ListBaofuProcessingProfitSharingOrdersForRecoveryParams{
+		CreatedBefore: time.Now().Add(-profitSharingRecoveryMinAge),
+		Limit:         baofuPaymentRecoveryBatchLimit,
+	})
+	if err != nil {
+		return fmt.Errorf("list baofu processing profit sharing orders for recovery: %w", err)
+	}
+	service := logic.NewBaofuProfitSharingService(s.store)
+	for _, order := range orders {
+		result, err := s.queryBaofuProfitSharing(ctx, cfg, order)
+		if err != nil {
+			log.Error().Err(err).
+				Int64("profit_sharing_order_id", order.ID).
+				Str("out_order_no", order.OutOrderNo).
+				Msg("query baofu profit sharing failed")
+			continue
+		}
+		recorded, err := service.RecordShareFact(ctx, logic.RecordBaofuShareFactInput{
+			ProfitSharingOrder: order,
+			Fact:               baofuShareFactFromQueryResult(result, order),
+			FactSource:         db.ExternalPaymentFactSourceManualReconciliation,
+			ObservedAt:         time.Now().UTC(),
+		})
+		if err != nil {
+			log.Error().Err(err).
+				Int64("profit_sharing_order_id", order.ID).
+				Str("out_order_no", order.OutOrderNo).
+				Msg("record baofu profit sharing query fact failed")
+			continue
+		}
+		if recorded.Application == nil {
+			continue
+		}
+		if err := factDistributor.DistributeTaskProcessPaymentFactApplication(ctx, &PaymentFactApplicationPayload{
+			ApplicationID: recorded.Application.ID,
+		}, asynq.Queue(QueueCritical), asynq.Unique(paymentFactApplicationTaskUnique)); err != nil {
+			log.Error().Err(err).
+				Int64("payment_fact_application_id", recorded.Application.ID).
+				Int64("profit_sharing_order_id", order.ID).
+				Msg("enqueue baofu profit sharing fact application failed")
+		}
+	}
+	return nil
+}
+
+func (s *BaofuPaymentRecoveryScheduler) queryBaofuProfitSharing(ctx context.Context, cfg BaofuProfitSharingWorkerConfig, order db.ProfitSharingOrder) (*aggregatecontracts.ShareResult, error) {
+	req := aggregatecontracts.ShareQueryRequest{
+		MerchantID: cfg.CollectMerchantID,
+		TerminalID: cfg.CollectTerminalID,
+	}
+	if order.SharingOrderID.Valid && strings.TrimSpace(order.SharingOrderID.String) != "" {
+		req.TradeNo = strings.TrimSpace(order.SharingOrderID.String)
+	} else {
+		req.OutTradeNo = strings.TrimSpace(order.OutOrderNo)
+	}
+	return s.client.QueryProfitSharing(ctx, req)
+}
+
+func baofuShareFactFromQueryResult(result *aggregatecontracts.ShareResult, order db.ProfitSharingOrder) aggregatecontracts.ShareFact {
+	if result == nil {
+		return aggregatecontracts.ShareFact{OutTradeNo: order.OutOrderNo, TransactionState: aggregatecontracts.ShareStateAbnormal}
+	}
+	outTradeNo := strings.TrimSpace(result.OutTradeNo)
+	if outTradeNo == "" {
+		outTradeNo = strings.TrimSpace(order.OutOrderNo)
+	}
+	return aggregatecontracts.ShareFact{
+		OutTradeNo:       outTradeNo,
+		TradeNo:          strings.TrimSpace(result.TradeNo),
+		TransactionState: strings.TrimSpace(result.TxnState),
+		SuccessAmountFen: result.SuccessAmountFen,
+		ResultCode:       strings.TrimSpace(result.ResultCode),
+		Raw:              result.Raw,
+	}
+}
+
+func (s *BaofuPaymentRecoveryScheduler) queryPendingPaymentOrders(ctx context.Context) error {
+	if s.client == nil {
+		log.Warn().Msg("baofu aggregate client not configured, skip baofu payment query recovery")
+		return nil
+	}
+	cfg := s.shareConfig.normalized()
+	if cfg.CollectMerchantID == "" || cfg.CollectTerminalID == "" {
+		log.Warn().Msg("baofu collect merchant config not configured, skip baofu payment query recovery")
+		return nil
+	}
+	factDistributor, ok := s.distributor.(PaymentFactApplicationTaskDistributor)
+	if !ok {
+		log.Warn().Msg("payment fact application distributor not configured, skip baofu payment fact application enqueue")
+		return nil
+	}
+
+	orders, err := s.store.ListBaofuPendingPaymentOrdersForRecovery(ctx, db.ListBaofuPendingPaymentOrdersForRecoveryParams{
+		CreatedBefore: time.Now().Add(-paymentRecoveryMinAge),
+		Limit:         baofuPaymentRecoveryBatchLimit,
+	})
+	if err != nil {
+		return fmt.Errorf("list baofu pending payment orders for recovery: %w", err)
+	}
+	service := logic.NewBaofuPaymentService(s.store, s.client, logic.BaofuPaymentServiceConfig{
+		CollectMerchantID: cfg.CollectMerchantID,
+		CollectTerminalID: cfg.CollectTerminalID,
+	})
+	for _, order := range orders {
+		result, err := s.queryBaofuPayment(ctx, cfg, order)
+		if err != nil {
+			log.Error().Err(err).
+				Int64("payment_order_id", order.ID).
+				Str("out_trade_no", order.OutTradeNo).
+				Msg("query baofu payment failed")
+			continue
+		}
+		recorded, err := service.RecordPaymentFact(ctx, logic.RecordBaofuPaymentFactInput{
+			PaymentOrder: order,
+			Fact:         baofuPaymentFactFromQueryResult(result, order),
+			FactSource:   db.ExternalPaymentFactSourceManualReconciliation,
+			ObservedAt:   time.Now().UTC(),
+		})
+		if err != nil {
+			log.Error().Err(err).
+				Int64("payment_order_id", order.ID).
+				Str("out_trade_no", order.OutTradeNo).
+				Msg("record baofu payment query fact failed")
+			continue
+		}
+		if recorded.Application == nil {
+			continue
+		}
+		if err := factDistributor.DistributeTaskProcessPaymentFactApplication(ctx, &PaymentFactApplicationPayload{
+			ApplicationID: recorded.Application.ID,
+		}, asynq.Queue(QueueCritical), asynq.Unique(paymentFactApplicationTaskUnique)); err != nil {
+			log.Error().Err(err).
+				Int64("payment_fact_application_id", recorded.Application.ID).
+				Int64("payment_order_id", order.ID).
+				Msg("enqueue baofu payment fact application failed")
+		}
+	}
+	return nil
+}
+
+func (s *BaofuPaymentRecoveryScheduler) queryBaofuPayment(ctx context.Context, cfg BaofuProfitSharingWorkerConfig, order db.PaymentOrder) (*aggregatecontracts.UnifiedOrderResult, error) {
+	req := aggregatecontracts.PaymentQueryRequest{
+		MerchantID: cfg.CollectMerchantID,
+		TerminalID: cfg.CollectTerminalID,
+	}
+	if order.TransactionID.Valid && strings.TrimSpace(order.TransactionID.String) != "" {
+		req.TradeNo = strings.TrimSpace(order.TransactionID.String)
+	} else {
+		req.OutTradeNo = strings.TrimSpace(order.OutTradeNo)
+	}
+	return s.client.QueryPayment(ctx, req)
+}
+
+func baofuPaymentFactFromQueryResult(result *aggregatecontracts.UnifiedOrderResult, order db.PaymentOrder) aggregatecontracts.PaymentFact {
+	if result == nil {
+		return aggregatecontracts.PaymentFact{OutTradeNo: order.OutTradeNo, TransactionState: aggregatecontracts.PaymentStateAbnormal}
+	}
+	outTradeNo := strings.TrimSpace(result.OutTradeNo)
+	if outTradeNo == "" {
+		outTradeNo = strings.TrimSpace(order.OutTradeNo)
+	}
+	return aggregatecontracts.PaymentFact{
+		OutTradeNo:       outTradeNo,
+		TradeNo:          strings.TrimSpace(result.TradeNo),
+		TransactionState: strings.TrimSpace(result.TxnState),
+		SuccessAmountFen: order.Amount,
+		ResultCode:       strings.TrimSpace(result.ResultCode),
+		Raw:              result.Raw,
+	}
 }

@@ -2,11 +2,13 @@ package worker_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
+	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/worker"
@@ -83,14 +85,175 @@ func TestBaofuPaymentRecoverySchedulerRunOnceCreatesPendingShareAndEnqueuesComma
 	require.Equal(t, []int64{801}, distributor.profitSharingOrderIDs)
 }
 
+func TestBaofuPaymentRecoverySchedulerRunOnceQueriesProcessingShareAndEnqueuesFactApplication(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &baofuProfitSharingEnqueueRecorder{}
+	client := &baofuRecoveryAggregateClient{
+		shareResult: &aggregatecontracts.ShareResult{
+			TradeNo:          "BFSHARE_UP_301",
+			OutTradeNo:       "BFPS301O401",
+			TxnState:         aggregatecontracts.ShareStateSuccess,
+			SuccessAmountFen: 10000,
+			Raw:              json.RawMessage(`{"txnState":"SUCCESS"}`),
+		},
+	}
+	shareOrder := db.ProfitSharingOrder{
+		ID:                 801,
+		PaymentOrderID:     301,
+		OutOrderNo:         "BFPS301O401",
+		SharingOrderID:     pgtype.Text{String: "BFSHARE_UP_301", Valid: true},
+		Status:             db.ProfitSharingOrderStatusProcessing,
+		Provider:           db.ExternalPaymentProviderBaofu,
+		Channel:            db.PaymentChannelBaofuAggregate,
+		MerchantAmount:     9470,
+		PlatformCommission: 200,
+		OperatorCommission: 300,
+		PaymentFee:         30,
+	}
+
+	store.EXPECT().
+		ListBaofuOrdersReadyForProfitSharing(gomock.Any(), gomock.Any()).
+		Return([]db.ListBaofuOrdersReadyForProfitSharingRow{}, nil)
+	store.EXPECT().
+		ListBaofuProcessingProfitSharingOrdersForRecovery(gomock.Any(), gomock.Any()).
+		Return([]db.ProfitSharingOrder{shareOrder}, nil)
+	store.EXPECT().
+		ListBaofuPendingPaymentOrdersForRecovery(gomock.Any(), gomock.Any()).
+		Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().
+		CreateExternalPaymentFact(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+			require.Equal(t, db.ExternalPaymentProviderBaofu, arg.Provider)
+			require.Equal(t, db.PaymentChannelBaofuAggregate, arg.Channel)
+			require.Equal(t, db.ExternalPaymentCapabilityBaofuProfitSharing, arg.Capability)
+			require.Equal(t, db.ExternalPaymentFactSourceManualReconciliation, arg.FactSource)
+			require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
+			require.True(t, arg.IsTerminal)
+			require.Equal(t, shareOrder.ID, arg.BusinessObjectID.Int64)
+			return db.ExternalPaymentFact{ID: 1101, IsTerminal: true}, nil
+		})
+	store.EXPECT().
+		CreateExternalPaymentFactApplication(gomock.Any(), gomock.Any()).
+		Return(db.ExternalPaymentFactApplication{ID: 1201}, nil)
+
+	scheduler := worker.NewBaofuPaymentRecoveryScheduler(store, distributor)
+	scheduler.SetBaofuAggregateClientForTest(client, worker.BaofuProfitSharingWorkerConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+	})
+	scheduler.RunOnce()
+
+	require.Equal(t, []int64{1201}, distributor.factApplicationIDs)
+	require.Equal(t, "COLLECT_MER", client.lastShareQuery.MerchantID)
+	require.Equal(t, "COLLECT_TER", client.lastShareQuery.TerminalID)
+	require.Equal(t, "BFSHARE_UP_301", client.lastShareQuery.TradeNo)
+	require.Empty(t, client.lastShareQuery.OutTradeNo)
+}
+
+func TestBaofuPaymentRecoverySchedulerRunOnceQueriesPendingPaymentAndEnqueuesFactApplication(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &baofuProfitSharingEnqueueRecorder{}
+	client := &baofuRecoveryAggregateClient{
+		paymentResult: &aggregatecontracts.UnifiedOrderResult{
+			TradeNo:    "BFPAY_UP_301",
+			OutTradeNo: "BFPAY_301",
+			TxnState:   aggregatecontracts.PaymentStateSuccess,
+			Raw:        json.RawMessage(`{"txnState":"SUCCESS"}`),
+		},
+	}
+	paymentOrder := db.PaymentOrder{
+		ID:             301,
+		OrderID:        pgtype.Int8{Int64: 401, Valid: true},
+		BusinessType:   db.ExternalPaymentBusinessOwnerOrder,
+		Amount:         10000,
+		OutTradeNo:     "BFPAY_301",
+		Status:         "pending",
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+	}
+
+	store.EXPECT().
+		ListBaofuOrdersReadyForProfitSharing(gomock.Any(), gomock.Any()).
+		Return([]db.ListBaofuOrdersReadyForProfitSharingRow{}, nil)
+	store.EXPECT().
+		ListBaofuProcessingProfitSharingOrdersForRecovery(gomock.Any(), gomock.Any()).
+		Return([]db.ProfitSharingOrder{}, nil)
+	store.EXPECT().
+		ListBaofuPendingPaymentOrdersForRecovery(gomock.Any(), gomock.Any()).
+		Return([]db.PaymentOrder{paymentOrder}, nil)
+	store.EXPECT().
+		CreateExternalPaymentFact(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+			require.Equal(t, db.ExternalPaymentProviderBaofu, arg.Provider)
+			require.Equal(t, db.PaymentChannelBaofuAggregate, arg.Channel)
+			require.Equal(t, db.ExternalPaymentCapabilityBaofuPayment, arg.Capability)
+			require.Equal(t, db.ExternalPaymentFactSourceManualReconciliation, arg.FactSource)
+			require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
+			require.True(t, arg.IsTerminal)
+			require.Equal(t, paymentOrder.ID, arg.BusinessObjectID.Int64)
+			return db.ExternalPaymentFact{ID: 2101, IsTerminal: true}, nil
+		})
+	store.EXPECT().
+		CreateExternalPaymentFactApplication(gomock.Any(), gomock.Any()).
+		Return(db.ExternalPaymentFactApplication{ID: 2201}, nil)
+
+	scheduler := worker.NewBaofuPaymentRecoveryScheduler(store, distributor)
+	scheduler.SetBaofuAggregateClientForTest(client, worker.BaofuProfitSharingWorkerConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+	})
+	scheduler.RunOnce()
+
+	require.Equal(t, []int64{2201}, distributor.factApplicationIDs)
+	require.Equal(t, "COLLECT_MER", client.lastPaymentQuery.MerchantID)
+	require.Equal(t, "COLLECT_TER", client.lastPaymentQuery.TerminalID)
+	require.Equal(t, "BFPAY_301", client.lastPaymentQuery.OutTradeNo)
+}
+
 type baofuProfitSharingEnqueueRecorder struct {
 	worker.NoopTaskDistributor
 	profitSharingOrderIDs []int64
+	factApplicationIDs    []int64
 }
 
 func (d *baofuProfitSharingEnqueueRecorder) DistributeTaskProcessBaofuProfitSharing(_ context.Context, payload *worker.BaofuProfitSharingPayload, _ ...asynq.Option) error {
 	d.profitSharingOrderIDs = append(d.profitSharingOrderIDs, payload.ProfitSharingOrderID)
 	return nil
+}
+
+func (d *baofuProfitSharingEnqueueRecorder) DistributeTaskProcessPaymentFactApplication(_ context.Context, payload *worker.PaymentFactApplicationPayload, _ ...asynq.Option) error {
+	d.factApplicationIDs = append(d.factApplicationIDs, payload.ApplicationID)
+	return nil
+}
+
+type baofuRecoveryAggregateClient struct {
+	paymentResult    *aggregatecontracts.UnifiedOrderResult
+	shareResult      *aggregatecontracts.ShareResult
+	lastPaymentQuery aggregatecontracts.PaymentQueryRequest
+	lastShareQuery   aggregatecontracts.ShareQueryRequest
+}
+
+func (c *baofuRecoveryAggregateClient) CreateUnifiedOrder(context.Context, aggregatecontracts.UnifiedOrderRequest) (*aggregatecontracts.UnifiedOrderResult, error) {
+	return nil, nil
+}
+
+func (c *baofuRecoveryAggregateClient) CreateProfitSharing(context.Context, aggregatecontracts.ShareAfterPayRequest) (*aggregatecontracts.ShareResult, error) {
+	return nil, nil
+}
+
+func (c *baofuRecoveryAggregateClient) QueryPayment(_ context.Context, req aggregatecontracts.PaymentQueryRequest) (*aggregatecontracts.UnifiedOrderResult, error) {
+	c.lastPaymentQuery = req
+	return c.paymentResult, nil
+}
+
+func (c *baofuRecoveryAggregateClient) QueryProfitSharing(_ context.Context, req aggregatecontracts.ShareQueryRequest) (*aggregatecontracts.ShareResult, error) {
+	c.lastShareQuery = req
+	return c.shareResult, nil
 }
 
 func expectBaofuReceiverLookup(store *mockdb.MockStore, ownerType string, ownerID int64, sharingMerID string) {

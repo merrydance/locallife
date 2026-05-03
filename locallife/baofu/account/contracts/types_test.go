@@ -7,12 +7,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAccountResultNormalizesSharingMerIDFromContractNo(t *testing.T) {
+func TestAccountResultDoesNotFallbackSharingMerIDFromContractNo(t *testing.T) {
 	result := AccountResult{ContractNo: "CP123", Raw: json.RawMessage(`{"status":"1"}`)}
 
 	normalized := result.Normalized()
 
-	require.Equal(t, "CP123", normalized.SharingMerID)
+	require.Empty(t, normalized.SharingMerID)
 	require.Equal(t, json.RawMessage(`{"status":"1"}`), normalized.Raw)
 }
 

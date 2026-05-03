@@ -12682,6 +12682,36 @@ func (mr *MockStoreMockRecorder) ListBaofuOrdersReadyForProfitSharing(ctx, arg a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListBaofuOrdersReadyForProfitSharing", reflect.TypeOf((*MockStore)(nil).ListBaofuOrdersReadyForProfitSharing), ctx, arg)
 }
 
+// ListBaofuPendingPaymentOrdersForRecovery mocks base method.
+func (m *MockStore) ListBaofuPendingPaymentOrdersForRecovery(ctx context.Context, arg db.ListBaofuPendingPaymentOrdersForRecoveryParams) ([]db.PaymentOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListBaofuPendingPaymentOrdersForRecovery", ctx, arg)
+	ret0, _ := ret[0].([]db.PaymentOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListBaofuPendingPaymentOrdersForRecovery indicates an expected call of ListBaofuPendingPaymentOrdersForRecovery.
+func (mr *MockStoreMockRecorder) ListBaofuPendingPaymentOrdersForRecovery(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListBaofuPendingPaymentOrdersForRecovery", reflect.TypeOf((*MockStore)(nil).ListBaofuPendingPaymentOrdersForRecovery), ctx, arg)
+}
+
+// ListBaofuProcessingProfitSharingOrdersForRecovery mocks base method.
+func (m *MockStore) ListBaofuProcessingProfitSharingOrdersForRecovery(ctx context.Context, arg db.ListBaofuProcessingProfitSharingOrdersForRecoveryParams) ([]db.ProfitSharingOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListBaofuProcessingProfitSharingOrdersForRecovery", ctx, arg)
+	ret0, _ := ret[0].([]db.ProfitSharingOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListBaofuProcessingProfitSharingOrdersForRecovery indicates an expected call of ListBaofuProcessingProfitSharingOrdersForRecovery.
+func (mr *MockStoreMockRecorder) ListBaofuProcessingProfitSharingOrdersForRecovery(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListBaofuProcessingProfitSharingOrdersForRecovery", reflect.TypeOf((*MockStore)(nil).ListBaofuProcessingProfitSharingOrdersForRecovery), ctx, arg)
+}
+
 // ListBehaviorActionsByDecision mocks base method.
 func (m *MockStore) ListBehaviorActionsByDecision(ctx context.Context, decisionID int64) ([]db.BehaviorAction, error) {
 	m.ctrl.T.Helper()

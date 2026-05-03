@@ -105,6 +105,10 @@ func (c *fakeBaofuProfitSharingClient) CreateUnifiedOrder(context.Context, aggre
 	return nil, nil
 }
 
+func (c *fakeBaofuProfitSharingClient) QueryPayment(context.Context, aggregatecontracts.PaymentQueryRequest) (*aggregatecontracts.UnifiedOrderResult, error) {
+	return nil, nil
+}
+
 func (c *fakeBaofuProfitSharingClient) CreateProfitSharing(_ context.Context, req aggregatecontracts.ShareAfterPayRequest) (*aggregatecontracts.ShareResult, error) {
 	c.called = true
 	c.lastShareRequest = req

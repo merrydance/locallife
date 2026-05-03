@@ -513,7 +513,7 @@ ExternalPaymentCapabilityBaofuWithdraw = "baofu_withdraw"
 - 实现分账单创建、分账明细快照。
 - 分账创建入口必须先通过本地退款互斥门禁：只扫描宝付已支付、订单已完成、退款窗口已关闭、无 `pending/processing/success` 退款、且未创建过分账单的支付单。
 - 调用 `share_after_pay`。
-- 实现分账通知、分账查询 worker。
+- 实现分账通知、分账查询 worker；分账处理中和支付待回调都必须由查询结果先落 `external_payment_facts`，再交给单写者状态机推进本地状态。
 - 更新商户、骑手、运营商、平台收入视图。
 
 ### 阶段 5：提现与余额

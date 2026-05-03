@@ -518,6 +518,61 @@ func (q *Queries) GetPendingPaymentOrderByUserAndBusinessType(ctx context.Contex
 	return i, err
 }
 
+const listBaofuPendingPaymentOrdersForRecovery = `-- name: ListBaofuPendingPaymentOrdersForRecovery :many
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing
+FROM payment_orders
+WHERE status = 'pending'
+  AND payment_channel = 'baofu_aggregate'
+  AND created_at <= $1
+ORDER BY created_at ASC, id ASC
+LIMIT $2::int
+`
+
+type ListBaofuPendingPaymentOrdersForRecoveryParams struct {
+	CreatedBefore time.Time `json:"created_before"`
+	Limit         int32     `json:"limit"`
+}
+
+func (q *Queries) ListBaofuPendingPaymentOrdersForRecovery(ctx context.Context, arg ListBaofuPendingPaymentOrdersForRecoveryParams) ([]PaymentOrder, error) {
+	rows, err := q.db.Query(ctx, listBaofuPendingPaymentOrdersForRecovery, arg.CreatedBefore, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PaymentOrder{}
+	for rows.Next() {
+		var i PaymentOrder
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderID,
+			&i.ReservationID,
+			&i.UserID,
+			&i.PaymentType,
+			&i.BusinessType,
+			&i.Amount,
+			&i.OutTradeNo,
+			&i.TransactionID,
+			&i.PrepayID,
+			&i.Status,
+			&i.PaidAt,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.Attach,
+			&i.CombinedPaymentID,
+			&i.ProcessedAt,
+			&i.PaymentChannel,
+			&i.RequiresProfitSharing,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listExpiredPaymentOrders = `-- name: ListExpiredPaymentOrders :many
 SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE status = 'pending' AND expires_at < now()

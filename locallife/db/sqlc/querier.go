@@ -1203,6 +1203,8 @@ type Querier interface {
 	ListAvailableRoomsForCustomer(ctx context.Context, merchantID int64) ([]ListAvailableRoomsForCustomerRow, error)
 	ListBaofuFeeLedgerByPayer(ctx context.Context, arg ListBaofuFeeLedgerByPayerParams) ([]BaofuFeeLedger, error)
 	ListBaofuOrdersReadyForProfitSharing(ctx context.Context, arg ListBaofuOrdersReadyForProfitSharingParams) ([]ListBaofuOrdersReadyForProfitSharingRow, error)
+	ListBaofuPendingPaymentOrdersForRecovery(ctx context.Context, arg ListBaofuPendingPaymentOrdersForRecoveryParams) ([]PaymentOrder, error)
+	ListBaofuProcessingProfitSharingOrdersForRecovery(ctx context.Context, arg ListBaofuProcessingProfitSharingOrdersForRecoveryParams) ([]ProfitSharingOrder, error)
 	ListBehaviorActionsByDecision(ctx context.Context, decisionID int64) ([]BehaviorAction, error)
 	ListBehaviorActionsByStatusAndType(ctx context.Context, arg ListBehaviorActionsByStatusAndTypeParams) ([]BehaviorAction, error)
 	ListBehaviorAppealsByEntity(ctx context.Context, arg ListBehaviorAppealsByEntityParams) ([]BehaviorAppeal, error)

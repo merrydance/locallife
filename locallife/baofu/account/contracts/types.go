@@ -46,9 +46,6 @@ func (r AccountResult) Normalized() AccountResult {
 	r.OutRequestNo = strings.TrimSpace(r.OutRequestNo)
 	r.ContractNo = strings.TrimSpace(r.ContractNo)
 	r.SharingMerID = strings.TrimSpace(r.SharingMerID)
-	if r.SharingMerID == "" {
-		r.SharingMerID = r.ContractNo
-	}
 	r.OpenState = strings.TrimSpace(r.OpenState)
 	if r.OpenState == "" {
 		r.OpenState = OpenStateFromUpstream(r.UpstreamState)
