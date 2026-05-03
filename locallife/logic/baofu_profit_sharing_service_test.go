@@ -4,8 +4,10 @@ import (
 	"context"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/stretchr/testify/require"
 )
@@ -208,4 +210,89 @@ type fakeBaofuProfitSharingOrderStore struct {
 func (s *fakeBaofuProfitSharingOrderStore) CreateBaofuProfitSharingOrderTx(_ context.Context, arg db.CreateBaofuProfitSharingOrderTxParams) (db.CreateBaofuProfitSharingOrderTxResult, error) {
 	s.lastTx = arg
 	return db.CreateBaofuProfitSharingOrderTxResult{ProfitSharingOrder: db.ProfitSharingOrder{PaymentOrderID: arg.ProfitSharingOrder.PaymentOrderID}, PaymentFeeLedger: db.BaofuFeeLedger{Amount: arg.PaymentFeeLedger.Amount}}, nil
+}
+
+func TestBaofuProfitSharingServiceRecordShareFactCreatesApplicationForTerminalShare(t *testing.T) {
+	store := &fakeBaofuProfitSharingFactStore{}
+	service := NewBaofuProfitSharingService(store)
+	now := time.Date(2026, 5, 3, 12, 30, 0, 0, time.UTC)
+
+	result, err := service.RecordShareFact(context.Background(), RecordBaofuShareFactInput{
+		ProfitSharingOrder: db.ProfitSharingOrder{
+			ID:             3001,
+			OutOrderNo:     "BFSHARE202605030001",
+			PaymentOrderID: 9001,
+		},
+		Fact: aggregatecontracts.ShareFact{
+			OutTradeNo:       "BFSHARE202605030001",
+			TradeNo:          "BFSHAREUP202605030001",
+			TransactionState: aggregatecontracts.ShareStateSuccess,
+			SuccessAmountFen: 10000,
+			Raw:              []byte(`{"txnState":"SUCCESS","succAmt":10000}`),
+		},
+		FactSource:      db.ExternalPaymentFactSourceCallback,
+		SourceEventID:   "BFSN202605030001",
+		SourceEventType: "SHARE.SUCCESS",
+		OccurredAt:      now,
+		ObservedAt:      now,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(801), result.Fact.ID)
+	require.NotNil(t, result.Application)
+	require.Equal(t, db.ExternalPaymentProviderBaofu, store.lastFact.Provider)
+	require.Equal(t, db.PaymentChannelBaofuAggregate, store.lastFact.Channel)
+	require.Equal(t, db.ExternalPaymentCapabilityBaofuProfitSharing, store.lastFact.Capability)
+	require.Equal(t, db.ExternalPaymentFactSourceCallback, store.lastFact.FactSource)
+	require.Equal(t, db.ExternalPaymentObjectProfitSharing, store.lastFact.ExternalObjectType)
+	require.Equal(t, "BFSHARE202605030001", store.lastFact.ExternalObjectKey)
+	require.Equal(t, "BFSHAREUP202605030001", store.lastFact.ExternalSecondaryKey.String)
+	require.Equal(t, db.ExternalPaymentBusinessOwnerProfitSharing, store.lastFact.BusinessOwner.String)
+	require.Equal(t, paymentFactBusinessObjectProfitSharingOrder, store.lastFact.BusinessObjectType.String)
+	require.Equal(t, int64(3001), store.lastFact.BusinessObjectID.Int64)
+	require.Equal(t, aggregatecontracts.ShareStateSuccess, store.lastFact.UpstreamState)
+	require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, store.lastFact.TerminalStatus)
+	require.True(t, store.lastFact.IsTerminal)
+	require.Equal(t, int64(10000), store.lastFact.Amount.Int64)
+	require.Equal(t, "baofu:callback:profit_sharing:BFSHARE202605030001:BFSN202605030001", store.lastFact.DedupeKey)
+	require.Equal(t, int64(801), store.lastApplication.FactID)
+	require.Equal(t, paymentFactConsumerProfitSharingDomain, store.lastApplication.Consumer)
+	require.Equal(t, paymentFactBusinessObjectProfitSharingOrder, store.lastApplication.BusinessObjectType)
+	require.Equal(t, int64(3001), store.lastApplication.BusinessObjectID)
+}
+
+type fakeBaofuProfitSharingFactStore struct {
+	fakeBaofuProfitSharingReceiverStore
+	lastFact        db.CreateExternalPaymentFactParams
+	lastApplication db.CreateExternalPaymentFactApplicationParams
+}
+
+func (s *fakeBaofuProfitSharingFactStore) CreateBaofuProfitSharingOrderTx(context.Context, db.CreateBaofuProfitSharingOrderTxParams) (db.CreateBaofuProfitSharingOrderTxResult, error) {
+	return db.CreateBaofuProfitSharingOrderTxResult{}, nil
+}
+
+func (s *fakeBaofuProfitSharingFactStore) CreateExternalPaymentFact(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+	s.lastFact = arg
+	return db.ExternalPaymentFact{
+		ID:                 801,
+		Provider:           arg.Provider,
+		Channel:            arg.Channel,
+		Capability:         arg.Capability,
+		ExternalObjectType: arg.ExternalObjectType,
+		ExternalObjectKey:  arg.ExternalObjectKey,
+		TerminalStatus:     arg.TerminalStatus,
+		IsTerminal:         arg.IsTerminal,
+	}, nil
+}
+
+func (s *fakeBaofuProfitSharingFactStore) CreateExternalPaymentFactApplication(_ context.Context, arg db.CreateExternalPaymentFactApplicationParams) (db.ExternalPaymentFactApplication, error) {
+	s.lastApplication = arg
+	return db.ExternalPaymentFactApplication{
+		ID:                 901,
+		FactID:             arg.FactID,
+		Consumer:           arg.Consumer,
+		BusinessObjectType: arg.BusinessObjectType,
+		BusinessObjectID:   arg.BusinessObjectID,
+		Status:             arg.Status,
+	}, nil
 }

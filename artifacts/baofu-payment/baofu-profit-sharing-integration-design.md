@@ -353,6 +353,8 @@ type BaofuAccountClient interface {
 - 回调与主动查询写 `external_payment_facts`，记录 provider、channel、fact_source、upstream_state、terminal_status、raw_resource、dedupe_key。
 - 业务状态推进由 fact application/worker 完成，避免在回调 handler 内做复杂业务。
 - 支付成功、分账完成、退款异常、提现异常等通过 `payment_domain_outbox` 发布领域事件。
+- 宝付分账回调入口为 `POST /v1/webhooks/baofu/share`。回调只做验签/解析、加载本地分账单、写入 `external_payment_facts` 和创建 fact application；真正的 `profit_sharing_orders` 状态推进复用支付域 fact application 单写者。
+- 宝付分账事实映射固定为：`PROCESSING -> processing`、`SUCCESS -> success`、`CANCELED -> failed`、`ABNORMAL -> unknown`。只有 `SUCCESS` 允许把本地分账单从 `processing` 推进到 `finished`；`PROCESSING` 只落事实并等待查询恢复，不做业务状态突变。
 
 ## 9. 数据库调整建议
 

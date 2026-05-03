@@ -22,6 +22,7 @@ type baofuAccountNotificationParser interface {
 
 type baofuAggregatePaymentNotificationParser interface {
 	ParsePaymentNotification(body []byte) (*baofuaggregatenotification.PaymentNotification, error)
+	ParseShareNotification(body []byte) (*baofuaggregatenotification.ShareNotification, error)
 }
 
 type baofuCallbackResponse struct {
@@ -128,6 +129,60 @@ func (server *Server) handleBaofuPaymentNotify(ctx *gin.Context) {
 		Str("out_trade_no", strings.TrimSpace(notification.Fact.OutTradeNo)).
 		Str("baofu_payment_state", strings.TrimSpace(notification.Fact.TransactionState)).
 		Msg("baofu payment callback fact persisted")
+	ctx.JSON(http.StatusOK, baofuCallbackResponse{Code: "SUCCESS", Message: "OK"})
+}
+
+func (server *Server) handleBaofuShareNotify(ctx *gin.Context) {
+	if server.baofuPaymentNotificationParser == nil {
+		log.Error().Msg("baofu share callback received but parser is not configured")
+		ctx.JSON(http.StatusServiceUnavailable, baofuCallbackResponse{Code: "FAIL", Message: "baofu share callback service unavailable"})
+		return
+	}
+	body, status, err := readWebhookBody(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("read baofu share callback body failed")
+		ctx.JSON(status, baofuCallbackResponse{Code: "FAIL", Message: "read callback body failed"})
+		return
+	}
+	notification, err := server.baofuPaymentNotificationParser.ParseShareNotification(body)
+	if err != nil {
+		log.Error().Err(err).Msg("parse baofu share callback failed")
+		ctx.JSON(http.StatusUnauthorized, baofuCallbackResponse{Code: "FAIL", Message: "callback verification failed"})
+		return
+	}
+	if notification == nil {
+		log.Error().Msg("parse baofu share callback returned empty notification")
+		ctx.JSON(http.StatusBadRequest, baofuCallbackResponse{Code: "FAIL", Message: "callback content invalid"})
+		return
+	}
+	profitSharingOrder, err := server.store.GetProfitSharingOrderByOutOrderNo(ctx.Request.Context(), strings.TrimSpace(notification.Fact.OutTradeNo))
+	if err != nil {
+		log.Error().Err(err).Str("out_order_no", strings.TrimSpace(notification.Fact.OutTradeNo)).Msg("load baofu profit sharing order for callback failed")
+		ctx.JSON(http.StatusInternalServerError, baofuCallbackResponse{Code: "FAIL", Message: "persist callback failed"})
+		return
+	}
+	service := logic.NewBaofuProfitSharingService(server.store)
+	result, err := service.RecordShareFact(ctx.Request.Context(), logic.RecordBaofuShareFactInput{
+		ProfitSharingOrder: profitSharingOrder,
+		Fact:               notification.Fact,
+		FactSource:         db.ExternalPaymentFactSourceCallback,
+		SourceEventID:      strings.TrimSpace(notification.NotifyID),
+		SourceEventType:    strings.TrimSpace(notification.NotifyType),
+		OccurredAt:         notification.OccurredAt,
+	})
+	if err != nil {
+		log.Error().Err(err).Str("out_order_no", strings.TrimSpace(notification.Fact.OutTradeNo)).Msg("persist baofu share callback fact failed")
+		ctx.JSON(http.StatusInternalServerError, baofuCallbackResponse{Code: "FAIL", Message: "persist callback failed"})
+		return
+	}
+	if err := server.enqueueOrderPaymentFactApplication(ctx.Request.Context(), result.Application); err != nil {
+		log.Warn().Err(err).Int64("payment_fact_id", result.Fact.ID).Msg("enqueue baofu share fact application failed; scheduler will retry")
+	}
+	log.Info().
+		Int64("payment_fact_id", result.Fact.ID).
+		Str("out_order_no", strings.TrimSpace(notification.Fact.OutTradeNo)).
+		Str("baofu_share_state", strings.TrimSpace(notification.Fact.TransactionState)).
+		Msg("baofu share callback fact persisted")
 	ctx.JSON(http.StatusOK, baofuCallbackResponse{Code: "SUCCESS", Message: "OK"})
 }
 

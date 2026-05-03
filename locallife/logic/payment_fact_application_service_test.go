@@ -72,6 +72,40 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrdinaryProfitSha
 	require.Equal(t, db.ExternalPaymentFactApplicationStatusApplied, result.Application.Status)
 }
 
+func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuProfitSharingSuccessFinishesOrder(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	now := time.Date(2026, 5, 3, 12, 10, 0, 0, time.UTC)
+	application := buildProfitSharingFactApplication(2701, 2601, db.ExternalPaymentFactApplicationStatusProcessing)
+	fact := buildProfitSharingFact(2601, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess)
+	fact.Provider = db.ExternalPaymentProviderBaofu
+	fact.Channel = db.PaymentChannelBaofuAggregate
+	fact.Capability = db.ExternalPaymentCapabilityBaofuProfitSharing
+	fact.ExternalObjectType = db.ExternalPaymentObjectProfitSharing
+	fact.ExternalObjectKey = "BFSHARE202605030001"
+	fact.ExternalSecondaryKey = pgtype.Text{String: "BFSHAREUP202605030001", Valid: true}
+	fact.UpstreamState = "SUCCESS"
+	fact.RawResource = []byte(`{"txnState":"SUCCESS","succAmt":10000}`)
+
+	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
+	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().GetProfitSharingOrder(gomock.Any(), application.BusinessObjectID).Return(buildProfitSharingOrderForApplication(application, db.ProfitSharingOrderStatusProcessing), nil)
+	store.EXPECT().UpdateProfitSharingOrderToFinished(gomock.Any(), application.BusinessObjectID).Return(buildProfitSharingOrderForApplication(application, db.ProfitSharingOrderStatusFinished), nil)
+	expectProfitSharingResultOutbox(t, store, application, fact, "SUCCESS", "")
+	expectFactTerminalized(t, store, fact.ID, now)
+	expectApplicationApplied(t, store, application, now)
+
+	svc := NewPaymentFactService(store)
+	svc.now = func() time.Time { return now }
+
+	result, err := svc.ApplyExternalPaymentFactApplication(context.Background(), application.ID)
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+	require.Equal(t, db.ExternalPaymentFactApplicationStatusApplied, result.Application.Status)
+}
+
 func TestPaymentFactServiceApplyExternalPaymentFactApplication_ProfitSharingSuccessRejectsPendingOrder(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

@@ -1595,8 +1595,8 @@ func validateProfitSharingFactApplication(application db.ExternalPaymentFactAppl
 	if !fact.IsTerminal {
 		return fmt.Errorf("payment fact %d is not terminal", fact.ID)
 	}
-	if !isWechatMainBusinessProfitSharingFact(fact) {
-		return fmt.Errorf("payment fact %d is not a supported wechat profit sharing fact", fact.ID)
+	if !isSupportedMainBusinessProfitSharingFact(fact) {
+		return fmt.Errorf("payment fact %d is not a supported main business profit sharing fact", fact.ID)
 	}
 	if fact.ExternalObjectType != db.ExternalPaymentObjectProfitSharing {
 		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)

@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v5/pgconn"
+	baofuaggregatenotification "github.com/merrydance/locallife/baofu/aggregatepay/notification"
 	"github.com/merrydance/locallife/cloudprint"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/docs"
@@ -329,28 +330,29 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	}
 
 	server := &Server{
-		config:                      config,
-		store:                       store,
-		tokenMaker:                  tokenMaker,
-		auditWriter:                 auditWriter,
-		wechatClient:                wechatClient,
-		directPaymentClient:         paymentClient,
-		transferClient:              transferClient,
-		ecommerceClient:             ecommerceClient,
-		ordinarySPClient:            ordinarySPClient,
-		dataEncryptor:               dataEncryptor,
-		mapClient:                   mapClient,
-		weatherCache:                weatherCache,
-		taskDistributor:             taskDistributor,
-		printerClient:               cloudprint.NewFeieyunClientFromConfig(config),
-		wsHub:                       wsHub,
-		wsPubSub:                    wsPubSub,
-		rulesEngine:                 engine,
-		imageDeleter:                newImageDeleteWorker(),
-		keywordWorker:               newSearchKeywordWorker(store),
-		paymentFactService:          logic.NewPaymentFactService(store).WithPaymentSuccessConfig(config.RiderAverageSpeed, config.DefaultPrepareTime),
-		onboardingReviewService:     logic.NewOnboardingReviewService(store),
-		credentialGovernanceService: logic.NewCredentialGovernanceService(store),
+		config:                         config,
+		store:                          store,
+		tokenMaker:                     tokenMaker,
+		auditWriter:                    auditWriter,
+		wechatClient:                   wechatClient,
+		directPaymentClient:            paymentClient,
+		transferClient:                 transferClient,
+		ecommerceClient:                ecommerceClient,
+		ordinarySPClient:               ordinarySPClient,
+		dataEncryptor:                  dataEncryptor,
+		mapClient:                      mapClient,
+		weatherCache:                   weatherCache,
+		taskDistributor:                taskDistributor,
+		printerClient:                  cloudprint.NewFeieyunClientFromConfig(config),
+		wsHub:                          wsHub,
+		wsPubSub:                       wsPubSub,
+		rulesEngine:                    engine,
+		imageDeleter:                   newImageDeleteWorker(),
+		keywordWorker:                  newSearchKeywordWorker(store),
+		paymentFactService:             logic.NewPaymentFactService(store).WithPaymentSuccessConfig(config.RiderAverageSpeed, config.DefaultPrepareTime),
+		baofuPaymentNotificationParser: baofuaggregatenotification.NewParser(),
+		onboardingReviewService:        logic.NewOnboardingReviewService(store),
+		credentialGovernanceService:    logic.NewCredentialGovernanceService(store),
 	}
 
 	// 初始化 Redis 客户端（供绑定码等功能使用）
@@ -580,6 +582,7 @@ func (server *Server) setupRouter() {
 		// 宝付宝财通回调
 		webhooksGroup.POST("/baofu/account/open", server.handleBaofuAccountOpenNotify)
 		webhooksGroup.POST("/baofu/payment", server.handleBaofuPaymentNotify)
+		webhooksGroup.POST("/baofu/share", server.handleBaofuShareNotify)
 		// 微信用户投诉通知（合规要求，状态变更实时推送）
 		webhooksGroup.POST("/wechat-ecommerce/complaint-notify", server.handleComplaintNotify)
 		webhooksGroup.POST("/wechat-ecommerce/violation-notify", server.handleViolationNotify)

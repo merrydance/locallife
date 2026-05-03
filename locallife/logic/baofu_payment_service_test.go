@@ -283,6 +283,14 @@ func (c *fakeBaofuAggregatePaymentClient) CreateUnifiedOrder(ctx context.Context
 	return c.unifiedResult, nil
 }
 
+func (c *fakeBaofuAggregatePaymentClient) CreateProfitSharing(ctx context.Context, req aggregatecontracts.ShareAfterPayRequest) (*aggregatecontracts.ShareResult, error) {
+	return nil, errors.New("not implemented in payment tests")
+}
+
+func (c *fakeBaofuAggregatePaymentClient) QueryProfitSharing(ctx context.Context, req aggregatecontracts.ShareQueryRequest) (*aggregatecontracts.ShareResult, error) {
+	return nil, errors.New("not implemented in payment tests")
+}
+
 type fakeBaofuPaymentCommandStore struct {
 	last db.CreateExternalPaymentCommandParams
 }

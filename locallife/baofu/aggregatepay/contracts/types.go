@@ -243,6 +243,15 @@ type ShareResult struct {
 	Raw              json.RawMessage `json:"-"`
 }
 
+type ShareFact struct {
+	OutTradeNo       string
+	TradeNo          string
+	TransactionState string
+	SuccessAmountFen int64
+	ResultCode       string
+	Raw              json.RawMessage
+}
+
 type ShareQueryRequest struct {
 	MerchantID string `json:"merId"`
 	TerminalID string `json:"terId"`

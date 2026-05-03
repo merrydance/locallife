@@ -47,3 +47,13 @@ func isBaofuMainBusinessPaymentFact(fact db.ExternalPaymentFact) bool {
 func isSupportedMainBusinessPaymentFact(fact db.ExternalPaymentFact) bool {
 	return isWechatMainBusinessPaymentFact(fact) || isBaofuMainBusinessPaymentFact(fact)
 }
+
+func isBaofuMainBusinessProfitSharingFact(fact db.ExternalPaymentFact) bool {
+	return fact.Provider == db.ExternalPaymentProviderBaofu &&
+		fact.Channel == db.PaymentChannelBaofuAggregate &&
+		fact.Capability == db.ExternalPaymentCapabilityBaofuProfitSharing
+}
+
+func isSupportedMainBusinessProfitSharingFact(fact db.ExternalPaymentFact) bool {
+	return isWechatMainBusinessProfitSharingFact(fact) || isBaofuMainBusinessProfitSharingFact(fact)
+}

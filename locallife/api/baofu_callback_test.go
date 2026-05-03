@@ -98,6 +98,88 @@ func TestBaofuPaymentCallbackPersistsFactAndEnqueuesApplication(t *testing.T) {
 	require.Equal(t, []int64{601}, taskRecorder.applicationIDs)
 }
 
+func TestBaofuShareCallbackPersistsFactAndEnqueuesApplication(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAggregatePaymentNotificationParserForTest(fakeBaofuPaymentParser{})
+	taskRecorder := &refundFactApplicationEnqueueRecorder{}
+	server.taskDistributor = taskRecorder
+
+	profitSharingOrder := db.ProfitSharingOrder{
+		ID:             3001,
+		PaymentOrderID: 4001,
+		OutOrderNo:     "BFSHARE_3001",
+		Status:         db.ProfitSharingOrderStatusProcessing,
+		MerchantAmount: 8970,
+		RiderAmount:    500,
+	}
+	store.EXPECT().GetProfitSharingOrderByOutOrderNo(gomock.Any(), "BFSHARE_3001").Return(profitSharingOrder, nil)
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ any, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+			require.Equal(t, db.ExternalPaymentProviderBaofu, arg.Provider)
+			require.Equal(t, db.PaymentChannelBaofuAggregate, arg.Channel)
+			require.Equal(t, db.ExternalPaymentCapabilityBaofuProfitSharing, arg.Capability)
+			require.Equal(t, db.ExternalPaymentFactSourceCallback, arg.FactSource)
+			require.Equal(t, db.ExternalPaymentObjectProfitSharing, arg.ExternalObjectType)
+			require.Equal(t, "BFSHARE_3001", arg.ExternalObjectKey)
+			require.Equal(t, "BFSHARE_UP_3001", arg.ExternalSecondaryKey.String)
+			require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
+			require.True(t, arg.IsTerminal)
+			require.Equal(t, int64(9470), arg.Amount.Int64)
+			require.Equal(t, "baofu:callback:profit_sharing:BFSHARE_3001:BFSN_3001", arg.DedupeKey)
+			return db.ExternalPaymentFact{ID: 701, IsTerminal: true, DedupeKey: arg.DedupeKey}, nil
+		})
+	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
+		FactID:             701,
+		Consumer:           paymentFactConsumerProfitSharingDomain,
+		BusinessObjectType: paymentFactBusinessObjectProfitSharingOrder,
+		BusinessObjectID:   profitSharingOrder.ID,
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}).Return(db.ExternalPaymentFactApplication{ID: 801, FactID: 701, Consumer: paymentFactConsumerProfitSharingDomain, BusinessObjectType: paymentFactBusinessObjectProfitSharingOrder, BusinessObjectID: profitSharingOrder.ID}, nil)
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/share", bytes.NewBufferString(`{"notifyId":"BFSN_3001"}`))
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "SUCCESS")
+	require.Equal(t, []int64{801}, taskRecorder.applicationIDs)
+}
+
+func TestBaofuShareCallbackUsesDefaultParser(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	taskRecorder := &refundFactApplicationEnqueueRecorder{}
+	server.taskDistributor = taskRecorder
+
+	profitSharingOrder := db.ProfitSharingOrder{ID: 3002, OutOrderNo: "BFSHARE_3002", Status: db.ProfitSharingOrderStatusProcessing}
+	store.EXPECT().GetProfitSharingOrderByOutOrderNo(gomock.Any(), "BFSHARE_3002").Return(profitSharingOrder, nil)
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+		require.Equal(t, "BFSHARE_3002", arg.ExternalObjectKey)
+		require.Equal(t, "BFSHARE_UP_3002", arg.ExternalSecondaryKey.String)
+		require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
+		return db.ExternalPaymentFact{ID: 702, IsTerminal: true}, nil
+	})
+	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), gomock.Any()).Return(db.ExternalPaymentFactApplication{
+		ID:                 802,
+		FactID:             702,
+		Consumer:           paymentFactConsumerProfitSharingDomain,
+		BusinessObjectType: paymentFactBusinessObjectProfitSharingOrder,
+		BusinessObjectID:   profitSharingOrder.ID,
+	}, nil)
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/share", bytes.NewBufferString(`{"notifyId":"BFSN_3002","notifyType":"SHARE.SUCCESS","outTradeNo":"BFSHARE_3002","tradeNo":"BFSHARE_UP_3002","txnState":"SUCCESS","succAmt":9470}`))
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, []int64{802}, taskRecorder.applicationIDs)
+}
+
 type fakeBaofuOpenAccountParser struct{}
 
 func (fakeBaofuOpenAccountParser) ParseOpenAccountNotification(body []byte) (*baofunotification.AccountNotification, error) {
@@ -129,6 +211,24 @@ func (fakeBaofuPaymentParser) ParsePaymentNotification(body []byte) (*baofuaggre
 			SuccessAmountFen: 1200,
 			FeeAmountFen:     4,
 			Raw:              []byte(`{"notifyId":"BFN_4001","outTradeNo":"PO_BAOFU_4001","tradeNo":"BFPAY_4001","txnState":"SUCCESS"}`),
+		},
+	}, nil
+}
+
+func (fakeBaofuPaymentParser) ParseShareNotification(body []byte) (*baofuaggregatenotification.ShareNotification, error) {
+	return &baofuaggregatenotification.ShareNotification{
+		NotifyID:       "BFSN_3001",
+		NotifyType:     "SHARE.SUCCESS",
+		TerminalStatus: db.ExternalPaymentTerminalStatusSuccess,
+		IsTerminal:     true,
+		OccurredAt:     time.Now().UTC(),
+		Raw:            []byte(`{"notifyId":"BFSN_3001","outTradeNo":"BFSHARE_3001","tradeNo":"BFSHARE_UP_3001","txnState":"SUCCESS"}`),
+		Fact: aggregatecontracts.ShareFact{
+			OutTradeNo:       "BFSHARE_3001",
+			TradeNo:          "BFSHARE_UP_3001",
+			TransactionState: aggregatecontracts.ShareStateSuccess,
+			SuccessAmountFen: 9470,
+			Raw:              []byte(`{"notifyId":"BFSN_3001","outTradeNo":"BFSHARE_3001","tradeNo":"BFSHARE_UP_3001","txnState":"SUCCESS"}`),
 		},
 	}, nil
 }

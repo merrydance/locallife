@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	db "github.com/merrydance/locallife/db/sqlc"
 )
 
@@ -18,6 +20,8 @@ const (
 var (
 	ErrBaofuProfitSharingInvalidAmount          = errors.New("baofu profit sharing amount input is invalid")
 	ErrBaofuProfitSharingMerchantAmountNegative = errors.New("baofu profit sharing merchant amount is negative")
+	ErrBaofuProfitSharingServiceNotConfigured   = errors.New("baofu profit sharing service is not configured")
+	ErrBaofuProfitSharingFactInvalidInput       = errors.New("baofu profit sharing fact input is invalid")
 )
 
 type baofuProfitSharingOrderStore interface {
@@ -41,6 +45,16 @@ type BaofuProfitSharingOrderInput struct {
 	PlatformRateBps int32
 	OperatorRateBps int32
 	OutOrderNo      string
+}
+
+type RecordBaofuShareFactInput struct {
+	ProfitSharingOrder db.ProfitSharingOrder
+	Fact               aggregatecontracts.ShareFact
+	FactSource         string
+	SourceEventID      string
+	SourceEventType    string
+	OccurredAt         time.Time
+	ObservedAt         time.Time
 }
 
 type baofuSharingDetailSnapshot struct {
@@ -131,6 +145,119 @@ func (s *BaofuProfitSharingService) CreatePendingOrder(ctx context.Context, inpu
 			Status:             "recorded",
 		},
 	})
+}
+
+func (s *BaofuProfitSharingService) RecordShareFact(ctx context.Context, input RecordBaofuShareFactInput) (RecordExternalPaymentFactResult, error) {
+	var result RecordExternalPaymentFactResult
+	if s == nil || s.store == nil {
+		return result, ErrBaofuProfitSharingServiceNotConfigured
+	}
+	factStore, ok := s.store.(baofuPaymentFactStore)
+	if !ok {
+		return result, ErrBaofuProfitSharingServiceNotConfigured
+	}
+	if err := validateRecordBaofuShareFactInput(input); err != nil {
+		return result, err
+	}
+
+	order := input.ProfitSharingOrder
+	shareFact := input.Fact
+	outTradeNo := strings.TrimSpace(shareFact.OutTradeNo)
+	if outTradeNo == "" {
+		outTradeNo = strings.TrimSpace(order.OutOrderNo)
+	}
+	upstreamState := strings.TrimSpace(shareFact.TransactionState)
+	terminalStatus := aggregatecontracts.NormalizeShareTerminalStatus(upstreamState)
+	observedAt := input.ObservedAt
+	if observedAt.IsZero() {
+		observedAt = time.Now().UTC()
+	}
+	occurredAtParam := pgtype.Timestamptz{}
+	if !input.OccurredAt.IsZero() {
+		occurredAtParam = pgtype.Timestamptz{Time: input.OccurredAt.UTC(), Valid: true}
+	}
+	rawResource := shareFact.Raw
+	if len(rawResource) == 0 {
+		rawResource = []byte(`{}`)
+	}
+	amount := shareFact.SuccessAmountFen
+	if amount <= 0 {
+		amount = order.MerchantAmount + order.RiderAmount + order.OperatorCommission + order.PlatformCommission
+	}
+
+	fact, err := factStore.CreateExternalPaymentFact(ctx, db.CreateExternalPaymentFactParams{
+		Provider:             db.ExternalPaymentProviderBaofu,
+		Channel:              db.PaymentChannelBaofuAggregate,
+		Capability:           db.ExternalPaymentCapabilityBaofuProfitSharing,
+		FactSource:           strings.TrimSpace(input.FactSource),
+		SourceEventID:        pgtype.Text{String: strings.TrimSpace(input.SourceEventID), Valid: strings.TrimSpace(input.SourceEventID) != ""},
+		SourceEventType:      pgtype.Text{String: strings.TrimSpace(input.SourceEventType), Valid: strings.TrimSpace(input.SourceEventType) != ""},
+		ExternalObjectType:   db.ExternalPaymentObjectProfitSharing,
+		ExternalObjectKey:    outTradeNo,
+		ExternalSecondaryKey: pgtype.Text{String: strings.TrimSpace(shareFact.TradeNo), Valid: strings.TrimSpace(shareFact.TradeNo) != ""},
+		BusinessOwner:        pgtype.Text{String: db.ExternalPaymentBusinessOwnerProfitSharing, Valid: true},
+		BusinessObjectType:   pgtype.Text{String: paymentFactBusinessObjectProfitSharingOrder, Valid: true},
+		BusinessObjectID:     pgtype.Int8{Int64: order.ID, Valid: true},
+		UpstreamState:        upstreamState,
+		TerminalStatus:       terminalStatus,
+		IsTerminal:           isExternalPaymentTerminalStatus(terminalStatus),
+		Amount:               pgtype.Int8{Int64: amount, Valid: amount > 0},
+		Currency:             "CNY",
+		OccurredAt:           occurredAtParam,
+		ObservedAt:           observedAt.UTC(),
+		RawResource:          rawResource,
+		DedupeKey:            baofuShareFactDedupeKey(input, outTradeNo, upstreamState),
+		ProcessingStatus:     db.ExternalPaymentFactProcessingStatusReceived,
+	})
+	if err != nil {
+		return result, err
+	}
+	result.Fact = fact
+	if !fact.IsTerminal {
+		return result, nil
+	}
+
+	application, err := factStore.CreateExternalPaymentFactApplication(ctx, db.CreateExternalPaymentFactApplicationParams{
+		FactID:             fact.ID,
+		Consumer:           paymentFactConsumerProfitSharingDomain,
+		BusinessObjectType: paymentFactBusinessObjectProfitSharingOrder,
+		BusinessObjectID:   order.ID,
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	})
+	if err != nil {
+		return result, err
+	}
+	result.Application = &application
+	return result, nil
+}
+
+func validateRecordBaofuShareFactInput(input RecordBaofuShareFactInput) error {
+	if input.ProfitSharingOrder.ID == 0 || strings.TrimSpace(input.ProfitSharingOrder.OutOrderNo) == "" {
+		return ErrBaofuProfitSharingFactInvalidInput
+	}
+	if !isExternalPaymentFactSource(input.FactSource) {
+		return fmt.Errorf("unsupported fact source %q", input.FactSource)
+	}
+	outTradeNo := strings.TrimSpace(input.Fact.OutTradeNo)
+	if outTradeNo != "" && outTradeNo != strings.TrimSpace(input.ProfitSharingOrder.OutOrderNo) {
+		return ErrBaofuProfitSharingFactInvalidInput
+	}
+	if strings.TrimSpace(input.Fact.TransactionState) == "" {
+		return ErrBaofuProfitSharingFactInvalidInput
+	}
+	return nil
+}
+
+func baofuShareFactDedupeKey(input RecordBaofuShareFactInput, outTradeNo string, upstreamState string) string {
+	source := strings.TrimSpace(input.FactSource)
+	if source == db.ExternalPaymentFactSourceCallback && strings.TrimSpace(input.SourceEventID) != "" {
+		return fmt.Sprintf("baofu:callback:profit_sharing:%s:%s", outTradeNo, strings.TrimSpace(input.SourceEventID))
+	}
+	secondary := strings.TrimSpace(input.Fact.TradeNo)
+	if secondary == "" {
+		secondary = strings.TrimSpace(upstreamState)
+	}
+	return fmt.Sprintf("baofu:%s:profit_sharing:%s:%s", source, outTradeNo, secondary)
 }
 
 func buildBaofuSharingDetailSnapshot(amounts BaofuProfitSharingAmountResult, receivers BaofuProfitSharingReceiverResult) ([]byte, error) {
