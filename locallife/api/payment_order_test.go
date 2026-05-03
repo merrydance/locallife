@@ -1438,6 +1438,46 @@ func TestCreateCombinedPaymentOrderAPI_ServiceUnavailableWhenEcommerceClientMiss
 	require.Equal(t, "合单支付能力未完成配置，请联系平台处理", resp.Message)
 }
 
+func TestCreateCombinedPaymentOrderAPI_BaofuReadinessErrorIsSanitized(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
+	server := newTestServerWithOrdinaryServiceProvider(t, store, ordinaryClient)
+	recorder := httptest.NewRecorder()
+
+	store.EXPECT().
+		GetOrder(gomock.Any(), int64(11)).
+		Return(db.Order{ID: 11, UserID: 1001, MerchantID: 501}, nil)
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   501,
+		}).
+		Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
+
+	body, err := json.Marshal(gin.H{"order_ids": []int64{11}})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/payments/combined", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, 1001, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, CodeBadRequest, resp.Code)
+	require.Equal(t, "商户结算账户未开通，暂不能创建支付订单", resp.Message)
+	require.NotContains(t, recorder.Body.String(), "contract")
+	require.NotContains(t, recorder.Body.String(), "sharing")
+	require.NotContains(t, recorder.Body.String(), "baofu")
+	require.NotContains(t, recorder.Body.String(), "provider")
+}
+
 func TestCloseCombinedPaymentOrderAPI_ServiceUnavailableWhenEcommerceClientMissing(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
