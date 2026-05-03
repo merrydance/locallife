@@ -76,6 +76,9 @@ func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProces
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessProfitSharing(context.Context, *ProfitSharingPayload, ...asynq.Option) error {
 	return nil
 }
+func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessBaofuProfitSharing(context.Context, *BaofuProfitSharingPayload, ...asynq.Option) error {
+	return nil
+}
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessProfitSharingReceiverTarget(context.Context, *ProfitSharingReceiverTargetPayload, ...asynq.Option) error {
 	return nil
 }

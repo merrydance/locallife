@@ -382,3 +382,25 @@ WHERE
     AND o.updated_at > now() - INTERVAL '7 days'
 ORDER BY o.updated_at ASC, po.id ASC
 LIMIT $1;
+
+-- name: ListBaofuOrdersReadyForProfitSharing :many
+SELECT po.id AS payment_order_id, po.order_id
+FROM payment_orders po
+JOIN orders o ON po.order_id = o.id
+WHERE po.status = 'paid'
+  AND po.payment_channel = 'baofu_aggregate'
+  AND po.requires_profit_sharing = TRUE
+  AND po.business_type = 'order'
+  AND o.status = 'completed'
+  AND COALESCE(o.completed_at, o.updated_at) <= sqlc.arg(refund_closed_before)
+  AND NOT EXISTS (
+      SELECT 1 FROM refund_orders ro
+      WHERE ro.payment_order_id = po.id
+        AND ro.status IN ('pending', 'processing', 'success')
+  )
+  AND NOT EXISTS (
+      SELECT 1 FROM profit_sharing_orders pso
+      WHERE pso.payment_order_id = po.id
+  )
+ORDER BY COALESCE(o.completed_at, o.updated_at) ASC, po.id ASC
+LIMIT sqlc.arg('limit')::int;

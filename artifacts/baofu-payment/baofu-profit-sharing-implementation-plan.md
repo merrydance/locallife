@@ -711,7 +711,7 @@ Expected: merchant finance totals show platform/operator fees and Baofu payment 
 - Test: `locallife/worker/task_baofu_profit_sharing_test.go`
 - Test: `locallife/worker/task_baofu_profit_sharing_fact_application_test.go`
 
-- [ ] **Step 1: Gate share creation on refund-closed state**
+- [x] **Step 1: Gate share creation on refund-closed state**
 
 Share worker only selects paid Baofu orders when the related order is terminal for refund purposes:
 
@@ -1248,3 +1248,12 @@ make test-integration
 - Added a worker regression test for the command payload, receiver details, sanitized command snapshot, and processing transition.
 - Focused verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./worker -run 'TestProcessTaskBaofuProfitSharingCreatesShareCommand' -count=1`.
 - Residual risk: this slice assumes a pending Baofu share order already exists. It does not yet add the selector that gates creation on completed/refund-closed orders, does not query processing share orders, and does not add recovery scheduling.
+
+### 2026-05-03 Task 6 Partial - Refund-Closed Share Creation Gate
+
+- Added `ListBaofuOrdersReadyForProfitSharing` so Baofu share creation only selects paid `baofu_aggregate` order payments whose business order is `completed`, whose refund window cutoff has passed, which have no refund rows in `pending/processing/success`, and which have no existing `profit_sharing_orders` row for the same payment order.
+- Added `BaofuPaymentRecoveryScheduler` first slice: it scans refund-closed Baofu orders, creates the durable pending Baofu profit-sharing order through `BaofuProfitSharingService.CreatePendingOrder`, and enqueues `TaskProcessBaofuProfitSharing` after the DB transaction commits.
+- The scheduler uses the confirmed fixed first-version rates, platform 2% (`200` bps) and operator 3% (`300` bps), and still resolves actual receiver IDs only through canonical `sharing_mer_id`.
+- Added `DistributeTaskProcessBaofuProfitSharing` to the task distributor boundary plus Redis/noop/mock implementations so share command creation is an explicit queued side effect.
+- Focused verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./db/sqlc -run TestListBaofuOrdersReadyForProfitSharing_GatesCompletedPaidAndRefundClosed -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./worker -run 'TestBaofuPaymentRecoveryScheduler|TestProcessTaskBaofuProfitSharingCreatesShareCommand' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./db/sqlc ./worker -run 'TestListBaofuOrdersReadyForProfitSharing|TestBaofuPaymentRecoverySchedulerRunOnceCreatesPendingShareAndEnqueuesCommand|TestProcessTaskBaofuProfitSharingCreatesShareCommand' -count=1`.
+- Residual risk: this slice gates and enqueues share creation. It does not yet query `processing` Baofu share orders, query pending Baofu payments past callback SLA, query withdrawals, wire a production aggregatepay client into the worker runtime, or add the refund API guard; those remain Task 6 Step 4 and Task 7.

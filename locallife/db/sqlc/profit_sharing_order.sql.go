@@ -1011,6 +1011,59 @@ func (q *Queries) GetRiderProfitSharingStatusSummary(ctx context.Context, arg Ge
 	return items, nil
 }
 
+const listBaofuOrdersReadyForProfitSharing = `-- name: ListBaofuOrdersReadyForProfitSharing :many
+SELECT po.id AS payment_order_id, po.order_id
+FROM payment_orders po
+JOIN orders o ON po.order_id = o.id
+WHERE po.status = 'paid'
+  AND po.payment_channel = 'baofu_aggregate'
+  AND po.requires_profit_sharing = TRUE
+  AND po.business_type = 'order'
+  AND o.status = 'completed'
+  AND COALESCE(o.completed_at, o.updated_at) <= $1
+  AND NOT EXISTS (
+      SELECT 1 FROM refund_orders ro
+      WHERE ro.payment_order_id = po.id
+        AND ro.status IN ('pending', 'processing', 'success')
+  )
+  AND NOT EXISTS (
+      SELECT 1 FROM profit_sharing_orders pso
+      WHERE pso.payment_order_id = po.id
+  )
+ORDER BY COALESCE(o.completed_at, o.updated_at) ASC, po.id ASC
+LIMIT $2::int
+`
+
+type ListBaofuOrdersReadyForProfitSharingParams struct {
+	RefundClosedBefore pgtype.Timestamptz `json:"refund_closed_before"`
+	Limit              int32              `json:"limit"`
+}
+
+type ListBaofuOrdersReadyForProfitSharingRow struct {
+	PaymentOrderID int64       `json:"payment_order_id"`
+	OrderID        pgtype.Int8 `json:"order_id"`
+}
+
+func (q *Queries) ListBaofuOrdersReadyForProfitSharing(ctx context.Context, arg ListBaofuOrdersReadyForProfitSharingParams) ([]ListBaofuOrdersReadyForProfitSharingRow, error) {
+	rows, err := q.db.Query(ctx, listBaofuOrdersReadyForProfitSharing, arg.RefundClosedBefore, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListBaofuOrdersReadyForProfitSharingRow{}
+	for rows.Next() {
+		var i ListBaofuOrdersReadyForProfitSharingRow
+		if err := rows.Scan(&i.PaymentOrderID, &i.OrderID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCompletedOrdersMissingProfitSharing = `-- name: ListCompletedOrdersMissingProfitSharing :many
 SELECT po.id AS payment_order_id, po.order_id
 FROM payment_orders po

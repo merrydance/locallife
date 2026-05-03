@@ -27,6 +27,27 @@ type BaofuProfitSharingPayload struct {
 	ProfitSharingOrderID int64 `json:"profit_sharing_order_id"`
 }
 
+func (distributor *RedisTaskDistributor) DistributeTaskProcessBaofuProfitSharing(ctx context.Context, payload *BaofuProfitSharingPayload, opts ...asynq.Option) error {
+	if payload == nil || payload.ProfitSharingOrderID <= 0 {
+		return fmt.Errorf("baofu profit sharing order id is required")
+	}
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal baofu profit sharing payload: %w", err)
+	}
+	task := asynq.NewTask(TaskProcessBaofuProfitSharing, jsonPayload, opts...)
+	info, err := distributor.enqueueTask(ctx, task)
+	if err != nil {
+		return fmt.Errorf("enqueue baofu profit sharing task: %w", err)
+	}
+	log.Info().
+		Str("type", task.Type()).
+		Str("queue", info.Queue).
+		Int64("profit_sharing_order_id", payload.ProfitSharingOrderID).
+		Msg("enqueued baofu profit sharing task")
+	return nil
+}
+
 type baofuProfitSharingSnapshot struct {
 	Receivers []baofuProfitSharingSnapshotReceiver `json:"receivers"`
 }

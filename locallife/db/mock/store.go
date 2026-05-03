@@ -12667,6 +12667,21 @@ func (mr *MockStoreMockRecorder) ListBaofuFeeLedgerByPayer(ctx, arg any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListBaofuFeeLedgerByPayer", reflect.TypeOf((*MockStore)(nil).ListBaofuFeeLedgerByPayer), ctx, arg)
 }
 
+// ListBaofuOrdersReadyForProfitSharing mocks base method.
+func (m *MockStore) ListBaofuOrdersReadyForProfitSharing(ctx context.Context, arg db.ListBaofuOrdersReadyForProfitSharingParams) ([]db.ListBaofuOrdersReadyForProfitSharingRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListBaofuOrdersReadyForProfitSharing", ctx, arg)
+	ret0, _ := ret[0].([]db.ListBaofuOrdersReadyForProfitSharingRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListBaofuOrdersReadyForProfitSharing indicates an expected call of ListBaofuOrdersReadyForProfitSharing.
+func (mr *MockStoreMockRecorder) ListBaofuOrdersReadyForProfitSharing(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListBaofuOrdersReadyForProfitSharing", reflect.TypeOf((*MockStore)(nil).ListBaofuOrdersReadyForProfitSharing), ctx, arg)
+}
+
 // ListBehaviorActionsByDecision mocks base method.
 func (m *MockStore) ListBehaviorActionsByDecision(ctx context.Context, decisionID int64) ([]db.BehaviorAction, error) {
 	m.ctrl.T.Helper()

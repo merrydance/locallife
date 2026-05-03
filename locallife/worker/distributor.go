@@ -72,6 +72,13 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
+	// DistributeTaskProcessBaofuProfitSharing 分发宝付确认分账任务
+	DistributeTaskProcessBaofuProfitSharing(
+		ctx context.Context,
+		payload *BaofuProfitSharingPayload,
+		opts ...asynq.Option,
+	) error
+
 	// DistributeTaskProcessProfitSharingReceiverTarget 分发分账接收方生命周期同步任务
 	DistributeTaskProcessProfitSharingReceiverTarget(
 		ctx context.Context,

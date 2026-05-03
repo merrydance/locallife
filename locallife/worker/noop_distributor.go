@@ -56,6 +56,10 @@ func (NoopTaskDistributor) DistributeTaskProcessProfitSharing(ctx context.Contex
 	return financialTaskDistributorUnavailable("profit sharing")
 }
 
+func (NoopTaskDistributor) DistributeTaskProcessBaofuProfitSharing(ctx context.Context, payload *BaofuProfitSharingPayload, opts ...asynq.Option) error {
+	return financialTaskDistributorUnavailable("baofu profit sharing")
+}
+
 func (NoopTaskDistributor) DistributeTaskProcessProfitSharingReceiverTarget(ctx context.Context, payload *ProfitSharingReceiverTargetPayload, opts ...asynq.Option) error {
 	return financialTaskDistributorUnavailable("profit sharing receiver target")
 }

@@ -511,6 +511,7 @@ ExternalPaymentCapabilityBaofuWithdraw = "baofu_withdraw"
 
 - 实现手续费由商户承担的分账计算。
 - 实现分账单创建、分账明细快照。
+- 分账创建入口必须先通过本地退款互斥门禁：只扫描宝付已支付、订单已完成、退款窗口已关闭、无 `pending/processing/success` 退款、且未创建过分账单的支付单。
 - 调用 `share_after_pay`。
 - 实现分账通知、分账查询 worker。
 - 更新商户、骑手、运营商、平台收入视图。
