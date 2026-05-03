@@ -218,6 +218,24 @@ func expectOrderPaymentCommandAccepted(t *testing.T, store *mockdb.MockStore, pa
 		})
 }
 
+func expectActiveMerchantBaofuAccountForPaymentAPI(store *mockdb.MockStore, merchantID int64, subMchID string) {
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchantID,
+		}).
+		Times(1).
+		Return(db.BaofuAccountBinding{
+			OwnerType:      db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:        merchantID,
+			AccountType:    db.BaofuAccountTypeBusiness,
+			OpenState:      db.BaofuAccountOpenStateActive,
+			ContractNo:     pgtype.Text{String: "CMAPI", Valid: true},
+			SharingMerID:   pgtype.Text{String: "CMAPI", Valid: true},
+			WechatSubMchID: pgtype.Text{String: subMchID, Valid: true},
+		}, nil)
+}
+
 // ==================== CreatePaymentOrder Tests ====================
 
 func TestCreatePaymentOrderAPI(t *testing.T) {
@@ -264,6 +282,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 					GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+				expectActiveMerchantBaofuAccountForPaymentAPI(store, merchant.ID, "1900000109")
 
 				store.EXPECT().
 					GetUser(gomock.Any(), user.ID).
@@ -331,6 +350,46 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, paymentOrder.ID, response.ID)
 				require.Equal(t, "pending", response.Status)
+			},
+		},
+		{
+			name: "MerchantBaofuAccountMissing",
+			body: gin.H{
+				"order_id":      order.ID,
+				"business_type": "order",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ordinaryClient *mockordinaryserviceprovider.MockOrdinaryServiceProviderClientInterface) {
+				store.EXPECT().
+					GetOrder(gomock.Any(), order.ID).
+					Times(1).
+					Return(order, nil)
+
+				store.EXPECT().
+					GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+						OwnerType: db.BaofuAccountOwnerTypeMerchant,
+						OwnerID:   merchant.ID,
+					}).
+					Times(1).
+					Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
+				store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).Times(0)
+				ordinaryClient.EXPECT().CreatePayment(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				var resp APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.Equal(t, "商户结算账户未开通，暂不能创建支付订单", resp.Message)
+				require.NotContains(t, resp.Message, "contract")
+				require.NotContains(t, resp.Message, "sharing")
+				require.NotContains(t, resp.Message, "provider")
 			},
 		},
 		{
@@ -456,6 +515,21 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 						GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
 						Times(1).
 						Return(db.PaymentOrder{}, db.ErrRecordNotFound),
+					store.EXPECT().
+						GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+							OwnerType: db.BaofuAccountOwnerTypeMerchant,
+							OwnerID:   merchant.ID,
+						}).
+						Times(1).
+						Return(db.BaofuAccountBinding{
+							OwnerType:      db.BaofuAccountOwnerTypeMerchant,
+							OwnerID:        merchant.ID,
+							AccountType:    db.BaofuAccountTypeBusiness,
+							OpenState:      db.BaofuAccountOpenStateActive,
+							ContractNo:     pgtype.Text{String: "CMAPI", Valid: true},
+							SharingMerID:   pgtype.Text{String: "CMAPI", Valid: true},
+							WechatSubMchID: pgtype.Text{String: "1900000109", Valid: true},
+						}, nil),
 					store.EXPECT().
 						GetMerchant(gomock.Any(), merchant.ID).
 						Times(1).

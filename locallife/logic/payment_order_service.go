@@ -303,6 +303,9 @@ func (svc *PaymentOrderService) createReservationOrdinaryServiceProviderPayment(
 	if svc.ordinaryProviderPayClient == nil {
 		return CreatePaymentOrderResult{}, fmt.Errorf("ordinary service provider client: not configured")
 	}
+	if err := ensureMerchantBaofuReadyForPayment(ctx, svc.store, merchantID); err != nil {
+		return CreatePaymentOrderResult{}, err
+	}
 	if merchantID > 0 {
 		merchant, err := svc.store.GetMerchant(ctx, merchantID)
 		if err == nil {
@@ -338,6 +341,9 @@ func (svc *PaymentOrderService) createOrderOrdinaryServiceProviderPayment(
 ) (CreatePaymentOrderResult, error) {
 	if svc.ordinaryProviderPayClient == nil {
 		return CreatePaymentOrderResult{}, fmt.Errorf("ordinary service provider client: not configured")
+	}
+	if err := ensureMerchantBaofuReadyForPayment(ctx, svc.store, merchantID); err != nil {
+		return CreatePaymentOrderResult{}, err
 	}
 	if merchantID > 0 {
 		merchant, err := svc.store.GetMerchant(ctx, merchantID)

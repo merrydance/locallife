@@ -540,6 +540,7 @@ Do not expose `contractNo`, `sharingMerId`, or raw upstream error payloads to or
 
 Current backend status: rider status now returns sanitized `settlement_account` readiness (`state`, `label`, `payment_ready`) and aligns `can_go_online` / `online_block_reason` with the same Baofu settlement guard. Merchant/operator/platform and frontend surfaces remain in later Task 3 slices.
 Merchant open status now also checks Baofu merchant readiness before allowing open-for-business: ordinary service provider channel identity must be active, Baofu merchant account binding must be active, and the binding must carry a WeChat channel identity. Merchant/operator/platform status response surfaces remain in later Task 3 slices.
+Single-order main-business payment creation now also checks merchant Baofu readiness before creating a new upstream payment order. Combined payment creation is still listed as residual work because it currently builds merchant/payment context inside `CreateCombinedPaymentTx`.
 
 - [ ] **Step 4: Validate API and onboarding workers**
 
@@ -1089,3 +1090,12 @@ make test-integration
 - Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestUpdateMerchantOpenStatus_RequireBaofuAccountWhenOpen' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestUpdateMerchantOpenStatus' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api ./worker -run 'TestProfitSharingCapability|TestOnboardingReview|TestRider|TestUpdateMerchantOpenStatus' -count=1`; `git diff --check`.
 - Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on the same 71 pre-existing oversized Go files, including existing `api/merchant.go`; the new merchant Baofu helper is in a small separate file.
 - Residual risk: this is an open-for-business guard, not yet the payment-creation guard. Task 3/4 still need direct Baofu payment-create enforcement, merchant/operator/platform readiness response surfaces, onboarding worker propagation, and frontend display/wizard updates.
+
+### 2026-05-03 Task 3 Partial - Single Order Payment Readiness Guard
+
+- Added a payment-creation Baofu readiness guard in `logic.PaymentOrderService` before new ordinary-service-provider main-business order payments create local payment rows or call upstream payment APIs.
+- Missing/unready merchant Baofu account now returns `商户结算账户未开通，暂不能创建支付订单`; missing WeChat channel identity on an otherwise active Baofu account returns `商户微信渠道待报备，暂不能创建微信生态支付订单`.
+- API coverage verifies the frontend-facing response is semantic and does not expose `contract`, `sharing`, provider internals, or upstream identifiers.
+- Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestPaymentOrderServiceCreatePaymentOrder_RequiresMerchantBaofuReadiness' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestPaymentOrderServiceCreatePaymentOrder' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestCreatePaymentOrderAPI' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api ./logic -run 'TestCreatePaymentOrderAPI|TestPaymentOrderServiceCreatePaymentOrder|TestBaofuAccountReadiness|TestUpdateMerchantOpenStatus' -count=1`; `git diff --check`.
+- Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on the same 71 pre-existing oversized Go files, including existing `logic/payment_order_service.go`; the new Baofu payment readiness helper is in a small separate file.
+- Residual risk: this guard covers single-order payment creation. Combined payment creation still needs a pre-transaction merchant Baofu readiness strategy or a transaction-level guard so it does not create local pending child payments before detecting an unready merchant.

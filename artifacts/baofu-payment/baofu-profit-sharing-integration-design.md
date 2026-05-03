@@ -213,17 +213,18 @@ merchant_amount = 10000 - 500 - 200 - 300 - 30 = 8970
 ### 6.3 支付流程
 
 1. 用户在微信小程序提交订单。
-2. 后端创建本地 `payment_orders`，通道为宝付聚合支付。
-3. 后端调用宝付 `unified_order`：
+2. 后端创建本地 `payment_orders` 前先做商户收款 readiness 校验：商户宝付二级户必须已开通并具备分账接收方标识，且微信/支付宝渠道报备标识必须已保存；不满足时直接拒绝创建支付单，不调用上游支付接口。
+3. 后端创建本地 `payment_orders`，通道为宝付聚合支付。
+4. 后端调用宝付 `unified_order`：
    - `prodType=SHARING`。
    - `orderType=7`。
    - `payCode=WECHAT_JSAPI`。
    - `payExtend.sub_appid` 为本平台小程序 appid。
    - `payExtend.sub_openid` 为付款用户 openid。
    - `subMchId` 为商户在微信/支付宝报备的二级商户号。
-4. 宝付返回 `chlRetParam.wc_pay_data`，后端转给小程序调起支付。
-5. 宝付支付通知到后端，后端验签、写入 `external_payment_facts`、幂等更新支付单。
-6. 支付成功后发布 outbox 事件，由 worker 发起分账。
+5. 宝付返回 `chlRetParam.wc_pay_data`，后端转给小程序调起支付。
+6. 宝付支付通知到后端，后端验签、写入 `external_payment_facts`、幂等更新支付单。
+7. 支付成功后发布 outbox 事件，由 worker 发起分账。
 
 ### 6.4 分账流程
 

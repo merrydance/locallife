@@ -133,6 +133,23 @@ func (c *fakeOrdinaryPaymentClient) GenerateJSAPIPayParams(prepayID string) (*os
 	return &ospcontracts.JSAPIPayParams{Package: "prepay_id=" + prepayID, NonceStr: "nonce-ordinary"}, nil
 }
 
+func expectActiveMerchantBaofuBindingForPayment(store *mockdb.MockStore, merchantID int64) {
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchantID,
+		}).
+		Return(db.BaofuAccountBinding{
+			OwnerType:      db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:        merchantID,
+			AccountType:    db.BaofuAccountTypeBusiness,
+			OpenState:      db.BaofuAccountOpenStateActive,
+			ContractNo:     pgtype.Text{String: "CM3001", Valid: true},
+			SharingMerID:   pgtype.Text{String: "CM3001", Valid: true},
+			WechatSubMchID: pgtype.Text{String: "sub-ordinary", Valid: true},
+		}, nil)
+}
+
 func TestPaymentOrderServiceCreatePaymentOrder_UsesOrdinaryServiceProviderForMainBusiness(t *testing.T) {
 	input := CreatePaymentOrderInput{
 		UserID:       1001,
@@ -171,6 +188,7 @@ func TestPaymentOrderServiceCreatePaymentOrder_UsesOrdinaryServiceProviderForMai
 		OrderID:      pgtype.Int8{Int64: input.OrderID, Valid: true},
 		BusinessType: businessTypeOrder,
 	}).Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+	expectActiveMerchantBaofuBindingForPayment(store, order.MerchantID)
 	store.EXPECT().GetUser(gomock.Any(), input.UserID).Return(db.User{ID: input.UserID, WechatOpenid: "openid"}, nil)
 	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(db.Merchant{ID: order.MerchantID, Name: "Merchant A"}, nil)
 	store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreatePartnerPaymentTxParams) (db.CreatePartnerPaymentTxResult, error) {
@@ -211,6 +229,49 @@ func TestPaymentOrderServiceCreatePaymentOrder_UsesOrdinaryServiceProviderForMai
 	require.Equal(t, "127.0.0.1", ordinaryClient.createPaymentRequest.SceneInfo.PayerClientIP)
 	require.Equal(t, "https://api.example.com/v1/webhooks/wechat-ordinary/payment-notify", ordinaryClient.createPaymentRequest.NotifyURL)
 	require.False(t, ordinaryClient.createPaymentRequest.SettleInfo.ProfitSharing)
+}
+
+func TestPaymentOrderServiceCreatePaymentOrder_RequiresMerchantBaofuReadiness(t *testing.T) {
+	input := CreatePaymentOrderInput{
+		UserID:       1001,
+		OrderID:      2001,
+		PaymentType:  paymentTypeMiniProgram,
+		BusinessType: businessTypeOrder,
+		ClientIP:     "127.0.0.1",
+	}
+	order := db.Order{
+		ID:          input.OrderID,
+		UserID:      input.UserID,
+		MerchantID:  3001,
+		OrderType:   orderTypeTakeaway,
+		Status:      "pending",
+		TotalAmount: 1000,
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{}
+
+	store.EXPECT().GetOrder(gomock.Any(), input.OrderID).Return(order, nil)
+	store.EXPECT().GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: input.OrderID, Valid: true},
+		BusinessType: businessTypeOrder,
+	}).Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+		OwnerType: db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:   order.MerchantID,
+	}).Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
+	store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).Times(0)
+
+	svc := NewPaymentOrderServiceWithOrdinaryServiceProvider(store, nil, ordinaryClient)
+	_, err := svc.CreatePaymentOrder(context.Background(), input)
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusBadRequest, reqErr.Status)
+	require.Equal(t, "商户结算账户未开通，暂不能创建支付订单", reqErr.Err.Error())
+	require.Nil(t, ordinaryClient.createPaymentRequest)
 }
 
 func TestPaymentOrderServiceCreatePaymentOrder_LogsOrdinaryMarkFailedCleanupError(t *testing.T) {
@@ -255,6 +316,7 @@ func TestPaymentOrderServiceCreatePaymentOrder_LogsOrdinaryMarkFailedCleanupErro
 		OrderID:      pgtype.Int8{Int64: input.OrderID, Valid: true},
 		BusinessType: businessTypeOrder,
 	}).Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+	expectActiveMerchantBaofuBindingForPayment(store, order.MerchantID)
 	store.EXPECT().GetUser(gomock.Any(), input.UserID).Return(db.User{ID: input.UserID, WechatOpenid: "openid"}, nil)
 	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(db.Merchant{ID: order.MerchantID, Name: "Merchant A"}, nil)
 	store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).Return(db.CreatePartnerPaymentTxResult{
