@@ -181,6 +181,11 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 	if len(orderIDs) > combinedOrderMaxCount {
 		return result, NewRequestError(http.StatusBadRequest, fmt.Errorf("too many orders, max %d", combinedOrderMaxCount))
 	}
+	if svc.mainBusinessPaymentChannel == db.PaymentChannelOrdinaryServiceProvider {
+		if err := ensureCombinedPaymentMerchantsBaofuReady(ctx, svc.store, input.UserID, orderIDs); err != nil {
+			return result, err
+		}
+	}
 
 	user, err := svc.store.GetUser(ctx, input.UserID)
 	if err != nil {
