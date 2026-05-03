@@ -751,7 +751,7 @@ baofu_withdrawal_orders status processing -> query withdraw
 
 Each query result inserts an `external_payment_facts` row, then fact application advances business state.
 
-- [ ] **Step 5: Validate share workflow**
+- [x] **Step 5: Validate share workflow**
 
 Run from `locallife/`:
 
@@ -1267,3 +1267,9 @@ make test-integration
 - Corrected the account contract normalization so `AccountResult.Normalized()` no longer copies `contract_no` into `sharing_mer_id`; the Baofu-returned secondary merchant id must be present as its own field before an account can become share-ready.
 - Focused verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./worker -run 'TestBaofuPaymentRecoverySchedulerRunOnceQueriesPendingPaymentAndEnqueuesFactApplication|TestBaofuPaymentRecoverySchedulerRunOnceQueriesProcessingShareAndEnqueuesFactApplication' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./logic ./worker ./baofu/aggregatepay -run 'TestBaofuPayment|TestBaofuPaymentRecoveryScheduler|TestProcessTaskBaofuProfitSharing|TestBaofuProfitSharing' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./baofu/account/contracts ./logic -run 'TestAccountResultDoesNotFallbackSharingMerIDFromContractNo|TestBaofuAccountServicePaymentReadinessRequiresCanonicalSharingMerID|TestBaofuAccountServiceOpenAccountRecordsCommandBeforeClientCall' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./baofu/account/contracts ./baofu/aggregatepay ./logic ./worker ./db/sqlc -run 'TestAccountResult|TestBaofuAccountService|TestBaofuPayment|TestBaofuProfitSharing|TestBaofuPaymentRecoveryScheduler|TestProcessTaskBaofuProfitSharing|TestListBaofuOrdersReadyForProfitSharing' -count=1`; `PATH="/usr/local/go/bin:$PATH" make check-generated`; `git diff --check`.
 - Residual risk: withdrawal query recovery is still pending because the BaoCaiTong withdrawal request/query client and local withdrawal fact application are Task 8 scope. The production runtime still needs a concrete Baofu aggregatepay transport client wired into workers/schedulers before enabling the scheduler.
+
+### 2026-05-03 Task 6 Step 5 - Share Workflow Validation
+
+- Ran the Task 6 validation command from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./worker ./logic -run 'TestBaofuProfitSharing|TestBaofuPaymentRecovery' -count=1`.
+- Verified the current Baofu share workflow coverage: share command worker emits `share_after_pay` once for the pending share order under test, processing/success share query recovery persists facts and enqueues application only for terminal facts, and success fact application terminalizes the local share order through the existing single-writer path.
+- Remaining Task 6 gap is limited to withdrawal query recovery and production aggregatepay client runtime wiring; refund/share API concurrency is tracked in Task 7.
