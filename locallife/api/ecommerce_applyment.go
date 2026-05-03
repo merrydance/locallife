@@ -1260,7 +1260,7 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 				remoteStatusDesc = strings.TrimSpace(wxResp.ApplymentStateMsg)
 			}
 
-			// 普通服务商进件完成以 FINISHED + sub_mchid 为准，不再查询渠道商开户意愿授权状态。
+			// 普通服务商进件完成以 FINISHED + sub_mchid 为准，不再查询渠道商授权状态。
 			if updateStatus == "finish" && nextSubMchID.Valid && strings.TrimSpace(nextSubMchID.String) != "" {
 				err = server.store.ApplymentSubMchActivationTx(ctx, db.ApplymentSubMchActivationTxParams{
 					ApplymentID: applyment.ID,

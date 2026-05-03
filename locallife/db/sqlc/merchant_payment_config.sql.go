@@ -158,3 +158,41 @@ func (q *Queries) UpdateMerchantPaymentConfigSettlementApplication(ctx context.C
 	)
 	return i, err
 }
+
+const upsertMerchantPaymentConfig = `-- name: UpsertMerchantPaymentConfig :one
+INSERT INTO merchant_payment_configs (
+    merchant_id,
+    sub_mch_id,
+    status
+) VALUES (
+    $1, $2, $3
+)
+ON CONFLICT (merchant_id) DO UPDATE
+SET
+    sub_mch_id = EXCLUDED.sub_mch_id,
+    status = EXCLUDED.status,
+    updated_at = now()
+RETURNING id, merchant_id, sub_mch_id, status, created_at, updated_at, latest_settlement_application_no, latest_settlement_application_submitted_at
+`
+
+type UpsertMerchantPaymentConfigParams struct {
+	MerchantID int64  `json:"merchant_id"`
+	SubMchID   string `json:"sub_mch_id"`
+	Status     string `json:"status"`
+}
+
+func (q *Queries) UpsertMerchantPaymentConfig(ctx context.Context, arg UpsertMerchantPaymentConfigParams) (MerchantPaymentConfig, error) {
+	row := q.db.QueryRow(ctx, upsertMerchantPaymentConfig, arg.MerchantID, arg.SubMchID, arg.Status)
+	var i MerchantPaymentConfig
+	err := row.Scan(
+		&i.ID,
+		&i.MerchantID,
+		&i.SubMchID,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LatestSettlementApplicationNo,
+		&i.LatestSettlementApplicationSubmittedAt,
+	)
+	return i, err
+}

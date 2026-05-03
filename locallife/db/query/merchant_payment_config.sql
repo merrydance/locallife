@@ -7,6 +7,21 @@ INSERT INTO merchant_payment_configs (
     $1, $2, $3
 ) RETURNING *;
 
+-- name: UpsertMerchantPaymentConfig :one
+INSERT INTO merchant_payment_configs (
+    merchant_id,
+    sub_mch_id,
+    status
+) VALUES (
+    $1, $2, $3
+)
+ON CONFLICT (merchant_id) DO UPDATE
+SET
+    sub_mch_id = EXCLUDED.sub_mch_id,
+    status = EXCLUDED.status,
+    updated_at = now()
+RETURNING *;
+
 -- name: GetMerchantPaymentConfig :one
 SELECT id, merchant_id, sub_mch_id, status, created_at, updated_at, latest_settlement_application_no, latest_settlement_application_submitted_at FROM merchant_payment_configs
 WHERE merchant_id = $1 LIMIT 1;

@@ -242,3 +242,133 @@
   - Prompt routing：`PATH="$HOME/.local/bin:$PATH" node .github/scripts/prompt_routing_test.js` 通过。
   - 生成物检查：`PATH="/usr/local/go/bin:$HOME/go/bin:$PATH" make check-generated` 首次发现 Swagger 生成物未同步；保留生成后的 `docs.go`、`swagger.json`、`swagger.yaml` 后重跑通过。
 - Review 结果：通过。微信支付域 README 已沉淀普通服务商开户完成态规则、邮箱必填、小程序开户流程、微信待办和终态页边界；Swagger 生成物同步了 `account_authorize_state` 兼容字段说明；后端、小程序、prompt governance 和生成物检查均已验证。
+
+
+## 后续修复计划：开户完成激活与可营业状态残留
+
+### 线上报错根因
+
+报错：
+
+```text
+activate applyment: update merchant payment config: no rows in result set
+```
+
+真实路径：
+
+1. `payment:process_fact_application` 任务调用 `PaymentFactService.ApplyExternalPaymentFactApplication`。
+2. 进件事实进入 `applyApplymentFact`，在 `finish + sub_mch_id` 时调用 `ApplymentSubMchActivationTx`。
+3. `ApplymentSubMchActivationTx` 先写 `ecommerce_applyments.status=finish` 和 `ecommerce_applyments.sub_mch_id`。
+4. 事务随后调用 `UpdateMerchantPaymentConfig`，要求 `merchant_payment_configs` 已存在该 `merchant_id` 的行。
+5. 当前生产提交开户链路没有创建 `merchant_payment_configs` 初始行；代码库中 `CreateMerchantPaymentConfig` 除测试外没有生产调用。
+6. 因此新开户商户在完成态激活时，`UPDATE merchant_payment_configs WHERE merchant_id=$1 RETURNING *` 找不到行，返回 `no rows in result set`，整个激活事务回滚。
+
+根因：激活事务把 `merchant_payment_configs` 当成必然已存在的前置记录，但普通服务商提交链路没有创建该记录；`finish + sub_mch_id` 的激活 owner 应该能幂等创建或更新商户支付配置。
+
+### 修复目标
+
+- 普通服务商 `finish + sub_mch_id` 必须幂等完成本地激活：写进件终态、写支付配置子商户号、激活支付配置、更新商户状态为 `active`。
+- 不再依赖 `AUTHORIZE_STATE_AUTHORIZED` 创建开户成功 outbox 或判断激活完成。
+- 商户手动开店失败文案不得再出现“开户意愿授权”。
+- 激活事务可安全重试，适配已有配置行和缺失配置行两种生产状态。
+
+### 任务 1：支付配置激活改为幂等 upsert
+
+**文件：**
+
+- 修改：`locallife/db/query/merchant_payment_config.sql`
+- 修改：`locallife/db/sqlc/tx_notification.go`
+- 测试：`locallife/db/sqlc/tx_applyment_activation_test.go`
+- 生成：`locallife/db/sqlc/merchant_payment_config.sql.go`
+- 生成：`locallife/db/mock/store.go`
+
+步骤：
+
+1. 在 `tx_applyment_activation_test.go` 增加 RED：无 `merchant_payment_configs` 行时，`ApplymentSubMchActivationTx` 仍应创建配置、写入 `sub_mch_id`、设置 `status=active`、商户 `status=active`。
+2. 运行：`PATH="/usr/local/go/bin:$PATH" go test -count=1 ./db/sqlc -run 'ApplymentSubMchActivation'`，期望新增测试先失败并复现 `no rows in result set`。
+3. 在 `merchant_payment_config.sql` 增加 `UpsertMerchantPaymentConfig`，使用 `INSERT ... ON CONFLICT (merchant_id) DO UPDATE SET sub_mch_id=EXCLUDED.sub_mch_id, status=EXCLUDED.status, updated_at=now() RETURNING *`。
+4. 运行：`PATH="/usr/local/go/bin:$HOME/go/bin:$PATH" make sqlc`。
+5. 在 `ApplymentSubMchActivationTx` 中用 `UpsertMerchantPaymentConfig` 替代 `UpdateMerchantPaymentConfig`。
+6. 重跑 db 聚焦测试。
+
+### 任务 2：修正开户成功 outbox 激活判定
+
+**文件：**
+
+- 修改：`locallife/logic/payment_fact_application_service.go`
+- 测试：`locallife/logic/payment_fact_application_service_test.go`
+
+步骤：
+
+1. 将 `TestPaymentFactServiceApplyExternalPaymentFactApplication_OrdinaryApplymentFinishWithoutAuthorizationDoesNotActivate` 改为普通服务商无授权状态也创建 activated outbox。
+2. 运行：`PATH="/usr/local/go/bin:$PATH" go test -count=1 ./logic -run 'PaymentFactServiceApplyExternalPaymentFactApplication_OrdinaryApplymentFinish'`，期望先失败。
+3. 在 `applyApplymentFact` 中，`finish + sub_mch_id` 且 `ApplymentSubMchActivationTx` 成功后，`Activated` 直接置为 `true`。
+4. 保留 `AccountAuthorizeState` 只作为兼容字段，不作为普通服务商激活/outbox 门槛。
+5. 重跑 logic 聚焦测试。
+
+### 任务 3：修正商户开店失败文案
+
+**文件：**
+
+- 修改：`locallife/api/merchant.go`
+- 测试：`locallife/api/merchant_status_test.go`
+
+步骤：
+
+1. 更新 `TestUpdateMerchantOpenStatus_RequireApplymentWhenOpen_InactivePaymentConfig`，断言响应不包含“开户意愿授权”，并包含“微信支付进件”和“结算账户配置”。
+2. 运行：`PATH="/usr/local/go/bin:$PATH" go test -count=1 ./api -run 'UpdateMerchantOpenStatus_RequireApplymentWhenOpen'`，期望先失败。
+3. 将失败文案改为“普通服务商特约商户未激活，请先完成微信支付进件和结算账户配置后再开业”。
+4. 重跑 API 聚焦测试。
+
+### 任务 4：恢复链路验证
+
+**文件：**
+
+- 检查：`locallife/worker/applyment_recovery_scheduler.go`
+- 检查：`locallife/worker/task_payment_domain_outbox.go`
+- 测试：`locallife/worker/applyment_recovery_scheduler_test.go`
+- 测试：`locallife/worker/task_payment_domain_outbox_test.go`
+
+步骤：
+
+1. 确认 `finish + sub_mch_id` 恢复查询会记录 applyment activated fact 并 enqueue `payment:process_fact_application`。
+2. 确认 activated outbox 发送“微信支付开户成功”通知后会 `MarkEcommerceApplymentResultProcessed(... finish)`。
+3. 运行：`PATH="/usr/local/go/bin:$PATH" go test -count=1 ./worker -run 'ApplymentRecovery|PaymentDomainOutbox|PaymentFactApplication'`。
+
+### 收口验证
+
+修复完成后运行：
+
+```bash
+cd locallife
+PATH="/usr/local/go/bin:$PATH" go test -count=1 ./db/sqlc -run 'ApplymentSubMchActivation'
+PATH="/usr/local/go/bin:$PATH" go test -count=1 ./logic -run 'PaymentFactServiceApplyExternalPaymentFactApplication_OrdinaryApplymentFinish|ApplymentSubmission|ContactEmail|Ordinary'
+PATH="/usr/local/go/bin:$PATH" go test -count=1 ./api -run 'UpdateMerchantOpenStatus_RequireApplymentWhenOpen|MerchantBindBank|MerchantApplyment|ContactEmail|Applyment'
+PATH="/usr/local/go/bin:$PATH" go test -count=1 ./worker -run 'ApplymentRecovery|PaymentDomainOutbox|PaymentFactApplication'
+PATH="/usr/local/go/bin:$HOME/go/bin:$PATH" make check-generated
+
+cd ../weapp
+PATH="$HOME/.local/bin:$PATH" npm run quality:check
+```
+
+### 执行结果（2026-05-03）
+
+- [x] 任务 1：已完成。新增无 `merchant_payment_configs` 行的事务回归测试；`ApplymentSubMchActivationTx` 改为 `UpsertMerchantPaymentConfig`，`finish + sub_mch_id` 可幂等创建或更新支付配置，并继续将 `merchants.status` 推进为 `active`。
+- [x] 任务 2：已完成。普通服务商 `APPLYMENT_STATE_FINISHED + sub_mch_id` 的 activated outbox 不再依赖 `AUTHORIZE_STATE_AUTHORIZED`；`account_authorize_state` 只保留为兼容字段。
+- [x] 任务 3：已完成。商户开店失败文案和结算账户未激活错误文案均移除“开户意愿授权”，只提示完成微信支付进件和结算账户配置。
+- [x] 任务 4：已完成。恢复链路确认 `finish + sub_mch_id` 会记录 activated fact 并投递 `payment:process_fact_application`；activated outbox 发布成功后会将进件结果处理状态标记为 `finish`。
+
+验证结果：
+
+- RED：`PATH="/usr/local/go/bin:$PATH" go test -count=1 ./db/sqlc -run 'ApplymentSubMchActivation'` 先失败并复现 `update merchant payment config: no rows in result set`。
+- RED：`PATH="/usr/local/go/bin:$PATH" go test -count=1 ./logic -run 'PaymentFactServiceApplyExternalPaymentFactApplication_OrdinaryApplymentFinish'` 先失败，证明无授权状态未创建 activated outbox。
+- RED：`PATH="/usr/local/go/bin:$PATH" go test -count=1 ./api -run 'UpdateMerchantOpenStatus_RequireApplymentWhenOpen'` 先失败，证明响应仍包含“开户意愿授权”。
+- 后端验证：`PATH="/usr/local/go/bin:$PATH" go test -count=1 ./db/sqlc -run 'ApplymentSubMchActivation'` 通过。
+- 后端验证：`PATH="/usr/local/go/bin:$PATH" go test -count=1 ./logic -run 'PaymentFactServiceApplyExternalPaymentFactApplication_OrdinaryApplymentFinish|ApplymentSubmission|ContactEmail|Ordinary'` 通过。
+- 后端验证：`PATH="/usr/local/go/bin:$PATH" go test -count=1 ./api -run 'UpdateMerchantOpenStatus_RequireApplymentWhenOpen|MerchantBindBank|MerchantApplyment|ContactEmail|Applyment'` 通过。
+- 后端验证：`PATH="/usr/local/go/bin:$PATH" go test -count=1 ./api -run 'UpdateMerchantOpenStatus_RequireApplymentWhenOpen|MerchantBindBank|MerchantApplyment|ContactEmail|Applyment|SettlementAccount'` 通过。
+- 后端验证：`PATH="/usr/local/go/bin:$PATH" go test -count=1 ./worker -run 'ApplymentRecovery|PaymentDomainOutbox|PaymentFactApplication'` 通过。
+- 生成物检查：`PATH="/usr/local/go/bin:$HOME/go/bin:$PATH" make check-generated` 通过。
+- 小程序全量门禁：`PATH="$HOME/.local/bin:$PATH" npm run quality:check` 通过。
+
+Review 结果：通过。线上报错根因已在激活事务 owner 层修复，不依赖提交链路预创建支付配置；开户完成事实、恢复任务、outbox 通知和商户开业前置校验均以普通服务商完成态 `finish + sub_mch_id` 为准，不再把渠道商开户意愿授权作为完成门槛。

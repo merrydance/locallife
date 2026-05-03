@@ -1918,6 +1918,7 @@ type Querier interface {
 	UpsertMerchantCapabilities(ctx context.Context, arg UpsertMerchantCapabilitiesParams) (MerchantCapability, error)
 	UpsertMerchantCapabilitiesDefaults(ctx context.Context, merchantID int64) error
 	UpsertMerchantMembershipSettings(ctx context.Context, arg UpsertMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
+	UpsertMerchantPaymentConfig(ctx context.Context, arg UpsertMerchantPaymentConfigParams) (MerchantPaymentConfig, error)
 	UpsertMerchantSystemLabel(ctx context.Context, arg UpsertMerchantSystemLabelParams) error
 	UpsertOCRJob(ctx context.Context, arg UpsertOCRJobParams) (OcrJob, error)
 	UpsertOrderDisplayConfig(ctx context.Context, arg UpsertOrderDisplayConfigParams) (OrderDisplayConfig, error)

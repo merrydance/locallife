@@ -111,13 +111,13 @@ func (store *SQLStore) ApplymentSubMchActivationTx(ctx context.Context, arg Appl
 			return nil
 		}
 
-		// step 2: 更新商户支付配置。普通服务商完成态不再等待渠道商开户意愿授权。
-		if _, err := q.UpdateMerchantPaymentConfig(ctx, UpdateMerchantPaymentConfigParams{
+		// step 2: 幂等创建或更新商户支付配置。普通服务商完成态不再等待渠道商授权。
+		if _, err := q.UpsertMerchantPaymentConfig(ctx, UpsertMerchantPaymentConfigParams{
 			MerchantID: arg.SubjectID,
-			SubMchID:   pgtype.Text{String: arg.SubMchID, Valid: true},
-			Status:     pgtype.Text{String: MerchantPaymentConfigStatusActive, Valid: true},
+			SubMchID:   arg.SubMchID,
+			Status:     MerchantPaymentConfigStatusActive,
 		}); err != nil {
-			return fmt.Errorf("update merchant payment config: %w", err)
+			return fmt.Errorf("upsert merchant payment config: %w", err)
 		}
 
 		// step 3: 更新商户状态为 active

@@ -377,7 +377,7 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_ClaimRecoveryPaym
 	require.True(t, result.ClaimRecoveryPayment.Processed)
 }
 
-func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrdinaryApplymentFinishWithoutAuthorizationDoesNotActivate(t *testing.T) {
+func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrdinaryApplymentFinishWithoutAuthorizationActivatesMerchant(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -403,6 +403,7 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrdinaryApplyment
 		SubMchID:          "sub_mch_850",
 	}).Return(nil)
 	store.EXPECT().GetEcommerceApplyment(gomock.Any(), application.BusinessObjectID).Return(applymentAfter, nil)
+	expectApplymentActivatedOutbox(t, store, application, fact, applymentAfter)
 	expectFactTerminalized(t, store, fact.ID, now)
 	expectApplicationApplied(t, store, application, now)
 
@@ -412,7 +413,7 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrdinaryApplyment
 	result, err := svc.ApplyExternalPaymentFactApplication(context.Background(), application.ID)
 	require.NoError(t, err)
 	require.True(t, result.Applied)
-	require.Nil(t, result.Outbox)
+	require.NotNil(t, result.Outbox)
 }
 
 func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrdinaryApplymentFinishWithStoredAuthorizationActivatesMerchant(t *testing.T) {

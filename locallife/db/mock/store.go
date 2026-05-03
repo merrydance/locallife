@@ -21647,6 +21647,21 @@ func (mr *MockStoreMockRecorder) UpsertMerchantMembershipSettings(ctx, arg any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertMerchantMembershipSettings", reflect.TypeOf((*MockStore)(nil).UpsertMerchantMembershipSettings), ctx, arg)
 }
 
+// UpsertMerchantPaymentConfig mocks base method.
+func (m *MockStore) UpsertMerchantPaymentConfig(ctx context.Context, arg db.UpsertMerchantPaymentConfigParams) (db.MerchantPaymentConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertMerchantPaymentConfig", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantPaymentConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertMerchantPaymentConfig indicates an expected call of UpsertMerchantPaymentConfig.
+func (mr *MockStoreMockRecorder) UpsertMerchantPaymentConfig(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertMerchantPaymentConfig", reflect.TypeOf((*MockStore)(nil).UpsertMerchantPaymentConfig), ctx, arg)
+}
+
 // UpsertMerchantSystemLabel mocks base method.
 func (m *MockStore) UpsertMerchantSystemLabel(ctx context.Context, arg db.UpsertMerchantSystemLabelParams) error {
 	m.ctrl.T.Helper()

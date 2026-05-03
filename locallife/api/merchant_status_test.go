@@ -87,6 +87,7 @@ func TestUpdateMerchantOpenStatus_RequireApplymentWhenOpen_InactivePaymentConfig
 	server.router.ServeHTTP(recorder, req)
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 	require.Contains(t, recorder.Body.String(), "普通服务商特约商户未激活")
-	require.Contains(t, recorder.Body.String(), "开户意愿授权")
+	require.NotContains(t, recorder.Body.String(), "开户意愿授权")
+	require.Contains(t, recorder.Body.String(), "微信支付进件")
 	require.Contains(t, recorder.Body.String(), "结算账户")
 }

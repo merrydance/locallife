@@ -502,7 +502,7 @@ func (svc *PaymentFactService) applyApplymentFact(ctx context.Context, applicati
 		result = applymentDomainResult{
 			Applyment:  updatedApplyment,
 			MerchantID: updatedApplyment.SubjectID,
-			Activated:  strings.TrimSpace(updatedApplyment.AccountAuthorizeState.String) == db.AccountAuthorizeStateAuthorized,
+			Activated:  true,
 		}
 		return result, nil
 	case "rejected", "frozen", "canceled":

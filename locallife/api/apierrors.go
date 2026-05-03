@@ -308,7 +308,7 @@ var (
 	ErrSettlementWechatFrequencyLimit                 = apierr(42951, "微信支付结算账户请求过于频繁，请稍后重试并避免短时间重复提交")
 	ErrSettlementApplicationQueryFrequencyLimit       = apierr(42952, "微信支付结算账户申请查询过于频繁，请稍后重试")
 	ErrSettlementWechatServiceUnavailable             = apierr(50051, "微信支付普通服务商结算账户接口暂不可用，请稍后重试；如持续失败请联系平台管理员查看结算账户服务日志并处理")
-	ErrSettlementAccountInactive                      = apierr(42251, "商户普通服务商支付账户尚未激活，请先完成进件和开户意愿授权后再操作结算账户")
+	ErrSettlementAccountInactive                      = apierr(42251, "商户普通服务商支付账户尚未激活，请先完成微信支付进件后再操作结算账户")
 	ErrSettlementWechatInvalidResponse                = apierr(50219, "微信支付普通服务商结算账户返回内容异常，请稍后重试；如持续失败请联系平台管理员排查微信返回")
 	ErrMerchantCancelWithdrawSignError                = apierr(40111, "wechat cancel-withdraw signature verification failed: please retry later or contact support")
 	ErrMerchantCancelWithdrawPermissionDenied         = apierr(40366, "you do not have permission to access this cancel-withdraw application")

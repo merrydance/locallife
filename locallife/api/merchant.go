@@ -557,7 +557,7 @@ func (server *Server) updateMerchantOpenStatus(ctx *gin.Context) {
 		}
 
 		if paymentConfig.SubMchID == "" || paymentConfig.Status != "active" {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("普通服务商特约商户未激活，请先完成微信支付进件、开户意愿授权和结算账户配置后再开业")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("普通服务商特约商户未激活，请先完成微信支付进件和结算账户配置后再开业")))
 			return
 		}
 	}
