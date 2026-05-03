@@ -1196,3 +1196,12 @@ make test-integration
 - The calculator rejects negative merchant amount before any future share-order write path can persist an invalid split.
 - TDD verification: first run failed with missing `CalculateBaofuPaymentFeeFen`, `CalculateBaofuProfitSharingAmounts`, `BaofuProfitSharingAmountInput`, and `ErrBaofuProfitSharingMerchantAmountNegative`; after implementation, `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestCalculateBaofu' -count=1` passed.
 - Residual risk: this slice is pure calculation only. It does not yet resolve Baofu receiver IDs, write `profit_sharing_orders` Baofu receiver/fee columns, write `baofu_fee_ledger`, or update finance API display.
+
+### 2026-05-03 Task 5 Partial - Receiver Resolution
+
+- Added `logic.ResolveBaofuProfitSharingReceivers` to resolve merchant, rider, operator, and platform Baofu receiver IDs from `baofu_account_bindings`.
+- Receiver resolution uses `sharing_mer_id` first and falls back to `contract_no` only when `sharing_mer_id` is empty, matching the documented `sharingMerId` boundary that receivers are Baofu/BaoCaiTong secondary-account identifiers rather than WeChat openid/subMchId.
+- Resolver requires active Baofu bindings and rejects inactive, missing, or receiver-less bindings before a future share order can be written.
+- Platform receiver resolution defaults to the platform singleton owner (`owner_type=platform`, `owner_id=0`); rider/operator receiver resolution is conditional on the caller providing a rider/operator ID.
+- TDD verification: first run failed with missing `ResolveBaofuProfitSharingReceivers` and `BaofuProfitSharingReceiverInput`; after implementation, `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestResolveBaofuProfitSharingReceivers|TestCalculateBaofu' -count=1` passed.
+- Residual risk: this slice resolves receivers only. It does not yet persist the resolved IDs into `profit_sharing_orders.*_sharing_mer_id`, build `sharing_detail_snapshot`, write fee ledger rows, or create the Baofu share command.
