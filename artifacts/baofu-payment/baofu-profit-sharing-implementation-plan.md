@@ -565,7 +565,7 @@ Expected: merchant readiness requires Baofu active account plus channel report i
 - Test: `locallife/logic/baofu_payment_service_test.go`
 - Test: `locallife/worker/task_baofu_payment_fact_application_test.go`
 
-- [ ] **Step 1: Define unified order request**
+- [x] **Step 1: Define unified order request**
 
 Baofu payment service must create aggregate payment with:
 
@@ -1130,3 +1130,12 @@ make test-integration
 - Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestGetPlatformBaofuSettlementStatusAPI_IncludesSanitizedReadiness' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestGetPlatformBaofuSettlementStatusAPI_IncludesSanitizedReadiness|TestGetPlatformAccountBalanceAPI|TestGetOperatorApplicationAPI_IncludesBaofuSettlementReadiness|TestGetMerchantOpenStatus_IncludesBaofuSettlementReadiness|TestGetRiderStatusAPI' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api ./logic -run 'TestGetPlatformBaofuSettlementStatusAPI|TestGetOperatorApplicationAPI|TestGetMerchantOpenStatus|TestGetRiderStatusAPI|TestBaofuAccountReadiness' -count=1`; `PATH="/usr/local/go/bin:$PATH" make swagger`; `PATH="/usr/local/go/bin:$PATH" make check-generated`; `git diff --check`.
 - Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on the same 71 pre-existing oversized Go files, including existing `api/server.go` and `api/platform_finance.go`; the new platform Baofu helper is in a small separate file.
 - Residual risk: Task 3 still needs onboarding worker propagation and frontend display/wizard updates.
+
+### 2026-05-03 Task 4 Partial - Aggregate Payment Contracts
+
+- Verified BaoCaiTong aggregate payment docs for unified order, confirm sharing, payment notification, sharing notification, payment query, sharing query, order state appendix, and channel return appendix.
+- Added project-level aggregate payment contract DTOs in `locallife/baofu/aggregatepay/contracts/types.go` for WeChat JSAPI `SHARING` unified order, channel return `wc_pay_data`, payment facts, `share_after_pay`, share facts, and payment/share terminal-state normalization.
+- Locked the no receiver-identity mixup invariant in tests: payer `sub_openid` only appears in `payExtend`, while share receivers use `sharingMerId`; the unified-order request never writes `sharingMerId`.
+- Implemented Baofu state mapping for payment (`WAIT_PAYING` -> processing, `SUCCESS` -> success, `CLOSED` -> closed, `PAY_ERROR` -> failed, `REFUND` -> success for pre-share refund handling, `ABNORMAL` -> unknown) and sharing (`PROCESSING` -> processing, `SUCCESS` -> success, `CANCELED` -> failed, `ABNORMAL` -> unknown).
+- Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" gofmt -w baofu/aggregatepay/contracts/types.go baofu/aggregatepay/contracts/types_test.go`; `PATH="/usr/local/go/bin:$PATH" go test ./baofu/aggregatepay/contracts -run 'TestUnifiedOrder|TestNormalizePaymentTerminalStatus|TestShareAfterPay|TestNormalizeShareTerminalStatus' -count=1`.
+- Residual risk: this slice is contract-only. It does not yet route main-business payment creation to Baofu, persist Baofu payment commands/facts, apply payment success, or wire runtime transport.
