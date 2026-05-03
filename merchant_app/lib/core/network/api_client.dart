@@ -4,6 +4,17 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:merchant_app/config/env.dart';
 import 'package:merchant_app/core/service/auth_session_controller.dart';
 
+Map<String, dynamic> extractApiResponseData(dynamic payload) {
+  if (payload is Map<String, dynamic>) {
+    final data = payload['data'];
+    if (data is Map<String, dynamic>) {
+      return data;
+    }
+    return payload;
+  }
+  return <String, dynamic>{};
+}
+
 class ApiClient {
   final Dio _dio;
   final Dio _refreshDio;
@@ -89,9 +100,7 @@ class ApiClient {
         data: {'refresh_token': refreshToken},
       );
 
-      final data = response.data is Map<String, dynamic>
-          ? response.data as Map<String, dynamic>
-          : <String, dynamic>{};
+      final data = extractApiResponseData(response.data);
       final accessToken = data['access_token']?.toString();
       final newRefreshToken = data['refresh_token']?.toString();
 

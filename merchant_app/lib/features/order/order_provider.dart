@@ -46,7 +46,10 @@ class OrderNotifier extends StateNotifier<OrderState> {
   Future<List<OrderModel>> fetchOrders() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final response = await _apiClient.get('/merchant/orders');
+      final response = await _apiClient.get(
+        '/merchant/orders',
+        queryParameters: const {'page_id': 1, 'page_size': 20},
+      );
       final orders = _extractOrdersFromResponse(response.data);
       state = state.copyWith(orders: orders, isLoading: false);
       return List<OrderModel>.from(orders);

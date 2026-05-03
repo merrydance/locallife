@@ -168,7 +168,7 @@ class _OrderListPageState extends ConsumerState<OrderListPage> {
                 onTap: () async {
                   Navigator.pop(context);
                   if (!isAuthenticated) {
-                    context.push('/login');
+                    context.go('/login');
                     return;
                   }
 
@@ -231,7 +231,7 @@ class _OrderListPageState extends ConsumerState<OrderListPage> {
                         const SizedBox(height: AppSpacing.xl),
                         MerchantPrimaryButton(
                           label: '立即绑定商户',
-                          onPressed: () => context.push('/login'),
+                          onPressed: () => context.go('/login'),
                         ),
                       ],
                     ),
