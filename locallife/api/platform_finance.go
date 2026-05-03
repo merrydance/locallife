@@ -25,6 +25,10 @@ type platformAccountBalanceResponse struct {
 	PendingAmount   int64  `json:"pending_amount"`
 }
 
+type platformBaofuSettlementStatusResponse struct {
+	SettlementAccount *baofuSettlementReadinessResponse `json:"settlement_account"`
+}
+
 type fundBalanceAccountTypeNormalizer func(string) (string, error)
 
 func bindSubMerchantFundBalanceQuery(ctx *gin.Context) (fundBalanceQueryRequest, bool) {
@@ -136,5 +140,27 @@ func (server *Server) getPlatformAccountBalance(ctx *gin.Context) {
 		BalanceDate:     query.Date,
 		AvailableAmount: balance.AvailableAmount,
 		PendingAmount:   balance.PendingAmount,
+	})
+}
+
+// getPlatformBaofuSettlementStatus 查询平台宝付结算账户状态
+// @Summary 查询平台宝付结算账户状态
+// @Description 管理员查询平台佣金接收方宝付二级户开通状态；响应只返回产品状态，不暴露宝付账户号、分账接收方标识或上游原始数据
+// @Tags 平台财务
+// @Produce json
+// @Success 200 {object} platformBaofuSettlementStatusResponse
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 403 {object} ErrorResponse "无权限"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Security BearerAuth
+// @Router /v1/platform/finance/settlement-account/status [get]
+func (server *Server) getPlatformBaofuSettlementStatus(ctx *gin.Context) {
+	readiness, err := server.getPlatformBaofuSettlementReadiness(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	ctx.JSON(http.StatusOK, platformBaofuSettlementStatusResponse{
+		SettlementAccount: newBaofuSettlementReadinessResponse(readiness),
 	})
 }

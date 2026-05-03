@@ -23258,6 +23258,49 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/platform/finance/settlement-account/status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员查询平台佣金接收方宝付二级户开通状态；响应只返回产品状态，不暴露宝付账户号、分账接收方标识或上游原始数据",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "查询平台宝付结算账户状态",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.platformBaofuSettlementStatusResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/platform/finance/wechat-ecommerce/violation-notification": {
             "get": {
                 "security": [
@@ -43355,6 +43398,14 @@ const docTemplate = `{
                 },
                 "title": {
                     "type": "string"
+                }
+            }
+        },
+        "api.platformBaofuSettlementStatusResponse": {
+            "type": "object",
+            "properties": {
+                "settlement_account": {
+                    "$ref": "#/definitions/api.baofuSettlementReadinessResponse"
                 }
             }
         },

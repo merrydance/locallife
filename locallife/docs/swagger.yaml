@@ -6906,6 +6906,11 @@ definitions:
       title:
         type: string
     type: object
+  api.platformBaofuSettlementStatusResponse:
+    properties:
+      settlement_account:
+        $ref: '#/definitions/api.baofuSettlementReadinessResponse'
+    type: object
   api.platformDailyStatRow:
     properties:
       active_merchants:
@@ -26022,6 +26027,33 @@ paths:
       security:
       - BearerAuth: []
       summary: 查询平台微信支付账户余额
+      tags:
+      - 平台财务
+  /v1/platform/finance/settlement-account/status:
+    get:
+      description: 管理员查询平台佣金接收方宝付二级户开通状态；响应只返回产品状态，不暴露宝付账户号、分账接收方标识或上游原始数据
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.platformBaofuSettlementStatusResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询平台宝付结算账户状态
       tags:
       - 平台财务
   /v1/platform/finance/wechat-ecommerce/violation-notification:

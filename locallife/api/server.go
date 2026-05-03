@@ -1466,6 +1466,7 @@ func (server *Server) setupRouter() {
 	platformFinanceGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
 	{
 		platformFinanceGroup.GET("/account/balance", server.gateEcommerceFundManagementWhenOrdinaryActive("platform account balance", server.getPlatformAccountBalance))
+		platformFinanceGroup.GET("/settlement-account/status", server.getPlatformBaofuSettlementStatus)
 		platformFinanceGroup.GET("/wechat-ecommerce/violation-notification", server.getPlatformViolationNotificationConfig)
 		platformFinanceGroup.POST("/wechat-ecommerce/violation-notification", server.createPlatformViolationNotificationConfig)
 		platformFinanceGroup.PUT("/wechat-ecommerce/violation-notification", server.updatePlatformViolationNotificationConfig)
