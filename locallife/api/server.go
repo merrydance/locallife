@@ -60,42 +60,43 @@ type successMessageResponse struct {
 
 // Server serves HTTP requests for our banking service.
 type Server struct {
-	config                      util.Config
-	store                       db.Store
-	tokenMaker                  token.Maker
-	auditWriter                 AuditWriter
-	wechatClient                wechat.WechatClient
-	directPaymentClient         wechat.DirectPaymentClientInterface                            // 小程序直连支付（骑手押金、追偿付款）
-	transferClient              wechat.TransferClientInterface                                 // 商家转账到零钱（索赔赔付）
-	ecommerceClient             wechat.EcommerceClientInterface                                // 平台收付通（历史/冷备路径）
-	ordinarySPClient            ordinaryserviceprovider.OrdinaryServiceProviderClientInterface // 普通服务商支付（商户主业务支付）
-	dataEncryptor               util.DataEncryptor                                             // 敏感数据加密器（本地存储加密）
-	mapClient                   maps.TencentMapClientInterface                                 // 地图客户端（自建 OSM）
-	weatherCache                weather.WeatherCache
-	taskDistributor             worker.TaskDistributor
-	wsHub                       *websocket.Hub           // WebSocket连接管理（骑手和商户）
-	wsPubSub                    *websocket.PubSubManager // Redis Pub/Sub管理（跨进程推送）
-	deliveryBroadcast           *logic.DeliveryBroadcastLogic
-	rateLimiter                 *RateLimiter
-	mediaRegistry               *media.Registry
-	mediaResolver               *media.URLResolver
-	imageDeleter                *imageDeleteWorker   // 有界异步图片删除 worker pool
-	keywordWorker               *searchKeywordWorker // 有界异步搜索关键词记录 worker pool
-	rulesEngine                 rules.Engine
-	routeService                *logic.RouteService
-	orderCommandSvc             logic.OrderCommandService
-	orderQuerySvc               logic.OrderQueryService
-	paymentFacade               logic.PaymentFacade
-	refundOrchestrator          logic.RefundOrchestrator
-	paymentFactService          *logic.PaymentFactService
-	onboardingReviewService     *logic.OnboardingReviewService
-	credentialGovernanceService *logic.CredentialGovernanceService
-	mediaStorage                media.ObjectStorage
-	printerClient               cloudprint.Client
-	router                      *gin.Engine
-	applymentCatalogCache       *applymentCatalogCache
-	applymentCatalogCacheMu     sync.Mutex
-	redisClient                 *redis.Client // Redis 客户端（绑定码等功能使用）
+	config                         util.Config
+	store                          db.Store
+	tokenMaker                     token.Maker
+	auditWriter                    AuditWriter
+	wechatClient                   wechat.WechatClient
+	directPaymentClient            wechat.DirectPaymentClientInterface                            // 小程序直连支付（骑手押金、追偿付款）
+	transferClient                 wechat.TransferClientInterface                                 // 商家转账到零钱（索赔赔付）
+	ecommerceClient                wechat.EcommerceClientInterface                                // 平台收付通（历史/冷备路径）
+	ordinarySPClient               ordinaryserviceprovider.OrdinaryServiceProviderClientInterface // 普通服务商支付（商户主业务支付）
+	dataEncryptor                  util.DataEncryptor                                             // 敏感数据加密器（本地存储加密）
+	mapClient                      maps.TencentMapClientInterface                                 // 地图客户端（自建 OSM）
+	weatherCache                   weather.WeatherCache
+	taskDistributor                worker.TaskDistributor
+	wsHub                          *websocket.Hub           // WebSocket连接管理（骑手和商户）
+	wsPubSub                       *websocket.PubSubManager // Redis Pub/Sub管理（跨进程推送）
+	deliveryBroadcast              *logic.DeliveryBroadcastLogic
+	rateLimiter                    *RateLimiter
+	mediaRegistry                  *media.Registry
+	mediaResolver                  *media.URLResolver
+	imageDeleter                   *imageDeleteWorker   // 有界异步图片删除 worker pool
+	keywordWorker                  *searchKeywordWorker // 有界异步搜索关键词记录 worker pool
+	rulesEngine                    rules.Engine
+	routeService                   *logic.RouteService
+	orderCommandSvc                logic.OrderCommandService
+	orderQuerySvc                  logic.OrderQueryService
+	paymentFacade                  logic.PaymentFacade
+	refundOrchestrator             logic.RefundOrchestrator
+	paymentFactService             *logic.PaymentFactService
+	onboardingReviewService        *logic.OnboardingReviewService
+	credentialGovernanceService    *logic.CredentialGovernanceService
+	baofuAccountNotificationParser baofuAccountNotificationParser
+	mediaStorage                   media.ObjectStorage
+	printerClient                  cloudprint.Client
+	router                         *gin.Engine
+	applymentCatalogCache          *applymentCatalogCache
+	applymentCatalogCacheMu        sync.Mutex
+	redisClient                    *redis.Client // Redis 客户端（绑定码等功能使用）
 }
 
 // SetDirectPaymentClientForTest injects a payment client in tests.
@@ -575,6 +576,8 @@ func (server *Server) setupRouter() {
 		webhooksGroup.POST("/wechat-ordinary/refund-notify", server.handleOrdinaryServiceProviderRefundNotify)
 		webhooksGroup.POST("/wechat-ordinary/profit-sharing-notify", server.handleOrdinaryServiceProviderProfitSharingNotify)
 		webhooksGroup.POST("/wechat-ordinary/violation-notify", server.handleOrdinaryServiceProviderViolationNotify)
+		// 宝付宝财通回调
+		webhooksGroup.POST("/baofu/account/open", server.handleBaofuAccountOpenNotify)
 		// 微信用户投诉通知（合规要求，状态变更实时推送）
 		webhooksGroup.POST("/wechat-ecommerce/complaint-notify", server.handleComplaintNotify)
 		webhooksGroup.POST("/wechat-ecommerce/violation-notify", server.handleViolationNotify)

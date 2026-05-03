@@ -617,6 +617,9 @@ type Querier interface {
 	GetActiveRecommendConfig(ctx context.Context) (RecommendConfig, error)
 	GetActiveRiderCredentialLedgers(ctx context.Context, riderID pgtype.Int8) ([]CredentialLedger, error)
 	GetApplicableDiscountRules(ctx context.Context, arg GetApplicableDiscountRulesParams) ([]DiscountRule, error)
+	GetBaofuAccountBinding(ctx context.Context, id int64) (BaofuAccountBinding, error)
+	GetBaofuAccountBindingByContractNo(ctx context.Context, contractNo pgtype.Text) (BaofuAccountBinding, error)
+	GetBaofuAccountBindingByOwner(ctx context.Context, arg GetBaofuAccountBindingByOwnerParams) (BaofuAccountBinding, error)
 	GetBehaviorAction(ctx context.Context, id int64) (BehaviorAction, error)
 	GetBehaviorDecision(ctx context.Context, id int64) (BehaviorDecision, error)
 	GetBehaviorEffectSummary(ctx context.Context, arg GetBehaviorEffectSummaryParams) (GetBehaviorEffectSummaryRow, error)
@@ -1422,6 +1425,7 @@ type Querier interface {
 	ListPlatformConfigsByKey(ctx context.Context, configKey string) ([]PlatformConfig, error)
 	ListPrintLogsByOrder(ctx context.Context, orderID int64) ([]ListPrintLogsByOrderRow, error)
 	ListPrintLogsByPrinter(ctx context.Context, arg ListPrintLogsByPrinterParams) ([]PrintLog, error)
+	ListProcessingBaofuAccountBindings(ctx context.Context, arg ListProcessingBaofuAccountBindingsParams) ([]BaofuAccountBinding, error)
 	ListProfitSharingConfigAudits(ctx context.Context, arg ListProfitSharingConfigAuditsParams) ([]ProfitSharingConfigAudit, error)
 	ListProfitSharingConfigs(ctx context.Context, arg ListProfitSharingConfigsParams) ([]ProfitSharingConfig, error)
 	ListProfitSharingConfigsForRegion(ctx context.Context, arg ListProfitSharingConfigsForRegionParams) ([]ProfitSharingConfig, error)
@@ -1541,6 +1545,9 @@ type Querier interface {
 	ListWithdrawalRecords(ctx context.Context, arg ListWithdrawalRecordsParams) ([]WithdrawalRecord, error)
 	MarkAllNotificationsAsRead(ctx context.Context, userID int64) error
 	MarkAllOperatorNotificationsAsRead(ctx context.Context, userID int64) error
+	MarkBaofuAccountBindingActive(ctx context.Context, arg MarkBaofuAccountBindingActiveParams) (BaofuAccountBinding, error)
+	MarkBaofuAccountBindingFailed(ctx context.Context, arg MarkBaofuAccountBindingFailedParams) (BaofuAccountBinding, error)
+	MarkBaofuAccountBindingProcessing(ctx context.Context, arg MarkBaofuAccountBindingProcessingParams) (BaofuAccountBinding, error)
 	MarkClaimPaid(ctx context.Context, arg MarkClaimPaidParams) error
 	MarkClaimRecoveryDisputed(ctx context.Context, id int64) (ClaimRecovery, error)
 	MarkClaimRecoveryOverdue(ctx context.Context, id int64) (ClaimRecovery, error)
@@ -1910,6 +1917,7 @@ type Querier interface {
 	UpdateWechatComplaintState(ctx context.Context, arg UpdateWechatComplaintStateParams) (WechatComplaint, error)
 	UpdateWithdrawalAccountInfo(ctx context.Context, arg UpdateWithdrawalAccountInfoParams) (WithdrawalRecord, error)
 	UpdateWithdrawalStatus(ctx context.Context, arg UpdateWithdrawalStatusParams) (WithdrawalRecord, error)
+	UpsertBaofuAccountBinding(ctx context.Context, arg UpsertBaofuAccountBindingParams) (BaofuAccountBinding, error)
 	UpsertCloudPrinterReconciliationJob(ctx context.Context, arg UpsertCloudPrinterReconciliationJobParams) (CloudPrinterReconciliationJob, error)
 	// 添加或更新菜品标签关联
 	UpsertDishTag(ctx context.Context, arg UpsertDishTagParams) error

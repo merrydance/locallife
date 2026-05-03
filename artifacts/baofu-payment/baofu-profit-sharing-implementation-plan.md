@@ -421,11 +421,11 @@ Expected: all Baofu package tests pass.
 - Test: `locallife/logic/baofu_account_service_test.go`
 - Test: `locallife/api/baofu_callback_test.go`
 
-- [ ] **Step 1: Add sqlc account binding queries**
+- [x] **Step 1: Add sqlc account binding queries**
 
 Create `locallife/db/query/baofu_account_binding.sql` with queries for upsert by owner, get by owner, get by contract, mark processing, mark active, mark failed, list processing for recovery. `MarkBaofuAccountBindingActive` must write both `contract_no` and `sharing_mer_id`.
 
-- [ ] **Step 2: Define account contract DTOs**
+- [x] **Step 2: Define account contract DTOs**
 
 Define normalized project-level types:
 
@@ -456,7 +456,7 @@ type AccountResult struct {
 }
 ```
 
-- [ ] **Step 3: Enforce owner/account rules in service**
+- [x] **Step 3: Enforce owner/account rules in service**
 
 `locallife/logic/baofu_account_service.go` must enforce:
 
@@ -470,24 +470,21 @@ rider active account -> no wechat_sub_mch_id requirement
 merchant active account -> wechat_sub_mch_id required before payment creation, not before account opening
 ```
 
-- [ ] **Step 4: Record command for account opening**
+- [x] **Step 4: Record command for account opening**
 
 Before calling Baofu open account, insert `external_payment_commands` with provider `baofu`, channel `baofu_aggregate`, capability `baofu_account`, command type `open_baofu_account`, business owner matching the local owner, and external key `out_request_no`.
 
-- [ ] **Step 5: Normalize account notifications into facts**
+- [x] **Step 5: Normalize account notifications into facts**
 
-`locallife/api/baofu_callback.go` routes:
+`locallife/api/baofu_callback.go` registers the account callback on the existing webhook namespace:
 
 ```text
-POST /v1/payment-callbacks/baofu/account/open
-POST /v1/payment-callbacks/baofu/withdraw
-POST /v1/payment-callbacks/baofu/payment
-POST /v1/payment-callbacks/baofu/profit-sharing
+POST /v1/webhooks/baofu/account/open
 ```
 
-The account callback handler verifies/decrypts via `locallife/baofu/account/notification`, inserts an `external_payment_facts` row, and returns Baofu ACK only after persistence succeeds.
+The account callback handler verifies/decrypts via `locallife/baofu/account/notification`, inserts an `external_payment_facts` row, and returns Baofu ACK only after persistence succeeds. Payment, profit-sharing, and withdrawal callback routes remain in their own payment/withdraw task cards so Task 2 does not expose unimplemented money-movement callbacks as successful paths.
 
-- [ ] **Step 6: Validate account path**
+- [x] **Step 6: Validate account path**
 
 Run from `locallife/`:
 
@@ -1049,3 +1046,14 @@ make test-integration
 - Added placeholder package roots for account and aggregate payment submodules so subsequent task cards can add contracts without changing package layout.
 - Added tests for config merchant separation, default normalization, deterministic JSON, RSA sign/verify, sensitive log field redaction, union-gw round trip, and tamper rejection.
 - Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" gofmt -w locallife/baofu`; `PATH="/usr/local/go/bin:$PATH" go test ./baofu ./baofu/crypto ./baofu/account ./baofu/account/contracts ./baofu/account/notification ./baofu/aggregatepay ./baofu/aggregatepay/contracts ./baofu/aggregatepay/notification -count=1`; `git diff --check`.
+
+### 2026-05-03 Task 2
+
+- Added BaoCaiTong account binding sqlc queries for owner upsert, owner/contract lookup, active/failed/processing transitions, and stale processing scans; `make sqlc` regenerated `db/sqlc`, `db/mock`, `worker/mock`, and WeChat mocks.
+- Added Baofu account contracts and notification parsing with normalized `contractNo` / `sharingMerId` handling, upstream state mapping, union-gw decrypt/verify boundary, and missing-codec rejection.
+- Added `logic.BaofuAccountService` to enforce owner/account-type rules, merchant WeChat channel identity readiness, receiver readiness, and command-before-client-call audit persistence for account opening.
+- Added `POST /v1/webhooks/baofu/account/open` callback handling; it persists an `external_payment_facts` callback fact before ACK and keeps unresolved `business_object_type/id` null to satisfy the external fact pair constraint until a later application worker resolves the local binding.
+- Review/fix notes: fixed the callback fact business object pair so DB constraints cannot reject account callbacks without a known binding ID; defaulted empty account raw snapshots to `{}` for JSONB safety; added a parser configuration guard.
+- Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" make sqlc`; `PATH="/usr/local/go/bin:$PATH" go test ./db/sqlc ./baofu/account ./baofu/account/contracts ./baofu/account/notification ./logic ./api -run 'TestBaofuAccount|TestBaofuCallback' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./db/sqlc -run 'TestBaofuAccountBinding|TestMarkBaofuAccountBinding' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./baofu/account ./baofu/account/contracts ./baofu/account/notification ./logic ./api -count=1`; `PATH="/usr/local/go/bin:$PATH" make check-generated`; `git diff --check`.
+- Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on 71 pre-existing oversized Go files; Task 2 new files are under the 500-line guardrail.
+- Residual risk: Task 2 stops at account opening contracts, persistence, command creation, and account callback fact capture. It does not yet wire runtime Baofu config into `NewServer`, does not call real BaoCaiTong account transport, and does not apply callback facts into `baofu_account_bindings`; those remain assigned to later task cards before production traffic.

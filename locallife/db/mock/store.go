@@ -6372,6 +6372,51 @@ func (mr *MockStoreMockRecorder) GetApplicableDiscountRules(ctx, arg any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetApplicableDiscountRules", reflect.TypeOf((*MockStore)(nil).GetApplicableDiscountRules), ctx, arg)
 }
 
+// GetBaofuAccountBinding mocks base method.
+func (m *MockStore) GetBaofuAccountBinding(ctx context.Context, id int64) (db.BaofuAccountBinding, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuAccountBinding", ctx, id)
+	ret0, _ := ret[0].(db.BaofuAccountBinding)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuAccountBinding indicates an expected call of GetBaofuAccountBinding.
+func (mr *MockStoreMockRecorder) GetBaofuAccountBinding(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuAccountBinding", reflect.TypeOf((*MockStore)(nil).GetBaofuAccountBinding), ctx, id)
+}
+
+// GetBaofuAccountBindingByContractNo mocks base method.
+func (m *MockStore) GetBaofuAccountBindingByContractNo(ctx context.Context, contractNo pgtype.Text) (db.BaofuAccountBinding, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuAccountBindingByContractNo", ctx, contractNo)
+	ret0, _ := ret[0].(db.BaofuAccountBinding)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuAccountBindingByContractNo indicates an expected call of GetBaofuAccountBindingByContractNo.
+func (mr *MockStoreMockRecorder) GetBaofuAccountBindingByContractNo(ctx, contractNo any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuAccountBindingByContractNo", reflect.TypeOf((*MockStore)(nil).GetBaofuAccountBindingByContractNo), ctx, contractNo)
+}
+
+// GetBaofuAccountBindingByOwner mocks base method.
+func (m *MockStore) GetBaofuAccountBindingByOwner(ctx context.Context, arg db.GetBaofuAccountBindingByOwnerParams) (db.BaofuAccountBinding, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuAccountBindingByOwner", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountBinding)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuAccountBindingByOwner indicates an expected call of GetBaofuAccountBindingByOwner.
+func (mr *MockStoreMockRecorder) GetBaofuAccountBindingByOwner(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuAccountBindingByOwner", reflect.TypeOf((*MockStore)(nil).GetBaofuAccountBindingByOwner), ctx, arg)
+}
+
 // GetBehaviorAction mocks base method.
 func (m *MockStore) GetBehaviorAction(ctx context.Context, id int64) (db.BehaviorAction, error) {
 	m.ctrl.T.Helper()
@@ -15112,6 +15157,21 @@ func (mr *MockStoreMockRecorder) ListPrintLogsByPrinter(ctx, arg any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPrintLogsByPrinter", reflect.TypeOf((*MockStore)(nil).ListPrintLogsByPrinter), ctx, arg)
 }
 
+// ListProcessingBaofuAccountBindings mocks base method.
+func (m *MockStore) ListProcessingBaofuAccountBindings(ctx context.Context, arg db.ListProcessingBaofuAccountBindingsParams) ([]db.BaofuAccountBinding, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListProcessingBaofuAccountBindings", ctx, arg)
+	ret0, _ := ret[0].([]db.BaofuAccountBinding)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListProcessingBaofuAccountBindings indicates an expected call of ListProcessingBaofuAccountBindings.
+func (mr *MockStoreMockRecorder) ListProcessingBaofuAccountBindings(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListProcessingBaofuAccountBindings", reflect.TypeOf((*MockStore)(nil).ListProcessingBaofuAccountBindings), ctx, arg)
+}
+
 // ListProfitSharingConfigAudits mocks base method.
 func (m *MockStore) ListProfitSharingConfigAudits(ctx context.Context, arg db.ListProfitSharingConfigAuditsParams) ([]db.ProfitSharingConfigAudit, error) {
 	m.ctrl.T.Helper()
@@ -16548,6 +16608,51 @@ func (m *MockStore) MarkAllOperatorNotificationsAsRead(ctx context.Context, user
 func (mr *MockStoreMockRecorder) MarkAllOperatorNotificationsAsRead(ctx, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkAllOperatorNotificationsAsRead", reflect.TypeOf((*MockStore)(nil).MarkAllOperatorNotificationsAsRead), ctx, userID)
+}
+
+// MarkBaofuAccountBindingActive mocks base method.
+func (m *MockStore) MarkBaofuAccountBindingActive(ctx context.Context, arg db.MarkBaofuAccountBindingActiveParams) (db.BaofuAccountBinding, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkBaofuAccountBindingActive", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountBinding)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkBaofuAccountBindingActive indicates an expected call of MarkBaofuAccountBindingActive.
+func (mr *MockStoreMockRecorder) MarkBaofuAccountBindingActive(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBaofuAccountBindingActive", reflect.TypeOf((*MockStore)(nil).MarkBaofuAccountBindingActive), ctx, arg)
+}
+
+// MarkBaofuAccountBindingFailed mocks base method.
+func (m *MockStore) MarkBaofuAccountBindingFailed(ctx context.Context, arg db.MarkBaofuAccountBindingFailedParams) (db.BaofuAccountBinding, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkBaofuAccountBindingFailed", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountBinding)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkBaofuAccountBindingFailed indicates an expected call of MarkBaofuAccountBindingFailed.
+func (mr *MockStoreMockRecorder) MarkBaofuAccountBindingFailed(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBaofuAccountBindingFailed", reflect.TypeOf((*MockStore)(nil).MarkBaofuAccountBindingFailed), ctx, arg)
+}
+
+// MarkBaofuAccountBindingProcessing mocks base method.
+func (m *MockStore) MarkBaofuAccountBindingProcessing(ctx context.Context, arg db.MarkBaofuAccountBindingProcessingParams) (db.BaofuAccountBinding, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkBaofuAccountBindingProcessing", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountBinding)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkBaofuAccountBindingProcessing indicates an expected call of MarkBaofuAccountBindingProcessing.
+func (mr *MockStoreMockRecorder) MarkBaofuAccountBindingProcessing(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBaofuAccountBindingProcessing", reflect.TypeOf((*MockStore)(nil).MarkBaofuAccountBindingProcessing), ctx, arg)
 }
 
 // MarkClaimPaid mocks base method.
@@ -21557,6 +21662,21 @@ func (m *MockStore) UpdateWithdrawalStatus(ctx context.Context, arg db.UpdateWit
 func (mr *MockStoreMockRecorder) UpdateWithdrawalStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWithdrawalStatus", reflect.TypeOf((*MockStore)(nil).UpdateWithdrawalStatus), ctx, arg)
+}
+
+// UpsertBaofuAccountBinding mocks base method.
+func (m *MockStore) UpsertBaofuAccountBinding(ctx context.Context, arg db.UpsertBaofuAccountBindingParams) (db.BaofuAccountBinding, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertBaofuAccountBinding", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountBinding)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertBaofuAccountBinding indicates an expected call of UpsertBaofuAccountBinding.
+func (mr *MockStoreMockRecorder) UpsertBaofuAccountBinding(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertBaofuAccountBinding", reflect.TypeOf((*MockStore)(nil).UpsertBaofuAccountBinding), ctx, arg)
 }
 
 // UpsertCloudPrinterReconciliationJob mocks base method.
