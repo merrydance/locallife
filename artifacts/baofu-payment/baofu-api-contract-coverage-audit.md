@@ -54,6 +54,7 @@
 - `share_after_pay` 官方字段不包含 `subMchId`。分账接收方仍必须是宝财通开户返回并同步到本地 `sharing_mer_id` 的宝付二级商户号。
 - 本地已补入官方字段级 DTO、公共报文、聚合商户报备、退款、关单、官方错误码本地分类和微信类目 allowlist；剩余漂移风险集中在宝财通 union-gw 官方加密/签名 envelope 完整性、响应验签/数字信封、真实渠道错误组合、回调真实 payload 与沙箱证据。
 - “防漂移”的实现标准不能只靠文档：必须把官方必填/条件必填、字段类型长度、枚举、错误码、金额单位、回调 ACK 形态、测试/生产 endpoint 都变成 typed constants、校验器和表驱动测试。
+- 已新增 `make check-baofu-contract` 静态守卫，阻断已发现的漂移回归：响应层直接读 `BizContent`、误用旧 `https://api.baofoo.com`、分账携带 `subMchId`、用宝付一级商户号填 `sharingMerId`、重新引入静态 `BAOFU_AES_KEY`。
 
 
 ## 2.2 Source Ledger

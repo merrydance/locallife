@@ -1512,9 +1512,9 @@ git commit -m "fix(baofu): lock error and status contracts"
 - Modify: `locallife/Makefile`
 - Modify: `artifacts/baofu-payment/baofu-api-contract-coverage-audit.md`
 
-- [ ] **Step 1: Create static guard script**
+- [x] **Step 1: Create static guard script**
 
-The script must fail on known drift patterns:
+The script must fail on known drift patterns. It excludes `*_test.go` fixtures so negative tests can still mention deprecated values intentionally:
 
 ```bash
 #!/usr/bin/env bash
@@ -1529,7 +1529,7 @@ cd "$(dirname "$0")/.."
 ! rg -n 'BAOFU_AES_KEY' baofu util app.env.example
 ```
 
-- [ ] **Step 2: Wire make target**
+- [x] **Step 2: Wire make target**
 
 Add:
 
@@ -1538,7 +1538,7 @@ check-baofu-contract:
 	./scripts/check_baofu_contract_drift.sh
 ```
 
-- [ ] **Step 3: Validate**
+- [x] **Step 3: Validate**
 
 ```bash
 cd locallife
@@ -1546,7 +1546,7 @@ chmod +x scripts/check_baofu_contract_drift.sh
 make check-baofu-contract
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add locallife/scripts/check_baofu_contract_drift.sh locallife/Makefile artifacts/baofu-payment/baofu-api-contract-coverage-audit.md
