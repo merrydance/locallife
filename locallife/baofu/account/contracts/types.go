@@ -30,12 +30,14 @@ type OpenAccountRequest struct {
 type QueryAccountRequest struct {
 	OutRequestNo string
 	ContractNo   string
+	AccountType  string
 }
 
 type BalanceQueryRequest struct {
-	MerchantID string
-	TerminalID string
-	ContractNo string
+	MerchantID  string
+	TerminalID  string
+	ContractNo  string
+	AccountType string
 }
 
 type BalanceResult struct {

@@ -40,7 +40,7 @@ func (c *Client) QueryAccount(ctx context.Context, req contracts.QueryAccountReq
 	}
 	officialReq := contracts.OfficialQueryAccountRequest{
 		Version:     contracts.OfficialOpenAccountVersion,
-		AccountType: contracts.OfficialAccountTypeBusiness,
+		AccountType: officialAccountType(req.AccountType),
 		ContractNo:  strings.TrimSpace(req.ContractNo),
 		LoginNo:     strings.TrimSpace(req.OutRequestNo),
 	}
@@ -61,7 +61,7 @@ func (c *Client) QueryBalance(ctx context.Context, req contracts.BalanceQueryReq
 	officialReq := contracts.OfficialBalanceQueryRequest{
 		Version:     contracts.OfficialOpenAccountVersion,
 		ContractNo:  strings.TrimSpace(req.ContractNo),
-		AccountType: contracts.OfficialAccountTypeBusiness,
+		AccountType: officialAccountType(req.AccountType),
 	}
 	if err := officialReq.Validate(); err != nil {
 		return nil, err
@@ -136,11 +136,10 @@ func (c *Client) accountOpenNotifyURL() string {
 }
 
 func officialOpenAccountRequest(req contracts.OpenAccountRequest, noticeURL string) (contracts.OfficialOpenAccountRequest, error) {
-	accountType := contracts.OfficialAccountTypeBusiness
+	accountType := officialAccountType(req.AccountType)
 	var accountInfo any
 	switch strings.TrimSpace(req.AccountType) {
 	case "personal":
-		accountType = contracts.OfficialAccountTypePersonal
 		if strings.TrimSpace(req.BankAccountNo) == "" {
 			accountInfo = contracts.OfficialPersonalTwoFactorAccountInfo{
 				TransSerialNo:   strings.TrimSpace(req.OutRequestNo),
@@ -181,6 +180,15 @@ func officialOpenAccountRequest(req contracts.OpenAccountRequest, noticeURL stri
 		return contracts.OfficialOpenAccountRequest{}, err
 	}
 	return officialReq, nil
+}
+
+func officialAccountType(accountType string) int {
+	switch strings.ToLower(strings.TrimSpace(accountType)) {
+	case "personal":
+		return contracts.OfficialAccountTypePersonal
+	default:
+		return contracts.OfficialAccountTypeBusiness
+	}
 }
 
 type officialAccountResult struct {

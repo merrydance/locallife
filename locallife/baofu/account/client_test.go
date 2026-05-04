@@ -95,6 +95,38 @@ func TestAccountClientOpenAccountParsesOfficialResultArray(t *testing.T) {
 	require.Equal(t, "上游资料校验失败", result.FailMessage)
 }
 
+func TestAccountClientQueryAccountUsesPersonalAccountType(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": 1, "result": []map[string]any{{"transSerialNo": "OPEN202605050001", "state": 2}}}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.QueryAccount(context.Background(), contracts.QueryAccountRequest{
+		OutRequestNo: "OPEN202605050001",
+		AccountType:  "personal",
+	})
+
+	require.NoError(t, err)
+	env := accountRequestEnvelopeForTest(t, doer)
+	require.Equal(t, "T-1001-013-03", env.Header.ServiceType)
+	require.JSONEq(t, `{"accType":1,"loginNo":"OPEN202605050001"}`, partialJSONForAccountTest(t, env.Body, "accType", "loginNo"))
+}
+
+func TestAccountClientQueryBalanceUsesPersonalAccountType(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": 1, "contractNo": "CM202605040001", "availableBal": "123.45", "pendingBal": "1.00", "currBal": "124.45", "freezeBal": "0.00"}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.QueryBalance(context.Background(), contracts.BalanceQueryRequest{
+		MerchantID:  "102004465",
+		TerminalID:  "200005200",
+		ContractNo:  "CM202605040001",
+		AccountType: "personal",
+	})
+
+	require.NoError(t, err)
+	env := accountRequestEnvelopeForTest(t, doer)
+	require.Equal(t, "T-1001-013-06", env.Header.ServiceType)
+	require.JSONEq(t, `{"accType":1,"contractNo":"CM202605040001"}`, partialJSONForAccountTest(t, env.Body, "accType", "contractNo"))
+}
+
 func TestAccountClientReturnsProviderErrorForBusinessFailure(t *testing.T) {
 	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": 0, "errorCode": "BF00061", "errorMsg": "上游原始四要素错误"}}
 	client := NewClient(testBaofuRootClient(t, doer))
