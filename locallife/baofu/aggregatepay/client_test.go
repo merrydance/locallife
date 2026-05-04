@@ -68,6 +68,21 @@ func TestAggregateClientReturnsProviderErrorForBusinessFailure(t *testing.T) {
 	require.Equal(t, "contact_platform", providerErr.Frontend.Action)
 }
 
+func TestAggregateClientReturnsProviderErrorForEnvelopeFailure(t *testing.T) {
+	doer := &aggregateRecordingDoer{responseBody: []byte(`{"returnCode":"FAIL","returnMsg":"上游签名证书不匹配"}`)}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.QueryPayment(context.Background(), contracts.PaymentQueryRequest{MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "BF202605040001"})
+
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "上游签名证书不匹配")
+	var providerErr *baofu.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, baofu.PublicEnvelopeReturnCodeFail, providerErr.UpstreamCode)
+	require.Equal(t, "上游签名证书不匹配", providerErr.UpstreamMessage)
+	require.Equal(t, "资料信息不完整，请核对后重新提交", providerErr.Frontend.Message)
+}
+
 func validUnifiedOrderRequestForClientTest() contracts.UnifiedOrderRequest {
 	return contracts.NewWechatJSAPISharingUnifiedOrderRequest(contracts.UnifiedOrderInput{
 		MerchantID: "102004465",

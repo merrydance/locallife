@@ -78,6 +78,22 @@ func TestAccountClientReturnsProviderErrorForBusinessFailure(t *testing.T) {
 	require.Equal(t, "身份或银行卡信息核验未通过，请核对后重新提交", providerErr.Frontend.Message)
 }
 
+func TestAccountClientReturnsProviderErrorWhenErrorCodeHasNoRetCode(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{"errorCode": "BF0005", "errorMsg": "上游处理中"}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.QueryAccount(context.Background(), contracts.QueryAccountRequest{OutRequestNo: "OPEN202605040001"})
+
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "上游处理中")
+	var providerErr *baofu.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, "BF0005", providerErr.UpstreamCode)
+	require.Equal(t, "上游处理中", providerErr.UpstreamMessage)
+	require.Equal(t, "支付通道处理中，请稍后重试", providerErr.Frontend.Message)
+	require.True(t, providerErr.Frontend.Retryable)
+}
+
 type accountRecordingDoer struct {
 	request         *http.Request
 	requestBody     []byte

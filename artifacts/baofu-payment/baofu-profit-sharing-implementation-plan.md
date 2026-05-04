@@ -1609,3 +1609,11 @@ make test-integration
 - Removed the static `BAOFU_AES_KEY` runtime dependency from Baofu config validation and local sandbox env setup. BaoCaiTong account request/response and account `data_content` notifications use the documented `verifyType=1` RSA/base64 flow; aggregate-pay digital envelopes must use per-request key material when required, not a long-lived env AES key.
 - Updated the account notification parser to decode official `data_content` payloads with the configured Baofoo public key and to accept query-string style callback payloads when Baofoo posts notification parameters on the callback URL.
 - Verification scope remains local C3 until Baofoo sandbox sends real account/withdraw callback payloads.
+
+
+### 2026-05-04 Sandbox Smoke Follow-up - Provider Failure Parsing
+
+- First production-host smoke against Baofoo sandbox reached both BaoCaiTong union-gw account query and aggregate-pay `order_query`, confirming endpoint/certificate/basic transport connectivity for those two synthetic queries.
+- Account query returned upstream `BF0005` in `errorCode` without `retCode`; the client incorrectly treated that as a zero-value success. The client boundary now fails closed when account `errorCode/errorMsg` is present even if `retCode` is absent.
+- Aggregate-pay `order_query` returned public-envelope `returnCode=FAIL`; the client previously dropped `returnMsg`, which blocked diagnosis of missing-order vs signing/config errors. The client now preserves envelope `returnMsg` on sanitized `ProviderError.UpstreamMessage` while keeping frontend guidance curated.
+- Added focused regressions for both smoke-discovered failure shapes. The smoke evidence is recorded in `artifacts/baofu-payment/baofu-sandbox-evidence.md`; C4 is still not granted until the fixed commit is deployed and the queries are rerun with classified results.

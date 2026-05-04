@@ -19,6 +19,7 @@
 
 | Date | Env | Endpoint | Query Key | Owner | Result | ContractNo Masked | SharingMerID Masked | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-05-04 | sandbox | `https://vgw.baofoo.com/union-gw/api/T-1001-013-03/transReq.do` | smoke synthetic account query | platform config smoke | reached sandbox; parsed union-gw envelope; upstream returned `BF0005` without `retCode` | - | - | `640a0d1b` | Exposed local fail-closed gap: response with `errorCode/errorMsg` but no `retCode` was incorrectly unmarshalled as success. Fixed in next commit; rerun required before C4. |
 
 ## Account Balance `T-1001-013-06`
 
@@ -59,6 +60,7 @@
 
 | Date | Env | Endpoint | OutTradeNo/TradeNo | Result | Local Fact | Local Application | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-05-04 | sandbox | `https://mch-juhe.baofoo.com/api` | smoke synthetic order query | reached sandbox; public envelope returned `FAIL` | no | no | `640a0d1b` | Exposed local diagnostics gap: envelope `returnMsg` was not carried into `ProviderError.UpstreamMessage`. Fixed in next commit; rerun required to classify whether this is expected missing-order response or config/signing issue. |
 
 ## Payment Callback
 

@@ -172,7 +172,7 @@ func (c *Client) postPublicEnvelope(ctx context.Context, endpoint string, method
 		return providerRequestError(method, resp.StatusCode, "", err)
 	}
 	if strings.TrimSpace(responseEnvelope.ReturnCode) == PublicEnvelopeReturnCodeFail {
-		return providerResponseError(method, resp.StatusCode, responseEnvelope.ReturnCode, "", errors.New("baofu upstream returned failure"))
+		return providerResponseError(method, resp.StatusCode, responseEnvelope.ReturnCode, responseEnvelope.ReturnMessage, errors.New("baofu upstream returned failure"))
 	}
 	if err := responseEnvelope.Validate(); err != nil {
 		return providerRequestError(method, resp.StatusCode, responseEnvelope.ReturnCode, err)
@@ -223,6 +223,9 @@ func accountBusinessFailure(raw json.RawMessage) (string, string, bool) {
 		return "", "", false
 	}
 	retCode := strings.ToUpper(strings.TrimSpace(payload.RetCode))
+	if retCode == "" && (strings.TrimSpace(payload.ErrorCode) != "" || strings.TrimSpace(payload.ErrorMessage) != "") {
+		return strings.TrimSpace(payload.ErrorCode), strings.TrimSpace(payload.ErrorMessage), true
+	}
 	if retCode == "" || retCode == "1" || retCode == "SUCCESS" {
 		return "", "", false
 	}
@@ -243,6 +246,9 @@ func publicBusinessFailure(raw json.RawMessage) (string, string, bool) {
 		return "", "", false
 	}
 	resultCode := strings.ToUpper(strings.TrimSpace(payload.ResultCode))
+	if resultCode == "" && (strings.TrimSpace(payload.ErrorCode) != "" || strings.TrimSpace(payload.ErrorMessage) != "") {
+		return strings.TrimSpace(payload.ErrorCode), strings.TrimSpace(payload.ErrorMessage), true
+	}
 	if resultCode == "" || resultCode == "SUCCESS" {
 		return "", "", false
 	}
