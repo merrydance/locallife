@@ -997,7 +997,7 @@ git commit -m "feat(payment): wire baofu main business payments"
 - Modify: `artifacts/baofu-payment/baofu-api-contract-coverage-audit.md`
 - Modify: `artifacts/baofu-payment/baofu-profit-sharing-implementation-plan.md`
 
-- [ ] **Step 1: Create evidence template**
+- [x] **Step 1: Create evidence template**
 
 Create `baofu-sandbox-evidence.md` with sections:
 
@@ -1025,11 +1025,11 @@ Create `baofu-sandbox-evidence.md` with sections:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 ```
 
-- [ ] **Step 2: Update audit status after each C3 task**
+- [x] **Step 2: Update audit status after each C3 task**
 
 After Tasks 1-11, update `baofu-api-contract-coverage-audit.md` from C0/C1/C2 to C3 only when code has real transport and local tests. Do not mark C4 until sandbox evidence table has a row.
 
-- [ ] **Step 3: Run doc validation**
+- [x] **Step 3: Run doc validation**
 
 ```bash
 git diff --check -- artifacts/baofu-payment/baofu-api-contract-coverage-audit.md artifacts/baofu-payment/baofu-profit-sharing-implementation-plan.md artifacts/baofu-payment/baofu-sandbox-evidence.md
