@@ -96,9 +96,32 @@ func TestBaofuPaymentServiceCreateWechatJSAPIOrderRejectsMissingWechatPayData(t 
 		MerchantWechatSubMchID: "wx-sub-mch-001",
 		PayerOpenID:            "payer-openid-secret",
 		Body:                   "LocalLife订单",
+		ClientIP:               "203.0.113.9",
 	})
 
 	require.ErrorIs(t, err, ErrBaofuPaymentWechatPayDataRequired)
+}
+
+func TestBaofuPaymentServiceCreateWechatJSAPIOrderRejectsMissingClientIP(t *testing.T) {
+	store := &fakeBaofuPaymentStore{}
+	client := &fakeBaofuAggregatePaymentClient{}
+	service := NewBaofuPaymentService(store, client, BaofuPaymentServiceConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+		MiniProgramAppID:  "wxapp123",
+		PaymentNotifyURL:  "https://api.example.com/v1/webhooks/baofu/payment",
+	})
+
+	_, err := service.CreateWechatJSAPIOrder(context.Background(), CreateBaofuWechatJSAPIOrderInput{
+		PaymentOrder:           db.PaymentOrder{ID: 88, Amount: 12345, OutTradeNo: "PO202605030001"},
+		MerchantWechatSubMchID: "wx-sub-mch-001",
+		PayerOpenID:            "payer-openid-secret",
+		Body:                   "LocalLife订单",
+	})
+
+	require.ErrorIs(t, err, ErrBaofuPaymentRiskInfoClientIPRequired)
+	require.False(t, store.commandCreatedBeforeClientCall)
+	require.False(t, client.called)
 }
 
 func TestBaofuPaymentServiceRecordPaymentCallbackFactCreatesTerminalApplication(t *testing.T) {

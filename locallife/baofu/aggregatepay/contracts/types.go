@@ -26,6 +26,8 @@ const (
 	ShareStateAbnormal   = "ABNORMAL"
 )
 
+var ErrUnifiedOrderRiskInfoClientIPRequired = errors.New("baofu unified order riskInfo.clientIp is required for wechat/alipay")
+
 type UnifiedOrderInput struct {
 	MerchantID string
 	TerminalID string
@@ -109,6 +111,20 @@ func NewWechatJSAPISharingUnifiedOrderRequest(input UnifiedOrderInput) UnifiedOr
 		req.RiskInfo = &RiskInfo{ClientIP: clientIP}
 	}
 	return req
+}
+
+func (r UnifiedOrderRequest) Validate() error {
+	if unifiedOrderPayCodeRequiresRiskInfo(r.PayCode) {
+		if r.RiskInfo == nil || strings.TrimSpace(r.RiskInfo.ClientIP) == "" {
+			return ErrUnifiedOrderRiskInfoClientIPRequired
+		}
+	}
+	return nil
+}
+
+func unifiedOrderPayCodeRequiresRiskInfo(payCode string) bool {
+	payCode = strings.ToUpper(strings.TrimSpace(payCode))
+	return strings.HasPrefix(payCode, "WECHAT_") || strings.HasPrefix(payCode, "ALIPAY_")
 }
 
 type UnifiedOrderResult struct {

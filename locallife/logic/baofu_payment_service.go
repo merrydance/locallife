@@ -15,9 +15,10 @@ import (
 )
 
 var (
-	ErrBaofuPaymentServiceNotConfigured  = errors.New("baofu payment service is not configured")
-	ErrBaofuPaymentInvalidInput          = errors.New("baofu payment input is invalid")
-	ErrBaofuPaymentWechatPayDataRequired = errors.New("baofu payment missing wechat pay data")
+	ErrBaofuPaymentServiceNotConfigured     = errors.New("baofu payment service is not configured")
+	ErrBaofuPaymentInvalidInput             = errors.New("baofu payment input is invalid")
+	ErrBaofuPaymentWechatPayDataRequired    = errors.New("baofu payment missing wechat pay data")
+	ErrBaofuPaymentRiskInfoClientIPRequired = aggregatecontracts.ErrUnifiedOrderRiskInfoClientIPRequired
 )
 
 type baofuPaymentStore interface {
@@ -136,6 +137,9 @@ func (s *BaofuPaymentService) CreateWechatJSAPIOrder(ctx context.Context, input 
 		ClientIP:   strings.TrimSpace(input.ClientIP),
 		Attach:     strings.TrimSpace(paymentOrder.Attach.String),
 	})
+	if err := req.Validate(); err != nil {
+		return result, err
+	}
 	upstreamResult, err := s.client.CreateUnifiedOrder(ctx, req)
 	if err != nil {
 		return result, err
@@ -249,6 +253,9 @@ func validateCreateBaofuWechatJSAPIOrderInput(input CreateBaofuWechatJSAPIOrderI
 	}
 	if strings.TrimSpace(input.PayerOpenID) == "" || strings.TrimSpace(input.Body) == "" {
 		return ErrBaofuPaymentInvalidInput
+	}
+	if strings.TrimSpace(input.ClientIP) == "" {
+		return ErrBaofuPaymentRiskInfoClientIPRequired
 	}
 	return nil
 }

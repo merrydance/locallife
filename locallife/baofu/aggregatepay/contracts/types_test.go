@@ -38,7 +38,26 @@ func TestUnifiedOrderRequestForWechatJSAPIUsesBaoCaiTongSharingFields(t *testing
 	require.Contains(t, string(body), `"orderType":"7"`)
 	require.Contains(t, string(body), `"payCode":"WECHAT_JSAPI"`)
 	require.Contains(t, string(body), `"sub_openid":"openid-payer-001"`)
+	require.Contains(t, string(body), `"riskInfo":{"clientIp":"203.0.113.1"}`)
 	require.NotContains(t, string(body), "sharingMerId")
+}
+
+func TestUnifiedOrderRequestForWechatJSAPIRequiresRiskInfoClientIP(t *testing.T) {
+	req := NewWechatJSAPISharingUnifiedOrderRequest(UnifiedOrderInput{
+		OutTradeNo: "BF202605030002",
+		AmountFen:  12800,
+		SubMchID:   "1900000109",
+		SubAppID:   "wx1234567890abcdef",
+		SubOpenID:  "openid-payer-001",
+		Body:       "本地生活订单",
+		NotifyURL:  "https://api.example.com/v1/webhooks/baofu/payment",
+		TimeExpire: 30,
+		TxnTime:    "20260503120000",
+		MerchantID: "102004465",
+		TerminalID: "200005200",
+	})
+
+	require.ErrorIs(t, req.Validate(), ErrUnifiedOrderRiskInfoClientIPRequired)
 }
 
 func TestUnifiedOrderResultExtractsWechatPayData(t *testing.T) {
