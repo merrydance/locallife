@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"io"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -27,8 +28,8 @@ func TestMerchantReportClientSubmitReportPostsPublicEnvelope(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "1900000109", result.SubMchID)
 	require.Equal(t, baofu.SandboxMerchantReportBaseURL, doer.request.URL.String())
-	var env baofu.PublicRequestEnvelope
-	require.NoError(t, json.Unmarshal(doer.requestBody, &env))
+	require.Contains(t, doer.request.Header.Get("Content-Type"), "application/x-www-form-urlencoded")
+	env := publicEnvelopeFromFormForTest(t, doer.requestBody)
 	require.Equal(t, "merchant_report", env.Method)
 	require.Contains(t, string(env.BizContent), `"bctMerId":"CM202605040001"`)
 	require.NotContains(t, string(env.BizContent), "sharingMerId")
@@ -41,8 +42,7 @@ func TestMerchantReportClientBindSubConfigPostsAppletAuth(t *testing.T) {
 	_, err := client.BindSubConfig(context.Background(), contracts.BindSubConfigRequest{MerchantID: "102004465", TerminalID: "200005200", SubMchID: "1900000109", AuthType: contracts.AuthTypeApplet, AuthContent: "wx1234567890abcdef", Remark: "LocalLife mini program"})
 
 	require.NoError(t, err)
-	var env baofu.PublicRequestEnvelope
-	require.NoError(t, json.Unmarshal(doer.requestBody, &env))
+	env := publicEnvelopeFromFormForTest(t, doer.requestBody)
 	require.Equal(t, "bind_sub_config", env.Method)
 	require.Contains(t, string(env.BizContent), `"authType":"APPLET"`)
 	require.Contains(t, string(env.BizContent), `"authContent":"wx1234567890abcdef"`)
@@ -98,10 +98,31 @@ func (d *merchantReportRecordingDoer) Do(req *http.Request) (*http.Response, err
 		return nil, err
 	}
 	d.requestBody = body
-	var reqEnv baofu.PublicRequestEnvelope
-	_ = json.Unmarshal(body, &reqEnv)
+	reqEnv := publicEnvelopeFromFormForTest(nil, body)
 	responseBody, _ := json.Marshal(baofu.PublicResponseEnvelope{ReturnCode: baofu.PublicEnvelopeReturnCodeSuccess, MerchantID: reqEnv.MerchantID, TerminalID: reqEnv.TerminalID, Charset: baofu.PublicEnvelopeCharsetUTF8, Version: baofu.PublicEnvelopeVersion10, Format: baofu.PublicEnvelopeFormatJSON, SignType: baofu.SignTypeRSA, SignSerialNo: "test-sign-sn", EncryptionSerialNo: "test-enc-sn", SignString: "test-signature", BizContent: baofu.JSONString(d.responseBizContent)})
 	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(responseBody)), Header: make(http.Header)}, nil
+}
+
+func publicEnvelopeFromFormForTest(t require.TestingT, raw []byte) baofu.PublicRequestEnvelope {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+	values, _ := url.ParseQuery(string(raw))
+	return baofu.PublicRequestEnvelope{
+		MerchantID:         values.Get("merId"),
+		TerminalID:         values.Get("terId"),
+		Method:             values.Get("method"),
+		Charset:            values.Get("charset"),
+		Version:            values.Get("version"),
+		Format:             values.Get("format"),
+		Timestamp:          values.Get("timestamp"),
+		SignType:           values.Get("signType"),
+		SignSerialNo:       values.Get("signSn"),
+		EncryptionSerialNo: values.Get("ncrptnSn"),
+		DigitalEnvelope:    values.Get("dgtlEnvlp"),
+		SignString:         values.Get("signStr"),
+		BizContent:         baofu.JSONString(values.Get("bizContent")),
+	}
 }
 
 func testBaofuRootClient(t *testing.T, doer baofu.HTTPDoer) *baofu.Client {

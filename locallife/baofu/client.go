@@ -1,7 +1,6 @@
 package baofu
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -146,15 +145,12 @@ func (c *Client) postPublicEnvelope(ctx context.Context, endpoint string, method
 	if err := envelope.Validate(); err != nil {
 		return err
 	}
-	requestBody, err := json.Marshal(envelope)
+	requestBody := envelope.FormValues().Encode()
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(requestBody))
 	if err != nil {
 		return err
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(requestBody))
-	if err != nil {
-		return err
-	}
-	httpReq.Header.Set("Content-Type", "application/json; charset=utf-8")
+	httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=utf-8")
 	resp, err := c.transport.client.Do(httpReq)
 	if err != nil {
 		return providerRequestError(method, 0, "", err)

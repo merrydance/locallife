@@ -3,6 +3,7 @@ package baofu
 import (
 	"encoding/json"
 	"errors"
+	"net/url"
 	"strings"
 )
 
@@ -113,6 +114,24 @@ func (e PublicRequestEnvelope) Validate() error {
 		return errors.New("baofu public envelope bizContent must be valid JSON")
 	}
 	return nil
+}
+
+func (e PublicRequestEnvelope) FormValues() url.Values {
+	values := url.Values{}
+	values.Set("merId", strings.TrimSpace(e.MerchantID))
+	values.Set("terId", strings.TrimSpace(e.TerminalID))
+	values.Set("method", strings.TrimSpace(e.Method))
+	values.Set("charset", strings.TrimSpace(e.Charset))
+	values.Set("version", strings.TrimSpace(e.Version))
+	values.Set("format", strings.TrimSpace(e.Format))
+	values.Set("timestamp", strings.TrimSpace(e.Timestamp))
+	values.Set("signType", strings.TrimSpace(e.SignType))
+	values.Set("signSn", strings.TrimSpace(e.SignSerialNo))
+	values.Set("ncrptnSn", strings.TrimSpace(e.EncryptionSerialNo))
+	values.Set("dgtlEnvlp", strings.TrimSpace(e.DigitalEnvelope))
+	values.Set("signStr", strings.TrimSpace(e.SignString))
+	values.Set("bizContent", string(e.BizContent))
+	return values
 }
 
 func (e PublicResponseEnvelope) Validate() error {

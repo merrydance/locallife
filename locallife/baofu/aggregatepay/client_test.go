@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"io"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -28,14 +29,14 @@ func TestAggregateClientCreateUnifiedOrderPostsPublicEnvelope(t *testing.T) {
 	require.Equal(t, "BFPAY202605040001", result.TradeNo)
 	require.Equal(t, baofu.SandboxAggregatePayBaseURL, doer.request.URL.String())
 	require.Equal(t, http.MethodPost, doer.request.Method)
-	var env baofu.PublicRequestEnvelope
-	require.NoError(t, json.Unmarshal(doer.requestBody, &env))
+	require.Contains(t, doer.request.Header.Get("Content-Type"), "application/x-www-form-urlencoded")
+	env := publicEnvelopeFromFormForTest(t, doer.requestBody)
 	require.Equal(t, "unified_order", env.Method)
 	require.Equal(t, "102004465", env.MerchantID)
 	require.Equal(t, "200005200", env.TerminalID)
 	require.NotEmpty(t, env.SignString)
 	require.JSONEq(t, `{"outTradeNo":"BF202605040001","subMchId":"1900000109","riskInfo":{"clientIp":"203.0.113.1"}}`, partialJSONForTest(t, json.RawMessage(env.BizContent), "outTradeNo", "subMchId", "riskInfo"))
-	require.Contains(t, string(doer.requestBody), `"bizContent":"{\"`)
+	require.Contains(t, string(doer.requestBody), "bizContent=%7B%22")
 }
 
 func TestAggregateClientReturnsSanitizedProviderError(t *testing.T) {
@@ -122,8 +123,7 @@ func (d *aggregateRecordingDoer) Do(req *http.Request) (*http.Response, error) {
 	}
 	responseBody := d.responseBody
 	if responseBody == nil {
-		var reqEnv baofu.PublicRequestEnvelope
-		_ = json.Unmarshal(body, &reqEnv)
+		reqEnv := publicEnvelopeFromFormBytes(body)
 		responseBody, _ = json.Marshal(baofu.PublicResponseEnvelope{
 			ReturnCode:         baofu.PublicEnvelopeReturnCodeSuccess,
 			MerchantID:         reqEnv.MerchantID,
@@ -194,8 +194,7 @@ func TestAggregateClientCreateRefundPostsPublicEnvelope(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "BFREFUND202605040001", result.TradeNo)
-	var env baofu.PublicRequestEnvelope
-	require.NoError(t, json.Unmarshal(doer.requestBody, &env))
+	env := publicEnvelopeFromFormForTest(t, doer.requestBody)
 	require.Equal(t, "order_refund", env.Method)
 	require.JSONEq(t, `{"originOutTradeNo":"BF202605040001","outTradeNo":"RF202605040001","refundAmt":300,"totalAmt":300}`, partialJSONForTest(t, json.RawMessage(env.BizContent), "originOutTradeNo", "outTradeNo", "refundAmt", "totalAmt"))
 	require.NotContains(t, string(env.BizContent), "sharingRefundInfo")
@@ -208,15 +207,38 @@ func TestAggregateClientQueryRefundAndCloseOrderPostPublicEnvelope(t *testing.T)
 
 	_, err := client.QueryRefund(context.Background(), contracts.RefundQueryRequest{MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "RF202605040001"})
 	require.NoError(t, err)
-	var env baofu.PublicRequestEnvelope
-	require.NoError(t, json.Unmarshal(doer.requestBody, &env))
+	env := publicEnvelopeFromFormForTest(t, doer.requestBody)
 	require.Equal(t, "refund_query", env.Method)
 
 	doer.responseBizContent = json.RawMessage(`{"resultCode":"SUCCESS","outTradeNo":"BF202605040001"}`)
 	_, err = client.CloseOrder(context.Background(), contracts.OrderCloseRequest{MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "BF202605040001"})
 	require.NoError(t, err)
-	require.NoError(t, json.Unmarshal(doer.requestBody, &env))
+	env = publicEnvelopeFromFormForTest(t, doer.requestBody)
 	require.Equal(t, "order_close", env.Method)
+}
+
+func publicEnvelopeFromFormForTest(t *testing.T, raw []byte) baofu.PublicRequestEnvelope {
+	t.Helper()
+	return publicEnvelopeFromFormBytes(raw)
+}
+
+func publicEnvelopeFromFormBytes(raw []byte) baofu.PublicRequestEnvelope {
+	values, _ := url.ParseQuery(string(raw))
+	return baofu.PublicRequestEnvelope{
+		MerchantID:         values.Get("merId"),
+		TerminalID:         values.Get("terId"),
+		Method:             values.Get("method"),
+		Charset:            values.Get("charset"),
+		Version:            values.Get("version"),
+		Format:             values.Get("format"),
+		Timestamp:          values.Get("timestamp"),
+		SignType:           values.Get("signType"),
+		SignSerialNo:       values.Get("signSn"),
+		EncryptionSerialNo: values.Get("ncrptnSn"),
+		DigitalEnvelope:    values.Get("dgtlEnvlp"),
+		SignString:         values.Get("signStr"),
+		BizContent:         baofu.JSONString(values.Get("bizContent")),
+	}
 }
 
 func validRefundBeforeShareRequestForClientTest() contracts.RefundBeforeShareRequest {

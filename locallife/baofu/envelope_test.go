@@ -42,6 +42,19 @@ func TestPublicEnvelopeCanonicalJSONUsesOfficialFieldNames(t *testing.T) {
 	require.Contains(t, string(raw), `"bizContent":"{\"outTradeNo\":\"BF1\"}"`)
 }
 
+func TestPublicEnvelopeFormValuesUseOfficialWireFormat(t *testing.T) {
+	env := validPublicEnvelopeForTest()
+
+	values := env.FormValues()
+
+	require.Equal(t, "100000", values.Get("merId"))
+	require.Equal(t, "200000", values.Get("terId"))
+	require.Equal(t, "unified_order", values.Get("method"))
+	require.Equal(t, "json", values.Get("format"))
+	require.Equal(t, `{"outTradeNo":"BF1"}`, values.Get("bizContent"))
+	require.Equal(t, "encrypted-key", values.Get("dgtlEnvlp"))
+}
+
 func TestPublicResponseEnvelopeAcceptsStringOrObjectBizContent(t *testing.T) {
 	var fromString PublicResponseEnvelope
 	require.NoError(t, json.Unmarshal([]byte(`{"returnCode":"FAIL","returnMsg":"参数错误","bizContent":"{\"errCode\":\"INVALID_PARAMETER\"}"}`), &fromString))
