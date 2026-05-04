@@ -141,7 +141,7 @@ func (c *Client) postPublicEnvelope(ctx context.Context, endpoint string, method
 		SignSerialNo:       c.config.SignSerialNo,
 		EncryptionSerialNo: c.config.EncryptionSerialNo,
 		SignString:         signature,
-		BizContent:         bizContent,
+		BizContent:         JSONString(bizContent),
 	}
 	if err := envelope.Validate(); err != nil {
 		return err
@@ -177,7 +177,7 @@ func (c *Client) postPublicEnvelope(ctx context.Context, endpoint string, method
 	if err := responseEnvelope.Validate(); err != nil {
 		return providerRequestError(method, resp.StatusCode, responseEnvelope.ReturnCode, err)
 	}
-	if code, message, failed := publicBusinessFailure(responseEnvelope.BizContent); failed {
+	if code, message, failed := publicBusinessFailure(json.RawMessage(responseEnvelope.BizContent)); failed {
 		return providerResponseError(method, resp.StatusCode, code, message, errors.New("baofu public business response failed"))
 	}
 	if out != nil {

@@ -39,7 +39,17 @@ func TestPublicEnvelopeCanonicalJSONUsesOfficialFieldNames(t *testing.T) {
 	require.Contains(t, string(raw), `"merId":"100000"`)
 	require.Contains(t, string(raw), `"terId":"200000"`)
 	require.Contains(t, string(raw), `"method":"unified_order"`)
-	require.Contains(t, string(raw), `"bizContent":{"outTradeNo":"BF1"}`)
+	require.Contains(t, string(raw), `"bizContent":"{\"outTradeNo\":\"BF1\"}"`)
+}
+
+func TestPublicResponseEnvelopeAcceptsStringOrObjectBizContent(t *testing.T) {
+	var fromString PublicResponseEnvelope
+	require.NoError(t, json.Unmarshal([]byte(`{"returnCode":"FAIL","returnMsg":"参数错误","bizContent":"{\"errCode\":\"INVALID_PARAMETER\"}"}`), &fromString))
+	require.JSONEq(t, `{"errCode":"INVALID_PARAMETER"}`, string(fromString.BizContent))
+
+	var fromObject PublicResponseEnvelope
+	require.NoError(t, json.Unmarshal([]byte(`{"returnCode":"FAIL","returnMsg":"参数错误","bizContent":{"errCode":"INVALID_PARAMETER"}}`), &fromObject))
+	require.JSONEq(t, `{"errCode":"INVALID_PARAMETER"}`, string(fromObject.BizContent))
 }
 
 func TestPublicResponseEnvelopeValidateHandlesTransportStatus(t *testing.T) {
@@ -55,7 +65,7 @@ func TestPublicResponseEnvelopeValidateHandlesTransportStatus(t *testing.T) {
 		SignSerialNo:       "1",
 		EncryptionSerialNo: "1",
 		SignString:         "abcd",
-		BizContent:         json.RawMessage(`{"resultCode":"SUCCESS"}`),
+		BizContent:         JSONString(`{"resultCode":"SUCCESS"}`),
 	}
 
 	require.NoError(t, env.Validate())
@@ -78,6 +88,6 @@ func validPublicEnvelopeForTest() PublicRequestEnvelope {
 		EncryptionSerialNo: "1",
 		DigitalEnvelope:    "encrypted-key",
 		SignString:         "abcd",
-		BizContent:         json.RawMessage(`{"outTradeNo":"BF1"}`),
+		BizContent:         JSONString(`{"outTradeNo":"BF1"}`),
 	}
 }

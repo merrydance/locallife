@@ -19,35 +19,57 @@ const (
 )
 
 type PublicRequestEnvelope struct {
-	MerchantID         string          `json:"merId"`
-	TerminalID         string          `json:"terId"`
-	Method             string          `json:"method"`
-	Charset            string          `json:"charset"`
-	Version            string          `json:"version"`
-	Format             string          `json:"format"`
-	Timestamp          string          `json:"timestamp"`
-	SignType           string          `json:"signType"`
-	SignSerialNo       string          `json:"signSn"`
-	EncryptionSerialNo string          `json:"ncrptnSn"`
-	DigitalEnvelope    string          `json:"dgtlEnvlp,omitempty"`
-	SignString         string          `json:"signStr"`
-	BizContent         json.RawMessage `json:"bizContent"`
+	MerchantID         string     `json:"merId"`
+	TerminalID         string     `json:"terId"`
+	Method             string     `json:"method"`
+	Charset            string     `json:"charset"`
+	Version            string     `json:"version"`
+	Format             string     `json:"format"`
+	Timestamp          string     `json:"timestamp"`
+	SignType           string     `json:"signType"`
+	SignSerialNo       string     `json:"signSn"`
+	EncryptionSerialNo string     `json:"ncrptnSn"`
+	DigitalEnvelope    string     `json:"dgtlEnvlp,omitempty"`
+	SignString         string     `json:"signStr"`
+	BizContent         JSONString `json:"bizContent"`
 }
 
 type PublicResponseEnvelope struct {
-	ReturnCode         string          `json:"returnCode"`
-	ReturnMessage      string          `json:"returnMsg"`
-	MerchantID         string          `json:"merId,omitempty"`
-	TerminalID         string          `json:"terId,omitempty"`
-	Charset            string          `json:"charset,omitempty"`
-	Version            string          `json:"version,omitempty"`
-	Format             string          `json:"format,omitempty"`
-	SignType           string          `json:"signType,omitempty"`
-	SignSerialNo       string          `json:"signSn,omitempty"`
-	EncryptionSerialNo string          `json:"ncrptnSn,omitempty"`
-	DigitalEnvelope    string          `json:"dgtlEnvlp,omitempty"`
-	SignString         string          `json:"signStr,omitempty"`
-	BizContent         json.RawMessage `json:"bizContent,omitempty"`
+	ReturnCode         string     `json:"returnCode"`
+	ReturnMessage      string     `json:"returnMsg"`
+	MerchantID         string     `json:"merId,omitempty"`
+	TerminalID         string     `json:"terId,omitempty"`
+	Charset            string     `json:"charset,omitempty"`
+	Version            string     `json:"version,omitempty"`
+	Format             string     `json:"format,omitempty"`
+	SignType           string     `json:"signType,omitempty"`
+	SignSerialNo       string     `json:"signSn,omitempty"`
+	EncryptionSerialNo string     `json:"ncrptnSn,omitempty"`
+	DigitalEnvelope    string     `json:"dgtlEnvlp,omitempty"`
+	SignString         string     `json:"signStr,omitempty"`
+	BizContent         JSONString `json:"bizContent,omitempty"`
+}
+
+type JSONString []byte
+
+func (c JSONString) MarshalJSON() ([]byte, error) {
+	return json.Marshal(string(c))
+}
+
+func (c *JSONString) UnmarshalJSON(raw []byte) error {
+	if c == nil {
+		return errors.New("baofu json string target is nil")
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		*c = JSONString(strings.TrimSpace(text))
+		return nil
+	}
+	if !json.Valid(raw) {
+		return errors.New("baofu json string content must be valid JSON")
+	}
+	*c = JSONString(raw)
+	return nil
 }
 
 func (e PublicRequestEnvelope) Validate() error {
@@ -87,7 +109,7 @@ func (e PublicRequestEnvelope) Validate() error {
 	if len(e.BizContent) == 0 {
 		return errors.New("baofu public envelope bizContent is required")
 	}
-	if !json.Valid(e.BizContent) {
+	if !json.Valid([]byte(e.BizContent)) {
 		return errors.New("baofu public envelope bizContent must be valid JSON")
 	}
 	return nil
@@ -134,7 +156,7 @@ func (e PublicResponseEnvelope) Validate() error {
 	if len(e.BizContent) == 0 {
 		return errors.New("baofu public response bizContent is required")
 	}
-	if !json.Valid(e.BizContent) {
+	if !json.Valid([]byte(e.BizContent)) {
 		return errors.New("baofu public response bizContent must be valid JSON")
 	}
 	return nil

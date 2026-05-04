@@ -62,6 +62,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-05-04 | sandbox | `https://mch-juhe.baofoo.com/api` | smoke synthetic order query | reached sandbox; public envelope returned `FAIL` | no | no | `640a0d1b` | Exposed local diagnostics gap: envelope `returnMsg` was not carried into `ProviderError.UpstreamMessage`. Fixed in next commit; rerun required to classify whether this is expected missing-order response or config/signing issue. |
 | 2026-05-04 | sandbox | `https://mch-juhe.baofoo.com/api` | smoke synthetic order query | reached sandbox; upstream `FAIL` message indicates `merId` missing from `bizContent` | no | no | `002c86f6` | Smoke request omitted query-level `merId/terId`; local contract now validates `PaymentQueryRequest` before POST so this does not reach Baofoo as a malformed request. Rerun with collect merchant/terminal in request body. |
+| 2026-05-04 | sandbox | `https://mch-juhe.baofoo.com/api` | smoke synthetic order query | reached sandbox; upstream still reported `商户号不能为null` after DTO carried `merId/terId` | no | no | `6bec7b1f` | Root cause narrowed to public envelope wire format: official docs and Baofoo Java demo define `bizContent` as JSON string (`S`) and `signStr` as SHA256withRSA hex over that string; local client was sending `bizContent` as JSON object and base64 signature. Fixed in next commit; rerun required. |
 
 ## Payment Callback
 

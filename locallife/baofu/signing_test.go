@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/pem"
 	"testing"
 
@@ -29,6 +30,8 @@ func TestSignAndVerifySHA256WithRSA(t *testing.T) {
 	signature, err := SignSHA256WithRSA(privatePEM, message)
 	require.NoError(t, err)
 	require.NotEmpty(t, signature)
+	_, err = hex.DecodeString(signature)
+	require.NoError(t, err)
 
 	require.NoError(t, VerifySHA256WithRSA(publicPEM, message, signature))
 	require.ErrorIs(t, VerifySHA256WithRSA(publicPEM, []byte(`{"tampered":true}`), signature), ErrInvalidSignature)

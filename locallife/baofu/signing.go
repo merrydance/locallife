@@ -7,7 +7,7 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
-	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -35,15 +35,15 @@ func SignSHA256WithRSA(privateKeyPEM string, message []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return base64.StdEncoding.EncodeToString(signature), nil
+	return hex.EncodeToString(signature), nil
 }
 
-func VerifySHA256WithRSA(publicKeyPEM string, message []byte, signatureBase64 string) error {
+func VerifySHA256WithRSA(publicKeyPEM string, message []byte, signatureHex string) error {
 	publicKey, err := parseRSAPublicKey(publicKeyPEM)
 	if err != nil {
 		return err
 	}
-	signature, err := base64.StdEncoding.DecodeString(signatureBase64)
+	signature, err := hex.DecodeString(signatureHex)
 	if err != nil {
 		return ErrInvalidSignature
 	}

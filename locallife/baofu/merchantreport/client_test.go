@@ -100,7 +100,7 @@ func (d *merchantReportRecordingDoer) Do(req *http.Request) (*http.Response, err
 	d.requestBody = body
 	var reqEnv baofu.PublicRequestEnvelope
 	_ = json.Unmarshal(body, &reqEnv)
-	responseBody, _ := json.Marshal(baofu.PublicResponseEnvelope{ReturnCode: baofu.PublicEnvelopeReturnCodeSuccess, MerchantID: reqEnv.MerchantID, TerminalID: reqEnv.TerminalID, Charset: baofu.PublicEnvelopeCharsetUTF8, Version: baofu.PublicEnvelopeVersion10, Format: baofu.PublicEnvelopeFormatJSON, SignType: baofu.SignTypeRSA, SignSerialNo: "test-sign-sn", EncryptionSerialNo: "test-enc-sn", SignString: "test-signature", BizContent: d.responseBizContent})
+	responseBody, _ := json.Marshal(baofu.PublicResponseEnvelope{ReturnCode: baofu.PublicEnvelopeReturnCodeSuccess, MerchantID: reqEnv.MerchantID, TerminalID: reqEnv.TerminalID, Charset: baofu.PublicEnvelopeCharsetUTF8, Version: baofu.PublicEnvelopeVersion10, Format: baofu.PublicEnvelopeFormatJSON, SignType: baofu.SignTypeRSA, SignSerialNo: "test-sign-sn", EncryptionSerialNo: "test-enc-sn", SignString: "test-signature", BizContent: baofu.JSONString(d.responseBizContent)})
 	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(responseBody)), Header: make(http.Header)}, nil
 }
 

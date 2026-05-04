@@ -34,7 +34,8 @@ func TestAggregateClientCreateUnifiedOrderPostsPublicEnvelope(t *testing.T) {
 	require.Equal(t, "102004465", env.MerchantID)
 	require.Equal(t, "200005200", env.TerminalID)
 	require.NotEmpty(t, env.SignString)
-	require.JSONEq(t, `{"outTradeNo":"BF202605040001","subMchId":"1900000109","riskInfo":{"clientIp":"203.0.113.1"}}`, partialJSONForTest(t, env.BizContent, "outTradeNo", "subMchId", "riskInfo"))
+	require.JSONEq(t, `{"outTradeNo":"BF202605040001","subMchId":"1900000109","riskInfo":{"clientIp":"203.0.113.1"}}`, partialJSONForTest(t, json.RawMessage(env.BizContent), "outTradeNo", "subMchId", "riskInfo"))
+	require.Contains(t, string(doer.requestBody), `"bizContent":"{\"`)
 }
 
 func TestAggregateClientReturnsSanitizedProviderError(t *testing.T) {
@@ -134,7 +135,7 @@ func (d *aggregateRecordingDoer) Do(req *http.Request) (*http.Response, error) {
 			SignSerialNo:       "test-sign-sn",
 			EncryptionSerialNo: "test-enc-sn",
 			SignString:         "test-signature",
-			BizContent:         d.responseBizContent,
+			BizContent:         baofu.JSONString(d.responseBizContent),
 		})
 	}
 	return &http.Response{StatusCode: status, Body: io.NopCloser(bytes.NewReader(responseBody)), Header: make(http.Header)}, nil
@@ -196,7 +197,7 @@ func TestAggregateClientCreateRefundPostsPublicEnvelope(t *testing.T) {
 	var env baofu.PublicRequestEnvelope
 	require.NoError(t, json.Unmarshal(doer.requestBody, &env))
 	require.Equal(t, "order_refund", env.Method)
-	require.JSONEq(t, `{"originOutTradeNo":"BF202605040001","outTradeNo":"RF202605040001","refundAmt":300,"totalAmt":300}`, partialJSONForTest(t, env.BizContent, "originOutTradeNo", "outTradeNo", "refundAmt", "totalAmt"))
+	require.JSONEq(t, `{"originOutTradeNo":"BF202605040001","outTradeNo":"RF202605040001","refundAmt":300,"totalAmt":300}`, partialJSONForTest(t, json.RawMessage(env.BizContent), "originOutTradeNo", "outTradeNo", "refundAmt", "totalAmt"))
 	require.NotContains(t, string(env.BizContent), "sharingRefundInfo")
 	require.NotContains(t, string(env.BizContent), "advanceAmt")
 }
