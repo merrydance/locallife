@@ -234,8 +234,10 @@ func (d *baofuProfitSharingEnqueueRecorder) DistributeTaskProcessPaymentFactAppl
 type baofuRecoveryAggregateClient struct {
 	paymentResult    *aggregatecontracts.UnifiedOrderResult
 	shareResult      *aggregatecontracts.ShareResult
+	refundResult     *aggregatecontracts.RefundResult
 	lastPaymentQuery aggregatecontracts.PaymentQueryRequest
 	lastShareQuery   aggregatecontracts.ShareQueryRequest
+	lastRefundQuery  aggregatecontracts.RefundQueryRequest
 }
 
 func (c *baofuRecoveryAggregateClient) CreateUnifiedOrder(context.Context, aggregatecontracts.UnifiedOrderRequest) (*aggregatecontracts.UnifiedOrderResult, error) {
@@ -274,8 +276,9 @@ func (c *baofuRecoveryAggregateClient) CreateRefund(context.Context, aggregateco
 	return nil, nil
 }
 
-func (c *baofuRecoveryAggregateClient) QueryRefund(context.Context, aggregatecontracts.RefundQueryRequest) (*aggregatecontracts.RefundResult, error) {
-	return nil, nil
+func (c *baofuRecoveryAggregateClient) QueryRefund(_ context.Context, req aggregatecontracts.RefundQueryRequest) (*aggregatecontracts.RefundResult, error) {
+	c.lastRefundQuery = req
+	return c.refundResult, nil
 }
 
 func (c *baofuRecoveryAggregateClient) CloseOrder(context.Context, aggregatecontracts.OrderCloseRequest) (*aggregatecontracts.OrderCloseResult, error) {

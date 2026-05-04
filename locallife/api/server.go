@@ -610,6 +610,7 @@ func (server *Server) setupRouter() {
 		webhooksGroup.POST("/baofu/account/open", server.handleBaofuAccountOpenNotify)
 		webhooksGroup.POST("/baofu/payment", server.handleBaofuPaymentNotify)
 		webhooksGroup.POST("/baofu/share", server.handleBaofuShareNotify)
+		webhooksGroup.POST("/baofu/refund", server.handleBaofuRefundNotify)
 		// 微信用户投诉通知（合规要求，状态变更实时推送）
 		webhooksGroup.POST("/wechat-ecommerce/complaint-notify", server.handleComplaintNotify)
 		webhooksGroup.POST("/wechat-ecommerce/violation-notify", server.handleViolationNotify)

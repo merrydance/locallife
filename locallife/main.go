@@ -262,6 +262,14 @@ func main() {
 	}
 	refundRecoveryScheduler := worker.NewRefundRecoveryScheduler(store, taskDistributor, directPaymentClient, ecommerceClient)
 	refundRecoveryScheduler.SetOrdinaryServiceProviderClient(ordinarySPClient)
+	if baofuAggregateClient != nil {
+		refundRecoveryScheduler.SetBaofuAggregateClient(baofuAggregateClient, worker.BaofuProfitSharingWorkerConfig{
+			CollectMerchantID: config.BaofuCollectMerchantID,
+			CollectTerminalID: config.BaofuCollectTerminalID,
+		})
+	} else if config.BaofuMainBusinessEnabled {
+		log.Warn().Msg("refund recovery baofu status branch disabled: baofu aggregate client not configured")
+	}
 	schedulerManager.Register("refund-recovery", refundRecoveryScheduler)
 	schedulerManager.Register("applyment-recovery", worker.NewApplymentRecoveryScheduler(store, taskDistributor, ordinarySPClient))
 	if ordinarySPClient != nil {

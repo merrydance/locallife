@@ -1425,8 +1425,8 @@ func validateOrderRefundFactApplication(application db.ExternalPaymentFactApplic
 	if !fact.IsTerminal {
 		return fmt.Errorf("payment fact %d is not terminal", fact.ID)
 	}
-	if !isWechatMainBusinessRefundFact(fact) {
-		return fmt.Errorf("payment fact %d is not a wechat main-business refund fact", fact.ID)
+	if !isSupportedMainBusinessRefundFact(fact) {
+		return fmt.Errorf("payment fact %d is not a supported main-business refund fact", fact.ID)
 	}
 	if fact.ExternalObjectType != db.ExternalPaymentObjectRefund {
 		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)
@@ -1524,8 +1524,8 @@ func validateReservationRefundFactApplication(application db.ExternalPaymentFact
 	if !fact.IsTerminal {
 		return fmt.Errorf("payment fact %d is not terminal", fact.ID)
 	}
-	if !isWechatMainBusinessRefundFact(fact) {
-		return fmt.Errorf("payment fact %d is not a wechat main-business refund fact", fact.ID)
+	if !isSupportedMainBusinessRefundFact(fact) {
+		return fmt.Errorf("payment fact %d is not a supported main-business refund fact", fact.ID)
 	}
 	if fact.ExternalObjectType != db.ExternalPaymentObjectRefund {
 		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)
@@ -1555,6 +1555,13 @@ func isWechatMainBusinessRefundFact(fact db.ExternalPaymentFact) bool {
 		return true
 	}
 	return fact.Channel == db.PaymentChannelOrdinaryServiceProvider && fact.Capability == db.ExternalPaymentCapabilityPartnerRefund
+}
+
+func isSupportedMainBusinessRefundFact(fact db.ExternalPaymentFact) bool {
+	return isWechatMainBusinessRefundFact(fact) ||
+		(fact.Provider == db.ExternalPaymentProviderBaofu &&
+			fact.Channel == db.PaymentChannelBaofuAggregate &&
+			fact.Capability == db.ExternalPaymentCapabilityBaofuRefund)
 }
 
 func isOrderRefundPaymentOrder(paymentOrder db.PaymentOrder) bool {

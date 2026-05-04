@@ -1541,3 +1541,13 @@ make test-integration
 - Added logic/API regressions proving the error is a safe Chinese product message and does not expose provider internals or use ordinary/ecommerce clients.
 - Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./api ./logic -run 'TestCreateCombinedPaymentOrderAPI_BaofuMainBusinessFailsClosed|TestCreateCombinedPaymentOrder_BaofuMainBusinessFailsClosed' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api ./logic -run 'TestCreateCombinedPaymentOrder|TestPaymentOrderServiceCreatePaymentOrder_UsesBaofu|TestCreatePaymentOrderAPIUsesBaofu' -count=1`; `PATH="/usr/local/go/bin:$PATH" make check-generated`; `git diff --check`.
 - Residual risk: if product requires cross-merchant combined payment after launch, it needs a separate Baofu official-contract design rather than reusing WeChat combined payment DTOs.
+
+
+### 2026-05-04 Remediation Follow-up - Baofu Refund Callback And Query Recovery
+
+- Added `/v1/webhooks/baofu/refund` so Baofu refund notifications parse through the aggregatepay notification parser, load the local refund/payment order, persist a `baofu_refund` external payment fact, and enqueue the existing refund fact application path.
+- Extended payment fact application validation so Baofu main-business refund facts are treated as supported order/reservation refund facts instead of WeChat-only facts.
+- Added refund recovery scheduler Baofu support: processing Baofu refund orders now query `refund_query` through the production aggregatepay client with collect merchant/terminal config, persist Baofu query facts, and enqueue fact application; missing client/config still fail closed and log at the scheduler boundary.
+- Wired the production Baofu aggregate client into `RefundRecoveryScheduler` from `main.go` when `BAOFU_MAIN_BUSINESS_ENABLED` runtime config provides a concrete client.
+- TDD verification: first API test failed with 404 for `/v1/webhooks/baofu/refund`; first logic test failed because Baofu refund facts were rejected as non-WeChat; first worker test failed because refund scheduler lacked `SetBaofuAggregateClient`. After implementation, focused tests passed.
+- Residual risk: this is still C3 local coverage. Real Baofu refund callback/query evidence, response signature/digital-envelope verification, and sandbox callback payload shape remain C4 open items.

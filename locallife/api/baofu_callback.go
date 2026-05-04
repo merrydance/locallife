@@ -23,6 +23,7 @@ type baofuAccountNotificationParser interface {
 type baofuAggregatePaymentNotificationParser interface {
 	ParsePaymentNotification(body []byte) (*baofuaggregatenotification.PaymentNotification, error)
 	ParseShareNotification(body []byte) (*baofuaggregatenotification.ShareNotification, error)
+	ParseRefundNotification(body []byte) (*baofuaggregatenotification.RefundNotification, error)
 }
 
 type baofuCallbackResponse struct {
@@ -184,6 +185,140 @@ func (server *Server) handleBaofuShareNotify(ctx *gin.Context) {
 		Str("baofu_share_state", strings.TrimSpace(notification.Fact.TransactionState)).
 		Msg("baofu share callback fact persisted")
 	ctx.JSON(http.StatusOK, baofuCallbackResponse{Code: "SUCCESS", Message: "OK"})
+}
+
+func (server *Server) handleBaofuRefundNotify(ctx *gin.Context) {
+	if server.baofuPaymentNotificationParser == nil {
+		log.Error().Msg("baofu refund callback received but parser is not configured")
+		ctx.JSON(http.StatusServiceUnavailable, baofuCallbackResponse{Code: "FAIL", Message: "baofu refund callback service unavailable"})
+		return
+	}
+	body, status, err := readWebhookBody(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("read baofu refund callback body failed")
+		ctx.JSON(status, baofuCallbackResponse{Code: "FAIL", Message: "read callback body failed"})
+		return
+	}
+	notification, err := server.baofuPaymentNotificationParser.ParseRefundNotification(body)
+	if err != nil {
+		log.Error().Err(err).Msg("parse baofu refund callback failed")
+		ctx.JSON(http.StatusUnauthorized, baofuCallbackResponse{Code: "FAIL", Message: "callback verification failed"})
+		return
+	}
+	if notification == nil {
+		log.Error().Msg("parse baofu refund callback returned empty notification")
+		ctx.JSON(http.StatusBadRequest, baofuCallbackResponse{Code: "FAIL", Message: "callback content invalid"})
+		return
+	}
+	refundOrder, err := server.store.GetRefundOrderByOutRefundNo(ctx.Request.Context(), strings.TrimSpace(notification.Fact.OutTradeNo))
+	if err != nil {
+		log.Error().Err(err).Str("out_refund_no", strings.TrimSpace(notification.Fact.OutTradeNo)).Msg("load baofu refund order for callback failed")
+		ctx.JSON(http.StatusInternalServerError, baofuCallbackResponse{Code: "FAIL", Message: "persist callback failed"})
+		return
+	}
+	paymentOrder, err := server.store.GetPaymentOrder(ctx.Request.Context(), refundOrder.PaymentOrderID)
+	if err != nil {
+		log.Error().Err(err).
+			Int64("refund_order_id", refundOrder.ID).
+			Int64("payment_order_id", refundOrder.PaymentOrderID).
+			Msg("load baofu refund payment order for callback failed")
+		ctx.JSON(http.StatusInternalServerError, baofuCallbackResponse{Code: "FAIL", Message: "persist callback failed"})
+		return
+	}
+	application, err := server.recordBaofuRefundCallbackFact(ctx.Request.Context(), notification, refundOrder, paymentOrder)
+	if err != nil {
+		log.Error().Err(err).
+			Int64("refund_order_id", refundOrder.ID).
+			Str("out_refund_no", strings.TrimSpace(notification.Fact.OutTradeNo)).
+			Msg("persist baofu refund callback fact failed")
+		ctx.JSON(http.StatusInternalServerError, baofuCallbackResponse{Code: "FAIL", Message: "persist callback failed"})
+		return
+	}
+	server.enqueueOrderRefundPaymentFactApplication(ctx.Request.Context(), application)
+	log.Info().
+		Int64("refund_order_id", refundOrder.ID).
+		Str("out_refund_no", strings.TrimSpace(notification.Fact.OutTradeNo)).
+		Str("baofu_refund_state", strings.TrimSpace(notification.Fact.TransactionState)).
+		Msg("baofu refund callback fact persisted")
+	ctx.JSON(http.StatusOK, baofuCallbackResponse{Code: "SUCCESS", Message: "OK"})
+}
+
+func (server *Server) recordBaofuRefundCallbackFact(ctx context.Context, notification *baofuaggregatenotification.RefundNotification, refundOrder db.RefundOrder, paymentOrder db.PaymentOrder) (*db.ExternalPaymentFactApplication, error) {
+	if server.paymentFactService == nil {
+		return nil, fmt.Errorf("baofu refund callback payment fact service is not configured")
+	}
+	if notification == nil {
+		return nil, fmt.Errorf("baofu refund callback notification is required")
+	}
+	if paymentOrder.PaymentChannel != db.PaymentChannelBaofuAggregate {
+		return nil, fmt.Errorf("baofu refund callback payment order %d has channel %q", paymentOrder.ID, paymentOrder.PaymentChannel)
+	}
+	owner, consumer, err := baofuRefundFactOwnerAndConsumer(paymentOrder)
+	if err != nil {
+		return nil, err
+	}
+	amount := notification.Fact.SuccessAmountFen
+	if amount <= 0 {
+		amount = refundOrder.RefundAmount
+	}
+	result, err := server.paymentFactService.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
+		Provider:             db.ExternalPaymentProviderBaofu,
+		Channel:              db.PaymentChannelBaofuAggregate,
+		Capability:           db.ExternalPaymentCapabilityBaofuRefund,
+		FactSource:           db.ExternalPaymentFactSourceCallback,
+		SourceEventID:        paymentFactStringPtr(strings.TrimSpace(notification.NotifyID)),
+		SourceEventType:      paymentFactStringPtr(strings.TrimSpace(notification.NotifyType)),
+		ExternalObjectType:   db.ExternalPaymentObjectRefund,
+		ExternalObjectKey:    strings.TrimSpace(notification.Fact.OutTradeNo),
+		ExternalSecondaryKey: paymentFactStringPtr(strings.TrimSpace(notification.Fact.TradeNo)),
+		BusinessOwner:        paymentFactStringPtr(owner),
+		BusinessObjectType:   paymentFactStringPtr(paymentFactBusinessObjectRefundOrder),
+		BusinessObjectID:     paymentFactInt64Ptr(refundOrder.ID),
+		UpstreamState:        strings.TrimSpace(notification.Fact.TransactionState),
+		TerminalStatus:       notification.TerminalStatus,
+		Amount:               paymentFactInt64Ptr(amount),
+		Currency:             "CNY",
+		OccurredAt:           baofuNotificationTimePtr(notification.OccurredAt),
+		UpstreamUpdatedAt:    baofuNotificationTimePtr(notification.OccurredAt),
+		RawResource:          notification.Raw,
+		DedupeKey:            baofuRefundCallbackDedupeKey(notification),
+		Application: &logic.ExternalPaymentFactApplicationTarget{
+			Consumer:           consumer,
+			BusinessObjectType: paymentFactBusinessObjectRefundOrder,
+			BusinessObjectID:   refundOrder.ID,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Application, nil
+}
+
+func baofuRefundFactOwnerAndConsumer(paymentOrder db.PaymentOrder) (owner string, consumer string, err error) {
+	if paymentOrder.OrderID.Valid && !paymentOrder.ReservationID.Valid && paymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerOrder {
+		return db.ExternalPaymentBusinessOwnerOrder, paymentFactConsumerOrderDomain, nil
+	}
+	if paymentOrder.ReservationID.Valid && (paymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerReservation || paymentOrder.BusinessType == "reservation_addon") {
+		return db.ExternalPaymentBusinessOwnerReservation, paymentFactConsumerReservationDomain, nil
+	}
+	return "", "", fmt.Errorf("baofu refund callback payment order %d has unsupported business target", paymentOrder.ID)
+}
+
+func baofuNotificationTimePtr(value time.Time) *time.Time {
+	if value.IsZero() {
+		return nil
+	}
+	utc := value.UTC()
+	return &utc
+}
+
+func baofuRefundCallbackDedupeKey(notification *baofuaggregatenotification.RefundNotification) string {
+	outRefundNo := strings.TrimSpace(notification.Fact.OutTradeNo)
+	sourceEventID := strings.TrimSpace(notification.NotifyID)
+	if sourceEventID == "" {
+		sourceEventID = strings.TrimSpace(notification.Fact.TransactionState)
+	}
+	return fmt.Sprintf("baofu:callback:refund:%s:%s", outRefundNo, sourceEventID)
 }
 
 func (server *Server) recordBaofuAccountOpenCallbackFact(ctx context.Context, notification *baofunotification.AccountNotification) (db.ExternalPaymentFact, error) {

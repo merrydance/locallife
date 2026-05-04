@@ -10,6 +10,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
+	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
@@ -778,6 +779,83 @@ func TestRefundRecoverySchedulerRunOnceQueriesOrdinaryRefundStatusByOrder(t *tes
 	require.NotNil(t, ordinaryClient.queryRefundRequest)
 	require.Equal(t, "sub_mch_ordinary_7001", ordinaryClient.queryRefundRequest.SubMchID)
 	require.Equal(t, stuckRefund.OutRefundNo, ordinaryClient.queryRefundRequest.OutRefundNo)
+}
+
+func TestRefundRecoverySchedulerRunOnceQueriesBaofuRefundStatusByOrder(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &orderRefundFactApplicationRecorder{}
+	baofuClient := &baofuRecoveryAggregateClient{
+		refundResult: &aggregatecontracts.RefundResult{
+			OutTradeNo:       "BFRFD_STUCK_ORDER_001",
+			TradeNo:          "BFREFUND_UP_ORDER_001",
+			RefundState:      aggregatecontracts.RefundStateSuccess,
+			SuccessAmountFen: 880,
+			Raw:              json.RawMessage(`{"refundState":"SUCCESS"}`),
+		},
+	}
+
+	stuckRefund := db.RefundOrder{
+		ID:             263,
+		PaymentOrderID: 293,
+		OutRefundNo:    "BFRFD_STUCK_ORDER_001",
+		Status:         "processing",
+		RefundAmount:   880,
+	}
+	paymentOrder := db.PaymentOrder{
+		ID:             293,
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+		BusinessType:   db.ExternalPaymentBusinessOwnerOrder,
+		OrderID:        pgtype.Int8{Int64: 2501, Valid: true},
+	}
+
+	store.EXPECT().ListPaidUnrefundedPaymentOrders(gomock.Any(), int32(50)).Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().ListPaidUnrefundedReservationPaymentOrders(gomock.Any(), int32(50)).Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().ListPendingReservationRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingReservationRefundOrdersForRecoveryRow{}, nil)
+	store.EXPECT().ListStuckProcessingRefundOrders(gomock.Any(), gomock.Any()).Return([]db.ListStuckProcessingRefundOrdersRow{{
+		ID:          stuckRefund.ID,
+		OutRefundNo: stuckRefund.OutRefundNo,
+		Status:      stuckRefund.Status,
+		CreatedAt:   time.Now().Add(-20 * time.Minute),
+		PaymentType: paymentOrder.PaymentType,
+	}}, nil)
+	store.EXPECT().GetRefundOrder(gomock.Any(), stuckRefund.ID).Return(stuckRefund, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+		require.Equal(t, db.ExternalPaymentProviderBaofu, arg.Provider)
+		require.Equal(t, db.PaymentChannelBaofuAggregate, arg.Channel)
+		require.Equal(t, db.ExternalPaymentCapabilityBaofuRefund, arg.Capability)
+		require.Equal(t, db.ExternalPaymentFactSourceQuery, arg.FactSource)
+		require.Equal(t, stuckRefund.OutRefundNo, arg.ExternalObjectKey)
+		require.Equal(t, "BFREFUND_UP_ORDER_001", arg.ExternalSecondaryKey.String)
+		require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
+		require.Equal(t, stuckRefund.ID, arg.BusinessObjectID.Int64)
+		require.Equal(t, db.ExternalPaymentBusinessOwnerOrder, arg.BusinessOwner.String)
+		require.Equal(t, "baofu:query:refund:"+stuckRefund.OutRefundNo+":"+db.ExternalPaymentTerminalStatusSuccess, arg.DedupeKey)
+		return db.ExternalPaymentFact{ID: 2812, DedupeKey: arg.DedupeKey, IsTerminal: true}, nil
+	})
+	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
+		FactID:             2812,
+		Consumer:           "order_domain",
+		BusinessObjectType: "refund_order",
+		BusinessObjectID:   stuckRefund.ID,
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}).Return(db.ExternalPaymentFactApplication{ID: 2912, FactID: 2812, Consumer: "order_domain", BusinessObjectType: "refund_order", BusinessObjectID: stuckRefund.ID, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
+
+	scheduler := worker.NewRefundRecoveryScheduler(store, distributor, nil, nil)
+	scheduler.SetBaofuAggregateClient(baofuClient, worker.BaofuProfitSharingWorkerConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+	})
+	scheduler.RunOnce()
+
+	require.Equal(t, []int64{2912}, distributor.applicationIDs)
+	require.Equal(t, "COLLECT_MER", baofuClient.lastRefundQuery.MerchantID)
+	require.Equal(t, "COLLECT_TER", baofuClient.lastRefundQuery.TerminalID)
+	require.Equal(t, stuckRefund.OutRefundNo, baofuClient.lastRefundQuery.OutTradeNo)
 }
 
 func TestRefundRecoverySchedulerRunOnceKeepsWaitingWhenEcommerceRefundStillProcessing(t *testing.T) {
