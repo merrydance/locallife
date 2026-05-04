@@ -189,6 +189,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 本地缺口：
 
 - 已新增 `OfficialQueryAccountRequest` 覆盖 `version`、`accType`、`contractNo/loginNo/certificateNo` 查询路径；本地强制一次只用一个查询 key，`certificateNo` 查询时必须带 `certificateType`，避免多 key 语义漂移。2026-05-05 沙箱查询 `BAOFU_OPEN_4FACTOR_202605050001` 返回 `BF0003` 后确认本地漂移：个人开户查询仍默认 `accType=2`。现已把业务层 `QueryAccountRequest.AccountType` 传入官方 `accType`，并同步让余额查询支持个人/企业账户类型。
+- 2026-05-05 个人开户查询已返回 `contractNo=CP61***2938`，但官方查询响应不含开户 `state` 字段且上游返回 success-like `errorCode=SUCCESS`；本地 parser 已改为“成功查询且有 `contractNo` 即视为 active”，并清空 `SUCCESS/1` 这类非失败码，避免把已开户账户显示为 abnormal。
 - 当前项目把 `contractNo` 与 `sharing_mer_id` 严格拆开是正确的；本地 active receiver 约束要求显式 `sharing_mer_id`。但官方查询页只明确 `contractNo`，开户/查询/通知哪个字段承载宝付二级商户号仍必须用实际沙箱回包确认后固化。
 
 ### 6.3 开户结果通知

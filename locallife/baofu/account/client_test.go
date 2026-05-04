@@ -110,6 +110,30 @@ func TestAccountClientQueryAccountUsesPersonalAccountType(t *testing.T) {
 	require.JSONEq(t, `{"accType":1,"loginNo":"OPEN202605050001"}`, partialJSONForAccountTest(t, env.Body, "accType", "loginNo"))
 }
 
+func TestAccountClientQueryAccountTreatsContractOnlySuccessAsActive(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{
+		"retCode":   1,
+		"errorCode": "SUCCESS",
+		"result": []map[string]any{{
+			"transSerialNo": "OPEN202605050001",
+			"contractNo":    "CP610000000000542938",
+		}},
+	}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	result, err := client.QueryAccount(context.Background(), contracts.QueryAccountRequest{
+		OutRequestNo: "OPEN202605050001",
+		AccountType:  "personal",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "OPEN202605050001", result.OutRequestNo)
+	require.Equal(t, "CP610000000000542938", result.ContractNo)
+	require.Equal(t, contracts.OpenStateActive, result.OpenState)
+	require.Equal(t, "1", result.UpstreamState)
+	require.Empty(t, result.FailCode)
+}
+
 func TestAccountClientQueryBalanceUsesPersonalAccountType(t *testing.T) {
 	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": 1, "contractNo": "CM202605040001", "availableBal": "123.45", "pendingBal": "1.00", "currBal": "124.45", "freezeBal": "0.00"}}
 	client := NewClient(testBaofuRootClient(t, doer))

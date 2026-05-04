@@ -205,13 +205,20 @@ func (r officialAccountResult) toAccountResult() *contracts.AccountResult {
 	item := r.firstResultItem()
 	contractNo := firstNonEmpty(item.ContractNo.String(), r.ContractNo.String())
 	state := firstNonEmpty(item.State.String(), r.State.String())
+	if state == "" && contractNo != "" {
+		state = "1"
+	}
+	failCode := firstNonEmpty(item.ErrorCode.String(), r.ErrorCode.String())
+	if isOfficialSuccessCode(failCode) {
+		failCode = ""
+	}
 	return &contracts.AccountResult{
 		OutRequestNo:  firstNonEmpty(item.TransSerialNo.String(), r.TransSerialNo.String()),
 		ContractNo:    contractNo,
 		SharingMerID:  contractNo,
 		UpstreamState: state,
 		OpenState:     contracts.OpenStateFromUpstream(state),
-		FailCode:      firstNonEmpty(item.ErrorCode.String(), r.ErrorCode.String()),
+		FailCode:      failCode,
 		FailMessage:   firstNonEmpty(item.ErrorMessage.String(), r.ErrorMessage.String()),
 	}
 }
@@ -271,6 +278,15 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func isOfficialSuccessCode(value string) bool {
+	switch strings.ToUpper(strings.TrimSpace(value)) {
+	case "", "1", "SUCCESS":
+		return true
+	default:
+		return false
+	}
 }
 
 type officialBalanceResult struct {
