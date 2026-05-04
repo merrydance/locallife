@@ -9,7 +9,7 @@ import (
 
 func validBaofuConfigForTest() Config {
 	return Config{
-		BaseURL:           "https://test-api.example.com",
+		Environment:       BaofuEnvironmentSandbox,
 		CollectMerchantID: "102004465",
 		CollectTerminalID: "200005200",
 		PayoutMerchantID:  "102004466",
@@ -37,13 +37,37 @@ func TestConfigValidateRequiresCollectMerchant(t *testing.T) {
 	require.EqualError(t, cfg.Validate(), "baofu collect merchant id is required")
 }
 
-func TestConfigNormalizedDefaultsTimeoutAndBaseURL(t *testing.T) {
+func TestConfigNormalizedDefaultsTimeoutAndOfficialEndpoints(t *testing.T) {
 	cfg := validBaofuConfigForTest()
-	cfg.BaseURL = "  "
+	cfg.AccountGatewayBaseURL = "  "
+	cfg.AggregatePayBaseURL = "  "
+	cfg.AggregatePayBackupBaseURL = "  "
+	cfg.MerchantReportBaseURL = "  "
 	cfg.Timeout = 0
 
 	normalized := cfg.Normalized()
 
-	require.Equal(t, DefaultBaseURL, normalized.BaseURL)
+	require.Equal(t, SandboxAccountGatewayBaseURL, normalized.AccountGatewayBaseURL)
+	require.Equal(t, SandboxAggregatePayBaseURL, normalized.AggregatePayBaseURL)
+	require.Equal(t, SandboxMerchantReportBaseURL, normalized.MerchantReportBaseURL)
 	require.Equal(t, 30*time.Second, normalized.Timeout)
+}
+
+func TestConfigValidateRejectsPlaceholderEndpoint(t *testing.T) {
+	cfg := validBaofuConfigForTest()
+	cfg.AggregatePayBaseURL = "https://api.baofoo.com"
+
+	require.EqualError(t, cfg.Validate(), "baofu aggregate pay base url must be an official endpoint")
+}
+
+func TestConfigValidateRequiresOfficialEndpointProfiles(t *testing.T) {
+	cfg := validBaofuConfigForTest()
+	cfg.AccountGatewayBaseURL = "https://test-api.example.com/union-gw/api"
+
+	require.EqualError(t, cfg.Validate(), "baofu account gateway base url must be an official endpoint")
+
+	cfg = validBaofuConfigForTest()
+	cfg.MerchantReportBaseURL = "https://test-api.example.com/mch-service/api"
+
+	require.EqualError(t, cfg.Validate(), "baofu merchant report base url must be an official endpoint")
 }

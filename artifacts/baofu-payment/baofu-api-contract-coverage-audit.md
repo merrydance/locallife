@@ -59,7 +59,7 @@
 
 | 能力组 | 官方文档 | 请求方式 | 测试地址 | 生产地址 | 生产备用地址 | 当前项目覆盖 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 宝财通账户 API / union-gw | https://doc.mandao.com/docs/bct/unionGw | POST | `https://vgw.baofoo.com/union-gw/api/{报文编号}/transReq.do` | `https://public.baofu.com/union-gw/api/{报文编号}/transReq.do` | 未见 | C1：`locallife/baofu/crypto` 有本地 envelope 测试；`Config.DefaultBaseURL` 仍是占位 `https://api.baofoo.com`，不匹配官方入口。 |
+| 宝财通账户 API / union-gw | https://doc.mandao.com/docs/bct/unionGw | POST | `https://vgw.baofoo.com/union-gw/api/{报文编号}/transReq.do` | `https://public.baofu.com/union-gw/api/{报文编号}/transReq.do` | 未见 | C1：`locallife/baofu/crypto` 有本地 envelope 测试；已拆出官方 endpoint profile，但 union-gw 真实 HTTP client 未完成。 |
 | 宝付聚合支付 | https://doc.mandao.com/docs/bct/bct-1f9qhakcna6te | POST | `https://mch-juhe.baofoo.com/api` | `https://juhe.baofoo.com/api` | `https://juhe-backup.baofoo.com/api` | C1/C2：有 contracts/service/mock；无真实 HTTP client；API runtime 仍硬编码普通服务商 facade；微信直连支付不在宝付替换范围。 |
 | 聚合商户报备 | https://doc.mandao.com/docs/bct/bct-1f9o5s1lqlean | POST | `https://mch-juhe.baofoo.com/mch-service/api` | `https://juhe.baofoo.com/mch-service/api` | 未见 | C0：已列入计划 Task 3A，尚无代码。 |
 
@@ -474,7 +474,7 @@
 
 | 路径 | 现状 | 主要缺口 |
 | --- | --- | --- |
-| `locallife/baofu/config.go` | 区分收款/支付商户号 | 默认 base URL 不匹配官方三组入口；缺 endpoint profile。 |
+| `locallife/baofu/config.go` | 区分收款/支付商户号；已拆官方三组 endpoint profile 并拒绝 `https://api.baofoo.com` 占位地址 | 后续真实 client 仍需逐接口使用正确 endpoint。 |
 | `locallife/baofu/crypto/uniongw.go` | 本地 union-gw envelope 草稿 | 未按官方 `verifyType=1/2`、`content`、`veryfyString` 完整实现并联调。 |
 | `locallife/baofu/aggregatepay/contracts/types.go` | 统一下单、查询、分账 DTO 草稿 | 未覆盖所有必填/条件必填/长度/枚举；无退款/关单 DTO。 |
 | `locallife/baofu/account/contracts/types.go` | 账户/余额/提现 DTO 抽象 | 不是官方字段级 DTO；缺个人/企业/个体差异和条件必填。 |
@@ -491,7 +491,7 @@
 
 | 编号 | 严重度 | 证据 | 风险 | 整改要求 |
 | --- | --- | --- | --- | --- |
-| C-001 | 高 | `locallife/baofu/config.go:10` 默认 `https://api.baofoo.com`；`locallife/baofu/config.go:12` 只有单一 `BaseURL` | 三组官方入口不同，单一 BaseURL 会把 union-gw、聚合支付、聚合商户报备混到同一地址，测试/生产切换不可审计 | 拆成 account union-gw、aggregate pay、merchant report 三个 endpoint profile，分别校验测试/生产/备用地址。 |
+| C-001 | 已本地修复，待真实 client 使用验证 | `locallife/baofu/config.go` 已拆 `AccountGatewayBaseURL`、`AggregatePayBaseURL`、`MerchantReportBaseURL` 并拒绝 `https://api.baofoo.com` | 配置层已防止三组入口混用；真实 client 仍必须逐接口读取对应 endpoint | Task 8 接真实 HTTP 时验证每个 client 使用正确 endpoint。 |
 | C-002 | 高 | `locallife/baofu/account/contracts/types.go:19` 的 `OpenAccountRequest` 是业务抽象 | 官方开户 `version/accType/accInfo/noticeUrl/businessType/loginNo/needUploadFile` 和个人/企业/个体条件必填未入契约，容易上线后参数缺失 | 建官方字段级 DTO；个人二要素、个人四要素、企业、个体户分开校验。 |
 | C-003 | 高 | `locallife/baofu/account/notification/notification.go:45` 解析 `outRequestNo/sharingMerId/openState` | 官方开户通知字段是 `member_id/terminal_id/memberType/state/errorCode/errorMsg/transSerialNo/loginNo/customerName/contractNo/noticeType`，ACK 还需纯 `OK`；当前 parser 可能无法处理真实通知 | 按官方通知重写 parser/ACK 测试；用宝付测试通知样例或沙箱回调验证。 |
 | C-004 | 高 | `locallife/baofu/aggregatepay/contracts/types.go:48` 直接定义业务请求，无公共报文 envelope | 聚合支付和报备都要求 `merId/terId/method/charset/version/format/timestamp/signType/signSn/ncrptnSn/dgtlEnvlp/signStr/bizContent`，缺失会导致真实 HTTP 无法上线 | 新增公共 envelope DTO、签名/验签/加密测试，业务 DTO 只进入 `bizContent`。 |

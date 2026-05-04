@@ -122,7 +122,7 @@ Required helper behavior:
 - Modify: `locallife/baofu/config_test.go`
 - Modify: `artifacts/baofu-payment/baofu-api-contract-coverage-audit.md`
 
-- [ ] **Step 1: Write endpoint profile tests**
+- [x] **Step 1: Write endpoint profile tests**
 
 Add tests in `locallife/baofu/config_test.go`:
 
@@ -151,7 +151,7 @@ func TestConfigNormalizedUsesSandboxEndpointProfile(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 Run from `locallife/`:
 
@@ -161,7 +161,7 @@ go test ./baofu -run 'TestConfigValidateRequiresOfficialEndpointProfiles|TestCon
 
 Expected before implementation: compile failure or assertion failure because endpoint profile fields/constants do not exist.
 
-- [ ] **Step 3: Implement config fields and official allowlist**
+- [x] **Step 3: Implement config fields and official allowlist**
 
 In `locallife/baofu/config.go`, add:
 
@@ -200,7 +200,7 @@ type Config struct {
 
 Keep existing fields that callers still need, but stop defaulting to `https://api.baofoo.com`.
 
-- [ ] **Step 4: Run config tests**
+- [x] **Step 4: Run config tests**
 
 ```bash
 go test ./baofu -run 'TestConfig' -count=1
@@ -260,7 +260,7 @@ func TestPublicEnvelopeRejectsInvalidFixedValues(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 ```bash
 go test ./baofu -run 'TestPublicEnvelope' -count=1
@@ -355,7 +355,7 @@ func TestOfficialBalanceAmountConvertsYuanToFen(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 ```bash
 go test ./baofu/account/contracts -run 'TestOfficial|Test.*Yuan' -count=1
@@ -422,7 +422,7 @@ func TestAccountNotificationACKIsPlainOK(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 ```bash
 go test ./baofu/account/notification ./api -run 'TestParseOpenAccountNotificationUsesOfficialFields|TestAccountNotificationACK|TestBaofuAccountCallback' -count=1
@@ -567,7 +567,7 @@ func TestBaofuPaymentReadinessRequiresMerchantSubMchIDAndAppletAuth(t *testing.T
 }
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 ```bash
 go test ./logic -run 'TestBaofuMerchantReport|TestBaofuPaymentReadinessRequiresMerchantSubMchID' -count=1
@@ -676,7 +676,7 @@ func TestUnifiedOrderRequestValidateOfficialRequiredFields(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 ```bash
 go test ./baofu/aggregatepay/contracts -run 'TestUnifiedOrderRequestValidateOfficialRequiredFields' -count=1
@@ -752,7 +752,7 @@ func TestAggregateClientCreateUnifiedOrderPostsPublicEnvelope(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 ```bash
 go test ./baofu ./baofu/account ./baofu/merchantreport ./baofu/aggregatepay -run 'Test.*Client' -count=1
@@ -828,7 +828,7 @@ func TestOrderCloseRequiresOriginalPaymentReference(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 ```bash
 go test ./baofu/aggregatepay/contracts ./logic -run 'TestRefundBeforeShare|TestOrderClose|TestBaofuRefund' -count=1
@@ -888,7 +888,7 @@ func TestClassifyBaofuErrorCodeForFrontendSemantics(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 ```bash
 go test ./baofu ./logic ./api -run 'TestClassifyBaofuError|TestBaofu.*Error' -count=1
@@ -956,7 +956,7 @@ func TestDirectPaymentPathsDoNotUseBaofu(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [x] **Step 2: Run tests and confirm failure**
 
 ```bash
 go test ./api ./logic -run 'TestCreatePaymentOrderAPIUsesBaofu|TestDirectPaymentPathsDoNotUseBaofu|TestPaymentOrderServiceCreatePaymentOrder_UsesBaofu' -count=1
