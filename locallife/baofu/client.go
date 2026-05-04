@@ -37,7 +37,7 @@ func (c *Client) PostAccount(ctx context.Context, method string, merchantID stri
 		return errors.New("baofu client is not configured")
 	}
 	endpoint := strings.TrimRight(c.config.AccountGatewayBaseURL, "/") + "/" + strings.TrimSpace(method) + "/transReq.do"
-	return c.postPublicEnvelope(ctx, endpoint, method, merchantID, terminalID, bizRequest, out)
+	return c.postUnionGateway(ctx, endpoint, method, merchantID, terminalID, bizRequest, out)
 }
 
 func (c *Client) PostAggregatePay(ctx context.Context, method string, bizRequest any, out any) error {
@@ -52,6 +52,66 @@ func (c *Client) PostMerchantReport(ctx context.Context, method string, bizReque
 		return errors.New("baofu client is not configured")
 	}
 	return c.postPublicEnvelope(ctx, c.config.MerchantReportBaseURL, method, c.config.CollectMerchantID, c.config.CollectTerminalID, bizRequest, out)
+}
+
+func (c *Client) postUnionGateway(ctx context.Context, endpoint string, method string, merchantID string, terminalID string, bizRequest any, out any) error {
+	if c.transport == nil {
+		return errors.New("baofu transport is not configured")
+	}
+	envelope, err := NewUnionGWRequestEnvelope(merchantID, terminalID, method, bizRequest)
+	if err != nil {
+		return err
+	}
+	plaintext, err := CanonicalJSON(envelope)
+	if err != nil {
+		return err
+	}
+	content, err := EncodeUnionGWVerifyType1Content(c.config.PrivateKeyPEM, plaintext)
+	if err != nil {
+		return err
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, http.NoBody)
+	if err != nil {
+		return err
+	}
+	query := httpReq.URL.Query()
+	query.Set("memberId", strings.TrimSpace(merchantID))
+	query.Set("terminalId", strings.TrimSpace(terminalID))
+	query.Set("verifyType", UnionGWVerifyTypeRSA)
+	query.Set("content", content)
+	httpReq.URL.RawQuery = query.Encode()
+	resp, err := c.transport.client.Do(httpReq)
+	if err != nil {
+		return providerRequestError(method, 0, "", err)
+	}
+	defer resp.Body.Close()
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return providerRequestError(method, resp.StatusCode, "", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return providerRequestError(method, resp.StatusCode, "", fmt.Errorf("baofu upstream http status %d", resp.StatusCode))
+	}
+	responsePlaintext, err := DecodeUnionGWVerifyType1Content(c.config.BaofuPublicKeyPEM, strings.TrimSpace(string(responseBody)))
+	if err != nil {
+		return providerRequestError(method, resp.StatusCode, "", err)
+	}
+	var responseEnvelope UnionGWPlaintextEnvelope
+	if err := json.Unmarshal(responsePlaintext, &responseEnvelope); err != nil {
+		return providerRequestError(method, resp.StatusCode, "", err)
+	}
+	if err := responseEnvelope.ValidateResponse(merchantID, terminalID, method); err != nil {
+		return providerRequestError(method, resp.StatusCode, responseEnvelope.Header.SystemRespCode, err)
+	}
+	if strings.TrimSpace(responseEnvelope.Header.SystemRespCode) != UnionGWSystemRespSuccess {
+		return providerRequestError(method, resp.StatusCode, responseEnvelope.Header.SystemRespCode, errors.New("baofu union-gw system response failed"))
+	}
+	if out != nil {
+		if err := json.Unmarshal(responseEnvelope.Body, out); err != nil {
+			return providerRequestError(method, resp.StatusCode, responseEnvelope.Header.SystemRespCode, err)
+		}
+	}
+	return nil
 }
 
 func (c *Client) postPublicEnvelope(ctx context.Context, endpoint string, method string, merchantID string, terminalID string, bizRequest any, out any) error {

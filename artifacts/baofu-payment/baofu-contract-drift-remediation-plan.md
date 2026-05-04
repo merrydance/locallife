@@ -760,7 +760,7 @@ go test ./baofu ./baofu/account ./baofu/merchantreport ./baofu/aggregatepay -run
 
 Expected: fail because concrete clients are not implemented.
 
-- [ ] **Step 3: Implement clients**
+- [x] **Step 3: Implement clients**
 
 Implement:
 
@@ -784,7 +784,7 @@ AggregatePayClient.CloseOrder(ctx, req)
 
 All methods must use context, configured timeout, one structured logging boundary, redacted request metadata, and no raw payload in ordinary errors.
 
-Progress: current DTO-backed HTTP clients are implemented for account query/balance/withdraw, merchant report/report query/APPLET bind, unified order/query, and share/share query. Refund/query refund/order close remain intentionally deferred to Task 9 because their DTOs are introduced there.
+Progress: current DTO-backed HTTP clients are implemented for account open/query/balance/withdraw/query withdraw, merchant report/report query/APPLET bind, unified order/query, share/share query, refund/query refund, and order close. Account client now uses official union-gw `verifyType=1` URL params + encrypted `content` + `header/body` response validation instead of aggregate public envelope. `verifyType=2` and sandbox evidence remain C4 open.
 
 - [x] **Step 4: Run transport tests**
 
@@ -794,11 +794,11 @@ go test ./baofu ./baofu/account ./baofu/merchantreport ./baofu/aggregatepay -cou
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
-git add locallife/baofu
-git commit -m "feat(baofu): implement http clients"
+git add locallife/baofu artifacts/baofu-payment
+git commit -m "feat(baofu): use official union gateway envelope"
 ```
 
 ### Task 9: Refund Before Share And Order Close Contracts

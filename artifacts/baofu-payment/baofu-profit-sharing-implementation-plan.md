@@ -1551,3 +1551,11 @@ make test-integration
 - Wired the production Baofu aggregate client into `RefundRecoveryScheduler` from `main.go` when `BAOFU_MAIN_BUSINESS_ENABLED` runtime config provides a concrete client.
 - TDD verification: first API test failed with 404 for `/v1/webhooks/baofu/refund`; first logic test failed because Baofu refund facts were rejected as non-WeChat; first worker test failed because refund scheduler lacked `SetBaofuAggregateClient`. After implementation, focused tests passed.
 - Residual risk: this is still C3 local coverage. Real Baofu refund callback/query evidence, response signature/digital-envelope verification, and sandbox callback payload shape remain C4 open items.
+
+
+### 2026-05-04 Remediation Follow-up - Official BaoCaiTong Union-GW Envelope
+
+- Corrected the account API transport boundary: BaoCaiTong account open/query/balance/withdraw/query withdraw now posts to `/union-gw/api/{serviceTp}/transReq.do` with URL query parameters `memberId`、`terminalId`、`verifyType=1`、`content` instead of reusing the aggregate-pay public envelope.
+- Added `locallife/baofu/uniongw.go` to build the official `header/body` plaintext envelope, encrypt/decrypt `verifyType=1` content, and validate response `memberId`、`terminalId`、`serviceTp`、`sysRespCode` before unmarshalling business `body`.
+- Added regression coverage proving the account client request no longer has a JSON request body or `bizContent`, and that decrypted `content` contains `header.serviceTp` matching the URL service number.
+- Residual risk: this is C3 local coverage. Baofoo `verifyType=2`、real sandbox response samples、account notification `data_content` encryption shape、and full union-gw system/business error-code evidence remain C4 open items.

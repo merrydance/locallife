@@ -59,7 +59,7 @@
 
 | 能力组 | 官方文档 | 请求方式 | 测试地址 | 生产地址 | 生产备用地址 | 当前项目覆盖 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 宝财通账户 API / union-gw | https://doc.mandao.com/docs/bct/unionGw | POST | `https://vgw.baofoo.com/union-gw/api/{报文编号}/transReq.do` | `https://public.baofu.com/union-gw/api/{报文编号}/transReq.do` | 未见 | C2/C3：已拆官方 endpoint profile，并有账户 open/query/balance/withdraw/query withdraw concrete client 与 httptest；union-gw 官方 `verifyType/content/veryfyString` envelope、响应验签/数字信封完整性仍需复核，不得升 C4。 |
+| 宝财通账户 API / union-gw | https://doc.mandao.com/docs/bct/unionGw | POST | `https://vgw.baofoo.com/union-gw/api/{报文编号}/transReq.do` | `https://public.baofu.com/union-gw/api/{报文编号}/transReq.do` | 未见 | C3：已拆官方 endpoint profile，账户 open/query/balance/withdraw/query withdraw concrete client 已改用 union-gw `verifyType=1` URL 参数、`content` 密文、`header/body` 明文 envelope，并校验响应 `sysRespCode/memberId/terminalId/serviceTp`；`verifyType=2`、真实宝付沙箱和通知密文仍需复核，不得升 C4。 |
 | 宝付聚合支付 | https://doc.mandao.com/docs/bct/bct-1f9qhakcna6te | POST | `https://mch-juhe.baofoo.com/api` | `https://juhe.baofoo.com/api` | `https://juhe-backup.baofoo.com/api` | C3：已有 concrete HTTP client、httptest envelope、统一下单/查询/分账/退款/关单 DTO 和主业务 API runtime wiring；响应验签/数字信封与沙箱证据仍未完成；微信直连支付不在宝付替换范围。 |
 | 聚合商户报备 | https://doc.mandao.com/docs/bct/bct-1f9o5s1lqlean | POST | `https://mch-juhe.baofoo.com/mch-service/api` | `https://juhe.baofoo.com/mch-service/api` | 未见 | C3：已有 `merchant_report`、`merchant_report_query`、`bind_sub_config` DTO/client、报备表、sqlc、service 和 readiness；真实资料映射、完整附录枚举和沙箱证据仍未完成。 |
 
@@ -137,7 +137,7 @@
 - `locallife/baofu/account/contracts/types.go` 的 `OpenAccountRequest` 仍是业务抽象；官方字段级 DTO 已拆到 `official_open.go` 等文件。
 - 已区分个人二要素、个人四要素、企业/个体字段集合；企业/个体生产资料来源、资质附件和完整条件必填仍需沙箱样例校准。
 - 已把 `businessType=BCT2.0`、`version=4.1.0`、`accType` 和个人开户条件必填落入契约校验；企业/个体长尾条件仍需继续补测试。
-- 已新增官方 DTO 和本地 client；仍未使用官方测试地址 `https://vgw.baofoo.com/union-gw/api/T-1001-013-01/transReq.do` 联调，且 union-gw 官方 envelope/数字信封完整性需复核。
+- 已新增官方 DTO 和本地 client；client 已按 `verifyType=1` 构造 union-gw URL 参数和 `header/body` 密文 envelope；仍未使用官方测试地址 `https://vgw.baofoo.com/union-gw/api/T-1001-013-01/transReq.do` 联调，且 `verifyType=2`/通知密文形态需复核。
 
 ### 6.2 开户查询 `T-1001-013-03`
 
@@ -476,11 +476,12 @@
 | 路径 | 现状 | 主要缺口 |
 | --- | --- | --- |
 | `locallife/baofu/config.go` | 区分收款/支付商户号；已拆官方三组 endpoint profile 并拒绝 `https://api.baofoo.com` 占位地址 | 仍需用真实宝付测试地址证明每个 client 命中正确 endpoint。 |
-| `locallife/baofu/crypto/uniongw.go` | 本地 union-gw envelope 草稿 | 未按官方 `verifyType=1/2`、`content`、`veryfyString` 完整实现并联调。 |
+| `locallife/baofu/uniongw.go` | 账户请求 union-gw `verifyType=1` 官方 URL 参数、`content` 密文、`header/body` envelope 和响应 `sysRespCode` 校验 | `verifyType=2`、通知 `data_content` 密文、真实沙箱和完整系统错误码仍待补。 |
+| `locallife/baofu/crypto/uniongw.go` | 早期本地通知 envelope/加密草稿 | 仅保留给现有开户通知本地 parser 测试；不得作为账户请求 client 的官方 envelope。 |
 | `locallife/baofu/aggregatepay/contracts/types.go` | 统一下单、查询、分账、退款、关单 DTO | 退款/关单已补 DTO 和首版互斥；错误码分类、沙箱 fixture 仍待补。 |
 | `locallife/baofu/account/contracts` | 业务归一化 DTO + 官方开户/查询/余额/提现 DTO | 企业/个体完整资料映射、资质附件、账户错误码表和沙箱样例仍待补。 |
 | `locallife/baofu/aggregatepay/client.go` | interface + concrete HTTP client | 已覆盖支付/查询/分账/退款/关单；未做沙箱验证和响应验签/数字信封完整验证。 |
-| `locallife/baofu/account/client.go` | concrete account client，覆盖开户/查询/余额/提现/提现查询 | union-gw 官方 `verifyType/content/veryfyString` envelope、响应验签/数字信封和沙箱证据仍待补。 |
+| `locallife/baofu/account/client.go` | concrete account client，覆盖开户/查询/余额/提现/提现查询，并已切到 union-gw `verifyType=1` 请求/响应 envelope | `verifyType=2`、通知密文、沙箱证据和真实错误码仍待补。 |
 | `locallife/baofu/merchantreport/**` | 报备/查询/APPLET 绑定 contracts + concrete client + tests | 完整附录枚举、真实资料来源映射、报备恢复 worker 和沙箱证据仍待补。 |
 | `locallife/logic/baofu_payment_service.go` | 服务层可组统一下单并记录 command；主业务 API runtime 可切宝付 concrete aggregate client | 宝付合单支付已 fail-closed；沙箱证据仍待补。 |
 | `locallife/api/logic_adapters.go` | 已按 `BAOFU_MAIN_BUSINESS_ENABLED` 构造宝付主业务 facade | 主业务支付可切宝付；宝付启用时合单支付已明确 fail-closed。 |
@@ -493,16 +494,16 @@
 | 编号 | 严重度 | 证据 | 风险 | 整改要求 |
 | --- | --- | --- | --- | --- |
 | C-001 | 已本地修复，待真实 client 使用验证 | `locallife/baofu/config.go` 已拆 `AccountGatewayBaseURL`、`AggregatePayBaseURL`、`MerchantReportBaseURL` 并拒绝 `https://api.baofoo.com` | 配置层已防止三组入口混用；真实 client 仍必须逐接口读取对应 endpoint | Task 8 接真实 HTTP 时验证每个 client 使用正确 endpoint。 |
-| C-002 | 部分修复，待 service/client 切换 | 已新增官方开户、查询、余额、提现 DTO 与金额元/分转换测试；原 `OpenAccountRequest` 业务抽象仍保留给现有 service | 官方字段级 DTO 已有本地校验，但 account client/service 仍未切到官方 DTO | Task 8 接 union-gw 真实 HTTP 时只允许官方 DTO 进入报文。 |
+| C-002 | C3 本地修复，待沙箱 | 已新增官方开户、查询、余额、提现 DTO 与金额元/分转换测试；account client 已将业务抽象转换为官方 DTO 后放入 union-gw `body` | 原 `OpenAccountRequest` 业务抽象仍保留给现有 service；企业/个体完整资料映射和沙箱样例仍待补 | Task 12/C4 用真实测试地址证明字段和错误码。 |
 | C-003 | 部分修复，待沙箱验证 | `locallife/baofu/account/notification/notification.go` 已按官方开户/提现通知字段解析；`locallife/api/baofu_callback.go` 开户 ACK 已改纯文本 `OK` | 本地 parser/ACK 已防止明显字段漂移，但还未使用宝付测试环境真实通知验证 URL query、密文 envelope、重放 ACK 行为 | 用宝付测试通知样例或沙箱回调验证开户/提现通知，并补回真实样例摘要。 |
-| C-004 | 部分修复，待沙箱验证 | 已新增 `locallife/baofu/envelope.go` 公共请求/响应 envelope DTO；当前 HTTP client 已将 account、merchant report、aggregate pay 当前 DTO 放入 public envelope，并生成 RSA `signStr` | 本地已覆盖 URL/method/envelope/脱敏错误；响应验签、数字信封加密、真实错误码和宝付沙箱请求仍未验证 | Task 8/沙箱联调补真实请求/响应 fixture，Task 10 补错误码分类。 |
+| C-004 | 部分修复，待沙箱验证 | 已新增聚合/报备 `PublicRequestEnvelope`；账户 API 已拆到独立 union-gw `verifyType=1` envelope，不再误用聚合 public envelope | 聚合/报备响应验签、数字信封加密、账户 `verifyType=2`、真实错误码和宝付沙箱请求仍未验证 | Task 12/C4 补真实请求/响应 fixture，Task 10 补错误码分类。 |
 | C-005 | 已本地修复，待沙箱验证 | `locallife/baofu/aggregatepay/contracts/types.go` 已新增 `unified_order` 表驱动校验，覆盖 M/C 字段、枚举、`subMchId` 条件必填、https `pageUrl`、金额关系 | 本地契约已 fail-closed；仍未用宝付测试地址验证真实错误码和字段长度边界 | Task 8/沙箱测试补真实请求、参数错误和错误码样例。 |
 | C-006 | 部分修复，待联调/恢复 worker | 已新增 `locallife/baofu/merchantreport/contracts`、`baofu_merchant_reports`、sqlc query、报备 service、APPLET 授权 readiness 和 `merchantreport.Client` | 本地契约/持久化/服务/HTTP client 已能防止 `bctMerId/subMchId/authContent` 漂移，但还没有沙箱证据和报备查询恢复 worker | Task 8/沙箱联调验证真实报备与授权目录请求；后续补报备恢复 worker。 |
 | C-007 | 已本地修复，待联调 | `locallife/logic/baofu_payment_order_route.go` 已通过 `merchantBaofuReadinessForPayment` 取商户报备 `sub_mch_id`；`CreateBaofuWechatJSAPIOrderInput` 字段已改 `MerchantSubMchID` | 旧普通服务商 `txResult.SubMchID` 来源已移除；真实支付仍待宝付聚合商户报备沙箱验证 | Task 8/沙箱测试验证 `unified_order.subMchId` 使用报备返回值。 |
 | C-008 | C3 本地修复，待沙箱 | 已新增 `order_refund`、`refund_query`、`order_close` DTO/client、退款通知 parser、退款状态映射、API callback、退款查询恢复 scheduler 和分账前退款业务接入 | 首版“分账前退款、分账后不退款”已在本地 fail-closed；仍缺真实验签/数字信封、宝付测试地址退款查询/回调证据 | Task 12/C4 补沙箱证据；响应验签/数字信封在 C-004/C-011 跟进。 |
 | C-009 | 部分修复，待 service/client 切换 | 已新增 `YuanStringToFen` / `FenToYuanString` 并覆盖 2 位小数校验 | 转换 helper 已在契约包，余额/提现真实 client 仍需集中调用 | Task 8/提现服务切换时禁止业务层散落金额转换。 |
 | C-010 | 部分修复，待完整官方错误码/沙箱样例 | 已新增 `locallife/baofu/errors.go` 分类器，并接入宝付支付/退款创建错误映射 | 前端可获得安全中文语义，不暴露上游原文；账户/报备错误码、完整聚合支付错误码和沙箱错误样例仍待补 | 后续补完整错误码表、API handler 边界日志验证和 C4 evidence。 |
-| C-011 | C3 局部，待沙箱/验签 | `locallife/baofu/aggregatepay/client.go`、`locallife/baofu/account/client.go`、`locallife/baofu/merchantreport/client.go` 已有 concrete HTTP client；`locallife/api/logic_adapters.go` 已支持 `BAOFU_MAIN_BUSINESS_ENABLED` 时用宝付 facade 承接单笔主业务支付 | 本地可构造 signed public envelope 并打配置 endpoint，API runtime/worker/scheduler 已防止宝付启用时回退普通服务商；仍缺响应验签、数字信封完整验证和真实测试地址联调证据 | Task 12 补沙箱证据；C4 前不得宣称生产验证完成。 |
+| C-011 | C3 局部，待沙箱/验签 | `locallife/baofu/account/client.go` 已用 union-gw 官方 URL/query/encrypted content；`aggregatepay`、`merchantreport` concrete HTTP client 已有；主业务 API runtime/worker/scheduler 已防止宝付启用时回退普通服务商 | 账户真实测试地址、聚合/报备响应验签、数字信封完整验证和沙箱联调证据仍缺 | Task 12 补沙箱证据；C4 前不得宣称生产验证完成。 |
 | C-012 | 已本地修复，待产品验收 | `merchantBaofuReadinessForPayment` 已返回“商户微信支付通道待开通，暂不能创建微信生态支付订单”，API runtime 切换测试覆盖主业务宝付与直连支付边界 | 旧“微信特约商户进件”语义已移除；仍需前端/运营最终文案验收 | 沙箱联调和上线前检查中继续确认用户侧只看到产品语义，不暴露 report/auth/subMchId 内部细节。 |
 
 ### 12.2 防漂移实现门禁
