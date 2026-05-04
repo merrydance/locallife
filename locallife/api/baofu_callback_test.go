@@ -2,18 +2,21 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	baofunotification "github.com/merrydance/locallife/baofu/account/notification"
 	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	baofuaggregatenotification "github.com/merrydance/locallife/baofu/aggregatepay/notification"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/worker"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -48,6 +51,33 @@ func TestBaofuAccountOpenCallbackPersistsFactBeforeAck(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, "OK", recorder.Body.String())
 	require.Equal(t, "text/plain; charset=utf-8", recorder.Header().Get("Content-Type"))
+}
+
+func TestBaofuWithdrawCallbackEnqueuesFactApplicationBeforeAck(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAccountNotificationParserForTest(fakeBaofuOpenAccountParser{})
+	taskRecorder := &baofuWithdrawalFactApplicationEnqueueRecorder{}
+	server.taskDistributor = taskRecorder
+
+	withdrawal := db.BaofuWithdrawalOrder{
+		ID:           6101,
+		OutRequestNo: "WD202605040001",
+		Status:       db.BaofuWithdrawalStatusProcessing,
+	}
+	store.EXPECT().GetBaofuWithdrawalOrderByOutRequestNo(gomock.Any(), "WD202605040001").Return(withdrawal, nil)
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/withdraw", bytes.NewBufferString(`{"encrypted":true}`))
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "OK", recorder.Body.String())
+	require.Equal(t, []int64{withdrawal.ID}, taskRecorder.withdrawalOrderIDs)
+	require.Equal(t, []string{"3"}, taskRecorder.upstreamStates)
+	require.Equal(t, []string{"BFWD202605040001"}, taskRecorder.baofuWithdrawNos)
 }
 
 func TestBaofuPaymentCallbackPersistsFactAndEnqueuesApplication(t *testing.T) {
@@ -252,6 +282,35 @@ func (fakeBaofuOpenAccountParser) ParseOpenAccountNotification(body []byte) (*ba
 		OccurredAt:    time.Now().UTC(),
 		Raw:           []byte(`{"transSerialNo":"OPEN123","state":"1","contractNo":"CM_BCT_123"}`),
 	}, nil
+}
+
+func (fakeBaofuOpenAccountParser) ParseWithdrawNotification(body []byte) (*baofunotification.WithdrawNotification, error) {
+	return &baofunotification.WithdrawNotification{
+		TransSerialNo:   "WD202605040001",
+		BaofuWithdrawNo: "BFWD202605040001",
+		ContractNo:      "CM_BCT_123",
+		UpstreamState:   "3",
+		Status:          db.BaofuWithdrawalStatusReturned,
+		AmountFen:       12345,
+		FeeFen:          100,
+		TotalAmountFen:  12445,
+		OccurredAt:      time.Now().UTC(),
+		Raw:             []byte(`{"transSerialNo":"WD202605040001","orderId":"BFWD202605040001","state":"3"}`),
+	}, nil
+}
+
+type baofuWithdrawalFactApplicationEnqueueRecorder struct {
+	worker.NoopTaskDistributor
+	withdrawalOrderIDs []int64
+	upstreamStates     []string
+	baofuWithdrawNos   []string
+}
+
+func (r *baofuWithdrawalFactApplicationEnqueueRecorder) DistributeTaskProcessBaofuWithdrawalFactApplication(_ context.Context, payload *worker.BaofuWithdrawalFactApplicationPayload, _ ...asynq.Option) error {
+	r.withdrawalOrderIDs = append(r.withdrawalOrderIDs, payload.WithdrawalOrderID)
+	r.upstreamStates = append(r.upstreamStates, payload.UpstreamState)
+	r.baofuWithdrawNos = append(r.baofuWithdrawNos, payload.BaofuWithdrawNo)
+	return nil
 }
 
 type fakeBaofuPaymentParser struct{}

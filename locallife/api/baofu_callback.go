@@ -8,16 +8,19 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	baofunotification "github.com/merrydance/locallife/baofu/account/notification"
 	baofuaggregatenotification "github.com/merrydance/locallife/baofu/aggregatepay/notification"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
+	"github.com/merrydance/locallife/worker"
 	"github.com/rs/zerolog/log"
 )
 
 type baofuAccountNotificationParser interface {
 	ParseOpenAccountNotification(body []byte) (*baofunotification.AccountNotification, error)
+	ParseWithdrawNotification(body []byte) (*baofunotification.WithdrawNotification, error)
 }
 
 type baofuAggregatePaymentNotificationParser interface {
@@ -76,6 +79,64 @@ func (server *Server) handleBaofuAccountOpenNotify(ctx *gin.Context) {
 		Str("out_request_no", strings.TrimSpace(notification.OutRequestNo)).
 		Str("baofu_open_state", strings.TrimSpace(notification.OpenState)).
 		Msg("baofu account callback fact persisted")
+	ctx.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(baofunotification.AccountNotificationACK()))
+}
+
+func (server *Server) handleBaofuWithdrawNotify(ctx *gin.Context) {
+	if server.baofuAccountNotificationParser == nil {
+		log.Error().Msg("baofu withdraw callback received but parser is not configured")
+		ctx.JSON(http.StatusServiceUnavailable, baofuCallbackResponse{Code: "FAIL", Message: "baofu withdraw callback service unavailable"})
+		return
+	}
+	if server.taskDistributor == nil {
+		log.Error().Msg("baofu withdraw callback received but task distributor is not configured")
+		ctx.JSON(http.StatusServiceUnavailable, baofuCallbackResponse{Code: "FAIL", Message: "baofu withdraw callback service unavailable"})
+		return
+	}
+	body, status, err := readWebhookBody(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("read baofu withdraw callback body failed")
+		ctx.JSON(status, baofuCallbackResponse{Code: "FAIL", Message: "read callback body failed"})
+		return
+	}
+	notification, err := server.baofuAccountNotificationParser.ParseWithdrawNotification(body)
+	if err != nil {
+		log.Error().Err(err).Msg("parse baofu withdraw callback failed")
+		ctx.JSON(http.StatusUnauthorized, baofuCallbackResponse{Code: "FAIL", Message: "callback verification failed"})
+		return
+	}
+	if notification == nil {
+		log.Error().Msg("parse baofu withdraw callback returned empty notification")
+		ctx.JSON(http.StatusBadRequest, baofuCallbackResponse{Code: "FAIL", Message: "callback content invalid"})
+		return
+	}
+	outRequestNo := strings.TrimSpace(notification.TransSerialNo)
+	if outRequestNo == "" {
+		log.Error().Msg("baofu withdraw callback missing trans serial no")
+		ctx.JSON(http.StatusBadRequest, baofuCallbackResponse{Code: "FAIL", Message: "callback content invalid"})
+		return
+	}
+	withdrawalOrder, err := server.store.GetBaofuWithdrawalOrderByOutRequestNo(ctx.Request.Context(), outRequestNo)
+	if err != nil {
+		log.Error().Err(err).Str("out_request_no", outRequestNo).Msg("load baofu withdrawal order for callback failed")
+		ctx.JSON(http.StatusInternalServerError, baofuCallbackResponse{Code: "FAIL", Message: "persist callback failed"})
+		return
+	}
+	if err := server.taskDistributor.DistributeTaskProcessBaofuWithdrawalFactApplication(ctx.Request.Context(), &worker.BaofuWithdrawalFactApplicationPayload{
+		WithdrawalOrderID: withdrawalOrder.ID,
+		UpstreamState:     strings.TrimSpace(notification.UpstreamState),
+		BaofuWithdrawNo:   strings.TrimSpace(notification.BaofuWithdrawNo),
+		RawSnapshot:       notification.Raw,
+	}, asynq.MaxRetry(5), asynq.Queue(worker.QueueCritical), asynq.Unique(30*time.Second)); err != nil {
+		log.Error().Err(err).Int64("baofu_withdrawal_order_id", withdrawalOrder.ID).Str("out_request_no", outRequestNo).Msg("enqueue baofu withdrawal callback fact application failed")
+		ctx.JSON(http.StatusInternalServerError, baofuCallbackResponse{Code: "FAIL", Message: "persist callback failed"})
+		return
+	}
+	log.Info().
+		Int64("baofu_withdrawal_order_id", withdrawalOrder.ID).
+		Str("out_request_no", outRequestNo).
+		Str("baofu_withdraw_state", strings.TrimSpace(notification.UpstreamState)).
+		Msg("baofu withdraw callback fact application enqueued")
 	ctx.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(baofunotification.AccountNotificationACK()))
 }
 

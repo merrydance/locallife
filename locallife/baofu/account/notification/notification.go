@@ -60,6 +60,21 @@ func (p *Parser) ParseOpenAccountNotification(body []byte) (*AccountNotification
 	return ParseOpenAccountPlaintext(plaintext)
 }
 
+func (p *Parser) ParseWithdrawNotification(body []byte) (*WithdrawNotification, error) {
+	if p == nil || p.codec == nil {
+		return nil, errors.New("baofu account notification parser is not configured")
+	}
+	var envelope baofucrypto.UnionGWEnvelope
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return nil, err
+	}
+	plaintext, err := p.codec.OpenEnvelope(envelope)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWithdrawPlaintext(plaintext)
+}
+
 func ParseOpenAccountPlaintext(plaintext []byte) (*AccountNotification, error) {
 	var payload struct {
 		MemberID      string `json:"member_id"`

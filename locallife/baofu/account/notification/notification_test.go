@@ -40,6 +40,35 @@ func TestParserParsesOpenAccountNotification(t *testing.T) {
 	require.True(t, json.Valid(notification.Raw))
 }
 
+func TestParserParsesWithdrawNotification(t *testing.T) {
+	codec, err := baofucrypto.NewUnionGWCodec("0123456789abcdef0123456789abcdef")
+	require.NoError(t, err)
+	envelope, err := codec.SealEnvelope("102004466", "200005201", map[string]any{
+		"contractNo":          "CM202605040001",
+		"orderId":             "WD_UP_001",
+		"transSerialNo":       "WD202605040001",
+		"transMoney":          "123.45",
+		"transFee":            "1.00",
+		"transferTotalAmount": "124.45",
+		"state":               "3",
+		"transRemark":         "提现退回",
+		"reqReserved":         "withdraw-001",
+	})
+	require.NoError(t, err)
+	body, err := json.Marshal(envelope)
+	require.NoError(t, err)
+
+	parser := NewParser(codec)
+	notification, err := parser.ParseWithdrawNotification(body)
+
+	require.NoError(t, err)
+	require.Equal(t, "WD202605040001", notification.TransSerialNo)
+	require.Equal(t, "WD_UP_001", notification.BaofuWithdrawNo)
+	require.Equal(t, "3", notification.UpstreamState)
+	require.Equal(t, "returned", notification.Status)
+	require.True(t, json.Valid(notification.Raw))
+}
+
 func TestParserDoesNotFallbackSharingMerIDFromContractNo(t *testing.T) {
 	codec, err := baofucrypto.NewUnionGWCodec("0123456789abcdef0123456789abcdef")
 	require.NoError(t, err)

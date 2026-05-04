@@ -1565,4 +1565,11 @@ make test-integration
 
 - Added `baofu-withdrawal-recovery` scheduler for processing BaoCaiTong withdrawal orders. It queries `T-1001-013-15` with the Baofu payout merchant/terminal and enqueues the existing withdrawal fact application task when the upstream state is terminal.
 - Added task distributor support for `baofu:process_withdrawal_fact_application`, kept the processor as the single writer for withdrawal-order terminal status, and wired the scheduler in `main.go` when Baofu account client config is available.
-- Verification scope remains local C3. Real BaoCaiTong withdrawal query sandbox evidence and withdrawal notification callback wiring are still open.
+- Verification scope remains local C3. Real BaoCaiTong withdrawal query sandbox evidence remained open; withdrawal notification callback wiring was completed in the next follow-up slice below.
+
+
+### 2026-05-04 Remediation Follow-up - Baofu Withdrawal Notification Callback
+
+- Added encrypted BaoCaiTong withdraw notification parsing and `/v1/webhooks/baofu/withdraw`.
+- The callback resolves the local withdrawal order by `transSerialNo`, enqueues `baofu:process_withdrawal_fact_application`, and ACKs with plain `OK` only after enqueue succeeds; withdrawal terminal status remains single-written by the worker.
+- Verification scope remains local C3. Real BaoCaiTong withdrawal callback payload/query-string/replay behavior and sandbox evidence are still open.

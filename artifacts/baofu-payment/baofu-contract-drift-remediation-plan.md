@@ -1089,4 +1089,11 @@ This remediation is not complete until all of the following are true:
 - Added `BaofuWithdrawalRecoveryScheduler` to scan processing BaoCaiTong withdrawal orders, call `T-1001-013-15` through the account client with the payout merchant/terminal, and enqueue `BaofuWithdrawalFactApplicationPayload` for terminal states.
 - Added `DistributeTaskProcessBaofuWithdrawalFactApplication` to the task distributor boundary and regenerated worker mocks.
 - Wired `baofu-withdrawal-recovery` in `main.go` when Baofu account runtime config is available; missing config logs a scheduler-boundary warning instead of silently pretending recovery is active.
-- Residual risk: sandbox query evidence and withdraw notification callback route remain C4/C3-open items.
+- Residual risk: sandbox query evidence and withdraw notification callback route were still C4/C3-open before the next follow-up slice.
+
+### 2026-05-04 Follow-up: Baofu Withdrawal Notification Callback
+
+- Added encrypted BaoCaiTong withdraw notification parsing through the account notification parser and covered official withdraw plaintext fields plus envelope parsing locally.
+- Added `/v1/webhooks/baofu/withdraw`; it resolves local withdrawal orders by `transSerialNo`, enqueues `BaofuWithdrawalFactApplicationPayload`, and returns the official plain-text `OK` only after durable task enqueue succeeds.
+- Wired the default account notification parser in `api.NewServer` when Baofu runtime config is available.
+- Residual risk: real BaoCaiTong withdraw notification URL shape, replay behavior, and sandbox callback samples remain C4-open.

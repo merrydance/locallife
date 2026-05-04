@@ -14,8 +14,10 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/merrydance/locallife/baofu"
+	baofuaccountnotification "github.com/merrydance/locallife/baofu/account/notification"
 	"github.com/merrydance/locallife/baofu/aggregatepay"
 	baofuaggregatenotification "github.com/merrydance/locallife/baofu/aggregatepay/notification"
+	baofucrypto "github.com/merrydance/locallife/baofu/crypto"
 	"github.com/merrydance/locallife/cloudprint"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/docs"
@@ -210,6 +212,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	var ecommerceClient wechat.EcommerceClientInterface
 	var ordinarySPClient ordinaryserviceprovider.OrdinaryServiceProviderClientInterface
 	var baofuAggregateClient aggregatepay.Client
+	var baofuAccountNotificationParser baofuAccountNotificationParser
 	if config.HasWechatPayRuntimeConfig() {
 		if err := config.ValidateWechatPayConfig(); err != nil {
 			return nil, err
@@ -257,6 +260,11 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 			return nil, fmt.Errorf("cannot create baofu client: %w", err)
 		}
 		baofuAggregateClient = aggregatepay.NewClient(baofuRootClient)
+		codec, err := baofucrypto.NewUnionGWCodec(config.BaofuAESKey)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create baofu account notification parser: %w", err)
+		}
+		baofuAccountNotificationParser = baofuaccountnotification.NewParser(codec)
 	}
 
 	// 创建 LBS 地图客户端（统一使用腾讯地图）
@@ -377,6 +385,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		imageDeleter:                   newImageDeleteWorker(),
 		keywordWorker:                  newSearchKeywordWorker(store),
 		paymentFactService:             logic.NewPaymentFactService(store).WithPaymentSuccessConfig(config.RiderAverageSpeed, config.DefaultPrepareTime),
+		baofuAccountNotificationParser: baofuAccountNotificationParser,
 		baofuPaymentNotificationParser: baofuaggregatenotification.NewParser(),
 		onboardingReviewService:        logic.NewOnboardingReviewService(store),
 		credentialGovernanceService:    logic.NewCredentialGovernanceService(store),
@@ -608,6 +617,7 @@ func (server *Server) setupRouter() {
 		webhooksGroup.POST("/wechat-ordinary/violation-notify", server.handleOrdinaryServiceProviderViolationNotify)
 		// 宝付宝财通回调
 		webhooksGroup.POST("/baofu/account/open", server.handleBaofuAccountOpenNotify)
+		webhooksGroup.POST("/baofu/withdraw", server.handleBaofuWithdrawNotify)
 		webhooksGroup.POST("/baofu/payment", server.handleBaofuPaymentNotify)
 		webhooksGroup.POST("/baofu/share", server.handleBaofuShareNotify)
 		webhooksGroup.POST("/baofu/refund", server.handleBaofuRefundNotify)
