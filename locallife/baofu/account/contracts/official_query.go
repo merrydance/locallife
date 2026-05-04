@@ -22,8 +22,20 @@ func (r OfficialQueryAccountRequest) Validate() error {
 	if r.AccountType != OfficialAccountTypePersonal && r.AccountType != OfficialAccountTypeBusiness {
 		return errors.New("baofu query account accType is unsupported")
 	}
-	if strings.TrimSpace(r.ContractNo) == "" && strings.TrimSpace(r.LoginNo) == "" && strings.TrimSpace(r.CertificateNo) == "" {
+	queryKeyCount := 0
+	for _, value := range []string{r.ContractNo, r.LoginNo, r.CertificateNo} {
+		if strings.TrimSpace(value) != "" {
+			queryKeyCount++
+		}
+	}
+	if queryKeyCount == 0 {
 		return errors.New("baofu query account contractNo, loginNo, or certificateNo is required")
+	}
+	if queryKeyCount > 1 {
+		return errors.New("baofu query account must use exactly one query key")
+	}
+	if strings.TrimSpace(r.CertificateNo) != "" && strings.TrimSpace(r.CertificateType) == "" {
+		return errors.New("baofu query account certificateType is required when certificateNo is used")
 	}
 	return nil
 }

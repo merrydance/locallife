@@ -149,6 +149,12 @@ func (i OfficialBusinessAccountInfo) Validate() error {
 			return errors.New("baofu open account business " + field.name + " is required")
 		}
 	}
+	if err := validateOfficialLoginNo("business", i.LoginNo); err != nil {
+		return err
+	}
+	if i.SelfEmployed && strings.TrimSpace(i.CorporateMobile) == "" {
+		return errors.New("baofu open account business corporateMobile is required for selfEmployed")
+	}
 	return nil
 }
 
@@ -163,8 +169,18 @@ func validateOfficialPersonalIdentity(transSerialNo, loginNo, customerName, cert
 			return errors.New("baofu open account personal " + field.name + " is required")
 		}
 	}
+	if err := validateOfficialLoginNo("personal", loginNo); err != nil {
+		return err
+	}
 	if strings.TrimSpace(certificateType) != OfficialCertificateTypeID {
 		return errors.New("baofu open account personal certificateType must be ID")
+	}
+	return nil
+}
+
+func validateOfficialLoginNo(owner string, loginNo string) error {
+	if len(strings.TrimSpace(loginNo)) < 11 {
+		return errors.New("baofu open account " + owner + " loginNo must be at least 11 characters")
 	}
 	return nil
 }

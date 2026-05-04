@@ -36,8 +36,12 @@ func (r OfficialWithdrawRequest) Validate() error {
 	if strings.TrimSpace(r.TransSerialNo) == "" {
 		return errors.New("baofu withdraw transSerialNo is required")
 	}
-	if _, err := YuanStringToFen(r.DealAmount); err != nil {
+	amountFen, err := YuanStringToFen(r.DealAmount)
+	if err != nil {
 		return err
+	}
+	if amountFen <= 0 {
+		return errors.New("baofu withdraw dealAmount must be positive")
 	}
 	parsed, err := url.Parse(strings.TrimSpace(r.ReturnURL))
 	if err != nil || parsed.Scheme != "https" || strings.TrimSpace(parsed.Host) == "" {

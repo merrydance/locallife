@@ -1240,11 +1240,11 @@ git commit -m "fix(baofu): lock public envelope contract"
 - Modify: `locallife/baofu/account/notification/notification_test.go`
 - Modify: `artifacts/baofu-payment/baofu-api-contract-coverage-audit.md`
 
-- [ ] **Step 1: Build account field matrix**
+- [x] **Step 1: Build account field matrix**
 
 In the audit doc, for each union-gw interface, fill a table with: official field name, local struct field, JSON tag, type/length, required rule, conditional rule, enum/constant, and test name.
 
-- [ ] **Step 2: Add negative validation table tests**
+- [x] **Step 2: Add negative validation table tests**
 
 For account contracts, tests must cover:
 
@@ -1255,7 +1255,7 @@ For account contracts, tests must cover:
 - balance amount unit conversion yuan <-> fen and invalid decimal precision;
 - withdraw amount unit conversion, `contractNo`, order number, bank/card fields, and query order number.
 
-- [ ] **Step 3: Verify union-gw envelope behavior**
+- [x] **Step 3: Verify union-gw envelope behavior**
 
 Tests must assert:
 
@@ -1265,7 +1265,7 @@ Tests must assert:
 - response validates `sysRespCode`, `memberId`, `terminalId`, and `serviceTp`;
 - account business error payload with `errorCode/errorMsg` and missing `retCode` fails closed.
 
-- [ ] **Step 4: Verify account notifications**
+- [x] **Step 4: Verify account notifications**
 
 Tests must assert:
 
@@ -1274,14 +1274,14 @@ Tests must assert:
 - callback ACK remains plain text `OK` only after durable enqueue succeeds;
 - no static AES key is required for `verifyType=1`.
 
-- [ ] **Step 5: Validate**
+- [x] **Step 5: Validate**
 
 ```bash
 cd locallife
 PATH="/usr/local/go/bin:$PATH" go test ./baofu ./baofu/account ./baofu/account/contracts ./baofu/account/notification -count=1
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add locallife/baofu locallife/baofu/account artifacts/baofu-payment/baofu-api-contract-coverage-audit.md

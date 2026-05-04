@@ -138,15 +138,15 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 | 字段 | 必填 | 类型/长度 | 条件/枚举 | 本地覆盖 |
 | --- | --- | --- | --- | --- |
-| `version` | M | String(5) | 文档为 `4.1.0` | 未显式建模 |
-| `accType` | M | int(1) | `1` 个人，`2` 企业/个体 | `AccountType` 抽象，不等同官方字段 |
-| `accInfo` | M | Object | 根据 `accType` 不同 | 未完整建模 |
-| `noticeUrl` | M | String(256) | 开户通知地址 | 未完整 DTO |
-| `businessType` | M | String(32) | `BCT2.0` | 未显式校验 |
-| `accInfo.transSerialNo` | M | String(200) | 请求流水号 | `OutRequestNo` 类似但名称不一致 |
-| `accInfo.loginNo` | M | String(32) | 全局唯一，长度 11 位以上 | 未校验长度 |
-| 个人：`customerName/certificateType/certificateNo/cardNo/mobileNo/cardUserName/needUploadFile` | M | String/boolean | `certificateType=ID`；二要素接口无 `cardNo/mobileNo` | 未完整覆盖 |
-| 企业/个体：`email/selfEmployed/customerName/certificateNo/certificateType/corporateName/corporateCertType/corporateCertId/industryId/cardNo/bankName/depositBankProvince/depositBankCity/depositBankName` | M/C/O | 多类型 | `selfEmployed=true` 且绑定对私卡时 `corporateMobile` 必传；证件类型有多枚举 | 未覆盖完整字段和条件必填 |
+| `version` | M | String(5) | 文档为 `4.1.0` | C3：`OfficialOpenAccountRequest.Version` 常量校验，`TestOfficialOpenAccountRequestRequiresBCT20Fields` |
+| `accType` | M | int(1) | `1` 个人，`2` 企业/个体 | C3：官方 DTO 使用 `OfficialAccountTypePersonal/Business`，业务抽象只在 adapter 层转换 |
+| `accInfo` | M | Object | 根据 `accType` 不同 | C3：个人二要素、个人四要素、企业/个体 DTO 分型并校验 unsupported type |
+| `noticeUrl` | M | String(256) | 开户通知地址 | C3：HTTPS 校验，runtime 从 `NotifyBaseURL + /account/open` 组装 |
+| `businessType` | M | String(32) | `BCT2.0` | C3：`OfficialBusinessTypeBCT20` 常量校验 |
+| `accInfo.transSerialNo` | M | String(200) | 请求流水号 | C3：`OutRequestNo` 只在 adapter 层映射为官方 `transSerialNo` |
+| `accInfo.loginNo` | M | String(32) | 全局唯一，长度 11 位以上 | C3：个人/企业均校验 `loginNo` 至少 11 位 |
+| 个人：`customerName/certificateType/certificateNo/cardNo/mobileNo/cardUserName/needUploadFile` | M | String/boolean | `certificateType=ID`；二要素接口无 `cardNo/mobileNo` | C3：个人二要素允许无银行卡，四要素要求 `cardNo/mobileNo/cardUserName` |
+| 企业/个体：`email/selfEmployed/customerName/certificateNo/certificateType/corporateName/corporateCertType/corporateCertId/industryId/cardNo/bankName/depositBankProvince/depositBankCity/depositBankName` | M/C/O | 多类型 | `selfEmployed=true` 且绑定对私卡时 `corporateMobile` 必传；证件类型有多枚举 | C3：首版 DTO 覆盖必填字段；`selfEmployed` 时 fail-closed 要求 `corporateMobile`；附件/证件类型长尾仍待沙箱 |
 | `platformNo/platformTerminalId/qualificationTransSerialNo` | C | String | 代理模式/上传资质时条件必填 | 未覆盖 |
 
 响应结构摘要：`retCode`、`errorCode`、`errorMsg`、`result[]`；`result.state` 枚举 `1` 成功、`0` 失败、`-1` 异常、`2` 开户处理中；返回 `transSerialNo`、`loginNo`、`customerName`、`contractNo` 等。
@@ -154,8 +154,8 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 本地缺口：
 
 - `locallife/baofu/account/contracts/types.go` 的 `OpenAccountRequest` 仍是业务抽象；官方字段级 DTO 已拆到 `official_open.go` 等文件。
-- 已区分个人二要素、个人四要素、企业/个体字段集合；企业/个体生产资料来源、资质附件和完整条件必填仍需沙箱样例校准。
-- 已把 `businessType=BCT2.0`、`version=4.1.0`、`accType` 和个人开户条件必填落入契约校验；企业/个体长尾条件仍需继续补测试。
+- 已区分个人二要素、个人四要素、企业/个体字段集合；企业/个体首版必填字段、`loginNo` 长度、`selfEmployed -> corporateMobile` 条件已落入表驱动测试，资质附件和证件类型长尾仍需沙箱样例校准。
+- 已把 `businessType=BCT2.0`、`version=4.1.0`、`accType`、个人开户条件必填和企业/个体首版字段落入契约校验。
 - 已新增官方 DTO 和本地 client；client 已按 `verifyType=1` 构造 union-gw URL 参数和 `header/body` 密文 envelope；开户 `noticeUrl` 已改为运行时 `BAOFU_NOTIFY_BASE_URL + /account/open`，不再使用 placeholder。仍未使用官方测试地址 `https://vgw.baofoo.com/union-gw/api/T-1001-013-01/transReq.do` 联调，且 `verifyType=2`/通知密文形态需复核。
 
 ### 6.2 开户查询 `T-1001-013-03`
@@ -168,7 +168,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 本地缺口：
 
-- 已新增 `OfficialQueryAccountRequest` 覆盖 `version`、`accType`、`contractNo/loginNo/certificateNo` 查询路径；业务层 `QueryAccountRequest` 仍是归一化输入。
+- 已新增 `OfficialQueryAccountRequest` 覆盖 `version`、`accType`、`contractNo/loginNo/certificateNo` 查询路径；本地强制一次只用一个查询 key，`certificateNo` 查询时必须带 `certificateType`，避免多 key 语义漂移。业务层 `QueryAccountRequest` 仍是归一化输入。
 - 当前项目把 `contractNo` 与 `sharing_mer_id` 严格拆开是正确的；本地 active receiver 约束要求显式 `sharing_mer_id`。但官方查询页只明确 `contractNo`，开户/查询/通知哪个字段承载宝付二级商户号仍必须用实际沙箱回包确认后固化。
 
 ### 6.3 开户结果通知
@@ -183,7 +183,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 - `locallife/baofu/account/notification/notification.go` 已按官方 `data_content` RSA/base64 解密后解析 `transSerialNo/state/errorCode/errorMsg/contractNo`，不再读取自造 `outRequestNo/sharingMerId/status` 字段，也不再依赖静态 `BAOFU_AES_KEY`。
 - `locallife/api/baofu_callback.go` 已在开户回调落 fact 后返回 `text/plain` 纯文本 `OK`。
-- 本地测试覆盖官方 query-string 通知参数和 RSA/base64 `data_content` 解码；沙箱回调证据未做。
+- 本地测试覆盖官方 query-string 通知参数、RSA/base64 `data_content` 解码、缺失 `data_content` fail-closed 和纯文本 `OK` ACK；沙箱回调证据未做。
 
 ### 6.4 账户余额查询 `T-1001-013-06`
 
@@ -206,7 +206,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 本地缺口：
 
-- `WithdrawRequest` 仍使用本地 `AmountFen`，已在官方 DTO 边界转换为元金额并校验。
+- `WithdrawRequest` 仍使用本地 `AmountFen`，已在官方 DTO 边界转换为元金额并校验最多 2 位小数；`dealAmount=0` fail-closed。
 - `directPlatformNo/feeMemberId/transAbstract/reqReserved` 仍未完整接入业务输入。
 - 提现 client 已存在，但收/付一级商户号边界和开户手续费/提现资金账户扣款仍需沙箱验证。
 

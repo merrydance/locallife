@@ -67,6 +67,59 @@ func TestOfficialPersonalTwoFactorOpenAccountAllowsNoBankCard(t *testing.T) {
 	require.NoError(t, req.Validate())
 }
 
+func TestOfficialOpenAccountRejectsShortLoginNo(t *testing.T) {
+	req := OfficialOpenAccountRequest{
+		Version:      OfficialOpenAccountVersion,
+		AccountType:  OfficialAccountTypePersonal,
+		NoticeURL:    "https://api.example.com/v1/webhooks/baofu/account/open",
+		BusinessType: OfficialBusinessTypeBCT20,
+		AccountInfo: OfficialPersonalTwoFactorAccountInfo{
+			TransSerialNo:   "OPEN202605040002",
+			LoginNo:         "short",
+			CustomerName:    "李四",
+			CertificateType: OfficialCertificateTypeID,
+			CertificateNo:   "110101199001011235",
+		},
+	}
+
+	require.EqualError(t, req.Validate(), "baofu open account personal loginNo must be at least 11 characters")
+}
+
+func TestOfficialBusinessOpenAccountRequiresOfficialFields(t *testing.T) {
+	req := OfficialOpenAccountRequest{
+		Version:      OfficialOpenAccountVersion,
+		AccountType:  OfficialAccountTypeBusiness,
+		NoticeURL:    "https://api.example.com/v1/webhooks/baofu/account/open",
+		BusinessType: OfficialBusinessTypeBCT20,
+		AccountInfo: OfficialBusinessAccountInfo{
+			TransSerialNo:       "OPEN202605040003",
+			LoginNo:             "merchant-login-001",
+			Email:               "merchant@example.com",
+			SelfEmployed:        true,
+			CustomerName:        "某某餐饮店",
+			CertificateNo:       "91310000123456789X",
+			CertificateType:     "LICENSE",
+			CorporateName:       "王五",
+			CorporateCertType:   OfficialCertificateTypeID,
+			CorporateCertID:     "110101199001011236",
+			IndustryID:          "5812",
+			CardNo:              "6222020000000000001",
+			BankName:            "招商银行",
+			DepositBankProvince: "上海市",
+			DepositBankCity:     "上海市",
+			DepositBankName:     "招商银行上海分行",
+			CorporateMobile:     "13800138002",
+		},
+	}
+
+	require.NoError(t, req.Validate())
+
+	info := req.AccountInfo.(OfficialBusinessAccountInfo)
+	info.CorporateMobile = ""
+	req.AccountInfo = info
+	require.EqualError(t, req.Validate(), "baofu open account business corporateMobile is required for selfEmployed")
+}
+
 func TestOfficialBalanceAmountConvertsYuanToFen(t *testing.T) {
 	got, err := YuanStringToFen("123.45")
 	require.NoError(t, err)
@@ -97,6 +150,16 @@ func TestOfficialQueryBalanceAndWithdrawValidateRequiredFields(t *testing.T) {
 	}
 	require.NoError(t, query.Validate())
 
+	query.LoginNo = "OPEN202605040001"
+	require.EqualError(t, query.Validate(), "baofu query account must use exactly one query key")
+
+	query = OfficialQueryAccountRequest{
+		Version:       OfficialOpenAccountVersion,
+		AccountType:   OfficialAccountTypePersonal,
+		CertificateNo: "110101199001011234",
+	}
+	require.EqualError(t, query.Validate(), "baofu query account certificateType is required when certificateNo is used")
+
 	balance := OfficialBalanceQueryRequest{
 		Version:     OfficialOpenAccountVersion,
 		AccountType: OfficialAccountTypePersonal,
@@ -115,4 +178,7 @@ func TestOfficialQueryBalanceAndWithdrawValidateRequiredFields(t *testing.T) {
 
 	withdraw.DealAmount = "123.456"
 	require.EqualError(t, withdraw.Validate(), "baofu amount supports at most 2 decimal places")
+
+	withdraw.DealAmount = "0.00"
+	require.EqualError(t, withdraw.Validate(), "baofu withdraw dealAmount must be positive")
 }

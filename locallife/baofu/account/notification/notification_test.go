@@ -66,6 +66,15 @@ func TestParserRejectsMissingPublicKey(t *testing.T) {
 	require.EqualError(t, err, "baofu account notification parser is not configured")
 }
 
+func TestParserRejectsMissingDataContent(t *testing.T) {
+	_, publicPEM := generateNotificationTestKeyPair(t)
+	parser := NewParser(publicPEM)
+
+	_, err := parser.ParseOpenAccountNotification([]byte(`member_id=102004465&terminal_id=200005200&data_type=JSON`))
+
+	require.EqualError(t, err, "baofu account notification data_content is required")
+}
+
 func TestParseOpenAccountPlaintextUsesOfficialFields(t *testing.T) {
 	raw := []byte(`{"member_id":"100000","terminal_id":"200000","memberType":"2","state":"1","errorCode":"","errorMsg":"","transSerialNo":"OPEN202605040001","loginNo":"merchant-login-001","customerName":"商户A","contractNo":"CM202605040001","noticeType":"OPEN_ACC"}`)
 
