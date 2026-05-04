@@ -72,6 +72,9 @@ func (c *HTTPClient) QueryProfitSharing(ctx context.Context, req contracts.Share
 	if err := c.validate("share_query"); err != nil {
 		return nil, err
 	}
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
 	var result contracts.ShareResult
 	if err := c.root.PostAggregatePay(ctx, "share_query", req, &result); err != nil {
 		return nil, err

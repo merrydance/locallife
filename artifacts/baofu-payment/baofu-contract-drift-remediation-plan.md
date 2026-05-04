@@ -1299,11 +1299,11 @@ git commit -m "fix(baofu): re-audit account contract drift"
 - Modify: `locallife/baofu/aggregatepay/notification/notification_test.go`
 - Modify: `artifacts/baofu-payment/baofu-api-contract-coverage-audit.md`
 
-- [ ] **Step 1: Build aggregate method field matrix**
+- [x] **Step 1: Build aggregate method field matrix**
 
 Add or complete audit tables for `unified_order`, `order_query`, `share_after_pay`, `share_query`, `order_refund`, `refund_query`, and `order_close`. Each row must name the method, field, type/length, M/C/O rule, enum source, local JSON tag, and local test name.
 
-- [ ] **Step 2: Verify unified order mandatory and conditional fields**
+- [x] **Step 2: Verify unified order mandatory and conditional fields**
 
 Table tests must prove:
 
@@ -1316,11 +1316,11 @@ Table tests must prove:
 - `txnAmt`/amount fields use fen if docs say amount is integer fen, and tests reject zero/negative;
 - notify URL is HTTPS and not placeholder.
 
-- [ ] **Step 3: Verify payment query contract**
+- [x] **Step 3: Verify payment query contract**
 
 Tests must prove `merId`, `terId`, and one of `tradeNo/outTradeNo` are required before POST, and missing identifiers never reach Baofoo.
 
-- [ ] **Step 4: Verify share contract**
+- [x] **Step 4: Verify share contract**
 
 Tests must prove:
 
@@ -1328,7 +1328,7 @@ Tests must prove:
 - every receiver has `sharingMerId`, amount, and receiver role/type if required by docs;
 - local receiver source is `baofu_account_bindings.sharing_mer_id`, not Baofoo一级商户号, not `contractNo`, and not WeChat `subMchId`.
 
-- [ ] **Step 5: Verify refund-before-share and close contracts**
+- [x] **Step 5: Verify refund-before-share and close contracts**
 
 Tests must prove:
 
@@ -1336,18 +1336,18 @@ Tests must prove:
 - refund is blocked after share terminal success;
 - `order_close` has the documented identifiers and cannot close direct-payment orders through Baofoo.
 
-- [ ] **Step 6: Verify notification payloads**
+- [x] **Step 6: Verify notification payloads**
 
 Notification parser tests must cover payment, share, and refund terminal statuses, duplicate-safe ACK behavior, and unknown status fail-closed classification.
 
-- [ ] **Step 7: Validate**
+- [x] **Step 7: Validate**
 
 ```bash
 cd locallife
 PATH="/usr/local/go/bin:$PATH" go test ./baofu/aggregatepay ./baofu/aggregatepay/contracts ./baofu/aggregatepay/notification -count=1
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add locallife/baofu/aggregatepay artifacts/baofu-payment/baofu-api-contract-coverage-audit.md

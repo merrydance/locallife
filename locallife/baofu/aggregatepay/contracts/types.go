@@ -64,6 +64,10 @@ var (
 	ErrBaofuPaymentQueryMerchantIDRequired     = errors.New("baofu payment query merId is required")
 	ErrBaofuPaymentQueryTerminalIDRequired     = errors.New("baofu payment query terId is required")
 	ErrBaofuPaymentQueryReferenceRequired      = errors.New("baofu payment query tradeNo or outTradeNo is required")
+	ErrBaofuShareQueryMerchantIDRequired       = errors.New("baofu share query merId is required")
+	ErrBaofuShareQueryTerminalIDRequired       = errors.New("baofu share query terId is required")
+	ErrBaofuShareQueryReferenceRequired        = errors.New("baofu share query tradeNo or outTradeNo is required")
+	ErrBaofuShareTransactionTimeInvalid        = errors.New("baofu share txnTime must use yyyyMMddHHmmss")
 	ErrBaofuRefundQueryMerchantIDRequired      = errors.New("baofu refund query merId is required")
 	ErrBaofuRefundQueryTerminalIDRequired      = errors.New("baofu refund query terId is required")
 	ErrBaofuRefundQueryReferenceRequired       = errors.New("baofu refund query tradeNo or outTradeNo is required")
@@ -345,6 +349,9 @@ func (r ShareAfterPayRequest) Validate() error {
 	if strings.TrimSpace(r.OutTradeNo) == "" {
 		return errors.New("baofu share out trade no is required")
 	}
+	if !isBaofuTransactionTime(r.TxnTime) {
+		return ErrBaofuShareTransactionTimeInvalid
+	}
 	if len(r.SharingDetails) == 0 {
 		return errors.New("baofu share details are required")
 	}
@@ -388,6 +395,19 @@ type ShareQueryRequest struct {
 	TerminalID string `json:"terId"`
 	TradeNo    string `json:"tradeNo,omitempty"`
 	OutTradeNo string `json:"outTradeNo,omitempty"`
+}
+
+func (r ShareQueryRequest) Validate() error {
+	if strings.TrimSpace(r.MerchantID) == "" {
+		return ErrBaofuShareQueryMerchantIDRequired
+	}
+	if strings.TrimSpace(r.TerminalID) == "" {
+		return ErrBaofuShareQueryTerminalIDRequired
+	}
+	if strings.TrimSpace(r.TradeNo) == "" && strings.TrimSpace(r.OutTradeNo) == "" {
+		return ErrBaofuShareQueryReferenceRequired
+	}
+	return nil
 }
 
 func NormalizeShareTerminalStatus(upstreamState string) string {

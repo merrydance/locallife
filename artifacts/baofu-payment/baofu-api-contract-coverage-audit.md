@@ -311,40 +311,40 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 | 字段 | 必填 | 类型 | 条件/枚举 | 本地覆盖 |
 | --- | --- | --- | --- | --- |
-| `agentMerId/agentTerId` | 否 | S(16) | 代理场景 | 未覆盖 |
-| `merId/terId` | 是 | S(16) | 收款商户号/终端号 | C1，已建字段 |
-| `outTradeNo` | 是 | S(32) | 同商户唯一 | C1 |
-| `txnAmt/totalAmt` | 是 | I | 分，`totalAmt=txnAmt+营销金额` | C1 |
-| `txnTime` | 是 | T | `yyyyMMddHHmmss` | C1 |
-| `timeExpire` | 否 | I | 分钟；默认 30；最大 7 天 | C1 |
-| `prodType` | 是 | E | `SHARING` | C1 常量 |
-| `orderType` | 是 | S | 宝财通2.0 必传 `7` | C1 常量 |
-| `payCode` | 是 | E | 首版 `WECHAT_JSAPI` | C1 常量 |
-| `payExtend` | 是 | C | 按支付方式选择 | C1 部分 |
+| `agentMerId/agentTerId` | 否 | S(16) | 代理场景 | C3 DTO 字段存在，首版不主动填 |
+| `merId/terId` | 是 | S(16) | 收款商户号/终端号 | C3：所有请求 Validate 必填，client 不允许缺失 POST |
+| `outTradeNo` | 是 | S(32) | 同商户唯一 | C3：统一下单、分账、退款、关单按方法必填/条件必填校验 |
+| `txnAmt/totalAmt` | 是 | I | 分，`totalAmt=txnAmt+营销金额` | C3：正数和 `totalAmt >= txnAmt` 校验 |
+| `txnTime` | 是 | T | `yyyyMMddHHmmss` | C3：统一下单、分账、退款均校验格式 |
+| `timeExpire` | 否 | I | 分钟；默认 30；最大 7 天 | C2/C3：字段存在，最大值未在本地强制，待沙箱/产品确认 |
+| `prodType` | 是 | E | `SHARING` | C3：`ProductTypeSharing` 常量和负向测试 |
+| `orderType` | 是 | S | 宝财通2.0 必传 `7` | C3：`BaoCaiTongOrderTypeSharing` 常量和负向测试 |
+| `payCode` | 是 | E | 首版 `WECHAT_JSAPI` | C3：`PayCodeWechatJSAPI` 常量和负向测试 |
+| `payExtend` | 是 | C | 按支付方式选择 | C3：微信 JSAPI 的 `sub_appid/sub_openid/body` 条件必填 |
 | `subMchId` | 否/条件必填 | S(64) | 微信/支付宝必传，渠道报备二级商户号 | C3，来源为报备成功且 APPLET 授权成功后的 `baofu_merchant_reports.sub_mch_id` |
-| `notifyUrl` | 否 | S(128) | 支付成功服务端通知 | C1 |
-| `pageUrl` | 否 | S(128) | https 跳转地址 | C1 |
-| `forbidCredit` | 否 | S(1) | `1` 禁止、`0` 不禁止 | C1 |
-| `attach/reqReserved` | 否 | S(128) | 保留域 | C1 attach |
+| `notifyUrl` | 否 | S(128) | 支付成功服务端通知 | C3 DTO 字段存在；运行时使用配置回调 URL |
+| `pageUrl` | 否 | S(128) | https 跳转地址 | C3：非空时必须 HTTPS |
+| `forbidCredit` | 否 | S(1) | `1` 禁止、`0` 不禁止 | C3：只允许 `0/1` |
+| `attach/reqReserved` | 否 | S(128) | 保留域 | C3 DTO 字段存在，长度待沙箱/官方错误样本确认 |
 | `mktInfo` | 否 | JSON | 当前仅支持交易商户承担营销金额 | 未启用 |
-| `riskInfo` | 否/条件必填 | JSON | 微信/支付宝必传 | C1，已补 `clientIp` 校验 |
-| `riskInfo.clientIp` | 是 | S(64) | 付款用户 IP | C1，已强制 |
+| `riskInfo` | 否/条件必填 | JSON | 微信/支付宝必传 | C3：微信/支付宝 payCode 下强制 `riskInfo.clientIp` |
+| `riskInfo.clientIp` | 是 | S(64) | 付款用户 IP | C3：负向测试覆盖 |
 | `riskInfo.locationPoint` | 否 | S(128) | 经度,纬度 | 字段存在，未使用 |
 
 `payExtend` 微信 JSAPI 字段：
 
 | 字段 | 必填 | 类型 | 说明 | 本地覆盖 |
 | --- | --- | --- | --- | --- |
-| `sub_appid` | 是 | S(128) | 小程序或公众号 appid | C1 |
-| `sub_openid` | 是 | S(128) | 用户在 `sub_appid` 下的 openid | C1 |
-| `body` | 是 | S(128) | 商品/订单展示名 | C1 |
+| `sub_appid` | 是 | S(128) | 小程序或公众号 appid | C3：条件必填校验 |
+| `sub_openid` | 是 | S(128) | 用户在 `sub_appid` 下的 openid | C3：条件必填校验 |
+| `body` | 是 | S(128) | 商品/订单展示名 | C3：条件必填校验 |
 
 响应字段：`resultCode/errCode/errMsg/merId/terId/outTradeNo/txnState/tradeNo/reqChlNo/payCode/chlRetParam`；`chlRetParam.wc_pay_data` 是小程序支付参数。
 
 本地缺口：
 
 - 已有真实 HTTP client、官方 endpoint profile、公共 envelope 本地测试和 API runtime Baofu facade wiring；不再回退普通服务商/平台收付通。
-- `UnifiedOrderRequest.Validate()` 已校验首版必填字段、金额关系、`txnTime` 格式、`SHARING/orderType=7/WECHAT_JSAPI` 枚举、微信 `subMchId/payExtend/riskInfo.clientIp` 条件必填、`pageUrl=https` 和 `forbidCredit` 枚举。
+- `UnifiedOrderRequest.Validate()` 已校验首版必填字段、金额关系、`txnTime` 格式、`SHARING/orderType=7/WECHAT_JSAPI` 枚举、微信 `subMchId/payExtend/riskInfo.clientIp` 条件必填、`pageUrl=https` 和 `forbidCredit` 枚举。`PaymentQueryRequest`、`ShareQueryRequest`、`RefundQueryRequest`、`OrderCloseRequest` 均在本地校验 `merId/terId` 和交易引用，缺失不会 POST 到宝付。
 - 响应验签、数字信封完整性和测试地址联调仍未完成。
 - 未做测试地址联调：`https://mch-juhe.baofoo.com/api`。
 
@@ -354,7 +354,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 用途：支付通知缺失或处理中时查询。请求通常用 `tradeNo` 或 `outTradeNo` 定位。响应返回 `txnState`、`tradeNo`、金额、支付方式、渠道返回等。
 
-本地覆盖：`PaymentQueryRequest` 有 `merId/terId/tradeNo/outTradeNo`，aggregatepay client 已实现 `order_query`，scheduler 可查询并落 query fact。完整响应字段和测试地址联调仍待补。
+本地覆盖：`PaymentQueryRequest` 有 `merId/terId/tradeNo/outTradeNo`，Validate 强制 `merId/terId` 与一个交易引用；aggregatepay client 已实现 `order_query`，scheduler 可查询并落 query fact。完整响应字段和测试地址联调仍待补。
 
 ### 8.3 支付结果通知
 
@@ -386,16 +386,16 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 | 字段 | 必填 | 类型 | 条件/说明 | 本地覆盖 |
 | --- | --- | --- | --- | --- |
-| `agentMerId/agentTerId` | 否 | S(16) | 代理场景 | 未覆盖 |
-| `merId/terId` | 是 | S(16) | 收款商户号/终端号 | C1 |
-| `originTradeNo` | 否 | S(32) | 与 `originOutTradeNo` 二选一，推荐 | C1 |
-| `originOutTradeNo` | 否 | S(64) | 二选一 | C1 |
-| `txnTime` | 是 | T | `yyyyMMddHHmmss` | C1 |
-| `outTradeNo` | 是 | S(50) | 商户分账订单号 | C1 |
-| `notifyUrl` | 否 | S(128) | 分账通知地址 | C1 |
-| `sharingDetails` | 是 | JSON array | 分账明细 | C1 |
-| `sharingDetails[].sharingMerId` | 是 | S(64) | 宝付分配商户号/二级商户号 | C1，强制来自 `sharing_mer_id` |
-| `sharingDetails[].sharingAmt` | 是 | I | 分账金额，分 | C1 |
+| `agentMerId/agentTerId` | 否 | S(16) | 代理场景 | C3 DTO 字段存在，首版不主动填 |
+| `merId/terId` | 是 | S(16) | 收款商户号/终端号 | C3：Validate 必填 |
+| `originTradeNo` | 否 | S(32) | 与 `originOutTradeNo` 二选一，推荐 | C3：与 `originOutTradeNo` 二选一校验 |
+| `originOutTradeNo` | 否 | S(64) | 二选一 | C3：与 `originTradeNo` 二选一校验 |
+| `txnTime` | 是 | T | `yyyyMMddHHmmss` | C3：统一下单、分账、退款均校验格式 |
+| `outTradeNo` | 是 | S(50) | 商户分账订单号 | C3：Validate 必填 |
+| `notifyUrl` | 否 | S(128) | 分账通知地址 | C3 DTO 字段存在，运行时使用配置回调 URL |
+| `sharingDetails` | 是 | JSON array | 分账明细 | C3：数组非空校验 |
+| `sharingDetails[].sharingMerId` | 是 | S(64) | 宝付分配商户号/二级商户号 | C3：每个接收方必填；业务层强制来自 `sharing_mer_id` |
+| `sharingDetails[].sharingAmt` | 是 | I | 分账金额，分 | C3：正数校验 |
 
 响应字段：`resultCode/errCode/errMsg/merId/terId/tradeNo/outTradeNo/txnState/finishTime/succAmt/clearingDate`。
 

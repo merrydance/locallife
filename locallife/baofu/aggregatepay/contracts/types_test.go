@@ -178,8 +178,26 @@ func TestShareAfterPayRequestRequiresPaymentReferenceAndReceiverIDs(t *testing.T
 	require.NoError(t, err)
 	require.Contains(t, string(body), `"originOutTradeNo":"BF202605030001"`)
 	require.Contains(t, string(body), `"sharingMerId":"CP_MERCHANT"`)
+	require.NotContains(t, string(body), "subMchId")
 	require.NotContains(t, string(body), "openid")
 	require.NotContains(t, string(body), "sub_openid")
+
+	req.TxnTime = "2026-05-03"
+	require.ErrorIs(t, req.Validate(), ErrBaofuShareTransactionTimeInvalid)
+}
+
+func TestShareQueryRequestValidateOfficialRequiredFields(t *testing.T) {
+	req := ShareQueryRequest{MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "BFSHARE202605040001"}
+	require.NoError(t, req.Validate())
+
+	req = ShareQueryRequest{TerminalID: "200005200", OutTradeNo: "BFSHARE202605040001"}
+	require.ErrorIs(t, req.Validate(), ErrBaofuShareQueryMerchantIDRequired)
+
+	req = ShareQueryRequest{MerchantID: "102004465", OutTradeNo: "BFSHARE202605040001"}
+	require.ErrorIs(t, req.Validate(), ErrBaofuShareQueryTerminalIDRequired)
+
+	req = ShareQueryRequest{MerchantID: "102004465", TerminalID: "200005200"}
+	require.ErrorIs(t, req.Validate(), ErrBaofuShareQueryReferenceRequired)
 }
 
 func TestNormalizeShareTerminalStatus(t *testing.T) {
