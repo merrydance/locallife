@@ -26,11 +26,11 @@ func (server *Server) getRiderBaofuSettlementReadiness(ctx context.Context, ride
 	service := logic.NewBaofuAccountService(nil, nil)
 	if err != nil {
 		if isNotFoundError(err) {
-			return service.ReadinessFromBinding(db.BaofuAccountBinding{}, false, false), nil
+			return service.ReadinessFromBinding(db.BaofuAccountBinding{}, false), nil
 		}
 		return logic.BaofuAccountReadiness{}, err
 	}
-	return service.ReadinessFromBinding(binding, true, false), nil
+	return service.ReadinessFromBinding(binding, true), nil
 }
 
 func newBaofuSettlementReadinessResponse(readiness logic.BaofuAccountReadiness) *baofuSettlementReadinessResponse {

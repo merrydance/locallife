@@ -419,6 +419,101 @@ func TestPaymentOrderServiceCreatePaymentOrder_BaofuMissingClientFailsBeforeLoca
 	require.Equal(t, "宝付支付通道未配置，请联系平台处理", reqErr.Err.Error())
 }
 
+func TestPaymentOrderServiceCreatePaymentOrder_BaofuWechatChannelNotReadyFailsBeforeClientCall(t *testing.T) {
+	tests := []struct {
+		name   string
+		report db.BaofuMerchantReport
+	}{
+		{
+			name: "missing merchant report sub mch id",
+			report: db.BaofuMerchantReport{
+				OwnerType:       db.BaofuAccountOwnerTypeMerchant,
+				OwnerID:         3001,
+				ReportType:      db.BaofuMerchantReportTypeWechat,
+				ReportState:     db.BaofuMerchantReportStateSucceeded,
+				AppletAuthState: db.BaofuMerchantReportAppletAuthStateSucceeded,
+			},
+		},
+		{
+			name: "pending applet bind",
+			report: db.BaofuMerchantReport{
+				OwnerType:       db.BaofuAccountOwnerTypeMerchant,
+				OwnerID:         3001,
+				ReportType:      db.BaofuMerchantReportTypeWechat,
+				ReportState:     db.BaofuMerchantReportStateSucceeded,
+				AppletAuthState: db.BaofuMerchantReportAppletAuthStatePending,
+				SubMchID:        pgtype.Text{String: "sub-baofu", Valid: true},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := CreatePaymentOrderInput{
+				UserID:       1001,
+				OrderID:      2001,
+				PaymentType:  paymentTypeMiniProgram,
+				BusinessType: businessTypeOrder,
+				ClientIP:     "127.0.0.1",
+			}
+			order := db.Order{
+				ID:          input.OrderID,
+				UserID:      input.UserID,
+				MerchantID:  3001,
+				OrderType:   orderTypeTakeaway,
+				Status:      "pending",
+				TotalAmount: 1000,
+			}
+
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			baofuClient := &fakeBaofuAggregatePaymentClient{
+				unifiedResult: &aggregatecontracts.UnifiedOrderResult{},
+			}
+			baofuPayment := NewBaofuPaymentService(store, baofuClient, BaofuPaymentServiceConfig{
+				CollectMerchantID: "COLLECT_MER",
+				CollectTerminalID: "COLLECT_TER",
+				MiniProgramAppID:  "wxapp",
+				PaymentNotifyURL:  "https://api.example.com/v1/webhooks/baofu/payment",
+			})
+
+			store.EXPECT().GetOrder(gomock.Any(), input.OrderID).Return(order, nil)
+			store.EXPECT().GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+				OrderID:      pgtype.Int8{Int64: input.OrderID, Valid: true},
+				BusinessType: businessTypeOrder,
+			}).Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+			store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(db.Merchant{ID: order.MerchantID, Name: "Merchant B"}, nil)
+			store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+				OwnerType: db.BaofuAccountOwnerTypeMerchant,
+				OwnerID:   order.MerchantID,
+			}).Return(db.BaofuAccountBinding{
+				OwnerType:    db.BaofuAccountOwnerTypeMerchant,
+				OwnerID:      order.MerchantID,
+				AccountType:  db.BaofuAccountTypeBusiness,
+				OpenState:    db.BaofuAccountOpenStateActive,
+				ContractNo:   pgtype.Text{String: "CM3001", Valid: true},
+				SharingMerID: pgtype.Text{String: "CM3001", Valid: true},
+			}, nil)
+			store.EXPECT().GetBaofuMerchantReportByOwner(gomock.Any(), db.GetBaofuMerchantReportByOwnerParams{
+				OwnerType:  db.BaofuAccountOwnerTypeMerchant,
+				OwnerID:    order.MerchantID,
+				ReportType: db.BaofuMerchantReportTypeWechat,
+			}).Return(tt.report, nil)
+			store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).Times(0)
+
+			svc := NewPaymentOrderServiceWithBaofu(store, nil, baofuPayment)
+			_, err := svc.CreatePaymentOrder(context.Background(), input)
+
+			reqErr := assertRequestError(t, err)
+			require.Equal(t, http.StatusBadRequest, reqErr.Status)
+			require.Equal(t, "商户微信支付通道待开通，暂不能创建微信生态支付订单", reqErr.Err.Error())
+			require.False(t, baofuClient.called)
+		})
+	}
+}
+
 func TestPaymentOrderServiceQueryPaymentOrder_DirectPaymentIgnoresBaofuMainBusinessClient(t *testing.T) {
 	input := QueryPaymentOrderInput{UserID: 1001, PaymentOrderID: 2001}
 	paymentOrder := db.PaymentOrder{

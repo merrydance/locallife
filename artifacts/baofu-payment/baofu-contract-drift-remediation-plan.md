@@ -1413,7 +1413,7 @@ git commit -m "fix(baofu): re-audit merchant report contracts"
 - Modify: `locallife/db/query/baofu_merchant_report.sql`
 - Modify: `artifacts/baofu-payment/baofu-profit-sharing-integration-design.md`
 
-- [ ] **Step 1: Add source-of-truth table to design doc**
+- [x] **Step 1: Add source-of-truth table to design doc**
 
 Document these invariants:
 
@@ -1423,7 +1423,7 @@ Document these invariants:
 | `unified_order.subMchId` | Successful merchant report `sub_mch_id` | WeChat ordinary-service-provider applyment result, platform unified `subMchId`, Baofoo二级商户号. |
 | APPLET auth content | `WECHAT_MINI_APP_ID` | merchant-provided appid, random report field, empty placeholder. |
 
-- [ ] **Step 2: Static checks**
+- [x] **Step 2: Static checks**
 
 Run:
 
@@ -1431,9 +1431,11 @@ Run:
 rg -n "ordinaryserviceprovider|wechat_sub_mch|TxResult\\.SubMCH|TxResult\\.SubMch|contractNo.*sharing|CollectMerchantID.*sharing|subMchId.*share" locallife/logic locallife/baofu locallife/db/query
 ```
 
-Expected: any hit is either read-only cold-reserve code outside Baofoo main path or has an explicit test proving the correct boundary.
+Expected: any hit is either read-only cold-reserve code outside Baofoo main path, legacy `wechat_sub_mch_id` storage that is no longer read by readiness/payment creation, or has an explicit test proving the correct boundary.
 
-- [ ] **Step 3: Service tests**
+Progress: static scan shows ordinary-service-provider imports only in cold-reserve/legacy WeChat paths and `wechat_sub_mch_id` only in the account-binding SQL/generated legacy field. Runtime readiness and payment creation now read `baofu_merchant_reports.sub_mch_id` plus APPLET auth; account binding readiness no longer treats `wechat_sub_mch_id` as a payment source.
+
+- [x] **Step 3: Service tests**
 
 Tests must prove:
 
@@ -1442,14 +1444,16 @@ Tests must prove:
 - pending APPLET bind blocks unified order before client call;
 - direct-payment order creation never calls Baofoo client.
 
-- [ ] **Step 4: Validate**
+Progress: added payment-order regression coverage for missing merchant-report `sub_mch_id` and pending APPLET bind, both failing before local payment creation and before Baofoo client calls. Existing direct-payment query coverage proves Baofu main-business client is ignored for direct channel; direct-payment creation remains structurally separate because claim-recovery/rider deposit creation functions only accept the WeChat direct-payment client.
+
+- [x] **Step 4: Validate**
 
 ```bash
 cd locallife
 PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestBaofuPayment|TestBaofuMerchantReport|TestDirectPayment' -count=1
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add locallife/logic locallife/db/query artifacts/baofu-payment/baofu-profit-sharing-integration-design.md

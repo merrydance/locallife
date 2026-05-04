@@ -164,7 +164,7 @@ func (server *Server) getPlatformBaofuSettlementStatus(ctx *gin.Context) {
 		return
 	}
 	service := logic.NewBaofuAccountService(nil, nil)
-	readiness := service.ReadinessFromBinding(binding, found, false)
+	readiness := service.ReadinessFromBinding(binding, found)
 	ctx.JSON(http.StatusOK, platformBaofuSettlementStatusResponse{
 		SettlementAccount:  newBaofuSettlementReadinessResponse(readiness),
 		MaskedContractNo:   maskedBaofuIdentifier(binding.ContractNo.String),

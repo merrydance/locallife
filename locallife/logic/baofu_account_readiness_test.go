@@ -12,13 +12,12 @@ func TestBaofuAccountReadinessStates(t *testing.T) {
 	service := NewBaofuAccountService(nil, nil)
 
 	tests := []struct {
-		name                  string
-		found                 bool
-		binding               db.BaofuAccountBinding
-		requireWechatSubMchID bool
-		wantState             string
-		wantLabel             string
-		wantPaymentReady      bool
+		name             string
+		found            bool
+		binding          db.BaofuAccountBinding
+		wantState        string
+		wantLabel        string
+		wantPaymentReady bool
 	}{
 		{
 			name:             "missing binding asks for profile submission",
@@ -37,7 +36,7 @@ func TestBaofuAccountReadinessStates(t *testing.T) {
 			wantPaymentReady: false,
 		},
 		{
-			name:  "merchant active binding still waits for wechat channel identity",
+			name:  "merchant active binding is settlement-ready before channel report",
 			found: true,
 			binding: db.BaofuAccountBinding{
 				OwnerType:    db.BaofuAccountOwnerTypeMerchant,
@@ -46,10 +45,9 @@ func TestBaofuAccountReadinessStates(t *testing.T) {
 				ContractNo:   pgtype.Text{String: "CM123", Valid: true},
 				SharingMerID: pgtype.Text{String: "CM123", Valid: true},
 			},
-			requireWechatSubMchID: true,
-			wantState:             BaofuOnboardingStateWechatChannelPending,
-			wantLabel:             "微信支付通道待开通",
-			wantPaymentReady:      false,
+			wantState:        BaofuOnboardingStateReady,
+			wantLabel:        "结算账户可用",
+			wantPaymentReady: true,
 		},
 		{
 			name:  "active rider binding is ready without wechat channel identity",
@@ -93,7 +91,7 @@ func TestBaofuAccountReadinessStates(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := service.ReadinessFromBinding(tt.binding, tt.found, tt.requireWechatSubMchID)
+			got := service.ReadinessFromBinding(tt.binding, tt.found)
 
 			require.Equal(t, tt.wantState, got.State)
 			require.Equal(t, tt.wantLabel, got.Label)

@@ -15,7 +15,7 @@ func (server *Server) getPlatformBaofuSettlementReadiness(ctx context.Context) (
 	if err != nil {
 		return logic.BaofuAccountReadiness{}, err
 	}
-	return service.ReadinessFromBinding(binding, found, false), nil
+	return service.ReadinessFromBinding(binding, found), nil
 }
 
 func (server *Server) getPlatformBaofuSettlementBinding(ctx context.Context) (db.BaofuAccountBinding, bool, error) {

@@ -23,7 +23,7 @@ func TestBaofuAccountServiceValidateOwnerAccountRules(t *testing.T) {
 	require.ErrorIs(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypeRider, db.BaofuAccountTypeBusiness), ErrBaofuAccountInvalidOwnerAccount)
 }
 
-func TestBaofuAccountServiceMerchantPaymentReadinessRequiresWechatSubMchID(t *testing.T) {
+func TestBaofuAccountServiceMerchantPaymentReadinessUsesCanonicalSharingMerIDOnly(t *testing.T) {
 	service := NewBaofuAccountService(nil, nil)
 	binding := db.BaofuAccountBinding{
 		OwnerType:    db.BaofuAccountOwnerTypeMerchant,
@@ -32,10 +32,6 @@ func TestBaofuAccountServiceMerchantPaymentReadinessRequiresWechatSubMchID(t *te
 		SharingMerID: pgtype.Text{String: "CM123", Valid: true},
 	}
 
-	err := service.ValidatePaymentReady(binding)
-	require.ErrorIs(t, err, ErrBaofuAccountWechatSubMchRequired)
-
-	binding.WechatSubMchID = pgtype.Text{String: "sub_mch_123", Valid: true}
 	require.NoError(t, service.ValidatePaymentReady(binding))
 }
 

@@ -15,7 +15,6 @@ var (
 	ErrBaofuAccountInvalidOwnerAccount  = errors.New("baofu account owner and account type do not match")
 	ErrBaofuAccountInactive             = errors.New("baofu account is not active")
 	ErrBaofuAccountReceiverRequired     = errors.New("baofu account receiver id is required")
-	ErrBaofuAccountWechatSubMchRequired = errors.New("baofu merchant wechat channel identity is required")
 	ErrBaofuAccountOutRequestNoRequired = errors.New("baofu account out request no is required")
 )
 
@@ -87,13 +86,10 @@ func (s *BaofuAccountService) ValidatePaymentReady(binding db.BaofuAccountBindin
 	if strings.TrimSpace(binding.SharingMerID.String) == "" {
 		return ErrBaofuAccountReceiverRequired
 	}
-	if strings.TrimSpace(binding.OwnerType) == db.BaofuAccountOwnerTypeMerchant && strings.TrimSpace(binding.WechatSubMchID.String) == "" {
-		return ErrBaofuAccountWechatSubMchRequired
-	}
 	return nil
 }
 
-func (s *BaofuAccountService) ReadinessFromBinding(binding db.BaofuAccountBinding, found bool, requireWechatSubMchID bool) BaofuAccountReadiness {
+func (s *BaofuAccountService) ReadinessFromBinding(binding db.BaofuAccountBinding, found bool) BaofuAccountReadiness {
 	if !found {
 		return baofuAccountReadiness(BaofuOnboardingStateProfilePending, false)
 	}
@@ -108,9 +104,6 @@ func (s *BaofuAccountService) ReadinessFromBinding(binding db.BaofuAccountBindin
 	case db.BaofuAccountOpenStateActive:
 		if strings.TrimSpace(binding.SharingMerID.String) == "" {
 			return baofuAccountReadiness(BaofuOnboardingStateOpenFailed, false)
-		}
-		if requireWechatSubMchID && strings.TrimSpace(binding.WechatSubMchID.String) == "" {
-			return baofuAccountReadiness(BaofuOnboardingStateWechatChannelPending, false)
 		}
 		return baofuAccountReadiness(BaofuOnboardingStateReady, true)
 	default:
@@ -135,7 +128,7 @@ func (s *BaofuAccountService) OpenAccount(ctx context.Context, req baofucontract
 		AccountType:           strings.TrimSpace(req.AccountType),
 		LoginNo:               pgtype.Text{},
 		OpenState:             db.BaofuAccountOpenStateProcessing,
-		WechatSubMchID:        pgtype.Text{String: strings.TrimSpace(req.WechatSubMchID), Valid: strings.TrimSpace(req.WechatSubMchID) != ""},
+		WechatSubMchID:        pgtype.Text{},
 		LastOpenTransSerialNo: pgtype.Text{String: strings.TrimSpace(req.OutRequestNo), Valid: strings.TrimSpace(req.OutRequestNo) != ""},
 		RawSnapshot:           rawSnapshot,
 	})

@@ -172,9 +172,9 @@ func riderBaofuSettlementReadiness(ctx context.Context, store db.Store, rider db
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
-			return service.ReadinessFromBinding(db.BaofuAccountBinding{}, false, false), nil
+			return service.ReadinessFromBinding(db.BaofuAccountBinding{}, false), nil
 		}
 		return BaofuAccountReadiness{}, err
 	}
-	return service.ReadinessFromBinding(binding, true, false), nil
+	return service.ReadinessFromBinding(binding, true), nil
 }

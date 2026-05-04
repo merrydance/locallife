@@ -51,7 +51,7 @@ func ensureMerchantBaofuReadyForPayment(ctx context.Context, store db.Store, mer
 
 func ReadinessFromBaofuBindingAndMerchantReport(binding db.BaofuAccountBinding, report db.BaofuMerchantReport) BaofuAccountReadiness {
 	service := NewBaofuAccountService(nil, nil)
-	accountReadiness := service.ReadinessFromBinding(binding, true, false)
+	accountReadiness := service.ReadinessFromBinding(binding, true)
 	if !accountReadiness.PaymentReady {
 		return accountReadiness
 	}

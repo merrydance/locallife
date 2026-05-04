@@ -17,15 +17,14 @@ const (
 type OwnerType string
 
 type OpenAccountRequest struct {
-	OwnerType      string
-	OwnerID        int64
-	AccountType    string
-	OutRequestNo   string
-	LegalName      string
-	CertificateNo  string
-	BankAccountNo  string
-	BankMobile     string
-	WechatSubMchID string
+	OwnerType     string
+	OwnerID       int64
+	AccountType   string
+	OutRequestNo  string
+	LegalName     string
+	CertificateNo string
+	BankAccountNo string
+	BankMobile    string
 }
 
 type QueryAccountRequest struct {

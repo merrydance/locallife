@@ -18,6 +18,7 @@ var (
 	ErrBaofuPaymentServiceNotConfigured     = errors.New("baofu payment service is not configured")
 	ErrBaofuPaymentInvalidInput             = errors.New("baofu payment input is invalid")
 	ErrBaofuPaymentWechatPayDataRequired    = errors.New("baofu payment missing wechat pay data")
+	ErrBaofuPaymentMerchantSubMchIDRequired = errors.New("baofu payment merchant report sub mch id is required")
 	ErrBaofuPaymentRiskInfoClientIPRequired = aggregatecontracts.ErrUnifiedOrderRiskInfoClientIPRequired
 )
 
@@ -293,7 +294,7 @@ func validateCreateBaofuWechatJSAPIOrderInput(input CreateBaofuWechatJSAPIOrderI
 		return ErrBaofuPaymentInvalidInput
 	}
 	if strings.TrimSpace(input.MerchantSubMchID) == "" {
-		return ErrBaofuAccountWechatSubMchRequired
+		return ErrBaofuPaymentMerchantSubMchIDRequired
 	}
 	if strings.TrimSpace(input.PayerOpenID) == "" || strings.TrimSpace(input.Body) == "" {
 		return ErrBaofuPaymentInvalidInput

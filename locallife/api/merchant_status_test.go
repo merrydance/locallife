@@ -169,6 +169,11 @@ func TestUpdateMerchantOpenStatus_RequireBaofuAccountWhenOpen_WechatChannelPendi
 		ContractNo:   pgtype.Text{String: "CM91", Valid: true},
 		SharingMerID: pgtype.Text{String: "CM91", Valid: true},
 	}, nil)
+	store.EXPECT().GetBaofuMerchantReportByOwner(gomock.Any(), db.GetBaofuMerchantReportByOwnerParams{
+		OwnerType:  db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:    merchant.ID,
+		ReportType: db.BaofuMerchantReportTypeWechat,
+	}).Return(db.BaofuMerchantReport{}, db.ErrRecordNotFound)
 	store.EXPECT().UpdateMerchantIsOpen(gomock.Any(), gomock.Any()).Times(0)
 
 	server := newTestServer(t, store)
@@ -183,7 +188,7 @@ func TestUpdateMerchantOpenStatus_RequireBaofuAccountWhenOpen_WechatChannelPendi
 
 	server.router.ServeHTTP(recorder, req)
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
-	require.Contains(t, recorder.Body.String(), "微信渠道待报备")
+	require.Contains(t, recorder.Body.String(), "微信支付通道待开通")
 	require.NotContains(t, recorder.Body.String(), "CM91")
 }
 
@@ -216,6 +221,11 @@ func TestGetMerchantOpenStatus_IncludesBaofuSettlementReadiness(t *testing.T) {
 		ContractNo:   pgtype.Text{String: "CM92", Valid: true},
 		SharingMerID: pgtype.Text{String: "CM92", Valid: true},
 	}, nil)
+	store.EXPECT().GetBaofuMerchantReportByOwner(gomock.Any(), db.GetBaofuMerchantReportByOwnerParams{
+		OwnerType:  db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:    merchant.ID,
+		ReportType: db.BaofuMerchantReportTypeWechat,
+	}).Return(db.BaofuMerchantReport{}, db.ErrRecordNotFound)
 
 	server := newTestServer(t, store)
 	recorder := httptest.NewRecorder()
@@ -231,7 +241,7 @@ func TestGetMerchantOpenStatus_IncludesBaofuSettlementReadiness(t *testing.T) {
 	require.False(t, resp.IsOpen)
 	require.NotNil(t, resp.SettlementAccount)
 	require.Equal(t, "wechat_channel_pending", resp.SettlementAccount.State)
-	require.Equal(t, "微信渠道待报备", resp.SettlementAccount.Label)
+	require.Equal(t, "微信支付通道待开通", resp.SettlementAccount.Label)
 	require.False(t, resp.SettlementAccount.PaymentReady)
 	require.NotContains(t, recorder.Body.String(), "CM92")
 	require.NotContains(t, recorder.Body.String(), "contract")

@@ -15,9 +15,9 @@ func (server *Server) getOperatorBaofuSettlementReadiness(ctx context.Context, o
 	service := logic.NewBaofuAccountService(nil, nil)
 	if err != nil {
 		if isNotFoundError(err) {
-			return service.ReadinessFromBinding(db.BaofuAccountBinding{}, false, false), nil
+			return service.ReadinessFromBinding(db.BaofuAccountBinding{}, false), nil
 		}
 		return logic.BaofuAccountReadiness{}, err
 	}
-	return service.ReadinessFromBinding(binding, true, false), nil
+	return service.ReadinessFromBinding(binding, true), nil
 }
