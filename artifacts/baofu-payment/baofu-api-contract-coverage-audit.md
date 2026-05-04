@@ -82,7 +82,7 @@
 | 提现查询 | 提现查询 | `T-1001-013-15` | 提现处理中恢复/对账 | C3：已有官方提现查询 DTO 和状态映射 | C3：已有 client、worker 状态应用和 `baofu-withdrawal-recovery` 调度查询入队；沙箱证据待补 | 未做 |
 | 提现通知 | 提现结果通知 | 通知 URL | 提现终态通知 | C3：官方字段 parser、密文 envelope parser、纯文本 `OK` ACK 已有本地测试 | C3：`/v1/webhooks/baofu/withdraw` 已按 `transSerialNo` 定位提现单并入队提现 fact application；沙箱证据待补 | 未做 |
 | 聚合商户报备 | 报备认证 | `merchant_report` | 商户宝付开户后逐户报备微信渠道，取得该商户 `subMchId` | C3：字段级 DTO、微信类目 allowlist 和校验已建 | C3：表/sqlc/service/client/readiness 已建；真实资料映射待补 | 未做 |
-| 聚合商户报备 | 报备信息查询 | `merchant_report_query` | 查询平台或商户报备状态和 `subMchId` | C3：DTO/状态归一化已建 | C3：client/service 同步 `sub_mch_id` 边界已建 | 未做 |
+| 聚合商户报备 | 报备信息查询 | `merchant_report_query` | 查询平台或商户报备状态和 `subMchId` | C3：DTO/状态归一化已建 | C3：client/service 同步 `sub_mch_id` 边界已建，`baofu-merchant-report-recovery` 已补处理中报备和 APPLET 授权补偿 | 未做 |
 | 聚合支付 | 统一下单交易创建 | `unified_order` | 主支付入口，微信 JSAPI 支付 | C3：官方字段、条件必填、金额关系、`riskInfo.clientIp` 校验已建 | C3：concrete client + API runtime main-business wiring 已建；不回退普通服务商 | 未做 |
 | 聚合支付 | 支付订单查询 | `order_query` | 支付回调缺失恢复 | C3：DTO/client 已建 | C3：recovery scheduler 已可使用生产 aggregatepay client 查询并落 fact | 未做 |
 | 聚合支付 | 支付结果通知 | 通知 URL | 支付终态回调 | C2/C3：notification parser 与 ACK 语义有本地测试 | C2/C3：callback 落 fact 并入队；真实验签/数字信封和沙箱回调待补 | 未做 |
@@ -487,7 +487,7 @@
 | `locallife/logic/baofu_payment_service.go` | 服务层可组统一下单并记录 command；主业务 API runtime 可切宝付 concrete aggregate client | 宝付合单支付已 fail-closed；沙箱证据仍待补。 |
 | `locallife/api/logic_adapters.go` | 已按 `BAOFU_MAIN_BUSINESS_ENABLED` 构造宝付主业务 facade | 主业务支付可切宝付；宝付启用时合单支付已明确 fail-closed。 |
 | `locallife/api/baofu_callback.go` | 支付/分账/退款/开户回调落 fact 草稿 | ACK、验签、payload 完整性需沙箱确认。 |
-| `locallife/worker/*baofu*` | 分账创建、支付/分账/退款查询恢复、提现查询恢复、提现 fact application 等本地 worker 边界 | aggregatepay/account 生产 client wiring 已接入任务处理器和 Baofu/refund/withdrawal recovery scheduler；沙箱证据仍待补。 |
+| `locallife/worker/*baofu*` | 分账创建、支付/分账/退款查询恢复、提现查询恢复、提现 fact application、聚合商户报备查询恢复等本地 worker 边界 | aggregatepay/account/merchantreport 生产 client wiring 已接入任务处理器和 Baofu/refund/withdrawal/merchant-report recovery scheduler；沙箱证据仍待补。 |
 
 
 ### 12.1 契约漂移审计 Findings
@@ -499,7 +499,7 @@
 | C-003 | C3 本地修复，待沙箱验证 | `locallife/baofu/account/notification/notification.go` 已按官方开户/提现通知字段解析并覆盖提现密文 envelope；`locallife/api/baofu_callback.go` 开户/提现 ACK 均为纯文本 `OK` | 本地 parser/ACK/提现入队已防止明显字段漂移，但还未使用宝付测试环境真实通知验证 URL query、密文 envelope、重放 ACK 行为 | 用宝付测试通知样例或沙箱回调验证开户/提现通知，并补回真实样例摘要。 |
 | C-004 | 部分修复，待沙箱验证 | 已新增聚合/报备 `PublicRequestEnvelope`；账户 API 已拆到独立 union-gw `verifyType=1` envelope，不再误用聚合 public envelope | 聚合/报备响应验签、数字信封加密、账户 `verifyType=2`、真实错误码和宝付沙箱请求仍未验证 | Task 12/C4 补真实请求/响应 fixture，Task 10 补错误码分类。 |
 | C-005 | 已本地修复，待沙箱验证 | `locallife/baofu/aggregatepay/contracts/types.go` 已新增 `unified_order` 表驱动校验，覆盖 M/C 字段、枚举、`subMchId` 条件必填、https `pageUrl`、金额关系 | 本地契约已 fail-closed；仍未用宝付测试地址验证真实错误码和字段长度边界 | Task 8/沙箱测试补真实请求、参数错误和错误码样例。 |
-| C-006 | 部分修复，待联调/恢复 worker | 已新增 `locallife/baofu/merchantreport/contracts`、`baofu_merchant_reports`、sqlc query、报备 service、APPLET 授权 readiness 和 `merchantreport.Client` | 本地契约/持久化/服务/HTTP client 已能防止 `bctMerId/subMchId/authContent` 漂移，但还没有沙箱证据和报备查询恢复 worker | Task 8/沙箱联调验证真实报备与授权目录请求；后续补报备恢复 worker。 |
+| C-006 | C3 本地修复，待联调 | 已新增 `locallife/baofu/merchantreport/contracts`、`baofu_merchant_reports`、sqlc query、报备 service、APPLET 授权 readiness、`merchantreport.Client` 和 `baofu-merchant-report-recovery` | 本地契约/持久化/服务/HTTP client/recovery 已能防止 `bctMerId/subMchId/authContent` 漂移，但还没有沙箱证据和真实资料映射验收 | Task 8/沙箱联调验证真实报备、报备查询与授权目录请求。 |
 | C-007 | 已本地修复，待联调 | `locallife/logic/baofu_payment_order_route.go` 已通过 `merchantBaofuReadinessForPayment` 取商户报备 `sub_mch_id`；`CreateBaofuWechatJSAPIOrderInput` 字段已改 `MerchantSubMchID` | 旧普通服务商 `txResult.SubMchID` 来源已移除；真实支付仍待宝付聚合商户报备沙箱验证 | Task 8/沙箱测试验证 `unified_order.subMchId` 使用报备返回值。 |
 | C-008 | C3 本地修复，待沙箱 | 已新增 `order_refund`、`refund_query`、`order_close` DTO/client、退款通知 parser、退款状态映射、API callback、退款查询恢复 scheduler 和分账前退款业务接入 | 首版“分账前退款、分账后不退款”已在本地 fail-closed；仍缺真实验签/数字信封、宝付测试地址退款查询/回调证据 | Task 12/C4 补沙箱证据；响应验签/数字信封在 C-004/C-011 跟进。 |
 | C-009 | 部分修复，待 service/client 切换 | 已新增 `YuanStringToFen` / `FenToYuanString` 并覆盖 2 位小数校验 | 转换 helper 已在契约包，余额/提现真实 client 仍需集中调用 | Task 8/提现服务切换时禁止业务层散落金额转换。 |
@@ -537,7 +537,7 @@
 2. 宝付合单支付首版已选择 fail-closed：`BAOFU_MAIN_BUSINESS_ENABLED=true` 时创建合单支付返回 `宝付合单支付暂未开通，请分开支付`，不得回退普通服务商/平台收付通；后续如需合单再按宝付官方合单/多单契约新增。
 3. 用宝付测试地址补退款 callback / `refund_query` 证据，并继续保持“分账前退款、分账后不退款”互斥。
 4. 补完整错误码表：账户错误码、聚合支付错误码、报备错误码至少分成“用户需改资料”“商户/平台配置错误”“宝付处理中可重试”“宝付/渠道异常需人工”。
-5. 补聚合商户报备完整附录枚举、真实资料来源映射和报备查询恢复 worker；未覆盖字段在请求进入 client 前 fail-closed。
+5. 补聚合商户报备完整附录枚举和真实资料来源映射；报备查询恢复 worker 已本地完成，未覆盖字段仍需在请求进入 client 前 fail-closed。
 6. 每个必用接口至少跑一次宝付测试地址正向、参数错误、重复请求/幂等、查询恢复、回调重复投递，并把脱敏证据写入 `baofu-sandbox-evidence.md`。
 7. 向宝付确认拓展码/扫码确认的接口归属、字段、扫码主体和状态查询方式，并把结果补入开户/报备契约。
 

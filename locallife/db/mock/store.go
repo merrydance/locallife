@@ -15667,6 +15667,21 @@ func (mr *MockStoreMockRecorder) ListReconciliationReports(ctx, arg any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListReconciliationReports", reflect.TypeOf((*MockStore)(nil).ListReconciliationReports), ctx, arg)
 }
 
+// ListRecoverableBaofuMerchantReports mocks base method.
+func (m *MockStore) ListRecoverableBaofuMerchantReports(ctx context.Context, arg db.ListRecoverableBaofuMerchantReportsParams) ([]db.BaofuMerchantReport, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListRecoverableBaofuMerchantReports", ctx, arg)
+	ret0, _ := ret[0].([]db.BaofuMerchantReport)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListRecoverableBaofuMerchantReports indicates an expected call of ListRecoverableBaofuMerchantReports.
+func (mr *MockStoreMockRecorder) ListRecoverableBaofuMerchantReports(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRecoverableBaofuMerchantReports", reflect.TypeOf((*MockStore)(nil).ListRecoverableBaofuMerchantReports), ctx, arg)
+}
+
 // ListRefundOrdersByPaymentOrder mocks base method.
 func (m *MockStore) ListRefundOrdersByPaymentOrder(ctx context.Context, paymentOrderID int64) ([]db.RefundOrder, error) {
 	m.ctrl.T.Helper()

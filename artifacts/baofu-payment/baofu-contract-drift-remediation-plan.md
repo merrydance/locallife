@@ -1097,3 +1097,10 @@ This remediation is not complete until all of the following are true:
 - Added `/v1/webhooks/baofu/withdraw`; it resolves local withdrawal orders by `transSerialNo`, enqueues `BaofuWithdrawalFactApplicationPayload`, and returns the official plain-text `OK` only after durable task enqueue succeeds.
 - Wired the default account notification parser in `api.NewServer` when Baofu runtime config is available.
 - Residual risk: real BaoCaiTong withdraw notification URL shape, replay behavior, and sandbox callback samples remain C4-open.
+
+### 2026-05-04 Follow-up: Aggregate Merchant Report Query Recovery
+
+- Added `RecoverWechatMerchantReport` to the merchant-report service so delayed `merchant_report_query` success writes `sub_mch_id` and then binds `authType=APPLET` to the LocalLife mini-program appid through `bind_sub_config`.
+- Added `ListRecoverableBaofuMerchantReports` and `baofu-merchant-report-recovery` scheduler for processing WeChat reports and pending APPLET auth bindings.
+- Wired concrete merchant-report client construction in `main.go`; the scheduler is registered only when Baofu runtime config is available and otherwise fails closed with a scheduler-boundary warning.
+- Residual risk: real Baofu merchant report/query/bind_sub_config sandbox evidence and complete production資料来源映射 remain C4/open.

@@ -265,6 +265,7 @@ const (
 	ExternalPaymentCommandTypeCreateBaofuWithdraw       = "create_baofu_withdraw"
 	ExternalPaymentCommandTypeQueryBaofuWithdraw        = "query_baofu_withdraw"
 	ExternalPaymentCommandTypeBaofuMerchantReport       = "baofu_merchant_report"
+	ExternalPaymentCommandTypeBaofuMerchantReportQuery  = "baofu_merchant_report_query"
 	ExternalPaymentCommandTypeBaofuBindSubConfig        = "baofu_bind_sub_config"
 
 	ExternalPaymentBusinessOwnerRiderDeposit  = "rider_deposit"

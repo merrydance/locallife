@@ -1573,3 +1573,10 @@ make test-integration
 - Added encrypted BaoCaiTong withdraw notification parsing and `/v1/webhooks/baofu/withdraw`.
 - The callback resolves the local withdrawal order by `transSerialNo`, enqueues `baofu:process_withdrawal_fact_application`, and ACKs with plain `OK` only after enqueue succeeds; withdrawal terminal status remains single-written by the worker.
 - Verification scope remains local C3. Real BaoCaiTong withdrawal callback payload/query-string/replay behavior and sandbox evidence are still open.
+
+
+### 2026-05-04 Remediation Follow-up - Aggregate Merchant Report Query Recovery
+
+- Added merchant-report query recovery for delayed WeChat channel reporting. Processing `baofu_merchant_reports` are queried through `merchant_report_query`; successful results persist `sub_mch_id` and then execute `bind_sub_config(authType=APPLET, authContent=<LocalLife 小程序 appid>)`.
+- Added `baofu-merchant-report-recovery` scheduler and runtime concrete `merchantreport.Client` wiring in `main.go`.
+- Verification scope remains local C3. Real Baofu report/query/APPLET-bind sandbox evidence and production资料映射验收 are still open.

@@ -1458,6 +1458,7 @@ type Querier interface {
 	ListRecentWeatherCoefficients(ctx context.Context, arg ListRecentWeatherCoefficientsParams) ([]WeatherCoefficient, error)
 	ListRecommendConfigs(ctx context.Context) ([]RecommendConfig, error)
 	ListReconciliationReports(ctx context.Context, arg ListReconciliationReportsParams) ([]ReconciliationReport, error)
+	ListRecoverableBaofuMerchantReports(ctx context.Context, arg ListRecoverableBaofuMerchantReportsParams) ([]BaofuMerchantReport, error)
 	ListRefundOrdersByPaymentOrder(ctx context.Context, paymentOrderID int64) ([]RefundOrder, error)
 	ListRefundOrdersByStatus(ctx context.Context, arg ListRefundOrdersByStatusParams) ([]RefundOrder, error)
 	// 获取指定日期范围内直连支付（miniprogram/deposit等）成功退款订单（用于每日对账）

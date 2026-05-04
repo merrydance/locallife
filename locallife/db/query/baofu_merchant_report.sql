@@ -43,6 +43,22 @@ FROM baofu_merchant_reports
 WHERE report_no = $1
 LIMIT 1;
 
+-- name: ListRecoverableBaofuMerchantReports :many
+SELECT id, owner_type, owner_id, report_type, report_no, bct_mer_id, sub_mch_id, report_state, applet_auth_state, platform_biz_no, failure_code, failure_message, raw_snapshot, created_at, updated_at
+FROM baofu_merchant_reports
+WHERE report_type = 'WECHAT'
+  AND updated_at <= sqlc.arg(updated_before)
+  AND (
+      report_state = 'processing'
+      OR (
+          report_state = 'succeeded'
+          AND sub_mch_id IS NOT NULL
+          AND applet_auth_state = 'pending'
+      )
+  )
+ORDER BY updated_at ASC, id ASC
+LIMIT sqlc.arg(limit_count);
+
 -- name: MarkBaofuMerchantReportSucceeded :one
 UPDATE baofu_merchant_reports
 SET report_state = 'succeeded',

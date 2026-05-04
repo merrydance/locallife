@@ -66,6 +66,36 @@ func TestBaofuMerchantReportServiceBindsAppletAfterReportSuccess(t *testing.T) {
 	require.Equal(t, db.ExternalPaymentCommandTypeBaofuMerchantReport, store.commands[0].CommandType)
 }
 
+func TestBaofuMerchantReportServiceRecoversProcessingReportAndBindsApplet(t *testing.T) {
+	store := &fakeBaofuMerchantReportStore{
+		report: db.BaofuMerchantReport{
+			ID:              78,
+			OwnerType:       db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:         123,
+			ReportType:      db.BaofuMerchantReportTypeWechat,
+			ReportNo:        "MR202605040002",
+			BctMerID:        "CM202605040002",
+			ReportState:     db.BaofuMerchantReportStateProcessing,
+			AppletAuthState: db.BaofuMerchantReportAppletAuthStatePending,
+		},
+	}
+	client := fakeMerchantReportClient{
+		reportResult: &merchantcontracts.MerchantReportResult{ReportNo: "MR202605040002", ReportState: "SUCCESS", SubMchID: "1900000110", PlatformBizNo: "PB202605040002"},
+		bindResult:   &merchantcontracts.BindSubConfigResult{SubMchID: "1900000110", AuthType: merchantcontracts.AuthTypeApplet, ResultCode: "SUCCESS"},
+	}
+	service := NewBaofuMerchantReportService(store, &client, BaofuMerchantReportConfig{CollectMerchantID: "100000", CollectTerminalID: "200000", MiniProgramAppID: "wx1234567890abcdef"})
+
+	result, err := service.RecoverWechatMerchantReport(context.Background(), store.report)
+
+	require.NoError(t, err)
+	require.Equal(t, db.BaofuMerchantReportStateSucceeded, result.ReportState)
+	require.Equal(t, db.BaofuMerchantReportAppletAuthStateSucceeded, result.AppletAuthState)
+	require.Equal(t, "MR202605040002", client.queryRequest.ReportNo)
+	require.Equal(t, db.BaofuMerchantReportTypeWechat, client.queryRequest.ReportType)
+	require.Equal(t, "1900000110", client.bindRequest.SubMchID)
+	require.Equal(t, "wx1234567890abcdef", client.bindRequest.AuthContent)
+}
+
 func activeBaofuBindingWithSharingMerID(ownerID int64, sharingMerID string) db.BaofuAccountBinding {
 	return db.BaofuAccountBinding{
 		OwnerType:    db.BaofuAccountOwnerTypeMerchant,
@@ -142,6 +172,7 @@ type fakeMerchantReportClient struct {
 	reportResult  *merchantcontracts.MerchantReportResult
 	bindResult    *merchantcontracts.BindSubConfigResult
 	reportRequest merchantcontracts.WechatMerchantReportRequest
+	queryRequest  merchantcontracts.MerchantReportQueryRequest
 	bindRequest   merchantcontracts.BindSubConfigRequest
 }
 
@@ -151,6 +182,7 @@ func (c *fakeMerchantReportClient) SubmitWechatReport(ctx context.Context, req m
 }
 
 func (c *fakeMerchantReportClient) QueryReport(ctx context.Context, req merchantcontracts.MerchantReportQueryRequest) (*merchantcontracts.MerchantReportResult, error) {
+	c.queryRequest = req
 	return c.reportResult, nil
 }
 

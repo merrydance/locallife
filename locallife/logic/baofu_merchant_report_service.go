@@ -140,6 +140,69 @@ func (s *BaofuMerchantReportService) SubmitWechatMerchantReport(ctx context.Cont
 	return s.bindApplet(ctx, report, cfg, subMchID)
 }
 
+func (s *BaofuMerchantReportService) RecoverWechatMerchantReport(ctx context.Context, report db.BaofuMerchantReport) (db.BaofuMerchantReport, error) {
+	if s == nil || s.store == nil || s.client == nil {
+		return db.BaofuMerchantReport{}, ErrBaofuMerchantReportServiceNotConfigured
+	}
+	cfg := s.config.normalized()
+	if cfg.CollectMerchantID == "" || cfg.CollectTerminalID == "" || cfg.MiniProgramAppID == "" {
+		return db.BaofuMerchantReport{}, ErrBaofuMerchantReportServiceNotConfigured
+	}
+	if strings.TrimSpace(report.ReportType) != db.BaofuMerchantReportTypeWechat {
+		return report, nil
+	}
+	if strings.TrimSpace(report.ReportState) == db.BaofuMerchantReportStateProcessing {
+		req := merchantcontracts.MerchantReportQueryRequest{
+			MerchantID: cfg.CollectMerchantID,
+			TerminalID: cfg.CollectTerminalID,
+			ReportType: db.BaofuMerchantReportTypeWechat,
+			ReportNo:   strings.TrimSpace(report.ReportNo),
+		}
+		if err := req.Validate(); err != nil {
+			return db.BaofuMerchantReport{}, err
+		}
+		if _, err := s.store.CreateExternalPaymentCommand(ctx, db.CreateExternalPaymentCommandParams{
+			Provider:           db.ExternalPaymentProviderBaofu,
+			Channel:            db.PaymentChannelBaofuAggregate,
+			Capability:         db.ExternalPaymentCapabilityBaofuMerchantReport,
+			CommandType:        db.ExternalPaymentCommandTypeBaofuMerchantReportQuery,
+			BusinessOwner:      db.ExternalPaymentBusinessOwnerApplyment,
+			BusinessObjectType: pgtype.Text{String: "baofu_merchant_report", Valid: true},
+			BusinessObjectID:   pgtype.Int8{Int64: report.ID, Valid: true},
+			ExternalObjectType: "baofu_merchant_report",
+			ExternalObjectKey:  strings.TrimSpace(report.ReportNo),
+			CommandStatus:      db.ExternalPaymentCommandStatusSubmitted,
+			SubmittedAt:        s.now().UTC(),
+			ResponseSnapshot:   baofuMerchantReportCommandSnapshot(report.ReportNo, report.BctMerID),
+		}); err != nil {
+			return db.BaofuMerchantReport{}, err
+		}
+		result, err := s.client.QueryReport(ctx, req)
+		if err != nil {
+			return db.BaofuMerchantReport{}, err
+		}
+		if result == nil {
+			return db.BaofuMerchantReport{}, ErrBaofuMerchantReportServiceNotConfigured
+		}
+		var errSync error
+		report, errSync = s.syncReportResult(ctx, report, result)
+		if errSync != nil {
+			return db.BaofuMerchantReport{}, errSync
+		}
+	}
+	if strings.TrimSpace(report.ReportState) != db.BaofuMerchantReportStateSucceeded {
+		return report, nil
+	}
+	if strings.TrimSpace(report.AppletAuthState) == db.BaofuMerchantReportAppletAuthStateSucceeded {
+		return report, nil
+	}
+	subMchID := strings.TrimSpace(report.SubMchID.String)
+	if subMchID == "" {
+		return db.BaofuMerchantReport{}, ErrBaofuMerchantReportSubMchIDRequired
+	}
+	return s.bindApplet(ctx, report, cfg, subMchID)
+}
+
 func (s *BaofuMerchantReportService) buildWechatMerchantReportRequest(input SubmitBaofuMerchantReportInput, cfg BaofuMerchantReportConfig, bctMerID string) merchantcontracts.WechatMerchantReportRequest {
 	return merchantcontracts.WechatMerchantReportRequest{
 		MerchantID:    cfg.CollectMerchantID,

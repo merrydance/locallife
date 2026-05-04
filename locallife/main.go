@@ -20,6 +20,7 @@ import (
 	"github.com/merrydance/locallife/baofu"
 	baofuaccount "github.com/merrydance/locallife/baofu/account"
 	"github.com/merrydance/locallife/baofu/aggregatepay"
+	"github.com/merrydance/locallife/baofu/merchantreport"
 	db "github.com/merrydance/locallife/db/sqlc"
 	_ "github.com/merrydance/locallife/docs" // Swagger docs
 	"github.com/merrydance/locallife/internal/wechatruntime"
@@ -205,6 +206,10 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create baofu account client for runtime")
 	}
+	baofuMerchantReportClient, err := buildBaofuMerchantReportClient(config)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to create baofu merchant report client for runtime")
+	}
 	if config.RedisAddress != "" {
 		// 初始化逻辑层
 		redisClient := redis.NewClient(&redis.Options{
@@ -261,6 +266,15 @@ func main() {
 		}))
 	} else if config.BaofuMainBusinessEnabled {
 		log.Warn().Msg("baofu withdrawal recovery scheduler disabled: baofu account client not configured")
+	}
+	if baofuMerchantReportClient != nil {
+		schedulerManager.Register("baofu-merchant-report-recovery", worker.NewBaofuMerchantReportRecoveryScheduler(store, baofuMerchantReportClient, worker.BaofuMerchantReportRecoveryConfig{
+			CollectMerchantID: config.BaofuCollectMerchantID,
+			CollectTerminalID: config.BaofuCollectTerminalID,
+			MiniProgramAppID:  config.WechatMiniAppID,
+		}))
+	} else if config.BaofuMainBusinessEnabled {
+		log.Warn().Msg("baofu merchant report recovery scheduler disabled: baofu merchant report client not configured")
 	}
 	schedulerManager.Register("profit-sharing-receiver-lifecycle", worker.NewProfitSharingReceiverLifecycleScheduler(store, taskDistributor))
 	if directPaymentClient == nil {
@@ -402,6 +416,20 @@ func buildBaofuAccountClient(config util.Config) (*baofuaccount.Client, error) {
 		return nil, err
 	}
 	return baofuaccount.NewClient(root), nil
+}
+
+func buildBaofuMerchantReportClient(config util.Config) (*merchantreport.Client, error) {
+	if !config.HasBaofuRuntimeConfig() {
+		return nil, nil
+	}
+	if err := config.ValidateBaofuConfig(); err != nil {
+		return nil, err
+	}
+	root, err := baofu.NewClient(config.ToBaofuConfig(), nil)
+	if err != nil {
+		return nil, err
+	}
+	return merchantreport.NewClient(root), nil
 }
 
 func runTaskProcessor(

@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -75,6 +76,64 @@ func (q *Queries) GetBaofuMerchantReportByReportNo(ctx context.Context, reportNo
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listRecoverableBaofuMerchantReports = `-- name: ListRecoverableBaofuMerchantReports :many
+SELECT id, owner_type, owner_id, report_type, report_no, bct_mer_id, sub_mch_id, report_state, applet_auth_state, platform_biz_no, failure_code, failure_message, raw_snapshot, created_at, updated_at
+FROM baofu_merchant_reports
+WHERE report_type = 'WECHAT'
+  AND updated_at <= $1
+  AND (
+      report_state = 'processing'
+      OR (
+          report_state = 'succeeded'
+          AND sub_mch_id IS NOT NULL
+          AND applet_auth_state = 'pending'
+      )
+  )
+ORDER BY updated_at ASC, id ASC
+LIMIT $2
+`
+
+type ListRecoverableBaofuMerchantReportsParams struct {
+	UpdatedBefore time.Time `json:"updated_before"`
+	LimitCount    int32     `json:"limit_count"`
+}
+
+func (q *Queries) ListRecoverableBaofuMerchantReports(ctx context.Context, arg ListRecoverableBaofuMerchantReportsParams) ([]BaofuMerchantReport, error) {
+	rows, err := q.db.Query(ctx, listRecoverableBaofuMerchantReports, arg.UpdatedBefore, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BaofuMerchantReport{}
+	for rows.Next() {
+		var i BaofuMerchantReport
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerType,
+			&i.OwnerID,
+			&i.ReportType,
+			&i.ReportNo,
+			&i.BctMerID,
+			&i.SubMchID,
+			&i.ReportState,
+			&i.AppletAuthState,
+			&i.PlatformBizNo,
+			&i.FailureCode,
+			&i.FailureMessage,
+			&i.RawSnapshot,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const markBaofuMerchantReportAppletAuthFailed = `-- name: MarkBaofuMerchantReportAppletAuthFailed :one
