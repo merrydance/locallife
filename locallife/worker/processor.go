@@ -200,9 +200,13 @@ func (processor *RedisTaskProcessor) SetOrdinaryServiceProviderClient(client Ord
 	processor.ordinarySPClient = client
 }
 
-func (processor *RedisTaskProcessor) SetBaofuAggregateClientForTest(client aggregatepay.Client, config BaofuProfitSharingWorkerConfig) {
+func (processor *RedisTaskProcessor) SetBaofuAggregateClient(client aggregatepay.Client, config BaofuProfitSharingWorkerConfig) {
 	processor.baofuAggregateClient = client
 	processor.baofuProfitSharingConfig = config.normalized()
+}
+
+func (processor *RedisTaskProcessor) SetBaofuAggregateClientForTest(client aggregatepay.Client, config BaofuProfitSharingWorkerConfig) {
+	processor.SetBaofuAggregateClient(client, config)
 }
 
 func (processor *RedisTaskProcessor) SetPrinterClientForTest(client cloudprint.Client) {

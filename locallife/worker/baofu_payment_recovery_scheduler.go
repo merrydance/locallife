@@ -52,9 +52,13 @@ func NewBaofuPaymentRecoveryScheduler(store db.Store, distributor TaskDistributo
 	}
 }
 
-func (s *BaofuPaymentRecoveryScheduler) SetBaofuAggregateClientForTest(client aggregatepay.Client, config BaofuProfitSharingWorkerConfig) {
+func (s *BaofuPaymentRecoveryScheduler) SetBaofuAggregateClient(client aggregatepay.Client, config BaofuProfitSharingWorkerConfig) {
 	s.client = client
 	s.shareConfig = config.normalized()
+}
+
+func (s *BaofuPaymentRecoveryScheduler) SetBaofuAggregateClientForTest(client aggregatepay.Client, config BaofuProfitSharingWorkerConfig) {
+	s.SetBaofuAggregateClient(client, config)
 }
 
 func (s *BaofuPaymentRecoveryScheduler) Start() error {

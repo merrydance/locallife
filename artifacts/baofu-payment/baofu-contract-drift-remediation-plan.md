@@ -1037,7 +1037,7 @@ git diff --check -- artifacts/baofu-payment/baofu-api-contract-coverage-audit.md
 
 Expected: no whitespace errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add artifacts/baofu-payment/baofu-api-contract-coverage-audit.md artifacts/baofu-payment/baofu-profit-sharing-implementation-plan.md artifacts/baofu-payment/baofu-sandbox-evidence.md

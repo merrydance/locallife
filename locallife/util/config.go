@@ -105,6 +105,7 @@ type Config struct {
 	BaofuAESKey                    string        `mapstructure:"BAOFU_AES_KEY"`
 	BaofuNotifyBaseURL             string        `mapstructure:"BAOFU_NOTIFY_BASE_URL"`
 	BaofuPaymentNotifyURL          string        `mapstructure:"BAOFU_PAYMENT_NOTIFY_URL"`
+	BaofuProfitSharingNotifyURL    string        `mapstructure:"BAOFU_PROFIT_SHARING_NOTIFY_URL"`
 	BaofuRefundNotifyURL           string        `mapstructure:"BAOFU_REFUND_NOTIFY_URL"`
 	BaofuHTTPTimeout               time.Duration `mapstructure:"BAOFU_HTTP_TIMEOUT"`
 
@@ -328,6 +329,7 @@ func (c Config) HasBaofuRuntimeConfig() bool {
 		strings.TrimSpace(c.BaofuAESKey) != "" ||
 		strings.TrimSpace(c.BaofuNotifyBaseURL) != "" ||
 		strings.TrimSpace(c.BaofuPaymentNotifyURL) != "" ||
+		strings.TrimSpace(c.BaofuProfitSharingNotifyURL) != "" ||
 		strings.TrimSpace(c.BaofuRefundNotifyURL) != ""
 }
 
@@ -357,6 +359,10 @@ func (c Config) EffectiveBaofuPaymentNotifyURL() string {
 	return strings.TrimSpace(c.BaofuPaymentNotifyURL)
 }
 
+func (c Config) EffectiveBaofuProfitSharingNotifyURL() string {
+	return strings.TrimSpace(c.BaofuProfitSharingNotifyURL)
+}
+
 func (c Config) EffectiveBaofuRefundNotifyURL() string {
 	return strings.TrimSpace(c.BaofuRefundNotifyURL)
 }
@@ -372,6 +378,9 @@ func (c Config) ValidateBaofuConfig() error {
 		return err
 	}
 	if err := validateRequiredAbsoluteConfigURL("BAOFU_PAYMENT_NOTIFY_URL", c.BaofuPaymentNotifyURL, "baofu main business pay is enabled"); err != nil {
+		return err
+	}
+	if err := validateRequiredAbsoluteConfigURL("BAOFU_PROFIT_SHARING_NOTIFY_URL", c.BaofuProfitSharingNotifyURL, "baofu main business pay is enabled"); err != nil {
 		return err
 	}
 	if err := validateRequiredAbsoluteConfigURL("BAOFU_REFUND_NOTIFY_URL", c.BaofuRefundNotifyURL, "baofu main business pay is enabled"); err != nil {

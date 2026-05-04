@@ -26,7 +26,7 @@ func TestProcessTaskBaofuProfitSharingCreatesShareCommand(t *testing.T) {
 		TxnState:   aggregatecontracts.ShareStateProcessing,
 	}}
 	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
-	processor.SetBaofuAggregateClientForTest(client, worker.BaofuProfitSharingWorkerConfig{
+	processor.SetBaofuAggregateClient(client, worker.BaofuProfitSharingWorkerConfig{
 		CollectMerchantID: "COLLECT_MER",
 		CollectTerminalID: "COLLECT_TER",
 		ShareNotifyURL:    "https://api.example.com/v1/webhooks/baofu/share",
@@ -119,5 +119,17 @@ func (c *fakeBaofuProfitSharingClient) CreateProfitSharing(_ context.Context, re
 }
 
 func (c *fakeBaofuProfitSharingClient) QueryProfitSharing(context.Context, aggregatecontracts.ShareQueryRequest) (*aggregatecontracts.ShareResult, error) {
+	return nil, nil
+}
+
+func (c *fakeBaofuProfitSharingClient) CreateRefund(context.Context, aggregatecontracts.RefundBeforeShareRequest) (*aggregatecontracts.RefundResult, error) {
+	return nil, nil
+}
+
+func (c *fakeBaofuProfitSharingClient) QueryRefund(context.Context, aggregatecontracts.RefundQueryRequest) (*aggregatecontracts.RefundResult, error) {
+	return nil, nil
+}
+
+func (c *fakeBaofuProfitSharingClient) CloseOrder(context.Context, aggregatecontracts.OrderCloseRequest) (*aggregatecontracts.OrderCloseResult, error) {
 	return nil, nil
 }

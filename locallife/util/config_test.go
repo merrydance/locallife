@@ -151,6 +151,7 @@ func TestLoadConfig_ReadsBaofuMainBusinessConfig(t *testing.T) {
 		"BAOFU_AES_KEY=0123456789abcdef0123456789abcdef",
 		"BAOFU_NOTIFY_BASE_URL=https://api.example.com/v1/webhooks/baofu",
 		"BAOFU_PAYMENT_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/payment",
+		"BAOFU_PROFIT_SHARING_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/share",
 		"BAOFU_REFUND_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/refund",
 		"BAOFU_HTTP_TIMEOUT=12s",
 	}, "\n")+"\n")
@@ -162,6 +163,7 @@ func TestLoadConfig_ReadsBaofuMainBusinessConfig(t *testing.T) {
 	require.NoError(t, config.ValidateBaofuConfig())
 	require.Equal(t, "wx-local-life", config.WechatMiniAppID)
 	require.Equal(t, "https://api.example.com/v1/webhooks/baofu/payment", config.EffectiveBaofuPaymentNotifyURL())
+	require.Equal(t, "https://api.example.com/v1/webhooks/baofu/share", config.EffectiveBaofuProfitSharingNotifyURL())
 	require.Equal(t, 12*time.Second, config.BaofuHTTPTimeout)
 
 	baofuConfig := config.ToBaofuConfig().Normalized()

@@ -140,7 +140,7 @@ func TestBaofuPaymentRecoverySchedulerRunOnceQueriesProcessingShareAndEnqueuesFa
 		Return(db.ExternalPaymentFactApplication{ID: 1201}, nil)
 
 	scheduler := worker.NewBaofuPaymentRecoveryScheduler(store, distributor)
-	scheduler.SetBaofuAggregateClientForTest(client, worker.BaofuProfitSharingWorkerConfig{
+	scheduler.SetBaofuAggregateClient(client, worker.BaofuProfitSharingWorkerConfig{
 		CollectMerchantID: "COLLECT_MER",
 		CollectTerminalID: "COLLECT_TER",
 	})
@@ -203,7 +203,7 @@ func TestBaofuPaymentRecoverySchedulerRunOnceQueriesPendingPaymentAndEnqueuesFac
 		Return(db.ExternalPaymentFactApplication{ID: 2201}, nil)
 
 	scheduler := worker.NewBaofuPaymentRecoveryScheduler(store, distributor)
-	scheduler.SetBaofuAggregateClientForTest(client, worker.BaofuProfitSharingWorkerConfig{
+	scheduler.SetBaofuAggregateClient(client, worker.BaofuProfitSharingWorkerConfig{
 		CollectMerchantID: "COLLECT_MER",
 		CollectTerminalID: "COLLECT_TER",
 	})
@@ -268,4 +268,16 @@ func expectBaofuReceiverLookup(store *mockdb.MockStore, ownerType string, ownerI
 			OpenState:    db.BaofuAccountOpenStateActive,
 			SharingMerID: pgtype.Text{String: sharingMerID, Valid: true},
 		}, nil)
+}
+
+func (c *baofuRecoveryAggregateClient) CreateRefund(context.Context, aggregatecontracts.RefundBeforeShareRequest) (*aggregatecontracts.RefundResult, error) {
+	return nil, nil
+}
+
+func (c *baofuRecoveryAggregateClient) QueryRefund(context.Context, aggregatecontracts.RefundQueryRequest) (*aggregatecontracts.RefundResult, error) {
+	return nil, nil
+}
+
+func (c *baofuRecoveryAggregateClient) CloseOrder(context.Context, aggregatecontracts.OrderCloseRequest) (*aggregatecontracts.OrderCloseResult, error) {
+	return nil, nil
 }
