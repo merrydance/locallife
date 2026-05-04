@@ -13,17 +13,21 @@
 ## 0. Scope And Risk
 
 - 风险等级：G3，高风险资金链路。原因：支付、分账、提现、手续费、退款互斥、外部回调和查询补偿都会改变真实资金状态。
-- 首版切换方式：未正式开展业务，宝付链路上线即全量承接主业务交易；不做微信普通服务商分账灰度并行。
+- 首版切换方式：未正式开展业务，宝付链路上线即全量承接主业务交易；不做微信普通服务商/平台收付通分账灰度并行。
 - 固定业务规则：开户验证费由平台承担；支付手续费 0.3% 由商户承担；分账后不退款；骑手必须开宝付个人二级户才可接收配送费分账。
-- 账户边界：宝付收款商户号用于开户、转账、支付、分账；宝付支付商户号用于提现、提现查询，并承接平台预存的开户验证费。
+- 账户边界：为避免和微信 `subMchId` 混淆，统一称 `宝付收单一级商户号` 与 `宝付代付一级商户号`。宝付收单一级商户号用于开户、转账、支付、分账；宝付代付一级商户号用于提现、提现查询，并承接平台预存的开户验证费。
 - 分账接收方：已确认分账接口直接上送开户接口返回的二级商户号。本地用 `sharing_mer_id` 作为分账接收方规范字段；开户/查询解析层必须把宝付返回的二级商户号写入 `sharing_mer_id`，后续分账只读 `sharing_mer_id`。`contract_no` 只保留上游开户/查询字段和对账留痕，不作为分账创建兜底字段。不得使用微信 `openid`、微信报备 `subMchId` 或平台宝付收款商户号作为分账接收方。
+- 聚合商户报备：已向宝付技术支持确认，LocalLife 不再需要保留项目内微信支付特约商户进件流程，且宝付支持异主体报备。宝付开户成功后，主业务商户逐户做 `merchant_report` 取得微信渠道 `subMchId`，再调用 `bind_sub_config(authType=APPLET, authContent=<LocalLife 小程序 appid>)` 绑定平台小程序。
+- 微信小程序授权边界：宝付 `share_after_pay` 不需要 `subMchId`，也没有小程序 appid/授权目录字段；`subMchId` 和 `bind_sub_config(authType=APPLET)` 只属于微信渠道支付 readiness。首版每个主业务商户的 `subMchId` 都绑定 LocalLife 平台小程序 appid。
 - 平台佣金接收方：平台也必须为平台自己开一个平台名下宝付二级户并保存到 `owner_type=platform, owner_id=0`，不能直接使用平台宝付收款商户号收平台 2% 分账。
+- 替换边界：宝付只替换主业务订单中原普通服务商/平台收付通承载的支付、分账、分账前退款互斥、账户余额和提现能力；不替换微信直连支付。骑手保证金缴纳/赎回、商户追偿向平台付款、骑手追偿向平台付款及其查询、退款、通知继续走微信直连支付。
+- 接口覆盖审计：必用接口、官方入口、字段覆盖、错误码和沙箱联调状态以 `artifacts/baofu-payment/baofu-api-contract-coverage-audit.md` 为当前核对清单；实现任务不能把该审计中的 C0/C1/C2 项误判为已生产可用。
 
 ## 1. Target File Map
 
 ### 1.1 Backend Integration Boundary
 
-- Create: `locallife/baofu/config.go` - environment/config validation, collect merchant and payout merchant separation.
+- Create/Modify: `locallife/baofu/config.go` - environment/config validation, collect merchant and payout merchant separation, and three official endpoint profiles for union-gw, aggregate pay, and merchant report.
 - Create: `locallife/baofu/client.go` - top-level interfaces and concrete client composition.
 - Create: `locallife/baofu/transport.go` - HTTP transport, request IDs, timeout, structured request metadata.
 - Create: `locallife/baofu/signing.go` - aggregate payment request signing and callback verification.
@@ -31,7 +35,9 @@
 - Create: `locallife/baofu/account/contracts/types.go` - open account, query account, balance, withdraw request/result DTOs.
 - Create: `locallife/baofu/account/client.go` - account opening, query, balance, withdraw, withdraw query.
 - Create: `locallife/baofu/account/notification/notification.go` - account and withdrawal callback parse/verify/normalize.
-- Create: `locallife/baofu/aggregatepay/contracts/types.go` - unified order, payment query, share, share query, refund-before-share DTOs.
+- Create: `locallife/baofu/merchantreport/contracts/types.go` - aggregate merchant report request/query/result DTOs, bind_sub_config DTOs, appendix enums, and category/MCC allowlists.
+- Create: `locallife/baofu/merchantreport/client.go` - `merchant_report` and report-query client implementation.
+- Create/Modify: `locallife/baofu/aggregatepay/contracts/types.go` - public envelope, unified order, payment query, share, share query, refund-before-share, refund query, notification, and order close DTOs.
 - Create: `locallife/baofu/aggregatepay/client.go` - payment and profit-sharing client implementation.
 - Create: `locallife/baofu/aggregatepay/notification/notification.go` - payment and share callback parse/verify/normalize.
 - Create: `locallife/baofu/mock/client.go` - test mock implementing account/payment interfaces.
@@ -41,6 +47,7 @@
 - Create: `locallife/db/migration/000227_add_baofu_payment_foundation.up.sql` - Baofu channel constraints, account bindings, fee ledger, withdrawal orders, profit sharing columns.
 - Create: `locallife/db/migration/000227_add_baofu_payment_foundation.down.sql` - down migration for the same objects and constraints.
 - Create: `locallife/db/query/baofu_account_binding.sql` - sqlc queries for account binding lifecycle.
+- Create: `locallife/db/query/baofu_merchant_report.sql` - sqlc queries for aggregate merchant report lifecycle and `subMchId` synchronization.
 - Create: `locallife/db/query/baofu_fee_ledger.sql` - sqlc queries for fee ledger writes and reads.
 - Create: `locallife/db/query/baofu_withdrawal_order.sql` - sqlc queries for withdrawal lifecycle.
 - Modify: `locallife/db/query/payment_order.sql` - Baofu paid-unprocessed selection and payment locking helpers.
@@ -52,6 +59,7 @@
 ### 1.3 Business Logic, API, Workers
 
 - Create: `locallife/logic/baofu_account_service.go` - merchant/rider/operator/platform Baofu account orchestration.
+- Create: `locallife/logic/baofu_merchant_report_service.go` - WeChat/Alipay channel reporting orchestration after Baofu account activation.
 - Create: `locallife/logic/baofu_payment_service.go` - unified order and payment query orchestration.
 - Create: `locallife/logic/baofu_profit_sharing_service.go` - fee calculation, receiver resolution, share command creation.
 - Create: `locallife/logic/baofu_withdraw_service.go` - balance and withdrawal orchestration.
@@ -85,7 +93,7 @@
 
 - [x] **Step 1: Add constants first**
 
-Add these constants to `locallife/db/sqlc/constants.go` near the existing payment constants:
+Add these constants to `locallife/db/sqlc/constants.go` near the existing payment constants. The new `baofu_aggregate` channel is for main-business aggregate payment only; it must not be used for existing `direct` payment capabilities such as rider deposits or recourse payments:
 
 ```go
 const (
@@ -408,6 +416,53 @@ go test ./baofu ./baofu/crypto ./baofu/account ./baofu/account/contracts ./baofu
 
 Expected: all Baofu package tests pass.
 
+### Task 1A: Official Contract Drift Guard And Endpoint Profiles
+
+**Files:**
+- Modify: `locallife/baofu/config.go`
+- Modify/Create: `locallife/baofu/aggregatepay/contracts/envelope.go`
+- Modify/Create: `locallife/baofu/merchantreport/contracts/enums.go`
+- Modify/Create: `locallife/baofu/merchantreport/contracts/categories_generated.go`
+- Modify/Create: `locallife/baofu/account/contracts/official_types.go`
+- Test: `locallife/baofu/config_test.go`
+- Test: `locallife/baofu/aggregatepay/contracts/envelope_test.go`
+- Test: `locallife/baofu/merchantreport/contracts/enums_test.go`
+- Test: `locallife/baofu/account/contracts/official_types_test.go`
+
+- [ ] **Step 1: Split endpoint profiles**
+
+Replace the single placeholder `BaseURL` with explicit endpoint profiles:
+
+```text
+account union-gw test: https://vgw.baofoo.com/union-gw/api/{报文编号}/transReq.do
+account union-gw prod: https://public.baofu.com/union-gw/api/{报文编号}/transReq.do
+aggregate pay test: https://mch-juhe.baofoo.com/api
+aggregate pay prod: https://juhe.baofoo.com/api
+aggregate pay backup: https://juhe-backup.baofoo.com/api
+merchant report test: https://mch-juhe.baofoo.com/mch-service/api
+merchant report prod: https://juhe.baofoo.com/mch-service/api
+```
+
+Config validation must fail if Baofu main payment is enabled while any required endpoint profile is missing. Do not silently default to `https://api.baofoo.com`.
+
+- [ ] **Step 2: Model public envelope separately from bizContent**
+
+For aggregate pay and merchant report, add a public request/response envelope with `merId`, `terId`, `method`, `charset=UTF-8`, `version=1.0`, `format=json`, `timestamp`, `signType`, `signSn`, `ncrptnSn`, `dgtlEnvlp`, `signStr`, and `bizContent`. Business DTOs must only represent `bizContent`.
+
+- [ ] **Step 3: Generate appendix enums and category allowlists**
+
+From `bct-1f9o6qi1pf2r8` and `/home/sam/文档/分账/宝付/经营类目&MCC.xlsx`, add typed constants or generated allowlists for the first-version WeChat path. Tests must lock xlsx SHA256, row counts, duplicate detection, and illegal value rejection.
+
+- [ ] **Step 4: Validate anti-drift gates**
+
+Run from `locallife/`:
+
+```bash
+go test ./baofu ./baofu/account/contracts ./baofu/aggregatepay/contracts ./baofu/merchantreport/contracts -run 'TestBaofuConfigEndpointProfiles|TestAggregateEnvelope|TestBaofuAppendixEnums|TestMerchantReportCategories|TestOfficialAccountContracts' -count=1
+```
+
+Expected: missing official endpoints fail config validation; public envelope cannot omit required fields; report/auth/category enum illegal values fail closed; account official DTO tests cover personal two-factor, personal four-factor, enterprise, and self-employed conditional-required fields.
+
 ### Task 2: Account Contracts, Persistence, Opening, Query, And Notifications
 
 **Files:**
@@ -468,7 +523,8 @@ platform -> platform account required
 rider -> personal account required
 active account -> sharing_mer_id required
 rider active account -> no wechat_sub_mch_id requirement
-merchant active account -> wechat_sub_mch_id required before payment creation, not before account opening
+merchant active account -> sharing_mer_id required before payment creation
+payment channel -> merchant subMchId and APPLET auth binding required before payment creation; source is merchant_report + bind_sub_config
 ```
 
 - [x] **Step 4: Record command for account opening**
@@ -518,7 +574,7 @@ Extend account readiness so a business owner is considered Baofu-ready only when
 ```text
 baofu_account_bindings.open_state = active
 sharing_mer_id is present
-merchant payment creation additionally has wechat_sub_mch_id present
+merchant payment creation additionally requires final subMchId/payment-channel readiness
 ```
 
 - [x] **Step 2: Block rider assignment without active Baofu account**
@@ -540,7 +596,7 @@ Expose states to clients as product terms:
 Do not expose `contractNo`, `sharingMerId`, or raw upstream error payloads to ordinary users. Operator/admin views may display masked IDs.
 
 Current backend/frontend status: rider status now returns sanitized `settlement_account` readiness (`state`, `label`, `payment_ready`) and aligns `can_go_online` / `online_block_reason` with the same Baofu settlement guard. Merchant open status returns the same sanitized readiness shape for the merchant Baofu settlement account. Operator application status returns sanitized readiness after the approved application has a formal operator account. Platform finance status returns sanitized readiness plus masked platform `contract_no` / `sharing_mer_id` for the platform singleton account (`owner_type=platform`, `owner_id=0`). Mini Program rider dashboard/order-hall/income pages now display the settlement-account block message without exposing provider internals.
-Merchant open status now also checks Baofu merchant readiness before allowing open-for-business: ordinary service provider channel identity must be active, Baofu merchant account binding must be active, and the binding must carry a WeChat channel identity. Operator readiness display does not require a WeChat channel identity because operator commission is received into the Baofu secondary account.
+Merchant open status now also checks Baofu merchant readiness before allowing open-for-business: Baofu merchant account binding must be active and `sharing_mer_id` must be present. WeChat channel identity readiness depends on merchant `merchant_report` success and APPLET auth binding readiness. Operator readiness display does not require a WeChat channel identity because operator commission is received into the Baofu secondary account.
 Single-order and combined-payment main-business payment creation now check merchant Baofu readiness before creating new local payment rows or calling the upstream payment API. Combined payment uses a pre-transaction order-to-merchant lookup so an unready merchant cannot leave local pending child payment rows behind.
 
 - [x] **Step 4: Validate API and onboarding workers**
@@ -551,7 +607,77 @@ Run from `locallife/`:
 go test ./api ./worker -run 'TestProfitSharingCapability|TestOnboardingReview|TestRider' -count=1
 ```
 
-Expected: merchant readiness requires Baofu active account plus channel report identity, rider readiness requires Baofu active personal account.
+Expected: merchant readiness requires Baofu active account plus `sharing_mer_id`; payment-channel readiness requires final口径下的 `subMchId`; rider readiness requires Baofu active personal account.
+
+### Task 3A: Aggregate Merchant Report And WeChat Channel Opening
+
+**Files:**
+- Create: `locallife/baofu/merchantreport/contracts/types.go`
+- Create: `locallife/baofu/merchantreport/client.go`
+- Create: `locallife/db/migration/000229_add_baofu_merchant_reports.up.sql`
+- Create: `locallife/db/migration/000229_add_baofu_merchant_reports.down.sql`
+- Create: `locallife/db/query/baofu_merchant_report.sql`
+- Create: `locallife/logic/baofu_merchant_report_service.go`
+- Modify: `locallife/logic/baofu_account_service.go`
+- Modify: `locallife/api/merchant_application.go`
+- Modify: `locallife/db/mock/store.go`
+- Test: `locallife/baofu/merchantreport/contracts/types_test.go`
+- Test: `locallife/logic/baofu_merchant_report_service_test.go`
+- Test: `locallife/db/sqlc/baofu_merchant_report_test.go`
+
+- [ ] **Step 1: Model confirmed report boundary**
+
+Add a Baofu merchant-report boundary for `merchant_report`, `merchant_report_query`, and `bind_sub_config` if Baofu confirms mini-program authorization binding is required. Request construction must use official field names and appendix enum constants, not scattered strings:
+
+```text
+reportType = WECHAT for WeChat mini program payment
+bctMerId = merchant sharing_mer_id
+reportNo = platform-generated unique report number
+```
+
+The service must not start reporting until the selected owner Baofu account binding is `active` and has canonical `sharing_mer_id`. It must not use `contract_no`, `sub_openid`, or the platform Baofu collect merchant ID as `bctMerId`.
+
+This report is the only Baofu-channel way to obtain the `subMchId`; do not call or require the legacy WeChat ordinary-service-provider applyment flow before reporting. Baofu has confirmed异主体报备 support, so the selected mode is merchant-level reporting followed by APPLET auth binding to the LocalLife mini program appid.
+
+- [ ] **Step 2: Persist report lifecycle**
+
+Create `baofu_merchant_reports` with a unique active report per merchant/report type. Fields include `report_no`, `bct_mer_id`, `sub_mch_id`, `report_state`, `platform_biz_no`, sanitized failure reason, APPLET auth binding state, and a redacted snapshot.
+
+Successful report query/application must atomically:
+
+```text
+mark baofu_merchant_reports.report_state = succeeded
+write sub_mch_id on the report row
+sync sub_mch_id to merchant payment-channel readiness
+```
+
+- [ ] **Step 3: Integrate readiness and product copy**
+
+Merchant payment readiness remains:
+
+```text
+baofu account active
+sharing_mer_id present
+merchant subMchId present from successful aggregate merchant report
+applet auth binding present from successful bind_sub_config
+```
+
+User-facing copy stays product-level: `微信渠道待配置` or `微信支付通道待开通，暂不能创建微信生态支付订单`. Do not expose `reportNo`, `bctMerId`, `subMchId`, `sharingMerId`, raw report payloads, certificates, bank cards, ID cards, phones, or upstream signatures to ordinary users.
+
+Add a `bind_sub_config` subtask after `subMchId` synchronization: submit `authType=APPLET` and `authContent=<LocalLife mini program appid>` for each merchant `subMchId`, persist a sanitized binding state, and gate only unified-order readiness on that state. This binding must not write or overwrite `sharing_mer_id`; `share_after_pay` has no `subMchId` requirement.
+
+- [ ] **Step 4: Validate report path**
+
+Run from `locallife/`:
+
+```bash
+make sqlc
+make mock
+go test ./baofu/merchantreport ./logic ./db/sqlc -run 'TestBaofuMerchantReport|TestBaofuAccountService' -count=1
+make check-generated
+```
+
+Expected: report creation requires merchant `sharing_mer_id`, successful report query synchronizes `sub_mch_id` into merchant payment-channel readiness, APPLET auth binding gates unified-order readiness, no report code writes `subMchId` into profit-sharing receiver fields, and `share_after_pay` request construction does not require `subMchId` or APPLET authorization state.
 
 ### Task 4: Baofu Aggregate Payment Unified Order And Payment Facts
 
@@ -576,10 +702,12 @@ orderType = 7
 payCode = WECHAT_JSAPI
 payExtend.sub_appid = platform mini program appid
 payExtend.sub_openid = paying user's openid
-subMchId = merchant channel report ID
+subMchId = merchant sub_mch_id from successful Baofu aggregate merchant report and APPLET auth binding
+riskInfo.clientIp = paying user's client IP, required for WeChat/Alipay
+riskInfo.locationPoint = optional merchant terminal longitude/latitude when a stable source exists
 ```
 
-`sub_openid` is payer identity only. It must never be written as a profit-sharing receiver.
+`sub_openid` is payer identity only. It must never be written as a profit-sharing receiver. `riskInfo.clientIp` is conditionally required by Baofu for WeChat/Alipay and must be validated before command persistence/upstream submission.
 
 - [x] **Step 2: Route main business order payment to Baofu**
 
@@ -620,6 +748,51 @@ go test ./baofu/aggregatepay ./baofu/aggregatepay/contracts ./baofu/aggregatepay
 ```
 
 Expected: payment creation refuses missing merchant Baofu readiness, stores command, returns WeChat JSAPI payload, and duplicate callbacks do not double-apply.
+
+### Task 4A: Production Aggregate Payment Transport And Runtime Wiring
+
+**Files:**
+- Modify: `locallife/baofu/aggregatepay/client.go`
+- Create/Modify: `locallife/baofu/aggregatepay/transport.go`
+- Modify: `locallife/baofu/client.go`
+- Modify: `locallife/logic/service_support.go`
+- Modify: `locallife/api/logic_adapters.go`
+- Modify: `locallife/api/server.go`
+- Modify: `locallife/worker/processor.go`
+- Test: `locallife/baofu/aggregatepay/client_test.go`
+- Test: `locallife/api/payment_order_test.go`
+- Test: `locallife/logic/payment_order_service_test.go`
+
+- [ ] **Step 1: Implement concrete aggregate payment HTTP client**
+
+The existing `aggregatepay.Client` interface and request contracts are not enough for production. Add a concrete implementation that builds the official public envelope, signs requests, posts to the Baofu aggregate payment endpoint, parses `unified_order`, payment query, `share_after_pay`, share query, refund, refund query, and order close responses, and maps upstream business failures into project errors with sanitized logs.
+
+- [ ] **Step 2: Wire Baofu as the runtime main-business payment facade**
+
+Production API construction must be able to build:
+
+```text
+NewBaofuPaymentService(store, concreteAggregateClient, config)
+NewPaymentOrderServiceWithBaofu(...)
+NewCombinedPaymentServiceWithBaofu(...) when combined payment support is enabled
+```
+
+`server.buildPaymentFacade()` must no longer hard-code the ordinary service provider facade when Baofu is configured as the main business channel.
+
+- [ ] **Step 3: Keep readiness fail-closed and direct-payment boundary intact**
+
+If Baofu is configured as main payment and the concrete client/config is missing, main-business payment creation must fail before local pending payment rows are created. There is no downgrade to ordinary service provider or ecommerce payment. Existing WeChat direct-payment capabilities must remain on `direct` and must not call Baofu: rider deposit pay/redeem, merchant recourse-to-platform payment, rider recourse-to-platform payment, and their query/refund/notification paths.
+
+- [ ] **Step 4: Validate production route**
+
+Run from `locallife/`:
+
+```bash
+go test ./baofu/aggregatepay ./logic ./api -run 'TestBaofuPayment|TestPaymentOrderServiceCreatePaymentOrder_UsesBaofuForMainBusiness|TestCreatePaymentOrderAPI' -count=1
+make check-generated
+```
+
+Expected: API-level payment creation uses Baofu aggregate payment when configured, calls concrete `unified_order`, returns only `wc_pay_data`-derived WeChat JSAPI params to the Mini Program, and never silently routes to ordinary service provider.
 
 ### Task 5: Profit Sharing Calculation, Fee Ledger, And Receiver Snapshot
 
@@ -907,7 +1080,7 @@ collect merchant balance and config verified
 payout merchant prefunded for account opening fee
 merchant Baofu account active
 rider Baofu account active
-merchant WeChat subMchId present
+selected Baofu aggregate merchant report succeeded and selected WeChat subMchId present
 mini program payment succeeds
 payment callback persisted
 share order created after refund window closes
@@ -977,13 +1150,14 @@ Expected: changed app commands exit 0. If a toolchain is unavailable on the impl
 ## 3. Cross-Task Invariants
 
 - No code path writes `openid`, `sub_openid`, `subMchId`, or the platform Baofu collect merchant ID into `sharing_mer_id`.
-- No withdrawal request uses the collect merchant ID.
-- No account opening, payment, or profit sharing request uses the payout merchant ID.
+- No withdrawal request uses the Baofu collect/acquiring primary merchant ID.
+- No account opening, aggregate payment, or profit-sharing request uses the Baofu payout primary merchant ID.
 - No Baofu callback mutates business state before its verified payload is persisted to `external_payment_facts`.
 - No share order is created while a refund is pending or while the order can still be refunded by product policy.
 - No refund starts after a share order reaches pending, processing, or finished.
 - No merchant finance view subtracts the 0.3% Baofu fee from platform 2% or operator 3%; it subtracts the fee from merchant net revenue.
 - No ordinary user-facing API response exposes raw upstream payload, full bank card, full ID card, private key, AES key, or signature material.
+- No Baofu main-business switch changes WeChat direct-payment flows for rider deposits, deposit redemption, merchant recourse, or rider recourse.
 
 ## 4. Regeneration And Validation Matrix
 
@@ -1056,7 +1230,7 @@ make test-integration
 
 - Added BaoCaiTong account binding sqlc queries for owner upsert, owner/contract lookup, active/failed/processing transitions, and stale processing scans; `make sqlc` regenerated `db/sqlc`, `db/mock`, `worker/mock`, and WeChat mocks.
 - Added Baofu account contracts and notification parsing with normalized `contractNo` / `sharingMerId` handling, upstream state mapping, union-gw decrypt/verify boundary, and missing-codec rejection.
-- Added `logic.BaofuAccountService` to enforce owner/account-type rules, merchant WeChat channel identity readiness, receiver readiness, and command-before-client-call audit persistence for account opening.
+- Added `logic.BaofuAccountService` to enforce owner/account-type rules, receiver readiness, and command-before-client-call audit persistence for account opening. Earlier merchant WeChat channel identity readiness is superseded by the merchant `merchant_report` + APPLET auth binding readiness rule; Baofu has confirmed异主体报备 support.
 - Added `POST /v1/webhooks/baofu/account/open` callback handling; it persists an `external_payment_facts` callback fact before ACK and keeps unresolved `business_object_type/id` null to satisfy the external fact pair constraint until a later application worker resolves the local binding.
 - Review/fix notes: fixed the callback fact business object pair so DB constraints cannot reject account callbacks without a known binding ID; defaulted empty account raw snapshots to `{}` for JSONB safety; added a parser configuration guard.
 - Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" make sqlc`; `PATH="/usr/local/go/bin:$PATH" go test ./db/sqlc ./baofu/account ./baofu/account/contracts ./baofu/account/notification ./logic ./api -run 'TestBaofuAccount|TestBaofuCallback' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./db/sqlc -run 'TestBaofuAccountBinding|TestMarkBaofuAccountBinding' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./baofu/account ./baofu/account/contracts ./baofu/account/notification ./logic ./api -count=1`; `PATH="/usr/local/go/bin:$PATH" make check-generated`; `git diff --check`.
@@ -1086,9 +1260,9 @@ make test-integration
 ### 2026-05-03 Task 3 Partial - Merchant Open Readiness Guard
 
 - Added the merchant-side Baofu readiness gate to `PATCH /v1/merchants/me/status` when opening the merchant.
-- Opening now requires the existing ordinary service provider payment config to be active and the merchant Baofu account binding to be payment-ready with a WeChat channel identity on the binding.
-- Public errors stay product-facing: `商户结算账户未开通，暂不能开业接收分账订单` and `商户微信渠道待报备，暂不能开业接收微信生态支付订单`; raw `contractNo`, `sharingMerId`, upstream payloads, bank/card/ID/phone details remain hidden.
-- `GET /v1/merchants/me/status` now returns sanitized `settlement_account` readiness (`state`, `label`, `payment_ready`) so merchant clients can show `资料待提交`, `宝付开户处理中`, `微信渠道待报备`, `结算账户可用`, or `开通失败` without exposing `contractNo`, `sharingMerId`, or upstream payloads.
+- Opening now requires Baofu payment-channel readiness rather than the project-owned WeChat ordinary-service-provider applyment flow. Final `subMchId` source is merchant-level `merchant_report`; Baofu has confirmed per-merchant异主体授权 support.
+- Public errors stay product-facing: `商户结算账户未开通，暂不能开业接收分账订单` and `微信支付通道待开通，暂不能接收微信生态支付订单`; raw `contractNo`, `sharingMerId`, upstream payloads, bank/card/ID/phone details remain hidden.
+- `GET /v1/merchants/me/status` now returns sanitized `settlement_account` readiness (`state`, `label`, `payment_ready`) so merchant clients can show `资料待提交`, `宝付开户处理中`, `结算账户可用`, or `开通失败` without exposing `contractNo`, `sharingMerId`, or upstream payloads. Payment-channel failures should use product-level copy such as `微信支付通道待开通`.
 - Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestUpdateMerchantOpenStatus_RequireBaofuAccountWhenOpen' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestUpdateMerchantOpenStatus' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api ./worker -run 'TestProfitSharingCapability|TestOnboardingReview|TestRider|TestUpdateMerchantOpenStatus' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestGetMerchantOpenStatus_IncludesBaofuSettlementReadiness|TestUpdateMerchantOpenStatus' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api ./logic -run 'TestGetMerchantOpenStatus|TestUpdateMerchantOpenStatus|TestBaofuAccountReadiness|TestCreatePaymentOrderAPI|TestCreateCombinedPaymentOrderAPI' -count=1`; `PATH="/usr/local/go/bin:$PATH" make swagger`; `PATH="/usr/local/go/bin:$PATH" make check-generated`; `git diff --check`.
 - Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on the same 71 pre-existing oversized Go files, including existing `api/merchant.go`; the new merchant Baofu helper is in a small separate file.
 - Residual risk: Task 3 still needs operator/platform readiness response surfaces, onboarding worker propagation, and frontend display/wizard updates.
@@ -1096,7 +1270,7 @@ make test-integration
 ### 2026-05-03 Task 3 Partial - Single Order Payment Readiness Guard
 
 - Added a payment-creation Baofu readiness guard in `logic.PaymentOrderService` before new ordinary-service-provider main-business order payments create local payment rows or call upstream payment APIs.
-- Missing/unready merchant Baofu account now returns `商户结算账户未开通，暂不能创建支付订单`; missing WeChat channel identity on an otherwise active Baofu account returns `商户微信渠道待报备，暂不能创建微信生态支付订单`.
+- Missing/unready merchant Baofu account now returns `商户结算账户未开通，暂不能创建支付订单`; missing selected WeChat payment-channel readiness should return `微信支付通道待开通，暂不能创建微信生态支付订单`.
 - API coverage verifies the frontend-facing response is semantic and does not expose `contract`, `sharing`, provider internals, or upstream identifiers.
 - Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestPaymentOrderServiceCreatePaymentOrder_RequiresMerchantBaofuReadiness' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestPaymentOrderServiceCreatePaymentOrder' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestCreatePaymentOrderAPI' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api ./logic -run 'TestCreatePaymentOrderAPI|TestPaymentOrderServiceCreatePaymentOrder|TestBaofuAccountReadiness|TestUpdateMerchantOpenStatus' -count=1`; `git diff --check`.
 - Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on the same 71 pre-existing oversized Go files, including existing `logic/payment_order_service.go`; the new Baofu payment readiness helper is in a small separate file.
@@ -1105,8 +1279,8 @@ make test-integration
 ### 2026-05-03 Task 3 Partial - Combined Payment Readiness Guard
 
 - Added a combined-payment Baofu readiness guard in `logic.CombinedPaymentService` for the ordinary service provider main-business channel.
-- The guard deduplicates order IDs, reads each order to resolve unique merchant IDs, verifies ownership, then requires each merchant Baofu binding to be active with `sharing_mer_id` and `wechat_sub_mch_id` before `CreateCombinedPaymentTx`.
-- Missing/unready merchant Baofu account returns `商户结算账户未开通，暂不能创建支付订单`; missing WeChat channel identity returns `商户微信渠道待报备，暂不能创建微信生态支付订单`. The new path does not expose contract numbers, sharing IDs, raw upstream payloads, card/ID/phone data, or provider internals.
+- The guard deduplicates order IDs, reads each order to resolve unique merchant IDs, verifies ownership, then requires each merchant Baofu binding to be active with `sharing_mer_id` before `CreateCombinedPaymentTx`. Under the updated merchant-`subMchId`口径, payment-channel readiness must additionally check the merchant report result and APPLET auth binding; it must not depend on legacy ordinary-service-provider `wechat_sub_mch_id`.
+- Missing/unready merchant Baofu account returns `商户结算账户未开通，暂不能创建支付订单`; missing selected WeChat payment-channel readiness should return `微信支付通道待开通，暂不能创建微信生态支付订单`. The new path does not expose contract numbers, sharing IDs, raw upstream payloads, card/ID/phone data, or provider internals.
 - The pre-transaction strategy intentionally stops before local combined payment and child `payment_orders` rows are created, so a blocked merchant does not leave pending local payment anchors or trigger upstream combine payment.
 - Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestCreateCombinedPaymentOrder_OrdinaryServiceProviderRequiresMerchantBaofuReadiness' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestCreateCombinedPaymentOrder' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./logic -run 'TestCreateCombinedPaymentOrder|TestPaymentOrderServiceCreatePaymentOrder|TestBaofuAccountReadiness' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestCreateCombinedPaymentOrderAPI_BaofuReadinessErrorIsSanitized' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api ./logic -run 'TestCreateCombinedPaymentOrderAPI|TestCreateCombinedPaymentOrder|TestCreatePaymentOrderAPI|TestPaymentOrderServiceCreatePaymentOrder|TestBaofuAccountReadiness|TestUpdateMerchantOpenStatus' -count=1`; `git diff --check`.
 - Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on the same 71 pre-existing oversized Go files, including existing `api/payment_order.go` and `logic/combined_payment_service.go`; this slice keeps the shared readiness helper small and only adds the necessary call site/test coverage to existing oversized payment files.
@@ -1143,7 +1317,7 @@ make test-integration
 
 ### 2026-05-03 Task 4 Partial - Unified Order Service Command
 
-- Added `logic.BaofuPaymentService` as the service-level Baofu unified-order boundary. It builds BaoCaiTong WeChat JSAPI `SHARING` unified-order requests with the collect merchant/terminal, mini-program appid, payer `sub_openid`, merchant `subMchId`, and payment notify URL.
+- Added `logic.BaofuPaymentService` as the service-level Baofu unified-order boundary. It builds BaoCaiTong WeChat JSAPI `SHARING` unified-order requests with the collect merchant/terminal, mini-program appid, payer `sub_openid`, selected payment-channel `subMchId`, and payment notify URL.
 - Added command-before-client-call persistence for Baofu create-payment commands using provider `baofu`, channel `baofu_aggregate`, capability `baofu_payment`, command type `create_payment`, business object `payment_order`, and external object type `baofu_payment_order`.
 - Added sanitized command snapshots for create-payment attempts; payer openid is not stored in the snapshot, and upstream `wc_pay_data` is returned only from the service result for the mini program payment call.
 - Extended `PaymentCommandService` validation to accept Baofu provider/channel/capabilities and the `baofu_payment_order` external object type so later slices can reuse the common command recorder instead of bypassing validation.
@@ -1302,7 +1476,7 @@ make test-integration
 - Added `GetBaofuDailyReconciliation` to aggregate Baofu daily reconciliation rows by provider/channel, including paid amount, payment fee, merchant/rider/platform/operator splits, succeeded/processing withdrawal amounts, failed fact count, unknown command count, and fee-ledger mismatch count.
 - Added admin route `GET /v1/platform/stats/baofu/reconciliation/daily`. The response returns only aggregate amounts/counts and provider/channel labels; it does not expose `contract_no`, `sharing_mer_id`, `contractNo`, `sharingMerId`, upstream raw payloads, cards, IDs, phones, signatures, or keys.
 - Added sanitized Baofu alert payload builders for the five planned conditions: payment callback missing after SLA, share processing SLA exceeded, withdrawal processing SLA exceeded, failed external payment fact application, and payment-fee ledger mismatch.
-- Created `artifacts/baofu-payment/baofu-production-first-order-checklist.md` covering collect/payout merchant checks, prefunded account-opening fees, merchant/rider/operator/platform account readiness, payment callback persistence, refund-closed share creation, formula/balance checks, withdrawal smoke test, and post-first-order observation.
+- Created `artifacts/baofu-payment/baofu-production-first-order-checklist.md` covering collect/payout merchant checks, prefunded account-opening fees, merchant/rider/operator/platform account readiness, merchant `subMchId` payment-channel readiness, payment callback persistence, refund-closed share creation, formula/balance checks, withdrawal smoke test, and post-first-order observation.
 - Corrected the receiver-field migration note and migration source: `000228_require_baofu_sharing_mer_id` now requires explicit `sharing_mer_id` for active rows and does not copy `contract_no` into `sharing_mer_id`.
 - Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./api ./worker -run 'TestPlatformStats|TestAlertPayload|TestBaofu' -count=1`; `PATH="/usr/local/go/bin:$PATH" make swagger`; `PATH="/usr/local/go/bin:$PATH" make check-generated`; `git diff --check`.
 - Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on the pre-existing 71 oversized Go files; this slice keeps the new reconciliation handler in a small dedicated API file and only extends existing server routing for the new route.
@@ -1318,3 +1492,14 @@ make test-integration
 - Web operator finance copy now reflects the Baofu/BaoCaiTong funds model instead of ordinary-service-provider/WeChat balance handling and avoids exposing upstream identifiers.
 - Verification run: `PATH="$HOME/.local/bin:$PATH" npm run compile` from `weapp/`; `PATH="$HOME/.local/bin:$PATH" npm run lint` from `weapp/`; `PATH="$HOME/.local/bin:$PATH" npm run lint` from `web/`; `PATH="$HOME/.local/bin:$PATH" flutter analyze` from `merchant_app/` (exit 0, with pub.dev advisory decode warnings before analyze); `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestGetPlatformBaofuSettlementStatus|TestPlatformStats' -count=1` from `locallife/`; `PATH="/usr/local/go/bin:$PATH" make check-generated` from `locallife/`; `git diff --check`.
 - Residual UX scope: platform/admin currently shows masked platform receiver identifiers and aggregate anomaly/withdrawal/fee information. Raw fee-ledger and withdrawal row drill-downs remain intentionally unexposed until a dedicated sanitized admin list contract is added; ordinary users still never receive raw Baofu identifiers.
+
+### 2026-05-04 Scope Correction - Aggregate Merchant Report Confirmed
+
+- Added contract coverage audit: `artifacts/baofu-payment/baofu-api-contract-coverage-audit.md`. It lists required Baofu interfaces and marks current code coverage/sandbox status; current project coverage is not beyond C2 and no Baofu test-address联调 is recorded.
+- Tightened terminology: Baofu platform merchant IDs are `宝付收单一级商户号` and `宝付代付一级商户号`; Baofu account-opening receivers are `宝付二级商户号` / `sharing_mer_id`; WeChat `subMchId` is a channel identity only and never a sharing receiver.
+- Tightened replacement boundary: Baofu replaces only main-business ordinary-service-provider/platform-ecommerce capabilities; WeChat direct-payment flows remain direct.
+- Confirmed with Baofu technical support: LocalLife no longer needs the project-owned WeChat Pay special-merchant onboarding flow. Baofu personal/organization onboarding plus aggregate merchant report replaces it for the Baofu main-business channel.
+- The earlier local readiness guard that requires merchant `wechat_sub_mch_id` before Baofu WeChat JSAPI payment is superseded by the merchant-`subMchId`口径: payment creation should require merchant `sharing_mer_id` plus merchant `subMchId` and APPLET auth binding readiness. Project-owned WeChat ordinary-service-provider applyment is not part of this Baofu path.
+- Added Task 3A to implement `merchant_report`, report query, report lifecycle persistence, and merchant `subMchId` synchronization and APPLET auth binding into payment-channel readiness.
+- Added Task 4A because the current Baofu aggregate payment work has service-level routing and contracts, but production replacement is not complete until a concrete aggregate payment HTTP client and API runtime wiring replace the current ordinary-service-provider facade.
+- This reopens the implementation plan: payment creation must be adjusted from legacy merchant `wechat_sub_mch_id` readiness to merchant `subMchId` readiness, and production enablement is not complete until Task 3A, Task 4A, endpoint profiles, public envelope, appendix enums, and sandbox evidence are implemented and verified.
