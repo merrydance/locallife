@@ -19,7 +19,7 @@
 
 | Date | Env | Endpoint | Query Key | Owner | Result | ContractNo Masked | SharingMerID Masked | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2026-05-04 | sandbox | `https://vgw.baofoo.com/union-gw/api/T-1001-013-03/transReq.do` | smoke synthetic account query | platform config smoke | reached sandbox; parsed union-gw envelope; upstream returned `BF0005` without `retCode` | - | - | `640a0d1b` | Exposed local fail-closed gap: response with `errorCode/errorMsg` but no `retCode` was incorrectly unmarshalled as success. Fixed in next commit; rerun required before C4. |
+| 2026-05-04 | sandbox | `https://vgw.baofoo.com/union-gw/api/T-1001-013-03/transReq.do` | smoke synthetic account query | platform config smoke | reached sandbox; parsed union-gw envelope; upstream returned `BF0005`/abnormal without `contractNo` | - | - | `002c86f6` | Synthetic query did not prove a successful account exists; it only proves account-query transport/decryption is reachable. Treat as negative smoke evidence; positive C4 requires a real opened test account or a known query key from Baofoo. |
 
 ## Account Balance `T-1001-013-06`
 
@@ -61,6 +61,7 @@
 | Date | Env | Endpoint | OutTradeNo/TradeNo | Result | Local Fact | Local Application | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-05-04 | sandbox | `https://mch-juhe.baofoo.com/api` | smoke synthetic order query | reached sandbox; public envelope returned `FAIL` | no | no | `640a0d1b` | Exposed local diagnostics gap: envelope `returnMsg` was not carried into `ProviderError.UpstreamMessage`. Fixed in next commit; rerun required to classify whether this is expected missing-order response or config/signing issue. |
+| 2026-05-04 | sandbox | `https://mch-juhe.baofoo.com/api` | smoke synthetic order query | reached sandbox; upstream `FAIL` message indicates `merId` missing from `bizContent` | no | no | `002c86f6` | Smoke request omitted query-level `merId/terId`; local contract now validates `PaymentQueryRequest` before POST so this does not reach Baofoo as a malformed request. Rerun with collect merchant/terminal in request body. |
 
 ## Payment Callback
 

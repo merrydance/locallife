@@ -61,6 +61,9 @@ var (
 	ErrBaofuRefundReasonRequired               = errors.New("baofu refund refundReason is required")
 	ErrBaofuRefundSharingRefundInfoUnsupported = errors.New("baofu refund sharingRefundInfo is unsupported before profit sharing")
 	ErrBaofuRefundAdvanceUnsupported           = errors.New("baofu refund advanceAmt is unsupported")
+	ErrBaofuPaymentQueryMerchantIDRequired     = errors.New("baofu payment query merId is required")
+	ErrBaofuPaymentQueryTerminalIDRequired     = errors.New("baofu payment query terId is required")
+	ErrBaofuPaymentQueryReferenceRequired      = errors.New("baofu payment query tradeNo or outTradeNo is required")
 	ErrBaofuRefundQueryMerchantIDRequired      = errors.New("baofu refund query merId is required")
 	ErrBaofuRefundQueryTerminalIDRequired      = errors.New("baofu refund query terId is required")
 	ErrBaofuRefundQueryReferenceRequired       = errors.New("baofu refund query tradeNo or outTradeNo is required")
@@ -264,6 +267,19 @@ type PaymentQueryRequest struct {
 	TerminalID string `json:"terId"`
 	TradeNo    string `json:"tradeNo,omitempty"`
 	OutTradeNo string `json:"outTradeNo,omitempty"`
+}
+
+func (r PaymentQueryRequest) Validate() error {
+	if strings.TrimSpace(r.MerchantID) == "" {
+		return ErrBaofuPaymentQueryMerchantIDRequired
+	}
+	if strings.TrimSpace(r.TerminalID) == "" {
+		return ErrBaofuPaymentQueryTerminalIDRequired
+	}
+	if strings.TrimSpace(r.TradeNo) == "" && strings.TrimSpace(r.OutTradeNo) == "" {
+		return ErrBaofuPaymentQueryReferenceRequired
+	}
+	return nil
 }
 
 type PaymentFact struct {

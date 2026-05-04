@@ -141,6 +141,20 @@ func TestNormalizePaymentTerminalStatus(t *testing.T) {
 	require.Equal(t, db.ExternalPaymentTerminalStatusUnknown, NormalizePaymentTerminalStatus("unexpected"))
 }
 
+func TestPaymentQueryRequestValidateOfficialRequiredFields(t *testing.T) {
+	req := PaymentQueryRequest{MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "BF202605040001"}
+	require.NoError(t, req.Validate())
+
+	req = PaymentQueryRequest{TerminalID: "200005200", OutTradeNo: "BF202605040001"}
+	require.ErrorIs(t, req.Validate(), ErrBaofuPaymentQueryMerchantIDRequired)
+
+	req = PaymentQueryRequest{MerchantID: "102004465", OutTradeNo: "BF202605040001"}
+	require.ErrorIs(t, req.Validate(), ErrBaofuPaymentQueryTerminalIDRequired)
+
+	req = PaymentQueryRequest{MerchantID: "102004465", TerminalID: "200005200"}
+	require.ErrorIs(t, req.Validate(), ErrBaofuPaymentQueryReferenceRequired)
+}
+
 func TestShareAfterPayRequestRequiresPaymentReferenceAndReceiverIDs(t *testing.T) {
 	req := ShareAfterPayRequest{
 		MerchantID:        "102004465",

@@ -1617,3 +1617,10 @@ make test-integration
 - Account query returned upstream `BF0005` in `errorCode` without `retCode`; the client incorrectly treated that as a zero-value success. The client boundary now fails closed when account `errorCode/errorMsg` is present even if `retCode` is absent.
 - Aggregate-pay `order_query` returned public-envelope `returnCode=FAIL`; the client previously dropped `returnMsg`, which blocked diagnosis of missing-order vs signing/config errors. The client now preserves envelope `returnMsg` on sanitized `ProviderError.UpstreamMessage` while keeping frontend guidance curated.
 - Added focused regressions for both smoke-discovered failure shapes. The smoke evidence is recorded in `artifacts/baofu-payment/baofu-sandbox-evidence.md`; C4 is still not granted until the fixed commit is deployed and the queries are rerun with classified results.
+
+
+### 2026-05-04 Sandbox Smoke Follow-up - Payment Query Required Fields
+
+- Rerunning smoke on `002c86f6` confirmed aggregate-pay `returnMsg` is now visible: Baofoo returned `商户号不能为null`, which points to `order_query.bizContent.merId` being absent rather than a cert/signature failure.
+- Locked `PaymentQueryRequest` to the same fail-closed contract style as refund query and order close: `merId`、`terId` and one of `tradeNo/outTradeNo` are now validated locally before POST.
+- The account query still reaches Baofoo and returns abnormal/`BF0005` without `contractNo`; this is negative smoke evidence for a synthetic query key, not a positive account-open proof. C4 account-query evidence still requires a known opened test account or a successful sandbox开户 flow.

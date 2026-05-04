@@ -44,6 +44,9 @@ func (c *HTTPClient) QueryPayment(ctx context.Context, req contracts.PaymentQuer
 	if err := c.validate("order_query"); err != nil {
 		return nil, err
 	}
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
 	var result contracts.UnifiedOrderResult
 	if err := c.root.PostAggregatePay(ctx, "order_query", req, &result); err != nil {
 		return nil, err
