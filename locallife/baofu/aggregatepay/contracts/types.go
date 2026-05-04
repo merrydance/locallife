@@ -3,7 +3,9 @@ package contracts
 import (
 	"encoding/json"
 	"errors"
+	"net/url"
 	"strings"
+	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
 )
@@ -26,7 +28,24 @@ const (
 	ShareStateAbnormal   = "ABNORMAL"
 )
 
-var ErrUnifiedOrderRiskInfoClientIPRequired = errors.New("baofu unified order riskInfo.clientIp is required for wechat/alipay")
+var (
+	ErrUnifiedOrderMerchantIDRequired         = errors.New("baofu unified order merId is required")
+	ErrUnifiedOrderTerminalIDRequired         = errors.New("baofu unified order terId is required")
+	ErrUnifiedOrderOutTradeNoRequired         = errors.New("baofu unified order outTradeNo is required")
+	ErrUnifiedOrderAmountInvalid              = errors.New("baofu unified order txnAmt must be positive")
+	ErrUnifiedOrderTotalAmountInvalid         = errors.New("baofu unified order totalAmt must be greater than or equal to txnAmt")
+	ErrUnifiedOrderTransactionTimeInvalid     = errors.New("baofu unified order txnTime must use yyyyMMddHHmmss")
+	ErrUnifiedOrderProductTypeUnsupported     = errors.New("baofu unified order prodType must be SHARING")
+	ErrUnifiedOrderOrderTypeUnsupported       = errors.New("baofu unified order orderType must be 7")
+	ErrUnifiedOrderPayCodeUnsupported         = errors.New("baofu unified order payCode is unsupported")
+	ErrUnifiedOrderSubMchIDRequired           = errors.New("baofu unified order subMchId is required for wechat/alipay")
+	ErrUnifiedOrderPayExtendSubAppIDRequired  = errors.New("baofu unified order payExtend.sub_appid is required")
+	ErrUnifiedOrderPayExtendSubOpenIDRequired = errors.New("baofu unified order payExtend.sub_openid is required")
+	ErrUnifiedOrderPayExtendBodyRequired      = errors.New("baofu unified order payExtend.body is required")
+	ErrUnifiedOrderRiskInfoClientIPRequired   = errors.New("baofu unified order riskInfo.clientIp is required for wechat/alipay")
+	ErrUnifiedOrderPageURLInvalid             = errors.New("baofu unified order pageUrl must be https")
+	ErrUnifiedOrderForbidCreditUnsupported    = errors.New("baofu unified order forbidCredit must be 0 or 1")
+)
 
 type UnifiedOrderInput struct {
 	MerchantID string
@@ -114,12 +133,70 @@ func NewWechatJSAPISharingUnifiedOrderRequest(input UnifiedOrderInput) UnifiedOr
 }
 
 func (r UnifiedOrderRequest) Validate() error {
+	if strings.TrimSpace(r.MerchantID) == "" {
+		return ErrUnifiedOrderMerchantIDRequired
+	}
+	if strings.TrimSpace(r.TerminalID) == "" {
+		return ErrUnifiedOrderTerminalIDRequired
+	}
+	if strings.TrimSpace(r.OutTradeNo) == "" {
+		return ErrUnifiedOrderOutTradeNoRequired
+	}
+	if r.TransactionAmt <= 0 {
+		return ErrUnifiedOrderAmountInvalid
+	}
+	if r.TotalAmt < r.TransactionAmt {
+		return ErrUnifiedOrderTotalAmountInvalid
+	}
+	if !isBaofuTransactionTime(r.TransactionTime) {
+		return ErrUnifiedOrderTransactionTimeInvalid
+	}
+	if strings.TrimSpace(r.ProductType) != ProductTypeSharing {
+		return ErrUnifiedOrderProductTypeUnsupported
+	}
+	if strings.TrimSpace(r.OrderType) != BaoCaiTongOrderTypeSharing {
+		return ErrUnifiedOrderOrderTypeUnsupported
+	}
+	if strings.TrimSpace(r.PayCode) != PayCodeWechatJSAPI {
+		return ErrUnifiedOrderPayCodeUnsupported
+	}
 	if unifiedOrderPayCodeRequiresRiskInfo(r.PayCode) {
+		if strings.TrimSpace(r.SubMchID) == "" {
+			return ErrUnifiedOrderSubMchIDRequired
+		}
+		if strings.TrimSpace(r.PayExtend.SubAppID) == "" {
+			return ErrUnifiedOrderPayExtendSubAppIDRequired
+		}
+		if strings.TrimSpace(r.PayExtend.SubOpenID) == "" {
+			return ErrUnifiedOrderPayExtendSubOpenIDRequired
+		}
+		if strings.TrimSpace(r.PayExtend.Body) == "" {
+			return ErrUnifiedOrderPayExtendBodyRequired
+		}
 		if r.RiskInfo == nil || strings.TrimSpace(r.RiskInfo.ClientIP) == "" {
 			return ErrUnifiedOrderRiskInfoClientIPRequired
 		}
 	}
+	if strings.TrimSpace(r.PageURL) != "" && !isHTTPSURL(r.PageURL) {
+		return ErrUnifiedOrderPageURLInvalid
+	}
+	if strings.TrimSpace(r.ForbidCredit) != "" && strings.TrimSpace(r.ForbidCredit) != "0" && strings.TrimSpace(r.ForbidCredit) != "1" {
+		return ErrUnifiedOrderForbidCreditUnsupported
+	}
 	return nil
+}
+
+func isBaofuTransactionTime(value string) bool {
+	if len(strings.TrimSpace(value)) != len("20060102150405") {
+		return false
+	}
+	_, err := time.Parse("20060102150405", strings.TrimSpace(value))
+	return err == nil
+}
+
+func isHTTPSURL(value string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	return err == nil && parsed.Scheme == "https" && strings.TrimSpace(parsed.Host) != ""
 }
 
 func unifiedOrderPayCodeRequiresRiskInfo(payCode string) bool {

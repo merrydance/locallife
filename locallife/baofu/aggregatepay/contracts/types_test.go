@@ -60,6 +60,59 @@ func TestUnifiedOrderRequestForWechatJSAPIRequiresRiskInfoClientIP(t *testing.T)
 	require.ErrorIs(t, req.Validate(), ErrUnifiedOrderRiskInfoClientIPRequired)
 }
 
+func TestUnifiedOrderRequestValidateOfficialRequiredFields(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*UnifiedOrderRequest)
+		want   error
+	}{
+		{"missing merchant", func(r *UnifiedOrderRequest) { r.MerchantID = "" }, ErrUnifiedOrderMerchantIDRequired},
+		{"missing terminal", func(r *UnifiedOrderRequest) { r.TerminalID = "" }, ErrUnifiedOrderTerminalIDRequired},
+		{"missing out trade no", func(r *UnifiedOrderRequest) { r.OutTradeNo = "" }, ErrUnifiedOrderOutTradeNoRequired},
+		{"missing txn amount", func(r *UnifiedOrderRequest) { r.TransactionAmt = 0 }, ErrUnifiedOrderAmountInvalid},
+		{"total less than txn", func(r *UnifiedOrderRequest) { r.TotalAmt = r.TransactionAmt - 1 }, ErrUnifiedOrderTotalAmountInvalid},
+		{"missing txn time", func(r *UnifiedOrderRequest) { r.TransactionTime = "" }, ErrUnifiedOrderTransactionTimeInvalid},
+		{"invalid txn time", func(r *UnifiedOrderRequest) { r.TransactionTime = "2026-05-04T12:00:00" }, ErrUnifiedOrderTransactionTimeInvalid},
+		{"invalid product", func(r *UnifiedOrderRequest) { r.ProductType = "PAYMENT" }, ErrUnifiedOrderProductTypeUnsupported},
+		{"invalid order type", func(r *UnifiedOrderRequest) { r.OrderType = "1" }, ErrUnifiedOrderOrderTypeUnsupported},
+		{"invalid pay code", func(r *UnifiedOrderRequest) { r.PayCode = "WECHAT_NATIVE" }, ErrUnifiedOrderPayCodeUnsupported},
+		{"missing sub mch for wechat", func(r *UnifiedOrderRequest) { r.SubMchID = "" }, ErrUnifiedOrderSubMchIDRequired},
+		{"missing sub appid", func(r *UnifiedOrderRequest) { r.PayExtend.SubAppID = "" }, ErrUnifiedOrderPayExtendSubAppIDRequired},
+		{"missing sub openid", func(r *UnifiedOrderRequest) { r.PayExtend.SubOpenID = "" }, ErrUnifiedOrderPayExtendSubOpenIDRequired},
+		{"missing body", func(r *UnifiedOrderRequest) { r.PayExtend.Body = "" }, ErrUnifiedOrderPayExtendBodyRequired},
+		{"missing risk client ip", func(r *UnifiedOrderRequest) { r.RiskInfo.ClientIP = "" }, ErrUnifiedOrderRiskInfoClientIPRequired},
+		{"non https page url", func(r *UnifiedOrderRequest) { r.PageURL = "http://example.com/pay" }, ErrUnifiedOrderPageURLInvalid},
+		{"invalid forbid credit", func(r *UnifiedOrderRequest) { r.ForbidCredit = "2" }, ErrUnifiedOrderForbidCreditUnsupported},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := validWechatUnifiedOrderRequestForTest()
+			tc.mutate(&req)
+			require.ErrorIs(t, req.Validate(), tc.want)
+		})
+	}
+}
+
+func validWechatUnifiedOrderRequestForTest() UnifiedOrderRequest {
+	req := NewWechatJSAPISharingUnifiedOrderRequest(UnifiedOrderInput{
+		OutTradeNo: "BF202605030099",
+		AmountFen:  12800,
+		SubMchID:   "1900000109",
+		SubAppID:   "wx1234567890abcdef",
+		SubOpenID:  "openid-payer-099",
+		Body:       "本地生活订单",
+		NotifyURL:  "https://api.example.com/v1/webhooks/baofu/payment",
+		PageURL:    "https://example.com/pay",
+		ClientIP:   "203.0.113.99",
+		TimeExpire: 30,
+		TxnTime:    "20260503120000",
+		MerchantID: "102004465",
+		TerminalID: "200005200",
+	})
+	req.ForbidCredit = "0"
+	return req
+}
+
 func TestUnifiedOrderResultExtractsWechatPayData(t *testing.T) {
 	result := UnifiedOrderResult{
 		ResultCode: "SUCCESS",

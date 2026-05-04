@@ -303,8 +303,8 @@
 | `payExtend` | 是 | C | 按支付方式选择 | C1 部分 |
 | `subMchId` | 否/条件必填 | S(64) | 微信/支付宝必传，渠道报备二级商户号 | C1/C2，来源待 Task 3A |
 | `notifyUrl` | 否 | S(128) | 支付成功服务端通知 | C1 |
-| `pageUrl` | 否 | S(128) | https 跳转地址 | C1 未校验 https |
-| `forbidCredit` | 否 | S(1) | `1` 禁止、`0` 不禁止 | 未覆盖 |
+| `pageUrl` | 否 | S(128) | https 跳转地址 | C1 |
+| `forbidCredit` | 否 | S(1) | `1` 禁止、`0` 不禁止 | C1 |
 | `attach/reqReserved` | 否 | S(128) | 保留域 | C1 attach |
 | `mktInfo` | 否 | JSON | 当前仅支持交易商户承担营销金额 | 未启用 |
 | `riskInfo` | 否/条件必填 | JSON | 微信/支付宝必传 | C1，已补 `clientIp` 校验 |
@@ -324,7 +324,7 @@
 本地缺口：
 
 - 无真实 HTTP client；无 SM2/数字信封完整实现对聚合支付入口的覆盖。
-- `UnifiedOrderRequest.Validate()` 目前只校验 `riskInfo.clientIp`，还未校验所有 M/C 字段、长度、枚举。
+- `UnifiedOrderRequest.Validate()` 已校验首版必填字段、金额关系、`txnTime` 格式、`SHARING/orderType=7/WECHAT_JSAPI` 枚举、微信 `subMchId/payExtend/riskInfo.clientIp` 条件必填、`pageUrl=https` 和 `forbidCredit` 枚举。
 - API runtime 未切到宝付 facade。
 - 未做测试地址联调：`https://mch-juhe.baofoo.com/api`。
 
@@ -496,7 +496,7 @@
 | C-002 | 部分修复，待 service/client 切换 | 已新增官方开户、查询、余额、提现 DTO 与金额元/分转换测试；原 `OpenAccountRequest` 业务抽象仍保留给现有 service | 官方字段级 DTO 已有本地校验，但 account client/service 仍未切到官方 DTO | Task 8 接 union-gw 真实 HTTP 时只允许官方 DTO 进入报文。 |
 | C-003 | 部分修复，待沙箱验证 | `locallife/baofu/account/notification/notification.go` 已按官方开户/提现通知字段解析；`locallife/api/baofu_callback.go` 开户 ACK 已改纯文本 `OK` | 本地 parser/ACK 已防止明显字段漂移，但还未使用宝付测试环境真实通知验证 URL query、密文 envelope、重放 ACK 行为 | 用宝付测试通知样例或沙箱回调验证开户/提现通知，并补回真实样例摘要。 |
 | C-004 | 部分修复，待 transport 集成 | 已新增 `locallife/baofu/envelope.go` 公共请求/响应 envelope DTO，覆盖 `merId/terId/method/charset/version/format/timestamp/signType/signSn/ncrptnSn/dgtlEnvlp/signStr/bizContent` | 业务 DTO 已可进入 `bizContent`，但真实 HTTP client 尚未把签名、验签、加密和 envelope 串起来 | Task 8 接真实 HTTP 时必须使用该 envelope 并补请求/响应 fixture。 |
-| C-005 | 高 | `locallife/baofu/aggregatepay/contracts/types.go:116` 的 `Validate()` 只检查 `riskInfo.clientIp` | `unified_order` 的 M/C 字段、长度、枚举、`subMchId` 条件必填、https `pageUrl`、金额关系未被锁住 | 补全字段级校验和表驱动测试；非法枚举/缺条件字段必须 fail-closed。 |
+| C-005 | 已本地修复，待沙箱验证 | `locallife/baofu/aggregatepay/contracts/types.go` 已新增 `unified_order` 表驱动校验，覆盖 M/C 字段、枚举、`subMchId` 条件必填、https `pageUrl`、金额关系 | 本地契约已 fail-closed；仍未用宝付测试地址验证真实错误码和字段长度边界 | Task 8/沙箱测试补真实请求、参数错误和错误码样例。 |
 | C-006 | 部分修复，待真实 client/联调 | 已新增 `locallife/baofu/merchantreport/contracts`、`baofu_merchant_reports`、sqlc query、报备 service、APPLET 授权 readiness | 本地契约/持久化/服务已能防止 `bctMerId/subMchId/authContent` 漂移，但还没有真实 HTTP client、回调/查询恢复 worker 和沙箱证据 | Task 8 继续新增 HTTP client 和测试地址联调；后续补报备恢复 worker。 |
 | C-007 | 已本地修复，待联调 | `locallife/logic/baofu_payment_order_route.go` 已通过 `merchantBaofuReadinessForPayment` 取商户报备 `sub_mch_id`；`CreateBaofuWechatJSAPIOrderInput` 字段已改 `MerchantSubMchID` | 旧普通服务商 `txResult.SubMchID` 来源已移除；真实支付仍待宝付聚合商户报备沙箱验证 | Task 8/沙箱测试验证 `unified_order.subMchId` 使用报备返回值。 |
 | C-008 | 中 | `locallife/baofu/aggregatepay/contracts/types.go` 无 `order_refund/refund_query/order_close` DTO | 首版宣称“分账前可退款/分账后不退款”，但没有宝付退款与关单契约，支付失败清理也无法关闭上游订单 | 补退款、退款查询、退款通知、关单 DTO/client/状态映射，并测试分账后禁退。 |

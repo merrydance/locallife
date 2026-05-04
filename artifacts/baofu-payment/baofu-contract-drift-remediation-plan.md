@@ -649,7 +649,7 @@ git commit -m "feat(baofu): add merchant report readiness"
 - Modify: `locallife/baofu/aggregatepay/contracts/types.go`
 - Modify: `locallife/baofu/aggregatepay/contracts/types_test.go`
 
-- [ ] **Step 1: Add table-driven validation tests**
+- [x] **Step 1: Add table-driven validation tests**
 
 Add tests covering missing/invalid `merId`, `terId`, `outTradeNo`, `txnAmt`, `totalAmt`, `txnTime`, `prodType`, `orderType`, `payCode`, `payExtend.sub_appid`, `payExtend.sub_openid`, `payExtend.body`, `subMchId`, `riskInfo.clientIp`, `pageUrl` https, `forbidCredit`, and amount relation.
 
@@ -684,7 +684,7 @@ go test ./baofu/aggregatepay/contracts -run 'TestUnifiedOrderRequestValidateOffi
 
 Expected: fail because current `Validate()` only checks `riskInfo.clientIp`.
 
-- [ ] **Step 3: Implement validation errors and checks**
+- [x] **Step 3: Implement validation errors and checks**
 
 Add typed errors and enforce:
 
@@ -705,7 +705,7 @@ pageUrl if present must be https
 forbidCredit if present must be 0 or 1
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 go test ./baofu/aggregatepay/contracts -run 'TestUnifiedOrder|TestNormalizePaymentTerminalStatus|TestShareAfterPay' -count=1
