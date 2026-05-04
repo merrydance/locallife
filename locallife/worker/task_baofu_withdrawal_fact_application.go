@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	baofucontracts "github.com/merrydance/locallife/baofu/account/contracts"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/rs/zerolog/log"
 )
 
 const TaskProcessBaofuWithdrawalFactApplication = "baofu:process_withdrawal_fact_application"
@@ -19,6 +20,27 @@ type BaofuWithdrawalFactApplicationPayload struct {
 	UpstreamState     string `json:"upstream_state"`
 	BaofuWithdrawNo   string `json:"baofu_withdraw_no,omitempty"`
 	RawSnapshot       []byte `json:"raw_snapshot,omitempty"`
+}
+
+func (distributor *RedisTaskDistributor) DistributeTaskProcessBaofuWithdrawalFactApplication(ctx context.Context, payload *BaofuWithdrawalFactApplicationPayload, opts ...asynq.Option) error {
+	if payload == nil || payload.WithdrawalOrderID <= 0 {
+		return fmt.Errorf("baofu withdrawal order id is required")
+	}
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal baofu withdrawal fact application payload: %w", err)
+	}
+	task := asynq.NewTask(TaskProcessBaofuWithdrawalFactApplication, jsonPayload, opts...)
+	info, err := distributor.enqueueTask(ctx, task)
+	if err != nil {
+		return fmt.Errorf("enqueue baofu withdrawal fact application task: %w", err)
+	}
+	log.Info().
+		Str("type", task.Type()).
+		Str("queue", info.Queue).
+		Int64("baofu_withdrawal_order_id", payload.WithdrawalOrderID).
+		Msg("enqueued baofu withdrawal fact application task")
+	return nil
 }
 
 func (processor *RedisTaskProcessor) ProcessTaskBaofuWithdrawalFactApplication(ctx context.Context, task *asynq.Task) error {

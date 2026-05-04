@@ -1083,3 +1083,10 @@ This remediation is not complete until all of the following are true:
 - All provider errors map to safe Chinese product semantics.
 - No direct-payment path calls Baofu.
 - At least one sandbox evidence row exists for account open, merchant report, APPLET auth, unified order, payment callback/query, share callback/query, refund-before-share, and withdraw.
+
+### 2026-05-04 Follow-up: Baofu Withdrawal Query Recovery
+
+- Added `BaofuWithdrawalRecoveryScheduler` to scan processing BaoCaiTong withdrawal orders, call `T-1001-013-15` through the account client with the payout merchant/terminal, and enqueue `BaofuWithdrawalFactApplicationPayload` for terminal states.
+- Added `DistributeTaskProcessBaofuWithdrawalFactApplication` to the task distributor boundary and regenerated worker mocks.
+- Wired `baofu-withdrawal-recovery` in `main.go` when Baofu account runtime config is available; missing config logs a scheduler-boundary warning instead of silently pretending recovery is active.
+- Residual risk: sandbox query evidence and withdraw notification callback route remain C4/C3-open items.

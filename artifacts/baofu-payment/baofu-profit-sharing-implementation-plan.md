@@ -1559,3 +1559,10 @@ make test-integration
 - Added `locallife/baofu/uniongw.go` to build the official `header/body` plaintext envelope, encrypt/decrypt `verifyType=1` content, and validate response `memberId`、`terminalId`、`serviceTp`、`sysRespCode` before unmarshalling business `body`.
 - Added regression coverage proving the account client request no longer has a JSON request body or `bizContent`, and that decrypted `content` contains `header.serviceTp` matching the URL service number.
 - Residual risk: this is C3 local coverage. Baofoo `verifyType=2`、real sandbox response samples、account notification `data_content` encryption shape、and full union-gw system/business error-code evidence remain C4 open items.
+
+
+### 2026-05-04 Remediation Follow-up - Baofu Withdrawal Query Recovery
+
+- Added `baofu-withdrawal-recovery` scheduler for processing BaoCaiTong withdrawal orders. It queries `T-1001-013-15` with the Baofu payout merchant/terminal and enqueues the existing withdrawal fact application task when the upstream state is terminal.
+- Added task distributor support for `baofu:process_withdrawal_fact_application`, kept the processor as the single writer for withdrawal-order terminal status, and wired the scheduler in `main.go` when Baofu account client config is available.
+- Verification scope remains local C3. Real BaoCaiTong withdrawal query sandbox evidence and withdrawal notification callback wiring are still open.

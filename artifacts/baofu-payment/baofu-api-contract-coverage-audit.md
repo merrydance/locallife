@@ -79,7 +79,7 @@
 | 开户通知 | 开户结果通知 | 通知 URL | 开户异步结果 | C1：notification parser 有本地测试 | C2：callback 落 fact | 未做 |
 | 余额 | 账户余额查询 | `T-1001-013-06` | 二级户在途/可用/冻结余额 | C3：已有官方余额 DTO 和元/分转换测试 | C3：已有 concrete client 和提现 service 读余额边界 | 未做 |
 | 提现 | 账户提现 | `T-1001-013-14` | 二级户可用余额提现到银行卡 | C3：已有官方提现 DTO 和分转元转换 | C2/C3：已有提现 service/worker/core client；公网 API 路由和沙箱证据待补 | 未做 |
-| 提现查询 | 提现查询 | `T-1001-013-15` | 提现处理中恢复/对账 | C3：已有官方提现查询 DTO 和状态映射 | C2/C3：已有 client/worker 状态应用；调度恢复和沙箱证据待补 | 未做 |
+| 提现查询 | 提现查询 | `T-1001-013-15` | 提现处理中恢复/对账 | C3：已有官方提现查询 DTO 和状态映射 | C3：已有 client、worker 状态应用和 `baofu-withdrawal-recovery` 调度查询入队；沙箱证据待补 | 未做 |
 | 提现通知 | 提现结果通知 | 通知 URL | 提现终态通知 | C1：notification parser 局部 | 未完整 callback route | 未做 |
 | 聚合商户报备 | 报备认证 | `merchant_report` | 商户宝付开户后逐户报备微信渠道，取得该商户 `subMchId` | C3：字段级 DTO、微信类目 allowlist 和校验已建 | C3：表/sqlc/service/client/readiness 已建；真实资料映射待补 | 未做 |
 | 聚合商户报备 | 报备信息查询 | `merchant_report_query` | 查询平台或商户报备状态和 `subMchId` | C3：DTO/状态归一化已建 | C3：client/service 同步 `sub_mch_id` 边界已建 | 未做 |
@@ -486,7 +486,7 @@
 | `locallife/logic/baofu_payment_service.go` | 服务层可组统一下单并记录 command；主业务 API runtime 可切宝付 concrete aggregate client | 宝付合单支付已 fail-closed；沙箱证据仍待补。 |
 | `locallife/api/logic_adapters.go` | 已按 `BAOFU_MAIN_BUSINESS_ENABLED` 构造宝付主业务 facade | 主业务支付可切宝付；宝付启用时合单支付已明确 fail-closed。 |
 | `locallife/api/baofu_callback.go` | 支付/分账/退款/开户回调落 fact 草稿 | ACK、验签、payload 完整性需沙箱确认。 |
-| `locallife/worker/*baofu*` | 分账创建、支付/分账/退款查询恢复、提现 fact application 等本地 worker 边界 | aggregatepay 生产 client wiring 已接入任务处理器和 Baofu/refund recovery scheduler；提现查询调度和沙箱证据仍待补。 |
+| `locallife/worker/*baofu*` | 分账创建、支付/分账/退款查询恢复、提现查询恢复、提现 fact application 等本地 worker 边界 | aggregatepay/account 生产 client wiring 已接入任务处理器和 Baofu/refund/withdrawal recovery scheduler；沙箱证据仍待补。 |
 
 
 ### 12.1 契约漂移审计 Findings
@@ -536,7 +536,7 @@
 2. 宝付合单支付首版已选择 fail-closed：`BAOFU_MAIN_BUSINESS_ENABLED=true` 时创建合单支付返回 `宝付合单支付暂未开通，请分开支付`，不得回退普通服务商/平台收付通；后续如需合单再按宝付官方合单/多单契约新增。
 3. 用宝付测试地址补退款 callback / `refund_query` 证据，并继续保持“分账前退款、分账后不退款”互斥。
 4. 补完整错误码表：账户错误码、聚合支付错误码、报备错误码至少分成“用户需改资料”“商户/平台配置错误”“宝付处理中可重试”“宝付/渠道异常需人工”。
-5. 补聚合商户报备完整附录枚举和真实资料来源映射；未覆盖字段在请求进入 client 前 fail-closed。
+5. 补聚合商户报备完整附录枚举、真实资料来源映射和报备查询恢复 worker；未覆盖字段在请求进入 client 前 fail-closed。
 6. 每个必用接口至少跑一次宝付测试地址正向、参数错误、重复请求/幂等、查询恢复、回调重复投递，并把脱敏证据写入 `baofu-sandbox-evidence.md`。
 7. 向宝付确认拓展码/扫码确认的接口归属、字段、扫码主体和状态查询方式，并把结果补入开户/报备契约。
 

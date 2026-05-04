@@ -18,6 +18,7 @@ import (
 	"github.com/merrydance/locallife/api"
 	"github.com/merrydance/locallife/autotag"
 	"github.com/merrydance/locallife/baofu"
+	baofuaccount "github.com/merrydance/locallife/baofu/account"
 	"github.com/merrydance/locallife/baofu/aggregatepay"
 	db "github.com/merrydance/locallife/db/sqlc"
 	_ "github.com/merrydance/locallife/docs" // Swagger docs
@@ -200,6 +201,10 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create baofu aggregate client for runtime")
 	}
+	baofuAccountClient, err := buildBaofuAccountClient(config)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to create baofu account client for runtime")
+	}
 	if config.RedisAddress != "" {
 		// 初始化逻辑层
 		redisClient := redis.NewClient(&redis.Options{
@@ -249,6 +254,14 @@ func main() {
 		log.Warn().Msg("baofu payment recovery scheduler remote-query branch disabled: baofu aggregate client not configured")
 	}
 	schedulerManager.Register("baofu-payment-recovery", baofuPaymentRecoveryScheduler)
+	if baofuAccountClient != nil {
+		schedulerManager.Register("baofu-withdrawal-recovery", worker.NewBaofuWithdrawalRecoveryScheduler(store, taskDistributor, baofuAccountClient, worker.BaofuWithdrawalRecoveryConfig{
+			PayoutMerchantID: config.BaofuPayoutMerchantID,
+			PayoutTerminalID: config.BaofuPayoutTerminalID,
+		}))
+	} else if config.BaofuMainBusinessEnabled {
+		log.Warn().Msg("baofu withdrawal recovery scheduler disabled: baofu account client not configured")
+	}
 	schedulerManager.Register("profit-sharing-receiver-lifecycle", worker.NewProfitSharingReceiverLifecycleScheduler(store, taskDistributor))
 	if directPaymentClient == nil {
 		log.Warn().Msg("refund recovery direct status branch disabled: payment client not configured")
@@ -375,6 +388,20 @@ func buildBaofuAggregateClient(config util.Config) (aggregatepay.Client, error) 
 		return nil, err
 	}
 	return aggregatepay.NewClient(root), nil
+}
+
+func buildBaofuAccountClient(config util.Config) (*baofuaccount.Client, error) {
+	if !config.HasBaofuRuntimeConfig() {
+		return nil, nil
+	}
+	if err := config.ValidateBaofuConfig(); err != nil {
+		return nil, err
+	}
+	root, err := baofu.NewClient(config.ToBaofuConfig(), nil)
+	if err != nil {
+		return nil, err
+	}
+	return baofuaccount.NewClient(root), nil
 }
 
 func runTaskProcessor(

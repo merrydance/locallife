@@ -60,6 +60,10 @@ func (NoopTaskDistributor) DistributeTaskProcessBaofuProfitSharing(ctx context.C
 	return financialTaskDistributorUnavailable("baofu profit sharing")
 }
 
+func (NoopTaskDistributor) DistributeTaskProcessBaofuWithdrawalFactApplication(ctx context.Context, payload *BaofuWithdrawalFactApplicationPayload, opts ...asynq.Option) error {
+	return financialTaskDistributorUnavailable("baofu withdrawal fact application")
+}
+
 func (NoopTaskDistributor) DistributeTaskProcessProfitSharingReceiverTarget(ctx context.Context, payload *ProfitSharingReceiverTargetPayload, opts ...asynq.Option) error {
 	return financialTaskDistributorUnavailable("profit sharing receiver target")
 }
