@@ -55,6 +55,25 @@
 - 本地已补入官方字段级 DTO、公共报文、聚合商户报备、退款、关单、官方错误码本地分类和微信类目 allowlist；剩余漂移风险集中在宝财通 union-gw 官方加密/签名 envelope 完整性、响应验签/数字信封、真实渠道错误组合、回调真实 payload 与沙箱证据。
 - “防漂移”的实现标准不能只靠文档：必须把官方必填/条件必填、字段类型长度、枚举、错误码、金额单位、回调 ACK 形态、测试/生产 endpoint 都变成 typed constants、校验器和表驱动测试。
 
+
+## 2.2 Source Ledger
+
+| Group | Local source file/demo | Official URL | Current trust level | Notes |
+| --- | --- | --- | --- | --- |
+| union-gw account | `/home/sam/文档/分账/宝付/宝财通产品服务协议-宝财通2.0-来富网络（宁晋）有限公司.pdf...`, `/home/sam/文档/分账/宝付/BaoCaiTongTestInfo_OHTERV1.0.0.2/**`, doc.mandao pages | `unionGw`, `openAcc`, `queryAcc`, `queryBalace`, `accWithdrawal`, `queryWithdrawal`, `openAccNotify`, `withdrawNotify` | doc + local DTO/client tests + negative sandbox smoke | `verifyType=1` RSA/base64 is the local implementation baseline. `verifyType=2`, real notification encrypted payloads, and successful account-open/query samples remain C4-open. |
+| aggregate pay | `/tmp/baofu_doc.html` catalog, `/tmp/baofu_demo/java/src/main/java/com/baofoo/Entitys/PostMasterEntity.java`, `/tmp/baofu_demo/java/src/main/java/com/baofoo/Entitys/ResultMasterEntity.java`, aggregate demo/entity classes | `bct-1f9qhakcna6te`, `bct-1f9qm38du1agl`, `bct-1f9qlvu1em0tb`, `bct-1f9qm06dmb1a9`, `bct-1f9qm13po92jq`, `bct-1f9qm1m0u1s68`, `bct-1f9qm246c6cp8`, callback pages | doc + Java demo + local tests + public-envelope sandbox smoke | Request public envelope uses form fields and request-side `bizContent`; response public envelope uses `dataContent`. Real business `dataContent` samples for order/query/share/refund remain C4-open. |
+| merchant report | `/tmp/baofu_doc.html` catalog, `/tmp/baofu_demo/java/src/test/java/com/baofoo/Demo/MerchantReport.java`, `MerchantReportQuery.java`, `BindSubConfig.java`, `/home/sam/文档/分账/宝付/经营类目&MCC.xlsx` | `bct-1f9o62bulbiqd`, `bct-1f9o63b6ufii5`, `bct-1f9o63qmkndkc` | doc + Java demo + local DTO/service tests | 商户逐户报备取得 `subMchId`，再 `bind_sub_config(authType=APPLET, authContent=<LocalLife 小程序 appid>)`；真实报备/授权目录样本仍 C4-open。 |
+
+Source inventory command for this audit slice:
+
+```bash
+rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|merchant_report|merchant_report_query|bind_sub_config|T-1001-013-01|T-1001-013-03|T-1001-013-06|T-1001-013-14|T-1001-013-15" \
+  /home/sam/文档/分账/宝付 /tmp/baofu_demo/java \
+  > /tmp/baofu_contract_source_hits.txt
+```
+
+本次命中确认了聚合支付 Java demo 的 `PostMasterEntity.bizContent`、`ResultMasterEntity.dataContent`，以及聚合商户报备 demo 的 `merchant_report`、`merchant_report_query`、`bind_sub_config` 方法名。union-gw 账户详细字段主要以 doc.mandao 页面和本地 BaoCaiTong 测试资料/协议为源，仍需后续沙箱正向样本把 C3 固化到 C4。
+
 ## 3. 官方入口地址
 
 | 能力组 | 官方文档 | 请求方式 | 测试地址 | 生产地址 | 生产备用地址 | 当前项目覆盖 |

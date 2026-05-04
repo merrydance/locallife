@@ -1140,7 +1140,7 @@ This remediation is not complete until all of the following are true:
 - Modify: `artifacts/baofu-payment/baofu-api-contract-coverage-audit.md`
 - Modify: `artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md`
 
-- [ ] **Step 1: Inventory local official sources**
+- [x] **Step 1: Inventory local official sources**
 
 Run from repo root:
 
@@ -1152,7 +1152,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 Expected: source hits include BaoCaiTong union-gw docs/material, aggregate-pay public envelope docs/demo, merchant-report docs/demo, and Java `ResultMasterEntity.dataContent`.
 
-- [ ] **Step 2: Add source ledger table**
+- [x] **Step 2: Add source ledger table**
 
 In `baofu-api-contract-coverage-audit.md`, add a "Source Ledger" table with one row per interface group:
 
@@ -1162,11 +1162,11 @@ In `baofu-api-contract-coverage-audit.md`, add a "Source Ledger" table with one 
 | aggregate pay | `/tmp/baofu_demo/java/...PostMasterEntity/ResultMasterEntity...` | doc.mandao 聚合支付 | doc + Java demo + smoke | request `bizContent`, response `dataContent`. |
 | merchant report | `/tmp/baofu_demo/java/...` and merchant-report docs | doc.mandao 聚合商户报备 | doc + local tests | APPLET bind and异主体报备 are required. |
 
-- [ ] **Step 3: Review**
+- [x] **Step 3: Review**
 
 Check the ledger for missing first-version interfaces: account open/query/balance/withdraw/query withdraw, merchant report/query/APPLET bind, unified order/query/payment callback, share/query/share callback, refund/query/refund callback, close.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add artifacts/baofu-payment/baofu-api-contract-coverage-audit.md artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md
