@@ -12,6 +12,7 @@ import (
 
 var ErrPaymentNotificationOutTradeNoRequired = errors.New("baofu payment notification out trade no is required")
 var ErrShareNotificationOutTradeNoRequired = errors.New("baofu share notification out trade no is required")
+var ErrRefundNotificationOutTradeNoRequired = errors.New("baofu refund notification out trade no is required")
 
 type PaymentNotification struct {
 	NotifyID       string
@@ -30,6 +31,16 @@ type ShareNotification struct {
 	IsTerminal     bool
 	OccurredAt     time.Time
 	Fact           aggregatecontracts.ShareFact
+	Raw            []byte
+}
+
+type RefundNotification struct {
+	NotifyID       string
+	NotifyType     string
+	TerminalStatus string
+	IsTerminal     bool
+	OccurredAt     time.Time
+	Fact           aggregatecontracts.RefundFact
 	Raw            []byte
 }
 
@@ -142,6 +153,56 @@ func (p *Parser) ParseShareNotification(body []byte) (*ShareNotification, error)
 	}, nil
 }
 
+func (p *Parser) ParseRefundNotification(body []byte) (*RefundNotification, error) {
+	var payload struct {
+		NotifyID      string `json:"notifyId"`
+		NotifyType    string `json:"notifyType"`
+		OutTradeNo    string `json:"outTradeNo"`
+		TradeNo       string `json:"tradeNo"`
+		RefundState   string `json:"refundState"`
+		State         string `json:"state"`
+		SuccessAmount int64  `json:"succAmt"`
+		RefundAmount  int64  `json:"refundAmt"`
+		ResultCode    string `json:"resultCode"`
+		OccurredAt    string `json:"occurredAt"`
+		NotifyTime    string `json:"notifyTime"`
+		FinishTime    string `json:"finishTime"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, err
+	}
+	outTradeNo := strings.TrimSpace(payload.OutTradeNo)
+	if outTradeNo == "" {
+		return nil, ErrRefundNotificationOutTradeNoRequired
+	}
+	upstreamState := strings.TrimSpace(payload.RefundState)
+	if upstreamState == "" {
+		upstreamState = strings.TrimSpace(payload.State)
+	}
+	amount := payload.SuccessAmount
+	if amount == 0 {
+		amount = payload.RefundAmount
+	}
+	occurredAt := parseBaofuPaymentNotifyTime(payload.OccurredAt, payload.NotifyTime, payload.FinishTime)
+	terminalStatus := aggregatecontracts.NormalizeRefundTerminalStatus(upstreamState)
+	return &RefundNotification{
+		NotifyID:       strings.TrimSpace(payload.NotifyID),
+		NotifyType:     strings.TrimSpace(payload.NotifyType),
+		TerminalStatus: terminalStatus,
+		IsTerminal:     isTerminalRefundStatus(terminalStatus),
+		OccurredAt:     occurredAt,
+		Raw:            body,
+		Fact: aggregatecontracts.RefundFact{
+			OutTradeNo:       outTradeNo,
+			TradeNo:          strings.TrimSpace(payload.TradeNo),
+			TransactionState: upstreamState,
+			SuccessAmountFen: amount,
+			ResultCode:       strings.TrimSpace(payload.ResultCode),
+			Raw:              body,
+		},
+	}, nil
+}
+
 func parseBaofuPaymentNotifyTime(candidates ...string) time.Time {
 	for _, candidate := range candidates {
 		value := strings.TrimSpace(candidate)
@@ -170,6 +231,17 @@ func isTerminalPaymentStatus(status string) bool {
 }
 
 func isTerminalShareStatus(status string) bool {
+	switch strings.TrimSpace(status) {
+	case db.ExternalPaymentTerminalStatusSuccess,
+		db.ExternalPaymentTerminalStatusFailed,
+		db.ExternalPaymentTerminalStatusClosed:
+		return true
+	default:
+		return false
+	}
+}
+
+func isTerminalRefundStatus(status string) bool {
 	switch strings.TrimSpace(status) {
 	case db.ExternalPaymentTerminalStatusSuccess,
 		db.ExternalPaymentTerminalStatusFailed,

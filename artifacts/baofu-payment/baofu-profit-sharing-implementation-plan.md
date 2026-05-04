@@ -763,9 +763,11 @@ Expected: payment creation refuses missing merchant Baofu readiness, stores comm
 - Test: `locallife/api/payment_order_test.go`
 - Test: `locallife/logic/payment_order_service_test.go`
 
-- [ ] **Step 1: Implement concrete aggregate payment HTTP client**
+- [x] **Step 1: Implement concrete aggregate payment HTTP client**
 
 The existing `aggregatepay.Client` interface and request contracts are not enough for production. Add a concrete implementation that builds the official public envelope, signs requests, posts to the Baofu aggregate payment endpoint, parses `unified_order`, payment query, `share_after_pay`, share query, refund, refund query, and order close responses, and maps upstream business failures into project errors with sanitized logs.
+
+Progress: concrete `aggregatepay.HTTPClient` now covers `unified_order`、`order_query`、`share_after_pay`、`share_query`、`order_refund`、`refund_query`、`order_close` with local envelope tests. Runtime API wiring and sandbox evidence remain open in this task/remediation plan.
 
 - [ ] **Step 2: Wire Baofu as the runtime main-business payment facade**
 

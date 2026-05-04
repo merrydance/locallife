@@ -26,6 +26,11 @@ const (
 	ShareStateProcessing = "PROCESSING"
 	ShareStateCanceled   = "CANCELED"
 	ShareStateAbnormal   = "ABNORMAL"
+
+	RefundStateSuccess  = "SUCCESS"
+	RefundStateAccepted = "REFUND"
+	RefundStateError    = "REFUND_ERROR"
+	RefundStateAbnormal = "ABNORMAL"
 )
 
 var (
@@ -45,6 +50,23 @@ var (
 	ErrUnifiedOrderRiskInfoClientIPRequired   = errors.New("baofu unified order riskInfo.clientIp is required for wechat/alipay")
 	ErrUnifiedOrderPageURLInvalid             = errors.New("baofu unified order pageUrl must be https")
 	ErrUnifiedOrderForbidCreditUnsupported    = errors.New("baofu unified order forbidCredit must be 0 or 1")
+
+	ErrBaofuRefundMerchantIDRequired           = errors.New("baofu refund merId is required")
+	ErrBaofuRefundTerminalIDRequired           = errors.New("baofu refund terId is required")
+	ErrBaofuRefundOriginalReferenceRequired    = errors.New("baofu refund originTradeNo or originOutTradeNo is required")
+	ErrBaofuRefundOutTradeNoRequired           = errors.New("baofu refund outTradeNo is required")
+	ErrBaofuRefundAmountInvalid                = errors.New("baofu refund refundAmt must be positive")
+	ErrBaofuRefundTotalAmountInvalid           = errors.New("baofu refund totalAmt must be greater than or equal to refundAmt")
+	ErrBaofuRefundTransactionTimeInvalid       = errors.New("baofu refund txnTime must use yyyyMMddHHmmss")
+	ErrBaofuRefundReasonRequired               = errors.New("baofu refund refundReason is required")
+	ErrBaofuRefundSharingRefundInfoUnsupported = errors.New("baofu refund sharingRefundInfo is unsupported before profit sharing")
+	ErrBaofuRefundAdvanceUnsupported           = errors.New("baofu refund advanceAmt is unsupported")
+	ErrBaofuRefundQueryMerchantIDRequired      = errors.New("baofu refund query merId is required")
+	ErrBaofuRefundQueryTerminalIDRequired      = errors.New("baofu refund query terId is required")
+	ErrBaofuRefundQueryReferenceRequired       = errors.New("baofu refund query tradeNo or outTradeNo is required")
+	ErrBaofuOrderCloseMerchantIDRequired       = errors.New("baofu order close merId is required")
+	ErrBaofuOrderCloseTerminalIDRequired       = errors.New("baofu order close terId is required")
+	ErrBaofuOrderCloseReferenceRequired        = errors.New("baofu order close tradeNo or outTradeNo is required")
 )
 
 type UnifiedOrderInput struct {
@@ -365,4 +387,167 @@ func NormalizeShareTerminalStatus(upstreamState string) string {
 	default:
 		return db.ExternalPaymentTerminalStatusUnknown
 	}
+}
+
+type RefundBeforeShareRequest struct {
+	AgentMerchantID   string                `json:"agentMerId,omitempty"`
+	AgentTerminalID   string                `json:"agentTerId,omitempty"`
+	MerchantID        string                `json:"merId"`
+	TerminalID        string                `json:"terId"`
+	MerchantName      string                `json:"merchantName,omitempty"`
+	OriginTradeNo     string                `json:"originTradeNo,omitempty"`
+	OriginOutTradeNo  string                `json:"originOutTradeNo,omitempty"`
+	OutTradeNo        string                `json:"outTradeNo"`
+	NotifyURL         string                `json:"notifyUrl,omitempty"`
+	RefundAmountFen   int64                 `json:"refundAmt"`
+	TotalAmountFen    int64                 `json:"totalAmt"`
+	TransactionTime   string                `json:"txnTime"`
+	Attach            string                `json:"attach,omitempty"`
+	RequestReserved   string                `json:"reqReserved,omitempty"`
+	SharingRefundInfo []SharingRefundDetail `json:"sharingRefundInfo,omitempty"`
+	MarketingInfo     *MarketingRefundInfo  `json:"mktRefundInfo,omitempty"`
+	AdvanceAmountFen  int64                 `json:"advanceAmt,omitempty"`
+	RefundReason      string                `json:"refundReason"`
+}
+
+type SharingRefundDetail struct {
+	SharingMerID     string `json:"sharingMerId"`
+	SharingAmountFen int64  `json:"sharingAmt"`
+}
+
+type MarketingRefundInfo struct {
+	MerchantID string `json:"mktMerId"`
+	AmountFen  int64  `json:"mktAmt"`
+}
+
+func (r RefundBeforeShareRequest) Validate() error {
+	if strings.TrimSpace(r.MerchantID) == "" {
+		return ErrBaofuRefundMerchantIDRequired
+	}
+	if strings.TrimSpace(r.TerminalID) == "" {
+		return ErrBaofuRefundTerminalIDRequired
+	}
+	if strings.TrimSpace(r.OriginTradeNo) == "" && strings.TrimSpace(r.OriginOutTradeNo) == "" {
+		return ErrBaofuRefundOriginalReferenceRequired
+	}
+	if strings.TrimSpace(r.OutTradeNo) == "" {
+		return ErrBaofuRefundOutTradeNoRequired
+	}
+	if r.RefundAmountFen <= 0 {
+		return ErrBaofuRefundAmountInvalid
+	}
+	if r.TotalAmountFen < r.RefundAmountFen {
+		return ErrBaofuRefundTotalAmountInvalid
+	}
+	if !isBaofuTransactionTime(r.TransactionTime) {
+		return ErrBaofuRefundTransactionTimeInvalid
+	}
+	if strings.TrimSpace(r.RefundReason) == "" {
+		return ErrBaofuRefundReasonRequired
+	}
+	if len(r.SharingRefundInfo) > 0 {
+		return ErrBaofuRefundSharingRefundInfoUnsupported
+	}
+	if r.AdvanceAmountFen > 0 {
+		return ErrBaofuRefundAdvanceUnsupported
+	}
+	return nil
+}
+
+type RefundQueryRequest struct {
+	AgentMerchantID string `json:"agentMerId,omitempty"`
+	AgentTerminalID string `json:"agentTerId,omitempty"`
+	MerchantID      string `json:"merId"`
+	TerminalID      string `json:"terId"`
+	OutTradeNo      string `json:"outTradeNo,omitempty"`
+	TradeNo         string `json:"tradeNo,omitempty"`
+}
+
+func (r RefundQueryRequest) Validate() error {
+	if strings.TrimSpace(r.MerchantID) == "" {
+		return ErrBaofuRefundQueryMerchantIDRequired
+	}
+	if strings.TrimSpace(r.TerminalID) == "" {
+		return ErrBaofuRefundQueryTerminalIDRequired
+	}
+	if strings.TrimSpace(r.OutTradeNo) == "" && strings.TrimSpace(r.TradeNo) == "" {
+		return ErrBaofuRefundQueryReferenceRequired
+	}
+	return nil
+}
+
+type RefundResult struct {
+	OriginTradeNo    string          `json:"originTradeNo,omitempty"`
+	OriginOutTradeNo string          `json:"originOutTradeNo,omitempty"`
+	OutTradeNo       string          `json:"outTradeNo,omitempty"`
+	TradeNo          string          `json:"tradeNo,omitempty"`
+	RefundAmountFen  int64           `json:"refundAmt,omitempty"`
+	TotalAmountFen   int64           `json:"totalAmt,omitempty"`
+	ResultCode       string          `json:"resultCode,omitempty"`
+	RefundState      string          `json:"refundState,omitempty"`
+	FinishTime       string          `json:"finishTime,omitempty"`
+	SuccessAmountFen int64           `json:"succAmt,omitempty"`
+	ErrorCode        string          `json:"errCode,omitempty"`
+	ErrorMessage     string          `json:"errMsg,omitempty"`
+	RequestReserved  string          `json:"reqReserved,omitempty"`
+	Raw              json.RawMessage `json:"-"`
+}
+
+type RefundFact struct {
+	OutTradeNo       string
+	TradeNo          string
+	TransactionState string
+	SuccessAmountFen int64
+	ResultCode       string
+	Raw              json.RawMessage
+}
+
+func NormalizeRefundTerminalStatus(upstreamState string) string {
+	switch strings.TrimSpace(upstreamState) {
+	case RefundStateSuccess:
+		return db.ExternalPaymentTerminalStatusSuccess
+	case RefundStateAccepted:
+		return db.ExternalPaymentTerminalStatusProcessing
+	case RefundStateError:
+		return db.ExternalPaymentTerminalStatusFailed
+	case RefundStateAbnormal:
+		return db.ExternalPaymentTerminalStatusUnknown
+	default:
+		return db.ExternalPaymentTerminalStatusUnknown
+	}
+}
+
+type OrderCloseRequest struct {
+	AgentMerchantID string `json:"agentMerId,omitempty"`
+	AgentTerminalID string `json:"agentTerId,omitempty"`
+	MerchantID      string `json:"merId"`
+	TerminalID      string `json:"terId"`
+	TradeNo         string `json:"tradeNo,omitempty"`
+	OutTradeNo      string `json:"outTradeNo,omitempty"`
+}
+
+func (r OrderCloseRequest) Validate() error {
+	if strings.TrimSpace(r.MerchantID) == "" {
+		return ErrBaofuOrderCloseMerchantIDRequired
+	}
+	if strings.TrimSpace(r.TerminalID) == "" {
+		return ErrBaofuOrderCloseTerminalIDRequired
+	}
+	if strings.TrimSpace(r.TradeNo) == "" && strings.TrimSpace(r.OutTradeNo) == "" {
+		return ErrBaofuOrderCloseReferenceRequired
+	}
+	return nil
+}
+
+type OrderCloseResult struct {
+	AgentMerchantID string          `json:"agentMerId,omitempty"`
+	AgentTerminalID string          `json:"agentTerId,omitempty"`
+	MerchantID      string          `json:"merId,omitempty"`
+	TerminalID      string          `json:"terId,omitempty"`
+	TradeNo         string          `json:"tradeNo,omitempty"`
+	OutTradeNo      string          `json:"outTradeNo,omitempty"`
+	ResultCode      string          `json:"resultCode,omitempty"`
+	ErrorCode       string          `json:"errCode,omitempty"`
+	ErrorMessage    string          `json:"errMsg,omitempty"`
+	Raw             json.RawMessage `json:"-"`
 }

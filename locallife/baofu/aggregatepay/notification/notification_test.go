@@ -81,3 +81,37 @@ func TestParserParseShareNotificationRequiresOutTradeNo(t *testing.T) {
 
 	require.ErrorIs(t, err, ErrShareNotificationOutTradeNoRequired)
 }
+
+func TestParserParseRefundNotificationNormalizesRefundFact(t *testing.T) {
+	body := []byte(`{
+		"notifyId":"BFRN202605040001",
+		"notifyType":"REFUND.SUCCESS",
+		"outTradeNo":"RF202605040001",
+		"tradeNo":"BFREFUND202605040001",
+		"refundState":"SUCCESS",
+		"succAmt":300,
+		"resultCode":"SUCCESS",
+		"finishTime":"20260504121000"
+	}`)
+	parser := NewParser()
+
+	notification, err := parser.ParseRefundNotification(body)
+
+	require.NoError(t, err)
+	require.Equal(t, "BFRN202605040001", notification.NotifyID)
+	require.Equal(t, "RF202605040001", notification.Fact.OutTradeNo)
+	require.Equal(t, "BFREFUND202605040001", notification.Fact.TradeNo)
+	require.Equal(t, aggregatecontracts.RefundStateSuccess, notification.Fact.TransactionState)
+	require.Equal(t, int64(300), notification.Fact.SuccessAmountFen)
+	require.Equal(t, "success", notification.TerminalStatus)
+	require.True(t, notification.IsTerminal)
+	require.Equal(t, "2026-05-04T12:10:00Z", notification.OccurredAt.UTC().Format("2006-01-02T15:04:05Z"))
+}
+
+func TestParserParseRefundNotificationRequiresOutTradeNo(t *testing.T) {
+	parser := NewParser()
+
+	_, err := parser.ParseRefundNotification([]byte(`{"notifyId":"BFRN1","refundState":"SUCCESS"}`))
+
+	require.ErrorIs(t, err, ErrRefundNotificationOutTradeNoRequired)
+}

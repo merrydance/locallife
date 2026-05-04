@@ -175,3 +175,76 @@ func TestNormalizeShareTerminalStatus(t *testing.T) {
 	require.Equal(t, db.ExternalPaymentTerminalStatusUnknown, NormalizeShareTerminalStatus("ABNORMAL"))
 	require.Equal(t, db.ExternalPaymentTerminalStatusUnknown, NormalizeShareTerminalStatus("unexpected"))
 }
+
+func TestRefundBeforeShareRequestRejectsPostShareFields(t *testing.T) {
+	req := validBaofuRefundBeforeShareRequestForTest()
+	req.SharingRefundInfo = []SharingRefundDetail{{SharingMerID: "CM1", SharingAmountFen: 100}}
+	require.ErrorIs(t, req.Validate(), ErrBaofuRefundSharingRefundInfoUnsupported)
+
+	req = validBaofuRefundBeforeShareRequestForTest()
+	req.AdvanceAmountFen = 100
+	require.ErrorIs(t, req.Validate(), ErrBaofuRefundAdvanceUnsupported)
+}
+
+func TestRefundBeforeShareRequestRequiresOfficialFields(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*RefundBeforeShareRequest)
+		want   error
+	}{
+		{"missing merchant", func(r *RefundBeforeShareRequest) { r.MerchantID = "" }, ErrBaofuRefundMerchantIDRequired},
+		{"missing terminal", func(r *RefundBeforeShareRequest) { r.TerminalID = "" }, ErrBaofuRefundTerminalIDRequired},
+		{"missing origin ref", func(r *RefundBeforeShareRequest) { r.OriginTradeNo = ""; r.OriginOutTradeNo = "" }, ErrBaofuRefundOriginalReferenceRequired},
+		{"missing out trade no", func(r *RefundBeforeShareRequest) { r.OutTradeNo = "" }, ErrBaofuRefundOutTradeNoRequired},
+		{"invalid amount", func(r *RefundBeforeShareRequest) { r.RefundAmountFen = 0 }, ErrBaofuRefundAmountInvalid},
+		{"total less", func(r *RefundBeforeShareRequest) { r.TotalAmountFen = r.RefundAmountFen - 1 }, ErrBaofuRefundTotalAmountInvalid},
+		{"invalid txn time", func(r *RefundBeforeShareRequest) { r.TransactionTime = "2026-05-04" }, ErrBaofuRefundTransactionTimeInvalid},
+		{"missing reason", func(r *RefundBeforeShareRequest) { r.RefundReason = "" }, ErrBaofuRefundReasonRequired},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := validBaofuRefundBeforeShareRequestForTest()
+			tc.mutate(&req)
+			require.ErrorIs(t, req.Validate(), tc.want)
+		})
+	}
+}
+
+func TestOrderCloseRequiresOriginalPaymentReference(t *testing.T) {
+	req := OrderCloseRequest{MerchantID: "102004465", TerminalID: "200005200"}
+	require.ErrorIs(t, req.Validate(), ErrBaofuOrderCloseReferenceRequired)
+
+	req.OutTradeNo = "BF202605040001"
+	require.NoError(t, req.Validate())
+}
+
+func TestRefundQueryRequiresRefundReference(t *testing.T) {
+	req := RefundQueryRequest{MerchantID: "102004465", TerminalID: "200005200"}
+	require.ErrorIs(t, req.Validate(), ErrBaofuRefundQueryReferenceRequired)
+
+	req.OutTradeNo = "RF202605040001"
+	require.NoError(t, req.Validate())
+}
+
+func TestNormalizeRefundTerminalStatus(t *testing.T) {
+	require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, NormalizeRefundTerminalStatus(RefundStateSuccess))
+	require.Equal(t, db.ExternalPaymentTerminalStatusProcessing, NormalizeRefundTerminalStatus(RefundStateAccepted))
+	require.Equal(t, db.ExternalPaymentTerminalStatusFailed, NormalizeRefundTerminalStatus(RefundStateError))
+	require.Equal(t, db.ExternalPaymentTerminalStatusUnknown, NormalizeRefundTerminalStatus(RefundStateAbnormal))
+	require.Equal(t, db.ExternalPaymentTerminalStatusUnknown, NormalizeRefundTerminalStatus("unexpected"))
+}
+
+func validBaofuRefundBeforeShareRequestForTest() RefundBeforeShareRequest {
+	return RefundBeforeShareRequest{
+		MerchantID:       "102004465",
+		TerminalID:       "200005200",
+		OriginOutTradeNo: "BF202605040001",
+		OutTradeNo:       "RF202605040001",
+		NotifyURL:        "https://api.example.com/v1/webhooks/baofu/refund",
+		RefundAmountFen:  300,
+		TotalAmountFen:   300,
+		TransactionTime:  "20260504120500",
+		RefundReason:     "用户申请退款",
+		RequestReserved:  "refund-order:9001",
+	}
+}

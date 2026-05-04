@@ -241,6 +241,7 @@ const (
 	ExternalPaymentCapabilityBaofuAccount        = "baofu_account"
 	ExternalPaymentCapabilityBaofuMerchantReport = "baofu_merchant_report"
 	ExternalPaymentCapabilityBaofuPayment        = "baofu_payment"
+	ExternalPaymentCapabilityBaofuRefund         = "baofu_refund"
 	ExternalPaymentCapabilityBaofuProfitSharing  = "baofu_profit_sharing"
 	ExternalPaymentCapabilityBaofuWithdraw       = "baofu_withdraw"
 

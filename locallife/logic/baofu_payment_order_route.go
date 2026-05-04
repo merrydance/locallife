@@ -113,6 +113,15 @@ func (svc *PaymentOrderService) createBaofuPayment(ctx context.Context, createIn
 	}
 	payParams, err := baofuWechatPayDataToPayParams(baofuResult.WechatPayData)
 	if err != nil {
+		if _, closeErr := svc.baofuPaymentService.CloseOrder(ctx, CloseBaofuOrderInput{
+			PaymentOrder:  txResult.PaymentOrder,
+			BusinessOwner: createInput.BusinessOwner,
+		}); closeErr != nil {
+			return result, fmt.Errorf("close baofu upstream order after local parse failure: %w", closeErr)
+		}
+		if _, closeErr := svc.store.UpdatePaymentOrderToClosed(ctx, txResult.PaymentOrder.ID); closeErr != nil {
+			return result, fmt.Errorf("close baofu payment order after local parse failure: %w", closeErr)
+		}
 		return result, err
 	}
 	result.PaymentOrder = txResult.PaymentOrder

@@ -154,3 +154,50 @@ func partialJSONForTest(t *testing.T, raw json.RawMessage, keys ...string) strin
 	require.NoError(t, err)
 	return string(body)
 }
+
+func TestAggregateClientCreateRefundPostsPublicEnvelope(t *testing.T) {
+	doer := &aggregateRecordingDoer{responseBizContent: json.RawMessage(`{"resultCode":"SUCCESS","outTradeNo":"RF202605040001","tradeNo":"BFREFUND202605040001","refundState":"REFUND","refundAmt":300,"totalAmt":300}`)}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	result, err := client.CreateRefund(context.Background(), validRefundBeforeShareRequestForClientTest())
+
+	require.NoError(t, err)
+	require.Equal(t, "BFREFUND202605040001", result.TradeNo)
+	var env baofu.PublicRequestEnvelope
+	require.NoError(t, json.Unmarshal(doer.requestBody, &env))
+	require.Equal(t, "order_refund", env.Method)
+	require.JSONEq(t, `{"originOutTradeNo":"BF202605040001","outTradeNo":"RF202605040001","refundAmt":300,"totalAmt":300}`, partialJSONForTest(t, env.BizContent, "originOutTradeNo", "outTradeNo", "refundAmt", "totalAmt"))
+	require.NotContains(t, string(env.BizContent), "sharingRefundInfo")
+	require.NotContains(t, string(env.BizContent), "advanceAmt")
+}
+
+func TestAggregateClientQueryRefundAndCloseOrderPostPublicEnvelope(t *testing.T) {
+	doer := &aggregateRecordingDoer{responseBizContent: json.RawMessage(`{"resultCode":"SUCCESS","outTradeNo":"RF202605040001","tradeNo":"BFREFUND202605040001","refundState":"SUCCESS"}`)}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.QueryRefund(context.Background(), contracts.RefundQueryRequest{MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "RF202605040001"})
+	require.NoError(t, err)
+	var env baofu.PublicRequestEnvelope
+	require.NoError(t, json.Unmarshal(doer.requestBody, &env))
+	require.Equal(t, "refund_query", env.Method)
+
+	doer.responseBizContent = json.RawMessage(`{"resultCode":"SUCCESS","outTradeNo":"BF202605040001"}`)
+	_, err = client.CloseOrder(context.Background(), contracts.OrderCloseRequest{MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "BF202605040001"})
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(doer.requestBody, &env))
+	require.Equal(t, "order_close", env.Method)
+}
+
+func validRefundBeforeShareRequestForClientTest() contracts.RefundBeforeShareRequest {
+	return contracts.RefundBeforeShareRequest{
+		MerchantID:       "102004465",
+		TerminalID:       "200005200",
+		OriginOutTradeNo: "BF202605040001",
+		OutTradeNo:       "RF202605040001",
+		NotifyURL:        "https://api.example.com/v1/webhooks/baofu/refund",
+		RefundAmountFen:  300,
+		TotalAmountFen:   300,
+		TransactionTime:  "20260504120500",
+		RefundReason:     "用户申请退款",
+	}
+}

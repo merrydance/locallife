@@ -5,8 +5,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/merrydance/locallife/baofu/aggregatepay"
+	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
@@ -114,9 +117,17 @@ type DefaultPaymentFacade struct {
 	paymentClient      wechat.DirectPaymentClientInterface
 	ecommerceClient    wechat.EcommerceClientInterface
 	ordinaryServicePay ordinaryServiceProviderFacadeClient
+	baofuAggregatePay  aggregatepay.Client
+	baofuConfig        BaofuAggregateFacadeConfig
 	paymentService     *PaymentOrderService
 	ledgerService      *PaymentLedgerService
 	combinedService    *CombinedPaymentService
+}
+
+type BaofuAggregateFacadeConfig struct {
+	CollectMerchantID string
+	CollectTerminalID string
+	RefundNotifyURL   string
 }
 
 type ordinaryServiceProviderFacadeClient interface {
@@ -155,6 +166,29 @@ func NewDefaultPaymentFacadeWithOrdinaryServiceProvider(
 		ledgerService:      NewPaymentLedgerService(store),
 		combinedService:    NewCombinedPaymentServiceWithOrdinaryServiceProvider(store, ordinaryClient),
 	}
+}
+
+func NewDefaultPaymentFacadeWithBaofuAggregate(
+	store db.Store,
+	paymentClient wechat.DirectPaymentClientInterface,
+	baofuClient aggregatepay.Client,
+	config BaofuAggregateFacadeConfig,
+) PaymentFacade {
+	return &DefaultPaymentFacade{
+		paymentClient:     paymentClient,
+		baofuAggregatePay: baofuClient,
+		baofuConfig:       config.normalized(),
+		paymentService:    NewPaymentOrderServiceWithBaofu(store, paymentClient, NewBaofuPaymentService(store, baofuClient, BaofuPaymentServiceConfig{})),
+		ledgerService:     NewPaymentLedgerService(store),
+		combinedService:   NewCombinedPaymentService(store, nil),
+	}
+}
+
+func (c BaofuAggregateFacadeConfig) normalized() BaofuAggregateFacadeConfig {
+	c.CollectMerchantID = strings.TrimSpace(c.CollectMerchantID)
+	c.CollectTerminalID = strings.TrimSpace(c.CollectTerminalID)
+	c.RefundNotifyURL = strings.TrimSpace(c.RefundNotifyURL)
+	return c
 }
 
 func (f *DefaultPaymentFacade) CreatePaymentOrder(ctx context.Context, input CreatePaymentOrderInput) (CreatePaymentOrderResult, error) {
@@ -217,6 +251,27 @@ func (f *DefaultPaymentFacade) OrdinaryServiceProviderRefundNotifyURL() string {
 		return ""
 	}
 	return f.ordinaryServicePay.RefundNotifyURL()
+}
+
+func (f *DefaultPaymentFacade) CreateBaofuRefund(ctx context.Context, req aggregatecontracts.RefundBeforeShareRequest) (*aggregatecontracts.RefundResult, error) {
+	if f.baofuAggregatePay == nil {
+		return nil, fmt.Errorf("baofu aggregate client not configured")
+	}
+	cfg := f.baofuConfig.normalized()
+	if strings.TrimSpace(req.MerchantID) == "" {
+		req.MerchantID = cfg.CollectMerchantID
+	}
+	if strings.TrimSpace(req.TerminalID) == "" {
+		req.TerminalID = cfg.CollectTerminalID
+	}
+	if strings.TrimSpace(req.NotifyURL) == "" {
+		req.NotifyURL = cfg.RefundNotifyURL
+	}
+	return f.baofuAggregatePay.CreateRefund(ctx, req)
+}
+
+func (f *DefaultPaymentFacade) BaofuRefundNotifyURL() string {
+	return f.baofuConfig.normalized().RefundNotifyURL
 }
 
 func (f *DefaultPaymentFacade) CreateOrdinaryServiceProviderProfitSharingReturn(ctx context.Context, req ospcontracts.ProfitSharingReturnRequest) (*ospcontracts.ProfitSharingReturnResponse, error) {

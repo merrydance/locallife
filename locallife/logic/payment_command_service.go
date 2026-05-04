@@ -188,6 +188,7 @@ func isExternalPaymentCapability(capability string) bool {
 		db.ExternalPaymentCapabilityMerchantTransfer,
 		db.ExternalPaymentCapabilityBaofuAccount,
 		db.ExternalPaymentCapabilityBaofuPayment,
+		db.ExternalPaymentCapabilityBaofuRefund,
 		db.ExternalPaymentCapabilityBaofuProfitSharing,
 		db.ExternalPaymentCapabilityBaofuWithdraw:
 		return true

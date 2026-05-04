@@ -318,6 +318,18 @@ func (c *fakeBaofuAggregatePaymentClient) QueryProfitSharing(ctx context.Context
 	return nil, errors.New("not implemented in payment tests")
 }
 
+func (c *fakeBaofuAggregatePaymentClient) CreateRefund(ctx context.Context, req aggregatecontracts.RefundBeforeShareRequest) (*aggregatecontracts.RefundResult, error) {
+	return nil, errors.New("not implemented in payment tests")
+}
+
+func (c *fakeBaofuAggregatePaymentClient) QueryRefund(ctx context.Context, req aggregatecontracts.RefundQueryRequest) (*aggregatecontracts.RefundResult, error) {
+	return nil, errors.New("not implemented in payment tests")
+}
+
+func (c *fakeBaofuAggregatePaymentClient) CloseOrder(ctx context.Context, req aggregatecontracts.OrderCloseRequest) (*aggregatecontracts.OrderCloseResult, error) {
+	return nil, errors.New("not implemented in payment tests")
+}
+
 type fakeBaofuPaymentCommandStore struct {
 	last db.CreateExternalPaymentCommandParams
 }

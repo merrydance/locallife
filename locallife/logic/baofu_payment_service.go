@@ -75,6 +75,11 @@ type CreateBaofuWechatJSAPIOrderResult struct {
 	WechatPayData json.RawMessage
 }
 
+type CloseBaofuOrderInput struct {
+	PaymentOrder  db.PaymentOrder
+	BusinessOwner string
+}
+
 type RecordBaofuPaymentFactInput struct {
 	PaymentOrder    db.PaymentOrder
 	Fact            aggregatecontracts.PaymentFact
@@ -243,6 +248,45 @@ func (s *BaofuPaymentService) RecordPaymentFact(ctx context.Context, input Recor
 	return result, nil
 }
 
+func (s *BaofuPaymentService) CloseOrder(ctx context.Context, input CloseBaofuOrderInput) (*aggregatecontracts.OrderCloseResult, error) {
+	if s == nil || s.store == nil || s.client == nil {
+		return nil, ErrBaofuPaymentServiceNotConfigured
+	}
+	cfg := s.config.normalized()
+	if cfg.CollectMerchantID == "" || cfg.CollectTerminalID == "" {
+		return nil, ErrBaofuPaymentServiceNotConfigured
+	}
+	paymentOrder := input.PaymentOrder
+	if paymentOrder.ID == 0 || strings.TrimSpace(paymentOrder.OutTradeNo) == "" {
+		return nil, ErrBaofuPaymentInvalidInput
+	}
+	businessOwner := strings.TrimSpace(input.BusinessOwner)
+	if businessOwner == "" {
+		businessOwner = db.ExternalPaymentBusinessOwnerOrder
+	}
+	if _, err := s.store.CreateExternalPaymentCommand(ctx, db.CreateExternalPaymentCommandParams{
+		Provider:           db.ExternalPaymentProviderBaofu,
+		Channel:            db.PaymentChannelBaofuAggregate,
+		Capability:         db.ExternalPaymentCapabilityBaofuPayment,
+		CommandType:        db.ExternalPaymentCommandTypeClosePayment,
+		BusinessOwner:      businessOwner,
+		BusinessObjectType: pgtype.Text{String: "payment_order", Valid: true},
+		BusinessObjectID:   pgtype.Int8{Int64: paymentOrder.ID, Valid: true},
+		ExternalObjectType: db.ExternalPaymentObjectBaofuPaymentOrder,
+		ExternalObjectKey:  strings.TrimSpace(paymentOrder.OutTradeNo),
+		CommandStatus:      db.ExternalPaymentCommandStatusSubmitted,
+		SubmittedAt:        s.now().UTC(),
+		ResponseSnapshot:   buildBaofuOrderCloseCommandSnapshot(paymentOrder),
+	}); err != nil {
+		return nil, err
+	}
+	return s.client.CloseOrder(ctx, aggregatecontracts.OrderCloseRequest{
+		MerchantID: strings.TrimSpace(cfg.CollectMerchantID),
+		TerminalID: strings.TrimSpace(cfg.CollectTerminalID),
+		OutTradeNo: strings.TrimSpace(paymentOrder.OutTradeNo),
+	})
+}
+
 func validateCreateBaofuWechatJSAPIOrderInput(input CreateBaofuWechatJSAPIOrderInput) error {
 	paymentOrder := input.PaymentOrder
 	if paymentOrder.ID == 0 || strings.TrimSpace(paymentOrder.OutTradeNo) == "" || paymentOrder.Amount <= 0 {
@@ -311,6 +355,23 @@ func buildBaofuUnifiedOrderCommandSnapshot(paymentOrder db.PaymentOrder) []byte 
 	raw, err := json.Marshal(snapshot)
 	if err != nil {
 		return []byte(`{"provider":"baofu","operation":"unified_order"}`)
+	}
+	return raw
+}
+
+func buildBaofuOrderCloseCommandSnapshot(paymentOrder db.PaymentOrder) []byte {
+	snapshot := struct {
+		Provider   string `json:"provider"`
+		Operation  string `json:"operation"`
+		OutTradeNo string `json:"out_trade_no"`
+	}{
+		Provider:   db.ExternalPaymentProviderBaofu,
+		Operation:  "order_close",
+		OutTradeNo: strings.TrimSpace(paymentOrder.OutTradeNo),
+	}
+	raw, err := json.Marshal(snapshot)
+	if err != nil {
+		return []byte(`{"provider":"baofu","operation":"order_close"}`)
 	}
 	return raw
 }

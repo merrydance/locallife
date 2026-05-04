@@ -60,7 +60,7 @@
 | 能力组 | 官方文档 | 请求方式 | 测试地址 | 生产地址 | 生产备用地址 | 当前项目覆盖 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 宝财通账户 API / union-gw | https://doc.mandao.com/docs/bct/unionGw | POST | `https://vgw.baofoo.com/union-gw/api/{报文编号}/transReq.do` | `https://public.baofu.com/union-gw/api/{报文编号}/transReq.do` | 未见 | C1：`locallife/baofu/crypto` 有本地 envelope 测试；已拆出官方 endpoint profile，但 union-gw 真实 HTTP client 未完成。 |
-| 宝付聚合支付 | https://doc.mandao.com/docs/bct/bct-1f9qhakcna6te | POST | `https://mch-juhe.baofoo.com/api` | `https://juhe.baofoo.com/api` | `https://juhe-backup.baofoo.com/api` | C1/C2：有 contracts/service/mock；无真实 HTTP client；API runtime 仍硬编码普通服务商 facade；微信直连支付不在宝付替换范围。 |
+| 宝付聚合支付 | https://doc.mandao.com/docs/bct/bct-1f9qhakcna6te | POST | `https://mch-juhe.baofoo.com/api` | `https://juhe.baofoo.com/api` | `https://juhe-backup.baofoo.com/api` | C3：已有 concrete HTTP client + httptest envelope；API runtime wiring 和沙箱证据仍未完成；微信直连支付不在宝付替换范围。 |
 | 聚合商户报备 | https://doc.mandao.com/docs/bct/bct-1f9o5s1lqlean | POST | `https://mch-juhe.baofoo.com/mch-service/api` | `https://juhe.baofoo.com/mch-service/api` | 未见 | C0：已列入计划 Task 3A，尚无代码。 |
 
 公共报文要求：
@@ -89,10 +89,10 @@
 | 确认分账 | 确认分账 | `share_after_pay` | 支付成功后按 `sharingMerId` 分账 | C1/C2：DTO/Validate/worker | C2：无真实 HTTP | 未做 |
 | 分账查询 | 分账订单查询 | `share_query` | 分账处理中恢复 | C1/C2：DTO/scheduler | C2：无真实 HTTP | 未做 |
 | 分账通知 | 分账结果通知 | 通知 URL | 分账终态回调 | C1/C2：parser/callback | C2 | 未做 |
-| 退款 | 申请退款 | `order_refund` | 首版仅分账前退款 | C0：未建 DTO | C0：当前只做本地分账后禁退 | 未做 |
-| 退款查询 | 退款订单查询 | `refund_query` | 退款恢复/对账 | C0 | C0 | 未做 |
-| 退款通知 | 退款结果通知 | 通知 URL | 退款终态回调 | C0 | C0 | 未做 |
-| 关单 | 交易关闭 | `order_close` | 上游支付失败/本地关闭时关单 | C0 | C0 | 未做 |
+| 退款 | 申请退款 | `order_refund` | 首版仅分账前退款 | C3：本地 DTO/client/业务互斥已建 | C3：分账前退款已接入，分账后禁退 | 待沙箱 |
+| 退款查询 | 退款订单查询 | `refund_query` | 退款恢复/对账 | C3：DTO/client 已建 | C2：恢复 worker 待补 | 待沙箱 |
+| 退款通知 | 退款结果通知 | 通知 URL | 退款终态回调 | C2：parser/ACK 语义已建 | C1：API callback wiring 待补 | 待沙箱 |
+| 关单 | 交易关闭 | `order_close` | 上游支付失败/本地关闭时关单 | C3：DTO/client 已建 | C2：本地 pay data 失败已关上游，其他关闭路径待扩展 | 待沙箱 |
 
 ## 5. 暂缓或条件接口
 
@@ -350,7 +350,7 @@
 
 用途：支付单超时、上游创建后本地失败、用户取消支付时关闭订单。
 
-当前覆盖：C0。现有宝付支付创建失败只关闭本地支付单，未调宝付关单。
+当前覆盖：C2/C3。`order_close` DTO/client 已补齐；宝付统一下单成功但本地支付参数解析失败时，会先调用宝付关单再关闭本地支付单。统一下单调用本身失败且不确定上游是否建单的歧义恢复，仍需后续按查询/关单 worker 收敛。
 
 ## 9. 分账详细核对
 
@@ -397,7 +397,7 @@
 
 用途：首版只允许分账前退款。宝付文档支持分账退款/垫资相关字段，但 LocalLife 首版不启用分账后退款。
 
-本地覆盖：C0。当前只做了本地“分账单已创建后禁止退款”互斥，没有宝付退款 DTO、HTTP client、退款查询、退款通知。
+本地覆盖：C3。已新增 `order_refund` DTO/Validate/HTTP client，并在业务层只允许分账前退款；`sharingRefundInfo` 和 `advanceAmt` 在首版请求中显式拒绝，已进入分账流程继续返回 `订单已进入结算分账流程，不支持退款`。
 
 必须补齐的首版契约：原支付单引用、退款订单号、退款金额、退款原因/通知地址、`sharingRefundInfo`/`advanceAmt` 等分账后退款字段禁止出现在首版请求。
 
@@ -407,7 +407,7 @@
 
 用途：退款处理中恢复、回调终态。
 
-本地覆盖：C0。生产前必须补齐，否则“分账前退款”链路不可用。
+本地覆盖：C2/C3。`refund_query` DTO/client 和退款通知 parser 已补齐；退款恢复 worker、API callback 路由接入和沙箱回调证据仍需补齐。
 
 ## 11. 枚举和错误码核对
 
@@ -417,7 +417,7 @@
 | 聚合支付错误码 | https://doc.mandao.com/docs/bct/bct-1f9qrfsj2fcbu | C0 | 未建错误码集。 |
 | 产品类型 | https://doc.mandao.com/docs/bct/bct-1f9qrdjnaqra5 | C1：`SHARING` | 未限制其他产品类型。 |
 | 支付方式 | https://doc.mandao.com/docs/bct/bct-1f9qrdro3gtv1 | C1：`WECHAT_JSAPI` | 未建完整支付方式枚举和条件必填矩阵。 |
-| 订单状态 | https://doc.mandao.com/docs/bct/bct-1f9qre51sa7dg | C1：支付/分账状态局部 | 未覆盖退款、关闭、异常组合。 |
+| 订单状态 | https://doc.mandao.com/docs/bct/bct-1f9qre51sa7dg | C2：支付/分账/退款状态局部 | 已覆盖退款 `SUCCESS/REFUND/REFUND_ERROR/ABNORMAL` 映射；关闭状态仍主要依赖支付状态，未知组合进入 `unknown`。 |
 | 支付属性 | https://doc.mandao.com/docs/bct/bct-1f9qrefjkin2b | C1：微信 JSAPI 三字段 | 未覆盖公共参数禁传条件、支付宝/云闪付等非首版支付方式。 |
 | 聚合商户报备附录 | https://doc.mandao.com/docs/bct/bct-1f9o6qi1pf2r8 | C0 | 未建报备类型、报备状态、微信服务类型、证件类型、MCC/类目枚举。 |
 
@@ -429,7 +429,7 @@
 | --- | --- | --- | --- | --- |
 | 报备附录枚举 | `bct-1f9o6qi1pf2r8` | 签名类型、报备类型、报备状态、终端设备类型、操作标识、设备状态、微信服务类型、支付宝服务类型、联系人业务标识、微信证件类型、支付宝证件类型、联系人类型、授权类型、站点类型、间连等级、商户状态、交易控制位、认证订单状态、商户认证状态 | C0，文档只列缺口 | 为 `merchant_report`、`merchant_report_query`、`bind_sub_config` 建枚举常量和校验；首版至少覆盖 `WECHAT`、`PROCESSING/SUCCESS/FAIL`、`APPLET`、`NATIONAL_LEGAL/NATIONAL_LEGAL_MERGE/IDENTITY_CARD`、联系人业务标识、商户状态和交易控制位。 |
 | 经营类目/MCC | `/home/sam/文档/分账/宝付/经营类目&MCC.xlsx`，SHA256 `c521b7b15397a5aa63be9a3d8297c8a8c207e68e7d7fea7a26f8450945b4793f` | `微信经营类目` sheet：110 条，字段为 `类目值/类目名称`；`支付宝MCC` sheet：368 条，字段为 `MCC/经营类目一级/经营类目二级/经营类目三级/特殊资质` | C0，未生成代码常量或数据表 | 首版如果只做微信小程序支付，至少抽取微信经营类目 allowlist；如同时保留支付宝报备 DTO，再抽取支付宝 MCC。应在测试中校验报备 `business` 只能来自 allowlist，并在 xlsx 更新时显式更新 hash/版本。 |
-| 聚合支付枚举 | `产品类型`、`支付方式`、`订单状态`、`支付属性` 附录 | `SHARING`、`WECHAT_JSAPI`、支付/退款/分账订单状态、微信 JSAPI 支付属性等 | C1，只有首版局部常量 | 首版契约要显式拒绝非 `SHARING`、非 `orderType=7`、非 `WECHAT_JSAPI`；支付状态、分账状态、退款状态分别建映射，未知值进入 `unknown/needs_manual_review`。 |
+| 聚合支付枚举 | `产品类型`、`支付方式`、`订单状态`、`支付属性` 附录 | `SHARING`、`WECHAT_JSAPI`、支付/退款/分账订单状态、微信 JSAPI 支付属性等 | C2/C3，首版常量和状态映射已覆盖支付/分账/退款主状态 | 已显式拒绝非 `SHARING`、非 `orderType=7`、非 `WECHAT_JSAPI`；支付/分账/退款状态分别映射，未知值进入 `unknown`，错误码细分仍留 Task 10。 |
 | 错误码 | 账户错误码、聚合支付错误码、报备错误码 | 参数错误、系统繁忙、商户未报备、分账配置不存在、风控拒绝等 | C0/C1，未分类 | 建 typed error code 与前端语义分类，不向普通用户暴露上游原文；至少区分资料需修改、平台配置错误、可重试处理中、渠道/宝付异常需人工。 |
 
 
@@ -477,9 +477,9 @@
 | --- | --- | --- |
 | `locallife/baofu/config.go` | 区分收款/支付商户号；已拆官方三组 endpoint profile 并拒绝 `https://api.baofoo.com` 占位地址 | 后续真实 client 仍需逐接口使用正确 endpoint。 |
 | `locallife/baofu/crypto/uniongw.go` | 本地 union-gw envelope 草稿 | 未按官方 `verifyType=1/2`、`content`、`veryfyString` 完整实现并联调。 |
-| `locallife/baofu/aggregatepay/contracts/types.go` | 统一下单、查询、分账 DTO 草稿 | 未覆盖所有必填/条件必填/长度/枚举；无退款/关单 DTO。 |
+| `locallife/baofu/aggregatepay/contracts/types.go` | 统一下单、查询、分账、退款、关单 DTO | 退款/关单已补 DTO 和首版互斥；错误码分类、沙箱 fixture 仍待补。 |
 | `locallife/baofu/account/contracts/types.go` | 账户/余额/提现 DTO 抽象 | 不是官方字段级 DTO；缺个人/企业/个体差异和条件必填。 |
-| `locallife/baofu/aggregatepay/client.go` | 仅 interface | 无真实 HTTP transport。 |
+| `locallife/baofu/aggregatepay/client.go` | interface + concrete HTTP client | 已覆盖支付/查询/分账/退款/关单；未做沙箱验证和响应验签/数字信封完整验证。 |
 | `locallife/baofu/account/client.go` | 仅 interface | 无真实 union-gw HTTP client。 |
 | `locallife/baofu/merchantreport/**` | 不存在 | 需新增。 |
 | `locallife/logic/baofu_payment_service.go` | 服务层可组统一下单并记录 command | 依赖 mock client；生产 API 未接入；仅部分校验。 |
@@ -499,10 +499,10 @@
 | C-005 | 已本地修复，待沙箱验证 | `locallife/baofu/aggregatepay/contracts/types.go` 已新增 `unified_order` 表驱动校验，覆盖 M/C 字段、枚举、`subMchId` 条件必填、https `pageUrl`、金额关系 | 本地契约已 fail-closed；仍未用宝付测试地址验证真实错误码和字段长度边界 | Task 8/沙箱测试补真实请求、参数错误和错误码样例。 |
 | C-006 | 部分修复，待联调/恢复 worker | 已新增 `locallife/baofu/merchantreport/contracts`、`baofu_merchant_reports`、sqlc query、报备 service、APPLET 授权 readiness 和 `merchantreport.Client` | 本地契约/持久化/服务/HTTP client 已能防止 `bctMerId/subMchId/authContent` 漂移，但还没有沙箱证据和报备查询恢复 worker | Task 8/沙箱联调验证真实报备与授权目录请求；后续补报备恢复 worker。 |
 | C-007 | 已本地修复，待联调 | `locallife/logic/baofu_payment_order_route.go` 已通过 `merchantBaofuReadinessForPayment` 取商户报备 `sub_mch_id`；`CreateBaofuWechatJSAPIOrderInput` 字段已改 `MerchantSubMchID` | 旧普通服务商 `txResult.SubMchID` 来源已移除；真实支付仍待宝付聚合商户报备沙箱验证 | Task 8/沙箱测试验证 `unified_order.subMchId` 使用报备返回值。 |
-| C-008 | 中 | `locallife/baofu/aggregatepay/contracts/types.go` 无 `order_refund/refund_query/order_close` DTO | 首版宣称“分账前可退款/分账后不退款”，但没有宝付退款与关单契约，支付失败清理也无法关闭上游订单 | 补退款、退款查询、退款通知、关单 DTO/client/状态映射，并测试分账后禁退。 |
+| C-008 | 部分修复，待 callback/worker/沙箱 | 已新增 `order_refund`、`refund_query`、`order_close` DTO/client、退款通知 parser、退款状态映射和分账前退款业务接入 | 首版“分账前退款、分账后不退款”已在本地 fail-closed；仍缺退款 callback API wiring、退款查询恢复 worker 和沙箱证据 | Task 10/11/12 补错误语义、runtime wiring、沙箱证据；后续补退款恢复 worker。 |
 | C-009 | 部分修复，待 service/client 切换 | 已新增 `YuanStringToFen` / `FenToYuanString` 并覆盖 2 位小数校验 | 转换 helper 已在契约包，余额/提现真实 client 仍需集中调用 | Task 8/提现服务切换时禁止业务层散落金额转换。 |
 | C-010 | 中 | `locallife/baofu/aggregatepay/contracts/types.go:180`、`:244` 状态映射只覆盖局部状态 | 聚合支付/分账/退款/报备/认证错误码和未知状态未分类，前端语义和重试策略会漂移 | 建 typed error/status 分类：资料需修改、平台配置错误、处理中可重试、渠道异常需人工；未知状态进入人工处理。 |
-| C-011 | 中 | `locallife/baofu/aggregatepay/client.go`、`locallife/baofu/account/client.go` 仍是 interface/未实现 transport | C1/C2 容易被误认为可生产；没有测试地址联调证据 | 真实 client 完成前 implementation plan 不得勾选生产任务；每个接口需 C4 沙箱证据。 |
+| C-011 | 部分修复，待沙箱/验签 | `locallife/baofu/aggregatepay/client.go`、`locallife/baofu/account/client.go`、`locallife/baofu/merchantreport/client.go` 已有 concrete HTTP client | 本地可构造 signed public envelope 并打配置 endpoint；仍缺响应验签、数字信封完整验证、真实测试地址联调证据 | Task 10/12 补错误分类和沙箱证据；C4 前不得宣称生产验证完成。 |
 | C-012 | 中 | `locallife/logic/baofu_payment_readiness.go:14` 仍有“商户微信渠道待报备”错误文案 | 语义混入旧微信特约商户进件，可能误导运营/商户 | 改成“微信支付通道待开通/微信渠道待配置”，内部记录具体 report/auth 状态。 |
 
 ### 12.2 防漂移实现门禁
@@ -524,7 +524,7 @@
 | --- | --- | --- | --- |
 | 账户 union-gw | `https://vgw.baofoo.com/union-gw/api/{报文编号}/transReq.do` | 否 | 仅本地单元测试和本地证书/加密测试。 |
 | 聚合商户报备 | `https://mch-juhe.baofoo.com/mch-service/api` | 否 | 无代码。 |
-| 聚合支付/分账/退款 | `https://mch-juhe.baofoo.com/api` | 否 | 仅 contracts/service mock 测试。 |
+| 聚合支付/分账/退款 | `https://mch-juhe.baofoo.com/api` | 否 | 已有本地 HTTP client/httptest envelope 测试；尚未打宝付测试地址。 |
 | 回调通知 | 本平台 webhook URL | 否 | 仅本地 fake parser/callback 测试。 |
 
 生产前必须形成沙箱证据：请求报文摘要、响应摘要、回调样例、查询补偿样例、错误样例、对应测试订单/流水号、测试时间、测试账号、代码 commit。

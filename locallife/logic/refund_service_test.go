@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
@@ -215,6 +216,89 @@ func TestCreateRefundOrder_BaofuShareStartedReturnsSettlementBusinessError(t *te
 	require.True(t, errors.As(err, &requestErr))
 	require.Equal(t, http.StatusBadRequest, requestErr.Status)
 	require.EqualError(t, requestErr.Err, "订单已进入结算分账流程，不支持退款")
+}
+
+func TestCreateRefundOrder_BaofuPreShareRefundAcceptedRecordsCommand(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	baofuClient := &fakeBaofuRefundAggregateClient{
+		refundResult: &aggregatecontracts.RefundResult{
+			OutTradeNo:  "RF-baofu-pre-share",
+			TradeNo:     "BFREFUND202605040001",
+			RefundState: aggregatecontracts.RefundStateAccepted,
+			ResultCode:  "SUCCESS",
+		},
+	}
+	service := NewRefundService(
+		store,
+		NewDefaultPaymentFacadeWithBaofuAggregate(store, nil, baofuClient, BaofuAggregateFacadeConfig{
+			CollectMerchantID: "102004465",
+			CollectTerminalID: "200005200",
+			RefundNotifyURL:   "https://api.example.com/v1/webhooks/baofu/refund",
+		}),
+		nil,
+		nil,
+		refundServiceIDGeneratorStub{outRefundNo: "RF-baofu-pre-share"},
+	)
+
+	merchant := db.Merchant{ID: 645, OwnerUserID: 68}
+	paymentOrder := db.PaymentOrder{
+		ID:                    623,
+		Amount:                1000,
+		Status:                "paid",
+		PaymentType:           "miniprogram",
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+		BusinessType:          businessTypeOrder,
+		OrderID:               pgtype.Int8{Int64: 634, Valid: true},
+		OutTradeNo:            "BF202605040001",
+	}
+	order := db.Order{ID: 634, MerchantID: merchant.ID}
+	refundOrder := db.RefundOrder{ID: 656, PaymentOrderID: paymentOrder.ID, OutRefundNo: "RF-baofu-pre-share", Status: "pending"}
+
+	store.EXPECT().GetMerchantByOwner(gomock.Any(), merchant.OwnerUserID).Return(merchant, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().
+		GetBaofuPaymentOrderRefundGuardForUpdate(gomock.Any(), paymentOrder.ID).
+		Return(db.GetBaofuPaymentOrderRefundGuardForUpdateRow{
+			ID:                      paymentOrder.ID,
+			Status:                  paymentOrder.Status,
+			PaymentChannel:          db.PaymentChannelBaofuAggregate,
+			HasStartedProfitSharing: false,
+		}, nil)
+	store.EXPECT().CreateRefundOrderTx(gomock.Any(), db.CreateRefundOrderTxParams{
+		PaymentOrderID: paymentOrder.ID,
+		RefundType:     "full",
+		RefundAmount:   300,
+		RefundReason:   "用户申请退款",
+		OutRefundNo:    refundOrder.OutRefundNo,
+	}).Return(db.CreateRefundOrderTxResult{RefundOrder: refundOrder}, nil)
+	store.EXPECT().UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
+		ID:       refundOrder.ID,
+		RefundID: pgtype.Text{String: "BFREFUND202605040001", Valid: true},
+	}).Return(db.RefundOrder{ID: refundOrder.ID, Status: "processing"}, nil)
+	expectRefundServiceExternalRefundCommand(t, store, db.PaymentChannelBaofuAggregate, db.ExternalPaymentCapabilityBaofuRefund, refundOrder.ID, refundOrder.OutRefundNo, "BFREFUND202605040001", db.ExternalPaymentCommandStatusAccepted, "", 9901, db.ExternalPaymentProviderBaofu)
+	store.EXPECT().GetRefundOrder(gomock.Any(), refundOrder.ID).Return(db.RefundOrder{ID: refundOrder.ID, Status: "processing", OutRefundNo: refundOrder.OutRefundNo}, nil)
+
+	result, err := service.CreateRefundOrder(context.Background(), CreateRefundOrderInput{
+		ActorUserID:    merchant.OwnerUserID,
+		PaymentOrderID: paymentOrder.ID,
+		RefundType:     "full",
+		RefundAmount:   300,
+		RefundReason:   "用户申请退款",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, refundOrder.ID, result.RefundOrder.ID)
+	require.Equal(t, "102004465", baofuClient.lastRefundRequest.MerchantID)
+	require.Equal(t, "200005200", baofuClient.lastRefundRequest.TerminalID)
+	require.Equal(t, paymentOrder.OutTradeNo, baofuClient.lastRefundRequest.OriginOutTradeNo)
+	require.Equal(t, refundOrder.OutRefundNo, baofuClient.lastRefundRequest.OutTradeNo)
+	require.Equal(t, int64(300), baofuClient.lastRefundRequest.RefundAmountFen)
+	require.Empty(t, baofuClient.lastRefundRequest.SharingRefundInfo)
 }
 
 func TestCreateRefundOrder_ProfitSharingReturnNotEnoughFallsBackToPolling(t *testing.T) {
@@ -1340,11 +1424,15 @@ func expectRefundServiceEcommerceRefundCommand(t *testing.T, store *mockdb.MockS
 	expectRefundServiceExternalRefundCommand(t, store, db.PaymentChannelEcommerce, db.ExternalPaymentCapabilityEcommerceRefund, refundOrderID, outRefundNo, secondaryKey, status, errorCode, commandID)
 }
 
-func expectRefundServiceExternalRefundCommand(t *testing.T, store *mockdb.MockStore, channel string, capability string, refundOrderID int64, outRefundNo string, secondaryKey string, status string, errorCode string, commandID int64) {
+func expectRefundServiceExternalRefundCommand(t *testing.T, store *mockdb.MockStore, channel string, capability string, refundOrderID int64, outRefundNo string, secondaryKey string, status string, errorCode string, commandID int64, providers ...string) {
 	t.Helper()
+	provider := db.ExternalPaymentProviderWechat
+	if len(providers) > 0 && providers[0] != "" {
+		provider = providers[0]
+	}
 
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
-		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
+		require.Equal(t, provider, arg.Provider)
 		require.Equal(t, channel, arg.Channel)
 		require.Equal(t, capability, arg.Capability)
 		require.Equal(t, db.ExternalPaymentCommandTypeCreateRefund, arg.CommandType)
@@ -1413,6 +1501,44 @@ func expectProfitSharingReturnCommand(t *testing.T, store *mockdb.MockStore, ret
 		require.NotContains(t, snapshot, "encrypted")
 		return db.ExternalPaymentCommand{ID: commandID}, nil
 	})
+}
+
+type fakeBaofuRefundAggregateClient struct {
+	lastRefundRequest aggregatecontracts.RefundBeforeShareRequest
+	refundResult      *aggregatecontracts.RefundResult
+	refundErr         error
+}
+
+func (c *fakeBaofuRefundAggregateClient) CreateUnifiedOrder(ctx context.Context, req aggregatecontracts.UnifiedOrderRequest) (*aggregatecontracts.UnifiedOrderResult, error) {
+	return nil, errors.New("not implemented in refund tests")
+}
+
+func (c *fakeBaofuRefundAggregateClient) QueryPayment(ctx context.Context, req aggregatecontracts.PaymentQueryRequest) (*aggregatecontracts.UnifiedOrderResult, error) {
+	return nil, errors.New("not implemented in refund tests")
+}
+
+func (c *fakeBaofuRefundAggregateClient) CreateProfitSharing(ctx context.Context, req aggregatecontracts.ShareAfterPayRequest) (*aggregatecontracts.ShareResult, error) {
+	return nil, errors.New("not implemented in refund tests")
+}
+
+func (c *fakeBaofuRefundAggregateClient) QueryProfitSharing(ctx context.Context, req aggregatecontracts.ShareQueryRequest) (*aggregatecontracts.ShareResult, error) {
+	return nil, errors.New("not implemented in refund tests")
+}
+
+func (c *fakeBaofuRefundAggregateClient) CreateRefund(ctx context.Context, req aggregatecontracts.RefundBeforeShareRequest) (*aggregatecontracts.RefundResult, error) {
+	c.lastRefundRequest = req
+	if c.refundErr != nil {
+		return nil, c.refundErr
+	}
+	return c.refundResult, nil
+}
+
+func (c *fakeBaofuRefundAggregateClient) QueryRefund(ctx context.Context, req aggregatecontracts.RefundQueryRequest) (*aggregatecontracts.RefundResult, error) {
+	return nil, errors.New("not implemented in refund tests")
+}
+
+func (c *fakeBaofuRefundAggregateClient) CloseOrder(ctx context.Context, req aggregatecontracts.OrderCloseRequest) (*aggregatecontracts.OrderCloseResult, error) {
+	return nil, errors.New("not implemented in refund tests")
 }
 
 func TestCreateRefundOrder_RejectsMainBusinessNonWechatServiceProviderPaymentOrder(t *testing.T) {

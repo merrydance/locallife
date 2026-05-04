@@ -838,11 +838,13 @@ go test ./baofu/aggregatepay/contracts ./logic -run 'TestRefundBeforeShare|TestO
 
 Expected: compile failure or missing DTOs.
 
-- [ ] **Step 3: Implement DTOs and business guards**
+- [x] **Step 3: Implement DTOs and business guards**
 
 Add DTOs for `order_refund`, `refund_query`, `order_close`, refund notification. Logic must allow only pre-share refund and must call Baofu close when upstream order exists but local payment creation fails.
 
-- [ ] **Step 4: Run refund tests**
+Progress: `order_refund`、`refund_query`、`order_close` DTO/client 已补齐；退款通知 parser 已补齐；`RefundService` 已把宝付分账前退款接入 `order_refund`，继续拒绝已进入分账流程的退款；宝付支付创建后本地 pay data 解析失败会调用 `order_close` 再关闭本地支付单。
+
+- [x] **Step 4: Run refund tests**
 
 ```bash
 go test ./baofu/aggregatepay/contracts ./baofu/aggregatepay/notification ./logic -run 'TestRefund|TestOrderClose|TestBaofu' -count=1
