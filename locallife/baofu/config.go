@@ -70,8 +70,14 @@ func (c Config) Validate() error {
 	if cfg.SignSerialNo == "" {
 		return errors.New("baofu sign serial no is required")
 	}
+	if len(cfg.SignSerialNo) > 10 {
+		return errors.New("baofu sign serial no must be at most 10 characters")
+	}
 	if cfg.EncryptionSerialNo == "" {
 		return errors.New("baofu encryption serial no is required")
+	}
+	if len(cfg.EncryptionSerialNo) > 10 {
+		return errors.New("baofu encryption serial no must be at most 10 characters")
 	}
 	if err := validateOfficialEndpoint("baofu account gateway base url", cfg.AccountGatewayBaseURL, officialAccountGatewayBaseURLs()); err != nil {
 		return err

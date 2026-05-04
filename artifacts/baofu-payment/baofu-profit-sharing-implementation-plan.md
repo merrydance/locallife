@@ -1650,3 +1650,13 @@ make test-integration
   - `signStr`: now SHA256withRSA hex string, matching `FormatUtil.byte2Hex(signature.sign())`.
   - `timestamp`: docs require `yyyyMMddHHmmss` within 10 minutes of Baofoo payment system; Java demo uses local `new Date()` with `SimpleDateFormat`, while Go had been using UTC.
 - Corrected public-envelope timestamp to format in `Asia/Shanghai` regardless of host timezone. This should remove the 8-hour offset seen on UTC production hosts.
+
+
+### 2026-05-04 Sandbox Smoke Follow-up - Certificate Serial Index
+
+- Rerunning smoke on `5f4c3313` changed aggregate-pay `order_query` from `时间戳传入错误` to `签名证书序号字符长度超限（10）`, proving the public-envelope form, business JSON, signature encoding, and timestamp have advanced to the next provider validation boundary.
+- Rechecked the official public-envelope table and Baofoo Java demo:
+  - `signSn` is `S(10)` and Java demo defaults it to `1`.
+  - `ncrptnSn` is `S(10)` and Java demo defaults it to `1`.
+  - The prior local `823078EFB7E1BBDC` / `B9F3E90C370A7A0F` values were derived certificate serial fragments and are too long for this public-envelope certificate index field.
+- Added local config validation to reject `BAOFU_SIGN_SERIAL_NO` and `BAOFU_ENCRYPTION_SERIAL_NO` longer than 10 characters so this cannot silently reach Baofoo again. Sandbox config should use Baofoo-provided certificate indexes; current Java demo/test material indicates `1` / `1`.

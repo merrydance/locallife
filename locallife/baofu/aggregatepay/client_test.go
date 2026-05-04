@@ -132,8 +132,8 @@ func (d *aggregateRecordingDoer) Do(req *http.Request) (*http.Response, error) {
 			Version:            baofu.PublicEnvelopeVersion10,
 			Format:             baofu.PublicEnvelopeFormatJSON,
 			SignType:           baofu.SignTypeRSA,
-			SignSerialNo:       "test-sign-sn",
-			EncryptionSerialNo: "test-enc-sn",
+			SignSerialNo:       "1",
+			EncryptionSerialNo: "1",
 			SignString:         "test-signature",
 			BizContent:         baofu.JSONString(d.responseBizContent),
 		})
@@ -154,8 +154,8 @@ func testBaofuRootClient(t *testing.T, doer baofu.HTTPDoer) *baofu.Client {
 		PrivateKeyPEM:      privatePEM,
 		BaofuPublicKeyPEM:  publicPEM,
 		NotifyBaseURL:      "https://api.example.com/v1/webhooks/baofu",
-		SignSerialNo:       "test-sign-sn",
-		EncryptionSerialNo: "test-enc-sn",
+		SignSerialNo:       "1",
+		EncryptionSerialNo: "1",
 		Timeout:            5 * time.Second,
 	}, doer)
 	require.NoError(t, err)

@@ -17,8 +17,8 @@ func validBaofuConfigForTest() Config {
 		AppID:              "local-life-miniapp",
 		PrivateKeyPEM:      "test-private-key",
 		BaofuPublicKeyPEM:  "test-public-key",
-		SignSerialNo:       "test-sign-sn",
-		EncryptionSerialNo: "test-enc-sn",
+		SignSerialNo:       "1",
+		EncryptionSerialNo: "1",
 		NotifyBaseURL:      "https://pay.example.com/callbacks/baofu",
 		Timeout:            10 * time.Second,
 	}
@@ -42,6 +42,18 @@ func TestConfigValidateRequiresCollectMerchant(t *testing.T) {
 	cfg.CollectMerchantID = "  "
 
 	require.EqualError(t, cfg.Validate(), "baofu collect merchant id is required")
+}
+
+func TestConfigValidateRejectsPublicEnvelopeSerialsLongerThanOfficialLimit(t *testing.T) {
+	cfg := validBaofuConfigForTest()
+	cfg.SignSerialNo = "823078EFB7E1BBDC"
+
+	require.EqualError(t, cfg.Validate(), "baofu sign serial no must be at most 10 characters")
+
+	cfg = validBaofuConfigForTest()
+	cfg.EncryptionSerialNo = "B9F3E90C370A7A0F"
+
+	require.EqualError(t, cfg.Validate(), "baofu encryption serial no must be at most 10 characters")
 }
 
 func TestConfigNormalizedDefaultsTimeoutAndOfficialEndpoints(t *testing.T) {
