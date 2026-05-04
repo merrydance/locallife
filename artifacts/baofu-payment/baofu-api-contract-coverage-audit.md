@@ -162,9 +162,9 @@
 
 本地覆盖：
 
-- `locallife/baofu/account/notification/notification.go` 有 parser；`locallife/api/baofu_callback.go` 有开户回调落 fact。
-- 本地测试是自造 envelope，未使用宝付测试环境真实通知。
-- 需核对 ACK 是否必须是纯文本 `OK`，当前回调 ACK 形状是否匹配宝付账户通知要求。
+- `locallife/baofu/account/notification/notification.go` 已按官方明文字段解析 `transSerialNo/state/errorCode/errorMsg/contractNo`，不再读取自造 `outRequestNo/sharingMerId/status` 字段。
+- `locallife/api/baofu_callback.go` 已在开户回调落 fact 后返回 `text/plain` 纯文本 `OK`。
+- 本地测试仍是官方字段 fixture 和本地 envelope，自造样例未替代宝付测试环境真实通知；沙箱回调证据未做。
 
 ### 6.4 账户余额查询 `T-1001-013-06`
 
@@ -202,7 +202,8 @@
 本地覆盖：
 
 - 已有 `WithdrawStatusFromUpstream` 包含 `3 -> returned`，方向正确。
-- 未完整覆盖查询请求 `tradeTime` 和通知 ACK 形态。
+- 已新增提现通知明文字段 parser，覆盖 `contractNo/orderId/transSerialNo/transMoney/transFee/transferTotalAmount/state/transRemark/reqReserved` 和元转分校验。
+- 未完整覆盖查询请求 `tradeTime`。
 - 未做测试地址联调。
 
 ## 7. 聚合商户报备详细核对
@@ -493,7 +494,7 @@
 | --- | --- | --- | --- | --- |
 | C-001 | 已本地修复，待真实 client 使用验证 | `locallife/baofu/config.go` 已拆 `AccountGatewayBaseURL`、`AggregatePayBaseURL`、`MerchantReportBaseURL` 并拒绝 `https://api.baofoo.com` | 配置层已防止三组入口混用；真实 client 仍必须逐接口读取对应 endpoint | Task 8 接真实 HTTP 时验证每个 client 使用正确 endpoint。 |
 | C-002 | 部分修复，待 service/client 切换 | 已新增官方开户、查询、余额、提现 DTO 与金额元/分转换测试；原 `OpenAccountRequest` 业务抽象仍保留给现有 service | 官方字段级 DTO 已有本地校验，但 account client/service 仍未切到官方 DTO | Task 8 接 union-gw 真实 HTTP 时只允许官方 DTO 进入报文。 |
-| C-003 | 高 | `locallife/baofu/account/notification/notification.go:45` 解析 `outRequestNo/sharingMerId/openState` | 官方开户通知字段是 `member_id/terminal_id/memberType/state/errorCode/errorMsg/transSerialNo/loginNo/customerName/contractNo/noticeType`，ACK 还需纯 `OK`；当前 parser 可能无法处理真实通知 | 按官方通知重写 parser/ACK 测试；用宝付测试通知样例或沙箱回调验证。 |
+| C-003 | 部分修复，待沙箱验证 | `locallife/baofu/account/notification/notification.go` 已按官方开户/提现通知字段解析；`locallife/api/baofu_callback.go` 开户 ACK 已改纯文本 `OK` | 本地 parser/ACK 已防止明显字段漂移，但还未使用宝付测试环境真实通知验证 URL query、密文 envelope、重放 ACK 行为 | 用宝付测试通知样例或沙箱回调验证开户/提现通知，并补回真实样例摘要。 |
 | C-004 | 部分修复，待 transport 集成 | 已新增 `locallife/baofu/envelope.go` 公共请求/响应 envelope DTO，覆盖 `merId/terId/method/charset/version/format/timestamp/signType/signSn/ncrptnSn/dgtlEnvlp/signStr/bizContent` | 业务 DTO 已可进入 `bizContent`，但真实 HTTP client 尚未把签名、验签、加密和 envelope 串起来 | Task 8 接真实 HTTP 时必须使用该 envelope 并补请求/响应 fixture。 |
 | C-005 | 高 | `locallife/baofu/aggregatepay/contracts/types.go:116` 的 `Validate()` 只检查 `riskInfo.clientIp` | `unified_order` 的 M/C 字段、长度、枚举、`subMchId` 条件必填、https `pageUrl`、金额关系未被锁住 | 补全字段级校验和表驱动测试；非法枚举/缺条件字段必须 fail-closed。 |
 | C-006 | 高 | `locallife/baofu/merchantreport/**` 不存在 | 无法取得宝付返回的微信渠道 `subMchId`，也无法验证商户逐户异主体小程序授权闭环 | 新增 `merchantreport` contracts/client/service/table/query，支持商户级异主体报备和 APPLET 授权目录绑定。 |

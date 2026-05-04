@@ -75,7 +75,7 @@ func (server *Server) handleBaofuAccountOpenNotify(ctx *gin.Context) {
 		Str("out_request_no", strings.TrimSpace(notification.OutRequestNo)).
 		Str("baofu_open_state", strings.TrimSpace(notification.OpenState)).
 		Msg("baofu account callback fact persisted")
-	ctx.JSON(http.StatusOK, baofuCallbackResponse{Code: "SUCCESS", Message: "OK"})
+	ctx.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(baofunotification.AccountNotificationACK()))
 }
 
 func (server *Server) handleBaofuPaymentNotify(ctx *gin.Context) {

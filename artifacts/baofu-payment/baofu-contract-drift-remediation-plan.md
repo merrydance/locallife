@@ -403,7 +403,7 @@ git commit -m "feat(baofu): add official account contracts"
 - Modify: `locallife/api/baofu_callback.go`
 - Test: `locallife/api/baofu_callback_test.go`
 
-- [ ] **Step 1: Add official notification fixture tests**
+- [x] **Step 1: Add official notification fixture tests**
 
 Add tests that decrypt/parse a plaintext fixture equivalent to official fields:
 
@@ -430,11 +430,11 @@ go test ./baofu/account/notification ./api -run 'TestParseOpenAccountNotificatio
 
 Expected: fail because parser still expects invented fields or API returns JSON ACK.
 
-- [ ] **Step 3: Implement parser and ACK**
+- [x] **Step 3: Implement parser and ACK**
 
 Parser must read `member_id`, `terminal_id`, `memberType`, `state`, `errorCode`, `errorMsg`, `transSerialNo`, `loginNo`, `customerName`, `contractNo`, `noticeType`. Callback handler must return `text/plain` body `OK` only after verified payload is persisted.
 
-- [ ] **Step 4: Run notification/API tests**
+- [x] **Step 4: Run notification/API tests**
 
 ```bash
 go test ./baofu/account/notification ./api -run 'TestBaofu.*Callback|TestParse.*Notification|Test.*ACK' -count=1

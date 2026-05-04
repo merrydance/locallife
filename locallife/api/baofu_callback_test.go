@@ -46,7 +46,8 @@ func TestBaofuAccountOpenCallbackPersistsFactBeforeAck(t *testing.T) {
 	server.router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
-	require.Contains(t, recorder.Body.String(), "SUCCESS")
+	require.Equal(t, "OK", recorder.Body.String())
+	require.Equal(t, "text/plain; charset=utf-8", recorder.Header().Get("Content-Type"))
 }
 
 func TestBaofuPaymentCallbackPersistsFactAndEnqueuesApplication(t *testing.T) {
@@ -185,12 +186,11 @@ type fakeBaofuOpenAccountParser struct{}
 func (fakeBaofuOpenAccountParser) ParseOpenAccountNotification(body []byte) (*baofunotification.AccountNotification, error) {
 	return &baofunotification.AccountNotification{
 		OutRequestNo:  "OPEN123",
-		ContractNo:    "CP123",
-		SharingMerID:  "CP123",
+		ContractNo:    "CM_BCT_123",
 		UpstreamState: "1",
 		OpenState:     db.BaofuAccountOpenStateActive,
 		OccurredAt:    time.Now().UTC(),
-		Raw:           []byte(`{"outRequestNo":"OPEN123","status":"1"}`),
+		Raw:           []byte(`{"transSerialNo":"OPEN123","state":"1","contractNo":"CM_BCT_123"}`),
 	}, nil
 }
 
