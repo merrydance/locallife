@@ -13,6 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/merrydance/locallife/baofu"
+	"github.com/merrydance/locallife/baofu/aggregatepay"
 	baofuaggregatenotification "github.com/merrydance/locallife/baofu/aggregatepay/notification"
 	"github.com/merrydance/locallife/cloudprint"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -70,6 +72,7 @@ type Server struct {
 	transferClient                 wechat.TransferClientInterface                                 // 商家转账到零钱（索赔赔付）
 	ecommerceClient                wechat.EcommerceClientInterface                                // 平台收付通（历史/冷备路径）
 	ordinarySPClient               ordinaryserviceprovider.OrdinaryServiceProviderClientInterface // 普通服务商支付（商户主业务支付）
+	baofuAggregateClient           aggregatepay.Client                                            // 宝付聚合支付（主业务支付替换路径）
 	dataEncryptor                  util.DataEncryptor                                             // 敏感数据加密器（本地存储加密）
 	mapClient                      maps.TencentMapClientInterface                                 // 地图客户端（自建 OSM）
 	weatherCache                   weather.WeatherCache
@@ -173,6 +176,18 @@ func (server *Server) SetOrdinaryServiceProviderClientForTest(client ordinaryser
 	server.refundOrchestrator = nil
 }
 
+func (server *Server) SetBaofuAggregateClientForTest(client aggregatepay.Client, config logic.BaofuAggregateFacadeConfig) {
+	server.baofuAggregateClient = client
+	server.config.BaofuMainBusinessEnabled = true
+	server.config.BaofuCollectMerchantID = config.CollectMerchantID
+	server.config.BaofuCollectTerminalID = config.CollectTerminalID
+	server.config.WechatMiniAppID = config.MiniProgramAppID
+	server.config.BaofuPaymentNotifyURL = config.PaymentNotifyURL
+	server.config.BaofuRefundNotifyURL = config.RefundNotifyURL
+	server.paymentFacade = nil
+	server.refundOrchestrator = nil
+}
+
 func (server *Server) SetPrinterClientForTest(client cloudprint.Client) {
 	server.printerClient = client
 }
@@ -194,6 +209,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	var transferClient wechat.TransferClientInterface
 	var ecommerceClient wechat.EcommerceClientInterface
 	var ordinarySPClient ordinaryserviceprovider.OrdinaryServiceProviderClientInterface
+	var baofuAggregateClient aggregatepay.Client
 	if config.HasWechatPayRuntimeConfig() {
 		if err := config.ValidateWechatPayConfig(); err != nil {
 			return nil, err
@@ -231,6 +247,16 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		if err != nil {
 			return nil, fmt.Errorf("cannot create ordinary service provider client: %w", err)
 		}
+	}
+	if config.HasBaofuRuntimeConfig() {
+		if err := config.ValidateBaofuConfig(); err != nil {
+			return nil, err
+		}
+		baofuRootClient, err := baofu.NewClient(config.ToBaofuConfig(), nil)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create baofu client: %w", err)
+		}
+		baofuAggregateClient = aggregatepay.NewClient(baofuRootClient)
 	}
 
 	// 创建 LBS 地图客户端（统一使用腾讯地图）
@@ -339,6 +365,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		transferClient:                 transferClient,
 		ecommerceClient:                ecommerceClient,
 		ordinarySPClient:               ordinarySPClient,
+		baofuAggregateClient:           baofuAggregateClient,
 		dataEncryptor:                  dataEncryptor,
 		mapClient:                      mapClient,
 		weatherCache:                   weatherCache,

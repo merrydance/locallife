@@ -381,6 +381,97 @@ func TestPaymentOrderServiceCreatePaymentOrder_RequiresMerchantBaofuReadiness(t 
 	require.Nil(t, ordinaryClient.createPaymentRequest)
 }
 
+func TestPaymentOrderServiceCreatePaymentOrder_BaofuMissingClientFailsBeforeLocalPayment(t *testing.T) {
+	input := CreatePaymentOrderInput{
+		UserID:       1001,
+		OrderID:      2001,
+		PaymentType:  paymentTypeMiniProgram,
+		BusinessType: businessTypeOrder,
+		ClientIP:     "127.0.0.1",
+	}
+	order := db.Order{
+		ID:          input.OrderID,
+		UserID:      input.UserID,
+		MerchantID:  3001,
+		OrderType:   orderTypeTakeaway,
+		Status:      "pending",
+		TotalAmount: 1000,
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetOrder(gomock.Any(), input.OrderID).Return(order, nil)
+	store.EXPECT().GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: input.OrderID, Valid: true},
+		BusinessType: businessTypeOrder,
+	}).Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(db.Merchant{ID: order.MerchantID, Name: "Merchant B"}, nil)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Any()).Times(0)
+	store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).Times(0)
+
+	svc := NewPaymentOrderServiceWithBaofu(store, nil, nil)
+	_, err := svc.CreatePaymentOrder(context.Background(), input)
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
+	require.Equal(t, "宝付支付通道未配置，请联系平台处理", reqErr.Err.Error())
+}
+
+func TestPaymentOrderServiceQueryPaymentOrder_DirectPaymentIgnoresBaofuMainBusinessClient(t *testing.T) {
+	input := QueryPaymentOrderInput{UserID: 1001, PaymentOrderID: 2001}
+	paymentOrder := db.PaymentOrder{
+		ID:             input.PaymentOrderID,
+		UserID:         input.UserID,
+		PaymentType:    paymentTypeMiniProgram,
+		PaymentChannel: db.PaymentChannelDirect,
+		BusinessType:   db.ExternalPaymentBusinessOwnerRiderDeposit,
+		Status:         paymentStatusPending,
+		OutTradeNo:     "DP202605040001",
+		PrepayID:       pgtype.Text{String: "prepay-direct-boundary", Valid: true},
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(5 * time.Minute), Valid: true},
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	directClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
+	baofuClient := &fakeBaofuAggregatePaymentClient{
+		unifiedResult: &aggregatecontracts.UnifiedOrderResult{},
+	}
+
+	store.EXPECT().
+		GetPaymentOrder(gomock.Any(), input.PaymentOrderID).
+		Return(paymentOrder, nil)
+	directClient.EXPECT().
+		QueryOrderByOutTradeNo(gomock.Any(), paymentOrder.OutTradeNo).
+		Return(&wechatcontracts.DirectOrderQueryResponse{
+			OutTradeNo:     paymentOrder.OutTradeNo,
+			TradeState:     "NOTPAY",
+			TradeStateDesc: "待支付",
+			Amount:         wechatcontracts.DirectOrderQueryAmount{Total: paymentOrder.Amount},
+		}, nil)
+	directClient.EXPECT().
+		GenerateJSAPIPayParams("prepay-direct-boundary").
+		Return(&wechat.JSAPIPayParams{NonceStr: "direct-boundary-nonce"}, nil)
+
+	baofuPayment := NewBaofuPaymentService(store, baofuClient, BaofuPaymentServiceConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+		MiniProgramAppID:  "wxapp",
+		PaymentNotifyURL:  "https://api.example.com/v1/webhooks/baofu/payment",
+	})
+	svc := NewPaymentOrderServiceWithBaofu(store, directClient, baofuPayment)
+	result, err := svc.QueryPaymentOrder(context.Background(), input)
+
+	require.NoError(t, err)
+	require.Equal(t, "NOTPAY", result.WechatOrder.TradeState)
+	require.NotNil(t, result.PayParams)
+	require.False(t, baofuClient.called)
+}
+
 func TestPaymentOrderServiceCreatePaymentOrder_LogsOrdinaryMarkFailedCleanupError(t *testing.T) {
 	input := CreatePaymentOrderInput{
 		UserID:       1001,

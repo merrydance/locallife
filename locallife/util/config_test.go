@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/merrydance/locallife/baofu"
 	"github.com/stretchr/testify/require"
 )
 
@@ -129,6 +130,44 @@ func TestLoadConfig_ReadsWechatOrdinaryApplymentSettlementConfig(t *testing.T) {
 	require.Equal(t, "0.38", config.WechatOrdinaryApplymentDebitActivitiesRate)
 	require.Equal(t, "0.38", config.WechatOrdinaryApplymentCreditActivitiesRate)
 	require.Equal(t, "media-a, media-b", config.WechatOrdinaryApplymentActivitiesAdditions)
+}
+
+func TestLoadConfig_ReadsBaofuMainBusinessConfig(t *testing.T) {
+	configDir := writeTestConfigFile(t, strings.Join([]string{
+		"ENVIRONMENT=test",
+		"DB_SOURCE=postgresql:///test",
+		"MIGRATION_URL=file://db/migration",
+		"WECHAT_MINI_APP_ID=wx-local-life",
+		"BAOFU_MAIN_BUSINESS_ENABLED=true",
+		"BAOFU_COLLECT_MERCHANT_ID=COLLECT_MER",
+		"BAOFU_COLLECT_TERMINAL_ID=COLLECT_TER",
+		"BAOFU_PAYOUT_MERCHANT_ID=PAYOUT_MER",
+		"BAOFU_PAYOUT_TERMINAL_ID=PAYOUT_TER",
+		"BAOFU_APP_ID=baofu-app",
+		"BAOFU_PRIVATE_KEY_PEM=test-private-key",
+		"BAOFU_PUBLIC_KEY_PEM=test-public-key",
+		"BAOFU_SIGN_SERIAL_NO=sign-sn",
+		"BAOFU_ENCRYPTION_SERIAL_NO=enc-sn",
+		"BAOFU_AES_KEY=0123456789abcdef0123456789abcdef",
+		"BAOFU_NOTIFY_BASE_URL=https://api.example.com/v1/webhooks/baofu",
+		"BAOFU_PAYMENT_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/payment",
+		"BAOFU_REFUND_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/refund",
+		"BAOFU_HTTP_TIMEOUT=12s",
+	}, "\n")+"\n")
+
+	config, err := LoadConfig(configDir)
+	require.NoError(t, err)
+	require.True(t, config.BaofuMainBusinessEnabled)
+	require.True(t, config.HasBaofuRuntimeConfig())
+	require.NoError(t, config.ValidateBaofuConfig())
+	require.Equal(t, "wx-local-life", config.WechatMiniAppID)
+	require.Equal(t, "https://api.example.com/v1/webhooks/baofu/payment", config.EffectiveBaofuPaymentNotifyURL())
+	require.Equal(t, 12*time.Second, config.BaofuHTTPTimeout)
+
+	baofuConfig := config.ToBaofuConfig().Normalized()
+	require.Equal(t, baofu.SandboxAggregatePayBaseURL, baofuConfig.AggregatePayBaseURL)
+	require.Equal(t, "COLLECT_MER", baofuConfig.CollectMerchantID)
+	require.Equal(t, "PAYOUT_MER", baofuConfig.PayoutMerchantID)
 }
 
 func TestEffectiveWechatEcommerceNotifyURLs(t *testing.T) {

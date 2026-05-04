@@ -942,7 +942,7 @@ git commit -m "feat(baofu): classify provider errors"
 - Modify: `locallife/logic/combined_payment_service.go`
 - Tests: `locallife/api/payment_order_test.go`, `locallife/logic/payment_order_service_test.go`, `locallife/logic/direct_payment_order_errors_test.go`
 
-- [ ] **Step 1: Add fail-closed runtime tests**
+- [x] **Step 1: Add fail-closed runtime tests**
 
 ```go
 func TestCreatePaymentOrderAPIUsesBaofuWhenMainBusinessConfigured(t *testing.T) {
@@ -970,11 +970,11 @@ go test ./api ./logic -run 'TestCreatePaymentOrderAPIUsesBaofu|TestDirectPayment
 
 Expected: fail if API runtime still hard-codes ordinary service provider facade.
 
-- [ ] **Step 3: Implement runtime wiring**
+- [x] **Step 3: Implement runtime wiring**
 
 `server.buildPaymentFacade()` must choose Baofu for main-business ordinary-service-provider replacement only when Baofu config/client is complete. Missing config returns safe 500/400 product error before local payment rows are created. Existing `direct` flows remain unchanged.
 
-- [ ] **Step 4: Run boundary tests**
+- [x] **Step 4: Run boundary tests**
 
 ```bash
 go test ./api ./logic -run 'TestCreatePaymentOrderAPI|TestPaymentOrderServiceCreatePaymentOrder|TestDirectPayment|TestRiderDeposit|TestClaimRecovery' -count=1

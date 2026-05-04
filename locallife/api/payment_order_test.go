@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
+	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
@@ -127,6 +128,7 @@ func TestCreatePaymentOrderAPI_InvalidPayloadReturnsChineseGuidance(t *testing.T
 	request, err := http.NewRequest(http.MethodPost, "/v1/payments", bytes.NewReader([]byte(`{"order_id":0,"payment_type":"native","business_type":"invalid"}`)))
 	require.NoError(t, err)
 	request.Header.Set("Content-Type", "application/json")
+	request.RemoteAddr = "203.0.113.9:12345"
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
 	server.router.ServeHTTP(recorder, request)
@@ -234,9 +236,154 @@ func expectActiveMerchantBaofuAccountForPaymentAPI(store *mockdb.MockStore, merc
 			SharingMerID:   pgtype.Text{String: "CMAPI", Valid: true},
 			WechatSubMchID: pgtype.Text{String: subMchID, Valid: true},
 		}, nil)
+	store.EXPECT().
+		GetBaofuMerchantReportByOwner(gomock.Any(), db.GetBaofuMerchantReportByOwnerParams{
+			OwnerType:  db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:    merchantID,
+			ReportType: db.BaofuMerchantReportTypeWechat,
+		}).
+		Times(1).
+		Return(db.BaofuMerchantReport{
+			OwnerType:       db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:         merchantID,
+			ReportType:      db.BaofuMerchantReportTypeWechat,
+			ReportState:     db.BaofuMerchantReportStateSucceeded,
+			AppletAuthState: db.BaofuMerchantReportAppletAuthStateSucceeded,
+			SubMchID:        pgtype.Text{String: subMchID, Valid: true},
+		}, nil)
+}
+
+type fakeAPIBaofuAggregateClient struct {
+	calledUnified bool
+	lastUnified   aggregatecontracts.UnifiedOrderRequest
+}
+
+func (c *fakeAPIBaofuAggregateClient) CreateUnifiedOrder(_ context.Context, req aggregatecontracts.UnifiedOrderRequest) (*aggregatecontracts.UnifiedOrderResult, error) {
+	c.calledUnified = true
+	c.lastUnified = req
+	return &aggregatecontracts.UnifiedOrderResult{
+		TradeNo: "BFPAY_API_001",
+		ChannelReturn: aggregatecontracts.ChannelReturn{
+			WechatPayData: json.RawMessage(`{"timeStamp":"1767225600","nonceStr":"nonce-api-baofu","package":"prepay_id=baofu-api","signType":"RSA","paySign":"pay-sign-api-baofu"}`),
+		},
+	}, nil
+}
+
+func (c *fakeAPIBaofuAggregateClient) QueryPayment(context.Context, aggregatecontracts.PaymentQueryRequest) (*aggregatecontracts.UnifiedOrderResult, error) {
+	return nil, errors.New("not implemented in api baofu payment test")
+}
+
+func (c *fakeAPIBaofuAggregateClient) CreateProfitSharing(context.Context, aggregatecontracts.ShareAfterPayRequest) (*aggregatecontracts.ShareResult, error) {
+	return nil, errors.New("not implemented in api baofu payment test")
+}
+
+func (c *fakeAPIBaofuAggregateClient) QueryProfitSharing(context.Context, aggregatecontracts.ShareQueryRequest) (*aggregatecontracts.ShareResult, error) {
+	return nil, errors.New("not implemented in api baofu payment test")
+}
+
+func (c *fakeAPIBaofuAggregateClient) CreateRefund(context.Context, aggregatecontracts.RefundBeforeShareRequest) (*aggregatecontracts.RefundResult, error) {
+	return nil, errors.New("not implemented in api baofu payment test")
+}
+
+func (c *fakeAPIBaofuAggregateClient) QueryRefund(context.Context, aggregatecontracts.RefundQueryRequest) (*aggregatecontracts.RefundResult, error) {
+	return nil, errors.New("not implemented in api baofu payment test")
+}
+
+func (c *fakeAPIBaofuAggregateClient) CloseOrder(context.Context, aggregatecontracts.OrderCloseRequest) (*aggregatecontracts.OrderCloseResult, error) {
+	return nil, errors.New("not implemented in api baofu payment test")
 }
 
 // ==================== CreatePaymentOrder Tests ====================
+
+func TestCreatePaymentOrderAPIUsesBaofuWhenMainBusinessConfigured(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	order := randomPaymentTestOrder(user.ID, merchant.ID)
+	order.TotalAmount = 1200
+	paymentOrder := randomPaymentOrder(user.ID, &order.ID)
+	paymentOrder.Amount = order.TotalAmount
+	paymentOrder.PaymentType = PaymentTypeMiniProgram
+	paymentOrder.PaymentChannel = db.PaymentChannelBaofuAggregate
+	paymentOrder.OutTradeNo = "BFAPI202605040001"
+	paymentOrder.Attach = pgtype.Text{String: "order_id:8001", Valid: true}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := mockordinaryserviceprovider.NewMockOrdinaryServiceProviderClientInterface(ctrl)
+	baofuClient := &fakeAPIBaofuAggregateClient{}
+
+	store.EXPECT().
+		GetOrder(gomock.Any(), order.ID).
+		Times(1).
+		Return(order, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+	expectActiveMerchantBaofuAccountForPaymentAPI(store, merchant.ID, "sub-api-baofu")
+	store.EXPECT().
+		GetUser(gomock.Any(), user.ID).
+		Times(1).
+		Return(user, nil)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		CreatePartnerPaymentTx(gomock.Any(), gomock.AssignableToTypeOf(db.CreatePartnerPaymentTxParams{})).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.CreatePartnerPaymentTxParams) (db.CreatePartnerPaymentTxResult, error) {
+			require.Equal(t, db.PaymentChannelBaofuAggregate, arg.PaymentChannel)
+			require.True(t, arg.RequiresProfitSharing)
+			return db.CreatePartnerPaymentTxResult{PaymentOrder: paymentOrder}, nil
+		})
+	store.EXPECT().
+		CreateExternalPaymentCommand(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentCommandParams{})).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+			require.Equal(t, db.ExternalPaymentProviderBaofu, arg.Provider)
+			require.Equal(t, db.PaymentChannelBaofuAggregate, arg.Channel)
+			require.Equal(t, db.ExternalPaymentCapabilityBaofuPayment, arg.Capability)
+			require.Equal(t, db.ExternalPaymentObjectBaofuPaymentOrder, arg.ExternalObjectType)
+			require.Equal(t, paymentOrder.OutTradeNo, arg.ExternalObjectKey)
+			return db.ExternalPaymentCommand{ID: 8801, CommandStatus: arg.CommandStatus}, nil
+		})
+	ordinaryClient.EXPECT().CreatePayment(gomock.Any(), gomock.Any()).Times(0)
+
+	server := newTestServerWithOrdinaryServiceProvider(t, store, ordinaryClient)
+	server.SetBaofuAggregateClientForTest(baofuClient, logic.BaofuAggregateFacadeConfig{
+		CollectMerchantID: "COLLECT_API",
+		CollectTerminalID: "TER_API",
+		MiniProgramAppID:  "wx-mini-api",
+		PaymentNotifyURL:  "https://api.example.com/v1/webhooks/baofu/payment",
+		RefundNotifyURL:   "https://api.example.com/v1/webhooks/baofu/refund",
+	})
+	server.SetTaskDistributorForTest(nil)
+
+	body, err := json.Marshal(gin.H{"order_id": order.ID, "business_type": "order"})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/payments", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	request.RemoteAddr = "203.0.113.9:12345"
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusCreated, recorder.Code)
+	require.True(t, baofuClient.calledUnified)
+	require.Equal(t, "COLLECT_API", baofuClient.lastUnified.MerchantID)
+	require.Equal(t, "sub-api-baofu", baofuClient.lastUnified.SubMchID)
+	require.Equal(t, user.WechatOpenid, baofuClient.lastUnified.PayExtend.SubOpenID)
+	var response paymentOrderResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Equal(t, paymentOrder.ID, response.ID)
+	require.NotNil(t, response.PayParams)
+	require.Equal(t, "prepay_id=baofu-api", response.PayParams.Package)
+}
 
 func TestCreatePaymentOrderAPI(t *testing.T) {
 	user, _ := randomUser(t)
@@ -529,6 +676,21 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 							ContractNo:     pgtype.Text{String: "CMAPI", Valid: true},
 							SharingMerID:   pgtype.Text{String: "CMAPI", Valid: true},
 							WechatSubMchID: pgtype.Text{String: "1900000109", Valid: true},
+						}, nil),
+					store.EXPECT().
+						GetBaofuMerchantReportByOwner(gomock.Any(), db.GetBaofuMerchantReportByOwnerParams{
+							OwnerType:  db.BaofuAccountOwnerTypeMerchant,
+							OwnerID:    merchant.ID,
+							ReportType: db.BaofuMerchantReportTypeWechat,
+						}).
+						Times(1).
+						Return(db.BaofuMerchantReport{
+							OwnerType:       db.BaofuAccountOwnerTypeMerchant,
+							OwnerID:         merchant.ID,
+							ReportType:      db.BaofuMerchantReportTypeWechat,
+							ReportState:     db.BaofuMerchantReportStateSucceeded,
+							AppletAuthState: db.BaofuMerchantReportAppletAuthStateSucceeded,
+							SubMchID:        pgtype.Text{String: "1900000109", Valid: true},
 						}, nil),
 					store.EXPECT().
 						GetMerchant(gomock.Any(), merchant.ID).

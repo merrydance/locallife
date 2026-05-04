@@ -76,7 +76,7 @@ func (svc *PaymentOrderService) createOrderBaofuPayment(
 func (svc *PaymentOrderService) createBaofuPayment(ctx context.Context, createInput ordinaryPaymentCreateInput) (CreatePaymentOrderResult, error) {
 	var result CreatePaymentOrderResult
 	if svc.baofuPaymentService == nil {
-		return result, fmt.Errorf("baofu payment service: not configured")
+		return result, mapBaofuPaymentCreateError(fmt.Errorf("baofu payment service: not configured"))
 	}
 	readiness, err := merchantBaofuReadinessForPayment(ctx, svc.store, createInput.MerchantID)
 	if err != nil {

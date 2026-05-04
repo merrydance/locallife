@@ -10,6 +10,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/websocket"
+	ordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider"
 	"github.com/merrydance/locallife/worker"
 	"github.com/rs/zerolog/log"
 )
@@ -350,7 +351,7 @@ func (server *Server) buildOrderCommandService() logic.OrderCommandService {
 		nil,
 		nil,
 		nil,
-		server.ordinarySPClient,
+		server.mainBusinessOrdinaryServiceProviderClient(),
 	)
 	if service == nil {
 		log.Error().Msg("buildOrderCommandService: failed to initialize service")
@@ -382,7 +383,7 @@ func (server *Server) buildOrderQueryService() logic.OrderQueryService {
 		nil,
 		nil,
 		nil,
-		server.ordinarySPClient,
+		server.mainBusinessOrdinaryServiceProviderClient(),
 	)
 	if service == nil {
 		log.Error().Msg("buildOrderQueryService: failed to initialize service")
@@ -391,12 +392,27 @@ func (server *Server) buildOrderQueryService() logic.OrderQueryService {
 }
 
 func (server *Server) buildPaymentFacade() logic.PaymentFacade {
+	if server.usesBaofuMainBusinessPayments() {
+		return logic.NewDefaultPaymentFacadeWithBaofuAggregate(
+			server.store,
+			server.directPaymentClient,
+			server.baofuAggregateClient,
+			server.baofuAggregateFacadeConfig(),
+		)
+	}
 	return logic.NewDefaultPaymentFacadeWithOrdinaryServiceProvider(server.store, server.directPaymentClient, server.ecommerceClient, server.ordinarySPClient)
 }
 
 func (server *Server) buildRefundOrchestrator() logic.RefundOrchestrator {
 	var paymentFacade logic.PaymentFacade
-	if server.directPaymentClient != nil || server.ecommerceClient != nil || server.ordinarySPClient != nil {
+	if server.usesBaofuMainBusinessPayments() {
+		paymentFacade = logic.NewDefaultPaymentFacadeWithBaofuAggregate(
+			server.store,
+			server.directPaymentClient,
+			server.baofuAggregateClient,
+			server.baofuAggregateFacadeConfig(),
+		)
+	} else if server.directPaymentClient != nil || server.ecommerceClient != nil || server.ordinarySPClient != nil {
 		paymentFacade = logic.NewDefaultPaymentFacadeWithOrdinaryServiceProvider(server.store, server.directPaymentClient, server.ecommerceClient, server.ordinarySPClient)
 	}
 
@@ -412,6 +428,31 @@ func (server *Server) buildRefundOrchestrator() logic.RefundOrchestrator {
 		nil,
 		nil,
 	)
+}
+
+func (server *Server) usesBaofuMainBusinessPayments() bool {
+	return server != nil && server.config.BaofuMainBusinessEnabled
+}
+
+func (server *Server) mainBusinessOrdinaryServiceProviderClient() ordinaryserviceprovider.OrdinaryServiceProviderClientInterface {
+	if server.usesBaofuMainBusinessPayments() {
+		return nil
+	}
+	return server.ordinarySPClient
+}
+
+func (server *Server) baofuAggregateFacadeConfig() logic.BaofuAggregateFacadeConfig {
+	if server == nil {
+		return logic.BaofuAggregateFacadeConfig{}
+	}
+	return logic.BaofuAggregateFacadeConfig{
+		CollectMerchantID: server.config.BaofuCollectMerchantID,
+		CollectTerminalID: server.config.BaofuCollectTerminalID,
+		MiniProgramAppID:  server.config.WechatMiniAppID,
+		PaymentNotifyURL:  server.config.EffectiveBaofuPaymentNotifyURL(),
+		RefundNotifyURL:   server.config.EffectiveBaofuRefundNotifyURL(),
+		TimeExpireMinutes: 30,
+	}
 }
 
 func (server *Server) buildProfitSharingReceiverLifecycleService() *logic.ProfitSharingReceiverLifecycleService {

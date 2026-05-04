@@ -483,7 +483,7 @@
 | `locallife/baofu/account/client.go` | 仅 interface | 无真实 union-gw HTTP client。 |
 | `locallife/baofu/merchantreport/**` | 不存在 | 需新增。 |
 | `locallife/logic/baofu_payment_service.go` | 服务层可组统一下单并记录 command | 依赖 mock client；生产 API 未接入；仅部分校验。 |
-| `locallife/api/logic_adapters.go` | 当前仍构造普通服务商支付 facade | 主业务未真正切宝付。 |
+| `locallife/api/logic_adapters.go` | 已按 `BAOFU_MAIN_BUSINESS_ENABLED` 构造宝付主业务 facade | 主业务支付可切宝付；合单支付、worker/scheduler runtime 仍需后续专项收口。 |
 | `locallife/api/baofu_callback.go` | 支付/分账/开户回调落 fact 草稿 | ACK、验签、payload 完整性需沙箱确认。 |
 | `locallife/worker/*baofu*` | 分账/恢复/提现 fact worker 草稿 | 无真实 client wiring；无宝付退款恢复。 |
 
@@ -502,8 +502,8 @@
 | C-008 | 部分修复，待 callback/worker/沙箱 | 已新增 `order_refund`、`refund_query`、`order_close` DTO/client、退款通知 parser、退款状态映射和分账前退款业务接入 | 首版“分账前退款、分账后不退款”已在本地 fail-closed；仍缺退款 callback API wiring、退款查询恢复 worker 和沙箱证据 | Task 10/11/12 补错误语义、runtime wiring、沙箱证据；后续补退款恢复 worker。 |
 | C-009 | 部分修复，待 service/client 切换 | 已新增 `YuanStringToFen` / `FenToYuanString` 并覆盖 2 位小数校验 | 转换 helper 已在契约包，余额/提现真实 client 仍需集中调用 | Task 8/提现服务切换时禁止业务层散落金额转换。 |
 | C-010 | 部分修复，待完整官方错误码/沙箱样例 | 已新增 `locallife/baofu/errors.go` 分类器，并接入宝付支付/退款创建错误映射 | 前端可获得安全中文语义，不暴露上游原文；账户/报备错误码、完整聚合支付错误码和沙箱错误样例仍待补 | 后续补完整错误码表、API handler 边界日志验证和 C4 evidence。 |
-| C-011 | 部分修复，待沙箱/验签 | `locallife/baofu/aggregatepay/client.go`、`locallife/baofu/account/client.go`、`locallife/baofu/merchantreport/client.go` 已有 concrete HTTP client | 本地可构造 signed public envelope 并打配置 endpoint；仍缺响应验签、数字信封完整验证、真实测试地址联调证据 | Task 10/12 补错误分类和沙箱证据；C4 前不得宣称生产验证完成。 |
-| C-012 | 中 | `locallife/logic/baofu_payment_readiness.go:14` 仍有“商户微信渠道待报备”错误文案 | 语义混入旧微信特约商户进件，可能误导运营/商户 | 改成“微信支付通道待开通/微信渠道待配置”，内部记录具体 report/auth 状态。 |
+| C-011 | C3 局部，待沙箱/验签 | `locallife/baofu/aggregatepay/client.go`、`locallife/baofu/account/client.go`、`locallife/baofu/merchantreport/client.go` 已有 concrete HTTP client；`locallife/api/logic_adapters.go` 已支持 `BAOFU_MAIN_BUSINESS_ENABLED` 时用宝付 facade 承接单笔主业务支付 | 本地可构造 signed public envelope 并打配置 endpoint，API runtime 已防止宝付启用时回退普通服务商；仍缺响应验签、数字信封完整验证、worker runtime 和真实测试地址联调证据 | Task 12 补沙箱证据；后续补 worker/scheduler 真实 client wiring，C4 前不得宣称生产验证完成。 |
+| C-012 | 已本地修复，待产品验收 | `merchantBaofuReadinessForPayment` 已返回“商户微信支付通道待开通，暂不能创建微信生态支付订单”，API runtime 切换测试覆盖主业务宝付与直连支付边界 | 旧“微信特约商户进件”语义已移除；仍需前端/运营最终文案验收 | 沙箱联调和上线前检查中继续确认用户侧只看到产品语义，不暴露 report/auth/subMchId 内部细节。 |
 
 ### 12.2 防漂移实现门禁
 

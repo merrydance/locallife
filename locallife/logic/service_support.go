@@ -127,7 +127,10 @@ type DefaultPaymentFacade struct {
 type BaofuAggregateFacadeConfig struct {
 	CollectMerchantID string
 	CollectTerminalID string
+	MiniProgramAppID  string
+	PaymentNotifyURL  string
 	RefundNotifyURL   string
+	TimeExpireMinutes int
 }
 
 type ordinaryServiceProviderFacadeClient interface {
@@ -174,11 +177,26 @@ func NewDefaultPaymentFacadeWithBaofuAggregate(
 	baofuClient aggregatepay.Client,
 	config BaofuAggregateFacadeConfig,
 ) PaymentFacade {
+	cfg := config.normalized()
+	var baofuPaymentService *BaofuPaymentService
+	if baofuClient != nil &&
+		cfg.CollectMerchantID != "" &&
+		cfg.CollectTerminalID != "" &&
+		cfg.MiniProgramAppID != "" &&
+		cfg.PaymentNotifyURL != "" {
+		baofuPaymentService = NewBaofuPaymentService(store, baofuClient, BaofuPaymentServiceConfig{
+			CollectMerchantID: cfg.CollectMerchantID,
+			CollectTerminalID: cfg.CollectTerminalID,
+			MiniProgramAppID:  cfg.MiniProgramAppID,
+			PaymentNotifyURL:  cfg.PaymentNotifyURL,
+			TimeExpireMinutes: cfg.TimeExpireMinutes,
+		})
+	}
 	return &DefaultPaymentFacade{
 		paymentClient:     paymentClient,
 		baofuAggregatePay: baofuClient,
-		baofuConfig:       config.normalized(),
-		paymentService:    NewPaymentOrderServiceWithBaofu(store, paymentClient, NewBaofuPaymentService(store, baofuClient, BaofuPaymentServiceConfig{})),
+		baofuConfig:       cfg,
+		paymentService:    NewPaymentOrderServiceWithBaofu(store, paymentClient, baofuPaymentService),
 		ledgerService:     NewPaymentLedgerService(store),
 		combinedService:   NewCombinedPaymentService(store, nil),
 	}
@@ -187,7 +205,12 @@ func NewDefaultPaymentFacadeWithBaofuAggregate(
 func (c BaofuAggregateFacadeConfig) normalized() BaofuAggregateFacadeConfig {
 	c.CollectMerchantID = strings.TrimSpace(c.CollectMerchantID)
 	c.CollectTerminalID = strings.TrimSpace(c.CollectTerminalID)
+	c.MiniProgramAppID = strings.TrimSpace(c.MiniProgramAppID)
+	c.PaymentNotifyURL = strings.TrimSpace(c.PaymentNotifyURL)
 	c.RefundNotifyURL = strings.TrimSpace(c.RefundNotifyURL)
+	if c.TimeExpireMinutes <= 0 {
+		c.TimeExpireMinutes = 30
+	}
 	return c
 }
 

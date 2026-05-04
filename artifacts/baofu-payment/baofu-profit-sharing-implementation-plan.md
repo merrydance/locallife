@@ -769,7 +769,7 @@ The existing `aggregatepay.Client` interface and request contracts are not enoug
 
 Progress: concrete `aggregatepay.HTTPClient` now covers `unified_order`、`order_query`、`share_after_pay`、`share_query`、`order_refund`、`refund_query`、`order_close` with local envelope tests. Runtime API wiring and sandbox evidence remain open in this task/remediation plan.
 
-- [ ] **Step 2: Wire Baofu as the runtime main-business payment facade**
+- [x] **Step 2: Wire Baofu as the runtime main-business payment facade**
 
 Production API construction must be able to build:
 
@@ -781,11 +781,11 @@ NewCombinedPaymentServiceWithBaofu(...) when combined payment support is enabled
 
 `server.buildPaymentFacade()` must no longer hard-code the ordinary service provider facade when Baofu is configured as the main business channel.
 
-- [ ] **Step 3: Keep readiness fail-closed and direct-payment boundary intact**
+- [x] **Step 3: Keep readiness fail-closed and direct-payment boundary intact**
 
 If Baofu is configured as main payment and the concrete client/config is missing, main-business payment creation must fail before local pending payment rows are created. There is no downgrade to ordinary service provider or ecommerce payment. Existing WeChat direct-payment capabilities must remain on `direct` and must not call Baofu: rider deposit pay/redeem, merchant recourse-to-platform payment, rider recourse-to-platform payment, and their query/refund/notification paths.
 
-- [ ] **Step 4: Validate production route**
+- [x] **Step 4: Validate production route**
 
 Run from `locallife/`:
 
@@ -1505,3 +1505,14 @@ make test-integration
 - Added Task 3A to implement `merchant_report`, report query, report lifecycle persistence, and merchant `subMchId` synchronization and APPLET auth binding into payment-channel readiness.
 - Added Task 4A because the current Baofu aggregate payment work has service-level routing and contracts, but production replacement is not complete until a concrete aggregate payment HTTP client and API runtime wiring replace the current ordinary-service-provider facade.
 - This reopens the implementation plan: payment creation must be adjusted from legacy merchant `wechat_sub_mch_id` readiness to merchant `subMchId` readiness, and production enablement is not complete until Task 3A, Task 4A, endpoint profiles, public envelope, appendix enums, and sandbox evidence are implemented and verified.
+
+### 2026-05-04 Task 4A/Remediation Task 11 - Runtime Main-Business Wiring
+
+- Added Baofu runtime config fields and validation under `util.Config`, including `BAOFU_MAIN_BUSINESS_ENABLED`, separated collect/payout merchant and terminal IDs, official endpoint-backed root config, payment/refund notify URLs, key serials, AES key, and HTTP timeout.
+- `api.NewServer` now builds the concrete Baofu root client and aggregatepay client when Baofu runtime config is present. When `BAOFU_MAIN_BUSINESS_ENABLED=true`, `server.buildPaymentFacade()` constructs `NewDefaultPaymentFacadeWithBaofuAggregate(...)` instead of the ordinary-service-provider facade.
+- Baofu main-business payment facade now passes collect merchant/terminal, LocalLife mini-program appid, Baofu payment notify URL, and expiry config into `BaofuPaymentService`; missing Baofu client/config fails before merchant readiness reads or local pending payment rows.
+- No downgrade path was added: Baofu-enabled main-business payment does not fall back to ordinary service provider or platform ecommerce. Order service construction also avoids injecting the ordinary-service-provider client into main-business order payment paths when Baofu is enabled.
+- Added API and logic regressions for runtime switch, fail-closed missing Baofu client before local payment creation, and direct-payment boundary. Direct payment query remains on `direct` even when a Baofu main-business service is present.
+- Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./api ./logic ./util -run 'TestCreatePaymentOrderAPIUsesBaofu|TestPaymentOrderServiceCreatePaymentOrder_(UsesBaofu|BaofuMissingClient)|TestPaymentOrderServiceQueryPaymentOrder_DirectPaymentIgnoresBaofu|TestLoadConfig_ReadsBaofu' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api ./logic ./util -run 'TestCreatePaymentOrderAPI|TestPaymentOrderServiceCreatePaymentOrder|TestDirectPayment|TestRiderDeposit|TestClaimRecovery|TestLoadConfig_ReadsBaofu|TestLoadConfig_Defaults' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./baofu ./baofu/aggregatepay ./logic ./util -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestCreatePaymentOrderAPI|TestCreatePaymentOrderAPIUsesBaofu|TestDirectPayment|TestRiderDeposit|TestClaimRecovery|TestBaofu' -count=1`; `PATH="/usr/local/go/bin:$PATH" make check-generated`.
+- Additional broad API package attempt: `PATH="/usr/local/go/bin:$PATH" go test ./baofu ./baofu/aggregatepay ./logic ./api ./util -count=1` still fails in the pre-existing noisy full `./api` run at `/v1/auth/wechat-login` with `sql: connection is already closed`; focused API payment/baofu boundary tests pass.
+- Residual risk: this slice wires HTTP API main-business single-payment creation. Combined payment Baofu support, worker/scheduler production aggregatepay client wiring, response signature verification/digital envelope completeness, and real Baofu test-address evidence remain open for later remediation/sandbox tasks.
