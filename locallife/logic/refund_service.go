@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog/log"
 
+	"github.com/merrydance/locallife/baofu"
 	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
@@ -785,7 +786,7 @@ func (s *RefundService) processBaofuPreShareRefund(ctx context.Context, paymentO
 			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark baofu refund as failed")
 		}
 		recordBaofuRefundCommand(ctx, s.store, refundOrder, nil, db.ExternalPaymentCommandStatusRejected, err)
-		return err
+		return mapBaofuRefundCreateError(err)
 	}
 	if refundResp == nil {
 		err := errors.New("baofu refund returned empty result")
@@ -829,6 +830,32 @@ func (s *RefundService) processBaofuPreShareRefund(ctx context.Context, paymentO
 		recordBaofuRefundCommand(ctx, s.store, refundOrder, refundResp, db.ExternalPaymentCommandStatusUnknown, nil)
 	}
 	return nil
+}
+
+func mapBaofuRefundCreateError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if message := strings.ToLower(err.Error()); strings.Contains(message, "baofu") && strings.Contains(message, "not configured") {
+		return NewRequestErrorWithCause(http.StatusServiceUnavailable, errors.New("宝付退款通道未配置，请联系平台处理"), err)
+	}
+	var providerErr *baofu.ProviderError
+	if !errors.As(err, &providerErr) {
+		return err
+	}
+	classified := baofu.ClassifyBaofuError(providerErr.UpstreamCode, providerErr.UpstreamMessage)
+	status := http.StatusBadGateway
+	switch classified.Category {
+	case baofu.BaofuErrorCategoryUserActionRequired:
+		status = http.StatusBadRequest
+	case baofu.BaofuErrorCategoryPlatformConfiguration:
+		status = http.StatusServiceUnavailable
+	case baofu.BaofuErrorCategoryRetryable:
+		status = http.StatusServiceUnavailable
+	case baofu.BaofuErrorCategoryManualReview:
+		status = http.StatusBadGateway
+	}
+	return NewRequestErrorWithCause(status, errors.New(classified.PublicMessage), err)
 }
 
 func recordBaofuRefundCommand(ctx context.Context, store db.Store, refundOrder db.RefundOrder, refundResp *aggregatecontracts.RefundResult, status string, cause error) {

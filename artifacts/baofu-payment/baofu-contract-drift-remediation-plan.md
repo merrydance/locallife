@@ -869,7 +869,7 @@ git commit -m "feat(baofu): add refund and close contracts"
 - Modify: `locallife/logic/baofu_merchant_report_service.go`
 - Modify: `locallife/api/*baofu*.go`
 
-- [ ] **Step 1: Add error classification tests**
+- [x] **Step 1: Add error classification tests**
 
 ```go
 func TestClassifyBaofuErrorCodeForFrontendSemantics(t *testing.T) {
@@ -900,7 +900,7 @@ go test ./baofu ./logic ./api -run 'TestClassifyBaofuError|TestBaofu.*Error' -co
 
 Expected: compile failure or missing classifier.
 
-- [ ] **Step 3: Implement classifier**
+- [x] **Step 3: Implement classifier**
 
 Implement categories:
 
@@ -916,7 +916,9 @@ const (
 
 Only log upstream code/raw message at the provider boundary. API responses use public Chinese copy and no raw identifiers.
 
-- [ ] **Step 4: Run error tests**
+Progress: `baofu.ClassifyBaofuError` now maps common parameter/config/retryable/manual-review codes to safe Chinese frontend guidance. Baofu payment/refund creation errors now map provider errors into `RequestError` without exposing upstream raw messages.
+
+- [x] **Step 4: Run error tests**
 
 ```bash
 go test ./baofu ./logic ./api -run 'TestClassifyBaofuError|TestBaofu.*Error|Test.*Sanitized' -count=1

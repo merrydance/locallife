@@ -123,18 +123,14 @@ func (c *Client) postPublicEnvelope(ctx context.Context, endpoint string, method
 }
 
 func providerRequestError(operation string, statusCode int, upstreamCode string, cause error) error {
+	classified := ClassifyBaofuError(upstreamCode, "")
 	return &ProviderError{
 		Operation:    strings.TrimSpace(operation),
 		Capability:   "baofu",
 		StatusCode:   statusCode,
 		UpstreamCode: strings.TrimSpace(upstreamCode),
-		Frontend: FrontendGuidance{
-			Code:      "BAOFU_CHANNEL_ERROR",
-			Message:   "宝付通道暂时不可用，请稍后重试",
-			Action:    "retry_or_contact_platform",
-			Retryable: true,
-		},
-		cause: cause,
+		Frontend:     classified.FrontendGuidance(),
+		cause:        cause,
 	}
 }
 

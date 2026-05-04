@@ -105,11 +105,10 @@ func (svc *PaymentOrderService) createBaofuPayment(ctx context.Context, createIn
 		BusinessOwner:    createInput.BusinessOwner,
 	})
 	if err != nil {
-		cleanupCtx := context.Background()
-		if _, closeErr := svc.store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID); closeErr != nil {
+		if _, closeErr := svc.store.UpdatePaymentOrderToClosed(ctx, txResult.PaymentOrder.ID); closeErr != nil {
 			return result, fmt.Errorf("close baofu payment order after create failure: %w", closeErr)
 		}
-		return result, err
+		return result, mapBaofuPaymentCreateError(err)
 	}
 	payParams, err := baofuWechatPayDataToPayParams(baofuResult.WechatPayData)
 	if err != nil {
