@@ -316,7 +316,7 @@ git commit -m "feat(baofu): add public request envelope"
 - Create: `locallife/baofu/account/contracts/official_withdraw.go`
 - Modify: `locallife/baofu/account/contracts/types_test.go`
 
-- [ ] **Step 1: Add official DTO tests**
+- [x] **Step 1: Add official DTO tests**
 
 Add tests in `locallife/baofu/account/contracts/types_test.go`:
 
@@ -363,7 +363,7 @@ go test ./baofu/account/contracts -run 'TestOfficial|Test.*Yuan' -count=1
 
 Expected: compile failure because official DTOs and conversion helpers do not exist.
 
-- [ ] **Step 3: Implement official DTOs**
+- [x] **Step 3: Implement official DTOs**
 
 Implement official request/response structs with JSON tags matching Baofu docs:
 
@@ -380,7 +380,7 @@ const (
 
 `OfficialOpenAccountRequest.Validate()` must distinguish personal two-factor, personal four-factor, enterprise, and self-employed required fields. Do not write `wechat_sub_mch_id` into account open DTO.
 
-- [ ] **Step 4: Run account contract tests**
+- [x] **Step 4: Run account contract tests**
 
 ```bash
 go test ./baofu/account/contracts -count=1

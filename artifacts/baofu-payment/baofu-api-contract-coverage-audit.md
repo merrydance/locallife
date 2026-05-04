@@ -492,14 +492,14 @@
 | 编号 | 严重度 | 证据 | 风险 | 整改要求 |
 | --- | --- | --- | --- | --- |
 | C-001 | 已本地修复，待真实 client 使用验证 | `locallife/baofu/config.go` 已拆 `AccountGatewayBaseURL`、`AggregatePayBaseURL`、`MerchantReportBaseURL` 并拒绝 `https://api.baofoo.com` | 配置层已防止三组入口混用；真实 client 仍必须逐接口读取对应 endpoint | Task 8 接真实 HTTP 时验证每个 client 使用正确 endpoint。 |
-| C-002 | 高 | `locallife/baofu/account/contracts/types.go:19` 的 `OpenAccountRequest` 是业务抽象 | 官方开户 `version/accType/accInfo/noticeUrl/businessType/loginNo/needUploadFile` 和个人/企业/个体条件必填未入契约，容易上线后参数缺失 | 建官方字段级 DTO；个人二要素、个人四要素、企业、个体户分开校验。 |
+| C-002 | 部分修复，待 service/client 切换 | 已新增官方开户、查询、余额、提现 DTO 与金额元/分转换测试；原 `OpenAccountRequest` 业务抽象仍保留给现有 service | 官方字段级 DTO 已有本地校验，但 account client/service 仍未切到官方 DTO | Task 8 接 union-gw 真实 HTTP 时只允许官方 DTO 进入报文。 |
 | C-003 | 高 | `locallife/baofu/account/notification/notification.go:45` 解析 `outRequestNo/sharingMerId/openState` | 官方开户通知字段是 `member_id/terminal_id/memberType/state/errorCode/errorMsg/transSerialNo/loginNo/customerName/contractNo/noticeType`，ACK 还需纯 `OK`；当前 parser 可能无法处理真实通知 | 按官方通知重写 parser/ACK 测试；用宝付测试通知样例或沙箱回调验证。 |
 | C-004 | 部分修复，待 transport 集成 | 已新增 `locallife/baofu/envelope.go` 公共请求/响应 envelope DTO，覆盖 `merId/terId/method/charset/version/format/timestamp/signType/signSn/ncrptnSn/dgtlEnvlp/signStr/bizContent` | 业务 DTO 已可进入 `bizContent`，但真实 HTTP client 尚未把签名、验签、加密和 envelope 串起来 | Task 8 接真实 HTTP 时必须使用该 envelope 并补请求/响应 fixture。 |
 | C-005 | 高 | `locallife/baofu/aggregatepay/contracts/types.go:116` 的 `Validate()` 只检查 `riskInfo.clientIp` | `unified_order` 的 M/C 字段、长度、枚举、`subMchId` 条件必填、https `pageUrl`、金额关系未被锁住 | 补全字段级校验和表驱动测试；非法枚举/缺条件字段必须 fail-closed。 |
 | C-006 | 高 | `locallife/baofu/merchantreport/**` 不存在 | 无法取得宝付返回的微信渠道 `subMchId`，也无法验证商户逐户异主体小程序授权闭环 | 新增 `merchantreport` contracts/client/service/table/query，支持商户级异主体报备和 APPLET 授权目录绑定。 |
 | C-007 | 高 | `locallife/logic/baofu_payment_order_route.go:98` 把 `txResult.SubMchID` 传给宝付；`locallife/logic/baofu_payment_service.go:62` 字段名仍是 `MerchantWechatSubMchID` | 来源继承普通服务商链路，未从宝付聚合商户报备的商户 `subMchId` 读取；会把旧微信进件假设带入宝付支付 | 引入商户聚合报备 `SubMchID` 解析器；按商户报备结果取 `sub_mch_id`，不再读普通服务商 txResult。 |
 | C-008 | 中 | `locallife/baofu/aggregatepay/contracts/types.go` 无 `order_refund/refund_query/order_close` DTO | 首版宣称“分账前可退款/分账后不退款”，但没有宝付退款与关单契约，支付失败清理也无法关闭上游订单 | 补退款、退款查询、退款通知、关单 DTO/client/状态映射，并测试分账后禁退。 |
-| C-009 | 中 | `locallife/baofu/account/contracts/types.go:36`、`:55` 用分为单位；官方余额/提现金额为元 BigDecimal | 金额单位转换若散落在业务层，容易出现提现金额放大/缩小 100 倍 | 在 contract/transport 边界集中做 fen<->yuan 转换，加入舍入和非法小数测试。 |
+| C-009 | 部分修复，待 service/client 切换 | 已新增 `YuanStringToFen` / `FenToYuanString` 并覆盖 2 位小数校验 | 转换 helper 已在契约包，余额/提现真实 client 仍需集中调用 | Task 8/提现服务切换时禁止业务层散落金额转换。 |
 | C-010 | 中 | `locallife/baofu/aggregatepay/contracts/types.go:180`、`:244` 状态映射只覆盖局部状态 | 聚合支付/分账/退款/报备/认证错误码和未知状态未分类，前端语义和重试策略会漂移 | 建 typed error/status 分类：资料需修改、平台配置错误、处理中可重试、渠道异常需人工；未知状态进入人工处理。 |
 | C-011 | 中 | `locallife/baofu/aggregatepay/client.go`、`locallife/baofu/account/client.go` 仍是 interface/未实现 transport | C1/C2 容易被误认为可生产；没有测试地址联调证据 | 真实 client 完成前 implementation plan 不得勾选生产任务；每个接口需 C4 沙箱证据。 |
 | C-012 | 中 | `locallife/logic/baofu_payment_readiness.go:14` 仍有“商户微信渠道待报备”错误文案 | 语义混入旧微信特约商户进件，可能误导运营/商户 | 改成“微信支付通道待开通/微信渠道待配置”，内部记录具体 report/auth 状态。 |
