@@ -220,34 +220,34 @@
 | --- | --- | --- | --- | --- |
 | `agentMerId/agentTerId` | 否 | S(16) | 代理场景 | C0 |
 | `merId/terId` | 是 | S(16) | 宝付交易商户号/终端号 | C0 |
-| `reportType` | 是 | E | `WECHAT`/`ALIPAY`，枚举见附录 | C0 |
-| `reportNo` | 是 | S(64) | 每次请求唯一 | C0 |
-| `reportInfo` | 是 | C | 按报备类型传 JSON | C0 |
-| `bctMerId` | 是 | S(64) | 宝财通二级商户号；主业务商户逐户报备时取商户 `sharing_mer_id` | C0 |
+| `reportType` | 是 | E | `WECHAT`/`ALIPAY`，枚举见附录 | C1 |
+| `reportNo` | 是 | S(64) | 每次请求唯一 | C1 |
+| `reportInfo` | 是 | C | 按报备类型传 JSON | C1 微信 |
+| `bctMerId` | 是 | S(64) | 宝财通二级商户号；主业务商户逐户报备时取商户 `sharing_mer_id` | C1 |
 
 微信 `reportInfo` 关键字段：
 
 | 字段 | 必填 | 类型 | 说明 | 本地覆盖 |
 | --- | --- | --- | --- | --- |
-| `merchant_name` | 是 | S(50) | 主体全称 | C0 |
-| `merchant_shortname` | 是 | S(20) | 消费者展示名称 | C0 |
-| `service_phone` | 是 | S(20) | 客服电话 | C0 |
-| `contact/contact_phone/contact_email` | 否 | S | 联系信息 | C0 |
-| `channel_id/channel_name` | 是 | S | 测试环境文档给固定渠道参数示例 | C0 |
-| `business` | 是 | S(10) | 经营类目/MCC | C0 |
-| `service_codes` | 是 | C | 如 `JSAPI`、`APPLET` | C0 |
-| `address_info` | 是 | C | 省市区、地址、经纬度等 | C0 |
-| `business_license/business_license_type` | 是 | S | 证照编号和类型 | C0 |
-| `bankcard_info` | 是 | C | 结算卡信息 | C0 |
+| `merchant_name` | 是 | S(50) | 主体全称 | C1 |
+| `merchant_shortname` | 是 | S(20) | 消费者展示名称 | C1 |
+| `service_phone` | 是 | S(20) | 客服电话 | C1 |
+| `contact/contact_phone/contact_email` | 否 | S | 联系信息 | C1 |
+| `channel_id/channel_name` | 是 | S | 测试环境文档给固定渠道参数示例 | C1 |
+| `business` | 是 | S(10) | 经营类目/MCC | C1，已从本地 XLSX 生成 110 项微信类目 allowlist |
+| `service_codes` | 是 | C | 如 `JSAPI`、`APPLET` | C1 |
+| `address_info` | 是 | C | 省市区、地址、经纬度等 | C1 |
+| `business_license/business_license_type` | 是 | S | 证照编号和类型 | C1 |
+| `bankcard_info` | 是 | C | 结算卡信息 | C1 |
 
 响应字段：`reportType/reportNo/reportState/subMchId/platformBizNo/resultCode/errCode/errMsg`；`subMchId` 在成功时有值，是微信/支付宝分配的商户识别码。该值按商户保存为商户微信渠道 `subMchId`，只作为 `unified_order.subMchId` 的来源，不写入分账接收方字段。
 
 本地缺口：
 
-- 无 `locallife/baofu/merchantreport` 包。
+- 已新增 `locallife/baofu/merchantreport/contracts` 字段级 DTO、报备/授权枚举、状态归一化和微信经营类目 allowlist。
 - 无报备表、报备状态机、`subMchId` 同步事务；也未在数据模型中支持商户逐户异主体报备和授权目录绑定闭环。
 - 无宝付聚合商户报备资料字段映射和附件/证照处理策略。
-- 未核对附录枚举：报备类型、报备状态、微信服务类型、微信证件类型、结算卡字段。
+- 附录枚举已本地覆盖一部分：报备类型、报备状态、微信服务类型、微信证件类型、授权类型、微信经营类目；结算卡字段仍需沙箱样例确认。
 - 未做测试地址联调：`https://mch-juhe.baofoo.com/mch-service/api`。
 
 ### 7.2 报备信息查询 `merchant_report_query`
@@ -273,9 +273,9 @@
 | `agentMerId/agentTerId` | 否 | S(16) | 代理场景 | C0 |
 | `merId/terId` | 是 | S(16) | 宝付交易商户号/终端号 | C0 |
 | `subMchId` | 是 | S(30) | 微信/支付宝分配的商户识别码，取报备成功结果 | C0 |
-| `authType` | 是 | E | `AUTH` 支付目录、`JSAPI` 公众号、`APPLET` 微信小程序 | C0 |
-| `authContent` | 是 | S(256) | `APPLET` 填小程序 appid | C0 |
-| `remark` | 是 | S(128) | 备注 | C0 |
+| `authType` | 是 | E | `AUTH` 支付目录、`JSAPI` 公众号、`APPLET` 微信小程序 | C1 |
+| `authContent` | 是 | S(256) | `APPLET` 填小程序 appid | C1 |
+| `remark` | 是 | S(128) | 备注 | C1 |
 
 边界结论：`bind_sub_config` 不进入确认分账接口，不能改变分账接收方；它只影响微信渠道支付配置。商户 `merchant_report` 成功后必须为该商户 `subMchId` 绑定 LocalLife 平台小程序 appid。若 `bind_sub_config` 失败，风险首先是 `unified_order` 后续无法在平台小程序中正常拉起微信支付或展示主体不符合预期，而不是 `share_after_pay` 无法按宝付二级户分账。
 
@@ -497,7 +497,7 @@
 | C-003 | 部分修复，待沙箱验证 | `locallife/baofu/account/notification/notification.go` 已按官方开户/提现通知字段解析；`locallife/api/baofu_callback.go` 开户 ACK 已改纯文本 `OK` | 本地 parser/ACK 已防止明显字段漂移，但还未使用宝付测试环境真实通知验证 URL query、密文 envelope、重放 ACK 行为 | 用宝付测试通知样例或沙箱回调验证开户/提现通知，并补回真实样例摘要。 |
 | C-004 | 部分修复，待 transport 集成 | 已新增 `locallife/baofu/envelope.go` 公共请求/响应 envelope DTO，覆盖 `merId/terId/method/charset/version/format/timestamp/signType/signSn/ncrptnSn/dgtlEnvlp/signStr/bizContent` | 业务 DTO 已可进入 `bizContent`，但真实 HTTP client 尚未把签名、验签、加密和 envelope 串起来 | Task 8 接真实 HTTP 时必须使用该 envelope 并补请求/响应 fixture。 |
 | C-005 | 高 | `locallife/baofu/aggregatepay/contracts/types.go:116` 的 `Validate()` 只检查 `riskInfo.clientIp` | `unified_order` 的 M/C 字段、长度、枚举、`subMchId` 条件必填、https `pageUrl`、金额关系未被锁住 | 补全字段级校验和表驱动测试；非法枚举/缺条件字段必须 fail-closed。 |
-| C-006 | 高 | `locallife/baofu/merchantreport/**` 不存在 | 无法取得宝付返回的微信渠道 `subMchId`，也无法验证商户逐户异主体小程序授权闭环 | 新增 `merchantreport` contracts/client/service/table/query，支持商户级异主体报备和 APPLET 授权目录绑定。 |
+| C-006 | 部分修复，待持久化/服务/联调 | 已新增 `locallife/baofu/merchantreport/contracts`，覆盖 `merchant_report`、`merchant_report_query`、`bind_sub_config` DTO、关键枚举、APPLET 授权校验和微信经营类目 allowlist | 契约层已能防止 `bctMerId/subMchId/authContent` 漂移，但还没有报备表、状态机、真实 client 和沙箱证据 | Task 6/8 继续新增持久化、服务、HTTP client 和测试地址联调。 |
 | C-007 | 高 | `locallife/logic/baofu_payment_order_route.go:98` 把 `txResult.SubMchID` 传给宝付；`locallife/logic/baofu_payment_service.go:62` 字段名仍是 `MerchantWechatSubMchID` | 来源继承普通服务商链路，未从宝付聚合商户报备的商户 `subMchId` 读取；会把旧微信进件假设带入宝付支付 | 引入商户聚合报备 `SubMchID` 解析器；按商户报备结果取 `sub_mch_id`，不再读普通服务商 txResult。 |
 | C-008 | 中 | `locallife/baofu/aggregatepay/contracts/types.go` 无 `order_refund/refund_query/order_close` DTO | 首版宣称“分账前可退款/分账后不退款”，但没有宝付退款与关单契约，支付失败清理也无法关闭上游订单 | 补退款、退款查询、退款通知、关单 DTO/client/状态映射，并测试分账后禁退。 |
 | C-009 | 部分修复，待 service/client 切换 | 已新增 `YuanStringToFen` / `FenToYuanString` 并覆盖 2 位小数校验 | 转换 helper 已在契约包，余额/提现真实 client 仍需集中调用 | Task 8/提现服务切换时禁止业务层散落金额转换。 |

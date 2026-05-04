@@ -208,7 +208,7 @@ go test ./baofu -run 'TestConfig' -count=1
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add locallife/baofu/config.go locallife/baofu/config_test.go artifacts/baofu-payment/baofu-api-contract-coverage-audit.md
@@ -458,7 +458,7 @@ git commit -m "fix(baofu): align account notification contract"
 - Create: `locallife/baofu/merchantreport/contracts/types_test.go`
 - Create: `locallife/baofu/merchantreport/contracts/categories_test.go`
 
-- [ ] **Step 1: Add merchant report contract tests**
+- [x] **Step 1: Add merchant report contract tests**
 
 Create tests:
 
@@ -495,7 +495,7 @@ func TestBindSubConfigRequiresAppletAppID(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Add category allowlist tests**
+- [x] **Step 2: Add category allowlist tests**
 
 ```go
 func TestWechatCategoryAllowlistSource(t *testing.T) {
@@ -506,7 +506,7 @@ func TestWechatCategoryAllowlistSource(t *testing.T) {
 }
 ```
 
-- [ ] **Step 3: Run tests and confirm failure**
+- [x] **Step 3: Run tests and confirm failure**
 
 ```bash
 go test ./baofu/merchantreport/contracts -count=1
@@ -514,11 +514,11 @@ go test ./baofu/merchantreport/contracts -count=1
 
 Expected: package missing or compile failure.
 
-- [ ] **Step 4: Implement contracts and generated allowlist**
+- [x] **Step 4: Implement contracts and generated allowlist**
 
 Implement `merchant_report`, `merchant_report_query`, and `bind_sub_config` request/response DTOs with appendix enums. Generate or manually add the WeChat category allowlist from `/home/sam/文档/分账/宝付/经营类目&MCC.xlsx`; keep SHA256 and row count constants in the generated file.
 
-- [ ] **Step 5: Run contract tests**
+- [x] **Step 5: Run contract tests**
 
 ```bash
 go test ./baofu/merchantreport/contracts -count=1
