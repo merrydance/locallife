@@ -137,7 +137,7 @@
 - `locallife/baofu/account/contracts/types.go` 的 `OpenAccountRequest` 仍是业务抽象；官方字段级 DTO 已拆到 `official_open.go` 等文件。
 - 已区分个人二要素、个人四要素、企业/个体字段集合；企业/个体生产资料来源、资质附件和完整条件必填仍需沙箱样例校准。
 - 已把 `businessType=BCT2.0`、`version=4.1.0`、`accType` 和个人开户条件必填落入契约校验；企业/个体长尾条件仍需继续补测试。
-- 已新增官方 DTO 和本地 client；client 已按 `verifyType=1` 构造 union-gw URL 参数和 `header/body` 密文 envelope；仍未使用官方测试地址 `https://vgw.baofoo.com/union-gw/api/T-1001-013-01/transReq.do` 联调，且 `verifyType=2`/通知密文形态需复核。
+- 已新增官方 DTO 和本地 client；client 已按 `verifyType=1` 构造 union-gw URL 参数和 `header/body` 密文 envelope；开户 `noticeUrl` 已改为运行时 `BAOFU_NOTIFY_BASE_URL + /account/open`，不再使用 placeholder。仍未使用官方测试地址 `https://vgw.baofoo.com/union-gw/api/T-1001-013-01/transReq.do` 联调，且 `verifyType=2`/通知密文形态需复核。
 
 ### 6.2 开户查询 `T-1001-013-03`
 

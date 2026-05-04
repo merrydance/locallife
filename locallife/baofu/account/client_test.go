@@ -45,6 +45,24 @@ func TestAccountClientQueryBalancePostsOfficialUnionGatewayRequest(t *testing.T)
 	require.Contains(t, string(env.Body), `"contractNo":"CM202605040001"`)
 }
 
+func TestAccountClientOpenAccountUsesConfiguredNotifyBaseURL(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": "1", "transSerialNo": "OPEN202605040001", "contractNo": "CM202605040001", "state": "2"}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.OpenAccount(context.Background(), contracts.OpenAccountRequest{
+		AccountType:   "personal",
+		OutRequestNo:  "OPEN202605040001",
+		LegalName:     "测试用户",
+		CertificateNo: "110101199001010011",
+	})
+
+	require.NoError(t, err)
+	env := accountRequestEnvelopeForTest(t, doer)
+	require.Equal(t, "T-1001-013-01", env.Header.ServiceType)
+	require.JSONEq(t, `{"noticeUrl":"https://api.example.com/v1/webhooks/baofu/account/open"}`, partialJSONForAccountTest(t, env.Body, "noticeUrl"))
+	require.NotContains(t, string(env.Body), "placeholder.local")
+}
+
 func TestAccountClientReturnsProviderErrorForBusinessFailure(t *testing.T) {
 	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": "0", "errorCode": "BF00061", "errorMsg": "上游原始四要素错误"}}
 	client := NewClient(testBaofuRootClient(t, doer))
@@ -133,4 +151,28 @@ func mustAccountResponseRaw(value map[string]any) json.RawMessage {
 		panic(err)
 	}
 	return raw
+}
+
+func accountRequestEnvelopeForTest(t *testing.T, doer *accountRecordingDoer) baofu.UnionGWPlaintextEnvelope {
+	t.Helper()
+	require.NotNil(t, doer)
+	require.NotNil(t, doer.request)
+	plaintext, err := baofu.DecodeUnionGWVerifyType1Content(doer.baofuPublicPEM, doer.request.URL.Query().Get("content"))
+	require.NoError(t, err)
+	var env baofu.UnionGWPlaintextEnvelope
+	require.NoError(t, json.Unmarshal(plaintext, &env))
+	return env
+}
+
+func partialJSONForAccountTest(t *testing.T, raw json.RawMessage, keys ...string) string {
+	t.Helper()
+	var full map[string]any
+	require.NoError(t, json.Unmarshal(raw, &full))
+	partial := make(map[string]any, len(keys))
+	for _, key := range keys {
+		partial[key] = full[key]
+	}
+	body, err := json.Marshal(partial)
+	require.NoError(t, err)
+	return string(body)
 }

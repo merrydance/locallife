@@ -172,6 +172,39 @@ func TestLoadConfig_ReadsBaofuMainBusinessConfig(t *testing.T) {
 	require.Equal(t, "PAYOUT_MER", baofuConfig.PayoutMerchantID)
 }
 
+func TestLoadConfig_NormalizesEscapedBaofuPEMValues(t *testing.T) {
+	configDir := writeTestConfigFile(t, strings.Join([]string{
+		"ENVIRONMENT=test",
+		"DB_SOURCE=postgresql:///test",
+		"MIGRATION_URL=file://db/migration",
+		"WECHAT_MINI_APP_ID=wx-local-life",
+		"BAOFU_MAIN_BUSINESS_ENABLED=true",
+		"BAOFU_COLLECT_MERCHANT_ID=COLLECT_MER",
+		"BAOFU_COLLECT_TERMINAL_ID=COLLECT_TER",
+		"BAOFU_PAYOUT_MERCHANT_ID=PAYOUT_MER",
+		"BAOFU_PAYOUT_TERMINAL_ID=PAYOUT_TER",
+		"BAOFU_APP_ID=baofu-app",
+		`BAOFU_PRIVATE_KEY_PEM=-----BEGIN PRIVATE KEY-----\\nprivate-body\\n-----END PRIVATE KEY-----`,
+		`BAOFU_PUBLIC_KEY_PEM=-----BEGIN CERTIFICATE-----\\npublic-body\\n-----END CERTIFICATE-----`,
+		"BAOFU_SIGN_SERIAL_NO=sign-sn",
+		"BAOFU_ENCRYPTION_SERIAL_NO=enc-sn",
+		"BAOFU_AES_KEY=0123456789abcdef0123456789abcdef",
+		"BAOFU_NOTIFY_BASE_URL=https://api.example.com/v1/webhooks/baofu",
+		"BAOFU_PAYMENT_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/payment",
+		"BAOFU_PROFIT_SHARING_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/share",
+		"BAOFU_REFUND_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/refund",
+	}, "\n")+"\n")
+
+	config, err := LoadConfig(configDir)
+	require.NoError(t, err)
+
+	baofuConfig := config.ToBaofuConfig()
+	require.Contains(t, baofuConfig.PrivateKeyPEM, "\nprivate-body\n")
+	require.NotContains(t, baofuConfig.PrivateKeyPEM, `\n`)
+	require.Contains(t, baofuConfig.BaofuPublicKeyPEM, "\npublic-body\n")
+	require.NotContains(t, baofuConfig.BaofuPublicKeyPEM, `\n`)
+}
+
 func TestEffectiveWechatEcommerceNotifyURLs(t *testing.T) {
 	config := Config{
 		WechatEcommercePaymentNotifyURL:    "https://example.com/v1/webhooks/wechat-ecommerce/payment-notify",

@@ -23,7 +23,7 @@ func (c *Client) OpenAccount(ctx context.Context, req contracts.OpenAccountReque
 	if c == nil || c.root == nil {
 		return nil, errors.New("baofu account client is not configured")
 	}
-	officialReq, err := officialOpenAccountRequest(req)
+	officialReq, err := officialOpenAccountRequest(req, c.accountOpenNotifyURL())
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +131,11 @@ func (c *Client) terminalID(value string) string {
 	return c.root.Config().CollectTerminalID
 }
 
-func officialOpenAccountRequest(req contracts.OpenAccountRequest) (contracts.OfficialOpenAccountRequest, error) {
+func (c *Client) accountOpenNotifyURL() string {
+	return strings.TrimRight(strings.TrimSpace(c.root.Config().NotifyBaseURL), "/") + "/account/open"
+}
+
+func officialOpenAccountRequest(req contracts.OpenAccountRequest, noticeURL string) (contracts.OfficialOpenAccountRequest, error) {
 	accountType := contracts.OfficialAccountTypeBusiness
 	var accountInfo any
 	switch strings.TrimSpace(req.AccountType) {
@@ -170,7 +174,7 @@ func officialOpenAccountRequest(req contracts.OpenAccountRequest) (contracts.Off
 		Version:      contracts.OfficialOpenAccountVersion,
 		AccountType:  accountType,
 		AccountInfo:  accountInfo,
-		NoticeURL:    "https://placeholder.local/baofu/account/open",
+		NoticeURL:    strings.TrimSpace(noticeURL),
 		BusinessType: contracts.OfficialBusinessTypeBCT20,
 	}
 	if err := officialReq.Validate(); err != nil {

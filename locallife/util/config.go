@@ -345,8 +345,8 @@ func (c Config) ToBaofuConfig() baofu.Config {
 		PayoutMerchantID:          c.BaofuPayoutMerchantID,
 		PayoutTerminalID:          c.BaofuPayoutTerminalID,
 		AppID:                     c.BaofuAppID,
-		PrivateKeyPEM:             c.BaofuPrivateKeyPEM,
-		BaofuPublicKeyPEM:         c.BaofuPublicKeyPEM,
+		PrivateKeyPEM:             normalizeEscapedPEM(c.BaofuPrivateKeyPEM),
+		BaofuPublicKeyPEM:         normalizeEscapedPEM(c.BaofuPublicKeyPEM),
 		SignSerialNo:              c.BaofuSignSerialNo,
 		EncryptionSerialNo:        c.BaofuEncryptionSerialNo,
 		AESKey:                    c.BaofuAESKey,
@@ -670,5 +670,12 @@ func trimOptionalQuotes(s string) string {
 	s = strings.TrimSuffix(s, "\"")
 	s = strings.TrimPrefix(s, "'")
 	s = strings.TrimSuffix(s, "'")
+	return s
+}
+
+func normalizeEscapedPEM(s string) string {
+	s = trimOptionalQuotes(s)
+	s = strings.ReplaceAll(s, `\\n`, "\n")
+	s = strings.ReplaceAll(s, `\n`, "\n")
 	return s
 }

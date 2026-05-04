@@ -1595,3 +1595,11 @@ make test-integration
 - Tightened the concrete client boundary: BaoCaiTong account union-gw responses with failing `retCode` and aggregate pay / merchant report public-envelope responses with `resultCode != SUCCESS` now become sanitized `ProviderError` values before DTO unmarshalling, so empty failure payloads cannot accidentally become successful zero-value results.
 - Preserved the error exposure rule: upstream `errMsg/errorMsg` is stored only on `ProviderError.UpstreamMessage` for the provider/log boundary; frontend guidance uses curated Chinese product messages and actions only.
 - Verification scope remains local C3. Real Baofu sandbox error samples, channel-specific error combinations, and response signature/digital-envelope evidence are still open.
+
+
+### 2026-05-04 Sandbox Prep - Account Notify URL And Local Config Skeleton
+
+- Corrected BaoCaiTong account opening request construction so `noticeUrl` is derived from runtime `BAOFU_NOTIFY_BASE_URL + /account/open`; the old `https://placeholder.local/...` value is no longer emitted.
+- Added config normalization for PEM values written as escaped single-line env strings, allowing `BAOFU_PRIVATE_KEY_PEM` and `BAOFU_PUBLIC_KEY_PEM` to be stored in local `.env` files with `\n` separators and converted back to real PEM before client construction.
+- Created local ignored `locallife/app.env` from Baofoo sandbox test material: collect/payout merchant IDs, sandbox endpoints, extracted private/public PEM material, and derived certificate serial numbers. Remaining local placeholders are public callback host, LocalLife mini-program appid, and Baofoo AES key confirmation/replacement.
+- Verification scope remains local setup only. No Baofoo sandbox endpoint has been called yet, and C4 evidence remains empty until the remaining placeholders are replaced and test requests are executed.
