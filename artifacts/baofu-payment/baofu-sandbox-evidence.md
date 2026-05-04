@@ -24,6 +24,7 @@
 
 | Date | Env | Endpoint | OutRequestNo | Owner | Owner Type | Result | ContractNo Masked | SharingMerID Masked | Callback | Query | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-05-05 | sandbox | `https://vgw.baofoo.com/union-gw/api/T-1001-013-01/transReq.do` | `BAOFU_OPEN_PERSON_20260505071859` | masked personal identity | personal two-factor | reached sandbox; parsed union-gw response; upstream returned abnormal with `BF0001` | - | - | no | no | `bee8a3d2` | Negative open-account evidence only. The provider accepted the request shape but did not open an account; no `contractNo`/`sharing_mer_id` was returned, so balance query and merchant report cannot proceed from this run. |
 
 ## Account Query `T-1001-013-03`
 
