@@ -1104,3 +1104,9 @@ This remediation is not complete until all of the following are true:
 - Added `ListRecoverableBaofuMerchantReports` and `baofu-merchant-report-recovery` scheduler for processing WeChat reports and pending APPLET auth bindings.
 - Wired concrete merchant-report client construction in `main.go`; the scheduler is registered only when Baofu runtime config is available and otherwise fails closed with a scheduler-boundary warning.
 - Residual risk: real Baofu merchant report/query/bind_sub_config sandbox evidence and complete production資料来源映射 remain C4/open.
+
+### 2026-05-04 Follow-up: Merchant Report Appendix Enums
+
+- Added typed constants and allowlist helpers for the merchant-report appendix enums identified in the audit: terminal device types, operation flags, device statuses, WeChat/Alipay service and certificate values, contact business/type values, site types, indirect levels, merchant statuses, transaction controls, auth order states, and merchant auth states.
+- Added table-driven coverage so unsupported appendix values fail closed before future DTO fields can silently drift.
+- Residual risk: these enums are local C3 guardrails only; production资料映射 and sandbox response samples still need evidence.

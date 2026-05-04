@@ -1580,3 +1580,10 @@ make test-integration
 - Added merchant-report query recovery for delayed WeChat channel reporting. Processing `baofu_merchant_reports` are queried through `merchant_report_query`; successful results persist `sub_mch_id` and then execute `bind_sub_config(authType=APPLET, authContent=<LocalLife 小程序 appid>)`.
 - Added `baofu-merchant-report-recovery` scheduler and runtime concrete `merchantreport.Client` wiring in `main.go`.
 - Verification scope remains local C3. Real Baofu report/query/APPLET-bind sandbox evidence and production资料映射验收 are still open.
+
+
+### 2026-05-04 Remediation Follow-up - Merchant Report Appendix Enums
+
+- Added typed allowlists for the merchant-report appendix enums identified by the audit, including terminal/device/contact/site/indirect-level/merchant-status/transaction-control/auth-state groups.
+- Current first-version WeChat APPLET DTOs still only emit the supported fields; future fields must reuse these allowlists instead of introducing new magic strings.
+- Verification scope remains local C3. Real Baofu report/query/APPLET-bind sandbox evidence and production资料映射验收 are still open.

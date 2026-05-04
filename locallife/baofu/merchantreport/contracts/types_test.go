@@ -89,3 +89,34 @@ func TestNormalizeMerchantReportState(t *testing.T) {
 	require.Equal(t, ReportStateProcessing, NormalizeMerchantReportState("PROCESSING"))
 	require.Equal(t, ReportStateUnknown, NormalizeMerchantReportState("unexpected"))
 }
+
+func TestMerchantReportAppendixEnumsAreTypedAllowlists(t *testing.T) {
+	cases := []struct {
+		name   string
+		value  string
+		check  func(string) bool
+		reject string
+	}{
+		{"terminal device type", TerminalDeviceTypeStore, IsValidTerminalDeviceType, "99"},
+		{"operation flag", OperationFlagCreate, IsValidOperationFlag, "03"},
+		{"device status", DeviceStatusEnabled, IsValidDeviceStatus, "99"},
+		{"wechat service type micopay", WechatServiceTypeMicropay, IsValidWechatServiceType, "NATIVE"},
+		{"alipay service type", AlipayServiceTypeFaceToFace, IsValidAlipayServiceType, "APPLET"},
+		{"contact business type", ContactBusinessTypeMerchantContact, IsValidContactBusinessType, "99"},
+		{"wechat certificate identity", WechatCertificateTypeIdentityCard, IsValidWechatCertificateType, "PASSPORT"},
+		{"alipay certificate", AlipayCertificateTypeInstRegistration, IsValidAlipayCertificateType, "IDENTITY_CARD"},
+		{"alipay contact type", AlipayContactTypeLegalPerson, IsValidAlipayContactType, "OWNER"},
+		{"site type", SiteTypeMiniProgram, IsValidSiteType, "99"},
+		{"indirect level", IndirectLevelM1, IsValidIndirectLevel, "M1"},
+		{"merchant status", MerchantStatusEnabled, IsValidMerchantStatus, "99"},
+		{"transaction control", TransactionControlAllowed, IsValidTransactionControl, "99"},
+		{"auth order state", AuthOrderStateContactConfirm, IsValidAuthOrderState, "UNKNOWN"},
+		{"merchant auth state", MerchantAuthStateAuthorized, IsValidMerchantAuthState, "UNKNOWN"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.True(t, tc.check(tc.value))
+			require.False(t, tc.check(tc.reject))
+		})
+	}
+}

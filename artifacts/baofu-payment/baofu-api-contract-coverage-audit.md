@@ -420,15 +420,15 @@
 | 支付方式 | https://doc.mandao.com/docs/bct/bct-1f9qrdro3gtv1 | C1：`WECHAT_JSAPI` | 未建完整支付方式枚举和条件必填矩阵。 |
 | 订单状态 | https://doc.mandao.com/docs/bct/bct-1f9qre51sa7dg | C2：支付/分账/退款状态局部 | 已覆盖退款 `SUCCESS/REFUND/REFUND_ERROR/ABNORMAL` 映射；关闭状态仍主要依赖支付状态，未知组合进入 `unknown`。 |
 | 支付属性 | https://doc.mandao.com/docs/bct/bct-1f9qrefjkin2b | C1：微信 JSAPI 三字段 | 未覆盖公共参数禁传条件、支付宝/云闪付等非首版支付方式。 |
-| 聚合商户报备附录 | https://doc.mandao.com/docs/bct/bct-1f9o6qi1pf2r8 | C2/C3：首版微信报备类型、报备状态、微信服务类型、证件类型、授权类型和 110 项微信经营类目 allowlist 已建 | 终端设备、联系人业务标识、商户状态、交易控制位、认证状态等完整附录仍需补齐。 |
+| 聚合商户报备附录 | https://doc.mandao.com/docs/bct/bct-1f9o6qi1pf2r8 | C3：报备类型、报备状态、终端设备、操作标识、设备状态、微信/支付宝服务类型、联系人业务标识、微信/支付宝证件类型、支付宝联系人类型、授权类型、站点类型、间连等级、商户状态、交易控制位、认证订单状态、商户认证状态和 110 项微信经营类目 allowlist 已建 | 仍需把长尾枚举接入未来新增字段的 DTO 校验；当前首版未使用字段必须保持不进入请求体。 |
 
 ### 11.1 聚合商户报备附录枚举覆盖状态
 
-结论：首版微信小程序路径已把关键报备类型、报备状态、微信服务类型、微信证件类型、授权类型和微信经营类目 allowlist 落入项目契约层；但聚合商户报备附录没有全量覆盖，不能把报备生命周期视为完全防漂移。生产前仍需补齐终端/联系人/认证/商户状态等长尾枚举，或在首版请求中显式禁止传入未覆盖字段。
+结论：首版微信小程序路径已把关键报备类型、报备状态、微信服务类型、微信证件类型、授权类型和微信经营类目 allowlist 落入项目契约层；本地已补齐当前审计识别出的终端/联系人/认证/商户状态等附录枚举 typed constants 和 allowlist 测试。生产前仍需确保未来新增字段全部复用这些校验，未使用字段继续禁止进入请求体。
 
 | 附录/下载文件 | 来源 | 已识别内容 | 当前项目覆盖 | 生产前要求 |
 | --- | --- | --- | --- | --- |
-| 报备附录枚举 | `bct-1f9o6qi1pf2r8` | 签名类型、报备类型、报备状态、终端设备类型、操作标识、设备状态、微信服务类型、支付宝服务类型、联系人业务标识、微信证件类型、支付宝证件类型、联系人类型、授权类型、站点类型、间连等级、商户状态、交易控制位、认证订单状态、商户认证状态 | C2/C3，首版已覆盖 `WECHAT`、报备状态、`APPLET`、微信证件类型和授权类型 | 继续为终端设备、联系人业务标识、商户状态、交易控制位、认证状态等未覆盖字段建常量/校验；未覆盖字段进入请求前必须 fail-closed。 |
+| 报备附录枚举 | `bct-1f9o6qi1pf2r8` | 签名类型、报备类型、报备状态、终端设备类型、操作标识、设备状态、微信服务类型、支付宝服务类型、联系人业务标识、微信证件类型、支付宝证件类型、联系人类型、授权类型、站点类型、间连等级、商户状态、交易控制位、认证订单状态、商户认证状态 | C3，已覆盖 `WECHAT`、报备状态、`APPLET`、微信证件类型、授权类型以及当前审计识别出的终端设备、联系人业务标识、商户状态、交易控制位、认证状态等长尾枚举 | 未来新增字段必须复用 allowlist；未使用字段进入请求前必须 fail-closed。 |
 | 经营类目/MCC | `/home/sam/文档/分账/宝付/经营类目&MCC.xlsx`，SHA256 `c521b7b15397a5aa63be9a3d8297c8a8c207e68e7d7fea7a26f8450945b4793f` | `微信经营类目` sheet：110 条，字段为 `类目值/类目名称`；`支付宝MCC` sheet：368 条，字段为 `MCC/经营类目一级/经营类目二级/经营类目三级/特殊资质` | C3：微信经营类目已生成 allowlist 并用 hash/行数/非法值测试锁定；支付宝 MCC 暂缓 | xlsx 更新时必须更新 hash 和生成物；如启用支付宝报备，再抽取支付宝 MCC。 |
 | 聚合支付枚举 | `产品类型`、`支付方式`、`订单状态`、`支付属性` 附录 | `SHARING`、`WECHAT_JSAPI`、支付/退款/分账订单状态、微信 JSAPI 支付属性等 | C2/C3，首版常量和状态映射已覆盖支付/分账/退款主状态 | 已显式拒绝非 `SHARING`、非 `orderType=7`、非 `WECHAT_JSAPI`；支付/分账/退款状态分别映射，未知值进入 `unknown`，错误码细分仍留 Task 10。 |
 | 错误码 | 账户错误码、聚合支付错误码、报备错误码 | 参数错误、系统繁忙、商户未报备、分账配置不存在、风控拒绝等 | C2，首版 typed classification 已建 | 已区分资料需修改、平台配置错误、可重试处理中、渠道/宝付异常需人工，并接入宝付支付/退款创建错误映射；完整官方错误码表、账户/报备细分和沙箱错误样例仍待补。 |
@@ -483,7 +483,7 @@
 | `locallife/baofu/account/contracts` | 业务归一化 DTO + 官方开户/查询/余额/提现 DTO | 企业/个体完整资料映射、资质附件、账户错误码表和沙箱样例仍待补。 |
 | `locallife/baofu/aggregatepay/client.go` | interface + concrete HTTP client | 已覆盖支付/查询/分账/退款/关单；未做沙箱验证和响应验签/数字信封完整验证。 |
 | `locallife/baofu/account/client.go` | concrete account client，覆盖开户/查询/余额/提现/提现查询，并已切到 union-gw `verifyType=1` 请求/响应 envelope | `verifyType=2`、通知密文、沙箱证据和真实错误码仍待补。 |
-| `locallife/baofu/merchantreport/**` | 报备/查询/APPLET 绑定 contracts + concrete client + tests | 完整附录枚举、真实资料来源映射、报备恢复 worker 和沙箱证据仍待补。 |
+| `locallife/baofu/merchantreport/**` | 报备/查询/APPLET 绑定 contracts + concrete client + tests | 当前审计识别的附录枚举和报备恢复 worker 已补；真实资料来源映射和沙箱证据仍待补。 |
 | `locallife/logic/baofu_payment_service.go` | 服务层可组统一下单并记录 command；主业务 API runtime 可切宝付 concrete aggregate client | 宝付合单支付已 fail-closed；沙箱证据仍待补。 |
 | `locallife/api/logic_adapters.go` | 已按 `BAOFU_MAIN_BUSINESS_ENABLED` 构造宝付主业务 facade | 主业务支付可切宝付；宝付启用时合单支付已明确 fail-closed。 |
 | `locallife/api/baofu_callback.go` | 支付/分账/退款/开户回调落 fact 草稿 | ACK、验签、payload 完整性需沙箱确认。 |
@@ -537,7 +537,7 @@
 2. 宝付合单支付首版已选择 fail-closed：`BAOFU_MAIN_BUSINESS_ENABLED=true` 时创建合单支付返回 `宝付合单支付暂未开通，请分开支付`，不得回退普通服务商/平台收付通；后续如需合单再按宝付官方合单/多单契约新增。
 3. 用宝付测试地址补退款 callback / `refund_query` 证据，并继续保持“分账前退款、分账后不退款”互斥。
 4. 补完整错误码表：账户错误码、聚合支付错误码、报备错误码至少分成“用户需改资料”“商户/平台配置错误”“宝付处理中可重试”“宝付/渠道异常需人工”。
-5. 补聚合商户报备完整附录枚举和真实资料来源映射；报备查询恢复 worker 已本地完成，未覆盖字段仍需在请求进入 client 前 fail-closed。
+5. 补聚合商户报备真实资料来源映射；附录枚举和报备查询恢复 worker 已本地完成，未覆盖字段仍需在请求进入 client 前 fail-closed。
 6. 每个必用接口至少跑一次宝付测试地址正向、参数错误、重复请求/幂等、查询恢复、回调重复投递，并把脱敏证据写入 `baofu-sandbox-evidence.md`。
 7. 向宝付确认拓展码/扫码确认的接口归属、字段、扫码主体和状态查询方式，并把结果补入开户/报备契约。
 
