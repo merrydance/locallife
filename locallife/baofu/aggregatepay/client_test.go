@@ -20,7 +20,7 @@ import (
 )
 
 func TestAggregateClientCreateUnifiedOrderPostsPublicEnvelope(t *testing.T) {
-	doer := &aggregateRecordingDoer{responseBizContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","outTradeNo":"BF202605040001","txnState":"WAIT_PAYING","tradeNo":"BFPAY202605040001","chlRetParam":{"wc_pay_data":{"timeStamp":"1767225600","nonceStr":"nonce","package":"prepay_id=wx","signType":"RSA","paySign":"sign"}}}`)}
+	doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","outTradeNo":"BF202605040001","txnState":"WAIT_PAYING","tradeNo":"BFPAY202605040001","chlRetParam":{"wc_pay_data":{"timeStamp":"1767225600","nonceStr":"nonce","package":"prepay_id=wx","signType":"RSA","paySign":"sign"}}}`)}
 	client := NewClient(testBaofuRootClient(t, doer))
 
 	result, err := client.CreateUnifiedOrder(context.Background(), validUnifiedOrderRequestForClientTest())
@@ -55,7 +55,7 @@ func TestAggregateClientReturnsSanitizedProviderError(t *testing.T) {
 }
 
 func TestAggregateClientReturnsProviderErrorForBusinessFailure(t *testing.T) {
-	doer := &aggregateRecordingDoer{responseBizContent: json.RawMessage(`{"resultCode":"FAIL","errCode":"MERCHANT_NOT_REPORT","errMsg":"上游原始报备错误","outTradeNo":"BF202605040001"}`)}
+	doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"FAIL","errCode":"MERCHANT_NOT_REPORT","errMsg":"上游原始报备错误","outTradeNo":"BF202605040001"}`)}
 	client := NewClient(testBaofuRootClient(t, doer))
 
 	_, err := client.CreateUnifiedOrder(context.Background(), validUnifiedOrderRequestForClientTest())
@@ -103,11 +103,11 @@ func validUnifiedOrderRequestForClientTest() contracts.UnifiedOrderRequest {
 }
 
 type aggregateRecordingDoer struct {
-	request            *http.Request
-	requestBody        []byte
-	statusCode         int
-	responseBizContent json.RawMessage
-	responseBody       []byte
+	request             *http.Request
+	requestBody         []byte
+	statusCode          int
+	responseDataContent json.RawMessage
+	responseBody        []byte
 }
 
 func (d *aggregateRecordingDoer) Do(req *http.Request) (*http.Response, error) {
@@ -135,7 +135,7 @@ func (d *aggregateRecordingDoer) Do(req *http.Request) (*http.Response, error) {
 			SignSerialNo:       "1",
 			EncryptionSerialNo: "1",
 			SignString:         "test-signature",
-			DataContent:        baofu.JSONString(d.responseBizContent),
+			DataContent:        baofu.JSONString(d.responseDataContent),
 		})
 	}
 	return &http.Response{StatusCode: status, Body: io.NopCloser(bytes.NewReader(responseBody)), Header: make(http.Header)}, nil
@@ -187,7 +187,7 @@ func partialJSONForTest(t *testing.T, raw json.RawMessage, keys ...string) strin
 }
 
 func TestAggregateClientCreateRefundPostsPublicEnvelope(t *testing.T) {
-	doer := &aggregateRecordingDoer{responseBizContent: json.RawMessage(`{"resultCode":"SUCCESS","outTradeNo":"RF202605040001","tradeNo":"BFREFUND202605040001","refundState":"REFUND","refundAmt":300,"totalAmt":300}`)}
+	doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","outTradeNo":"RF202605040001","tradeNo":"BFREFUND202605040001","refundState":"REFUND","refundAmt":300,"totalAmt":300}`)}
 	client := NewClient(testBaofuRootClient(t, doer))
 
 	result, err := client.CreateRefund(context.Background(), validRefundBeforeShareRequestForClientTest())
@@ -202,7 +202,7 @@ func TestAggregateClientCreateRefundPostsPublicEnvelope(t *testing.T) {
 }
 
 func TestAggregateClientQueryRefundAndCloseOrderPostPublicEnvelope(t *testing.T) {
-	doer := &aggregateRecordingDoer{responseBizContent: json.RawMessage(`{"resultCode":"SUCCESS","outTradeNo":"RF202605040001","tradeNo":"BFREFUND202605040001","refundState":"SUCCESS"}`)}
+	doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","outTradeNo":"RF202605040001","tradeNo":"BFREFUND202605040001","refundState":"SUCCESS"}`)}
 	client := NewClient(testBaofuRootClient(t, doer))
 
 	_, err := client.QueryRefund(context.Background(), contracts.RefundQueryRequest{MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "RF202605040001"})
@@ -210,7 +210,7 @@ func TestAggregateClientQueryRefundAndCloseOrderPostPublicEnvelope(t *testing.T)
 	env := publicEnvelopeFromFormForTest(t, doer.requestBody)
 	require.Equal(t, "refund_query", env.Method)
 
-	doer.responseBizContent = json.RawMessage(`{"resultCode":"SUCCESS","outTradeNo":"BF202605040001"}`)
+	doer.responseDataContent = json.RawMessage(`{"resultCode":"SUCCESS","outTradeNo":"BF202605040001"}`)
 	_, err = client.CloseOrder(context.Background(), contracts.OrderCloseRequest{MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "BF202605040001"})
 	require.NoError(t, err)
 	env = publicEnvelopeFromFormForTest(t, doer.requestBody)

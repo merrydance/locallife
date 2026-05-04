@@ -1183,7 +1183,7 @@ git commit -m "docs(baofu): freeze contract source ledger"
 - Modify: `locallife/baofu/merchantreport/client_test.go`
 - Modify: `artifacts/baofu-payment/baofu-api-contract-coverage-audit.md`
 
-- [ ] **Step 1: Add/verify request fixture tests**
+- [x] **Step 1: Add/verify request fixture tests**
 
 `go test ./baofu -run 'TestPublicEnvelope' -count=1` must prove:
 
@@ -1193,7 +1193,7 @@ git commit -m "docs(baofu): freeze contract source ledger"
 - `timestamp` is `yyyyMMddHHmmss` in `Asia/Shanghai`;
 - `signSn/ncrptnSn` reject values longer than S(10).
 
-- [ ] **Step 2: Add/verify response fixture tests**
+- [x] **Step 2: Add/verify response fixture tests**
 
 `go test ./baofu -run 'TestPublicResponseEnvelope' -count=1` must prove:
 
@@ -1202,7 +1202,7 @@ git commit -m "docs(baofu): freeze contract source ledger"
 - missing business content on `returnCode=SUCCESS` fails closed;
 - `returnCode=FAIL` does not require business content and preserves `returnMsg`.
 
-- [ ] **Step 3: Remove direct response `BizContent` reads**
+- [x] **Step 3: Remove direct response `BizContent` reads**
 
 Run:
 
@@ -1212,14 +1212,14 @@ rg -n "responseEnvelope\\.BizContent|PublicResponseEnvelope\\{[^\\n]*BizContent|
 
 Expected: no production caller reads response `BizContent` directly. Test fixtures should prefer `DataContent`.
 
-- [ ] **Step 4: Validate**
+- [x] **Step 4: Validate**
 
 ```bash
 cd locallife
 PATH="/usr/local/go/bin:$PATH" go test ./baofu ./baofu/aggregatepay ./baofu/merchantreport -count=1
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add locallife/baofu artifacts/baofu-payment/baofu-api-contract-coverage-audit.md

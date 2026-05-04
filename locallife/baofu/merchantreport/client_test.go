@@ -20,7 +20,7 @@ import (
 )
 
 func TestMerchantReportClientSubmitReportPostsPublicEnvelope(t *testing.T) {
-	doer := &merchantReportRecordingDoer{responseBizContent: json.RawMessage(`{"resultCode":"SUCCESS","reportType":"WECHAT","reportNo":"MR202605040001","reportState":"SUCCESS","subMchId":"1900000109","platformBizNo":"PB202605040001"}`)}
+	doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","reportType":"WECHAT","reportNo":"MR202605040001","reportState":"SUCCESS","subMchId":"1900000109","platformBizNo":"PB202605040001"}`)}
 	client := NewClient(testBaofuRootClient(t, doer))
 
 	result, err := client.SubmitWechatReport(context.Background(), validWechatReportRequestForClientTest())
@@ -36,7 +36,7 @@ func TestMerchantReportClientSubmitReportPostsPublicEnvelope(t *testing.T) {
 }
 
 func TestMerchantReportClientBindSubConfigPostsAppletAuth(t *testing.T) {
-	doer := &merchantReportRecordingDoer{responseBizContent: json.RawMessage(`{"resultCode":"SUCCESS","subMchId":"1900000109","authType":"APPLET"}`)}
+	doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","subMchId":"1900000109","authType":"APPLET"}`)}
 	client := NewClient(testBaofuRootClient(t, doer))
 
 	_, err := client.BindSubConfig(context.Background(), contracts.BindSubConfigRequest{MerchantID: "102004465", TerminalID: "200005200", SubMchID: "1900000109", AuthType: contracts.AuthTypeApplet, AuthContent: "wx1234567890abcdef", Remark: "LocalLife mini program"})
@@ -49,7 +49,7 @@ func TestMerchantReportClientBindSubConfigPostsAppletAuth(t *testing.T) {
 }
 
 func TestMerchantReportClientReturnsProviderErrorForBusinessFailure(t *testing.T) {
-	doer := &merchantReportRecordingDoer{responseBizContent: json.RawMessage(`{"resultCode":"FAIL","errCode":"INVALID_PARAMETER","errMsg":"上游原始参数错误"}`)}
+	doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"FAIL","errCode":"INVALID_PARAMETER","errMsg":"上游原始参数错误"}`)}
 	client := NewClient(testBaofuRootClient(t, doer))
 
 	_, err := client.SubmitWechatReport(context.Background(), validWechatReportRequestForClientTest())
@@ -86,9 +86,9 @@ func validWechatReportRequestForClientTest() contracts.WechatMerchantReportReque
 }
 
 type merchantReportRecordingDoer struct {
-	request            *http.Request
-	requestBody        []byte
-	responseBizContent json.RawMessage
+	request             *http.Request
+	requestBody         []byte
+	responseDataContent json.RawMessage
 }
 
 func (d *merchantReportRecordingDoer) Do(req *http.Request) (*http.Response, error) {
@@ -99,7 +99,7 @@ func (d *merchantReportRecordingDoer) Do(req *http.Request) (*http.Response, err
 	}
 	d.requestBody = body
 	reqEnv := publicEnvelopeFromFormForTest(nil, body)
-	responseBody, _ := json.Marshal(baofu.PublicResponseEnvelope{ReturnCode: baofu.PublicEnvelopeReturnCodeSuccess, MerchantID: reqEnv.MerchantID, TerminalID: reqEnv.TerminalID, Charset: baofu.PublicEnvelopeCharsetUTF8, Version: baofu.PublicEnvelopeVersion10, Format: baofu.PublicEnvelopeFormatJSON, SignType: baofu.SignTypeRSA, SignSerialNo: "1", EncryptionSerialNo: "1", SignString: "test-signature", DataContent: baofu.JSONString(d.responseBizContent)})
+	responseBody, _ := json.Marshal(baofu.PublicResponseEnvelope{ReturnCode: baofu.PublicEnvelopeReturnCodeSuccess, MerchantID: reqEnv.MerchantID, TerminalID: reqEnv.TerminalID, Charset: baofu.PublicEnvelopeCharsetUTF8, Version: baofu.PublicEnvelopeVersion10, Format: baofu.PublicEnvelopeFormatJSON, SignType: baofu.SignTypeRSA, SignSerialNo: "1", EncryptionSerialNo: "1", SignString: "test-signature", DataContent: baofu.JSONString(d.responseDataContent)})
 	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(responseBody)), Header: make(http.Header)}, nil
 }
 
