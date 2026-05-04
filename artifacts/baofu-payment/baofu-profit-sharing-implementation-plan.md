@@ -1639,3 +1639,14 @@ make test-integration
 - Rerunning smoke on `d1b8dc55` still returned `商户号不能为null`, so `bizContent` string serialization and hex signature alone were not sufficient.
 - Rechecked Baofoo Java demo transport (`HttpSendModel` default `ContentTypeName.Default = application/x-www-form-urlencoded`, `UrlEncodedFormEntity`); public-envelope fields are posted as form fields, not as a JSON request body.
 - Corrected aggregate-pay and merchant-report public-envelope transport to POST `application/x-www-form-urlencoded` with top-level fields `merId/terId/method/.../bizContent/signStr`. Local tests now parse the recorded request as form and assert `bizContent` carries JSON text.
+
+
+### 2026-05-04 Sandbox Smoke Follow-up - Public Envelope Timestamp
+
+- Rerunning smoke on `c67d7fdf` changed aggregate-pay `order_query` from `商户号不能为null` to `时间戳传入错误`, proving the form transport got past the previous parser boundary.
+- Rechecked public-envelope fields against Baofoo docs and Java demo:
+  - `merId/terId/method/charset/version/format/signType/signSn/ncrptnSn/dgtlEnvlp/signStr/bizContent`: now match the documented field names and demo transport.
+  - `bizContent`: now JSON text inside a form field, signed before form encoding.
+  - `signStr`: now SHA256withRSA hex string, matching `FormatUtil.byte2Hex(signature.sign())`.
+  - `timestamp`: docs require `yyyyMMddHHmmss` within 10 minutes of Baofoo payment system; Java demo uses local `new Date()` with `SimpleDateFormat`, while Go had been using UTC.
+- Corrected public-envelope timestamp to format in `Asia/Shanghai` regardless of host timezone. This should remove the 8-hour offset seen on UTC production hosts.

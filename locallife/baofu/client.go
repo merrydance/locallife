@@ -135,7 +135,7 @@ func (c *Client) postPublicEnvelope(ctx context.Context, endpoint string, method
 		Charset:            PublicEnvelopeCharsetUTF8,
 		Version:            PublicEnvelopeVersion10,
 		Format:             PublicEnvelopeFormatJSON,
-		Timestamp:          time.Now().UTC().Format("20060102150405"),
+		Timestamp:          PublicEnvelopeTimestamp(time.Now()),
 		SignType:           SignTypeRSA,
 		SignSerialNo:       c.config.SignSerialNo,
 		EncryptionSerialNo: c.config.EncryptionSerialNo,
@@ -256,3 +256,11 @@ func publicBusinessFailure(raw json.RawMessage) (string, string, bool) {
 }
 
 var _ HTTPDoer = (*http.Client)(nil)
+
+func PublicEnvelopeTimestamp(now time.Time) string {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		location = time.FixedZone("Asia/Shanghai", 8*60*60)
+	}
+	return now.In(location).Format("20060102150405")
+}
