@@ -1660,3 +1660,11 @@ make test-integration
   - `ncrptnSn` is `S(10)` and Java demo defaults it to `1`.
   - The prior local `823078EFB7E1BBDC` / `B9F3E90C370A7A0F` values were derived certificate serial fragments and are too long for this public-envelope certificate index field.
 - Added local config validation to reject `BAOFU_SIGN_SERIAL_NO` and `BAOFU_ENCRYPTION_SERIAL_NO` longer than 10 characters so this cannot silently reach Baofoo again. Sandbox config should use Baofoo-provided certificate indexes; current Java demo/test material indicates `1` / `1`.
+
+
+### 2026-05-04 Sandbox Smoke Follow-up - Public Response `dataContent`
+
+- Rerunning smoke after setting `signSn/ncrptnSn=1/1` produced public-envelope `returnCode=SUCCESS` / `returnMsg=OK`, with top-level response keys `charset,dataContent,format,merId,ncrptnSn,returnCode,returnMsg,signSn,signStr,signType,terId,version`.
+- This matches Baofoo Java demo `ResultMasterEntity.dataContent`: request-side business payload uses `bizContent`, but response-side business payload uses `dataContent`. The local client had incorrectly required response `bizContent`, causing `baofu public response bizContent is required` after Baofoo had already accepted the request envelope.
+- Updated the public response envelope to parse and validate official `dataContent`, while retaining `bizContent` as a compatibility fallback for local fixtures only. Aggregate-pay and merchant-report clients now classify business failures and unmarshal DTOs from the response business content abstraction instead of reading `BizContent` directly.
+- C4 is still not granted for `order_query` until the fixed commit is deployed and the smoke script records the parsed `dataContent` business result. The next expected outcome is no longer envelope failure; it should be a classified business payload for the synthetic order, such as order-not-found/manual-review.

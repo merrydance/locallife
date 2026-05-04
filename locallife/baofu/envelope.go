@@ -48,6 +48,7 @@ type PublicResponseEnvelope struct {
 	EncryptionSerialNo string     `json:"ncrptnSn,omitempty"`
 	DigitalEnvelope    string     `json:"dgtlEnvlp,omitempty"`
 	SignString         string     `json:"signStr,omitempty"`
+	DataContent        JSONString `json:"dataContent,omitempty"`
 	BizContent         JSONString `json:"bizContent,omitempty"`
 }
 
@@ -172,13 +173,21 @@ func (e PublicResponseEnvelope) Validate() error {
 	if strings.TrimSpace(e.SignString) == "" {
 		return errors.New("baofu public response signStr is required")
 	}
-	if len(e.BizContent) == 0 {
-		return errors.New("baofu public response bizContent is required")
+	businessContent := e.BusinessContent()
+	if len(businessContent) == 0 {
+		return errors.New("baofu public response dataContent is required")
 	}
-	if !json.Valid([]byte(e.BizContent)) {
-		return errors.New("baofu public response bizContent must be valid JSON")
+	if !json.Valid([]byte(businessContent)) {
+		return errors.New("baofu public response dataContent must be valid JSON")
 	}
 	return nil
+}
+
+func (e PublicResponseEnvelope) BusinessContent() JSONString {
+	if len(e.DataContent) > 0 {
+		return e.DataContent
+	}
+	return e.BizContent
 }
 
 func isSupportedSignType(signType string) bool {

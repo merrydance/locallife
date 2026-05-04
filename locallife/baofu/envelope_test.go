@@ -55,14 +55,20 @@ func TestPublicEnvelopeFormValuesUseOfficialWireFormat(t *testing.T) {
 	require.Equal(t, "encrypted-key", values.Get("dgtlEnvlp"))
 }
 
-func TestPublicResponseEnvelopeAcceptsStringOrObjectBizContent(t *testing.T) {
+func TestPublicResponseEnvelopeAcceptsOfficialDataContent(t *testing.T) {
 	var fromString PublicResponseEnvelope
-	require.NoError(t, json.Unmarshal([]byte(`{"returnCode":"FAIL","returnMsg":"参数错误","bizContent":"{\"errCode\":\"INVALID_PARAMETER\"}"}`), &fromString))
-	require.JSONEq(t, `{"errCode":"INVALID_PARAMETER"}`, string(fromString.BizContent))
+	require.NoError(t, json.Unmarshal([]byte(`{"returnCode":"SUCCESS","returnMsg":"OK","dataContent":"{\"resultCode\":\"SUCCESS\"}"}`), &fromString))
+	require.JSONEq(t, `{"resultCode":"SUCCESS"}`, string(fromString.BusinessContent()))
 
 	var fromObject PublicResponseEnvelope
+	require.NoError(t, json.Unmarshal([]byte(`{"returnCode":"SUCCESS","returnMsg":"OK","dataContent":{"resultCode":"SUCCESS"}}`), &fromObject))
+	require.JSONEq(t, `{"resultCode":"SUCCESS"}`, string(fromObject.BusinessContent()))
+}
+
+func TestPublicResponseEnvelopeAcceptsLegacyBizContentFallback(t *testing.T) {
+	var fromObject PublicResponseEnvelope
 	require.NoError(t, json.Unmarshal([]byte(`{"returnCode":"FAIL","returnMsg":"参数错误","bizContent":{"errCode":"INVALID_PARAMETER"}}`), &fromObject))
-	require.JSONEq(t, `{"errCode":"INVALID_PARAMETER"}`, string(fromObject.BizContent))
+	require.JSONEq(t, `{"errCode":"INVALID_PARAMETER"}`, string(fromObject.BusinessContent()))
 }
 
 func TestPublicResponseEnvelopeValidateHandlesTransportStatus(t *testing.T) {
@@ -78,7 +84,7 @@ func TestPublicResponseEnvelopeValidateHandlesTransportStatus(t *testing.T) {
 		SignSerialNo:       "1",
 		EncryptionSerialNo: "1",
 		SignString:         "abcd",
-		BizContent:         JSONString(`{"resultCode":"SUCCESS"}`),
+		DataContent:        JSONString(`{"resultCode":"SUCCESS"}`),
 	}
 
 	require.NoError(t, env.Validate())

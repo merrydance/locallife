@@ -66,7 +66,7 @@
 公共报文要求：
 
 - 账户 union-gw：URL 带 `memberId`、`terminalId`、`verifyType`、`content`、条件字段 `veryfyString`；body 明文由 `header` + `body` 组成，`header.serviceTp` 必须与 URL 报文编号一致。
-- 聚合支付/聚合商户报备：公共字段包括 `merId`、`terId`、`method`、`charset=UTF-8`、`version=1.0`、`format=json`、`timestamp`、`signType`、`signSn`、`ncrptnSn`、`dgtlEnvlp`、`signStr`、`bizContent`。
+- 聚合支付/聚合商户报备：请求公共字段包括 `merId`、`terId`、`method`、`charset=UTF-8`、`version=1.0`、`format=json`、`timestamp`、`signType`、`signSn`、`ncrptnSn`、`dgtlEnvlp`、`signStr`、`bizContent`；响应公共字段按宝付 Java demo 和沙箱回包使用 `dataContent` 承载业务 JSON，`bizContent` 只作为本地历史兼容 fallback。
 - 当前项目已把三组入口拆成独立 endpoint 配置并限制官方测试/生产地址；仍未使用宝付测试地址完成真实联调，也未补齐响应验签/数字信封证据。
 
 ## 4. 必用接口总览

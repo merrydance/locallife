@@ -173,11 +173,12 @@ func (c *Client) postPublicEnvelope(ctx context.Context, endpoint string, method
 	if err := responseEnvelope.Validate(); err != nil {
 		return providerRequestError(method, resp.StatusCode, responseEnvelope.ReturnCode, err)
 	}
-	if code, message, failed := publicBusinessFailure(json.RawMessage(responseEnvelope.BizContent)); failed {
+	responseBusinessContent := responseEnvelope.BusinessContent()
+	if code, message, failed := publicBusinessFailure(json.RawMessage(responseBusinessContent)); failed {
 		return providerResponseError(method, resp.StatusCode, code, message, errors.New("baofu public business response failed"))
 	}
 	if out != nil {
-		if err := json.Unmarshal(responseEnvelope.BizContent, out); err != nil {
+		if err := json.Unmarshal(responseBusinessContent, out); err != nil {
 			return providerRequestError(method, resp.StatusCode, responseEnvelope.ReturnCode, err)
 		}
 	}

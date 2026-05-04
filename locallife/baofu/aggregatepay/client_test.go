@@ -135,7 +135,7 @@ func (d *aggregateRecordingDoer) Do(req *http.Request) (*http.Response, error) {
 			SignSerialNo:       "1",
 			EncryptionSerialNo: "1",
 			SignString:         "test-signature",
-			BizContent:         baofu.JSONString(d.responseBizContent),
+			DataContent:        baofu.JSONString(d.responseBizContent),
 		})
 	}
 	return &http.Response{StatusCode: status, Body: io.NopCloser(bytes.NewReader(responseBody)), Header: make(http.Header)}, nil
