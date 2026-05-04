@@ -211,29 +211,27 @@ func providerResponseError(operation string, statusCode int, upstreamCode string
 }
 
 func accountBusinessFailure(raw json.RawMessage) (string, string, bool) {
-	var payload struct {
-		RetCode      string `json:"retCode"`
-		ErrorCode    string `json:"errorCode"`
-		ErrorMessage string `json:"errorMsg"`
-	}
+	var payload map[string]json.RawMessage
 	if len(raw) == 0 || json.Unmarshal(raw, &payload) != nil {
 		return "", "", false
 	}
-	retCode := strings.ToUpper(strings.TrimSpace(payload.RetCode))
-	if retCode == "" && (strings.TrimSpace(payload.ErrorCode) != "" || strings.TrimSpace(payload.ErrorMessage) != "") {
-		return strings.TrimSpace(payload.ErrorCode), strings.TrimSpace(payload.ErrorMessage), true
+	retCode := strings.ToUpper(jsonScalarString(payload["retCode"]))
+	errorCode := jsonScalarString(payload["errorCode"])
+	errorMessage := jsonScalarString(payload["errorMsg"])
+	if retCode == "" && (errorCode != "" || errorMessage != "") {
+		return errorCode, errorMessage, true
 	}
 	if retCode == "" {
-		return "MISSING_RET_CODE", strings.TrimSpace(payload.ErrorMessage), true
+		return "MISSING_RET_CODE", errorMessage, true
 	}
 	if retCode == "1" || retCode == "SUCCESS" {
 		return "", "", false
 	}
-	code := strings.TrimSpace(payload.ErrorCode)
+	code := errorCode
 	if code == "" {
 		code = retCode
 	}
-	return code, strings.TrimSpace(payload.ErrorMessage), true
+	return code, errorMessage, true
 }
 
 func publicBusinessFailure(raw json.RawMessage) (string, string, bool) {
@@ -260,6 +258,18 @@ func publicBusinessFailure(raw json.RawMessage) (string, string, bool) {
 		code = resultCode
 	}
 	return code, strings.TrimSpace(payload.ErrorMessage), true
+}
+
+func jsonScalarString(raw json.RawMessage) string {
+	raw = json.RawMessage(strings.TrimSpace(string(raw)))
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return strings.TrimSpace(value)
+	}
+	return strings.Trim(strings.TrimSpace(string(raw)), `"`)
 }
 
 var _ HTTPDoer = (*http.Client)(nil)

@@ -65,13 +65,13 @@ func TestAccountClientOpenAccountUsesConfiguredNotifyBaseURL(t *testing.T) {
 
 func TestAccountClientOpenAccountParsesOfficialResultArray(t *testing.T) {
 	doer := &accountRecordingDoer{responseBody: map[string]any{
-		"retCode":   "1",
+		"retCode":   1,
 		"errorCode": "BF0001",
 		"errorMsg":  "上游资料校验失败",
 		"result": []map[string]any{{
 			"transSerialNo": "OPEN202605050001",
 			"contractNo":    "",
-			"state":         "-1",
+			"state":         -1,
 			"errorCode":     "BF0001",
 			"errorMsg":      "上游资料校验失败",
 		}},
@@ -96,7 +96,7 @@ func TestAccountClientOpenAccountParsesOfficialResultArray(t *testing.T) {
 }
 
 func TestAccountClientReturnsProviderErrorForBusinessFailure(t *testing.T) {
-	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": "0", "errorCode": "BF00061", "errorMsg": "上游原始四要素错误"}}
+	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": 0, "errorCode": "BF00061", "errorMsg": "上游原始四要素错误"}}
 	client := NewClient(testBaofuRootClient(t, doer))
 
 	_, err := client.QueryBalance(context.Background(), contracts.BalanceQueryRequest{MerchantID: "102004465", TerminalID: "200005200", ContractNo: "CM202605040001"})

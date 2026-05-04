@@ -184,27 +184,27 @@ func officialOpenAccountRequest(req contracts.OpenAccountRequest, noticeURL stri
 }
 
 type officialAccountResult struct {
-	TransSerialNo string          `json:"transSerialNo"`
-	ContractNo    string          `json:"contractNo"`
-	State         string          `json:"state"`
-	ErrorCode     string          `json:"errorCode"`
-	ErrorMessage  string          `json:"errorMsg"`
-	Result        json.RawMessage `json:"result"`
-	Raw           json.RawMessage `json:"-"`
+	TransSerialNo officialScalarString `json:"transSerialNo"`
+	ContractNo    officialScalarString `json:"contractNo"`
+	State         officialScalarString `json:"state"`
+	ErrorCode     officialScalarString `json:"errorCode"`
+	ErrorMessage  officialScalarString `json:"errorMsg"`
+	Result        json.RawMessage      `json:"result"`
+	Raw           json.RawMessage      `json:"-"`
 }
 
 func (r officialAccountResult) toAccountResult() *contracts.AccountResult {
 	item := r.firstResultItem()
-	contractNo := firstNonEmpty(item.ContractNo, r.ContractNo)
-	state := firstNonEmpty(item.State, r.State)
+	contractNo := firstNonEmpty(item.ContractNo.String(), r.ContractNo.String())
+	state := firstNonEmpty(item.State.String(), r.State.String())
 	return &contracts.AccountResult{
-		OutRequestNo:  firstNonEmpty(item.TransSerialNo, r.TransSerialNo),
+		OutRequestNo:  firstNonEmpty(item.TransSerialNo.String(), r.TransSerialNo.String()),
 		ContractNo:    contractNo,
 		SharingMerID:  contractNo,
 		UpstreamState: state,
 		OpenState:     contracts.OpenStateFromUpstream(state),
-		FailCode:      firstNonEmpty(item.ErrorCode, r.ErrorCode),
-		FailMessage:   firstNonEmpty(item.ErrorMessage, r.ErrorMessage),
+		FailCode:      firstNonEmpty(item.ErrorCode.String(), r.ErrorCode.String()),
+		FailMessage:   firstNonEmpty(item.ErrorMessage.String(), r.ErrorMessage.String()),
 	}
 }
 
@@ -228,11 +228,32 @@ func (r officialAccountResult) firstResultItem() officialAccountResultItem {
 }
 
 type officialAccountResultItem struct {
-	TransSerialNo string `json:"transSerialNo"`
-	ContractNo    string `json:"contractNo"`
-	State         string `json:"state"`
-	ErrorCode     string `json:"errorCode"`
-	ErrorMessage  string `json:"errorMsg"`
+	TransSerialNo officialScalarString `json:"transSerialNo"`
+	ContractNo    officialScalarString `json:"contractNo"`
+	State         officialScalarString `json:"state"`
+	ErrorCode     officialScalarString `json:"errorCode"`
+	ErrorMessage  officialScalarString `json:"errorMsg"`
+}
+
+type officialScalarString string
+
+func (s *officialScalarString) UnmarshalJSON(raw []byte) error {
+	value := strings.TrimSpace(string(raw))
+	if value == "" || value == "null" {
+		*s = ""
+		return nil
+	}
+	var decoded string
+	if err := json.Unmarshal(raw, &decoded); err == nil {
+		*s = officialScalarString(strings.TrimSpace(decoded))
+		return nil
+	}
+	*s = officialScalarString(strings.Trim(value, `"`))
+	return nil
+}
+
+func (s officialScalarString) String() string {
+	return strings.TrimSpace(string(s))
 }
 
 func firstNonEmpty(values ...string) string {

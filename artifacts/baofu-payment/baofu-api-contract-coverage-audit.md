@@ -176,7 +176,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 - `locallife/baofu/account/contracts/types.go` 的 `OpenAccountRequest` 仍是业务抽象；官方字段级 DTO 已拆到 `official_open.go` 等文件。
 - 已区分个人二要素、个人四要素、企业/个体字段集合；企业/个体首版必填字段、`loginNo` 长度、`selfEmployed -> corporateMobile` 条件已落入表驱动测试，资质附件和证件类型长尾仍需沙箱样例校准。
 - 已把 `businessType=BCT2.0`、`version=4.1.0`、`accType`、个人开户条件必填和企业/个体首版字段落入契约校验。
-- 已新增官方 DTO 和本地 client；client 已按 `verifyType=1` 构造 union-gw URL 参数和 `header/body` 密文 envelope；开户 `noticeUrl` 已改为运行时 `BAOFU_NOTIFY_BASE_URL + /account/open`，不再使用 placeholder。2026-05-05 已用测试地址跑过个人二要素和四要素负向开户，证明请求可达且响应可解析，但上游返回 `BF0001`/abnormal，未返回 `contractNo`/`sharing_mer_id`；四要素 smoke 暴露开户响应业务字段位于 `result[]`，本地 parser 已改为优先读取第一条 `result`，再回退 top-level 字段。正向开户、`verifyType=2` 和通知密文形态仍需复核。
+- 已新增官方 DTO 和本地 client；client 已按 `verifyType=1` 构造 union-gw URL 参数和 `header/body` 密文 envelope；开户 `noticeUrl` 已改为运行时 `BAOFU_NOTIFY_BASE_URL + /account/open`，不再使用 placeholder。2026-05-05 已用测试地址跑过个人二要素和四要素负向开户，证明请求可达且响应可解析，但上游返回 `BF0001`/abnormal，未返回 `contractNo`/`sharing_mer_id`；四要素 smoke 暴露开户响应业务字段位于 `result[]`，且官方 `retCode` 为 int、示例 `result.state` 为数字。本地 parser 已改为优先读取第一条 `result`、兼容 string/number 标量，再回退 top-level 字段。正向开户、`verifyType=2` 和通知密文形态仍需复核。
 
 ### 6.2 开户查询 `T-1001-013-03`
 

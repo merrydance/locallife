@@ -51,6 +51,18 @@ func TestBusinessFailureDetectorsFailClosedForMissingSuccessIndicators(t *testin
 	require.Empty(t, publicMessage)
 }
 
+func TestAccountBusinessFailureAcceptsNumericRetCode(t *testing.T) {
+	code, message, failed := accountBusinessFailure(json.RawMessage(`{"retCode":0,"errorCode":"BF00061","errorMsg":"上游四要素失败"}`))
+	require.True(t, failed)
+	require.Equal(t, "BF00061", code)
+	require.Equal(t, "上游四要素失败", message)
+
+	code, message, failed = accountBusinessFailure(json.RawMessage(`{"retCode":1,"result":[{"state":2,"transSerialNo":"OPEN202605050001"}]}`))
+	require.False(t, failed)
+	require.Empty(t, code)
+	require.Empty(t, message)
+}
+
 func TestPublicBusinessFailureUsesUnknownNonSuccessResultCode(t *testing.T) {
 	code, message, failed := publicBusinessFailure(json.RawMessage(`{"resultCode":"PENDING_REVIEW","errMsg":"上游未知处理中"}`))
 
