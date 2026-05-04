@@ -45,7 +45,7 @@
 | C3 生产传输 | 有真实 HTTP client、签名/加密/验签、endpoint 配置、错误映射。 |
 | C4 沙箱验证 | 已用宝付测试地址和测试商户号完成请求/回调/查询联调，并留存证据。 |
 
-当前全局判断：项目内宝付代码已把聚合支付、聚合商户报备和部分宝财通账户能力推进到本地 C3（真实 HTTP client、endpoint 配置、httptest transport 和业务 wiring）。没有任何接口达到 C4；凡未在 `baofu-sandbox-evidence.md` 留证的接口仍不得视为已完成宝付测试地址联调。
+当前全局判断：项目内宝付代码已把聚合支付、聚合商户报备和部分宝财通账户能力推进到本地 C3（真实 HTTP client、endpoint 配置、httptest transport 和业务 wiring）。账户查询和聚合支付 `order_query` 已有宝付测试地址负向 smoke 证据，但没有任何生产必用接口达到完整正向 C4；凡未在 `baofu-sandbox-evidence.md` 留正向请求/回调/查询证据的接口仍不得视为已完成宝付测试地址联调。
 
 
 ## 2.1 本次补充审计结论
@@ -536,14 +536,14 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 | C-001 | 已本地修复，待真实 client 使用验证 | `locallife/baofu/config.go` 已拆 `AccountGatewayBaseURL`、`AggregatePayBaseURL`、`MerchantReportBaseURL` 并拒绝 `https://api.baofoo.com` | 配置层已防止三组入口混用；真实 client 仍必须逐接口读取对应 endpoint | Task 8 接真实 HTTP 时验证每个 client 使用正确 endpoint。 |
 | C-002 | C3 本地修复，待沙箱 | 已新增官方开户、查询、余额、提现 DTO 与金额元/分转换测试；account client 已将业务抽象转换为官方 DTO 后放入 union-gw `body` | 原 `OpenAccountRequest` 业务抽象仍保留给现有 service；企业/个体完整资料映射和沙箱样例仍待补 | Task 12/C4 用真实测试地址证明字段和错误码。 |
 | C-003 | C3 本地修复，待沙箱验证 | `locallife/baofu/account/notification/notification.go` 已按官方开户/提现通知字段解析并覆盖提现密文 envelope；`locallife/api/baofu_callback.go` 开户/提现 ACK 均为纯文本 `OK` | 本地 parser/ACK/提现入队已防止明显字段漂移，但还未使用宝付测试环境真实通知验证 URL query、密文 envelope、重放 ACK 行为 | 用宝付测试通知样例或沙箱回调验证开户/提现通知，并补回真实样例摘要。 |
-| C-004 | 部分修复，待沙箱验证 | 已新增聚合/报备 `PublicRequestEnvelope`；账户 API 已拆到独立 union-gw `verifyType=1` envelope，不再误用聚合 public envelope | 聚合/报备响应验签、数字信封加密、账户 `verifyType=2`、真实错误码和宝付沙箱请求仍未验证 | Task 12/C4 补真实请求/响应 fixture，Task 10 补错误码分类。 |
+| C-004 | C3 本地修复，部分负向沙箱 smoke | 已新增聚合/报备 `PublicRequestEnvelope`；账户 API 已拆到独立 union-gw `verifyType=1` envelope；`order_query` 负向 smoke 已证明聚合请求 `bizContent` 与响应 `dataContent` 解析可通过宝付测试地址 | 聚合/报备响应验签、数字信封加密、账户 `verifyType=2`、真实业务成功 `dataContent`、真实错误码和回调仍未验证 | C4 补真实成功请求/响应、回调和错误样例；不得因负向 smoke 宣称支付/分账已联调完成。 |
 | C-005 | 已本地修复，待沙箱验证 | `locallife/baofu/aggregatepay/contracts/types.go` 已新增 `unified_order` 表驱动校验，覆盖 M/C 字段、枚举、`subMchId` 条件必填、https `pageUrl`、金额关系 | 本地契约已 fail-closed；仍未用宝付测试地址验证真实错误码和字段长度边界 | Task 8/沙箱测试补真实请求、参数错误和错误码样例。 |
 | C-006 | C3 本地修复，待联调 | 已新增 `locallife/baofu/merchantreport/contracts`、`baofu_merchant_reports`、sqlc query、报备 service、APPLET 授权 readiness、`merchantreport.Client` 和 `baofu-merchant-report-recovery` | 本地契约/持久化/服务/HTTP client/recovery 已能防止 `bctMerId/subMchId/authContent` 漂移，但还没有沙箱证据和真实资料映射验收 | Task 8/沙箱联调验证真实报备、报备查询与授权目录请求。 |
 | C-007 | 已本地修复，待联调 | `locallife/logic/baofu_payment_order_route.go` 已通过 `merchantBaofuReadinessForPayment` 取商户报备 `sub_mch_id`；`CreateBaofuWechatJSAPIOrderInput` 字段已改 `MerchantSubMchID` | 旧普通服务商 `txResult.SubMchID` 来源已移除，API/logic readiness 不再读取 `baofu_account_bindings.wechat_sub_mch_id`；真实支付仍待宝付聚合商户报备沙箱验证 | Task 8/沙箱测试验证 `unified_order.subMchId` 使用报备返回值。 |
 | C-008 | C3 本地修复，待沙箱 | 已新增 `order_refund`、`refund_query`、`order_close` DTO/client、退款通知 parser、退款状态映射、API callback、退款查询恢复 scheduler 和分账前退款业务接入 | 首版“分账前退款、分账后不退款”已在本地 fail-closed；仍缺真实验签/数字信封、宝付测试地址退款查询/回调证据 | Task 12/C4 补沙箱证据；响应验签/数字信封在 C-004/C-011 跟进。 |
 | C-009 | 部分修复，待 service/client 切换 | 已新增 `YuanStringToFen` / `FenToYuanString` 并覆盖 2 位小数校验 | 转换 helper 已在契约包，余额/提现真实 client 仍需集中调用 | Task 8/提现服务切换时禁止业务层散落金额转换。 |
 | C-010 | C3 本地修复，待沙箱样例 | `locallife/baofu/errors.go` 已覆盖官方账户错误码页和聚合支付错误码页；`locallife/baofu/client.go` 已在账户 `retCode` 失败、聚合支付/报备 `resultCode != SUCCESS` 时返回 `ProviderError`，并保留上游原文只在 provider error/log 边界 | 前端可获得安全中文语义，不暴露上游原文、证件、银行卡、手机号、`contractNo`、`sharingMerId`、`subMchId` 或 raw payload；沙箱错误样例和真实渠道组合仍待补 | Task 12/C4 补真实错误样例、API handler 边界日志验证和 evidence。 |
-| C-011 | C3 局部，待沙箱/验签 | `locallife/baofu/account/client.go` 已用 union-gw 官方 URL/query/encrypted content；`aggregatepay`、`merchantreport` concrete HTTP client 已有；主业务 API runtime/worker/scheduler 已防止宝付启用时回退普通服务商 | 账户真实测试地址、聚合/报备响应验签、数字信封完整验证和沙箱联调证据仍缺 | Task 12 补沙箱证据；C4 前不得宣称生产验证完成。 |
+| C-011 | C3 局部，部分负向沙箱 smoke | `locallife/baofu/account/client.go` 已用 union-gw 官方 URL/query/encrypted content；`aggregatepay`、`merchantreport` concrete HTTP client 已有；账户查询和聚合 `order_query` 已打到测试地址并解析脱敏响应；主业务 API runtime/worker/scheduler 已防止宝付启用时回退普通服务商 | 账户开户/余额/提现、聚合商户报备/授权目录、统一下单/分账/退款/回调的正向沙箱证据仍缺；聚合/报备响应验签和数字信封完整验证仍待补 | C4 前继续补正向沙箱证据、回调证据和真实错误样例。 |
 | C-012 | 已本地修复，待产品验收 | `merchantBaofuReadinessForPayment` 已返回“商户微信支付通道待开通，暂不能创建微信生态支付订单”，API runtime 切换测试覆盖主业务宝付与直连支付边界 | 旧“微信特约商户进件”语义已移除；仍需前端/运营最终文案验收 | 沙箱联调和上线前检查中继续确认用户侧只看到产品语义，不暴露 report/auth/subMchId 内部细节。 |
 
 ### 12.2 防漂移实现门禁
@@ -563,9 +563,9 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 | 能力 | 测试地址 | 是否已联调 | 证据 |
 | --- | --- | --- | --- |
-| 账户 union-gw | `https://vgw.baofoo.com/union-gw/api/{报文编号}/transReq.do` | 否 | 仅本地单元测试和本地证书/加密测试。 |
+| 账户 union-gw | `https://vgw.baofoo.com/union-gw/api/{报文编号}/transReq.do` | 部分 | `T-1001-013-03` 账户查询已有负向 smoke，证明测试地址可达和 union-gw 响应可解析；开户/余额/提现/提现查询正向证据仍缺。 |
 | 聚合商户报备 | `https://mch-juhe.baofoo.com/mch-service/api` | 否 | 已有 contracts/client/service/httptest；尚未打宝付测试地址。 |
-| 聚合支付/分账/退款 | `https://mch-juhe.baofoo.com/api` | 否 | 已有本地 HTTP client/httptest envelope 测试；尚未打宝付测试地址。 |
+| 聚合支付/分账/退款 | `https://mch-juhe.baofoo.com/api` | 部分 | `order_query` 负向 smoke 已证明 public envelope、S(10) serial、上海时间戳和响应 `dataContent` 解析；统一下单、支付回调、分账、退款正向证据仍缺。 |
 | 回调通知 | 本平台 webhook URL | 否 | 仅本地 fake parser/callback 测试。 |
 
 生产前必须形成沙箱证据：请求报文摘要、响应摘要、回调样例、查询补偿样例、错误样例、对应测试订单/流水号、测试时间、测试账号、代码 commit。

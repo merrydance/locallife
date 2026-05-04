@@ -10,6 +10,16 @@
 - 每次联调必须同时记录：请求是否命中测试地址、是否收到/解析回包、是否落本地 command/fact、查询是否能补偿回调缺失、前端/用户可见错误是否为安全中文语义。
 - 联调失败也要记录一行，`Result`/`Observed Status` 标记失败类别，`Notes` 写下一步处理，不写 raw upstream message。
 
+## Ready For Next Sandbox Test
+
+- [ ] 用安全测试身份资料完成一次 `open_personal` 或机构开户正向测试，并通过查询拿到 `contractNo`/`sharing_mer_id` 脱敏证据。
+- [ ] 用已开户的宝付二级商户号完成 `merchant_report`、`merchant_report_query` 和 `bind_sub_config(authType=APPLET)` 正向测试。
+- [ ] 用真实 `subMchId` 和本小程序下真实 `sub_openid` 完成 `unified_order`，拿到 `wc_pay_data`，并记录回调/查询补偿证据。
+- [ ] 基于已支付订单完成 `share_after_pay`、`share_query` 和分账回调证据。
+- [ ] 基于分账前订单完成 `order_refund`、`refund_query` 和退款回调证据。
+- [ ] 用真实 `contractNo` 完成余额查询、提现、提现查询和提现回调证据。
+- [ ] 为账户、报备、聚合支付各补一条参数/配置/处理中类错误样例，验证 API 安全文案不泄露上游原文。
+
 ## Account Open `T-1001-013-01`
 
 | Date | Env | Endpoint | OutRequestNo | Owner | Owner Type | Result | ContractNo Masked | SharingMerID Masked | Callback | Query | Commit | Notes |
@@ -20,6 +30,7 @@
 | Date | Env | Endpoint | Query Key | Owner | Result | ContractNo Masked | SharingMerID Masked | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-05-04 | sandbox | `https://vgw.baofoo.com/union-gw/api/T-1001-013-03/transReq.do` | smoke synthetic account query | platform config smoke | reached sandbox; parsed union-gw envelope; upstream returned `BF0005`/abnormal without `contractNo` | - | - | `002c86f6` | Synthetic query did not prove a successful account exists; it only proves account-query transport/decryption is reachable. Treat as negative smoke evidence; positive C4 requires a real opened test account or a known query key from Baofoo. |
+| 2026-05-05 | sandbox | `https://vgw.baofoo.com/union-gw/api/T-1001-013-03/transReq.do` | `loginNo:BAOF***0843` | platform config smoke | reached sandbox; parsed union-gw envelope; upstream returned `BF0005`/abnormal without `contractNo` | - | - | `773ac598` | Rerun after public-envelope/dataContent fixes still proves union-gw account-query transport/decryption only. Positive account C4 still requires Baofoo-accepted test identity material or a known successful query key. |
 
 ## Account Balance `T-1001-013-06`
 
@@ -68,6 +79,7 @@
 | 2026-05-04 | sandbox | `https://mch-juhe.baofoo.com/api` | smoke synthetic order query | reached sandbox; upstream `FAIL` message changed to `签名证书序号字符长度超限（10）` | no | no | `5f4c3313` | Public-envelope parse/timestamp passed. Remaining config issue: `signSn/ncrptnSn` are S(10) public-envelope certificate indexes, not the 16-char certificate serials derived from PEM. Baofoo Java demo defaults both to `1`; local config validation now rejects values longer than 10 before startup/smoke. |
 | 2026-05-04 | sandbox | `https://mch-juhe.baofoo.com/api` | smoke synthetic order query | reached sandbox; public envelope returned `SUCCESS/OK` with signed `dataContent` and no `bizContent` | no | no | `b4961434` | This proves the request-side public envelope now passes Baofoo parsing/signature/timestamp/serial checks. Local client still expected response `bizContent`; fix parses official response `dataContent` while retaining legacy `bizContent` fallback for local fixtures. Rerun after deploy should classify the business payload, likely as order-not-found/manual-review for the synthetic order. |
 | 2026-05-04 | sandbox | `https://mch-juhe.baofoo.com/api` | smoke synthetic order query | parsed official `dataContent`; client returned success with `resultCode=SUCCESS` and `txnState=ABNORMAL` | no | no | `b4961434` | Public envelope request/response and `dataContent` parsing are now proven against sandbox for `order_query`. The synthetic order still has no `outTradeNo/tradeNo`; treat this as transport/contract evidence only, not a real paid-order query or local fact-application proof. |
+| 2026-05-05 | sandbox | `https://mch-juhe.baofoo.com/api` | `BAOFU_SMOKE_ORDER_20260505070843` | parsed official `dataContent`; client returned success with `resultCode=SUCCESS` and `txnState=ABNORMAL` | no | no | `773ac598` | Rerun against deployed sandbox config confirms the previous fix: form public envelope, local Shanghai timestamp, S(10) serial indexes, response `dataContent` parsing. Synthetic order has no local fact/application and is not a paid-order C4 proof. |
 
 ## Payment Callback
 

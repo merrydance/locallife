@@ -1560,7 +1560,7 @@ git commit -m "test(baofu): add contract drift guard"
 - Modify: `artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md`
 - Modify: `artifacts/baofu-payment/baofu-sandbox-evidence.md`
 
-- [ ] **Step 1: Run full pre-dataContent validation**
+- [x] **Step 1: Run full pre-dataContent validation**
 
 ```bash
 cd locallife
@@ -1569,7 +1569,9 @@ make check-baofu-contract
 git diff --check
 ```
 
-- [ ] **Step 2: Update audit grades**
+Validation on 2026-05-05: all three commands passed; `make check-baofu-contract` printed `baofu contract drift guard passed`.
+
+- [x] **Step 2: Update audit grades**
 
 Only mark an interface C3 when all of these are true:
 
@@ -1581,7 +1583,9 @@ Only mark an interface C3 when all of these are true:
 
 Keep every interface C4-open until a real sandbox row is added.
 
-- [ ] **Step 3: Produce next-test checklist**
+Audit update on 2026-05-05: account query and aggregate `order_query` are recorded only as partial negative sandbox smoke; no required production interface is marked complete positive C4.
+
+- [x] **Step 3: Produce next-test checklist**
 
 In `baofu-sandbox-evidence.md`, add a "Ready for next sandbox test" checklist for:
 
@@ -1593,7 +1597,7 @@ In `baofu-sandbox-evidence.md`, add a "Ready for next sandbox test" checklist fo
 - refund-before-share/query/callback;
 - withdraw/query/callback.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add artifacts/baofu-payment/baofu-api-contract-coverage-audit.md artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md artifacts/baofu-payment/baofu-sandbox-evidence.md
