@@ -4,7 +4,9 @@
 
 ## 1. 审计目标
 
-本文件用于把 LocalLife 宝付宝财通接入需要使用的官方接口集中列出，并逐一核对：
+本文件用于把 LocalLife 宝付宝财通接入需要使用的官方接口集中列出，并逐一核对。审计 findings 的执行修复计划见 `artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md`。
+
+本文件核对：
 
 - 官方用途、请求方式、测试地址、生产地址。
 - 请求、响应、错误码、必填、条件必填、字段类型、枚举值。

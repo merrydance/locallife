@@ -21,7 +21,7 @@
 - 微信小程序授权边界：宝付 `share_after_pay` 不需要 `subMchId`，也没有小程序 appid/授权目录字段；`subMchId` 和 `bind_sub_config(authType=APPLET)` 只属于微信渠道支付 readiness。首版每个主业务商户的 `subMchId` 都绑定 LocalLife 平台小程序 appid。
 - 平台佣金接收方：平台也必须为平台自己开一个平台名下宝付二级户并保存到 `owner_type=platform, owner_id=0`，不能直接使用平台宝付收款商户号收平台 2% 分账。
 - 替换边界：宝付只替换主业务订单中原普通服务商/平台收付通承载的支付、分账、分账前退款互斥、账户余额和提现能力；不替换微信直连支付。骑手保证金缴纳/赎回、商户追偿向平台付款、骑手追偿向平台付款及其查询、退款、通知继续走微信直连支付。
-- 接口覆盖审计：必用接口、官方入口、字段覆盖、错误码和沙箱联调状态以 `artifacts/baofu-payment/baofu-api-contract-coverage-audit.md` 为当前核对清单；实现任务不能把该审计中的 C0/C1/C2 项误判为已生产可用。
+- 接口覆盖审计：必用接口、官方入口、字段覆盖、错误码和沙箱联调状态以 `artifacts/baofu-payment/baofu-api-contract-coverage-audit.md` 为当前核对清单；详细修复拆解以 `artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md` 为执行计划；实现任务不能把该审计中的 C0/C1/C2 项误判为已生产可用。
 
 ## 1. Target File Map
 
