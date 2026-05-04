@@ -300,7 +300,7 @@ go test ./baofu -run 'TestPublicEnvelope|TestSigning' -count=1
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add locallife/baofu/envelope.go locallife/baofu/envelope_test.go locallife/baofu/signing.go locallife/baofu/signing_test.go
@@ -388,7 +388,7 @@ go test ./baofu/account/contracts -count=1
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add locallife/baofu/account/contracts
@@ -442,7 +442,7 @@ go test ./baofu/account/notification ./api -run 'TestBaofu.*Callback|TestParse.*
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add locallife/baofu/account/notification locallife/api/baofu_callback.go locallife/api/baofu_callback_test.go
@@ -526,7 +526,7 @@ go test ./baofu/merchantreport/contracts -count=1
 
 Expected: pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add locallife/baofu/merchantreport/contracts
@@ -636,7 +636,7 @@ make check-generated
 
 Expected: pass; no code path reads ordinary-service-provider `txResult.SubMchID` for Baofu unified order.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add locallife/db/migration/000229_add_baofu_merchant_reports.* locallife/db/query/baofu_merchant_report.sql locallife/db/sqlc locallife/db/mock locallife/logic
@@ -713,7 +713,7 @@ go test ./baofu/aggregatepay/contracts -run 'TestUnifiedOrder|TestNormalizePayme
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add locallife/baofu/aggregatepay/contracts/types.go locallife/baofu/aggregatepay/contracts/types_test.go
@@ -811,7 +811,7 @@ git commit -m "feat(baofu): use official union gateway envelope"
 - Modify: `locallife/logic/refund_service.go`
 - Modify: `locallife/logic/refund_service_test.go`
 
-- [ ] **Step 1: Add refund/close contract tests**
+- [x] **Step 1: Add refund/close contract tests**
 
 ```go
 func TestRefundBeforeShareRequestRejectsPostShareFields(t *testing.T) {
@@ -852,7 +852,7 @@ go test ./baofu/aggregatepay/contracts ./baofu/aggregatepay/notification ./logic
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add locallife/baofu/aggregatepay locallife/logic/refund_service.go locallife/logic/refund_service_test.go
@@ -926,7 +926,7 @@ go test ./baofu ./logic ./api -run 'TestClassifyBaofuError|TestBaofu.*Error|Test
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add locallife/baofu/errors.go locallife/baofu/errors_test.go locallife/logic locallife/api
@@ -983,7 +983,7 @@ make check-generated
 
 Expected: pass; Baofu path has no ordinary-service-provider fallback.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add locallife/api locallife/logic locallife/docs
