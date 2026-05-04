@@ -52,7 +52,6 @@ type RequestMetadata struct {
 	BankCardNo    string
 	Mobile        string
 	PrivateKeyPEM string
-	AESKey        string
 }
 
 func (m RequestMetadata) SafeLogFields() map[string]any {

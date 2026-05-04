@@ -3,11 +3,12 @@ package notification
 import (
 	"encoding/json"
 	"errors"
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/merrydance/locallife/baofu"
 	"github.com/merrydance/locallife/baofu/account/contracts"
-	baofucrypto "github.com/merrydance/locallife/baofu/crypto"
 )
 
 type AccountNotification struct {
@@ -38,22 +39,18 @@ type WithdrawNotification struct {
 }
 
 type Parser struct {
-	codec *baofucrypto.UnionGWCodec
+	baofuPublicKeyPEM string
 }
 
-func NewParser(codec *baofucrypto.UnionGWCodec) *Parser {
-	return &Parser{codec: codec}
+func NewParser(baofuPublicKeyPEM string) *Parser {
+	return &Parser{baofuPublicKeyPEM: strings.TrimSpace(baofuPublicKeyPEM)}
 }
 
 func (p *Parser) ParseOpenAccountNotification(body []byte) (*AccountNotification, error) {
-	if p == nil || p.codec == nil {
+	if p == nil || p.baofuPublicKeyPEM == "" {
 		return nil, errors.New("baofu account notification parser is not configured")
 	}
-	var envelope baofucrypto.UnionGWEnvelope
-	if err := json.Unmarshal(body, &envelope); err != nil {
-		return nil, err
-	}
-	plaintext, err := p.codec.OpenEnvelope(envelope)
+	plaintext, err := p.decodeOfficialDataContent(body)
 	if err != nil {
 		return nil, err
 	}
@@ -61,18 +58,48 @@ func (p *Parser) ParseOpenAccountNotification(body []byte) (*AccountNotification
 }
 
 func (p *Parser) ParseWithdrawNotification(body []byte) (*WithdrawNotification, error) {
-	if p == nil || p.codec == nil {
+	if p == nil || p.baofuPublicKeyPEM == "" {
 		return nil, errors.New("baofu account notification parser is not configured")
 	}
-	var envelope baofucrypto.UnionGWEnvelope
-	if err := json.Unmarshal(body, &envelope); err != nil {
-		return nil, err
-	}
-	plaintext, err := p.codec.OpenEnvelope(envelope)
+	plaintext, err := p.decodeOfficialDataContent(body)
 	if err != nil {
 		return nil, err
 	}
 	return ParseWithdrawPlaintext(plaintext)
+}
+
+func (p *Parser) decodeOfficialDataContent(body []byte) ([]byte, error) {
+	values, err := parseOfficialNotificationValues(body)
+	if err != nil {
+		return nil, err
+	}
+	if dataType := strings.TrimSpace(values.Get("data_type")); dataType != "" && !strings.EqualFold(dataType, "JSON") {
+		return nil, errors.New("baofu account notification data_type must be JSON")
+	}
+	dataContent := strings.TrimSpace(values.Get("data_content"))
+	if dataContent == "" {
+		return nil, errors.New("baofu account notification data_content is required")
+	}
+	return baofu.DecodeUnionGWVerifyType1Content(p.baofuPublicKeyPEM, dataContent)
+}
+
+func parseOfficialNotificationValues(body []byte) (url.Values, error) {
+	raw := strings.TrimSpace(string(body))
+	if raw == "" {
+		return nil, errors.New("baofu account notification payload is required")
+	}
+	if strings.HasPrefix(raw, "{") {
+		var payload map[string]string
+		if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+			return nil, err
+		}
+		values := url.Values{}
+		for k, v := range payload {
+			values.Set(k, v)
+		}
+		return values, nil
+	}
+	return url.ParseQuery(raw)
 }
 
 func ParseOpenAccountPlaintext(plaintext []byte) (*AccountNotification, error) {

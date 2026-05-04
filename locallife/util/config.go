@@ -102,7 +102,6 @@ type Config struct {
 	BaofuPublicKeyPEM              string        `mapstructure:"BAOFU_PUBLIC_KEY_PEM"`
 	BaofuSignSerialNo              string        `mapstructure:"BAOFU_SIGN_SERIAL_NO"`
 	BaofuEncryptionSerialNo        string        `mapstructure:"BAOFU_ENCRYPTION_SERIAL_NO"`
-	BaofuAESKey                    string        `mapstructure:"BAOFU_AES_KEY"`
 	BaofuNotifyBaseURL             string        `mapstructure:"BAOFU_NOTIFY_BASE_URL"`
 	BaofuPaymentNotifyURL          string        `mapstructure:"BAOFU_PAYMENT_NOTIFY_URL"`
 	BaofuProfitSharingNotifyURL    string        `mapstructure:"BAOFU_PROFIT_SHARING_NOTIFY_URL"`
@@ -326,7 +325,6 @@ func (c Config) HasBaofuRuntimeConfig() bool {
 		strings.TrimSpace(c.BaofuPublicKeyPEM) != "" ||
 		strings.TrimSpace(c.BaofuSignSerialNo) != "" ||
 		strings.TrimSpace(c.BaofuEncryptionSerialNo) != "" ||
-		strings.TrimSpace(c.BaofuAESKey) != "" ||
 		strings.TrimSpace(c.BaofuNotifyBaseURL) != "" ||
 		strings.TrimSpace(c.BaofuPaymentNotifyURL) != "" ||
 		strings.TrimSpace(c.BaofuProfitSharingNotifyURL) != "" ||
@@ -349,7 +347,6 @@ func (c Config) ToBaofuConfig() baofu.Config {
 		BaofuPublicKeyPEM:         normalizeEscapedPEM(c.BaofuPublicKeyPEM),
 		SignSerialNo:              c.BaofuSignSerialNo,
 		EncryptionSerialNo:        c.BaofuEncryptionSerialNo,
-		AESKey:                    c.BaofuAESKey,
 		NotifyBaseURL:             c.BaofuNotifyBaseURL,
 		Timeout:                   c.BaofuHTTPTimeout,
 	}

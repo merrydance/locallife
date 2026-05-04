@@ -162,9 +162,9 @@
 
 本地覆盖：
 
-- `locallife/baofu/account/notification/notification.go` 已按官方明文字段解析 `transSerialNo/state/errorCode/errorMsg/contractNo`，不再读取自造 `outRequestNo/sharingMerId/status` 字段。
+- `locallife/baofu/account/notification/notification.go` 已按官方 `data_content` RSA/base64 解密后解析 `transSerialNo/state/errorCode/errorMsg/contractNo`，不再读取自造 `outRequestNo/sharingMerId/status` 字段，也不再依赖静态 `BAOFU_AES_KEY`。
 - `locallife/api/baofu_callback.go` 已在开户回调落 fact 后返回 `text/plain` 纯文本 `OK`。
-- 本地测试仍是官方字段 fixture 和本地 envelope，自造样例未替代宝付测试环境真实通知；沙箱回调证据未做。
+- 本地测试覆盖官方 query-string 通知参数和 RSA/base64 `data_content` 解码；沙箱回调证据未做。
 
 ### 6.4 账户余额查询 `T-1001-013-06`
 
@@ -477,12 +477,12 @@
 | 路径 | 现状 | 主要缺口 |
 | --- | --- | --- |
 | `locallife/baofu/config.go` | 区分收款/支付商户号；已拆官方三组 endpoint profile 并拒绝 `https://api.baofoo.com` 占位地址 | 仍需用真实宝付测试地址证明每个 client 命中正确 endpoint。 |
-| `locallife/baofu/uniongw.go` | 账户请求 union-gw `verifyType=1` 官方 URL 参数、`content` 密文、`header/body` envelope 和响应 `sysRespCode` 校验 | `verifyType=2`、通知 `data_content` 密文、真实沙箱和完整系统错误码仍待补。 |
-| `locallife/baofu/crypto/uniongw.go` | 早期本地通知 envelope/加密草稿 | 仅保留给现有开户通知本地 parser 测试；不得作为账户请求 client 的官方 envelope。 |
+| `locallife/baofu/uniongw.go` | 账户请求 union-gw `verifyType=1` 官方 URL 参数、`content` 密文、`header/body` envelope 和响应 `sysRespCode` 校验；账户通知复用 RSA/base64 解码规则 | `verifyType=2`、真实沙箱和完整系统错误码仍待补。 |
+| `locallife/baofu/crypto/uniongw.go` | 早期本地 AES-GCM envelope 草稿 | 不再接入运行时账户通知；不得作为账户请求或账户通知官方 envelope。 |
 | `locallife/baofu/aggregatepay/contracts/types.go` | 统一下单、查询、分账、退款、关单 DTO | 退款/关单已补 DTO 和首版互斥；错误码分类、沙箱 fixture 仍待补。 |
 | `locallife/baofu/account/contracts` | 业务归一化 DTO + 官方开户/查询/余额/提现 DTO | 企业/个体完整资料映射、资质附件、账户错误码表和沙箱样例仍待补。 |
 | `locallife/baofu/aggregatepay/client.go` | interface + concrete HTTP client | 已覆盖支付/查询/分账/退款/关单；未做沙箱验证和响应验签/数字信封完整验证。 |
-| `locallife/baofu/account/client.go` | concrete account client，覆盖开户/查询/余额/提现/提现查询，并已切到 union-gw `verifyType=1` 请求/响应 envelope | `verifyType=2`、通知密文、沙箱证据和真实错误码仍待补。 |
+| `locallife/baofu/account/client.go` | concrete account client，覆盖开户/查询/余额/提现/提现查询，并已切到 union-gw `verifyType=1` 请求/响应 envelope | `verifyType=2`、沙箱证据和真实错误码仍待补。 |
 | `locallife/baofu/merchantreport/**` | 报备/查询/APPLET 绑定 contracts + concrete client + tests | 当前审计识别的附录枚举和报备恢复 worker 已补；真实资料来源映射和沙箱证据仍待补。 |
 | `locallife/logic/baofu_payment_service.go` | 服务层可组统一下单并记录 command；主业务 API runtime 可切宝付 concrete aggregate client | 宝付合单支付已 fail-closed；沙箱证据仍待补。 |
 | `locallife/api/logic_adapters.go` | 已按 `BAOFU_MAIN_BUSINESS_ENABLED` 构造宝付主业务 facade | 主业务支付可切宝付；宝付启用时合单支付已明确 fail-closed。 |

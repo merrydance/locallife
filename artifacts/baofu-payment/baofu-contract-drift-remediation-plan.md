@@ -192,7 +192,6 @@ type Config struct {
     AppID string
     PrivateKeyPEM string
     BaofuPublicKeyPEM string
-    AESKey string
     NotifyBaseURL string
     Timeout time.Duration
 }

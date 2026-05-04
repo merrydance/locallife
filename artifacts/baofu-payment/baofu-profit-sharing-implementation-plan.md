@@ -355,7 +355,6 @@ type Config struct {
     AppID             string
     PrivateKeyPEM     string
     BaofuPublicKeyPEM string
-    AESKey            string
     NotifyBaseURL     string
     Timeout           time.Duration
 }
@@ -1508,7 +1507,7 @@ make test-integration
 
 ### 2026-05-04 Task 4A/Remediation Task 11 - Runtime Main-Business Wiring
 
-- Added Baofu runtime config fields and validation under `util.Config`, including `BAOFU_MAIN_BUSINESS_ENABLED`, separated collect/payout merchant and terminal IDs, official endpoint-backed root config, payment/refund notify URLs, key serials, AES key, and HTTP timeout.
+- Added Baofu runtime config fields and validation under `util.Config`, including `BAOFU_MAIN_BUSINESS_ENABLED`, separated collect/payout merchant and terminal IDs, official endpoint-backed root config, payment/refund notify URLs, key serials, and HTTP timeout.
 - `api.NewServer` now builds the concrete Baofu root client and aggregatepay client when Baofu runtime config is present. When `BAOFU_MAIN_BUSINESS_ENABLED=true`, `server.buildPaymentFacade()` constructs `NewDefaultPaymentFacadeWithBaofuAggregate(...)` instead of the ordinary-service-provider facade.
 - Baofu main-business payment facade now passes collect merchant/terminal, LocalLife mini-program appid, Baofu payment notify URL, and expiry config into `BaofuPaymentService`; missing Baofu client/config fails before merchant readiness reads or local pending payment rows.
 - No downgrade path was added: Baofu-enabled main-business payment does not fall back to ordinary service provider or platform ecommerce. Order service construction also avoids injecting the ordinary-service-provider client into main-business order payment paths when Baofu is enabled.
@@ -1601,5 +1600,12 @@ make test-integration
 
 - Corrected BaoCaiTong account opening request construction so `noticeUrl` is derived from runtime `BAOFU_NOTIFY_BASE_URL + /account/open`; the old `https://placeholder.local/...` value is no longer emitted.
 - Added config normalization for PEM values written as escaped single-line env strings, allowing `BAOFU_PRIVATE_KEY_PEM` and `BAOFU_PUBLIC_KEY_PEM` to be stored in local `.env` files with `\n` separators and converted back to real PEM before client construction.
-- Created local ignored `locallife/app.env` from Baofoo sandbox test material: collect/payout merchant IDs, sandbox endpoints, extracted private/public PEM material, and derived certificate serial numbers. Remaining local placeholders are public callback host, LocalLife mini-program appid, and Baofoo AES key confirmation/replacement.
+- Created local ignored `locallife/app.env` from Baofoo sandbox test material: collect/payout merchant IDs, sandbox endpoints, extracted private/public PEM material, and derived certificate serial numbers. Remaining local placeholders are public callback host and LocalLife mini-program appid; `BAOFU_AES_KEY` was removed because BaoCaiTong `verifyType=1` account notifications use RSA/base64 `data_content`, not a static AES key.
 - Verification scope remains local setup only. No Baofoo sandbox endpoint has been called yet, and C4 evidence remains empty until the remaining placeholders are replaced and test requests are executed.
+
+
+### 2026-05-04 Sandbox Prep - Remove Static Baofu AES Runtime Config
+
+- Removed the static `BAOFU_AES_KEY` runtime dependency from Baofu config validation and local sandbox env setup. BaoCaiTong account request/response and account `data_content` notifications use the documented `verifyType=1` RSA/base64 flow; aggregate-pay digital envelopes must use per-request key material when required, not a long-lived env AES key.
+- Updated the account notification parser to decode official `data_content` payloads with the configured Baofoo public key and to accept query-string style callback payloads when Baofoo posts notification parameters on the callback URL.
+- Verification scope remains local C3 until Baofoo sandbox sends real account/withdraw callback payloads.

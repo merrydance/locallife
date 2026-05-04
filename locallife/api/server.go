@@ -17,7 +17,6 @@ import (
 	baofuaccountnotification "github.com/merrydance/locallife/baofu/account/notification"
 	"github.com/merrydance/locallife/baofu/aggregatepay"
 	baofuaggregatenotification "github.com/merrydance/locallife/baofu/aggregatepay/notification"
-	baofucrypto "github.com/merrydance/locallife/baofu/crypto"
 	"github.com/merrydance/locallife/cloudprint"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/docs"
@@ -260,11 +259,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 			return nil, fmt.Errorf("cannot create baofu client: %w", err)
 		}
 		baofuAggregateClient = aggregatepay.NewClient(baofuRootClient)
-		codec, err := baofucrypto.NewUnionGWCodec(config.BaofuAESKey)
-		if err != nil {
-			return nil, fmt.Errorf("cannot create baofu account notification parser: %w", err)
-		}
-		baofuAccountNotificationParser = baofuaccountnotification.NewParser(codec)
+		baofuAccountNotificationParser = baofuaccountnotification.NewParser(baofuRootClient.Config().BaofuPublicKeyPEM)
 	}
 
 	// 创建 LBS 地图客户端（统一使用腾讯地图）

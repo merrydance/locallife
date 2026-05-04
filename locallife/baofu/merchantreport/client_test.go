@@ -107,7 +107,7 @@ func (d *merchantReportRecordingDoer) Do(req *http.Request) (*http.Response, err
 func testBaofuRootClient(t *testing.T, doer baofu.HTTPDoer) *baofu.Client {
 	t.Helper()
 	privatePEM, publicPEM := generateClientTestKeyPair(t)
-	client, err := baofu.NewClient(baofu.Config{Environment: baofu.BaofuEnvironmentSandbox, CollectMerchantID: "102004465", CollectTerminalID: "200005200", PayoutMerchantID: "102004466", PayoutTerminalID: "200005201", AppID: "wx1234567890abcdef", PrivateKeyPEM: privatePEM, BaofuPublicKeyPEM: publicPEM, AESKey: "0123456789abcdef0123456789abcdef", NotifyBaseURL: "https://api.example.com/v1/webhooks/baofu", SignSerialNo: "test-sign-sn", EncryptionSerialNo: "test-enc-sn", Timeout: 5 * time.Second}, doer)
+	client, err := baofu.NewClient(baofu.Config{Environment: baofu.BaofuEnvironmentSandbox, CollectMerchantID: "102004465", CollectTerminalID: "200005200", PayoutMerchantID: "102004466", PayoutTerminalID: "200005201", AppID: "wx1234567890abcdef", PrivateKeyPEM: privatePEM, BaofuPublicKeyPEM: publicPEM, NotifyBaseURL: "https://api.example.com/v1/webhooks/baofu", SignSerialNo: "test-sign-sn", EncryptionSerialNo: "test-enc-sn", Timeout: 5 * time.Second}, doer)
 	require.NoError(t, err)
 	return client
 }

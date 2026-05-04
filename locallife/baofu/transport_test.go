@@ -17,7 +17,6 @@ func TestRequestMetadataRedactsSensitiveValues(t *testing.T) {
 		BankCardNo:    "6222020202020202020",
 		Mobile:        "13800138000",
 		PrivateKeyPEM: "-----BEGIN PRIVATE KEY-----secret",
-		AESKey:        "0123456789abcdef0123456789abcdef",
 	}
 
 	fields := metadata.SafeLogFields()

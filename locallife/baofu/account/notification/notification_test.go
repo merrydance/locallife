@@ -1,35 +1,25 @@
 package notification
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
+	"net/url"
 	"testing"
 
+	"github.com/merrydance/locallife/baofu"
 	"github.com/merrydance/locallife/baofu/account/contracts"
-	baofucrypto "github.com/merrydance/locallife/baofu/crypto"
 	"github.com/stretchr/testify/require"
 )
 
-func TestParserParsesOpenAccountNotification(t *testing.T) {
-	codec, err := baofucrypto.NewUnionGWCodec("0123456789abcdef0123456789abcdef")
-	require.NoError(t, err)
-	envelope, err := codec.SealEnvelope("102004465", "200005200", map[string]any{
-		"member_id":     "102004465",
-		"terminal_id":   "200005200",
-		"memberType":    "2",
-		"state":         "1",
-		"errorCode":     "",
-		"errorMsg":      "",
-		"transSerialNo": "OPEN123",
-		"loginNo":       "merchant-login-001",
-		"customerName":  "商户A",
-		"contractNo":    "CM_SHARE_123",
-		"noticeType":    "OPEN_ACC",
-	})
-	require.NoError(t, err)
-	body, err := json.Marshal(envelope)
-	require.NoError(t, err)
+func TestParserParsesOfficialOpenAccountNotification(t *testing.T) {
+	privatePEM, publicPEM := generateNotificationTestKeyPair(t)
+	plaintext := []byte(`{"member_id":"102004465","terminal_id":"200005200","memberType":"2","state":"1","errorCode":"","errorMsg":"","transSerialNo":"OPEN123","loginNo":"merchant-login-001","customerName":"商户A","contractNo":"CM_SHARE_123","noticeType":"OPEN_ACC"}`)
+	body := officialNotificationQueryForTest(t, privatePEM, plaintext)
 
-	parser := NewParser(codec)
+	parser := NewParser(publicPEM)
 	notification, err := parser.ParseOpenAccountNotification(body)
 
 	require.NoError(t, err)
@@ -40,25 +30,12 @@ func TestParserParsesOpenAccountNotification(t *testing.T) {
 	require.True(t, json.Valid(notification.Raw))
 }
 
-func TestParserParsesWithdrawNotification(t *testing.T) {
-	codec, err := baofucrypto.NewUnionGWCodec("0123456789abcdef0123456789abcdef")
-	require.NoError(t, err)
-	envelope, err := codec.SealEnvelope("102004466", "200005201", map[string]any{
-		"contractNo":          "CM202605040001",
-		"orderId":             "WD_UP_001",
-		"transSerialNo":       "WD202605040001",
-		"transMoney":          "123.45",
-		"transFee":            "1.00",
-		"transferTotalAmount": "124.45",
-		"state":               "3",
-		"transRemark":         "提现退回",
-		"reqReserved":         "withdraw-001",
-	})
-	require.NoError(t, err)
-	body, err := json.Marshal(envelope)
-	require.NoError(t, err)
+func TestParserParsesOfficialWithdrawNotification(t *testing.T) {
+	privatePEM, publicPEM := generateNotificationTestKeyPair(t)
+	plaintext := []byte(`{"contractNo":"CM202605040001","orderId":"WD_UP_001","transSerialNo":"WD202605040001","transMoney":"123.45","transFee":"1.00","transferTotalAmount":"124.45","state":"3","transRemark":"提现退回","reqReserved":"withdraw-001"}`)
+	body := officialNotificationQueryForTest(t, privatePEM, plaintext)
 
-	parser := NewParser(codec)
+	parser := NewParser(publicPEM)
 	notification, err := parser.ParseWithdrawNotification(body)
 
 	require.NoError(t, err)
@@ -70,18 +47,10 @@ func TestParserParsesWithdrawNotification(t *testing.T) {
 }
 
 func TestParserDoesNotFallbackSharingMerIDFromContractNo(t *testing.T) {
-	codec, err := baofucrypto.NewUnionGWCodec("0123456789abcdef0123456789abcdef")
-	require.NoError(t, err)
-	envelope, err := codec.SealEnvelope("102004465", "200005200", map[string]any{
-		"transSerialNo": "OPEN_CONTRACT_ONLY",
-		"contractNo":    "CP_ONLY",
-		"state":         "1",
-	})
-	require.NoError(t, err)
-	body, err := json.Marshal(envelope)
-	require.NoError(t, err)
+	privatePEM, publicPEM := generateNotificationTestKeyPair(t)
+	body := officialNotificationQueryForTest(t, privatePEM, []byte(`{"transSerialNo":"OPEN_CONTRACT_ONLY","contractNo":"CP_ONLY","state":"1"}`))
 
-	parser := NewParser(codec)
+	parser := NewParser(publicPEM)
 	notification, err := parser.ParseOpenAccountNotification(body)
 
 	require.NoError(t, err)
@@ -89,8 +58,8 @@ func TestParserDoesNotFallbackSharingMerIDFromContractNo(t *testing.T) {
 	require.Empty(t, notification.SharingMerID)
 }
 
-func TestParserRejectsMissingCodec(t *testing.T) {
-	parser := NewParser(nil)
+func TestParserRejectsMissingPublicKey(t *testing.T) {
+	parser := NewParser("")
 
 	_, err := parser.ParseOpenAccountNotification([]byte(`{}`))
 
@@ -129,4 +98,32 @@ func TestParseWithdrawPlaintextUsesOfficialFields(t *testing.T) {
 
 func TestAccountNotificationACKIsPlainOK(t *testing.T) {
 	require.Equal(t, "OK", AccountNotificationACK())
+}
+
+func officialNotificationQueryForTest(t *testing.T, privatePEM string, plaintext []byte) []byte {
+	t.Helper()
+	content, err := baofu.EncodeUnionGWVerifyType1Content(privatePEM, plaintext)
+	require.NoError(t, err)
+	values := url.Values{}
+	values.Set("member_id", "102004465")
+	values.Set("terminal_id", "200005200")
+	values.Set("data_type", "JSON")
+	values.Set("data_content", content)
+	return []byte(values.Encode())
+}
+
+func generateNotificationTestKeyPair(t *testing.T) (string, string) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	privateDER, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+	privatePEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateDER})
+
+	publicDER, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	require.NoError(t, err)
+	publicPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicDER})
+
+	return string(privatePEM), string(publicPEM)
 }

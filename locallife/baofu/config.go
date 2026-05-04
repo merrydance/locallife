@@ -40,7 +40,6 @@ type Config struct {
 	BaofuPublicKeyPEM         string
 	SignSerialNo              string
 	EncryptionSerialNo        string
-	AESKey                    string
 	NotifyBaseURL             string
 	Timeout                   time.Duration
 }
@@ -73,9 +72,6 @@ func (c Config) Validate() error {
 	}
 	if cfg.EncryptionSerialNo == "" {
 		return errors.New("baofu encryption serial no is required")
-	}
-	if len(cfg.AESKey) != 16 && len(cfg.AESKey) != 24 && len(cfg.AESKey) != 32 {
-		return errors.New("baofu aes key must be 16, 24, or 32 bytes")
 	}
 	if err := validateOfficialEndpoint("baofu account gateway base url", cfg.AccountGatewayBaseURL, officialAccountGatewayBaseURLs()); err != nil {
 		return err
@@ -138,7 +134,6 @@ func (c Config) Normalized() Config {
 	c.BaofuPublicKeyPEM = strings.TrimSpace(c.BaofuPublicKeyPEM)
 	c.SignSerialNo = strings.TrimSpace(c.SignSerialNo)
 	c.EncryptionSerialNo = strings.TrimSpace(c.EncryptionSerialNo)
-	c.AESKey = strings.TrimSpace(c.AESKey)
 	c.NotifyBaseURL = strings.TrimSpace(c.NotifyBaseURL)
 	if c.Timeout == 0 {
 		c.Timeout = 30 * time.Second

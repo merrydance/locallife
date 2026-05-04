@@ -19,10 +19,15 @@ func validBaofuConfigForTest() Config {
 		BaofuPublicKeyPEM:  "test-public-key",
 		SignSerialNo:       "test-sign-sn",
 		EncryptionSerialNo: "test-enc-sn",
-		AESKey:             "0123456789abcdef0123456789abcdef",
 		NotifyBaseURL:      "https://pay.example.com/callbacks/baofu",
 		Timeout:            10 * time.Second,
 	}
+}
+
+func TestConfigValidateDoesNotRequireAESKey(t *testing.T) {
+	cfg := validBaofuConfigForTest()
+
+	require.NoError(t, cfg.Validate())
 }
 
 func TestConfigValidateRequiresSeparatedMerchants(t *testing.T) {

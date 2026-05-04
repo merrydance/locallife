@@ -54,6 +54,7 @@ func (server *Server) handleBaofuAccountOpenNotify(ctx *gin.Context) {
 		ctx.JSON(status, baofuCallbackResponse{Code: "FAIL", Message: "read callback body failed"})
 		return
 	}
+	body = baofuAccountCallbackPayload(ctx, body)
 	notification, err := server.baofuAccountNotificationParser.ParseOpenAccountNotification(body)
 	if err != nil {
 		log.Error().Err(err).Msg("parse baofu account callback failed")
@@ -99,6 +100,7 @@ func (server *Server) handleBaofuWithdrawNotify(ctx *gin.Context) {
 		ctx.JSON(status, baofuCallbackResponse{Code: "FAIL", Message: "read callback body failed"})
 		return
 	}
+	body = baofuAccountCallbackPayload(ctx, body)
 	notification, err := server.baofuAccountNotificationParser.ParseWithdrawNotification(body)
 	if err != nil {
 		log.Error().Err(err).Msg("parse baofu withdraw callback failed")
@@ -138,6 +140,19 @@ func (server *Server) handleBaofuWithdrawNotify(ctx *gin.Context) {
 		Str("baofu_withdraw_state", strings.TrimSpace(notification.UpstreamState)).
 		Msg("baofu withdraw callback fact application enqueued")
 	ctx.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(baofunotification.AccountNotificationACK()))
+}
+
+func baofuAccountCallbackPayload(ctx *gin.Context, body []byte) []byte {
+	if strings.TrimSpace(string(body)) != "" {
+		return body
+	}
+	if ctx == nil || ctx.Request == nil || ctx.Request.URL == nil {
+		return body
+	}
+	if rawQuery := strings.TrimSpace(ctx.Request.URL.RawQuery); rawQuery != "" {
+		return []byte(rawQuery)
+	}
+	return body
 }
 
 func (server *Server) handleBaofuPaymentNotify(ctx *gin.Context) {

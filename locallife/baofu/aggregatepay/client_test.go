@@ -137,7 +137,6 @@ func testBaofuRootClient(t *testing.T, doer baofu.HTTPDoer) *baofu.Client {
 		AppID:              "wx1234567890abcdef",
 		PrivateKeyPEM:      privatePEM,
 		BaofuPublicKeyPEM:  publicPEM,
-		AESKey:             "0123456789abcdef0123456789abcdef",
 		NotifyBaseURL:      "https://api.example.com/v1/webhooks/baofu",
 		SignSerialNo:       "test-sign-sn",
 		EncryptionSerialNo: "test-enc-sn",

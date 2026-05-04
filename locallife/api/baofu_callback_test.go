@@ -80,6 +80,15 @@ func TestBaofuWithdrawCallbackEnqueuesFactApplicationBeforeAck(t *testing.T) {
 	require.Equal(t, []string{"BFWD202605040001"}, taskRecorder.baofuWithdrawNos)
 }
 
+func TestBaofuAccountCallbackPayloadUsesRawQueryWhenBodyEmpty(t *testing.T) {
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/account/open?member_id=102004465&terminal_id=200005200&data_type=JSON&data_content=ciphertext", http.NoBody)
+	ctx := &gin.Context{Request: request}
+
+	payload := baofuAccountCallbackPayload(ctx, nil)
+
+	require.Equal(t, "member_id=102004465&terminal_id=200005200&data_type=JSON&data_content=ciphertext", string(payload))
+}
+
 func TestBaofuPaymentCallbackPersistsFactAndEnqueuesApplication(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
