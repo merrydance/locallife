@@ -33,6 +33,19 @@ func TestBaofuPaymentReadinessRequiresMerchantSubMchIDAndAppletAuth(t *testing.T
 	require.Equal(t, "1900000109", readiness.SubMchID)
 }
 
+func TestBaofuPaymentReadinessUsesMerchantReportSubMchIDAfterAppletAuth(t *testing.T) {
+	binding := activeBaofuBindingWithSharingMerID(123, "CM202605040001")
+	report := succeededMerchantReportWithoutAppletAuth(123, "1900000109")
+	report.AppletAuthState = db.BaofuMerchantReportAppletAuthStateSucceeded
+
+	readiness := ReadinessFromBaofuBindingAndMerchantReport(binding, report)
+
+	require.True(t, readiness.PaymentReady)
+	require.Equal(t, BaofuOnboardingStateReady, readiness.State)
+	require.Equal(t, "1900000109", readiness.SubMchID)
+	require.NotEqual(t, binding.SharingMerID.String, readiness.SubMchID)
+}
+
 func TestBaofuMerchantReportServiceBindsAppletAfterReportSuccess(t *testing.T) {
 	store := &fakeBaofuMerchantReportStore{binding: activeBaofuBindingWithSharingMerID(123, "CM202605040001")}
 	client := fakeMerchantReportClient{

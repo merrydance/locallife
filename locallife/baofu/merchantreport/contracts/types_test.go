@@ -67,6 +67,29 @@ func TestWechatMerchantReportSerializesOfficialFieldNames(t *testing.T) {
 	require.NotContains(t, string(body), "sharingMerId")
 }
 
+func TestWechatMerchantReportRejectsUnsupportedWechatAppendixValues(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*WechatMerchantReportRequest)
+		want   string
+	}{
+		{"unsupported category", func(r *WechatMerchantReportRequest) { r.ReportInfo.Business = "INVALID_CATEGORY" }, "baofu merchant report wechat business is unsupported"},
+		{"unsupported certificate", func(r *WechatMerchantReportRequest) { r.ReportInfo.BusinessLicenseType = "PASSPORT" }, "baofu merchant report wechat business_license_type is unsupported"},
+		{"missing service codes", func(r *WechatMerchantReportRequest) { r.ReportInfo.ServiceCodes = nil }, "baofu merchant report wechat service_codes are required"},
+		{"unsupported service code", func(r *WechatMerchantReportRequest) { r.ReportInfo.ServiceCodes = []string{"NATIVE"} }, "baofu merchant report wechat service_codes contains unsupported value"},
+		{"missing address", func(r *WechatMerchantReportRequest) { r.ReportInfo.AddressInfo.Address = "" }, "baofu merchant report wechat address_info.address is required"},
+		{"missing bank branch", func(r *WechatMerchantReportRequest) { r.ReportInfo.BankCardInfo.BankBranchName = "" }, "baofu merchant report wechat bankcard_info.bank_branch_name is required"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := validWechatMerchantReportRequestForTest()
+			tc.mutate(&req)
+			require.EqualError(t, req.Validate(), tc.want)
+		})
+	}
+}
+
 func TestMerchantReportQueryRequiresReportNo(t *testing.T) {
 	req := MerchantReportQueryRequest{MerchantID: "100000", TerminalID: "200000", ReportType: ReportTypeWechat, ReportNo: "MR202605040001"}
 	require.NoError(t, req.Validate())
@@ -81,6 +104,9 @@ func TestBindSubConfigRequiresAppletAppID(t *testing.T) {
 
 	req.AuthContent = ""
 	require.EqualError(t, req.Validate(), "baofu bind_sub_config authContent is required for APPLET")
+
+	req = BindSubConfigRequest{MerchantID: "100000", TerminalID: "200000", SubMchID: "1900000109", AuthType: "UNKNOWN", AuthContent: "wx1234567890abcdef", Remark: "LocalLife mini program"}
+	require.EqualError(t, req.Validate(), "baofu bind_sub_config authType is unsupported")
 }
 
 func TestNormalizeMerchantReportState(t *testing.T) {
@@ -88,6 +114,29 @@ func TestNormalizeMerchantReportState(t *testing.T) {
 	require.Equal(t, ReportStateFailed, NormalizeMerchantReportState("FAIL"))
 	require.Equal(t, ReportStateProcessing, NormalizeMerchantReportState("PROCESSING"))
 	require.Equal(t, ReportStateUnknown, NormalizeMerchantReportState("unexpected"))
+}
+
+func validWechatMerchantReportRequestForTest() WechatMerchantReportRequest {
+	return WechatMerchantReportRequest{
+		MerchantID:    "100000",
+		TerminalID:    "200000",
+		ReportType:    ReportTypeWechat,
+		ReportNo:      "MR202605040099",
+		BCTMerchantID: "CM202605040099",
+		ReportInfo: WechatReportInfo{
+			MerchantName:        "上海某某餐饮有限公司",
+			MerchantShortName:   "某某餐饮",
+			ServicePhone:        "02112345678",
+			ChannelID:           "channel-001",
+			ChannelName:         "乐客来福",
+			Business:            "758-2",
+			ServiceCodes:        []string{WechatServiceTypeApplet},
+			AddressInfo:         WechatAddressInfo{Province: "上海市", City: "上海市", District: "浦东新区", Address: "世纪大道 1 号"},
+			BusinessLicenseType: WechatCertificateTypeNationalLegalMerge,
+			BusinessLicense:     "91310000123456789X",
+			BankCardInfo:        WechatBankCardInfo{AccountName: "上海某某餐饮有限公司", AccountNo: "6222000000000000000", BankName: "招商银行", BankBranchName: "招商银行上海分行"},
+		},
+	}
 }
 
 func TestMerchantReportAppendixEnumsAreTypedAllowlists(t *testing.T) {

@@ -264,10 +264,10 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 本地缺口：
 
-- 已新增 `locallife/baofu/merchantreport/contracts` 字段级 DTO、报备/授权枚举、状态归一化和微信经营类目 allowlist。
+- 已新增 `locallife/baofu/merchantreport/contracts` 字段级 DTO、报备/授权枚举、状态归一化和微信经营类目 allowlist； unsupported 经营类目、证件类型、服务类型、地址和结算卡必填缺失均 fail-closed。
 - 已新增 `baofu_merchant_reports` 表、sqlc query、报备 service 和 readiness 合成逻辑；宝付支付下单不再读取普通服务商 `txResult.SubMchID`，改读报备成功且 APPLET 授权成功后的商户 `sub_mch_id`。
 - 宝付聚合商户报备资料字段已有 service 输入骨架，附件/证照文件上传与真实资料来源映射仍需结合开户/商户入驻资料收口。
-- 附录枚举已本地覆盖一部分：报备类型、报备状态、微信服务类型、微信证件类型、授权类型、微信经营类目；结算卡字段仍需沙箱样例确认。
+- 附录枚举已本地覆盖：报备类型、报备状态、微信服务类型、微信证件类型、授权类型、终端/联系人/商户/认证等长尾枚举，以及 110 项微信经营类目 allowlist；结算卡字段的真实渠道样例仍需沙箱确认。
 - 未做测试地址联调：`https://mch-juhe.baofoo.com/mch-service/api`。
 
 ### 7.2 报备信息查询 `merchant_report_query`
@@ -278,7 +278,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 响应字段：`merId/terId/reportType/reportNo/reportState`，以及渠道参数 `channelRetParam`；微信/支付宝返回中包含渠道处理结果和 `subMchId`。
 
-本地覆盖：C3。已有 `MerchantReportQueryRequest`、状态归一化、client 和 service 同步边界；生产必须继续用它做报备恢复和 `subMchId` 补偿同步。未做沙箱联调。
+本地覆盖：C3。已有 `MerchantReportQueryRequest`、状态归一化、client 和 service 同步边界；生产必须继续用它做报备恢复和 `subMchId` 补偿同步。APPLET 授权未成功时 readiness 仍保持不可支付。未做沙箱联调。
 
 ### 7.3 绑定授权目录 `bind_sub_config`
 
@@ -297,7 +297,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 | `authContent` | 是 | S(256) | `APPLET` 填小程序 appid | C3，取 LocalLife 小程序 appid |
 | `remark` | 是 | S(128) | 备注 | C3 |
 
-边界结论：`bind_sub_config` 不进入确认分账接口，不能改变分账接收方；它只影响微信渠道支付配置。商户 `merchant_report` 成功后必须为该商户 `subMchId` 绑定 LocalLife 平台小程序 appid。若 `bind_sub_config` 失败，风险首先是 `unified_order` 后续无法在平台小程序中正常拉起微信支付或展示主体不符合预期，而不是 `share_after_pay` 无法按宝付二级户分账。
+边界结论：`bind_sub_config` 不进入确认分账接口，不能改变分账接收方；它只影响微信渠道支付配置。商户 `merchant_report` 成功后必须为该商户 `subMchId` 绑定 LocalLife 平台小程序 appid。若 `bind_sub_config` 失败，readiness 保持不可支付，风险首先是 `unified_order` 后续无法在平台小程序中正常拉起微信支付或展示主体不符合预期，而不是 `share_after_pay` 无法按宝付二级户分账。
 
 ## 8. 聚合支付详细核对
 

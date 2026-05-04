@@ -1367,19 +1367,19 @@ git commit -m "fix(baofu): re-audit aggregate pay contracts"
 - Modify: `locallife/logic/baofu_payment_readiness.go`
 - Modify: `artifacts/baofu-payment/baofu-api-contract-coverage-audit.md`
 
-- [ ] **Step 1: Build merchant-report field matrix**
+- [x] **Step 1: Build merchant-report field matrix**
 
 Audit tables must cover `merchant_report`, `merchant_report_query`, and `bind_sub_config`, including report identity fields, `bctMerId`, channel type, business category/MCC, contact/settlement fields, service codes, certificate types, site info, and APPLET auth fields.
 
-- [ ] **Step 2: Verify APPLET bind requirement**
+- [x] **Step 2: Verify APPLET bind requirement**
 
 Tests must prove every merchant `subMchId` from report success gets `bind_sub_config(authType=APPLET, authContent=<WECHAT_MINI_APP_ID>)`, and payment readiness remains false until APPLET bind success.
 
-- [ ] **Step 3: Verify异主体报备 model**
+- [x] **Step 3: Verify异主体报备 model**
 
 Service/readiness tests must prove LocalLife uses each merchant's Baofoo report `subMchId` for `unified_order`, not one platform-wide `subMchId`, because Baofoo confirmed异主体报备 support.
 
-- [ ] **Step 4: Verify appendix enums and category file**
+- [x] **Step 4: Verify appendix enums and category file**
 
 Tests must prove:
 
@@ -1388,14 +1388,14 @@ Tests must prove:
 - `/home/sam/文档/分账/宝付/经营类目&MCC.xlsx` derived category constants have a recorded source hash/row count;
 - no hardcoded unknown category string bypasses the allowlist.
 
-- [ ] **Step 5: Validate**
+- [x] **Step 5: Validate**
 
 ```bash
 cd locallife
 PATH="/usr/local/go/bin:$PATH" go test ./baofu/merchantreport ./baofu/merchantreport/contracts ./logic -run 'TestBaofuMerchantReport|TestBaofuPaymentReadiness' -count=1
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add locallife/baofu/merchantreport locallife/logic/baofu_merchant_report_service.go locallife/logic/baofu_payment_readiness.go artifacts/baofu-payment/baofu-api-contract-coverage-audit.md
