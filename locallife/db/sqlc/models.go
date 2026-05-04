@@ -123,6 +123,24 @@ type BaofuFeeLedger struct {
 	UpdatedAt          time.Time   `json:"updated_at"`
 }
 
+type BaofuMerchantReport struct {
+	ID              int64       `json:"id"`
+	OwnerType       string      `json:"owner_type"`
+	OwnerID         int64       `json:"owner_id"`
+	ReportType      string      `json:"report_type"`
+	ReportNo        string      `json:"report_no"`
+	BctMerID        string      `json:"bct_mer_id"`
+	SubMchID        pgtype.Text `json:"sub_mch_id"`
+	ReportState     string      `json:"report_state"`
+	AppletAuthState string      `json:"applet_auth_state"`
+	PlatformBizNo   pgtype.Text `json:"platform_biz_no"`
+	FailureCode     pgtype.Text `json:"failure_code"`
+	FailureMessage  pgtype.Text `json:"failure_message"`
+	RawSnapshot     []byte      `json:"raw_snapshot"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
+}
+
 type BaofuWithdrawalOrder struct {
 	ID               int64              `json:"id"`
 	OwnerType        string             `json:"owner_type"`

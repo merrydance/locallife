@@ -40,10 +40,10 @@ func TestBaofuPaymentServiceCreateWechatJSAPIOrderRecordsCommandBeforeClientCall
 			OutTradeNo: "PO202605030001",
 			Attach:     pgtype.Text{String: "order:42", Valid: true},
 		},
-		MerchantWechatSubMchID: "wx-sub-mch-001",
-		PayerOpenID:            "payer-openid-secret",
-		Body:                   "LocalLife订单",
-		ClientIP:               "203.0.113.9",
+		MerchantSubMchID: "wx-sub-mch-001",
+		PayerOpenID:      "payer-openid-secret",
+		Body:             "LocalLife订单",
+		ClientIP:         "203.0.113.9",
 	})
 
 	require.NoError(t, err)
@@ -92,11 +92,11 @@ func TestBaofuPaymentServiceCreateWechatJSAPIOrderRejectsMissingWechatPayData(t 
 	})
 
 	_, err := service.CreateWechatJSAPIOrder(context.Background(), CreateBaofuWechatJSAPIOrderInput{
-		PaymentOrder:           db.PaymentOrder{ID: 88, Amount: 12345, OutTradeNo: "PO202605030001"},
-		MerchantWechatSubMchID: "wx-sub-mch-001",
-		PayerOpenID:            "payer-openid-secret",
-		Body:                   "LocalLife订单",
-		ClientIP:               "203.0.113.9",
+		PaymentOrder:     db.PaymentOrder{ID: 88, Amount: 12345, OutTradeNo: "PO202605030001"},
+		MerchantSubMchID: "wx-sub-mch-001",
+		PayerOpenID:      "payer-openid-secret",
+		Body:             "LocalLife订单",
+		ClientIP:         "203.0.113.9",
 	})
 
 	require.ErrorIs(t, err, ErrBaofuPaymentWechatPayDataRequired)
@@ -113,10 +113,10 @@ func TestBaofuPaymentServiceCreateWechatJSAPIOrderRejectsMissingClientIP(t *test
 	})
 
 	_, err := service.CreateWechatJSAPIOrder(context.Background(), CreateBaofuWechatJSAPIOrderInput{
-		PaymentOrder:           db.PaymentOrder{ID: 88, Amount: 12345, OutTradeNo: "PO202605030001"},
-		MerchantWechatSubMchID: "wx-sub-mch-001",
-		PayerOpenID:            "payer-openid-secret",
-		Body:                   "LocalLife订单",
+		PaymentOrder:     db.PaymentOrder{ID: 88, Amount: 12345, OutTradeNo: "PO202605030001"},
+		MerchantSubMchID: "wx-sub-mch-001",
+		PayerOpenID:      "payer-openid-secret",
+		Body:             "LocalLife订单",
 	})
 
 	require.ErrorIs(t, err, ErrBaofuPaymentRiskInfoClientIPRequired)

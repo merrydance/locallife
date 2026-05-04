@@ -729,13 +729,27 @@ func expectCombinedPaymentMerchantBaofuReady(store *mockdb.MockStore, userID int
 			}).
 			Times(1).
 			Return(db.BaofuAccountBinding{
-				OwnerType:      db.BaofuAccountOwnerTypeMerchant,
-				OwnerID:        order.MerchantID,
-				AccountType:    db.BaofuAccountTypeBusiness,
-				OpenState:      db.BaofuAccountOpenStateActive,
-				ContractNo:     pgtype.Text{String: "contract-ready", Valid: true},
-				SharingMerID:   pgtype.Text{String: "sharing-ready", Valid: true},
-				WechatSubMchID: pgtype.Text{String: "sub-mch-ready", Valid: true},
+				OwnerType:    db.BaofuAccountOwnerTypeMerchant,
+				OwnerID:      order.MerchantID,
+				AccountType:  db.BaofuAccountTypeBusiness,
+				OpenState:    db.BaofuAccountOpenStateActive,
+				ContractNo:   pgtype.Text{String: "contract-ready", Valid: true},
+				SharingMerID: pgtype.Text{String: "sharing-ready", Valid: true},
+			}, nil)
+		store.EXPECT().
+			GetBaofuMerchantReportByOwner(gomock.Any(), db.GetBaofuMerchantReportByOwnerParams{
+				OwnerType:  db.BaofuAccountOwnerTypeMerchant,
+				OwnerID:    order.MerchantID,
+				ReportType: db.BaofuMerchantReportTypeWechat,
+			}).
+			Times(1).
+			Return(db.BaofuMerchantReport{
+				OwnerType:       db.BaofuAccountOwnerTypeMerchant,
+				OwnerID:         order.MerchantID,
+				ReportType:      db.BaofuMerchantReportTypeWechat,
+				ReportState:     db.BaofuMerchantReportStateSucceeded,
+				AppletAuthState: db.BaofuMerchantReportAppletAuthStateSucceeded,
+				SubMchID:        pgtype.Text{String: "sub-mch-ready", Valid: true},
 			}, nil)
 	}
 }

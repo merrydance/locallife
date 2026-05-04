@@ -142,13 +142,26 @@ func expectActiveMerchantBaofuBindingForPayment(store *mockdb.MockStore, merchan
 			OwnerID:   merchantID,
 		}).
 		Return(db.BaofuAccountBinding{
-			OwnerType:      db.BaofuAccountOwnerTypeMerchant,
-			OwnerID:        merchantID,
-			AccountType:    db.BaofuAccountTypeBusiness,
-			OpenState:      db.BaofuAccountOpenStateActive,
-			ContractNo:     pgtype.Text{String: "CM3001", Valid: true},
-			SharingMerID:   pgtype.Text{String: "CM3001", Valid: true},
-			WechatSubMchID: pgtype.Text{String: "sub-ordinary", Valid: true},
+			OwnerType:    db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:      merchantID,
+			AccountType:  db.BaofuAccountTypeBusiness,
+			OpenState:    db.BaofuAccountOpenStateActive,
+			ContractNo:   pgtype.Text{String: "CM3001", Valid: true},
+			SharingMerID: pgtype.Text{String: "CM3001", Valid: true},
+		}, nil)
+	store.EXPECT().
+		GetBaofuMerchantReportByOwner(gomock.Any(), db.GetBaofuMerchantReportByOwnerParams{
+			OwnerType:  db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:    merchantID,
+			ReportType: db.BaofuMerchantReportTypeWechat,
+		}).
+		Return(db.BaofuMerchantReport{
+			OwnerType:       db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:         merchantID,
+			ReportType:      db.BaofuMerchantReportTypeWechat,
+			ReportState:     db.BaofuMerchantReportStateSucceeded,
+			AppletAuthState: db.BaofuMerchantReportAppletAuthStateSucceeded,
+			SubMchID:        pgtype.Text{String: "sub-baofu", Valid: true},
 		}, nil)
 }
 
@@ -293,7 +306,7 @@ func TestPaymentOrderServiceCreatePaymentOrder_UsesBaofuForMainBusiness(t *testi
 		require.Equal(t, db.PaymentChannelBaofuAggregate, arg.PaymentChannel)
 		require.True(t, arg.RequiresProfitSharing)
 		require.Equal(t, "order_id:2001", arg.Attach)
-		return db.CreatePartnerPaymentTxResult{PaymentOrder: txPayment, SubMchID: "sub-baofu"}, nil
+		return db.CreatePartnerPaymentTxResult{PaymentOrder: txPayment}, nil
 	})
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
 		require.Equal(t, db.ExternalPaymentProviderBaofu, arg.Provider)

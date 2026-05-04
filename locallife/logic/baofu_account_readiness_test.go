@@ -48,7 +48,7 @@ func TestBaofuAccountReadinessStates(t *testing.T) {
 			},
 			requireWechatSubMchID: true,
 			wantState:             BaofuOnboardingStateWechatChannelPending,
-			wantLabel:             "微信渠道待报备",
+			wantLabel:             "微信支付通道待开通",
 			wantPaymentReady:      false,
 		},
 		{

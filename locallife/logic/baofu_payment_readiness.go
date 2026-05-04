@@ -5,36 +5,61 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	db "github.com/merrydance/locallife/db/sqlc"
 )
 
 var (
 	errMerchantBaofuPaymentAccountMissing       = errors.New("商户结算账户未开通，暂不能创建支付订单")
-	errMerchantBaofuPaymentWechatChannelPending = errors.New("商户微信渠道待报备，暂不能创建微信生态支付订单")
+	errMerchantBaofuPaymentWechatChannelPending = errors.New("商户微信支付通道待开通，暂不能创建微信生态支付订单")
 )
 
-func ensureMerchantBaofuReadyForPayment(ctx context.Context, store db.Store, merchantID int64) error {
+func merchantBaofuReadinessForPayment(ctx context.Context, store db.Store, merchantID int64) (BaofuAccountReadiness, error) {
 	binding, err := store.GetBaofuAccountBindingByOwner(ctx, db.GetBaofuAccountBindingByOwnerParams{
 		OwnerType: db.BaofuAccountOwnerTypeMerchant,
 		OwnerID:   merchantID,
 	})
-	service := NewBaofuAccountService(nil, nil)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
-			return NewRequestError(http.StatusBadRequest, errMerchantBaofuPaymentAccountMissing)
+			return BaofuAccountReadiness{}, NewRequestError(http.StatusBadRequest, errMerchantBaofuPaymentAccountMissing)
 		}
-		return err
+		return BaofuAccountReadiness{}, err
 	}
-
-	readiness := service.ReadinessFromBinding(binding, true, true)
+	report, err := store.GetBaofuMerchantReportByOwner(ctx, db.GetBaofuMerchantReportByOwnerParams{
+		OwnerType:  db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:    merchantID,
+		ReportType: db.BaofuMerchantReportTypeWechat,
+	})
+	if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
+		return BaofuAccountReadiness{}, err
+	}
+	readiness := ReadinessFromBaofuBindingAndMerchantReport(binding, report)
 	if readiness.PaymentReady {
-		return nil
+		return readiness, nil
 	}
 	if readiness.State == BaofuOnboardingStateWechatChannelPending {
-		return NewRequestError(http.StatusBadRequest, errMerchantBaofuPaymentWechatChannelPending)
+		return readiness, NewRequestError(http.StatusBadRequest, errMerchantBaofuPaymentWechatChannelPending)
 	}
-	return NewRequestError(http.StatusBadRequest, errMerchantBaofuPaymentAccountMissing)
+	return readiness, NewRequestError(http.StatusBadRequest, errMerchantBaofuPaymentAccountMissing)
+}
+
+func ensureMerchantBaofuReadyForPayment(ctx context.Context, store db.Store, merchantID int64) error {
+	_, err := merchantBaofuReadinessForPayment(ctx, store, merchantID)
+	return err
+}
+
+func ReadinessFromBaofuBindingAndMerchantReport(binding db.BaofuAccountBinding, report db.BaofuMerchantReport) BaofuAccountReadiness {
+	service := NewBaofuAccountService(nil, nil)
+	accountReadiness := service.ReadinessFromBinding(binding, true, false)
+	if !accountReadiness.PaymentReady {
+		return accountReadiness
+	}
+	subMchID := strings.TrimSpace(report.SubMchID.String)
+	if strings.TrimSpace(report.ReportState) != db.BaofuMerchantReportStateSucceeded || subMchID == "" || strings.TrimSpace(report.AppletAuthState) != db.BaofuMerchantReportAppletAuthStateSucceeded {
+		return BaofuAccountReadiness{State: BaofuOnboardingStateWechatChannelPending, Label: baofuOnboardingStateLabel(BaofuOnboardingStateWechatChannelPending), PaymentReady: false, SubMchID: subMchID}
+	}
+	return BaofuAccountReadiness{State: BaofuOnboardingStateReady, Label: baofuOnboardingStateLabel(BaofuOnboardingStateReady), PaymentReady: true, SubMchID: subMchID}
 }
 
 func ensureCombinedPaymentMerchantsBaofuReady(ctx context.Context, store db.Store, userID int64, orderIDs []int64) error {

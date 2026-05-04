@@ -33,6 +33,7 @@ type BaofuAccountReadiness struct {
 	State        string
 	Label        string
 	PaymentReady bool
+	SubMchID     string
 }
 
 type baofuAccountStore interface {
@@ -207,7 +208,7 @@ func baofuOnboardingStateLabel(state string) string {
 	case BaofuOnboardingStateOpeningProcessing:
 		return "宝付开户处理中"
 	case BaofuOnboardingStateWechatChannelPending:
-		return "微信渠道待报备"
+		return "微信支付通道待开通"
 	case BaofuOnboardingStateReady:
 		return "结算账户可用"
 	case BaofuOnboardingStateOpenFailed:

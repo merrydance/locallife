@@ -245,8 +245,8 @@
 本地缺口：
 
 - 已新增 `locallife/baofu/merchantreport/contracts` 字段级 DTO、报备/授权枚举、状态归一化和微信经营类目 allowlist。
-- 无报备表、报备状态机、`subMchId` 同步事务；也未在数据模型中支持商户逐户异主体报备和授权目录绑定闭环。
-- 无宝付聚合商户报备资料字段映射和附件/证照处理策略。
+- 已新增 `baofu_merchant_reports` 表、sqlc query、报备 service 和 readiness 合成逻辑；宝付支付下单不再读取普通服务商 `txResult.SubMchID`，改读报备成功且 APPLET 授权成功后的商户 `sub_mch_id`。
+- 宝付聚合商户报备资料字段已有 service 输入骨架，附件/证照文件上传与真实资料来源映射仍需结合开户/商户入驻资料收口。
 - 附录枚举已本地覆盖一部分：报备类型、报备状态、微信服务类型、微信证件类型、授权类型、微信经营类目；结算卡字段仍需沙箱样例确认。
 - 未做测试地址联调：`https://mch-juhe.baofoo.com/mch-service/api`。
 
@@ -497,8 +497,8 @@
 | C-003 | 部分修复，待沙箱验证 | `locallife/baofu/account/notification/notification.go` 已按官方开户/提现通知字段解析；`locallife/api/baofu_callback.go` 开户 ACK 已改纯文本 `OK` | 本地 parser/ACK 已防止明显字段漂移，但还未使用宝付测试环境真实通知验证 URL query、密文 envelope、重放 ACK 行为 | 用宝付测试通知样例或沙箱回调验证开户/提现通知，并补回真实样例摘要。 |
 | C-004 | 部分修复，待 transport 集成 | 已新增 `locallife/baofu/envelope.go` 公共请求/响应 envelope DTO，覆盖 `merId/terId/method/charset/version/format/timestamp/signType/signSn/ncrptnSn/dgtlEnvlp/signStr/bizContent` | 业务 DTO 已可进入 `bizContent`，但真实 HTTP client 尚未把签名、验签、加密和 envelope 串起来 | Task 8 接真实 HTTP 时必须使用该 envelope 并补请求/响应 fixture。 |
 | C-005 | 高 | `locallife/baofu/aggregatepay/contracts/types.go:116` 的 `Validate()` 只检查 `riskInfo.clientIp` | `unified_order` 的 M/C 字段、长度、枚举、`subMchId` 条件必填、https `pageUrl`、金额关系未被锁住 | 补全字段级校验和表驱动测试；非法枚举/缺条件字段必须 fail-closed。 |
-| C-006 | 部分修复，待持久化/服务/联调 | 已新增 `locallife/baofu/merchantreport/contracts`，覆盖 `merchant_report`、`merchant_report_query`、`bind_sub_config` DTO、关键枚举、APPLET 授权校验和微信经营类目 allowlist | 契约层已能防止 `bctMerId/subMchId/authContent` 漂移，但还没有报备表、状态机、真实 client 和沙箱证据 | Task 6/8 继续新增持久化、服务、HTTP client 和测试地址联调。 |
-| C-007 | 高 | `locallife/logic/baofu_payment_order_route.go:98` 把 `txResult.SubMchID` 传给宝付；`locallife/logic/baofu_payment_service.go:62` 字段名仍是 `MerchantWechatSubMchID` | 来源继承普通服务商链路，未从宝付聚合商户报备的商户 `subMchId` 读取；会把旧微信进件假设带入宝付支付 | 引入商户聚合报备 `SubMchID` 解析器；按商户报备结果取 `sub_mch_id`，不再读普通服务商 txResult。 |
+| C-006 | 部分修复，待真实 client/联调 | 已新增 `locallife/baofu/merchantreport/contracts`、`baofu_merchant_reports`、sqlc query、报备 service、APPLET 授权 readiness | 本地契约/持久化/服务已能防止 `bctMerId/subMchId/authContent` 漂移，但还没有真实 HTTP client、回调/查询恢复 worker 和沙箱证据 | Task 8 继续新增 HTTP client 和测试地址联调；后续补报备恢复 worker。 |
+| C-007 | 已本地修复，待联调 | `locallife/logic/baofu_payment_order_route.go` 已通过 `merchantBaofuReadinessForPayment` 取商户报备 `sub_mch_id`；`CreateBaofuWechatJSAPIOrderInput` 字段已改 `MerchantSubMchID` | 旧普通服务商 `txResult.SubMchID` 来源已移除；真实支付仍待宝付聚合商户报备沙箱验证 | Task 8/沙箱测试验证 `unified_order.subMchId` 使用报备返回值。 |
 | C-008 | 中 | `locallife/baofu/aggregatepay/contracts/types.go` 无 `order_refund/refund_query/order_close` DTO | 首版宣称“分账前可退款/分账后不退款”，但没有宝付退款与关单契约，支付失败清理也无法关闭上游订单 | 补退款、退款查询、退款通知、关单 DTO/client/状态映射，并测试分账后禁退。 |
 | C-009 | 部分修复，待 service/client 切换 | 已新增 `YuanStringToFen` / `FenToYuanString` 并覆盖 2 位小数校验 | 转换 helper 已在契约包，余额/提现真实 client 仍需集中调用 | Task 8/提现服务切换时禁止业务层散落金额转换。 |
 | C-010 | 中 | `locallife/baofu/aggregatepay/contracts/types.go:180`、`:244` 状态映射只覆盖局部状态 | 聚合支付/分账/退款/报备/认证错误码和未知状态未分类，前端语义和重试策略会漂移 | 建 typed error/status 分类：资料需修改、平台配置错误、处理中可重试、渠道异常需人工；未知状态进入人工处理。 |

@@ -60,13 +60,13 @@ func NewBaofuPaymentService(store baofuPaymentStore, client aggregatepay.Client,
 }
 
 type CreateBaofuWechatJSAPIOrderInput struct {
-	PaymentOrder           db.PaymentOrder
-	MerchantWechatSubMchID string
-	PayerOpenID            string
-	Body                   string
-	PageURL                string
-	ClientIP               string
-	BusinessOwner          string
+	PaymentOrder     db.PaymentOrder
+	MerchantSubMchID string
+	PayerOpenID      string
+	Body             string
+	PageURL          string
+	ClientIP         string
+	BusinessOwner    string
 }
 
 type CreateBaofuWechatJSAPIOrderResult struct {
@@ -128,7 +128,7 @@ func (s *BaofuPaymentService) CreateWechatJSAPIOrder(ctx context.Context, input 
 		AmountFen:  paymentOrder.Amount,
 		TxnTime:    submittedAt.Format("20060102150405"),
 		TimeExpire: cfg.TimeExpireMinutes,
-		SubMchID:   strings.TrimSpace(input.MerchantWechatSubMchID),
+		SubMchID:   strings.TrimSpace(input.MerchantSubMchID),
 		SubAppID:   strings.TrimSpace(cfg.MiniProgramAppID),
 		SubOpenID:  strings.TrimSpace(input.PayerOpenID),
 		Body:       strings.TrimSpace(input.Body),
@@ -248,7 +248,7 @@ func validateCreateBaofuWechatJSAPIOrderInput(input CreateBaofuWechatJSAPIOrderI
 	if paymentOrder.ID == 0 || strings.TrimSpace(paymentOrder.OutTradeNo) == "" || paymentOrder.Amount <= 0 {
 		return ErrBaofuPaymentInvalidInput
 	}
-	if strings.TrimSpace(input.MerchantWechatSubMchID) == "" {
+	if strings.TrimSpace(input.MerchantSubMchID) == "" {
 		return ErrBaofuAccountWechatSubMchRequired
 	}
 	if strings.TrimSpace(input.PayerOpenID) == "" || strings.TrimSpace(input.Body) == "" {

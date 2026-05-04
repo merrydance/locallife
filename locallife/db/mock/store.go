@@ -6507,6 +6507,36 @@ func (mr *MockStoreMockRecorder) GetBaofuFeeLedgerByBusinessObject(ctx, arg any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuFeeLedgerByBusinessObject", reflect.TypeOf((*MockStore)(nil).GetBaofuFeeLedgerByBusinessObject), ctx, arg)
 }
 
+// GetBaofuMerchantReportByOwner mocks base method.
+func (m *MockStore) GetBaofuMerchantReportByOwner(ctx context.Context, arg db.GetBaofuMerchantReportByOwnerParams) (db.BaofuMerchantReport, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuMerchantReportByOwner", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuMerchantReport)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuMerchantReportByOwner indicates an expected call of GetBaofuMerchantReportByOwner.
+func (mr *MockStoreMockRecorder) GetBaofuMerchantReportByOwner(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuMerchantReportByOwner", reflect.TypeOf((*MockStore)(nil).GetBaofuMerchantReportByOwner), ctx, arg)
+}
+
+// GetBaofuMerchantReportByReportNo mocks base method.
+func (m *MockStore) GetBaofuMerchantReportByReportNo(ctx context.Context, reportNo string) (db.BaofuMerchantReport, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuMerchantReportByReportNo", ctx, reportNo)
+	ret0, _ := ret[0].(db.BaofuMerchantReport)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuMerchantReportByReportNo indicates an expected call of GetBaofuMerchantReportByReportNo.
+func (mr *MockStoreMockRecorder) GetBaofuMerchantReportByReportNo(ctx, reportNo any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuMerchantReportByReportNo", reflect.TypeOf((*MockStore)(nil).GetBaofuMerchantReportByReportNo), ctx, reportNo)
+}
+
 // GetBaofuPaymentOrderRefundGuardForUpdate mocks base method.
 func (m *MockStore) GetBaofuPaymentOrderRefundGuardForUpdate(ctx context.Context, id int64) (db.GetBaofuPaymentOrderRefundGuardForUpdateRow, error) {
 	m.ctrl.T.Helper()
@@ -16895,6 +16925,66 @@ func (mr *MockStoreMockRecorder) MarkBaofuAccountBindingProcessing(ctx, arg any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBaofuAccountBindingProcessing", reflect.TypeOf((*MockStore)(nil).MarkBaofuAccountBindingProcessing), ctx, arg)
 }
 
+// MarkBaofuMerchantReportAppletAuthFailed mocks base method.
+func (m *MockStore) MarkBaofuMerchantReportAppletAuthFailed(ctx context.Context, arg db.MarkBaofuMerchantReportAppletAuthFailedParams) (db.BaofuMerchantReport, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkBaofuMerchantReportAppletAuthFailed", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuMerchantReport)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkBaofuMerchantReportAppletAuthFailed indicates an expected call of MarkBaofuMerchantReportAppletAuthFailed.
+func (mr *MockStoreMockRecorder) MarkBaofuMerchantReportAppletAuthFailed(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBaofuMerchantReportAppletAuthFailed", reflect.TypeOf((*MockStore)(nil).MarkBaofuMerchantReportAppletAuthFailed), ctx, arg)
+}
+
+// MarkBaofuMerchantReportAppletAuthSucceeded mocks base method.
+func (m *MockStore) MarkBaofuMerchantReportAppletAuthSucceeded(ctx context.Context, id int64) (db.BaofuMerchantReport, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkBaofuMerchantReportAppletAuthSucceeded", ctx, id)
+	ret0, _ := ret[0].(db.BaofuMerchantReport)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkBaofuMerchantReportAppletAuthSucceeded indicates an expected call of MarkBaofuMerchantReportAppletAuthSucceeded.
+func (mr *MockStoreMockRecorder) MarkBaofuMerchantReportAppletAuthSucceeded(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBaofuMerchantReportAppletAuthSucceeded", reflect.TypeOf((*MockStore)(nil).MarkBaofuMerchantReportAppletAuthSucceeded), ctx, id)
+}
+
+// MarkBaofuMerchantReportFailed mocks base method.
+func (m *MockStore) MarkBaofuMerchantReportFailed(ctx context.Context, arg db.MarkBaofuMerchantReportFailedParams) (db.BaofuMerchantReport, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkBaofuMerchantReportFailed", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuMerchantReport)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkBaofuMerchantReportFailed indicates an expected call of MarkBaofuMerchantReportFailed.
+func (mr *MockStoreMockRecorder) MarkBaofuMerchantReportFailed(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBaofuMerchantReportFailed", reflect.TypeOf((*MockStore)(nil).MarkBaofuMerchantReportFailed), ctx, arg)
+}
+
+// MarkBaofuMerchantReportSucceeded mocks base method.
+func (m *MockStore) MarkBaofuMerchantReportSucceeded(ctx context.Context, arg db.MarkBaofuMerchantReportSucceededParams) (db.BaofuMerchantReport, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkBaofuMerchantReportSucceeded", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuMerchantReport)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkBaofuMerchantReportSucceeded indicates an expected call of MarkBaofuMerchantReportSucceeded.
+func (mr *MockStoreMockRecorder) MarkBaofuMerchantReportSucceeded(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBaofuMerchantReportSucceeded", reflect.TypeOf((*MockStore)(nil).MarkBaofuMerchantReportSucceeded), ctx, arg)
+}
+
 // MarkClaimPaid mocks base method.
 func (m *MockStore) MarkClaimPaid(ctx context.Context, arg db.MarkClaimPaidParams) error {
 	m.ctrl.T.Helper()
@@ -21947,6 +22037,21 @@ func (m *MockStore) UpsertBaofuAccountBinding(ctx context.Context, arg db.Upsert
 func (mr *MockStoreMockRecorder) UpsertBaofuAccountBinding(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertBaofuAccountBinding", reflect.TypeOf((*MockStore)(nil).UpsertBaofuAccountBinding), ctx, arg)
+}
+
+// UpsertBaofuMerchantReportProcessing mocks base method.
+func (m *MockStore) UpsertBaofuMerchantReportProcessing(ctx context.Context, arg db.UpsertBaofuMerchantReportProcessingParams) (db.BaofuMerchantReport, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertBaofuMerchantReportProcessing", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuMerchantReport)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertBaofuMerchantReportProcessing indicates an expected call of UpsertBaofuMerchantReportProcessing.
+func (mr *MockStoreMockRecorder) UpsertBaofuMerchantReportProcessing(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertBaofuMerchantReportProcessing", reflect.TypeOf((*MockStore)(nil).UpsertBaofuMerchantReportProcessing), ctx, arg)
 }
 
 // UpsertCloudPrinterReconciliationJob mocks base method.

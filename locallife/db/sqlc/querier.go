@@ -625,6 +625,8 @@ type Querier interface {
 	GetBaofuDailyReconciliation(ctx context.Context, arg GetBaofuDailyReconciliationParams) ([]GetBaofuDailyReconciliationRow, error)
 	GetBaofuFeeLedger(ctx context.Context, id int64) (BaofuFeeLedger, error)
 	GetBaofuFeeLedgerByBusinessObject(ctx context.Context, arg GetBaofuFeeLedgerByBusinessObjectParams) (BaofuFeeLedger, error)
+	GetBaofuMerchantReportByOwner(ctx context.Context, arg GetBaofuMerchantReportByOwnerParams) (BaofuMerchantReport, error)
+	GetBaofuMerchantReportByReportNo(ctx context.Context, reportNo string) (BaofuMerchantReport, error)
 	GetBaofuPaymentOrderRefundGuardForUpdate(ctx context.Context, id int64) (GetBaofuPaymentOrderRefundGuardForUpdateRow, error)
 	GetBaofuWithdrawalOrder(ctx context.Context, id int64) (BaofuWithdrawalOrder, error)
 	GetBaofuWithdrawalOrderByOutRequestNo(ctx context.Context, outRequestNo string) (BaofuWithdrawalOrder, error)
@@ -1562,6 +1564,10 @@ type Querier interface {
 	MarkBaofuAccountBindingActive(ctx context.Context, arg MarkBaofuAccountBindingActiveParams) (BaofuAccountBinding, error)
 	MarkBaofuAccountBindingFailed(ctx context.Context, arg MarkBaofuAccountBindingFailedParams) (BaofuAccountBinding, error)
 	MarkBaofuAccountBindingProcessing(ctx context.Context, arg MarkBaofuAccountBindingProcessingParams) (BaofuAccountBinding, error)
+	MarkBaofuMerchantReportAppletAuthFailed(ctx context.Context, arg MarkBaofuMerchantReportAppletAuthFailedParams) (BaofuMerchantReport, error)
+	MarkBaofuMerchantReportAppletAuthSucceeded(ctx context.Context, id int64) (BaofuMerchantReport, error)
+	MarkBaofuMerchantReportFailed(ctx context.Context, arg MarkBaofuMerchantReportFailedParams) (BaofuMerchantReport, error)
+	MarkBaofuMerchantReportSucceeded(ctx context.Context, arg MarkBaofuMerchantReportSucceededParams) (BaofuMerchantReport, error)
 	MarkClaimPaid(ctx context.Context, arg MarkClaimPaidParams) error
 	MarkClaimRecoveryDisputed(ctx context.Context, id int64) (ClaimRecovery, error)
 	MarkClaimRecoveryOverdue(ctx context.Context, id int64) (ClaimRecovery, error)
@@ -1934,6 +1940,7 @@ type Querier interface {
 	UpdateWithdrawalAccountInfo(ctx context.Context, arg UpdateWithdrawalAccountInfoParams) (WithdrawalRecord, error)
 	UpdateWithdrawalStatus(ctx context.Context, arg UpdateWithdrawalStatusParams) (WithdrawalRecord, error)
 	UpsertBaofuAccountBinding(ctx context.Context, arg UpsertBaofuAccountBindingParams) (BaofuAccountBinding, error)
+	UpsertBaofuMerchantReportProcessing(ctx context.Context, arg UpsertBaofuMerchantReportProcessingParams) (BaofuMerchantReport, error)
 	UpsertCloudPrinterReconciliationJob(ctx context.Context, arg UpsertCloudPrinterReconciliationJobParams) (CloudPrinterReconciliationJob, error)
 	// 添加或更新菜品标签关联
 	UpsertDishTag(ctx context.Context, arg UpsertDishTagParams) error

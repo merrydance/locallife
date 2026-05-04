@@ -546,7 +546,7 @@ git commit -m "feat(baofu): add merchant report contracts"
 - Modify: `locallife/logic/baofu_payment_service.go`
 - Modify: `locallife/db/mock/store.go` via `make mock` or `make sqlc`
 
-- [ ] **Step 1: Add failing service tests**
+- [x] **Step 1: Add failing service tests**
 
 Create `locallife/logic/baofu_merchant_report_service_test.go`:
 
@@ -575,7 +575,7 @@ go test ./logic -run 'TestBaofuMerchantReport|TestBaofuPaymentReadinessRequiresM
 
 Expected: compile failure because service/table/readiness helpers do not exist.
 
-- [ ] **Step 3: Add migration and sqlc query**
+- [x] **Step 3: Add migration and sqlc query**
 
 Create `baofu_merchant_reports` with:
 
@@ -597,7 +597,7 @@ updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 UNIQUE (owner_type, owner_id, report_type)
 ```
 
-- [ ] **Step 4: Implement service and readiness**
+- [x] **Step 4: Implement service and readiness**
 
 Service must:
 
@@ -609,7 +609,7 @@ Service must:
 6. Submit `bind_sub_config` after `sub_mch_id` exists.
 7. Mark readiness only when report succeeded and APPLET auth succeeded.
 
-- [ ] **Step 5: Remove old `txResult.SubMchID` source**
+- [x] **Step 5: Remove old `txResult.SubMchID` source**
 
 In `locallife/logic/baofu_payment_order_route.go`, replace Baofu payment input source:
 
@@ -625,7 +625,7 @@ MerchantWechatSubMchID: readiness.SubMchID,
 
 Then rename field to `MerchantSubMchID` in `CreateBaofuWechatJSAPIOrderInput` to avoid implying ordinary-service-provider origin.
 
-- [ ] **Step 6: Regenerate and test**
+- [x] **Step 6: Regenerate and test**
 
 ```bash
 make sqlc

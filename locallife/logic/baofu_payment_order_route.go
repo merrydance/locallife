@@ -78,7 +78,8 @@ func (svc *PaymentOrderService) createBaofuPayment(ctx context.Context, createIn
 	if svc.baofuPaymentService == nil {
 		return result, fmt.Errorf("baofu payment service: not configured")
 	}
-	if err := ensureMerchantBaofuReadyForPayment(ctx, svc.store, createInput.MerchantID); err != nil {
+	readiness, err := merchantBaofuReadinessForPayment(ctx, svc.store, createInput.MerchantID)
+	if err != nil {
 		return result, err
 	}
 	user, err := svc.store.GetUser(ctx, createInput.UserID)
@@ -96,12 +97,12 @@ func (svc *PaymentOrderService) createBaofuPayment(ctx context.Context, createIn
 	result.PaymentOrder = txResult.PaymentOrder
 
 	baofuResult, err := svc.baofuPaymentService.CreateWechatJSAPIOrder(ctx, CreateBaofuWechatJSAPIOrderInput{
-		PaymentOrder:           txResult.PaymentOrder,
-		MerchantWechatSubMchID: txResult.SubMchID,
-		PayerOpenID:            user.WechatOpenid,
-		Body:                   createInput.MerchantName,
-		ClientIP:               createInput.ClientIP,
-		BusinessOwner:          createInput.BusinessOwner,
+		PaymentOrder:     txResult.PaymentOrder,
+		MerchantSubMchID: readiness.SubMchID,
+		PayerOpenID:      user.WechatOpenid,
+		Body:             createInput.MerchantName,
+		ClientIP:         createInput.ClientIP,
+		BusinessOwner:    createInput.BusinessOwner,
 	})
 	if err != nil {
 		cleanupCtx := context.Background()

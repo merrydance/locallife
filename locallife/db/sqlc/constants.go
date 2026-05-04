@@ -188,6 +188,19 @@ const (
 	BaofuWithdrawalStatusFailed     = "failed"
 	BaofuWithdrawalStatusReturned   = "returned"
 
+	BaofuMerchantReportTypeWechat = "WECHAT"
+	BaofuMerchantReportTypeAlipay = "ALIPAY"
+
+	BaofuMerchantReportStateProcessing = "processing"
+	BaofuMerchantReportStateSucceeded  = "succeeded"
+	BaofuMerchantReportStateFailed     = "failed"
+	BaofuMerchantReportStateUnknown    = "unknown"
+
+	BaofuMerchantReportAppletAuthStatePending     = "pending"
+	BaofuMerchantReportAppletAuthStateSucceeded   = "succeeded"
+	BaofuMerchantReportAppletAuthStateFailed      = "failed"
+	BaofuMerchantReportAppletAuthStateNotRequired = "not_required"
+
 	ProfitSharingReceiverOwnerTypeRider    = "rider"
 	ProfitSharingReceiverOwnerTypeOperator = "operator"
 	ProfitSharingReceiverOwnerTypeManual   = "manual"
@@ -226,6 +239,7 @@ const (
 	ExternalPaymentCapabilityCancelWithdraw      = "cancel_withdraw"
 	ExternalPaymentCapabilityMerchantTransfer    = "merchant_transfer"
 	ExternalPaymentCapabilityBaofuAccount        = "baofu_account"
+	ExternalPaymentCapabilityBaofuMerchantReport = "baofu_merchant_report"
 	ExternalPaymentCapabilityBaofuPayment        = "baofu_payment"
 	ExternalPaymentCapabilityBaofuProfitSharing  = "baofu_profit_sharing"
 	ExternalPaymentCapabilityBaofuWithdraw       = "baofu_withdraw"
@@ -249,6 +263,8 @@ const (
 	ExternalPaymentCommandTypeQueryBaofuBalance         = "query_baofu_balance"
 	ExternalPaymentCommandTypeCreateBaofuWithdraw       = "create_baofu_withdraw"
 	ExternalPaymentCommandTypeQueryBaofuWithdraw        = "query_baofu_withdraw"
+	ExternalPaymentCommandTypeBaofuMerchantReport       = "baofu_merchant_report"
+	ExternalPaymentCommandTypeBaofuBindSubConfig        = "baofu_bind_sub_config"
 
 	ExternalPaymentBusinessOwnerRiderDeposit  = "rider_deposit"
 	ExternalPaymentBusinessOwnerOrder         = "order"
