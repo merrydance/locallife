@@ -48,6 +48,20 @@ func TestMerchantReportClientBindSubConfigPostsAppletAuth(t *testing.T) {
 	require.Contains(t, string(env.BizContent), `"authContent":"wx1234567890abcdef"`)
 }
 
+func TestMerchantReportClientReturnsProviderErrorForBusinessFailure(t *testing.T) {
+	doer := &merchantReportRecordingDoer{responseBizContent: json.RawMessage(`{"resultCode":"FAIL","errCode":"INVALID_PARAMETER","errMsg":"上游原始参数错误"}`)}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.SubmitWechatReport(context.Background(), validWechatReportRequestForClientTest())
+
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "上游原始参数错误")
+	var providerErr *baofu.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, "INVALID_PARAMETER", providerErr.UpstreamCode)
+	require.Equal(t, "资料信息不完整，请核对后重新提交", providerErr.Frontend.Message)
+}
+
 func validWechatReportRequestForClientTest() contracts.WechatMerchantReportRequest {
 	return contracts.WechatMerchantReportRequest{
 		MerchantID:    "102004465",

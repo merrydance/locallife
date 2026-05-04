@@ -52,6 +52,22 @@ func TestAggregateClientReturnsSanitizedProviderError(t *testing.T) {
 	require.NotContains(t, providerErr.Frontend.Message, "upstream raw")
 }
 
+func TestAggregateClientReturnsProviderErrorForBusinessFailure(t *testing.T) {
+	doer := &aggregateRecordingDoer{responseBizContent: json.RawMessage(`{"resultCode":"FAIL","errCode":"MERCHANT_NOT_REPORT","errMsg":"上游原始报备错误","outTradeNo":"BF202605040001"}`)}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.CreateUnifiedOrder(context.Background(), validUnifiedOrderRequestForClientTest())
+
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "上游原始报备错误")
+	var providerErr *baofu.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, "MERCHANT_NOT_REPORT", providerErr.UpstreamCode)
+	require.Equal(t, "上游原始报备错误", providerErr.UpstreamMessage)
+	require.Equal(t, "商户微信支付通道待开通，请联系平台处理", providerErr.Frontend.Message)
+	require.Equal(t, "contact_platform", providerErr.Frontend.Action)
+}
+
 func validUnifiedOrderRequestForClientTest() contracts.UnifiedOrderRequest {
 	return contracts.NewWechatJSAPISharingUnifiedOrderRequest(contracts.UnifiedOrderInput{
 		MerchantID: "102004465",

@@ -1587,3 +1587,11 @@ make test-integration
 - Added typed allowlists for the merchant-report appendix enums identified by the audit, including terminal/device/contact/site/indirect-level/merchant-status/transaction-control/auth-state groups.
 - Current first-version WeChat APPLET DTOs still only emit the supported fields; future fields must reuse these allowlists instead of introducing new magic strings.
 - Verification scope remains local C3. Real Baofu report/query/APPLET-bind sandbox evidence and production资料映射验收 are still open.
+
+
+### 2026-05-04 Remediation Follow-up - Official Error Classification And Business Failure Guard
+
+- Expanded `baofu.ClassifyBaofuError` from a coarse first-pass classifier to a typed local C3 mapping for the official account error-code page and aggregate payment error-code page. It now distinguishes user-correctable资料问题、身份/银行卡核验失败、平台/商户配置待开通、商户微信渠道待报备、可查询/可重试处理中、订单重复需查询、渠道/宝付异常需人工处理。
+- Tightened the concrete client boundary: BaoCaiTong account union-gw responses with failing `retCode` and aggregate pay / merchant report public-envelope responses with `resultCode != SUCCESS` now become sanitized `ProviderError` values before DTO unmarshalling, so empty failure payloads cannot accidentally become successful zero-value results.
+- Preserved the error exposure rule: upstream `errMsg/errorMsg` is stored only on `ProviderError.UpstreamMessage` for the provider/log boundary; frontend guidance uses curated Chinese product messages and actions only.
+- Verification scope remains local C3. Real Baofu sandbox error samples, channel-specific error combinations, and response signature/digital-envelope evidence are still open.

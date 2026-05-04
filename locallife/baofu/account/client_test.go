@@ -45,6 +45,21 @@ func TestAccountClientQueryBalancePostsOfficialUnionGatewayRequest(t *testing.T)
 	require.Contains(t, string(env.Body), `"contractNo":"CM202605040001"`)
 }
 
+func TestAccountClientReturnsProviderErrorForBusinessFailure(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": "0", "errorCode": "BF00061", "errorMsg": "上游原始四要素错误"}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.QueryBalance(context.Background(), contracts.BalanceQueryRequest{MerchantID: "102004465", TerminalID: "200005200", ContractNo: "CM202605040001"})
+
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "上游原始四要素错误")
+	var providerErr *baofu.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, "BF00061", providerErr.UpstreamCode)
+	require.Equal(t, "上游原始四要素错误", providerErr.UpstreamMessage)
+	require.Equal(t, "身份或银行卡信息核验未通过，请核对后重新提交", providerErr.Frontend.Message)
+}
+
 type accountRecordingDoer struct {
 	request         *http.Request
 	requestBody     []byte

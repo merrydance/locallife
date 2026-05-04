@@ -916,7 +916,7 @@ const (
 
 Only log upstream code/raw message at the provider boundary. API responses use public Chinese copy and no raw identifiers.
 
-Progress: `baofu.ClassifyBaofuError` now maps common parameter/config/retryable/manual-review codes to safe Chinese frontend guidance. Baofu payment/refund creation errors now map provider errors into `RequestError` without exposing upstream raw messages.
+Progress: `baofu.ClassifyBaofuError` now maps the official account error-code page and aggregate payment error-code page into safe Chinese frontend guidance:资料需修改、身份/银行卡核验失败、平台/商户配置待开通、商户微信渠道待报备、可查询/可重试处理中、渠道/宝付异常需人工处理。Union-gw account `retCode` failures and aggregate/merchant-report `resultCode != SUCCESS` business failures are converted to `ProviderError` before DTO unmarshalling, preserving upstream code/message only in the provider error/log boundary. Baofu payment/refund creation errors map provider errors into `RequestError` without exposing upstream raw messages.
 
 - [x] **Step 4: Run error tests**
 

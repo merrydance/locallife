@@ -104,7 +104,10 @@ func (c *Client) postUnionGateway(ctx context.Context, endpoint string, method s
 		return providerRequestError(method, resp.StatusCode, responseEnvelope.Header.SystemRespCode, err)
 	}
 	if strings.TrimSpace(responseEnvelope.Header.SystemRespCode) != UnionGWSystemRespSuccess {
-		return providerRequestError(method, resp.StatusCode, responseEnvelope.Header.SystemRespCode, errors.New("baofu union-gw system response failed"))
+		return providerResponseError(method, resp.StatusCode, responseEnvelope.Header.SystemRespCode, responseEnvelope.Header.SystemRespDesc, errors.New("baofu union-gw system response failed"))
+	}
+	if code, message, failed := accountBusinessFailure(responseEnvelope.Body); failed {
+		return providerResponseError(method, resp.StatusCode, code, message, errors.New("baofu account business response failed"))
 	}
 	if out != nil {
 		if err := json.Unmarshal(responseEnvelope.Body, out); err != nil {
@@ -169,10 +172,13 @@ func (c *Client) postPublicEnvelope(ctx context.Context, endpoint string, method
 		return providerRequestError(method, resp.StatusCode, "", err)
 	}
 	if strings.TrimSpace(responseEnvelope.ReturnCode) == PublicEnvelopeReturnCodeFail {
-		return providerRequestError(method, resp.StatusCode, responseEnvelope.ReturnCode, errors.New("baofu upstream returned failure"))
+		return providerResponseError(method, resp.StatusCode, responseEnvelope.ReturnCode, "", errors.New("baofu upstream returned failure"))
 	}
 	if err := responseEnvelope.Validate(); err != nil {
 		return providerRequestError(method, resp.StatusCode, responseEnvelope.ReturnCode, err)
+	}
+	if code, message, failed := publicBusinessFailure(responseEnvelope.BizContent); failed {
+		return providerResponseError(method, resp.StatusCode, code, message, errors.New("baofu public business response failed"))
 	}
 	if out != nil {
 		if err := json.Unmarshal(responseEnvelope.BizContent, out); err != nil {
@@ -192,6 +198,59 @@ func providerRequestError(operation string, statusCode int, upstreamCode string,
 		Frontend:     classified.FrontendGuidance(),
 		cause:        cause,
 	}
+}
+
+func providerResponseError(operation string, statusCode int, upstreamCode string, upstreamMessage string, cause error) error {
+	classified := ClassifyBaofuError(upstreamCode, upstreamMessage)
+	return &ProviderError{
+		Operation:       strings.TrimSpace(operation),
+		Capability:      "baofu",
+		StatusCode:      statusCode,
+		UpstreamCode:    strings.TrimSpace(upstreamCode),
+		UpstreamMessage: strings.TrimSpace(upstreamMessage),
+		Frontend:        classified.FrontendGuidance(),
+		cause:           cause,
+	}
+}
+
+func accountBusinessFailure(raw json.RawMessage) (string, string, bool) {
+	var payload struct {
+		RetCode      string `json:"retCode"`
+		ErrorCode    string `json:"errorCode"`
+		ErrorMessage string `json:"errorMsg"`
+	}
+	if len(raw) == 0 || json.Unmarshal(raw, &payload) != nil {
+		return "", "", false
+	}
+	retCode := strings.ToUpper(strings.TrimSpace(payload.RetCode))
+	if retCode == "" || retCode == "1" || retCode == "SUCCESS" {
+		return "", "", false
+	}
+	code := strings.TrimSpace(payload.ErrorCode)
+	if code == "" {
+		code = retCode
+	}
+	return code, strings.TrimSpace(payload.ErrorMessage), true
+}
+
+func publicBusinessFailure(raw json.RawMessage) (string, string, bool) {
+	var payload struct {
+		ResultCode   string `json:"resultCode"`
+		ErrorCode    string `json:"errCode"`
+		ErrorMessage string `json:"errMsg"`
+	}
+	if len(raw) == 0 || json.Unmarshal(raw, &payload) != nil {
+		return "", "", false
+	}
+	resultCode := strings.ToUpper(strings.TrimSpace(payload.ResultCode))
+	if resultCode == "" || resultCode == "SUCCESS" {
+		return "", "", false
+	}
+	code := strings.TrimSpace(payload.ErrorCode)
+	if code == "" {
+		code = resultCode
+	}
+	return code, strings.TrimSpace(payload.ErrorMessage), true
 }
 
 var _ HTTPDoer = (*http.Client)(nil)
