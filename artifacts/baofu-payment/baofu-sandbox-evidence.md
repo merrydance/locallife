@@ -25,6 +25,7 @@
 | Date | Env | Endpoint | OutRequestNo | Owner | Owner Type | Result | ContractNo Masked | SharingMerID Masked | Callback | Query | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-05-05 | sandbox | `https://vgw.baofoo.com/union-gw/api/T-1001-013-01/transReq.do` | `BAOFU_OPEN_PERSON_20260505071859` | masked personal identity | personal two-factor | reached sandbox; parsed union-gw response; upstream returned abnormal with `BF0001` | - | - | no | no | `bee8a3d2` | Negative open-account evidence only. The provider accepted the request shape but did not open an account; no `contractNo`/`sharing_mer_id` was returned, so balance query and merchant report cannot proceed from this run. |
+| 2026-05-05 | sandbox | `https://vgw.baofoo.com/union-gw/api/T-1001-013-01/transReq.do` | generated `BAOFU_OPEN_4FACTOR_*` | masked personal identity | personal four-factor | reached sandbox; response parsed as abnormal with `BF0001`, but local result fields were blank before `result[]` parser fix | - | - | no | no | `64e5fecf` | Negative four-factor evidence. The run exposed that account open/query success envelopes can carry business fields inside `result[]`; local parser now reads first result item before falling back to top-level fields. Rerun required after deploy to capture the masked `transSerialNo` and failure details correctly. |
 
 ## Account Query `T-1001-013-03`
 

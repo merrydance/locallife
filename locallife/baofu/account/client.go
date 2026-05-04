@@ -189,12 +189,59 @@ type officialAccountResult struct {
 	State         string          `json:"state"`
 	ErrorCode     string          `json:"errorCode"`
 	ErrorMessage  string          `json:"errorMsg"`
+	Result        json.RawMessage `json:"result"`
 	Raw           json.RawMessage `json:"-"`
 }
 
 func (r officialAccountResult) toAccountResult() *contracts.AccountResult {
-	contractNo := strings.TrimSpace(r.ContractNo)
-	return &contracts.AccountResult{OutRequestNo: strings.TrimSpace(r.TransSerialNo), ContractNo: contractNo, SharingMerID: contractNo, UpstreamState: strings.TrimSpace(r.State), OpenState: contracts.OpenStateFromUpstream(r.State), FailCode: strings.TrimSpace(r.ErrorCode), FailMessage: strings.TrimSpace(r.ErrorMessage)}
+	item := r.firstResultItem()
+	contractNo := firstNonEmpty(item.ContractNo, r.ContractNo)
+	state := firstNonEmpty(item.State, r.State)
+	return &contracts.AccountResult{
+		OutRequestNo:  firstNonEmpty(item.TransSerialNo, r.TransSerialNo),
+		ContractNo:    contractNo,
+		SharingMerID:  contractNo,
+		UpstreamState: state,
+		OpenState:     contracts.OpenStateFromUpstream(state),
+		FailCode:      firstNonEmpty(item.ErrorCode, r.ErrorCode),
+		FailMessage:   firstNonEmpty(item.ErrorMessage, r.ErrorMessage),
+	}
+}
+
+func (r officialAccountResult) firstResultItem() officialAccountResultItem {
+	raw := strings.TrimSpace(string(r.Result))
+	if raw == "" || raw == "null" {
+		return officialAccountResultItem{}
+	}
+	if strings.HasPrefix(raw, "[") {
+		var items []officialAccountResultItem
+		if err := json.Unmarshal(r.Result, &items); err != nil || len(items) == 0 {
+			return officialAccountResultItem{}
+		}
+		return items[0]
+	}
+	var item officialAccountResultItem
+	if err := json.Unmarshal(r.Result, &item); err != nil {
+		return officialAccountResultItem{}
+	}
+	return item
+}
+
+type officialAccountResultItem struct {
+	TransSerialNo string `json:"transSerialNo"`
+	ContractNo    string `json:"contractNo"`
+	State         string `json:"state"`
+	ErrorCode     string `json:"errorCode"`
+	ErrorMessage  string `json:"errorMsg"`
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 type officialBalanceResult struct {

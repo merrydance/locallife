@@ -63,6 +63,38 @@ func TestAccountClientOpenAccountUsesConfiguredNotifyBaseURL(t *testing.T) {
 	require.NotContains(t, string(env.Body), "placeholder.local")
 }
 
+func TestAccountClientOpenAccountParsesOfficialResultArray(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{
+		"retCode":   "1",
+		"errorCode": "BF0001",
+		"errorMsg":  "上游资料校验失败",
+		"result": []map[string]any{{
+			"transSerialNo": "OPEN202605050001",
+			"contractNo":    "",
+			"state":         "-1",
+			"errorCode":     "BF0001",
+			"errorMsg":      "上游资料校验失败",
+		}},
+	}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	result, err := client.OpenAccount(context.Background(), contracts.OpenAccountRequest{
+		AccountType:   "personal",
+		OutRequestNo:  "OPEN202605050001",
+		LegalName:     "测试用户",
+		CertificateNo: "110101199001010011",
+		BankAccountNo: "6222020202020202020",
+		BankMobile:    "13800138000",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "OPEN202605050001", result.OutRequestNo)
+	require.Equal(t, contracts.OpenStateAbnormal, result.OpenState)
+	require.Empty(t, result.ContractNo)
+	require.Equal(t, "BF0001", result.FailCode)
+	require.Equal(t, "上游资料校验失败", result.FailMessage)
+}
+
 func TestAccountClientReturnsProviderErrorForBusinessFailure(t *testing.T) {
 	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": "0", "errorCode": "BF00061", "errorMsg": "上游原始四要素错误"}}
 	client := NewClient(testBaofuRootClient(t, doer))
