@@ -9,17 +9,19 @@ import (
 
 func validBaofuConfigForTest() Config {
 	return Config{
-		Environment:       BaofuEnvironmentSandbox,
-		CollectMerchantID: "102004465",
-		CollectTerminalID: "200005200",
-		PayoutMerchantID:  "102004466",
-		PayoutTerminalID:  "200005201",
-		AppID:             "local-life-miniapp",
-		PrivateKeyPEM:     "test-private-key",
-		BaofuPublicKeyPEM: "test-public-key",
-		AESKey:            "0123456789abcdef0123456789abcdef",
-		NotifyBaseURL:     "https://pay.example.com/callbacks/baofu",
-		Timeout:           10 * time.Second,
+		Environment:        BaofuEnvironmentSandbox,
+		CollectMerchantID:  "102004465",
+		CollectTerminalID:  "200005200",
+		PayoutMerchantID:   "102004466",
+		PayoutTerminalID:   "200005201",
+		AppID:              "local-life-miniapp",
+		PrivateKeyPEM:      "test-private-key",
+		BaofuPublicKeyPEM:  "test-public-key",
+		SignSerialNo:       "test-sign-sn",
+		EncryptionSerialNo: "test-enc-sn",
+		AESKey:             "0123456789abcdef0123456789abcdef",
+		NotifyBaseURL:      "https://pay.example.com/callbacks/baofu",
+		Timeout:            10 * time.Second,
 	}
 }
 

@@ -730,7 +730,7 @@ git commit -m "feat(baofu): validate unified order contract"
 - Modify: `locallife/baofu/aggregatepay/client.go`
 - Tests: `locallife/baofu/**/*_test.go`
 
-- [ ] **Step 1: Add httptest transport tests**
+- [x] **Step 1: Add httptest transport tests**
 
 For each client, add tests that assert URL, method, public envelope, and sanitized error mapping. Example:
 
@@ -784,7 +784,9 @@ AggregatePayClient.CloseOrder(ctx, req)
 
 All methods must use context, configured timeout, one structured logging boundary, redacted request metadata, and no raw payload in ordinary errors.
 
-- [ ] **Step 4: Run transport tests**
+Progress: current DTO-backed HTTP clients are implemented for account query/balance/withdraw, merchant report/report query/APPLET bind, unified order/query, and share/share query. Refund/query refund/order close remain intentionally deferred to Task 9 because their DTOs are introduced there.
+
+- [x] **Step 4: Run transport tests**
 
 ```bash
 go test ./baofu ./baofu/account ./baofu/merchantreport ./baofu/aggregatepay -count=1

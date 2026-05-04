@@ -1,6 +1,16 @@
 package baofu
 
-import "net/http"
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+)
 
 type Client struct {
 	config    Config
@@ -20,6 +30,112 @@ func (c *Client) Config() Config {
 		return Config{}
 	}
 	return c.config
+}
+
+func (c *Client) PostAccount(ctx context.Context, method string, merchantID string, terminalID string, bizRequest any, out any) error {
+	if c == nil {
+		return errors.New("baofu client is not configured")
+	}
+	endpoint := strings.TrimRight(c.config.AccountGatewayBaseURL, "/") + "/" + strings.TrimSpace(method) + "/transReq.do"
+	return c.postPublicEnvelope(ctx, endpoint, method, merchantID, terminalID, bizRequest, out)
+}
+
+func (c *Client) PostAggregatePay(ctx context.Context, method string, bizRequest any, out any) error {
+	if c == nil {
+		return errors.New("baofu client is not configured")
+	}
+	return c.postPublicEnvelope(ctx, c.config.AggregatePayBaseURL, method, c.config.CollectMerchantID, c.config.CollectTerminalID, bizRequest, out)
+}
+
+func (c *Client) PostMerchantReport(ctx context.Context, method string, bizRequest any, out any) error {
+	if c == nil {
+		return errors.New("baofu client is not configured")
+	}
+	return c.postPublicEnvelope(ctx, c.config.MerchantReportBaseURL, method, c.config.CollectMerchantID, c.config.CollectTerminalID, bizRequest, out)
+}
+
+func (c *Client) postPublicEnvelope(ctx context.Context, endpoint string, method string, merchantID string, terminalID string, bizRequest any, out any) error {
+	if c.transport == nil {
+		return errors.New("baofu transport is not configured")
+	}
+	bizContent, err := CanonicalJSON(bizRequest)
+	if err != nil {
+		return err
+	}
+	signature, err := SignSHA256WithRSA(c.config.PrivateKeyPEM, bizContent)
+	if err != nil {
+		return err
+	}
+	envelope := PublicRequestEnvelope{
+		MerchantID:         strings.TrimSpace(merchantID),
+		TerminalID:         strings.TrimSpace(terminalID),
+		Method:             strings.TrimSpace(method),
+		Charset:            PublicEnvelopeCharsetUTF8,
+		Version:            PublicEnvelopeVersion10,
+		Format:             PublicEnvelopeFormatJSON,
+		Timestamp:          time.Now().UTC().Format("20060102150405"),
+		SignType:           SignTypeRSA,
+		SignSerialNo:       c.config.SignSerialNo,
+		EncryptionSerialNo: c.config.EncryptionSerialNo,
+		SignString:         signature,
+		BizContent:         bizContent,
+	}
+	if err := envelope.Validate(); err != nil {
+		return err
+	}
+	requestBody, err := json.Marshal(envelope)
+	if err != nil {
+		return err
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(requestBody))
+	if err != nil {
+		return err
+	}
+	httpReq.Header.Set("Content-Type", "application/json; charset=utf-8")
+	resp, err := c.transport.client.Do(httpReq)
+	if err != nil {
+		return providerRequestError(method, 0, "", err)
+	}
+	defer resp.Body.Close()
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return providerRequestError(method, resp.StatusCode, "", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return providerRequestError(method, resp.StatusCode, "", fmt.Errorf("baofu upstream http status %d", resp.StatusCode))
+	}
+	var responseEnvelope PublicResponseEnvelope
+	if err := json.Unmarshal(responseBody, &responseEnvelope); err != nil {
+		return providerRequestError(method, resp.StatusCode, "", err)
+	}
+	if strings.TrimSpace(responseEnvelope.ReturnCode) == PublicEnvelopeReturnCodeFail {
+		return providerRequestError(method, resp.StatusCode, responseEnvelope.ReturnCode, errors.New("baofu upstream returned failure"))
+	}
+	if err := responseEnvelope.Validate(); err != nil {
+		return providerRequestError(method, resp.StatusCode, responseEnvelope.ReturnCode, err)
+	}
+	if out != nil {
+		if err := json.Unmarshal(responseEnvelope.BizContent, out); err != nil {
+			return providerRequestError(method, resp.StatusCode, responseEnvelope.ReturnCode, err)
+		}
+	}
+	return nil
+}
+
+func providerRequestError(operation string, statusCode int, upstreamCode string, cause error) error {
+	return &ProviderError{
+		Operation:    strings.TrimSpace(operation),
+		Capability:   "baofu",
+		StatusCode:   statusCode,
+		UpstreamCode: strings.TrimSpace(upstreamCode),
+		Frontend: FrontendGuidance{
+			Code:      "BAOFU_CHANNEL_ERROR",
+			Message:   "宝付通道暂时不可用，请稍后重试",
+			Action:    "retry_or_contact_platform",
+			Retryable: true,
+		},
+		cause: cause,
+	}
 }
 
 var _ HTTPDoer = (*http.Client)(nil)

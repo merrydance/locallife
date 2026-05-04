@@ -1,0 +1,156 @@
+package aggregatepay
+
+import (
+	"bytes"
+	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/json"
+	"encoding/pem"
+	"io"
+	"net/http"
+	"testing"
+	"time"
+
+	"github.com/merrydance/locallife/baofu"
+	"github.com/merrydance/locallife/baofu/aggregatepay/contracts"
+	"github.com/stretchr/testify/require"
+)
+
+func TestAggregateClientCreateUnifiedOrderPostsPublicEnvelope(t *testing.T) {
+	doer := &aggregateRecordingDoer{responseBizContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","outTradeNo":"BF202605040001","txnState":"WAIT_PAYING","tradeNo":"BFPAY202605040001","chlRetParam":{"wc_pay_data":{"timeStamp":"1767225600","nonceStr":"nonce","package":"prepay_id=wx","signType":"RSA","paySign":"sign"}}}`)}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	result, err := client.CreateUnifiedOrder(context.Background(), validUnifiedOrderRequestForClientTest())
+
+	require.NoError(t, err)
+	require.Equal(t, "BFPAY202605040001", result.TradeNo)
+	require.Equal(t, baofu.SandboxAggregatePayBaseURL, doer.request.URL.String())
+	require.Equal(t, http.MethodPost, doer.request.Method)
+	var env baofu.PublicRequestEnvelope
+	require.NoError(t, json.Unmarshal(doer.requestBody, &env))
+	require.Equal(t, "unified_order", env.Method)
+	require.Equal(t, "102004465", env.MerchantID)
+	require.Equal(t, "200005200", env.TerminalID)
+	require.NotEmpty(t, env.SignString)
+	require.JSONEq(t, `{"outTradeNo":"BF202605040001","subMchId":"1900000109","riskInfo":{"clientIp":"203.0.113.1"}}`, partialJSONForTest(t, env.BizContent, "outTradeNo", "subMchId", "riskInfo"))
+}
+
+func TestAggregateClientReturnsSanitizedProviderError(t *testing.T) {
+	doer := &aggregateRecordingDoer{statusCode: http.StatusBadGateway, responseBody: []byte(`upstream raw failure with signature payload`)}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.CreateUnifiedOrder(context.Background(), validUnifiedOrderRequestForClientTest())
+
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "upstream raw failure")
+	var providerErr *baofu.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, "unified_order", providerErr.Operation)
+	require.Equal(t, http.StatusBadGateway, providerErr.StatusCode)
+	require.NotContains(t, providerErr.Frontend.Message, "upstream raw")
+}
+
+func validUnifiedOrderRequestForClientTest() contracts.UnifiedOrderRequest {
+	return contracts.NewWechatJSAPISharingUnifiedOrderRequest(contracts.UnifiedOrderInput{
+		MerchantID: "102004465",
+		TerminalID: "200005200",
+		OutTradeNo: "BF202605040001",
+		AmountFen:  1200,
+		TxnTime:    "20260504120000",
+		TimeExpire: 30,
+		SubMchID:   "1900000109",
+		SubAppID:   "wx1234567890abcdef",
+		SubOpenID:  "openid-001",
+		Body:       "本地生活订单",
+		NotifyURL:  "https://api.example.com/v1/webhooks/baofu/payment",
+		ClientIP:   "203.0.113.1",
+	})
+}
+
+type aggregateRecordingDoer struct {
+	request            *http.Request
+	requestBody        []byte
+	statusCode         int
+	responseBizContent json.RawMessage
+	responseBody       []byte
+}
+
+func (d *aggregateRecordingDoer) Do(req *http.Request) (*http.Response, error) {
+	d.request = req
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		return nil, err
+	}
+	d.requestBody = body
+	status := d.statusCode
+	if status == 0 {
+		status = http.StatusOK
+	}
+	responseBody := d.responseBody
+	if responseBody == nil {
+		var reqEnv baofu.PublicRequestEnvelope
+		_ = json.Unmarshal(body, &reqEnv)
+		responseBody, _ = json.Marshal(baofu.PublicResponseEnvelope{
+			ReturnCode:         baofu.PublicEnvelopeReturnCodeSuccess,
+			MerchantID:         reqEnv.MerchantID,
+			TerminalID:         reqEnv.TerminalID,
+			Charset:            baofu.PublicEnvelopeCharsetUTF8,
+			Version:            baofu.PublicEnvelopeVersion10,
+			Format:             baofu.PublicEnvelopeFormatJSON,
+			SignType:           baofu.SignTypeRSA,
+			SignSerialNo:       "test-sign-sn",
+			EncryptionSerialNo: "test-enc-sn",
+			SignString:         "test-signature",
+			BizContent:         d.responseBizContent,
+		})
+	}
+	return &http.Response{StatusCode: status, Body: io.NopCloser(bytes.NewReader(responseBody)), Header: make(http.Header)}, nil
+}
+
+func testBaofuRootClient(t *testing.T, doer baofu.HTTPDoer) *baofu.Client {
+	t.Helper()
+	privatePEM, publicPEM := generateClientTestKeyPair(t)
+	client, err := baofu.NewClient(baofu.Config{
+		Environment:        baofu.BaofuEnvironmentSandbox,
+		CollectMerchantID:  "102004465",
+		CollectTerminalID:  "200005200",
+		PayoutMerchantID:   "102004466",
+		PayoutTerminalID:   "200005201",
+		AppID:              "wx1234567890abcdef",
+		PrivateKeyPEM:      privatePEM,
+		BaofuPublicKeyPEM:  publicPEM,
+		AESKey:             "0123456789abcdef0123456789abcdef",
+		NotifyBaseURL:      "https://api.example.com/v1/webhooks/baofu",
+		SignSerialNo:       "test-sign-sn",
+		EncryptionSerialNo: "test-enc-sn",
+		Timeout:            5 * time.Second,
+	}, doer)
+	require.NoError(t, err)
+	return client
+}
+
+func generateClientTestKeyPair(t *testing.T) (string, string) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	privateDER, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+	publicDER, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	require.NoError(t, err)
+	return string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateDER})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicDER}))
+}
+
+func partialJSONForTest(t *testing.T, raw json.RawMessage, keys ...string) string {
+	t.Helper()
+	var full map[string]any
+	require.NoError(t, json.Unmarshal(raw, &full))
+	partial := make(map[string]any, len(keys))
+	for _, key := range keys {
+		partial[key] = full[key]
+	}
+	body, err := json.Marshal(partial)
+	require.NoError(t, err)
+	return string(body)
+}
