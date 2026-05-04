@@ -2401,3 +2401,34 @@ func TestApplyPlatformAbnormalRefundAPI(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateCombinedPaymentOrderAPI_BaofuMainBusinessFailsClosed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAggregateClientForTest(&fakeAPIBaofuAggregateClient{}, logic.BaofuAggregateFacadeConfig{
+		CollectMerchantID: "COLLECT_API",
+		CollectTerminalID: "TER_API",
+		MiniProgramAppID:  "wx-mini-api",
+		PaymentNotifyURL:  "https://api.example.com/v1/webhooks/baofu/payment",
+		RefundNotifyURL:   "https://api.example.com/v1/webhooks/baofu/refund",
+	})
+
+	body, err := json.Marshal(gin.H{"order_ids": []int64{11, 22}})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/payments/combined", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, 1001, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, CodeServiceUnavail, resp.Code)
+	require.Equal(t, "宝付合单支付暂未开通，请分开支付", resp.Message)
+}

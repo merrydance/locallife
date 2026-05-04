@@ -198,7 +198,7 @@ func NewDefaultPaymentFacadeWithBaofuAggregate(
 		baofuConfig:       cfg,
 		paymentService:    NewPaymentOrderServiceWithBaofu(store, paymentClient, baofuPaymentService),
 		ledgerService:     NewPaymentLedgerService(store),
-		combinedService:   NewCombinedPaymentService(store, nil),
+		combinedService:   NewCombinedPaymentServiceWithBaofuUnsupported(store),
 	}
 }
 

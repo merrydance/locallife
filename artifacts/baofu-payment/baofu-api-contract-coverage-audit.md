@@ -482,8 +482,8 @@
 | `locallife/baofu/aggregatepay/client.go` | interface + concrete HTTP client | 已覆盖支付/查询/分账/退款/关单；未做沙箱验证和响应验签/数字信封完整验证。 |
 | `locallife/baofu/account/client.go` | concrete account client，覆盖开户/查询/余额/提现/提现查询 | union-gw 官方 `verifyType/content/veryfyString` envelope、响应验签/数字信封和沙箱证据仍待补。 |
 | `locallife/baofu/merchantreport/**` | 报备/查询/APPLET 绑定 contracts + concrete client + tests | 完整附录枚举、真实资料来源映射、报备恢复 worker 和沙箱证据仍待补。 |
-| `locallife/logic/baofu_payment_service.go` | 服务层可组统一下单并记录 command；主业务 API runtime 可切宝付 concrete aggregate client | 合单支付策略、沙箱证据仍待补。 |
-| `locallife/api/logic_adapters.go` | 已按 `BAOFU_MAIN_BUSINESS_ENABLED` 构造宝付主业务 facade | 主业务支付可切宝付；合单支付仍需后续专项收口。 |
+| `locallife/logic/baofu_payment_service.go` | 服务层可组统一下单并记录 command；主业务 API runtime 可切宝付 concrete aggregate client | 宝付合单支付已 fail-closed；沙箱证据仍待补。 |
+| `locallife/api/logic_adapters.go` | 已按 `BAOFU_MAIN_BUSINESS_ENABLED` 构造宝付主业务 facade | 主业务支付可切宝付；宝付启用时合单支付已明确 fail-closed。 |
 | `locallife/api/baofu_callback.go` | 支付/分账/开户回调落 fact 草稿 | ACK、验签、payload 完整性需沙箱确认。 |
 | `locallife/worker/*baofu*` | 分账创建、支付/分账查询恢复、提现 fact application 等本地 worker 边界 | aggregatepay 生产 client wiring 已接入任务处理器和 Baofu recovery scheduler；宝付退款查询恢复、提现查询调度和沙箱证据仍待补。 |
 
@@ -532,7 +532,7 @@
 ## 14. 高优先级整改任务
 
 1. 补 union-gw 官方 envelope/数字信封/响应验签：确认账户接口是否必须使用 `verifyType/content/veryfyString` 形态，不能把聚合公共 envelope 误用到宝财通账户 API。
-2. 明确合单支付策略：要么接入宝付合单/多单策略，要么在宝付主业务启用时对合单支付 fail-closed 并给前端安全中文语义。
+2. 宝付合单支付首版已选择 fail-closed：`BAOFU_MAIN_BUSINESS_ENABLED=true` 时创建合单支付返回 `宝付合单支付暂未开通，请分开支付`，不得回退普通服务商/平台收付通；后续如需合单再按宝付官方合单/多单契约新增。
 3. 补退款 callback API route、退款查询恢复 worker，并继续保持“分账前退款、分账后不退款”互斥。
 4. 补完整错误码表：账户错误码、聚合支付错误码、报备错误码至少分成“用户需改资料”“商户/平台配置错误”“宝付处理中可重试”“宝付/渠道异常需人工”。
 5. 补聚合商户报备完整附录枚举和真实资料来源映射；未覆盖字段在请求进入 client 前 fail-closed。

@@ -1828,3 +1828,19 @@ func TestMapCombineOrderCloseError(t *testing.T) {
 	require.Equal(t, http.StatusConflict, reqErr.Status)
 	require.Equal(t, "支付处理中，请先刷新支付结果确认后再决定是否关闭", reqErr.Err.Error())
 }
+
+func TestCreateCombinedPaymentOrder_BaofuMainBusinessFailsClosed(t *testing.T) {
+	facade := NewDefaultPaymentFacadeWithBaofuAggregate(nil, nil, nil, BaofuAggregateFacadeConfig{
+		CollectMerchantID: "100000",
+		CollectTerminalID: "200000",
+		MiniProgramAppID:  "wx1234567890abcdef",
+		PaymentNotifyURL:  "https://api.example.com/v1/webhooks/baofu/payment",
+		RefundNotifyURL:   "https://api.example.com/v1/webhooks/baofu/refund",
+	})
+	_, err := facade.CreateCombinedPaymentOrder(context.Background(), CreateCombinedPaymentOrderInput{UserID: 1, OrderIDs: []int64{11, 22}, ClientIP: "127.0.0.1"})
+	require.Error(t, err)
+	var reqErr *RequestError
+	require.ErrorAs(t, err, &reqErr)
+	require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
+	require.EqualError(t, err, "宝付合单支付暂未开通，请分开支付")
+}
