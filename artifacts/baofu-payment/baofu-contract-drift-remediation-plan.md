@@ -223,7 +223,7 @@ git commit -m "feat(baofu): split official endpoint profiles"
 - Modify: `locallife/baofu/signing.go`
 - Modify: `locallife/baofu/signing_test.go`
 
-- [ ] **Step 1: Add failing envelope tests**
+- [x] **Step 1: Add failing envelope tests**
 
 Create `locallife/baofu/envelope_test.go`:
 
@@ -268,7 +268,7 @@ go test ./baofu -run 'TestPublicEnvelope' -count=1
 
 Expected: compile failure because `PublicRequestEnvelope` does not exist.
 
-- [ ] **Step 3: Implement envelope DTO**
+- [x] **Step 3: Implement envelope DTO**
 
 Create `locallife/baofu/envelope.go` with:
 
@@ -292,7 +292,7 @@ type PublicRequestEnvelope struct {
 
 `Validate()` must reject missing `merId/terId/method/timestamp/signType/signSn/ncrptnSn/signStr/bizContent`, non-`UTF-8`, non-`1.0`, non-`json`, and invalid sign type.
 
-- [ ] **Step 4: Run envelope/signing tests**
+- [x] **Step 4: Run envelope/signing tests**
 
 ```bash
 go test ./baofu -run 'TestPublicEnvelope|TestSigning' -count=1

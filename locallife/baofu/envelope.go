@@ -1,0 +1,150 @@
+package baofu
+
+import (
+	"encoding/json"
+	"errors"
+	"strings"
+)
+
+const (
+	PublicEnvelopeCharsetUTF8 = "UTF-8"
+	PublicEnvelopeVersion10   = "1.0"
+	PublicEnvelopeFormatJSON  = "json"
+
+	SignTypeSM2 = "SM2"
+	SignTypeRSA = "RSA"
+
+	PublicEnvelopeReturnCodeSuccess = "SUCCESS"
+	PublicEnvelopeReturnCodeFail    = "FAIL"
+)
+
+type PublicRequestEnvelope struct {
+	MerchantID         string          `json:"merId"`
+	TerminalID         string          `json:"terId"`
+	Method             string          `json:"method"`
+	Charset            string          `json:"charset"`
+	Version            string          `json:"version"`
+	Format             string          `json:"format"`
+	Timestamp          string          `json:"timestamp"`
+	SignType           string          `json:"signType"`
+	SignSerialNo       string          `json:"signSn"`
+	EncryptionSerialNo string          `json:"ncrptnSn"`
+	DigitalEnvelope    string          `json:"dgtlEnvlp,omitempty"`
+	SignString         string          `json:"signStr"`
+	BizContent         json.RawMessage `json:"bizContent"`
+}
+
+type PublicResponseEnvelope struct {
+	ReturnCode         string          `json:"returnCode"`
+	ReturnMessage      string          `json:"returnMsg"`
+	MerchantID         string          `json:"merId,omitempty"`
+	TerminalID         string          `json:"terId,omitempty"`
+	Charset            string          `json:"charset,omitempty"`
+	Version            string          `json:"version,omitempty"`
+	Format             string          `json:"format,omitempty"`
+	SignType           string          `json:"signType,omitempty"`
+	SignSerialNo       string          `json:"signSn,omitempty"`
+	EncryptionSerialNo string          `json:"ncrptnSn,omitempty"`
+	DigitalEnvelope    string          `json:"dgtlEnvlp,omitempty"`
+	SignString         string          `json:"signStr,omitempty"`
+	BizContent         json.RawMessage `json:"bizContent,omitempty"`
+}
+
+func (e PublicRequestEnvelope) Validate() error {
+	if strings.TrimSpace(e.MerchantID) == "" {
+		return errors.New("baofu public envelope merId is required")
+	}
+	if strings.TrimSpace(e.TerminalID) == "" {
+		return errors.New("baofu public envelope terId is required")
+	}
+	if strings.TrimSpace(e.Method) == "" {
+		return errors.New("baofu public envelope method is required")
+	}
+	if strings.TrimSpace(e.Charset) != PublicEnvelopeCharsetUTF8 {
+		return errors.New("baofu public envelope charset must be UTF-8")
+	}
+	if strings.TrimSpace(e.Version) != PublicEnvelopeVersion10 {
+		return errors.New("baofu public envelope version must be 1.0")
+	}
+	if strings.TrimSpace(e.Format) != PublicEnvelopeFormatJSON {
+		return errors.New("baofu public envelope format must be json")
+	}
+	if strings.TrimSpace(e.Timestamp) == "" {
+		return errors.New("baofu public envelope timestamp is required")
+	}
+	if !isSupportedSignType(e.SignType) {
+		return errors.New("baofu public envelope signType is unsupported")
+	}
+	if strings.TrimSpace(e.SignSerialNo) == "" {
+		return errors.New("baofu public envelope signSn is required")
+	}
+	if strings.TrimSpace(e.EncryptionSerialNo) == "" {
+		return errors.New("baofu public envelope ncrptnSn is required")
+	}
+	if strings.TrimSpace(e.SignString) == "" {
+		return errors.New("baofu public envelope signStr is required")
+	}
+	if len(e.BizContent) == 0 {
+		return errors.New("baofu public envelope bizContent is required")
+	}
+	if !json.Valid(e.BizContent) {
+		return errors.New("baofu public envelope bizContent must be valid JSON")
+	}
+	return nil
+}
+
+func (e PublicResponseEnvelope) Validate() error {
+	switch strings.TrimSpace(e.ReturnCode) {
+	case PublicEnvelopeReturnCodeSuccess:
+	case PublicEnvelopeReturnCodeFail:
+		return nil
+	default:
+		if strings.TrimSpace(e.ReturnCode) == "" {
+			return errors.New("baofu public response returnCode is required")
+		}
+		return errors.New("baofu public response returnCode is unsupported")
+	}
+	if strings.TrimSpace(e.MerchantID) == "" {
+		return errors.New("baofu public response merId is required")
+	}
+	if strings.TrimSpace(e.TerminalID) == "" {
+		return errors.New("baofu public response terId is required")
+	}
+	if strings.TrimSpace(e.Charset) != PublicEnvelopeCharsetUTF8 {
+		return errors.New("baofu public response charset must be UTF-8")
+	}
+	if strings.TrimSpace(e.Version) != PublicEnvelopeVersion10 {
+		return errors.New("baofu public response version must be 1.0")
+	}
+	if strings.TrimSpace(e.Format) != PublicEnvelopeFormatJSON {
+		return errors.New("baofu public response format must be json")
+	}
+	if !isSupportedSignType(e.SignType) {
+		return errors.New("baofu public response signType is unsupported")
+	}
+	if strings.TrimSpace(e.SignSerialNo) == "" {
+		return errors.New("baofu public response signSn is required")
+	}
+	if strings.TrimSpace(e.EncryptionSerialNo) == "" {
+		return errors.New("baofu public response ncrptnSn is required")
+	}
+	if strings.TrimSpace(e.SignString) == "" {
+		return errors.New("baofu public response signStr is required")
+	}
+	if len(e.BizContent) == 0 {
+		return errors.New("baofu public response bizContent is required")
+	}
+	if !json.Valid(e.BizContent) {
+		return errors.New("baofu public response bizContent must be valid JSON")
+	}
+	return nil
+}
+
+func isSupportedSignType(signType string) bool {
+	switch strings.ToUpper(strings.TrimSpace(signType)) {
+	case SignTypeSM2, SignTypeRSA:
+		return true
+	default:
+		return false
+	}
+}
