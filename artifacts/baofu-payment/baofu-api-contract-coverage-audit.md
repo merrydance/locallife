@@ -74,6 +74,25 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 本次命中确认了聚合支付 Java demo 的 `PostMasterEntity.bizContent`、`ResultMasterEntity.dataContent`，以及聚合商户报备 demo 的 `merchant_report`、`merchant_report_query`、`bind_sub_config` 方法名。union-gw 账户详细字段主要以 doc.mandao 页面和本地 BaoCaiTong 测试资料/协议为源，仍需后续沙箱正向样本把 C3 固化到 C4。
 
+## 2.3 Status / Error Interpretation Matrix
+
+下表只列本地会解释并影响业务状态、重试或前端语义的字段。未列字段不得在业务层临时解释；新增解释必须先补 DTO/枚举/测试。
+
+| 接口组 | 字段 | 官方/本地取值 | 本地解释 | 失败闭合规则 | 本地证明 |
+| --- | --- | --- | --- | --- | --- |
+| union-gw 公共响应 | `header.sysRespCode/sysRespDesc` | `0000` 表示系统层成功，其他为系统层失败 | `ValidateResponse` 校验 `memberId/terminalId/serviceTp` 后再解释系统码 | 非 `0000` 转 `ProviderError`，`UpstreamMessage=sysRespDesc`，前端只给安全中文语义 | `TestUnionGWResponseValidationRejectsMismatchedServiceType`、`TestProviderErrorKeepsUpstreamMessageOutOfFrontendGuidance` |
+| 宝财通账户业务响应 | `body.retCode/errorCode/errorMsg` | `1`/`SUCCESS` 成功；`0`、`2`、`BF****`、`errorCode` 表示失败或处理中 | `accountBusinessFailure` 统一转 `ProviderError`；`OpenStateFromUpstream` 只在业务成功后归一化账户状态 | 缺 `retCode` 但有错误字段 fail-closed；缺 `retCode` 且无错误字段也按 `MISSING_RET_CODE` fail-closed | `TestAccountClientReturnsProviderErrorForBusinessFailure`、`TestAccountClientReturnsProviderErrorWhenErrorCodeHasNoRetCode`、`TestBusinessFailureDetectorsFailClosedForMissingSuccessIndicators` |
+| 宝财通开户状态 | `state` | `1/0/2/-1` | `active/failed/processing/abnormal` | 未知值归 `abnormal`，不得当成功开户 | `TestOpenStateFromUpstream` |
+| 宝财通提现状态 | `state` | `1/0/2/3` | `succeeded/failed/processing/returned` | 未知值归 `processing`，由查询/通知继续收敛 | `TestOfficialWithdrawAmountConvertsFenToYuan`、提现通知 parser tests |
+| 聚合支付/报备公共响应 | `returnCode/returnMsg` | `SUCCESS/FAIL` | 公共层成功后才读取 `dataContent` | `FAIL` 直接转 `ProviderError`；`SUCCESS` 缺 `dataContent` fail-closed；响应 `bizContent` 只作为本地兼容 fallback | `TestPublicResponseEnvelopeValidateHandlesTransportStatus`、`TestAggregateClientReturnsProviderErrorForEnvelopeFailure` |
+| 聚合支付/报备业务响应 | `resultCode/errCode/errMsg` | `SUCCESS` 成功；`FAIL` 或错误码失败 | `publicBusinessFailure` 统一解释支付、报备、分账、退款、关单业务结果 | 缺 `resultCode` 但有错误字段 fail-closed；缺 `resultCode` 且无错误字段也按 `MISSING_RESULT_CODE` fail-closed | `TestAggregateClientReturnsProviderErrorForBusinessFailure`、`TestMerchantReportClientReturnsProviderErrorForBusinessFailure`、`TestBusinessFailureDetectorsFailClosedForMissingSuccessIndicators` |
+| 聚合支付状态 | `txnState/state` | `WAIT_PAYING/SUCCESS/CLOSED/PAY_ERROR/REFUND/ABNORMAL` | `processing/success/closed/failed/success/unknown` | 未知值归 `unknown`，不触发成功事实应用 | `TestNormalizePaymentTerminalStatus` |
+| 确认分账状态 | `txnState/state` | `PROCESSING/SUCCESS/CANCELED/ABNORMAL` | `processing/success/failed/unknown` | 未知值归 `unknown`，不触发成功事实应用 | `TestNormalizeShareTerminalStatus` |
+| 退款状态 | `refundState/state` | `SUCCESS/REFUND/REFUND_ERROR/ABNORMAL` | `success/processing/failed/unknown` | 未知值归 `unknown`，由查询/通知继续收敛 | `TestNormalizeRefundTerminalStatus` |
+| 聚合商户报备状态 | `reportState` | `SUCCESS/FAIL/PROCESSING` | `succeeded/failed/processing` | 未知值归 `unknown`，不得进入支付 readiness | `TestNormalizeMerchantReportState`、`TestBaofuPaymentReadinessRequiresMerchantSubMchIDAndAppletAuth` |
+| 绑定授权目录 | `resultCode/errCode/errMsg` 与本地 `applet_auth_state` | `SUCCESS` 成功，其余失败/待确认 | 成功才写 `applet_auth_state=succeeded`；失败写 failed 并保留脱敏 code/message | 未成功不允许 `unified_order`，只返回产品语义“微信支付通道待开通” | `TestBaofuMerchantReportServiceBindsAppletAfterReportSuccess`、`TestPaymentOrderServiceCreatePaymentOrder_BaofuWechatChannelNotReadyFailsBeforeClientCall` |
+| 错误码前端语义 | `ProviderError.UpstreamCode/UpstreamMessage` | 官方错误码、未知错误码、HTTP/解析错误 | `ClassifyBaofuError` 归类为资料需修改、平台配置、可重试、人工处理 | `UpstreamMessage` 只留在 `ProviderError` 供日志/运营诊断，`Frontend.Message` 不拼接上游原文 | `TestClassifyBaofuOfficialErrorTables`、`TestProviderErrorKeepsUpstreamMessageOutOfFrontendGuidance` |
+
 ## 3. 官方入口地址
 
 | 能力组 | 官方文档 | 请求方式 | 测试地址 | 生产地址 | 生产备用地址 | 当前项目覆盖 |

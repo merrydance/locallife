@@ -1471,7 +1471,7 @@ git commit -m "fix(baofu): lock identifier source boundaries"
 - Modify: `locallife/baofu/merchantreport/contracts/*.go`
 - Modify: `artifacts/baofu-payment/baofu-api-contract-coverage-audit.md`
 
-- [ ] **Step 1: Build status/error matrix**
+- [x] **Step 1: Build status/error matrix**
 
 Audit doc must list every locally interpreted status/error field:
 
@@ -1480,7 +1480,7 @@ Audit doc must list every locally interpreted status/error field:
 - public business `resultCode/errCode/errMsg`;
 - payment/share/refund/report/auth status enums.
 
-- [ ] **Step 2: Add fail-closed tests**
+- [x] **Step 2: Add fail-closed tests**
 
 Tests must prove:
 
@@ -1489,14 +1489,16 @@ Tests must prove:
 - upstream raw message is kept in `ProviderError.UpstreamMessage` for logs/ops but not leaked through `Frontend.Message`;
 - frontend guidance is stable Chinese product guidance.
 
-- [ ] **Step 3: Validate**
+Progress: added root client failure-detector regressions for missing `retCode`, missing `resultCode`, unknown non-success `resultCode`, and upstream-message sanitization. `accountBusinessFailure` and `publicBusinessFailure` now fail closed instead of allowing business payloads with no success indicator to unmarshal as success.
+
+- [x] **Step 3: Validate**
 
 ```bash
 cd locallife
 PATH="/usr/local/go/bin:$PATH" go test ./baofu ./baofu/account/contracts ./baofu/aggregatepay/contracts ./baofu/merchantreport/contracts -run 'Test.*Error|Test.*Status|Test.*Validate' -count=1
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add locallife/baofu artifacts/baofu-payment/baofu-api-contract-coverage-audit.md

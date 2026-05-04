@@ -223,7 +223,10 @@ func accountBusinessFailure(raw json.RawMessage) (string, string, bool) {
 	if retCode == "" && (strings.TrimSpace(payload.ErrorCode) != "" || strings.TrimSpace(payload.ErrorMessage) != "") {
 		return strings.TrimSpace(payload.ErrorCode), strings.TrimSpace(payload.ErrorMessage), true
 	}
-	if retCode == "" || retCode == "1" || retCode == "SUCCESS" {
+	if retCode == "" {
+		return "MISSING_RET_CODE", strings.TrimSpace(payload.ErrorMessage), true
+	}
+	if retCode == "1" || retCode == "SUCCESS" {
 		return "", "", false
 	}
 	code := strings.TrimSpace(payload.ErrorCode)
@@ -246,7 +249,10 @@ func publicBusinessFailure(raw json.RawMessage) (string, string, bool) {
 	if resultCode == "" && (strings.TrimSpace(payload.ErrorCode) != "" || strings.TrimSpace(payload.ErrorMessage) != "") {
 		return strings.TrimSpace(payload.ErrorCode), strings.TrimSpace(payload.ErrorMessage), true
 	}
-	if resultCode == "" || resultCode == "SUCCESS" {
+	if resultCode == "" {
+		return "MISSING_RESULT_CODE", strings.TrimSpace(payload.ErrorMessage), true
+	}
+	if resultCode == "SUCCESS" {
 		return "", "", false
 	}
 	code := strings.TrimSpace(payload.ErrorCode)
