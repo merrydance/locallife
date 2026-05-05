@@ -1839,6 +1839,8 @@ Added `WechatMiniProgramPaymentServiceCodes()` as the local project source for f
 
 Existing sandbox `subMchId=4000***0573` was likely created before this correction. Before retrying unified order, run `merchant_report_modify` for that `subMchId` with `service_codes=["JSAPI","APPLET"]`, or create a fresh report that submits both service codes, then run `bind_sub_config(APPLET)` again and retry `unified_order`.
 
+2026-05-05 follow-up: `merchant_report_modify` returned `SUCCESS` for existing `subMchId=4000***0573`, and APPLET bind returned `SUCCESS` again, but `unified_order` still returned `PAY_CHANNEL_NOT_SUPPORT`. Therefore the remaining blocker is no longer explained by the local default service-code drift alone. Next diagnostics should either create a fresh report after the `JSAPI+APPLET` fix or ask Baofoo to inspect whether `subMchId=400060573` under `merId=102004465/terId=200005200` has WeChat `WECHAT_JSAPI` enabled in sandbox.
+
 ### 7.3 Completion Gate For This Pre-`dataContent` Audit
 
 This pre-sandbox-positive audit is complete only when:

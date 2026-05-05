@@ -75,12 +75,14 @@
 | Date | Env | Endpoint | subMchId Masked | AuthType | AuthContent Masked | Result | Payment Readiness | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-05-05 | sandbox | `https://mch-juhe.baofoo.com/mch-service/api` | `4000***0573` | `APPLET` | `wx9f***4a0b` | success; `resultCode=SUCCESS` | merchant payment channel ready for unified-order smoke | `94bae1f2` | Positive APPLET bind C4 evidence. Baofoo success response did not echo `subMchId/authType/authContent`, but the request used the queried `subMchId` and LocalLife mini program appid; continue to unified-order test with real mini-program `sub_openid`. |
+| 2026-05-05 | sandbox | `https://mch-juhe.baofoo.com/mch-service/api` | `4000***0573` | `APPLET` | `wx9f***4a0b` | success; `resultCode=SUCCESS` | APPLET bind positive, unified-order still provider-rejected | `bccd0b89` | APPLET bind was rerun after `merchant_report_modify` reported success with `service_codes=["JSAPI","APPLET"]`. This proves APPLET authorization itself is not the remaining blocker. |
 
 ## Unified Order `unified_order`
 
 | Date | Env | Endpoint | OutTradeNo | subMchId Masked | Amount Fen | wc_pay_data | Callback | Query | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-05-05 | sandbox | `https://mch-juhe.baofoo.com/api` | `BAOFU_UO_20260505102335` | `4000***0573` | 1 | no | no | no | next fix | Negative unified-order evidence. Request reached aggregate sandbox with real merchant-report `subMchId`, platform appid, payer `sub_openid`, `riskInfo.clientIp`, `WECHAT_JSAPI`, `prodType=SHARING`, and `orderType=7`, but provider returned `PAY_CHANNEL_NOT_SUPPORT`. Root-cause investigation found project/default report service codes used only `APPLET`, while Baofoo unified-order uses `WECHAT_JSAPI` and Baofoo's merchant-report doc/demo submit `service_codes=["JSAPI","APPLET"]`; future reports now submit both. Existing `subMchId` likely needs `merchant_report_modify` or a new report with both service codes before retry. |
+| 2026-05-05 | sandbox | `https://mch-juhe.baofoo.com/api` | `BAOFU_UO_20260505104354` | `4000***0573` | 100 | no | no | no | `bccd0b89` | Negative unified-order evidence after `merchant_report_modify` success and APPLET re-bind. Request used real merchant-report `subMchId`, platform appid, masked payer `sub_openid`, IPv6 payer IP, `WECHAT_JSAPI`, `prodType=SHARING`, and `orderType=7`; provider still returned `PAY_CHANNEL_NOT_SUPPORT`, now safely classified as `BAOFU_PLATFORM_CONFIGURATION`. Remaining hypotheses: existing channel report modification may not actually enable the WeChat JSAPI channel, Baofoo sandbox/channel provisioning for this `subMchId` may be delayed or disabled, or Baofoo requires a fresh report/channel-side manual enablement. |
 
 ## Payment Query `order_query`
 
