@@ -51,6 +51,10 @@ type WechatBankCardInfo struct {
 	BankBranchName string `json:"bank_branch_name"`
 }
 
+func WechatMiniProgramPaymentServiceCodes() []string {
+	return []string{WechatServiceTypeJSAPI, WechatServiceTypeApplet}
+}
+
 type MerchantReportQueryRequest struct {
 	AgentMerchantID string `json:"agentMerId,omitempty"`
 	AgentTerminalID string `json:"agentTerId,omitempty"`

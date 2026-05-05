@@ -88,7 +88,7 @@ func validWechatReportRequestForClientTest() contracts.WechatMerchantReportReque
 			ChannelID:           "channel-001",
 			ChannelName:         "乐客来福",
 			Business:            "758-2",
-			ServiceCodes:        []string{contracts.WechatServiceTypeApplet},
+			ServiceCodes:        contracts.WechatMiniProgramPaymentServiceCodes(),
 			AddressInfo:         contracts.WechatAddressInfo{ProvinceCode: "310000", CityCode: "310100", DistrictCode: "310115", Address: "世纪大道 1 号"},
 			BusinessLicenseType: contracts.WechatCertificateTypeNationalLegalMerge,
 			BusinessLicense:     "91310000123456789X",

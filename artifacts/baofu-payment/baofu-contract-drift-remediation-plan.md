@@ -41,6 +41,7 @@
 | C-014 balance query version/amount drift | Task P11 | 余额查询独立 `version=4.0.0`，响应金额兼容 string/number。 |
 | C-015 balance optional amount drift | Task P12 | 余额响应金额字段按官方 `O` 处理；缺失字段默认为 `0`，但全部缺失仍视为漂移。 |
 | C-016 merchant report query subMchId drift | Task P13 | 报备查询从 `channelRetParam.sub_mch_id` 归一化微信渠道 `subMchId`。 |
+| C-017 merchant report service_codes drift | Task P14 | 微信小程序支付报备固定上送 `JSAPI` + `APPLET`，避免 `WECHAT_JSAPI` 下单时渠道未开通。 |
 
 ## 2. Target File Map
 
@@ -478,7 +479,7 @@ func TestWechatMerchantReportRequiresMerchantBCTMerID(t *testing.T) {
             MerchantShortName: "某某餐饮",
             ServicePhone: "02112345678",
             Business: "餐饮",
-            ServiceCodes: []string{WechatServiceTypeApplet},
+            ServiceCodes: WechatMiniProgramPaymentServiceCodes(),
             BusinessLicenseType: WechatCertificateTypeNationalLegalMerge,
             BusinessLicense: "91310000123456789X",
         },
@@ -1806,6 +1807,37 @@ PATH="/usr/local/go/bin:$PATH" go test ./baofu/merchantreport ./baofu/merchantre
 ```
 
 Validation on 2026-05-05: targeted merchant-report tests passed. Redeploy and rerun `merchant_report_query` to record positive query C4 with `subMchId`.
+
+### Task P14: Merchant Report Service Codes For Mini Program Payment
+
+> Trigger: sandbox `unified_order` reached Baofoo with `WECHAT_JSAPI` + real `subMchId` + APPLET bind, but provider returned `PAY_CHANNEL_NOT_SUPPORT`.
+
+**Files:**
+- Modify: `locallife/baofu/merchantreport/contracts/types.go`
+- Modify: `locallife/baofu/merchantreport/contracts/types_test.go`
+- Modify: `locallife/baofu/merchantreport/client_test.go`
+- Modify: `locallife/logic/baofu_merchant_report_service.go`
+- Modify: `artifacts/baofu-payment/baofu-api-contract-coverage-audit.md`
+- Modify: `artifacts/baofu-payment/baofu-sandbox-evidence.md`
+
+- [x] **Step 1: Re-read grouped Baofoo docs and demo**
+
+Checked `merchant_report`, `bind_sub_config`, `unified_order`, payment return appendix, merchant-report appendix, and Baofoo Java demo together.
+
+Confirmed:
+
+- `unified_order.payCode` for mini program/JSAPI payment is `WECHAT_JSAPI`;
+- `bind_sub_config(authType=APPLET)` only binds the mini program appid to the returned channel `subMchId`;
+- Baofoo merchant-report doc example and Java demo submit `service_codes=["JSAPI","APPLET"]`;
+- previous local service construction used only `APPLET`, which can leave the `WECHAT_JSAPI` payment channel unopened even after APPLET bind succeeds.
+
+- [x] **Step 2: Fix local contract source**
+
+Added `WechatMiniProgramPaymentServiceCodes()` as the local project source for first-version WeChat mini program payment report services. Future merchant reports now submit `JSAPI` + `APPLET` together.
+
+- [ ] **Step 3: Sandbox repair for existing report**
+
+Existing sandbox `subMchId=4000***0573` was likely created before this correction. Before retrying unified order, run `merchant_report_modify` for that `subMchId` with `service_codes=["JSAPI","APPLET"]`, or create a fresh report that submits both service codes, then run `bind_sub_config(APPLET)` again and retry `unified_order`.
 
 ### 7.3 Completion Gate For This Pre-`dataContent` Audit
 

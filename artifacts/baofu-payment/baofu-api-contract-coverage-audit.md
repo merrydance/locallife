@@ -279,7 +279,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 | `contact/contact_phone/contact_email` | 否 | S | 联系信息 | C2/C3，字段骨架已建 |
 | `channel_id/channel_name` | 是 | S | 测试环境文档给固定渠道参数示例 | C2/C3，取值待沙箱确认 |
 | `business` | 是 | S(10) | 经营类目/MCC | C3，已从本地 XLSX 生成 110 项微信类目 allowlist |
-| `service_codes` | 是 | C | 如 `JSAPI`、`APPLET` | C3 |
+| `service_codes` | 是 | C | 微信小程序支付首版固定同时传 `JSAPI`、`APPLET` | C3 |
 | `address_info` | 是 | C | 微信页要求 `province_code/city_code/district_code/address`，可选 `longitude/latitude/type`；不是 `province/city/district/locationPoint` | C3，已按官方字段名修复并加序列化测试 |
 | `business_license/business_license_type` | 是 | S | 证照编号和类型 | C2/C3，字段骨架已建 |
 | `bankcard_info` | 是 | C | 微信页要求 `card_no/card_name` 必填，`bank_branch_name` 可选；不是 `account_no/account_name/bank_name` | C3，已按官方字段名修复并加序列化/必填测试 |
@@ -489,7 +489,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 | 终端设备类型 | `01`、`02`、`03`、`04`、`05`、`06`、`07`、`08`、`09`、`10`、`11`、`12`、`13` | 若报备请求涉及终端信息，必须从 allowlist 选择；首版未使用时也要禁止随意传值。 |
 | 操作标识 | `00` 新增、`01` 修改、`02` 注销 | 报备新增、后续修改/注销接口不能混用。 |
 | 设备状态 | `00` 启用、`01` 注销 | 设备上报时校验。 |
-| 微信服务类型 | `JSAPI`、`APPLET`、`MICROPAY` | 小程序支付首版应使用/允许 `APPLET`，如文档要求 `service_codes` 同时含 `JSAPI` 需以沙箱验证为准固化测试。 |
+| 微信服务类型 | `JSAPI`、`APPLET`、`MICROPAY` | 小程序支付首版固定传 `JSAPI` + `APPLET`：`WECHAT_JSAPI` 是统一下单支付方式，`APPLET` 是小程序授权/渠道服务。宝付 Java demo 也同时上送两者；仅传 `APPLET` 的报备会留下 `PAY_CHANNEL_NOT_SUPPORT` 风险。 |
 | 支付宝服务类型 | `F2F` | 首版不启用支付宝主路径时不得影响微信校验。 |
 | 联系人业务标识 | `02`、`06`、`08`、`11` | 报备联系人数组必须校验业务标识；普通用户错误提示只能说资料不完整/需补充。 |
 | 微信证件类型 | `NATIONAL_LEGAL`、`NATIONAL_LEGAL_MERGE`、`INST_RGST_CTF`、`IDENTITY_CARD`、`OTHERS` | 机构/个体/个人报备资料映射必须显式；不能复用微信进件旧枚举名而不转换。 |

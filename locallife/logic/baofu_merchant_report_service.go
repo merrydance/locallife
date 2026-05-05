@@ -217,7 +217,7 @@ func (s *BaofuMerchantReportService) buildWechatMerchantReportRequest(input Subm
 			ChannelID:           strings.TrimSpace(input.ChannelID),
 			ChannelName:         strings.TrimSpace(input.ChannelName),
 			Business:            strings.TrimSpace(input.Business),
-			ServiceCodes:        []string{merchantcontracts.WechatServiceTypeApplet},
+			ServiceCodes:        merchantcontracts.WechatMiniProgramPaymentServiceCodes(),
 			AddressInfo:         input.AddressInfo,
 			BusinessLicenseType: strings.TrimSpace(input.BusinessLicenseType),
 			BusinessLicense:     strings.TrimSpace(input.BusinessLicense),

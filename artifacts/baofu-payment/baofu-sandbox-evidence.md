@@ -80,6 +80,7 @@
 
 | Date | Env | Endpoint | OutTradeNo | subMchId Masked | Amount Fen | wc_pay_data | Callback | Query | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-05-05 | sandbox | `https://mch-juhe.baofoo.com/api` | `BAOFU_UO_20260505102335` | `4000***0573` | 1 | no | no | no | next fix | Negative unified-order evidence. Request reached aggregate sandbox with real merchant-report `subMchId`, platform appid, payer `sub_openid`, `riskInfo.clientIp`, `WECHAT_JSAPI`, `prodType=SHARING`, and `orderType=7`, but provider returned `PAY_CHANNEL_NOT_SUPPORT`. Root-cause investigation found project/default report service codes used only `APPLET`, while Baofoo unified-order uses `WECHAT_JSAPI` and Baofoo's merchant-report doc/demo submit `service_codes=["JSAPI","APPLET"]`; future reports now submit both. Existing `subMchId` likely needs `merchant_report_modify` or a new report with both service codes before retry. |
 
 ## Payment Query `order_query`
 

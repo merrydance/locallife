@@ -21,7 +21,7 @@ func TestWechatMerchantReportRequiresMerchantBCTMerID(t *testing.T) {
 			ChannelID:           "channel-001",
 			ChannelName:         "乐客来福",
 			Business:            "758-2",
-			ServiceCodes:        []string{WechatServiceTypeApplet},
+			ServiceCodes:        WechatMiniProgramPaymentServiceCodes(),
 			AddressInfo:         WechatAddressInfo{ProvinceCode: "310000", CityCode: "310100", DistrictCode: "310115", Address: "世纪大道 1 号"},
 			BusinessLicenseType: WechatCertificateTypeNationalLegalMerge,
 			BusinessLicense:     "91310000123456789X",
@@ -48,7 +48,7 @@ func TestWechatMerchantReportSerializesOfficialFieldNames(t *testing.T) {
 			ChannelID:           "channel-001",
 			ChannelName:         "乐客来福",
 			Business:            "758-2",
-			ServiceCodes:        []string{WechatServiceTypeApplet},
+			ServiceCodes:        WechatMiniProgramPaymentServiceCodes(),
 			AddressInfo:         WechatAddressInfo{ProvinceCode: "310000", CityCode: "310100", DistrictCode: "310115", Address: "世纪大道 1 号"},
 			BusinessLicenseType: WechatCertificateTypeNationalLegalMerge,
 			BusinessLicense:     "91310000123456789X",
@@ -63,7 +63,7 @@ func TestWechatMerchantReportSerializesOfficialFieldNames(t *testing.T) {
 	require.Contains(t, string(body), `"bctMerId":"CM202605040002"`)
 	require.Contains(t, string(body), `"merchant_name":"上海某某餐饮有限公司"`)
 	require.Contains(t, string(body), `"merchant_shortname":"某某餐饮"`)
-	require.Contains(t, string(body), `"service_codes":["APPLET"]`)
+	require.Contains(t, string(body), `"service_codes":["JSAPI","APPLET"]`)
 	require.Contains(t, string(body), `"province_code":"310000"`)
 	require.Contains(t, string(body), `"city_code":"310100"`)
 	require.Contains(t, string(body), `"district_code":"310115"`)
@@ -73,6 +73,10 @@ func TestWechatMerchantReportSerializesOfficialFieldNames(t *testing.T) {
 	require.NotContains(t, string(body), `"account_name"`)
 	require.NotContains(t, string(body), `"account_no"`)
 	require.NotContains(t, string(body), "sharingMerId")
+}
+
+func TestWechatMiniProgramPaymentServiceCodesIncludeJSAPIAndApplet(t *testing.T) {
+	require.Equal(t, []string{WechatServiceTypeJSAPI, WechatServiceTypeApplet}, WechatMiniProgramPaymentServiceCodes())
 }
 
 func TestWechatMerchantReportRejectsUnsupportedWechatAppendixValues(t *testing.T) {
@@ -156,7 +160,7 @@ func validWechatMerchantReportRequestForTest() WechatMerchantReportRequest {
 			ChannelID:           "channel-001",
 			ChannelName:         "乐客来福",
 			Business:            "758-2",
-			ServiceCodes:        []string{WechatServiceTypeApplet},
+			ServiceCodes:        WechatMiniProgramPaymentServiceCodes(),
 			AddressInfo:         WechatAddressInfo{ProvinceCode: "310000", CityCode: "310100", DistrictCode: "310115", Address: "世纪大道 1 号"},
 			BusinessLicenseType: WechatCertificateTypeNationalLegalMerge,
 			BusinessLicense:     "91310000123456789X",
