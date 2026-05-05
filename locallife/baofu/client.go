@@ -179,7 +179,7 @@ func (c *Client) postPublicEnvelope(ctx context.Context, endpoint string, method
 	}
 	if out != nil {
 		if err := json.Unmarshal(responseBusinessContent, out); err != nil {
-			return providerRequestError(method, resp.StatusCode, responseEnvelope.ReturnCode, err)
+			return providerRequestError(method, resp.StatusCode, PublicEnvelopeUpstreamCodeInvalidDataContent, err)
 		}
 	}
 	return nil

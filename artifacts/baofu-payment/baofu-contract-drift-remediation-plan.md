@@ -1989,6 +1989,33 @@ Expected changes after deploy:
 - fake `order_refund` with `errCode=ORDER_NOT_EXIST` should return provider_error instead of success;
 - fake query endpoints may still return `ABNORMAL` with `resultCode=SUCCESS`, which remains transport/query-shape evidence rather than business success.
 
+### Task P19: Unified Order Numeric Channel Order ID
+
+> Trigger: repo-owned unified-order smoke proved sandbox wire `subMchId=omitted_by_client`, then Baofoo returned a business payload where `chlRetParam.order_id` was a number. Local `ChannelReturn.OrderID` required a string, so JSON unmarshal failed and the client still reported upstream_code `SUCCESS`.
+
+**Files:**
+- Modify: `locallife/baofu/aggregatepay/contracts/types.go`
+- Modify: `locallife/baofu/aggregatepay/contracts/types_test.go`
+- Modify: `locallife/baofu/client.go`
+- Modify: `locallife/baofu/aggregatepay/client_test.go`
+- Modify: `artifacts/baofu-payment/baofu-sandbox-evidence.md`
+- Modify: `artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md`
+
+- [x] **Step 1: Add regressions**
+
+Added tests proving:
+
+- `UnifiedOrderResult` accepts numeric `chlRetParam.order_id` and normalizes it to a string;
+- successful public envelopes whose business `dataContent` cannot unmarshal into the target DTO are classified as `INVALID_DATA_CONTENT`, not upstream `SUCCESS`.
+
+- [x] **Step 2: Fix DTO and provider error classification**
+
+`ChannelReturn.UnmarshalJSON` now accepts string or number `order_id`. The shared public-envelope client now classifies business payload unmarshal errors with `INVALID_DATA_CONTENT` so provider diagnostics do not misleadingly show `SUCCESS`.
+
+- [ ] **Step 3: Redeploy and rerun unified-order smoke**
+
+After deploy, rerun `go run ./cmd/baofu_unified_order_smoke`. The expected next outcome is either a parsed `UnifiedOrderResult` without `wc_pay_data` or a provider error with a non-success diagnostic code; it should no longer fail on numeric `order_id` or report upstream_code `SUCCESS` for unmarshal failures.
+
 ### 7.3 Completion Gate For This Pre-`dataContent` Audit
 
 This pre-sandbox-positive audit is complete only when:

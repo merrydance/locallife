@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -120,6 +121,20 @@ func TestAggregateClientClassifiesSuccessEnvelopeMissingDataContent(t *testing.T
 	require.ErrorAs(t, err, &providerErr)
 	require.Equal(t, baofu.PublicEnvelopeUpstreamCodeMissingDataContent, providerErr.UpstreamCode)
 	require.Equal(t, "支付通道异常，请联系平台处理", providerErr.Frontend.Message)
+}
+
+func TestAggregateClientClassifiesBusinessPayloadUnmarshalFailure(t *testing.T) {
+	doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","outTradeNo":{"bad":"shape"}}`)}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.CreateUnifiedOrder(context.Background(), validUnifiedOrderRequestForClientTest())
+
+	require.Error(t, err)
+	var providerErr *baofu.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, baofu.PublicEnvelopeUpstreamCodeInvalidDataContent, providerErr.UpstreamCode)
+	require.NotEqual(t, baofu.PublicEnvelopeReturnCodeSuccess, providerErr.UpstreamCode)
+	require.Contains(t, errors.Unwrap(providerErr).Error(), "json")
 }
 
 func validUnifiedOrderRequestForClientTest() contracts.UnifiedOrderRequest {

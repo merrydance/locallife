@@ -269,6 +269,42 @@ type ChannelReturn struct {
 	OrderID       string          `json:"order_id,omitempty"`
 }
 
+func (r *ChannelReturn) UnmarshalJSON(raw []byte) error {
+	var aux struct {
+		PrepayID      string          `json:"prepay_id,omitempty"`
+		WechatPayData json.RawMessage `json:"wc_pay_data,omitempty"`
+		OrderID       json.RawMessage `json:"order_id"`
+	}
+	if err := json.Unmarshal(raw, &aux); err != nil {
+		return err
+	}
+	result := ChannelReturn{
+		PrepayID:      strings.TrimSpace(aux.PrepayID),
+		WechatPayData: aux.WechatPayData,
+	}
+	if len(aux.OrderID) > 0 && string(aux.OrderID) != "null" {
+		orderID, err := jsonScalarToString(aux.OrderID)
+		if err != nil {
+			return err
+		}
+		result.OrderID = orderID
+	}
+	*r = result
+	return nil
+}
+
+func jsonScalarToString(raw json.RawMessage) (string, error) {
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return strings.TrimSpace(text), nil
+	}
+	var number json.Number
+	if err := json.Unmarshal(raw, &number); err == nil {
+		return strings.TrimSpace(number.String()), nil
+	}
+	return "", errors.New("baofu json scalar must be string or number")
+}
+
 func (r UnifiedOrderResult) WechatPayData() (json.RawMessage, error) {
 	if len(r.ChannelReturn.WechatPayData) == 0 {
 		return nil, errors.New("baofu unified order missing wc_pay_data")

@@ -140,6 +140,15 @@ func TestUnifiedOrderResultExtractsWechatPayData(t *testing.T) {
 	require.JSONEq(t, `{"appId":"wx123","timeStamp":"1710000000","nonceStr":"nonce","package":"prepay_id=wx-prepay-id","signType":"RSA","paySign":"sign"}`, string(payData))
 }
 
+func TestUnifiedOrderResultAcceptsNumericChannelOrderID(t *testing.T) {
+	var result UnifiedOrderResult
+
+	err := json.Unmarshal([]byte(`{"resultCode":"SUCCESS","chlRetParam":{"order_id":1234567890}}`), &result)
+
+	require.NoError(t, err)
+	require.Equal(t, "1234567890", result.ChannelReturn.OrderID)
+}
+
 func TestNormalizePaymentTerminalStatus(t *testing.T) {
 	require.Equal(t, db.ExternalPaymentTerminalStatusProcessing, NormalizePaymentTerminalStatus("WAIT_PAYING"))
 	require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, NormalizePaymentTerminalStatus("SUCCESS"))

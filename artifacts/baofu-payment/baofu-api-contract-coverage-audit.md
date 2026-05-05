@@ -54,6 +54,7 @@
 - `share_after_pay` 官方字段不包含 `subMchId`。分账接收方仍必须是宝财通开户返回并同步到本地 `sharing_mer_id` 的宝付二级商户号。
 - 宝付技术支持确认：测试环境不支持真实下单，聚合商户报备资料为虚拟资料且不会真实发往渠道；`bind_sub_config` 返回 `SUCCESS` 即代表绑定成功，但绑定后可能需要约 30 分钟才能发起交易。故 sandbox 统一下单只能作为请求形态、公共 envelope、错误分类和不泄露上游细节的验证，不能作为拿到真实 `wc_pay_data` / 支付回调 / 分账后续的完整 C4 证明。
 - sandbox 若返回公共报文 `returnCode=SUCCESS` 但缺少业务 `dataContent`，本地统一归类为 `MISSING_DATA_CONTENT`，不得再把 upstream code 误报为 `SUCCESS`。
+- sandbox 已观察到 `chlRetParam.order_id` 可为 number；本地统一按 string/number 容忍解析，业务 payload 反序列化失败统一归类为 `INVALID_DATA_CONTENT`，不得误报为 `SUCCESS`。
 - 聚合支付/报备业务响应即使 `resultCode=SUCCESS`，只要出现非成功 `errCode`，本地仍按 provider failure 处理；`errCode=SUCCESS` 才作为成功辅助字段接受。
 - 本地已补入官方字段级 DTO、公共报文、聚合商户报备、退款、关单、官方错误码本地分类和微信类目 allowlist；剩余漂移风险集中在宝财通 union-gw 官方加密/签名 envelope 完整性、响应验签/数字信封、真实渠道错误组合、回调真实 payload 与沙箱证据。
 - “防漂移”的实现标准不能只靠文档：必须把官方必填/条件必填、字段类型长度、枚举、错误码、金额单位、回调 ACK 形态、测试/生产 endpoint 都变成 typed constants、校验器和表驱动测试。
