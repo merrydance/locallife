@@ -2,11 +2,11 @@
 
 > 适用场景：宝付全量切换后的第一笔生产订单。宝付已确认测试环境不支持真实下单，因此可真实调起并完成支付的 `wc_pay_data`、支付回调、后续分账/提现闭环必须在生产首单或宝付提供的真实交易验证环境中完成。首单必须在平台财务、运营、后端值守同时在线时执行；任一核对项失败即暂停新支付创建，已支付订单继续走宝付分账/提现恢复链路。
 
-## 0. 契约真值与待确认项
+## 0. 契约真值与运行配置
 
-- [ ] 首单前已复核 `artifacts/baofu-payment/baofu-contract-source-matrix.md`，本次使用的接口行没有 `NEEDS_BAOFOO_CONFIRMATION` 阻塞项。
-- [ ] 已向宝付确认聚合支付/分账/退款回调的 HTTP body encoding、签名验签规则、ACK body/status/content-type；未确认前，form/query parser 只能作为兼容性容忍，不作为生产契约假设。
-- [ ] 已确认生产 `signSn` / `ncrptnSn` 使用宝付发放的 S(10) 证书索引，不使用本地从 X.509 证书推导出的长序列号。
+- [ ] 首单前已复核 `artifacts/baofu-payment/baofu-contract-source-matrix.md`，本次使用接口的官方字段、条件必填、枚举、签名、ACK 规则均已固化到代码和测试。
+- [ ] 聚合支付/分账/退款回调按宝付文档要求校验 POST 公共 envelope、`dataContent`、`signStr`，成功处理后只返回纯文本大写 `OK`；代码不依赖未写入文档的 `Content-Type` header。
+- [ ] 生产 `signSn` / `ncrptnSn` 已配置为宝付发放的 S(10) 证书索引，不使用本地从 X.509 证书推导出的长序列号。
 - [ ] 已确认生产首单观察项只记录脱敏字段：openid、身份证、银行卡、手机号、私钥、完整 `contractNo`、完整 `sharingMerId`、完整 `subMchId` 均不得进入文档或普通日志。
 
 ## 1. 首单前配置确认

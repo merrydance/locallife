@@ -244,26 +244,40 @@ func TestOfficialQueryBalanceAndWithdrawValidateRequiredFields(t *testing.T) {
 	require.NoError(t, query.Validate())
 
 	query.LoginNo = "OPEN202605040001"
-	require.EqualError(t, query.Validate(), "baofu query account must use exactly one query key")
+	require.EqualError(t, query.Validate(), "baofu query account contractNo cannot be combined with loginNo identity fields")
 
 	query = OfficialQueryAccountRequest{
-		Version:       OfficialQueryAccountVersion,
-		AccountType:   OfficialAccountTypePersonal,
-		CertificateNo: "110101199001011234",
+		Version:     OfficialQueryAccountVersion,
+		AccountType: OfficialAccountTypePersonal,
+		LoginNo:     "OPEN202605040001",
 	}
-	require.EqualError(t, query.Validate(), "baofu query account certificateType is required when certificateNo is used")
+	require.EqualError(t, query.Validate(), "baofu query account certificateNo is required when loginNo is used")
 
 	query.Version = OfficialOpenAccountVersion
+	query.CertificateNo = "110101199001011234"
 	query.CertificateType = OfficialCertificateTypeID
+	query.PlatformNo = "100030218"
 	require.EqualError(t, query.Validate(), "baofu query account version must be 4.0.0")
 
 	query = OfficialQueryAccountRequest{
 		Version:         OfficialQueryAccountVersion,
 		AccountType:     OfficialAccountTypePersonal,
+		LoginNo:         "OPEN202605040001",
 		CertificateNo:   "110101199001011234",
 		CertificateType: "PASSPORT",
+		PlatformNo:      "100030218",
 	}
 	require.EqualError(t, query.Validate(), "baofu query account certificateType is unsupported")
+
+	query = OfficialQueryAccountRequest{
+		Version:         OfficialQueryAccountVersion,
+		AccountType:     OfficialAccountTypePersonal,
+		LoginNo:         "OPEN202605040001",
+		CertificateNo:   "110101199001011234",
+		CertificateType: OfficialCertificateTypeID,
+		PlatformNo:      "100030218",
+	}
+	require.NoError(t, query.Validate())
 
 	balance := OfficialBalanceQueryRequest{
 		Version:     OfficialBalanceVersion,

@@ -16,7 +16,7 @@ import (
 func TestParserParsePaymentNotificationNormalizesPaymentFact(t *testing.T) {
 	body := []byte(`{
 		"notifyId":"BFN202605030001",
-		"notifyType":"PAYMENT.SUCCESS",
+		"notifyType":"PAYMENT",
 		"agentMerId":"AGENT_MER",
 		"agentTerId":"AGENT_TER",
 		"merId":"102004465",
@@ -42,7 +42,7 @@ func TestParserParsePaymentNotificationNormalizesPaymentFact(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "BFN202605030001", notification.NotifyID)
-	require.Equal(t, "PAYMENT.SUCCESS", notification.NotifyType)
+	require.Equal(t, "PAYMENT", notification.NotifyType)
 	require.Equal(t, "PO202605030001", notification.Fact.OutTradeNo)
 	require.Equal(t, "BFPAY202605030001", notification.Fact.TradeNo)
 	require.Equal(t, "AGENT_MER", notification.Fact.AgentMerchantID)
@@ -124,13 +124,25 @@ func TestParserParseShareNotificationVerifiesOfficialPublicEnvelopeSignature(t *
 	require.NoError(t, err)
 	parser := NewParserWithPublicKey(publicPEM)
 
-	notification, err := parser.ParseShareNotification([]byte(signedNotificationEnvelopeValues("SHARE", dataContent, signature).Encode()))
+	notification, err := parser.ParseShareNotification([]byte(signedNotificationEnvelopeValues("SHARING", dataContent, signature).Encode()))
 
 	require.NoError(t, err)
-	require.Equal(t, "SHARE", notification.NotifyType)
+	require.Equal(t, "SHARING", notification.NotifyType)
 	require.Equal(t, "BFSHARE_UP_3004", notification.Fact.TradeNo)
 	require.Equal(t, aggregatecontracts.ShareStateSuccess, notification.Fact.TransactionState)
 	require.Equal(t, int64(9470), notification.Fact.SuccessAmountFen)
+}
+
+func TestParserRejectsMismatchedOfficialNotifyType(t *testing.T) {
+	privatePEM, publicPEM := generateBaofuNotificationTestKeyPair(t)
+	dataContent := `{"merId":"102004465","terId":"200005200","resultCode":"SUCCESS","tradeNo":"BFPAY202605050004","txnState":"SUCCESS","succAmt":100,"payCode":"WECHAT_JSAPI"}`
+	signature, err := baofu.SignSHA256WithRSA(privatePEM, []byte(dataContent))
+	require.NoError(t, err)
+	parser := NewParserWithPublicKey(publicPEM)
+
+	_, err = parser.ParsePaymentNotification([]byte(signedNotificationEnvelopeValues("SHARING", dataContent, signature).Encode()))
+
+	require.EqualError(t, err, "baofu payment notification notifyType must be PAYMENT")
 }
 
 func TestParserParseRefundNotificationVerifiesOfficialPublicEnvelopeSignature(t *testing.T) {
@@ -213,10 +225,23 @@ func TestParserParsePaymentNotificationRequiresOfficialRequiredFields(t *testing
 	require.ErrorIs(t, err, ErrPaymentNotificationPayCodeRequired)
 }
 
+func TestParserParsePaymentNotificationRejectsUnsupportedOfficialEnums(t *testing.T) {
+	parser := NewParser()
+
+	_, err := parser.ParsePaymentNotification([]byte(`{"notifyType":"SHARING","merId":"102004465","terId":"200005200","tradeNo":"BFPAY202605050010","txnState":"SUCCESS","resultCode":"SUCCESS","payCode":"WECHAT_JSAPI"}`))
+	require.EqualError(t, err, "baofu payment notification notifyType must be PAYMENT")
+
+	_, err = parser.ParsePaymentNotification([]byte(`{"notifyType":"PAYMENT","merId":"102004465","terId":"200005200","tradeNo":"BFPAY202605050010","txnState":"NOT_A_STATE","resultCode":"SUCCESS","payCode":"WECHAT_JSAPI"}`))
+	require.EqualError(t, err, "baofu payment notification txnState is unsupported")
+
+	_, err = parser.ParsePaymentNotification([]byte(`{"notifyType":"PAYMENT","merId":"102004465","terId":"200005200","tradeNo":"BFPAY202605050010","txnState":"SUCCESS","resultCode":"MAYBE","payCode":"WECHAT_JSAPI"}`))
+	require.EqualError(t, err, "baofu payment notification resultCode is unsupported")
+}
+
 func TestParserParseShareNotificationNormalizesShareFact(t *testing.T) {
 	body := []byte(`{
 		"notifyId":"BFSN202605030001",
-		"notifyType":"SHARE.SUCCESS",
+		"notifyType":"SHARING",
 		"merId":"102004465",
 		"terId":"200005200",
 		"outTradeNo":"BFSHARE202605030001",
@@ -235,7 +260,7 @@ func TestParserParseShareNotificationNormalizesShareFact(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "BFSN202605030001", notification.NotifyID)
-	require.Equal(t, "SHARE.SUCCESS", notification.NotifyType)
+	require.Equal(t, "SHARING", notification.NotifyType)
 	require.Equal(t, "BFSHARE202605030001", notification.Fact.OutTradeNo)
 	require.Equal(t, "BFSHAREUP202605030001", notification.Fact.TradeNo)
 	require.Equal(t, "102004465", notification.Fact.MerchantID)
@@ -268,10 +293,23 @@ func TestParserParseShareNotificationRequiresOfficialRequiredFields(t *testing.T
 	require.ErrorIs(t, err, ErrShareNotificationTransactionStateRequired)
 }
 
+func TestParserParseShareNotificationRejectsUnsupportedOfficialEnums(t *testing.T) {
+	parser := NewParser()
+
+	_, err := parser.ParseShareNotification([]byte(`{"notifyType":"SHARE","tradeNo":"BFSHARE_UP_3001","txnState":"SUCCESS","resultCode":"SUCCESS"}`))
+	require.EqualError(t, err, "baofu share notification notifyType must be SHARING")
+
+	_, err = parser.ParseShareNotification([]byte(`{"notifyType":"SHARING","tradeNo":"BFSHARE_UP_3001","txnState":"NOT_A_STATE","resultCode":"SUCCESS"}`))
+	require.EqualError(t, err, "baofu share notification txnState is unsupported")
+
+	_, err = parser.ParseShareNotification([]byte(`{"notifyType":"SHARING","tradeNo":"BFSHARE_UP_3001","txnState":"SUCCESS","resultCode":"MAYBE"}`))
+	require.EqualError(t, err, "baofu share notification resultCode is unsupported")
+}
+
 func TestParserParseRefundNotificationNormalizesRefundFact(t *testing.T) {
 	body := []byte(`{
 		"notifyId":"BFRN202605040001",
-		"notifyType":"REFUND.SUCCESS",
+		"notifyType":"REFUND",
 		"agentMerId":"AGENT_MER",
 		"agentTerId":"AGENT_TER",
 		"merId":"102004465",
@@ -309,6 +347,35 @@ func TestParserParseRefundNotificationRequiresOfficialRequiredFields(t *testing.
 	_, err := parser.ParseRefundNotification([]byte(`{"merId":"102004465","terId":"200005200","outTradeNo":"BFRFD_5101","refundState":"SUCCESS","resultCode":"SUCCESS","txnTime":"20260504120900"}`))
 
 	require.ErrorIs(t, err, ErrRefundNotificationTradeNoRequired)
+}
+
+func TestParserParseRefundNotificationFallsBackToOfficialResultCodeWhenStateAbsent(t *testing.T) {
+	parser := NewParser()
+
+	success, err := parser.ParseRefundNotification([]byte(`{"notifyType":"REFUND","merId":"102004465","terId":"200005200","outTradeNo":"BFRFD_5101","tradeNo":"BFREFUND_UP_5101","resultCode":"SUCCESS","txnTime":"20260504120900","succAmt":300}`))
+	require.NoError(t, err)
+	require.Empty(t, success.Fact.TransactionState)
+	require.Equal(t, "success", success.TerminalStatus)
+	require.True(t, success.IsTerminal)
+
+	failed, err := parser.ParseRefundNotification([]byte(`{"notifyType":"REFUND","merId":"102004465","terId":"200005200","outTradeNo":"BFRFD_5102","tradeNo":"BFREFUND_UP_5102","resultCode":"FAIL","txnTime":"20260504120900","errCode":"REFUND_ERROR"}`))
+	require.NoError(t, err)
+	require.Empty(t, failed.Fact.TransactionState)
+	require.Equal(t, "failed", failed.TerminalStatus)
+	require.True(t, failed.IsTerminal)
+}
+
+func TestParserParseRefundNotificationRejectsUnsupportedOfficialEnums(t *testing.T) {
+	parser := NewParser()
+
+	_, err := parser.ParseRefundNotification([]byte(`{"notifyType":"PAYMENT","merId":"102004465","terId":"200005200","outTradeNo":"BFRFD_5101","tradeNo":"BFREFUND_UP_5101","refundState":"SUCCESS","resultCode":"SUCCESS","txnTime":"20260504120900"}`))
+	require.EqualError(t, err, "baofu refund notification notifyType must be REFUND")
+
+	_, err = parser.ParseRefundNotification([]byte(`{"notifyType":"REFUND","merId":"102004465","terId":"200005200","outTradeNo":"BFRFD_5101","tradeNo":"BFREFUND_UP_5101","refundState":"NOT_A_STATE","resultCode":"SUCCESS","txnTime":"20260504120900"}`))
+	require.EqualError(t, err, "baofu refund notification refundState is unsupported")
+
+	_, err = parser.ParseRefundNotification([]byte(`{"notifyType":"REFUND","merId":"102004465","terId":"200005200","outTradeNo":"BFRFD_5101","tradeNo":"BFREFUND_UP_5101","refundState":"SUCCESS","resultCode":"MAYBE","txnTime":"20260504120900"}`))
+	require.EqualError(t, err, "baofu refund notification resultCode is unsupported")
 }
 
 func signedNotificationEnvelopeValues(notifyType, dataContent, signature string) url.Values {

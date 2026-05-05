@@ -354,7 +354,7 @@ func TestBaofuShareCallbackUsesDefaultParser(t *testing.T) {
 	}, nil)
 
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/share", bytes.NewBufferString(`{"notifyId":"BFSN_3002","notifyType":"SHARE.SUCCESS","outTradeNo":"BFSHARE_3002","tradeNo":"BFSHARE_UP_3002","txnState":"SUCCESS","resultCode":"SUCCESS","succAmt":9470}`))
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/share", bytes.NewBufferString(`{"notifyId":"BFSN_3002","notifyType":"SHARING","outTradeNo":"BFSHARE_3002","tradeNo":"BFSHARE_UP_3002","txnState":"SUCCESS","resultCode":"SUCCESS","succAmt":9470}`))
 	server.router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
@@ -468,7 +468,7 @@ type fakeBaofuPaymentParser struct{}
 func (fakeBaofuPaymentParser) ParsePaymentNotification(body []byte) (*baofuaggregatenotification.PaymentNotification, error) {
 	return &baofuaggregatenotification.PaymentNotification{
 		NotifyID:       "BFN_4001",
-		NotifyType:     "PAYMENT.SUCCESS",
+		NotifyType:     "PAYMENT",
 		TerminalStatus: db.ExternalPaymentTerminalStatusSuccess,
 		IsTerminal:     true,
 		OccurredAt:     time.Now().UTC(),
@@ -487,7 +487,7 @@ func (fakeBaofuPaymentParser) ParsePaymentNotification(body []byte) (*baofuaggre
 func (fakeBaofuPaymentParser) ParseShareNotification(body []byte) (*baofuaggregatenotification.ShareNotification, error) {
 	return &baofuaggregatenotification.ShareNotification{
 		NotifyID:       "BFSN_3001",
-		NotifyType:     "SHARE.SUCCESS",
+		NotifyType:     "SHARING",
 		TerminalStatus: db.ExternalPaymentTerminalStatusSuccess,
 		IsTerminal:     true,
 		OccurredAt:     time.Now().UTC(),
@@ -505,7 +505,7 @@ func (fakeBaofuPaymentParser) ParseShareNotification(body []byte) (*baofuaggrega
 func (fakeBaofuPaymentParser) ParseRefundNotification(body []byte) (*baofuaggregatenotification.RefundNotification, error) {
 	return &baofuaggregatenotification.RefundNotification{
 		NotifyID:       "BFRN_5101",
-		NotifyType:     "REFUND.SUCCESS",
+		NotifyType:     "REFUND",
 		TerminalStatus: db.ExternalPaymentTerminalStatusSuccess,
 		IsTerminal:     true,
 		OccurredAt:     time.Now().UTC(),
@@ -525,7 +525,7 @@ type fakeBaofuPaymentTradeNoOnlyParser struct{}
 func (fakeBaofuPaymentTradeNoOnlyParser) ParsePaymentNotification(body []byte) (*baofuaggregatenotification.PaymentNotification, error) {
 	return &baofuaggregatenotification.PaymentNotification{
 		NotifyID:       "BFN_4002",
-		NotifyType:     "PAYMENT.SUCCESS",
+		NotifyType:     "PAYMENT",
 		TerminalStatus: db.ExternalPaymentTerminalStatusSuccess,
 		IsTerminal:     true,
 		OccurredAt:     time.Now().UTC(),
@@ -556,7 +556,7 @@ func (fakeBaofuShareTradeNoOnlyParser) ParsePaymentNotification(body []byte) (*b
 func (fakeBaofuShareTradeNoOnlyParser) ParseShareNotification(body []byte) (*baofuaggregatenotification.ShareNotification, error) {
 	return &baofuaggregatenotification.ShareNotification{
 		NotifyID:       "BFSN_3003",
-		NotifyType:     "SHARE.SUCCESS",
+		NotifyType:     "SHARING",
 		TerminalStatus: db.ExternalPaymentTerminalStatusSuccess,
 		IsTerminal:     true,
 		OccurredAt:     time.Now().UTC(),

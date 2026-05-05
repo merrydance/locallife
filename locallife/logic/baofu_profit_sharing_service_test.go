@@ -232,7 +232,7 @@ func TestBaofuProfitSharingServiceRecordShareFactCreatesApplicationForTerminalSh
 		},
 		FactSource:      db.ExternalPaymentFactSourceCallback,
 		SourceEventID:   "BFSN202605030001",
-		SourceEventType: "SHARE.SUCCESS",
+		SourceEventType: "SHARING",
 		OccurredAt:      now,
 		ObservedAt:      now,
 	})

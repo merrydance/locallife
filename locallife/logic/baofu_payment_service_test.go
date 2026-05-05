@@ -139,7 +139,7 @@ func TestBaofuPaymentServiceRecordPaymentCallbackFactCreatesTerminalApplication(
 		},
 		FactSource:      db.ExternalPaymentFactSourceCallback,
 		SourceEventID:   "BFN202605030001",
-		SourceEventType: "PAYMENT.SUCCESS",
+		SourceEventType: "PAYMENT",
 		OccurredAt:      occurredAt,
 		Fact: aggregatecontracts.PaymentFact{
 			OutTradeNo:       "PO202605030001",
@@ -160,7 +160,7 @@ func TestBaofuPaymentServiceRecordPaymentCallbackFactCreatesTerminalApplication(
 	require.Equal(t, db.ExternalPaymentCapabilityBaofuPayment, store.lastFact.Capability)
 	require.Equal(t, db.ExternalPaymentFactSourceCallback, store.lastFact.FactSource)
 	require.Equal(t, "BFN202605030001", store.lastFact.SourceEventID.String)
-	require.Equal(t, "PAYMENT.SUCCESS", store.lastFact.SourceEventType.String)
+	require.Equal(t, "PAYMENT", store.lastFact.SourceEventType.String)
 	require.Equal(t, db.ExternalPaymentObjectBaofuPaymentOrder, store.lastFact.ExternalObjectType)
 	require.Equal(t, "PO202605030001", store.lastFact.ExternalObjectKey)
 	require.Equal(t, "BFPAY202605030001", store.lastFact.ExternalSecondaryKey.String)

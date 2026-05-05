@@ -258,21 +258,7 @@ func TestAccountClientQueryAccountUsesPersonalAccountType(t *testing.T) {
 	client := NewClient(testBaofuRootClient(t, doer))
 
 	_, err := client.QueryAccount(context.Background(), contracts.QueryAccountRequest{
-		OutRequestNo: "OPEN202605050001",
-		AccountType:  "personal",
-	})
-
-	require.NoError(t, err)
-	env := accountRequestEnvelopeForTest(t, doer)
-	require.Equal(t, "T-1001-013-03", env.Header.ServiceType)
-	require.JSONEq(t, `{"version":"4.0.0","accType":1,"loginNo":"OPEN202605050001"}`, partialJSONForAccountTest(t, env.Body, "version", "accType", "loginNo"))
-}
-
-func TestAccountClientQueryAccountCanSendOfficialCredentialFields(t *testing.T) {
-	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": 1, "result": map[string]any{"contractNo": "CP610000000000542938"}}}
-	client := NewClient(testBaofuRootClient(t, doer))
-
-	_, err := client.QueryAccount(context.Background(), contracts.QueryAccountRequest{
+		OutRequestNo:    "OPEN202605050001",
 		AccountType:     "personal",
 		CertificateNo:   "110101199001011234",
 		CertificateType: contracts.OfficialCertificateTypeID,
@@ -282,7 +268,25 @@ func TestAccountClientQueryAccountCanSendOfficialCredentialFields(t *testing.T) 
 	require.NoError(t, err)
 	env := accountRequestEnvelopeForTest(t, doer)
 	require.Equal(t, "T-1001-013-03", env.Header.ServiceType)
-	require.JSONEq(t, `{"version":"4.0.0","accType":1,"certificateNo":"110101199001011234","certificateType":"ID","platformNo":"100030218"}`, partialJSONForAccountTest(t, env.Body, "version", "accType", "certificateNo", "certificateType", "platformNo"))
+	require.JSONEq(t, `{"version":"4.0.0","accType":1,"loginNo":"OPEN202605050001","certificateNo":"110101199001011234","certificateType":"ID","platformNo":"100030218"}`, partialJSONForAccountTest(t, env.Body, "version", "accType", "loginNo", "certificateNo", "certificateType", "platformNo"))
+}
+
+func TestAccountClientQueryAccountCanSendOfficialCredentialFields(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": 1, "result": map[string]any{"contractNo": "CP610000000000542938"}}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.QueryAccount(context.Background(), contracts.QueryAccountRequest{
+		OutRequestNo:    "OPEN202605050001",
+		AccountType:     "personal",
+		CertificateNo:   "110101199001011234",
+		CertificateType: contracts.OfficialCertificateTypeID,
+		PlatformNo:      "100030218",
+	})
+
+	require.NoError(t, err)
+	env := accountRequestEnvelopeForTest(t, doer)
+	require.Equal(t, "T-1001-013-03", env.Header.ServiceType)
+	require.JSONEq(t, `{"version":"4.0.0","accType":1,"loginNo":"OPEN202605050001","certificateNo":"110101199001011234","certificateType":"ID","platformNo":"100030218"}`, partialJSONForAccountTest(t, env.Body, "version", "accType", "loginNo", "certificateNo", "certificateType", "platformNo"))
 }
 
 func TestAccountClientQueryAccountTreatsContractOnlySuccessAsActive(t *testing.T) {
@@ -297,8 +301,8 @@ func TestAccountClientQueryAccountTreatsContractOnlySuccessAsActive(t *testing.T
 	client := NewClient(testBaofuRootClient(t, doer))
 
 	result, err := client.QueryAccount(context.Background(), contracts.QueryAccountRequest{
-		OutRequestNo: "OPEN202605050001",
-		AccountType:  "personal",
+		ContractNo:  "CP610000000000542938",
+		AccountType: "personal",
 	})
 
 	require.NoError(t, err)
@@ -405,7 +409,7 @@ func TestAccountClientReturnsProviderErrorWhenErrorCodeHasNoRetCode(t *testing.T
 	doer := &accountRecordingDoer{responseBody: map[string]any{"errorCode": "BF0005", "errorMsg": "上游处理中"}}
 	client := NewClient(testBaofuRootClient(t, doer))
 
-	_, err := client.QueryAccount(context.Background(), contracts.QueryAccountRequest{OutRequestNo: "OPEN202605040001"})
+	_, err := client.QueryAccount(context.Background(), contracts.QueryAccountRequest{ContractNo: "CP610000000000542938"})
 
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "上游处理中")

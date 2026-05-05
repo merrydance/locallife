@@ -30,6 +30,16 @@ func TestPublicEnvelopeRejectsInvalidFixedValues(t *testing.T) {
 	require.EqualError(t, env.Validate(), "baofu public envelope signType is unsupported")
 }
 
+func TestPublicEnvelopeRejectsSerialsLongerThanOfficialS10(t *testing.T) {
+	env := validPublicEnvelopeForTest()
+	env.SignSerialNo = "12345678901"
+	require.EqualError(t, env.Validate(), "baofu public envelope signSn must be at most 10 characters")
+
+	env = validPublicEnvelopeForTest()
+	env.EncryptionSerialNo = "12345678901"
+	require.EqualError(t, env.Validate(), "baofu public envelope ncrptnSn must be at most 10 characters")
+}
+
 func TestPublicEnvelopeCanonicalJSONUsesOfficialFieldNames(t *testing.T) {
 	env := validPublicEnvelopeForTest()
 
@@ -114,6 +124,28 @@ func TestPublicResponseEnvelopeValidationUpstreamCodeForMissingDataContent(t *te
 	require.Equal(t, PublicEnvelopeUpstreamCodeMissingDataContent, env.ValidationUpstreamCode(err))
 }
 
+func TestPublicResponseEnvelopeRejectsSerialsLongerThanOfficialS10(t *testing.T) {
+	env := PublicResponseEnvelope{
+		ReturnCode:         PublicEnvelopeReturnCodeSuccess,
+		ReturnMessage:      "OK",
+		MerchantID:         "100000",
+		TerminalID:         "200000",
+		Charset:            PublicEnvelopeCharsetUTF8,
+		Version:            PublicEnvelopeVersion10,
+		Format:             PublicEnvelopeFormatJSON,
+		SignType:           SignTypeRSA,
+		SignSerialNo:       "12345678901",
+		EncryptionSerialNo: "1",
+		SignString:         "abcd",
+		DataContent:        JSONString(`{"resultCode":"SUCCESS"}`),
+	}
+	require.EqualError(t, env.Validate(), "baofu public response signSn must be at most 10 characters")
+
+	env.SignSerialNo = "1"
+	env.EncryptionSerialNo = "12345678901"
+	require.EqualError(t, env.Validate(), "baofu public response ncrptnSn must be at most 10 characters")
+}
+
 func TestPublicResponseEnvelopeVerifiesDataContentSignature(t *testing.T) {
 	privatePEM, publicPEM := generateBaofuTestKeyPair(t)
 	dataContent := JSONString(`{"resultCode":"SUCCESS","outTradeNo":"BF1"}`)
@@ -182,6 +214,23 @@ func TestPublicNotificationEnvelopeValidateRequiresOfficialFields(t *testing.T) 
 	env = validPublicNotificationEnvelopeForTest()
 	env.Charset = "GBK"
 	require.EqualError(t, env.Validate(), "baofu public notification charset must be UTF-8")
+}
+
+func TestPublicNotificationEnvelopeRejectsUnsupportedOfficialNotifyType(t *testing.T) {
+	env := validPublicNotificationEnvelopeForTest()
+	env.NotifyType = "SHARE"
+
+	require.EqualError(t, env.Validate(), "baofu public notification notifyType is unsupported")
+}
+
+func TestPublicNotificationEnvelopeRejectsSerialsLongerThanOfficialS10(t *testing.T) {
+	env := validPublicNotificationEnvelopeForTest()
+	env.SignSerialNo = "12345678901"
+	require.EqualError(t, env.Validate(), "baofu public notification signSn must be at most 10 characters")
+
+	env = validPublicNotificationEnvelopeForTest()
+	env.EncryptionSerialNo = "12345678901"
+	require.EqualError(t, env.Validate(), "baofu public notification ncrptnSn must be at most 10 characters")
 }
 
 func validPublicEnvelopeForTest() PublicRequestEnvelope {

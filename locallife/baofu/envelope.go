@@ -21,6 +21,11 @@ const (
 	PublicEnvelopeUpstreamCodeMissingDataContent = "MISSING_DATA_CONTENT"
 	PublicEnvelopeUpstreamCodeInvalidDataContent = "INVALID_DATA_CONTENT"
 	PublicEnvelopeUpstreamCodeInvalidSignature   = "INVALID_SIGNATURE"
+
+	PublicNotificationTypePayment = "PAYMENT"
+	PublicNotificationTypeSharing = "SHARING"
+	PublicNotificationTypeRefund  = "REFUND"
+	PublicNotificationTypeSign    = "SIGN"
 )
 
 type PublicRequestEnvelope struct {
@@ -121,8 +126,14 @@ func (e PublicRequestEnvelope) Validate() error {
 	if strings.TrimSpace(e.SignSerialNo) == "" {
 		return errors.New("baofu public envelope signSn is required")
 	}
+	if len(strings.TrimSpace(e.SignSerialNo)) > 10 {
+		return errors.New("baofu public envelope signSn must be at most 10 characters")
+	}
 	if strings.TrimSpace(e.EncryptionSerialNo) == "" {
 		return errors.New("baofu public envelope ncrptnSn is required")
+	}
+	if len(strings.TrimSpace(e.EncryptionSerialNo)) > 10 {
+		return errors.New("baofu public envelope ncrptnSn must be at most 10 characters")
 	}
 	if strings.TrimSpace(e.SignString) == "" {
 		return errors.New("baofu public envelope signStr is required")
@@ -186,8 +197,14 @@ func (e PublicResponseEnvelope) Validate() error {
 	if strings.TrimSpace(e.SignSerialNo) == "" {
 		return errors.New("baofu public response signSn is required")
 	}
+	if len(strings.TrimSpace(e.SignSerialNo)) > 10 {
+		return errors.New("baofu public response signSn must be at most 10 characters")
+	}
 	if strings.TrimSpace(e.EncryptionSerialNo) == "" {
 		return errors.New("baofu public response ncrptnSn is required")
+	}
+	if len(strings.TrimSpace(e.EncryptionSerialNo)) > 10 {
+		return errors.New("baofu public response ncrptnSn must be at most 10 characters")
 	}
 	if strings.TrimSpace(e.SignString) == "" {
 		return errors.New("baofu public response signStr is required")
@@ -252,14 +269,23 @@ func (e PublicNotificationEnvelope) Validate() error {
 	if strings.TrimSpace(e.NotifyType) == "" {
 		return errors.New("baofu public notification notifyType is required")
 	}
+	if !isSupportedPublicNotificationType(e.NotifyType) {
+		return errors.New("baofu public notification notifyType is unsupported")
+	}
 	if !isSupportedSignType(e.SignType) {
 		return errors.New("baofu public notification signType is unsupported")
 	}
 	if strings.TrimSpace(e.SignSerialNo) == "" {
 		return errors.New("baofu public notification signSn is required")
 	}
+	if len(strings.TrimSpace(e.SignSerialNo)) > 10 {
+		return errors.New("baofu public notification signSn must be at most 10 characters")
+	}
 	if strings.TrimSpace(e.EncryptionSerialNo) == "" {
 		return errors.New("baofu public notification ncrptnSn is required")
+	}
+	if len(strings.TrimSpace(e.EncryptionSerialNo)) > 10 {
+		return errors.New("baofu public notification ncrptnSn must be at most 10 characters")
 	}
 	if strings.TrimSpace(e.SignString) == "" {
 		return errors.New("baofu public notification signStr is required")
@@ -280,6 +306,15 @@ func (e PublicNotificationEnvelope) VerifySignature(publicKeyPEM string) error {
 func isSupportedSignType(signType string) bool {
 	switch strings.ToUpper(strings.TrimSpace(signType)) {
 	case SignTypeSM2, SignTypeRSA:
+		return true
+	default:
+		return false
+	}
+}
+
+func isSupportedPublicNotificationType(notifyType string) bool {
+	switch strings.ToUpper(strings.TrimSpace(notifyType)) {
+	case PublicNotificationTypePayment, PublicNotificationTypeSharing, PublicNotificationTypeRefund, PublicNotificationTypeSign:
 		return true
 	default:
 		return false

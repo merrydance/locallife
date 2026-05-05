@@ -15,6 +15,9 @@ const (
 	BaoCaiTongOrderTypeSharing = "7"
 	PayCodeWechatJSAPI         = "WECHAT_JSAPI"
 
+	BusinessResultCodeSuccess = "SUCCESS"
+	BusinessResultCodeFail    = "FAIL"
+
 	PaymentStateSuccess    = "SUCCESS"
 	PaymentStateClosed     = "CLOSED"
 	PaymentStateWaitPaying = "WAIT_PAYING"
@@ -389,6 +392,15 @@ func NormalizePaymentTerminalStatus(upstreamState string) string {
 	}
 }
 
+func IsSupportedPaymentState(upstreamState string) bool {
+	switch strings.TrimSpace(upstreamState) {
+	case PaymentStateSuccess, PaymentStateClosed, PaymentStateWaitPaying, PaymentStatePayError, PaymentStateRefund, PaymentStateAbnormal:
+		return true
+	default:
+		return false
+	}
+}
+
 type ShareAfterPayRequest struct {
 	AgentMerchantID   string          `json:"agentMerId,omitempty"`
 	AgentTerminalID   string          `json:"agentTerId,omitempty"`
@@ -506,6 +518,15 @@ func NormalizeShareTerminalStatus(upstreamState string) string {
 		return db.ExternalPaymentTerminalStatusUnknown
 	default:
 		return db.ExternalPaymentTerminalStatusUnknown
+	}
+}
+
+func IsSupportedShareState(upstreamState string) bool {
+	switch strings.TrimSpace(upstreamState) {
+	case ShareStateSuccess, ShareStateProcessing, ShareStateCanceled, ShareStateAbnormal:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -642,6 +663,15 @@ func NormalizeRefundTerminalStatus(upstreamState string) string {
 		return db.ExternalPaymentTerminalStatusUnknown
 	default:
 		return db.ExternalPaymentTerminalStatusUnknown
+	}
+}
+
+func IsSupportedRefundState(upstreamState string) bool {
+	switch strings.TrimSpace(upstreamState) {
+	case RefundStateSuccess, RefundStateAccepted, RefundStateError, RefundStateAbnormal:
+		return true
+	default:
+		return false
 	}
 }
 

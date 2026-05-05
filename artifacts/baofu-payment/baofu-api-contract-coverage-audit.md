@@ -72,7 +72,7 @@
 | 个人二要素开户字段 | `bct-1gj4ccsdha6d8` 写明 `cardUserName`、`needUploadFile` | 二要素 DTO 保留官方字段用于漂移审查，但运行时 `OfficialOpenAccountRequest.Validate()` 和上层 `OpenAccountRequest.Validate()` 均拒绝二要素，避免生产开出不可分账账户。 |
 | 开户 optional/conditional 字段 | `openAcc` 个人/企业表格 | `platformNo`、`platformTerminalId`、`qualificationTransSerialNo`、企业 `aliasName/contactName/contactMobile/registerCapital/cardUserName` 等已补到 DTO。 |
 | 企业开户证件枚举 | `openAcc` 写明企业 `certificateType=LICENSE`、法人证件枚举 | 本地默认和 Validate 已按 `LICENSE` / `ID,HONG_KONG_AND_MACAO_PASS,TAIWAN_TRAVEL_PERMIT,PASSPORT` 收口。 |
-| 开户查询字段 | `queryAcc` 写明 `certificateNo/certificateType/platformNo/loginNo/contractNo` | 本地查询请求已支持证件/平台字段，证件类型限制为 `ID/LICENSE`。`loginNo` 是否必须同时带证件/平台字段，官方文字与 sandbox 正向证据不一致，暂记为待宝付确认，不按 sandbox 改生产真值。 |
+| 开户查询字段 | `queryAcc` 写明传 `loginNo` 时以上三个参数 `certificateNo/certificateType/platformNo` 必填，传 `contractNo` 时以上四个参数可不填 | 本地查询请求已按文档强制两种模式：`contractNo` 单独查询，或 `loginNo + certificateNo + certificateType + platformNo`；证件类型限制为 `ID/LICENSE`。sandbox 接受 `loginNo` 单独查询仅记录为环境宽松，不作为生产契约。 |
 | 提现同步/查询 | `accWithdrawal` 同步 `state=1/2` 只是受理；`queryWithdrawal` 要 `tradeTime` | `CreateWithdraw` 同步 `state=1` 只标 processing；提现恢复按订单创建日传 `tradeTime`；查询金额/手续费/总额按元转分解析。 |
 | 聚合查询响应 | `order_query` / `share_query` 响应字段表 | `finishTime/succAmt/feeAmt/instFeeAmt/clearingDate/openId/subOpenid` 和查询 agent 字段已补 DTO/测试。 |
 | 聚合响应/回调签名 | `bct-1f9qhae400u5l` 写明所有请求和返回报文都包含签名，RSA 为 `SHA256withRSA` 且结果 HEX；`bct-1f9qhakcna6te` 写明返回/通知业务报文分别为 `dataContent` | 同步响应与 payment/share/refund 回调均验签 `dataContent`；生产 server 使用签名公共 envelope parser；SM2 暂不支持并 fail-closed。 |
@@ -82,8 +82,7 @@
 
 仍不能宣称“完全对齐”的项：
 
-- 聚合 payment/share/refund callback 的精确 HTTP body content-type 未在当前页明确；实现按 JSON/form 双形态兼容解析，但生产必须存在公共 envelope 和 `signStr`。
-- `queryAcc.loginNo` 条件必填解释：官方文字疑似要求同时带 `certificateNo/certificateType/platformNo`，但 sandbox 已接受 loginNo+accType，必须作为文档/环境差异待确认。
+- 聚合 payment/share/refund callback：宝付文档已明确 POST、公用 envelope 字段、`dataContent`、验签、`notifyType` 枚举、业务/状态枚举和大写 `OK` ACK；文档未把 HTTP `Content-Type` header 作为契约字段。实现按 JSON/form 公共 envelope 兼容解析，但生产必须存在公共 envelope 和 `signStr`。
 - 真实生产支付、分账、退款、提现正向回调没有 C4 证据；sandbox 已被宝付确认不代表真实支付渠道。
 
 
@@ -92,7 +91,7 @@
 | Group | Local source file/demo | Official URL | Current trust level | Notes |
 | --- | --- | --- | --- | --- |
 | union-gw account | `/home/sam/文档/分账/宝付/宝财通产品服务协议-宝财通2.0-来富网络（宁晋）有限公司.pdf...`, `/home/sam/文档/分账/宝付/BaoCaiTongTestInfo_OHTERV1.0.0.2/**`, authenticated doc.mandao pages cached at `/tmp/baofu_doc_pages_auth` | `notice`, `unionGw`, `openAcc`, `bct-1gj4ccsdha6d8`, `queryAcc`, `queryBalace`, `accWithdrawal`, `queryWithdrawal`, `openAccNotify`, `withdrawNotify`, `appendix`, `bct-1fjpm4fpns79f`, `question` | doc + local DTO/client tests + partial sandbox smoke | 必须把“接口须知 + 请求入口 + 单接口页 + 通知页 + 错误码/FAQ + 协议”一起看。`verifyType=1` RSA/base64 is the local implementation baseline. `verifyType=2`, real notification encrypted payloads, and successful account-open/query samples remain C4-open. |
-| aggregate pay | authenticated doc.mandao pages cached at `/tmp/baofu_doc_pages_auth`, `/tmp/baofu_demo/java/src/main/java/com/baofoo/Entitys/PostMasterEntity.java`, `/tmp/baofu_demo/java/src/main/java/com/baofoo/Entitys/ResultMasterEntity.java`, aggregate demo/entity classes | `bct-1f9os3k1eh3p6`, `bct-1f9qhae400u5l`, `bct-1f9qhakcna6te`, `bct-1f9qlvjef634j`, `bct-1f9qlvu1em0tb`, `bct-1f9qm06dmb1a9`, `bct-1f9qm0flcca1k`, `bct-1f9qm13po92jq`, `bct-1f9qm1m0u1s68`, `bct-1f9qm246c6cp8`, callback pages, appendix pages, flow pages | doc + Java demo + local tests + public-envelope sandbox smoke | 必须把“聚合支付产品说明 + 接口说明 + 请求入口 + 交易/查询/通知接口 + 附录 + 流程说明 + demo”一起看。官方文档确认 request public envelope 有 `bizContent`、response public envelope 有 `dataContent`；HTTP body 是否必须 form-urlencoded 仅由 Java demo 和 sandbox 证明，未在当前文档页形成唯一真值，仍需宝付确认。真实业务 `dataContent` 样本 for order/query/share/refund remain C4-open. |
+| aggregate pay | authenticated doc.mandao pages cached at `/tmp/baofu_doc_pages_auth`, `/tmp/baofu_demo/java/src/main/java/com/baofoo/Entitys/PostMasterEntity.java`, `/tmp/baofu_demo/java/src/main/java/com/baofoo/Entitys/ResultMasterEntity.java`, aggregate demo/entity classes | `bct-1f9os3k1eh3p6`, `bct-1f9qhae400u5l`, `bct-1f9qhakcna6te`, `bct-1f9qlvjef634j`, `bct-1f9qlvu1em0tb`, `bct-1f9qm06dmb1a9`, `bct-1f9qm0flcca1k`, `bct-1f9qm13po92jq`, `bct-1f9qm1m0u1s68`, `bct-1f9qm246c6cp8`, callback pages, appendix pages, flow pages | doc + Java demo + local tests + public-envelope sandbox smoke | 必须把“聚合支付产品说明 + 接口说明 + 请求入口 + 交易/查询/通知接口 + 附录 + 流程说明 + demo”一起看。官方文档确认 request public envelope 有 `bizContent`、response/notification public envelope 有 `dataContent`，并确认 `signSn/ncrptnSn` 为 S(10)；HTTP `Content-Type` header 未作为契约字段写明，form-urlencoded 只是 Java demo 和 sandbox 证明的兼容传输。真实业务 `dataContent` 样本 for order/query/share/refund remain C4-open. |
 | merchant report | authenticated doc.mandao pages cached at `/tmp/baofu_doc_pages_auth`, `/tmp/baofu_demo/java/src/test/java/com/baofoo/Demo/MerchantReport.java`, `MerchantReportQuery.java`, `BindSubConfig.java`, `/home/sam/文档/分账/宝付/经营类目&MCC.xlsx` | `bct-1f9o5nti54urb`, `bct-1f9o5qri554o2`, `bct-1f9o5s1lqlean`, `bct-1f9o62bulbiqd`, `bct-1f9o63b6ufii5`, `bct-1f9o63qmkndkc`, `bct-1f9o6qi1pf2r8`, Java demo | doc + Java demo + local DTO/service tests | 必须把“聚合商户报备产品页 + 接口须知 + 请求入口 + 业务接口 + 附录 + demo + MCC 文件”一起看。商户逐户报备取得 `subMchId`，再 `bind_sub_config(authType=APPLET, authContent=<LocalLife 小程序 appid>)`；真实报备/授权目录样本仍 C4-open。 |
 | transfer account pay | authenticated doc.mandao pages cached at `/tmp/baofu_doc_pages_auth`, `/tmp/baofu_pay_demo/**/transferaccpay-*` | `bct-zz`, `bct-1facj8t3su8go`, `bct-1facj99v1hke5`, `bct-1fd9huiq8tuvn` | doc + demo, not in first-version runtime | 本产品使用 `https://vgw.baofoo.com/cutpayment/api/backTransRequest` 与 `data_content`，不是当前聚合支付主链路 envelope。首版只作为边界参考；若后续使用账户间转账或转账支付退款，必须新建独立契约组，不能复用聚合支付 DTO。 |
 
@@ -120,9 +119,10 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 | 宝财通提现状态 | `state` | `1/0/2/3` | `succeeded/failed/processing/returned` | 未知值归 `processing`，由查询/通知继续收敛 | `TestOfficialWithdrawAmountConvertsFenToYuan`、提现通知 parser tests |
 | 聚合支付/报备公共响应 | `returnCode/returnMsg` | `SUCCESS/FAIL` | 公共层成功后才读取 `dataContent` | `FAIL` 直接转 `ProviderError`；`SUCCESS` 缺 `dataContent` fail-closed；响应 `bizContent` 只作为本地兼容 fallback | `TestPublicResponseEnvelopeValidateHandlesTransportStatus`、`TestAggregateClientReturnsProviderErrorForEnvelopeFailure` |
 | 聚合支付/报备业务响应 | `resultCode/errCode/errMsg` | `SUCCESS` 成功；`FAIL` 或错误码失败 | `publicBusinessFailure` 统一解释支付、报备、分账、退款、关单业务结果 | 缺 `resultCode` 但有错误字段 fail-closed；缺 `resultCode` 且无错误字段也按 `MISSING_RESULT_CODE` fail-closed | `TestAggregateClientReturnsProviderErrorForBusinessFailure`、`TestMerchantReportClientReturnsProviderErrorForBusinessFailure`、`TestBusinessFailureDetectorsFailClosedForMissingSuccessIndicators` |
-| 聚合支付状态 | `txnState/state` | `WAIT_PAYING/SUCCESS/CLOSED/PAY_ERROR/REFUND/ABNORMAL` | `processing/success/closed/failed/success/unknown` | 未知值归 `unknown`，不触发成功事实应用 | `TestNormalizePaymentTerminalStatus` |
-| 确认分账状态 | `txnState/state` | `PROCESSING/SUCCESS/CANCELED/ABNORMAL` | `processing/success/failed/unknown` | 未知值归 `unknown`，不触发成功事实应用 | `TestNormalizeShareTerminalStatus` |
-| 退款状态 | `refundState/state` | `SUCCESS/REFUND/REFUND_ERROR/ABNORMAL` | `success/processing/failed/unknown` | 未知值归 `unknown`，由查询/通知继续收敛 | `TestNormalizeRefundTerminalStatus` |
+| 聚合通知类型 | public envelope `notifyType` | `PAYMENT/SHARING/REFUND/SIGN` | 支付/分账/退款回调分别只接受 `PAYMENT/SHARING/REFUND` | 非官方值或路由不匹配直接拒绝解析，不落 fact | `TestPublicNotificationEnvelopeRejectsUnsupportedOfficialNotifyType`、`TestParserRejectsMismatchedOfficialNotifyType` |
+| 聚合支付状态 | `txnState/state` | `WAIT_PAYING/SUCCESS/CLOSED/PAY_ERROR/REFUND/ABNORMAL` | `processing/success/closed/failed/success/unknown` | 查询结果未知值归 `unknown`；回调出现非官方枚举直接拒绝解析，不落 fact | `TestNormalizePaymentTerminalStatus`、`TestParserParsePaymentNotificationRejectsUnsupportedOfficialEnums` |
+| 确认分账状态 | `txnState/state` | `PROCESSING/SUCCESS/CANCELED/ABNORMAL` | `processing/success/failed/unknown` | 查询结果未知值归 `unknown`；回调出现非官方枚举直接拒绝解析，不落 fact | `TestNormalizeShareTerminalStatus`、`TestParserParseShareNotificationRejectsUnsupportedOfficialEnums` |
+| 退款状态 | `refundState/state` | `SUCCESS/REFUND/REFUND_ERROR/ABNORMAL` | `success/processing/failed/unknown` | 查询结果未知值归 `unknown`；回调 `refundState` 缺省时按必填 `resultCode=SUCCESS/FAIL` 归一，非官方枚举拒绝解析 | `TestNormalizeRefundTerminalStatus`、`TestParserParseRefundNotificationFallsBackToOfficialResultCodeWhenStateAbsent` |
 | 聚合商户报备状态 | `reportState` | `SUCCESS/FAIL/PROCESSING` | `succeeded/failed/processing` | 未知值归 `unknown`，不得进入支付 readiness | `TestNormalizeMerchantReportState`、`TestBaofuPaymentReadinessRequiresMerchantSubMchIDAndAppletAuth` |
 | 绑定授权目录 | `resultCode/errCode/errMsg` 与本地 `applet_auth_state` | `SUCCESS` 成功，其余失败/待确认 | 成功才写 `applet_auth_state=succeeded`；失败写 failed 并保留脱敏 code/message | 未成功不允许 `unified_order`，只返回产品语义“微信支付通道待开通” | `TestBaofuMerchantReportServiceBindsAppletAfterReportSuccess`、`TestPaymentOrderServiceCreatePaymentOrder_BaofuWechatChannelNotReadyFailsBeforeClientCall` |
 | 错误码前端语义 | `ProviderError.UpstreamCode/UpstreamMessage` | 官方错误码、未知错误码、HTTP/解析错误 | `ClassifyBaofuError` 归类为资料需修改、平台配置、可重试、人工处理 | `UpstreamMessage` 只留在 `ProviderError` 供日志/运营诊断，`Frontend.Message` 不拼接上游原文 | `TestClassifyBaofuOfficialErrorTables`、`TestProviderErrorKeepsUpstreamMessageOutOfFrontendGuidance` |
@@ -138,7 +138,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 公共报文要求：
 
 - 账户 union-gw：URL 带 `memberId`、`terminalId`、`verifyType`、`content`、条件字段 `veryfyString`；body 明文由 `header` + `body` 组成，`header.serviceTp` 必须与 URL 报文编号一致。
-- 聚合支付/聚合商户报备：请求公共字段包括 `merId`、`terId`、`method`、`charset=UTF-8`、`version=1.0`、`format=json`、`timestamp`、`signType`、`signSn`、`ncrptnSn`、`dgtlEnvlp`、`signStr`、`bizContent`；响应公共字段按官方入口页使用 `dataContent` 承载业务 JSON，`bizContent` 只作为本地历史兼容 fallback。HTTP body 的 form-urlencoded 形态来自 Java demo 与 sandbox 兼容性证据，不能替代宝付文档真值。
+- 聚合支付/聚合商户报备：请求公共字段包括 `merId`、`terId`、`method`、`charset=UTF-8`、`version=1.0`、`format=json`、`timestamp`、`signType`、`signSn`、`ncrptnSn`、`dgtlEnvlp`、`signStr`、`bizContent`，其中 `signSn/ncrptnSn` 为 S(10)；响应/通知公共字段按官方入口页使用 `dataContent` 承载业务 JSON，`bizContent` 只作为本地历史兼容 fallback。HTTP `Content-Type` header 未作为官方契约字段写明，form-urlencoded 形态来自 Java demo 与 sandbox 兼容性证据。
 - 当前项目已把三组入口拆成独立 endpoint 配置并限制官方测试/生产地址；仍未使用宝付测试地址完成真实联调，也未补齐响应验签/数字信封证据。
 
 ## 4. 必用接口总览
@@ -146,7 +146,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 | 能力 | 接口 | 官方方法/报文编号 | 用途 | 本地契约 | 本地运行时 | 沙箱联调 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 账户开户 | 个人/机构开户 | `T-1001-013-01` | 商户、骑手、运营商、平台二级户开户 | C2/C3：已有官方 `OfficialOpenAccountRequest`、个人二要素/四要素/机构 DTO 与校验；业务抽象仍需完善企业/个体全量资料映射 | C2/C3：有 service command 记录和 concrete client；union-gw envelope 完整性待复核 | 未做 |
-| 账户开户 | 个人开户二要素 | `T-1001-013-01` 变体 | 骑手个人二要素开户候选 | C3：已区分 `OfficialPersonalTwoFactorAccountInfo` 与四要素开户 | C2/C3：client 可组装二要素请求；是否允许生产使用待宝付沙箱回包确认 | 未做 |
+| 账户开户 | 个人开户二要素 | `T-1001-013-01` 变体 | 官方 DTO 漂移审查保留，不进入首版生产路径 | C3：已区分 `OfficialPersonalTwoFactorAccountInfo` 与四要素开户 | C2/C3：DTO 可覆盖官方字段，但运行时拒绝个人二要素；首版只支持个人四要素，避免产生不可分账账户 | 不做生产联调 |
 | 账户查询 | 开户查询 | `T-1001-013-03` | 同步 `contractNo`、二级商户号/状态 | C3：已有 `OfficialQueryAccountRequest` 和校验 | C3：concrete client 已按个人/机构 `accType` 查询并归一成功态 | C4：个人四要素开户后查询 active，返回 `contractNo/sharing_mer_id` 脱敏证据 |
 | 开户通知 | 开户结果通知 | 通知 URL | 开户异步结果 | C1：notification parser 有本地测试 | C2：callback 落 fact | 未做 |
 | 余额 | 账户余额查询 | `T-1001-013-06` | 二级户在途/可用/冻结余额 | C3：已有官方余额 DTO、可选金额默认值和元/分转换测试 | C3：concrete client 会在上游省略 `contractNo` 时保留请求上下文 | C4：个人二级户余额查询成功，四类余额均为 0 |
@@ -157,7 +157,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 | 聚合商户报备 | 报备信息查询 | `merchant_report_query` | 查询平台或商户报备状态和 `subMchId` | C3：DTO/状态归一化已建 | C3：client/service 同步 `channelRetParam.sub_mch_id` 边界已建，`baofu-merchant-report-recovery` 已补处理中报备和 APPLET 授权补偿 | C4：sandbox 查询成功并归一出 `subMchId` |
 | 聚合支付 | 统一下单交易创建 | `unified_order` | 主支付入口，微信 JSAPI 支付 | C3：官方字段、条件必填、金额关系、`riskInfo.clientIp` 校验已建 | C3：concrete client + API runtime main-business wiring 已建；sandbox 发包省略 `subMchId`，production 仍必填 | C4-形态：sandbox 已证明请求命中测试地址且 wire `subMchId=omitted_by_client`；真实支付因宝付 sandbox 不支持真实下单，转生产首单验证 |
 | 聚合支付 | 支付订单查询 | `order_query` | 支付回调缺失恢复 | C3：DTO/client 已建 | C3：recovery scheduler 已可使用生产 aggregatepay client 查询并落 fact | C4-查询形态：sandbox unified-order 后按 `outTradeNo` 查询返回 `SUCCESS` 并归一为 success；未触发本地 fact application |
-| 聚合支付 | 支付结果通知 | 通知 URL | 支付终态回调 | C2/C3：notification parser 覆盖官方公共回调字段和支付 `dataContent` 字段，成功 ACK 为纯文本 `OK`；JSON/form/query 输入支持属于兼容性容忍 | C2/C3：callback 落 fact 并入队；sandbox 已收到非 JSON 小报文但尚未正向落本地订单 fact | C4-负向：回调曾因 JSON-only parser 返回 401，已本地兼容待重试；具体 body encoding/content-type 仍需宝付确认 |
+| 聚合支付 | 支付结果通知 | 通知 URL | 支付终态回调 | C2/C3：notification parser 覆盖官方公共回调字段和支付 `dataContent` 字段，成功 ACK 为纯文本 `OK`；JSON/form/query 输入支持属于兼容性容忍，生产仍要求 signed public envelope | C2/C3：callback 落 fact 并入队；sandbox 已收到非 JSON 小报文但尚未正向落本地订单 fact | C4-负向：回调曾因 JSON-only parser 返回 401，已按官方 POST 字段 + envelope 要求修正；剩余缺口是成功落本地订单 fact 的真实回调证据 |
 | 确认分账 | 确认分账 | `share_after_pay` | 支付成功后按 `sharingMerId` 分账 | C3：DTO/Validate 已建，接收方只读 `sharing_mer_id` | C3：worker 已可使用生产 aggregatepay client 创建分账 | C4-负向形态：fake order 已命中 sandbox 并以 `ORDER_NOT_EXIST` fail-closed；真实分账需已支付订单 |
 | 分账查询 | 分账订单查询 | `share_query` | 分账处理中恢复 | C3：DTO/client 已建 | C3：scheduler 已可使用生产 aggregatepay client 查询落 fact | C4-形态：fake order 查询已命中 sandbox 并解析 `ABNORMAL`，不代表真实分账成功 |
 | 分账通知 | 分账结果通知 | 通知 URL | 分账终态回调 | C2/C3：parser/callback/fact application 已建 | C2/C3：真实验签/数字信封和沙箱回调待补 | 未做 |
@@ -209,7 +209,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 - `locallife/baofu/account/contracts/types.go` 的 `OpenAccountRequest` 仍是业务抽象；官方字段级 DTO 已拆到 `official_open.go` 等文件。
 - 已区分个人二要素、个人四要素、企业/个体字段集合；企业/个体首版必填字段、`loginNo` 长度、`selfEmployed -> corporateMobile` 条件已落入表驱动测试，资质附件和证件类型长尾仍需沙箱样例校准。
 - 已把 `businessType=BCT2.0`、`version=4.1.0`、`accType`、个人开户条件必填和企业/个体首版字段落入契约校验。
-- 已新增官方 DTO 和本地 client；client 已按 `verifyType=1` 构造 union-gw URL 参数和 `header/body` 密文 envelope；开户 `noticeUrl` 已改为运行时 `BAOFU_NOTIFY_BASE_URL + /account/open`，不再使用 placeholder。2026-05-05 已用测试地址跑过个人二要素和四要素开户，证明请求可达且响应可解析；四要素请求 `BAOFU_OPEN_4FACTOR_202605050001` 已被受理并返回 `state=2/processing`，尚未返回 `contractNo`/`sharing_mer_id`，需通过开户查询或回调确认终态。四要素 smoke 暴露开户响应业务字段位于 `result[]`，且官方 `retCode` 为 int、示例 `result.state` 为数字。本地 parser 已改为优先读取第一条 `result`、兼容 string/number 标量，再回退 top-level 字段；`BF0001` 负向样例已按 `ProviderError` fail-closed。正向终态开户、`verifyType=2` 和通知密文形态仍需复核。
+- 已新增官方 DTO 和本地 client；client 已按 `verifyType=1` 构造 union-gw URL 参数和 `header/body` 密文 envelope；开户 `noticeUrl` 已改为运行时 `BAOFU_NOTIFY_BASE_URL + /account/open`，不再使用 placeholder。2026-05-05 已用测试地址跑过个人二要素和四要素开户，证明请求可达且响应可解析；四要素请求 `BAOFU_OPEN_4FACTOR_202605050001` 先返回 `state=2/processing`，后续 `queryAcc` 已返回 active `contractNo/sharing_mer_id` 脱敏证据。四要素 smoke 暴露开户响应业务字段位于 `result[]`，且官方 `retCode` 为 int、示例 `result.state` 为数字。本地 parser 已改为优先读取第一条 `result`、兼容 string/number 标量，再回退 top-level 字段；`BF0001` 负向样例已按 `ProviderError` fail-closed。`verifyType=2` 和通知密文正向形态仍需复核。
 
 ### 6.2 开户查询 `T-1001-013-03`
 
@@ -221,9 +221,9 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 本地缺口：
 
-- 已新增 `OfficialQueryAccountRequest` 覆盖 `version`、`accType`、`contractNo/loginNo/certificateNo` 查询路径；本地强制一次只用一个查询 key，`certificateNo` 查询时必须带 `certificateType`，避免多 key 语义漂移。2026-05-05 沙箱查询 `BAOFU_OPEN_4FACTOR_202605050001` 返回 `BF0003` 后确认本地漂移：个人开户查询仍默认 `accType=2`。现已把业务层 `QueryAccountRequest.AccountType` 传入官方 `accType`，并同步让余额查询支持个人/企业账户类型。
+- 已新增 `OfficialQueryAccountRequest` 覆盖 `version`、`accType`、`contractNo` 查询模式和 `loginNo + certificateNo + certificateType + platformNo` 查询模式；本地拒绝 `loginNo` 单独查询和 `contractNo` 混用身份字段，避免用 sandbox 宽松行为覆盖生产文档。2026-05-05 沙箱查询 `BAOFU_OPEN_4FACTOR_202605050001` 返回 `BF0003` 后确认本地漂移：个人开户查询仍默认 `accType=2`。现已把业务层 `QueryAccountRequest.AccountType` 传入官方 `accType`，并同步让余额查询支持个人/企业账户类型。
 - 2026-05-05 个人开户查询已返回 `contractNo=CP61***2938`，但官方查询响应不含开户 `state` 字段且上游返回 success-like `errorCode=SUCCESS`；本地 parser 已改为“成功查询且有 `contractNo` 即视为 active”，并清空 `SUCCESS/1` 这类非失败码，避免把已开户账户显示为 abnormal。
-- 当前项目把 `contractNo` 与 `sharing_mer_id` 严格拆开是正确的；本地 active receiver 约束要求显式 `sharing_mer_id`。但官方查询页只明确 `contractNo`，开户/查询/通知哪个字段承载宝付二级商户号仍必须用实际沙箱回包确认后固化。
+- 当前项目把持久化字段 `contract_no` 与 `sharing_mer_id` 拆开是正确的，防止业务层把任意合同号当分账接收方；但在官方开户/查询结果解析层，宝付返回的 `contractNo` 就是当前可用的开户返回二级商户号，已按 Baofoo support 口径和 sandbox 正向结果写入本地 `sharing_mer_id`。若未来官方新增独立 receiver 字段，必须先补契约测试再改映射。
 
 ### 6.3 开户结果通知
 
@@ -416,7 +416,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 用途：支付异步结果。当前本地 parser 可把支付通知落 fact，并通过 fact application 更新本地支付单。
 
-缺口：已有本地 parser/callback/fact application；宝付官方聚合通知页确认通知字段集和成功处理后返回大写 `OK`，但当前官方页未充分说明 HTTP body encoding/content-type。2026-05-05 sandbox 观察到非 JSON 小报文，因此本地兼容 JSON/form/query 形态；该兼容性不得单独升级为生产契约真值，仍需宝付确认。尚未完成真实回调落本地订单 fact 的正向证据；通知 `feeAmt`、渠道原始字段等未完整进入契约。
+本地覆盖：C3。宝付官方聚合通知页确认 POST 通知、公共字段集、`dataContent`、验签要求、`notifyType` 枚举、成功处理后返回大写 `OK` 以及重试规则；支付通知页确认 `merId/terId/payCode` 必填、`tradeNo/outTradeNo/txnState/resultCode` 条件或可选。当前 parser 生产路径要求 signed public envelope，且只接受 `notifyType=PAYMENT`、官方 `txnState` 枚举和 `resultCode=SUCCESS/FAIL`（`resultCode` 缺省仍按文档允许）。官方页未把 HTTP `Content-Type` header 写成契约字段；2026-05-05 sandbox 观察到非 JSON 小报文，因此本地兼容 JSON/form/query 形态。尚未完成真实回调落本地订单 fact 的正向证据。
 
 ### 8.4 交易关闭
 
@@ -459,9 +459,9 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 官方文档：https://doc.mandao.com/docs/bct/bct-1f9qm1m0u1s68 与 https://doc.mandao.com/docs/bct/bct-1f9qm58emskkg
 
-用途：分账处理中恢复和终态通知。状态以 `txnState` 判断，当前本地映射：`SUCCESS -> success`，`PROCESSING -> processing`，`CANCELED -> failed`，`ABNORMAL -> unknown`。
+用途：分账处理中恢复和终态通知。状态以 `txnState` 判断，当前本地映射：`SUCCESS -> success`，`PROCESSING -> processing`，`CANCELED -> failed`，`ABNORMAL -> unknown`。回调 public envelope 必须是官方 `notifyType=SHARING`，不是非官方 `SHARE`；`resultCode` 只接受 `SUCCESS/FAIL`。
 
-缺口：通知页内容较短，需用沙箱确认完整 payload、ACK、签名字段和 `resultCode`/`txnState` 组合；未做真实联调。
+缺口：通知页内容较短；公共 envelope、签名字段、通知类型枚举和 ACK 由聚合请求入口页/附录确认，仍需真实联调证明完整 payload、`resultCode`/`txnState` 组合和本地 fact 应用。
 
 ## 10. 退款详细核对
 
@@ -481,7 +481,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 用途：退款处理中恢复、回调终态。
 
-本地覆盖：C3。`refund_query` DTO/client、退款通知 parser、API callback route、订单退款 fact application 和退款查询恢复 scheduler 已补齐；真实验签/数字信封、沙箱回调证据和宝付测试地址查询证据仍需补齐。
+本地覆盖：C3。`refund_query` DTO/client、退款通知 parser、API callback route、订单退款 fact application 和退款查询恢复 scheduler 已补齐。退款回调 public envelope 必须是 `notifyType=REFUND`；业务必填 `resultCode` 只接受 `SUCCESS/FAIL`；`refundState` 按官方枚举校验，缺省时按通知页必填 `resultCode` 归一为成功/失败。真实验签/数字信封、沙箱回调证据和宝付测试地址查询证据仍需补齐。
 
 ## 11. 枚举和错误码核对
 
@@ -491,7 +491,8 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 | 聚合支付错误码 | https://doc.mandao.com/docs/bct/bct-1f9qrfsj2fcbu | C3：已把官方页列出的 `INVALID_PARAMETER/SYSTEM_BUSY/UNOPENED_PRODUCT/ORDER_EXIST/MERCHANT_NOT_REPORT/RISK_REFUSED` 等错误码归类，并对聚合支付/报备 public envelope `resultCode != SUCCESS` 做 `ProviderError` fail-closed | 沙箱错误样例、响应验签/数字信封和真实渠道错误组合仍待补。 |
 | 产品类型 | https://doc.mandao.com/docs/bct/bct-1f9qrdjnaqra5 | C1：`SHARING` | 未限制其他产品类型。 |
 | 支付方式 | https://doc.mandao.com/docs/bct/bct-1f9qrdro3gtv1 | C1：`WECHAT_JSAPI` | 未建完整支付方式枚举和条件必填矩阵。 |
-| 订单状态 | https://doc.mandao.com/docs/bct/bct-1f9qre51sa7dg | C2：支付/分账/退款状态局部 | 已覆盖退款 `SUCCESS/REFUND/REFUND_ERROR/ABNORMAL` 映射；关闭状态仍主要依赖支付状态，未知组合进入 `unknown`。 |
+| 通知类型 | https://doc.mandao.com/docs/bct/bct-1f9qrdaere1nb | C3：`PAYMENT/SHARING/REFUND/SIGN`，生产回调按路由校验 `PAYMENT/SHARING/REFUND` | `SIGN` 当前未接入业务回调路由。 |
+| 订单状态 | https://doc.mandao.com/docs/bct/bct-1f9qre51sa7dg | C3：支付/分账/退款状态局部；回调路径拒绝非官方枚举 | 查询路径未知组合进入 `unknown`，用于 fail-closed 观测；关闭状态仍主要依赖支付状态。 |
 | 支付属性 | https://doc.mandao.com/docs/bct/bct-1f9qrefjkin2b | C1：微信 JSAPI 三字段 | 未覆盖公共参数禁传条件、支付宝/云闪付等非首版支付方式。 |
 | 聚合商户报备附录 | https://doc.mandao.com/docs/bct/bct-1f9o6qi1pf2r8 | C3：报备类型、报备状态、终端设备、操作标识、设备状态、微信/支付宝服务类型、联系人业务标识、微信/支付宝证件类型、支付宝联系人类型、授权类型、站点类型、间连等级、商户状态、交易控制位、认证订单状态、商户认证状态和 110 项微信经营类目 allowlist 已建 | 仍需把长尾枚举接入未来新增字段的 DTO 校验；当前首版未使用字段必须保持不进入请求体。 |
 
@@ -503,7 +504,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 | --- | --- | --- | --- | --- |
 | 报备附录枚举 | `bct-1f9o6qi1pf2r8` | 签名类型、报备类型、报备状态、终端设备类型、操作标识、设备状态、微信服务类型、支付宝服务类型、联系人业务标识、微信证件类型、支付宝证件类型、联系人类型、授权类型、站点类型、间连等级、商户状态、交易控制位、认证订单状态、商户认证状态 | C3，已覆盖 `WECHAT`、报备状态、`APPLET`、微信证件类型、授权类型以及当前审计识别出的终端设备、联系人业务标识、商户状态、交易控制位、认证状态等长尾枚举 | 未来新增字段必须复用 allowlist；未使用字段进入请求前必须 fail-closed。 |
 | 经营类目/MCC | `/home/sam/文档/分账/宝付/经营类目&MCC.xlsx`，SHA256 `c521b7b15397a5aa63be9a3d8297c8a8c207e68e7d7fea7a26f8450945b4793f` | `微信经营类目` sheet：110 条，字段为 `类目值/类目名称`；`支付宝MCC` sheet：368 条，字段为 `MCC/经营类目一级/经营类目二级/经营类目三级/特殊资质` | C3：微信经营类目已生成 allowlist 并用 hash/行数/非法值测试锁定；支付宝 MCC 暂缓 | xlsx 更新时必须更新 hash 和生成物；如启用支付宝报备，再抽取支付宝 MCC。 |
-| 聚合支付枚举 | `产品类型`、`支付方式`、`订单状态`、`支付属性` 附录 | `SHARING`、`WECHAT_JSAPI`、支付/退款/分账订单状态、微信 JSAPI 支付属性等 | C2/C3，首版常量和状态映射已覆盖支付/分账/退款主状态 | 已显式拒绝非 `SHARING`、非 `orderType=7`、非 `WECHAT_JSAPI`；支付/分账/退款状态分别映射，未知值进入 `unknown`，错误码细分仍留 Task 10。 |
+| 聚合支付枚举 | `通知类型`、`产品类型`、`支付方式`、`订单状态`、`支付属性` 附录 | `PAYMENT/SHARING/REFUND/SIGN`、`SHARING`、`WECHAT_JSAPI`、支付/退款/分账订单状态、微信 JSAPI 支付属性等 | C3，首版常量、状态映射和回调 notifyType/resultCode 校验已覆盖支付/分账/退款主状态 | 已显式拒绝非 `SHARING`、非 `orderType=7`、非 `WECHAT_JSAPI`；回调拒绝非官方通知类型、状态和业务结果码；查询未知值进入 `unknown`，错误码细分仍留 Task 10。 |
 | 错误码 | 账户错误码、聚合支付错误码、报备错误码 | 参数错误、身份/银行卡核验失败、系统繁忙、商户未报备、分账配置不存在、订单重复、交易未知、风控拒绝等 | C3，本地 typed classification 已覆盖官方账户错误码页和聚合支付错误码页，报备接口按 public envelope `resultCode/errCode/errMsg` 统一进入分类器 | 已区分资料需修改、平台配置错误、可重试/可查询处理中、渠道/宝付异常需人工；沙箱错误样例和真实渠道组合仍待补。 |
 
 
@@ -559,7 +560,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 | `locallife/baofu/merchantreport/**` | 报备/查询/APPLET 绑定 contracts + concrete client + tests | 当前审计识别的附录枚举和报备恢复 worker 已补；真实资料来源映射和沙箱证据仍待补。 |
 | `locallife/logic/baofu_payment_service.go` | 服务层可组统一下单并记录 command；主业务 API runtime 可切宝付 concrete aggregate client | 宝付合单支付已 fail-closed；沙箱证据仍待补。 |
 | `locallife/api/logic_adapters.go` | 已按 `BAOFU_MAIN_BUSINESS_ENABLED` 构造宝付主业务 facade | 主业务支付可切宝付；宝付启用时合单支付已明确 fail-closed。 |
-| `locallife/api/baofu_callback.go` | 支付/分账/退款/开户回调落 fact 草稿 | ACK、验签、payload 完整性需沙箱确认。 |
+| `locallife/api/baofu_callback.go` | 支付/分账/退款/开户回调落 fact 草稿 | ACK、验签和公共 envelope 已按文档固化；payload 完整性和 fact 应用仍需真实回调证据。 |
 | `locallife/worker/*baofu*` | 分账创建、支付/分账/退款查询恢复、提现查询恢复、提现 fact application、聚合商户报备查询恢复等本地 worker 边界 | aggregatepay/account/merchantreport 生产 client wiring 已接入任务处理器和 Baofu/refund/withdrawal/merchant-report recovery scheduler；沙箱证据仍待补。 |
 
 
@@ -573,7 +574,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 | C-004 | C3 本地修复，部分正向沙箱 smoke | 已新增聚合/报备 `PublicRequestEnvelope`；账户 API 已拆到独立 union-gw `verifyType=1` envelope；`unified_order`/`order_query` 已证明聚合请求 `bizContent` 与响应 `dataContent` 可通过宝付测试地址 | 聚合/报备响应验签、数字信封加密、账户 `verifyType=2`、真实错误码和回调仍未验证 | C4 继续补回调和错误样例；不得因 sandbox 查询成功宣称真实支付/分账已联调完成。 |
 | C-005 | 已本地修复，sandbox 请求/响应形态已验证 | `locallife/baofu/aggregatepay/contracts/types.go` 已新增 `unified_order` 表驱动校验，覆盖 M/C 字段、枚举、生产 `subMchId` 条件必填、sandbox 省略 `subMchId`、https `pageUrl`、金额关系，并兼容 numeric/string `chlRetParam.order_id` | 本地契约已 fail-closed；sandbox 已证明省略 `subMchId` 后可解析 `WAIT_PAYING`、`tradeNo` 和 `wc_pay_data`，但宝付确认测试环境不支持真实支付，所以不能证明支付回调/后续分账 | Task 8/沙箱继续补参数错误和错误码样例；真实支付、回调和后续链路放入生产首单 checklist。 |
 | C-006 | C3 本地修复，待联调 | 已新增 `locallife/baofu/merchantreport/contracts`、`baofu_merchant_reports`、sqlc query、报备 service、APPLET 授权 readiness、`merchantreport.Client` 和 `baofu-merchant-report-recovery` | 本地契约/持久化/服务/HTTP client/recovery 已能防止 `bctMerId/subMchId/authContent` 漂移，但还没有沙箱证据和真实资料映射验收 | Task 8/沙箱联调验证真实报备、报备查询与授权目录请求。 |
-| C-007 | 已本地修复，待联调 | `locallife/logic/baofu_payment_order_route.go` 已通过 `merchantBaofuReadinessForPayment` 取商户报备 `sub_mch_id`；`CreateBaofuWechatJSAPIOrderInput` 字段已改 `MerchantSubMchID` | 旧普通服务商 `txResult.SubMchID` 来源已移除，API/logic readiness 不再读取 `baofu_account_bindings.wechat_sub_mch_id`；真实支付仍待宝付聚合商户报备沙箱验证 | Task 8/沙箱测试验证 `unified_order.subMchId` 使用报备返回值。 |
+| C-007 | 已本地修复，sandbox 已验证请求形态 | `locallife/logic/baofu_payment_order_route.go` 已通过 `merchantBaofuReadinessForPayment` 取商户报备 `sub_mch_id`；`CreateBaofuWechatJSAPIOrderInput` 字段已改 `MerchantSubMchID` | 旧普通服务商 `txResult.SubMchID` 来源已移除，API/logic readiness 不再读取 `baofu_account_bindings.wechat_sub_mch_id`；sandbox 已验证报备返回 `subMchId`、APPLET 绑定和按环境省略 wire `subMchId` 的统一下单形态，真实支付仍需生产首单 | 生产环境继续强制使用报备返回的 `unified_order.subMchId`。 |
 | C-008 | C3 本地修复，待沙箱 | 已新增 `order_refund`、`refund_query`、`order_close` DTO/client、退款通知 parser、退款状态映射、API callback、退款查询恢复 scheduler 和分账前退款业务接入 | 首版“分账前退款、分账后不退款”已在本地 fail-closed；fake `order_refund` 沙箱探针暴露并修复 `resultCode=SUCCESS` + `errCode=ORDER_NOT_EXIST` 误判成功问题；仍缺真实验签/数字信封、真实退款查询/回调证据 | Task 12/C4 补沙箱/生产首单证据；响应验签/数字信封在 C-004/C-011 跟进。 |
 | C-009 | 部分修复，待 service/client 切换 | 已新增 `YuanStringToFen` / `FenToYuanString` 并覆盖 2 位小数校验 | 转换 helper 已在契约包，余额/提现真实 client 仍需集中调用 | Task 8/提现服务切换时禁止业务层散落金额转换。 |
 | C-010 | C3 本地修复，待沙箱样例 | `locallife/baofu/errors.go` 已覆盖官方账户错误码页和聚合支付错误码页；`locallife/baofu/client.go` 已在账户 `retCode` 失败、聚合支付/报备 `resultCode != SUCCESS` 时返回 `ProviderError`，并保留上游原文只在 provider error/log 边界 | 前端可获得安全中文语义，不暴露上游原文、证件、银行卡、手机号、`contractNo`、`sharingMerId`、`subMchId` 或 raw payload；沙箱错误样例和真实渠道组合仍待补 | Task 12/C4 补真实错误样例、API handler 边界日志验证和 evidence。 |
@@ -588,7 +589,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 1. 每个官方接口必须有独立 `Method`/报文编号常量、endpoint profile、官方字段级请求/响应 DTO、字段校验、状态映射、错误码分类和表驱动测试。
 2. 所有条件必填必须以测试锁住：微信/支付宝 `riskInfo.clientIp`、生产微信/支付宝 `subMchId`、sandbox 统一下单省略 `subMchId`、`payExtend` 按 `payCode` 的字段矩阵、`share_after_pay` 的原支付单二选一、企业/个体开户资料差异。
 3. 公共报文 envelope 与业务 `bizContent` 分层实现；业务层不得直接拼接 `method`、签名串、数字信封或上游原始 JSON。
-4. `sharing_mer_id` 只能由开户/查询/通知解析层的“宝付二级商户号”字段写入；任何 `subMchId/openid/collect merchant id/contract_no` 写入都必须有失败测试。
+4. `sharing_mer_id` 只能由官方开户/查询结果解析出的开户返回二级商户号写入；业务层不得用 `subMchId/openid/collect merchant id/db contract_no` 兜底写入，任何新增兜底都必须有失败测试。
 5. `subMchId` 只能由聚合商户报备成功结果写入支付通道 readiness；支付创建只读取“最终选定 subMchId”，不得从普通服务商 `txResult.SubMchID` 继承。
 6. 回调 parser 必须用官方字段名和 ACK 形态测试；重复通知必须先落 fact 再幂等应用。
 7. 错误日志只在一个边界记录上游代码、接口名、脱敏流水号和内部原因；前端只收到安全中文语义，不暴露 `reportNo/bctMerId/subMchId/sharingMerId/contractNo` 原值、证件、银行卡、手机号、签名或 raw payload。

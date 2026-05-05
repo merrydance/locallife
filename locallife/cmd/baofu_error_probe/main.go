@@ -51,10 +51,10 @@ func run() error {
 	aggregateClient := payclient.NewClient(root)
 	merchantReportClient := reportclient.NewClient(root)
 
-	fakeLoginNo := firstNonEmpty(os.Getenv("BAOFU_TEST_FAKE_LOGIN_NO"), "BAOFU_ERR_ACC_"+now)
+	fakeContractNo := firstNonEmpty(os.Getenv("BAOFU_TEST_FAKE_CONTRACT_NO"), "CP_ERR_"+now)
 	accountResult, err := accountClient.QueryAccount(ctx, accountcontracts.QueryAccountRequest{
-		OutRequestNo: fakeLoginNo,
-		AccountType:  firstNonEmpty(os.Getenv("BAOFU_TEST_ACCOUNT_TYPE"), "personal"),
+		ContractNo:  fakeContractNo,
+		AccountType: firstNonEmpty(os.Getenv("BAOFU_TEST_ACCOUNT_TYPE"), "personal"),
 	})
 	printResult("account_query_fake", summarizeAccountResult(accountResult), err)
 

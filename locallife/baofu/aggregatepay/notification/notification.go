@@ -115,9 +115,18 @@ func (p *Parser) ParsePaymentNotification(body []byte) (*PaymentNotification, er
 	if strings.TrimSpace(payload.PayCode) == "" {
 		return nil, ErrPaymentNotificationPayCodeRequired
 	}
+	if err := validateOfficialNotifyType("baofu payment notification", payload.NotifyType, baofu.PublicNotificationTypePayment); err != nil {
+		return nil, err
+	}
 	upstreamState := strings.TrimSpace(payload.TransactionState)
 	if upstreamState == "" {
 		upstreamState = strings.TrimSpace(payload.State)
+	}
+	if upstreamState != "" && !aggregatecontracts.IsSupportedPaymentState(upstreamState) {
+		return nil, errors.New("baofu payment notification txnState is unsupported")
+	}
+	if err := validateOfficialBusinessResultCode("baofu payment notification", payload.ResultCode); err != nil {
+		return nil, err
 	}
 	amount := payload.SuccessAmount
 	if amount == 0 {
@@ -191,9 +200,18 @@ func (p *Parser) ParseShareNotification(body []byte) (*ShareNotification, error)
 	if strings.TrimSpace(payload.ResultCode) == "" {
 		return nil, ErrShareNotificationResultCodeRequired
 	}
+	if err := validateOfficialNotifyType("baofu share notification", payload.NotifyType, baofu.PublicNotificationTypeSharing); err != nil {
+		return nil, err
+	}
 	upstreamState := strings.TrimSpace(payload.TxnState)
 	if upstreamState == "" {
 		upstreamState = strings.TrimSpace(payload.State)
+	}
+	if !aggregatecontracts.IsSupportedShareState(upstreamState) {
+		return nil, errors.New("baofu share notification txnState is unsupported")
+	}
+	if err := validateOfficialBusinessResultCode("baofu share notification", payload.ResultCode); err != nil {
+		return nil, err
 	}
 	amount := payload.SuccessAmount
 	if amount == 0 {
@@ -273,16 +291,25 @@ func (p *Parser) ParseRefundNotification(body []byte) (*RefundNotification, erro
 	if strings.TrimSpace(payload.TransactionTime) == "" {
 		return nil, ErrRefundNotificationTransactionTimeRequired
 	}
+	if err := validateOfficialNotifyType("baofu refund notification", payload.NotifyType, baofu.PublicNotificationTypeRefund); err != nil {
+		return nil, err
+	}
+	if err := validateOfficialBusinessResultCode("baofu refund notification", payload.ResultCode); err != nil {
+		return nil, err
+	}
 	upstreamState := strings.TrimSpace(payload.RefundState)
 	if upstreamState == "" {
 		upstreamState = strings.TrimSpace(payload.State)
+	}
+	if upstreamState != "" && !aggregatecontracts.IsSupportedRefundState(upstreamState) {
+		return nil, errors.New("baofu refund notification refundState is unsupported")
 	}
 	amount := payload.SuccessAmount
 	if amount == 0 {
 		amount = payload.RefundAmount
 	}
 	occurredAt := parseBaofuPaymentNotifyTime(payload.OccurredAt, payload.NotifyTime, payload.FinishTime)
-	terminalStatus := aggregatecontracts.NormalizeRefundTerminalStatus(upstreamState)
+	terminalStatus := normalizeRefundTerminalStatus(upstreamState, payload.ResultCode)
 	return &RefundNotification{
 		NotifyID:       strings.TrimSpace(payload.NotifyID),
 		NotifyType:     strings.TrimSpace(payload.NotifyType),
@@ -307,6 +334,40 @@ func (p *Parser) ParseRefundNotification(body []byte) (*RefundNotification, erro
 			Raw:              normalizedBody,
 		},
 	}, nil
+}
+
+func validateOfficialNotifyType(prefix, actual, expected string) error {
+	actual = strings.TrimSpace(actual)
+	if actual == "" {
+		return nil
+	}
+	if actual != expected {
+		return errors.New(prefix + " notifyType must be " + expected)
+	}
+	return nil
+}
+
+func validateOfficialBusinessResultCode(prefix, resultCode string) error {
+	switch strings.TrimSpace(resultCode) {
+	case "", aggregatecontracts.BusinessResultCodeSuccess, aggregatecontracts.BusinessResultCodeFail:
+		return nil
+	default:
+		return errors.New(prefix + " resultCode is unsupported")
+	}
+}
+
+func normalizeRefundTerminalStatus(upstreamState, resultCode string) string {
+	if strings.TrimSpace(upstreamState) != "" {
+		return aggregatecontracts.NormalizeRefundTerminalStatus(upstreamState)
+	}
+	switch strings.TrimSpace(resultCode) {
+	case aggregatecontracts.BusinessResultCodeSuccess:
+		return db.ExternalPaymentTerminalStatusSuccess
+	case aggregatecontracts.BusinessResultCodeFail:
+		return db.ExternalPaymentTerminalStatusFailed
+	default:
+		return db.ExternalPaymentTerminalStatusUnknown
+	}
 }
 
 func (p *Parser) normalizeAggregateNotificationBody(body []byte) ([]byte, error) {

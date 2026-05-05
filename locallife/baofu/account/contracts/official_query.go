@@ -24,22 +24,30 @@ func (r OfficialQueryAccountRequest) Validate() error {
 	if r.AccountType != OfficialAccountTypePersonal && r.AccountType != OfficialAccountTypeBusiness {
 		return errors.New("baofu query account accType is unsupported")
 	}
-	queryKeyCount := 0
-	for _, value := range []string{r.ContractNo, r.LoginNo, r.CertificateNo} {
-		if strings.TrimSpace(value) != "" {
-			queryKeyCount++
+	contractNo := strings.TrimSpace(r.ContractNo)
+	loginNo := strings.TrimSpace(r.LoginNo)
+	certificateNo := strings.TrimSpace(r.CertificateNo)
+	certificateType := strings.TrimSpace(r.CertificateType)
+	platformNo := strings.TrimSpace(r.PlatformNo)
+	if contractNo != "" {
+		if loginNo != "" || certificateNo != "" || certificateType != "" || platformNo != "" {
+			return errors.New("baofu query account contractNo cannot be combined with loginNo identity fields")
 		}
+		return nil
 	}
-	if queryKeyCount == 0 {
-		return errors.New("baofu query account contractNo, loginNo, or certificateNo is required")
+	if loginNo == "" {
+		return errors.New("baofu query account contractNo or loginNo is required")
 	}
-	if queryKeyCount > 1 {
-		return errors.New("baofu query account must use exactly one query key")
+	if certificateNo == "" {
+		return errors.New("baofu query account certificateNo is required when loginNo is used")
 	}
-	if strings.TrimSpace(r.CertificateNo) != "" && strings.TrimSpace(r.CertificateType) == "" {
-		return errors.New("baofu query account certificateType is required when certificateNo is used")
+	if certificateType == "" {
+		return errors.New("baofu query account certificateType is required when loginNo is used")
 	}
-	if strings.TrimSpace(r.CertificateType) != "" && strings.TrimSpace(r.CertificateType) != OfficialCertificateTypeID && strings.TrimSpace(r.CertificateType) != OfficialBusinessCertificateTypeLicense {
+	if platformNo == "" {
+		return errors.New("baofu query account platformNo is required when loginNo is used")
+	}
+	if certificateType != OfficialCertificateTypeID && certificateType != OfficialBusinessCertificateTypeLicense {
 		return errors.New("baofu query account certificateType is unsupported")
 	}
 	return nil

@@ -2055,7 +2055,7 @@ Expected: at least one account/report/aggregate fake request should produce a pr
 
 ### Task P22: Aggregate Callback Form Payload Parsing
 
-> Trigger: Baofoo sandbox sent two payment callbacks to `/v1/webhooks/baofu/payment` after unified-order smoke. The server logged `invalid character 'r' looking for beginning of value` and returned 401. The body was 56 bytes and the user agent was `Apache-HttpClient/4.3.6`. The aggregate notification docs confirm the callback field set and uppercase `OK` ACK, but the exact HTTP body encoding/content-type still requires Baofoo confirmation; form/query parsing is compatibility support, not standalone contract truth.
+> Trigger: Baofoo sandbox sent two payment callbacks to `/v1/webhooks/baofu/payment` after unified-order smoke. The server logged `invalid character 'r' looking for beginning of value` and returned 401. The body was 56 bytes and the user agent was `Apache-HttpClient/4.3.6`. The aggregate notification docs confirm POST delivery, callback public fields, `dataContent`, signature, route `notifyType`, business/state enums, retry rules, and uppercase `OK` ACK; the HTTP `Content-Type` header itself is not documented as a contract field, so parsing must be based on the documented fields, not on guessing a header.
 
 **Files:**
 - Modify: `locallife/baofu/aggregatepay/notification/notification.go`
@@ -2067,7 +2067,7 @@ Expected: at least one account/report/aggregate fake request should produce a pr
 
 - [x] **Step 1: Add regression**
 
-Added a parser regression for the sandbox-observed compatibility shape: `application/x-www-form-urlencoded` / query-style direct fields such as `resultCode=SUCCESS&outTradeNo=...&txnState=SUCCESS`. The regression failed before the parser fix with `invalid character 'r' looking for beginning of value`, matching production logs; this does not by itself settle the official callback body encoding.
+Added a parser regression for the sandbox-observed compatibility shape: `application/x-www-form-urlencoded` / query-style direct fields such as `resultCode=SUCCESS&outTradeNo=...&txnState=SUCCESS`. The regression failed before the parser fix with `invalid character 'r' looking for beginning of value`, matching production logs; production parsing now still requires the documented signed public envelope when wired with Baofoo public key.
 
 - [x] **Step 2: Fix aggregate callback parser and ACK**
 
@@ -2113,12 +2113,42 @@ Added rows for account open/query/balance/withdraw/query withdraw/account callba
 
 - [x] **Step 3: Reclassify callback parser assumptions**
 
-Aggregate callback field set and uppercase `OK` ACK are `DOC_CONFIRMED` from Baofoo aggregate request-entry and per-callback pages. Exact HTTP body encoding/content-type is not fully specified by the current docs; form/query support is kept as `SANDBOX_COMPATIBILITY` and must be confirmed with Baofoo before it becomes a production contract rule.
+Aggregate callback POST delivery, public field set, `dataContent`, signature verification, route `notifyType`, business/state enums, retry rule, S(10) serial fields, and uppercase `OK` ACK are `DOC_CONFIRMED` from Baofoo aggregate request-entry, per-callback pages, and appendix pages. Exact HTTP `Content-Type` header is not a documented contract field; form/query support is kept as parser tolerance, while production still requires the signed public envelope.
 
 - [x] **Step 4: Add Baofoo confirmation questions**
 
-Recorded open questions for aggregate callback body encoding, signature canonical string, ACK content-type, `signSn/ncrptnSn`, `contractNo` vs `sharingMerId`, sandbox payment semantics, and production first-order validation.
+Reclassified the previous open-question list: `queryAcc.loginNo` and `signSn/ncrptnSn` are now doc-confirmed contract rules, callback ACK/signature/envelope are doc-confirmed, and remaining items are operational/C4 evidence gaps rather than reasons to weaken production contract validation.
 
 - [ ] **Step 5: Keep this gate current**
 
 Every future Baofoo DTO/parser/enum/ACK/error-classification change must update `baofu-contract-source-matrix.md` or explicitly state why the matrix row is unaffected. Sandbox evidence remains in `baofu-sandbox-evidence.md` and must not be promoted to contract truth by itself.
+
+### Task P24: Aggregate Callback Enum And Route Alignment
+
+> Trigger: callback structure and enum pages were already explicit in Baofoo docs/appendix, but local callback tests still used non-official `SHARE` / dotted notification types and parsers did not enforce route-specific `notifyType`, callback state enums, or `resultCode` enums.
+
+**Files:**
+- Modify: `locallife/baofu/envelope.go`
+- Modify: `locallife/baofu/envelope_test.go`
+- Modify: `locallife/baofu/aggregatepay/contracts/types.go`
+- Modify: `locallife/baofu/aggregatepay/notification/notification.go`
+- Modify: `locallife/baofu/aggregatepay/notification/notification_test.go`
+- Modify: `locallife/scripts/check_baofu_contract_drift.sh`
+- Modify: `artifacts/baofu-payment/baofu-api-contract-coverage-audit.md`
+- Modify: `artifacts/baofu-payment/baofu-contract-source-matrix.md`
+
+- [x] **Step 1: Lock official public notification type enum**
+
+Public notification envelope validation now accepts only `PAYMENT/SHARING/REFUND/SIGN` from the Baofoo notification-type appendix. The non-official `SHARE` value is rejected.
+
+- [x] **Step 2: Enforce route-specific callback type**
+
+Payment/share/refund parser paths now require `PAYMENT/SHARING/REFUND` respectively when `notifyType` is present or injected from the public envelope. This prevents a signed but wrong notification type from being accepted by the wrong webhook route.
+
+- [x] **Step 3: Enforce callback business enums**
+
+Callback `txnState/refundState` values are checked against the documented order-state subsets before facts are persisted. Callback `resultCode` is limited to `SUCCESS/FAIL` when present/required. Refund callback handles the documented optional `refundState` by falling back to required `resultCode=SUCCESS/FAIL` for terminal success/failure.
+
+- [x] **Step 4: Update guard and source matrix**
+
+`make check-baofu-contract` now checks the official `SHARING` value, notification enum enforcement, route-specific type validation, state enum validation, and business `resultCode` validation. The source matrix records this as `BAOFU-FIELD-012`.
