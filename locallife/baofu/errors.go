@@ -89,6 +89,7 @@ var baofuOfficialErrorRules = map[string]baofuErrorRule{
 	"MERCHANT_NOT_REPORT":     {category: BaofuErrorCategoryPlatformConfiguration, message: baofuMessagePaymentChannelPending, action: baofuActionContactPlatform},
 	"MERCHANT_NOT_AUTHORIZED": {category: BaofuErrorCategoryPlatformConfiguration, message: baofuMessagePaymentChannelPending, action: baofuActionContactPlatform},
 	"NO_AUTH":                 {category: BaofuErrorCategoryPlatformConfiguration, message: baofuMessagePaymentChannelPending, action: baofuActionContactPlatform},
+	"PAY_CHANNEL_NOT_SUPPORT": {category: BaofuErrorCategoryPlatformConfiguration, message: baofuMessagePaymentChannelPending, action: baofuActionContactPlatform},
 	"MCH_NOT_EXISTS":          {category: BaofuErrorCategoryPlatformConfiguration, message: baofuMessagePaymentConfigPending, action: baofuActionContactPlatform},
 	"MERCHANT_NOT_EXIST":      {category: BaofuErrorCategoryPlatformConfiguration, message: baofuMessagePaymentConfigPending, action: baofuActionContactPlatform},
 	"TERMINAL_NOT_EXIST":      {category: BaofuErrorCategoryPlatformConfiguration, message: baofuMessagePaymentConfigPending, action: baofuActionContactPlatform},
