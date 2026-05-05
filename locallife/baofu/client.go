@@ -173,6 +173,9 @@ func (c *Client) postPublicEnvelope(ctx context.Context, endpoint string, method
 	if err := responseEnvelope.Validate(); err != nil {
 		return providerRequestError(method, resp.StatusCode, responseEnvelope.ValidationUpstreamCode(err), err)
 	}
+	if err := validatePublicResponseIdentity(responseEnvelope, merchantID, terminalID); err != nil {
+		return providerRequestError(method, resp.StatusCode, responseEnvelope.ValidationUpstreamCode(err), err)
+	}
 	if err := responseEnvelope.VerifySignature(c.config.BaofuPublicKeyPEM); err != nil {
 		return providerRequestError(method, resp.StatusCode, responseEnvelope.ValidationUpstreamCode(err), err)
 	}
@@ -184,6 +187,16 @@ func (c *Client) postPublicEnvelope(ctx context.Context, endpoint string, method
 		if err := json.Unmarshal(responseBusinessContent, out); err != nil {
 			return providerRequestError(method, resp.StatusCode, PublicEnvelopeUpstreamCodeInvalidDataContent, err)
 		}
+	}
+	return nil
+}
+
+func validatePublicResponseIdentity(responseEnvelope PublicResponseEnvelope, merchantID string, terminalID string) error {
+	if strings.TrimSpace(responseEnvelope.MerchantID) != strings.TrimSpace(merchantID) {
+		return errors.New("baofu public response merId does not match request")
+	}
+	if strings.TrimSpace(responseEnvelope.TerminalID) != strings.TrimSpace(terminalID) {
+		return errors.New("baofu public response terId does not match request")
 	}
 	return nil
 }

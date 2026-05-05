@@ -220,7 +220,7 @@ func (s *BaofuProfitSharingService) RecordShareFact(ctx context.Context, input R
 	}
 	amount := shareFact.SuccessAmountFen
 	if amount <= 0 {
-		amount = order.MerchantAmount + order.RiderAmount + order.OperatorCommission + order.PlatformCommission
+		amount = baofuProfitSharingOrderExpectedShareAmount(order)
 	}
 
 	fact, err := factStore.CreateExternalPaymentFact(ctx, db.CreateExternalPaymentFactParams{
@@ -284,6 +284,13 @@ func validateRecordBaofuShareFactInput(input RecordBaofuShareFactInput) error {
 		return ErrBaofuProfitSharingFactInvalidInput
 	}
 	return nil
+}
+
+func baofuProfitSharingOrderExpectedShareAmount(order db.ProfitSharingOrder) int64 {
+	if strings.TrimSpace(order.CalculationVersion) == BaofuSettlementCalculationVersionV2 || order.PlatformReceiverAmount > 0 {
+		return order.MerchantAmount + order.RiderAmount + order.OperatorCommission + order.PlatformReceiverAmount
+	}
+	return order.MerchantAmount + order.RiderAmount + order.OperatorCommission + order.PlatformCommission
 }
 
 func baofuShareFactDedupeKey(input RecordBaofuShareFactInput, outTradeNo string, upstreamState string) string {

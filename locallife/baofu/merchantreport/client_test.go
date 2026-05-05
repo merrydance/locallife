@@ -20,7 +20,7 @@ import (
 )
 
 func TestMerchantReportClientSubmitReportPostsPublicEnvelope(t *testing.T) {
-	doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","reportType":"WECHAT","reportNo":"MR202605040001","reportState":"SUCCESS","subMchId":"1900000109","platformBizNo":"PB202605040001"}`)}
+	doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","reportType":"WECHAT","reportNo":"MR202605040001","reportState":"SUCCESS","subMchId":"1900000109","platformBizNo":"PB202605040001"}`)}
 	client := NewClient(testBaofuRootClient(t, doer))
 
 	result, err := client.SubmitWechatReport(context.Background(), validWechatReportRequestForClientTest())
@@ -36,7 +36,7 @@ func TestMerchantReportClientSubmitReportPostsPublicEnvelope(t *testing.T) {
 }
 
 func TestMerchantReportClientBindSubConfigPostsAppletAuth(t *testing.T) {
-	doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","subMchId":"1900000109","authType":"APPLET"}`)}
+	doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","subMchId":"1900000109","authType":"APPLET"}`)}
 	client := NewClient(testBaofuRootClient(t, doer))
 
 	_, err := client.BindSubConfig(context.Background(), contracts.BindSubConfigRequest{MerchantID: "102004465", TerminalID: "200005200", SubMchID: "1900000109", AuthType: contracts.AuthTypeApplet, AuthContent: "wx1234567890abcdef", Remark: "LocalLife mini program"})
@@ -49,7 +49,7 @@ func TestMerchantReportClientBindSubConfigPostsAppletAuth(t *testing.T) {
 }
 
 func TestMerchantReportClientQueryNormalizesWechatSubMchIDFromChannelReturnParam(t *testing.T) {
-	doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","reportType":"WECHAT","reportNo":"MR202605040001","reportState":"SUCCESS","channelRetParam":{"sub_mch_id":"1900000109"}}`)}
+	doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","reportType":"WECHAT","reportNo":"MR202605040001","reportState":"SUCCESS","channelRetParam":{"sub_mch_id":"1900000109"}}`)}
 	client := NewClient(testBaofuRootClient(t, doer))
 
 	result, err := client.QueryReport(context.Background(), contracts.MerchantReportQueryRequest{MerchantID: "102004465", TerminalID: "200005200", ReportType: contracts.ReportTypeWechat, ReportNo: "MR202605040001"})
@@ -72,6 +72,32 @@ func TestMerchantReportClientReturnsProviderErrorForBusinessFailure(t *testing.T
 	require.ErrorAs(t, err, &providerErr)
 	require.Equal(t, "INVALID_PARAMETER", providerErr.UpstreamCode)
 	require.Equal(t, "资料信息不完整，请核对后重新提交", providerErr.Frontend.Message)
+}
+
+func TestMerchantReportClientRunsMethodSpecificResponseValidation(t *testing.T) {
+	t.Run("report missing reportNo", func(t *testing.T) {
+		doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","reportType":"WECHAT"}`)}
+		client := NewClient(testBaofuRootClient(t, doer))
+
+		_, err := client.SubmitWechatReport(context.Background(), validWechatReportRequestForClientTest())
+		require.EqualError(t, err, "baofu merchant report response reportNo is required")
+	})
+
+	t.Run("query unsupported reportType", func(t *testing.T) {
+		doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","reportType":"UNKNOWN","reportNo":"MR202605040001"}`)}
+		client := NewClient(testBaofuRootClient(t, doer))
+
+		_, err := client.QueryReport(context.Background(), contracts.MerchantReportQueryRequest{MerchantID: "102004465", TerminalID: "200005200", ReportType: contracts.ReportTypeWechat, ReportNo: "MR202605040001"})
+		require.EqualError(t, err, "baofu merchant report response reportType is unsupported")
+	})
+
+	t.Run("bind missing terId", func(t *testing.T) {
+		doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465"}`)}
+		client := NewClient(testBaofuRootClient(t, doer))
+
+		_, err := client.BindSubConfig(context.Background(), contracts.BindSubConfigRequest{MerchantID: "102004465", TerminalID: "200005200", SubMchID: "1900000109", AuthType: contracts.AuthTypeApplet, AuthContent: "wx1234567890abcdef", Remark: "LocalLife mini program"})
+		require.EqualError(t, err, "baofu bind_sub_config response terId is required")
+	})
 }
 
 func validWechatReportRequestForClientTest() contracts.WechatMerchantReportRequest {

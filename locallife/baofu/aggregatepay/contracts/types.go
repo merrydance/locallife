@@ -329,6 +329,47 @@ func (r UnifiedOrderResult) WechatPayData() (json.RawMessage, error) {
 	return r.ChannelReturn.WechatPayData, nil
 }
 
+func (r UnifiedOrderResult) ValidateUnifiedOrderResponse() error {
+	if strings.TrimSpace(r.MerchantID) == "" {
+		return errors.New("baofu unified order response merId is required")
+	}
+	if strings.TrimSpace(r.TerminalID) == "" {
+		return errors.New("baofu unified order response terId is required")
+	}
+	if strings.TrimSpace(r.OutTradeNo) == "" {
+		return errors.New("baofu unified order response outTradeNo is required")
+	}
+	if err := validateBusinessResultCode("baofu unified order response", r.ResultCode); err != nil {
+		return err
+	}
+	if err := validateResponsePayCode("baofu unified order response", r.PayCode, true); err != nil {
+		return err
+	}
+	if err := validateOptionalPaymentState("baofu unified order response", r.TxnState); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r UnifiedOrderResult) ValidateOrderQueryResponse() error {
+	if strings.TrimSpace(r.MerchantID) == "" {
+		return errors.New("baofu order query response merId is required")
+	}
+	if strings.TrimSpace(r.TerminalID) == "" {
+		return errors.New("baofu order query response terId is required")
+	}
+	if err := validateBusinessResultCode("baofu order query response", r.ResultCode); err != nil {
+		return err
+	}
+	if err := validateOptionalPaymentState("baofu order query response", r.TxnState); err != nil {
+		return err
+	}
+	if err := validateResponsePayCode("baofu order query response", r.PayCode, false); err != nil {
+		return err
+	}
+	return nil
+}
+
 type PaymentQueryRequest struct {
 	AgentMerchantID string `json:"agentMerId,omitempty"`
 	AgentTerminalID string `json:"agentTerId,omitempty"`
@@ -399,6 +440,16 @@ func IsSupportedPaymentState(upstreamState string) bool {
 	default:
 		return false
 	}
+}
+
+func validateOptionalPaymentState(prefix string, state string) error {
+	if strings.TrimSpace(state) == "" {
+		return nil
+	}
+	if !IsSupportedPaymentState(state) {
+		return errors.New(prefix + " txnState is unsupported")
+	}
+	return nil
 }
 
 type ShareAfterPayRequest struct {
@@ -482,6 +533,33 @@ type ShareFact struct {
 	ClearingDate     string
 	ResultCode       string
 	Raw              json.RawMessage
+}
+
+func (r ShareResult) ValidateShareAfterPayResponse() error {
+	return r.validateShareResponse()
+}
+
+func (r ShareResult) ValidateShareQueryResponse() error {
+	return r.validateShareResponse()
+}
+
+func (r ShareResult) validateShareResponse() error {
+	if strings.TrimSpace(r.MerchantID) == "" {
+		return errors.New("baofu share response merId is required")
+	}
+	if strings.TrimSpace(r.TerminalID) == "" {
+		return errors.New("baofu share response terId is required")
+	}
+	if err := validateBusinessResultCode("baofu share response", r.ResultCode); err != nil {
+		return err
+	}
+	if strings.TrimSpace(r.TxnState) == "" {
+		return errors.New("baofu share response txnState is required")
+	}
+	if !IsSupportedShareState(r.TxnState) {
+		return errors.New("baofu share response txnState is unsupported")
+	}
+	return nil
 }
 
 type ShareQueryRequest struct {
@@ -651,6 +729,38 @@ type RefundFact struct {
 	Raw              json.RawMessage
 }
 
+func (r RefundResult) ValidateOrderRefundResponse() error {
+	if strings.TrimSpace(r.OutTradeNo) == "" {
+		return errors.New("baofu refund response outTradeNo is required")
+	}
+	if strings.TrimSpace(r.TradeNo) == "" {
+		return errors.New("baofu refund response tradeNo is required")
+	}
+	if r.RefundAmountFen <= 0 {
+		return errors.New("baofu refund response refundAmt must be positive")
+	}
+	if r.TotalAmountFen < r.RefundAmountFen {
+		return errors.New("baofu refund response totalAmt must be greater than or equal to refundAmt")
+	}
+	if err := validateBusinessResultCode("baofu refund response", r.ResultCode); err != nil {
+		return err
+	}
+	if err := validateOptionalRefundState("baofu refund response", r.RefundState); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r RefundResult) ValidateRefundQueryResponse() error {
+	if err := validateBusinessResultCode("baofu refund query response", r.ResultCode); err != nil {
+		return err
+	}
+	if err := validateOptionalRefundState("baofu refund query response", r.RefundState); err != nil {
+		return err
+	}
+	return nil
+}
+
 func NormalizeRefundTerminalStatus(upstreamState string) string {
 	switch strings.TrimSpace(upstreamState) {
 	case RefundStateSuccess:
@@ -673,6 +783,16 @@ func IsSupportedRefundState(upstreamState string) bool {
 	default:
 		return false
 	}
+}
+
+func validateOptionalRefundState(prefix string, state string) error {
+	if strings.TrimSpace(state) == "" {
+		return nil
+	}
+	if !IsSupportedRefundState(state) {
+		return errors.New(prefix + " refundState is unsupported")
+	}
+	return nil
 }
 
 type OrderCloseRequest struct {
@@ -708,4 +828,39 @@ type OrderCloseResult struct {
 	ErrorCode       string          `json:"errCode,omitempty"`
 	ErrorMessage    string          `json:"errMsg,omitempty"`
 	Raw             json.RawMessage `json:"-"`
+}
+
+func (r OrderCloseResult) ValidateOrderCloseResponse() error {
+	if strings.TrimSpace(r.MerchantID) == "" {
+		return errors.New("baofu order close response merId is required")
+	}
+	if strings.TrimSpace(r.TerminalID) == "" {
+		return errors.New("baofu order close response terId is required")
+	}
+	return validateBusinessResultCode("baofu order close response", r.ResultCode)
+}
+
+func validateBusinessResultCode(prefix string, resultCode string) error {
+	switch strings.ToUpper(strings.TrimSpace(resultCode)) {
+	case BusinessResultCodeSuccess, BusinessResultCodeFail:
+		return nil
+	case "":
+		return errors.New(prefix + " resultCode is required")
+	default:
+		return errors.New(prefix + " resultCode is unsupported")
+	}
+}
+
+func validateResponsePayCode(prefix string, payCode string, required bool) error {
+	trimmed := strings.TrimSpace(payCode)
+	if trimmed == "" {
+		if required {
+			return errors.New(prefix + " payCode is required")
+		}
+		return nil
+	}
+	if trimmed != PayCodeWechatJSAPI {
+		return errors.New(prefix + " payCode is unsupported")
+	}
+	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/url"
 	"strings"
+	"time"
 )
 
 const OfficialWithdrawVersion = "4.2.0"
@@ -59,6 +60,9 @@ func (r OfficialWithdrawQueryRequest) Validate() error {
 	}
 	if strings.TrimSpace(r.TradeTime) == "" {
 		return errors.New("baofu withdraw query tradeTime is required")
+	}
+	if _, err := time.Parse("2006-01-02", strings.TrimSpace(r.TradeTime)); err != nil {
+		return errors.New("baofu withdraw query tradeTime must use yyyy-MM-dd")
 	}
 	return nil
 }

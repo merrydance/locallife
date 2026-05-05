@@ -263,10 +263,6 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		baofuAccountNotificationParser = baofuaccountnotification.NewParser(baofuRootClient.Config().BaofuPublicKeyPEM)
 		baofuPaymentNotificationParser = baofuaggregatenotification.NewParserWithPublicKey(baofuRootClient.Config().BaofuPublicKeyPEM)
 	}
-	if baofuPaymentNotificationParser == nil {
-		baofuPaymentNotificationParser = baofuaggregatenotification.NewParser()
-	}
-
 	// 创建 LBS 地图客户端（统一使用腾讯地图）
 	var mapClient maps.TencentMapClientInterface
 	if config.TencentMapKey != "" {

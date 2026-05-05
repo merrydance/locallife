@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
-	"time"
 
 	"github.com/merrydance/locallife/baofu"
 	"github.com/merrydance/locallife/baofu/account/contracts"
@@ -112,14 +111,10 @@ func (c *Client) QueryWithdraw(ctx context.Context, req contracts.WithdrawQueryR
 	if c == nil || c.root == nil {
 		return nil, errors.New("baofu account client is not configured")
 	}
-	tradeTime := strings.TrimSpace(req.TradeTime)
-	if tradeTime == "" {
-		tradeTime = time.Now().Format("2006-01-02")
-	}
 	officialReq := contracts.OfficialWithdrawQueryRequest{
 		Version:       contracts.OfficialWithdrawVersion,
 		TransSerialNo: strings.TrimSpace(req.TransSerialNo),
-		TradeTime:     tradeTime,
+		TradeTime:     strings.TrimSpace(req.TradeTime),
 	}
 	if err := officialReq.Validate(); err != nil {
 		return nil, err
@@ -135,14 +130,14 @@ func (c *Client) merchantID(value string) string {
 	if strings.TrimSpace(value) != "" {
 		return strings.TrimSpace(value)
 	}
-	return c.root.Config().CollectMerchantID
+	return c.root.Config().PayoutMerchantID
 }
 
 func (c *Client) terminalID(value string) string {
 	if strings.TrimSpace(value) != "" {
 		return strings.TrimSpace(value)
 	}
-	return c.root.Config().CollectTerminalID
+	return c.root.Config().PayoutTerminalID
 }
 
 func (c *Client) accountOpenNotifyURL() string {

@@ -274,6 +274,41 @@ func TestBaofuProfitSharingServiceRecordShareFactCreatesApplicationForTerminalSh
 	require.Equal(t, int64(3001), store.lastApplication.BusinessObjectID)
 }
 
+func TestBaofuProfitSharingServiceRecordShareFactFallsBackToV2ShareableAmount(t *testing.T) {
+	store := &fakeBaofuProfitSharingFactStore{}
+	service := NewBaofuProfitSharingService(store)
+	now := time.Date(2026, 5, 5, 12, 30, 0, 0, time.UTC)
+
+	_, err := service.RecordShareFact(context.Background(), RecordBaofuShareFactInput{
+		ProfitSharingOrder: db.ProfitSharingOrder{
+			ID:                     3002,
+			OutOrderNo:             "BFSHARE202605050001",
+			PaymentOrderID:         9002,
+			MerchantAmount:         8970,
+			RiderAmount:            500,
+			OperatorCommission:     280,
+			PlatformCommission:     190,
+			PlatformReceiverAmount: 220,
+			CalculationVersion:     BaofuSettlementCalculationVersionV2,
+		},
+		Fact: aggregatecontracts.ShareFact{
+			OutTradeNo:       "BFSHARE202605050001",
+			TradeNo:          "BFSHAREUP202605050001",
+			TransactionState: aggregatecontracts.ShareStateSuccess,
+			Raw:              []byte(`{"txnState":"SUCCESS"}`),
+		},
+		FactSource:      db.ExternalPaymentFactSourceCallback,
+		SourceEventID:   "BFSN202605050001",
+		SourceEventType: "SHARING",
+		OccurredAt:      now,
+		ObservedAt:      now,
+	})
+
+	require.NoError(t, err)
+	require.True(t, store.lastFact.Amount.Valid)
+	require.Equal(t, int64(9970), store.lastFact.Amount.Int64)
+}
+
 type fakeBaofuProfitSharingFactStore struct {
 	fakeBaofuProfitSharingReceiverStore
 	lastFact        db.CreateExternalPaymentFactParams

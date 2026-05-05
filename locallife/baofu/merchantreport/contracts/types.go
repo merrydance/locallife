@@ -88,6 +88,33 @@ func (r MerchantReportResult) Normalized() MerchantReportResult {
 	return r
 }
 
+func (r MerchantReportResult) ValidateMerchantReportResponse() error {
+	return r.validateMerchantReportResponse()
+}
+
+func (r MerchantReportResult) ValidateMerchantReportQueryResponse() error {
+	return r.validateMerchantReportResponse()
+}
+
+func (r MerchantReportResult) validateMerchantReportResponse() error {
+	if strings.TrimSpace(r.MerchantID) == "" {
+		return errors.New("baofu merchant report response merId is required")
+	}
+	if strings.TrimSpace(r.TerminalID) == "" {
+		return errors.New("baofu merchant report response terId is required")
+	}
+	if strings.TrimSpace(r.ReportType) == "" {
+		return errors.New("baofu merchant report response reportType is required")
+	}
+	if !IsValidReportType(r.ReportType) {
+		return errors.New("baofu merchant report response reportType is unsupported")
+	}
+	if strings.TrimSpace(r.ReportNo) == "" {
+		return errors.New("baofu merchant report response reportNo is required")
+	}
+	return validateBusinessResultCode("baofu merchant report response", r.ResultCode)
+}
+
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
 		if trimmed := strings.TrimSpace(value); trimmed != "" {
@@ -151,6 +178,16 @@ type BindSubConfigResult struct {
 	ErrorCode    string          `json:"errCode,omitempty"`
 	ErrorMessage string          `json:"errMsg,omitempty"`
 	Raw          json.RawMessage `json:"-"`
+}
+
+func (r BindSubConfigResult) ValidateBindSubConfigResponse() error {
+	if strings.TrimSpace(r.MerchantID) == "" {
+		return errors.New("baofu bind_sub_config response merId is required")
+	}
+	if strings.TrimSpace(r.TerminalID) == "" {
+		return errors.New("baofu bind_sub_config response terId is required")
+	}
+	return validateBusinessResultCode("baofu bind_sub_config response", r.ResultCode)
 }
 
 func (r WechatMerchantReportRequest) Validate() error {
@@ -276,4 +313,15 @@ func validateMerchantTerminal(merchantID, terminalID, prefix string) error {
 		return errors.New(prefix + " terId is required")
 	}
 	return nil
+}
+
+func validateBusinessResultCode(prefix string, resultCode string) error {
+	switch strings.ToUpper(strings.TrimSpace(resultCode)) {
+	case "SUCCESS", "FAIL":
+		return nil
+	case "":
+		return errors.New(prefix + " resultCode is required")
+	default:
+		return errors.New(prefix + " resultCode is unsupported")
+	}
 }

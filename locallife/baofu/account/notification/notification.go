@@ -73,7 +73,17 @@ func (p *Parser) decodeOfficialDataContent(body []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if dataType := strings.TrimSpace(values.Get("data_type")); dataType != "" && !strings.EqualFold(dataType, "JSON") {
+	if strings.TrimSpace(values.Get("member_id")) == "" {
+		return nil, errors.New("baofu account notification member_id is required")
+	}
+	if strings.TrimSpace(values.Get("terminal_id")) == "" {
+		return nil, errors.New("baofu account notification terminal_id is required")
+	}
+	dataType := strings.TrimSpace(values.Get("data_type"))
+	if dataType == "" {
+		return nil, errors.New("baofu account notification data_type is required")
+	}
+	if !strings.EqualFold(dataType, "JSON") {
 		return nil, errors.New("baofu account notification data_type must be JSON")
 	}
 	dataContent := strings.TrimSpace(values.Get("data_content"))
@@ -120,6 +130,24 @@ func ParseOpenAccountPlaintext(plaintext []byte) (*AccountNotification, error) {
 	if err := json.Unmarshal(plaintext, &payload); err != nil {
 		return nil, err
 	}
+	for _, field := range []struct{ name, value string }{
+		{"member_id", payload.MemberID},
+		{"terminal_id", payload.TerminalID},
+		{"memberType", payload.MemberType},
+		{"state", payload.State},
+		{"transSerialNo", payload.TransSerialNo},
+		{"loginNo", payload.LoginNo},
+		{"customerName", payload.CustomerName},
+		{"contractNo", payload.ContractNo},
+		{"noticeType", payload.NoticeType},
+	} {
+		if strings.TrimSpace(field.value) == "" {
+			return nil, errors.New("baofu open account notification " + field.name + " is required")
+		}
+	}
+	if !isSupportedOpenAccountNotifyState(payload.State) {
+		return nil, errors.New("baofu open account notification state is unsupported")
+	}
 	outRequestNo := strings.TrimSpace(payload.TransSerialNo)
 	openState := contracts.OpenStateFromUpstream(payload.State)
 	occurredAt := time.Now().UTC()
@@ -155,6 +183,24 @@ func ParseWithdrawPlaintext(plaintext []byte) (*WithdrawNotification, error) {
 	if err := json.Unmarshal(plaintext, &payload); err != nil {
 		return nil, err
 	}
+	for _, field := range []struct{ name, value string }{
+		{"contractNo", payload.ContractNo},
+		{"orderId", payload.OrderID},
+		{"transSerialNo", payload.TransSerialNo},
+		{"transMoney", payload.TransMoney},
+		{"transFee", payload.TransFee},
+		{"transferTotalAmount", payload.TransferTotalAmount},
+		{"state", payload.State},
+		{"transRemark", payload.TransRemark},
+		{"reqReserved", payload.RequestReserved},
+	} {
+		if strings.TrimSpace(field.value) == "" {
+			return nil, errors.New("baofu withdraw notification " + field.name + " is required")
+		}
+	}
+	if !isSupportedWithdrawNotifyState(payload.State) {
+		return nil, errors.New("baofu withdraw notification state is unsupported")
+	}
 	amountFen, err := contracts.YuanStringToFen(payload.TransMoney)
 	if err != nil {
 		return nil, err
@@ -189,4 +235,22 @@ func ParseWithdrawPlaintext(plaintext []byte) (*WithdrawNotification, error) {
 
 func AccountNotificationACK() string {
 	return "OK"
+}
+
+func isSupportedOpenAccountNotifyState(state string) bool {
+	switch strings.TrimSpace(state) {
+	case "1", "0", "-1", "2":
+		return true
+	default:
+		return false
+	}
+}
+
+func isSupportedWithdrawNotifyState(state string) bool {
+	switch strings.TrimSpace(state) {
+	case "0", "1", "2", "3":
+		return true
+	default:
+		return false
+	}
 }

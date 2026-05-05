@@ -149,6 +149,25 @@ func TestMerchantReportResultNormalizesSubMchIDFromChannelReturnParam(t *testing
 	require.Equal(t, "1900000111", result.Normalized().SubMchID)
 }
 
+func TestMerchantReportResultsValidateMethodSpecificResponses(t *testing.T) {
+	report := MerchantReportResult{MerchantID: "102004465", TerminalID: "200005200", ReportType: ReportTypeWechat, ReportNo: "MR202605040001", ResultCode: "SUCCESS"}
+	require.NoError(t, report.ValidateMerchantReportResponse())
+	require.NoError(t, report.ValidateMerchantReportQueryResponse())
+
+	report.ReportType = "UNKNOWN"
+	require.EqualError(t, report.ValidateMerchantReportResponse(), "baofu merchant report response reportType is unsupported")
+
+	report.ReportType = ReportTypeWechat
+	report.ReportNo = ""
+	require.EqualError(t, report.ValidateMerchantReportQueryResponse(), "baofu merchant report response reportNo is required")
+
+	bind := BindSubConfigResult{MerchantID: "102004465", TerminalID: "200005200", ResultCode: "SUCCESS"}
+	require.NoError(t, bind.ValidateBindSubConfigResponse())
+
+	bind.TerminalID = ""
+	require.EqualError(t, bind.ValidateBindSubConfigResponse(), "baofu bind_sub_config response terId is required")
+}
+
 func validWechatMerchantReportRequestForTest() WechatMerchantReportRequest {
 	return WechatMerchantReportRequest{
 		MerchantID:    "100000",

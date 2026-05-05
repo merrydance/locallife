@@ -137,6 +137,44 @@ func TestAccountClientOpenAccountUsesConfiguredNotifyBaseURL(t *testing.T) {
 	require.NotContains(t, string(env.Body), "placeholder.local")
 }
 
+func TestAccountClientOpenAndQueryAccountDefaultToPayoutIdentity(t *testing.T) {
+	openDoer := &accountRecordingDoer{responseBody: map[string]any{"retCode": "1", "transSerialNo": "OPEN202605040001", "contractNo": "CM202605040001", "state": "2"}}
+	openClient := NewClient(testBaofuRootClient(t, openDoer))
+
+	_, err := openClient.OpenAccount(context.Background(), contracts.OpenAccountRequest{
+		AccountType:   "personal",
+		OutRequestNo:  "OPEN202605040001",
+		LegalName:     "测试用户",
+		CertificateNo: "110101199001010011",
+		BankAccountNo: "6222020202020202020",
+		BankMobile:    "13800138000",
+	})
+
+	require.NoError(t, err)
+	openQuery := openDoer.request.URL.Query()
+	require.Equal(t, "102004466", openQuery.Get("memberId"))
+	require.Equal(t, "200005201", openQuery.Get("terminalId"))
+	openEnv := accountRequestEnvelopeForTest(t, openDoer)
+	require.Equal(t, "102004466", openEnv.Header.MemberID)
+	require.Equal(t, "200005201", openEnv.Header.TerminalID)
+
+	queryDoer := &accountRecordingDoer{responseBody: map[string]any{"retCode": 1, "result": []map[string]any{{"transSerialNo": "OPEN202605040001", "contractNo": "CM202605040001", "state": 1}}}}
+	queryClient := NewClient(testBaofuRootClient(t, queryDoer))
+
+	_, err = queryClient.QueryAccount(context.Background(), contracts.QueryAccountRequest{
+		ContractNo:  "CM202605040001",
+		AccountType: "personal",
+	})
+
+	require.NoError(t, err)
+	queryValues := queryDoer.request.URL.Query()
+	require.Equal(t, "102004466", queryValues.Get("memberId"))
+	require.Equal(t, "200005201", queryValues.Get("terminalId"))
+	queryEnv := accountRequestEnvelopeForTest(t, queryDoer)
+	require.Equal(t, "102004466", queryEnv.Header.MemberID)
+	require.Equal(t, "200005201", queryEnv.Header.TerminalID)
+}
+
 func TestAccountClientOpenAccountRejectsPersonalTwoFactorBeforeHTTP(t *testing.T) {
 	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": "1"}}
 	client := NewClient(testBaofuRootClient(t, doer))
@@ -371,6 +409,20 @@ func TestAccountClientQueryWithdrawSendsOfficialTradeTimeAndParsesAmounts(t *tes
 	env := accountRequestEnvelopeForTest(t, doer)
 	require.Equal(t, "T-1001-013-15", env.Header.ServiceType)
 	require.JSONEq(t, `{"version":"4.2.0","transSerialNo":"WD202605050001","tradeTime":"2026-05-05"}`, partialJSONForAccountTest(t, env.Body, "version", "transSerialNo", "tradeTime"))
+}
+
+func TestAccountClientQueryWithdrawRejectsMissingTradeTimeBeforeHTTP(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": 1}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.QueryWithdraw(context.Background(), contracts.WithdrawQueryRequest{
+		MerchantID:    "102004466",
+		TerminalID:    "200005201",
+		TransSerialNo: "WD202605050001",
+	})
+
+	require.EqualError(t, err, "baofu withdraw query tradeTime is required")
+	require.Nil(t, doer.request)
 }
 
 func TestAccountClientQueryBalanceUsesPersonalAccountType(t *testing.T) {

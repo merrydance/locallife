@@ -41,6 +41,9 @@ func (c *HTTPClient) CreateUnifiedOrder(ctx context.Context, req contracts.Unifi
 	if err := c.root.PostAggregatePay(ctx, "unified_order", req, &result); err != nil {
 		return nil, err
 	}
+	if err := result.ValidateUnifiedOrderResponse(); err != nil {
+		return nil, err
+	}
 	return &result, nil
 }
 
@@ -53,6 +56,9 @@ func (c *HTTPClient) QueryPayment(ctx context.Context, req contracts.PaymentQuer
 	}
 	var result contracts.UnifiedOrderResult
 	if err := c.root.PostAggregatePay(ctx, "order_query", req, &result); err != nil {
+		return nil, err
+	}
+	if err := result.ValidateOrderQueryResponse(); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -69,6 +75,9 @@ func (c *HTTPClient) CreateProfitSharing(ctx context.Context, req contracts.Shar
 	if err := c.root.PostAggregatePay(ctx, "share_after_pay", req, &result); err != nil {
 		return nil, err
 	}
+	if err := result.ValidateShareAfterPayResponse(); err != nil {
+		return nil, err
+	}
 	return &result, nil
 }
 
@@ -81,6 +90,9 @@ func (c *HTTPClient) QueryProfitSharing(ctx context.Context, req contracts.Share
 	}
 	var result contracts.ShareResult
 	if err := c.root.PostAggregatePay(ctx, "share_query", req, &result); err != nil {
+		return nil, err
+	}
+	if err := result.ValidateShareQueryResponse(); err != nil {
 		return nil, err
 	}
 	return &result, nil
@@ -97,6 +109,9 @@ func (c *HTTPClient) CreateRefund(ctx context.Context, req contracts.RefundBefor
 	if err := c.root.PostAggregatePay(ctx, "order_refund", req, &result); err != nil {
 		return nil, err
 	}
+	if err := result.ValidateOrderRefundResponse(); err != nil {
+		return nil, err
+	}
 	return &result, nil
 }
 
@@ -111,6 +126,9 @@ func (c *HTTPClient) QueryRefund(ctx context.Context, req contracts.RefundQueryR
 	if err := c.root.PostAggregatePay(ctx, "refund_query", req, &result); err != nil {
 		return nil, err
 	}
+	if err := result.ValidateRefundQueryResponse(); err != nil {
+		return nil, err
+	}
 	return &result, nil
 }
 
@@ -123,6 +141,9 @@ func (c *HTTPClient) CloseOrder(ctx context.Context, req contracts.OrderCloseReq
 	}
 	var result contracts.OrderCloseResult
 	if err := c.root.PostAggregatePay(ctx, "order_close", req, &result); err != nil {
+		return nil, err
+	}
+	if err := result.ValidateOrderCloseResponse(); err != nil {
 		return nil, err
 	}
 	return &result, nil

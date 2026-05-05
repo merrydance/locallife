@@ -48,7 +48,7 @@ func TestParserParsesOfficialWithdrawNotification(t *testing.T) {
 
 func TestParserDoesNotFallbackSharingMerIDFromContractNo(t *testing.T) {
 	privatePEM, publicPEM := generateNotificationTestKeyPair(t)
-	body := officialNotificationQueryForTest(t, privatePEM, []byte(`{"transSerialNo":"OPEN_CONTRACT_ONLY","contractNo":"CP_ONLY","state":"1"}`))
+	body := officialNotificationQueryForTest(t, privatePEM, []byte(`{"member_id":"102004465","terminal_id":"200005200","memberType":"2","state":"1","transSerialNo":"OPEN_CONTRACT_ONLY","loginNo":"merchant-login-001","customerName":"商户A","contractNo":"CP_ONLY","noticeType":"OPEN_ACC"}`))
 
 	parser := NewParser(publicPEM)
 	notification, err := parser.ParseOpenAccountNotification(body)
@@ -75,6 +75,32 @@ func TestParserRejectsMissingDataContent(t *testing.T) {
 	require.EqualError(t, err, "baofu account notification data_content is required")
 }
 
+func TestParserRejectsMissingOfficialTransportFields(t *testing.T) {
+	privatePEM, publicPEM := generateNotificationTestKeyPair(t)
+	plaintext := []byte(`{"member_id":"102004465","terminal_id":"200005200","memberType":"2","state":"1","transSerialNo":"OPEN123","loginNo":"merchant-login-001","customerName":"商户A","contractNo":"CM_SHARE_123","noticeType":"OPEN_ACC"}`)
+	content, err := baofu.EncodeUnionGWVerifyType1Content(privatePEM, plaintext)
+	require.NoError(t, err)
+	parser := NewParser(publicPEM)
+
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"missing member", "terminal_id=200005200&data_type=JSON&data_content=" + url.QueryEscape(content), "baofu account notification member_id is required"},
+		{"missing terminal", "member_id=102004465&data_type=JSON&data_content=" + url.QueryEscape(content), "baofu account notification terminal_id is required"},
+		{"missing data type", "member_id=102004465&terminal_id=200005200&data_content=" + url.QueryEscape(content), "baofu account notification data_type is required"},
+		{"unsupported data type", "member_id=102004465&terminal_id=200005200&data_type=XML&data_content=" + url.QueryEscape(content), "baofu account notification data_type must be JSON"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parser.ParseOpenAccountNotification([]byte(tc.body))
+			require.EqualError(t, err, tc.want)
+		})
+	}
+}
+
 func TestParseOpenAccountPlaintextUsesOfficialFields(t *testing.T) {
 	raw := []byte(`{"member_id":"100000","terminal_id":"200000","memberType":"2","state":"1","errorCode":"","errorMsg":"","transSerialNo":"OPEN202605040001","loginNo":"merchant-login-001","customerName":"商户A","contractNo":"CM202605040001","noticeType":"OPEN_ACC"}`)
 
@@ -87,6 +113,51 @@ func TestParseOpenAccountPlaintextUsesOfficialFields(t *testing.T) {
 	require.Equal(t, contracts.OpenStateActive, notification.OpenState)
 	require.Empty(t, notification.SharingMerID)
 	require.JSONEq(t, string(raw), string(notification.Raw))
+}
+
+func TestParseOpenAccountPlaintextRejectsMissingMandatoryFieldsAndUnsupportedState(t *testing.T) {
+	base := map[string]string{
+		"member_id":     "102004465",
+		"terminal_id":   "200005200",
+		"memberType":    "2",
+		"state":         "1",
+		"transSerialNo": "OPEN202605040001",
+		"loginNo":       "merchant-login-001",
+		"customerName":  "商户A",
+		"contractNo":    "CM202605040001",
+		"noticeType":    "OPEN_ACC",
+	}
+	cases := []struct {
+		name   string
+		mutate func(map[string]string)
+		want   string
+	}{
+		{"missing member", func(p map[string]string) { delete(p, "member_id") }, "baofu open account notification member_id is required"},
+		{"missing terminal", func(p map[string]string) { delete(p, "terminal_id") }, "baofu open account notification terminal_id is required"},
+		{"missing member type", func(p map[string]string) { delete(p, "memberType") }, "baofu open account notification memberType is required"},
+		{"missing state", func(p map[string]string) { delete(p, "state") }, "baofu open account notification state is required"},
+		{"unsupported state", func(p map[string]string) { p["state"] = "9" }, "baofu open account notification state is unsupported"},
+		{"missing trans serial", func(p map[string]string) { delete(p, "transSerialNo") }, "baofu open account notification transSerialNo is required"},
+		{"missing login", func(p map[string]string) { delete(p, "loginNo") }, "baofu open account notification loginNo is required"},
+		{"missing customer name", func(p map[string]string) { delete(p, "customerName") }, "baofu open account notification customerName is required"},
+		{"missing contract", func(p map[string]string) { delete(p, "contractNo") }, "baofu open account notification contractNo is required"},
+		{"missing notice type", func(p map[string]string) { delete(p, "noticeType") }, "baofu open account notification noticeType is required"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := make(map[string]string, len(base))
+			for k, v := range base {
+				payload[k] = v
+			}
+			tc.mutate(payload)
+			raw, err := json.Marshal(payload)
+			require.NoError(t, err)
+
+			_, err = ParseOpenAccountPlaintext(raw)
+			require.EqualError(t, err, tc.want)
+		})
+	}
 }
 
 func TestParseWithdrawPlaintextUsesOfficialFields(t *testing.T) {
@@ -103,6 +174,51 @@ func TestParseWithdrawPlaintextUsesOfficialFields(t *testing.T) {
 	require.Equal(t, int64(12345), notification.AmountFen)
 	require.Equal(t, int64(100), notification.FeeFen)
 	require.Equal(t, int64(12445), notification.TotalAmountFen)
+}
+
+func TestParseWithdrawPlaintextRejectsMissingMandatoryFieldsAndUnsupportedState(t *testing.T) {
+	base := map[string]string{
+		"contractNo":          "CM202605040001",
+		"orderId":             "WD_UP_001",
+		"transSerialNo":       "WD202605040001",
+		"transMoney":          "123.45",
+		"transFee":            "1.00",
+		"transferTotalAmount": "124.45",
+		"state":               "3",
+		"transRemark":         "提现退回",
+		"reqReserved":         "withdraw-001",
+	}
+	cases := []struct {
+		name   string
+		mutate func(map[string]string)
+		want   string
+	}{
+		{"missing contract", func(p map[string]string) { delete(p, "contractNo") }, "baofu withdraw notification contractNo is required"},
+		{"missing order id", func(p map[string]string) { delete(p, "orderId") }, "baofu withdraw notification orderId is required"},
+		{"missing trans serial", func(p map[string]string) { delete(p, "transSerialNo") }, "baofu withdraw notification transSerialNo is required"},
+		{"missing trans money", func(p map[string]string) { delete(p, "transMoney") }, "baofu withdraw notification transMoney is required"},
+		{"missing trans fee", func(p map[string]string) { delete(p, "transFee") }, "baofu withdraw notification transFee is required"},
+		{"missing total amount", func(p map[string]string) { delete(p, "transferTotalAmount") }, "baofu withdraw notification transferTotalAmount is required"},
+		{"missing state", func(p map[string]string) { delete(p, "state") }, "baofu withdraw notification state is required"},
+		{"unsupported state", func(p map[string]string) { p["state"] = "9" }, "baofu withdraw notification state is unsupported"},
+		{"missing remark", func(p map[string]string) { delete(p, "transRemark") }, "baofu withdraw notification transRemark is required"},
+		{"missing reserved", func(p map[string]string) { delete(p, "reqReserved") }, "baofu withdraw notification reqReserved is required"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := make(map[string]string, len(base))
+			for k, v := range base {
+				payload[k] = v
+			}
+			tc.mutate(payload)
+			raw, err := json.Marshal(payload)
+			require.NoError(t, err)
+
+			_, err = ParseWithdrawPlaintext(raw)
+			require.EqualError(t, err, tc.want)
+		})
+	}
 }
 
 func TestAccountNotificationACKIsPlainOK(t *testing.T) {

@@ -183,6 +183,20 @@ func TestUnifiedOrderResultCoversOfficialOrderQueryFields(t *testing.T) {
 	require.Equal(t, "sub-openid-001", result.ChannelReturn.SubOpenID)
 }
 
+func TestUnifiedOrderResultValidatesMethodSpecificResponses(t *testing.T) {
+	unified := UnifiedOrderResult{MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "BF202605040001", ResultCode: BusinessResultCodeSuccess, PayCode: PayCodeWechatJSAPI, TxnState: PaymentStateWaitPaying}
+	require.NoError(t, unified.ValidateUnifiedOrderResponse())
+
+	unified.PayCode = "WECHAT_NATIVE"
+	require.EqualError(t, unified.ValidateUnifiedOrderResponse(), "baofu unified order response payCode is unsupported")
+
+	unified = UnifiedOrderResult{MerchantID: "102004465", TerminalID: "200005200", ResultCode: BusinessResultCodeSuccess, TxnState: PaymentStateSuccess, PayCode: PayCodeWechatJSAPI}
+	require.NoError(t, unified.ValidateOrderQueryResponse())
+
+	unified.TxnState = "UNKNOWN"
+	require.EqualError(t, unified.ValidateOrderQueryResponse(), "baofu order query response txnState is unsupported")
+}
+
 func TestNormalizePaymentTerminalStatus(t *testing.T) {
 	require.Equal(t, db.ExternalPaymentTerminalStatusProcessing, NormalizePaymentTerminalStatus("WAIT_PAYING"))
 	require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, NormalizePaymentTerminalStatus("SUCCESS"))
@@ -280,6 +294,18 @@ func TestShareResultCoversOfficialAgentFields(t *testing.T) {
 	require.Equal(t, int64(100), result.SuccessAmountFen)
 }
 
+func TestShareResultValidatesMethodSpecificResponses(t *testing.T) {
+	result := ShareResult{MerchantID: "102004465", TerminalID: "200005200", ResultCode: BusinessResultCodeSuccess, TxnState: ShareStateProcessing}
+	require.NoError(t, result.ValidateShareAfterPayResponse())
+	require.NoError(t, result.ValidateShareQueryResponse())
+
+	result.TxnState = ""
+	require.EqualError(t, result.ValidateShareAfterPayResponse(), "baofu share response txnState is required")
+
+	result.TxnState = "UNKNOWN"
+	require.EqualError(t, result.ValidateShareQueryResponse(), "baofu share response txnState is unsupported")
+}
+
 func TestRefundBeforeShareRequestRejectsPostShareFields(t *testing.T) {
 	req := validBaofuRefundBeforeShareRequestForTest()
 	req.SharingRefundInfo = []SharingRefundDetail{{SharingMerID: "CM1", SharingAmountFen: 100}}
@@ -328,6 +354,24 @@ func TestRefundQueryRequiresRefundReference(t *testing.T) {
 
 	req.OutTradeNo = "RF202605040001"
 	require.NoError(t, req.Validate())
+}
+
+func TestRefundAndCloseResultsValidateMethodSpecificResponses(t *testing.T) {
+	refund := RefundResult{OutTradeNo: "RF202605040001", TradeNo: "BFREFUND202605040001", RefundAmountFen: 300, TotalAmountFen: 300, ResultCode: BusinessResultCodeSuccess, RefundState: RefundStateAccepted}
+	require.NoError(t, refund.ValidateOrderRefundResponse())
+	require.NoError(t, refund.ValidateRefundQueryResponse())
+
+	refund.TradeNo = ""
+	require.EqualError(t, refund.ValidateOrderRefundResponse(), "baofu refund response tradeNo is required")
+
+	refund = RefundResult{ResultCode: BusinessResultCodeSuccess, RefundState: "UNKNOWN"}
+	require.EqualError(t, refund.ValidateRefundQueryResponse(), "baofu refund query response refundState is unsupported")
+
+	closeResult := OrderCloseResult{MerchantID: "102004465", TerminalID: "200005200", ResultCode: BusinessResultCodeSuccess}
+	require.NoError(t, closeResult.ValidateOrderCloseResponse())
+
+	closeResult.MerchantID = ""
+	require.EqualError(t, closeResult.ValidateOrderCloseResponse(), "baofu order close response merId is required")
 }
 
 func TestNormalizeRefundTerminalStatus(t *testing.T) {

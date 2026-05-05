@@ -21,7 +21,7 @@ import (
 )
 
 func TestAggregateClientCreateUnifiedOrderPostsPublicEnvelope(t *testing.T) {
-	doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","outTradeNo":"BF202605040001","txnState":"WAIT_PAYING","tradeNo":"BFPAY202605040001","chlRetParam":{"wc_pay_data":{"timeStamp":"1767225600","nonceStr":"nonce","package":"prepay_id=wx","signType":"RSA","paySign":"sign"}}}`)}
+	doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","outTradeNo":"BF202605040001","txnState":"WAIT_PAYING","tradeNo":"BFPAY202605040001","payCode":"WECHAT_JSAPI","chlRetParam":{"wc_pay_data":{"timeStamp":"1767225600","nonceStr":"nonce","package":"prepay_id=wx","signType":"RSA","paySign":"sign"}}}`)}
 	client := NewClient(testBaofuRootClient(t, doer))
 
 	result, err := client.CreateUnifiedOrder(context.Background(), validUnifiedOrderRequestForClientTest())
@@ -54,7 +54,7 @@ func TestAggregateClientProductionRequiresUnifiedOrderSubMchID(t *testing.T) {
 }
 
 func TestAggregateClientProductionKeepsUnifiedOrderSubMchID(t *testing.T) {
-	doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","tradeNo":"BFPAY202605040002"}`)}
+	doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","outTradeNo":"BF202605040001","tradeNo":"BFPAY202605040002","txnState":"WAIT_PAYING","payCode":"WECHAT_JSAPI"}`)}
 	client := NewClient(testBaofuRootClientWithEnvironment(t, doer, baofu.BaofuEnvironmentProduction))
 
 	_, err := client.CreateUnifiedOrder(context.Background(), validUnifiedOrderRequestForClientTest())
@@ -165,6 +165,56 @@ func TestAggregateClientClassifiesBusinessPayloadUnmarshalFailure(t *testing.T) 
 	require.Contains(t, errors.Unwrap(providerErr).Error(), "json")
 }
 
+func TestAggregateClientRejectsSignedEnvelopeIdentityMismatch(t *testing.T) {
+	doer := &aggregateRecordingDoer{
+		responseMerchantID:  "102004999",
+		responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","outTradeNo":"BF202605040001","payCode":"WECHAT_JSAPI","txnState":"WAIT_PAYING"}`),
+	}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.CreateUnifiedOrder(context.Background(), validUnifiedOrderRequestForClientTest())
+
+	require.Error(t, err)
+	var providerErr *baofu.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, baofu.PublicEnvelopeReturnCodeSuccess, providerErr.UpstreamCode)
+	require.Contains(t, errors.Unwrap(providerErr).Error(), "response merId")
+}
+
+func TestAggregateClientRunsMethodSpecificResponseValidation(t *testing.T) {
+	t.Run("unified order missing payCode", func(t *testing.T) {
+		doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","outTradeNo":"BF202605040001","txnState":"WAIT_PAYING"}`)}
+		client := NewClient(testBaofuRootClient(t, doer))
+
+		_, err := client.CreateUnifiedOrder(context.Background(), validUnifiedOrderRequestForClientTest())
+		require.EqualError(t, err, "baofu unified order response payCode is required")
+	})
+
+	t.Run("share missing txnState", func(t *testing.T) {
+		doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","outTradeNo":"BFSHARE202605040001"}`)}
+		client := NewClient(testBaofuRootClient(t, doer))
+
+		_, err := client.CreateProfitSharing(context.Background(), validShareAfterPayRequestForClientTest())
+		require.EqualError(t, err, "baofu share response txnState is required")
+	})
+
+	t.Run("refund missing tradeNo", func(t *testing.T) {
+		doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","outTradeNo":"RF202605040001","refundAmt":300,"totalAmt":300}`)}
+		client := NewClient(testBaofuRootClient(t, doer))
+
+		_, err := client.CreateRefund(context.Background(), validRefundBeforeShareRequestForClientTest())
+		require.EqualError(t, err, "baofu refund response tradeNo is required")
+	})
+
+	t.Run("close missing merId", func(t *testing.T) {
+		doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","terId":"200005200","outTradeNo":"BF202605040001"}`)}
+		client := NewClient(testBaofuRootClient(t, doer))
+
+		_, err := client.CloseOrder(context.Background(), contracts.OrderCloseRequest{MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "BF202605040001"})
+		require.EqualError(t, err, "baofu order close response merId is required")
+	})
+}
+
 func validUnifiedOrderRequestForClientTest() contracts.UnifiedOrderRequest {
 	return contracts.NewWechatJSAPISharingUnifiedOrderRequest(contracts.UnifiedOrderInput{
 		MerchantID: "102004465",
@@ -186,6 +236,8 @@ type aggregateRecordingDoer struct {
 	request             *http.Request
 	requestBody         []byte
 	statusCode          int
+	responseMerchantID  string
+	responseTerminalID  string
 	responseDataContent json.RawMessage
 	responseBody        []byte
 	baofuPrivatePEM     string
@@ -209,10 +261,18 @@ func (d *aggregateRecordingDoer) Do(req *http.Request) (*http.Response, error) {
 		if err != nil {
 			return nil, err
 		}
+		responseMerchantID := d.responseMerchantID
+		if responseMerchantID == "" {
+			responseMerchantID = reqEnv.MerchantID
+		}
+		responseTerminalID := d.responseTerminalID
+		if responseTerminalID == "" {
+			responseTerminalID = reqEnv.TerminalID
+		}
 		responseBody, _ = json.Marshal(baofu.PublicResponseEnvelope{
 			ReturnCode:         baofu.PublicEnvelopeReturnCodeSuccess,
-			MerchantID:         reqEnv.MerchantID,
-			TerminalID:         reqEnv.TerminalID,
+			MerchantID:         responseMerchantID,
+			TerminalID:         responseTerminalID,
 			Charset:            baofu.PublicEnvelopeCharsetUTF8,
 			Version:            baofu.PublicEnvelopeVersion10,
 			Format:             baofu.PublicEnvelopeFormatJSON,
@@ -303,7 +363,7 @@ func TestAggregateClientQueryRefundAndCloseOrderPostPublicEnvelope(t *testing.T)
 	env := publicEnvelopeFromFormForTest(t, doer.requestBody)
 	require.Equal(t, "refund_query", env.Method)
 
-	doer.responseDataContent = json.RawMessage(`{"resultCode":"SUCCESS","outTradeNo":"BF202605040001"}`)
+	doer.responseDataContent = json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","outTradeNo":"BF202605040001"}`)
 	_, err = client.CloseOrder(context.Background(), contracts.OrderCloseRequest{MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "BF202605040001"})
 	require.NoError(t, err)
 	env = publicEnvelopeFromFormForTest(t, doer.requestBody)
@@ -345,5 +405,17 @@ func validRefundBeforeShareRequestForClientTest() contracts.RefundBeforeShareReq
 		TotalAmountFen:   300,
 		TransactionTime:  "20260504120500",
 		RefundReason:     "用户申请退款",
+	}
+}
+
+func validShareAfterPayRequestForClientTest() contracts.ShareAfterPayRequest {
+	return contracts.ShareAfterPayRequest{
+		MerchantID:       "102004465",
+		TerminalID:       "200005200",
+		OriginOutTradeNo: "BF202605040001",
+		OutTradeNo:       "BFSHARE202605040001",
+		TxnTime:          "20260504120600",
+		NotifyURL:        "https://api.example.com/v1/webhooks/baofu/share",
+		SharingDetails:   []contracts.SharingDetail{{SharingMerID: "CM202605040001", SharingAmountFen: 300}},
 	}
 }

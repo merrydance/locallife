@@ -341,7 +341,7 @@ func TestBaofuShareCallbackQueriesBaofooWhenOutTradeNoMissing(t *testing.T) {
 	require.Equal(t, []int64{803}, taskRecorder.applicationIDs)
 }
 
-func TestBaofuShareCallbackUsesDefaultParser(t *testing.T) {
+func TestBaofuShareCallbackRejectsWhenSignedParserNotConfigured(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	store := mockdb.NewMockStore(ctrl)
@@ -349,28 +349,12 @@ func TestBaofuShareCallbackUsesDefaultParser(t *testing.T) {
 	taskRecorder := &refundFactApplicationEnqueueRecorder{}
 	server.taskDistributor = taskRecorder
 
-	profitSharingOrder := db.ProfitSharingOrder{ID: 3002, OutOrderNo: "BFSHARE_3002", Status: db.ProfitSharingOrderStatusProcessing}
-	store.EXPECT().GetProfitSharingOrderByOutOrderNo(gomock.Any(), "BFSHARE_3002").Return(profitSharingOrder, nil)
-	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
-		require.Equal(t, "BFSHARE_3002", arg.ExternalObjectKey)
-		require.Equal(t, "BFSHARE_UP_3002", arg.ExternalSecondaryKey.String)
-		require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
-		return db.ExternalPaymentFact{ID: 702, IsTerminal: true}, nil
-	})
-	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), gomock.Any()).Return(db.ExternalPaymentFactApplication{
-		ID:                 802,
-		FactID:             702,
-		Consumer:           paymentFactConsumerProfitSharingDomain,
-		BusinessObjectType: paymentFactBusinessObjectProfitSharingOrder,
-		BusinessObjectID:   profitSharingOrder.ID,
-	}, nil)
-
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/share", bytes.NewBufferString(`{"notifyId":"BFSN_3002","notifyType":"SHARING","outTradeNo":"BFSHARE_3002","tradeNo":"BFSHARE_UP_3002","txnState":"SUCCESS","resultCode":"SUCCESS","succAmt":9470}`))
 	server.router.ServeHTTP(recorder, request)
 
-	require.Equal(t, http.StatusOK, recorder.Code)
-	require.Equal(t, []int64{802}, taskRecorder.applicationIDs)
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	require.Empty(t, taskRecorder.applicationIDs)
 }
 
 func TestBaofuRefundCallbackPersistsFactAndEnqueuesApplication(t *testing.T) {
