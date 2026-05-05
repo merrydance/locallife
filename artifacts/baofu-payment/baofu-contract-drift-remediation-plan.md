@@ -1915,17 +1915,9 @@ The probe covers safe independent calls that are not blocked by real unified ord
 
 Docs now state that sandbox unified order cannot prove a real payment or produce reliable `wc_pay_data`/callback evidence. Sandbox can still prove endpoint reachability, envelope shape, environment-specific omission of `subMchId`, parsing, and error classification.
 
-- [ ] **Step 3: Redeploy and run independent probe**
+- [x] **Step 3: Redeploy and run independent probe**
 
-After deploy, run:
-
-```bash
-BAOFU_TEST_CONTRACT_NO='CP610000000000542938' \
-BAOFU_TEST_ACCOUNT_TYPE='personal' \
-PATH="/usr/local/go/bin:$PATH" go run ./cmd/baofu_independent_probe
-```
-
-Do not set `BAOFU_RUN_WITHDRAW=true` unless intentionally testing a real funds action.
+Rerun completed on 2026-05-05 with the opened personal BaoCaiTong account. Results: `account_balance` succeeded with zero balances, fake `share_query` and `refund_query` parsed as `ABNORMAL` transport/query-shape evidence, fake `order_close` returned retryable `SYSTEM_BUSY`, fake `order_refund` and fake `share_after_pay` failed closed with `ORDER_NOT_EXIST`, fake `withdraw_query` returned `BF00069`, and real withdraw remained skipped because `BAOFU_RUN_WITHDRAW` was not set.
 
 ### Task P17: Unified Order Empty `dataContent` Classification And Repo Smoke
 
@@ -1952,9 +1944,9 @@ Added tests proving a public-envelope `returnCode=SUCCESS` with missing `dataCon
 
 Added `go run ./cmd/baofu_unified_order_smoke`. It prints both requested and effective wire `subMchId`; in sandbox the effective value is `omitted_by_client`, matching Baofoo's test-environment rule. Use this instead of the stale `/tmp/baofu_unified_order_smoke.go`.
 
-- [ ] **Step 4: Redeploy and rerun repo smoke**
+- [x] **Step 4: Redeploy and rerun repo smoke**
 
-After deploy, run the repo command. In sandbox, a missing `wc_pay_data` is expected if Baofoo still returns an empty business payload; the important proof is the synthetic upstream code `MISSING_DATA_CONTENT` plus no raw payload leakage.
+Rerun completed on 2026-05-05 using the repo-owned command. It proved sandbox wire `subMchId=omitted_by_client`, then exposed a new business payload detail: Baofoo returned numeric `chlRetParam.order_id`. That spawned Task P19; sandbox still cannot prove real `wc_pay_data`.
 
 ### Task P18: Independent Probe Result Interpretation Fixes
 
@@ -1981,13 +1973,9 @@ Both tests failed before the fix, matching the independent probe output.
 
 `QueryBalance` now backfills the requested contract number for display/downstream result context when the upstream response omits it. Aggregate public business failure detection now fails closed on non-success `errCode` even if `resultCode=SUCCESS`.
 
-- [ ] **Step 3: Redeploy and rerun independent probe**
+- [x] **Step 3: Redeploy and rerun independent probe**
 
-Expected changes after deploy:
-
-- `account_balance` should display `contract=CP61***2938` instead of `contract=-`;
-- fake `order_refund` with `errCode=ORDER_NOT_EXIST` should return provider_error instead of success;
-- fake query endpoints may still return `ABNORMAL` with `resultCode=SUCCESS`, which remains transport/query-shape evidence rather than business success.
+Rerun completed on 2026-05-05. `account_balance` now displays the masked requested contract (`CP61***2938`) with zero balances, and fake `order_refund` now returns provider_error `ORDER_NOT_EXIST` instead of a false success. Fake `share_query`/`refund_query` still parse `ABNORMAL` results, which remains transport/query-shape evidence rather than business success.
 
 ### Task P19: Unified Order Numeric Channel Order ID
 

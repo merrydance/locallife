@@ -121,24 +121,24 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 | --- | --- | --- | --- | --- | --- | --- |
 | 账户开户 | 个人/机构开户 | `T-1001-013-01` | 商户、骑手、运营商、平台二级户开户 | C2/C3：已有官方 `OfficialOpenAccountRequest`、个人二要素/四要素/机构 DTO 与校验；业务抽象仍需完善企业/个体全量资料映射 | C2/C3：有 service command 记录和 concrete client；union-gw envelope 完整性待复核 | 未做 |
 | 账户开户 | 个人开户二要素 | `T-1001-013-01` 变体 | 骑手个人二要素开户候选 | C3：已区分 `OfficialPersonalTwoFactorAccountInfo` 与四要素开户 | C2/C3：client 可组装二要素请求；是否允许生产使用待宝付沙箱回包确认 | 未做 |
-| 账户查询 | 开户查询 | `T-1001-013-03` | 同步 `contractNo`、二级商户号/状态 | C3：已有 `OfficialQueryAccountRequest` 和校验 | C2/C3：已有 concrete client；查询条件仍需按沙箱确认补齐 | 未做 |
+| 账户查询 | 开户查询 | `T-1001-013-03` | 同步 `contractNo`、二级商户号/状态 | C3：已有 `OfficialQueryAccountRequest` 和校验 | C3：concrete client 已按个人/机构 `accType` 查询并归一成功态 | C4：个人四要素开户后查询 active，返回 `contractNo/sharing_mer_id` 脱敏证据 |
 | 开户通知 | 开户结果通知 | 通知 URL | 开户异步结果 | C1：notification parser 有本地测试 | C2：callback 落 fact | 未做 |
-| 余额 | 账户余额查询 | `T-1001-013-06` | 二级户在途/可用/冻结余额 | C3：已有官方余额 DTO 和元/分转换测试 | C3：已有 concrete client 和提现 service 读余额边界 | 未做 |
+| 余额 | 账户余额查询 | `T-1001-013-06` | 二级户在途/可用/冻结余额 | C3：已有官方余额 DTO、可选金额默认值和元/分转换测试 | C3：concrete client 会在上游省略 `contractNo` 时保留请求上下文 | C4：个人二级户余额查询成功，四类余额均为 0 |
 | 提现 | 账户提现 | `T-1001-013-14` | 二级户可用余额提现到银行卡 | C3：已有官方提现 DTO 和分转元转换 | C2/C3：已有提现 service/worker/core client；公网 API 路由和沙箱证据待补 | 未做 |
 | 提现查询 | 提现查询 | `T-1001-013-15` | 提现处理中恢复/对账 | C3：已有官方提现查询 DTO 和状态映射 | C3：已有 client、worker 状态应用和 `baofu-withdrawal-recovery` 调度查询入队；沙箱证据待补 | 未做 |
 | 提现通知 | 提现结果通知 | 通知 URL | 提现终态通知 | C3：官方字段 parser、密文 envelope parser、纯文本 `OK` ACK 已有本地测试 | C3：`/v1/webhooks/baofu/withdraw` 已按 `transSerialNo` 定位提现单并入队提现 fact application；沙箱证据待补 | 未做 |
-| 聚合商户报备 | 报备认证 | `merchant_report` | 商户宝付开户后逐户报备微信渠道，取得该商户 `subMchId` | C3：字段级 DTO、微信类目 allowlist 和校验已建 | C3：表/sqlc/service/client/readiness 已建；真实资料映射待补 | 未做 |
-| 聚合商户报备 | 报备信息查询 | `merchant_report_query` | 查询平台或商户报备状态和 `subMchId` | C3：DTO/状态归一化已建 | C3：client/service 同步 `sub_mch_id` 边界已建，`baofu-merchant-report-recovery` 已补处理中报备和 APPLET 授权补偿 | 未做 |
-| 聚合支付 | 统一下单交易创建 | `unified_order` | 主支付入口，微信 JSAPI 支付 | C3：官方字段、条件必填、金额关系、`riskInfo.clientIp` 校验已建 | C3：concrete client + API runtime main-business wiring 已建；不回退普通服务商 | 未做 |
+| 聚合商户报备 | 报备认证 | `merchant_report` | 商户宝付开户后逐户报备微信渠道，取得该商户 `subMchId` | C3：字段级 DTO、微信类目 allowlist 和校验已建 | C3：表/sqlc/service/client/readiness 已建；真实资料映射待补 | C4：sandbox 报备成功并返回 `subMchId` 脱敏证据 |
+| 聚合商户报备 | 报备信息查询 | `merchant_report_query` | 查询平台或商户报备状态和 `subMchId` | C3：DTO/状态归一化已建 | C3：client/service 同步 `channelRetParam.sub_mch_id` 边界已建，`baofu-merchant-report-recovery` 已补处理中报备和 APPLET 授权补偿 | C4：sandbox 查询成功并归一出 `subMchId` |
+| 聚合支付 | 统一下单交易创建 | `unified_order` | 主支付入口，微信 JSAPI 支付 | C3：官方字段、条件必填、金额关系、`riskInfo.clientIp` 校验已建 | C3：concrete client + API runtime main-business wiring 已建；sandbox 发包省略 `subMchId`，production 仍必填 | C4-形态：sandbox 已证明请求命中测试地址且 wire `subMchId=omitted_by_client`；真实支付因宝付 sandbox 不支持真实下单，转生产首单验证 |
 | 聚合支付 | 支付订单查询 | `order_query` | 支付回调缺失恢复 | C3：DTO/client 已建 | C3：recovery scheduler 已可使用生产 aggregatepay client 查询并落 fact | 未做 |
 | 聚合支付 | 支付结果通知 | 通知 URL | 支付终态回调 | C2/C3：notification parser 与 ACK 语义有本地测试 | C2/C3：callback 落 fact 并入队；真实验签/数字信封和沙箱回调待补 | 未做 |
-| 确认分账 | 确认分账 | `share_after_pay` | 支付成功后按 `sharingMerId` 分账 | C3：DTO/Validate 已建，接收方只读 `sharing_mer_id` | C3：worker 已可使用生产 aggregatepay client 创建分账；沙箱证据待补 | 未做 |
-| 分账查询 | 分账订单查询 | `share_query` | 分账处理中恢复 | C3：DTO/client 已建 | C3：scheduler 已可使用生产 aggregatepay client 查询落 fact；沙箱证据待补 | 未做 |
+| 确认分账 | 确认分账 | `share_after_pay` | 支付成功后按 `sharingMerId` 分账 | C3：DTO/Validate 已建，接收方只读 `sharing_mer_id` | C3：worker 已可使用生产 aggregatepay client 创建分账 | C4-负向形态：fake order 已命中 sandbox 并以 `ORDER_NOT_EXIST` fail-closed；真实分账需已支付订单 |
+| 分账查询 | 分账订单查询 | `share_query` | 分账处理中恢复 | C3：DTO/client 已建 | C3：scheduler 已可使用生产 aggregatepay client 查询落 fact | C4-形态：fake order 查询已命中 sandbox 并解析 `ABNORMAL`，不代表真实分账成功 |
 | 分账通知 | 分账结果通知 | 通知 URL | 分账终态回调 | C2/C3：parser/callback/fact application 已建 | C2/C3：真实验签/数字信封和沙箱回调待补 | 未做 |
-| 退款 | 申请退款 | `order_refund` | 首版仅分账前退款 | C3：本地 DTO/client/业务互斥已建 | C3：分账前退款已接入，分账后禁退 | 待沙箱 |
-| 退款查询 | 退款订单查询 | `refund_query` | 退款恢复/对账 | C3：DTO/client 已建 | C3：退款恢复 scheduler 已可使用生产 aggregatepay client 查询并落 fact | 待沙箱 |
+| 退款 | 申请退款 | `order_refund` | 首版仅分账前退款 | C3：本地 DTO/client/业务互斥已建 | C3：分账前退款已接入，分账后禁退；`resultCode=SUCCESS` + 非成功 `errCode` 已 fail-closed | C4-负向形态：fake order 已命中 sandbox 并以 `ORDER_NOT_EXIST` provider_error 收口；真实退款需已支付订单 |
+| 退款查询 | 退款订单查询 | `refund_query` | 退款恢复/对账 | C3：DTO/client 已建 | C3：退款恢复 scheduler 已可使用生产 aggregatepay client 查询并落 fact | C4-形态：fake order 查询已命中 sandbox 并解析 `ABNORMAL`，不代表真实退款成功 |
 | 退款通知 | 退款结果通知 | 通知 URL | 退款终态回调 | C2/C3：parser/ACK 语义已建 | C2/C3：API callback 已落 Baofu refund fact 并入队应用；真实验签/数字信封和沙箱回调待补 | 待沙箱 |
-| 关单 | 交易关闭 | `order_close` | 上游支付失败/本地关闭时关单 | C3：DTO/client 已建 | C2：本地 pay data 失败已关上游，其他关闭路径待扩展 | 待沙箱 |
+| 关单 | 交易关闭 | `order_close` | 上游支付失败/本地关闭时关单 | C3：DTO/client 已建 | C2：本地 pay data 失败已关上游，其他关闭路径待扩展 | C4-负向形态：fake order close 命中 sandbox，`SYSTEM_BUSY` 被归类为 retryable |
 
 ## 5. 暂缓或条件接口
 
