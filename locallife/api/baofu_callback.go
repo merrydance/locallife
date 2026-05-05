@@ -246,9 +246,13 @@ func (server *Server) queryBaofuPaymentOutTradeNoForCallback(ctx context.Context
 	if tradeNo == "" {
 		return "", db.ErrRecordNotFound
 	}
+	merchantID, terminalID, err := server.baofuCollectIdentityForCallback(notification.Fact.MerchantID, notification.Fact.TerminalID)
+	if err != nil {
+		return "", err
+	}
 	queryResult, err := server.baofuAggregateClient.QueryPayment(ctx, aggregatecontracts.PaymentQueryRequest{
-		MerchantID: firstNonEmptyTrimmed(notification.Fact.MerchantID, server.config.BaofuCollectMerchantID),
-		TerminalID: firstNonEmptyTrimmed(notification.Fact.TerminalID, server.config.BaofuCollectTerminalID),
+		MerchantID: merchantID,
+		TerminalID: terminalID,
 		TradeNo:    tradeNo,
 	})
 	if err != nil {
@@ -343,9 +347,13 @@ func (server *Server) queryBaofuShareOutOrderNoForCallback(ctx context.Context, 
 	if tradeNo == "" {
 		return "", db.ErrRecordNotFound
 	}
+	merchantID, terminalID, err := server.baofuCollectIdentityForCallback(notification.Fact.MerchantID, notification.Fact.TerminalID)
+	if err != nil {
+		return "", err
+	}
 	queryResult, err := server.baofuAggregateClient.QueryProfitSharing(ctx, aggregatecontracts.ShareQueryRequest{
-		MerchantID: firstNonEmptyTrimmed(notification.Fact.MerchantID, server.config.BaofuCollectMerchantID),
-		TerminalID: firstNonEmptyTrimmed(notification.Fact.TerminalID, server.config.BaofuCollectTerminalID),
+		MerchantID: merchantID,
+		TerminalID: terminalID,
 		TradeNo:    tradeNo,
 	})
 	if err != nil {
@@ -355,6 +363,20 @@ func (server *Server) queryBaofuShareOutOrderNoForCallback(ctx context.Context, 
 		return "", db.ErrRecordNotFound
 	}
 	return strings.TrimSpace(queryResult.OutTradeNo), nil
+}
+
+func (server *Server) baofuCollectIdentityForCallback(notificationMerchantID string, notificationTerminalID string) (string, string, error) {
+	configuredMerchantID := strings.TrimSpace(server.config.BaofuCollectMerchantID)
+	configuredTerminalID := strings.TrimSpace(server.config.BaofuCollectTerminalID)
+	notificationMerchantID = strings.TrimSpace(notificationMerchantID)
+	notificationTerminalID = strings.TrimSpace(notificationTerminalID)
+	if configuredMerchantID != "" && notificationMerchantID != "" && notificationMerchantID != configuredMerchantID {
+		return "", "", fmt.Errorf("baofu callback merId does not match configured collect merchant")
+	}
+	if configuredTerminalID != "" && notificationTerminalID != "" && notificationTerminalID != configuredTerminalID {
+		return "", "", fmt.Errorf("baofu callback terId does not match configured collect terminal")
+	}
+	return firstNonEmptyTrimmed(configuredMerchantID, notificationMerchantID), firstNonEmptyTrimmed(configuredTerminalID, notificationTerminalID), nil
 }
 
 func (server *Server) handleBaofuRefundNotify(ctx *gin.Context) {

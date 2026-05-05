@@ -242,6 +242,31 @@ func TestBaofuPaymentCallbackQueriesBaofooWhenTradeNoOnlyIsNotPersisted(t *testi
 	require.Equal(t, []int64{603}, taskRecorder.applicationIDs)
 }
 
+func TestBaofuPaymentCallbackFallbackRejectsNotificationIdentityMismatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	queryClient := &fakeBaofuAggregateQueryClient{outTradeNo: "PO_BAOFU_4004"}
+	server.baofuAggregateClient = queryClient
+	server.config.BaofuCollectMerchantID = "102004465"
+	server.config.BaofuCollectTerminalID = "200005200"
+	notification := &baofuaggregatenotification.PaymentNotification{
+		Fact: aggregatecontracts.PaymentFact{
+			MerchantID: "102004999",
+			TerminalID: "200005200",
+			TradeNo:    "BFPAY_4004",
+		},
+	}
+
+	outTradeNo, err := server.queryBaofuPaymentOutTradeNoForCallback(context.Background(), notification)
+
+	require.Error(t, err)
+	require.Empty(t, outTradeNo)
+	require.Contains(t, err.Error(), "merId does not match configured collect merchant")
+	require.Empty(t, queryClient.lastPaymentQuery.TradeNo)
+}
+
 func TestBaofuShareCallbackPersistsFactAndEnqueuesApplication(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -339,6 +364,31 @@ func TestBaofuShareCallbackQueriesBaofooWhenOutTradeNoMissing(t *testing.T) {
 	require.Equal(t, "102004465", queryClient.lastShareQuery.MerchantID)
 	require.Equal(t, "200005200", queryClient.lastShareQuery.TerminalID)
 	require.Equal(t, []int64{803}, taskRecorder.applicationIDs)
+}
+
+func TestBaofuShareCallbackFallbackRejectsNotificationIdentityMismatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	queryClient := &fakeBaofuAggregateQueryClient{shareOutTradeNo: "BFSHARE_3004"}
+	server.baofuAggregateClient = queryClient
+	server.config.BaofuCollectMerchantID = "102004465"
+	server.config.BaofuCollectTerminalID = "200005200"
+	notification := &baofuaggregatenotification.ShareNotification{
+		Fact: aggregatecontracts.ShareFact{
+			MerchantID: "102004465",
+			TerminalID: "200005299",
+			TradeNo:    "BFSHARE_UP_3004",
+		},
+	}
+
+	outTradeNo, err := server.queryBaofuShareOutOrderNoForCallback(context.Background(), notification)
+
+	require.Error(t, err)
+	require.Empty(t, outTradeNo)
+	require.Contains(t, err.Error(), "terId does not match configured collect terminal")
+	require.Empty(t, queryClient.lastShareQuery.TradeNo)
 }
 
 func TestBaofuShareCallbackRejectsWhenSignedParserNotConfigured(t *testing.T) {

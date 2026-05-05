@@ -117,6 +117,41 @@ func TestParserParsePaymentNotificationVerifiesOfficialPublicEnvelopeSignature(t
 	require.ErrorIs(t, err, baofu.ErrInvalidSignature)
 }
 
+func TestParserRejectsSignedEnvelopeDataContentIdentityMismatch(t *testing.T) {
+	privatePEM, publicPEM := generateBaofuNotificationTestKeyPair(t)
+	parser := NewParserWithPublicKey(publicPEM)
+
+	t.Run("payment merId mismatch", func(t *testing.T) {
+		dataContent := `{"merId":"102004999","terId":"200005200","resultCode":"SUCCESS","tradeNo":"BFPAY202605050004","txnState":"SUCCESS","succAmt":100,"payCode":"WECHAT_JSAPI"}`
+		signature, err := baofu.SignSHA256WithRSA(privatePEM, []byte(dataContent))
+		require.NoError(t, err)
+
+		_, err = parser.ParsePaymentNotification([]byte(signedNotificationEnvelopeValues("PAYMENT", dataContent, signature).Encode()))
+
+		require.EqualError(t, err, "baofu aggregate notification dataContent merId does not match envelope")
+	})
+
+	t.Run("payment terId mismatch", func(t *testing.T) {
+		dataContent := `{"merId":"102004465","terId":"200005299","resultCode":"SUCCESS","tradeNo":"BFPAY202605050004","txnState":"SUCCESS","succAmt":100,"payCode":"WECHAT_JSAPI"}`
+		signature, err := baofu.SignSHA256WithRSA(privatePEM, []byte(dataContent))
+		require.NoError(t, err)
+
+		_, err = parser.ParsePaymentNotification([]byte(signedNotificationEnvelopeValues("PAYMENT", dataContent, signature).Encode()))
+
+		require.EqualError(t, err, "baofu aggregate notification dataContent terId does not match envelope")
+	})
+
+	t.Run("share merId mismatch when present", func(t *testing.T) {
+		dataContent := `{"merId":"102004999","tradeNo":"BFSHARE_UP_3004","txnState":"SUCCESS","resultCode":"SUCCESS","succAmt":9470}`
+		signature, err := baofu.SignSHA256WithRSA(privatePEM, []byte(dataContent))
+		require.NoError(t, err)
+
+		_, err = parser.ParseShareNotification([]byte(signedNotificationEnvelopeValues("SHARING", dataContent, signature).Encode()))
+
+		require.EqualError(t, err, "baofu aggregate notification dataContent merId does not match envelope")
+	})
+}
+
 func TestParserParsePaymentNotificationAcceptsNumericDocumentedStringScalars(t *testing.T) {
 	privatePEM, publicPEM := generateBaofuNotificationTestKeyPair(t)
 	dataContent := `{"merId":102004465,"terId":200005200,"resultCode":"SUCCESS","outTradeNo":"PO202605050005","tradeNo":26050001958,"txnState":"SUCCESS","finishTime":20260505141652,"succAmt":100,"feeAmt":1,"reqChlNo":123456,"payCode":"WECHAT_JSAPI"}`
@@ -145,6 +180,8 @@ func TestParserParseShareNotificationVerifiesOfficialPublicEnvelopeSignature(t *
 
 	require.NoError(t, err)
 	require.Equal(t, "SHARING", notification.NotifyType)
+	require.Equal(t, "102004465", notification.Fact.MerchantID)
+	require.Equal(t, "200005200", notification.Fact.TerminalID)
 	require.Equal(t, "BFSHARE_UP_3004", notification.Fact.TradeNo)
 	require.Equal(t, aggregatecontracts.ShareStateSuccess, notification.Fact.TransactionState)
 	require.Equal(t, int64(9470), notification.Fact.SuccessAmountFen)
@@ -393,6 +430,16 @@ func TestParserParseRefundNotificationRejectsUnsupportedOfficialEnums(t *testing
 
 	_, err = parser.ParseRefundNotification([]byte(`{"notifyType":"REFUND","merId":"102004465","terId":"200005200","outTradeNo":"BFRFD_5101","tradeNo":"BFREFUND_UP_5101","refundState":"SUCCESS","resultCode":"MAYBE","txnTime":"20260504120900"}`))
 	require.EqualError(t, err, "baofu refund notification resultCode is unsupported")
+}
+
+func TestParserParseRefundNotificationRejectsInvalidOfficialDateTime(t *testing.T) {
+	parser := NewParser()
+
+	_, err := parser.ParseRefundNotification([]byte(`{"notifyType":"REFUND","merId":"102004465","terId":"200005200","outTradeNo":"BFRFD_5101","tradeNo":"BFREFUND_UP_5101","refundState":"SUCCESS","resultCode":"SUCCESS","txnTime":"2026-05-04 12:09:00"}`))
+	require.EqualError(t, err, "baofu refund notification txnTime must use yyyyMMddHHmmss")
+
+	_, err = parser.ParseRefundNotification([]byte(`{"notifyType":"REFUND","merId":"102004465","terId":"200005200","outTradeNo":"BFRFD_5101","tradeNo":"BFREFUND_UP_5101","refundState":"SUCCESS","resultCode":"SUCCESS","txnTime":"20260504120900","finishTime":"2026-05-04T12:10:00Z"}`))
+	require.EqualError(t, err, "baofu refund notification finishTime must use yyyyMMddHHmmss")
 }
 
 func signedNotificationEnvelopeValues(notifyType, dataContent, signature string) url.Values {

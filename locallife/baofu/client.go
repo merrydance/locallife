@@ -201,6 +201,13 @@ func validatePublicResponseIdentity(responseEnvelope PublicResponseEnvelope, mer
 	return nil
 }
 
+func NewProviderContractError(operation string, cause error) error {
+	if cause == nil {
+		return nil
+	}
+	return providerRequestError(operation, http.StatusOK, PublicEnvelopeUpstreamCodeInvalidDataContent, cause)
+}
+
 func providerRequestError(operation string, statusCode int, upstreamCode string, cause error) error {
 	classified := ClassifyBaofuError(upstreamCode, "")
 	return &ProviderError{

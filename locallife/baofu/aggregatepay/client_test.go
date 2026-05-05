@@ -187,7 +187,7 @@ func TestAggregateClientRunsMethodSpecificResponseValidation(t *testing.T) {
 		client := NewClient(testBaofuRootClient(t, doer))
 
 		_, err := client.CreateUnifiedOrder(context.Background(), validUnifiedOrderRequestForClientTest())
-		require.EqualError(t, err, "baofu unified order response payCode is required")
+		requireAggregateContractProviderError(t, err, "unified_order", "baofu unified order response payCode is required")
 	})
 
 	t.Run("share missing txnState", func(t *testing.T) {
@@ -195,7 +195,7 @@ func TestAggregateClientRunsMethodSpecificResponseValidation(t *testing.T) {
 		client := NewClient(testBaofuRootClient(t, doer))
 
 		_, err := client.CreateProfitSharing(context.Background(), validShareAfterPayRequestForClientTest())
-		require.EqualError(t, err, "baofu share response txnState is required")
+		requireAggregateContractProviderError(t, err, "share_after_pay", "baofu share response txnState is required")
 	})
 
 	t.Run("refund missing tradeNo", func(t *testing.T) {
@@ -203,7 +203,7 @@ func TestAggregateClientRunsMethodSpecificResponseValidation(t *testing.T) {
 		client := NewClient(testBaofuRootClient(t, doer))
 
 		_, err := client.CreateRefund(context.Background(), validRefundBeforeShareRequestForClientTest())
-		require.EqualError(t, err, "baofu refund response tradeNo is required")
+		requireAggregateContractProviderError(t, err, "order_refund", "baofu refund response tradeNo is required")
 	})
 
 	t.Run("close missing merId", func(t *testing.T) {
@@ -211,8 +211,77 @@ func TestAggregateClientRunsMethodSpecificResponseValidation(t *testing.T) {
 		client := NewClient(testBaofuRootClient(t, doer))
 
 		_, err := client.CloseOrder(context.Background(), contracts.OrderCloseRequest{MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "BF202605040001"})
-		require.EqualError(t, err, "baofu order close response merId is required")
+		requireAggregateContractProviderError(t, err, "order_close", "baofu order close response merId is required")
 	})
+}
+
+func TestAggregateClientRejectsBusinessResponseNotBoundToRequest(t *testing.T) {
+	t.Run("unified order outTradeNo mismatch", func(t *testing.T) {
+		doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","outTradeNo":"BF202605049999","txnState":"WAIT_PAYING","payCode":"WECHAT_JSAPI"}`)}
+		client := NewClient(testBaofuRootClient(t, doer))
+
+		_, err := client.CreateUnifiedOrder(context.Background(), validUnifiedOrderRequestForClientTest())
+		requireAggregateContractProviderError(t, err, "unified_order", "outTradeNo does not match request")
+	})
+
+	t.Run("payment query tradeNo mismatch", func(t *testing.T) {
+		doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","tradeNo":"BFPAY_MISMATCH","outTradeNo":"BF202605040001","txnState":"SUCCESS","payCode":"WECHAT_JSAPI"}`)}
+		client := NewClient(testBaofuRootClient(t, doer))
+
+		_, err := client.QueryPayment(context.Background(), contracts.PaymentQueryRequest{MerchantID: "102004465", TerminalID: "200005200", TradeNo: "BFPAY_EXPECTED"})
+		requireAggregateContractProviderError(t, err, "order_query", "tradeNo does not match request")
+	})
+
+	t.Run("share after pay outTradeNo mismatch", func(t *testing.T) {
+		doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","outTradeNo":"BFSHARE_MISMATCH","txnState":"PROCESSING"}`)}
+		client := NewClient(testBaofuRootClient(t, doer))
+
+		_, err := client.CreateProfitSharing(context.Background(), validShareAfterPayRequestForClientTest())
+		requireAggregateContractProviderError(t, err, "share_after_pay", "outTradeNo does not match request")
+	})
+
+	t.Run("share query tradeNo mismatch", func(t *testing.T) {
+		doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","tradeNo":"BFSHARE_MISMATCH","txnState":"SUCCESS"}`)}
+		client := NewClient(testBaofuRootClient(t, doer))
+
+		_, err := client.QueryProfitSharing(context.Background(), contracts.ShareQueryRequest{MerchantID: "102004465", TerminalID: "200005200", TradeNo: "BFSHARE_EXPECTED"})
+		requireAggregateContractProviderError(t, err, "share_query", "tradeNo does not match request")
+	})
+
+	t.Run("refund outTradeNo and amount mismatch", func(t *testing.T) {
+		doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","outTradeNo":"RF202605049999","tradeNo":"BFREFUND202605040001","refundState":"REFUND","refundAmt":301,"totalAmt":301}`)}
+		client := NewClient(testBaofuRootClient(t, doer))
+
+		_, err := client.CreateRefund(context.Background(), validRefundBeforeShareRequestForClientTest())
+		requireAggregateContractProviderError(t, err, "order_refund", "outTradeNo does not match request")
+	})
+
+	t.Run("refund query outTradeNo mismatch", func(t *testing.T) {
+		doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","outTradeNo":"RF202605049999","tradeNo":"BFREFUND202605040001","refundState":"SUCCESS"}`)}
+		client := NewClient(testBaofuRootClient(t, doer))
+
+		_, err := client.QueryRefund(context.Background(), contracts.RefundQueryRequest{MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "RF202605040001"})
+		requireAggregateContractProviderError(t, err, "refund_query", "outTradeNo does not match request")
+	})
+
+	t.Run("close order outTradeNo mismatch", func(t *testing.T) {
+		doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","outTradeNo":"BF202605049999"}`)}
+		client := NewClient(testBaofuRootClient(t, doer))
+
+		_, err := client.CloseOrder(context.Background(), contracts.OrderCloseRequest{MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "BF202605040001"})
+		requireAggregateContractProviderError(t, err, "order_close", "outTradeNo does not match request")
+	})
+}
+
+func requireAggregateContractProviderError(t *testing.T, err error, operation string, causeSubstring string) {
+	t.Helper()
+	require.Error(t, err)
+	var providerErr *baofu.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, operation, providerErr.Operation)
+	require.Equal(t, baofu.PublicEnvelopeUpstreamCodeInvalidDataContent, providerErr.UpstreamCode)
+	require.Contains(t, errors.Unwrap(providerErr).Error(), causeSubstring)
+	require.NotContains(t, err.Error(), causeSubstring)
 }
 
 func validUnifiedOrderRequestForClientTest() contracts.UnifiedOrderRequest {

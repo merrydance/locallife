@@ -239,6 +239,14 @@ func isBaofuTransactionTime(value string) bool {
 	return err == nil
 }
 
+func isBaofuDate(value string) bool {
+	if len(strings.TrimSpace(value)) != len("20060102") {
+		return false
+	}
+	_, err := time.Parse("20060102", strings.TrimSpace(value))
+	return err == nil
+}
+
 func isHTTPSURL(value string) bool {
 	parsed, err := url.Parse(strings.TrimSpace(value))
 	return err == nil && parsed.Scheme == "https" && strings.TrimSpace(parsed.Host) != ""
@@ -348,6 +356,31 @@ func (r UnifiedOrderResult) ValidateUnifiedOrderResponse() error {
 	if err := validateOptionalPaymentState("baofu unified order response", r.TxnState); err != nil {
 		return err
 	}
+	if err := validateOptionalBaofuDateTime("baofu unified order response", "finishTime", r.FinishTime); err != nil {
+		return err
+	}
+	if err := validateOptionalBaofuDate("baofu unified order response", "clearingDate", r.ClearingDate); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r UnifiedOrderResult) ValidateUnifiedOrderResponseForRequest(req UnifiedOrderRequest) error {
+	if err := r.ValidateUnifiedOrderResponse(); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu unified order response", "merId", r.MerchantID, req.MerchantID); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu unified order response", "terId", r.TerminalID, req.TerminalID); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu unified order response", "outTradeNo", r.OutTradeNo, req.OutTradeNo); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu unified order response", "payCode", r.PayCode, req.PayCode); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -365,6 +398,31 @@ func (r UnifiedOrderResult) ValidateOrderQueryResponse() error {
 		return err
 	}
 	if err := validateResponsePayCode("baofu order query response", r.PayCode, false); err != nil {
+		return err
+	}
+	if err := validateOptionalBaofuDateTime("baofu order query response", "finishTime", r.FinishTime); err != nil {
+		return err
+	}
+	if err := validateOptionalBaofuDate("baofu order query response", "clearingDate", r.ClearingDate); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r UnifiedOrderResult) ValidateOrderQueryResponseForRequest(req PaymentQueryRequest) error {
+	if err := r.ValidateOrderQueryResponse(); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu order query response", "merId", r.MerchantID, req.MerchantID); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu order query response", "terId", r.TerminalID, req.TerminalID); err != nil {
+		return err
+	}
+	if err := validateOptionalResponseMatchesRequest("baofu order query response", "tradeNo", r.TradeNo, req.TradeNo); err != nil {
+		return err
+	}
+	if err := validateOptionalResponseMatchesRequest("baofu order query response", "outTradeNo", r.OutTradeNo, req.OutTradeNo); err != nil {
 		return err
 	}
 	return nil
@@ -539,8 +597,43 @@ func (r ShareResult) ValidateShareAfterPayResponse() error {
 	return r.validateShareResponse()
 }
 
+func (r ShareResult) ValidateShareAfterPayResponseForRequest(req ShareAfterPayRequest) error {
+	if err := r.ValidateShareAfterPayResponse(); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu share response", "merId", r.MerchantID, req.MerchantID); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu share response", "terId", r.TerminalID, req.TerminalID); err != nil {
+		return err
+	}
+	if err := validateOptionalResponseMatchesRequest("baofu share response", "outTradeNo", r.OutTradeNo, req.OutTradeNo); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r ShareResult) ValidateShareQueryResponse() error {
 	return r.validateShareResponse()
+}
+
+func (r ShareResult) ValidateShareQueryResponseForRequest(req ShareQueryRequest) error {
+	if err := r.ValidateShareQueryResponse(); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu share response", "merId", r.MerchantID, req.MerchantID); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu share response", "terId", r.TerminalID, req.TerminalID); err != nil {
+		return err
+	}
+	if err := validateOptionalResponseMatchesRequest("baofu share response", "tradeNo", r.TradeNo, req.TradeNo); err != nil {
+		return err
+	}
+	if err := validateOptionalResponseMatchesRequest("baofu share response", "outTradeNo", r.OutTradeNo, req.OutTradeNo); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r ShareResult) validateShareResponse() error {
@@ -558,6 +651,12 @@ func (r ShareResult) validateShareResponse() error {
 	}
 	if !IsSupportedShareState(r.TxnState) {
 		return errors.New("baofu share response txnState is unsupported")
+	}
+	if err := validateOptionalBaofuDateTime("baofu share response", "finishTime", r.FinishTime); err != nil {
+		return err
+	}
+	if err := validateOptionalBaofuDate("baofu share response", "clearingDate", r.ClearingDate); err != nil {
+		return err
 	}
 	return nil
 }
@@ -748,6 +847,31 @@ func (r RefundResult) ValidateOrderRefundResponse() error {
 	if err := validateOptionalRefundState("baofu refund response", r.RefundState); err != nil {
 		return err
 	}
+	if err := validateOptionalBaofuDateTime("baofu refund response", "finishTime", r.FinishTime); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r RefundResult) ValidateOrderRefundResponseForRequest(req RefundBeforeShareRequest) error {
+	if err := r.ValidateOrderRefundResponse(); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu refund response", "outTradeNo", r.OutTradeNo, req.OutTradeNo); err != nil {
+		return err
+	}
+	if err := validateOptionalResponseMatchesRequest("baofu refund response", "originTradeNo", r.OriginTradeNo, req.OriginTradeNo); err != nil {
+		return err
+	}
+	if err := validateOptionalResponseMatchesRequest("baofu refund response", "originOutTradeNo", r.OriginOutTradeNo, req.OriginOutTradeNo); err != nil {
+		return err
+	}
+	if req.RefundAmountFen > 0 && r.RefundAmountFen != req.RefundAmountFen {
+		return errors.New("baofu refund response refundAmt does not match request")
+	}
+	if req.TotalAmountFen > 0 && r.TotalAmountFen != req.TotalAmountFen {
+		return errors.New("baofu refund response totalAmt does not match request")
+	}
 	return nil
 }
 
@@ -756,6 +880,22 @@ func (r RefundResult) ValidateRefundQueryResponse() error {
 		return err
 	}
 	if err := validateOptionalRefundState("baofu refund query response", r.RefundState); err != nil {
+		return err
+	}
+	if err := validateOptionalBaofuDateTime("baofu refund query response", "finishTime", r.FinishTime); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r RefundResult) ValidateRefundQueryResponseForRequest(req RefundQueryRequest) error {
+	if err := r.ValidateRefundQueryResponse(); err != nil {
+		return err
+	}
+	if err := validateOptionalResponseMatchesRequest("baofu refund query response", "tradeNo", r.TradeNo, req.TradeNo); err != nil {
+		return err
+	}
+	if err := validateOptionalResponseMatchesRequest("baofu refund query response", "outTradeNo", r.OutTradeNo, req.OutTradeNo); err != nil {
 		return err
 	}
 	return nil
@@ -791,6 +931,26 @@ func validateOptionalRefundState(prefix string, state string) error {
 	}
 	if !IsSupportedRefundState(state) {
 		return errors.New(prefix + " refundState is unsupported")
+	}
+	return nil
+}
+
+func validateOptionalBaofuDateTime(prefix, field, value string) error {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	if !isBaofuTransactionTime(value) {
+		return errors.New(prefix + " " + field + " must use yyyyMMddHHmmss")
+	}
+	return nil
+}
+
+func validateOptionalBaofuDate(prefix, field, value string) error {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	if !isBaofuDate(value) {
+		return errors.New(prefix + " " + field + " must use yyyyMMdd")
 	}
 	return nil
 }
@@ -838,6 +998,44 @@ func (r OrderCloseResult) ValidateOrderCloseResponse() error {
 		return errors.New("baofu order close response terId is required")
 	}
 	return validateBusinessResultCode("baofu order close response", r.ResultCode)
+}
+
+func (r OrderCloseResult) ValidateOrderCloseResponseForRequest(req OrderCloseRequest) error {
+	if err := r.ValidateOrderCloseResponse(); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu order close response", "merId", r.MerchantID, req.MerchantID); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu order close response", "terId", r.TerminalID, req.TerminalID); err != nil {
+		return err
+	}
+	if err := validateOptionalResponseMatchesRequest("baofu order close response", "tradeNo", r.TradeNo, req.TradeNo); err != nil {
+		return err
+	}
+	if err := validateOptionalResponseMatchesRequest("baofu order close response", "outTradeNo", r.OutTradeNo, req.OutTradeNo); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateResponseMatchesRequest(prefix, field, actual, expected string) error {
+	actual = strings.TrimSpace(actual)
+	expected = strings.TrimSpace(expected)
+	if expected == "" {
+		return nil
+	}
+	if actual != expected {
+		return errors.New(prefix + " " + field + " does not match request")
+	}
+	return nil
+}
+
+func validateOptionalResponseMatchesRequest(prefix, field, actual, expected string) error {
+	if strings.TrimSpace(actual) == "" || strings.TrimSpace(expected) == "" {
+		return nil
+	}
+	return validateResponseMatchesRequest(prefix, field, actual, expected)
 }
 
 func validateBusinessResultCode(prefix string, resultCode string) error {

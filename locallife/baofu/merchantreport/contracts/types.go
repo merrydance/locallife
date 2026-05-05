@@ -92,8 +92,46 @@ func (r MerchantReportResult) ValidateMerchantReportResponse() error {
 	return r.validateMerchantReportResponse()
 }
 
+func (r MerchantReportResult) ValidateMerchantReportResponseForRequest(req WechatMerchantReportRequest) error {
+	if err := r.ValidateMerchantReportResponse(); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu merchant report response", "merId", r.MerchantID, req.MerchantID); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu merchant report response", "terId", r.TerminalID, req.TerminalID); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu merchant report response", "reportType", r.ReportType, req.ReportType); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu merchant report response", "reportNo", r.ReportNo, req.ReportNo); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r MerchantReportResult) ValidateMerchantReportQueryResponse() error {
 	return r.validateMerchantReportResponse()
+}
+
+func (r MerchantReportResult) ValidateMerchantReportQueryResponseForRequest(req MerchantReportQueryRequest) error {
+	if err := r.ValidateMerchantReportQueryResponse(); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu merchant report response", "merId", r.MerchantID, req.MerchantID); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu merchant report response", "terId", r.TerminalID, req.TerminalID); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu merchant report response", "reportType", r.ReportType, req.ReportType); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu merchant report response", "reportNo", r.ReportNo, req.ReportNo); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r MerchantReportResult) validateMerchantReportResponse() error {
@@ -188,6 +226,47 @@ func (r BindSubConfigResult) ValidateBindSubConfigResponse() error {
 		return errors.New("baofu bind_sub_config response terId is required")
 	}
 	return validateBusinessResultCode("baofu bind_sub_config response", r.ResultCode)
+}
+
+func (r BindSubConfigResult) ValidateBindSubConfigResponseForRequest(req BindSubConfigRequest) error {
+	if err := r.ValidateBindSubConfigResponse(); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu bind_sub_config response", "merId", r.MerchantID, req.MerchantID); err != nil {
+		return err
+	}
+	if err := validateResponseMatchesRequest("baofu bind_sub_config response", "terId", r.TerminalID, req.TerminalID); err != nil {
+		return err
+	}
+	if err := validateOptionalResponseMatchesRequest("baofu bind_sub_config response", "subMchId", r.SubMchID, req.SubMchID); err != nil {
+		return err
+	}
+	if err := validateOptionalResponseMatchesRequest("baofu bind_sub_config response", "authType", r.AuthType, req.AuthType); err != nil {
+		return err
+	}
+	if err := validateOptionalResponseMatchesRequest("baofu bind_sub_config response", "authContent", r.AuthContent, req.AuthContent); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateResponseMatchesRequest(prefix, field, actual, expected string) error {
+	actual = strings.TrimSpace(actual)
+	expected = strings.TrimSpace(expected)
+	if expected == "" {
+		return nil
+	}
+	if actual != expected {
+		return errors.New(prefix + " " + field + " does not match request")
+	}
+	return nil
+}
+
+func validateOptionalResponseMatchesRequest(prefix, field, actual, expected string) error {
+	if strings.TrimSpace(actual) == "" || strings.TrimSpace(expected) == "" {
+		return nil
+	}
+	return validateResponseMatchesRequest(prefix, field, actual, expected)
 }
 
 func (r WechatMerchantReportRequest) Validate() error {

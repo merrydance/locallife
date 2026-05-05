@@ -27,8 +27,8 @@ func (c *Client) SubmitWechatReport(ctx context.Context, req contracts.WechatMer
 	if err := c.root.PostMerchantReport(ctx, "merchant_report", req, &result); err != nil {
 		return nil, err
 	}
-	if err := result.ValidateMerchantReportResponse(); err != nil {
-		return nil, err
+	if err := result.ValidateMerchantReportResponseForRequest(req); err != nil {
+		return nil, baofu.NewProviderContractError("merchant_report", err)
 	}
 	result = result.Normalized()
 	return &result, nil
@@ -45,8 +45,8 @@ func (c *Client) QueryReport(ctx context.Context, req contracts.MerchantReportQu
 	if err := c.root.PostMerchantReport(ctx, "merchant_report_query", req, &result); err != nil {
 		return nil, err
 	}
-	if err := result.ValidateMerchantReportQueryResponse(); err != nil {
-		return nil, err
+	if err := result.ValidateMerchantReportQueryResponseForRequest(req); err != nil {
+		return nil, baofu.NewProviderContractError("merchant_report_query", err)
 	}
 	result = result.Normalized()
 	return &result, nil
@@ -63,8 +63,8 @@ func (c *Client) BindSubConfig(ctx context.Context, req contracts.BindSubConfigR
 	if err := c.root.PostMerchantReport(ctx, "bind_sub_config", req, &result); err != nil {
 		return nil, err
 	}
-	if err := result.ValidateBindSubConfigResponse(); err != nil {
-		return nil, err
+	if err := result.ValidateBindSubConfigResponseForRequest(req); err != nil {
+		return nil, baofu.NewProviderContractError("bind_sub_config", err)
 	}
 	return &result, nil
 }

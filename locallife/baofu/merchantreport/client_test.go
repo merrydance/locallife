@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -80,7 +81,7 @@ func TestMerchantReportClientRunsMethodSpecificResponseValidation(t *testing.T) 
 		client := NewClient(testBaofuRootClient(t, doer))
 
 		_, err := client.SubmitWechatReport(context.Background(), validWechatReportRequestForClientTest())
-		require.EqualError(t, err, "baofu merchant report response reportNo is required")
+		requireMerchantReportContractProviderError(t, err, "merchant_report", "baofu merchant report response reportNo is required")
 	})
 
 	t.Run("query unsupported reportType", func(t *testing.T) {
@@ -88,7 +89,7 @@ func TestMerchantReportClientRunsMethodSpecificResponseValidation(t *testing.T) 
 		client := NewClient(testBaofuRootClient(t, doer))
 
 		_, err := client.QueryReport(context.Background(), contracts.MerchantReportQueryRequest{MerchantID: "102004465", TerminalID: "200005200", ReportType: contracts.ReportTypeWechat, ReportNo: "MR202605040001"})
-		require.EqualError(t, err, "baofu merchant report response reportType is unsupported")
+		requireMerchantReportContractProviderError(t, err, "merchant_report_query", "baofu merchant report response reportType is unsupported")
 	})
 
 	t.Run("bind missing terId", func(t *testing.T) {
@@ -96,8 +97,45 @@ func TestMerchantReportClientRunsMethodSpecificResponseValidation(t *testing.T) 
 		client := NewClient(testBaofuRootClient(t, doer))
 
 		_, err := client.BindSubConfig(context.Background(), contracts.BindSubConfigRequest{MerchantID: "102004465", TerminalID: "200005200", SubMchID: "1900000109", AuthType: contracts.AuthTypeApplet, AuthContent: "wx1234567890abcdef", Remark: "LocalLife mini program"})
-		require.EqualError(t, err, "baofu bind_sub_config response terId is required")
+		requireMerchantReportContractProviderError(t, err, "bind_sub_config", "baofu bind_sub_config response terId is required")
 	})
+}
+
+func TestMerchantReportClientRejectsBusinessResponseNotBoundToRequest(t *testing.T) {
+	t.Run("reportNo mismatch", func(t *testing.T) {
+		doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","reportType":"WECHAT","reportNo":"MR202605049999"}`)}
+		client := NewClient(testBaofuRootClient(t, doer))
+
+		_, err := client.SubmitWechatReport(context.Background(), validWechatReportRequestForClientTest())
+		requireMerchantReportContractProviderError(t, err, "merchant_report", "reportNo does not match request")
+	})
+
+	t.Run("query reportType mismatch", func(t *testing.T) {
+		doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","reportType":"ALIPAY","reportNo":"MR202605040001"}`)}
+		client := NewClient(testBaofuRootClient(t, doer))
+
+		_, err := client.QueryReport(context.Background(), contracts.MerchantReportQueryRequest{MerchantID: "102004465", TerminalID: "200005200", ReportType: contracts.ReportTypeWechat, ReportNo: "MR202605040001"})
+		requireMerchantReportContractProviderError(t, err, "merchant_report_query", "reportType does not match request")
+	})
+
+	t.Run("bind subMchId mismatch when returned", func(t *testing.T) {
+		doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","merId":"102004465","terId":"200005200","subMchId":"1900000999","authType":"APPLET","authContent":"wx1234567890abcdef"}`)}
+		client := NewClient(testBaofuRootClient(t, doer))
+
+		_, err := client.BindSubConfig(context.Background(), contracts.BindSubConfigRequest{MerchantID: "102004465", TerminalID: "200005200", SubMchID: "1900000109", AuthType: contracts.AuthTypeApplet, AuthContent: "wx1234567890abcdef", Remark: "LocalLife mini program"})
+		requireMerchantReportContractProviderError(t, err, "bind_sub_config", "subMchId does not match request")
+	})
+}
+
+func requireMerchantReportContractProviderError(t *testing.T, err error, operation string, causeSubstring string) {
+	t.Helper()
+	require.Error(t, err)
+	var providerErr *baofu.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, operation, providerErr.Operation)
+	require.Equal(t, baofu.PublicEnvelopeUpstreamCodeInvalidDataContent, providerErr.UpstreamCode)
+	require.Contains(t, errors.Unwrap(providerErr).Error(), causeSubstring)
+	require.NotContains(t, err.Error(), causeSubstring)
 }
 
 func validWechatReportRequestForClientTest() contracts.WechatMerchantReportRequest {

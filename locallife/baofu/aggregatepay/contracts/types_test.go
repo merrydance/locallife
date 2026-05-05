@@ -197,6 +197,25 @@ func TestUnifiedOrderResultValidatesMethodSpecificResponses(t *testing.T) {
 	require.EqualError(t, unified.ValidateOrderQueryResponse(), "baofu order query response txnState is unsupported")
 }
 
+func TestAggregateResultsValidateOfficialDateFormats(t *testing.T) {
+	payment := UnifiedOrderResult{MerchantID: "102004465", TerminalID: "200005200", ResultCode: BusinessResultCodeSuccess, TxnState: PaymentStateSuccess, PayCode: PayCodeWechatJSAPI, FinishTime: "2026-05-05T12:00:00"}
+	require.EqualError(t, payment.ValidateOrderQueryResponse(), "baofu order query response finishTime must use yyyyMMddHHmmss")
+
+	payment.FinishTime = "20260505120000"
+	payment.ClearingDate = "2026-05-05"
+	require.EqualError(t, payment.ValidateOrderQueryResponse(), "baofu order query response clearingDate must use yyyyMMdd")
+
+	share := ShareResult{MerchantID: "102004465", TerminalID: "200005200", ResultCode: BusinessResultCodeSuccess, TxnState: ShareStateSuccess, FinishTime: "2026-05-05 12:00:00"}
+	require.EqualError(t, share.ValidateShareQueryResponse(), "baofu share response finishTime must use yyyyMMddHHmmss")
+
+	share.FinishTime = "20260505120000"
+	share.ClearingDate = "2026/05/05"
+	require.EqualError(t, share.ValidateShareQueryResponse(), "baofu share response clearingDate must use yyyyMMdd")
+
+	refund := RefundResult{ResultCode: BusinessResultCodeSuccess, RefundState: RefundStateSuccess, FinishTime: "2026-05-05T12:00:00Z"}
+	require.EqualError(t, refund.ValidateRefundQueryResponse(), "baofu refund query response finishTime must use yyyyMMddHHmmss")
+}
+
 func TestNormalizePaymentTerminalStatus(t *testing.T) {
 	require.Equal(t, db.ExternalPaymentTerminalStatusProcessing, NormalizePaymentTerminalStatus("WAIT_PAYING"))
 	require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, NormalizePaymentTerminalStatus("SUCCESS"))

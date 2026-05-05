@@ -132,6 +132,12 @@ func (p *Parser) ParsePaymentNotification(body []byte) (*PaymentNotification, er
 	if err := validateOfficialBusinessResultCode("baofu payment notification", payload.ResultCode); err != nil {
 		return nil, err
 	}
+	if err := validateOptionalOfficialDateTime("baofu payment notification", "finishTime", payload.FinishTime); err != nil {
+		return nil, err
+	}
+	if err := validateOptionalOfficialDate("baofu payment notification", "clearingDate", payload.ClearingDate); err != nil {
+		return nil, err
+	}
 	amount := payload.SuccessAmount
 	if amount == 0 {
 		amount = payload.TransactionAmt
@@ -221,6 +227,12 @@ func (p *Parser) ParseShareNotification(body []byte) (*ShareNotification, error)
 	if err := validateOfficialBusinessResultCode("baofu share notification", payload.ResultCode); err != nil {
 		return nil, err
 	}
+	if err := validateOptionalOfficialDateTime("baofu share notification", "finishTime", payload.FinishTime); err != nil {
+		return nil, err
+	}
+	if err := validateOptionalOfficialDate("baofu share notification", "clearingDate", payload.ClearingDate); err != nil {
+		return nil, err
+	}
 	amount := payload.SuccessAmount
 	if amount == 0 {
 		amount = payload.SharingAmount
@@ -303,10 +315,16 @@ func (p *Parser) ParseRefundNotification(body []byte) (*RefundNotification, erro
 	if strings.TrimSpace(payload.TransactionTime) == "" {
 		return nil, ErrRefundNotificationTransactionTimeRequired
 	}
+	if err := validateOptionalOfficialDateTime("baofu refund notification", "txnTime", payload.TransactionTime); err != nil {
+		return nil, err
+	}
 	if err := validateOfficialNotifyType("baofu refund notification", payload.NotifyType, baofu.PublicNotificationTypeRefund); err != nil {
 		return nil, err
 	}
 	if err := validateOfficialBusinessResultCode("baofu refund notification", payload.ResultCode); err != nil {
+		return nil, err
+	}
+	if err := validateOptionalOfficialDateTime("baofu refund notification", "finishTime", payload.FinishTime); err != nil {
 		return nil, err
 	}
 	upstreamState := strings.TrimSpace(payload.RefundState)
@@ -368,6 +386,32 @@ func validateOfficialBusinessResultCode(prefix, resultCode string) error {
 	}
 }
 
+func validateOptionalOfficialDateTime(prefix, field, value string) error {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	if len(strings.TrimSpace(value)) != len("20060102150405") {
+		return errors.New(prefix + " " + field + " must use yyyyMMddHHmmss")
+	}
+	if _, err := time.Parse("20060102150405", strings.TrimSpace(value)); err != nil {
+		return errors.New(prefix + " " + field + " must use yyyyMMddHHmmss")
+	}
+	return nil
+}
+
+func validateOptionalOfficialDate(prefix, field, value string) error {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	if len(strings.TrimSpace(value)) != len("20060102") {
+		return errors.New(prefix + " " + field + " must use yyyyMMdd")
+	}
+	if _, err := time.Parse("20060102", strings.TrimSpace(value)); err != nil {
+		return errors.New(prefix + " " + field + " must use yyyyMMdd")
+	}
+	return nil
+}
+
 func normalizeRefundTerminalStatus(upstreamState, resultCode string) string {
 	if strings.TrimSpace(upstreamState) != "" {
 		return aggregatecontracts.NormalizeRefundTerminalStatus(upstreamState)
@@ -402,6 +446,8 @@ func normalizeSignedAggregateNotificationBody(body []byte, publicKeyPEM string) 
 	}
 	return normalizeAggregateNotificationDataContent(envelope.DataContent, map[string]string{
 		"notifyType": envelope.NotifyType,
+		"merId":      envelope.MerchantID,
+		"terId":      envelope.TerminalID,
 	})
 }
 
@@ -523,15 +569,28 @@ func normalizeAggregateNotificationDataContent(raw []byte, metadata map[string]s
 		if strings.TrimSpace(value) == "" {
 			continue
 		}
-		if _, exists := payload[key]; !exists {
-			encoded, err := json.Marshal(strings.TrimSpace(value))
-			if err != nil {
-				return nil, err
+		if existing, exists := payload[key]; exists {
+			if isAggregateNotificationEnvelopeIdentityField(key) && jsonRawString(existing) != strings.TrimSpace(value) {
+				return nil, errors.New("baofu aggregate notification dataContent " + key + " does not match envelope")
 			}
-			payload[key] = encoded
+			continue
 		}
+		encoded, err := json.Marshal(strings.TrimSpace(value))
+		if err != nil {
+			return nil, err
+		}
+		payload[key] = encoded
 	}
 	return json.Marshal(payload)
+}
+
+func isAggregateNotificationEnvelopeIdentityField(key string) bool {
+	switch strings.TrimSpace(key) {
+	case "merId", "terId":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeAggregateNotificationStringScalars(raw []byte) ([]byte, error) {

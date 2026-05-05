@@ -41,8 +41,8 @@ func (c *HTTPClient) CreateUnifiedOrder(ctx context.Context, req contracts.Unifi
 	if err := c.root.PostAggregatePay(ctx, "unified_order", req, &result); err != nil {
 		return nil, err
 	}
-	if err := result.ValidateUnifiedOrderResponse(); err != nil {
-		return nil, err
+	if err := result.ValidateUnifiedOrderResponseForRequest(req); err != nil {
+		return nil, baofu.NewProviderContractError("unified_order", err)
 	}
 	return &result, nil
 }
@@ -58,8 +58,8 @@ func (c *HTTPClient) QueryPayment(ctx context.Context, req contracts.PaymentQuer
 	if err := c.root.PostAggregatePay(ctx, "order_query", req, &result); err != nil {
 		return nil, err
 	}
-	if err := result.ValidateOrderQueryResponse(); err != nil {
-		return nil, err
+	if err := result.ValidateOrderQueryResponseForRequest(req); err != nil {
+		return nil, baofu.NewProviderContractError("order_query", err)
 	}
 	return &result, nil
 }
@@ -75,8 +75,8 @@ func (c *HTTPClient) CreateProfitSharing(ctx context.Context, req contracts.Shar
 	if err := c.root.PostAggregatePay(ctx, "share_after_pay", req, &result); err != nil {
 		return nil, err
 	}
-	if err := result.ValidateShareAfterPayResponse(); err != nil {
-		return nil, err
+	if err := result.ValidateShareAfterPayResponseForRequest(req); err != nil {
+		return nil, baofu.NewProviderContractError("share_after_pay", err)
 	}
 	return &result, nil
 }
@@ -92,8 +92,8 @@ func (c *HTTPClient) QueryProfitSharing(ctx context.Context, req contracts.Share
 	if err := c.root.PostAggregatePay(ctx, "share_query", req, &result); err != nil {
 		return nil, err
 	}
-	if err := result.ValidateShareQueryResponse(); err != nil {
-		return nil, err
+	if err := result.ValidateShareQueryResponseForRequest(req); err != nil {
+		return nil, baofu.NewProviderContractError("share_query", err)
 	}
 	return &result, nil
 }
@@ -109,8 +109,8 @@ func (c *HTTPClient) CreateRefund(ctx context.Context, req contracts.RefundBefor
 	if err := c.root.PostAggregatePay(ctx, "order_refund", req, &result); err != nil {
 		return nil, err
 	}
-	if err := result.ValidateOrderRefundResponse(); err != nil {
-		return nil, err
+	if err := result.ValidateOrderRefundResponseForRequest(req); err != nil {
+		return nil, baofu.NewProviderContractError("order_refund", err)
 	}
 	return &result, nil
 }
@@ -126,8 +126,8 @@ func (c *HTTPClient) QueryRefund(ctx context.Context, req contracts.RefundQueryR
 	if err := c.root.PostAggregatePay(ctx, "refund_query", req, &result); err != nil {
 		return nil, err
 	}
-	if err := result.ValidateRefundQueryResponse(); err != nil {
-		return nil, err
+	if err := result.ValidateRefundQueryResponseForRequest(req); err != nil {
+		return nil, baofu.NewProviderContractError("refund_query", err)
 	}
 	return &result, nil
 }
@@ -143,8 +143,8 @@ func (c *HTTPClient) CloseOrder(ctx context.Context, req contracts.OrderCloseReq
 	if err := c.root.PostAggregatePay(ctx, "order_close", req, &result); err != nil {
 		return nil, err
 	}
-	if err := result.ValidateOrderCloseResponse(); err != nil {
-		return nil, err
+	if err := result.ValidateOrderCloseResponseForRequest(req); err != nil {
+		return nil, baofu.NewProviderContractError("order_close", err)
 	}
 	return &result, nil
 }
