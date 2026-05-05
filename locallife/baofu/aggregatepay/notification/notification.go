@@ -3,6 +3,8 @@ package notification
 import (
 	"encoding/json"
 	"errors"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -65,7 +67,11 @@ func (p *Parser) ParsePaymentNotification(body []byte) (*PaymentNotification, er
 		OccurredAt       string `json:"occurredAt"`
 		NotifyTime       string `json:"notifyTime"`
 	}
-	if err := json.Unmarshal(body, &payload); err != nil {
+	normalizedBody, err := normalizeAggregateNotificationBody(body)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(normalizedBody, &payload); err != nil {
 		return nil, err
 	}
 	outTradeNo := strings.TrimSpace(payload.OutTradeNo)
@@ -88,7 +94,7 @@ func (p *Parser) ParsePaymentNotification(body []byte) (*PaymentNotification, er
 		TerminalStatus: terminalStatus,
 		IsTerminal:     isTerminalPaymentStatus(terminalStatus),
 		OccurredAt:     occurredAt,
-		Raw:            body,
+		Raw:            normalizedBody,
 		Fact: aggregatecontracts.PaymentFact{
 			OutTradeNo:       outTradeNo,
 			TradeNo:          strings.TrimSpace(payload.TradeNo),
@@ -96,7 +102,7 @@ func (p *Parser) ParsePaymentNotification(body []byte) (*PaymentNotification, er
 			SuccessAmountFen: amount,
 			FeeAmountFen:     payload.FeeAmount,
 			ResultCode:       strings.TrimSpace(payload.ResultCode),
-			Raw:              body,
+			Raw:              normalizedBody,
 		},
 	}, nil
 }
@@ -118,7 +124,11 @@ func (p *Parser) ParseShareNotification(body []byte) (*ShareNotification, error)
 		ClearingDate   string `json:"clearingDate"`
 		RequestReserve string `json:"reqReserved"`
 	}
-	if err := json.Unmarshal(body, &payload); err != nil {
+	normalizedBody, err := normalizeAggregateNotificationBody(body)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(normalizedBody, &payload); err != nil {
 		return nil, err
 	}
 	outTradeNo := strings.TrimSpace(payload.OutTradeNo)
@@ -141,14 +151,14 @@ func (p *Parser) ParseShareNotification(body []byte) (*ShareNotification, error)
 		TerminalStatus: terminalStatus,
 		IsTerminal:     isTerminalShareStatus(terminalStatus),
 		OccurredAt:     occurredAt,
-		Raw:            body,
+		Raw:            normalizedBody,
 		Fact: aggregatecontracts.ShareFact{
 			OutTradeNo:       outTradeNo,
 			TradeNo:          strings.TrimSpace(payload.TradeNo),
 			TransactionState: upstreamState,
 			SuccessAmountFen: amount,
 			ResultCode:       strings.TrimSpace(payload.ResultCode),
-			Raw:              body,
+			Raw:              normalizedBody,
 		},
 	}, nil
 }
@@ -168,7 +178,11 @@ func (p *Parser) ParseRefundNotification(body []byte) (*RefundNotification, erro
 		NotifyTime    string `json:"notifyTime"`
 		FinishTime    string `json:"finishTime"`
 	}
-	if err := json.Unmarshal(body, &payload); err != nil {
+	normalizedBody, err := normalizeAggregateNotificationBody(body)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(normalizedBody, &payload); err != nil {
 		return nil, err
 	}
 	outTradeNo := strings.TrimSpace(payload.OutTradeNo)
@@ -191,16 +205,67 @@ func (p *Parser) ParseRefundNotification(body []byte) (*RefundNotification, erro
 		TerminalStatus: terminalStatus,
 		IsTerminal:     isTerminalRefundStatus(terminalStatus),
 		OccurredAt:     occurredAt,
-		Raw:            body,
+		Raw:            normalizedBody,
 		Fact: aggregatecontracts.RefundFact{
 			OutTradeNo:       outTradeNo,
 			TradeNo:          strings.TrimSpace(payload.TradeNo),
 			TransactionState: upstreamState,
 			SuccessAmountFen: amount,
 			ResultCode:       strings.TrimSpace(payload.ResultCode),
-			Raw:              body,
+			Raw:              normalizedBody,
 		},
 	}, nil
+}
+
+func normalizeAggregateNotificationBody(body []byte) ([]byte, error) {
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		return nil, errors.New("baofu aggregate notification payload is required")
+	}
+	if json.Valid([]byte(trimmed)) {
+		return []byte(trimmed), nil
+	}
+	if !strings.Contains(trimmed, "=") {
+		var payload any
+		if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
+			return nil, err
+		}
+	}
+	values, err := url.ParseQuery(trimmed)
+	if err != nil {
+		return nil, err
+	}
+	if len(values) == 0 {
+		return nil, errors.New("baofu aggregate notification form payload is empty")
+	}
+	payload := make(map[string]any, len(values))
+	for key, vals := range values {
+		key = strings.TrimSpace(key)
+		if key == "" || len(vals) == 0 {
+			continue
+		}
+		value := strings.TrimSpace(vals[0])
+		if isAggregateNotificationIntegerField(key) {
+			if parsed, err := strconv.ParseInt(value, 10, 64); err == nil {
+				payload[key] = parsed
+				continue
+			}
+		}
+		payload[key] = value
+	}
+	if len(payload) == 0 {
+		return nil, errors.New("baofu aggregate notification form payload is empty")
+	}
+	return json.Marshal(payload)
+}
+
+func isAggregateNotificationIntegerField(key string) bool {
+	switch strings.TrimSpace(key) {
+	case "succAmt", "txnAmt", "feeAmt", "instFeeAmt", "sharingAmt", "refundAmt":
+		return true
+	default:
+		return false
+	}
 }
 
 func parseBaofuPaymentNotifyTime(candidates ...string) time.Time {

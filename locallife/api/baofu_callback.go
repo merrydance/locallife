@@ -206,7 +206,7 @@ func (server *Server) handleBaofuPaymentNotify(ctx *gin.Context) {
 		Str("out_trade_no", strings.TrimSpace(notification.Fact.OutTradeNo)).
 		Str("baofu_payment_state", strings.TrimSpace(notification.Fact.TransactionState)).
 		Msg("baofu payment callback fact persisted")
-	ctx.JSON(http.StatusOK, baofuCallbackResponse{Code: "SUCCESS", Message: "OK"})
+	ctx.Data(http.StatusOK, "text/plain; charset=utf-8", []byte("OK"))
 }
 
 func (server *Server) handleBaofuShareNotify(ctx *gin.Context) {
@@ -260,7 +260,7 @@ func (server *Server) handleBaofuShareNotify(ctx *gin.Context) {
 		Str("out_order_no", strings.TrimSpace(notification.Fact.OutTradeNo)).
 		Str("baofu_share_state", strings.TrimSpace(notification.Fact.TransactionState)).
 		Msg("baofu share callback fact persisted")
-	ctx.JSON(http.StatusOK, baofuCallbackResponse{Code: "SUCCESS", Message: "OK"})
+	ctx.Data(http.StatusOK, "text/plain; charset=utf-8", []byte("OK"))
 }
 
 func (server *Server) handleBaofuRefundNotify(ctx *gin.Context) {
@@ -316,7 +316,7 @@ func (server *Server) handleBaofuRefundNotify(ctx *gin.Context) {
 		Str("out_refund_no", strings.TrimSpace(notification.Fact.OutTradeNo)).
 		Str("baofu_refund_state", strings.TrimSpace(notification.Fact.TransactionState)).
 		Msg("baofu refund callback fact persisted")
-	ctx.JSON(http.StatusOK, baofuCallbackResponse{Code: "SUCCESS", Message: "OK"})
+	ctx.Data(http.StatusOK, "text/plain; charset=utf-8", []byte("OK"))
 }
 
 func (server *Server) recordBaofuRefundCallbackFact(ctx context.Context, notification *baofuaggregatenotification.RefundNotification, refundOrder db.RefundOrder, paymentOrder db.PaymentOrder) (*db.ExternalPaymentFactApplication, error) {

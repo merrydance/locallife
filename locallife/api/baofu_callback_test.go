@@ -134,7 +134,7 @@ func TestBaofuPaymentCallbackPersistsFactAndEnqueuesApplication(t *testing.T) {
 	server.router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
-	require.Contains(t, recorder.Body.String(), "SUCCESS")
+	require.Equal(t, "OK", recorder.Body.String())
 	require.Equal(t, []int64{601}, taskRecorder.applicationIDs)
 }
 
@@ -184,7 +184,7 @@ func TestBaofuShareCallbackPersistsFactAndEnqueuesApplication(t *testing.T) {
 	server.router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
-	require.Contains(t, recorder.Body.String(), "SUCCESS")
+	require.Equal(t, "OK", recorder.Body.String())
 	require.Equal(t, []int64{801}, taskRecorder.applicationIDs)
 }
 
@@ -276,7 +276,7 @@ func TestBaofuRefundCallbackPersistsFactAndEnqueuesApplication(t *testing.T) {
 	server.router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
-	require.Contains(t, recorder.Body.String(), "SUCCESS")
+	require.Equal(t, "OK", recorder.Body.String())
 	require.Equal(t, []int64{1001}, taskRecorder.applicationIDs)
 }
 

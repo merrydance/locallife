@@ -38,6 +38,23 @@ func TestParserParsePaymentNotificationNormalizesPaymentFact(t *testing.T) {
 	require.NotContains(t, string(notification.Raw), "sharingMerId")
 }
 
+func TestParserParsePaymentNotificationAcceptsFormURLEncodedBody(t *testing.T) {
+	body := []byte(`resultCode=SUCCESS&outTradeNo=PO202605050001&tradeNo=BFPAY202605050001&txnState=SUCCESS&succAmt=100&feeAmt=1&notifyTime=20260505115804`)
+	parser := NewParser()
+
+	notification, err := parser.ParsePaymentNotification(body)
+
+	require.NoError(t, err)
+	require.Equal(t, "PO202605050001", notification.Fact.OutTradeNo)
+	require.Equal(t, "BFPAY202605050001", notification.Fact.TradeNo)
+	require.Equal(t, aggregatecontracts.PaymentStateSuccess, notification.Fact.TransactionState)
+	require.Equal(t, int64(100), notification.Fact.SuccessAmountFen)
+	require.Equal(t, int64(1), notification.Fact.FeeAmountFen)
+	require.Equal(t, "success", notification.TerminalStatus)
+	require.True(t, notification.IsTerminal)
+	require.JSONEq(t, `{"feeAmt":1,"notifyTime":"20260505115804","outTradeNo":"PO202605050001","resultCode":"SUCCESS","succAmt":100,"tradeNo":"BFPAY202605050001","txnState":"SUCCESS"}`, string(notification.Raw))
+}
+
 func TestParserParsePaymentNotificationRequiresOutTradeNo(t *testing.T) {
 	parser := NewParser()
 

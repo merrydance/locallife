@@ -2052,6 +2052,31 @@ PATH="/usr/local/go/bin:$PATH" go run ./cmd/baofu_error_probe
 
 Expected: at least one account/report/aggregate fake request should produce a provider error or abnormal response with safe frontend semantics. Record only masked IDs/codes/messages in `baofu-sandbox-evidence.md`; do not paste raw upstream messages if they include business/private details.
 
+
+### Task P22: Aggregate Callback Form Payload Parsing
+
+> Trigger: Baofoo sandbox sent two payment callbacks to `/v1/webhooks/baofu/payment` after unified-order smoke. The server logged `invalid character 'r' looking for beginning of value` and returned 401. The body was 56 bytes and the user agent was `Apache-HttpClient/4.3.6`, consistent with the aggregate notification document listing direct notification parameters rather than a JSON envelope.
+
+**Files:**
+- Modify: `locallife/baofu/aggregatepay/notification/notification.go`
+- Modify: `locallife/baofu/aggregatepay/notification/notification_test.go`
+- Modify: `locallife/api/baofu_callback.go`
+- Modify: `locallife/api/baofu_callback_test.go`
+- Modify: `artifacts/baofu-payment/baofu-sandbox-evidence.md`
+- Modify: `artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md`
+
+- [x] **Step 1: Add regression**
+
+Added a parser regression for payment callbacks delivered as `application/x-www-form-urlencoded` / query-style direct fields such as `resultCode=SUCCESS&outTradeNo=...&txnState=SUCCESS`. The regression failed before the parser fix with `invalid character 'r' looking for beginning of value`, matching production logs.
+
+- [x] **Step 2: Fix aggregate callback parser and ACK**
+
+Aggregate payment/share/refund notification parsers now accept either JSON objects or form/query direct fields and normalize form bodies into JSON before persistence so `Raw` remains JSON-safe for fact storage. Successful aggregate payment/share/refund callbacks now return plain text `OK`, matching the Baofoo aggregate notification document, instead of JSON `{"code":"SUCCESS","message":"OK"}`.
+
+- [ ] **Step 3: Deploy and observe next callback**
+
+After deploy, trigger or wait for a Baofoo sandbox payment callback. Expected: parser should no longer fail on `invalid character 'r'`; if the callback references a smoke order that was not created through local API, the next failure may be a local order lookup/persistence failure rather than a parse failure. Do not ACK unknown local orders as success.
+
 ### 7.3 Completion Gate For This Pre-`dataContent` Audit
 
 This pre-sandbox-positive audit is complete only when:

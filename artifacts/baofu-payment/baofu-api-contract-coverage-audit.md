@@ -131,7 +131,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 | 聚合商户报备 | 报备信息查询 | `merchant_report_query` | 查询平台或商户报备状态和 `subMchId` | C3：DTO/状态归一化已建 | C3：client/service 同步 `channelRetParam.sub_mch_id` 边界已建，`baofu-merchant-report-recovery` 已补处理中报备和 APPLET 授权补偿 | C4：sandbox 查询成功并归一出 `subMchId` |
 | 聚合支付 | 统一下单交易创建 | `unified_order` | 主支付入口，微信 JSAPI 支付 | C3：官方字段、条件必填、金额关系、`riskInfo.clientIp` 校验已建 | C3：concrete client + API runtime main-business wiring 已建；sandbox 发包省略 `subMchId`，production 仍必填 | C4-形态：sandbox 已证明请求命中测试地址且 wire `subMchId=omitted_by_client`；真实支付因宝付 sandbox 不支持真实下单，转生产首单验证 |
 | 聚合支付 | 支付订单查询 | `order_query` | 支付回调缺失恢复 | C3：DTO/client 已建 | C3：recovery scheduler 已可使用生产 aggregatepay client 查询并落 fact | C4-查询形态：sandbox unified-order 后按 `outTradeNo` 查询返回 `SUCCESS` 并归一为 success；未触发本地 fact application |
-| 聚合支付 | 支付结果通知 | 通知 URL | 支付终态回调 | C2/C3：notification parser 与 ACK 语义有本地测试 | C2/C3：callback 落 fact 并入队；真实验签/数字信封和沙箱回调待补 | 未做 |
+| 聚合支付 | 支付结果通知 | 通知 URL | 支付终态回调 | C2/C3：notification parser 支持 JSON/form direct fields，成功 ACK 为纯文本 `OK` | C2/C3：callback 落 fact 并入队；sandbox 已收到 form 类回调但尚未正向落本地订单 fact | C4-负向：form 回调曾因 JSON-only parser 返回 401，已本地修复待重试 |
 | 确认分账 | 确认分账 | `share_after_pay` | 支付成功后按 `sharingMerId` 分账 | C3：DTO/Validate 已建，接收方只读 `sharing_mer_id` | C3：worker 已可使用生产 aggregatepay client 创建分账 | C4-负向形态：fake order 已命中 sandbox 并以 `ORDER_NOT_EXIST` fail-closed；真实分账需已支付订单 |
 | 分账查询 | 分账订单查询 | `share_query` | 分账处理中恢复 | C3：DTO/client 已建 | C3：scheduler 已可使用生产 aggregatepay client 查询落 fact | C4-形态：fake order 查询已命中 sandbox 并解析 `ABNORMAL`，不代表真实分账成功 |
 | 分账通知 | 分账结果通知 | 通知 URL | 分账终态回调 | C2/C3：parser/callback/fact application 已建 | C2/C3：真实验签/数字信封和沙箱回调待补 | 未做 |
@@ -390,7 +390,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 用途：支付异步结果。当前本地 parser 可把支付通知落 fact，并通过 fact application 更新本地支付单。
 
-缺口：已有本地 parser/callback/fact application，但未核对官方通知公共验签/ACK 完整要求；未做宝付真实通知联调；通知 `feeAmt`、渠道原始字段等未完整进入契约。
+缺口：已有本地 parser/callback/fact application；2026-05-05 sandbox 已证明宝付可能以 form/query direct fields 投递支付回调，本地已兼容 JSON 与 form 两种形态并将成功 ACK 改为纯文本 `OK`。仍未完成真实回调落本地订单 fact 的正向证据；通知 `feeAmt`、渠道原始字段等未完整进入契约。
 
 ### 8.4 交易关闭
 
