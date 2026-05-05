@@ -68,11 +68,13 @@
 | Date | Env | Endpoint | ReportNo | Result | subMchId Masked | Local Sync | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-05-05 | sandbox | `https://mch-juhe.baofoo.com/mch-service/api` | `MR20260505100849` | success; `reportState=SUCCESS` | - before normalization | not synced by query yet | next fix | Query succeeded but did not surface `subMchId` because Baofoo query documents WeChat `sub_mch_id` inside `channelRetParam`, while the local DTO only read top-level `subMchId`. Fixed locally to normalize `channelRetParam.sub_mch_id` into `SubMchID`; redeploy and rerun query to record positive query C4 with `subMchId`. |
+| 2026-05-05 | sandbox | `https://mch-juhe.baofoo.com/mch-service/api` | `MR20260505100849` | success; `reportState=SUCCESS` | `4000***0573` | query result normalized from `channelRetParam.sub_mch_id` | `94bae1f2` | Positive merchant-report query C4 evidence after redeploy. The normalized result surfaces the WeChat channel `subMchId` needed for APPLET authorization binding. |
 
 ## Bind Sub Config `bind_sub_config` / `APPLET`
 
 | Date | Env | Endpoint | subMchId Masked | AuthType | AuthContent Masked | Result | Payment Readiness | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-05-05 | sandbox | `https://mch-juhe.baofoo.com/mch-service/api` | `4000***0573` | `APPLET` | `wx9f***4a0b` | success; `resultCode=SUCCESS` | merchant payment channel ready for unified-order smoke | `94bae1f2` | Positive APPLET bind C4 evidence. Baofoo success response did not echo `subMchId/authType/authContent`, but the request used the queried `subMchId` and LocalLife mini program appid; continue to unified-order test with real mini-program `sub_openid`. |
 
 ## Unified Order `unified_order`
 
