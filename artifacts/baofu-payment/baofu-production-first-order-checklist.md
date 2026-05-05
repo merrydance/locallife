@@ -1,6 +1,6 @@
 # 宝付宝财通生产首单 Checklist
 
-> 适用场景：宝付全量切换后的第一笔生产订单。首单必须在平台财务、运营、后端值守同时在线时执行；任一核对项失败即暂停新支付创建，已支付订单继续走宝付分账/提现恢复链路。
+> 适用场景：宝付全量切换后的第一笔生产订单。宝付已确认测试环境不支持真实下单，因此真实 `wc_pay_data`、支付回调、后续分账/提现闭环必须在生产首单或宝付提供的真实交易验证环境中完成。首单必须在平台财务、运营、后端值守同时在线时执行；任一核对项失败即暂停新支付创建，已支付订单继续走宝付分账/提现恢复链路。
 
 ## 1. 首单前配置确认
 
@@ -13,14 +13,14 @@
 ## 2. 接收方就绪确认
 
 - [ ] 商户宝付二级户开户成功，状态为 `结算账户可用`。
-- [ ] 商户微信渠道报备标识存在，允许在微信生态内通过宝付聚合支付下单。
+- [ ] 商户微信渠道报备标识存在，允许在微信生态内通过宝付聚合支付下单；生产 `unified_order` 必须上送该商户报备返回的 `subMchId`。
 - [ ] 骑手宝付个人二级户开户成功，状态为 `结算账户可用`。
 - [ ] 区域运营商宝付二级户开户成功，状态为 `结算账户可用`。
 - [ ] 所有分账接收方使用开户接口返回的二级商户号作为 `sharing_mer_id`；不得使用 `contract_no`、微信 `openid`、微信 `subMchId` 或平台宝付收款商户号。
 
 ## 3. 支付与回调确认
 
-- [ ] 小程序发起首单支付，前端直接使用后端返回的 `wc_pay_data` 调用 `wx.requestPayment`，不在前端拼装 nonce、package、signType 或 paySign。
+- [ ] `bind_sub_config(authType=APPLET)` 已成功至少 30 分钟后再发起首单支付；小程序发起首单支付，前端直接使用后端返回的 `wc_pay_data` 调用 `wx.requestPayment`，不在前端拼装 nonce、package、signType 或 paySign。
 - [ ] 宝付支付订单本地 `payment_orders.payment_channel=baofu_aggregate`、`requires_profit_sharing=true`、`payment_type=profit_sharing`。
 - [ ] `external_payment_commands` 已记录宝付支付创建命令，provider/channel/capability 分别为 `baofu`、`baofu_aggregate`、`baofu_payment`。
 - [ ] 支付成功回调已验签、解密并持久化到 `external_payment_facts`，再由事实应用推进本地支付成功。

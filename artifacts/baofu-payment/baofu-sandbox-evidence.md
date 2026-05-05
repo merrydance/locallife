@@ -14,10 +14,10 @@
 
 - [ ] 用安全测试身份资料完成一次 `open_personal` 或机构开户正向测试，并通过查询拿到 `contractNo`/`sharing_mer_id` 脱敏证据。
 - [ ] 用已开户的宝付二级商户号完成 `merchant_report`、`merchant_report_query` 和 `bind_sub_config(authType=APPLET)` 正向测试。
-- [ ] 按宝付测试环境口径省略 `subMchId`，用本小程序下真实 `sub_openid` 完成 `unified_order`，拿到 `wc_pay_data`，并记录回调/查询补偿证据；生产环境仍必须上送聚合商户报备返回的 `subMchId`。
-- [ ] 基于已支付订单完成 `share_after_pay`、`share_query` 和分账回调证据。
-- [ ] 基于分账前订单完成 `order_refund`、`refund_query` 和退款回调证据。
-- [ ] 用真实 `contractNo` 完成余额查询、提现、提现查询和提现回调证据。
+- [ ] 按宝付测试环境口径省略 `subMchId`，用本小程序下真实 `sub_openid` 发起一次 `unified_order` 请求形态验证；宝付已确认测试环境不支持真实下单，因此不再期待 sandbox 返回真实 `wc_pay_data`、支付回调或后续分账链路。生产环境仍必须上送聚合商户报备返回的 `subMchId`。
+- [ ] 在生产首单或宝付提供的真实交易验证环境中，基于已支付订单完成 `share_after_pay`、`share_query` 和分账回调证据；sandbox 先用 fake order 做请求形态/错误分类探针。
+- [ ] 在生产首单或宝付提供的真实交易验证环境中，基于分账前订单完成 `order_refund`、`refund_query` 和退款回调证据；sandbox 先用 fake order 做请求形态/错误分类探针。
+- [ ] 用真实 `contractNo` 完成余额查询和提现查询；真实提现/提现回调只有在明确设置 `BAOFU_RUN_WITHDRAW=true` 的资金动作测试中执行。
 - [ ] 为账户、报备、聚合支付各补一条参数/配置/处理中类错误样例，验证 API 安全文案不泄露上游原文。
 
 ## Account Open `T-1001-013-01`
@@ -78,9 +78,13 @@
 | 2026-05-05 | sandbox | `https://mch-juhe.baofoo.com/mch-service/api` | `4000***0573` | `APPLET` | `wx9f***4a0b` | success; `resultCode=SUCCESS` | merchant payment channel ready for unified-order smoke | `94bae1f2` | Positive APPLET bind C4 evidence. Baofoo success response did not echo `subMchId/authType/authContent`, but the request used the queried `subMchId` and LocalLife mini program appid; continue to unified-order test with real mini-program `sub_openid`. |
 | 2026-05-05 | sandbox | `https://mch-juhe.baofoo.com/mch-service/api` | `4000***0573` | `APPLET` | `wx9f***4a0b` | success; `resultCode=SUCCESS` | APPLET bind positive, unified-order still provider-rejected | `bccd0b89` | APPLET bind was rerun after `merchant_report_modify` reported success with `service_codes=["JSAPI","APPLET"]`. This proves APPLET authorization itself is not the remaining blocker. |
 
+### BindSub Config Timing Note
+
+宝付确认 `bind_sub_config` 返回 `SUCCESS` 即表示绑定成功，但可能需要约 30 分钟才能发起交易。sandbox 资料为虚拟资料且不会真实发往渠道，因此绑定成功只能证明授权目录接口契约和本地 readiness 写入，不证明 sandbox 可真实下单。
+
 ## Unified Order `unified_order`
 
-2026-05-05 宝付技术支持回复：测试环境统一下单不要上送 `subMchId`，生产环境需要上送。因此此前携带 `subMchId=4000***0573` 的 sandbox `PAY_CHANNEL_NOT_SUPPORT` 不能再作为生产契约字段漂移证据；下一次 sandbox 统一下单的单变量重试必须省略 `subMchId`，但生产 readiness 和发包仍以商户报备 `subMchId` 为必填。
+2026-05-05 宝付技术支持回复：测试环境统一下单不要上送 `subMchId`，生产环境需要上送；测试环境不支持真实下单；`bind_sub_config` 返回 `SUCCESS` 表示绑定成功但可能需要约 30 分钟才能发起交易；测试环境商户/渠道资料为虚拟资料，不会真实发往渠道。因此此前携带 `subMchId=4000***0573` 的 sandbox `PAY_CHANNEL_NOT_SUPPORT` 不能再作为生产契约字段漂移证据；下一次 sandbox 统一下单的单变量重试必须省略 `subMchId`，且验收目标只是不含 `subMchId` 的请求形态和安全错误分类，不再期待真实 `wc_pay_data`。生产 readiness 和发包仍以商户报备 `subMchId` 为必填。
 
 | Date | Env | Endpoint | OutTradeNo | subMchId Masked | Amount Fen | wc_pay_data | Callback | Query | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |

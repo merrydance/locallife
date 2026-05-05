@@ -1835,15 +1835,15 @@ Confirmed:
 
 Added `WechatMiniProgramPaymentServiceCodes()` as the local project source for first-version WeChat mini program payment report services. Future merchant reports now submit `JSAPI` + `APPLET` together.
 
-- [ ] **Step 3: Sandbox repair for existing report**
+- [x] **Step 3: Sandbox repair for existing report**
 
-Existing sandbox `subMchId=4000***0573` was likely created before this correction. Before retrying unified order, run `merchant_report_modify` for that `subMchId` with `service_codes=["JSAPI","APPLET"]`, or create a fresh report that submits both service codes, then run `bind_sub_config(APPLET)` again and retry `unified_order`.
+Existing sandbox `subMchId=4000***0573` was likely created before this correction. We ran `merchant_report_modify` for that `subMchId` with `service_codes=["JSAPI","APPLET"]`, then reran `bind_sub_config(APPLET)` successfully. Baofoo later clarified sandbox does not support real payment, so this task is closed as a local service-code drift fix plus sandbox-limitation finding rather than a channel-provisioning blocker.
 
-2026-05-05 follow-up: `merchant_report_modify` returned `SUCCESS` for existing `subMchId=4000***0573`, and APPLET bind returned `SUCCESS` again, but `unified_order` still returned `PAY_CHANNEL_NOT_SUPPORT`. Therefore the remaining blocker is no longer explained by the local default service-code drift alone. Next diagnostics should either create a fresh report after the `JSAPI+APPLET` fix or ask Baofoo to inspect whether `subMchId=400060573` under `merId=102004465/terId=200005200` has WeChat `WECHAT_JSAPI` enabled in sandbox.
+2026-05-05 follow-up: `merchant_report_modify` returned `SUCCESS` for existing `subMchId=4000***0573`, and APPLET bind returned `SUCCESS` again, but `unified_order` still returned `PAY_CHANNEL_NOT_SUPPORT`. Baofoo later clarified this is consistent with sandbox limitations: sandbox should not receive `subMchId` and does not support real payment.
 
-2026-05-05 IPv4 follow-up: retrying the same unified-order request with an IPv4 payer IP still returned `PAY_CHANNEL_NOT_SUPPORT`, so IPv6 `riskInfo.clientIp` compatibility is ruled out. Continue with the fresh-report diagnostic or Baofoo channel-provisioning inspection.
+2026-05-05 IPv4 follow-up: retrying the same unified-order request with an IPv4 payer IP still returned `PAY_CHANNEL_NOT_SUPPORT`, so IPv6 `riskInfo.clientIp` compatibility is ruled out. This remains useful evidence, but no longer requires fresh-report or channel-provisioning inspection for sandbox.
 
-2026-05-05 fresh-report follow-up: attempting a new merchant report for the same BaoCaiTong secondary account / subject returned `MERCHANT_REPORT_LIMIT`. This blocks the fresh-report diagnostic in sandbox; either Baofoo must inspect/enable the existing `subMchId=400060573` channel capabilities, or we need a different BaoCaiTong secondary account / subject for a truly fresh report.
+2026-05-05 fresh-report follow-up: attempting a new merchant report for the same BaoCaiTong secondary account / subject returned `MERCHANT_REPORT_LIMIT`. Baofoo later clarified sandbox merchant/channel information is virtual and not sent to real channels, so duplicate-report behavior is only a sandbox/account-state fact, not a production channel proof.
 
 ### Task P15: Unified Order Sandbox `subMchId` Omission
 
@@ -1883,7 +1883,49 @@ Implementation result:
 
 - [ ] **Step 3: Redeploy and retry sandbox unified order**
 
-After deploy, rerun unified order without passing `BAOFU_TEST_SUB_MCH_ID` or with the updated smoke script that omits it automatically in sandbox. Expected next outcome should move past the previous `PAY_CHANNEL_NOT_SUPPORT` caused by sending sandbox `subMchId`; if Baofoo still rejects, record the new upstream code as a fresh single-variable result.
+After deploy, rerun unified order without passing `BAOFU_TEST_SUB_MCH_ID` or with the updated smoke script that omits it automatically in sandbox. Baofoo has since clarified that sandbox does not support real payment, so the expected proof is only: request reaches sandbox, wire `bizContent` omits `subMchId`, and any provider rejection is safely classified. Do not treat missing `wc_pay_data` in sandbox as a remaining code defect; real payment proof moves to production first-order validation or a Baofoo-provided real-transaction environment.
+
+### Task P16: Independent Sandbox Probe And Baofoo Support Clarifications
+
+> Trigger: the temporary `/tmp/baofu_independent_probe.go` script failed to compile because it passed multi-return client calls directly into `printResult`. Baofoo also clarified sandbox limitations: no real payment, `bind_sub_config=SUCCESS` means bound but may take about 30 minutes before transaction, and sandbox merchant/channel information is virtual and not sent to real channels.
+
+**Files:**
+- Create: `locallife/cmd/baofu_independent_probe/main.go`
+- Modify: `artifacts/baofu-payment/baofu-api-contract-coverage-audit.md`
+- Modify: `artifacts/baofu-payment/baofu-sandbox-evidence.md`
+- Modify: `artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md`
+- Modify: `artifacts/baofu-payment/baofu-production-first-order-checklist.md`
+
+- [x] **Step 1: Replace the throwaway probe with a repo-owned command**
+
+Added `go run ./cmd/baofu_independent_probe` so future deploys do not depend on a stale `/tmp` script. The command explicitly stores each `(result, error)` pair before calling `printResult`, which fixes the Go multi-return compile error.
+
+The probe covers safe independent calls that are not blocked by real unified order:
+
+- `account_balance` when `BAOFU_TEST_CONTRACT_NO` is set;
+- fake `share_query`;
+- fake `refund_query`;
+- fake `order_close`;
+- fake `order_refund` using a nonexistent payment order;
+- fake `share_after_pay` using `BAOFU_TEST_CONTRACT_NO` as receiver id, still against a nonexistent payment order;
+- fake `withdraw_query`;
+- real `withdraw` only when `BAOFU_RUN_WITHDRAW=true` and an amount are explicitly provided.
+
+- [x] **Step 2: Record sandbox limits**
+
+Docs now state that sandbox unified order cannot prove a real payment or produce reliable `wc_pay_data`/callback evidence. Sandbox can still prove endpoint reachability, envelope shape, environment-specific omission of `subMchId`, parsing, and error classification.
+
+- [ ] **Step 3: Redeploy and run independent probe**
+
+After deploy, run:
+
+```bash
+BAOFU_TEST_CONTRACT_NO='CP610000000000542938' \
+BAOFU_TEST_ACCOUNT_TYPE='personal' \
+PATH="/usr/local/go/bin:$PATH" go run ./cmd/baofu_independent_probe
+```
+
+Do not set `BAOFU_RUN_WITHDRAW=true` unless intentionally testing a real funds action.
 
 ### 7.3 Completion Gate For This Pre-`dataContent` Audit
 
@@ -1893,4 +1935,4 @@ This pre-sandbox-positive audit is complete only when:
 - every required first-version Baofoo interface has a field matrix row for request, response, status/error fields, required/conditional-required rules, type/length, and enum source;
 - every required/conditional-required rule used by LocalLife has a negative table test;
 - static guard blocks the drift patterns already discovered during smoke;
-- docs state clearly that C3 means local contract/transport coverage only, and C4 still requires real Baofoo sandbox request/callback/query evidence.
+- docs state clearly that C3 means local contract/transport coverage only; C4 requires real Baofoo request/callback/query evidence, but sandbox unified-order cannot prove real payment because Baofoo confirmed sandbox does not support true payment.
