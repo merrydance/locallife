@@ -126,6 +126,8 @@ func TestAccountClientOpenAccountUsesConfiguredNotifyBaseURL(t *testing.T) {
 		OutRequestNo:  "OPEN202605040001",
 		LegalName:     "测试用户",
 		CertificateNo: "110101199001010011",
+		BankAccountNo: "6222020202020202020",
+		BankMobile:    "13800138000",
 	})
 
 	require.NoError(t, err)
@@ -133,6 +135,90 @@ func TestAccountClientOpenAccountUsesConfiguredNotifyBaseURL(t *testing.T) {
 	require.Equal(t, "T-1001-013-01", env.Header.ServiceType)
 	require.JSONEq(t, `{"noticeUrl":"https://api.example.com/v1/webhooks/baofu/account/open"}`, partialJSONForAccountTest(t, env.Body, "noticeUrl"))
 	require.NotContains(t, string(env.Body), "placeholder.local")
+}
+
+func TestAccountClientOpenAccountRejectsPersonalTwoFactorBeforeHTTP(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": "1"}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.OpenAccount(context.Background(), contracts.OpenAccountRequest{
+		AccountType:   "personal",
+		OutRequestNo:  "OPEN202605040001",
+		LegalName:     "测试用户",
+		CertificateNo: "110101199001010011",
+	})
+
+	require.EqualError(t, err, "baofu open account personal bankAccountNo is required")
+	require.Nil(t, doer.request)
+}
+
+func TestAccountClientOpenAccountMapsCompleteBusinessInputToOfficialDTO(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": "1", "transSerialNo": "OPEN202605040003", "contractNo": "CM202605040003", "state": "2"}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.OpenAccount(context.Background(), contracts.OpenAccountRequest{
+		AccountType:                "business",
+		OutRequestNo:               "OPEN202605040003",
+		Email:                      "merchant@example.com",
+		SelfEmployed:               true,
+		CustomerName:               "某某餐饮店",
+		AliasName:                  "某某餐饮",
+		CertificateNo:              "91310000123456789X",
+		CertificateType:            contracts.OfficialBusinessCertificateTypeLicense,
+		CorporateName:              "王五",
+		CorporateCertType:          contracts.OfficialCertificateTypeID,
+		CorporateCertID:            "110101199001011236",
+		CorporateMobile:            "13800138002",
+		IndustryID:                 "5812",
+		ContactName:                "赵六",
+		ContactMobile:              "13800138003",
+		BankAccountNo:              "6222020000000000001",
+		BankName:                   "招商银行",
+		DepositBankProvince:        "上海市",
+		DepositBankCity:            "上海市",
+		DepositBankName:            "招商银行上海分行",
+		RegisterCapital:            "10",
+		CardUserName:               "王五",
+		PlatformNo:                 "100030218",
+		PlatformTerminalID:         "200000001",
+		QualificationTransSerialNo: "QUAL202605040001",
+	})
+
+	require.NoError(t, err)
+	env := accountRequestEnvelopeForTest(t, doer)
+	require.Equal(t, "T-1001-013-01", env.Header.ServiceType)
+	require.JSONEq(t, `{
+		"version":"4.1.0",
+		"accType":2,
+		"businessType":"BCT2.0",
+		"accInfo":{
+			"transSerialNo":"OPEN202605040003",
+			"loginNo":"OPEN202605040003",
+			"email":"merchant@example.com",
+			"selfEmployed":true,
+			"customerName":"某某餐饮店",
+			"aliasName":"某某餐饮",
+			"certificateNo":"91310000123456789X",
+			"certificateType":"LICENSE",
+			"corporateName":"王五",
+			"corporateCertType":"ID",
+			"corporateCertId":"110101199001011236",
+			"corporateMobile":"13800138002",
+			"industryId":"5812",
+			"contactName":"赵六",
+			"contactMobile":"13800138003",
+			"cardNo":"6222020000000000001",
+			"bankName":"招商银行",
+			"depositBankProvince":"上海市",
+			"depositBankCity":"上海市",
+			"depositBankName":"招商银行上海分行",
+			"registerCapital":"10",
+			"cardUserName":"王五",
+			"platformNo":"100030218",
+			"platformTerminalId":"200000001",
+			"qualificationTransSerialNo":"QUAL202605040001"
+		}
+	}`, partialJSONForAccountTest(t, env.Body, "version", "accType", "businessType", "accInfo"))
 }
 
 func TestAccountClientOpenAccountParsesOfficialResultArray(t *testing.T) {
@@ -179,7 +265,24 @@ func TestAccountClientQueryAccountUsesPersonalAccountType(t *testing.T) {
 	require.NoError(t, err)
 	env := accountRequestEnvelopeForTest(t, doer)
 	require.Equal(t, "T-1001-013-03", env.Header.ServiceType)
-	require.JSONEq(t, `{"accType":1,"loginNo":"OPEN202605050001"}`, partialJSONForAccountTest(t, env.Body, "accType", "loginNo"))
+	require.JSONEq(t, `{"version":"4.0.0","accType":1,"loginNo":"OPEN202605050001"}`, partialJSONForAccountTest(t, env.Body, "version", "accType", "loginNo"))
+}
+
+func TestAccountClientQueryAccountCanSendOfficialCredentialFields(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": 1, "result": map[string]any{"contractNo": "CP610000000000542938"}}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.QueryAccount(context.Background(), contracts.QueryAccountRequest{
+		AccountType:     "personal",
+		CertificateNo:   "110101199001011234",
+		CertificateType: contracts.OfficialCertificateTypeID,
+		PlatformNo:      "100030218",
+	})
+
+	require.NoError(t, err)
+	env := accountRequestEnvelopeForTest(t, doer)
+	require.Equal(t, "T-1001-013-03", env.Header.ServiceType)
+	require.JSONEq(t, `{"version":"4.0.0","accType":1,"certificateNo":"110101199001011234","certificateType":"ID","platformNo":"100030218"}`, partialJSONForAccountTest(t, env.Body, "version", "accType", "certificateNo", "certificateType", "platformNo"))
 }
 
 func TestAccountClientQueryAccountTreatsContractOnlySuccessAsActive(t *testing.T) {
@@ -204,6 +307,66 @@ func TestAccountClientQueryAccountTreatsContractOnlySuccessAsActive(t *testing.T
 	require.Equal(t, contracts.OpenStateActive, result.OpenState)
 	require.Equal(t, "1", result.UpstreamState)
 	require.Empty(t, result.FailCode)
+}
+
+func TestAccountClientCreateWithdrawTreatsSyncAcceptedAsProcessing(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{
+		"retCode":       1,
+		"contractNo":    "CP610000000000542938",
+		"state":         1,
+		"transSerialNo": "WD202605050001",
+		"transRemark":   "",
+	}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	result, err := client.CreateWithdraw(context.Background(), contracts.WithdrawRequest{
+		MerchantID:    "102004466",
+		TerminalID:    "200005201",
+		ContractNo:    "CP610000000000542938",
+		TransSerialNo: "WD202605050001",
+		AmountFen:     100,
+		NotifyURL:     "https://api.example.com/v1/webhooks/baofu/account/withdraw",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "processing", result.Status)
+	require.Equal(t, "1", result.UpstreamState)
+	env := accountRequestEnvelopeForTest(t, doer)
+	require.Equal(t, "T-1001-013-14", env.Header.ServiceType)
+	require.JSONEq(t, `{"version":"4.2.0","contractNo":"CP610000000000542938","transSerialNo":"WD202605050001","dealAmount":"1.00","returnUrl":"https://api.example.com/v1/webhooks/baofu/account/withdraw"}`, partialJSONForAccountTest(t, env.Body, "version", "contractNo", "transSerialNo", "dealAmount", "returnUrl"))
+}
+
+func TestAccountClientQueryWithdrawSendsOfficialTradeTimeAndParsesAmounts(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{
+		"retCode":             1,
+		"contractNo":          "CP610000000000542938",
+		"state":               1,
+		"orderId":             21273130,
+		"transSerialNo":       "WD202605050001",
+		"transMoney":          10.01,
+		"transFee":            1,
+		"transferTotalAmount": 10.01,
+		"transRemark":         "成功",
+	}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	result, err := client.QueryWithdraw(context.Background(), contracts.WithdrawQueryRequest{
+		MerchantID:    "102004466",
+		TerminalID:    "200005201",
+		TransSerialNo: "WD202605050001",
+		TradeTime:     "2026-05-05",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "21273130", result.BaofuWithdrawNo)
+	require.Equal(t, int64(1001), result.AmountFen)
+	require.Equal(t, int64(100), result.FeeFen)
+	require.Equal(t, int64(1001), result.TotalAmountFen)
+	require.Equal(t, "成功", result.Remark)
+	require.Equal(t, "succeeded", result.Status)
+	env := accountRequestEnvelopeForTest(t, doer)
+	require.Equal(t, "T-1001-013-15", env.Header.ServiceType)
+	require.JSONEq(t, `{"version":"4.2.0","transSerialNo":"WD202605050001","tradeTime":"2026-05-05"}`, partialJSONForAccountTest(t, env.Body, "version", "transSerialNo", "tradeTime"))
 }
 
 func TestAccountClientQueryBalanceUsesPersonalAccountType(t *testing.T) {

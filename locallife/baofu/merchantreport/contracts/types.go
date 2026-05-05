@@ -48,7 +48,7 @@ type WechatAddressInfo struct {
 type WechatBankCardInfo struct {
 	CardName       string `json:"card_name"`
 	CardNo         string `json:"card_no"`
-	BankBranchName string `json:"bank_branch_name"`
+	BankBranchName string `json:"bank_branch_name,omitempty"`
 }
 
 func WechatMiniProgramPaymentServiceCodes() []string {

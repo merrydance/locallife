@@ -121,6 +121,9 @@ func (s *BaofuAccountService) OpenAccount(ctx context.Context, req baofucontract
 	if strings.TrimSpace(req.OutRequestNo) == "" {
 		return nil, ErrBaofuAccountOutRequestNoRequired
 	}
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
 	rawSnapshot := []byte(`{"state":"submitted"}`)
 	binding, err := s.store.UpsertBaofuAccountBinding(ctx, db.UpsertBaofuAccountBindingParams{
 		OwnerType:             strings.TrimSpace(req.OwnerType),

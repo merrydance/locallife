@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	baofunotification "github.com/merrydance/locallife/baofu/account/notification"
+	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	baofuaggregatenotification "github.com/merrydance/locallife/baofu/aggregatepay/notification"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
@@ -178,9 +180,12 @@ func (server *Server) handleBaofuPaymentNotify(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, baofuCallbackResponse{Code: "FAIL", Message: "callback content invalid"})
 		return
 	}
-	paymentOrder, err := server.store.GetPaymentOrderByOutTradeNo(ctx.Request.Context(), strings.TrimSpace(notification.Fact.OutTradeNo))
+	paymentOrder, err := server.loadBaofuPaymentOrderForCallback(ctx.Request.Context(), notification)
 	if err != nil {
-		log.Error().Err(err).Str("out_trade_no", strings.TrimSpace(notification.Fact.OutTradeNo)).Msg("load baofu payment order for callback failed")
+		log.Error().Err(err).
+			Str("out_trade_no", strings.TrimSpace(notification.Fact.OutTradeNo)).
+			Str("baofu_trade_no", strings.TrimSpace(notification.Fact.TradeNo)).
+			Msg("load baofu payment order for callback failed")
 		ctx.JSON(http.StatusInternalServerError, baofuCallbackResponse{Code: "FAIL", Message: "persist callback failed"})
 		return
 	}
@@ -209,6 +214,52 @@ func (server *Server) handleBaofuPaymentNotify(ctx *gin.Context) {
 	ctx.Data(http.StatusOK, "text/plain; charset=utf-8", []byte("OK"))
 }
 
+func (server *Server) loadBaofuPaymentOrderForCallback(ctx context.Context, notification *baofuaggregatenotification.PaymentNotification) (db.PaymentOrder, error) {
+	if notification == nil {
+		return db.PaymentOrder{}, fmt.Errorf("baofu payment callback notification is required")
+	}
+	if outTradeNo := strings.TrimSpace(notification.Fact.OutTradeNo); outTradeNo != "" {
+		return server.store.GetPaymentOrderByOutTradeNo(ctx, outTradeNo)
+	}
+	if tradeNo := strings.TrimSpace(notification.Fact.TradeNo); tradeNo != "" {
+		paymentOrder, err := server.store.GetPaymentOrderByTransactionId(ctx, pgtype.Text{String: tradeNo, Valid: true})
+		if err == nil || !errors.Is(err, db.ErrRecordNotFound) {
+			return paymentOrder, err
+		}
+		outTradeNo, queryErr := server.queryBaofuPaymentOutTradeNoForCallback(ctx, notification)
+		if queryErr != nil {
+			return db.PaymentOrder{}, fmt.Errorf("query baofu payment callback tradeNo %q: %w", tradeNo, queryErr)
+		}
+		if strings.TrimSpace(outTradeNo) != "" {
+			return server.store.GetPaymentOrderByOutTradeNo(ctx, outTradeNo)
+		}
+		return db.PaymentOrder{}, err
+	}
+	return db.PaymentOrder{}, fmt.Errorf("baofu payment callback outTradeNo or tradeNo is required")
+}
+
+func (server *Server) queryBaofuPaymentOutTradeNoForCallback(ctx context.Context, notification *baofuaggregatenotification.PaymentNotification) (string, error) {
+	if server.baofuAggregateClient == nil || notification == nil {
+		return "", db.ErrRecordNotFound
+	}
+	tradeNo := strings.TrimSpace(notification.Fact.TradeNo)
+	if tradeNo == "" {
+		return "", db.ErrRecordNotFound
+	}
+	queryResult, err := server.baofuAggregateClient.QueryPayment(ctx, aggregatecontracts.PaymentQueryRequest{
+		MerchantID: firstNonEmptyTrimmed(notification.Fact.MerchantID, server.config.BaofuCollectMerchantID),
+		TerminalID: firstNonEmptyTrimmed(notification.Fact.TerminalID, server.config.BaofuCollectTerminalID),
+		TradeNo:    tradeNo,
+	})
+	if err != nil {
+		return "", err
+	}
+	if queryResult == nil {
+		return "", db.ErrRecordNotFound
+	}
+	return strings.TrimSpace(queryResult.OutTradeNo), nil
+}
+
 func (server *Server) handleBaofuShareNotify(ctx *gin.Context) {
 	if server.baofuPaymentNotificationParser == nil {
 		log.Error().Msg("baofu share callback received but parser is not configured")
@@ -232,7 +283,7 @@ func (server *Server) handleBaofuShareNotify(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, baofuCallbackResponse{Code: "FAIL", Message: "callback content invalid"})
 		return
 	}
-	profitSharingOrder, err := server.store.GetProfitSharingOrderByOutOrderNo(ctx.Request.Context(), strings.TrimSpace(notification.Fact.OutTradeNo))
+	profitSharingOrder, err := server.loadBaofuProfitSharingOrderForCallback(ctx.Request.Context(), notification)
 	if err != nil {
 		log.Error().Err(err).Str("out_order_no", strings.TrimSpace(notification.Fact.OutTradeNo)).Msg("load baofu profit sharing order for callback failed")
 		ctx.JSON(http.StatusInternalServerError, baofuCallbackResponse{Code: "FAIL", Message: "persist callback failed"})
@@ -261,6 +312,49 @@ func (server *Server) handleBaofuShareNotify(ctx *gin.Context) {
 		Str("baofu_share_state", strings.TrimSpace(notification.Fact.TransactionState)).
 		Msg("baofu share callback fact persisted")
 	ctx.Data(http.StatusOK, "text/plain; charset=utf-8", []byte("OK"))
+}
+
+func (server *Server) loadBaofuProfitSharingOrderForCallback(ctx context.Context, notification *baofuaggregatenotification.ShareNotification) (db.ProfitSharingOrder, error) {
+	if notification == nil {
+		return db.ProfitSharingOrder{}, fmt.Errorf("baofu share callback notification is required")
+	}
+	if outOrderNo := strings.TrimSpace(notification.Fact.OutTradeNo); outOrderNo != "" {
+		return server.store.GetProfitSharingOrderByOutOrderNo(ctx, outOrderNo)
+	}
+	tradeNo := strings.TrimSpace(notification.Fact.TradeNo)
+	if tradeNo == "" {
+		return db.ProfitSharingOrder{}, fmt.Errorf("baofu share callback outTradeNo or tradeNo is required")
+	}
+	outOrderNo, err := server.queryBaofuShareOutOrderNoForCallback(ctx, notification)
+	if err != nil {
+		return db.ProfitSharingOrder{}, fmt.Errorf("query baofu share callback tradeNo %q: %w", tradeNo, err)
+	}
+	if strings.TrimSpace(outOrderNo) == "" {
+		return db.ProfitSharingOrder{}, db.ErrRecordNotFound
+	}
+	return server.store.GetProfitSharingOrderByOutOrderNo(ctx, outOrderNo)
+}
+
+func (server *Server) queryBaofuShareOutOrderNoForCallback(ctx context.Context, notification *baofuaggregatenotification.ShareNotification) (string, error) {
+	if server.baofuAggregateClient == nil || notification == nil {
+		return "", db.ErrRecordNotFound
+	}
+	tradeNo := strings.TrimSpace(notification.Fact.TradeNo)
+	if tradeNo == "" {
+		return "", db.ErrRecordNotFound
+	}
+	queryResult, err := server.baofuAggregateClient.QueryProfitSharing(ctx, aggregatecontracts.ShareQueryRequest{
+		MerchantID: firstNonEmptyTrimmed(notification.Fact.MerchantID, server.config.BaofuCollectMerchantID),
+		TerminalID: firstNonEmptyTrimmed(notification.Fact.TerminalID, server.config.BaofuCollectTerminalID),
+		TradeNo:    tradeNo,
+	})
+	if err != nil {
+		return "", err
+	}
+	if queryResult == nil {
+		return "", db.ErrRecordNotFound
+	}
+	return strings.TrimSpace(queryResult.OutTradeNo), nil
 }
 
 func (server *Server) handleBaofuRefundNotify(ctx *gin.Context) {

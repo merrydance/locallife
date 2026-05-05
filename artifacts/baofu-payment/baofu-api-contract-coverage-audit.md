@@ -62,6 +62,30 @@
 - “防漂移”的实现标准不能只靠文档：必须把官方必填/条件必填、字段类型长度、枚举、错误码、金额单位、回调 ACK 形态、测试/生产 endpoint 都变成 typed constants、校验器和表驱动测试。
 - 已新增 `make check-baofu-contract` 静态守卫，阻断已发现的漂移回归：响应层直接读 `BizContent`、误用旧 `https://api.baofoo.com`、分账携带 `subMchId`、用宝付一级商户号填 `sharingMerId`、重新引入静态 `BAOFU_AES_KEY`、丢失统一下单 sandbox/production `subMchId` 环境差异处理。
 
+## 2.1.1 2026-05-05 字段级复核补充
+
+本轮复核只把宝付官方页明确写出的字段、类型、必填/条件必填、枚举和嵌套结构作为真值；sandbox 成功/失败和 Java demo 只作为定位线索。结论不是“所有宝付接口已经 100% 完全对齐”，而是以下已确认漂移已经修复并加测试/守卫：
+
+| 漂移 | 官方依据 | 修复 |
+| --- | --- | --- |
+| 开户查询版本 | `queryAcc` 写明 `version=4.0.0` | `OfficialQueryAccountVersion=4.0.0`，client 和测试已改；`make check-baofu-contract` 加守卫。 |
+| 个人二要素开户字段 | `bct-1gj4ccsdha6d8` 写明 `cardUserName`、`needUploadFile` | 二要素 DTO 保留官方字段用于漂移审查，但运行时 `OfficialOpenAccountRequest.Validate()` 和上层 `OpenAccountRequest.Validate()` 均拒绝二要素，避免生产开出不可分账账户。 |
+| 开户 optional/conditional 字段 | `openAcc` 个人/企业表格 | `platformNo`、`platformTerminalId`、`qualificationTransSerialNo`、企业 `aliasName/contactName/contactMobile/registerCapital/cardUserName` 等已补到 DTO。 |
+| 企业开户证件枚举 | `openAcc` 写明企业 `certificateType=LICENSE`、法人证件枚举 | 本地默认和 Validate 已按 `LICENSE` / `ID,HONG_KONG_AND_MACAO_PASS,TAIWAN_TRAVEL_PERMIT,PASSPORT` 收口。 |
+| 开户查询字段 | `queryAcc` 写明 `certificateNo/certificateType/platformNo/loginNo/contractNo` | 本地查询请求已支持证件/平台字段，证件类型限制为 `ID/LICENSE`。`loginNo` 是否必须同时带证件/平台字段，官方文字与 sandbox 正向证据不一致，暂记为待宝付确认，不按 sandbox 改生产真值。 |
+| 提现同步/查询 | `accWithdrawal` 同步 `state=1/2` 只是受理；`queryWithdrawal` 要 `tradeTime` | `CreateWithdraw` 同步 `state=1` 只标 processing；提现恢复按订单创建日传 `tradeTime`；查询金额/手续费/总额按元转分解析。 |
+| 聚合查询响应 | `order_query` / `share_query` 响应字段表 | `finishTime/succAmt/feeAmt/instFeeAmt/clearingDate/openId/subOpenid` 和查询 agent 字段已补 DTO/测试。 |
+| 聚合响应/回调签名 | `bct-1f9qhae400u5l` 写明所有请求和返回报文都包含签名，RSA 为 `SHA256withRSA` 且结果 HEX；`bct-1f9qhakcna6te` 写明返回/通知业务报文分别为 `dataContent` | 同步响应与 payment/share/refund 回调均验签 `dataContent`；生产 server 使用签名公共 envelope parser；SM2 暂不支持并 fail-closed。 |
+| 聚合回调公共 envelope | `bct-1f9qhakcna6te` 回调公共字段写明 `dataContent` | payment/share/refund parser 已支持 JSON/form 公共 envelope 并解出 `dataContent`，成功 ACK 固定大写 `OK`。 |
+| payment/share tradeNo-only 回调 | payment/share 回调页均将 `outTradeNo` 标为非必填，`tradeNo` 为可用关联键 | payment callback 不再要求 `outTradeNo`；本地先按 `tradeNo` 查已持久化交易号，仍缺失时调用宝付查询接口恢复商户单号；share callback 缺 `outTradeNo` 时同样按 `tradeNo` 查询恢复分账单号。 |
+| 微信报备结算卡 | `merchant_report` 微信报备字段 | `bankcard_info.bank_branch_name` 按 optional 处理，空值不再序列化。 |
+
+仍不能宣称“完全对齐”的项：
+
+- 聚合 payment/share/refund callback 的精确 HTTP body content-type 未在当前页明确；实现按 JSON/form 双形态兼容解析，但生产必须存在公共 envelope 和 `signStr`。
+- `queryAcc.loginNo` 条件必填解释：官方文字疑似要求同时带 `certificateNo/certificateType/platformNo`，但 sandbox 已接受 loginNo+accType，必须作为文档/环境差异待确认。
+- 真实生产支付、分账、退款、提现正向回调没有 C4 证据；sandbox 已被宝付确认不代表真实支付渠道。
+
 
 ## 2.2 Source Ledger
 

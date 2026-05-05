@@ -13,7 +13,11 @@ const (
 	OfficialAccountTypePersonal = 1
 	OfficialAccountTypeBusiness = 2
 
-	OfficialCertificateTypeID = "ID"
+	OfficialCertificateTypeID                  = "ID"
+	OfficialBusinessCertificateTypeLicense     = "LICENSE"
+	OfficialCorporateCertTypeHongKongMacaoPass = "HONG_KONG_AND_MACAO_PASS"
+	OfficialCorporateCertTypeTaiwanPermit      = "TAIWAN_TRAVEL_PERMIT"
+	OfficialCorporateCertTypePassport          = "PASSPORT"
 )
 
 type OfficialOpenAccountRequest struct {
@@ -25,43 +29,59 @@ type OfficialOpenAccountRequest struct {
 }
 
 type OfficialPersonalAccountInfo struct {
-	TransSerialNo   string `json:"transSerialNo"`
-	LoginNo         string `json:"loginNo"`
-	CustomerName    string `json:"customerName"`
-	CertificateType string `json:"certificateType"`
-	CertificateNo   string `json:"certificateNo"`
-	CardNo          string `json:"cardNo"`
-	MobileNo        string `json:"mobileNo"`
-	CardUserName    string `json:"cardUserName"`
-	NeedUploadFile  bool   `json:"needUploadFile"`
+	TransSerialNo              string `json:"transSerialNo"`
+	LoginNo                    string `json:"loginNo"`
+	CustomerName               string `json:"customerName"`
+	CertificateType            string `json:"certificateType"`
+	CertificateNo              string `json:"certificateNo"`
+	CardNo                     string `json:"cardNo"`
+	MobileNo                   string `json:"mobileNo"`
+	CardUserName               string `json:"cardUserName"`
+	NeedUploadFile             bool   `json:"needUploadFile"`
+	PlatformNo                 string `json:"platformNo,omitempty"`
+	PlatformTerminalID         string `json:"platformTerminalId,omitempty"`
+	QualificationTransSerialNo string `json:"qualificationTransSerialNo,omitempty"`
 }
 
 type OfficialPersonalTwoFactorAccountInfo struct {
-	TransSerialNo   string `json:"transSerialNo"`
-	LoginNo         string `json:"loginNo"`
-	CustomerName    string `json:"customerName"`
-	CertificateType string `json:"certificateType"`
-	CertificateNo   string `json:"certificateNo"`
+	TransSerialNo              string `json:"transSerialNo"`
+	LoginNo                    string `json:"loginNo"`
+	CustomerName               string `json:"customerName"`
+	CertificateType            string `json:"certificateType"`
+	CertificateNo              string `json:"certificateNo"`
+	CardUserName               string `json:"cardUserName"`
+	NeedUploadFile             bool   `json:"needUploadFile"`
+	PlatformNo                 string `json:"platformNo,omitempty"`
+	PlatformTerminalID         string `json:"platformTerminalId,omitempty"`
+	QualificationTransSerialNo string `json:"qualificationTransSerialNo,omitempty"`
 }
 
 type OfficialBusinessAccountInfo struct {
-	TransSerialNo       string `json:"transSerialNo"`
-	LoginNo             string `json:"loginNo"`
-	Email               string `json:"email"`
-	SelfEmployed        bool   `json:"selfEmployed"`
-	CustomerName        string `json:"customerName"`
-	CertificateNo       string `json:"certificateNo"`
-	CertificateType     string `json:"certificateType"`
-	CorporateName       string `json:"corporateName"`
-	CorporateCertType   string `json:"corporateCertType"`
-	CorporateCertID     string `json:"corporateCertId"`
-	IndustryID          string `json:"industryId"`
-	CardNo              string `json:"cardNo"`
-	BankName            string `json:"bankName"`
-	DepositBankProvince string `json:"depositBankProvince"`
-	DepositBankCity     string `json:"depositBankCity"`
-	DepositBankName     string `json:"depositBankName"`
-	CorporateMobile     string `json:"corporateMobile,omitempty"`
+	TransSerialNo              string `json:"transSerialNo"`
+	LoginNo                    string `json:"loginNo"`
+	Email                      string `json:"email"`
+	SelfEmployed               bool   `json:"selfEmployed"`
+	CustomerName               string `json:"customerName"`
+	AliasName                  string `json:"aliasName,omitempty"`
+	CertificateNo              string `json:"certificateNo"`
+	CertificateType            string `json:"certificateType"`
+	CorporateName              string `json:"corporateName"`
+	CorporateCertType          string `json:"corporateCertType"`
+	CorporateCertID            string `json:"corporateCertId"`
+	CorporateMobile            string `json:"corporateMobile,omitempty"`
+	IndustryID                 string `json:"industryId"`
+	ContactName                string `json:"contactName,omitempty"`
+	ContactMobile              string `json:"contactMobile,omitempty"`
+	CardNo                     string `json:"cardNo"`
+	BankName                   string `json:"bankName"`
+	DepositBankProvince        string `json:"depositBankProvince"`
+	DepositBankCity            string `json:"depositBankCity"`
+	DepositBankName            string `json:"depositBankName"`
+	RegisterCapital            string `json:"registerCapital,omitempty"`
+	CardUserName               string `json:"cardUserName,omitempty"`
+	PlatformNo                 string `json:"platformNo,omitempty"`
+	PlatformTerminalID         string `json:"platformTerminalId,omitempty"`
+	QualificationTransSerialNo string `json:"qualificationTransSerialNo,omitempty"`
 }
 
 func (r OfficialOpenAccountRequest) Validate() error {
@@ -89,12 +109,12 @@ func (r OfficialOpenAccountRequest) Validate() error {
 		}
 		return info.Validate()
 	case OfficialPersonalTwoFactorAccountInfo:
-		return info.Validate()
+		return errors.New("baofu open account personal two-factor is not supported")
 	case *OfficialPersonalTwoFactorAccountInfo:
 		if info == nil {
 			return errors.New("baofu open account accInfo is required")
 		}
-		return info.Validate()
+		return errors.New("baofu open account personal two-factor is not supported")
 	case OfficialBusinessAccountInfo:
 		return info.Validate()
 	case *OfficialBusinessAccountInfo:
@@ -124,7 +144,13 @@ func (i OfficialPersonalAccountInfo) Validate() error {
 }
 
 func (i OfficialPersonalTwoFactorAccountInfo) Validate() error {
-	return validateOfficialPersonalIdentity(i.TransSerialNo, i.LoginNo, i.CustomerName, i.CertificateType, i.CertificateNo)
+	if err := validateOfficialPersonalIdentity(i.TransSerialNo, i.LoginNo, i.CustomerName, i.CertificateType, i.CertificateNo); err != nil {
+		return err
+	}
+	if strings.TrimSpace(i.CardUserName) == "" {
+		return errors.New("baofu open account personal cardUserName is required")
+	}
+	return nil
 }
 
 func (i OfficialBusinessAccountInfo) Validate() error {
@@ -152,10 +178,28 @@ func (i OfficialBusinessAccountInfo) Validate() error {
 	if err := validateOfficialLoginNo("business", i.LoginNo); err != nil {
 		return err
 	}
-	if i.SelfEmployed && strings.TrimSpace(i.CorporateMobile) == "" {
-		return errors.New("baofu open account business corporateMobile is required for selfEmployed")
+	if strings.TrimSpace(i.CertificateType) != OfficialBusinessCertificateTypeLicense {
+		return errors.New("baofu open account business certificateType must be LICENSE")
+	}
+	if !isOfficialCorporateCertificateType(i.CorporateCertType) {
+		return errors.New("baofu open account business corporateCertType is unsupported")
+	}
+	if i.SelfEmployed && strings.TrimSpace(i.CardUserName) != "" && strings.TrimSpace(i.CorporateMobile) == "" {
+		return errors.New("baofu open account business corporateMobile is required for selfEmployed private card")
 	}
 	return nil
+}
+
+func isOfficialCorporateCertificateType(value string) bool {
+	switch strings.TrimSpace(value) {
+	case OfficialCertificateTypeID,
+		OfficialCorporateCertTypeHongKongMacaoPass,
+		OfficialCorporateCertTypeTaiwanPermit,
+		OfficialCorporateCertTypePassport:
+		return true
+	default:
+		return false
+	}
 }
 
 func validateOfficialPersonalIdentity(transSerialNo, loginNo, customerName, certificateType, certificateNo string) error {

@@ -129,6 +129,7 @@ func (s *BaofuWithdrawalRecoveryScheduler) queryAndEnqueue(ctx context.Context, 
 		MerchantID:    cfg.PayoutMerchantID,
 		TerminalID:    cfg.PayoutTerminalID,
 		TransSerialNo: outRequestNo,
+		TradeTime:     order.CreatedAt.Format("2006-01-02"),
 	})
 	if err != nil {
 		log.Error().Err(err).Int64("baofu_withdrawal_order_id", order.ID).Str("out_request_no", outRequestNo).Msg("query baofu withdrawal status failed")

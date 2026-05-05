@@ -39,10 +39,13 @@ func (c *Client) QueryAccount(ctx context.Context, req contracts.QueryAccountReq
 		return nil, errors.New("baofu account client is not configured")
 	}
 	officialReq := contracts.OfficialQueryAccountRequest{
-		Version:     contracts.OfficialOpenAccountVersion,
-		AccountType: officialAccountType(req.AccountType),
-		ContractNo:  strings.TrimSpace(req.ContractNo),
-		LoginNo:     strings.TrimSpace(req.OutRequestNo),
+		Version:         contracts.OfficialQueryAccountVersion,
+		AccountType:     officialAccountType(req.AccountType),
+		ContractNo:      strings.TrimSpace(req.ContractNo),
+		LoginNo:         strings.TrimSpace(req.OutRequestNo),
+		CertificateNo:   strings.TrimSpace(req.CertificateNo),
+		CertificateType: strings.TrimSpace(req.CertificateType),
+		PlatformNo:      strings.TrimSpace(req.PlatformNo),
 	}
 	if err := officialReq.Validate(); err != nil {
 		return nil, err
@@ -102,17 +105,21 @@ func (c *Client) CreateWithdraw(ctx context.Context, req contracts.WithdrawReque
 	if err := c.root.PostAccount(ctx, "T-1001-013-14", c.merchantID(req.MerchantID), c.terminalID(req.TerminalID), officialReq, &result); err != nil {
 		return nil, err
 	}
-	return result.toWithdrawResult(), nil
+	return result.toWithdrawAcceptanceResult(), nil
 }
 
 func (c *Client) QueryWithdraw(ctx context.Context, req contracts.WithdrawQueryRequest) (*contracts.WithdrawResult, error) {
 	if c == nil || c.root == nil {
 		return nil, errors.New("baofu account client is not configured")
 	}
+	tradeTime := strings.TrimSpace(req.TradeTime)
+	if tradeTime == "" {
+		tradeTime = time.Now().Format("2006-01-02")
+	}
 	officialReq := contracts.OfficialWithdrawQueryRequest{
 		Version:       contracts.OfficialWithdrawVersion,
 		TransSerialNo: strings.TrimSpace(req.TransSerialNo),
-		TradeTime:     time.Now().Format("2006-01-02"),
+		TradeTime:     tradeTime,
 	}
 	if err := officialReq.Validate(); err != nil {
 		return nil, err
@@ -143,37 +150,55 @@ func (c *Client) accountOpenNotifyURL() string {
 }
 
 func officialOpenAccountRequest(req contracts.OpenAccountRequest, noticeURL string) (contracts.OfficialOpenAccountRequest, error) {
+	if err := req.Validate(); err != nil {
+		return contracts.OfficialOpenAccountRequest{}, err
+	}
 	accountType := officialAccountType(req.AccountType)
 	var accountInfo any
-	switch strings.TrimSpace(req.AccountType) {
+	switch strings.ToLower(strings.TrimSpace(req.AccountType)) {
 	case "personal":
-		if strings.TrimSpace(req.BankAccountNo) == "" {
-			accountInfo = contracts.OfficialPersonalTwoFactorAccountInfo{
-				TransSerialNo:   strings.TrimSpace(req.OutRequestNo),
-				LoginNo:         strings.TrimSpace(req.OutRequestNo),
-				CustomerName:    strings.TrimSpace(req.LegalName),
-				CertificateType: contracts.OfficialCertificateTypeID,
-				CertificateNo:   strings.TrimSpace(req.CertificateNo),
-			}
-		} else {
-			accountInfo = contracts.OfficialPersonalAccountInfo{
-				TransSerialNo:   strings.TrimSpace(req.OutRequestNo),
-				LoginNo:         strings.TrimSpace(req.OutRequestNo),
-				CustomerName:    strings.TrimSpace(req.LegalName),
-				CertificateType: contracts.OfficialCertificateTypeID,
-				CertificateNo:   strings.TrimSpace(req.CertificateNo),
-				CardNo:          strings.TrimSpace(req.BankAccountNo),
-				MobileNo:        strings.TrimSpace(req.BankMobile),
-				CardUserName:    strings.TrimSpace(req.LegalName),
-			}
+		cardUserName := firstNonEmpty(req.CardUserName, req.LegalName)
+		accountInfo = contracts.OfficialPersonalAccountInfo{
+			TransSerialNo:              strings.TrimSpace(req.OutRequestNo),
+			LoginNo:                    strings.TrimSpace(req.OutRequestNo),
+			CustomerName:               strings.TrimSpace(req.LegalName),
+			CertificateType:            contracts.OfficialCertificateTypeID,
+			CertificateNo:              strings.TrimSpace(req.CertificateNo),
+			CardNo:                     strings.TrimSpace(req.BankAccountNo),
+			MobileNo:                   strings.TrimSpace(req.BankMobile),
+			CardUserName:               strings.TrimSpace(cardUserName),
+			PlatformNo:                 strings.TrimSpace(req.PlatformNo),
+			PlatformTerminalID:         strings.TrimSpace(req.PlatformTerminalID),
+			QualificationTransSerialNo: strings.TrimSpace(req.QualificationTransSerialNo),
 		}
 	default:
+		certificateType := firstNonEmpty(req.CertificateType, contracts.OfficialBusinessCertificateTypeLicense)
 		accountInfo = contracts.OfficialBusinessAccountInfo{
-			TransSerialNo:   strings.TrimSpace(req.OutRequestNo),
-			LoginNo:         strings.TrimSpace(req.OutRequestNo),
-			CustomerName:    strings.TrimSpace(req.LegalName),
-			CertificateType: contracts.OfficialCertificateTypeID,
-			CertificateNo:   strings.TrimSpace(req.CertificateNo),
+			TransSerialNo:              strings.TrimSpace(req.OutRequestNo),
+			LoginNo:                    strings.TrimSpace(req.OutRequestNo),
+			Email:                      strings.TrimSpace(req.Email),
+			SelfEmployed:               req.SelfEmployed,
+			CustomerName:               strings.TrimSpace(firstNonEmpty(req.CustomerName, req.LegalName)),
+			AliasName:                  strings.TrimSpace(req.AliasName),
+			CertificateType:            strings.TrimSpace(certificateType),
+			CertificateNo:              strings.TrimSpace(req.CertificateNo),
+			CorporateName:              strings.TrimSpace(req.CorporateName),
+			CorporateCertType:          strings.TrimSpace(req.CorporateCertType),
+			CorporateCertID:            strings.TrimSpace(req.CorporateCertID),
+			CorporateMobile:            strings.TrimSpace(req.CorporateMobile),
+			IndustryID:                 strings.TrimSpace(req.IndustryID),
+			ContactName:                strings.TrimSpace(req.ContactName),
+			ContactMobile:              strings.TrimSpace(req.ContactMobile),
+			CardNo:                     strings.TrimSpace(req.BankAccountNo),
+			BankName:                   strings.TrimSpace(req.BankName),
+			DepositBankProvince:        strings.TrimSpace(req.DepositBankProvince),
+			DepositBankCity:            strings.TrimSpace(req.DepositBankCity),
+			DepositBankName:            strings.TrimSpace(req.DepositBankName),
+			RegisterCapital:            strings.TrimSpace(req.RegisterCapital),
+			CardUserName:               strings.TrimSpace(req.CardUserName),
+			PlatformNo:                 strings.TrimSpace(req.PlatformNo),
+			PlatformTerminalID:         strings.TrimSpace(req.PlatformTerminalID),
+			QualificationTransSerialNo: strings.TrimSpace(req.QualificationTransSerialNo),
 		}
 	}
 	officialReq := contracts.OfficialOpenAccountRequest{
@@ -346,13 +371,38 @@ func optionalOfficialBalanceAmountFen(value officialScalarString) (int64, error)
 }
 
 type officialWithdrawResult struct {
-	TransSerialNo string          `json:"transSerialNo"`
-	OrderID       string          `json:"orderId"`
-	ContractNo    string          `json:"contractNo"`
-	State         string          `json:"state"`
-	Raw           json.RawMessage `json:"-"`
+	TransSerialNo       officialScalarString `json:"transSerialNo"`
+	OrderID             officialScalarString `json:"orderId"`
+	ContractNo          officialScalarString `json:"contractNo"`
+	State               officialScalarString `json:"state"`
+	TransMoney          officialScalarString `json:"transMoney"`
+	TransFee            officialScalarString `json:"transFee"`
+	TransferTotalAmount officialScalarString `json:"transferTotalAmount"`
+	TransRemark         officialScalarString `json:"transRemark"`
+	Raw                 json.RawMessage      `json:"-"`
 }
 
 func (r officialWithdrawResult) toWithdrawResult() *contracts.WithdrawResult {
-	return &contracts.WithdrawResult{TransSerialNo: strings.TrimSpace(r.TransSerialNo), BaofuWithdrawNo: strings.TrimSpace(r.OrderID), ContractNo: strings.TrimSpace(r.ContractNo), UpstreamState: strings.TrimSpace(r.State), Status: contracts.WithdrawStatusFromUpstream(r.State)}
+	return r.toWithdrawResultWithStatus(contracts.WithdrawStatusFromUpstream(r.State.String()))
+}
+
+func (r officialWithdrawResult) toWithdrawAcceptanceResult() *contracts.WithdrawResult {
+	return r.toWithdrawResultWithStatus(contracts.WithdrawAcceptanceStatusFromUpstream(r.State.String()))
+}
+
+func (r officialWithdrawResult) toWithdrawResultWithStatus(status string) *contracts.WithdrawResult {
+	amount, _ := optionalOfficialBalanceAmountFen(r.TransMoney)
+	fee, _ := optionalOfficialBalanceAmountFen(r.TransFee)
+	total, _ := optionalOfficialBalanceAmountFen(r.TransferTotalAmount)
+	return &contracts.WithdrawResult{
+		TransSerialNo:   r.TransSerialNo.String(),
+		BaofuWithdrawNo: r.OrderID.String(),
+		ContractNo:      r.ContractNo.String(),
+		UpstreamState:   r.State.String(),
+		Status:          status,
+		AmountFen:       amount,
+		FeeFen:          fee,
+		TotalAmountFen:  total,
+		Remark:          r.TransRemark.String(),
+	}
 }

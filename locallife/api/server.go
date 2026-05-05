@@ -212,6 +212,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	var ordinarySPClient ordinaryserviceprovider.OrdinaryServiceProviderClientInterface
 	var baofuAggregateClient aggregatepay.Client
 	var baofuAccountNotificationParser baofuAccountNotificationParser
+	var baofuPaymentNotificationParser baofuAggregatePaymentNotificationParser
 	if config.HasWechatPayRuntimeConfig() {
 		if err := config.ValidateWechatPayConfig(); err != nil {
 			return nil, err
@@ -260,6 +261,10 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		}
 		baofuAggregateClient = aggregatepay.NewClient(baofuRootClient)
 		baofuAccountNotificationParser = baofuaccountnotification.NewParser(baofuRootClient.Config().BaofuPublicKeyPEM)
+		baofuPaymentNotificationParser = baofuaggregatenotification.NewParserWithPublicKey(baofuRootClient.Config().BaofuPublicKeyPEM)
+	}
+	if baofuPaymentNotificationParser == nil {
+		baofuPaymentNotificationParser = baofuaggregatenotification.NewParser()
 	}
 
 	// 创建 LBS 地图客户端（统一使用腾讯地图）
@@ -381,7 +386,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		keywordWorker:                  newSearchKeywordWorker(store),
 		paymentFactService:             logic.NewPaymentFactService(store).WithPaymentSuccessConfig(config.RiderAverageSpeed, config.DefaultPrepareTime),
 		baofuAccountNotificationParser: baofuAccountNotificationParser,
-		baofuPaymentNotificationParser: baofuaggregatenotification.NewParser(),
+		baofuPaymentNotificationParser: baofuPaymentNotificationParser,
 		onboardingReviewService:        logic.NewOnboardingReviewService(store),
 		credentialGovernanceService:    logic.NewCredentialGovernanceService(store),
 	}

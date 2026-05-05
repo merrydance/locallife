@@ -149,6 +149,40 @@ func TestUnifiedOrderResultAcceptsNumericChannelOrderID(t *testing.T) {
 	require.Equal(t, "1234567890", result.ChannelReturn.OrderID)
 }
 
+func TestUnifiedOrderResultCoversOfficialOrderQueryFields(t *testing.T) {
+	var result UnifiedOrderResult
+
+	err := json.Unmarshal([]byte(`{
+		"agentMerId":"agent-merchant",
+		"agentTerId":"agent-terminal",
+		"merId":"102004465",
+		"terId":"200005200",
+		"outTradeNo":"PO202605050001",
+		"tradeNo":"260500000001",
+		"txnState":"SUCCESS",
+		"finishTime":"20260505120000",
+		"succAmt":100,
+		"feeAmt":1,
+		"instFeeAmt":2,
+		"reqChlNo":"REQCHL001",
+		"payCode":"WECHAT_JSAPI",
+		"chlRetParam":{"openId":"openid-001","subOpenid":"sub-openid-001","order_id":"260500000001"},
+		"clearingDate":"20260505",
+		"resultCode":"SUCCESS"
+	}`), &result)
+
+	require.NoError(t, err)
+	require.Equal(t, "agent-merchant", result.AgentMerchantID)
+	require.Equal(t, "agent-terminal", result.AgentTerminalID)
+	require.Equal(t, "20260505120000", result.FinishTime)
+	require.Equal(t, int64(100), result.SuccessAmountFen)
+	require.Equal(t, int64(1), result.FeeAmountFen)
+	require.Equal(t, int64(2), result.InstallmentFeeAmountFen)
+	require.Equal(t, "20260505", result.ClearingDate)
+	require.Equal(t, "openid-001", result.ChannelReturn.OpenID)
+	require.Equal(t, "sub-openid-001", result.ChannelReturn.SubOpenID)
+}
+
 func TestNormalizePaymentTerminalStatus(t *testing.T) {
 	require.Equal(t, db.ExternalPaymentTerminalStatusProcessing, NormalizePaymentTerminalStatus("WAIT_PAYING"))
 	require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, NormalizePaymentTerminalStatus("SUCCESS"))
@@ -160,8 +194,12 @@ func TestNormalizePaymentTerminalStatus(t *testing.T) {
 }
 
 func TestPaymentQueryRequestValidateOfficialRequiredFields(t *testing.T) {
-	req := PaymentQueryRequest{MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "BF202605040001"}
+	req := PaymentQueryRequest{AgentMerchantID: "agent-merchant", AgentTerminalID: "agent-terminal", MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "BF202605040001"}
 	require.NoError(t, req.Validate())
+	body, err := json.Marshal(req)
+	require.NoError(t, err)
+	require.Contains(t, string(body), `"agentMerId":"agent-merchant"`)
+	require.Contains(t, string(body), `"agentTerId":"agent-terminal"`)
 
 	req = PaymentQueryRequest{TerminalID: "200005200", OutTradeNo: "BF202605040001"}
 	require.ErrorIs(t, req.Validate(), ErrBaofuPaymentQueryMerchantIDRequired)
@@ -205,8 +243,12 @@ func TestShareAfterPayRequestRequiresPaymentReferenceAndReceiverIDs(t *testing.T
 }
 
 func TestShareQueryRequestValidateOfficialRequiredFields(t *testing.T) {
-	req := ShareQueryRequest{MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "BFSHARE202605040001"}
+	req := ShareQueryRequest{AgentMerchantID: "agent-merchant", AgentTerminalID: "agent-terminal", MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "BFSHARE202605040001"}
 	require.NoError(t, req.Validate())
+	body, err := json.Marshal(req)
+	require.NoError(t, err)
+	require.Contains(t, string(body), `"agentMerId":"agent-merchant"`)
+	require.Contains(t, string(body), `"agentTerId":"agent-terminal"`)
 
 	req = ShareQueryRequest{TerminalID: "200005200", OutTradeNo: "BFSHARE202605040001"}
 	require.ErrorIs(t, req.Validate(), ErrBaofuShareQueryMerchantIDRequired)
@@ -224,6 +266,18 @@ func TestNormalizeShareTerminalStatus(t *testing.T) {
 	require.Equal(t, db.ExternalPaymentTerminalStatusFailed, NormalizeShareTerminalStatus("CANCELED"))
 	require.Equal(t, db.ExternalPaymentTerminalStatusUnknown, NormalizeShareTerminalStatus("ABNORMAL"))
 	require.Equal(t, db.ExternalPaymentTerminalStatusUnknown, NormalizeShareTerminalStatus("unexpected"))
+}
+
+func TestShareResultCoversOfficialAgentFields(t *testing.T) {
+	var result ShareResult
+
+	err := json.Unmarshal([]byte(`{"agentMerId":"agent-merchant","agentTerId":"agent-terminal","merId":"102004465","terId":"200005200","resultCode":"SUCCESS","tradeNo":"260500000001","outTradeNo":"SH202605050001","txnState":"SUCCESS","succAmt":100,"clearingDate":"20260505"}`), &result)
+
+	require.NoError(t, err)
+	require.Equal(t, "agent-merchant", result.AgentMerchantID)
+	require.Equal(t, "agent-terminal", result.AgentTerminalID)
+	require.Equal(t, "SH202605050001", result.OutTradeNo)
+	require.Equal(t, int64(100), result.SuccessAmountFen)
 }
 
 func TestRefundBeforeShareRequestRejectsPostShareFields(t *testing.T) {

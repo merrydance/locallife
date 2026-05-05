@@ -60,7 +60,7 @@ func TestMapBaofuRefundCreateErrorUsesSafeChineseProviderMessage(t *testing.T) {
 	reqErr := assertRequestError(t, err)
 
 	require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
-	require.EqualError(t, reqErr.Err, "微信支付通道待开通，请联系平台处理")
+	require.EqualError(t, reqErr.Err, "商户微信支付通道待开通，请联系平台处理")
 	require.NotContains(t, reqErr.Err.Error(), "raw upstream")
 	require.Same(t, providerErr, LoggableError(err))
 }

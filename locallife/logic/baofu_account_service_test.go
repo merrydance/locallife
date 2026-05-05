@@ -73,10 +73,14 @@ func TestBaofuAccountServiceOpenAccountRecordsCommandBeforeClientCall(t *testing
 	service := NewBaofuAccountService(store, client)
 
 	_, err := service.OpenAccount(context.Background(), baofucontracts.OpenAccountRequest{
-		OwnerType:    db.BaofuAccountOwnerTypeRider,
-		OwnerID:      42,
-		AccountType:  db.BaofuAccountTypePersonal,
-		OutRequestNo: "OPEN123",
+		OwnerType:     db.BaofuAccountOwnerTypeRider,
+		OwnerID:       42,
+		AccountType:   db.BaofuAccountTypePersonal,
+		OutRequestNo:  "OPEN123",
+		LegalName:     "测试用户",
+		CertificateNo: "110101199001010011",
+		BankAccountNo: "6222020202020202020",
+		BankMobile:    "13800138000",
 	})
 	require.NoError(t, err)
 	require.True(t, store.commandCreatedBeforeClientCall)
@@ -106,14 +110,33 @@ func TestBaofuAccountServiceOpenAccountRequiresOutRequestNo(t *testing.T) {
 	require.ErrorIs(t, err, ErrBaofuAccountOutRequestNoRequired)
 }
 
+func TestBaofuAccountServiceOpenAccountRejectsInvalidOfficialInputBeforeWriting(t *testing.T) {
+	store := &fakeBaofuAccountStore{}
+	client := &fakeBaofuAccountClient{}
+	service := NewBaofuAccountService(store, client)
+
+	_, err := service.OpenAccount(context.Background(), baofucontracts.OpenAccountRequest{
+		OwnerType:    db.BaofuAccountOwnerTypeRider,
+		OwnerID:      42,
+		AccountType:  db.BaofuAccountTypePersonal,
+		OutRequestNo: "OPEN123",
+	})
+
+	require.EqualError(t, err, "baofu open account personal legalName is required")
+	require.False(t, store.bindingUpserted)
+	require.False(t, client.called)
+}
+
 type fakeBaofuAccountStore struct {
 	lastCommand                    db.CreateExternalPaymentCommandParams
 	lastActive                     db.MarkBaofuAccountBindingActiveParams
 	lastFeeLedger                  db.CreateBaofuFeeLedgerParams
 	commandCreatedBeforeClientCall bool
+	bindingUpserted                bool
 }
 
 func (s *fakeBaofuAccountStore) UpsertBaofuAccountBinding(ctx context.Context, arg db.UpsertBaofuAccountBindingParams) (db.BaofuAccountBinding, error) {
+	s.bindingUpserted = true
 	return db.BaofuAccountBinding{ID: 7, OwnerType: arg.OwnerType, OwnerID: arg.OwnerID, AccountType: arg.AccountType, OpenState: arg.OpenState}, nil
 }
 

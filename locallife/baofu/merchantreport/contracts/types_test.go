@@ -107,6 +107,9 @@ func TestWechatMerchantReportBankBranchIsOptional(t *testing.T) {
 	req := validWechatMerchantReportRequestForTest()
 	req.ReportInfo.BankCardInfo.BankBranchName = ""
 	require.NoError(t, req.Validate())
+	body, err := json.Marshal(req)
+	require.NoError(t, err)
+	require.NotContains(t, string(body), "bank_branch_name")
 }
 
 func TestMerchantReportQueryRequiresReportNo(t *testing.T) {

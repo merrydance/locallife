@@ -114,6 +114,76 @@ func TestPublicResponseEnvelopeValidationUpstreamCodeForMissingDataContent(t *te
 	require.Equal(t, PublicEnvelopeUpstreamCodeMissingDataContent, env.ValidationUpstreamCode(err))
 }
 
+func TestPublicResponseEnvelopeVerifiesDataContentSignature(t *testing.T) {
+	privatePEM, publicPEM := generateBaofuTestKeyPair(t)
+	dataContent := JSONString(`{"resultCode":"SUCCESS","outTradeNo":"BF1"}`)
+	signature, err := SignSHA256WithRSA(privatePEM, []byte(dataContent))
+	require.NoError(t, err)
+	env := PublicResponseEnvelope{
+		ReturnCode:         PublicEnvelopeReturnCodeSuccess,
+		ReturnMessage:      "OK",
+		MerchantID:         "100000",
+		TerminalID:         "200000",
+		Charset:            PublicEnvelopeCharsetUTF8,
+		Version:            PublicEnvelopeVersion10,
+		Format:             PublicEnvelopeFormatJSON,
+		SignType:           SignTypeRSA,
+		SignSerialNo:       "1",
+		EncryptionSerialNo: "1",
+		SignString:         signature,
+		DataContent:        dataContent,
+	}
+
+	require.NoError(t, env.Validate())
+	require.NoError(t, env.VerifySignature(publicPEM))
+
+	env.DataContent = JSONString(`{"resultCode":"SUCCESS","outTradeNo":"tampered"}`)
+	require.ErrorIs(t, env.VerifySignature(publicPEM), ErrInvalidSignature)
+}
+
+func TestPublicNotificationEnvelopeVerifiesDataContentSignature(t *testing.T) {
+	privatePEM, publicPEM := generateBaofuTestKeyPair(t)
+	dataContent := JSONString(`{"merId":"100000","terId":"200000","payCode":"WECHAT_JSAPI"}`)
+	signature, err := SignSHA256WithRSA(privatePEM, []byte(dataContent))
+	require.NoError(t, err)
+	env := PublicNotificationEnvelope{
+		MerchantID:         "100000",
+		TerminalID:         "200000",
+		Charset:            PublicEnvelopeCharsetUTF8,
+		Version:            PublicEnvelopeVersion10,
+		Format:             PublicEnvelopeFormatJSON,
+		NotifyType:         "PAYMENT",
+		SignType:           SignTypeRSA,
+		SignSerialNo:       "1",
+		EncryptionSerialNo: "1",
+		SignString:         signature,
+		DataContent:        dataContent,
+	}
+
+	require.NoError(t, env.Validate())
+	require.NoError(t, env.VerifySignature(publicPEM))
+
+	env.SignString = "bad-signature"
+	require.ErrorIs(t, env.VerifySignature(publicPEM), ErrInvalidSignature)
+}
+
+func TestPublicNotificationEnvelopeValidateRequiresOfficialFields(t *testing.T) {
+	env := validPublicNotificationEnvelopeForTest()
+
+	require.NoError(t, env.Validate())
+
+	env.NotifyType = ""
+	require.EqualError(t, env.Validate(), "baofu public notification notifyType is required")
+
+	env = validPublicNotificationEnvelopeForTest()
+	env.DataContent = nil
+	require.EqualError(t, env.Validate(), "baofu public notification dataContent is required")
+
+	env = validPublicNotificationEnvelopeForTest()
+	env.Charset = "GBK"
+	require.EqualError(t, env.Validate(), "baofu public notification charset must be UTF-8")
+}
+
 func validPublicEnvelopeForTest() PublicRequestEnvelope {
 	return PublicRequestEnvelope{
 		MerchantID:         "100000",
@@ -129,5 +199,21 @@ func validPublicEnvelopeForTest() PublicRequestEnvelope {
 		DigitalEnvelope:    "encrypted-key",
 		SignString:         "abcd",
 		BizContent:         JSONString(`{"outTradeNo":"BF1"}`),
+	}
+}
+
+func validPublicNotificationEnvelopeForTest() PublicNotificationEnvelope {
+	return PublicNotificationEnvelope{
+		MerchantID:         "100000",
+		TerminalID:         "200000",
+		Charset:            PublicEnvelopeCharsetUTF8,
+		Version:            PublicEnvelopeVersion10,
+		Format:             PublicEnvelopeFormatJSON,
+		NotifyType:         "PAYMENT",
+		SignType:           SignTypeRSA,
+		SignSerialNo:       "1",
+		EncryptionSerialNo: "1",
+		SignString:         "abcd",
+		DataContent:        JSONString(`{"merId":"100000","terId":"200000","payCode":"WECHAT_JSAPI"}`),
 	}
 }

@@ -29,11 +29,12 @@ func TestBaofuWithdrawalRecoverySchedulerQueriesProcessingWithdrawals(t *testing
 		},
 	}
 	distributor := &baofuWithdrawalRecoveryDistributor{}
+	withdrawalCreatedAt := time.Date(2026, 5, 5, 10, 30, 0, 0, time.UTC)
 	withdrawal := db.BaofuWithdrawalOrder{
 		ID:           901,
 		OutRequestNo: "WD_OUT_001",
 		Status:       db.BaofuWithdrawalStatusProcessing,
-		CreatedAt:    time.Now().Add(-20 * time.Minute),
+		CreatedAt:    withdrawalCreatedAt,
 	}
 	store.EXPECT().ListProcessingBaofuWithdrawalOrdersForRecovery(gomock.Any(), gomock.Any()).
 		Return([]db.BaofuWithdrawalOrder{withdrawal}, nil)
@@ -47,6 +48,7 @@ func TestBaofuWithdrawalRecoverySchedulerQueriesProcessingWithdrawals(t *testing
 	require.Equal(t, "PAYOUT_MER", client.queryReq.MerchantID)
 	require.Equal(t, "PAYOUT_TER", client.queryReq.TerminalID)
 	require.Equal(t, "WD_OUT_001", client.queryReq.TransSerialNo)
+	require.Equal(t, "2026-05-05", client.queryReq.TradeTime)
 	require.Equal(t, []int64{withdrawal.ID}, distributor.withdrawalOrderIDs)
 	require.Equal(t, []string{"3"}, distributor.upstreamStates)
 }

@@ -20,6 +20,7 @@ const (
 
 	PublicEnvelopeUpstreamCodeMissingDataContent = "MISSING_DATA_CONTENT"
 	PublicEnvelopeUpstreamCodeInvalidDataContent = "INVALID_DATA_CONTENT"
+	PublicEnvelopeUpstreamCodeInvalidSignature   = "INVALID_SIGNATURE"
 )
 
 type PublicRequestEnvelope struct {
@@ -53,6 +54,21 @@ type PublicResponseEnvelope struct {
 	SignString         string     `json:"signStr,omitempty"`
 	DataContent        JSONString `json:"dataContent,omitempty"`
 	BizContent         JSONString `json:"bizContent,omitempty"`
+}
+
+type PublicNotificationEnvelope struct {
+	MerchantID         string     `json:"merId"`
+	TerminalID         string     `json:"terId"`
+	Charset            string     `json:"charset"`
+	Version            string     `json:"version"`
+	Format             string     `json:"format"`
+	NotifyType         string     `json:"notifyType"`
+	SignType           string     `json:"signType"`
+	SignSerialNo       string     `json:"signSn"`
+	EncryptionSerialNo string     `json:"ncrptnSn"`
+	DigitalEnvelope    string     `json:"dgtlEnvlp,omitempty"`
+	SignString         string     `json:"signStr"`
+	DataContent        JSONString `json:"dataContent"`
 }
 
 type JSONString []byte
@@ -186,6 +202,13 @@ func (e PublicResponseEnvelope) Validate() error {
 	return nil
 }
 
+func (e PublicResponseEnvelope) VerifySignature(publicKeyPEM string) error {
+	if err := verifyPublicEnvelopeSignature("baofu public response", e.SignType, publicKeyPEM, e.BusinessContent(), e.SignString); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (e PublicResponseEnvelope) ValidationUpstreamCode(err error) string {
 	if err == nil || strings.TrimSpace(e.ReturnCode) != PublicEnvelopeReturnCodeSuccess {
 		return strings.TrimSpace(e.ReturnCode)
@@ -196,6 +219,8 @@ func (e PublicResponseEnvelope) ValidationUpstreamCode(err error) string {
 		return PublicEnvelopeUpstreamCodeMissingDataContent
 	case strings.Contains(message, "dataContent must be valid JSON"):
 		return PublicEnvelopeUpstreamCodeInvalidDataContent
+	case errors.Is(err, ErrInvalidSignature), strings.Contains(message, "signature"):
+		return PublicEnvelopeUpstreamCodeInvalidSignature
 	default:
 		return strings.TrimSpace(e.ReturnCode)
 	}
@@ -208,11 +233,72 @@ func (e PublicResponseEnvelope) BusinessContent() JSONString {
 	return e.BizContent
 }
 
+func (e PublicNotificationEnvelope) Validate() error {
+	if strings.TrimSpace(e.MerchantID) == "" {
+		return errors.New("baofu public notification merId is required")
+	}
+	if strings.TrimSpace(e.TerminalID) == "" {
+		return errors.New("baofu public notification terId is required")
+	}
+	if strings.TrimSpace(e.Charset) != PublicEnvelopeCharsetUTF8 {
+		return errors.New("baofu public notification charset must be UTF-8")
+	}
+	if strings.TrimSpace(e.Version) != PublicEnvelopeVersion10 {
+		return errors.New("baofu public notification version must be 1.0")
+	}
+	if strings.TrimSpace(e.Format) != PublicEnvelopeFormatJSON {
+		return errors.New("baofu public notification format must be json")
+	}
+	if strings.TrimSpace(e.NotifyType) == "" {
+		return errors.New("baofu public notification notifyType is required")
+	}
+	if !isSupportedSignType(e.SignType) {
+		return errors.New("baofu public notification signType is unsupported")
+	}
+	if strings.TrimSpace(e.SignSerialNo) == "" {
+		return errors.New("baofu public notification signSn is required")
+	}
+	if strings.TrimSpace(e.EncryptionSerialNo) == "" {
+		return errors.New("baofu public notification ncrptnSn is required")
+	}
+	if strings.TrimSpace(e.SignString) == "" {
+		return errors.New("baofu public notification signStr is required")
+	}
+	if len(e.DataContent) == 0 {
+		return errors.New("baofu public notification dataContent is required")
+	}
+	if !json.Valid([]byte(e.DataContent)) {
+		return errors.New("baofu public notification dataContent must be valid JSON")
+	}
+	return nil
+}
+
+func (e PublicNotificationEnvelope) VerifySignature(publicKeyPEM string) error {
+	return verifyPublicEnvelopeSignature("baofu public notification", e.SignType, publicKeyPEM, e.DataContent, e.SignString)
+}
+
 func isSupportedSignType(signType string) bool {
 	switch strings.ToUpper(strings.TrimSpace(signType)) {
 	case SignTypeSM2, SignTypeRSA:
 		return true
 	default:
 		return false
+	}
+}
+
+func verifyPublicEnvelopeSignature(prefix, signType, publicKeyPEM string, message JSONString, signature string) error {
+	if strings.TrimSpace(publicKeyPEM) == "" {
+		return errors.New(prefix + " public key is required")
+	}
+	if len(message) == 0 {
+		return errors.New(prefix + " dataContent is required")
+	}
+	switch strings.ToUpper(strings.TrimSpace(signType)) {
+	case SignTypeRSA:
+		return VerifySHA256WithRSA(publicKeyPEM, []byte(message), strings.TrimSpace(signature))
+	case SignTypeSM2:
+		return errors.New(prefix + " sm2 signature verification is not supported")
+	default:
+		return errors.New(prefix + " signType is unsupported")
 	}
 }

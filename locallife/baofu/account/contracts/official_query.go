@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+const OfficialQueryAccountVersion = "4.0.0"
+
 type OfficialQueryAccountRequest struct {
 	Version         string `json:"version"`
 	AccountType     int    `json:"accType"`
@@ -16,8 +18,8 @@ type OfficialQueryAccountRequest struct {
 }
 
 func (r OfficialQueryAccountRequest) Validate() error {
-	if strings.TrimSpace(r.Version) != OfficialOpenAccountVersion {
-		return errors.New("baofu query account version must be 4.1.0")
+	if strings.TrimSpace(r.Version) != OfficialQueryAccountVersion {
+		return errors.New("baofu query account version must be 4.0.0")
 	}
 	if r.AccountType != OfficialAccountTypePersonal && r.AccountType != OfficialAccountTypeBusiness {
 		return errors.New("baofu query account accType is unsupported")
@@ -36,6 +38,9 @@ func (r OfficialQueryAccountRequest) Validate() error {
 	}
 	if strings.TrimSpace(r.CertificateNo) != "" && strings.TrimSpace(r.CertificateType) == "" {
 		return errors.New("baofu query account certificateType is required when certificateNo is used")
+	}
+	if strings.TrimSpace(r.CertificateType) != "" && strings.TrimSpace(r.CertificateType) != OfficialCertificateTypeID && strings.TrimSpace(r.CertificateType) != OfficialBusinessCertificateTypeLicense {
+		return errors.New("baofu query account certificateType is unsupported")
 	}
 	return nil
 }

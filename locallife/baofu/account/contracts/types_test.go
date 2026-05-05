@@ -49,7 +49,39 @@ func TestOfficialOpenAccountRequestRequiresBCT20Fields(t *testing.T) {
 	require.EqualError(t, req.Validate(), "baofu open account businessType must be BCT2.0")
 }
 
-func TestOfficialPersonalTwoFactorOpenAccountAllowsNoBankCard(t *testing.T) {
+func TestOfficialOpenAccountRejectsShortLoginNo(t *testing.T) {
+	req := OfficialOpenAccountRequest{
+		Version:      OfficialOpenAccountVersion,
+		AccountType:  OfficialAccountTypePersonal,
+		NoticeURL:    "https://api.example.com/v1/webhooks/baofu/account/open",
+		BusinessType: OfficialBusinessTypeBCT20,
+		AccountInfo: OfficialPersonalAccountInfo{
+			TransSerialNo:   "OPEN202605040002",
+			LoginNo:         "short",
+			CustomerName:    "李四",
+			CertificateType: OfficialCertificateTypeID,
+			CertificateNo:   "110101199001011235",
+			CardUserName:    "李四",
+			CardNo:          "6222020000000000002",
+			MobileNo:        "13800138001",
+		},
+	}
+
+	require.EqualError(t, req.Validate(), "baofu open account personal loginNo must be at least 11 characters")
+}
+
+func TestOpenAccountRequestRejectsPersonalTwoFactorProductionPath(t *testing.T) {
+	req := OpenAccountRequest{
+		AccountType:   "personal",
+		OutRequestNo:  "OPEN202605040002",
+		LegalName:     "李四",
+		CertificateNo: "110101199001011235",
+	}
+
+	require.EqualError(t, req.Validate(), "baofu open account personal bankAccountNo is required")
+}
+
+func TestOfficialPersonalTwoFactorOpenAccountIsNotSupported(t *testing.T) {
 	req := OfficialOpenAccountRequest{
 		Version:      OfficialOpenAccountVersion,
 		AccountType:  OfficialAccountTypePersonal,
@@ -61,28 +93,41 @@ func TestOfficialPersonalTwoFactorOpenAccountAllowsNoBankCard(t *testing.T) {
 			CustomerName:    "李四",
 			CertificateType: OfficialCertificateTypeID,
 			CertificateNo:   "110101199001011235",
+			CardUserName:    "李四",
 		},
+	}
+
+	require.EqualError(t, req.Validate(), "baofu open account personal two-factor is not supported")
+}
+
+func TestOpenAccountRequestRequiresBusinessOfficialInputFields(t *testing.T) {
+	req := OpenAccountRequest{
+		AccountType:                "business",
+		OutRequestNo:               "OPEN202605040003",
+		Email:                      "merchant@example.com",
+		CustomerName:               "某某餐饮店",
+		CertificateNo:              "91310000123456789X",
+		CorporateName:              "王五",
+		CorporateCertType:          OfficialCertificateTypeID,
+		CorporateCertID:            "110101199001011236",
+		IndustryID:                 "5812",
+		BankAccountNo:              "6222020000000000001",
+		BankName:                   "招商银行",
+		DepositBankProvince:        "上海市",
+		DepositBankCity:            "上海市",
+		DepositBankName:            "招商银行上海分行",
+		SelfEmployed:               true,
+		CardUserName:               "王五",
+		CorporateMobile:            "13800138002",
+		PlatformNo:                 "100030218",
+		PlatformTerminalID:         "200000001",
+		QualificationTransSerialNo: "QUAL202605040001",
 	}
 
 	require.NoError(t, req.Validate())
-}
 
-func TestOfficialOpenAccountRejectsShortLoginNo(t *testing.T) {
-	req := OfficialOpenAccountRequest{
-		Version:      OfficialOpenAccountVersion,
-		AccountType:  OfficialAccountTypePersonal,
-		NoticeURL:    "https://api.example.com/v1/webhooks/baofu/account/open",
-		BusinessType: OfficialBusinessTypeBCT20,
-		AccountInfo: OfficialPersonalTwoFactorAccountInfo{
-			TransSerialNo:   "OPEN202605040002",
-			LoginNo:         "short",
-			CustomerName:    "李四",
-			CertificateType: OfficialCertificateTypeID,
-			CertificateNo:   "110101199001011235",
-		},
-	}
-
-	require.EqualError(t, req.Validate(), "baofu open account personal loginNo must be at least 11 characters")
+	req.DepositBankName = ""
+	require.EqualError(t, req.Validate(), "baofu open account business depositBankName is required")
 }
 
 func TestOfficialBusinessOpenAccountRequiresOfficialFields(t *testing.T) {
@@ -115,9 +160,57 @@ func TestOfficialBusinessOpenAccountRequiresOfficialFields(t *testing.T) {
 	require.NoError(t, req.Validate())
 
 	info := req.AccountInfo.(OfficialBusinessAccountInfo)
+	info.CardUserName = "王五"
 	info.CorporateMobile = ""
 	req.AccountInfo = info
-	require.EqualError(t, req.Validate(), "baofu open account business corporateMobile is required for selfEmployed")
+	require.EqualError(t, req.Validate(), "baofu open account business corporateMobile is required for selfEmployed private card")
+}
+
+func TestOfficialOpenAccountOptionalAndConditionalFieldsSerializeOfficialNames(t *testing.T) {
+	req := OfficialOpenAccountRequest{
+		Version:      OfficialOpenAccountVersion,
+		AccountType:  OfficialAccountTypeBusiness,
+		NoticeURL:    "https://api.example.com/v1/webhooks/baofu/account/open",
+		BusinessType: OfficialBusinessTypeBCT20,
+		AccountInfo: OfficialBusinessAccountInfo{
+			TransSerialNo:              "OPEN202605040003",
+			LoginNo:                    "merchant-login-001",
+			Email:                      "merchant@example.com",
+			SelfEmployed:               true,
+			CustomerName:               "某某餐饮店",
+			AliasName:                  "某某餐饮",
+			CertificateNo:              "91310000123456789X",
+			CertificateType:            OfficialBusinessCertificateTypeLicense,
+			CorporateName:              "王五",
+			CorporateCertType:          OfficialCertificateTypeID,
+			CorporateCertID:            "110101199001011236",
+			CorporateMobile:            "13800138002",
+			IndustryID:                 "5812",
+			ContactName:                "赵六",
+			ContactMobile:              "13800138003",
+			CardNo:                     "6222020000000000001",
+			BankName:                   "招商银行",
+			DepositBankProvince:        "上海市",
+			DepositBankCity:            "上海市",
+			DepositBankName:            "招商银行上海分行",
+			RegisterCapital:            "10",
+			CardUserName:               "王五",
+			PlatformNo:                 "100030218",
+			PlatformTerminalID:         "200000001",
+			QualificationTransSerialNo: "QUAL202605040001",
+		},
+	}
+
+	body, err := json.Marshal(req)
+
+	require.NoError(t, err)
+	require.Contains(t, string(body), `"aliasName":"某某餐饮"`)
+	require.Contains(t, string(body), `"contactName":"赵六"`)
+	require.Contains(t, string(body), `"registerCapital":"10"`)
+	require.Contains(t, string(body), `"cardUserName":"王五"`)
+	require.Contains(t, string(body), `"platformNo":"100030218"`)
+	require.Contains(t, string(body), `"platformTerminalId":"200000001"`)
+	require.Contains(t, string(body), `"qualificationTransSerialNo":"QUAL202605040001"`)
 }
 
 func TestOfficialBalanceAmountConvertsYuanToFen(t *testing.T) {
@@ -144,7 +237,7 @@ func TestOfficialWithdrawAmountConvertsFenToYuan(t *testing.T) {
 
 func TestOfficialQueryBalanceAndWithdrawValidateRequiredFields(t *testing.T) {
 	query := OfficialQueryAccountRequest{
-		Version:     OfficialOpenAccountVersion,
+		Version:     OfficialQueryAccountVersion,
 		AccountType: OfficialAccountTypePersonal,
 		ContractNo:  "CM202605040001",
 	}
@@ -154,11 +247,23 @@ func TestOfficialQueryBalanceAndWithdrawValidateRequiredFields(t *testing.T) {
 	require.EqualError(t, query.Validate(), "baofu query account must use exactly one query key")
 
 	query = OfficialQueryAccountRequest{
-		Version:       OfficialOpenAccountVersion,
+		Version:       OfficialQueryAccountVersion,
 		AccountType:   OfficialAccountTypePersonal,
 		CertificateNo: "110101199001011234",
 	}
 	require.EqualError(t, query.Validate(), "baofu query account certificateType is required when certificateNo is used")
+
+	query.Version = OfficialOpenAccountVersion
+	query.CertificateType = OfficialCertificateTypeID
+	require.EqualError(t, query.Validate(), "baofu query account version must be 4.0.0")
+
+	query = OfficialQueryAccountRequest{
+		Version:         OfficialQueryAccountVersion,
+		AccountType:     OfficialAccountTypePersonal,
+		CertificateNo:   "110101199001011234",
+		CertificateType: "PASSPORT",
+	}
+	require.EqualError(t, query.Validate(), "baofu query account certificateType is unsupported")
 
 	balance := OfficialBalanceQueryRequest{
 		Version:     OfficialBalanceVersion,

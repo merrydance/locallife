@@ -123,6 +123,34 @@ func TestAggregateClientClassifiesSuccessEnvelopeMissingDataContent(t *testing.T
 	require.Equal(t, "支付通道异常，请联系平台处理", providerErr.Frontend.Message)
 }
 
+func TestAggregateClientRejectsInvalidSignedPublicResponse(t *testing.T) {
+	dataContent := baofu.JSONString(`{"resultCode":"SUCCESS","outTradeNo":"BF202605040001"}`)
+	responseBody, _ := json.Marshal(baofu.PublicResponseEnvelope{
+		ReturnCode:         baofu.PublicEnvelopeReturnCodeSuccess,
+		ReturnMessage:      "OK",
+		MerchantID:         "102004465",
+		TerminalID:         "200005200",
+		Charset:            baofu.PublicEnvelopeCharsetUTF8,
+		Version:            baofu.PublicEnvelopeVersion10,
+		Format:             baofu.PublicEnvelopeFormatJSON,
+		SignType:           baofu.SignTypeRSA,
+		SignSerialNo:       "1",
+		EncryptionSerialNo: "1",
+		SignString:         "bad-signature",
+		DataContent:        dataContent,
+	})
+	doer := &aggregateRecordingDoer{responseBody: responseBody}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.CreateUnifiedOrder(context.Background(), validUnifiedOrderRequestForClientTest())
+
+	require.Error(t, err)
+	var providerErr *baofu.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, baofu.PublicEnvelopeUpstreamCodeInvalidSignature, providerErr.UpstreamCode)
+	require.ErrorIs(t, errors.Unwrap(providerErr), baofu.ErrInvalidSignature)
+}
+
 func TestAggregateClientClassifiesBusinessPayloadUnmarshalFailure(t *testing.T) {
 	doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","outTradeNo":{"bad":"shape"}}`)}
 	client := NewClient(testBaofuRootClient(t, doer))
@@ -160,6 +188,7 @@ type aggregateRecordingDoer struct {
 	statusCode          int
 	responseDataContent json.RawMessage
 	responseBody        []byte
+	baofuPrivatePEM     string
 }
 
 func (d *aggregateRecordingDoer) Do(req *http.Request) (*http.Response, error) {
@@ -176,6 +205,10 @@ func (d *aggregateRecordingDoer) Do(req *http.Request) (*http.Response, error) {
 	responseBody := d.responseBody
 	if responseBody == nil {
 		reqEnv := publicEnvelopeFromFormBytes(body)
+		signature, err := baofu.SignSHA256WithRSA(d.baofuPrivatePEM, []byte(d.responseDataContent))
+		if err != nil {
+			return nil, err
+		}
 		responseBody, _ = json.Marshal(baofu.PublicResponseEnvelope{
 			ReturnCode:         baofu.PublicEnvelopeReturnCodeSuccess,
 			MerchantID:         reqEnv.MerchantID,
@@ -186,7 +219,7 @@ func (d *aggregateRecordingDoer) Do(req *http.Request) (*http.Response, error) {
 			SignType:           baofu.SignTypeRSA,
 			SignSerialNo:       "1",
 			EncryptionSerialNo: "1",
-			SignString:         "test-signature",
+			SignString:         signature,
 			DataContent:        baofu.JSONString(d.responseDataContent),
 		})
 	}
@@ -201,6 +234,9 @@ func testBaofuRootClient(t *testing.T, doer baofu.HTTPDoer) *baofu.Client {
 func testBaofuRootClientWithEnvironment(t *testing.T, doer baofu.HTTPDoer, environment string) *baofu.Client {
 	t.Helper()
 	privatePEM, publicPEM := generateClientTestKeyPair(t)
+	if recorder, ok := doer.(*aggregateRecordingDoer); ok {
+		recorder.baofuPrivatePEM = privatePEM
+	}
 	client, err := baofu.NewClient(baofu.Config{
 		Environment:        environment,
 		CollectMerchantID:  "102004465",

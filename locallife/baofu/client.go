@@ -173,6 +173,9 @@ func (c *Client) postPublicEnvelope(ctx context.Context, endpoint string, method
 	if err := responseEnvelope.Validate(); err != nil {
 		return providerRequestError(method, resp.StatusCode, responseEnvelope.ValidationUpstreamCode(err), err)
 	}
+	if err := responseEnvelope.VerifySignature(c.config.BaofuPublicKeyPEM); err != nil {
+		return providerRequestError(method, resp.StatusCode, responseEnvelope.ValidationUpstreamCode(err), err)
+	}
 	responseBusinessContent := responseEnvelope.BusinessContent()
 	if code, message, failed := publicBusinessFailure(json.RawMessage(responseBusinessContent)); failed {
 		return providerResponseError(method, resp.StatusCode, code, message, errors.New("baofu public business response failed"))

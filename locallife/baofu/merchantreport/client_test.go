@@ -101,6 +101,7 @@ type merchantReportRecordingDoer struct {
 	request             *http.Request
 	requestBody         []byte
 	responseDataContent json.RawMessage
+	baofuPrivatePEM     string
 }
 
 func (d *merchantReportRecordingDoer) Do(req *http.Request) (*http.Response, error) {
@@ -111,7 +112,11 @@ func (d *merchantReportRecordingDoer) Do(req *http.Request) (*http.Response, err
 	}
 	d.requestBody = body
 	reqEnv := publicEnvelopeFromFormForTest(nil, body)
-	responseBody, _ := json.Marshal(baofu.PublicResponseEnvelope{ReturnCode: baofu.PublicEnvelopeReturnCodeSuccess, MerchantID: reqEnv.MerchantID, TerminalID: reqEnv.TerminalID, Charset: baofu.PublicEnvelopeCharsetUTF8, Version: baofu.PublicEnvelopeVersion10, Format: baofu.PublicEnvelopeFormatJSON, SignType: baofu.SignTypeRSA, SignSerialNo: "1", EncryptionSerialNo: "1", SignString: "test-signature", DataContent: baofu.JSONString(d.responseDataContent)})
+	signature, err := baofu.SignSHA256WithRSA(d.baofuPrivatePEM, []byte(d.responseDataContent))
+	if err != nil {
+		return nil, err
+	}
+	responseBody, _ := json.Marshal(baofu.PublicResponseEnvelope{ReturnCode: baofu.PublicEnvelopeReturnCodeSuccess, MerchantID: reqEnv.MerchantID, TerminalID: reqEnv.TerminalID, Charset: baofu.PublicEnvelopeCharsetUTF8, Version: baofu.PublicEnvelopeVersion10, Format: baofu.PublicEnvelopeFormatJSON, SignType: baofu.SignTypeRSA, SignSerialNo: "1", EncryptionSerialNo: "1", SignString: signature, DataContent: baofu.JSONString(d.responseDataContent)})
 	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(responseBody)), Header: make(http.Header)}, nil
 }
 
@@ -140,6 +145,9 @@ func publicEnvelopeFromFormForTest(t require.TestingT, raw []byte) baofu.PublicR
 func testBaofuRootClient(t *testing.T, doer baofu.HTTPDoer) *baofu.Client {
 	t.Helper()
 	privatePEM, publicPEM := generateClientTestKeyPair(t)
+	if recorder, ok := doer.(*merchantReportRecordingDoer); ok {
+		recorder.baofuPrivatePEM = privatePEM
+	}
 	client, err := baofu.NewClient(baofu.Config{Environment: baofu.BaofuEnvironmentSandbox, CollectMerchantID: "102004465", CollectTerminalID: "200005200", PayoutMerchantID: "102004466", PayoutTerminalID: "200005201", AppID: "wx1234567890abcdef", PrivateKeyPEM: privatePEM, BaofuPublicKeyPEM: publicPEM, NotifyBaseURL: "https://api.example.com/v1/webhooks/baofu", SignSerialNo: "1", EncryptionSerialNo: "1", Timeout: 5 * time.Second}, doer)
 	require.NoError(t, err)
 	return client

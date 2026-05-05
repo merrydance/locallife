@@ -247,26 +247,33 @@ func unifiedOrderPayCodeRequiresRiskInfo(payCode string) bool {
 }
 
 type UnifiedOrderResult struct {
-	AgentMerchantID  string          `json:"agentMerId,omitempty"`
-	AgentTerminalID  string          `json:"agentTerId,omitempty"`
-	MerchantID       string          `json:"merId,omitempty"`
-	TerminalID       string          `json:"terId,omitempty"`
-	OutTradeNo       string          `json:"outTradeNo,omitempty"`
-	TxnState         string          `json:"txnState,omitempty"`
-	TradeNo          string          `json:"tradeNo,omitempty"`
-	RequestChannelNo string          `json:"reqChlNo,omitempty"`
-	PayCode          string          `json:"payCode,omitempty"`
-	ChannelReturn    ChannelReturn   `json:"chlRetParam,omitempty"`
-	ResultCode       string          `json:"resultCode,omitempty"`
-	ErrorCode        string          `json:"errCode,omitempty"`
-	ErrorMessage     string          `json:"errMsg,omitempty"`
-	Raw              json.RawMessage `json:"-"`
+	AgentMerchantID         string          `json:"agentMerId,omitempty"`
+	AgentTerminalID         string          `json:"agentTerId,omitempty"`
+	MerchantID              string          `json:"merId,omitempty"`
+	TerminalID              string          `json:"terId,omitempty"`
+	OutTradeNo              string          `json:"outTradeNo,omitempty"`
+	TxnState                string          `json:"txnState,omitempty"`
+	TradeNo                 string          `json:"tradeNo,omitempty"`
+	FinishTime              string          `json:"finishTime,omitempty"`
+	SuccessAmountFen        int64           `json:"succAmt,omitempty"`
+	FeeAmountFen            int64           `json:"feeAmt,omitempty"`
+	InstallmentFeeAmountFen int64           `json:"instFeeAmt,omitempty"`
+	RequestChannelNo        string          `json:"reqChlNo,omitempty"`
+	PayCode                 string          `json:"payCode,omitempty"`
+	ChannelReturn           ChannelReturn   `json:"chlRetParam,omitempty"`
+	ClearingDate            string          `json:"clearingDate,omitempty"`
+	ResultCode              string          `json:"resultCode,omitempty"`
+	ErrorCode               string          `json:"errCode,omitempty"`
+	ErrorMessage            string          `json:"errMsg,omitempty"`
+	Raw                     json.RawMessage `json:"-"`
 }
 
 type ChannelReturn struct {
 	PrepayID      string          `json:"prepay_id,omitempty"`
 	WechatPayData json.RawMessage `json:"wc_pay_data,omitempty"`
 	OrderID       string          `json:"order_id,omitempty"`
+	OpenID        string          `json:"openId,omitempty"`
+	SubOpenID     string          `json:"subOpenid,omitempty"`
 }
 
 func (r *ChannelReturn) UnmarshalJSON(raw []byte) error {
@@ -274,6 +281,8 @@ func (r *ChannelReturn) UnmarshalJSON(raw []byte) error {
 		PrepayID      string          `json:"prepay_id,omitempty"`
 		WechatPayData json.RawMessage `json:"wc_pay_data,omitempty"`
 		OrderID       json.RawMessage `json:"order_id"`
+		OpenID        string          `json:"openId,omitempty"`
+		SubOpenID     string          `json:"subOpenid,omitempty"`
 	}
 	if err := json.Unmarshal(raw, &aux); err != nil {
 		return err
@@ -281,6 +290,8 @@ func (r *ChannelReturn) UnmarshalJSON(raw []byte) error {
 	result := ChannelReturn{
 		PrepayID:      strings.TrimSpace(aux.PrepayID),
 		WechatPayData: aux.WechatPayData,
+		OpenID:        strings.TrimSpace(aux.OpenID),
+		SubOpenID:     strings.TrimSpace(aux.SubOpenID),
 	}
 	if len(aux.OrderID) > 0 && string(aux.OrderID) != "null" {
 		orderID, err := jsonScalarToString(aux.OrderID)
@@ -316,10 +327,12 @@ func (r UnifiedOrderResult) WechatPayData() (json.RawMessage, error) {
 }
 
 type PaymentQueryRequest struct {
-	MerchantID string `json:"merId"`
-	TerminalID string `json:"terId"`
-	TradeNo    string `json:"tradeNo,omitempty"`
-	OutTradeNo string `json:"outTradeNo,omitempty"`
+	AgentMerchantID string `json:"agentMerId,omitempty"`
+	AgentTerminalID string `json:"agentTerId,omitempty"`
+	MerchantID      string `json:"merId"`
+	TerminalID      string `json:"terId"`
+	TradeNo         string `json:"tradeNo,omitempty"`
+	OutTradeNo      string `json:"outTradeNo,omitempty"`
 }
 
 func (r PaymentQueryRequest) Validate() error {
@@ -336,13 +349,25 @@ func (r PaymentQueryRequest) Validate() error {
 }
 
 type PaymentFact struct {
-	OutTradeNo       string
-	TradeNo          string
-	TransactionState string
-	SuccessAmountFen int64
-	FeeAmountFen     int64
-	ResultCode       string
-	Raw              json.RawMessage
+	AgentMerchantID         string
+	AgentTerminalID         string
+	MerchantID              string
+	TerminalID              string
+	OutTradeNo              string
+	TradeNo                 string
+	TransactionState        string
+	FinishTime              string
+	SuccessAmountFen        int64
+	FeeAmountFen            int64
+	InstallmentFeeAmountFen int64
+	ResultCode              string
+	ErrorCode               string
+	ErrorMessage            string
+	RequestChannelNo        string
+	PayCode                 string
+	ChannelReturnParam      json.RawMessage
+	ClearingDate            string
+	Raw                     json.RawMessage
 }
 
 func NormalizePaymentTerminalStatus(upstreamState string) string {
@@ -416,6 +441,8 @@ func (r ShareAfterPayRequest) Validate() error {
 }
 
 type ShareResult struct {
+	AgentMerchantID  string          `json:"agentMerId,omitempty"`
+	AgentTerminalID  string          `json:"agentTerId,omitempty"`
 	MerchantID       string          `json:"merId,omitempty"`
 	TerminalID       string          `json:"terId,omitempty"`
 	ResultCode       string          `json:"resultCode,omitempty"`
@@ -431,19 +458,27 @@ type ShareResult struct {
 }
 
 type ShareFact struct {
+	AgentMerchantID  string
+	AgentTerminalID  string
+	MerchantID       string
+	TerminalID       string
 	OutTradeNo       string
 	TradeNo          string
 	TransactionState string
+	FinishTime       string
 	SuccessAmountFen int64
+	ClearingDate     string
 	ResultCode       string
 	Raw              json.RawMessage
 }
 
 type ShareQueryRequest struct {
-	MerchantID string `json:"merId"`
-	TerminalID string `json:"terId"`
-	TradeNo    string `json:"tradeNo,omitempty"`
-	OutTradeNo string `json:"outTradeNo,omitempty"`
+	AgentMerchantID string `json:"agentMerId,omitempty"`
+	AgentTerminalID string `json:"agentTerId,omitempty"`
+	MerchantID      string `json:"merId"`
+	TerminalID      string `json:"terId"`
+	TradeNo         string `json:"tradeNo,omitempty"`
+	OutTradeNo      string `json:"outTradeNo,omitempty"`
 }
 
 func (r ShareQueryRequest) Validate() error {
@@ -579,11 +614,19 @@ type RefundResult struct {
 }
 
 type RefundFact struct {
+	AgentMerchantID  string
+	AgentTerminalID  string
+	MerchantID       string
+	TerminalID       string
 	OutTradeNo       string
 	TradeNo          string
 	TransactionState string
+	FinishTime       string
 	SuccessAmountFen int64
 	ResultCode       string
+	TransactionTime  string
+	ErrorCode        string
+	ErrorMessage     string
 	Raw              json.RawMessage
 }
 

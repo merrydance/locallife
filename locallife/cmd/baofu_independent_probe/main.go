@@ -124,6 +124,7 @@ func run() error {
 		MerchantID:    baofuCfg.PayoutMerchantID,
 		TerminalID:    baofuCfg.PayoutTerminalID,
 		TransSerialNo: envDefault("BAOFU_TEST_WITHDRAW_TRANS_SERIAL_NO", fakeWithdrawSerialNo),
+		TradeTime:     envDefault("BAOFU_TEST_WITHDRAW_TRADE_TIME", time.Now().Format("2006-01-02")),
 	})
 	printResult("withdraw_query_fake", withdrawQueryResult, err)
 
