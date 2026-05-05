@@ -161,11 +161,14 @@ func TestOfficialQueryBalanceAndWithdrawValidateRequiredFields(t *testing.T) {
 	require.EqualError(t, query.Validate(), "baofu query account certificateType is required when certificateNo is used")
 
 	balance := OfficialBalanceQueryRequest{
-		Version:     OfficialOpenAccountVersion,
+		Version:     OfficialBalanceVersion,
 		AccountType: OfficialAccountTypePersonal,
 		ContractNo:  "CM202605040001",
 	}
 	require.NoError(t, balance.Validate())
+
+	balance.Version = OfficialOpenAccountVersion
+	require.EqualError(t, balance.Validate(), "baofu balance query version must be 4.0.0")
 
 	withdraw := OfficialWithdrawRequest{
 		Version:       OfficialWithdrawVersion,

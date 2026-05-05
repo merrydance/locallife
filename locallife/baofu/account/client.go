@@ -59,7 +59,7 @@ func (c *Client) QueryBalance(ctx context.Context, req contracts.BalanceQueryReq
 		return nil, errors.New("baofu account client is not configured")
 	}
 	officialReq := contracts.OfficialBalanceQueryRequest{
-		Version:     contracts.OfficialOpenAccountVersion,
+		Version:     contracts.OfficialBalanceVersion,
 		ContractNo:  strings.TrimSpace(req.ContractNo),
 		AccountType: officialAccountType(req.AccountType),
 	}
@@ -290,31 +290,41 @@ func isOfficialSuccessCode(value string) bool {
 }
 
 type officialBalanceResult struct {
-	ContractNo   string `json:"contractNo"`
-	AvailableBal string `json:"availableBal"`
-	PendingBal   string `json:"pendingBal"`
-	CurrBal      string `json:"currBal"`
-	FreezeBal    string `json:"freezeBal"`
+	ContractNo   officialScalarString `json:"contractNo"`
+	AvailableBal officialScalarString `json:"availableBal"`
+	PendingBal   officialScalarString `json:"pendingBal"`
+	CurrBal      officialScalarString `json:"currBal"`
+	FreezeBal    officialScalarString `json:"freezeBal"`
 }
 
 func (r officialBalanceResult) toBalanceResult() (*contracts.BalanceResult, error) {
-	available, err := contracts.YuanStringToFen(r.AvailableBal)
+	available, err := contracts.YuanStringToFen(r.AvailableBal.String())
 	if err != nil {
 		return nil, err
 	}
-	pending, err := contracts.YuanStringToFen(r.PendingBal)
+	pending, err := contracts.YuanStringToFen(r.PendingBal.String())
 	if err != nil {
 		return nil, err
 	}
-	ledger, err := contracts.YuanStringToFen(r.CurrBal)
+	ledger, err := contracts.YuanStringToFen(r.CurrBal.String())
 	if err != nil {
 		return nil, err
 	}
-	frozen, err := contracts.YuanStringToFen(r.FreezeBal)
+	frozen, err := contracts.YuanStringToFen(r.FreezeBal.String())
 	if err != nil {
 		return nil, err
 	}
-	return &contracts.BalanceResult{ContractNo: strings.TrimSpace(r.ContractNo), AvailableAmountFen: available, PendingAmountFen: pending, LedgerAmountFen: ledger, FrozenAmountFen: frozen, UpstreamAvailable: r.AvailableBal, UpstreamPending: r.PendingBal, UpstreamLedger: r.CurrBal, UpstreamFrozen: r.FreezeBal}, nil
+	return &contracts.BalanceResult{
+		ContractNo:         r.ContractNo.String(),
+		AvailableAmountFen: available,
+		PendingAmountFen:   pending,
+		LedgerAmountFen:    ledger,
+		FrozenAmountFen:    frozen,
+		UpstreamAvailable:  r.AvailableBal.String(),
+		UpstreamPending:    r.PendingBal.String(),
+		UpstreamLedger:     r.CurrBal.String(),
+		UpstreamFrozen:     r.FreezeBal.String(),
+	}, nil
 }
 
 type officialWithdrawResult struct {

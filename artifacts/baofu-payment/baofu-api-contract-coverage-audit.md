@@ -213,12 +213,12 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 官方文档：https://doc.mandao.com/docs/bct/queryBalace
 
-请求字段：`version` M，`contractNo` M，`accType` M。响应字段：`retCode/errorCode/errorMsg/availableBal/pendingBal/currBal/freezeBal`。
+请求字段：`version=4.0.0` M，`contractNo` M，`accType` M。响应字段：`retCode/errorCode/errorMsg/availableBal/pendingBal/currBal/freezeBal`。官方示例中余额字段可能以 JSON number 返回，例如 `0`，本地必须兼容 string/number 两种标量。
 
 本地覆盖：
 
-- 已新增官方余额 DTO，并把官方元 `BigDecimal(10,2)` 与本地分金额转换集中到契约边界且有测试。
-- 已有真实 client/httptest；未做测试地址联调。
+- 已新增官方余额 DTO，并把官方元 `BigDecimal(10,2)` 与本地分金额转换集中到契约边界且有测试。2026-05-05 沙箱余额查询暴露两处漂移：本地误复用开户 `version=4.1.0`，且响应金额字段只接 string，遇到官方 number 示例会在系统层 `S_0000` 后反序列化失败。现已改为 `version=4.0.0`，并用 `officialScalarString` 兼容 number/string 金额。
+- 已有真实 client/httptest；沙箱正向余额查询待重新部署后复测。
 
 ### 6.5 账户提现 `T-1001-013-14`
 

@@ -42,7 +42,35 @@ func TestAccountClientQueryBalancePostsOfficialUnionGatewayRequest(t *testing.T)
 	require.Equal(t, "200005200", env.Header.TerminalID)
 	require.Equal(t, "T-1001-013-06", env.Header.ServiceType)
 	require.Equal(t, baofu.UnionGWVerifyTypeRSA, env.Header.VerifyType)
+	require.Contains(t, string(env.Body), `"version":"4.0.0"`)
 	require.Contains(t, string(env.Body), `"contractNo":"CM202605040001"`)
+}
+
+func TestAccountClientQueryBalanceParsesNumericOfficialAmounts(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{
+		"retCode":      1,
+		"contractNo":   "CP610000000000542938",
+		"availableBal": 0,
+		"pendingBal":   1.23,
+		"currBal":      1.23,
+		"freezeBal":    0,
+	}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	result, err := client.QueryBalance(context.Background(), contracts.BalanceQueryRequest{
+		MerchantID:  "102004465",
+		TerminalID:  "200005200",
+		ContractNo:  "CP610000000000542938",
+		AccountType: "personal",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "CP610000000000542938", result.ContractNo)
+	require.Equal(t, int64(0), result.AvailableAmountFen)
+	require.Equal(t, int64(123), result.PendingAmountFen)
+	require.Equal(t, int64(123), result.LedgerAmountFen)
+	require.Equal(t, int64(0), result.FrozenAmountFen)
+	require.Equal(t, "0", result.UpstreamAvailable)
 }
 
 func TestAccountClientOpenAccountUsesConfiguredNotifyBaseURL(t *testing.T) {
@@ -148,7 +176,7 @@ func TestAccountClientQueryBalanceUsesPersonalAccountType(t *testing.T) {
 	require.NoError(t, err)
 	env := accountRequestEnvelopeForTest(t, doer)
 	require.Equal(t, "T-1001-013-06", env.Header.ServiceType)
-	require.JSONEq(t, `{"accType":1,"contractNo":"CM202605040001"}`, partialJSONForAccountTest(t, env.Body, "accType", "contractNo"))
+	require.JSONEq(t, `{"version":"4.0.0","accType":1,"contractNo":"CM202605040001"}`, partialJSONForAccountTest(t, env.Body, "version", "accType", "contractNo"))
 }
 
 func TestAccountClientReturnsProviderErrorForBusinessFailure(t *testing.T) {

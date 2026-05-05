@@ -42,6 +42,7 @@
 
 | Date | Env | Endpoint | ContractNo Masked | Available Fen | Pending Fen | Frozen Fen | Result | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-05-05 | sandbox | `https://vgw.baofoo.com/union-gw/api/T-1001-013-06/transReq.do` | `CP61***2938` | - | - | - | reached sandbox; local client returned provider_error with system code `S_0000` before parsing business balance | `7133b966` | Negative balance evidence. Root cause is local contract drift: balance query page requires `version=4.0.0` and official examples return numeric balance fields, while deployed code sent `4.1.0` and only accepted string balances. Fixed locally; redeploy and rerun required before C4. |
 
 ## Withdrawal `T-1001-013-14`
 

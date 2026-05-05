@@ -38,6 +38,7 @@
 | C-011 real transport missing | Task 8 | union-gw、aggregate pay、merchant report 真实 HTTP client 可打测试地址。 |
 | C-012 readiness copy drift | Task 6, Task 11 | 旧“商户微信渠道待报备”文案替换为产品语义。 |
 | C-013 merchant_report nested field drift | Task P10 | 整体文档复核后修复微信报备 `address_info`、`bankcard_info` 字段名和必填性。 |
+| C-014 balance query version/amount drift | Task P11 | 余额查询独立 `version=4.0.0`，响应金额兼容 string/number。 |
 
 ## 2. Target File Map
 
@@ -1667,6 +1668,54 @@ git diff --check
 ```
 
 All commands passed.
+
+### Task P11: Balance Query Sandbox Drift Fix
+
+> Trigger: sandbox `T-1001-013-06` returned a provider error with system code `S_0000`, which means union-gw transport/system layer succeeded but local business response parsing failed.
+
+**Files:**
+- Modify: `locallife/baofu/account/contracts/official_balance.go`
+- Modify: `locallife/baofu/account/contracts/types_test.go`
+- Modify: `locallife/baofu/account/client.go`
+- Modify: `locallife/baofu/account/client_test.go`
+- Modify: `artifacts/baofu-payment/baofu-api-contract-coverage-audit.md`
+- Modify: `artifacts/baofu-payment/baofu-sandbox-evidence.md`
+- Modify: `artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md`
+
+- [x] **Step 1: Read the exact balance page**
+
+Authenticated doc page: `queryBalace` / `T-1001-013-06`.
+
+Confirmed:
+
+- request `version` is `4.0.0`, not the account-open/query version `4.1.0`;
+- response `availableBal/pendingBal/currBal/freezeBal` are BigDecimal yuan values and the official sample uses numeric `0`, not JSON strings.
+
+- [x] **Step 2: Add regressions**
+
+Added tests proving:
+
+- balance query request body sends `version=4.0.0`;
+- personal balance query still sends `accType=1`;
+- numeric official amount fields parse into local fen amounts.
+
+- [x] **Step 3: Fix implementation**
+
+Updated `OfficialBalanceVersion` to `4.0.0` and changed `officialBalanceResult` amount fields to reuse the same string/number tolerant scalar parser already used by account-open/query results.
+
+- [x] **Step 4: Validate and commit**
+
+```bash
+cd locallife
+PATH="/usr/local/go/bin:$PATH" go test ./baofu/account ./baofu/account/contracts -run 'TestAccountClientQueryBalance|TestOfficialQueryBalance' -count=1
+PATH="/usr/local/go/bin:$PATH" go test ./baofu/... -count=1
+make check-baofu-contract
+git diff --check
+git add locallife/baofu/account artifacts/baofu-payment/baofu-api-contract-coverage-audit.md artifacts/baofu-payment/baofu-sandbox-evidence.md artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md
+git commit -m "fix(baofu): align balance query contract"
+```
+
+Validation on 2026-05-05: all commands above passed.
 
 ### 7.3 Completion Gate For This Pre-`dataContent` Audit
 
