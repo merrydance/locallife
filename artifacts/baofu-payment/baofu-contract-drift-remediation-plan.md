@@ -2019,15 +2019,9 @@ Rerun completed on 2026-05-05. The repo command printed `effective_wire_sub_mch_
 
 Added `go run ./cmd/baofu_order_query_smoke`. It accepts `BAOFU_TEST_OUT_TRADE_NO` or `BAOFU_TEST_TRADE_NO`, prints masked query keys, calls aggregate `order_query`, and prints masked `out_trade_no`, `trade_no`, upstream `txn_state`, normalized local terminal state, `result_code`, `err_code`, and whether `wc_pay_data` is present.
 
-- [ ] **Step 2: Deploy and query the sandbox order**
+- [x] **Step 2: Deploy and query the sandbox order**
 
-After deploy, run:
-
-```bash
-BAOFU_TEST_OUT_TRADE_NO='BAOFU_UO_20260505115158' PATH="/usr/local/go/bin:$PATH" go run ./cmd/baofu_order_query_smoke
-```
-
-Expected: the command should compile and reach `order_query`. A `WAIT_PAYING`/processing result proves query parsing/status mapping for the sandbox order; it still does not prove payment callback or downstream分账 because Baofoo confirmed sandbox does not support real payment.
+Rerun completed on 2026-05-05. Querying `BAOFU_UO_20260505115158` returned masked `tradeNo=2605***1952`, `txnState=SUCCESS`, normalized state `success`, and `resultCode=SUCCESS`. Querying the prior `BAOFU_UO_20260505114340` returned masked `tradeNo=2605***1948` with the same terminal state. This proves `order_query` parsing and terminal-state normalization for sandbox-created orders, but still does not prove payment callback or downstream分账 because Baofoo confirmed sandbox does not support real payment.
 
 ### 7.3 Completion Gate For This Pre-`dataContent` Audit
 
