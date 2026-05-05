@@ -3,6 +3,8 @@ package util
 import (
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -100,6 +102,8 @@ type Config struct {
 	BaofuAppID                     string        `mapstructure:"BAOFU_APP_ID"`
 	BaofuPrivateKeyPEM             string        `mapstructure:"BAOFU_PRIVATE_KEY_PEM"`
 	BaofuPublicKeyPEM              string        `mapstructure:"BAOFU_PUBLIC_KEY_PEM"`
+	BaofuPrivateKeyPath            string        `mapstructure:"BAOFU_PRIVATE_KEY_PATH"`
+	BaofuPublicKeyPath             string        `mapstructure:"BAOFU_PUBLIC_KEY_PATH"`
 	BaofuSignSerialNo              string        `mapstructure:"BAOFU_SIGN_SERIAL_NO"`
 	BaofuEncryptionSerialNo        string        `mapstructure:"BAOFU_ENCRYPTION_SERIAL_NO"`
 	BaofuNotifyBaseURL             string        `mapstructure:"BAOFU_NOTIFY_BASE_URL"`
@@ -323,6 +327,8 @@ func (c Config) HasBaofuRuntimeConfig() bool {
 		strings.TrimSpace(c.BaofuAppID) != "" ||
 		strings.TrimSpace(c.BaofuPrivateKeyPEM) != "" ||
 		strings.TrimSpace(c.BaofuPublicKeyPEM) != "" ||
+		strings.TrimSpace(c.BaofuPrivateKeyPath) != "" ||
+		strings.TrimSpace(c.BaofuPublicKeyPath) != "" ||
 		strings.TrimSpace(c.BaofuSignSerialNo) != "" ||
 		strings.TrimSpace(c.BaofuEncryptionSerialNo) != "" ||
 		strings.TrimSpace(c.BaofuNotifyBaseURL) != "" ||
@@ -626,6 +632,9 @@ func LoadConfig(path string) (config Config, err error) {
 
 	// Normalize common quoted values from .env (e.g. REDIS_PASSWORD="...")
 	config.RedisPassword = trimOptionalQuotes(config.RedisPassword)
+	if err = config.loadBaofuPEMFromPaths(path); err != nil {
+		return
+	}
 	return
 }
 
@@ -675,4 +684,37 @@ func normalizeEscapedPEM(s string) string {
 	s = strings.ReplaceAll(s, `\\n`, "\n")
 	s = strings.ReplaceAll(s, `\n`, "\n")
 	return s
+}
+
+func (c *Config) loadBaofuPEMFromPaths(configDir string) error {
+	privateKeyPath := trimOptionalQuotes(c.BaofuPrivateKeyPath)
+	publicKeyPath := trimOptionalQuotes(c.BaofuPublicKeyPath)
+	c.BaofuPrivateKeyPath = privateKeyPath
+	c.BaofuPublicKeyPath = publicKeyPath
+	if privateKeyPath != "" {
+		content, err := readConfigRelativeFile(configDir, privateKeyPath)
+		if err != nil {
+			return fmt.Errorf("read BAOFU_PRIVATE_KEY_PATH: %w", err)
+		}
+		c.BaofuPrivateKeyPEM = string(content)
+	}
+	if publicKeyPath != "" {
+		content, err := readConfigRelativeFile(configDir, publicKeyPath)
+		if err != nil {
+			return fmt.Errorf("read BAOFU_PUBLIC_KEY_PATH: %w", err)
+		}
+		c.BaofuPublicKeyPEM = string(content)
+	}
+	return nil
+}
+
+func readConfigRelativeFile(configDir, rawPath string) ([]byte, error) {
+	path := strings.TrimSpace(rawPath)
+	if path == "" {
+		return nil, fmt.Errorf("path is required")
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(configDir, path)
+	}
+	return os.ReadFile(filepath.Clean(path))
 }
