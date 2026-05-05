@@ -56,6 +56,19 @@
   padding-bottom: 40rpx;
 }
 
+.split-checkout-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-xs);
+  padding: var(--spacer-sm) var(--spacer-md);
+  color: var(--td-text-color-primary);
+  background: var(--td-warning-color-1, #fff4e5);
+  border: 1rpx solid var(--td-warning-color-3, #ffd8a6);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
 .merchant-group {
   background: var(--td-bg-color-container);
   border-radius: var(--radius-lg);

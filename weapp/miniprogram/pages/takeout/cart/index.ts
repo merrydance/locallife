@@ -1,4 +1,5 @@
 import * as CartAPI from '@/api/cart'
+import { loadCheckoutPaymentCapabilities } from '@/services/takeout-checkout'
 import { logger } from '@/utils/logger'
 import {
   buildCartSummary,
@@ -18,6 +19,7 @@ import {
 
 let _loadAllCartsPromise: Promise<void> | null = null
 let _lastLoadAllCartsAt = 0
+let _loadPaymentCapabilitiesPromise: Promise<void> | null = null
 
 Page({
   data: {
@@ -34,7 +36,9 @@ Page({
     // 结算相关
     selectedCartIds: [] as number[],
     checkoutTotal: 0,
-    checkoutTotalDisplay: '¥0.00'
+    checkoutTotalDisplay: '¥0.00',
+    splitCheckoutRequired: false,
+    splitCheckoutNotice: ''
   },
 
   onLoad() {
@@ -103,11 +107,17 @@ Page({
 
         // 预先计算费用并校验商户状态（在显示前完成）
         merchantGroups = await this.calculateDeliveryFees(merchantGroups, true)
+        await this.loadPaymentCapabilities()
 
         // 默认全选（排除有错误的商户）
-        const selectedCartIds = merchantGroups
-          .filter((g) => !g.errorStatus)
-          .map((g) => g.cartId)
+        const availableGroups = merchantGroups.filter((g) => !g.errorStatus)
+        const selectedCartIds = this.data.splitCheckoutRequired
+          ? availableGroups.slice(0, 1).map((g) => g.cartId)
+          : availableGroups.map((g) => g.cartId)
+        merchantGroups = merchantGroups.map((group) => ({
+          ...group,
+          selected: selectedCartIds.includes(group.cartId)
+        }))
 
         // 设置数据并显示
         this.setData({
@@ -135,6 +145,29 @@ Page({
     })
 
     return _loadAllCartsPromise
+  },
+
+  async loadPaymentCapabilities() {
+    if (_loadPaymentCapabilitiesPromise) {
+      return _loadPaymentCapabilitiesPromise
+    }
+
+    _loadPaymentCapabilitiesPromise = (async () => {
+      try {
+        const capabilities = await loadCheckoutPaymentCapabilities()
+        const splitCheckoutRequired = capabilities.splitCheckoutRequired
+        this.setData({
+          splitCheckoutRequired,
+          splitCheckoutNotice: capabilities.splitCheckoutNotice
+        })
+      } catch (error) {
+        logger.warn('Failed to load payment capabilities', error, 'cart.loadPaymentCapabilities')
+      }
+    })().finally(() => {
+      _loadPaymentCapabilitiesPromise = null
+    })
+
+    return _loadPaymentCapabilitiesPromise
   },
 
 
@@ -263,6 +296,24 @@ Page({
     }
 
     const index = selectedCartIds.indexOf(cartId)
+    if (this.data.splitCheckoutRequired) {
+      const nextSelectedCartIds = index > -1 ? [] : [cartId]
+      const updatedGroups = merchantGroups.map((group) => ({
+        ...group,
+        selected: nextSelectedCartIds.includes(group.cartId)
+      }))
+
+      this.setData({
+        selectedCartIds: nextSelectedCartIds,
+        merchantGroups: updatedGroups
+      })
+      if (index === -1 && selectedCartIds.some((id) => id !== cartId)) {
+        wx.showToast({ title: '当前需按商户分别支付', icon: 'none' })
+      }
+      this.calculateCheckoutTotal()
+      return
+    }
+
     if (index > -1) {
       selectedCartIds.splice(index, 1)
     } else {
@@ -504,6 +555,10 @@ Page({
 
     if (selectedCartIds.length === 0) {
       wx.showToast({ title: '请选择要结算的商品', icon: 'none' })
+      return
+    }
+    if (this.data.splitCheckoutRequired && selectedCartIds.length > 1) {
+      wx.showToast({ title: '当前需按商户分别支付', icon: 'none' })
       return
     }
 

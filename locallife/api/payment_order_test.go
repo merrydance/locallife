@@ -2432,3 +2432,37 @@ func TestCreateCombinedPaymentOrderAPI_BaofuMainBusinessFailsClosed(t *testing.T
 	require.Equal(t, CodeServiceUnavail, resp.Code)
 	require.Equal(t, "宝付合单支付暂未开通，请分开支付", resp.Message)
 }
+
+func TestGetPaymentCapabilitiesAPI_BaofuMainBusinessRequiresSplitCheckout(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAggregateClientForTest(&fakeAPIBaofuAggregateClient{}, logic.BaofuAggregateFacadeConfig{
+		CollectMerchantID: "COLLECT_API",
+		CollectTerminalID: "TER_API",
+		MiniProgramAppID:  "wx-mini-api",
+		PaymentNotifyURL:  "https://api.example.com/v1/webhooks/baofu/payment",
+		RefundNotifyURL:   "https://api.example.com/v1/webhooks/baofu/refund",
+	})
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/payments/capabilities", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, 1001, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var resp struct {
+		Code int                         `json:"code"`
+		Data paymentCapabilitiesResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, CodeOK, resp.Code)
+	require.Equal(t, db.PaymentChannelBaofuAggregate, resp.Data.MainBusinessPaymentChannel)
+	require.False(t, resp.Data.CombinedPaymentSupported)
+	require.True(t, resp.Data.SplitCheckoutRequired)
+	require.Equal(t, "宝付暂不支持合单支付，请按商户分别下单支付", resp.Data.CombinedPaymentUnavailableMessage)
+}

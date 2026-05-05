@@ -22520,6 +22520,37 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/payments/capabilities": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "返回当前主业务支付通道及合单支付可用性，供小程序购物车决定是否必须按商户拆单支付",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "支付管理"
+                ],
+                "summary": "查询支付能力",
+                "responses": {
+                    "200": {
+                        "description": "支付能力",
+                        "schema": {
+                            "$ref": "#/definitions/api.paymentCapabilitiesResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/payments/combined": {
             "post": {
                 "security": [
@@ -38192,7 +38223,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total_deduction_fee": {
-                    "description": "总扣减（平台+运营商+支付手续费）",
+                    "description": "总扣减（平台+运营商+商户支付服务费）",
                     "type": "integer"
                 },
                 "total_gmv": {
@@ -38208,7 +38239,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total_payment_fee": {
-                    "description": "宝付支付手续费",
+                    "description": "商户支付服务费",
                     "type": "integer"
                 },
                 "total_platform_fee": {
@@ -43108,6 +43139,23 @@ const docTemplate = `{
                 }
             }
         },
+        "api.paymentCapabilitiesResponse": {
+            "type": "object",
+            "properties": {
+                "combined_payment_supported": {
+                    "type": "boolean"
+                },
+                "combined_payment_unavailable_message": {
+                    "type": "string"
+                },
+                "main_business_payment_channel": {
+                    "type": "string"
+                },
+                "split_checkout_required": {
+                    "type": "boolean"
+                }
+            }
+        },
         "api.paymentLedgerEntryResponse": {
             "type": "object",
             "properties": {
@@ -43495,6 +43543,9 @@ const docTemplate = `{
                 "merchant_amount": {
                     "type": "integer"
                 },
+                "merchant_payment_fee": {
+                    "type": "integer"
+                },
                 "operator_commission": {
                     "type": "integer"
                 },
@@ -43507,10 +43558,22 @@ const docTemplate = `{
                 "platform_commission": {
                     "type": "integer"
                 },
+                "platform_net_payment_fee_margin": {
+                    "type": "integer"
+                },
+                "platform_payment_fee_income": {
+                    "type": "integer"
+                },
                 "provider": {
                     "type": "string"
                 },
+                "provider_payment_fee": {
+                    "type": "integer"
+                },
                 "rider_amount": {
+                    "type": "integer"
+                },
+                "rider_payment_fee": {
                     "type": "integer"
                 },
                 "unapplied_fact_count": {
@@ -45761,6 +45824,12 @@ const docTemplate = `{
                 },
                 "delivery_count": {
                     "type": "integer"
+                },
+                "rider_gross_amount": {
+                    "type": "integer"
+                },
+                "rider_payment_fee": {
+                    "type": "integer"
                 }
             }
         },
@@ -45814,6 +45883,12 @@ const docTemplate = `{
                 "rider_amount": {
                     "type": "integer"
                 },
+                "rider_gross_amount": {
+                    "type": "integer"
+                },
+                "rider_payment_fee": {
+                    "type": "integer"
+                },
                 "sharing_order_id": {
                     "type": "string"
                 },
@@ -45860,6 +45935,12 @@ const docTemplate = `{
                 "rider_amount": {
                     "type": "integer"
                 },
+                "rider_gross_amount": {
+                    "type": "integer"
+                },
+                "rider_payment_fee": {
+                    "type": "integer"
+                },
                 "status": {
                     "type": "string"
                 }
@@ -45880,7 +45961,13 @@ const docTemplate = `{
                 "total_delivery_fee": {
                     "type": "integer"
                 },
+                "total_rider_gross_amount": {
+                    "type": "integer"
+                },
                 "total_rider_income": {
+                    "type": "integer"
+                },
+                "total_rider_payment_fee": {
                     "type": "integer"
                 }
             }
@@ -46299,7 +46386,13 @@ const docTemplate = `{
                 "total_delivery_fee": {
                     "type": "integer"
                 },
+                "total_rider_gross_amount": {
+                    "type": "integer"
+                },
                 "total_rider_income": {
+                    "type": "integer"
+                },
+                "total_rider_payment_fee": {
                     "type": "integer"
                 }
             }

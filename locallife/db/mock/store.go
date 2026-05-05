@@ -4248,6 +4248,21 @@ func (mr *MockStoreMockRecorder) CreateOrderItem(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrderItem", reflect.TypeOf((*MockStore)(nil).CreateOrderItem), ctx, arg)
 }
 
+// CreateOrderPaymentFeeLedger mocks base method.
+func (m *MockStore) CreateOrderPaymentFeeLedger(ctx context.Context, arg db.CreateOrderPaymentFeeLedgerParams) (db.OrderPaymentFeeLedger, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateOrderPaymentFeeLedger", ctx, arg)
+	ret0, _ := ret[0].(db.OrderPaymentFeeLedger)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateOrderPaymentFeeLedger indicates an expected call of CreateOrderPaymentFeeLedger.
+func (mr *MockStoreMockRecorder) CreateOrderPaymentFeeLedger(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrderPaymentFeeLedger", reflect.TypeOf((*MockStore)(nil).CreateOrderPaymentFeeLedger), ctx, arg)
+}
+
 // CreateOrderStatusLog mocks base method.
 func (m *MockStore) CreateOrderStatusLog(ctx context.Context, arg db.CreateOrderStatusLogParams) (db.OrderStatusLog, error) {
 	m.ctrl.T.Helper()
@@ -14857,6 +14872,21 @@ func (mr *MockStoreMockRecorder) ListOrderItemsWithDishByOrderIDs(ctx, dollar_1 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOrderItemsWithDishByOrderIDs", reflect.TypeOf((*MockStore)(nil).ListOrderItemsWithDishByOrderIDs), ctx, dollar_1)
 }
 
+// ListOrderPaymentFeeLedgersByPayer mocks base method.
+func (m *MockStore) ListOrderPaymentFeeLedgersByPayer(ctx context.Context, arg db.ListOrderPaymentFeeLedgersByPayerParams) ([]db.OrderPaymentFeeLedger, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListOrderPaymentFeeLedgersByPayer", ctx, arg)
+	ret0, _ := ret[0].([]db.OrderPaymentFeeLedger)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListOrderPaymentFeeLedgersByPayer indicates an expected call of ListOrderPaymentFeeLedgersByPayer.
+func (mr *MockStoreMockRecorder) ListOrderPaymentFeeLedgersByPayer(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOrderPaymentFeeLedgersByPayer", reflect.TypeOf((*MockStore)(nil).ListOrderPaymentFeeLedgersByPayer), ctx, arg)
+}
+
 // ListOrderStatusLogs mocks base method.
 func (m *MockStore) ListOrderStatusLogs(ctx context.Context, orderID int64) ([]db.OrderStatusLog, error) {
 	m.ctrl.T.Helper()
@@ -21126,6 +21156,21 @@ func (mr *MockStoreMockRecorder) UpdateProfitSharingConfigTx(ctx, arg any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateProfitSharingConfigTx", reflect.TypeOf((*MockStore)(nil).UpdateProfitSharingConfigTx), ctx, arg)
 }
 
+// UpdateProfitSharingOrderFeeBreakdown mocks base method.
+func (m *MockStore) UpdateProfitSharingOrderFeeBreakdown(ctx context.Context, arg db.UpdateProfitSharingOrderFeeBreakdownParams) (db.ProfitSharingOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateProfitSharingOrderFeeBreakdown", ctx, arg)
+	ret0, _ := ret[0].(db.ProfitSharingOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateProfitSharingOrderFeeBreakdown indicates an expected call of UpdateProfitSharingOrderFeeBreakdown.
+func (mr *MockStoreMockRecorder) UpdateProfitSharingOrderFeeBreakdown(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateProfitSharingOrderFeeBreakdown", reflect.TypeOf((*MockStore)(nil).UpdateProfitSharingOrderFeeBreakdown), ctx, arg)
+}
+
 // UpdateProfitSharingOrderToFailed mocks base method.
 func (m *MockStore) UpdateProfitSharingOrderToFailed(ctx context.Context, id int64) (db.ProfitSharingOrder, error) {
 	m.ctrl.T.Helper()
@@ -22214,6 +22259,36 @@ func (m *MockStore) UpsertOrderDisplayConfig(ctx context.Context, arg db.UpsertO
 func (mr *MockStoreMockRecorder) UpsertOrderDisplayConfig(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertOrderDisplayConfig", reflect.TypeOf((*MockStore)(nil).UpsertOrderDisplayConfig), ctx, arg)
+}
+
+// UpsertOrderPaymentFeeLedgerActual mocks base method.
+func (m *MockStore) UpsertOrderPaymentFeeLedgerActual(ctx context.Context, arg db.UpsertOrderPaymentFeeLedgerActualParams) (db.OrderPaymentFeeLedger, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertOrderPaymentFeeLedgerActual", ctx, arg)
+	ret0, _ := ret[0].(db.OrderPaymentFeeLedger)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertOrderPaymentFeeLedgerActual indicates an expected call of UpsertOrderPaymentFeeLedgerActual.
+func (mr *MockStoreMockRecorder) UpsertOrderPaymentFeeLedgerActual(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertOrderPaymentFeeLedgerActual", reflect.TypeOf((*MockStore)(nil).UpsertOrderPaymentFeeLedgerActual), ctx, arg)
+}
+
+// UpsertOrderPaymentFeeLedgerCalculated mocks base method.
+func (m *MockStore) UpsertOrderPaymentFeeLedgerCalculated(ctx context.Context, arg db.UpsertOrderPaymentFeeLedgerCalculatedParams) (db.OrderPaymentFeeLedger, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertOrderPaymentFeeLedgerCalculated", ctx, arg)
+	ret0, _ := ret[0].(db.OrderPaymentFeeLedger)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertOrderPaymentFeeLedgerCalculated indicates an expected call of UpsertOrderPaymentFeeLedgerCalculated.
+func (mr *MockStoreMockRecorder) UpsertOrderPaymentFeeLedgerCalculated(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertOrderPaymentFeeLedgerCalculated", reflect.TypeOf((*MockStore)(nil).UpsertOrderPaymentFeeLedgerCalculated), ctx, arg)
 }
 
 // UpsertPlatformConfig mocks base method.

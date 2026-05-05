@@ -176,6 +176,15 @@ func TestBaofuPaymentServiceRecordPaymentCallbackFactCreatesTerminalApplication(
 	require.Equal(t, now, store.lastFact.ObservedAt)
 	require.Equal(t, "baofu:callback:payment:PO202605030001:BFN202605030001", store.lastFact.DedupeKey)
 	require.NotContains(t, string(store.lastFact.RawResource), "sharingMerId")
+	require.True(t, store.providerFeeActualUpserted)
+	require.Equal(t, db.OrderPaymentFeeTypeProviderPaymentFee, store.lastProviderFeeActual.FeeType)
+	require.Equal(t, db.OrderPaymentFeePayerTypePlatform, store.lastProviderFeeActual.PayerType)
+	require.Equal(t, db.OrderPaymentFeePayeeTypeBaofu, store.lastProviderFeeActual.PayeeType)
+	require.Equal(t, int64(88), store.lastProviderFeeActual.PaymentOrderID)
+	require.Equal(t, int64(12345), store.lastProviderFeeActual.BaseAmount)
+	require.Equal(t, int64(37), store.lastProviderFeeActual.Amount)
+	require.Equal(t, db.OrderPaymentFeeAmountSourceActualCallback, store.lastProviderFeeActual.AmountSource)
+	require.Equal(t, int64(501), store.lastProviderFeeActual.ExternalPaymentFactID.Int64)
 	require.Equal(t, int64(501), store.lastApplication.FactID)
 	require.Equal(t, "order_domain", store.lastApplication.Consumer)
 	require.Equal(t, "payment_order", store.lastApplication.BusinessObjectType)
@@ -246,8 +255,10 @@ type fakeBaofuPaymentStore struct {
 	lastCommand                    db.CreateExternalPaymentCommandParams
 	lastFact                       db.CreateExternalPaymentFactParams
 	lastApplication                db.CreateExternalPaymentFactApplicationParams
+	lastProviderFeeActual          db.UpsertOrderPaymentFeeLedgerActualParams
 	commandCreatedBeforeClientCall bool
 	applicationCreated             bool
+	providerFeeActualUpserted      bool
 }
 
 func (s *fakeBaofuPaymentStore) CreateExternalPaymentCommand(ctx context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
@@ -285,6 +296,12 @@ func (s *fakeBaofuPaymentStore) CreateExternalPaymentFactApplication(ctx context
 		BusinessObjectID:   arg.BusinessObjectID,
 		Status:             arg.Status,
 	}, nil
+}
+
+func (s *fakeBaofuPaymentStore) UpsertOrderPaymentFeeLedgerActual(ctx context.Context, arg db.UpsertOrderPaymentFeeLedgerActualParams) (db.OrderPaymentFeeLedger, error) {
+	s.lastProviderFeeActual = arg
+	s.providerFeeActualUpserted = true
+	return db.OrderPaymentFeeLedger{ID: 701, Amount: arg.Amount, AmountSource: arg.AmountSource}, nil
 }
 
 type fakeBaofuAggregatePaymentClient struct {

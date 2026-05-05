@@ -214,3 +214,48 @@ func TestListBaofuOrdersReadyForProfitSharing_GatesCompletedPaidAndRefundClosed(
 		require.NotEqual(t, paymentOrder.ID, row.PaymentOrderID)
 	}
 }
+
+func TestListBaofuOrdersReadyForProfitSharing_IncludesPaidReservations(t *testing.T) {
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	table := createRandomTable(t, merchant.ID)
+	reservation := createRandomReservation(t, user.ID, merchant.ID, table.ID, "paid")
+
+	paymentOrder, err := testStore.CreatePaymentOrder(context.Background(), CreatePaymentOrderParams{
+		ReservationID:         pgtype.Int8{Int64: reservation.ID, Valid: true},
+		UserID:                user.ID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+		BusinessType:          ExternalPaymentBusinessOwnerReservation,
+		Amount:                10000,
+		OutTradeNo:            util.RandomString(24),
+		ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdatePaymentOrderToPaid(context.Background(), UpdatePaymentOrderToPaidParams{
+		ID:            paymentOrder.ID,
+		TransactionID: pgtype.Text{String: util.RandomString(24), Valid: true},
+	})
+	require.NoError(t, err)
+
+	rows, err := testStore.ListBaofuOrdersReadyForProfitSharing(context.Background(), ListBaofuOrdersReadyForProfitSharingParams{
+		RefundClosedBefore: pgtype.Timestamptz{Time: time.Now().Add(time.Minute), Valid: true},
+		Limit:              200,
+	})
+	require.NoError(t, err)
+
+	matched := false
+	for _, row := range rows {
+		if row.PaymentOrderID == paymentOrder.ID {
+			require.False(t, row.OrderID.Valid)
+			require.True(t, row.ReservationID.Valid)
+			require.Equal(t, reservation.ID, row.ReservationID.Int64)
+			require.Equal(t, ExternalPaymentBusinessOwnerReservation, row.BusinessType)
+			matched = true
+			break
+		}
+	}
+	require.True(t, matched)
+}

@@ -52,9 +52,9 @@ type financeOverviewResponse struct {
 	TotalIncome       int64 `json:"total_income"`        // 商户净收入
 	TotalPlatformFee  int64 `json:"total_platform_fee"`  // 平台服务费
 	TotalOperatorFee  int64 `json:"total_operator_fee"`  // 运营商服务费
-	TotalPaymentFee   int64 `json:"total_payment_fee"`   // 宝付支付手续费
+	TotalPaymentFee   int64 `json:"total_payment_fee"`   // 商户支付服务费
 	TotalServiceFee   int64 `json:"total_service_fee"`   // 总服务费（平台+运营商）
-	TotalDeductionFee int64 `json:"total_deduction_fee"` // 总扣减（平台+运营商+支付手续费）
+	TotalDeductionFee int64 `json:"total_deduction_fee"` // 总扣减（平台+运营商+商户支付服务费）
 	PendingIncome     int64 `json:"pending_income"`      // 待结算收入
 
 	// 满返支出统计

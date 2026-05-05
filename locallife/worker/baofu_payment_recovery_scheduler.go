@@ -127,17 +127,38 @@ func (s *BaofuPaymentRecoveryScheduler) createReadyProfitSharingOrders(ctx conte
 
 	service := logic.NewBaofuProfitSharingService(s.store)
 	for _, row := range rows {
-		if !row.OrderID.Valid {
+		var created db.CreateBaofuProfitSharingOrderTxResult
+		switch row.BusinessType {
+		case db.ExternalPaymentBusinessOwnerOrder:
+			if !row.OrderID.Valid {
+				log.Warn().
+					Int64("payment_order_id", row.PaymentOrderID).
+					Msg("skip baofu profit sharing creation because order id is missing")
+				continue
+			}
+			created, err = s.createBaofuProfitSharingOrder(ctx, service, row.PaymentOrderID, row.OrderID.Int64)
+		case db.ExternalPaymentBusinessOwnerReservation, reservationPaymentAddonBusinessType:
+			if !row.ReservationID.Valid {
+				log.Warn().
+					Int64("payment_order_id", row.PaymentOrderID).
+					Str("business_type", row.BusinessType).
+					Msg("skip baofu profit sharing creation because reservation id is missing")
+				continue
+			}
+			created, err = s.createBaofuReservationProfitSharingOrder(ctx, service, row.PaymentOrderID, row.ReservationID.Int64)
+		default:
 			log.Warn().
 				Int64("payment_order_id", row.PaymentOrderID).
-				Msg("skip baofu profit sharing creation because order id is missing")
+				Str("business_type", row.BusinessType).
+				Msg("skip baofu profit sharing creation because business type is unsupported")
 			continue
 		}
-		created, err := s.createBaofuProfitSharingOrder(ctx, service, row.PaymentOrderID, row.OrderID.Int64)
 		if err != nil {
 			log.Error().Err(err).
 				Int64("payment_order_id", row.PaymentOrderID).
 				Int64("order_id", row.OrderID.Int64).
+				Int64("reservation_id", row.ReservationID.Int64).
+				Str("business_type", row.BusinessType).
 				Msg("create baofu profit sharing order failed")
 			continue
 		}
@@ -173,15 +194,9 @@ func (s *BaofuPaymentRecoveryScheduler) createBaofuProfitSharingOrder(ctx contex
 	if err != nil {
 		return db.CreateBaofuProfitSharingOrderTxResult{}, fmt.Errorf("get merchant: %w", err)
 	}
-	operatorID := int64(0)
-	if merchant.RegionID > 0 {
-		operator, err := s.store.GetActiveOperatorByRegion(ctx, merchant.RegionID)
-		if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
-			return db.CreateBaofuProfitSharingOrderTxResult{}, fmt.Errorf("get active operator by region: %w", err)
-		}
-		if err == nil {
-			operatorID = operator.ID
-		}
+	operatorID, err := s.resolveBaofuProfitSharingOperator(ctx, merchant)
+	if err != nil {
+		return db.CreateBaofuProfitSharingOrderTxResult{}, err
 	}
 
 	riderID, err := s.resolveBaofuProfitSharingRider(ctx, order)
@@ -202,6 +217,74 @@ func (s *BaofuPaymentRecoveryScheduler) createBaofuProfitSharingOrder(ctx contex
 		OperatorRateBps: baofuOperatorRateBps,
 		OutOrderNo:      fmt.Sprintf("BFPS%dO%d", paymentOrder.ID, order.ID),
 	})
+}
+
+func (s *BaofuPaymentRecoveryScheduler) createBaofuReservationProfitSharingOrder(ctx context.Context, service *logic.BaofuProfitSharingService, paymentOrderID int64, reservationID int64) (db.CreateBaofuProfitSharingOrderTxResult, error) {
+	paymentOrder, err := s.store.GetPaymentOrder(ctx, paymentOrderID)
+	if err != nil {
+		return db.CreateBaofuProfitSharingOrderTxResult{}, fmt.Errorf("get payment order: %w", err)
+	}
+	if paymentOrder.PaymentChannel != db.PaymentChannelBaofuAggregate || !paymentOrder.RequiresProfitSharing || paymentOrder.Status != "paid" {
+		return db.CreateBaofuProfitSharingOrderTxResult{}, fmt.Errorf("payment order %d is not ready for baofu reservation profit sharing", paymentOrder.ID)
+	}
+	if paymentOrder.BusinessType != db.ExternalPaymentBusinessOwnerReservation && paymentOrder.BusinessType != reservationPaymentAddonBusinessType {
+		return db.CreateBaofuProfitSharingOrderTxResult{}, fmt.Errorf("payment order %d business type %q is not reservation profit sharing", paymentOrder.ID, paymentOrder.BusinessType)
+	}
+	if !paymentOrder.ReservationID.Valid || paymentOrder.ReservationID.Int64 != reservationID {
+		return db.CreateBaofuProfitSharingOrderTxResult{}, fmt.Errorf("payment order %d reservation id does not match %d", paymentOrder.ID, reservationID)
+	}
+
+	reservation, err := s.store.GetTableReservation(ctx, reservationID)
+	if err != nil {
+		return db.CreateBaofuProfitSharingOrderTxResult{}, fmt.Errorf("get reservation: %w", err)
+	}
+	if !baofuReservationReadyForProfitSharing(reservation.Status) {
+		return db.CreateBaofuProfitSharingOrderTxResult{}, fmt.Errorf("reservation %d status %q is not ready for baofu profit sharing", reservation.ID, reservation.Status)
+	}
+	merchant, err := s.store.GetMerchant(ctx, reservation.MerchantID)
+	if err != nil {
+		return db.CreateBaofuProfitSharingOrderTxResult{}, fmt.Errorf("get merchant: %w", err)
+	}
+	operatorID, err := s.resolveBaofuProfitSharingOperator(ctx, merchant)
+	if err != nil {
+		return db.CreateBaofuProfitSharingOrderTxResult{}, err
+	}
+
+	return service.CreatePendingOrder(ctx, logic.BaofuProfitSharingOrderInput{
+		PaymentOrderID:  paymentOrder.ID,
+		MerchantID:      reservation.MerchantID,
+		OperatorID:      operatorID,
+		PlatformOwnerID: 0,
+		OrderSource:     db.OrderTypeReservation,
+		TotalAmountFen:  paymentOrder.Amount,
+		DeliveryFeeFen:  0,
+		PlatformRateBps: baofuPlatformRateBps,
+		OperatorRateBps: baofuOperatorRateBps,
+		OutOrderNo:      fmt.Sprintf("BFPS%dR%d", paymentOrder.ID, reservation.ID),
+	})
+}
+
+func (s *BaofuPaymentRecoveryScheduler) resolveBaofuProfitSharingOperator(ctx context.Context, merchant db.Merchant) (int64, error) {
+	if merchant.RegionID <= 0 {
+		return 0, nil
+	}
+	operator, err := s.store.GetActiveOperatorByRegion(ctx, merchant.RegionID)
+	if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
+		return 0, fmt.Errorf("get active operator by region: %w", err)
+	}
+	if err != nil {
+		return 0, nil
+	}
+	return operator.ID, nil
+}
+
+func baofuReservationReadyForProfitSharing(status string) bool {
+	switch status {
+	case "paid", "confirmed", "checked_in", "completed":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *BaofuPaymentRecoveryScheduler) resolveBaofuProfitSharingRider(ctx context.Context, order db.Order) (int64, error) {

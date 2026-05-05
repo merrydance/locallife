@@ -2155,7 +2155,7 @@ Callback `txnState/refundState` values are checked against the documented order-
 
 ### Task P25: Aggregate Callback Numeric JSON Scalar Compatibility
 
-> Trigger: after certificate-path deployment, Baofoo sandbox payment callback parsing progressed past PEM loading and failed with `json: cannot unmarshal number into Go struct field .merId of type string`. The official pages still define `merId`/`terId` and other identifiers/times as S/String fields, so this is not promoted to a production contract type change. It is recorded as sandbox compatibility: inbound JSON numbers for documented string fields are normalized to string at the callback boundary only.
+> Trigger: after certificate-path deployment, Baofoo sandbox payment callback parsing progressed past PEM loading and failed with `json: cannot unmarshal number into Go struct field .merId of type string`. Baofoo support confirmed `merId`/`terId` and similar identifiers are string contract fields, so this is not promoted to a production contract type change. It is recorded as defensive parser compatibility only: inbound JSON numbers for documented string fields are normalized to string at the callback boundary.
 
 **Files:**
 - Modify: `locallife/baofu/envelope.go`
@@ -2176,3 +2176,5 @@ Aggregate payment/share/refund notification parsing now converts numeric JSON sc
 - [ ] **Step 3: Deploy and observe next callback**
 
 After deploy, trigger or wait for another Baofoo sandbox payment callback. Expected: parser should no longer fail with `cannot unmarshal number into ... merId`; the next possible failure should be either unknown local order/fact application or another newly exposed field mismatch, which must be handled by adding a new doc-first regression before changing production behavior.
+
+2026-05-05 rerun note: the next callback reached local order lookup with masked `outTradeNo`/`tradeNo`, then failed with `no rows in result set` because the `BAOFU_UO_*` smoke order was created by the standalone Baofoo smoke command and not by LocalLife `/v1/payments`. This is correct fail-closed behavior; do not ACK unknown local orders.

@@ -1130,6 +1130,7 @@ func (server *Server) setupRouter() {
 	paymentGroup := authGroup.Group("/payments")
 	{
 		paymentGroup.POST("", server.createPaymentOrder)
+		paymentGroup.GET("/capabilities", server.getPaymentCapabilities)
 		paymentGroup.POST("/combined", server.createCombinedPaymentOrder)
 		paymentGroup.GET("/combined/:id", server.getCombinedPaymentOrder)
 		paymentGroup.GET("/combined/:id/query", server.queryCombinedPaymentOrder)

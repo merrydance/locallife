@@ -22,6 +22,11 @@
 
   <!-- 2. 正常内容 -->
   <block wx:else>
+    <view wx:if="{{splitCheckoutRequired && carts.length > 1 && splitCheckoutNotice}}" class="split-checkout-notice card">
+      <t-icon name="info-circle" size="32rpx" color="var(--td-warning-color)" />
+      <text>{{splitCheckoutNotice}}</text>
+    </view>
+
     <!-- 收货地址 -->
     <view class="address-section card" bindtap="onSelectAddress">
       <view wx:if="{{address && address.id}}" class="address-content">

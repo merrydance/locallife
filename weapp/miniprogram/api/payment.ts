@@ -139,6 +139,13 @@ export interface CreateCombinedPaymentRequest {
   order_ids: number[]
 }
 
+export interface PaymentCapabilitiesResponse {
+  main_business_payment_channel: string
+  combined_payment_supported: boolean
+  split_checkout_required: boolean
+  combined_payment_unavailable_message?: string
+}
+
 export interface CreatePaymentRequest {
   order_id: number
   payment_type?: PaymentType
@@ -588,6 +595,13 @@ export async function createPayment(paymentData: CreatePaymentRequest): Promise<
 }
 
 export const pay = createPayment
+
+export async function getPaymentCapabilities(): Promise<PaymentCapabilitiesResponse> {
+  return request({
+    url: '/v1/payments/capabilities',
+    method: 'GET'
+  })
+}
 
 export async function createCombinedPaymentOrder(payload: CreateCombinedPaymentRequest): Promise<CombinedPaymentOrderResponse> {
   return request({

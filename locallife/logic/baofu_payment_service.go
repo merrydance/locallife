@@ -31,6 +31,10 @@ type baofuPaymentFactStore interface {
 	CreateExternalPaymentFactApplication(ctx context.Context, arg db.CreateExternalPaymentFactApplicationParams) (db.ExternalPaymentFactApplication, error)
 }
 
+type baofuPaymentFeeActualStore interface {
+	UpsertOrderPaymentFeeLedgerActual(ctx context.Context, arg db.UpsertOrderPaymentFeeLedgerActualParams) (db.OrderPaymentFeeLedger, error)
+}
+
 const (
 	baofuOrderPaymentFactConsumerDomain = "order_domain"
 	baofuPaymentFactBusinessObjectOrder = "payment_order"
@@ -232,6 +236,29 @@ func (s *BaofuPaymentService) RecordPaymentFact(ctx context.Context, input Recor
 		return result, err
 	}
 	result.Fact = fact
+	if paymentFact.FeeAmountFen > 0 {
+		feeStore, ok := s.store.(baofuPaymentFeeActualStore)
+		if !ok {
+			return result, ErrBaofuPaymentServiceNotConfigured
+		}
+		if _, err := feeStore.UpsertOrderPaymentFeeLedgerActual(ctx, db.UpsertOrderPaymentFeeLedgerActualParams{
+			Provider:              db.ExternalPaymentProviderBaofu,
+			Channel:               db.PaymentChannelBaofuAggregate,
+			PaymentOrderID:        paymentOrder.ID,
+			FeeType:               db.OrderPaymentFeeTypeProviderPaymentFee,
+			PayerType:             db.OrderPaymentFeePayerTypePlatform,
+			PayeeType:             db.OrderPaymentFeePayeeTypeBaofu,
+			BaseAmount:            amount,
+			RateBps:               DefaultBaofuProviderPaymentFeeRateBps,
+			Amount:                paymentFact.FeeAmountFen,
+			AmountSource:          baofuPaymentFeeAmountSource(input.FactSource),
+			ExternalPaymentFactID: pgtype.Int8{Int64: fact.ID, Valid: fact.ID > 0},
+			Status:                db.OrderPaymentFeeStatusRecorded,
+			CalculationVersion:    BaofuSettlementCalculationVersionV2,
+		}); err != nil {
+			return result, err
+		}
+	}
 	if !fact.IsTerminal {
 		return result, nil
 	}
@@ -387,4 +414,11 @@ func baofuPaymentFactDedupeKey(input RecordBaofuPaymentFactInput, outTradeNo str
 		secondary = strings.TrimSpace(upstreamState)
 	}
 	return fmt.Sprintf("baofu:%s:payment:%s:%s", source, outTradeNo, secondary)
+}
+
+func baofuPaymentFeeAmountSource(factSource string) string {
+	if strings.TrimSpace(factSource) == db.ExternalPaymentFactSourceCallback {
+		return db.OrderPaymentFeeAmountSourceActualCallback
+	}
+	return db.OrderPaymentFeeAmountSourceActualQuery
 }

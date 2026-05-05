@@ -44,6 +44,17 @@
   box-shadow: var(--shadow-sm);
 }
 
+.split-checkout-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-xs);
+  color: var(--td-text-color-primary);
+  background: var(--td-warning-color-1, #fff4e5);
+  border: 1rpx solid var(--td-warning-color-3, #ffd8a6);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
 /* 收货地址 */
 .address-section {
   display: flex;

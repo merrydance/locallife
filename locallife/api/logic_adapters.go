@@ -434,6 +434,10 @@ func (server *Server) usesBaofuMainBusinessPayments() bool {
 	return server != nil && server.config.BaofuMainBusinessEnabled
 }
 
+func (server *Server) usesOrdinaryServiceProviderMainBusinessPayments() bool {
+	return server != nil && !server.usesBaofuMainBusinessPayments() && server.ordinarySPClient != nil
+}
+
 func (server *Server) mainBusinessOrdinaryServiceProviderClient() ordinaryserviceprovider.OrdinaryServiceProviderClientInterface {
 	if server.usesBaofuMainBusinessPayments() {
 		return nil

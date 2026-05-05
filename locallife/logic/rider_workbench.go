@@ -110,6 +110,8 @@ type RiderWorkbenchIncome struct {
 	TotalDeliveries       int64
 	TotalRiderIncome      int64
 	TotalDeliveryFee      int64
+	TotalRiderGrossAmount int64
+	TotalRiderPaymentFee  int64
 	PendingRiderAmount    int64
 	ProcessingRiderAmount int64
 	FailedCount           int64
@@ -392,9 +394,11 @@ func newRiderWorkbenchDeliveryItems(deliveries []db.Delivery) []RiderWorkbenchDe
 
 func newRiderWorkbenchIncome(stats db.GetRiderProfitSharingStatsRow, statusRows []db.GetRiderProfitSharingStatusSummaryRow) RiderWorkbenchIncome {
 	income := RiderWorkbenchIncome{
-		TotalDeliveries:  stats.TotalDeliveries,
-		TotalRiderIncome: stats.TotalRiderIncome,
-		TotalDeliveryFee: stats.TotalDeliveryFee,
+		TotalDeliveries:       stats.TotalDeliveries,
+		TotalRiderIncome:      stats.TotalRiderIncome,
+		TotalDeliveryFee:      stats.TotalDeliveryFee,
+		TotalRiderGrossAmount: stats.TotalRiderGrossAmount,
+		TotalRiderPaymentFee:  stats.TotalRiderPaymentFee,
 	}
 	for _, row := range completeRiderIncomeStatusSummary(statusRows) {
 		switch row.Status {

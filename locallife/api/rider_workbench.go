@@ -73,6 +73,8 @@ type riderWorkbenchIncomeResponse struct {
 	TotalDeliveries       int64 `json:"total_deliveries"`
 	TotalRiderIncome      int64 `json:"total_rider_income"`
 	TotalDeliveryFee      int64 `json:"total_delivery_fee"`
+	TotalRiderGrossAmount int64 `json:"total_rider_gross_amount"`
+	TotalRiderPaymentFee  int64 `json:"total_rider_payment_fee"`
 	PendingRiderAmount    int64 `json:"pending_rider_amount"`
 	ProcessingRiderAmount int64 `json:"processing_rider_amount"`
 	FailedCount           int64 `json:"failed_count"`
@@ -151,6 +153,8 @@ func newRiderWorkbenchSummaryResponse(result logic.RiderWorkbenchSummary) riderW
 			TotalDeliveries:       result.Income.TotalDeliveries,
 			TotalRiderIncome:      result.Income.TotalRiderIncome,
 			TotalDeliveryFee:      result.Income.TotalDeliveryFee,
+			TotalRiderGrossAmount: result.Income.TotalRiderGrossAmount,
+			TotalRiderPaymentFee:  result.Income.TotalRiderPaymentFee,
 			PendingRiderAmount:    result.Income.PendingRiderAmount,
 			ProcessingRiderAmount: result.Income.ProcessingRiderAmount,
 			FailedCount:           result.Income.FailedCount,

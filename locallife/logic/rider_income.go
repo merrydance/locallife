@@ -34,17 +34,21 @@ func NewRiderIncomeService(store RiderIncomeStore) *RiderIncomeService {
 }
 
 type RiderIncomeSummary struct {
-	TotalDeliveries  int64
-	TotalRiderIncome int64
-	TotalDeliveryFee int64
-	StatusSummary    []RiderIncomeStatusSummary
+	TotalDeliveries       int64
+	TotalRiderIncome      int64
+	TotalDeliveryFee      int64
+	TotalRiderGrossAmount int64
+	TotalRiderPaymentFee  int64
+	StatusSummary         []RiderIncomeStatusSummary
 }
 
 type RiderIncomeStatusSummary struct {
-	Status      string
-	OrderCount  int64
-	RiderAmount int64
-	DeliveryFee int64
+	Status           string
+	OrderCount       int64
+	RiderAmount      int64
+	DeliveryFee      int64
+	RiderGrossAmount int64
+	RiderPaymentFee  int64
 }
 
 type RiderIncomeLedger struct {
@@ -65,6 +69,8 @@ type RiderIncomeLedgerItem struct {
 	Status              string
 	TotalAmount         int64
 	DeliveryFee         int64
+	RiderGrossAmount    int64
+	RiderPaymentFee     int64
 	RiderAmount         int64
 	DistributableAmount int64
 	OutOrderNo          string
@@ -74,9 +80,11 @@ type RiderIncomeLedgerItem struct {
 }
 
 type RiderIncomeDailyItem struct {
-	Date          time.Time
-	DeliveryCount int64
-	DailyIncome   int64
+	Date             time.Time
+	DeliveryCount    int64
+	DailyIncome      int64
+	RiderGrossAmount int64
+	RiderPaymentFee  int64
 }
 
 func (service *RiderIncomeService) GetSummary(ctx context.Context, userID int64, startAt, endAt time.Time) (RiderIncomeSummary, error) {
@@ -105,10 +113,12 @@ func (service *RiderIncomeService) GetSummary(ctx context.Context, userID int64,
 	}
 
 	return RiderIncomeSummary{
-		TotalDeliveries:  stats.TotalDeliveries,
-		TotalRiderIncome: stats.TotalRiderIncome,
-		TotalDeliveryFee: stats.TotalDeliveryFee,
-		StatusSummary:    completeRiderIncomeStatusSummary(statusRows),
+		TotalDeliveries:       stats.TotalDeliveries,
+		TotalRiderIncome:      stats.TotalRiderIncome,
+		TotalDeliveryFee:      stats.TotalDeliveryFee,
+		TotalRiderGrossAmount: stats.TotalRiderGrossAmount,
+		TotalRiderPaymentFee:  stats.TotalRiderPaymentFee,
+		StatusSummary:         completeRiderIncomeStatusSummary(statusRows),
 	}, nil
 }
 
@@ -182,9 +192,11 @@ func (service *RiderIncomeService) GetDaily(ctx context.Context, userID int64, s
 	items := make([]RiderIncomeDailyItem, 0, len(rows))
 	for _, row := range rows {
 		items = append(items, RiderIncomeDailyItem{
-			Date:          row.Date.Time,
-			DeliveryCount: row.DeliveryCount,
-			DailyIncome:   row.DailyIncome,
+			Date:             row.Date.Time,
+			DeliveryCount:    row.DeliveryCount,
+			DailyIncome:      row.DailyIncome,
+			RiderGrossAmount: row.RiderGrossAmount,
+			RiderPaymentFee:  row.RiderPaymentFee,
 		})
 	}
 	return items, nil
@@ -247,10 +259,12 @@ func completeRiderIncomeStatusSummary(rows []db.GetRiderProfitSharingStatusSumma
 	byStatus := make(map[string]RiderIncomeStatusSummary, len(rows))
 	for _, row := range rows {
 		byStatus[row.Status] = RiderIncomeStatusSummary{
-			Status:      row.Status,
-			OrderCount:  row.OrderCount,
-			RiderAmount: row.RiderAmount,
-			DeliveryFee: row.DeliveryFee,
+			Status:           row.Status,
+			OrderCount:       row.OrderCount,
+			RiderAmount:      row.RiderAmount,
+			DeliveryFee:      row.DeliveryFee,
+			RiderGrossAmount: row.RiderGrossAmount,
+			RiderPaymentFee:  row.RiderPaymentFee,
 		}
 	}
 
@@ -276,6 +290,8 @@ func newRiderIncomeLedgerItem(row db.ListRiderProfitSharingOrdersRow) RiderIncom
 		Status:              row.Status,
 		TotalAmount:         row.TotalAmount,
 		DeliveryFee:         row.DeliveryFee,
+		RiderGrossAmount:    row.RiderGrossAmount,
+		RiderPaymentFee:     row.RiderPaymentFee,
 		RiderAmount:         row.RiderAmount,
 		DistributableAmount: row.DistributableAmount,
 		OutOrderNo:          row.OutOrderNo,

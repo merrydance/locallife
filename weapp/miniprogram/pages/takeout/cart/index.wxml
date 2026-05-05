@@ -15,6 +15,10 @@
 
   <!-- 购物车列表（按商户分组） -->
   <view wx:elif="{{merchantGroups.length > 0}}" class="cart-groups">
+    <view wx:if="{{splitCheckoutRequired && splitCheckoutNotice}}" class="split-checkout-notice">
+      <t-icon name="info-circle" size="32rpx" color="var(--td-warning-color)" />
+      <text>{{splitCheckoutNotice}}</text>
+    </view>
     <view wx:for="{{merchantGroups || []}}" wx:key="cartId" class="merchant-group">
       <!-- 商户头部 -->
       <view class="merchant-header {{item.errorStatus ? 'disabled' : ''}}">

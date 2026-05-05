@@ -16,6 +16,7 @@ import { getErrorUserMessage } from '../../../utils/user-facing'
 import {
   getCheckoutAddressDetail,
   getDefaultCheckoutAddress,
+  loadCheckoutPaymentCapabilities,
   loadTakeoutMembershipState,
   type CheckoutAddress
 } from '../../../services/takeout-checkout'
@@ -36,6 +37,8 @@ import {
   syncTakeoutCartSummary
 } from '../../../utils/takeout-order-confirm-support'
 
+let _loadPaymentCapabilitiesPromise: Promise<void> | null = null
+
 Page({
   data: {
     carts: [] as MerchantCartView[],
@@ -50,6 +53,8 @@ Page({
     orderTotalDisplay: '0.00',
     summarySubtotalDisplay: '0.00',
     summaryDeliveryDisplay: '待计算',
+    splitCheckoutRequired: false,
+    splitCheckoutNotice: '',
     
     // 会员优惠相关
     memberBalances: {} as Record<number, number>, // merchantId -> balance
@@ -100,6 +105,7 @@ Page({
     }
 
     this.loadDefaultAddress()
+    void this.loadPaymentCapabilities()
   },
 
   onUnload() {
@@ -381,6 +387,39 @@ Page({
     this.requestPricingRefresh()
   },
 
+  async loadPaymentCapabilities() {
+    if (_loadPaymentCapabilitiesPromise) {
+      return _loadPaymentCapabilitiesPromise
+    }
+
+    _loadPaymentCapabilitiesPromise = (async () => {
+      try {
+        const capabilities = await loadCheckoutPaymentCapabilities()
+        const splitCheckoutRequired = capabilities.splitCheckoutRequired
+        this.setData({
+          splitCheckoutRequired,
+          splitCheckoutNotice: capabilities.splitCheckoutNotice
+        })
+      } catch (error) {
+        logger.warn('Failed to load payment capabilities', error, 'Order-confirm')
+      }
+    })().finally(() => {
+      _loadPaymentCapabilitiesPromise = null
+    })
+
+    return _loadPaymentCapabilitiesPromise
+  },
+
+  showSplitCheckoutRequired() {
+    wx.showModal({
+      title: '请分开支付',
+      content: this.data.splitCheckoutNotice || '当前支付通道需按商户分别下单支付，请返回购物车一次选择一家商户。',
+      showCancel: false,
+      confirmText: '返回购物车',
+      success: () => wx.navigateBack()
+    })
+  },
+
   async onSubmitOrder() {
     if (this.data.loading) {
       return
@@ -405,6 +444,12 @@ Page({
 
     if (!carts || carts.length === 0) {
       wx.showToast({ title: '购物车为空', icon: 'none' })
+      return
+    }
+
+    await this.loadPaymentCapabilities()
+    if (this.data.splitCheckoutRequired && carts.length > 1) {
+      this.showSplitCheckoutRequired()
       return
     }
 
@@ -525,9 +570,13 @@ Page({
       })
     } catch (paymentError) {
       logger.error('Combined payment creation failed', paymentError, 'Order-confirm')
+      const paymentMessage = getErrorUserMessage(paymentError, '')
+      const splitRequired = paymentMessage.includes('分开支付') || paymentMessage.includes('合单支付暂未开通')
       wx.showModal({
         title: '订单已创建',
-        content: '支付创建失败，请在订单列表继续完成合单支付。',
+        content: splitRequired
+          ? '当前支付通道需按商户分别支付。订单已创建，请在订单列表逐笔支付。'
+          : '支付创建失败，请在订单列表继续完成合单支付。',
         showCancel: false,
         success: () => Navigation.redirectToOrderList({ orderType: 'takeout' })
       })

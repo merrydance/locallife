@@ -412,6 +412,41 @@ func TestProcessTaskPaymentDomainOutbox_PublishesReservationPaymentSucceeded(t *
 	require.NoError(t, err)
 }
 
+func TestProcessTaskPaymentDomainOutbox_BaofuReservationDoesNotEnqueueLegacyWechatProfitSharing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	reservationDate := pgtype.Date{Time: time.Date(2026, 4, 27, 0, 0, 0, 0, time.Local), Valid: true}
+	reservationTime := pgtype.Time{Microseconds: int64((18 * time.Hour) + (30 * time.Minute))}
+	outbox := buildReservationPaymentSucceededOutbox(t, 914, 404, 504)
+	paymentOrder := db.PaymentOrder{
+		ID:             404,
+		ReservationID:  pgtype.Int8{Int64: 504, Valid: true},
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+		BusinessType:   db.ExternalPaymentBusinessOwnerReservation,
+	}
+	reservation := db.TableReservation{ID: 504, MerchantID: 604, ReservationDate: reservationDate, ReservationTime: reservationTime}
+
+	store.EXPECT().ClaimPaymentDomainOutbox(gomock.Any(), gomock.Any()).Return(outbox, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), int64(404)).Return(paymentOrder, nil)
+	store.EXPECT().GetTableReservation(gomock.Any(), int64(504)).Return(reservation, nil)
+	distributor.EXPECT().DistributeTaskReservationNoShowAlert(gomock.Any(), gomock.AssignableToTypeOf(&worker.PayloadReservationNoShowAlert{}), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, payload *worker.PayloadReservationNoShowAlert, opts ...asynq.Option) error {
+		require.Equal(t, int64(504), payload.ReservationID)
+		require.Len(t, opts, 2)
+		return nil
+	})
+	store.EXPECT().MarkPaymentDomainOutboxPublished(gomock.Any(), outbox.ID).Return(db.PaymentDomainOutbox{ID: outbox.ID, Status: db.PaymentDomainOutboxStatusPublished}, nil)
+
+	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
+	payload, err := json.Marshal(worker.PaymentDomainOutboxPayload{OutboxID: outbox.ID})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskPaymentDomainOutbox(context.Background(), asynq.NewTask(worker.TaskProcessPaymentDomainOutbox, payload))
+	require.NoError(t, err)
+}
+
 func TestProcessTaskPaymentDomainOutbox_PublishesApplymentActivated(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

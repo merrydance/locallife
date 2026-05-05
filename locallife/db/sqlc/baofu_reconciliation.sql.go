@@ -19,6 +19,11 @@ WITH baofu_reconciliation_parts AS (
         po.payment_channel AS channel,
         COALESCE(SUM(po.amount), 0)::bigint AS paid_amount,
         0::bigint AS payment_fee,
+        0::bigint AS provider_payment_fee,
+        0::bigint AS merchant_payment_fee,
+        0::bigint AS rider_payment_fee,
+        0::bigint AS platform_payment_fee_income,
+        0::bigint AS platform_net_payment_fee_margin,
         0::bigint AS merchant_amount,
         0::bigint AS rider_amount,
         0::bigint AS platform_commission,
@@ -42,7 +47,12 @@ WITH baofu_reconciliation_parts AS (
         pso.provider,
         pso.channel,
         0::bigint AS paid_amount,
-        COALESCE(SUM(pso.payment_fee), 0)::bigint AS payment_fee,
+        COALESCE(SUM(CASE WHEN pso.calculation_version = 'baofu_fee_v2' THEN pso.provider_payment_fee ELSE pso.payment_fee END), 0)::bigint AS payment_fee,
+        COALESCE(SUM(CASE WHEN pso.calculation_version = 'baofu_fee_v2' THEN pso.provider_payment_fee ELSE pso.payment_fee END), 0)::bigint AS provider_payment_fee,
+        COALESCE(SUM(pso.merchant_payment_fee), 0)::bigint AS merchant_payment_fee,
+        COALESCE(SUM(pso.rider_payment_fee), 0)::bigint AS rider_payment_fee,
+        COALESCE(SUM(pso.merchant_payment_fee + pso.rider_payment_fee), 0)::bigint AS platform_payment_fee_income,
+        COALESCE(SUM(pso.merchant_payment_fee + pso.rider_payment_fee - CASE WHEN pso.calculation_version = 'baofu_fee_v2' THEN pso.provider_payment_fee ELSE pso.payment_fee END), 0)::bigint AS platform_net_payment_fee_margin,
         COALESCE(SUM(pso.merchant_amount), 0)::bigint AS merchant_amount,
         COALESCE(SUM(pso.rider_amount), 0)::bigint AS rider_amount,
         COALESCE(SUM(pso.platform_commission), 0)::bigint AS platform_commission,
@@ -67,6 +77,11 @@ WITH baofu_reconciliation_parts AS (
         'baofu_aggregate'::text AS channel,
         0::bigint AS paid_amount,
         0::bigint AS payment_fee,
+        0::bigint AS provider_payment_fee,
+        0::bigint AS merchant_payment_fee,
+        0::bigint AS rider_payment_fee,
+        0::bigint AS platform_payment_fee_income,
+        0::bigint AS platform_net_payment_fee_margin,
         0::bigint AS merchant_amount,
         0::bigint AS rider_amount,
         0::bigint AS platform_commission,
@@ -90,6 +105,11 @@ WITH baofu_reconciliation_parts AS (
         epf.channel,
         0::bigint AS paid_amount,
         0::bigint AS payment_fee,
+        0::bigint AS provider_payment_fee,
+        0::bigint AS merchant_payment_fee,
+        0::bigint AS rider_payment_fee,
+        0::bigint AS platform_payment_fee_income,
+        0::bigint AS platform_net_payment_fee_margin,
         0::bigint AS merchant_amount,
         0::bigint AS rider_amount,
         0::bigint AS platform_commission,
@@ -115,6 +135,11 @@ WITH baofu_reconciliation_parts AS (
         epc.channel,
         0::bigint AS paid_amount,
         0::bigint AS payment_fee,
+        0::bigint AS provider_payment_fee,
+        0::bigint AS merchant_payment_fee,
+        0::bigint AS rider_payment_fee,
+        0::bigint AS platform_payment_fee_income,
+        0::bigint AS platform_net_payment_fee_margin,
         0::bigint AS merchant_amount,
         0::bigint AS rider_amount,
         0::bigint AS platform_commission,
@@ -140,6 +165,11 @@ WITH baofu_reconciliation_parts AS (
         pso.channel,
         0::bigint AS paid_amount,
         0::bigint AS payment_fee,
+        0::bigint AS provider_payment_fee,
+        0::bigint AS merchant_payment_fee,
+        0::bigint AS rider_payment_fee,
+        0::bigint AS platform_payment_fee_income,
+        0::bigint AS platform_net_payment_fee_margin,
         0::bigint AS merchant_amount,
         0::bigint AS rider_amount,
         0::bigint AS platform_commission,
@@ -167,6 +197,11 @@ SELECT
     channel,
     COALESCE(SUM(paid_amount), 0)::bigint AS paid_amount,
     COALESCE(SUM(payment_fee), 0)::bigint AS payment_fee,
+    COALESCE(SUM(provider_payment_fee), 0)::bigint AS provider_payment_fee,
+    COALESCE(SUM(merchant_payment_fee), 0)::bigint AS merchant_payment_fee,
+    COALESCE(SUM(rider_payment_fee), 0)::bigint AS rider_payment_fee,
+    COALESCE(SUM(platform_payment_fee_income), 0)::bigint AS platform_payment_fee_income,
+    COALESCE(SUM(platform_net_payment_fee_margin), 0)::bigint AS platform_net_payment_fee_margin,
     COALESCE(SUM(merchant_amount), 0)::bigint AS merchant_amount,
     COALESCE(SUM(rider_amount), 0)::bigint AS rider_amount,
     COALESCE(SUM(platform_commission), 0)::bigint AS platform_commission,
@@ -188,20 +223,25 @@ type GetBaofuDailyReconciliationParams struct {
 }
 
 type GetBaofuDailyReconciliationRow struct {
-	Date                     pgtype.Date `json:"date"`
-	Provider                 string      `json:"provider"`
-	Channel                  string      `json:"channel"`
-	PaidAmount               int64       `json:"paid_amount"`
-	PaymentFee               int64       `json:"payment_fee"`
-	MerchantAmount           int64       `json:"merchant_amount"`
-	RiderAmount              int64       `json:"rider_amount"`
-	PlatformCommission       int64       `json:"platform_commission"`
-	OperatorCommission       int64       `json:"operator_commission"`
-	WithdrawSucceededAmount  int64       `json:"withdraw_succeeded_amount"`
-	WithdrawProcessingAmount int64       `json:"withdraw_processing_amount"`
-	UnappliedFactCount       int64       `json:"unapplied_fact_count"`
-	UnknownCommandCount      int64       `json:"unknown_command_count"`
-	FeeLedgerMismatchCount   int64       `json:"fee_ledger_mismatch_count"`
+	Date                        pgtype.Date `json:"date"`
+	Provider                    string      `json:"provider"`
+	Channel                     string      `json:"channel"`
+	PaidAmount                  int64       `json:"paid_amount"`
+	PaymentFee                  int64       `json:"payment_fee"`
+	ProviderPaymentFee          int64       `json:"provider_payment_fee"`
+	MerchantPaymentFee          int64       `json:"merchant_payment_fee"`
+	RiderPaymentFee             int64       `json:"rider_payment_fee"`
+	PlatformPaymentFeeIncome    int64       `json:"platform_payment_fee_income"`
+	PlatformNetPaymentFeeMargin int64       `json:"platform_net_payment_fee_margin"`
+	MerchantAmount              int64       `json:"merchant_amount"`
+	RiderAmount                 int64       `json:"rider_amount"`
+	PlatformCommission          int64       `json:"platform_commission"`
+	OperatorCommission          int64       `json:"operator_commission"`
+	WithdrawSucceededAmount     int64       `json:"withdraw_succeeded_amount"`
+	WithdrawProcessingAmount    int64       `json:"withdraw_processing_amount"`
+	UnappliedFactCount          int64       `json:"unapplied_fact_count"`
+	UnknownCommandCount         int64       `json:"unknown_command_count"`
+	FeeLedgerMismatchCount      int64       `json:"fee_ledger_mismatch_count"`
 }
 
 func (q *Queries) GetBaofuDailyReconciliation(ctx context.Context, arg GetBaofuDailyReconciliationParams) ([]GetBaofuDailyReconciliationRow, error) {
@@ -219,6 +259,11 @@ func (q *Queries) GetBaofuDailyReconciliation(ctx context.Context, arg GetBaofuD
 			&i.Channel,
 			&i.PaidAmount,
 			&i.PaymentFee,
+			&i.ProviderPaymentFee,
+			&i.MerchantPaymentFee,
+			&i.RiderPaymentFee,
+			&i.PlatformPaymentFeeIncome,
+			&i.PlatformNetPaymentFeeMargin,
 			&i.MerchantAmount,
 			&i.RiderAmount,
 			&i.PlatformCommission,

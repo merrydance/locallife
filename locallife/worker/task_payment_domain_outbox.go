@@ -454,11 +454,13 @@ func (processor *RedisTaskProcessor) dispatchReservationPaymentSucceededOutbox(c
 	if err != nil {
 		return fmt.Errorf("get reservation: %w", err)
 	}
-	if err := processor.distributor.DistributeTaskProcessProfitSharing(ctx, &ProfitSharingPayload{
-		PaymentOrderID: paymentOrder.ID,
-		ReservationID:  reservation.ID,
-	}, asynq.MaxRetry(5), asynq.Queue(QueueCritical)); err != nil {
-		return fmt.Errorf("enqueue reservation profit sharing after reservation payment outbox: %w", err)
+	if paymentOrder.PaymentChannel != db.PaymentChannelBaofuAggregate {
+		if err := processor.distributor.DistributeTaskProcessProfitSharing(ctx, &ProfitSharingPayload{
+			PaymentOrderID: paymentOrder.ID,
+			ReservationID:  reservation.ID,
+		}, asynq.MaxRetry(5), asynq.Queue(QueueCritical)); err != nil {
+			return fmt.Errorf("enqueue reservation profit sharing after reservation payment outbox: %w", err)
+		}
 	}
 
 	hours := reservation.ReservationTime.Microseconds / 1000000 / 3600

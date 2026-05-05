@@ -122,6 +122,18 @@ func TestBaofuPaymentCallbackPersistsFactAndEnqueuesApplication(t *testing.T) {
 			require.Equal(t, "baofu:callback:payment:PO_BAOFU_4001:BFN_4001", arg.DedupeKey)
 			return db.ExternalPaymentFact{ID: 501, IsTerminal: true, DedupeKey: arg.DedupeKey}, nil
 		})
+	store.EXPECT().UpsertOrderPaymentFeeLedgerActual(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ any, arg db.UpsertOrderPaymentFeeLedgerActualParams) (db.OrderPaymentFeeLedger, error) {
+			require.Equal(t, db.OrderPaymentFeeTypeProviderPaymentFee, arg.FeeType)
+			require.Equal(t, db.OrderPaymentFeePayerTypePlatform, arg.PayerType)
+			require.Equal(t, db.OrderPaymentFeePayeeTypeBaofu, arg.PayeeType)
+			require.Equal(t, paymentOrder.ID, arg.PaymentOrderID)
+			require.Equal(t, int64(1200), arg.BaseAmount)
+			require.Equal(t, int64(4), arg.Amount)
+			require.Equal(t, db.OrderPaymentFeeAmountSourceActualCallback, arg.AmountSource)
+			require.Equal(t, int64(501), arg.ExternalPaymentFactID.Int64)
+			return db.OrderPaymentFeeLedger{ID: 701, Amount: arg.Amount, AmountSource: arg.AmountSource}, nil
+		})
 	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
 		FactID:             501,
 		Consumer:           paymentFactConsumerOrderDomain,
