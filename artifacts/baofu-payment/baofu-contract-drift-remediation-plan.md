@@ -2055,7 +2055,7 @@ Expected: at least one account/report/aggregate fake request should produce a pr
 
 ### Task P22: Aggregate Callback Form Payload Parsing
 
-> Trigger: Baofoo sandbox sent two payment callbacks to `/v1/webhooks/baofu/payment` after unified-order smoke. The server logged `invalid character 'r' looking for beginning of value` and returned 401. The body was 56 bytes and the user agent was `Apache-HttpClient/4.3.6`, consistent with the aggregate notification document listing direct notification parameters rather than a JSON envelope.
+> Trigger: Baofoo sandbox sent two payment callbacks to `/v1/webhooks/baofu/payment` after unified-order smoke. The server logged `invalid character 'r' looking for beginning of value` and returned 401. The body was 56 bytes and the user agent was `Apache-HttpClient/4.3.6`. The aggregate notification docs confirm the callback field set and uppercase `OK` ACK, but the exact HTTP body encoding/content-type still requires Baofoo confirmation; form/query parsing is compatibility support, not standalone contract truth.
 
 **Files:**
 - Modify: `locallife/baofu/aggregatepay/notification/notification.go`
@@ -2067,11 +2067,11 @@ Expected: at least one account/report/aggregate fake request should produce a pr
 
 - [x] **Step 1: Add regression**
 
-Added a parser regression for payment callbacks delivered as `application/x-www-form-urlencoded` / query-style direct fields such as `resultCode=SUCCESS&outTradeNo=...&txnState=SUCCESS`. The regression failed before the parser fix with `invalid character 'r' looking for beginning of value`, matching production logs.
+Added a parser regression for the sandbox-observed compatibility shape: `application/x-www-form-urlencoded` / query-style direct fields such as `resultCode=SUCCESS&outTradeNo=...&txnState=SUCCESS`. The regression failed before the parser fix with `invalid character 'r' looking for beginning of value`, matching production logs; this does not by itself settle the official callback body encoding.
 
 - [x] **Step 2: Fix aggregate callback parser and ACK**
 
-Aggregate payment/share/refund notification parsers now accept either JSON objects or form/query direct fields and normalize form bodies into JSON before persistence so `Raw` remains JSON-safe for fact storage. Successful aggregate payment/share/refund callbacks now return plain text `OK`, matching the Baofoo aggregate notification document, instead of JSON `{"code":"SUCCESS","message":"OK"}`.
+Aggregate payment/share/refund notification parsers now accept either JSON objects or form/query direct fields and normalize form bodies into JSON before persistence so `Raw` remains JSON-safe for fact storage. Successful aggregate payment/share/refund callbacks now return plain text `OK`, which is the ACK required by Baofoo aggregate notification docs, instead of JSON `{"code":"SUCCESS","message":"OK"}`.
 
 - [ ] **Step 3: Deploy and observe next callback**
 
@@ -2086,3 +2086,39 @@ This pre-sandbox-positive audit is complete only when:
 - every required/conditional-required rule used by LocalLife has a negative table test;
 - static guard blocks the drift patterns already discovered during smoke;
 - docs state clearly that C3 means local contract/transport coverage only; C4 requires real Baofoo request/callback/query evidence, but sandbox unified-order cannot prove real payment because Baofoo confirmed sandbox does not support true payment.
+
+### Task P23: Contract Source Matrix And No-Guess Rule
+
+> Trigger: production callback logs and sandbox probes exposed that some fixes were driven from observed behavior before the exact Baofoo source page/body-encoding rule was recorded. The correction is a doc-first gate: official Baofoo pages are the only contract truth, while sandbox/log/demo evidence can only be compatibility evidence or a question for Baofoo.
+
+**Files:**
+- Create: `artifacts/baofu-payment/baofu-contract-source-matrix.md`
+- Modify: `artifacts/baofu-payment/baofu-api-contract-coverage-audit.md`
+- Modify: `artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md`
+- Modify as needed: `artifacts/baofu-payment/baofu-sandbox-evidence.md`
+
+- [x] **Step 1: Add contract truth labels**
+
+Added matrix labels:
+
+- `DOC_CONFIRMED`: directly from Baofoo official docs;
+- `BAOFOO_CONFIRMED`: direct Baofoo support answer;
+- `SANDBOX_COMPATIBILITY`: sandbox-compatible evidence only;
+- `DEMO_AUXILIARY`: Java demo/test material support only;
+- `NEEDS_BAOFOO_CONFIRMATION`: cannot define production contract yet.
+
+- [x] **Step 2: Map first-version interfaces to source pages**
+
+Added rows for account open/query/balance/withdraw/query withdraw/account callbacks, merchant report/query/APPLET bind, aggregate unified order/order query/payment callback/share/share query/share callback/refund/refund query/refund callback/order close.
+
+- [x] **Step 3: Reclassify callback parser assumptions**
+
+Aggregate callback field set and uppercase `OK` ACK are `DOC_CONFIRMED` from Baofoo aggregate request-entry and per-callback pages. Exact HTTP body encoding/content-type is not fully specified by the current docs; form/query support is kept as `SANDBOX_COMPATIBILITY` and must be confirmed with Baofoo before it becomes a production contract rule.
+
+- [x] **Step 4: Add Baofoo confirmation questions**
+
+Recorded open questions for aggregate callback body encoding, signature canonical string, ACK content-type, `signSn/ncrptnSn`, `contractNo` vs `sharingMerId`, sandbox payment semantics, and production first-order validation.
+
+- [ ] **Step 5: Keep this gate current**
+
+Every future Baofoo DTO/parser/enum/ACK/error-classification change must update `baofu-contract-source-matrix.md` or explicitly state why the matrix row is unaffected. Sandbox evidence remains in `baofu-sandbox-evidence.md` and must not be promoted to contract truth by itself.

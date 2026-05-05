@@ -1,0 +1,107 @@
+# Baofoo BaoCaiTong Contract Source Matrix
+
+Updated: 2026-05-05
+
+This file is the source-control checklist for LocalLife Baofoo contract work. It does not replace Baofoo official documents. It records which Baofoo document pages define each first-version interface and which local files must stay aligned with those pages.
+
+## 1. Contract Truth Rules
+
+1. Baofoo official documents are the only contract truth for request shape, response shape, required fields, conditional required fields, field types, enum values, status semantics, error codes, endpoint URLs, callback ACK, and retry rules.
+2. Baofoo sandbox results, production logs, Java demo code, and local smoke scripts are evidence only. They can prove compatibility or expose a question; they cannot create or override a contract rule.
+3. Java demo code is auxiliary evidence only. Use it to disambiguate transport examples when the official docs are silent, then mark the item as `DEMO_AUXILIARY` or `NEEDS_BAOFOO_CONFIRMATION` until Baofoo confirms.
+4. Sandbox behavior that contradicts or extends the docs must be written as `SANDBOX_COMPATIBILITY` and escalated to Baofoo before changing production contract semantics.
+5. No Baofoo DTO, parser, enum, endpoint, ACK, error-classification, or smoke-script behavior should be changed without updating the matching row in this matrix or recording why the row is unchanged.
+
+## 2. Evidence Labels
+
+| Label | Meaning | May change production contract? |
+| --- | --- | --- |
+| `DOC_CONFIRMED` | Directly stated by Baofoo official docs or official appendix pages. | Yes, when implemented with tests. |
+| `BAOFOO_CONFIRMED` | Direct answer from Baofoo support or business/technical contact. | Yes, if it does not contradict official docs; otherwise record as a doc gap. |
+| `SANDBOX_COMPATIBILITY` | Observed from Baofoo sandbox request, response, callback, or smoke probe. | No; use for parser tolerance or diagnostics unless Baofoo confirms. |
+| `DEMO_AUXILIARY` | Observed from Baofoo Java demo or bundled test material. | No; use only as supporting evidence for a documented field or pending question. |
+| `NEEDS_BAOFOO_CONFIRMATION` | Not fully specified by docs, or docs/demo/sandbox differ. | No. |
+
+## 3. Document Groups To Read Together
+
+| Group | Must-read official/source set | Local boundary | Current notes |
+| --- | --- | --- | --- |
+| Account / union-gw | `unionGw`, `openAcc`, `bct-1gj4ccsdha6d8`, `queryAcc`, `queryBalace`, `accWithdrawal`, `queryWithdrawal`, `openAccNotify`, `withdrawNotify`, `appendix`, account FAQ/error pages, BaoCaiTong local test material | `locallife/baofu/account/**`, `locallife/baofu/config.go`, `locallife/baofu/client.go` | `unionGw` defines the transport envelope. Individual pages define `T-1001-013-*` body fields. Account callbacks are query-string `data_content` encrypted payloads and require plain uppercase `OK`. |
+| Aggregate pay | `bct-1f9os3k1eh3p6`, `bct-1f9qhae400u5l`, `bct-1f9qhakcna6te`, `bct-1f9qlvjef634j`, `bct-1f9qm13po92jq`, `bct-1f9qlvu1em0tb`, `bct-1f9qm1m0u1s68`, `bct-1f9qm06dmb1a9`, `bct-1f9qm246c6cp8`, `bct-1f9qm0flcca1k`, `bct-1f9qm4ujg50cv`, `bct-1f9qm58emskkg`, `bct-1f9qm5hspcd9v`, aggregate appendix pages | `locallife/baofu/aggregatepay/**`, `locallife/baofu/envelope.go`, `locallife/baofu/signing.go`, aggregate callbacks in `locallife/api/**` | Request public field `bizContent` and response public field `dataContent` are `DOC_CONFIRMED`. Body encoding is not explicit enough in the docs; form-urlencoded transport remains `DEMO_AUXILIARY` plus `SANDBOX_COMPATIBILITY`. |
+| Merchant report | `bct-1f9o5nti54urb`, `bct-1f9o5qri554o2`, `bct-1f9o62bulbiqd`, `bct-1f9o63b6ufii5`, `bct-1f9o63qmkndkc`, `bct-1f9o6qi1pf2r8`, `经营类目&MCC.xlsx`, merchant-report Java demos | `locallife/baofu/merchantreport/**`, `locallife/logic/baofu_merchant_report_service.go`, readiness logic | `merchant_report` returns/queries the channel `subMchId`; `bind_sub_config(APPLET)` binds the LocalLife mini program appid. |
+| Certificate/material setup | CFCA and Baofoo certificate download/export manuals, Baofoo provided PFX/CER material | `locallife/baofu/config.go`, `locallife/baofu/signing.go`, env examples | Certificate manuals explain operational setup only. They do not define API DTOs. Do not infer `signSn/ncrptnSn` from certificate serial unless Baofoo confirms. |
+
+## 4. Endpoint And Envelope Matrix
+
+| Boundary | Contract source | Endpoint/method | Contract rule | Local files | Status |
+| --- | --- | --- | --- | --- | --- |
+| union-gw account transport | `unionGw` | `POST https://vgw.baofoo.com/union-gw/api/{serviceTp}/transReq.do`; production `https://public.baofu.com/union-gw/api/{serviceTp}/transReq.do` | URL query carries `memberId`, `terminalId`, `verifyType`, `content`, conditional `veryfyString`; cleartext payload is `header` + `body`; `header.serviceTp` must match path service type. | `locallife/baofu/account/client.go`, `locallife/baofu/config.go` | `DOC_CONFIRMED`; `verifyType=1` sandbox-tested; `verifyType=2` open. |
+| aggregate/merchant public request | `bct-1f9qhakcna6te`, merchant-report request-entry page | `POST https://mch-juhe.baofoo.com/api` or `/mch-service/api` | Public request fields include `merId`, `terId`, `method`, `charset=UTF-8`, `version=1.0`, `format=json`, `timestamp`, `signType`, `signSn`, `ncrptnSn`, optional `dgtlEnvlp`, `signStr`, and business JSON string `bizContent`. | `locallife/baofu/envelope.go`, `locallife/baofu/aggregatepay/client.go`, `locallife/baofu/merchantreport/client.go` | Field set is `DOC_CONFIRMED`; form-urlencoded body is `DEMO_AUXILIARY` + `SANDBOX_COMPATIBILITY`; content-type confirmation open. |
+| aggregate/merchant public response | `bct-1f9qhakcna6te`, merchant-report request-entry page | Same as request endpoint | `returnCode=SUCCESS/FAIL` is communication status, not business status. On public success, business JSON is in `dataContent`, not request-side `bizContent`. | `locallife/baofu/envelope.go`, clients under `aggregatepay` and `merchantreport` | `DOC_CONFIRMED`; sandbox has positive `dataContent` parsing evidence. |
+| aggregate callbacks public envelope | `bct-1f9qhakcna6te` plus per-callback pages | POST to merchant `notifyUrl` | Common callback public fields include `merId`, `terId`, `charset`, `version`, `format`, `notifyType`, `signType`, `signSn`, `ncrptnSn`, optional `dgtlEnvlp`, `signStr`, and `dataContent`; successful handling must return uppercase `OK`. | `locallife/baofu/aggregatepay/notification/notification.go`, `locallife/api/baofu_callback.go` | Field set and ACK are `DOC_CONFIRMED`; exact HTTP body encoding/content-type is `NEEDS_BAOFOO_CONFIRMATION`. Form/query parser is compatibility only. |
+
+## 5. First-Version Interface Matrix
+
+### 5.1 Account / BaoCaiTong
+
+| Interface | Official page(s) | Method/code | Request truth | Response/callback truth | Local files | Test/evidence status | Open questions |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Personal/business open account | `openAcc`, `bct-1gj4ccsdha6d8`, `openAccNotify`, `appendix` | `T-1001-013-01` | `version=4.1.0`, `accType=1/2`, `accInfo`, `noticeUrl`, `businessType=BCT2.0`; personal four-factor and business/self-employed fields from page. | `retCode`, `errorCode`, `errorMsg`, `result[]`; `state=1/0/-1/2`; callback page defines encrypted query-style `data_content` and `OK` ACK. | `locallife/baofu/account/contracts/*open*`, `locallife/baofu/account/client.go`, `locallife/baofu/account/notification/notification.go` | Four-factor request accepted then query returned active test account; two-factor negative evidence exists. | Whether Baofoo returns a distinct secondary merchant ID beyond `contractNo` in any production/account-notify shape. |
+| Account query | `queryAcc` | `T-1001-013-03` | `version=4.0.0`, `accType`, either `contractNo` or credential/login fields per doc. | `retCode`, `errorCode`, `errorMsg`, `result.contractNo` and customer fields; no documented `state` field. | `locallife/baofu/account/contracts/official_query.go`, `locallife/baofu/account/client.go` | Positive sandbox query for personal `loginNo` returned `contractNo`. | Treating successful query with `contractNo` as active is local normalization; keep documented as project semantics, not Baofoo field truth. |
+| Account balance | `queryBalace` | `T-1001-013-06` | `version=4.0.0`, `contractNo`, `accType`. | `retCode`, optional `availableBal`, `pendingBal`, `currBal`, sample includes `freezeBal`; amount unit is yuan `BigDecimal(10,2)`. | `locallife/baofu/account/contracts/official_balance.go`, `locallife/baofu/account/client.go` | Positive sandbox balance query returned zero balances. | `freezeBal` appears in sample but not table; keep parser tolerant and record as doc/sample gap. |
+| Withdrawal | `accWithdrawal`, `withdrawNotify` | `T-1001-013-14` | `version=4.2.0`, `contractNo`, `transSerialNo`, `dealAmount` in yuan, `returnUrl`, conditional fee/abstract fields. | Synchronous acceptance `state=1/2`; notification/query determine final result; callback ACK uppercase `OK`. | `locallife/baofu/account/contracts/official_withdraw.go`, `locallife/baofu/account/client.go`, withdrawal logic/worker | Not executed as real funds action. | Need real small-amount test only after explicit funds-action approval and production/sandbox account funding. |
+| Withdrawal query | `queryWithdrawal` | `T-1001-013-15` | `version=4.2.0`, `transSerialNo`, `tradeTime=yyyy-MM-dd`. | Final state `1/0/2/3`, amount fields in yuan. | `locallife/baofu/account/contracts/official_withdraw.go`, `locallife/baofu/account/client.go` | Fake serial reached sandbox and produced provider error. | Need real withdrawal serial for positive C4. |
+| Account open notification | `openAccNotify` | callback | Query/form URL includes `member_id`, `terminal_id`, `data_type=JSON`, encrypted `data_content`. | Decrypted content includes `memberType`, `state`, `errorCode`, `transSerialNo`, `loginNo`, `contractNo`, `noticeType`; ACK uppercase `OK`; retry rules documented. | `locallife/baofu/account/notification/notification.go`, `locallife/api/baofu_callback.go` | Local parser tests only. | Need sandbox/production callback payload evidence. |
+| Withdrawal notification | `withdrawNotify` | callback | Same query/form encrypted `data_content` envelope. | Decrypted content includes `contractNo`, `orderId`, `transSerialNo`, `transMoney`, `transFee`, `transferTotalAmount`, `state`, `transRemark`, `reqReserved`; ACK uppercase `OK`. | `locallife/baofu/account/notification/notification.go`, `locallife/api/baofu_callback.go` | Local parser tests only. | Need real withdrawal callback evidence. |
+
+### 5.2 Merchant Report
+
+| Interface | Official page(s) | Method/code | Request truth | Response truth | Local files | Test/evidence status | Open questions |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Merchant report | `bct-1f9o62bulbiqd`, `bct-1f9o6qi1pf2r8`, `经营类目&MCC.xlsx` | `merchant_report` | `merId`, `terId`, `reportType`, `reportNo`, `reportInfo`, `bctMerId`; WeChat `reportInfo` requires `merchant_name`, `merchant_shortname`, `service_phone`, `channel_id`, `channel_name`, `business`, `service_codes`, `address_info`, `business_license`, `business_license_type`, `bankcard_info`. | `resultCode`, `errCode`, `errMsg`, `reportState`, channel return fields including `sub_mch_id` when successful. | `locallife/baofu/merchantreport/contracts/types.go`, `locallife/baofu/merchantreport/client.go`, `locallife/logic/baofu_merchant_report_service.go` | Positive sandbox report returned masked `subMchId`. | Merchant subject rules for personal BaoCaiTong account vs individual-business account should stay tied to account-open doc plus Baofoo support, not inferred from one sandbox error. |
+| Merchant report query | `bct-1f9o63b6ufii5` | `merchant_report_query` | `merId`, `terId`, `reportType`, `reportNo`. | `reportState`, `resultCode`, `errCode`, `errMsg`, `channelRetParam.sub_mch_id`. | `locallife/baofu/merchantreport/contracts/types.go`, `locallife/baofu/merchantreport/client.go` | Positive sandbox query normalized `channelRetParam.sub_mch_id`. | None for first-version query fields. |
+| Bind sub config | `bct-1f9o63qmkndkc`, merchant report appendix | `bind_sub_config` | `merId`, `terId`, `subMchId`, `authType`, `authContent`, `remark`; for `APPLET`, `authContent` is mini program appid. | `resultCode=SUCCESS` means binding success. | `locallife/baofu/merchantreport/contracts/types.go`, readiness/service files | Positive sandbox APPLET bind. Baofoo confirmed success may need about 30 minutes before transactions. | Exact production propagation/activation timing remains operational, not contract-shape. |
+
+### 5.3 Aggregate Pay / Refund / Sharing
+
+| Interface | Official page(s) | Method/code | Request truth | Response/callback truth | Local files | Test/evidence status | Open questions |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Unified order | `bct-1f9qlvjef634j`, aggregate appendix, payment callback page | `unified_order` | `merId`, `terId`, `outTradeNo`, `txnAmt`, `txnTime`, `totalAmt`, `prodType=SHARING`, `orderType=7`, `payCode=WECHAT_JSAPI`, `payExtend.sub_openid/sub_appid/body`, `riskInfo.clientIp`; doc says `subMchId` is required for WeChat/Alipay reported secondary merchant. | Response `txnState`, `tradeNo`, `reqChlNo`, `payCode`, `chlRetParam`, `resultCode`, `errCode`, `errMsg`; payment callback has its own page and `OK` ACK. | `locallife/baofu/aggregatepay/contracts/types.go`, `locallife/baofu/aggregatepay/client.go`, `cmd/baofu_unified_order_smoke` | Sandbox positive response parsing with `subMchId` omitted because Baofoo support confirmed sandbox exception; production must send `subMchId`. | Sandbox returns `wc_pay_data` although Baofoo says no real payment; treat as parsing evidence only. Need production first-order callback proof. |
+| Order query | `bct-1f9qm13po92jq` | `order_query` | Query by merchant/trade keys defined on page; used for callback recovery and terminal-state confirmation. | Response carries order state/result fields and `tradeNo`; local normalization must not create new upstream statuses. | `locallife/baofu/aggregatepay/contracts/types.go`, `locallife/baofu/aggregatepay/client.go`, `cmd/baofu_order_query_smoke` | Positive sandbox query for smoke-created orders returned `SUCCESS`. | No local fact application was exercised by smoke. |
+| Payment callback | `bct-1f9qhakcna6te`, `bct-1f9qm4ujg50cv` | callback | Common callback envelope from request-entry page plus payment `dataContent`; per-page fields include `tradeNo`, `outTradeNo`, `txnState`, `finishTime`, amount/fee fields, `resultCode`, `errCode`, `errMsg`, `payCode`, optional `chlRetParam`. | Merchant must verify and return uppercase `OK`; process only documented terminal states. | `locallife/baofu/aggregatepay/notification/notification.go`, `locallife/api/baofu_callback.go` | Sandbox callback hit production URL before parser fix; no successful fact evidence yet. | Exact callback body encoding/content-type and signature canonical string need Baofoo confirmation. |
+| Share after pay | `bct-1f9qlvu1em0tb`, share callback page | `share_after_pay` | `originTradeNo` or `originOutTradeNo`, `txnTime`, `outTradeNo`, optional `notifyUrl`, `sharingDetails[]` with `sharingMerId` and `sharingAmt`; no `subMchId`. | Synchronous success is acceptance/processing; final result by share callback or share query. | `locallife/baofu/aggregatepay/contracts/types.go`, worker/payment logic | Fake order reached sandbox and failed as `ORDER_NOT_EXIST`, proving request/error path only. | Real share requires real paid order in production/real transaction environment. |
+| Share query | `bct-1f9qm1m0u1s68` | `share_query` | Query keys per page after share request. | Response `txnState`, `tradeNo`, `succAmt`, `clearingDate`, `resultCode`. | `locallife/baofu/aggregatepay/contracts/types.go`, recovery scheduler/client | Fake order query parsed `ABNORMAL`; transport evidence only. | Positive query requires real share order. |
+| Share callback | `bct-1f9qhakcna6te`, `bct-1f9qm58emskkg` | callback | Common callback envelope plus share `dataContent`. | Fields include `tradeNo`, `outTradeNo`, required `txnState`, `finishTime`, `succAmt`, required `resultCode`, `clearingDate`; ACK `OK`. | `locallife/baofu/aggregatepay/notification/notification.go`, callback API | Local parser tests only. | Exact body encoding/signature confirmation; real callback evidence. |
+| Refund before share | `bct-1f9qm06dmb1a9`, refund callback page | `order_refund` | Refund request fields from page; same payment order can be refunded multiple times but refund and share cannot be initiated concurrently for the same payment order. | Synchronous success is acceptance; final result by refund callback/query; non-success `errCode` must fail closed even if `resultCode=SUCCESS`. | `locallife/baofu/aggregatepay/contracts/types.go`, refund logic | Fake order reached sandbox and now fails closed on `ORDER_NOT_EXIST`. | Real refund requires real pre-share paid order. |
+| Refund query | `bct-1f9qm246c6cp8` | `refund_query` | Query after refund request. | Response refund state/result fields. | `locallife/baofu/aggregatepay/contracts/types.go`, recovery scheduler/client | Fake order query parsed `ABNORMAL`; transport evidence only. | Positive query requires real refund order. |
+| Refund callback | `bct-1f9qhakcna6te`, `bct-1f9qm5hspcd9v` | callback | Common callback envelope plus refund `dataContent`. | Fields include refund `tradeNo`, `outTradeNo`, `refundState`, `finishTime`, `succAmt`, `resultCode`, `txnTime`, `errCode`, `errMsg`; ACK `OK`. | `locallife/baofu/aggregatepay/notification/notification.go`, callback API | Local parser tests only. | Exact body encoding/signature confirmation; real callback evidence. |
+| Order close | `bct-1f9qm0flcca1k`, payment callback page | `order_close` | Close request fields from page; cannot close paid or already closed order. | Synchronous success is acceptance; close result is by payment-style callback or order query. | `locallife/baofu/aggregatepay/contracts/types.go`, `locallife/baofu/aggregatepay/client.go` | Fake order close reached sandbox and `SYSTEM_BUSY` is retryable. | Need real order-close acceptance/terminal query evidence. |
+
+## 6. Baofoo Confirmed Sandbox Exceptions
+
+| Topic | Baofoo answer | Local rule |
+| --- | --- | --- |
+| `unified_order.subMchId` in sandbox | Sandbox should not send `subMchId`; production needs it. | `BAOFU_ENVIRONMENT=sandbox` omits wire `subMchId` only for sandbox smoke. Production validation still requires merchant-report `subMchId`. |
+| Real payment in sandbox | Sandbox does not support real payment. | `wc_pay_data`, `WAIT_PAYING`, and later sandbox `order_query=SUCCESS` are parsing/query evidence, not payment/callback/settlement proof. |
+| `bind_sub_config` timing | `SUCCESS` means binding succeeded, but transaction availability can need about 30 minutes. | Local readiness can mark APPLET auth success, but unified-order sandbox failures after bind must not be treated as contract drift without Baofoo confirmation. |
+| Sandbox merchant/channel data | Sandbox data is virtual and not sent to real channels. | Merchant-report success proves DTO/envelope/readiness behavior, not real WeChat sub-merchant provisioning. |
+
+## 7. Open Questions For Baofoo
+
+1. Aggregate payment/share/refund callback HTTP body encoding: are callbacks sent as `application/x-www-form-urlencoded`, query string, JSON body, or the public envelope as form fields?
+2. Aggregate callback signature verification: exact canonical string, included fields, and whether `dataContent` is signed before or after URL/form decoding.
+3. Aggregate callback ACK requirements: exact body `OK`, HTTP status, content-type requirements, and whether whitespace/newline is accepted.
+4. `signSn` and `ncrptnSn`: confirm production values for RSA certificate mode and whether Baofoo will always issue S(10) indexes distinct from X.509 serial numbers.
+5. Account/query identity: confirm whether `contractNo` is the same value to use as BaoCaiTong `sharingMerId`, or whether a distinct field can appear in account-open/account-query/account-notify responses.
+6. Sandbox `unified_order` semantics: explain why sandbox can return `wc_pay_data` and later `order_query=SUCCESS` while also not supporting real payment, and which status transitions should be ignored as non-production evidence.
+7. Real first-order validation path: confirm whether production first order can be run with a controlled 1-yuan order, and which callback/source IP/signature details Baofoo expects us to log for acceptance.
+
+## 8. Change Gate
+
+Before merging any Baofoo contract change:
+
+- Update this matrix row or add a row for the touched interface.
+- Add or update table-driven tests for official required/conditional fields and enum/status/error interpretation.
+- Record sandbox/prod evidence only in `baofu-sandbox-evidence.md`; do not encode sandbox-only behavior as contract truth.
+- Keep PII and secrets out of artifacts: mask openid, ID card, bank card, phone, private key, full `contractNo`, full `sharingMerId`, and full `subMchId`.
+- Run `make check-baofu-contract` plus the smallest relevant Go package tests.

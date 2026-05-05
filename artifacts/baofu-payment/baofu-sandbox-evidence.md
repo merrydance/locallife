@@ -120,7 +120,7 @@
 
 | Date | Env | Callback URL | OutTradeNo | TradeNo Masked | Observed Status | Fact Persisted | Application Enqueued | ACK | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2026-05-05 | sandbox | `https://llapi.merrydance.cn/v1/webhooks/baofu/payment` | unknown sandbox order callback | unknown | parse failed before form callback support; HTTP 401 | no | no | no | next fix | Baofoo posted a 56-byte non-JSON body from `Apache-HttpClient/4.3.6`; parser failed with `invalid character r looking for beginning of value`, consistent with documented aggregate notification fields being delivered as form/query parameters rather than JSON. Fixed next to accept form-urlencoded aggregate payment/share/refund callbacks and ACK successful aggregate callbacks with plain text `OK`. |
+| 2026-05-05 | sandbox | `https://llapi.merrydance.cn/v1/webhooks/baofu/payment` | unknown sandbox order callback | unknown | parse failed before compatibility parser; HTTP 401 | no | no | no | next fix | Baofoo posted a 56-byte non-JSON body from `Apache-HttpClient/4.3.6`; parser failed with `invalid character r looking for beginning of value`. Baofoo docs confirm aggregate callback fields and plain uppercase `OK` ACK, but exact body encoding/content-type remains a Baofoo-confirmation item. Local form/query parser support is recorded as sandbox compatibility, not contract truth. |
 
 ## Profit Sharing `share_after_pay`
 
