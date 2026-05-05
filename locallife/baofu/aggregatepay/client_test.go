@@ -109,6 +109,19 @@ func TestAggregateClientReturnsProviderErrorForEnvelopeFailure(t *testing.T) {
 	require.Equal(t, "资料信息不完整，请核对后重新提交", providerErr.Frontend.Message)
 }
 
+func TestAggregateClientClassifiesSuccessEnvelopeMissingDataContent(t *testing.T) {
+	doer := &aggregateRecordingDoer{responseBody: []byte(`{"returnCode":"SUCCESS","returnMsg":"OK","merId":"102004465","terId":"200005200","charset":"UTF-8","version":"1.0","format":"json","signType":"RSA","signSn":"1","ncrptnSn":"1","signStr":"test-signature"}`)}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.CreateUnifiedOrder(context.Background(), validUnifiedOrderRequestForClientTest())
+
+	require.Error(t, err)
+	var providerErr *baofu.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, baofu.PublicEnvelopeUpstreamCodeMissingDataContent, providerErr.UpstreamCode)
+	require.Equal(t, "支付通道异常，请联系平台处理", providerErr.Frontend.Message)
+}
+
 func validUnifiedOrderRequestForClientTest() contracts.UnifiedOrderRequest {
 	return contracts.NewWechatJSAPISharingUnifiedOrderRequest(contracts.UnifiedOrderInput{
 		MerchantID: "102004465",

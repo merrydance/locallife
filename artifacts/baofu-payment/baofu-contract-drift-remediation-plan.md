@@ -1927,6 +1927,35 @@ PATH="/usr/local/go/bin:$PATH" go run ./cmd/baofu_independent_probe
 
 Do not set `BAOFU_RUN_WITHDRAW=true` unless intentionally testing a real funds action.
 
+### Task P17: Unified Order Empty `dataContent` Classification And Repo Smoke
+
+> Trigger: after deploying the sandbox `subMchId` omission change, the old `/tmp/baofu_unified_order_smoke.go` still printed the requested `subMchId` and Baofoo returned public-envelope `SUCCESS` without usable business `dataContent`. The client surfaced this as upstream_code `SUCCESS`, which is misleading because the failure is a missing business payload under a successful envelope.
+
+**Files:**
+- Modify: `locallife/baofu/envelope.go`
+- Modify: `locallife/baofu/envelope_test.go`
+- Modify: `locallife/baofu/client.go`
+- Modify: `locallife/baofu/aggregatepay/client_test.go`
+- Create: `locallife/cmd/baofu_unified_order_smoke/main.go`
+- Modify: `artifacts/baofu-payment/baofu-sandbox-evidence.md`
+- Modify: `artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md`
+
+- [x] **Step 1: Add regression for success envelope without dataContent**
+
+Added tests proving a public-envelope `returnCode=SUCCESS` with missing `dataContent` becomes provider upstream code `MISSING_DATA_CONTENT`, not `SUCCESS`, while keeping frontend guidance safe and generic.
+
+- [x] **Step 2: Fix classification**
+
+`PublicResponseEnvelope.ValidationUpstreamCode` now maps missing/invalid business payloads under successful public envelopes to synthetic diagnostic codes. This preserves the provider/log boundary detail without exposing raw response payloads.
+
+- [x] **Step 3: Add repo-owned unified-order smoke command**
+
+Added `go run ./cmd/baofu_unified_order_smoke`. It prints both requested and effective wire `subMchId`; in sandbox the effective value is `omitted_by_client`, matching Baofoo's test-environment rule. Use this instead of the stale `/tmp/baofu_unified_order_smoke.go`.
+
+- [ ] **Step 4: Redeploy and rerun repo smoke**
+
+After deploy, run the repo command. In sandbox, a missing `wc_pay_data` is expected if Baofoo still returns an empty business payload; the important proof is the synthetic upstream code `MISSING_DATA_CONTENT` plus no raw payload leakage.
+
 ### 7.3 Completion Gate For This Pre-`dataContent` Audit
 
 This pre-sandbox-positive audit is complete only when:

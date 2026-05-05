@@ -17,6 +17,9 @@ const (
 
 	PublicEnvelopeReturnCodeSuccess = "SUCCESS"
 	PublicEnvelopeReturnCodeFail    = "FAIL"
+
+	PublicEnvelopeUpstreamCodeMissingDataContent = "MISSING_DATA_CONTENT"
+	PublicEnvelopeUpstreamCodeInvalidDataContent = "INVALID_DATA_CONTENT"
 )
 
 type PublicRequestEnvelope struct {
@@ -181,6 +184,21 @@ func (e PublicResponseEnvelope) Validate() error {
 		return errors.New("baofu public response dataContent must be valid JSON")
 	}
 	return nil
+}
+
+func (e PublicResponseEnvelope) ValidationUpstreamCode(err error) string {
+	if err == nil || strings.TrimSpace(e.ReturnCode) != PublicEnvelopeReturnCodeSuccess {
+		return strings.TrimSpace(e.ReturnCode)
+	}
+	message := err.Error()
+	switch {
+	case strings.Contains(message, "dataContent is required"):
+		return PublicEnvelopeUpstreamCodeMissingDataContent
+	case strings.Contains(message, "dataContent must be valid JSON"):
+		return PublicEnvelopeUpstreamCodeInvalidDataContent
+	default:
+		return strings.TrimSpace(e.ReturnCode)
+	}
 }
 
 func (e PublicResponseEnvelope) BusinessContent() JSONString {

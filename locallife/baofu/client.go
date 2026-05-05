@@ -171,7 +171,7 @@ func (c *Client) postPublicEnvelope(ctx context.Context, endpoint string, method
 		return providerResponseError(method, resp.StatusCode, responseEnvelope.ReturnCode, responseEnvelope.ReturnMessage, errors.New("baofu upstream returned failure"))
 	}
 	if err := responseEnvelope.Validate(); err != nil {
-		return providerRequestError(method, resp.StatusCode, responseEnvelope.ReturnCode, err)
+		return providerRequestError(method, resp.StatusCode, responseEnvelope.ValidationUpstreamCode(err), err)
 	}
 	responseBusinessContent := responseEnvelope.BusinessContent()
 	if code, message, failed := publicBusinessFailure(json.RawMessage(responseBusinessContent)); failed {

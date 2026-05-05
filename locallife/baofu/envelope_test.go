@@ -93,6 +93,27 @@ func TestPublicResponseEnvelopeValidateHandlesTransportStatus(t *testing.T) {
 	require.EqualError(t, env.Validate(), "baofu public response returnCode is required")
 }
 
+func TestPublicResponseEnvelopeValidationUpstreamCodeForMissingDataContent(t *testing.T) {
+	env := PublicResponseEnvelope{
+		ReturnCode:         PublicEnvelopeReturnCodeSuccess,
+		ReturnMessage:      "OK",
+		MerchantID:         "100000",
+		TerminalID:         "200000",
+		Charset:            PublicEnvelopeCharsetUTF8,
+		Version:            PublicEnvelopeVersion10,
+		Format:             PublicEnvelopeFormatJSON,
+		SignType:           SignTypeRSA,
+		SignSerialNo:       "1",
+		EncryptionSerialNo: "1",
+		SignString:         "abcd",
+	}
+
+	err := env.Validate()
+
+	require.EqualError(t, err, "baofu public response dataContent is required")
+	require.Equal(t, PublicEnvelopeUpstreamCodeMissingDataContent, env.ValidationUpstreamCode(err))
+}
+
 func validPublicEnvelopeForTest() PublicRequestEnvelope {
 	return PublicRequestEnvelope{
 		MerchantID:         "100000",

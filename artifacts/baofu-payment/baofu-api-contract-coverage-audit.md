@@ -53,6 +53,7 @@
 - 已确认 `subMchId` 策略：采用商户逐户聚合商户报备 + 平台小程序异主体授权目录绑定。代码不得再固化为“平台统一下单”，也不得复用项目内微信普通服务商特约商户进件结果。宝付技术支持进一步确认：生产环境 `unified_order` 需要上送 `subMchId`，测试环境不要上送；本地 concrete aggregate client 按 `BAOFU_ENVIRONMENT` 在 sandbox 发包前清空该字段，同时保留生产校验。
 - `share_after_pay` 官方字段不包含 `subMchId`。分账接收方仍必须是宝财通开户返回并同步到本地 `sharing_mer_id` 的宝付二级商户号。
 - 宝付技术支持确认：测试环境不支持真实下单，聚合商户报备资料为虚拟资料且不会真实发往渠道；`bind_sub_config` 返回 `SUCCESS` 即代表绑定成功，但绑定后可能需要约 30 分钟才能发起交易。故 sandbox 统一下单只能作为请求形态、公共 envelope、错误分类和不泄露上游细节的验证，不能作为拿到真实 `wc_pay_data` / 支付回调 / 分账后续的完整 C4 证明。
+- sandbox 若返回公共报文 `returnCode=SUCCESS` 但缺少业务 `dataContent`，本地统一归类为 `MISSING_DATA_CONTENT`，不得再把 upstream code 误报为 `SUCCESS`。
 - 本地已补入官方字段级 DTO、公共报文、聚合商户报备、退款、关单、官方错误码本地分类和微信类目 allowlist；剩余漂移风险集中在宝财通 union-gw 官方加密/签名 envelope 完整性、响应验签/数字信封、真实渠道错误组合、回调真实 payload 与沙箱证据。
 - “防漂移”的实现标准不能只靠文档：必须把官方必填/条件必填、字段类型长度、枚举、错误码、金额单位、回调 ACK 形态、测试/生产 endpoint 都变成 typed constants、校验器和表驱动测试。
 - 已新增 `make check-baofu-contract` 静态守卫，阻断已发现的漂移回归：响应层直接读 `BizContent`、误用旧 `https://api.baofoo.com`、分账携带 `subMchId`、用宝付一级商户号填 `sharingMerId`、重新引入静态 `BAOFU_AES_KEY`、丢失统一下单 sandbox/production `subMchId` 环境差异处理。
@@ -371,7 +372,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 - 已有真实 HTTP client、官方 endpoint profile、公共 envelope 本地测试和 API runtime Baofu facade wiring；不再回退普通服务商/平台收付通。
 - `UnifiedOrderRequest.Validate()` 已校验首版必填字段、金额关系、`txnTime` 格式、`SHARING/orderType=7/WECHAT_JSAPI` 枚举、生产微信 `subMchId`、`payExtend/riskInfo.clientIp` 条件必填、`pageUrl=https` 和 `forbidCredit` 枚举；`ValidateForEnvironment("sandbox")` 仅放宽 `subMchId`，不放宽 `payExtend` 或 `riskInfo.clientIp`。`PaymentQueryRequest`、`ShareQueryRequest`、`RefundQueryRequest`、`OrderCloseRequest` 均在本地校验 `merId/terId` 和交易引用，缺失不会 POST 到宝付。
 - 响应验签、数字信封完整性和测试地址联调仍未完成。
-- 宝付已确认测试环境不支持真实下单；sandbox 统一下单验收目标调整为“请求到达测试地址、sandbox 发包不含 `subMchId`、公共 envelope / `dataContent` / 错误分类正确”，不能期待真实 `wc_pay_data`、支付回调或后续分账链路。真实支付 C4 需要生产首单或宝付提供可真实交易的专用验证环境。
+- 宝付已确认测试环境不支持真实下单；sandbox 统一下单验收目标调整为“请求到达测试地址、sandbox 发包不含 `subMchId`、公共 envelope / `dataContent` / 错误分类正确”，不能期待真实 `wc_pay_data`、支付回调或后续分账链路。公共报文成功但缺业务 `dataContent` 时应分类为 `MISSING_DATA_CONTENT`。真实支付 C4 需要生产首单或宝付提供可真实交易的专用验证环境。
 
 ### 8.2 支付订单查询
 
