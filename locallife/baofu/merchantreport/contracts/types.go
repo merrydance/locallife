@@ -3,6 +3,7 @@ package contracts
 import (
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 )
 
@@ -76,6 +77,53 @@ type MerchantReportResult struct {
 
 func (r MerchantReportResult) NormalizedReportState() string {
 	return NormalizeMerchantReportState(r.ReportState)
+}
+
+func (r MerchantReportResult) Normalized() MerchantReportResult {
+	r.SubMchID = strings.TrimSpace(firstNonEmpty(r.SubMchID, subMchIDFromChannelReturnParam(r.ChannelReturnParam)))
+	return r
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func subMchIDFromChannelReturnParam(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		var encoded string
+		if json.Unmarshal(raw, &encoded) != nil {
+			return ""
+		}
+		if json.Unmarshal([]byte(encoded), &payload) != nil {
+			return ""
+		}
+	}
+	for _, key := range []string{"sub_mch_id", "subMchId"} {
+		if value, ok := payload[key]; ok {
+			return strings.TrimSpace(toString(value))
+		}
+	}
+	return ""
+}
+
+func toString(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	default:
+		return ""
+	}
 }
 
 type BindSubConfigRequest struct {

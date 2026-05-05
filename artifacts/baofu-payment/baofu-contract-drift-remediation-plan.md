@@ -40,6 +40,7 @@
 | C-013 merchant_report nested field drift | Task P10 | 整体文档复核后修复微信报备 `address_info`、`bankcard_info` 字段名和必填性。 |
 | C-014 balance query version/amount drift | Task P11 | 余额查询独立 `version=4.0.0`，响应金额兼容 string/number。 |
 | C-015 balance optional amount drift | Task P12 | 余额响应金额字段按官方 `O` 处理；缺失字段默认为 `0`，但全部缺失仍视为漂移。 |
+| C-016 merchant report query subMchId drift | Task P13 | 报备查询从 `channelRetParam.sub_mch_id` 归一化微信渠道 `subMchId`。 |
 
 ## 2. Target File Map
 
@@ -1761,6 +1762,50 @@ git diff --check
 ```
 
 Validation on 2026-05-05: all commands above passed. Redeploy and rerun the real sandbox balance command before marking balance query C4.
+
+### Task P13: Merchant Report Query Channel Return Param Fix
+
+> Trigger: sandbox `merchant_report` submit succeeded and returned `subMchId`, but `merchant_report_query` succeeded without surfacing `subMchId` in the local result.
+
+**Files:**
+- Modify: `locallife/baofu/merchantreport/contracts/types.go`
+- Modify: `locallife/baofu/merchantreport/contracts/types_test.go`
+- Modify: `locallife/baofu/merchantreport/client.go`
+- Modify: `locallife/baofu/merchantreport/client_test.go`
+- Modify: `artifacts/baofu-payment/baofu-sandbox-evidence.md`
+- Modify: `artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md`
+
+- [x] **Step 1: Re-read the exact query page**
+
+Authenticated doc page: `bct-1f9o63b6ufii5` / `merchant_report_query`.
+
+Confirmed:
+
+- query response has optional `channelRetParam`;
+- WeChat channel return parameter contains `sub_mch_id`;
+- the top-level result is not required to contain camel-case `subMchId`.
+
+- [x] **Step 2: Add regressions**
+
+Added tests proving:
+
+- `MerchantReportResult.Normalized()` reads `channelRetParam.sub_mch_id`;
+- JSON-string encoded `channelRetParam` is also accepted;
+- top-level `subMchId` wins when both shapes are present;
+- `QueryReport` returns normalized `SubMchID`.
+
+- [x] **Step 3: Fix implementation**
+
+`SubmitWechatReport` and `QueryReport` now normalize the result before returning it. The normalization maps WeChat `channelRetParam.sub_mch_id` into local `SubMchID`.
+
+- [x] **Step 4: Validate**
+
+```bash
+cd locallife
+PATH="/usr/local/go/bin:$PATH" go test ./baofu/merchantreport ./baofu/merchantreport/contracts -count=1
+```
+
+Validation on 2026-05-05: targeted merchant-report tests passed. Redeploy and rerun `merchant_report_query` to record positive query C4 with `subMchId`.
 
 ### 7.3 Completion Gate For This Pre-`dataContent` Audit
 

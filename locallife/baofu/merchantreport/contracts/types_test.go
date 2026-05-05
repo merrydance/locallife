@@ -131,6 +131,17 @@ func TestNormalizeMerchantReportState(t *testing.T) {
 	require.Equal(t, ReportStateUnknown, NormalizeMerchantReportState("unexpected"))
 }
 
+func TestMerchantReportResultNormalizesSubMchIDFromChannelReturnParam(t *testing.T) {
+	result := MerchantReportResult{ChannelReturnParam: json.RawMessage(`{"sub_mch_id":"1900000109"}`)}
+	require.Equal(t, "1900000109", result.Normalized().SubMchID)
+
+	result = MerchantReportResult{ChannelReturnParam: json.RawMessage(`"{\"sub_mch_id\":\"1900000110\"}"`)}
+	require.Equal(t, "1900000110", result.Normalized().SubMchID)
+
+	result = MerchantReportResult{SubMchID: "1900000111", ChannelReturnParam: json.RawMessage(`{"sub_mch_id":"1900000112"}`)}
+	require.Equal(t, "1900000111", result.Normalized().SubMchID)
+}
+
 func validWechatMerchantReportRequestForTest() WechatMerchantReportRequest {
 	return WechatMerchantReportRequest{
 		MerchantID:    "100000",

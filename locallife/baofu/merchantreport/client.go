@@ -27,6 +27,7 @@ func (c *Client) SubmitWechatReport(ctx context.Context, req contracts.WechatMer
 	if err := c.root.PostMerchantReport(ctx, "merchant_report", req, &result); err != nil {
 		return nil, err
 	}
+	result = result.Normalized()
 	return &result, nil
 }
 
@@ -41,6 +42,7 @@ func (c *Client) QueryReport(ctx context.Context, req contracts.MerchantReportQu
 	if err := c.root.PostMerchantReport(ctx, "merchant_report_query", req, &result); err != nil {
 		return nil, err
 	}
+	result = result.Normalized()
 	return &result, nil
 }
 

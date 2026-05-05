@@ -48,6 +48,18 @@ func TestMerchantReportClientBindSubConfigPostsAppletAuth(t *testing.T) {
 	require.Contains(t, string(env.BizContent), `"authContent":"wx1234567890abcdef"`)
 }
 
+func TestMerchantReportClientQueryNormalizesWechatSubMchIDFromChannelReturnParam(t *testing.T) {
+	doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","reportType":"WECHAT","reportNo":"MR202605040001","reportState":"SUCCESS","channelRetParam":{"sub_mch_id":"1900000109"}}`)}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	result, err := client.QueryReport(context.Background(), contracts.MerchantReportQueryRequest{MerchantID: "102004465", TerminalID: "200005200", ReportType: contracts.ReportTypeWechat, ReportNo: "MR202605040001"})
+
+	require.NoError(t, err)
+	require.Equal(t, "1900000109", result.SubMchID)
+	env := publicEnvelopeFromFormForTest(t, doer.requestBody)
+	require.Equal(t, "merchant_report_query", env.Method)
+}
+
 func TestMerchantReportClientReturnsProviderErrorForBusinessFailure(t *testing.T) {
 	doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"FAIL","errCode":"INVALID_PARAMETER","errMsg":"上游原始参数错误"}`)}
 	client := NewClient(testBaofuRootClient(t, doer))
