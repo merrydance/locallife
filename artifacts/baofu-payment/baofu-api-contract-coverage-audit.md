@@ -52,7 +52,7 @@
 
 - 已确认 `subMchId` 策略：采用商户逐户聚合商户报备 + 平台小程序异主体授权目录绑定。代码不得再固化为“平台统一下单”，也不得复用项目内微信普通服务商特约商户进件结果。宝付技术支持进一步确认：生产环境 `unified_order` 需要上送 `subMchId`，测试环境不要上送；本地 concrete aggregate client 按 `BAOFU_ENVIRONMENT` 在 sandbox 发包前清空该字段，同时保留生产校验。
 - `share_after_pay` 官方字段不包含 `subMchId`。分账接收方仍必须是宝财通开户返回并同步到本地 `sharing_mer_id` 的宝付二级商户号。
-- 宝付技术支持确认：测试环境不支持真实下单，聚合商户报备资料为虚拟资料且不会真实发往渠道；`bind_sub_config` 返回 `SUCCESS` 即代表绑定成功，但绑定后可能需要约 30 分钟才能发起交易。故 sandbox 统一下单只能作为请求形态、公共 envelope、错误分类和不泄露上游细节的验证，不能作为拿到真实 `wc_pay_data` / 支付回调 / 分账后续的完整 C4 证明。
+- 宝付技术支持确认：测试环境不支持真实下单，聚合商户报备资料为虚拟资料且不会真实发往渠道；`bind_sub_config` 返回 `SUCCESS` 即代表绑定成功，但绑定后可能需要约 30 分钟才能发起交易。故 sandbox 统一下单只能作为请求形态、公共 envelope、业务 `dataContent` 解析、错误分类和不泄露上游细节的验证；即使测试环境返回了 `wc_pay_data`，也不能作为真实支付 / 支付回调 / 分账后续的完整 C4 证明。
 - sandbox 若返回公共报文 `returnCode=SUCCESS` 但缺少业务 `dataContent`，本地统一归类为 `MISSING_DATA_CONTENT`，不得再把 upstream code 误报为 `SUCCESS`。
 - sandbox 已观察到 `chlRetParam.order_id` 可为 number；本地统一按 string/number 容忍解析，业务 payload 反序列化失败统一归类为 `INVALID_DATA_CONTENT`，不得误报为 `SUCCESS`。
 - 聚合支付/报备业务响应即使 `resultCode=SUCCESS`，只要出现非成功 `errCode`，本地仍按 provider failure 处理；`errCode=SUCCESS` 才作为成功辅助字段接受。
@@ -374,7 +374,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 - 已有真实 HTTP client、官方 endpoint profile、公共 envelope 本地测试和 API runtime Baofu facade wiring；不再回退普通服务商/平台收付通。
 - `UnifiedOrderRequest.Validate()` 已校验首版必填字段、金额关系、`txnTime` 格式、`SHARING/orderType=7/WECHAT_JSAPI` 枚举、生产微信 `subMchId`、`payExtend/riskInfo.clientIp` 条件必填、`pageUrl=https` 和 `forbidCredit` 枚举；`ValidateForEnvironment("sandbox")` 仅放宽 `subMchId`，不放宽 `payExtend` 或 `riskInfo.clientIp`。`PaymentQueryRequest`、`ShareQueryRequest`、`RefundQueryRequest`、`OrderCloseRequest` 均在本地校验 `merId/terId` 和交易引用，缺失不会 POST 到宝付。
 - 响应验签、数字信封完整性和测试地址联调仍未完成。
-- 宝付已确认测试环境不支持真实下单；sandbox 统一下单验收目标调整为“请求到达测试地址、sandbox 发包不含 `subMchId`、公共 envelope / `dataContent` / 错误分类正确”，不能期待真实 `wc_pay_data`、支付回调或后续分账链路。公共报文成功但缺业务 `dataContent` 时应分类为 `MISSING_DATA_CONTENT`。真实支付 C4 需要生产首单或宝付提供可真实交易的专用验证环境。
+- 宝付已确认测试环境不支持真实下单；sandbox 统一下单验收目标调整为“请求到达测试地址、sandbox 发包不含 `subMchId`、公共 envelope / `dataContent` / `wc_pay_data` 解析 / 错误分类正确”。2026-05-05 sandbox 已返回 `WAIT_PAYING` 和可解析 `wc_pay_data`，但这仍不能证明真实支付、支付回调或后续分账链路。公共报文成功但缺业务 `dataContent` 时应分类为 `MISSING_DATA_CONTENT`。真实支付 C4 需要生产首单或宝付提供可真实交易的专用验证环境。
 
 ### 8.2 支付订单查询
 
@@ -545,7 +545,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 | C-002 | C3 本地修复，待沙箱 | 已新增官方开户、查询、余额、提现 DTO 与金额元/分转换测试；account client 已将业务抽象转换为官方 DTO 后放入 union-gw `body` | 原 `OpenAccountRequest` 业务抽象仍保留给现有 service；企业/个体完整资料映射和沙箱样例仍待补 | Task 12/C4 用真实测试地址证明字段和错误码。 |
 | C-003 | C3 本地修复，待沙箱验证 | `locallife/baofu/account/notification/notification.go` 已按官方开户/提现通知字段解析并覆盖提现密文 envelope；`locallife/api/baofu_callback.go` 开户/提现 ACK 均为纯文本 `OK` | 本地 parser/ACK/提现入队已防止明显字段漂移，但还未使用宝付测试环境真实通知验证 URL query、密文 envelope、重放 ACK 行为 | 用宝付测试通知样例或沙箱回调验证开户/提现通知，并补回真实样例摘要。 |
 | C-004 | C3 本地修复，部分负向沙箱 smoke | 已新增聚合/报备 `PublicRequestEnvelope`；账户 API 已拆到独立 union-gw `verifyType=1` envelope；`order_query` 负向 smoke 已证明聚合请求 `bizContent` 与响应 `dataContent` 解析可通过宝付测试地址 | 聚合/报备响应验签、数字信封加密、账户 `verifyType=2`、真实业务成功 `dataContent`、真实错误码和回调仍未验证 | C4 补真实成功请求/响应、回调和错误样例；不得因负向 smoke 宣称支付/分账已联调完成。 |
-| C-005 | 已本地修复，待沙箱验证 | `locallife/baofu/aggregatepay/contracts/types.go` 已新增 `unified_order` 表驱动校验，覆盖 M/C 字段、枚举、生产 `subMchId` 条件必填、sandbox 省略 `subMchId`、https `pageUrl`、金额关系 | 本地契约已 fail-closed；宝付确认测试环境不支持真实下单，因此 sandbox 只能验证省略 `subMchId` 后的请求形态和错误分类，不能拿真实 `wc_pay_data` | Task 8/沙箱测试补真实请求形态、参数错误和错误码样例；真实支付放入生产首单 checklist。 |
+| C-005 | 已本地修复，sandbox 请求/响应形态已验证 | `locallife/baofu/aggregatepay/contracts/types.go` 已新增 `unified_order` 表驱动校验，覆盖 M/C 字段、枚举、生产 `subMchId` 条件必填、sandbox 省略 `subMchId`、https `pageUrl`、金额关系，并兼容 numeric/string `chlRetParam.order_id` | 本地契约已 fail-closed；sandbox 已证明省略 `subMchId` 后可解析 `WAIT_PAYING`、`tradeNo` 和 `wc_pay_data`，但宝付确认测试环境不支持真实支付，所以不能证明支付回调/后续分账 | Task 8/沙箱继续补参数错误和错误码样例；真实支付、回调和后续链路放入生产首单 checklist。 |
 | C-006 | C3 本地修复，待联调 | 已新增 `locallife/baofu/merchantreport/contracts`、`baofu_merchant_reports`、sqlc query、报备 service、APPLET 授权 readiness、`merchantreport.Client` 和 `baofu-merchant-report-recovery` | 本地契约/持久化/服务/HTTP client/recovery 已能防止 `bctMerId/subMchId/authContent` 漂移，但还没有沙箱证据和真实资料映射验收 | Task 8/沙箱联调验证真实报备、报备查询与授权目录请求。 |
 | C-007 | 已本地修复，待联调 | `locallife/logic/baofu_payment_order_route.go` 已通过 `merchantBaofuReadinessForPayment` 取商户报备 `sub_mch_id`；`CreateBaofuWechatJSAPIOrderInput` 字段已改 `MerchantSubMchID` | 旧普通服务商 `txResult.SubMchID` 来源已移除，API/logic readiness 不再读取 `baofu_account_bindings.wechat_sub_mch_id`；真实支付仍待宝付聚合商户报备沙箱验证 | Task 8/沙箱测试验证 `unified_order.subMchId` 使用报备返回值。 |
 | C-008 | C3 本地修复，待沙箱 | 已新增 `order_refund`、`refund_query`、`order_close` DTO/client、退款通知 parser、退款状态映射、API callback、退款查询恢复 scheduler 和分账前退款业务接入 | 首版“分账前退款、分账后不退款”已在本地 fail-closed；fake `order_refund` 沙箱探针暴露并修复 `resultCode=SUCCESS` + `errCode=ORDER_NOT_EXIST` 误判成功问题；仍缺真实验签/数字信封、真实退款查询/回调证据 | Task 12/C4 补沙箱/生产首单证据；响应验签/数字信封在 C-004/C-011 跟进。 |

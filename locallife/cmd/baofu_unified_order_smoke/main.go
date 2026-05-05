@@ -72,7 +72,7 @@ func run() error {
 		clientIP,
 	)
 	if baofuCfg.Environment == baofu.BaofuEnvironmentSandbox {
-		fmt.Println("sandbox_note: Baofoo confirmed sandbox must omit subMchId and does not support real payment; missing wc_pay_data is not a production contract failure.")
+		fmt.Println("sandbox_note: Baofoo confirmed sandbox must omit subMchId and does not support real payment; wc_pay_data only proves payload parsing, not real payment/callback success.")
 	}
 
 	client := payclient.NewClient(root)

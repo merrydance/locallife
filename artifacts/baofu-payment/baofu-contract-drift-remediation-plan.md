@@ -2000,9 +2000,9 @@ Added tests proving:
 
 `ChannelReturn.UnmarshalJSON` now accepts string or number `order_id`. The shared public-envelope client now classifies business payload unmarshal errors with `INVALID_DATA_CONTENT` so provider diagnostics do not misleadingly show `SUCCESS`.
 
-- [ ] **Step 3: Redeploy and rerun unified-order smoke**
+- [x] **Step 3: Redeploy and rerun unified-order smoke**
 
-After deploy, rerun `go run ./cmd/baofu_unified_order_smoke`. The expected next outcome is either a parsed `UnifiedOrderResult` without `wc_pay_data` or a provider error with a non-success diagnostic code; it should no longer fail on numeric `order_id` or report upstream_code `SUCCESS` for unmarshal failures.
+Rerun completed on 2026-05-05. The repo command printed `effective_wire_sub_mch_id=omitted_by_client` and parsed Baofoo's business payload successfully: `txnState=WAIT_PAYING`, masked `tradeNo=2605***1948`, `resultCode=SUCCESS`, and `wc_pay_data=true`. The numeric `chlRetParam.order_id` issue is fixed. Because Baofoo confirmed sandbox does not support real payment, this closes sandbox request/response parsing evidence only; real payment callback and downstream分账 remain production-first-order or Baofoo real-transaction-environment evidence.
 
 ### 7.3 Completion Gate For This Pre-`dataContent` Audit
 
