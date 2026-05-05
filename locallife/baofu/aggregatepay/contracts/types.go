@@ -162,6 +162,10 @@ func NewWechatJSAPISharingUnifiedOrderRequest(input UnifiedOrderInput) UnifiedOr
 }
 
 func (r UnifiedOrderRequest) Validate() error {
+	return r.ValidateForEnvironment("")
+}
+
+func (r UnifiedOrderRequest) ValidateForEnvironment(environment string) error {
 	if strings.TrimSpace(r.MerchantID) == "" {
 		return ErrUnifiedOrderMerchantIDRequired
 	}
@@ -190,7 +194,7 @@ func (r UnifiedOrderRequest) Validate() error {
 		return ErrUnifiedOrderPayCodeUnsupported
 	}
 	if unifiedOrderPayCodeRequiresRiskInfo(r.PayCode) {
-		if strings.TrimSpace(r.SubMchID) == "" {
+		if unifiedOrderRequiresSubMchID(environment) && strings.TrimSpace(r.SubMchID) == "" {
 			return ErrUnifiedOrderSubMchIDRequired
 		}
 		if strings.TrimSpace(r.PayExtend.SubAppID) == "" {
@@ -213,6 +217,15 @@ func (r UnifiedOrderRequest) Validate() error {
 		return ErrUnifiedOrderForbidCreditUnsupported
 	}
 	return nil
+}
+
+func (r UnifiedOrderRequest) WithoutSubMchID() UnifiedOrderRequest {
+	r.SubMchID = ""
+	return r
+}
+
+func unifiedOrderRequiresSubMchID(environment string) bool {
+	return !strings.EqualFold(strings.TrimSpace(environment), "sandbox")
 }
 
 func isBaofuTransactionTime(value string) bool {

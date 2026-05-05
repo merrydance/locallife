@@ -60,6 +60,15 @@ func TestUnifiedOrderRequestForWechatJSAPIRequiresRiskInfoClientIP(t *testing.T)
 	require.ErrorIs(t, req.Validate(), ErrUnifiedOrderRiskInfoClientIPRequired)
 }
 
+func TestUnifiedOrderRequestAllowsMissingSubMchIDOnlyInSandbox(t *testing.T) {
+	req := validWechatUnifiedOrderRequestForTest()
+	req.SubMchID = ""
+
+	require.ErrorIs(t, req.Validate(), ErrUnifiedOrderSubMchIDRequired)
+	require.ErrorIs(t, req.ValidateForEnvironment("production"), ErrUnifiedOrderSubMchIDRequired)
+	require.NoError(t, req.ValidateForEnvironment("sandbox"))
+}
+
 func TestUnifiedOrderRequestValidateOfficialRequiredFields(t *testing.T) {
 	cases := []struct {
 		name   string

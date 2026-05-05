@@ -35,8 +35,32 @@ func TestAggregateClientCreateUnifiedOrderPostsPublicEnvelope(t *testing.T) {
 	require.Equal(t, "102004465", env.MerchantID)
 	require.Equal(t, "200005200", env.TerminalID)
 	require.NotEmpty(t, env.SignString)
-	require.JSONEq(t, `{"outTradeNo":"BF202605040001","subMchId":"1900000109","riskInfo":{"clientIp":"203.0.113.1"}}`, partialJSONForTest(t, json.RawMessage(env.BizContent), "outTradeNo", "subMchId", "riskInfo"))
+	require.JSONEq(t, `{"outTradeNo":"BF202605040001","riskInfo":{"clientIp":"203.0.113.1"}}`, partialJSONForTest(t, json.RawMessage(env.BizContent), "outTradeNo", "riskInfo"))
+	require.NotContains(t, string(env.BizContent), "subMchId")
 	require.Contains(t, string(doer.requestBody), "bizContent=%7B%22")
+}
+
+func TestAggregateClientProductionRequiresUnifiedOrderSubMchID(t *testing.T) {
+	doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS"}`)}
+	client := NewClient(testBaofuRootClientWithEnvironment(t, doer, baofu.BaofuEnvironmentProduction))
+	req := validUnifiedOrderRequestForClientTest()
+	req.SubMchID = ""
+
+	_, err := client.CreateUnifiedOrder(context.Background(), req)
+
+	require.ErrorIs(t, err, contracts.ErrUnifiedOrderSubMchIDRequired)
+	require.Nil(t, doer.request)
+}
+
+func TestAggregateClientProductionKeepsUnifiedOrderSubMchID(t *testing.T) {
+	doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"SUCCESS","tradeNo":"BFPAY202605040002"}`)}
+	client := NewClient(testBaofuRootClientWithEnvironment(t, doer, baofu.BaofuEnvironmentProduction))
+
+	_, err := client.CreateUnifiedOrder(context.Background(), validUnifiedOrderRequestForClientTest())
+
+	require.NoError(t, err)
+	env := publicEnvelopeFromFormForTest(t, doer.requestBody)
+	require.Contains(t, string(env.BizContent), `"subMchId":"1900000109"`)
 }
 
 func TestAggregateClientReturnsSanitizedProviderError(t *testing.T) {
@@ -143,9 +167,14 @@ func (d *aggregateRecordingDoer) Do(req *http.Request) (*http.Response, error) {
 
 func testBaofuRootClient(t *testing.T, doer baofu.HTTPDoer) *baofu.Client {
 	t.Helper()
+	return testBaofuRootClientWithEnvironment(t, doer, baofu.BaofuEnvironmentSandbox)
+}
+
+func testBaofuRootClientWithEnvironment(t *testing.T, doer baofu.HTTPDoer, environment string) *baofu.Client {
+	t.Helper()
 	privatePEM, publicPEM := generateClientTestKeyPair(t)
 	client, err := baofu.NewClient(baofu.Config{
-		Environment:        baofu.BaofuEnvironmentSandbox,
+		Environment:        environment,
 		CollectMerchantID:  "102004465",
 		CollectTerminalID:  "200005200",
 		PayoutMerchantID:   "102004466",

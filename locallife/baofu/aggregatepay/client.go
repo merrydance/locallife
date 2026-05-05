@@ -30,7 +30,11 @@ func (c *HTTPClient) CreateUnifiedOrder(ctx context.Context, req contracts.Unifi
 	if err := c.validate("unified_order"); err != nil {
 		return nil, err
 	}
-	if err := req.Validate(); err != nil {
+	environment := c.root.Config().Environment
+	if environment == baofu.BaofuEnvironmentSandbox {
+		req = req.WithoutSubMchID()
+	}
+	if err := req.ValidateForEnvironment(environment); err != nil {
 		return nil, err
 	}
 	var result contracts.UnifiedOrderResult

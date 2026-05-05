@@ -1845,6 +1845,46 @@ Existing sandbox `subMchId=4000***0573` was likely created before this correctio
 
 2026-05-05 fresh-report follow-up: attempting a new merchant report for the same BaoCaiTong secondary account / subject returned `MERCHANT_REPORT_LIMIT`. This blocks the fresh-report diagnostic in sandbox; either Baofoo must inspect/enable the existing `subMchId=400060573` channel capabilities, or we need a different BaoCaiTong secondary account / subject for a truly fresh report.
 
+### Task P15: Unified Order Sandbox `subMchId` Omission
+
+> Trigger: Baofoo support clarified on 2026-05-05 that sandbox/test `unified_order` must not send `subMchId`, while production must send it. Previous sandbox attempts with a real reported `subMchId` returned `PAY_CHANNEL_NOT_SUPPORT`; after this clarification, that result is treated as a sandbox-only request-shape mismatch rather than proof that production should omit the field.
+
+**Files:**
+- Modify: `locallife/baofu/aggregatepay/contracts/types.go`
+- Modify: `locallife/baofu/aggregatepay/contracts/types_test.go`
+- Modify: `locallife/baofu/aggregatepay/client.go`
+- Modify: `locallife/baofu/aggregatepay/client_test.go`
+- Modify: `locallife/scripts/check_baofu_contract_drift.sh`
+- Modify: `artifacts/baofu-payment/baofu-api-contract-coverage-audit.md`
+- Modify: `artifacts/baofu-payment/baofu-sandbox-evidence.md`
+- Modify: `artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md`
+
+- [x] **Step 1: Add failing regressions**
+
+Added tests proving:
+
+- default `UnifiedOrderRequest.Validate()` remains production-strict and rejects missing `subMchId`;
+- `ValidateForEnvironment("sandbox")` allows missing `subMchId` but still keeps the other WeChat JSAPI required fields;
+- the concrete aggregate client in sandbox posts a public-envelope `bizContent` without `subMchId`;
+- the concrete aggregate client in production rejects missing `subMchId` before any HTTP request.
+
+Initial targeted run failed because `ValidateForEnvironment` did not exist and sandbox client still posted `subMchId`, proving the regressions covered the reported drift.
+
+- [x] **Step 2: Implement environment-aware behavior**
+
+Implementation result:
+
+- `UnifiedOrderRequest.Validate()` delegates to the strict/default environment;
+- `ValidateForEnvironment("sandbox")` only relaxes `subMchId`;
+- `aggregatepay.HTTPClient.CreateUnifiedOrder` reads `root.Config().Environment`;
+- sandbox requests are copied with `SubMchID` cleared before validation and POST, so callers can keep carrying production readiness data while sandbox wire payload follows Baofoo's test rule;
+- production still requires and sends the merchant-report `subMchId`;
+- `make check-baofu-contract` now also guards that unified-order environment-aware validation and sandbox omission helpers remain present.
+
+- [ ] **Step 3: Redeploy and retry sandbox unified order**
+
+After deploy, rerun unified order without passing `BAOFU_TEST_SUB_MCH_ID` or with the updated smoke script that omits it automatically in sandbox. Expected next outcome should move past the previous `PAY_CHANNEL_NOT_SUPPORT` caused by sending sandbox `subMchId`; if Baofoo still rejects, record the new upstream code as a fresh single-variable result.
+
 ### 7.3 Completion Gate For This Pre-`dataContent` Audit
 
 This pre-sandbox-positive audit is complete only when:

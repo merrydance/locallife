@@ -24,10 +24,10 @@
 | 宝付收单一级商户号 | 宝付协议/测试资料中的收单商户号 | 宝财通开户、转账、聚合支付、确认分账等交易发起；主交易资金进入该一级商户号对应的待结算/资金管理体系 | 否 |
 | 宝付代付一级商户号 | 宝付协议/测试资料中的代付商户号 | 宝财通提现、提现查询；承接平台预存的开户验证费 | 否 |
 | 宝付二级商户号 | 宝财通开户返回的二级户标识，本地字段 `sharing_mer_id` | 商户、骑手、运营商、平台佣金分账接收方；二级户余额包含在途、可用、冻结等状态 | 是 |
-| 微信渠道二级商户号 / `subMchId` | 宝付聚合商户报备返回 | 宝付 `unified_order.subMchId`，用于微信渠道交易主体识别和合规报备 | 否 |
+| 微信渠道二级商户号 / `subMchId` | 宝付聚合商户报备返回 | 生产环境用于宝付 `unified_order.subMchId`，用于微信渠道交易主体识别和合规报备；宝付已回复测试环境统一下单不要上送该字段 | 否 |
 | 付款人 `sub_openid` | 微信小程序用户身份 | 宝付 `payExtend.sub_openid`，用于调起微信 JSAPI 支付 | 否 |
 
-资金链路核对口径：顾客下单后通过宝付聚合支付在微信生态完成付款；宝付以宝付收单一级商户号和微信渠道 `subMchId` 发起主交易。交易完成并满足本地不可退款条件后，LocalLife 调用 `share_after_pay`，宝付按 `sharingDetails[].sharingMerId` 将资金分入对应宝付二级户。宝财通文档明确二级户资金先进入在途余额，结算后进入可用余额，可用余额才能提现。
+资金链路核对口径：顾客下单后通过宝付聚合支付在微信生态完成付款；生产环境宝付以宝付收单一级商户号和微信渠道 `subMchId` 发起主交易，测试环境按宝付技术支持回复需省略 `subMchId` 才能走沙箱联调。交易完成并满足本地不可退款条件后，LocalLife 调用 `share_after_pay`，宝付按 `sharingDetails[].sharingMerId` 将资金分入对应宝付二级户。宝财通文档明确二级户资金先进入在途余额，结算后进入可用余额，可用余额才能提现。
 
 渠道开通口径：宝付个人/机构进件和宝财通开户先产生宝付二级商户号；项目内微信普通服务商特约商户进件流程不再作为宝付主链路前置条件。已向宝付确认支持异主体报备：宝付开户成功后，主业务商户需要继续做聚合商户报备取得微信渠道 `subMchId`，再调用绑定授权目录 `bind_sub_config(authType=APPLET, authContent=<LocalLife 小程序 appid>)`，把该商户的微信渠道 `subMchId` 绑定到 LocalLife 平台小程序。由于 `share_after_pay` 不需要 `subMchId`，`subMchId` 只决定微信小程序统一下单的渠道主体和顾客支付展示主体；商户、骑手、运营商的实际分账接收方仍是宝财通二级户 `sharing_mer_id`。
 
@@ -50,11 +50,11 @@
 
 ## 2.1 本次补充审计结论
 
-- 已确认 `subMchId` 策略：采用商户逐户聚合商户报备 + 平台小程序异主体授权目录绑定。代码不得再固化为“平台统一下单”，也不得复用项目内微信普通服务商特约商户进件结果。
+- 已确认 `subMchId` 策略：采用商户逐户聚合商户报备 + 平台小程序异主体授权目录绑定。代码不得再固化为“平台统一下单”，也不得复用项目内微信普通服务商特约商户进件结果。宝付技术支持进一步确认：生产环境 `unified_order` 需要上送 `subMchId`，测试环境不要上送；本地 concrete aggregate client 按 `BAOFU_ENVIRONMENT` 在 sandbox 发包前清空该字段，同时保留生产校验。
 - `share_after_pay` 官方字段不包含 `subMchId`。分账接收方仍必须是宝财通开户返回并同步到本地 `sharing_mer_id` 的宝付二级商户号。
 - 本地已补入官方字段级 DTO、公共报文、聚合商户报备、退款、关单、官方错误码本地分类和微信类目 allowlist；剩余漂移风险集中在宝财通 union-gw 官方加密/签名 envelope 完整性、响应验签/数字信封、真实渠道错误组合、回调真实 payload 与沙箱证据。
 - “防漂移”的实现标准不能只靠文档：必须把官方必填/条件必填、字段类型长度、枚举、错误码、金额单位、回调 ACK 形态、测试/生产 endpoint 都变成 typed constants、校验器和表驱动测试。
-- 已新增 `make check-baofu-contract` 静态守卫，阻断已发现的漂移回归：响应层直接读 `BizContent`、误用旧 `https://api.baofoo.com`、分账携带 `subMchId`、用宝付一级商户号填 `sharingMerId`、重新引入静态 `BAOFU_AES_KEY`。
+- 已新增 `make check-baofu-contract` 静态守卫，阻断已发现的漂移回归：响应层直接读 `BizContent`、误用旧 `https://api.baofoo.com`、分账携带 `subMchId`、用宝付一级商户号填 `sharingMerId`、重新引入静态 `BAOFU_AES_KEY`、丢失统一下单 sandbox/production `subMchId` 环境差异处理。
 
 
 ## 2.2 Source Ledger
@@ -345,7 +345,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 | `orderType` | 是 | S | 宝财通2.0 必传 `7` | C3：`BaoCaiTongOrderTypeSharing` 常量和负向测试 |
 | `payCode` | 是 | E | 首版 `WECHAT_JSAPI` | C3：`PayCodeWechatJSAPI` 常量和负向测试 |
 | `payExtend` | 是 | C | 按支付方式选择 | C3：微信 JSAPI 的 `sub_appid/sub_openid/body` 条件必填 |
-| `subMchId` | 否/条件必填 | S(64) | 微信/支付宝必传，渠道报备二级商户号 | C3，来源为报备成功且 APPLET 授权成功后的 `baofu_merchant_reports.sub_mch_id` |
+| `subMchId` | 否/条件必填 | S(64) | 生产环境微信/支付宝必传，渠道报备二级商户号；测试环境按宝付回复不要上送 | C3：`Validate()`/production 强制；sandbox client 发包前省略，来源仍是报备成功且 APPLET 授权成功后的 `baofu_merchant_reports.sub_mch_id` |
 | `notifyUrl` | 否 | S(128) | 支付成功服务端通知 | C3 DTO 字段存在；运行时使用配置回调 URL |
 | `pageUrl` | 否 | S(128) | https 跳转地址 | C3：非空时必须 HTTPS |
 | `forbidCredit` | 否 | S(1) | `1` 禁止、`0` 不禁止 | C3：只允许 `0/1` |
@@ -368,7 +368,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 本地缺口：
 
 - 已有真实 HTTP client、官方 endpoint profile、公共 envelope 本地测试和 API runtime Baofu facade wiring；不再回退普通服务商/平台收付通。
-- `UnifiedOrderRequest.Validate()` 已校验首版必填字段、金额关系、`txnTime` 格式、`SHARING/orderType=7/WECHAT_JSAPI` 枚举、微信 `subMchId/payExtend/riskInfo.clientIp` 条件必填、`pageUrl=https` 和 `forbidCredit` 枚举。`PaymentQueryRequest`、`ShareQueryRequest`、`RefundQueryRequest`、`OrderCloseRequest` 均在本地校验 `merId/terId` 和交易引用，缺失不会 POST 到宝付。
+- `UnifiedOrderRequest.Validate()` 已校验首版必填字段、金额关系、`txnTime` 格式、`SHARING/orderType=7/WECHAT_JSAPI` 枚举、生产微信 `subMchId`、`payExtend/riskInfo.clientIp` 条件必填、`pageUrl=https` 和 `forbidCredit` 枚举；`ValidateForEnvironment("sandbox")` 仅放宽 `subMchId`，不放宽 `payExtend` 或 `riskInfo.clientIp`。`PaymentQueryRequest`、`ShareQueryRequest`、`RefundQueryRequest`、`OrderCloseRequest` 均在本地校验 `merId/terId` 和交易引用，缺失不会 POST 到宝付。
 - 响应验签、数字信封完整性和测试地址联调仍未完成。
 - 未做测试地址联调：`https://mch-juhe.baofoo.com/api`。
 
@@ -541,7 +541,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 | C-002 | C3 本地修复，待沙箱 | 已新增官方开户、查询、余额、提现 DTO 与金额元/分转换测试；account client 已将业务抽象转换为官方 DTO 后放入 union-gw `body` | 原 `OpenAccountRequest` 业务抽象仍保留给现有 service；企业/个体完整资料映射和沙箱样例仍待补 | Task 12/C4 用真实测试地址证明字段和错误码。 |
 | C-003 | C3 本地修复，待沙箱验证 | `locallife/baofu/account/notification/notification.go` 已按官方开户/提现通知字段解析并覆盖提现密文 envelope；`locallife/api/baofu_callback.go` 开户/提现 ACK 均为纯文本 `OK` | 本地 parser/ACK/提现入队已防止明显字段漂移，但还未使用宝付测试环境真实通知验证 URL query、密文 envelope、重放 ACK 行为 | 用宝付测试通知样例或沙箱回调验证开户/提现通知，并补回真实样例摘要。 |
 | C-004 | C3 本地修复，部分负向沙箱 smoke | 已新增聚合/报备 `PublicRequestEnvelope`；账户 API 已拆到独立 union-gw `verifyType=1` envelope；`order_query` 负向 smoke 已证明聚合请求 `bizContent` 与响应 `dataContent` 解析可通过宝付测试地址 | 聚合/报备响应验签、数字信封加密、账户 `verifyType=2`、真实业务成功 `dataContent`、真实错误码和回调仍未验证 | C4 补真实成功请求/响应、回调和错误样例；不得因负向 smoke 宣称支付/分账已联调完成。 |
-| C-005 | 已本地修复，待沙箱验证 | `locallife/baofu/aggregatepay/contracts/types.go` 已新增 `unified_order` 表驱动校验，覆盖 M/C 字段、枚举、`subMchId` 条件必填、https `pageUrl`、金额关系 | 本地契约已 fail-closed；仍未用宝付测试地址验证真实错误码和字段长度边界 | Task 8/沙箱测试补真实请求、参数错误和错误码样例。 |
+| C-005 | 已本地修复，待沙箱验证 | `locallife/baofu/aggregatepay/contracts/types.go` 已新增 `unified_order` 表驱动校验，覆盖 M/C 字段、枚举、生产 `subMchId` 条件必填、sandbox 省略 `subMchId`、https `pageUrl`、金额关系 | 本地契约已 fail-closed；仍未用宝付测试地址验证真实错误码和字段长度边界；下一次 sandbox 统一下单必须省略 `subMchId` | Task 8/沙箱测试补真实请求、参数错误和错误码样例。 |
 | C-006 | C3 本地修复，待联调 | 已新增 `locallife/baofu/merchantreport/contracts`、`baofu_merchant_reports`、sqlc query、报备 service、APPLET 授权 readiness、`merchantreport.Client` 和 `baofu-merchant-report-recovery` | 本地契约/持久化/服务/HTTP client/recovery 已能防止 `bctMerId/subMchId/authContent` 漂移，但还没有沙箱证据和真实资料映射验收 | Task 8/沙箱联调验证真实报备、报备查询与授权目录请求。 |
 | C-007 | 已本地修复，待联调 | `locallife/logic/baofu_payment_order_route.go` 已通过 `merchantBaofuReadinessForPayment` 取商户报备 `sub_mch_id`；`CreateBaofuWechatJSAPIOrderInput` 字段已改 `MerchantSubMchID` | 旧普通服务商 `txResult.SubMchID` 来源已移除，API/logic readiness 不再读取 `baofu_account_bindings.wechat_sub_mch_id`；真实支付仍待宝付聚合商户报备沙箱验证 | Task 8/沙箱测试验证 `unified_order.subMchId` 使用报备返回值。 |
 | C-008 | C3 本地修复，待沙箱 | 已新增 `order_refund`、`refund_query`、`order_close` DTO/client、退款通知 parser、退款状态映射、API callback、退款查询恢复 scheduler 和分账前退款业务接入 | 首版“分账前退款、分账后不退款”已在本地 fail-closed；仍缺真实验签/数字信封、宝付测试地址退款查询/回调证据 | Task 12/C4 补沙箱证据；响应验签/数字信封在 C-004/C-011 跟进。 |
@@ -556,7 +556,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 以下门禁用于后续代码实现和 review，不满足时不能把接口标记为 C3/C4：
 
 1. 每个官方接口必须有独立 `Method`/报文编号常量、endpoint profile、官方字段级请求/响应 DTO、字段校验、状态映射、错误码分类和表驱动测试。
-2. 所有条件必填必须以测试锁住：微信/支付宝 `riskInfo.clientIp`、微信/支付宝 `subMchId`、`payExtend` 按 `payCode` 的字段矩阵、`share_after_pay` 的原支付单二选一、企业/个体开户资料差异。
+2. 所有条件必填必须以测试锁住：微信/支付宝 `riskInfo.clientIp`、生产微信/支付宝 `subMchId`、sandbox 统一下单省略 `subMchId`、`payExtend` 按 `payCode` 的字段矩阵、`share_after_pay` 的原支付单二选一、企业/个体开户资料差异。
 3. 公共报文 envelope 与业务 `bizContent` 分层实现；业务层不得直接拼接 `method`、签名串、数字信封或上游原始 JSON。
 4. `sharing_mer_id` 只能由开户/查询/通知解析层的“宝付二级商户号”字段写入；任何 `subMchId/openid/collect merchant id/contract_no` 写入都必须有失败测试。
 5. `subMchId` 只能由聚合商户报备成功结果写入支付通道 readiness；支付创建只读取“最终选定 subMchId”，不得从普通服务商 `txResult.SubMchID` 继承。

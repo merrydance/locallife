@@ -14,7 +14,7 @@
 
 - [ ] 用安全测试身份资料完成一次 `open_personal` 或机构开户正向测试，并通过查询拿到 `contractNo`/`sharing_mer_id` 脱敏证据。
 - [ ] 用已开户的宝付二级商户号完成 `merchant_report`、`merchant_report_query` 和 `bind_sub_config(authType=APPLET)` 正向测试。
-- [ ] 用真实 `subMchId` 和本小程序下真实 `sub_openid` 完成 `unified_order`，拿到 `wc_pay_data`，并记录回调/查询补偿证据。
+- [ ] 按宝付测试环境口径省略 `subMchId`，用本小程序下真实 `sub_openid` 完成 `unified_order`，拿到 `wc_pay_data`，并记录回调/查询补偿证据；生产环境仍必须上送聚合商户报备返回的 `subMchId`。
 - [ ] 基于已支付订单完成 `share_after_pay`、`share_query` 和分账回调证据。
 - [ ] 基于分账前订单完成 `order_refund`、`refund_query` 和退款回调证据。
 - [ ] 用真实 `contractNo` 完成余额查询、提现、提现查询和提现回调证据。
@@ -80,11 +80,13 @@
 
 ## Unified Order `unified_order`
 
+2026-05-05 宝付技术支持回复：测试环境统一下单不要上送 `subMchId`，生产环境需要上送。因此此前携带 `subMchId=4000***0573` 的 sandbox `PAY_CHANNEL_NOT_SUPPORT` 不能再作为生产契约字段漂移证据；下一次 sandbox 统一下单的单变量重试必须省略 `subMchId`，但生产 readiness 和发包仍以商户报备 `subMchId` 为必填。
+
 | Date | Env | Endpoint | OutTradeNo | subMchId Masked | Amount Fen | wc_pay_data | Callback | Query | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-05-05 | sandbox | `https://mch-juhe.baofoo.com/api` | `BAOFU_UO_20260505102335` | `4000***0573` | 1 | no | no | no | next fix | Negative unified-order evidence. Request reached aggregate sandbox with real merchant-report `subMchId`, platform appid, payer `sub_openid`, `riskInfo.clientIp`, `WECHAT_JSAPI`, `prodType=SHARING`, and `orderType=7`, but provider returned `PAY_CHANNEL_NOT_SUPPORT`. Root-cause investigation found project/default report service codes used only `APPLET`, while Baofoo unified-order uses `WECHAT_JSAPI` and Baofoo's merchant-report doc/demo submit `service_codes=["JSAPI","APPLET"]`; future reports now submit both. Existing `subMchId` likely needs `merchant_report_modify` or a new report with both service codes before retry. |
 | 2026-05-05 | sandbox | `https://mch-juhe.baofoo.com/api` | `BAOFU_UO_20260505104354` | `4000***0573` | 100 | no | no | no | `bccd0b89` | Negative unified-order evidence after `merchant_report_modify` success and APPLET re-bind. Request used real merchant-report `subMchId`, platform appid, masked payer `sub_openid`, IPv6 payer IP, `WECHAT_JSAPI`, `prodType=SHARING`, and `orderType=7`; provider still returned `PAY_CHANNEL_NOT_SUPPORT`, now safely classified as `BAOFU_PLATFORM_CONFIGURATION`. Remaining hypotheses: existing channel report modification may not actually enable the WeChat JSAPI channel, Baofoo sandbox/channel provisioning for this `subMchId` may be delayed or disabled, or Baofoo requires a fresh report/channel-side manual enablement. |
-| 2026-05-05 | sandbox | `https://mch-juhe.baofoo.com/api` | `BAOFU_UO_20260505105041` | `4000***0573` | 100 | no | no | no | `bccd0b89` | Negative unified-order evidence with IPv4 payer IP. This rules out IPv6 `riskInfo.clientIp` compatibility as the cause; next single-variable diagnostic is a fresh `merchant_report` created after the `JSAPI+APPLET` service-code fix, followed by APPLET bind and unified-order retry. |
+| 2026-05-05 | sandbox | `https://mch-juhe.baofoo.com/api` | `BAOFU_UO_20260505105041` | `4000***0573` | 100 | no | no | no | `bccd0b89` | Negative unified-order evidence with IPv4 payer IP. This rules out IPv6 `riskInfo.clientIp` compatibility as the cause. Baofoo later clarified that sandbox unified_order should omit `subMchId`; next diagnostic is an omitted-`subMchId` sandbox retry, not another channel/service-code mutation. |
 
 ## Payment Query `order_query`
 
