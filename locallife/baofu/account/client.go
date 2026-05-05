@@ -298,19 +298,22 @@ type officialBalanceResult struct {
 }
 
 func (r officialBalanceResult) toBalanceResult() (*contracts.BalanceResult, error) {
-	available, err := contracts.YuanStringToFen(r.AvailableBal.String())
+	if firstNonEmpty(r.AvailableBal.String(), r.PendingBal.String(), r.CurrBal.String(), r.FreezeBal.String()) == "" {
+		return nil, errors.New("baofu balance response amount fields are required")
+	}
+	available, err := optionalOfficialBalanceAmountFen(r.AvailableBal)
 	if err != nil {
 		return nil, err
 	}
-	pending, err := contracts.YuanStringToFen(r.PendingBal.String())
+	pending, err := optionalOfficialBalanceAmountFen(r.PendingBal)
 	if err != nil {
 		return nil, err
 	}
-	ledger, err := contracts.YuanStringToFen(r.CurrBal.String())
+	ledger, err := optionalOfficialBalanceAmountFen(r.CurrBal)
 	if err != nil {
 		return nil, err
 	}
-	frozen, err := contracts.YuanStringToFen(r.FreezeBal.String())
+	frozen, err := optionalOfficialBalanceAmountFen(r.FreezeBal)
 	if err != nil {
 		return nil, err
 	}
@@ -325,6 +328,14 @@ func (r officialBalanceResult) toBalanceResult() (*contracts.BalanceResult, erro
 		UpstreamLedger:     r.CurrBal.String(),
 		UpstreamFrozen:     r.FreezeBal.String(),
 	}, nil
+}
+
+func optionalOfficialBalanceAmountFen(value officialScalarString) (int64, error) {
+	amount := value.String()
+	if amount == "" {
+		return 0, nil
+	}
+	return contracts.YuanStringToFen(amount)
 }
 
 type officialWithdrawResult struct {

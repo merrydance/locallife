@@ -73,6 +73,31 @@ func TestAccountClientQueryBalanceParsesNumericOfficialAmounts(t *testing.T) {
 	require.Equal(t, "0", result.UpstreamAvailable)
 }
 
+func TestAccountClientQueryBalanceDefaultsMissingOptionalAmounts(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{
+		"retCode":      1,
+		"contractNo":   "CP610000000000542938",
+		"availableBal": 0,
+		"currBal":      0,
+		"freezeBal":    0,
+		"errorCode":    "SUCCESS",
+	}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	result, err := client.QueryBalance(context.Background(), contracts.BalanceQueryRequest{
+		MerchantID:  "102004465",
+		TerminalID:  "200005200",
+		ContractNo:  "CP610000000000542938",
+		AccountType: "personal",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(0), result.AvailableAmountFen)
+	require.Equal(t, int64(0), result.PendingAmountFen)
+	require.Equal(t, int64(0), result.LedgerAmountFen)
+	require.Equal(t, int64(0), result.FrozenAmountFen)
+}
+
 func TestAccountClientOpenAccountUsesConfiguredNotifyBaseURL(t *testing.T) {
 	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": "1", "transSerialNo": "OPEN202605040001", "contractNo": "CM202605040001", "state": "2"}}
 	client := NewClient(testBaofuRootClient(t, doer))

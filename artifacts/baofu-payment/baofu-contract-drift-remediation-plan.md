@@ -39,6 +39,7 @@
 | C-012 readiness copy drift | Task 6, Task 11 | 旧“商户微信渠道待报备”文案替换为产品语义。 |
 | C-013 merchant_report nested field drift | Task P10 | 整体文档复核后修复微信报备 `address_info`、`bankcard_info` 字段名和必填性。 |
 | C-014 balance query version/amount drift | Task P11 | 余额查询独立 `version=4.0.0`，响应金额兼容 string/number。 |
+| C-015 balance optional amount drift | Task P12 | 余额响应金额字段按官方 `O` 处理；缺失字段默认为 `0`，但全部缺失仍视为漂移。 |
 
 ## 2. Target File Map
 
@@ -1716,6 +1717,50 @@ git commit -m "fix(baofu): align balance query contract"
 ```
 
 Validation on 2026-05-05: all commands above passed.
+
+### Task P12: Balance Query Optional Amount Fix
+
+> Trigger: after `version=4.0.0` and numeric BigDecimal parsing landed, sandbox `T-1001-013-06` reached Baofoo and parsed the response envelope, but local balance conversion returned `baofu amount is required`.
+
+**Files:**
+- Modify: `locallife/baofu/account/client.go`
+- Modify: `locallife/baofu/account/client_test.go`
+- Modify: `artifacts/baofu-payment/baofu-sandbox-evidence.md`
+- Modify: `artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md`
+
+- [x] **Step 1: Re-read the exact balance page**
+
+Authenticated doc page: `queryBalace` / `T-1001-013-06`.
+
+Confirmed:
+
+- response `availableBal/pendingBal/currBal/freezeBal` are marked `O` optional;
+- the official sample includes `availableBal/currBal/freezeBal` but omits `pendingBal`;
+- therefore a missing individual amount field must not fail local parsing, but a response with no balance amount fields should still be treated as a contract drift instead of silently returning all-zero.
+
+- [x] **Step 2: Add regression**
+
+Added `TestAccountClientQueryBalanceDefaultsMissingOptionalAmounts` to prove the official sample shape with missing `pendingBal` parses as zero pending balance.
+
+- [x] **Step 3: Fix implementation**
+
+`officialBalanceResult.toBalanceResult` now:
+
+- rejects only when all balance amount fields are absent;
+- converts present amount fields with the existing yuan-to-fen parser;
+- defaults missing optional amount fields to `0`.
+
+- [x] **Step 4: Validate**
+
+```bash
+cd locallife
+PATH="/usr/local/go/bin:$PATH" go test ./baofu/account ./baofu/account/contracts -run 'TestAccountClientQueryBalance|TestOfficialQueryBalance|TestOfficialBalance' -count=1
+PATH="/usr/local/go/bin:$PATH" go test ./baofu/... -count=1
+make check-baofu-contract
+git diff --check
+```
+
+Validation on 2026-05-05: all commands above passed. Redeploy and rerun the real sandbox balance command before marking balance query C4.
 
 ### 7.3 Completion Gate For This Pre-`dataContent` Audit
 
