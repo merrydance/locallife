@@ -2004,6 +2004,31 @@ Added tests proving:
 
 Rerun completed on 2026-05-05. The repo command printed `effective_wire_sub_mch_id=omitted_by_client` and parsed Baofoo's business payload successfully: `txnState=WAIT_PAYING`, masked `tradeNo=2605***1948`, `resultCode=SUCCESS`, and `wc_pay_data=true`. The numeric `chlRetParam.order_id` issue is fixed. Because Baofoo confirmed sandbox does not support real payment, this closes sandbox request/response parsing evidence only; real payment callback and downstream分账 remain production-first-order or Baofoo real-transaction-environment evidence.
 
+
+### Task P20: Repo-Owned Order Query Smoke Command
+
+> Trigger: after unified_order returned `WAIT_PAYING` and `wc_pay_data=true`, the suggested `go run ./cmd/baofu_order_query_smoke` command failed because the repo-owned command did not exist.
+
+**Files:**
+- Create: `locallife/cmd/baofu_order_query_smoke/main.go`
+- Modify: `locallife/cmd/baofu_independent_probe/main.go`
+- Modify: `artifacts/baofu-payment/baofu-sandbox-evidence.md`
+- Modify: `artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md`
+
+- [x] **Step 1: Add command**
+
+Added `go run ./cmd/baofu_order_query_smoke`. It accepts `BAOFU_TEST_OUT_TRADE_NO` or `BAOFU_TEST_TRADE_NO`, prints masked query keys, calls aggregate `order_query`, and prints masked `out_trade_no`, `trade_no`, upstream `txn_state`, normalized local terminal state, `result_code`, `err_code`, and whether `wc_pay_data` is present.
+
+- [ ] **Step 2: Deploy and query the sandbox order**
+
+After deploy, run:
+
+```bash
+BAOFU_TEST_OUT_TRADE_NO='BAOFU_UO_20260505115158' PATH="/usr/local/go/bin:$PATH" go run ./cmd/baofu_order_query_smoke
+```
+
+Expected: the command should compile and reach `order_query`. A `WAIT_PAYING`/processing result proves query parsing/status mapping for the sandbox order; it still does not prove payment callback or downstream分账 because Baofoo confirmed sandbox does not support real payment.
+
 ### 7.3 Completion Gate For This Pre-`dataContent` Audit
 
 This pre-sandbox-positive audit is complete only when:

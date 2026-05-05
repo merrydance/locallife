@@ -41,7 +41,7 @@ func run() error {
 	baofuCfg := root.Config()
 	fmt.Printf("baofu env=%s collect=%s/%s payout=%s/%s\n", baofuCfg.Environment, baofuCfg.CollectMerchantID, baofuCfg.CollectTerminalID, baofuCfg.PayoutMerchantID, baofuCfg.PayoutTerminalID)
 	fmt.Printf("endpoints account=%s aggregate=%s merchant_report=%s\n", baofuCfg.AccountGatewayBaseURL, baofuCfg.AggregatePayBaseURL, baofuCfg.MerchantReportBaseURL)
-	fmt.Println("sandbox_note: Baofoo confirmed sandbox does not support real payment; unified_order sandbox can only prove request shape/provider classification, not wc_pay_data.")
+	fmt.Println("sandbox_note: Baofoo confirmed sandbox does not support real payment; fake probes prove request shape/parsing/provider classification, not real callbacks or settlement.")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
