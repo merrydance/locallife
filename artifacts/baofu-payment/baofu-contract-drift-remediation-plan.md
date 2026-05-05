@@ -2023,6 +2023,35 @@ Added `go run ./cmd/baofu_order_query_smoke`. It accepts `BAOFU_TEST_OUT_TRADE_N
 
 Rerun completed on 2026-05-05. Querying `BAOFU_UO_20260505115158` returned masked `tradeNo=2605***1952`, `txnState=SUCCESS`, normalized state `success`, and `resultCode=SUCCESS`. Querying the prior `BAOFU_UO_20260505114340` returned masked `tradeNo=2605***1948` with the same terminal state. This proves `order_query` parsing and terminal-state normalization for sandbox-created orders, but still does not prove payment callback or downstream分账 because Baofoo confirmed sandbox does not support real payment.
 
+
+### Task P21: Repo-Owned Safe Error Probe Command
+
+> Trigger: after positive `unified_order` and `order_query` sandbox evidence, the remaining safe sandbox work is to collect account, merchant-report, and aggregate-pay error/abnormal samples without touching real funds or relying on real payment callbacks.
+
+**Files:**
+- Create: `locallife/cmd/baofu_error_probe/main.go`
+- Modify: `artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md`
+
+- [x] **Step 1: Add command**
+
+Added `go run ./cmd/baofu_error_probe`. It uses fake identifiers only and calls:
+
+- account `T-1001-013-03` with a fake login number;
+- merchant-report `merchant_report_query` with a fake report number;
+- aggregate-pay `order_query` with a fake outTradeNo.
+
+The command prints provider `upstream_code`, safe frontend code/message/action/retryable values, or parsed abnormal query summaries. It does not call withdraw, refund creation, profit sharing creation, or any real funds action.
+
+- [ ] **Step 2: Deploy and run safe error probe**
+
+After deploy, run:
+
+```bash
+PATH="/usr/local/go/bin:$PATH" go run ./cmd/baofu_error_probe
+```
+
+Expected: at least one account/report/aggregate fake request should produce a provider error or abnormal response with safe frontend semantics. Record only masked IDs/codes/messages in `baofu-sandbox-evidence.md`; do not paste raw upstream messages if they include business/private details.
+
 ### 7.3 Completion Gate For This Pre-`dataContent` Audit
 
 This pre-sandbox-positive audit is complete only when:
