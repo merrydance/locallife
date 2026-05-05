@@ -1843,6 +1843,8 @@ Existing sandbox `subMchId=4000***0573` was likely created before this correctio
 
 2026-05-05 IPv4 follow-up: retrying the same unified-order request with an IPv4 payer IP still returned `PAY_CHANNEL_NOT_SUPPORT`, so IPv6 `riskInfo.clientIp` compatibility is ruled out. Continue with the fresh-report diagnostic or Baofoo channel-provisioning inspection.
 
+2026-05-05 fresh-report follow-up: attempting a new merchant report for the same BaoCaiTong secondary account / subject returned `MERCHANT_REPORT_LIMIT`. This blocks the fresh-report diagnostic in sandbox; either Baofoo must inspect/enable the existing `subMchId=400060573` channel capabilities, or we need a different BaoCaiTong secondary account / subject for a truly fresh report.
+
 ### 7.3 Completion Gate For This Pre-`dataContent` Audit
 
 This pre-sandbox-positive audit is complete only when:

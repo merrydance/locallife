@@ -14,6 +14,7 @@ func TestClassifyBaofuErrorCodeForFrontendSemantics(t *testing.T) {
 	}{
 		{"PARAM_ERROR", BaofuErrorCategoryUserActionRequired, "资料信息不完整，请核对后重新提交"},
 		{"MERCHANT_NOT_REPORTED", BaofuErrorCategoryPlatformConfiguration, "商户微信支付通道待开通，请联系平台处理"},
+		{"MERCHANT_REPORT_LIMIT", BaofuErrorCategoryPlatformConfiguration, "该主体已有微信渠道报备记录，请联系平台核对开通状态"},
 		{"PAY_CHANNEL_NOT_SUPPORT", BaofuErrorCategoryPlatformConfiguration, "商户微信支付通道待开通，请联系平台处理"},
 		{"SYSTEM_BUSY", BaofuErrorCategoryRetryable, "支付通道处理中，请稍后重试"},
 		{"UNKNOWN", BaofuErrorCategoryManualReview, "支付通道异常，请联系平台处理"},
@@ -43,6 +44,7 @@ func TestClassifyBaofuOfficialErrorTables(t *testing.T) {
 		{name: "account system busy", code: "SYSTEM_INNER_ERROR", wantCategory: BaofuErrorCategoryRetryable, wantMessage: "支付通道处理中，请稍后重试", wantAction: "retry_later", wantRetryable: true},
 		{name: "aggregate unopened product", code: "UNOPENED_PRODUCT", wantCategory: BaofuErrorCategoryPlatformConfiguration, wantMessage: "支付通道配置待开通，请联系平台处理", wantAction: "contact_platform"},
 		{name: "aggregate merchant report missing", code: "MERCHANT_NOT_REPORT", wantCategory: BaofuErrorCategoryPlatformConfiguration, wantMessage: "商户微信支付通道待开通，请联系平台处理", wantAction: "contact_platform"},
+		{name: "aggregate merchant report limit", code: "MERCHANT_REPORT_LIMIT", wantCategory: BaofuErrorCategoryPlatformConfiguration, wantMessage: "该主体已有微信渠道报备记录，请联系平台核对开通状态", wantAction: "contact_platform"},
 		{name: "aggregate pay channel not enabled", code: "PAY_CHANNEL_NOT_SUPPORT", wantCategory: BaofuErrorCategoryPlatformConfiguration, wantMessage: "商户微信支付通道待开通，请联系平台处理", wantAction: "contact_platform"},
 		{name: "aggregate trade unknown", code: "TRADE_UNCONFIRMED", wantCategory: BaofuErrorCategoryRetryable, wantMessage: "交易结果处理中，请稍后查询", wantAction: "query_later", wantRetryable: true},
 		{name: "aggregate duplicate order", code: "ORDER_EXIST", wantCategory: BaofuErrorCategoryRetryable, wantMessage: "支付订单已创建，请返回订单页查看支付状态", wantAction: "query_order", wantRetryable: true},

@@ -87,6 +87,7 @@ var baofuOfficialErrorRules = map[string]baofuErrorRule{
 	"MERCHANT_NOT_REPORTED":   {category: BaofuErrorCategoryPlatformConfiguration, message: baofuMessagePaymentChannelPending, action: baofuActionContactPlatform},
 	"SUB_MCH_NOT_REPORTED":    {category: BaofuErrorCategoryPlatformConfiguration, message: baofuMessagePaymentChannelPending, action: baofuActionContactPlatform},
 	"MERCHANT_NOT_REPORT":     {category: BaofuErrorCategoryPlatformConfiguration, message: baofuMessagePaymentChannelPending, action: baofuActionContactPlatform},
+	"MERCHANT_REPORT_LIMIT":   {category: BaofuErrorCategoryPlatformConfiguration, message: "该主体已有微信渠道报备记录，请联系平台核对开通状态", action: baofuActionContactPlatform},
 	"MERCHANT_NOT_AUTHORIZED": {category: BaofuErrorCategoryPlatformConfiguration, message: baofuMessagePaymentChannelPending, action: baofuActionContactPlatform},
 	"NO_AUTH":                 {category: BaofuErrorCategoryPlatformConfiguration, message: baofuMessagePaymentChannelPending, action: baofuActionContactPlatform},
 	"PAY_CHANNEL_NOT_SUPPORT": {category: BaofuErrorCategoryPlatformConfiguration, message: baofuMessagePaymentChannelPending, action: baofuActionContactPlatform},
