@@ -2152,3 +2152,27 @@ Callback `txnState/refundState` values are checked against the documented order-
 - [x] **Step 4: Update guard and source matrix**
 
 `make check-baofu-contract` now checks the official `SHARING` value, notification enum enforcement, route-specific type validation, state enum validation, and business `resultCode` validation. The source matrix records this as `BAOFU-FIELD-012`.
+
+### Task P25: Aggregate Callback Numeric JSON Scalar Compatibility
+
+> Trigger: after certificate-path deployment, Baofoo sandbox payment callback parsing progressed past PEM loading and failed with `json: cannot unmarshal number into Go struct field .merId of type string`. The official pages still define `merId`/`terId` and other identifiers/times as S/String fields, so this is not promoted to a production contract type change. It is recorded as sandbox compatibility: inbound JSON numbers for documented string fields are normalized to string at the callback boundary only.
+
+**Files:**
+- Modify: `locallife/baofu/envelope.go`
+- Modify: `locallife/baofu/envelope_test.go`
+- Modify: `locallife/baofu/aggregatepay/notification/notification.go`
+- Modify: `locallife/baofu/aggregatepay/notification/notification_test.go`
+- Modify: `artifacts/baofu-payment/baofu-contract-source-matrix.md`
+- Modify: `artifacts/baofu-payment/baofu-sandbox-evidence.md`
+
+- [x] **Step 1: Add regression**
+
+Added parser regressions for signed payment callbacks where the public envelope or `dataContent` carries documented S/String scalars such as `merId`, `terId`, `tradeNo`, `finishTime`, and `reqChlNo` as JSON numbers.
+
+- [x] **Step 2: Normalize inbound string/number scalars**
+
+Aggregate payment/share/refund notification parsing now converts numeric JSON scalars for documented string fields to strings before unmarshalling into the local contract DTOs. The project still sends and stores these identifiers as strings, and signature, public-envelope, required-field, route `notifyType`, state enum, and `resultCode` checks remain unchanged.
+
+- [ ] **Step 3: Deploy and observe next callback**
+
+After deploy, trigger or wait for another Baofoo sandbox payment callback. Expected: parser should no longer fail with `cannot unmarshal number into ... merId`; the next possible failure should be either unknown local order/fact application or another newly exposed field mismatch, which must be handled by adding a new doc-first regression before changing production behavior.

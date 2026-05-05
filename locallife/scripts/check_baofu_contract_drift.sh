@@ -46,6 +46,7 @@ check_present "aggregate callback envelope must enforce official notifyType enum
 check_present "aggregate callbacks must reject mismatched route notifyType" 'notifyType must be' baofu/aggregatepay/notification
 check_present "aggregate callbacks must validate official business resultCode enum" 'resultCode is unsupported|BusinessResultCodeFail' baofu/aggregatepay
 check_present "aggregate callbacks must validate official state enums" 'txnState is unsupported|refundState is unsupported|IsSupportedPaymentState|IsSupportedShareState|IsSupportedRefundState' baofu/aggregatepay
+check_present "aggregate callbacks must normalize numeric JSON scalars for documented string fields" 'normalizeAggregateNotificationStringScalars|isAggregateNotificationStringField' baofu/aggregatepay/notification
 check_present "public envelope serial fields must enforce official S(10)" 'signSn must be at most 10 characters|ncrptnSn must be at most 10 characters' baofu
 check_present "public aggregate response must verify dataContent signature" 'responseEnvelope\.VerifySignature' baofu/client.go
 check_present "payment notification must require official payCode" 'ErrPaymentNotificationPayCodeRequired' baofu/aggregatepay/notification

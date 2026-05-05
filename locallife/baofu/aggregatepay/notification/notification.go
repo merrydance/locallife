@@ -102,6 +102,10 @@ func (p *Parser) ParsePaymentNotification(body []byte) (*PaymentNotification, er
 	if err != nil {
 		return nil, err
 	}
+	normalizedBody, err = normalizeAggregateNotificationStringScalars(normalizedBody)
+	if err != nil {
+		return nil, err
+	}
 	if err := json.Unmarshal(normalizedBody, &payload); err != nil {
 		return nil, err
 	}
@@ -190,6 +194,10 @@ func (p *Parser) ParseShareNotification(body []byte) (*ShareNotification, error)
 	if err != nil {
 		return nil, err
 	}
+	normalizedBody, err = normalizeAggregateNotificationStringScalars(normalizedBody)
+	if err != nil {
+		return nil, err
+	}
 	if err := json.Unmarshal(normalizedBody, &payload); err != nil {
 		return nil, err
 	}
@@ -266,6 +274,10 @@ func (p *Parser) ParseRefundNotification(body []byte) (*RefundNotification, erro
 		FinishTime      string `json:"finishTime"`
 	}
 	normalizedBody, err := p.normalizeAggregateNotificationBody(body)
+	if err != nil {
+		return nil, err
+	}
+	normalizedBody, err = normalizeAggregateNotificationStringScalars(normalizedBody)
 	if err != nil {
 		return nil, err
 	}
@@ -503,7 +515,7 @@ func normalizeAggregateNotificationDataContent(raw []byte, metadata map[string]s
 	if !json.Valid(content) {
 		return nil, errors.New("baofu aggregate notification dataContent must be valid JSON")
 	}
-	var payload map[string]any
+	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(content, &payload); err != nil {
 		return nil, err
 	}
@@ -512,10 +524,59 @@ func normalizeAggregateNotificationDataContent(raw []byte, metadata map[string]s
 			continue
 		}
 		if _, exists := payload[key]; !exists {
-			payload[key] = strings.TrimSpace(value)
+			encoded, err := json.Marshal(strings.TrimSpace(value))
+			if err != nil {
+				return nil, err
+			}
+			payload[key] = encoded
 		}
 	}
 	return json.Marshal(payload)
+}
+
+func normalizeAggregateNotificationStringScalars(raw []byte) ([]byte, error) {
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, err
+	}
+	changed := false
+	for key, value := range payload {
+		if !isAggregateNotificationStringField(key) {
+			continue
+		}
+		text, ok := jsonStringOrNumber(value)
+		if !ok {
+			continue
+		}
+		encoded, err := json.Marshal(text)
+		if err != nil {
+			return nil, err
+		}
+		payload[key] = encoded
+		changed = true
+	}
+	if !changed {
+		return raw, nil
+	}
+	return json.Marshal(payload)
+}
+
+func jsonStringOrNumber(raw json.RawMessage) (string, bool) {
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return strings.TrimSpace(text), true
+	}
+	value := strings.TrimSpace(string(raw))
+	if value == "" || value == "null" {
+		return "", false
+	}
+	var number json.Number
+	decoder := json.NewDecoder(strings.NewReader(value))
+	decoder.UseNumber()
+	if err := decoder.Decode(&number); err == nil {
+		return strings.TrimSpace(number.String()), true
+	}
+	return "", false
 }
 
 func jsonRawString(raw json.RawMessage) string {
@@ -524,6 +585,36 @@ func jsonRawString(raw json.RawMessage) string {
 		return strings.TrimSpace(text)
 	}
 	return strings.Trim(strings.TrimSpace(string(raw)), `"`)
+}
+
+func isAggregateNotificationStringField(key string) bool {
+	switch strings.TrimSpace(key) {
+	case "notifyId",
+		"notifyType",
+		"agentMerId",
+		"agentTerId",
+		"merId",
+		"terId",
+		"outTradeNo",
+		"tradeNo",
+		"txnState",
+		"state",
+		"finishTime",
+		"resultCode",
+		"errCode",
+		"errMsg",
+		"reqChlNo",
+		"payCode",
+		"clearingDate",
+		"occurredAt",
+		"notifyTime",
+		"reqReserved",
+		"refundState",
+		"txnTime":
+		return true
+	default:
+		return false
+	}
 }
 
 func isAggregateNotificationIntegerField(key string) bool {

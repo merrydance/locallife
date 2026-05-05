@@ -121,6 +121,7 @@
 | Date | Env | Callback URL | OutTradeNo | TradeNo Masked | Observed Status | Fact Persisted | Application Enqueued | ACK | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-05-05 | sandbox | `https://llapi.merrydance.cn/v1/webhooks/baofu/payment` | unknown sandbox order callback | unknown | parse failed before compatibility parser; HTTP 401 | no | no | no | next fix | Baofoo posted a 56-byte non-JSON body from `Apache-HttpClient/4.3.6`; parser failed with `invalid character r looking for beginning of value`. Baofoo docs confirm aggregate callback public envelope fields, signed `dataContent`, route `notifyType`, business/state enums, and plain uppercase `OK` ACK. Exact HTTP `Content-Type` is not used as contract truth; local form/query parsing is parser tolerance plus sandbox compatibility. |
+| 2026-05-05 | sandbox | `https://llapi.merrydance.cn/v1/webhooks/baofu/payment` | unknown sandbox order callback | unknown | parse failed on numeric JSON scalar for documented string field `merId`; HTTP 401 | no | no | no | next fix | PEM/public-key configuration was already past the previous failure. The callback reached JSON parsing, but sandbox encoded at least one documented S/String identifier as a JSON number. Local parser now keeps the project contract as string while accepting JSON string/number at the inbound callback boundary and normalizing to string before required-field, enum, and signature-protected fact parsing. |
 
 ## Profit Sharing `share_after_pay`
 

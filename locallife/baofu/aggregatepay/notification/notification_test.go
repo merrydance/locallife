@@ -117,6 +117,23 @@ func TestParserParsePaymentNotificationVerifiesOfficialPublicEnvelopeSignature(t
 	require.ErrorIs(t, err, baofu.ErrInvalidSignature)
 }
 
+func TestParserParsePaymentNotificationAcceptsNumericDocumentedStringScalars(t *testing.T) {
+	privatePEM, publicPEM := generateBaofuNotificationTestKeyPair(t)
+	dataContent := `{"merId":102004465,"terId":200005200,"resultCode":"SUCCESS","outTradeNo":"PO202605050005","tradeNo":26050001958,"txnState":"SUCCESS","finishTime":20260505141652,"succAmt":100,"feeAmt":1,"reqChlNo":123456,"payCode":"WECHAT_JSAPI"}`
+	signature, err := baofu.SignSHA256WithRSA(privatePEM, []byte(dataContent))
+	require.NoError(t, err)
+	parser := NewParserWithPublicKey(publicPEM)
+
+	notification, err := parser.ParsePaymentNotification([]byte(signedNotificationEnvelopeValues("PAYMENT", dataContent, signature).Encode()))
+
+	require.NoError(t, err)
+	require.Equal(t, "102004465", notification.Fact.MerchantID)
+	require.Equal(t, "200005200", notification.Fact.TerminalID)
+	require.Equal(t, "26050001958", notification.Fact.TradeNo)
+	require.Equal(t, "20260505141652", notification.Fact.FinishTime)
+	require.Equal(t, "123456", notification.Fact.RequestChannelNo)
+}
+
 func TestParserParseShareNotificationVerifiesOfficialPublicEnvelopeSignature(t *testing.T) {
 	privatePEM, publicPEM := generateBaofuNotificationTestKeyPair(t)
 	dataContent := `{"tradeNo":"BFSHARE_UP_3004","txnState":"SUCCESS","resultCode":"SUCCESS","succAmt":9470}`

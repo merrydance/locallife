@@ -76,6 +76,36 @@ type PublicNotificationEnvelope struct {
 	DataContent        JSONString `json:"dataContent"`
 }
 
+type publicEnvelopeScalarString string
+
+func (s *publicEnvelopeScalarString) UnmarshalJSON(raw []byte) error {
+	if s == nil {
+		return errors.New("baofu public envelope scalar target is nil")
+	}
+	value := strings.TrimSpace(string(raw))
+	if value == "" || value == "null" {
+		*s = ""
+		return nil
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		*s = publicEnvelopeScalarString(strings.TrimSpace(text))
+		return nil
+	}
+	var number json.Number
+	decoder := json.NewDecoder(strings.NewReader(value))
+	decoder.UseNumber()
+	if err := decoder.Decode(&number); err == nil {
+		*s = publicEnvelopeScalarString(strings.TrimSpace(number.String()))
+		return nil
+	}
+	return errors.New("baofu public envelope scalar must be string or number")
+}
+
+func (s publicEnvelopeScalarString) String() string {
+	return strings.TrimSpace(string(s))
+}
+
 type JSONString []byte
 
 func (c JSONString) MarshalJSON() ([]byte, error) {
@@ -95,6 +125,44 @@ func (c *JSONString) UnmarshalJSON(raw []byte) error {
 		return errors.New("baofu json string content must be valid JSON")
 	}
 	*c = JSONString(raw)
+	return nil
+}
+
+func (e *PublicNotificationEnvelope) UnmarshalJSON(raw []byte) error {
+	if e == nil {
+		return errors.New("baofu public notification target is nil")
+	}
+	var payload struct {
+		MerchantID         publicEnvelopeScalarString `json:"merId"`
+		TerminalID         publicEnvelopeScalarString `json:"terId"`
+		Charset            publicEnvelopeScalarString `json:"charset"`
+		Version            publicEnvelopeScalarString `json:"version"`
+		Format             publicEnvelopeScalarString `json:"format"`
+		NotifyType         publicEnvelopeScalarString `json:"notifyType"`
+		SignType           publicEnvelopeScalarString `json:"signType"`
+		SignSerialNo       publicEnvelopeScalarString `json:"signSn"`
+		EncryptionSerialNo publicEnvelopeScalarString `json:"ncrptnSn"`
+		DigitalEnvelope    publicEnvelopeScalarString `json:"dgtlEnvlp"`
+		SignString         publicEnvelopeScalarString `json:"signStr"`
+		DataContent        JSONString                 `json:"dataContent"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return err
+	}
+	*e = PublicNotificationEnvelope{
+		MerchantID:         payload.MerchantID.String(),
+		TerminalID:         payload.TerminalID.String(),
+		Charset:            payload.Charset.String(),
+		Version:            payload.Version.String(),
+		Format:             payload.Format.String(),
+		NotifyType:         payload.NotifyType.String(),
+		SignType:           payload.SignType.String(),
+		SignSerialNo:       payload.SignSerialNo.String(),
+		EncryptionSerialNo: payload.EncryptionSerialNo.String(),
+		DigitalEnvelope:    payload.DigitalEnvelope.String(),
+		SignString:         payload.SignString.String(),
+		DataContent:        payload.DataContent,
+	}
 	return nil
 }
 

@@ -199,6 +199,17 @@ func TestPublicNotificationEnvelopeVerifiesDataContentSignature(t *testing.T) {
 	require.ErrorIs(t, env.VerifySignature(publicPEM), ErrInvalidSignature)
 }
 
+func TestPublicNotificationEnvelopeAcceptsNumericPublicScalars(t *testing.T) {
+	var env PublicNotificationEnvelope
+
+	err := json.Unmarshal([]byte(`{"merId":102004465,"terId":200005200,"charset":"UTF-8","version":"1.0","format":"json","notifyType":"PAYMENT","signType":"RSA","signSn":"1","ncrptnSn":"1","signStr":"abc","dataContent":{"resultCode":"SUCCESS"}}`), &env)
+
+	require.NoError(t, err)
+	require.Equal(t, "102004465", env.MerchantID)
+	require.Equal(t, "200005200", env.TerminalID)
+	require.JSONEq(t, `{"resultCode":"SUCCESS"}`, string(env.DataContent))
+}
+
 func TestPublicNotificationEnvelopeValidateRequiresOfficialFields(t *testing.T) {
 	env := validPublicNotificationEnvelopeForTest()
 
