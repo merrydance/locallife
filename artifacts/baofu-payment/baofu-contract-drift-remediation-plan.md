@@ -1841,6 +1841,8 @@ Existing sandbox `subMchId=4000***0573` was likely created before this correctio
 
 2026-05-05 follow-up: `merchant_report_modify` returned `SUCCESS` for existing `subMchId=4000***0573`, and APPLET bind returned `SUCCESS` again, but `unified_order` still returned `PAY_CHANNEL_NOT_SUPPORT`. Therefore the remaining blocker is no longer explained by the local default service-code drift alone. Next diagnostics should either create a fresh report after the `JSAPI+APPLET` fix or ask Baofoo to inspect whether `subMchId=400060573` under `merId=102004465/terId=200005200` has WeChat `WECHAT_JSAPI` enabled in sandbox.
 
+2026-05-05 IPv4 follow-up: retrying the same unified-order request with an IPv4 payer IP still returned `PAY_CHANNEL_NOT_SUPPORT`, so IPv6 `riskInfo.clientIp` compatibility is ruled out. Continue with the fresh-report diagnostic or Baofoo channel-provisioning inspection.
+
 ### 7.3 Completion Gate For This Pre-`dataContent` Audit
 
 This pre-sandbox-positive audit is complete only when:
