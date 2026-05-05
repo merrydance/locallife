@@ -61,9 +61,10 @@
 
 | Group | Local source file/demo | Official URL | Current trust level | Notes |
 | --- | --- | --- | --- | --- |
-| union-gw account | `/home/sam/文档/分账/宝付/宝财通产品服务协议-宝财通2.0-来富网络（宁晋）有限公司.pdf...`, `/home/sam/文档/分账/宝付/BaoCaiTongTestInfo_OHTERV1.0.0.2/**`, doc.mandao pages | `unionGw`, `openAcc`, `queryAcc`, `queryBalace`, `accWithdrawal`, `queryWithdrawal`, `openAccNotify`, `withdrawNotify` | doc + local DTO/client tests + negative sandbox smoke | `verifyType=1` RSA/base64 is the local implementation baseline. `verifyType=2`, real notification encrypted payloads, and successful account-open/query samples remain C4-open. |
-| aggregate pay | `/tmp/baofu_doc.html` catalog, `/tmp/baofu_demo/java/src/main/java/com/baofoo/Entitys/PostMasterEntity.java`, `/tmp/baofu_demo/java/src/main/java/com/baofoo/Entitys/ResultMasterEntity.java`, aggregate demo/entity classes | `bct-1f9qhakcna6te`, `bct-1f9qm38du1agl`, `bct-1f9qlvu1em0tb`, `bct-1f9qm06dmb1a9`, `bct-1f9qm13po92jq`, `bct-1f9qm1m0u1s68`, `bct-1f9qm246c6cp8`, callback pages | doc + Java demo + local tests + public-envelope sandbox smoke | Request public envelope uses form fields and request-side `bizContent`; response public envelope uses `dataContent`. Real business `dataContent` samples for order/query/share/refund remain C4-open. |
-| merchant report | `/tmp/baofu_doc.html` catalog, `/tmp/baofu_demo/java/src/test/java/com/baofoo/Demo/MerchantReport.java`, `MerchantReportQuery.java`, `BindSubConfig.java`, `/home/sam/文档/分账/宝付/经营类目&MCC.xlsx` | `bct-1f9o62bulbiqd`, `bct-1f9o63b6ufii5`, `bct-1f9o63qmkndkc` | doc + Java demo + local DTO/service tests | 商户逐户报备取得 `subMchId`，再 `bind_sub_config(authType=APPLET, authContent=<LocalLife 小程序 appid>)`；真实报备/授权目录样本仍 C4-open。 |
+| union-gw account | `/home/sam/文档/分账/宝付/宝财通产品服务协议-宝财通2.0-来富网络（宁晋）有限公司.pdf...`, `/home/sam/文档/分账/宝付/BaoCaiTongTestInfo_OHTERV1.0.0.2/**`, authenticated doc.mandao pages cached at `/tmp/baofu_doc_pages_auth` | `notice`, `unionGw`, `openAcc`, `bct-1gj4ccsdha6d8`, `queryAcc`, `queryBalace`, `accWithdrawal`, `queryWithdrawal`, `openAccNotify`, `withdrawNotify`, `appendix`, `bct-1fjpm4fpns79f`, `question` | doc + local DTO/client tests + partial sandbox smoke | 必须把“接口须知 + 请求入口 + 单接口页 + 通知页 + 错误码/FAQ + 协议”一起看。`verifyType=1` RSA/base64 is the local implementation baseline. `verifyType=2`, real notification encrypted payloads, and successful account-open/query samples remain C4-open. |
+| aggregate pay | authenticated doc.mandao pages cached at `/tmp/baofu_doc_pages_auth`, `/tmp/baofu_demo/java/src/main/java/com/baofoo/Entitys/PostMasterEntity.java`, `/tmp/baofu_demo/java/src/main/java/com/baofoo/Entitys/ResultMasterEntity.java`, aggregate demo/entity classes | `bct-1f9os3k1eh3p6`, `bct-1f9qhakcna6te`, `bct-1f9qlvjef634j`, `bct-1f9qlvu1em0tb`, `bct-1f9qm06dmb1a9`, `bct-1f9qm0flcca1k`, `bct-1f9qm13po92jq`, `bct-1f9qm1m0u1s68`, `bct-1f9qm246c6cp8`, callback pages, appendix pages, flow pages | doc + Java demo + local tests + public-envelope sandbox smoke | 必须把“聚合支付产品说明 + 接口说明 + 请求入口 + 交易/查询/通知接口 + 附录 + 流程说明 + demo”一起看。Request public envelope uses form fields and request-side `bizContent`; response public envelope uses `dataContent`. Real business `dataContent` samples for order/query/share/refund remain C4-open. |
+| merchant report | authenticated doc.mandao pages cached at `/tmp/baofu_doc_pages_auth`, `/tmp/baofu_demo/java/src/test/java/com/baofoo/Demo/MerchantReport.java`, `MerchantReportQuery.java`, `BindSubConfig.java`, `/home/sam/文档/分账/宝付/经营类目&MCC.xlsx` | `bct-1f9o5nti54urb`, `bct-1f9o5qri554o2`, `bct-1f9o5s1lqlean`, `bct-1f9o62bulbiqd`, `bct-1f9o63b6ufii5`, `bct-1f9o63qmkndkc`, `bct-1f9o6qi1pf2r8`, Java demo | doc + Java demo + local DTO/service tests | 必须把“聚合商户报备产品页 + 接口须知 + 请求入口 + 业务接口 + 附录 + demo + MCC 文件”一起看。商户逐户报备取得 `subMchId`，再 `bind_sub_config(authType=APPLET, authContent=<LocalLife 小程序 appid>)`；真实报备/授权目录样本仍 C4-open。 |
+| transfer account pay | authenticated doc.mandao pages cached at `/tmp/baofu_doc_pages_auth`, `/tmp/baofu_pay_demo/**/transferaccpay-*` | `bct-zz`, `bct-1facj8t3su8go`, `bct-1facj99v1hke5`, `bct-1fd9huiq8tuvn` | doc + demo, not in first-version runtime | 本产品使用 `https://vgw.baofoo.com/cutpayment/api/backTransRequest` 与 `data_content`，不是当前聚合支付主链路 envelope。首版只作为边界参考；若后续使用账户间转账或转账支付退款，必须新建独立契约组，不能复用聚合支付 DTO。 |
 
 Source inventory command for this audit slice:
 
@@ -74,6 +75,8 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 ```
 
 本次命中确认了聚合支付 Java demo 的 `PostMasterEntity.bizContent`、`ResultMasterEntity.dataContent`，以及聚合商户报备 demo 的 `merchant_report`、`merchant_report_query`、`bind_sub_config` 方法名。union-gw 账户详细字段主要以 doc.mandao 页面和本地 BaoCaiTong 测试资料/协议为源，仍需后续沙箱正向样本把 C3 固化到 C4。
+
+2026-05-05 复核更新：已使用 `docuser` 登录 doc.mandao 并缓存 70 个相关页面到 `/tmp/baofu_doc_pages_auth`。本轮把“目录页/产品页/接口须知/请求入口/单接口页/附录/FAQ/demo/协议”合并审查后，确认先前只看单页会遗漏字段名和条件必填；已发现并修复 `merchant_report.reportInfo.address_info` 与 `bankcard_info` 的字段漂移，详见 C-013。
 
 ## 2.3 Status / Error Interpretation Matrix
 
@@ -277,18 +280,18 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 | `channel_id/channel_name` | 是 | S | 测试环境文档给固定渠道参数示例 | C2/C3，取值待沙箱确认 |
 | `business` | 是 | S(10) | 经营类目/MCC | C3，已从本地 XLSX 生成 110 项微信类目 allowlist |
 | `service_codes` | 是 | C | 如 `JSAPI`、`APPLET` | C3 |
-| `address_info` | 是 | C | 省市区、地址、经纬度等 | C2/C3，字段骨架已建 |
+| `address_info` | 是 | C | 微信页要求 `province_code/city_code/district_code/address`，可选 `longitude/latitude/type`；不是 `province/city/district/locationPoint` | C3，已按官方字段名修复并加序列化测试 |
 | `business_license/business_license_type` | 是 | S | 证照编号和类型 | C2/C3，字段骨架已建 |
-| `bankcard_info` | 是 | C | 结算卡信息 | C2/C3，字段骨架已建，沙箱样例待确认 |
+| `bankcard_info` | 是 | C | 微信页要求 `card_no/card_name` 必填，`bank_branch_name` 可选；不是 `account_no/account_name/bank_name` | C3，已按官方字段名修复并加序列化/必填测试 |
 
 响应字段：`reportType/reportNo/reportState/subMchId/platformBizNo/resultCode/errCode/errMsg`；`subMchId` 在成功时有值，是微信/支付宝分配的商户识别码。该值按商户保存为商户微信渠道 `subMchId`，只作为 `unified_order.subMchId` 的来源，不写入分账接收方字段。
 
 本地缺口：
 
-- 已新增 `locallife/baofu/merchantreport/contracts` 字段级 DTO、报备/授权枚举、状态归一化和微信经营类目 allowlist； unsupported 经营类目、证件类型、服务类型、地址和结算卡必填缺失均 fail-closed。
+- 已新增 `locallife/baofu/merchantreport/contracts` 字段级 DTO、报备/授权枚举、状态归一化和微信经营类目 allowlist； unsupported 经营类目、证件类型、服务类型、地址和结算卡必填缺失均 fail-closed。2026-05-05 整体文档复核后已把 `address_info` 修正为 `province_code/city_code/district_code/address`，把 `bankcard_info` 修正为 `card_no/card_name/bank_branch_name`，并确认 `bank_branch_name` 在微信报备中是可选字段。
 - 已新增 `baofu_merchant_reports` 表、sqlc query、报备 service 和 readiness 合成逻辑；宝付支付下单不再读取普通服务商 `txResult.SubMchID`，改读报备成功且 APPLET 授权成功后的商户 `sub_mch_id`。
 - 宝付聚合商户报备资料字段已有 service 输入骨架，附件/证照文件上传与真实资料来源映射仍需结合开户/商户入驻资料收口。
-- 附录枚举已本地覆盖：报备类型、报备状态、微信服务类型、微信证件类型、授权类型、终端/联系人/商户/认证等长尾枚举，以及 110 项微信经营类目 allowlist；结算卡字段的真实渠道样例仍需沙箱确认。
+- 附录枚举已本地覆盖：报备类型、报备状态、微信服务类型、微信证件类型、授权类型、终端/联系人/商户/认证等长尾枚举，以及 110 项微信经营类目 allowlist；结算卡字段已按官方文档修复，仍需沙箱确认真实渠道是否有额外风控字段。
 - 未做测试地址联调：`https://mch-juhe.baofoo.com/mch-service/api`。
 
 ### 7.2 报备信息查询 `merchant_report_query`
@@ -546,6 +549,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 | C-010 | C3 本地修复，待沙箱样例 | `locallife/baofu/errors.go` 已覆盖官方账户错误码页和聚合支付错误码页；`locallife/baofu/client.go` 已在账户 `retCode` 失败、聚合支付/报备 `resultCode != SUCCESS` 时返回 `ProviderError`，并保留上游原文只在 provider error/log 边界 | 前端可获得安全中文语义，不暴露上游原文、证件、银行卡、手机号、`contractNo`、`sharingMerId`、`subMchId` 或 raw payload；沙箱错误样例和真实渠道组合仍待补 | Task 12/C4 补真实错误样例、API handler 边界日志验证和 evidence。 |
 | C-011 | C3 局部，部分负向沙箱 smoke | `locallife/baofu/account/client.go` 已用 union-gw 官方 URL/query/encrypted content；`aggregatepay`、`merchantreport` concrete HTTP client 已有；账户查询和聚合 `order_query` 已打到测试地址并解析脱敏响应；主业务 API runtime/worker/scheduler 已防止宝付启用时回退普通服务商 | 账户开户/余额/提现、聚合商户报备/授权目录、统一下单/分账/退款/回调的正向沙箱证据仍缺；聚合/报备响应验签和数字信封完整验证仍待补 | C4 前继续补正向沙箱证据、回调证据和真实错误样例。 |
 | C-012 | 已本地修复，待产品验收 | `merchantBaofuReadinessForPayment` 已返回“商户微信支付通道待开通，暂不能创建微信生态支付订单”，API runtime 切换测试覆盖主业务宝付与直连支付边界 | 旧“微信特约商户进件”语义已移除；仍需前端/运营最终文案验收 | 沙箱联调和上线前检查中继续确认用户侧只看到产品语义，不暴露 report/auth/subMchId 内部细节。 |
+| C-013 | C3 本地修复，待沙箱 | 整体文档复核发现 `merchant_report.reportInfo.address_info` 官方字段为 `province_code/city_code/district_code/address`，`bankcard_info` 官方字段为 `card_no/card_name/bank_branch_name` 且 `bank_branch_name` 可选；本地曾误用 `province/city/district/locationPoint` 与 `account_name/account_no/bank_name` 并强制分行必填 | 若不修复，真实 `merchant_report` 可能因字段名漂移被宝付/渠道拒绝，或错误要求用户补充分行信息 | 已修复 DTO JSON tag、必填校验、序列化测试和静态漂移 guard；下一步用沙箱 `merchant_report` 验证真实报备。 |
 
 ### 12.2 防漂移实现门禁
 

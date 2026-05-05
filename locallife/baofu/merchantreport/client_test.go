@@ -77,10 +77,10 @@ func validWechatReportRequestForClientTest() contracts.WechatMerchantReportReque
 			ChannelName:         "乐客来福",
 			Business:            "758-2",
 			ServiceCodes:        []string{contracts.WechatServiceTypeApplet},
-			AddressInfo:         contracts.WechatAddressInfo{Province: "上海市", City: "上海市", District: "浦东新区", Address: "世纪大道 1 号"},
+			AddressInfo:         contracts.WechatAddressInfo{ProvinceCode: "310000", CityCode: "310100", DistrictCode: "310115", Address: "世纪大道 1 号"},
 			BusinessLicenseType: contracts.WechatCertificateTypeNationalLegalMerge,
 			BusinessLicense:     "91310000123456789X",
-			BankCardInfo:        contracts.WechatBankCardInfo{AccountName: "上海某某餐饮有限公司", AccountNo: "6222000000000000000", BankName: "招商银行", BankBranchName: "招商银行上海分行"},
+			BankCardInfo:        contracts.WechatBankCardInfo{CardName: "上海某某餐饮有限公司", CardNo: "6222000000000000000", BankBranchName: "招商银行上海分行"},
 		},
 	}
 }

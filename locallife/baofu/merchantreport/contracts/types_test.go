@@ -22,10 +22,10 @@ func TestWechatMerchantReportRequiresMerchantBCTMerID(t *testing.T) {
 			ChannelName:         "乐客来福",
 			Business:            "758-2",
 			ServiceCodes:        []string{WechatServiceTypeApplet},
-			AddressInfo:         WechatAddressInfo{Province: "上海市", City: "上海市", District: "浦东新区", Address: "世纪大道 1 号"},
+			AddressInfo:         WechatAddressInfo{ProvinceCode: "310000", CityCode: "310100", DistrictCode: "310115", Address: "世纪大道 1 号"},
 			BusinessLicenseType: WechatCertificateTypeNationalLegalMerge,
 			BusinessLicense:     "91310000123456789X",
-			BankCardInfo:        WechatBankCardInfo{AccountName: "上海某某餐饮有限公司", AccountNo: "6222000000000000000", BankName: "招商银行", BankBranchName: "招商银行上海分行"},
+			BankCardInfo:        WechatBankCardInfo{CardName: "上海某某餐饮有限公司", CardNo: "6222000000000000000", BankBranchName: "招商银行上海分行"},
 		},
 	}
 	require.NoError(t, req.Validate())
@@ -49,10 +49,10 @@ func TestWechatMerchantReportSerializesOfficialFieldNames(t *testing.T) {
 			ChannelName:         "乐客来福",
 			Business:            "758-2",
 			ServiceCodes:        []string{WechatServiceTypeApplet},
-			AddressInfo:         WechatAddressInfo{Province: "上海市", City: "上海市", District: "浦东新区", Address: "世纪大道 1 号"},
+			AddressInfo:         WechatAddressInfo{ProvinceCode: "310000", CityCode: "310100", DistrictCode: "310115", Address: "世纪大道 1 号"},
 			BusinessLicenseType: WechatCertificateTypeNationalLegalMerge,
 			BusinessLicense:     "91310000123456789X",
-			BankCardInfo:        WechatBankCardInfo{AccountName: "上海某某餐饮有限公司", AccountNo: "6222000000000000000", BankName: "招商银行", BankBranchName: "招商银行上海分行"},
+			BankCardInfo:        WechatBankCardInfo{CardName: "上海某某餐饮有限公司", CardNo: "6222000000000000000", BankBranchName: "招商银行上海分行"},
 		},
 	}
 
@@ -64,6 +64,14 @@ func TestWechatMerchantReportSerializesOfficialFieldNames(t *testing.T) {
 	require.Contains(t, string(body), `"merchant_name":"上海某某餐饮有限公司"`)
 	require.Contains(t, string(body), `"merchant_shortname":"某某餐饮"`)
 	require.Contains(t, string(body), `"service_codes":["APPLET"]`)
+	require.Contains(t, string(body), `"province_code":"310000"`)
+	require.Contains(t, string(body), `"city_code":"310100"`)
+	require.Contains(t, string(body), `"district_code":"310115"`)
+	require.Contains(t, string(body), `"card_name":"上海某某餐饮有限公司"`)
+	require.Contains(t, string(body), `"card_no":"6222000000000000000"`)
+	require.NotContains(t, string(body), `"province"`)
+	require.NotContains(t, string(body), `"account_name"`)
+	require.NotContains(t, string(body), `"account_no"`)
 	require.NotContains(t, string(body), "sharingMerId")
 }
 
@@ -78,7 +86,8 @@ func TestWechatMerchantReportRejectsUnsupportedWechatAppendixValues(t *testing.T
 		{"missing service codes", func(r *WechatMerchantReportRequest) { r.ReportInfo.ServiceCodes = nil }, "baofu merchant report wechat service_codes are required"},
 		{"unsupported service code", func(r *WechatMerchantReportRequest) { r.ReportInfo.ServiceCodes = []string{"NATIVE"} }, "baofu merchant report wechat service_codes contains unsupported value"},
 		{"missing address", func(r *WechatMerchantReportRequest) { r.ReportInfo.AddressInfo.Address = "" }, "baofu merchant report wechat address_info.address is required"},
-		{"missing bank branch", func(r *WechatMerchantReportRequest) { r.ReportInfo.BankCardInfo.BankBranchName = "" }, "baofu merchant report wechat bankcard_info.bank_branch_name is required"},
+		{"missing card no", func(r *WechatMerchantReportRequest) { r.ReportInfo.BankCardInfo.CardNo = "" }, "baofu merchant report wechat bankcard_info.card_no is required"},
+		{"missing card name", func(r *WechatMerchantReportRequest) { r.ReportInfo.BankCardInfo.CardName = "" }, "baofu merchant report wechat bankcard_info.card_name is required"},
 	}
 
 	for _, tc := range cases {
@@ -88,6 +97,12 @@ func TestWechatMerchantReportRejectsUnsupportedWechatAppendixValues(t *testing.T
 			require.EqualError(t, req.Validate(), tc.want)
 		})
 	}
+}
+
+func TestWechatMerchantReportBankBranchIsOptional(t *testing.T) {
+	req := validWechatMerchantReportRequestForTest()
+	req.ReportInfo.BankCardInfo.BankBranchName = ""
+	require.NoError(t, req.Validate())
 }
 
 func TestMerchantReportQueryRequiresReportNo(t *testing.T) {
@@ -131,10 +146,10 @@ func validWechatMerchantReportRequestForTest() WechatMerchantReportRequest {
 			ChannelName:         "乐客来福",
 			Business:            "758-2",
 			ServiceCodes:        []string{WechatServiceTypeApplet},
-			AddressInfo:         WechatAddressInfo{Province: "上海市", City: "上海市", District: "浦东新区", Address: "世纪大道 1 号"},
+			AddressInfo:         WechatAddressInfo{ProvinceCode: "310000", CityCode: "310100", DistrictCode: "310115", Address: "世纪大道 1 号"},
 			BusinessLicenseType: WechatCertificateTypeNationalLegalMerge,
 			BusinessLicense:     "91310000123456789X",
-			BankCardInfo:        WechatBankCardInfo{AccountName: "上海某某餐饮有限公司", AccountNo: "6222000000000000000", BankName: "招商银行", BankBranchName: "招商银行上海分行"},
+			BankCardInfo:        WechatBankCardInfo{CardName: "上海某某餐饮有限公司", CardNo: "6222000000000000000", BankBranchName: "招商银行上海分行"},
 		},
 	}
 }

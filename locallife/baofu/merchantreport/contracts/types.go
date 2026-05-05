@@ -35,20 +35,19 @@ type WechatReportInfo struct {
 }
 
 type WechatAddressInfo struct {
-	Province      string `json:"province"`
-	City          string `json:"city"`
-	District      string `json:"district"`
-	Address       string `json:"address"`
-	LocationPoint string `json:"locationPoint,omitempty"`
+	ProvinceCode string `json:"province_code"`
+	CityCode     string `json:"city_code"`
+	DistrictCode string `json:"district_code"`
+	Address      string `json:"address"`
+	Longitude    string `json:"longitude,omitempty"`
+	Latitude     string `json:"latitude,omitempty"`
+	Type         string `json:"type,omitempty"`
 }
 
 type WechatBankCardInfo struct {
-	AccountName    string `json:"account_name"`
-	AccountNo      string `json:"account_no"`
-	BankName       string `json:"bank_name"`
+	CardName       string `json:"card_name"`
+	CardNo         string `json:"card_no"`
 	BankBranchName string `json:"bank_branch_name"`
-	BankProvince   string `json:"bank_province,omitempty"`
-	BankCity       string `json:"bank_city,omitempty"`
 }
 
 type MerchantReportQueryRequest struct {
@@ -158,9 +157,9 @@ func (i WechatReportInfo) Validate() error {
 
 func (i WechatAddressInfo) Validate() error {
 	for _, field := range []struct{ name, value string }{
-		{"province", i.Province},
-		{"city", i.City},
-		{"district", i.District},
+		{"province_code", i.ProvinceCode},
+		{"city_code", i.CityCode},
+		{"district_code", i.DistrictCode},
 		{"address", i.Address},
 	} {
 		if strings.TrimSpace(field.value) == "" {
@@ -172,10 +171,8 @@ func (i WechatAddressInfo) Validate() error {
 
 func (i WechatBankCardInfo) Validate() error {
 	for _, field := range []struct{ name, value string }{
-		{"account_name", i.AccountName},
-		{"account_no", i.AccountNo},
-		{"bank_name", i.BankName},
-		{"bank_branch_name", i.BankBranchName},
+		{"card_name", i.CardName},
+		{"card_no", i.CardNo},
 	} {
 		if strings.TrimSpace(field.value) == "" {
 			return errors.New("baofu merchant report wechat bankcard_info." + field.name + " is required")

@@ -37,6 +37,7 @@
 | C-010 error/status classification missing | Task 10 | 账户/报备/支付错误码分类，前端语义安全。 |
 | C-011 real transport missing | Task 8 | union-gw、aggregate pay、merchant report 真实 HTTP client 可打测试地址。 |
 | C-012 readiness copy drift | Task 6, Task 11 | 旧“商户微信渠道待报备”文案替换为产品语义。 |
+| C-013 merchant_report nested field drift | Task P10 | 整体文档复核后修复微信报备 `address_info`、`bankcard_info` 字段名和必填性。 |
 
 ## 2. Target File Map
 
@@ -1603,6 +1604,69 @@ In `baofu-sandbox-evidence.md`, add a "Ready for next sandbox test" checklist fo
 git add artifacts/baofu-payment/baofu-api-contract-coverage-audit.md artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md artifacts/baofu-payment/baofu-sandbox-evidence.md
 git commit -m "docs(baofu): close pre-dataContent drift audit"
 ```
+
+### Task P10: Whole-Document Merchant Report Reconciliation
+
+> Trigger: sandbox testing exposed repeated contract drift, and review showed Baofoo docs are not single-page contracts. Every interface must be read as product page + request entry + concrete interface page + appendix + demo + FAQ/protocol when available.
+
+**Files:**
+- Modify: `locallife/baofu/merchantreport/contracts/types.go`
+- Modify: `locallife/baofu/merchantreport/contracts/types_test.go`
+- Modify: `locallife/baofu/merchantreport/client_test.go`
+- Modify: `locallife/logic/baofu_merchant_report_service_test.go`
+- Modify: `locallife/scripts/check_baofu_contract_drift.sh`
+- Modify: `artifacts/baofu-payment/baofu-api-contract-coverage-audit.md`
+- Modify: `artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md`
+
+- [x] **Step 1: Authenticate and cache relevant doc pages**
+
+Logged in to `https://doc.mandao.com/docs/bct?token=I179BCdP579o` with the provided documentation account and cached 70 relevant pages under `/tmp/baofu_doc_pages_auth`.
+
+The source set now includes:
+
+- Account: `notice`, `unionGw`, account API pages, account notifications, appendix/error code/FAQ.
+- Aggregate pay: product/interface/request-entry pages, transaction/query/callback pages, appendix, flow pages, Java demo.
+- Merchant report: product/interface/request-entry pages, `merchant_report`, `merchant_report_query`, `bind_sub_config`, appendix, Java demo, `经营类目&MCC.xlsx`.
+- Transfer account pay: product/interface/demo/refund pages, marked out of first-version runtime so its `data_content` envelope is not mixed into aggregate-pay contracts.
+
+- [x] **Step 2: Identify concrete drift from whole-document reading**
+
+Finding C-013:
+
+| Field group | Official whole-doc source | Prior local drift | Correct local contract |
+| --- | --- | --- | --- |
+| `merchant_report.reportInfo.address_info` | `bct-1f9o62bulbiqd` 微信参数 + Java demo | Used `province/city/district/locationPoint` | Use `province_code/city_code/district_code/address`, optional `longitude/latitude/type`. |
+| `merchant_report.reportInfo.bankcard_info` | `bct-1f9o62bulbiqd` 微信参数 + Java demo | Used `account_name/account_no/bank_name` and required `bank_branch_name` | Use required `card_no/card_name`, optional `bank_branch_name`. |
+
+- [x] **Step 3: Fix DTO and regression tests**
+
+Updated merchant-report DTO JSON tags and validation. Added serialization assertions that reject old field names, and added a regression proving `bank_branch_name` is optional.
+
+- [x] **Step 4: Extend static drift guard**
+
+`make check-baofu-contract` now fails if non-test merchant-report code reintroduces old `province/city/district/locationPoint` or `account_name/account_no/bank_name` field names.
+
+- [x] **Step 5: Validate and commit**
+
+```bash
+cd locallife
+PATH="/usr/local/go/bin:$PATH" go test ./baofu/merchantreport ./baofu/merchantreport/contracts ./logic -run 'TestBaofuMerchantReport|TestWechatMerchantReport' -count=1
+make check-baofu-contract
+git diff --check
+git add locallife/baofu/merchantreport locallife/logic/baofu_merchant_report_service_test.go locallife/scripts/check_baofu_contract_drift.sh artifacts/baofu-payment/baofu-api-contract-coverage-audit.md artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md
+git commit -m "fix(baofu): align merchant report nested fields"
+```
+
+Validation on 2026-05-05:
+
+```bash
+cd locallife
+PATH="/usr/local/go/bin:$PATH" go test ./baofu/merchantreport ./baofu/merchantreport/contracts ./logic -run 'TestBaofuMerchantReport|TestWechatMerchantReport' -count=1
+make check-baofu-contract
+git diff --check
+```
+
+All commands passed.
 
 ### 7.3 Completion Gate For This Pre-`dataContent` Audit
 

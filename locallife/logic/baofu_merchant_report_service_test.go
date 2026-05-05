@@ -65,8 +65,8 @@ func TestBaofuMerchantReportServiceBindsAppletAfterReportSuccess(t *testing.T) {
 		Business:            "758-2",
 		BusinessLicenseType: merchantcontracts.WechatCertificateTypeNationalLegalMerge,
 		BusinessLicense:     "91310000123456789X",
-		AddressInfo:         merchantcontracts.WechatAddressInfo{Province: "上海市", City: "上海市", District: "浦东新区", Address: "世纪大道 1 号"},
-		BankCardInfo:        merchantcontracts.WechatBankCardInfo{AccountName: "上海某某餐饮有限公司", AccountNo: "6222000000000000000", BankName: "招商银行", BankBranchName: "招商银行上海分行"},
+		AddressInfo:         merchantcontracts.WechatAddressInfo{ProvinceCode: "310000", CityCode: "310100", DistrictCode: "310115", Address: "世纪大道 1 号"},
+		BankCardInfo:        merchantcontracts.WechatBankCardInfo{CardName: "上海某某餐饮有限公司", CardNo: "6222000000000000000", BankBranchName: "招商银行上海分行"},
 	})
 
 	require.NoError(t, err)
