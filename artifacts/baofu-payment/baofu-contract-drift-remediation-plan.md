@@ -1956,6 +1956,39 @@ Added `go run ./cmd/baofu_unified_order_smoke`. It prints both requested and eff
 
 After deploy, run the repo command. In sandbox, a missing `wc_pay_data` is expected if Baofoo still returns an empty business payload; the important proof is the synthetic upstream code `MISSING_DATA_CONTENT` plus no raw payload leakage.
 
+### Task P18: Independent Probe Result Interpretation Fixes
+
+> Trigger: independent sandbox probe reached multiple endpoints. It exposed two local interpretation issues: balance responses may omit `contractNo`, and aggregate public responses may return `resultCode=SUCCESS` with a non-success `errCode` such as `ORDER_NOT_EXIST`.
+
+**Files:**
+- Modify: `locallife/baofu/client.go`
+- Modify: `locallife/baofu/client_test.go`
+- Modify: `locallife/baofu/account/client.go`
+- Modify: `locallife/baofu/account/client_test.go`
+- Modify: `artifacts/baofu-payment/baofu-sandbox-evidence.md`
+- Modify: `artifacts/baofu-payment/baofu-contract-drift-remediation-plan.md`
+
+- [x] **Step 1: Add regressions**
+
+Added tests proving:
+
+- `QueryBalance` keeps the requested `contractNo` in local `BalanceResult` when Baofoo omits it in the balance response;
+- `publicBusinessFailure` treats `resultCode=SUCCESS` plus non-success `errCode` as provider failure, while still accepting `errCode=SUCCESS`.
+
+Both tests failed before the fix, matching the independent probe output.
+
+- [x] **Step 2: Fix interpretation**
+
+`QueryBalance` now backfills the requested contract number for display/downstream result context when the upstream response omits it. Aggregate public business failure detection now fails closed on non-success `errCode` even if `resultCode=SUCCESS`.
+
+- [ ] **Step 3: Redeploy and rerun independent probe**
+
+Expected changes after deploy:
+
+- `account_balance` should display `contract=CP61***2938` instead of `contract=-`;
+- fake `order_refund` with `errCode=ORDER_NOT_EXIST` should return provider_error instead of success;
+- fake query endpoints may still return `ABNORMAL` with `resultCode=SUCCESS`, which remains transport/query-shape evidence rather than business success.
+
 ### 7.3 Completion Gate For This Pre-`dataContent` Audit
 
 This pre-sandbox-positive audit is complete only when:

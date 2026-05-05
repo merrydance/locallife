@@ -70,7 +70,14 @@ func (c *Client) QueryBalance(ctx context.Context, req contracts.BalanceQueryReq
 	if err := c.root.PostAccount(ctx, "T-1001-013-06", c.merchantID(req.MerchantID), c.terminalID(req.TerminalID), officialReq, &result); err != nil {
 		return nil, err
 	}
-	return result.toBalanceResult()
+	balance, err := result.toBalanceResult()
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(balance.ContractNo) == "" {
+		balance.ContractNo = strings.TrimSpace(req.ContractNo)
+	}
+	return balance, nil
 }
 
 func (c *Client) CreateWithdraw(ctx context.Context, req contracts.WithdrawRequest) (*contracts.WithdrawResult, error) {

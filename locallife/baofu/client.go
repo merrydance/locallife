@@ -251,6 +251,10 @@ func publicBusinessFailure(raw json.RawMessage) (string, string, bool) {
 		return "MISSING_RESULT_CODE", strings.TrimSpace(payload.ErrorMessage), true
 	}
 	if resultCode == "SUCCESS" {
+		errorCode := strings.ToUpper(strings.TrimSpace(payload.ErrorCode))
+		if errorCode != "" && errorCode != "SUCCESS" {
+			return strings.TrimSpace(payload.ErrorCode), strings.TrimSpace(payload.ErrorMessage), true
+		}
 		return "", "", false
 	}
 	code := strings.TrimSpace(payload.ErrorCode)

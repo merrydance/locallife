@@ -79,3 +79,16 @@ func TestPublicBusinessFailureUsesUnknownNonSuccessResultCode(t *testing.T) {
 	require.Equal(t, "支付通道异常，请联系平台处理", providerErr.Frontend.Message)
 	require.NotContains(t, providerErr.Frontend.Message, "上游未知")
 }
+
+func TestPublicBusinessFailureFailsForSuccessResultWithFailureErrCode(t *testing.T) {
+	code, message, failed := publicBusinessFailure(json.RawMessage(`{"resultCode":"SUCCESS","errCode":"ORDER_NOT_EXIST","errMsg":"上游订单不存在"}`))
+
+	require.True(t, failed)
+	require.Equal(t, "ORDER_NOT_EXIST", code)
+	require.Equal(t, "上游订单不存在", message)
+
+	code, message, failed = publicBusinessFailure(json.RawMessage(`{"resultCode":"SUCCESS","errCode":"SUCCESS","errMsg":"OK"}`))
+	require.False(t, failed)
+	require.Empty(t, code)
+	require.Empty(t, message)
+}

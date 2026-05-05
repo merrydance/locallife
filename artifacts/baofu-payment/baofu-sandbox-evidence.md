@@ -45,6 +45,7 @@
 | 2026-05-05 | sandbox | `https://vgw.baofoo.com/union-gw/api/T-1001-013-06/transReq.do` | `CP61***2938` | - | - | - | reached sandbox; local client returned provider_error with system code `S_0000` before parsing business balance | `7133b966` | Negative balance evidence. Root cause is local contract drift: balance query page requires `version=4.0.0` and official examples return numeric balance fields, while deployed code sent `4.1.0` and only accepted string balances. Fixed locally; redeploy and rerun required before C4. |
 | 2026-05-05 | sandbox | `https://vgw.baofoo.com/union-gw/api/T-1001-013-06/transReq.do` | `CP61***2938` | - | - | - | reached sandbox; local client parsed response envelope but returned `baofu amount is required` before producing balance result | next fix | Negative balance evidence. The official balance page marks balance fields as optional and its sample omits `pendingBal`; local parser still required every amount field. Fixed locally to default missing optional amount fields to `0` while still rejecting responses with no balance fields at all. Redeploy and rerun required before C4. |
 | 2026-05-05 | sandbox | `https://vgw.baofoo.com/union-gw/api/T-1001-013-06/transReq.do` | `CP61***2938` | 0 | 0 | 0 | success; parsed union-gw response and optional amount fields into zero balance result | `6d38bf20` | Positive balance-query C4 evidence for the opened personal BaoCaiTong secondary account. `available/pending/ledger/frozen` all returned as zero; `freezeBal` was absent/empty upstream and defaulted to local zero per official optional-field contract. |
+| 2026-05-05 | sandbox | `https://vgw.baofoo.com/union-gw/api/T-1001-013-06/transReq.do` | `CP61***2938` | 0 | 0 | 0 | success; independent probe showed blank local contract display because upstream omitted `contractNo` | next fix | Request and amounts are valid, but display/local result lost the queried `contractNo` when Baofoo omitted it in the balance response. Fixed next to keep the requested `contractNo` in `BalanceResult` when the response omits it. |
 
 ## Withdrawal `T-1001-013-14`
 
@@ -54,7 +55,8 @@
 ## Withdrawal Query `T-1001-013-15`
 
 | Date | Env | Endpoint | TransSerialNo | TradeTime | Result | Local Recovery | Commit | Notes |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-05-05 | sandbox | `https://vgw.baofoo.com/union-gw/api/T-1001-013-15/transReq.do` | `BAOFU_PROBE_WD_*` | current date | provider_error `BF00069` | no | `703897a3` | Independent probe reached union-gw withdraw query endpoint with a fake serial number. This is transport/error-classification evidence only; real withdrawal query needs an actual withdrawal serial number. | --- |
 
 ## Merchant Report `merchant_report`
 
@@ -116,11 +118,13 @@
 
 | Date | Env | Endpoint | ShareOutTradeNo | Origin TradeNo Masked | Receiver Count | Amount Fen | Result | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-05-05 | sandbox | `https://mch-juhe.baofoo.com/api` | `BAOFU_PROBE_SH_*` | fake payment order | 1 | 1 | provider_error `ORDER_NOT_EXIST` | `703897a3` | Independent probe reached Baofoo and confirmed fake share_after_pay is rejected safely. This proves request shape/error classification only; real share requires a paid order, which sandbox does not support. |
 
 ## Profit Sharing Query `share_query`
 
 | Date | Env | Endpoint | ShareOutTradeNo/TradeNo | Result | Local Fact | Local Application | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-05-05 | sandbox | `https://mch-juhe.baofoo.com/api` | `BAOFU_PROBE_SH_*` | success; `txnState=ABNORMAL` | no | no | `703897a3` | Independent probe reached Baofoo and parsed public-envelope/dataContent for a nonexistent share order. Treat as transport/query-shape evidence only. |
 
 ## Profit Sharing Callback
 
@@ -131,11 +135,13 @@
 
 | Date | Env | Endpoint | RefundOutTradeNo | Origin OutTradeNo/TradeNo | Amount Fen | Result | Callback | Query | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-05-05 | sandbox | `https://mch-juhe.baofoo.com/api` | `BAOFU_PROBE_RF_*` | fake payment order | 1 | parsed as success with `refundState=ABNORMAL` and `errCode=ORDER_NOT_EXIST` before local fix | no | no | next fix | Independent probe exposed a local failure detector gap: aggregate responses can contain `resultCode=SUCCESS` plus a non-success `errCode`. Fixed next so non-success `errCode` is treated as provider_error instead of success. |
 
 ## Refund Query `refund_query`
 
 | Date | Env | Endpoint | RefundOutTradeNo/TradeNo | Result | Local Recovery | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-05-05 | sandbox | `https://mch-juhe.baofoo.com/api` | `BAOFU_PROBE_RF_*` | success; `refundState=ABNORMAL` | no | `703897a3` | Independent probe reached Baofoo and parsed public-envelope/dataContent for a nonexistent refund order. Treat as transport/query-shape evidence only. |
 
 ## Refund Callback
 
@@ -146,3 +152,4 @@
 
 | Date | Env | Endpoint | OutTradeNo/TradeNo | Trigger | Result | Local State | Commit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-05-05 | sandbox | `https://mch-juhe.baofoo.com/api` | `BAOFU_PROBE_OC_*` | fake order close probe | provider_error `SYSTEM_BUSY`, retryable | no local state | `703897a3` | Independent probe reached Baofoo and classified retryable provider response without exposing raw upstream detail. |
