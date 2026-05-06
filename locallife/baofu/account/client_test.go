@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"io"
 	"net/http"
 	"testing"
@@ -118,7 +119,7 @@ func TestAccountClientQueryBalanceKeepsRequestedContractWhenResponseOmitsIt(t *t
 }
 
 func TestAccountClientOpenAccountUsesConfiguredNotifyBaseURL(t *testing.T) {
-	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": "1", "transSerialNo": "OPEN202605040001", "contractNo": "CM202605040001", "state": "2"}}
+	doer := &accountRecordingDoer{responseBody: accountOpenAcceptedResponseForTest("OPEN202605040001", "测试用户")}
 	client := NewClient(testBaofuRootClient(t, doer))
 
 	_, err := client.OpenAccount(context.Background(), contracts.OpenAccountRequest{
@@ -138,7 +139,7 @@ func TestAccountClientOpenAccountUsesConfiguredNotifyBaseURL(t *testing.T) {
 }
 
 func TestAccountClientOpenAndQueryAccountDefaultToPayoutIdentity(t *testing.T) {
-	openDoer := &accountRecordingDoer{responseBody: map[string]any{"retCode": "1", "transSerialNo": "OPEN202605040001", "contractNo": "CM202605040001", "state": "2"}}
+	openDoer := &accountRecordingDoer{responseBody: accountOpenAcceptedResponseForTest("OPEN202605040001", "测试用户")}
 	openClient := NewClient(testBaofuRootClient(t, openDoer))
 
 	_, err := openClient.OpenAccount(context.Background(), contracts.OpenAccountRequest{
@@ -191,7 +192,7 @@ func TestAccountClientOpenAccountRejectsPersonalTwoFactorBeforeHTTP(t *testing.T
 }
 
 func TestAccountClientOpenAccountMapsCompleteBusinessInputToOfficialDTO(t *testing.T) {
-	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": "1", "transSerialNo": "OPEN202605040003", "contractNo": "CM202605040003", "state": "2"}}
+	doer := &accountRecordingDoer{responseBody: accountOpenAcceptedResponseForTest("OPEN202605040003", "某某餐饮店")}
 	client := NewClient(testBaofuRootClient(t, doer))
 
 	_, err := client.OpenAccount(context.Background(), contracts.OpenAccountRequest{
@@ -266,6 +267,8 @@ func TestAccountClientOpenAccountParsesOfficialResultArray(t *testing.T) {
 		"errorMsg":  "上游资料校验失败",
 		"result": []map[string]any{{
 			"transSerialNo": "OPEN202605050001",
+			"loginNo":       "OPEN202605050001",
+			"customerName":  "测试用户",
 			"contractNo":    "",
 			"state":         -1,
 			"errorCode":     "BF0001",
@@ -291,8 +294,32 @@ func TestAccountClientOpenAccountParsesOfficialResultArray(t *testing.T) {
 	require.Equal(t, "上游资料校验失败", result.FailMessage)
 }
 
+func TestAccountClientOpenAccountRejectsOfficialSuccessMissingState(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{
+		"retCode": 1,
+		"result": []map[string]any{{
+			"transSerialNo": "OPEN202605050001",
+			"loginNo":       "OPEN202605050001",
+			"customerName":  "测试用户",
+			"contractNo":    "CP610000000000542938",
+		}},
+	}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.OpenAccount(context.Background(), contracts.OpenAccountRequest{
+		AccountType:   "personal",
+		OutRequestNo:  "OPEN202605050001",
+		LegalName:     "测试用户",
+		CertificateNo: "110101199001010011",
+		BankAccountNo: "6222020202020202020",
+		BankMobile:    "13800138000",
+	})
+
+	requireAccountProviderContractError(t, err, "T-1001-013-01", "baofu open account response state is required")
+}
+
 func TestAccountClientQueryAccountUsesPersonalAccountType(t *testing.T) {
-	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": 1, "result": []map[string]any{{"transSerialNo": "OPEN202605050001", "state": 2}}}}
+	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": 1, "result": map[string]any{"contractNo": "CM202605050001"}}}
 	client := NewClient(testBaofuRootClient(t, doer))
 
 	_, err := client.QueryAccount(context.Background(), contracts.QueryAccountRequest{
@@ -351,6 +378,21 @@ func TestAccountClientQueryAccountTreatsContractOnlySuccessAsActive(t *testing.T
 	require.Empty(t, result.FailCode)
 }
 
+func TestAccountClientQueryAccountRejectsOfficialSuccessMissingContractNo(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{
+		"retCode": 1,
+		"result":  map[string]any{"contractName": "测试账户"},
+	}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.QueryAccount(context.Background(), contracts.QueryAccountRequest{
+		ContractNo:  "CP610000000000542938",
+		AccountType: "personal",
+	})
+
+	requireAccountProviderContractError(t, err, "T-1001-013-03", "baofu query account response contractNo is required")
+}
+
 func TestAccountClientCreateWithdrawTreatsSyncAcceptedAsProcessing(t *testing.T) {
 	doer := &accountRecordingDoer{responseBody: map[string]any{
 		"retCode":       1,
@@ -381,6 +423,7 @@ func TestAccountClientCreateWithdrawTreatsSyncAcceptedAsProcessing(t *testing.T)
 func TestAccountClientQueryWithdrawSendsOfficialTradeTimeAndParsesAmounts(t *testing.T) {
 	doer := &accountRecordingDoer{responseBody: map[string]any{
 		"retCode":             1,
+		"memberId":            "102004466",
 		"contractNo":          "CP610000000000542938",
 		"state":               1,
 		"orderId":             21273130,
@@ -409,6 +452,51 @@ func TestAccountClientQueryWithdrawSendsOfficialTradeTimeAndParsesAmounts(t *tes
 	env := accountRequestEnvelopeForTest(t, doer)
 	require.Equal(t, "T-1001-013-15", env.Header.ServiceType)
 	require.JSONEq(t, `{"version":"4.2.0","transSerialNo":"WD202605050001","tradeTime":"2026-05-05"}`, partialJSONForAccountTest(t, env.Body, "version", "transSerialNo", "tradeTime"))
+}
+
+func TestAccountClientQueryWithdrawRejectsInvalidOfficialAmount(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{
+		"retCode":             1,
+		"memberId":            "102004466",
+		"contractNo":          "CP610000000000542938",
+		"state":               1,
+		"orderId":             21273130,
+		"transSerialNo":       "WD202605050001",
+		"transMoney":          "not-a-money",
+		"transFee":            "1.00",
+		"transferTotalAmount": "10.01",
+	}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.QueryWithdraw(context.Background(), contracts.WithdrawQueryRequest{
+		MerchantID:    "102004466",
+		TerminalID:    "200005201",
+		TransSerialNo: "WD202605050001",
+		TradeTime:     "2026-05-05",
+	})
+
+	requireAccountProviderContractError(t, err, "T-1001-013-15", "baofu amount must be a decimal number")
+}
+
+func requireAccountProviderContractError(t *testing.T, err error, operation string, cause string) {
+	t.Helper()
+	require.Error(t, err)
+	var providerErr *baofu.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, operation, providerErr.Operation)
+	require.Contains(t, errors.Unwrap(providerErr).Error(), cause)
+}
+
+func accountOpenAcceptedResponseForTest(transSerialNo string, customerName string) map[string]any {
+	return map[string]any{
+		"retCode": 1,
+		"result": []map[string]any{{
+			"transSerialNo": transSerialNo,
+			"loginNo":       transSerialNo,
+			"customerName":  customerName,
+			"state":         2,
+		}},
+	}
 }
 
 func TestAccountClientQueryWithdrawRejectsMissingTradeTimeBeforeHTTP(t *testing.T) {

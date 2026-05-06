@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	db "github.com/merrydance/locallife/db/sqlc"
 )
@@ -178,14 +180,46 @@ func (r UnifiedOrderRequest) ValidateForEnvironment(environment string) error {
 	if strings.TrimSpace(r.OutTradeNo) == "" {
 		return ErrUnifiedOrderOutTradeNoRequired
 	}
+	if err := validateMaxLength("baofu unified order", "agentMerId", r.AgentMerchantID, 16); err != nil {
+		return err
+	}
+	if err := validateMaxLength("baofu unified order", "agentTerId", r.AgentTerminalID, 16); err != nil {
+		return err
+	}
+	if err := validateMaxLength("baofu unified order", "merId", r.MerchantID, 16); err != nil {
+		return err
+	}
+	if err := validateMaxLength("baofu unified order", "terId", r.TerminalID, 16); err != nil {
+		return err
+	}
+	if err := validateMaxLength("baofu unified order", "outTradeNo", r.OutTradeNo, 32); err != nil {
+		return err
+	}
 	if r.TransactionAmt <= 0 {
 		return ErrUnifiedOrderAmountInvalid
 	}
 	if r.TotalAmt < r.TransactionAmt {
 		return ErrUnifiedOrderTotalAmountInvalid
 	}
+	if r.MarketingInfo == nil && r.TotalAmt != r.TransactionAmt {
+		return errors.New("baofu unified order totalAmt must equal txnAmt when mktInfo is absent")
+	}
+	if r.MarketingInfo != nil {
+		if err := r.MarketingInfo.Validate("baofu unified order mktInfo"); err != nil {
+			return err
+		}
+		if r.TotalAmt != r.TransactionAmt+r.MarketingInfo.AmountFen {
+			return errors.New("baofu unified order totalAmt must equal txnAmt plus mktInfo.mktAmt")
+		}
+	}
 	if !isBaofuTransactionTime(r.TransactionTime) {
 		return ErrUnifiedOrderTransactionTimeInvalid
+	}
+	if r.TimeExpire < 0 {
+		return errors.New("baofu unified order timeExpire must be non-negative")
+	}
+	if r.TimeExpire > 7*24*60 {
+		return errors.New("baofu unified order timeExpire must be at most 10080 minutes")
 	}
 	if strings.TrimSpace(r.ProductType) != ProductTypeSharing {
 		return ErrUnifiedOrderProductTypeUnsupported
@@ -212,12 +246,47 @@ func (r UnifiedOrderRequest) ValidateForEnvironment(environment string) error {
 		if r.RiskInfo == nil || strings.TrimSpace(r.RiskInfo.ClientIP) == "" {
 			return ErrUnifiedOrderRiskInfoClientIPRequired
 		}
+		if err := validateMaxLength("baofu unified order riskInfo", "clientIp", r.RiskInfo.ClientIP, 64); err != nil {
+			return err
+		}
+		if err := validateMaxLength("baofu unified order riskInfo", "locationPoint", r.RiskInfo.LocationPoint, 128); err != nil {
+			return err
+		}
+	}
+	for _, field := range []struct {
+		name  string
+		value string
+		max   int
+	}{
+		{"subMchId", r.SubMchID, 64},
+		{"notifyUrl", r.NotifyURL, 128},
+		{"pageUrl", r.PageURL, 128},
+		{"forbidCredit", r.ForbidCredit, 1},
+		{"attach", r.Attach, 128},
+		{"reqReserved", r.RequestReserved, 128},
+	} {
+		if err := validateMaxLength("baofu unified order", field.name, field.value, field.max); err != nil {
+			return err
+		}
 	}
 	if strings.TrimSpace(r.PageURL) != "" && !isHTTPSURL(r.PageURL) {
 		return ErrUnifiedOrderPageURLInvalid
 	}
 	if strings.TrimSpace(r.ForbidCredit) != "" && strings.TrimSpace(r.ForbidCredit) != "0" && strings.TrimSpace(r.ForbidCredit) != "1" {
 		return ErrUnifiedOrderForbidCreditUnsupported
+	}
+	return nil
+}
+
+func (i MarketingInfo) Validate(prefix string) error {
+	if strings.TrimSpace(i.MerchantID) == "" {
+		return errors.New(prefix + ".mktMerId is required")
+	}
+	if err := validateMaxLength(prefix, "mktMerId", i.MerchantID, 16); err != nil {
+		return err
+	}
+	if i.AmountFen <= 0 {
+		return errors.New(prefix + ".mktAmt must be positive")
 	}
 	return nil
 }
@@ -544,6 +613,24 @@ func (r ShareAfterPayRequest) Validate() error {
 	if strings.TrimSpace(r.OutTradeNo) == "" {
 		return errors.New("baofu share out trade no is required")
 	}
+	for _, field := range []struct {
+		name  string
+		value string
+		max   int
+	}{
+		{"agentMerId", r.AgentMerchantID, 16},
+		{"agentTerId", r.AgentTerminalID, 16},
+		{"merId", r.MerchantID, 16},
+		{"terId", r.TerminalID, 16},
+		{"originTradeNo", r.OriginTradeNo, 32},
+		{"originOutTradeNo", r.OriginOutTradeNo, 64},
+		{"outTradeNo", r.OutTradeNo, 50},
+		{"notifyUrl", r.NotifyURL, 128},
+	} {
+		if err := validateMaxLength("baofu share", field.name, field.value, field.max); err != nil {
+			return err
+		}
+	}
 	if !isBaofuTransactionTime(r.TxnTime) {
 		return ErrBaofuShareTransactionTimeInvalid
 	}
@@ -553,6 +640,9 @@ func (r ShareAfterPayRequest) Validate() error {
 	for _, detail := range r.SharingDetails {
 		if strings.TrimSpace(detail.SharingMerID) == "" {
 			return errors.New("baofu share receiver id is required")
+		}
+		if err := validateMaxLength("baofu share", "sharingMerId", detail.SharingMerID, 64); err != nil {
+			return err
 		}
 		if detail.SharingAmountFen <= 0 {
 			return errors.New("baofu share amount must be positive")
@@ -751,11 +841,44 @@ func (r RefundBeforeShareRequest) Validate() error {
 	if strings.TrimSpace(r.OutTradeNo) == "" {
 		return ErrBaofuRefundOutTradeNoRequired
 	}
+	for _, field := range []struct {
+		name  string
+		value string
+		max   int
+	}{
+		{"agentMerId", r.AgentMerchantID, 16},
+		{"agentTerId", r.AgentTerminalID, 16},
+		{"merId", r.MerchantID, 16},
+		{"terId", r.TerminalID, 16},
+		{"merchantName", r.MerchantName, 128},
+		{"originTradeNo", r.OriginTradeNo, 32},
+		{"originOutTradeNo", r.OriginOutTradeNo, 32},
+		{"outTradeNo", r.OutTradeNo, 50},
+		{"notifyUrl", r.NotifyURL, 128},
+		{"attach", r.Attach, 128},
+		{"reqReserved", r.RequestReserved, 128},
+		{"refundReason", r.RefundReason, 128},
+	} {
+		if err := validateMaxLength("baofu refund", field.name, field.value, field.max); err != nil {
+			return err
+		}
+	}
 	if r.RefundAmountFen <= 0 {
 		return ErrBaofuRefundAmountInvalid
 	}
 	if r.TotalAmountFen < r.RefundAmountFen {
 		return ErrBaofuRefundTotalAmountInvalid
+	}
+	if r.MarketingInfo == nil && r.TotalAmountFen != r.RefundAmountFen {
+		return errors.New("baofu refund totalAmt must equal refundAmt when mktRefundInfo is absent")
+	}
+	if r.MarketingInfo != nil {
+		if err := r.MarketingInfo.Validate("baofu refund mktRefundInfo"); err != nil {
+			return err
+		}
+		if r.TotalAmountFen != r.RefundAmountFen+r.MarketingInfo.AmountFen {
+			return errors.New("baofu refund totalAmt must equal refundAmt plus mktRefundInfo.mktAmt")
+		}
 	}
 	if !isBaofuTransactionTime(r.TransactionTime) {
 		return ErrBaofuRefundTransactionTimeInvalid
@@ -768,6 +891,19 @@ func (r RefundBeforeShareRequest) Validate() error {
 	}
 	if r.AdvanceAmountFen > 0 {
 		return ErrBaofuRefundAdvanceUnsupported
+	}
+	return nil
+}
+
+func (i MarketingRefundInfo) Validate(prefix string) error {
+	if strings.TrimSpace(i.MerchantID) == "" {
+		return errors.New(prefix + ".mktMerId is required")
+	}
+	if err := validateMaxLength(prefix, "mktMerId", i.MerchantID, 16); err != nil {
+		return err
+	}
+	if i.AmountFen <= 0 {
+		return errors.New(prefix + ".mktAmt must be positive")
 	}
 	return nil
 }
@@ -1059,6 +1195,13 @@ func validateResponsePayCode(prefix string, payCode string, required bool) error
 	}
 	if trimmed != PayCodeWechatJSAPI {
 		return errors.New(prefix + " payCode is unsupported")
+	}
+	return nil
+}
+
+func validateMaxLength(prefix, field, value string, max int) error {
+	if utf8.RuneCountInString(strings.TrimSpace(value)) > max {
+		return errors.New(prefix + " " + field + " must be at most " + strconv.Itoa(max) + " characters")
 	}
 	return nil
 }

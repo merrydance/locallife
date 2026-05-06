@@ -2,6 +2,7 @@ package baofu
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -101,6 +102,13 @@ func TestPublicResponseEnvelopeValidateHandlesTransportStatus(t *testing.T) {
 
 	env.ReturnCode = ""
 	require.EqualError(t, env.Validate(), "baofu public response returnCode is required")
+
+	env.ReturnCode = PublicEnvelopeReturnCodeFail
+	env.ReturnMessage = ""
+	require.EqualError(t, env.Validate(), "baofu public response returnMsg is required when returnCode is FAIL")
+
+	env.ReturnMessage = strings.Repeat("错", 129)
+	require.EqualError(t, env.Validate(), "baofu public response returnMsg must be at most 128 characters")
 }
 
 func TestPublicResponseEnvelopeValidationUpstreamCodeForMissingDataContent(t *testing.T) {

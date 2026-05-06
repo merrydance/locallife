@@ -41,36 +41,6 @@ func randomRider(userID int64) db.Rider {
 	}
 }
 
-func expectRiderThresholdFromPlatformDefault(store *mockdb.MockStore, rider db.Rider, threshold int64) {
-	store.EXPECT().
-		GetRegionRuleConfigByRegion(gomock.Any(), rider.RegionID.Int64).
-		Times(1).
-		Return(db.RegionRuleConfig{}, db.ErrRecordNotFound)
-	if threshold > 0 && threshold != db.DefaultRiderDepositThresholdFen {
-		thresholdConfig, err := json.Marshal(depositConfigValue{AmountFen: threshold})
-		if err != nil {
-			panic(err)
-		}
-		store.EXPECT().
-			GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
-				ConfigKey: db.PlatformConfigKeyRiderDepositFen,
-				ScopeType: db.PlatformConfigScopeGlobal,
-				ScopeID:   pgtype.Int8{Valid: false},
-			}).
-			Times(1).
-			Return(db.PlatformConfig{ConfigValue: thresholdConfig}, nil)
-		return
-	}
-	store.EXPECT().
-		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
-			ConfigKey: db.PlatformConfigKeyRiderDepositFen,
-			ScopeType: db.PlatformConfigScopeGlobal,
-			ScopeID:   pgtype.Int8{Valid: false},
-		}).
-		Times(1).
-		Return(db.PlatformConfig{}, db.ErrRecordNotFound)
-}
-
 func expectRiderThresholdFromRegionRule(store *mockdb.MockStore, rider db.Rider, threshold int64) {
 	store.EXPECT().
 		GetRegionRuleConfigByRegion(gomock.Any(), rider.RegionID.Int64).

@@ -30,6 +30,9 @@ func (r OfficialQueryAccountRequest) Validate() error {
 	certificateType := strings.TrimSpace(r.CertificateType)
 	platformNo := strings.TrimSpace(r.PlatformNo)
 	if contractNo != "" {
+		if err := validateOfficialMaxLength("baofu query account", "contractNo", contractNo, 32); err != nil {
+			return err
+		}
 		if loginNo != "" || certificateNo != "" || certificateType != "" || platformNo != "" {
 			return errors.New("baofu query account contractNo cannot be combined with loginNo identity fields")
 		}
@@ -46,6 +49,20 @@ func (r OfficialQueryAccountRequest) Validate() error {
 	}
 	if platformNo == "" {
 		return errors.New("baofu query account platformNo is required when loginNo is used")
+	}
+	for _, field := range []struct {
+		name  string
+		value string
+		max   int
+	}{
+		{"loginNo", loginNo, 128},
+		{"certificateNo", certificateNo, 64},
+		{"certificateType", certificateType, 16},
+		{"platformNo", platformNo, 32},
+	} {
+		if err := validateOfficialMaxLength("baofu query account", field.name, field.value, field.max); err != nil {
+			return err
+		}
 	}
 	if certificateType != OfficialCertificateTypeID && certificateType != OfficialBusinessCertificateTypeLicense {
 		return errors.New("baofu query account certificateType is unsupported")

@@ -80,7 +80,7 @@ func TestAggregateClientReturnsSanitizedProviderError(t *testing.T) {
 }
 
 func TestAggregateClientReturnsProviderErrorForBusinessFailure(t *testing.T) {
-	doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"FAIL","errCode":"MERCHANT_NOT_REPORT","errMsg":"上游原始报备错误","outTradeNo":"BF202605040001"}`)}
+	doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"FAIL","errCode":"MERCHANT_NOT_REPORT","errMsg":"上游原始报备错误","merId":"102004465","terId":"200005200","outTradeNo":"BF202605040001","payCode":"WECHAT_JSAPI"}`)}
 	client := NewClient(testBaofuRootClient(t, doer))
 
 	_, err := client.CreateUnifiedOrder(context.Background(), validUnifiedOrderRequestForClientTest())
@@ -93,6 +93,15 @@ func TestAggregateClientReturnsProviderErrorForBusinessFailure(t *testing.T) {
 	require.Equal(t, "上游原始报备错误", providerErr.UpstreamMessage)
 	require.Equal(t, "商户微信支付通道待开通，请联系平台处理", providerErr.Frontend.Message)
 	require.Equal(t, "contact_platform", providerErr.Frontend.Action)
+}
+
+func TestAggregateClientValidatesBusinessFailurePayloadBeforeReturningProviderError(t *testing.T) {
+	doer := &aggregateRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"FAIL","errCode":"MERCHANT_NOT_REPORT","errMsg":"上游原始报备错误","outTradeNo":"BF202605040001","payCode":"WECHAT_JSAPI"}`)}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.CreateUnifiedOrder(context.Background(), validUnifiedOrderRequestForClientTest())
+
+	requireAggregateContractProviderError(t, err, "unified_order", "baofu unified order response merId is required")
 }
 
 func TestAggregateClientReturnsProviderErrorForEnvelopeFailure(t *testing.T) {
@@ -340,6 +349,7 @@ func (d *aggregateRecordingDoer) Do(req *http.Request) (*http.Response, error) {
 		}
 		responseBody, _ = json.Marshal(baofu.PublicResponseEnvelope{
 			ReturnCode:         baofu.PublicEnvelopeReturnCodeSuccess,
+			ReturnMessage:      "OK",
 			MerchantID:         responseMerchantID,
 			TerminalID:         responseTerminalID,
 			Charset:            baofu.PublicEnvelopeCharsetUTF8,

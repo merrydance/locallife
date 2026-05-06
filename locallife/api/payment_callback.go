@@ -340,19 +340,6 @@ func (server *Server) validatePartnerNotifyOwnership(resource *wechatcontracts.P
 	return nil
 }
 
-func (server *Server) validateOrdinaryPartnerNotifyOwnership(resource *wechatcontracts.PartnerPaymentNotificationResource) error {
-	if server.ordinarySPClient == nil {
-		return errors.New("ordinary service provider client not configured")
-	}
-	if resource.SpMchID != "" && resource.SpMchID != server.ordinarySPClient.ServiceProviderMchID() {
-		return fmt.Errorf("sp_mchid mismatch")
-	}
-	if resource.SpAppID != "" && resource.SpAppID != server.ordinarySPClient.ServiceProviderAppID() {
-		return fmt.Errorf("sp_appid mismatch")
-	}
-	return nil
-}
-
 func (server *Server) validateOrdinaryPaymentNotifyOwnership(resource *ospcontracts.PaymentNotificationPayload) error {
 	if server.ordinarySPClient == nil {
 		return errors.New("ordinary service provider client not configured")
@@ -365,19 +352,6 @@ func (server *Server) validateOrdinaryPaymentNotifyOwnership(resource *ospcontra
 	}
 	if resource.SpAppID != "" && resource.SpAppID != server.ordinarySPClient.ServiceProviderAppID() {
 		return fmt.Errorf("sp_appid mismatch")
-	}
-	return nil
-}
-
-func (server *Server) validateOrdinaryCombineNotifyOwnership(resource *wechatcontracts.CombinePaymentNotification) error {
-	if server.ordinarySPClient == nil {
-		return errors.New("ordinary service provider client not configured")
-	}
-	if resource.CombineMchID != "" && resource.CombineMchID != server.ordinarySPClient.ServiceProviderMchID() {
-		return fmt.Errorf("combine_mchid mismatch")
-	}
-	if resource.CombineAppID != "" && resource.CombineAppID != server.ordinarySPClient.ServiceProviderAppID() {
-		return fmt.Errorf("combine_appid mismatch")
 	}
 	return nil
 }

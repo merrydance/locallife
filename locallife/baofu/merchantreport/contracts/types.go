@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 type WechatMerchantReportRequest struct {
@@ -273,6 +274,22 @@ func (r WechatMerchantReportRequest) Validate() error {
 	if err := validateMerchantTerminal(r.MerchantID, r.TerminalID, "baofu merchant report"); err != nil {
 		return err
 	}
+	for _, field := range []struct {
+		name  string
+		value string
+		max   int
+	}{
+		{"agentMerId", r.AgentMerchantID, 16},
+		{"agentTerId", r.AgentTerminalID, 16},
+		{"merId", r.MerchantID, 16},
+		{"terId", r.TerminalID, 16},
+		{"reportNo", r.ReportNo, 64},
+		{"bctMerId", r.BCTMerchantID, 64},
+	} {
+		if err := validateMaxLength("baofu merchant report", field.name, field.value, field.max); err != nil {
+			return err
+		}
+	}
 	if !IsValidReportType(r.ReportType) {
 		return errors.New("baofu merchant report reportType is unsupported")
 	}
@@ -309,6 +326,27 @@ func (i WechatReportInfo) Validate() error {
 	if !IsValidWechatCertificateType(i.BusinessLicenseType) {
 		return errors.New("baofu merchant report wechat business_license_type is unsupported")
 	}
+	for _, field := range []struct {
+		name  string
+		value string
+		max   int
+	}{
+		{"merchant_name", i.MerchantName, 50},
+		{"merchant_shortname", i.MerchantShortName, 20},
+		{"service_phone", i.ServicePhone, 20},
+		{"contact", i.Contact, 10},
+		{"contact_phone", i.ContactPhone, 11},
+		{"contact_email", i.ContactEmail, 30},
+		{"channel_id", i.ChannelID, 32},
+		{"channel_name", i.ChannelName, 50},
+		{"business", i.Business, 10},
+		{"business_license_type", i.BusinessLicenseType, 32},
+		{"business_license", i.BusinessLicense, 20},
+	} {
+		if err := validateMaxLength("baofu merchant report wechat", field.name, field.value, field.max); err != nil {
+			return err
+		}
+	}
 	if len(i.ServiceCodes) == 0 {
 		return errors.New("baofu merchant report wechat service_codes are required")
 	}
@@ -334,6 +372,22 @@ func (i WechatAddressInfo) Validate() error {
 			return errors.New("baofu merchant report wechat address_info." + field.name + " is required")
 		}
 	}
+	for _, field := range []struct {
+		name  string
+		value string
+		max   int
+	}{
+		{"province_code", i.ProvinceCode, 10},
+		{"city_code", i.CityCode, 6},
+		{"address", i.Address, 64},
+		{"longitude", i.Longitude, 11},
+		{"latitude", i.Latitude, 10},
+		{"type", i.Type, 32},
+	} {
+		if err := validateMaxLength("baofu merchant report wechat address_info", field.name, field.value, field.max); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -346,12 +400,40 @@ func (i WechatBankCardInfo) Validate() error {
 			return errors.New("baofu merchant report wechat bankcard_info." + field.name + " is required")
 		}
 	}
+	for _, field := range []struct {
+		name  string
+		value string
+		max   int
+	}{
+		{"card_name", i.CardName, 32},
+		{"card_no", i.CardNo, 48},
+		{"bank_branch_name", i.BankBranchName, 32},
+	} {
+		if err := validateMaxLength("baofu merchant report wechat bankcard_info", field.name, field.value, field.max); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func (r MerchantReportQueryRequest) Validate() error {
 	if err := validateMerchantTerminal(r.MerchantID, r.TerminalID, "baofu merchant report query"); err != nil {
 		return err
+	}
+	for _, field := range []struct {
+		name  string
+		value string
+		max   int
+	}{
+		{"agentMerId", r.AgentMerchantID, 16},
+		{"agentTerId", r.AgentTerminalID, 16},
+		{"merId", r.MerchantID, 16},
+		{"terId", r.TerminalID, 16},
+		{"reportNo", r.ReportNo, 64},
+	} {
+		if err := validateMaxLength("baofu merchant report query", field.name, field.value, field.max); err != nil {
+			return err
+		}
 	}
 	if !IsValidReportType(r.ReportType) {
 		return errors.New("baofu merchant report query reportType is unsupported")
@@ -390,6 +472,17 @@ func validateMerchantTerminal(merchantID, terminalID, prefix string) error {
 	}
 	if strings.TrimSpace(terminalID) == "" {
 		return errors.New(prefix + " terId is required")
+	}
+	return nil
+}
+
+func validateMaxLength(prefix, field, value string, max int) error {
+	if utf8.RuneCountInString(strings.TrimSpace(value)) > max {
+		separator := " "
+		if strings.HasSuffix(prefix, "_info") {
+			separator = "."
+		}
+		return errors.New(prefix + separator + field + " must be at most " + strconv.Itoa(max) + " characters")
 	}
 	return nil
 }

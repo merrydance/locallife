@@ -102,6 +102,32 @@ func TestUnifiedOrderRequestValidateOfficialRequiredFields(t *testing.T) {
 	}
 }
 
+func TestUnifiedOrderRequestValidateOfficialLengthsAndConditionalNestedFields(t *testing.T) {
+	t.Run("outTradeNo S32", func(t *testing.T) {
+		req := validWechatUnifiedOrderRequestForTest()
+		req.OutTradeNo = stringOfLen("O", 33)
+		require.EqualError(t, req.Validate(), "baofu unified order outTradeNo must be at most 32 characters")
+	})
+
+	t.Run("timeExpire max seven days in minutes", func(t *testing.T) {
+		req := validWechatUnifiedOrderRequestForTest()
+		req.TimeExpire = 7*24*60 + 1
+		require.EqualError(t, req.Validate(), "baofu unified order timeExpire must be at most 10080 minutes")
+	})
+
+	t.Run("marketing merchant required when mktInfo present", func(t *testing.T) {
+		req := validWechatUnifiedOrderRequestForTest()
+		req.MarketingInfo = &MarketingInfo{AmountFen: 100}
+		require.EqualError(t, req.Validate(), "baofu unified order mktInfo.mktMerId is required")
+	})
+
+	t.Run("marketing amount positive when mktInfo present", func(t *testing.T) {
+		req := validWechatUnifiedOrderRequestForTest()
+		req.MarketingInfo = &MarketingInfo{MerchantID: "102004465"}
+		require.EqualError(t, req.Validate(), "baofu unified order mktInfo.mktAmt must be positive")
+	})
+}
+
 func validWechatUnifiedOrderRequestForTest() UnifiedOrderRequest {
 	req := NewWechatJSAPISharingUnifiedOrderRequest(UnifiedOrderInput{
 		OutTradeNo: "BF202605030099",
@@ -275,6 +301,20 @@ func TestShareAfterPayRequestRequiresPaymentReferenceAndReceiverIDs(t *testing.T
 	require.ErrorIs(t, req.Validate(), ErrBaofuShareTransactionTimeInvalid)
 }
 
+func TestShareAfterPayRequestValidateOfficialLengths(t *testing.T) {
+	req := ShareAfterPayRequest{
+		MerchantID:       "102004465",
+		TerminalID:       "200005200",
+		OriginOutTradeNo: "BF202605030001",
+		OutTradeNo:       "BFSHARE202605030001",
+		TxnTime:          "20260503120500",
+		SharingDetails:   []SharingDetail{{SharingMerID: "CP_MERCHANT", SharingAmountFen: 12000}},
+	}
+	req.OutTradeNo = stringOfLen("S", 51)
+
+	require.EqualError(t, req.Validate(), "baofu share outTradeNo must be at most 50 characters")
+}
+
 func TestShareQueryRequestValidateOfficialRequiredFields(t *testing.T) {
 	req := ShareQueryRequest{AgentMerchantID: "agent-merchant", AgentTerminalID: "agent-terminal", MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "BFSHARE202605040001"}
 	require.NoError(t, req.Validate())
@@ -359,6 +399,26 @@ func TestRefundBeforeShareRequestRequiresOfficialFields(t *testing.T) {
 	}
 }
 
+func TestRefundBeforeShareRequestValidateOfficialLengthsAndMarketingInfo(t *testing.T) {
+	t.Run("outTradeNo S50", func(t *testing.T) {
+		req := validBaofuRefundBeforeShareRequestForTest()
+		req.OutTradeNo = stringOfLen("R", 51)
+		require.EqualError(t, req.Validate(), "baofu refund outTradeNo must be at most 50 characters")
+	})
+
+	t.Run("marketing merchant required", func(t *testing.T) {
+		req := validBaofuRefundBeforeShareRequestForTest()
+		req.MarketingInfo = &MarketingRefundInfo{AmountFen: 100}
+		require.EqualError(t, req.Validate(), "baofu refund mktRefundInfo.mktMerId is required")
+	})
+
+	t.Run("marketing amount positive", func(t *testing.T) {
+		req := validBaofuRefundBeforeShareRequestForTest()
+		req.MarketingInfo = &MarketingRefundInfo{MerchantID: "102004465"}
+		require.EqualError(t, req.Validate(), "baofu refund mktRefundInfo.mktAmt must be positive")
+	})
+}
+
 func TestOrderCloseRequiresOriginalPaymentReference(t *testing.T) {
 	req := OrderCloseRequest{MerchantID: "102004465", TerminalID: "200005200"}
 	require.ErrorIs(t, req.Validate(), ErrBaofuOrderCloseReferenceRequired)
@@ -414,4 +474,12 @@ func validBaofuRefundBeforeShareRequestForTest() RefundBeforeShareRequest {
 		RefundReason:     "用户申请退款",
 		RequestReserved:  "refund-order:9001",
 	}
+}
+
+func stringOfLen(ch string, n int) string {
+	out := ""
+	for i := 0; i < n; i++ {
+		out += ch
+	}
+	return out
 }

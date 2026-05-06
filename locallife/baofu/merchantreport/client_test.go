@@ -62,7 +62,7 @@ func TestMerchantReportClientQueryNormalizesWechatSubMchIDFromChannelReturnParam
 }
 
 func TestMerchantReportClientReturnsProviderErrorForBusinessFailure(t *testing.T) {
-	doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"FAIL","errCode":"INVALID_PARAMETER","errMsg":"上游原始参数错误"}`)}
+	doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"FAIL","errCode":"INVALID_PARAMETER","errMsg":"上游原始参数错误","merId":"102004465","terId":"200005200","reportType":"WECHAT","reportNo":"MR202605040001"}`)}
 	client := NewClient(testBaofuRootClient(t, doer))
 
 	_, err := client.SubmitWechatReport(context.Background(), validWechatReportRequestForClientTest())
@@ -73,6 +73,15 @@ func TestMerchantReportClientReturnsProviderErrorForBusinessFailure(t *testing.T
 	require.ErrorAs(t, err, &providerErr)
 	require.Equal(t, "INVALID_PARAMETER", providerErr.UpstreamCode)
 	require.Equal(t, "资料信息不完整，请核对后重新提交", providerErr.Frontend.Message)
+}
+
+func TestMerchantReportClientValidatesBusinessFailurePayloadBeforeProviderError(t *testing.T) {
+	doer := &merchantReportRecordingDoer{responseDataContent: json.RawMessage(`{"resultCode":"FAIL","errCode":"INVALID_PARAMETER","errMsg":"上游原始参数错误","terId":"200005200","reportType":"WECHAT","reportNo":"MR202605040001"}`)}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.SubmitWechatReport(context.Background(), validWechatReportRequestForClientTest())
+
+	requireMerchantReportContractProviderError(t, err, "merchant_report", "baofu merchant report response merId is required")
 }
 
 func TestMerchantReportClientRunsMethodSpecificResponseValidation(t *testing.T) {
@@ -180,7 +189,7 @@ func (d *merchantReportRecordingDoer) Do(req *http.Request) (*http.Response, err
 	if err != nil {
 		return nil, err
 	}
-	responseBody, _ := json.Marshal(baofu.PublicResponseEnvelope{ReturnCode: baofu.PublicEnvelopeReturnCodeSuccess, MerchantID: reqEnv.MerchantID, TerminalID: reqEnv.TerminalID, Charset: baofu.PublicEnvelopeCharsetUTF8, Version: baofu.PublicEnvelopeVersion10, Format: baofu.PublicEnvelopeFormatJSON, SignType: baofu.SignTypeRSA, SignSerialNo: "1", EncryptionSerialNo: "1", SignString: signature, DataContent: baofu.JSONString(d.responseDataContent)})
+	responseBody, _ := json.Marshal(baofu.PublicResponseEnvelope{ReturnCode: baofu.PublicEnvelopeReturnCodeSuccess, ReturnMessage: "OK", MerchantID: reqEnv.MerchantID, TerminalID: reqEnv.TerminalID, Charset: baofu.PublicEnvelopeCharsetUTF8, Version: baofu.PublicEnvelopeVersion10, Format: baofu.PublicEnvelopeFormatJSON, SignType: baofu.SignTypeRSA, SignSerialNo: "1", EncryptionSerialNo: "1", SignString: signature, DataContent: baofu.JSONString(d.responseDataContent)})
 	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(responseBody)), Header: make(http.Header)}, nil
 }
 

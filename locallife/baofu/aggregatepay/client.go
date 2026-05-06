@@ -3,6 +3,7 @@ package aggregatepay
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/merrydance/locallife/baofu"
 	"github.com/merrydance/locallife/baofu/aggregatepay/contracts"
@@ -44,6 +45,9 @@ func (c *HTTPClient) CreateUnifiedOrder(ctx context.Context, req contracts.Unifi
 	if err := result.ValidateUnifiedOrderResponseForRequest(req); err != nil {
 		return nil, baofu.NewProviderContractError("unified_order", err)
 	}
+	if err := aggregateBusinessFailureError("unified_order", result.ResultCode, result.ErrorCode, result.ErrorMessage); err != nil {
+		return nil, err
+	}
 	return &result, nil
 }
 
@@ -60,6 +64,9 @@ func (c *HTTPClient) QueryPayment(ctx context.Context, req contracts.PaymentQuer
 	}
 	if err := result.ValidateOrderQueryResponseForRequest(req); err != nil {
 		return nil, baofu.NewProviderContractError("order_query", err)
+	}
+	if err := aggregateBusinessFailureError("order_query", result.ResultCode, result.ErrorCode, result.ErrorMessage); err != nil {
+		return nil, err
 	}
 	return &result, nil
 }
@@ -78,6 +85,9 @@ func (c *HTTPClient) CreateProfitSharing(ctx context.Context, req contracts.Shar
 	if err := result.ValidateShareAfterPayResponseForRequest(req); err != nil {
 		return nil, baofu.NewProviderContractError("share_after_pay", err)
 	}
+	if err := aggregateBusinessFailureError("share_after_pay", result.ResultCode, result.ErrorCode, result.ErrorMessage); err != nil {
+		return nil, err
+	}
 	return &result, nil
 }
 
@@ -94,6 +104,9 @@ func (c *HTTPClient) QueryProfitSharing(ctx context.Context, req contracts.Share
 	}
 	if err := result.ValidateShareQueryResponseForRequest(req); err != nil {
 		return nil, baofu.NewProviderContractError("share_query", err)
+	}
+	if err := aggregateBusinessFailureError("share_query", result.ResultCode, result.ErrorCode, result.ErrorMessage); err != nil {
+		return nil, err
 	}
 	return &result, nil
 }
@@ -112,6 +125,9 @@ func (c *HTTPClient) CreateRefund(ctx context.Context, req contracts.RefundBefor
 	if err := result.ValidateOrderRefundResponseForRequest(req); err != nil {
 		return nil, baofu.NewProviderContractError("order_refund", err)
 	}
+	if err := aggregateBusinessFailureError("order_refund", result.ResultCode, result.ErrorCode, result.ErrorMessage); err != nil {
+		return nil, err
+	}
 	return &result, nil
 }
 
@@ -128,6 +144,9 @@ func (c *HTTPClient) QueryRefund(ctx context.Context, req contracts.RefundQueryR
 	}
 	if err := result.ValidateRefundQueryResponseForRequest(req); err != nil {
 		return nil, baofu.NewProviderContractError("refund_query", err)
+	}
+	if err := aggregateBusinessFailureError("refund_query", result.ResultCode, result.ErrorCode, result.ErrorMessage); err != nil {
+		return nil, err
 	}
 	return &result, nil
 }
@@ -146,12 +165,31 @@ func (c *HTTPClient) CloseOrder(ctx context.Context, req contracts.OrderCloseReq
 	if err := result.ValidateOrderCloseResponseForRequest(req); err != nil {
 		return nil, baofu.NewProviderContractError("order_close", err)
 	}
+	if err := aggregateBusinessFailureError("order_close", result.ResultCode, result.ErrorCode, result.ErrorMessage); err != nil {
+		return nil, err
+	}
 	return &result, nil
 }
 
 func (c *HTTPClient) validate(operation string) error {
 	if c == nil || c.root == nil {
 		return errors.New("baofu aggregatepay client is not configured for " + operation)
+	}
+	return nil
+}
+
+func aggregateBusinessFailureError(operation, resultCode, errorCode, errorMessage string) error {
+	normalizedResultCode := strings.ToUpper(strings.TrimSpace(resultCode))
+	normalizedErrorCode := strings.ToUpper(strings.TrimSpace(errorCode))
+	if normalizedResultCode == contracts.BusinessResultCodeFail {
+		code := strings.TrimSpace(errorCode)
+		if code == "" {
+			code = normalizedResultCode
+		}
+		return baofu.NewProviderBusinessError(operation, code, errorMessage)
+	}
+	if normalizedResultCode == contracts.BusinessResultCodeSuccess && normalizedErrorCode != "" && normalizedErrorCode != contracts.BusinessResultCodeSuccess {
+		return baofu.NewProviderBusinessError(operation, errorCode, errorMessage)
 	}
 	return nil
 }

@@ -12,6 +12,8 @@ import (
 )
 
 type AccountNotification struct {
+	MemberID      string
+	TerminalID    string
 	OutRequestNo  string
 	ContractNo    string
 	SharingMerID  string
@@ -24,6 +26,8 @@ type AccountNotification struct {
 }
 
 type WithdrawNotification struct {
+	MemberID        string
+	TerminalID      string
 	TransSerialNo   string
 	BaofuWithdrawNo string
 	ContractNo      string
@@ -50,47 +54,75 @@ func (p *Parser) ParseOpenAccountNotification(body []byte) (*AccountNotification
 	if p == nil || p.baofuPublicKeyPEM == "" {
 		return nil, errors.New("baofu account notification parser is not configured")
 	}
-	plaintext, err := p.decodeOfficialDataContent(body)
+	decoded, err := p.decodeOfficialDataContent(body)
 	if err != nil {
 		return nil, err
 	}
-	return ParseOpenAccountPlaintext(plaintext)
+	notification, err := ParseOpenAccountPlaintext(decoded.plaintext)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(notification.MemberID) != decoded.memberID {
+		return nil, errors.New("baofu open account notification member_id does not match transport")
+	}
+	if strings.TrimSpace(notification.TerminalID) != decoded.terminalID {
+		return nil, errors.New("baofu open account notification terminal_id does not match transport")
+	}
+	return notification, nil
 }
 
 func (p *Parser) ParseWithdrawNotification(body []byte) (*WithdrawNotification, error) {
 	if p == nil || p.baofuPublicKeyPEM == "" {
 		return nil, errors.New("baofu account notification parser is not configured")
 	}
-	plaintext, err := p.decodeOfficialDataContent(body)
+	decoded, err := p.decodeOfficialDataContent(body)
 	if err != nil {
 		return nil, err
 	}
-	return ParseWithdrawPlaintext(plaintext)
+	notification, err := ParseWithdrawPlaintext(decoded.plaintext)
+	if err != nil {
+		return nil, err
+	}
+	notification.MemberID = decoded.memberID
+	notification.TerminalID = decoded.terminalID
+	return notification, nil
 }
 
-func (p *Parser) decodeOfficialDataContent(body []byte) ([]byte, error) {
+type officialDecodedNotification struct {
+	memberID   string
+	terminalID string
+	plaintext  []byte
+}
+
+func (p *Parser) decodeOfficialDataContent(body []byte) (officialDecodedNotification, error) {
 	values, err := parseOfficialNotificationValues(body)
 	if err != nil {
-		return nil, err
+		return officialDecodedNotification{}, err
 	}
-	if strings.TrimSpace(values.Get("member_id")) == "" {
-		return nil, errors.New("baofu account notification member_id is required")
+	memberID := strings.TrimSpace(values.Get("member_id"))
+	if memberID == "" {
+		return officialDecodedNotification{}, errors.New("baofu account notification member_id is required")
 	}
-	if strings.TrimSpace(values.Get("terminal_id")) == "" {
-		return nil, errors.New("baofu account notification terminal_id is required")
+	terminalID := strings.TrimSpace(values.Get("terminal_id"))
+	if terminalID == "" {
+		return officialDecodedNotification{}, errors.New("baofu account notification terminal_id is required")
 	}
 	dataType := strings.TrimSpace(values.Get("data_type"))
 	if dataType == "" {
-		return nil, errors.New("baofu account notification data_type is required")
+		return officialDecodedNotification{}, errors.New("baofu account notification data_type is required")
 	}
 	if !strings.EqualFold(dataType, "JSON") {
-		return nil, errors.New("baofu account notification data_type must be JSON")
+		return officialDecodedNotification{}, errors.New("baofu account notification data_type must be JSON")
 	}
 	dataContent := strings.TrimSpace(values.Get("data_content"))
 	if dataContent == "" {
-		return nil, errors.New("baofu account notification data_content is required")
+		return officialDecodedNotification{}, errors.New("baofu account notification data_content is required")
 	}
-	return baofu.DecodeUnionGWVerifyType1Content(p.baofuPublicKeyPEM, dataContent)
+	plaintext, err := baofu.DecodeUnionGWVerifyType1Content(p.baofuPublicKeyPEM, dataContent)
+	if err != nil {
+		return officialDecodedNotification{}, err
+	}
+	return officialDecodedNotification{memberID: memberID, terminalID: terminalID, plaintext: plaintext}, nil
 }
 
 func parseOfficialNotificationValues(body []byte) (url.Values, error) {
@@ -156,6 +188,8 @@ func ParseOpenAccountPlaintext(plaintext []byte) (*AccountNotification, error) {
 	}
 	contractNo := strings.TrimSpace(payload.ContractNo)
 	return &AccountNotification{
+		MemberID:      strings.TrimSpace(payload.MemberID),
+		TerminalID:    strings.TrimSpace(payload.TerminalID),
 		OutRequestNo:  outRequestNo,
 		ContractNo:    contractNo,
 		UpstreamState: strings.TrimSpace(payload.State),

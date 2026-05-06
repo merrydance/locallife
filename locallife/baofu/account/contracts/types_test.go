@@ -70,6 +70,27 @@ func TestOfficialOpenAccountRejectsShortLoginNo(t *testing.T) {
 	require.EqualError(t, req.Validate(), "baofu open account personal loginNo must be at least 11 characters")
 }
 
+func TestOfficialOpenAccountValidateOfficialMaxLengths(t *testing.T) {
+	req := OfficialOpenAccountRequest{
+		Version:      OfficialOpenAccountVersion,
+		AccountType:  OfficialAccountTypePersonal,
+		NoticeURL:    "https://api.example.com/v1/webhooks/baofu/account/open",
+		BusinessType: OfficialBusinessTypeBCT20,
+		AccountInfo: OfficialPersonalAccountInfo{
+			TransSerialNo:   repeatAccountContract("T", 201),
+			LoginNo:         "rider13800138000",
+			CustomerName:    "张三",
+			CertificateType: OfficialCertificateTypeID,
+			CertificateNo:   "110101199001011234",
+			CardNo:          "6222020000000000000",
+			MobileNo:        "13800138000",
+			CardUserName:    "张三",
+		},
+	}
+
+	require.EqualError(t, req.Validate(), "baofu open account personal transSerialNo must be at most 200 characters")
+}
+
 func TestOpenAccountRequestRejectsPersonalTwoFactorProductionPath(t *testing.T) {
 	req := OpenAccountRequest{
 		AccountType:   "personal",
@@ -303,4 +324,30 @@ func TestOfficialQueryBalanceAndWithdrawValidateRequiredFields(t *testing.T) {
 
 	withdraw.DealAmount = "0.00"
 	require.EqualError(t, withdraw.Validate(), "baofu withdraw dealAmount must be positive")
+}
+
+func TestOfficialAccountQueryAndWithdrawValidateOfficialMaxLengths(t *testing.T) {
+	query := OfficialQueryAccountRequest{
+		Version:     OfficialQueryAccountVersion,
+		AccountType: OfficialAccountTypePersonal,
+		ContractNo:  repeatAccountContract("C", 33),
+	}
+	require.EqualError(t, query.Validate(), "baofu query account contractNo must be at most 32 characters")
+
+	withdraw := OfficialWithdrawRequest{
+		Version:       OfficialWithdrawVersion,
+		ContractNo:    "CM202605040001",
+		TransSerialNo: repeatAccountContract("W", 51),
+		DealAmount:    "123.45",
+		ReturnURL:     "https://api.example.com/v1/webhooks/baofu/withdraw",
+	}
+	require.EqualError(t, withdraw.Validate(), "baofu withdraw transSerialNo must be at most 50 characters")
+}
+
+func repeatAccountContract(ch string, n int) string {
+	out := ""
+	for i := 0; i < n; i++ {
+		out += ch
+	}
+	return out
 }

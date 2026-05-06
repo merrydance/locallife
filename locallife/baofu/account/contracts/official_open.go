@@ -94,8 +94,14 @@ func (r OfficialOpenAccountRequest) Validate() error {
 	if err := validateOfficialNoticeURL(r.NoticeURL); err != nil {
 		return err
 	}
+	if err := validateOfficialMaxLength("baofu open account", "noticeUrl", r.NoticeURL, 256); err != nil {
+		return err
+	}
 	if strings.TrimSpace(r.BusinessType) != OfficialBusinessTypeBCT20 {
 		return errors.New("baofu open account businessType must be BCT2.0")
+	}
+	if err := validateOfficialMaxLength("baofu open account", "businessType", r.BusinessType, 32); err != nil {
+		return err
 	}
 	if r.AccountInfo == nil {
 		return errors.New("baofu open account accInfo is required")
@@ -140,6 +146,22 @@ func (i OfficialPersonalAccountInfo) Validate() error {
 	if strings.TrimSpace(i.CardUserName) == "" {
 		return errors.New("baofu open account personal cardUserName is required")
 	}
+	for _, field := range []struct {
+		name  string
+		value string
+		max   int
+	}{
+		{"cardNo", i.CardNo, 128},
+		{"mobileNo", i.MobileNo, 64},
+		{"cardUserName", i.CardUserName, 20},
+		{"platformNo", i.PlatformNo, 32},
+		{"platformTerminalId", i.PlatformTerminalID, 32},
+		{"qualificationTransSerialNo", i.QualificationTransSerialNo, 128},
+	} {
+		if err := validateOfficialMaxLength("baofu open account personal", field.name, field.value, field.max); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -149,6 +171,20 @@ func (i OfficialPersonalTwoFactorAccountInfo) Validate() error {
 	}
 	if strings.TrimSpace(i.CardUserName) == "" {
 		return errors.New("baofu open account personal cardUserName is required")
+	}
+	for _, field := range []struct {
+		name  string
+		value string
+		max   int
+	}{
+		{"cardUserName", i.CardUserName, 20},
+		{"platformNo", i.PlatformNo, 32},
+		{"platformTerminalId", i.PlatformTerminalID, 32},
+		{"qualificationTransSerialNo", i.QualificationTransSerialNo, 128},
+	} {
+		if err := validateOfficialMaxLength("baofu open account personal", field.name, field.value, field.max); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -177,6 +213,39 @@ func (i OfficialBusinessAccountInfo) Validate() error {
 	}
 	if err := validateOfficialLoginNo("business", i.LoginNo); err != nil {
 		return err
+	}
+	for _, field := range []struct {
+		name  string
+		value string
+		max   int
+	}{
+		{"transSerialNo", i.TransSerialNo, 200},
+		{"loginNo", i.LoginNo, 32},
+		{"email", i.Email, 32},
+		{"customerName", i.CustomerName, 64},
+		{"aliasName", i.AliasName, 64},
+		{"certificateNo", i.CertificateNo, 64},
+		{"certificateType", i.CertificateType, 16},
+		{"corporateName", i.CorporateName, 20},
+		{"corporateCertId", i.CorporateCertID, 64},
+		{"corporateMobile", i.CorporateMobile, 64},
+		{"industryId", i.IndustryID, 11},
+		{"contactName", i.ContactName, 20},
+		{"contactMobile", i.ContactMobile, 64},
+		{"cardNo", i.CardNo, 128},
+		{"bankName", i.BankName, 20},
+		{"depositBankProvince", i.DepositBankProvince, 20},
+		{"depositBankCity", i.DepositBankCity, 20},
+		{"depositBankName", i.DepositBankName, 64},
+		{"registerCapital", i.RegisterCapital, 64},
+		{"cardUserName", i.CardUserName, 64},
+		{"platformNo", i.PlatformNo, 32},
+		{"platformTerminalId", i.PlatformTerminalID, 32},
+		{"qualificationTransSerialNo", i.QualificationTransSerialNo, 128},
+	} {
+		if err := validateOfficialMaxLength("baofu open account business", field.name, field.value, field.max); err != nil {
+			return err
+		}
 	}
 	if strings.TrimSpace(i.CertificateType) != OfficialBusinessCertificateTypeLicense {
 		return errors.New("baofu open account business certificateType must be LICENSE")
@@ -215,6 +284,21 @@ func validateOfficialPersonalIdentity(transSerialNo, loginNo, customerName, cert
 	}
 	if err := validateOfficialLoginNo("personal", loginNo); err != nil {
 		return err
+	}
+	for _, field := range []struct {
+		name  string
+		value string
+		max   int
+	}{
+		{"transSerialNo", transSerialNo, 200},
+		{"loginNo", loginNo, 32},
+		{"customerName", customerName, 32},
+		{"certificateType", certificateType, 16},
+		{"certificateNo", certificateNo, 64},
+	} {
+		if err := validateOfficialMaxLength("baofu open account personal", field.name, field.value, field.max); err != nil {
+			return err
+		}
 	}
 	if strings.TrimSpace(certificateType) != OfficialCertificateTypeID {
 		return errors.New("baofu open account personal certificateType must be ID")

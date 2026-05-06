@@ -68,6 +68,11 @@ func (server *Server) handleBaofuAccountOpenNotify(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, baofuCallbackResponse{Code: "FAIL", Message: "callback content invalid"})
 		return
 	}
+	if err := server.validateBaofuPayoutNotificationIdentity(notification.MemberID, notification.TerminalID); err != nil {
+		log.Error().Err(err).Msg("baofu account callback identity mismatch")
+		ctx.JSON(http.StatusUnauthorized, baofuCallbackResponse{Code: "FAIL", Message: "callback verification failed"})
+		return
+	}
 	fact, err := server.recordBaofuAccountOpenCallbackFact(ctx.Request.Context(), notification)
 	if err != nil {
 		log.Error().Err(err).
@@ -112,6 +117,11 @@ func (server *Server) handleBaofuWithdrawNotify(ctx *gin.Context) {
 	if notification == nil {
 		log.Error().Msg("parse baofu withdraw callback returned empty notification")
 		ctx.JSON(http.StatusBadRequest, baofuCallbackResponse{Code: "FAIL", Message: "callback content invalid"})
+		return
+	}
+	if err := server.validateBaofuPayoutNotificationIdentity(notification.MemberID, notification.TerminalID); err != nil {
+		log.Error().Err(err).Msg("baofu withdraw callback identity mismatch")
+		ctx.JSON(http.StatusUnauthorized, baofuCallbackResponse{Code: "FAIL", Message: "callback verification failed"})
 		return
 	}
 	outRequestNo := strings.TrimSpace(notification.TransSerialNo)
@@ -524,7 +534,11 @@ func (server *Server) recordBaofuAccountOpenCallbackFact(ctx context.Context, no
 	upstreamState := strings.TrimSpace(notification.UpstreamState)
 	terminalStatus, isTerminal := baofuAccountTerminalStatus(notification.OpenState)
 	observedAt := baofuObservedAt(notification)
-	return server.store.CreateExternalPaymentFact(ctx, db.CreateExternalPaymentFactParams{
+	command, binding, err := server.resolveBaofuAccountOpenCommandForCallback(ctx, outRequestNo)
+	if err != nil {
+		return db.ExternalPaymentFact{}, err
+	}
+	fact, err := server.store.CreateExternalPaymentFact(ctx, db.CreateExternalPaymentFactParams{
 		Provider:             db.ExternalPaymentProviderBaofu,
 		Channel:              db.PaymentChannelBaofuAggregate,
 		Capability:           db.ExternalPaymentCapabilityBaofuAccount,
@@ -535,8 +549,8 @@ func (server *Server) recordBaofuAccountOpenCallbackFact(ctx context.Context, no
 		ExternalObjectKey:    outRequestNo,
 		ExternalSecondaryKey: baofuText(strings.TrimSpace(notification.ContractNo)),
 		BusinessOwner:        pgtype.Text{String: db.ExternalPaymentBusinessOwnerApplyment, Valid: true},
-		BusinessObjectType:   pgtype.Text{},
-		BusinessObjectID:     pgtype.Int8{},
+		BusinessObjectType:   command.BusinessObjectType,
+		BusinessObjectID:     command.BusinessObjectID,
 		UpstreamState:        upstreamState,
 		TerminalStatus:       terminalStatus,
 		IsTerminal:           isTerminal,
@@ -547,6 +561,92 @@ func (server *Server) recordBaofuAccountOpenCallbackFact(ctx context.Context, no
 		DedupeKey:            fmt.Sprintf("baofu:callback:account:%s:%s", outRequestNo, upstreamState),
 		ProcessingStatus:     db.ExternalPaymentFactProcessingStatusReceived,
 	})
+	if err != nil {
+		return db.ExternalPaymentFact{}, err
+	}
+	if err := server.applyBaofuAccountOpenCallbackState(ctx, notification, binding); err != nil {
+		return db.ExternalPaymentFact{}, err
+	}
+	return fact, nil
+}
+
+func (server *Server) resolveBaofuAccountOpenCommandForCallback(ctx context.Context, outRequestNo string) (db.ExternalPaymentCommand, db.BaofuAccountBinding, error) {
+	command, err := server.store.GetExternalPaymentCommandByExternalObject(ctx, db.GetExternalPaymentCommandByExternalObjectParams{
+		Provider:           db.ExternalPaymentProviderBaofu,
+		Channel:            db.PaymentChannelBaofuAggregate,
+		Capability:         db.ExternalPaymentCapabilityBaofuAccount,
+		CommandType:        db.ExternalPaymentCommandTypeOpenBaofuAccount,
+		ExternalObjectType: "baofu_account",
+		ExternalObjectKey:  strings.TrimSpace(outRequestNo),
+	})
+	if err != nil {
+		return db.ExternalPaymentCommand{}, db.BaofuAccountBinding{}, fmt.Errorf("resolve baofu account open command %q: %w", strings.TrimSpace(outRequestNo), err)
+	}
+	if !command.BusinessObjectID.Valid || strings.TrimSpace(command.BusinessObjectType.String) != "baofu_account_binding" {
+		return db.ExternalPaymentCommand{}, db.BaofuAccountBinding{}, fmt.Errorf("baofu account open command %q is not bound to account binding", strings.TrimSpace(outRequestNo))
+	}
+	binding, err := server.store.GetBaofuAccountBinding(ctx, command.BusinessObjectID.Int64)
+	if err != nil {
+		return db.ExternalPaymentCommand{}, db.BaofuAccountBinding{}, fmt.Errorf("load baofu account binding %d: %w", command.BusinessObjectID.Int64, err)
+	}
+	return command, binding, nil
+}
+
+func (server *Server) applyBaofuAccountOpenCallbackState(ctx context.Context, notification *baofunotification.AccountNotification, binding db.BaofuAccountBinding) error {
+	if notification == nil {
+		return fmt.Errorf("baofu account callback notification is required")
+	}
+	switch strings.TrimSpace(notification.OpenState) {
+	case db.BaofuAccountOpenStateActive:
+		if binding.OpenState == db.BaofuAccountOpenStateActive {
+			return nil
+		}
+		contractNo := strings.TrimSpace(notification.ContractNo)
+		if contractNo == "" {
+			return fmt.Errorf("baofu account callback active state requires contractNo")
+		}
+		sharingMerID := firstNonEmptyTrimmed(notification.SharingMerID, contractNo)
+		_, err := server.store.MarkBaofuAccountBindingActiveWithFeeLedgerTx(ctx, db.MarkBaofuAccountBindingActiveWithFeeLedgerTxParams{
+			ActiveBinding: db.MarkBaofuAccountBindingActiveParams{
+				ID:           binding.ID,
+				ContractNo:   pgtype.Text{String: contractNo, Valid: true},
+				SharingMerID: pgtype.Text{String: sharingMerID, Valid: sharingMerID != ""},
+				RawSnapshot:  baofuAccountRawSnapshot(notification.Raw),
+			},
+			AccountOpenFeeLedger: db.CreateBaofuFeeLedgerParams{
+				FeeType:            db.BaofuFeeTypeAccountOpenVerifyFee,
+				PayerType:          db.BaofuFeePayerTypePlatform,
+				PayerID:            pgtype.Int8{Valid: false},
+				BusinessObjectType: "baofu_account_binding",
+				BusinessObjectID:   binding.ID,
+				Amount:             logic.BaofuAccountOpenVerifyFeeFen,
+				Status:             "recorded",
+			},
+		})
+		return err
+	case db.BaofuAccountOpenStateFailed:
+		if binding.OpenState == db.BaofuAccountOpenStateActive || binding.OpenState == db.BaofuAccountOpenStateFailed {
+			return nil
+		}
+		_, err := server.store.MarkBaofuAccountBindingFailed(ctx, db.MarkBaofuAccountBindingFailedParams{ID: binding.ID, RawSnapshot: baofuAccountRawSnapshot(notification.Raw)})
+		return err
+	default:
+		return nil
+	}
+}
+
+func (server *Server) validateBaofuPayoutNotificationIdentity(memberID string, terminalID string) error {
+	configuredMerchantID := strings.TrimSpace(server.config.BaofuPayoutMerchantID)
+	configuredTerminalID := strings.TrimSpace(server.config.BaofuPayoutTerminalID)
+	memberID = strings.TrimSpace(memberID)
+	terminalID = strings.TrimSpace(terminalID)
+	if configuredMerchantID != "" && memberID != configuredMerchantID {
+		return fmt.Errorf("baofu account callback member_id does not match configured payout merchant")
+	}
+	if configuredTerminalID != "" && terminalID != configuredTerminalID {
+		return fmt.Errorf("baofu account callback terminal_id does not match configured payout terminal")
+	}
+	return nil
 }
 
 func baofuAccountTerminalStatus(openState string) (terminalStatus string, isTerminal bool) {
@@ -572,4 +672,11 @@ func baofuObservedAt(notification *baofunotification.AccountNotification) time.T
 func baofuText(value string) pgtype.Text {
 	value = strings.TrimSpace(value)
 	return pgtype.Text{String: value, Valid: value != ""}
+}
+
+func baofuAccountRawSnapshot(raw []byte) []byte {
+	if len(raw) == 0 {
+		return []byte(`{}`)
+	}
+	return raw
 }

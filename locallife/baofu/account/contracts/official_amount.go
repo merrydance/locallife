@@ -16,11 +16,11 @@ func YuanStringToFen(raw string) (int64, error) {
 	}
 	parts := strings.Split(amount, ".")
 	if len(parts) > 2 {
-		return 0, errors.New("baofu amount is invalid")
+		return 0, errors.New("baofu amount must be a decimal number")
 	}
 	yuan, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {
-		return 0, errors.New("baofu amount is invalid")
+		return 0, errors.New("baofu amount must be a decimal number")
 	}
 	fen := int64(0)
 	if len(parts) == 2 {
@@ -33,7 +33,7 @@ func YuanStringToFen(raw string) (int64, error) {
 		}
 		fen, err = strconv.ParseInt(decimal, 10, 64)
 		if err != nil {
-			return 0, errors.New("baofu amount is invalid")
+			return 0, errors.New("baofu amount must be a decimal number")
 		}
 	}
 	return yuan*100 + fen, nil

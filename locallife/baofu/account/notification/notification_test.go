@@ -24,10 +24,29 @@ func TestParserParsesOfficialOpenAccountNotification(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "OPEN123", notification.OutRequestNo)
+	require.Equal(t, "102004465", notification.MemberID)
+	require.Equal(t, "200005200", notification.TerminalID)
 	require.Equal(t, "CM_SHARE_123", notification.ContractNo)
 	require.Empty(t, notification.SharingMerID)
 	require.Equal(t, "active", notification.OpenState)
 	require.True(t, json.Valid(notification.Raw))
+}
+
+func TestParserRejectsOpenAccountNotificationTransportIdentityMismatch(t *testing.T) {
+	privatePEM, publicPEM := generateNotificationTestKeyPair(t)
+	plaintext := []byte(`{"member_id":"102004465","terminal_id":"200005200","memberType":"2","state":"1","errorCode":"","errorMsg":"","transSerialNo":"OPEN123","loginNo":"merchant-login-001","customerName":"商户A","contractNo":"CM_SHARE_123","noticeType":"OPEN_ACC"}`)
+	content, err := baofu.EncodeUnionGWVerifyType1Content(privatePEM, plaintext)
+	require.NoError(t, err)
+	values := url.Values{}
+	values.Set("member_id", "102004466")
+	values.Set("terminal_id", "200005200")
+	values.Set("data_type", "JSON")
+	values.Set("data_content", content)
+
+	parser := NewParser(publicPEM)
+	_, err = parser.ParseOpenAccountNotification([]byte(values.Encode()))
+
+	require.EqualError(t, err, "baofu open account notification member_id does not match transport")
 }
 
 func TestParserParsesOfficialWithdrawNotification(t *testing.T) {
@@ -39,6 +58,8 @@ func TestParserParsesOfficialWithdrawNotification(t *testing.T) {
 	notification, err := parser.ParseWithdrawNotification(body)
 
 	require.NoError(t, err)
+	require.Equal(t, "102004465", notification.MemberID)
+	require.Equal(t, "200005200", notification.TerminalID)
 	require.Equal(t, "WD202605040001", notification.TransSerialNo)
 	require.Equal(t, "WD_UP_001", notification.BaofuWithdrawNo)
 	require.Equal(t, "3", notification.UpstreamState)

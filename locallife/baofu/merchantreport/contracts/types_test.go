@@ -103,6 +103,26 @@ func TestWechatMerchantReportRejectsUnsupportedWechatAppendixValues(t *testing.T
 	}
 }
 
+func TestWechatMerchantReportValidateOfficialLengths(t *testing.T) {
+	t.Run("reportNo S64", func(t *testing.T) {
+		req := validWechatMerchantReportRequestForTest()
+		req.ReportNo = repeatedForMerchantReport("R", 65)
+		require.EqualError(t, req.Validate(), "baofu merchant report reportNo must be at most 64 characters")
+	})
+
+	t.Run("bctMerId S64", func(t *testing.T) {
+		req := validWechatMerchantReportRequestForTest()
+		req.BCTMerchantID = repeatedForMerchantReport("C", 65)
+		require.EqualError(t, req.Validate(), "baofu merchant report bctMerId must be at most 64 characters")
+	})
+
+	t.Run("address_info address S64", func(t *testing.T) {
+		req := validWechatMerchantReportRequestForTest()
+		req.ReportInfo.AddressInfo.Address = repeatedForMerchantReport("A", 65)
+		require.EqualError(t, req.Validate(), "baofu merchant report wechat address_info.address must be at most 64 characters")
+	})
+}
+
 func TestWechatMerchantReportBankBranchIsOptional(t *testing.T) {
 	req := validWechatMerchantReportRequestForTest()
 	req.ReportInfo.BankCardInfo.BankBranchName = ""
@@ -189,6 +209,14 @@ func validWechatMerchantReportRequestForTest() WechatMerchantReportRequest {
 			BankCardInfo:        WechatBankCardInfo{CardName: "上海某某餐饮有限公司", CardNo: "6222000000000000000", BankBranchName: "招商银行上海分行"},
 		},
 	}
+}
+
+func repeatedForMerchantReport(ch string, n int) string {
+	out := ""
+	for i := 0; i < n; i++ {
+		out += ch
+	}
+	return out
 }
 
 func TestMerchantReportAppendixEnumsAreTypedAllowlists(t *testing.T) {

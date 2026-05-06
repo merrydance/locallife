@@ -30,6 +30,9 @@ func (c *Client) OpenAccount(ctx context.Context, req contracts.OpenAccountReque
 	if err := c.root.PostAccount(ctx, "T-1001-013-01", c.merchantID(""), c.terminalID(""), officialReq, &result); err != nil {
 		return nil, err
 	}
+	if err := result.validateOpenAccountResponse(); err != nil {
+		return nil, baofu.NewProviderContractError("T-1001-013-01", err)
+	}
 	return result.toAccountResult(), nil
 }
 
@@ -52,6 +55,9 @@ func (c *Client) QueryAccount(ctx context.Context, req contracts.QueryAccountReq
 	var result officialAccountResult
 	if err := c.root.PostAccount(ctx, "T-1001-013-03", c.merchantID(""), c.terminalID(""), officialReq, &result); err != nil {
 		return nil, err
+	}
+	if err := result.validateQueryAccountResponse(); err != nil {
+		return nil, baofu.NewProviderContractError("T-1001-013-03", err)
 	}
 	return result.toAccountResult(), nil
 }
@@ -104,7 +110,14 @@ func (c *Client) CreateWithdraw(ctx context.Context, req contracts.WithdrawReque
 	if err := c.root.PostAccount(ctx, "T-1001-013-14", c.merchantID(req.MerchantID), c.terminalID(req.TerminalID), officialReq, &result); err != nil {
 		return nil, err
 	}
-	return result.toWithdrawAcceptanceResult(), nil
+	if err := result.validateWithdrawAcceptanceResponse(); err != nil {
+		return nil, baofu.NewProviderContractError("T-1001-013-14", err)
+	}
+	withdrawResult, err := result.toWithdrawAcceptanceResult()
+	if err != nil {
+		return nil, baofu.NewProviderContractError("T-1001-013-14", err)
+	}
+	return withdrawResult, nil
 }
 
 func (c *Client) QueryWithdraw(ctx context.Context, req contracts.WithdrawQueryRequest) (*contracts.WithdrawResult, error) {
@@ -123,7 +136,14 @@ func (c *Client) QueryWithdraw(ctx context.Context, req contracts.WithdrawQueryR
 	if err := c.root.PostAccount(ctx, "T-1001-013-15", c.merchantID(req.MerchantID), c.terminalID(req.TerminalID), officialReq, &result); err != nil {
 		return nil, err
 	}
-	return result.toWithdrawResult(), nil
+	if err := result.validateWithdrawQueryResponse(); err != nil {
+		return nil, baofu.NewProviderContractError("T-1001-013-15", err)
+	}
+	withdrawResult, err := result.toWithdrawResult()
+	if err != nil {
+		return nil, baofu.NewProviderContractError("T-1001-013-15", err)
+	}
+	return withdrawResult, nil
 }
 
 func (c *Client) merchantID(value string) string {
@@ -271,10 +291,49 @@ func (r officialAccountResult) firstResultItem() officialAccountResultItem {
 
 type officialAccountResultItem struct {
 	TransSerialNo officialScalarString `json:"transSerialNo"`
+	LoginNo       officialScalarString `json:"loginNo"`
+	CustomerName  officialScalarString `json:"customerName"`
 	ContractNo    officialScalarString `json:"contractNo"`
 	State         officialScalarString `json:"state"`
 	ErrorCode     officialScalarString `json:"errorCode"`
 	ErrorMessage  officialScalarString `json:"errorMsg"`
+}
+
+func (r officialAccountResult) validateOpenAccountResponse() error {
+	item := r.firstResultItem()
+	for _, field := range []struct{ name, value string }{
+		{"state", item.State.String()},
+		{"transSerialNo", item.TransSerialNo.String()},
+		{"loginNo", item.LoginNo.String()},
+		{"customerName", item.CustomerName.String()},
+	} {
+		if strings.TrimSpace(field.value) == "" {
+			return errors.New("baofu open account response " + field.name + " is required")
+		}
+	}
+	if !isOfficialOpenAccountState(item.State.String()) {
+		return errors.New("baofu open account response state is unsupported")
+	}
+	if item.State.String() == "1" && strings.TrimSpace(item.ContractNo.String()) == "" {
+		return errors.New("baofu open account response contractNo is required for success")
+	}
+	return nil
+}
+
+func (r officialAccountResult) validateQueryAccountResponse() error {
+	if strings.TrimSpace(r.firstResultItem().ContractNo.String()) == "" {
+		return errors.New("baofu query account response contractNo is required")
+	}
+	return nil
+}
+
+func isOfficialOpenAccountState(value string) bool {
+	switch strings.TrimSpace(value) {
+	case "1", "0", "-1", "2":
+		return true
+	default:
+		return false
+	}
 }
 
 type officialScalarString string
@@ -366,6 +425,7 @@ func optionalOfficialBalanceAmountFen(value officialScalarString) (int64, error)
 }
 
 type officialWithdrawResult struct {
+	MemberID            officialScalarString `json:"memberId"`
 	TransSerialNo       officialScalarString `json:"transSerialNo"`
 	OrderID             officialScalarString `json:"orderId"`
 	ContractNo          officialScalarString `json:"contractNo"`
@@ -377,18 +437,75 @@ type officialWithdrawResult struct {
 	Raw                 json.RawMessage      `json:"-"`
 }
 
-func (r officialWithdrawResult) toWithdrawResult() *contracts.WithdrawResult {
+func (r officialWithdrawResult) validateWithdrawAcceptanceResponse() error {
+	if strings.TrimSpace(r.TransSerialNo.String()) == "" {
+		return errors.New("baofu withdraw response transSerialNo is required")
+	}
+	if strings.TrimSpace(r.ContractNo.String()) == "" {
+		return errors.New("baofu withdraw response contractNo is required")
+	}
+	switch strings.TrimSpace(r.State.String()) {
+	case "1", "2":
+		return nil
+	case "":
+		return errors.New("baofu withdraw response state is required")
+	default:
+		return errors.New("baofu withdraw response state is unsupported")
+	}
+}
+
+func (r officialWithdrawResult) validateWithdrawQueryResponse() error {
+	for _, field := range []struct{ name, value string }{
+		{"memberId", r.MemberID.String()},
+		{"transSerialNo", r.TransSerialNo.String()},
+		{"state", r.State.String()},
+		{"contractNo", r.ContractNo.String()},
+		{"transMoney", r.TransMoney.String()},
+		{"transFee", r.TransFee.String()},
+		{"transferTotalAmount", r.TransferTotalAmount.String()},
+	} {
+		if strings.TrimSpace(field.value) == "" {
+			return errors.New("baofu withdraw query response " + field.name + " is required")
+		}
+	}
+	switch strings.TrimSpace(r.State.String()) {
+	case "0", "1", "2", "3":
+	default:
+		return errors.New("baofu withdraw query response state is unsupported")
+	}
+	if _, err := contracts.YuanStringToFen(r.TransMoney.String()); err != nil {
+		return err
+	}
+	if _, err := contracts.YuanStringToFen(r.TransFee.String()); err != nil {
+		return err
+	}
+	if _, err := contracts.YuanStringToFen(r.TransferTotalAmount.String()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r officialWithdrawResult) toWithdrawResult() (*contracts.WithdrawResult, error) {
 	return r.toWithdrawResultWithStatus(contracts.WithdrawStatusFromUpstream(r.State.String()))
 }
 
-func (r officialWithdrawResult) toWithdrawAcceptanceResult() *contracts.WithdrawResult {
+func (r officialWithdrawResult) toWithdrawAcceptanceResult() (*contracts.WithdrawResult, error) {
 	return r.toWithdrawResultWithStatus(contracts.WithdrawAcceptanceStatusFromUpstream(r.State.String()))
 }
 
-func (r officialWithdrawResult) toWithdrawResultWithStatus(status string) *contracts.WithdrawResult {
-	amount, _ := optionalOfficialBalanceAmountFen(r.TransMoney)
-	fee, _ := optionalOfficialBalanceAmountFen(r.TransFee)
-	total, _ := optionalOfficialBalanceAmountFen(r.TransferTotalAmount)
+func (r officialWithdrawResult) toWithdrawResultWithStatus(status string) (*contracts.WithdrawResult, error) {
+	amount, err := optionalOfficialBalanceAmountFen(r.TransMoney)
+	if err != nil {
+		return nil, err
+	}
+	fee, err := optionalOfficialBalanceAmountFen(r.TransFee)
+	if err != nil {
+		return nil, err
+	}
+	total, err := optionalOfficialBalanceAmountFen(r.TransferTotalAmount)
+	if err != nil {
+		return nil, err
+	}
 	return &contracts.WithdrawResult{
 		TransSerialNo:   r.TransSerialNo.String(),
 		BaofuWithdrawNo: r.OrderID.String(),
@@ -399,5 +516,5 @@ func (r officialWithdrawResult) toWithdrawResultWithStatus(status string) *contr
 		FeeFen:          fee,
 		TotalAmountFen:  total,
 		Remark:          r.TransRemark.String(),
-	}
+	}, nil
 }

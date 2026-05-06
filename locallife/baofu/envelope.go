@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 )
 
 const (
@@ -234,15 +235,29 @@ func (e PublicRequestEnvelope) FormValues() url.Values {
 }
 
 func (e PublicResponseEnvelope) Validate() error {
-	switch strings.TrimSpace(e.ReturnCode) {
+	returnCode := strings.TrimSpace(e.ReturnCode)
+	returnMessage := strings.TrimSpace(e.ReturnMessage)
+	switch returnCode {
 	case PublicEnvelopeReturnCodeSuccess:
+		if returnMessage == "" {
+			return errors.New("baofu public response returnMsg is required")
+		}
 	case PublicEnvelopeReturnCodeFail:
+		if returnMessage == "" {
+			return errors.New("baofu public response returnMsg is required when returnCode is FAIL")
+		}
+		if utf8.RuneCountInString(returnMessage) > 128 {
+			return errors.New("baofu public response returnMsg must be at most 128 characters")
+		}
 		return nil
 	default:
-		if strings.TrimSpace(e.ReturnCode) == "" {
+		if returnCode == "" {
 			return errors.New("baofu public response returnCode is required")
 		}
 		return errors.New("baofu public response returnCode is unsupported")
+	}
+	if utf8.RuneCountInString(returnMessage) > 128 {
+		return errors.New("baofu public response returnMsg must be at most 128 characters")
 	}
 	if strings.TrimSpace(e.MerchantID) == "" {
 		return errors.New("baofu public response merId is required")

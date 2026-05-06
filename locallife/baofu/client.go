@@ -167,11 +167,11 @@ func (c *Client) postPublicEnvelope(ctx context.Context, endpoint string, method
 	if err := json.Unmarshal(responseBody, &responseEnvelope); err != nil {
 		return providerRequestError(method, resp.StatusCode, "", err)
 	}
-	if strings.TrimSpace(responseEnvelope.ReturnCode) == PublicEnvelopeReturnCodeFail {
-		return providerResponseError(method, resp.StatusCode, responseEnvelope.ReturnCode, responseEnvelope.ReturnMessage, errors.New("baofu upstream returned failure"))
-	}
 	if err := responseEnvelope.Validate(); err != nil {
 		return providerRequestError(method, resp.StatusCode, responseEnvelope.ValidationUpstreamCode(err), err)
+	}
+	if strings.TrimSpace(responseEnvelope.ReturnCode) == PublicEnvelopeReturnCodeFail {
+		return providerResponseError(method, resp.StatusCode, responseEnvelope.ReturnCode, responseEnvelope.ReturnMessage, errors.New("baofu upstream returned failure"))
 	}
 	if err := validatePublicResponseIdentity(responseEnvelope, merchantID, terminalID); err != nil {
 		return providerRequestError(method, resp.StatusCode, responseEnvelope.ValidationUpstreamCode(err), err)
@@ -180,9 +180,6 @@ func (c *Client) postPublicEnvelope(ctx context.Context, endpoint string, method
 		return providerRequestError(method, resp.StatusCode, responseEnvelope.ValidationUpstreamCode(err), err)
 	}
 	responseBusinessContent := responseEnvelope.BusinessContent()
-	if code, message, failed := publicBusinessFailure(json.RawMessage(responseBusinessContent)); failed {
-		return providerResponseError(method, resp.StatusCode, code, message, errors.New("baofu public business response failed"))
-	}
 	if out != nil {
 		if err := json.Unmarshal(responseBusinessContent, out); err != nil {
 			return providerRequestError(method, resp.StatusCode, PublicEnvelopeUpstreamCodeInvalidDataContent, err)
@@ -206,6 +203,10 @@ func NewProviderContractError(operation string, cause error) error {
 		return nil
 	}
 	return providerRequestError(operation, http.StatusOK, PublicEnvelopeUpstreamCodeInvalidDataContent, cause)
+}
+
+func NewProviderBusinessError(operation string, upstreamCode string, upstreamMessage string) error {
+	return providerResponseError(operation, http.StatusOK, upstreamCode, upstreamMessage, errors.New("baofu public business response failed"))
 }
 
 func providerRequestError(operation string, statusCode int, upstreamCode string, cause error) error {

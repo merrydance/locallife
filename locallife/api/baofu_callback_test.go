@@ -22,12 +22,33 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestBaofuAccountOpenCallbackPersistsFactBeforeAck(t *testing.T) {
+func TestBaofuAccountOpenCallbackAppliesTerminalStateBeforeAck(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	store := mockdb.NewMockStore(ctrl)
 	server := newTestServer(t, store)
 	server.SetBaofuAccountNotificationParserForTest(fakeBaofuOpenAccountParser{})
+	server.config.BaofuPayoutMerchantID = "102004466"
+	server.config.BaofuPayoutTerminalID = "200005201"
+
+	command := db.ExternalPaymentCommand{
+		ID:                 7001,
+		BusinessObjectType: pgtype.Text{String: "baofu_account_binding", Valid: true},
+		BusinessObjectID:   pgtype.Int8{Int64: 6101, Valid: true},
+	}
+	binding := db.BaofuAccountBinding{
+		ID:        6101,
+		OpenState: db.BaofuAccountOpenStateProcessing,
+	}
+	store.EXPECT().GetExternalPaymentCommandByExternalObject(gomock.Any(), db.GetExternalPaymentCommandByExternalObjectParams{
+		Provider:           db.ExternalPaymentProviderBaofu,
+		Channel:            db.PaymentChannelBaofuAggregate,
+		Capability:         db.ExternalPaymentCapabilityBaofuAccount,
+		CommandType:        db.ExternalPaymentCommandTypeOpenBaofuAccount,
+		ExternalObjectType: "baofu_account",
+		ExternalObjectKey:  "OPEN123",
+	}).Return(command, nil)
+	store.EXPECT().GetBaofuAccountBinding(gomock.Any(), int64(6101)).Return(binding, nil)
 
 	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ any, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
@@ -40,9 +61,19 @@ func TestBaofuAccountOpenCallbackPersistsFactBeforeAck(t *testing.T) {
 			require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
 			require.True(t, arg.IsTerminal)
 			require.Equal(t, pgtype.Text{String: db.ExternalPaymentBusinessOwnerApplyment, Valid: true}, arg.BusinessOwner)
-			require.False(t, arg.BusinessObjectType.Valid)
-			require.False(t, arg.BusinessObjectID.Valid)
+			require.Equal(t, pgtype.Text{String: "baofu_account_binding", Valid: true}, arg.BusinessObjectType)
+			require.Equal(t, pgtype.Int8{Int64: 6101, Valid: true}, arg.BusinessObjectID)
 			return db.ExternalPaymentFact{ID: 88, DedupeKey: arg.DedupeKey}, nil
+		})
+	store.EXPECT().MarkBaofuAccountBindingActiveWithFeeLedgerTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountBindingActiveWithFeeLedgerTxParams) (db.MarkBaofuAccountBindingActiveWithFeeLedgerTxResult, error) {
+			require.Equal(t, int64(6101), arg.ActiveBinding.ID)
+			require.Equal(t, pgtype.Text{String: "CM_BCT_123", Valid: true}, arg.ActiveBinding.ContractNo)
+			require.Equal(t, pgtype.Text{String: "CM_BCT_123", Valid: true}, arg.ActiveBinding.SharingMerID)
+			require.JSONEq(t, `{"transSerialNo":"OPEN123","state":"1","contractNo":"CM_BCT_123"}`, string(arg.ActiveBinding.RawSnapshot))
+			require.Equal(t, db.BaofuFeeTypeAccountOpenVerifyFee, arg.AccountOpenFeeLedger.FeeType)
+			require.Equal(t, int64(6101), arg.AccountOpenFeeLedger.BusinessObjectID)
+			return db.MarkBaofuAccountBindingActiveWithFeeLedgerTxResult{Binding: binding}, nil
 		})
 
 	recorder := httptest.NewRecorder()
@@ -52,6 +83,23 @@ func TestBaofuAccountOpenCallbackPersistsFactBeforeAck(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, "OK", recorder.Body.String())
 	require.Equal(t, "text/plain; charset=utf-8", recorder.Header().Get("Content-Type"))
+}
+
+func TestBaofuAccountOpenCallbackRejectsPayoutIdentityMismatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAccountNotificationParserForTest(fakeBaofuOpenAccountParser{})
+	server.config.BaofuPayoutMerchantID = "EXPECTED_MER"
+	server.config.BaofuPayoutTerminalID = "EXPECTED_TER"
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/account/open", bytes.NewBufferString(`{"encrypted":true}`))
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusUnauthorized, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "callback verification failed")
 }
 
 func TestBaofuWithdrawCallbackEnqueuesFactApplicationBeforeAck(t *testing.T) {
@@ -79,6 +127,24 @@ func TestBaofuWithdrawCallbackEnqueuesFactApplicationBeforeAck(t *testing.T) {
 	require.Equal(t, []int64{withdrawal.ID}, taskRecorder.withdrawalOrderIDs)
 	require.Equal(t, []string{"3"}, taskRecorder.upstreamStates)
 	require.Equal(t, []string{"BFWD202605040001"}, taskRecorder.baofuWithdrawNos)
+}
+
+func TestBaofuWithdrawCallbackRejectsPayoutIdentityMismatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAccountNotificationParserForTest(fakeBaofuOpenAccountParser{})
+	server.taskDistributor = &baofuWithdrawalFactApplicationEnqueueRecorder{}
+	server.config.BaofuPayoutMerchantID = "EXPECTED_MER"
+	server.config.BaofuPayoutTerminalID = "EXPECTED_TER"
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/withdraw", bytes.NewBufferString(`{"encrypted":true}`))
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusUnauthorized, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "callback verification failed")
 }
 
 func TestBaofuAccountCallbackPayloadUsesRawQueryWhenBodyEmpty(t *testing.T) {
@@ -471,6 +537,8 @@ type fakeBaofuOpenAccountParser struct{}
 
 func (fakeBaofuOpenAccountParser) ParseOpenAccountNotification(body []byte) (*baofunotification.AccountNotification, error) {
 	return &baofunotification.AccountNotification{
+		MemberID:      "102004466",
+		TerminalID:    "200005201",
 		OutRequestNo:  "OPEN123",
 		ContractNo:    "CM_BCT_123",
 		UpstreamState: "1",
@@ -482,6 +550,8 @@ func (fakeBaofuOpenAccountParser) ParseOpenAccountNotification(body []byte) (*ba
 
 func (fakeBaofuOpenAccountParser) ParseWithdrawNotification(body []byte) (*baofunotification.WithdrawNotification, error) {
 	return &baofunotification.WithdrawNotification{
+		MemberID:        "102004466",
+		TerminalID:      "200005201",
 		TransSerialNo:   "WD202605040001",
 		BaofuWithdrawNo: "BFWD202605040001",
 		ContractNo:      "CM_BCT_123",
