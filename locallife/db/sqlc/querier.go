@@ -1564,6 +1564,7 @@ type Querier interface {
 	ListWithdrawalRecords(ctx context.Context, arg ListWithdrawalRecordsParams) ([]WithdrawalRecord, error)
 	MarkAllNotificationsAsRead(ctx context.Context, userID int64) error
 	MarkAllOperatorNotificationsAsRead(ctx context.Context, userID int64) error
+	MarkBaofuAccountBindingAbnormal(ctx context.Context, arg MarkBaofuAccountBindingAbnormalParams) (BaofuAccountBinding, error)
 	MarkBaofuAccountBindingActive(ctx context.Context, arg MarkBaofuAccountBindingActiveParams) (BaofuAccountBinding, error)
 	MarkBaofuAccountBindingFailed(ctx context.Context, arg MarkBaofuAccountBindingFailedParams) (BaofuAccountBinding, error)
 	MarkBaofuAccountBindingProcessing(ctx context.Context, arg MarkBaofuAccountBindingProcessingParams) (BaofuAccountBinding, error)

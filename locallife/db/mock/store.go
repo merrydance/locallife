@@ -16910,6 +16910,21 @@ func (mr *MockStoreMockRecorder) MarkAllOperatorNotificationsAsRead(ctx, userID 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkAllOperatorNotificationsAsRead", reflect.TypeOf((*MockStore)(nil).MarkAllOperatorNotificationsAsRead), ctx, userID)
 }
 
+// MarkBaofuAccountBindingAbnormal mocks base method.
+func (m *MockStore) MarkBaofuAccountBindingAbnormal(ctx context.Context, arg db.MarkBaofuAccountBindingAbnormalParams) (db.BaofuAccountBinding, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkBaofuAccountBindingAbnormal", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountBinding)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkBaofuAccountBindingAbnormal indicates an expected call of MarkBaofuAccountBindingAbnormal.
+func (mr *MockStoreMockRecorder) MarkBaofuAccountBindingAbnormal(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBaofuAccountBindingAbnormal", reflect.TypeOf((*MockStore)(nil).MarkBaofuAccountBindingAbnormal), ctx, arg)
+}
+
 // MarkBaofuAccountBindingActive mocks base method.
 func (m *MockStore) MarkBaofuAccountBindingActive(ctx context.Context, arg db.MarkBaofuAccountBindingActiveParams) (db.BaofuAccountBinding, error) {
 	m.ctrl.T.Helper()

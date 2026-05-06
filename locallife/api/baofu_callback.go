@@ -538,6 +538,10 @@ func (server *Server) recordBaofuAccountOpenCallbackFact(ctx context.Context, no
 	if err != nil {
 		return db.ExternalPaymentFact{}, err
 	}
+	businessOwner := strings.TrimSpace(command.BusinessOwner)
+	if businessOwner == "" {
+		businessOwner = db.ExternalPaymentBusinessOwnerApplyment
+	}
 	fact, err := server.store.CreateExternalPaymentFact(ctx, db.CreateExternalPaymentFactParams{
 		Provider:             db.ExternalPaymentProviderBaofu,
 		Channel:              db.PaymentChannelBaofuAggregate,
@@ -548,7 +552,7 @@ func (server *Server) recordBaofuAccountOpenCallbackFact(ctx context.Context, no
 		ExternalObjectType:   "baofu_account",
 		ExternalObjectKey:    outRequestNo,
 		ExternalSecondaryKey: baofuText(strings.TrimSpace(notification.ContractNo)),
-		BusinessOwner:        pgtype.Text{String: db.ExternalPaymentBusinessOwnerApplyment, Valid: true},
+		BusinessOwner:        pgtype.Text{String: businessOwner, Valid: true},
 		BusinessObjectType:   command.BusinessObjectType,
 		BusinessObjectID:     command.BusinessObjectID,
 		UpstreamState:        upstreamState,
@@ -629,6 +633,12 @@ func (server *Server) applyBaofuAccountOpenCallbackState(ctx context.Context, no
 			return nil
 		}
 		_, err := server.store.MarkBaofuAccountBindingFailed(ctx, db.MarkBaofuAccountBindingFailedParams{ID: binding.ID, RawSnapshot: baofuAccountRawSnapshot(notification.Raw)})
+		return err
+	case db.BaofuAccountOpenStateAbnormal:
+		if binding.OpenState == db.BaofuAccountOpenStateActive || binding.OpenState == db.BaofuAccountOpenStateAbnormal {
+			return nil
+		}
+		_, err := server.store.MarkBaofuAccountBindingAbnormal(ctx, db.MarkBaofuAccountBindingAbnormalParams{ID: binding.ID, RawSnapshot: baofuAccountRawSnapshot(notification.Raw)})
 		return err
 	default:
 		return nil

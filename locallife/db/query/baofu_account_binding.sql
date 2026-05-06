@@ -74,6 +74,14 @@ SET open_state = 'failed',
 WHERE id = sqlc.arg(id)
 RETURNING id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at;
 
+-- name: MarkBaofuAccountBindingAbnormal :one
+UPDATE baofu_account_bindings
+SET open_state = 'abnormal',
+    raw_snapshot = sqlc.arg(raw_snapshot),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+RETURNING id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at;
+
 -- name: ListProcessingBaofuAccountBindings :many
 SELECT id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at
 FROM baofu_account_bindings

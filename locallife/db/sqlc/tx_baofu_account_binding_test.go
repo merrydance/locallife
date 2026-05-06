@@ -52,3 +52,23 @@ func TestMarkBaofuAccountBindingActiveWithFeeLedgerTx(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, result.AccountOpenFeeLedger.ID, gotLedger.ID)
 }
+
+func TestMarkBaofuAccountBindingAbnormal(t *testing.T) {
+	binding, err := testStore.UpsertBaofuAccountBinding(context.Background(), UpsertBaofuAccountBindingParams{
+		OwnerType:   BaofuAccountOwnerTypeRider,
+		OwnerID:     time.Now().UnixNano(),
+		AccountType: BaofuAccountTypePersonal,
+		OpenState:   BaofuAccountOpenStateProcessing,
+		RawSnapshot: []byte(`{}`),
+	})
+	require.NoError(t, err)
+
+	updated, err := testStore.MarkBaofuAccountBindingAbnormal(context.Background(), MarkBaofuAccountBindingAbnormalParams{
+		ID:          binding.ID,
+		RawSnapshot: []byte(`{"state":"-1"}`),
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, BaofuAccountOpenStateAbnormal, updated.OpenState)
+	require.JSONEq(t, `{"state":"-1"}`, string(updated.RawSnapshot))
+}

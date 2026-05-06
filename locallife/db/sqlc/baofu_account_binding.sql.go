@@ -153,6 +153,42 @@ func (q *Queries) ListProcessingBaofuAccountBindings(ctx context.Context, arg Li
 	return items, nil
 }
 
+const markBaofuAccountBindingAbnormal = `-- name: MarkBaofuAccountBindingAbnormal :one
+UPDATE baofu_account_bindings
+SET open_state = 'abnormal',
+    raw_snapshot = $1,
+    updated_at = now()
+WHERE id = $2
+RETURNING id, owner_type, owner_id, account_type, contract_no, sharing_mer_id, login_no, open_state, wechat_sub_mch_id, bank_card_last4, last_open_trans_serial_no, raw_snapshot, created_at, updated_at
+`
+
+type MarkBaofuAccountBindingAbnormalParams struct {
+	RawSnapshot []byte `json:"raw_snapshot"`
+	ID          int64  `json:"id"`
+}
+
+func (q *Queries) MarkBaofuAccountBindingAbnormal(ctx context.Context, arg MarkBaofuAccountBindingAbnormalParams) (BaofuAccountBinding, error) {
+	row := q.db.QueryRow(ctx, markBaofuAccountBindingAbnormal, arg.RawSnapshot, arg.ID)
+	var i BaofuAccountBinding
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerType,
+		&i.OwnerID,
+		&i.AccountType,
+		&i.ContractNo,
+		&i.SharingMerID,
+		&i.LoginNo,
+		&i.OpenState,
+		&i.WechatSubMchID,
+		&i.BankCardLast4,
+		&i.LastOpenTransSerialNo,
+		&i.RawSnapshot,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const markBaofuAccountBindingActive = `-- name: MarkBaofuAccountBindingActive :one
 UPDATE baofu_account_bindings
 SET open_state = 'active',

@@ -33,6 +33,7 @@ func TestBaofuAccountOpenCallbackAppliesTerminalStateBeforeAck(t *testing.T) {
 
 	command := db.ExternalPaymentCommand{
 		ID:                 7001,
+		BusinessOwner:      "rider",
 		BusinessObjectType: pgtype.Text{String: "baofu_account_binding", Valid: true},
 		BusinessObjectID:   pgtype.Int8{Int64: 6101, Valid: true},
 	}
@@ -60,7 +61,7 @@ func TestBaofuAccountOpenCallbackAppliesTerminalStateBeforeAck(t *testing.T) {
 			require.Equal(t, "baofu:callback:account:OPEN123:1", arg.DedupeKey)
 			require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
 			require.True(t, arg.IsTerminal)
-			require.Equal(t, pgtype.Text{String: db.ExternalPaymentBusinessOwnerApplyment, Valid: true}, arg.BusinessOwner)
+			require.Equal(t, pgtype.Text{String: "rider", Valid: true}, arg.BusinessOwner)
 			require.Equal(t, pgtype.Text{String: "baofu_account_binding", Valid: true}, arg.BusinessObjectType)
 			require.Equal(t, pgtype.Int8{Int64: 6101, Valid: true}, arg.BusinessObjectID)
 			return db.ExternalPaymentFact{ID: 88, DedupeKey: arg.DedupeKey}, nil
@@ -83,6 +84,50 @@ func TestBaofuAccountOpenCallbackAppliesTerminalStateBeforeAck(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, "OK", recorder.Body.String())
 	require.Equal(t, "text/plain; charset=utf-8", recorder.Header().Get("Content-Type"))
+}
+
+func TestBaofuAccountOpenCallbackMarksAbnormalBeforeAck(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAccountNotificationParserForTest(fakeBaofuAbnormalAccountParser{})
+	server.config.BaofuPayoutMerchantID = "102004466"
+	server.config.BaofuPayoutTerminalID = "200005201"
+
+	command := db.ExternalPaymentCommand{
+		ID:                 7002,
+		BusinessOwner:      "rider",
+		BusinessObjectType: pgtype.Text{String: "baofu_account_binding", Valid: true},
+		BusinessObjectID:   pgtype.Int8{Int64: 6102, Valid: true},
+	}
+	binding := db.BaofuAccountBinding{
+		ID:        6102,
+		OpenState: db.BaofuAccountOpenStateProcessing,
+	}
+	store.EXPECT().GetExternalPaymentCommandByExternalObject(gomock.Any(), gomock.Any()).Return(command, nil)
+	store.EXPECT().GetBaofuAccountBinding(gomock.Any(), int64(6102)).Return(binding, nil)
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+			require.Equal(t, pgtype.Text{String: "rider", Valid: true}, arg.BusinessOwner)
+			require.Equal(t, db.ExternalPaymentTerminalStatusUnknown, arg.TerminalStatus)
+			require.False(t, arg.IsTerminal)
+			require.Equal(t, "-1", arg.UpstreamState)
+			return db.ExternalPaymentFact{ID: 89, DedupeKey: arg.DedupeKey}, nil
+		})
+	store.EXPECT().MarkBaofuAccountBindingAbnormal(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountBindingAbnormalParams) (db.BaofuAccountBinding, error) {
+			require.Equal(t, int64(6102), arg.ID)
+			require.JSONEq(t, `{"transSerialNo":"OPEN_ABNORMAL","state":"-1"}`, string(arg.RawSnapshot))
+			return db.BaofuAccountBinding{ID: arg.ID, OpenState: db.BaofuAccountOpenStateAbnormal}, nil
+		})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/account/open", bytes.NewBufferString(`{"encrypted":true}`))
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "OK", recorder.Body.String())
 }
 
 func TestBaofuAccountOpenCallbackRejectsPayoutIdentityMismatch(t *testing.T) {
@@ -546,6 +591,24 @@ func (fakeBaofuOpenAccountParser) ParseOpenAccountNotification(body []byte) (*ba
 		OccurredAt:    time.Now().UTC(),
 		Raw:           []byte(`{"transSerialNo":"OPEN123","state":"1","contractNo":"CM_BCT_123"}`),
 	}, nil
+}
+
+type fakeBaofuAbnormalAccountParser struct{}
+
+func (fakeBaofuAbnormalAccountParser) ParseOpenAccountNotification(body []byte) (*baofunotification.AccountNotification, error) {
+	return &baofunotification.AccountNotification{
+		MemberID:      "102004466",
+		TerminalID:    "200005201",
+		OutRequestNo:  "OPEN_ABNORMAL",
+		UpstreamState: "-1",
+		OpenState:     db.BaofuAccountOpenStateAbnormal,
+		OccurredAt:    time.Now().UTC(),
+		Raw:           []byte(`{"transSerialNo":"OPEN_ABNORMAL","state":"-1"}`),
+	}, nil
+}
+
+func (fakeBaofuAbnormalAccountParser) ParseWithdrawNotification(body []byte) (*baofunotification.WithdrawNotification, error) {
+	return fakeBaofuOpenAccountParser{}.ParseWithdrawNotification(body)
 }
 
 func (fakeBaofuOpenAccountParser) ParseWithdrawNotification(body []byte) (*baofunotification.WithdrawNotification, error) {

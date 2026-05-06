@@ -98,6 +98,33 @@ func TestBaofuAccountServiceOpenAccountRecordsCommandBeforeClientCall(t *testing
 	require.Equal(t, int64(100), store.lastFeeLedger.Amount)
 }
 
+func TestBaofuAccountServiceOpenAccountMarksAbnormalForOfficialExceptionState(t *testing.T) {
+	store := &fakeBaofuAccountStore{}
+	client := &fakeBaofuAccountClient{result: &baofucontracts.AccountResult{
+		OutRequestNo:  "OPEN_ABNORMAL",
+		OpenState:     db.BaofuAccountOpenStateAbnormal,
+		UpstreamState: "-1",
+		Raw:           []byte(`{"state":"-1"}`),
+	}}
+	service := NewBaofuAccountService(store, client)
+
+	_, err := service.OpenAccount(context.Background(), baofucontracts.OpenAccountRequest{
+		OwnerType:     db.BaofuAccountOwnerTypeRider,
+		OwnerID:       42,
+		AccountType:   db.BaofuAccountTypePersonal,
+		OutRequestNo:  "OPEN_ABNORMAL",
+		LegalName:     "测试用户",
+		CertificateNo: "110101199001010011",
+		BankAccountNo: "6222020202020202020",
+		BankMobile:    "13800138000",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(7), store.lastAbnormal.ID)
+	require.JSONEq(t, `{"state":"-1"}`, string(store.lastAbnormal.RawSnapshot))
+	require.False(t, store.failedCalled)
+}
+
 func TestBaofuAccountServiceOpenAccountRequiresOutRequestNo(t *testing.T) {
 	service := NewBaofuAccountService(&fakeBaofuAccountStore{}, &fakeBaofuAccountClient{})
 
@@ -130,9 +157,11 @@ func TestBaofuAccountServiceOpenAccountRejectsInvalidOfficialInputBeforeWriting(
 type fakeBaofuAccountStore struct {
 	lastCommand                    db.CreateExternalPaymentCommandParams
 	lastActive                     db.MarkBaofuAccountBindingActiveParams
+	lastAbnormal                   db.MarkBaofuAccountBindingAbnormalParams
 	lastFeeLedger                  db.CreateBaofuFeeLedgerParams
 	commandCreatedBeforeClientCall bool
 	bindingUpserted                bool
+	failedCalled                   bool
 }
 
 func (s *fakeBaofuAccountStore) UpsertBaofuAccountBinding(ctx context.Context, arg db.UpsertBaofuAccountBindingParams) (db.BaofuAccountBinding, error) {
@@ -156,7 +185,13 @@ func (s *fakeBaofuAccountStore) MarkBaofuAccountBindingActiveWithFeeLedgerTx(ctx
 }
 
 func (s *fakeBaofuAccountStore) MarkBaofuAccountBindingFailed(ctx context.Context, arg db.MarkBaofuAccountBindingFailedParams) (db.BaofuAccountBinding, error) {
+	s.failedCalled = true
 	return db.BaofuAccountBinding{ID: arg.ID, OpenState: db.BaofuAccountOpenStateFailed}, nil
+}
+
+func (s *fakeBaofuAccountStore) MarkBaofuAccountBindingAbnormal(ctx context.Context, arg db.MarkBaofuAccountBindingAbnormalParams) (db.BaofuAccountBinding, error) {
+	s.lastAbnormal = arg
+	return db.BaofuAccountBinding{ID: arg.ID, OpenState: db.BaofuAccountOpenStateAbnormal}, nil
 }
 
 type fakeBaofuAccountClient struct {
