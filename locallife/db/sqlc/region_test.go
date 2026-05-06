@@ -51,6 +51,13 @@ func TestRegionQueries_GetRegionByCode(t *testing.T) {
 func TestRegionQueries_ListRegions_Filters(t *testing.T) {
 	ctx := context.Background()
 
+	var existingLevel2Count int64
+	err := testStore.(*SQLStore).connPool.
+		QueryRow(ctx, "SELECT COUNT(*) FROM regions WHERE level = $1", int16(2)).
+		Scan(&existingLevel2Count)
+	require.NoError(t, err)
+	require.Less(t, existingLevel2Count, int64(1<<31))
+
 	province := createRandomRegion(t)
 
 	city1, err := testStore.CreateRegion(ctx, CreateRegionParams{
@@ -75,7 +82,7 @@ func TestRegionQueries_ListRegions_Filters(t *testing.T) {
 
 	// 另一个省的城市（不应被 parent_id=province.ID 命中）
 	otherProvince := createRandomRegion(t)
-	_, err = testStore.CreateRegion(ctx, CreateRegionParams{
+	otherCity, err := testStore.CreateRegion(ctx, CreateRegionParams{
 		Code:      util.RandomString(6),
 		Name:      "city_other_" + util.RandomString(6),
 		Level:     2,
@@ -97,10 +104,14 @@ func TestRegionQueries_ListRegions_Filters(t *testing.T) {
 	require.Equal(t, city1.ID, regions[0].ID)
 	require.Equal(t, city2.ID, regions[1].ID)
 
-	// parent_id 未指定时，不按 parent 过滤；至少应包含上面创建的城市
-	allRegions, err := testStore.ListRegions(ctx, ListRegionsParams{Limit: 100000, Offset: 0})
+	// parent_id 未指定时，不按 parent 过滤；从本测试新增的 level=2 行开始读，避免依赖全表前 100000 行。
+	allRegions, err := testStore.ListRegions(ctx, ListRegionsParams{
+		Limit:  3,
+		Offset: int32(existingLevel2Count),
+		Level:  pgtype.Int2{Int16: 2, Valid: true},
+	})
 	require.NoError(t, err)
-	require.NotEmpty(t, allRegions)
+	require.Len(t, allRegions, 3)
 	ids := make(map[int64]struct{}, len(allRegions))
 	for _, r := range allRegions {
 		ids[r.ID] = struct{}{}
@@ -109,6 +120,8 @@ func TestRegionQueries_ListRegions_Filters(t *testing.T) {
 	_, ok2 := ids[city2.ID]
 	require.True(t, ok1)
 	require.True(t, ok2)
+	_, okOther := ids[otherCity.ID]
+	require.True(t, okOther)
 }
 
 func TestRegionQueries_ListRegionChildren(t *testing.T) {
