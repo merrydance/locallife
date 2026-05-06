@@ -2,8 +2,8 @@ package db
 
 import "context"
 
-// CreateBaofuProfitSharingOrderTxParams contains the durable share order and the
-// matching merchant-borne payment fee ledger row that must commit atomically.
+// CreateBaofuProfitSharingOrderTxParams contains the durable share order and
+// matching Baofu fee ledger rows that must commit atomically.
 type CreateBaofuProfitSharingOrderTxParams struct {
 	ProfitSharingOrder     CreateProfitSharingOrderParams
 	FeeBreakdown           UpdateProfitSharingOrderFeeBreakdownParams
