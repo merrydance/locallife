@@ -151,6 +151,17 @@ func TestOpenAccountRequestRequiresBusinessOfficialInputFields(t *testing.T) {
 	require.EqualError(t, req.Validate(), "baofu open account business depositBankName is required")
 }
 
+func TestOpenAccountRequestRejectsPlatformAccountType(t *testing.T) {
+	req := OpenAccountRequest{
+		AccountType:   "platform",
+		OutRequestNo:  "OPEN202605040004",
+		LegalName:     "平台公司",
+		CertificateNo: "91310000123456789X",
+	}
+
+	require.EqualError(t, req.Validate(), "baofu open account accountType is unsupported")
+}
+
 func TestOfficialBusinessOpenAccountRequiresOfficialFields(t *testing.T) {
 	req := OfficialOpenAccountRequest{
 		Version:      OfficialOpenAccountVersion,

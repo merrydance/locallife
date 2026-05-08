@@ -16,11 +16,14 @@ func TestBaofuAccountServiceValidateOwnerAccountRules(t *testing.T) {
 
 	require.NoError(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypeMerchant, db.BaofuAccountTypeBusiness))
 	require.NoError(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypeRider, db.BaofuAccountTypePersonal))
-	require.NoError(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypeOperator, db.BaofuAccountTypePlatform))
-	require.NoError(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypePlatform, db.BaofuAccountTypePlatform))
+	require.NoError(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypeOperator, db.BaofuAccountTypePersonal))
+	require.NoError(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypePlatform, db.BaofuAccountTypeBusiness))
 
 	require.ErrorIs(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypeMerchant, db.BaofuAccountTypePersonal), ErrBaofuAccountInvalidOwnerAccount)
 	require.ErrorIs(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypeRider, db.BaofuAccountTypeBusiness), ErrBaofuAccountInvalidOwnerAccount)
+	require.ErrorIs(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypeOperator, db.BaofuAccountTypeBusiness), ErrBaofuAccountInvalidOwnerAccount)
+	require.ErrorIs(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypePlatform, db.BaofuAccountTypePersonal), ErrBaofuAccountInvalidOwnerAccount)
+	require.ErrorIs(t, service.ValidateOwnerAccount(db.BaofuAccountOwnerTypePlatform, "platform"), ErrBaofuAccountInvalidOwnerAccount)
 }
 
 func TestBaofuAccountServiceMerchantPaymentReadinessUsesCanonicalSharingMerIDOnly(t *testing.T) {

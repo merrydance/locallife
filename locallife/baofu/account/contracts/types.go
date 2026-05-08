@@ -56,7 +56,7 @@ func (r OpenAccountRequest) Validate() error {
 	switch normalizedAccountType(r.AccountType) {
 	case db.BaofuAccountTypePersonal:
 		return r.validatePersonalFourFactor()
-	case db.BaofuAccountTypeBusiness, db.BaofuAccountTypePlatform:
+	case db.BaofuAccountTypeBusiness:
 		return r.validateBusiness()
 	default:
 		return errors.New("baofu open account accountType is unsupported")
@@ -116,8 +116,6 @@ func normalizedAccountType(accountType string) string {
 		return db.BaofuAccountTypePersonal
 	case db.BaofuAccountTypeBusiness:
 		return db.BaofuAccountTypeBusiness
-	case db.BaofuAccountTypePlatform:
-		return db.BaofuAccountTypePlatform
 	default:
 		return strings.ToLower(strings.TrimSpace(accountType))
 	}

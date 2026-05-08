@@ -69,11 +69,11 @@ func (s *BaofuAccountService) ValidateOwnerAccount(ownerType, accountType string
 			return nil
 		}
 	case db.BaofuAccountOwnerTypeOperator:
-		if accountType == db.BaofuAccountTypeBusiness || accountType == db.BaofuAccountTypePlatform {
+		if accountType == db.BaofuAccountTypePersonal {
 			return nil
 		}
 	case db.BaofuAccountOwnerTypePlatform:
-		if accountType == db.BaofuAccountTypePlatform {
+		if accountType == db.BaofuAccountTypeBusiness {
 			return nil
 		}
 	}

@@ -365,7 +365,7 @@ func TestGetOperatorApplicationAPI_IncludesBaofuSettlementReadiness(t *testing.T
 		ID:           4201,
 		OwnerType:    db.BaofuAccountOwnerTypeOperator,
 		OwnerID:      operator.ID,
-		AccountType:  db.BaofuAccountTypeBusiness,
+		AccountType:  db.BaofuAccountTypePersonal,
 		ContractNo:   pgtype.Text{String: "CO3101", Valid: true},
 		SharingMerID: pgtype.Text{String: "SH3101", Valid: true},
 		OpenState:    db.BaofuAccountOpenStateProcessing,

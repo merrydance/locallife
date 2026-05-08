@@ -171,7 +171,6 @@ const (
 
 	BaofuAccountTypePersonal = "personal"
 	BaofuAccountTypeBusiness = "business"
-	BaofuAccountTypePlatform = "platform"
 
 	BaofuAccountOpenStateProcessing = "processing"
 	BaofuAccountOpenStateActive     = "active"

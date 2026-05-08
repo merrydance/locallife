@@ -175,7 +175,7 @@ func TestGetPlatformBaofuSettlementStatusAPI_IncludesSanitizedReadiness(t *testi
 		ID:           5301,
 		OwnerType:    db.BaofuAccountOwnerTypePlatform,
 		OwnerID:      platformBaofuAccountOwnerID,
-		AccountType:  db.BaofuAccountTypePlatform,
+		AccountType:  db.BaofuAccountTypeBusiness,
 		ContractNo:   pgtype.Text{String: "PF5301ABC", Valid: true},
 		SharingMerID: pgtype.Text{String: "PS5301XYZ", Valid: true},
 		OpenState:    db.BaofuAccountOpenStateActive,
