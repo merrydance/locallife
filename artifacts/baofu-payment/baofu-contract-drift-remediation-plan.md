@@ -1624,7 +1624,7 @@ git commit -m "docs(baofu): close pre-dataContent drift audit"
 
 - [x] **Step 1: Authenticate and cache relevant doc pages**
 
-Logged in to `https://doc.mandao.com/docs/bct?token=I179BCdP579o` with the provided documentation account and cached 70 relevant pages under `/tmp/baofu_doc_pages_auth`.
+Logged in to the authenticated Baofoo doc.mandao BCT documentation entry with the provided documentation account and cached 70 relevant pages under `/tmp/baofu_doc_pages_auth`; do not store login URLs with access tokens in repo docs.
 
 The source set now includes:
 

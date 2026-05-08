@@ -35,7 +35,7 @@ Treat `.github/prompts/` as reusable workflow templates, not as task archives.
 
 For any non-trivial backend work under `locallife/`, also follow `locallife/AGENTS.md`.
 
-High-risk backend paths include payment, refund, profit sharing, withdrawal, delivery, reservation, callbacks, workers, schedulers, idempotency, recovery, authn/authz, tenant boundaries, media visibility, and OCR. Classify these upward, trace the production path before editing, and use the matching domain README under `.github/standards/domains/` when relevant.
+High-risk backend paths include payment, refund, profit sharing, withdrawal, delivery, reservation, callbacks, workers, schedulers, idempotency, recovery, authn/authz, tenant boundaries, media visibility, and OCR. Classify these upward, trace the production path before editing, and use the matching domain README under `.github/standards/domains/` when relevant, for example `wechat-payment/README.md` or `baofu-payment/README.md`.
 
 ## Validation Baseline
 
