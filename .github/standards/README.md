@@ -12,6 +12,7 @@ This directory is the canonical home for project-owned standards and normative d
 - `domains/media/`: media-domain standards, designs, runbooks, and an index that separates active guidance from historical rollout material.
 - `domains/ocr/`: OCR-domain standards, runbooks, and an index that separates active guidance from historical rollout material.
 - `domains/wechat-payment/`: WeChat payment standards, runbooks, and an index that separates active guidance from historical rollout material.
+- `domains/baofu-payment/`: Baofoo/Baofu BaoCaiTong payment contract standards, field matrices, raw-source ledger, and evidence ledger.
 
 ## Canonical Rule
 

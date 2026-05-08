@@ -25,6 +25,7 @@ Backend base and layers:
 - `backend-scheduler.instructions.md`
 - `backend-integration.instructions.md`
 - `backend-cmd.instructions.md`
+- `backend-baofu.instructions.md`
 - `backend-media.instructions.md`
 - `backend-ocr.instructions.md`
 - `backend-wechat.instructions.md`
