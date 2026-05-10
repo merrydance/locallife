@@ -23495,6 +23495,288 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/platform/finance/applyment/areas/provinces": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询微信普通服务商支行检索所需的省份列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "开户"
+                ],
+                "summary": "查询开户省份列表",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.applymentProvinceListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/finance/applyment/areas/provinces/{province_code}/cities": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "根据省份编码查询微信普通服务商支行检索所需的城市列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "开户"
+                ],
+                "summary": "查询开户城市列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "省份编码",
+                        "name": "province_code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.applymentCityListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/finance/applyment/banks": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询微信普通服务商支持的对公或对私开户银行列表，返回后端缓存快照",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "开户"
+                ],
+                "summary": "查询进件银行列表",
+                "parameters": [
+                    {
+                        "enum": [
+                            "ACCOUNT_TYPE_BUSINESS",
+                            "ACCOUNT_TYPE_PRIVATE"
+                        ],
+                        "type": "string",
+                        "description": "账户类型",
+                        "name": "account_type",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.applymentBankListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/finance/applyment/banks/search-by-bank-account": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "根据个人银行卡号识别开户银行候选，仅适用于对私账户",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "开户"
+                ],
+                "summary": "识别对私银行卡开户银行",
+                "parameters": [
+                    {
+                        "enum": [
+                            "ACCOUNT_TYPE_BUSINESS",
+                            "ACCOUNT_TYPE_PRIVATE"
+                        ],
+                        "type": "string",
+                        "description": "账户类型",
+                        "name": "account_type",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "银行卡号",
+                        "name": "account_number",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.applymentBankSearchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/finance/applyment/banks/{bank_alias_code}/branches": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "根据银行别名编码和城市编码查询微信普通服务商支行列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "开户"
+                ],
+                "summary": "查询开户支行列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "银行别名编码",
+                        "name": "bank_alias_code",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "城市编码",
+                        "name": "city_code",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.applymentBranchListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/platform/finance/settlement-account": {
             "get": {
                 "security": [
@@ -35156,6 +35438,101 @@ const docTemplate = `{
                 }
             }
         },
+        "api.baofuSettlementAccountProfileDefaults": {
+            "type": "object",
+            "properties": {
+                "account_bank": {
+                    "type": "string"
+                },
+                "account_bank_code": {
+                    "type": "integer"
+                },
+                "bank_account_no_mask": {
+                    "type": "string"
+                },
+                "bank_address_code": {
+                    "type": "string"
+                },
+                "bank_alias": {
+                    "type": "string"
+                },
+                "bank_alias_code": {
+                    "type": "string"
+                },
+                "bank_branch_id": {
+                    "type": "string"
+                },
+                "bank_name": {
+                    "type": "string"
+                },
+                "business_license_number": {
+                    "type": "string"
+                },
+                "card_user_name": {
+                    "type": "string"
+                },
+                "certificate_no_mask": {
+                    "type": "string"
+                },
+                "contact_mobile_mask": {
+                    "type": "string"
+                },
+                "contact_name": {
+                    "type": "string"
+                },
+                "corporate_mobile_mask": {
+                    "type": "string"
+                },
+                "deposit_bank_city": {
+                    "type": "string"
+                },
+                "deposit_bank_name": {
+                    "type": "string"
+                },
+                "deposit_bank_province": {
+                    "type": "string"
+                },
+                "email_mask": {
+                    "type": "string"
+                },
+                "has_bank_account_no": {
+                    "type": "boolean"
+                },
+                "has_certificate_no": {
+                    "type": "boolean"
+                },
+                "has_contact_mobile": {
+                    "type": "boolean"
+                },
+                "has_corporate_mobile": {
+                    "type": "boolean"
+                },
+                "has_email": {
+                    "type": "boolean"
+                },
+                "has_legal_person_id_number": {
+                    "type": "boolean"
+                },
+                "has_saved_sensitive_defaults": {
+                    "type": "boolean"
+                },
+                "legal_name": {
+                    "type": "string"
+                },
+                "legal_person_id_number_mask": {
+                    "type": "string"
+                },
+                "legal_person_name": {
+                    "type": "string"
+                },
+                "self_employed": {
+                    "type": "boolean"
+                },
+                "source": {
+                    "type": "string"
+                }
+            }
+        },
         "api.baofuSettlementAccountProfileRequest": {
             "type": "object",
             "properties": {
@@ -35192,6 +35569,9 @@ const docTemplate = `{
                 "contact_name": {
                     "type": "string"
                 },
+                "corporate_mobile": {
+                    "type": "string"
+                },
                 "deposit_bank_city": {
                     "type": "string"
                 },
@@ -35224,6 +35604,9 @@ const docTemplate = `{
                 },
                 "real_name": {
                     "type": "string"
+                },
+                "self_employed": {
+                    "type": "boolean"
                 }
             }
         },
@@ -35303,6 +35686,9 @@ const docTemplate = `{
                 },
                 "payment_ready": {
                     "type": "boolean"
+                },
+                "profile_defaults": {
+                    "$ref": "#/definitions/api.baofuSettlementAccountProfileDefaults"
                 },
                 "profile_status": {
                     "type": "string"

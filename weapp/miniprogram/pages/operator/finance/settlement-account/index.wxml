@@ -41,10 +41,13 @@
         placeholder="请输入姓名"
         value="{{form.legal_name}}"
         data-field="legal_name"
-        disabled="{{!canEditProfile || submitting || syncing}}"
+        disabled="{{hasStoredCertificateNo || !canEditProfile || submitting || syncing}}"
         bind:change="onInput"
       />
+      <view wx:if="{{hasStoredCertificateNo}}" class="identity-note">姓名已从已通过的运营商入驻资料带入。</view>
+      <t-cell wx:if="{{hasStoredCertificateNo}}" title="身份证号" note="{{profileDefaults.certificate_no_mask}}" />
       <t-input
+        wx:else
         label="身份证号"
         placeholder="请输入身份证号"
         value="{{form.certificate_no}}"

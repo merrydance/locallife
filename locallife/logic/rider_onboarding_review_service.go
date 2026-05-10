@@ -37,6 +37,7 @@ type RiderOnboardingReviewResult struct {
 }
 
 type riderReviewIDCardOCRData struct {
+	Status   string `json:"status,omitempty"`
 	Name     string `json:"name,omitempty"`
 	IDNumber string `json:"id_number,omitempty"`
 	ValidEnd string `json:"valid_end,omitempty"`
@@ -44,6 +45,7 @@ type riderReviewIDCardOCRData struct {
 }
 
 type riderReviewHealthCertOCRData struct {
+	Status     string `json:"status,omitempty"`
 	Name       string `json:"name,omitempty"`
 	IDNumber   string `json:"id_number,omitempty"`
 	CertNumber string `json:"cert_number,omitempty"`
@@ -205,6 +207,12 @@ func evaluateRiderApplication(application db.RiderApplication, now time.Time) (b
 		return false, "身份证信息解析失败，请重新上传", riderReviewIDCardOCRData{}
 	}
 	idCardOCR := *decodedIDCardOCR
+	switch strings.TrimSpace(idCardOCR.Status) {
+	case "pending", "processing":
+		return false, "身份证OCR处理中，请稍后再提交", idCardOCR
+	case "failed":
+		return false, "身份证OCR处理失败，请重新上传清晰的身份证照片", idCardOCR
+	}
 	if strings.TrimSpace(idCardOCR.IDNumber) == "" {
 		return false, "身份证号未识别，请重新上传清晰的身份证正面照片", idCardOCR
 	}
@@ -229,12 +237,21 @@ func evaluateRiderApplication(application db.RiderApplication, now time.Time) (b
 		return false, "健康证信息解析失败，请重新上传", idCardOCR
 	}
 	healthOCR := *decodedHealthOCR
+	switch strings.TrimSpace(healthOCR.Status) {
+	case "pending", "processing":
+		return false, "健康证OCR处理中，请稍后再提交", idCardOCR
+	case "failed":
+		return false, "健康证OCR处理失败，请重新上传清晰的健康证照片", idCardOCR
+	}
 
 	idName := normalizeRiderPersonName(idCardOCR.Name)
 	if idName == "" && application.RealName.Valid {
 		idName = normalizeRiderPersonName(application.RealName.String)
 	}
 	healthName := normalizeRiderPersonName(healthOCR.Name)
+	if idName != "" && healthName != "" && idName != healthName && strings.Contains(healthName, idName) {
+		healthName = idName
+	}
 	if idName == "" {
 		return false, "身份证姓名未识别，请重新上传清晰的身份证正面照片", idCardOCR
 	}

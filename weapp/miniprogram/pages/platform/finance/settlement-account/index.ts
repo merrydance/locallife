@@ -3,7 +3,7 @@ import type {
   BaofuSettlementAccountProfileDefaults,
   BaofuSettlementAccountResponse
 } from '../../../../api/baofu-account'
-import { getMerchantBaofuSettlementAccount } from '../../../../api/baofu-account'
+import { getPlatformBaofuSettlementAccount } from '../../../../api/baofu-account'
 import type {
   ApplymentBankFormDraftPayload,
   ApplymentBankFormPayload
@@ -20,18 +20,12 @@ import {
   type BaofuRolePageView
 } from '../../../../services/baofu-account-role-page'
 import Toast, { hideToast } from '../../../../miniprogram_npm/tdesign-miniprogram/toast/index'
-import {
-  ensureMerchantApplymentAccess,
-  getMerchantConsoleAccessErrorMessage,
-  isMerchantConsoleAccessDenied,
-  isMerchantConsoleAccessGranted
-} from '../../../../utils/console-access'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 type FeedbackTheme = 'success' | 'warning' | 'error'
-type MerchantFormField =
+type PlatformFormField =
   | 'legal_name'
   | 'business_license_number'
   | 'legal_person_name'
@@ -41,7 +35,7 @@ type MerchantFormField =
   | 'contact_name'
   | 'contact_mobile'
 
-interface MerchantProfileForm {
+interface PlatformProfileForm {
   legal_name: string
   business_license_number: string
   legal_person_name: string
@@ -53,15 +47,15 @@ interface MerchantProfileForm {
 }
 
 interface FieldDataset {
-  field?: MerchantFormField
+  field?: PlatformFormField
 }
 
 const TOAST_SELECTOR = '#t-toast'
-const EMPTY_PAGE_VIEW = buildBaofuRolePageView('merchant', null)
+const EMPTY_PAGE_VIEW = buildBaofuRolePageView('platform', null)
 
 let accountRequestPending = false
 
-function emptyForm(): MerchantProfileForm {
+function emptyForm(): PlatformProfileForm {
   return {
     legal_name: '',
     business_license_number: '',
@@ -76,39 +70,6 @@ function emptyForm(): MerchantProfileForm {
 
 function normalizeText(value?: string | null): string {
   return typeof value === 'string' ? value.trim() : ''
-}
-
-function hasStoredLegalPersonID(defaults?: BaofuSettlementAccountProfileDefaults | null): boolean {
-  return Boolean(defaults?.has_legal_person_id_number)
-}
-
-function hasStoredEmail(defaults?: BaofuSettlementAccountProfileDefaults | null): boolean {
-  return Boolean(defaults?.has_email)
-}
-
-function hasStoredCorporateMobile(defaults?: BaofuSettlementAccountProfileDefaults | null): boolean {
-  return Boolean(defaults?.has_corporate_mobile)
-}
-
-function hasStoredBankAccount(defaults?: BaofuSettlementAccountProfileDefaults | null): boolean {
-  return Boolean(defaults?.has_bank_account_no)
-}
-
-function hasStoredContactMobile(defaults?: BaofuSettlementAccountProfileDefaults | null): boolean {
-  return Boolean(defaults?.has_contact_mobile)
-}
-
-function buildFormFromDefaults(defaults?: BaofuSettlementAccountProfileDefaults | null): MerchantProfileForm {
-  return {
-    legal_name: normalizeText(defaults?.legal_name),
-    business_license_number: normalizeText(defaults?.business_license_number),
-    legal_person_name: normalizeText(defaults?.legal_person_name),
-    legal_person_id_number: '',
-    corporate_mobile: '',
-    email: '',
-    contact_name: normalizeText(defaults?.contact_name),
-    contact_mobile: ''
-  }
 }
 
 function buildBankDraftFromDefaults(defaults?: BaofuSettlementAccountProfileDefaults | null): ApplymentBankFormDraftPayload | null {
@@ -133,8 +94,41 @@ function buildBankDraftFromDefaults(defaults?: BaofuSettlementAccountProfileDefa
   }
 }
 
+function hasStoredLegalPersonID(defaults?: BaofuSettlementAccountProfileDefaults | null): boolean {
+  return Boolean(defaults?.has_legal_person_id_number)
+}
+
+function hasStoredEmail(defaults?: BaofuSettlementAccountProfileDefaults | null): boolean {
+  return Boolean(defaults?.has_email)
+}
+
+function hasStoredCorporateMobile(defaults?: BaofuSettlementAccountProfileDefaults | null): boolean {
+  return Boolean(defaults?.has_corporate_mobile)
+}
+
+function hasStoredBankAccount(defaults?: BaofuSettlementAccountProfileDefaults | null): boolean {
+  return Boolean(defaults?.has_bank_account_no)
+}
+
+function hasStoredContactMobile(defaults?: BaofuSettlementAccountProfileDefaults | null): boolean {
+  return Boolean(defaults?.has_contact_mobile)
+}
+
+function buildFormFromDefaults(defaults?: BaofuSettlementAccountProfileDefaults | null): PlatformProfileForm {
+  return {
+    legal_name: normalizeText(defaults?.legal_name),
+    business_license_number: normalizeText(defaults?.business_license_number),
+    legal_person_name: normalizeText(defaults?.legal_person_name),
+    legal_person_id_number: '',
+    corporate_mobile: '',
+    email: '',
+    contact_name: normalizeText(defaults?.contact_name),
+    contact_mobile: ''
+  }
+}
+
 function buildProfilePayload(
-  form: MerchantProfileForm,
+  form: PlatformProfileForm,
   bank: ApplymentBankFormPayload,
   defaults?: BaofuSettlementAccountProfileDefaults | null
 ): BaofuAccountProfile {
@@ -159,7 +153,6 @@ function buildProfilePayload(
   } else {
     payload.self_employed = false
   }
-
   if (!payload.legal_person_id_number && hasStoredLegalPersonID(defaults)) {
     delete payload.legal_person_id_number
   }
@@ -200,10 +193,6 @@ function hidePageToast(context: WechatMiniprogram.Page.TrivialInstance) {
 Page({
   data: {
     navBarHeight: 88,
-    accessReady: false,
-    accessDenied: false,
-    accessDeniedMessage: '',
-    accessErrorMessage: '',
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
@@ -228,10 +217,10 @@ Page({
     hasStoredContactMobile: false
   },
 
-  async onLoad() {
+  onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
-    await this.bootstrapPage()
+    void this.loadAccount({ force: true })
   },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>) {
@@ -239,78 +228,18 @@ Page({
   },
 
   onShow() {
-    if (!this.hasAccess() || !this.data.accountLoaded || this.data.initialLoading || this.data.submitting || this.data.syncing) {
+    if (!this.data.accountLoaded || this.data.initialLoading || this.data.submitting || this.data.syncing) {
       return
     }
     void this.loadAccount({ silent: true })
   },
 
   onPullDownRefresh() {
-    if (!this.hasAccess()) {
-      wx.stopPullDownRefresh()
-      return
-    }
     void this.loadAccount({ force: true, refreshing: true })
   },
 
-  hasAccess() {
-    return this.data.accessReady && !this.data.accessDenied && !this.data.accessErrorMessage
-  },
-
-  async bootstrapPage() {
-    this.setData({
-      accessReady: false,
-      accessDenied: false,
-      accessDeniedMessage: '',
-      accessErrorMessage: '',
-      initialLoading: true,
-      initialError: false,
-      initialErrorMessage: '',
-      refreshErrorMessage: '',
-      accountLoaded: false,
-      pageView: { ...EMPTY_PAGE_VIEW },
-      canEditProfile: false
-    })
-
-    try {
-      const accessResult = await ensureMerchantApplymentAccess()
-      if (!isMerchantConsoleAccessGranted(accessResult)) {
-        if (accessResult.status === 'error') {
-          logger.error('Merchant baofu settlement access check failed action=check_access role=merchant', accessResult.message, 'merchant-baofu-settlement-account')
-        }
-        this.setData({
-          accessReady: true,
-          accessDenied: isMerchantConsoleAccessDenied(accessResult),
-          accessDeniedMessage: accessResult.status === 'denied' ? accessResult.message : '',
-          accessErrorMessage: getMerchantConsoleAccessErrorMessage(accessResult),
-          initialLoading: false
-        })
-        return
-      }
-
-      this.setData({
-        accessReady: true,
-        accessDenied: false,
-        accessDeniedMessage: '',
-        accessErrorMessage: ''
-      })
-      await this.loadAccount({ force: true })
-    } catch (error: unknown) {
-      logger.error('Bootstrap merchant baofu settlement account failed action=bootstrap role=merchant', error, 'merchant-baofu-settlement-account')
-      this.setData({
-        accessReady: true,
-        accessDenied: false,
-        accessDeniedMessage: '',
-        accessErrorMessage: '',
-        initialLoading: false,
-        initialError: true,
-        initialErrorMessage: '商户宝付开户状态加载失败，请稍后重试'
-      })
-    }
-  },
-
   applyAccount(response: BaofuSettlementAccountResponse) {
-    const pageView = buildBaofuRolePageView('merchant', response)
+    const pageView = buildBaofuRolePageView('platform', response)
     const profileDefaults = response.profile_defaults || null
     const canEditProfile = pageView.shouldShowProfileAction
     this.setData({
@@ -318,13 +247,13 @@ Page({
       profileDefaults,
       form: canEditProfile ? buildFormFromDefaults(profileDefaults) : this.data.form,
       bankDraft: canEditProfile ? buildBankDraftFromDefaults(profileDefaults) : this.data.bankDraft,
+      canEditProfile,
+      canRefreshStatus: pageView.shouldShowRefreshAction,
       hasStoredLegalPersonID: hasStoredLegalPersonID(profileDefaults),
       hasStoredCorporateMobile: hasStoredCorporateMobile(profileDefaults),
       hasStoredEmail: hasStoredEmail(profileDefaults),
       hasStoredBankAccount: hasStoredBankAccount(profileDefaults),
       hasStoredContactMobile: hasStoredContactMobile(profileDefaults),
-      canEditProfile,
-      canRefreshStatus: pageView.shouldShowRefreshAction,
       initialLoading: false,
       initialError: false,
       initialErrorMessage: '',
@@ -348,11 +277,11 @@ Page({
     }
 
     try {
-      const response = await getMerchantBaofuSettlementAccount()
+      const response = await getPlatformBaofuSettlementAccount()
       this.applyAccount(response)
     } catch (error: unknown) {
-      logger.error('Load merchant baofu settlement account failed action=load_account role=merchant', error, 'merchant-baofu-settlement-account')
-      const message = getErrorUserMessage(error, '商户宝付开户状态加载失败，请稍后重试')
+      logger.error('Load platform baofu settlement account failed action=load_account role=platform', error, 'platform-baofu-settlement-account')
+      const message = getErrorUserMessage(error, '平台宝付开户状态加载失败，请稍后重试')
       if (hasTrustedData) {
         this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
       } else {
@@ -372,10 +301,6 @@ Page({
   },
 
   onRetry() {
-    if (!this.hasAccess()) {
-      void this.bootstrapPage()
-      return
-    }
     void this.loadAccount({ force: true })
   },
 
@@ -393,9 +318,9 @@ Page({
   },
 
   validateSubjectForm() {
-    const form = this.data.form as MerchantProfileForm
+    const form = this.data.form as PlatformProfileForm
     const defaults = this.data.profileDefaults as BaofuSettlementAccountProfileDefaults | null
-    if (!form.legal_name.trim()) return '请输入商户主体名称'
+    if (!form.legal_name.trim()) return '请输入平台主体名称'
     if (!form.business_license_number.trim()) return '请输入营业执照号'
     if (!form.legal_person_name.trim()) return '请输入法人姓名'
     if (!hasStoredLegalPersonID(defaults) && !/(^\d{15}$)|(^\d{17}[\dXx]$)/.test(form.legal_person_id_number.trim())) return '请输入正确法人身份证号'
@@ -431,22 +356,19 @@ Page({
 
     this.setData({ submitting: true, formErrorMessage: '', actionFeedbackMessage: '' })
     try {
-      const result = await startBaofuAccountOnboarding(
-        buildProfilePayload(
-          this.data.form as MerchantProfileForm,
-          e.detail,
-          this.data.profileDefaults as BaofuSettlementAccountProfileDefaults | null
-        ),
-        {
-          role: 'merchant',
-          context: this,
-          loadingMessage: '正在提交开户资料...'
-        }
-      )
+      const result = await startBaofuAccountOnboarding(buildProfilePayload(
+        this.data.form as PlatformProfileForm,
+        e.detail,
+        this.data.profileDefaults as BaofuSettlementAccountProfileDefaults | null
+      ), {
+        role: 'platform',
+        context: this,
+        loadingMessage: '正在提交开户资料...'
+      })
       this.applyWorkflowResult(result)
     } catch (error: unknown) {
-      logger.error('Submit merchant baofu settlement profile failed action=submit_profile role=merchant', error, 'merchant-baofu-settlement-account')
-      const message = getErrorUserMessage(error, '商户宝付开户资料提交失败，请稍后重试')
+      logger.error('Submit platform baofu settlement profile failed action=submit_profile role=platform', error, 'platform-baofu-settlement-account')
+      const message = getErrorUserMessage(error, '平台宝付开户资料提交失败，请稍后重试')
       this.setData({ actionFeedbackMessage: message, actionFeedbackTheme: 'error' })
       showResultToast(this, message, 'error')
     } finally {
@@ -467,15 +389,15 @@ Page({
     this.setData({ syncing: true, actionFeedbackMessage: '' })
     try {
       const result = await pollBaofuSettlementAccountStatus({
-        role: 'merchant',
+        role: 'platform',
         context: this,
         maxAttempts: 1,
         loadingMessage: '正在刷新开户状态...'
       })
       this.applyWorkflowResult(result)
     } catch (error: unknown) {
-      logger.error('Refresh merchant baofu settlement status failed action=refresh_status role=merchant', error, 'merchant-baofu-settlement-account')
-      const message = getErrorUserMessage(error, '商户宝付开户状态刷新失败，请稍后重试')
+      logger.error('Refresh platform baofu settlement status failed action=refresh_status role=platform', error, 'platform-baofu-settlement-account')
+      const message = getErrorUserMessage(error, '平台宝付开户状态刷新失败，请稍后重试')
       this.setData({ refreshErrorMessage: message })
       showResultToast(this, message, 'error')
     } finally {

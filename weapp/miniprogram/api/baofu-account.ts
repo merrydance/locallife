@@ -2,7 +2,7 @@ import { request } from '../utils/request'
 import type { MiniProgramPayParams } from './payment'
 import type { StatusTagTheme } from '../utils/status-tag'
 
-export type BaofuAccountOwnerRole = 'rider' | 'merchant' | 'operator'
+export type BaofuAccountOwnerRole = 'rider' | 'merchant' | 'operator' | 'platform'
 
 export type BaofuSettlementAccountStatus =
   | 'ready'
@@ -30,6 +30,7 @@ export interface BaofuAccountProfile {
   business_license_number?: string
   legal_person_name?: string
   legal_person_id_number?: string
+  corporate_mobile?: string
   email?: string
   bank_account_no?: string
   account_name?: string
@@ -48,6 +49,7 @@ export interface BaofuAccountProfile {
   contact_name?: string
   contact_mobile?: string
   card_user_name?: string
+  self_employed?: boolean
 }
 
 export interface BaofuSettlementAccountPayment {
@@ -57,6 +59,39 @@ export interface BaofuSettlementAccountPayment {
   out_trade_no?: string
   pay_params?: MiniProgramPayParams
   expires_at?: string
+}
+
+export interface BaofuSettlementAccountProfileDefaults {
+  source?: 'wechat_applyment' | string
+  legal_name?: string
+  certificate_no_mask?: string
+  business_license_number?: string
+  legal_person_name?: string
+  card_user_name?: string
+  self_employed?: boolean
+  legal_person_id_number_mask?: string
+  corporate_mobile_mask?: string
+  email_mask?: string
+  bank_account_no_mask?: string
+  bank_name?: string
+  deposit_bank_province?: string
+  deposit_bank_city?: string
+  deposit_bank_name?: string
+  bank_address_code?: string
+  bank_branch_id?: string
+  account_bank?: string
+  account_bank_code?: number
+  bank_alias?: string
+  bank_alias_code?: string
+  contact_name?: string
+  contact_mobile_mask?: string
+  has_legal_person_id_number?: boolean
+  has_corporate_mobile?: boolean
+  has_certificate_no?: boolean
+  has_email?: boolean
+  has_bank_account_no?: boolean
+  has_contact_mobile?: boolean
+  has_saved_sensitive_defaults?: boolean
 }
 
 export interface BaofuSettlementAccountResponse {
@@ -87,6 +122,7 @@ export interface BaofuSettlementAccountResponse {
   contact_mobile_mask?: string
   email_mask?: string
   wechat_sub_mch_id_mask?: string
+  profile_defaults?: BaofuSettlementAccountProfileDefaults
   submitted_at?: string
   updated_at?: string
 }
@@ -122,6 +158,8 @@ function baofuAccountEndpoint(role: BaofuAccountOwnerRole): string {
       return '/v1/merchant/settlement-account'
     case 'operator':
       return '/v1/operators/me/settlement-account'
+    case 'platform':
+      return '/v1/platform/finance/settlement-account'
     default:
       return '/v1/rider/settlement-account'
   }
@@ -159,6 +197,11 @@ export const getOperatorBaofuSettlementAccount = () => getBaofuSettlementAccount
 
 export const submitOperatorBaofuSettlementAccountProfile = (profile: BaofuAccountProfile) =>
   submitBaofuSettlementAccountProfile('operator', { profile })
+
+export const getPlatformBaofuSettlementAccount = () => getBaofuSettlementAccount('platform')
+
+export const submitPlatformBaofuSettlementAccountProfile = (profile: BaofuAccountProfile) =>
+  submitBaofuSettlementAccountProfile('platform', { profile })
 
 export function getBaofuAccountStatusText(status?: string): string {
   switch (normalizeBaofuSettlementAccountStatus(status)) {

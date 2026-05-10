@@ -1,6 +1,6 @@
 <view class="bank-form">
   <t-cell-group theme="card">
-    <t-cell title="账户类型">
+    <t-cell wx:if="{{showAccountTypeSelector}}" title="账户类型">
       <view slot="note" class="tag-check-list">
         <t-check-tag
           checked="{{form.account_type === 'ACCOUNT_TYPE_BUSINESS'}}"
@@ -42,12 +42,12 @@
 
     <t-input
       label="银行账号"
-      placeholder="{{form.account_type === 'ACCOUNT_TYPE_PRIVATE' ? '请输入银行账户号码' : '请输入对公银行账户号码'}}"
+      placeholder="{{savedAccountNumberMask ? savedAccountNumberMask : (form.account_type === 'ACCOUNT_TYPE_PRIVATE' ? '请输入银行账户号码' : '请输入对公银行账户号码')}}"
       value="{{form.account_number}}"
       data-field="account_number"
       bind:change="onTextFieldChange"
       bind:blur="onAccountNumberBlur"
-      required
+      required="{{!allowSavedAccountNumber}}"
     />
 
     <t-cell
@@ -59,7 +59,7 @@
     />
 
     <t-cell
-      wx:if="{{form.need_bank_branch}}"
+      wx:if="{{form.need_bank_branch || requireBankBranch}}"
       title="开户地址省份"
       hover
       arrow
@@ -68,7 +68,7 @@
     />
 
     <t-cell
-      wx:if="{{form.need_bank_branch}}"
+      wx:if="{{form.need_bank_branch || requireBankBranch}}"
       title="开户地址城市"
       hover
       arrow
@@ -77,7 +77,7 @@
     />
 
     <t-cell
-      wx:if="{{form.need_bank_branch}}"
+      wx:if="{{form.need_bank_branch || requireBankBranch}}"
       title="开户支行"
       hover
       arrow
@@ -190,7 +190,7 @@
 
   <view class="form-actions">
     <t-button theme="primary" loading="{{submitting}}" disabled="{{submitting}}" bind:tap="onSubmit">{{submitLabel}}</t-button>
-    <t-button theme="default" variant="outline" disabled="{{submitting}}" bind:tap="onCancel">取消</t-button>
+    <t-button wx:if="{{showCancelButton}}" theme="default" variant="outline" disabled="{{submitting}}" bind:tap="onCancel">取消</t-button>
   </view>
 
   <t-popup wx:if="{{showBankPicker}}" visible="{{showBankPicker}}" placement="bottom" using-custom-navbar="{{true}}" bind:visible-change="onBankPickerVisibleChange">

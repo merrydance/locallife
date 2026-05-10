@@ -233,3 +233,39 @@ func TestListApplymentBanksSuccessUsesOrdinaryProvider(t *testing.T) {
 	require.Equal(t, 1, response.Total)
 	require.Equal(t, "测试银行", response.Banks[0].BankAlias)
 }
+
+func TestPlatformListApplymentBanksSuccessUsesOrdinaryProvider(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := mockosp.NewMockOrdinaryServiceProviderClientInterface(ctrl)
+	server := newTestServer(t, store)
+	server.SetOrdinaryServiceProviderClientForTest(ordinaryClient)
+
+	ordinaryClient.EXPECT().
+		ListCorporateBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).
+		Return(&ospcontracts.CapitalBankListResponse{
+			Data: []ospcontracts.CapitalBank{
+				{
+					BankAlias:       "平台测试银行",
+					BankAliasCode:   "PLATFORM_TEST",
+					AccountBank:     "平台测试银行",
+					AccountBankCode: 1002,
+					NeedBankBranch:  true,
+				},
+			},
+			Count:      1,
+			TotalCount: 1,
+		}, nil)
+
+	recorder, ctx := applymentCatalogRequest(t, http.MethodGet, "/v1/platform/finance/applyment/banks?account_type=ACCOUNT_TYPE_BUSINESS")
+
+	server.listApplymentBanks(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response applymentBankListResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Equal(t, 1, response.Total)
+	require.Equal(t, "平台测试银行", response.Banks[0].BankAlias)
+}

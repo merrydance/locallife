@@ -561,10 +561,3 @@ func baofuText(value string) pgtype.Text {
 	value = strings.TrimSpace(value)
 	return pgtype.Text{String: value, Valid: value != ""}
 }
-
-func baofuAccountRawSnapshot(raw []byte) []byte {
-	if len(raw) == 0 {
-		return []byte(`{}`)
-	}
-	return raw
-}

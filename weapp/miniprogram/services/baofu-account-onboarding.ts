@@ -122,7 +122,8 @@ function isPendingWorkflowContext(value: unknown): value is PendingWorkflowConte
   return (
     candidate.role === 'merchant' ||
     candidate.role === 'rider' ||
-    candidate.role === 'operator'
+    candidate.role === 'operator' ||
+    candidate.role === 'platform'
   ) && Number.isFinite(candidate.paymentOrderId) && Number.isFinite(candidate.amount) && typeof candidate.updatedAt === 'string'
 }
 
@@ -238,6 +239,12 @@ export function startOrResumeOperatorSettlementAccount(
   options: WorkflowOptions = {}
 ): Promise<BaofuOnboardingWorkflowResult> {
   return startOrResumeBaofuAccountOnboarding('operator', options)
+}
+
+export function startOrResumePlatformSettlementAccount(
+  options: WorkflowOptions = {}
+): Promise<BaofuOnboardingWorkflowResult> {
+  return startOrResumeBaofuAccountOnboarding('platform', options)
 }
 
 export async function pollBaofuSettlementAccountStatus(

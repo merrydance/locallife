@@ -1,6 +1,7 @@
 import {
   BaofuAccountProfile,
   BaofuSettlementAccountResponse,
+  type BaofuSettlementAccountProfileDefaults,
   buildBaofuSettlementAccountView,
   getRiderBaofuSettlementAccount,
   type BaofuSettlementAccountView
@@ -52,13 +53,17 @@ function emptyForm(): ProfileForm {
 }
 
 function buildProfilePayload(form: ProfileForm): BaofuAccountProfile {
-  return {
+  const payload: BaofuAccountProfile = {
     real_name: form.real_name.trim(),
     mobile: form.mobile.trim(),
     id_card_number: form.id_card_number.trim(),
     bank_account_number: form.bank_account_number.trim(),
     bank_name: form.bank_name.trim()
   }
+  if (!payload.id_card_number) {
+    delete payload.id_card_number
+  }
+  return payload
 }
 
 function showResultToast(
@@ -95,6 +100,8 @@ Page({
     actionFeedbackTheme: 'success' as FeedbackTheme,
     accountView: { ...EMPTY_ACCOUNT_VIEW } as BaofuSettlementAccountView,
     form: emptyForm(),
+    profileDefaults: null as BaofuSettlementAccountProfileDefaults | null,
+    hasStoredCertificateNo: false,
     formErrorMessage: '',
     canEditProfile: false,
     canContinuePayment: false,
@@ -125,9 +132,19 @@ Page({
 
   applyAccount(response: BaofuSettlementAccountResponse) {
     const accountView = buildBaofuSettlementAccountView(response)
+    const profileDefaults = response.profile_defaults || null
+    const canEditProfile = accountView.canSubmitProfile
     this.setData({
       accountView,
-      canEditProfile: accountView.canSubmitProfile,
+      profileDefaults,
+      form: canEditProfile
+        ? {
+            ...this.data.form,
+            real_name: profileDefaults?.legal_name || this.data.form.real_name
+          }
+        : this.data.form,
+      hasStoredCertificateNo: Boolean(profileDefaults?.has_certificate_no),
+      canEditProfile,
       canContinuePayment: accountView.canStartPayment,
       canRefreshStatus: accountView.canRefresh,
       initialLoading: false,
@@ -226,13 +243,14 @@ Page({
 
   validateForm() {
     const form = this.data.form as ProfileForm
+    const defaults = this.data.profileDefaults as BaofuSettlementAccountProfileDefaults | null
     if (!form.real_name.trim()) {
       return '请输入姓名'
     }
     if (!/^1\d{10}$/.test(form.mobile.trim())) {
       return '请输入 11 位手机号'
     }
-    if (!/(^\d{15}$)|(^\d{17}[\dXx]$)/.test(form.id_card_number.trim())) {
+    if (!defaults?.has_certificate_no && !/(^\d{15}$)|(^\d{17}[\dXx]$)/.test(form.id_card_number.trim())) {
       return '请输入正确身份证号'
     }
     if (!/^\d{8,30}$/.test(form.bank_account_number.trim())) {

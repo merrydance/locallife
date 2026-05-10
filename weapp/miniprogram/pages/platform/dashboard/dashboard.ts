@@ -89,6 +89,13 @@ Page({
                 url: '/pages/platform/operational-configs/index'
             },
             {
+                id: 'settlement-account',
+                title: '宝付结算账户',
+                desc: '平台二级户开户与状态同步',
+                icon: 'wallet',
+                url: '/pages/platform/finance/settlement-account/index'
+            },
+            {
                 id: 'groups',
                 title: '集团申请审核',
                 desc: '审核集团入驻申请',
@@ -416,4 +423,3 @@ Page({
         this.setData({ navBarHeight: e.detail.navBarHeight })
     }
 })
-

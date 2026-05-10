@@ -44,6 +44,8 @@ import {
   SKELETON_ROWS
 } from '../../../utils/merchant-dashboard-view'
 
+const BAOFU_SETTLEMENT_ACCOUNT_PAGE_PATH = '/pages/merchant/finance/settlement-account/index'
+
 Page({
   data: {
     navBarHeight: 88,
@@ -418,7 +420,7 @@ Page({
       })
 
       if (result) {
-        wx.navigateTo({ url: '/pages/merchant/settings/applyment/index' })
+        wx.navigateTo({ url: BAOFU_SETTLEMENT_ACCOUNT_PAGE_PATH })
       }
 
       return false

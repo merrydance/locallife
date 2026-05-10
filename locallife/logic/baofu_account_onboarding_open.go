@@ -96,6 +96,10 @@ func (s *BaofuAccountOnboardingService) buildOpenRequest(profile db.BaofuAccount
 	if err != nil {
 		return baofucontracts.OpenAccountRequest{}, err
 	}
+	corporateMobile, err := decryptOptional(s.encryptor, profile.CorporateMobileCiphertext.String)
+	if err != nil {
+		return baofucontracts.OpenAccountRequest{}, err
+	}
 	email, err := decryptOptional(s.encryptor, profile.EmailCiphertext.String)
 	if err != nil {
 		return baofucontracts.OpenAccountRequest{}, err
@@ -120,6 +124,7 @@ func (s *BaofuAccountOnboardingService) buildOpenRequest(profile db.BaofuAccount
 		CorporateName:       profile.CorporateName.String,
 		CorporateCertType:   profile.CorporateCertType.String,
 		CorporateCertID:     corpCertID,
+		CorporateMobile:     corporateMobile,
 		IndustryID:          firstTrimmed(profile.IndustryID.String, cfg.IndustryID),
 		ContactName:         profile.ContactName.String,
 		ContactMobile:       contactMobile,
@@ -128,6 +133,7 @@ func (s *BaofuAccountOnboardingService) buildOpenRequest(profile db.BaofuAccount
 		DepositBankCity:     profile.DepositBankCity.String,
 		DepositBankName:     profile.DepositBankName.String,
 		CardUserName:        firstTrimmed(profile.CardUserName.String, profile.LegalName.String),
+		SelfEmployed:        baofuProfileUsesPrivateBusinessCard(profile),
 	}
 	if err := req.Validate(); err != nil {
 		return baofucontracts.OpenAccountRequest{}, err

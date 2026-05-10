@@ -72,6 +72,7 @@
         "operators/index",
         "operators/detail",
         "operational-configs/index",
+        "finance/settlement-account/index",
         "riders/index",
         "tables/tags/index",
         "groups/index",

@@ -80,6 +80,28 @@ func TestEvaluateRiderApplication_AcceptsHealthCertDateWithDots(t *testing.T) {
 	require.Empty(t, rejectReason)
 }
 
+func TestEvaluateRiderApplication_ExtractsNameFromNoisyHealthCertOCR(t *testing.T) {
+	app := riderReviewTestApplication()
+	app.RealName = pgtype.Text{String: "周松涛", Valid: true}
+	app.IDCardOcr = []byte(`{"name":"周松涛","id_number":"132229197706017792","valid_end":"2025.03.01-2035.03.01"}`)
+	app.HealthCertOcr = []byte(`{"name":"人员健康合格证明安康姓全名周松涛","cert_number":"1305282025D590","valid_end":"2026.12.06"}`)
+
+	approved, rejectReason, _ := evaluateRiderApplication(app, riderReviewFixedNow())
+
+	require.True(t, approved)
+	require.Empty(t, rejectReason)
+}
+
+func TestEvaluateRiderApplication_BlocksPendingHealthCertOCR(t *testing.T) {
+	app := riderReviewTestApplication()
+	app.HealthCertOcr = []byte(`{"status":"pending","name":"张三","valid_end":"2030年12月31日"}`)
+
+	approved, rejectReason, _ := evaluateRiderApplication(app, riderReviewFixedNow())
+
+	require.False(t, approved)
+	require.Equal(t, "健康证OCR处理中，请稍后再提交", rejectReason)
+}
+
 func TestEvaluateRiderApplication_FallsBackToApplicationRealName(t *testing.T) {
 	app := riderReviewTestApplication()
 	app.IDCardOcr = []byte(`{"id_number":"110101199001011234","valid_end":"20350101"}`)

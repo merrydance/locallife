@@ -77,6 +77,9 @@ func BaofuAccountOpeningInputMissingFields(ownerType string, input BaofuAccountO
 			baofuAccountOpeningProfileField{code: "deposit_bank_city", value: input.DepositBankCity},
 			baofuAccountOpeningProfileField{code: "deposit_bank_name", value: input.DepositBankName},
 		)
+		if input.SelfEmployed && strings.TrimSpace(input.CardUserName) != "" {
+			fields = append(fields, baofuAccountOpeningProfileField{code: "corporate_mobile", value: input.CorporateMobile})
+		}
 	case db.BaofuAccountOwnerTypeRider, db.BaofuAccountOwnerTypeOperator:
 		fields = append(fields,
 			baofuAccountOpeningProfileField{code: "id_card_number", value: firstTrimmed(input.CertificateNo, input.LegalPersonIDNumber)},
@@ -105,6 +108,9 @@ func BaofuAccountOpeningProfileMissingFields(profile db.BaofuAccountOpeningProfi
 			baofuAccountOpeningProfileField{code: "deposit_bank_city", value: profile.DepositBankCity.String},
 			baofuAccountOpeningProfileField{code: "deposit_bank_name", value: profile.DepositBankName.String},
 		)
+		if baofuProfileUsesPrivateBusinessCard(profile) {
+			fields = append(fields, baofuAccountOpeningProfileField{code: "corporate_mobile", value: profile.CorporateMobileCiphertext.String})
+		}
 	case db.BaofuAccountOwnerTypeRider, db.BaofuAccountOwnerTypeOperator:
 		fields = append(fields,
 			baofuAccountOpeningProfileField{code: "id_card_number", value: profile.CertificateNoCiphertext.String},
@@ -114,6 +120,22 @@ func BaofuAccountOpeningProfileMissingFields(profile db.BaofuAccountOpeningProfi
 		return []string{"owner_type"}
 	}
 	return missingBaofuProfileFieldCodes(fields)
+}
+
+func baofuProfileUsesPrivateBusinessCard(profile db.BaofuAccountOpeningProfile) bool {
+	if strings.TrimSpace(profile.AccountType) != db.BaofuAccountTypeBusiness {
+		return false
+	}
+	if strings.TrimSpace(profile.CardUserName.String) == "" {
+		return false
+	}
+	var payload struct {
+		SelfEmployed bool `json:"self_employed"`
+	}
+	if err := json.Unmarshal(profile.SourceSnapshot, &payload); err != nil {
+		return false
+	}
+	return payload.SelfEmployed
 }
 
 func missingBaofuProfileFieldCodes(fields []baofuAccountOpeningProfileField) []string {
@@ -147,6 +169,8 @@ func baofuAccountOpeningProfileFieldLabel(field string) string {
 		return "法人姓名"
 	case "legal_person_id_number":
 		return "法人身份证号"
+	case "corporate_mobile":
+		return "法人手机号"
 	case "email":
 		return "联系邮箱"
 	case "bank_account_no":

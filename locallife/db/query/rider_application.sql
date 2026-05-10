@@ -24,6 +24,10 @@ UPDATE rider_applications
 SET 
     real_name = COALESCE(sqlc.narg(real_name), real_name),
     phone = COALESCE(sqlc.narg(phone), phone),
+    reject_reason = NULL,
+    reviewed_by = NULL,
+    reviewed_at = NULL,
+    review_summary = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING *;
@@ -41,6 +45,10 @@ SET
     END,
     -- OCR识别出姓名时自动更新real_name
     real_name = COALESCE(sqlc.narg(real_name), real_name),
+    reject_reason = NULL,
+    reviewed_by = NULL,
+    reviewed_at = NULL,
+    review_summary = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING *;
@@ -51,6 +59,10 @@ UPDATE rider_applications
 SET 
     health_cert_media_asset_id = COALESCE(sqlc.narg(health_cert_media_asset_id), health_cert_media_asset_id),
     health_cert_ocr = COALESCE(sqlc.narg(health_cert_ocr), health_cert_ocr),
+    reject_reason = NULL,
+    reviewed_by = NULL,
+    reviewed_at = NULL,
+    review_summary = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING *;
@@ -80,6 +92,10 @@ SET
             '{}'::jsonb
         )
     END,
+    reject_reason = NULL,
+    reviewed_by = NULL,
+    reviewed_at = NULL,
+    review_summary = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING *;
@@ -106,6 +122,10 @@ SET
             '{}'::jsonb
         )
     END,
+    reject_reason = NULL,
+    reviewed_by = NULL,
+    reviewed_at = NULL,
+    review_summary = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING *;
@@ -116,6 +136,10 @@ UPDATE rider_applications
 SET
     health_cert_media_asset_id = NULL,
     health_cert_ocr = NULL,
+    reject_reason = NULL,
+    reviewed_by = NULL,
+    reviewed_at = NULL,
+    review_summary = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING *;
@@ -125,6 +149,10 @@ RETURNING *;
 UPDATE rider_applications
 SET 
     status = 'submitted',
+    reject_reason = NULL,
+    reviewed_by = NULL,
+    reviewed_at = NULL,
+    review_summary = NULL,
     submitted_at = now(),
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
@@ -135,6 +163,7 @@ RETURNING *;
 UPDATE rider_applications
 SET 
     status = 'approved',
+    reject_reason = NULL,
     reviewed_by = sqlc.narg(reviewed_by),
     reviewed_at = now(),
     updated_at = now()
@@ -162,6 +191,7 @@ SET
     reject_reason = NULL,
     reviewed_by = NULL,
     reviewed_at = NULL,
+    review_summary = NULL,
     submitted_at = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'submitted'

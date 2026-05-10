@@ -39,14 +39,16 @@ function buildRoleTitle(role: BaofuAccountOwnerRole): string {
       return '商户宝付开户'
     case 'operator':
       return '运营商宝付开户'
+    case 'platform':
+      return '平台宝付开户'
     default:
       return '骑手宝付开户'
   }
 }
 
 function buildVerifyFeePrompt(role: BaofuAccountOwnerRole, feeDisplay: string): string {
-  if (role === 'merchant') {
-    return '商户开户由平台承担核验费，提交后继续同步状态。'
+  if (role === 'merchant' || role === 'platform') {
+    return '开户核验费由平台承担，提交后继续同步状态。'
   }
   return `${feeDisplay} 元核验费由本人支付，支付完成后继续开户。`
 }
@@ -55,13 +57,16 @@ function buildProfileHint(role: BaofuAccountOwnerRole): string {
   if (role === 'merchant') {
     return '用于商户报备与小程序授权目录绑定。'
   }
+  if (role === 'platform') {
+    return '用于平台机构二级户开户核验。'
+  }
   return '用于宝付个人户开户与核验。'
 }
 
 function buildFieldConfigs(role: BaofuAccountOwnerRole): BaofuRolePageFieldConfig[] {
-  if (role === 'merchant') {
+  if (role === 'merchant' || role === 'platform') {
     return [
-      { key: 'legal_name', label: '商户主体名称', placeholder: '请输入商户营业执照名称', required: true },
+      { key: 'legal_name', label: role === 'platform' ? '平台主体名称' : '商户主体名称', placeholder: '请输入营业执照主体名称', required: true },
       { key: 'business_license_number', label: '营业执照号', placeholder: '请输入营业执照号', required: true },
       { key: 'legal_person_name', label: '法人姓名', placeholder: '请输入法人姓名', required: true },
       { key: 'legal_person_id_number', label: '法人身份证号', placeholder: '请输入法人身份证号', required: true },
@@ -92,7 +97,7 @@ export function buildBaofuRolePageView(
   const statusView = buildBaofuSettlementAccountView(response)
   const title = buildRoleTitle(role)
   const feeDisplay = `${statusView.verifyFeeDisplay}`
-  const shouldShowPaymentAction = role !== 'merchant' && statusView.canStartPayment
+  const shouldShowPaymentAction = role !== 'merchant' && role !== 'platform' && statusView.canStartPayment
   const shouldShowProfileAction = statusView.canSubmitProfile
   const shouldShowRefreshAction = statusView.canRefresh
   const shouldShowOpenReportHint = role === 'merchant' && (statusView.normalizedStatus === 'merchant_report_processing' || statusView.normalizedStatus === 'applet_auth_pending')
@@ -110,7 +115,7 @@ export function buildBaofuRolePageView(
     shouldShowRefreshAction,
     shouldShowOpenReportHint,
     fieldConfigs: buildFieldConfigs(role),
-    profileButtonText: role === 'merchant' ? '提交开户资料' : '提交资料并支付核验费',
+    profileButtonText: role === 'merchant' || role === 'platform' ? '提交开户资料' : '提交资料并支付核验费',
     paymentButtonText: '继续支付核验费'
   }
 }

@@ -660,52 +660,6 @@ func (server *Server) recordDirectPaymentCallbackFact(ctx context.Context, notif
 	return result.Application, nil
 }
 
-func (server *Server) enqueueRiderDepositPaymentFactApplication(ctx context.Context, application *db.ExternalPaymentFactApplication) {
-	if application == nil || server.taskDistributor == nil {
-		return
-	}
-	distributor, ok := server.taskDistributor.(worker.PaymentFactApplicationTaskDistributor)
-	if !ok {
-		return
-	}
-	if err := distributor.DistributeTaskProcessPaymentFactApplication(
-		ctx,
-		&worker.PaymentFactApplicationPayload{ApplicationID: application.ID},
-		asynq.MaxRetry(5),
-		asynq.Queue(worker.QueueCritical),
-		asynq.Unique(paymentFactApplicationTaskUnique),
-	); err != nil {
-		log.Warn().Err(err).
-			Int64("payment_fact_application_id", application.ID).
-			Int64("payment_fact_id", application.FactID).
-			Int64("payment_order_id", application.BusinessObjectID).
-			Msg("enqueue rider deposit payment fact application from callback failed; scheduler will retry")
-	}
-}
-
-func (server *Server) enqueueClaimRecoveryPaymentFactApplication(ctx context.Context, application *db.ExternalPaymentFactApplication) {
-	if application == nil || server.taskDistributor == nil {
-		return
-	}
-	distributor, ok := server.taskDistributor.(worker.PaymentFactApplicationTaskDistributor)
-	if !ok {
-		return
-	}
-	if err := distributor.DistributeTaskProcessPaymentFactApplication(
-		ctx,
-		&worker.PaymentFactApplicationPayload{ApplicationID: application.ID},
-		asynq.MaxRetry(5),
-		asynq.Queue(worker.QueueCritical),
-		asynq.Unique(paymentFactApplicationTaskUnique),
-	); err != nil {
-		log.Warn().Err(err).
-			Int64("payment_fact_application_id", application.ID).
-			Int64("payment_fact_id", application.FactID).
-			Int64("payment_order_id", application.BusinessObjectID).
-			Msg("enqueue claim recovery payment fact application from callback failed; scheduler will retry")
-	}
-}
-
 func (server *Server) recordRiderDepositDirectRefundCallbackFact(ctx context.Context, notification wechat.PaymentNotification, refundOrder db.RefundOrder, paymentOrder db.PaymentOrder, resource *wechatcontracts.DirectRefundNotificationResource) (*db.ExternalPaymentFactApplication, error) {
 	if server.paymentFactService == nil || paymentOrder.BusinessType != db.ExternalPaymentBusinessOwnerRiderDeposit || resource == nil {
 		return nil, nil

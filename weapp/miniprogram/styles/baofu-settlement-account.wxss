@@ -42,3 +42,10 @@
   gap: var(--spacer-sm);
   padding-bottom: var(--spacer-md);
 }
+
+.identity-note {
+  padding: 0 var(--spacer-xs);
+  color: var(--td-text-color-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}

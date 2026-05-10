@@ -171,6 +171,7 @@ func TestMarkOCRFailed_SkipsStaleRiderIDCardWriteback(t *testing.T) {
 func TestCreateOCRJob_MarksRiderHealthCertPending(t *testing.T) {
 	user, _ := randomUser(t)
 	app := randomRiderApplication(user.ID)
+	app.HealthCertOcr = []byte(`{"status":"done","name":"旧姓名","cert_number":"JK20250001","valid_end":"2030年12月31日","readiness":{"state":"ready","reason_code":"ok"}}`)
 	job := db.OcrJob{ID: 321, Status: "pending", DocumentType: string(ocr.DocumentTypeHealthCert), Provider: string(ocr.ProviderNameAliyun), MediaAssetID: 701, OwnerType: string(ocr.OwnerTypeRiderApplication), OwnerID: app.ID, CreatedAt: time.Now()}
 
 	ctrl := gomock.NewController(t)
@@ -196,6 +197,10 @@ func TestCreateOCRJob_MarksRiderHealthCertPending(t *testing.T) {
 			var payload HealthCertOCRData
 			require.NoError(t, json.Unmarshal(arg.HealthCertOcr, &payload))
 			require.Equal(t, "pending", payload.Status)
+			require.Empty(t, payload.Name)
+			require.Empty(t, payload.CertNumber)
+			require.Empty(t, payload.ValidEnd)
+			require.Nil(t, payload.Readiness)
 			require.NotNil(t, payload.OCRJobID)
 			require.Equal(t, int64(321), *payload.OCRJobID)
 			return app, nil
@@ -260,6 +265,51 @@ func TestCreateOCRJob_MarksRiderIDCardPending_PreservesExistingFields(t *testing
 	server.SetTaskDistributorForTest(distributor)
 
 	body, err := json.Marshal(createOCRJobRequest{DocumentType: "id_card", MediaAssetID: 702, OwnerType: "rider_application", OwnerID: app.ID, Side: "back"})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/ocr/jobs", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
+func TestCreateOCRJob_MarksRiderIDCardPending_ClearsReplacedSideFields(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomRiderApplication(user.ID)
+	app.IDCardOcr = []byte(`{"status":"done","name":"旧姓名","id_number":"110101199001011234","valid_end":"20350101","readiness":{"state":"ready","reason_code":"ok"}}`)
+	job := db.OcrJob{ID: 323, Status: "pending", DocumentType: string(ocr.DocumentTypeIDCard), Provider: string(ocr.ProviderNameAliyun), MediaAssetID: 703, OwnerType: string(ocr.OwnerTypeRiderApplication), OwnerID: app.ID, Side: string(ocr.DocumentSideFront), CreatedAt: time.Now()}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	gomock.InOrder(
+		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(703)).Return(db.MediaAsset{ID: 703, ModerationStatus: "approved"}, nil),
+		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).Return(job, nil),
+		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().UpdateRiderApplicationIDCard(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpdateRiderApplicationIDCardParams) (db.RiderApplication, error) {
+			var payload IDCardOCRData
+			require.NoError(t, json.Unmarshal(arg.IDCardOcr, &payload))
+			require.Equal(t, "pending", payload.Status)
+			require.Empty(t, payload.Name)
+			require.Empty(t, payload.IDNumber)
+			require.Equal(t, "20350101", payload.ValidEnd)
+			require.Nil(t, payload.Readiness)
+			return app, nil
+		}),
+	)
+	distributor.EXPECT().DistributeTaskRiderApplicationIDCardOCR(gomock.Any(), app.ID, int64(703), int64(323), "Front").Return(nil)
+
+	server := newTestServer(t, store)
+	server.SetTaskDistributorForTest(distributor)
+
+	body, err := json.Marshal(createOCRJobRequest{DocumentType: "id_card", MediaAssetID: 703, OwnerType: "rider_application", OwnerID: app.ID, Side: "front"})
 	require.NoError(t, err)
 	request, err := http.NewRequest(http.MethodPost, "/v1/ocr/jobs", bytes.NewReader(body))
 	require.NoError(t, err)

@@ -68,6 +68,7 @@ type BaofuAccountOpeningProfileInput struct {
 	BusinessLicenseNo   string `json:"business_license_number,omitempty"`
 	LegalPersonName     string `json:"legal_person_name,omitempty"`
 	LegalPersonIDNumber string `json:"legal_person_id_number,omitempty"`
+	CorporateMobile     string `json:"corporate_mobile,omitempty"`
 	Email               string `json:"email,omitempty"`
 	BankAccountNo       string `json:"bank_account_no,omitempty"`
 	BankMobile          string `json:"bank_mobile,omitempty"`
@@ -78,6 +79,8 @@ type BaofuAccountOpeningProfileInput struct {
 	ContactName         string `json:"contact_name,omitempty"`
 	ContactMobile       string `json:"contact_mobile,omitempty"`
 	CardUserName        string `json:"card_user_name,omitempty"`
+	SelfEmployed        bool   `json:"self_employed,omitempty"`
+	SelfEmployedSet     bool   `json:"-"`
 }
 
 type baofuAccountOpeningProfileField struct {

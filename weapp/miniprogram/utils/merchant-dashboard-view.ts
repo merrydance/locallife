@@ -73,7 +73,7 @@ export const EMPTY_MERCHANT: MerchantStorefrontProfile = {
   updated_at: ''
 }
 
-const PRE_OPEN_PREPARATION_HINT = '主体审核通过后，可先完善菜品、桌台、套餐和门店配置；准备收款前再完成微信支付开户。'
+const PRE_OPEN_PREPARATION_HINT = '主体审核通过后，可先完善菜品、桌台、套餐和门店配置；准备收款前再完成宝付结算账户开户。'
 
 export function buildMerchantBusinessStateView(params: {
   merchantStatus?: string
@@ -100,14 +100,14 @@ export function buildMerchantBusinessStateView(params: {
   if (applymentView?.isOpened) {
     return {
       title: '打烊中',
-      hint: '微信支付已开通，当前是自主打烊状态，可随时恢复营业。'
+      hint: '结算账户已开通，当前是自主打烊状态，可随时恢复营业。'
     }
   }
 
   if (merchantStatus === 'bindbank_submitted') {
     return {
       title: '待开通',
-      hint: '微信支付开户审核中，可继续完善菜品、桌台、套餐和门店配置。'
+      hint: '结算账户开户处理中，可继续完善菜品、桌台、套餐和门店配置。'
     }
   }
 
@@ -115,14 +115,14 @@ export function buildMerchantBusinessStateView(params: {
     if (applymentView?.needsSign) {
       return {
         title: '待开通',
-        hint: '微信签约尚未完成，完成签约后即可恢复营业。'
+        hint: '结算账户签约尚未完成，完成签约后即可恢复营业。'
       }
     }
 
     if (applymentView?.isInReview) {
       return {
         title: '待开通',
-        hint: '微信支付开户审核中，可继续完善菜品、桌台、套餐和门店配置。'
+        hint: '结算账户开户处理中，可继续完善菜品、桌台、套餐和门店配置。'
       }
     }
 
@@ -214,7 +214,7 @@ const DASHBOARD_SECTIONS: DashboardSectionDefinition[] = [
     items: [
       { id: 'finance-home', title: '结算账户', icon: createIcon('money', 'var(--td-brand-color)'), path: '/pages/merchant/finance/index' },
       { id: 'application', title: '主体资料', icon: createIcon('personal-information', 'var(--td-brand-color)'), path: '/pages/merchant/settings/application/index' },
-      { id: 'applyment', title: '微信支付开户', icon: createIcon('creditcard-add', 'var(--td-brand-color)'), path: '/pages/merchant/settings/applyment/index' }
+      { id: 'baofu-settlement-account', title: '宝付结算账户', icon: createIcon('creditcard-add', 'var(--td-brand-color)'), path: '/pages/merchant/finance/settlement-account/index' }
     ]
   }
 ]
@@ -291,7 +291,7 @@ export function buildSections(params: {
     title: section.title,
     items: section.items.filter((item) => {
       const passesDeviceGate = params.canManageDeviceSettings || !DEVICE_MANAGE_ENTRY_IDS.has(item.id)
-      const passesApplymentGate = params.canManageMerchantApplyment || item.id !== 'applyment'
+      const passesApplymentGate = params.canManageMerchantApplyment || item.id !== 'baofu-settlement-account'
       return passesDeviceGate && passesApplymentGate
     }).map((item) => {
       let badgeText = ''

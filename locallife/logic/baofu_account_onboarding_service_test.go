@@ -91,6 +91,79 @@ func TestBaofuAccountOnboardingServiceStart_ProviderOpenErrorBecomesSafeRequestE
 	require.Equal(t, 1, accountClient.openCalls)
 }
 
+func TestBaofuAccountOnboardingServiceStart_BusinessPrivateCardRequiresCorporateMobile(t *testing.T) {
+	store := newFakeBaofuAccountOnboardingStore()
+	service := NewBaofuAccountOnboardingService(store, &fakeBaofuOnboardingAccountClient{}, nil, nil, BaofuAccountOnboardingConfig{
+		VerifyFeeFen: 200,
+		IndustryID:   "9931",
+	})
+
+	result, err := service.StartOrRecoverOpening(context.Background(), BaofuAccountOpeningInput{
+		OwnerType: db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:   88,
+		UserID:    99,
+		Profile: &BaofuAccountOpeningProfileInput{
+			LegalName:           "测试商户",
+			BusinessLicenseNo:   "91330100MA00000001",
+			LegalPersonName:     "李四",
+			LegalPersonIDNumber: "110101199001010011",
+			Email:               "merchant@example.com",
+			BankAccountNo:       "6222020202020202",
+			BankName:            "招商银行",
+			DepositBankProvince: "浙江省",
+			DepositBankCity:     "杭州市",
+			DepositBankName:     "招商银行杭州支行",
+			CardUserName:        "李四",
+			SelfEmployed:        true,
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, db.BaofuAccountOpeningStateProfilePending, result.State)
+	require.ElementsMatch(t, []string{"corporate_mobile"}, result.MissingFields)
+	require.Zero(t, store.openAccountCalls)
+}
+
+func TestBaofuAccountOnboardingServiceStart_BusinessPrivateCardPassesOfficialFields(t *testing.T) {
+	store := newFakeBaofuAccountOnboardingStore()
+	client := &fakeBaofuOnboardingAccountClient{
+		openResult: &baofucontracts.AccountResult{
+			ContractNo:    "CM202605080188",
+			OpenState:     db.BaofuAccountOpenStateActive,
+			UpstreamState: "1",
+		},
+	}
+	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931"})
+
+	result, err := service.StartOrRecoverOpening(context.Background(), BaofuAccountOpeningInput{
+		OwnerType: db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:   188,
+		UserID:    99,
+		Profile: &BaofuAccountOpeningProfileInput{
+			LegalName:           "测试商户",
+			BusinessLicenseNo:   "91330100MA00000001",
+			LegalPersonName:     "李四",
+			LegalPersonIDNumber: "110101199001010011",
+			Email:               "merchant@example.com",
+			BankAccountNo:       "6222020202020202",
+			BankName:            "招商银行",
+			DepositBankProvince: "浙江省",
+			DepositBankCity:     "杭州市",
+			DepositBankName:     "招商银行杭州支行",
+			CardUserName:        "李四",
+			CorporateMobile:     "13800138000",
+			SelfEmployed:        true,
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, db.BaofuAccountOpeningStateMerchantReportProcessing, result.State)
+	require.Equal(t, db.BaofuAccountTypeBusiness, client.lastOpen.AccountType)
+	require.True(t, client.lastOpen.SelfEmployed)
+	require.Equal(t, "李四", client.lastOpen.CardUserName)
+	require.Equal(t, "13800138000", client.lastOpen.CorporateMobile)
+}
+
 func TestBaofuAccountOnboardingServiceStart_RiderRequiresVerifyFeeBeforeOpening(t *testing.T) {
 	store := newFakeBaofuAccountOnboardingStore()
 	store.users[7] = db.User{ID: 7, WechatOpenid: "openid-rider"}
@@ -746,6 +819,8 @@ func (s *fakeBaofuAccountOnboardingStore) UpsertBaofuAccountOpeningProfile(_ con
 			profile.CorporateCertType = arg.CorporateCertType
 			profile.CorporateCertIDCiphertext = arg.CorporateCertIDCiphertext
 			profile.CorporateCertIDMask = arg.CorporateCertIDMask
+			profile.CorporateMobileCiphertext = arg.CorporateMobileCiphertext
+			profile.CorporateMobileMask = arg.CorporateMobileMask
 			profile.IndustryID = arg.IndustryID
 			profile.ContactName = arg.ContactName
 			profile.ContactMobileCiphertext = arg.ContactMobileCiphertext
@@ -759,6 +834,7 @@ func (s *fakeBaofuAccountOnboardingStore) UpsertBaofuAccountOpeningProfile(_ con
 			profile.DepositBankCity = arg.DepositBankCity
 			profile.DepositBankName = arg.DepositBankName
 			profile.CardUserName = arg.CardUserName
+			profile.SourceSnapshot = arg.SourceSnapshot
 			s.profiles[i] = profile
 			return profile, nil
 		}
@@ -780,6 +856,8 @@ func (s *fakeBaofuAccountOnboardingStore) UpsertBaofuAccountOpeningProfile(_ con
 		CorporateCertType:         arg.CorporateCertType,
 		CorporateCertIDCiphertext: arg.CorporateCertIDCiphertext,
 		CorporateCertIDMask:       arg.CorporateCertIDMask,
+		CorporateMobileCiphertext: arg.CorporateMobileCiphertext,
+		CorporateMobileMask:       arg.CorporateMobileMask,
 		IndustryID:                arg.IndustryID,
 		ContactName:               arg.ContactName,
 		ContactMobileCiphertext:   arg.ContactMobileCiphertext,
@@ -793,6 +871,7 @@ func (s *fakeBaofuAccountOnboardingStore) UpsertBaofuAccountOpeningProfile(_ con
 		DepositBankCity:           arg.DepositBankCity,
 		DepositBankName:           arg.DepositBankName,
 		CardUserName:              arg.CardUserName,
+		SourceSnapshot:            arg.SourceSnapshot,
 		CreatedAt:                 time.Now(),
 		UpdatedAt:                 time.Now(),
 	}

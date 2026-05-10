@@ -69,6 +69,8 @@ export interface ApplymentBindBankPayload {
   bank_alias_code?: string
   need_bank_branch?: boolean
   bank_address_code?: string
+  deposit_bank_province?: string
+  deposit_bank_city?: string
   bank_branch_id?: string
   bank_name?: string
   account_number: string

@@ -15,6 +15,7 @@ const approveRiderApplication = `-- name: ApproveRiderApplication :one
 UPDATE rider_applications
 SET 
     status = 'approved',
+    reject_reason = NULL,
     reviewed_by = $2,
     reviewed_at = now(),
     updated_at = now()
@@ -58,6 +59,10 @@ UPDATE rider_applications
 SET
     health_cert_media_asset_id = NULL,
     health_cert_ocr = NULL,
+    reject_reason = NULL,
+    reviewed_by = NULL,
+    reviewed_at = NULL,
+    review_summary = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary
@@ -110,6 +115,10 @@ SET
             '{}'::jsonb
         )
     END,
+    reject_reason = NULL,
+    reviewed_by = NULL,
+    reviewed_at = NULL,
+    review_summary = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary
@@ -165,6 +174,10 @@ SET
             '{}'::jsonb
         )
     END,
+    reject_reason = NULL,
+    reviewed_by = NULL,
+    reviewed_at = NULL,
+    review_summary = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary
@@ -370,6 +383,7 @@ SET
     reject_reason = NULL,
     reviewed_by = NULL,
     reviewed_at = NULL,
+    review_summary = NULL,
     submitted_at = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'submitted'
@@ -451,6 +465,10 @@ const submitRiderApplication = `-- name: SubmitRiderApplication :one
 UPDATE rider_applications
 SET 
     status = 'submitted',
+    reject_reason = NULL,
+    reviewed_by = NULL,
+    reviewed_at = NULL,
+    review_summary = NULL,
     submitted_at = now(),
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
@@ -488,6 +506,10 @@ UPDATE rider_applications
 SET 
     real_name = COALESCE($2, real_name),
     phone = COALESCE($3, phone),
+    reject_reason = NULL,
+    reviewed_by = NULL,
+    reviewed_at = NULL,
+    review_summary = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary
@@ -530,6 +552,10 @@ UPDATE rider_applications
 SET 
     health_cert_media_asset_id = COALESCE($2, health_cert_media_asset_id),
     health_cert_ocr = COALESCE($3, health_cert_ocr),
+    reject_reason = NULL,
+    reviewed_by = NULL,
+    reviewed_at = NULL,
+    review_summary = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary
@@ -579,6 +605,10 @@ SET
     END,
     -- OCR识别出姓名时自动更新real_name
     real_name = COALESCE($5, real_name),
+    reject_reason = NULL,
+    reviewed_by = NULL,
+    reviewed_at = NULL,
+    review_summary = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id, review_summary

@@ -32,11 +32,10 @@
         </view>
       </t-cell>
       <t-cell title="核验费" note="{{pageView.verifyFeePrompt}}" />
-      <t-cell wx:if="{{pageView.shouldShowOpenReportHint}}" title="微信支付展示" note="微信支付展示商户名称配置中，请稍后刷新" />
     </t-cell-group>
 
     <t-cell-group wx:if="{{canEditProfile}}">
-      <t-cell title="主体资料" note="{{profileDefaults ? '已自动带入可复用资料' : '请补全开户所需资料'}}" />
+      <t-cell title="主体资料" note="{{profileDefaults ? '已自动带入可复用资料' : pageView.profileHint}}" />
       <t-input
         label="主体名称"
         placeholder="请输入营业执照名称"
@@ -116,7 +115,7 @@
 
     <applyment-bank-form
       wx:if="{{canEditProfile}}"
-      apiBasePath="/v1/merchant/applyment"
+      apiBasePath="/v1/platform/finance/applyment"
       initialDraft="{{bankDraft}}"
       defaultAccountType="ACCOUNT_TYPE_BUSINESS"
       showAccountTypeSelector="{{true}}"

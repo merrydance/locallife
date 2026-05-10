@@ -208,6 +208,84 @@ func TestUpdateRiderApplicationHealthCert(t *testing.T) {
 	require.False(t, updated.HealthCertMediaAssetID.Valid)
 }
 
+func TestUpdateRiderApplicationHealthCert_ClearsStaleReviewFailure(t *testing.T) {
+	app := createRandomRiderApplication(t)
+	_, err := testStore.UpdateRiderApplicationBasicInfo(context.Background(), UpdateRiderApplicationBasicInfoParams{
+		ID:       app.ID,
+		RealName: pgtype.Text{String: "周松涛", Valid: true},
+		Phone:    pgtype.Text{String: "15833712098", Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
+		ID:                      app.ID,
+		IDCardFrontMediaAssetID: pgtype.Int8{Int64: 167, Valid: true},
+		IDCardBackMediaAssetID:  pgtype.Int8{Int64: 168, Valid: true},
+		IDCardOcr:               []byte(`{"name":"周松涛","id_number":"132229197706017792","valid_end":"2035.03.01"}`),
+	})
+	require.NoError(t, err)
+	_, err = testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
+		ID:                     app.ID,
+		HealthCertMediaAssetID: pgtype.Int8{Int64: 208, Valid: true},
+		HealthCertOcr:          []byte(`{"name":"错误姓名","valid_end":"2026.12.06"}`),
+	})
+	require.NoError(t, err)
+	_, err = testStore.SubmitRiderApplication(context.Background(), app.ID)
+	require.NoError(t, err)
+	_, err = testStore.ReturnRiderApplicationToDraft(context.Background(), ReturnRiderApplicationToDraftParams{
+		ID:           app.ID,
+		RejectReason: pgtype.Text{String: "健康证姓名与身份证姓名不一致", Valid: true},
+	})
+	require.NoError(t, err)
+
+	updated, err := testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
+		ID:                     app.ID,
+		HealthCertMediaAssetID: pgtype.Int8{Int64: 209, Valid: true},
+		HealthCertOcr:          []byte(`{"name":"周松涛","valid_end":"2026.12.06"}`),
+	})
+	require.NoError(t, err)
+	require.False(t, updated.RejectReason.Valid)
+	require.False(t, updated.ReviewedAt.Valid)
+	require.Len(t, updated.ReviewSummary, 0)
+}
+
+func TestClearRiderApplicationHealthCert_ClearsStaleReviewFailure(t *testing.T) {
+	app := createRandomRiderApplication(t)
+	_, err := testStore.UpdateRiderApplicationBasicInfo(context.Background(), UpdateRiderApplicationBasicInfoParams{
+		ID:       app.ID,
+		RealName: pgtype.Text{String: "周松涛", Valid: true},
+		Phone:    pgtype.Text{String: "15833712098", Valid: true},
+	})
+	require.NoError(t, err)
+	_, err = testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
+		ID:                      app.ID,
+		IDCardFrontMediaAssetID: pgtype.Int8{Int64: 167, Valid: true},
+		IDCardBackMediaAssetID:  pgtype.Int8{Int64: 168, Valid: true},
+		IDCardOcr:               []byte(`{"name":"周松涛","id_number":"132229197706017792","valid_end":"2035.03.01"}`),
+	})
+	require.NoError(t, err)
+	_, err = testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
+		ID:                     app.ID,
+		HealthCertMediaAssetID: pgtype.Int8{Int64: 208, Valid: true},
+		HealthCertOcr:          []byte(`{"name":"错误姓名","valid_end":"2026.12.06"}`),
+	})
+	require.NoError(t, err)
+	_, err = testStore.SubmitRiderApplication(context.Background(), app.ID)
+	require.NoError(t, err)
+	_, err = testStore.ReturnRiderApplicationToDraft(context.Background(), ReturnRiderApplicationToDraftParams{
+		ID:           app.ID,
+		RejectReason: pgtype.Text{String: "健康证姓名与身份证姓名不一致", Valid: true},
+	})
+	require.NoError(t, err)
+
+	updated, err := testStore.ClearRiderApplicationHealthCert(context.Background(), app.ID)
+	require.NoError(t, err)
+	require.False(t, updated.HealthCertMediaAssetID.Valid)
+	require.Len(t, updated.HealthCertOcr, 0)
+	require.False(t, updated.RejectReason.Valid)
+	require.False(t, updated.ReviewedAt.Valid)
+	require.Len(t, updated.ReviewSummary, 0)
+}
+
 // ==================== Submit Tests ====================
 
 func TestSubmitRiderApplication(t *testing.T) {

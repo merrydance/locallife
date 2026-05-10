@@ -41,9 +41,10 @@
         placeholder="请输入姓名"
         value="{{form.real_name}}"
         data-field="real_name"
-        disabled="{{!canEditProfile || submitting || syncing}}"
+        disabled="{{hasStoredCertificateNo || !canEditProfile || submitting || syncing}}"
         bind:change="onInput"
       />
+      <view wx:if="{{hasStoredCertificateNo}}" class="identity-note">姓名已从已通过的骑手入驻资料带入。</view>
       <t-input
         label="银行预留手机号"
         placeholder="请输入银行预留手机号"
@@ -53,7 +54,9 @@
         disabled="{{!canEditProfile || submitting || syncing}}"
         bind:change="onInput"
       />
+      <t-cell wx:if="{{hasStoredCertificateNo}}" title="身份证号" note="{{profileDefaults.certificate_no_mask}}" />
       <t-input
+        wx:else
         label="身份证号"
         placeholder="请输入身份证号"
         value="{{form.id_card_number}}"

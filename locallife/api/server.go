@@ -1450,6 +1450,11 @@ func (server *Server) setupRouter() {
 	platformFinanceGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
 	{
 		platformFinanceGroup.GET("/account/balance", server.gateEcommerceFundManagementWhenOrdinaryActive("platform account balance", server.getPlatformAccountBalance))
+		platformFinanceGroup.GET("/applyment/banks", server.listApplymentBanks)
+		platformFinanceGroup.GET("/applyment/banks/search-by-bank-account", server.searchApplymentBanksByAccount)
+		platformFinanceGroup.GET("/applyment/banks/:bank_alias_code/branches", server.listApplymentBankBranches)
+		platformFinanceGroup.GET("/applyment/areas/provinces", server.listApplymentProvinces)
+		platformFinanceGroup.GET("/applyment/areas/provinces/:province_code/cities", server.listApplymentCities)
 		platformFinanceGroup.GET("/settlement-account", server.getPlatformBaofuSettlementAccount)
 		platformFinanceGroup.POST("/settlement-account", server.createPlatformBaofuSettlementAccount)
 		platformFinanceGroup.GET("/settlement-account/status", server.getPlatformBaofuSettlementStatus)

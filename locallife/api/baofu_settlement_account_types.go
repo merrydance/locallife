@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/merrydance/locallife/logic"
 )
 
 const (
@@ -12,10 +14,13 @@ const (
 )
 
 type baofuSettlementAccountScope struct {
-	OwnerType   string
-	OwnerID     int64
-	AccountType string
-	Audience    string
+	OwnerType           string
+	OwnerID             int64
+	OwnerUserID         int64
+	AccountType         string
+	Audience            string
+	DefaultProfile      *logic.BaofuAccountOpeningProfileInput
+	DefaultProfileMasks *baofuSettlementAccountProfileDefaults
 }
 
 type baofuSettlementAccountClientControlledFieldError struct {
@@ -71,6 +76,7 @@ type baofuSettlementAccountProfileRequest struct {
 	IDCardNumber          string `json:"id_card_number"`
 	LegalPersonName       string `json:"legal_person_name"`
 	LegalPersonIDNumber   string `json:"legal_person_id_number"`
+	CorporateMobile       string `json:"corporate_mobile"`
 	Email                 string `json:"email"`
 	BankAccountNo         string `json:"bank_account_no"`
 	BankAccountNumber     string `json:"bank_account_number"`
@@ -85,6 +91,8 @@ type baofuSettlementAccountProfileRequest struct {
 	ContactName           string `json:"contact_name"`
 	ContactMobile         string `json:"contact_mobile"`
 	CardUserName          string `json:"card_user_name"`
+	SelfEmployed          bool   `json:"self_employed"`
+	SelfEmployedSet       bool   `json:"-"`
 }
 
 type baofuSettlementAccountPaymentResponse struct {
@@ -94,6 +102,39 @@ type baofuSettlementAccountPaymentResponse struct {
 	OutTradeNo     string                `json:"out_trade_no,omitempty"`
 	PayParams      *miniProgramPayParams `json:"pay_params,omitempty"`
 	ExpiresAt      *time.Time            `json:"expires_at,omitempty"`
+}
+
+type baofuSettlementAccountProfileDefaults struct {
+	Source                    string `json:"source,omitempty"`
+	LegalName                 string `json:"legal_name,omitempty"`
+	CertificateNoMask         string `json:"certificate_no_mask,omitempty"`
+	BusinessLicenseNumber     string `json:"business_license_number,omitempty"`
+	LegalPersonName           string `json:"legal_person_name,omitempty"`
+	CardUserName              string `json:"card_user_name,omitempty"`
+	SelfEmployed              bool   `json:"self_employed,omitempty"`
+	LegalPersonIDNumberMask   string `json:"legal_person_id_number_mask,omitempty"`
+	CorporateMobileMask       string `json:"corporate_mobile_mask,omitempty"`
+	EmailMask                 string `json:"email_mask,omitempty"`
+	BankAccountNoMask         string `json:"bank_account_no_mask,omitempty"`
+	BankName                  string `json:"bank_name,omitempty"`
+	DepositBankProvince       string `json:"deposit_bank_province,omitempty"`
+	DepositBankCity           string `json:"deposit_bank_city,omitempty"`
+	DepositBankName           string `json:"deposit_bank_name,omitempty"`
+	BankAddressCode           string `json:"bank_address_code,omitempty"`
+	BankBranchID              string `json:"bank_branch_id,omitempty"`
+	AccountBank               string `json:"account_bank,omitempty"`
+	AccountBankCode           int64  `json:"account_bank_code,omitempty"`
+	BankAlias                 string `json:"bank_alias,omitempty"`
+	BankAliasCode             string `json:"bank_alias_code,omitempty"`
+	ContactName               string `json:"contact_name,omitempty"`
+	ContactMobileMask         string `json:"contact_mobile_mask,omitempty"`
+	HasLegalPersonIDNumber    bool   `json:"has_legal_person_id_number,omitempty"`
+	HasCorporateMobile        bool   `json:"has_corporate_mobile,omitempty"`
+	HasCertificateNo          bool   `json:"has_certificate_no,omitempty"`
+	HasEmail                  bool   `json:"has_email,omitempty"`
+	HasBankAccountNo          bool   `json:"has_bank_account_no,omitempty"`
+	HasContactMobile          bool   `json:"has_contact_mobile,omitempty"`
+	HasSavedSensitiveDefaults bool   `json:"has_saved_sensitive_defaults,omitempty"`
 }
 
 type baofuSettlementAccountResponse struct {
@@ -124,6 +165,7 @@ type baofuSettlementAccountResponse struct {
 	ContactMobileMask  string                                 `json:"contact_mobile_mask,omitempty"`
 	EmailMask          string                                 `json:"email_mask,omitempty"`
 	WechatSubMchIDMask string                                 `json:"wechat_sub_mch_id_mask,omitempty"`
+	ProfileDefaults    *baofuSettlementAccountProfileDefaults `json:"profile_defaults,omitempty"`
 	SubmittedAt        *time.Time                             `json:"submitted_at,omitempty"`
 	UpdatedAt          *time.Time                             `json:"updated_at,omitempty"`
 }

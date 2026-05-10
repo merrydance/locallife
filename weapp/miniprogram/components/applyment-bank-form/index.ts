@@ -49,6 +49,8 @@ interface ApplymentBindBankDraft {
 }
 
 type PartialApplymentBindBankDraft = Partial<ApplymentBindBankDraft>
+export type ApplymentBankFormDraftPayload = PartialApplymentBindBankDraft
+export type ApplymentBankFormPayload = ApplymentBindBankPayload
 
 interface ApplymentBankFormProperties {
   apiBasePath: string
@@ -58,6 +60,9 @@ interface ApplymentBankFormProperties {
   showContactFields?: boolean
   requireContactEmail?: boolean
   requireAccountName?: boolean
+  showAccountTypeSelector?: boolean
+  allowSavedAccountNumber?: boolean
+  requireBankBranch?: boolean
   uploadBusinessType?: string
 }
 
@@ -283,9 +288,11 @@ function getSubmitBlockMessage(
   form: ApplymentBindBankDraft,
   showContactFields?: boolean,
   requireContactEmail?: boolean,
-  requireAccountName: boolean = true
+  requireAccountName: boolean = true,
+  allowSavedAccountNumber: boolean = false,
+  requireBankBranch: boolean = false
 ): string {
-  if (!form.account_number.trim()) {
+  if (!form.account_number.trim() && !allowSavedAccountNumber) {
     return '请先填写银行账号'
   }
 
@@ -329,7 +336,7 @@ function getSubmitBlockMessage(
     }
   }
 
-  if (!form.need_bank_branch) {
+  if (!form.need_bank_branch && !requireBankBranch) {
     return ''
   }
 
@@ -352,9 +359,11 @@ function canSubmitForm(
   form: ApplymentBindBankDraft,
   showContactFields?: boolean,
   requireContactEmail?: boolean,
-  requireAccountName: boolean = true
+  requireAccountName: boolean = true,
+  allowSavedAccountNumber: boolean = false,
+  requireBankBranch: boolean = false
 ): boolean {
-  return !getSubmitBlockMessage(form, showContactFields, requireContactEmail, requireAccountName)
+  return !getSubmitBlockMessage(form, showContactFields, requireContactEmail, requireAccountName, allowSavedAccountNumber, requireBankBranch)
 }
 
 Component({
@@ -389,6 +398,26 @@ Component({
       value: false
     },
     requireAccountName: {
+      type: Boolean,
+      value: true
+    },
+    showAccountTypeSelector: {
+      type: Boolean,
+      value: true
+    },
+    allowSavedAccountNumber: {
+      type: Boolean,
+      value: false
+    },
+    requireBankBranch: {
+      type: Boolean,
+      value: false
+    },
+    savedAccountNumberMask: {
+      type: String,
+      value: ''
+    },
+    showCancelButton: {
       type: Boolean,
       value: true
     },
@@ -493,13 +522,17 @@ Component({
           initialDraft,
           properties.showContactFields,
           properties.requireContactEmail,
-          properties.requireAccountName
+          properties.requireAccountName,
+          properties.allowSavedAccountNumber,
+          properties.requireBankBranch
         ),
         submitBlockMessage: getSubmitBlockMessage(
           initialDraft,
           properties.showContactFields,
           properties.requireContactEmail,
-          properties.requireAccountName
+          properties.requireAccountName,
+          properties.allowSavedAccountNumber,
+          properties.requireBankBranch
         )
       }, { emitDraft: false, syncSubmit: false })
 
@@ -522,7 +555,11 @@ Component({
 
     emitDraftChange(nextForm?: ApplymentBindBankDraft) {
       const form = nextForm || (this.data.form as ApplymentBindBankDraft)
-      this.triggerEvent('draftchange', { ...form })
+      this.triggerEvent('draftchange', {
+        ...form,
+        deposit_bank_province: this.data.selectedProvinceLabel || undefined,
+        deposit_bank_city: this.data.selectedCityLabel || undefined
+      })
     },
 
     getApiBasePath() {
@@ -634,13 +671,17 @@ Component({
         form,
         this.properties.showContactFields,
         this.properties.requireContactEmail,
-        this.properties.requireAccountName
+        this.properties.requireAccountName,
+        this.properties.allowSavedAccountNumber,
+        this.properties.requireBankBranch
       )
       const submitBlockMessage = getSubmitBlockMessage(
         form,
         this.properties.showContactFields,
         this.properties.requireContactEmail,
-        this.properties.requireAccountName
+        this.properties.requireAccountName,
+        this.properties.allowSavedAccountNumber,
+        this.properties.requireBankBranch
       )
       this.setData({ canSubmit, submitBlockMessage })
     },
@@ -1395,7 +1436,9 @@ Component({
         form,
         properties.showContactFields,
         properties.requireContactEmail,
-        properties.requireAccountName
+        properties.requireAccountName,
+        properties.allowSavedAccountNumber,
+        properties.requireBankBranch
       )
       if (submitBlockMessage) {
         wx.showToast({ title: submitBlockMessage, icon: 'none' })
@@ -1408,8 +1451,10 @@ Component({
         account_bank_code: form.account_bank_code > 0 ? form.account_bank_code : undefined,
         bank_alias: form.bank_alias.trim() || undefined,
         bank_alias_code: form.bank_alias_code.trim() || undefined,
-        need_bank_branch: form.need_bank_branch || undefined,
+        need_bank_branch: (form.need_bank_branch || properties.requireBankBranch) || undefined,
         bank_address_code: form.bank_address_code.trim() || undefined,
+        deposit_bank_province: this.data.selectedProvinceLabel || undefined,
+        deposit_bank_city: this.data.selectedCityLabel || undefined,
         bank_branch_id: form.bank_branch_id.trim() || undefined,
         bank_name: form.bank_name.trim() || undefined,
         account_number: form.account_number.trim(),

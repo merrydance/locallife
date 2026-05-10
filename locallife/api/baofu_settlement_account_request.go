@@ -40,6 +40,7 @@ func decodeBaofuSettlementAccountRequest(ctx *gin.Context, scope baofuSettlement
 		}
 		req.Profile = directProfile
 	}
+	req.Profile.SelfEmployedSet = baofuSettlementAccountProfileHasField(payload, "self_employed")
 	return req, nil
 }
 
@@ -73,12 +74,10 @@ func rejectClientControlledBaofuSettlementAccountFields(payload map[string]any) 
 		"platformNo",
 		"platform_terminal_id",
 		"platformTerminalId",
-		"self_employed",
 		"customer_name",
 		"alias_name",
 		"corporate_cert_type",
 		"corporate_cert_id",
-		"corporate_mobile",
 	} {
 		if hasBaofuSettlementAccountField(payload, field) {
 			return baofuSettlementAccountClientControlledFieldError{Field: field}
@@ -125,6 +124,8 @@ func baofuSettlementAccountAllowedProfileFields(ownerType string) map[string]str
 			"business_license_number",
 			"legal_person_name",
 			"legal_person_id_number",
+			"corporate_mobile",
+			"self_employed",
 			"email",
 			"bank_name",
 			"deposit_bank_province",
@@ -132,6 +133,7 @@ func baofuSettlementAccountAllowedProfileFields(ownerType string) map[string]str
 			"deposit_bank_name",
 			"contact_name",
 			"contact_mobile",
+			"card_user_name",
 		)
 	case db.BaofuAccountOwnerTypePlatform:
 		fields = append(fields,
@@ -139,6 +141,8 @@ func baofuSettlementAccountAllowedProfileFields(ownerType string) map[string]str
 			"business_license_number",
 			"legal_person_name",
 			"legal_person_id_number",
+			"corporate_mobile",
+			"self_employed",
 			"email",
 			"bank_name",
 			"deposit_bank_province",
@@ -146,6 +150,7 @@ func baofuSettlementAccountAllowedProfileFields(ownerType string) map[string]str
 			"deposit_bank_name",
 			"contact_name",
 			"contact_mobile",
+			"card_user_name",
 		)
 	case db.BaofuAccountOwnerTypeRider, db.BaofuAccountOwnerTypeOperator:
 		fields = append(fields,
@@ -180,6 +185,15 @@ func hasBaofuSettlementAccountField(payload map[string]any, field string) bool {
 	return ok
 }
 
+func baofuSettlementAccountProfileHasField(payload map[string]any, field string) bool {
+	profile, ok := baofuSettlementAccountProfilePayload(payload)
+	if !ok {
+		return false
+	}
+	_, ok = profile[field]
+	return ok
+}
+
 func (req baofuSettlementAccountRequest) toOpeningProfileInput() *logic.BaofuAccountOpeningProfileInput {
 	profile := req.Profile
 	if profile.isZero() {
@@ -194,6 +208,7 @@ func (req baofuSettlementAccountRequest) toOpeningProfileInput() *logic.BaofuAcc
 		Email:               profile.Email,
 		BankAccountNo:       firstNonBlank(profile.BankAccountNo, profile.BankAccountNumber, profile.AccountNumber),
 		BankMobile:          firstNonBlank(profile.BankMobile, profile.Mobile, profile.Phone),
+		CorporateMobile:     profile.CorporateMobile,
 		BankName:            profile.BankName,
 		DepositBankProvince: profile.DepositBankProvince,
 		DepositBankCity:     profile.DepositBankCity,
@@ -201,6 +216,8 @@ func (req baofuSettlementAccountRequest) toOpeningProfileInput() *logic.BaofuAcc
 		ContactName:         profile.ContactName,
 		ContactMobile:       profile.ContactMobile,
 		CardUserName:        firstNonBlank(profile.CardUserName, profile.RealName, profile.AccountName, profile.LegalName),
+		SelfEmployed:        profile.SelfEmployed,
+		SelfEmployedSet:     profile.SelfEmployedSet,
 	}
 }
 
@@ -228,5 +245,6 @@ func (profile baofuSettlementAccountProfileRequest) isZero() bool {
 		profile.ContactName,
 		profile.ContactMobile,
 		profile.CardUserName,
-	) == ""
+		profile.CorporateMobile,
+	) == "" && !profile.SelfEmployed && !profile.SelfEmployedSet
 }

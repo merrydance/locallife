@@ -1,6 +1,7 @@
 import {
   type BaofuAccountProfile,
   type BaofuSettlementAccountResponse,
+  type BaofuSettlementAccountProfileDefaults,
   getOperatorBaofuSettlementAccount
 } from '../../../../api/baofu-account'
 import {
@@ -54,13 +55,17 @@ function emptyForm(): OperatorProfileForm {
 }
 
 function buildProfilePayload(form: OperatorProfileForm): BaofuAccountProfile {
-  return {
+  const payload: BaofuAccountProfile = {
     legal_name: form.legal_name.trim(),
     certificate_no: form.certificate_no.trim(),
     bank_account_no: form.bank_account_no.trim(),
     bank_mobile: form.bank_mobile.trim(),
     bank_name: form.bank_name.trim()
   }
+  if (!payload.certificate_no) {
+    delete payload.certificate_no
+  }
+  return payload
 }
 
 function showResultToast(
@@ -97,6 +102,8 @@ Page({
     actionFeedbackTheme: 'success' as FeedbackTheme,
     pageView: { ...EMPTY_PAGE_VIEW } as BaofuRolePageView,
     form: emptyForm(),
+    profileDefaults: null as BaofuSettlementAccountProfileDefaults | null,
+    hasStoredCertificateNo: false,
     formErrorMessage: '',
     canEditProfile: false,
     canContinuePayment: false,
@@ -127,9 +134,19 @@ Page({
 
   applyAccount(response: BaofuSettlementAccountResponse) {
     const pageView = buildBaofuRolePageView('operator', response)
+    const profileDefaults = response.profile_defaults || null
+    const canEditProfile = pageView.shouldShowProfileAction
     this.setData({
       pageView,
-      canEditProfile: pageView.shouldShowProfileAction,
+      profileDefaults,
+      form: canEditProfile
+        ? {
+            ...this.data.form,
+            legal_name: profileDefaults?.legal_name || this.data.form.legal_name
+          }
+        : this.data.form,
+      hasStoredCertificateNo: Boolean(profileDefaults?.has_certificate_no),
+      canEditProfile,
       canContinuePayment: pageView.shouldShowPaymentAction,
       canRefreshStatus: pageView.shouldShowRefreshAction,
       initialLoading: false,
@@ -228,10 +245,11 @@ Page({
 
   validateForm() {
     const form = this.data.form as OperatorProfileForm
+    const defaults = this.data.profileDefaults as BaofuSettlementAccountProfileDefaults | null
     if (!form.legal_name.trim()) {
       return '请输入姓名'
     }
-    if (!/(^\d{15}$)|(^\d{17}[\dXx]$)/.test(form.certificate_no.trim())) {
+    if (!defaults?.has_certificate_no && !/(^\d{15}$)|(^\d{17}[\dXx]$)/.test(form.certificate_no.trim())) {
       return '请输入正确身份证号'
     }
     if (!/^\d{8,30}$/.test(form.bank_account_no.trim())) {

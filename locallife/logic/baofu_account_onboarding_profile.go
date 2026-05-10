@@ -61,12 +61,20 @@ func (s *BaofuAccountOnboardingService) upsertProfile(ctx context.Context, owner
 	if err != nil {
 		return db.BaofuAccountOpeningProfile{}, err
 	}
+	corporateMobileCipher, err := encryptOptional(s.encryptor, input.CorporateMobile)
+	if err != nil {
+		return db.BaofuAccountOpeningProfile{}, err
+	}
 	contactMobileCipher, err := encryptOptional(s.encryptor, input.ContactMobile)
 	if err != nil {
 		return db.BaofuAccountOpeningProfile{}, err
 	}
 
-	sourceSnapshot := baofuOpeningSnapshot(map[string]any{"source": "baofu_settlement_profile_api", "status": status})
+	sourceSnapshot := baofuOpeningSnapshot(map[string]any{
+		"source":        "baofu_settlement_profile_api",
+		"status":        status,
+		"self_employed": input.SelfEmployed,
+	})
 	return s.store.UpsertBaofuAccountOpeningProfile(ctx, db.UpsertBaofuAccountOpeningProfileParams{
 		OwnerType:                 ownerType,
 		OwnerID:                   ownerID,
@@ -83,6 +91,8 @@ func (s *BaofuAccountOnboardingService) upsertProfile(ctx context.Context, owner
 		CorporateCertType:         pgText(baofuCorporateCertType(accountType)),
 		CorporateCertIDCiphertext: pgText(corporateCipher),
 		CorporateCertIDMask:       pgText(maskSensitiveTail(corporateCertID, 4)),
+		CorporateMobileCiphertext: pgText(corporateMobileCipher),
+		CorporateMobileMask:       pgText(maskMobile(input.CorporateMobile)),
 		IndustryID:                pgText(s.config.normalized().IndustryID),
 		ContactName:               pgText(input.ContactName),
 		ContactMobileCiphertext:   pgText(contactMobileCipher),
