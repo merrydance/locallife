@@ -111,6 +111,11 @@ type Config struct {
 	BaofuProfitSharingNotifyURL    string        `mapstructure:"BAOFU_PROFIT_SHARING_NOTIFY_URL"`
 	BaofuRefundNotifyURL           string        `mapstructure:"BAOFU_REFUND_NOTIFY_URL"`
 	BaofuHTTPTimeout               time.Duration `mapstructure:"BAOFU_HTTP_TIMEOUT"`
+	BaofuAccountVerifyFeeFen       int64         `mapstructure:"BAOFU_ACCOUNT_VERIFY_FEE_FEN"`
+	BaofuBusinessIndustryID        string        `mapstructure:"BAOFU_BUSINESS_INDUSTRY_ID"`
+	BaofuMerchantReportChannelID   string        `mapstructure:"BAOFU_MERCHANT_REPORT_CHANNEL_ID"`
+	BaofuMerchantReportChannelName string        `mapstructure:"BAOFU_MERCHANT_REPORT_CHANNEL_NAME"`
+	BaofuMerchantReportBusiness    string        `mapstructure:"BAOFU_MERCHANT_REPORT_BUSINESS"`
 
 	// 数据加密配置
 	DataEncryptionKey string `mapstructure:"DATA_ENCRYPTION_KEY"` // 本地数据加密密钥（16/24/32字节）
@@ -601,6 +606,9 @@ func LoadConfig(path string) (config Config, err error) {
 	v.SetDefault("FEIEYUN_HTTP_TIMEOUT", "5s")
 	v.SetDefault("BAOFU_MAIN_BUSINESS_ENABLED", false)
 	v.SetDefault("BAOFU_HTTP_TIMEOUT", "30s")
+	v.SetDefault("BAOFU_ACCOUNT_VERIFY_FEE_FEN", 200)
+	v.SetDefault("BAOFU_BUSINESS_INDUSTRY_ID", "9931")
+	v.SetDefault("BAOFU_MERCHANT_REPORT_BUSINESS", "758-2")
 	// 媒体存储默认值
 	v.SetDefault("FILE_STORAGE_PROVIDER", "local")
 	v.SetDefault("PRIVATE_DOWNLOAD_URL_TTL", "5m")

@@ -98,7 +98,7 @@ func TestBaofuAccountServiceOpenAccountRecordsCommandBeforeClientCall(t *testing
 	require.False(t, store.lastFeeLedger.PayerID.Valid)
 	require.Equal(t, "baofu_account_binding", store.lastFeeLedger.BusinessObjectType)
 	require.Equal(t, int64(7), store.lastFeeLedger.BusinessObjectID)
-	require.Equal(t, int64(100), store.lastFeeLedger.Amount)
+	require.Equal(t, int64(BaofuAccountOpenVerifyFeeFen), store.lastFeeLedger.Amount)
 }
 
 func TestBaofuAccountServiceOpenAccountMarksAbnormalForOfficialExceptionState(t *testing.T) {

@@ -37,7 +37,8 @@ const businessTitleMap: Record<string, BusinessTitlePair> = {
   reservation_addon: { payment: '预订补差', refund: '预订退款' },
   membership_recharge: { payment: '会员充值', refund: '会员退款' },
   rider_deposit: { payment: '押金支付', refund: '押金退款' },
-  claim_recovery: { payment: '追偿支付', refund: '追偿退款' }
+  claim_recovery: { payment: '追偿支付', refund: '追偿退款' },
+  baofu_account_verify_fee: { payment: '开户核验费', refund: '开户核验费退款' }
 }
 
 function formatTransactionTime(timeText: string): string {

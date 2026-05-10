@@ -5,6 +5,7 @@ import {
     type RiderDepositPendingRechargeContext
 } from '../../../services/rider-deposit-payment'
 import { startPaymentOrderWorkflow } from '../../../services/payment-workflow'
+import Toast, { hideToast } from '../../../miniprogram_npm/tdesign-miniprogram/toast/index'
 import { logger } from '../../../utils/logger'
 import Navigation from '../../../utils/navigation'
 
@@ -31,9 +32,26 @@ type CurrentPageWithOptions = {
 }
 
 const BUSINESS_TYPES: BusinessType[] = ['order', 'reservation', 'reservation_addon', 'membership_recharge', 'rider_deposit', 'claim_recovery']
+const TOAST_SELECTOR = '#t-toast'
 
 function normalizeBusinessType(value?: string): BusinessType {
     return BUSINESS_TYPES.includes(value as BusinessType) ? value as BusinessType : 'order'
+}
+
+function showPaymentToast(context: WechatMiniprogram.Page.TrivialInstance, message: string) {
+    Toast({
+        context,
+        selector: TOAST_SELECTOR,
+        message,
+        theme: 'loading',
+        direction: 'column',
+        duration: 0,
+        preventScrollThrough: true
+    })
+}
+
+function hidePaymentToast(context: WechatMiniprogram.Page.TrivialInstance) {
+    hideToast({ context, selector: TOAST_SELECTOR })
 }
 
 Page({
@@ -170,7 +188,7 @@ Page({
         }
 
         this.setData({ paying: true })
-        wx.showLoading({ title: '拉起支付...' })
+        showPaymentToast(this, '正在拉起支付...')
         try {
             if (payment.business_type === 'rider_deposit') {
                 const rechargeContext: RiderDepositPendingRechargeContext = {
@@ -179,7 +197,7 @@ Page({
                     outTradeNo: payment.out_trade_no,
                     updatedAt: new Date().toISOString()
                 }
-                const rechargeResult = await continuePendingRiderDepositRecharge(rechargeContext)
+                const rechargeResult = await continuePendingRiderDepositRecharge(rechargeContext, { context: this })
                 const rechargeStatusView = getRiderDepositRechargeWorkflowStatusView(rechargeResult.status)
 
                 if (rechargeStatusView.isCancelled) {
@@ -218,7 +236,8 @@ Page({
             const paymentResult = await startPaymentOrderWorkflow({
                 orderId: payment.order_id,
                 paymentType: 'miniprogram',
-                businessType: normalizeBusinessType(payment.business_type)
+                businessType: normalizeBusinessType(payment.business_type),
+                context: this
             })
 
             if (paymentResult.paymentOrderId) {
@@ -237,7 +256,7 @@ Page({
             logger.error('继续支付失败', error, 'payment-detail.onContinuePay')
             wx.showToast({ title: '支付未完成，请稍后重试', icon: 'none' })
         } finally {
-            wx.hideLoading()
+            hidePaymentToast(this)
             this.setData({ paying: false })
         }
     },
@@ -296,17 +315,17 @@ Page({
             content: '关闭后该支付单无法继续支付，如仍需付款需要重新发起。',
             success: async (res) => {
                 if (res.confirm) {
-                    wx.showLoading({ title: '处理中...' })
+                    showPaymentToast(this, '正在处理中...')
                     try {
                         await closePayment(this.data.paymentId)
                         await this.loadPaymentDetail()
                     } catch (error) {
-                        wx.hideLoading()
+                        hidePaymentToast(this)
                         logger.error('关闭支付失败', error, 'payment-detail.onClosePayment')
                         wx.showToast({ title: '操作失败', icon: 'error' })
                         return
                     }
-                    wx.hideLoading()
+                    hidePaymentToast(this)
                 }
             }
         })

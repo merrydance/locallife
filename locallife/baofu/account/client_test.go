@@ -125,6 +125,7 @@ func TestAccountClientOpenAccountUsesConfiguredNotifyBaseURL(t *testing.T) {
 	_, err := client.OpenAccount(context.Background(), contracts.OpenAccountRequest{
 		AccountType:   "personal",
 		OutRequestNo:  "OPEN202605040001",
+		LoginNo:       "LLBFOR0000000001",
 		LegalName:     "测试用户",
 		CertificateNo: "110101199001010011",
 		BankAccountNo: "6222020202020202020",
@@ -145,6 +146,7 @@ func TestAccountClientOpenAndQueryAccountDefaultToPayoutIdentity(t *testing.T) {
 	_, err := openClient.OpenAccount(context.Background(), contracts.OpenAccountRequest{
 		AccountType:   "personal",
 		OutRequestNo:  "OPEN202605040001",
+		LoginNo:       "LLBFOR0000000001",
 		LegalName:     "测试用户",
 		CertificateNo: "110101199001010011",
 		BankAccountNo: "6222020202020202020",
@@ -198,6 +200,7 @@ func TestAccountClientOpenAccountMapsCompleteBusinessInputToOfficialDTO(t *testi
 	_, err := client.OpenAccount(context.Background(), contracts.OpenAccountRequest{
 		AccountType:                "business",
 		OutRequestNo:               "OPEN202605040003",
+		LoginNo:                    "LLBFOM0000000003",
 		Email:                      "merchant@example.com",
 		SelfEmployed:               true,
 		CustomerName:               "某某餐饮店",
@@ -227,16 +230,16 @@ func TestAccountClientOpenAccountMapsCompleteBusinessInputToOfficialDTO(t *testi
 	env := accountRequestEnvelopeForTest(t, doer)
 	require.Equal(t, "T-1001-013-01", env.Header.ServiceType)
 	require.JSONEq(t, `{
-		"version":"4.1.0",
-		"accType":2,
-		"businessType":"BCT2.0",
-		"accInfo":{
-			"transSerialNo":"OPEN202605040003",
-			"loginNo":"OPEN202605040003",
-			"email":"merchant@example.com",
-			"selfEmployed":true,
-			"customerName":"某某餐饮店",
-			"aliasName":"某某餐饮",
+			"version":"4.1.0",
+			"accType":2,
+			"businessType":"BCT2.0",
+			"accInfo":{
+				"transSerialNo":"OPEN202605040003",
+				"loginNo":"LLBFOM0000000003",
+				"email":"merchant@example.com",
+				"selfEmployed":true,
+				"customerName":"某某餐饮店",
+				"aliasName":"某某餐饮",
 			"certificateNo":"91310000123456789X",
 			"certificateType":"LICENSE",
 			"corporateName":"王五",
@@ -249,15 +252,15 @@ func TestAccountClientOpenAccountMapsCompleteBusinessInputToOfficialDTO(t *testi
 			"cardNo":"6222020000000000001",
 			"bankName":"招商银行",
 			"depositBankProvince":"上海市",
-			"depositBankCity":"上海市",
-			"depositBankName":"招商银行上海分行",
-			"registerCapital":"10",
-			"cardUserName":"王五",
-			"platformNo":"100030218",
-			"platformTerminalId":"200000001",
-			"qualificationTransSerialNo":"QUAL202605040001"
-		}
+				"depositBankCity":"上海市",
+				"depositBankName":"招商银行上海分行",
+				"registerCapital":"10",
+				"cardUserName":"王五"
+			}
 	}`, partialJSONForAccountTest(t, env.Body, "version", "accType", "businessType", "accInfo"))
+	require.NotContains(t, string(env.Body), "platformNo")
+	require.NotContains(t, string(env.Body), "platformTerminalId")
+	require.NotContains(t, string(env.Body), "qualificationTransSerialNo")
 }
 
 func TestAccountClientOpenAccountParsesOfficialResultArray(t *testing.T) {
@@ -324,16 +327,17 @@ func TestAccountClientQueryAccountUsesPersonalAccountType(t *testing.T) {
 
 	_, err := client.QueryAccount(context.Background(), contracts.QueryAccountRequest{
 		OutRequestNo:    "OPEN202605050001",
+		LoginNo:         "LLBFOR0000000001",
 		AccountType:     "personal",
 		CertificateNo:   "110101199001011234",
 		CertificateType: contracts.OfficialCertificateTypeID,
-		PlatformNo:      "100030218",
 	})
 
 	require.NoError(t, err)
 	env := accountRequestEnvelopeForTest(t, doer)
 	require.Equal(t, "T-1001-013-03", env.Header.ServiceType)
-	require.JSONEq(t, `{"version":"4.0.0","accType":1,"loginNo":"OPEN202605050001","certificateNo":"110101199001011234","certificateType":"ID","platformNo":"100030218"}`, partialJSONForAccountTest(t, env.Body, "version", "accType", "loginNo", "certificateNo", "certificateType", "platformNo"))
+	require.JSONEq(t, `{"version":"4.0.0","accType":1,"loginNo":"LLBFOR0000000001","certificateNo":"110101199001011234","certificateType":"ID"}`, partialJSONForAccountTest(t, env.Body, "version", "accType", "loginNo", "certificateNo", "certificateType"))
+	require.NotContains(t, string(env.Body), "platformNo")
 }
 
 func TestAccountClientQueryAccountCanSendOfficialCredentialFields(t *testing.T) {
@@ -342,16 +346,17 @@ func TestAccountClientQueryAccountCanSendOfficialCredentialFields(t *testing.T) 
 
 	_, err := client.QueryAccount(context.Background(), contracts.QueryAccountRequest{
 		OutRequestNo:    "OPEN202605050001",
+		LoginNo:         "LLBFOR0000000001",
 		AccountType:     "personal",
 		CertificateNo:   "110101199001011234",
 		CertificateType: contracts.OfficialCertificateTypeID,
-		PlatformNo:      "100030218",
 	})
 
 	require.NoError(t, err)
 	env := accountRequestEnvelopeForTest(t, doer)
 	require.Equal(t, "T-1001-013-03", env.Header.ServiceType)
-	require.JSONEq(t, `{"version":"4.0.0","accType":1,"loginNo":"OPEN202605050001","certificateNo":"110101199001011234","certificateType":"ID","platformNo":"100030218"}`, partialJSONForAccountTest(t, env.Body, "version", "accType", "loginNo", "certificateNo", "certificateType", "platformNo"))
+	require.JSONEq(t, `{"version":"4.0.0","accType":1,"loginNo":"LLBFOR0000000001","certificateNo":"110101199001011234","certificateType":"ID"}`, partialJSONForAccountTest(t, env.Body, "version", "accType", "loginNo", "certificateNo", "certificateType"))
+	require.NotContains(t, string(env.Body), "platformNo")
 }
 
 func TestAccountClientQueryAccountTreatsContractOnlySuccessAsActive(t *testing.T) {

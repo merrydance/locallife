@@ -1,0 +1,114 @@
+-- name: UpsertBaofuAccountOpeningProfile :one
+INSERT INTO baofu_account_opening_profiles (
+    owner_type,
+    owner_id,
+    account_type,
+    profile_status,
+    legal_name,
+    certificate_type,
+    certificate_no_ciphertext,
+    certificate_no_mask,
+    email_ciphertext,
+    email_mask,
+    customer_name,
+    alias_name,
+    corporate_name,
+    corporate_cert_type,
+    corporate_cert_id_ciphertext,
+    corporate_cert_id_mask,
+    corporate_mobile_ciphertext,
+    corporate_mobile_mask,
+    industry_id,
+    contact_name,
+    contact_mobile_ciphertext,
+    contact_mobile_mask,
+    bank_account_no_ciphertext,
+    bank_account_no_mask,
+    bank_mobile_ciphertext,
+    bank_mobile_mask,
+    bank_name,
+    deposit_bank_province,
+    deposit_bank_city,
+    deposit_bank_name,
+    card_user_name,
+    source_snapshot
+) VALUES (
+    sqlc.arg(owner_type),
+    sqlc.arg(owner_id),
+    sqlc.arg(account_type),
+    sqlc.arg(profile_status),
+    sqlc.narg(legal_name),
+    sqlc.narg(certificate_type),
+    sqlc.narg(certificate_no_ciphertext),
+    sqlc.narg(certificate_no_mask),
+    sqlc.narg(email_ciphertext),
+    sqlc.narg(email_mask),
+    sqlc.narg(customer_name),
+    sqlc.narg(alias_name),
+    sqlc.narg(corporate_name),
+    sqlc.narg(corporate_cert_type),
+    sqlc.narg(corporate_cert_id_ciphertext),
+    sqlc.narg(corporate_cert_id_mask),
+    sqlc.narg(corporate_mobile_ciphertext),
+    sqlc.narg(corporate_mobile_mask),
+    sqlc.narg(industry_id),
+    sqlc.narg(contact_name),
+    sqlc.narg(contact_mobile_ciphertext),
+    sqlc.narg(contact_mobile_mask),
+    sqlc.narg(bank_account_no_ciphertext),
+    sqlc.narg(bank_account_no_mask),
+    sqlc.narg(bank_mobile_ciphertext),
+    sqlc.narg(bank_mobile_mask),
+    sqlc.narg(bank_name),
+    sqlc.narg(deposit_bank_province),
+    sqlc.narg(deposit_bank_city),
+    sqlc.narg(deposit_bank_name),
+    sqlc.narg(card_user_name),
+    sqlc.arg(source_snapshot)
+)
+ON CONFLICT (owner_type, owner_id)
+DO UPDATE SET
+    account_type = EXCLUDED.account_type,
+    profile_status = EXCLUDED.profile_status,
+    legal_name = EXCLUDED.legal_name,
+    certificate_type = EXCLUDED.certificate_type,
+    certificate_no_ciphertext = EXCLUDED.certificate_no_ciphertext,
+    certificate_no_mask = EXCLUDED.certificate_no_mask,
+    email_ciphertext = EXCLUDED.email_ciphertext,
+    email_mask = EXCLUDED.email_mask,
+    customer_name = EXCLUDED.customer_name,
+    alias_name = EXCLUDED.alias_name,
+    corporate_name = EXCLUDED.corporate_name,
+    corporate_cert_type = EXCLUDED.corporate_cert_type,
+    corporate_cert_id_ciphertext = EXCLUDED.corporate_cert_id_ciphertext,
+    corporate_cert_id_mask = EXCLUDED.corporate_cert_id_mask,
+    corporate_mobile_ciphertext = EXCLUDED.corporate_mobile_ciphertext,
+    corporate_mobile_mask = EXCLUDED.corporate_mobile_mask,
+    industry_id = EXCLUDED.industry_id,
+    contact_name = EXCLUDED.contact_name,
+    contact_mobile_ciphertext = EXCLUDED.contact_mobile_ciphertext,
+    contact_mobile_mask = EXCLUDED.contact_mobile_mask,
+    bank_account_no_ciphertext = EXCLUDED.bank_account_no_ciphertext,
+    bank_account_no_mask = EXCLUDED.bank_account_no_mask,
+    bank_mobile_ciphertext = EXCLUDED.bank_mobile_ciphertext,
+    bank_mobile_mask = EXCLUDED.bank_mobile_mask,
+    bank_name = EXCLUDED.bank_name,
+    deposit_bank_province = EXCLUDED.deposit_bank_province,
+    deposit_bank_city = EXCLUDED.deposit_bank_city,
+    deposit_bank_name = EXCLUDED.deposit_bank_name,
+    card_user_name = EXCLUDED.card_user_name,
+    source_snapshot = EXCLUDED.source_snapshot,
+    updated_at = now()
+RETURNING id, owner_type, owner_id, account_type, profile_status, legal_name, certificate_type, certificate_no_ciphertext, certificate_no_mask, email_ciphertext, email_mask, customer_name, alias_name, corporate_name, corporate_cert_type, corporate_cert_id_ciphertext, corporate_cert_id_mask, corporate_mobile_ciphertext, corporate_mobile_mask, industry_id, contact_name, contact_mobile_ciphertext, contact_mobile_mask, bank_account_no_ciphertext, bank_account_no_mask, bank_mobile_ciphertext, bank_mobile_mask, bank_name, deposit_bank_province, deposit_bank_city, deposit_bank_name, card_user_name, source_snapshot, created_at, updated_at;
+
+-- name: GetBaofuAccountOpeningProfileByOwner :one
+SELECT id, owner_type, owner_id, account_type, profile_status, legal_name, certificate_type, certificate_no_ciphertext, certificate_no_mask, email_ciphertext, email_mask, customer_name, alias_name, corporate_name, corporate_cert_type, corporate_cert_id_ciphertext, corporate_cert_id_mask, corporate_mobile_ciphertext, corporate_mobile_mask, industry_id, contact_name, contact_mobile_ciphertext, contact_mobile_mask, bank_account_no_ciphertext, bank_account_no_mask, bank_mobile_ciphertext, bank_mobile_mask, bank_name, deposit_bank_province, deposit_bank_city, deposit_bank_name, card_user_name, source_snapshot, created_at, updated_at
+FROM baofu_account_opening_profiles
+WHERE owner_type = $1 AND owner_id = $2
+LIMIT 1;
+
+-- name: GetBaofuAccountOpeningProfile :one
+SELECT id, owner_type, owner_id, account_type, profile_status, legal_name, certificate_type, certificate_no_ciphertext, certificate_no_mask, email_ciphertext, email_mask, customer_name, alias_name, corporate_name, corporate_cert_type, corporate_cert_id_ciphertext, corporate_cert_id_mask, corporate_mobile_ciphertext, corporate_mobile_mask, industry_id, contact_name, contact_mobile_ciphertext, contact_mobile_mask, bank_account_no_ciphertext, bank_account_no_mask, bank_mobile_ciphertext, bank_mobile_mask, bank_name, deposit_bank_province, deposit_bank_city, deposit_bank_name, card_user_name, source_snapshot, created_at, updated_at
+FROM baofu_account_opening_profiles
+WHERE id = $1
+LIMIT 1;

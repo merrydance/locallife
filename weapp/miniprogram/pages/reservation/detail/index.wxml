@@ -118,7 +118,8 @@
 >
   <view slot="content" class="dialog-content">
     <t-radio-group value="{{cancelReason}}" bind:change="onReasonChange">
-      <t-radio wx:for="{{cancelReasons}}" wx:key="*this" value="{{item}}" label="{{item}}" />
+  <t-radio wx:for="{{cancelReasons}}" wx:key="*this" value="{{item}}" label="{{item}}" />
     </t-radio-group>
   </view>
 </t-dialog>
+<t-toast id="t-toast" />

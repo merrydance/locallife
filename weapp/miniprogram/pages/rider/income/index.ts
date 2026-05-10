@@ -115,6 +115,10 @@ Page({
     this.loadLedger(this.data.pageId + 1, false)
   },
 
+  onGoToSettlementAccount() {
+    wx.navigateTo({ url: '/pages/rider/settlement-account/index' })
+  },
+
   onStatusTabChange(e: WechatMiniprogram.CustomEvent<{ value: RiderIncomeStatusFilter }>) {
     const statusTab = e.detail.value
     if (statusTab === this.data.statusTab) {

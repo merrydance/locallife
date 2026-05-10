@@ -1,0 +1,117 @@
+<custom-navbar title="结算账户" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view
+  class="settlement-page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
+>
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载结算账户中..." layout="vertical" />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '结算账户加载失败，请重试'}}" />
+    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
+  </view>
+
+  <view wx:else class="page-content">
+    <view wx:if="{{refreshErrorMessage}}" class="sync-state">
+      <t-icon name="error-circle" size="32rpx" />
+      <text class="sync-state__text">{{refreshErrorMessage}}</text>
+      <t-button size="small" theme="primary" variant="text" icon="refresh" bindtap="onRetry">重试</t-button>
+    </view>
+
+    <view wx:if="{{actionFeedbackMessage}}" class="sync-state sync-state--{{actionFeedbackTheme}}">
+      <t-icon name="{{actionFeedbackTheme === 'success' ? 'check-circle-filled' : 'info-circle-filled'}}" size="32rpx" />
+      <text class="sync-state__text">{{actionFeedbackMessage}}</text>
+    </view>
+
+    <t-cell-group>
+      <t-cell title="开户状态" note="{{accountView.statusDesc || '以开户状态查询结果为准'}}">
+        <view slot="right-icon">
+          <t-tag theme="{{accountView.tagTheme}}" size="small">{{accountView.statusText}}</t-tag>
+        </view>
+      </t-cell>
+      <t-cell title="核验费" note="{{accountView.verifyFeeDisplay}} 元核验费，支付完成后继续开户" />
+    </t-cell-group>
+
+    <t-cell-group>
+      <t-cell title="个人资料" note="{{canEditProfile ? '用于二级户开户核验' : '已提交资料将随状态同步'}}" />
+      <t-input
+        label="姓名"
+        placeholder="请输入姓名"
+        value="{{form.real_name}}"
+        data-field="real_name"
+        disabled="{{!canEditProfile || submitting || syncing}}"
+        bind:change="onInput"
+      />
+      <t-input
+        label="银行预留手机号"
+        placeholder="请输入银行预留手机号"
+        type="number"
+        value="{{form.mobile}}"
+        data-field="mobile"
+        disabled="{{!canEditProfile || submitting || syncing}}"
+        bind:change="onInput"
+      />
+      <t-input
+        label="身份证号"
+        placeholder="请输入身份证号"
+        value="{{form.id_card_number}}"
+        data-field="id_card_number"
+        disabled="{{!canEditProfile || submitting || syncing}}"
+        bind:change="onInput"
+      />
+      <t-input
+        label="银行卡号"
+        placeholder="请输入本人银行卡号"
+        type="number"
+        value="{{form.bank_account_number}}"
+        data-field="bank_account_number"
+        disabled="{{!canEditProfile || submitting || syncing}}"
+        bind:change="onInput"
+      />
+      <t-input
+        label="开户银行（可选）"
+        placeholder="如：中国工商银行"
+        value="{{form.bank_name}}"
+        data-field="bank_name"
+        disabled="{{!canEditProfile || submitting || syncing}}"
+        bind:change="onInput"
+      />
+      <t-cell wx:if="{{formErrorMessage}}" title="资料校验" note="{{formErrorMessage}}" />
+    </t-cell-group>
+
+    <view class="form-actions">
+      <t-button
+        wx:if="{{canEditProfile}}"
+        theme="primary"
+        loading="{{submitting}}"
+        disabled="{{submitting || syncing}}"
+        bindtap="onSubmitProfile"
+      >
+        提交资料并支付核验费
+      </t-button>
+      <t-button
+        wx:if="{{canContinuePayment}}"
+        theme="primary"
+        loading="{{syncing}}"
+        disabled="{{submitting || syncing}}"
+        bindtap="onContinuePayment"
+      >
+        继续支付核验费
+      </t-button>
+      <t-button
+        wx:if="{{canRefreshStatus}}"
+        theme="primary"
+        variant="outline"
+        loading="{{syncing}}"
+        disabled="{{submitting || syncing}}"
+        bindtap="onRefreshStatus"
+      >
+        刷新状态
+      </t-button>
+    </view>
+  </view>
+
+  <t-toast id="t-toast" />
+</view>

@@ -70,7 +70,8 @@ const CONFIG_SECTIONS: ConfigSection[] = [
     desc: '处理主体申请、微信支付开户与资金账户相关设置。',
     items: [
       { id: 'application', title: '主体申请', desc: '维护主体申请草稿、上传证照并提交审核', path: '/pages/merchant/settings/application/index' },
-      { id: 'applyment', title: '微信支付开户', desc: '查看开户状态并处理微信待办', path: '/pages/merchant/settings/applyment/index' }
+      { id: 'applyment', title: '微信支付开户', desc: '查看开户状态并处理微信待办', path: '/pages/merchant/settings/applyment/index' },
+      { id: 'baofu-settlement-account', title: '宝付结算账户', desc: '开通平台分账所需的宝付二级户', path: '/pages/merchant/finance/settlement-account/index' }
     ]
   },
   {
@@ -120,7 +121,7 @@ function filterConfigSections(
       ...section,
       items: section.items?.filter((item) => {
         const passesDeviceGate = canManageDeviceSettings || !DEVICE_MANAGE_ITEM_IDS.has(item.id)
-        const passesApplymentGate = canManageApplyment || item.id !== 'applyment'
+        const passesApplymentGate = canManageApplyment || (item.id !== 'applyment' && item.id !== 'baofu-settlement-account')
         return passesDeviceGate && passesApplymentGate
       }),
       groups: section.groups
@@ -128,7 +129,7 @@ function filterConfigSections(
           ...group,
           items: group.items.filter((item) => {
             const passesDeviceGate = canManageDeviceSettings || !DEVICE_MANAGE_ITEM_IDS.has(item.id)
-            const passesApplymentGate = canManageApplyment || item.id !== 'applyment'
+            const passesApplymentGate = canManageApplyment || (item.id !== 'applyment' && item.id !== 'baofu-settlement-account')
             return passesDeviceGate && passesApplymentGate
           })
         }))

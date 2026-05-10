@@ -492,7 +492,7 @@ Page({
         this.setData({ rechargeSubmitting: true })
         showDepositLoadingToast(this, '正在发起支付...')
         try {
-            const result = await submitRiderDepositRecharge(Math.round(amount * 100))
+            const result = await submitRiderDepositRecharge(Math.round(amount * 100), { context: this })
             hideDepositToast(this)
             this.setData({ isRechargeVisible: false, rechargeAmount: '' })
             await this.applyRechargeWorkflowResult(result, { refreshIfNeeded: result.shouldRefresh })
@@ -522,7 +522,7 @@ Page({
         this.setData({ syncingPendingRecharge: true })
         showDepositLoadingToast(this, '正在拉起支付...')
         try {
-            const result = await continueStoredRiderDepositRecharge()
+            const result = await continueStoredRiderDepositRecharge({ context: this })
             if (!result) {
                 hideDepositToast(this)
                 this.updateFinanceView(null)

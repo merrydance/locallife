@@ -157,7 +157,8 @@ Page({
         try {
             const paymentResult = await startPaymentOrderWorkflow({
                 orderId: this.data.reservation.id,
-                businessType: 'reservation'
+                businessType: 'reservation',
+                context: this
             })
 
             Navigation.toPaymentResult({

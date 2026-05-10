@@ -15,6 +15,7 @@
         "dashboard/index",
         "order-hall/index",
         "income/index",
+        "settlement-account/index",
         "claims/index",
         "claims/detail/index",
         "deposit/index",
@@ -45,6 +46,7 @@
         "safety/report/index",
         "safety/detail/index",
         "finance/withdraw/index",
+        "finance/settlement-account/index",
         "region-expansion/index"
       ],
       "independent": false
@@ -174,6 +176,7 @@
         "finance/cancel-withdraw/detail/index",
         "finance/bills/index",
         "finance/settlements/index",
+        "finance/settlement-account/index",
         "kitchen/index",
         "kitchen/detail/index",
         "stats/index",

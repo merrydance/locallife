@@ -9,6 +9,7 @@ import { checkRoomAvailability } from '../../../api/room'
 import Navigation from '../../../utils/navigation'
 import { startPaymentOrderWorkflow } from '../../../services/payment-workflow'
 import { getErrorUserMessage } from '../../../utils/user-facing'
+import { logger } from '../../../utils/logger'
 
 interface TimeSlot {
   time: string
@@ -182,7 +183,7 @@ Page({
         wx.showToast({ title: '该日期暂无可用时段', icon: 'none' })
       }
     } catch (error) {
-      console.error('获取可用时段失败:', error)
+      logger.error('获取可用时段失败', error, 'reservation-confirm')
       this.setData({ loadingSlots: false })
       wx.showToast({ title: '获取时段失败', icon: 'error' })
     }
@@ -271,7 +272,8 @@ Page({
         try {
           const paymentResult = await startPaymentOrderWorkflow({
             orderId: reservation.id,
-            businessType: 'reservation'
+            businessType: 'reservation',
+            context: this
           })
           Navigation.toPaymentResult({
             status: paymentResult.status,
@@ -282,7 +284,7 @@ Page({
             amount: resultAmount
           })
         } catch (payErr) {
-          console.error('[预订支付] 支付失败或取消:', payErr)
+          logger.error('预订支付失败或取消', payErr, 'reservation-confirm')
           Navigation.toPaymentResult({
             status: 'create_failed',
             businessId: reservation.id,
@@ -293,7 +295,7 @@ Page({
       }
     } catch (error) {
       const errMessage = getErrorUserMessage(error, '提交失败，请稍后重试')
-      console.error('预定提交失败:', error)
+      logger.error('预订提交失败', error, 'reservation-confirm')
       wx.showToast({ title: errMessage || '提交失败', icon: 'none' })
     } finally {
       this.setData({ submitting: false })

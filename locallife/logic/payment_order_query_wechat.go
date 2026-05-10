@@ -13,6 +13,7 @@ import (
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
+	"github.com/rs/zerolog/log"
 )
 
 func (svc *PaymentOrderService) QueryPaymentOrder(ctx context.Context, input QueryPaymentOrderInput) (QueryPaymentOrderResult, error) {
@@ -393,7 +394,11 @@ func (svc *PaymentOrderService) recordAndApplyDirectPaymentQueryFact(ctx context
 		RawResource:          rawResource,
 		DedupeKey:            fmt.Sprintf("wechat:query:direct_payment:%s:%s", queryResp.OutTradeNo, queryResp.TradeState),
 	}
-	if terminalStatus == db.ExternalPaymentTerminalStatusSuccess {
+	if terminalStatus == db.ExternalPaymentTerminalStatusSuccess ||
+		(paymentOrder.BusinessType == db.PaymentBusinessTypeBaofuAccountVerifyFee &&
+			(terminalStatus == db.ExternalPaymentTerminalStatusClosed ||
+				terminalStatus == db.ExternalPaymentTerminalStatusFailed ||
+				terminalStatus == db.ExternalPaymentTerminalStatusExpired)) {
 		input.Application = &ExternalPaymentFactApplicationTarget{
 			Consumer:           consumer,
 			BusinessObjectType: paymentFactBusinessObjectPaymentOrder,
@@ -401,11 +406,33 @@ func (svc *PaymentOrderService) recordAndApplyDirectPaymentQueryFact(ctx context
 		}
 	}
 
+	if shouldSkipBaofuVerifyFeeQuerySuccessApplication(paymentOrder, terminalStatus, queryResp) {
+		log.Error().
+			Int64("payment_order_id", paymentOrder.ID).
+			Str("out_trade_no", paymentOrder.OutTradeNo).
+			Str("transaction_id", queryResp.TransactionID).
+			Int64("expected_amount", paymentOrder.Amount).
+			Int64("actual_amount", queryResp.Amount.Total).
+			Msg("baofu verify fee query success amount mismatch; skip local paid transition")
+		return paymentOrder, nil
+	}
+
+	if paymentOrder.BusinessType == db.PaymentBusinessTypeBaofuAccountVerifyFee && terminalStatus == db.ExternalPaymentTerminalStatusSuccess {
+		updatedPaymentOrder, err := svc.markDirectBaofuVerifyFeeQueryPaymentPaid(ctx, paymentOrder, queryResp.TransactionID)
+		if err != nil {
+			return paymentOrder, err
+		}
+		paymentOrder = updatedPaymentOrder
+	}
+
 	factResult, err := NewPaymentFactService(svc.store).RecordExternalPaymentFact(ctx, input)
 	if err != nil {
 		return paymentOrder, fmt.Errorf("record direct payment query fact: %w", err)
 	}
 	if factResult.Application == nil {
+		return paymentOrder, nil
+	}
+	if shouldDeferDirectPaymentQueryFactApplication(paymentOrder, terminalStatus) {
 		return paymentOrder, nil
 	}
 	if _, err := NewPaymentFactService(svc.store).ApplyExternalPaymentFactApplication(ctx, factResult.Application.ID); err != nil {
@@ -424,6 +451,8 @@ func directPaymentFactConsumer(businessType string) (string, bool) {
 		return paymentFactConsumerRiderDepositDomain, true
 	case db.ExternalPaymentBusinessOwnerClaimRecovery:
 		return paymentFactConsumerClaimRecoveryDomain, true
+	case db.ExternalPaymentBusinessOwnerBaofuVerifyFee:
+		return paymentFactConsumerBaofuAccountVerifyFeeDomain, true
 	default:
 		return "", false
 	}

@@ -24,6 +24,7 @@ const (
 	paymentFactConsumerApplymentDomain              = "applyment_domain"
 	paymentFactConsumerSettlementDomain             = "settlement_domain"
 	paymentFactConsumerMerchantFundsDomain          = "merchant_funds_domain"
+	paymentFactConsumerBaofuAccountVerifyFeeDomain  = "baofu_account_verify_fee_domain"
 	paymentFactBusinessObjectPaymentOrder           = "payment_order"
 	paymentFactBusinessObjectRefundOrder            = "refund_order"
 	paymentFactBusinessObjectProfitSharingOrder     = "profit_sharing_order"
@@ -46,6 +47,7 @@ type ApplyExternalPaymentFactApplicationResult struct {
 	MerchantCancelWithdraw        *merchantCancelWithdrawDomainResult
 	MerchantWithdraw              *merchantWithdrawDomainResult
 	ReservationPayment            *ApplyReservationPaymentFactResult
+	BaofuVerifyFeePayment         *baofuVerifyFeePaymentDomainResult
 	Applied                       bool
 	Skipped                       bool
 }
@@ -62,6 +64,7 @@ type appliedPaymentFactDomainResult struct {
 	MerchantWithdraw              *merchantWithdrawDomainResult
 	ReservationPayment            *ApplyReservationPaymentFactResult
 	RiderDepositPayment           *riderDepositPaymentDomainResult
+	BaofuVerifyFeePayment         *baofuVerifyFeePaymentDomainResult
 	RiderDepositRefund            *riderDepositRefundDomainResult
 	OrderRefund                   *orderRefundDomainResult
 	ReservationRefund             *reservationRefundDomainResult
@@ -75,6 +78,11 @@ type profitSharingReturnDomainResult struct {
 }
 
 type riderDepositPaymentDomainResult struct {
+	PaymentOrder db.PaymentOrder
+	Processed    bool
+}
+
+type baofuVerifyFeePaymentDomainResult struct {
 	PaymentOrder db.PaymentOrder
 	Processed    bool
 }
@@ -274,13 +282,13 @@ func (svc *PaymentFactService) ApplyExternalPaymentFactApplication(ctx context.C
 		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, fmt.Errorf("get external payment fact: %w", err))
 	}
 	if len(fact.RawResource) > 0 && !json.Valid(fact.RawResource) {
-		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, fmt.Errorf("external payment fact %d raw_resource is not valid JSON", fact.ID))
+		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, fmt.Errorf("external payment fact %d raw_resource is not valid JSON", fact.ID), fact)
 	}
 	result.Fact = fact
 
 	domainResult, err := svc.applyExternalPaymentFactToDomain(ctx, application, fact)
 	if err != nil {
-		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, err)
+		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, err, fact)
 	}
 	result.OrderPayment = domainResult.OrderPayment
 	result.ClaimRecoveryPayment = domainResult.ClaimRecoveryPayment
@@ -289,10 +297,11 @@ func (svc *PaymentFactService) ApplyExternalPaymentFactApplication(ctx context.C
 	result.MerchantCancelWithdraw = domainResult.MerchantCancelWithdraw
 	result.MerchantWithdraw = domainResult.MerchantWithdraw
 	result.ReservationPayment = domainResult.ReservationPayment
+	result.BaofuVerifyFeePayment = domainResult.BaofuVerifyFeePayment
 
 	outbox, err := svc.createPaymentDomainOutboxForAppliedFact(ctx, application, fact, domainResult)
 	if err != nil {
-		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, err)
+		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, err, fact)
 	}
 	result.Outbox = outbox
 
@@ -302,7 +311,7 @@ func (svc *PaymentFactService) ApplyExternalPaymentFactApplication(ctx context.C
 		ProcessingStatus: db.ExternalPaymentFactProcessingStatusTerminalized,
 		ProcessedAt:      pgtype.Timestamptz{Time: processedAt, Valid: true},
 	}); err != nil {
-		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, fmt.Errorf("mark external payment fact terminalized: %w", err))
+		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, fmt.Errorf("mark external payment fact terminalized: %w", err), fact)
 	}
 
 	applied, err := svc.store.MarkExternalPaymentFactApplicationApplied(ctx, db.MarkExternalPaymentFactApplicationAppliedParams{
@@ -310,7 +319,7 @@ func (svc *PaymentFactService) ApplyExternalPaymentFactApplication(ctx context.C
 		AppliedAt: pgtype.Timestamptz{Time: processedAt, Valid: true},
 	})
 	if err != nil {
-		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, fmt.Errorf("mark external payment fact application applied: %w", err))
+		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, fmt.Errorf("mark external payment fact application applied: %w", err), fact)
 	}
 	result.Application = applied
 	result.Applied = true
@@ -396,6 +405,13 @@ func (svc *PaymentFactService) applyExternalPaymentFactToDomain(ctx context.Cont
 			return result, err
 		}
 		result.RiderDepositPayment = &riderDepositPayment
+		return result, nil
+	case application.Consumer == paymentFactConsumerBaofuAccountVerifyFeeDomain && application.BusinessObjectType == paymentFactBusinessObjectPaymentOrder:
+		baofuVerifyFeePayment, err := svc.applyBaofuVerifyFeePaymentFact(ctx, application, fact)
+		if err != nil {
+			return result, err
+		}
+		result.BaofuVerifyFeePayment = &baofuVerifyFeePayment
 		return result, nil
 	case application.Consumer == paymentFactConsumerRiderDepositDomain && application.BusinessObjectType == paymentFactBusinessObjectRefundOrder:
 		riderDepositRefund, err := svc.applyRiderDepositRefundFact(ctx, application, fact)
@@ -1198,101 +1214,6 @@ func isWechatMainBusinessProfitSharingFact(fact db.ExternalPaymentFact) bool {
 	return fact.Channel == db.PaymentChannelEcommerce || fact.Channel == db.PaymentChannelOrdinaryServiceProvider
 }
 
-func (svc *PaymentFactService) applyRiderDepositPaymentFact(ctx context.Context, application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) (riderDepositPaymentDomainResult, error) {
-	var result riderDepositPaymentDomainResult
-	if err := validateRiderDepositPaymentFactApplication(application, fact); err != nil {
-		return result, err
-	}
-
-	paymentResult, err := svc.store.ProcessPaymentSuccessTx(ctx, db.ProcessPaymentSuccessTxParams{
-		PaymentOrderID: application.BusinessObjectID,
-	})
-	if err != nil {
-		return result, fmt.Errorf("process rider deposit payment success: %w", err)
-	}
-
-	result = riderDepositPaymentDomainResult{
-		PaymentOrder: paymentResult.PaymentOrder,
-		Processed:    paymentResult.Processed,
-	}
-	if paymentResult.Processed || paymentResult.PaymentOrder.ProcessedAt.Valid {
-		if err := svc.maybeRequestRiderReceiverPresent(ctx, paymentResult.PaymentOrder); err != nil {
-			return result, err
-		}
-	}
-	return result, nil
-}
-
-func (svc *PaymentFactService) applyClaimRecoveryPaymentFact(ctx context.Context, application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) (claimRecoveryPaymentDomainResult, error) {
-	var result claimRecoveryPaymentDomainResult
-	if err := validateClaimRecoveryPaymentFactApplication(application, fact); err != nil {
-		return result, err
-	}
-
-	paymentResult, err := svc.store.ProcessPaymentSuccessTx(ctx, db.ProcessPaymentSuccessTxParams{
-		PaymentOrderID: application.BusinessObjectID,
-	})
-	if err != nil {
-		return result, fmt.Errorf("process claim recovery payment success: %w", err)
-	}
-
-	result = claimRecoveryPaymentDomainResult{
-		PaymentOrder: paymentResult.PaymentOrder,
-		Processed:    paymentResult.Processed,
-	}
-	return result, nil
-}
-
-func validateRiderDepositPaymentFactApplication(application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) error {
-	if !fact.IsTerminal {
-		return fmt.Errorf("payment fact %d is not terminal", fact.ID)
-	}
-	if fact.Provider != db.ExternalPaymentProviderWechat || fact.Channel != db.PaymentChannelDirect || fact.Capability != db.ExternalPaymentCapabilityDirectJSAPIPayment {
-		return fmt.Errorf("payment fact %d is not a wechat direct payment fact", fact.ID)
-	}
-	if fact.ExternalObjectType != db.ExternalPaymentObjectPayment {
-		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)
-	}
-	if fact.BusinessOwner.Valid && fact.BusinessOwner.String != db.ExternalPaymentBusinessOwnerRiderDeposit {
-		return fmt.Errorf("payment fact %d business owner %q is not rider deposit", fact.ID, fact.BusinessOwner.String)
-	}
-	if fact.BusinessObjectType.Valid && fact.BusinessObjectType.String != paymentFactBusinessObjectPaymentOrder {
-		return fmt.Errorf("payment fact %d has unsupported business object type %q", fact.ID, fact.BusinessObjectType.String)
-	}
-	if fact.BusinessObjectID.Valid && fact.BusinessObjectID.Int64 != application.BusinessObjectID {
-		return fmt.Errorf("payment fact %d business object id %d does not match application object id %d", fact.ID, fact.BusinessObjectID.Int64, application.BusinessObjectID)
-	}
-	if fact.TerminalStatus != db.ExternalPaymentTerminalStatusSuccess {
-		return fmt.Errorf("unsupported rider deposit payment terminal status %q", fact.TerminalStatus)
-	}
-	return nil
-}
-
-func validateClaimRecoveryPaymentFactApplication(application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) error {
-	if !fact.IsTerminal {
-		return fmt.Errorf("payment fact %d is not terminal", fact.ID)
-	}
-	if fact.Provider != db.ExternalPaymentProviderWechat || fact.Channel != db.PaymentChannelDirect || fact.Capability != db.ExternalPaymentCapabilityDirectJSAPIPayment {
-		return fmt.Errorf("payment fact %d is not a wechat direct payment fact", fact.ID)
-	}
-	if fact.ExternalObjectType != db.ExternalPaymentObjectPayment {
-		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)
-	}
-	if fact.BusinessOwner.Valid && fact.BusinessOwner.String != db.ExternalPaymentBusinessOwnerClaimRecovery {
-		return fmt.Errorf("payment fact %d business owner %q is not claim recovery", fact.ID, fact.BusinessOwner.String)
-	}
-	if fact.BusinessObjectType.Valid && fact.BusinessObjectType.String != paymentFactBusinessObjectPaymentOrder {
-		return fmt.Errorf("payment fact %d has unsupported business object type %q", fact.ID, fact.BusinessObjectType.String)
-	}
-	if fact.BusinessObjectID.Valid && fact.BusinessObjectID.Int64 != application.BusinessObjectID {
-		return fmt.Errorf("payment fact %d business object id %d does not match application object id %d", fact.ID, fact.BusinessObjectID.Int64, application.BusinessObjectID)
-	}
-	if fact.TerminalStatus != db.ExternalPaymentTerminalStatusSuccess {
-		return fmt.Errorf("unsupported claim recovery payment terminal status %q", fact.TerminalStatus)
-	}
-	return nil
-}
-
 func (svc *PaymentFactService) applyRiderDepositRefundFact(ctx context.Context, application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) (riderDepositRefundDomainResult, error) {
 	var result riderDepositRefundDomainResult
 	if err := validateRiderDepositRefundFactApplication(application, fact); err != nil {
@@ -1907,6 +1828,9 @@ func (svc *PaymentFactService) createPaymentDomainOutboxForAppliedFact(ctx conte
 	if domainResult.ClaimRecoveryPayment != nil {
 		return nil, nil
 	}
+	if domainResult.BaofuVerifyFeePayment != nil {
+		return nil, nil
+	}
 	if domainResult.SettlementVerification != nil {
 		return nil, nil
 	}
@@ -2423,17 +2347,4 @@ func profitSharingReturnFactFailReason(rawResource []byte) (string, error) {
 		return "", fmt.Errorf("decode profit sharing return fact resource: %w", err)
 	}
 	return payload.FailReason, nil
-}
-
-func (svc *PaymentFactService) markExternalPaymentFactApplicationFailed(ctx context.Context, application db.ExternalPaymentFactApplication, applyErr error) error {
-	nextRetryAt := svc.now().UTC().Add(paymentFactApplicationRetryDelay)
-	_, markErr := svc.store.MarkExternalPaymentFactApplicationFailed(ctx, db.MarkExternalPaymentFactApplicationFailedParams{
-		ID:          application.ID,
-		LastError:   pgtype.Text{String: applyErr.Error(), Valid: true},
-		NextRetryAt: pgtype.Timestamptz{Time: nextRetryAt, Valid: true},
-	})
-	if markErr != nil {
-		return fmt.Errorf("%w; mark external payment fact application failed: %v", applyErr, markErr)
-	}
-	return applyErr
 }

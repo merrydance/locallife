@@ -1,0 +1,165 @@
+<custom-navbar title="{{pageView.title}}" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view
+  class="settlement-page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
+>
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载开户状态中..." layout="vertical" />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '开户状态加载失败，请重试'}}" />
+    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
+  </view>
+
+  <view wx:else class="page-content">
+    <view wx:if="{{refreshErrorMessage}}" class="sync-state">
+      <t-icon name="error-circle" size="32rpx" />
+      <text class="sync-state__text">{{refreshErrorMessage}}</text>
+      <t-button size="small" theme="primary" variant="text" icon="refresh" bindtap="onRetry">重试</t-button>
+    </view>
+
+    <view wx:if="{{actionFeedbackMessage}}" class="sync-state sync-state--{{actionFeedbackTheme}}">
+      <t-icon name="{{actionFeedbackTheme === 'success' ? 'check-circle-filled' : 'info-circle-filled'}}" size="32rpx" />
+      <text class="sync-state__text">{{actionFeedbackMessage}}</text>
+    </view>
+
+    <t-cell-group>
+      <t-cell title="开户状态" note="{{pageView.statusView.statusDesc || pageView.nextActionText}}">
+        <view slot="right-icon">
+          <t-tag theme="{{pageView.statusView.tagTheme}}" size="small">{{pageView.statusView.statusText}}</t-tag>
+        </view>
+      </t-cell>
+      <t-cell title="核验费" note="{{pageView.verifyFeePrompt}}" />
+      <t-cell wx:if="{{pageView.shouldShowOpenReportHint}}" title="微信支付展示" note="微信支付展示商户名称配置中，请稍后刷新" />
+    </t-cell-group>
+
+    <t-cell-group>
+      <t-cell title="开户资料" note="{{pageView.profileHint}}" />
+      <t-input
+        label="商户主体名称"
+        placeholder="请输入商户营业执照名称"
+        value="{{form.legal_name}}"
+        data-field="legal_name"
+        disabled="{{!canEditProfile || submitting || syncing}}"
+        bind:change="onInput"
+      />
+      <t-input
+        label="营业执照号"
+        placeholder="请输入营业执照号"
+        value="{{form.business_license_number}}"
+        data-field="business_license_number"
+        disabled="{{!canEditProfile || submitting || syncing}}"
+        bind:change="onInput"
+      />
+      <t-input
+        label="法人姓名"
+        placeholder="请输入法人姓名"
+        value="{{form.legal_person_name}}"
+        data-field="legal_person_name"
+        disabled="{{!canEditProfile || submitting || syncing}}"
+        bind:change="onInput"
+      />
+      <t-input
+        label="法人身份证号"
+        placeholder="请输入法人身份证号"
+        value="{{form.legal_person_id_number}}"
+        data-field="legal_person_id_number"
+        disabled="{{!canEditProfile || submitting || syncing}}"
+        bind:change="onInput"
+      />
+      <t-input
+        label="联系邮箱"
+        placeholder="请输入联系邮箱"
+        value="{{form.email}}"
+        data-field="email"
+        disabled="{{!canEditProfile || submitting || syncing}}"
+        bind:change="onInput"
+      />
+      <t-input
+        label="对公账号"
+        placeholder="请输入对公账号"
+        type="number"
+        value="{{form.bank_account_no}}"
+        data-field="bank_account_no"
+        disabled="{{!canEditProfile || submitting || syncing}}"
+        bind:change="onInput"
+      />
+      <t-input
+        label="开户银行"
+        placeholder="请输入开户银行"
+        value="{{form.bank_name}}"
+        data-field="bank_name"
+        disabled="{{!canEditProfile || submitting || syncing}}"
+        bind:change="onInput"
+      />
+      <t-input
+        label="开户地址省份"
+        placeholder="请输入开户地址省份"
+        value="{{form.deposit_bank_province}}"
+        data-field="deposit_bank_province"
+        disabled="{{!canEditProfile || submitting || syncing}}"
+        bind:change="onInput"
+      />
+      <t-input
+        label="开户地址城市"
+        placeholder="请输入开户地址城市"
+        value="{{form.deposit_bank_city}}"
+        data-field="deposit_bank_city"
+        disabled="{{!canEditProfile || submitting || syncing}}"
+        bind:change="onInput"
+      />
+      <t-input
+        label="开户支行"
+        placeholder="请输入开户支行"
+        value="{{form.deposit_bank_name}}"
+        data-field="deposit_bank_name"
+        disabled="{{!canEditProfile || submitting || syncing}}"
+        bind:change="onInput"
+      />
+      <t-input
+        label="联系人"
+        placeholder="请输入联系人"
+        value="{{form.contact_name}}"
+        data-field="contact_name"
+        disabled="{{!canEditProfile || submitting || syncing}}"
+        bind:change="onInput"
+      />
+      <t-input
+        label="联系人手机号"
+        placeholder="请输入联系人手机号"
+        type="number"
+        value="{{form.contact_mobile}}"
+        data-field="contact_mobile"
+        disabled="{{!canEditProfile || submitting || syncing}}"
+        bind:change="onInput"
+      />
+      <t-cell wx:if="{{formErrorMessage}}" title="资料校验" note="{{formErrorMessage}}" />
+    </t-cell-group>
+
+    <view class="form-actions">
+      <t-button
+        wx:if="{{canEditProfile}}"
+        theme="primary"
+        loading="{{submitting}}"
+        disabled="{{submitting || syncing}}"
+        bindtap="onSubmitProfile"
+      >
+        {{pageView.profileButtonText}}
+      </t-button>
+      <t-button
+        wx:if="{{canRefreshStatus}}"
+        theme="primary"
+        variant="outline"
+        loading="{{syncing}}"
+        disabled="{{submitting || syncing}}"
+        bindtap="onRefreshStatus"
+      >
+        刷新状态
+      </t-button>
+    </view>
+  </view>
+
+  <t-toast id="t-toast" />
+</view>

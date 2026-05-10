@@ -67,6 +67,9 @@ func TestLoadConfig_DefaultsAndTrimQuotes(t *testing.T) {
 	require.Equal(t, 20, config.DefaultPrepareTime)
 	require.Equal(t, time.Minute, config.ProfitSharingReturnRetryInterval)
 	require.Equal(t, 10, config.ProfitSharingReturnMaxRetries)
+	require.EqualValues(t, 200, config.BaofuAccountVerifyFeeFen)
+	require.Equal(t, "9931", config.BaofuBusinessIndustryID)
+	require.Equal(t, "758-2", config.BaofuMerchantReportBusiness)
 }
 
 func TestLoadConfig_ReadsWechatPaymentAndEcommerceConfig(t *testing.T) {

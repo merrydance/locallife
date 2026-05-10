@@ -49,6 +49,9 @@ export function createCheckoutOrderPayment(orderId: number) {
   return createOrderPayment(orderId)
 }
 
-export function completeCheckoutPayment(payment: Parameters<typeof completePaymentWorkflow>[0]) {
-  return completePaymentWorkflow(payment)
+export function completeCheckoutPayment(
+  payment: Parameters<typeof completePaymentWorkflow>[0],
+  options: Parameters<typeof completePaymentWorkflow>[1] = {}
+) {
+  return completePaymentWorkflow(payment, options)
 }

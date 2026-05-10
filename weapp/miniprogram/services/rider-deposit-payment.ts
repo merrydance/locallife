@@ -1,20 +1,21 @@
 import RiderService from '../api/rider'
 import type { PaymentWorkflowStatus } from './payment-workflow'
 import {
-  PaymentCancelledError,
+  completePaymentWorkflow
+} from './payment-workflow'
+import {
   getPaymentDetail,
-  invokeWechatPay,
   isPaymentStatusFailed,
   isPaymentStatusSuccessful,
   mapWechatTradeStateToPaymentStatus,
   PAYMENT_STATUS_POLL_INTERVAL_MS,
   PAYMENT_STATUS_POLL_MAX_ATTEMPTS,
   queryPaymentOrder,
-  pollPaymentStatus,
   type PaymentOrderQueryResponse,
   type PaymentOrderResponse,
   type PaymentStatus
 } from '../api/payment'
+import { logger } from '../utils/logger'
 
 const STORAGE_KEY = 'riderDepositPendingRecharge'
 
@@ -39,6 +40,10 @@ export interface RiderDepositRechargeWorkflowResult {
   paymentStatus?: PaymentStatus | string
   shouldRefresh: boolean
   pendingContext: RiderDepositPendingRechargeContext | null
+}
+
+export interface RiderDepositRechargeWorkflowOptions {
+  context?: WechatMiniprogram.Page.TrivialInstance
 }
 
 export interface RiderDepositRechargeWorkflowStatusView {
@@ -77,7 +82,14 @@ function isValidPendingRechargeContext(value: unknown): value is RiderDepositPen
 }
 
 export function savePendingRiderDepositRecharge(context: RiderDepositPendingRechargeContext) {
-  wx.setStorageSync(STORAGE_KEY, context)
+  try {
+    wx.setStorageSync(STORAGE_KEY, context)
+  } catch (error: unknown) {
+    logger.error('保存骑手押金待确认支付上下文失败', error, 'rider-deposit-payment')
+    const recoverableError = new Error('支付进度暂时无法保存，请稍后再试')
+    ;(recoverableError as Error & { userMessage?: string }).userMessage = '支付进度暂时无法保存，请稍后再试'
+    throw recoverableError
+  }
 }
 
 export function getPendingRiderDepositRecharge(): RiderDepositPendingRechargeContext | null {
@@ -87,7 +99,8 @@ export function getPendingRiderDepositRecharge(): RiderDepositPendingRechargeCon
       return null
     }
     return stored
-  } catch (_error) {
+  } catch (error: unknown) {
+    logger.error('读取骑手押金待确认支付上下文失败', error, 'rider-deposit-payment')
     return null
   }
 }
@@ -95,7 +108,8 @@ export function getPendingRiderDepositRecharge(): RiderDepositPendingRechargeCon
 export function clearPendingRiderDepositRecharge() {
   try {
     wx.removeStorageSync(STORAGE_KEY)
-  } catch (_error) {
+  } catch (error: unknown) {
+    logger.error('清除骑手押金待确认支付上下文失败', error, 'rider-deposit-payment')
     return
   }
 }
@@ -169,7 +183,8 @@ function buildRechargeResultFromPayment(
 async function getRiderDepositRechargePaymentTruth(paymentOrderId: number): Promise<PaymentOrderQueryResponse | PaymentOrderResponse> {
   try {
     return await queryPaymentOrder(paymentOrderId)
-  } catch (_error) {
+  } catch (error: unknown) {
+    logger.error('骑手押金支付远端查询失败，回退本地支付单查询', error, 'rider-deposit-payment')
     return getPaymentDetail(paymentOrderId)
   }
 }
@@ -231,46 +246,67 @@ async function createRechargePayment(amountFen: number) {
   }
 }
 
-async function finalizeRechargeAfterPay(context: RiderDepositPendingRechargeContext): Promise<RiderDepositRechargeWorkflowResult> {
-  try {
-    const finalStatus = await pollPaymentStatus(
-      context.paymentOrderId,
-      PAYMENT_STATUS_POLL_MAX_ATTEMPTS,
-      PAYMENT_STATUS_POLL_INTERVAL_MS
-    )
-    if (isPaymentStatusSuccessful(finalStatus)) {
-      clearPendingRiderDepositRecharge()
-      return {
-        status: 'paid',
-        paymentOrderId: context.paymentOrderId,
-        amount: context.amount,
-        paymentStatus: finalStatus,
-        shouldRefresh: true,
-        pendingContext: null
-      }
-    }
-
-    clearPendingRiderDepositRecharge()
-    return {
-      status: 'failed',
-      paymentOrderId: context.paymentOrderId,
-      amount: context.amount,
-      paymentStatus: finalStatus,
-      shouldRefresh: true,
-      pendingContext: null
-    }
-  } catch (_error) {
-    return {
-      status: 'pending_confirmation',
-      paymentOrderId: context.paymentOrderId,
-      amount: context.amount,
-      shouldRefresh: false,
-      pendingContext: context
-    }
+function toPaymentOrderResponse(
+  payment: PaymentOrderQueryResponse | PaymentOrderResponse,
+  fallbackContext: RiderDepositPendingRechargeContext
+): PaymentOrderResponse {
+  return {
+    ...(payment as PaymentOrderResponse),
+    id: payment.id,
+    user_id: (payment as PaymentOrderResponse).user_id || 0,
+    order_id: (payment as PaymentOrderResponse).order_id || 0,
+    out_trade_no: payment.out_trade_no || fallbackContext.outTradeNo || '',
+    amount: payment.amount || fallbackContext.amount,
+    status: getPaymentEffectiveStatus(payment) as PaymentStatus,
+    payment_type: (payment as PaymentOrderResponse).payment_type || 'miniprogram',
+    business_type: (payment as PaymentOrderResponse).business_type || 'rider_deposit',
+    created_at: (payment as PaymentOrderResponse).created_at || ''
   }
 }
 
-export async function submitRiderDepositRecharge(amountFen: number): Promise<RiderDepositRechargeWorkflowResult> {
+function buildRechargeResultFromWorkflow(
+  workflowStatus: PaymentWorkflowStatus,
+  payment: PaymentOrderQueryResponse | PaymentOrderResponse,
+  context: RiderDepositPendingRechargeContext
+): RiderDepositRechargeWorkflowResult {
+  if (workflowStatus === 'paid') {
+    clearPendingRiderDepositRecharge()
+    return buildRechargeResultFromPayment('paid', payment, null, true)
+  }
+
+  if (workflowStatus === 'failed' || workflowStatus === 'closed') {
+    clearPendingRiderDepositRecharge()
+    return buildRechargeResultFromPayment('failed', payment, null, true)
+  }
+
+  savePendingRiderDepositRecharge(context)
+  return buildRechargeResultFromPayment(workflowStatus, payment, context, false)
+}
+
+async function completeRiderDepositPayment(
+  payment: PaymentOrderResponse,
+  context: RiderDepositPendingRechargeContext,
+  options: RiderDepositRechargeWorkflowOptions = {}
+): Promise<RiderDepositRechargeWorkflowResult> {
+  const workflowResult = await completePaymentWorkflow(payment, {
+    maxAttempts: PAYMENT_STATUS_POLL_MAX_ATTEMPTS,
+    interval: PAYMENT_STATUS_POLL_INTERVAL_MS,
+    context: options.context,
+    paymentMessage: '正在调起微信支付...',
+    confirmingMessage: '支付结果确认中...'
+  })
+
+  return buildRechargeResultFromWorkflow(
+    workflowResult.status,
+    workflowResult.payment || payment,
+    context
+  )
+}
+
+export async function submitRiderDepositRecharge(
+  amountFen: number,
+  options: RiderDepositRechargeWorkflowOptions = {}
+): Promise<RiderDepositRechargeWorkflowResult> {
   const { rechargeResult, context } = await createRechargePayment(amountFen)
 
   if (!context) {
@@ -287,29 +323,23 @@ export async function submitRiderDepositRecharge(amountFen: number): Promise<Rid
     return recoverPendingRiderDepositRecharge(context)
   }
 
-  try {
-    await invokeWechatPay(rechargeResult.pay_params)
-  } catch (error: unknown) {
-    const errMsg = error instanceof Error ? error.message : ''
-    const wxErrMsg = error && typeof error === 'object' && 'errMsg' in error ? String((error as { errMsg?: string }).errMsg || '') : ''
-    if (error instanceof PaymentCancelledError || errMsg.includes('cancel') || wxErrMsg.includes('cancel')) {
-      return {
-        status: 'cancelled',
-        paymentOrderId: context.paymentOrderId,
-        amount: context.amount,
-        shouldRefresh: false,
-        pendingContext: context
-      }
-    }
-
-    throw error
-  }
-
-  return finalizeRechargeAfterPay(context)
+  return completeRiderDepositPayment({
+    id: context.paymentOrderId,
+    user_id: 0,
+    order_id: 0,
+    out_trade_no: rechargeResult.out_trade_no || context.outTradeNo || '',
+    amount: context.amount,
+    status: 'pending',
+    payment_type: 'miniprogram',
+    business_type: 'rider_deposit',
+    pay_params: rechargeResult.pay_params,
+    created_at: ''
+  } as PaymentOrderResponse, context, options)
 }
 
 export async function continuePendingRiderDepositRecharge(
-  pendingRecharge: RiderDepositPendingRechargeContext
+  pendingRecharge: RiderDepositPendingRechargeContext,
+  options: RiderDepositRechargeWorkflowOptions = {}
 ): Promise<RiderDepositRechargeWorkflowResult> {
   const recoveryResult = await recoverPendingRiderDepositRecharge(pendingRecharge)
   if (recoveryResult.status !== 'pending_confirmation') {
@@ -338,34 +368,18 @@ export async function continuePendingRiderDepositRecharge(
     return buildRechargeResultFromPayment('pending_confirmation', payment, nextContext, false)
   }
 
-  try {
-    await invokeWechatPay(payment.pay_params)
-  } catch (error: unknown) {
-    const errMsg = error instanceof Error ? error.message : ''
-    const wxErrMsg = error && typeof error === 'object' && 'errMsg' in error ? String((error as { errMsg?: string }).errMsg || '') : ''
-    if (error instanceof PaymentCancelledError || errMsg.includes('cancel') || wxErrMsg.includes('cancel')) {
-      return {
-        status: 'cancelled',
-        paymentOrderId: nextContext.paymentOrderId,
-        amount: nextContext.amount,
-        shouldRefresh: false,
-        pendingContext: nextContext
-      }
-    }
-
-    throw error
-  }
-
-  return finalizeRechargeAfterPay(nextContext)
+  return completeRiderDepositPayment(toPaymentOrderResponse(payment, nextContext), nextContext, options)
 }
 
-export async function continueStoredRiderDepositRecharge(): Promise<RiderDepositRechargeWorkflowResult | null> {
+export async function continueStoredRiderDepositRecharge(
+  options: RiderDepositRechargeWorkflowOptions = {}
+): Promise<RiderDepositRechargeWorkflowResult | null> {
   const pendingRecharge = getPendingRiderDepositRecharge()
   if (!pendingRecharge) {
     return null
   }
 
-  return continuePendingRiderDepositRecharge(pendingRecharge)
+  return continuePendingRiderDepositRecharge(pendingRecharge, options)
 }
 
 export async function getRiderDepositPaymentDetail(paymentOrderId: number): Promise<PaymentOrderResponse> {

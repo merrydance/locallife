@@ -187,4 +187,5 @@
         <t-button wx:if="{{showReorderButton}}" theme="primary" size="medium" shape="round" bindtap="onReorder">再来一单</t-button>
       </view>
    </view>
+   <t-toast id="t-toast" />
 </view>

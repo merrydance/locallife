@@ -15,6 +15,7 @@
         "t-picker": "tdesign-miniprogram/picker/picker",
         "t-picker-item": "tdesign-miniprogram/picker-item/picker-item",
         "t-tag": "tdesign-miniprogram/tag/tag",
-        "merchant-promos": "/components/merchant-promos/index"
+        "merchant-promos": "/components/merchant-promos/index",
+        "t-toast": "tdesign-miniprogram/toast/toast"
     }
 }

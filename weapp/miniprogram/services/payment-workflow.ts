@@ -17,7 +17,12 @@ import {
   shouldRecreateCombinedPayment,
   pollPaymentStatus
 } from '../api/payment'
+import Toast, { hideToast } from '../miniprogram_npm/tdesign-miniprogram/toast/index'
+import { logger } from '../utils/logger'
 
+const TOAST_SELECTOR = '#t-toast'
+
+// New Mini Program payment flows must enter here so requestPayment never becomes the UI terminal truth.
 export type PaymentWorkflowStatus =
   | 'paid'
   | 'failed'
@@ -33,6 +38,7 @@ export type PaymentWorkflowKind =
   | 'reservation'
   | 'reservation_addon'
   | 'rider_deposit'
+  | 'baofu_account_verify_fee'
   | 'claim_recovery'
 
 export interface PaymentWorkflowResult {
@@ -68,15 +74,60 @@ export interface StartPaymentOrderWorkflowParams {
   paymentType?: PaymentType
   maxAttempts?: number
   interval?: number
+  context?: WechatMiniprogram.Page.TrivialInstance
 }
 
 export interface PaymentTerminalWaitOptions {
   maxAttempts?: number
   interval?: number
+  context?: WechatMiniprogram.Page.TrivialInstance
+  paymentMessage?: string
+  confirmingMessage?: string
 }
+
+type PaymentWorkflowOptions = PaymentTerminalWaitOptions
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function showPaymentWorkflowToast(
+  context: WechatMiniprogram.Page.TrivialInstance | undefined,
+  message: string
+) {
+  if (!context) {
+    return
+  }
+
+  Toast({
+    context,
+    selector: TOAST_SELECTOR,
+    message,
+    theme: 'loading',
+    direction: 'column',
+    duration: 0,
+    preventScrollThrough: true
+  })
+}
+
+function hidePaymentWorkflowToast(context: WechatMiniprogram.Page.TrivialInstance | undefined) {
+  if (!context) {
+    return
+  }
+
+  hideToast({ context, selector: TOAST_SELECTOR })
+}
+
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value)
+  } catch (_error) {
+    return '"[unserializable]"'
+  }
+}
+
+function logPaymentWorkflowError(message: string, error: unknown, details: Record<string, unknown>) {
+  logger.error(`${message} ${safeStringify(details)}`, error, 'payment-workflow')
 }
 
 function toPaymentWorkflowKind(businessType?: BusinessType | string): PaymentWorkflowKind {
@@ -89,6 +140,8 @@ function toPaymentWorkflowKind(businessType?: BusinessType | string): PaymentWor
       return 'rider_deposit'
     case 'claim_recovery':
       return 'claim_recovery'
+    case 'baofu_account_verify_fee':
+      return 'baofu_account_verify_fee'
     default:
       return 'order'
   }
@@ -160,9 +213,24 @@ export async function waitForPaymentWorkflowTerminalResult(
   return buildPaymentWorkflowResultFromPayment(payment, mapPaymentStatusToWorkflowStatus(finalStatus))
 }
 
+async function queryPaymentWorkflowResultOrPending(payment: PaymentOrderResponse): Promise<PaymentWorkflowResult> {
+  try {
+    return await queryPaymentWorkflowResult(payment.id)
+  } catch (error: unknown) {
+    logPaymentWorkflowError('支付单查询失败，回退为待确认状态', error, {
+      paymentId: payment.id,
+      orderId: payment.order_id,
+      businessType: payment.business_type,
+      amount: payment.amount,
+      outTradeNo: payment.out_trade_no
+    })
+    return buildPaymentWorkflowResultFromPayment(payment, 'pending_confirmation')
+  }
+}
+
 export async function completePaymentWorkflow(
   payment: PaymentOrderResponse,
-  options: { maxAttempts?: number, interval?: number } = {}
+  options: PaymentWorkflowOptions = {}
 ): Promise<PaymentWorkflowResult> {
   if (!payment.pay_params) {
     const terminalStatus = mapPaymentStatusToWorkflowStatus(payment.status)
@@ -174,29 +242,54 @@ export async function completePaymentWorkflow(
   }
 
   try {
+    showPaymentWorkflowToast(options.context, options.paymentMessage || '正在调起微信支付...')
     await invokeWechatPay(payment.pay_params)
   } catch (error: unknown) {
     if (error instanceof PaymentCancelledError) {
+      hidePaymentWorkflowToast(options.context)
       return buildPaymentWorkflowResultFromPayment(payment, 'cancelled')
     }
 
     const wxError = error as { errMsg?: string }
     if (wxError?.errMsg?.includes('cancel')) {
+      hidePaymentWorkflowToast(options.context)
       return buildPaymentWorkflowResultFromPayment(payment, 'cancelled')
     }
 
-    return buildPaymentWorkflowResultFromPayment(payment, 'failed')
+    logPaymentWorkflowError('调起微信支付失败，改为查询支付状态', error, {
+      paymentId: payment.id,
+      orderId: payment.order_id,
+      businessType: payment.business_type,
+      amount: payment.amount,
+      outTradeNo: payment.out_trade_no
+    })
+    showPaymentWorkflowToast(options.context, options.confirmingMessage || '支付结果确认中...')
+    try {
+      return await queryPaymentWorkflowResultOrPending(payment)
+    } finally {
+      hidePaymentWorkflowToast(options.context)
+    }
   }
 
   try {
+    showPaymentWorkflowToast(options.context, options.confirmingMessage || '支付结果确认中...')
     const finalStatus = await pollPaymentStatus(
       payment.id,
       options.maxAttempts ?? PAYMENT_STATUS_POLL_MAX_ATTEMPTS,
       options.interval ?? PAYMENT_STATUS_POLL_INTERVAL_MS
     )
     return buildPaymentWorkflowResultFromPayment(payment, mapPaymentStatusToWorkflowStatus(finalStatus))
-  } catch {
+  } catch (error: unknown) {
+    logPaymentWorkflowError('支付状态轮询失败，回退为待确认状态', error, {
+      paymentId: payment.id,
+      orderId: payment.order_id,
+      businessType: payment.business_type,
+      amount: payment.amount,
+      outTradeNo: payment.out_trade_no
+    })
     return buildPaymentWorkflowResultFromPayment(payment, 'pending_confirmation')
+  } finally {
+    hidePaymentWorkflowToast(options.context)
   }
 }
 
@@ -210,9 +303,15 @@ export async function startPaymentOrderWorkflow(params: StartPaymentOrderWorkflo
 
     return completePaymentWorkflow(payment, {
       maxAttempts: params.maxAttempts,
-      interval: params.interval
+      interval: params.interval,
+      context: params.context
     })
-  } catch {
+  } catch (error: unknown) {
+    logPaymentWorkflowError('创建支付单失败，返回 create_failed', error, {
+      orderId: params.orderId,
+      businessType: params.businessType,
+      paymentType: params.paymentType || 'miniprogram'
+    })
     return {
       kind: toPaymentWorkflowKind(params.businessType),
       status: 'create_failed',
@@ -275,7 +374,8 @@ function isWechatPaymentCancelled(error: unknown): boolean {
 }
 
 export async function completeCombinedPaymentWorkflow(
-  combinedPayment: CombinedPaymentOrderResponse
+  combinedPayment: CombinedPaymentOrderResponse,
+  options: PaymentWorkflowOptions = {}
 ): Promise<CombinedPaymentWorkflowResult> {
   if (!combinedPayment.pay_params) {
     if (isCombinedPaymentSuccessful(combinedPayment) || shouldRecreateCombinedPayment(combinedPayment)) {
@@ -286,20 +386,60 @@ export async function completeCombinedPaymentWorkflow(
   }
 
   try {
+    showPaymentWorkflowToast(options.context, options.paymentMessage || '正在调起微信支付...')
     await invokeWechatPay(combinedPayment.pay_params)
   } catch (error: unknown) {
     if (isWechatPaymentCancelled(error)) {
+      hidePaymentWorkflowToast(options.context)
       return buildCombinedPaymentWorkflowResult(combinedPayment, 'cancelled')
     }
 
-    const recoveredPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
-    return buildCombinedPaymentWorkflowResult(recoveredPayment)
+    logPaymentWorkflowError('合单支付调起失败，改为查询合单状态', error, {
+      combinedPaymentId: combinedPayment.id,
+      totalAmount: combinedPayment.total_amount,
+      combineOutTradeNo: combinedPayment.combine_out_trade_no,
+      subOrderCount: combinedPayment.sub_orders?.length || 0
+    })
+    showPaymentWorkflowToast(options.context, options.confirmingMessage || '支付结果确认中...')
+    try {
+      const recoveredPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
+      return buildCombinedPaymentWorkflowResult(recoveredPayment)
+    } catch (recoverError: unknown) {
+      logPaymentWorkflowError('合单支付查询失败，回退为待确认状态', recoverError, {
+        combinedPaymentId: combinedPayment.id,
+        totalAmount: combinedPayment.total_amount,
+        combineOutTradeNo: combinedPayment.combine_out_trade_no,
+        subOrderCount: combinedPayment.sub_orders?.length || 0
+      })
+      return buildCombinedPaymentWorkflowResult(combinedPayment, 'pending_confirmation')
+    } finally {
+      hidePaymentWorkflowToast(options.context)
+    }
   }
 
   try {
+    showPaymentWorkflowToast(options.context, options.confirmingMessage || '支付结果确认中...')
     return await waitForCombinedPaymentWorkflowResult(combinedPayment.id)
-  } catch {
-    const recoveredPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
-    return buildCombinedPaymentWorkflowResult(recoveredPayment, 'pending_confirmation')
+  } catch (error: unknown) {
+    logPaymentWorkflowError('合单支付轮询失败，回退为待确认状态', error, {
+      combinedPaymentId: combinedPayment.id,
+      totalAmount: combinedPayment.total_amount,
+      combineOutTradeNo: combinedPayment.combine_out_trade_no,
+      subOrderCount: combinedPayment.sub_orders?.length || 0
+    })
+    try {
+      const recoveredPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
+      return buildCombinedPaymentWorkflowResult(recoveredPayment, 'pending_confirmation')
+    } catch (recoverError: unknown) {
+      logPaymentWorkflowError('合单支付查询失败，仍回退为待确认状态', recoverError, {
+        combinedPaymentId: combinedPayment.id,
+        totalAmount: combinedPayment.total_amount,
+        combineOutTradeNo: combinedPayment.combine_out_trade_no,
+        subOrderCount: combinedPayment.sub_orders?.length || 0
+      })
+      return buildCombinedPaymentWorkflowResult(combinedPayment, 'pending_confirmation')
+    }
+  } finally {
+    hidePaymentWorkflowToast(options.context)
   }
 }

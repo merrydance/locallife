@@ -21,6 +21,7 @@
       <view wx:if="{{settlementNotice}}" class="sync-state">
         <t-icon name="error-circle-filled" size="32rpx" />
         <text class="sync-state__text">{{settlementNotice}}</text>
+        <t-button size="small" theme="primary" variant="text" bindtap="onGoToSettlementAccount">去开通</t-button>
       </view>
 
       <view class="summary-section">

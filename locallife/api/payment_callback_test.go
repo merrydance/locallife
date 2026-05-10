@@ -37,6 +37,22 @@ func (r *refundFactApplicationEnqueueRecorder) DistributeTaskProcessPaymentFactA
 	return r.err
 }
 
+type directPaymentCallbackTaskRecorder struct {
+	worker.NoopTaskDistributor
+	applicationIDs []int64
+	refundPayloads []worker.PayloadProcessRefund
+}
+
+func (r *directPaymentCallbackTaskRecorder) DistributeTaskProcessPaymentFactApplication(_ context.Context, payload *worker.PaymentFactApplicationPayload, _ ...asynq.Option) error {
+	r.applicationIDs = append(r.applicationIDs, payload.ApplicationID)
+	return nil
+}
+
+func (r *directPaymentCallbackTaskRecorder) DistributeTaskProcessRefund(_ context.Context, payload *worker.PayloadProcessRefund, _ ...asynq.Option) error {
+	r.refundPayloads = append(r.refundPayloads, *payload)
+	return nil
+}
+
 // TestHandlePaymentNotifyIdempotency 测试支付回调的幂等性检查
 func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 	notificationID := util.RandomString(32)
@@ -3102,6 +3118,231 @@ func TestHandlePaymentNotify_ClaimRecoveryRecordsPaymentFact(t *testing.T) {
 	server.router.ServeHTTP(recorder, request)
 	assertWechatNoContentResponse(t, recorder)
 	require.Equal(t, []int64{201}, taskDistributor.applicationIDs)
+}
+
+func TestHandlePaymentNotify_BaofuVerifyFeeRecordsPaymentFactAndDedupesReplay(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
+	taskDistributor := &refundFactApplicationEnqueueRecorder{}
+	server := newTestServerWithPaymentClient(t, store, paymentClient)
+	server.SetTaskDistributorForTest(taskDistributor)
+
+	notificationID := util.RandomString(32)
+	outTradeNo := "BFVF_" + util.RandomString(20)
+	transactionID := "WX_" + util.RandomString(20)
+	amount := int64(200)
+
+	paymentClient.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(2).
+		Return(nil)
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Return(true, nil)
+	paymentClient.EXPECT().
+		DecryptPaymentNotification(gomock.Any()).
+		Return(&wechatcontracts.DirectPaymentNotificationResource{
+			OutTradeNo:    outTradeNo,
+			TransactionID: transactionID,
+			TradeState:    "SUCCESS",
+			SuccessTime:   "2026-05-08T10:00:00+08:00",
+			Amount: wechatcontracts.DirectOrderQueryAmount{
+				Total: amount,
+			},
+		}, nil)
+	store.EXPECT().
+		GetPaymentOrderByOutTradeNo(gomock.Any(), outTradeNo).
+		Return(db.PaymentOrder{
+			ID:           93,
+			OutTradeNo:   outTradeNo,
+			Amount:       amount,
+			Status:       PaymentStatusPending,
+			UserID:       1003,
+			BusinessType: db.ExternalPaymentBusinessOwnerBaofuVerifyFee,
+		}, nil)
+	store.EXPECT().
+		CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+			require.Equal(t, db.ExternalPaymentCapabilityDirectJSAPIPayment, arg.Capability)
+			require.Equal(t, db.ExternalPaymentFactSourceCallback, arg.FactSource)
+			require.Equal(t, db.ExternalPaymentObjectPayment, arg.ExternalObjectType)
+			require.Equal(t, outTradeNo, arg.ExternalObjectKey)
+			require.Equal(t, transactionID, arg.ExternalSecondaryKey.String)
+			require.Equal(t, db.ExternalPaymentBusinessOwnerBaofuVerifyFee, arg.BusinessOwner.String)
+			require.Equal(t, paymentFactBusinessObjectPaymentOrder, arg.BusinessObjectType.String)
+			require.Equal(t, int64(93), arg.BusinessObjectID.Int64)
+			require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
+			require.Equal(t, "wechat:callback:direct_payment:"+notificationID, arg.DedupeKey)
+			return db.ExternalPaymentFact{ID: 102, DedupeKey: arg.DedupeKey, IsTerminal: true}, nil
+		})
+	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
+		FactID:             102,
+		Consumer:           paymentFactConsumerBaofuVerifyFeeDomain,
+		BusinessObjectType: paymentFactBusinessObjectPaymentOrder,
+		BusinessObjectID:   int64(93),
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}).Return(db.ExternalPaymentFactApplication{
+		ID:                 202,
+		FactID:             102,
+		Consumer:           paymentFactConsumerBaofuVerifyFeeDomain,
+		BusinessObjectType: paymentFactBusinessObjectPaymentOrder,
+		BusinessObjectID:   93,
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}, nil)
+	store.EXPECT().
+		UpdatePaymentOrderToPaid(gomock.Any(), gomock.Any()).
+		Return(db.PaymentOrder{
+			ID:           93,
+			OutTradeNo:   outTradeNo,
+			Amount:       amount,
+			Status:       PaymentStatusPaid,
+			UserID:       1003,
+			BusinessType: db.ExternalPaymentBusinessOwnerBaofuVerifyFee,
+		}, nil)
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Return(false, nil)
+	store.EXPECT().
+		GetWechatNotification(gomock.Any(), notificationID).
+		Return(db.WechatNotification{
+			ID:          notificationID,
+			ProcessedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		}, nil)
+
+	requestBody := map[string]any{
+		"id":            notificationID,
+		"event_type":    "TRANSACTION.SUCCESS",
+		"resource_type": "encrypt-resource",
+		"resource": map[string]any{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_encrypted_data",
+			"nonce":           "mock_nonce",
+			"associated_data": "transaction",
+		},
+	}
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-pay/notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	request.Header.Set("Wechatpay-Timestamp", "1234567890")
+	request.Header.Set("Wechatpay-Nonce", "test_nonce")
+	request.Header.Set("Wechatpay-Signature", "test_signature")
+	request.Header.Set("Wechatpay-Serial", "test_serial")
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	assertWechatNoContentResponse(t, recorder)
+	require.Equal(t, []int64{202}, taskDistributor.applicationIDs)
+
+	replay, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-pay/notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	replay.Header.Set("Wechatpay-Timestamp", "1234567890")
+	replay.Header.Set("Wechatpay-Nonce", "test_nonce")
+	replay.Header.Set("Wechatpay-Signature", "test_signature")
+	replay.Header.Set("Wechatpay-Serial", "test_serial")
+
+	replayRecorder := httptest.NewRecorder()
+	server.router.ServeHTTP(replayRecorder, replay)
+	assertWechatNoContentResponse(t, replayRecorder)
+	require.Equal(t, []int64{202}, taskDistributor.applicationIDs)
+}
+
+func TestHandlePaymentNotify_BaofuVerifyFeeAmountMismatchDoesNotRecordPaymentFact(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
+	taskDistributor := &directPaymentCallbackTaskRecorder{}
+	server := newTestServerWithPaymentClient(t, store, paymentClient)
+	server.SetTaskDistributorForTest(taskDistributor)
+
+	notificationID := util.RandomString(32)
+	outTradeNo := "BFVF_" + util.RandomString(20)
+	transactionID := "WX_" + util.RandomString(20)
+
+	paymentClient.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil)
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Return(true, nil)
+	paymentClient.EXPECT().
+		DecryptPaymentNotification(gomock.Any()).
+		Return(&wechatcontracts.DirectPaymentNotificationResource{
+			OutTradeNo:    outTradeNo,
+			TransactionID: transactionID,
+			TradeState:    "SUCCESS",
+			SuccessTime:   "2026-05-08T10:00:00+08:00",
+			Amount: wechatcontracts.DirectOrderQueryAmount{
+				Total: 999,
+			},
+		}, nil)
+	store.EXPECT().
+		GetPaymentOrderByOutTradeNo(gomock.Any(), outTradeNo).
+		Return(db.PaymentOrder{
+			ID:           94,
+			OutTradeNo:   outTradeNo,
+			Amount:       200,
+			Status:       PaymentStatusPending,
+			UserID:       1004,
+			BusinessType: db.ExternalPaymentBusinessOwnerBaofuVerifyFee,
+		}, nil)
+	store.EXPECT().
+		CreateRefundOrder(gomock.Any(), gomock.AssignableToTypeOf(db.CreateRefundOrderParams{})).
+		DoAndReturn(func(_ context.Context, arg db.CreateRefundOrderParams) (db.RefundOrder, error) {
+			require.Equal(t, int64(94), arg.PaymentOrderID)
+			require.Equal(t, "amount_mismatch", arg.RefundType)
+			require.Equal(t, int64(999), arg.RefundAmount)
+			return db.RefundOrder{ID: 502, PaymentOrderID: 94, RefundAmount: 999, OutRefundNo: arg.OutRefundNo, Status: "pending"}, nil
+		})
+	store.EXPECT().
+		UpdatePaymentOrderToPaid(gomock.Any(), db.UpdatePaymentOrderToPaidParams{
+			ID:            int64(94),
+			TransactionID: pgtype.Text{String: transactionID, Valid: true},
+		}).
+		Return(db.PaymentOrder{
+			ID:           94,
+			OutTradeNo:   outTradeNo,
+			Amount:       200,
+			Status:       PaymentStatusPaid,
+			UserID:       1004,
+			BusinessType: db.ExternalPaymentBusinessOwnerBaofuVerifyFee,
+		}, nil)
+	store.EXPECT().
+		UpdateRefundOrderToFailed(gomock.Any(), int64(502)).
+		Return(db.RefundOrder{ID: 502, PaymentOrderID: 94, RefundAmount: 999, Status: "failed"}, nil)
+
+	requestBody := map[string]any{
+		"id":            notificationID,
+		"event_type":    "TRANSACTION.SUCCESS",
+		"resource_type": "encrypt-resource",
+		"resource": map[string]any{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_encrypted_data",
+			"nonce":           "mock_nonce",
+			"associated_data": "transaction",
+		},
+	}
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-pay/notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	request.Header.Set("Wechatpay-Timestamp", "1234567890")
+	request.Header.Set("Wechatpay-Nonce", "test_nonce")
+	request.Header.Set("Wechatpay-Signature", "test_signature")
+	request.Header.Set("Wechatpay-Serial", "test_serial")
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	assertWechatNoContentResponse(t, recorder)
+	require.Empty(t, taskDistributor.applicationIDs)
+	require.Empty(t, taskDistributor.refundPayloads)
 }
 
 func TestHandleRefundNotify_RiderDepositRecordsRefundFact(t *testing.T) {

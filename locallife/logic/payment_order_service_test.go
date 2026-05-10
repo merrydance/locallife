@@ -1690,6 +1690,248 @@ func TestPaymentOrderServiceQueryPaymentOrder(t *testing.T) {
 			},
 		},
 		{
+			name:            "DirectBaofuVerifyFeeRemoteSuccessMarksPaidAndDefersFactApplication",
+			useDirectClient: true,
+			buildStubs: func(store *mockdb.MockStore, directClient *mockwechat.MockDirectPaymentClientInterface, _ *mockwechat.MockEcommerceClientInterface) {
+				paymentOrder := db.PaymentOrder{
+					ID:             input.PaymentOrderID,
+					UserID:         input.UserID,
+					PaymentType:    paymentTypeMiniProgram,
+					PaymentChannel: db.PaymentChannelDirect,
+					BusinessType:   db.PaymentBusinessTypeBaofuAccountVerifyFee,
+					Status:         paymentStatusPending,
+					OutTradeNo:     "BFVF20260508000002",
+					Amount:         200,
+				}
+				paidOrder := paymentOrder
+				paidOrder.Status = paymentStatusPaid
+				paidOrder.TransactionID = pgtype.Text{String: "wx-direct-baofu-verify-fee-001", Valid: true}
+				fact := db.ExternalPaymentFact{
+					ID:                 9301,
+					Provider:           db.ExternalPaymentProviderWechat,
+					Channel:            db.PaymentChannelDirect,
+					Capability:         db.ExternalPaymentCapabilityDirectJSAPIPayment,
+					FactSource:         db.ExternalPaymentFactSourceQuery,
+					ExternalObjectType: db.ExternalPaymentObjectPayment,
+					ExternalObjectKey:  paymentOrder.OutTradeNo,
+					BusinessOwner:      pgtype.Text{String: db.ExternalPaymentBusinessOwnerBaofuVerifyFee, Valid: true},
+					BusinessObjectType: pgtype.Text{String: paymentFactBusinessObjectPaymentOrder, Valid: true},
+					BusinessObjectID:   pgtype.Int8{Int64: paymentOrder.ID, Valid: true},
+					UpstreamState:      "SUCCESS",
+					TerminalStatus:     db.ExternalPaymentTerminalStatusSuccess,
+					IsTerminal:         true,
+					Amount:             pgtype.Int8{Int64: 200, Valid: true},
+					Currency:           "CNY",
+					RawResource:        []byte(`{"trade_state":"SUCCESS"}`),
+					DedupeKey:          "wechat:query:direct_payment:BFVF20260508000002:SUCCESS",
+				}
+				application := db.ExternalPaymentFactApplication{
+					ID:                 9401,
+					FactID:             fact.ID,
+					Consumer:           paymentFactConsumerBaofuAccountVerifyFeeDomain,
+					BusinessObjectType: paymentFactBusinessObjectPaymentOrder,
+					BusinessObjectID:   paymentOrder.ID,
+					Status:             db.ExternalPaymentFactApplicationStatusPending,
+				}
+
+				store.EXPECT().
+					GetPaymentOrder(gomock.Any(), input.PaymentOrderID).
+					Return(paymentOrder, nil)
+				directClient.EXPECT().
+					QueryOrderByOutTradeNo(gomock.Any(), paymentOrder.OutTradeNo).
+					Return(&wechatcontracts.DirectOrderQueryResponse{
+						OutTradeNo:     paymentOrder.OutTradeNo,
+						TransactionID:  "wx-direct-baofu-verify-fee-001",
+						TradeState:     "SUCCESS",
+						TradeStateDesc: "支付成功",
+						SuccessTime:    "2026-05-08T12:00:00+08:00",
+						Amount:         wechatcontracts.DirectOrderQueryAmount{Total: 200},
+					}, nil)
+				store.EXPECT().
+					UpdatePaymentOrderToPaid(gomock.Any(), db.UpdatePaymentOrderToPaidParams{
+						ID:            paymentOrder.ID,
+						TransactionID: pgtype.Text{String: "wx-direct-baofu-verify-fee-001", Valid: true},
+					}).
+					Return(paidOrder, nil)
+				store.EXPECT().
+					CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).
+					DoAndReturn(func(_ context.Context, params db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+						require.Equal(t, db.ExternalPaymentBusinessOwnerBaofuVerifyFee, params.BusinessOwner.String)
+						require.True(t, params.IsTerminal)
+						require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, params.TerminalStatus)
+						return fact, nil
+					})
+				store.EXPECT().
+					CreateExternalPaymentFactApplication(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactApplicationParams{})).
+					DoAndReturn(func(_ context.Context, params db.CreateExternalPaymentFactApplicationParams) (db.ExternalPaymentFactApplication, error) {
+						require.Equal(t, paymentFactConsumerBaofuAccountVerifyFeeDomain, params.Consumer)
+						require.Equal(t, paymentOrder.ID, params.BusinessObjectID)
+						return application, nil
+					})
+			},
+			check: func(t *testing.T, result QueryPaymentOrderResult, err error) {
+				require.NoError(t, err)
+				require.Equal(t, paymentStatusPaid, result.PaymentOrder.Status)
+				require.NotNil(t, result.WechatOrder)
+				require.Equal(t, "SUCCESS", result.WechatOrder.TradeState)
+				require.Nil(t, result.PayParams)
+			},
+		},
+		{
+			name:            "DirectBaofuVerifyFeeRemoteSuccessAmountMismatchDoesNotMarkPaidOrRecordFact",
+			useDirectClient: true,
+			buildStubs: func(store *mockdb.MockStore, directClient *mockwechat.MockDirectPaymentClientInterface, _ *mockwechat.MockEcommerceClientInterface) {
+				paymentOrder := db.PaymentOrder{
+					ID:             input.PaymentOrderID,
+					UserID:         input.UserID,
+					PaymentType:    paymentTypeMiniProgram,
+					PaymentChannel: db.PaymentChannelDirect,
+					BusinessType:   db.PaymentBusinessTypeBaofuAccountVerifyFee,
+					Status:         paymentStatusPending,
+					OutTradeNo:     "BFVF20260508000004",
+					Amount:         200,
+				}
+
+				store.EXPECT().
+					GetPaymentOrder(gomock.Any(), input.PaymentOrderID).
+					Return(paymentOrder, nil)
+				directClient.EXPECT().
+					QueryOrderByOutTradeNo(gomock.Any(), paymentOrder.OutTradeNo).
+					Return(&wechatcontracts.DirectOrderQueryResponse{
+						OutTradeNo:     paymentOrder.OutTradeNo,
+						TransactionID:  "wx-direct-baofu-verify-fee-mismatch-001",
+						TradeState:     "SUCCESS",
+						TradeStateDesc: "支付成功",
+						SuccessTime:    "2026-05-08T12:05:00+08:00",
+						Amount:         wechatcontracts.DirectOrderQueryAmount{Total: 100},
+					}, nil)
+			},
+			check: func(t *testing.T, result QueryPaymentOrderResult, err error) {
+				require.NoError(t, err)
+				require.Equal(t, paymentStatusPending, result.PaymentOrder.Status)
+				require.NotNil(t, result.WechatOrder)
+				require.Equal(t, "SUCCESS", result.WechatOrder.TradeState)
+				require.Equal(t, int64(100), result.WechatOrder.Amount.Total)
+				require.Nil(t, result.PayParams)
+			},
+		},
+		{
+			name:            "DirectBaofuVerifyFeeRemoteClosedAppliesRetryableFact",
+			useDirectClient: true,
+			buildStubs: func(store *mockdb.MockStore, directClient *mockwechat.MockDirectPaymentClientInterface, _ *mockwechat.MockEcommerceClientInterface) {
+				paymentOrder := db.PaymentOrder{
+					ID:             input.PaymentOrderID,
+					UserID:         input.UserID,
+					PaymentType:    paymentTypeMiniProgram,
+					PaymentChannel: db.PaymentChannelDirect,
+					BusinessType:   db.PaymentBusinessTypeBaofuAccountVerifyFee,
+					Status:         paymentStatusPending,
+					OutTradeNo:     "BFVF20260508000003",
+					Amount:         200,
+				}
+				closedOrder := paymentOrder
+				closedOrder.Status = "closed"
+				fact := db.ExternalPaymentFact{
+					ID:                 9302,
+					Provider:           db.ExternalPaymentProviderWechat,
+					Channel:            db.PaymentChannelDirect,
+					Capability:         db.ExternalPaymentCapabilityDirectJSAPIPayment,
+					FactSource:         db.ExternalPaymentFactSourceQuery,
+					ExternalObjectType: db.ExternalPaymentObjectPayment,
+					ExternalObjectKey:  paymentOrder.OutTradeNo,
+					BusinessOwner:      pgtype.Text{String: db.ExternalPaymentBusinessOwnerBaofuVerifyFee, Valid: true},
+					BusinessObjectType: pgtype.Text{String: paymentFactBusinessObjectPaymentOrder, Valid: true},
+					BusinessObjectID:   pgtype.Int8{Int64: paymentOrder.ID, Valid: true},
+					UpstreamState:      "CLOSED",
+					TerminalStatus:     db.ExternalPaymentTerminalStatusClosed,
+					IsTerminal:         true,
+					Amount:             pgtype.Int8{Int64: 200, Valid: true},
+					Currency:           "CNY",
+					RawResource:        []byte(`{"trade_state":"CLOSED"}`),
+					DedupeKey:          "wechat:query:direct_payment:BFVF20260508000003:CLOSED",
+				}
+				application := db.ExternalPaymentFactApplication{
+					ID:                 9402,
+					FactID:             fact.ID,
+					Consumer:           paymentFactConsumerBaofuAccountVerifyFeeDomain,
+					BusinessObjectType: paymentFactBusinessObjectPaymentOrder,
+					BusinessObjectID:   paymentOrder.ID,
+					Status:             db.ExternalPaymentFactApplicationStatusPending,
+				}
+				flow := db.BaofuAccountOpeningFlow{
+					ID:                      7402,
+					OwnerType:               db.BaofuAccountOwnerTypeRider,
+					OwnerID:                 1001,
+					AccountType:             db.BaofuAccountTypePersonal,
+					State:                   db.BaofuAccountOpeningStateVerifyFeeProcessing,
+					ProfileID:               pgtype.Int8{Int64: 7001, Valid: true},
+					VerifyFeeAmount:         200,
+					VerifyFeePaymentOrderID: pgtype.Int8{Int64: paymentOrder.ID, Valid: true},
+				}
+
+				store.EXPECT().
+					GetPaymentOrder(gomock.Any(), input.PaymentOrderID).
+					Return(paymentOrder, nil)
+				directClient.EXPECT().
+					QueryOrderByOutTradeNo(gomock.Any(), paymentOrder.OutTradeNo).
+					Return(&wechatcontracts.DirectOrderQueryResponse{
+						OutTradeNo:     paymentOrder.OutTradeNo,
+						TradeState:     "CLOSED",
+						TradeStateDesc: "订单已关闭",
+						Amount:         wechatcontracts.DirectOrderQueryAmount{Total: 200},
+					}, nil)
+				store.EXPECT().
+					CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).
+					DoAndReturn(func(_ context.Context, params db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+						require.Equal(t, db.ExternalPaymentBusinessOwnerBaofuVerifyFee, params.BusinessOwner.String)
+						require.True(t, params.IsTerminal)
+						require.Equal(t, db.ExternalPaymentTerminalStatusClosed, params.TerminalStatus)
+						return fact, nil
+					})
+				store.EXPECT().
+					CreateExternalPaymentFactApplication(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactApplicationParams{})).
+					DoAndReturn(func(_ context.Context, params db.CreateExternalPaymentFactApplicationParams) (db.ExternalPaymentFactApplication, error) {
+						require.Equal(t, paymentFactConsumerBaofuAccountVerifyFeeDomain, params.Consumer)
+						require.Equal(t, paymentOrder.ID, params.BusinessObjectID)
+						return application, nil
+					})
+				store.EXPECT().
+					ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).
+					Return(application, nil)
+				store.EXPECT().
+					GetExternalPaymentFact(gomock.Any(), fact.ID).
+					Return(fact, nil)
+				store.EXPECT().
+					GetPaymentOrder(gomock.Any(), paymentOrder.ID).
+					Return(paymentOrder, nil)
+				store.EXPECT().
+					UpdatePaymentOrderToClosed(gomock.Any(), paymentOrder.ID).
+					Return(closedOrder, nil)
+				store.EXPECT().
+					GetBaofuAccountOpeningFlowByPaymentOrder(gomock.Any(), pgtype.Int8{Int64: paymentOrder.ID, Valid: true}).
+					Return(flow, nil)
+				store.EXPECT().
+					MarkBaofuAccountOpeningFlowVerifyFeePending(gomock.Any(), gomock.AssignableToTypeOf(db.MarkBaofuAccountOpeningFlowVerifyFeePendingParams{})).
+					Return(db.BaofuAccountOpeningFlow{ID: flow.ID, State: db.BaofuAccountOpeningStateVerifyFeePending}, nil)
+				store.EXPECT().
+					UpdateExternalPaymentFactProcessingStatus(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateExternalPaymentFactProcessingStatusParams{})).
+					Return(fact, nil)
+				store.EXPECT().
+					MarkExternalPaymentFactApplicationApplied(gomock.Any(), gomock.AssignableToTypeOf(db.MarkExternalPaymentFactApplicationAppliedParams{})).
+					Return(application, nil)
+				store.EXPECT().
+					GetPaymentOrder(gomock.Any(), paymentOrder.ID).
+					Return(closedOrder, nil)
+			},
+			check: func(t *testing.T, result QueryPaymentOrderResult, err error) {
+				require.NoError(t, err)
+				require.Equal(t, "closed", result.PaymentOrder.Status)
+				require.NotNil(t, result.WechatOrder)
+				require.Equal(t, "CLOSED", result.WechatOrder.TradeState)
+				require.Nil(t, result.PayParams)
+			},
+		},
+		{
 			name:          "Success_RemotePendingExposesPayParams",
 			useEcomClient: true,
 			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockDirectPaymentClientInterface, client *mockwechat.MockEcommerceClientInterface) {

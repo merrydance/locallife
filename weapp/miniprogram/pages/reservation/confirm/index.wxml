@@ -92,3 +92,4 @@
 >
   <t-picker-item options="{{availableTimeSlots}}" />
 </t-picker>
+<t-toast id="t-toast" />

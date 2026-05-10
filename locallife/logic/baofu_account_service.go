@@ -19,7 +19,7 @@ var (
 )
 
 const (
-	BaofuAccountOpenVerifyFeeFen = 100
+	BaofuAccountOpenVerifyFeeFen = 200
 
 	BaofuOnboardingStateProfilePending       = "profile_pending"
 	BaofuOnboardingStateOpeningProcessing    = "baofu_opening_processing"
@@ -211,6 +211,16 @@ func baofuOnboardingStateLabel(state string) string {
 	case BaofuOnboardingStateReady:
 		return "结算账户可用"
 	case BaofuOnboardingStateOpenFailed:
+		return "开通失败"
+	case db.BaofuAccountOpeningStateVerifyFeePending, db.BaofuAccountOpeningStateVerifyFeeProcessing:
+		return "核验费待确认"
+	case db.BaofuAccountOpeningStateOpeningProcessing:
+		return "宝付开户处理中"
+	case db.BaofuAccountOpeningStateMerchantReportProcessing:
+		return "商户报备处理中"
+	case db.BaofuAccountOpeningStateAppletAuthPending:
+		return "授权目录绑定中"
+	case db.BaofuAccountOpeningStateFailed:
 		return "开通失败"
 	default:
 		return "资料待提交"

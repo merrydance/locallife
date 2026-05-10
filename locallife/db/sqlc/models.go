@@ -108,6 +108,65 @@ type BaofuAccountBinding struct {
 	UpdatedAt             time.Time   `json:"updated_at"`
 }
 
+type BaofuAccountOpeningFlow struct {
+	ID                      int64       `json:"id"`
+	OwnerType               string      `json:"owner_type"`
+	OwnerID                 int64       `json:"owner_id"`
+	AccountType             string      `json:"account_type"`
+	ProfileID               pgtype.Int8 `json:"profile_id"`
+	State                   string      `json:"state"`
+	VerifyFeeAmount         int64       `json:"verify_fee_amount"`
+	VerifyFeePaymentOrderID pgtype.Int8 `json:"verify_fee_payment_order_id"`
+	OpenTransSerialNo       pgtype.Text `json:"open_trans_serial_no"`
+	LoginNo                 pgtype.Text `json:"login_no"`
+	AccountBindingID        pgtype.Int8 `json:"account_binding_id"`
+	MerchantReportID        pgtype.Int8 `json:"merchant_report_id"`
+	FailureCode             pgtype.Text `json:"failure_code"`
+	FailureMessage          pgtype.Text `json:"failure_message"`
+	ProviderRequestSnapshot []byte      `json:"provider_request_snapshot"`
+	RawSnapshot             []byte      `json:"raw_snapshot"`
+	CreatedAt               time.Time   `json:"created_at"`
+	UpdatedAt               time.Time   `json:"updated_at"`
+}
+
+type BaofuAccountOpeningProfile struct {
+	ID                        int64       `json:"id"`
+	OwnerType                 string      `json:"owner_type"`
+	OwnerID                   int64       `json:"owner_id"`
+	AccountType               string      `json:"account_type"`
+	ProfileStatus             string      `json:"profile_status"`
+	LegalName                 pgtype.Text `json:"legal_name"`
+	CertificateType           pgtype.Text `json:"certificate_type"`
+	CertificateNoCiphertext   pgtype.Text `json:"certificate_no_ciphertext"`
+	CertificateNoMask         pgtype.Text `json:"certificate_no_mask"`
+	EmailCiphertext           pgtype.Text `json:"email_ciphertext"`
+	EmailMask                 pgtype.Text `json:"email_mask"`
+	CustomerName              pgtype.Text `json:"customer_name"`
+	AliasName                 pgtype.Text `json:"alias_name"`
+	CorporateName             pgtype.Text `json:"corporate_name"`
+	CorporateCertType         pgtype.Text `json:"corporate_cert_type"`
+	CorporateCertIDCiphertext pgtype.Text `json:"corporate_cert_id_ciphertext"`
+	CorporateCertIDMask       pgtype.Text `json:"corporate_cert_id_mask"`
+	CorporateMobileCiphertext pgtype.Text `json:"corporate_mobile_ciphertext"`
+	CorporateMobileMask       pgtype.Text `json:"corporate_mobile_mask"`
+	IndustryID                pgtype.Text `json:"industry_id"`
+	ContactName               pgtype.Text `json:"contact_name"`
+	ContactMobileCiphertext   pgtype.Text `json:"contact_mobile_ciphertext"`
+	ContactMobileMask         pgtype.Text `json:"contact_mobile_mask"`
+	BankAccountNoCiphertext   pgtype.Text `json:"bank_account_no_ciphertext"`
+	BankAccountNoMask         pgtype.Text `json:"bank_account_no_mask"`
+	BankMobileCiphertext      pgtype.Text `json:"bank_mobile_ciphertext"`
+	BankMobileMask            pgtype.Text `json:"bank_mobile_mask"`
+	BankName                  pgtype.Text `json:"bank_name"`
+	DepositBankProvince       pgtype.Text `json:"deposit_bank_province"`
+	DepositBankCity           pgtype.Text `json:"deposit_bank_city"`
+	DepositBankName           pgtype.Text `json:"deposit_bank_name"`
+	CardUserName              pgtype.Text `json:"card_user_name"`
+	SourceSnapshot            []byte      `json:"source_snapshot"`
+	CreatedAt                 time.Time   `json:"created_at"`
+	UpdatedAt                 time.Time   `json:"updated_at"`
+}
+
 type BaofuFeeLedger struct {
 	ID                 int64       `json:"id"`
 	FeeType            string      `json:"fee_type"`

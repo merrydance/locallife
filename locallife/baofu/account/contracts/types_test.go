@@ -288,7 +288,6 @@ func TestOfficialQueryBalanceAndWithdrawValidateRequiredFields(t *testing.T) {
 	query.Version = OfficialOpenAccountVersion
 	query.CertificateNo = "110101199001011234"
 	query.CertificateType = OfficialCertificateTypeID
-	query.PlatformNo = "100030218"
 	require.EqualError(t, query.Validate(), "baofu query account version must be 4.0.0")
 
 	query = OfficialQueryAccountRequest{
@@ -307,9 +306,11 @@ func TestOfficialQueryBalanceAndWithdrawValidateRequiredFields(t *testing.T) {
 		LoginNo:         "OPEN202605040001",
 		CertificateNo:   "110101199001011234",
 		CertificateType: OfficialCertificateTypeID,
-		PlatformNo:      "100030218",
 	}
 	require.NoError(t, query.Validate())
+	body, err := json.Marshal(query)
+	require.NoError(t, err)
+	require.NotContains(t, string(body), "platformNo")
 
 	balance := OfficialBalanceQueryRequest{
 		Version:     OfficialBalanceVersion,

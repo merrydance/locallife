@@ -3063,6 +3063,21 @@ func (mr *MockStoreMockRecorder) CreateAuditLog(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateAuditLog", reflect.TypeOf((*MockStore)(nil).CreateAuditLog), ctx, arg)
 }
 
+// CreateBaofuAccountOpeningFlow mocks base method.
+func (m *MockStore) CreateBaofuAccountOpeningFlow(ctx context.Context, arg db.CreateBaofuAccountOpeningFlowParams) (db.BaofuAccountOpeningFlow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateBaofuAccountOpeningFlow", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountOpeningFlow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateBaofuAccountOpeningFlow indicates an expected call of CreateBaofuAccountOpeningFlow.
+func (mr *MockStoreMockRecorder) CreateBaofuAccountOpeningFlow(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBaofuAccountOpeningFlow", reflect.TypeOf((*MockStore)(nil).CreateBaofuAccountOpeningFlow), ctx, arg)
+}
+
 // CreateBaofuFeeLedger mocks base method.
 func (m *MockStore) CreateBaofuFeeLedger(ctx context.Context, arg db.CreateBaofuFeeLedgerParams) (db.BaofuFeeLedger, error) {
 	m.ctrl.T.Helper()
@@ -6222,6 +6237,21 @@ func (mr *MockStoreMockRecorder) GetActiveAgreementByType(ctx, type_ any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveAgreementByType", reflect.TypeOf((*MockStore)(nil).GetActiveAgreementByType), ctx, type_)
 }
 
+// GetActiveBaofuAccountOpeningFlowByOwner mocks base method.
+func (m *MockStore) GetActiveBaofuAccountOpeningFlowByOwner(ctx context.Context, arg db.GetActiveBaofuAccountOpeningFlowByOwnerParams) (db.BaofuAccountOpeningFlow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetActiveBaofuAccountOpeningFlowByOwner", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountOpeningFlow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetActiveBaofuAccountOpeningFlowByOwner indicates an expected call of GetActiveBaofuAccountOpeningFlowByOwner.
+func (mr *MockStoreMockRecorder) GetActiveBaofuAccountOpeningFlowByOwner(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveBaofuAccountOpeningFlowByOwner", reflect.TypeOf((*MockStore)(nil).GetActiveBaofuAccountOpeningFlowByOwner), ctx, arg)
+}
+
 // GetActiveBehaviorBlocklist mocks base method.
 func (m *MockStore) GetActiveBehaviorBlocklist(ctx context.Context, arg db.GetActiveBehaviorBlocklistParams) (db.BehaviorBlocklist, error) {
 	m.ctrl.T.Helper()
@@ -6477,6 +6507,81 @@ func (mr *MockStoreMockRecorder) GetBaofuAccountBindingByOwner(ctx, arg any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuAccountBindingByOwner", reflect.TypeOf((*MockStore)(nil).GetBaofuAccountBindingByOwner), ctx, arg)
 }
 
+// GetBaofuAccountOpeningFlow mocks base method.
+func (m *MockStore) GetBaofuAccountOpeningFlow(ctx context.Context, id int64) (db.BaofuAccountOpeningFlow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuAccountOpeningFlow", ctx, id)
+	ret0, _ := ret[0].(db.BaofuAccountOpeningFlow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuAccountOpeningFlow indicates an expected call of GetBaofuAccountOpeningFlow.
+func (mr *MockStoreMockRecorder) GetBaofuAccountOpeningFlow(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuAccountOpeningFlow", reflect.TypeOf((*MockStore)(nil).GetBaofuAccountOpeningFlow), ctx, id)
+}
+
+// GetBaofuAccountOpeningFlowByOpenTransSerialNo mocks base method.
+func (m *MockStore) GetBaofuAccountOpeningFlowByOpenTransSerialNo(ctx context.Context, openTransSerialNo pgtype.Text) (db.BaofuAccountOpeningFlow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuAccountOpeningFlowByOpenTransSerialNo", ctx, openTransSerialNo)
+	ret0, _ := ret[0].(db.BaofuAccountOpeningFlow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuAccountOpeningFlowByOpenTransSerialNo indicates an expected call of GetBaofuAccountOpeningFlowByOpenTransSerialNo.
+func (mr *MockStoreMockRecorder) GetBaofuAccountOpeningFlowByOpenTransSerialNo(ctx, openTransSerialNo any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuAccountOpeningFlowByOpenTransSerialNo", reflect.TypeOf((*MockStore)(nil).GetBaofuAccountOpeningFlowByOpenTransSerialNo), ctx, openTransSerialNo)
+}
+
+// GetBaofuAccountOpeningFlowByPaymentOrder mocks base method.
+func (m *MockStore) GetBaofuAccountOpeningFlowByPaymentOrder(ctx context.Context, verifyFeePaymentOrderID pgtype.Int8) (db.BaofuAccountOpeningFlow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuAccountOpeningFlowByPaymentOrder", ctx, verifyFeePaymentOrderID)
+	ret0, _ := ret[0].(db.BaofuAccountOpeningFlow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuAccountOpeningFlowByPaymentOrder indicates an expected call of GetBaofuAccountOpeningFlowByPaymentOrder.
+func (mr *MockStoreMockRecorder) GetBaofuAccountOpeningFlowByPaymentOrder(ctx, verifyFeePaymentOrderID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuAccountOpeningFlowByPaymentOrder", reflect.TypeOf((*MockStore)(nil).GetBaofuAccountOpeningFlowByPaymentOrder), ctx, verifyFeePaymentOrderID)
+}
+
+// GetBaofuAccountOpeningProfile mocks base method.
+func (m *MockStore) GetBaofuAccountOpeningProfile(ctx context.Context, id int64) (db.BaofuAccountOpeningProfile, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuAccountOpeningProfile", ctx, id)
+	ret0, _ := ret[0].(db.BaofuAccountOpeningProfile)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuAccountOpeningProfile indicates an expected call of GetBaofuAccountOpeningProfile.
+func (mr *MockStoreMockRecorder) GetBaofuAccountOpeningProfile(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuAccountOpeningProfile", reflect.TypeOf((*MockStore)(nil).GetBaofuAccountOpeningProfile), ctx, id)
+}
+
+// GetBaofuAccountOpeningProfileByOwner mocks base method.
+func (m *MockStore) GetBaofuAccountOpeningProfileByOwner(ctx context.Context, arg db.GetBaofuAccountOpeningProfileByOwnerParams) (db.BaofuAccountOpeningProfile, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuAccountOpeningProfileByOwner", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountOpeningProfile)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuAccountOpeningProfileByOwner indicates an expected call of GetBaofuAccountOpeningProfileByOwner.
+func (mr *MockStoreMockRecorder) GetBaofuAccountOpeningProfileByOwner(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuAccountOpeningProfileByOwner", reflect.TypeOf((*MockStore)(nil).GetBaofuAccountOpeningProfileByOwner), ctx, arg)
+}
+
 // GetBaofuDailyReconciliation mocks base method.
 func (m *MockStore) GetBaofuDailyReconciliation(ctx context.Context, arg db.GetBaofuDailyReconciliationParams) ([]db.GetBaofuDailyReconciliationRow, error) {
 	m.ctrl.T.Helper()
@@ -6565,6 +6670,21 @@ func (m *MockStore) GetBaofuPaymentOrderRefundGuardForUpdate(ctx context.Context
 func (mr *MockStoreMockRecorder) GetBaofuPaymentOrderRefundGuardForUpdate(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuPaymentOrderRefundGuardForUpdate", reflect.TypeOf((*MockStore)(nil).GetBaofuPaymentOrderRefundGuardForUpdate), ctx, id)
+}
+
+// GetBaofuVerifyFeePaymentByAttach mocks base method.
+func (m *MockStore) GetBaofuVerifyFeePaymentByAttach(ctx context.Context, attach pgtype.Text) (db.PaymentOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBaofuVerifyFeePaymentByAttach", ctx, attach)
+	ret0, _ := ret[0].(db.PaymentOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBaofuVerifyFeePaymentByAttach indicates an expected call of GetBaofuVerifyFeePaymentByAttach.
+func (mr *MockStoreMockRecorder) GetBaofuVerifyFeePaymentByAttach(ctx, attach any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaofuVerifyFeePaymentByAttach", reflect.TypeOf((*MockStore)(nil).GetBaofuVerifyFeePaymentByAttach), ctx, attach)
 }
 
 // GetBaofuWithdrawalOrder mocks base method.
@@ -8095,6 +8215,21 @@ func (m *MockStore) GetLatestActiveAppVersion(ctx context.Context, arg db.GetLat
 func (mr *MockStoreMockRecorder) GetLatestActiveAppVersion(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestActiveAppVersion", reflect.TypeOf((*MockStore)(nil).GetLatestActiveAppVersion), ctx, arg)
+}
+
+// GetLatestBaofuAccountOpeningFlowByOwner mocks base method.
+func (m *MockStore) GetLatestBaofuAccountOpeningFlowByOwner(ctx context.Context, arg db.GetLatestBaofuAccountOpeningFlowByOwnerParams) (db.BaofuAccountOpeningFlow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLatestBaofuAccountOpeningFlowByOwner", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountOpeningFlow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLatestBaofuAccountOpeningFlowByOwner indicates an expected call of GetLatestBaofuAccountOpeningFlowByOwner.
+func (mr *MockStoreMockRecorder) GetLatestBaofuAccountOpeningFlowByOwner(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestBaofuAccountOpeningFlowByOwner", reflect.TypeOf((*MockStore)(nil).GetLatestBaofuAccountOpeningFlowByOwner), ctx, arg)
 }
 
 // GetLatestBehaviorDecisionByClaimID mocks base method.
@@ -10645,6 +10780,21 @@ func (m *MockStore) GetReservationStatsEnhanced(ctx context.Context, merchantID 
 func (mr *MockStoreMockRecorder) GetReservationStatsEnhanced(ctx, merchantID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReservationStatsEnhanced", reflect.TypeOf((*MockStore)(nil).GetReservationStatsEnhanced), ctx, merchantID)
+}
+
+// GetReusableBaofuVerifyFeePayment mocks base method.
+func (m *MockStore) GetReusableBaofuVerifyFeePayment(ctx context.Context, arg db.GetReusableBaofuVerifyFeePaymentParams) (db.PaymentOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetReusableBaofuVerifyFeePayment", ctx, arg)
+	ret0, _ := ret[0].(db.PaymentOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetReusableBaofuVerifyFeePayment indicates an expected call of GetReusableBaofuVerifyFeePayment.
+func (mr *MockStoreMockRecorder) GetReusableBaofuVerifyFeePayment(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReusableBaofuVerifyFeePayment", reflect.TypeOf((*MockStore)(nil).GetReusableBaofuVerifyFeePayment), ctx, arg)
 }
 
 // GetReview mocks base method.
@@ -15697,6 +15847,21 @@ func (mr *MockStoreMockRecorder) ListReconciliationReports(ctx, arg any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListReconciliationReports", reflect.TypeOf((*MockStore)(nil).ListReconciliationReports), ctx, arg)
 }
 
+// ListRecoverableBaofuAccountOpeningFlows mocks base method.
+func (m *MockStore) ListRecoverableBaofuAccountOpeningFlows(ctx context.Context, arg db.ListRecoverableBaofuAccountOpeningFlowsParams) ([]db.BaofuAccountOpeningFlow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListRecoverableBaofuAccountOpeningFlows", ctx, arg)
+	ret0, _ := ret[0].([]db.BaofuAccountOpeningFlow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListRecoverableBaofuAccountOpeningFlows indicates an expected call of ListRecoverableBaofuAccountOpeningFlows.
+func (mr *MockStoreMockRecorder) ListRecoverableBaofuAccountOpeningFlows(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRecoverableBaofuAccountOpeningFlows", reflect.TypeOf((*MockStore)(nil).ListRecoverableBaofuAccountOpeningFlows), ctx, arg)
+}
+
 // ListRecoverableBaofuMerchantReports mocks base method.
 func (m *MockStore) ListRecoverableBaofuMerchantReports(ctx context.Context, arg db.ListRecoverableBaofuMerchantReportsParams) ([]db.BaofuMerchantReport, error) {
 	m.ctrl.T.Helper()
@@ -16983,6 +17148,111 @@ func (m *MockStore) MarkBaofuAccountBindingProcessing(ctx context.Context, arg d
 func (mr *MockStoreMockRecorder) MarkBaofuAccountBindingProcessing(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBaofuAccountBindingProcessing", reflect.TypeOf((*MockStore)(nil).MarkBaofuAccountBindingProcessing), ctx, arg)
+}
+
+// MarkBaofuAccountOpeningFlowAppletAuthPending mocks base method.
+func (m *MockStore) MarkBaofuAccountOpeningFlowAppletAuthPending(ctx context.Context, arg db.MarkBaofuAccountOpeningFlowAppletAuthPendingParams) (db.BaofuAccountOpeningFlow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkBaofuAccountOpeningFlowAppletAuthPending", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountOpeningFlow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkBaofuAccountOpeningFlowAppletAuthPending indicates an expected call of MarkBaofuAccountOpeningFlowAppletAuthPending.
+func (mr *MockStoreMockRecorder) MarkBaofuAccountOpeningFlowAppletAuthPending(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBaofuAccountOpeningFlowAppletAuthPending", reflect.TypeOf((*MockStore)(nil).MarkBaofuAccountOpeningFlowAppletAuthPending), ctx, arg)
+}
+
+// MarkBaofuAccountOpeningFlowFailed mocks base method.
+func (m *MockStore) MarkBaofuAccountOpeningFlowFailed(ctx context.Context, arg db.MarkBaofuAccountOpeningFlowFailedParams) (db.BaofuAccountOpeningFlow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkBaofuAccountOpeningFlowFailed", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountOpeningFlow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkBaofuAccountOpeningFlowFailed indicates an expected call of MarkBaofuAccountOpeningFlowFailed.
+func (mr *MockStoreMockRecorder) MarkBaofuAccountOpeningFlowFailed(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBaofuAccountOpeningFlowFailed", reflect.TypeOf((*MockStore)(nil).MarkBaofuAccountOpeningFlowFailed), ctx, arg)
+}
+
+// MarkBaofuAccountOpeningFlowMerchantReportProcessing mocks base method.
+func (m *MockStore) MarkBaofuAccountOpeningFlowMerchantReportProcessing(ctx context.Context, arg db.MarkBaofuAccountOpeningFlowMerchantReportProcessingParams) (db.BaofuAccountOpeningFlow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkBaofuAccountOpeningFlowMerchantReportProcessing", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountOpeningFlow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkBaofuAccountOpeningFlowMerchantReportProcessing indicates an expected call of MarkBaofuAccountOpeningFlowMerchantReportProcessing.
+func (mr *MockStoreMockRecorder) MarkBaofuAccountOpeningFlowMerchantReportProcessing(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBaofuAccountOpeningFlowMerchantReportProcessing", reflect.TypeOf((*MockStore)(nil).MarkBaofuAccountOpeningFlowMerchantReportProcessing), ctx, arg)
+}
+
+// MarkBaofuAccountOpeningFlowOpeningProcessing mocks base method.
+func (m *MockStore) MarkBaofuAccountOpeningFlowOpeningProcessing(ctx context.Context, arg db.MarkBaofuAccountOpeningFlowOpeningProcessingParams) (db.BaofuAccountOpeningFlow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkBaofuAccountOpeningFlowOpeningProcessing", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountOpeningFlow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkBaofuAccountOpeningFlowOpeningProcessing indicates an expected call of MarkBaofuAccountOpeningFlowOpeningProcessing.
+func (mr *MockStoreMockRecorder) MarkBaofuAccountOpeningFlowOpeningProcessing(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBaofuAccountOpeningFlowOpeningProcessing", reflect.TypeOf((*MockStore)(nil).MarkBaofuAccountOpeningFlowOpeningProcessing), ctx, arg)
+}
+
+// MarkBaofuAccountOpeningFlowReady mocks base method.
+func (m *MockStore) MarkBaofuAccountOpeningFlowReady(ctx context.Context, arg db.MarkBaofuAccountOpeningFlowReadyParams) (db.BaofuAccountOpeningFlow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkBaofuAccountOpeningFlowReady", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountOpeningFlow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkBaofuAccountOpeningFlowReady indicates an expected call of MarkBaofuAccountOpeningFlowReady.
+func (mr *MockStoreMockRecorder) MarkBaofuAccountOpeningFlowReady(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBaofuAccountOpeningFlowReady", reflect.TypeOf((*MockStore)(nil).MarkBaofuAccountOpeningFlowReady), ctx, arg)
+}
+
+// MarkBaofuAccountOpeningFlowVerifyFeePending mocks base method.
+func (m *MockStore) MarkBaofuAccountOpeningFlowVerifyFeePending(ctx context.Context, arg db.MarkBaofuAccountOpeningFlowVerifyFeePendingParams) (db.BaofuAccountOpeningFlow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkBaofuAccountOpeningFlowVerifyFeePending", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountOpeningFlow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkBaofuAccountOpeningFlowVerifyFeePending indicates an expected call of MarkBaofuAccountOpeningFlowVerifyFeePending.
+func (mr *MockStoreMockRecorder) MarkBaofuAccountOpeningFlowVerifyFeePending(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBaofuAccountOpeningFlowVerifyFeePending", reflect.TypeOf((*MockStore)(nil).MarkBaofuAccountOpeningFlowVerifyFeePending), ctx, arg)
+}
+
+// MarkBaofuAccountOpeningFlowVerifyFeeProcessing mocks base method.
+func (m *MockStore) MarkBaofuAccountOpeningFlowVerifyFeeProcessing(ctx context.Context, arg db.MarkBaofuAccountOpeningFlowVerifyFeeProcessingParams) (db.BaofuAccountOpeningFlow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkBaofuAccountOpeningFlowVerifyFeeProcessing", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountOpeningFlow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkBaofuAccountOpeningFlowVerifyFeeProcessing indicates an expected call of MarkBaofuAccountOpeningFlowVerifyFeeProcessing.
+func (mr *MockStoreMockRecorder) MarkBaofuAccountOpeningFlowVerifyFeeProcessing(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkBaofuAccountOpeningFlowVerifyFeeProcessing", reflect.TypeOf((*MockStore)(nil).MarkBaofuAccountOpeningFlowVerifyFeeProcessing), ctx, arg)
 }
 
 // MarkBaofuMerchantReportAppletAuthFailed mocks base method.
@@ -18694,6 +18964,21 @@ func (m *MockStore) SetAddressAsDefault(ctx context.Context, arg db.SetAddressAs
 func (mr *MockStoreMockRecorder) SetAddressAsDefault(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetAddressAsDefault", reflect.TypeOf((*MockStore)(nil).SetAddressAsDefault), ctx, arg)
+}
+
+// SetBaofuAccountOpeningFlowProfilePending mocks base method.
+func (m *MockStore) SetBaofuAccountOpeningFlowProfilePending(ctx context.Context, arg db.SetBaofuAccountOpeningFlowProfilePendingParams) (db.BaofuAccountOpeningFlow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetBaofuAccountOpeningFlowProfilePending", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountOpeningFlow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetBaofuAccountOpeningFlowProfilePending indicates an expected call of SetBaofuAccountOpeningFlowProfilePending.
+func (mr *MockStoreMockRecorder) SetBaofuAccountOpeningFlowProfilePending(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetBaofuAccountOpeningFlowProfilePending", reflect.TypeOf((*MockStore)(nil).SetBaofuAccountOpeningFlowProfilePending), ctx, arg)
 }
 
 // SetBusinessHoursTx mocks base method.
@@ -22114,6 +22399,21 @@ func (mr *MockStoreMockRecorder) UpsertBaofuAccountBinding(ctx, arg any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertBaofuAccountBinding", reflect.TypeOf((*MockStore)(nil).UpsertBaofuAccountBinding), ctx, arg)
 }
 
+// UpsertBaofuAccountOpeningProfile mocks base method.
+func (m *MockStore) UpsertBaofuAccountOpeningProfile(ctx context.Context, arg db.UpsertBaofuAccountOpeningProfileParams) (db.BaofuAccountOpeningProfile, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertBaofuAccountOpeningProfile", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountOpeningProfile)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertBaofuAccountOpeningProfile indicates an expected call of UpsertBaofuAccountOpeningProfile.
+func (mr *MockStoreMockRecorder) UpsertBaofuAccountOpeningProfile(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertBaofuAccountOpeningProfile", reflect.TypeOf((*MockStore)(nil).UpsertBaofuAccountOpeningProfile), ctx, arg)
+}
+
 // UpsertBaofuMerchantReportProcessing mocks base method.
 func (m *MockStore) UpsertBaofuMerchantReportProcessing(ctx context.Context, arg db.UpsertBaofuMerchantReportProcessingParams) (db.BaofuMerchantReport, error) {
 	m.ctrl.T.Helper()
@@ -22469,4 +22769,19 @@ func (m *MockStore) UseVoucherTx(ctx context.Context, arg db.UseVoucherTxParams)
 func (mr *MockStoreMockRecorder) UseVoucherTx(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UseVoucherTx", reflect.TypeOf((*MockStore)(nil).UseVoucherTx), ctx, arg)
+}
+
+// VoidBaofuAccountOpeningFlow mocks base method.
+func (m *MockStore) VoidBaofuAccountOpeningFlow(ctx context.Context, arg db.VoidBaofuAccountOpeningFlowParams) (db.BaofuAccountOpeningFlow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VoidBaofuAccountOpeningFlow", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountOpeningFlow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// VoidBaofuAccountOpeningFlow indicates an expected call of VoidBaofuAccountOpeningFlow.
+func (mr *MockStoreMockRecorder) VoidBaofuAccountOpeningFlow(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VoidBaofuAccountOpeningFlow", reflect.TypeOf((*MockStore)(nil).VoidBaofuAccountOpeningFlow), ctx, arg)
 }

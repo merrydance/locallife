@@ -22,6 +22,7 @@ type OpenAccountRequest struct {
 	OwnerID                    int64
 	AccountType                string
 	OutRequestNo               string
+	LoginNo                    string
 	LegalName                  string
 	CertificateNo              string
 	CertificateType            string
@@ -132,6 +133,7 @@ func firstTrimmed(values ...string) string {
 
 type QueryAccountRequest struct {
 	OutRequestNo    string
+	LoginNo         string
 	ContractNo      string
 	AccountType     string
 	CertificateNo   string

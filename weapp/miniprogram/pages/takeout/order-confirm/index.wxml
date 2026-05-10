@@ -222,4 +222,5 @@
   >
     去支付
   </t-button>
+  <t-toast id="t-toast" />
 </view>

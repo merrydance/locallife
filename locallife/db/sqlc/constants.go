@@ -164,6 +164,9 @@ const (
 	ExternalPaymentProviderWechat = "wechat"
 	ExternalPaymentProviderBaofu  = "baofu"
 
+	PlatformAlertTypeSystemError = "SYSTEM_ERROR"
+	PlatformAlertLevelCritical   = "critical"
+
 	BaofuAccountOwnerTypeMerchant = "merchant"
 	BaofuAccountOwnerTypeRider    = "rider"
 	BaofuAccountOwnerTypeOperator = "operator"
@@ -218,6 +221,19 @@ const (
 	BaofuMerchantReportAppletAuthStateSucceeded   = "succeeded"
 	BaofuMerchantReportAppletAuthStateFailed      = "failed"
 	BaofuMerchantReportAppletAuthStateNotRequired = "not_required"
+
+	BaofuAccountOpeningProfileStatusIncomplete = "incomplete"
+	BaofuAccountOpeningProfileStatusComplete   = "complete"
+
+	BaofuAccountOpeningStateProfilePending           = "profile_pending"
+	BaofuAccountOpeningStateVerifyFeePending         = "verify_fee_pending"
+	BaofuAccountOpeningStateVerifyFeeProcessing      = "verify_fee_processing"
+	BaofuAccountOpeningStateOpeningProcessing        = "opening_processing"
+	BaofuAccountOpeningStateMerchantReportProcessing = "merchant_report_processing"
+	BaofuAccountOpeningStateAppletAuthPending        = "applet_auth_pending"
+	BaofuAccountOpeningStateReady                    = "ready"
+	BaofuAccountOpeningStateFailed                   = "failed"
+	BaofuAccountOpeningStateVoided                   = "voided"
 
 	ProfitSharingReceiverOwnerTypeRider    = "rider"
 	ProfitSharingReceiverOwnerTypeOperator = "operator"
@@ -286,14 +302,17 @@ const (
 	ExternalPaymentCommandTypeBaofuMerchantReportQuery  = "baofu_merchant_report_query"
 	ExternalPaymentCommandTypeBaofuBindSubConfig        = "baofu_bind_sub_config"
 
-	ExternalPaymentBusinessOwnerRiderDeposit  = "rider_deposit"
-	ExternalPaymentBusinessOwnerOrder         = "order"
-	ExternalPaymentBusinessOwnerReservation   = "reservation"
-	ExternalPaymentBusinessOwnerClaimRecovery = "claim_recovery"
-	ExternalPaymentBusinessOwnerProfitSharing = "profit_sharing"
-	ExternalPaymentBusinessOwnerSubsidy       = "subsidy"
-	ExternalPaymentBusinessOwnerApplyment     = "applyment"
-	ExternalPaymentBusinessOwnerMerchantFunds = "merchant_finance"
+	ExternalPaymentBusinessOwnerRiderDeposit   = "rider_deposit"
+	ExternalPaymentBusinessOwnerBaofuVerifyFee = "baofu_account_verify_fee"
+	ExternalPaymentBusinessOwnerOrder          = "order"
+	ExternalPaymentBusinessOwnerReservation    = "reservation"
+	ExternalPaymentBusinessOwnerClaimRecovery  = "claim_recovery"
+	ExternalPaymentBusinessOwnerProfitSharing  = "profit_sharing"
+	ExternalPaymentBusinessOwnerSubsidy        = "subsidy"
+	ExternalPaymentBusinessOwnerApplyment      = "applyment"
+	ExternalPaymentBusinessOwnerMerchantFunds  = "merchant_finance"
+
+	PaymentBusinessTypeBaofuAccountVerifyFee = "baofu_account_verify_fee"
 
 	ExternalPaymentObjectPayment             = "payment"
 	ExternalPaymentObjectCombinedPayment     = "combined_payment"

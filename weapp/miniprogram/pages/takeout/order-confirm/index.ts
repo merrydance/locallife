@@ -524,7 +524,7 @@ Page({
 
   async handlePayment(orderId: number) {
     try {
-      const paymentResult = await completePaymentWorkflow(await createOrderPayment(orderId))
+      const paymentResult = await completePaymentWorkflow(await createOrderPayment(orderId), { context: this })
       Navigation.toPaymentResult({
         status: paymentResult.status,
         paymentOrderId: paymentResult.paymentOrderId,
@@ -543,7 +543,7 @@ Page({
 
   async handleCombinedPayment(orderIds: number[]) {
     try {
-      const paymentResult = await completeCombinedPaymentWorkflow(await createCombinedPaymentOrder({ order_ids: orderIds }))
+      const paymentResult = await completeCombinedPaymentWorkflow(await createCombinedPaymentOrder({ order_ids: orderIds }), { context: this })
       const combinedPayment = paymentResult.combinedPayment
 
       if (isCombinedPaymentWorkflowPaid(paymentResult.status)) {

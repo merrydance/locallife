@@ -79,4 +79,5 @@
       </view>
     </block>
   </view>
+  <t-toast id="t-toast" />
 </view>

@@ -10,7 +10,7 @@ import { getStableBarHeights } from '../../../utils/responsive'
 const FINANCE_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 const BILLS_PAGE_PATH = '/pages/merchant/finance/bills/index'
 const SETTLEMENTS_PAGE_PATH = '/pages/merchant/finance/settlements/index'
-const SETTLEMENT_ACCOUNT_PAGE_PATH = '/pages/merchant/settings/applyment/settlement-account/index'
+const BAOFU_SETTLEMENT_ACCOUNT_PAGE_PATH = '/pages/merchant/finance/settlement-account/index'
 
 interface FinanceEntryView {
   id: string
@@ -35,9 +35,9 @@ function buildFinanceEntries(): FinanceEntryView[] {
     },
     {
       id: 'settlement-account',
-      title: '结算账户',
+      title: '宝付结算账户',
       icon: 'creditcard',
-      path: SETTLEMENT_ACCOUNT_PAGE_PATH
+      path: BAOFU_SETTLEMENT_ACCOUNT_PAGE_PATH
     }
   ]
 }

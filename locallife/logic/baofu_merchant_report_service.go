@@ -121,7 +121,7 @@ func (s *BaofuMerchantReportService) SubmitWechatMerchantReport(ctx context.Cont
 	}
 	upstreamResult, err := s.client.SubmitWechatReport(ctx, req)
 	if err != nil {
-		return db.BaofuMerchantReport{}, err
+		return report, err
 	}
 	if upstreamResult == nil {
 		return db.BaofuMerchantReport{}, ErrBaofuMerchantReportServiceNotConfigured
@@ -179,7 +179,7 @@ func (s *BaofuMerchantReportService) RecoverWechatMerchantReport(ctx context.Con
 		}
 		result, err := s.client.QueryReport(ctx, req)
 		if err != nil {
-			return db.BaofuMerchantReport{}, err
+			return report, err
 		}
 		if result == nil {
 			return db.BaofuMerchantReport{}, ErrBaofuMerchantReportServiceNotConfigured
@@ -279,7 +279,7 @@ func (s *BaofuMerchantReportService) bindApplet(ctx context.Context, report db.B
 	}
 	result, err := s.client.BindSubConfig(ctx, bindReq)
 	if err != nil {
-		return db.BaofuMerchantReport{}, err
+		return report, err
 	}
 	if result != nil && strings.TrimSpace(result.ResultCode) != "" && strings.ToUpper(strings.TrimSpace(result.ResultCode)) != "SUCCESS" {
 		return s.store.MarkBaofuMerchantReportAppletAuthFailed(ctx, db.MarkBaofuMerchantReportAppletAuthFailedParams{ID: report.ID, FailureCode: baofuReportText(result.ErrorCode), FailureMessage: baofuReportText(result.ErrorMessage)})

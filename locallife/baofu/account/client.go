@@ -44,7 +44,7 @@ func (c *Client) QueryAccount(ctx context.Context, req contracts.QueryAccountReq
 		Version:         contracts.OfficialQueryAccountVersion,
 		AccountType:     officialAccountType(req.AccountType),
 		ContractNo:      strings.TrimSpace(req.ContractNo),
-		LoginNo:         strings.TrimSpace(req.OutRequestNo),
+		LoginNo:         strings.TrimSpace(req.LoginNo),
 		CertificateNo:   strings.TrimSpace(req.CertificateNo),
 		CertificateType: strings.TrimSpace(req.CertificateType),
 		PlatformNo:      strings.TrimSpace(req.PlatformNo),
@@ -169,51 +169,46 @@ func officialOpenAccountRequest(req contracts.OpenAccountRequest, noticeURL stri
 		return contracts.OfficialOpenAccountRequest{}, err
 	}
 	accountType := officialAccountType(req.AccountType)
+	loginNo := firstNonEmpty(req.LoginNo, req.OutRequestNo)
 	var accountInfo any
 	switch strings.ToLower(strings.TrimSpace(req.AccountType)) {
 	case "personal":
 		cardUserName := firstNonEmpty(req.CardUserName, req.LegalName)
 		accountInfo = contracts.OfficialPersonalAccountInfo{
-			TransSerialNo:              strings.TrimSpace(req.OutRequestNo),
-			LoginNo:                    strings.TrimSpace(req.OutRequestNo),
-			CustomerName:               strings.TrimSpace(req.LegalName),
-			CertificateType:            contracts.OfficialCertificateTypeID,
-			CertificateNo:              strings.TrimSpace(req.CertificateNo),
-			CardNo:                     strings.TrimSpace(req.BankAccountNo),
-			MobileNo:                   strings.TrimSpace(req.BankMobile),
-			CardUserName:               strings.TrimSpace(cardUserName),
-			PlatformNo:                 strings.TrimSpace(req.PlatformNo),
-			PlatformTerminalID:         strings.TrimSpace(req.PlatformTerminalID),
-			QualificationTransSerialNo: strings.TrimSpace(req.QualificationTransSerialNo),
+			TransSerialNo:   strings.TrimSpace(req.OutRequestNo),
+			LoginNo:         strings.TrimSpace(loginNo),
+			CustomerName:    strings.TrimSpace(req.LegalName),
+			CertificateType: contracts.OfficialCertificateTypeID,
+			CertificateNo:   strings.TrimSpace(req.CertificateNo),
+			CardNo:          strings.TrimSpace(req.BankAccountNo),
+			MobileNo:        strings.TrimSpace(req.BankMobile),
+			CardUserName:    strings.TrimSpace(cardUserName),
 		}
 	default:
 		certificateType := firstNonEmpty(req.CertificateType, contracts.OfficialBusinessCertificateTypeLicense)
 		accountInfo = contracts.OfficialBusinessAccountInfo{
-			TransSerialNo:              strings.TrimSpace(req.OutRequestNo),
-			LoginNo:                    strings.TrimSpace(req.OutRequestNo),
-			Email:                      strings.TrimSpace(req.Email),
-			SelfEmployed:               req.SelfEmployed,
-			CustomerName:               strings.TrimSpace(firstNonEmpty(req.CustomerName, req.LegalName)),
-			AliasName:                  strings.TrimSpace(req.AliasName),
-			CertificateType:            strings.TrimSpace(certificateType),
-			CertificateNo:              strings.TrimSpace(req.CertificateNo),
-			CorporateName:              strings.TrimSpace(req.CorporateName),
-			CorporateCertType:          strings.TrimSpace(req.CorporateCertType),
-			CorporateCertID:            strings.TrimSpace(req.CorporateCertID),
-			CorporateMobile:            strings.TrimSpace(req.CorporateMobile),
-			IndustryID:                 strings.TrimSpace(req.IndustryID),
-			ContactName:                strings.TrimSpace(req.ContactName),
-			ContactMobile:              strings.TrimSpace(req.ContactMobile),
-			CardNo:                     strings.TrimSpace(req.BankAccountNo),
-			BankName:                   strings.TrimSpace(req.BankName),
-			DepositBankProvince:        strings.TrimSpace(req.DepositBankProvince),
-			DepositBankCity:            strings.TrimSpace(req.DepositBankCity),
-			DepositBankName:            strings.TrimSpace(req.DepositBankName),
-			RegisterCapital:            strings.TrimSpace(req.RegisterCapital),
-			CardUserName:               strings.TrimSpace(req.CardUserName),
-			PlatformNo:                 strings.TrimSpace(req.PlatformNo),
-			PlatformTerminalID:         strings.TrimSpace(req.PlatformTerminalID),
-			QualificationTransSerialNo: strings.TrimSpace(req.QualificationTransSerialNo),
+			TransSerialNo:       strings.TrimSpace(req.OutRequestNo),
+			LoginNo:             strings.TrimSpace(loginNo),
+			Email:               strings.TrimSpace(req.Email),
+			SelfEmployed:        req.SelfEmployed,
+			CustomerName:        strings.TrimSpace(firstNonEmpty(req.CustomerName, req.LegalName)),
+			AliasName:           strings.TrimSpace(req.AliasName),
+			CertificateType:     strings.TrimSpace(certificateType),
+			CertificateNo:       strings.TrimSpace(req.CertificateNo),
+			CorporateName:       strings.TrimSpace(req.CorporateName),
+			CorporateCertType:   strings.TrimSpace(req.CorporateCertType),
+			CorporateCertID:     strings.TrimSpace(req.CorporateCertID),
+			CorporateMobile:     strings.TrimSpace(req.CorporateMobile),
+			IndustryID:          strings.TrimSpace(req.IndustryID),
+			ContactName:         strings.TrimSpace(req.ContactName),
+			ContactMobile:       strings.TrimSpace(req.ContactMobile),
+			CardNo:              strings.TrimSpace(req.BankAccountNo),
+			BankName:            strings.TrimSpace(req.BankName),
+			DepositBankProvince: strings.TrimSpace(req.DepositBankProvince),
+			DepositBankCity:     strings.TrimSpace(req.DepositBankCity),
+			DepositBankName:     strings.TrimSpace(req.DepositBankName),
+			RegisterCapital:     strings.TrimSpace(req.RegisterCapital),
+			CardUserName:        strings.TrimSpace(req.CardUserName),
 		}
 	}
 	officialReq := contracts.OfficialOpenAccountRequest{

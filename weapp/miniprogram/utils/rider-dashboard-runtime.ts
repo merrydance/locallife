@@ -676,6 +676,10 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
     wx.navigateTo({ url: '/pages/rider/income/index' })
   },
 
+  onGoToSettlementAccount() {
+    wx.navigateTo({ url: '/pages/rider/settlement-account/index' })
+  },
+
   async getLocation(): Promise<WechatMiniprogram.GetLocationSuccessCallbackResult> {
     return new Promise((resolve, reject) => {
       wx.getLocation({
@@ -954,6 +958,11 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
     const { key } = e.currentTarget.dataset as { key?: string }
     if (key === 'deposit') {
       this.onGoToDeposit()
+      return
+    }
+
+    if (key === 'settlement_account') {
+      this.onGoToSettlementAccount()
       return
     }
 

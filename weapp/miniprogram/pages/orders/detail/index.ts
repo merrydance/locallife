@@ -396,7 +396,7 @@ Page({
     try {
       const combinedPaymentID = orderDTO?.payment_context?.combined_payment_id
       if (combinedPaymentID) {
-        const combinedResult = await completeCombinedPaymentWorkflow(await recoverCombinedPaymentOrder(combinedPaymentID))
+        const combinedResult = await completeCombinedPaymentWorkflow(await recoverCombinedPaymentOrder(combinedPaymentID), { context: this })
         const combinedPayment = combinedResult.combinedPayment
 
         if (isCombinedPaymentWorkflowPaid(combinedResult.status)) {
@@ -420,7 +420,7 @@ Page({
           return
         }
 
-        const fallbackResult = await completePaymentWorkflow(await createOrderPayment(parseInt(orderId, 10)))
+        const fallbackResult = await completePaymentWorkflow(await createOrderPayment(parseInt(orderId, 10)), { context: this })
 
         Navigation.toPaymentResult({
           status: fallbackResult.status,
@@ -435,7 +435,8 @@ Page({
 
       const paymentResult = await startPaymentOrderWorkflow({
         orderId: parseInt(orderId, 10),
-        businessType: 'order'
+        businessType: 'order',
+        context: this
       })
       
       const { order } = this.data

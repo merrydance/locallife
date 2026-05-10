@@ -133,6 +133,45 @@ func (q *Queries) CreatePaymentOrder(ctx context.Context, arg CreatePaymentOrder
 	return i, err
 }
 
+const getBaofuVerifyFeePaymentByAttach = `-- name: GetBaofuVerifyFeePaymentByAttach :one
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
+WHERE business_type = 'baofu_account_verify_fee'
+  AND attach = $1
+  AND status IN ('pending', 'paid')
+ORDER BY
+    CASE WHEN status = 'paid' THEN 0 ELSE 1 END,
+    created_at DESC,
+    id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetBaofuVerifyFeePaymentByAttach(ctx context.Context, attach pgtype.Text) (PaymentOrder, error) {
+	row := q.db.QueryRow(ctx, getBaofuVerifyFeePaymentByAttach, attach)
+	var i PaymentOrder
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.ReservationID,
+		&i.UserID,
+		&i.PaymentType,
+		&i.BusinessType,
+		&i.Amount,
+		&i.OutTradeNo,
+		&i.TransactionID,
+		&i.PrepayID,
+		&i.Status,
+		&i.PaidAt,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.Attach,
+		&i.CombinedPaymentID,
+		&i.ProcessedAt,
+		&i.PaymentChannel,
+		&i.RequiresProfitSharing,
+	)
+	return i, err
+}
+
 const getLatestPaymentOrderByBusinessTypeAndAttach = `-- name: GetLatestPaymentOrderByBusinessTypeAndAttach :one
 SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
 WHERE business_type = $1
@@ -493,6 +532,61 @@ type GetPendingPaymentOrderByUserAndBusinessTypeParams struct {
 
 func (q *Queries) GetPendingPaymentOrderByUserAndBusinessType(ctx context.Context, arg GetPendingPaymentOrderByUserAndBusinessTypeParams) (PaymentOrder, error) {
 	row := q.db.QueryRow(ctx, getPendingPaymentOrderByUserAndBusinessType, arg.UserID, arg.BusinessType, arg.Amount)
+	var i PaymentOrder
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.ReservationID,
+		&i.UserID,
+		&i.PaymentType,
+		&i.BusinessType,
+		&i.Amount,
+		&i.OutTradeNo,
+		&i.TransactionID,
+		&i.PrepayID,
+		&i.Status,
+		&i.PaidAt,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.Attach,
+		&i.CombinedPaymentID,
+		&i.ProcessedAt,
+		&i.PaymentChannel,
+		&i.RequiresProfitSharing,
+	)
+	return i, err
+}
+
+const getReusableBaofuVerifyFeePayment = `-- name: GetReusableBaofuVerifyFeePayment :one
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at, payment_channel, requires_profit_sharing FROM payment_orders
+WHERE business_type = 'baofu_account_verify_fee'
+  AND attach = $1
+  AND user_id = $2
+  AND amount = $3
+  AND payment_type = 'miniprogram'
+  AND payment_channel = 'direct'
+  AND requires_profit_sharing = false
+  AND order_id IS NULL
+  AND reservation_id IS NULL
+  AND (
+      status = 'paid'
+      OR (status = 'pending' AND expires_at > now())
+  )
+ORDER BY
+    CASE WHEN status = 'paid' THEN 0 ELSE 1 END,
+    created_at DESC,
+    id DESC
+LIMIT 1
+`
+
+type GetReusableBaofuVerifyFeePaymentParams struct {
+	Attach pgtype.Text `json:"attach"`
+	UserID int64       `json:"user_id"`
+	Amount int64       `json:"amount"`
+}
+
+func (q *Queries) GetReusableBaofuVerifyFeePayment(ctx context.Context, arg GetReusableBaofuVerifyFeePaymentParams) (PaymentOrder, error) {
+	row := q.db.QueryRow(ctx, getReusableBaofuVerifyFeePayment, arg.Attach, arg.UserID, arg.Amount)
 	var i PaymentOrder
 	err := row.Scan(
 		&i.ID,
