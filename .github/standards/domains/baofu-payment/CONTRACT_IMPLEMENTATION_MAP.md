@@ -68,8 +68,8 @@ withdrawal
 
 | Identifier | Baofoo source | Local meaning | Must not be confused with |
 | --- | --- | --- | --- |
-| Collect `merId/terId` | Baofoo aggregate/report/acquiring contract | Level-1 transaction merchant/terminal for collecting and aggregate payment/report APIs | BaoCaiTong second-level account; WeChat `subMchId`; share receiver |
-| Payout `memberId/terminalId` | Baofoo account/payout contract | Level-1 merchant/terminal for account/withdraw union-gw APIs when configured | Aggregate collect merchant identity |
+| Collect `merId/terId` or `memberId/terminalId` | Baofoo aggregate/report/acquiring contract and current BaoCaiTong account setup | Level-1 collection/transaction merchant/terminal for account open/query/balance, aggregate payment, report, share, refund, and transfer-style APIs | Payout merchant identity; BaoCaiTong second-level account; WeChat `subMchId`; share receiver |
+| Payout `memberId/terminalId` | Baofoo payout contract | Level-1 payout merchant/terminal for withdrawal and withdrawal-query union-gw APIs in the current production setup | Aggregate collect merchant identity; account-open identity |
 | `contractNo` | Account open/query result | BaoCaiTong customer/account number; current source for local `sharing_mer_id` after Baofoo confirmation | WeChat channel `subMchId` |
 | `sharing_mer_id` | Local persisted account binding | BaoCaiTong second-level account used in `sharingDetails[].sharingMerId` | Level-1 `merId`; `subMchId`; openid |
 | `subMchId` / `sub_mch_id` | `merchant_report` / `merchant_report_query` channel return | WeChat/Alipay reported channel merchant identity for `unified_order.subMchId` | Share receiver; BaoCaiTong account |

@@ -27,7 +27,7 @@ func (c *Client) OpenAccount(ctx context.Context, req contracts.OpenAccountReque
 		return nil, err
 	}
 	var result officialAccountResult
-	if err := c.root.PostAccount(ctx, "T-1001-013-01", c.merchantID(""), c.terminalID(""), officialReq, &result); err != nil {
+	if err := c.root.PostAccount(ctx, "T-1001-013-01", c.collectMerchantID(), c.collectTerminalID(), officialReq, &result); err != nil {
 		return nil, err
 	}
 	if err := result.validateOpenAccountResponse(); err != nil {
@@ -53,7 +53,7 @@ func (c *Client) QueryAccount(ctx context.Context, req contracts.QueryAccountReq
 		return nil, err
 	}
 	var result officialAccountResult
-	if err := c.root.PostAccount(ctx, "T-1001-013-03", c.merchantID(""), c.terminalID(""), officialReq, &result); err != nil {
+	if err := c.root.PostAccount(ctx, "T-1001-013-03", c.collectMerchantID(), c.collectTerminalID(), officialReq, &result); err != nil {
 		return nil, err
 	}
 	if err := result.validateQueryAccountResponse(); err != nil {
@@ -158,6 +158,14 @@ func (c *Client) terminalID(value string) string {
 		return strings.TrimSpace(value)
 	}
 	return c.root.Config().PayoutTerminalID
+}
+
+func (c *Client) collectMerchantID() string {
+	return c.root.Config().CollectMerchantID
+}
+
+func (c *Client) collectTerminalID() string {
+	return c.root.Config().CollectTerminalID
 }
 
 func (c *Client) accountOpenNotifyURL() string {

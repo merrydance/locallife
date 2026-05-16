@@ -139,7 +139,7 @@ func TestAccountClientOpenAccountUsesConfiguredNotifyBaseURL(t *testing.T) {
 	require.NotContains(t, string(env.Body), "placeholder.local")
 }
 
-func TestAccountClientOpenAndQueryAccountDefaultToPayoutIdentity(t *testing.T) {
+func TestAccountClientOpenAndQueryAccountDefaultToCollectIdentity(t *testing.T) {
 	openDoer := &accountRecordingDoer{responseBody: accountOpenAcceptedResponseForTest("OPEN202605040001", "测试用户")}
 	openClient := NewClient(testBaofuRootClient(t, openDoer))
 
@@ -155,11 +155,11 @@ func TestAccountClientOpenAndQueryAccountDefaultToPayoutIdentity(t *testing.T) {
 
 	require.NoError(t, err)
 	openQuery := openDoer.request.URL.Query()
-	require.Equal(t, "102004466", openQuery.Get("memberId"))
-	require.Equal(t, "200005201", openQuery.Get("terminalId"))
+	require.Equal(t, "102004465", openQuery.Get("memberId"))
+	require.Equal(t, "200005200", openQuery.Get("terminalId"))
 	openEnv := accountRequestEnvelopeForTest(t, openDoer)
-	require.Equal(t, "102004466", openEnv.Header.MemberID)
-	require.Equal(t, "200005201", openEnv.Header.TerminalID)
+	require.Equal(t, "102004465", openEnv.Header.MemberID)
+	require.Equal(t, "200005200", openEnv.Header.TerminalID)
 
 	queryDoer := &accountRecordingDoer{responseBody: map[string]any{"retCode": 1, "result": []map[string]any{{"transSerialNo": "OPEN202605040001", "contractNo": "CM202605040001", "state": 1}}}}
 	queryClient := NewClient(testBaofuRootClient(t, queryDoer))
@@ -171,11 +171,11 @@ func TestAccountClientOpenAndQueryAccountDefaultToPayoutIdentity(t *testing.T) {
 
 	require.NoError(t, err)
 	queryValues := queryDoer.request.URL.Query()
-	require.Equal(t, "102004466", queryValues.Get("memberId"))
-	require.Equal(t, "200005201", queryValues.Get("terminalId"))
+	require.Equal(t, "102004465", queryValues.Get("memberId"))
+	require.Equal(t, "200005200", queryValues.Get("terminalId"))
 	queryEnv := accountRequestEnvelopeForTest(t, queryDoer)
-	require.Equal(t, "102004466", queryEnv.Header.MemberID)
-	require.Equal(t, "200005201", queryEnv.Header.TerminalID)
+	require.Equal(t, "102004465", queryEnv.Header.MemberID)
+	require.Equal(t, "200005200", queryEnv.Header.TerminalID)
 }
 
 func TestAccountClientOpenAccountRejectsPersonalTwoFactorBeforeHTTP(t *testing.T) {
