@@ -410,8 +410,8 @@ Source: `https://doc.mandao.com/docs/bct/openAccNotify`; updated: `2026-04-22 02
 
 | Path | 字段名 | 类型 | 长度 | 必填 | 枚举/条件/格式要求 | 官方描述 | 契约实现要求 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `openAccNotify.data_content.member_id` | `member_id` | String | 10 | M | length=10 | 商户号 | Validate required; add missing-field test; Preserve official length/type at boundary |
-| `openAccNotify.data_content.terminal_id` | `terminal_id` | String | 10 | M | length=10 | 终端号 | Validate required; add missing-field test; Preserve official length/type at boundary |
+| `openAccNotify.data_content.member_id` | `member_id` | String | 10 | M | length=10 | 商户号 | Validate required; accept official-example `memberId` alias inbound; require plaintext identity to match transport identity; Preserve official length/type at boundary |
+| `openAccNotify.data_content.terminal_id` | `terminal_id` | String | 10 | M | length=10 | 终端号 | Validate required; accept official-example `terminalId` alias inbound; require plaintext identity to match transport identity; Preserve official length/type at boundary |
 | `openAccNotify.data_content.memberType` | `memberType` | int | 1 | M | length=1 | 类型:类型:1-个人,2-企业,3-个体工商户 | Validate required; add missing-field test; Preserve official length/type at boundary |
 | `openAccNotify.data_content.state` | `state` | String | 4 | M | length=4 | 状态 1 成功 0 失败 -1 异常 2开户处理中 | Validate required; add missing-field test; Preserve official length/type at boundary |
 | `openAccNotify.data_content.errorCode` | `errorCode` | String | 20 | C | length=20 | 错误码 | Encode condition from notes; add positive/negative conditional tests; Preserve official length/type at boundary |

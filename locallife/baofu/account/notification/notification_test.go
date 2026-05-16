@@ -32,6 +32,22 @@ func TestParserParsesOfficialOpenAccountNotification(t *testing.T) {
 	require.True(t, json.Valid(notification.Raw))
 }
 
+func TestParserParsesOpenAccountNotificationWithCamelCasePlaintextIdentity(t *testing.T) {
+	privatePEM, publicPEM := generateNotificationTestKeyPair(t)
+	plaintext := []byte(`{"memberId":"102004465","terminalId":"200005200","memberType":"1","state":"1","errorCode":"","errorMsg":"","transSerialNo":"OPEN123","loginNo":"person002","customerName":"张宝","contractNo":"CP690000000000001468","noticeType":"OPEN_ACC"}`)
+	body := officialNotificationQueryForTest(t, privatePEM, plaintext)
+
+	parser := NewParser(publicPEM)
+	notification, err := parser.ParseOpenAccountNotification(body)
+
+	require.NoError(t, err)
+	require.Equal(t, "102004465", notification.MemberID)
+	require.Equal(t, "200005200", notification.TerminalID)
+	require.Equal(t, "OPEN123", notification.OutRequestNo)
+	require.Equal(t, "CP690000000000001468", notification.ContractNo)
+	require.Equal(t, "active", notification.OpenState)
+}
+
 func TestParserRejectsOpenAccountNotificationTransportIdentityMismatch(t *testing.T) {
 	privatePEM, publicPEM := generateNotificationTestKeyPair(t)
 	plaintext := []byte(`{"member_id":"102004465","terminal_id":"200005200","memberType":"2","state":"1","errorCode":"","errorMsg":"","transSerialNo":"OPEN123","loginNo":"merchant-login-001","customerName":"商户A","contractNo":"CM_SHARE_123","noticeType":"OPEN_ACC"}`)

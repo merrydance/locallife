@@ -146,25 +146,35 @@ func parseOfficialNotificationValues(body []byte) (url.Values, error) {
 
 func ParseOpenAccountPlaintext(plaintext []byte) (*AccountNotification, error) {
 	var payload struct {
-		MemberID      string `json:"member_id"`
-		TerminalID    string `json:"terminal_id"`
-		MemberType    string `json:"memberType"`
-		State         string `json:"state"`
-		ErrorCode     string `json:"errorCode"`
-		ErrorMessage  string `json:"errorMsg"`
-		TransSerialNo string `json:"transSerialNo"`
-		LoginNo       string `json:"loginNo"`
-		CustomerName  string `json:"customerName"`
-		ContractNo    string `json:"contractNo"`
-		NoticeType    string `json:"noticeType"`
-		OccurredAt    string `json:"occurredAt"`
+		MemberID        string `json:"member_id"`
+		MemberIDCamel   string `json:"memberId"`
+		TerminalID      string `json:"terminal_id"`
+		TerminalIDCamel string `json:"terminalId"`
+		MemberType      string `json:"memberType"`
+		State           string `json:"state"`
+		ErrorCode       string `json:"errorCode"`
+		ErrorMessage    string `json:"errorMsg"`
+		TransSerialNo   string `json:"transSerialNo"`
+		LoginNo         string `json:"loginNo"`
+		CustomerName    string `json:"customerName"`
+		ContractNo      string `json:"contractNo"`
+		NoticeType      string `json:"noticeType"`
+		OccurredAt      string `json:"occurredAt"`
 	}
 	if err := json.Unmarshal(plaintext, &payload); err != nil {
 		return nil, err
 	}
+	memberID, err := openAccountNotificationIdentityValue("member_id", payload.MemberID, "memberId", payload.MemberIDCamel)
+	if err != nil {
+		return nil, err
+	}
+	terminalID, err := openAccountNotificationIdentityValue("terminal_id", payload.TerminalID, "terminalId", payload.TerminalIDCamel)
+	if err != nil {
+		return nil, err
+	}
 	for _, field := range []struct{ name, value string }{
-		{"member_id", payload.MemberID},
-		{"terminal_id", payload.TerminalID},
+		{"member_id", memberID},
+		{"terminal_id", terminalID},
 		{"memberType", payload.MemberType},
 		{"state", payload.State},
 		{"transSerialNo", payload.TransSerialNo},
@@ -188,8 +198,8 @@ func ParseOpenAccountPlaintext(plaintext []byte) (*AccountNotification, error) {
 	}
 	contractNo := strings.TrimSpace(payload.ContractNo)
 	return &AccountNotification{
-		MemberID:      strings.TrimSpace(payload.MemberID),
-		TerminalID:    strings.TrimSpace(payload.TerminalID),
+		MemberID:      memberID,
+		TerminalID:    terminalID,
 		OutRequestNo:  outRequestNo,
 		ContractNo:    contractNo,
 		UpstreamState: strings.TrimSpace(payload.State),
@@ -199,6 +209,18 @@ func ParseOpenAccountPlaintext(plaintext []byte) (*AccountNotification, error) {
 		OccurredAt:    occurredAt,
 		Raw:           plaintext,
 	}, nil
+}
+
+func openAccountNotificationIdentityValue(snakeName string, snakeValue string, camelName string, camelValue string) (string, error) {
+	snakeValue = strings.TrimSpace(snakeValue)
+	camelValue = strings.TrimSpace(camelValue)
+	if snakeValue != "" && camelValue != "" && snakeValue != camelValue {
+		return "", errors.New("baofu open account notification " + snakeName + " does not match " + camelName)
+	}
+	if snakeValue != "" {
+		return snakeValue, nil
+	}
+	return camelValue, nil
 }
 
 func ParseWithdrawPlaintext(plaintext []byte) (*WithdrawNotification, error) {
