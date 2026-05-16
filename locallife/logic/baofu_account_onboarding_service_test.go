@@ -1,6 +1,7 @@
 package logic
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,8 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -445,6 +448,89 @@ func TestBaofuAccountOnboardingServiceApplyAccountOpenResult_NonMerchantOwnersSk
 	}
 }
 
+func TestBaofuAccountOnboardingServiceApplyAccountOpenResult_FailedResultReturnsSafeGuidanceAndLogsCode(t *testing.T) {
+	var logs bytes.Buffer
+	previousLogger := log.Logger
+	log.Logger = zerolog.New(&logs)
+	t.Cleanup(func() { log.Logger = previousLogger })
+
+	store := newFakeBaofuAccountOnboardingStore()
+	service := NewBaofuAccountOnboardingService(store, nil, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931"})
+	flow := db.BaofuAccountOpeningFlow{
+		ID:                12,
+		OwnerType:         db.BaofuAccountOwnerTypeOperator,
+		OwnerID:           1,
+		AccountType:       db.BaofuAccountTypePersonal,
+		State:             db.BaofuAccountOpeningStateOpeningProcessing,
+		OpenTransSerialNo: pgtype.Text{String: "BFO_DUPLICATE_CURRENT", Valid: true},
+		LoginNo:           pgtype.Text{String: "LLBFOO0000000999", Valid: true},
+	}
+	store.flows = append(store.flows, flow)
+	store.activeBinding = db.BaofuAccountBinding{ID: 22, OwnerType: flow.OwnerType, OwnerID: flow.OwnerID, AccountType: flow.AccountType, OpenState: db.BaofuAccountOpenStateProcessing}
+
+	applied, err := service.ApplyAccountOpenResult(context.Background(), flow, baofucontracts.AccountResult{
+		OpenState:   db.BaofuAccountOpenStateFailed,
+		FailCode:    "BF00060",
+		FailMessage: "该子商户已开户，请勿重复提交，login_no=LLBFOO0000000999",
+		Raw:         []byte(`{"state":"0","errorCode":"BF00060"}`),
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, db.BaofuAccountOpeningStateFailed, applied.Flow.State)
+	require.Equal(t, "BF00060", applied.Flow.FailureCode.String)
+	result := baofuOpeningResult(applied.Flow, db.BaofuAccountOpeningProfile{ProfileStatus: db.BaofuAccountOpeningProfileStatusComplete})
+	require.Equal(t, "该主体已存在宝付开户记录，请联系平台核对账户状态", result.StatusDesc)
+	require.Contains(t, logs.String(), "baofu account opening flow marked failed")
+	require.Contains(t, logs.String(), `"failure_code":"BF00060"`)
+	require.Contains(t, logs.String(), `"failure_category":"user_action_required"`)
+	require.NotContains(t, logs.String(), "该子商户已开户")
+	require.NotContains(t, logs.String(), "LLBFOO0000000999")
+}
+
+func TestBaofuAccountOnboardingServiceApplyAccountOpenResult_DuplicateOpenReconcilesByQuery(t *testing.T) {
+	store := newFakeBaofuAccountOnboardingStore()
+	client := &fakeBaofuOnboardingAccountClient{
+		queryResult: &baofucontracts.AccountResult{
+			OutRequestNo:  "BFO_DUPLICATE_PREVIOUS",
+			ContractNo:    "CP2026051600011958",
+			SharingMerID:  "CP2026051600011958",
+			OpenState:     db.BaofuAccountOpenStateActive,
+			UpstreamState: "1",
+			Raw:           []byte(`{"transSerialNo":"BFO_DUPLICATE_PREVIOUS","contractNo":"CP2026051600011958"}`),
+		},
+	}
+	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "1338125"})
+	profile := store.mustUpsertProfile(t, db.BaofuAccountOwnerTypeOperator, 1, db.BaofuAccountTypePersonal)
+	flow := store.mustCreateFlow(t, db.BaofuAccountOwnerTypeOperator, 1, db.BaofuAccountTypePersonal, profile.ID)
+	flow.State = db.BaofuAccountOpeningStateOpeningProcessing
+	flow.OpenTransSerialNo = pgtype.Text{String: "BFO_DUPLICATE_CURRENT", Valid: true}
+	flow.LoginNo = pgtype.Text{String: "LLBFOO0000000999", Valid: true}
+	store.flows[0] = flow
+	store.activeBinding = db.BaofuAccountBinding{ID: 22, OwnerType: flow.OwnerType, OwnerID: flow.OwnerID, AccountType: flow.AccountType, LoginNo: flow.LoginNo, LastOpenTransSerialNo: flow.OpenTransSerialNo, OpenState: db.BaofuAccountOpenStateProcessing}
+
+	applied, err := service.ApplyAccountOpenResult(context.Background(), flow, baofucontracts.AccountResult{
+		OpenState:     db.BaofuAccountOpenStateFailed,
+		UpstreamState: "0",
+		FailCode:      "BF00060",
+		FailMessage:   "该子商户已开户，请勿重复提交",
+		Raw:           []byte(`{"state":"0","errorCode":"BF00060"}`),
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, db.BaofuAccountOpeningStateReady, applied.Flow.State)
+	require.NotNil(t, applied.Binding)
+	require.Equal(t, db.BaofuAccountOpenStateActive, applied.Binding.OpenState)
+	require.Equal(t, "CP2026051600011958", applied.Binding.ContractNo.String)
+	require.Equal(t, "CP2026051600011958", applied.Binding.SharingMerID.String)
+	require.Equal(t, "LLBFOO0000000999", client.lastQuery.LoginNo)
+	require.Equal(t, "110101199001011234", client.lastQuery.CertificateNo)
+	require.Equal(t, baofucontracts.OfficialCertificateTypeID, client.lastQuery.CertificateType)
+	require.Equal(t, "1338125", client.lastQuery.PlatformNo)
+	require.Equal(t, db.BaofuAccountOpeningStateReady, store.flows[0].State)
+	require.Equal(t, pgtype.Text{}, store.flows[0].FailureCode)
+	require.Equal(t, pgtype.Text{}, store.flows[0].FailureMessage)
+}
+
 func TestBaofuAccountOnboardingServiceStart_MerchantActiveBindingWaitsForAppletAuth(t *testing.T) {
 	store := newFakeBaofuAccountOnboardingStore()
 	store.activeBinding = db.BaofuAccountBinding{
@@ -632,6 +718,42 @@ func TestBaofuAccountOnboardingServiceRecoverOpeningQueriesByLoginNoAndAppliesRe
 	require.Equal(t, baofucontracts.OfficialCertificateTypeID, client.lastQuery.CertificateType)
 	require.Equal(t, "100000", client.lastQuery.PlatformNo)
 	require.False(t, store.platformFeeLedgerCreated)
+}
+
+func TestBaofuAccountOnboardingServiceRecoverOpeningReconcilesDuplicateFailedFlow(t *testing.T) {
+	store := newFakeBaofuAccountOnboardingStore()
+	client := &fakeBaofuOnboardingAccountClient{
+		queryResult: &baofucontracts.AccountResult{
+			OutRequestNo:  "BFO_DUPLICATE_PREVIOUS",
+			ContractNo:    "CP2026051600011958",
+			SharingMerID:  "CP2026051600011958",
+			OpenState:     db.BaofuAccountOpenStateActive,
+			UpstreamState: "1",
+			Raw:           []byte(`{"transSerialNo":"BFO_DUPLICATE_PREVIOUS","contractNo":"CP2026051600011958"}`),
+		},
+	}
+	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "1338125"})
+	profile := store.mustUpsertProfile(t, db.BaofuAccountOwnerTypeOperator, 1, db.BaofuAccountTypePersonal)
+	flow := store.mustCreateFlow(t, db.BaofuAccountOwnerTypeOperator, 1, db.BaofuAccountTypePersonal, profile.ID)
+	flow.State = db.BaofuAccountOpeningStateFailed
+	flow.OpenTransSerialNo = pgtype.Text{String: "BFO_DUPLICATE_CURRENT", Valid: true}
+	flow.LoginNo = pgtype.Text{String: "LLBFOO0000000999", Valid: true}
+	flow.FailureCode = pgtype.Text{String: "BF00060", Valid: true}
+	flow.FailureMessage = pgtype.Text{String: "该子商户已开户，请勿重复提交", Valid: true}
+	store.flows[0] = flow
+	store.activeBinding = db.BaofuAccountBinding{ID: 22, OwnerType: flow.OwnerType, OwnerID: flow.OwnerID, AccountType: flow.AccountType, LoginNo: flow.LoginNo, LastOpenTransSerialNo: flow.OpenTransSerialNo, OpenState: db.BaofuAccountOpenStateFailed}
+
+	applied, err := service.RecoverOpeningFlow(context.Background(), flow)
+
+	require.NoError(t, err)
+	require.Equal(t, db.BaofuAccountOpeningStateReady, applied.Flow.State)
+	require.NotNil(t, applied.Binding)
+	require.Equal(t, db.BaofuAccountOpenStateActive, applied.Binding.OpenState)
+	require.Equal(t, "CP2026051600011958", applied.Binding.ContractNo.String)
+	require.Equal(t, "CP2026051600011958", applied.Binding.SharingMerID.String)
+	require.Equal(t, "LLBFOO0000000999", client.lastQuery.LoginNo)
+	require.Equal(t, "1338125", client.lastQuery.PlatformNo)
+	require.Equal(t, db.BaofuAccountOpeningStateReady, store.flows[0].State)
 }
 
 func TestBaofuAccountOnboardingServiceRecoverOpeningAlertsAndRejectsContractOwnedByDifferentOwner(t *testing.T) {

@@ -146,7 +146,7 @@ func (s *BaofuAccountOpeningRecoveryScheduler) runOnce(ctx context.Context) {
 	})
 	for _, flow := range flows {
 		switch strings.TrimSpace(flow.State) {
-		case db.BaofuAccountOpeningStateOpeningProcessing:
+		case db.BaofuAccountOpeningStateOpeningProcessing, db.BaofuAccountOpeningStateFailed:
 			if _, err := service.RecoverOpeningFlow(ctx, flow); err != nil {
 				logBaofuAccountOpeningRecoveryFlow(log.Error().Err(err), flow, "baofu_account_query", err).
 					Msg("recover baofu account opening flow failed")

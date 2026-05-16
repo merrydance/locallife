@@ -295,6 +295,66 @@ func TestBaofuAccountOpeningRecoverySchedulerMarksOpeningFailure(t *testing.T) {
 	require.Equal(t, "LLBFOR0000001007", client.queryReq.LoginNo)
 }
 
+func TestBaofuAccountOpeningRecoverySchedulerReconcilesDuplicateFailedFlow(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	client := &baofuAccountOpeningRecoveryClient{
+		result: &baofucontracts.AccountResult{
+			OutRequestNo:  "BFO_DUPLICATE_PREVIOUS",
+			ContractNo:    "CP2026051600011958",
+			OpenState:     db.BaofuAccountOpenStateActive,
+			UpstreamState: "1",
+			Raw:           []byte(`{"transSerialNo":"BFO_DUPLICATE_PREVIOUS","contractNo":"CP2026051600011958"}`),
+		},
+	}
+	flow, binding, profile := baofuOpeningRecoveryPersonalFixtures(69, 1009)
+	flow.OwnerType = db.BaofuAccountOwnerTypeOperator
+	flow.State = db.BaofuAccountOpeningStateFailed
+	flow.OpenTransSerialNo = pgtype.Text{String: "BFO_DUPLICATE_CURRENT", Valid: true}
+	flow.LoginNo = pgtype.Text{String: "LLBFOO0000001009", Valid: true}
+	flow.FailureCode = pgtype.Text{String: "BF00060", Valid: true}
+	binding.OwnerType = flow.OwnerType
+	binding.LoginNo = flow.LoginNo
+	binding.OpenState = db.BaofuAccountOpenStateFailed
+	profile.OwnerType = flow.OwnerType
+
+	store.EXPECT().ListRecoverableBaofuAccountOpeningFlows(gomock.Any(), gomock.Any()).
+		Return([]db.BaofuAccountOpeningFlow{flow}, nil)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{OwnerType: flow.OwnerType, OwnerID: flow.OwnerID}).
+		Return(binding, nil)
+	store.EXPECT().GetBaofuAccountOpeningProfile(gomock.Any(), profile.ID).Return(profile, nil)
+	store.EXPECT().GetBaofuAccountBindingByContractNo(gomock.Any(), pgtype.Text{String: "CP2026051600011958", Valid: true}).
+		Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{OwnerType: flow.OwnerType, OwnerID: flow.OwnerID}).
+		Return(binding, nil)
+	store.EXPECT().MarkBaofuAccountBindingActive(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountBindingActiveParams) (db.BaofuAccountBinding, error) {
+			require.Equal(t, binding.ID, arg.ID)
+			require.Equal(t, pgtype.Text{String: "CP2026051600011958", Valid: true}, arg.ContractNo)
+			require.Equal(t, pgtype.Text{String: "CP2026051600011958", Valid: true}, arg.SharingMerID)
+			binding.OpenState = db.BaofuAccountOpenStateActive
+			binding.ContractNo = arg.ContractNo
+			binding.SharingMerID = arg.SharingMerID
+			return binding, nil
+		})
+	store.EXPECT().MarkBaofuAccountOpeningFlowReady(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountOpeningFlowReadyParams) (db.BaofuAccountOpeningFlow, error) {
+			require.Equal(t, flow.ID, arg.ID)
+			require.Equal(t, pgtype.Int8{Int64: binding.ID, Valid: true}, arg.AccountBindingID)
+			flow.State = db.BaofuAccountOpeningStateReady
+			return flow, nil
+		})
+
+	scheduler := worker.NewBaofuAccountOpeningRecoveryScheduler(store, client, nil, worker.BaofuAccountOpeningRecoveryConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "1338125"})
+	scheduler.RunOnce()
+
+	require.Equal(t, "LLBFOO0000001009", client.queryReq.LoginNo)
+	require.Equal(t, "110101199001011234", client.queryReq.CertificateNo)
+	require.Equal(t, "1338125", client.queryReq.PlatformNo)
+}
+
 func TestBaofuAccountOpeningRecoverySchedulerLeavesProviderProcessingFlowUnchanged(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

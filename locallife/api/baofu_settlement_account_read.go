@@ -50,7 +50,7 @@ func (server *Server) loadBaofuSettlementAccount(ctx *gin.Context, scope baofuSe
 		resp.FlowID = flow.ID
 		resp.FlowState = strings.TrimSpace(flow.State)
 		resp.SubmittedAt = &flow.CreatedAt
-		resp.applyFlowState(flow.State)
+		resp.applyFlowFailure(flow)
 		if err := resp.addPaymentFromFlow(ctx, server, flow); err != nil {
 			return baofuSettlementAccountResponse{}, err
 		}

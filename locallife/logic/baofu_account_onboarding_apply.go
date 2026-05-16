@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/baofu"
 	baofucontracts "github.com/merrydance/locallife/baofu/account/contracts"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/rs/zerolog/log"
@@ -67,6 +68,15 @@ func (s *BaofuAccountOnboardingService) ApplyAccountOpenResult(ctx context.Conte
 		}
 		return BaofuAccountOpenApplyResult{Flow: updated, Binding: &binding}, nil
 	case db.BaofuAccountOpenStateFailed, db.BaofuAccountOpenStateAbnormal:
+		if baofuAccountOpenResultRequiresReconcile(normalized) {
+			applied, reconciled, err := s.reconcileDuplicateAccountOpenResult(ctx, flow, normalized)
+			if err != nil {
+				return BaofuAccountOpenApplyResult{}, err
+			}
+			if reconciled {
+				return applied, nil
+			}
+		}
 		binding, bindingErr := s.store.GetBaofuAccountBindingByOwner(ctx, db.GetBaofuAccountBindingByOwnerParams{OwnerType: flow.OwnerType, OwnerID: flow.OwnerID})
 		if bindingErr != nil && !errors.Is(bindingErr, db.ErrRecordNotFound) {
 			return BaofuAccountOpenApplyResult{}, bindingErr
@@ -99,6 +109,14 @@ func (s *BaofuAccountOnboardingService) ApplyAccountOpenResult(ctx context.Conte
 		if err != nil {
 			return BaofuAccountOpenApplyResult{}, err
 		}
+		log.Warn().
+			Int64("flow_id", updated.ID).
+			Str("owner_type", strings.TrimSpace(updated.OwnerType)).
+			Int64("owner_id", updated.OwnerID).
+			Str("open_trans_serial_no", strings.TrimSpace(updated.OpenTransSerialNo.String)).
+			Str("failure_code", strings.TrimSpace(updated.FailureCode.String)).
+			Str("failure_category", string(baofu.ClassifyBaofuError(updated.FailureCode.String, "").Category)).
+			Msg("baofu account opening flow marked failed")
 		if bindingErr == nil {
 			return BaofuAccountOpenApplyResult{Flow: updated, Binding: &binding}, nil
 		}
@@ -106,6 +124,67 @@ func (s *BaofuAccountOnboardingService) ApplyAccountOpenResult(ctx context.Conte
 	default:
 		return BaofuAccountOpenApplyResult{Flow: flow}, nil
 	}
+}
+
+func baofuAccountOpenResultRequiresReconcile(result baofucontracts.AccountResult) bool {
+	return baofuAccountDuplicateFailureCode(result.FailCode)
+}
+
+func (s *BaofuAccountOnboardingService) reconcileDuplicateAccountOpenResult(ctx context.Context, flow db.BaofuAccountOpeningFlow, duplicateResult baofucontracts.AccountResult) (BaofuAccountOpenApplyResult, bool, error) {
+	if s == nil || s.accountClient == nil {
+		return BaofuAccountOpenApplyResult{}, false, nil
+	}
+	log.Info().
+		Int64("flow_id", flow.ID).
+		Str("owner_type", strings.TrimSpace(flow.OwnerType)).
+		Int64("owner_id", flow.OwnerID).
+		Str("open_trans_serial_no", strings.TrimSpace(flow.OpenTransSerialNo.String)).
+		Str("failure_code", strings.TrimSpace(duplicateResult.FailCode)).
+		Str("provider_operation", "baofu_account_duplicate_reconcile").
+		Msg("baofu account duplicate opening response triggers query reconciliation")
+	req, err := s.queryRequestForFlow(ctx, flow)
+	if err != nil {
+		return BaofuAccountOpenApplyResult{}, false, err
+	}
+	result, err := s.accountClient.QueryAccount(ctx, req)
+	if err != nil {
+		return BaofuAccountOpenApplyResult{}, false, err
+	}
+	if result == nil {
+		return BaofuAccountOpenApplyResult{}, false, errors.New("baofu account duplicate reconcile query returned empty result")
+	}
+	normalized := result.Normalized()
+	if strings.TrimSpace(normalized.OpenState) != db.BaofuAccountOpenStateActive || strings.TrimSpace(normalized.ContractNo) == "" {
+		log.Warn().
+			Int64("flow_id", flow.ID).
+			Str("owner_type", strings.TrimSpace(flow.OwnerType)).
+			Int64("owner_id", flow.OwnerID).
+			Str("open_trans_serial_no", strings.TrimSpace(flow.OpenTransSerialNo.String)).
+			Str("failure_code", strings.TrimSpace(duplicateResult.FailCode)).
+			Str("query_open_state", strings.TrimSpace(normalized.OpenState)).
+			Str("query_upstream_state", strings.TrimSpace(normalized.UpstreamState)).
+			Str("query_failure_code", strings.TrimSpace(normalized.FailCode)).
+			Str("provider_operation", "baofu_account_duplicate_reconcile").
+			Msg("baofu account duplicate opening reconciliation query did not return active account")
+		return BaofuAccountOpenApplyResult{}, false, nil
+	}
+	queryOutRequestNo := strings.TrimSpace(normalized.OutRequestNo)
+	if queryOutRequestNo != "" && queryOutRequestNo != strings.TrimSpace(flow.OpenTransSerialNo.String) {
+		log.Info().
+			Int64("flow_id", flow.ID).
+			Str("owner_type", strings.TrimSpace(flow.OwnerType)).
+			Int64("owner_id", flow.OwnerID).
+			Str("open_trans_serial_no", strings.TrimSpace(flow.OpenTransSerialNo.String)).
+			Str("query_out_request_no", queryOutRequestNo).
+			Str("provider_operation", "baofu_account_duplicate_reconcile").
+			Msg("baofu account duplicate reconciliation accepted query result from previous opening request")
+		normalized = baofuAccountDuplicateReconcileResult(flow, normalized)
+	}
+	applied, err := s.ApplyAccountOpenResult(ctx, flow, normalized)
+	if err != nil {
+		return BaofuAccountOpenApplyResult{}, false, err
+	}
+	return applied, true, nil
 }
 
 func (s *BaofuAccountOnboardingService) ensureAccountOpenResultSerialMatchesFlow(ctx context.Context, flow db.BaofuAccountOpeningFlow, result baofucontracts.AccountResult) error {
@@ -269,6 +348,9 @@ func (s *BaofuAccountOnboardingService) applyAccountOpenActive(ctx context.Conte
 	}
 	if strings.TrimSpace(binding.OpenState) == db.BaofuAccountOpenStateActive {
 		return binding, nil
+	}
+	if baofuAccountDuplicateFailureCode(flow.FailureCode.String) && strings.TrimSpace(binding.OpenState) == db.BaofuAccountOpenStateFailed {
+		binding.OpenState = db.BaofuAccountOpenStateProcessing
 	}
 	return s.markBindingActive(ctx, binding, flow, result, s.config.normalized())
 }

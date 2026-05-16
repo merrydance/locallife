@@ -283,8 +283,22 @@ func (q *Queries) GetLatestBaofuAccountOpeningFlowByOwner(ctx context.Context, a
 const listRecoverableBaofuAccountOpeningFlows = `-- name: ListRecoverableBaofuAccountOpeningFlows :many
 SELECT id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
 FROM baofu_account_opening_flows
-WHERE state IN ('opening_processing', 'merchant_report_processing', 'applet_auth_pending')
-  AND updated_at <= $1
+WHERE (
+    state IN ('opening_processing', 'merchant_report_processing', 'applet_auth_pending')
+    OR (
+        state = 'failed'
+        AND failure_code IN ('BF00060', 'EXISTED_LOGIN_NO')
+        AND id = (
+            SELECT latest.id
+            FROM baofu_account_opening_flows latest
+            WHERE latest.owner_type = baofu_account_opening_flows.owner_type
+              AND latest.owner_id = baofu_account_opening_flows.owner_id
+            ORDER BY latest.created_at DESC, latest.id DESC
+            LIMIT 1
+        )
+    )
+)
+AND baofu_account_opening_flows.updated_at <= $1
 ORDER BY updated_at ASC, id ASC
 LIMIT $2
 `

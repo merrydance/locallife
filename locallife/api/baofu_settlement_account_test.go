@@ -1215,6 +1215,64 @@ func TestBaofuSettlementAccountOperatorCanReadActiveBinding(t *testing.T) {
 	require.Empty(t, response.WechatSubMchIDMask)
 }
 
+func TestBaofuSettlementAccountOperatorFailedFlowReturnsClassifiedSafeGuidance(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := randomOperator(user.ID)
+	flow := db.BaofuAccountOpeningFlow{
+		ID:                198,
+		OwnerType:         db.BaofuAccountOwnerTypeOperator,
+		OwnerID:           operator.ID,
+		AccountType:       db.BaofuAccountTypePersonal,
+		State:             db.BaofuAccountOpeningStateFailed,
+		OpenTransSerialNo: pgtype.Text{String: "BFO_DUPLICATE_CURRENT", Valid: true},
+		FailureCode:       pgtype.Text{String: "BF00060", Valid: true},
+		FailureMessage:    pgtype.Text{String: "该子商户已开户，请勿重复提交，login_no=LLBFOO0000000999", Valid: true},
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectActiveOperatorAuth(store, user.ID, operator)
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeOperator,
+			OwnerID:   operator.ID,
+		})).
+		Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetBaofuAccountOpeningProfileByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountOpeningProfileByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeOperator,
+			OwnerID:   operator.ID,
+		})).
+		Return(db.BaofuAccountOpeningProfile{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetLatestBaofuAccountOpeningFlowByOwner(gomock.Any(), gomock.Eq(db.GetLatestBaofuAccountOpeningFlowByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeOperator,
+			OwnerID:   operator.ID,
+		})).
+		Return(flow, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/operators/me/settlement-account", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response baofuSettlementAccountResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Equal(t, db.BaofuAccountOpeningStateFailed, response.Status)
+	require.Equal(t, "该主体已存在宝付开户记录，请联系平台核对账户状态", response.StatusDesc)
+	require.NotContains(t, recorder.Body.String(), "该子商户已开户")
+	require.NotContains(t, recorder.Body.String(), "LLBFOO0000000999")
+	require.NotContains(t, recorder.Body.String(), "BF00060")
+}
+
 func TestBaofuSettlementAccountOperatorRejectsClientControlledFieldsBeforeServiceCall(t *testing.T) {
 	user, _ := randomUser(t)
 	operator := randomOperator(user.ID)

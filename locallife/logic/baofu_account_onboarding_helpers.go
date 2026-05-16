@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/baofu"
 	baofucontracts "github.com/merrydance/locallife/baofu/account/contracts"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/util"
@@ -201,12 +202,26 @@ func baofuCorporateCertType(accountType string) string {
 
 func baofuOpeningResult(flow db.BaofuAccountOpeningFlow, profile db.BaofuAccountOpeningProfile) BaofuAccountOpeningResult {
 	result := BaofuAccountOpeningResult{State: strings.TrimSpace(flow.State), Label: baofuOnboardingStateLabel(flow.State), Flow: flow, Profile: profile}
-	if strings.TrimSpace(result.State) == db.BaofuAccountOpeningStateProfilePending ||
+	if strings.TrimSpace(result.State) == db.BaofuAccountOpeningStateFailed {
+		result.StatusDesc = BaofuAccountOpeningFailureStatusDesc(result.Flow.FailureCode.String)
+	} else if strings.TrimSpace(result.State) == db.BaofuAccountOpeningStateProfilePending ||
 		strings.TrimSpace(profile.ProfileStatus) != db.BaofuAccountOpeningProfileStatusComplete {
 		result.MissingFields = BaofuAccountOpeningProfileMissingFields(profile)
 		result.StatusDesc = BaofuAccountOpeningProfilePendingStatusDesc(result.MissingFields)
 	}
 	return result
+}
+
+func BaofuAccountOpeningFailureStatusDesc(failureCode string) string {
+	code := strings.TrimSpace(failureCode)
+	if code == "" {
+		return "开户未通过，请核对资料后重试"
+	}
+	classified := baofu.ClassifyBaofuError(code, "")
+	if msg := strings.TrimSpace(classified.PublicMessage); msg != "" {
+		return msg
+	}
+	return "开户未通过，请核对资料后重试"
 }
 
 func baofuOpeningSnapshot(payload map[string]any) []byte {

@@ -13,7 +13,7 @@ func (s *BaofuAccountOnboardingService) RecoverOpeningFlow(ctx context.Context, 
 	if s == nil || s.store == nil || s.accountClient == nil {
 		return BaofuAccountOpenApplyResult{}, ErrBaofuAccountOnboardingNotConfigured
 	}
-	if strings.TrimSpace(flow.State) != db.BaofuAccountOpeningStateOpeningProcessing {
+	if !baofuOpeningFlowCanQueryRecover(flow) {
 		return BaofuAccountOpenApplyResult{Flow: flow}, nil
 	}
 	req, err := s.queryRequestForFlow(ctx, flow)
@@ -27,7 +27,39 @@ func (s *BaofuAccountOnboardingService) RecoverOpeningFlow(ctx context.Context, 
 	if result == nil {
 		return BaofuAccountOpenApplyResult{}, errors.New("baofu account query returned empty result")
 	}
-	return s.ApplyAccountOpenResult(ctx, flow, *result)
+	normalized := result.Normalized()
+	if strings.TrimSpace(flow.State) == db.BaofuAccountOpeningStateFailed && baofuAccountDuplicateFailureCode(flow.FailureCode.String) {
+		normalized = baofuAccountDuplicateReconcileResult(flow, normalized)
+	}
+	return s.ApplyAccountOpenResult(ctx, flow, normalized)
+}
+
+func baofuOpeningFlowCanQueryRecover(flow db.BaofuAccountOpeningFlow) bool {
+	switch strings.TrimSpace(flow.State) {
+	case db.BaofuAccountOpeningStateOpeningProcessing:
+		return true
+	case db.BaofuAccountOpeningStateFailed:
+		return baofuAccountDuplicateFailureCode(flow.FailureCode.String)
+	default:
+		return false
+	}
+}
+
+func baofuAccountDuplicateFailureCode(code string) bool {
+	switch strings.ToUpper(strings.TrimSpace(code)) {
+	case "BF00060", "EXISTED_LOGIN_NO":
+		return true
+	default:
+		return false
+	}
+}
+
+func baofuAccountDuplicateReconcileResult(flow db.BaofuAccountOpeningFlow, result baofucontracts.AccountResult) baofucontracts.AccountResult {
+	queryOutRequestNo := strings.TrimSpace(result.OutRequestNo)
+	if queryOutRequestNo != "" && queryOutRequestNo != strings.TrimSpace(flow.OpenTransSerialNo.String) {
+		result.OutRequestNo = ""
+	}
+	return result
 }
 
 func (s *BaofuAccountOnboardingService) queryRequestForFlow(ctx context.Context, flow db.BaofuAccountOpeningFlow) (baofucontracts.QueryAccountRequest, error) {

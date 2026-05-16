@@ -289,3 +289,82 @@ func TestBaofuAccountOpeningFlowFailedReplacementAndOpeningGuards(t *testing.T) 
 	)
 	require.NotEqual(t, flow.ID, replacement.ID)
 }
+
+func TestListRecoverableBaofuAccountOpeningFlowsIncludesLatestDuplicateFailure(t *testing.T) {
+	ctx := context.Background()
+	ownerID := time.Now().UnixNano()
+
+	oldFlow := createBaofuOpeningFlowForTest(t, BaofuAccountOwnerTypeOperator, ownerID, BaofuAccountTypePersonal, BaofuAccountOpeningStateVerifyFeePending)
+	oldPayment := createBaofuVerifyFeePaymentOrderForTest(t, BaofuAccountOwnerTypeOperator, ownerID, "pending")
+	oldFlow, err := testStore.MarkBaofuAccountOpeningFlowOpeningProcessing(ctx, MarkBaofuAccountOpeningFlowOpeningProcessingParams{
+		ID:                      oldFlow.ID,
+		VerifyFeePaymentOrderID: pgtype.Int8{Int64: oldPayment.ID, Valid: true},
+		OpenTransSerialNo:       pgtype.Text{String: "OPEN" + util.RandomString(18), Valid: true},
+		LoginNo:                 pgtype.Text{String: "LLBFOO" + util.RandomString(12), Valid: true},
+		ProviderRequestSnapshot: []byte(`{}`),
+		RawSnapshot:             []byte(`{}`),
+	})
+	require.NoError(t, err)
+	oldFailed, err := testStore.MarkBaofuAccountOpeningFlowFailed(ctx, MarkBaofuAccountOpeningFlowFailedParams{
+		ID:             oldFlow.ID,
+		FailureCode:    pgtype.Text{String: "BF00060", Valid: true},
+		FailureMessage: pgtype.Text{String: "该子商户已开户，请勿重复提交", Valid: true},
+		RawSnapshot:    []byte(`{"state":"failed","errorCode":"BF00060"}`),
+	})
+	require.NoError(t, err)
+	_, err = testStore.UpdatePaymentOrderToClosed(ctx, oldPayment.ID)
+	require.NoError(t, err)
+
+	latestFlow := createBaofuOpeningFlowForTest(t, BaofuAccountOwnerTypeOperator, ownerID, BaofuAccountTypePersonal, BaofuAccountOpeningStateVerifyFeePending)
+	latestPayment := createBaofuVerifyFeePaymentOrderForTest(t, BaofuAccountOwnerTypeOperator, ownerID, "pending")
+	latestFlow, err = testStore.MarkBaofuAccountOpeningFlowOpeningProcessing(ctx, MarkBaofuAccountOpeningFlowOpeningProcessingParams{
+		ID:                      latestFlow.ID,
+		VerifyFeePaymentOrderID: pgtype.Int8{Int64: latestPayment.ID, Valid: true},
+		OpenTransSerialNo:       pgtype.Text{String: "OPEN" + util.RandomString(18), Valid: true},
+		LoginNo:                 pgtype.Text{String: "LLBFOO" + util.RandomString(12), Valid: true},
+		ProviderRequestSnapshot: []byte(`{}`),
+		RawSnapshot:             []byte(`{}`),
+	})
+	require.NoError(t, err)
+	latestFailed, err := testStore.MarkBaofuAccountOpeningFlowFailed(ctx, MarkBaofuAccountOpeningFlowFailedParams{
+		ID:             latestFlow.ID,
+		FailureCode:    pgtype.Text{String: "BF00060", Valid: true},
+		FailureMessage: pgtype.Text{String: "该子商户已开户，请勿重复提交", Valid: true},
+		RawSnapshot:    []byte(`{"state":"failed","errorCode":"BF00060"}`),
+	})
+	require.NoError(t, err)
+
+	nonDuplicateOwnerID := time.Now().UnixNano()
+	nonDuplicateFlow := createBaofuOpeningFlowForTest(t, BaofuAccountOwnerTypeRider, nonDuplicateOwnerID, BaofuAccountTypePersonal, BaofuAccountOpeningStateVerifyFeePending)
+	nonDuplicatePayment := createBaofuVerifyFeePaymentOrderForTest(t, BaofuAccountOwnerTypeRider, nonDuplicateOwnerID, "paid")
+	nonDuplicateFlow, err = testStore.MarkBaofuAccountOpeningFlowOpeningProcessing(ctx, MarkBaofuAccountOpeningFlowOpeningProcessingParams{
+		ID:                      nonDuplicateFlow.ID,
+		VerifyFeePaymentOrderID: pgtype.Int8{Int64: nonDuplicatePayment.ID, Valid: true},
+		OpenTransSerialNo:       pgtype.Text{String: "OPEN" + util.RandomString(18), Valid: true},
+		LoginNo:                 pgtype.Text{String: "LLBFOR" + util.RandomString(12), Valid: true},
+		ProviderRequestSnapshot: []byte(`{}`),
+		RawSnapshot:             []byte(`{}`),
+	})
+	require.NoError(t, err)
+	nonDuplicateFailed, err := testStore.MarkBaofuAccountOpeningFlowFailed(ctx, MarkBaofuAccountOpeningFlowFailedParams{
+		ID:             nonDuplicateFlow.ID,
+		FailureCode:    pgtype.Text{String: "BF00061", Valid: true},
+		FailureMessage: pgtype.Text{String: "身份核验失败", Valid: true},
+		RawSnapshot:    []byte(`{"state":"failed","errorCode":"BF00061"}`),
+	})
+	require.NoError(t, err)
+
+	flows, err := testStore.ListRecoverableBaofuAccountOpeningFlows(ctx, ListRecoverableBaofuAccountOpeningFlowsParams{
+		BeforeAt:   time.Now().Add(time.Minute),
+		LimitCount: 100,
+	})
+	require.NoError(t, err)
+
+	ids := make(map[int64]bool, len(flows))
+	for _, flow := range flows {
+		ids[flow.ID] = true
+	}
+	require.False(t, ids[oldFailed.ID])
+	require.True(t, ids[latestFailed.ID])
+	require.False(t, ids[nonDuplicateFailed.ID])
+}
