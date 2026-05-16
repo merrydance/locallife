@@ -35,7 +35,7 @@
     <view class="card" wx:if="{{caseDetail.is_active}}">
       <view class="section-title">结案处置</view>
       <t-textarea label="商户整改报告" placeholder="填写商户整改完成情况" value="{{merchantRectificationReport}}" bindchange="onMerchantRectificationReportChange" maxlength="4000" />
-      <t-textarea label="结案结论" placeholder="填写结案结论与恢复依据" value="{{resolution}}" bindchange="onResolutionChange" maxlength="2000" />
+      <t-textarea label="结案结论" placeholder="填写恢复依据" value="{{resolution}}" bindchange="onResolutionChange" maxlength="2000" />
       <t-button theme="primary" block bindtap="onSubmitResolution" loading="{{resolveSubmitting}}">提交结案</t-button>
     </view>
 

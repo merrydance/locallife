@@ -118,7 +118,7 @@
       <view class="dialog-title">集团：{{application.group_name || ('申请#' + application.id)}}</view>
       <t-textarea
         value="{{rejectReason}}"
-        placeholder="请输入驳回原因"
+        placeholder="说明不通过原因"
         maxlength="200"
         indicator
         bind:change="onRejectReasonChange"

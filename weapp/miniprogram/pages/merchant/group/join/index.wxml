@@ -69,7 +69,7 @@
       <view slot="content" class="dialog-content">
         <view class="input-label">申请备注 (可选)</view>
         <t-textarea
-          placeholder="请输入申请理由，例如：我是 XX 分店的店主"
+          placeholder="例如：我是 XX 分店的店主"
           bordered
           value="{{applyReason}}"
           bindchange="onReasonChange"

@@ -42,7 +42,7 @@
         <view class="field-stack">
           <t-input
             value="{{platformRateInput}}"
-            placeholder="请输入 0-100 的整数"
+            placeholder="0-100 的整数"
             label="平台佣金比例"
             suffix="%"
             align="right"
@@ -50,7 +50,7 @@
           />
           <t-input
             value="{{operatorRateInput}}"
-            placeholder="请输入 0-100 的整数"
+            placeholder="0-100 的整数"
             label="运营商佣金比例"
             suffix="%"
             align="right"
@@ -86,7 +86,7 @@
         <view class="field-stack">
           <t-input
             value="{{merchantDepositInput}}"
-            placeholder="请输入金额"
+            placeholder="如 1000.00"
             label="商户保证金"
             suffix="元"
             align="right"
@@ -94,7 +94,7 @@
           />
           <t-input
             value="{{riderDepositInput}}"
-            placeholder="请输入金额"
+            placeholder="如 500.00"
             label="骑手押金"
             suffix="元"
             align="right"

@@ -31,14 +31,17 @@
           <t-cell title="预订桌台" arrow bind:tap="showTablePicker" note="{{selectedTableLabel || '请选择桌台'}}" />
           <t-cell title="到店日期" arrow bind:tap="onOpenDatePicker" note="{{formData.date || '请选择到店日期'}}" />
           <t-cell title="到店时间" arrow bind:tap="onOpenTimePicker" note="{{formData.time || '请选择到店时间'}}" />
-          <t-input
-            label="到店人数"
-            type="number"
-            placeholder="请输入到店人数"
-            value="{{formData.guest_count}}"
-            bind:change="onGuestCountChange"
-            required
-          />
+          <t-cell required title="到店人数">
+            <t-input
+              slot="note"
+              type="number"
+              placeholder="1人起"
+              value="{{formData.guest_count}}"
+              borderless
+              align="right"
+              bind:change="onGuestCountChange"
+            />
+          </t-cell>
         </t-cell-group>
       </view>
 
@@ -48,23 +51,28 @@
         </view>
 
         <t-cell-group theme="card">
-          <t-input
-            label="联系人"
-            placeholder="请输入联系人姓名"
-            value="{{formData.contact_name}}"
-            data-field="contact_name"
-            bind:change="onInputChange"
-            required
-          />
-          <t-input
-            label="联系电话"
-            type="number"
-            placeholder="请输入 11 位手机号"
-            value="{{formData.contact_phone}}"
-            data-field="contact_phone"
-            bind:change="onInputChange"
-            required
-          />
+          <t-cell required title="联系人">
+            <t-input
+              slot="note"
+              value="{{formData.contact_name}}"
+              data-field="contact_name"
+              borderless
+              align="right"
+              bind:change="onInputChange"
+            />
+          </t-cell>
+          <t-cell required title="联系电话">
+            <t-input
+              slot="note"
+              type="number"
+              placeholder="11位手机号"
+              value="{{formData.contact_phone}}"
+              data-field="contact_phone"
+              borderless
+              align="right"
+              bind:change="onInputChange"
+            />
+          </t-cell>
         </t-cell-group>
       </view>
 
@@ -90,7 +98,7 @@
         </view>
 
         <t-textarea
-          placeholder="请输入备注信息..."
+          placeholder="口味偏好、特殊布置或到店提醒"
           value="{{formData.notes}}"
           data-field="notes"
           bind:change="onInputChange"

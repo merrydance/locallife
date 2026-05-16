@@ -30,24 +30,32 @@
         </view>
 
         <t-cell-group theme="card">
-          <t-input
-            label="充值金额(元)"
-            type="digit"
-            placeholder="如 100.00"
-            value="{{formData.recharge_amount_yuan}}"
-            data-field="recharge_amount_yuan"
-            required
-            bind:change="onFormInputChange"
-          />
-          <t-input
-            label="赠送金额(元)"
-            type="digit"
-            placeholder="如 20.00，没有赠送填 0"
-            value="{{formData.bonus_amount_yuan}}"
-            data-field="bonus_amount_yuan"
-            required
-            bind:change="onFormInputChange"
-          />
+          <t-cell required title="充值金额">
+            <t-input
+              slot="note"
+              type="digit"
+              suffix="元"
+              placeholder="如 100.00"
+              value="{{formData.recharge_amount_yuan}}"
+              data-field="recharge_amount_yuan"
+              borderless
+              align="right"
+              bind:change="onFormInputChange"
+            />
+          </t-cell>
+          <t-cell required title="赠送金额">
+            <t-input
+              slot="note"
+              type="digit"
+              suffix="元"
+              placeholder="如 20.00，没有赠送填 0"
+              value="{{formData.bonus_amount_yuan}}"
+              data-field="bonus_amount_yuan"
+              borderless
+              align="right"
+              bind:change="onFormInputChange"
+            />
+          </t-cell>
         </t-cell-group>
       </view>
 

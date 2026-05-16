@@ -30,33 +30,43 @@
         </view>
 
         <t-cell-group theme="card">
-          <t-input
-            label="优惠名称"
-            placeholder="例如：满30减5"
-            value="{{formData.name}}"
-            data-field="name"
-            required
-            bind:change="onFormInputChange"
-          />
-          <t-input
-            label="最低金额"
-            type="digit"
-            suffix="元"
-            placeholder="如 30.00"
-            value="{{formData.min_order_yuan}}"
-            data-field="min_order_yuan"
-            required
-            bind:change="onFormInputChange"
-          />
-          <t-input
-            label="优惠金额(元)"
-            type="digit"
-            placeholder="如 5.00"
-            value="{{formData.discount_yuan}}"
-            data-field="discount_yuan"
-            required
-            bind:change="onFormInputChange"
-          />
+          <t-cell required title="优惠名称">
+            <t-input
+              slot="note"
+              placeholder="例如：满30减5"
+              value="{{formData.name}}"
+              data-field="name"
+              borderless
+              align="right"
+              bind:change="onFormInputChange"
+            />
+          </t-cell>
+          <t-cell required title="最低金额">
+            <t-input
+              slot="note"
+              type="digit"
+              suffix="元"
+              placeholder="如 30.00"
+              value="{{formData.min_order_yuan}}"
+              data-field="min_order_yuan"
+              borderless
+              align="right"
+              bind:change="onFormInputChange"
+            />
+          </t-cell>
+          <t-cell required title="优惠金额">
+            <t-input
+              slot="note"
+              type="digit"
+              suffix="元"
+              placeholder="如 5.00"
+              value="{{formData.discount_yuan}}"
+              data-field="discount_yuan"
+              borderless
+              align="right"
+              bind:change="onFormInputChange"
+            />
+          </t-cell>
         </t-cell-group>
       </view>
 

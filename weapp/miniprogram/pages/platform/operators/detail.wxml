@@ -134,7 +134,7 @@
           <view class="reject-input-wrap">
             <t-textarea
               value="{{rejectReason}}"
-              placeholder="请输入驳回原因（必填）"
+              placeholder="说明不通过原因"
               maxlength="200"
               indicator
               bind:change="onRejectReasonChange"

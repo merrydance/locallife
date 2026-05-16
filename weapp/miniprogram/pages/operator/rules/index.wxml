@@ -82,7 +82,7 @@
       <view class="input-section">
         <t-input
           value="{{newValue}}"
-          placeholder="请输入新的规则数值"
+          placeholder="按规则单位填写"
           label="规则数值"
           suffix="{{editingRule.unit}}"
           align="right"

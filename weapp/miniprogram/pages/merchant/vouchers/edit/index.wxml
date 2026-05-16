@@ -38,14 +38,17 @@
             data-field="code"
             bind:change="onFormInputChange"
           />
-          <t-input
-            label="代金券名称"
-            placeholder="例如：午市立减券"
-            value="{{formData.name}}"
-            data-field="name"
-            required
-            bind:change="onFormInputChange"
-          />
+          <t-cell required title="代金券名称">
+            <t-input
+              slot="note"
+              placeholder="例如：午市立减券"
+              value="{{formData.name}}"
+              data-field="name"
+              borderless
+              align="right"
+              bind:change="onFormInputChange"
+            />
+          </t-cell>
           <t-input
             label="说明"
             placeholder="可选，补充活动提示或适用说明"
@@ -53,15 +56,19 @@
             data-field="description"
             bind:change="onFormInputChange"
           />
-          <t-input
-            label="抵扣金额(元)"
-            type="digit"
-            placeholder="如 10.00"
-            value="{{formData.amount_yuan}}"
-            data-field="amount_yuan"
-            required
-            bind:change="onFormInputChange"
-          />
+          <t-cell required title="抵扣金额">
+            <t-input
+              slot="note"
+              type="digit"
+              suffix="元"
+              placeholder="如 10.00"
+              value="{{formData.amount_yuan}}"
+              data-field="amount_yuan"
+              borderless
+              align="right"
+              bind:change="onFormInputChange"
+            />
+          </t-cell>
           <t-input
             label="使用门槛(元)"
             type="digit"
@@ -70,15 +77,18 @@
             data-field="min_order_amount_yuan"
             bind:change="onFormInputChange"
           />
-          <t-input
-            label="发放数量"
-            type="number"
-            placeholder="请输入总发放张数"
-            value="{{formData.total_quantity}}"
-            data-field="total_quantity"
-            required
-            bind:change="onFormInputChange"
-          />
+          <t-cell required title="发放数量">
+            <t-input
+              slot="note"
+              type="number"
+              placeholder="正整数"
+              value="{{formData.total_quantity}}"
+              data-field="total_quantity"
+              borderless
+              align="right"
+              bind:change="onFormInputChange"
+            />
+          </t-cell>
         </t-cell-group>
       </view>
 
