@@ -1,5 +1,6 @@
 .settlement-page {
   background: var(--td-bg-color-page);
+  --td-input-label-max-width: 6em;
 }
 
 .state-block {
@@ -48,4 +49,9 @@
   color: var(--td-text-color-secondary);
   font-size: var(--font-size-sm);
   line-height: 1.6;
+}
+
+.form-required-label::after {
+  content: ' *';
+  color: var(--td-error-color-6);
 }

@@ -8,150 +8,68 @@
     <t-loading theme="circular" size="40rpx" text="加载开户状态中..." layout="vertical" />
   </view>
 
+  <view wx:elif="{{accessDenied}}" class="state-block">
+    <t-empty icon="lock-on" description="{{accessDeniedMessage}}" />
+  </view>
+
+  <view wx:elif="{{accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" bindtap="onRetry">重新校验</t-button>
+  </view>
+
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty icon="error-circle" description="{{initialErrorMessage || '开户状态加载失败，请重试'}}" />
     <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
   </view>
 
   <view wx:else class="page-content">
-    <view wx:if="{{refreshErrorMessage}}" class="sync-state">
-      <t-icon name="error-circle" size="32rpx" />
-      <text class="sync-state__text">{{refreshErrorMessage}}</text>
-      <t-button size="small" theme="primary" variant="text" icon="refresh" bindtap="onRetry">重试</t-button>
-    </view>
-
-    <view wx:if="{{actionFeedbackMessage}}" class="sync-state sync-state--{{actionFeedbackTheme}}">
-      <t-icon name="{{actionFeedbackTheme === 'success' ? 'check-circle-filled' : 'info-circle-filled'}}" size="32rpx" />
-      <text class="sync-state__text">{{actionFeedbackMessage}}</text>
-    </view>
-
-    <t-cell-group>
-      <t-cell title="开户状态" note="{{pageView.statusView.statusDesc || pageView.nextActionText}}">
-        <view slot="right-icon">
-          <t-tag theme="{{pageView.statusView.tagTheme}}" size="small">{{pageView.statusView.statusText}}</t-tag>
-        </view>
-      </t-cell>
-      <t-cell title="核验费" note="{{pageView.verifyFeePrompt}}" />
-      <t-cell wx:if="{{pageView.shouldShowOpenReportHint}}" title="微信支付展示" note="微信支付展示商户名称配置中，请稍后刷新" />
-    </t-cell-group>
-
-    <t-cell-group wx:if="{{canEditProfile}}">
-      <t-cell title="主体资料" note="{{profileDefaults ? '已自动带入可复用资料' : '请补全开户所需资料'}}" />
-      <t-input
-        label="主体名称"
-        placeholder="请输入营业执照名称"
-        value="{{form.legal_name}}"
-        data-field="legal_name"
-        disabled="{{submitting || syncing}}"
-        bind:change="onInput"
-      />
-      <t-input
-        label="营业执照号"
-        placeholder="请输入营业执照号"
-        value="{{form.business_license_number}}"
-        data-field="business_license_number"
-        disabled="{{submitting || syncing}}"
-        bind:change="onInput"
-      />
-      <t-input
-        label="法人姓名"
-        placeholder="请输入法人姓名"
-        value="{{form.legal_person_name}}"
-        data-field="legal_person_name"
-        disabled="{{submitting || syncing}}"
-        bind:change="onInput"
-      />
-      <t-cell wx:if="{{hasStoredLegalPersonID}}" title="法人身份证号" note="{{profileDefaults.legal_person_id_number_mask}}" />
-      <t-input
-        wx:else
-        label="法人身份证号"
-        placeholder="请输入法人身份证号"
-        value="{{form.legal_person_id_number}}"
-        data-field="legal_person_id_number"
-        disabled="{{submitting || syncing}}"
-        bind:change="onInput"
-      />
-      <t-cell wx:if="{{bankDraft.account_type === 'ACCOUNT_TYPE_PRIVATE' && hasStoredCorporateMobile}}" title="法人手机号" note="{{profileDefaults.corporate_mobile_mask}}" />
-      <t-input
-        wx:elif="{{bankDraft.account_type === 'ACCOUNT_TYPE_PRIVATE'}}"
-        label="法人手机号"
-        placeholder="请输入法人手机号"
-        type="number"
-        value="{{form.corporate_mobile}}"
-        data-field="corporate_mobile"
-        disabled="{{submitting || syncing}}"
-        bind:change="onInput"
-      />
-      <t-cell wx:if="{{hasStoredEmail}}" title="联系邮箱" note="{{profileDefaults.email_mask}}" />
-      <t-input
-        wx:else
-        label="联系邮箱"
-        placeholder="请输入联系邮箱"
-        value="{{form.email}}"
-        data-field="email"
-        disabled="{{submitting || syncing}}"
-        bind:change="onInput"
-      />
-      <t-input
-        label="联系人"
-        placeholder="请输入联系人"
-        value="{{form.contact_name}}"
-        data-field="contact_name"
-        disabled="{{submitting || syncing}}"
-        bind:change="onInput"
-      />
-      <t-cell wx:if="{{hasStoredContactMobile}}" title="联系人手机号" note="{{profileDefaults.contact_mobile_mask}}" />
-      <t-input
-        wx:else
-        label="联系人手机号"
-        placeholder="请输入联系人手机号"
-        type="number"
-        value="{{form.contact_mobile}}"
-        data-field="contact_mobile"
-        disabled="{{submitting || syncing}}"
-        bind:change="onInput"
-      />
-      <t-cell wx:if="{{formErrorMessage}}" title="资料校验" note="{{formErrorMessage}}" />
-    </t-cell-group>
-
-    <applyment-bank-form
-      wx:if="{{canEditProfile}}"
-      apiBasePath="/v1/merchant/applyment"
-      initialDraft="{{bankDraft}}"
-      defaultAccountType="ACCOUNT_TYPE_BUSINESS"
-      showAccountTypeSelector="{{true}}"
-      showContactFields="{{false}}"
-      requireContactEmail="{{false}}"
-      requireAccountName="{{true}}"
-      requireBankBranch="{{true}}"
-      allowSavedAccountNumber="{{hasStoredBankAccount}}"
-      savedAccountNumberMask="{{profileDefaults.bank_account_no_mask}}"
-      showCancelButton="{{false}}"
-      submitLabel="{{pageView.profileButtonText}}"
-      submitting="{{submitting}}"
-      bind:submit="onSubmitBank"
-      bind:draftchange="onBankDraftChange"
+    <baofu-onboarding-wait
+      wx:if="{{waitVisible}}"
+      state="{{waitState}}"
+      title="{{waitTitle}}"
+      description="{{waitDescription}}"
+      theme="{{waitTheme}}"
+      primaryActionText="{{waitPrimaryActionText}}"
+      loading="{{syncing}}"
+      bind:primary="onWaitPrimary"
     />
 
-    <t-cell-group wx:if="{{!canEditProfile}}">
-      <t-cell title="开户资料" note="{{pageView.profileHint}}" />
-      <t-cell wx:if="{{pageView.statusView.isReady}}" title="银行账户" note="已提交" />
-      <t-cell wx:if="{{profileDefaults.email_mask}}" title="联系邮箱" note="{{profileDefaults.email_mask}}" />
-    </t-cell-group>
+    <block wx:else>
+      <view wx:if="{{refreshErrorMessage}}" class="sync-state">
+        <t-icon name="error-circle" size="32rpx" />
+        <text class="sync-state__text">{{refreshErrorMessage}}</text>
+        <t-button size="small" theme="primary" variant="text" icon="refresh" bindtap="onRetry">重试</t-button>
+      </view>
 
-    <view class="form-actions">
-      <t-button
-        wx:if="{{canRefreshStatus}}"
-        theme="primary"
-        variant="outline"
-        loading="{{syncing}}"
-        disabled="{{submitting || syncing}}"
-        bindtap="onRefreshStatus"
-      >
-        刷新状态
-      </t-button>
-    </view>
+      <t-result
+        theme="{{pageView.statusView.resultTheme}}"
+        title="{{pageView.statusView.statusText}}"
+        description="{{pageView.statusView.statusDesc || pageView.nextActionText}}"
+      />
+
+      <baofu-account-status-summary
+        statusText="{{pageView.statusView.statusText}}"
+        statusDesc="{{pageView.statusView.statusDesc}}"
+        nextActionText="{{pageView.nextActionText}}"
+        tagTheme="{{pageView.statusView.tagTheme}}"
+        verifyFeePrompt="{{pageView.verifyFeePrompt}}"
+        profileHint="{{pageView.profileHint}}"
+        showOpenReportHint="{{pageView.shouldShowOpenReportHint}}"
+        isReady="{{pageView.statusView.isReady}}"
+      />
+
+      <view class="form-actions" wx:if="{{pageView.primaryAction.type !== 'none'}}">
+        <t-button
+          theme="{{pageView.primaryAction.theme}}"
+          variant="{{pageView.primaryAction.variant}}"
+          block
+          loading="{{syncing && pageView.primaryAction.type === 'refresh_status'}}"
+          disabled="{{syncing}}"
+          bindtap="onPrimaryAction"
+        >
+          {{pageView.primaryAction.text}}
+        </t-button>
+      </view>
+    </block>
   </view>
-
-  <t-toast id="t-toast" />
 </view>

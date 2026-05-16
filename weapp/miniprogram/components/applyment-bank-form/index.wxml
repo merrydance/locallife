@@ -1,5 +1,5 @@
-<view class="bank-form">
-  <t-cell-group theme="card">
+<view class="bank-form {{embedded ? 'bank-form--embedded' : ''}}">
+  <t-cell-group theme="{{embedded ? 'default' : 'card'}}">
     <t-cell wx:if="{{showAccountTypeSelector}}" title="账户类型">
       <view slot="note" class="tag-check-list">
         <t-check-tag
@@ -21,36 +21,44 @@
 
     <t-input
       label="开户名称"
-      placeholder="{{requireAccountName ? (form.account_type === 'ACCOUNT_TYPE_BUSINESS' ? '请输入企业或机构全称' : '请输入持卡人姓名') : '请输入开户名称'}}"
+      t-class-label="{{requireAccountName ? 'form-required-label' : ''}}"
+      placeholder="{{requireAccountName ? (form.account_type === 'ACCOUNT_TYPE_BUSINESS' ? '企业或机构全称' : '持卡人姓名') : ''}}"
       value="{{form.account_name}}"
       data-field="account_name"
+      align="right"
       bind:change="onTextFieldChange"
-      required="{{requireAccountName}}"
     />
 
     <t-input
       wx:if="{{requireContactEmail}}"
-      label="管理员邮箱"
-      placeholder="请输入商户自己的邮箱"
+      label="管理邮箱"
+      t-class-label="form-required-label"
+      placeholder="name@example.com"
       value="{{form.contact_email}}"
       data-field="contact_email"
+      align="right"
       bind:change="onTextFieldChange"
-      required
     />
 
     <view wx:if="{{requireContactEmail}}" class="contact-email-tip">用于接收微信支付开户邮件和业务通知，请填写商户自己的邮箱。</view>
 
     <t-input
       label="银行账号"
-      placeholder="{{savedAccountNumberMask ? savedAccountNumberMask : (form.account_type === 'ACCOUNT_TYPE_PRIVATE' ? '请输入银行账户号码' : '请输入对公银行账户号码')}}"
+      t-class-label="{{!allowSavedAccountNumber ? 'form-required-label' : ''}}"
+      placeholder="{{savedAccountNumberMask ? savedAccountNumberMask : (form.account_type === 'ACCOUNT_TYPE_PRIVATE' ? '银行卡号' : '对公账号')}}"
+      type="{{showAccountNumber ? 'text' : 'password'}}"
       value="{{form.account_number}}"
       data-field="account_number"
+      align="right"
+      maxlength="30"
+      suffixIcon="{{showAccountNumber ? 'browse' : 'browse-off'}}"
       bind:change="onTextFieldChange"
       bind:blur="onAccountNumberBlur"
-      required="{{!allowSavedAccountNumber}}"
+      bind:click="onToggleAccountNumberVisibility"
     />
 
     <t-cell
+      required
       title="开户银行"
       hover
       arrow
@@ -60,7 +68,8 @@
 
     <t-cell
       wx:if="{{form.need_bank_branch || requireBankBranch}}"
-      title="开户地址省份"
+      required
+      title="开户省份"
       hover
       arrow
       note="{{selectedProvinceLabel || (loadingProvinces ? '省份加载中' : '请选择')}}"
@@ -69,7 +78,8 @@
 
     <t-cell
       wx:if="{{form.need_bank_branch || requireBankBranch}}"
-      title="开户地址城市"
+      required
+      title="开户城市"
       hover
       arrow
       note="{{selectedCityLabel || (selectedProvinceCode ? (loadingCities ? '城市加载中' : '请选择') : '请先选择省份')}}"
@@ -78,6 +88,7 @@
 
     <t-cell
       wx:if="{{form.need_bank_branch || requireBankBranch}}"
+      required
       title="开户支行"
       hover
       arrow
@@ -108,21 +119,22 @@
         <t-cell title="证件类型" note="中国大陆居民身份证" />
 
         <t-input
-          label="联系人姓名"
-          placeholder="请输入超级管理员姓名"
+          label="管理员"
+          t-class-label="form-required-label"
           value="{{form.contact_name}}"
           data-field="contact_name"
+          align="right"
           bind:change="onTextFieldChange"
-          required
         />
 
         <t-input
-          label="联系人身份证号"
-          placeholder="请输入超级管理员身份证号"
+          label="管理证件"
+          t-class-label="form-required-label"
+          placeholder="18位身份证号"
           value="{{form.contact_id_card_number}}"
           data-field="contact_id_card_number"
+          align="right"
           bind:change="onTextFieldChange"
-          required
         />
 
         <view class="document-hint">请上传超级管理员身份证人像面与国徽面，确保头像、号码和有效期清晰完整。</view>
@@ -154,12 +166,13 @@
         </view>
 
         <t-input
-          label="证件有效期开始"
+          label="开始日期"
+          t-class-label="form-required-label"
           placeholder="例如 2020-01-01"
           value="{{form.contact_id_doc_period_begin}}"
           data-field="contact_id_doc_period_begin"
+          align="right"
           bind:change="onTextFieldChange"
-          required
         />
 
         <view class="tag-check-list tag-check-list--subtle">
@@ -175,12 +188,13 @@
 
         <t-input
           wx:else
-          label="证件有效期结束"
+          label="结束日期"
+          t-class-label="form-required-label"
           placeholder="例如 2030-01-01 或填写 长期"
           value="{{form.contact_id_doc_period_end}}"
           data-field="contact_id_doc_period_end"
+          align="right"
           bind:change="onTextFieldChange"
-          required
         />
 
         <view class="document-tip">有效期建议按证件原文填写，支持 YYYY-MM-DD 和“长期”两种格式。</view>
@@ -188,9 +202,9 @@
     </t-cell-group>
   </view>
 
-  <view class="form-actions">
-    <t-button theme="primary" loading="{{submitting}}" disabled="{{submitting}}" bind:tap="onSubmit">{{submitLabel}}</t-button>
-    <t-button wx:if="{{showCancelButton}}" theme="default" variant="outline" disabled="{{submitting}}" bind:tap="onCancel">取消</t-button>
+  <view wx:if="{{showSubmitActions}}" class="form-actions {{submitBlock ? 'form-actions--block' : ''}}">
+    <t-button theme="primary" block="{{submitBlock}}" loading="{{submitting}}" disabled="{{submitting}}" bind:tap="onSubmit">{{submitLabel}}</t-button>
+    <t-button wx:if="{{showCancelButton}}" theme="default" variant="outline" block="{{submitBlock}}" disabled="{{submitting}}" bind:tap="onCancel">取消</t-button>
   </view>
 
   <t-popup wx:if="{{showBankPicker}}" visible="{{showBankPicker}}" placement="bottom" using-custom-navbar="{{true}}" bind:visible-change="onBankPickerVisibleChange">
@@ -229,7 +243,7 @@
   <t-picker
     visible="{{showProvincePicker}}"
     value="{{provincePickerValue}}"
-    title="选择开户地址省份"
+    title="选择开户省份"
     cancelBtn="取消"
     confirmBtn="确定"
     bind:pick="onProvincePickerPick"
@@ -243,7 +257,7 @@
   <t-picker
     visible="{{showCityPicker}}"
     value="{{cityPickerValue}}"
-    title="选择开户地址城市"
+    title="选择开户城市"
     cancelBtn="取消"
     confirmBtn="确定"
     bind:pick="onCityPickerPick"

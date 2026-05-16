@@ -1,0 +1,133 @@
+<custom-navbar title="提交开户资料" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view
+  class="settlement-page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
+>
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载开户资料中..." layout="vertical" />
+  </view>
+
+  <view wx:elif="{{accessDenied}}" class="state-block">
+    <t-empty icon="lock-on" description="{{accessDeniedMessage}}" />
+  </view>
+
+  <view wx:elif="{{accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" bindtap="onRetry">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '开户资料加载失败，请重试'}}" />
+    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
+  </view>
+
+  <view wx:else class="page-content">
+    <baofu-onboarding-wait
+      wx:if="{{waitVisible}}"
+      state="{{waitState}}"
+      title="{{waitTitle}}"
+      description="{{waitDescription}}"
+      theme="{{waitTheme}}"
+      primaryActionText="{{waitPrimaryActionText}}"
+      loading="{{submitting || syncing}}"
+      bind:primary="onWaitPrimary"
+    />
+
+    <block wx:else>
+      <t-cell-group>
+        <t-input
+          label="执照名称"
+          t-class-label="form-required-label"
+          value="{{form.legal_name}}"
+          data-field="legal_name"
+          disabled="{{submitting || syncing}}"
+          align="right"
+          bind:change="onInput"
+        />
+        <t-input
+          label="信用代码"
+          t-class-label="form-required-label"
+          value="{{form.business_license_number}}"
+          data-field="business_license_number"
+          disabled="{{submitting || syncing}}"
+          align="right"
+          maxlength="18"
+          bind:change="onInput"
+        />
+        <t-input
+          label="法人姓名"
+          t-class-label="form-required-label"
+          value="{{form.legal_person_name}}"
+          data-field="legal_person_name"
+          disabled="{{submitting || syncing}}"
+          align="right"
+          bind:change="onInput"
+        />
+        <t-cell wx:if="{{hasStoredLegalPersonID}}" title="法人身份证号" note="{{profileDefaults.legal_person_id_number_mask}}" />
+        <t-input
+          wx:else
+          label="法人证件"
+          t-class-label="form-required-label"
+          placeholder="18位身份证号"
+          type="{{showIdNumber ? 'text' : 'password'}}"
+          value="{{form.legal_person_id_number}}"
+          data-field="legal_person_id_number"
+          disabled="{{submitting || syncing}}"
+          align="right"
+          maxlength="18"
+          suffixIcon="{{showIdNumber ? 'browse' : 'browse-off'}}"
+          bind:change="onInputId"
+          bind:click="onToggleIdVisibility"
+        />
+        <t-cell wx:if="{{bankDraft.account_type === 'ACCOUNT_TYPE_PRIVATE' && hasStoredCorporateMobile}}" title="法人手机" note="{{profileDefaults.corporate_mobile_mask}}" />
+        <t-input
+          wx:elif="{{bankDraft.account_type === 'ACCOUNT_TYPE_PRIVATE'}}"
+          label="法人手机"
+          t-class-label="form-required-label"
+          placeholder="11位手机号"
+          type="number"
+          value="{{form.corporate_mobile}}"
+          data-field="corporate_mobile"
+          disabled="{{submitting || syncing}}"
+          align="right"
+          maxlength="11"
+          bind:change="onInput"
+        />
+        <t-cell wx:if="{{hasStoredEmail}}" title="联系邮箱" note="{{profileDefaults.email_mask}}" />
+        <t-input
+          wx:else
+          label="联系邮箱"
+          t-class-label="form-required-label"
+          placeholder="name@example.com"
+          value="{{form.email}}"
+          data-field="email"
+          disabled="{{submitting || syncing}}"
+          align="right"
+          maxlength="100"
+          bind:change="onInput"
+        />
+        <t-cell wx:if="{{formErrorMessage}}" title="资料校验" note="{{formErrorMessage}}" />
+      </t-cell-group>
+
+      <applyment-bank-form
+        apiBasePath="/v1/merchant/applyment"
+        initialDraft="{{bankDraft}}"
+        defaultAccountType="ACCOUNT_TYPE_BUSINESS"
+        embedded="{{true}}"
+        submitBlock="{{true}}"
+        showAccountTypeSelector="{{true}}"
+        showContactFields="{{false}}"
+        requireContactEmail="{{false}}"
+        requireAccountName="{{true}}"
+        allowSavedAccountNumber="{{hasStoredBankAccount}}"
+        savedAccountNumberMask="{{profileDefaults.bank_account_no_mask}}"
+        showCancelButton="{{false}}"
+        submitLabel="提交开户资料"
+        submitting="{{submitting}}"
+        bind:submit="onSubmitBank"
+        bind:draftchange="onBankDraftChange"
+      />
+    </block>
+  </view>
+</view>

@@ -63,6 +63,9 @@ interface ApplymentBankFormProperties {
   showAccountTypeSelector?: boolean
   allowSavedAccountNumber?: boolean
   requireBankBranch?: boolean
+  embedded?: boolean
+  submitBlock?: boolean
+  showSubmitActions?: boolean
   uploadBusinessType?: string
 }
 
@@ -341,7 +344,7 @@ function getSubmitBlockMessage(
   }
 
   if (!form.bank_address_code.trim()) {
-    return '请先选择开户地址城市'
+    return '请先选择开户城市'
   }
 
   if (!form.bank_alias_code.trim()) {
@@ -413,6 +416,18 @@ Component({
       type: Boolean,
       value: false
     },
+    embedded: {
+      type: Boolean,
+      value: false
+    },
+    submitBlock: {
+      type: Boolean,
+      value: true
+    },
+    showSubmitActions: {
+      type: Boolean,
+      value: true
+    },
     savedAccountNumberMask: {
       type: String,
       value: ''
@@ -476,7 +491,8 @@ Component({
     canSubmit: false,
     submitBlockMessage: '',
     selectedBankLabel: '',
-    hasSelectedBank: false
+    hasSelectedBank: false,
+    showAccountNumber: false
   },
 
   lifetimes: {
@@ -486,6 +502,10 @@ Component({
   },
 
   methods: {
+    onToggleAccountNumberVisibility() {
+      this.setData({ showAccountNumber: !this.data.showAccountNumber })
+    },
+
     readForm() {
       const instance = this as unknown as ApplymentBankFormInstance
       return instance.draftForm || (this.data.form as ApplymentBindBankDraft)
@@ -746,6 +766,7 @@ Component({
       const nextKeyword = keyword ?? this.data.bankKeyword
       const filteredBanks = this.getBanksForType(this.data.form.account_type)
         .filter((bank: ApplymentBankViewOption) => bankMatchesKeyword(bank, nextKeyword))
+        .slice(0, 100)
       const selectedBankIndex = findSelectedBankIndex(filteredBanks, this.data.form as ApplymentBindBankDraft)
 
       this.setData({
@@ -759,6 +780,7 @@ Component({
       const nextKeyword = keyword ?? this.data.branchKeyword
       const filteredBranches = (this.data.branches as ApplymentBranchOption[])
         .filter((branch) => branchMatchesKeyword(branch, nextKeyword))
+        .slice(0, 100)
       const selectedBranchIndex = findSelectedBranchIndex(filteredBranches, this.data.form as ApplymentBindBankDraft)
 
       this.setData({
@@ -930,7 +952,7 @@ Component({
 
       this.setFormState(nextForm, {
         bankKeyword: '',
-        filteredBanks: this.getBanksForType(accountType),
+        filteredBanks: this.getBanksForType(accountType).slice(0, 100),
         showBankPicker: false,
         showProvincePicker: false,
         showCityPicker: false,
@@ -972,6 +994,7 @@ Component({
       const nextBankKeyword = bankMatchesKeyword(bank, this.data.bankKeyword) ? this.data.bankKeyword : ''
       let filteredBanks = this.getBanksForType(nextForm.account_type)
         .filter((item: ApplymentBankViewOption) => bankMatchesKeyword(item, nextBankKeyword))
+        .slice(0, 100)
       if (!filteredBanks.length) {
         filteredBanks = [bank]
       }
@@ -1202,7 +1225,7 @@ Component({
 
         if (matches.length > 1) {
           this.setData({
-            filteredBanks: matches,
+            filteredBanks: matches.slice(0, 100),
             showBankPicker: true,
             selectedBankIndex: 0
           })

@@ -1,6 +1,14 @@
+/**
+ * Baofu settlement account API layer.
+ *
+ * Types, interfaces, and network calls for the Baofu settlement account
+ * domain. Status helpers live in ./baofu-account-status.ts; view model
+ * logic lives in ./baofu-account-view.ts. Both are re-exported here so
+ * that existing import paths continue to work.
+ */
+
 import { request } from '../utils/request'
 import type { MiniProgramPayParams } from './payment'
-import type { StatusTagTheme } from '../utils/status-tag'
 
 export type BaofuAccountOwnerRole = 'rider' | 'merchant' | 'operator' | 'platform'
 
@@ -127,30 +135,24 @@ export interface BaofuSettlementAccountResponse {
   updated_at?: string
 }
 
+export type BaofuSettlementAccountPageActionType =
+  | 'submit_profile'
+  | 'continue_payment'
+  | 'refresh_status'
+  | 'none'
+
+export interface BaofuSettlementAccountPageAction {
+  type: BaofuSettlementAccountPageActionType
+  text: string
+  theme: 'primary' | 'default'
+  variant?: 'base' | 'outline' | 'text'
+}
+
 export interface SubmitBaofuSettlementAccountRequest {
   profile: BaofuAccountProfile
 }
 
-export interface BaofuSettlementAccountView {
-  normalizedStatus: string
-  statusText: string
-  statusDesc: string
-  nextActionText: string
-  tagTheme: StatusTagTheme
-  verifyFeeAmount: number
-  verifyFeeDisplay: string
-  canSubmitProfile: boolean
-  canStartPayment: boolean
-  canRefresh: boolean
-  isReady: boolean
-  isFailed: boolean
-  isProcessing: boolean
-}
-
-function normalizeBaofuSettlementAccountStatus(status?: string): string {
-  const normalized = String(status || '').trim().toLowerCase()
-  return normalized || 'unknown'
-}
+// --- Network calls ---
 
 function baofuAccountEndpoint(role: BaofuAccountOwnerRole): string {
   switch (role) {
@@ -203,149 +205,8 @@ export const getPlatformBaofuSettlementAccount = () => getBaofuSettlementAccount
 export const submitPlatformBaofuSettlementAccountProfile = (profile: BaofuAccountProfile) =>
   submitBaofuSettlementAccountProfile('platform', { profile })
 
-export function getBaofuAccountStatusText(status?: string): string {
-  switch (normalizeBaofuSettlementAccountStatus(status)) {
-    case 'ready':
-      return '已开通'
-    case 'profile_pending':
-      return '待补充资料'
-    case 'verify_fee_pending':
-      return '待支付核验费'
-    case 'verify_fee_processing':
-      return '支付确认中'
-    case 'opening_processing':
-      return '开户处理中'
-    case 'merchant_report_processing':
-      return '商户报备中'
-    case 'applet_auth_pending':
-      return '授权目录绑定中'
-    case 'failed':
-      return '开通失败'
-    case 'voided':
-      return '已作废'
-    default:
-      return '同步中'
-  }
-}
+// --- Re-exports for backward compatibility ---
+// Consumers may continue importing from this file.
 
-export function getBaofuAccountStatusTheme(status?: string): StatusTagTheme {
-  switch (normalizeBaofuSettlementAccountStatus(status)) {
-    case 'ready':
-      return 'success'
-    case 'failed':
-    case 'voided':
-      return 'danger'
-    case 'profile_pending':
-    case 'verify_fee_pending':
-    case 'verify_fee_processing':
-      return 'warning'
-    case 'opening_processing':
-    case 'merchant_report_processing':
-    case 'applet_auth_pending':
-      return 'primary'
-    default:
-      return 'default'
-  }
-}
-
-export function getBaofuAccountNextActionText(
-  status?: string,
-  verifyFeeAmount = 200
-): string {
-  const feeDisplay = (verifyFeeAmount / 100).toFixed(2)
-  switch (normalizeBaofuSettlementAccountStatus(status)) {
-    case 'ready':
-      return '结算账户已可用'
-    case 'profile_pending':
-      return '请补全开户资料后提交'
-    case 'verify_fee_pending':
-      return `支付 ${feeDisplay} 元核验费后继续开户`
-    case 'verify_fee_processing':
-      return '核验费支付结果确认中，请稍后刷新'
-    case 'opening_processing':
-      return '宝付开户处理中，请稍后刷新'
-    case 'merchant_report_processing':
-      return '正在配置微信支付商户展示名称，请稍后刷新'
-    case 'applet_auth_pending':
-      return '正在绑定微信支付授权目录，请稍后刷新'
-    case 'failed':
-      return '开户未通过，请核对资料后重试；如持续失败请联系平台处理'
-    case 'voided':
-      return '开户流程已作废，请联系平台处理'
-    default:
-      return '开户状态同步中，请稍后刷新'
-  }
-}
-
-export function isBaofuSettlementTerminalStatus(status?: string): boolean {
-  const normalized = normalizeBaofuSettlementAccountStatus(status)
-  return normalized === 'ready' ||
-    normalized === 'failed' ||
-    normalized === 'profile_pending' ||
-    normalized === 'voided'
-}
-
-export function isBaofuSettlementAfterPaymentTerminalStatus(status?: string): boolean {
-  return isBaofuSettlementTerminalStatus(status)
-}
-
-export function isBaofuSettlementPaymentRequiredStatus(status?: string): boolean {
-  const normalized = normalizeBaofuSettlementAccountStatus(status)
-  return normalized === 'verify_fee_pending'
-}
-
-export function isBaofuSettlementOpeningProcessingStatus(status?: string): boolean {
-  const normalized = normalizeBaofuSettlementAccountStatus(status)
-  return normalized === 'opening_processing' ||
-    normalized === 'verify_fee_processing' ||
-    normalized === 'merchant_report_processing' ||
-    normalized === 'applet_auth_pending'
-}
-
-export function getBaofuAccountPayment(response?: BaofuSettlementAccountResponse | null): BaofuSettlementAccountPayment | null {
-  if (!response) {
-    return null
-  }
-
-  const nested = response.payment
-  const paymentOrderId = nested?.payment_order_id || response.payment_order_id || 0
-  const payParams = nested?.pay_params || response.pay_params
-
-  if (!paymentOrderId && !payParams) {
-    return null
-  }
-
-  return {
-    payment_order_id: paymentOrderId,
-    amount: nested?.amount || response.amount || response.verify_fee_amount || 200,
-    business_type: nested?.business_type || response.business_type || 'baofu_account_verify_fee',
-    out_trade_no: nested?.out_trade_no || response.out_trade_no,
-    pay_params: payParams,
-    expires_at: nested?.expires_at || response.expires_at
-  }
-}
-
-export function buildBaofuSettlementAccountView(
-  response?: BaofuSettlementAccountResponse | null
-): BaofuSettlementAccountView {
-  const normalizedStatus = normalizeBaofuSettlementAccountStatus(response?.status || response?.state)
-  const verifyFeeAmount = Number(response?.verify_fee_amount || response?.payment?.amount || response?.amount || 200)
-  const nextActionText = getBaofuAccountNextActionText(normalizedStatus, verifyFeeAmount)
-  const statusDesc = String(response?.status_desc || nextActionText).trim()
-
-  return {
-    normalizedStatus,
-    statusText: response?.label || getBaofuAccountStatusText(normalizedStatus),
-    statusDesc,
-    nextActionText,
-    tagTheme: getBaofuAccountStatusTheme(normalizedStatus),
-    verifyFeeAmount,
-    verifyFeeDisplay: (verifyFeeAmount / 100).toFixed(2),
-    canSubmitProfile: normalizedStatus === 'profile_pending' || normalizedStatus === 'failed',
-    canStartPayment: isBaofuSettlementPaymentRequiredStatus(normalizedStatus),
-    canRefresh: normalizedStatus !== 'ready' && normalizedStatus !== 'voided',
-    isReady: normalizedStatus === 'ready',
-    isFailed: normalizedStatus === 'failed',
-    isProcessing: isBaofuSettlementOpeningProcessingStatus(normalizedStatus)
-  }
-}
+export * from './baofu-account-status'
+export * from './baofu-account-view'

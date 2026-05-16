@@ -1,16 +1,13 @@
 {
   "usingComponents": {
-    "applyment-bank-form": "/components/applyment-bank-form/index",
+    "baofu-account-status-summary": "/components/baofu-account-status-summary/index",
+    "baofu-onboarding-wait": "/components/baofu-onboarding-wait/index",
     "custom-navbar": "/components/custom-navbar/index",
     "t-button": "tdesign-miniprogram/button/button",
-    "t-cell": "tdesign-miniprogram/cell/cell",
-    "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-icon": "tdesign-miniprogram/icon/icon",
-    "t-input": "tdesign-miniprogram/input/input",
     "t-loading": "tdesign-miniprogram/loading/loading",
-    "t-tag": "tdesign-miniprogram/tag/tag",
-    "t-toast": "tdesign-miniprogram/toast/toast"
+    "t-result": "tdesign-miniprogram/result/result"
   },
   "navigationStyle": "custom",
   "enablePullDownRefresh": true

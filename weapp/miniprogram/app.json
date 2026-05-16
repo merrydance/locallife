@@ -16,6 +16,7 @@
         "order-hall/index",
         "income/index",
         "settlement-account/index",
+        "settlement-account/submit/index",
         "claims/index",
         "claims/detail/index",
         "deposit/index",
@@ -47,6 +48,7 @@
         "safety/detail/index",
         "finance/withdraw/index",
         "finance/settlement-account/index",
+        "finance/settlement-account/submit/index",
         "region-expansion/index"
       ],
       "independent": false
@@ -73,6 +75,7 @@
         "operators/detail",
         "operational-configs/index",
         "finance/settlement-account/index",
+        "finance/settlement-account/submit/index",
         "riders/index",
         "tables/tags/index",
         "groups/index",
@@ -178,6 +181,7 @@
         "finance/bills/index",
         "finance/settlements/index",
         "finance/settlement-account/index",
+        "finance/settlement-account/submit/index",
         "kitchen/index",
         "kitchen/detail/index",
         "stats/index",

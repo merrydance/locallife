@@ -3,6 +3,7 @@ import {
   getBaofuAccountNextActionText,
   getBaofuAccountStatusText,
   type BaofuAccountOwnerRole,
+  type BaofuSettlementAccountPageAction,
   type BaofuSettlementAccountResponse,
   type BaofuSettlementAccountView
 } from '../api/baofu-account'
@@ -24,13 +25,22 @@ export interface BaofuRolePageView {
   statusView: BaofuSettlementAccountView
   statusText: string
   nextActionText: string
+  primaryAction: BaofuSettlementAccountPageAction
+  shouldEnterSubmitDirectly: boolean
   shouldShowPaymentAction: boolean
   shouldShowProfileAction: boolean
-  shouldShowRefreshAction: boolean
   shouldShowOpenReportHint: boolean
   fieldConfigs: BaofuRolePageFieldConfig[]
   profileButtonText: string
   paymentButtonText: string
+}
+
+function emptyAction(): BaofuSettlementAccountPageAction {
+  return {
+    type: 'none',
+    text: '',
+    theme: 'default'
+  }
 }
 
 function buildRoleTitle(role: BaofuAccountOwnerRole): string {
@@ -66,28 +76,58 @@ function buildProfileHint(role: BaofuAccountOwnerRole): string {
 function buildFieldConfigs(role: BaofuAccountOwnerRole): BaofuRolePageFieldConfig[] {
   if (role === 'merchant' || role === 'platform') {
     return [
-      { key: 'legal_name', label: role === 'platform' ? '平台主体名称' : '商户主体名称', placeholder: '请输入营业执照主体名称', required: true },
-      { key: 'business_license_number', label: '营业执照号', placeholder: '请输入营业执照号', required: true },
-      { key: 'legal_person_name', label: '法人姓名', placeholder: '请输入法人姓名', required: true },
-      { key: 'legal_person_id_number', label: '法人身份证号', placeholder: '请输入法人身份证号', required: true },
-      { key: 'email', label: '联系邮箱', placeholder: '请输入联系邮箱', required: true },
-      { key: 'bank_account_no', label: '对公账号', placeholder: '请输入对公账号', required: true },
-      { key: 'bank_name', label: '开户银行', placeholder: '请输入开户银行', required: true },
-      { key: 'deposit_bank_province', label: '开户地址省份', placeholder: '请输入开户地址省份', required: true },
-      { key: 'deposit_bank_city', label: '开户地址城市', placeholder: '请输入开户地址城市', required: true },
-      { key: 'deposit_bank_name', label: '开户支行', placeholder: '请输入开户支行', required: true },
-      { key: 'contact_name', label: '联系人', placeholder: '请输入联系人', required: false },
-      { key: 'contact_mobile', label: '联系人手机号', placeholder: '请输入联系人手机号', required: false }
+      { key: 'legal_name', label: role === 'platform' ? '平台主体名称' : '商户主体名称', placeholder: '', required: true },
+      { key: 'business_license_number', label: '营业执照号', placeholder: '', required: true },
+      { key: 'legal_person_name', label: '法人姓名', placeholder: '', required: true },
+      { key: 'legal_person_id_number', label: '法人身份证号', placeholder: '18位身份证号', required: true },
+      { key: 'email', label: '联系邮箱', placeholder: 'name@example.com', required: true },
+      { key: 'bank_account_no', label: '对公账号', placeholder: '', required: true },
+      { key: 'bank_name', label: '开户银行', placeholder: '', required: true },
+      { key: 'deposit_bank_province', label: '开户省份', placeholder: '', required: true },
+      { key: 'deposit_bank_city', label: '开户城市', placeholder: '', required: true },
+      { key: 'deposit_bank_name', label: '开户支行', placeholder: '', required: true }
     ]
   }
 
   return [
-    { key: 'legal_name', label: '姓名', placeholder: '请输入姓名', required: true },
-    { key: 'certificate_no', label: '身份证号', placeholder: '请输入身份证号', required: true },
-    { key: 'bank_account_no', label: '银行卡号', placeholder: '请输入本人银行卡号', required: true },
-    { key: 'bank_mobile', label: '银行预留手机号', placeholder: '请输入银行预留手机号', required: true },
-    { key: 'bank_name', label: '开户银行（可选）', placeholder: '如：中国工商银行', required: false }
+    { key: 'legal_name', label: '姓名', placeholder: '', required: true },
+    { key: 'certificate_no', label: '身份证号', placeholder: '18位身份证号', required: true },
+    { key: 'bank_account_no', label: '银行卡号', placeholder: '本人借记卡号', required: true },
+    { key: 'bank_mobile', label: '预留手机号', placeholder: '11位手机号', required: true },
+    { key: 'bank_name', label: '开户银行', placeholder: '选填，如：中国工商银行', required: false }
   ]
+}
+
+function buildPrimaryAction(
+  role: BaofuAccountOwnerRole,
+  statusView: BaofuSettlementAccountView
+): BaofuSettlementAccountPageAction {
+  if (statusView.canSubmitProfile) {
+    return {
+      type: 'submit_profile',
+      text: role === 'merchant' || role === 'platform' ? '提交开户资料' : '提交资料并支付核验费',
+      theme: 'primary'
+    }
+  }
+
+  if (role !== 'merchant' && role !== 'platform' && statusView.canContinuePayment) {
+    return {
+      type: 'continue_payment',
+      text: '继续支付核验费',
+      theme: 'primary'
+    }
+  }
+
+  if (statusView.canRefreshStatus) {
+    return {
+      type: 'refresh_status',
+      text: statusView.isWaiting ? '刷新开户状态' : '刷新状态',
+      theme: 'primary',
+      variant: 'outline'
+    }
+  }
+
+  return emptyAction()
 }
 
 export function buildBaofuRolePageView(
@@ -99,8 +139,9 @@ export function buildBaofuRolePageView(
   const feeDisplay = `${statusView.verifyFeeDisplay}`
   const shouldShowPaymentAction = role !== 'merchant' && role !== 'platform' && statusView.canStartPayment
   const shouldShowProfileAction = statusView.canSubmitProfile
-  const shouldShowRefreshAction = statusView.canRefresh
   const shouldShowOpenReportHint = role === 'merchant' && (statusView.normalizedStatus === 'merchant_report_processing' || statusView.normalizedStatus === 'applet_auth_pending')
+  const primaryAction = buildPrimaryAction(role, statusView)
+  const shouldEnterSubmitDirectly = statusView.normalizedStatus === 'profile_pending'
 
   return {
     role,
@@ -110,9 +151,10 @@ export function buildBaofuRolePageView(
     statusView,
     statusText: getBaofuAccountStatusText(statusView.normalizedStatus),
     nextActionText: getBaofuAccountNextActionText(statusView.normalizedStatus, statusView.verifyFeeAmount),
+    primaryAction,
+    shouldEnterSubmitDirectly,
     shouldShowPaymentAction,
     shouldShowProfileAction,
-    shouldShowRefreshAction,
     shouldShowOpenReportHint,
     fieldConfigs: buildFieldConfigs(role),
     profileButtonText: role === 'merchant' || role === 'platform' ? '提交开户资料' : '提交资料并支付核验费',

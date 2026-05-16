@@ -26,6 +26,7 @@ const GENERIC_RETRY_MESSAGE = '开户进度暂时无法同步，请稍后刷新'
 export type BaofuOnboardingWorkflowStatus =
   | 'ready'
   | 'failed'
+  | 'voided'
   | 'profile_pending'
   | 'verify_fee_pending'
   | 'closed'
@@ -40,10 +41,31 @@ export interface BaofuOnboardingWorkflowResult {
   shouldRefreshWorkbench: boolean
 }
 
+export type BaofuOnboardingWaitState =
+  | 'submitting'
+  | 'payment_confirming'
+  | 'opening_processing'
+  | 'pending_confirmation'
+  | 'ready'
+  | 'failed'
+  | 'error'
+
+export type BaofuOnboardingWaitAction = 'refresh_status' | 'back_to_status' | 'dismiss' | 'retry'
+
+export interface BaofuOnboardingWaitView {
+  state: BaofuOnboardingWaitState
+  title: string
+  description: string
+  theme: 'success' | 'warning' | 'error'
+  primaryActionText: string
+  primaryAction: BaofuOnboardingWaitAction
+}
+
 interface WorkflowOptions {
   role?: BaofuAccountOwnerRole
   context?: WechatMiniprogram.Page.TrivialInstance
   loadingMessage?: string
+  silentToast?: boolean
   maxAttempts?: number
   interval?: number
 }
@@ -144,6 +166,15 @@ function loadPendingWorkflowContext(role: BaofuAccountOwnerRole): PendingWorkflo
     if (!isPendingWorkflowContext(stored)) {
       return null
     }
+
+    const PENDING_CONTEXT_TTL_MS = 5 * 60 * 1000
+    const age = Date.now() - new Date(stored.updatedAt).getTime()
+    if (age > PENDING_CONTEXT_TTL_MS) {
+      logger.info(`宝付开户待确认支付上下文已过期 role=${role} age_ms=${age}`, undefined, 'baofu-account-onboarding')
+      clearPendingWorkflowContext(role)
+      return null
+    }
+
     return stored
   } catch (error: unknown) {
     logger.error(`读取宝付开户待确认支付上下文失败 role=${role}`, error, 'baofu-account-onboarding')
@@ -195,6 +226,8 @@ function mapAccountStatus(status?: string): BaofuOnboardingWorkflowStatus {
       return 'ready'
     case 'failed':
       return 'failed'
+    case 'voided':
+      return 'voided'
     case 'profile_pending':
       return 'profile_pending'
     case 'verify_fee_pending':
@@ -215,7 +248,98 @@ function buildResult(account: BaofuSettlementAccountResponse, status = mapAccoun
   return {
     status,
     account,
-    shouldRefreshWorkbench: status === 'ready' || status === 'failed' || status === 'profile_pending' || status === 'closed'
+    shouldRefreshWorkbench: status === 'ready' || status === 'failed' || status === 'voided' || status === 'profile_pending' || status === 'closed'
+  }
+}
+
+function resolveWaitState(status: BaofuOnboardingWorkflowStatus): BaofuOnboardingWaitState {
+  switch (status) {
+    case 'ready':
+      return 'ready'
+    case 'failed':
+    case 'closed':
+    case 'voided':
+      return 'failed'
+    case 'pending_confirmation':
+    case 'pay_params_missing':
+      return 'pending_confirmation'
+    case 'verify_fee_pending':
+      return 'payment_confirming'
+    default:
+      return 'opening_processing'
+  }
+}
+
+function resolveWaitTheme(status: BaofuOnboardingWorkflowStatus): 'success' | 'warning' | 'error' {
+  switch (status) {
+    case 'ready':
+      return 'success'
+    case 'failed':
+    case 'closed':
+    case 'voided':
+      return 'error'
+    default:
+      return 'warning'
+  }
+}
+
+function resolveWaitPrimaryAction(status: BaofuOnboardingWorkflowStatus): BaofuOnboardingWaitAction {
+  switch (status) {
+    case 'ready':
+    case 'failed':
+    case 'closed':
+    case 'voided':
+    case 'profile_pending':
+    case 'verify_fee_pending':
+      return 'back_to_status'
+    case 'processing':
+      return 'refresh_status'
+    case 'pending_confirmation':
+    case 'pay_params_missing':
+      return 'retry'
+    default:
+      return 'refresh_status'
+  }
+}
+
+export function buildBaofuOnboardingWaitView(result: BaofuOnboardingWorkflowResult): BaofuOnboardingWaitView {
+  const state = resolveWaitState(result.status)
+  const theme = resolveWaitTheme(result.status)
+  const title = result.account.label || getBaofuAccountStatusText(result.account.status)
+  const description = getBaofuOnboardingFeedbackMessage(result)
+  const primaryAction = resolveWaitPrimaryAction(result.status)
+
+  return {
+    state,
+    title,
+    description,
+    theme,
+    primaryActionText: primaryAction === 'back_to_status'
+      ? '返回状态页'
+      : primaryAction === 'retry'
+        ? '重试'
+        : '刷新状态',
+    primaryAction
+  }
+}
+
+export function buildBaofuOnboardingWaitViewFromText(
+  options: {
+    state: BaofuOnboardingWaitState
+    title: string
+    description: string
+    theme?: 'success' | 'warning' | 'error'
+    primaryAction?: BaofuOnboardingWaitAction
+    primaryActionText?: string
+  }
+): BaofuOnboardingWaitView {
+  return {
+    state: options.state,
+    title: options.title,
+    description: options.description,
+    theme: options.theme ?? 'warning',
+    primaryAction: options.primaryAction ?? 'refresh_status',
+    primaryActionText: options.primaryActionText !== undefined ? options.primaryActionText : '刷新状态'
   }
 }
 
@@ -255,7 +379,9 @@ export async function pollBaofuSettlementAccountStatus(
   const interval = options.interval ?? PAYMENT_STATUS_POLL_INTERVAL_MS
   const context = options.context
 
-  showProgressToast(context, options.loadingMessage || '开户状态同步中...')
+  if (!options.silentToast) {
+    showProgressToast(context, options.loadingMessage || '开户状态同步中...')
+  }
 
   try {
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -275,9 +401,11 @@ export async function pollBaofuSettlementAccountStatus(
       : 'pending_confirmation'
     return buildResult(account, terminalStatus)
   } catch (error: unknown) {
-    logAndThrowWorkflowError('poll_status', role, error)
+    return logAndThrowWorkflowError('poll_status', role, error)
   } finally {
-    hideProgressToast(context)
+    if (!options.silentToast) {
+      hideProgressToast(context)
+    }
   }
 }
 
@@ -286,6 +414,7 @@ async function completePaymentThenPoll(
   options: WorkflowOptions
 ): Promise<BaofuOnboardingWorkflowResult> {
   const context = options.context
+  const toastContext = options.silentToast ? undefined : context
   const payment = getBaofuAccountPayment(account)
   const normalizedAccountStatus = String(account.status || '').trim().toLowerCase()
   const role = options.role || 'rider'
@@ -321,7 +450,7 @@ async function completePaymentThenPoll(
   } as PaymentOrderResponse, {
     maxAttempts: options.maxAttempts,
     interval: options.interval,
-    context,
+    context: toastContext,
     paymentMessage: '正在调起微信支付...',
     confirmingMessage: '支付结果确认中...'
   })
@@ -380,7 +509,9 @@ async function startOrResumeBaofuAccountOnboarding(
   const pendingWorkflowContext = loadPendingWorkflowContext(role)
 
   try {
-    showProgressToast(context, options.loadingMessage || '正在恢复开户进度...')
+    if (!options.silentToast) {
+      showProgressToast(context, options.loadingMessage || '正在恢复开户进度...')
+    }
     if (pendingWorkflowContext) {
       const account = await getBaofuSettlementAccount(role)
       const payment = getBaofuAccountPayment(account)
@@ -411,9 +542,11 @@ async function startOrResumeBaofuAccountOnboarding(
     }
     return buildResult(account)
   } catch (error: unknown) {
-    logAndThrowWorkflowError('start_or_resume', role, error)
+    return logAndThrowWorkflowError('start_or_resume', role, error)
   } finally {
-    hideProgressToast(context)
+    if (!options.silentToast) {
+      hideProgressToast(context)
+    }
   }
 }
 
@@ -425,13 +558,17 @@ export async function startBaofuAccountOnboarding(
   const context = options.context
 
   try {
-    showProgressToast(context, options.loadingMessage || '正在提交开户资料...')
+    if (!options.silentToast) {
+      showProgressToast(context, options.loadingMessage || '正在提交开户资料...')
+    }
     const account = await submitBaofuSettlementAccountProfile(role, { profile })
     return completePaymentThenPoll(account, { ...options, role })
   } catch (error: unknown) {
-    logAndThrowWorkflowError('submit_profile', role, error, '开户资料提交失败，请稍后重试')
+    return logAndThrowWorkflowError('submit_profile', role, error, '开户资料提交失败，请稍后重试')
   } finally {
-    hideProgressToast(context)
+    if (!options.silentToast) {
+      hideProgressToast(context)
+    }
   }
 }
 
@@ -449,7 +586,9 @@ export async function continueBaofuAccountPayment(
   const context = options.context
 
   try {
-    showProgressToast(context, options.loadingMessage || '正在恢复支付进度...')
+    if (!options.silentToast) {
+      showProgressToast(context, options.loadingMessage || '正在恢复支付进度...')
+    }
     const account = await getBaofuSettlementAccount(role)
     const payment = getBaofuAccountPayment(account)
 
@@ -472,9 +611,11 @@ export async function continueBaofuAccountPayment(
 
     return buildResult(account, 'pay_params_missing')
   } catch (error: unknown) {
-    logAndThrowWorkflowError('continue_payment', role, error, '支付进度恢复失败，请稍后重试')
+    return logAndThrowWorkflowError('continue_payment', role, error, '支付进度恢复失败，请稍后重试')
   } finally {
-    hideProgressToast(context)
+    if (!options.silentToast) {
+      hideProgressToast(context)
+    }
   }
 }
 
@@ -486,6 +627,9 @@ export function getBaofuOnboardingFeedbackMessage(result: BaofuOnboardingWorkflo
       return result.account.status_desc ||
         getBaofuAccountNextActionText(result.account.status, result.account.verify_fee_amount) ||
         '开户未通过，请核对资料后重试；如持续失败请联系平台处理'
+    case 'voided':
+      return result.account.status_desc ||
+        '开户流程已作废，请联系平台处理'
     case 'profile_pending':
       return '请补全开户资料'
     case 'verify_fee_pending':
@@ -511,6 +655,7 @@ export function getBaofuOnboardingFeedbackTheme(result: BaofuOnboardingWorkflowR
     case 'ready':
       return 'success'
     case 'failed':
+    case 'voided':
       return 'error'
     default:
       return 'warning'
@@ -521,6 +666,7 @@ export function shouldClearPendingBaofuAccountOnboardingContext(result: BaofuOnb
   switch (result.status) {
     case 'ready':
     case 'failed':
+    case 'voided':
     case 'profile_pending':
     case 'closed':
       return true
