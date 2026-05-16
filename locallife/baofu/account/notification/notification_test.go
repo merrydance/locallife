@@ -152,6 +152,17 @@ func TestParseOpenAccountPlaintextUsesOfficialFields(t *testing.T) {
 	require.JSONEq(t, string(raw), string(notification.Raw))
 }
 
+func TestParseOpenAccountPlaintextAllowsMissingNoticeTypeFromOfficialExamples(t *testing.T) {
+	raw := []byte(`{"contractNo":"CP690000000000001468","customerName":"张宝","errorCode":"","errorMsg":"","loginNo":"person002","memberId":"100030218","memberType":"1","state":"1","terminalId":"200005478","transSerialNo":"TSN314778753119603185643720"}`)
+
+	notification, err := ParseOpenAccountPlaintext(raw)
+
+	require.NoError(t, err)
+	require.Equal(t, "TSN314778753119603185643720", notification.OutRequestNo)
+	require.Equal(t, "CP690000000000001468", notification.ContractNo)
+	require.Equal(t, contracts.OpenStateActive, notification.OpenState)
+}
+
 func TestParseOpenAccountPlaintextRejectsMissingMandatoryFieldsAndUnsupportedState(t *testing.T) {
 	base := map[string]string{
 		"member_id":     "102004465",
@@ -178,7 +189,6 @@ func TestParseOpenAccountPlaintextRejectsMissingMandatoryFieldsAndUnsupportedSta
 		{"missing login", func(p map[string]string) { delete(p, "loginNo") }, "baofu open account notification loginNo is required"},
 		{"missing customer name", func(p map[string]string) { delete(p, "customerName") }, "baofu open account notification customerName is required"},
 		{"missing contract", func(p map[string]string) { delete(p, "contractNo") }, "baofu open account notification contractNo is required"},
-		{"missing notice type", func(p map[string]string) { delete(p, "noticeType") }, "baofu open account notification noticeType is required"},
 	}
 
 	for _, tc := range cases {

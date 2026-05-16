@@ -231,7 +231,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 通知要求：商户收到后返回大写 `OK`；未确认会重发。通知 URL 形如 `...?member_id=...&terminal_id=...&data_type=JSON&data_content=密文`。
 
-通知明文字段：`member_id`、`terminal_id`、`memberType`、`state`、`errorCode`、`errorMsg`、`transSerialNo`、`loginNo`、`customerName`、`contractNo`、`noticeType`。
+通知明文字段：`member_id`、`terminal_id`、`memberType`、`state`、`errorCode`、`errorMsg`、`transSerialNo`、`loginNo`、`customerName`、`contractNo`；`noticeType` 在表格中列为必填，但官方示例和 2026-05-16 生产回调证据可缺失，入站解析按兼容字段处理。
 
 本地覆盖：
 

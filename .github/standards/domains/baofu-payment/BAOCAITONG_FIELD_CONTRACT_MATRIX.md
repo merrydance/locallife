@@ -420,7 +420,7 @@ Source: `https://doc.mandao.com/docs/bct/openAccNotify`; updated: `2026-04-22 02
 | `openAccNotify.data_content.loginNo` | `loginNo` | String | 128 | M | length=128 | 登录号 | Validate required; add missing-field test; Preserve official length/type at boundary |
 | `openAccNotify.data_content.customerName` | `customerName` | String | 64 | M | length=64 | 商户名称 | Validate required; add missing-field test; Preserve official length/type at boundary |
 | `openAccNotify.data_content.contractNo` | `contractNo` | String | 64 | M | length=64 | 商户客户号 | Validate required; add missing-field test; Preserve official length/type at boundary; BaoCaiTong account id; never replace with channel subMchId |
-| `openAccNotify.data_content.noticeType` | `noticeType` | String | 32 | M | length=32 |  | Validate required; add missing-field test; Preserve official length/type at boundary |
+| `openAccNotify.data_content.noticeType` | `noticeType` | String | 32 | M | length=32 |  | Official table marks required, but official success/failure examples and production callback evidence can omit it; tolerate absent inbound; Preserve official length/type at boundary |
 
 ### 提现结果通知 (`withdrawNotify`)
 

@@ -181,7 +181,6 @@ func ParseOpenAccountPlaintext(plaintext []byte) (*AccountNotification, error) {
 		{"loginNo", payload.LoginNo},
 		{"customerName", payload.CustomerName},
 		{"contractNo", payload.ContractNo},
-		{"noticeType", payload.NoticeType},
 	} {
 		if strings.TrimSpace(field.value) == "" {
 			return nil, errors.New("baofu open account notification " + field.name + " is required")
