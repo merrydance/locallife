@@ -566,6 +566,21 @@ func TestAccountClientReturnsProviderErrorWhenErrorCodeHasNoRetCode(t *testing.T
 	require.True(t, providerErr.Frontend.Retryable)
 }
 
+func TestAccountClientClassifiesInvalidUnionGatewayResponseContent(t *testing.T) {
+	doer := &accountRawResponseDoer{body: []byte("not-encrypted-uniongw-content")}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.QueryAccount(context.Background(), contracts.QueryAccountRequest{ContractNo: "CP610000000000542938"})
+
+	require.Error(t, err)
+	var providerErr *baofu.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, "T-1001-013-03", providerErr.Operation)
+	require.Equal(t, baofu.PublicEnvelopeUpstreamCodeInvalidDataContent, providerErr.UpstreamCode)
+	require.Contains(t, err.Error(), "code="+baofu.PublicEnvelopeUpstreamCodeInvalidDataContent)
+	require.NotContains(t, err.Error(), "not-encrypted")
+}
+
 type accountRecordingDoer struct {
 	request         *http.Request
 	requestBody     []byte
@@ -608,6 +623,19 @@ func (d *accountRecordingDoer) Do(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader([]byte(content))), Header: make(http.Header)}, nil
+}
+
+type accountRawResponseDoer struct {
+	statusCode int
+	body       []byte
+}
+
+func (d *accountRawResponseDoer) Do(req *http.Request) (*http.Response, error) {
+	statusCode := d.statusCode
+	if statusCode == 0 {
+		statusCode = http.StatusOK
+	}
+	return &http.Response{StatusCode: statusCode, Body: io.NopCloser(bytes.NewReader(d.body)), Header: make(http.Header)}, nil
 }
 
 func testBaofuRootClient(t *testing.T, doer baofu.HTTPDoer) *baofu.Client {

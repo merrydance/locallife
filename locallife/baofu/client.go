@@ -210,6 +210,7 @@ func NewProviderBusinessError(operation string, upstreamCode string, upstreamMes
 }
 
 func providerRequestError(operation string, statusCode int, upstreamCode string, cause error) error {
+	upstreamCode = providerRequestUpstreamCode(statusCode, upstreamCode)
 	classified := ClassifyBaofuError(upstreamCode, "")
 	return &ProviderError{
 		Operation:    strings.TrimSpace(operation),
@@ -219,6 +220,20 @@ func providerRequestError(operation string, statusCode int, upstreamCode string,
 		Frontend:     classified.FrontendGuidance(),
 		cause:        cause,
 	}
+}
+
+func providerRequestUpstreamCode(statusCode int, upstreamCode string) string {
+	code := strings.TrimSpace(upstreamCode)
+	if code != "" {
+		return code
+	}
+	if statusCode == 0 {
+		return "REQUEST_FAILED"
+	}
+	if statusCode < http.StatusOK || statusCode >= http.StatusMultipleChoices {
+		return "HTTP_STATUS"
+	}
+	return PublicEnvelopeUpstreamCodeInvalidDataContent
 }
 
 func providerResponseError(operation string, statusCode int, upstreamCode string, upstreamMessage string, cause error) error {

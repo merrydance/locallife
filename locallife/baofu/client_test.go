@@ -29,6 +29,17 @@ func TestProviderErrorKeepsUpstreamMessageOutOfFrontendGuidance(t *testing.T) {
 	require.NotContains(t, providerErr.Frontend.Message, "上游原始")
 }
 
+func TestProviderRequestErrorUsesSafeCodeWhenNoUpstreamCodeExists(t *testing.T) {
+	err := providerRequestError("T-1001-013-01", 0, "", errors.New("dial tcp 203.0.113.1:443: i/o timeout"))
+
+	var providerErr *ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, "REQUEST_FAILED", providerErr.UpstreamCode)
+	require.Contains(t, err.Error(), "code=REQUEST_FAILED")
+	require.NotContains(t, err.Error(), "203.0.113.1")
+	require.Equal(t, "支付通道异常，请联系平台处理", providerErr.Frontend.Message)
+}
+
 func TestBusinessFailureDetectorsFailClosedForMissingSuccessIndicators(t *testing.T) {
 	accountCode, accountMessage, accountFailed := accountBusinessFailure(json.RawMessage(`{"errorCode":"BF0005","errorMsg":"上游账户处理中"}`))
 	require.True(t, accountFailed)
