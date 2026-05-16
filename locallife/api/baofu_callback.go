@@ -68,7 +68,7 @@ func (server *Server) handleBaofuAccountOpenNotify(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, baofuCallbackResponse{Code: "FAIL", Message: "callback content invalid"})
 		return
 	}
-	if err := server.validateBaofuPayoutNotificationIdentity(notification.MemberID, notification.TerminalID); err != nil {
+	if err := server.validateBaofuCollectNotificationIdentity(notification.MemberID, notification.TerminalID); err != nil {
 		log.Error().Err(err).Msg("baofu account callback identity mismatch")
 		ctx.JSON(http.StatusUnauthorized, baofuCallbackResponse{Code: "FAIL", Message: "callback verification failed"})
 		return
@@ -533,6 +533,20 @@ func (server *Server) validateBaofuPayoutNotificationIdentity(memberID string, t
 	}
 	if configuredTerminalID != "" && terminalID != configuredTerminalID {
 		return fmt.Errorf("baofu account callback terminal_id does not match configured payout terminal")
+	}
+	return nil
+}
+
+func (server *Server) validateBaofuCollectNotificationIdentity(memberID string, terminalID string) error {
+	configuredMerchantID := strings.TrimSpace(server.config.BaofuCollectMerchantID)
+	configuredTerminalID := strings.TrimSpace(server.config.BaofuCollectTerminalID)
+	memberID = strings.TrimSpace(memberID)
+	terminalID = strings.TrimSpace(terminalID)
+	if configuredMerchantID != "" && memberID != configuredMerchantID {
+		return fmt.Errorf("baofu account callback member_id does not match configured collect merchant")
+	}
+	if configuredTerminalID != "" && terminalID != configuredTerminalID {
+		return fmt.Errorf("baofu account callback terminal_id does not match configured collect terminal")
 	}
 	return nil
 }

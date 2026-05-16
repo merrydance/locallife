@@ -29,8 +29,8 @@ func TestBaofuAccountOpenCallbackAppliesTerminalStateBeforeAck(t *testing.T) {
 	store := mockdb.NewMockStore(ctrl)
 	server := newTestServer(t, store)
 	server.SetBaofuAccountNotificationParserForTest(fakeBaofuOpenAccountParser{})
-	server.config.BaofuPayoutMerchantID = "102004466"
-	server.config.BaofuPayoutTerminalID = "200005201"
+	server.config.BaofuCollectMerchantID = "102004465"
+	server.config.BaofuCollectTerminalID = "200005200"
 
 	flow := db.BaofuAccountOpeningFlow{
 		ID:                7101,
@@ -108,8 +108,8 @@ func TestBaofuAccountOpenCallbackMerchantActiveRecordsLedgerAndWaitsForReport(t 
 	store := mockdb.NewMockStore(ctrl)
 	server := newTestServer(t, store)
 	server.SetBaofuAccountNotificationParserForTest(fakeBaofuOpenAccountParser{})
-	server.config.BaofuPayoutMerchantID = "102004466"
-	server.config.BaofuPayoutTerminalID = "200005201"
+	server.config.BaofuCollectMerchantID = "102004465"
+	server.config.BaofuCollectTerminalID = "200005200"
 	server.config.BaofuAccountVerifyFeeFen = 200
 
 	flow := db.BaofuAccountOpeningFlow{
@@ -178,8 +178,8 @@ func TestBaofuAccountOpenCallbackMarksAbnormalBeforeAck(t *testing.T) {
 	store := mockdb.NewMockStore(ctrl)
 	server := newTestServer(t, store)
 	server.SetBaofuAccountNotificationParserForTest(fakeBaofuAbnormalAccountParser{})
-	server.config.BaofuPayoutMerchantID = "102004466"
-	server.config.BaofuPayoutTerminalID = "200005201"
+	server.config.BaofuCollectMerchantID = "102004465"
+	server.config.BaofuCollectTerminalID = "200005200"
 
 	flow := db.BaofuAccountOpeningFlow{
 		ID:                7103,
@@ -234,14 +234,14 @@ func TestBaofuAccountOpenCallbackMarksAbnormalBeforeAck(t *testing.T) {
 	require.Equal(t, "OK", recorder.Body.String())
 }
 
-func TestBaofuAccountOpenCallbackRejectsPayoutIdentityMismatch(t *testing.T) {
+func TestBaofuAccountOpenCallbackRejectsCollectIdentityMismatch(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	store := mockdb.NewMockStore(ctrl)
 	server := newTestServer(t, store)
 	server.SetBaofuAccountNotificationParserForTest(fakeBaofuOpenAccountParser{})
-	server.config.BaofuPayoutMerchantID = "EXPECTED_MER"
-	server.config.BaofuPayoutTerminalID = "EXPECTED_TER"
+	server.config.BaofuCollectMerchantID = "EXPECTED_MER"
+	server.config.BaofuCollectTerminalID = "EXPECTED_TER"
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/account/open", bytes.NewBufferString(`{"encrypted":true}`))
@@ -257,8 +257,8 @@ func TestBaofuAccountOpenCallbackPersistsAlertWhenFlowCannotBeMatched(t *testing
 	store := mockdb.NewMockStore(ctrl)
 	server := newTestServer(t, store)
 	server.SetBaofuAccountNotificationParserForTest(fakeBaofuUnmatchedAccountParser{})
-	server.config.BaofuPayoutMerchantID = "102004466"
-	server.config.BaofuPayoutTerminalID = "200005201"
+	server.config.BaofuCollectMerchantID = "102004465"
+	server.config.BaofuCollectTerminalID = "200005200"
 
 	store.EXPECT().
 		GetBaofuAccountOpeningFlowByOpenTransSerialNo(gomock.Any(), pgtype.Text{String: "OPEN_MISSING", Valid: true}).
@@ -294,8 +294,8 @@ func TestBaofuAccountOpenCallbackBlocksWhenOutRequestNoMissesEvenIfContractExist
 	store := mockdb.NewMockStore(ctrl)
 	server := newTestServer(t, store)
 	server.SetBaofuAccountNotificationParserForTest(fakeBaofuMismatchedSerialAccountParser{})
-	server.config.BaofuPayoutMerchantID = "102004466"
-	server.config.BaofuPayoutTerminalID = "200005201"
+	server.config.BaofuCollectMerchantID = "102004465"
+	server.config.BaofuCollectTerminalID = "200005200"
 
 	store.EXPECT().
 		GetBaofuAccountOpeningFlowByOpenTransSerialNo(gomock.Any(), pgtype.Text{String: "OPEN_CALLBACK_OTHER", Valid: true}).
@@ -321,6 +321,62 @@ func TestBaofuAccountOpenCallbackBlocksWhenOutRequestNoMissesEvenIfContractExist
 
 	require.Equal(t, http.StatusInternalServerError, recorder.Code)
 	require.Contains(t, recorder.Body.String(), "persist callback failed")
+}
+
+func TestBaofuAccountOpenCallbackAcceptsOfficialQueryStringGet(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAccountNotificationParserForTest(fakeBaofuOpenAccountParser{})
+	server.config.BaofuCollectMerchantID = "102004465"
+	server.config.BaofuCollectTerminalID = "200005200"
+
+	flow := db.BaofuAccountOpeningFlow{
+		ID:                7104,
+		OwnerType:         db.BaofuAccountOwnerTypeRider,
+		OwnerID:           14,
+		AccountType:       db.BaofuAccountTypePersonal,
+		State:             db.BaofuAccountOpeningStateOpeningProcessing,
+		OpenTransSerialNo: pgtype.Text{String: "OPEN123", Valid: true},
+		LoginNo:           pgtype.Text{String: "LLBFOR0000000014", Valid: true},
+	}
+	binding := db.BaofuAccountBinding{
+		ID:          6104,
+		OwnerType:   db.BaofuAccountOwnerTypeRider,
+		OwnerID:     14,
+		AccountType: db.BaofuAccountTypePersonal,
+		LoginNo:     pgtype.Text{String: "LLBFOR0000000014", Valid: true},
+		OpenState:   db.BaofuAccountOpenStateProcessing,
+	}
+	store.EXPECT().GetBaofuAccountOpeningFlowByOpenTransSerialNo(gomock.Any(), pgtype.Text{String: "OPEN123", Valid: true}).Return(flow, nil)
+	store.EXPECT().GetBaofuAccountBindingByContractNo(gomock.Any(), pgtype.Text{String: "CM_BCT_123", Valid: true}).
+		Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+		OwnerType: db.BaofuAccountOwnerTypeRider,
+		OwnerID:   14,
+	}).Return(binding, nil)
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).Return(db.ExternalPaymentFact{ID: 91}, nil)
+	store.EXPECT().MarkBaofuAccountBindingActive(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountBindingActiveParams) (db.BaofuAccountBinding, error) {
+			binding.OpenState = db.BaofuAccountOpenStateActive
+			binding.ContractNo = arg.ContractNo
+			binding.SharingMerID = arg.SharingMerID
+			return binding, nil
+		})
+	store.EXPECT().MarkBaofuAccountOpeningFlowReady(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountOpeningFlowReadyParams) (db.BaofuAccountOpeningFlow, error) {
+			flow.State = db.BaofuAccountOpeningStateReady
+			flow.AccountBindingID = arg.AccountBindingID
+			return flow, nil
+		})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/v1/webhooks/baofu/account/open?member_id=102004465&terminal_id=200005200&data_type=JSON&data_content=ciphertext", http.NoBody)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "OK", recorder.Body.String())
 }
 
 func TestBaofuWithdrawCallbackEnqueuesFactApplicationBeforeAck(t *testing.T) {
@@ -758,8 +814,8 @@ type fakeBaofuOpenAccountParser struct{}
 
 func (fakeBaofuOpenAccountParser) ParseOpenAccountNotification(body []byte) (*baofunotification.AccountNotification, error) {
 	return &baofunotification.AccountNotification{
-		MemberID:      "102004466",
-		TerminalID:    "200005201",
+		MemberID:      "102004465",
+		TerminalID:    "200005200",
 		OutRequestNo:  "OPEN123",
 		ContractNo:    "CM_BCT_123",
 		UpstreamState: "1",
@@ -773,8 +829,8 @@ type fakeBaofuAbnormalAccountParser struct{}
 
 func (fakeBaofuAbnormalAccountParser) ParseOpenAccountNotification(body []byte) (*baofunotification.AccountNotification, error) {
 	return &baofunotification.AccountNotification{
-		MemberID:      "102004466",
-		TerminalID:    "200005201",
+		MemberID:      "102004465",
+		TerminalID:    "200005200",
 		OutRequestNo:  "OPEN_ABNORMAL",
 		UpstreamState: "-1",
 		OpenState:     db.BaofuAccountOpenStateAbnormal,
@@ -791,8 +847,8 @@ type fakeBaofuUnmatchedAccountParser struct{}
 
 func (fakeBaofuUnmatchedAccountParser) ParseOpenAccountNotification(body []byte) (*baofunotification.AccountNotification, error) {
 	return &baofunotification.AccountNotification{
-		MemberID:      "102004466",
-		TerminalID:    "200005201",
+		MemberID:      "102004465",
+		TerminalID:    "200005200",
 		OutRequestNo:  "OPEN_MISSING",
 		ContractNo:    "CP_MISSING",
 		UpstreamState: "1",
@@ -810,8 +866,8 @@ type fakeBaofuMismatchedSerialAccountParser struct{}
 
 func (fakeBaofuMismatchedSerialAccountParser) ParseOpenAccountNotification(body []byte) (*baofunotification.AccountNotification, error) {
 	return &baofunotification.AccountNotification{
-		MemberID:      "102004466",
-		TerminalID:    "200005201",
+		MemberID:      "102004465",
+		TerminalID:    "200005200",
 		OutRequestNo:  "OPEN_CALLBACK_OTHER",
 		ContractNo:    "CP_EXISTING",
 		UpstreamState: "1",

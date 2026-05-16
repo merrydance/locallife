@@ -540,6 +540,7 @@ func (server *Server) setupRouter() {
 		webhooksGroup.POST("/wechat-ordinary/profit-sharing-notify", server.handleOrdinaryServiceProviderProfitSharingNotify)
 		webhooksGroup.POST("/wechat-ordinary/violation-notify", server.handleOrdinaryServiceProviderViolationNotify)
 		// 宝付宝财通回调
+		webhooksGroup.GET("/baofu/account/open", server.handleBaofuAccountOpenNotify)
 		webhooksGroup.POST("/baofu/account/open", server.handleBaofuAccountOpenNotify)
 		webhooksGroup.POST("/baofu/withdraw", server.handleBaofuWithdrawNotify)
 		webhooksGroup.POST("/baofu/payment", server.handleBaofuPaymentNotify)
