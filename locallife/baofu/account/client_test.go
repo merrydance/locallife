@@ -331,13 +331,13 @@ func TestAccountClientQueryAccountUsesPersonalAccountType(t *testing.T) {
 		AccountType:     "personal",
 		CertificateNo:   "110101199001011234",
 		CertificateType: contracts.OfficialCertificateTypeID,
+		PlatformNo:      "100030218",
 	})
 
 	require.NoError(t, err)
 	env := accountRequestEnvelopeForTest(t, doer)
 	require.Equal(t, "T-1001-013-03", env.Header.ServiceType)
-	require.JSONEq(t, `{"version":"4.0.0","accType":1,"loginNo":"LLBFOR0000000001","certificateNo":"110101199001011234","certificateType":"ID"}`, partialJSONForAccountTest(t, env.Body, "version", "accType", "loginNo", "certificateNo", "certificateType"))
-	require.NotContains(t, string(env.Body), "platformNo")
+	require.JSONEq(t, `{"version":"4.0.0","accType":1,"loginNo":"LLBFOR0000000001","certificateNo":"110101199001011234","certificateType":"ID","platformNo":"100030218"}`, partialJSONForAccountTest(t, env.Body, "version", "accType", "loginNo", "certificateNo", "certificateType", "platformNo"))
 }
 
 func TestAccountClientQueryAccountCanSendOfficialCredentialFields(t *testing.T) {
@@ -350,13 +350,13 @@ func TestAccountClientQueryAccountCanSendOfficialCredentialFields(t *testing.T) 
 		AccountType:     "personal",
 		CertificateNo:   "110101199001011234",
 		CertificateType: contracts.OfficialCertificateTypeID,
+		PlatformNo:      "100030218",
 	})
 
 	require.NoError(t, err)
 	env := accountRequestEnvelopeForTest(t, doer)
 	require.Equal(t, "T-1001-013-03", env.Header.ServiceType)
-	require.JSONEq(t, `{"version":"4.0.0","accType":1,"loginNo":"LLBFOR0000000001","certificateNo":"110101199001011234","certificateType":"ID"}`, partialJSONForAccountTest(t, env.Body, "version", "accType", "loginNo", "certificateNo", "certificateType"))
-	require.NotContains(t, string(env.Body), "platformNo")
+	require.JSONEq(t, `{"version":"4.0.0","accType":1,"loginNo":"LLBFOR0000000001","certificateNo":"110101199001011234","certificateType":"ID","platformNo":"100030218"}`, partialJSONForAccountTest(t, env.Body, "version", "accType", "loginNo", "certificateNo", "certificateType", "platformNo"))
 }
 
 func TestAccountClientQueryAccountTreatsContractOnlySuccessAsActive(t *testing.T) {

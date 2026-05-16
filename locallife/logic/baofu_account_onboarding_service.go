@@ -50,8 +50,9 @@ type baofuAccountOnboardingStore interface {
 }
 
 type BaofuAccountOnboardingConfig struct {
-	VerifyFeeFen int64
-	IndustryID   string
+	VerifyFeeFen      int64
+	IndustryID        string
+	CollectMerchantID string
 }
 
 type BaofuAccountOpeningInput struct {
@@ -144,6 +145,7 @@ func (c BaofuAccountOnboardingConfig) normalized() BaofuAccountOnboardingConfig 
 	if c.IndustryID == "" {
 		c.IndustryID = "9931"
 	}
+	c.CollectMerchantID = strings.TrimSpace(c.CollectMerchantID)
 	return c
 }
 

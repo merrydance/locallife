@@ -47,6 +47,9 @@ func (r OfficialQueryAccountRequest) Validate() error {
 	if certificateType == "" {
 		return errors.New("baofu query account certificateType is required when loginNo is used")
 	}
+	if platformNo == "" {
+		return errors.New("baofu query account platformNo is required when loginNo is used")
+	}
 	for _, field := range []struct {
 		name  string
 		value string
@@ -55,13 +58,9 @@ func (r OfficialQueryAccountRequest) Validate() error {
 		{"loginNo", loginNo, 128},
 		{"certificateNo", certificateNo, 64},
 		{"certificateType", certificateType, 16},
+		{"platformNo", platformNo, 32},
 	} {
 		if err := validateOfficialMaxLength("baofu query account", field.name, field.value, field.max); err != nil {
-			return err
-		}
-	}
-	if platformNo != "" {
-		if err := validateOfficialMaxLength("baofu query account", "platformNo", platformNo, 32); err != nil {
 			return err
 		}
 	}

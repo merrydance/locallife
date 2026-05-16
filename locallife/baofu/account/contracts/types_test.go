@@ -307,10 +307,13 @@ func TestOfficialQueryBalanceAndWithdrawValidateRequiredFields(t *testing.T) {
 		CertificateNo:   "110101199001011234",
 		CertificateType: OfficialCertificateTypeID,
 	}
+	require.EqualError(t, query.Validate(), "baofu query account platformNo is required when loginNo is used")
+
+	query.PlatformNo = "100030218"
 	require.NoError(t, query.Validate())
 	body, err := json.Marshal(query)
 	require.NoError(t, err)
-	require.NotContains(t, string(body), "platformNo")
+	require.Contains(t, string(body), `"platformNo":"100030218"`)
 
 	balance := OfficialBalanceQueryRequest{
 		Version:     OfficialBalanceVersion,

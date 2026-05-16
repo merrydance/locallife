@@ -359,8 +359,9 @@ func loggedBaofuSettlementAccountServerError(ctx *gin.Context, err error, scope 
 
 func (server *Server) newBaofuAccountOnboardingService() *logic.BaofuAccountOnboardingService {
 	service := logic.NewBaofuAccountOnboardingService(server.store, server.baofuAccountClient, server.directPaymentClient, server.dataEncryptor, logic.BaofuAccountOnboardingConfig{
-		VerifyFeeFen: server.config.BaofuAccountVerifyFeeFen,
-		IndustryID:   server.config.BaofuBusinessIndustryID,
+		VerifyFeeFen:      server.config.BaofuAccountVerifyFeeFen,
+		IndustryID:        server.config.BaofuBusinessIndustryID,
+		CollectMerchantID: server.config.BaofuCollectMerchantID,
 	})
 	if server.baofuMerchantReportClient != nil {
 		service = service.WithMerchantReportContinuation(server.baofuMerchantReportClient, logic.BaofuAccountMerchantReportConfig{

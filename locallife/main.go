@@ -270,8 +270,9 @@ func main() {
 	schedulerManager.Register("baofu-payment-recovery", baofuPaymentRecoveryScheduler)
 	if baofuAccountClient != nil {
 		baofuAccountOpeningRecoveryScheduler := worker.NewBaofuAccountOpeningRecoveryScheduler(store, baofuAccountClient, dataEncryptor, worker.BaofuAccountOpeningRecoveryConfig{
-			VerifyFeeFen: config.BaofuAccountVerifyFeeFen,
-			IndustryID:   config.BaofuBusinessIndustryID,
+			VerifyFeeFen:      config.BaofuAccountVerifyFeeFen,
+			IndustryID:        config.BaofuBusinessIndustryID,
+			CollectMerchantID: config.BaofuCollectMerchantID,
 		})
 		if baofuMerchantReportClient != nil {
 			baofuAccountOpeningRecoveryScheduler.SetMerchantReportClient(baofuMerchantReportClient, worker.BaofuAccountOpeningMerchantReportRecoveryConfig{

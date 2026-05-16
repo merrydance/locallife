@@ -57,8 +57,9 @@ func (processor *RedisTaskProcessor) ProcessTaskPaymentFactApplication(ctx conte
 	}
 
 	baofuContinuation := logic.NewBaofuAccountOnboardingService(processor.store, processor.baofuAccountClient, processor.directPaymentClient, processor.dataEncryptor, logic.BaofuAccountOnboardingConfig{
-		VerifyFeeFen: processor.config.BaofuAccountVerifyFeeFen,
-		IndustryID:   processor.config.BaofuBusinessIndustryID,
+		VerifyFeeFen:      processor.config.BaofuAccountVerifyFeeFen,
+		IndustryID:        processor.config.BaofuBusinessIndustryID,
+		CollectMerchantID: processor.config.BaofuCollectMerchantID,
 	})
 	if processor.baofuMerchantReportClient != nil {
 		baofuContinuation = baofuContinuation.WithMerchantReportContinuation(processor.baofuMerchantReportClient, logic.BaofuAccountMerchantReportConfig{

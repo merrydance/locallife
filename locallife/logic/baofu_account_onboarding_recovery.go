@@ -59,6 +59,7 @@ func (s *BaofuAccountOnboardingService) queryRequestForFlow(ctx context.Context,
 	req.LoginNo = strings.TrimSpace(flow.LoginNo.String)
 	req.CertificateNo = strings.TrimSpace(certificateNo)
 	req.CertificateType = strings.TrimSpace(profile.CertificateType.String)
+	req.PlatformNo = strings.TrimSpace(s.config.normalized().CollectMerchantID)
 	if strings.TrimSpace(req.LoginNo) == "" {
 		return baofucontracts.QueryAccountRequest{}, errors.New("baofu account opening loginNo is required for query")
 	}
@@ -67,6 +68,9 @@ func (s *BaofuAccountOnboardingService) queryRequestForFlow(ctx context.Context,
 	}
 	if strings.TrimSpace(req.CertificateType) == "" {
 		return baofucontracts.QueryAccountRequest{}, errors.New("baofu account opening certificateType is required for query")
+	}
+	if strings.TrimSpace(req.PlatformNo) == "" {
+		return baofucontracts.QueryAccountRequest{}, errors.New("baofu account opening collect merchant id is required for query")
 	}
 	return req, nil
 }

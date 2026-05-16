@@ -133,7 +133,7 @@ func TestBaofuAccountOnboardingServiceStart_BusinessPrivateCardPassesOfficialFie
 			UpstreamState: "1",
 		},
 	}
-	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931"})
+	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "100000"})
 
 	result, err := service.StartOrRecoverOpening(context.Background(), BaofuAccountOpeningInput{
 		OwnerType: db.BaofuAccountOwnerTypeMerchant,
@@ -241,7 +241,7 @@ func TestBaofuAccountOnboardingServiceStart_BusinessOwnerOpensWithIndustry9931An
 			UpstreamState: "1",
 		},
 	}
-	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931"})
+	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "100000"})
 
 	result, err := service.StartOrRecoverOpening(context.Background(), BaofuAccountOpeningInput{
 		OwnerType: db.BaofuAccountOwnerTypePlatform,
@@ -285,7 +285,7 @@ func TestBaofuAccountOnboardingServiceContinueAfterVerifyFeePaid_OpensRiderWitho
 			UpstreamState: "1",
 		},
 	}
-	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931"})
+	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "100000"})
 	profile := store.mustUpsertProfile(t, db.BaofuAccountOwnerTypeRider, 66, db.BaofuAccountTypePersonal)
 	flow := store.mustCreateFlow(t, db.BaofuAccountOwnerTypeRider, 66, db.BaofuAccountTypePersonal, profile.ID)
 	payment := db.PaymentOrder{ID: 501, UserID: 9, BusinessType: db.PaymentBusinessTypeBaofuAccountVerifyFee, PaymentChannel: db.PaymentChannelDirect, PaymentType: "miniprogram", Amount: 200, Status: "paid"}
@@ -466,7 +466,7 @@ func TestBaofuAccountOnboardingServiceStart_MerchantActiveBindingWaitsForAppletA
 		SubMchID:        pgtype.Text{String: "1900000118", Valid: true},
 	})
 	client := &fakeBaofuOnboardingAccountClient{}
-	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931"})
+	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "100000"})
 
 	result, err := service.StartOrRecoverOpening(context.Background(), BaofuAccountOpeningInput{
 		OwnerType: db.BaofuAccountOwnerTypeMerchant,
@@ -614,7 +614,7 @@ func TestBaofuAccountOnboardingServiceRecoverOpeningQueriesByLoginNoAndAppliesRe
 			Raw:           []byte(`{"state":"1"}`),
 		},
 	}
-	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931"})
+	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "100000"})
 	profile := store.mustUpsertProfile(t, db.BaofuAccountOwnerTypeRider, 66, db.BaofuAccountTypePersonal)
 	flow := store.mustCreateFlow(t, db.BaofuAccountOwnerTypeRider, 66, db.BaofuAccountTypePersonal, profile.ID)
 	flow.State = db.BaofuAccountOpeningStateOpeningProcessing
@@ -630,7 +630,7 @@ func TestBaofuAccountOnboardingServiceRecoverOpeningQueriesByLoginNoAndAppliesRe
 	require.Equal(t, "LLBFOR0000000066", client.lastQuery.LoginNo)
 	require.Equal(t, "110101199001011234", client.lastQuery.CertificateNo)
 	require.Equal(t, baofucontracts.OfficialCertificateTypeID, client.lastQuery.CertificateType)
-	require.Empty(t, client.lastQuery.PlatformNo)
+	require.Equal(t, "100000", client.lastQuery.PlatformNo)
 	require.False(t, store.platformFeeLedgerCreated)
 }
 
@@ -644,7 +644,7 @@ func TestBaofuAccountOnboardingServiceRecoverOpeningAlertsAndRejectsContractOwne
 			Raw:           []byte(`{"state":"1","contractNo":"CP_CONFLICT"}`),
 		},
 	}
-	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931"})
+	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "100000"})
 	profile := store.mustUpsertProfile(t, db.BaofuAccountOwnerTypeRider, 166, db.BaofuAccountTypePersonal)
 	flow := store.mustCreateFlow(t, db.BaofuAccountOwnerTypeRider, 166, db.BaofuAccountTypePersonal, profile.ID)
 	flow.State = db.BaofuAccountOpeningStateOpeningProcessing
@@ -693,7 +693,7 @@ func TestBaofuAccountOnboardingServiceRecoverOpeningAlertsAndRejectsMismatchedOu
 			Raw:           []byte(`{"transSerialNo":"BFO_OTHER","state":"1","contractNo":"CP_QUERY_SERIAL_MISMATCH"}`),
 		},
 	}
-	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931"})
+	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "100000"})
 	profile := store.mustUpsertProfile(t, db.BaofuAccountOwnerTypeRider, 167, db.BaofuAccountTypePersonal)
 	flow := store.mustCreateFlow(t, db.BaofuAccountOwnerTypeRider, 167, db.BaofuAccountTypePersonal, profile.ID)
 	flow.State = db.BaofuAccountOpeningStateOpeningProcessing

@@ -305,8 +305,9 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		paymentFactService: logic.NewPaymentFactService(store).
 			WithPaymentSuccessConfig(config.RiderAverageSpeed, config.DefaultPrepareTime).
 			WithBaofuVerifyFeeContinuation(logic.NewBaofuAccountOnboardingService(store, baofuAccountClient, paymentClient, dataEncryptor, logic.BaofuAccountOnboardingConfig{
-				VerifyFeeFen: config.BaofuAccountVerifyFeeFen,
-				IndustryID:   config.BaofuBusinessIndustryID,
+				VerifyFeeFen:      config.BaofuAccountVerifyFeeFen,
+				IndustryID:        config.BaofuBusinessIndustryID,
+				CollectMerchantID: config.BaofuCollectMerchantID,
 			})),
 		baofuAccountNotificationParser: baofuAccountNotificationParser,
 		baofuPaymentNotificationParser: baofuPaymentNotificationParser,

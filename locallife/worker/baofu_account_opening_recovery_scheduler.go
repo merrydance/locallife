@@ -25,6 +25,7 @@ const (
 type BaofuAccountOpeningRecoveryConfig struct {
 	VerifyFeeFen                    int64
 	IndustryID                      string
+	CollectMerchantID               string
 	MerchantReportCollectMerchantID string
 	MerchantReportCollectTerminalID string
 	MerchantReportChannelID         string
@@ -139,8 +140,9 @@ func (s *BaofuAccountOpeningRecoveryScheduler) runOnce(ctx context.Context) {
 		return
 	}
 	service := logic.NewBaofuAccountOnboardingService(s.store, s.client, nil, s.dataEncryptor, logic.BaofuAccountOnboardingConfig{
-		VerifyFeeFen: s.config.VerifyFeeFen,
-		IndustryID:   s.config.IndustryID,
+		VerifyFeeFen:      s.config.VerifyFeeFen,
+		IndustryID:        s.config.IndustryID,
+		CollectMerchantID: s.config.CollectMerchantID,
 	})
 	for _, flow := range flows {
 		switch strings.TrimSpace(flow.State) {

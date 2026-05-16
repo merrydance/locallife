@@ -96,14 +96,15 @@ func TestBaofuAccountOpeningRecoverySchedulerQueriesOpeningFlowAndMarksReady(t *
 		})
 
 	scheduler := worker.NewBaofuAccountOpeningRecoveryScheduler(store, client, nil, worker.BaofuAccountOpeningRecoveryConfig{
-		VerifyFeeFen: 200,
-		IndustryID:   "9931",
+		VerifyFeeFen:      200,
+		IndustryID:        "9931",
+		CollectMerchantID: "100000",
 	})
 	scheduler.RunOnce()
 
 	require.Equal(t, "LLBFOR0000001006", client.queryReq.LoginNo)
 	require.Equal(t, "110101199001011234", client.queryReq.CertificateNo)
-	require.Empty(t, client.queryReq.PlatformNo)
+	require.Equal(t, "100000", client.queryReq.PlatformNo)
 }
 
 func TestBaofuAccountOpeningRecoverySchedulerSubmitsMerchantReportAndMarksReady(t *testing.T) {
@@ -288,7 +289,7 @@ func TestBaofuAccountOpeningRecoverySchedulerMarksOpeningFailure(t *testing.T) {
 			return flow, nil
 		})
 
-	scheduler := worker.NewBaofuAccountOpeningRecoveryScheduler(store, client, nil, worker.BaofuAccountOpeningRecoveryConfig{VerifyFeeFen: 200, IndustryID: "9931"})
+	scheduler := worker.NewBaofuAccountOpeningRecoveryScheduler(store, client, nil, worker.BaofuAccountOpeningRecoveryConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "100000"})
 	scheduler.RunOnce()
 
 	require.Equal(t, "LLBFOR0000001007", client.queryReq.LoginNo)
@@ -314,7 +315,7 @@ func TestBaofuAccountOpeningRecoverySchedulerLeavesProviderProcessingFlowUnchang
 		Return(binding, nil)
 	store.EXPECT().GetBaofuAccountOpeningProfile(gomock.Any(), profile.ID).Return(profile, nil)
 
-	scheduler := worker.NewBaofuAccountOpeningRecoveryScheduler(store, client, nil, worker.BaofuAccountOpeningRecoveryConfig{VerifyFeeFen: 200, IndustryID: "9931"})
+	scheduler := worker.NewBaofuAccountOpeningRecoveryScheduler(store, client, nil, worker.BaofuAccountOpeningRecoveryConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "100000"})
 	scheduler.RunOnce()
 
 	require.Equal(t, "LLBFOR0000001008", client.queryReq.LoginNo)
@@ -420,7 +421,7 @@ func TestBaofuAccountOpeningRecoverySchedulerLogsFlowContextOnFailure(t *testing
 	store.EXPECT().GetBaofuAccountOpeningProfile(gomock.Any(), flow.ProfileID.Int64).
 		Return(db.BaofuAccountOpeningProfile{}, context.DeadlineExceeded)
 
-	scheduler := worker.NewBaofuAccountOpeningRecoveryScheduler(store, client, nil, worker.BaofuAccountOpeningRecoveryConfig{VerifyFeeFen: 200, IndustryID: "9931"})
+	scheduler := worker.NewBaofuAccountOpeningRecoveryScheduler(store, client, nil, worker.BaofuAccountOpeningRecoveryConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "100000"})
 	scheduler.RunOnce()
 
 	body := logs.String()
@@ -454,7 +455,7 @@ func TestBaofuAccountOpeningRecoverySchedulerLogsSafeProviderErrorDetails(t *tes
 	store.EXPECT().GetBaofuAccountOpeningProfile(gomock.Any(), flow.ProfileID.Int64).
 		Return(profile, nil)
 
-	scheduler := worker.NewBaofuAccountOpeningRecoveryScheduler(store, client, nil, worker.BaofuAccountOpeningRecoveryConfig{VerifyFeeFen: 200, IndustryID: "9931"})
+	scheduler := worker.NewBaofuAccountOpeningRecoveryScheduler(store, client, nil, worker.BaofuAccountOpeningRecoveryConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "100000"})
 	scheduler.RunOnce()
 
 	body := logs.String()
