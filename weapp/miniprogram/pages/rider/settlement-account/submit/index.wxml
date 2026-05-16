@@ -81,15 +81,6 @@
           maxlength="11"
           bind:change="onInput"
         />
-        <t-input
-          label="开户银行"
-          placeholder="选填，如：中国工商银行"
-          value="{{form.bank_name}}"
-          data-field="bank_name"
-          disabled="{{submitting || syncing}}"
-          align="right"
-          bind:change="onInput"
-        />
         <t-cell wx:if="{{formErrorMessage}}" title="资料校验" note="{{formErrorMessage}}" />
       </t-cell-group>
 

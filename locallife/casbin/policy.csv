@@ -127,6 +127,8 @@ p, operator, /v1/operator/food-safety/cases/:id/resolve, POST
 # Operator Finance
 p, operator, /v1/operators/me/finance/overview, GET
 p, operator, /v1/operators/me/commission, GET
+p, operator, /v1/operators/me/settlement-account, GET
+p, operator, /v1/operators/me/settlement-account, POST
 p, operator, /v1/operators/me/profit-sharing/configs, GET
 p, operator, /v1/operators/me/notifications, GET
 p, operator, /v1/operators/me/notifications/summary, GET

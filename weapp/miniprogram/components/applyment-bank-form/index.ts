@@ -15,6 +15,7 @@ import {
 } from '../../api/applyment-bank'
 import { uploadMedia } from '../../utils/media'
 import { getErrorUserMessage } from '../../utils/user-facing'
+import { resolveRecognizedBankSelection } from './selection'
 
 const DEFAULT_CONTACT_DOC_TYPE: ApplymentContactDocType = 'IDENTIFICATION_TYPE_MAINLAND_IDCARD'
 const CONTACT_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -1217,18 +1218,23 @@ Component({
       try {
         const response = await searchApplymentBanksByAccount(this.getApiBasePath(), form.account_type, accountNumber)
         const matches = decorateBankOptions(response.matches)
+        const selection = resolveRecognizedBankSelection(matches)
 
-        if (matches.length === 1) {
-          await this.applySelectedBank(matches[0])
+        if (selection.bank) {
+          await this.applySelectedBank(selection.bank)
+        }
+
+        if (selection.shouldOpenPicker) {
+          const selectedBankIndex = findSelectedBankIndex(selection.filteredBanks, this.readForm())
+          this.setData({
+            filteredBanks: selection.filteredBanks,
+            showBankPicker: true,
+            selectedBankIndex
+          })
           return
         }
 
-        if (matches.length > 1) {
-          this.setData({
-            filteredBanks: matches.slice(0, 100),
-            showBankPicker: true,
-            selectedBankIndex: 0
-          })
+        if (selection.bank) {
           return
         }
 

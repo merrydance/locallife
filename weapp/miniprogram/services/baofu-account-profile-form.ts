@@ -37,14 +37,12 @@ export type BaofuPersonalProfileField =
   | 'certificate_no'
   | 'bank_account_no'
   | 'bank_mobile'
-  | 'bank_name'
 
 export interface BaofuPersonalProfileForm {
   name: string
   certificate_no: string
   bank_account_no: string
   bank_mobile: string
-  bank_name: string
 }
 
 function normalizeText(value?: string | null): string {
@@ -67,8 +65,7 @@ export function emptyBaofuPersonalProfileForm(): BaofuPersonalProfileForm {
     name: '',
     certificate_no: '',
     bank_account_no: '',
-    bank_mobile: '',
-    bank_name: ''
+    bank_mobile: ''
   }
 }
 
@@ -211,8 +208,7 @@ export function buildBaofuPersonalProfilePayload(
       real_name: form.name.trim(),
       mobile: form.bank_mobile.trim(),
       id_card_number: form.certificate_no.trim(),
-      bank_account_number: form.bank_account_no.trim(),
-      bank_name: form.bank_name.trim()
+      bank_account_number: form.bank_account_no.trim()
     }
     if (!payload.id_card_number) {
       delete payload.id_card_number
@@ -224,8 +220,7 @@ export function buildBaofuPersonalProfilePayload(
     legal_name: form.name.trim(),
     certificate_no: form.certificate_no.trim(),
     bank_account_no: form.bank_account_no.trim(),
-    bank_mobile: form.bank_mobile.trim(),
-    bank_name: form.bank_name.trim()
+    bank_mobile: form.bank_mobile.trim()
   }
   if (!payload.certificate_no) {
     delete payload.certificate_no

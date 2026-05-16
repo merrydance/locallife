@@ -93,8 +93,7 @@ function buildFieldConfigs(role: BaofuAccountOwnerRole): BaofuRolePageFieldConfi
     { key: 'legal_name', label: '姓名', placeholder: '', required: true },
     { key: 'certificate_no', label: '身份证号', placeholder: '18位身份证号', required: true },
     { key: 'bank_account_no', label: '银行卡号', placeholder: '本人借记卡号', required: true },
-    { key: 'bank_mobile', label: '预留手机号', placeholder: '11位手机号', required: true },
-    { key: 'bank_name', label: '开户银行', placeholder: '选填，如：中国工商银行', required: false }
+    { key: 'bank_mobile', label: '预留手机号', placeholder: '11位手机号', required: true }
   ]
 }
 
