@@ -290,6 +290,37 @@ func TestBaofuAccountOpeningFlowFailedReplacementAndOpeningGuards(t *testing.T) 
 	require.NotEqual(t, flow.ID, replacement.ID)
 }
 
+func TestMarkBaofuAccountOpeningFlowReadyAllowsDuplicateFailedRecovery(t *testing.T) {
+	ctx := context.Background()
+	ownerID := time.Now().UnixNano()
+	flow := createBaofuOpeningFlowForTest(t, BaofuAccountOwnerTypeOperator, ownerID, BaofuAccountTypePersonal, BaofuAccountOpeningStateVerifyFeePending)
+	payment := createBaofuVerifyFeePaymentOrderForTest(t, BaofuAccountOwnerTypeOperator, ownerID, "pending")
+	flow, err := testStore.MarkBaofuAccountOpeningFlowOpeningProcessing(ctx, MarkBaofuAccountOpeningFlowOpeningProcessingParams{
+		ID:                      flow.ID,
+		VerifyFeePaymentOrderID: pgtype.Int8{Int64: payment.ID, Valid: true},
+		OpenTransSerialNo:       pgtype.Text{String: "OPEN" + util.RandomString(18), Valid: true},
+		LoginNo:                 pgtype.Text{String: "LLBFOO" + util.RandomString(12), Valid: true},
+		ProviderRequestSnapshot: []byte(`{}`),
+		RawSnapshot:             []byte(`{}`),
+	})
+	require.NoError(t, err)
+	failed, err := testStore.MarkBaofuAccountOpeningFlowFailed(ctx, MarkBaofuAccountOpeningFlowFailedParams{
+		ID:             flow.ID,
+		FailureCode:    pgtype.Text{String: "BF00060", Valid: true},
+		FailureMessage: pgtype.Text{String: "该子商户已开户，请勿重复提交", Valid: true},
+		RawSnapshot:    []byte(`{"state":"failed","errorCode":"BF00060"}`),
+	})
+	require.NoError(t, err)
+
+	ready, err := testStore.MarkBaofuAccountOpeningFlowReady(ctx, MarkBaofuAccountOpeningFlowReadyParams{
+		ID:          failed.ID,
+		RawSnapshot: []byte(`{"state":"ready"}`),
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, BaofuAccountOpeningStateReady, ready.State)
+}
+
 func TestListRecoverableBaofuAccountOpeningFlowsIncludesLatestDuplicateFailure(t *testing.T) {
 	ctx := context.Background()
 	ownerID := time.Now().UnixNano()

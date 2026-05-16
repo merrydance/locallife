@@ -565,7 +565,10 @@ SET
     raw_snapshot = $3,
     updated_at = now()
 WHERE id = $4
-  AND state IN ('opening_processing', 'merchant_report_processing', 'applet_auth_pending', 'ready')
+  AND (
+      state IN ('opening_processing', 'merchant_report_processing', 'applet_auth_pending', 'ready')
+      OR (state = 'failed' AND failure_code IN ('BF00060', 'EXISTED_LOGIN_NO'))
+  )
 RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
 `
 
