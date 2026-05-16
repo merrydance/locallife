@@ -257,11 +257,12 @@ func accountBusinessFailure(raw json.RawMessage) (string, string, bool) {
 	retCode := strings.ToUpper(jsonScalarString(payload["retCode"]))
 	errorCode := jsonScalarString(payload["errorCode"])
 	errorMessage := jsonScalarString(payload["errorMsg"])
-	if retCode == "" && (errorCode != "" || errorMessage != "") {
-		return errorCode, errorMessage, true
-	}
 	if retCode == "" {
-		return "MISSING_RET_CODE", errorMessage, true
+		code := errorCode
+		if code == "" {
+			code = "MISSING_RET_CODE"
+		}
+		return code, errorMessage, true
 	}
 	if retCode == "1" || retCode == "SUCCESS" {
 		return "", "", false

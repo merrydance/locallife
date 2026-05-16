@@ -3,11 +3,14 @@ package api
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/merrydance/locallife/baofu"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
@@ -292,7 +295,9 @@ func writeBaofuSettlementAccountLogicRequestError(ctx *gin.Context, err error, s
 		Int64("owner_id", scope.OwnerID).
 		Str("account_type", scope.AccountType).
 		Str("audience", scope.Audience)
+	hasProviderContext := false
 	if providerContext, ok := logic.BaofuProviderErrorContextFromError(logErr); ok {
+		hasProviderContext = true
 		event = event.
 			Int64("flow_id", providerContext.FlowID).
 			Str("owner_type", providerContext.OwnerType).
@@ -304,9 +309,32 @@ func writeBaofuSettlementAccountLogicRequestError(ctx *gin.Context, err error, s
 			Str("provider_operation", providerContext.ProviderOperation).
 			Str("provider_capability", providerContext.ProviderCapability)
 	}
+	event = writeBaofuSettlementAccountProviderErrorLogFields(event, logErr, hasProviderContext)
 	event.Msg("baofu settlement account request rejected")
 	ctx.JSON(reqErr.Status, errorResponse(errors.New(logicRequestErrorPublicMessage(reqErr))))
 	return true
+}
+
+func writeBaofuSettlementAccountProviderErrorLogFields(event *zerolog.Event, err error, hasProviderContext bool) *zerolog.Event {
+	var providerErr *baofu.ProviderError
+	if !errors.As(err, &providerErr) || providerErr == nil {
+		return event
+	}
+	event = event.
+		Str("provider_method", strings.TrimSpace(providerErr.Operation)).
+		Str("upstream_code", strings.TrimSpace(providerErr.UpstreamCode)).
+		Str("frontend_code", strings.TrimSpace(providerErr.Frontend.Code)).
+		Bool("retryable", providerErr.Frontend.Retryable)
+	if !hasProviderContext {
+		event = event.Str("provider_capability", strings.TrimSpace(providerErr.Capability))
+	}
+	if providerErr.StatusCode != 0 {
+		event = event.Int("http_status", providerErr.StatusCode)
+	}
+	if cause := errors.Unwrap(providerErr); cause != nil {
+		event = event.Str("provider_error_cause", strings.TrimSpace(cause.Error()))
+	}
+	return event
 }
 
 func loggedBaofuSettlementAccountServerError(ctx *gin.Context, err error, scope baofuSettlementAccountScope, publicMessage string, logMessage string) ErrorResponse {

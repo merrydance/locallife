@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"math/big"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/baofu"
 	baofucontracts "github.com/merrydance/locallife/baofu/account/contracts"
 	merchantcontracts "github.com/merrydance/locallife/baofu/merchantreport/contracts"
 	mockdb "github.com/merrydance/locallife/db/mock"
@@ -428,6 +430,40 @@ func TestBaofuAccountOpeningRecoverySchedulerLogsFlowContextOnFailure(t *testing
 	require.Contains(t, body, `"open_trans_serial_no":"BFO1009"`)
 	require.Contains(t, body, `"current_state":"opening_processing"`)
 	require.Contains(t, body, `"provider_operation":"baofu_account_query"`)
+}
+
+func TestBaofuAccountOpeningRecoverySchedulerLogsSafeProviderErrorDetails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var logs bytes.Buffer
+	previousLogger := log.Logger
+	log.Logger = zerolog.New(&logs)
+	t.Cleanup(func() { log.Logger = previousLogger })
+
+	store := mockdb.NewMockStore(ctrl)
+	client := &baofuAccountOpeningRecoveryClient{
+		err: baofu.NewProviderContractError("T-1001-013-03", errors.New("baofu query account response contractNo is required")),
+	}
+	flow, binding, profile := baofuOpeningRecoveryPersonalFixtures(70, 1010)
+
+	store.EXPECT().ListRecoverableBaofuAccountOpeningFlows(gomock.Any(), gomock.Any()).
+		Return([]db.BaofuAccountOpeningFlow{flow}, nil)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{OwnerType: flow.OwnerType, OwnerID: flow.OwnerID}).
+		Return(binding, nil)
+	store.EXPECT().GetBaofuAccountOpeningProfile(gomock.Any(), flow.ProfileID.Int64).
+		Return(profile, nil)
+
+	scheduler := worker.NewBaofuAccountOpeningRecoveryScheduler(store, client, nil, worker.BaofuAccountOpeningRecoveryConfig{VerifyFeeFen: 200, IndustryID: "9931"})
+	scheduler.RunOnce()
+
+	body := logs.String()
+	require.Contains(t, body, `"flow_id":70`)
+	require.Contains(t, body, `"provider_operation":"baofu_account_query"`)
+	require.Contains(t, body, `"provider_method":"T-1001-013-03"`)
+	require.Contains(t, body, `"upstream_code":"INVALID_DATA_CONTENT"`)
+	require.Contains(t, body, `"http_status":200`)
+	require.Contains(t, body, `"provider_error_cause":"baofu query account response contractNo is required"`)
 }
 
 type baofuAccountOpeningRecoveryClient struct {

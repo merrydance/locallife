@@ -1032,6 +1032,9 @@ func TestBaofuSettlementAccountRequestErrorLogIncludesMerchantReportContext(t *t
 	require.Contains(t, logs.String(), `"current_state":"applet_auth_pending"`)
 	require.Contains(t, logs.String(), `"owner_type":"merchant"`)
 	require.Contains(t, logs.String(), `"owner_id":88`)
+	require.Contains(t, logs.String(), `"provider_method":"bind_sub_config"`)
+	require.Contains(t, logs.String(), `"upstream_code":"NO_AUTH"`)
+	require.NotContains(t, logs.String(), providerErr.UpstreamMessage)
 }
 
 func TestBaofuSettlementAccountMerchantManagerCannotPost(t *testing.T) {

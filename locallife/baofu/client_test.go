@@ -46,6 +46,11 @@ func TestBusinessFailureDetectorsFailClosedForMissingSuccessIndicators(t *testin
 	require.Equal(t, "BF0005", accountCode)
 	require.Equal(t, "上游账户处理中", accountMessage)
 
+	accountCode, accountMessage, accountFailed = accountBusinessFailure(json.RawMessage(`{"errorMsg":"上游账户失败但未返回错误码"}`))
+	require.True(t, accountFailed)
+	require.Equal(t, "MISSING_RET_CODE", accountCode)
+	require.Equal(t, "上游账户失败但未返回错误码", accountMessage)
+
 	publicCode, publicMessage, publicFailed := publicBusinessFailure(json.RawMessage(`{"errCode":"MERCHANT_NOT_REPORT","errMsg":"上游报备缺失"}`))
 	require.True(t, publicFailed)
 	require.Equal(t, "MERCHANT_NOT_REPORT", publicCode)

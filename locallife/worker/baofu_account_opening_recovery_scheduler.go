@@ -2,10 +2,12 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/merrydance/locallife/baofu"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/util"
@@ -144,17 +146,17 @@ func (s *BaofuAccountOpeningRecoveryScheduler) runOnce(ctx context.Context) {
 		switch strings.TrimSpace(flow.State) {
 		case db.BaofuAccountOpeningStateOpeningProcessing:
 			if _, err := service.RecoverOpeningFlow(ctx, flow); err != nil {
-				logBaofuAccountOpeningRecoveryFlow(log.Error().Err(err), flow, "baofu_account_query").
+				logBaofuAccountOpeningRecoveryFlow(log.Error().Err(err), flow, "baofu_account_query", err).
 					Msg("recover baofu account opening flow failed")
 			}
 		case db.BaofuAccountOpeningStateMerchantReportProcessing, db.BaofuAccountOpeningStateAppletAuthPending:
 			if s.merchantReportClient == nil {
-				logBaofuAccountOpeningRecoveryFlow(log.Warn().Bool("missing_merchant_report_client", true), flow, "baofu_merchant_report_recover").
+				logBaofuAccountOpeningRecoveryFlow(log.Warn().Bool("missing_merchant_report_client", true), flow, "baofu_merchant_report_recover", nil).
 					Msg("baofu account opening recovery skipped merchant report flow because client is not configured")
 				continue
 			}
 			if missing := s.missingMerchantReportRecoveryConfigFields(); len(missing) > 0 {
-				logBaofuAccountOpeningRecoveryFlow(log.Warn().Strs("missing_config_fields", missing), flow, "baofu_merchant_report_recover").
+				logBaofuAccountOpeningRecoveryFlow(log.Warn().Strs("missing_config_fields", missing), flow, "baofu_merchant_report_recover", nil).
 					Msg("baofu account opening recovery skipped merchant report flow because config is incomplete")
 				continue
 			}
@@ -167,21 +169,37 @@ func (s *BaofuAccountOpeningRecoveryScheduler) runOnce(ctx context.Context) {
 				Business:          s.config.MerchantReportBusiness,
 			})
 			if _, err := reportService.RecoverMerchantReportFlow(ctx, flow); err != nil {
-				logBaofuAccountOpeningRecoveryFlow(log.Error().Err(err), flow, "baofu_merchant_report_recover").
+				logBaofuAccountOpeningRecoveryFlow(log.Error().Err(err), flow, "baofu_merchant_report_recover", err).
 					Msg("recover baofu merchant report flow failed")
 			}
 		}
 	}
 }
 
-func logBaofuAccountOpeningRecoveryFlow(event *zerolog.Event, flow db.BaofuAccountOpeningFlow, providerOperation string) *zerolog.Event {
-	return event.
+func logBaofuAccountOpeningRecoveryFlow(event *zerolog.Event, flow db.BaofuAccountOpeningFlow, providerOperation string, err error) *zerolog.Event {
+	event = event.
 		Int64("flow_id", flow.ID).
 		Str("owner_type", strings.TrimSpace(flow.OwnerType)).
 		Int64("owner_id", flow.OwnerID).
 		Str("open_trans_serial_no", strings.TrimSpace(flow.OpenTransSerialNo.String)).
 		Str("current_state", strings.TrimSpace(flow.State)).
 		Str("provider_operation", providerOperation)
+	var providerErr *baofu.ProviderError
+	if errors.As(logic.LoggableError(err), &providerErr) && providerErr != nil {
+		event = event.
+			Str("provider_method", strings.TrimSpace(providerErr.Operation)).
+			Str("provider_capability", strings.TrimSpace(providerErr.Capability)).
+			Str("upstream_code", strings.TrimSpace(providerErr.UpstreamCode)).
+			Str("frontend_code", strings.TrimSpace(providerErr.Frontend.Code)).
+			Bool("retryable", providerErr.Frontend.Retryable)
+		if providerErr.StatusCode != 0 {
+			event = event.Int("http_status", providerErr.StatusCode)
+		}
+		if cause := errors.Unwrap(providerErr); cause != nil {
+			event = event.Str("provider_error_cause", strings.TrimSpace(cause.Error()))
+		}
+	}
+	return event
 }
 
 func (s *BaofuAccountOpeningRecoveryScheduler) missingMerchantReportRecoveryConfigFields() []string {
