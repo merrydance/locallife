@@ -29,46 +29,6 @@
   margin-bottom: 24rpx;
 }
 
-.task-summary-card {
-  margin: 24rpx;
-  background: var(--td-bg-color-container, #fff);
-  border-radius: 16rpx;
-  padding: 24rpx;
-  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
-}
-
-.task-summary-title {
-  font-size: 30rpx;
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 20rpx;
-}
-
-.task-summary-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 24rpx;
-  margin-bottom: 16rpx;
-}
-
-.task-summary-row:last-child {
-  margin-bottom: 0;
-}
-
-.task-summary-label {
-  font-size: 26rpx;
-  color: #666;
-  flex-shrink: 0;
-}
-
-.task-summary-value,
-.task-summary-desc {
-  font-size: 26rpx;
-  color: #333;
-  line-height: 1.6;
-  text-align: right;
-}
-
 .payment-tip {
   padding: 24rpx;
   display: flex;
@@ -143,4 +103,3 @@
   color: var(--td-text-color-primary, #333);
   font-weight: 500;
 }
-
