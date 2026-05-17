@@ -1,10 +1,15 @@
 <custom-navbar title="外卖" location="{{address}}" bind:locationchange="onLocationChange" />
 
 <template name="provider-onboarding-empty">
-  <t-empty description="附近暂无商户服务，你可以成为第一个 🏪" />
+  <t-empty description="附近暂无可配送商户" />
   <view class="empty-actions">
-    <t-button theme="primary" size="large" block bind:tap="onMerchantRegister" shape="round">商户入驻</t-button>
-    <t-button size="large" block bind:tap="onOperatorRegister" shape="round">运营商入驻</t-button>
+    <t-button theme="primary" size="large" block bind:tap="onRefresh" shape="round">重新加载</t-button>
+    <t-button size="large" block bind:tap="onManualLocation" shape="round">切换位置</t-button>
+  </view>
+  <view class="provider-entry">
+    <text bindtap="onMerchantRegister">我是商家</text>
+    <text class="provider-entry-divider">/</text>
+    <text bindtap="onOperatorRegister">合作入驻</text>
   </view>
 </template>
 

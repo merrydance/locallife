@@ -62,6 +62,20 @@
   padding: var(--spacer-sm) var(--spacer-md) 0;
 }
 
+.provider-entry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  padding-top: var(--spacer-sm);
+  color: var(--td-brand-color);
+  font-size: var(--font-size-sm);
+}
+
+.provider-entry-divider {
+  color: var(--td-text-color-placeholder);
+}
+
 /* 筛选侧边栏 (Drawer) */
 .filter-drawer {
   width: 620rpx;
