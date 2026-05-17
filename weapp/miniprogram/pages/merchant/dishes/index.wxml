@@ -106,16 +106,17 @@
 
               <view class="dish-action-bar" catchtap="onActionsCatch">
                 <view class="dish-action-slot">
-                  <t-button class="dish-action-button" variant="text" theme="default" size="small" bind:tap="onDishCardTap" data-id="{{item.id}}">编辑</t-button>
+                  <t-button class="dish-action-button" variant="text" theme="default" size="small" icon="edit" bind:tap="onDishCardTap" data-id="{{item.id}}">编辑</t-button>
                 </view>
                 <t-divider layout="vertical" />
                 <view class="dish-action-slot">
                   <t-button
                     class="dish-action-button"
                     variant="text"
-                    theme="danger"
-                    size="small"
-                    loading="{{item.deletePending}}"
+	                    theme="danger"
+	                    size="small"
+	                    icon="delete"
+	                    loading="{{item.deletePending}}"
                     disabled="{{item.deletePending || item.statusPending}}"
                     bind:tap="onRequestDeleteDish"
                     data-id="{{item.id}}"

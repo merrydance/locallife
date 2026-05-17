@@ -85,16 +85,17 @@
 
             <view class="rule-action-bar" catchtap="onActionsCatch">
               <view class="rule-action-slot">
-                <t-button class="rule-action-button" variant="text" theme="default" size="small" bind:tap="onEditRule" data-id="{{item.id}}">编辑</t-button>
+                <t-button class="rule-action-button" variant="text" theme="default" size="small" icon="edit" bind:tap="onEditRule" data-id="{{item.id}}">编辑</t-button>
               </view>
               <t-divider layout="vertical" />
               <view class="rule-action-slot">
                 <t-button
                   class="rule-action-button"
                   variant="text"
-                  theme="danger"
-                  size="small"
-                  loading="{{item.deletePending}}"
+	                  theme="danger"
+	                  size="small"
+	                  icon="delete"
+	                  loading="{{item.deletePending}}"
                   disabled="{{item.deletePending || item.statusPending}}"
                   bind:tap="onRequestDeleteRule"
                   data-id="{{item.id}}"

@@ -80,16 +80,17 @@
 
             <view class="promotion-action-bar" catchtap="onActionsCatch">
               <view class="promotion-action-slot">
-                <t-button class="promotion-action-button" variant="text" theme="default" size="small" bind:tap="onEditPromotion" data-id="{{item.id}}">编辑</t-button>
+                <t-button class="promotion-action-button" variant="text" theme="default" size="small" icon="edit" bind:tap="onEditPromotion" data-id="{{item.id}}">编辑</t-button>
               </view>
               <t-divider layout="vertical" />
               <view class="promotion-action-slot">
                 <t-button
                   class="promotion-action-button"
                   variant="text"
-                  theme="danger"
-                  size="small"
-                  loading="{{item.deletePending}}"
+	                  theme="danger"
+	                  size="small"
+	                  icon="delete"
+	                  loading="{{item.deletePending}}"
                   disabled="{{item.deletePending || item.statusPending}}"
                   bind:tap="onRequestDeletePromotion"
                   data-id="{{item.id}}"
