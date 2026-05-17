@@ -13,10 +13,6 @@ import {
   type MerchantCartGroup
 } from '@/utils/takeout-cart-view'
 
-// ... existing imports
-
-// ... existing imports
-
 let _loadAllCartsPromise: Promise<void> | null = null
 let _lastLoadAllCartsAt = 0
 let _loadPaymentCapabilitiesPromise: Promise<void> | null = null
@@ -87,7 +83,6 @@ Page({
 
         // 为每个商户获取详细购物车内容
         let merchantGroups: MerchantCartGroup[] = []
-
 
         for (const merchantCart of userCarts.carts) {
           if (!merchantCart.merchant_id) continue
@@ -170,8 +165,6 @@ Page({
 
     return _loadPaymentCapabilitiesPromise
   },
-
-
   /**
    * 同步购物车状态到全局存储
    */
@@ -244,11 +237,9 @@ Page({
     // 如果是基于 this.data 进行的更新，则需要 setData
     if (!groups) {
       this.setData({ merchantGroups: updatedGroups })
-      
       // 检查 selectedCartIds 是否需要更新
       const { selectedCartIds } = this.data
       const newSelectedIds = updatedGroups.filter((g) => g.selected && selectedCartIds.includes(g.cartId)).map((g) => g.cartId)
-      
       // 如果有原来选中的现在因为错误变为了不选中
       if (newSelectedIds.length !== selectedCartIds.length) {
          // 注意：这里的简单比较可能不够，但通常足够处理 "选中->不选中" 的情况
@@ -258,7 +249,7 @@ Page({
            const g = updatedGroups.find((group) => group.cartId === id)
            return g && !g.errorStatus
          })
-         
+
          if (validSelectedIds.length !== selectedCartIds.length) {
             this.setData({ selectedCartIds: validSelectedIds })
             this.calculateCheckoutTotal()
