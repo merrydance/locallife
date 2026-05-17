@@ -62,7 +62,6 @@
           max="{{maxImages}}"
           bind:add="onAddImage"
           bind:remove="onRemoveImage"
-          bind:complete="onUploadComplete"
         />
       </view>
     </view>

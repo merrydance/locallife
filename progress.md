@@ -20,3 +20,6 @@
 - Completed P0-2 takeout cart unavailable item removal: added `onRemoveUnavailable`, duplicate-tap item state, delete API call, local cart removal reuse, and user-facing failure Toast.
 - Verified P0-2 with a targeted handler check, `PATH="$HOME/.local/bin:$PATH" npm run compile`, `PATH="$HOME/.local/bin:$PATH" npm run lint`, and `PATH="$HOME/.local/bin:$PATH" npm run gate:wxml-expression-safety`; all exited 0.
 - Error note: one exploratory `rg` command for WXML dynamic loading/disabled expressions failed due to an unescaped `{` in the regex; use fixed-string or simpler quoted patterns next time.
+- Completed P1-3 WXML handler binding gate: added `npm run check:wxml-handlers`, a lightweight page WXML-to-Page handler checker with behavior allowlist support, and regression coverage for runtime spreads, typed handlers, line comments, and URL regex literals.
+- P1-3 gate also found and removed two real stale bindings: `onStepChange` from merchant store registration steps and `onUploadComplete` from review image upload.
+- Verified P1-3 with `PATH="$HOME/.local/bin:$PATH" node scripts/check-wxml-handler-bindings.test.js`, `PATH="$HOME/.local/bin:$PATH" npm run check:wxml-handlers`, `PATH="$HOME/.local/bin:$PATH" npm run compile`, and `PATH="$HOME/.local/bin:$PATH" npm run lint`; all exited 0.
