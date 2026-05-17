@@ -147,8 +147,14 @@ func (s *BaofuAccountOpeningRecoveryScheduler) runOnce(ctx context.Context) {
 	for _, flow := range flows {
 		switch strings.TrimSpace(flow.State) {
 		case db.BaofuAccountOpeningStateOpeningProcessing, db.BaofuAccountOpeningStateFailed:
-			if _, err := service.RecoverOpeningFlow(ctx, flow); err != nil {
-				logBaofuAccountOpeningRecoveryFlow(log.Error().Err(err), flow, "baofu_account_query", err).
+			result, err := service.RecoverOpeningFlow(ctx, flow)
+			if err != nil {
+				logFlow := baofuAccountOpeningRecoveredFlowForLog(flow, result.Flow)
+				event := log.Error().Err(err)
+				if baofuAccountOpeningRecoveryErrorIsUserActionFailure(logFlow, err) {
+					event = log.Warn().Err(err)
+				}
+				logBaofuAccountOpeningRecoveryFlow(event, logFlow, "baofu_account_query", err).
 					Msg("recover baofu account opening flow failed")
 			}
 		case db.BaofuAccountOpeningStateMerchantReportProcessing, db.BaofuAccountOpeningStateAppletAuthPending:
@@ -176,6 +182,25 @@ func (s *BaofuAccountOpeningRecoveryScheduler) runOnce(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func baofuAccountOpeningRecoveredFlowForLog(original db.BaofuAccountOpeningFlow, recovered db.BaofuAccountOpeningFlow) db.BaofuAccountOpeningFlow {
+	if recovered.ID == 0 {
+		return original
+	}
+	return recovered
+}
+
+func baofuAccountOpeningRecoveryErrorIsUserActionFailure(flow db.BaofuAccountOpeningFlow, err error) bool {
+	if strings.TrimSpace(flow.State) != db.BaofuAccountOpeningStateFailed {
+		return false
+	}
+	var providerErr *baofu.ProviderError
+	if !errors.As(logic.LoggableError(err), &providerErr) || providerErr == nil {
+		return false
+	}
+	classified := baofu.ClassifyBaofuError(providerErr.UpstreamCode, providerErr.UpstreamMessage)
+	return classified.Category == baofu.BaofuErrorCategoryUserActionRequired
 }
 
 func logBaofuAccountOpeningRecoveryFlow(event *zerolog.Event, flow db.BaofuAccountOpeningFlow, providerOperation string, err error) *zerolog.Event {

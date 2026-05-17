@@ -527,6 +527,54 @@ func TestBaofuAccountOpeningRecoverySchedulerLogsSafeProviderErrorDetails(t *tes
 	require.Contains(t, body, `"provider_error_cause":"baofu query account response contractNo is required"`)
 }
 
+func TestBaofuAccountOpeningRecoverySchedulerLogsFinalFailedStateForProviderBusinessRejection(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	var logs bytes.Buffer
+	previousLogger := log.Logger
+	log.Logger = zerolog.New(&logs)
+	t.Cleanup(func() { log.Logger = previousLogger })
+
+	store := mockdb.NewMockStore(ctrl)
+	client := &baofuAccountOpeningRecoveryClient{
+		err: baofu.NewProviderBusinessError("T-1001-013-03", "BF00064", "account not found"),
+	}
+	flow, binding, profile := baofuOpeningRecoveryPersonalFixtures(71, 1011)
+	failedFlow := flow
+	failedFlow.State = db.BaofuAccountOpeningStateFailed
+	failedFlow.FailureCode = pgtype.Text{String: "BF00064", Valid: true}
+	failedFlow.FailureMessage = pgtype.Text{String: "未查询到宝付开户记录，请核对资料后重新提交", Valid: true}
+
+	store.EXPECT().ListRecoverableBaofuAccountOpeningFlows(gomock.Any(), gomock.Any()).
+		Return([]db.BaofuAccountOpeningFlow{flow}, nil)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{OwnerType: flow.OwnerType, OwnerID: flow.OwnerID}).
+		Return(binding, nil)
+	store.EXPECT().GetBaofuAccountOpeningProfile(gomock.Any(), flow.ProfileID.Int64).
+		Return(profile, nil)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{OwnerType: flow.OwnerType, OwnerID: flow.OwnerID}).
+		Return(binding, nil)
+	store.EXPECT().MarkBaofuAccountBindingFailed(gomock.Any(), gomock.Any()).
+		Return(db.BaofuAccountBinding{ID: binding.ID, OwnerType: binding.OwnerType, OwnerID: binding.OwnerID, AccountType: binding.AccountType, OpenState: db.BaofuAccountOpenStateFailed}, nil)
+	store.EXPECT().MarkBaofuAccountOpeningFlowFailed(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountOpeningFlowFailedParams) (db.BaofuAccountOpeningFlow, error) {
+			require.Equal(t, flow.ID, arg.ID)
+			require.Equal(t, pgtype.Text{String: "BF00064", Valid: true}, arg.FailureCode)
+			require.Equal(t, pgtype.Text{String: "未查询到宝付开户记录，请核对资料后重新提交", Valid: true}, arg.FailureMessage)
+			return failedFlow, nil
+		})
+
+	scheduler := worker.NewBaofuAccountOpeningRecoveryScheduler(store, client, nil, worker.BaofuAccountOpeningRecoveryConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "100000"})
+	scheduler.RunOnce()
+
+	body := logs.String()
+	require.Contains(t, body, `"level":"warn"`)
+	require.Contains(t, body, `"current_state":"failed"`)
+	require.NotContains(t, body, `"current_state":"opening_processing"`)
+	require.Contains(t, body, `"upstream_code":"BF00064"`)
+	require.Contains(t, body, `"frontend_code":"BAOFU_USER_ACTION_REQUIRED"`)
+}
+
 type baofuAccountOpeningRecoveryClient struct {
 	queryReq baofucontracts.QueryAccountRequest
 	result   *baofucontracts.AccountResult
