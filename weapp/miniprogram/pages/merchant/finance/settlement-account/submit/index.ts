@@ -1,3 +1,4 @@
+import { Message } from 'tdesign-miniprogram'
 import type {
   BaofuSettlementAccountProfileDefaults,
   BaofuSettlementAccountResponse
@@ -37,6 +38,19 @@ import { getErrorUserMessage } from '../../../../../utils/user-facing'
 
 interface FieldDataset {
   field?: BaofuEnterpriseProfileField
+}
+
+function showProfileValidationMessage(
+  context: WechatMiniprogram.Page.TrivialInstance,
+  offsetTop: number,
+  content: string
+) {
+  Message.warning({
+    context,
+    offset: [offsetTop + 16, 24] as [number, number],
+    duration: 2200,
+    content
+  })
 }
 
 async function merchantAccessGuard(): Promise<AccessCheckResult> {
@@ -109,8 +123,7 @@ Page({
     }
 
     this.setData({
-      [`form.${field}`]: e.detail.value,
-      formErrorMessage: ''
+      [`form.${field}`]: e.detail.value
     })
   },
 
@@ -124,8 +137,7 @@ Page({
     const value = String(e.detail.value || '').toUpperCase()
 
     this.setData({
-      [`form.${field}`]: value,
-      formErrorMessage: ''
+      [`form.${field}`]: value
     })
   },
 
@@ -151,13 +163,13 @@ Page({
       this.data.profileDefaults as BaofuSettlementAccountProfileDefaults | null
     )
     if (formErrorMessage) {
-      this.setData({ formErrorMessage })
+      const navBarHeight = Number((this.data as { navBarHeight?: number }).navBarHeight || 88)
+      showProfileValidationMessage(this, navBarHeight, formErrorMessage)
       return
     }
 
     this.setData({
       submitting: true,
-      formErrorMessage: '',
       waitVisible: true,
       ...buildBaofuOnboardingWaitViewFromText({
         state: 'submitting',

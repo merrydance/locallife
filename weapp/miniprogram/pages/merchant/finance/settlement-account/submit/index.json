@@ -8,7 +8,8 @@
     "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-input": "tdesign-miniprogram/input/input",
-    "t-loading": "tdesign-miniprogram/loading/loading"
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-message": "tdesign-miniprogram/message/message"
   },
   "navigationStyle": "custom"
 }

@@ -108,7 +108,6 @@
           maxlength="100"
           bind:change="onInput"
         />
-        <t-cell wx:if="{{formErrorMessage}}" title="资料校验" note="{{formErrorMessage}}" />
       </t-cell-group>
 
       <applyment-bank-form
@@ -132,3 +131,5 @@
     </block>
   </view>
 </view>
+
+<t-message id="t-message" />
