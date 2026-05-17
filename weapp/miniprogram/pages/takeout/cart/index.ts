@@ -107,9 +107,7 @@ Page({
 
         // 默认全选（排除有错误的商户）
         const availableGroups = merchantGroups.filter((g) => !g.errorStatus)
-        const selectedCartIds = this.data.splitCheckoutRequired
-          ? availableGroups.slice(0, 1).map((g) => g.cartId)
-          : availableGroups.map((g) => g.cartId)
+        const selectedCartIds = availableGroups.map((g) => g.cartId)
         merchantGroups = merchantGroups.map((group) => ({
           ...group,
           selected: selectedCartIds.includes(group.cartId)
@@ -288,24 +286,6 @@ Page({
     }
 
     const index = selectedCartIds.indexOf(cartId)
-    if (this.data.splitCheckoutRequired) {
-      const nextSelectedCartIds = index > -1 ? [] : [cartId]
-      const updatedGroups = merchantGroups.map((group) => ({
-        ...group,
-        selected: nextSelectedCartIds.includes(group.cartId)
-      }))
-
-      this.setData({
-        selectedCartIds: nextSelectedCartIds,
-        merchantGroups: updatedGroups
-      })
-      if (index === -1 && selectedCartIds.some((id) => id !== cartId)) {
-        wx.showToast({ title: '当前需按商户分别支付', icon: 'none' })
-      }
-      this.calculateCheckoutTotal()
-      return
-    }
-
     if (index > -1) {
       selectedCartIds.splice(index, 1)
     } else {
@@ -588,7 +568,12 @@ Page({
       return
     }
     if (this.data.splitCheckoutRequired && selectedCartIds.length > 1) {
-      wx.showToast({ title: '当前需按商户分别支付', icon: 'none' })
+      wx.showModal({
+        title: '暂不支持合单支付',
+        content: this.data.splitCheckoutNotice || '请一次选择一家商户下单。',
+        showCancel: false,
+        confirmText: '知道了'
+      })
       return
     }
 

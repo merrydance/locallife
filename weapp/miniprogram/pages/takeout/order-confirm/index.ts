@@ -412,8 +412,8 @@ Page({
 
   showSplitCheckoutRequired() {
     wx.showModal({
-      title: '请分开支付',
-      content: this.data.splitCheckoutNotice || '当前支付通道需按商户分别下单支付，请返回购物车一次选择一家商户。',
+      title: '暂不支持合单支付',
+      content: this.data.splitCheckoutNotice || '请返回购物车，一次选择一家商户下单。',
       showCancel: false,
       confirmText: '返回购物车',
       success: () => wx.navigateBack()

@@ -10,6 +10,7 @@
     "lint:all": "eslint miniprogram --ext .ts -f stylish",
     "check:applyment-bank-selection": "node scripts/check-applyment-bank-selection.js",
     "check:baofu-personal-profile-form": "node scripts/check-baofu-personal-profile-form.js",
+    "check:takeout-cart-split-checkout-ux": "node scripts/check-takeout-cart-split-checkout-ux.js",
     "check:wxml-handlers": "node scripts/check-wxml-handler-bindings.js",
     "gate:page-shell": "node scripts/check-page-shell.js",
     "gate:wxml-expression-safety": "node scripts/check-wxml-expression-safety.js",

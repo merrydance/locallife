@@ -16,6 +16,8 @@ export interface CheckoutPaymentCapabilities {
   splitCheckoutNotice: string
 }
 
+const SPLIT_CHECKOUT_UNAVAILABLE_NOTICE = '暂不支持合单支付，请一次选择一家商户下单。'
+
 export function getDefaultCheckoutAddress() {
   return AddressService.getDefaultAddress()
 }
@@ -53,8 +55,6 @@ export async function loadCheckoutPaymentCapabilities(): Promise<CheckoutPayment
     mainBusinessPaymentChannel: capabilities.main_business_payment_channel,
     combinedPaymentSupported: !!capabilities.combined_payment_supported,
     splitCheckoutRequired,
-    splitCheckoutNotice: splitCheckoutRequired
-      ? (capabilities.combined_payment_unavailable_message || '当前支付通道需按商户分别下单支付')
-      : ''
+    splitCheckoutNotice: splitCheckoutRequired ? SPLIT_CHECKOUT_UNAVAILABLE_NOTICE : ''
   }
 }
