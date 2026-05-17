@@ -307,6 +307,13 @@ func (s *BaofuAccountOnboardingService) ContinueAfterVerifyFeePaid(ctx context.C
 	if !baofuOpeningRequiresUserFee(flow.OwnerType) {
 		return nil
 	}
+	switch strings.TrimSpace(flow.State) {
+	case db.BaofuAccountOpeningStateOpeningProcessing,
+		db.BaofuAccountOpeningStateMerchantReportProcessing,
+		db.BaofuAccountOpeningStateAppletAuthPending,
+		db.BaofuAccountOpeningStateReady:
+		return nil
+	}
 	profileID := flow.ProfileID
 	if !profileID.Valid {
 		return errors.New("baofu account opening profile is required")

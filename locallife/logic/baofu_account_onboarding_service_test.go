@@ -341,6 +341,30 @@ func TestBaofuAccountOnboardingServiceContinueAfterVerifyFeePaid_OpensRiderWitho
 	require.False(t, store.platformFeeLedgerCreated)
 }
 
+func TestBaofuAccountOnboardingServiceContinueAfterVerifyFeePaid_ReadyFlowIsIdempotent(t *testing.T) {
+	store := newFakeBaofuAccountOnboardingStore()
+	client := &fakeBaofuOnboardingAccountClient{
+		openResult: &baofucontracts.AccountResult{
+			ContractNo:    "CP202605170001",
+			OpenState:     db.BaofuAccountOpenStateActive,
+			UpstreamState: "1",
+		},
+	}
+	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "100000"})
+	profile := store.mustUpsertProfile(t, db.BaofuAccountOwnerTypeRider, 1, db.BaofuAccountTypePersonal)
+	flow := store.mustCreateFlow(t, db.BaofuAccountOwnerTypeRider, 1, db.BaofuAccountTypePersonal, profile.ID)
+	payment := db.PaymentOrder{ID: 11, UserID: 2, BusinessType: db.PaymentBusinessTypeBaofuAccountVerifyFee, PaymentChannel: db.PaymentChannelDirect, PaymentType: "miniprogram", Amount: 200, Status: "paid"}
+	flow.State = db.BaofuAccountOpeningStateReady
+	flow.VerifyFeePaymentOrderID = pgtype.Int8{Int64: payment.ID, Valid: true}
+	store.flows[0] = flow
+
+	err := service.ContinueAfterVerifyFeePaid(context.Background(), payment)
+
+	require.NoError(t, err)
+	require.Equal(t, db.BaofuAccountOpeningStateReady, store.flows[0].State)
+	require.Zero(t, client.openCalls)
+}
+
 func TestBaofuAccountOnboardingServiceContinueAfterVerifyFeePaid_OpensOperatorWithoutPlatformFeeLedgerOrMerchantReport(t *testing.T) {
 	store := newFakeBaofuAccountOnboardingStore()
 	client := &fakeBaofuOnboardingAccountClient{
