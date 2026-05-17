@@ -36,6 +36,7 @@ import {
   ORDER_CONFIRM_CONCURRENCY,
   syncTakeoutCartSummary
 } from '../../../utils/takeout-order-confirm-support'
+import { getTakeoutPaymentCreateFailedContent } from '../../../utils/takeout-payment-error-copy'
 
 let _loadPaymentCapabilitiesPromise: Promise<void> | null = null
 
@@ -535,7 +536,7 @@ Page({
       })
     } catch (paymentError) {
       logger.error('Payment creation failed', paymentError, 'Order-confirm')
-      this.showPaymentCreateFailed(orderId)
+      this.showPaymentCreateFailed(orderId, paymentError)
     } finally {
       this.setData({ loading: false })
     }
@@ -585,11 +586,11 @@ Page({
     }
   },
 
-  showPaymentCreateFailed(orderId: number) {
+  showPaymentCreateFailed(orderId: number, error?: unknown) {
     this.setData({ loading: false })
     wx.showModal({
       title: '订单已创建',
-      content: '支付创建失败，请在订单详情页重新发起支付。',
+      content: getTakeoutPaymentCreateFailedContent(error),
       showCancel: false,
       confirmText: '查看订单',
       success: () => {
