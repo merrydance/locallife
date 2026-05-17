@@ -94,6 +94,43 @@ func TestBaofuAccountOnboardingServiceStart_ProviderOpenErrorBecomesSafeRequestE
 	require.Equal(t, 1, accountClient.openCalls)
 }
 
+func TestBaofuAccountOnboardingServiceStart_ProviderOpenErrorMarksFlowFailed(t *testing.T) {
+	store := newFakeBaofuAccountOnboardingStore()
+	providerErr := baofu.NewProviderBusinessError("T-1001-013-01", "BF0001", "raw upstream missing field")
+	accountClient := &fakeBaofuOnboardingAccountClient{err: providerErr}
+	service := NewBaofuAccountOnboardingService(store, accountClient, nil, nil, BaofuAccountOnboardingConfig{
+		VerifyFeeFen: 200,
+		IndustryID:   "9931",
+	})
+
+	_, err := service.StartOrRecoverOpening(context.Background(), BaofuAccountOpeningInput{
+		OwnerType: db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:   88,
+		UserID:    99,
+		Profile: &BaofuAccountOpeningProfileInput{
+			LegalName:           "测试商户",
+			BusinessLicenseNo:   "91330100MA00000001",
+			LegalPersonName:     "李四",
+			LegalPersonIDNumber: "110101199001010011",
+			Email:               "merchant@example.com",
+			BankAccountNo:       "6222020202020202",
+			BankName:            "招商银行",
+			DepositBankProvince: "浙江省",
+			DepositBankCity:     "杭州市",
+			DepositBankName:     "招商银行杭州支行",
+		},
+	})
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, 1, accountClient.openCalls)
+	require.Len(t, store.flows, 1)
+	require.Equal(t, db.BaofuAccountOpeningStateFailed, store.flows[0].State)
+	require.Equal(t, "BF0001", store.flows[0].FailureCode.String)
+	require.Equal(t, "资料信息不完整，请核对后重新提交", store.flows[0].FailureMessage.String)
+	require.Equal(t, db.BaofuAccountOpenStateFailed, store.activeBinding.OpenState)
+}
+
 func TestBaofuAccountOnboardingServiceStart_BusinessPrivateCardRequiresCorporateMobile(t *testing.T) {
 	store := newFakeBaofuAccountOnboardingStore()
 	service := NewBaofuAccountOnboardingService(store, &fakeBaofuOnboardingAccountClient{}, nil, nil, BaofuAccountOnboardingConfig{
@@ -836,6 +873,29 @@ func TestBaofuAccountOnboardingServiceRecoverOpeningAlertsAndRejectsMismatchedOu
 	require.Equal(t, "BFO167", extra["flow_open_trans_serial_no"])
 	require.Equal(t, "BFO_OTHER", extra["result_out_request_no"])
 	require.Equal(t, "CP_QUERY_SERIAL_MISMATCH", extra["contract_no"])
+}
+
+func TestBaofuAccountOnboardingServiceRecoverOpeningMarksFlowFailedWhenQueryHasNoAccountRecord(t *testing.T) {
+	store := newFakeBaofuAccountOnboardingStore()
+	providerErr := baofu.NewProviderBusinessError("T-1001-013-03", "BF00064", "raw upstream account not found")
+	client := &fakeBaofuOnboardingAccountClient{err: providerErr}
+	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "100000"})
+	profile := store.mustUpsertProfile(t, db.BaofuAccountOwnerTypeMerchant, 88, db.BaofuAccountTypeBusiness)
+	flow := store.mustCreateFlow(t, db.BaofuAccountOwnerTypeMerchant, 88, db.BaofuAccountTypeBusiness, profile.ID)
+	flow.State = db.BaofuAccountOpeningStateOpeningProcessing
+	flow.OpenTransSerialNo = pgtype.Text{String: "BFO202605171059041b2b8998", Valid: true}
+	flow.LoginNo = pgtype.Text{String: "LLBFOM0000000088", Valid: true}
+	store.flows[0] = flow
+	store.activeBinding = db.BaofuAccountBinding{ID: 31, OwnerType: flow.OwnerType, OwnerID: flow.OwnerID, AccountType: flow.AccountType, LoginNo: flow.LoginNo, OpenState: db.BaofuAccountOpenStateProcessing}
+
+	_, err := service.RecoverOpeningFlow(context.Background(), flow)
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, db.BaofuAccountOpeningStateFailed, store.flows[0].State)
+	require.Equal(t, "BF00064", store.flows[0].FailureCode.String)
+	require.Equal(t, "未查询到宝付开户记录，请核对资料后重新提交", store.flows[0].FailureMessage.String)
+	require.Equal(t, db.BaofuAccountOpenStateFailed, store.activeBinding.OpenState)
 }
 
 type fakeBaofuAccountOnboardingStore struct {

@@ -40,6 +40,13 @@ func TestProviderRequestErrorUsesSafeCodeWhenNoUpstreamCodeExists(t *testing.T) 
 	require.Equal(t, "支付通道异常，请联系平台处理", providerErr.Frontend.Message)
 }
 
+func TestIsProviderBusinessResponseErrorDistinguishesBusinessAndContractFailures(t *testing.T) {
+	require.True(t, IsProviderBusinessResponseError(NewProviderBusinessError("T-1001-013-03", "BF00064", "account not found")))
+	require.True(t, IsProviderBusinessResponseError(providerResponseError("T-1001-013-03", 200, "BF00064", "account not found", errProviderAccountBusinessResponse)))
+	require.False(t, IsProviderBusinessResponseError(NewProviderContractError("T-1001-013-03", errors.New("contractNo is required"))))
+	require.False(t, IsProviderBusinessResponseError(providerRequestError("T-1001-013-03", 0, "", errors.New("dial tcp timeout"))))
+}
+
 func TestBusinessFailureDetectorsFailClosedForMissingSuccessIndicators(t *testing.T) {
 	accountCode, accountMessage, accountFailed := accountBusinessFailure(json.RawMessage(`{"errorCode":"BF0005","errorMsg":"上游账户处理中"}`))
 	require.True(t, accountFailed)

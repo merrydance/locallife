@@ -58,7 +58,12 @@ func (s *BaofuAccountOnboardingService) openFromProfile(ctx context.Context, flo
 	}
 	result, err := s.accountClient.OpenAccount(ctx, req)
 	if err != nil {
-		return db.BaofuAccountOpeningFlow{}, nil, mapBaofuAccountOpenError(err)
+		if updated, markErr := s.markFlowFailedFromProviderError(ctx, flow, err); markErr == nil {
+			flow = updated
+		} else {
+			return db.BaofuAccountOpeningFlow{}, nil, markErr
+		}
+		return flow, nil, mapBaofuAccountOpenError(err)
 	}
 	if result == nil {
 		return db.BaofuAccountOpeningFlow{}, nil, errors.New("baofu account open returned empty result")

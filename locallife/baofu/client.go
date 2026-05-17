@@ -16,6 +16,13 @@ type Client struct {
 	transport *Transport
 }
 
+var (
+	errProviderUnionGWSystemResponse   = errors.New("baofu union-gw system response failed")
+	errProviderAccountBusinessResponse = errors.New("baofu account business response failed")
+	errProviderPublicEnvelopeFailure   = errors.New("baofu upstream returned failure")
+	errProviderPublicBusinessResponse  = errors.New("baofu public business response failed")
+)
+
 func NewClient(cfg Config, httpClient HTTPDoer) (*Client, error) {
 	cfg = cfg.Normalized()
 	if err := cfg.Validate(); err != nil {
@@ -103,10 +110,10 @@ func (c *Client) postUnionGateway(ctx context.Context, endpoint string, method s
 		return providerRequestError(method, resp.StatusCode, responseEnvelope.Header.SystemRespCode, err)
 	}
 	if strings.TrimSpace(responseEnvelope.Header.SystemRespCode) != UnionGWSystemRespSuccess {
-		return providerResponseError(method, resp.StatusCode, responseEnvelope.Header.SystemRespCode, responseEnvelope.Header.SystemRespDesc, errors.New("baofu union-gw system response failed"))
+		return providerResponseError(method, resp.StatusCode, responseEnvelope.Header.SystemRespCode, responseEnvelope.Header.SystemRespDesc, errProviderUnionGWSystemResponse)
 	}
 	if code, message, failed := accountBusinessFailure(responseEnvelope.Body); failed {
-		return providerResponseError(method, resp.StatusCode, code, message, errors.New("baofu account business response failed"))
+		return providerResponseError(method, resp.StatusCode, code, message, errProviderAccountBusinessResponse)
 	}
 	if out != nil {
 		if err := json.Unmarshal(responseEnvelope.Body, out); err != nil {
@@ -171,7 +178,7 @@ func (c *Client) postPublicEnvelope(ctx context.Context, endpoint string, method
 		return providerRequestError(method, resp.StatusCode, responseEnvelope.ValidationUpstreamCode(err), err)
 	}
 	if strings.TrimSpace(responseEnvelope.ReturnCode) == PublicEnvelopeReturnCodeFail {
-		return providerResponseError(method, resp.StatusCode, responseEnvelope.ReturnCode, responseEnvelope.ReturnMessage, errors.New("baofu upstream returned failure"))
+		return providerResponseError(method, resp.StatusCode, responseEnvelope.ReturnCode, responseEnvelope.ReturnMessage, errProviderPublicEnvelopeFailure)
 	}
 	if err := validatePublicResponseIdentity(responseEnvelope, merchantID, terminalID); err != nil {
 		return providerRequestError(method, resp.StatusCode, responseEnvelope.ValidationUpstreamCode(err), err)
@@ -206,7 +213,11 @@ func NewProviderContractError(operation string, cause error) error {
 }
 
 func NewProviderBusinessError(operation string, upstreamCode string, upstreamMessage string) error {
-	return providerResponseError(operation, http.StatusOK, upstreamCode, upstreamMessage, errors.New("baofu public business response failed"))
+	return providerResponseError(operation, http.StatusOK, upstreamCode, upstreamMessage, errProviderPublicBusinessResponse)
+}
+
+func IsProviderBusinessResponseError(err error) bool {
+	return errors.Is(err, errProviderAccountBusinessResponse) || errors.Is(err, errProviderPublicBusinessResponse)
 }
 
 func providerRequestError(operation string, statusCode int, upstreamCode string, cause error) error {

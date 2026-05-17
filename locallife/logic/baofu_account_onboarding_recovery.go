@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/baofu"
 	baofucontracts "github.com/merrydance/locallife/baofu/account/contracts"
 	db "github.com/merrydance/locallife/db/sqlc"
 )
@@ -22,7 +24,12 @@ func (s *BaofuAccountOnboardingService) RecoverOpeningFlow(ctx context.Context, 
 	}
 	result, err := s.accountClient.QueryAccount(ctx, req)
 	if err != nil {
-		return BaofuAccountOpenApplyResult{}, err
+		if updated, markErr := s.markFlowFailedFromProviderError(ctx, flow, err); markErr == nil {
+			flow = updated
+		} else {
+			return BaofuAccountOpenApplyResult{}, markErr
+		}
+		return BaofuAccountOpenApplyResult{Flow: flow}, mapBaofuAccountOpenError(err)
 	}
 	if result == nil {
 		return BaofuAccountOpenApplyResult{}, errors.New("baofu account query returned empty result")
@@ -32,6 +39,43 @@ func (s *BaofuAccountOnboardingService) RecoverOpeningFlow(ctx context.Context, 
 		normalized = baofuAccountDuplicateReconcileResult(flow, normalized)
 	}
 	return s.ApplyAccountOpenResult(ctx, flow, normalized)
+}
+
+func (s *BaofuAccountOnboardingService) markFlowFailedFromProviderError(ctx context.Context, flow db.BaofuAccountOpeningFlow, err error) (db.BaofuAccountOpeningFlow, error) {
+	var providerErr *baofu.ProviderError
+	if !errors.As(err, &providerErr) || providerErr == nil {
+		return flow, nil
+	}
+	if !baofu.IsProviderBusinessResponseError(providerErr) {
+		return flow, nil
+	}
+	classified := baofu.ClassifyBaofuError(providerErr.UpstreamCode, providerErr.UpstreamMessage)
+	if classified.Category == baofu.BaofuErrorCategoryRetryable {
+		return flow, nil
+	}
+	binding, bindingErr := s.store.GetBaofuAccountBindingByOwner(ctx, db.GetBaofuAccountBindingByOwnerParams{
+		OwnerType: flow.OwnerType,
+		OwnerID:   flow.OwnerID,
+	})
+	if bindingErr == nil && strings.TrimSpace(binding.OpenState) != db.BaofuAccountOpenStateActive {
+		if _, err := s.store.MarkBaofuAccountBindingFailed(ctx, db.MarkBaofuAccountBindingFailedParams{
+			ID: binding.ID,
+			RawSnapshot: baofuOpeningSnapshot(map[string]any{
+				"state":        db.BaofuAccountOpeningStateFailed,
+				"failure_code": classified.Code,
+			}),
+		}); err != nil {
+			return db.BaofuAccountOpeningFlow{}, err
+		}
+	} else if bindingErr != nil && !errors.Is(bindingErr, db.ErrRecordNotFound) {
+		return db.BaofuAccountOpeningFlow{}, bindingErr
+	}
+	return s.store.MarkBaofuAccountOpeningFlowFailed(ctx, db.MarkBaofuAccountOpeningFlowFailedParams{
+		ID:             flow.ID,
+		FailureCode:    pgtype.Text{String: classified.Code, Valid: classified.Code != ""},
+		FailureMessage: pgtype.Text{String: classified.PublicMessage, Valid: strings.TrimSpace(classified.PublicMessage) != ""},
+		RawSnapshot:    baofuOpeningSnapshot(map[string]any{"state": db.BaofuAccountOpeningStateFailed, "failure_code": classified.Code}),
+	})
 }
 
 func baofuOpeningFlowCanQueryRecover(flow db.BaofuAccountOpeningFlow) bool {
