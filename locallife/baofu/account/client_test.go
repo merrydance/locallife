@@ -340,7 +340,7 @@ func TestAccountClientQueryAccountUsesPersonalAccountType(t *testing.T) {
 	require.JSONEq(t, `{"version":"4.0.0","accType":1,"loginNo":"LLBFOR0000000001","certificateNo":"110101199001011234","certificateType":"ID","platformNo":"100030218"}`, partialJSONForAccountTest(t, env.Body, "version", "accType", "loginNo", "certificateNo", "certificateType", "platformNo"))
 }
 
-func TestAccountClientQueryAccountCanSendOfficialCredentialFields(t *testing.T) {
+func TestAccountClientQueryAccountCanStillSendOfficialCredentialFieldsWhenExplicitlyRequested(t *testing.T) {
 	doer := &accountRecordingDoer{responseBody: map[string]any{"retCode": 1, "result": map[string]any{"contractNo": "CP610000000000542938"}}}
 	client := NewClient(testBaofuRootClient(t, doer))
 

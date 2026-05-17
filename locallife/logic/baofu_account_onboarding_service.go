@@ -186,7 +186,21 @@ func (s *BaofuAccountOnboardingService) StartOrRecoverOpening(ctx context.Contex
 		return baofuOpeningResult(flow, profile), nil
 	}
 	if baofuOpeningFlowInProviderProgress(flow.State) {
-		return baofuOpeningResult(flow, profile), nil
+		applied, err := s.RecoverOpeningFlow(ctx, flow)
+		if err != nil {
+			return BaofuAccountOpeningResult{}, err
+		}
+		if applied.Flow.ID != 0 {
+			flow = applied.Flow
+		}
+		result := baofuOpeningResult(flow, profile)
+		if applied.Binding != nil {
+			result.Binding = applied.Binding
+		}
+		if strings.TrimSpace(result.State) == db.BaofuAccountOpeningStateReady && result.Binding != nil {
+			result.Label = baofuOnboardingStateLabel(db.BaofuAccountOpeningStateReady)
+		}
+		return result, nil
 	}
 
 	if baofuOpeningRequiresUserFee(ownerType) {

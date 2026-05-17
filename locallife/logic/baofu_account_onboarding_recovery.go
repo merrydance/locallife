@@ -24,6 +24,9 @@ func (s *BaofuAccountOnboardingService) RecoverOpeningFlow(ctx context.Context, 
 	}
 	result, err := s.accountClient.QueryAccount(ctx, req)
 	if err != nil {
+		if baofuAccountQueryNotFoundIsRecoverable(err) {
+			return BaofuAccountOpenApplyResult{}, mapBaofuAccountOpenError(err)
+		}
 		if updated, markErr := s.markFlowFailedFromProviderError(ctx, flow, err); markErr == nil {
 			flow = updated
 		} else {
@@ -78,12 +81,21 @@ func (s *BaofuAccountOnboardingService) markFlowFailedFromProviderError(ctx cont
 	})
 }
 
+func baofuAccountQueryNotFoundIsRecoverable(err error) bool {
+	var providerErr *baofu.ProviderError
+	if !errors.As(err, &providerErr) || providerErr == nil {
+		return false
+	}
+	return strings.TrimSpace(providerErr.Operation) == "T-1001-013-03" &&
+		strings.EqualFold(strings.TrimSpace(providerErr.UpstreamCode), "BF00064")
+}
+
 func baofuOpeningFlowCanQueryRecover(flow db.BaofuAccountOpeningFlow) bool {
 	switch strings.TrimSpace(flow.State) {
 	case db.BaofuAccountOpeningStateOpeningProcessing:
 		return true
 	case db.BaofuAccountOpeningStateFailed:
-		return baofuAccountDuplicateFailureCode(flow.FailureCode.String)
+		return baofuAccountDuplicateFailureCode(flow.FailureCode.String) || baofuAccountQueryNotFoundFailureCode(flow.FailureCode.String)
 	default:
 		return false
 	}
@@ -96,6 +108,10 @@ func baofuAccountDuplicateFailureCode(code string) bool {
 	default:
 		return false
 	}
+}
+
+func baofuAccountQueryNotFoundFailureCode(code string) bool {
+	return strings.EqualFold(strings.TrimSpace(code), "BF00064")
 }
 
 func baofuAccountDuplicateReconcileResult(flow db.BaofuAccountOpeningFlow, result baofucontracts.AccountResult) baofucontracts.AccountResult {

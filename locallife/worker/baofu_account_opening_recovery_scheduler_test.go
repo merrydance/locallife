@@ -217,6 +217,13 @@ func TestBaofuAccountOpeningRecoverySchedulerSubmitsMerchantReportAndMarksReady(
 		Return(db.ExternalPaymentCommand{ID: 2, CommandType: db.ExternalPaymentCommandTypeBaofuBindSubConfig}, nil)
 	store.EXPECT().MarkBaofuMerchantReportAppletAuthSucceeded(gomock.Any(), int64(788)).
 		Return(db.BaofuMerchantReport{ID: 788, OwnerType: flow.OwnerType, OwnerID: flow.OwnerID, ReportType: db.BaofuMerchantReportTypeWechat, ReportState: db.BaofuMerchantReportStateSucceeded, AppletAuthState: db.BaofuMerchantReportAppletAuthStateSucceeded, SubMchID: pgtype.Text{String: "1900000118", Valid: true}}, nil)
+	store.EXPECT().UpsertMerchantPaymentConfig(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.UpsertMerchantPaymentConfigParams) (db.MerchantPaymentConfig, error) {
+			require.Equal(t, flow.OwnerID, arg.MerchantID)
+			require.Equal(t, "1900000118", arg.SubMchID)
+			require.Equal(t, db.MerchantPaymentConfigStatusActive, arg.Status)
+			return db.MerchantPaymentConfig{MerchantID: arg.MerchantID, SubMchID: arg.SubMchID, Status: arg.Status}, nil
+		})
 	store.EXPECT().MarkBaofuAccountOpeningFlowReady(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountOpeningFlowReadyParams) (db.BaofuAccountOpeningFlow, error) {
 			require.Equal(t, flow.ID, arg.ID)
@@ -527,7 +534,7 @@ func TestBaofuAccountOpeningRecoverySchedulerLogsSafeProviderErrorDetails(t *tes
 	require.Contains(t, body, `"provider_error_cause":"baofu query account response contractNo is required"`)
 }
 
-func TestBaofuAccountOpeningRecoverySchedulerLogsFinalFailedStateForProviderBusinessRejection(t *testing.T) {
+func TestBaofuAccountOpeningRecoverySchedulerKeepsNoAccountRecordRecoverable(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -541,10 +548,6 @@ func TestBaofuAccountOpeningRecoverySchedulerLogsFinalFailedStateForProviderBusi
 		err: baofu.NewProviderBusinessError("T-1001-013-03", "BF00064", "account not found"),
 	}
 	flow, binding, profile := baofuOpeningRecoveryPersonalFixtures(71, 1011)
-	failedFlow := flow
-	failedFlow.State = db.BaofuAccountOpeningStateFailed
-	failedFlow.FailureCode = pgtype.Text{String: "BF00064", Valid: true}
-	failedFlow.FailureMessage = pgtype.Text{String: "未查询到宝付开户记录，请核对资料后重新提交", Valid: true}
 
 	store.EXPECT().ListRecoverableBaofuAccountOpeningFlows(gomock.Any(), gomock.Any()).
 		Return([]db.BaofuAccountOpeningFlow{flow}, nil)
@@ -552,27 +555,16 @@ func TestBaofuAccountOpeningRecoverySchedulerLogsFinalFailedStateForProviderBusi
 		Return(binding, nil)
 	store.EXPECT().GetBaofuAccountOpeningProfile(gomock.Any(), flow.ProfileID.Int64).
 		Return(profile, nil)
-	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{OwnerType: flow.OwnerType, OwnerID: flow.OwnerID}).
-		Return(binding, nil)
-	store.EXPECT().MarkBaofuAccountBindingFailed(gomock.Any(), gomock.Any()).
-		Return(db.BaofuAccountBinding{ID: binding.ID, OwnerType: binding.OwnerType, OwnerID: binding.OwnerID, AccountType: binding.AccountType, OpenState: db.BaofuAccountOpenStateFailed}, nil)
-	store.EXPECT().MarkBaofuAccountOpeningFlowFailed(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountOpeningFlowFailedParams) (db.BaofuAccountOpeningFlow, error) {
-			require.Equal(t, flow.ID, arg.ID)
-			require.Equal(t, pgtype.Text{String: "BF00064", Valid: true}, arg.FailureCode)
-			require.Equal(t, pgtype.Text{String: "未查询到宝付开户记录，请核对资料后重新提交", Valid: true}, arg.FailureMessage)
-			return failedFlow, nil
-		})
 
 	scheduler := worker.NewBaofuAccountOpeningRecoveryScheduler(store, client, nil, worker.BaofuAccountOpeningRecoveryConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "100000"})
 	scheduler.RunOnce()
 
 	body := logs.String()
-	require.Contains(t, body, `"level":"warn"`)
-	require.Contains(t, body, `"current_state":"failed"`)
-	require.NotContains(t, body, `"current_state":"opening_processing"`)
+	require.Contains(t, body, `"level":"error"`)
+	require.Contains(t, body, `"current_state":"opening_processing"`)
 	require.Contains(t, body, `"upstream_code":"BF00064"`)
-	require.Contains(t, body, `"frontend_code":"BAOFU_USER_ACTION_REQUIRED"`)
+	require.Contains(t, body, `"frontend_code":"BAOFU_MANUAL_REVIEW"`)
+	require.Equal(t, "100000", client.queryReq.PlatformNo)
 }
 
 type baofuAccountOpeningRecoveryClient struct {

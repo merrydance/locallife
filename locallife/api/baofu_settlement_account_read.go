@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
+	"github.com/rs/zerolog/log"
 )
 
 func (server *Server) loadBaofuSettlementAccount(ctx *gin.Context, scope baofuSettlementAccountScope) (baofuSettlementAccountResponse, error) {
@@ -47,6 +48,24 @@ func (server *Server) loadBaofuSettlementAccount(ctx *gin.Context, scope baofuSe
 		return baofuSettlementAccountResponse{}, err
 	}
 	if flowFound {
+		recovered, recoveredBinding, recoveredFlow, ok := server.tryRecoverBaofuSettlementAccountFlow(ctx, scope, flow)
+		if ok {
+			flow = recoveredFlow
+			if recoveredBinding != nil {
+				binding = *recoveredBinding
+				bindingFound = true
+				resp.OpenState = strings.TrimSpace(binding.OpenState)
+				resp.BankCardLast4 = pgTextString(binding.BankCardLast4)
+				resp.WechatSubMchIDMask = maskSensitiveTail(pgTextString(binding.WechatSubMchID), 4)
+				if resp.UpdatedAt == nil || binding.UpdatedAt.After(*resp.UpdatedAt) {
+					resp.UpdatedAt = &binding.UpdatedAt
+				}
+			}
+			if recovered != nil {
+				resp.FlowID = recovered.Flow.ID
+				resp.FlowState = strings.TrimSpace(recovered.Flow.State)
+			}
+		}
 		resp.FlowID = flow.ID
 		resp.FlowState = strings.TrimSpace(flow.State)
 		resp.SubmittedAt = &flow.CreatedAt
@@ -79,6 +98,51 @@ func (server *Server) loadBaofuSettlementAccount(ctx *gin.Context, scope baofuSe
 		}
 	}
 	return resp, nil
+}
+
+func (server *Server) tryRecoverBaofuSettlementAccountFlow(ctx *gin.Context, scope baofuSettlementAccountScope, flow db.BaofuAccountOpeningFlow) (*logic.BaofuAccountOpenApplyResult, *db.BaofuAccountBinding, db.BaofuAccountOpeningFlow, bool) {
+	if !baofuSettlementAccountFlowShouldRecover(flow) || server.baofuAccountClient == nil {
+		return nil, nil, flow, false
+	}
+	service := server.newBaofuAccountOnboardingService()
+	result, err := service.RecoverOpeningFlow(ctx, flow)
+	if err != nil {
+		log.Warn().
+			Err(logic.LoggableError(err)).
+			Str("request_id", GetRequestID(ctx)).
+			Str("owner_type", scope.OwnerType).
+			Int64("owner_id", scope.OwnerID).
+			Int64("flow_id", flow.ID).
+			Str("current_state", strings.TrimSpace(flow.State)).
+			Str("provider_operation", "baofu_settlement_account_read_recover").
+			Msg("baofu settlement account read recovery skipped")
+		return nil, nil, flow, false
+	}
+	recoveredFlow := result.Flow
+	if recoveredFlow.ID == 0 {
+		recoveredFlow = flow
+	}
+	return &result, result.Binding, recoveredFlow, true
+}
+
+func baofuSettlementAccountFlowShouldRecover(flow db.BaofuAccountOpeningFlow) bool {
+	switch strings.TrimSpace(flow.State) {
+	case db.BaofuAccountOpeningStateOpeningProcessing:
+		return true
+	case db.BaofuAccountOpeningStateFailed:
+		return baofuSettlementAccountRecoverableFailureCode(flow.FailureCode.String)
+	default:
+		return false
+	}
+}
+
+func baofuSettlementAccountRecoverableFailureCode(code string) bool {
+	switch strings.ToUpper(strings.TrimSpace(code)) {
+	case "BF00060", "EXISTED_LOGIN_NO", "BF00064":
+		return true
+	default:
+		return false
+	}
 }
 
 func shouldMergeBaofuSettlementAccountProfileDefaults(scope baofuSettlementAccountScope, profile *logic.BaofuAccountOpeningProfileInput) bool {

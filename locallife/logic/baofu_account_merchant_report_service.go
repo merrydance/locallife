@@ -21,6 +21,7 @@ type baofuAccountMerchantReportStore interface {
 	GetBaofuMerchantReportByOwner(ctx context.Context, arg db.GetBaofuMerchantReportByOwnerParams) (db.BaofuMerchantReport, error)
 	GetMerchant(ctx context.Context, id int64) (db.Merchant, error)
 	GetRegion(ctx context.Context, id int64) (db.Region, error)
+	UpsertMerchantPaymentConfig(ctx context.Context, arg db.UpsertMerchantPaymentConfigParams) (db.MerchantPaymentConfig, error)
 	MarkBaofuAccountOpeningFlowMerchantReportProcessing(ctx context.Context, arg db.MarkBaofuAccountOpeningFlowMerchantReportProcessingParams) (db.BaofuAccountOpeningFlow, error)
 	MarkBaofuAccountOpeningFlowAppletAuthPending(ctx context.Context, arg db.MarkBaofuAccountOpeningFlowAppletAuthPendingParams) (db.BaofuAccountOpeningFlow, error)
 	MarkBaofuAccountOpeningFlowReady(ctx context.Context, arg db.MarkBaofuAccountOpeningFlowReadyParams) (db.BaofuAccountOpeningFlow, error)
@@ -257,6 +258,15 @@ func (s *BaofuAccountMerchantReportService) loadRegionChain(ctx context.Context,
 
 func (s *BaofuAccountMerchantReportService) applyMerchantReportResult(ctx context.Context, flow db.BaofuAccountOpeningFlow, report db.BaofuMerchantReport) (db.BaofuAccountOpeningFlow, error) {
 	reportID := pgtype.Int8{Int64: report.ID, Valid: report.ID > 0}
+	if strings.TrimSpace(report.SubMchID.String) != "" && strings.TrimSpace(flow.OwnerType) == db.BaofuAccountOwnerTypeMerchant {
+		if _, err := s.store.UpsertMerchantPaymentConfig(ctx, db.UpsertMerchantPaymentConfigParams{
+			MerchantID: flow.OwnerID,
+			SubMchID:   strings.TrimSpace(report.SubMchID.String),
+			Status:     db.MerchantPaymentConfigStatusActive,
+		}); err != nil {
+			return db.BaofuAccountOpeningFlow{}, err
+		}
+	}
 	if strings.TrimSpace(report.ReportState) == db.BaofuMerchantReportStateFailed || strings.TrimSpace(report.AppletAuthState) == db.BaofuMerchantReportAppletAuthStateFailed {
 		return s.store.MarkBaofuAccountOpeningFlowFailed(ctx, db.MarkBaofuAccountOpeningFlowFailedParams{
 			ID:             flow.ID,

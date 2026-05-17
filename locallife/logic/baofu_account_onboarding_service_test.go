@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/baofu"
 	baofucontracts "github.com/merrydance/locallife/baofu/account/contracts"
+	merchantcontracts "github.com/merrydance/locallife/baofu/merchantreport/contracts"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
@@ -639,12 +640,46 @@ func TestBaofuAccountOnboardingServiceStart_MerchantAppletAuthFailedReturnsGuida
 
 func TestBaofuAccountOnboardingServiceApplyAccountOpenResult_MerchantActiveWaitsForReport(t *testing.T) {
 	store := newFakeBaofuAccountOnboardingStore()
-	service := NewBaofuAccountOnboardingService(store, nil, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931"})
+	reportClient := &fakeMerchantReportClient{
+		reportResult: &merchantcontracts.MerchantReportResult{
+			ReportNo:      "MR202605080088",
+			ReportState:   "SUCCESS",
+			SubMchID:      "1900000088",
+			PlatformBizNo: "PB202605080088",
+		},
+		bindResult: &merchantcontracts.BindSubConfigResult{
+			SubMchID:   "1900000088",
+			AuthType:   merchantcontracts.AuthTypeApplet,
+			ResultCode: "SUCCESS",
+		},
+	}
+	service := NewBaofuAccountOnboardingService(store, nil, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931"}).
+		WithMerchantReportContinuation(reportClient, BaofuAccountMerchantReportConfig{
+			CollectMerchantID: "100000",
+			CollectTerminalID: "200000",
+			MiniProgramAppID:  "wx1234567890abcdef",
+			ChannelID:         "CH001",
+			ChannelName:       "LocalLife",
+			Business:          "758-2",
+		})
+	profile := store.mustUpsertProfile(t, db.BaofuAccountOwnerTypeMerchant, 88, db.BaofuAccountTypeBusiness)
+	profile.LegalName = pgtype.Text{String: "测试餐饮有限公司", Valid: true}
+	profile.CertificateType = pgtype.Text{String: baofucontracts.OfficialBusinessCertificateTypeLicense, Valid: true}
+	profile.CertificateNoCiphertext = pgtype.Text{String: "91330100MA00000001", Valid: true}
+	profile.BankAccountNoCiphertext = pgtype.Text{String: "6222020202020202", Valid: true}
+	profile.CardUserName = pgtype.Text{String: "测试餐饮有限公司", Valid: true}
+	profile.DepositBankName = pgtype.Text{String: "招商银行杭州支行", Valid: true}
+	store.profiles[0] = profile
+	store.merchants[88] = db.Merchant{ID: 88, Name: "测试餐饮", Phone: "057112345678", Address: "测试路 1 号", RegionID: 330106}
+	store.regions[330106] = db.Region{ID: 330106, Code: "330106", Level: 3, ParentID: pgtype.Int8{Int64: 330100, Valid: true}}
+	store.regions[330100] = db.Region{ID: 330100, Code: "330100", Level: 2, ParentID: pgtype.Int8{Int64: 330000, Valid: true}}
+	store.regions[330000] = db.Region{ID: 330000, Code: "330000", Level: 1}
 	flow := db.BaofuAccountOpeningFlow{
 		ID:                11,
 		OwnerType:         db.BaofuAccountOwnerTypeMerchant,
 		OwnerID:           88,
 		AccountType:       db.BaofuAccountTypeBusiness,
+		ProfileID:         pgtype.Int8{Int64: profile.ID, Valid: true},
 		State:             db.BaofuAccountOpeningStateOpeningProcessing,
 		OpenTransSerialNo: pgtype.Text{String: "BFO88", Valid: true},
 		LoginNo:           pgtype.Text{String: "LLBFOM0000000088", Valid: true},
@@ -660,12 +695,18 @@ func TestBaofuAccountOnboardingServiceApplyAccountOpenResult_MerchantActiveWaits
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, db.BaofuAccountOpeningStateMerchantReportProcessing, applied.Flow.State)
+	require.Equal(t, db.BaofuAccountOpeningStateReady, applied.Flow.State)
 	require.NotNil(t, applied.Binding)
 	require.Equal(t, "CM202605080088", applied.Binding.ContractNo.String)
 	require.Equal(t, "CM202605080088", applied.Binding.SharingMerID.String)
 	require.True(t, store.platformFeeLedgerCreated)
 	require.Equal(t, int64(200), store.lastLedger.Amount)
+	require.Equal(t, "100000", reportClient.reportRequest.MerchantID)
+	require.Equal(t, "100000", reportClient.bindRequest.MerchantID)
+	require.Equal(t, "200000", reportClient.bindRequest.TerminalID)
+	require.Equal(t, "wx1234567890abcdef", reportClient.bindRequest.AuthContent)
+	require.Equal(t, "1900000088", store.merchantReports[0].SubMchID.String)
+	require.Equal(t, db.BaofuMerchantReportAppletAuthStateSucceeded, store.merchantReports[0].AppletAuthState)
 }
 
 func TestBaofuAccountMerchantReportServiceRecoverProviderErrorReturnsSafeContext(t *testing.T) {
@@ -755,6 +796,40 @@ func TestBaofuAccountOnboardingServiceRecoverOpeningQueriesByLoginNoAndAppliesRe
 	require.Equal(t, baofucontracts.OfficialCertificateTypeID, client.lastQuery.CertificateType)
 	require.Equal(t, "100000", client.lastQuery.PlatformNo)
 	require.False(t, store.platformFeeLedgerCreated)
+}
+
+func TestBaofuAccountOnboardingServiceStartRecoversProviderProgressFlow(t *testing.T) {
+	store := newFakeBaofuAccountOnboardingStore()
+	client := &fakeBaofuOnboardingAccountClient{
+		queryResult: &baofucontracts.AccountResult{
+			ContractNo:    "CP202605170099",
+			SharingMerID:  "CP202605170099",
+			OpenState:     db.BaofuAccountOpenStateActive,
+			UpstreamState: "1",
+			Raw:           []byte(`{"state":"1","contractNo":"CP202605170099"}`),
+		},
+	}
+	service := NewBaofuAccountOnboardingService(store, client, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931", CollectMerchantID: "100000"})
+	profile := store.mustUpsertProfile(t, db.BaofuAccountOwnerTypePlatform, platformBaofuOpeningOwnerID, db.BaofuAccountTypeBusiness)
+	flow := store.mustCreateFlow(t, db.BaofuAccountOwnerTypePlatform, platformBaofuOpeningOwnerID, db.BaofuAccountTypeBusiness, profile.ID)
+	flow.State = db.BaofuAccountOpeningStateOpeningProcessing
+	flow.OpenTransSerialNo = pgtype.Text{String: "BFO_PLATFORM", Valid: true}
+	flow.LoginNo = pgtype.Text{String: "LLBFOP0000000000", Valid: true}
+	store.flows[0] = flow
+	store.activeBinding = db.BaofuAccountBinding{ID: 88, OwnerType: flow.OwnerType, OwnerID: flow.OwnerID, AccountType: flow.AccountType, LoginNo: flow.LoginNo, OpenState: db.BaofuAccountOpenStateProcessing}
+
+	result, err := service.StartOrRecoverOpening(context.Background(), BaofuAccountOpeningInput{
+		OwnerType: db.BaofuAccountOwnerTypePlatform,
+		OwnerID:   platformBaofuOpeningOwnerID,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, db.BaofuAccountOpeningStateReady, result.State)
+	require.NotNil(t, result.Binding)
+	require.Equal(t, db.BaofuAccountOpenStateActive, result.Binding.OpenState)
+	require.Equal(t, "LLBFOP0000000000", client.lastQuery.LoginNo)
+	require.Equal(t, "100000", client.lastQuery.PlatformNo)
+	require.Equal(t, 0, client.openCalls)
 }
 
 func TestBaofuAccountOnboardingServiceRecoverOpeningReconcilesDuplicateFailedFlow(t *testing.T) {
@@ -875,7 +950,7 @@ func TestBaofuAccountOnboardingServiceRecoverOpeningAlertsAndRejectsMismatchedOu
 	require.Equal(t, "CP_QUERY_SERIAL_MISMATCH", extra["contract_no"])
 }
 
-func TestBaofuAccountOnboardingServiceRecoverOpeningMarksFlowFailedWhenQueryHasNoAccountRecord(t *testing.T) {
+func TestBaofuAccountOnboardingServiceRecoverOpeningKeepsProcessingWhenQueryHasNoAccountRecord(t *testing.T) {
 	store := newFakeBaofuAccountOnboardingStore()
 	providerErr := baofu.NewProviderBusinessError("T-1001-013-03", "BF00064", "raw upstream account not found")
 	client := &fakeBaofuOnboardingAccountClient{err: providerErr}
@@ -891,11 +966,12 @@ func TestBaofuAccountOnboardingServiceRecoverOpeningMarksFlowFailedWhenQueryHasN
 	_, err := service.RecoverOpeningFlow(context.Background(), flow)
 
 	reqErr := assertRequestError(t, err)
-	require.Equal(t, 400, reqErr.Status)
-	require.Equal(t, db.BaofuAccountOpeningStateFailed, store.flows[0].State)
-	require.Equal(t, "BF00064", store.flows[0].FailureCode.String)
-	require.Equal(t, "未查询到宝付开户记录，请核对资料后重新提交", store.flows[0].FailureMessage.String)
-	require.Equal(t, db.BaofuAccountOpenStateFailed, store.activeBinding.OpenState)
+	require.Equal(t, 503, reqErr.Status)
+	require.Equal(t, db.BaofuAccountOpeningStateOpeningProcessing, store.flows[0].State)
+	require.False(t, store.flows[0].FailureCode.Valid)
+	require.False(t, store.flows[0].FailureMessage.Valid)
+	require.Equal(t, db.BaofuAccountOpenStateProcessing, store.activeBinding.OpenState)
+	require.Equal(t, "100000", client.lastQuery.PlatformNo)
 }
 
 type fakeBaofuAccountOnboardingStore struct {
@@ -904,6 +980,7 @@ type fakeBaofuAccountOnboardingStore struct {
 	users                    map[int64]db.User
 	payments                 []db.PaymentOrder
 	merchantReports          []db.BaofuMerchantReport
+	merchantPaymentConfigs   []db.MerchantPaymentConfig
 	merchants                map[int64]db.Merchant
 	regions                  map[int64]db.Region
 	bindingsByContract       map[string]db.BaofuAccountBinding
@@ -1307,6 +1384,27 @@ func (s *fakeBaofuAccountOnboardingStore) MarkBaofuMerchantReportAppletAuthFaile
 		}
 	}
 	return db.BaofuMerchantReport{}, db.ErrRecordNotFound
+}
+
+func (s *fakeBaofuAccountOnboardingStore) UpsertMerchantPaymentConfig(_ context.Context, arg db.UpsertMerchantPaymentConfigParams) (db.MerchantPaymentConfig, error) {
+	for i := range s.merchantPaymentConfigs {
+		if s.merchantPaymentConfigs[i].MerchantID == arg.MerchantID {
+			s.merchantPaymentConfigs[i].SubMchID = arg.SubMchID
+			s.merchantPaymentConfigs[i].Status = arg.Status
+			s.merchantPaymentConfigs[i].UpdatedAt = time.Now()
+			return s.merchantPaymentConfigs[i], nil
+		}
+	}
+	cfg := db.MerchantPaymentConfig{
+		ID:         s.next(),
+		MerchantID: arg.MerchantID,
+		SubMchID:   arg.SubMchID,
+		Status:     arg.Status,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+	s.merchantPaymentConfigs = append(s.merchantPaymentConfigs, cfg)
+	return cfg, nil
 }
 
 func (s *fakeBaofuAccountOnboardingStore) CreatePlatformAlertEvent(_ context.Context, arg db.CreatePlatformAlertEventParams) (db.PlatformAlertEvent, error) {

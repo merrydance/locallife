@@ -56,7 +56,7 @@ var baofuOfficialErrorRules = map[string]baofuErrorRule{
 	"PARAMETER_VALID":           {category: BaofuErrorCategoryUserActionRequired, message: baofuMessageCheckAndResubmit, action: baofuActionCheckAndResubmit},
 	"BF0001":                    {category: BaofuErrorCategoryUserActionRequired, message: baofuMessageCheckAndResubmit, action: baofuActionCheckAndResubmit},
 	"BF00062":                   {category: BaofuErrorCategoryUserActionRequired, message: baofuMessageCheckAndResubmit, action: baofuActionCheckAndResubmit},
-	"BF00064":                   {category: BaofuErrorCategoryUserActionRequired, message: "未查询到宝付开户记录，请核对资料后重新提交", action: baofuActionCheckAndResubmit},
+	"BF00064":                   {category: BaofuErrorCategoryManualReview, message: baofuMessagePaymentProcessing, action: baofuActionQueryLater},
 	"BF00107":                   {category: BaofuErrorCategoryUserActionRequired, message: baofuMessageCheckAndResubmit, action: baofuActionCheckAndResubmit},
 	"BF00108":                   {category: BaofuErrorCategoryUserActionRequired, message: baofuMessageCheckAndResubmit, action: baofuActionCheckAndResubmit},
 	"BF00110":                   {category: BaofuErrorCategoryUserActionRequired, message: baofuMessageCheckAndResubmit, action: baofuActionCheckAndResubmit},

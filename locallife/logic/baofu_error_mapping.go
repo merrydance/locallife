@@ -76,6 +76,10 @@ func mapBaofuAccountOpenError(err error) error {
 		return err
 	}
 	classified := baofu.ClassifyBaofuError(providerErr.UpstreamCode, providerErr.UpstreamMessage)
+	if strings.TrimSpace(providerErr.Operation) == "T-1001-013-03" &&
+		strings.EqualFold(strings.TrimSpace(providerErr.UpstreamCode), "BF00064") {
+		return NewRequestErrorWithCause(http.StatusServiceUnavailable, errors.New("宝付开户结果暂未查询到，系统会继续确认，请稍后刷新"), err)
+	}
 	status := http.StatusBadGateway
 	switch classified.Category {
 	case baofu.BaofuErrorCategoryUserActionRequired:
