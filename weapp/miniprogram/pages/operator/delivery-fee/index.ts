@@ -14,6 +14,8 @@ interface ConfigInputEventDetail {
     value: string | number
 }
 
+const MISSING_REGION_MESSAGE = '未选择区域，请返回区域列表重新选择'
+
 Page({
     data: {
         config: createEmptyOperatorDeliveryFeeConfigView() as OperatorDeliveryFeeConfigView,
@@ -29,7 +31,7 @@ Page({
             this.setData({ regionId: parseInt(options.region_id) })
         }
         if (!this.data.regionId) {
-            this.setData({ initialLoading: false, error: '缺少区域ID，无法加载配送费配置' })
+            this.setData({ initialLoading: false, error: MISSING_REGION_MESSAGE })
             return
         }
         this.loadConfig()
@@ -47,7 +49,7 @@ Page({
 
     async loadConfig() {
         if (!this.data.regionId) {
-            this.setData({ initialLoading: false, error: '缺少区域ID，无法加载配送费配置' })
+            this.setData({ initialLoading: false, error: MISSING_REGION_MESSAGE })
             return
         }
 
@@ -85,7 +87,7 @@ Page({
         const { config, regionId } = this.data
 
         if (!regionId) {
-            wx.showToast({ title: '缺少区域ID', icon: 'none' })
+            wx.showToast({ title: '请先选择区域', icon: 'none' })
             return
         }
 
@@ -100,4 +102,3 @@ Page({
         }
     }
 })
-

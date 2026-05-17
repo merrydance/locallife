@@ -16,7 +16,7 @@
 
       <view wx:else class="animate-fade-in">
         <view class="page-summary">
-          <text class="page-summary-text">当前区域：{{regionName || ('ID: ' + regionId)}}</text>
+          <text class="page-summary-text">当前区域：{{regionName || '未命名区域'}}</text>
         </view>
 
         <view class="section-card">

@@ -5,13 +5,13 @@
     <view class="content-inner">
       <view class="welcome-header">
         <view class="title">时段系数配置</view>
-        <view class="subtitle">当前区域：{{selectedRegionName || ('ID: ' + selectedRegionId)}}，保存后立即生效。已有时段如需调整，请删除后重建。</view>
+        <view class="subtitle">当前区域：{{selectedRegionName || '未命名区域'}}，保存后立即生效。已有时段如需调整，请删除后重建。</view>
       </view>
 
       <view class="section-card">
         <view class="meta-row">
           <text class="meta-label">配置区域</text>
-          <text class="meta-value">{{selectedRegionName || ('ID: ' + selectedRegionId)}}</text>
+          <text class="meta-value">{{selectedRegionName || '未命名区域'}}</text>
         </view>
       </view>
 
