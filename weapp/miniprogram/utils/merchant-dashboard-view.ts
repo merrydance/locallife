@@ -1,4 +1,4 @@
-import { type MerchantApplymentStatusView } from '../api/merchant-applyment'
+import { type BaofuSettlementAccountView } from '../api/baofu-account-view'
 import { getErrorUserMessage } from './user-facing'
 import type { MerchantStorefrontProfile } from '../services/merchant-open-status'
 
@@ -78,10 +78,10 @@ const PRE_OPEN_PREPARATION_HINT = '主体审核通过后，可先完善菜品、
 export function buildMerchantBusinessStateView(params: {
   merchantStatus?: string
   isOpen: boolean
-  applymentView?: MerchantApplymentStatusView | null
+  settlementAccountView?: BaofuSettlementAccountView | null
 }): MerchantBusinessStateView {
   const merchantStatus = String(params.merchantStatus || '').trim().toLowerCase()
-  const applymentView = params.applymentView || null
+  const settlementAccountView = params.settlementAccountView || null
 
   if (merchantStatus === 'suspended' || merchantStatus === 'expired') {
     return {
@@ -97,58 +97,37 @@ export function buildMerchantBusinessStateView(params: {
     }
   }
 
-  if (applymentView?.isOpened) {
+  if (settlementAccountView?.isReady) {
     return {
       title: '打烊中',
-      hint: '结算账户已开通，当前是自主打烊状态，可随时恢复营业。'
+      hint: '宝付结算账户已开通，当前是自主打烊状态，可随时恢复营业。'
     }
   }
 
-  if (merchantStatus === 'bindbank_submitted') {
+  if (settlementAccountView?.isFailed) {
     return {
-      title: '待开通',
-      hint: '结算账户开户处理中，可继续完善菜品、桌台、套餐和门店配置。'
+      title: '待处理',
+      hint: settlementAccountView.statusDesc || '宝付开户失败，请修改后重新提交。'
     }
   }
 
-  if (merchantStatus === 'approved' || merchantStatus === 'pending_bindbank') {
-    if (applymentView?.needsSign) {
-      return {
-        title: '待开通',
-        hint: '结算账户签约尚未完成，完成签约后即可恢复营业。'
-      }
-    }
-
-    if (applymentView?.isInReview) {
-      return {
-        title: '待开通',
-        hint: '结算账户开户处理中，可继续完善菜品、桌台、套餐和门店配置。'
-      }
-    }
-
-    if (applymentView?.normalizedStatus === 'rejected') {
-      return {
-        title: '待处理',
-        hint: '开户资料已被驳回，请修改后重新提交。'
-      }
-    }
-
-    if (applymentView?.blockReason || applymentView?.guideText) {
-      return {
-        title: '待开通',
-        hint: applymentView?.blockReason || applymentView?.guideText || PRE_OPEN_PREPARATION_HINT
-      }
-    }
-
+  if (settlementAccountView?.isProcessing || settlementAccountView?.isWaiting) {
     return {
       title: '待开通',
-      hint: PRE_OPEN_PREPARATION_HINT
+      hint: settlementAccountView.statusDesc || settlementAccountView.nextActionText || PRE_OPEN_PREPARATION_HINT
+    }
+  }
+
+  if (merchantStatus === 'bindbank_submitted' || merchantStatus === 'approved' || merchantStatus === 'pending_bindbank') {
+    return {
+      title: '待开通',
+      hint: settlementAccountView?.statusDesc || settlementAccountView?.nextActionText || PRE_OPEN_PREPARATION_HINT
     }
   }
 
   return {
-    title: '打烊中',
-    hint: '当前是自主打烊状态，可随时恢复营业。'
+    title: '待开通',
+    hint: settlementAccountView?.statusDesc || PRE_OPEN_PREPARATION_HINT
   }
 }
 

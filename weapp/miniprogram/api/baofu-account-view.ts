@@ -38,6 +38,7 @@ export interface BaofuSettlementAccountView {
   isTerminal: boolean
   isWaiting: boolean
   isReady: boolean
+  paymentReady: boolean
   isFailed: boolean
   isProcessing: boolean
 }
@@ -72,6 +73,7 @@ export function buildBaofuSettlementAccountView(
   const verifyFeeAmount = Number(response?.verify_fee_amount || response?.payment?.amount || response?.amount || 200)
   const nextActionText = getBaofuAccountNextActionText(normalizedStatus, verifyFeeAmount)
   const statusDesc = String(response?.status_desc || nextActionText).trim()
+  const paymentReady = normalizedStatus === 'ready' || response?.payment_ready === true
 
   return {
     normalizedStatus,
@@ -90,6 +92,7 @@ export function buildBaofuSettlementAccountView(
     isTerminal: isBaofuSettlementTerminalStatus(normalizedStatus),
     isWaiting: normalizedStatus === 'unknown' || isBaofuSettlementOpeningProcessingStatus(normalizedStatus),
     isReady: normalizedStatus === 'ready',
+    paymentReady,
     isFailed: normalizedStatus === 'failed',
     isProcessing: isBaofuSettlementOpeningProcessingStatus(normalizedStatus)
   }
