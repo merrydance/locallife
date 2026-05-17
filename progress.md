@@ -31,3 +31,8 @@
 - Verified P2-1 with a static search that no large `商户入驻`/`运营商入驻` empty-state buttons remain in the target pages, plus `PATH="$HOME/.local/bin:$PATH" npm run compile` and `PATH="$HOME/.local/bin:$PATH" npm run quality:check`; all exited 0.
 - Completed P2-2 reservation placeholder cleanup: changed duplicated name/phone placeholders in reservation create and confirm forms to example/format hints.
 - Verified P2-2 with `rg -n "placeholder=\"请输入姓名\"|placeholder=\"请输入手机号\"" weapp/miniprogram/pages/reservation` returning no matches, plus `PATH="$HOME/.local/bin:$PATH" npm run compile` and `PATH="$HOME/.local/bin:$PATH" npm run quality:check`; all exited 0.
+- Performed a second user-perspective Mini Program review focused on handiness, copy clarity, and consistency.
+- Verified WXML handler bindings still pass with `PATH="$HOME/.local/bin:$PATH" npm run check:wxml-handlers`; the static route experiment was too noisy and was not used as evidence.
+- Ran full non-consumer UI pattern gate directly with `PATH="$HOME/.local/bin:$PATH" node scripts/check-non-consumer-ui-patterns.js`; it failed on current text-only local actions and explanatory-card patterns.
+- Replaced `task_plan.md` with a new second-review remediation plan covering reservation confirmation copy, reservation wording unification, merchant printer technical-field cleanup, operator region fallback copy, non-consumer action consistency, explanatory-card reduction, and stale platform dashboard template cleanup.
+- Appended second-review evidence and remediation themes to `findings.md`.

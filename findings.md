@@ -51,6 +51,18 @@
   - WXML handler references scanned: 1,262
   - Confirmed two real missing-action groups after filtering behavior/runtime false positives.
 
+## Second UX Review Evidence
+
+- `PATH="$HOME/.local/bin:$PATH" npm run check:wxml-handlers` from `weapp/`: exited 0 and validated 156 page WXML files.
+- `PATH="$HOME/.local/bin:$PATH" node scripts/check-non-consumer-ui-patterns.js` from `weapp/`: failed on current non-consumer UI issues, mainly text-only local row actions and explanatory-card blocks.
+- Confirmed user-visible wording issues:
+  - `weapp/miniprogram/pages/reservation/confirm/index.wxml` uses internal flow copy such as "当前步骤", "本步将完成", and "本页只负责提交预订".
+  - `weapp/miniprogram/app.json` and reservation pages mix "预定" and "预订" in TabBar, page titles, and visible labels.
+  - `weapp/miniprogram/pages/merchant/printers/index.wxml` exposes device/merchant IDs, raw printer type/role values, and vendor-facing status labels such as "云端返回".
+  - `weapp/miniprogram/pages/operator/region/config.wxml`, `operator/timeslot/index.wxml`, and `operator/delivery-fee/index.ts` expose "ID" / "区域ID" in operator-visible fallback and error text.
+- Confirmed maintenance risk:
+  - `weapp/miniprogram/pages/platform/dashboard/templates/mobile-content.wxml`, `tablet-content.wxml`, and `pc-content-full.wxml` are not referenced by active `dashboard.wxml`, but still contain stale responsive dashboard copy and handler bindings.
+
 ## Current Findings Summary
 
 ### Baseline Violations
@@ -64,6 +76,10 @@
 2. Replace or delete demo map wrapper components before they are used in delivery/order surfaces.
 3. Consumer empty states should reduce B-side onboarding prominence unless the user's intent is clearly provider onboarding.
 4. Reservation forms still have placeholder-as-label copy drift.
+5. Reservation confirmation copy should describe user outcome and next action instead of internal page responsibilities.
+6. Merchant printer management should hide backend/vendor fields from the daily task surface and move diagnostics behind an advanced or copy-for-support action.
+7. Operator region configuration should use recoverable user wording instead of exposing region IDs.
+8. Non-consumer row actions and explanatory cards should be brought back under the Mini Program UI gate.
 
 ### Positive Evidence
 
