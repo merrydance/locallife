@@ -157,11 +157,6 @@
     flex: 0 0 auto;
 }
 
-.status-value--multiline {
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
 .status-popup {
   background: var(--td-bg-color-container);
   border-top-left-radius: var(--radius-lg);
