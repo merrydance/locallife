@@ -22,7 +22,9 @@ import type { BaofuSettlementAccountResponse } from '../api/baofu-account'
 import {
   buildBaofuOnboardingWaitView,
   buildBaofuOnboardingWaitViewFromText,
+  formatBaofuOnboardingPollProgress,
   pollBaofuSettlementAccountStatus,
+  type BaofuOnboardingPollProgress,
   type BaofuOnboardingWaitAction,
   type BaofuOnboardingWaitState,
   type BaofuOnboardingWorkflowResult
@@ -61,6 +63,10 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
     wx.redirectTo({ url: config.statusPagePath })
   }
 
+  function shouldReturnToStatusPage(result: BaofuOnboardingWorkflowResult): boolean {
+    return result.status === 'ready' || result.status === 'failed' || result.status === 'voided'
+  }
+
   return Behavior({
     data: {
       navBarHeight: 88,
@@ -81,6 +87,7 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
       waitTheme: 'warning' as 'success' | 'warning' | 'error',
       waitTitle: '',
       waitDescription: '',
+      waitProgressText: '',
       waitPrimaryAction: 'dismiss' as BaofuOnboardingWaitAction,
       waitPrimaryActionText: ''
     },
@@ -103,7 +110,8 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
           initialError: false,
           initialErrorMessage: '',
           formErrorMessage: '',
-          waitVisible: false
+          waitVisible: false,
+          waitProgressText: ''
         })
 
         try {
@@ -143,7 +151,8 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
           initialError: false,
           initialErrorMessage: '',
           formErrorMessage: '',
-          waitVisible: false
+          waitVisible: false,
+          waitProgressText: ''
         })
 
         try {
@@ -170,9 +179,17 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
           waitTheme: waitView.theme,
           waitTitle: waitView.title,
           waitDescription: waitView.description,
+          waitProgressText: '',
           waitPrimaryAction: waitView.primaryAction,
           waitPrimaryActionText: waitView.primaryActionText
         })
+        if (shouldReturnToStatusPage(result)) {
+          backToStatusPage()
+        }
+      },
+
+      _handleBaofuOnboardingProgress(progress: BaofuOnboardingPollProgress) {
+        this.setData({ waitProgressText: formatBaofuOnboardingPollProgress(progress) })
       },
 
       // --- Public event handlers bound from WXML ---
@@ -218,7 +235,8 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
             theme: 'warning',
             primaryAction: 'refresh_status',
             primaryActionText: ''
-          })
+          }),
+          waitProgressText: ''
         })
 
         try {
@@ -227,7 +245,10 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
             context: this as unknown as WechatMiniprogram.Page.TrivialInstance,
             maxAttempts: 1,
             loadingMessage: '正在刷新开户状态...',
-            silentToast: true
+            silentToast: true,
+            onProgress: (progress) => {
+              this.setData({ waitProgressText: formatBaofuOnboardingPollProgress(progress) })
+            }
           })
           this._applyWorkflowResult(result)
         } catch (error: unknown) {
@@ -242,7 +263,8 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
               theme: 'error',
               primaryAction: 'retry',
               primaryActionText: '重试'
-            })
+            }),
+            waitProgressText: ''
           })
         } finally {
           this.setData({ syncing: false })
@@ -259,7 +281,7 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
             backToStatusPage()
             break
           default:
-            this.setData({ waitVisible: false })
+            this.setData({ waitVisible: false, waitProgressText: '' })
             break
         }
       }

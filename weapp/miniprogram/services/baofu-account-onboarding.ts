@@ -68,6 +68,15 @@ interface WorkflowOptions {
   silentToast?: boolean
   maxAttempts?: number
   interval?: number
+  onProgress?: (progress: BaofuOnboardingPollProgress) => void
+}
+
+export interface BaofuOnboardingPollProgress {
+  attempt: number
+  maxAttempts: number
+  elapsedSeconds: number
+  remainingSeconds: number
+  finalAttempt: boolean
 }
 
 export interface PendingWorkflowContext {
@@ -80,6 +89,36 @@ export interface PendingWorkflowContext {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function emitPollProgress(
+  options: WorkflowOptions,
+  attemptIndex: number,
+  maxAttempts: number,
+  interval: number
+) {
+  if (!options.onProgress || maxAttempts <= 1) {
+    return
+  }
+
+  const elapsedSeconds = Math.max(0, Math.round((attemptIndex * interval) / 1000))
+  const remainingSeconds = Math.max(0, Math.ceil(((maxAttempts - attemptIndex - 1) * interval) / 1000))
+  options.onProgress({
+    attempt: Math.min(attemptIndex + 1, maxAttempts),
+    maxAttempts,
+    elapsedSeconds,
+    remainingSeconds,
+    finalAttempt: attemptIndex >= maxAttempts - 1
+  })
+}
+
+export function formatBaofuOnboardingPollProgress(progress: BaofuOnboardingPollProgress): string {
+  const elapsedSeconds = Math.max(0, Math.round(progress.elapsedSeconds))
+  const remainingSeconds = Math.max(0, Math.ceil(progress.remainingSeconds))
+  if (progress.finalAttempt || remainingSeconds <= 0) {
+    return `已等待 ${elapsedSeconds} 秒，正在确认最后一次状态`
+  }
+  return `已等待 ${elapsedSeconds} 秒，最多还会自动同步 ${remainingSeconds} 秒`
 }
 
 function showProgressToast(context: WechatMiniprogram.Page.TrivialInstance | undefined, message: string) {
@@ -385,6 +424,7 @@ export async function pollBaofuSettlementAccountStatus(
 
   try {
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      emitPollProgress(options, attempt, maxAttempts, interval)
       const account = await getBaofuSettlementAccount(role)
       if (isBaofuSettlementAfterPaymentTerminalStatus(account.status)) {
         return buildResult(account)

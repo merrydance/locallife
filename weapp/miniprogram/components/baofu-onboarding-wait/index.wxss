@@ -21,6 +21,13 @@
   text-align: center;
 }
 
+.onboarding-wait__progress {
+  color: var(--td-text-color-placeholder);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  text-align: center;
+}
+
 .onboarding-wait__actions {
   display: flex;
   flex-direction: column;

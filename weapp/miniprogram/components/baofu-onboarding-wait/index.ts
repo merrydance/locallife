@@ -21,6 +21,10 @@ Component({
       type: String,
       value: '请稍候，结果会以后端开户状态为准。'
     },
+    progressText: {
+      type: String,
+      value: ''
+    },
     theme: {
       type: String,
       value: 'warning'

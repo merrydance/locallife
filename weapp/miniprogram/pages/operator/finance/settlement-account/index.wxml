@@ -19,6 +19,7 @@
       state="{{waitState}}"
       title="{{waitTitle}}"
       description="{{waitDescription}}"
+      progressText="{{waitProgressText}}"
       theme="{{waitTheme}}"
       primaryActionText="{{waitPrimaryActionText}}"
       loading="{{syncing}}"

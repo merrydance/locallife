@@ -180,7 +180,9 @@ Page({
           role: 'merchant',
           context: this,
           loadingMessage: '正在提交开户资料...',
-          silentToast: true
+          silentToast: true,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          onProgress: (progress) => (this as any)._handleBaofuOnboardingProgress(progress)
         }
       )
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

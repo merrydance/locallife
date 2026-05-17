@@ -25,6 +25,7 @@ import {
   buildBaofuOnboardingWaitViewFromText,
   clearPendingBaofuAccountOnboardingContext,
   continueBaofuAccountPayment,
+  formatBaofuOnboardingPollProgress,
   getPendingBaofuAccountOnboardingContext,
   pollBaofuSettlementAccountStatus,
   shouldClearPendingBaofuAccountOnboardingContext,
@@ -84,6 +85,7 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
       waitTheme: 'warning' as 'success' | 'warning' | 'error',
       waitTitle: '',
       waitDescription: '',
+      waitProgressText: '',
       waitPrimaryAction: 'refresh_status' as BaofuOnboardingWaitAction,
       waitPrimaryActionText: '刷新状态'
     },
@@ -113,7 +115,8 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
           refreshErrorMessage: '',
           accountLoaded: false,
           pageView: { ...EMPTY_PAGE_VIEW },
-          waitVisible: false
+          waitVisible: false,
+          waitProgressText: ''
         })
 
         try {
@@ -256,13 +259,17 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
               theme: 'warning',
               primaryAction: 'refresh_status',
               primaryActionText: ''
-            })
+            }),
+            waitProgressText: ''
           })
           const result = await continueBaofuAccountPayment({
             role: config.role,
             context: this as unknown as WechatMiniprogram.Page.TrivialInstance,
             loadingMessage: '正在恢复开户进度...',
-            silentToast: true
+            silentToast: true,
+            onProgress: (progress) => {
+              this.setData({ waitProgressText: formatBaofuOnboardingPollProgress(progress) })
+            }
           })
           await this._applyWorkflowResult(result)
           if (shouldClearPendingBaofuAccountOnboardingContext(result)) {
@@ -280,7 +287,8 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
               theme: 'error',
               primaryAction: 'refresh_status',
               primaryActionText: '刷新状态'
-            })
+            }),
+            waitProgressText: ''
           })
         } finally {
           this.setData({ syncing: false })
@@ -299,6 +307,7 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
           waitTheme: waitView.theme,
           waitTitle: waitView.title,
           waitDescription: waitView.description,
+          waitProgressText: '',
           waitPrimaryAction: waitView.primaryAction,
           waitPrimaryActionText: waitView.primaryActionText
         })
@@ -320,14 +329,18 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
             theme: 'warning',
             primaryAction: 'refresh_status',
             primaryActionText: ''
-          })
+          }),
+          waitProgressText: ''
         })
         try {
           const result = await continueBaofuAccountPayment({
             role: config.role,
             context: this as unknown as WechatMiniprogram.Page.TrivialInstance,
             loadingMessage: '正在核对支付结果...',
-            silentToast: true
+            silentToast: true,
+            onProgress: (progress) => {
+              this.setData({ waitProgressText: formatBaofuOnboardingPollProgress(progress) })
+            }
           })
           await this._applyWorkflowResult(result)
         } catch (error: unknown) {
@@ -429,7 +442,8 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
             theme: 'warning',
             primaryAction: 'refresh_status',
             primaryActionText: ''
-          })
+          }),
+          waitProgressText: ''
         })
         try {
           const result = await pollBaofuSettlementAccountStatus({
@@ -437,7 +451,10 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
             context: this as unknown as WechatMiniprogram.Page.TrivialInstance,
             maxAttempts: 1,
             loadingMessage: '正在刷新开户状态...',
-            silentToast: true
+            silentToast: true,
+            onProgress: (progress) => {
+              this.setData({ waitProgressText: formatBaofuOnboardingPollProgress(progress) })
+            }
           })
           await this._applyWorkflowResult(result)
         } catch (error: unknown) {
@@ -453,7 +470,8 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
               theme: 'error',
               primaryAction: 'retry',
               primaryActionText: '重试'
-            })
+            }),
+            waitProgressText: ''
           })
         } finally {
           this.setData({ syncing: false })
@@ -471,7 +489,7 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
             break
           case 'dismiss':
           default:
-            this.setData({ waitVisible: false })
+            this.setData({ waitVisible: false, waitProgressText: '' })
             break
         }
       }
