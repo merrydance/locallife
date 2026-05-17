@@ -18,6 +18,7 @@ import (
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
+	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
@@ -215,6 +216,94 @@ func TestBaofuSettlementAccountMerchantProfilePendingIncludesBackfilledDefaults(
 	require.NotContains(t, recorder.Body.String(), "merchant-secret@example.com")
 }
 
+func TestBaofuSettlementAccountMerchantProfilePendingDecryptsStoredWechatApplymentMasks(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	encryptor, err := util.NewAESEncryptor("0123456789abcdef0123456789abcdef")
+	require.NoError(t, err)
+	encryptedIDCardNumber, err := util.EncryptSensitiveField(encryptor, "110101199001010011")
+	require.NoError(t, err)
+	encryptedAccountNumber, err := util.EncryptSensitiveField(encryptor, "6222020202020202")
+	require.NoError(t, err)
+	applyment := db.EcommerceApplyment{
+		ID:                    702,
+		SubjectType:           "merchant",
+		SubjectID:             merchant.ID,
+		MerchantName:          "杭州测试餐饮有限公司",
+		BusinessLicenseNumber: pgtype.Text{String: "91330100MA00000001", Valid: true},
+		LegalPerson:           "李四",
+		IDCardNumber:          encryptedIDCardNumber,
+		AccountType:           "ACCOUNT_TYPE_BUSINESS",
+		AccountBank:           "招商银行",
+		AccountBankCode:       pgtype.Int8{Int64: 1001, Valid: true},
+		BankAlias:             pgtype.Text{String: "招商银行", Valid: true},
+		BankAliasCode:         pgtype.Text{String: "CMB", Valid: true},
+		BankAddressCode:       "330100",
+		BankBranchID:          pgtype.Text{String: "103331000001", Valid: true},
+		BankName:              pgtype.Text{String: "招商银行杭州分行营业部", Valid: true},
+		AccountNumber:         encryptedAccountNumber,
+		AccountName:           "杭州测试餐饮有限公司",
+		ContactName:           "王五",
+		MobilePhone:           "13800138000",
+		ContactEmail:          pgtype.Text{String: "merchant-secret@example.com", Valid: true},
+		Status:                "finish",
+		CreatedAt:             time.Now(),
+		UpdatedAt:             time.Now(),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		})).
+		Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetBaofuAccountOpeningProfileByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountOpeningProfileByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		})).
+		Return(db.BaofuAccountOpeningProfile{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetLatestBaofuAccountOpeningFlowByOwner(gomock.Any(), gomock.Eq(db.GetLatestBaofuAccountOpeningFlowByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		})).
+		Return(db.BaofuAccountOpeningFlow{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Eq(db.GetLatestEcommerceApplymentBySubjectParams{
+			SubjectType: "merchant",
+			SubjectID:   merchant.ID,
+		})).
+		Return(applyment, nil)
+
+	server := newTestServer(t, store)
+	server.dataEncryptor = encryptor
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/settlement-account", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response baofuSettlementAccountResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.NotNil(t, response.ProfileDefaults)
+	require.Equal(t, "***0011", response.ProfileDefaults.LegalPersonIDNumberMask)
+	require.Equal(t, "***0202", response.ProfileDefaults.BankAccountNoMask)
+	require.True(t, response.ProfileDefaults.HasLegalPersonIDNumber)
+	require.True(t, response.ProfileDefaults.HasBankAccountNo)
+	require.NotContains(t, recorder.Body.String(), encryptedIDCardNumber)
+	require.NotContains(t, recorder.Body.String(), encryptedAccountNumber)
+	require.NotContains(t, response.ProfileDefaults.LegalPersonIDNumberMask, "=")
+	require.NotContains(t, response.ProfileDefaults.BankAccountNoMask, "=")
+}
+
 func TestBaofuSettlementAccountMerchantProfileInputMergesHiddenWechatApplymentDefaults(t *testing.T) {
 	owner, _ := randomUser(t)
 	merchant := randomMerchant(owner.ID)
@@ -279,6 +368,69 @@ func TestBaofuSettlementAccountMerchantProfileInputMergesHiddenWechatApplymentDe
 	require.Equal(t, "招商银行杭州分行营业部", merged.DepositBankName)
 	require.Equal(t, "王五", merged.ContactName)
 	require.Equal(t, "13800138000", merged.ContactMobile)
+}
+
+func TestBaofuSettlementAccountMerchantProfileInputDecryptsStoredWechatApplymentSecrets(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	encryptor, err := util.NewAESEncryptor("0123456789abcdef0123456789abcdef")
+	require.NoError(t, err)
+	encryptedIDCardNumber, err := util.EncryptSensitiveField(encryptor, "110101199001010011")
+	require.NoError(t, err)
+	encryptedAccountNumber, err := util.EncryptSensitiveField(encryptor, "6222020202020202")
+	require.NoError(t, err)
+	applyment := db.EcommerceApplyment{
+		SubjectType:           "merchant",
+		SubjectID:             merchant.ID,
+		MerchantName:          "杭州测试餐饮有限公司",
+		BusinessLicenseNumber: pgtype.Text{String: "91330100MA00000001", Valid: true},
+		LegalPerson:           "李四",
+		IDCardNumber:          encryptedIDCardNumber,
+		AccountBank:           "招商银行",
+		BankName:              pgtype.Text{String: "招商银行杭州分行营业部", Valid: true},
+		AccountNumber:         encryptedAccountNumber,
+		ContactName:           "王五",
+		MobilePhone:           "13800138000",
+		ContactEmail:          pgtype.Text{String: "merchant-secret@example.com", Valid: true},
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetBaofuAccountOpeningProfileByOwner(gomock.Any(), gomock.Eq(db.GetBaofuAccountOpeningProfileByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		})).
+		Return(db.BaofuAccountOpeningProfile{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Eq(db.GetLatestEcommerceApplymentBySubjectParams{
+			SubjectType: "merchant",
+			SubjectID:   merchant.ID,
+		})).
+		Return(applyment, nil)
+
+	server := newTestServer(t, store)
+	server.dataEncryptor = encryptor
+	partial := &logic.BaofuAccountOpeningProfileInput{
+		DepositBankProvince: "浙江省",
+		DepositBankCity:     "杭州市",
+	}
+
+	merged, err := server.baofuSettlementAccountProfileInputWithDefaults(context.Background(), baofuSettlementAccountScope{
+		OwnerType:   db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:     merchant.ID,
+		AccountType: db.BaofuAccountTypeBusiness,
+		Audience:    "merchant",
+	}, partial)
+
+	require.NoError(t, err)
+	require.NotNil(t, merged)
+	require.Equal(t, "110101199001010011", merged.LegalPersonIDNumber)
+	require.Equal(t, "6222020202020202", merged.BankAccountNo)
+	require.NotEqual(t, encryptedIDCardNumber, merged.LegalPersonIDNumber)
+	require.NotEqual(t, encryptedAccountNumber, merged.BankAccountNo)
 }
 
 func TestBaofuSettlementAccountRiderProfileInputMergesApprovedIdentityDefaults(t *testing.T) {

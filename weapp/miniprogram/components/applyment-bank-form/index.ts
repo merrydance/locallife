@@ -504,6 +504,9 @@ Component({
 
   methods: {
     onToggleAccountNumberVisibility() {
+      if (this.properties.allowSavedAccountNumber && this.properties.savedAccountNumberMask && !this.readForm().account_number.trim()) {
+        return
+      }
       this.setData({ showAccountNumber: !this.data.showAccountNumber })
     },
 

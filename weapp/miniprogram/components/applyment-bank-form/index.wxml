@@ -51,7 +51,7 @@
       data-field="account_number"
       align="right"
       maxlength="30"
-      suffixIcon="{{showAccountNumber ? 'browse' : 'browse-off'}}"
+      suffixIcon="{{allowSavedAccountNumber && savedAccountNumberMask && !form.account_number ? '' : (showAccountNumber ? 'browse' : 'browse-off')}}"
       bind:change="onTextFieldChange"
       bind:blur="onAccountNumberBlur"
       bind:click="onToggleAccountNumberVisibility"

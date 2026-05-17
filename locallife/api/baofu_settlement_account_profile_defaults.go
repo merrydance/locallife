@@ -341,7 +341,11 @@ func (server *Server) loadMerchantBaofuSettlementAccountProfileDefaults(ctx cont
 		SubjectID:   merchantID,
 	})
 	if err == nil {
-		return baofuProfileDefaultsFromEcommerceApplyment(applyment), true, nil
+		defaults, err := server.baofuProfileDefaultsFromEcommerceApplyment(applyment)
+		if err != nil {
+			return baofuSettlementAccountProfileDefaultsWithSecrets{}, false, err
+		}
+		return defaults, true, nil
 	}
 	if !isNotFoundError(err) {
 		return baofuSettlementAccountProfileDefaultsWithSecrets{}, false, err
@@ -349,11 +353,17 @@ func (server *Server) loadMerchantBaofuSettlementAccountProfileDefaults(ctx cont
 	return baofuSettlementAccountProfileDefaultsWithSecrets{}, false, nil
 }
 
-func baofuProfileDefaultsFromEcommerceApplyment(applyment db.EcommerceApplyment) baofuSettlementAccountProfileDefaultsWithSecrets {
+func (server *Server) baofuProfileDefaultsFromEcommerceApplyment(applyment db.EcommerceApplyment) (baofuSettlementAccountProfileDefaultsWithSecrets, error) {
 	businessLicenseNumber := pgTextString(applyment.BusinessLicenseNumber)
-	legalPersonIDNumber := strings.TrimSpace(applyment.IDCardNumber)
+	legalPersonIDNumber, err := util.DecryptSensitiveField(server.dataEncryptor, strings.TrimSpace(applyment.IDCardNumber))
+	if err != nil {
+		return baofuSettlementAccountProfileDefaultsWithSecrets{}, err
+	}
 	email := pgTextString(applyment.ContactEmail)
-	bankAccountNo := strings.TrimSpace(applyment.AccountNumber)
+	bankAccountNo, err := util.DecryptSensitiveField(server.dataEncryptor, strings.TrimSpace(applyment.AccountNumber))
+	if err != nil {
+		return baofuSettlementAccountProfileDefaultsWithSecrets{}, err
+	}
 	contactMobile := strings.TrimSpace(applyment.MobilePhone)
 	legalPersonName := strings.TrimSpace(applyment.LegalPerson)
 	selfEmployed := strings.TrimSpace(applyment.AccountType) == "ACCOUNT_TYPE_PRIVATE"
@@ -409,5 +419,5 @@ func baofuProfileDefaultsFromEcommerceApplyment(applyment db.EcommerceApplyment)
 		contactName:           strings.TrimSpace(applyment.ContactName),
 		contactMobile:         contactMobile,
 		selfEmployed:          selfEmployed,
-	}
+	}, nil
 }
