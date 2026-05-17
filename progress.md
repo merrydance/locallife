@@ -17,3 +17,6 @@
 - Pushed current workspace checkpoint as `10553cc8 chore: checkpoint current workspace`.
 - Completed P0-1 dine-in checkout cleanup: removed stale guest-count stepper binding and local voucher popup wiring, changed merchant promo voucher event to the existing `onVoucherClaimed` refresh path, and removed unused component declarations/styles.
 - Verified P0-1 with a targeted handler check, `PATH="$HOME/.local/bin:$PATH" npm run compile`, and `PATH="$HOME/.local/bin:$PATH" npm run lint`; all exited 0.
+- Completed P0-2 takeout cart unavailable item removal: added `onRemoveUnavailable`, duplicate-tap item state, delete API call, local cart removal reuse, and user-facing failure Toast.
+- Verified P0-2 with a targeted handler check, `PATH="$HOME/.local/bin:$PATH" npm run compile`, `PATH="$HOME/.local/bin:$PATH" npm run lint`, and `PATH="$HOME/.local/bin:$PATH" npm run gate:wxml-expression-safety`; all exited 0.
+- Error note: one exploratory `rg` command for WXML dynamic loading/disabled expressions failed due to an unescaped `{` in the regex; use fixed-string or simpler quoted patterns next time.

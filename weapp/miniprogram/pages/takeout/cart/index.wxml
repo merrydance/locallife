@@ -79,7 +79,19 @@
             </view>
             <view wx:if="{{!cartItem.isAvailable}}" class="unavailable-actions" style="display: flex; justify-content: space-between; align-items: center; margin-top: 8rpx;">
               <text class="item-status">已下架</text>
-              <t-button size="extra-small" variant="text" theme="danger" bindtap="onRemoveUnavailable" data-item-id="{{cartItem.id}}" data-cart-id="{{item.cartId}}" shape="round">移除</t-button>
+              <t-button
+                size="extra-small"
+                variant="text"
+                theme="danger"
+                loading="{{removingUnavailableItemIds[cartItem.id]}}"
+                disabled="{{removingUnavailableItemIds[cartItem.id]}}"
+                bindtap="onRemoveUnavailable"
+                data-item-id="{{cartItem.id}}"
+                data-cart-id="{{item.cartId}}"
+                shape="round"
+              >
+                移除
+              </t-button>
             </view>
           </view>
         </view>

@@ -38,7 +38,8 @@ Page({
     checkoutTotal: 0,
     checkoutTotalDisplay: '¥0.00',
     splitCheckoutRequired: false,
-    splitCheckoutNotice: ''
+    splitCheckoutNotice: '',
+    removingUnavailableItemIds: {} as Record<string, boolean>
   },
 
   onLoad() {
@@ -392,6 +393,44 @@ Page({
       this.updateLocalQuantity(itemId, currentQuantity)
       wx.showToast({ title: '更新失败', icon: 'none' })
     }
+  },
+
+  /**
+   * 移除已下架商品
+   */
+  async onRemoveUnavailable(e: WechatMiniprogram.CustomEvent) {
+    const rawItemId = e.currentTarget.dataset.itemId
+    const itemId = Number(rawItemId)
+    if (!Number.isFinite(itemId) || itemId <= 0) return
+
+    const itemKey = String(itemId)
+    if (this.data.removingUnavailableItemIds[itemKey]) return
+
+    this.setRemovingUnavailableItem(itemKey, true)
+
+    try {
+      await CartAPI.removeFromCart(itemId, { loading: false })
+      this.removeLocalItem(itemId)
+    } catch (error) {
+      logger.warn('Failed to remove unavailable cart item', { itemId }, 'cart.onRemoveUnavailable')
+      wx.showToast({ title: '移除失败，请重试', icon: 'none' })
+    } finally {
+      this.setRemovingUnavailableItem(itemKey, false)
+    }
+  },
+
+  setRemovingUnavailableItem(itemKey: string, removing: boolean) {
+    const removingUnavailableItemIds = {
+      ...this.data.removingUnavailableItemIds
+    }
+
+    if (removing) {
+      removingUnavailableItemIds[itemKey] = true
+    } else {
+      delete removingUnavailableItemIds[itemKey]
+    }
+
+    this.setData({ removingUnavailableItemIds })
   },
 
   /**
