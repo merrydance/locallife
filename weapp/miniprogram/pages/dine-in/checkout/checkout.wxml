@@ -71,17 +71,12 @@
           <t-cell title="联系电话" note="{{reservationInfo.contact_phone}}" t-class-title="cell-label" t-class-note="cell-value" />
         </block>
 
-        <t-cell title="就餐人数" t-class-title="cell-label">
-          <t-stepper 
-            slot="note"
-            value="{{diningInfo.guest_count}}" 
-            min="{{1}}" 
-            max="{{20}}"
-            theme="filled"
-            size="small"
-            bind:change="onGuestCountChange"
-          />
-        </t-cell>
+        <t-cell
+          title="就餐人数"
+          note="{{diningInfo.guest_count}}人"
+          t-class-title="cell-label"
+          t-class-note="cell-value"
+        />
       </t-cell-group>
     </view>
 
@@ -196,7 +191,7 @@
         membershipId="{{membershipId}}"
         orderTotal="{{calculation.total_amount}}"
         bind:recharged="onRecharged"
-        bind:claimVoucher="onClaimVoucher"
+        bind:voucherClaimed="onVoucherClaimed"
       />
     </view>
 
@@ -223,58 +218,3 @@
     </t-button>
   </view>
 </view>
-
-<!-- 优惠券选择弹窗 -->
-<t-popup 
-  visible="{{voucherVisible}}" 
-  placement="bottom" 
-  bind:visible-change="onVoucherPopupChange"
->
-  <view class="voucher-popup">
-    <view class="popup-header">
-      <text class="popup-title">选择优惠券</text>
-      <t-icon name="close" size="44rpx" bind:click="closeVoucherPopup" />
-    </view>
-    
-    <scroll-view scroll-y class="voucher-scroll">
-      <!-- 加载中 -->
-      <view wx:if="{{voucherLoading}}" class="voucher-loading">
-        <t-loading theme="circular" size="40rpx" text="加载中..." />
-      </view>
-      
-      <block wx:else>
-        <!-- 不使用优惠券选项 -->
-        <view 
-          class="voucher-item {{!selectedVoucher ? 'selected' : ''}}"
-          bind:tap="onClearVoucher"
-        >
-          <view class="voucher-content">
-            <text class="voucher-title">不使用优惠券</text>
-          </view>
-          <t-icon wx:if="{{!selectedVoucher}}" name="check" color="#0052d9" size="40rpx" />
-        </view>
-        
-        <!-- 优惠券列表 -->
-        <view 
-          wx:for="{{vouchers || []}}" 
-          wx:key="id" 
-          class="voucher-item {{selectedVoucher && selectedVoucher.id === item.id ? 'selected' : ''}}"
-          bind:tap="onSelectVoucher"
-          data-voucher="{{item}}"
-        >
-          <view class="voucher-amount">
-            <text class="currency">¥</text>
-            <text class="amount">{{item.value / 100}}</text>
-          </view>
-          <view class="voucher-content">
-            <text class="voucher-title">{{item.title}}</text>
-            <text class="voucher-condition">满{{item.min_spend / 100}}元可用</text>
-          </view>
-          <t-icon wx:if="{{selectedVoucher && selectedVoucher.id === item.id}}" name="check" color="#0052d9" size="40rpx" />
-        </view>
-        
-        <t-empty wx:if="{{vouchers.length === 0}}" description="暂无可用优惠券" />
-      </block>
-    </scroll-view>
-  </view>
-</t-popup>

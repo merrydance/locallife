@@ -10,16 +10,13 @@
         "custom-navbar": "/components/custom-navbar/index",
         "t-cell": "tdesign-miniprogram/cell/cell",
         "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
-        "t-stepper": "tdesign-miniprogram/stepper/stepper",
         "t-radio": "tdesign-miniprogram/radio/radio",
         "t-radio-group": "tdesign-miniprogram/radio-group/radio-group",
-        "t-popup": "tdesign-miniprogram/popup/popup",
         "t-textarea": "tdesign-miniprogram/textarea/textarea",
         "remark-input": "/components/remark-input/index",
         "t-image": "tdesign-miniprogram/image/image",
         "t-button": "tdesign-miniprogram/button/button",
         "t-icon": "tdesign-miniprogram/icon/icon",
-        "t-loading": "tdesign-miniprogram/loading/loading",
         "t-empty": "tdesign-miniprogram/empty/empty",
         "merchant-promos": "/components/merchant-promos/index"
     }

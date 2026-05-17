@@ -14,3 +14,6 @@
 - Checked payment workflow implementation; it uses backend status polling/requery after WeChat payment and has pending-confirmation result handling.
 - Ran `PATH="$HOME/.local/bin:$PATH" npm run compile` from `weapp/`; TypeScript compilation exited 0.
 - Converted the audit output into a bounded remediation plan in `task_plan.md`, covering two P0 defects, three P1 debt/gate tasks, and two P2 UX consistency tasks with scope, non-scope, touched files, acceptance criteria, validation, and residual risk.
+- Pushed current workspace checkpoint as `10553cc8 chore: checkpoint current workspace`.
+- Completed P0-1 dine-in checkout cleanup: removed stale guest-count stepper binding and local voucher popup wiring, changed merchant promo voucher event to the existing `onVoucherClaimed` refresh path, and removed unused component declarations/styles.
+- Verified P0-1 with a targeted handler check, `PATH="$HOME/.local/bin:$PATH" npm run compile`, and `PATH="$HOME/.local/bin:$PATH" npm run lint`; all exited 0.
