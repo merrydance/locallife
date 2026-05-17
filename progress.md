@@ -29,3 +29,5 @@
 - Verified P1-2 with exact searches for stale marker assets/demo coordinates and `map-view` references, plus `PATH="$HOME/.local/bin:$PATH" npm run compile` and `PATH="$HOME/.local/bin:$PATH" npm run quality:check`; all final checks exited 0 after removing the empty deleted component directory.
 - Completed P2-1 consumer empty-state action hierarchy: changed takeout and reservation empty states to prioritize consumer recovery actions while keeping merchant/operator onboarding as low-weight text links.
 - Verified P2-1 with a static search that no large `商户入驻`/`运营商入驻` empty-state buttons remain in the target pages, plus `PATH="$HOME/.local/bin:$PATH" npm run compile` and `PATH="$HOME/.local/bin:$PATH" npm run quality:check`; all exited 0.
+- Completed P2-2 reservation placeholder cleanup: changed duplicated name/phone placeholders in reservation create and confirm forms to example/format hints.
+- Verified P2-2 with `rg -n "placeholder=\"请输入姓名\"|placeholder=\"请输入手机号\"" weapp/miniprogram/pages/reservation` returning no matches, plus `PATH="$HOME/.local/bin:$PATH" npm run compile` and `PATH="$HOME/.local/bin:$PATH" npm run quality:check`; all exited 0.
