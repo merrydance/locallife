@@ -31,7 +31,7 @@ func (server *Server) recordBaofuAccountOpenCallbackFact(ctx context.Context, no
 	if externalObjectKey == "" {
 		externalObjectKey = strings.TrimSpace(notification.ContractNo)
 	}
-	fact, err := server.store.CreateExternalPaymentFact(ctx, db.CreateExternalPaymentFactParams{
+	createParams := db.CreateExternalPaymentFactParams{
 		Provider:             db.ExternalPaymentProviderBaofu,
 		Channel:              db.PaymentChannelBaofuAggregate,
 		Capability:           db.ExternalPaymentCapabilityBaofuAccount,
@@ -53,14 +53,76 @@ func (server *Server) recordBaofuAccountOpenCallbackFact(ctx context.Context, no
 		RawResource:          notification.Raw,
 		DedupeKey:            fmt.Sprintf("baofu:callback:account:%s:%s", externalObjectKey, upstreamState),
 		ProcessingStatus:     db.ExternalPaymentFactProcessingStatusReceived,
-	})
+	}
+	fact, err := server.store.CreateExternalPaymentFact(ctx, createParams)
 	if err != nil {
-		return db.ExternalPaymentFact{}, err
+		fact, err = server.baofuAccountOpenCallbackExistingFact(ctx, createParams, err)
+		if err != nil {
+			return db.ExternalPaymentFact{}, err
+		}
 	}
 	if err := server.applyBaofuAccountOpenCallbackState(ctx, notification, flow); err != nil {
 		return db.ExternalPaymentFact{}, err
 	}
 	return fact, nil
+}
+
+func (server *Server) baofuAccountOpenCallbackExistingFact(ctx context.Context, params db.CreateExternalPaymentFactParams, createErr error) (db.ExternalPaymentFact, error) {
+	if !errors.Is(createErr, db.ErrRecordNotFound) {
+		return db.ExternalPaymentFact{}, createErr
+	}
+	fact, err := server.store.GetExternalPaymentFactByDedupeKey(ctx, params.DedupeKey)
+	if err != nil {
+		return db.ExternalPaymentFact{}, createErr
+	}
+	if !baofuAccountOpenCallbackFactMatches(params, fact) {
+		return db.ExternalPaymentFact{}, createErr
+	}
+	return fact, nil
+}
+
+func baofuAccountOpenCallbackFactMatches(params db.CreateExternalPaymentFactParams, fact db.ExternalPaymentFact) bool {
+	if fact.Provider != params.Provider ||
+		fact.Channel != params.Channel ||
+		fact.Capability != params.Capability ||
+		fact.FactSource != params.FactSource ||
+		fact.ExternalObjectType != params.ExternalObjectType ||
+		fact.ExternalObjectKey != params.ExternalObjectKey ||
+		fact.UpstreamState != params.UpstreamState ||
+		fact.TerminalStatus != params.TerminalStatus ||
+		fact.IsTerminal != params.IsTerminal ||
+		fact.Currency != params.Currency ||
+		fact.DedupeKey != params.DedupeKey {
+		return false
+	}
+	if !pgTextEqual(fact.SourceEventID, params.SourceEventID) ||
+		!pgTextEqual(fact.SourceEventType, params.SourceEventType) ||
+		!pgTextEqual(fact.ExternalSecondaryKey, params.ExternalSecondaryKey) ||
+		!pgTextEqual(fact.BusinessOwner, params.BusinessOwner) ||
+		!pgTextEqual(fact.BusinessObjectType, params.BusinessObjectType) {
+		return false
+	}
+	return pgInt8Equal(fact.BusinessObjectID, params.BusinessObjectID)
+}
+
+func pgTextEqual(left pgtype.Text, right pgtype.Text) bool {
+	if left.Valid != right.Valid {
+		return false
+	}
+	if !left.Valid {
+		return true
+	}
+	return strings.TrimSpace(left.String) == strings.TrimSpace(right.String)
+}
+
+func pgInt8Equal(left pgtype.Int8, right pgtype.Int8) bool {
+	if left.Valid != right.Valid {
+		return false
+	}
+	if !left.Valid {
+		return true
+	}
+	return left.Int64 == right.Int64
 }
 
 func (server *Server) resolveBaofuAccountOpeningFlowForCallback(ctx context.Context, notification *baofunotification.AccountNotification) (db.BaofuAccountOpeningFlow, error) {
