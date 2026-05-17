@@ -121,7 +121,7 @@
           />
         </view>
 
-        <view wx:if="{{!formData.allowed_order_types.length}}" class="inline-note-card inline-note-card--warning">
+        <view wx:if="{{!formData.allowed_order_types.length}}" class="field-warning-text">
           请至少保留一个适用订单类型
         </view>
       </view>

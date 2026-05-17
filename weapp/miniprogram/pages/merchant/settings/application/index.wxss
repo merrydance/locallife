@@ -14,21 +14,18 @@
   padding: 0 var(--spacer-lg);
 }
 
-.section-panel,
-.notice-card {
+.section-panel {
   background: var(--td-bg-color-container);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
 }
 
 .section-title,
-.certificate-title,
-.notice-title {
+.certificate-title {
   color: var(--td-text-color-primary);
 }
 
-.section-tip,
-.notice-text {
+.section-tip {
   color: var(--td-text-color-secondary);
   font-size: var(--font-size-xs);
   line-height: 1.6;
@@ -64,9 +61,7 @@
 }
 
 .section-head,
-.upload-head,
-.notice-head,
-.notice-card {
+.upload-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -84,48 +79,6 @@
 .section-title {
   font-size: var(--font-size-base);
   font-weight: 700;
-}
-
-.notice-card {
-  padding: var(--spacer-sm) var(--spacer-md);
-}
-
-.notice-card-inner {
-  padding: 20rpx 24rpx;
-}
-
-.notice-card-success {
-  background: var(--td-success-color-1);
-}
-
-.notice-card-error {
-  background: var(--td-error-color-1);
-}
-
-.notice-card-info,
-.notice-card-warning {
-  background: var(--td-bg-color-secondarycontainer);
-}
-
-.notice-card-warning {
-  background: var(--td-warning-color-1);
-}
-
-.notice-title {
-  flex: 1;
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
-}
-
-.notice-text-flex {
-  flex: 1;
-}
-
-.notice-action {
-  flex-shrink: 0;
-  font-size: var(--font-size-sm);
-  color: var(--td-brand-color);
-  font-weight: 600;
 }
 
 .certificate-card {
@@ -157,16 +110,6 @@
 }
 
 @media (max-width: 420px) {
-  .notice-head,
-  .notice-card {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .notice-action {
-    align-self: flex-end;
-  }
-
   .certificate-image {
     height: 300rpx;
   }

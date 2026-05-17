@@ -46,19 +46,12 @@
   gap: 16rpx;
 }
 
-.inline-note-card {
+.field-warning-text {
   margin-top: 20rpx;
   padding: 20rpx 24rpx;
-  border-radius: var(--radius-md);
-  background: var(--td-bg-color-page);
-  color: var(--td-text-color-secondary);
+  color: var(--td-warning-color-7);
   font-size: var(--font-size-xs);
   line-height: 1.6;
-}
-
-.inline-note-card--warning {
-  background: var(--td-warning-color-1);
-  color: var(--td-text-color-primary);
 }
 
 .form-actions {

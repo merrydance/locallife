@@ -153,7 +153,7 @@
           />
         </view>
 
-        <view wx:else class="inline-note-card">暂无桌台标签，可直接新增后立即选择。</view>
+        <view wx:else class="tag-empty-text">暂无桌台标签，可直接新增后立即选择。</view>
       </view>
 
       <view wx:if="{{isEdit}}" class="section-panel">

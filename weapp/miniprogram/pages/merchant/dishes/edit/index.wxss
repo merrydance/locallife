@@ -123,13 +123,7 @@
   color: var(--td-text-color-secondary);
 }
 
-.inline-note-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-  padding: var(--spacer-md);
-  border-radius: var(--radius-md);
-  background: var(--td-bg-color-secondarycontainer);
+.tag-empty-text {
   font-size: var(--font-size-sm);
   line-height: 1.6;
   color: var(--td-text-color-secondary);

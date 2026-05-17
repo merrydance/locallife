@@ -80,10 +80,8 @@
   gap: 16rpx;
 }
 
-.inline-note-card {
+.tag-empty-text {
   padding: 20rpx 24rpx;
-  border-radius: 20rpx;
-  background: var(--td-bg-color-page);
   font-size: 24rpx;
   line-height: 1.6;
   color: var(--td-text-color-secondary);

@@ -150,7 +150,7 @@
           />
         </view>
 
-        <view wx:else class="inline-note-card">暂无普通菜品标签，可先新增标签。</view>
+        <view wx:else class="tag-empty-text">暂无普通菜品标签，可先新增标签。</view>
       </view>
 
       <view class="section-panel">
