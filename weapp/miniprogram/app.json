@@ -266,7 +266,7 @@
       },
       {
         "pagePath": "pages/reservation/index",
-        "text": "预定",
+        "text": "预订",
         "iconPath": "assets/tabbar/reservation.png",
         "selectedIconPath": "assets/tabbar/reservation_active.png"
       },

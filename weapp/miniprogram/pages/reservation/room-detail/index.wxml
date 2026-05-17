@@ -128,7 +128,7 @@
         </view>
       </view>
       
-      <!-- 预定状态图例 -->
+      <!-- 预订状态图例 -->
       <view class="legend">
         <view class="legend-item">
           <t-icon name="check-circle-filled" size="28rpx" color="var(--td-success-color)" />

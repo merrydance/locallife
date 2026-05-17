@@ -1,5 +1,5 @@
 {
-    "navigationBarTitleText": "确认预定",
+    "navigationBarTitleText": "确认预订",
     "navigationStyle": "custom",
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
