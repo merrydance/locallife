@@ -198,9 +198,6 @@ func (s *BaofuPaymentService) RecordPaymentFact(ctx context.Context, input Recor
 		occurredAtParam = pgtype.Timestamptz{Time: occurredAt.UTC(), Valid: true}
 	}
 	amount := paymentFact.SuccessAmountFen
-	if amount <= 0 {
-		amount = paymentOrder.Amount
-	}
 	sourceEventID := strings.TrimSpace(input.SourceEventID)
 	sourceEventType := strings.TrimSpace(input.SourceEventType)
 	rawResource := paymentFact.Raw
@@ -343,9 +340,6 @@ func validateRecordBaofuPaymentFactInput(input RecordBaofuPaymentFactInput) erro
 	if outTradeNo != "" && outTradeNo != strings.TrimSpace(input.PaymentOrder.OutTradeNo) {
 		return ErrBaofuPaymentInvalidInput
 	}
-	if strings.TrimSpace(input.Fact.TransactionState) == "" {
-		return ErrBaofuPaymentInvalidInput
-	}
 	return nil
 }
 
@@ -413,7 +407,17 @@ func baofuPaymentFactDedupeKey(input RecordBaofuPaymentFactInput, outTradeNo str
 	if secondary == "" {
 		secondary = strings.TrimSpace(upstreamState)
 	}
-	return fmt.Sprintf("baofu:%s:payment:%s:%s", source, outTradeNo, secondary)
+	if secondary == "" {
+		secondary = db.ExternalPaymentTerminalStatusUnknown
+	}
+	statusComponent := strings.TrimSpace(upstreamState)
+	if statusComponent == "" {
+		statusComponent = db.ExternalPaymentTerminalStatusUnknown
+	}
+	if secondary == statusComponent {
+		return fmt.Sprintf("baofu:%s:payment:%s:%s", source, outTradeNo, secondary)
+	}
+	return fmt.Sprintf("baofu:%s:payment:%s:%s:%s", source, outTradeNo, secondary, statusComponent)
 }
 
 func baofuPaymentFeeAmountSource(factSource string) string {

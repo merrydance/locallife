@@ -1013,6 +1013,56 @@ func TestBaofuRefundCallbackPersistsFactAndEnqueuesApplication(t *testing.T) {
 	require.Equal(t, []int64{1001}, taskRecorder.applicationIDs)
 }
 
+func TestBaofuRefundCallbackUsesResultCodeWhenRefundStateIsAbsent(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAggregatePaymentNotificationParserForTest(fakeBaofuRefundResultCodeOnlyParser{})
+	taskRecorder := &refundFactApplicationEnqueueRecorder{}
+	server.taskDistributor = taskRecorder
+
+	refundOrder := db.RefundOrder{
+		ID:             5102,
+		PaymentOrderID: 4002,
+		OutRefundNo:    "BFRFD_5102",
+		RefundAmount:   1200,
+		Status:         "processing",
+	}
+	paymentOrder := db.PaymentOrder{
+		ID:             4002,
+		OrderID:        pgtype.Int8{Int64: 3102, Valid: true},
+		Amount:         1200,
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+		BusinessType:   db.ExternalPaymentBusinessOwnerOrder,
+	}
+	store.EXPECT().GetRefundOrderByOutRefundNo(gomock.Any(), "BFRFD_5102").Return(refundOrder, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), refundOrder.PaymentOrderID).Return(paymentOrder, nil)
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ any, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+			require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
+			require.True(t, arg.IsTerminal)
+			require.Equal(t, aggregatecontracts.BusinessResultCodeSuccess, arg.UpstreamState)
+			require.Equal(t, "baofu:callback:refund:BFRFD_5102:BFRN_5102", arg.DedupeKey)
+			return db.ExternalPaymentFact{ID: 902, IsTerminal: true, DedupeKey: arg.DedupeKey}, nil
+		})
+	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
+		FactID:             902,
+		Consumer:           paymentFactConsumerOrderDomain,
+		BusinessObjectType: paymentFactBusinessObjectRefundOrder,
+		BusinessObjectID:   refundOrder.ID,
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}).Return(db.ExternalPaymentFactApplication{ID: 1002, FactID: 902, Consumer: paymentFactConsumerOrderDomain, BusinessObjectType: paymentFactBusinessObjectRefundOrder, BusinessObjectID: refundOrder.ID}, nil)
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/refund", bytes.NewBufferString(`{"notifyId":"BFRN_5102"}`))
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "OK", recorder.Body.String())
+	require.Equal(t, []int64{1002}, taskRecorder.applicationIDs)
+}
+
 func TestBaofuRefundCallbackDirectRejectsNotificationIdentityMismatch(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -1208,6 +1258,30 @@ func (fakeBaofuPaymentParser) ParseRefundNotification(body []byte) (*baofuaggreg
 			TransactionState: aggregatecontracts.RefundStateSuccess,
 			SuccessAmountFen: 1200,
 			Raw:              []byte(`{"notifyId":"BFRN_5101","outTradeNo":"BFRFD_5101","tradeNo":"BFREFUND_UP_5101","refundState":"SUCCESS"}`),
+		},
+	}, nil
+}
+
+type fakeBaofuRefundResultCodeOnlyParser struct {
+	fakeBaofuPaymentParser
+}
+
+func (fakeBaofuRefundResultCodeOnlyParser) ParseRefundNotification(body []byte) (*baofuaggregatenotification.RefundNotification, error) {
+	return &baofuaggregatenotification.RefundNotification{
+		NotifyID:       "BFRN_5102",
+		NotifyType:     "REFUND",
+		TerminalStatus: db.ExternalPaymentTerminalStatusSuccess,
+		IsTerminal:     true,
+		OccurredAt:     time.Now().UTC(),
+		Raw:            []byte(`{"notifyId":"BFRN_5102","outTradeNo":"BFRFD_5102","tradeNo":"BFREFUND_UP_5102","resultCode":"SUCCESS"}`),
+		Fact: aggregatecontracts.RefundFact{
+			MerchantID:       "102004465",
+			TerminalID:       "200005200",
+			OutTradeNo:       "BFRFD_5102",
+			TradeNo:          "BFREFUND_UP_5102",
+			SuccessAmountFen: 1200,
+			ResultCode:       aggregatecontracts.BusinessResultCodeSuccess,
+			Raw:              []byte(`{"notifyId":"BFRN_5102","outTradeNo":"BFRFD_5102","tradeNo":"BFREFUND_UP_5102","resultCode":"SUCCESS"}`),
 		},
 	}, nil
 }

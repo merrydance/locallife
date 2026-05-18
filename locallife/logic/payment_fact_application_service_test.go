@@ -1636,6 +1636,63 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrderBaofuRefundS
 	require.Equal(t, db.PaymentDomainOutboxEventOrderRefundSucceeded, result.Outbox.EventType)
 }
 
+func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrderBaofuRefundResultCodeSuccessCreatesOutbox(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	now := time.Date(2026, 5, 4, 12, 11, 0, 0, time.UTC)
+	application := db.ExternalPaymentFactApplication{
+		ID:                 2817,
+		FactID:             2717,
+		Consumer:           paymentFactConsumerOrderDomain,
+		BusinessObjectType: paymentFactBusinessObjectRefundOrder,
+		BusinessObjectID:   24207,
+		Status:             db.ExternalPaymentFactApplicationStatusProcessing,
+	}
+	fact := db.ExternalPaymentFact{
+		ID:                   2717,
+		Provider:             db.ExternalPaymentProviderBaofu,
+		Channel:              db.PaymentChannelBaofuAggregate,
+		Capability:           db.ExternalPaymentCapabilityBaofuRefund,
+		ExternalObjectType:   db.ExternalPaymentObjectRefund,
+		ExternalSecondaryKey: pgtype.Text{String: "BF_REFUND_24207", Valid: true},
+		BusinessOwner:        pgtype.Text{String: db.ExternalPaymentBusinessOwnerOrder, Valid: true},
+		BusinessObjectType:   pgtype.Text{String: paymentFactBusinessObjectRefundOrder, Valid: true},
+		BusinessObjectID:     pgtype.Int8{Int64: 24207, Valid: true},
+		UpstreamState:        "SUCCESS",
+		TerminalStatus:       db.ExternalPaymentTerminalStatusSuccess,
+		IsTerminal:           true,
+	}
+	refundOrder := db.RefundOrder{ID: 24207, PaymentOrderID: 25207, RefundAmount: 500, OutRefundNo: "BFRFD24207", Status: "processing"}
+	paymentOrder := db.PaymentOrder{ID: 25207, OrderID: pgtype.Int8{Int64: 26207, Valid: true}, Amount: 500, BusinessType: db.ExternalPaymentBusinessOwnerOrder, PaymentChannel: db.PaymentChannelBaofuAggregate, UserID: 77}
+
+	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
+	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().GetRefundOrder(gomock.Any(), application.BusinessObjectID).Return(refundOrder, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), refundOrder.PaymentOrderID).Return(paymentOrder, nil)
+	store.EXPECT().UpdateRefundOrderToSuccess(gomock.Any(), refundOrder.ID).Return(db.RefundOrder{ID: refundOrder.ID, PaymentOrderID: refundOrder.PaymentOrderID, RefundAmount: refundOrder.RefundAmount, OutRefundNo: refundOrder.OutRefundNo, Status: riderDepositRefundStatusSuccess}, nil)
+	store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(int64(500), nil)
+	store.EXPECT().UpdatePaymentOrderToRefunded(gomock.Any(), paymentOrder.ID).Return(db.PaymentOrder{ID: paymentOrder.ID, Status: "refunded"}, nil)
+	store.EXPECT().CreatePaymentDomainOutboxOnce(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreatePaymentDomainOutboxOnceParams) (db.PaymentDomainOutbox, error) {
+		require.Equal(t, db.PaymentDomainOutboxEventOrderRefundSucceeded, arg.EventType)
+		require.Equal(t, db.PaymentDomainOutboxAggregateRefundOrder, arg.AggregateType)
+		require.Equal(t, refundOrder.ID, arg.AggregateID)
+		return db.PaymentDomainOutbox{ID: 28107, EventType: arg.EventType, AggregateType: arg.AggregateType, AggregateID: arg.AggregateID, Payload: arg.Payload, Status: arg.Status}, nil
+	})
+	expectFactTerminalized(t, store, fact.ID, now)
+	expectApplicationApplied(t, store, application, now)
+
+	svc := NewPaymentFactService(store)
+	svc.now = func() time.Time { return now }
+
+	result, err := svc.ApplyExternalPaymentFactApplication(context.Background(), application.ID)
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+	require.NotNil(t, result.Outbox)
+	require.Equal(t, db.PaymentDomainOutboxEventOrderRefundSucceeded, result.Outbox.EventType)
+}
+
 func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrderRefundFailedFactDoesNotRegressSuccessfulRefund(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

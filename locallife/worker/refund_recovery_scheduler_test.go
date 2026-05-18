@@ -858,6 +858,78 @@ func TestRefundRecoverySchedulerRunOnceQueriesBaofuRefundStatusByOrder(t *testin
 	require.Equal(t, stuckRefund.OutRefundNo, baofuClient.lastRefundQuery.OutTradeNo)
 }
 
+func TestRefundRecoverySchedulerRunOnceUsesBaofuRefundResultCodeWhenStateAbsent(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &orderRefundFactApplicationRecorder{}
+	baofuClient := &baofuRecoveryAggregateClient{
+		refundResult: &aggregatecontracts.RefundResult{
+			OutTradeNo:       "BFRFD_RESULT_ONLY_ORDER_001",
+			TradeNo:          "BFREFUND_RESULT_ONLY_ORDER_001",
+			ResultCode:       aggregatecontracts.BusinessResultCodeSuccess,
+			SuccessAmountFen: 880,
+			Raw:              json.RawMessage(`{"resultCode":"SUCCESS","succAmt":880}`),
+		},
+	}
+
+	stuckRefund := db.RefundOrder{
+		ID:             264,
+		PaymentOrderID: 294,
+		OutRefundNo:    "BFRFD_RESULT_ONLY_ORDER_001",
+		Status:         "processing",
+		RefundAmount:   880,
+	}
+	paymentOrder := db.PaymentOrder{
+		ID:             294,
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+		BusinessType:   db.ExternalPaymentBusinessOwnerOrder,
+		OrderID:        pgtype.Int8{Int64: 2502, Valid: true},
+	}
+
+	store.EXPECT().ListPaidUnrefundedPaymentOrders(gomock.Any(), int32(50)).Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().ListPaidUnrefundedReservationPaymentOrders(gomock.Any(), int32(50)).Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().ListPendingReservationRefundOrdersForRecovery(gomock.Any(), gomock.Any()).Return([]db.ListPendingReservationRefundOrdersForRecoveryRow{}, nil)
+	store.EXPECT().ListStuckProcessingRefundOrders(gomock.Any(), gomock.Any()).Return([]db.ListStuckProcessingRefundOrdersRow{{
+		ID:          stuckRefund.ID,
+		OutRefundNo: stuckRefund.OutRefundNo,
+		Status:      stuckRefund.Status,
+		CreatedAt:   time.Now().Add(-20 * time.Minute),
+		PaymentType: paymentOrder.PaymentType,
+	}}, nil)
+	store.EXPECT().GetRefundOrder(gomock.Any(), stuckRefund.ID).Return(stuckRefund, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+		require.Equal(t, db.ExternalPaymentProviderBaofu, arg.Provider)
+		require.Equal(t, db.PaymentChannelBaofuAggregate, arg.Channel)
+		require.Equal(t, db.ExternalPaymentCapabilityBaofuRefund, arg.Capability)
+		require.Equal(t, stuckRefund.OutRefundNo, arg.ExternalObjectKey)
+		require.Equal(t, "BFREFUND_RESULT_ONLY_ORDER_001", arg.ExternalSecondaryKey.String)
+		require.Equal(t, aggregatecontracts.BusinessResultCodeSuccess, arg.UpstreamState)
+		require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
+		require.Equal(t, "baofu:query:refund:"+stuckRefund.OutRefundNo+":"+db.ExternalPaymentTerminalStatusSuccess, arg.DedupeKey)
+		return db.ExternalPaymentFact{ID: 2813, DedupeKey: arg.DedupeKey, IsTerminal: true}, nil
+	})
+	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), db.CreateExternalPaymentFactApplicationParams{
+		FactID:             2813,
+		Consumer:           "order_domain",
+		BusinessObjectType: "refund_order",
+		BusinessObjectID:   stuckRefund.ID,
+		Status:             db.ExternalPaymentFactApplicationStatusPending,
+	}).Return(db.ExternalPaymentFactApplication{ID: 2913, FactID: 2813, Consumer: "order_domain", BusinessObjectType: "refund_order", BusinessObjectID: stuckRefund.ID, Status: db.ExternalPaymentFactApplicationStatusPending}, nil)
+
+	scheduler := worker.NewRefundRecoveryScheduler(store, distributor, nil, nil)
+	scheduler.SetBaofuAggregateClient(baofuClient, worker.BaofuProfitSharingWorkerConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+	})
+	scheduler.RunOnce()
+
+	require.Equal(t, []int64{2913}, distributor.applicationIDs)
+}
+
 func TestRefundRecoverySchedulerRunOnceKeepsWaitingWhenEcommerceRefundStillProcessing(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

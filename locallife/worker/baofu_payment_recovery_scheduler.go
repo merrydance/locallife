@@ -485,7 +485,7 @@ func baofuPaymentFactFromQueryResult(result *aggregatecontracts.UnifiedOrderResu
 		OutTradeNo:       outTradeNo,
 		TradeNo:          strings.TrimSpace(result.TradeNo),
 		TransactionState: strings.TrimSpace(result.TxnState),
-		SuccessAmountFen: order.Amount,
+		SuccessAmountFen: result.SuccessAmountFen,
 		ResultCode:       strings.TrimSpace(result.ResultCode),
 		Raw:              result.Raw,
 	}

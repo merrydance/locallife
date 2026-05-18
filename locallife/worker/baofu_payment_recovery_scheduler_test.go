@@ -236,10 +236,11 @@ func TestBaofuPaymentRecoverySchedulerRunOnceQueriesPendingPaymentAndEnqueuesFac
 	distributor := &baofuProfitSharingEnqueueRecorder{}
 	client := &baofuRecoveryAggregateClient{
 		paymentResult: &aggregatecontracts.UnifiedOrderResult{
-			TradeNo:    "BFPAY_UP_301",
-			OutTradeNo: "BFPAY_301",
-			TxnState:   aggregatecontracts.PaymentStateSuccess,
-			Raw:        json.RawMessage(`{"txnState":"SUCCESS"}`),
+			TradeNo:          "BFPAY_UP_301",
+			OutTradeNo:       "BFPAY_301",
+			TxnState:         aggregatecontracts.PaymentStateSuccess,
+			SuccessAmountFen: 9980,
+			Raw:              json.RawMessage(`{"txnState":"SUCCESS","succAmt":9980}`),
 		},
 	}
 	paymentOrder := db.PaymentOrder{
@@ -271,6 +272,8 @@ func TestBaofuPaymentRecoverySchedulerRunOnceQueriesPendingPaymentAndEnqueuesFac
 			require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
 			require.True(t, arg.IsTerminal)
 			require.Equal(t, paymentOrder.ID, arg.BusinessObjectID.Int64)
+			require.True(t, arg.Amount.Valid)
+			require.Equal(t, int64(9980), arg.Amount.Int64)
 			return db.ExternalPaymentFact{ID: 2101, IsTerminal: true}, nil
 		})
 	store.EXPECT().
@@ -288,6 +291,60 @@ func TestBaofuPaymentRecoverySchedulerRunOnceQueriesPendingPaymentAndEnqueuesFac
 	require.Equal(t, "COLLECT_MER", client.lastPaymentQuery.MerchantID)
 	require.Equal(t, "COLLECT_TER", client.lastPaymentQuery.TerminalID)
 	require.Equal(t, "BFPAY_301", client.lastPaymentQuery.OutTradeNo)
+}
+
+func TestBaofuPaymentRecoverySchedulerRunOnceRecordsEmptyPaymentStateAsUnknown(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &baofuProfitSharingEnqueueRecorder{}
+	client := &baofuRecoveryAggregateClient{
+		paymentResult: &aggregatecontracts.UnifiedOrderResult{
+			TradeNo:          "BFPAY_UP_302",
+			OutTradeNo:       "BFPAY_302",
+			ResultCode:       aggregatecontracts.BusinessResultCodeSuccess,
+			SuccessAmountFen: 10000,
+			Raw:              json.RawMessage(`{"resultCode":"SUCCESS","succAmt":10000}`),
+		},
+	}
+	paymentOrder := db.PaymentOrder{
+		ID:             302,
+		OrderID:        pgtype.Int8{Int64: 402, Valid: true},
+		BusinessType:   db.ExternalPaymentBusinessOwnerOrder,
+		Amount:         10000,
+		OutTradeNo:     "BFPAY_302",
+		Status:         "pending",
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+	}
+
+	store.EXPECT().
+		ListBaofuOrdersReadyForProfitSharing(gomock.Any(), gomock.Any()).
+		Return([]db.ListBaofuOrdersReadyForProfitSharingRow{}, nil)
+	store.EXPECT().
+		ListBaofuProcessingProfitSharingOrdersForRecovery(gomock.Any(), gomock.Any()).
+		Return([]db.ProfitSharingOrder{}, nil)
+	store.EXPECT().
+		ListBaofuPendingPaymentOrdersForRecovery(gomock.Any(), gomock.Any()).
+		Return([]db.PaymentOrder{paymentOrder}, nil)
+	store.EXPECT().
+		CreateExternalPaymentFact(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+			require.Equal(t, db.ExternalPaymentTerminalStatusUnknown, arg.TerminalStatus)
+			require.False(t, arg.IsTerminal)
+			require.Empty(t, arg.UpstreamState)
+			require.Equal(t, "baofu:manual_reconciliation:payment:BFPAY_302:BFPAY_UP_302:unknown", arg.DedupeKey)
+			return db.ExternalPaymentFact{ID: 2102, IsTerminal: false}, nil
+		})
+
+	scheduler := worker.NewBaofuPaymentRecoveryScheduler(store, distributor)
+	scheduler.SetBaofuAggregateClient(client, worker.BaofuProfitSharingWorkerConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+	})
+	scheduler.RunOnce()
+
+	require.Empty(t, distributor.factApplicationIDs)
 }
 
 type baofuProfitSharingEnqueueRecorder struct {

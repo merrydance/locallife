@@ -491,6 +491,7 @@ func (server *Server) recordBaofuRefundCallbackFact(ctx context.Context, notific
 	if amount <= 0 {
 		amount = refundOrder.RefundAmount
 	}
+	upstreamState := baofuRefundFactUpstreamState(notification.Fact)
 	result, err := server.paymentFactService.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
 		Provider:             db.ExternalPaymentProviderBaofu,
 		Channel:              db.PaymentChannelBaofuAggregate,
@@ -504,7 +505,7 @@ func (server *Server) recordBaofuRefundCallbackFact(ctx context.Context, notific
 		BusinessOwner:        paymentFactStringPtr(owner),
 		BusinessObjectType:   paymentFactStringPtr(paymentFactBusinessObjectRefundOrder),
 		BusinessObjectID:     paymentFactInt64Ptr(refundOrder.ID),
-		UpstreamState:        strings.TrimSpace(notification.Fact.TransactionState),
+		UpstreamState:        upstreamState,
 		TerminalStatus:       notification.TerminalStatus,
 		Amount:               paymentFactInt64Ptr(amount),
 		Currency:             "CNY",
@@ -546,9 +547,16 @@ func baofuRefundCallbackDedupeKey(notification *baofuaggregatenotification.Refun
 	outRefundNo := strings.TrimSpace(notification.Fact.OutTradeNo)
 	sourceEventID := strings.TrimSpace(notification.NotifyID)
 	if sourceEventID == "" {
-		sourceEventID = strings.TrimSpace(notification.Fact.TransactionState)
+		sourceEventID = baofuRefundFactUpstreamState(notification.Fact)
 	}
 	return fmt.Sprintf("baofu:callback:refund:%s:%s", outRefundNo, sourceEventID)
+}
+
+func baofuRefundFactUpstreamState(fact aggregatecontracts.RefundFact) string {
+	if upstreamState := strings.TrimSpace(fact.TransactionState); upstreamState != "" {
+		return upstreamState
+	}
+	return strings.TrimSpace(fact.ResultCode)
 }
 
 func (server *Server) validateBaofuPayoutNotificationIdentity(memberID string, terminalID string) error {

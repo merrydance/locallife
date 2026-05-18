@@ -220,6 +220,65 @@ func TestBaofuPaymentServiceRecordPaymentQueryFactSkipsProcessingApplication(t *
 	require.False(t, store.applicationCreated)
 }
 
+func TestBaofuPaymentServiceRecordPaymentQueryFactKeepsMissingUpstreamAmountEmpty(t *testing.T) {
+	store := &fakeBaofuPaymentStore{}
+	now := time.Date(2026, 5, 3, 10, 26, 0, 0, time.UTC)
+	service := NewBaofuPaymentService(store, nil, BaofuPaymentServiceConfig{})
+	service.now = func() time.Time { return now }
+
+	result, err := service.RecordPaymentFact(context.Background(), RecordBaofuPaymentFactInput{
+		PaymentOrder: db.PaymentOrder{
+			ID:         88,
+			Amount:     12345,
+			OutTradeNo: "PO202605030001",
+		},
+		FactSource: db.ExternalPaymentFactSourceManualReconciliation,
+		Fact: aggregatecontracts.PaymentFact{
+			OutTradeNo:       "PO202605030001",
+			TradeNo:          "BFPAY202605030001",
+			TransactionState: aggregatecontracts.PaymentStateSuccess,
+			Raw:              json.RawMessage(`{"outTradeNo":"PO202605030001","tradeNo":"BFPAY202605030001","txnState":"SUCCESS"}`),
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(501), result.Fact.ID)
+	require.True(t, result.Fact.IsTerminal)
+	require.False(t, store.lastFact.Amount.Valid)
+	require.Equal(t, int64(0), store.lastFact.Amount.Int64)
+}
+
+func TestBaofuPaymentServiceRecordPaymentQueryFactAcceptsEmptyTransactionState(t *testing.T) {
+	store := &fakeBaofuPaymentStore{}
+	now := time.Date(2026, 5, 3, 10, 27, 0, 0, time.UTC)
+	service := NewBaofuPaymentService(store, nil, BaofuPaymentServiceConfig{})
+	service.now = func() time.Time { return now }
+
+	result, err := service.RecordPaymentFact(context.Background(), RecordBaofuPaymentFactInput{
+		PaymentOrder: db.PaymentOrder{
+			ID:         88,
+			Amount:     12345,
+			OutTradeNo: "PO202605030001",
+		},
+		FactSource: db.ExternalPaymentFactSourceManualReconciliation,
+		Fact: aggregatecontracts.PaymentFact{
+			OutTradeNo:       "PO202605030001",
+			TradeNo:          "BFPAY202605030001",
+			SuccessAmountFen: 12345,
+			ResultCode:       aggregatecontracts.BusinessResultCodeSuccess,
+			Raw:              json.RawMessage(`{"outTradeNo":"PO202605030001","tradeNo":"BFPAY202605030001","resultCode":"SUCCESS"}`),
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(501), result.Fact.ID)
+	require.Nil(t, result.Application)
+	require.Equal(t, "", store.lastFact.UpstreamState)
+	require.Equal(t, db.ExternalPaymentTerminalStatusUnknown, store.lastFact.TerminalStatus)
+	require.False(t, store.lastFact.IsTerminal)
+	require.Equal(t, "baofu:manual_reconciliation:payment:PO202605030001:BFPAY202605030001:unknown", store.lastFact.DedupeKey)
+}
+
 func TestPaymentCommandServiceRecordExternalPaymentCommand_AcceptsBaofuPaymentCommand(t *testing.T) {
 	store := &fakeBaofuPaymentCommandStore{}
 	now := time.Date(2026, 5, 3, 10, 30, 0, 0, time.UTC)

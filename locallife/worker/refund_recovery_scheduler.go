@@ -509,7 +509,7 @@ func (s *RefundRecoveryScheduler) queryRefundStatus(ctx context.Context, payment
 		if refundID == "" {
 			refundID = strings.TrimSpace(resp.OutTradeNo)
 		}
-		return strings.TrimSpace(resp.RefundState), refundID, nil
+		return baofuRefundResultUpstreamState(resp), refundID, nil
 	}
 	if paymentOrderUsesEcommerceChannel(paymentOrder) {
 
@@ -710,12 +710,36 @@ func mainBusinessRefundFactProviderChannelCapability(channel string) (string, st
 
 func normalizeRefundTerminalStatusForPaymentOrder(paymentOrder db.PaymentOrder, refundStatus string) string {
 	if paymentOrder.PaymentChannel == db.PaymentChannelBaofuAggregate {
+		if terminalStatus := normalizeBaofuRefundResultCodeTerminalStatus(refundStatus); terminalStatus != "" {
+			return terminalStatus
+		}
 		return aggregatecontracts.NormalizeRefundTerminalStatus(refundStatus)
 	}
 	if paymentOrder.PaymentChannel == db.PaymentChannelDirect {
 		return logic.NormalizeDirectRefundTerminalStatus(refundStatus)
 	}
 	return logic.NormalizeEcommerceRefundTerminalStatus(refundStatus)
+}
+
+func baofuRefundResultUpstreamState(result *aggregatecontracts.RefundResult) string {
+	if result == nil {
+		return ""
+	}
+	if refundState := strings.TrimSpace(result.RefundState); refundState != "" {
+		return refundState
+	}
+	return strings.TrimSpace(result.ResultCode)
+}
+
+func normalizeBaofuRefundResultCodeTerminalStatus(resultCode string) string {
+	switch strings.TrimSpace(resultCode) {
+	case aggregatecontracts.BusinessResultCodeSuccess:
+		return db.ExternalPaymentTerminalStatusSuccess
+	case aggregatecontracts.BusinessResultCodeFail:
+		return db.ExternalPaymentTerminalStatusFailed
+	default:
+		return ""
+	}
 }
 
 func paymentFactStringPtr(value string) *string {
