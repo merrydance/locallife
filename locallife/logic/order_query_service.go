@@ -12,6 +12,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+var ErrMerchantOrderNotPaid = errors.New("订单尚未支付，暂不可处理")
+
 func (s *OrderService) GetUserOrder(ctx context.Context, input GetUserOrderQueryInput) (GetUserOrderQueryResult, error) {
 	order, err := s.store.GetOrderWithDetails(ctx, input.OrderID)
 	if err != nil {
@@ -142,6 +144,15 @@ func (s *OrderService) GetMerchantOrder(ctx context.Context, input GetMerchantOr
 	if order.MerchantID != input.MerchantID {
 		return GetMerchantOrderQueryResult{}, NewRequestError(http.StatusForbidden, errors.New("order does not belong to your merchant"))
 	}
+	if order.Status == db.OrderStatusPending {
+		log.Warn().
+			Int64("merchant_id", input.MerchantID).
+			Int64("order_id", input.OrderID).
+			Int64("user_id", order.UserID).
+			Str("status", order.Status).
+			Msg("merchant attempted to access unpaid order")
+		return GetMerchantOrderQueryResult{}, NewRequestError(http.StatusConflict, ErrMerchantOrderNotPaid)
+	}
 
 	items, err := s.store.ListOrderItemsWithDishByOrder(ctx, order.ID)
 	if err != nil {
@@ -158,6 +169,13 @@ func (s *OrderService) ListMerchantOrders(ctx context.Context, input ListMerchan
 	offset := int32((input.PageID - 1) * input.PageSize)
 	status := pgtype.Text{}
 	if input.Status != nil && *input.Status != "" {
+		if *input.Status == db.OrderStatusPending {
+			log.Warn().
+				Int64("merchant_id", input.MerchantID).
+				Str("status", *input.Status).
+				Msg("merchant attempted to list unpaid orders")
+			return ListMerchantOrdersQueryResult{}, NewRequestError(http.StatusConflict, ErrMerchantOrderNotPaid)
+		}
 		status = pgtype.Text{String: *input.Status, Valid: true}
 	}
 	orderType := pgtype.Text{}

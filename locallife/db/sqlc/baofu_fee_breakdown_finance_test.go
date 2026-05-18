@@ -62,7 +62,9 @@ func TestMerchantFinanceQueriesUseMerchantPaymentFeeBreakdown(t *testing.T) {
 		EndAt:      endAt,
 	})
 	require.NoError(t, err)
-	require.Equal(t, int64(60), overview.TotalPaymentFee)
+	require.Equal(t, int64(60), overview.TotalPaymentChannelFeeAmount)
+	require.Equal(t, int64(500), overview.TotalPlatformServiceFeeAmount)
+	require.Equal(t, int64(9440), overview.TotalMerchantReceivableAmount)
 
 	serviceFees, err := testStore.GetMerchantServiceFeeDetail(ctx, GetMerchantServiceFeeDetailParams{
 		MerchantID: merchant.ID,
@@ -71,7 +73,9 @@ func TestMerchantFinanceQueriesUseMerchantPaymentFeeBreakdown(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, serviceFees)
-	require.Equal(t, int64(60), serviceFees[0].PaymentFee)
+	require.Equal(t, int64(60), serviceFees[0].PaymentChannelFeeAmount)
+	require.Equal(t, int64(500), serviceFees[0].PlatformServiceFeeAmount)
+	require.Equal(t, int64(560), serviceFees[0].TotalFeeAmount)
 
 	daily, err := testStore.GetMerchantDailyFinance(ctx, GetMerchantDailyFinanceParams{
 		MerchantID: merchant.ID,
@@ -80,8 +84,9 @@ func TestMerchantFinanceQueriesUseMerchantPaymentFeeBreakdown(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, daily)
-	require.Equal(t, int64(60), daily[0].PaymentFee)
-	require.Equal(t, int64(560), daily[0].TotalDeductionFee)
+	require.Equal(t, int64(60), daily[0].PaymentChannelFeeAmount)
+	require.Equal(t, int64(500), daily[0].PlatformServiceFeeAmount)
+	require.Equal(t, int64(560), daily[0].TotalDeductionFeeAmount)
 
 	rows, err := testStore.ListMerchantFinanceOrders(ctx, ListMerchantFinanceOrdersParams{
 		MerchantID: merchant.ID,
@@ -92,7 +97,32 @@ func TestMerchantFinanceQueriesUseMerchantPaymentFeeBreakdown(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, rows)
-	require.Equal(t, int64(60), rows[0].PaymentFee)
+	require.Equal(t, int64(60), rows[0].PaymentChannelFeeAmount)
+	require.Equal(t, int64(500), rows[0].PlatformServiceFeeAmount)
+	require.Equal(t, int64(9440), rows[0].MerchantReceivableAmount)
+
+	settlements, err := testStore.ListMerchantSettlements(ctx, ListMerchantSettlementsParams{
+		MerchantID: merchant.ID,
+		StartAt:    startAt,
+		EndAt:      endAt,
+		Limit:      10,
+		Offset:     0,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, settlements)
+	require.Equal(t, int64(60), settlements[0].PaymentChannelFeeAmount)
+	require.Equal(t, int64(500), settlements[0].PlatformServiceFeeAmount)
+	require.Equal(t, int64(9440), settlements[0].MerchantReceivableAmount)
+
+	stats, err := testStore.GetMerchantProfitSharingStats(ctx, GetMerchantProfitSharingStatsParams{
+		MerchantID: merchant.ID,
+		StartAt:    startAt,
+		EndAt:      endAt,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(60), stats.TotalPaymentChannelFeeAmount)
+	require.Equal(t, int64(500), stats.TotalPlatformServiceFeeAmount)
+	require.Equal(t, int64(9440), stats.TotalMerchantReceivableAmount)
 }
 
 func TestRiderFinanceQueriesExposeGrossAmountAndPaymentFee(t *testing.T) {

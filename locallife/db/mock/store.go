@@ -14513,10 +14513,10 @@ func (mr *MockStoreMockRecorder) ListMerchantSettlementTimeline(ctx, arg any) *g
 }
 
 // ListMerchantSettlements mocks base method.
-func (m *MockStore) ListMerchantSettlements(ctx context.Context, arg db.ListMerchantSettlementsParams) ([]db.ProfitSharingOrder, error) {
+func (m *MockStore) ListMerchantSettlements(ctx context.Context, arg db.ListMerchantSettlementsParams) ([]db.ListMerchantSettlementsRow, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListMerchantSettlements", ctx, arg)
-	ret0, _ := ret[0].([]db.ProfitSharingOrder)
+	ret0, _ := ret[0].([]db.ListMerchantSettlementsRow)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -14528,10 +14528,10 @@ func (mr *MockStoreMockRecorder) ListMerchantSettlements(ctx, arg any) *gomock.C
 }
 
 // ListMerchantSettlementsByStatus mocks base method.
-func (m *MockStore) ListMerchantSettlementsByStatus(ctx context.Context, arg db.ListMerchantSettlementsByStatusParams) ([]db.ProfitSharingOrder, error) {
+func (m *MockStore) ListMerchantSettlementsByStatus(ctx context.Context, arg db.ListMerchantSettlementsByStatusParams) ([]db.ListMerchantSettlementsByStatusRow, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListMerchantSettlementsByStatus", ctx, arg)
-	ret0, _ := ret[0].([]db.ProfitSharingOrder)
+	ret0, _ := ret[0].([]db.ListMerchantSettlementsByStatusRow)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -15680,6 +15680,21 @@ func (m *MockStore) ListProfitSharingOrdersByOperator(ctx context.Context, arg d
 func (mr *MockStoreMockRecorder) ListProfitSharingOrdersByOperator(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListProfitSharingOrdersByOperator", reflect.TypeOf((*MockStore)(nil).ListProfitSharingOrdersByOperator), ctx, arg)
+}
+
+// ListProfitSharingOrdersByOrderIDsForMerchant mocks base method.
+func (m *MockStore) ListProfitSharingOrdersByOrderIDsForMerchant(ctx context.Context, arg db.ListProfitSharingOrdersByOrderIDsForMerchantParams) ([]db.ListProfitSharingOrdersByOrderIDsForMerchantRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListProfitSharingOrdersByOrderIDsForMerchant", ctx, arg)
+	ret0, _ := ret[0].([]db.ListProfitSharingOrdersByOrderIDsForMerchantRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListProfitSharingOrdersByOrderIDsForMerchant indicates an expected call of ListProfitSharingOrdersByOrderIDsForMerchant.
+func (mr *MockStoreMockRecorder) ListProfitSharingOrdersByOrderIDsForMerchant(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListProfitSharingOrdersByOrderIDsForMerchant", reflect.TypeOf((*MockStore)(nil).ListProfitSharingOrdersByOrderIDsForMerchant), ctx, arg)
 }
 
 // ListProfitSharingOrdersByStatus mocks base method.

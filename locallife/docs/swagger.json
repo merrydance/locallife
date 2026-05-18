@@ -39200,8 +39200,8 @@
                     "description": "汇总",
                     "type": "integer"
                 },
-                "pending_income": {
-                    "description": "待结算收入",
+                "pending_merchant_receivable_amount": {
+                    "description": "待结算实收",
                     "type": "integer"
                 },
                 "pending_orders": {
@@ -39211,36 +39211,28 @@
                     "description": "满返支出统计",
                     "type": "integer"
                 },
-                "total_deduction_fee": {
-                    "description": "总扣减（平台+运营商+商户支付服务费）",
+                "total_deduction_fee_amount": {
+                    "description": "总扣减",
                     "type": "integer"
                 },
                 "total_gmv": {
                     "description": "金额统计（分）",
                     "type": "integer"
                 },
-                "total_income": {
-                    "description": "商户净收入",
+                "total_merchant_receivable_amount": {
+                    "description": "商户实收",
                     "type": "integer"
                 },
-                "total_operator_fee": {
-                    "description": "运营商服务费",
+                "total_payment_channel_fee_amount": {
+                    "description": "支付通道费",
                     "type": "integer"
                 },
-                "total_payment_fee": {
-                    "description": "商户支付服务费",
-                    "type": "integer"
-                },
-                "total_platform_fee": {
+                "total_platform_service_fee_amount": {
                     "description": "平台服务费",
                     "type": "integer"
                 },
                 "total_promotion_exp": {
                     "description": "满返支出总额",
-                    "type": "integer"
-                },
-                "total_service_fee": {
-                    "description": "总服务费（平台+运营商）",
                     "type": "integer"
                 }
             }
@@ -41987,6 +41979,55 @@
                 }
             }
         },
+        "api.merchantOrderFeeBreakdownResponse": {
+            "type": "object",
+            "properties": {
+                "customer_payable_amount": {
+                    "type": "integer",
+                    "example": 10300
+                },
+                "delivery_fee_amount": {
+                    "type": "integer",
+                    "example": 800
+                },
+                "delivery_fee_discount_amount": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "delivery_payable_amount": {
+                    "type": "integer",
+                    "example": 800
+                },
+                "food_amount": {
+                    "type": "integer",
+                    "example": 10000
+                },
+                "food_payable_amount": {
+                    "type": "integer",
+                    "example": 9500
+                },
+                "merchant_discount_amount": {
+                    "type": "integer",
+                    "example": 300
+                },
+                "merchant_receivable_amount": {
+                    "type": "integer",
+                    "example": 8968
+                },
+                "payment_channel_fee_amount": {
+                    "type": "integer",
+                    "example": 57
+                },
+                "platform_service_fee_amount": {
+                    "type": "integer",
+                    "example": 475
+                },
+                "voucher_discount_amount": {
+                    "type": "integer",
+                    "example": 200
+                }
+            }
+        },
         "api.merchantOrderPrintJobResponse": {
             "type": "object",
             "properties": {
@@ -43848,6 +43889,9 @@
                 },
                 "exception_state": {
                     "type": "string"
+                },
+                "fee_breakdown": {
+                    "$ref": "#/definitions/api.merchantOrderFeeBreakdownResponse"
                 },
                 "flow_id": {
                     "type": "integer"

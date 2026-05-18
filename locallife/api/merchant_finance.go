@@ -48,14 +48,12 @@ type financeOverviewResponse struct {
 	PendingOrders   int64 `json:"pending_orders"`
 
 	// 金额统计（分）
-	TotalGMV          int64 `json:"total_gmv"`           // 总交易额
-	TotalIncome       int64 `json:"total_income"`        // 商户净收入
-	TotalPlatformFee  int64 `json:"total_platform_fee"`  // 平台服务费
-	TotalOperatorFee  int64 `json:"total_operator_fee"`  // 运营商服务费
-	TotalPaymentFee   int64 `json:"total_payment_fee"`   // 商户支付服务费
-	TotalServiceFee   int64 `json:"total_service_fee"`   // 总服务费（平台+运营商）
-	TotalDeductionFee int64 `json:"total_deduction_fee"` // 总扣减（平台+运营商+商户支付服务费）
-	PendingIncome     int64 `json:"pending_income"`      // 待结算收入
+	TotalGMV                        int64 `json:"total_gmv"`                          // 总交易额
+	TotalMerchantReceivableAmount   int64 `json:"total_merchant_receivable_amount"`   // 商户实收
+	TotalPlatformServiceFeeAmount   int64 `json:"total_platform_service_fee_amount"`  // 平台服务费
+	TotalPaymentChannelFeeAmount    int64 `json:"total_payment_channel_fee_amount"`   // 支付通道费
+	TotalDeductionFeeAmount         int64 `json:"total_deduction_fee_amount"`         // 总扣减
+	PendingMerchantReceivableAmount int64 `json:"pending_merchant_receivable_amount"` // 待结算实收
 
 	// 满返支出统计
 	PromotionOrders   int64 `json:"promotion_orders"`    // 满返订单数
@@ -142,25 +140,22 @@ func (server *Server) getMerchantFinanceOverview(ctx *gin.Context) {
 		return
 	}
 
-	totalServiceFee := financeStats.TotalPlatformFee + financeStats.TotalOperatorFee
-	totalDeductionFee := totalServiceFee + financeStats.TotalPaymentFee
-	totalIncome := financeStats.TotalIncome + adjustmentTotal
+	totalDeductionFee := financeStats.TotalPlatformServiceFeeAmount + financeStats.TotalPaymentChannelFeeAmount
+	totalIncome := financeStats.TotalMerchantReceivableAmount + adjustmentTotal
 	netIncome := totalIncome - promoStats.TotalDiscount
 
 	resp := financeOverviewResponse{
-		CompletedOrders:   financeStats.CompletedOrders,
-		PendingOrders:     financeStats.PendingOrders,
-		TotalGMV:          financeStats.TotalGmv,
-		TotalIncome:       totalIncome,
-		TotalPlatformFee:  financeStats.TotalPlatformFee,
-		TotalOperatorFee:  financeStats.TotalOperatorFee,
-		TotalPaymentFee:   financeStats.TotalPaymentFee,
-		TotalServiceFee:   totalServiceFee,
-		TotalDeductionFee: totalDeductionFee,
-		PendingIncome:     financeStats.PendingIncome,
-		PromotionOrders:   promoStats.PromoOrderCount,
-		TotalPromotionExp: promoStats.TotalDiscount,
-		NetIncome:         netIncome,
+		CompletedOrders:                 financeStats.CompletedOrders,
+		PendingOrders:                   financeStats.PendingOrders,
+		TotalGMV:                        financeStats.TotalGmv,
+		TotalMerchantReceivableAmount:   totalIncome,
+		TotalPlatformServiceFeeAmount:   financeStats.TotalPlatformServiceFeeAmount,
+		TotalPaymentChannelFeeAmount:    financeStats.TotalPaymentChannelFeeAmount,
+		TotalDeductionFeeAmount:         totalDeductionFee,
+		PendingMerchantReceivableAmount: financeStats.PendingMerchantReceivableAmount,
+		PromotionOrders:                 promoStats.PromoOrderCount,
+		TotalPromotionExp:               promoStats.TotalDiscount,
+		NetIncome:                       netIncome,
 	}
 
 	ctx.JSON(http.StatusOK, resp)
@@ -176,18 +171,17 @@ type listFinanceOrdersRequest struct {
 }
 
 type financeOrderItem struct {
-	ID                 int64  `json:"id"`
-	PaymentOrderID     int64  `json:"payment_order_id"`
-	OrderID            int64  `json:"order_id,omitempty"`
-	OrderSource        string `json:"order_source"`
-	TotalAmount        int64  `json:"total_amount"`
-	PlatformCommission int64  `json:"platform_commission"`
-	OperatorCommission int64  `json:"operator_commission"`
-	PaymentFee         int64  `json:"payment_fee"`
-	MerchantAmount     int64  `json:"merchant_amount"`
-	Status             string `json:"status"`
-	CreatedAt          string `json:"created_at"`
-	FinishedAt         string `json:"finished_at,omitempty"`
+	ID                       int64  `json:"id"`
+	PaymentOrderID           int64  `json:"payment_order_id"`
+	OrderID                  int64  `json:"order_id,omitempty"`
+	OrderSource              string `json:"order_source"`
+	TotalAmount              int64  `json:"total_amount"`
+	PlatformServiceFeeAmount int64  `json:"platform_service_fee_amount"`
+	PaymentChannelFeeAmount  int64  `json:"payment_channel_fee_amount"`
+	MerchantReceivableAmount int64  `json:"merchant_receivable_amount"`
+	Status                   string `json:"status"`
+	CreatedAt                string `json:"created_at"`
+	FinishedAt               string `json:"finished_at,omitempty"`
 }
 
 type financeOrdersResponse struct {
@@ -292,18 +286,17 @@ func (server *Server) listMerchantFinanceOrders(ctx *gin.Context) {
 		}
 
 		result[i] = financeOrderItem{
-			ID:                 order.ID,
-			PaymentOrderID:     order.PaymentOrderID,
-			OrderID:            orderID,
-			OrderSource:        order.OrderSource,
-			TotalAmount:        order.TotalAmount,
-			PlatformCommission: order.PlatformCommission,
-			OperatorCommission: order.OperatorCommission,
-			PaymentFee:         order.PaymentFee,
-			MerchantAmount:     order.MerchantAmount,
-			Status:             order.Status,
-			CreatedAt:          order.CreatedAt.Format(time.RFC3339),
-			FinishedAt:         finishedAt,
+			ID:                       order.ID,
+			PaymentOrderID:           order.PaymentOrderID,
+			OrderID:                  orderID,
+			OrderSource:              order.OrderSource,
+			TotalAmount:              order.TotalAmount,
+			PlatformServiceFeeAmount: order.PlatformServiceFeeAmount,
+			PaymentChannelFeeAmount:  order.PaymentChannelFeeAmount,
+			MerchantReceivableAmount: order.MerchantReceivableAmount,
+			Status:                   order.Status,
+			CreatedAt:                order.CreatedAt.Format(time.RFC3339),
+			FinishedAt:               finishedAt,
 		}
 	}
 
@@ -324,24 +317,20 @@ type listServiceFeesRequest struct {
 }
 
 type serviceFeeItem struct {
-	Date              string `json:"date"`
-	OrderSource       string `json:"order_source"`
-	OrderCount        int64  `json:"order_count"`
-	TotalAmount       int64  `json:"total_amount"`
-	PlatformFee       int64  `json:"platform_fee"`
-	OperatorFee       int64  `json:"operator_fee"`
-	PaymentFee        int64  `json:"payment_fee"`
-	TotalFee          int64  `json:"total_fee"`
-	TotalDeductionFee int64  `json:"total_deduction_fee"`
+	Date                     string `json:"date"`
+	OrderSource              string `json:"order_source"`
+	OrderCount               int64  `json:"order_count"`
+	TotalAmount              int64  `json:"total_amount"`
+	PlatformServiceFeeAmount int64  `json:"platform_service_fee_amount"`
+	PaymentChannelFeeAmount  int64  `json:"payment_channel_fee_amount"`
+	TotalFeeAmount           int64  `json:"total_fee_amount"`
 }
 
 type serviceFeeSummaryResponse struct {
-	Details           []serviceFeeItem `json:"details"`
-	TotalPlatformFee  int64            `json:"total_platform_fee"`
-	TotalOperatorFee  int64            `json:"total_operator_fee"`
-	TotalPaymentFee   int64            `json:"total_payment_fee"`
-	TotalServiceFee   int64            `json:"total_service_fee"`
-	TotalDeductionFee int64            `json:"total_deduction_fee"`
+	Details                       []serviceFeeItem `json:"details"`
+	TotalPlatformServiceFeeAmount int64            `json:"total_platform_service_fee_amount"`
+	TotalPaymentChannelFeeAmount  int64            `json:"total_payment_channel_fee_amount"`
+	TotalDeductionFeeAmount       int64            `json:"total_deduction_fee_amount"`
 }
 
 // listMerchantServiceFees 获取商户服务费明细
@@ -400,35 +389,28 @@ func (server *Server) listMerchantServiceFees(ctx *gin.Context) {
 	}
 
 	// 计算汇总
-	var totalPlatformFee, totalOperatorFee, totalPaymentFee int64
+	var totalPlatformServiceFee, totalPaymentChannelFee int64
 	result := make([]serviceFeeItem, len(fees))
 	for i, fee := range fees {
-		totalFee := fee.PlatformFee + fee.OperatorFee
-		totalDeductionFee := totalFee + fee.PaymentFee
-		totalPlatformFee += fee.PlatformFee
-		totalOperatorFee += fee.OperatorFee
-		totalPaymentFee += fee.PaymentFee
+		totalPlatformServiceFee += fee.PlatformServiceFeeAmount
+		totalPaymentChannelFee += fee.PaymentChannelFeeAmount
 
 		result[i] = serviceFeeItem{
-			Date:              fee.Date.Time.Format("2006-01-02"),
-			OrderSource:       fee.OrderSource,
-			OrderCount:        fee.OrderCount,
-			TotalAmount:       fee.TotalAmount,
-			PlatformFee:       fee.PlatformFee,
-			OperatorFee:       fee.OperatorFee,
-			PaymentFee:        fee.PaymentFee,
-			TotalFee:          totalFee,
-			TotalDeductionFee: totalDeductionFee,
+			Date:                     fee.Date.Time.Format("2006-01-02"),
+			OrderSource:              fee.OrderSource,
+			OrderCount:               fee.OrderCount,
+			TotalAmount:              fee.TotalAmount,
+			PlatformServiceFeeAmount: fee.PlatformServiceFeeAmount,
+			PaymentChannelFeeAmount:  fee.PaymentChannelFeeAmount,
+			TotalFeeAmount:           fee.TotalFeeAmount,
 		}
 	}
 
 	ctx.JSON(http.StatusOK, serviceFeeSummaryResponse{
-		Details:           result,
-		TotalPlatformFee:  totalPlatformFee,
-		TotalOperatorFee:  totalOperatorFee,
-		TotalPaymentFee:   totalPaymentFee,
-		TotalServiceFee:   totalPlatformFee + totalOperatorFee,
-		TotalDeductionFee: totalPlatformFee + totalOperatorFee + totalPaymentFee,
+		Details:                       result,
+		TotalPlatformServiceFeeAmount: totalPlatformServiceFee,
+		TotalPaymentChannelFeeAmount:  totalPaymentChannelFee,
+		TotalDeductionFeeAmount:       totalPlatformServiceFee + totalPaymentChannelFee,
 	})
 }
 
@@ -594,14 +576,13 @@ type listDailyFinanceRequest struct {
 }
 
 type dailyFinanceItem struct {
-	Date              string `json:"date"`
-	OrderCount        int64  `json:"order_count"`
-	TotalGMV          int64  `json:"total_gmv"`
-	MerchantIncome    int64  `json:"merchant_income"`
-	PaymentFee        int64  `json:"payment_fee"`
-	ServiceFee        int64  `json:"service_fee"`
-	TotalFee          int64  `json:"total_fee"`
-	TotalDeductionFee int64  `json:"total_deduction_fee"`
+	Date                     string `json:"date"`
+	OrderCount               int64  `json:"order_count"`
+	TotalGMV                 int64  `json:"total_gmv"`
+	MerchantReceivableAmount int64  `json:"merchant_receivable_amount"`
+	PaymentChannelFeeAmount  int64  `json:"payment_channel_fee_amount"`
+	PlatformServiceFeeAmount int64  `json:"platform_service_fee_amount"`
+	TotalDeductionFeeAmount  int64  `json:"total_deduction_fee_amount"`
 }
 
 type dailyFinanceSummaryResponse struct {
@@ -677,14 +658,13 @@ func (server *Server) listMerchantDailyFinance(ctx *gin.Context) {
 	for _, stat := range dailyStats {
 		dateKey := stat.Date.Time.Format("2006-01-02")
 		resultMap[dateKey] = &dailyFinanceItem{
-			Date:              dateKey,
-			OrderCount:        stat.OrderCount,
-			TotalGMV:          stat.TotalGmv,
-			MerchantIncome:    stat.MerchantIncome,
-			PaymentFee:        stat.PaymentFee,
-			ServiceFee:        stat.ServiceFee,
-			TotalFee:          stat.ServiceFee,
-			TotalDeductionFee: stat.TotalDeductionFee,
+			Date:                     dateKey,
+			OrderCount:               stat.OrderCount,
+			TotalGMV:                 stat.TotalGmv,
+			MerchantReceivableAmount: stat.MerchantReceivableAmount,
+			PaymentChannelFeeAmount:  stat.PaymentChannelFeeAmount,
+			PlatformServiceFeeAmount: stat.PlatformServiceFeeAmount,
+			TotalDeductionFeeAmount:  stat.TotalDeductionFeeAmount,
 		}
 	}
 
@@ -695,7 +675,7 @@ func (server *Server) listMerchantDailyFinance(ctx *gin.Context) {
 			item = &dailyFinanceItem{Date: dateKey}
 			resultMap[dateKey] = item
 		}
-		item.MerchantIncome += adj.TotalAdjustment
+		item.MerchantReceivableAmount += adj.TotalAdjustment
 	}
 
 	result := make([]dailyFinanceItem, 0, len(resultMap))
@@ -723,18 +703,18 @@ type listMerchantSettlementsRequest struct {
 }
 
 type merchantSettlementItem struct {
-	ID                 int64  `json:"id"`
-	PaymentOrderID     int64  `json:"payment_order_id"`
-	OrderSource        string `json:"order_source"`
-	TotalAmount        int64  `json:"total_amount"`
-	PlatformCommission int64  `json:"platform_commission"`
-	OperatorCommission int64  `json:"operator_commission"`
-	MerchantAmount     int64  `json:"merchant_amount"`
-	OutOrderNo         string `json:"out_order_no"`
-	SharingOrderID     string `json:"sharing_order_id,omitempty"`
-	Status             string `json:"status"`
-	CreatedAt          string `json:"created_at"`
-	FinishedAt         string `json:"finished_at,omitempty"`
+	ID                       int64  `json:"id"`
+	PaymentOrderID           int64  `json:"payment_order_id"`
+	OrderSource              string `json:"order_source"`
+	TotalAmount              int64  `json:"total_amount"`
+	PlatformServiceFeeAmount int64  `json:"platform_service_fee_amount"`
+	PaymentChannelFeeAmount  int64  `json:"payment_channel_fee_amount"`
+	MerchantReceivableAmount int64  `json:"merchant_receivable_amount"`
+	OutOrderNo               string `json:"out_order_no"`
+	SharingOrderID           string `json:"sharing_order_id,omitempty"`
+	Status                   string `json:"status"`
+	CreatedAt                string `json:"created_at"`
+	FinishedAt               string `json:"finished_at,omitempty"`
 }
 
 type listMerchantSettlementTimelineRequest struct {
@@ -745,34 +725,34 @@ type listMerchantSettlementTimelineRequest struct {
 }
 
 type merchantSettlementTimelineItem struct {
-	RecordType         string `json:"record_type"`
-	ID                 int64  `json:"id"`
-	PaymentOrderID     int64  `json:"payment_order_id"`
-	OrderSource        string `json:"order_source"`
-	TotalAmount        int64  `json:"total_amount"`
-	PlatformCommission int64  `json:"platform_commission"`
-	OperatorCommission int64  `json:"operator_commission"`
-	MerchantAmount     int64  `json:"merchant_amount"`
-	OutOrderNo         string `json:"out_order_no"`
-	SharingOrderID     string `json:"sharing_order_id,omitempty"`
-	Status             string `json:"status"`
-	CreatedAt          string `json:"created_at"`
-	FinishedAt         string `json:"finished_at,omitempty"`
-	AdjustmentType     string `json:"adjustment_type,omitempty"`
-	RelatedType        string `json:"related_type,omitempty"`
-	RelatedID          int64  `json:"related_id,omitempty"`
+	RecordType               string `json:"record_type"`
+	ID                       int64  `json:"id"`
+	PaymentOrderID           int64  `json:"payment_order_id"`
+	OrderSource              string `json:"order_source"`
+	TotalAmount              int64  `json:"total_amount"`
+	PlatformServiceFeeAmount int64  `json:"platform_service_fee_amount"`
+	PaymentChannelFeeAmount  int64  `json:"payment_channel_fee_amount"`
+	MerchantReceivableAmount int64  `json:"merchant_receivable_amount"`
+	OutOrderNo               string `json:"out_order_no"`
+	SharingOrderID           string `json:"sharing_order_id,omitempty"`
+	Status                   string `json:"status"`
+	CreatedAt                string `json:"created_at"`
+	FinishedAt               string `json:"finished_at,omitempty"`
+	AdjustmentType           string `json:"adjustment_type,omitempty"`
+	RelatedType              string `json:"related_type,omitempty"`
+	RelatedID                int64  `json:"related_id,omitempty"`
 }
 
 type merchantSettlementsResponse struct {
-	Settlements         []merchantSettlementItem `json:"settlements"`
-	Total               int64                    `json:"total"`
-	Page                int32                    `json:"page"`
-	Limit               int32                    `json:"limit"`
-	TotalPages          int64                    `json:"total_pages"`
-	TotalAmount         int64                    `json:"total_amount"`
-	TotalMerchantAmount int64                    `json:"total_merchant_amount"`
-	TotalPlatformFee    int64                    `json:"total_platform_fee"`
-	TotalOperatorFee    int64                    `json:"total_operator_fee"`
+	Settlements                   []merchantSettlementItem `json:"settlements"`
+	Total                         int64                    `json:"total"`
+	Page                          int32                    `json:"page"`
+	Limit                         int32                    `json:"limit"`
+	TotalPages                    int64                    `json:"total_pages"`
+	TotalAmount                   int64                    `json:"total_amount"`
+	TotalMerchantReceivableAmount int64                    `json:"total_merchant_receivable_amount"`
+	TotalPlatformServiceFeeAmount int64                    `json:"total_platform_service_fee_amount"`
+	TotalPaymentChannelFeeAmount  int64                    `json:"total_payment_channel_fee_amount"`
 }
 
 type merchantSettlementTimelineResponse struct {
@@ -781,6 +761,63 @@ type merchantSettlementTimelineResponse struct {
 	Page       int32                            `json:"page"`
 	Limit      int32                            `json:"limit"`
 	TotalPages int64                            `json:"total_pages"`
+}
+
+type merchantSettlementRow struct {
+	ID                       int64
+	PaymentOrderID           int64
+	OrderSource              string
+	TotalAmount              int64
+	PlatformServiceFeeAmount int64
+	PaymentChannelFeeAmount  int64
+	MerchantReceivableAmount int64
+	OutOrderNo               string
+	SharingOrderID           pgtype.Text
+	Status                   string
+	FinishedAt               pgtype.Timestamptz
+	CreatedAt                time.Time
+}
+
+func merchantSettlementRowsFromList(rows []db.ListMerchantSettlementsRow) []merchantSettlementRow {
+	result := make([]merchantSettlementRow, len(rows))
+	for i, row := range rows {
+		result[i] = merchantSettlementRow{
+			ID:                       row.ID,
+			PaymentOrderID:           row.PaymentOrderID,
+			OrderSource:              row.OrderSource,
+			TotalAmount:              row.TotalAmount,
+			PlatformServiceFeeAmount: row.PlatformServiceFeeAmount,
+			PaymentChannelFeeAmount:  row.PaymentChannelFeeAmount,
+			MerchantReceivableAmount: row.MerchantReceivableAmount,
+			OutOrderNo:               row.OutOrderNo,
+			SharingOrderID:           row.SharingOrderID,
+			Status:                   row.Status,
+			FinishedAt:               row.FinishedAt,
+			CreatedAt:                row.CreatedAt,
+		}
+	}
+	return result
+}
+
+func merchantSettlementRowsFromStatus(rows []db.ListMerchantSettlementsByStatusRow) []merchantSettlementRow {
+	result := make([]merchantSettlementRow, len(rows))
+	for i, row := range rows {
+		result[i] = merchantSettlementRow{
+			ID:                       row.ID,
+			PaymentOrderID:           row.PaymentOrderID,
+			OrderSource:              row.OrderSource,
+			TotalAmount:              row.TotalAmount,
+			PlatformServiceFeeAmount: row.PlatformServiceFeeAmount,
+			PaymentChannelFeeAmount:  row.PaymentChannelFeeAmount,
+			MerchantReceivableAmount: row.MerchantReceivableAmount,
+			OutOrderNo:               row.OutOrderNo,
+			SharingOrderID:           row.SharingOrderID,
+			Status:                   row.Status,
+			FinishedAt:               row.FinishedAt,
+			CreatedAt:                row.CreatedAt,
+		}
+	}
+	return result
 }
 
 // listMerchantSettlements 获取商户结算记录（分账订单列表）
@@ -841,11 +878,11 @@ func (server *Server) listMerchantSettlements(ctx *gin.Context) {
 	offset := pageOffset(req.Page, req.Limit)
 
 	// 根据是否有状态筛选选择不同的查询
-	var orders []db.ProfitSharingOrder
+	var orders []merchantSettlementRow
 	var totalCount int64
 	if req.Status != nil {
 		// 带状态筛选的查询
-		orders, err = server.store.ListMerchantSettlementsByStatus(ctx, db.ListMerchantSettlementsByStatusParams{
+		statusOrders, err := server.store.ListMerchantSettlementsByStatus(ctx, db.ListMerchantSettlementsByStatusParams{
 			MerchantID: merchant.ID,
 			Status:     *req.Status,
 			StartAt:    startDate,
@@ -857,6 +894,7 @@ func (server *Server) listMerchantSettlements(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
+		orders = merchantSettlementRowsFromStatus(statusOrders)
 
 		totalCount, err = server.store.CountMerchantSettlementsByStatus(ctx, db.CountMerchantSettlementsByStatusParams{
 			MerchantID: merchant.ID,
@@ -866,7 +904,7 @@ func (server *Server) listMerchantSettlements(ctx *gin.Context) {
 		})
 	} else {
 		// 不带状态筛选的查询
-		orders, err = server.store.ListMerchantSettlements(ctx, db.ListMerchantSettlementsParams{
+		settlementOrders, err := server.store.ListMerchantSettlements(ctx, db.ListMerchantSettlementsParams{
 			MerchantID: merchant.ID,
 			StartAt:    startDate,
 			EndAt:      endDate,
@@ -877,6 +915,7 @@ func (server *Server) listMerchantSettlements(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
+		orders = merchantSettlementRowsFromList(settlementOrders)
 
 		totalCount, err = server.store.CountMerchantSettlements(ctx, db.CountMerchantSettlementsParams{
 			MerchantID: merchant.ID,
@@ -914,28 +953,30 @@ func (server *Server) listMerchantSettlements(ctx *gin.Context) {
 		}
 
 		result[i] = merchantSettlementItem{
-			ID:                 order.ID,
-			PaymentOrderID:     order.PaymentOrderID,
-			PlatformCommission: order.PlatformCommission,
-			OperatorCommission: order.OperatorCommission,
-			MerchantAmount:     order.MerchantAmount,
-			OutOrderNo:         order.OutOrderNo,
-			SharingOrderID:     sharingOrderID,
-			Status:             order.Status,
-			CreatedAt:          order.CreatedAt.Format(time.RFC3339),
-			FinishedAt:         finishedAt,
+			ID:                       order.ID,
+			PaymentOrderID:           order.PaymentOrderID,
+			OrderSource:              order.OrderSource,
+			TotalAmount:              order.TotalAmount,
+			PlatformServiceFeeAmount: order.PlatformServiceFeeAmount,
+			PaymentChannelFeeAmount:  order.PaymentChannelFeeAmount,
+			MerchantReceivableAmount: order.MerchantReceivableAmount,
+			OutOrderNo:               order.OutOrderNo,
+			SharingOrderID:           sharingOrderID,
+			Status:                   order.Status,
+			CreatedAt:                order.CreatedAt.Format(time.RFC3339),
+			FinishedAt:               finishedAt,
 		}
 	}
 	ctx.JSON(http.StatusOK, merchantSettlementsResponse{
-		Settlements:         result,
-		Total:               totalCount,
-		Page:                req.Page,
-		Limit:               req.Limit,
-		TotalPages:          (totalCount + int64(req.Limit) - 1) / int64(req.Limit),
-		TotalAmount:         stats.TotalAmount,
-		TotalMerchantAmount: stats.TotalMerchantAmount,
-		TotalPlatformFee:    stats.TotalPlatformCommission,
-		TotalOperatorFee:    stats.TotalOperatorCommission,
+		Settlements:                   result,
+		Total:                         totalCount,
+		Page:                          req.Page,
+		Limit:                         req.Limit,
+		TotalPages:                    (totalCount + int64(req.Limit) - 1) / int64(req.Limit),
+		TotalAmount:                   stats.TotalAmount,
+		TotalMerchantReceivableAmount: stats.TotalMerchantReceivableAmount,
+		TotalPlatformServiceFeeAmount: stats.TotalPlatformServiceFeeAmount,
+		TotalPaymentChannelFeeAmount:  stats.TotalPaymentChannelFeeAmount,
 	})
 }
 
@@ -1042,22 +1083,22 @@ func (server *Server) listMerchantSettlementTimeline(ctx *gin.Context) {
 		}
 
 		item := merchantSettlementTimelineItem{
-			RecordType:         row.RecordType,
-			ID:                 row.ID,
-			PaymentOrderID:     row.PaymentOrderID,
-			OrderSource:        row.OrderSource,
-			TotalAmount:        row.TotalAmount,
-			PlatformCommission: row.PlatformCommission,
-			OperatorCommission: row.OperatorCommission,
-			MerchantAmount:     row.MerchantAmount,
-			OutOrderNo:         row.OutOrderNo,
-			SharingOrderID:     sharingOrderID,
-			Status:             row.Status,
-			CreatedAt:          row.CreatedAt.Format(time.RFC3339),
-			FinishedAt:         finishedAt,
-			AdjustmentType:     adjustmentType,
-			RelatedType:        relatedType,
-			RelatedID:          relatedID,
+			RecordType:               row.RecordType,
+			ID:                       row.ID,
+			PaymentOrderID:           row.PaymentOrderID,
+			OrderSource:              row.OrderSource,
+			TotalAmount:              row.TotalAmount,
+			PlatformServiceFeeAmount: row.PlatformServiceFeeAmount,
+			PaymentChannelFeeAmount:  row.PaymentChannelFeeAmount,
+			MerchantReceivableAmount: row.MerchantReceivableAmount,
+			OutOrderNo:               row.OutOrderNo,
+			SharingOrderID:           sharingOrderID,
+			Status:                   row.Status,
+			CreatedAt:                row.CreatedAt.Format(time.RFC3339),
+			FinishedAt:               finishedAt,
+			AdjustmentType:           adjustmentType,
+			RelatedType:              relatedType,
+			RelatedID:                relatedID,
 		}
 
 		result[i] = item
@@ -1275,19 +1316,33 @@ func (server *Server) enqueueWithdrawalResultPolling(ctx *gin.Context, record db
 	}
 }
 
-func parseMerchantWithdrawAccountInfo(raw []byte) merchantWithdrawAccountInfo {
+func parseMerchantWithdrawAccountInfo(raw []byte) (merchantWithdrawAccountInfo, error) {
 	if len(raw) == 0 {
-		return merchantWithdrawAccountInfo{}
+		return merchantWithdrawAccountInfo{}, nil
 	}
 	var info merchantWithdrawAccountInfo
 	if err := json.Unmarshal(raw, &info); err != nil {
+		return merchantWithdrawAccountInfo{}, err
+	}
+	return info, nil
+}
+
+func parseMerchantWithdrawAccountInfoForRecord(ctx *gin.Context, record db.WithdrawalRecord, usage string) merchantWithdrawAccountInfo {
+	info, err := parseMerchantWithdrawAccountInfo(record.AccountInfo)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("request_id", GetRequestID(ctx)).
+			Int64("withdrawal_record_id", record.ID).
+			Str("usage", usage).
+			Msg("parse merchant withdraw account info failed")
 		return merchantWithdrawAccountInfo{}
 	}
 	return info
 }
 
-func toMerchantWithdrawItem(record db.WithdrawalRecord) merchantWithdrawItem {
-	info := parseMerchantWithdrawAccountInfo(record.AccountInfo)
+func toMerchantWithdrawItem(ctx *gin.Context, record db.WithdrawalRecord) merchantWithdrawItem {
+	info := parseMerchantWithdrawAccountInfoForRecord(ctx, record, "build merchant withdraw response")
 	reason := ""
 	if record.Reason.Valid {
 		reason = record.Reason.String
@@ -1478,12 +1533,16 @@ func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 		return
 	}
 
-	accountInfoBytes, _ := json.Marshal(merchantWithdrawAccountInfo{
+	accountInfoBytes, marshalErr := json.Marshal(merchantWithdrawAccountInfo{
 		MerchantID:   merchant.ID,
 		SubMchID:     paymentConfig.SubMchID,
 		OutRequestNo: outRequestNo,
 		Remark:       req.Remark,
 	})
+	if marshalErr != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("marshal merchant withdraw account info: %w", marshalErr)))
+		return
+	}
 
 	record, err := server.store.CreateWithdrawalRecord(ctx, db.CreateWithdrawalRecordParams{
 		UserID:       authPayload.UserID,
@@ -1533,7 +1592,7 @@ func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 			recordMerchantWithdrawCommandUnknown(ctx, server.store, record, paymentConfig.SubMchID, err, queryErr)
 			ctx.JSON(http.StatusAccepted, merchantWithdrawCreateResponse{
 				Withdrawal: withMerchantWithdrawSyncState(
-					toMerchantWithdrawItem(record),
+					toMerchantWithdrawItem(ctx, record),
 					merchantWithdrawSyncStatePendingConfirmation,
 					"微信提现已提交，但微信侧结果暂未确认，系统将继续同步状态。",
 				),
@@ -1550,16 +1609,20 @@ func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 		wechatPayload = withdrawCreateResp
 	}
 
-	accountInfoBytes, _ = json.Marshal(merchantWithdrawAccountInfo{
+	accountInfoBytes, marshalErr = json.Marshal(merchantWithdrawAccountInfo{
 		MerchantID:   merchant.ID,
 		SubMchID:     paymentConfig.SubMchID,
 		OutRequestNo: outRequestNo,
 		WithdrawID:   withdrawID,
 		Remark:       req.Remark,
 	})
+	if marshalErr != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("marshal merchant withdraw account info with withdraw id: %w", marshalErr)))
+		return
+	}
 	record = server.updateWithdrawalRecordAccountInfo(ctx, record, accountInfoBytes)
 	if wechatStatus != "" {
-		record = server.syncMerchantWithdrawFactFromQuery(ctx, record, parseMerchantWithdrawAccountInfo(record.AccountInfo), &wechat.EcommerceWithdrawResponse{
+		record = server.syncMerchantWithdrawFactFromQuery(ctx, record, parseMerchantWithdrawAccountInfoForRecord(ctx, record, "sync merchant withdraw fact after create"), &wechat.EcommerceWithdrawResponse{
 			SubMchID:     paymentConfig.SubMchID,
 			OutRequestNo: outRequestNo,
 			WithdrawID:   withdrawID,
@@ -1572,7 +1635,7 @@ func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 	recordMerchantWithdrawCommandAccepted(ctx, server.store, record, paymentConfig.SubMchID, withdrawID, wechatStatus)
 
 	ctx.JSON(http.StatusCreated, merchantWithdrawCreateResponse{
-		Withdrawal: toMerchantWithdrawItem(record),
+		Withdrawal: toMerchantWithdrawItem(ctx, record),
 		Wechat:     wechatPayload,
 	})
 }
@@ -1589,7 +1652,7 @@ func recordMerchantWithdrawCommandAccepted(ctx context.Context, store db.Store, 
 		secondaryKey,
 		nil,
 		nil,
-		merchantWithdrawCommandSnapshot(map[string]string{
+		merchantWithdrawCommandSnapshot(ctx, map[string]string{
 			"out_request_no": strings.TrimSpace(record.OutRequestNo.String),
 			"sub_mchid":      strings.TrimSpace(subMchID),
 			"withdraw_id":    strings.TrimSpace(withdrawID),
@@ -1612,7 +1675,7 @@ func recordMerchantWithdrawCommandUnknown(ctx context.Context, store db.Store, r
 		nil,
 		lastErrorCode,
 		lastErrorMessage,
-		merchantWithdrawCommandSnapshot(map[string]string{
+		merchantWithdrawCommandSnapshot(ctx, map[string]string{
 			"out_request_no":      strings.TrimSpace(record.OutRequestNo.String),
 			"sub_mchid":           strings.TrimSpace(subMchID),
 			"error_code":          stringValue(lastErrorCode),
@@ -1666,7 +1729,7 @@ func ecommerceWithdrawCommandErrorFields(err error) (*string, *string) {
 	return nil, stringPtrIfNotEmpty(strings.TrimSpace(err.Error()))
 }
 
-func merchantWithdrawCommandSnapshot(values map[string]string) []byte {
+func merchantWithdrawCommandSnapshot(ctx context.Context, values map[string]string) []byte {
 	filtered := make(map[string]string, len(values))
 	for key, value := range values {
 		if strings.TrimSpace(value) != "" {
@@ -1678,6 +1741,10 @@ func merchantWithdrawCommandSnapshot(values map[string]string) []byte {
 	}
 	data, err := json.Marshal(filtered)
 	if err != nil {
+		log.Error().Err(err).Msg("marshal merchant withdraw command snapshot failed")
+		if ginCtx, ok := ctx.(*gin.Context); ok {
+			_ = ginCtx.Error(fmt.Errorf("marshal merchant withdraw command snapshot: %w", err))
+		}
 		return []byte(`{}`)
 	}
 	return data
@@ -1752,7 +1819,7 @@ func (server *Server) listMerchantAccountWithdrawals(ctx *gin.Context) {
 
 	items := make([]merchantWithdrawItem, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, toMerchantWithdrawItem(row))
+		items = append(items, toMerchantWithdrawItem(ctx, row))
 	}
 
 	ctx.JSON(http.StatusOK, merchantWithdrawalsResponse{
@@ -1818,20 +1885,30 @@ func (server *Server) getMerchantAccountWithdrawal(ctx *gin.Context) {
 		return
 	}
 
-	info := parseMerchantWithdrawAccountInfo(record.AccountInfo)
-	response := toMerchantWithdrawItem(record)
+	info := parseMerchantWithdrawAccountInfoForRecord(ctx, record, "query merchant withdraw detail")
+	response := toMerchantWithdrawItem(ctx, record)
 	if info.SubMchID != "" && info.OutRequestNo != "" {
 		wxResp, queryErr := server.ecommerceClient.QueryEcommerceWithdrawByOutRequestNo(ctx, info.SubMchID, info.OutRequestNo)
 		if queryErr == nil {
 			if wxResp.WithdrawID != "" && wxResp.WithdrawID != info.WithdrawID {
 				info.WithdrawID = wxResp.WithdrawID
-				if raw, marshalErr := json.Marshal(info); marshalErr == nil {
+				raw, marshalErr := json.Marshal(info)
+				if marshalErr != nil {
+					_ = ctx.Error(fmt.Errorf("marshal merchant withdraw account info after query: %w", marshalErr))
+					log.Error().
+						Err(marshalErr).
+						Str("request_id", GetRequestID(ctx)).
+						Int64("withdrawal_record_id", record.ID).
+						Str("sub_mchid", info.SubMchID).
+						Str("out_request_no", info.OutRequestNo).
+						Msg("marshal merchant withdraw account info after query failed")
+				} else {
 					record = server.updateWithdrawalRecordAccountInfo(ctx, record, raw)
-					info = parseMerchantWithdrawAccountInfo(record.AccountInfo)
+					info = parseMerchantWithdrawAccountInfoForRecord(ctx, record, "refresh merchant withdraw account info after query")
 				}
 			}
 			record = server.syncMerchantWithdrawFactFromQuery(ctx, record, info, wxResp)
-			response = toMerchantWithdrawItem(record)
+			response = toMerchantWithdrawItem(ctx, record)
 		} else {
 			_ = ctx.Error(queryErr)
 			log.Warn().

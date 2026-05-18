@@ -4022,7 +4022,8 @@ func TestHandleEcommerceWithdrawNotify_SuccessUpdatesWithdrawal(t *testing.T) {
 	store.EXPECT().GetWithdrawalRecordByOutRequestNo(gomock.Any(), pgtype.Text{String: "MW202604060001", Valid: true}).Return(record, nil)
 	expectWithdrawCallbackFact(t, store, notificationID, record, "SUCCESS", "MW202604060001", "wd_001", "")
 	store.EXPECT().UpdateWithdrawalAccountInfo(gomock.Any(), gomock.Any()).DoAndReturn(func(_ interface{}, arg db.UpdateWithdrawalAccountInfoParams) (db.WithdrawalRecord, error) {
-		info := parseMerchantWithdrawAccountInfo(arg.AccountInfo)
+		info, err := parseMerchantWithdrawAccountInfo(arg.AccountInfo)
+		require.NoError(t, err)
 		require.Equal(t, "wd_001", info.WithdrawID)
 		return db.WithdrawalRecord{ID: 66, UserID: 99, Amount: 1200, Status: "pending", Channel: merchantWithdrawChannel, Reason: pgtype.Text{String: "query withdraw result failed: timeout", Valid: true}, AccountInfo: arg.AccountInfo, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
 	})

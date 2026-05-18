@@ -1358,9 +1358,9 @@ type Querier interface {
 	ListMerchantSettlementAdjustments(ctx context.Context, arg ListMerchantSettlementAdjustmentsParams) ([]MerchantSettlementAdjustment, error)
 	ListMerchantSettlementTimeline(ctx context.Context, arg ListMerchantSettlementTimelineParams) ([]ListMerchantSettlementTimelineRow, error)
 	// 商户结算记录（带日期范围和状态筛选）
-	ListMerchantSettlements(ctx context.Context, arg ListMerchantSettlementsParams) ([]ProfitSharingOrder, error)
+	ListMerchantSettlements(ctx context.Context, arg ListMerchantSettlementsParams) ([]ListMerchantSettlementsRow, error)
 	// 商户结算记录（带日期范围和状态筛选）
-	ListMerchantSettlementsByStatus(ctx context.Context, arg ListMerchantSettlementsByStatusParams) ([]ProfitSharingOrder, error)
+	ListMerchantSettlementsByStatus(ctx context.Context, arg ListMerchantSettlementsByStatusParams) ([]ListMerchantSettlementsByStatusRow, error)
 	ListMerchantSpecialHours(ctx context.Context, merchantID int64) ([]MerchantBusinessHour, error)
 	// 显示所有员工，包括离职员工（软删除），按状态和角色排序
 	ListMerchantStaffByMerchant(ctx context.Context, merchantID int64) ([]ListMerchantStaffByMerchantRow, error)
@@ -1459,6 +1459,7 @@ type Querier interface {
 	ListProfitSharingConfigsForRegion(ctx context.Context, arg ListProfitSharingConfigsForRegionParams) ([]ProfitSharingConfig, error)
 	ListProfitSharingOrdersByMerchant(ctx context.Context, arg ListProfitSharingOrdersByMerchantParams) ([]ProfitSharingOrder, error)
 	ListProfitSharingOrdersByOperator(ctx context.Context, arg ListProfitSharingOrdersByOperatorParams) ([]ProfitSharingOrder, error)
+	ListProfitSharingOrdersByOrderIDsForMerchant(ctx context.Context, arg ListProfitSharingOrdersByOrderIDsForMerchantParams) ([]ListProfitSharingOrdersByOrderIDsForMerchantRow, error)
 	ListProfitSharingOrdersByStatus(ctx context.Context, arg ListProfitSharingOrdersByStatusParams) ([]ProfitSharingOrder, error)
 	ListProfitSharingOrdersForRetry(ctx context.Context, arg ListProfitSharingOrdersForRetryParams) ([]ProfitSharingOrder, error)
 	ListProfitSharingReceiverAttemptsByTarget(ctx context.Context, targetID int64) ([]ProfitSharingReceiverAttempt, error)

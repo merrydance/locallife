@@ -112,6 +112,16 @@ WHERE out_order_no = $1 LIMIT 1;
 SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount FROM profit_sharing_orders
 WHERE payment_order_id = $1 LIMIT 1;
 
+-- name: ListProfitSharingOrdersByOrderIDsForMerchant :many
+SELECT
+    COALESCE(po.order_id, 0)::bigint AS order_id,
+    sqlc.embed(p)
+FROM profit_sharing_orders p
+JOIN payment_orders po ON po.id = p.payment_order_id
+WHERE p.merchant_id = sqlc.arg('merchant_id')
+  AND po.order_id = ANY(sqlc.arg('order_ids')::bigint[])
+ORDER BY po.order_id, p.created_at DESC, p.id DESC;
+
 -- name: ListProfitSharingOrdersByMerchant :many
 SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount FROM profit_sharing_orders
 WHERE merchant_id = $1
@@ -187,9 +197,9 @@ RETURNING *;
 SELECT 
     COUNT(*) as total_orders,
     COALESCE(SUM(total_amount), 0)::bigint as total_amount,
-    COALESCE(SUM(merchant_amount), 0)::bigint as total_merchant_amount,
-    COALESCE(SUM(platform_commission), 0)::bigint as total_platform_commission,
-    COALESCE(SUM(operator_commission), 0)::bigint as total_operator_commission
+    COALESCE(SUM(merchant_amount), 0)::bigint as total_merchant_receivable_amount,
+    COALESCE(SUM(platform_commission + operator_commission), 0)::bigint as total_platform_service_fee_amount,
+    COALESCE(SUM(CASE WHEN calculation_version = 'baofu_fee_v2' THEN merchant_payment_fee ELSE payment_fee END), 0)::bigint as total_payment_channel_fee_amount
 FROM profit_sharing_orders
 WHERE merchant_id = sqlc.arg('merchant_id') AND status = 'finished'
   AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at');
@@ -222,10 +232,9 @@ SELECT
     p.payment_order_id,
     p.order_source,
     p.total_amount,
-    p.platform_commission,
-    p.operator_commission,
-    (CASE WHEN p.calculation_version = 'baofu_fee_v2' THEN p.merchant_payment_fee ELSE p.payment_fee END)::bigint AS payment_fee,
-    p.merchant_amount,
+    (p.platform_commission + p.operator_commission)::bigint AS platform_service_fee_amount,
+    (CASE WHEN p.calculation_version = 'baofu_fee_v2' THEN p.merchant_payment_fee ELSE p.payment_fee END)::bigint AS payment_channel_fee_amount,
+    p.merchant_amount AS merchant_receivable_amount,
     p.status,
     p.created_at,
     p.finished_at,
@@ -250,13 +259,12 @@ SELECT
     COUNT(*) FILTER (WHERE status = 'finished') as completed_orders,
     COUNT(*) FILTER (WHERE status = 'pending') as pending_orders,
     COALESCE(SUM(CASE WHEN status = 'finished' THEN total_amount ELSE 0 END), 0)::bigint as total_gmv,
-    COALESCE(SUM(CASE WHEN status = 'finished' THEN merchant_amount ELSE 0 END), 0)::bigint as total_income,
-    COALESCE(SUM(CASE WHEN status = 'finished' THEN platform_commission ELSE 0 END), 0)::bigint as total_platform_fee,
-    COALESCE(SUM(CASE WHEN status = 'finished' THEN operator_commission ELSE 0 END), 0)::bigint as total_operator_fee,
+    COALESCE(SUM(CASE WHEN status = 'finished' THEN merchant_amount ELSE 0 END), 0)::bigint as total_merchant_receivable_amount,
+    COALESCE(SUM(CASE WHEN status = 'finished' THEN platform_commission + operator_commission ELSE 0 END), 0)::bigint as total_platform_service_fee_amount,
     COALESCE(SUM(CASE WHEN status = 'finished' THEN
         CASE WHEN calculation_version = 'baofu_fee_v2' THEN merchant_payment_fee ELSE payment_fee END
-        ELSE 0 END), 0)::bigint as total_payment_fee,
-    COALESCE(SUM(CASE WHEN status = 'pending' THEN merchant_amount ELSE 0 END), 0)::bigint as pending_income
+        ELSE 0 END), 0)::bigint as total_payment_channel_fee_amount,
+    COALESCE(SUM(CASE WHEN status = 'pending' THEN merchant_amount ELSE 0 END), 0)::bigint as pending_merchant_receivable_amount
 FROM profit_sharing_orders
 WHERE merchant_id = sqlc.arg('merchant_id')
   AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at');
@@ -268,9 +276,9 @@ SELECT
     order_source,
     COUNT(*) as order_count,
     COALESCE(SUM(total_amount), 0)::bigint as total_amount,
-    COALESCE(SUM(platform_commission), 0)::bigint as platform_fee,
-    COALESCE(SUM(operator_commission), 0)::bigint as operator_fee,
-    COALESCE(SUM(CASE WHEN calculation_version = 'baofu_fee_v2' THEN merchant_payment_fee ELSE payment_fee END), 0)::bigint as payment_fee
+    COALESCE(SUM(platform_commission + operator_commission), 0)::bigint as platform_service_fee_amount,
+    COALESCE(SUM(CASE WHEN calculation_version = 'baofu_fee_v2' THEN merchant_payment_fee ELSE payment_fee END), 0)::bigint as payment_channel_fee_amount,
+    COALESCE(SUM(platform_commission + operator_commission + CASE WHEN calculation_version = 'baofu_fee_v2' THEN merchant_payment_fee ELSE payment_fee END), 0)::bigint as total_fee_amount
 FROM profit_sharing_orders
 WHERE merchant_id = sqlc.arg('merchant_id')
   AND status = 'finished'
@@ -284,10 +292,10 @@ SELECT
     DATE(created_at) AS date,
     COUNT(*) as order_count,
     COALESCE(SUM(total_amount), 0)::bigint as total_gmv,
-    COALESCE(SUM(merchant_amount), 0)::bigint as merchant_income,
-    COALESCE(SUM(CASE WHEN calculation_version = 'baofu_fee_v2' THEN merchant_payment_fee ELSE payment_fee END), 0)::bigint as payment_fee,
-    COALESCE(SUM(platform_commission + operator_commission), 0)::bigint as service_fee,
-    COALESCE(SUM(platform_commission + operator_commission + CASE WHEN calculation_version = 'baofu_fee_v2' THEN merchant_payment_fee ELSE payment_fee END), 0)::bigint as total_deduction_fee
+    COALESCE(SUM(merchant_amount), 0)::bigint as merchant_receivable_amount,
+    COALESCE(SUM(CASE WHEN calculation_version = 'baofu_fee_v2' THEN merchant_payment_fee ELSE payment_fee END), 0)::bigint as payment_channel_fee_amount,
+    COALESCE(SUM(platform_commission + operator_commission), 0)::bigint as platform_service_fee_amount,
+    COALESCE(SUM(platform_commission + operator_commission + CASE WHEN calculation_version = 'baofu_fee_v2' THEN merchant_payment_fee ELSE payment_fee END), 0)::bigint as total_deduction_fee_amount
 FROM profit_sharing_orders
 WHERE merchant_id = sqlc.arg('merchant_id')
   AND status = 'finished'
@@ -297,7 +305,19 @@ ORDER BY date DESC;
 
 -- name: ListMerchantSettlements :many
 -- 商户结算记录（带日期范围和状态筛选）
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount
+SELECT
+  id,
+  payment_order_id,
+  order_source,
+  total_amount,
+  (platform_commission + operator_commission)::bigint AS platform_service_fee_amount,
+  (CASE WHEN calculation_version = 'baofu_fee_v2' THEN merchant_payment_fee ELSE payment_fee END)::bigint AS payment_channel_fee_amount,
+  merchant_amount AS merchant_receivable_amount,
+  out_order_no,
+  sharing_order_id,
+  status,
+  finished_at,
+  created_at
 FROM profit_sharing_orders
 WHERE merchant_id = sqlc.arg('merchant_id')
   AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at')
@@ -306,7 +326,19 @@ LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: ListMerchantSettlementsByStatus :many
 -- 商户结算记录（带日期范围和状态筛选）
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount
+SELECT
+  id,
+  payment_order_id,
+  order_source,
+  total_amount,
+  (platform_commission + operator_commission)::bigint AS platform_service_fee_amount,
+  (CASE WHEN calculation_version = 'baofu_fee_v2' THEN merchant_payment_fee ELSE payment_fee END)::bigint AS payment_channel_fee_amount,
+  merchant_amount AS merchant_receivable_amount,
+  out_order_no,
+  sharing_order_id,
+  status,
+  finished_at,
+  created_at
 FROM profit_sharing_orders
 WHERE merchant_id = sqlc.arg('merchant_id')
   AND status = sqlc.arg('status')

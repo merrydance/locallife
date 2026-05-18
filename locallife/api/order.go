@@ -230,8 +230,9 @@ type orderResponse struct {
 	DeliveryContactPhone *string             `json:"delivery_contact_phone,omitempty" example:"13800138000"`
 	DeliveryAddress      *string             `json:"delivery_address,omitempty" example:"北京市朝阳区某小区1号楼"`
 	// 微信支付交易号，用于拉起小程序确认收货组件
-	WechatTransactionID *string                      `json:"wechat_transaction_id,omitempty"`
-	PaymentContext      *orderPaymentContextResponse `json:"payment_context,omitempty"`
+	WechatTransactionID *string                            `json:"wechat_transaction_id,omitempty"`
+	PaymentContext      *orderPaymentContextResponse       `json:"payment_context,omitempty"`
+	FeeBreakdown        *merchantOrderFeeBreakdownResponse `json:"fee_breakdown,omitempty"`
 }
 
 func newOrderPaymentContext(combinedPaymentID pgtype.Int8, combineOutTradeNo string) *orderPaymentContextResponse {
@@ -1119,6 +1120,9 @@ func (server *Server) listMerchantOrders(ctx *gin.Context) {
 		PageSize:   req.PageSize,
 	})
 	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -1139,6 +1143,14 @@ func (server *Server) listMerchantOrders(ctx *gin.Context) {
 		}
 		orderResp.Items = server.newOrderItemResponses(ctx, itemViews, false)
 		resp[index] = orderResp
+	}
+	feeBreakdowns, err := server.loadMerchantOrderFeeBreakdowns(ctx, merchant.ID, orders)
+	if err != nil {
+		writeMerchantOrderFeeBreakdownError(ctx, merchant.ID, orders, err)
+		return
+	}
+	for index, order := range orders {
+		resp[index].FeeBreakdown = newMerchantOrderFeeBreakdownResponse(feeBreakdowns[order.ID])
 	}
 
 	ctx.JSON(http.StatusOK, listMerchantOrdersResponse{
@@ -1231,6 +1243,12 @@ func (server *Server) getMerchantOrder(ctx *gin.Context) {
 		return
 	}
 	resp.Items = server.newOrderItemResponses(ctx, itemViews, false)
+	feeBreakdowns, err := server.loadMerchantOrderFeeBreakdowns(ctx, merchant.ID, []db.Order{order})
+	if err != nil {
+		writeMerchantOrderFeeBreakdownError(ctx, merchant.ID, []db.Order{order}, err)
+		return
+	}
+	resp.FeeBreakdown = newMerchantOrderFeeBreakdownResponse(feeBreakdowns[order.ID])
 
 	ctx.JSON(http.StatusOK, resp)
 }

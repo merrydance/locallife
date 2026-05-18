@@ -3531,37 +3531,31 @@ definitions:
       net_income:
         description: 汇总
         type: integer
-      pending_income:
-        description: 待结算收入
+      pending_merchant_receivable_amount:
+        description: 待结算实收
         type: integer
       pending_orders:
         type: integer
       promotion_orders:
         description: 满返支出统计
         type: integer
-      total_deduction_fee:
-        description: 总扣减（平台+运营商+商户支付服务费）
+      total_deduction_fee_amount:
+        description: 总扣减
         type: integer
       total_gmv:
         description: 金额统计（分）
         type: integer
-      total_income:
-        description: 商户净收入
+      total_merchant_receivable_amount:
+        description: 商户实收
         type: integer
-      total_operator_fee:
-        description: 运营商服务费
+      total_payment_channel_fee_amount:
+        description: 支付通道费
         type: integer
-      total_payment_fee:
-        description: 商户支付服务费
-        type: integer
-      total_platform_fee:
+      total_platform_service_fee_amount:
         description: 平台服务费
         type: integer
       total_promotion_exp:
         description: 满返支出总额
-        type: integer
-      total_service_fee:
-        description: 总服务费（平台+运营商）
         type: integer
     type: object
   api.foodSafetyCaseDetailResponse:
@@ -5409,6 +5403,42 @@ definitions:
       user_id:
         type: integer
     type: object
+  api.merchantOrderFeeBreakdownResponse:
+    properties:
+      customer_payable_amount:
+        example: 10300
+        type: integer
+      delivery_fee_amount:
+        example: 800
+        type: integer
+      delivery_fee_discount_amount:
+        example: 0
+        type: integer
+      delivery_payable_amount:
+        example: 800
+        type: integer
+      food_amount:
+        example: 10000
+        type: integer
+      food_payable_amount:
+        example: 9500
+        type: integer
+      merchant_discount_amount:
+        example: 300
+        type: integer
+      merchant_receivable_amount:
+        example: 8968
+        type: integer
+      payment_channel_fee_amount:
+        example: 57
+        type: integer
+      platform_service_fee_amount:
+        example: 475
+        type: integer
+      voucher_discount_amount:
+        example: 200
+        type: integer
+    type: object
   api.merchantOrderPrintJobResponse:
     properties:
       created_at:
@@ -6671,6 +6701,8 @@ definitions:
         type: string
       exception_state:
         type: string
+      fee_breakdown:
+        $ref: '#/definitions/api.merchantOrderFeeBreakdownResponse'
       flow_id:
         type: integer
       fulfillment_status:

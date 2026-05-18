@@ -87,13 +87,21 @@ func (p apiOrderEventPublisher) PublishMerchantUserRiskAlert(ctx context.Context
 		return
 	}
 
-	payload, _ := json.Marshal(map[string]any{
+	payload, err := json.Marshal(map[string]any{
 		"user_id":     alert.UserID,
 		"order_id":    alert.OrderID,
 		"order_no":    alert.OrderNo,
 		"message":     alert.Message,
 		"reason_code": alert.ReasonCode,
 	})
+	if err != nil {
+		log.Error().Err(err).
+			Int64("merchant_id", merchantID).
+			Int64("user_id", alert.UserID).
+			Int64("order_id", alert.OrderID).
+			Msg("marshal merchant user risk alert failed")
+		return
+	}
 
 	p.server.wsHub.SendToMerchant(merchantID, websocket.Message{
 		Type:      "merchant_user_risk_alert",

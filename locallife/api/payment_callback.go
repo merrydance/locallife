@@ -1017,7 +1017,15 @@ func (server *Server) syncWithdrawalRecordWithWechat(ctx *gin.Context, record db
 
 	switch record.Channel {
 	case merchantWithdrawChannel:
-		info := parseMerchantWithdrawAccountInfo(record.AccountInfo)
+		info, err := parseMerchantWithdrawAccountInfo(record.AccountInfo)
+		if err != nil {
+			log.Error().
+				Err(err).
+				Str("request_id", GetRequestID(ctx)).
+				Int64("withdrawal_record_id", record.ID).
+				Msg("parse merchant withdraw account info for callback failed")
+			return record, fmt.Errorf("parse merchant withdraw account info: %w", err)
+		}
 		if info.OutRequestNo != "" && info.OutRequestNo != resource.OutRequestNo {
 			return record, fmt.Errorf("merchant withdraw out_request_no mismatch")
 		}
