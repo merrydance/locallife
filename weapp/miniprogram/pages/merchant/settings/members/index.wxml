@@ -129,7 +129,7 @@
 
       <view class="form-item">
         <text class="form-label">调整金额（元）</text>
-        <t-input class="form-input" type="digit" value="{{adjustForm.amount_yuan}}" data-field="amount_yuan" placeholder="请输入正数金额" borderless bind:change="onAdjustInput" />
+        <t-input class="form-input" type="digit" value="{{adjustForm.amount_yuan}}" data-field="amount_yuan" placeholder="正数金额" borderless bind:change="onAdjustInput" />
       </view>
 
       <view class="form-item">

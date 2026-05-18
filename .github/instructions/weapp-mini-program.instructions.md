@@ -49,6 +49,8 @@ Use `.github/prompts/weapp-implementation.prompt.md` for all Mini Program implem
 - If a protected super service must change, update its ownership note in the same change so the page-group owner, temporary scope, and non-extraction reason stay explicit.
 - User-facing copy must be product copy. Do not leak raw backend, provider, SQL, or English diagnostic text.
 - Default to no explanatory copy. First make the page understandable through information architecture, labels, state, and actions; only add a sentence when omitting it would hide risk, state meaning, field constraints, or the next required action.
+- In forms, labels own the input purpose. Do not use placeholders as second labels, and do not write `请输入/请选择 + field label` when a visible label already exists; placeholders may only add format, constraint, example, or state-specific hints.
+- In forms, required semantics must come from backend contract or verified validation, and required indicators must use component-native behavior that actually renders in the installed component version. Do not rely on unsupported or non-rendering props, and do not elevate low-value optional fields into the main form by default.
 - Do not repeat the same explanation across title, subtitle, note, notice bar, and card body, and do not add page-boundary copy such as “this page is mainly for...” unless the explanation itself is the task.
 - Use the implementation or review prompt to carry detailed delivery structure; keep this instruction as the always-on execution baseline.
 
@@ -69,6 +71,8 @@ Use `.github/prompts/weapp-implementation.prompt.md` for all Mini Program implem
 - Consumer-language bleed: non-consumer surfaces inherit customer-side brand colors, decorative token usage, or marketing-style visual language without explicit approval.
 - Unsupported TDesign override: internal class overrides, structure-dependent styling, or behavior changes not supported by official TDesign docs.
 - Text-action drift: section headers, list rows, repeaters, or local toolbars use plain text add/remove buttons even though a TDesign icon button would express the action more clearly and consistently.
+- Placeholder-as-label drift: form rows repeat the same field meaning in both label and placeholder, especially `请输入/请选择 + 字段名`, creating dense text instead of useful input guidance.
+- Required-marker drift: required fields are not visibly marked, optional fields are mixed into the primary task at the same weight, or a component prop is used even though the installed TDesign version does not render it.
 - Raw leakage: untranslated backend, SQL, provider, or English diagnostic text reaches the user.
 
 ## Validation Defaults

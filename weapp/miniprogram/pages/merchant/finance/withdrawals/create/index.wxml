@@ -5,7 +5,7 @@
     <t-empty icon="info-circle" description="提现请在微信支付商户平台处理" />
 
     <t-cell-group>
-      <t-cell title="结算账户" arrow url="/pages/merchant/settings/applyment/settlement-account/index" />
+      <t-cell title="宝付结算账户" arrow url="/pages/merchant/finance/settlement-account/index" />
     </t-cell-group>
 
     <t-button theme="primary" block bind:tap="onBackToFinance">返回财务页</t-button>

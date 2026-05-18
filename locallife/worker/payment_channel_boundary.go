@@ -27,7 +27,9 @@ func refundTypeForPaymentOrder(paymentOrder db.PaymentOrder) string {
 }
 
 func paymentOrderUsesMainBusinessRefundChannel(paymentOrder db.PaymentOrder) bool {
-	return paymentOrderUsesEcommerceChannel(paymentOrder) || db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder)
+	return paymentOrderUsesEcommerceChannel(paymentOrder) ||
+		db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) ||
+		paymentOrder.PaymentChannel == db.PaymentChannelBaofuAggregate
 }
 
 func requiresEcommerceRefund(paymentOrder db.PaymentOrder) bool {

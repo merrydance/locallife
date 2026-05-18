@@ -1,0 +1,76 @@
+<custom-navbar title="{{pageView.title}}" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view
+  class="settlement-page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
+>
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载开户状态中..." layout="vertical" />
+  </view>
+
+  <view wx:elif="{{accessDenied}}" class="state-block">
+    <t-empty icon="lock-on" description="{{accessDeniedMessage}}" />
+  </view>
+
+  <view wx:elif="{{accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" bindtap="onRetry">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '开户状态加载失败，请重试'}}" />
+    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
+  </view>
+
+  <view wx:else class="page-content">
+    <baofu-onboarding-wait
+      wx:if="{{waitVisible}}"
+      state="{{waitState}}"
+      title="{{waitTitle}}"
+      description="{{waitDescription}}"
+      progressText="{{waitProgressText}}"
+      theme="{{waitTheme}}"
+      primaryActionText="{{waitPrimaryActionText}}"
+      loading="{{syncing}}"
+      bind:primary="onWaitPrimary"
+    />
+
+    <block wx:else>
+      <view wx:if="{{refreshErrorMessage}}" class="sync-state">
+        <t-icon name="error-circle" size="32rpx" />
+        <text class="sync-state__text">{{refreshErrorMessage}}</text>
+        <t-button size="small" theme="primary" variant="text" icon="refresh" bindtap="onRetry">重试</t-button>
+      </view>
+
+      <t-result
+        theme="{{pageView.statusView.resultTheme}}"
+        title="{{pageView.statusView.statusText}}"
+        description="{{pageView.statusView.statusDesc || pageView.nextActionText}}"
+      />
+
+      <baofu-account-status-summary
+        statusText="{{pageView.statusView.statusText}}"
+        statusDesc="{{pageView.statusView.statusDesc}}"
+        nextActionText="{{pageView.nextActionText}}"
+        tagTheme="{{pageView.statusView.tagTheme}}"
+        verifyFeePrompt="{{pageView.verifyFeePrompt}}"
+        profileHint="{{pageView.profileHint}}"
+        showOpenReportHint="{{pageView.shouldShowOpenReportHint}}"
+        isReady="{{pageView.statusView.isReady}}"
+      />
+
+      <view class="form-actions" wx:if="{{pageView.primaryAction.type !== 'none'}}">
+        <t-button
+          theme="{{pageView.primaryAction.theme}}"
+          variant="{{pageView.primaryAction.variant}}"
+          block
+          loading="{{syncing && pageView.primaryAction.type === 'refresh_status'}}"
+          disabled="{{syncing}}"
+          bindtap="onPrimaryAction"
+        >
+          {{pageView.primaryAction.text}}
+        </t-button>
+      </view>
+    </block>
+  </view>
+</view>

@@ -1,0 +1,21 @@
+<view class="onboarding-wait">
+  <view wx:if="{{loading || state === 'submitting' || state === 'payment_confirming' || state === 'opening_processing'}}" class="onboarding-wait__loading">
+    <t-loading theme="circular" size="56rpx" text="{{title}}" layout="vertical" />
+    <view wx:if="{{description}}" class="onboarding-wait__description">{{description}}</view>
+    <view wx:if="{{progressText}}" class="onboarding-wait__progress">{{progressText}}</view>
+  </view>
+
+  <t-result wx:else theme="{{theme}}" title="{{title}}" description="{{description}}" />
+
+  <view wx:if="{{primaryActionText}}" class="onboarding-wait__actions">
+    <t-button
+      theme="primary"
+      block
+      loading="{{loading}}"
+      disabled="{{loading}}"
+      bind:tap="onPrimary"
+    >
+      {{primaryActionText}}
+    </t-button>
+  </view>
+</view>

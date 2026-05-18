@@ -16,6 +16,7 @@ import { getErrorUserMessage } from '../../../utils/user-facing'
 import {
   getCheckoutAddressDetail,
   getDefaultCheckoutAddress,
+  loadCheckoutPaymentCapabilities,
   loadTakeoutMembershipState,
   type CheckoutAddress
 } from '../../../services/takeout-checkout'
@@ -35,6 +36,9 @@ import {
   ORDER_CONFIRM_CONCURRENCY,
   syncTakeoutCartSummary
 } from '../../../utils/takeout-order-confirm-support'
+import { getTakeoutPaymentCreateFailedContent } from '../../../utils/takeout-payment-error-copy'
+
+let _loadPaymentCapabilitiesPromise: Promise<void> | null = null
 
 Page({
   data: {
@@ -50,6 +54,8 @@ Page({
     orderTotalDisplay: '0.00',
     summarySubtotalDisplay: '0.00',
     summaryDeliveryDisplay: '待计算',
+    splitCheckoutRequired: false,
+    splitCheckoutNotice: '',
     
     // 会员优惠相关
     memberBalances: {} as Record<number, number>, // merchantId -> balance
@@ -100,6 +106,7 @@ Page({
     }
 
     this.loadDefaultAddress()
+    void this.loadPaymentCapabilities()
   },
 
   onUnload() {
@@ -381,6 +388,39 @@ Page({
     this.requestPricingRefresh()
   },
 
+  async loadPaymentCapabilities() {
+    if (_loadPaymentCapabilitiesPromise) {
+      return _loadPaymentCapabilitiesPromise
+    }
+
+    _loadPaymentCapabilitiesPromise = (async () => {
+      try {
+        const capabilities = await loadCheckoutPaymentCapabilities()
+        const splitCheckoutRequired = capabilities.splitCheckoutRequired
+        this.setData({
+          splitCheckoutRequired,
+          splitCheckoutNotice: capabilities.splitCheckoutNotice
+        })
+      } catch (error) {
+        logger.warn('Failed to load payment capabilities', error, 'Order-confirm')
+      }
+    })().finally(() => {
+      _loadPaymentCapabilitiesPromise = null
+    })
+
+    return _loadPaymentCapabilitiesPromise
+  },
+
+  showSplitCheckoutRequired() {
+    wx.showModal({
+      title: '暂不支持合单支付',
+      content: this.data.splitCheckoutNotice || '请返回购物车，一次选择一家商户下单。',
+      showCancel: false,
+      confirmText: '返回购物车',
+      success: () => wx.navigateBack()
+    })
+  },
+
   async onSubmitOrder() {
     if (this.data.loading) {
       return
@@ -405,6 +445,12 @@ Page({
 
     if (!carts || carts.length === 0) {
       wx.showToast({ title: '购物车为空', icon: 'none' })
+      return
+    }
+
+    await this.loadPaymentCapabilities()
+    if (this.data.splitCheckoutRequired && carts.length > 1) {
+      this.showSplitCheckoutRequired()
       return
     }
 
@@ -479,7 +525,7 @@ Page({
 
   async handlePayment(orderId: number) {
     try {
-      const paymentResult = await completePaymentWorkflow(await createOrderPayment(orderId))
+      const paymentResult = await completePaymentWorkflow(await createOrderPayment(orderId), { context: this })
       Navigation.toPaymentResult({
         status: paymentResult.status,
         paymentOrderId: paymentResult.paymentOrderId,
@@ -490,7 +536,7 @@ Page({
       })
     } catch (paymentError) {
       logger.error('Payment creation failed', paymentError, 'Order-confirm')
-      this.showPaymentCreateFailed(orderId)
+      this.showPaymentCreateFailed(orderId, paymentError)
     } finally {
       this.setData({ loading: false })
     }
@@ -498,7 +544,7 @@ Page({
 
   async handleCombinedPayment(orderIds: number[]) {
     try {
-      const paymentResult = await completeCombinedPaymentWorkflow(await createCombinedPaymentOrder({ order_ids: orderIds }))
+      const paymentResult = await completeCombinedPaymentWorkflow(await createCombinedPaymentOrder({ order_ids: orderIds }), { context: this })
       const combinedPayment = paymentResult.combinedPayment
 
       if (isCombinedPaymentWorkflowPaid(paymentResult.status)) {
@@ -525,9 +571,13 @@ Page({
       })
     } catch (paymentError) {
       logger.error('Combined payment creation failed', paymentError, 'Order-confirm')
+      const paymentMessage = getErrorUserMessage(paymentError, '')
+      const splitRequired = paymentMessage.includes('分开支付') || paymentMessage.includes('合单支付暂未开通')
       wx.showModal({
         title: '订单已创建',
-        content: '支付创建失败，请在订单列表继续完成合单支付。',
+        content: splitRequired
+          ? '当前支付通道需按商户分别支付。订单已创建，请在订单列表逐笔支付。'
+          : '支付创建失败，请在订单列表继续完成合单支付。',
         showCancel: false,
         success: () => Navigation.redirectToOrderList({ orderType: 'takeout' })
       })
@@ -536,11 +586,11 @@ Page({
     }
   },
 
-  showPaymentCreateFailed(orderId: number) {
+  showPaymentCreateFailed(orderId: number, error?: unknown) {
     this.setData({ loading: false })
     wx.showModal({
       title: '订单已创建',
-      content: '支付创建失败，请在订单详情页重新发起支付。',
+      content: getTakeoutPaymentCreateFailedContent(error),
       showCancel: false,
       confirmText: '查看订单',
       success: () => {

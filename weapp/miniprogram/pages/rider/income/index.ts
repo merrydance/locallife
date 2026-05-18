@@ -3,6 +3,7 @@ import {
   riderIncomeApi,
   RiderIncomeStatus
 } from '../../../api/rider-income'
+import RiderService from '../../../api/rider'
 import {
   buildDefaultRiderIncomeDateRange,
   buildRiderIncomeDailyItemView,
@@ -56,6 +57,7 @@ Page({
     refreshErrorMessage: '',
     listErrorMessage: '',
     loadMoreErrorMessage: '',
+    settlementNotice: '',
     loading: false,
     loadingMore: false,
     statusTab: 'all' as RiderIncomeStatusFilter,
@@ -113,6 +115,10 @@ Page({
     this.loadLedger(this.data.pageId + 1, false)
   },
 
+  onGoToSettlementAccount() {
+    wx.navigateTo({ url: '/pages/rider/settlement-account/index' })
+  },
+
   onStatusTabChange(e: WechatMiniprogram.CustomEvent<{ value: RiderIncomeStatusFilter }>) {
     const statusTab = e.detail.value
     if (statusTab === this.data.statusTab) {
@@ -147,7 +153,7 @@ Page({
 
     try {
       const range = this.data.dateRange
-      const [summary, daily, ledger] = await Promise.all([
+      const [summary, daily, ledger, riderStatus] = await Promise.all([
         riderIncomeApi.getSummary(range),
         riderIncomeApi.getDaily(range),
         riderIncomeApi.listLedger({
@@ -155,10 +161,15 @@ Page({
           status: statusFilterToParam(this.data.statusTab as RiderIncomeStatusFilter),
           page_id: 1,
           page_size: RIDER_INCOME_PAGE_SIZE
-        })
+        }),
+        RiderService.getStatus()
       ])
+      const settlementNotice = riderStatus.settlement_account?.payment_ready === false
+        ? '结算账户未开通，暂不能接收配送费分账订单'
+        : ''
       const ledgerPage = normalizeLedgerPage(ledger, 1)
       this.setData({
+        settlementNotice,
         summary: buildRiderIncomeSummaryView(summary),
         dailyItems: (daily.items || []).slice(0, DAILY_PREVIEW_LIMIT).map(buildRiderIncomeDailyItemView),
         ledgerItems: ledgerPage.items,

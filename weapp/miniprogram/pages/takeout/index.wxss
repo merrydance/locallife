@@ -84,6 +84,20 @@
   padding: 16rpx 48rpx 0;
 }
 
+.provider-entry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  padding-top: 24rpx;
+  color: var(--td-brand-color);
+  font-size: var(--font-size-sm);
+}
+
+.provider-entry-divider {
+  color: var(--td-text-color-placeholder);
+}
+
 .error-container {
   display: flex;
   flex-direction: column;

@@ -42,6 +42,8 @@ Implementation must push:
 - Default to zero new explanatory copy: first make the page understandable through structure, labels, status, and action hierarchy, and only add a sentence when omitting it would hide risk, state meaning, field constraints, or the next required action
 - If explanation text is truly unavoidable, keep exactly one shortest necessary sentence in the closest place that affects action instead of distributing guidance across the page
 - Avoid duplicate explanation across title, subtitle, note, notice, helper text, and card body; one fact should usually be stated once in the closest place that affects action
+- Keep form placeholders sparse: label explains the input purpose; placeholder may only add format, constraint, example, or state-specific hints, never `请输入/请选择 + field label` when a label is visible
+- Mark required fields only from backend contract or verified validation, and use component-native required indicators that actually render in the installed TDesign version; omit or downgrade low-value optional fields instead of mixing them into the main form at the same weight
 - Keep non-consumer pages restrained: prefer page shell + content container + TDesign components, and make every extra local wrapper earn its keep through layout, state ownership, summary, or danger containment
 - Default section-level and row-level local actions to TDesign icon buttons or icon-led small buttons; if a text-only local action remains, name the exception and why icon-led affordance would be misleading or insufficient
 - Check TDesign MCP against the installed Mini Program component set before introducing any user-visible local control or wrapper exception, and state the exact component or supported composition chosen
@@ -77,6 +79,8 @@ Implementation must not do:
 - Do not add page-boundary filler such as “这里主要用于…”, “你可以在这里…”, or equivalent helper copy unless that explanation is itself the primary task content
 - Do not proactively add helper text, subtitles, note blocks, or notice copy when labels, values, status, and actions already express the task clearly
 - Do not repeat the same meaning in title, subtitle, note, notice bar, helper block, and card description layers
+- Do not use placeholders as second labels, and do not use `请输入/请选择 + 字段名` in ordinary labeled form rows
+- Do not use unsupported or non-rendering component props as fake required markers, and do not keep low-value optional fields in the main form simply to mirror backend DTO shape
 - Do not default to text-only local edit/delete/add/test/status buttons when an icon button or icon-led small button would communicate the action
 - Do not wrap TDesign regions in extra local notice/card/panel shells unless the wrapper owns real layout, state, summary, warning, or danger responsibility
 - Do not build non-consumer pages by skinning TDesign with customer-side token imports or extra decorative wrapper layers when the task can be expressed by page shell plus native TDesign composition
@@ -114,6 +118,8 @@ Acceptance focus:
 - The delivery names the task-domain owner and, when relevant, the page-group owner, service owner, and workflow/controller owner
 - The first screen enters the task directly instead of opening with explanatory cards or stacked guidance copy
 - New explanatory copy was avoided by default; any retained sentence is explicitly necessary for risk, state meaning, field constraint, or next-action clarity
+- Form rows do not duplicate label text in placeholders; any placeholder that remains carries real format, constraint, example, or state-specific value
+- Required markers are visible through the installed component system, optional fields are omitted or clearly downgraded, and the UI does not invent required semantics beyond backend truth
 - Non-consumer local actions default to icon buttons or icon-led small buttons, and any text-only exception is called out explicitly
 - If backend semantics are ambiguous or required fields are missing, the request states whether backend clarification or backend changes are needed instead of guessing in the page layer
 - Any visual-system exception, non-TDesign exception, or remaining weak-network / re-entry / duplicate-tap / unknown-result risk is stated explicitly

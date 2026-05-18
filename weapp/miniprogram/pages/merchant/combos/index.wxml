@@ -112,7 +112,7 @@
 
               <view class="combo-action-bar" catchtap="onActionsCatch">
                 <view class="combo-action-slot">
-                  <t-button class="combo-action-button" variant="text" theme="default" size="small" bind:tap="onEditCombo" data-id="{{item.id}}">编辑</t-button>
+                  <t-button class="combo-action-button" variant="text" theme="default" size="small" icon="edit" bind:tap="onEditCombo" data-id="{{item.id}}">编辑</t-button>
                 </view>
                 <t-divider layout="vertical" />
                 <view class="combo-action-slot">
@@ -120,8 +120,9 @@
                     class="combo-action-button"
                     variant="text"
                     theme="danger"
-                    size="small"
-                    loading="{{item.deletePending}}"
+	                    size="small"
+	                    icon="delete"
+	                    loading="{{item.deletePending}}"
                     disabled="{{item.deletePending || item.statusPending}}"
                     bind:tap="onRequestDeleteCombo"
                     data-id="{{item.id}}"

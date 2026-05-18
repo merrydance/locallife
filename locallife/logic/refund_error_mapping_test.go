@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/merrydance/locallife/baofu"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/stretchr/testify/require"
@@ -46,6 +47,38 @@ func TestMapOrdinaryRefundCreateErrorMapsMissingClientToActionableRequestError(t
 	require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
 	require.EqualError(t, reqErr.Err, "微信服务商退款配置未完成，当前无法发起退款，请联系平台处理")
 	require.Same(t, configErr, LoggableError(err))
+}
+
+func TestMapBaofuRefundCreateErrorUsesSafeChineseProviderMessage(t *testing.T) {
+	providerErr := &baofu.ProviderError{
+		Operation:       "order_refund",
+		UpstreamCode:    "MERCHANT_NOT_REPORTED",
+		UpstreamMessage: "raw upstream merchant id detail",
+	}
+
+	err := mapBaofuRefundCreateError(providerErr)
+	reqErr := assertRequestError(t, err)
+
+	require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
+	require.EqualError(t, reqErr.Err, "商户微信支付通道待开通，请联系平台处理")
+	require.NotContains(t, reqErr.Err.Error(), "raw upstream")
+	require.Same(t, providerErr, LoggableError(err))
+}
+
+func TestMapBaofuPaymentCreateErrorUsesSafeChineseProviderMessage(t *testing.T) {
+	providerErr := &baofu.ProviderError{
+		Operation:       "unified_order",
+		UpstreamCode:    "SYSTEM_BUSY",
+		UpstreamMessage: "raw upstream payment detail",
+	}
+
+	err := mapBaofuPaymentCreateError(providerErr)
+	reqErr := assertRequestError(t, err)
+
+	require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
+	require.EqualError(t, reqErr.Err, "支付通道处理中，请稍后重试")
+	require.NotContains(t, reqErr.Err.Error(), "raw upstream")
+	require.Same(t, providerErr, LoggableError(err))
 }
 
 func TestMapWechatPaymentCreateErrorPreservesWechatCause(t *testing.T) {

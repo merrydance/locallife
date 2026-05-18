@@ -3,7 +3,6 @@
   background: var(--td-bg-color-page);
 }
 
-
 .state-block {
   min-height: 60vh;
   display: flex;
@@ -14,67 +13,12 @@
   padding: 0 var(--spacer-lg);
 }
 
-.notice-banner,
-.section-panel {
-  background: var(--td-bg-color-container);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-}
-
-.notice-copy {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacer-xs);
-}
-
-.notice-text {
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
-  color: var(--td-text-color-secondary);
-}
-
 .notice-banner-operation {
   flex-shrink: 0;
   font-size: var(--font-size-sm);
   line-height: 1.6;
   color: var(--td-brand-color);
   font-weight: 600;
-}
-
-.section-title {
-  font-size: var(--font-size-base);
-  font-weight: 700;
-  color: var(--td-text-color-primary);
-}
-
-.section-panel {
-  padding: var(--spacer-md);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacer-md);
-}
-
-.section-panel--plain {
-  padding: 0;
-  background: transparent;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.section-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--spacer-sm);
-}
-
-.section-count {
-  font-size: var(--font-size-xs);
-  color: var(--td-text-color-secondary);
-}
-
-.input-cell {
-  width: 100%;
 }
 
 .section-state {
@@ -84,14 +28,6 @@
   justify-content: center;
   gap: var(--spacer-sm);
   min-height: 240rpx;
-}
-
-.section-state--embedded {
-  min-height: 180rpx;
-  padding: var(--spacer-md);
-  background: var(--td-bg-color-container);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
 }
 
 .category-list-item {
@@ -106,16 +42,10 @@
   opacity: 0.7;
 }
 
-/* weapp-gate allow-tdesign-internal-class: 当前纯展示分组依赖 t-cell-group 裁剪圆角，待改成独立展示容器后移除 */
-.section-panel--plain .t-cell-group {
-  overflow: hidden;
-}
-
 .category-note-action {
   width: 72rpx;
   display: flex;
   justify-content: flex-end;
-  margin-right: -8rpx;
 }
 
 .category-note-action__button {
@@ -167,8 +97,6 @@
 }
 
 @media (max-width: 420px) {
-  .notice-card--split,
-  .section-top,
   .inline-feedback {
     align-items: flex-start;
     flex-direction: column;

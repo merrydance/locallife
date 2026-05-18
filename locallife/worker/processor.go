@@ -7,6 +7,8 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/hibiken/asynq"
+	"github.com/merrydance/locallife/baofu/aggregatepay"
+	merchantcontracts "github.com/merrydance/locallife/baofu/merchantreport/contracts"
 	"github.com/merrydance/locallife/cloudprint"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
@@ -50,30 +52,43 @@ type TaskProcessor interface {
 	ProcessTaskClaimPayout(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskPaymentFactApplication 处理外部支付事实应用任务
 	ProcessTaskPaymentFactApplication(ctx context.Context, task *asynq.Task) error
+	// ProcessTaskBaofuProfitSharing 处理宝付确认分账任务
+	ProcessTaskBaofuProfitSharing(ctx context.Context, task *asynq.Task) error
 }
 
 type RedisTaskProcessor struct {
-	server              *asynq.Server
-	store               db.Store
-	distributor         TaskDistributor                     // 用于在任务中分发后续任务
-	wechatClient        wechat.WechatClient                 // 微信小程序客户端（用于证照OCR等）
-	directPaymentClient wechat.DirectPaymentClientInterface // 直连支付客户端（骑手押金/追偿退款）
-	transferClient      wechat.TransferClientInterface      // 商家转账客户端（索赔赔付到零钱）
-	ecommerceClient     wechat.EcommerceClientInterface     // 平台收付通客户端（历史/冷备路径）
-	ordinarySPClient    OrdinaryServiceProviderWorkerClient // 普通服务商支付客户端（商户主业务支付）
-	pubSubPublisher     websocket.PubSubPublisher           // Pub/Sub 发布器（用于推送通知）
-	deliveryBroadcast   *logic.DeliveryBroadcastLogic
-	mediaRegistry       *media.Registry
-	ocrService          *ocr.Service
-	onboardingReviewSvc *logic.OnboardingReviewService
-	credentialGovSvc    *logic.CredentialGovernanceService
-	merchantReviewSvc   *logic.MerchantOnboardingReviewService
-	riderReviewSvc      *logic.RiderOnboardingReviewService
-	printerClient       cloudprint.Client
-	config              util.Config
-	roleCache           map[int64]cachedUserRoles
-	roleCacheMu         sync.RWMutex
-	roleCacheTTL        time.Duration
+	server                    *asynq.Server
+	store                     db.Store
+	distributor               TaskDistributor                     // 用于在任务中分发后续任务
+	wechatClient              wechat.WechatClient                 // 微信小程序客户端（用于证照OCR等）
+	directPaymentClient       wechat.DirectPaymentClientInterface // 直连支付客户端（骑手押金/追偿退款）
+	transferClient            wechat.TransferClientInterface      // 商家转账客户端（索赔赔付到零钱）
+	ecommerceClient           wechat.EcommerceClientInterface     // 平台收付通客户端（历史/冷备路径）
+	ordinarySPClient          OrdinaryServiceProviderWorkerClient // 普通服务商支付客户端（商户主业务支付）
+	baofuAggregateClient      aggregatepay.Client                 // 宝付聚合支付/分账客户端
+	baofuAccountClient        logic.BaofuAccountClient
+	baofuMerchantReportClient baofuMerchantReportContinuationClient
+	dataEncryptor             util.DataEncryptor        // 本地敏感资料加解密
+	pubSubPublisher           websocket.PubSubPublisher // Pub/Sub 发布器（用于推送通知）
+	deliveryBroadcast         *logic.DeliveryBroadcastLogic
+	mediaRegistry             *media.Registry
+	ocrService                *ocr.Service
+	onboardingReviewSvc       *logic.OnboardingReviewService
+	credentialGovSvc          *logic.CredentialGovernanceService
+	merchantReviewSvc         *logic.MerchantOnboardingReviewService
+	riderReviewSvc            *logic.RiderOnboardingReviewService
+	printerClient             cloudprint.Client
+	config                    util.Config
+	baofuProfitSharingConfig  BaofuProfitSharingWorkerConfig
+	roleCache                 map[int64]cachedUserRoles
+	roleCacheMu               sync.RWMutex
+	roleCacheTTL              time.Duration
+}
+
+type baofuMerchantReportContinuationClient interface {
+	SubmitWechatReport(ctx context.Context, req merchantcontracts.WechatMerchantReportRequest) (*merchantcontracts.MerchantReportResult, error)
+	QueryReport(ctx context.Context, req merchantcontracts.MerchantReportQueryRequest) (*merchantcontracts.MerchantReportResult, error)
+	BindSubConfig(ctx context.Context, req merchantcontracts.BindSubConfigRequest) (*merchantcontracts.BindSubConfigResult, error)
 }
 
 type testStoreWithNoopPlatformAlertPersistence struct {
@@ -195,6 +210,24 @@ func (processor *RedisTaskProcessor) SetOrdinaryServiceProviderClient(client Ord
 	processor.ordinarySPClient = client
 }
 
+func (processor *RedisTaskProcessor) SetBaofuAggregateClient(client aggregatepay.Client, config BaofuProfitSharingWorkerConfig) {
+	processor.baofuAggregateClient = client
+	processor.baofuProfitSharingConfig = config.normalized()
+}
+
+func (processor *RedisTaskProcessor) SetBaofuAccountClient(client logic.BaofuAccountClient, encryptor util.DataEncryptor) {
+	processor.baofuAccountClient = client
+	processor.dataEncryptor = encryptor
+}
+
+func (processor *RedisTaskProcessor) SetBaofuMerchantReportClient(client baofuMerchantReportContinuationClient) {
+	processor.baofuMerchantReportClient = client
+}
+
+func (processor *RedisTaskProcessor) SetBaofuAggregateClientForTest(client aggregatepay.Client, config BaofuProfitSharingWorkerConfig) {
+	processor.SetBaofuAggregateClient(client, config)
+}
+
 func (processor *RedisTaskProcessor) SetPrinterClientForTest(client cloudprint.Client) {
 	processor.printerClient = client
 }
@@ -299,6 +332,8 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskProcessApplymentResult, processor.ProcessTaskApplymentResult)
 	mux.HandleFunc(TaskProcessPaymentFactApplication, processor.ProcessTaskPaymentFactApplication)
 	mux.HandleFunc(TaskProcessPaymentDomainOutbox, processor.ProcessTaskPaymentDomainOutbox)
+	mux.HandleFunc(TaskProcessBaofuProfitSharing, processor.ProcessTaskBaofuProfitSharing)
+	mux.HandleFunc(TaskProcessBaofuWithdrawalFactApplication, processor.ProcessTaskBaofuWithdrawalFactApplication)
 
 	// 商户入驻证照OCR任务
 	mux.HandleFunc(TaskMerchantApplicationBusinessLicenseOCR, processor.ProcessTaskMerchantApplicationBusinessLicenseOCR)

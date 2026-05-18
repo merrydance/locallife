@@ -4,7 +4,7 @@
 
   <!-- 步骤条 (Step 0 不显示) -->
   <view class="steps-container" wx:if="{{currentStep > 0}}">
-    <t-steps current="{{currentStep - 1}}" bind:change="onStepChange">
+    <t-steps current="{{currentStep - 1}}">
       <t-step-item title="上传" />
       <t-step-item title="信息" />
       <t-step-item title="位置" />
@@ -218,5 +218,4 @@
         <t-button block variant="text" bindtap="closeConsentPopup">暂不继续</t-button>
     </view>
 </t-popup>
-
 

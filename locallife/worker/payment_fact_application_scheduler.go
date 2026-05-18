@@ -13,11 +13,12 @@ import (
 )
 
 const (
-	paymentFactApplicationCron         = "*/1 * * * *"
-	paymentFactApplicationBatchLimit   = int32(200)
-	paymentFactApplicationTaskUnique   = 30 * time.Second
-	claimRecoveryPaymentFactConsumer   = "claim_recovery_domain"
-	settlementFactBusinessObjectConfig = "merchant_payment_config"
+	paymentFactApplicationCron              = "*/1 * * * *"
+	paymentFactApplicationBatchLimit        = int32(200)
+	paymentFactApplicationTaskUnique        = 30 * time.Second
+	claimRecoveryPaymentFactConsumer        = "claim_recovery_domain"
+	baofuVerifyFeePaymentFactConsumerDomain = "baofu_account_verify_fee_domain"
+	settlementFactBusinessObjectConfig      = "merchant_payment_config"
 )
 
 var paymentFactApplicationSchedulerTargets = []struct {
@@ -33,6 +34,7 @@ var paymentFactApplicationSchedulerTargets = []struct {
 	{consumer: merchantWithdrawFactConsumerDomain, businessObjectType: merchantCancelWithdrawFactBusinessType},
 	{consumer: claimRecoveryPaymentFactConsumer, businessObjectType: orderPaymentFactBusinessObjectOrder},
 	{consumer: riderDepositPaymentFactConsumerDomain, businessObjectType: riderDepositPaymentFactBusinessObjectOrder},
+	{consumer: baofuVerifyFeePaymentFactConsumerDomain, businessObjectType: orderPaymentFactBusinessObjectOrder},
 	{consumer: orderPaymentFactConsumerDomain, businessObjectType: orderPaymentFactBusinessObjectOrder},
 	{consumer: reservationPaymentFactConsumerDomain, businessObjectType: reservationPaymentFactBusinessObjectOrder},
 	{consumer: orderRefundFactConsumerDomain, businessObjectType: orderRefundFactBusinessObjectOrder},

@@ -84,16 +84,17 @@
 
             <view class="voucher-action-bar" catchtap="onActionsCatch">
               <view class="voucher-action-slot">
-                <t-button class="voucher-action-button" variant="text" theme="default" size="small" bind:tap="onEditVoucher" data-id="{{item.id}}">编辑</t-button>
+                <t-button class="voucher-action-button" variant="text" theme="default" size="small" icon="edit" bind:tap="onEditVoucher" data-id="{{item.id}}">编辑</t-button>
               </view>
               <t-divider layout="vertical" />
               <view class="voucher-action-slot">
                 <t-button
                   class="voucher-action-button"
                   variant="text"
-                  theme="danger"
-                  size="small"
-                  loading="{{item.deletePending}}"
+	                  theme="danger"
+	                  size="small"
+	                  icon="delete"
+	                  loading="{{item.deletePending}}"
                   disabled="{{item.deletePending || item.statusPending}}"
                   bind:tap="onRequestDeleteVoucher"
                   data-id="{{item.id}}"

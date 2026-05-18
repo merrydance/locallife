@@ -56,13 +56,30 @@ func (processor *RedisTaskProcessor) ProcessTaskPaymentFactApplication(ctx conte
 		return fmt.Errorf("payment fact application id is required: %w", asynq.SkipRetry)
 	}
 
+	baofuContinuation := logic.NewBaofuAccountOnboardingService(processor.store, processor.baofuAccountClient, processor.directPaymentClient, processor.dataEncryptor, logic.BaofuAccountOnboardingConfig{
+		VerifyFeeFen:      processor.config.BaofuAccountVerifyFeeFen,
+		IndustryID:        processor.config.BaofuBusinessIndustryID,
+		CollectMerchantID: processor.config.BaofuCollectMerchantID,
+	})
+	if processor.baofuMerchantReportClient != nil {
+		baofuContinuation = baofuContinuation.WithMerchantReportContinuation(processor.baofuMerchantReportClient, logic.BaofuAccountMerchantReportConfig{
+			CollectMerchantID: processor.config.BaofuCollectMerchantID,
+			CollectTerminalID: processor.config.BaofuCollectTerminalID,
+			MiniProgramAppID:  processor.config.WechatMiniAppID,
+			ChannelID:         processor.config.BaofuMerchantReportChannelID,
+			ChannelName:       processor.config.BaofuMerchantReportChannelName,
+			Business:          processor.config.BaofuMerchantReportBusiness,
+		})
+	}
+
 	service := logic.NewPaymentFactService(processor.store).
 		WithEcommerceClient(processor.ecommerceClient).
 		WithRefundCreator(paymentFactApplicationRefundCreator{
 			ecommerceClient: processor.ecommerceClient,
 			ordinaryClient:  processor.ordinarySPClient,
 		}).
-		WithPaymentSuccessConfig(processor.config.RiderAverageSpeed, processor.config.DefaultPrepareTime)
+		WithPaymentSuccessConfig(processor.config.RiderAverageSpeed, processor.config.DefaultPrepareTime).
+		WithBaofuVerifyFeeContinuation(baofuContinuation)
 	result, err := service.ApplyExternalPaymentFactApplication(ctx, payload.ApplicationID)
 	if err != nil {
 		return err

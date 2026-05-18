@@ -63,6 +63,14 @@ func NewCombinedPaymentServiceWithOrdinaryServiceProvider(store db.Store, ordina
 	}
 }
 
+func NewCombinedPaymentServiceWithBaofuUnsupported(store db.Store) *CombinedPaymentService {
+	return &CombinedPaymentService{
+		store:                      store,
+		mainBusinessPaymentChannel: db.PaymentChannelBaofuAggregate,
+		now:                        time.Now,
+	}
+}
+
 // CreateCombinedPaymentOrderInput defines the input for combined payment creation.
 type CreateCombinedPaymentOrderInput struct {
 	UserID   int64
@@ -166,6 +174,9 @@ type combinedSubOrderPayload struct {
 func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Context, input CreateCombinedPaymentOrderInput) (CreateCombinedPaymentOrderResult, error) {
 	var result CreateCombinedPaymentOrderResult
 
+	if svc.mainBusinessPaymentChannel == db.PaymentChannelBaofuAggregate {
+		return result, NewRequestError(http.StatusServiceUnavailable, errors.New("宝付合单支付暂未开通，请分开支付"))
+	}
 	if svc.mainBusinessPaymentChannel == db.PaymentChannelOrdinaryServiceProvider && svc.ordinaryProviderPayClient == nil {
 		return result, fmt.Errorf("ordinary service provider client: not configured")
 	}
@@ -180,6 +191,11 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 	}
 	if len(orderIDs) > combinedOrderMaxCount {
 		return result, NewRequestError(http.StatusBadRequest, fmt.Errorf("too many orders, max %d", combinedOrderMaxCount))
+	}
+	if svc.mainBusinessPaymentChannel == db.PaymentChannelOrdinaryServiceProvider {
+		if err := ensureCombinedPaymentMerchantsBaofuReady(ctx, svc.store, input.UserID, orderIDs); err != nil {
+			return result, err
+		}
 	}
 
 	user, err := svc.store.GetUser(ctx, input.UserID)

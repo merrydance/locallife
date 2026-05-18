@@ -430,7 +430,6 @@ Page({
 
     try {
       this.setData({ recoveryPaying: true })
-      wx.showLoading({ title: '拉起支付中...' })
       const paymentResult = await claimManagementService.payRiderClaimRecovery(this.data.claimId)
       const workflowResult = await this.handleRecoveryPayment(paymentResult)
       if (!workflowResult.shouldSync) {
@@ -443,13 +442,12 @@ Page({
       logger.error('Confirm rider claim recovery failed', error)
       wx.showToast({ title: getErrorMessage(error, '支付追偿款失败，请稍后重试'), icon: 'none' })
     } finally {
-      wx.hideLoading()
       this.setData({ recoveryPaying: false })
     }
   },
 
   async handleRecoveryPayment(paymentResult: ClaimRecoveryPaymentResponse) {
-    return completeClaimRecoveryPayment(paymentResult, 'Poll rider claim recovery payment status timeout')
+    return completeClaimRecoveryPayment(paymentResult, 'Poll rider claim recovery payment status timeout', { context: this })
   },
 
   onRetryRefresh() {

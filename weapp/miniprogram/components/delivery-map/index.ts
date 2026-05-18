@@ -13,7 +13,7 @@ type MarkerItem = {
     id: number
     latitude: number
     longitude: number
-    iconPath: string
+    iconPath?: string
     width: number
     height: number
     callout: {
@@ -54,7 +54,10 @@ Component({
     data: {
         markers: [] as MarkerItem[],
         polyline: [] as PolylineItem[],
-        includePoints: [] as MapLocationPoint[]
+        includePoints: [] as MapLocationPoint[],
+        centerLatitude: 0,
+        centerLongitude: 0,
+        hasValidLocation: false
     },
 
     observers: {
@@ -73,6 +76,7 @@ Component({
             }
             const markers: MarkerItem[] = []
             const includePoints: MapLocationPoint[] = []
+            let centerPoint: MapLocationPoint | null = null
 
             if (
                 merchant &&
@@ -83,7 +87,7 @@ Component({
                     id: 1,
                     latitude: merchant.latitude,
                     longitude: merchant.longitude,
-                    iconPath: '/assets/images/marker-merchant.png', // Assuming assets exist or using default
+                    iconPath: '/assets/merchant.png',
                     width: 32,
                     height: 32,
                     callout: {
@@ -94,6 +98,7 @@ Component({
                     }
                 })
                 includePoints.push({ latitude: merchant.latitude, longitude: merchant.longitude })
+                centerPoint = centerPoint || { latitude: merchant.latitude, longitude: merchant.longitude }
             }
 
             if (
@@ -105,7 +110,7 @@ Component({
                     id: 2,
                     latitude: customer.latitude,
                     longitude: customer.longitude,
-                    iconPath: '/assets/images/marker-customer.png',
+                    iconPath: '/assets/customer.png',
                     width: 32,
                     height: 32,
                     callout: {
@@ -116,6 +121,7 @@ Component({
                     }
                 })
                 includePoints.push({ latitude: customer.latitude, longitude: customer.longitude })
+                centerPoint = centerPoint || { latitude: customer.latitude, longitude: customer.longitude }
             }
 
             if (
@@ -127,7 +133,7 @@ Component({
                     id: 3,
                     latitude: rider.latitude,
                     longitude: rider.longitude,
-                    iconPath: '/assets/images/marker-rider.png',
+                    iconPath: '/assets/rider.png',
                     width: 32,
                     height: 32,
                     callout: {
@@ -138,6 +144,7 @@ Component({
                     }
                 })
                 includePoints.push({ latitude: rider.latitude, longitude: rider.longitude })
+                centerPoint = { latitude: rider.latitude, longitude: rider.longitude }
             }
 
             // Simple straight line for polyline if route API is not used
@@ -162,7 +169,14 @@ Component({
                 }]
             }
 
-            this.setData({ markers, polyline, includePoints })
+            this.setData({
+                markers,
+                polyline,
+                includePoints,
+                centerLatitude: centerPoint?.latitude || 0,
+                centerLongitude: centerPoint?.longitude || 0,
+                hasValidLocation: !!centerPoint
+            })
         }
     }
 })

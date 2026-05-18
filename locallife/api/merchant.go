@@ -491,9 +491,10 @@ type updateMerchantStatusRequest struct {
 }
 
 type merchantStatusResponse struct {
-	IsOpen      bool       `json:"is_open"`
-	AutoCloseAt *time.Time `json:"auto_close_at,omitempty"`
-	Message     string     `json:"message"`
+	IsOpen            bool                              `json:"is_open"`
+	AutoCloseAt       *time.Time                        `json:"auto_close_at,omitempty"`
+	Message           string                            `json:"message"`
+	SettlementAccount *baofuSettlementReadinessResponse `json:"settlement_account,omitempty"`
 }
 
 // updateMerchantOpenStatus godoc
@@ -558,6 +559,15 @@ func (server *Server) updateMerchantOpenStatus(ctx *gin.Context) {
 
 		if paymentConfig.SubMchID == "" || paymentConfig.Status != "active" {
 			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("普通服务商特约商户未激活，请先完成微信支付进件和结算账户配置后再开业")))
+			return
+		}
+
+		if err := server.ensureMerchantBaofuPaymentReady(ctx, merchant); err != nil {
+			if errors.Is(err, errMerchantBaofuAccountMissing) || errors.Is(err, errMerchantBaofuWechatChannelPending) {
+				ctx.JSON(http.StatusBadRequest, errorResponse(err))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
 	}
@@ -659,6 +669,12 @@ func (server *Server) getMerchantOpenStatus(ctx *gin.Context) {
 	if status.AutoCloseAt.Valid {
 		resp.AutoCloseAt = &status.AutoCloseAt.Time
 	}
+	readiness, err := server.getMerchantBaofuSettlementReadiness(ctx, merchant)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	resp.SettlementAccount = newBaofuSettlementReadinessResponse(readiness)
 
 	ctx.JSON(http.StatusOK, resp)
 }

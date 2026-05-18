@@ -1,6 +1,7 @@
 import { formatPriceNoSymbol } from '../../../utils/util'
 import Navigation from '../../../utils/navigation'
 import { getErrorUserMessage } from '../../../utils/user-facing'
+import { logger } from '../../../utils/logger'
 import { getDineInSessionContext, saveDineInSessionFromMenu, savePendingDineInCheckoutContext } from '../../../services/dine-in-session'
 import {
     calculateCheckoutCart,
@@ -181,7 +182,7 @@ Page({
 
         } catch (error: unknown) {
             const message = getErrorUserMessage(error, '加载失败，请重试')
-            console.error('初始化失败:', error)
+            logger.error('堂食结账初始化失败', error, 'dine-in-checkout')
             this.setData({ 
                 isError: true, 
                 errorMessage: message
@@ -207,7 +208,7 @@ Page({
                 })
             }
         } catch (err) {
-            console.warn('获取余额失败', err)
+            logger.warn('获取会员余额失败', err, 'dine-in-checkout')
         }
     },
 
@@ -266,7 +267,7 @@ Page({
         const amount = formatPriceNoSymbol(this.data.calculation.total_amount || 0)
         try {
             const payment = await createCheckoutOrderPayment(orderId)
-            const result = await completeCheckoutPayment(payment)
+            const result = await completeCheckoutPayment(payment, { context: this })
             const paymentAmount = formatPriceNoSymbol(result.amountFen || payment.amount || this.data.calculation.total_amount || 0)
             if (this.data.sessionId > 0) {
                 savePendingDineInCheckoutContext({
@@ -285,7 +286,7 @@ Page({
                 amount: paymentAmount
             })
         } catch (error) {
-            console.error('支付失败', error)
+            logger.error('堂食结账支付失败', error, 'dine-in-checkout')
             Navigation.toPaymentResult({
                 status: 'create_failed',
                 businessId: orderId,

@@ -65,6 +65,24 @@ func TestValidateRiderApplicationSubmissionReadiness_UsesHealthCertProviderFailu
 	require.EqualError(t, err, "健康证OCR处理失败，请重新上传清晰的健康证照片")
 }
 
+func TestValidateRiderApplicationSubmissionReadiness_BlocksPendingIDCardOCR(t *testing.T) {
+	app := randomRiderApplicationWithData(1)
+	app.IDCardOcr = []byte(`{"status":"pending","name":"张三","id_number":"110101199001011234","valid_end":"20350101"}`)
+
+	_, err := validateRiderApplicationSubmissionReadiness(app)
+
+	require.EqualError(t, err, "身份证OCR处理中，请稍后再提交")
+}
+
+func TestValidateRiderApplicationSubmissionReadiness_BlocksPendingHealthCertOCR(t *testing.T) {
+	app := randomRiderApplicationWithData(1)
+	app.HealthCertOcr = []byte(`{"status":"pending","name":"张三","valid_end":"2030年12月31日"}`)
+
+	_, err := validateRiderApplicationSubmissionReadiness(app)
+
+	require.EqualError(t, err, "健康证OCR处理中，请稍后再提交")
+}
+
 // ==================== 创建/获取草稿测试 ====================
 
 func TestCreateOrGetRiderApplicationDraft(t *testing.T) {

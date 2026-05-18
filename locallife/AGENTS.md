@@ -14,7 +14,7 @@ For any non-trivial backend task, read these first:
 1. `../.github/standards/backend/README.md`
 2. `../.github/standards/backend/RUNTIME_ARCHITECTURE.md`
 3. `../.github/standards/backend/WORKFLOW_AND_VALIDATION.md`
-4. matching domain README for the active high-risk area, for example `../.github/standards/domains/wechat-payment/README.md`
+4. matching domain README for the active high-risk area, for example `../.github/standards/domains/wechat-payment/README.md` or `../.github/standards/domains/baofu-payment/README.md`
 
 Use the prompt templates in `../.github/prompts/` when the task matches. Legacy `.codex/prompts/` files should be treated as backend-local wrappers, not the long-term source of truth.
 
@@ -43,5 +43,5 @@ Use the prompt templates in `../.github/prompts/` when the task matches. Legacy 
 
 - `main.go` contains startup wiring, production safeguards, scheduler registration, and worker boot order.
 - `../.github/standards/backend/README.md` plus the matching domain README are the durable entrypoints for production backend risk context.
-- `../.github/standards/backend/RUNTIME_ARCHITECTURE.md` plus `../.github/standards/domains/wechat-payment/README.md` are the preferred entrypoints for current execution paths and payment-domain capability routing.
+- `../.github/standards/backend/RUNTIME_ARCHITECTURE.md` plus the matching payment provider README such as `../.github/standards/domains/wechat-payment/README.md` or `../.github/standards/domains/baofu-payment/README.md` are the preferred entrypoints for current execution paths and payment-domain capability routing.
 - There is existing user work in the tree; never revert unrelated changes.

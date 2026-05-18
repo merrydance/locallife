@@ -22,6 +22,10 @@ type paymentFactOrdinaryRefundCreator interface {
 	OrdinaryServiceProviderRefundNotifyURL() string
 }
 
+type baofuVerifyFeeContinuation interface {
+	ContinueAfterVerifyFeePaid(ctx context.Context, paymentOrder db.PaymentOrder) error
+}
+
 type paymentFactEcommerceRefundCreatorAdapter struct {
 	client wechat.EcommerceClientInterface
 }
@@ -35,6 +39,7 @@ type PaymentFactService struct {
 	now                func() time.Time
 	ecommerceClient    wechat.EcommerceClientInterface
 	refundCreator      paymentFactRefundCreator
+	baofuContinuation  baofuVerifyFeeContinuation
 	riderAverageSpeed  int
 	defaultPrepareTime int
 }
@@ -57,6 +62,11 @@ func (svc *PaymentFactService) WithEcommerceClient(client wechat.EcommerceClient
 
 func (svc *PaymentFactService) WithRefundCreator(creator paymentFactRefundCreator) *PaymentFactService {
 	svc.refundCreator = creator
+	return svc
+}
+
+func (svc *PaymentFactService) WithBaofuVerifyFeeContinuation(continuation baofuVerifyFeeContinuation) *PaymentFactService {
+	svc.baofuContinuation = continuation
 	return svc
 }
 

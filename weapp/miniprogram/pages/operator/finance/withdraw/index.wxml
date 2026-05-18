@@ -53,6 +53,10 @@
       </view>
     </view>
 
+    <t-cell-group>
+      <t-cell title="宝付结算账户" note="开通后接收运营商分账" arrow bind:tap="onOpenSettlementAccount" />
+    </t-cell-group>
+
     <view class="card summary-card">
       <view class="card-title">近期佣金明细</view>
 

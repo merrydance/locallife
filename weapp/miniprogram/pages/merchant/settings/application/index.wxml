@@ -25,10 +25,14 @@
 
     <block wx:else>
       <view class="page-content">
-        <view wx:if="{{refreshErrorMessage}}" class="notice-card notice-card-error">
-          <text class="notice-text notice-text-flex">{{refreshErrorMessage}}</text>
-          <text class="notice-action" bindtap="onRetryRefresh">重新同步</text>
-        </view>
+        <t-notice-bar
+          wx:if="{{refreshErrorMessage}}"
+          theme="error"
+          visible="{{true}}"
+          content="{{refreshErrorMessage}}"
+          suffix-icon="refresh"
+          bind:click="onRetryRefresh"
+        />
 
         <t-badge
           count="{{statusBadgeText}}"

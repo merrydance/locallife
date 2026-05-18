@@ -1398,6 +1398,31 @@ func randomOrder(userID, merchantID int64) db.Order {
 	}
 }
 
+func merchantFeeBreakdownTestOrder(userID, merchantID int64, offset int64) db.Order {
+	order := randomOrder(userID, merchantID)
+	order.Status = db.OrderStatusPaid
+	order.Subtotal = 10000 + offset
+	order.DiscountAmount = 300
+	order.VoucherAmount = 200
+	order.DeliveryFee = 800
+	order.DeliveryFeeDiscount = 0
+	order.TotalAmount = order.Subtotal - order.DiscountAmount - order.VoucherAmount + order.DeliveryFee
+	return order
+}
+
+func merchantFeeBreakdownTestProfitSharingOrder(order db.Order, id int64) db.ProfitSharingOrder {
+	return db.ProfitSharingOrder{
+		ID:                 id,
+		PaymentOrderID:     id + 1000,
+		MerchantID:         order.MerchantID,
+		TotalAmount:        order.TotalAmount,
+		PlatformCommission: 190,
+		OperatorCommission: 285,
+		PaymentFee:         31,
+		MerchantAmount:     order.TotalAmount - 190 - 285 - 31,
+	}
+}
+
 // ==================== 商户端订单管理测试 ====================
 
 func TestListMerchantOrdersAPI(t *testing.T) {
@@ -1406,8 +1431,12 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 	otherUser, _ := randomUser(t)
 
 	orders := []db.Order{
-		randomOrder(otherUser.ID, merchant.ID),
-		randomOrder(otherUser.ID, merchant.ID),
+		merchantFeeBreakdownTestOrder(otherUser.ID, merchant.ID, 0),
+		merchantFeeBreakdownTestOrder(otherUser.ID, merchant.ID, 100),
+	}
+	profitSharingOrders := []db.ProfitSharingOrder{
+		merchantFeeBreakdownTestProfitSharingOrder(orders[0], 201),
+		merchantFeeBreakdownTestProfitSharingOrder(orders[1], 202),
 	}
 	listItemCustomizations := []byte(`{"501":601,"502":602,"meta_specs":"大份 / 少辣"}`)
 
@@ -1461,6 +1490,17 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 						Customizations:        listItemCustomizations,
 						DishImageMediaAssetID: pgtype.Int8{Int64: 9901, Valid: true},
 					}}, nil)
+
+				store.EXPECT().
+					ListProfitSharingOrdersByOrderIDsForMerchant(gomock.Any(), gomock.Eq(db.ListProfitSharingOrdersByOrderIDsForMerchantParams{
+						MerchantID: merchant.ID,
+						OrderIds:   []int64{orders[0].ID, orders[1].ID},
+					})).
+					Times(1).
+					Return([]db.ListProfitSharingOrdersByOrderIDsForMerchantRow{
+						{OrderID: orders[0].ID, ProfitSharingOrder: profitSharingOrders[0]},
+						{OrderID: orders[1].ID, ProfitSharingOrder: profitSharingOrders[1]},
+					}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1470,6 +1510,10 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 				require.Len(t, resp.Orders[0].Items, 1)
 				require.Equal(t, "大份 / 少辣", resp.Orders[0].Items[0].SpecsText)
 				require.Empty(t, resp.Orders[0].Items[0].ImageURL)
+				require.NotNil(t, resp.Orders[0].FeeBreakdown)
+				require.Equal(t, int64(10000), resp.Orders[0].FeeBreakdown.FoodAmount)
+				require.Equal(t, int64(475), resp.Orders[0].FeeBreakdown.PlatformServiceFeeAmount)
+				require.Equal(t, int64(31), resp.Orders[0].FeeBreakdown.PaymentChannelFeeAmount)
 			},
 		},
 		{
@@ -1496,6 +1540,22 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:  "RejectPendingStatus",
+			query: "page_id=1&page_size=10&status=pending",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusConflict, recorder.Code)
+				var resp ErrorResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, "订单尚未支付，暂不可处理", resp.Error)
 			},
 		},
 		{
@@ -1531,9 +1591,53 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 					ListOrderItemsWithDishByOrderIDs(gomock.Any(), gomock.Eq([]int64{orders[0].ID, orders[1].ID})).
 					Times(1).
 					Return([]db.ListOrderItemsWithDishByOrderIDsRow{}, nil)
+
+				store.EXPECT().
+					ListProfitSharingOrdersByOrderIDsForMerchant(gomock.Any(), gomock.Eq(db.ListProfitSharingOrdersByOrderIDsForMerchantParams{
+						MerchantID: merchant.ID,
+						OrderIds:   []int64{orders[0].ID, orders[1].ID},
+					})).
+					Times(1).
+					Return([]db.ListProfitSharingOrdersByOrderIDsForMerchantRow{
+						{OrderID: orders[0].ID, ProfitSharingOrder: profitSharingOrders[0]},
+						{OrderID: orders[1].ID, ProfitSharingOrder: profitSharingOrders[1]},
+					}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name:  "MissingFeeBreakdown",
+			query: "page_id=1&page_size=10",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+
+				store.EXPECT().
+					ListOrdersByMerchantWithFilters(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(orders, nil)
+				store.EXPECT().
+					CountOrdersByMerchantWithFilters(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(len(orders)), nil)
+				store.EXPECT().
+					ListOrderItemsWithDishByOrderIDs(gomock.Any(), gomock.Eq([]int64{orders[0].ID, orders[1].ID})).
+					Times(1).
+					Return([]db.ListOrderItemsWithDishByOrderIDsRow{}, nil)
+				store.EXPECT().
+					ListProfitSharingOrdersByOrderIDsForMerchant(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.ListProfitSharingOrdersByOrderIDsForMerchantRow{}, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				var resp APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.Equal(t, "订单费用明细暂不可用，请稍后重试", resp.Message)
 			},
 		},
 		{
@@ -2352,7 +2456,8 @@ func TestGetMerchantOrderAPI(t *testing.T) {
 	otherMerchant.ID = merchant.ID + 1
 	customer, _ := randomUser(t)
 
-	order := randomOrder(customer.ID, merchant.ID)
+	order := merchantFeeBreakdownTestOrder(customer.ID, merchant.ID, 0)
+	profitSharingOrder := merchantFeeBreakdownTestProfitSharingOrder(order, 301)
 
 	testCases := []struct {
 		name          string
@@ -2387,6 +2492,15 @@ func TestGetMerchantOrderAPI(t *testing.T) {
 						Customizations:        []byte(`{"501":601,"meta_specs":"大份"}`),
 						DishImageMediaAssetID: pgtype.Int8{Int64: 9902, Valid: true},
 					}}, nil)
+				store.EXPECT().
+					ListProfitSharingOrdersByOrderIDsForMerchant(gomock.Any(), gomock.Eq(db.ListProfitSharingOrdersByOrderIDsForMerchantParams{
+						MerchantID: merchant.ID,
+						OrderIds:   []int64{order.ID},
+					})).
+					Times(1).
+					Return([]db.ListProfitSharingOrdersByOrderIDsForMerchantRow{
+						{OrderID: order.ID, ProfitSharingOrder: profitSharingOrder},
+					}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -2395,6 +2509,38 @@ func TestGetMerchantOrderAPI(t *testing.T) {
 				require.Len(t, resp.Items, 1)
 				require.Equal(t, "大份", resp.Items[0].SpecsText)
 				require.Empty(t, resp.Items[0].ImageURL)
+				require.NotNil(t, resp.FeeBreakdown)
+				require.Equal(t, int64(10000), resp.FeeBreakdown.FoodAmount)
+				require.Equal(t, int64(475), resp.FeeBreakdown.PlatformServiceFeeAmount)
+				require.Equal(t, int64(31), resp.FeeBreakdown.PaymentChannelFeeAmount)
+			},
+		},
+		{
+			name:    "MissingFeeBreakdown",
+			orderID: order.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+				store.EXPECT().
+					GetOrder(gomock.Any(), order.ID).
+					Times(1).
+					Return(order, nil)
+				store.EXPECT().
+					ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).
+					Times(1).
+					Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				store.EXPECT().
+					ListProfitSharingOrdersByOrderIDsForMerchant(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.ListProfitSharingOrdersByOrderIDsForMerchantRow{}, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				var resp APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.Equal(t, "订单费用明细暂不可用，请稍后重试", resp.Message)
 			},
 		},
 		{
@@ -2471,6 +2617,29 @@ func TestGetMerchantOrderAPI(t *testing.T) {
 				var resp APIResponse
 				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 				require.Equal(t, "internal server error", resp.Message)
+			},
+		},
+		{
+			name:    "RejectPendingOrder",
+			orderID: order.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				pendingOrder := order
+				pendingOrder.Status = db.OrderStatusPending
+
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+				store.EXPECT().
+					GetOrder(gomock.Any(), order.ID).
+					Times(1).
+					Return(pendingOrder, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusConflict, recorder.Code)
+				var resp ErrorResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, "订单尚未支付，暂不可处理", resp.Error)
 			},
 		},
 		{
@@ -2976,6 +3145,7 @@ func TestListMerchantOrderPrintJobsAPI(t *testing.T) {
 	customer, _ := randomUser(t)
 
 	order := randomOrder(customer.ID, merchant.ID)
+	order.Status = db.OrderStatusPaid
 	now := time.Now()
 	printedAt := pgtype.Timestamptz{Time: now.Add(-time.Minute), Valid: true}
 	failedMessage := pgtype.Text{String: "printer offline", Valid: true}
@@ -3081,6 +3251,7 @@ func TestGetMerchantOrderPrintJobStatusAPI(t *testing.T) {
 	merchant := randomMerchant(merchantOwner.ID)
 	customer, _ := randomUser(t)
 	order := randomOrder(customer.ID, merchant.ID)
+	order.Status = db.OrderStatusPaid
 	printer := randomCloudPrinter(merchant.ID)
 	printLog := db.PrintLog{
 		ID:            9001,
@@ -3295,6 +3466,7 @@ func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
 	merchant := randomMerchant(merchantOwner.ID)
 	customer, _ := randomUser(t)
 	order := randomOrder(customer.ID, merchant.ID)
+	order.Status = db.OrderStatusPaid
 	printer := randomCloudPrinter(merchant.ID)
 	printLog := db.PrintLog{
 		ID:        9002,

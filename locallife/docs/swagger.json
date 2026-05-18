@@ -13971,6 +13971,109 @@
                 }
             }
         },
+        "/v1/merchant/settlement-account": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户老板查询宝付二级户开户、微信商户报备与小程序授权目录状态；只返回产品状态、下一步指引和脱敏信息，不暴露宝付上游原始字段",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户财务"
+                ],
+                "summary": "查询当前商户宝付结算账户",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.baofuSettlementAccountResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "仅商户老板可访问",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "宝付结算账户状态暂不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户老板提交角色限定的开户资料或继续已有流程；owner_type、account_type、industry_id、qualificationTransSerialNo、platformNo、platformTerminalId 均由服务端控制",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户财务"
+                ],
+                "summary": "提交当前商户宝付结算账户开户",
+                "parameters": [
+                    {
+                        "description": "开户资料；空 body 表示继续当前流程",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.baofuSettlementAccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/api.baofuSettlementAccountResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误或包含服务端控制字段",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "仅商户老板可访问",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "宝付开户服务暂不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchant/staff": {
             "get": {
                 "security": [
@@ -21746,6 +21849,109 @@
                 }
             }
         },
+        "/v1/operators/me/settlement-account": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "运营商查询个人宝付二级户开户状态、核验费支付状态和下一步指引；运营商不做微信商户报备或授权目录绑定",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商财务"
+                ],
+                "summary": "查询当前运营商宝付结算账户",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.baofuSettlementAccountResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无运营商权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "宝付结算账户状态暂不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "运营商提交个人开户资料或继续已有流程；核验费通过微信直连支付给平台后进入宝付开户，服务端控制 owner/account/provider 字段",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商财务"
+                ],
+                "summary": "提交当前运营商宝付结算账户开户",
+                "parameters": [
+                    {
+                        "description": "开户资料；空 body 表示继续当前流程",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.baofuSettlementAccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/api.baofuSettlementAccountResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误或包含服务端控制字段",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无运营商权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "宝付开户服务暂不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/orders": {
             "get": {
                 "security": [
@@ -22514,6 +22720,37 @@
                 }
             }
         },
+        "/v1/payments/capabilities": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "返回当前主业务支付通道及合单支付可用性，供小程序购物车决定是否必须按商户拆单支付",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "支付管理"
+                ],
+                "summary": "查询支付能力",
+                "responses": {
+                    "200": {
+                        "description": "支付能力",
+                        "schema": {
+                            "$ref": "#/definitions/api.paymentCapabilitiesResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/payments/combined": {
             "post": {
                 "security": [
@@ -23245,6 +23482,434 @@
                     },
                     "502": {
                         "description": "微信支付调用失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/finance/applyment/areas/provinces": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询微信普通服务商支行检索所需的省份列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "开户"
+                ],
+                "summary": "查询开户省份列表",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.applymentProvinceListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/finance/applyment/areas/provinces/{province_code}/cities": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "根据省份编码查询微信普通服务商支行检索所需的城市列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "开户"
+                ],
+                "summary": "查询开户城市列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "省份编码",
+                        "name": "province_code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.applymentCityListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/finance/applyment/banks": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询微信普通服务商支持的对公或对私开户银行列表，返回后端缓存快照",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "开户"
+                ],
+                "summary": "查询进件银行列表",
+                "parameters": [
+                    {
+                        "enum": [
+                            "ACCOUNT_TYPE_BUSINESS",
+                            "ACCOUNT_TYPE_PRIVATE"
+                        ],
+                        "type": "string",
+                        "description": "账户类型",
+                        "name": "account_type",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.applymentBankListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/finance/applyment/banks/search-by-bank-account": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "根据个人银行卡号识别开户银行候选，仅适用于对私账户",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "开户"
+                ],
+                "summary": "识别对私银行卡开户银行",
+                "parameters": [
+                    {
+                        "enum": [
+                            "ACCOUNT_TYPE_BUSINESS",
+                            "ACCOUNT_TYPE_PRIVATE"
+                        ],
+                        "type": "string",
+                        "description": "账户类型",
+                        "name": "account_type",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "银行卡号",
+                        "name": "account_number",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.applymentBankSearchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/finance/applyment/banks/{bank_alias_code}/branches": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "根据银行别名编码和城市编码查询微信普通服务商支行列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "开户"
+                ],
+                "summary": "查询开户支行列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "银行别名编码",
+                        "name": "bank_alias_code",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "城市编码",
+                        "name": "city_code",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.applymentBranchListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/finance/settlement-account": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员查询平台宝付机构二级户开户状态和下一步指引；平台不做微信商户报备或授权目录绑定",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "查询平台宝付结算账户",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.baofuSettlementAccountResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无管理员权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "宝付结算账户状态暂不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员提交平台机构开户资料或继续已有流程；平台核验费由平台承担，服务端控制 owner/account/provider 字段",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "提交平台宝付结算账户开户",
+                "parameters": [
+                    {
+                        "description": "开户资料；空 body 表示继续当前流程",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.baofuSettlementAccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/api.baofuSettlementAccountResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误或包含服务端控制字段",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无管理员权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "宝付开户服务暂不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/finance/settlement-account/status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员查询平台佣金接收方宝付二级户开通状态；响应只返回产品状态和脱敏账户标识，不暴露宝付账户号、分账接收方标识或上游原始数据",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "查询平台宝付结算账户状态",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.platformBaofuSettlementStatusResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -25336,6 +26001,77 @@
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/stats/baofu/reconciliation/daily": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员查看宝付支付、分账、提现与异常事实每日汇总；响应只返回聚合金额和计数，不返回分账接收方、合同号或上游原始数据",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取宝付每日对账汇总",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "开始日期 (格式: 2025-01-01)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束日期 (格式: 2025-01-31)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "宝付每日对账汇总",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.platformBaofuDailyReconciliationRow"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
                         }
                     }
                 }
@@ -30758,6 +31494,109 @@
                 }
             }
         },
+        "/v1/rider/settlement-account": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "骑手查询个人宝付二级户开户状态、核验费支付状态和下一步指引；不返回明文身份证、银行卡或宝付上游原始字段",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "骑手"
+                ],
+                "summary": "查询当前骑手宝付结算账户",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.baofuSettlementAccountResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无骑手权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "宝付结算账户状态暂不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "骑手提交个人开户资料或继续已有流程；核验费通过微信直连支付给平台后进入宝付开户，服务端控制 owner/account/provider 字段",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "骑手"
+                ],
+                "summary": "提交当前骑手宝付结算账户开户",
+                "parameters": [
+                    {
+                        "description": "开户资料；空 body 表示继续当前流程",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.baofuSettlementAccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/api.baofuSettlementAccountResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误或包含服务端控制字段",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无骑手权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "宝付开户服务暂不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/rider/status": {
             "get": {
                 "security": [
@@ -34570,6 +35409,321 @@
                 }
             }
         },
+        "api.baofuSettlementAccountPaymentResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "business_type": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "out_trade_no": {
+                    "type": "string"
+                },
+                "pay_params": {
+                    "$ref": "#/definitions/api.miniProgramPayParams"
+                },
+                "payment_order_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.baofuSettlementAccountProfileDefaults": {
+            "type": "object",
+            "properties": {
+                "account_bank": {
+                    "type": "string"
+                },
+                "account_bank_code": {
+                    "type": "integer"
+                },
+                "bank_account_no_mask": {
+                    "type": "string"
+                },
+                "bank_address_code": {
+                    "type": "string"
+                },
+                "bank_alias": {
+                    "type": "string"
+                },
+                "bank_alias_code": {
+                    "type": "string"
+                },
+                "bank_branch_id": {
+                    "type": "string"
+                },
+                "bank_name": {
+                    "type": "string"
+                },
+                "business_license_number": {
+                    "type": "string"
+                },
+                "card_user_name": {
+                    "type": "string"
+                },
+                "certificate_no_mask": {
+                    "type": "string"
+                },
+                "contact_mobile_mask": {
+                    "type": "string"
+                },
+                "contact_name": {
+                    "type": "string"
+                },
+                "corporate_mobile_mask": {
+                    "type": "string"
+                },
+                "deposit_bank_city": {
+                    "type": "string"
+                },
+                "deposit_bank_name": {
+                    "type": "string"
+                },
+                "deposit_bank_province": {
+                    "type": "string"
+                },
+                "email_mask": {
+                    "type": "string"
+                },
+                "has_bank_account_no": {
+                    "type": "boolean"
+                },
+                "has_certificate_no": {
+                    "type": "boolean"
+                },
+                "has_contact_mobile": {
+                    "type": "boolean"
+                },
+                "has_corporate_mobile": {
+                    "type": "boolean"
+                },
+                "has_email": {
+                    "type": "boolean"
+                },
+                "has_legal_person_id_number": {
+                    "type": "boolean"
+                },
+                "has_saved_sensitive_defaults": {
+                    "type": "boolean"
+                },
+                "legal_name": {
+                    "type": "string"
+                },
+                "legal_person_id_number_mask": {
+                    "type": "string"
+                },
+                "legal_person_name": {
+                    "type": "string"
+                },
+                "self_employed": {
+                    "type": "boolean"
+                },
+                "source": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.baofuSettlementAccountProfileRequest": {
+            "type": "object",
+            "properties": {
+                "account_name": {
+                    "type": "string"
+                },
+                "account_number": {
+                    "type": "string"
+                },
+                "bank_account_no": {
+                    "type": "string"
+                },
+                "bank_account_number": {
+                    "type": "string"
+                },
+                "bank_mobile": {
+                    "type": "string"
+                },
+                "bank_name": {
+                    "type": "string"
+                },
+                "business_license_number": {
+                    "type": "string"
+                },
+                "card_user_name": {
+                    "type": "string"
+                },
+                "certificate_no": {
+                    "type": "string"
+                },
+                "contact_mobile": {
+                    "type": "string"
+                },
+                "contact_name": {
+                    "type": "string"
+                },
+                "corporate_mobile": {
+                    "type": "string"
+                },
+                "deposit_bank_city": {
+                    "type": "string"
+                },
+                "deposit_bank_name": {
+                    "type": "string"
+                },
+                "deposit_bank_province": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id_card_number": {
+                    "type": "string"
+                },
+                "legal_name": {
+                    "type": "string"
+                },
+                "legal_person_id_number": {
+                    "type": "string"
+                },
+                "legal_person_name": {
+                    "type": "string"
+                },
+                "mobile": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "real_name": {
+                    "type": "string"
+                },
+                "self_employed": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "api.baofuSettlementAccountRequest": {
+            "type": "object",
+            "properties": {
+                "profile": {
+                    "$ref": "#/definitions/api.baofuSettlementAccountProfileRequest"
+                }
+            }
+        },
+        "api.baofuSettlementAccountResponse": {
+            "type": "object",
+            "properties": {
+                "account_type": {
+                    "type": "string"
+                },
+                "amount": {
+                    "type": "integer"
+                },
+                "bank_account_no_mask": {
+                    "type": "string"
+                },
+                "bank_card_last4": {
+                    "type": "string"
+                },
+                "bank_mobile_mask": {
+                    "type": "string"
+                },
+                "business_type": {
+                    "type": "string"
+                },
+                "contact_mobile_mask": {
+                    "type": "string"
+                },
+                "email_mask": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "flow_id": {
+                    "type": "integer"
+                },
+                "flow_state": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "missing_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "open_state": {
+                    "type": "string"
+                },
+                "out_trade_no": {
+                    "type": "string"
+                },
+                "owner_id": {
+                    "type": "integer"
+                },
+                "owner_type": {
+                    "type": "string"
+                },
+                "pay_params": {
+                    "$ref": "#/definitions/api.miniProgramPayParams"
+                },
+                "payment": {
+                    "$ref": "#/definitions/api.baofuSettlementAccountPaymentResponse"
+                },
+                "payment_order_id": {
+                    "type": "integer"
+                },
+                "payment_ready": {
+                    "type": "boolean"
+                },
+                "profile_defaults": {
+                    "$ref": "#/definitions/api.baofuSettlementAccountProfileDefaults"
+                },
+                "profile_status": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "status_desc": {
+                    "type": "string"
+                },
+                "submitted_at": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "verify_fee_amount": {
+                    "type": "integer"
+                },
+                "wechat_sub_mch_id_mask": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.baofuSettlementReadinessResponse": {
+            "type": "object",
+            "properties": {
+                "label": {
+                    "type": "string"
+                },
+                "payment_ready": {
+                    "type": "boolean"
+                },
+                "state": {
+                    "type": "string"
+                }
+            }
+        },
         "api.batchAdminOperatorStatusFailure": {
             "type": "object",
             "properties": {
@@ -38046,8 +39200,8 @@
                     "description": "汇总",
                     "type": "integer"
                 },
-                "pending_income": {
-                    "description": "待结算收入",
+                "pending_merchant_receivable_amount": {
+                    "description": "待结算实收",
                     "type": "integer"
                 },
                 "pending_orders": {
@@ -38057,28 +39211,28 @@
                     "description": "满返支出统计",
                     "type": "integer"
                 },
+                "total_deduction_fee_amount": {
+                    "description": "总扣减",
+                    "type": "integer"
+                },
                 "total_gmv": {
                     "description": "金额统计（分）",
                     "type": "integer"
                 },
-                "total_income": {
-                    "description": "商户净收入",
+                "total_merchant_receivable_amount": {
+                    "description": "商户实收",
                     "type": "integer"
                 },
-                "total_operator_fee": {
-                    "description": "运营商服务费",
+                "total_payment_channel_fee_amount": {
+                    "description": "支付通道费",
                     "type": "integer"
                 },
-                "total_platform_fee": {
+                "total_platform_service_fee_amount": {
                     "description": "平台服务费",
                     "type": "integer"
                 },
                 "total_promotion_exp": {
                     "description": "满返支出总额",
-                    "type": "integer"
-                },
-                "total_service_fee": {
-                    "description": "总服务费（平台+运营商）",
                     "type": "integer"
                 }
             }
@@ -40825,6 +41979,55 @@
                 }
             }
         },
+        "api.merchantOrderFeeBreakdownResponse": {
+            "type": "object",
+            "properties": {
+                "customer_payable_amount": {
+                    "type": "integer",
+                    "example": 10300
+                },
+                "delivery_fee_amount": {
+                    "type": "integer",
+                    "example": 800
+                },
+                "delivery_fee_discount_amount": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "delivery_payable_amount": {
+                    "type": "integer",
+                    "example": 800
+                },
+                "food_amount": {
+                    "type": "integer",
+                    "example": 10000
+                },
+                "food_payable_amount": {
+                    "type": "integer",
+                    "example": 9500
+                },
+                "merchant_discount_amount": {
+                    "type": "integer",
+                    "example": 300
+                },
+                "merchant_receivable_amount": {
+                    "type": "integer",
+                    "example": 8968
+                },
+                "payment_channel_fee_amount": {
+                    "type": "integer",
+                    "example": 57
+                },
+                "platform_service_fee_amount": {
+                    "type": "integer",
+                    "example": 475
+                },
+                "voucher_discount_amount": {
+                    "type": "integer",
+                    "example": 200
+                }
+            }
+        },
         "api.merchantOrderPrintJobResponse": {
             "type": "object",
             "properties": {
@@ -41402,6 +42605,9 @@
                 },
                 "message": {
                     "type": "string"
+                },
+                "settlement_account": {
+                    "$ref": "#/definitions/api.baofuSettlementReadinessResponse"
                 }
             }
         },
@@ -41854,6 +43060,9 @@
                 },
                 "reviewed_at": {
                     "type": "string"
+                },
+                "settlement_account": {
+                    "$ref": "#/definitions/api.baofuSettlementReadinessResponse"
                 },
                 "status": {
                     "type": "string"
@@ -42681,6 +43890,9 @@
                 "exception_state": {
                     "type": "string"
                 },
+                "fee_breakdown": {
+                    "$ref": "#/definitions/api.merchantOrderFeeBreakdownResponse"
+                },
                 "flow_id": {
                     "type": "integer"
                 },
@@ -42957,6 +44169,23 @@
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "api.paymentCapabilitiesResponse": {
+            "type": "object",
+            "properties": {
+                "combined_payment_supported": {
+                    "type": "boolean"
+                },
+                "combined_payment_unavailable_message": {
+                    "type": "string"
+                },
+                "main_business_payment_channel": {
+                    "type": "string"
+                },
+                "split_checkout_required": {
+                    "type": "boolean"
                 }
             }
         },
@@ -43329,6 +44558,82 @@
                 },
                 "title": {
                     "type": "string"
+                }
+            }
+        },
+        "api.platformBaofuDailyReconciliationRow": {
+            "type": "object",
+            "properties": {
+                "channel": {
+                    "type": "string"
+                },
+                "date": {
+                    "type": "string"
+                },
+                "fee_ledger_mismatch_count": {
+                    "type": "integer"
+                },
+                "merchant_amount": {
+                    "type": "integer"
+                },
+                "merchant_payment_fee": {
+                    "type": "integer"
+                },
+                "operator_commission": {
+                    "type": "integer"
+                },
+                "paid_amount": {
+                    "type": "integer"
+                },
+                "payment_fee": {
+                    "type": "integer"
+                },
+                "platform_commission": {
+                    "type": "integer"
+                },
+                "platform_net_payment_fee_margin": {
+                    "type": "integer"
+                },
+                "platform_payment_fee_income": {
+                    "type": "integer"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "provider_payment_fee": {
+                    "type": "integer"
+                },
+                "rider_amount": {
+                    "type": "integer"
+                },
+                "rider_payment_fee": {
+                    "type": "integer"
+                },
+                "unapplied_fact_count": {
+                    "type": "integer"
+                },
+                "unknown_command_count": {
+                    "type": "integer"
+                },
+                "withdraw_processing_amount": {
+                    "type": "integer"
+                },
+                "withdraw_succeeded_amount": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.platformBaofuSettlementStatusResponse": {
+            "type": "object",
+            "properties": {
+                "masked_contract_no": {
+                    "type": "string"
+                },
+                "masked_sharing_mer_id": {
+                    "type": "string"
+                },
+                "settlement_account": {
+                    "$ref": "#/definitions/api.baofuSettlementReadinessResponse"
                 }
             }
         },
@@ -45552,6 +46857,12 @@
                 },
                 "delivery_count": {
                     "type": "integer"
+                },
+                "rider_gross_amount": {
+                    "type": "integer"
+                },
+                "rider_payment_fee": {
+                    "type": "integer"
                 }
             }
         },
@@ -45605,6 +46916,12 @@
                 "rider_amount": {
                     "type": "integer"
                 },
+                "rider_gross_amount": {
+                    "type": "integer"
+                },
+                "rider_payment_fee": {
+                    "type": "integer"
+                },
                 "sharing_order_id": {
                     "type": "string"
                 },
@@ -45651,6 +46968,12 @@
                 "rider_amount": {
                     "type": "integer"
                 },
+                "rider_gross_amount": {
+                    "type": "integer"
+                },
+                "rider_payment_fee": {
+                    "type": "integer"
+                },
                 "status": {
                     "type": "string"
                 }
@@ -45671,7 +46994,13 @@
                 "total_delivery_fee": {
                     "type": "integer"
                 },
+                "total_rider_gross_amount": {
+                    "type": "integer"
+                },
                 "total_rider_income": {
+                    "type": "integer"
+                },
+                "total_rider_payment_fee": {
                     "type": "integer"
                 }
             }
@@ -45866,6 +47195,9 @@
                 },
                 "required_deposit": {
                     "type": "integer"
+                },
+                "settlement_account": {
+                    "$ref": "#/definitions/api.baofuSettlementReadinessResponse"
                 },
                 "status": {
                     "description": "账号状态：approved/active/suspended",
@@ -46087,7 +47419,13 @@
                 "total_delivery_fee": {
                     "type": "integer"
                 },
+                "total_rider_gross_amount": {
+                    "type": "integer"
+                },
                 "total_rider_income": {
+                    "type": "integer"
+                },
+                "total_rider_payment_fee": {
                     "type": "integer"
                 }
             }

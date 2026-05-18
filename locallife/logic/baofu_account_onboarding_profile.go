@@ -1,0 +1,152 @@
+package logic
+
+import (
+	"context"
+	"errors"
+	"strings"
+
+	"github.com/jackc/pgx/v5/pgtype"
+	baofucontracts "github.com/merrydance/locallife/baofu/account/contracts"
+	db "github.com/merrydance/locallife/db/sqlc"
+)
+
+func (s *BaofuAccountOnboardingService) resolveProfile(ctx context.Context, ownerType string, ownerID int64, accountType string, input *BaofuAccountOpeningProfileInput) (db.BaofuAccountOpeningProfile, error) {
+	if input != nil {
+		return s.upsertProfile(ctx, ownerType, ownerID, accountType, *input)
+	}
+	profile, err := s.store.GetBaofuAccountOpeningProfileByOwner(ctx, db.GetBaofuAccountOpeningProfileByOwnerParams{OwnerType: ownerType, OwnerID: ownerID})
+	if err == nil {
+		return profile, nil
+	}
+	if !errors.Is(err, db.ErrRecordNotFound) {
+		return db.BaofuAccountOpeningProfile{}, err
+	}
+	return s.upsertProfile(ctx, ownerType, ownerID, accountType, BaofuAccountOpeningProfileInput{})
+}
+
+func (s *BaofuAccountOnboardingService) upsertProfile(ctx context.Context, ownerType string, ownerID int64, accountType string, input BaofuAccountOpeningProfileInput) (db.BaofuAccountOpeningProfile, error) {
+	completed := baofuProfileComplete(ownerType, input)
+	status := db.BaofuAccountOpeningProfileStatusIncomplete
+	if completed {
+		status = db.BaofuAccountOpeningProfileStatusComplete
+	}
+	certificateType := ""
+	certificateNo := strings.TrimSpace(input.IdentityCertificateNo())
+	corporateCertID := strings.TrimSpace(input.LegalPersonIDNumber)
+	if accountType == db.BaofuAccountTypePersonal {
+		corporateCertID = ""
+	}
+	if accountType == db.BaofuAccountTypePersonal {
+		certificateType = baofucontracts.OfficialCertificateTypeID
+	} else {
+		certificateType = baofucontracts.OfficialBusinessCertificateTypeLicense
+	}
+	certificateCipher, err := encryptOptional(s.encryptor, certificateNo)
+	if err != nil {
+		return db.BaofuAccountOpeningProfile{}, err
+	}
+	corporateCipher, err := encryptOptional(s.encryptor, corporateCertID)
+	if err != nil {
+		return db.BaofuAccountOpeningProfile{}, err
+	}
+	bankCipher, err := encryptOptional(s.encryptor, input.BankAccountNo)
+	if err != nil {
+		return db.BaofuAccountOpeningProfile{}, err
+	}
+	bankMobileCipher, err := encryptOptional(s.encryptor, input.BankMobile)
+	if err != nil {
+		return db.BaofuAccountOpeningProfile{}, err
+	}
+	emailCipher, err := encryptOptional(s.encryptor, input.Email)
+	if err != nil {
+		return db.BaofuAccountOpeningProfile{}, err
+	}
+	corporateMobileCipher, err := encryptOptional(s.encryptor, input.CorporateMobile)
+	if err != nil {
+		return db.BaofuAccountOpeningProfile{}, err
+	}
+	contactMobileCipher, err := encryptOptional(s.encryptor, input.ContactMobile)
+	if err != nil {
+		return db.BaofuAccountOpeningProfile{}, err
+	}
+
+	sourceSnapshot := baofuOpeningSnapshot(map[string]any{
+		"source":        "baofu_settlement_profile_api",
+		"status":        status,
+		"self_employed": input.SelfEmployed,
+	})
+	return s.store.UpsertBaofuAccountOpeningProfile(ctx, db.UpsertBaofuAccountOpeningProfileParams{
+		OwnerType:                 ownerType,
+		OwnerID:                   ownerID,
+		AccountType:               accountType,
+		ProfileStatus:             status,
+		LegalName:                 pgText(input.LegalName),
+		CertificateType:           pgText(certificateType),
+		CertificateNoCiphertext:   pgText(certificateCipher),
+		CertificateNoMask:         pgText(maskSensitiveTail(certificateNo, 4)),
+		EmailCiphertext:           pgText(emailCipher),
+		EmailMask:                 pgText(maskEmail(input.Email)),
+		CustomerName:              pgText(input.LegalName),
+		CorporateName:             pgText(input.LegalPersonName),
+		CorporateCertType:         pgText(baofuCorporateCertType(accountType)),
+		CorporateCertIDCiphertext: pgText(corporateCipher),
+		CorporateCertIDMask:       pgText(maskSensitiveTail(corporateCertID, 4)),
+		CorporateMobileCiphertext: pgText(corporateMobileCipher),
+		CorporateMobileMask:       pgText(maskMobile(input.CorporateMobile)),
+		IndustryID:                pgText(s.config.normalized().IndustryID),
+		ContactName:               pgText(input.ContactName),
+		ContactMobileCiphertext:   pgText(contactMobileCipher),
+		ContactMobileMask:         pgText(maskMobile(input.ContactMobile)),
+		BankAccountNoCiphertext:   pgText(bankCipher),
+		BankAccountNoMask:         pgText(maskBankAccount(input.BankAccountNo)),
+		BankMobileCiphertext:      pgText(bankMobileCipher),
+		BankMobileMask:            pgText(maskMobile(input.BankMobile)),
+		BankName:                  pgText(input.BankName),
+		DepositBankProvince:       pgText(input.DepositBankProvince),
+		DepositBankCity:           pgText(input.DepositBankCity),
+		DepositBankName:           pgText(input.DepositBankName),
+		CardUserName:              pgText(input.CardUserName),
+		SourceSnapshot:            sourceSnapshot,
+	})
+}
+
+func (input BaofuAccountOpeningProfileInput) IdentityCertificateNo() string {
+	if strings.TrimSpace(input.BusinessLicenseNo) != "" {
+		return input.BusinessLicenseNo
+	}
+	if strings.TrimSpace(input.CertificateNo) != "" {
+		return input.CertificateNo
+	}
+	return input.LegalPersonIDNumber
+}
+
+func (s *BaofuAccountOnboardingService) getOrCreateFlow(ctx context.Context, ownerType string, ownerID int64, accountType string, profile db.BaofuAccountOpeningProfile) (db.BaofuAccountOpeningFlow, error) {
+	flow, err := s.store.GetActiveBaofuAccountOpeningFlowByOwner(ctx, db.GetActiveBaofuAccountOpeningFlowByOwnerParams{OwnerType: ownerType, OwnerID: ownerID})
+	if err == nil {
+		return flow, nil
+	}
+	if !errors.Is(err, db.ErrRecordNotFound) {
+		return db.BaofuAccountOpeningFlow{}, err
+	}
+	return s.store.CreateBaofuAccountOpeningFlow(ctx, db.CreateBaofuAccountOpeningFlowParams{
+		OwnerType:               ownerType,
+		OwnerID:                 ownerID,
+		AccountType:             accountType,
+		ProfileID:               pgtype.Int8{Int64: profile.ID, Valid: profile.ID > 0},
+		State:                   db.BaofuAccountOpeningStateProfilePending,
+		VerifyFeeAmount:         0,
+		ProviderRequestSnapshot: []byte(`{}`),
+		RawSnapshot:             baofuOpeningSnapshot(map[string]any{"state": db.BaofuAccountOpeningStateProfilePending}),
+	})
+}
+
+func (s *BaofuAccountOnboardingService) markProfilePending(ctx context.Context, flow db.BaofuAccountOpeningFlow, profile db.BaofuAccountOpeningProfile) (db.BaofuAccountOpeningFlow, error) {
+	if strings.TrimSpace(flow.State) == db.BaofuAccountOpeningStateProfilePending {
+		return flow, nil
+	}
+	return s.store.SetBaofuAccountOpeningFlowProfilePending(ctx, db.SetBaofuAccountOpeningFlowProfilePendingParams{
+		ID:          flow.ID,
+		ProfileID:   pgtype.Int8{Int64: profile.ID, Valid: profile.ID > 0},
+		RawSnapshot: baofuOpeningSnapshot(map[string]any{"state": db.BaofuAccountOpeningStateProfilePending, "profile_id": profile.ID}),
+	})
+}

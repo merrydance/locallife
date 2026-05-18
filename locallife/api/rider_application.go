@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -13,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
+	"github.com/merrydance/locallife/ocr"
 	"github.com/merrydance/locallife/rules"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/worker"
@@ -21,96 +21,11 @@ import (
 
 // ==================== 骑手申请数据结构 ====================
 
-// IDCardOCRData 身份证OCR识别数据
-type IDCardOCRData struct {
-	Status         string        `json:"status,omitempty"`
-	Error          string        `json:"error,omitempty"`
-	ErrorCode      string        `json:"error_code,omitempty"`
-	AlertEmittedAt string        `json:"alert_emitted_at,omitempty"`
-	Readiness      *OCRReadiness `json:"readiness,omitempty"`
-	QueuedAt       string        `json:"queued_at,omitempty"`
-	StartedAt      string        `json:"started_at,omitempty"`
-	OCRJobID       *int64        `json:"ocr_job_id,omitempty"`
-	Name           string        `json:"name,omitempty"`        // 姓名
-	IDNumber       string        `json:"id_number,omitempty"`   // 身份证号
-	Gender         string        `json:"gender,omitempty"`      // 性别
-	Nation         string        `json:"nation,omitempty"`      // 民族
-	Address        string        `json:"address,omitempty"`     // 地址
-	ValidStart     string        `json:"valid_start,omitempty"` // 有效期起始
-	ValidEnd       string        `json:"valid_end,omitempty"`   // 有效期截止（"长期" 或日期）
-	OCRAt          string        `json:"ocr_at,omitempty"`      // OCR识别时间
-}
-
-// HealthCertOCRData 健康证OCR识别数据
-type HealthCertOCRData struct {
-	Status         string        `json:"status,omitempty"`
-	Error          string        `json:"error,omitempty"`
-	ErrorCode      string        `json:"error_code,omitempty"`
-	AlertEmittedAt string        `json:"alert_emitted_at,omitempty"`
-	Readiness      *OCRReadiness `json:"readiness,omitempty"`
-	QueuedAt       string        `json:"queued_at,omitempty"`
-	StartedAt      string        `json:"started_at,omitempty"`
-	OCRJobID       *int64        `json:"ocr_job_id,omitempty"`
-	Name           string        `json:"name,omitempty"`        // 姓名
-	IDNumber       string        `json:"id_number,omitempty"`   // 身份证号
-	CertNumber     string        `json:"cert_number,omitempty"` // 证书编号
-	ValidStart     string        `json:"valid_start,omitempty"` // 有效期起始
-	ValidEnd       string        `json:"valid_end,omitempty"`   // 有效期截止
-	OCRAt          string        `json:"ocr_at,omitempty"`      // OCR识别时间
-}
-
-func decodeOCRPayload(data []byte, target any) error {
-	if len(data) == 0 {
-		return nil
-	}
-	if err := json.Unmarshal(data, target); err == nil {
-		return nil
-	}
-
-	var embedded string
-	if err := json.Unmarshal(data, &embedded); err != nil {
-		return err
-	}
-	if strings.TrimSpace(embedded) == "" {
-		return nil
-	}
-	return json.Unmarshal([]byte(embedded), target)
-}
-
-func decodeIDCardOCRData(data []byte) (*IDCardOCRData, error) {
-	if len(data) == 0 {
-		return nil, nil
-	}
-	var payload IDCardOCRData
-	if err := decodeOCRPayload(data, &payload); err != nil {
-		return nil, err
-	}
-	return &payload, nil
-}
-
-func decodeHealthCertOCRData(data []byte) (*HealthCertOCRData, error) {
-	if len(data) == 0 {
-		return nil, nil
-	}
-	var payload HealthCertOCRData
-	if err := decodeOCRPayload(data, &payload); err != nil {
-		return nil, err
-	}
-	return &payload, nil
-}
-
 func buildRiderApplicationMissingFieldsError(missingFields []string) error {
 	return &APIError{
 		Code:    40105,
 		Message: fmt.Sprintf("请先补充以下资料后再提交：%s", joinStrings(missingFields, "、")),
 	}
-}
-
-func normalizePersonName(name string) string {
-	name = strings.TrimSpace(name)
-	name = strings.ReplaceAll(name, " ", "")
-	name = strings.ReplaceAll(name, "\t", "")
-	return name
 }
 
 // riderApplicationResponse 骑手申请响应
@@ -599,6 +514,12 @@ func validateRiderApplicationSubmissionReadiness(app db.RiderApplication) (*IDCa
 	if err != nil || decodedIDCardOCR == nil {
 		return nil, errors.New("身份证信息解析失败，请重新上传")
 	}
+	switch strings.TrimSpace(decodedIDCardOCR.Status) {
+	case string(ocr.JobStatusPending), string(ocr.JobStatusProcessing):
+		return nil, errors.New("身份证OCR处理中，请稍后再提交")
+	case string(ocr.JobStatusFailed):
+		return nil, errors.New("身份证OCR处理失败，请重新上传清晰的身份证照片")
+	}
 	if err := submissionReadinessError(
 		decodedIDCardOCR.Readiness,
 		map[string]string{
@@ -634,6 +555,12 @@ func validateRiderApplicationSubmissionReadiness(app db.RiderApplication) (*IDCa
 	decodedHealthOCR, err := decodeHealthCertOCRData(app.HealthCertOcr)
 	if err != nil || decodedHealthOCR == nil {
 		return nil, errors.New("健康证信息解析失败，请重新上传")
+	}
+	switch strings.TrimSpace(decodedHealthOCR.Status) {
+	case string(ocr.JobStatusPending), string(ocr.JobStatusProcessing):
+		return nil, errors.New("健康证OCR处理中，请稍后再提交")
+	case string(ocr.JobStatusFailed):
+		return nil, errors.New("健康证OCR处理失败，请重新上传清晰的健康证照片")
 	}
 	if err := submissionReadinessError(
 		decodedHealthOCR.Readiness,

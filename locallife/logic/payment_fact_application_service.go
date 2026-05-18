@@ -24,6 +24,7 @@ const (
 	paymentFactConsumerApplymentDomain              = "applyment_domain"
 	paymentFactConsumerSettlementDomain             = "settlement_domain"
 	paymentFactConsumerMerchantFundsDomain          = "merchant_funds_domain"
+	paymentFactConsumerBaofuAccountVerifyFeeDomain  = "baofu_account_verify_fee_domain"
 	paymentFactBusinessObjectPaymentOrder           = "payment_order"
 	paymentFactBusinessObjectRefundOrder            = "refund_order"
 	paymentFactBusinessObjectProfitSharingOrder     = "profit_sharing_order"
@@ -46,6 +47,7 @@ type ApplyExternalPaymentFactApplicationResult struct {
 	MerchantCancelWithdraw        *merchantCancelWithdrawDomainResult
 	MerchantWithdraw              *merchantWithdrawDomainResult
 	ReservationPayment            *ApplyReservationPaymentFactResult
+	BaofuVerifyFeePayment         *baofuVerifyFeePaymentDomainResult
 	Applied                       bool
 	Skipped                       bool
 }
@@ -62,6 +64,7 @@ type appliedPaymentFactDomainResult struct {
 	MerchantWithdraw              *merchantWithdrawDomainResult
 	ReservationPayment            *ApplyReservationPaymentFactResult
 	RiderDepositPayment           *riderDepositPaymentDomainResult
+	BaofuVerifyFeePayment         *baofuVerifyFeePaymentDomainResult
 	RiderDepositRefund            *riderDepositRefundDomainResult
 	OrderRefund                   *orderRefundDomainResult
 	ReservationRefund             *reservationRefundDomainResult
@@ -75,6 +78,11 @@ type profitSharingReturnDomainResult struct {
 }
 
 type riderDepositPaymentDomainResult struct {
+	PaymentOrder db.PaymentOrder
+	Processed    bool
+}
+
+type baofuVerifyFeePaymentDomainResult struct {
 	PaymentOrder db.PaymentOrder
 	Processed    bool
 }
@@ -274,13 +282,13 @@ func (svc *PaymentFactService) ApplyExternalPaymentFactApplication(ctx context.C
 		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, fmt.Errorf("get external payment fact: %w", err))
 	}
 	if len(fact.RawResource) > 0 && !json.Valid(fact.RawResource) {
-		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, fmt.Errorf("external payment fact %d raw_resource is not valid JSON", fact.ID))
+		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, fmt.Errorf("external payment fact %d raw_resource is not valid JSON", fact.ID), fact)
 	}
 	result.Fact = fact
 
 	domainResult, err := svc.applyExternalPaymentFactToDomain(ctx, application, fact)
 	if err != nil {
-		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, err)
+		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, err, fact)
 	}
 	result.OrderPayment = domainResult.OrderPayment
 	result.ClaimRecoveryPayment = domainResult.ClaimRecoveryPayment
@@ -289,10 +297,11 @@ func (svc *PaymentFactService) ApplyExternalPaymentFactApplication(ctx context.C
 	result.MerchantCancelWithdraw = domainResult.MerchantCancelWithdraw
 	result.MerchantWithdraw = domainResult.MerchantWithdraw
 	result.ReservationPayment = domainResult.ReservationPayment
+	result.BaofuVerifyFeePayment = domainResult.BaofuVerifyFeePayment
 
 	outbox, err := svc.createPaymentDomainOutboxForAppliedFact(ctx, application, fact, domainResult)
 	if err != nil {
-		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, err)
+		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, err, fact)
 	}
 	result.Outbox = outbox
 
@@ -302,7 +311,7 @@ func (svc *PaymentFactService) ApplyExternalPaymentFactApplication(ctx context.C
 		ProcessingStatus: db.ExternalPaymentFactProcessingStatusTerminalized,
 		ProcessedAt:      pgtype.Timestamptz{Time: processedAt, Valid: true},
 	}); err != nil {
-		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, fmt.Errorf("mark external payment fact terminalized: %w", err))
+		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, fmt.Errorf("mark external payment fact terminalized: %w", err), fact)
 	}
 
 	applied, err := svc.store.MarkExternalPaymentFactApplicationApplied(ctx, db.MarkExternalPaymentFactApplicationAppliedParams{
@@ -310,7 +319,7 @@ func (svc *PaymentFactService) ApplyExternalPaymentFactApplication(ctx context.C
 		AppliedAt: pgtype.Timestamptz{Time: processedAt, Valid: true},
 	})
 	if err != nil {
-		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, fmt.Errorf("mark external payment fact application applied: %w", err))
+		return result, svc.markExternalPaymentFactApplicationFailed(ctx, application, fmt.Errorf("mark external payment fact application applied: %w", err), fact)
 	}
 	result.Application = applied
 	result.Applied = true
@@ -325,7 +334,9 @@ func (svc *PaymentFactService) applyExternalPaymentFactToDomain(ctx context.Cont
 		if err != nil {
 			return result, err
 		}
-		result.ProfitSharingOrder = &profitSharingOrder
+		if profitSharingOrder.ID != 0 {
+			result.ProfitSharingOrder = &profitSharingOrder
+		}
 		return result, nil
 	case application.Consumer == paymentFactConsumerApplymentDomain && application.BusinessObjectType == paymentFactBusinessObjectApplyment:
 		applymentResult, err := svc.applyApplymentFact(ctx, application, fact)
@@ -397,6 +408,13 @@ func (svc *PaymentFactService) applyExternalPaymentFactToDomain(ctx context.Cont
 		}
 		result.RiderDepositPayment = &riderDepositPayment
 		return result, nil
+	case application.Consumer == paymentFactConsumerBaofuAccountVerifyFeeDomain && application.BusinessObjectType == paymentFactBusinessObjectPaymentOrder:
+		baofuVerifyFeePayment, err := svc.applyBaofuVerifyFeePaymentFact(ctx, application, fact)
+		if err != nil {
+			return result, err
+		}
+		result.BaofuVerifyFeePayment = &baofuVerifyFeePayment
+		return result, nil
 	case application.Consumer == paymentFactConsumerRiderDepositDomain && application.BusinessObjectType == paymentFactBusinessObjectRefundOrder:
 		riderDepositRefund, err := svc.applyRiderDepositRefundFact(ctx, application, fact)
 		if err != nil {
@@ -427,6 +445,15 @@ func (svc *PaymentFactService) applyOrderPaymentFact(ctx context.Context, applic
 	var result ApplyOrderPaymentFactResult
 	if err := validateOrderPaymentFactApplication(application, fact); err != nil {
 		return result, err
+	}
+	if isBaofuMainBusinessPaymentFact(fact) {
+		switch fact.TerminalStatus {
+		case db.ExternalPaymentTerminalStatusClosed, db.ExternalPaymentTerminalStatusFailed:
+			return svc.applyBaofuOrderPaymentTerminalFailure(ctx, application, fact)
+		}
+		if _, err := svc.markBaofuPaymentOrderPaid(ctx, application, fact); err != nil {
+			return result, err
+		}
 	}
 
 	paymentResult, err := svc.store.ProcessPaymentSuccessTx(ctx, db.ProcessPaymentSuccessTxParams{
@@ -1102,13 +1129,18 @@ func validateOrderPaymentFactApplication(application db.ExternalPaymentFactAppli
 	if !fact.IsTerminal {
 		return fmt.Errorf("payment fact %d is not terminal", fact.ID)
 	}
-	if fact.TerminalStatus != db.ExternalPaymentTerminalStatusSuccess {
+	if fact.TerminalStatus != db.ExternalPaymentTerminalStatusSuccess &&
+		!(isBaofuMainBusinessPaymentFact(fact) &&
+			(fact.TerminalStatus == db.ExternalPaymentTerminalStatusClosed ||
+				fact.TerminalStatus == db.ExternalPaymentTerminalStatusFailed)) {
 		return fmt.Errorf("payment fact %d terminal status %q is not success", fact.ID, fact.TerminalStatus)
 	}
-	if !isWechatMainBusinessPaymentFact(fact) {
-		return fmt.Errorf("payment fact %d is not a supported wechat main business payment fact", fact.ID)
+	if !isSupportedMainBusinessPaymentFact(fact) {
+		return fmt.Errorf("payment fact %d is not a supported main business payment fact", fact.ID)
 	}
-	if fact.ExternalObjectType != db.ExternalPaymentObjectPayment && fact.ExternalObjectType != db.ExternalPaymentObjectCombinedPayment {
+	if fact.ExternalObjectType != db.ExternalPaymentObjectPayment &&
+		fact.ExternalObjectType != db.ExternalPaymentObjectCombinedPayment &&
+		fact.ExternalObjectType != db.ExternalPaymentObjectBaofuPaymentOrder {
 		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)
 	}
 	if fact.BusinessOwner.Valid && fact.BusinessOwner.String != db.ExternalPaymentBusinessOwnerOrder {
@@ -1191,101 +1223,6 @@ func isWechatMainBusinessProfitSharingFact(fact db.ExternalPaymentFact) bool {
 	return fact.Channel == db.PaymentChannelEcommerce || fact.Channel == db.PaymentChannelOrdinaryServiceProvider
 }
 
-func (svc *PaymentFactService) applyRiderDepositPaymentFact(ctx context.Context, application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) (riderDepositPaymentDomainResult, error) {
-	var result riderDepositPaymentDomainResult
-	if err := validateRiderDepositPaymentFactApplication(application, fact); err != nil {
-		return result, err
-	}
-
-	paymentResult, err := svc.store.ProcessPaymentSuccessTx(ctx, db.ProcessPaymentSuccessTxParams{
-		PaymentOrderID: application.BusinessObjectID,
-	})
-	if err != nil {
-		return result, fmt.Errorf("process rider deposit payment success: %w", err)
-	}
-
-	result = riderDepositPaymentDomainResult{
-		PaymentOrder: paymentResult.PaymentOrder,
-		Processed:    paymentResult.Processed,
-	}
-	if paymentResult.Processed || paymentResult.PaymentOrder.ProcessedAt.Valid {
-		if err := svc.maybeRequestRiderReceiverPresent(ctx, paymentResult.PaymentOrder); err != nil {
-			return result, err
-		}
-	}
-	return result, nil
-}
-
-func (svc *PaymentFactService) applyClaimRecoveryPaymentFact(ctx context.Context, application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) (claimRecoveryPaymentDomainResult, error) {
-	var result claimRecoveryPaymentDomainResult
-	if err := validateClaimRecoveryPaymentFactApplication(application, fact); err != nil {
-		return result, err
-	}
-
-	paymentResult, err := svc.store.ProcessPaymentSuccessTx(ctx, db.ProcessPaymentSuccessTxParams{
-		PaymentOrderID: application.BusinessObjectID,
-	})
-	if err != nil {
-		return result, fmt.Errorf("process claim recovery payment success: %w", err)
-	}
-
-	result = claimRecoveryPaymentDomainResult{
-		PaymentOrder: paymentResult.PaymentOrder,
-		Processed:    paymentResult.Processed,
-	}
-	return result, nil
-}
-
-func validateRiderDepositPaymentFactApplication(application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) error {
-	if !fact.IsTerminal {
-		return fmt.Errorf("payment fact %d is not terminal", fact.ID)
-	}
-	if fact.Provider != db.ExternalPaymentProviderWechat || fact.Channel != db.PaymentChannelDirect || fact.Capability != db.ExternalPaymentCapabilityDirectJSAPIPayment {
-		return fmt.Errorf("payment fact %d is not a wechat direct payment fact", fact.ID)
-	}
-	if fact.ExternalObjectType != db.ExternalPaymentObjectPayment {
-		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)
-	}
-	if fact.BusinessOwner.Valid && fact.BusinessOwner.String != db.ExternalPaymentBusinessOwnerRiderDeposit {
-		return fmt.Errorf("payment fact %d business owner %q is not rider deposit", fact.ID, fact.BusinessOwner.String)
-	}
-	if fact.BusinessObjectType.Valid && fact.BusinessObjectType.String != paymentFactBusinessObjectPaymentOrder {
-		return fmt.Errorf("payment fact %d has unsupported business object type %q", fact.ID, fact.BusinessObjectType.String)
-	}
-	if fact.BusinessObjectID.Valid && fact.BusinessObjectID.Int64 != application.BusinessObjectID {
-		return fmt.Errorf("payment fact %d business object id %d does not match application object id %d", fact.ID, fact.BusinessObjectID.Int64, application.BusinessObjectID)
-	}
-	if fact.TerminalStatus != db.ExternalPaymentTerminalStatusSuccess {
-		return fmt.Errorf("unsupported rider deposit payment terminal status %q", fact.TerminalStatus)
-	}
-	return nil
-}
-
-func validateClaimRecoveryPaymentFactApplication(application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) error {
-	if !fact.IsTerminal {
-		return fmt.Errorf("payment fact %d is not terminal", fact.ID)
-	}
-	if fact.Provider != db.ExternalPaymentProviderWechat || fact.Channel != db.PaymentChannelDirect || fact.Capability != db.ExternalPaymentCapabilityDirectJSAPIPayment {
-		return fmt.Errorf("payment fact %d is not a wechat direct payment fact", fact.ID)
-	}
-	if fact.ExternalObjectType != db.ExternalPaymentObjectPayment {
-		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)
-	}
-	if fact.BusinessOwner.Valid && fact.BusinessOwner.String != db.ExternalPaymentBusinessOwnerClaimRecovery {
-		return fmt.Errorf("payment fact %d business owner %q is not claim recovery", fact.ID, fact.BusinessOwner.String)
-	}
-	if fact.BusinessObjectType.Valid && fact.BusinessObjectType.String != paymentFactBusinessObjectPaymentOrder {
-		return fmt.Errorf("payment fact %d has unsupported business object type %q", fact.ID, fact.BusinessObjectType.String)
-	}
-	if fact.BusinessObjectID.Valid && fact.BusinessObjectID.Int64 != application.BusinessObjectID {
-		return fmt.Errorf("payment fact %d business object id %d does not match application object id %d", fact.ID, fact.BusinessObjectID.Int64, application.BusinessObjectID)
-	}
-	if fact.TerminalStatus != db.ExternalPaymentTerminalStatusSuccess {
-		return fmt.Errorf("unsupported claim recovery payment terminal status %q", fact.TerminalStatus)
-	}
-	return nil
-}
-
 func (svc *PaymentFactService) applyRiderDepositRefundFact(ctx context.Context, application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) (riderDepositRefundDomainResult, error) {
 	var result riderDepositRefundDomainResult
 	if err := validateRiderDepositRefundFactApplication(application, fact); err != nil {
@@ -1365,7 +1302,7 @@ func (svc *PaymentFactService) applyOrderRefundFact(ctx context.Context, applica
 
 	switch fact.TerminalStatus {
 	case db.ExternalPaymentTerminalStatusSuccess:
-		if refundOrder.Status != riderDepositRefundStatusSuccess {
+		if refundOrder.Status != refundOrderStatusSuccess {
 			updatedRefundOrder, err := svc.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
 			if err != nil {
 				return result, fmt.Errorf("update order refund order to success: %w", err)
@@ -1376,17 +1313,41 @@ func (svc *PaymentFactService) applyOrderRefundFact(ctx context.Context, applica
 			return result, fmt.Errorf("maybe mark order payment order refunded: %w", err)
 		}
 	case db.ExternalPaymentTerminalStatusClosed:
-		if refundOrder.Status != riderDepositRefundStatusClosed {
+		if isTerminalRefundOrderStatus(refundOrder.Status) && refundOrder.Status != refundOrderStatusClosed {
+			return result, nil
+		}
+		if refundOrder.Status != refundOrderStatusClosed {
 			updatedRefundOrder, err := svc.store.UpdateRefundOrderToClosed(ctx, refundOrder.ID)
 			if err != nil {
+				if terminal, ok, reloadErr := svc.refundOrderAfterTerminalUpdateConflict(ctx, refundOrder.ID); reloadErr != nil {
+					return result, fmt.Errorf("reload order refund order after closed conflict: %w", reloadErr)
+				} else if ok {
+					if terminal.Status != refundOrderStatusClosed {
+						return result, nil
+					}
+					refundOrder = terminal
+					break
+				}
 				return result, fmt.Errorf("update order refund order to closed: %w", err)
 			}
 			refundOrder = updatedRefundOrder
 		}
 	case db.ExternalPaymentTerminalStatusFailed:
-		if refundOrder.Status != riderDepositRefundStatusFailed {
+		if isTerminalRefundOrderStatus(refundOrder.Status) && refundOrder.Status != refundOrderStatusFailed {
+			return result, nil
+		}
+		if refundOrder.Status != refundOrderStatusFailed {
 			updatedRefundOrder, err := svc.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
 			if err != nil {
+				if terminal, ok, reloadErr := svc.refundOrderAfterTerminalUpdateConflict(ctx, refundOrder.ID); reloadErr != nil {
+					return result, fmt.Errorf("reload order refund order after failed conflict: %w", reloadErr)
+				} else if ok {
+					if terminal.Status != refundOrderStatusFailed {
+						return result, nil
+					}
+					refundOrder = terminal
+					break
+				}
 				return result, fmt.Errorf("update order refund order to failed: %w", err)
 			}
 			refundOrder = updatedRefundOrder
@@ -1418,8 +1379,8 @@ func validateOrderRefundFactApplication(application db.ExternalPaymentFactApplic
 	if !fact.IsTerminal {
 		return fmt.Errorf("payment fact %d is not terminal", fact.ID)
 	}
-	if !isWechatMainBusinessRefundFact(fact) {
-		return fmt.Errorf("payment fact %d is not a wechat main-business refund fact", fact.ID)
+	if !isSupportedMainBusinessRefundFact(fact) {
+		return fmt.Errorf("payment fact %d is not a supported main-business refund fact", fact.ID)
 	}
 	if fact.ExternalObjectType != db.ExternalPaymentObjectRefund {
 		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)
@@ -1457,7 +1418,7 @@ func (svc *PaymentFactService) applyReservationRefundFact(ctx context.Context, a
 	transitionedToSuccess := false
 	switch fact.TerminalStatus {
 	case db.ExternalPaymentTerminalStatusSuccess:
-		if refundOrder.Status != riderDepositRefundStatusSuccess {
+		if refundOrder.Status != refundOrderStatusSuccess {
 			updatedRefundOrder, err := svc.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
 			if err != nil {
 				return result, fmt.Errorf("update reservation refund order to success: %w", err)
@@ -1477,17 +1438,41 @@ func (svc *PaymentFactService) applyReservationRefundFact(ctx context.Context, a
 			}
 		}
 	case db.ExternalPaymentTerminalStatusClosed:
-		if refundOrder.Status != riderDepositRefundStatusClosed {
+		if isTerminalRefundOrderStatus(refundOrder.Status) && refundOrder.Status != refundOrderStatusClosed {
+			return result, nil
+		}
+		if refundOrder.Status != refundOrderStatusClosed {
 			updatedRefundOrder, err := svc.store.UpdateRefundOrderToClosed(ctx, refundOrder.ID)
 			if err != nil {
+				if terminal, ok, reloadErr := svc.refundOrderAfterTerminalUpdateConflict(ctx, refundOrder.ID); reloadErr != nil {
+					return result, fmt.Errorf("reload reservation refund order after closed conflict: %w", reloadErr)
+				} else if ok {
+					if terminal.Status != refundOrderStatusClosed {
+						return result, nil
+					}
+					refundOrder = terminal
+					break
+				}
 				return result, fmt.Errorf("update reservation refund order to closed: %w", err)
 			}
 			refundOrder = updatedRefundOrder
 		}
 	case db.ExternalPaymentTerminalStatusFailed:
-		if refundOrder.Status != riderDepositRefundStatusFailed {
+		if isTerminalRefundOrderStatus(refundOrder.Status) && refundOrder.Status != refundOrderStatusFailed {
+			return result, nil
+		}
+		if refundOrder.Status != refundOrderStatusFailed {
 			updatedRefundOrder, err := svc.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
 			if err != nil {
+				if terminal, ok, reloadErr := svc.refundOrderAfterTerminalUpdateConflict(ctx, refundOrder.ID); reloadErr != nil {
+					return result, fmt.Errorf("reload reservation refund order after failed conflict: %w", reloadErr)
+				} else if ok {
+					if terminal.Status != refundOrderStatusFailed {
+						return result, nil
+					}
+					refundOrder = terminal
+					break
+				}
 				return result, fmt.Errorf("update reservation refund order to failed: %w", err)
 			}
 			refundOrder = updatedRefundOrder
@@ -1517,8 +1502,8 @@ func validateReservationRefundFactApplication(application db.ExternalPaymentFact
 	if !fact.IsTerminal {
 		return fmt.Errorf("payment fact %d is not terminal", fact.ID)
 	}
-	if !isWechatMainBusinessRefundFact(fact) {
-		return fmt.Errorf("payment fact %d is not a wechat main-business refund fact", fact.ID)
+	if !isSupportedMainBusinessRefundFact(fact) {
+		return fmt.Errorf("payment fact %d is not a supported main-business refund fact", fact.ID)
 	}
 	if fact.ExternalObjectType != db.ExternalPaymentObjectRefund {
 		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)
@@ -1550,8 +1535,44 @@ func isWechatMainBusinessRefundFact(fact db.ExternalPaymentFact) bool {
 	return fact.Channel == db.PaymentChannelOrdinaryServiceProvider && fact.Capability == db.ExternalPaymentCapabilityPartnerRefund
 }
 
+func isSupportedMainBusinessRefundFact(fact db.ExternalPaymentFact) bool {
+	return isWechatMainBusinessRefundFact(fact) ||
+		(fact.Provider == db.ExternalPaymentProviderBaofu &&
+			fact.Channel == db.PaymentChannelBaofuAggregate &&
+			fact.Capability == db.ExternalPaymentCapabilityBaofuRefund)
+}
+
 func isOrderRefundPaymentOrder(paymentOrder db.PaymentOrder) bool {
 	return paymentOrder.OrderID.Valid && !paymentOrder.ReservationID.Valid && paymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerOrder
+}
+
+const (
+	refundOrderStatusSuccess = "success"
+	refundOrderStatusFailed  = "failed"
+	refundOrderStatusClosed  = "closed"
+)
+
+func isTerminalRefundOrderStatus(status string) bool {
+	switch status {
+	case refundOrderStatusSuccess, refundOrderStatusFailed, refundOrderStatusClosed:
+		return true
+	default:
+		return false
+	}
+}
+
+func (svc *PaymentFactService) refundOrderAfterTerminalUpdateConflict(ctx context.Context, refundOrderID int64) (db.RefundOrder, bool, error) {
+	current, err := svc.store.GetRefundOrder(ctx, refundOrderID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return db.RefundOrder{}, false, nil
+		}
+		return db.RefundOrder{}, false, err
+	}
+	if !isTerminalRefundOrderStatus(current.Status) {
+		return db.RefundOrder{}, false, nil
+	}
+	return current, true, nil
 }
 
 func (svc *PaymentFactService) maybeMarkPaymentOrderRefunded(ctx context.Context, paymentOrderID int64, paymentAmount int64) error {
@@ -1588,8 +1609,8 @@ func validateProfitSharingFactApplication(application db.ExternalPaymentFactAppl
 	if !fact.IsTerminal {
 		return fmt.Errorf("payment fact %d is not terminal", fact.ID)
 	}
-	if !isWechatMainBusinessProfitSharingFact(fact) {
-		return fmt.Errorf("payment fact %d is not a supported wechat profit sharing fact", fact.ID)
+	if !isSupportedMainBusinessProfitSharingFact(fact) {
+		return fmt.Errorf("payment fact %d is not a supported main business profit sharing fact", fact.ID)
 	}
 	if fact.ExternalObjectType != db.ExternalPaymentObjectProfitSharing {
 		return fmt.Errorf("payment fact %d has unsupported external object type %q", fact.ID, fact.ExternalObjectType)
@@ -1616,6 +1637,14 @@ func (svc *PaymentFactService) applyProfitSharingSuccessFact(ctx context.Context
 	}
 	updated, err := svc.store.UpdateProfitSharingOrderToFinished(ctx, profitSharingOrderID)
 	if err != nil {
+		if terminal, ok, reloadErr := svc.profitSharingOrderAfterTerminalUpdateConflict(ctx, profitSharingOrderID); reloadErr != nil {
+			return db.ProfitSharingOrder{}, fmt.Errorf("reload profit sharing order after finished conflict: %w", reloadErr)
+		} else if ok {
+			if terminal.Status == db.ProfitSharingOrderStatusFinished {
+				return terminal, nil
+			}
+			return db.ProfitSharingOrder{}, fmt.Errorf("profit sharing order %d already reached terminal status %q before success fact", profitSharingOrderID, terminal.Status)
+		}
 		return db.ProfitSharingOrder{}, fmt.Errorf("update profit sharing order to finished: %w", err)
 	}
 	return updated, nil
@@ -1629,11 +1658,41 @@ func (svc *PaymentFactService) applyProfitSharingFailedFact(ctx context.Context,
 	if order.Status == db.ProfitSharingOrderStatusFailed {
 		return order, nil
 	}
+	if order.Status == db.ProfitSharingOrderStatusFinished {
+		return db.ProfitSharingOrder{}, nil
+	}
+	if order.Status != db.ProfitSharingOrderStatusProcessing {
+		return db.ProfitSharingOrder{}, fmt.Errorf("profit sharing order %d status %q cannot apply failed fact", profitSharingOrderID, order.Status)
+	}
 	updated, err := svc.store.UpdateProfitSharingOrderToFailed(ctx, profitSharingOrderID)
 	if err != nil {
+		if terminal, ok, reloadErr := svc.profitSharingOrderAfterTerminalUpdateConflict(ctx, profitSharingOrderID); reloadErr != nil {
+			return db.ProfitSharingOrder{}, fmt.Errorf("reload profit sharing order after failed conflict: %w", reloadErr)
+		} else if ok {
+			if terminal.Status == db.ProfitSharingOrderStatusFailed {
+				return terminal, nil
+			}
+			return db.ProfitSharingOrder{}, nil
+		}
 		return db.ProfitSharingOrder{}, fmt.Errorf("update profit sharing order to failed: %w", err)
 	}
 	return updated, nil
+}
+
+func (svc *PaymentFactService) profitSharingOrderAfterTerminalUpdateConflict(ctx context.Context, profitSharingOrderID int64) (db.ProfitSharingOrder, bool, error) {
+	current, err := svc.store.GetProfitSharingOrder(ctx, profitSharingOrderID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return db.ProfitSharingOrder{}, false, nil
+		}
+		return db.ProfitSharingOrder{}, false, err
+	}
+	switch current.Status {
+	case db.ProfitSharingOrderStatusFinished, db.ProfitSharingOrderStatusFailed:
+		return current, true, nil
+	default:
+		return db.ProfitSharingOrder{}, false, nil
+	}
 }
 
 func (svc *PaymentFactService) applyProfitSharingReturnFact(ctx context.Context, application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) (profitSharingReturnDomainResult, error) {
@@ -1891,6 +1950,9 @@ func (svc *PaymentFactService) createPaymentDomainOutboxForAppliedFact(ctx conte
 		return svc.createOrderPaymentOutbox(ctx, application, fact, *domainResult.OrderPayment)
 	}
 	if domainResult.ClaimRecoveryPayment != nil {
+		return nil, nil
+	}
+	if domainResult.BaofuVerifyFeePayment != nil {
 		return nil, nil
 	}
 	if domainResult.SettlementVerification != nil {
@@ -2409,17 +2471,4 @@ func profitSharingReturnFactFailReason(rawResource []byte) (string, error) {
 		return "", fmt.Errorf("decode profit sharing return fact resource: %w", err)
 	}
 	return payload.FailReason, nil
-}
-
-func (svc *PaymentFactService) markExternalPaymentFactApplicationFailed(ctx context.Context, application db.ExternalPaymentFactApplication, applyErr error) error {
-	nextRetryAt := svc.now().UTC().Add(paymentFactApplicationRetryDelay)
-	_, markErr := svc.store.MarkExternalPaymentFactApplicationFailed(ctx, db.MarkExternalPaymentFactApplicationFailedParams{
-		ID:          application.ID,
-		LastError:   pgtype.Text{String: applyErr.Error(), Valid: true},
-		NextRetryAt: pgtype.Timestamptz{Time: nextRetryAt, Valid: true},
-	})
-	if markErr != nil {
-		return fmt.Errorf("%w; mark external payment fact application failed: %v", applyErr, markErr)
-	}
-	return applyErr
 }

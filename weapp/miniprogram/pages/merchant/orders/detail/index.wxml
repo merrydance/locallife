@@ -322,7 +322,7 @@
         type="digit"
         value="{{refundForm.refund_amount}}"
         data-field="refund_amount"
-        placeholder="请输入退款金额，单位元"
+        placeholder="不可超过剩余可退金额"
         bindchange="onRefundFieldChange"
       />
     </view>

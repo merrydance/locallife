@@ -169,3 +169,66 @@ func createMainPackageTestPublicKeyFile(t *testing.T, dir string, publicKey *rsa
 	require.NoError(t, err)
 	return path
 }
+
+func TestBuildBaofuAggregateClient_UsesRuntimeConfig(t *testing.T) {
+	privateKey, publicKey := generateMainPackageTestKeyPair(t)
+	client, err := buildBaofuAggregateClient(util.Config{
+		BaofuMainBusinessEnabled:    true,
+		WechatMiniAppID:             "wx1234567890abcdef",
+		BaofuCollectMerchantID:      "102004465",
+		BaofuCollectTerminalID:      "200005200",
+		BaofuPayoutMerchantID:       "102004466",
+		BaofuPayoutTerminalID:       "200005201",
+		BaofuPrivateKeyPEM:          mainPackagePrivateKeyPEM(t, privateKey),
+		BaofuPublicKeyPEM:           mainPackagePublicKeyPEM(t, publicKey),
+		BaofuSignSerialNo:           "signsn1",
+		BaofuEncryptionSerialNo:     "encsn1",
+		BaofuNotifyBaseURL:          "https://api.example.com/v1/webhooks/baofu",
+		BaofuPaymentNotifyURL:       "https://api.example.com/v1/webhooks/baofu/payment",
+		BaofuProfitSharingNotifyURL: "https://api.example.com/v1/webhooks/baofu/share",
+		BaofuRefundNotifyURL:        "https://api.example.com/v1/webhooks/baofu/refund",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, client)
+}
+
+func mainPackagePrivateKeyPEM(t *testing.T, privateKey *rsa.PrivateKey) string {
+	t.Helper()
+	privateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	require.NoError(t, err)
+	return string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateKeyBytes}))
+}
+
+func mainPackagePublicKeyPEM(t *testing.T, publicKey *rsa.PublicKey) string {
+	t.Helper()
+	publicKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+	require.NoError(t, err)
+	return string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicKeyBytes}))
+}
+
+func TestValidateProductionPaymentRuntime_AllowsConfiguredBaofuMainBusiness(t *testing.T) {
+	privateKey, publicKey := generateMainPackageTestKeyPair(t)
+	err := validateProductionPaymentRuntime(validMainPackageBaofuConfig(t, privateKey, publicKey))
+	require.NoError(t, err)
+}
+
+func validMainPackageBaofuConfig(t *testing.T, privateKey *rsa.PrivateKey, publicKey *rsa.PublicKey) util.Config {
+	t.Helper()
+	return util.Config{
+		Environment:                 "production",
+		BaofuMainBusinessEnabled:    true,
+		WechatMiniAppID:             "wx1234567890abcdef",
+		BaofuCollectMerchantID:      "102004465",
+		BaofuCollectTerminalID:      "200005200",
+		BaofuPayoutMerchantID:       "102004466",
+		BaofuPayoutTerminalID:       "200005201",
+		BaofuPrivateKeyPEM:          mainPackagePrivateKeyPEM(t, privateKey),
+		BaofuPublicKeyPEM:           mainPackagePublicKeyPEM(t, publicKey),
+		BaofuSignSerialNo:           "signsn1",
+		BaofuEncryptionSerialNo:     "encsn1",
+		BaofuNotifyBaseURL:          "https://api.example.com/v1/webhooks/baofu",
+		BaofuPaymentNotifyURL:       "https://api.example.com/v1/webhooks/baofu/payment",
+		BaofuProfitSharingNotifyURL: "https://api.example.com/v1/webhooks/baofu/share",
+		BaofuRefundNotifyURL:        "https://api.example.com/v1/webhooks/baofu/refund",
+	}
+}

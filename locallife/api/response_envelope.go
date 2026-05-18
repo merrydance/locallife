@@ -100,6 +100,9 @@ func extractErrorMessage(status int, body []byte) string {
 	// For 500, always keep it safe. For 502/503/504, handlers may provide
 	// a sanitized public message such as service-unavailable guidance.
 	if status == http.StatusInternalServerError {
+		if msg := extractAllowedInternalServerErrorMessage(body); msg != "" {
+			return msg
+		}
 		return "internal server error"
 	}
 
@@ -125,9 +128,43 @@ func extractErrorMessage(status int, body []byte) string {
 	return http.StatusText(status)
 }
 
+func extractAllowedInternalServerErrorMessage(body []byte) string {
+	body = bytes.TrimSpace(body)
+	if len(body) == 0 {
+		return ""
+	}
+
+	var probe struct {
+		Error   string `json:"error"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(body, &probe); err != nil {
+		return ""
+	}
+
+	switch msg := strings.TrimSpace(firstNonEmpty(probe.Error, probe.Message)); msg {
+	case merchantOrderFeeBreakdownUnavailableMessage:
+		return msg
+	default:
+		return ""
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 func sanitizeServerErrorMessage(status int, message string) string {
 	trimmed := strings.TrimSpace(message)
 	if status == http.StatusInternalServerError {
+		if isAllowedInternalServerErrorMessage(trimmed) {
+			return trimmed
+		}
 		return "internal server error"
 	}
 	if trimmed == "" {
@@ -146,6 +183,15 @@ func sanitizeServerErrorMessage(status int, message string) string {
 		return "服务暂不可用，请稍后重试"
 	default:
 		return trimmed
+	}
+}
+
+func isAllowedInternalServerErrorMessage(message string) bool {
+	switch strings.TrimSpace(message) {
+	case merchantOrderFeeBreakdownUnavailableMessage:
+		return true
+	default:
+		return false
 	}
 }
 

@@ -50,6 +50,16 @@ func (store *SQLStore) CreateRefundOrderTx(ctx context.Context, arg CreateRefund
 			return &requestError{statusCode: http.StatusBadRequest, err: errors.New("payment order is not paid")}
 		}
 
+		if paymentOrder.PaymentChannel == PaymentChannelBaofuAggregate {
+			guard, err := q.GetBaofuPaymentOrderRefundGuardForUpdate(ctx, arg.PaymentOrderID)
+			if err != nil {
+				return fmt.Errorf("get baofu refund guard: %w", err)
+			}
+			if guard.HasStartedProfitSharing {
+				return &requestError{statusCode: http.StatusBadRequest, err: errors.New("订单已进入结算分账流程，不支持退款")}
+			}
+		}
+
 		// 在持锁状态下统计已占用退款额度（pending/processing/success 都占用额度）
 		alreadyRefunded, err := q.GetTotalRefundedByPaymentOrder(ctx, arg.PaymentOrderID)
 		if err != nil {

@@ -13,6 +13,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/merrydance/locallife/baofu"
+	baofuaccount "github.com/merrydance/locallife/baofu/account"
+	baofuaccountnotification "github.com/merrydance/locallife/baofu/account/notification"
+	"github.com/merrydance/locallife/baofu/aggregatepay"
+	baofuaggregatenotification "github.com/merrydance/locallife/baofu/aggregatepay/notification"
+	"github.com/merrydance/locallife/baofu/merchantreport"
 	"github.com/merrydance/locallife/cloudprint"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/docs"
@@ -60,118 +66,47 @@ type successMessageResponse struct {
 
 // Server serves HTTP requests for our banking service.
 type Server struct {
-	config                      util.Config
-	store                       db.Store
-	tokenMaker                  token.Maker
-	auditWriter                 AuditWriter
-	wechatClient                wechat.WechatClient
-	directPaymentClient         wechat.DirectPaymentClientInterface                            // 小程序直连支付（骑手押金、追偿付款）
-	transferClient              wechat.TransferClientInterface                                 // 商家转账到零钱（索赔赔付）
-	ecommerceClient             wechat.EcommerceClientInterface                                // 平台收付通（历史/冷备路径）
-	ordinarySPClient            ordinaryserviceprovider.OrdinaryServiceProviderClientInterface // 普通服务商支付（商户主业务支付）
-	dataEncryptor               util.DataEncryptor                                             // 敏感数据加密器（本地存储加密）
-	mapClient                   maps.TencentMapClientInterface                                 // 地图客户端（自建 OSM）
-	weatherCache                weather.WeatherCache
-	taskDistributor             worker.TaskDistributor
-	wsHub                       *websocket.Hub           // WebSocket连接管理（骑手和商户）
-	wsPubSub                    *websocket.PubSubManager // Redis Pub/Sub管理（跨进程推送）
-	deliveryBroadcast           *logic.DeliveryBroadcastLogic
-	rateLimiter                 *RateLimiter
-	mediaRegistry               *media.Registry
-	mediaResolver               *media.URLResolver
-	imageDeleter                *imageDeleteWorker   // 有界异步图片删除 worker pool
-	keywordWorker               *searchKeywordWorker // 有界异步搜索关键词记录 worker pool
-	rulesEngine                 rules.Engine
-	routeService                *logic.RouteService
-	orderCommandSvc             logic.OrderCommandService
-	orderQuerySvc               logic.OrderQueryService
-	paymentFacade               logic.PaymentFacade
-	refundOrchestrator          logic.RefundOrchestrator
-	paymentFactService          *logic.PaymentFactService
-	onboardingReviewService     *logic.OnboardingReviewService
-	credentialGovernanceService *logic.CredentialGovernanceService
-	mediaStorage                media.ObjectStorage
-	printerClient               cloudprint.Client
-	router                      *gin.Engine
-	applymentCatalogCache       *applymentCatalogCache
-	applymentCatalogCacheMu     sync.Mutex
-	redisClient                 *redis.Client // Redis 客户端（绑定码等功能使用）
-}
-
-// SetDirectPaymentClientForTest injects a payment client in tests.
-// It rebuilds the cached order services immediately so they pick up the new
-// client; this prevents nil-pointer panics in handlers that access
-// orderCommandSvc / orderQuerySvc directly. Transfer client injection must be
-// handled separately via SetTransferClientForTest.
-func (server *Server) SetDirectPaymentClientForTest(client wechat.DirectPaymentClientInterface) {
-	server.directPaymentClient = client
-	newSvc := server.buildOrderCommandService()
-	server.orderCommandSvc = newSvc
-	if qs, ok := newSvc.(logic.OrderQueryService); ok {
-		server.orderQuerySvc = qs
-	}
-}
-
-// SetTransferClientForTest injects a transfer client in tests.
-func (server *Server) SetTransferClientForTest(client wechat.TransferClientInterface) {
-	server.transferClient = client
-}
-
-// SetPaymentClientsForTest injects direct payment and transfer clients together
-// for tests that need to manage both capabilities as one runtime fixture.
-func (server *Server) SetPaymentClientsForTest(directClient wechat.DirectPaymentClientInterface, transferClient wechat.TransferClientInterface) {
-	server.directPaymentClient = directClient
-	server.transferClient = transferClient
-	newSvc := server.buildOrderCommandService()
-	server.orderCommandSvc = newSvc
-	if qs, ok := newSvc.(logic.OrderQueryService); ok {
-		server.orderQuerySvc = qs
-	}
-}
-
-// ResetPaymentClientsForTest clears direct payment and transfer clients
-// together so shared test servers do not leak runtime state across cases.
-func (server *Server) ResetPaymentClientsForTest() {
-	server.SetPaymentClientsForTest(nil, nil)
-}
-
-// SetTaskDistributorForTest injects a task distributor in tests.
-func (server *Server) SetTaskDistributorForTest(distributor worker.TaskDistributor) {
-	server.taskDistributor = distributor
-	newSvc := server.buildOrderCommandService()
-	server.orderCommandSvc = newSvc
-	if qs, ok := newSvc.(logic.OrderQueryService); ok {
-		server.orderQuerySvc = qs
-	}
-}
-
-// SetEcommerceClientForTest injects an ecommerce client in tests.
-// It also clears the cached paymentFacade and refundOrchestrator so they are
-// rebuilt with the new client on the next request.
-func (server *Server) SetEcommerceClientForTest(client wechat.EcommerceClientInterface) {
-	server.ecommerceClient = client
-	newSvc := server.buildOrderCommandService()
-	server.orderCommandSvc = newSvc
-	if qs, ok := newSvc.(logic.OrderQueryService); ok {
-		server.orderQuerySvc = qs
-	}
-	server.paymentFacade = nil
-	server.refundOrchestrator = nil
-}
-
-func (server *Server) SetOrdinaryServiceProviderClientForTest(client ordinaryserviceprovider.OrdinaryServiceProviderClientInterface) {
-	server.ordinarySPClient = client
-	newSvc := server.buildOrderCommandService()
-	server.orderCommandSvc = newSvc
-	if qs, ok := newSvc.(logic.OrderQueryService); ok {
-		server.orderQuerySvc = qs
-	}
-	server.paymentFacade = nil
-	server.refundOrchestrator = nil
-}
-
-func (server *Server) SetPrinterClientForTest(client cloudprint.Client) {
-	server.printerClient = client
+	config                         util.Config
+	store                          db.Store
+	tokenMaker                     token.Maker
+	auditWriter                    AuditWriter
+	wechatClient                   wechat.WechatClient
+	directPaymentClient            wechat.DirectPaymentClientInterface                            // 小程序直连支付（骑手押金、追偿付款）
+	transferClient                 wechat.TransferClientInterface                                 // 商家转账到零钱（索赔赔付）
+	ecommerceClient                wechat.EcommerceClientInterface                                // 平台收付通（历史/冷备路径）
+	ordinarySPClient               ordinaryserviceprovider.OrdinaryServiceProviderClientInterface // 普通服务商支付（商户主业务支付）
+	baofuAggregateClient           aggregatepay.Client                                            // 宝付聚合支付（主业务支付替换路径）
+	baofuAccountClient             logic.BaofuAccountClient                                       // 宝付宝财通二级户开户
+	baofuMerchantReportClient      *merchantreport.Client                                         // 宝付微信商户报备/授权目录
+	dataEncryptor                  util.DataEncryptor                                             // 敏感数据加密器（本地存储加密）
+	mapClient                      maps.TencentMapClientInterface                                 // 地图客户端（自建 OSM）
+	weatherCache                   weather.WeatherCache
+	taskDistributor                worker.TaskDistributor
+	wsHub                          *websocket.Hub           // WebSocket连接管理（骑手和商户）
+	wsPubSub                       *websocket.PubSubManager // Redis Pub/Sub管理（跨进程推送）
+	deliveryBroadcast              *logic.DeliveryBroadcastLogic
+	rateLimiter                    *RateLimiter
+	mediaRegistry                  *media.Registry
+	mediaResolver                  *media.URLResolver
+	imageDeleter                   *imageDeleteWorker   // 有界异步图片删除 worker pool
+	keywordWorker                  *searchKeywordWorker // 有界异步搜索关键词记录 worker pool
+	rulesEngine                    rules.Engine
+	routeService                   *logic.RouteService
+	orderCommandSvc                logic.OrderCommandService
+	orderQuerySvc                  logic.OrderQueryService
+	paymentFacade                  logic.PaymentFacade
+	refundOrchestrator             logic.RefundOrchestrator
+	paymentFactService             *logic.PaymentFactService
+	onboardingReviewService        *logic.OnboardingReviewService
+	credentialGovernanceService    *logic.CredentialGovernanceService
+	baofuAccountNotificationParser baofuAccountNotificationParser
+	baofuPaymentNotificationParser baofuAggregatePaymentNotificationParser
+	mediaStorage                   media.ObjectStorage
+	printerClient                  cloudprint.Client
+	router                         *gin.Engine
+	applymentCatalogCache          *applymentCatalogCache
+	applymentCatalogCacheMu        sync.Mutex
+	redisClient                    *redis.Client // Redis 客户端（绑定码等功能使用）
 }
 
 // NewServer creates a new HTTP server and set up routing.
@@ -191,6 +126,11 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	var transferClient wechat.TransferClientInterface
 	var ecommerceClient wechat.EcommerceClientInterface
 	var ordinarySPClient ordinaryserviceprovider.OrdinaryServiceProviderClientInterface
+	var baofuAggregateClient aggregatepay.Client
+	var baofuAccountClient logic.BaofuAccountClient
+	var baofuMerchantReportClient *merchantreport.Client
+	var baofuAccountNotificationParser baofuAccountNotificationParser
+	var baofuPaymentNotificationParser baofuAggregatePaymentNotificationParser
 	if config.HasWechatPayRuntimeConfig() {
 		if err := config.ValidateWechatPayConfig(); err != nil {
 			return nil, err
@@ -229,7 +169,20 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 			return nil, fmt.Errorf("cannot create ordinary service provider client: %w", err)
 		}
 	}
-
+	if config.HasBaofuRuntimeConfig() {
+		if err := config.ValidateBaofuConfig(); err != nil {
+			return nil, err
+		}
+		baofuRootClient, err := baofu.NewClient(config.ToBaofuConfig(), nil)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create baofu client: %w", err)
+		}
+		baofuAccountClient = baofuaccount.NewClient(baofuRootClient)
+		baofuAggregateClient = aggregatepay.NewClient(baofuRootClient)
+		baofuMerchantReportClient = merchantreport.NewClient(baofuRootClient)
+		baofuAccountNotificationParser = baofuaccountnotification.NewParser(baofuRootClient.Config().BaofuPublicKeyPEM)
+		baofuPaymentNotificationParser = baofuaggregatenotification.NewParserWithPublicKey(baofuRootClient.Config().BaofuPublicKeyPEM)
+	}
 	// 创建 LBS 地图客户端（统一使用腾讯地图）
 	var mapClient maps.TencentMapClientInterface
 	if config.TencentMapKey != "" {
@@ -327,28 +280,39 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	}
 
 	server := &Server{
-		config:                      config,
-		store:                       store,
-		tokenMaker:                  tokenMaker,
-		auditWriter:                 auditWriter,
-		wechatClient:                wechatClient,
-		directPaymentClient:         paymentClient,
-		transferClient:              transferClient,
-		ecommerceClient:             ecommerceClient,
-		ordinarySPClient:            ordinarySPClient,
-		dataEncryptor:               dataEncryptor,
-		mapClient:                   mapClient,
-		weatherCache:                weatherCache,
-		taskDistributor:             taskDistributor,
-		printerClient:               cloudprint.NewFeieyunClientFromConfig(config),
-		wsHub:                       wsHub,
-		wsPubSub:                    wsPubSub,
-		rulesEngine:                 engine,
-		imageDeleter:                newImageDeleteWorker(),
-		keywordWorker:               newSearchKeywordWorker(store),
-		paymentFactService:          logic.NewPaymentFactService(store).WithPaymentSuccessConfig(config.RiderAverageSpeed, config.DefaultPrepareTime),
-		onboardingReviewService:     logic.NewOnboardingReviewService(store),
-		credentialGovernanceService: logic.NewCredentialGovernanceService(store),
+		config:                    config,
+		store:                     store,
+		tokenMaker:                tokenMaker,
+		auditWriter:               auditWriter,
+		wechatClient:              wechatClient,
+		directPaymentClient:       paymentClient,
+		transferClient:            transferClient,
+		ecommerceClient:           ecommerceClient,
+		ordinarySPClient:          ordinarySPClient,
+		baofuAggregateClient:      baofuAggregateClient,
+		baofuAccountClient:        baofuAccountClient,
+		baofuMerchantReportClient: baofuMerchantReportClient,
+		dataEncryptor:             dataEncryptor,
+		mapClient:                 mapClient,
+		weatherCache:              weatherCache,
+		taskDistributor:           taskDistributor,
+		printerClient:             cloudprint.NewFeieyunClientFromConfig(config),
+		wsHub:                     wsHub,
+		wsPubSub:                  wsPubSub,
+		rulesEngine:               engine,
+		imageDeleter:              newImageDeleteWorker(),
+		keywordWorker:             newSearchKeywordWorker(store),
+		paymentFactService: logic.NewPaymentFactService(store).
+			WithPaymentSuccessConfig(config.RiderAverageSpeed, config.DefaultPrepareTime).
+			WithBaofuVerifyFeeContinuation(logic.NewBaofuAccountOnboardingService(store, baofuAccountClient, paymentClient, dataEncryptor, logic.BaofuAccountOnboardingConfig{
+				VerifyFeeFen:      config.BaofuAccountVerifyFeeFen,
+				IndustryID:        config.BaofuBusinessIndustryID,
+				CollectMerchantID: config.BaofuCollectMerchantID,
+			})),
+		baofuAccountNotificationParser: baofuAccountNotificationParser,
+		baofuPaymentNotificationParser: baofuPaymentNotificationParser,
+		onboardingReviewService:        logic.NewOnboardingReviewService(store),
+		credentialGovernanceService:    logic.NewCredentialGovernanceService(store),
 	}
 
 	// 初始化 Redis 客户端（供绑定码等功能使用）
@@ -575,6 +539,13 @@ func (server *Server) setupRouter() {
 		webhooksGroup.POST("/wechat-ordinary/refund-notify", server.handleOrdinaryServiceProviderRefundNotify)
 		webhooksGroup.POST("/wechat-ordinary/profit-sharing-notify", server.handleOrdinaryServiceProviderProfitSharingNotify)
 		webhooksGroup.POST("/wechat-ordinary/violation-notify", server.handleOrdinaryServiceProviderViolationNotify)
+		// 宝付宝财通回调
+		webhooksGroup.GET("/baofu/account/open", server.handleBaofuAccountOpenNotify)
+		webhooksGroup.POST("/baofu/account/open", server.handleBaofuAccountOpenNotify)
+		webhooksGroup.POST("/baofu/withdraw", server.handleBaofuWithdrawNotify)
+		webhooksGroup.POST("/baofu/payment", server.handleBaofuPaymentNotify)
+		webhooksGroup.POST("/baofu/share", server.handleBaofuShareNotify)
+		webhooksGroup.POST("/baofu/refund", server.handleBaofuRefundNotify)
 		// 微信用户投诉通知（合规要求，状态变更实时推送）
 		webhooksGroup.POST("/wechat-ecommerce/complaint-notify", server.handleComplaintNotify)
 		webhooksGroup.POST("/wechat-ecommerce/violation-notify", server.handleViolationNotify)
@@ -753,6 +724,18 @@ func (server *Server) setupRouter() {
 		merchantComplaintsGroup.GET("/:id", server.getMerchantComplaintDetail)
 		merchantComplaintsGroup.POST("/:id/response", server.respondToComplaint)
 		merchantComplaintsGroup.POST("/:id/complete", server.completeComplaint)
+	}
+
+	merchantBaofuSettlementAccountReadGroup := authGroup.Group("/merchant/settlement-account")
+	merchantBaofuSettlementAccountReadGroup.Use(server.MerchantOwnerOnlyMiddleware())
+	{
+		merchantBaofuSettlementAccountReadGroup.GET("", server.getMerchantBaofuSettlementAccount)
+	}
+
+	merchantBaofuSettlementAccountWriteGroup := authGroup.Group("/merchant/settlement-account")
+	merchantBaofuSettlementAccountWriteGroup.Use(server.MerchantOwnerOnlyMiddleware())
+	{
+		merchantBaofuSettlementAccountWriteGroup.POST("", server.createMerchantBaofuSettlementAccount)
 	}
 	// M3.3: 员工绑定商户（任意登录用户）
 	authGroup.POST("/bind-merchant", server.bindMerchant)
@@ -1084,6 +1067,7 @@ func (server *Server) setupRouter() {
 	paymentGroup := authGroup.Group("/payments")
 	{
 		paymentGroup.POST("", server.createPaymentOrder)
+		paymentGroup.GET("/capabilities", server.getPaymentCapabilities)
 		paymentGroup.POST("/combined", server.createCombinedPaymentOrder)
 		paymentGroup.GET("/combined/:id", server.getCombinedPaymentOrder)
 		paymentGroup.GET("/combined/:id/query", server.queryCombinedPaymentOrder)
@@ -1120,6 +1104,8 @@ func (server *Server) setupRouter() {
 		// 押金管理
 		riderGroup.GET("/deposit", server.getRiderDepositBalance)
 		riderGroup.POST("/deposit", server.depositRider)
+		riderGroup.GET("/settlement-account", server.RiderMiddleware(), server.getRiderBaofuSettlementAccount)
+		riderGroup.POST("/settlement-account", server.RiderMiddleware(), server.createRiderBaofuSettlementAccount)
 		riderGroup.POST("/withdraw", server.withdrawRider)
 		riderGroup.GET("/withdrawals/status", server.getRiderWithdrawalStatus)
 		riderGroup.GET("/deposits", server.listRiderDeposits)
@@ -1378,6 +1364,8 @@ func (server *Server) setupRouter() {
 	{
 		operatorsGroup.GET("/finance/overview", server.getOperatorFinanceOverview)
 		operatorsGroup.GET("/commission", server.getOperatorCommission)
+		operatorsGroup.GET("/settlement-account", server.getOperatorBaofuSettlementAccount)
+		operatorsGroup.POST("/settlement-account", server.createOperatorBaofuSettlementAccount)
 		operatorsGroup.GET("/profit-sharing/configs", server.listOperatorProfitSharingConfigs)
 		operatorsGroup.GET("/notifications", server.listOperatorNotifications)
 		operatorsGroup.GET("/notifications/summary", server.getOperatorNotificationSummary)
@@ -1419,6 +1407,7 @@ func (server *Server) setupRouter() {
 	{
 		platformStatsGroup.GET("/overview", server.getPlatformOverview)
 		platformStatsGroup.GET("/daily", server.getPlatformDailyStats)
+		platformStatsGroup.GET("/baofu/reconciliation/daily", server.getPlatformBaofuDailyReconciliation)
 		platformStatsGroup.GET("/profit-sharing/reconciliation", server.getPlatformProfitSharingReconciliation)
 		platformStatsGroup.GET("/profit-sharing/sla", server.getPlatformProfitSharingSlaSummary)
 		platformStatsGroup.GET("/profit-sharing/config-audits", server.getPlatformProfitSharingConfigAudits)
@@ -1463,6 +1452,14 @@ func (server *Server) setupRouter() {
 	platformFinanceGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
 	{
 		platformFinanceGroup.GET("/account/balance", server.gateEcommerceFundManagementWhenOrdinaryActive("platform account balance", server.getPlatformAccountBalance))
+		platformFinanceGroup.GET("/applyment/banks", server.listApplymentBanks)
+		platformFinanceGroup.GET("/applyment/banks/search-by-bank-account", server.searchApplymentBanksByAccount)
+		platformFinanceGroup.GET("/applyment/banks/:bank_alias_code/branches", server.listApplymentBankBranches)
+		platformFinanceGroup.GET("/applyment/areas/provinces", server.listApplymentProvinces)
+		platformFinanceGroup.GET("/applyment/areas/provinces/:province_code/cities", server.listApplymentCities)
+		platformFinanceGroup.GET("/settlement-account", server.getPlatformBaofuSettlementAccount)
+		platformFinanceGroup.POST("/settlement-account", server.createPlatformBaofuSettlementAccount)
+		platformFinanceGroup.GET("/settlement-account/status", server.getPlatformBaofuSettlementStatus)
 		platformFinanceGroup.GET("/wechat-ecommerce/violation-notification", server.getPlatformViolationNotificationConfig)
 		platformFinanceGroup.POST("/wechat-ecommerce/violation-notification", server.createPlatformViolationNotificationConfig)
 		platformFinanceGroup.PUT("/wechat-ecommerce/violation-notification", server.updatePlatformViolationNotificationConfig)

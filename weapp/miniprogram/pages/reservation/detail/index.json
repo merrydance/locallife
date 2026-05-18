@@ -14,6 +14,7 @@
         "t-dialog": "tdesign-miniprogram/dialog/dialog",
         "t-radio-group": "tdesign-miniprogram/radio-group/radio-group",
         "t-radio": "tdesign-miniprogram/radio/radio",
-        "t-empty": "tdesign-miniprogram/empty/empty"
+        "t-empty": "tdesign-miniprogram/empty/empty",
+        "t-toast": "tdesign-miniprogram/toast/toast"
     }
 }

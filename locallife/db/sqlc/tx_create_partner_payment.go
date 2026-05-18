@@ -13,16 +13,18 @@ import (
 // CreatePartnerPaymentTxParams 为服务商单笔支付创建本地 payment_order。
 // 该事务仅创建 payment_orders，不创建 combined_payment_orders。
 type CreatePartnerPaymentTxParams struct {
-	UserID        int64
-	MerchantID    int64
-	OrderID       int64
-	ReservationID int64
-	PaymentMode   string
-	BusinessType  string
-	Amount        int64
-	OutTradeNo    string
-	ExpiresAt     time.Time
-	Attach        string
+	UserID                int64
+	MerchantID            int64
+	OrderID               int64
+	ReservationID         int64
+	PaymentMode           string
+	BusinessType          string
+	Amount                int64
+	OutTradeNo            string
+	ExpiresAt             time.Time
+	Attach                string
+	PaymentChannel        string
+	RequiresProfitSharing bool
 }
 
 // CreatePartnerPaymentTxResult 返回创建结果及商户服务商配置。
@@ -136,10 +138,18 @@ func (store *SQLStore) CreatePartnerPaymentTx(ctx context.Context, arg CreatePar
 			enrichedAttach = enrichedAttach + ";sub_mchid:" + paymentConfig.SubMchID
 		}
 
+		paymentChannel := arg.PaymentChannel
+		if paymentChannel == "" {
+			paymentChannel = PaymentChannelOrdinaryServiceProvider
+		}
+		if arg.RequiresProfitSharing {
+			requiresProfitSharing = true
+		}
+
 		createParams := CreatePaymentOrderParams{
 			UserID:                arg.UserID,
 			PaymentType:           "miniprogram",
-			PaymentChannel:        PaymentChannelOrdinaryServiceProvider,
+			PaymentChannel:        paymentChannel,
 			RequiresProfitSharing: requiresProfitSharing,
 			BusinessType:          arg.BusinessType,
 			Amount:                arg.Amount,

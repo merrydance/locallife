@@ -203,6 +203,70 @@ func TestProcessTaskPaymentOrderTimeout_DirectRemotePaidRecordsFactInsteadOfClos
 	require.NoError(t, err)
 }
 
+func TestProcessTaskPaymentOrderTimeout_BaofuVerifyFeeDirectRemotePaidRecordsFactInsteadOfClosing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	directClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
+	distributor := &paymentTimeoutFactApplicationRecorder{}
+	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil, directClient)
+
+	paymentOrder := db.PaymentOrder{
+		ID:             9004,
+		OutTradeNo:     "BFVF_DIRECT_TIMEOUT_PAID_1",
+		Amount:         200,
+		Status:         "pending",
+		PaymentChannel: db.PaymentChannelDirect,
+		BusinessType:   db.ExternalPaymentBusinessOwnerBaofuVerifyFee,
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(-1 * time.Minute), Valid: true},
+	}
+	paidPaymentOrder := paymentOrder
+	paidPaymentOrder.Status = "paid"
+	paidPaymentOrder.TransactionID = pgtype.Text{String: "wx_baofu_verify_fee_timeout_paid_1", Valid: true}
+
+	store.EXPECT().GetPaymentOrderByOutTradeNo(gomock.Any(), paymentOrder.OutTradeNo).Return(paymentOrder, nil)
+	directClient.EXPECT().QueryOrderByOutTradeNo(gomock.Any(), paymentOrder.OutTradeNo).Return(&wechatcontracts.DirectOrderQueryResponse{
+		OutTradeNo:    paymentOrder.OutTradeNo,
+		TransactionID: "wx_baofu_verify_fee_timeout_paid_1",
+		TradeState:    wechatcontracts.DirectTradeStateSuccess,
+		SuccessTime:   "2026-05-08T10:03:00+08:00",
+		Amount: wechatcontracts.DirectOrderQueryAmount{
+			Total:         paymentOrder.Amount,
+			PayerTotal:    paymentOrder.Amount,
+			Currency:      "CNY",
+			PayerCurrency: "CNY",
+		},
+	}, nil)
+	store.EXPECT().UpdatePaymentOrderToPaid(gomock.Any(), db.UpdatePaymentOrderToPaidParams{
+		ID:            paymentOrder.ID,
+		TransactionID: pgtype.Text{String: "wx_baofu_verify_fee_timeout_paid_1", Valid: true},
+	}).Return(paidPaymentOrder, nil)
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+		require.Equal(t, db.PaymentChannelDirect, arg.Channel)
+		require.Equal(t, db.ExternalPaymentCapabilityDirectJSAPIPayment, arg.Capability)
+		require.Equal(t, db.ExternalPaymentBusinessOwnerBaofuVerifyFee, arg.BusinessOwner.String)
+		require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
+		require.Equal(t, paymentOrder.ID, arg.BusinessObjectID.Int64)
+		return db.ExternalPaymentFact{ID: 9204, IsTerminal: true}, nil
+	})
+	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactApplicationParams) (db.ExternalPaymentFactApplication, error) {
+		require.Equal(t, int64(9204), arg.FactID)
+		require.Equal(t, "baofu_account_verify_fee_domain", arg.Consumer)
+		require.Equal(t, "payment_order", arg.BusinessObjectType)
+		require.Equal(t, paymentOrder.ID, arg.BusinessObjectID)
+		return db.ExternalPaymentFactApplication{ID: 9304, FactID: arg.FactID, Consumer: arg.Consumer, BusinessObjectType: arg.BusinessObjectType, BusinessObjectID: arg.BusinessObjectID}, nil
+	})
+	distributor.processPaymentFactApplication = func(_ context.Context, payload *worker.PaymentFactApplicationPayload, _ ...asynq.Option) error {
+		require.Equal(t, int64(9304), payload.ApplicationID)
+		return nil
+	}
+
+	task := asynq.NewTask(worker.TaskPaymentOrderTimeout, mustMarshalJSON(t, worker.PayloadPaymentOrderTimeout{PaymentOrderNo: paymentOrder.OutTradeNo}))
+	err := processor.ProcessTaskPaymentOrderTimeout(context.Background(), task)
+	require.NoError(t, err)
+}
+
 type paymentTimeoutFactApplicationRecorder struct {
 	worker.NoopTaskDistributor
 	processPaymentFactApplication func(context.Context, *worker.PaymentFactApplicationPayload, ...asynq.Option) error

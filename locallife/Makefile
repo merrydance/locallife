@@ -51,6 +51,9 @@ test-safety:
 check-generated:
 	./scripts/check_generated.sh
 
+check-baofu-contract:
+	./scripts/check_baofu_contract_drift.sh
+
 doc-audit:
 	go run ./cmd/doc_audit -report docs/phase0/user_journey_coverage_report.md
 
@@ -110,4 +113,4 @@ lint-filesize:
 	  echo "✅ All files within $(MAX_FILE_LINES)-line limit"; \
 	fi
 
-.PHONY: migrateup migratedown migrateup1 migratedown1 migrateforce migratestatus new_migration sqlc swagger ocr-baseline test test-unit test-integration test-safety check-generated server mock proto evans sync_regions_test doc-audit lint-filesize
+.PHONY: migrateup migratedown migrateup1 migratedown1 migrateforce migratestatus new_migration sqlc swagger ocr-baseline test test-unit test-integration test-safety check-generated check-baofu-contract server mock proto evans sync_regions_test doc-audit lint-filesize

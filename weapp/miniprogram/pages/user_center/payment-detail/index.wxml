@@ -111,4 +111,6 @@
       <t-empty icon="info-circle-filled" description="未找到相关的支付记录" />
     </view>
   </block>
+
+  <t-toast id="t-toast" />
 </view>

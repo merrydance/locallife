@@ -17,6 +17,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/merrydance/locallife/api"
 	"github.com/merrydance/locallife/autotag"
+	"github.com/merrydance/locallife/baofu"
+	baofuaccount "github.com/merrydance/locallife/baofu/account"
+	"github.com/merrydance/locallife/baofu/aggregatepay"
+	"github.com/merrydance/locallife/baofu/merchantreport"
 	db "github.com/merrydance/locallife/db/sqlc"
 	_ "github.com/merrydance/locallife/docs" // Swagger docs
 	"github.com/merrydance/locallife/internal/wechatruntime"
@@ -194,6 +198,27 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create ordinary service provider client for runtime")
 	}
+	baofuAggregateClient, err := buildBaofuAggregateClient(config)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to create baofu aggregate client for runtime")
+	}
+	baofuAccountClient, err := buildBaofuAccountClient(config)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to create baofu account client for runtime")
+	}
+	baofuMerchantReportClient, err := buildBaofuMerchantReportClient(config)
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to create baofu merchant report client for runtime")
+	}
+	var dataEncryptor util.DataEncryptor
+	if config.DataEncryptionKey != "" {
+		dataEncryptor, err = util.NewAESEncryptor(config.DataEncryptionKey)
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to create data encryptor for runtime")
+		}
+	} else if config.Environment == "production" {
+		log.Fatal().Msg("DATA_ENCRYPTION_KEY is required in production")
+	}
 	if config.RedisAddress != "" {
 		// 初始化逻辑层
 		redisClient := redis.NewClient(&redis.Options{
@@ -201,7 +226,7 @@ func main() {
 			Password: config.RedisPassword,
 		})
 		deliveryBroadcast := logic.NewDeliveryBroadcastLogic(store, redisClient)
-		taskDistributor = runTaskProcessor(ctx, waitGroup, config, redisOpt, store, directPaymentClient, transferClient, ecommerceClient, ordinarySPClient, deliveryBroadcast)
+		taskDistributor = runTaskProcessor(ctx, waitGroup, config, redisOpt, store, directPaymentClient, transferClient, ecommerceClient, ordinarySPClient, baofuAggregateClient, baofuAccountClient, baofuMerchantReportClient, dataEncryptor, deliveryBroadcast)
 		reconciliationPublisher = websocket.NewRedisPublisher(redisClient)
 	}
 
@@ -232,6 +257,50 @@ func main() {
 	profitSharingRecoveryScheduler := worker.NewProfitSharingRecoveryScheduler(store, taskDistributor, ecommerceClient)
 	profitSharingRecoveryScheduler.SetOrdinaryServiceProviderClient(ordinarySPClient)
 	schedulerManager.Register("profit-sharing-recovery", profitSharingRecoveryScheduler)
+	baofuPaymentRecoveryScheduler := worker.NewBaofuPaymentRecoveryScheduler(store, taskDistributor)
+	if baofuAggregateClient != nil {
+		baofuPaymentRecoveryScheduler.SetBaofuAggregateClient(baofuAggregateClient, worker.BaofuProfitSharingWorkerConfig{
+			CollectMerchantID: config.BaofuCollectMerchantID,
+			CollectTerminalID: config.BaofuCollectTerminalID,
+			ShareNotifyURL:    config.EffectiveBaofuProfitSharingNotifyURL(),
+		})
+	} else if config.BaofuMainBusinessEnabled {
+		log.Warn().Msg("baofu payment recovery scheduler remote-query branch disabled: baofu aggregate client not configured")
+	}
+	schedulerManager.Register("baofu-payment-recovery", baofuPaymentRecoveryScheduler)
+	if baofuAccountClient != nil {
+		baofuAccountOpeningRecoveryScheduler := worker.NewBaofuAccountOpeningRecoveryScheduler(store, baofuAccountClient, dataEncryptor, worker.BaofuAccountOpeningRecoveryConfig{
+			VerifyFeeFen:      config.BaofuAccountVerifyFeeFen,
+			IndustryID:        config.BaofuBusinessIndustryID,
+			CollectMerchantID: config.BaofuCollectMerchantID,
+		})
+		if baofuMerchantReportClient != nil {
+			baofuAccountOpeningRecoveryScheduler.SetMerchantReportClient(baofuMerchantReportClient, worker.BaofuAccountOpeningMerchantReportRecoveryConfig{
+				CollectMerchantID: config.BaofuCollectMerchantID,
+				CollectTerminalID: config.BaofuCollectTerminalID,
+				ChannelID:         config.BaofuMerchantReportChannelID,
+				ChannelName:       config.BaofuMerchantReportChannelName,
+				Business:          config.BaofuMerchantReportBusiness,
+				MiniProgramAppID:  config.WechatMiniAppID,
+			})
+		}
+		schedulerManager.Register("baofu-account-opening-recovery", baofuAccountOpeningRecoveryScheduler)
+		schedulerManager.Register("baofu-withdrawal-recovery", worker.NewBaofuWithdrawalRecoveryScheduler(store, taskDistributor, baofuAccountClient, worker.BaofuWithdrawalRecoveryConfig{
+			PayoutMerchantID: config.BaofuPayoutMerchantID,
+			PayoutTerminalID: config.BaofuPayoutTerminalID,
+		}))
+	} else if config.BaofuMainBusinessEnabled {
+		log.Warn().Msg("baofu account opening and withdrawal recovery schedulers disabled: baofu account client not configured")
+	}
+	if baofuMerchantReportClient != nil {
+		schedulerManager.Register("baofu-merchant-report-recovery", worker.NewBaofuMerchantReportRecoveryScheduler(store, baofuMerchantReportClient, worker.BaofuMerchantReportRecoveryConfig{
+			CollectMerchantID: config.BaofuCollectMerchantID,
+			CollectTerminalID: config.BaofuCollectTerminalID,
+			MiniProgramAppID:  config.WechatMiniAppID,
+		}))
+	} else if config.BaofuMainBusinessEnabled {
+		log.Warn().Msg("baofu merchant report recovery scheduler disabled: baofu merchant report client not configured")
+	}
 	schedulerManager.Register("profit-sharing-receiver-lifecycle", worker.NewProfitSharingReceiverLifecycleScheduler(store, taskDistributor))
 	if directPaymentClient == nil {
 		log.Warn().Msg("refund recovery direct status branch disabled: payment client not configured")
@@ -245,6 +314,14 @@ func main() {
 	}
 	refundRecoveryScheduler := worker.NewRefundRecoveryScheduler(store, taskDistributor, directPaymentClient, ecommerceClient)
 	refundRecoveryScheduler.SetOrdinaryServiceProviderClient(ordinarySPClient)
+	if baofuAggregateClient != nil {
+		refundRecoveryScheduler.SetBaofuAggregateClient(baofuAggregateClient, worker.BaofuProfitSharingWorkerConfig{
+			CollectMerchantID: config.BaofuCollectMerchantID,
+			CollectTerminalID: config.BaofuCollectTerminalID,
+		})
+	} else if config.BaofuMainBusinessEnabled {
+		log.Warn().Msg("refund recovery baofu status branch disabled: baofu aggregate client not configured")
+	}
 	schedulerManager.Register("refund-recovery", refundRecoveryScheduler)
 	schedulerManager.Register("applyment-recovery", worker.NewApplymentRecoveryScheduler(store, taskDistributor, ordinarySPClient))
 	if ordinarySPClient != nil {
@@ -321,6 +398,9 @@ func validateProductionPaymentRuntime(config util.Config) error {
 	if config.Environment != "production" {
 		return nil
 	}
+	if config.BaofuMainBusinessEnabled {
+		return config.ValidateBaofuConfig()
+	}
 	if !config.HasWechatOrdinaryServiceProviderRuntimeConfig() {
 		return fmt.Errorf("wechat ordinary service provider runtime config is required in production for main-business payments")
 	}
@@ -335,6 +415,48 @@ func buildOrdinaryServiceProviderClient(config util.Config) (*ordinaryservicepro
 	return wechatruntime.BuildOrdinaryServiceProviderClient(config)
 }
 
+func buildBaofuAggregateClient(config util.Config) (aggregatepay.Client, error) {
+	if !config.HasBaofuRuntimeConfig() {
+		return nil, nil
+	}
+	if err := config.ValidateBaofuConfig(); err != nil {
+		return nil, err
+	}
+	root, err := baofu.NewClient(config.ToBaofuConfig(), nil)
+	if err != nil {
+		return nil, err
+	}
+	return aggregatepay.NewClient(root), nil
+}
+
+func buildBaofuAccountClient(config util.Config) (*baofuaccount.Client, error) {
+	if !config.HasBaofuRuntimeConfig() {
+		return nil, nil
+	}
+	if err := config.ValidateBaofuConfig(); err != nil {
+		return nil, err
+	}
+	root, err := baofu.NewClient(config.ToBaofuConfig(), nil)
+	if err != nil {
+		return nil, err
+	}
+	return baofuaccount.NewClient(root), nil
+}
+
+func buildBaofuMerchantReportClient(config util.Config) (*merchantreport.Client, error) {
+	if !config.HasBaofuRuntimeConfig() {
+		return nil, nil
+	}
+	if err := config.ValidateBaofuConfig(); err != nil {
+		return nil, err
+	}
+	root, err := baofu.NewClient(config.ToBaofuConfig(), nil)
+	if err != nil {
+		return nil, err
+	}
+	return merchantreport.NewClient(root), nil
+}
+
 func runTaskProcessor(
 	ctx context.Context,
 	waitGroup *errgroup.Group,
@@ -345,6 +467,10 @@ func runTaskProcessor(
 	transferClient wechat.TransferClientInterface,
 	ecommerceClient wechat.EcommerceClientInterface,
 	ordinarySPClient worker.OrdinaryServiceProviderWorkerClient,
+	baofuAggregateClient aggregatepay.Client,
+	baofuAccountClient logic.BaofuAccountClient,
+	baofuMerchantReportClient *merchantreport.Client,
+	dataEncryptor util.DataEncryptor,
 	deliveryBroadcast *logic.DeliveryBroadcastLogic,
 ) worker.TaskDistributor {
 	// 创建任务分发器
@@ -384,6 +510,15 @@ func runTaskProcessor(
 	taskProcessor.SetDirectPaymentClient(directPaymentClient)
 	taskProcessor.SetTransferClient(transferClient)
 	taskProcessor.SetOrdinaryServiceProviderClient(ordinarySPClient)
+	if baofuAggregateClient != nil {
+		taskProcessor.SetBaofuAggregateClient(baofuAggregateClient, worker.BaofuProfitSharingWorkerConfig{
+			CollectMerchantID: config.BaofuCollectMerchantID,
+			CollectTerminalID: config.BaofuCollectTerminalID,
+			ShareNotifyURL:    config.EffectiveBaofuProfitSharingNotifyURL(),
+		})
+	}
+	taskProcessor.SetBaofuAccountClient(baofuAccountClient, dataEncryptor)
+	taskProcessor.SetBaofuMerchantReportClient(baofuMerchantReportClient)
 	log.Info().Msg("start task processor")
 
 	waitGroup.Go(func() error {

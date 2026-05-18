@@ -61,6 +61,8 @@ func directPaymentFactTarget(paymentOrder db.PaymentOrder) (string, string, erro
 		return riderDepositPaymentFactConsumerDomain, db.ExternalPaymentBusinessOwnerRiderDeposit, nil
 	case db.ExternalPaymentBusinessOwnerClaimRecovery:
 		return claimRecoveryPaymentFactConsumer, db.ExternalPaymentBusinessOwnerClaimRecovery, nil
+	case db.ExternalPaymentBusinessOwnerBaofuVerifyFee:
+		return baofuVerifyFeePaymentFactConsumerDomain, db.ExternalPaymentBusinessOwnerBaofuVerifyFee, nil
 	default:
 		return "", "", fmt.Errorf("unsupported direct payment timeout fact owner %q for payment order %d", paymentOrder.BusinessType, paymentOrder.ID)
 	}
@@ -71,7 +73,7 @@ func shouldRecordDirectPaymentRecoveryFact(order db.PaymentOrder) bool {
 		return false
 	}
 	switch order.BusinessType {
-	case db.ExternalPaymentBusinessOwnerRiderDeposit, db.ExternalPaymentBusinessOwnerClaimRecovery:
+	case db.ExternalPaymentBusinessOwnerRiderDeposit, db.ExternalPaymentBusinessOwnerClaimRecovery, db.ExternalPaymentBusinessOwnerBaofuVerifyFee:
 		return true
 	default:
 		return false

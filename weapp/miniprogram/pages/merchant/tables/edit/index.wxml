@@ -66,23 +66,29 @@
         </view>
 
         <t-cell-group theme="card">
-          <t-input
-            label="{{formData.table_type === 'room' ? '包间名' : '桌号'}}"
-            placeholder="{{formData.table_type === 'room' ? '例如 二楼包间 1' : '例如 A01'}}"
-            value="{{formData.table_no}}"
-            data-field="table_no"
-            bind:change="onInputChange"
-            required
-          />
+          <t-cell required title="{{formData.table_type === 'room' ? '包间名' : '桌号'}}">
+            <t-input
+              slot="note"
+              placeholder="{{formData.table_type === 'room' ? '例如 二楼包间 1' : '例如 A01'}}"
+              value="{{formData.table_no}}"
+              data-field="table_no"
+              borderless
+              align="right"
+              bind:change="onInputChange"
+            />
+          </t-cell>
 
-          <t-input
-            label="容纳人数"
-            type="number"
-            placeholder="请输入 1-100"
-            value="{{formData.capacity}}"
-            bind:change="onCapacityChange"
-            required
-          />
+          <t-cell required title="容纳人数">
+            <t-input
+              slot="note"
+              type="number"
+              placeholder="1-100"
+              value="{{formData.capacity}}"
+              borderless
+              align="right"
+              bind:change="onCapacityChange"
+            />
+          </t-cell>
 
           <t-input
             label="最低消费"
@@ -147,7 +153,7 @@
           />
         </view>
 
-        <view wx:else class="inline-note-card">暂无桌台标签，可直接新增后立即选择。</view>
+        <view wx:else class="tag-empty-text">暂无桌台标签，可直接新增后立即选择。</view>
       </view>
 
       <view wx:if="{{isEdit}}" class="section-panel">
@@ -213,7 +219,6 @@
       <view slot="content" class="dialog-form">
         <t-input
           label="标签名称"
-          placeholder="请输入标签名称"
           value="{{createTagInputValue}}"
           bind:change="onCreateTagInputChange"
         />

@@ -139,7 +139,7 @@
   >
     <view slot="content" class="dialog-content">
       <t-input
-        placeholder="请输入充值金额"
+        placeholder="如 100.00"
         type="digit"
         label="金额(元)"
         value="{{rechargeAmount}}"
@@ -163,7 +163,7 @@
   >
     <view slot="content" class="dialog-content">
       <t-input
-        placeholder="请输入提现金额"
+        placeholder="如 100.00"
         type="digit"
         label="金额(元)"
         value="{{withdrawAmount}}"

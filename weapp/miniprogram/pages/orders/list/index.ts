@@ -390,7 +390,6 @@ Page({
     if (this.data.paying) return
 
     this.setData({ paying: true })
-    wx.showLoading({ title: '拉起支付...' })
     try {
       const targetOrder = this.data.orders.find((order) => order.id === orderId)
       const combinedPaymentID = targetOrder?.paymentContext?.combined_payment_id
@@ -405,7 +404,7 @@ Page({
           }
         }
 
-      const paymentResult = await completePaymentWorkflow(await createOrderPayment(orderId))
+      const paymentResult = await completePaymentWorkflow(await createOrderPayment(orderId), { context: this })
 
       if (isPaymentWorkflowPaid(paymentResult.status)) {
         this.setData({ selectedPayMap: {}, selectedPayCount: 0 })
@@ -422,7 +421,6 @@ Page({
       logger.error('单笔支付失败', error, 'List.paySingleOrder')
       wx.showToast({ title: '支付失败', icon: 'none' })
     } finally {
-      wx.hideLoading()
       this.setData({ paying: false })
     }
   },
@@ -431,7 +429,7 @@ Page({
     combinedPaymentId: number,
     orderIds: number[]
   ): Promise<'completed' | 'handled' | 'fallback'> {
-    const paymentResult = await completeCombinedPaymentWorkflow(await recoverCombinedPaymentOrder(combinedPaymentId))
+    const paymentResult = await completeCombinedPaymentWorkflow(await recoverCombinedPaymentOrder(combinedPaymentId), { context: this })
     const combinedPayment = paymentResult.combinedPayment
 
     if (isCombinedPaymentWorkflowPaid(paymentResult.status)) {
@@ -470,7 +468,6 @@ Page({
     }
 
     this.setData({ paying: true })
-    wx.showLoading({ title: '拉起合并支付...' })
     try {
       const existingCombinedPaymentID = getSharedCombinedPaymentID(this.data.orders, selectedOrderIDs)
 
@@ -485,7 +482,7 @@ Page({
         }
       }
 
-      const paymentResult = await completeCombinedPaymentWorkflow(await createCombinedPaymentOrder({ order_ids: selectedOrderIDs }))
+      const paymentResult = await completeCombinedPaymentWorkflow(await createCombinedPaymentOrder({ order_ids: selectedOrderIDs }), { context: this })
       const combinedPayment = paymentResult.combinedPayment
 
       if (!isCombinedPaymentWorkflowPaid(paymentResult.status)) {
@@ -504,7 +501,6 @@ Page({
       logger.error('合并支付失败', error, 'List.onBatchPay')
       wx.showToast({ title: '合并支付未完成', icon: 'none' })
     } finally {
-      wx.hideLoading()
       this.setData({ paying: false })
     }
   },

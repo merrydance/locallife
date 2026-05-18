@@ -241,7 +241,7 @@
       <view class="card-title">提交异议</view>
       <t-textarea
         value="{{appealReason}}"
-        placeholder="请输入异议理由，需说明责任判定、赔付金额或证据点的争议"
+        placeholder="说明责任判定、赔付金额或证据点的争议"
         maxlength="1000"
         indicator
         bindchange="onAppealInput"
@@ -251,4 +251,5 @@
       </view>
     </view>
   </view>
+  <t-toast id="t-toast" />
 </view>

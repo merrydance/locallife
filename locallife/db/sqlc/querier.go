@@ -291,6 +291,9 @@ type Querier interface {
 	CountWechatMerchantViolations(ctx context.Context, arg CountWechatMerchantViolationsParams) (int64, error)
 	CountWithdrawalRecords(ctx context.Context, arg CountWithdrawalRecordsParams) (int64, error)
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error)
+	CreateBaofuAccountOpeningFlow(ctx context.Context, arg CreateBaofuAccountOpeningFlowParams) (BaofuAccountOpeningFlow, error)
+	CreateBaofuFeeLedger(ctx context.Context, arg CreateBaofuFeeLedgerParams) (BaofuFeeLedger, error)
+	CreateBaofuWithdrawalOrder(ctx context.Context, arg CreateBaofuWithdrawalOrderParams) (BaofuWithdrawalOrder, error)
 	// ==============================
 	// behavior_actions
 	// ==============================
@@ -433,6 +436,7 @@ type Querier interface {
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
 	CreateOrderDisplayConfig(ctx context.Context, arg CreateOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	CreateOrderItem(ctx context.Context, arg CreateOrderItemParams) (OrderItem, error)
+	CreateOrderPaymentFeeLedger(ctx context.Context, arg CreateOrderPaymentFeeLedgerParams) (OrderPaymentFeeLedger, error)
 	CreateOrderStatusLog(ctx context.Context, arg CreateOrderStatusLogParams) (OrderStatusLog, error)
 	CreatePaymentDomainOutbox(ctx context.Context, arg CreatePaymentDomainOutboxParams) (PaymentDomainOutbox, error)
 	CreatePaymentDomainOutboxOnce(ctx context.Context, arg CreatePaymentDomainOutboxOnceParams) (PaymentDomainOutbox, error)
@@ -600,6 +604,7 @@ type Querier interface {
 	// Phase3: abnormal stats aggregation queries
 	GetAbnormalStatsSummary(ctx context.Context, arg GetAbnormalStatsSummaryParams) (GetAbnormalStatsSummaryRow, error)
 	GetActiveAgreementByType(ctx context.Context, type_ string) (Agreement, error)
+	GetActiveBaofuAccountOpeningFlowByOwner(ctx context.Context, arg GetActiveBaofuAccountOpeningFlowByOwnerParams) (BaofuAccountOpeningFlow, error)
 	GetActiveBehaviorBlocklist(ctx context.Context, arg GetActiveBehaviorBlocklistParams) (BehaviorBlocklist, error)
 	GetActiveBillingGroupMember(ctx context.Context, arg GetActiveBillingGroupMemberParams) (BillingGroupMember, error)
 	// 返回指定区域内有商户覆盖的品类标签，按商户数量降序
@@ -617,6 +622,23 @@ type Querier interface {
 	GetActiveRecommendConfig(ctx context.Context) (RecommendConfig, error)
 	GetActiveRiderCredentialLedgers(ctx context.Context, riderID pgtype.Int8) ([]CredentialLedger, error)
 	GetApplicableDiscountRules(ctx context.Context, arg GetApplicableDiscountRulesParams) ([]DiscountRule, error)
+	GetBaofuAccountBinding(ctx context.Context, id int64) (BaofuAccountBinding, error)
+	GetBaofuAccountBindingByContractNo(ctx context.Context, contractNo pgtype.Text) (BaofuAccountBinding, error)
+	GetBaofuAccountBindingByOwner(ctx context.Context, arg GetBaofuAccountBindingByOwnerParams) (BaofuAccountBinding, error)
+	GetBaofuAccountOpeningFlow(ctx context.Context, id int64) (BaofuAccountOpeningFlow, error)
+	GetBaofuAccountOpeningFlowByOpenTransSerialNo(ctx context.Context, openTransSerialNo pgtype.Text) (BaofuAccountOpeningFlow, error)
+	GetBaofuAccountOpeningFlowByPaymentOrder(ctx context.Context, verifyFeePaymentOrderID pgtype.Int8) (BaofuAccountOpeningFlow, error)
+	GetBaofuAccountOpeningProfile(ctx context.Context, id int64) (BaofuAccountOpeningProfile, error)
+	GetBaofuAccountOpeningProfileByOwner(ctx context.Context, arg GetBaofuAccountOpeningProfileByOwnerParams) (BaofuAccountOpeningProfile, error)
+	GetBaofuDailyReconciliation(ctx context.Context, arg GetBaofuDailyReconciliationParams) ([]GetBaofuDailyReconciliationRow, error)
+	GetBaofuFeeLedger(ctx context.Context, id int64) (BaofuFeeLedger, error)
+	GetBaofuFeeLedgerByBusinessObject(ctx context.Context, arg GetBaofuFeeLedgerByBusinessObjectParams) (BaofuFeeLedger, error)
+	GetBaofuMerchantReportByOwner(ctx context.Context, arg GetBaofuMerchantReportByOwnerParams) (BaofuMerchantReport, error)
+	GetBaofuMerchantReportByReportNo(ctx context.Context, reportNo string) (BaofuMerchantReport, error)
+	GetBaofuPaymentOrderRefundGuardForUpdate(ctx context.Context, id int64) (GetBaofuPaymentOrderRefundGuardForUpdateRow, error)
+	GetBaofuVerifyFeePaymentByAttach(ctx context.Context, attach pgtype.Text) (PaymentOrder, error)
+	GetBaofuWithdrawalOrder(ctx context.Context, id int64) (BaofuWithdrawalOrder, error)
+	GetBaofuWithdrawalOrderByOutRequestNo(ctx context.Context, outRequestNo string) (BaofuWithdrawalOrder, error)
 	GetBehaviorAction(ctx context.Context, id int64) (BehaviorAction, error)
 	GetBehaviorDecision(ctx context.Context, id int64) (BehaviorDecision, error)
 	GetBehaviorEffectSummary(ctx context.Context, arg GetBehaviorEffectSummaryParams) (GetBehaviorEffectSummaryRow, error)
@@ -751,6 +773,7 @@ type Querier interface {
 	GetIngredient(ctx context.Context, id int64) (Ingredient, error)
 	GetInventoryStats(ctx context.Context, arg GetInventoryStatsParams) (GetInventoryStatsRow, error)
 	GetLatestActiveAppVersion(ctx context.Context, arg GetLatestActiveAppVersionParams) (AppVersion, error)
+	GetLatestBaofuAccountOpeningFlowByOwner(ctx context.Context, arg GetLatestBaofuAccountOpeningFlowByOwnerParams) (BaofuAccountOpeningFlow, error)
 	GetLatestBehaviorDecisionByClaimID(ctx context.Context, claimID pgtype.Int8) (BehaviorDecision, error)
 	GetLatestEcommerceApplymentBySubject(ctx context.Context, arg GetLatestEcommerceApplymentBySubjectParams) (EcommerceApplyment, error)
 	GetLatestGroupApplicationByApplicant(ctx context.Context, applicantUserID int64) (MerchantGroupApplication, error)
@@ -1006,6 +1029,7 @@ type Querier interface {
 	GetReservationStatsByDateRange(ctx context.Context, arg GetReservationStatsByDateRangeParams) (GetReservationStatsByDateRangeRow, error)
 	// 获取增强的预订统计（包含 checked_in）
 	GetReservationStatsEnhanced(ctx context.Context, merchantID int64) (GetReservationStatsEnhancedRow, error)
+	GetReusableBaofuVerifyFeePayment(ctx context.Context, arg GetReusableBaofuVerifyFeePaymentParams) (PaymentOrder, error)
 	GetReview(ctx context.Context, id int64) (Review, error)
 	GetReviewByOrderID(ctx context.Context, orderID int64) (Review, error)
 	GetRider(ctx context.Context, id int64) (Rider, error)
@@ -1195,6 +1219,11 @@ type Querier interface {
 	ListAvailableRooms(ctx context.Context, merchantID int64) ([]Table, error)
 	// 获取商户的可用包间列表（含主图）供顾客查看
 	ListAvailableRoomsForCustomer(ctx context.Context, merchantID int64) ([]ListAvailableRoomsForCustomerRow, error)
+	ListBaofuFeeLedgerByPayer(ctx context.Context, arg ListBaofuFeeLedgerByPayerParams) ([]BaofuFeeLedger, error)
+	ListBaofuOrdersReadyForProfitSharing(ctx context.Context, arg ListBaofuOrdersReadyForProfitSharingParams) ([]ListBaofuOrdersReadyForProfitSharingRow, error)
+	ListBaofuPendingPaymentOrdersForRecovery(ctx context.Context, arg ListBaofuPendingPaymentOrdersForRecoveryParams) ([]PaymentOrder, error)
+	ListBaofuProcessingProfitSharingOrdersForRecovery(ctx context.Context, arg ListBaofuProcessingProfitSharingOrdersForRecoveryParams) ([]ProfitSharingOrder, error)
+	ListBaofuWithdrawalOrdersByOwner(ctx context.Context, arg ListBaofuWithdrawalOrdersByOwnerParams) ([]BaofuWithdrawalOrder, error)
 	ListBehaviorActionsByDecision(ctx context.Context, decisionID int64) ([]BehaviorAction, error)
 	ListBehaviorActionsByStatusAndType(ctx context.Context, arg ListBehaviorActionsByStatusAndTypeParams) ([]BehaviorAction, error)
 	ListBehaviorAppealsByEntity(ctx context.Context, arg ListBehaviorAppealsByEntityParams) ([]BehaviorAppeal, error)
@@ -1329,9 +1358,9 @@ type Querier interface {
 	ListMerchantSettlementAdjustments(ctx context.Context, arg ListMerchantSettlementAdjustmentsParams) ([]MerchantSettlementAdjustment, error)
 	ListMerchantSettlementTimeline(ctx context.Context, arg ListMerchantSettlementTimelineParams) ([]ListMerchantSettlementTimelineRow, error)
 	// 商户结算记录（带日期范围和状态筛选）
-	ListMerchantSettlements(ctx context.Context, arg ListMerchantSettlementsParams) ([]ProfitSharingOrder, error)
+	ListMerchantSettlements(ctx context.Context, arg ListMerchantSettlementsParams) ([]ListMerchantSettlementsRow, error)
 	// 商户结算记录（带日期范围和状态筛选）
-	ListMerchantSettlementsByStatus(ctx context.Context, arg ListMerchantSettlementsByStatusParams) ([]ProfitSharingOrder, error)
+	ListMerchantSettlementsByStatus(ctx context.Context, arg ListMerchantSettlementsByStatusParams) ([]ListMerchantSettlementsByStatusRow, error)
 	ListMerchantSpecialHours(ctx context.Context, merchantID int64) ([]MerchantBusinessHour, error)
 	// 显示所有员工，包括离职员工（软删除），按状态和角色排序
 	ListMerchantStaffByMerchant(ctx context.Context, merchantID int64) ([]ListMerchantStaffByMerchantRow, error)
@@ -1378,6 +1407,7 @@ type Querier interface {
 	ListOrderItemsByOrder(ctx context.Context, orderID int64) ([]OrderItem, error)
 	ListOrderItemsWithDishByOrder(ctx context.Context, orderID int64) ([]ListOrderItemsWithDishByOrderRow, error)
 	ListOrderItemsWithDishByOrderIDs(ctx context.Context, dollar_1 []int64) ([]ListOrderItemsWithDishByOrderIDsRow, error)
+	ListOrderPaymentFeeLedgersByPayer(ctx context.Context, arg ListOrderPaymentFeeLedgersByPayerParams) ([]OrderPaymentFeeLedger, error)
 	ListOrderStatusLogs(ctx context.Context, orderID int64) ([]OrderStatusLog, error)
 	ListOrderStatusLogsWithOperator(ctx context.Context, orderID int64) ([]ListOrderStatusLogsWithOperatorRow, error)
 	ListOrdersByMerchant(ctx context.Context, arg ListOrdersByMerchantParams) ([]Order, error)
@@ -1422,11 +1452,14 @@ type Querier interface {
 	ListPlatformConfigsByKey(ctx context.Context, configKey string) ([]PlatformConfig, error)
 	ListPrintLogsByOrder(ctx context.Context, orderID int64) ([]ListPrintLogsByOrderRow, error)
 	ListPrintLogsByPrinter(ctx context.Context, arg ListPrintLogsByPrinterParams) ([]PrintLog, error)
+	ListProcessingBaofuAccountBindings(ctx context.Context, arg ListProcessingBaofuAccountBindingsParams) ([]BaofuAccountBinding, error)
+	ListProcessingBaofuWithdrawalOrdersForRecovery(ctx context.Context, arg ListProcessingBaofuWithdrawalOrdersForRecoveryParams) ([]BaofuWithdrawalOrder, error)
 	ListProfitSharingConfigAudits(ctx context.Context, arg ListProfitSharingConfigAuditsParams) ([]ProfitSharingConfigAudit, error)
 	ListProfitSharingConfigs(ctx context.Context, arg ListProfitSharingConfigsParams) ([]ProfitSharingConfig, error)
 	ListProfitSharingConfigsForRegion(ctx context.Context, arg ListProfitSharingConfigsForRegionParams) ([]ProfitSharingConfig, error)
 	ListProfitSharingOrdersByMerchant(ctx context.Context, arg ListProfitSharingOrdersByMerchantParams) ([]ProfitSharingOrder, error)
 	ListProfitSharingOrdersByOperator(ctx context.Context, arg ListProfitSharingOrdersByOperatorParams) ([]ProfitSharingOrder, error)
+	ListProfitSharingOrdersByOrderIDsForMerchant(ctx context.Context, arg ListProfitSharingOrdersByOrderIDsForMerchantParams) ([]ListProfitSharingOrdersByOrderIDsForMerchantRow, error)
 	ListProfitSharingOrdersByStatus(ctx context.Context, arg ListProfitSharingOrdersByStatusParams) ([]ProfitSharingOrder, error)
 	ListProfitSharingOrdersForRetry(ctx context.Context, arg ListProfitSharingOrdersForRetryParams) ([]ProfitSharingOrder, error)
 	ListProfitSharingReceiverAttemptsByTarget(ctx context.Context, targetID int64) ([]ProfitSharingReceiverAttempt, error)
@@ -1438,6 +1471,8 @@ type Querier interface {
 	ListRecentWeatherCoefficients(ctx context.Context, arg ListRecentWeatherCoefficientsParams) ([]WeatherCoefficient, error)
 	ListRecommendConfigs(ctx context.Context) ([]RecommendConfig, error)
 	ListReconciliationReports(ctx context.Context, arg ListReconciliationReportsParams) ([]ReconciliationReport, error)
+	ListRecoverableBaofuAccountOpeningFlows(ctx context.Context, arg ListRecoverableBaofuAccountOpeningFlowsParams) ([]BaofuAccountOpeningFlow, error)
+	ListRecoverableBaofuMerchantReports(ctx context.Context, arg ListRecoverableBaofuMerchantReportsParams) ([]BaofuMerchantReport, error)
 	ListRefundOrdersByPaymentOrder(ctx context.Context, paymentOrderID int64) ([]RefundOrder, error)
 	ListRefundOrdersByStatus(ctx context.Context, arg ListRefundOrdersByStatusParams) ([]RefundOrder, error)
 	// 获取指定日期范围内直连支付（miniprogram/deposit等）成功退款订单（用于每日对账）
@@ -1541,6 +1576,21 @@ type Querier interface {
 	ListWithdrawalRecords(ctx context.Context, arg ListWithdrawalRecordsParams) ([]WithdrawalRecord, error)
 	MarkAllNotificationsAsRead(ctx context.Context, userID int64) error
 	MarkAllOperatorNotificationsAsRead(ctx context.Context, userID int64) error
+	MarkBaofuAccountBindingAbnormal(ctx context.Context, arg MarkBaofuAccountBindingAbnormalParams) (BaofuAccountBinding, error)
+	MarkBaofuAccountBindingActive(ctx context.Context, arg MarkBaofuAccountBindingActiveParams) (BaofuAccountBinding, error)
+	MarkBaofuAccountBindingFailed(ctx context.Context, arg MarkBaofuAccountBindingFailedParams) (BaofuAccountBinding, error)
+	MarkBaofuAccountBindingProcessing(ctx context.Context, arg MarkBaofuAccountBindingProcessingParams) (BaofuAccountBinding, error)
+	MarkBaofuAccountOpeningFlowAppletAuthPending(ctx context.Context, arg MarkBaofuAccountOpeningFlowAppletAuthPendingParams) (BaofuAccountOpeningFlow, error)
+	MarkBaofuAccountOpeningFlowFailed(ctx context.Context, arg MarkBaofuAccountOpeningFlowFailedParams) (BaofuAccountOpeningFlow, error)
+	MarkBaofuAccountOpeningFlowMerchantReportProcessing(ctx context.Context, arg MarkBaofuAccountOpeningFlowMerchantReportProcessingParams) (BaofuAccountOpeningFlow, error)
+	MarkBaofuAccountOpeningFlowOpeningProcessing(ctx context.Context, arg MarkBaofuAccountOpeningFlowOpeningProcessingParams) (BaofuAccountOpeningFlow, error)
+	MarkBaofuAccountOpeningFlowReady(ctx context.Context, arg MarkBaofuAccountOpeningFlowReadyParams) (BaofuAccountOpeningFlow, error)
+	MarkBaofuAccountOpeningFlowVerifyFeePending(ctx context.Context, arg MarkBaofuAccountOpeningFlowVerifyFeePendingParams) (BaofuAccountOpeningFlow, error)
+	MarkBaofuAccountOpeningFlowVerifyFeeProcessing(ctx context.Context, arg MarkBaofuAccountOpeningFlowVerifyFeeProcessingParams) (BaofuAccountOpeningFlow, error)
+	MarkBaofuMerchantReportAppletAuthFailed(ctx context.Context, arg MarkBaofuMerchantReportAppletAuthFailedParams) (BaofuMerchantReport, error)
+	MarkBaofuMerchantReportAppletAuthSucceeded(ctx context.Context, id int64) (BaofuMerchantReport, error)
+	MarkBaofuMerchantReportFailed(ctx context.Context, arg MarkBaofuMerchantReportFailedParams) (BaofuMerchantReport, error)
+	MarkBaofuMerchantReportSucceeded(ctx context.Context, arg MarkBaofuMerchantReportSucceededParams) (BaofuMerchantReport, error)
 	MarkClaimPaid(ctx context.Context, arg MarkClaimPaidParams) error
 	MarkClaimRecoveryDisputed(ctx context.Context, id int64) (ClaimRecovery, error)
 	MarkClaimRecoveryOverdue(ctx context.Context, id int64) (ClaimRecovery, error)
@@ -1656,6 +1706,7 @@ type Querier interface {
 	SearchTags(ctx context.Context, arg SearchTagsParams) ([]Tag, error)
 	// 设置指定地址为默认
 	SetAddressAsDefault(ctx context.Context, arg SetAddressAsDefaultParams) (UserAddress, error)
+	SetBaofuAccountOpeningFlowProfilePending(ctx context.Context, arg SetBaofuAccountOpeningFlowProfilePendingParams) (BaofuAccountOpeningFlow, error)
 	// 先将用户的所有地址设为非默认
 	SetDefaultAddress(ctx context.Context, userID int64) error
 	SetMediaAssetModerationStatus(ctx context.Context, arg SetMediaAssetModerationStatusParams) (MediaAsset, error)
@@ -1698,6 +1749,8 @@ type Querier interface {
 	UnsuspendMerchant(ctx context.Context, merchantID int64) error
 	UnsuspendMerchantTakeout(ctx context.Context, merchantID int64) error
 	UnsuspendRider(ctx context.Context, riderID int64) error
+	UpdateBaofuWithdrawalOrderStatus(ctx context.Context, arg UpdateBaofuWithdrawalOrderStatusParams) (BaofuWithdrawalOrder, error)
+	UpdateBaofuWithdrawalOrderToProcessing(ctx context.Context, arg UpdateBaofuWithdrawalOrderToProcessingParams) (BaofuWithdrawalOrder, error)
 	UpdateBehaviorActionExecution(ctx context.Context, arg UpdateBehaviorActionExecutionParams) error
 	UpdateBehaviorActionExecutionIfCurrent(ctx context.Context, arg UpdateBehaviorActionExecutionIfCurrentParams) (BehaviorAction, error)
 	UpdateBehaviorActionStatus(ctx context.Context, arg UpdateBehaviorActionStatusParams) error
@@ -1838,6 +1891,7 @@ type Querier interface {
 	UpdatePrintLogStatus(ctx context.Context, arg UpdatePrintLogStatusParams) (PrintLog, error)
 	UpdateProfitSharingConfig(ctx context.Context, arg UpdateProfitSharingConfigParams) (ProfitSharingConfig, error)
 	UpdateProfitSharingConfigStatus(ctx context.Context, arg UpdateProfitSharingConfigStatusParams) (ProfitSharingConfig, error)
+	UpdateProfitSharingOrderFeeBreakdown(ctx context.Context, arg UpdateProfitSharingOrderFeeBreakdownParams) (ProfitSharingOrder, error)
 	UpdateProfitSharingOrderToFailed(ctx context.Context, id int64) (ProfitSharingOrder, error)
 	UpdateProfitSharingOrderToFinished(ctx context.Context, id int64) (ProfitSharingOrder, error)
 	UpdateProfitSharingOrderToProcessing(ctx context.Context, arg UpdateProfitSharingOrderToProcessingParams) (ProfitSharingOrder, error)
@@ -1910,6 +1964,9 @@ type Querier interface {
 	UpdateWechatComplaintState(ctx context.Context, arg UpdateWechatComplaintStateParams) (WechatComplaint, error)
 	UpdateWithdrawalAccountInfo(ctx context.Context, arg UpdateWithdrawalAccountInfoParams) (WithdrawalRecord, error)
 	UpdateWithdrawalStatus(ctx context.Context, arg UpdateWithdrawalStatusParams) (WithdrawalRecord, error)
+	UpsertBaofuAccountBinding(ctx context.Context, arg UpsertBaofuAccountBindingParams) (BaofuAccountBinding, error)
+	UpsertBaofuAccountOpeningProfile(ctx context.Context, arg UpsertBaofuAccountOpeningProfileParams) (BaofuAccountOpeningProfile, error)
+	UpsertBaofuMerchantReportProcessing(ctx context.Context, arg UpsertBaofuMerchantReportProcessingParams) (BaofuMerchantReport, error)
 	UpsertCloudPrinterReconciliationJob(ctx context.Context, arg UpsertCloudPrinterReconciliationJobParams) (CloudPrinterReconciliationJob, error)
 	// 添加或更新菜品标签关联
 	UpsertDishTag(ctx context.Context, arg UpsertDishTagParams) error
@@ -1922,6 +1979,8 @@ type Querier interface {
 	UpsertMerchantSystemLabel(ctx context.Context, arg UpsertMerchantSystemLabelParams) error
 	UpsertOCRJob(ctx context.Context, arg UpsertOCRJobParams) (OcrJob, error)
 	UpsertOrderDisplayConfig(ctx context.Context, arg UpsertOrderDisplayConfigParams) (OrderDisplayConfig, error)
+	UpsertOrderPaymentFeeLedgerActual(ctx context.Context, arg UpsertOrderPaymentFeeLedgerActualParams) (OrderPaymentFeeLedger, error)
+	UpsertOrderPaymentFeeLedgerCalculated(ctx context.Context, arg UpsertOrderPaymentFeeLedgerCalculatedParams) (OrderPaymentFeeLedger, error)
 	UpsertPlatformConfig(ctx context.Context, arg UpsertPlatformConfigParams) (PlatformConfig, error)
 	UpsertProfitSharingReceiverTarget(ctx context.Context, arg UpsertProfitSharingReceiverTargetParams) (ProfitSharingReceiverTarget, error)
 	UpsertRegionExternalMapping(ctx context.Context, arg UpsertRegionExternalMappingParams) (RegionExternalMapping, error)
@@ -1937,6 +1996,7 @@ type Querier interface {
 	// 插入或更新投诉记录（幂等，微信每日同步时使用 ON CONFLICT 更新）
 	UpsertWechatComplaint(ctx context.Context, arg UpsertWechatComplaintParams) (WechatComplaint, error)
 	UpsertWechatMerchantViolation(ctx context.Context, arg UpsertWechatMerchantViolationParams) (WechatMerchantViolation, error)
+	VoidBaofuAccountOpeningFlow(ctx context.Context, arg VoidBaofuAccountOpeningFlowParams) (BaofuAccountOpeningFlow, error)
 }
 
 var _ Querier = (*Queries)(nil)

@@ -545,13 +545,13 @@ func TestGetMerchantFinanceOverviewAPI(t *testing.T) {
 					})).
 					Times(1).
 					Return(db.GetMerchantFinanceOverviewRow{
-						CompletedOrders:  100,
-						PendingOrders:    5,
-						TotalGmv:         1000000,
-						TotalIncome:      950000,
-						TotalPlatformFee: 20000,
-						TotalOperatorFee: 30000,
-						PendingIncome:    50000,
+						CompletedOrders:                 100,
+						PendingOrders:                   5,
+						TotalGmv:                        1000000,
+						TotalMerchantReceivableAmount:   950000,
+						TotalPlatformServiceFeeAmount:   50000,
+						TotalPaymentChannelFeeAmount:    3000,
+						PendingMerchantReceivableAmount: 50000,
 					}, nil)
 
 				store.EXPECT().
@@ -578,12 +578,19 @@ func TestGetMerchantFinanceOverviewAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
-				var resp financeOverviewResponse
+				var resp map[string]interface{}
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-				require.Equal(t, int64(100), resp.CompletedOrders)
-				require.Equal(t, int64(1000000), resp.TotalGMV)
-				require.Equal(t, int64(50000), resp.TotalServiceFee)
-				require.Equal(t, int64(940000), resp.NetIncome) // 950000 - 10000
+				require.Equal(t, float64(100), resp["completed_orders"])
+				require.Equal(t, float64(1000000), resp["total_gmv"])
+				require.Equal(t, float64(950000), resp["total_merchant_receivable_amount"])
+				require.Equal(t, float64(50000), resp["total_platform_service_fee_amount"])
+				require.Equal(t, float64(3000), resp["total_payment_channel_fee_amount"])
+				require.Equal(t, float64(53000), resp["total_deduction_fee_amount"])
+				require.Equal(t, float64(940000), resp["net_income"]) // 950000 - 10000
+				require.NotContains(t, resp, "total_platform_fee")
+				require.NotContains(t, resp, "total_operator_fee")
+				require.NotContains(t, resp, "total_payment_fee")
+				require.NotContains(t, resp, "total_service_fee")
 			},
 		},
 		{
@@ -731,16 +738,16 @@ func TestListMerchantFinanceOrdersAPI(t *testing.T) {
 					Times(1).
 					Return([]db.ListMerchantFinanceOrdersRow{
 						{
-							ID:                 1,
-							PaymentOrderID:     100,
-							OrderSource:        "takeout",
-							TotalAmount:        10000,
-							PlatformCommission: 200,
-							OperatorCommission: 300,
-							MerchantAmount:     9500,
-							Status:             "finished",
-							CreatedAt:          time.Now(),
-							OrderID:            pgtype.Int8{Int64: 1000, Valid: true},
+							ID:                       1,
+							PaymentOrderID:           100,
+							OrderSource:              "takeout",
+							TotalAmount:              10000,
+							PlatformServiceFeeAmount: 500,
+							PaymentChannelFeeAmount:  30,
+							MerchantReceivableAmount: 9470,
+							Status:                   "finished",
+							CreatedAt:                time.Now(),
+							OrderID:                  pgtype.Int8{Int64: 1000, Valid: true},
 						},
 					}, nil)
 
@@ -758,6 +765,15 @@ func TestListMerchantFinanceOrdersAPI(t *testing.T) {
 
 				var resp map[string]interface{}
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				orders := resp["orders"].([]interface{})
+				firstOrder := orders[0].(map[string]interface{})
+				require.Equal(t, float64(500), firstOrder["platform_service_fee_amount"])
+				require.Equal(t, float64(30), firstOrder["payment_channel_fee_amount"])
+				require.Equal(t, float64(9470), firstOrder["merchant_receivable_amount"])
+				require.NotContains(t, firstOrder, "platform_commission")
+				require.NotContains(t, firstOrder, "operator_commission")
+				require.NotContains(t, firstOrder, "payment_fee")
+				require.NotContains(t, firstOrder, "merchant_amount")
 				require.NotNil(t, resp["orders"])
 				require.Equal(t, float64(1), resp["total"])
 			},
@@ -899,12 +915,13 @@ func TestListMerchantServiceFeesAPI(t *testing.T) {
 					Times(1).
 					Return([]db.GetMerchantServiceFeeDetailRow{
 						{
-							Date:        pgtype.Date{Time: time.Date(2025, 11, 15, 0, 0, 0, 0, time.UTC), Valid: true},
-							OrderSource: "takeout",
-							OrderCount:  50,
-							TotalAmount: 500000,
-							PlatformFee: 10000,
-							OperatorFee: 15000,
+							Date:                     pgtype.Date{Time: time.Date(2025, 11, 15, 0, 0, 0, 0, time.UTC), Valid: true},
+							OrderSource:              "takeout",
+							OrderCount:               50,
+							TotalAmount:              500000,
+							PlatformServiceFeeAmount: 25000,
+							PaymentChannelFeeAmount:  3000,
+							TotalFeeAmount:           28000,
 						},
 					}, nil)
 			},
@@ -914,9 +931,21 @@ func TestListMerchantServiceFeesAPI(t *testing.T) {
 				var resp map[string]interface{}
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.NotNil(t, resp["details"])
-				require.Equal(t, float64(10000), resp["total_platform_fee"])
-				require.Equal(t, float64(15000), resp["total_operator_fee"])
-				require.Equal(t, float64(25000), resp["total_service_fee"])
+				details := resp["details"].([]interface{})
+				firstDetail := details[0].(map[string]interface{})
+				require.Equal(t, float64(25000), firstDetail["platform_service_fee_amount"])
+				require.Equal(t, float64(3000), firstDetail["payment_channel_fee_amount"])
+				require.Equal(t, float64(28000), firstDetail["total_fee_amount"])
+				require.NotContains(t, firstDetail, "platform_fee")
+				require.NotContains(t, firstDetail, "operator_fee")
+				require.NotContains(t, firstDetail, "payment_fee")
+				require.Equal(t, float64(25000), resp["total_platform_service_fee_amount"])
+				require.Equal(t, float64(3000), resp["total_payment_channel_fee_amount"])
+				require.Equal(t, float64(28000), resp["total_deduction_fee_amount"])
+				require.NotContains(t, resp, "total_platform_fee")
+				require.NotContains(t, resp, "total_operator_fee")
+				require.NotContains(t, resp, "total_payment_fee")
+				require.NotContains(t, resp, "total_service_fee")
 			},
 		},
 		{
@@ -1078,11 +1107,13 @@ func TestListMerchantDailyFinanceAPI(t *testing.T) {
 					Times(1).
 					Return([]db.GetMerchantDailyFinanceRow{
 						{
-							Date:           pgtype.Date{Time: time.Date(2025, 11, 15, 0, 0, 0, 0, time.UTC), Valid: true},
-							OrderCount:     100,
-							TotalGmv:       1000000,
-							MerchantIncome: 950000,
-							TotalFee:       50000,
+							Date:                     pgtype.Date{Time: time.Date(2025, 11, 15, 0, 0, 0, 0, time.UTC), Valid: true},
+							OrderCount:               100,
+							TotalGmv:                 1000000,
+							MerchantReceivableAmount: 950000,
+							PaymentChannelFeeAmount:  3000,
+							PlatformServiceFeeAmount: 50000,
+							TotalDeductionFeeAmount:  53000,
 						},
 					}, nil)
 
@@ -1097,6 +1128,17 @@ func TestListMerchantDailyFinanceAPI(t *testing.T) {
 				var resp map[string]interface{}
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.NotNil(t, resp["daily_stats"])
+				dailyStats := resp["daily_stats"].([]interface{})
+				firstDay := dailyStats[0].(map[string]interface{})
+				require.Equal(t, float64(950000), firstDay["merchant_receivable_amount"])
+				require.Equal(t, float64(3000), firstDay["payment_channel_fee_amount"])
+				require.Equal(t, float64(50000), firstDay["platform_service_fee_amount"])
+				require.Equal(t, float64(53000), firstDay["total_deduction_fee_amount"])
+				require.NotContains(t, firstDay, "merchant_income")
+				require.NotContains(t, firstDay, "payment_fee")
+				require.NotContains(t, firstDay, "service_fee")
+				require.NotContains(t, firstDay, "total_fee")
+				require.NotContains(t, firstDay, "total_deduction_fee")
 			},
 		},
 	}
@@ -1154,19 +1196,18 @@ func TestListMerchantSettlementsAPI(t *testing.T) {
 				store.EXPECT().
 					ListMerchantSettlements(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return([]db.ProfitSharingOrder{
+					Return([]db.ListMerchantSettlementsRow{
 						{
-							ID:                 1,
-							PaymentOrderID:     100,
-							MerchantID:         merchant.ID,
-							OrderSource:        "takeout",
-							TotalAmount:        10000,
-							PlatformCommission: 200,
-							OperatorCommission: 300,
-							MerchantAmount:     9500,
-							OutOrderNo:         "PSO20251115001",
-							Status:             "finished",
-							CreatedAt:          time.Now(),
+							ID:                       1,
+							PaymentOrderID:           100,
+							OrderSource:              "takeout",
+							TotalAmount:              10000,
+							PlatformServiceFeeAmount: 500,
+							PaymentChannelFeeAmount:  30,
+							MerchantReceivableAmount: 9470,
+							OutOrderNo:               "PSO20251115001",
+							Status:                   "finished",
+							CreatedAt:                time.Now(),
 						},
 					}, nil)
 
@@ -1179,11 +1220,11 @@ func TestListMerchantSettlementsAPI(t *testing.T) {
 					GetMerchantProfitSharingStats(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.GetMerchantProfitSharingStatsRow{
-						TotalOrders:             1,
-						TotalAmount:             10000,
-						TotalMerchantAmount:     9500,
-						TotalPlatformCommission: 200,
-						TotalOperatorCommission: 300,
+						TotalOrders:                   1,
+						TotalAmount:                   10000,
+						TotalMerchantReceivableAmount: 9500,
+						TotalPlatformServiceFeeAmount: 500,
+						TotalPaymentChannelFeeAmount:  30,
 					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -1191,8 +1232,21 @@ func TestListMerchantSettlementsAPI(t *testing.T) {
 
 				var resp map[string]interface{}
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-				require.NotNil(t, resp["settlements"])
+				settlements := resp["settlements"].([]interface{})
+				firstSettlement := settlements[0].(map[string]interface{})
+				require.Equal(t, float64(500), firstSettlement["platform_service_fee_amount"])
+				require.Equal(t, float64(30), firstSettlement["payment_channel_fee_amount"])
+				require.Equal(t, float64(9470), firstSettlement["merchant_receivable_amount"])
+				require.NotContains(t, firstSettlement, "platform_commission")
+				require.NotContains(t, firstSettlement, "operator_commission")
+				require.NotContains(t, firstSettlement, "merchant_amount")
+				require.NotContains(t, firstSettlement, "payment_fee")
 				require.Equal(t, float64(1), resp["total"])
+				require.Equal(t, float64(9500), resp["total_merchant_receivable_amount"])
+				require.Equal(t, float64(500), resp["total_platform_service_fee_amount"])
+				require.NotContains(t, resp, "total_merchant_amount")
+				require.NotContains(t, resp, "total_platform_fee")
+				require.NotContains(t, resp, "total_operator_fee")
 			},
 		},
 		{
@@ -1207,19 +1261,18 @@ func TestListMerchantSettlementsAPI(t *testing.T) {
 				store.EXPECT().
 					ListMerchantSettlementsByStatus(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return([]db.ProfitSharingOrder{
+					Return([]db.ListMerchantSettlementsByStatusRow{
 						{
-							ID:                 1,
-							PaymentOrderID:     100,
-							MerchantID:         merchant.ID,
-							OrderSource:        "takeout",
-							TotalAmount:        10000,
-							PlatformCommission: 200,
-							OperatorCommission: 300,
-							MerchantAmount:     9500,
-							OutOrderNo:         "PSO20251115001",
-							Status:             "finished",
-							CreatedAt:          time.Now(),
+							ID:                       1,
+							PaymentOrderID:           100,
+							OrderSource:              "takeout",
+							TotalAmount:              10000,
+							PlatformServiceFeeAmount: 500,
+							PaymentChannelFeeAmount:  30,
+							MerchantReceivableAmount: 9470,
+							OutOrderNo:               "PSO20251115001",
+							Status:                   "finished",
+							CreatedAt:                time.Now(),
 						},
 					}, nil)
 
@@ -1232,11 +1285,11 @@ func TestListMerchantSettlementsAPI(t *testing.T) {
 					GetMerchantProfitSharingStats(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.GetMerchantProfitSharingStatsRow{
-						TotalOrders:             1,
-						TotalAmount:             10000,
-						TotalMerchantAmount:     9500,
-						TotalPlatformCommission: 200,
-						TotalOperatorCommission: 300,
+						TotalOrders:                   1,
+						TotalAmount:                   10000,
+						TotalMerchantReceivableAmount: 9500,
+						TotalPlatformServiceFeeAmount: 500,
+						TotalPaymentChannelFeeAmount:  30,
 					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -1244,7 +1297,14 @@ func TestListMerchantSettlementsAPI(t *testing.T) {
 
 				var resp map[string]interface{}
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-				require.NotNil(t, resp["settlements"])
+				settlements := resp["settlements"].([]interface{})
+				firstSettlement := settlements[0].(map[string]interface{})
+				require.Equal(t, float64(500), firstSettlement["platform_service_fee_amount"])
+				require.Equal(t, float64(30), firstSettlement["payment_channel_fee_amount"])
+				require.Equal(t, float64(9470), firstSettlement["merchant_receivable_amount"])
+				require.NotContains(t, firstSettlement, "platform_commission")
+				require.NotContains(t, firstSettlement, "operator_commission")
+				require.NotContains(t, firstSettlement, "merchant_amount")
 			},
 		},
 		{
@@ -1295,4 +1355,84 @@ func TestListMerchantSettlementsAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestListMerchantSettlementTimelineAPIUsesMerchantVisibleFeeFields(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := db.Merchant{
+		ID:          1,
+		RegionID:    1,
+		OwnerUserID: user.ID,
+		Name:        "测试商户",
+		Status:      "approved",
+		IsOpen:      true,
+		CreatedAt:   time.Now(),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		ListMerchantSettlementTimeline(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return([]db.ListMerchantSettlementTimelineRow{
+			{
+				RecordType:               "profit_sharing",
+				ID:                       1,
+				PaymentOrderID:           100,
+				OrderSource:              "takeout",
+				TotalAmount:              10000,
+				PlatformServiceFeeAmount: 500,
+				PaymentChannelFeeAmount:  30,
+				MerchantReceivableAmount: 9470,
+				OutOrderNo:               "PSO20251115001",
+				Status:                   "finished",
+				CreatedAt:                time.Now(),
+			},
+			{
+				RecordType:               "adjustment",
+				ID:                       2,
+				PaymentOrderID:           0,
+				OrderSource:              "adjustment",
+				TotalAmount:              0,
+				PlatformServiceFeeAmount: 0,
+				PaymentChannelFeeAmount:  0,
+				MerchantReceivableAmount: 200,
+				Status:                   "finished",
+				CreatedAt:                time.Now().Add(-time.Hour),
+				AdjustmentType:           pgtype.Text{String: "manual_credit", Valid: true},
+			},
+		}, nil)
+	store.EXPECT().
+		CountMerchantSettlementTimeline(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(int64(2), nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/settlement-timeline?start_date=2025-11-01&end_date=2025-11-30", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp map[string]interface{}
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	timeline := resp["timeline"].([]interface{})
+	firstItem := timeline[0].(map[string]interface{})
+	require.Equal(t, float64(500), firstItem["platform_service_fee_amount"])
+	require.Equal(t, float64(30), firstItem["payment_channel_fee_amount"])
+	require.Equal(t, float64(9470), firstItem["merchant_receivable_amount"])
+	require.NotContains(t, firstItem, "platform_commission")
+	require.NotContains(t, firstItem, "operator_commission")
+	require.NotContains(t, firstItem, "merchant_amount")
+
+	adjustmentItem := timeline[1].(map[string]interface{})
+	require.Equal(t, float64(0), adjustmentItem["platform_service_fee_amount"])
+	require.Equal(t, float64(0), adjustmentItem["payment_channel_fee_amount"])
+	require.Equal(t, float64(200), adjustmentItem["merchant_receivable_amount"])
 }

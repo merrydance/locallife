@@ -10,7 +10,8 @@
     "t-button": "tdesign-miniprogram/button/button",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
-    "t-loading": "tdesign-miniprogram/loading/loading"
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "merchant-section-card": "/components/merchant-section-card/index"
   },
   "navigationStyle": "custom"
 }

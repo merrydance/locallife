@@ -1,13 +1,15 @@
 <view class="map-container">
-  <map 
+  <map
+    wx:if="{{hasValidLocation}}"
     id="deliveryMap"
     class="map"
-    longitude="{{rider ? rider.longitude : (merchant ? merchant.longitude : 116.397)}}"
-    latitude="{{rider ? rider.latitude : (merchant ? merchant.latitude : 39.909)}}"
+    longitude="{{centerLongitude}}"
+    latitude="{{centerLatitude}}"
     scale="14"
     markers="{{markers}}"
     polyline="{{polyline}}"
     include-points="{{includePoints}}"
     show-location
   />
+  <view wx:else class="map-empty">暂无有效位置信息</view>
 </view>

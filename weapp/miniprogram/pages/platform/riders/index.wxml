@@ -89,7 +89,7 @@
       <view class="dialog-title">骑手：{{selectedName || '-'}}</view>
       <t-textarea
         value="{{rejectReason}}"
-        placeholder="请输入驳回原因"
+        placeholder="说明不通过原因"
         maxlength="200"
         indicator
         bind:change="onRejectReasonChange"

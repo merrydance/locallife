@@ -22,7 +22,7 @@ Use this skill as the lightweight router for the LocalLife AI-facing prompt syst
 
 - Backend work under `locallife/`: follow `locallife/AGENTS.md`, then use `.github/instructions/backend-locallife.instructions.md` plus narrower backend instruction files for the active path.
 - Backend implementation: use `.github/prompts/backend-implementation.prompt.md` unless a more specific backend prompt applies.
-- Payment, refund, profit sharing, withdrawal, WeChat callbacks, or money movement: use `.github/prompts/backend-payment-domain.prompt.md` and `.github/standards/domains/wechat-payment/README.md`.
+- Payment, refund, profit sharing, withdrawal, callbacks, or money movement: use `.github/prompts/backend-payment-domain.prompt.md` plus the matching provider domain README. For WeChat payment use `.github/standards/domains/wechat-payment/README.md`; for Baofoo/Baofu/BaoCaiTong work use `.github/standards/domains/baofu-payment/README.md`.
 - SQL/schema/sqlc work: use `.github/instructions/backend-db-query.instructions.md`, `.github/instructions/backend-db-sqlc.instructions.md`, and `.github/prompts/backend-sql-review.prompt.md` when reviewing SQL.
 - Backend production defects or regressions: use `.github/prompts/backend-bugfix.prompt.md`.
 - Backend formal closure or review propagation: use `.github/prompts/backend-review-closure.prompt.md`.

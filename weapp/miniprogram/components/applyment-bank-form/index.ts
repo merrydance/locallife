@@ -15,6 +15,7 @@ import {
 } from '../../api/applyment-bank'
 import { uploadMedia } from '../../utils/media'
 import { getErrorUserMessage } from '../../utils/user-facing'
+import { resolveRecognizedBankSelection } from './selection'
 
 const DEFAULT_CONTACT_DOC_TYPE: ApplymentContactDocType = 'IDENTIFICATION_TYPE_MAINLAND_IDCARD'
 const CONTACT_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -49,6 +50,8 @@ interface ApplymentBindBankDraft {
 }
 
 type PartialApplymentBindBankDraft = Partial<ApplymentBindBankDraft>
+export type ApplymentBankFormDraftPayload = PartialApplymentBindBankDraft
+export type ApplymentBankFormPayload = ApplymentBindBankPayload
 
 interface ApplymentBankFormProperties {
   apiBasePath: string
@@ -58,6 +61,12 @@ interface ApplymentBankFormProperties {
   showContactFields?: boolean
   requireContactEmail?: boolean
   requireAccountName?: boolean
+  showAccountTypeSelector?: boolean
+  allowSavedAccountNumber?: boolean
+  requireBankBranch?: boolean
+  embedded?: boolean
+  submitBlock?: boolean
+  showSubmitActions?: boolean
   uploadBusinessType?: string
 }
 
@@ -283,9 +292,11 @@ function getSubmitBlockMessage(
   form: ApplymentBindBankDraft,
   showContactFields?: boolean,
   requireContactEmail?: boolean,
-  requireAccountName: boolean = true
+  requireAccountName: boolean = true,
+  allowSavedAccountNumber: boolean = false,
+  requireBankBranch: boolean = false
 ): string {
-  if (!form.account_number.trim()) {
+  if (!form.account_number.trim() && !allowSavedAccountNumber) {
     return '请先填写银行账号'
   }
 
@@ -329,12 +340,12 @@ function getSubmitBlockMessage(
     }
   }
 
-  if (!form.need_bank_branch) {
+  if (!form.need_bank_branch && !requireBankBranch) {
     return ''
   }
 
   if (!form.bank_address_code.trim()) {
-    return '请先选择开户地址城市'
+    return '请先选择开户城市'
   }
 
   if (!form.bank_alias_code.trim()) {
@@ -352,9 +363,11 @@ function canSubmitForm(
   form: ApplymentBindBankDraft,
   showContactFields?: boolean,
   requireContactEmail?: boolean,
-  requireAccountName: boolean = true
+  requireAccountName: boolean = true,
+  allowSavedAccountNumber: boolean = false,
+  requireBankBranch: boolean = false
 ): boolean {
-  return !getSubmitBlockMessage(form, showContactFields, requireContactEmail, requireAccountName)
+  return !getSubmitBlockMessage(form, showContactFields, requireContactEmail, requireAccountName, allowSavedAccountNumber, requireBankBranch)
 }
 
 Component({
@@ -389,6 +402,38 @@ Component({
       value: false
     },
     requireAccountName: {
+      type: Boolean,
+      value: true
+    },
+    showAccountTypeSelector: {
+      type: Boolean,
+      value: true
+    },
+    allowSavedAccountNumber: {
+      type: Boolean,
+      value: false
+    },
+    requireBankBranch: {
+      type: Boolean,
+      value: false
+    },
+    embedded: {
+      type: Boolean,
+      value: false
+    },
+    submitBlock: {
+      type: Boolean,
+      value: true
+    },
+    showSubmitActions: {
+      type: Boolean,
+      value: true
+    },
+    savedAccountNumberMask: {
+      type: String,
+      value: ''
+    },
+    showCancelButton: {
       type: Boolean,
       value: true
     },
@@ -447,7 +492,8 @@ Component({
     canSubmit: false,
     submitBlockMessage: '',
     selectedBankLabel: '',
-    hasSelectedBank: false
+    hasSelectedBank: false,
+    showAccountNumber: false
   },
 
   lifetimes: {
@@ -457,6 +503,13 @@ Component({
   },
 
   methods: {
+    onToggleAccountNumberVisibility() {
+      if (this.properties.allowSavedAccountNumber && this.properties.savedAccountNumberMask && !this.readForm().account_number.trim()) {
+        return
+      }
+      this.setData({ showAccountNumber: !this.data.showAccountNumber })
+    },
+
     readForm() {
       const instance = this as unknown as ApplymentBankFormInstance
       return instance.draftForm || (this.data.form as ApplymentBindBankDraft)
@@ -493,13 +546,17 @@ Component({
           initialDraft,
           properties.showContactFields,
           properties.requireContactEmail,
-          properties.requireAccountName
+          properties.requireAccountName,
+          properties.allowSavedAccountNumber,
+          properties.requireBankBranch
         ),
         submitBlockMessage: getSubmitBlockMessage(
           initialDraft,
           properties.showContactFields,
           properties.requireContactEmail,
-          properties.requireAccountName
+          properties.requireAccountName,
+          properties.allowSavedAccountNumber,
+          properties.requireBankBranch
         )
       }, { emitDraft: false, syncSubmit: false })
 
@@ -522,7 +579,11 @@ Component({
 
     emitDraftChange(nextForm?: ApplymentBindBankDraft) {
       const form = nextForm || (this.data.form as ApplymentBindBankDraft)
-      this.triggerEvent('draftchange', { ...form })
+      this.triggerEvent('draftchange', {
+        ...form,
+        deposit_bank_province: this.data.selectedProvinceLabel || undefined,
+        deposit_bank_city: this.data.selectedCityLabel || undefined
+      })
     },
 
     getApiBasePath() {
@@ -634,13 +695,17 @@ Component({
         form,
         this.properties.showContactFields,
         this.properties.requireContactEmail,
-        this.properties.requireAccountName
+        this.properties.requireAccountName,
+        this.properties.allowSavedAccountNumber,
+        this.properties.requireBankBranch
       )
       const submitBlockMessage = getSubmitBlockMessage(
         form,
         this.properties.showContactFields,
         this.properties.requireContactEmail,
-        this.properties.requireAccountName
+        this.properties.requireAccountName,
+        this.properties.allowSavedAccountNumber,
+        this.properties.requireBankBranch
       )
       this.setData({ canSubmit, submitBlockMessage })
     },
@@ -705,6 +770,7 @@ Component({
       const nextKeyword = keyword ?? this.data.bankKeyword
       const filteredBanks = this.getBanksForType(this.data.form.account_type)
         .filter((bank: ApplymentBankViewOption) => bankMatchesKeyword(bank, nextKeyword))
+        .slice(0, 100)
       const selectedBankIndex = findSelectedBankIndex(filteredBanks, this.data.form as ApplymentBindBankDraft)
 
       this.setData({
@@ -718,6 +784,7 @@ Component({
       const nextKeyword = keyword ?? this.data.branchKeyword
       const filteredBranches = (this.data.branches as ApplymentBranchOption[])
         .filter((branch) => branchMatchesKeyword(branch, nextKeyword))
+        .slice(0, 100)
       const selectedBranchIndex = findSelectedBranchIndex(filteredBranches, this.data.form as ApplymentBindBankDraft)
 
       this.setData({
@@ -889,7 +956,7 @@ Component({
 
       this.setFormState(nextForm, {
         bankKeyword: '',
-        filteredBanks: this.getBanksForType(accountType),
+        filteredBanks: this.getBanksForType(accountType).slice(0, 100),
         showBankPicker: false,
         showProvincePicker: false,
         showCityPicker: false,
@@ -931,6 +998,7 @@ Component({
       const nextBankKeyword = bankMatchesKeyword(bank, this.data.bankKeyword) ? this.data.bankKeyword : ''
       let filteredBanks = this.getBanksForType(nextForm.account_type)
         .filter((item: ApplymentBankViewOption) => bankMatchesKeyword(item, nextBankKeyword))
+        .slice(0, 100)
       if (!filteredBanks.length) {
         filteredBanks = [bank]
       }
@@ -1153,18 +1221,23 @@ Component({
       try {
         const response = await searchApplymentBanksByAccount(this.getApiBasePath(), form.account_type, accountNumber)
         const matches = decorateBankOptions(response.matches)
+        const selection = resolveRecognizedBankSelection(matches)
 
-        if (matches.length === 1) {
-          await this.applySelectedBank(matches[0])
+        if (selection.bank) {
+          await this.applySelectedBank(selection.bank)
+        }
+
+        if (selection.shouldOpenPicker) {
+          const selectedBankIndex = findSelectedBankIndex(selection.filteredBanks, this.readForm())
+          this.setData({
+            filteredBanks: selection.filteredBanks,
+            showBankPicker: true,
+            selectedBankIndex
+          })
           return
         }
 
-        if (matches.length > 1) {
-          this.setData({
-            filteredBanks: matches,
-            showBankPicker: true,
-            selectedBankIndex: 0
-          })
+        if (selection.bank) {
           return
         }
 
@@ -1395,7 +1468,9 @@ Component({
         form,
         properties.showContactFields,
         properties.requireContactEmail,
-        properties.requireAccountName
+        properties.requireAccountName,
+        properties.allowSavedAccountNumber,
+        properties.requireBankBranch
       )
       if (submitBlockMessage) {
         wx.showToast({ title: submitBlockMessage, icon: 'none' })
@@ -1408,8 +1483,10 @@ Component({
         account_bank_code: form.account_bank_code > 0 ? form.account_bank_code : undefined,
         bank_alias: form.bank_alias.trim() || undefined,
         bank_alias_code: form.bank_alias_code.trim() || undefined,
-        need_bank_branch: form.need_bank_branch || undefined,
+        need_bank_branch: (form.need_bank_branch || properties.requireBankBranch) || undefined,
         bank_address_code: form.bank_address_code.trim() || undefined,
+        deposit_bank_province: this.data.selectedProvinceLabel || undefined,
+        deposit_bank_city: this.data.selectedCityLabel || undefined,
         bank_branch_id: form.bank_branch_id.trim() || undefined,
         bank_name: form.bank_name.trim() || undefined,
         account_number: form.account_number.trim(),

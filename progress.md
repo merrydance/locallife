@@ -1,0 +1,46 @@
+# Progress: WeApp User-Experience Function Audit
+
+## 2026-05-17
+
+- Read LocalLife root routing instructions and `.github` indexes.
+- Selected Mini Program review route: `.github/instructions/weapp-mini-program.instructions.md` plus `.github/prompts/weapp-review.prompt.md`.
+- Read the frontend architecture and Mini Program page delivery baselines.
+- Created review plan files for this multi-step audit.
+- Mapped app-level routes and standards: this is a multi-role Mini Program with consumer, merchant, rider, operator, platform, payment, order, dine-in, and reservation surfaces.
+- Noted pre-existing dirty workspace changes in Baofoo settlement account files; audit will not revert them.
+- Started static implementation audit. Default PATH did not expose `node`; will rerun script checks with `PATH="$HOME/.local/bin:$PATH"`.
+- Re-ran route and static binding audits with local Node.
+- Confirmed two user-facing incomplete action loops: dine-in checkout voucher/guest-count bindings and takeout cart unavailable-item removal.
+- Checked payment workflow implementation; it uses backend status polling/requery after WeChat payment and has pending-confirmation result handling.
+- Ran `PATH="$HOME/.local/bin:$PATH" npm run compile` from `weapp/`; TypeScript compilation exited 0.
+- Converted the audit output into a bounded remediation plan in `task_plan.md`, covering two P0 defects, three P1 debt/gate tasks, and two P2 UX consistency tasks with scope, non-scope, touched files, acceptance criteria, validation, and residual risk.
+- Pushed current workspace checkpoint as `10553cc8 chore: checkpoint current workspace`.
+- Completed P0-1 dine-in checkout cleanup: removed stale guest-count stepper binding and local voucher popup wiring, changed merchant promo voucher event to the existing `onVoucherClaimed` refresh path, and removed unused component declarations/styles.
+- Verified P0-1 with a targeted handler check, `PATH="$HOME/.local/bin:$PATH" npm run compile`, and `PATH="$HOME/.local/bin:$PATH" npm run lint`; all exited 0.
+- Completed P0-2 takeout cart unavailable item removal: added `onRemoveUnavailable`, duplicate-tap item state, delete API call, local cart removal reuse, and user-facing failure Toast.
+- Verified P0-2 with a targeted handler check, `PATH="$HOME/.local/bin:$PATH" npm run compile`, `PATH="$HOME/.local/bin:$PATH" npm run lint`, and `PATH="$HOME/.local/bin:$PATH" npm run gate:wxml-expression-safety`; all exited 0.
+- Error note: one exploratory `rg` command for WXML dynamic loading/disabled expressions failed due to an unescaped `{` in the regex; use fixed-string or simpler quoted patterns next time.
+- Completed P1-3 WXML handler binding gate: added `npm run check:wxml-handlers`, a lightweight page WXML-to-Page handler checker with behavior allowlist support, and regression coverage for runtime spreads, typed handlers, line comments, and URL regex literals.
+- P1-3 gate also found and removed two real stale bindings: `onStepChange` from merchant store registration steps and `onUploadComplete` from review image upload.
+- Verified P1-3 with `PATH="$HOME/.local/bin:$PATH" node scripts/check-wxml-handler-bindings.test.js`, `PATH="$HOME/.local/bin:$PATH" npm run check:wxml-handlers`, `PATH="$HOME/.local/bin:$PATH" npm run compile`, and `PATH="$HOME/.local/bin:$PATH" npm run lint`; all exited 0.
+- Completed P1-1 platform dashboard stale template cleanup: confirmed `templates/pc-content.wxml` was not imported by the active dashboard and deleted the dead template containing unregistered platform application routes.
+- During P1-1 validation, `PATH="$HOME/.local/bin:$PATH" npm run quality:check` initially failed because `weapp/miniprogram/pages/takeout/cart/index.ts` exceeded the page complexity limit by 6 lines after earlier cart work; removed inert placeholder comments/blank lines, verified `wc -l` at 646, then `npm run compile` and `npm run quality:check` exited 0. Committed separately as `7202d4d5`.
+- Completed P1-2 map cleanup: deleted unused demo `map-view` component, removed hardcoded Beijing fallback coordinates from `delivery-map`, switched delivery markers to existing `/assets/merchant.png`, `/assets/customer.png`, and `/assets/rider.png`, and added an explicit no-location empty state.
+- Verified P1-2 with exact searches for stale marker assets/demo coordinates and `map-view` references, plus `PATH="$HOME/.local/bin:$PATH" npm run compile` and `PATH="$HOME/.local/bin:$PATH" npm run quality:check`; all final checks exited 0 after removing the empty deleted component directory.
+- Completed P2-1 consumer empty-state action hierarchy: changed takeout and reservation empty states to prioritize consumer recovery actions while keeping merchant/operator onboarding as low-weight text links.
+- Verified P2-1 with a static search that no large `商户入驻`/`运营商入驻` empty-state buttons remain in the target pages, plus `PATH="$HOME/.local/bin:$PATH" npm run compile` and `PATH="$HOME/.local/bin:$PATH" npm run quality:check`; all exited 0.
+- Completed P2-2 reservation placeholder cleanup: changed duplicated name/phone placeholders in reservation create and confirm forms to example/format hints.
+- Verified P2-2 with `rg -n "placeholder=\"请输入姓名\"|placeholder=\"请输入手机号\"" weapp/miniprogram/pages/reservation` returning no matches, plus `PATH="$HOME/.local/bin:$PATH" npm run compile` and `PATH="$HOME/.local/bin:$PATH" npm run quality:check`; all exited 0.
+- Performed a second user-perspective Mini Program review focused on handiness, copy clarity, and consistency.
+- Verified WXML handler bindings still pass with `PATH="$HOME/.local/bin:$PATH" npm run check:wxml-handlers`; the static route experiment was too noisy and was not used as evidence.
+- Ran full non-consumer UI pattern gate directly with `PATH="$HOME/.local/bin:$PATH" node scripts/check-non-consumer-ui-patterns.js`; it failed on current text-only local actions and explanatory-card patterns.
+- Replaced `task_plan.md` with a new second-review remediation plan covering reservation confirmation copy, reservation wording unification, merchant printer technical-field cleanup, operator region fallback copy, non-consumer action consistency, explanatory-card reduction, and stale platform dashboard template cleanup.
+- Appended second-review evidence and remediation themes to `findings.md`.
+- Committed and pushed the second-review plan baseline as `c1f73bb0 docs: update weapp ux remediation plan`.
+- Completed P1-1 reservation confirmation copy cleanup: removed internal step-summary copy, changed non-deposit guidance to user next-step language, and kept payment/deposit behavior unchanged. Verified with a negative `rg` assertion for internal flow copy, `npm run check:wxml-handlers`, and `npm run compile`; committed and pushed as `5e8d9807`.
+- Completed P1-2 reservation wording unification: changed TabBar/page titles/comments from "预定" to "预订" in the reservation path. Verified no remaining `预定` matches under the target paths plus `npm run compile` and `npm run check:wxml-handlers`; committed and pushed as `fa5ca1b0`.
+- Completed P1-3 merchant printer cleanup: removed backend/vendor IDs and raw printer enum/status rows from the daily task surface, added icon-led row actions, and kept existing handlers/service calls. Verified targeted raw-field search, `check-non-consumer-ui-patterns.js --changed-only`, `npm run check:wxml-handlers`, and `npm run compile`; committed and pushed as `5a8cfb95`.
+- Completed P1-4 operator region fallback copy: replaced `ID:` and `区域ID` user-facing fallbacks with "未命名区域" or recoverable region-selection copy. Verified targeted `rg`, `npm run compile`, and `npm run check:wxml-handlers`; committed and pushed as `3fa0d5fc`.
+- Completed P2-1 non-consumer row-action consistency: added TDesign icons to the gate-reported edit/delete/remove row actions while preserving existing handlers/datasets. Verified `check-non-consumer-ui-patterns.js --changed-only`, `npm run check:wxml-handlers`, and `npm run compile`; committed and pushed as `b218e2cc`.
+- Completed P2-2 non-consumer explanatory-card reduction: changed tag empty hints into lightweight text, replaced the merchant application refresh error card with `t-notice-bar`, and changed the voucher order-type warning into a field-level warning text. Verified full `node scripts/check-non-consumer-ui-patterns.js`, `npm run compile`, and `npm run check:wxml-handlers`; committed and pushed as `d6d1d1a3`.
+- Completed P3-1 stale platform dashboard template cleanup: removed four unreferenced dashboard template WXML files and confirmed no old template handlers/copy remain. Verified targeted search, `npm run compile`, and `npm run quality:check`; committed and pushed as `d6ba16df`.

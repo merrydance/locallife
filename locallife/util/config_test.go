@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/merrydance/locallife/baofu"
 	"github.com/stretchr/testify/require"
 )
 
@@ -66,6 +67,9 @@ func TestLoadConfig_DefaultsAndTrimQuotes(t *testing.T) {
 	require.Equal(t, 20, config.DefaultPrepareTime)
 	require.Equal(t, time.Minute, config.ProfitSharingReturnRetryInterval)
 	require.Equal(t, 10, config.ProfitSharingReturnMaxRetries)
+	require.EqualValues(t, 200, config.BaofuAccountVerifyFeeFen)
+	require.Equal(t, "9931", config.BaofuBusinessIndustryID)
+	require.Equal(t, "758-2", config.BaofuMerchantReportBusiness)
 }
 
 func TestLoadConfig_ReadsWechatPaymentAndEcommerceConfig(t *testing.T) {
@@ -129,6 +133,118 @@ func TestLoadConfig_ReadsWechatOrdinaryApplymentSettlementConfig(t *testing.T) {
 	require.Equal(t, "0.38", config.WechatOrdinaryApplymentDebitActivitiesRate)
 	require.Equal(t, "0.38", config.WechatOrdinaryApplymentCreditActivitiesRate)
 	require.Equal(t, "media-a, media-b", config.WechatOrdinaryApplymentActivitiesAdditions)
+}
+
+func TestLoadConfig_ReadsBaofuMainBusinessConfig(t *testing.T) {
+	configDir := writeTestConfigFile(t, strings.Join([]string{
+		"ENVIRONMENT=test",
+		"DB_SOURCE=postgresql:///test",
+		"MIGRATION_URL=file://db/migration",
+		"WECHAT_MINI_APP_ID=wx-local-life",
+		"BAOFU_MAIN_BUSINESS_ENABLED=true",
+		"BAOFU_COLLECT_MERCHANT_ID=COLLECT_MER",
+		"BAOFU_COLLECT_TERMINAL_ID=COLLECT_TER",
+		"BAOFU_PAYOUT_MERCHANT_ID=PAYOUT_MER",
+		"BAOFU_PAYOUT_TERMINAL_ID=PAYOUT_TER",
+		"BAOFU_APP_ID=baofu-app",
+		"BAOFU_PRIVATE_KEY_PEM=test-private-key",
+		"BAOFU_PUBLIC_KEY_PEM=test-public-key",
+		"BAOFU_SIGN_SERIAL_NO=sign-sn",
+		"BAOFU_ENCRYPTION_SERIAL_NO=enc-sn",
+		"BAOFU_NOTIFY_BASE_URL=https://api.example.com/v1/webhooks/baofu",
+		"BAOFU_PAYMENT_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/payment",
+		"BAOFU_PROFIT_SHARING_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/share",
+		"BAOFU_REFUND_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/refund",
+		"BAOFU_HTTP_TIMEOUT=12s",
+	}, "\n")+"\n")
+
+	config, err := LoadConfig(configDir)
+	require.NoError(t, err)
+	require.True(t, config.BaofuMainBusinessEnabled)
+	require.True(t, config.HasBaofuRuntimeConfig())
+	require.NoError(t, config.ValidateBaofuConfig())
+	require.Equal(t, "wx-local-life", config.WechatMiniAppID)
+	require.Equal(t, "https://api.example.com/v1/webhooks/baofu/payment", config.EffectiveBaofuPaymentNotifyURL())
+	require.Equal(t, "https://api.example.com/v1/webhooks/baofu/share", config.EffectiveBaofuProfitSharingNotifyURL())
+	require.Equal(t, 12*time.Second, config.BaofuHTTPTimeout)
+
+	baofuConfig := config.ToBaofuConfig().Normalized()
+	require.Equal(t, baofu.SandboxAggregatePayBaseURL, baofuConfig.AggregatePayBaseURL)
+	require.Equal(t, "COLLECT_MER", baofuConfig.CollectMerchantID)
+	require.Equal(t, "PAYOUT_MER", baofuConfig.PayoutMerchantID)
+}
+
+func TestLoadConfig_NormalizesEscapedBaofuPEMValues(t *testing.T) {
+	configDir := writeTestConfigFile(t, strings.Join([]string{
+		"ENVIRONMENT=test",
+		"DB_SOURCE=postgresql:///test",
+		"MIGRATION_URL=file://db/migration",
+		"WECHAT_MINI_APP_ID=wx-local-life",
+		"BAOFU_MAIN_BUSINESS_ENABLED=true",
+		"BAOFU_COLLECT_MERCHANT_ID=COLLECT_MER",
+		"BAOFU_COLLECT_TERMINAL_ID=COLLECT_TER",
+		"BAOFU_PAYOUT_MERCHANT_ID=PAYOUT_MER",
+		"BAOFU_PAYOUT_TERMINAL_ID=PAYOUT_TER",
+		"BAOFU_APP_ID=baofu-app",
+		`BAOFU_PRIVATE_KEY_PEM=-----BEGIN PRIVATE KEY-----\\nprivate-body\\n-----END PRIVATE KEY-----`,
+		`BAOFU_PUBLIC_KEY_PEM=-----BEGIN CERTIFICATE-----\\npublic-body\\n-----END CERTIFICATE-----`,
+		"BAOFU_SIGN_SERIAL_NO=sign-sn",
+		"BAOFU_ENCRYPTION_SERIAL_NO=enc-sn",
+		"BAOFU_NOTIFY_BASE_URL=https://api.example.com/v1/webhooks/baofu",
+		"BAOFU_PAYMENT_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/payment",
+		"BAOFU_PROFIT_SHARING_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/share",
+		"BAOFU_REFUND_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/refund",
+	}, "\n")+"\n")
+
+	config, err := LoadConfig(configDir)
+	require.NoError(t, err)
+
+	baofuConfig := config.ToBaofuConfig()
+	require.Contains(t, baofuConfig.PrivateKeyPEM, "\nprivate-body\n")
+	require.NotContains(t, baofuConfig.PrivateKeyPEM, `\n`)
+	require.Contains(t, baofuConfig.BaofuPublicKeyPEM, "\npublic-body\n")
+	require.NotContains(t, baofuConfig.BaofuPublicKeyPEM, `\n`)
+}
+
+func TestLoadConfig_ReadsBaofuPEMValuesFromFilePaths(t *testing.T) {
+	configDir := t.TempDir()
+	certsDir := filepath.Join(configDir, "certs")
+	require.NoError(t, os.MkdirAll(certsDir, 0o700))
+	privatePEM := "-----BEGIN PRIVATE KEY-----\nprivate-body\n-----END PRIVATE KEY-----\n"
+	publicPEM := "-----BEGIN CERTIFICATE-----\npublic-body\n-----END CERTIFICATE-----\n"
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "baofu_private.pem"), []byte(privatePEM), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "baofu_public.pem"), []byte(publicPEM), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "app.env"), []byte(strings.Join([]string{
+		"ENVIRONMENT=test",
+		"DB_SOURCE=postgresql:///test",
+		"MIGRATION_URL=file://db/migration",
+		"WECHAT_MINI_APP_ID=wx-local-life",
+		"BAOFU_MAIN_BUSINESS_ENABLED=true",
+		"BAOFU_COLLECT_MERCHANT_ID=COLLECT_MER",
+		"BAOFU_COLLECT_TERMINAL_ID=COLLECT_TER",
+		"BAOFU_PAYOUT_MERCHANT_ID=PAYOUT_MER",
+		"BAOFU_PAYOUT_TERMINAL_ID=PAYOUT_TER",
+		"BAOFU_APP_ID=baofu-app",
+		"BAOFU_PRIVATE_KEY_PEM=bad-private-env",
+		"BAOFU_PUBLIC_KEY_PEM=bad-public-env",
+		"BAOFU_PRIVATE_KEY_PATH=./certs/baofu_private.pem",
+		"BAOFU_PUBLIC_KEY_PATH=./certs/baofu_public.pem",
+		"BAOFU_SIGN_SERIAL_NO=sign-sn",
+		"BAOFU_ENCRYPTION_SERIAL_NO=enc-sn",
+		"BAOFU_NOTIFY_BASE_URL=https://api.example.com/v1/webhooks/baofu",
+		"BAOFU_PAYMENT_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/payment",
+		"BAOFU_PROFIT_SHARING_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/share",
+		"BAOFU_REFUND_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/refund",
+	}, "\n")+"\n"), 0o600))
+
+	config, err := LoadConfig(configDir)
+	require.NoError(t, err)
+
+	require.Equal(t, "./certs/baofu_private.pem", config.BaofuPrivateKeyPath)
+	require.Equal(t, "./certs/baofu_public.pem", config.BaofuPublicKeyPath)
+	baofuConfig := config.ToBaofuConfig()
+	require.Equal(t, strings.TrimSpace(privatePEM), baofuConfig.PrivateKeyPEM)
+	require.Equal(t, strings.TrimSpace(publicPEM), baofuConfig.BaofuPublicKeyPEM)
 }
 
 func TestEffectiveWechatEcommerceNotifyURLs(t *testing.T) {

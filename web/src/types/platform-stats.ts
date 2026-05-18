@@ -42,6 +42,35 @@ export interface PlatformProfitSharingReconciliationRow {
   total_operator_commission: number;
 }
 
+export interface PlatformBaofuDailyReconciliationRow {
+  date: string;
+  provider: string;
+  channel: string;
+  paid_amount: number;
+  payment_fee: number;
+  merchant_amount: number;
+  rider_amount: number;
+  platform_commission: number;
+  operator_commission: number;
+  withdraw_succeeded_amount: number;
+  withdraw_processing_amount: number;
+  unapplied_fact_count: number;
+  unknown_command_count: number;
+  fee_ledger_mismatch_count: number;
+}
+
+export interface PlatformBaofuSettlementReadiness {
+  state: string;
+  label: string;
+  payment_ready: boolean;
+}
+
+export interface PlatformBaofuSettlementStatusResponse {
+  settlement_account: PlatformBaofuSettlementReadiness;
+  masked_contract_no?: string;
+  masked_sharing_mer_id?: string;
+}
+
 export interface RegionComparisonRow {
   region_id: number;
   region_name: string;

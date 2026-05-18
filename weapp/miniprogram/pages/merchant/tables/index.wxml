@@ -120,7 +120,7 @@
 
               <view class="table-action-bar">
                 <view class="table-action-slot">
-                  <t-button class="table-action-button" variant="text" theme="default" size="small" bind:tap="onEditTable" data-id="{{item.id}}">编辑</t-button>
+                  <t-button class="table-action-button" variant="text" theme="default" size="small" icon="edit" bind:tap="onEditTable" data-id="{{item.id}}">编辑</t-button>
                 </view>
 
                 <t-divider layout="vertical" />

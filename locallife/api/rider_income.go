@@ -25,17 +25,21 @@ type listRiderIncomeLedgerRequest struct {
 }
 
 type riderIncomeSummaryResponse struct {
-	TotalDeliveries  int64                              `json:"total_deliveries"`
-	TotalRiderIncome int64                              `json:"total_rider_income"`
-	TotalDeliveryFee int64                              `json:"total_delivery_fee"`
-	StatusSummary    []riderIncomeStatusSummaryResponse `json:"status_summary"`
+	TotalDeliveries       int64                              `json:"total_deliveries"`
+	TotalRiderIncome      int64                              `json:"total_rider_income"`
+	TotalDeliveryFee      int64                              `json:"total_delivery_fee"`
+	TotalRiderGrossAmount int64                              `json:"total_rider_gross_amount"`
+	TotalRiderPaymentFee  int64                              `json:"total_rider_payment_fee"`
+	StatusSummary         []riderIncomeStatusSummaryResponse `json:"status_summary"`
 }
 
 type riderIncomeStatusSummaryResponse struct {
-	Status      string `json:"status"`
-	OrderCount  int64  `json:"order_count"`
-	RiderAmount int64  `json:"rider_amount"`
-	DeliveryFee int64  `json:"delivery_fee"`
+	Status           string `json:"status"`
+	OrderCount       int64  `json:"order_count"`
+	RiderAmount      int64  `json:"rider_amount"`
+	DeliveryFee      int64  `json:"delivery_fee"`
+	RiderGrossAmount int64  `json:"rider_gross_amount"`
+	RiderPaymentFee  int64  `json:"rider_payment_fee"`
 }
 
 type riderIncomeLedgerResponse struct {
@@ -56,6 +60,8 @@ type riderIncomeLedgerItemResponse struct {
 	Status              string     `json:"status"`
 	TotalAmount         int64      `json:"total_amount"`
 	DeliveryFee         int64      `json:"delivery_fee"`
+	RiderGrossAmount    int64      `json:"rider_gross_amount"`
+	RiderPaymentFee     int64      `json:"rider_payment_fee"`
 	RiderAmount         int64      `json:"rider_amount"`
 	DistributableAmount int64      `json:"distributable_amount"`
 	OutOrderNo          string     `json:"out_order_no"`
@@ -69,27 +75,33 @@ type riderIncomeDailyResponse struct {
 }
 
 type riderIncomeDailyItemResponse struct {
-	Date          string `json:"date"`
-	DeliveryCount int64  `json:"delivery_count"`
-	DailyIncome   int64  `json:"daily_income"`
+	Date             string `json:"date"`
+	DeliveryCount    int64  `json:"delivery_count"`
+	DailyIncome      int64  `json:"daily_income"`
+	RiderGrossAmount int64  `json:"rider_gross_amount"`
+	RiderPaymentFee  int64  `json:"rider_payment_fee"`
 }
 
 func newRiderIncomeSummaryResponse(result logic.RiderIncomeSummary) riderIncomeSummaryResponse {
 	statusSummary := make([]riderIncomeStatusSummaryResponse, 0, len(result.StatusSummary))
 	for _, item := range result.StatusSummary {
 		statusSummary = append(statusSummary, riderIncomeStatusSummaryResponse{
-			Status:      item.Status,
-			OrderCount:  item.OrderCount,
-			RiderAmount: item.RiderAmount,
-			DeliveryFee: item.DeliveryFee,
+			Status:           item.Status,
+			OrderCount:       item.OrderCount,
+			RiderAmount:      item.RiderAmount,
+			DeliveryFee:      item.DeliveryFee,
+			RiderGrossAmount: item.RiderGrossAmount,
+			RiderPaymentFee:  item.RiderPaymentFee,
 		})
 	}
 
 	return riderIncomeSummaryResponse{
-		TotalDeliveries:  result.TotalDeliveries,
-		TotalRiderIncome: result.TotalRiderIncome,
-		TotalDeliveryFee: result.TotalDeliveryFee,
-		StatusSummary:    statusSummary,
+		TotalDeliveries:       result.TotalDeliveries,
+		TotalRiderIncome:      result.TotalRiderIncome,
+		TotalDeliveryFee:      result.TotalDeliveryFee,
+		TotalRiderGrossAmount: result.TotalRiderGrossAmount,
+		TotalRiderPaymentFee:  result.TotalRiderPaymentFee,
+		StatusSummary:         statusSummary,
 	}
 }
 
@@ -106,6 +118,8 @@ func newRiderIncomeLedgerResponse(result logic.RiderIncomeLedger) riderIncomeLed
 			Status:              item.Status,
 			TotalAmount:         item.TotalAmount,
 			DeliveryFee:         item.DeliveryFee,
+			RiderGrossAmount:    item.RiderGrossAmount,
+			RiderPaymentFee:     item.RiderPaymentFee,
 			RiderAmount:         item.RiderAmount,
 			DistributableAmount: item.DistributableAmount,
 			OutOrderNo:          item.OutOrderNo,
@@ -128,9 +142,11 @@ func newRiderIncomeDailyResponse(items []logic.RiderIncomeDailyItem) riderIncome
 	responses := make([]riderIncomeDailyItemResponse, 0, len(items))
 	for _, item := range items {
 		responses = append(responses, riderIncomeDailyItemResponse{
-			Date:          item.Date.Format("2006-01-02"),
-			DeliveryCount: item.DeliveryCount,
-			DailyIncome:   item.DailyIncome,
+			Date:             item.Date.Format("2006-01-02"),
+			DeliveryCount:    item.DeliveryCount,
+			DailyIncome:      item.DailyIncome,
+			RiderGrossAmount: item.RiderGrossAmount,
+			RiderPaymentFee:  item.RiderPaymentFee,
 		})
 	}
 	return riderIncomeDailyResponse{Items: responses}

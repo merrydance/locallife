@@ -3,12 +3,14 @@ package logic
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
@@ -133,6 +135,36 @@ func (c *fakeOrdinaryPaymentClient) GenerateJSAPIPayParams(prepayID string) (*os
 	return &ospcontracts.JSAPIPayParams{Package: "prepay_id=" + prepayID, NonceStr: "nonce-ordinary"}, nil
 }
 
+func expectActiveMerchantBaofuBindingForPayment(store *mockdb.MockStore, merchantID int64) {
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchantID,
+		}).
+		Return(db.BaofuAccountBinding{
+			OwnerType:    db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:      merchantID,
+			AccountType:  db.BaofuAccountTypeBusiness,
+			OpenState:    db.BaofuAccountOpenStateActive,
+			ContractNo:   pgtype.Text{String: "CM3001", Valid: true},
+			SharingMerID: pgtype.Text{String: "CM3001", Valid: true},
+		}, nil)
+	store.EXPECT().
+		GetBaofuMerchantReportByOwner(gomock.Any(), db.GetBaofuMerchantReportByOwnerParams{
+			OwnerType:  db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:    merchantID,
+			ReportType: db.BaofuMerchantReportTypeWechat,
+		}).
+		Return(db.BaofuMerchantReport{
+			OwnerType:       db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:         merchantID,
+			ReportType:      db.BaofuMerchantReportTypeWechat,
+			ReportState:     db.BaofuMerchantReportStateSucceeded,
+			AppletAuthState: db.BaofuMerchantReportAppletAuthStateSucceeded,
+			SubMchID:        pgtype.Text{String: "sub-baofu", Valid: true},
+		}, nil)
+}
+
 func TestPaymentOrderServiceCreatePaymentOrder_UsesOrdinaryServiceProviderForMainBusiness(t *testing.T) {
 	input := CreatePaymentOrderInput{
 		UserID:       1001,
@@ -171,6 +203,7 @@ func TestPaymentOrderServiceCreatePaymentOrder_UsesOrdinaryServiceProviderForMai
 		OrderID:      pgtype.Int8{Int64: input.OrderID, Valid: true},
 		BusinessType: businessTypeOrder,
 	}).Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+	expectActiveMerchantBaofuBindingForPayment(store, order.MerchantID)
 	store.EXPECT().GetUser(gomock.Any(), input.UserID).Return(db.User{ID: input.UserID, WechatOpenid: "openid"}, nil)
 	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(db.Merchant{ID: order.MerchantID, Name: "Merchant A"}, nil)
 	store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreatePartnerPaymentTxParams) (db.CreatePartnerPaymentTxResult, error) {
@@ -211,6 +244,327 @@ func TestPaymentOrderServiceCreatePaymentOrder_UsesOrdinaryServiceProviderForMai
 	require.Equal(t, "127.0.0.1", ordinaryClient.createPaymentRequest.SceneInfo.PayerClientIP)
 	require.Equal(t, "https://api.example.com/v1/webhooks/wechat-ordinary/payment-notify", ordinaryClient.createPaymentRequest.NotifyURL)
 	require.False(t, ordinaryClient.createPaymentRequest.SettleInfo.ProfitSharing)
+}
+
+func TestPaymentOrderServiceCreatePaymentOrder_UsesBaofuForMainBusiness(t *testing.T) {
+	input := CreatePaymentOrderInput{
+		UserID:       1001,
+		OrderID:      2001,
+		PaymentType:  paymentTypeMiniProgram,
+		BusinessType: businessTypeOrder,
+		ClientIP:     "127.0.0.1",
+	}
+	order := db.Order{
+		ID:          input.OrderID,
+		UserID:      input.UserID,
+		MerchantID:  3001,
+		OrderType:   orderTypeTakeaway,
+		Status:      "pending",
+		TotalAmount: 1000,
+	}
+	txPayment := db.PaymentOrder{
+		ID:                    4003,
+		UserID:                input.UserID,
+		Status:                paymentStatusPending,
+		PaymentType:           paymentTypeMiniProgram,
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+		BusinessType:          businessTypeOrder,
+		Amount:                1000,
+		OutTradeNo:            "baofu-out-trade-no",
+		Attach:                pgtype.Text{String: "order_id:2001;sub_mchid:sub-baofu", Valid: true},
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	baofuClient := &fakeBaofuAggregatePaymentClient{
+		unifiedResult: &aggregatecontracts.UnifiedOrderResult{
+			TradeNo: "BFPAY_4003",
+			ChannelReturn: aggregatecontracts.ChannelReturn{
+				WechatPayData: json.RawMessage(`{"timeStamp":"1767225600","nonceStr":"nonce-baofu","package":"prepay_id=baofu","signType":"RSA","paySign":"pay-sign-baofu"}`),
+			},
+		},
+	}
+	baofuPayment := NewBaofuPaymentService(store, baofuClient, BaofuPaymentServiceConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+		MiniProgramAppID:  "wxapp",
+		PaymentNotifyURL:  "https://api.example.com/v1/webhooks/baofu/payment",
+	})
+
+	store.EXPECT().GetOrder(gomock.Any(), input.OrderID).Return(order, nil)
+	store.EXPECT().GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: input.OrderID, Valid: true},
+		BusinessType: businessTypeOrder,
+	}).Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+	expectActiveMerchantBaofuBindingForPayment(store, order.MerchantID)
+	store.EXPECT().GetUser(gomock.Any(), input.UserID).Return(db.User{ID: input.UserID, WechatOpenid: "openid-baofu"}, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(db.Merchant{ID: order.MerchantID, Name: "Merchant B"}, nil)
+	store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreatePartnerPaymentTxParams) (db.CreatePartnerPaymentTxResult, error) {
+		require.Equal(t, db.PaymentChannelBaofuAggregate, arg.PaymentChannel)
+		require.True(t, arg.RequiresProfitSharing)
+		require.Equal(t, "order_id:2001", arg.Attach)
+		return db.CreatePartnerPaymentTxResult{PaymentOrder: txPayment}, nil
+	})
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+		require.Equal(t, db.ExternalPaymentProviderBaofu, arg.Provider)
+		require.Equal(t, db.PaymentChannelBaofuAggregate, arg.Channel)
+		require.Equal(t, db.ExternalPaymentCapabilityBaofuPayment, arg.Capability)
+		require.Equal(t, db.ExternalPaymentObjectBaofuPaymentOrder, arg.ExternalObjectType)
+		require.Equal(t, txPayment.OutTradeNo, arg.ExternalObjectKey)
+		require.Equal(t, db.ExternalPaymentCommandStatusSubmitted, arg.CommandStatus)
+		require.NotContains(t, string(arg.ResponseSnapshot), "openid-baofu")
+		return db.ExternalPaymentCommand{ID: 9701}, nil
+	})
+
+	svc := NewPaymentOrderServiceWithBaofu(store, nil, baofuPayment)
+	result, err := svc.CreatePaymentOrder(context.Background(), input)
+
+	require.NoError(t, err)
+	require.Equal(t, db.PaymentChannelBaofuAggregate, result.PaymentOrder.PaymentChannel)
+	require.True(t, result.PaymentOrder.RequiresProfitSharing)
+	require.NotNil(t, result.PayParams)
+	require.Equal(t, "1767225600", result.PayParams.TimeStamp)
+	require.Equal(t, "nonce-baofu", result.PayParams.NonceStr)
+	require.Equal(t, "prepay_id=baofu", result.PayParams.Package)
+	require.Equal(t, "RSA", result.PayParams.SignType)
+	require.Equal(t, "pay-sign-baofu", result.PayParams.PaySign)
+	require.True(t, baofuClient.called)
+	require.Equal(t, "COLLECT_MER", baofuClient.lastRequest.MerchantID)
+	require.Equal(t, "sub-baofu", baofuClient.lastRequest.SubMchID)
+	require.Equal(t, "openid-baofu", baofuClient.lastRequest.PayExtend.SubOpenID)
+	require.Equal(t, "Merchant B - Order Payment", baofuClient.lastRequest.PayExtend.Body)
+}
+
+func TestPaymentOrderServiceCreatePaymentOrder_RequiresMerchantBaofuReadiness(t *testing.T) {
+	input := CreatePaymentOrderInput{
+		UserID:       1001,
+		OrderID:      2001,
+		PaymentType:  paymentTypeMiniProgram,
+		BusinessType: businessTypeOrder,
+		ClientIP:     "127.0.0.1",
+	}
+	order := db.Order{
+		ID:          input.OrderID,
+		UserID:      input.UserID,
+		MerchantID:  3001,
+		OrderType:   orderTypeTakeaway,
+		Status:      "pending",
+		TotalAmount: 1000,
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{}
+
+	store.EXPECT().GetOrder(gomock.Any(), input.OrderID).Return(order, nil)
+	store.EXPECT().GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: input.OrderID, Valid: true},
+		BusinessType: businessTypeOrder,
+	}).Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+		OwnerType: db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:   order.MerchantID,
+	}).Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
+	store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).Times(0)
+
+	svc := NewPaymentOrderServiceWithOrdinaryServiceProvider(store, nil, ordinaryClient)
+	_, err := svc.CreatePaymentOrder(context.Background(), input)
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusBadRequest, reqErr.Status)
+	require.Equal(t, "商户结算账户未开通，暂不能创建支付订单", reqErr.Err.Error())
+	require.Nil(t, ordinaryClient.createPaymentRequest)
+}
+
+func TestPaymentOrderServiceCreatePaymentOrder_BaofuMissingClientFailsBeforeLocalPayment(t *testing.T) {
+	input := CreatePaymentOrderInput{
+		UserID:       1001,
+		OrderID:      2001,
+		PaymentType:  paymentTypeMiniProgram,
+		BusinessType: businessTypeOrder,
+		ClientIP:     "127.0.0.1",
+	}
+	order := db.Order{
+		ID:          input.OrderID,
+		UserID:      input.UserID,
+		MerchantID:  3001,
+		OrderType:   orderTypeTakeaway,
+		Status:      "pending",
+		TotalAmount: 1000,
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetOrder(gomock.Any(), input.OrderID).Return(order, nil)
+	store.EXPECT().GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: input.OrderID, Valid: true},
+		BusinessType: businessTypeOrder,
+	}).Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(db.Merchant{ID: order.MerchantID, Name: "Merchant B"}, nil)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), gomock.Any()).Times(0)
+	store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).Times(0)
+
+	svc := NewPaymentOrderServiceWithBaofu(store, nil, nil)
+	_, err := svc.CreatePaymentOrder(context.Background(), input)
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
+	require.Equal(t, "宝付支付通道未配置，请联系平台处理", reqErr.Err.Error())
+}
+
+func TestPaymentOrderServiceCreatePaymentOrder_BaofuWechatChannelNotReadyFailsBeforeClientCall(t *testing.T) {
+	tests := []struct {
+		name   string
+		report db.BaofuMerchantReport
+	}{
+		{
+			name: "missing merchant report sub mch id",
+			report: db.BaofuMerchantReport{
+				OwnerType:       db.BaofuAccountOwnerTypeMerchant,
+				OwnerID:         3001,
+				ReportType:      db.BaofuMerchantReportTypeWechat,
+				ReportState:     db.BaofuMerchantReportStateSucceeded,
+				AppletAuthState: db.BaofuMerchantReportAppletAuthStateSucceeded,
+			},
+		},
+		{
+			name: "pending applet bind",
+			report: db.BaofuMerchantReport{
+				OwnerType:       db.BaofuAccountOwnerTypeMerchant,
+				OwnerID:         3001,
+				ReportType:      db.BaofuMerchantReportTypeWechat,
+				ReportState:     db.BaofuMerchantReportStateSucceeded,
+				AppletAuthState: db.BaofuMerchantReportAppletAuthStatePending,
+				SubMchID:        pgtype.Text{String: "sub-baofu", Valid: true},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := CreatePaymentOrderInput{
+				UserID:       1001,
+				OrderID:      2001,
+				PaymentType:  paymentTypeMiniProgram,
+				BusinessType: businessTypeOrder,
+				ClientIP:     "127.0.0.1",
+			}
+			order := db.Order{
+				ID:          input.OrderID,
+				UserID:      input.UserID,
+				MerchantID:  3001,
+				OrderType:   orderTypeTakeaway,
+				Status:      "pending",
+				TotalAmount: 1000,
+			}
+
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			baofuClient := &fakeBaofuAggregatePaymentClient{
+				unifiedResult: &aggregatecontracts.UnifiedOrderResult{},
+			}
+			baofuPayment := NewBaofuPaymentService(store, baofuClient, BaofuPaymentServiceConfig{
+				CollectMerchantID: "COLLECT_MER",
+				CollectTerminalID: "COLLECT_TER",
+				MiniProgramAppID:  "wxapp",
+				PaymentNotifyURL:  "https://api.example.com/v1/webhooks/baofu/payment",
+			})
+
+			store.EXPECT().GetOrder(gomock.Any(), input.OrderID).Return(order, nil)
+			store.EXPECT().GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+				OrderID:      pgtype.Int8{Int64: input.OrderID, Valid: true},
+				BusinessType: businessTypeOrder,
+			}).Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+			store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(db.Merchant{ID: order.MerchantID, Name: "Merchant B"}, nil)
+			store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+				OwnerType: db.BaofuAccountOwnerTypeMerchant,
+				OwnerID:   order.MerchantID,
+			}).Return(db.BaofuAccountBinding{
+				OwnerType:    db.BaofuAccountOwnerTypeMerchant,
+				OwnerID:      order.MerchantID,
+				AccountType:  db.BaofuAccountTypeBusiness,
+				OpenState:    db.BaofuAccountOpenStateActive,
+				ContractNo:   pgtype.Text{String: "CM3001", Valid: true},
+				SharingMerID: pgtype.Text{String: "CM3001", Valid: true},
+			}, nil)
+			store.EXPECT().GetBaofuMerchantReportByOwner(gomock.Any(), db.GetBaofuMerchantReportByOwnerParams{
+				OwnerType:  db.BaofuAccountOwnerTypeMerchant,
+				OwnerID:    order.MerchantID,
+				ReportType: db.BaofuMerchantReportTypeWechat,
+			}).Return(tt.report, nil)
+			store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).Times(0)
+
+			svc := NewPaymentOrderServiceWithBaofu(store, nil, baofuPayment)
+			_, err := svc.CreatePaymentOrder(context.Background(), input)
+
+			reqErr := assertRequestError(t, err)
+			require.Equal(t, http.StatusBadRequest, reqErr.Status)
+			require.Equal(t, "商户微信支付通道待开通，暂不能创建微信生态支付订单", reqErr.Err.Error())
+			require.False(t, baofuClient.called)
+		})
+	}
+}
+
+func TestPaymentOrderServiceQueryPaymentOrder_DirectPaymentIgnoresBaofuMainBusinessClient(t *testing.T) {
+	input := QueryPaymentOrderInput{UserID: 1001, PaymentOrderID: 2001}
+	paymentOrder := db.PaymentOrder{
+		ID:             input.PaymentOrderID,
+		UserID:         input.UserID,
+		PaymentType:    paymentTypeMiniProgram,
+		PaymentChannel: db.PaymentChannelDirect,
+		BusinessType:   db.ExternalPaymentBusinessOwnerRiderDeposit,
+		Status:         paymentStatusPending,
+		OutTradeNo:     "DP202605040001",
+		PrepayID:       pgtype.Text{String: "prepay-direct-boundary", Valid: true},
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(5 * time.Minute), Valid: true},
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	directClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
+	baofuClient := &fakeBaofuAggregatePaymentClient{
+		unifiedResult: &aggregatecontracts.UnifiedOrderResult{},
+	}
+
+	store.EXPECT().
+		GetPaymentOrder(gomock.Any(), input.PaymentOrderID).
+		Return(paymentOrder, nil)
+	directClient.EXPECT().
+		QueryOrderByOutTradeNo(gomock.Any(), paymentOrder.OutTradeNo).
+		Return(&wechatcontracts.DirectOrderQueryResponse{
+			OutTradeNo:     paymentOrder.OutTradeNo,
+			TradeState:     "NOTPAY",
+			TradeStateDesc: "待支付",
+			Amount:         wechatcontracts.DirectOrderQueryAmount{Total: paymentOrder.Amount},
+		}, nil)
+	directClient.EXPECT().
+		GenerateJSAPIPayParams("prepay-direct-boundary").
+		Return(&wechat.JSAPIPayParams{NonceStr: "direct-boundary-nonce"}, nil)
+
+	baofuPayment := NewBaofuPaymentService(store, baofuClient, BaofuPaymentServiceConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+		MiniProgramAppID:  "wxapp",
+		PaymentNotifyURL:  "https://api.example.com/v1/webhooks/baofu/payment",
+	})
+	svc := NewPaymentOrderServiceWithBaofu(store, directClient, baofuPayment)
+	result, err := svc.QueryPaymentOrder(context.Background(), input)
+
+	require.NoError(t, err)
+	require.Equal(t, "NOTPAY", result.WechatOrder.TradeState)
+	require.NotNil(t, result.PayParams)
+	require.False(t, baofuClient.called)
 }
 
 func TestPaymentOrderServiceCreatePaymentOrder_LogsOrdinaryMarkFailedCleanupError(t *testing.T) {
@@ -255,6 +609,7 @@ func TestPaymentOrderServiceCreatePaymentOrder_LogsOrdinaryMarkFailedCleanupErro
 		OrderID:      pgtype.Int8{Int64: input.OrderID, Valid: true},
 		BusinessType: businessTypeOrder,
 	}).Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+	expectActiveMerchantBaofuBindingForPayment(store, order.MerchantID)
 	store.EXPECT().GetUser(gomock.Any(), input.UserID).Return(db.User{ID: input.UserID, WechatOpenid: "openid"}, nil)
 	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(db.Merchant{ID: order.MerchantID, Name: "Merchant A"}, nil)
 	store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).Return(db.CreatePartnerPaymentTxResult{
@@ -1331,6 +1686,248 @@ func TestPaymentOrderServiceQueryPaymentOrder(t *testing.T) {
 				require.Equal(t, paymentStatusPaid, result.PaymentOrder.Status)
 				require.NotNil(t, result.WechatOrder)
 				require.Equal(t, "SUCCESS", result.WechatOrder.TradeState)
+				require.Nil(t, result.PayParams)
+			},
+		},
+		{
+			name:            "DirectBaofuVerifyFeeRemoteSuccessMarksPaidAndDefersFactApplication",
+			useDirectClient: true,
+			buildStubs: func(store *mockdb.MockStore, directClient *mockwechat.MockDirectPaymentClientInterface, _ *mockwechat.MockEcommerceClientInterface) {
+				paymentOrder := db.PaymentOrder{
+					ID:             input.PaymentOrderID,
+					UserID:         input.UserID,
+					PaymentType:    paymentTypeMiniProgram,
+					PaymentChannel: db.PaymentChannelDirect,
+					BusinessType:   db.PaymentBusinessTypeBaofuAccountVerifyFee,
+					Status:         paymentStatusPending,
+					OutTradeNo:     "BFVF20260508000002",
+					Amount:         200,
+				}
+				paidOrder := paymentOrder
+				paidOrder.Status = paymentStatusPaid
+				paidOrder.TransactionID = pgtype.Text{String: "wx-direct-baofu-verify-fee-001", Valid: true}
+				fact := db.ExternalPaymentFact{
+					ID:                 9301,
+					Provider:           db.ExternalPaymentProviderWechat,
+					Channel:            db.PaymentChannelDirect,
+					Capability:         db.ExternalPaymentCapabilityDirectJSAPIPayment,
+					FactSource:         db.ExternalPaymentFactSourceQuery,
+					ExternalObjectType: db.ExternalPaymentObjectPayment,
+					ExternalObjectKey:  paymentOrder.OutTradeNo,
+					BusinessOwner:      pgtype.Text{String: db.ExternalPaymentBusinessOwnerBaofuVerifyFee, Valid: true},
+					BusinessObjectType: pgtype.Text{String: paymentFactBusinessObjectPaymentOrder, Valid: true},
+					BusinessObjectID:   pgtype.Int8{Int64: paymentOrder.ID, Valid: true},
+					UpstreamState:      "SUCCESS",
+					TerminalStatus:     db.ExternalPaymentTerminalStatusSuccess,
+					IsTerminal:         true,
+					Amount:             pgtype.Int8{Int64: 200, Valid: true},
+					Currency:           "CNY",
+					RawResource:        []byte(`{"trade_state":"SUCCESS"}`),
+					DedupeKey:          "wechat:query:direct_payment:BFVF20260508000002:SUCCESS",
+				}
+				application := db.ExternalPaymentFactApplication{
+					ID:                 9401,
+					FactID:             fact.ID,
+					Consumer:           paymentFactConsumerBaofuAccountVerifyFeeDomain,
+					BusinessObjectType: paymentFactBusinessObjectPaymentOrder,
+					BusinessObjectID:   paymentOrder.ID,
+					Status:             db.ExternalPaymentFactApplicationStatusPending,
+				}
+
+				store.EXPECT().
+					GetPaymentOrder(gomock.Any(), input.PaymentOrderID).
+					Return(paymentOrder, nil)
+				directClient.EXPECT().
+					QueryOrderByOutTradeNo(gomock.Any(), paymentOrder.OutTradeNo).
+					Return(&wechatcontracts.DirectOrderQueryResponse{
+						OutTradeNo:     paymentOrder.OutTradeNo,
+						TransactionID:  "wx-direct-baofu-verify-fee-001",
+						TradeState:     "SUCCESS",
+						TradeStateDesc: "支付成功",
+						SuccessTime:    "2026-05-08T12:00:00+08:00",
+						Amount:         wechatcontracts.DirectOrderQueryAmount{Total: 200},
+					}, nil)
+				store.EXPECT().
+					UpdatePaymentOrderToPaid(gomock.Any(), db.UpdatePaymentOrderToPaidParams{
+						ID:            paymentOrder.ID,
+						TransactionID: pgtype.Text{String: "wx-direct-baofu-verify-fee-001", Valid: true},
+					}).
+					Return(paidOrder, nil)
+				store.EXPECT().
+					CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).
+					DoAndReturn(func(_ context.Context, params db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+						require.Equal(t, db.ExternalPaymentBusinessOwnerBaofuVerifyFee, params.BusinessOwner.String)
+						require.True(t, params.IsTerminal)
+						require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, params.TerminalStatus)
+						return fact, nil
+					})
+				store.EXPECT().
+					CreateExternalPaymentFactApplication(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactApplicationParams{})).
+					DoAndReturn(func(_ context.Context, params db.CreateExternalPaymentFactApplicationParams) (db.ExternalPaymentFactApplication, error) {
+						require.Equal(t, paymentFactConsumerBaofuAccountVerifyFeeDomain, params.Consumer)
+						require.Equal(t, paymentOrder.ID, params.BusinessObjectID)
+						return application, nil
+					})
+			},
+			check: func(t *testing.T, result QueryPaymentOrderResult, err error) {
+				require.NoError(t, err)
+				require.Equal(t, paymentStatusPaid, result.PaymentOrder.Status)
+				require.NotNil(t, result.WechatOrder)
+				require.Equal(t, "SUCCESS", result.WechatOrder.TradeState)
+				require.Nil(t, result.PayParams)
+			},
+		},
+		{
+			name:            "DirectBaofuVerifyFeeRemoteSuccessAmountMismatchDoesNotMarkPaidOrRecordFact",
+			useDirectClient: true,
+			buildStubs: func(store *mockdb.MockStore, directClient *mockwechat.MockDirectPaymentClientInterface, _ *mockwechat.MockEcommerceClientInterface) {
+				paymentOrder := db.PaymentOrder{
+					ID:             input.PaymentOrderID,
+					UserID:         input.UserID,
+					PaymentType:    paymentTypeMiniProgram,
+					PaymentChannel: db.PaymentChannelDirect,
+					BusinessType:   db.PaymentBusinessTypeBaofuAccountVerifyFee,
+					Status:         paymentStatusPending,
+					OutTradeNo:     "BFVF20260508000004",
+					Amount:         200,
+				}
+
+				store.EXPECT().
+					GetPaymentOrder(gomock.Any(), input.PaymentOrderID).
+					Return(paymentOrder, nil)
+				directClient.EXPECT().
+					QueryOrderByOutTradeNo(gomock.Any(), paymentOrder.OutTradeNo).
+					Return(&wechatcontracts.DirectOrderQueryResponse{
+						OutTradeNo:     paymentOrder.OutTradeNo,
+						TransactionID:  "wx-direct-baofu-verify-fee-mismatch-001",
+						TradeState:     "SUCCESS",
+						TradeStateDesc: "支付成功",
+						SuccessTime:    "2026-05-08T12:05:00+08:00",
+						Amount:         wechatcontracts.DirectOrderQueryAmount{Total: 100},
+					}, nil)
+			},
+			check: func(t *testing.T, result QueryPaymentOrderResult, err error) {
+				require.NoError(t, err)
+				require.Equal(t, paymentStatusPending, result.PaymentOrder.Status)
+				require.NotNil(t, result.WechatOrder)
+				require.Equal(t, "SUCCESS", result.WechatOrder.TradeState)
+				require.Equal(t, int64(100), result.WechatOrder.Amount.Total)
+				require.Nil(t, result.PayParams)
+			},
+		},
+		{
+			name:            "DirectBaofuVerifyFeeRemoteClosedAppliesRetryableFact",
+			useDirectClient: true,
+			buildStubs: func(store *mockdb.MockStore, directClient *mockwechat.MockDirectPaymentClientInterface, _ *mockwechat.MockEcommerceClientInterface) {
+				paymentOrder := db.PaymentOrder{
+					ID:             input.PaymentOrderID,
+					UserID:         input.UserID,
+					PaymentType:    paymentTypeMiniProgram,
+					PaymentChannel: db.PaymentChannelDirect,
+					BusinessType:   db.PaymentBusinessTypeBaofuAccountVerifyFee,
+					Status:         paymentStatusPending,
+					OutTradeNo:     "BFVF20260508000003",
+					Amount:         200,
+				}
+				closedOrder := paymentOrder
+				closedOrder.Status = "closed"
+				fact := db.ExternalPaymentFact{
+					ID:                 9302,
+					Provider:           db.ExternalPaymentProviderWechat,
+					Channel:            db.PaymentChannelDirect,
+					Capability:         db.ExternalPaymentCapabilityDirectJSAPIPayment,
+					FactSource:         db.ExternalPaymentFactSourceQuery,
+					ExternalObjectType: db.ExternalPaymentObjectPayment,
+					ExternalObjectKey:  paymentOrder.OutTradeNo,
+					BusinessOwner:      pgtype.Text{String: db.ExternalPaymentBusinessOwnerBaofuVerifyFee, Valid: true},
+					BusinessObjectType: pgtype.Text{String: paymentFactBusinessObjectPaymentOrder, Valid: true},
+					BusinessObjectID:   pgtype.Int8{Int64: paymentOrder.ID, Valid: true},
+					UpstreamState:      "CLOSED",
+					TerminalStatus:     db.ExternalPaymentTerminalStatusClosed,
+					IsTerminal:         true,
+					Amount:             pgtype.Int8{Int64: 200, Valid: true},
+					Currency:           "CNY",
+					RawResource:        []byte(`{"trade_state":"CLOSED"}`),
+					DedupeKey:          "wechat:query:direct_payment:BFVF20260508000003:CLOSED",
+				}
+				application := db.ExternalPaymentFactApplication{
+					ID:                 9402,
+					FactID:             fact.ID,
+					Consumer:           paymentFactConsumerBaofuAccountVerifyFeeDomain,
+					BusinessObjectType: paymentFactBusinessObjectPaymentOrder,
+					BusinessObjectID:   paymentOrder.ID,
+					Status:             db.ExternalPaymentFactApplicationStatusPending,
+				}
+				flow := db.BaofuAccountOpeningFlow{
+					ID:                      7402,
+					OwnerType:               db.BaofuAccountOwnerTypeRider,
+					OwnerID:                 1001,
+					AccountType:             db.BaofuAccountTypePersonal,
+					State:                   db.BaofuAccountOpeningStateVerifyFeeProcessing,
+					ProfileID:               pgtype.Int8{Int64: 7001, Valid: true},
+					VerifyFeeAmount:         200,
+					VerifyFeePaymentOrderID: pgtype.Int8{Int64: paymentOrder.ID, Valid: true},
+				}
+
+				store.EXPECT().
+					GetPaymentOrder(gomock.Any(), input.PaymentOrderID).
+					Return(paymentOrder, nil)
+				directClient.EXPECT().
+					QueryOrderByOutTradeNo(gomock.Any(), paymentOrder.OutTradeNo).
+					Return(&wechatcontracts.DirectOrderQueryResponse{
+						OutTradeNo:     paymentOrder.OutTradeNo,
+						TradeState:     "CLOSED",
+						TradeStateDesc: "订单已关闭",
+						Amount:         wechatcontracts.DirectOrderQueryAmount{Total: 200},
+					}, nil)
+				store.EXPECT().
+					CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).
+					DoAndReturn(func(_ context.Context, params db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
+						require.Equal(t, db.ExternalPaymentBusinessOwnerBaofuVerifyFee, params.BusinessOwner.String)
+						require.True(t, params.IsTerminal)
+						require.Equal(t, db.ExternalPaymentTerminalStatusClosed, params.TerminalStatus)
+						return fact, nil
+					})
+				store.EXPECT().
+					CreateExternalPaymentFactApplication(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactApplicationParams{})).
+					DoAndReturn(func(_ context.Context, params db.CreateExternalPaymentFactApplicationParams) (db.ExternalPaymentFactApplication, error) {
+						require.Equal(t, paymentFactConsumerBaofuAccountVerifyFeeDomain, params.Consumer)
+						require.Equal(t, paymentOrder.ID, params.BusinessObjectID)
+						return application, nil
+					})
+				store.EXPECT().
+					ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).
+					Return(application, nil)
+				store.EXPECT().
+					GetExternalPaymentFact(gomock.Any(), fact.ID).
+					Return(fact, nil)
+				store.EXPECT().
+					GetPaymentOrder(gomock.Any(), paymentOrder.ID).
+					Return(paymentOrder, nil)
+				store.EXPECT().
+					UpdatePaymentOrderToClosed(gomock.Any(), paymentOrder.ID).
+					Return(closedOrder, nil)
+				store.EXPECT().
+					GetBaofuAccountOpeningFlowByPaymentOrder(gomock.Any(), pgtype.Int8{Int64: paymentOrder.ID, Valid: true}).
+					Return(flow, nil)
+				store.EXPECT().
+					MarkBaofuAccountOpeningFlowVerifyFeePending(gomock.Any(), gomock.AssignableToTypeOf(db.MarkBaofuAccountOpeningFlowVerifyFeePendingParams{})).
+					Return(db.BaofuAccountOpeningFlow{ID: flow.ID, State: db.BaofuAccountOpeningStateVerifyFeePending}, nil)
+				store.EXPECT().
+					UpdateExternalPaymentFactProcessingStatus(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateExternalPaymentFactProcessingStatusParams{})).
+					Return(fact, nil)
+				store.EXPECT().
+					MarkExternalPaymentFactApplicationApplied(gomock.Any(), gomock.AssignableToTypeOf(db.MarkExternalPaymentFactApplicationAppliedParams{})).
+					Return(application, nil)
+				store.EXPECT().
+					GetPaymentOrder(gomock.Any(), paymentOrder.ID).
+					Return(closedOrder, nil)
+			},
+			check: func(t *testing.T, result QueryPaymentOrderResult, err error) {
+				require.NoError(t, err)
+				require.Equal(t, "closed", result.PaymentOrder.Status)
+				require.NotNil(t, result.WechatOrder)
+				require.Equal(t, "CLOSED", result.WechatOrder.TradeState)
 				require.Nil(t, result.PayParams)
 			},
 		},

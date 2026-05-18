@@ -131,6 +131,7 @@ Domain modules:
 - `.github/standards/domains/media/*`
 - `.github/standards/domains/ocr/*`
 - `.github/standards/domains/wechat-payment/*`
+- `.github/standards/domains/baofu-payment/*`
 
 ## Recommended Read Order
 

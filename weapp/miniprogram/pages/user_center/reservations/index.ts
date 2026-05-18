@@ -172,7 +172,8 @@ Page({
         try {
             const paymentResult = await startPaymentOrderWorkflow({
                 orderId: id,
-                businessType: 'reservation'
+                businessType: 'reservation',
+                context: this
             })
             
             const res = this.data.reservations.find((r) => r.id === id)

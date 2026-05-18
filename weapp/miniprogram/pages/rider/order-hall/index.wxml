@@ -45,6 +45,11 @@
       </view>
     </t-sticky>
 
+    <view wx:if="{{showSettlementReminder}}" class="inline-sync-state">
+      <t-icon name="error-circle-filled" size="32rpx" />
+      <text class="inline-sync-state__text">{{settlementReminderText}}</text>
+    </view>
+
     <view wx:if="{{showDepositReminder}}" class="inline-sync-state">
       <t-icon name="error-circle-filled" size="32rpx" />
       <text class="inline-sync-state__text">{{depositReminderText}}</text>

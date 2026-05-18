@@ -42,6 +42,7 @@ type PaymentOrderService struct {
 	directPaymentClient        wechat.DirectPaymentClientInterface
 	ecommerceClient            wechat.EcommerceClientInterface
 	ordinaryProviderPayClient  ordinaryServiceProviderPaymentClient
+	baofuPaymentService        *BaofuPaymentService
 	mainBusinessPaymentChannel string
 	now                        func() time.Time
 }
@@ -79,6 +80,16 @@ func NewPaymentOrderServiceWithOrdinaryServiceProvider(store db.Store, directPay
 		directPaymentClient:        directPaymentClient,
 		ordinaryProviderPayClient:  ordinaryClient,
 		mainBusinessPaymentChannel: db.PaymentChannelOrdinaryServiceProvider,
+		now:                        time.Now,
+	}
+}
+
+func NewPaymentOrderServiceWithBaofu(store db.Store, directPaymentClient wechat.DirectPaymentClientInterface, baofuPaymentService *BaofuPaymentService) *PaymentOrderService {
+	return &PaymentOrderService{
+		store:                      store,
+		directPaymentClient:        directPaymentClient,
+		baofuPaymentService:        baofuPaymentService,
+		mainBusinessPaymentChannel: db.PaymentChannelBaofuAggregate,
 		now:                        time.Now,
 	}
 }
@@ -267,6 +278,14 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 			return svc.createOrderOrdinaryServiceProviderPayment(ctx, input, merchantID, merchantName, reservationLinkedOrder || shouldEnableOrderProfitSharing(orderType), amount, attach, expiresAt)
 		}
 	}
+	if svc.mainBusinessPaymentChannel == db.PaymentChannelBaofuAggregate {
+		if input.BusinessType == businessTypeReservation {
+			return svc.createReservationBaofuPayment(ctx, input, merchantID, merchantName, reservationPaymentMode, amount, attach, expiresAt)
+		}
+		if input.BusinessType == businessTypeOrder {
+			return svc.createOrderBaofuPayment(ctx, input, merchantID, merchantName, amount, attach, expiresAt)
+		}
+	}
 
 	// ==================== 历史收付通冷备路径 ====================
 	if input.BusinessType == businessTypeReservation {
@@ -283,6 +302,8 @@ func (svc *PaymentOrderService) paymentOrderUsesMainBusinessChannel(paymentOrder
 	switch svc.mainBusinessPaymentChannel {
 	case db.PaymentChannelOrdinaryServiceProvider:
 		return db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder)
+	case db.PaymentChannelBaofuAggregate:
+		return paymentOrder.PaymentChannel == db.PaymentChannelBaofuAggregate
 	case db.PaymentChannelEcommerce:
 		return paymentOrderUsesEcommerceChannel(paymentOrder)
 	default:
@@ -302,6 +323,9 @@ func (svc *PaymentOrderService) createReservationOrdinaryServiceProviderPayment(
 ) (CreatePaymentOrderResult, error) {
 	if svc.ordinaryProviderPayClient == nil {
 		return CreatePaymentOrderResult{}, fmt.Errorf("ordinary service provider client: not configured")
+	}
+	if err := ensureMerchantBaofuReadyForPayment(ctx, svc.store, merchantID); err != nil {
+		return CreatePaymentOrderResult{}, err
 	}
 	if merchantID > 0 {
 		merchant, err := svc.store.GetMerchant(ctx, merchantID)
@@ -338,6 +362,9 @@ func (svc *PaymentOrderService) createOrderOrdinaryServiceProviderPayment(
 ) (CreatePaymentOrderResult, error) {
 	if svc.ordinaryProviderPayClient == nil {
 		return CreatePaymentOrderResult{}, fmt.Errorf("ordinary service provider client: not configured")
+	}
+	if err := ensureMerchantBaofuReadyForPayment(ctx, svc.store, merchantID); err != nil {
+		return CreatePaymentOrderResult{}, err
 	}
 	if merchantID > 0 {
 		merchant, err := svc.store.GetMerchant(ctx, merchantID)

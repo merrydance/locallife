@@ -79,6 +79,29 @@ func TestCreateExternalPaymentCommand_DedupesByExternalObject(t *testing.T) {
 	require.Equal(t, ExternalPaymentCommandStatusSubmitted, command2.CommandStatus)
 }
 
+func TestCreateExternalPaymentCommand_AcceptsBaofuAggregateChannel(t *testing.T) {
+	externalKey := "BF" + util.RandomString(24)
+
+	command, err := testStore.CreateExternalPaymentCommand(context.Background(), CreateExternalPaymentCommandParams{
+		Provider:           ExternalPaymentProviderBaofu,
+		Channel:            PaymentChannelBaofuAggregate,
+		Capability:         ExternalPaymentCapabilityBaofuPayment,
+		CommandType:        ExternalPaymentCommandTypeCreatePayment,
+		BusinessOwner:      ExternalPaymentBusinessOwnerOrder,
+		BusinessObjectType: pgtype.Text{String: "payment_order", Valid: true},
+		BusinessObjectID:   pgtype.Int8{Int64: time.Now().UnixNano(), Valid: true},
+		ExternalObjectType: ExternalPaymentObjectPayment,
+		ExternalObjectKey:  externalKey,
+		CommandStatus:      ExternalPaymentCommandStatusSubmitted,
+		SubmittedAt:        time.Now().UTC(),
+		ResponseSnapshot:   []byte(`{"provider":"baofu"}`),
+	})
+	require.NoError(t, err)
+	require.Equal(t, ExternalPaymentProviderBaofu, command.Provider)
+	require.Equal(t, PaymentChannelBaofuAggregate, command.Channel)
+	require.Equal(t, ExternalPaymentCapabilityBaofuPayment, command.Capability)
+}
+
 func TestCreateExternalPaymentFact_DedupesIdenticalFactByDedupeKey(t *testing.T) {
 	fact1 := createRandomExternalPaymentFact(t, ExternalPaymentTerminalStatusSuccess, true)
 
@@ -113,6 +136,74 @@ func TestCreateExternalPaymentFact_DedupesIdenticalFactByDedupeKey(t *testing.T)
 	require.Equal(t, fact1.ID, fact2.ID)
 	require.Equal(t, ExternalPaymentTerminalStatusSuccess, fact2.TerminalStatus)
 	require.True(t, fact2.IsTerminal)
+}
+
+func TestCreateExternalPaymentFact_DedupesSameSemanticFactWhenSnapshotDiffers(t *testing.T) {
+	fact1 := createRandomExternalPaymentFact(t, ExternalPaymentTerminalStatusSuccess, true)
+
+	fact2, err := testStore.CreateExternalPaymentFact(context.Background(), CreateExternalPaymentFactParams{
+		Provider:             fact1.Provider,
+		Channel:              fact1.Channel,
+		Capability:           fact1.Capability,
+		FactSource:           fact1.FactSource,
+		SourceEventID:        fact1.SourceEventID,
+		SourceEventType:      fact1.SourceEventType,
+		ExternalObjectType:   fact1.ExternalObjectType,
+		ExternalObjectKey:    fact1.ExternalObjectKey,
+		ExternalSecondaryKey: fact1.ExternalSecondaryKey,
+		BusinessOwner:        fact1.BusinessOwner,
+		BusinessObjectType:   fact1.BusinessObjectType,
+		BusinessObjectID:     fact1.BusinessObjectID,
+		UpstreamState:        fact1.UpstreamState,
+		TerminalStatus:       fact1.TerminalStatus,
+		IsTerminal:           fact1.IsTerminal,
+		Amount:               fact1.Amount,
+		Currency:             fact1.Currency,
+		OccurredAt:           pgtype.Timestamptz{Time: time.Now().UTC().Add(time.Minute), Valid: true},
+		UpstreamUpdatedAt:    pgtype.Timestamptz{Time: time.Now().UTC().Add(time.Minute), Valid: true},
+		ObservedAt:           time.Now().UTC(),
+		RawResource:          []byte(`{"refund_status":"SUCCESS","retry":true}`),
+		DedupeKey:            fact1.DedupeKey,
+		ProcessingStatus:     ExternalPaymentFactProcessingStatusReceived,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, fact1.ID, fact2.ID)
+	require.JSONEq(t, string(fact1.RawResource), string(fact2.RawResource))
+	require.Equal(t, fact1.OccurredAt, fact2.OccurredAt)
+}
+
+func TestCreateExternalPaymentFact_AcceptsBaofuAggregateChannel(t *testing.T) {
+	now := time.Now().UTC()
+	dedupeKey := "baofu:callback:payment:" + util.RandomString(18)
+
+	fact, err := testStore.CreateExternalPaymentFact(context.Background(), CreateExternalPaymentFactParams{
+		Provider:           ExternalPaymentProviderBaofu,
+		Channel:            PaymentChannelBaofuAggregate,
+		Capability:         ExternalPaymentCapabilityBaofuPayment,
+		FactSource:         ExternalPaymentFactSourceCallback,
+		SourceEventID:      pgtype.Text{String: "BF_EVT_" + util.RandomString(18), Valid: true},
+		SourceEventType:    pgtype.Text{String: "PAYMENT.SUCCESS", Valid: true},
+		ExternalObjectType: ExternalPaymentObjectPayment,
+		ExternalObjectKey:  "BF" + util.RandomString(24),
+		BusinessOwner:      pgtype.Text{String: ExternalPaymentBusinessOwnerOrder, Valid: true},
+		BusinessObjectType: pgtype.Text{String: "payment_order", Valid: true},
+		BusinessObjectID:   pgtype.Int8{Int64: time.Now().UnixNano(), Valid: true},
+		UpstreamState:      "SUCCESS",
+		TerminalStatus:     ExternalPaymentTerminalStatusSuccess,
+		IsTerminal:         true,
+		Amount:             pgtype.Int8{Int64: 10000, Valid: true},
+		Currency:           "CNY",
+		OccurredAt:         pgtype.Timestamptz{Time: now, Valid: true},
+		ObservedAt:         now,
+		RawResource:        []byte(`{"provider":"baofu","status":"SUCCESS"}`),
+		DedupeKey:          dedupeKey,
+		ProcessingStatus:   ExternalPaymentFactProcessingStatusReceived,
+	})
+	require.NoError(t, err)
+	require.Equal(t, ExternalPaymentProviderBaofu, fact.Provider)
+	require.Equal(t, PaymentChannelBaofuAggregate, fact.Channel)
+	require.Equal(t, dedupeKey, fact.DedupeKey)
 }
 
 func TestCreateExternalPaymentFact_RejectsDedupeKeyWithDifferentPayload(t *testing.T) {

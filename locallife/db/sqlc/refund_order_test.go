@@ -246,6 +246,34 @@ func TestUpdateRefundOrderToFailed(t *testing.T) {
 	require.Equal(t, "failed", updatedRefund.Status)
 }
 
+func TestUpdateRefundOrderToFailedDoesNotRegressSuccess(t *testing.T) {
+	user := createRandomUser(t)
+	payment := createRandomPaymentOrder(t, user.ID)
+
+	_, err := testStore.UpdatePaymentOrderToPaid(context.Background(), UpdatePaymentOrderToPaidParams{
+		ID:            payment.ID,
+		TransactionID: pgtype.Text{String: util.RandomString(32), Valid: true},
+	})
+	require.NoError(t, err)
+
+	refund := createRandomRefundOrder(t, payment.ID, payment.Amount)
+	_, err = testStore.UpdateRefundOrderToProcessing(context.Background(), UpdateRefundOrderToProcessingParams{
+		ID:       refund.ID,
+		RefundID: pgtype.Text{String: util.RandomString(32), Valid: true},
+	})
+	require.NoError(t, err)
+	success, err := testStore.UpdateRefundOrderToSuccess(context.Background(), refund.ID)
+	require.NoError(t, err)
+	require.Equal(t, "success", success.Status)
+
+	_, err = testStore.UpdateRefundOrderToFailed(context.Background(), refund.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+
+	current, err := testStore.GetRefundOrder(context.Background(), refund.ID)
+	require.NoError(t, err)
+	require.Equal(t, "success", current.Status)
+}
+
 func TestUpdateRefundOrderToClosed(t *testing.T) {
 	user := createRandomUser(t)
 	payment := createRandomPaymentOrder(t, user.ID)

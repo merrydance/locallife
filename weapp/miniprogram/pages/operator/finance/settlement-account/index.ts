@@ -1,0 +1,16 @@
+import { getOperatorBaofuSettlementAccount } from '../../../../api/baofu-account'
+import { baofuSettlementStatusBehavior } from '../../../../behaviors/baofu-settlement-status'
+
+Page({
+  behaviors: [
+    baofuSettlementStatusBehavior({
+      role: 'operator',
+      submitPagePath: '/pages/operator/finance/settlement-account/submit/index',
+      getAccount: getOperatorBaofuSettlementAccount,
+      supportPaymentRecovery: true,
+      logTag: 'operator-baofu-settlement-account',
+      loadErrorFallback: '运营商宝付开户状态加载失败，请稍后重试',
+      refreshErrorFallback: '运营商宝付开户状态刷新失败，请稍后重试'
+    })
+  ]
+})

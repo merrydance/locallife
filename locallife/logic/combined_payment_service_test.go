@@ -707,6 +707,53 @@ func expectCombinePaymentCommand(t *testing.T, store *mockdb.MockStore, combined
 	})
 }
 
+func expectCombinedPaymentMerchantBaofuReady(store *mockdb.MockStore, userID int64, orders []db.Order) {
+	seenMerchantIDs := make(map[int64]struct{}, len(orders))
+	for _, order := range orders {
+		order := order
+		store.EXPECT().
+			GetOrder(gomock.Any(), order.ID).
+			Times(1).
+			Return(order, nil)
+		if order.UserID != userID {
+			continue
+		}
+		if _, exists := seenMerchantIDs[order.MerchantID]; exists {
+			continue
+		}
+		seenMerchantIDs[order.MerchantID] = struct{}{}
+		store.EXPECT().
+			GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+				OwnerType: db.BaofuAccountOwnerTypeMerchant,
+				OwnerID:   order.MerchantID,
+			}).
+			Times(1).
+			Return(db.BaofuAccountBinding{
+				OwnerType:    db.BaofuAccountOwnerTypeMerchant,
+				OwnerID:      order.MerchantID,
+				AccountType:  db.BaofuAccountTypeBusiness,
+				OpenState:    db.BaofuAccountOpenStateActive,
+				ContractNo:   pgtype.Text{String: "contract-ready", Valid: true},
+				SharingMerID: pgtype.Text{String: "sharing-ready", Valid: true},
+			}, nil)
+		store.EXPECT().
+			GetBaofuMerchantReportByOwner(gomock.Any(), db.GetBaofuMerchantReportByOwnerParams{
+				OwnerType:  db.BaofuAccountOwnerTypeMerchant,
+				OwnerID:    order.MerchantID,
+				ReportType: db.BaofuMerchantReportTypeWechat,
+			}).
+			Times(1).
+			Return(db.BaofuMerchantReport{
+				OwnerType:       db.BaofuAccountOwnerTypeMerchant,
+				OwnerID:         order.MerchantID,
+				ReportType:      db.BaofuMerchantReportTypeWechat,
+				ReportState:     db.BaofuMerchantReportStateSucceeded,
+				AppletAuthState: db.BaofuMerchantReportAppletAuthStateSucceeded,
+				SubMchID:        pgtype.Text{String: "sub-mch-ready", Valid: true},
+			}, nil)
+	}
+}
+
 func TestCreateCombinedPaymentOrder_UsesOrdinaryServiceProvider(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -718,6 +765,10 @@ func TestCreateCombinedPaymentOrder_UsesOrdinaryServiceProvider(t *testing.T) {
 
 	input := CreateCombinedPaymentOrderInput{UserID: 1001, OrderIDs: []int64{22, 11, 11}, ClientIP: "127.0.0.1"}
 	capturedCombineOutTradeNo := ""
+	expectCombinedPaymentMerchantBaofuReady(store, input.UserID, []db.Order{
+		{ID: 11, UserID: input.UserID, MerchantID: 501},
+		{ID: 22, UserID: input.UserID, MerchantID: 502},
+	})
 	store.EXPECT().GetUser(gomock.Any(), input.UserID).Return(db.User{ID: input.UserID, WechatOpenid: "openid-ok"}, nil)
 	store.EXPECT().CreateCombinedPaymentTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateCombinedPaymentTxParams) (db.CreateCombinedPaymentTxResult, error) {
 		require.Equal(t, []int64{11, 22}, arg.OrderIDs)
@@ -777,6 +828,41 @@ func TestCreateCombinedPaymentOrder_UsesOrdinaryServiceProvider(t *testing.T) {
 	require.False(t, ordinaryClient.createCombinePaymentRequest.SubOrders[1].SettleInfo.ProfitSharing)
 }
 
+func TestCreateCombinedPaymentOrder_OrdinaryServiceProviderRequiresMerchantBaofuReadiness(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ordinaryClient := &fakeOrdinaryPaymentClient{}
+	svc := NewCombinedPaymentServiceWithOrdinaryServiceProvider(store, ordinaryClient)
+
+	input := CreateCombinedPaymentOrderInput{UserID: 1001, OrderIDs: []int64{11, 22, 11}, ClientIP: "127.0.0.1"}
+
+	store.EXPECT().
+		GetOrder(gomock.Any(), int64(11)).
+		Times(1).
+		Return(db.Order{ID: 11, UserID: input.UserID, MerchantID: 501}, nil)
+	store.EXPECT().
+		GetOrder(gomock.Any(), int64(22)).
+		Times(1).
+		Return(db.Order{ID: 22, UserID: input.UserID, MerchantID: 501}, nil)
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   501,
+		}).
+		Times(1).
+		Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
+
+	result, err := svc.CreateCombinedPaymentOrder(context.Background(), input)
+
+	require.Empty(t, result.CombinedPayment.ID)
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusBadRequest, reqErr.Status)
+	require.Equal(t, "商户结算账户未开通，暂不能创建支付订单", reqErr.Err.Error())
+	require.Nil(t, ordinaryClient.createCombinePaymentRequest)
+}
+
 func TestCreateCombinedPaymentOrder_LogsOrdinaryCleanupFailuresAfterPrepayUpdateError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -791,6 +877,9 @@ func TestCreateCombinedPaymentOrder_LogsOrdinaryCleanupFailuresAfterPrepayUpdate
 	svc := NewCombinedPaymentServiceWithOrdinaryServiceProvider(store, ordinaryClient)
 
 	input := CreateCombinedPaymentOrderInput{UserID: 1001, OrderIDs: []int64{11}, ClientIP: "127.0.0.1"}
+	expectCombinedPaymentMerchantBaofuReady(store, input.UserID, []db.Order{
+		{ID: 11, UserID: input.UserID, MerchantID: 501},
+	})
 	store.EXPECT().GetUser(gomock.Any(), input.UserID).Return(db.User{ID: input.UserID, WechatOpenid: "openid-ok"}, nil)
 	store.EXPECT().CreateCombinedPaymentTx(gomock.Any(), gomock.Any()).Return(db.CreateCombinedPaymentTxResult{
 		CombinedPaymentOrder: db.CombinedPaymentOrder{ID: 9101, UserID: 1001, CombineOutTradeNo: "CP20260301112233", Status: paymentStatusPending},
@@ -1738,4 +1827,20 @@ func TestMapCombineOrderCloseError(t *testing.T) {
 	reqErr := assertRequestError(t, err)
 	require.Equal(t, http.StatusConflict, reqErr.Status)
 	require.Equal(t, "支付处理中，请先刷新支付结果确认后再决定是否关闭", reqErr.Err.Error())
+}
+
+func TestCreateCombinedPaymentOrder_BaofuMainBusinessFailsClosed(t *testing.T) {
+	facade := NewDefaultPaymentFacadeWithBaofuAggregate(nil, nil, nil, BaofuAggregateFacadeConfig{
+		CollectMerchantID: "100000",
+		CollectTerminalID: "200000",
+		MiniProgramAppID:  "wx1234567890abcdef",
+		PaymentNotifyURL:  "https://api.example.com/v1/webhooks/baofu/payment",
+		RefundNotifyURL:   "https://api.example.com/v1/webhooks/baofu/refund",
+	})
+	_, err := facade.CreateCombinedPaymentOrder(context.Background(), CreateCombinedPaymentOrderInput{UserID: 1, OrderIDs: []int64{11, 22}, ClientIP: "127.0.0.1"})
+	require.Error(t, err)
+	var reqErr *RequestError
+	require.ErrorAs(t, err, &reqErr)
+	require.Equal(t, http.StatusServiceUnavailable, reqErr.Status)
+	require.EqualError(t, err, "宝付合单支付暂未开通，请分开支付")
 }

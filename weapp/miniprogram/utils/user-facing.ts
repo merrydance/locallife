@@ -276,7 +276,7 @@ export function mapBackendMessageToUserMessage(rawMessage: string, fallback: str
     normalized.includes(`完成${applymentName}签约`) ||
     normalized.includes(`完成${applymentName}流程`)
   ) {
-    return '请先开通微信支付后再恢复营业'
+    return '请先完成宝付结算账户开户后再恢复营业'
   }
 
   if (normalized.includes('wallet account not bound')) {

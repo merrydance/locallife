@@ -33,11 +33,12 @@ func TestPaymentFactApplicationSchedulerRunOnceEnqueuesConfiguredTargets(t *test
 		{consumer: "merchant_funds_domain", businessObjectType: "merchant_cancel_withdraw_application", applicationID: 807},
 		{consumer: "claim_recovery_domain", businessObjectType: "payment_order", applicationID: 808},
 		{consumer: "rider_deposit_domain", businessObjectType: "payment_order", applicationID: 809},
-		{consumer: "order_domain", businessObjectType: "payment_order", applicationID: 810},
-		{consumer: "reservation_domain", businessObjectType: "payment_order", applicationID: 811},
-		{consumer: "order_domain", businessObjectType: "refund_order", applicationID: 812},
-		{consumer: "reservation_domain", businessObjectType: "refund_order", applicationID: 813},
-		{consumer: "rider_deposit_domain", businessObjectType: "refund_order", applicationID: 814},
+		{consumer: "baofu_account_verify_fee_domain", businessObjectType: "payment_order", applicationID: 810},
+		{consumer: "order_domain", businessObjectType: "payment_order", applicationID: 811},
+		{consumer: "reservation_domain", businessObjectType: "payment_order", applicationID: 812},
+		{consumer: "order_domain", businessObjectType: "refund_order", applicationID: 813},
+		{consumer: "reservation_domain", businessObjectType: "refund_order", applicationID: 814},
+		{consumer: "rider_deposit_domain", businessObjectType: "refund_order", applicationID: 815},
 	}
 	calls := make([]any, 0, len(expectedTargets))
 	for _, expected := range expectedTargets {
@@ -62,7 +63,7 @@ func TestPaymentFactApplicationSchedulerRunOnceEnqueuesConfiguredTargets(t *test
 	scheduler := worker.NewPaymentFactApplicationScheduler(store, distributor)
 	scheduler.RunOnce()
 
-	require.Equal(t, []int64{801, 802, 803, 804, 805, 806, 807, 808, 809, 810, 811, 812, 813, 814}, distributor.applicationIDs)
+	require.Equal(t, []int64{801, 802, 803, 804, 805, 806, 807, 808, 809, 810, 811, 812, 813, 814, 815}, distributor.applicationIDs)
 	require.Len(t, distributor.optionCounts, len(expectedTargets))
 	for _, optionCount := range distributor.optionCounts {
 		require.GreaterOrEqual(t, optionCount, 3)

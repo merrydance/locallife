@@ -10,6 +10,7 @@
         "t-empty": "tdesign-miniprogram/empty/empty",
         "t-loading": "tdesign-miniprogram/loading/loading",
         "t-image": "tdesign-miniprogram/image/image",
-        "t-icon": "tdesign-miniprogram/icon/icon"
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-toast": "tdesign-miniprogram/toast/toast"
     }
 }

@@ -46,9 +46,11 @@ func TestGetRiderIncomeSummaryAPI(t *testing.T) {
 						EndAt:   endAt,
 					}).
 					Return(db.GetRiderProfitSharingStatsRow{
-						TotalDeliveries:  2,
-						TotalRiderIncome: 1800,
-						TotalDeliveryFee: 2000,
+						TotalDeliveries:       2,
+						TotalRiderIncome:      1800,
+						TotalDeliveryFee:      2000,
+						TotalRiderGrossAmount: 2000,
+						TotalRiderPaymentFee:  12,
 					}, nil)
 				store.EXPECT().
 					GetRiderProfitSharingStatusSummary(gomock.Any(), db.GetRiderProfitSharingStatusSummaryParams{
@@ -57,8 +59,8 @@ func TestGetRiderIncomeSummaryAPI(t *testing.T) {
 						EndAt:   endAt,
 					}).
 					Return([]db.GetRiderProfitSharingStatusSummaryRow{
-						{Status: db.ProfitSharingOrderStatusFinished, OrderCount: 2, RiderAmount: 1800, DeliveryFee: 2000},
-						{Status: db.ProfitSharingOrderStatusPending, OrderCount: 1, RiderAmount: 600, DeliveryFee: 700},
+						{Status: db.ProfitSharingOrderStatusFinished, OrderCount: 2, RiderAmount: 1800, DeliveryFee: 2000, RiderGrossAmount: 2000, RiderPaymentFee: 12},
+						{Status: db.ProfitSharingOrderStatusPending, OrderCount: 1, RiderAmount: 600, DeliveryFee: 700, RiderGrossAmount: 700, RiderPaymentFee: 5},
 					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -68,9 +70,12 @@ func TestGetRiderIncomeSummaryAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, int64(2), response.TotalDeliveries)
 				require.Equal(t, int64(1800), response.TotalRiderIncome)
+				require.Equal(t, int64(2000), response.TotalRiderGrossAmount)
+				require.Equal(t, int64(12), response.TotalRiderPaymentFee)
 				require.Len(t, response.StatusSummary, 4)
 				require.Equal(t, db.ProfitSharingOrderStatusPending, response.StatusSummary[0].Status)
 				require.Equal(t, int64(1), response.StatusSummary[0].OrderCount)
+				require.Equal(t, int64(5), response.StatusSummary[0].RiderPaymentFee)
 			},
 		},
 		{
@@ -179,6 +184,8 @@ func TestListRiderIncomeLedgerAPI(t *testing.T) {
 							Status:              db.ProfitSharingOrderStatusFinished,
 							TotalAmount:         5000,
 							DeliveryFee:         800,
+							RiderGrossAmount:    800,
+							RiderPaymentFee:     5,
 							RiderAmount:         720,
 							DistributableAmount: 4200,
 							OutOrderNo:          "PS202604020001",
@@ -198,6 +205,8 @@ func TestListRiderIncomeLedgerAPI(t *testing.T) {
 				require.Equal(t, int32(1), response.PageSize)
 				require.True(t, response.HasMore)
 				require.Len(t, response.Items, 1)
+				require.Equal(t, int64(800), response.Items[0].RiderGrossAmount)
+				require.Equal(t, int64(5), response.Items[0].RiderPaymentFee)
 				require.Equal(t, int64(720), response.Items[0].RiderAmount)
 				require.Equal(t, "WXPS001", response.Items[0].SharingOrderID)
 				require.NotNil(t, response.Items[0].FinishedAt)
@@ -270,9 +279,11 @@ func TestGetRiderIncomeDailyAPI(t *testing.T) {
 		}).
 		Return([]db.GetRiderDailyIncomeRow{
 			{
-				Date:          pgtype.Date{Time: startAt, Valid: true},
-				DeliveryCount: 2,
-				DailyIncome:   1600,
+				Date:             pgtype.Date{Time: startAt, Valid: true},
+				DeliveryCount:    2,
+				DailyIncome:      1600,
+				RiderGrossAmount: 1700,
+				RiderPaymentFee:  10,
 			},
 		}, nil)
 
@@ -291,4 +302,6 @@ func TestGetRiderIncomeDailyAPI(t *testing.T) {
 	require.Len(t, response.Items, 1)
 	require.Equal(t, "2026-04-01", response.Items[0].Date)
 	require.Equal(t, int64(1600), response.Items[0].DailyIncome)
+	require.Equal(t, int64(1700), response.Items[0].RiderGrossAmount)
+	require.Equal(t, int64(10), response.Items[0].RiderPaymentFee)
 }

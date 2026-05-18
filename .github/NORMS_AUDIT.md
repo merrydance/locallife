@@ -48,6 +48,7 @@ Current evidence behind the assessed state:
 | Media domain | `.github/standards/domains/media/*` | `backend-media` | inherited through backend prompts | Covered |
 | OCR domain | `.github/standards/domains/ocr/*` | `backend-ocr` | inherited through backend prompts | Covered |
 | WeChat payment domain | `.github/standards/domains/wechat-payment/*` | `backend-wechat` | `backend-payment-runbook` | Covered |
+| Baofoo/Baofu payment domain | `.github/standards/domains/baofu-payment/*` | `backend-baofu` | `backend-payment-domain` | Covered |
 
 ## Residual Drift Risks
 

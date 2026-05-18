@@ -102,7 +102,7 @@
       <text class="popup-subtitle">请用顾客可理解的话说明处理结果、后续动作或沟通安排，回复内容会直接展示给顾客。</text>
       <t-textarea
         value="{{replyDraft}}"
-        placeholder="请输入回复内容，控制在 500 字内"
+        placeholder="控制在 500 字内"
         maxlength="500"
         indicator
         bindchange="onReplyInput"

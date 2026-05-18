@@ -71,6 +71,39 @@ func (q *Queries) CreateRefundOrder(ctx context.Context, arg CreateRefundOrderPa
 	return i, err
 }
 
+const getBaofuPaymentOrderRefundGuardForUpdate = `-- name: GetBaofuPaymentOrderRefundGuardForUpdate :one
+SELECT po.id,
+       po.status,
+       po.payment_channel,
+       EXISTS (
+           SELECT 1 FROM profit_sharing_orders pso
+           WHERE pso.payment_order_id = po.id
+             AND pso.status IN ('pending', 'processing', 'finished')
+       ) AS has_started_profit_sharing
+FROM payment_orders po
+WHERE po.id = $1
+FOR UPDATE
+`
+
+type GetBaofuPaymentOrderRefundGuardForUpdateRow struct {
+	ID                      int64  `json:"id"`
+	Status                  string `json:"status"`
+	PaymentChannel          string `json:"payment_channel"`
+	HasStartedProfitSharing bool   `json:"has_started_profit_sharing"`
+}
+
+func (q *Queries) GetBaofuPaymentOrderRefundGuardForUpdate(ctx context.Context, id int64) (GetBaofuPaymentOrderRefundGuardForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getBaofuPaymentOrderRefundGuardForUpdate, id)
+	var i GetBaofuPaymentOrderRefundGuardForUpdateRow
+	err := row.Scan(
+		&i.ID,
+		&i.Status,
+		&i.PaymentChannel,
+		&i.HasStartedProfitSharing,
+	)
+	return i, err
+}
+
 const getPendingRiderDepositRefundAmountByUserID = `-- name: GetPendingRiderDepositRefundAmountByUserID :one
 SELECT COALESCE(SUM(ro.refund_amount), 0)::bigint AS pending_rider_deposit_refund_amount
 FROM refund_orders ro
@@ -617,7 +650,7 @@ const updateRefundOrderToFailed = `-- name: UpdateRefundOrderToFailed :one
 UPDATE refund_orders
 SET
     status = 'failed'
-WHERE id = $1
+WHERE id = $1 AND status IN ('pending', 'processing')
 RETURNING id, payment_order_id, refund_type, refund_amount, refund_reason, out_refund_no, refund_id, platform_refund, operator_refund, merchant_refund, status, refunded_at, created_at
 `
 

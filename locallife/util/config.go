@@ -3,9 +3,12 @@ package util
 import (
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/merrydance/locallife/baofu"
 	"github.com/spf13/viper"
 )
 
@@ -84,6 +87,35 @@ type Config struct {
 	WechatOrdinaryApplymentDebitActivitiesRate    string        `mapstructure:"WECHAT_ORDINARY_APPLYMENT_DEBIT_ACTIVITIES_RATE"`    // 普通服务商进件非信用卡活动费率
 	WechatOrdinaryApplymentCreditActivitiesRate   string        `mapstructure:"WECHAT_ORDINARY_APPLYMENT_CREDIT_ACTIVITIES_RATE"`   // 普通服务商进件信用卡活动费率
 	WechatOrdinaryApplymentActivitiesAdditions    string        `mapstructure:"WECHAT_ORDINARY_APPLYMENT_ACTIVITIES_ADDITIONS"`     // 普通服务商进件优惠费率补充材料 media_id，逗号分隔
+
+	// 宝付/宝财通配置。开启 BAOFU_MAIN_BUSINESS_ENABLED 后，主业务支付使用宝付聚合支付，不回退普通服务商或平台收付通。
+	BaofuMainBusinessEnabled       bool          `mapstructure:"BAOFU_MAIN_BUSINESS_ENABLED"`
+	BaofuEnvironment               string        `mapstructure:"BAOFU_ENVIRONMENT"`
+	BaofuAccountGatewayBaseURL     string        `mapstructure:"BAOFU_ACCOUNT_GATEWAY_BASE_URL"`
+	BaofuAggregatePayBaseURL       string        `mapstructure:"BAOFU_AGGREGATE_PAY_BASE_URL"`
+	BaofuAggregatePayBackupBaseURL string        `mapstructure:"BAOFU_AGGREGATE_PAY_BACKUP_BASE_URL"`
+	BaofuMerchantReportBaseURL     string        `mapstructure:"BAOFU_MERCHANT_REPORT_BASE_URL"`
+	BaofuCollectMerchantID         string        `mapstructure:"BAOFU_COLLECT_MERCHANT_ID"`
+	BaofuCollectTerminalID         string        `mapstructure:"BAOFU_COLLECT_TERMINAL_ID"`
+	BaofuPayoutMerchantID          string        `mapstructure:"BAOFU_PAYOUT_MERCHANT_ID"`
+	BaofuPayoutTerminalID          string        `mapstructure:"BAOFU_PAYOUT_TERMINAL_ID"`
+	BaofuAppID                     string        `mapstructure:"BAOFU_APP_ID"`
+	BaofuPrivateKeyPEM             string        `mapstructure:"BAOFU_PRIVATE_KEY_PEM"`
+	BaofuPublicKeyPEM              string        `mapstructure:"BAOFU_PUBLIC_KEY_PEM"`
+	BaofuPrivateKeyPath            string        `mapstructure:"BAOFU_PRIVATE_KEY_PATH"`
+	BaofuPublicKeyPath             string        `mapstructure:"BAOFU_PUBLIC_KEY_PATH"`
+	BaofuSignSerialNo              string        `mapstructure:"BAOFU_SIGN_SERIAL_NO"`
+	BaofuEncryptionSerialNo        string        `mapstructure:"BAOFU_ENCRYPTION_SERIAL_NO"`
+	BaofuNotifyBaseURL             string        `mapstructure:"BAOFU_NOTIFY_BASE_URL"`
+	BaofuPaymentNotifyURL          string        `mapstructure:"BAOFU_PAYMENT_NOTIFY_URL"`
+	BaofuProfitSharingNotifyURL    string        `mapstructure:"BAOFU_PROFIT_SHARING_NOTIFY_URL"`
+	BaofuRefundNotifyURL           string        `mapstructure:"BAOFU_REFUND_NOTIFY_URL"`
+	BaofuHTTPTimeout               time.Duration `mapstructure:"BAOFU_HTTP_TIMEOUT"`
+	BaofuAccountVerifyFeeFen       int64         `mapstructure:"BAOFU_ACCOUNT_VERIFY_FEE_FEN"`
+	BaofuBusinessIndustryID        string        `mapstructure:"BAOFU_BUSINESS_INDUSTRY_ID"`
+	BaofuMerchantReportChannelID   string        `mapstructure:"BAOFU_MERCHANT_REPORT_CHANNEL_ID"`
+	BaofuMerchantReportChannelName string        `mapstructure:"BAOFU_MERCHANT_REPORT_CHANNEL_NAME"`
+	BaofuMerchantReportBusiness    string        `mapstructure:"BAOFU_MERCHANT_REPORT_BUSINESS"`
 
 	// 数据加密配置
 	DataEncryptionKey string `mapstructure:"DATA_ENCRYPTION_KEY"` // 本地数据加密密钥（16/24/32字节）
@@ -285,6 +317,84 @@ func (c Config) HasWechatOrdinaryServiceProviderRuntimeConfig() bool {
 		strings.TrimSpace(c.WechatOrdinaryApplymentDebitActivitiesRate) != "" ||
 		strings.TrimSpace(c.WechatOrdinaryApplymentCreditActivitiesRate) != "" ||
 		strings.TrimSpace(c.WechatOrdinaryApplymentActivitiesAdditions) != ""
+}
+
+func (c Config) HasBaofuRuntimeConfig() bool {
+	return c.BaofuMainBusinessEnabled ||
+		strings.TrimSpace(c.BaofuAccountGatewayBaseURL) != "" ||
+		strings.TrimSpace(c.BaofuAggregatePayBaseURL) != "" ||
+		strings.TrimSpace(c.BaofuAggregatePayBackupBaseURL) != "" ||
+		strings.TrimSpace(c.BaofuMerchantReportBaseURL) != "" ||
+		strings.TrimSpace(c.BaofuCollectMerchantID) != "" ||
+		strings.TrimSpace(c.BaofuCollectTerminalID) != "" ||
+		strings.TrimSpace(c.BaofuPayoutMerchantID) != "" ||
+		strings.TrimSpace(c.BaofuPayoutTerminalID) != "" ||
+		strings.TrimSpace(c.BaofuAppID) != "" ||
+		strings.TrimSpace(c.BaofuPrivateKeyPEM) != "" ||
+		strings.TrimSpace(c.BaofuPublicKeyPEM) != "" ||
+		strings.TrimSpace(c.BaofuPrivateKeyPath) != "" ||
+		strings.TrimSpace(c.BaofuPublicKeyPath) != "" ||
+		strings.TrimSpace(c.BaofuSignSerialNo) != "" ||
+		strings.TrimSpace(c.BaofuEncryptionSerialNo) != "" ||
+		strings.TrimSpace(c.BaofuNotifyBaseURL) != "" ||
+		strings.TrimSpace(c.BaofuPaymentNotifyURL) != "" ||
+		strings.TrimSpace(c.BaofuProfitSharingNotifyURL) != "" ||
+		strings.TrimSpace(c.BaofuRefundNotifyURL) != ""
+}
+
+func (c Config) ToBaofuConfig() baofu.Config {
+	return baofu.Config{
+		Environment:               c.BaofuEnvironment,
+		AccountGatewayBaseURL:     c.BaofuAccountGatewayBaseURL,
+		AggregatePayBaseURL:       c.BaofuAggregatePayBaseURL,
+		AggregatePayBackupBaseURL: c.BaofuAggregatePayBackupBaseURL,
+		MerchantReportBaseURL:     c.BaofuMerchantReportBaseURL,
+		CollectMerchantID:         c.BaofuCollectMerchantID,
+		CollectTerminalID:         c.BaofuCollectTerminalID,
+		PayoutMerchantID:          c.BaofuPayoutMerchantID,
+		PayoutTerminalID:          c.BaofuPayoutTerminalID,
+		AppID:                     c.BaofuAppID,
+		PrivateKeyPEM:             normalizeEscapedPEM(c.BaofuPrivateKeyPEM),
+		BaofuPublicKeyPEM:         normalizeEscapedPEM(c.BaofuPublicKeyPEM),
+		SignSerialNo:              c.BaofuSignSerialNo,
+		EncryptionSerialNo:        c.BaofuEncryptionSerialNo,
+		NotifyBaseURL:             c.BaofuNotifyBaseURL,
+		Timeout:                   c.BaofuHTTPTimeout,
+	}
+}
+
+func (c Config) EffectiveBaofuPaymentNotifyURL() string {
+	return strings.TrimSpace(c.BaofuPaymentNotifyURL)
+}
+
+func (c Config) EffectiveBaofuProfitSharingNotifyURL() string {
+	return strings.TrimSpace(c.BaofuProfitSharingNotifyURL)
+}
+
+func (c Config) EffectiveBaofuRefundNotifyURL() string {
+	return strings.TrimSpace(c.BaofuRefundNotifyURL)
+}
+
+func (c Config) ValidateBaofuConfig() error {
+	if !c.HasBaofuRuntimeConfig() {
+		return nil
+	}
+	if strings.TrimSpace(c.WechatMiniAppID) == "" {
+		return fmt.Errorf("WECHAT_MINI_APP_ID is required when baofu main business pay is enabled")
+	}
+	if err := c.ToBaofuConfig().Validate(); err != nil {
+		return err
+	}
+	if err := validateRequiredAbsoluteConfigURL("BAOFU_PAYMENT_NOTIFY_URL", c.BaofuPaymentNotifyURL, "baofu main business pay is enabled"); err != nil {
+		return err
+	}
+	if err := validateRequiredAbsoluteConfigURL("BAOFU_PROFIT_SHARING_NOTIFY_URL", c.BaofuProfitSharingNotifyURL, "baofu main business pay is enabled"); err != nil {
+		return err
+	}
+	if err := validateRequiredAbsoluteConfigURL("BAOFU_REFUND_NOTIFY_URL", c.BaofuRefundNotifyURL, "baofu main business pay is enabled"); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c Config) ValidateWechatPayConfig() error {
@@ -494,6 +604,11 @@ func LoadConfig(path string) (config Config, err error) {
 	v.SetDefault("FEIEYUN_ENABLED", false)
 	v.SetDefault("FEIEYUN_API_BASE_URL", "https://api.feieyun.cn")
 	v.SetDefault("FEIEYUN_HTTP_TIMEOUT", "5s")
+	v.SetDefault("BAOFU_MAIN_BUSINESS_ENABLED", false)
+	v.SetDefault("BAOFU_HTTP_TIMEOUT", "30s")
+	v.SetDefault("BAOFU_ACCOUNT_VERIFY_FEE_FEN", 200)
+	v.SetDefault("BAOFU_BUSINESS_INDUSTRY_ID", "9931")
+	v.SetDefault("BAOFU_MERCHANT_REPORT_BUSINESS", "758-2")
 	// 媒体存储默认值
 	v.SetDefault("FILE_STORAGE_PROVIDER", "local")
 	v.SetDefault("PRIVATE_DOWNLOAD_URL_TTL", "5m")
@@ -525,6 +640,9 @@ func LoadConfig(path string) (config Config, err error) {
 
 	// Normalize common quoted values from .env (e.g. REDIS_PASSWORD="...")
 	config.RedisPassword = trimOptionalQuotes(config.RedisPassword)
+	if err = config.loadBaofuPEMFromPaths(path); err != nil {
+		return
+	}
 	return
 }
 
@@ -567,4 +685,44 @@ func trimOptionalQuotes(s string) string {
 	s = strings.TrimPrefix(s, "'")
 	s = strings.TrimSuffix(s, "'")
 	return s
+}
+
+func normalizeEscapedPEM(s string) string {
+	s = trimOptionalQuotes(s)
+	s = strings.ReplaceAll(s, `\\n`, "\n")
+	s = strings.ReplaceAll(s, `\n`, "\n")
+	return s
+}
+
+func (c *Config) loadBaofuPEMFromPaths(configDir string) error {
+	privateKeyPath := trimOptionalQuotes(c.BaofuPrivateKeyPath)
+	publicKeyPath := trimOptionalQuotes(c.BaofuPublicKeyPath)
+	c.BaofuPrivateKeyPath = privateKeyPath
+	c.BaofuPublicKeyPath = publicKeyPath
+	if privateKeyPath != "" {
+		content, err := readConfigRelativeFile(configDir, privateKeyPath)
+		if err != nil {
+			return fmt.Errorf("read BAOFU_PRIVATE_KEY_PATH: %w", err)
+		}
+		c.BaofuPrivateKeyPEM = string(content)
+	}
+	if publicKeyPath != "" {
+		content, err := readConfigRelativeFile(configDir, publicKeyPath)
+		if err != nil {
+			return fmt.Errorf("read BAOFU_PUBLIC_KEY_PATH: %w", err)
+		}
+		c.BaofuPublicKeyPEM = string(content)
+	}
+	return nil
+}
+
+func readConfigRelativeFile(configDir, rawPath string) ([]byte, error) {
+	path := strings.TrimSpace(rawPath)
+	if path == "" {
+		return nil, fmt.Errorf("path is required")
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(configDir, path)
+	}
+	return os.ReadFile(filepath.Clean(path))
 }

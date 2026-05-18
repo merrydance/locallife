@@ -1,0 +1,57 @@
+.settlement-page {
+  background: var(--td-bg-color-page);
+  --td-input-label-max-width: 6em;
+}
+
+.state-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacer-md);
+  padding: 140rpx var(--spacer-md);
+}
+
+.sync-state {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-xs);
+  padding: var(--spacer-sm);
+  border-radius: var(--radius-md);
+  background: var(--td-warning-color-1);
+  color: var(--td-text-color-primary);
+}
+
+.sync-state--success {
+  background: var(--td-success-color-light);
+}
+
+.sync-state--error {
+  background: var(--td-error-color-1);
+}
+
+.sync-state__text {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.form-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+  padding-bottom: var(--spacer-md);
+}
+
+.identity-note {
+  padding: 0 var(--spacer-xs);
+  color: var(--td-text-color-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+.form-required-label::after {
+  content: ' *';
+  color: var(--td-error-color-6);
+}

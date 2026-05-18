@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/worker"
 	mockwk "github.com/merrydance/locallife/worker/mock"
 	"github.com/stretchr/testify/require"
@@ -98,13 +99,19 @@ func TestProcessTaskPaymentDomainOutbox_PublishesProfitSharingResultReady(t *tes
 		MerchantAmount:     1234,
 		PlatformCommission: 100,
 		OperatorCommission: 50,
+		PaymentFee:         8,
 	}, nil)
 	distributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.AssignableToTypeOf(&worker.SendNotificationPayload{}), gomock.Any()).DoAndReturn(func(_ context.Context, payload *worker.SendNotificationPayload, opts ...asynq.Option) error {
 		require.Equal(t, int64(9001), payload.UserID)
 		require.Equal(t, "finance", payload.Type)
 		require.Equal(t, "订单收入已到账", payload.Title)
 		require.Equal(t, int64(3001), payload.RelatedID)
-		require.Equal(t, int64(1234), payload.ExtraData["merchant_amount"])
+		require.Equal(t, int64(1234), payload.ExtraData["merchant_receivable_amount"])
+		require.Equal(t, int64(150), payload.ExtraData["platform_service_fee_amount"])
+		require.Equal(t, int64(8), payload.ExtraData["payment_channel_fee_amount"])
+		require.NotContains(t, payload.ExtraData, "merchant_amount")
+		require.NotContains(t, payload.ExtraData, "platform_commission")
+		require.NotContains(t, payload.ExtraData, "operator_commission")
 		require.Len(t, opts, 1)
 		return nil
 	})
@@ -316,7 +323,17 @@ func TestProcessTaskPaymentDomainOutbox_PublishesOrderPaymentSucceeded(t *testin
 	distributor := mockwk.NewMockTaskDistributor(ctrl)
 	outbox := buildOrderPaymentSucceededOutbox(t, 910, 401, 501, 601)
 	paymentOrder := db.PaymentOrder{ID: 401, OrderID: pgtype.Int8{Int64: 501, Valid: true}, PaymentChannel: db.PaymentChannelEcommerce, BusinessType: db.ExternalPaymentBusinessOwnerOrder, RequiresProfitSharing: true}
-	order := db.Order{ID: 501, MerchantID: 601, OrderNo: "ORD501", OrderType: "dinein", TotalAmount: 8800}
+	order := db.Order{ID: 501, MerchantID: 601, OrderNo: "ORD501", OrderType: "dinein", Status: db.OrderStatusPaid, Subtotal: 8800, TotalAmount: 8800}
+	profitSharingOrder := db.ProfitSharingOrder{
+		ID:                 801,
+		PaymentOrderID:     paymentOrder.ID,
+		MerchantID:         order.MerchantID,
+		TotalAmount:        order.TotalAmount,
+		PlatformCommission: 176,
+		OperatorCommission: 264,
+		PaymentFee:         26,
+		MerchantAmount:     8334,
+	}
 	merchant := db.Merchant{ID: 601, OwnerUserID: 701}
 
 	store.EXPECT().ClaimPaymentDomainOutbox(gomock.Any(), gomock.Any()).Return(outbox, nil)
@@ -332,9 +349,23 @@ func TestProcessTaskPaymentDomainOutbox_PublishesOrderPaymentSucceeded(t *testin
 		require.Equal(t, merchant.OwnerUserID, payload.UserID)
 		require.Equal(t, "order", payload.Type)
 		require.Equal(t, order.ID, payload.RelatedID)
+		breakdown, ok := payload.ExtraData["fee_breakdown"].(logic.MerchantOrderFeeBreakdown)
+		require.True(t, ok)
+		require.Equal(t, int64(8800), breakdown.FoodAmount)
+		require.Equal(t, int64(8800), breakdown.CustomerPayableAmount)
+		require.Equal(t, int64(440), breakdown.PlatformServiceFeeAmount)
+		require.Equal(t, int64(26), breakdown.PaymentChannelFeeAmount)
+		require.Equal(t, int64(8334), breakdown.MerchantReceivableAmount)
 		return nil
 	})
 	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+			BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+		}).
+		Return(paymentOrder, nil)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(profitSharingOrder, nil)
 	store.EXPECT().MarkPaymentDomainOutboxPublished(gomock.Any(), outbox.ID).Return(db.PaymentDomainOutbox{ID: outbox.ID, Status: db.PaymentDomainOutboxStatusPublished}, nil)
 
 	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
@@ -353,7 +384,7 @@ func TestProcessTaskPaymentDomainOutbox_OrderItemLoadFailureMarksFailed(t *testi
 	distributor := mockwk.NewMockTaskDistributor(ctrl)
 	outbox := buildOrderPaymentSucceededOutbox(t, 911, 402, 502, 602)
 	paymentOrder := db.PaymentOrder{ID: 402, OrderID: pgtype.Int8{Int64: 502, Valid: true}, PaymentChannel: db.PaymentChannelDirect, BusinessType: db.ExternalPaymentBusinessOwnerOrder}
-	order := db.Order{ID: 502, MerchantID: 602, OrderNo: "ORD502", OrderType: "dinein", TotalAmount: 9900}
+	order := db.Order{ID: 502, MerchantID: 602, OrderNo: "ORD502", OrderType: "dinein", Status: db.OrderStatusPaid, Subtotal: 9900, TotalAmount: 9900}
 	merchant := db.Merchant{ID: 602, OwnerUserID: 702}
 
 	store.EXPECT().ClaimPaymentDomainOutbox(gomock.Any(), gomock.Any()).Return(outbox, nil)
@@ -399,6 +430,41 @@ func TestProcessTaskPaymentDomainOutbox_PublishesReservationPaymentSucceeded(t *
 	})
 	distributor.EXPECT().DistributeTaskReservationNoShowAlert(gomock.Any(), gomock.AssignableToTypeOf(&worker.PayloadReservationNoShowAlert{}), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, payload *worker.PayloadReservationNoShowAlert, opts ...asynq.Option) error {
 		require.Equal(t, int64(503), payload.ReservationID)
+		require.Len(t, opts, 2)
+		return nil
+	})
+	store.EXPECT().MarkPaymentDomainOutboxPublished(gomock.Any(), outbox.ID).Return(db.PaymentDomainOutbox{ID: outbox.ID, Status: db.PaymentDomainOutboxStatusPublished}, nil)
+
+	processor := worker.NewTestTaskProcessor(store, distributor, nil, nil)
+	payload, err := json.Marshal(worker.PaymentDomainOutboxPayload{OutboxID: outbox.ID})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskPaymentDomainOutbox(context.Background(), asynq.NewTask(worker.TaskProcessPaymentDomainOutbox, payload))
+	require.NoError(t, err)
+}
+
+func TestProcessTaskPaymentDomainOutbox_BaofuReservationDoesNotEnqueueLegacyWechatProfitSharing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockwk.NewMockTaskDistributor(ctrl)
+	reservationDate := pgtype.Date{Time: time.Date(2026, 4, 27, 0, 0, 0, 0, time.Local), Valid: true}
+	reservationTime := pgtype.Time{Microseconds: int64((18 * time.Hour) + (30 * time.Minute))}
+	outbox := buildReservationPaymentSucceededOutbox(t, 914, 404, 504)
+	paymentOrder := db.PaymentOrder{
+		ID:             404,
+		ReservationID:  pgtype.Int8{Int64: 504, Valid: true},
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+		BusinessType:   db.ExternalPaymentBusinessOwnerReservation,
+	}
+	reservation := db.TableReservation{ID: 504, MerchantID: 604, ReservationDate: reservationDate, ReservationTime: reservationTime}
+
+	store.EXPECT().ClaimPaymentDomainOutbox(gomock.Any(), gomock.Any()).Return(outbox, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), int64(404)).Return(paymentOrder, nil)
+	store.EXPECT().GetTableReservation(gomock.Any(), int64(504)).Return(reservation, nil)
+	distributor.EXPECT().DistributeTaskReservationNoShowAlert(gomock.Any(), gomock.AssignableToTypeOf(&worker.PayloadReservationNoShowAlert{}), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, payload *worker.PayloadReservationNoShowAlert, opts ...asynq.Option) error {
+		require.Equal(t, int64(504), payload.ReservationID)
 		require.Len(t, opts, 2)
 		return nil
 	})

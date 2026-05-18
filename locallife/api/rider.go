@@ -723,18 +723,25 @@ type goOnlineRequest struct {
 
 // riderStatusResponse 骑手状态响应
 type riderStatusResponse struct {
-	Status            string     `json:"status"`            // 账号状态：approved/active/suspended
-	IsOnline          bool       `json:"is_online"`         // 是否在线
-	OnlineStatus      string     `json:"online_status"`     // 在线状态描述：offline/online/delivering
-	ActiveDeliveries  int        `json:"active_deliveries"` // 当前配送中订单数量
-	CurrentRegionID   int64      `json:"current_region_id"`
-	RequiredDeposit   int64      `json:"required_deposit"`
-	CurrentLongitude  *float64   `json:"current_longitude,omitempty"`
-	CurrentLatitude   *float64   `json:"current_latitude,omitempty"`
-	LocationUpdatedAt *time.Time `json:"location_updated_at,omitempty"`
-	CanGoOnline       bool       `json:"can_go_online"`                 // 是否可以上线
-	CanGoOffline      bool       `json:"can_go_offline"`                // 是否可以下线
-	OnlineBlockReason string     `json:"online_block_reason,omitempty"` // 不能上线的原因
+	Status            string                            `json:"status"`            // 账号状态：approved/active/suspended
+	IsOnline          bool                              `json:"is_online"`         // 是否在线
+	OnlineStatus      string                            `json:"online_status"`     // 在线状态描述：offline/online/delivering
+	ActiveDeliveries  int                               `json:"active_deliveries"` // 当前配送中订单数量
+	CurrentRegionID   int64                             `json:"current_region_id"`
+	RequiredDeposit   int64                             `json:"required_deposit"`
+	CurrentLongitude  *float64                          `json:"current_longitude,omitempty"`
+	CurrentLatitude   *float64                          `json:"current_latitude,omitempty"`
+	LocationUpdatedAt *time.Time                        `json:"location_updated_at,omitempty"`
+	CanGoOnline       bool                              `json:"can_go_online"`                 // 是否可以上线
+	CanGoOffline      bool                              `json:"can_go_offline"`                // 是否可以下线
+	OnlineBlockReason string                            `json:"online_block_reason,omitempty"` // 不能上线的原因
+	SettlementAccount *baofuSettlementReadinessResponse `json:"settlement_account,omitempty"`
+}
+
+type baofuSettlementReadinessResponse struct {
+	State        string `json:"state"`
+	Label        string `json:"label"`
+	PaymentReady bool   `json:"payment_ready"`
 }
 
 // getRiderStatus godoc
@@ -786,6 +793,12 @@ func (server *Server) getRiderStatus(ctx *gin.Context) {
 		CurrentRegionID:  rider.RegionID.Int64,
 		RequiredDeposit:  threshold,
 	}
+	readiness, err := server.getRiderBaofuSettlementReadiness(ctx, rider)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	resp.SettlementAccount = newBaofuSettlementReadinessResponse(readiness)
 
 	// 确定在线状态描述
 	if !rider.IsOnline {
@@ -820,6 +833,9 @@ func (server *Server) getRiderStatus(ctx *gin.Context) {
 	} else if availableDeposit < threshold {
 		resp.CanGoOnline = false
 		resp.OnlineBlockReason = fmt.Sprintf("可用押金不足，需要至少%s元", fenToYuanString(threshold, 0))
+	} else if readiness.PaymentReady == false {
+		resp.CanGoOnline = false
+		resp.OnlineBlockReason = ErrRiderBaofuAccountMissing.Error()
 	} else {
 		resp.CanGoOnline = true
 	}
@@ -887,6 +903,15 @@ func (server *Server) goOnline(ctx *gin.Context) {
 	// 检查押金余额
 	if rider.DepositAmount-rider.FrozenDeposit < threshold {
 		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderDepositInsufficient))
+		return
+	}
+
+	if err := server.ensureRiderBaofuSettlementReady(ctx, rider); err != nil {
+		if errors.Is(err, ErrRiderBaofuAccountMissing) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderBaofuAccountMissing))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 

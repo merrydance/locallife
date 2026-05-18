@@ -2,6 +2,7 @@ import {
   loadOperatorFinancePageData,
   type OperatorCommissionRowView
 } from '../../../../services/operator-finance'
+import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 
 Page({
@@ -44,7 +45,7 @@ Page({
         commissionLoading: false
       })
     } catch (error) {
-      console.error('加载运营商财务概览失败:', error)
+      logger.error('Load operator finance overview failed action=load_overview role=operator', error, 'operator-finance-withdraw')
       this.setData({ loadError: '收入概览加载失败，请稍后重试', commissionError: '佣金明细加载失败，请稍后重试', commissionLoading: false })
     } finally {
       this.setData({ loadingOverview: false })
@@ -63,5 +64,9 @@ Page({
   formatShareRatio(ratio: number): string {
     if (!Number.isFinite(ratio) || ratio <= 0) return '--'
     return `${(ratio * 100).toFixed(0)}%`
+  },
+
+  onOpenSettlementAccount() {
+    wx.navigateTo({ url: '/pages/operator/finance/settlement-account/index' })
   }
 })

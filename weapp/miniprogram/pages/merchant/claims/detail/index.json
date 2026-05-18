@@ -7,7 +7,8 @@
     "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
     "t-steps": "tdesign-miniprogram/steps/steps",
     "t-step-item": "tdesign-miniprogram/step-item/step-item",
-    "t-textarea": "tdesign-miniprogram/textarea/textarea"
+    "t-textarea": "tdesign-miniprogram/textarea/textarea",
+    "t-toast": "tdesign-miniprogram/toast/toast"
   },
   "navigationStyle": "custom",
   "enablePullDownRefresh": true

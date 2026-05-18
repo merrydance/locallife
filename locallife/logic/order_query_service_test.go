@@ -2,6 +2,8 @@ package logic
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -10,6 +12,52 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
+
+func TestOrderServiceListMerchantOrders_RejectsPendingStatus(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	service := NewOrderService(store, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+
+	status := db.OrderStatusPending
+	_, err := service.ListMerchantOrders(context.Background(), ListMerchantOrdersQueryInput{
+		MerchantID: 88,
+		Status:     &status,
+		PageID:     1,
+		PageSize:   10,
+	})
+
+	var reqErr *RequestError
+	require.ErrorAs(t, err, &reqErr)
+	require.Equal(t, http.StatusConflict, reqErr.Status)
+	require.EqualError(t, reqErr.Err, "订单尚未支付，暂不可处理")
+}
+
+func TestOrderServiceGetMerchantOrder_RejectsPendingBeforeLoadingItems(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	service := NewOrderService(store, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+
+	order := db.Order{ID: 901, MerchantID: 88, Status: db.OrderStatusPending}
+	store.EXPECT().
+		GetOrder(gomock.Any(), order.ID).
+		Times(1).
+		Return(order, nil)
+
+	_, err := service.GetMerchantOrder(context.Background(), GetMerchantOrderQueryInput{
+		MerchantID: order.MerchantID,
+		OrderID:    order.ID,
+	})
+
+	var reqErr *RequestError
+	require.ErrorAs(t, err, &reqErr)
+	require.Equal(t, http.StatusConflict, reqErr.Status)
+	require.True(t, errors.Is(reqErr.Err, ErrMerchantOrderNotPaid))
+	require.EqualError(t, reqErr.Err, "订单尚未支付，暂不可处理")
+}
 
 func TestOrderServiceListMerchantOrders_WithOrderTypeFilter(t *testing.T) {
 	ctrl := gomock.NewController(t)

@@ -9,6 +9,7 @@
         "t-empty": "tdesign-miniprogram/empty/empty",
         "t-icon": "tdesign-miniprogram/icon/icon",
         "t-image": "tdesign-miniprogram/image/image",
-        "list-skeleton": "/components/list-skeleton/index"
+        "list-skeleton": "/components/list-skeleton/index",
+        "t-toast": "tdesign-miniprogram/toast/toast"
     }
 }

@@ -30,6 +30,8 @@ Review must prioritize:
 - Filler explanation text that does not change the user's understanding of current state, risk, or next action
 - Explanatory helper text that was proactively added even though the page would already be clear through structure, labels, status, and actions
 - Duplicate explanation across title, subtitle, note, notice, helper text, and card body layers
+- Placeholder-as-label drift where ordinary form rows repeat visible labels in placeholders, especially `请输入/请选择 + 字段名`, instead of using placeholders only for format, constraint, example, or state
+- Required-marker drift where true required fields are not visibly marked, optional fields are mixed into the main form at the same weight, or a component prop is used even though the installed TDesign version does not render a required indicator
 - Text-action drift where local add/edit/delete/test/status actions stay as text buttons instead of icon buttons or icon-led small buttons without justification
 - Wrapper bloat where TDesign content is rewrapped in local cards, notice shells, or decorative containers that do not own real state or structure
 - Broken service-to-state-to-view wiring
@@ -79,6 +81,8 @@ Baseline review must check:
 - Non-consumer pages do not inherit consumer-side custom design language, branding colors, or decorative styling by default
 - Single-task non-consumer pages do not spend first-screen space on explanatory cards or repeated guidance copy when labels, notes, state strips, or action-adjacent copy would carry the meaning more efficiently
 - User-facing copy is absent by default unless needed: helper text that only restates page scope or repeats nearby labels is treated as drift, not harmless polish
+- Form labels and placeholders have separate responsibilities: label explains the field, placeholder only adds format, constraint, example, or state-specific guidance; `请输入/请选择 + 字段名` is treated as drift when a visible label exists
+- Required/optional semantics come from backend truth or verified validation, required indicators render through current component-native behavior, and low-value optional fields are omitted or visibly downgraded instead of presented as primary task fields
 - Section-level and row-level local actions use icon buttons or icon-led small buttons by default; text-only local actions are treated as exceptions that need explicit justification
 - Local wrappers around TDesign content have a concrete structural job instead of existing only to add another visual layer
 - The review names the correct role-side design document when visual-system assertions depend on it rather than treating one design document as universal

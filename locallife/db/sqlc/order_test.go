@@ -368,6 +368,42 @@ func TestCountOrdersByMerchantAndStatus(t *testing.T) {
 	require.GreaterOrEqual(t, count, int64(2))
 }
 
+func TestListOrdersByMerchantWithFilters_ExcludesPendingWhenStatusOmitted(t *testing.T) {
+	merchantOwner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, merchantOwner.ID)
+	customer := createRandomUser(t)
+
+	pendingOrder := createRandomOrderWithStatus(t, customer.ID, merchant.ID, OrderStatusPending)
+	paidOrder := createRandomOrderWithStatus(t, customer.ID, merchant.ID, OrderStatusPaid)
+	preparingOrder := createRandomOrderWithStatus(t, customer.ID, merchant.ID, OrderStatusPreparing)
+
+	orders, err := testStore.ListOrdersByMerchantWithFilters(context.Background(), ListOrdersByMerchantWithFiltersParams{
+		MerchantID: merchant.ID,
+		Status:     pgtype.Text{},
+		OrderType:  pgtype.Text{},
+		Limit:      10,
+		Offset:     0,
+	})
+	require.NoError(t, err)
+
+	orderIDs := make(map[int64]bool, len(orders))
+	for _, order := range orders {
+		orderIDs[order.ID] = true
+		require.NotEqual(t, OrderStatusPending, order.Status)
+	}
+	require.False(t, orderIDs[pendingOrder.ID])
+	require.True(t, orderIDs[paidOrder.ID])
+	require.True(t, orderIDs[preparingOrder.ID])
+
+	count, err := testStore.CountOrdersByMerchantWithFilters(context.Background(), CountOrdersByMerchantWithFiltersParams{
+		MerchantID: merchant.ID,
+		Status:     pgtype.Text{},
+		OrderType:  pgtype.Text{},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(len(orders)), count)
+}
+
 func TestGetOrderForUpdate(t *testing.T) {
 	order1 := createRandomOrder(t)
 

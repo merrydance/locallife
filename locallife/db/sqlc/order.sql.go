@@ -274,7 +274,10 @@ func (q *Queries) CountOrdersByMerchantAndStatus(ctx context.Context, arg CountO
 const countOrdersByMerchantWithFilters = `-- name: CountOrdersByMerchantWithFilters :one
 SELECT COUNT(*) FROM orders
 WHERE merchant_id = $1
-    AND ($2::text IS NULL OR status = $2::text)
+    AND (
+        ($2::text IS NULL AND status <> 'pending')
+        OR status = $2::text
+    )
     AND ($3::text IS NULL OR order_type = $3::text)
 `
 
@@ -1601,7 +1604,10 @@ func (q *Queries) ListOrdersByMerchantAndStatuses(ctx context.Context, arg ListO
 const listOrdersByMerchantWithFilters = `-- name: ListOrdersByMerchantWithFilters :many
 SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE merchant_id = $1
-    AND ($2::text IS NULL OR status = $2::text)
+    AND (
+        ($2::text IS NULL AND status <> 'pending')
+        OR status = $2::text
+    )
     AND ($3::text IS NULL OR order_type = $3::text)
 ORDER BY created_at DESC, id DESC
 LIMIT $5 OFFSET $4

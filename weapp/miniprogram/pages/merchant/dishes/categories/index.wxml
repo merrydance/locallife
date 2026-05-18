@@ -49,7 +49,7 @@
 
               <view class="category-actions">
                 <t-button size="small" theme="default" icon="edit" data-id="{{item.id}}" data-name="{{item.name}}" bind:tap="onEditCategory">编辑</t-button>
-                <t-button size="small" theme="danger" variant="text" data-id="{{item.id}}" loading="{{pendingDeleteId === item.id}}" disabled="{{pendingDeleteId === item.id}}" bind:tap="onDeleteCategory">删除</t-button>
+                <t-button size="small" theme="danger" variant="text" icon="delete" data-id="{{item.id}}" loading="{{pendingDeleteId === item.id}}" disabled="{{pendingDeleteId === item.id}}" bind:tap="onDeleteCategory">删除</t-button>
               </view>
             </view>
           </view>

@@ -91,6 +91,130 @@ type AuditLog struct {
 	CreatedAt   time.Time   `json:"created_at"`
 }
 
+type BaofuAccountBinding struct {
+	ID                    int64       `json:"id"`
+	OwnerType             string      `json:"owner_type"`
+	OwnerID               int64       `json:"owner_id"`
+	AccountType           string      `json:"account_type"`
+	ContractNo            pgtype.Text `json:"contract_no"`
+	SharingMerID          pgtype.Text `json:"sharing_mer_id"`
+	LoginNo               pgtype.Text `json:"login_no"`
+	OpenState             string      `json:"open_state"`
+	WechatSubMchID        pgtype.Text `json:"wechat_sub_mch_id"`
+	BankCardLast4         pgtype.Text `json:"bank_card_last4"`
+	LastOpenTransSerialNo pgtype.Text `json:"last_open_trans_serial_no"`
+	RawSnapshot           []byte      `json:"raw_snapshot"`
+	CreatedAt             time.Time   `json:"created_at"`
+	UpdatedAt             time.Time   `json:"updated_at"`
+}
+
+type BaofuAccountOpeningFlow struct {
+	ID                      int64       `json:"id"`
+	OwnerType               string      `json:"owner_type"`
+	OwnerID                 int64       `json:"owner_id"`
+	AccountType             string      `json:"account_type"`
+	ProfileID               pgtype.Int8 `json:"profile_id"`
+	State                   string      `json:"state"`
+	VerifyFeeAmount         int64       `json:"verify_fee_amount"`
+	VerifyFeePaymentOrderID pgtype.Int8 `json:"verify_fee_payment_order_id"`
+	OpenTransSerialNo       pgtype.Text `json:"open_trans_serial_no"`
+	LoginNo                 pgtype.Text `json:"login_no"`
+	AccountBindingID        pgtype.Int8 `json:"account_binding_id"`
+	MerchantReportID        pgtype.Int8 `json:"merchant_report_id"`
+	FailureCode             pgtype.Text `json:"failure_code"`
+	FailureMessage          pgtype.Text `json:"failure_message"`
+	ProviderRequestSnapshot []byte      `json:"provider_request_snapshot"`
+	RawSnapshot             []byte      `json:"raw_snapshot"`
+	CreatedAt               time.Time   `json:"created_at"`
+	UpdatedAt               time.Time   `json:"updated_at"`
+}
+
+type BaofuAccountOpeningProfile struct {
+	ID                        int64       `json:"id"`
+	OwnerType                 string      `json:"owner_type"`
+	OwnerID                   int64       `json:"owner_id"`
+	AccountType               string      `json:"account_type"`
+	ProfileStatus             string      `json:"profile_status"`
+	LegalName                 pgtype.Text `json:"legal_name"`
+	CertificateType           pgtype.Text `json:"certificate_type"`
+	CertificateNoCiphertext   pgtype.Text `json:"certificate_no_ciphertext"`
+	CertificateNoMask         pgtype.Text `json:"certificate_no_mask"`
+	EmailCiphertext           pgtype.Text `json:"email_ciphertext"`
+	EmailMask                 pgtype.Text `json:"email_mask"`
+	CustomerName              pgtype.Text `json:"customer_name"`
+	AliasName                 pgtype.Text `json:"alias_name"`
+	CorporateName             pgtype.Text `json:"corporate_name"`
+	CorporateCertType         pgtype.Text `json:"corporate_cert_type"`
+	CorporateCertIDCiphertext pgtype.Text `json:"corporate_cert_id_ciphertext"`
+	CorporateCertIDMask       pgtype.Text `json:"corporate_cert_id_mask"`
+	CorporateMobileCiphertext pgtype.Text `json:"corporate_mobile_ciphertext"`
+	CorporateMobileMask       pgtype.Text `json:"corporate_mobile_mask"`
+	IndustryID                pgtype.Text `json:"industry_id"`
+	ContactName               pgtype.Text `json:"contact_name"`
+	ContactMobileCiphertext   pgtype.Text `json:"contact_mobile_ciphertext"`
+	ContactMobileMask         pgtype.Text `json:"contact_mobile_mask"`
+	BankAccountNoCiphertext   pgtype.Text `json:"bank_account_no_ciphertext"`
+	BankAccountNoMask         pgtype.Text `json:"bank_account_no_mask"`
+	BankMobileCiphertext      pgtype.Text `json:"bank_mobile_ciphertext"`
+	BankMobileMask            pgtype.Text `json:"bank_mobile_mask"`
+	BankName                  pgtype.Text `json:"bank_name"`
+	DepositBankProvince       pgtype.Text `json:"deposit_bank_province"`
+	DepositBankCity           pgtype.Text `json:"deposit_bank_city"`
+	DepositBankName           pgtype.Text `json:"deposit_bank_name"`
+	CardUserName              pgtype.Text `json:"card_user_name"`
+	SourceSnapshot            []byte      `json:"source_snapshot"`
+	CreatedAt                 time.Time   `json:"created_at"`
+	UpdatedAt                 time.Time   `json:"updated_at"`
+}
+
+type BaofuFeeLedger struct {
+	ID                 int64       `json:"id"`
+	FeeType            string      `json:"fee_type"`
+	PayerType          string      `json:"payer_type"`
+	PayerID            pgtype.Int8 `json:"payer_id"`
+	BusinessObjectType string      `json:"business_object_type"`
+	BusinessObjectID   int64       `json:"business_object_id"`
+	Amount             int64       `json:"amount"`
+	FeeRateBps         pgtype.Int4 `json:"fee_rate_bps"`
+	ProviderBillNo     pgtype.Text `json:"provider_bill_no"`
+	Status             string      `json:"status"`
+	CreatedAt          time.Time   `json:"created_at"`
+	UpdatedAt          time.Time   `json:"updated_at"`
+}
+
+type BaofuMerchantReport struct {
+	ID              int64       `json:"id"`
+	OwnerType       string      `json:"owner_type"`
+	OwnerID         int64       `json:"owner_id"`
+	ReportType      string      `json:"report_type"`
+	ReportNo        string      `json:"report_no"`
+	BctMerID        string      `json:"bct_mer_id"`
+	SubMchID        pgtype.Text `json:"sub_mch_id"`
+	ReportState     string      `json:"report_state"`
+	AppletAuthState string      `json:"applet_auth_state"`
+	PlatformBizNo   pgtype.Text `json:"platform_biz_no"`
+	FailureCode     pgtype.Text `json:"failure_code"`
+	FailureMessage  pgtype.Text `json:"failure_message"`
+	RawSnapshot     []byte      `json:"raw_snapshot"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
+}
+
+type BaofuWithdrawalOrder struct {
+	ID               int64              `json:"id"`
+	OwnerType        string             `json:"owner_type"`
+	OwnerID          int64              `json:"owner_id"`
+	AccountBindingID int64              `json:"account_binding_id"`
+	OutRequestNo     string             `json:"out_request_no"`
+	BaofuWithdrawNo  pgtype.Text        `json:"baofu_withdraw_no"`
+	Amount           int64              `json:"amount"`
+	Status           string             `json:"status"`
+	RawSnapshot      []byte             `json:"raw_snapshot"`
+	FinishedAt       pgtype.Timestamptz `json:"finished_at"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        time.Time          `json:"updated_at"`
+}
+
 type BehaviorAction struct {
 	ID           int64              `json:"id"`
 	DecisionID   int64              `json:"decision_id"`
@@ -1688,6 +1812,27 @@ type OrderItem struct {
 	CreatedAt      time.Time   `json:"created_at"`
 }
 
+type OrderPaymentFeeLedger struct {
+	ID                    int64       `json:"id"`
+	Provider              string      `json:"provider"`
+	Channel               string      `json:"channel"`
+	PaymentOrderID        int64       `json:"payment_order_id"`
+	ProfitSharingOrderID  pgtype.Int8 `json:"profit_sharing_order_id"`
+	FeeType               string      `json:"fee_type"`
+	PayerType             string      `json:"payer_type"`
+	PayerID               pgtype.Int8 `json:"payer_id"`
+	PayeeType             string      `json:"payee_type"`
+	BaseAmount            int64       `json:"base_amount"`
+	RateBps               int32       `json:"rate_bps"`
+	Amount                int64       `json:"amount"`
+	AmountSource          string      `json:"amount_source"`
+	ExternalPaymentFactID pgtype.Int8 `json:"external_payment_fact_id"`
+	Status                string      `json:"status"`
+	CalculationVersion    string      `json:"calculation_version"`
+	CreatedAt             time.Time   `json:"created_at"`
+	UpdatedAt             time.Time   `json:"updated_at"`
+}
+
 type OrderPickupCounter struct {
 	MerchantID   int64              `json:"merchant_id"`
 	PickupDate   pgtype.Date        `json:"pickup_date"`
@@ -1854,7 +1999,31 @@ type ProfitSharingOrder struct {
 	// 平台分账比例（百分比），默认2%
 	PlatformRate int32 `json:"platform_rate"`
 	// 运营商分账比例（百分比），默认3%
-	OperatorRate int32 `json:"operator_rate"`
+	OperatorRate                 int32       `json:"operator_rate"`
+	PaymentFee                   int64       `json:"payment_fee"`
+	PaymentFeeRateBps            int32       `json:"payment_fee_rate_bps"`
+	Provider                     string      `json:"provider"`
+	Channel                      string      `json:"channel"`
+	MerchantSharingMerID         pgtype.Text `json:"merchant_sharing_mer_id"`
+	RiderSharingMerID            pgtype.Text `json:"rider_sharing_mer_id"`
+	OperatorSharingMerID         pgtype.Text `json:"operator_sharing_mer_id"`
+	PlatformSharingMerID         pgtype.Text `json:"platform_sharing_mer_id"`
+	SharingDetailSnapshot        []byte      `json:"sharing_detail_snapshot"`
+	CalculationVersion           string      `json:"calculation_version"`
+	SettlementMode               string      `json:"settlement_mode"`
+	ProviderPaymentFee           int64       `json:"provider_payment_fee"`
+	ProviderPaymentFeeRateBps    int32       `json:"provider_payment_fee_rate_bps"`
+	ProviderPaymentFeeBaseAmount int64       `json:"provider_payment_fee_base_amount"`
+	ProviderPaymentFeeSource     string      `json:"provider_payment_fee_source"`
+	MerchantPaymentFee           int64       `json:"merchant_payment_fee"`
+	MerchantPaymentFeeRateBps    int32       `json:"merchant_payment_fee_rate_bps"`
+	MerchantPaymentFeeBaseAmount int64       `json:"merchant_payment_fee_base_amount"`
+	RiderGrossAmount             int64       `json:"rider_gross_amount"`
+	RiderPaymentFee              int64       `json:"rider_payment_fee"`
+	RiderPaymentFeeRateBps       int32       `json:"rider_payment_fee_rate_bps"`
+	RiderPaymentFeeBaseAmount    int64       `json:"rider_payment_fee_base_amount"`
+	CommissionBaseAmount         int64       `json:"commission_base_amount"`
+	PlatformReceiverAmount       int64       `json:"platform_receiver_amount"`
 }
 
 type ProfitSharingReceiverAttempt struct {

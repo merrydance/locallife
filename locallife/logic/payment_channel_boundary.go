@@ -17,6 +17,10 @@ func paymentOrderUsesEcommerceChannel(paymentOrder db.PaymentOrder) bool {
 	return db.PaymentOrderUsesEcommerceChannel(paymentOrder)
 }
 
+func paymentOrderUsesBaofuAggregateChannel(paymentOrder db.PaymentOrder) bool {
+	return paymentOrder.PaymentChannel == db.PaymentChannelBaofuAggregate
+}
+
 func ensureWechatServiceProviderRefundClientConfigured(paymentOrder db.PaymentOrder, ecommerceClient wechat.EcommerceClientInterface, ordinaryClient ordinaryServiceProviderOrderClient, action string) error {
 	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
 		if ordinaryClient == nil {

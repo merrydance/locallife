@@ -86,7 +86,7 @@
           <t-divider wx:if="{{item.canEditRole && item.canRemove}}" layout="vertical" />
 
           <view class="staff-action-slot">
-            <t-button wx:if="{{item.canRemove}}" class="staff-action-button" variant="text" theme="danger" size="small" data-id="{{item.id}}" disabled="{{removingStaffId === item.id}}" bind:tap="onRemoveStaff">移除</t-button>
+            <t-button wx:if="{{item.canRemove}}" class="staff-action-button" variant="text" theme="danger" size="small" icon="delete" data-id="{{item.id}}" disabled="{{removingStaffId === item.id}}" bind:tap="onRemoveStaff">移除</t-button>
           </view>
         </view>
       </t-cell-group>

@@ -30,14 +30,17 @@
         </view>
 
         <t-cell-group theme="card">
-          <t-input
-            label="规则名称"
-            placeholder="例如：午市满50减8"
-            value="{{formData.name}}"
-            data-field="name"
-            required
-            bind:change="onFormInputChange"
-          />
+          <t-cell required title="规则名称">
+            <t-input
+              slot="note"
+              placeholder="例如：午市满50减8"
+              value="{{formData.name}}"
+              data-field="name"
+              borderless
+              align="right"
+              bind:change="onFormInputChange"
+            />
+          </t-cell>
           <t-input
             label="规则说明"
             placeholder="可选，补充展示文案或适用说明"
@@ -45,24 +48,32 @@
             data-field="description"
             bind:change="onFormInputChange"
           />
-          <t-input
-            label="门槛金额(元)"
-            type="digit"
-            placeholder="如 50.00"
-            value="{{formData.min_order_amount_yuan}}"
-            data-field="min_order_amount_yuan"
-            required
-            bind:change="onFormInputChange"
-          />
-          <t-input
-            label="优惠金额(元)"
-            type="digit"
-            placeholder="如 8.00"
-            value="{{formData.discount_amount_yuan}}"
-            data-field="discount_amount_yuan"
-            required
-            bind:change="onFormInputChange"
-          />
+          <t-cell required title="门槛金额">
+            <t-input
+              slot="note"
+              type="digit"
+              suffix="元"
+              placeholder="如 50.00"
+              value="{{formData.min_order_amount_yuan}}"
+              data-field="min_order_amount_yuan"
+              borderless
+              align="right"
+              bind:change="onFormInputChange"
+            />
+          </t-cell>
+          <t-cell required title="优惠金额">
+            <t-input
+              slot="note"
+              type="digit"
+              suffix="元"
+              placeholder="如 8.00"
+              value="{{formData.discount_amount_yuan}}"
+              data-field="discount_amount_yuan"
+              borderless
+              align="right"
+              bind:change="onFormInputChange"
+            />
+          </t-cell>
         </t-cell-group>
       </view>
 

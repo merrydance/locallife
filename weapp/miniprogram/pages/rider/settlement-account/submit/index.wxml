@@ -1,0 +1,101 @@
+<custom-navbar title="提交开户资料" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view
+  class="settlement-page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
+>
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载开户资料中..." layout="vertical" />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '开户资料加载失败，请重试'}}" />
+    <t-button theme="primary" bindtap="onRetry">重新加载</t-button>
+  </view>
+
+  <view wx:else class="page-content">
+    <baofu-onboarding-wait
+      wx:if="{{waitVisible}}"
+      state="{{waitState}}"
+      title="{{waitTitle}}"
+      description="{{waitDescription}}"
+      progressText="{{waitProgressText}}"
+      theme="{{waitTheme}}"
+      primaryActionText="{{waitPrimaryActionText}}"
+      loading="{{submitting || syncing}}"
+      bind:primary="onWaitPrimary"
+    />
+
+    <block wx:else>
+      <t-cell-group>
+        <t-cell wx:if="{{hasStoredCertificateNo}}" title="姓名" note="{{form.name}}" />
+        <t-input
+          wx:else
+          label="姓名"
+          t-class-label="form-required-label"
+          value="{{form.name}}"
+          data-field="name"
+          disabled="{{submitting || syncing}}"
+          align="right"
+          bind:change="onInput"
+        />
+        <view wx:if="{{hasStoredCertificateNo}}" class="identity-note">姓名已从已通过的骑手入驻资料带入。</view>
+        <t-cell wx:if="{{hasStoredCertificateNo}}" title="身份证号" note="{{profileDefaults.certificate_no_mask}}" />
+        <t-input
+          wx:else
+          label="身份证号"
+          t-class-label="form-required-label"
+          placeholder="18位身份证号"
+          type="{{showIdNumber ? 'text' : 'password'}}"
+          value="{{form.certificate_no}}"
+          data-field="certificate_no"
+          disabled="{{submitting || syncing}}"
+          align="right"
+          maxlength="18"
+          suffixIcon="{{showIdNumber ? 'browse' : 'browse-off'}}"
+          bind:change="onInputId"
+          bind:click="onToggleIdVisibility"
+        />
+        <t-input
+          label="银行卡号"
+          t-class-label="form-required-label"
+          placeholder="本人借记卡号"
+          type="{{showBankAccount ? 'text' : 'password'}}"
+          value="{{form.bank_account_no}}"
+          data-field="bank_account_no"
+          disabled="{{submitting || syncing}}"
+          align="right"
+          maxlength="30"
+          suffixIcon="{{showBankAccount ? 'browse' : 'browse-off'}}"
+          bind:change="onInput"
+          bind:click="onToggleBankAccountVisibility"
+        />
+        <t-input
+          label="预留手机"
+          t-class-label="form-required-label"
+          placeholder="11位手机号"
+          type="number"
+          value="{{form.bank_mobile}}"
+          data-field="bank_mobile"
+          disabled="{{submitting || syncing}}"
+          align="right"
+          maxlength="11"
+          bind:change="onInput"
+        />
+        <t-cell wx:if="{{formErrorMessage}}" title="资料校验" note="{{formErrorMessage}}" />
+      </t-cell-group>
+
+      <view class="form-actions">
+        <t-button
+          theme="primary"
+          block
+          loading="{{submitting}}"
+          disabled="{{submitting || syncing}}"
+          bindtap="onSubmitProfile"
+        >
+          提交资料并支付核验费
+        </t-button>
+      </view>
+    </block>
+  </view>
+</view>

@@ -3,11 +3,12 @@
  */
 
 import { request } from '../utils/request'
+import { logger } from '../utils/logger'
 
 export type PaymentStatus = 'pending' | 'paid' | 'refunded' | 'closed' | 'failed'
 export type RefundStatus = 'pending' | 'processing' | 'success' | 'failed' | 'closed'
 export type PaymentType = 'native' | 'miniprogram'
-export type BusinessType = 'order' | 'reservation' | 'reservation_addon' | 'membership_recharge' | 'rider_deposit' | 'claim_recovery'
+export type BusinessType = 'order' | 'reservation' | 'reservation_addon' | 'membership_recharge' | 'rider_deposit' | 'claim_recovery' | 'baofu_account_verify_fee'
 export type PaymentLedgerEntryType = 'payment' | 'refund'
 export type CombinedPaymentResolution = 'success' | 'recreate' | 'syncing'
 export type PaymentViewTheme = 'success' | 'warning' | 'danger' | 'primary' | 'default'
@@ -25,6 +26,30 @@ export interface MiniProgramPayParams {
   package: string
   signType?: 'MD5' | 'HMAC-SHA256' | 'RSA'
   paySign: string
+}
+
+export function buildBackendWechatPayRequestOptions(
+  paymentParams: MiniProgramPayParams
+): Pick<WechatMiniprogram.RequestPaymentOption, 'timeStamp' | 'nonceStr' | 'package' | 'signType' | 'paySign'> {
+  const {
+    timeStamp,
+    nonceStr,
+    package: packageValue,
+    signType,
+    paySign
+  } = paymentParams || {}
+
+  if (!timeStamp || !nonceStr || !packageValue || !paySign) {
+    throw new Error('支付参数缺失，请重新发起支付')
+  }
+
+  return {
+    timeStamp,
+    nonceStr,
+    package: packageValue,
+    signType,
+    paySign
+  }
 }
 
 export interface PaymentOrder {
@@ -113,6 +138,13 @@ export interface CombinedPaymentWechatQueryResponse {
 
 export interface CreateCombinedPaymentRequest {
   order_ids: number[]
+}
+
+export interface PaymentCapabilitiesResponse {
+  main_business_payment_channel: string
+  combined_payment_supported: boolean
+  split_checkout_required: boolean
+  combined_payment_unavailable_message?: string
 }
 
 export interface CreatePaymentRequest {
@@ -565,6 +597,13 @@ export async function createPayment(paymentData: CreatePaymentRequest): Promise<
 
 export const pay = createPayment
 
+export async function getPaymentCapabilities(): Promise<PaymentCapabilitiesResponse> {
+  return request({
+    url: '/v1/payments/capabilities',
+    method: 'GET'
+  })
+}
+
 export async function createCombinedPaymentOrder(payload: CreateCombinedPaymentRequest): Promise<CombinedPaymentOrderResponse> {
   return request({
     url: '/v1/payments/combined',
@@ -656,9 +695,10 @@ export async function createReservationPayment(reservationId: number): Promise<P
 }
 
 export async function invokeWechatPay(paymentParams: MiniProgramPayParams): Promise<void> {
+  const requestOptions = buildBackendWechatPayRequestOptions(paymentParams)
   return new Promise((resolve, reject) => {
     wx.requestPayment({
-      ...paymentParams,
+      ...requestOptions,
       success: () => resolve(),
       fail: (error) => reject(error)
     })
@@ -707,7 +747,7 @@ async function checkPaymentStatusWithRemoteFallback(
       }
     } catch (error: unknown) {
       if (!isRemotePaymentQueryUnsupported(error)) {
-        console.warn('[payment] 微信远端支付状态查询失败，回退本地支付单状态', error)
+        logger.warn('微信远端支付状态查询失败，回退本地支付单状态', error, 'payment-api')
       }
 
       const payment = await getPaymentDetail(paymentId)

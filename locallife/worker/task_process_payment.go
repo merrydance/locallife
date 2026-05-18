@@ -109,6 +109,13 @@ func profitSharingResultNotificationExpiresAt(order db.ProfitSharingOrder) time.
 	return order.CreatedAt.Add(profitSharingResultNotificationExpireWindow)
 }
 
+func merchantVisiblePaymentChannelFee(order db.ProfitSharingOrder) int64 {
+	if order.CalculationVersion == logic.BaofuSettlementCalculationVersionV2 {
+		return order.MerchantPaymentFee
+	}
+	return order.PaymentFee
+}
+
 // AlertLevel 告警级别
 type AlertLevel string
 
@@ -612,6 +619,17 @@ func (processor *RedisTaskProcessor) distributeTaskSendNotificationWithLog(ctx c
 
 // notifyMerchantNewOrder 通知商户有新订单
 func (processor *RedisTaskProcessor) notifyMerchantNewOrder(ctx context.Context, order db.Order) error {
+	if order.Status != db.OrderStatusPaid {
+		log.Error().
+			Int64("order_id", order.ID).
+			Int64("merchant_id", order.MerchantID).
+			Str("order_no", order.OrderNo).
+			Str("status", order.Status).
+			Str("payment_method", order.PaymentMethod.String).
+			Msg("merchant new order notification attempted for unpaid order")
+		return fmt.Errorf("merchant new order notification requires paid order: order_id=%d status=%s", order.ID, order.Status)
+	}
+
 	// 获取商户信息
 	merchant, err := processor.store.GetMerchant(ctx, order.MerchantID)
 	if err != nil {
@@ -627,6 +645,16 @@ func (processor *RedisTaskProcessor) notifyMerchantNewOrder(ctx context.Context,
 	if err != nil {
 		return fmt.Errorf("build order items for merchant new order snapshot: %w", err)
 	}
+	feeBreakdown, err := processor.loadMerchantOrderFeeBreakdown(ctx, order)
+	if err != nil {
+		log.Error().Err(err).
+			Int64("order_id", order.ID).
+			Int64("merchant_id", order.MerchantID).
+			Str("order_no", order.OrderNo).
+			Str("status", order.Status).
+			Msg("merchant new order fee breakdown unavailable")
+		return fmt.Errorf("build merchant new order fee breakdown: %w", err)
+	}
 
 	// 通过异步任务发送通知给商户
 	expiresAt := time.Now().Add(24 * time.Hour)
@@ -638,11 +666,12 @@ func (processor *RedisTaskProcessor) notifyMerchantNewOrder(ctx context.Context,
 		RelatedType: "order",
 		RelatedID:   order.ID,
 		ExtraData: map[string]any{
-			"message_id":   merchantPayload.MessageID,
-			"order_no":     order.OrderNo,
-			"order_type":   order.OrderType,
-			"total_amount": order.TotalAmount,
-			"shop_name":    merchantPayload.ShopName,
+			"message_id":    merchantPayload.MessageID,
+			"order_no":      order.OrderNo,
+			"order_type":    order.OrderType,
+			"total_amount":  order.TotalAmount,
+			"shop_name":     merchantPayload.ShopName,
+			"fee_breakdown": feeBreakdown,
 		},
 		ExpiresAt: &expiresAt,
 	}, asynq.Queue(QueueDefault))
@@ -665,7 +694,15 @@ func (processor *RedisTaskProcessor) notifyMerchantNewOrder(ctx context.Context,
 	orderSnapshot["content"] = merchantPayload.Content
 	orderSnapshot["amount"] = merchantPayload.Amount
 	orderSnapshot["shop_name"] = merchantPayload.ShopName
-	payload, _ := json.Marshal(orderSnapshot)
+	orderSnapshot["fee_breakdown"] = feeBreakdown
+	payload, err := json.Marshal(orderSnapshot)
+	if err != nil {
+		log.Error().Err(err).
+			Int64("order_id", order.ID).
+			Int64("merchant_id", merchant.ID).
+			Msg("marshal merchant new order websocket payload failed")
+		return fmt.Errorf("marshal merchant new order websocket payload: %w", err)
+	}
 	wsMessage := websocket.Message{
 		ID:        merchantPayload.MessageID,
 		Type:      "new_order",
@@ -677,10 +714,39 @@ func (processor *RedisTaskProcessor) notifyMerchantNewOrder(ctx context.Context,
 		EntityID:   merchant.ID,
 		Message:    wsMessage,
 	}
-	wsMessageJSON, _ := json.Marshal(pushMsg)
+	wsMessageJSON, err := json.Marshal(pushMsg)
+	if err != nil {
+		log.Error().Err(err).
+			Int64("order_id", order.ID).
+			Int64("merchant_id", merchant.ID).
+			Msg("marshal merchant websocket push message failed")
+		return fmt.Errorf("marshal merchant websocket push message: %w", err)
+	}
 	channel := fmt.Sprintf("notification:merchant:%d", merchant.ID)
 	processor.publishWSMessage(ctx, channel, wsMessageJSON)
 	return nil
+}
+
+func (processor *RedisTaskProcessor) loadMerchantOrderFeeBreakdown(ctx context.Context, order db.Order) (logic.MerchantOrderFeeBreakdown, error) {
+	paymentOrder, err := processor.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+	})
+	if err != nil {
+		return logic.MerchantOrderFeeBreakdown{}, fmt.Errorf("get latest payment order by order: %w", err)
+	}
+	profitSharingOrder, err := processor.store.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
+	if err != nil {
+		return logic.MerchantOrderFeeBreakdown{}, fmt.Errorf("get profit sharing order by payment order: %w", err)
+	}
+	breakdown, err := logic.BuildMerchantOrderFeeBreakdown(logic.BuildMerchantOrderFeeBreakdownInput{
+		Order:              order,
+		ProfitSharingOrder: &profitSharingOrder,
+	})
+	if err != nil {
+		return logic.MerchantOrderFeeBreakdown{}, err
+	}
+	return breakdown, nil
 }
 
 type orderItemSnapshot struct {
@@ -3219,9 +3285,9 @@ func (processor *RedisTaskProcessor) processProfitSharingResultPayload(ctx conte
 			RelatedType: "profit_sharing",
 			RelatedID:   payload.ProfitSharingOrderID,
 			ExtraData: map[string]any{
-				"merchant_amount":     profitSharingOrder.MerchantAmount,
-				"platform_commission": profitSharingOrder.PlatformCommission,
-				"operator_commission": profitSharingOrder.OperatorCommission,
+				"merchant_receivable_amount":  profitSharingOrder.MerchantAmount,
+				"platform_service_fee_amount": profitSharingOrder.PlatformCommission + profitSharingOrder.OperatorCommission,
+				"payment_channel_fee_amount":  merchantVisiblePaymentChannelFee(profitSharingOrder),
 			},
 			ExpiresAt: &expiresAt,
 		}, asynq.Unique(profitSharingResultNotificationDedupWindow))

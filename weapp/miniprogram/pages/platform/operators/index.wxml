@@ -198,7 +198,7 @@
   <view slot="content">
     <view class="dialog-desc">{{rejectTargetDesc}}</view>
     <t-textarea
-      placeholder="请填写驳回原因（至少2字）"
+      placeholder="至少 2 字"
       value="{{rejectReason}}"
       bind:change="onRejectReasonInput"
       maxlength="200"
@@ -206,5 +206,4 @@
     />
   </view>
 </t-dialog>
-
 

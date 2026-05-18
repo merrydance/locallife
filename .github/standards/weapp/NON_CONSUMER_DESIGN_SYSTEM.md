@@ -200,7 +200,17 @@
 
 当前仓库参考实现：`weapp/miniprogram/components/dish-customization-editor/index.wxml` 与 `weapp/miniprogram/components/dish-customization-options/index.wxml`。
 
-### 6.2 Cards And Sections
+### 6.2 Forms And Inputs
+
+- 表单 label 必须短、稳定、可扫读，负责说明输入项用途；不要把字段解释、业务背景或校验规则塞进 label 造成换行。
+- 当 label 已经可见时，placeholder 不得再做第二个 label，也不得写成 `请输入/请选择 + 字段名`。这种写法会把每一行变成两段重复文字，是非顾客侧表单的明确反模式。
+- placeholder 只用于补充格式、约束、示例或状态，例如 `18位身份证号`、`11位手机号`、`name@example.com`、`例如 2026-05-11`；若没有额外信息，应留空。
+- 搜索框可以使用 `搜索 + 对象名` 作为 placeholder，因为搜索框通常没有独立 label；这不是普通表单输入项的例外许可。
+- 必填项必须使用 TDesign 或当前组件体系真实可渲染的必填标识。选择/展示行可以使用 `t-cell required`，表单项可以使用 `t-form-item` 必填标记；输入框不得为了显示星号再外包一层 `t-cell`，否则会叠加两套行高与 padding。当前 `t-input` 场景应使用官方 external class（如 `t-class-label`）承接统一必填 label 样式，不得写一个当前版本不会渲染的属性来假装已经统一。
+- 必填与选填的判断以后端契约和已验证校验为准。低价值选填字段默认从主表单移除；确需保留时，必须降低权重或明确标成选填，不得和必填字段混成一张密集字段表。
+- 已提交、已带入或不可编辑的值必须用 `t-cell`、标签、摘要或只读状态承接，不得继续用输入框伪装成可编辑内容。
+
+### 6.3 Cards And Sections
 
 - 卡片只用于真正需要分组、隔离状态、承接摘要或危险信息的区块。
 - 不要把每一段说明、每一排筛选、每一个轻量表单组都做成独立白卡。
@@ -208,7 +218,7 @@
 - 顶部 hero 式说明卡片不属于非顾客侧默认结构；只有当说明本身就是当前任务主体时才允许例外。
 - 从 fixed footer-bar 改回内容流动作区时，page shell 仍然只负责外层 safe area；页面自身还需要补足内容区底部节奏，例如 `page-content` 的底部 padding 和动作区与上一块内容之间的显式间距。
 
-### 6.3 Popup And Dialog
+### 6.4 Popup And Dialog
 
 - 少字段辅助创建、短确认流程优先使用 `t-dialog`。
 - 只有当内容较长、需要滚动、需要持续底部动作区时，才使用底部 `t-popup`。
@@ -222,7 +232,9 @@
 2. page shell、左右 gutter、内容区内边距和底部安全区是否由统一外层结构承接，而不是分散在局部组件里。
 3. 是否只有形成页面结构所必需的补充容器，没有无意义的卡片套娃和装饰包装。
 4. 是否避免了顾客侧品牌色、营销氛围和装饰性 token 向非顾客侧页面渗透。
-5. 所有非 TDesign 的用户可见控件是否都能说明 TDesign 不满足的具体原因以及例外范围。
+5. 表单是否避免 label 与 placeholder 重复，placeholder 是否只用于格式、约束、示例或状态提示。
+6. 必填项是否使用当前组件版本真实可渲染的必填标识，输入框是否没有为了显示星号再外包 `t-cell`，选填字段是否没有和必填字段同权重挤在主表单里。
+7. 所有非 TDesign 的用户可见控件是否都能说明 TDesign 不满足的具体原因以及例外范围。
 
 ## 8. Current Implementation References
 

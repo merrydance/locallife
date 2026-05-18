@@ -113,9 +113,9 @@
       <view class="section-title">确认集团信息</view>
 
       <view class="card-group">
-        <t-input label="品牌名称" placeholder="请输入品牌名称" value="{{formData.groupName}}" bindchange="onInput" data-field="groupName" />
+        <t-input label="品牌名称" value="{{formData.groupName}}" bindchange="onInput" data-field="groupName" />
         <view class="field-block {{phoneError ? 'field-block-error' : ''}}">
-          <t-input label="联系电话" type="number" placeholder="请输入手机号" value="{{formData.contactPhone}}" bindchange="onInput" data-field="contactPhone" />
+          <t-input label="联系电话" type="number" placeholder="11位手机号" value="{{formData.contactPhone}}" bindchange="onInput" data-field="contactPhone" />
         </view>
         <view class="field-error-text" wx:if="{{phoneError}}">{{phoneError}}</view>
       </view>

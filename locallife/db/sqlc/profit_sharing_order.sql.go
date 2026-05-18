@@ -124,29 +124,71 @@ INSERT INTO profit_sharing_orders (
     operator_commission,
     merchant_amount,
     out_order_no,
-    status
+    status,
+    payment_fee,
+    payment_fee_rate_bps,
+    provider,
+    channel,
+    merchant_sharing_mer_id,
+    rider_sharing_mer_id,
+    operator_sharing_mer_id,
+    platform_sharing_mer_id,
+    sharing_detail_snapshot
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
-) RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8,
+    $9,
+    $10,
+    $11,
+    $12,
+    $13,
+    $14,
+    $15,
+    $16,
+    COALESCE($17, 0),
+    COALESCE($18, 30),
+    COALESCE($19, 'wechat'),
+    COALESCE($20, 'ecommerce'),
+    $21,
+    $22,
+    $23,
+    $24,
+    COALESCE($25, '{}'::jsonb)
+) RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount
 `
 
 type CreateProfitSharingOrderParams struct {
-	PaymentOrderID      int64       `json:"payment_order_id"`
-	MerchantID          int64       `json:"merchant_id"`
-	OperatorID          pgtype.Int8 `json:"operator_id"`
-	OrderSource         string      `json:"order_source"`
-	TotalAmount         int64       `json:"total_amount"`
-	DeliveryFee         int64       `json:"delivery_fee"`
-	RiderID             pgtype.Int8 `json:"rider_id"`
-	RiderAmount         int64       `json:"rider_amount"`
-	DistributableAmount int64       `json:"distributable_amount"`
-	PlatformRate        int32       `json:"platform_rate"`
-	OperatorRate        int32       `json:"operator_rate"`
-	PlatformCommission  int64       `json:"platform_commission"`
-	OperatorCommission  int64       `json:"operator_commission"`
-	MerchantAmount      int64       `json:"merchant_amount"`
-	OutOrderNo          string      `json:"out_order_no"`
-	Status              string      `json:"status"`
+	PaymentOrderID        int64       `json:"payment_order_id"`
+	MerchantID            int64       `json:"merchant_id"`
+	OperatorID            pgtype.Int8 `json:"operator_id"`
+	OrderSource           string      `json:"order_source"`
+	TotalAmount           int64       `json:"total_amount"`
+	DeliveryFee           int64       `json:"delivery_fee"`
+	RiderID               pgtype.Int8 `json:"rider_id"`
+	RiderAmount           int64       `json:"rider_amount"`
+	DistributableAmount   int64       `json:"distributable_amount"`
+	PlatformRate          int32       `json:"platform_rate"`
+	OperatorRate          int32       `json:"operator_rate"`
+	PlatformCommission    int64       `json:"platform_commission"`
+	OperatorCommission    int64       `json:"operator_commission"`
+	MerchantAmount        int64       `json:"merchant_amount"`
+	OutOrderNo            string      `json:"out_order_no"`
+	Status                string      `json:"status"`
+	PaymentFee            interface{} `json:"payment_fee"`
+	PaymentFeeRateBps     interface{} `json:"payment_fee_rate_bps"`
+	Provider              interface{} `json:"provider"`
+	Channel               interface{} `json:"channel"`
+	MerchantSharingMerID  pgtype.Text `json:"merchant_sharing_mer_id"`
+	RiderSharingMerID     pgtype.Text `json:"rider_sharing_mer_id"`
+	OperatorSharingMerID  pgtype.Text `json:"operator_sharing_mer_id"`
+	PlatformSharingMerID  pgtype.Text `json:"platform_sharing_mer_id"`
+	SharingDetailSnapshot interface{} `json:"sharing_detail_snapshot"`
 }
 
 func (q *Queries) CreateProfitSharingOrder(ctx context.Context, arg CreateProfitSharingOrderParams) (ProfitSharingOrder, error) {
@@ -167,6 +209,15 @@ func (q *Queries) CreateProfitSharingOrder(ctx context.Context, arg CreateProfit
 		arg.MerchantAmount,
 		arg.OutOrderNo,
 		arg.Status,
+		arg.PaymentFee,
+		arg.PaymentFeeRateBps,
+		arg.Provider,
+		arg.Channel,
+		arg.MerchantSharingMerID,
+		arg.RiderSharingMerID,
+		arg.OperatorSharingMerID,
+		arg.PlatformSharingMerID,
+		arg.SharingDetailSnapshot,
 	)
 	var i ProfitSharingOrder
 	err := row.Scan(
@@ -190,6 +241,30 @@ func (q *Queries) CreateProfitSharingOrder(ctx context.Context, arg CreateProfit
 		&i.DistributableAmount,
 		&i.PlatformRate,
 		&i.OperatorRate,
+		&i.PaymentFee,
+		&i.PaymentFeeRateBps,
+		&i.Provider,
+		&i.Channel,
+		&i.MerchantSharingMerID,
+		&i.RiderSharingMerID,
+		&i.OperatorSharingMerID,
+		&i.PlatformSharingMerID,
+		&i.SharingDetailSnapshot,
+		&i.CalculationVersion,
+		&i.SettlementMode,
+		&i.ProviderPaymentFee,
+		&i.ProviderPaymentFeeRateBps,
+		&i.ProviderPaymentFeeBaseAmount,
+		&i.ProviderPaymentFeeSource,
+		&i.MerchantPaymentFee,
+		&i.MerchantPaymentFeeRateBps,
+		&i.MerchantPaymentFeeBaseAmount,
+		&i.RiderGrossAmount,
+		&i.RiderPaymentFee,
+		&i.RiderPaymentFeeRateBps,
+		&i.RiderPaymentFeeBaseAmount,
+		&i.CommissionBaseAmount,
+		&i.PlatformReceiverAmount,
 	)
 	return i, err
 }
@@ -212,7 +287,7 @@ INSERT INTO profit_sharing_orders (
     status
 ) VALUES (
     $1, $2, $3, $4, $5, 0, $5, $6, $7, $8, $9, $10, $11, $12
-) RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate
+) RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount
 `
 
 type CreateProfitSharingOrderSimpleParams struct {
@@ -268,6 +343,30 @@ func (q *Queries) CreateProfitSharingOrderSimple(ctx context.Context, arg Create
 		&i.DistributableAmount,
 		&i.PlatformRate,
 		&i.OperatorRate,
+		&i.PaymentFee,
+		&i.PaymentFeeRateBps,
+		&i.Provider,
+		&i.Channel,
+		&i.MerchantSharingMerID,
+		&i.RiderSharingMerID,
+		&i.OperatorSharingMerID,
+		&i.PlatformSharingMerID,
+		&i.SharingDetailSnapshot,
+		&i.CalculationVersion,
+		&i.SettlementMode,
+		&i.ProviderPaymentFee,
+		&i.ProviderPaymentFeeRateBps,
+		&i.ProviderPaymentFeeBaseAmount,
+		&i.ProviderPaymentFeeSource,
+		&i.MerchantPaymentFee,
+		&i.MerchantPaymentFeeRateBps,
+		&i.MerchantPaymentFeeBaseAmount,
+		&i.RiderGrossAmount,
+		&i.RiderPaymentFee,
+		&i.RiderPaymentFeeRateBps,
+		&i.RiderPaymentFeeBaseAmount,
+		&i.CommissionBaseAmount,
+		&i.PlatformReceiverAmount,
 	)
 	return i, err
 }
@@ -277,8 +376,10 @@ SELECT
     DATE(created_at) AS date,
     COUNT(*) as order_count,
     COALESCE(SUM(total_amount), 0)::bigint as total_gmv,
-    COALESCE(SUM(merchant_amount), 0)::bigint as merchant_income,
-    COALESCE(SUM(platform_commission + operator_commission), 0)::bigint as total_fee
+    COALESCE(SUM(merchant_amount), 0)::bigint as merchant_receivable_amount,
+    COALESCE(SUM(CASE WHEN calculation_version = 'baofu_fee_v2' THEN merchant_payment_fee ELSE payment_fee END), 0)::bigint as payment_channel_fee_amount,
+    COALESCE(SUM(platform_commission + operator_commission), 0)::bigint as platform_service_fee_amount,
+    COALESCE(SUM(platform_commission + operator_commission + CASE WHEN calculation_version = 'baofu_fee_v2' THEN merchant_payment_fee ELSE payment_fee END), 0)::bigint as total_deduction_fee_amount
 FROM profit_sharing_orders
 WHERE merchant_id = $1
   AND status = 'finished'
@@ -294,11 +395,13 @@ type GetMerchantDailyFinanceParams struct {
 }
 
 type GetMerchantDailyFinanceRow struct {
-	Date           pgtype.Date `json:"date"`
-	OrderCount     int64       `json:"order_count"`
-	TotalGmv       int64       `json:"total_gmv"`
-	MerchantIncome int64       `json:"merchant_income"`
-	TotalFee       int64       `json:"total_fee"`
+	Date                     pgtype.Date `json:"date"`
+	OrderCount               int64       `json:"order_count"`
+	TotalGmv                 int64       `json:"total_gmv"`
+	MerchantReceivableAmount int64       `json:"merchant_receivable_amount"`
+	PaymentChannelFeeAmount  int64       `json:"payment_channel_fee_amount"`
+	PlatformServiceFeeAmount int64       `json:"platform_service_fee_amount"`
+	TotalDeductionFeeAmount  int64       `json:"total_deduction_fee_amount"`
 }
 
 // 商户每日财务汇总
@@ -315,8 +418,10 @@ func (q *Queries) GetMerchantDailyFinance(ctx context.Context, arg GetMerchantDa
 			&i.Date,
 			&i.OrderCount,
 			&i.TotalGmv,
-			&i.MerchantIncome,
-			&i.TotalFee,
+			&i.MerchantReceivableAmount,
+			&i.PaymentChannelFeeAmount,
+			&i.PlatformServiceFeeAmount,
+			&i.TotalDeductionFeeAmount,
 		); err != nil {
 			return nil, err
 		}
@@ -333,10 +438,12 @@ SELECT
     COUNT(*) FILTER (WHERE status = 'finished') as completed_orders,
     COUNT(*) FILTER (WHERE status = 'pending') as pending_orders,
     COALESCE(SUM(CASE WHEN status = 'finished' THEN total_amount ELSE 0 END), 0)::bigint as total_gmv,
-    COALESCE(SUM(CASE WHEN status = 'finished' THEN merchant_amount ELSE 0 END), 0)::bigint as total_income,
-    COALESCE(SUM(CASE WHEN status = 'finished' THEN platform_commission ELSE 0 END), 0)::bigint as total_platform_fee,
-    COALESCE(SUM(CASE WHEN status = 'finished' THEN operator_commission ELSE 0 END), 0)::bigint as total_operator_fee,
-    COALESCE(SUM(CASE WHEN status = 'pending' THEN merchant_amount ELSE 0 END), 0)::bigint as pending_income
+    COALESCE(SUM(CASE WHEN status = 'finished' THEN merchant_amount ELSE 0 END), 0)::bigint as total_merchant_receivable_amount,
+    COALESCE(SUM(CASE WHEN status = 'finished' THEN platform_commission + operator_commission ELSE 0 END), 0)::bigint as total_platform_service_fee_amount,
+    COALESCE(SUM(CASE WHEN status = 'finished' THEN
+        CASE WHEN calculation_version = 'baofu_fee_v2' THEN merchant_payment_fee ELSE payment_fee END
+        ELSE 0 END), 0)::bigint as total_payment_channel_fee_amount,
+    COALESCE(SUM(CASE WHEN status = 'pending' THEN merchant_amount ELSE 0 END), 0)::bigint as pending_merchant_receivable_amount
 FROM profit_sharing_orders
 WHERE merchant_id = $1
   AND created_at >= $2 AND created_at <= $3
@@ -349,13 +456,13 @@ type GetMerchantFinanceOverviewParams struct {
 }
 
 type GetMerchantFinanceOverviewRow struct {
-	CompletedOrders  int64 `json:"completed_orders"`
-	PendingOrders    int64 `json:"pending_orders"`
-	TotalGmv         int64 `json:"total_gmv"`
-	TotalIncome      int64 `json:"total_income"`
-	TotalPlatformFee int64 `json:"total_platform_fee"`
-	TotalOperatorFee int64 `json:"total_operator_fee"`
-	PendingIncome    int64 `json:"pending_income"`
+	CompletedOrders                 int64 `json:"completed_orders"`
+	PendingOrders                   int64 `json:"pending_orders"`
+	TotalGmv                        int64 `json:"total_gmv"`
+	TotalMerchantReceivableAmount   int64 `json:"total_merchant_receivable_amount"`
+	TotalPlatformServiceFeeAmount   int64 `json:"total_platform_service_fee_amount"`
+	TotalPaymentChannelFeeAmount    int64 `json:"total_payment_channel_fee_amount"`
+	PendingMerchantReceivableAmount int64 `json:"pending_merchant_receivable_amount"`
 }
 
 // 商户财务概览：统计收入、服务费、净收入
@@ -366,10 +473,10 @@ func (q *Queries) GetMerchantFinanceOverview(ctx context.Context, arg GetMerchan
 		&i.CompletedOrders,
 		&i.PendingOrders,
 		&i.TotalGmv,
-		&i.TotalIncome,
-		&i.TotalPlatformFee,
-		&i.TotalOperatorFee,
-		&i.PendingIncome,
+		&i.TotalMerchantReceivableAmount,
+		&i.TotalPlatformServiceFeeAmount,
+		&i.TotalPaymentChannelFeeAmount,
+		&i.PendingMerchantReceivableAmount,
 	)
 	return i, err
 }
@@ -378,9 +485,9 @@ const getMerchantProfitSharingStats = `-- name: GetMerchantProfitSharingStats :o
 SELECT 
     COUNT(*) as total_orders,
     COALESCE(SUM(total_amount), 0)::bigint as total_amount,
-    COALESCE(SUM(merchant_amount), 0)::bigint as total_merchant_amount,
-    COALESCE(SUM(platform_commission), 0)::bigint as total_platform_commission,
-    COALESCE(SUM(operator_commission), 0)::bigint as total_operator_commission
+    COALESCE(SUM(merchant_amount), 0)::bigint as total_merchant_receivable_amount,
+    COALESCE(SUM(platform_commission + operator_commission), 0)::bigint as total_platform_service_fee_amount,
+    COALESCE(SUM(CASE WHEN calculation_version = 'baofu_fee_v2' THEN merchant_payment_fee ELSE payment_fee END), 0)::bigint as total_payment_channel_fee_amount
 FROM profit_sharing_orders
 WHERE merchant_id = $1 AND status = 'finished'
   AND created_at >= $2 AND created_at <= $3
@@ -393,11 +500,11 @@ type GetMerchantProfitSharingStatsParams struct {
 }
 
 type GetMerchantProfitSharingStatsRow struct {
-	TotalOrders             int64 `json:"total_orders"`
-	TotalAmount             int64 `json:"total_amount"`
-	TotalMerchantAmount     int64 `json:"total_merchant_amount"`
-	TotalPlatformCommission int64 `json:"total_platform_commission"`
-	TotalOperatorCommission int64 `json:"total_operator_commission"`
+	TotalOrders                   int64 `json:"total_orders"`
+	TotalAmount                   int64 `json:"total_amount"`
+	TotalMerchantReceivableAmount int64 `json:"total_merchant_receivable_amount"`
+	TotalPlatformServiceFeeAmount int64 `json:"total_platform_service_fee_amount"`
+	TotalPaymentChannelFeeAmount  int64 `json:"total_payment_channel_fee_amount"`
 }
 
 func (q *Queries) GetMerchantProfitSharingStats(ctx context.Context, arg GetMerchantProfitSharingStatsParams) (GetMerchantProfitSharingStatsRow, error) {
@@ -406,9 +513,9 @@ func (q *Queries) GetMerchantProfitSharingStats(ctx context.Context, arg GetMerc
 	err := row.Scan(
 		&i.TotalOrders,
 		&i.TotalAmount,
-		&i.TotalMerchantAmount,
-		&i.TotalPlatformCommission,
-		&i.TotalOperatorCommission,
+		&i.TotalMerchantReceivableAmount,
+		&i.TotalPlatformServiceFeeAmount,
+		&i.TotalPaymentChannelFeeAmount,
 	)
 	return i, err
 }
@@ -419,8 +526,9 @@ SELECT
     order_source,
     COUNT(*) as order_count,
     COALESCE(SUM(total_amount), 0)::bigint as total_amount,
-    COALESCE(SUM(platform_commission), 0)::bigint as platform_fee,
-    COALESCE(SUM(operator_commission), 0)::bigint as operator_fee
+    COALESCE(SUM(platform_commission + operator_commission), 0)::bigint as platform_service_fee_amount,
+    COALESCE(SUM(CASE WHEN calculation_version = 'baofu_fee_v2' THEN merchant_payment_fee ELSE payment_fee END), 0)::bigint as payment_channel_fee_amount,
+    COALESCE(SUM(platform_commission + operator_commission + CASE WHEN calculation_version = 'baofu_fee_v2' THEN merchant_payment_fee ELSE payment_fee END), 0)::bigint as total_fee_amount
 FROM profit_sharing_orders
 WHERE merchant_id = $1
   AND status = 'finished'
@@ -436,12 +544,13 @@ type GetMerchantServiceFeeDetailParams struct {
 }
 
 type GetMerchantServiceFeeDetailRow struct {
-	Date        pgtype.Date `json:"date"`
-	OrderSource string      `json:"order_source"`
-	OrderCount  int64       `json:"order_count"`
-	TotalAmount int64       `json:"total_amount"`
-	PlatformFee int64       `json:"platform_fee"`
-	OperatorFee int64       `json:"operator_fee"`
+	Date                     pgtype.Date `json:"date"`
+	OrderSource              string      `json:"order_source"`
+	OrderCount               int64       `json:"order_count"`
+	TotalAmount              int64       `json:"total_amount"`
+	PlatformServiceFeeAmount int64       `json:"platform_service_fee_amount"`
+	PaymentChannelFeeAmount  int64       `json:"payment_channel_fee_amount"`
+	TotalFeeAmount           int64       `json:"total_fee_amount"`
 }
 
 // 商户服务费明细
@@ -459,8 +568,9 @@ func (q *Queries) GetMerchantServiceFeeDetail(ctx context.Context, arg GetMercha
 			&i.OrderSource,
 			&i.OrderCount,
 			&i.TotalAmount,
-			&i.PlatformFee,
-			&i.OperatorFee,
+			&i.PlatformServiceFeeAmount,
+			&i.PaymentChannelFeeAmount,
+			&i.TotalFeeAmount,
 		); err != nil {
 			return nil, err
 		}
@@ -540,7 +650,7 @@ func (q *Queries) GetOperatorProfitSharingStatsByRegion(ctx context.Context, arg
 }
 
 const getProfitSharingOrder = `-- name: GetProfitSharingOrder :one
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount FROM profit_sharing_orders
 WHERE id = $1 LIMIT 1
 `
 
@@ -568,12 +678,36 @@ func (q *Queries) GetProfitSharingOrder(ctx context.Context, id int64) (ProfitSh
 		&i.DistributableAmount,
 		&i.PlatformRate,
 		&i.OperatorRate,
+		&i.PaymentFee,
+		&i.PaymentFeeRateBps,
+		&i.Provider,
+		&i.Channel,
+		&i.MerchantSharingMerID,
+		&i.RiderSharingMerID,
+		&i.OperatorSharingMerID,
+		&i.PlatformSharingMerID,
+		&i.SharingDetailSnapshot,
+		&i.CalculationVersion,
+		&i.SettlementMode,
+		&i.ProviderPaymentFee,
+		&i.ProviderPaymentFeeRateBps,
+		&i.ProviderPaymentFeeBaseAmount,
+		&i.ProviderPaymentFeeSource,
+		&i.MerchantPaymentFee,
+		&i.MerchantPaymentFeeRateBps,
+		&i.MerchantPaymentFeeBaseAmount,
+		&i.RiderGrossAmount,
+		&i.RiderPaymentFee,
+		&i.RiderPaymentFeeRateBps,
+		&i.RiderPaymentFeeBaseAmount,
+		&i.CommissionBaseAmount,
+		&i.PlatformReceiverAmount,
 	)
 	return i, err
 }
 
 const getProfitSharingOrderByOutOrderNo = `-- name: GetProfitSharingOrderByOutOrderNo :one
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount FROM profit_sharing_orders
 WHERE out_order_no = $1 LIMIT 1
 `
 
@@ -601,12 +735,36 @@ func (q *Queries) GetProfitSharingOrderByOutOrderNo(ctx context.Context, outOrde
 		&i.DistributableAmount,
 		&i.PlatformRate,
 		&i.OperatorRate,
+		&i.PaymentFee,
+		&i.PaymentFeeRateBps,
+		&i.Provider,
+		&i.Channel,
+		&i.MerchantSharingMerID,
+		&i.RiderSharingMerID,
+		&i.OperatorSharingMerID,
+		&i.PlatformSharingMerID,
+		&i.SharingDetailSnapshot,
+		&i.CalculationVersion,
+		&i.SettlementMode,
+		&i.ProviderPaymentFee,
+		&i.ProviderPaymentFeeRateBps,
+		&i.ProviderPaymentFeeBaseAmount,
+		&i.ProviderPaymentFeeSource,
+		&i.MerchantPaymentFee,
+		&i.MerchantPaymentFeeRateBps,
+		&i.MerchantPaymentFeeBaseAmount,
+		&i.RiderGrossAmount,
+		&i.RiderPaymentFee,
+		&i.RiderPaymentFeeRateBps,
+		&i.RiderPaymentFeeBaseAmount,
+		&i.CommissionBaseAmount,
+		&i.PlatformReceiverAmount,
 	)
 	return i, err
 }
 
 const getProfitSharingOrderByPaymentOrder = `-- name: GetProfitSharingOrderByPaymentOrder :one
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount FROM profit_sharing_orders
 WHERE payment_order_id = $1 LIMIT 1
 `
 
@@ -634,12 +792,36 @@ func (q *Queries) GetProfitSharingOrderByPaymentOrder(ctx context.Context, payme
 		&i.DistributableAmount,
 		&i.PlatformRate,
 		&i.OperatorRate,
+		&i.PaymentFee,
+		&i.PaymentFeeRateBps,
+		&i.Provider,
+		&i.Channel,
+		&i.MerchantSharingMerID,
+		&i.RiderSharingMerID,
+		&i.OperatorSharingMerID,
+		&i.PlatformSharingMerID,
+		&i.SharingDetailSnapshot,
+		&i.CalculationVersion,
+		&i.SettlementMode,
+		&i.ProviderPaymentFee,
+		&i.ProviderPaymentFeeRateBps,
+		&i.ProviderPaymentFeeBaseAmount,
+		&i.ProviderPaymentFeeSource,
+		&i.MerchantPaymentFee,
+		&i.MerchantPaymentFeeRateBps,
+		&i.MerchantPaymentFeeBaseAmount,
+		&i.RiderGrossAmount,
+		&i.RiderPaymentFee,
+		&i.RiderPaymentFeeRateBps,
+		&i.RiderPaymentFeeBaseAmount,
+		&i.CommissionBaseAmount,
+		&i.PlatformReceiverAmount,
 	)
 	return i, err
 }
 
 const getProfitSharingOrderForUpdate = `-- name: GetProfitSharingOrderForUpdate :one
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount FROM profit_sharing_orders
 WHERE id = $1 LIMIT 1
 FOR UPDATE
 `
@@ -668,6 +850,30 @@ func (q *Queries) GetProfitSharingOrderForUpdate(ctx context.Context, id int64) 
 		&i.DistributableAmount,
 		&i.PlatformRate,
 		&i.OperatorRate,
+		&i.PaymentFee,
+		&i.PaymentFeeRateBps,
+		&i.Provider,
+		&i.Channel,
+		&i.MerchantSharingMerID,
+		&i.RiderSharingMerID,
+		&i.OperatorSharingMerID,
+		&i.PlatformSharingMerID,
+		&i.SharingDetailSnapshot,
+		&i.CalculationVersion,
+		&i.SettlementMode,
+		&i.ProviderPaymentFee,
+		&i.ProviderPaymentFeeRateBps,
+		&i.ProviderPaymentFeeBaseAmount,
+		&i.ProviderPaymentFeeSource,
+		&i.MerchantPaymentFee,
+		&i.MerchantPaymentFeeRateBps,
+		&i.MerchantPaymentFeeBaseAmount,
+		&i.RiderGrossAmount,
+		&i.RiderPaymentFee,
+		&i.RiderPaymentFeeRateBps,
+		&i.RiderPaymentFeeBaseAmount,
+		&i.CommissionBaseAmount,
+		&i.PlatformReceiverAmount,
 	)
 	return i, err
 }
@@ -768,7 +974,9 @@ const getRiderDailyIncome = `-- name: GetRiderDailyIncome :many
 SELECT 
     DATE(created_at) AS date,
     COUNT(*) as delivery_count,
-    COALESCE(SUM(rider_amount), 0)::bigint as daily_income
+    COALESCE(SUM(rider_amount), 0)::bigint as daily_income,
+    COALESCE(SUM(CASE WHEN rider_gross_amount > 0 THEN rider_gross_amount ELSE delivery_fee END), 0)::bigint as rider_gross_amount,
+    COALESCE(SUM(rider_payment_fee), 0)::bigint as rider_payment_fee
 FROM profit_sharing_orders
 WHERE rider_id = $1
   AND status = 'finished'
@@ -784,9 +992,11 @@ type GetRiderDailyIncomeParams struct {
 }
 
 type GetRiderDailyIncomeRow struct {
-	Date          pgtype.Date `json:"date"`
-	DeliveryCount int64       `json:"delivery_count"`
-	DailyIncome   int64       `json:"daily_income"`
+	Date             pgtype.Date `json:"date"`
+	DeliveryCount    int64       `json:"delivery_count"`
+	DailyIncome      int64       `json:"daily_income"`
+	RiderGrossAmount int64       `json:"rider_gross_amount"`
+	RiderPaymentFee  int64       `json:"rider_payment_fee"`
 }
 
 // 骑手每日收入汇总
@@ -799,7 +1009,13 @@ func (q *Queries) GetRiderDailyIncome(ctx context.Context, arg GetRiderDailyInco
 	items := []GetRiderDailyIncomeRow{}
 	for rows.Next() {
 		var i GetRiderDailyIncomeRow
-		if err := rows.Scan(&i.Date, &i.DeliveryCount, &i.DailyIncome); err != nil {
+		if err := rows.Scan(
+			&i.Date,
+			&i.DeliveryCount,
+			&i.DailyIncome,
+			&i.RiderGrossAmount,
+			&i.RiderPaymentFee,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -815,7 +1031,9 @@ const getRiderProfitSharingStats = `-- name: GetRiderProfitSharingStats :one
 SELECT 
     COUNT(*) as total_deliveries,
     COALESCE(SUM(rider_amount), 0)::bigint as total_rider_income,
-    COALESCE(SUM(delivery_fee), 0)::bigint as total_delivery_fee
+    COALESCE(SUM(delivery_fee), 0)::bigint as total_delivery_fee,
+    COALESCE(SUM(CASE WHEN rider_gross_amount > 0 THEN rider_gross_amount ELSE delivery_fee END), 0)::bigint as total_rider_gross_amount,
+    COALESCE(SUM(rider_payment_fee), 0)::bigint as total_rider_payment_fee
 FROM profit_sharing_orders
 WHERE rider_id = $1 AND status = 'finished'
   AND created_at >= $2 AND created_at <= $3
@@ -828,9 +1046,11 @@ type GetRiderProfitSharingStatsParams struct {
 }
 
 type GetRiderProfitSharingStatsRow struct {
-	TotalDeliveries  int64 `json:"total_deliveries"`
-	TotalRiderIncome int64 `json:"total_rider_income"`
-	TotalDeliveryFee int64 `json:"total_delivery_fee"`
+	TotalDeliveries       int64 `json:"total_deliveries"`
+	TotalRiderIncome      int64 `json:"total_rider_income"`
+	TotalDeliveryFee      int64 `json:"total_delivery_fee"`
+	TotalRiderGrossAmount int64 `json:"total_rider_gross_amount"`
+	TotalRiderPaymentFee  int64 `json:"total_rider_payment_fee"`
 }
 
 // ==================== 骑手分账查询 ====================
@@ -838,7 +1058,13 @@ type GetRiderProfitSharingStatsRow struct {
 func (q *Queries) GetRiderProfitSharingStats(ctx context.Context, arg GetRiderProfitSharingStatsParams) (GetRiderProfitSharingStatsRow, error) {
 	row := q.db.QueryRow(ctx, getRiderProfitSharingStats, arg.RiderID, arg.StartAt, arg.EndAt)
 	var i GetRiderProfitSharingStatsRow
-	err := row.Scan(&i.TotalDeliveries, &i.TotalRiderIncome, &i.TotalDeliveryFee)
+	err := row.Scan(
+		&i.TotalDeliveries,
+		&i.TotalRiderIncome,
+		&i.TotalDeliveryFee,
+		&i.TotalRiderGrossAmount,
+		&i.TotalRiderPaymentFee,
+	)
 	return i, err
 }
 
@@ -847,7 +1073,9 @@ SELECT
     status,
     COUNT(*)::bigint as order_count,
     COALESCE(SUM(rider_amount), 0)::bigint as rider_amount,
-    COALESCE(SUM(delivery_fee), 0)::bigint as delivery_fee
+    COALESCE(SUM(delivery_fee), 0)::bigint as delivery_fee,
+    COALESCE(SUM(CASE WHEN rider_gross_amount > 0 THEN rider_gross_amount ELSE delivery_fee END), 0)::bigint as rider_gross_amount,
+    COALESCE(SUM(rider_payment_fee), 0)::bigint as rider_payment_fee
 FROM profit_sharing_orders
 WHERE rider_id = $1
   AND created_at >= $2 AND created_at <= $3
@@ -862,10 +1090,12 @@ type GetRiderProfitSharingStatusSummaryParams struct {
 }
 
 type GetRiderProfitSharingStatusSummaryRow struct {
-	Status      string `json:"status"`
-	OrderCount  int64  `json:"order_count"`
-	RiderAmount int64  `json:"rider_amount"`
-	DeliveryFee int64  `json:"delivery_fee"`
+	Status           string `json:"status"`
+	OrderCount       int64  `json:"order_count"`
+	RiderAmount      int64  `json:"rider_amount"`
+	DeliveryFee      int64  `json:"delivery_fee"`
+	RiderGrossAmount int64  `json:"rider_gross_amount"`
+	RiderPaymentFee  int64  `json:"rider_payment_fee"`
 }
 
 // 骑手配送费按分账状态汇总
@@ -883,6 +1113,163 @@ func (q *Queries) GetRiderProfitSharingStatusSummary(ctx context.Context, arg Ge
 			&i.OrderCount,
 			&i.RiderAmount,
 			&i.DeliveryFee,
+			&i.RiderGrossAmount,
+			&i.RiderPaymentFee,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBaofuOrdersReadyForProfitSharing = `-- name: ListBaofuOrdersReadyForProfitSharing :many
+SELECT
+    po.id AS payment_order_id,
+    po.order_id,
+    po.reservation_id,
+    po.business_type
+FROM payment_orders po
+LEFT JOIN orders o ON po.business_type = 'order' AND po.order_id = o.id
+LEFT JOIN table_reservations r ON po.business_type IN ('reservation', 'reservation_addon') AND po.reservation_id = r.id
+WHERE po.status = 'paid'
+  AND po.payment_channel = 'baofu_aggregate'
+  AND po.requires_profit_sharing = TRUE
+  AND (
+      (
+          po.business_type = 'order'
+          AND o.status = 'completed'
+          AND COALESCE(o.completed_at, o.updated_at) <= $1
+      )
+      OR (
+          po.business_type IN ('reservation', 'reservation_addon')
+          AND r.status IN ('paid', 'confirmed', 'checked_in', 'completed')
+          AND COALESCE(r.paid_at, r.updated_at, po.paid_at, po.created_at) <= $1
+      )
+  )
+  AND NOT EXISTS (
+      SELECT 1 FROM refund_orders ro
+      WHERE ro.payment_order_id = po.id
+        AND ro.status IN ('pending', 'processing', 'success')
+  )
+  AND NOT EXISTS (
+      SELECT 1 FROM profit_sharing_orders pso
+      WHERE pso.payment_order_id = po.id
+  )
+ORDER BY COALESCE(o.completed_at, o.updated_at, r.paid_at, r.updated_at, po.paid_at, po.created_at) ASC, po.id ASC
+LIMIT $2::int
+`
+
+type ListBaofuOrdersReadyForProfitSharingParams struct {
+	RefundClosedBefore pgtype.Timestamptz `json:"refund_closed_before"`
+	Limit              int32              `json:"limit"`
+}
+
+type ListBaofuOrdersReadyForProfitSharingRow struct {
+	PaymentOrderID int64       `json:"payment_order_id"`
+	OrderID        pgtype.Int8 `json:"order_id"`
+	ReservationID  pgtype.Int8 `json:"reservation_id"`
+	BusinessType   string      `json:"business_type"`
+}
+
+func (q *Queries) ListBaofuOrdersReadyForProfitSharing(ctx context.Context, arg ListBaofuOrdersReadyForProfitSharingParams) ([]ListBaofuOrdersReadyForProfitSharingRow, error) {
+	rows, err := q.db.Query(ctx, listBaofuOrdersReadyForProfitSharing, arg.RefundClosedBefore, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListBaofuOrdersReadyForProfitSharingRow{}
+	for rows.Next() {
+		var i ListBaofuOrdersReadyForProfitSharingRow
+		if err := rows.Scan(
+			&i.PaymentOrderID,
+			&i.OrderID,
+			&i.ReservationID,
+			&i.BusinessType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBaofuProcessingProfitSharingOrdersForRecovery = `-- name: ListBaofuProcessingProfitSharingOrdersForRecovery :many
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount
+FROM profit_sharing_orders
+WHERE provider = 'baofu'
+  AND channel = 'baofu_aggregate'
+  AND status = 'processing'
+  AND created_at <= $1
+ORDER BY created_at ASC, id ASC
+LIMIT $2::int
+`
+
+type ListBaofuProcessingProfitSharingOrdersForRecoveryParams struct {
+	CreatedBefore time.Time `json:"created_before"`
+	Limit         int32     `json:"limit"`
+}
+
+func (q *Queries) ListBaofuProcessingProfitSharingOrdersForRecovery(ctx context.Context, arg ListBaofuProcessingProfitSharingOrdersForRecoveryParams) ([]ProfitSharingOrder, error) {
+	rows, err := q.db.Query(ctx, listBaofuProcessingProfitSharingOrdersForRecovery, arg.CreatedBefore, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProfitSharingOrder{}
+	for rows.Next() {
+		var i ProfitSharingOrder
+		if err := rows.Scan(
+			&i.ID,
+			&i.PaymentOrderID,
+			&i.MerchantID,
+			&i.OperatorID,
+			&i.OrderSource,
+			&i.TotalAmount,
+			&i.PlatformCommission,
+			&i.OperatorCommission,
+			&i.MerchantAmount,
+			&i.OutOrderNo,
+			&i.SharingOrderID,
+			&i.Status,
+			&i.FinishedAt,
+			&i.CreatedAt,
+			&i.DeliveryFee,
+			&i.RiderID,
+			&i.RiderAmount,
+			&i.DistributableAmount,
+			&i.PlatformRate,
+			&i.OperatorRate,
+			&i.PaymentFee,
+			&i.PaymentFeeRateBps,
+			&i.Provider,
+			&i.Channel,
+			&i.MerchantSharingMerID,
+			&i.RiderSharingMerID,
+			&i.OperatorSharingMerID,
+			&i.PlatformSharingMerID,
+			&i.SharingDetailSnapshot,
+			&i.CalculationVersion,
+			&i.SettlementMode,
+			&i.ProviderPaymentFee,
+			&i.ProviderPaymentFeeRateBps,
+			&i.ProviderPaymentFeeBaseAmount,
+			&i.ProviderPaymentFeeSource,
+			&i.MerchantPaymentFee,
+			&i.MerchantPaymentFeeRateBps,
+			&i.MerchantPaymentFeeBaseAmount,
+			&i.RiderGrossAmount,
+			&i.RiderPaymentFee,
+			&i.RiderPaymentFeeRateBps,
+			&i.RiderPaymentFeeBaseAmount,
+			&i.CommissionBaseAmount,
+			&i.PlatformReceiverAmount,
 		); err != nil {
 			return nil, err
 		}
@@ -942,9 +1329,9 @@ SELECT
     p.payment_order_id,
     p.order_source,
     p.total_amount,
-    p.platform_commission,
-    p.operator_commission,
-    p.merchant_amount,
+    (p.platform_commission + p.operator_commission)::bigint AS platform_service_fee_amount,
+    (CASE WHEN p.calculation_version = 'baofu_fee_v2' THEN p.merchant_payment_fee ELSE p.payment_fee END)::bigint AS payment_channel_fee_amount,
+    p.merchant_amount AS merchant_receivable_amount,
     p.status,
     p.created_at,
     p.finished_at,
@@ -967,18 +1354,18 @@ type ListMerchantFinanceOrdersParams struct {
 }
 
 type ListMerchantFinanceOrdersRow struct {
-	ID                 int64              `json:"id"`
-	PaymentOrderID     int64              `json:"payment_order_id"`
-	OrderSource        string             `json:"order_source"`
-	TotalAmount        int64              `json:"total_amount"`
-	PlatformCommission int64              `json:"platform_commission"`
-	OperatorCommission int64              `json:"operator_commission"`
-	MerchantAmount     int64              `json:"merchant_amount"`
-	Status             string             `json:"status"`
-	CreatedAt          time.Time          `json:"created_at"`
-	FinishedAt         pgtype.Timestamptz `json:"finished_at"`
-	OrderID            pgtype.Int8        `json:"order_id"`
-	ReservationID      pgtype.Int8        `json:"reservation_id"`
+	ID                       int64              `json:"id"`
+	PaymentOrderID           int64              `json:"payment_order_id"`
+	OrderSource              string             `json:"order_source"`
+	TotalAmount              int64              `json:"total_amount"`
+	PlatformServiceFeeAmount int64              `json:"platform_service_fee_amount"`
+	PaymentChannelFeeAmount  int64              `json:"payment_channel_fee_amount"`
+	MerchantReceivableAmount int64              `json:"merchant_receivable_amount"`
+	Status                   string             `json:"status"`
+	CreatedAt                time.Time          `json:"created_at"`
+	FinishedAt               pgtype.Timestamptz `json:"finished_at"`
+	OrderID                  pgtype.Int8        `json:"order_id"`
+	ReservationID            pgtype.Int8        `json:"reservation_id"`
 }
 
 // 商户财务订单明细（带分账信息）
@@ -1002,9 +1389,9 @@ func (q *Queries) ListMerchantFinanceOrders(ctx context.Context, arg ListMerchan
 			&i.PaymentOrderID,
 			&i.OrderSource,
 			&i.TotalAmount,
-			&i.PlatformCommission,
-			&i.OperatorCommission,
-			&i.MerchantAmount,
+			&i.PlatformServiceFeeAmount,
+			&i.PaymentChannelFeeAmount,
+			&i.MerchantReceivableAmount,
 			&i.Status,
 			&i.CreatedAt,
 			&i.FinishedAt,
@@ -1022,7 +1409,19 @@ func (q *Queries) ListMerchantFinanceOrders(ctx context.Context, arg ListMerchan
 }
 
 const listMerchantSettlements = `-- name: ListMerchantSettlements :many
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate
+SELECT
+  id,
+  payment_order_id,
+  order_source,
+  total_amount,
+  (platform_commission + operator_commission)::bigint AS platform_service_fee_amount,
+  (CASE WHEN calculation_version = 'baofu_fee_v2' THEN merchant_payment_fee ELSE payment_fee END)::bigint AS payment_channel_fee_amount,
+  merchant_amount AS merchant_receivable_amount,
+  out_order_no,
+  sharing_order_id,
+  status,
+  finished_at,
+  created_at
 FROM profit_sharing_orders
 WHERE merchant_id = $1
   AND created_at >= $2 AND created_at <= $3
@@ -1038,8 +1437,23 @@ type ListMerchantSettlementsParams struct {
 	Limit      int32     `json:"limit"`
 }
 
+type ListMerchantSettlementsRow struct {
+	ID                       int64              `json:"id"`
+	PaymentOrderID           int64              `json:"payment_order_id"`
+	OrderSource              string             `json:"order_source"`
+	TotalAmount              int64              `json:"total_amount"`
+	PlatformServiceFeeAmount int64              `json:"platform_service_fee_amount"`
+	PaymentChannelFeeAmount  int64              `json:"payment_channel_fee_amount"`
+	MerchantReceivableAmount int64              `json:"merchant_receivable_amount"`
+	OutOrderNo               string             `json:"out_order_no"`
+	SharingOrderID           pgtype.Text        `json:"sharing_order_id"`
+	Status                   string             `json:"status"`
+	FinishedAt               pgtype.Timestamptz `json:"finished_at"`
+	CreatedAt                time.Time          `json:"created_at"`
+}
+
 // 商户结算记录（带日期范围和状态筛选）
-func (q *Queries) ListMerchantSettlements(ctx context.Context, arg ListMerchantSettlementsParams) ([]ProfitSharingOrder, error) {
+func (q *Queries) ListMerchantSettlements(ctx context.Context, arg ListMerchantSettlementsParams) ([]ListMerchantSettlementsRow, error) {
 	rows, err := q.db.Query(ctx, listMerchantSettlements,
 		arg.MerchantID,
 		arg.StartAt,
@@ -1051,30 +1465,22 @@ func (q *Queries) ListMerchantSettlements(ctx context.Context, arg ListMerchantS
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ProfitSharingOrder{}
+	items := []ListMerchantSettlementsRow{}
 	for rows.Next() {
-		var i ProfitSharingOrder
+		var i ListMerchantSettlementsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.PaymentOrderID,
-			&i.MerchantID,
-			&i.OperatorID,
 			&i.OrderSource,
 			&i.TotalAmount,
-			&i.PlatformCommission,
-			&i.OperatorCommission,
-			&i.MerchantAmount,
+			&i.PlatformServiceFeeAmount,
+			&i.PaymentChannelFeeAmount,
+			&i.MerchantReceivableAmount,
 			&i.OutOrderNo,
 			&i.SharingOrderID,
 			&i.Status,
 			&i.FinishedAt,
 			&i.CreatedAt,
-			&i.DeliveryFee,
-			&i.RiderID,
-			&i.RiderAmount,
-			&i.DistributableAmount,
-			&i.PlatformRate,
-			&i.OperatorRate,
 		); err != nil {
 			return nil, err
 		}
@@ -1087,7 +1493,19 @@ func (q *Queries) ListMerchantSettlements(ctx context.Context, arg ListMerchantS
 }
 
 const listMerchantSettlementsByStatus = `-- name: ListMerchantSettlementsByStatus :many
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate
+SELECT
+  id,
+  payment_order_id,
+  order_source,
+  total_amount,
+  (platform_commission + operator_commission)::bigint AS platform_service_fee_amount,
+  (CASE WHEN calculation_version = 'baofu_fee_v2' THEN merchant_payment_fee ELSE payment_fee END)::bigint AS payment_channel_fee_amount,
+  merchant_amount AS merchant_receivable_amount,
+  out_order_no,
+  sharing_order_id,
+  status,
+  finished_at,
+  created_at
 FROM profit_sharing_orders
 WHERE merchant_id = $1
   AND status = $2
@@ -1105,8 +1523,23 @@ type ListMerchantSettlementsByStatusParams struct {
 	Limit      int32     `json:"limit"`
 }
 
+type ListMerchantSettlementsByStatusRow struct {
+	ID                       int64              `json:"id"`
+	PaymentOrderID           int64              `json:"payment_order_id"`
+	OrderSource              string             `json:"order_source"`
+	TotalAmount              int64              `json:"total_amount"`
+	PlatformServiceFeeAmount int64              `json:"platform_service_fee_amount"`
+	PaymentChannelFeeAmount  int64              `json:"payment_channel_fee_amount"`
+	MerchantReceivableAmount int64              `json:"merchant_receivable_amount"`
+	OutOrderNo               string             `json:"out_order_no"`
+	SharingOrderID           pgtype.Text        `json:"sharing_order_id"`
+	Status                   string             `json:"status"`
+	FinishedAt               pgtype.Timestamptz `json:"finished_at"`
+	CreatedAt                time.Time          `json:"created_at"`
+}
+
 // 商户结算记录（带日期范围和状态筛选）
-func (q *Queries) ListMerchantSettlementsByStatus(ctx context.Context, arg ListMerchantSettlementsByStatusParams) ([]ProfitSharingOrder, error) {
+func (q *Queries) ListMerchantSettlementsByStatus(ctx context.Context, arg ListMerchantSettlementsByStatusParams) ([]ListMerchantSettlementsByStatusRow, error) {
 	rows, err := q.db.Query(ctx, listMerchantSettlementsByStatus,
 		arg.MerchantID,
 		arg.Status,
@@ -1119,30 +1552,22 @@ func (q *Queries) ListMerchantSettlementsByStatus(ctx context.Context, arg ListM
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ProfitSharingOrder{}
+	items := []ListMerchantSettlementsByStatusRow{}
 	for rows.Next() {
-		var i ProfitSharingOrder
+		var i ListMerchantSettlementsByStatusRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.PaymentOrderID,
-			&i.MerchantID,
-			&i.OperatorID,
 			&i.OrderSource,
 			&i.TotalAmount,
-			&i.PlatformCommission,
-			&i.OperatorCommission,
-			&i.MerchantAmount,
+			&i.PlatformServiceFeeAmount,
+			&i.PaymentChannelFeeAmount,
+			&i.MerchantReceivableAmount,
 			&i.OutOrderNo,
 			&i.SharingOrderID,
 			&i.Status,
 			&i.FinishedAt,
 			&i.CreatedAt,
-			&i.DeliveryFee,
-			&i.RiderID,
-			&i.RiderAmount,
-			&i.DistributableAmount,
-			&i.PlatformRate,
-			&i.OperatorRate,
 		); err != nil {
 			return nil, err
 		}
@@ -1155,7 +1580,7 @@ func (q *Queries) ListMerchantSettlementsByStatus(ctx context.Context, arg ListM
 }
 
 const listProfitSharingOrdersByMerchant = `-- name: ListProfitSharingOrdersByMerchant :many
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount FROM profit_sharing_orders
 WHERE merchant_id = $1
 ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
@@ -1197,6 +1622,30 @@ func (q *Queries) ListProfitSharingOrdersByMerchant(ctx context.Context, arg Lis
 			&i.DistributableAmount,
 			&i.PlatformRate,
 			&i.OperatorRate,
+			&i.PaymentFee,
+			&i.PaymentFeeRateBps,
+			&i.Provider,
+			&i.Channel,
+			&i.MerchantSharingMerID,
+			&i.RiderSharingMerID,
+			&i.OperatorSharingMerID,
+			&i.PlatformSharingMerID,
+			&i.SharingDetailSnapshot,
+			&i.CalculationVersion,
+			&i.SettlementMode,
+			&i.ProviderPaymentFee,
+			&i.ProviderPaymentFeeRateBps,
+			&i.ProviderPaymentFeeBaseAmount,
+			&i.ProviderPaymentFeeSource,
+			&i.MerchantPaymentFee,
+			&i.MerchantPaymentFeeRateBps,
+			&i.MerchantPaymentFeeBaseAmount,
+			&i.RiderGrossAmount,
+			&i.RiderPaymentFee,
+			&i.RiderPaymentFeeRateBps,
+			&i.RiderPaymentFeeBaseAmount,
+			&i.CommissionBaseAmount,
+			&i.PlatformReceiverAmount,
 		); err != nil {
 			return nil, err
 		}
@@ -1209,7 +1658,7 @@ func (q *Queries) ListProfitSharingOrdersByMerchant(ctx context.Context, arg Lis
 }
 
 const listProfitSharingOrdersByOperator = `-- name: ListProfitSharingOrdersByOperator :many
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount FROM profit_sharing_orders
 WHERE operator_id = $1
 ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
@@ -1251,6 +1700,117 @@ func (q *Queries) ListProfitSharingOrdersByOperator(ctx context.Context, arg Lis
 			&i.DistributableAmount,
 			&i.PlatformRate,
 			&i.OperatorRate,
+			&i.PaymentFee,
+			&i.PaymentFeeRateBps,
+			&i.Provider,
+			&i.Channel,
+			&i.MerchantSharingMerID,
+			&i.RiderSharingMerID,
+			&i.OperatorSharingMerID,
+			&i.PlatformSharingMerID,
+			&i.SharingDetailSnapshot,
+			&i.CalculationVersion,
+			&i.SettlementMode,
+			&i.ProviderPaymentFee,
+			&i.ProviderPaymentFeeRateBps,
+			&i.ProviderPaymentFeeBaseAmount,
+			&i.ProviderPaymentFeeSource,
+			&i.MerchantPaymentFee,
+			&i.MerchantPaymentFeeRateBps,
+			&i.MerchantPaymentFeeBaseAmount,
+			&i.RiderGrossAmount,
+			&i.RiderPaymentFee,
+			&i.RiderPaymentFeeRateBps,
+			&i.RiderPaymentFeeBaseAmount,
+			&i.CommissionBaseAmount,
+			&i.PlatformReceiverAmount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProfitSharingOrdersByOrderIDsForMerchant = `-- name: ListProfitSharingOrdersByOrderIDsForMerchant :many
+SELECT
+    COALESCE(po.order_id, 0)::bigint AS order_id,
+    p.id, p.payment_order_id, p.merchant_id, p.operator_id, p.order_source, p.total_amount, p.platform_commission, p.operator_commission, p.merchant_amount, p.out_order_no, p.sharing_order_id, p.status, p.finished_at, p.created_at, p.delivery_fee, p.rider_id, p.rider_amount, p.distributable_amount, p.platform_rate, p.operator_rate, p.payment_fee, p.payment_fee_rate_bps, p.provider, p.channel, p.merchant_sharing_mer_id, p.rider_sharing_mer_id, p.operator_sharing_mer_id, p.platform_sharing_mer_id, p.sharing_detail_snapshot, p.calculation_version, p.settlement_mode, p.provider_payment_fee, p.provider_payment_fee_rate_bps, p.provider_payment_fee_base_amount, p.provider_payment_fee_source, p.merchant_payment_fee, p.merchant_payment_fee_rate_bps, p.merchant_payment_fee_base_amount, p.rider_gross_amount, p.rider_payment_fee, p.rider_payment_fee_rate_bps, p.rider_payment_fee_base_amount, p.commission_base_amount, p.platform_receiver_amount
+FROM profit_sharing_orders p
+JOIN payment_orders po ON po.id = p.payment_order_id
+WHERE p.merchant_id = $1
+  AND po.order_id = ANY($2::bigint[])
+ORDER BY po.order_id, p.created_at DESC, p.id DESC
+`
+
+type ListProfitSharingOrdersByOrderIDsForMerchantParams struct {
+	MerchantID int64   `json:"merchant_id"`
+	OrderIds   []int64 `json:"order_ids"`
+}
+
+type ListProfitSharingOrdersByOrderIDsForMerchantRow struct {
+	OrderID            int64              `json:"order_id"`
+	ProfitSharingOrder ProfitSharingOrder `json:"profit_sharing_order"`
+}
+
+func (q *Queries) ListProfitSharingOrdersByOrderIDsForMerchant(ctx context.Context, arg ListProfitSharingOrdersByOrderIDsForMerchantParams) ([]ListProfitSharingOrdersByOrderIDsForMerchantRow, error) {
+	rows, err := q.db.Query(ctx, listProfitSharingOrdersByOrderIDsForMerchant, arg.MerchantID, arg.OrderIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProfitSharingOrdersByOrderIDsForMerchantRow{}
+	for rows.Next() {
+		var i ListProfitSharingOrdersByOrderIDsForMerchantRow
+		if err := rows.Scan(
+			&i.OrderID,
+			&i.ProfitSharingOrder.ID,
+			&i.ProfitSharingOrder.PaymentOrderID,
+			&i.ProfitSharingOrder.MerchantID,
+			&i.ProfitSharingOrder.OperatorID,
+			&i.ProfitSharingOrder.OrderSource,
+			&i.ProfitSharingOrder.TotalAmount,
+			&i.ProfitSharingOrder.PlatformCommission,
+			&i.ProfitSharingOrder.OperatorCommission,
+			&i.ProfitSharingOrder.MerchantAmount,
+			&i.ProfitSharingOrder.OutOrderNo,
+			&i.ProfitSharingOrder.SharingOrderID,
+			&i.ProfitSharingOrder.Status,
+			&i.ProfitSharingOrder.FinishedAt,
+			&i.ProfitSharingOrder.CreatedAt,
+			&i.ProfitSharingOrder.DeliveryFee,
+			&i.ProfitSharingOrder.RiderID,
+			&i.ProfitSharingOrder.RiderAmount,
+			&i.ProfitSharingOrder.DistributableAmount,
+			&i.ProfitSharingOrder.PlatformRate,
+			&i.ProfitSharingOrder.OperatorRate,
+			&i.ProfitSharingOrder.PaymentFee,
+			&i.ProfitSharingOrder.PaymentFeeRateBps,
+			&i.ProfitSharingOrder.Provider,
+			&i.ProfitSharingOrder.Channel,
+			&i.ProfitSharingOrder.MerchantSharingMerID,
+			&i.ProfitSharingOrder.RiderSharingMerID,
+			&i.ProfitSharingOrder.OperatorSharingMerID,
+			&i.ProfitSharingOrder.PlatformSharingMerID,
+			&i.ProfitSharingOrder.SharingDetailSnapshot,
+			&i.ProfitSharingOrder.CalculationVersion,
+			&i.ProfitSharingOrder.SettlementMode,
+			&i.ProfitSharingOrder.ProviderPaymentFee,
+			&i.ProfitSharingOrder.ProviderPaymentFeeRateBps,
+			&i.ProfitSharingOrder.ProviderPaymentFeeBaseAmount,
+			&i.ProfitSharingOrder.ProviderPaymentFeeSource,
+			&i.ProfitSharingOrder.MerchantPaymentFee,
+			&i.ProfitSharingOrder.MerchantPaymentFeeRateBps,
+			&i.ProfitSharingOrder.MerchantPaymentFeeBaseAmount,
+			&i.ProfitSharingOrder.RiderGrossAmount,
+			&i.ProfitSharingOrder.RiderPaymentFee,
+			&i.ProfitSharingOrder.RiderPaymentFeeRateBps,
+			&i.ProfitSharingOrder.RiderPaymentFeeBaseAmount,
+			&i.ProfitSharingOrder.CommissionBaseAmount,
+			&i.ProfitSharingOrder.PlatformReceiverAmount,
 		); err != nil {
 			return nil, err
 		}
@@ -1263,7 +1823,7 @@ func (q *Queries) ListProfitSharingOrdersByOperator(ctx context.Context, arg Lis
 }
 
 const listProfitSharingOrdersByStatus = `-- name: ListProfitSharingOrdersByStatus :many
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount FROM profit_sharing_orders
 WHERE status = $1
 ORDER BY created_at ASC, id ASC
 LIMIT $2 OFFSET $3
@@ -1305,6 +1865,30 @@ func (q *Queries) ListProfitSharingOrdersByStatus(ctx context.Context, arg ListP
 			&i.DistributableAmount,
 			&i.PlatformRate,
 			&i.OperatorRate,
+			&i.PaymentFee,
+			&i.PaymentFeeRateBps,
+			&i.Provider,
+			&i.Channel,
+			&i.MerchantSharingMerID,
+			&i.RiderSharingMerID,
+			&i.OperatorSharingMerID,
+			&i.PlatformSharingMerID,
+			&i.SharingDetailSnapshot,
+			&i.CalculationVersion,
+			&i.SettlementMode,
+			&i.ProviderPaymentFee,
+			&i.ProviderPaymentFeeRateBps,
+			&i.ProviderPaymentFeeBaseAmount,
+			&i.ProviderPaymentFeeSource,
+			&i.MerchantPaymentFee,
+			&i.MerchantPaymentFeeRateBps,
+			&i.MerchantPaymentFeeBaseAmount,
+			&i.RiderGrossAmount,
+			&i.RiderPaymentFee,
+			&i.RiderPaymentFeeRateBps,
+			&i.RiderPaymentFeeBaseAmount,
+			&i.CommissionBaseAmount,
+			&i.PlatformReceiverAmount,
 		); err != nil {
 			return nil, err
 		}
@@ -1317,7 +1901,7 @@ func (q *Queries) ListProfitSharingOrdersByStatus(ctx context.Context, arg ListP
 }
 
 const listProfitSharingOrdersForRetry = `-- name: ListProfitSharingOrdersForRetry :many
-SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount FROM profit_sharing_orders
 WHERE status IN ('pending', 'failed', 'processing')
   AND created_at <= $1
 ORDER BY created_at ASC, id ASC
@@ -1359,6 +1943,30 @@ func (q *Queries) ListProfitSharingOrdersForRetry(ctx context.Context, arg ListP
 			&i.DistributableAmount,
 			&i.PlatformRate,
 			&i.OperatorRate,
+			&i.PaymentFee,
+			&i.PaymentFeeRateBps,
+			&i.Provider,
+			&i.Channel,
+			&i.MerchantSharingMerID,
+			&i.RiderSharingMerID,
+			&i.OperatorSharingMerID,
+			&i.PlatformSharingMerID,
+			&i.SharingDetailSnapshot,
+			&i.CalculationVersion,
+			&i.SettlementMode,
+			&i.ProviderPaymentFee,
+			&i.ProviderPaymentFeeRateBps,
+			&i.ProviderPaymentFeeBaseAmount,
+			&i.ProviderPaymentFeeSource,
+			&i.MerchantPaymentFee,
+			&i.MerchantPaymentFeeRateBps,
+			&i.MerchantPaymentFeeBaseAmount,
+			&i.RiderGrossAmount,
+			&i.RiderPaymentFee,
+			&i.RiderPaymentFeeRateBps,
+			&i.RiderPaymentFeeBaseAmount,
+			&i.CommissionBaseAmount,
+			&i.PlatformReceiverAmount,
 		); err != nil {
 			return nil, err
 		}
@@ -1372,7 +1980,7 @@ func (q *Queries) ListProfitSharingOrdersForRetry(ctx context.Context, arg ListP
 
 const listRiderProfitSharingOrders = `-- name: ListRiderProfitSharingOrders :many
 SELECT 
-  p.id, p.payment_order_id, p.merchant_id, p.operator_id, p.order_source, p.total_amount, p.platform_commission, p.operator_commission, p.merchant_amount, p.out_order_no, p.sharing_order_id, p.status, p.finished_at, p.created_at, p.delivery_fee, p.rider_id, p.rider_amount, p.distributable_amount, p.platform_rate, p.operator_rate,
+  p.id, p.payment_order_id, p.merchant_id, p.operator_id, p.order_source, p.total_amount, p.platform_commission, p.operator_commission, p.merchant_amount, p.out_order_no, p.sharing_order_id, p.status, p.finished_at, p.created_at, p.delivery_fee, p.rider_id, p.rider_amount, p.distributable_amount, p.platform_rate, p.operator_rate, p.payment_fee, p.payment_fee_rate_bps, p.provider, p.channel, p.merchant_sharing_mer_id, p.rider_sharing_mer_id, p.operator_sharing_mer_id, p.platform_sharing_mer_id, p.sharing_detail_snapshot, p.calculation_version, p.settlement_mode, p.provider_payment_fee, p.provider_payment_fee_rate_bps, p.provider_payment_fee_base_amount, p.provider_payment_fee_source, p.merchant_payment_fee, p.merchant_payment_fee_rate_bps, p.merchant_payment_fee_base_amount, p.rider_gross_amount, p.rider_payment_fee, p.rider_payment_fee_rate_bps, p.rider_payment_fee_base_amount, p.commission_base_amount, p.platform_receiver_amount,
     po.order_id,
     o.order_no,
     m.name as merchant_name
@@ -1397,29 +2005,53 @@ type ListRiderProfitSharingOrdersParams struct {
 }
 
 type ListRiderProfitSharingOrdersRow struct {
-	ID                  int64              `json:"id"`
-	PaymentOrderID      int64              `json:"payment_order_id"`
-	MerchantID          int64              `json:"merchant_id"`
-	OperatorID          pgtype.Int8        `json:"operator_id"`
-	OrderSource         string             `json:"order_source"`
-	TotalAmount         int64              `json:"total_amount"`
-	PlatformCommission  int64              `json:"platform_commission"`
-	OperatorCommission  int64              `json:"operator_commission"`
-	MerchantAmount      int64              `json:"merchant_amount"`
-	OutOrderNo          string             `json:"out_order_no"`
-	SharingOrderID      pgtype.Text        `json:"sharing_order_id"`
-	Status              string             `json:"status"`
-	FinishedAt          pgtype.Timestamptz `json:"finished_at"`
-	CreatedAt           time.Time          `json:"created_at"`
-	DeliveryFee         int64              `json:"delivery_fee"`
-	RiderID             pgtype.Int8        `json:"rider_id"`
-	RiderAmount         int64              `json:"rider_amount"`
-	DistributableAmount int64              `json:"distributable_amount"`
-	PlatformRate        int32              `json:"platform_rate"`
-	OperatorRate        int32              `json:"operator_rate"`
-	OrderID             pgtype.Int8        `json:"order_id"`
-	OrderNo             string             `json:"order_no"`
-	MerchantName        string             `json:"merchant_name"`
+	ID                           int64              `json:"id"`
+	PaymentOrderID               int64              `json:"payment_order_id"`
+	MerchantID                   int64              `json:"merchant_id"`
+	OperatorID                   pgtype.Int8        `json:"operator_id"`
+	OrderSource                  string             `json:"order_source"`
+	TotalAmount                  int64              `json:"total_amount"`
+	PlatformCommission           int64              `json:"platform_commission"`
+	OperatorCommission           int64              `json:"operator_commission"`
+	MerchantAmount               int64              `json:"merchant_amount"`
+	OutOrderNo                   string             `json:"out_order_no"`
+	SharingOrderID               pgtype.Text        `json:"sharing_order_id"`
+	Status                       string             `json:"status"`
+	FinishedAt                   pgtype.Timestamptz `json:"finished_at"`
+	CreatedAt                    time.Time          `json:"created_at"`
+	DeliveryFee                  int64              `json:"delivery_fee"`
+	RiderID                      pgtype.Int8        `json:"rider_id"`
+	RiderAmount                  int64              `json:"rider_amount"`
+	DistributableAmount          int64              `json:"distributable_amount"`
+	PlatformRate                 int32              `json:"platform_rate"`
+	OperatorRate                 int32              `json:"operator_rate"`
+	PaymentFee                   int64              `json:"payment_fee"`
+	PaymentFeeRateBps            int32              `json:"payment_fee_rate_bps"`
+	Provider                     string             `json:"provider"`
+	Channel                      string             `json:"channel"`
+	MerchantSharingMerID         pgtype.Text        `json:"merchant_sharing_mer_id"`
+	RiderSharingMerID            pgtype.Text        `json:"rider_sharing_mer_id"`
+	OperatorSharingMerID         pgtype.Text        `json:"operator_sharing_mer_id"`
+	PlatformSharingMerID         pgtype.Text        `json:"platform_sharing_mer_id"`
+	SharingDetailSnapshot        []byte             `json:"sharing_detail_snapshot"`
+	CalculationVersion           string             `json:"calculation_version"`
+	SettlementMode               string             `json:"settlement_mode"`
+	ProviderPaymentFee           int64              `json:"provider_payment_fee"`
+	ProviderPaymentFeeRateBps    int32              `json:"provider_payment_fee_rate_bps"`
+	ProviderPaymentFeeBaseAmount int64              `json:"provider_payment_fee_base_amount"`
+	ProviderPaymentFeeSource     string             `json:"provider_payment_fee_source"`
+	MerchantPaymentFee           int64              `json:"merchant_payment_fee"`
+	MerchantPaymentFeeRateBps    int32              `json:"merchant_payment_fee_rate_bps"`
+	MerchantPaymentFeeBaseAmount int64              `json:"merchant_payment_fee_base_amount"`
+	RiderGrossAmount             int64              `json:"rider_gross_amount"`
+	RiderPaymentFee              int64              `json:"rider_payment_fee"`
+	RiderPaymentFeeRateBps       int32              `json:"rider_payment_fee_rate_bps"`
+	RiderPaymentFeeBaseAmount    int64              `json:"rider_payment_fee_base_amount"`
+	CommissionBaseAmount         int64              `json:"commission_base_amount"`
+	PlatformReceiverAmount       int64              `json:"platform_receiver_amount"`
+	OrderID                      pgtype.Int8        `json:"order_id"`
+	OrderNo                      string             `json:"order_no"`
+	MerchantName                 string             `json:"merchant_name"`
 }
 
 // 骑手配送费明细
@@ -1460,6 +2092,30 @@ func (q *Queries) ListRiderProfitSharingOrders(ctx context.Context, arg ListRide
 			&i.DistributableAmount,
 			&i.PlatformRate,
 			&i.OperatorRate,
+			&i.PaymentFee,
+			&i.PaymentFeeRateBps,
+			&i.Provider,
+			&i.Channel,
+			&i.MerchantSharingMerID,
+			&i.RiderSharingMerID,
+			&i.OperatorSharingMerID,
+			&i.PlatformSharingMerID,
+			&i.SharingDetailSnapshot,
+			&i.CalculationVersion,
+			&i.SettlementMode,
+			&i.ProviderPaymentFee,
+			&i.ProviderPaymentFeeRateBps,
+			&i.ProviderPaymentFeeBaseAmount,
+			&i.ProviderPaymentFeeSource,
+			&i.MerchantPaymentFee,
+			&i.MerchantPaymentFeeRateBps,
+			&i.MerchantPaymentFeeBaseAmount,
+			&i.RiderGrossAmount,
+			&i.RiderPaymentFee,
+			&i.RiderPaymentFeeRateBps,
+			&i.RiderPaymentFeeBaseAmount,
+			&i.CommissionBaseAmount,
+			&i.PlatformReceiverAmount,
 			&i.OrderID,
 			&i.OrderNo,
 			&i.MerchantName,
@@ -1474,12 +2130,122 @@ func (q *Queries) ListRiderProfitSharingOrders(ctx context.Context, arg ListRide
 	return items, nil
 }
 
+const updateProfitSharingOrderFeeBreakdown = `-- name: UpdateProfitSharingOrderFeeBreakdown :one
+UPDATE profit_sharing_orders
+SET
+    calculation_version = $1,
+    settlement_mode = $2,
+    provider_payment_fee = $3,
+    provider_payment_fee_rate_bps = $4,
+    provider_payment_fee_base_amount = $5,
+    provider_payment_fee_source = $6,
+    merchant_payment_fee = $7,
+    merchant_payment_fee_rate_bps = $8,
+    merchant_payment_fee_base_amount = $9,
+    rider_gross_amount = $10,
+    rider_payment_fee = $11,
+    rider_payment_fee_rate_bps = $12,
+    rider_payment_fee_base_amount = $13,
+    commission_base_amount = $14,
+    platform_receiver_amount = $15
+WHERE id = $16
+RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount
+`
+
+type UpdateProfitSharingOrderFeeBreakdownParams struct {
+	CalculationVersion           string `json:"calculation_version"`
+	SettlementMode               string `json:"settlement_mode"`
+	ProviderPaymentFee           int64  `json:"provider_payment_fee"`
+	ProviderPaymentFeeRateBps    int32  `json:"provider_payment_fee_rate_bps"`
+	ProviderPaymentFeeBaseAmount int64  `json:"provider_payment_fee_base_amount"`
+	ProviderPaymentFeeSource     string `json:"provider_payment_fee_source"`
+	MerchantPaymentFee           int64  `json:"merchant_payment_fee"`
+	MerchantPaymentFeeRateBps    int32  `json:"merchant_payment_fee_rate_bps"`
+	MerchantPaymentFeeBaseAmount int64  `json:"merchant_payment_fee_base_amount"`
+	RiderGrossAmount             int64  `json:"rider_gross_amount"`
+	RiderPaymentFee              int64  `json:"rider_payment_fee"`
+	RiderPaymentFeeRateBps       int32  `json:"rider_payment_fee_rate_bps"`
+	RiderPaymentFeeBaseAmount    int64  `json:"rider_payment_fee_base_amount"`
+	CommissionBaseAmount         int64  `json:"commission_base_amount"`
+	PlatformReceiverAmount       int64  `json:"platform_receiver_amount"`
+	ID                           int64  `json:"id"`
+}
+
+func (q *Queries) UpdateProfitSharingOrderFeeBreakdown(ctx context.Context, arg UpdateProfitSharingOrderFeeBreakdownParams) (ProfitSharingOrder, error) {
+	row := q.db.QueryRow(ctx, updateProfitSharingOrderFeeBreakdown,
+		arg.CalculationVersion,
+		arg.SettlementMode,
+		arg.ProviderPaymentFee,
+		arg.ProviderPaymentFeeRateBps,
+		arg.ProviderPaymentFeeBaseAmount,
+		arg.ProviderPaymentFeeSource,
+		arg.MerchantPaymentFee,
+		arg.MerchantPaymentFeeRateBps,
+		arg.MerchantPaymentFeeBaseAmount,
+		arg.RiderGrossAmount,
+		arg.RiderPaymentFee,
+		arg.RiderPaymentFeeRateBps,
+		arg.RiderPaymentFeeBaseAmount,
+		arg.CommissionBaseAmount,
+		arg.PlatformReceiverAmount,
+		arg.ID,
+	)
+	var i ProfitSharingOrder
+	err := row.Scan(
+		&i.ID,
+		&i.PaymentOrderID,
+		&i.MerchantID,
+		&i.OperatorID,
+		&i.OrderSource,
+		&i.TotalAmount,
+		&i.PlatformCommission,
+		&i.OperatorCommission,
+		&i.MerchantAmount,
+		&i.OutOrderNo,
+		&i.SharingOrderID,
+		&i.Status,
+		&i.FinishedAt,
+		&i.CreatedAt,
+		&i.DeliveryFee,
+		&i.RiderID,
+		&i.RiderAmount,
+		&i.DistributableAmount,
+		&i.PlatformRate,
+		&i.OperatorRate,
+		&i.PaymentFee,
+		&i.PaymentFeeRateBps,
+		&i.Provider,
+		&i.Channel,
+		&i.MerchantSharingMerID,
+		&i.RiderSharingMerID,
+		&i.OperatorSharingMerID,
+		&i.PlatformSharingMerID,
+		&i.SharingDetailSnapshot,
+		&i.CalculationVersion,
+		&i.SettlementMode,
+		&i.ProviderPaymentFee,
+		&i.ProviderPaymentFeeRateBps,
+		&i.ProviderPaymentFeeBaseAmount,
+		&i.ProviderPaymentFeeSource,
+		&i.MerchantPaymentFee,
+		&i.MerchantPaymentFeeRateBps,
+		&i.MerchantPaymentFeeBaseAmount,
+		&i.RiderGrossAmount,
+		&i.RiderPaymentFee,
+		&i.RiderPaymentFeeRateBps,
+		&i.RiderPaymentFeeBaseAmount,
+		&i.CommissionBaseAmount,
+		&i.PlatformReceiverAmount,
+	)
+	return i, err
+}
+
 const updateProfitSharingOrderToFailed = `-- name: UpdateProfitSharingOrderToFailed :one
 UPDATE profit_sharing_orders
 SET
     status = 'failed'
-WHERE id = $1
-RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate
+WHERE id = $1 AND status = 'processing'
+RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount
 `
 
 func (q *Queries) UpdateProfitSharingOrderToFailed(ctx context.Context, id int64) (ProfitSharingOrder, error) {
@@ -1506,6 +2272,30 @@ func (q *Queries) UpdateProfitSharingOrderToFailed(ctx context.Context, id int64
 		&i.DistributableAmount,
 		&i.PlatformRate,
 		&i.OperatorRate,
+		&i.PaymentFee,
+		&i.PaymentFeeRateBps,
+		&i.Provider,
+		&i.Channel,
+		&i.MerchantSharingMerID,
+		&i.RiderSharingMerID,
+		&i.OperatorSharingMerID,
+		&i.PlatformSharingMerID,
+		&i.SharingDetailSnapshot,
+		&i.CalculationVersion,
+		&i.SettlementMode,
+		&i.ProviderPaymentFee,
+		&i.ProviderPaymentFeeRateBps,
+		&i.ProviderPaymentFeeBaseAmount,
+		&i.ProviderPaymentFeeSource,
+		&i.MerchantPaymentFee,
+		&i.MerchantPaymentFeeRateBps,
+		&i.MerchantPaymentFeeBaseAmount,
+		&i.RiderGrossAmount,
+		&i.RiderPaymentFee,
+		&i.RiderPaymentFeeRateBps,
+		&i.RiderPaymentFeeBaseAmount,
+		&i.CommissionBaseAmount,
+		&i.PlatformReceiverAmount,
 	)
 	return i, err
 }
@@ -1516,7 +2306,7 @@ SET
     status = 'finished',
     finished_at = now()
 WHERE id = $1 AND status = 'processing'
-RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate
+RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount
 `
 
 func (q *Queries) UpdateProfitSharingOrderToFinished(ctx context.Context, id int64) (ProfitSharingOrder, error) {
@@ -1543,6 +2333,30 @@ func (q *Queries) UpdateProfitSharingOrderToFinished(ctx context.Context, id int
 		&i.DistributableAmount,
 		&i.PlatformRate,
 		&i.OperatorRate,
+		&i.PaymentFee,
+		&i.PaymentFeeRateBps,
+		&i.Provider,
+		&i.Channel,
+		&i.MerchantSharingMerID,
+		&i.RiderSharingMerID,
+		&i.OperatorSharingMerID,
+		&i.PlatformSharingMerID,
+		&i.SharingDetailSnapshot,
+		&i.CalculationVersion,
+		&i.SettlementMode,
+		&i.ProviderPaymentFee,
+		&i.ProviderPaymentFeeRateBps,
+		&i.ProviderPaymentFeeBaseAmount,
+		&i.ProviderPaymentFeeSource,
+		&i.MerchantPaymentFee,
+		&i.MerchantPaymentFeeRateBps,
+		&i.MerchantPaymentFeeBaseAmount,
+		&i.RiderGrossAmount,
+		&i.RiderPaymentFee,
+		&i.RiderPaymentFeeRateBps,
+		&i.RiderPaymentFeeBaseAmount,
+		&i.CommissionBaseAmount,
+		&i.PlatformReceiverAmount,
 	)
 	return i, err
 }
@@ -1553,7 +2367,7 @@ SET
     status = 'processing',
     sharing_order_id = $2
 WHERE id = $1 AND status IN ('pending', 'failed')
-RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate
+RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount
 `
 
 type UpdateProfitSharingOrderToProcessingParams struct {
@@ -1585,6 +2399,30 @@ func (q *Queries) UpdateProfitSharingOrderToProcessing(ctx context.Context, arg 
 		&i.DistributableAmount,
 		&i.PlatformRate,
 		&i.OperatorRate,
+		&i.PaymentFee,
+		&i.PaymentFeeRateBps,
+		&i.Provider,
+		&i.Channel,
+		&i.MerchantSharingMerID,
+		&i.RiderSharingMerID,
+		&i.OperatorSharingMerID,
+		&i.PlatformSharingMerID,
+		&i.SharingDetailSnapshot,
+		&i.CalculationVersion,
+		&i.SettlementMode,
+		&i.ProviderPaymentFee,
+		&i.ProviderPaymentFeeRateBps,
+		&i.ProviderPaymentFeeBaseAmount,
+		&i.ProviderPaymentFeeSource,
+		&i.MerchantPaymentFee,
+		&i.MerchantPaymentFeeRateBps,
+		&i.MerchantPaymentFeeBaseAmount,
+		&i.RiderGrossAmount,
+		&i.RiderPaymentFee,
+		&i.RiderPaymentFeeRateBps,
+		&i.RiderPaymentFeeBaseAmount,
+		&i.CommissionBaseAmount,
+		&i.PlatformReceiverAmount,
 	)
 	return i, err
 }

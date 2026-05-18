@@ -55,6 +55,23 @@ func randomDeliveryPool(orderID, merchantID int64) db.DeliveryPool {
 	}
 }
 
+func expectActiveRiderBaofuAccountForDelivery(store *mockdb.MockStore, riderID int64) {
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeRider,
+			OwnerID:   riderID,
+		}).
+		Times(1).
+		Return(db.BaofuAccountBinding{
+			OwnerType:    db.BaofuAccountOwnerTypeRider,
+			OwnerID:      riderID,
+			AccountType:  db.BaofuAccountTypePersonal,
+			OpenState:    db.BaofuAccountOpenStateActive,
+			ContractNo:   pgtype.Text{String: "CP123", Valid: true},
+			SharingMerID: pgtype.Text{String: "CP123", Valid: true},
+		}, nil)
+}
+
 func TestGetRecommendedOrdersAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	rider := randomRider(user.ID)
@@ -207,6 +224,7 @@ func TestGrabOrderAPI(t *testing.T) {
 					GetRiderProfile(gomock.Any(), gomock.Eq(rider.ID)).
 					Times(1).
 					Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+				expectActiveRiderBaofuAccountForDelivery(store, rider.ID)
 
 				store.EXPECT().
 					GetDeliveryPoolByOrderID(gomock.Any(), gomock.Eq(orderID)).
@@ -294,6 +312,7 @@ func TestGrabOrderAPI(t *testing.T) {
 					GetRiderProfile(gomock.Any(), gomock.Eq(rider.ID)).
 					Times(1).
 					Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+				expectActiveRiderBaofuAccountForDelivery(store, rider.ID)
 
 				store.EXPECT().
 					GetDeliveryPoolByOrderID(gomock.Any(), gomock.Eq(orderID)).
@@ -324,6 +343,7 @@ func TestGrabOrderAPI(t *testing.T) {
 					GetRiderProfile(gomock.Any(), gomock.Eq(rider.ID)).
 					Times(1).
 					Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+				expectActiveRiderBaofuAccountForDelivery(store, rider.ID)
 
 				store.EXPECT().
 					GetDeliveryPoolByOrderID(gomock.Any(), gomock.Eq(orderID)).
@@ -1552,6 +1572,7 @@ func TestGrabOrderAPI_EdgeCases(t *testing.T) {
 					GetRiderProfile(gomock.Any(), gomock.Eq(lowDepositRider.ID)).
 					Times(1).
 					Return(db.RiderProfile{RiderID: lowDepositRider.ID, IsSuspended: false}, nil)
+				expectActiveRiderBaofuAccountForDelivery(store, lowDepositRider.ID)
 
 				store.EXPECT().
 					GetDeliveryPoolByOrderID(gomock.Any(), gomock.Eq(orderID)).

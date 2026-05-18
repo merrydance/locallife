@@ -160,6 +160,7 @@ func (server *Server) getApplymentCatalogCache() *applymentCatalogCache {
 // @Failure 401 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /v1/merchant/applyment/banks [get]
+// @Router /v1/platform/finance/applyment/banks [get]
 // @Security BearerAuth
 func (server *Server) listApplymentBanks(ctx *gin.Context) {
 	if server.ordinarySPClient == nil {
@@ -199,6 +200,7 @@ func (server *Server) listApplymentBanks(ctx *gin.Context) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /v1/merchant/applyment/banks/search-by-bank-account [get]
+// @Router /v1/platform/finance/applyment/banks/search-by-bank-account [get]
 // @Security BearerAuth
 func (server *Server) searchApplymentBanksByAccount(ctx *gin.Context) {
 	if server.ordinarySPClient == nil {
@@ -250,6 +252,7 @@ func (server *Server) searchApplymentBanksByAccount(ctx *gin.Context) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /v1/merchant/applyment/areas/provinces [get]
+// @Router /v1/platform/finance/applyment/areas/provinces [get]
 // @Security BearerAuth
 func (server *Server) listApplymentProvinces(ctx *gin.Context) {
 	if server.ordinarySPClient == nil {
@@ -282,6 +285,7 @@ func (server *Server) listApplymentProvinces(ctx *gin.Context) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /v1/merchant/applyment/areas/provinces/{province_code}/cities [get]
+// @Router /v1/platform/finance/applyment/areas/provinces/{province_code}/cities [get]
 // @Security BearerAuth
 func (server *Server) listApplymentCities(ctx *gin.Context) {
 	if server.ordinarySPClient == nil {
@@ -321,6 +325,7 @@ func (server *Server) listApplymentCities(ctx *gin.Context) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Router /v1/merchant/applyment/banks/{bank_alias_code}/branches [get]
+// @Router /v1/platform/finance/applyment/banks/{bank_alias_code}/branches [get]
 // @Security BearerAuth
 func (server *Server) listApplymentBankBranches(ctx *gin.Context) {
 	if server.ordinarySPClient == nil {

@@ -1,13 +1,21 @@
 package api
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
+	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/media"
+	"github.com/rs/zerolog/log"
 )
+
+const merchantOrderFeeBreakdownUnavailableMessage = "订单费用明细暂不可用，请稍后重试"
 
 // ==================== pgtype → 指针 转换 helpers ====================
 // 消除 order response 构建中的重复样板代码。
@@ -38,6 +46,106 @@ func pgtypeTimestamptzPtr(v pgtype.Timestamptz) *time.Time {
 		return &v.Time
 	}
 	return nil
+}
+
+type merchantOrderFeeBreakdownResponse struct {
+	FoodAmount                int64 `json:"food_amount" example:"10000"`
+	MerchantDiscountAmount    int64 `json:"merchant_discount_amount" example:"300"`
+	VoucherDiscountAmount     int64 `json:"voucher_discount_amount" example:"200"`
+	FoodPayableAmount         int64 `json:"food_payable_amount" example:"9500"`
+	DeliveryFeeAmount         int64 `json:"delivery_fee_amount" example:"800"`
+	DeliveryFeeDiscountAmount int64 `json:"delivery_fee_discount_amount" example:"0"`
+	DeliveryPayableAmount     int64 `json:"delivery_payable_amount" example:"800"`
+	CustomerPayableAmount     int64 `json:"customer_payable_amount" example:"10300"`
+	PlatformServiceFeeAmount  int64 `json:"platform_service_fee_amount" example:"475"`
+	PaymentChannelFeeAmount   int64 `json:"payment_channel_fee_amount" example:"57"`
+	MerchantReceivableAmount  int64 `json:"merchant_receivable_amount" example:"8968"`
+}
+
+func newMerchantOrderFeeBreakdownResponse(b logic.MerchantOrderFeeBreakdown) *merchantOrderFeeBreakdownResponse {
+	return &merchantOrderFeeBreakdownResponse{
+		FoodAmount:                b.FoodAmount,
+		MerchantDiscountAmount:    b.MerchantDiscountAmount,
+		VoucherDiscountAmount:     b.VoucherDiscountAmount,
+		FoodPayableAmount:         b.FoodPayableAmount,
+		DeliveryFeeAmount:         b.DeliveryFeeAmount,
+		DeliveryFeeDiscountAmount: b.DeliveryFeeDiscountAmount,
+		DeliveryPayableAmount:     b.DeliveryPayableAmount,
+		CustomerPayableAmount:     b.CustomerPayableAmount,
+		PlatformServiceFeeAmount:  b.PlatformServiceFeeAmount,
+		PaymentChannelFeeAmount:   b.PaymentChannelFeeAmount,
+		MerchantReceivableAmount:  b.MerchantReceivableAmount,
+	}
+}
+
+func (server *Server) loadMerchantOrderFeeBreakdowns(ctx context.Context, merchantID int64, orders []db.Order) (map[int64]logic.MerchantOrderFeeBreakdown, error) {
+	if len(orders) == 0 {
+		return map[int64]logic.MerchantOrderFeeBreakdown{}, nil
+	}
+
+	orderIDs := make([]int64, 0, len(orders))
+	ordersByID := make(map[int64]db.Order, len(orders))
+	for _, order := range orders {
+		orderIDs = append(orderIDs, order.ID)
+		ordersByID[order.ID] = order
+	}
+
+	rows, err := server.store.ListProfitSharingOrdersByOrderIDsForMerchant(ctx, db.ListProfitSharingOrdersByOrderIDsForMerchantParams{
+		MerchantID: merchantID,
+		OrderIds:   orderIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list merchant order fee breakdown profit sharing orders: %w", err)
+	}
+
+	breakdowns := make(map[int64]logic.MerchantOrderFeeBreakdown, len(orders))
+	for _, row := range rows {
+		if _, exists := breakdowns[row.OrderID]; exists {
+			continue
+		}
+		order, ok := ordersByID[row.OrderID]
+		if !ok {
+			continue
+		}
+		profitSharingOrder := row.ProfitSharingOrder
+		breakdown, err := logic.BuildMerchantOrderFeeBreakdown(logic.BuildMerchantOrderFeeBreakdownInput{
+			Order:              order,
+			ProfitSharingOrder: &profitSharingOrder,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("build merchant order fee breakdown: %w", err)
+		}
+		breakdowns[row.OrderID] = breakdown
+	}
+
+	for _, order := range orders {
+		if _, ok := breakdowns[order.ID]; !ok {
+			return nil, fmt.Errorf("%w: order_id=%d merchant_id=%d", logic.ErrMerchantFeeBreakdownUnavailable, order.ID, merchantID)
+		}
+	}
+	return breakdowns, nil
+}
+
+func writeMerchantOrderFeeBreakdownError(ctx *gin.Context, merchantID int64, orders []db.Order, err error) {
+	orderIDs := make([]int64, 0, len(orders))
+	statuses := make([]string, 0, len(orders))
+	for _, order := range orders {
+		orderIDs = append(orderIDs, order.ID)
+		statuses = append(statuses, order.Status)
+	}
+
+	evt := log.Error().
+		Err(err).
+		Int64("merchant_id", merchantID).
+		Ints64("order_ids", orderIDs).
+		Strs("statuses", statuses)
+	if errors.Is(err, logic.ErrMerchantFeeBreakdownUnavailable) || errors.Is(err, logic.ErrMerchantFeeBreakdownInconsistent) {
+		evt.Msg("merchant order fee breakdown unavailable")
+	} else {
+		evt.Msg("merchant order fee breakdown query failed")
+	}
+	_ = ctx.Error(err)
+	ctx.JSON(http.StatusInternalServerError, ErrorResponse{Error: merchantOrderFeeBreakdownUnavailableMessage})
 }
 
 // orderNullableFields 封装所有订单可选字段的 pgtype 值，

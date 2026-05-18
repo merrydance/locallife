@@ -247,9 +247,9 @@ SELECT
   p.payment_order_id,
   p.order_source,
   p.total_amount,
-  p.platform_commission,
-  p.operator_commission,
-  p.merchant_amount,
+  (p.platform_commission + p.operator_commission)::bigint AS platform_service_fee_amount,
+  (CASE WHEN p.calculation_version = 'baofu_fee_v2' THEN p.merchant_payment_fee ELSE p.payment_fee END)::bigint AS payment_channel_fee_amount,
+  p.merchant_amount AS merchant_receivable_amount,
   p.out_order_no,
   p.sharing_order_id,
   p.status,
@@ -268,9 +268,9 @@ SELECT
   0 AS payment_order_id,
   'adjustment'::text AS order_source,
   0 AS total_amount,
-  0 AS platform_commission,
-  0 AS operator_commission,
-  a.amount AS merchant_amount,
+  0::bigint AS platform_service_fee_amount,
+  0::bigint AS payment_channel_fee_amount,
+  a.amount AS merchant_receivable_amount,
   NULL::text AS out_order_no,
   NULL::text AS sharing_order_id,
   a.status,
@@ -295,22 +295,22 @@ type ListMerchantSettlementTimelineParams struct {
 }
 
 type ListMerchantSettlementTimelineRow struct {
-	RecordType         string             `json:"record_type"`
-	ID                 int64              `json:"id"`
-	PaymentOrderID     int64              `json:"payment_order_id"`
-	OrderSource        string             `json:"order_source"`
-	TotalAmount        int64              `json:"total_amount"`
-	PlatformCommission int64              `json:"platform_commission"`
-	OperatorCommission int64              `json:"operator_commission"`
-	MerchantAmount     int64              `json:"merchant_amount"`
-	OutOrderNo         string             `json:"out_order_no"`
-	SharingOrderID     pgtype.Text        `json:"sharing_order_id"`
-	Status             string             `json:"status"`
-	CreatedAt          time.Time          `json:"created_at"`
-	FinishedAt         pgtype.Timestamptz `json:"finished_at"`
-	AdjustmentType     pgtype.Text        `json:"adjustment_type"`
-	RelatedType        pgtype.Text        `json:"related_type"`
-	RelatedID          pgtype.Int8        `json:"related_id"`
+	RecordType               string             `json:"record_type"`
+	ID                       int64              `json:"id"`
+	PaymentOrderID           int64              `json:"payment_order_id"`
+	OrderSource              string             `json:"order_source"`
+	TotalAmount              int64              `json:"total_amount"`
+	PlatformServiceFeeAmount int64              `json:"platform_service_fee_amount"`
+	PaymentChannelFeeAmount  int64              `json:"payment_channel_fee_amount"`
+	MerchantReceivableAmount int64              `json:"merchant_receivable_amount"`
+	OutOrderNo               string             `json:"out_order_no"`
+	SharingOrderID           pgtype.Text        `json:"sharing_order_id"`
+	Status                   string             `json:"status"`
+	CreatedAt                time.Time          `json:"created_at"`
+	FinishedAt               pgtype.Timestamptz `json:"finished_at"`
+	AdjustmentType           pgtype.Text        `json:"adjustment_type"`
+	RelatedType              pgtype.Text        `json:"related_type"`
+	RelatedID                pgtype.Int8        `json:"related_id"`
 }
 
 func (q *Queries) ListMerchantSettlementTimeline(ctx context.Context, arg ListMerchantSettlementTimelineParams) ([]ListMerchantSettlementTimelineRow, error) {
@@ -334,9 +334,9 @@ func (q *Queries) ListMerchantSettlementTimeline(ctx context.Context, arg ListMe
 			&i.PaymentOrderID,
 			&i.OrderSource,
 			&i.TotalAmount,
-			&i.PlatformCommission,
-			&i.OperatorCommission,
-			&i.MerchantAmount,
+			&i.PlatformServiceFeeAmount,
+			&i.PaymentChannelFeeAmount,
+			&i.MerchantReceivableAmount,
 			&i.OutOrderNo,
 			&i.SharingOrderID,
 			&i.Status,

@@ -44,14 +44,13 @@
             label="序列号"
             value="{{formData.printer_sn}}"
             data-field="printer_sn"
-            placeholder="请输入打印机机身序列号"
             bind:change="onFormInputChange"
           />
           <t-input
             label="打印机密钥"
             value="{{formData.printer_key}}"
             data-field="printer_key"
-            placeholder="{{isEdit ? '编辑时留空则不修改' : '请输入打印机密钥'}}"
+            placeholder="{{isEdit ? '编辑时留空则不修改' : ''}}"
             bind:change="onFormInputChange"
           />
         </t-cell-group>

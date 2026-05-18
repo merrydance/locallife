@@ -1,4 +1,5 @@
 import * as CartAPI from '@/api/cart'
+import { loadCheckoutPaymentCapabilities } from '@/services/takeout-checkout'
 import { logger } from '@/utils/logger'
 import {
   buildCartSummary,
@@ -12,12 +13,9 @@ import {
   type MerchantCartGroup
 } from '@/utils/takeout-cart-view'
 
-// ... existing imports
-
-// ... existing imports
-
 let _loadAllCartsPromise: Promise<void> | null = null
 let _lastLoadAllCartsAt = 0
+let _loadPaymentCapabilitiesPromise: Promise<void> | null = null
 
 Page({
   data: {
@@ -34,7 +32,10 @@ Page({
     // 结算相关
     selectedCartIds: [] as number[],
     checkoutTotal: 0,
-    checkoutTotalDisplay: '¥0.00'
+    checkoutTotalDisplay: '¥0.00',
+    splitCheckoutRequired: false,
+    splitCheckoutNotice: '',
+    removingUnavailableItemIds: {} as Record<string, boolean>
   },
 
   onLoad() {
@@ -83,7 +84,6 @@ Page({
         // 为每个商户获取详细购物车内容
         let merchantGroups: MerchantCartGroup[] = []
 
-
         for (const merchantCart of userCarts.carts) {
           if (!merchantCart.merchant_id) continue
 
@@ -103,11 +103,15 @@ Page({
 
         // 预先计算费用并校验商户状态（在显示前完成）
         merchantGroups = await this.calculateDeliveryFees(merchantGroups, true)
+        await this.loadPaymentCapabilities()
 
         // 默认全选（排除有错误的商户）
-        const selectedCartIds = merchantGroups
-          .filter((g) => !g.errorStatus)
-          .map((g) => g.cartId)
+        const availableGroups = merchantGroups.filter((g) => !g.errorStatus)
+        const selectedCartIds = availableGroups.map((g) => g.cartId)
+        merchantGroups = merchantGroups.map((group) => ({
+          ...group,
+          selected: selectedCartIds.includes(group.cartId)
+        }))
 
         // 设置数据并显示
         this.setData({
@@ -137,7 +141,28 @@ Page({
     return _loadAllCartsPromise
   },
 
+  async loadPaymentCapabilities() {
+    if (_loadPaymentCapabilitiesPromise) {
+      return _loadPaymentCapabilitiesPromise
+    }
 
+    _loadPaymentCapabilitiesPromise = (async () => {
+      try {
+        const capabilities = await loadCheckoutPaymentCapabilities()
+        const splitCheckoutRequired = capabilities.splitCheckoutRequired
+        this.setData({
+          splitCheckoutRequired,
+          splitCheckoutNotice: capabilities.splitCheckoutNotice
+        })
+      } catch (error) {
+        logger.warn('Failed to load payment capabilities', error, 'cart.loadPaymentCapabilities')
+      }
+    })().finally(() => {
+      _loadPaymentCapabilitiesPromise = null
+    })
+
+    return _loadPaymentCapabilitiesPromise
+  },
   /**
    * 同步购物车状态到全局存储
    */
@@ -210,11 +235,9 @@ Page({
     // 如果是基于 this.data 进行的更新，则需要 setData
     if (!groups) {
       this.setData({ merchantGroups: updatedGroups })
-      
       // 检查 selectedCartIds 是否需要更新
       const { selectedCartIds } = this.data
       const newSelectedIds = updatedGroups.filter((g) => g.selected && selectedCartIds.includes(g.cartId)).map((g) => g.cartId)
-      
       // 如果有原来选中的现在因为错误变为了不选中
       if (newSelectedIds.length !== selectedCartIds.length) {
          // 注意：这里的简单比较可能不够，但通常足够处理 "选中->不选中" 的情况
@@ -224,7 +247,7 @@ Page({
            const g = updatedGroups.find((group) => group.cartId === id)
            return g && !g.errorStatus
          })
-         
+
          if (validSelectedIds.length !== selectedCartIds.length) {
             this.setData({ selectedCartIds: validSelectedIds })
             this.calculateCheckoutTotal()
@@ -341,6 +364,44 @@ Page({
       this.updateLocalQuantity(itemId, currentQuantity)
       wx.showToast({ title: '更新失败', icon: 'none' })
     }
+  },
+
+  /**
+   * 移除已下架商品
+   */
+  async onRemoveUnavailable(e: WechatMiniprogram.CustomEvent) {
+    const rawItemId = e.currentTarget.dataset.itemId
+    const itemId = Number(rawItemId)
+    if (!Number.isFinite(itemId) || itemId <= 0) return
+
+    const itemKey = String(itemId)
+    if (this.data.removingUnavailableItemIds[itemKey]) return
+
+    this.setRemovingUnavailableItem(itemKey, true)
+
+    try {
+      await CartAPI.removeFromCart(itemId, { loading: false })
+      this.removeLocalItem(itemId)
+    } catch (error) {
+      logger.warn('Failed to remove unavailable cart item', { itemId }, 'cart.onRemoveUnavailable')
+      wx.showToast({ title: '移除失败，请重试', icon: 'none' })
+    } finally {
+      this.setRemovingUnavailableItem(itemKey, false)
+    }
+  },
+
+  setRemovingUnavailableItem(itemKey: string, removing: boolean) {
+    const removingUnavailableItemIds = {
+      ...this.data.removingUnavailableItemIds
+    }
+
+    if (removing) {
+      removingUnavailableItemIds[itemKey] = true
+    } else {
+      delete removingUnavailableItemIds[itemKey]
+    }
+
+    this.setData({ removingUnavailableItemIds })
   },
 
   /**
@@ -504,6 +565,15 @@ Page({
 
     if (selectedCartIds.length === 0) {
       wx.showToast({ title: '请选择要结算的商品', icon: 'none' })
+      return
+    }
+    if (this.data.splitCheckoutRequired && selectedCartIds.length > 1) {
+      wx.showModal({
+        title: '暂不支持合单支付',
+        content: this.data.splitCheckoutNotice || '请一次选择一家商户下单。',
+        showCancel: false,
+        confirmText: '知道了'
+      })
       return
     }
 

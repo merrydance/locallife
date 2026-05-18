@@ -1,5 +1,5 @@
 import dayjs from 'dayjs'
-import { type MerchantApplymentStatusView } from '../../../api/merchant-applyment'
+import { type BaofuSettlementAccountView } from '../../../api/baofu-account-view'
 import {
   canManageMerchantApplyment,
   canUseMerchantDeviceManagementFallback,
@@ -22,8 +22,8 @@ import {
   updateMerchantStorefrontOpenStatus
 } from '../../../services/merchant-open-status'
 import {
-  fetchMerchantApplymentStatusView
-} from '../../../services/merchant-applyment-console'
+  fetchMerchantBaofuSettlementAccountView
+} from '../../../services/merchant-baofu-settlement-account'
 import {
   createMerchantAppBindCode
 } from '../../../services/merchant-app-bind'
@@ -44,6 +44,8 @@ import {
   SKELETON_ROWS
 } from '../../../utils/merchant-dashboard-view'
 
+const BAOFU_SETTLEMENT_ACCOUNT_PAGE_PATH = '/pages/merchant/finance/settlement-account/index'
+
 Page({
   data: {
     navBarHeight: 88,
@@ -62,7 +64,7 @@ Page({
     monthRangeLabel: '',
     lastRefreshAt: 0,
     activeMerchant: EMPTY_MERCHANT,
-    applymentView: null as MerchantApplymentStatusView | null,
+    settlementAccountView: null as BaofuSettlementAccountView | null,
     gridGutter: GRID_GUTTER,
     monthlyOrdersValue: null as number | null,
     monthlySalesValue: null as number | null,
@@ -184,7 +186,7 @@ Page({
       const [
         profileResult,
         openStatusResult,
-        applymentStatusResult,
+        settlementAccountResult,
         overviewResult,
         orderSummaryResult,
         complaintSummaryResult
@@ -192,8 +194,8 @@ Page({
         captureDashboardRequest(fetchMerchantStorefrontProfile()),
         captureDashboardRequest(fetchMerchantStorefrontOpenStatus()),
         this.data.canManageMerchantApplyment
-          ? captureDashboardRequest(fetchMerchantApplymentStatusView())
-          : Promise.resolve({ ok: true as const, value: null as MerchantApplymentStatusView | null }),
+          ? captureDashboardRequest(fetchMerchantBaofuSettlementAccountView())
+          : Promise.resolve({ ok: true as const, value: null as BaofuSettlementAccountView | null }),
         captureDashboardRequest(fetchMerchantDashboardOverview(monthStart, monthEnd)),
         captureDashboardRequest(fetchMerchantDashboardOrderSummary()),
         captureDashboardRequest(fetchMerchantDashboardComplaintSummary())
@@ -218,15 +220,15 @@ Page({
         : trustedDataAvailable
           ? this.data.isOpen
           : profile.is_open
-      const applymentView = applymentStatusResult.ok
-        ? applymentStatusResult.value
+      const settlementAccountView = settlementAccountResult.ok
+        ? settlementAccountResult.value
         : trustedDataAvailable
-          ? this.data.applymentView
+          ? this.data.settlementAccountView
           : null
       const businessStateView = buildMerchantBusinessStateView({
         merchantStatus: profile.status,
         isOpen,
-        applymentView
+        settlementAccountView
       })
       const pendingOrders = isDashboardRequestOk(orderSummaryResult)
         ? (orderSummaryResult.value.paid_count || 0)
@@ -243,7 +245,7 @@ Page({
 
       const partialFailure = [
         openStatusResult,
-        applymentStatusResult,
+        settlementAccountResult,
         overviewResult,
         orderSummaryResult,
         complaintSummaryResult
@@ -261,7 +263,7 @@ Page({
         isOpen,
         businessStateTitle: businessStateView.title,
         businessStateHint: businessStateView.hint,
-        applymentView,
+        settlementAccountView,
         monthlyOrdersValue,
         monthlySalesValue,
         complaintBacklogValue: complaintBacklog,
@@ -398,13 +400,13 @@ Page({
     }
 
     try {
-      const applymentStatusView = await fetchMerchantApplymentStatusView()
+      const settlementAccountView = await fetchMerchantBaofuSettlementAccountView()
 
-      if (applymentStatusView.isOpened) {
+      if (settlementAccountView.paymentReady) {
         return true
       }
 
-      const content = applymentStatusView.blockReason || applymentStatusView.guideText
+      const content = settlementAccountView.statusDesc || settlementAccountView.nextActionText || '宝付结算账户仍在处理，请稍后再试'
 
       const result = await new Promise<boolean>((resolve) => {
         wx.showModal({
@@ -418,12 +420,12 @@ Page({
       })
 
       if (result) {
-        wx.navigateTo({ url: '/pages/merchant/settings/applyment/index' })
+        wx.navigateTo({ url: BAOFU_SETTLEMENT_ACCOUNT_PAGE_PATH })
       }
 
       return false
     } catch (err) {
-      logger.warn('Merchant dashboard precheck applyment status failed', err)
+      logger.warn('Merchant dashboard precheck baofu settlement account failed', err)
       return true
     }
   },
@@ -469,7 +471,7 @@ Page({
       const businessStateView = buildMerchantBusinessStateView({
         merchantStatus: this.data.activeMerchant.status,
         isOpen: response.is_open,
-        applymentView: this.data.applymentView
+        settlementAccountView: this.data.settlementAccountView
       })
       this.setData({
         isOpen: response.is_open,

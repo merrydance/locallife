@@ -76,7 +76,7 @@ export default function OperatorFinancePage() {
           console.error("Load operator application status failed", operatorApplicationResult.reason);
           nextFinanceNotice = "暂未获取运营商入驻状态；如分账收入或规则展示异常，请刷新后重试。";
         } else if (operatorApplication?.status !== "active") {
-          nextFinanceNotice = "当前运营商入驻尚未激活；激活后才会产生普通服务商分账收入。";
+          nextFinanceNotice = "当前运营商入驻尚未激活；激活并完成宝付结算账户开通后才会产生分账收入。";
         }
 
         setOverview(overviewRes);
@@ -104,7 +104,7 @@ export default function OperatorFinancePage() {
     <PageShell>
       <PageHeader
         title="财务管理"
-        description="平台佣金明细、分账规则与微信支付资金处理指引"
+        description="运营商佣金明细、宝付分账规则与提现状态指引"
         actions={
           <div className="flex items-center gap-2">
             <Badge variant="secondary">运营商</Badge>
@@ -210,32 +210,31 @@ export default function OperatorFinancePage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>普通服务商资金处理</CardTitle>
+                <CardTitle>宝付资金处理</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-3 text-sm md:grid-cols-2">
                 <div className="rounded-lg border bg-muted/40 p-4">
                   <div className="font-medium">资金操作入口</div>
                   <p className="mt-2 text-muted-foreground">
-                    普通服务商模式不支持在平台内查询余额、发起提现、注销提现、补差或垫付回补。
-                    请前往微信支付商户平台或微信支付商家助手处理资金操作。
+                    宝付链路下，运营商佣金分账到宝财通二级户；余额、可提现金额、提现中、提现成功和提现退回以后端宝付接口结果为准。
                   </p>
                 </div>
                 <div className="rounded-lg border bg-muted/40 p-4">
                   <div className="font-medium">平台内保留能力</div>
                   <p className="mt-2 text-muted-foreground">
-                    本页保留运营商分账收入统计、平台佣金明细和分账规则展示；商户侧保留普通服务商进件与结算账户查询/修改。
+                    本页保留运营商分账收入统计、平台佣金明细和分账规则展示；不展示宝付二级户号、合同号或原始回调内容。
                   </p>
                 </div>
                 <div className="rounded-lg border bg-muted/40 p-4">
                   <div className="font-medium">异常处理指引</div>
                   <p className="mt-2 text-muted-foreground">
-                    如支付、退款或分账被限制，请联系平台管理员查看普通服务商商户管控诊断，并按微信侧恢复指引处理。
+                    如分账或提现状态长时间处理中，请联系平台管理员查看宝付对账与告警，不要重复发起资金操作。
                   </p>
                 </div>
                 <div className="rounded-lg border bg-muted/40 p-4">
                   <div className="font-medium">当前可核对数据</div>
                   <p className="mt-2 text-muted-foreground">
-                    可在“概览”和“分账规则”中核对分账收入、平台佣金和规则配置；资金到账状态以微信支付商户平台为准。
+                    可在“概览”和“分账规则”中核对分账收入、平台佣金和规则配置；提现明细待宝付提现接口开放给运营商端后展示。
                   </p>
                 </div>
               </CardContent>

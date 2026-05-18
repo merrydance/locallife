@@ -355,6 +355,71 @@ func TestGetOperatorApplicationAPI(t *testing.T) {
 	}
 }
 
+func TestGetOperatorApplicationAPI_IncludesBaofuSettlementReadiness(t *testing.T) {
+	user, _ := randomUser(t)
+	region := randomRegion()
+	app := randomOperatorApplicationDraft(user.ID, region.ID)
+	app.Status = "approved"
+	operator := db.Operator{ID: 3101, UserID: user.ID, RegionID: region.ID}
+	binding := db.BaofuAccountBinding{
+		ID:           4201,
+		OwnerType:    db.BaofuAccountOwnerTypeOperator,
+		OwnerID:      operator.ID,
+		AccountType:  db.BaofuAccountTypePersonal,
+		ContractNo:   pgtype.Text{String: "CO3101", Valid: true},
+		SharingMerID: pgtype.Text{String: "SH3101", Valid: true},
+		OpenState:    db.BaofuAccountOpenStateProcessing,
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetOperatorApplicationByUserID(gomock.Any(), user.ID).
+		Times(1).
+		Return(app, nil)
+	store.EXPECT().
+		GetRegion(gomock.Any(), region.ID).
+		Times(1).
+		Return(region, nil)
+	store.EXPECT().
+		GetOperatorByUser(gomock.Any(), user.ID).
+		Times(1).
+		Return(operator, nil)
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeOperator,
+			OwnerID:   operator.ID,
+		}).
+		Times(1).
+		Return(binding, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/operator/application", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.NotContains(t, recorder.Body.String(), "CO3101")
+	require.NotContains(t, recorder.Body.String(), "SH3101")
+	require.NotContains(t, recorder.Body.String(), "contractNo")
+	require.NotContains(t, recorder.Body.String(), "sharingMerId")
+	require.NotContains(t, recorder.Body.String(), "contract_no")
+	require.NotContains(t, recorder.Body.String(), "sharing_mer_id")
+
+	var resp operatorApplicationResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.True(t, resp.IsOperator)
+	require.NotNil(t, resp.SettlementAccount)
+	require.Equal(t, "baofu_opening_processing", resp.SettlementAccount.State)
+	require.Equal(t, "宝付开户处理中", resp.SettlementAccount.Label)
+	require.False(t, resp.SettlementAccount.PaymentReady)
+}
+
 func TestUpdateOperatorApplicationBasicInfoAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	region := randomRegion()

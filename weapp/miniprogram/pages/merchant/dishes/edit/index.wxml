@@ -42,14 +42,16 @@
         </view>
 
         <t-cell-group theme="card">
-          <t-input
-            label="菜品名称"
-            placeholder="请输入菜品名称"
-            value="{{formData.name}}"
-            bind:change="onInputChange"
-            data-field="name"
-            required
-          />
+          <t-cell required title="菜品名称">
+            <t-input
+              slot="note"
+              value="{{formData.name}}"
+              bind:change="onInputChange"
+              data-field="name"
+              borderless
+              align="right"
+            />
+          </t-cell>
 
           <view class="field-action-row">
             <view class="field-action-main">
@@ -60,14 +62,18 @@
 
           <text wx:if="{{!categoryOptions.length}}" class="section-caption">{{formData.category_id ? '当前分类不可调整' : '当前还没有可选分类'}}</text>
 
-          <t-input
-            label="价格(元)"
-            type="digit"
-            placeholder="0.00"
-            value="{{displayPrice}}"
-            bind:change="onPriceChange"
-            required
-          />
+          <t-cell required title="价格">
+            <t-input
+              slot="note"
+              type="digit"
+              suffix="元"
+              placeholder="0.00"
+              value="{{displayPrice}}"
+              bind:change="onPriceChange"
+              borderless
+              align="right"
+            />
+          </t-cell>
 
           <t-input
             label="会员价(元)"
@@ -79,7 +85,7 @@
         </t-cell-group>
 
         <t-textarea
-          placeholder="请输入菜品详细介绍..."
+          placeholder="介绍口味、分量或推荐搭配"
           value="{{formData.description}}"
           bind:change="onInputChange"
           data-field="description"
@@ -144,7 +150,7 @@
           />
         </view>
 
-        <view wx:else class="inline-note-card">暂无普通菜品标签，可先新增标签。</view>
+        <view wx:else class="tag-empty-text">暂无普通菜品标签，可先新增标签。</view>
       </view>
 
       <view class="section-panel">
@@ -187,12 +193,11 @@
       bind:cancel="onCloseCreatePopup"
     >
       <view slot="content" class="dialog-form">
-        <t-input
-          label="{{createPopupMode === 'category' ? '分类名称' : '标签名称'}}"
-          placeholder="{{createPopupMode === 'category' ? '请输入分类名称' : '请输入标签名称'}}"
-          value="{{createInputValue}}"
-          bind:change="onCreateInputChange"
-        />
+          <t-input
+            label="{{createPopupMode === 'category' ? '分类名称' : '标签名称'}}"
+            value="{{createInputValue}}"
+            bind:change="onCreateInputChange"
+          />
       </view>
     </t-dialog>
 

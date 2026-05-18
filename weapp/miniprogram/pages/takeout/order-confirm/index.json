@@ -8,7 +8,8 @@
         "t-icon": "tdesign-miniprogram/icon/icon",
         "t-empty": "tdesign-miniprogram/empty/empty",
         "remark-input": "/components/remark-input/index",
-        "merchant-promos": "/components/merchant-promos/index"
+        "merchant-promos": "/components/merchant-promos/index",
+        "t-toast": "tdesign-miniprogram/toast/toast"
     },
     "navigationStyle": "custom"
 }
