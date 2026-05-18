@@ -798,15 +798,8 @@ func (s *RefundService) processBaofuPreShareRefund(ctx context.Context, paymentO
 	}
 
 	refundID := strings.TrimSpace(refundResp.TradeNo)
-	terminalStatus := aggregatecontracts.NormalizeRefundTerminalStatus(refundResp.RefundState)
-	switch terminalStatus {
-	case db.ExternalPaymentTerminalStatusSuccess:
-		if _, dbErr := s.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID); dbErr != nil {
-			return fmt.Errorf("update baofu refund order to success: %w", dbErr)
-		}
-		s.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
-		recordBaofuRefundCommand(ctx, s.store, refundOrder, refundResp, db.ExternalPaymentCommandStatusAccepted, nil)
-	case db.ExternalPaymentTerminalStatusProcessing:
+	switch strings.ToUpper(strings.TrimSpace(refundResp.ResultCode)) {
+	case aggregatecontracts.BusinessResultCodeSuccess:
 		if _, dbErr := s.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
 			ID:       refundOrder.ID,
 			RefundID: pgtype.Text{String: refundID, Valid: refundID != ""},
@@ -814,7 +807,7 @@ func (s *RefundService) processBaofuPreShareRefund(ctx context.Context, paymentO
 			return fmt.Errorf("update baofu refund order to processing: %w", dbErr)
 		}
 		recordBaofuRefundCommand(ctx, s.store, refundOrder, refundResp, db.ExternalPaymentCommandStatusAccepted, nil)
-	case db.ExternalPaymentTerminalStatusFailed:
+	case aggregatecontracts.BusinessResultCodeFail:
 		if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
 			return fmt.Errorf("update baofu refund order to failed: %w", dbErr)
 		}

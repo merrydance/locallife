@@ -935,7 +935,8 @@ func TestBaofuAccountOnboardingServiceRecoverOpeningAlertsAndRejectsContractOwne
 	var extra map[string]any
 	require.NoError(t, json.Unmarshal(store.alerts[0].Extra, &extra))
 	require.Equal(t, "contract_owner_mismatch", extra["reason"])
-	require.Equal(t, "CP_CONFLICT", extra["contract_no"])
+	require.Equal(t, "*******LICT", extra["contract_no_mask"])
+	require.NotContains(t, string(store.alerts[0].Extra), "CP_CONFLICT")
 	require.Equal(t, db.BaofuAccountOwnerTypeRider, extra["flow_owner_type"])
 	require.Equal(t, db.BaofuAccountOwnerTypeOperator, extra["binding_owner_type"])
 }
@@ -971,7 +972,8 @@ func TestBaofuAccountOnboardingServiceRecoverOpeningAlertsAndRejectsMismatchedOu
 	require.Equal(t, "out_request_no_mismatch", extra["reason"])
 	require.Equal(t, "BFO167", extra["flow_open_trans_serial_no"])
 	require.Equal(t, "BFO_OTHER", extra["result_out_request_no"])
-	require.Equal(t, "CP_QUERY_SERIAL_MISMATCH", extra["contract_no"])
+	require.Equal(t, "********************ATCH", extra["contract_no_mask"])
+	require.NotContains(t, string(store.alerts[0].Extra), "CP_QUERY_SERIAL_MISMATCH")
 }
 
 func TestBaofuAccountOnboardingServiceRecoverOpeningKeepsProcessingWhenQueryHasNoAccountRecord(t *testing.T) {

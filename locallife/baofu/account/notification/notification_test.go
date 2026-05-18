@@ -163,6 +163,30 @@ func TestParseOpenAccountPlaintextAllowsMissingNoticeTypeFromOfficialExamples(t 
 	require.Equal(t, contracts.OpenStateActive, notification.OpenState)
 }
 
+func TestParseOpenAccountPlaintextAllowsOfficialFailureWithoutContractNo(t *testing.T) {
+	raw := []byte(`{"contractNo":"","customerName":"张宝","errorCode":"ID_CARD_CHECK_FAILED","errorMsg":"身份证号码不合法","loginNo":"person002","memberId":"100030218","memberType":"1","state":"0","terminalId":"200005478","transSerialNo":"TSN818378770194066009819111"}`)
+
+	notification, err := ParseOpenAccountPlaintext(raw)
+
+	require.NoError(t, err)
+	require.Equal(t, "TSN818378770194066009819111", notification.OutRequestNo)
+	require.Empty(t, notification.ContractNo)
+	require.Equal(t, "0", notification.UpstreamState)
+	require.Equal(t, contracts.OpenStateFailed, notification.OpenState)
+	require.Equal(t, "ID_CARD_CHECK_FAILED", notification.FailCode)
+}
+
+func TestParseOpenAccountPlaintextAcceptsNumericMemberType(t *testing.T) {
+	raw := []byte(`{"member_id":"100000","terminal_id":"200000","memberType":2,"state":"1","transSerialNo":"OPEN202605040001","loginNo":"merchant-login-001","customerName":"商户A","contractNo":"CM202605040001"}`)
+
+	notification, err := ParseOpenAccountPlaintext(raw)
+
+	require.NoError(t, err)
+	require.Equal(t, "OPEN202605040001", notification.OutRequestNo)
+	require.Equal(t, "CM202605040001", notification.ContractNo)
+	require.Equal(t, contracts.OpenStateActive, notification.OpenState)
+}
+
 func TestParseOpenAccountPlaintextRejectsMissingMandatoryFieldsAndUnsupportedState(t *testing.T) {
 	base := map[string]string{
 		"member_id":     "102004465",
@@ -188,7 +212,7 @@ func TestParseOpenAccountPlaintextRejectsMissingMandatoryFieldsAndUnsupportedSta
 		{"missing trans serial", func(p map[string]string) { delete(p, "transSerialNo") }, "baofu open account notification transSerialNo is required"},
 		{"missing login", func(p map[string]string) { delete(p, "loginNo") }, "baofu open account notification loginNo is required"},
 		{"missing customer name", func(p map[string]string) { delete(p, "customerName") }, "baofu open account notification customerName is required"},
-		{"missing contract", func(p map[string]string) { delete(p, "contractNo") }, "baofu open account notification contractNo is required"},
+		{"missing success contract", func(p map[string]string) { delete(p, "contractNo") }, "baofu open account notification contractNo is required for successful state"},
 	}
 
 	for _, tc := range cases {
@@ -223,6 +247,20 @@ func TestParseWithdrawPlaintextUsesOfficialFields(t *testing.T) {
 	require.Equal(t, int64(12445), notification.TotalAmountFen)
 }
 
+func TestParseWithdrawPlaintextAllowsOfficialSuccessEmptyRemarkAndReserved(t *testing.T) {
+	raw := []byte(`{"contractNo":"CP690000000000000258","orderId":"21201148","reqReserved":"","state":"1","transFee":"1.00","transMoney":"10.01","transRemark":"","transSerialNo":"TID277461406486212443164402","transferTotalAmount":"10.01"}`)
+
+	notification, err := ParseWithdrawPlaintext(raw)
+
+	require.NoError(t, err)
+	require.Equal(t, "TID277461406486212443164402", notification.TransSerialNo)
+	require.Equal(t, "21201148", notification.BaofuWithdrawNo)
+	require.Equal(t, "1", notification.UpstreamState)
+	require.Equal(t, contracts.WithdrawStatusFromUpstream("1"), notification.Status)
+	require.Empty(t, notification.Remark)
+	require.Empty(t, notification.RequestReserved)
+}
+
 func TestParseWithdrawPlaintextRejectsMissingMandatoryFieldsAndUnsupportedState(t *testing.T) {
 	base := map[string]string{
 		"contractNo":          "CM202605040001",
@@ -248,8 +286,6 @@ func TestParseWithdrawPlaintextRejectsMissingMandatoryFieldsAndUnsupportedState(
 		{"missing total amount", func(p map[string]string) { delete(p, "transferTotalAmount") }, "baofu withdraw notification transferTotalAmount is required"},
 		{"missing state", func(p map[string]string) { delete(p, "state") }, "baofu withdraw notification state is required"},
 		{"unsupported state", func(p map[string]string) { p["state"] = "9" }, "baofu withdraw notification state is unsupported"},
-		{"missing remark", func(p map[string]string) { delete(p, "transRemark") }, "baofu withdraw notification transRemark is required"},
-		{"missing reserved", func(p map[string]string) { delete(p, "reqReserved") }, "baofu withdraw notification reqReserved is required"},
 	}
 
 	for _, tc := range cases {

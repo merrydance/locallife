@@ -148,7 +148,7 @@ func (server *Server) resolveBaofuAccountOpeningFlowForCallback(ctx context.Cont
 		if errors.Is(err, db.ErrRecordNotFound) {
 			server.persistUnmatchedBaofuAccountCallbackAlert(ctx, notification, "callback_unmatched")
 		}
-		return db.BaofuAccountOpeningFlow{}, fmt.Errorf("resolve baofu account callback contract %q: %w", contractNo, err)
+		return db.BaofuAccountOpeningFlow{}, fmt.Errorf("resolve baofu account callback contract %q: %w", maskedBaofuIdentifier(contractNo), err)
 	}
 	flow, err := server.store.GetLatestBaofuAccountOpeningFlowByOwner(ctx, db.GetLatestBaofuAccountOpeningFlowByOwnerParams{
 		OwnerType: binding.OwnerType,
@@ -158,7 +158,7 @@ func (server *Server) resolveBaofuAccountOpeningFlowForCallback(ctx context.Cont
 		if errors.Is(err, db.ErrRecordNotFound) {
 			server.persistUnmatchedBaofuAccountCallbackAlert(ctx, notification, "callback_owner_flow_missing")
 		}
-		return db.BaofuAccountOpeningFlow{}, fmt.Errorf("resolve baofu account callback flow for contract %q: %w", contractNo, err)
+		return db.BaofuAccountOpeningFlow{}, fmt.Errorf("resolve baofu account callback flow for contract %q: %w", maskedBaofuIdentifier(contractNo), err)
 	}
 	return flow, nil
 }
@@ -169,6 +169,7 @@ func (server *Server) persistUnmatchedBaofuAccountCallbackAlert(ctx context.Cont
 	}
 	outRequestNo := strings.TrimSpace(notification.OutRequestNo)
 	contractNo := strings.TrimSpace(notification.ContractNo)
+	contractNoMask := maskedBaofuIdentifier(contractNo)
 	upstreamState := strings.TrimSpace(notification.UpstreamState)
 	openState := strings.TrimSpace(notification.OpenState)
 	err := worker.SavePlatformAlertEvent(
@@ -177,22 +178,22 @@ func (server *Server) persistUnmatchedBaofuAccountCallbackAlert(ctx context.Cont
 		string(worker.AlertTypeSystemError),
 		string(worker.AlertLevelCritical),
 		"宝付开户回调未匹配本地流程",
-		fmt.Sprintf("宝付开户回调未匹配到本地开户流程，流水号 %s，合约号 %s。系统未创建账户绑定，请人工核对宝付侧状态和本地流程。", outRequestNo, contractNo),
+		fmt.Sprintf("宝付开户回调未匹配到本地开户流程，流水号 %s，合约号 %s。系统未创建账户绑定，请人工核对宝付侧状态和本地流程。", outRequestNo, contractNoMask),
 		0,
 		"baofu_account_opening_flow",
 		map[string]any{
-			"out_request_no": outRequestNo,
-			"contract_no":    contractNo,
-			"upstream_state": upstreamState,
-			"open_state":     openState,
-			"reason":         strings.TrimSpace(reason),
+			"out_request_no":   outRequestNo,
+			"contract_no_mask": contractNoMask,
+			"upstream_state":   upstreamState,
+			"open_state":       openState,
+			"reason":           strings.TrimSpace(reason),
 		},
 		time.Now(),
 	)
 	if err != nil {
 		log.Error().Err(err).
 			Str("out_request_no", outRequestNo).
-			Str("contract_no", contractNo).
+			Str("contract_no_mask", contractNoMask).
 			Str("upstream_state", upstreamState).
 			Str("open_state", openState).
 			Str("reason", strings.TrimSpace(reason)).

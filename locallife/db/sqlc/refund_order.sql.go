@@ -650,7 +650,7 @@ const updateRefundOrderToFailed = `-- name: UpdateRefundOrderToFailed :one
 UPDATE refund_orders
 SET
     status = 'failed'
-WHERE id = $1
+WHERE id = $1 AND status IN ('pending', 'processing')
 RETURNING id, payment_order_id, refund_type, refund_amount, refund_reason, out_refund_no, refund_id, platform_refund, operator_refund, merchant_refund, status, refunded_at, created_at
 `
 

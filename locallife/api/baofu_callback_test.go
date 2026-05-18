@@ -405,7 +405,9 @@ func TestBaofuAccountOpenCallbackPersistsAlertWhenFlowCannotBeMatched(t *testing
 			var extra map[string]any
 			require.NoError(t, json.Unmarshal(arg.Extra, &extra))
 			require.Equal(t, "OPEN_MISSING", extra["out_request_no"])
-			require.Equal(t, "CP_MISSING", extra["contract_no"])
+			require.Equal(t, "CP_****ING", extra["contract_no_mask"])
+			require.NotContains(t, string(arg.Extra), "CP_MISSING")
+			require.NotContains(t, arg.Message, "CP_MISSING")
 			require.Equal(t, "1", extra["upstream_state"])
 			require.Equal(t, "callback_serial_no_unmatched", extra["reason"])
 			return db.PlatformAlertEvent{ID: 9302}, nil
@@ -441,7 +443,9 @@ func TestBaofuAccountOpenCallbackBlocksWhenOutRequestNoMissesEvenIfContractExist
 			var extra map[string]any
 			require.NoError(t, json.Unmarshal(arg.Extra, &extra))
 			require.Equal(t, "OPEN_CALLBACK_OTHER", extra["out_request_no"])
-			require.Equal(t, "CP_EXISTING", extra["contract_no"])
+			require.Equal(t, "CP_****ING", extra["contract_no_mask"])
+			require.NotContains(t, string(arg.Extra), "CP_EXISTING")
+			require.NotContains(t, arg.Message, "CP_EXISTING")
 			require.Equal(t, "callback_serial_no_unmatched", extra["reason"])
 			return db.PlatformAlertEvent{ID: 9303}, nil
 		})
@@ -741,6 +745,57 @@ func TestBaofuPaymentCallbackFallbackRejectsNotificationIdentityMismatch(t *test
 	require.Empty(t, queryClient.lastPaymentQuery.TradeNo)
 }
 
+func TestBaofuPaymentCallbackDirectRejectsNotificationIdentityMismatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAggregatePaymentNotificationParserForTest(fakeBaofuAggregateIdentityMismatchParser{})
+	server.config.BaofuCollectMerchantID = "102004465"
+	server.config.BaofuCollectTerminalID = "200005200"
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/payment", bytes.NewBufferString(`{"notifyId":"BFN_4001"}`))
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusUnauthorized, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "callback verification failed")
+}
+
+func TestBaofuPaymentCallbackDirectRejectsNotificationIdentityMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAggregatePaymentNotificationParserForTest(fakeBaofuAggregateIdentityMissingParser{})
+	server.config.BaofuCollectMerchantID = "102004465"
+	server.config.BaofuCollectTerminalID = "200005200"
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/payment", bytes.NewBufferString(`{"notifyId":"BFN_4001"}`))
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusUnauthorized, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "callback verification failed")
+}
+
+func TestBaofuShareCallbackDirectRejectsNotificationIdentityMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAggregatePaymentNotificationParserForTest(fakeBaofuAggregateIdentityMissingParser{})
+	server.config.BaofuCollectMerchantID = "102004465"
+	server.config.BaofuCollectTerminalID = "200005200"
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/share", bytes.NewBufferString(`{"notifyId":"BFSN_3001"}`))
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusUnauthorized, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "callback verification failed")
+}
+
 func TestBaofuShareCallbackPersistsFactAndEnqueuesApplication(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -865,6 +920,23 @@ func TestBaofuShareCallbackFallbackRejectsNotificationIdentityMismatch(t *testin
 	require.Empty(t, queryClient.lastShareQuery.TradeNo)
 }
 
+func TestBaofuShareCallbackDirectRejectsNotificationIdentityMismatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAggregatePaymentNotificationParserForTest(fakeBaofuAggregateIdentityMismatchParser{})
+	server.config.BaofuCollectMerchantID = "102004465"
+	server.config.BaofuCollectTerminalID = "200005200"
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/share", bytes.NewBufferString(`{"notifyId":"BFSN_3001"}`))
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusUnauthorized, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "callback verification failed")
+}
+
 func TestBaofuShareCallbackRejectsWhenSignedParserNotConfigured(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -939,6 +1011,40 @@ func TestBaofuRefundCallbackPersistsFactAndEnqueuesApplication(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, "OK", recorder.Body.String())
 	require.Equal(t, []int64{1001}, taskRecorder.applicationIDs)
+}
+
+func TestBaofuRefundCallbackDirectRejectsNotificationIdentityMismatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAggregatePaymentNotificationParserForTest(fakeBaofuAggregateIdentityMismatchParser{})
+	server.config.BaofuCollectMerchantID = "102004465"
+	server.config.BaofuCollectTerminalID = "200005200"
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/refund", bytes.NewBufferString(`{"notifyId":"BFRN_5101"}`))
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusUnauthorized, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "callback verification failed")
+}
+
+func TestBaofuRefundCallbackDirectRejectsNotificationIdentityMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAggregatePaymentNotificationParserForTest(fakeBaofuAggregateIdentityMissingParser{})
+	server.config.BaofuCollectMerchantID = "102004465"
+	server.config.BaofuCollectTerminalID = "200005200"
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/refund", bytes.NewBufferString(`{"notifyId":"BFRN_5101"}`))
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusUnauthorized, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "callback verification failed")
 }
 
 type fakeBaofuOpenAccountParser struct{}
@@ -1054,6 +1160,8 @@ func (fakeBaofuPaymentParser) ParsePaymentNotification(body []byte) (*baofuaggre
 		OccurredAt:     time.Now().UTC(),
 		Raw:            []byte(`{"notifyId":"BFN_4001","outTradeNo":"PO_BAOFU_4001","tradeNo":"BFPAY_4001","txnState":"SUCCESS"}`),
 		Fact: aggregatecontracts.PaymentFact{
+			MerchantID:       "102004465",
+			TerminalID:       "200005200",
 			OutTradeNo:       "PO_BAOFU_4001",
 			TradeNo:          "BFPAY_4001",
 			TransactionState: aggregatecontracts.PaymentStateSuccess,
@@ -1073,6 +1181,8 @@ func (fakeBaofuPaymentParser) ParseShareNotification(body []byte) (*baofuaggrega
 		OccurredAt:     time.Now().UTC(),
 		Raw:            []byte(`{"notifyId":"BFSN_3001","outTradeNo":"BFSHARE_3001","tradeNo":"BFSHARE_UP_3001","txnState":"SUCCESS"}`),
 		Fact: aggregatecontracts.ShareFact{
+			MerchantID:       "102004465",
+			TerminalID:       "200005200",
 			OutTradeNo:       "BFSHARE_3001",
 			TradeNo:          "BFSHARE_UP_3001",
 			TransactionState: aggregatecontracts.ShareStateSuccess,
@@ -1091,6 +1201,8 @@ func (fakeBaofuPaymentParser) ParseRefundNotification(body []byte) (*baofuaggreg
 		OccurredAt:     time.Now().UTC(),
 		Raw:            []byte(`{"notifyId":"BFRN_5101","outTradeNo":"BFRFD_5101","tradeNo":"BFREFUND_UP_5101","refundState":"SUCCESS"}`),
 		Fact: aggregatecontracts.RefundFact{
+			MerchantID:       "102004465",
+			TerminalID:       "200005200",
 			OutTradeNo:       "BFRFD_5101",
 			TradeNo:          "BFREFUND_UP_5101",
 			TransactionState: aggregatecontracts.RefundStateSuccess,
@@ -1098,6 +1210,68 @@ func (fakeBaofuPaymentParser) ParseRefundNotification(body []byte) (*baofuaggreg
 			Raw:              []byte(`{"notifyId":"BFRN_5101","outTradeNo":"BFRFD_5101","tradeNo":"BFREFUND_UP_5101","refundState":"SUCCESS"}`),
 		},
 	}, nil
+}
+
+type fakeBaofuAggregateIdentityMismatchParser struct {
+	fakeBaofuPaymentParser
+}
+
+type fakeBaofuAggregateIdentityMissingParser struct {
+	fakeBaofuPaymentParser
+}
+
+func (fakeBaofuAggregateIdentityMissingParser) ParsePaymentNotification(body []byte) (*baofuaggregatenotification.PaymentNotification, error) {
+	notification, err := fakeBaofuPaymentParser{}.ParsePaymentNotification(body)
+	if notification != nil {
+		notification.Fact.MerchantID = ""
+		notification.Fact.TerminalID = ""
+	}
+	return notification, err
+}
+
+func (fakeBaofuAggregateIdentityMissingParser) ParseShareNotification(body []byte) (*baofuaggregatenotification.ShareNotification, error) {
+	notification, err := fakeBaofuPaymentParser{}.ParseShareNotification(body)
+	if notification != nil {
+		notification.Fact.MerchantID = ""
+		notification.Fact.TerminalID = ""
+	}
+	return notification, err
+}
+
+func (fakeBaofuAggregateIdentityMissingParser) ParseRefundNotification(body []byte) (*baofuaggregatenotification.RefundNotification, error) {
+	notification, err := fakeBaofuPaymentParser{}.ParseRefundNotification(body)
+	if notification != nil {
+		notification.Fact.MerchantID = ""
+		notification.Fact.TerminalID = ""
+	}
+	return notification, err
+}
+
+func (fakeBaofuAggregateIdentityMismatchParser) ParsePaymentNotification(body []byte) (*baofuaggregatenotification.PaymentNotification, error) {
+	notification, err := fakeBaofuPaymentParser{}.ParsePaymentNotification(body)
+	if notification != nil {
+		notification.Fact.MerchantID = "102004999"
+		notification.Fact.TerminalID = "200005200"
+	}
+	return notification, err
+}
+
+func (fakeBaofuAggregateIdentityMismatchParser) ParseShareNotification(body []byte) (*baofuaggregatenotification.ShareNotification, error) {
+	notification, err := fakeBaofuPaymentParser{}.ParseShareNotification(body)
+	if notification != nil {
+		notification.Fact.MerchantID = "102004465"
+		notification.Fact.TerminalID = "200005299"
+	}
+	return notification, err
+}
+
+func (fakeBaofuAggregateIdentityMismatchParser) ParseRefundNotification(body []byte) (*baofuaggregatenotification.RefundNotification, error) {
+	notification, err := fakeBaofuPaymentParser{}.ParseRefundNotification(body)
+	if notification != nil {
+		notification.Fact.MerchantID = "102004999"
+		notification.Fact.TerminalID = "200005200"
+	}
+	return notification, err
 }
 
 type fakeBaofuPaymentTradeNoOnlyParser struct{}
@@ -1111,6 +1285,8 @@ func (fakeBaofuPaymentTradeNoOnlyParser) ParsePaymentNotification(body []byte) (
 		OccurredAt:     time.Now().UTC(),
 		Raw:            []byte(`{"notifyId":"BFN_4002","tradeNo":"BFPAY_4002","txnState":"SUCCESS"}`),
 		Fact: aggregatecontracts.PaymentFact{
+			MerchantID:       "102004465",
+			TerminalID:       "200005200",
 			TradeNo:          "BFPAY_4002",
 			TransactionState: aggregatecontracts.PaymentStateSuccess,
 			SuccessAmountFen: 1200,
@@ -1142,6 +1318,8 @@ func (fakeBaofuShareTradeNoOnlyParser) ParseShareNotification(body []byte) (*bao
 		OccurredAt:     time.Now().UTC(),
 		Raw:            []byte(`{"notifyId":"BFSN_3003","tradeNo":"BFSHARE_UP_3003","txnState":"SUCCESS","resultCode":"SUCCESS"}`),
 		Fact: aggregatecontracts.ShareFact{
+			MerchantID:       "102004465",
+			TerminalID:       "200005200",
 			TradeNo:          "BFSHARE_UP_3003",
 			TransactionState: aggregatecontracts.ShareStateSuccess,
 			SuccessAmountFen: 9470,

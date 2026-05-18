@@ -66,4 +66,5 @@ SET
     finished_at = CASE WHEN sqlc.arg(status) IN ('succeeded', 'failed', 'returned') THEN now() ELSE finished_at END,
     updated_at = now()
 WHERE id = sqlc.arg(id)
+  AND status = 'processing'
 RETURNING *;

@@ -77,7 +77,7 @@ func (server *Server) handleBaofuAccountOpenNotify(ctx *gin.Context) {
 	if err != nil {
 		log.Error().Err(err).
 			Str("out_request_no", strings.TrimSpace(notification.OutRequestNo)).
-			Str("contract_no", strings.TrimSpace(notification.ContractNo)).
+			Str("contract_no_mask", maskedBaofuIdentifier(notification.ContractNo)).
 			Msg("persist baofu account callback fact failed")
 		ctx.JSON(http.StatusInternalServerError, baofuCallbackResponse{Code: "FAIL", Message: "persist callback failed"})
 		return
@@ -190,6 +190,11 @@ func (server *Server) handleBaofuPaymentNotify(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, baofuCallbackResponse{Code: "FAIL", Message: "callback content invalid"})
 		return
 	}
+	if err := server.validateBaofuCollectCallbackIdentityPresent(notification.Fact.MerchantID, notification.Fact.TerminalID); err != nil {
+		log.Error().Err(err).Msg("baofu payment callback identity mismatch")
+		ctx.JSON(http.StatusUnauthorized, baofuCallbackResponse{Code: "FAIL", Message: "callback verification failed"})
+		return
+	}
 	paymentOrder, err := server.loadBaofuPaymentOrderForCallback(ctx.Request.Context(), notification)
 	if err != nil {
 		log.Error().Err(err).
@@ -297,6 +302,11 @@ func (server *Server) handleBaofuShareNotify(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, baofuCallbackResponse{Code: "FAIL", Message: "callback content invalid"})
 		return
 	}
+	if err := server.validateBaofuCollectCallbackIdentityPresent(notification.Fact.MerchantID, notification.Fact.TerminalID); err != nil {
+		log.Error().Err(err).Msg("baofu share callback identity mismatch")
+		ctx.JSON(http.StatusUnauthorized, baofuCallbackResponse{Code: "FAIL", Message: "callback verification failed"})
+		return
+	}
 	profitSharingOrder, err := server.loadBaofuProfitSharingOrderForCallback(ctx.Request.Context(), notification)
 	if err != nil {
 		log.Error().Err(err).Str("out_order_no", strings.TrimSpace(notification.Fact.OutTradeNo)).Msg("load baofu profit sharing order for callback failed")
@@ -389,6 +399,19 @@ func (server *Server) baofuCollectIdentityForCallback(notificationMerchantID str
 	return firstNonEmptyTrimmed(configuredMerchantID, notificationMerchantID), firstNonEmptyTrimmed(configuredTerminalID, notificationTerminalID), nil
 }
 
+func (server *Server) validateBaofuCollectCallbackIdentityPresent(notificationMerchantID string, notificationTerminalID string) error {
+	notificationMerchantID = strings.TrimSpace(notificationMerchantID)
+	notificationTerminalID = strings.TrimSpace(notificationTerminalID)
+	if notificationMerchantID == "" {
+		return fmt.Errorf("baofu callback merId is required")
+	}
+	if notificationTerminalID == "" {
+		return fmt.Errorf("baofu callback terId is required")
+	}
+	_, _, err := server.baofuCollectIdentityForCallback(notificationMerchantID, notificationTerminalID)
+	return err
+}
+
 func (server *Server) handleBaofuRefundNotify(ctx *gin.Context) {
 	if server.baofuPaymentNotificationParser == nil {
 		log.Error().Msg("baofu refund callback received but parser is not configured")
@@ -410,6 +433,11 @@ func (server *Server) handleBaofuRefundNotify(ctx *gin.Context) {
 	if notification == nil {
 		log.Error().Msg("parse baofu refund callback returned empty notification")
 		ctx.JSON(http.StatusBadRequest, baofuCallbackResponse{Code: "FAIL", Message: "callback content invalid"})
+		return
+	}
+	if err := server.validateBaofuCollectCallbackIdentityPresent(notification.Fact.MerchantID, notification.Fact.TerminalID); err != nil {
+		log.Error().Err(err).Msg("baofu refund callback identity mismatch")
+		ctx.JSON(http.StatusUnauthorized, baofuCallbackResponse{Code: "FAIL", Message: "callback verification failed"})
 		return
 	}
 	refundOrder, err := server.store.GetRefundOrderByOutRefundNo(ctx.Request.Context(), strings.TrimSpace(notification.Fact.OutTradeNo))

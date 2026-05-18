@@ -412,14 +412,14 @@ Source: `https://doc.mandao.com/docs/bct/openAccNotify`; updated: `2026-04-22 02
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `openAccNotify.data_content.member_id` | `member_id` | String | 10 | M | length=10 | 商户号 | Validate required; accept official-example `memberId` alias inbound; require plaintext identity to match transport identity; Preserve official length/type at boundary |
 | `openAccNotify.data_content.terminal_id` | `terminal_id` | String | 10 | M | length=10 | 终端号 | Validate required; accept official-example `terminalId` alias inbound; require plaintext identity to match transport identity; Preserve official length/type at boundary |
-| `openAccNotify.data_content.memberType` | `memberType` | int | 1 | M | length=1 | 类型:类型:1-个人,2-企业,3-个体工商户 | Validate required; add missing-field test; Preserve official length/type at boundary |
+| `openAccNotify.data_content.memberType` | `memberType` | int | 1 | M | length=1 | 类型:类型:1-个人,2-企业,3-个体工商户 | Validate required; accept official-example quoted numeric strings and table-declared JSON numbers inbound; add missing-field/type test; Preserve official length/type at boundary |
 | `openAccNotify.data_content.state` | `state` | String | 4 | M | length=4 | 状态 1 成功 0 失败 -1 异常 2开户处理中 | Validate required; add missing-field test; Preserve official length/type at boundary |
 | `openAccNotify.data_content.errorCode` | `errorCode` | String | 20 | C | length=20 | 错误码 | Encode condition from notes; add positive/negative conditional tests; Preserve official length/type at boundary |
 | `openAccNotify.data_content.errorMsg` | `errorMsg` | String | 40 | C | length=40 | 错误原因 | Encode condition from notes; add positive/negative conditional tests; Preserve official length/type at boundary |
 | `openAccNotify.data_content.transSerialNo` | `transSerialNo` | String | 200 | M | length=200 | 请求流水号 | Validate required; add missing-field test; Preserve official length/type at boundary |
 | `openAccNotify.data_content.loginNo` | `loginNo` | String | 128 | M | length=128 | 登录号 | Validate required; add missing-field test; Preserve official length/type at boundary |
 | `openAccNotify.data_content.customerName` | `customerName` | String | 64 | M | length=64 | 商户名称 | Validate required; add missing-field test; Preserve official length/type at boundary |
-| `openAccNotify.data_content.contractNo` | `contractNo` | String | 64 | M | length=64 | 商户客户号 | Validate required; add missing-field test; Preserve official length/type at boundary; BaoCaiTong account id; never replace with channel subMchId |
+| `openAccNotify.data_content.contractNo` | `contractNo` | String | 64 | C | required when `state=1`; official failure example sends empty string | 商户客户号 | Validate required only for successful/active state; tolerate empty for failed/abnormal/processing states so callback can be ACKed and persisted; Preserve official length/type at boundary; BaoCaiTong account id; never replace with channel subMchId |
 | `openAccNotify.data_content.noticeType` | `noticeType` | String | 32 | M | length=32 |  | Official table marks required, but official success/failure examples and production callback evidence can omit it; tolerate absent inbound; Preserve official length/type at boundary |
 
 ### 提现结果通知 (`withdrawNotify`)
@@ -447,8 +447,8 @@ Source: `https://doc.mandao.com/docs/bct/withdrawNotify`; updated: `2025-09-16 0
 | `withdrawNotify.data_content.transFee` | `transFee` | BigDecimal | 10,2 | M | unit=yuan; length=10,2 | 费用,单位：元 | Validate required; add missing-field test; Preserve official length/type at boundary; Yuan decimal: convert only at contract boundary |
 | `withdrawNotify.data_content.transferTotalAmount` | `transferTotalAmount` | BigDecimal | 10,2 | M | unit=yuan; length=10,2 | 转账交易时金额,单位：元 | Validate required; add missing-field test; Preserve official length/type at boundary; Yuan decimal: convert only at contract boundary |
 | `withdrawNotify.data_content.state` | `state` | String | 4 | M | enum/allowlist; conditional rule in description; length=4 | 状态枚举<br>0:失败<br>1:成功<br>2:处理中<br>3:提现退回 注：此状态只在提现时上送版本号4.2.0返回 | Validate required; add missing-field test; Preserve official length/type at boundary; Use typed constant/allowlist; unknown fail-closed |
-| `withdrawNotify.data_content.transRemark` | `transRemark` | String | 128 | M | length=128 | 失败原因 | Validate required; add missing-field test; Preserve official length/type at boundary |
-| `withdrawNotify.data_content.reqReserved` | `reqReserved` | String | 512 | M | length=512 | 保留域 | Validate required; add missing-field test; Preserve official length/type at boundary |
+| `withdrawNotify.data_content.transRemark` | `transRemark` | String | 128 | C | official success example sends empty string; meaningful mainly for failure/return reason | 失败原因 | Tolerate absent or empty inbound for success/processing callbacks; preserve when supplied for failure/returned callbacks; Preserve official length/type at boundary |
+| `withdrawNotify.data_content.reqReserved` | `reqReserved` | String | 512 | C | official success example sends empty string | 保留域 | Tolerate absent or empty inbound; preserve when supplied; Preserve official length/type at boundary |
 
 ## 3. Merchant Report Field Matrix
 

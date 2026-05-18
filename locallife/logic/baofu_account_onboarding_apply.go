@@ -222,6 +222,7 @@ func (s *BaofuAccountOnboardingService) ensureAccountOpenContractMatchesFlow(ctx
 }
 
 func (s *BaofuAccountOnboardingService) persistAccountOpenContractMismatchAlert(ctx context.Context, flow db.BaofuAccountOpeningFlow, binding db.BaofuAccountBinding, result baofucontracts.AccountResult, reason string) {
+	contractNoMask := maskSensitiveTail(result.ContractNo, 4)
 	extra := map[string]any{
 		"reason":                 strings.TrimSpace(reason),
 		"flow_id":                flow.ID,
@@ -230,7 +231,7 @@ func (s *BaofuAccountOnboardingService) persistAccountOpenContractMismatchAlert(
 		"flow_account_type":      strings.TrimSpace(flow.AccountType),
 		"flow_state":             strings.TrimSpace(flow.State),
 		"open_trans_serial_no":   strings.TrimSpace(flow.OpenTransSerialNo.String),
-		"contract_no":            strings.TrimSpace(result.ContractNo),
+		"contract_no_mask":       contractNoMask,
 		"upstream_state":         strings.TrimSpace(result.UpstreamState),
 		"open_state":             strings.TrimSpace(result.OpenState),
 		"binding_id":             binding.ID,
@@ -267,13 +268,14 @@ func (s *BaofuAccountOnboardingService) persistAccountOpenContractMismatchAlert(
 			Str("owner_type", strings.TrimSpace(flow.OwnerType)).
 			Int64("owner_id", flow.OwnerID).
 			Str("open_trans_serial_no", strings.TrimSpace(flow.OpenTransSerialNo.String)).
-			Str("contract_no", strings.TrimSpace(result.ContractNo)).
+			Str("contract_no_mask", contractNoMask).
 			Str("provider_operation", "baofu_account_open_result_apply").
 			Msg("persist baofu account contract mismatch alert failed")
 	}
 }
 
 func (s *BaofuAccountOnboardingService) persistAccountOpenResultMismatchAlert(ctx context.Context, flow db.BaofuAccountOpeningFlow, result baofucontracts.AccountResult, reason string) {
+	contractNoMask := maskSensitiveTail(result.ContractNo, 4)
 	extra := map[string]any{
 		"reason":                    strings.TrimSpace(reason),
 		"flow_id":                   flow.ID,
@@ -283,7 +285,7 @@ func (s *BaofuAccountOnboardingService) persistAccountOpenResultMismatchAlert(ct
 		"flow_state":                strings.TrimSpace(flow.State),
 		"flow_open_trans_serial_no": strings.TrimSpace(flow.OpenTransSerialNo.String),
 		"result_out_request_no":     strings.TrimSpace(result.OutRequestNo),
-		"contract_no":               strings.TrimSpace(result.ContractNo),
+		"contract_no_mask":          contractNoMask,
 		"upstream_state":            strings.TrimSpace(result.UpstreamState),
 		"open_state":                strings.TrimSpace(result.OpenState),
 		"provider_operation":        "baofu_account_open_result_apply",
@@ -317,7 +319,7 @@ func (s *BaofuAccountOnboardingService) persistAccountOpenResultMismatchAlert(ct
 			Int64("owner_id", flow.OwnerID).
 			Str("open_trans_serial_no", strings.TrimSpace(flow.OpenTransSerialNo.String)).
 			Str("result_out_request_no", strings.TrimSpace(result.OutRequestNo)).
-			Str("contract_no", strings.TrimSpace(result.ContractNo)).
+			Str("contract_no_mask", contractNoMask).
 			Str("provider_operation", "baofu_account_open_result_apply").
 			Msg("persist baofu account result mismatch alert failed")
 	}

@@ -80,7 +80,7 @@ RETURNING *;
 UPDATE refund_orders
 SET
     status = 'failed'
-WHERE id = $1
+WHERE id = $1 AND status IN ('pending', 'processing')
 RETURNING *;
 
 -- name: UpdateRefundOrderToClosed :one

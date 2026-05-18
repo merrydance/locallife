@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -55,6 +56,9 @@ func (processor *RedisTaskProcessor) ProcessTaskBaofuWithdrawalFactApplication(c
 	if err != nil {
 		return fmt.Errorf("get baofu withdrawal order: %w", err)
 	}
+	if isTerminalBaofuWithdrawalStatus(withdrawalOrder.Status) {
+		return nil
+	}
 	status := baofucontracts.WithdrawStatusFromUpstream(payload.UpstreamState)
 	raw := payload.RawSnapshot
 	if len(raw) == 0 || !json.Valid(raw) {
@@ -73,7 +77,25 @@ func (processor *RedisTaskProcessor) ProcessTaskBaofuWithdrawalFactApplication(c
 		},
 		RawSnapshot: raw,
 	}); err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			current, getErr := processor.store.GetBaofuWithdrawalOrder(ctx, withdrawalOrder.ID)
+			if getErr == nil && isTerminalBaofuWithdrawalStatus(current.Status) {
+				return nil
+			}
+			if getErr != nil {
+				return fmt.Errorf("get baofu withdrawal order after status update conflict: %w", getErr)
+			}
+		}
 		return fmt.Errorf("update baofu withdrawal order status: %w", err)
 	}
 	return nil
+}
+
+func isTerminalBaofuWithdrawalStatus(status string) bool {
+	switch status {
+	case db.BaofuWithdrawalStatusSucceeded, db.BaofuWithdrawalStatusFailed, db.BaofuWithdrawalStatusReturned:
+		return true
+	default:
+		return false
+	}
 }

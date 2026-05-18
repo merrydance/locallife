@@ -38,6 +38,38 @@ func (svc *PaymentFactService) markBaofuPaymentOrderPaid(ctx context.Context, ap
 	return current, nil
 }
 
+func (svc *PaymentFactService) applyBaofuOrderPaymentTerminalFailure(ctx context.Context, application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) (ApplyOrderPaymentFactResult, error) {
+	var result ApplyOrderPaymentFactResult
+	var (
+		paymentOrder db.PaymentOrder
+		err          error
+	)
+	switch fact.TerminalStatus {
+	case db.ExternalPaymentTerminalStatusClosed:
+		paymentOrder, err = svc.store.UpdatePaymentOrderToClosed(ctx, application.BusinessObjectID)
+	case db.ExternalPaymentTerminalStatusFailed:
+		paymentOrder, err = svc.store.UpdatePaymentOrderToFailed(ctx, application.BusinessObjectID)
+	default:
+		return result, fmt.Errorf("unsupported baofu payment terminal status %q", fact.TerminalStatus)
+	}
+	if err == nil {
+		result.PaymentOrder = paymentOrder
+		return result, nil
+	}
+	if !errors.Is(err, db.ErrRecordNotFound) {
+		return result, fmt.Errorf("mark baofu payment order terminal %s: %w", fact.TerminalStatus, err)
+	}
+	current, getErr := svc.store.GetPaymentOrder(ctx, application.BusinessObjectID)
+	if getErr != nil {
+		return result, fmt.Errorf("get baofu payment order after terminal update conflict: %w", getErr)
+	}
+	if current.Status == "closed" || current.Status == "failed" || current.Status == "paid" || current.Status == "refunded" {
+		result.PaymentOrder = current
+		return result, nil
+	}
+	return result, fmt.Errorf("baofu payment order %d is not terminal after %s fact: status=%s", current.ID, fact.TerminalStatus, current.Status)
+}
+
 func isBaofuMainBusinessPaymentFact(fact db.ExternalPaymentFact) bool {
 	return fact.Provider == db.ExternalPaymentProviderBaofu &&
 		fact.Channel == db.PaymentChannelBaofuAggregate &&

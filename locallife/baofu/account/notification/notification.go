@@ -146,20 +146,20 @@ func parseOfficialNotificationValues(body []byte) (url.Values, error) {
 
 func ParseOpenAccountPlaintext(plaintext []byte) (*AccountNotification, error) {
 	var payload struct {
-		MemberID        string `json:"member_id"`
-		MemberIDCamel   string `json:"memberId"`
-		TerminalID      string `json:"terminal_id"`
-		TerminalIDCamel string `json:"terminalId"`
-		MemberType      string `json:"memberType"`
-		State           string `json:"state"`
-		ErrorCode       string `json:"errorCode"`
-		ErrorMessage    string `json:"errorMsg"`
-		TransSerialNo   string `json:"transSerialNo"`
-		LoginNo         string `json:"loginNo"`
-		CustomerName    string `json:"customerName"`
-		ContractNo      string `json:"contractNo"`
-		NoticeType      string `json:"noticeType"`
-		OccurredAt      string `json:"occurredAt"`
+		MemberID        string          `json:"member_id"`
+		MemberIDCamel   string          `json:"memberId"`
+		TerminalID      string          `json:"terminal_id"`
+		TerminalIDCamel string          `json:"terminalId"`
+		MemberType      json.RawMessage `json:"memberType"`
+		State           string          `json:"state"`
+		ErrorCode       string          `json:"errorCode"`
+		ErrorMessage    string          `json:"errorMsg"`
+		TransSerialNo   string          `json:"transSerialNo"`
+		LoginNo         string          `json:"loginNo"`
+		CustomerName    string          `json:"customerName"`
+		ContractNo      string          `json:"contractNo"`
+		NoticeType      string          `json:"noticeType"`
+		OccurredAt      string          `json:"occurredAt"`
 	}
 	if err := json.Unmarshal(plaintext, &payload); err != nil {
 		return nil, err
@@ -175,27 +175,31 @@ func ParseOpenAccountPlaintext(plaintext []byte) (*AccountNotification, error) {
 	for _, field := range []struct{ name, value string }{
 		{"member_id", memberID},
 		{"terminal_id", terminalID},
-		{"memberType", payload.MemberType},
 		{"state", payload.State},
 		{"transSerialNo", payload.TransSerialNo},
 		{"loginNo", payload.LoginNo},
 		{"customerName", payload.CustomerName},
-		{"contractNo", payload.ContractNo},
 	} {
 		if strings.TrimSpace(field.value) == "" {
 			return nil, errors.New("baofu open account notification " + field.name + " is required")
 		}
+	}
+	if _, err := requiredNotificationStringOrNumber("baofu open account notification", "memberType", payload.MemberType); err != nil {
+		return nil, err
 	}
 	if !isSupportedOpenAccountNotifyState(payload.State) {
 		return nil, errors.New("baofu open account notification state is unsupported")
 	}
 	outRequestNo := strings.TrimSpace(payload.TransSerialNo)
 	openState := contracts.OpenStateFromUpstream(payload.State)
+	contractNo := strings.TrimSpace(payload.ContractNo)
+	if openState == contracts.OpenStateActive && contractNo == "" {
+		return nil, errors.New("baofu open account notification contractNo is required for successful state")
+	}
 	occurredAt := time.Now().UTC()
 	if parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(payload.OccurredAt)); err == nil {
 		occurredAt = parsed.UTC()
 	}
-	contractNo := strings.TrimSpace(payload.ContractNo)
 	return &AccountNotification{
 		MemberID:      memberID,
 		TerminalID:    terminalID,
@@ -222,6 +226,30 @@ func openAccountNotificationIdentityValue(snakeName string, snakeValue string, c
 	return camelValue, nil
 }
 
+func requiredNotificationStringOrNumber(prefix string, fieldName string, raw json.RawMessage) (string, error) {
+	raw = json.RawMessage(strings.TrimSpace(string(raw)))
+	if len(raw) == 0 || string(raw) == "null" {
+		return "", errors.New(prefix + " " + fieldName + " is required")
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		text = strings.TrimSpace(text)
+		if text == "" {
+			return "", errors.New(prefix + " " + fieldName + " is required")
+		}
+		return text, nil
+	}
+	var number json.Number
+	if err := json.Unmarshal(raw, &number); err == nil {
+		text := strings.TrimSpace(number.String())
+		if text == "" {
+			return "", errors.New(prefix + " " + fieldName + " is required")
+		}
+		return text, nil
+	}
+	return "", errors.New(prefix + " " + fieldName + " must be string or number")
+}
+
 func ParseWithdrawPlaintext(plaintext []byte) (*WithdrawNotification, error) {
 	var payload struct {
 		ContractNo          string `json:"contractNo"`
@@ -246,8 +274,6 @@ func ParseWithdrawPlaintext(plaintext []byte) (*WithdrawNotification, error) {
 		{"transFee", payload.TransFee},
 		{"transferTotalAmount", payload.TransferTotalAmount},
 		{"state", payload.State},
-		{"transRemark", payload.TransRemark},
-		{"reqReserved", payload.RequestReserved},
 	} {
 		if strings.TrimSpace(field.value) == "" {
 			return nil, errors.New("baofu withdraw notification " + field.name + " is required")

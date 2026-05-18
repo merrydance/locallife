@@ -138,6 +138,41 @@ func TestCreateExternalPaymentFact_DedupesIdenticalFactByDedupeKey(t *testing.T)
 	require.True(t, fact2.IsTerminal)
 }
 
+func TestCreateExternalPaymentFact_DedupesSameSemanticFactWhenSnapshotDiffers(t *testing.T) {
+	fact1 := createRandomExternalPaymentFact(t, ExternalPaymentTerminalStatusSuccess, true)
+
+	fact2, err := testStore.CreateExternalPaymentFact(context.Background(), CreateExternalPaymentFactParams{
+		Provider:             fact1.Provider,
+		Channel:              fact1.Channel,
+		Capability:           fact1.Capability,
+		FactSource:           fact1.FactSource,
+		SourceEventID:        fact1.SourceEventID,
+		SourceEventType:      fact1.SourceEventType,
+		ExternalObjectType:   fact1.ExternalObjectType,
+		ExternalObjectKey:    fact1.ExternalObjectKey,
+		ExternalSecondaryKey: fact1.ExternalSecondaryKey,
+		BusinessOwner:        fact1.BusinessOwner,
+		BusinessObjectType:   fact1.BusinessObjectType,
+		BusinessObjectID:     fact1.BusinessObjectID,
+		UpstreamState:        fact1.UpstreamState,
+		TerminalStatus:       fact1.TerminalStatus,
+		IsTerminal:           fact1.IsTerminal,
+		Amount:               fact1.Amount,
+		Currency:             fact1.Currency,
+		OccurredAt:           pgtype.Timestamptz{Time: time.Now().UTC().Add(time.Minute), Valid: true},
+		UpstreamUpdatedAt:    pgtype.Timestamptz{Time: time.Now().UTC().Add(time.Minute), Valid: true},
+		ObservedAt:           time.Now().UTC(),
+		RawResource:          []byte(`{"refund_status":"SUCCESS","retry":true}`),
+		DedupeKey:            fact1.DedupeKey,
+		ProcessingStatus:     ExternalPaymentFactProcessingStatusReceived,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, fact1.ID, fact2.ID)
+	require.JSONEq(t, string(fact1.RawResource), string(fact2.RawResource))
+	require.Equal(t, fact1.OccurredAt, fact2.OccurredAt)
+}
+
 func TestCreateExternalPaymentFact_AcceptsBaofuAggregateChannel(t *testing.T) {
 	now := time.Now().UTC()
 	dedupeKey := "baofu:callback:payment:" + util.RandomString(18)

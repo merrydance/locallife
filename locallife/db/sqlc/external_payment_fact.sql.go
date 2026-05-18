@@ -260,10 +260,6 @@ WHERE external_payment_facts.provider = excluded.provider
     AND external_payment_facts.is_terminal = excluded.is_terminal
     AND external_payment_facts.amount IS NOT DISTINCT FROM excluded.amount
     AND external_payment_facts.currency = excluded.currency
-    AND external_payment_facts.occurred_at IS NOT DISTINCT FROM excluded.occurred_at
-    AND external_payment_facts.upstream_updated_at IS NOT DISTINCT FROM excluded.upstream_updated_at
-    AND external_payment_facts.raw_resource = excluded.raw_resource
-    AND external_payment_facts.processing_status = excluded.processing_status
 RETURNING id, provider, channel, capability, fact_source, source_event_id, source_event_type, external_object_type, external_object_key, external_secondary_key, business_owner, business_object_type, business_object_id, upstream_state, terminal_status, is_terminal, amount, currency, occurred_at, upstream_updated_at, observed_at, raw_resource, dedupe_key, processing_status, processing_error, processed_at, created_at, updated_at
 `
 

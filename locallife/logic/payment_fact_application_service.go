@@ -334,7 +334,9 @@ func (svc *PaymentFactService) applyExternalPaymentFactToDomain(ctx context.Cont
 		if err != nil {
 			return result, err
 		}
-		result.ProfitSharingOrder = &profitSharingOrder
+		if profitSharingOrder.ID != 0 {
+			result.ProfitSharingOrder = &profitSharingOrder
+		}
 		return result, nil
 	case application.Consumer == paymentFactConsumerApplymentDomain && application.BusinessObjectType == paymentFactBusinessObjectApplyment:
 		applymentResult, err := svc.applyApplymentFact(ctx, application, fact)
@@ -445,6 +447,10 @@ func (svc *PaymentFactService) applyOrderPaymentFact(ctx context.Context, applic
 		return result, err
 	}
 	if isBaofuMainBusinessPaymentFact(fact) {
+		switch fact.TerminalStatus {
+		case db.ExternalPaymentTerminalStatusClosed, db.ExternalPaymentTerminalStatusFailed:
+			return svc.applyBaofuOrderPaymentTerminalFailure(ctx, application, fact)
+		}
 		if _, err := svc.markBaofuPaymentOrderPaid(ctx, application, fact); err != nil {
 			return result, err
 		}
@@ -1123,7 +1129,10 @@ func validateOrderPaymentFactApplication(application db.ExternalPaymentFactAppli
 	if !fact.IsTerminal {
 		return fmt.Errorf("payment fact %d is not terminal", fact.ID)
 	}
-	if fact.TerminalStatus != db.ExternalPaymentTerminalStatusSuccess {
+	if fact.TerminalStatus != db.ExternalPaymentTerminalStatusSuccess &&
+		!(isBaofuMainBusinessPaymentFact(fact) &&
+			(fact.TerminalStatus == db.ExternalPaymentTerminalStatusClosed ||
+				fact.TerminalStatus == db.ExternalPaymentTerminalStatusFailed)) {
 		return fmt.Errorf("payment fact %d terminal status %q is not success", fact.ID, fact.TerminalStatus)
 	}
 	if !isSupportedMainBusinessPaymentFact(fact) {
@@ -1293,7 +1302,7 @@ func (svc *PaymentFactService) applyOrderRefundFact(ctx context.Context, applica
 
 	switch fact.TerminalStatus {
 	case db.ExternalPaymentTerminalStatusSuccess:
-		if refundOrder.Status != riderDepositRefundStatusSuccess {
+		if refundOrder.Status != refundOrderStatusSuccess {
 			updatedRefundOrder, err := svc.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
 			if err != nil {
 				return result, fmt.Errorf("update order refund order to success: %w", err)
@@ -1304,17 +1313,41 @@ func (svc *PaymentFactService) applyOrderRefundFact(ctx context.Context, applica
 			return result, fmt.Errorf("maybe mark order payment order refunded: %w", err)
 		}
 	case db.ExternalPaymentTerminalStatusClosed:
-		if refundOrder.Status != riderDepositRefundStatusClosed {
+		if isTerminalRefundOrderStatus(refundOrder.Status) && refundOrder.Status != refundOrderStatusClosed {
+			return result, nil
+		}
+		if refundOrder.Status != refundOrderStatusClosed {
 			updatedRefundOrder, err := svc.store.UpdateRefundOrderToClosed(ctx, refundOrder.ID)
 			if err != nil {
+				if terminal, ok, reloadErr := svc.refundOrderAfterTerminalUpdateConflict(ctx, refundOrder.ID); reloadErr != nil {
+					return result, fmt.Errorf("reload order refund order after closed conflict: %w", reloadErr)
+				} else if ok {
+					if terminal.Status != refundOrderStatusClosed {
+						return result, nil
+					}
+					refundOrder = terminal
+					break
+				}
 				return result, fmt.Errorf("update order refund order to closed: %w", err)
 			}
 			refundOrder = updatedRefundOrder
 		}
 	case db.ExternalPaymentTerminalStatusFailed:
-		if refundOrder.Status != riderDepositRefundStatusFailed {
+		if isTerminalRefundOrderStatus(refundOrder.Status) && refundOrder.Status != refundOrderStatusFailed {
+			return result, nil
+		}
+		if refundOrder.Status != refundOrderStatusFailed {
 			updatedRefundOrder, err := svc.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
 			if err != nil {
+				if terminal, ok, reloadErr := svc.refundOrderAfterTerminalUpdateConflict(ctx, refundOrder.ID); reloadErr != nil {
+					return result, fmt.Errorf("reload order refund order after failed conflict: %w", reloadErr)
+				} else if ok {
+					if terminal.Status != refundOrderStatusFailed {
+						return result, nil
+					}
+					refundOrder = terminal
+					break
+				}
 				return result, fmt.Errorf("update order refund order to failed: %w", err)
 			}
 			refundOrder = updatedRefundOrder
@@ -1385,7 +1418,7 @@ func (svc *PaymentFactService) applyReservationRefundFact(ctx context.Context, a
 	transitionedToSuccess := false
 	switch fact.TerminalStatus {
 	case db.ExternalPaymentTerminalStatusSuccess:
-		if refundOrder.Status != riderDepositRefundStatusSuccess {
+		if refundOrder.Status != refundOrderStatusSuccess {
 			updatedRefundOrder, err := svc.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
 			if err != nil {
 				return result, fmt.Errorf("update reservation refund order to success: %w", err)
@@ -1405,17 +1438,41 @@ func (svc *PaymentFactService) applyReservationRefundFact(ctx context.Context, a
 			}
 		}
 	case db.ExternalPaymentTerminalStatusClosed:
-		if refundOrder.Status != riderDepositRefundStatusClosed {
+		if isTerminalRefundOrderStatus(refundOrder.Status) && refundOrder.Status != refundOrderStatusClosed {
+			return result, nil
+		}
+		if refundOrder.Status != refundOrderStatusClosed {
 			updatedRefundOrder, err := svc.store.UpdateRefundOrderToClosed(ctx, refundOrder.ID)
 			if err != nil {
+				if terminal, ok, reloadErr := svc.refundOrderAfterTerminalUpdateConflict(ctx, refundOrder.ID); reloadErr != nil {
+					return result, fmt.Errorf("reload reservation refund order after closed conflict: %w", reloadErr)
+				} else if ok {
+					if terminal.Status != refundOrderStatusClosed {
+						return result, nil
+					}
+					refundOrder = terminal
+					break
+				}
 				return result, fmt.Errorf("update reservation refund order to closed: %w", err)
 			}
 			refundOrder = updatedRefundOrder
 		}
 	case db.ExternalPaymentTerminalStatusFailed:
-		if refundOrder.Status != riderDepositRefundStatusFailed {
+		if isTerminalRefundOrderStatus(refundOrder.Status) && refundOrder.Status != refundOrderStatusFailed {
+			return result, nil
+		}
+		if refundOrder.Status != refundOrderStatusFailed {
 			updatedRefundOrder, err := svc.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
 			if err != nil {
+				if terminal, ok, reloadErr := svc.refundOrderAfterTerminalUpdateConflict(ctx, refundOrder.ID); reloadErr != nil {
+					return result, fmt.Errorf("reload reservation refund order after failed conflict: %w", reloadErr)
+				} else if ok {
+					if terminal.Status != refundOrderStatusFailed {
+						return result, nil
+					}
+					refundOrder = terminal
+					break
+				}
 				return result, fmt.Errorf("update reservation refund order to failed: %w", err)
 			}
 			refundOrder = updatedRefundOrder
@@ -1489,6 +1546,35 @@ func isOrderRefundPaymentOrder(paymentOrder db.PaymentOrder) bool {
 	return paymentOrder.OrderID.Valid && !paymentOrder.ReservationID.Valid && paymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerOrder
 }
 
+const (
+	refundOrderStatusSuccess = "success"
+	refundOrderStatusFailed  = "failed"
+	refundOrderStatusClosed  = "closed"
+)
+
+func isTerminalRefundOrderStatus(status string) bool {
+	switch status {
+	case refundOrderStatusSuccess, refundOrderStatusFailed, refundOrderStatusClosed:
+		return true
+	default:
+		return false
+	}
+}
+
+func (svc *PaymentFactService) refundOrderAfterTerminalUpdateConflict(ctx context.Context, refundOrderID int64) (db.RefundOrder, bool, error) {
+	current, err := svc.store.GetRefundOrder(ctx, refundOrderID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return db.RefundOrder{}, false, nil
+		}
+		return db.RefundOrder{}, false, err
+	}
+	if !isTerminalRefundOrderStatus(current.Status) {
+		return db.RefundOrder{}, false, nil
+	}
+	return current, true, nil
+}
+
 func (svc *PaymentFactService) maybeMarkPaymentOrderRefunded(ctx context.Context, paymentOrderID int64, paymentAmount int64) error {
 	totalRefunded, err := svc.store.GetTotalRefundedByPaymentOrder(ctx, paymentOrderID)
 	if err != nil {
@@ -1551,6 +1637,14 @@ func (svc *PaymentFactService) applyProfitSharingSuccessFact(ctx context.Context
 	}
 	updated, err := svc.store.UpdateProfitSharingOrderToFinished(ctx, profitSharingOrderID)
 	if err != nil {
+		if terminal, ok, reloadErr := svc.profitSharingOrderAfterTerminalUpdateConflict(ctx, profitSharingOrderID); reloadErr != nil {
+			return db.ProfitSharingOrder{}, fmt.Errorf("reload profit sharing order after finished conflict: %w", reloadErr)
+		} else if ok {
+			if terminal.Status == db.ProfitSharingOrderStatusFinished {
+				return terminal, nil
+			}
+			return db.ProfitSharingOrder{}, fmt.Errorf("profit sharing order %d already reached terminal status %q before success fact", profitSharingOrderID, terminal.Status)
+		}
 		return db.ProfitSharingOrder{}, fmt.Errorf("update profit sharing order to finished: %w", err)
 	}
 	return updated, nil
@@ -1564,11 +1658,41 @@ func (svc *PaymentFactService) applyProfitSharingFailedFact(ctx context.Context,
 	if order.Status == db.ProfitSharingOrderStatusFailed {
 		return order, nil
 	}
+	if order.Status == db.ProfitSharingOrderStatusFinished {
+		return db.ProfitSharingOrder{}, nil
+	}
+	if order.Status != db.ProfitSharingOrderStatusProcessing {
+		return db.ProfitSharingOrder{}, fmt.Errorf("profit sharing order %d status %q cannot apply failed fact", profitSharingOrderID, order.Status)
+	}
 	updated, err := svc.store.UpdateProfitSharingOrderToFailed(ctx, profitSharingOrderID)
 	if err != nil {
+		if terminal, ok, reloadErr := svc.profitSharingOrderAfterTerminalUpdateConflict(ctx, profitSharingOrderID); reloadErr != nil {
+			return db.ProfitSharingOrder{}, fmt.Errorf("reload profit sharing order after failed conflict: %w", reloadErr)
+		} else if ok {
+			if terminal.Status == db.ProfitSharingOrderStatusFailed {
+				return terminal, nil
+			}
+			return db.ProfitSharingOrder{}, nil
+		}
 		return db.ProfitSharingOrder{}, fmt.Errorf("update profit sharing order to failed: %w", err)
 	}
 	return updated, nil
+}
+
+func (svc *PaymentFactService) profitSharingOrderAfterTerminalUpdateConflict(ctx context.Context, profitSharingOrderID int64) (db.ProfitSharingOrder, bool, error) {
+	current, err := svc.store.GetProfitSharingOrder(ctx, profitSharingOrderID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return db.ProfitSharingOrder{}, false, nil
+		}
+		return db.ProfitSharingOrder{}, false, err
+	}
+	switch current.Status {
+	case db.ProfitSharingOrderStatusFinished, db.ProfitSharingOrderStatusFailed:
+		return current, true, nil
+	default:
+		return db.ProfitSharingOrder{}, false, nil
+	}
 }
 
 func (svc *PaymentFactService) applyProfitSharingReturnFact(ctx context.Context, application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) (profitSharingReturnDomainResult, error) {

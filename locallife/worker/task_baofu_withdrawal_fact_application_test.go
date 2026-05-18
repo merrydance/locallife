@@ -43,3 +43,25 @@ func TestProcessTaskBaofuWithdrawalFactApplicationMapsReturnedState(t *testing.T
 	err = processor.ProcessTaskBaofuWithdrawalFactApplication(context.Background(), asynq.NewTask(worker.TaskProcessBaofuWithdrawalFactApplication, payload))
 	require.NoError(t, err)
 }
+
+func TestProcessTaskBaofuWithdrawalFactApplicationDoesNotRegressTerminalOrder(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	withdrawal := db.BaofuWithdrawalOrder{ID: 78, OutRequestNo: "WD_TERMINAL", Status: db.BaofuWithdrawalStatusSucceeded}
+
+	store.EXPECT().GetBaofuWithdrawalOrder(gomock.Any(), withdrawal.ID).Return(withdrawal, nil)
+
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
+	payload, err := json.Marshal(worker.BaofuWithdrawalFactApplicationPayload{
+		WithdrawalOrderID: withdrawal.ID,
+		UpstreamState:     "2",
+		BaofuWithdrawNo:   "BF_PROCESSING",
+		RawSnapshot:       []byte(`{"state":"2"}`),
+	})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskBaofuWithdrawalFactApplication(context.Background(), asynq.NewTask(worker.TaskProcessBaofuWithdrawalFactApplication, payload))
+	require.NoError(t, err)
+}

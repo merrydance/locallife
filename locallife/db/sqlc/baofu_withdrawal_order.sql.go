@@ -235,6 +235,7 @@ SET
     finished_at = CASE WHEN $1 IN ('succeeded', 'failed', 'returned') THEN now() ELSE finished_at END,
     updated_at = now()
 WHERE id = $4
+  AND status = 'processing'
 RETURNING id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at
 `
 

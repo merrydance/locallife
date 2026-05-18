@@ -160,3 +160,40 @@ func TestCreateProfitSharingOrderPersistsBaofuFields(t *testing.T) {
 	require.Equal(t, "PLATFORM_SHARE", profitSharingOrder.PlatformSharingMerID.String)
 	require.JSONEq(t, string(snapshot), string(profitSharingOrder.SharingDetailSnapshot))
 }
+
+func TestUpdateProfitSharingOrderToFailedDoesNotRegressFinished(t *testing.T) {
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	operator := createRandomOperatorForRegion(t, merchant.RegionID)
+	paymentOrder := createRandomPaymentOrder(t, createRandomUser(t).ID)
+
+	order, err := testStore.CreateProfitSharingOrder(context.Background(), CreateProfitSharingOrderParams{
+		PaymentOrderID:      paymentOrder.ID,
+		MerchantID:          merchant.ID,
+		OperatorID:          pgtype.Int8{Int64: operator.ID, Valid: true},
+		OrderSource:         "takeout",
+		TotalAmount:         10000,
+		DeliveryFee:         500,
+		RiderID:             pgtype.Int8{Valid: false},
+		RiderAmount:         0,
+		DistributableAmount: 9500,
+		PlatformRate:        2,
+		OperatorRate:        3,
+		PlatformCommission:  200,
+		OperatorCommission:  300,
+		MerchantAmount:      9500,
+		OutOrderNo:          "pso_guard_" + util.RandomString(16),
+		Status:              ProfitSharingOrderStatusProcessing,
+	})
+	require.NoError(t, err)
+
+	finished, err := testStore.UpdateProfitSharingOrderToFinished(context.Background(), order.ID)
+	require.NoError(t, err)
+	require.Equal(t, ProfitSharingOrderStatusFinished, finished.Status)
+
+	_, err = testStore.UpdateProfitSharingOrderToFailed(context.Background(), order.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+
+	current, err := testStore.GetProfitSharingOrder(context.Background(), order.ID)
+	require.NoError(t, err)
+	require.Equal(t, ProfitSharingOrderStatusFinished, current.Status)
+}

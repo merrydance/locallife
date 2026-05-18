@@ -180,7 +180,7 @@ RETURNING *;
 UPDATE profit_sharing_orders
 SET
     status = 'failed'
-WHERE id = $1
+WHERE id = $1 AND status = 'processing'
 RETURNING *;
 
 -- name: GetMerchantProfitSharingStats :one
