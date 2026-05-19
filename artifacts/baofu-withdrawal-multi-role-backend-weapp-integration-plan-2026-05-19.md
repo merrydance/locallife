@@ -3,8 +3,21 @@
 **日期**：2026-05-19  
 **范围**：`locallife/` 宝付宝财通提现 HTTP 契约、共享提现服务接线、角色级权限解析、回调/恢复一致性；`weapp/` 商户、平台、运营商、骑手收入提现入口与页面组。  
 **风险等级**：G3。原因：涉及多角色资金提现、宝付宝财通二级户、外部支付命令、回调/轮询恢复、重复提交、对象级授权、提现账户归属、前端资金结果承接。  
-**当前结论**：后端已经有宝付宝财通提现的 provider/logic/回调/恢复能力，但没有实现可供商户、平台、运营商、骑手收入场景调用的产品化 HTTP 提现接口。小程序端目前也没有可直接接入的真实宝付提现 API。  
+**当前结论**：后端宝付宝财通提现 HTTP 契约已经落地，商户小程序已接入真实宝付提现列表、发起和详情回读；平台、运营商、骑手收入的小程序页面仍待按后续批次接入。
 **执行原则**：先补后端真实契约和测试，再接小程序。前端不得伪造可提现余额、提现成功、提现终态或跨角色 owner 身份。
+
+**2026-05-19 执行进度更新**：
+
+- 已提交后端文档批次：`0df8f47a docs: plan multi-role baofu withdrawal integration`。
+- 已提交后端契约批次：`e11784cb feat(api): expose shared baofu withdrawal contract`。
+- 已新增小程序共享 API：`weapp/miniprogram/api/baofu-withdrawal.ts`。
+- 已新增小程序共享 workflow：`weapp/miniprogram/services/baofu-withdrawal-workflow.ts`。
+- 已接入商户提现页面组：
+  - `weapp/miniprogram/pages/merchant/finance/withdrawals/index.*`
+  - `weapp/miniprogram/pages/merchant/finance/withdrawals/create/index.*`
+  - `weapp/miniprogram/pages/merchant/finance/withdrawals/detail/index.*`
+- 已新增并挂入质量门禁：`weapp/scripts/check-baofu-withdrawal-workflow.js`。
+- 本轮小程序验证已通过：`cd weapp && npm run quality:check`。
 
 ---
 
@@ -43,9 +56,32 @@
 
 这说明提现底层链路可以跨角色复用；缺口主要在产品化 HTTP 边界、角色权限解析、前端 workflow 和入口。
 
-### 1.2 不存在的后端能力
+### 1.2 后端 HTTP 契约当前状态
 
-当前没有看到任一角色可调用的宝付提现 HTTP 契约：
+后端已新增宝付提现 HTTP 契约，并保留历史微信平台收付通商户提现路径作为旧 provider path：
+
+- 新增商户宝付提现路由：
+  - `GET /v1/merchant/finance/baofu-withdrawal/balance`
+  - `GET /v1/merchant/finance/baofu-withdrawal/withdrawals`
+  - `GET /v1/merchant/finance/baofu-withdrawal/withdrawals/:id`
+  - `POST /v1/merchant/finance/baofu-withdrawal/withdraw`
+- 新增平台宝付提现路由：
+  - `GET /v1/platform/finance/baofu-withdrawal/balance`
+  - `GET /v1/platform/finance/baofu-withdrawal/withdrawals`
+  - `GET /v1/platform/finance/baofu-withdrawal/withdrawals/:id`
+  - `POST /v1/platform/finance/baofu-withdrawal/withdraw`
+- 新增运营商宝付提现路由：
+  - `GET /v1/operators/me/finance/baofu-withdrawal/balance`
+  - `GET /v1/operators/me/finance/baofu-withdrawal/withdrawals`
+  - `GET /v1/operators/me/finance/baofu-withdrawal/withdrawals/:id`
+  - `POST /v1/operators/me/finance/baofu-withdrawal/withdraw`
+- 新增骑手收入宝付提现路由：
+  - `GET /v1/rider/income/baofu-withdrawal/balance`
+  - `GET /v1/rider/income/baofu-withdrawal/withdrawals`
+  - `GET /v1/rider/income/baofu-withdrawal/withdrawals/:id`
+  - `POST /v1/rider/income/baofu-withdrawal/withdraw`
+
+保留但不能作为宝付提现复用的旧路由：
 
 - 商户旧提现路由仍是历史微信平台收付通路径：
   - `GET /v1/merchant/finance/account/withdrawals`
@@ -53,24 +89,40 @@
   - `POST /v1/merchant/finance/account/withdraw`
 - 这些路由被 `gateEcommerceFundManagementWhenOrdinaryActive(...)` 包裹，并调用 `locallife/api/merchant_finance.go` 中的历史收付通提现实现。
 - `merchant_finance.go` 的提现创建调用 `server.ecommerceClient.CreateEcommerceWithdraw(...)`，不是宝付 `BaofuWithdrawService.CreateWithdrawal(...)`。
-- `NewBaofuWithdrawService` 目前没有作为 `api.Server` 的生产 HTTP 服务注入给任一角色。
-- 平台、运营商、骑手收入都没有宝付提现 create/list/detail/balance HTTP routes。
 
-结论：如果目标是“宝付宝财通提现”，后端还缺产品化 HTTP 边界；如果目标是“历史微信收付通商户提现”或“骑手保证金退款”，那些不是同一条能力，不能复用成宝付收入提现。
+当前仍需后续确认或加强：
+
+- 宝付提现创建的 `client_request_id` 幂等语义尚未产品化；当前创建接口按后端生成唯一 `out_request_no` 并重新查询余额。
+- 平台 owner ID 当前使用后端单一常量，若未来出现多平台开户主体，必须改为配置或主体表解析。
+- 骑手收入提现虽然已有后端 route，但前端开放仍要以收入可提现余额口径为准，不能用累计收入推断。
 
 ### 1.3 小程序现状
 
-商户提现页面当前是迁移占位，不是真实宝付提现：
+商户提现页面已经从迁移占位改为真实宝付提现：
 
-- `weapp/miniprogram/pages/merchant/finance/withdrawals/index.wxml`
-- `weapp/miniprogram/pages/merchant/finance/withdrawals/create/index.wxml`
-- `weapp/miniprogram/pages/merchant/finance/withdrawals/detail/index.wxml`
+- `weapp/miniprogram/pages/merchant/finance/withdrawals/index.*`
+  - 调用 `getBaofuWithdrawalBalance('merchant')`
+  - 调用 `listBaofuWithdrawals('merchant', { page, limit })`
+  - 展示可提现余额、处理中金额、结算账户入口、提现记录、加载更多、首屏失败和保留可信数据后的局部刷新失败。
+- `weapp/miniprogram/pages/merchant/finance/withdrawals/create/index.*`
+  - 进入页重新调用 `getBaofuWithdrawalBalance('merchant')`
+  - 提交前用共享 workflow 校验金额、小数位、最低提现金额、可提现余额和禁用原因。
+  - 调用 `createBaofuWithdrawal('merchant', { amount })`，成功后进入详情页，不展示到账成功。
+- `weapp/miniprogram/pages/merchant/finance/withdrawals/detail/index.*`
+  - 调用 `getBaofuWithdrawal('merchant', id)`
+  - 展示金额、状态、申请单号、申请时间、更新时间、状态说明。
+  - 支持刷新状态；刷新失败保留上次可信记录。
 
-页面显示：
+小程序共享层已新增：
 
-- `提现功能已迁移`
-- `请前往微信支付商户平台/商家助手处理提现账户和提现申请`
-- `提现记录请在微信支付商户平台/商家助手查看`
+- `weapp/miniprogram/api/baofu-withdrawal.ts`
+  - 只接受 `role`，不接受 `owner_type` / `owner_id`。
+  - 角色 endpoint resolver 固定到后端新增宝付提现 routes。
+- `weapp/miniprogram/services/baofu-withdrawal-workflow.ts`
+  - 金额格式化和金额输入解析。
+  - 余额 view model。
+  - 状态 view model。
+  - 提交校验。
 
 运营商页面路径名叫 `withdraw`，但实际是财务概览，不是真实提现：
 
@@ -925,58 +977,76 @@ git commit -m "feat(weapp): add rider income withdrawal flow"
 
 ---
 
-## 9. 当前不执行小程序真实提现的原因
+## 9. 当前执行边界
 
-本次审查后，不应马上改小程序真实提现，原因是：
+### 9.1 已允许执行的范围
 
-1. 宝付提现 HTTP 契约不存在，小程序没有可调用的真实接口。
-2. 历史 `/v1/merchant/finance/account/withdraw*` 是微信平台收付通提现，不是宝付宝财通提现。
-3. 现有 `/v1/rider/withdraw` 是骑手保证金退款，不是骑手收入提现。
-4. 商户小程序提现页当前是迁移说明，不是半成品接口接入；直接替换成表单会制造资金动作假入口。
-5. 运营商 `finance/withdraw` 页面实际是财务概览；直接在里面塞提现会让入口语义继续混乱。
-6. 平台和骑手收入提现缺少前端页面组，骑手收入还缺可提现余额口径。
-7. 宝付提现是 G3 资金链路，必须先在后端补齐权限、幂等、状态、回调、恢复和安全错误文案。
+后端宝付提现 HTTP 契约已存在后，当前允许执行并已完成：
+
+1. 小程序新增跨角色宝付提现 API 封装。
+2. 小程序新增跨角色宝付提现 workflow。
+3. 商户小程序提现列表、发起、详情接入真实宝付提现接口。
+
+商户端真实提现接入必须继续遵守：
+
+- 不调用历史 `/v1/merchant/finance/account/withdraw*` 微信平台收付通提现路径。
+- 不调用现有 `/v1/rider/withdraw` 骑手保证金退款路径。
+- 不在创建返回后展示到账成功，只展示已受理/处理中和后续详情回读。
+- 不允许前端传 `owner_type`、`owner_id` 或其他 owner scope。
+- 余额查询失败时不能提交提现。
+
+### 9.2 仍不应马上开放的范围
+
+平台、运营商、骑手收入的小程序真实提现仍应按后续批次执行，不能直接复制商户页面后上线，原因是：
+
+1. 运营商 `finance/withdraw` 页面实际是财务概览；接入前必须先整理为 `财务概览`、`结算账户`、`提现` 三个清晰入口。
+2. 平台 dashboard 的 `宝付结算账户` 入口需要改成用户友好的 `结算账户`，并新增独立 `提现` 入口。
+3. 骑手收入提现必须与 `pages/rider/deposit/index` 保证金退款保持隔离。
+4. 骑手收入前端开放必须确认后端余额响应代表收入可提现能力，不能用收入累计值推断。
+5. 平台和运营商的创建权限虽然有后端 route 包裹，页面仍需按角色任务和无权限状态做可见承接。
+6. 宝付提现是 G3 资金链路；每个角色页面都必须单独验证重复提交、弱网、回读失败和跨角色 API 不串用。
 
 ---
 
 ## 10. 验收总清单
 
-- [ ] 后端新增宝付提现共享 service 接线，且不复用历史微信收付通提现 path。
-- [ ] 后端不改坏现有 `/v1/rider/withdraw` 保证金退款 path。
-- [ ] 商户、平台、运营商、骑手收入都有 role-scoped routes 或明确阶段性禁用策略。
-- [ ] 商户 owner 才能发起提现，manager 只能查看。
-- [ ] 平台提现创建只允许平台财务/管理员。
-- [ ] 运营商提现创建只允许运营商主体 owner 或明确财务角色。
-- [ ] 骑手收入提现只允许骑手本人。
-- [ ] 后端不信任前端 owner 字段。
-- [ ] 提现创建前查询宝付余额或后端可信可提现资产并校验金额。
+- [x] 后端新增宝付提现共享 service 接线，且不复用历史微信收付通提现 path。
+- [x] 后端不改坏现有 `/v1/rider/withdraw` 保证金退款 path。
+- [x] 商户、平台、运营商、骑手收入都有 role-scoped routes 或明确阶段性禁用策略。
+- [x] 商户 owner 才能发起提现，manager 只能查看。
+- [x] 平台提现创建只允许平台财务/管理员。
+- [x] 运营商提现创建只允许运营商主体 owner 或明确财务角色。
+- [x] 骑手收入提现只允许骑手本人。
+- [x] 后端不信任前端 owner 字段。
+- [x] 提现创建前查询宝付余额或后端可信可提现资产并校验金额。
 - [ ] 骑手收入不使用账本累计收入推断可提现余额。
-- [ ] 提现记录分页有 count query。
-- [ ] 回调、恢复任务、详情展示不会让终态回退。
-- [ ] 小程序 API 只调用 `/baofu-withdrawal/*` 新接口。
-- [ ] 小程序共享 workflow 不决定 owner 和角色权限。
+- [x] 提现记录分页有 count query。
+- [x] 回调、恢复任务、详情展示不会让终态回退。
+- [x] 小程序 API 只调用 `/baofu-withdrawal/*` 新接口。
+- [x] 小程序共享 workflow 不决定 owner 和角色权限。
 - [ ] 商户、平台、运营商、骑手收入页面不互相调用错误角色 API。
 - [ ] 运营商和平台入口展示 `结算账户` / `提现`，不把 `宝付结算账户` 当作用户主词。
 - [ ] 骑手保证金退款与骑手收入提现页面、API、文案保持分离。
-- [ ] 小程序提交中态、防重入、结果未知和刷新失败都有页面承接。
+- [x] 商户小程序提交中态、防重入、结果未知和刷新失败都有页面承接。
+- [ ] 平台、运营商、骑手收入小程序提交中态、防重入、结果未知和刷新失败都有页面承接。
 - [ ] `cd locallife && go test ./api -run 'TestBaofuWithdrawal|TestBaofuWithdrawCallback|TestCasbin'` 通过。
 - [ ] `cd locallife && go test ./logic -run 'TestBaofuWithdrawService'` 通过。
 - [ ] `cd locallife && go test ./worker -run 'TestBaofuWithdrawal'` 通过。
 - [ ] `cd locallife && make check-baofu-contract && make check-generated` 通过。
-- [ ] `cd weapp && npm run quality:check && git diff --check` 通过。
+- [x] `cd weapp && npm run quality:check` 通过。
+- [ ] `git diff --check` 通过。
 
 ---
 
 ## 11. 剩余风险记录
 
-在后端契约完成前，剩余风险明确落在：
+后端契约完成且商户小程序接入后，剩余风险明确落在：
 
-- 商户、平台、运营商、骑手收入小程序都没有宝付提现真实接口可调用。
+- 平台、运营商、骑手收入小程序尚未接入宝付提现真实页面。
 - 宝付提现创建的重复请求幂等策略尚未产品化。
 - 宝付提现详情页是否触发即时查询仍需后端确定单写入口，避免 HTTP handler 与 worker 同时写状态。
-- `BAOFU_WITHDRAW_NOTIFY_URL` 独立配置当前缺失，需要补齐或稳定使用 `BAOFU_NOTIFY_BASE_URL + /withdraw`。
-- 平台 owner ID 的生产来源需要确认，不能仅凭测试里的 `platform:0` 推断。
+- 平台 owner ID 当前以后端单一常量承接；如果未来有多平台开户主体，生产来源需要调整。
 - 骑手收入可提现余额尚未被后端契约明确，不能把收入累计值当提现余额。
 - 运营商当前 `finance/withdraw` 路径名和页面内容不一致，接入提现前必须整理入口语义。
 
-这些风险未关闭前，不能对外宣称“小程序真实宝付提现已接入”。
+这些风险未关闭前，只能对外宣称“商户小程序真实宝付提现已接入”，不能宣称“平台、运营商、骑手收入真实宝付提现已接入”。
