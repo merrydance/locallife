@@ -90,8 +90,16 @@ Page({
     this.setData({ submitting: true })
     try {
       const result = await createBaofuWithdrawal('operator', { amount: check.amount })
+      const withdrawalID = Number(result.withdrawal.id || 0)
+      if (!withdrawalID) {
+        throw new Error('提现申请结果确认中，请稍后查看提现记录')
+      }
+      wx.showToast({
+        title: result.message || result.withdrawal.sync_message || '提现申请已提交，请等待处理结果',
+        icon: 'none'
+      })
       wx.redirectTo({
-        url: `${DETAIL_PAGE_PATH}?id=${result.withdrawal.id}&created=1`
+        url: `${DETAIL_PAGE_PATH}?id=${withdrawalID}&created=1`
       })
     } catch (error) {
       logger.warn('Submit operator baofu withdrawal failed', error)

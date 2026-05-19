@@ -99,10 +99,14 @@ const merchantWithdrawalSources = [
 const rolePageGroups = {
   merchant: {
     label: 'Merchant',
+    listPagePath: 'miniprogram/pages/merchant/finance/withdrawals/index.ts',
+    createPagePath: 'miniprogram/pages/merchant/finance/withdrawals/create/index.ts',
     source: merchantWithdrawalSources
   },
   platform: {
     label: 'Platform',
+    listPagePath: 'miniprogram/pages/platform/finance/withdrawals/index.ts',
+    createPagePath: 'miniprogram/pages/platform/finance/withdrawals/create/index.ts',
     source: [
       read('miniprogram/pages/platform/finance/withdrawals/index.ts'),
       read('miniprogram/pages/platform/finance/withdrawals/create/index.ts'),
@@ -111,6 +115,8 @@ const rolePageGroups = {
   },
   operator: {
     label: 'Operator',
+    listPagePath: 'miniprogram/pages/operator/finance/withdrawals/index.ts',
+    createPagePath: 'miniprogram/pages/operator/finance/withdrawals/create/index.ts',
     source: [
       read('miniprogram/pages/operator/finance/withdrawals/index.ts'),
       read('miniprogram/pages/operator/finance/withdrawals/create/index.ts'),
@@ -119,6 +125,8 @@ const rolePageGroups = {
   },
   rider: {
     label: 'Rider income',
+    listPagePath: 'miniprogram/pages/rider/income/withdrawals/index.ts',
+    createPagePath: 'miniprogram/pages/rider/income/withdrawals/create/index.ts',
     source: [
       read('miniprogram/pages/rider/income/withdrawals/index.ts'),
       read('miniprogram/pages/rider/income/withdrawals/create/index.ts'),
@@ -141,7 +149,27 @@ for (const [role, group] of Object.entries(rolePageGroups)) {
   assert(!group.source.includes('owner_id'), `${group.label} withdrawal pages must not pass owner_id`)
   assert(!group.source.includes('/account/withdraw'), `${group.label} withdrawal pages must not call legacy WeChat withdraw routes`)
   assert(!group.source.includes('/v1/rider/withdraw'), `${group.label} withdrawal pages must not call rider deposit withdraw routes`)
+
+  const listPage = read(group.listPagePath)
+  assert(!listPage.includes('Promise.all([\n      getBaofuWithdrawalBalance'), `${group.label} withdrawal list must not couple balance and records with raw Promise.all`)
+  assert(
+    listPage.includes('Promise.allSettled') || listPage.includes('settleBaofuWithdrawalRequest'),
+    `${group.label} withdrawal list must isolate balance and records failures`
+  )
+  assert(listPage.includes('balanceErrorMessage'), `${group.label} withdrawal list must expose balance error state`)
+  assert(listPage.includes('recordsErrorMessage'), `${group.label} withdrawal list must expose records error state`)
+  assert(listPage.includes('withdrawalBalanceUnavailableView'), `${group.label} withdrawal list must disable create when balance is unavailable`)
+
+  const createPage = read(group.createPagePath)
+  assert(createPage.includes('result.withdrawal.id'), `${group.label} create page must navigate from returned withdrawal id`)
+  assert(createPage.includes('result.message') || createPage.includes('sync_message'), `${group.label} create page must surface accepted/unknown create message`)
 }
+
+const userFacingSource = read('miniprogram/utils/user-facing.ts')
+assert(userFacingSource.includes("'提现'"), 'User-facing mapper must allow safe withdrawal copy')
+assert(userFacingSource.includes("'可提现'"), 'User-facing mapper must allow safe withdrawable-balance copy')
+assert(userFacingSource.includes("'结算账户'"), 'User-facing mapper must allow safe settlement account copy')
+assert(userFacingSource.includes("'余额'"), 'User-facing mapper must allow safe balance copy')
 
 const appConfig = JSON.parse(read('miniprogram/app.json'))
 

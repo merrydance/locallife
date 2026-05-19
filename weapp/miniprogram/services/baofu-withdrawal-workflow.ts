@@ -54,6 +54,13 @@ export interface BaofuWithdrawalItemView extends BaofuWithdrawalItem {
   updatedAtText: string
 }
 
+export type BaofuWithdrawalSettledResult<T> =
+  | { status: 'fulfilled', value: T }
+  | { status: 'rejected', reason: unknown }
+
+export type BaofuWithdrawalFulfilledResult<T> = { status: 'fulfilled', value: T }
+export type BaofuWithdrawalRejectedResult = { status: 'rejected', reason: unknown }
+
 export function formatFenToYuanText(amount?: number): string {
   const normalized = Number.isFinite(amount) ? Math.max(Number(amount), 0) : 0
   return `¥${(normalized / 100).toFixed(2)}`
@@ -181,6 +188,50 @@ export function buildBaofuWithdrawalBalanceView(
     disabledReason,
     statusDesc: String(balance?.status_desc || '').trim()
   }
+}
+
+export function withdrawalBalanceUnavailableView(message?: string): BaofuWithdrawalBalanceView {
+  const fallback = String(message || '').trim() || '可提现余额暂不可确认'
+  const minWithdrawAmount = 100
+  const maxWithdrawAmount = 500000000
+  return {
+    availableAmount: 0,
+    pendingAmount: 0,
+    ledgerAmount: 0,
+    frozenAmount: 0,
+    minWithdrawAmount,
+    maxWithdrawAmount,
+    availableAmountText: '--',
+    pendingAmountText: '--',
+    ledgerAmountText: '--',
+    frozenAmountText: '--',
+    minWithdrawAmountText: formatFenToYuanText(minWithdrawAmount),
+    maxWithdrawAmountText: formatFenToYuanText(maxWithdrawAmount),
+    canSubmit: false,
+    disabledReason: fallback,
+    statusDesc: '余额暂不可确认'
+  }
+}
+
+export function settleBaofuWithdrawalRequest<T>(
+  request: Promise<T>
+): Promise<BaofuWithdrawalSettledResult<T>> {
+  return request.then(
+    (value) => ({ status: 'fulfilled', value }),
+    (reason) => ({ status: 'rejected', reason })
+  )
+}
+
+export function isBaofuWithdrawalRequestFulfilled<T>(
+  result: BaofuWithdrawalSettledResult<T>
+): result is BaofuWithdrawalFulfilledResult<T> {
+  return result.status === 'fulfilled'
+}
+
+export function isBaofuWithdrawalRequestRejected<T>(
+  result: BaofuWithdrawalSettledResult<T>
+): result is BaofuWithdrawalRejectedResult {
+  return result.status === 'rejected'
 }
 
 export function buildBaofuWithdrawalSubmitCheck(

@@ -26,9 +26,12 @@
       <t-cell title="结算账户" note="{{balanceView.statusDesc || '结算账户已开通'}}" arrow url="/pages/platform/finance/settlement-account/index" />
     </t-cell-group>
 
+    <t-notice-bar wx:if="{{balanceErrorMessage}}" theme="warning" content="{{balanceErrorMessage}}" />
+
     <t-button theme="primary" block loading="{{loadingWithdrawals}}" disabled="{{!balanceView.canSubmit || loadingWithdrawals}}" bind:tap="onOpenCreate">申请提现</t-button>
 
-    <t-empty wx:if="{{!rows.length}}" icon="info-circle" description="暂无提现记录" />
+    <t-empty wx:if="{{recordsErrorMessage && !rows.length}}" icon="error-circle" description="{{recordsErrorMessage}}" />
+    <t-empty wx:elif="{{!rows.length}}" icon="info-circle" description="暂无提现记录" />
     <t-cell-group wx:else>
       <t-cell
         wx:for="{{rows}}"

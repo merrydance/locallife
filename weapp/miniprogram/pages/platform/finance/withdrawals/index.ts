@@ -7,6 +7,10 @@ import {
 import {
   buildBaofuWithdrawalBalanceView,
   buildBaofuWithdrawalItemView,
+  isBaofuWithdrawalRequestFulfilled,
+  isBaofuWithdrawalRequestRejected,
+  settleBaofuWithdrawalRequest,
+  withdrawalBalanceUnavailableView,
   type BaofuWithdrawalBalanceView,
   type BaofuWithdrawalItemView
 } from '../../../../services/baofu-withdrawal-workflow'
@@ -19,8 +23,10 @@ const CREATE_PAGE_PATH = '/pages/platform/finance/withdrawals/create/index'
 const DETAIL_PAGE_PATH = '/pages/platform/finance/withdrawals/detail/index'
 
 interface PlatformWithdrawalFetchResult {
-  balance: BaofuWithdrawalBalanceResponse
+  balance?: BaofuWithdrawalBalanceResponse
+  balanceErrorMessage: string
   withdrawals: BaofuWithdrawalItem[]
+  recordsErrorMessage: string
   page: number
   totalPages: number
 }
@@ -34,6 +40,8 @@ Page({
     initialError: false,
     initialErrorMessage: '',
     refreshErrorMessage: '',
+    balanceErrorMessage: '',
+    recordsErrorMessage: '',
     loadingWithdrawals: false,
     balanceView: EMPTY_BALANCE_VIEW as BaofuWithdrawalBalanceView,
     rows: [] as BaofuWithdrawalItemView[],
@@ -84,7 +92,9 @@ Page({
             initialLoading: true,
             initialError: false,
             initialErrorMessage: '',
-            refreshErrorMessage: ''
+            refreshErrorMessage: '',
+            balanceErrorMessage: '',
+            recordsErrorMessage: ''
           })
     })
 
@@ -92,14 +102,19 @@ Page({
       const result = await this.fetchWithdrawals(page)
       const nextRows = result.withdrawals.map(buildBaofuWithdrawalItemView)
       const rows = append ? this.data.rows.concat(nextRows) : nextRows
+      const balanceView = result.balance
+        ? buildBaofuWithdrawalBalanceView(result.balance)
+        : withdrawalBalanceUnavailableView(result.balanceErrorMessage)
 
       this.setData({
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
-        refreshErrorMessage: '',
+        refreshErrorMessage: result.recordsErrorMessage,
+        balanceErrorMessage: result.balanceErrorMessage,
+        recordsErrorMessage: result.recordsErrorMessage,
         loadingWithdrawals: false,
-        balanceView: buildBaofuWithdrawalBalanceView(result.balance),
+        balanceView,
         rows,
         page: result.page,
         totalPages: result.totalPages,
@@ -121,16 +136,37 @@ Page({
   },
 
   async fetchWithdrawals(page: number): Promise<PlatformWithdrawalFetchResult> {
-    const [balance, records] = await Promise.all([
-      getBaofuWithdrawalBalance('platform'),
-      listBaofuWithdrawals('platform', { page, limit: PAGE_SIZE })
+    const [balanceResult, recordsResult] = await Promise.all([
+      settleBaofuWithdrawalRequest(getBaofuWithdrawalBalance('platform')),
+      settleBaofuWithdrawalRequest(listBaofuWithdrawals('platform', { page, limit: PAGE_SIZE }))
     ])
+
+    if (isBaofuWithdrawalRequestRejected(balanceResult)) {
+      logger.warn('Platform baofu withdrawal balance load failed', balanceResult.reason)
+    }
+    if (isBaofuWithdrawalRequestRejected(recordsResult)) {
+      logger.warn('Platform baofu withdrawals records load failed', recordsResult.reason)
+    }
+    if (isBaofuWithdrawalRequestRejected(balanceResult) && isBaofuWithdrawalRequestRejected(recordsResult)) {
+      throw new Error('提现信息加载失败，请稍后重试')
+    }
+
+    const balance = isBaofuWithdrawalRequestFulfilled(balanceResult) ? balanceResult.value : undefined
+    const records = isBaofuWithdrawalRequestFulfilled(recordsResult) ? recordsResult.value : undefined
 
     return {
       balance,
-      withdrawals: records.withdrawals || [],
-      page: records.page || page,
-      totalPages: records.total_pages || 0
+      balanceErrorMessage: balance ? '' : getErrorUserMessage(
+        isBaofuWithdrawalRequestRejected(balanceResult) ? balanceResult.reason : undefined,
+        '可提现余额暂不可确认，提现申请已暂停，提现记录可继续查看'
+      ),
+      withdrawals: records?.withdrawals || [],
+      recordsErrorMessage: records ? '' : getErrorUserMessage(
+        isBaofuWithdrawalRequestRejected(recordsResult) ? recordsResult.reason : undefined,
+        '提现记录加载失败，请稍后刷新'
+      ),
+      page: records?.page || page,
+      totalPages: records?.total_pages || 0
     }
   },
 
@@ -139,6 +175,13 @@ Page({
   },
 
   onOpenCreate() {
+    if (this.data.balanceErrorMessage) {
+      wx.showToast({
+        title: this.data.balanceErrorMessage,
+        icon: 'none'
+      })
+      return
+    }
     if (!this.data.balanceView.canSubmit) {
       wx.showToast({
         title: this.data.balanceView.disabledReason || '当前暂不能提现',

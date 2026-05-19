@@ -70,7 +70,11 @@ const SAFE_COPY_PREFIXES = [
   '图片',
   '内容',
   '服务',
-  '登录'
+  '登录',
+  '提现',
+  '可提现',
+  '结算账户',
+  '余额'
 ]
 
 function asNonEmptyString(value: unknown): string | undefined {

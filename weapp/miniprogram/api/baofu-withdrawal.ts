@@ -48,6 +48,7 @@ export interface CreateBaofuWithdrawalRequest {
 
 export interface CreateBaofuWithdrawalResponse {
   withdrawal: BaofuWithdrawalItem
+  message?: string
 }
 
 export interface ListBaofuWithdrawalsParams {
