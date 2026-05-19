@@ -14,6 +14,8 @@ This directory is the canonical home for project-owned standards and normative d
 - `domains/wechat-payment/`: WeChat payment standards, runbooks, and an index that separates active guidance from historical rollout material.
 - `domains/baofu-payment/`: Baofoo/Baofu BaoCaiTong payment contract standards, field matrices, raw-source ledger, and evidence ledger.
 
+External API and provider contract rules live under `backend/EXTERNAL_API_CONTRACT_STANDARDS.md`; provider-specific source matrices and evidence ledgers should live under the matching `domains/*` directory when one exists.
+
 ## Canonical Rule
 
 Files in this directory are the canonical project-owned standards.

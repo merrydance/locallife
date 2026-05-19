@@ -17,6 +17,7 @@
 然后按任务实际需要再打开最小相关深文档，而不是每次都把后端全栈指导全部读完：
 
 - `API_CONTRACT_STANDARDS.md`: 路由、状态码、empty-state、契约语义
+- `EXTERNAL_API_CONTRACT_STANDARDS.md`: 外部 API / provider 契约真值、字段矩阵、漂移复核、错误映射与降级约束
 - `SYSTEM_PROMPT.md`: 分层、middleware、DTO、依赖注入等实现细则
 - `GO_PRACTICES.md`: Go 代码组织、并发、context、测试与 Go guard 规则
 - `SQL_STANDARDS.md`: SQL、migration、索引、并发写语义与 SQL guard 规则
@@ -36,6 +37,7 @@
 - `BACKEND_REVIEW_CLOSEOUT_CHECKLIST.md`: backend review/audit 结束前的收口清单。
 - `FORMAL_REVIEW_DURABILITY.md`: 正式 backend review 如何把 findings、模式和审查范围沉淀为 durable knowledge。
 - `API_CONTRACT_STANDARDS.md`: API 契约语义与状态码口径。
+- `EXTERNAL_API_CONTRACT_STANDARDS.md`: 外部 API / provider 契约真值、字段矩阵、漂移复核、错误映射与降级约束。
 - `GO_PRACTICES.md`: Go 代码组织、接口、context、并发与测试实践。
 - `SQL_STANDARDS.md`: SQL、migration、索引与 sqlc 规则。
 - `IDEMPOTENCY_STANDARDS.md`: 幂等键分类、request-level guard 候选规则、外部契约键边界与重复执行 review gate。
@@ -47,4 +49,3 @@
 - 高频执行提醒继续镜像到 `.github/instructions/`。
 - 高频任务入口继续镜像到 `.github/prompts/`。
 - 如果某个后端规则既是长期基线，又和当前仓库的真实运行方式强相关，优先把基线落在本目录，再让 `locallife/AGENTS.md` 等入口文件引用它，而不是反过来。
-

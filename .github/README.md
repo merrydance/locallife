@@ -91,6 +91,7 @@ Backend:
 - `.github/standards/backend/GO_PRACTICES.md`
 - `.github/standards/backend/SQL_STANDARDS.md`
 - `.github/standards/backend/API_CONTRACT_STANDARDS.md`
+- `.github/standards/backend/EXTERNAL_API_CONTRACT_STANDARDS.md`
 - `.github/standards/backend/RUNTIME_ARCHITECTURE.md`
 - `.github/standards/backend/WORKFLOW_AND_VALIDATION.md`
 - `.github/standards/backend/BACKEND_CHANGE_SAFETY_CHECKLIST.md`
