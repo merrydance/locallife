@@ -90,10 +90,17 @@ Page({
             },
             {
                 id: 'settlement-account',
-                title: '宝付结算账户',
-                desc: '平台二级户开户与状态同步',
+                title: '结算账户',
+                desc: '平台结算账户开户与状态同步',
                 icon: 'wallet',
                 url: '/pages/platform/finance/settlement-account/index'
+            },
+            {
+                id: 'withdrawals',
+                title: '提现',
+                desc: '查看平台可提现余额和提现记录',
+                icon: 'money',
+                url: '/pages/platform/finance/withdrawals/index'
             },
             {
                 id: 'groups',
