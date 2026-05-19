@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -16,6 +17,8 @@ var (
 	ErrBaofuWithdrawServiceNotConfigured = errors.New("baofu withdraw service is not configured")
 	ErrBaofuWithdrawAccountNotReady      = errors.New("宝付结算账户未开通，暂不能提现")
 	ErrBaofuWithdrawContractNoRequired   = errors.New("宝付结算账户缺少提现账户标识，暂不能提现")
+	ErrBaofuWithdrawBalanceUnavailable   = errors.New("baofu withdraw balance unavailable")
+	ErrBaofuWithdrawInsufficientBalance  = errors.New("可提现金额不足")
 )
 
 type baofuWithdrawStore interface {
@@ -118,7 +121,7 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 		return result, ErrBaofuWithdrawServiceNotConfigured
 	}
 	cfg := s.config.normalized()
-	if cfg.PayoutMerchantID == "" || cfg.PayoutTerminalID == "" {
+	if cfg.CollectMerchantID == "" || cfg.CollectTerminalID == "" || cfg.PayoutMerchantID == "" || cfg.PayoutTerminalID == "" {
 		return result, ErrBaofuWithdrawServiceNotConfigured
 	}
 	if input.AmountFen <= 0 {
@@ -131,6 +134,20 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 	binding, err := s.readyBinding(ctx, input.OwnerType, input.OwnerID)
 	if err != nil {
 		return result, err
+	}
+	balance, err := s.client.QueryBalance(ctx, baofucontracts.BalanceQueryRequest{
+		MerchantID: cfg.CollectMerchantID,
+		TerminalID: cfg.CollectTerminalID,
+		ContractNo: strings.TrimSpace(binding.ContractNo.String),
+	})
+	if err != nil {
+		return result, fmt.Errorf("%w: %w", ErrBaofuWithdrawBalanceUnavailable, err)
+	}
+	if balance == nil {
+		return result, fmt.Errorf("%w: empty result", ErrBaofuWithdrawBalanceUnavailable)
+	}
+	if input.AmountFen > balance.AvailableAmountFen {
+		return result, ErrBaofuWithdrawInsufficientBalance
 	}
 	submittedSnapshot := []byte(`{"state":"submitted"}`)
 	withdrawalOrder, err := s.store.CreateBaofuWithdrawalOrder(ctx, db.CreateBaofuWithdrawalOrderParams{
@@ -150,7 +167,7 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 		Channel:            db.PaymentChannelBaofuAggregate,
 		Capability:         db.ExternalPaymentCapabilityBaofuWithdraw,
 		CommandType:        db.ExternalPaymentCommandTypeCreateBaofuWithdraw,
-		BusinessOwner:      businessOwnerForBaofuAccount(input.OwnerType),
+		BusinessOwner:      businessOwnerForBaofuWithdrawal(input.OwnerType),
 		BusinessObjectType: pgtype.Text{String: "baofu_withdrawal_order", Valid: true},
 		BusinessObjectID:   pgtype.Int8{Int64: withdrawalOrder.ID, Valid: true},
 		ExternalObjectType: db.ExternalPaymentObjectWithdraw,
@@ -192,6 +209,21 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 	}
 	result.WithdrawalOrder = updated
 	return result, nil
+}
+
+func businessOwnerForBaofuWithdrawal(ownerType string) string {
+	switch strings.TrimSpace(ownerType) {
+	case db.BaofuAccountOwnerTypeMerchant:
+		return db.ExternalPaymentBusinessOwnerMerchantFunds
+	case db.BaofuAccountOwnerTypeRider:
+		return "rider"
+	case db.BaofuAccountOwnerTypeOperator:
+		return "operator"
+	case db.BaofuAccountOwnerTypePlatform:
+		return "platform"
+	default:
+		return db.ExternalPaymentBusinessOwnerMerchantFunds
+	}
 }
 
 func (s *BaofuWithdrawService) readyBinding(ctx context.Context, ownerType string, ownerID int64) (db.BaofuAccountBinding, error) {

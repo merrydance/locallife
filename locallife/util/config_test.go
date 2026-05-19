@@ -155,6 +155,7 @@ func TestLoadConfig_ReadsBaofuMainBusinessConfig(t *testing.T) {
 		"BAOFU_PAYMENT_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/payment",
 		"BAOFU_PROFIT_SHARING_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/share",
 		"BAOFU_REFUND_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/refund",
+		"BAOFU_WITHDRAW_NOTIFY_URL=https://api.example.com/v1/webhooks/baofu/withdraw",
 		"BAOFU_HTTP_TIMEOUT=12s",
 	}, "\n")+"\n")
 
@@ -166,12 +167,28 @@ func TestLoadConfig_ReadsBaofuMainBusinessConfig(t *testing.T) {
 	require.Equal(t, "wx-local-life", config.WechatMiniAppID)
 	require.Equal(t, "https://api.example.com/v1/webhooks/baofu/payment", config.EffectiveBaofuPaymentNotifyURL())
 	require.Equal(t, "https://api.example.com/v1/webhooks/baofu/share", config.EffectiveBaofuProfitSharingNotifyURL())
+	require.Equal(t, "https://api.example.com/v1/webhooks/baofu/withdraw", config.EffectiveBaofuWithdrawNotifyURL())
 	require.Equal(t, 12*time.Second, config.BaofuHTTPTimeout)
 
 	baofuConfig := config.ToBaofuConfig().Normalized()
 	require.Equal(t, baofu.SandboxAggregatePayBaseURL, baofuConfig.AggregatePayBaseURL)
 	require.Equal(t, "COLLECT_MER", baofuConfig.CollectMerchantID)
 	require.Equal(t, "PAYOUT_MER", baofuConfig.PayoutMerchantID)
+}
+
+func TestEffectiveBaofuWithdrawNotifyURLFallsBackToNotifyBase(t *testing.T) {
+	config := Config{BaofuNotifyBaseURL: "https://api.example.com/v1/webhooks/baofu"}
+
+	require.Equal(t, "https://api.example.com/v1/webhooks/baofu/withdraw", config.EffectiveBaofuWithdrawNotifyURL())
+}
+
+func TestEffectiveBaofuWithdrawNotifyURLPrefersExplicitURL(t *testing.T) {
+	config := Config{
+		BaofuNotifyBaseURL:     "https://api.example.com/v1/webhooks/baofu",
+		BaofuWithdrawNotifyURL: "https://notify.example.com/custom/withdraw",
+	}
+
+	require.Equal(t, "https://notify.example.com/custom/withdraw", config.EffectiveBaofuWithdrawNotifyURL())
 }
 
 func TestLoadConfig_NormalizesEscapedBaofuPEMValues(t *testing.T) {

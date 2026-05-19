@@ -148,6 +148,7 @@ type Querier interface {
 	// 商户查看所有评价数量（包含不可见的）
 	CountAllReviewsByMerchant(ctx context.Context, merchantID int64) (int64, error)
 	CountAvailableTablesByMerchant(ctx context.Context, merchantID int64) (int64, error)
+	CountBaofuWithdrawalOrdersByOwner(ctx context.Context, arg CountBaofuWithdrawalOrdersByOwnerParams) (int64, error)
 	CountBrowseHistory(ctx context.Context, userID int64) (int64, error)
 	CountBrowseHistoryByType(ctx context.Context, arg CountBrowseHistoryByTypeParams) (int64, error)
 	CountCombinedPaymentSubOrders(ctx context.Context, combinedPaymentID int64) (int32, error)

@@ -1578,6 +1578,21 @@ func (mr *MockStoreMockRecorder) CountAvailableTablesByMerchant(ctx, merchantID 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountAvailableTablesByMerchant", reflect.TypeOf((*MockStore)(nil).CountAvailableTablesByMerchant), ctx, merchantID)
 }
 
+// CountBaofuWithdrawalOrdersByOwner mocks base method.
+func (m *MockStore) CountBaofuWithdrawalOrdersByOwner(ctx context.Context, arg db.CountBaofuWithdrawalOrdersByOwnerParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountBaofuWithdrawalOrdersByOwner", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountBaofuWithdrawalOrdersByOwner indicates an expected call of CountBaofuWithdrawalOrdersByOwner.
+func (mr *MockStoreMockRecorder) CountBaofuWithdrawalOrdersByOwner(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountBaofuWithdrawalOrdersByOwner", reflect.TypeOf((*MockStore)(nil).CountBaofuWithdrawalOrdersByOwner), ctx, arg)
+}
+
 // CountBrowseHistory mocks base method.
 func (m *MockStore) CountBrowseHistory(ctx context.Context, userID int64) (int64, error) {
 	m.ctrl.T.Helper()

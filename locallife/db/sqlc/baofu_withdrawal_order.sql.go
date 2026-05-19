@@ -12,6 +12,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countBaofuWithdrawalOrdersByOwner = `-- name: CountBaofuWithdrawalOrdersByOwner :one
+SELECT COUNT(*)::bigint
+FROM baofu_withdrawal_orders
+WHERE owner_type = $1
+  AND owner_id = $2
+`
+
+type CountBaofuWithdrawalOrdersByOwnerParams struct {
+	OwnerType string `json:"owner_type"`
+	OwnerID   int64  `json:"owner_id"`
+}
+
+func (q *Queries) CountBaofuWithdrawalOrdersByOwner(ctx context.Context, arg CountBaofuWithdrawalOrdersByOwnerParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countBaofuWithdrawalOrdersByOwner, arg.OwnerType, arg.OwnerID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createBaofuWithdrawalOrder = `-- name: CreateBaofuWithdrawalOrder :one
 INSERT INTO baofu_withdrawal_orders (
     owner_type,

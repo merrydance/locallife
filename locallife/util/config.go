@@ -110,6 +110,7 @@ type Config struct {
 	BaofuPaymentNotifyURL          string        `mapstructure:"BAOFU_PAYMENT_NOTIFY_URL"`
 	BaofuProfitSharingNotifyURL    string        `mapstructure:"BAOFU_PROFIT_SHARING_NOTIFY_URL"`
 	BaofuRefundNotifyURL           string        `mapstructure:"BAOFU_REFUND_NOTIFY_URL"`
+	BaofuWithdrawNotifyURL         string        `mapstructure:"BAOFU_WITHDRAW_NOTIFY_URL"`
 	BaofuHTTPTimeout               time.Duration `mapstructure:"BAOFU_HTTP_TIMEOUT"`
 	BaofuAccountVerifyFeeFen       int64         `mapstructure:"BAOFU_ACCOUNT_VERIFY_FEE_FEN"`
 	BaofuBusinessIndustryID        string        `mapstructure:"BAOFU_BUSINESS_INDUSTRY_ID"`
@@ -339,7 +340,8 @@ func (c Config) HasBaofuRuntimeConfig() bool {
 		strings.TrimSpace(c.BaofuNotifyBaseURL) != "" ||
 		strings.TrimSpace(c.BaofuPaymentNotifyURL) != "" ||
 		strings.TrimSpace(c.BaofuProfitSharingNotifyURL) != "" ||
-		strings.TrimSpace(c.BaofuRefundNotifyURL) != ""
+		strings.TrimSpace(c.BaofuRefundNotifyURL) != "" ||
+		strings.TrimSpace(c.BaofuWithdrawNotifyURL) != ""
 }
 
 func (c Config) ToBaofuConfig() baofu.Config {
@@ -375,6 +377,16 @@ func (c Config) EffectiveBaofuRefundNotifyURL() string {
 	return strings.TrimSpace(c.BaofuRefundNotifyURL)
 }
 
+func (c Config) EffectiveBaofuWithdrawNotifyURL() string {
+	if explicit := strings.TrimSpace(c.BaofuWithdrawNotifyURL); explicit != "" {
+		return explicit
+	}
+	if base := strings.TrimRight(strings.TrimSpace(c.BaofuNotifyBaseURL), "/"); base != "" {
+		return base + "/withdraw"
+	}
+	return ""
+}
+
 func (c Config) ValidateBaofuConfig() error {
 	if !c.HasBaofuRuntimeConfig() {
 		return nil
@@ -392,6 +404,9 @@ func (c Config) ValidateBaofuConfig() error {
 		return err
 	}
 	if err := validateRequiredAbsoluteConfigURL("BAOFU_REFUND_NOTIFY_URL", c.BaofuRefundNotifyURL, "baofu main business pay is enabled"); err != nil {
+		return err
+	}
+	if err := validateRequiredAbsoluteConfigURL("BAOFU_WITHDRAW_NOTIFY_URL", c.EffectiveBaofuWithdrawNotifyURL(), "baofu main business pay is enabled"); err != nil {
 		return err
 	}
 	return nil
