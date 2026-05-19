@@ -74,6 +74,7 @@ type baofuWithdrawalsResponse struct {
 
 type baofuWithdrawalCreateResponse struct {
 	Withdrawal baofuWithdrawalItem `json:"withdrawal"`
+	Message    string              `json:"message,omitempty"`
 }
 
 func (server *Server) getMerchantBaofuWithdrawalBalance(ctx *gin.Context) {
@@ -295,6 +296,9 @@ func (server *Server) handleCreateBaofuWithdrawal(ctx *gin.Context, scope baofuW
 		OutRequestNo: newBaofuWithdrawalOutRequestNo(ctx, scope),
 	})
 	if err != nil {
+		if server.respondBaofuWithdrawalCreateResultError(ctx, result, err) {
+			return
+		}
 		server.respondBaofuWithdrawalCreateError(ctx, err)
 		return
 	}

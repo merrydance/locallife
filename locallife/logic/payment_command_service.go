@@ -233,7 +233,10 @@ func isExternalPaymentBusinessOwner(owner string) bool {
 		db.ExternalPaymentBusinessOwnerProfitSharing,
 		db.ExternalPaymentBusinessOwnerSubsidy,
 		db.ExternalPaymentBusinessOwnerApplyment,
-		db.ExternalPaymentBusinessOwnerMerchantFunds:
+		db.ExternalPaymentBusinessOwnerMerchantFunds,
+		db.ExternalPaymentBusinessOwnerRiderIncome,
+		db.ExternalPaymentBusinessOwnerOperatorFunds,
+		db.ExternalPaymentBusinessOwnerPlatformFunds:
 		return true
 	default:
 		return false

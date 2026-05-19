@@ -311,6 +311,9 @@ const (
 	ExternalPaymentBusinessOwnerSubsidy        = "subsidy"
 	ExternalPaymentBusinessOwnerApplyment      = "applyment"
 	ExternalPaymentBusinessOwnerMerchantFunds  = "merchant_finance"
+	ExternalPaymentBusinessOwnerRiderIncome    = "rider_income"
+	ExternalPaymentBusinessOwnerOperatorFunds  = "operator_finance"
+	ExternalPaymentBusinessOwnerPlatformFunds  = "platform_finance"
 
 	PaymentBusinessTypeBaofuAccountVerifyFee = "baofu_account_verify_fee"
 
