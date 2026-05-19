@@ -7,6 +7,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
+	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
@@ -16,6 +17,81 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
+
+func TestProcessTaskInitiateRefund_BaofuAggregateRefundAcceptedSkipsProfitSharingLookup(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	baofuClient := &fakeWorkerBaofuRefundClient{refundResult: &aggregatecontracts.RefundResult{
+		OriginTradeNo:    "BFPAY_UP_2819",
+		OutTradeNo:       "RF2819_3719",
+		TradeNo:          "BFREFUND_UP_2819",
+		RefundAmountFen:  1459,
+		TotalAmountFen:   1459,
+		ResultCode:       aggregatecontracts.BusinessResultCodeSuccess,
+		RefundState:      aggregatecontracts.RefundStateAccepted,
+		SuccessAmountFen: 1459,
+	}}
+
+	paymentOrder := db.PaymentOrder{
+		ID:             2819,
+		OutTradeNo:     "BFPAY_2819",
+		TransactionID:  pgtype.Text{String: "BFPAY_UP_2819", Valid: true},
+		Amount:         1459,
+		Status:         "paid",
+		BusinessType:   db.ExternalPaymentBusinessOwnerOrder,
+		PaymentType:    "profit_sharing",
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+		OrderID:        pgtype.Int8{Int64: 3719, Valid: true},
+	}
+	order := db.Order{ID: 3719, MerchantID: 2719}
+	refundOrder := db.RefundOrder{ID: 3819, PaymentOrderID: paymentOrder.ID, Status: "pending", OutRefundNo: "RF2819_3719"}
+
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().GetRefundOrderByOutRefundNo(gomock.Any(), refundOrder.OutRefundNo).Return(db.RefundOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().CreateRefundOrderTx(gomock.Any(), db.CreateRefundOrderTxParams{
+		PaymentOrderID: paymentOrder.ID,
+		RefundType:     "user_cancel",
+		RefundAmount:   1459,
+		RefundReason:   "配送时间太长",
+		OutRefundNo:    refundOrder.OutRefundNo,
+	}).Return(db.CreateRefundOrderTxResult{RefundOrder: refundOrder}, nil)
+	store.EXPECT().UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
+		ID:       refundOrder.ID,
+		RefundID: pgtype.Text{String: "BFREFUND_UP_2819", Valid: true},
+	}).Return(db.RefundOrder{ID: refundOrder.ID, Status: "processing", OutRefundNo: refundOrder.OutRefundNo}, nil)
+	expectWorkerExternalRefundCommand(t, store, db.ExternalPaymentProviderBaofu, db.PaymentChannelBaofuAggregate, db.ExternalPaymentCapabilityBaofuRefund, refundOrder.ID, refundOrder.OutRefundNo, "BFREFUND_UP_2819", db.ExternalPaymentBusinessOwnerOrder, db.ExternalPaymentCommandStatusAccepted, "", 9801)
+
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
+	processor.SetBaofuAggregateClient(baofuClient, worker.BaofuProfitSharingWorkerConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+		RefundNotifyURL:   "https://api.example.com/v1/webhooks/baofu/refund",
+	})
+	payloadBytes, err := json.Marshal(worker.PayloadProcessRefund{
+		PaymentOrderID: paymentOrder.ID,
+		RefundAmount:   1459,
+		Reason:         "配送时间太长",
+	})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskInitiateRefund(context.Background(), asynq.NewTask(worker.TaskProcessRefund, payloadBytes))
+	require.NoError(t, err)
+	require.True(t, baofuClient.called)
+	require.Equal(t, "COLLECT_MER", baofuClient.lastRefundRequest.MerchantID)
+	require.Equal(t, "COLLECT_TER", baofuClient.lastRefundRequest.TerminalID)
+	require.Equal(t, "BFPAY_UP_2819", baofuClient.lastRefundRequest.OriginTradeNo)
+	require.Empty(t, baofuClient.lastRefundRequest.OriginOutTradeNo)
+	require.Equal(t, refundOrder.OutRefundNo, baofuClient.lastRefundRequest.OutTradeNo)
+	require.Equal(t, "https://api.example.com/v1/webhooks/baofu/refund", baofuClient.lastRefundRequest.NotifyURL)
+	require.Equal(t, int64(1459), baofuClient.lastRefundRequest.RefundAmountFen)
+	require.Equal(t, int64(1459), baofuClient.lastRefundRequest.TotalAmountFen)
+	require.Equal(t, "配送时间太长", baofuClient.lastRefundRequest.RefundReason)
+	require.Empty(t, baofuClient.lastRefundRequest.SharingRefundInfo)
+	require.Zero(t, baofuClient.lastRefundRequest.AdvanceAmountFen)
+}
 
 func TestProcessTaskInitiateRefund_EcommerceRefundAcceptedRecordsCommand(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -255,9 +331,13 @@ func expectWorkerEcommerceRefundAcceptedCommand(t *testing.T, store *mockdb.Mock
 
 func expectWorkerExternalRefundAcceptedCommand(t *testing.T, store *mockdb.MockStore, channel string, capability string, refundOrderID int64, outRefundNo string, refundID string, businessOwner string, commandID int64) {
 	t.Helper()
+	expectWorkerExternalRefundCommand(t, store, db.ExternalPaymentProviderWechat, channel, capability, refundOrderID, outRefundNo, refundID, businessOwner, db.ExternalPaymentCommandStatusAccepted, "", commandID)
+}
 
+func expectWorkerExternalRefundCommand(t *testing.T, store *mockdb.MockStore, provider string, channel string, capability string, refundOrderID int64, outRefundNo string, refundID string, businessOwner string, status string, errorCode string, commandID int64) {
+	t.Helper()
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
-		require.Equal(t, db.ExternalPaymentProviderWechat, arg.Provider)
+		require.Equal(t, provider, arg.Provider)
 		require.Equal(t, channel, arg.Channel)
 		require.Equal(t, capability, arg.Capability)
 		require.Equal(t, db.ExternalPaymentCommandTypeCreateRefund, arg.CommandType)
@@ -268,12 +348,59 @@ func expectWorkerExternalRefundAcceptedCommand(t *testing.T, store *mockdb.MockS
 		require.Equal(t, refundOrderID, arg.BusinessObjectID.Int64)
 		require.Equal(t, db.ExternalPaymentObjectRefund, arg.ExternalObjectType)
 		require.Equal(t, outRefundNo, arg.ExternalObjectKey)
-		require.True(t, arg.ExternalSecondaryKey.Valid)
-		require.Equal(t, refundID, arg.ExternalSecondaryKey.String)
-		require.Equal(t, db.ExternalPaymentCommandStatusAccepted, arg.CommandStatus)
+		require.Equal(t, status, arg.CommandStatus)
 		require.Contains(t, string(arg.ResponseSnapshot), outRefundNo)
-		require.Contains(t, string(arg.ResponseSnapshot), refundID)
+		if refundID != "" {
+			require.True(t, arg.ExternalSecondaryKey.Valid)
+			require.Equal(t, refundID, arg.ExternalSecondaryKey.String)
+			require.Contains(t, string(arg.ResponseSnapshot), refundID)
+		}
+		if errorCode != "" {
+			require.True(t, arg.LastErrorCode.Valid)
+			require.Equal(t, errorCode, arg.LastErrorCode.String)
+			require.Contains(t, string(arg.ResponseSnapshot), errorCode)
+		}
 		require.NotContains(t, string(arg.ResponseSnapshot), "paySign")
 		return db.ExternalPaymentCommand{ID: commandID}, nil
 	})
+}
+
+type fakeWorkerBaofuRefundClient struct {
+	called            bool
+	lastRefundRequest aggregatecontracts.RefundBeforeShareRequest
+	refundResult      *aggregatecontracts.RefundResult
+	err               error
+}
+
+func (c *fakeWorkerBaofuRefundClient) CreateUnifiedOrder(context.Context, aggregatecontracts.UnifiedOrderRequest) (*aggregatecontracts.UnifiedOrderResult, error) {
+	return nil, nil
+}
+
+func (c *fakeWorkerBaofuRefundClient) QueryPayment(context.Context, aggregatecontracts.PaymentQueryRequest) (*aggregatecontracts.UnifiedOrderResult, error) {
+	return nil, nil
+}
+
+func (c *fakeWorkerBaofuRefundClient) CreateProfitSharing(context.Context, aggregatecontracts.ShareAfterPayRequest) (*aggregatecontracts.ShareResult, error) {
+	return nil, nil
+}
+
+func (c *fakeWorkerBaofuRefundClient) QueryProfitSharing(context.Context, aggregatecontracts.ShareQueryRequest) (*aggregatecontracts.ShareResult, error) {
+	return nil, nil
+}
+
+func (c *fakeWorkerBaofuRefundClient) CreateRefund(_ context.Context, req aggregatecontracts.RefundBeforeShareRequest) (*aggregatecontracts.RefundResult, error) {
+	c.called = true
+	c.lastRefundRequest = req
+	if c.err != nil {
+		return nil, c.err
+	}
+	return c.refundResult, nil
+}
+
+func (c *fakeWorkerBaofuRefundClient) QueryRefund(context.Context, aggregatecontracts.RefundQueryRequest) (*aggregatecontracts.RefundResult, error) {
+	return nil, nil
+}
+
+func (c *fakeWorkerBaofuRefundClient) CloseOrder(context.Context, aggregatecontracts.OrderCloseRequest) (*aggregatecontracts.OrderCloseResult, error) {
+	return nil, nil
 }

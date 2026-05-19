@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/websocket"
@@ -1685,6 +1686,14 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 			log.Info().Str("out_refund_no", outRefundNo).Msg("refund already processing, skip")
 			return nil
 		}
+		if refundOrder.Status == "failed" || refundOrder.Status == "closed" {
+			log.Info().
+				Str("out_refund_no", outRefundNo).
+				Int64("refund_order_id", refundOrder.ID).
+				Str("status", refundOrder.Status).
+				Msg("refund already terminal, skip")
+			return nil
+		}
 		log.Info().
 			Str("out_refund_no", outRefundNo).
 			Int64("refund_order_id", refundOrder.ID).
@@ -1719,6 +1728,10 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 		return fmt.Errorf("%w: %w", refundErr, asynq.SkipRetry)
 	}
 
+	if paymentOrder.PaymentChannel == db.PaymentChannelBaofuAggregate {
+		return processor.processBaofuAggregateRefund(ctx, paymentOrder, refundOrder, payload, outRefundNo)
+	}
+
 	var paymentConfig db.MerchantPaymentConfig
 
 	if paymentOrderUsesMainBusinessRefundChannel(paymentOrder) {
@@ -1736,7 +1749,6 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 			}
 			return fmt.Errorf("get merchant payment config: %w", err)
 		}
-
 	}
 
 	if paymentOrderUsesMainBusinessRefundChannel(paymentOrder) {
@@ -2243,6 +2255,103 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 			Msg("direct refund request processed")
 	}
 
+	return nil
+}
+
+func (processor *RedisTaskProcessor) processBaofuAggregateRefund(
+	ctx context.Context,
+	paymentOrder db.PaymentOrder,
+	refundOrder db.RefundOrder,
+	payload PayloadProcessRefund,
+	outRefundNo string,
+) error {
+	if processor.baofuAggregateClient == nil {
+		err := errors.New("baofu aggregate client not configured for refund")
+		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+			return errors.Join(err, fmt.Errorf("mark refund order as failed: %w", dbErr))
+		}
+		recordWorkerBaofuRefundCommand(ctx, processor.store, refundOrder, nil, db.ExternalPaymentCommandStatusRejected, err)
+		return fmt.Errorf("%w: %w", err, asynq.SkipRetry)
+	}
+	cfg := processor.baofuProfitSharingConfig.normalized()
+	if cfg.CollectMerchantID == "" || cfg.CollectTerminalID == "" {
+		err := errors.New("baofu collect merchant config not configured for refund")
+		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+			return errors.Join(err, fmt.Errorf("mark refund order as failed: %w", dbErr))
+		}
+		recordWorkerBaofuRefundCommand(ctx, processor.store, refundOrder, nil, db.ExternalPaymentCommandStatusRejected, err)
+		return fmt.Errorf("%w: %w", err, asynq.SkipRetry)
+	}
+
+	req := aggregatecontracts.RefundBeforeShareRequest{
+		MerchantID:      cfg.CollectMerchantID,
+		TerminalID:      cfg.CollectTerminalID,
+		OutTradeNo:      strings.TrimSpace(outRefundNo),
+		NotifyURL:       cfg.RefundNotifyURL,
+		RefundAmountFen: payload.RefundAmount,
+		TotalAmountFen:  refundRequestTotalAmount(paymentOrder.Amount, payload.RefundAmount),
+		TransactionTime: time.Now().UTC().Format("20060102150405"),
+		RefundReason:    strings.TrimSpace(payload.Reason),
+	}
+	if paymentOrder.TransactionID.Valid && strings.TrimSpace(paymentOrder.TransactionID.String) != "" {
+		req.OriginTradeNo = strings.TrimSpace(paymentOrder.TransactionID.String)
+	} else {
+		req.OriginOutTradeNo = strings.TrimSpace(paymentOrder.OutTradeNo)
+	}
+
+	refundResp, err := processor.baofuAggregateClient.CreateRefund(ctx, req)
+	if err != nil {
+		logRefundRequestFailure(refundOrder.ID, paymentOrder.ID, outRefundNo, paymentOrder.PaymentType, err)
+		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+			return errors.Join(fmt.Errorf("call baofu refund API: %w", err), fmt.Errorf("mark refund order as failed: %w", dbErr))
+		}
+		recordWorkerBaofuRefundCommand(ctx, processor.store, refundOrder, refundResp, db.ExternalPaymentCommandStatusRejected, err)
+		return fmt.Errorf("call baofu refund API: %w", err)
+	}
+	if refundResp == nil {
+		err := errors.New("baofu refund returned empty result")
+		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+			return errors.Join(err, fmt.Errorf("mark refund order as failed: %w", dbErr))
+		}
+		recordWorkerBaofuRefundCommand(ctx, processor.store, refundOrder, nil, db.ExternalPaymentCommandStatusRejected, err)
+		return err
+	}
+
+	refundID := strings.TrimSpace(refundResp.TradeNo)
+	if refundID == "" {
+		refundID = strings.TrimSpace(refundResp.OutTradeNo)
+	}
+	switch strings.ToUpper(strings.TrimSpace(refundResp.ResultCode)) {
+	case aggregatecontracts.BusinessResultCodeSuccess:
+		if dbErr := processor.markRefundOrderProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+			ID:       refundOrder.ID,
+			RefundID: pgtype.Text{String: refundID, Valid: refundID != ""},
+		}); dbErr != nil {
+			return fmt.Errorf("mark baofu refund order as processing: %w", dbErr)
+		}
+		recordWorkerBaofuRefundCommand(ctx, processor.store, refundOrder, refundResp, db.ExternalPaymentCommandStatusAccepted, nil)
+	case aggregatecontracts.BusinessResultCodeFail:
+		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+			return fmt.Errorf("mark baofu refund order as failed: %w", dbErr)
+		}
+		recordWorkerBaofuRefundCommand(ctx, processor.store, refundOrder, refundResp, db.ExternalPaymentCommandStatusRejected, nil)
+		return fmt.Errorf("baofu refund request rejected: %w", asynq.SkipRetry)
+	default:
+		if dbErr := processor.markRefundOrderProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+			ID:       refundOrder.ID,
+			RefundID: pgtype.Text{String: refundID, Valid: refundID != ""},
+		}); dbErr != nil {
+			return fmt.Errorf("mark baofu refund order as processing: %w", dbErr)
+		}
+		recordWorkerBaofuRefundCommand(ctx, processor.store, refundOrder, refundResp, db.ExternalPaymentCommandStatusUnknown, nil)
+	}
+
+	log.Info().
+		Int64("refund_order_id", refundOrder.ID).
+		Str("out_refund_no", outRefundNo).
+		Str("baofu_refund_state", strings.TrimSpace(refundResp.RefundState)).
+		Str("result_code", strings.TrimSpace(refundResp.ResultCode)).
+		Msg("baofu refund request processed")
 	return nil
 }
 
@@ -2845,6 +2954,50 @@ func recordWorkerProfitSharingReturnCommandRejected(ctx context.Context, store d
 	}
 }
 
+func recordWorkerBaofuRefundCommand(ctx context.Context, store db.Store, refundOrder db.RefundOrder, refundResp *aggregatecontracts.RefundResult, status string, commandErr error) {
+	refundID := ""
+	resultCode := ""
+	refundState := ""
+	errorCode := ""
+	errorMessage := ""
+	if refundResp != nil {
+		refundID = strings.TrimSpace(refundResp.TradeNo)
+		if refundID == "" {
+			refundID = strings.TrimSpace(refundResp.OutTradeNo)
+		}
+		resultCode = strings.TrimSpace(refundResp.ResultCode)
+		refundState = strings.TrimSpace(refundResp.RefundState)
+		errorCode = strings.TrimSpace(refundResp.ErrorCode)
+		errorMessage = strings.TrimSpace(refundResp.ErrorMessage)
+	}
+	if commandErr != nil && errorMessage == "" {
+		errorMessage = commandErr.Error()
+	}
+
+	paymentCommandSvc := logic.NewPaymentCommandService(store)
+	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbWorkerBaofuRefundCommandInput(
+		refundOrder,
+		status,
+		workerStringPtrIfNotEmpty(refundID),
+		workerStringPtrIfNotEmpty(errorCode),
+		workerStringPtrIfNotEmpty(errorMessage),
+		workerBaofuRefundCommandSnapshot(map[string]string{
+			"out_refund_no": refundOrder.OutRefundNo,
+			"refund_id":     refundID,
+			"result_code":   resultCode,
+			"refund_state":  refundState,
+			"error_code":    errorCode,
+			"error_message": errorMessage,
+		}),
+	))
+	if err != nil {
+		log.Error().Err(err).
+			Int64("refund_order_id", refundOrder.ID).
+			Str("out_refund_no", refundOrder.OutRefundNo).
+			Msg("record worker baofu refund command failed")
+	}
+}
+
 func workerStringPtrIfNotEmpty(value string) *string {
 	if value == "" {
 		return nil
@@ -2909,6 +3062,51 @@ func dbWorkerEcommerceRefundCommandInput(
 		LastErrorMessage:     lastErrorMessage,
 		ResponseSnapshot:     responseSnapshot,
 	}
+}
+
+func dbWorkerBaofuRefundCommandInput(
+	refundOrder db.RefundOrder,
+	commandStatus string,
+	externalSecondaryKey *string,
+	lastErrorCode *string,
+	lastErrorMessage *string,
+	responseSnapshot []byte,
+) logic.RecordExternalPaymentCommandInput {
+	businessObjectType := "refund_order"
+	businessObjectID := refundOrder.ID
+	return logic.RecordExternalPaymentCommandInput{
+		Provider:             db.ExternalPaymentProviderBaofu,
+		Channel:              db.PaymentChannelBaofuAggregate,
+		Capability:           db.ExternalPaymentCapabilityBaofuRefund,
+		CommandType:          db.ExternalPaymentCommandTypeCreateRefund,
+		BusinessOwner:        db.ExternalPaymentBusinessOwnerOrder,
+		BusinessObjectType:   &businessObjectType,
+		BusinessObjectID:     &businessObjectID,
+		ExternalObjectType:   db.ExternalPaymentObjectRefund,
+		ExternalObjectKey:    strings.TrimSpace(refundOrder.OutRefundNo),
+		ExternalSecondaryKey: externalSecondaryKey,
+		CommandStatus:        commandStatus,
+		LastErrorCode:        lastErrorCode,
+		LastErrorMessage:     lastErrorMessage,
+		ResponseSnapshot:     responseSnapshot,
+	}
+}
+
+func workerBaofuRefundCommandSnapshot(values map[string]string) []byte {
+	snapshot := map[string]string{
+		"provider":  db.ExternalPaymentProviderBaofu,
+		"operation": "order_refund",
+	}
+	for key, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			snapshot[key] = trimmed
+		}
+	}
+	raw, err := json.Marshal(snapshot)
+	if err != nil {
+		return []byte(`{"provider":"baofu","operation":"order_refund"}`)
+	}
+	return raw
 }
 
 func workerRefundCommandCapability(channel string) string {

@@ -263,6 +263,7 @@ func main() {
 			CollectMerchantID: config.BaofuCollectMerchantID,
 			CollectTerminalID: config.BaofuCollectTerminalID,
 			ShareNotifyURL:    config.EffectiveBaofuProfitSharingNotifyURL(),
+			RefundNotifyURL:   config.EffectiveBaofuRefundNotifyURL(),
 		})
 	} else if config.BaofuMainBusinessEnabled {
 		log.Warn().Msg("baofu payment recovery scheduler remote-query branch disabled: baofu aggregate client not configured")
@@ -318,6 +319,7 @@ func main() {
 		refundRecoveryScheduler.SetBaofuAggregateClient(baofuAggregateClient, worker.BaofuProfitSharingWorkerConfig{
 			CollectMerchantID: config.BaofuCollectMerchantID,
 			CollectTerminalID: config.BaofuCollectTerminalID,
+			RefundNotifyURL:   config.EffectiveBaofuRefundNotifyURL(),
 		})
 	} else if config.BaofuMainBusinessEnabled {
 		log.Warn().Msg("refund recovery baofu status branch disabled: baofu aggregate client not configured")
@@ -515,6 +517,7 @@ func runTaskProcessor(
 			CollectMerchantID: config.BaofuCollectMerchantID,
 			CollectTerminalID: config.BaofuCollectTerminalID,
 			ShareNotifyURL:    config.EffectiveBaofuProfitSharingNotifyURL(),
+			RefundNotifyURL:   config.EffectiveBaofuRefundNotifyURL(),
 		})
 	}
 	taskProcessor.SetBaofuAccountClient(baofuAccountClient, dataEncryptor)

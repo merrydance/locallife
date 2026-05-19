@@ -232,8 +232,7 @@ WHERE
     AND po.created_at > now() - INTERVAL '7 days'
     AND NOT EXISTS (
         SELECT 1 FROM refund_orders ro 
-        WHERE ro.payment_order_id = po.id 
-        AND ro.status IN ('pending', 'processing', 'success')
+        WHERE ro.payment_order_id = po.id
     )
 ORDER BY po.created_at
     , po.id ASC
@@ -250,8 +249,7 @@ WHERE
     AND po.created_at > now() - INTERVAL '7 days'
     AND NOT EXISTS (
         SELECT 1 FROM refund_orders ro 
-        WHERE ro.payment_order_id = po.id 
-        AND ro.status IN ('pending', 'processing', 'success')
+        WHERE ro.payment_order_id = po.id
     )
 ORDER BY po.created_at
     , po.id ASC
