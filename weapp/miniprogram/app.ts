@@ -1,6 +1,5 @@
 import { tracker, EventType } from './utils/tracker'
-import { wechatLogin, getUserInfo, getDeviceId, type UserResponse } from './api/auth'
-import { setToken } from './utils/auth'
+import { getUserInfo, type UserResponse } from './api/auth'
 import { logger } from './utils/logger'
 import { AppError, ErrorHandler, ErrorType } from './utils/error-handler'
 import { networkMonitor } from './utils/network-monitor'
@@ -10,6 +9,7 @@ import { getCurrentRegion } from './api/location'
 import { confirmOrder } from './api/order'
 import { getErrorDebugMessage, isRetryableNetworkError } from './utils/user-facing'
 import { installPromptFeedbackGuards } from './utils/prompt-feedback'
+import { ensureWechatLoginSession } from './utils/wechat-login-session'
 
 // 微信发货信息管理 — 确认收货组件的 appId
 const WECHAT_ORDER_CONFIRM_APPID = 'wx1183b055aeec94d1'
@@ -364,68 +364,40 @@ App<IAppOption>({
 
   /** 完整的 wx.login → 后端 wechatLogin 流程（慢速路径及重试） */
   _doWxLogin(attempt: number, max: number, delays: number[]) {
-    wx.login({
-      success: async (res) => {
-        if (res.code) {
-          try {
-            logger.debug('微信登录成功,code获取成功', { code: res.code.substring(0, 10) + '...' }, '_doWxLogin')
-
-            const deviceId = getDeviceId()
-            logger.debug('设备ID已生成', { deviceId: deviceId.substring(0, 15) + '...' }, '_doWxLogin')
-
-            logger.debug('开始调用后端登录接口', undefined, '_doWxLogin')
-            const loginData = await wechatLogin({
-              code: res.code,
-              device_id: deviceId,
-              device_type: 'miniprogram'
-            })
-
-            const expiresAt = loginData.access_token_expires_at
-              ? new Date(loginData.access_token_expires_at).getTime()
-              : undefined
-            setToken(loginData.access_token, expiresAt, loginData.refresh_token)
-
-            const { getToken } = require('./utils/auth')
-            const savedToken = getToken()
-            if (!savedToken) {
-              logger.error('Token保存失败！getToken()返回空', undefined, '_doWxLogin')
-            }
-
-            this._applyUserInfo(loginData.user)
-            logger.info('✅ 静默登录完全成功 (wx.login)', {
-              userId: loginData.user.id,
-              userRole: this.globalData.userRole,
-              hasToken: !!savedToken
-            }, '_doWxLogin')
-
-            if (this.globalData.latitude && this.globalData.longitude) {
-              this.reverseGeocodeWhenReady()
-            }
-
-          } catch (error) {
-            const errorMsg = getErrorDebugMessage(error)
-
-            const isRetryable = isRetryableNetworkError(error)
-
-            if (isRetryable && attempt < max - 1) {
-              const delay = delays[attempt + 1] || 4000
-              logger.warn(`静默登录失败,${delay / 1000}秒后重试 (${attempt + 1}/${max})`, { error: errorMsg }, 'App._doWxLogin')
-              setTimeout(() => this._doWxLogin(attempt + 1, max, delays), delay)
-            } else {
-              logger.warn('静默登录最终失败,用户可继续浏览', {
-                error: errorMsg,
-                attempts: attempt + 1
-              }, 'App._doWxLogin')
-            }
-          }
-        } else {
-          logger.error('wx.login成功但未返回code', res, '_doWxLogin')
+    ensureWechatLoginSession()
+      .then((loginData) => {
+        const { getToken } = require('./utils/auth')
+        const savedToken = getToken()
+        if (!savedToken) {
+          logger.error('Token保存失败！getToken()返回空', undefined, '_doWxLogin')
         }
-      },
-      fail: (err) => {
-        logger.error('wx.login调用失败', err, 'App._doWxLogin')
-      }
-    })
+
+        this._applyUserInfo(loginData.user)
+        logger.info('✅ 静默登录完全成功 (wx.login)', {
+          userId: loginData.user.id,
+          userRole: this.globalData.userRole,
+          hasToken: !!savedToken
+        }, '_doWxLogin')
+
+        if (this.globalData.latitude && this.globalData.longitude) {
+          this.reverseGeocodeWhenReady()
+        }
+      })
+      .catch((error) => {
+        const errorMsg = getErrorDebugMessage(error)
+        const isRetryable = isRetryableNetworkError(error)
+
+        if (isRetryable && attempt < max - 1) {
+          const delay = delays[attempt + 1] || 4000
+          logger.warn(`静默登录失败,${delay / 1000}秒后重试 (${attempt + 1}/${max})`, { error: errorMsg }, 'App._doWxLogin')
+          setTimeout(() => this._doWxLogin(attempt + 1, max, delays), delay)
+        } else {
+          logger.warn('静默登录最终失败,用户可继续浏览', {
+            error: errorMsg,
+            attempts: attempt + 1
+          }, 'App._doWxLogin')
+        }
+      })
   },
 
   isDemoMode(): boolean {

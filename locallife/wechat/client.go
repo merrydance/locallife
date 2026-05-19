@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -87,6 +88,9 @@ func (c *Client) Code2Session(ctx context.Context, code string) (*Code2SessionRe
 
 	if result.ErrCode != 0 {
 		return nil, &APIError{Code: result.ErrCode, Msg: result.ErrMsg}
+	}
+	if strings.TrimSpace(result.OpenID) == "" {
+		return nil, ErrCode2SessionMissingOpenID
 	}
 
 	return &result, nil

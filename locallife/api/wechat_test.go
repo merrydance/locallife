@@ -171,6 +171,32 @@ func TestWechatLoginAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "WechatMissingOpenID",
+			body: map[string]interface{}{
+				"code":        "missing_openid_code",
+				"device_id":   "test_device_id",
+				"device_type": "ios",
+			},
+			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
+				wechatClient.EXPECT().
+					Code2Session(gomock.Any(), gomock.Eq("missing_openid_code")).
+					Times(1).
+					Return(&wechat.Code2SessionResponse{
+						SessionKey: "test_session_key",
+					}, nil)
+
+				store.EXPECT().
+					GetUserByWechatOpenID(gomock.Any(), gomock.Any()).
+					Times(0)
+				store.EXPECT().
+					CreateUserTx(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadGateway, recorder.Code)
+			},
+		},
+		{
 			name: "WechatNetworkError",
 			body: map[string]interface{}{
 				"code":        "network_error_code",

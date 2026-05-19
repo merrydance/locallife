@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -57,26 +58,35 @@ func (server *Server) wechatLogin(ctx *gin.Context) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid wechat code")))
 			return
 		}
+		if errors.Is(err, wechat.ErrCode2SessionMissingOpenID) {
+			ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "微信登录服务返回异常，请稍后重试", "wechat login upstream missing openid"))
+			return
+		}
 
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to get wechat session: %w", err)))
 		return
 	}
+	openID := strings.TrimSpace(wechatResp.OpenID)
+	if openID == "" {
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, errors.New("wechat login response missing openid"), "微信登录服务返回异常，请稍后重试", "wechat login upstream missing openid"))
+		return
+	}
 
 	// 查找或创建用户
-	user, err := server.store.GetUserByWechatOpenID(ctx, wechatResp.OpenID)
+	user, err := server.store.GetUserByWechatOpenID(ctx, openID)
 
 	if err != nil {
 		if isNotFoundError(err) {
 			// 用户不存在,创建新用户(使用事务确保原子性)
 			txResult, err := server.store.CreateUserTx(ctx, db.CreateUserTxParams{
-				WechatOpenid: wechatResp.OpenID,
+				WechatOpenid: openID,
 				FullName:     "微信用户",
 				DefaultRole:  "customer",
 			})
 			if err != nil {
 				// 并发请求可能导致重复 key 冲突（TOCTOU），此时降级为查询已存在的用户
 				if isDuplicateKeyError(err) {
-					user, err = server.store.GetUserByWechatOpenID(ctx, wechatResp.OpenID)
+					user, err = server.store.GetUserByWechatOpenID(ctx, openID)
 					if err != nil {
 						ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get user after duplicate: %w", err)))
 						return

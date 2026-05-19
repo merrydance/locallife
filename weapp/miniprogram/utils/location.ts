@@ -5,6 +5,7 @@
 
 import { logger } from './logger'
 import { request } from './request'
+import { getDeviceId } from './device-id'
 
 /**
  * 位置信息接口（对齐后端 API 响应）
@@ -320,31 +321,4 @@ class LocationService {
 // 导出单例
 export const locationService = new LocationService()
 
-/**
- * 生成设备ID
- */
-export function getDeviceId(): string {
-    const STORAGE_KEY = 'device_id'
-
-    // 优先使用缓存的device_id
-    try {
-        const deviceId = wx.getStorageSync(STORAGE_KEY)
-        if (deviceId) {
-            return deviceId
-        }
-    } catch (err) {
-        logger.warn('读取缓存的device_id失败', err, 'getDeviceId')
-    }
-
-    // 生成新的device_id (使用时间戳+随机数)
-    const deviceId = `mp_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
-
-    try {
-        wx.setStorageSync(STORAGE_KEY, deviceId)
-        logger.info('生成新的device_id', { deviceId }, 'getDeviceId')
-    } catch (err) {
-        logger.warn('保存device_id失败', err, 'getDeviceId')
-    }
-
-    return deviceId
-}
+export { getDeviceId }
