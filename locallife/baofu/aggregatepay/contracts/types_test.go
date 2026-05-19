@@ -166,6 +166,23 @@ func TestUnifiedOrderResultExtractsWechatPayData(t *testing.T) {
 	require.JSONEq(t, `{"appId":"wx123","timeStamp":"1710000000","nonceStr":"nonce","package":"prepay_id=wx-prepay-id","signType":"RSA","paySign":"sign"}`, string(payData))
 }
 
+func TestUnifiedOrderResultExtractsStringWrappedWechatPayData(t *testing.T) {
+	var result UnifiedOrderResult
+
+	err := json.Unmarshal([]byte(`{
+		"resultCode":"SUCCESS",
+		"chlRetParam":{
+			"wc_pay_data":"{\"timeStamp\":\"1767225600\",\"nonceStr\":\"nonce\",\"package\":\"prepay_id=wx-prepay-id\",\"signType\":\"RSA\",\"paySign\":\"sign\"}"
+		}
+	}`), &result)
+	require.NoError(t, err)
+
+	payData, err := result.WechatPayData()
+
+	require.NoError(t, err)
+	require.JSONEq(t, `{"timeStamp":"1767225600","nonceStr":"nonce","package":"prepay_id=wx-prepay-id","signType":"RSA","paySign":"sign"}`, string(payData))
+}
+
 func TestUnifiedOrderResultAcceptsNumericChannelOrderID(t *testing.T) {
 	var result UnifiedOrderResult
 

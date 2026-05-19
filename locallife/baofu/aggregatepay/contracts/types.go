@@ -368,10 +368,16 @@ func (r *ChannelReturn) UnmarshalJSON(raw []byte) error {
 		return err
 	}
 	result := ChannelReturn{
-		PrepayID:      strings.TrimSpace(aux.PrepayID),
-		WechatPayData: aux.WechatPayData,
-		OpenID:        strings.TrimSpace(aux.OpenID),
-		SubOpenID:     strings.TrimSpace(aux.SubOpenID),
+		PrepayID:  strings.TrimSpace(aux.PrepayID),
+		OpenID:    strings.TrimSpace(aux.OpenID),
+		SubOpenID: strings.TrimSpace(aux.SubOpenID),
+	}
+	if len(aux.WechatPayData) > 0 {
+		wechatPayData, err := normalizeJSONRawMessagePayload("baofu unified order wc_pay_data", aux.WechatPayData)
+		if err != nil {
+			return err
+		}
+		result.WechatPayData = wechatPayData
 	}
 	if len(aux.OrderID) > 0 && string(aux.OrderID) != "null" {
 		orderID, err := jsonScalarToString(aux.OrderID)
@@ -394,6 +400,25 @@ func jsonScalarToString(raw json.RawMessage) (string, error) {
 		return strings.TrimSpace(number.String()), nil
 	}
 	return "", errors.New("baofu json scalar must be string or number")
+}
+
+func normalizeJSONRawMessagePayload(field string, raw json.RawMessage) (json.RawMessage, error) {
+	trimmed := json.RawMessage(strings.TrimSpace(string(raw)))
+	if len(trimmed) == 0 {
+		return nil, errors.New(field + " is not valid JSON")
+	}
+	if !json.Valid(trimmed) {
+		return nil, errors.New(field + " is not valid JSON")
+	}
+	var text string
+	if err := json.Unmarshal(trimmed, &text); err == nil {
+		inner := json.RawMessage(strings.TrimSpace(text))
+		if len(inner) == 0 || !json.Valid(inner) {
+			return nil, errors.New(field + " is not valid JSON")
+		}
+		return inner, nil
+	}
+	return trimmed, nil
 }
 
 func (r UnifiedOrderResult) WechatPayData() (json.RawMessage, error) {
