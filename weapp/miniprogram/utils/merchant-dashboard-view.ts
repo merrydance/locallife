@@ -1,6 +1,10 @@
 import { type BaofuSettlementAccountView } from '../api/baofu-account-view'
 import { getErrorUserMessage } from './user-facing'
 import type { MerchantStorefrontProfile } from '../services/merchant-open-status'
+import {
+  MERCHANT_FINANCE_LABEL,
+  MERCHANT_FINANCE_PAGE_PATH
+} from './merchant-finance-entry-view'
 
 export interface MerchantBusinessStateView {
   title: string
@@ -73,7 +77,7 @@ export const EMPTY_MERCHANT: MerchantStorefrontProfile = {
   updated_at: ''
 }
 
-const PRE_OPEN_PREPARATION_HINT = '主体审核通过后，可先完善菜品、桌台、套餐和门店配置；准备收款前再完成宝付结算账户开户。'
+const PRE_OPEN_PREPARATION_HINT = '主体审核通过后，可先完善菜品、桌台、套餐和门店配置；准备收款前再完成结算账户开户。'
 
 export function buildMerchantBusinessStateView(params: {
   merchantStatus?: string
@@ -100,7 +104,7 @@ export function buildMerchantBusinessStateView(params: {
   if (settlementAccountView?.isReady) {
     return {
       title: '打烊中',
-      hint: '宝付结算账户已开通，当前是自主打烊状态，可随时恢复营业。'
+      hint: '结算账户已开通，当前是自主打烊状态，可随时恢复营业。'
     }
   }
 
@@ -191,9 +195,8 @@ const DASHBOARD_SECTIONS: DashboardSectionDefinition[] = [
     id: 'finance',
     title: '财务',
     items: [
-      { id: 'finance-home', title: '结算账户', icon: createIcon('money', 'var(--td-brand-color)'), path: '/pages/merchant/finance/index' },
-      { id: 'application', title: '主体资料', icon: createIcon('personal-information', 'var(--td-brand-color)'), path: '/pages/merchant/settings/application/index' },
-      { id: 'baofu-settlement-account', title: '宝付结算账户', icon: createIcon('creditcard-add', 'var(--td-brand-color)'), path: '/pages/merchant/finance/settlement-account/index' }
+      { id: 'finance-home', title: MERCHANT_FINANCE_LABEL, icon: createIcon('money', 'var(--td-brand-color)'), path: MERCHANT_FINANCE_PAGE_PATH },
+      { id: 'application', title: '主体资料', icon: createIcon('personal-information', 'var(--td-brand-color)'), path: '/pages/merchant/settings/application/index' }
     ]
   }
 ]
@@ -270,8 +273,7 @@ export function buildSections(params: {
     title: section.title,
     items: section.items.filter((item) => {
       const passesDeviceGate = params.canManageDeviceSettings || !DEVICE_MANAGE_ENTRY_IDS.has(item.id)
-      const passesApplymentGate = params.canManageMerchantApplyment || item.id !== 'baofu-settlement-account'
-      return passesDeviceGate && passesApplymentGate
+      return passesDeviceGate
     }).map((item) => {
       let badgeText = ''
       if (item.badgeKey === 'orders') {

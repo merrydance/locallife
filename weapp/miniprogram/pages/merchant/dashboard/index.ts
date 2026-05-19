@@ -43,8 +43,11 @@ import {
   shouldAutoRefreshDashboard,
   SKELETON_ROWS
 } from '../../../utils/merchant-dashboard-view'
+import {
+  MERCHANT_SETTLEMENT_ACCOUNT_PAGE_PATH
+} from '../../../utils/merchant-finance-entry-view'
 
-const BAOFU_SETTLEMENT_ACCOUNT_PAGE_PATH = '/pages/merchant/finance/settlement-account/index'
+const SETTLEMENT_ACCOUNT_PAGE_PATH = MERCHANT_SETTLEMENT_ACCOUNT_PAGE_PATH
 
 Page({
   data: {
@@ -406,7 +409,7 @@ Page({
         return true
       }
 
-      const content = settlementAccountView.statusDesc || settlementAccountView.nextActionText || '宝付结算账户仍在处理，请稍后再试'
+      const content = settlementAccountView.statusDesc || settlementAccountView.nextActionText || '结算账户仍在处理，请稍后再试'
 
       const result = await new Promise<boolean>((resolve) => {
         wx.showModal({
@@ -420,7 +423,7 @@ Page({
       })
 
       if (result) {
-        wx.navigateTo({ url: BAOFU_SETTLEMENT_ACCOUNT_PAGE_PATH })
+        wx.navigateTo({ url: SETTLEMENT_ACCOUNT_PAGE_PATH })
       }
 
       return false
