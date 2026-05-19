@@ -70,7 +70,7 @@ const CONFIG_SECTIONS: ConfigSection[] = [
     desc: '处理主体申请、宝付开户与资金账户相关设置。',
     items: [
       { id: 'application', title: '主体申请', desc: '维护主体申请草稿、上传证照并提交审核', path: '/pages/merchant/settings/application/index' },
-      { id: 'baofu-settlement-account', title: '宝付结算账户', desc: '开通收款和分账所需的宝付二级户', path: '/pages/merchant/finance/settlement-account/index' }
+      { id: 'baofu-settlement-account', title: '结算账户', desc: '查看和维护收款、分账所需的账户状态', path: '/pages/merchant/finance/settlement-account/index' }
     ]
   },
   {

@@ -2,7 +2,7 @@
 
 <view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: var(--spacer-lg);">
   <view class="page-content">
-    <t-empty icon="info-circle" description="提现记录请在微信支付商户平台查看" />
+    <t-empty icon="info-circle" description="提现记录请在微信支付商户平台/商家助手查看" />
 
     <t-cell-group>
       <t-cell title="订单流水" arrow url="/pages/merchant/finance/bills/index" />
