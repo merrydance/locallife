@@ -60,6 +60,55 @@ func TestCreateRefundOrderTx_CountsPendingAndProcessingRefunds(t *testing.T) {
 	require.Equal(t, "pending", latestPendingRefund.Status)
 }
 
+func TestCreateRefundOrderTx_AllowsProductionRefundTypes(t *testing.T) {
+	ctx := context.Background()
+	refundTypes := []string{
+		"miniprogram",
+		"profit_sharing",
+		"rider_deposit",
+		"user_cancel",
+		"full",
+		"partial",
+		"merchant_cancel",
+		"amount_mismatch",
+		"closed_order_anomaly",
+	}
+
+	for _, refundType := range refundTypes {
+		t.Run(refundType, func(t *testing.T) {
+			user := createRandomUser(t)
+			payment, err := testStore.CreatePaymentOrder(ctx, CreatePaymentOrderParams{
+				UserID:                user.ID,
+				PaymentType:           "profit_sharing",
+				PaymentChannel:        PaymentChannelEcommerce,
+				RequiresProfitSharing: true,
+				BusinessType:          "order",
+				Amount:                1459,
+				OutTradeNo:            util.RandomString(32),
+			})
+			require.NoError(t, err)
+
+			payment, err = testStore.UpdatePaymentOrderToPaid(ctx, UpdatePaymentOrderToPaidParams{
+				ID:            payment.ID,
+				TransactionID: pgtype.Text{String: util.RandomString(32), Valid: true},
+			})
+			require.NoError(t, err)
+
+			result, err := testStore.CreateRefundOrderTx(ctx, CreateRefundOrderTxParams{
+				PaymentOrderID: payment.ID,
+				RefundType:     refundType,
+				RefundAmount:   payment.Amount,
+				RefundReason:   "配送时间太长",
+				OutRefundNo:    util.RandomString(32),
+			})
+			require.NoError(t, err)
+			require.Equal(t, refundType, result.RefundOrder.RefundType)
+			require.Equal(t, payment.Amount, result.RefundOrder.RefundAmount)
+			require.Equal(t, "pending", result.RefundOrder.Status)
+		})
+	}
+}
+
 func TestCreateRefundOrderTx_BaofuRejectsRefundAfterProfitSharingStarts(t *testing.T) {
 	ctx := context.Background()
 	user := createRandomUser(t)
