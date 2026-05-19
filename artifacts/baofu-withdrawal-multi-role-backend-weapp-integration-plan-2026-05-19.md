@@ -3,7 +3,7 @@
 **日期**：2026-05-19  
 **范围**：`locallife/` 宝付宝财通提现 HTTP 契约、共享提现服务接线、角色级权限解析、回调/恢复一致性；`weapp/` 商户、平台、运营商、骑手收入提现入口与页面组。  
 **风险等级**：G3。原因：涉及多角色资金提现、宝付宝财通二级户、外部支付命令、回调/轮询恢复、重复提交、对象级授权、提现账户归属、前端资金结果承接。  
-**当前结论**：后端宝付宝财通提现 HTTP 契约已经落地，商户小程序已接入真实宝付提现列表、发起和详情回读；平台、运营商、骑手收入的小程序页面仍待按后续批次接入。
+**当前结论**：后端宝付宝财通提现 HTTP 契约已经落地，商户、平台、运营商、骑手收入小程序均已接入真实宝付提现列表、发起和详情回读；骑手保证金退款仍保持独立微信退款路径。
 **执行原则**：先补后端真实契约和测试，再接小程序。前端不得伪造可提现余额、提现成功、提现终态或跨角色 owner 身份。
 
 **2026-05-19 执行进度更新**：
@@ -18,6 +18,25 @@
   - `weapp/miniprogram/pages/merchant/finance/withdrawals/detail/index.*`
 - 已新增并挂入质量门禁：`weapp/scripts/check-baofu-withdrawal-workflow.js`。
 - 本轮小程序验证已通过：`cd weapp && npm run quality:check`。
+- 已接入运营商提现页面组：
+  - `weapp/miniprogram/pages/operator/finance/withdrawals/index.*`
+  - `weapp/miniprogram/pages/operator/finance/withdrawals/create/index.*`
+  - `weapp/miniprogram/pages/operator/finance/withdrawals/detail/index.*`
+- 已整理运营商财务概览入口：
+  - `结算账户`
+  - `提现`
+- 已接入平台提现页面组：
+  - `weapp/miniprogram/pages/platform/finance/withdrawals/index.*`
+  - `weapp/miniprogram/pages/platform/finance/withdrawals/create/index.*`
+  - `weapp/miniprogram/pages/platform/finance/withdrawals/detail/index.*`
+- 已整理平台 dashboard 入口：
+  - `结算账户`
+  - `提现`
+- 已接入骑手收入提现页面组：
+  - `weapp/miniprogram/pages/rider/income/withdrawals/index.*`
+  - `weapp/miniprogram/pages/rider/income/withdrawals/create/index.*`
+  - `weapp/miniprogram/pages/rider/income/withdrawals/detail/index.*`
+- 已将骑手收入页提现入口改为由 `weapp/miniprogram/services/rider-income.ts` 组合后端 `getBaofuWithdrawalBalance('rider')`，不使用收入账本累计值推断可提现余额。
 
 ---
 
@@ -997,14 +1016,14 @@ git commit -m "feat(weapp): add rider income withdrawal flow"
 
 ### 9.2 仍不应马上开放的范围
 
-平台、运营商、骑手收入的小程序真实提现仍应按后续批次执行，不能直接复制商户页面后上线，原因是：
+平台、运营商、骑手收入的小程序真实提现已按后续批次接入；本次执行没有直接复制商户页面后上线，而是逐项关闭以下前置问题：
 
-1. 运营商 `finance/withdraw` 页面实际是财务概览；接入前必须先整理为 `财务概览`、`结算账户`、`提现` 三个清晰入口。
-2. 平台 dashboard 的 `宝付结算账户` 入口需要改成用户友好的 `结算账户`，并新增独立 `提现` 入口。
-3. 骑手收入提现必须与 `pages/rider/deposit/index` 保证金退款保持隔离。
-4. 骑手收入前端开放必须确认后端余额响应代表收入可提现能力，不能用收入累计值推断。
-5. 平台和运营商的创建权限虽然有后端 route 包裹，页面仍需按角色任务和无权限状态做可见承接。
-6. 宝付提现是 G3 资金链路；每个角色页面都必须单独验证重复提交、弱网、回读失败和跨角色 API 不串用。
+1. 运营商 `finance/withdraw` 仍保留为财务概览兼容路径，页面内已整理为 `财务概览`、`结算账户`、`提现` 三个清晰入口。
+2. 平台 dashboard 的 `宝付结算账户` 已改成用户友好的 `结算账户`，并新增独立 `提现` 入口。
+3. 骑手收入提现已与 `pages/rider/deposit/index` 保证金退款保持页面、API、文案隔离。
+4. 骑手收入提现入口只根据后端 `getBaofuWithdrawalBalance('rider')` 返回展示，不用收入累计值推断。
+5. 平台和运营商创建权限仍由后端 route/middleware 决定，页面只承接 `can_withdraw`、`disabled_reason` 和错误返回。
+6. `weapp/scripts/check-baofu-withdrawal-workflow.js` 已扩展到四角色页面组，阻止错误 role、前端 owner 字段、旧商户微信提现路径、骑手保证金退款路径混入宝付收入提现。
 
 ---
 
@@ -1019,34 +1038,34 @@ git commit -m "feat(weapp): add rider income withdrawal flow"
 - [x] 骑手收入提现只允许骑手本人。
 - [x] 后端不信任前端 owner 字段。
 - [x] 提现创建前查询宝付余额或后端可信可提现资产并校验金额。
-- [ ] 骑手收入不使用账本累计收入推断可提现余额。
+- [x] 骑手收入不使用账本累计收入推断可提现余额。
 - [x] 提现记录分页有 count query。
 - [x] 回调、恢复任务、详情展示不会让终态回退。
 - [x] 小程序 API 只调用 `/baofu-withdrawal/*` 新接口。
 - [x] 小程序共享 workflow 不决定 owner 和角色权限。
-- [ ] 商户、平台、运营商、骑手收入页面不互相调用错误角色 API。
-- [ ] 运营商和平台入口展示 `结算账户` / `提现`，不把 `宝付结算账户` 当作用户主词。
-- [ ] 骑手保证金退款与骑手收入提现页面、API、文案保持分离。
+- [x] 商户、平台、运营商、骑手收入页面不互相调用错误角色 API。
+- [x] 运营商和平台入口展示 `结算账户` / `提现`，不把 `宝付结算账户` 当作用户主词。
+- [x] 骑手保证金退款与骑手收入提现页面、API、文案保持分离。
 - [x] 商户小程序提交中态、防重入、结果未知和刷新失败都有页面承接。
-- [ ] 平台、运营商、骑手收入小程序提交中态、防重入、结果未知和刷新失败都有页面承接。
+- [x] 平台、运营商、骑手收入小程序提交中态、防重入、结果未知和刷新失败都有页面承接。
 - [ ] `cd locallife && go test ./api -run 'TestBaofuWithdrawal|TestBaofuWithdrawCallback|TestCasbin'` 通过。
 - [ ] `cd locallife && go test ./logic -run 'TestBaofuWithdrawService'` 通过。
 - [ ] `cd locallife && go test ./worker -run 'TestBaofuWithdrawal'` 通过。
 - [ ] `cd locallife && make check-baofu-contract && make check-generated` 通过。
 - [x] `cd weapp && npm run quality:check` 通过。
-- [ ] `git diff --check` 通过。
+- [x] `git diff --check` 通过。
 
 ---
 
 ## 11. 剩余风险记录
 
-后端契约完成且商户小程序接入后，剩余风险明确落在：
+后端契约完成且四角色小程序页面组接入后，剩余风险明确落在：
 
-- 平台、运营商、骑手收入小程序尚未接入宝付提现真实页面。
 - 宝付提现创建的重复请求幂等策略尚未产品化。
 - 宝付提现详情页是否触发即时查询仍需后端确定单写入口，避免 HTTP handler 与 worker 同时写状态。
 - 平台 owner ID 当前以后端单一常量承接；如果未来有多平台开户主体，生产来源需要调整。
-- 骑手收入可提现余额尚未被后端契约明确，不能把收入累计值当提现余额。
-- 运营商当前 `finance/withdraw` 路径名和页面内容不一致，接入提现前必须整理入口语义。
+- 骑手收入可提现余额已由宝付提现 balance 契约承接；若后续收入钱包改为非宝付余额口径，需要同步调整后端契约和 `services/rider-income.ts`。
+- 运营商当前 `finance/withdraw` 路径名历史上与页面内容不一致；本次保留兼容路径并在页面内整理为财务概览入口，未来如做路由清理可新增 `finance/overview` 并保留旧路径跳转。
+- 本次只运行小程序静态/门禁验证，未在微信开发者工具或真机上人工点击三角色提现流程。
 
-这些风险未关闭前，只能对外宣称“商户小程序真实宝付提现已接入”，不能宣称“平台、运营商、骑手收入真实宝付提现已接入”。
+这些风险未关闭前，可以对外宣称“四角色小程序宝付提现页面已接入真实 HTTP 契约并通过小程序质量门禁”，但不能宣称“重复请求具备产品化幂等保障”或“已完成真机验收”。

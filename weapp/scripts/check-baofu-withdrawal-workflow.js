@@ -96,18 +96,113 @@ const merchantWithdrawalSources = [
   read('miniprogram/pages/merchant/finance/withdrawals/detail/index.ts')
 ].join('\n')
 
-for (const required of [
-  "getBaofuWithdrawalBalance('merchant')",
-  "listBaofuWithdrawals('merchant'",
-  "createBaofuWithdrawal('merchant'",
-  "getBaofuWithdrawal('merchant'"
-]) {
-  assert(merchantWithdrawalSources.includes(required), `Merchant withdrawal pages must call ${required}`)
+const rolePageGroups = {
+  merchant: {
+    label: 'Merchant',
+    source: merchantWithdrawalSources
+  },
+  platform: {
+    label: 'Platform',
+    source: [
+      read('miniprogram/pages/platform/finance/withdrawals/index.ts'),
+      read('miniprogram/pages/platform/finance/withdrawals/create/index.ts'),
+      read('miniprogram/pages/platform/finance/withdrawals/detail/index.ts')
+    ].join('\n')
+  },
+  operator: {
+    label: 'Operator',
+    source: [
+      read('miniprogram/pages/operator/finance/withdrawals/index.ts'),
+      read('miniprogram/pages/operator/finance/withdrawals/create/index.ts'),
+      read('miniprogram/pages/operator/finance/withdrawals/detail/index.ts')
+    ].join('\n')
+  },
+  rider: {
+    label: 'Rider income',
+    source: [
+      read('miniprogram/pages/rider/income/withdrawals/index.ts'),
+      read('miniprogram/pages/rider/income/withdrawals/create/index.ts'),
+      read('miniprogram/pages/rider/income/withdrawals/detail/index.ts')
+    ].join('\n')
+  }
 }
 
-assert(!merchantWithdrawalSources.includes('owner_type'), 'Merchant withdrawal pages must not pass owner_type')
-assert(!merchantWithdrawalSources.includes('owner_id'), 'Merchant withdrawal pages must not pass owner_id')
-assert(!merchantWithdrawalSources.includes('/account/withdraw'), 'Merchant withdrawal pages must not call legacy WeChat withdraw routes')
-assert(!merchantWithdrawalSources.includes('/v1/rider/withdraw'), 'Merchant withdrawal pages must not call rider deposit withdraw routes')
+for (const [role, group] of Object.entries(rolePageGroups)) {
+  for (const required of [
+    `getBaofuWithdrawalBalance('${role}')`,
+    `listBaofuWithdrawals('${role}'`,
+    `createBaofuWithdrawal('${role}'`,
+    `getBaofuWithdrawal('${role}'`
+  ]) {
+    assert(group.source.includes(required), `${group.label} withdrawal pages must call ${required}`)
+  }
+
+  assert(!group.source.includes('owner_type'), `${group.label} withdrawal pages must not pass owner_type`)
+  assert(!group.source.includes('owner_id'), `${group.label} withdrawal pages must not pass owner_id`)
+  assert(!group.source.includes('/account/withdraw'), `${group.label} withdrawal pages must not call legacy WeChat withdraw routes`)
+  assert(!group.source.includes('/v1/rider/withdraw'), `${group.label} withdrawal pages must not call rider deposit withdraw routes`)
+}
+
+const appConfig = JSON.parse(read('miniprogram/app.json'))
+
+function findSubPackage(root) {
+  return appConfig.subPackages.find((item) => item.root === root)
+}
+
+for (const { root, routes } of [
+  {
+    root: 'pages/operator',
+    routes: [
+      'finance/withdrawals/index',
+      'finance/withdrawals/create/index',
+      'finance/withdrawals/detail/index'
+    ]
+  },
+  {
+    root: 'pages/platform',
+    routes: [
+      'finance/withdrawals/index',
+      'finance/withdrawals/create/index',
+      'finance/withdrawals/detail/index'
+    ]
+  },
+  {
+    root: 'pages/rider',
+    routes: [
+      'income/withdrawals/index',
+      'income/withdrawals/create/index',
+      'income/withdrawals/detail/index'
+    ]
+  }
+]) {
+  const subPackage = findSubPackage(root)
+  assert(subPackage, `app.json must include subpackage ${root}`)
+  for (const route of routes) {
+    assert(subPackage.pages.includes(route), `app.json ${root} must register ${route}`)
+  }
+}
+
+const operatorFinanceOverview = read('miniprogram/pages/operator/finance/withdraw/index.wxml')
+assert(operatorFinanceOverview.includes('title="结算账户"'), 'Operator finance overview must expose user-facing settlement account wording')
+assert(operatorFinanceOverview.includes('title="提现"'), 'Operator finance overview must expose withdrawal entry')
+assert(!operatorFinanceOverview.includes('宝付结算账户'), 'Operator finance overview must not expose Baofoo provider wording')
+
+const platformDashboard = read('miniprogram/pages/platform/dashboard/dashboard.ts')
+assert(platformDashboard.includes("title: '结算账户'"), 'Platform dashboard must expose user-facing settlement account wording')
+assert(platformDashboard.includes("title: '提现'"), 'Platform dashboard must expose withdrawal entry')
+assert(platformDashboard.includes("url: '/pages/platform/finance/withdrawals/index'"), 'Platform dashboard must link to platform withdrawals')
+assert(!platformDashboard.includes('宝付结算账户'), 'Platform dashboard must not expose Baofoo provider wording')
+
+const riderIncomePage = read('miniprogram/pages/rider/income/index.ts')
+const riderIncomeService = read('miniprogram/services/rider-income.ts')
+assert(riderIncomePage.includes('loadRiderIncomePageData'), 'Rider income page must load withdrawal entry through the rider income task-domain service')
+assert(riderIncomeService.includes("getBaofuWithdrawalBalance('rider')"), 'Rider income service must use backend withdrawal balance for income withdrawal entry')
+assert(!riderIncomePage.includes('summary.totalRiderIncome'), 'Rider income page must not infer withdrawable balance from cumulative income')
+
+const riderDepositSources = [
+  read('miniprogram/pages/rider/deposit/index.ts'),
+  read('miniprogram/pages/rider/deposit/index.wxml')
+].join('\n')
+assert(!riderDepositSources.includes('baofu-withdrawal'), 'Rider deposit refund pages must stay separate from Baofoo income withdrawal')
 
 console.log('Baofu withdrawal workflow contract check passed')
