@@ -1150,7 +1150,9 @@ func (server *Server) listMerchantOrders(ctx *gin.Context) {
 		return
 	}
 	for index, order := range orders {
-		resp[index].FeeBreakdown = newMerchantOrderFeeBreakdownResponse(feeBreakdowns[order.ID])
+		if breakdown, ok := feeBreakdowns[order.ID]; ok {
+			resp[index].FeeBreakdown = newMerchantOrderFeeBreakdownResponse(breakdown)
+		}
 	}
 
 	ctx.JSON(http.StatusOK, listMerchantOrdersResponse{
@@ -1248,7 +1250,9 @@ func (server *Server) getMerchantOrder(ctx *gin.Context) {
 		writeMerchantOrderFeeBreakdownError(ctx, merchant.ID, []db.Order{order}, err)
 		return
 	}
-	resp.FeeBreakdown = newMerchantOrderFeeBreakdownResponse(feeBreakdowns[order.ID])
+	if breakdown, ok := feeBreakdowns[order.ID]; ok {
+		resp.FeeBreakdown = newMerchantOrderFeeBreakdownResponse(breakdown)
+	}
 
 	ctx.JSON(http.StatusOK, resp)
 }

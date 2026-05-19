@@ -86,8 +86,14 @@ func (server *Server) loadMerchantOrderFeeBreakdowns(ctx context.Context, mercha
 	orderIDs := make([]int64, 0, len(orders))
 	ordersByID := make(map[int64]db.Order, len(orders))
 	for _, order := range orders {
+		if !merchantOrderRequiresFeeBreakdown(order) {
+			continue
+		}
 		orderIDs = append(orderIDs, order.ID)
 		ordersByID[order.ID] = order
+	}
+	if len(orderIDs) == 0 {
+		return map[int64]logic.MerchantOrderFeeBreakdown{}, nil
 	}
 
 	rows, err := server.store.ListProfitSharingOrdersByOrderIDsForMerchant(ctx, db.ListProfitSharingOrdersByOrderIDsForMerchantParams{
@@ -119,11 +125,18 @@ func (server *Server) loadMerchantOrderFeeBreakdowns(ctx context.Context, mercha
 	}
 
 	for _, order := range orders {
+		if !merchantOrderRequiresFeeBreakdown(order) {
+			continue
+		}
 		if _, ok := breakdowns[order.ID]; !ok {
 			return nil, fmt.Errorf("%w: order_id=%d merchant_id=%d", logic.ErrMerchantFeeBreakdownUnavailable, order.ID, merchantID)
 		}
 	}
 	return breakdowns, nil
+}
+
+func merchantOrderRequiresFeeBreakdown(order db.Order) bool {
+	return order.Status != db.OrderStatusCancelled
 }
 
 func writeMerchantOrderFeeBreakdownError(ctx *gin.Context, merchantID int64, orders []db.Order, err error) {
