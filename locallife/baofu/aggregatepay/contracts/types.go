@@ -404,21 +404,28 @@ func jsonScalarToString(raw json.RawMessage) (string, error) {
 
 func normalizeJSONRawMessagePayload(field string, raw json.RawMessage) (json.RawMessage, error) {
 	trimmed := json.RawMessage(strings.TrimSpace(string(raw)))
-	if len(trimmed) == 0 {
-		return nil, errors.New(field + " is not valid JSON")
-	}
-	if !json.Valid(trimmed) {
-		return nil, errors.New(field + " is not valid JSON")
-	}
-	var text string
-	if err := json.Unmarshal(trimmed, &text); err == nil {
-		inner := json.RawMessage(strings.TrimSpace(text))
-		if len(inner) == 0 || !json.Valid(inner) {
+	for i := 0; i < 2; i++ {
+		if len(trimmed) == 0 || !json.Valid(trimmed) {
 			return nil, errors.New(field + " is not valid JSON")
 		}
-		return inner, nil
+		var text string
+		if err := json.Unmarshal(trimmed, &text); err != nil {
+			break
+		}
+		trimmed = json.RawMessage(strings.TrimSpace(text))
+	}
+	if len(trimmed) == 0 || !json.Valid(trimmed) {
+		return nil, errors.New(field + " is not valid JSON")
+	}
+	if !isJSONObject(trimmed) {
+		return nil, errors.New(field + " must be a JSON object")
 	}
 	return trimmed, nil
+}
+
+func isJSONObject(raw json.RawMessage) bool {
+	var object map[string]json.RawMessage
+	return json.Unmarshal(raw, &object) == nil
 }
 
 func (r UnifiedOrderResult) WechatPayData() (json.RawMessage, error) {
