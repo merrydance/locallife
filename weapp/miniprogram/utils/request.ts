@@ -8,6 +8,7 @@ import { CacheManager, CacheStrategy } from './cache'
 import { API_CONFIG, ENV } from '../config/index'
 import { performanceMonitor } from './performance-monitor'
 import { mapBackendMessageToUserMessage } from './user-facing'
+import { buildDefaultRequestId } from './request-id'
 
 export const API_BASE = API_CONFIG.BASE_URL
 
@@ -317,7 +318,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     loadingText = '加载中...',
     timeout = API_CONFIG.TIMEOUT,
     context,
-    requestId = `${method}_${url}_${Date.now()}`,
+    requestId = buildDefaultRequestId(method, url),
     retry = false,
     useCache = false,
     cacheTTL = 5 * 60 * 1000, // 默认5分钟
