@@ -443,7 +443,8 @@ func (server *Server) setupRouter() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Recovery())
 	// Limit in-memory multipart parsing to reduce RAM spikes under concurrent uploads.
 	// Parts larger than this will be stored in temporary files.
 	router.MaxMultipartMemory = 8 << 20 // 8 MiB

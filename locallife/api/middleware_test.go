@@ -1,14 +1,18 @@
 package api
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/merrydance/locallife/token"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -103,4 +107,39 @@ func TestAuthMiddleware(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestWebSocketAuthFailureDoesNotLeakTokenInLogs(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	const leakToken = "leak-test-token"
+
+	var ginLogBuf bytes.Buffer
+	oldGinDefaultWriter := gin.DefaultWriter
+	gin.DefaultWriter = &ginLogBuf
+	defer func() {
+		gin.DefaultWriter = oldGinDefaultWriter
+	}()
+
+	server := newTestServer(t, nil)
+
+	var appLogBuf bytes.Buffer
+	oldLogger := log.Logger
+	log.Logger = zerolog.New(&appLogBuf).With().Timestamp().Logger()
+	defer func() {
+		log.Logger = oldLogger
+	}()
+
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/ws?token="+leakToken, nil)
+	require.NoError(t, err)
+	request.Header.Set("Upgrade", "websocket")
+	request.Header.Set("Connection", "upgrade")
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusUnauthorized, recorder.Code)
+	require.NotContains(t, ginLogBuf.String(), leakToken)
+	require.NotContains(t, appLogBuf.String(), leakToken)
+	require.True(t, strings.Contains(appLogBuf.String(), "WebSocket authentication failed"))
 }

@@ -45,7 +45,9 @@ func authMiddleware(tokenMaker token.Maker) gin.HandlerFunc {
 			if isWebSocketUpgrade(ctx) {
 				log.Warn().
 					Err(err).
-					Str("url", ctx.Request.URL.String()).
+					Str("method", ctx.Request.Method).
+					Str("path", ctx.Request.URL.Path).
+					Str("query", sanitizeQuery(ctx.Request.URL.RawQuery)).
 					Msg("WebSocket authentication failed")
 			}
 			ctx.AbortWithStatusJSON(http.StatusUnauthorized, errorResponse(err))
