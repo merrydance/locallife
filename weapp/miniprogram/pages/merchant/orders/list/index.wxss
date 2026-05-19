@@ -200,14 +200,35 @@
 }
 
 .total-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6rpx;
   font-size: 24rpx;
   color: var(--td-text-color-secondary);
+  flex-shrink: 0;
+}
+
+.total-line,
+.income-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10rpx;
+  white-space: nowrap;
 }
 
 .total-price {
   font-size: 32rpx;
   font-weight: bold;
   color: var(--td-text-color-primary);
+}
+
+.income-line {
+  color: var(--td-success-color);
+}
+
+.income-line--pending {
+  color: var(--td-text-color-placeholder);
 }
 
 .card-actions {

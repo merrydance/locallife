@@ -56,19 +56,29 @@
           </view>
         </view>
         <t-divider />
-        <view class="price-summary">
-          <view class="summary-row">
-            <text>商品小计</text>
-            <text>¥{{order.subtotal / 100}}</text>
+        <view class="price-summary" wx:if="{{order.fee_breakdown_view.available}}">
+          <view
+            wx:for="{{order.fee_breakdown_view.summary_rows}}"
+            wx:key="key"
+            wx:if="{{item.visible}}"
+            class="summary-row summary-row--{{item.tone}}"
+          >
+            <text>{{item.label}}</text>
+            <text class="{{item.tone === 'total' ? 'total-val' : ''}}">{{item.value_text}}</text>
           </view>
-          <view class="summary-row" wx:if="{{order.delivery_fee}}">
-            <text>配送费</text>
-            <text>¥{{order.delivery_fee / 100}}</text>
+          <t-divider />
+          <view
+            wx:for="{{order.fee_breakdown_view.settlement_rows}}"
+            wx:key="key"
+            wx:if="{{item.visible}}"
+            class="summary-row summary-row--{{item.tone}}"
+          >
+            <text>{{item.label}}</text>
+            <text class="{{item.tone === 'income' ? 'income-val' : ''}}">{{item.value_text}}</text>
           </view>
-          <view class="summary-row total-row">
-            <text>实付金额</text>
-            <text class="total-val">¥{{order.total_amount / 100}}</text>
-          </view>
+        </view>
+        <view wx:else class="price-summary-unavailable">
+          <text>{{order.fee_breakdown_view.unavailable_text}}</text>
         </view>
       </view>
       <view class="card-wrap detail-card">

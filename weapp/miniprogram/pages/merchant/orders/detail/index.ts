@@ -12,6 +12,7 @@ import dayjs from 'dayjs'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 import {
   buildPaymentView,
+  buildMerchantOrderFeeBreakdownView,
   buildMerchantOrderTimeline,
   buildPrintJobView,
   buildRefundView,
@@ -249,6 +250,7 @@ Page({
       location_secondary: scene.secondary,
       contact_name: order.delivery_contact_name || '',
       contact_phone: order.delivery_contact_phone || '',
+      fee_breakdown_view: buildMerchantOrderFeeBreakdownView(order),
       can_accept: OrderManagementAdapter.canAcceptOrder(order),
       can_reject: OrderManagementAdapter.canRejectOrder(order),
       can_mark_ready: OrderManagementAdapter.canMarkReady(order),
