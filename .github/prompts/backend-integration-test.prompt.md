@@ -6,6 +6,8 @@ description: "Use when drafting a request for new or updated backend integration
 
 Use this template when asking for new or updated integration coverage in this workspace.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions, and confirm the test scope before writing the request. Do not keep relying on stale context.
+
 ## Backend Integration Test
 
 Target area: `locallife/integration/`

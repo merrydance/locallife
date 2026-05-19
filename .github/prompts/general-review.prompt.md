@@ -8,6 +8,8 @@ Use this template when asking for a code review in this workspace.
 
 Use `general-review.prompt.md` only when the review spans multiple product areas or the target area is still ambiguous. Once the scope is clearly backend-only, web-only, or Mini Program-only, prefer the matching area-specific review prompt and let `.github/instructions/review.instructions.md` plus the area instructions carry the detailed review rules.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions, and confirm the review scope before writing findings. Do not keep relying on stale context.
+
 If the change is cross-area, high-risk, or touches security, status semantics, async recovery, sensitive data, or dangerous user actions, ask the reviewer to infer the risk level (`G0`/`G1`/`G2`/`G3`) using `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md` and scale the review depth accordingly, with validation expectations grounded in `.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md`.
 
 When the review spans multiple stacks, use the shared implementation and review matrix in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` so implementation push items, prohibited shortcuts, and findings-first review checks stay on the same source of truth.
@@ -24,6 +26,8 @@ Request:
 - Flag silent error swallowing, nil-or-empty values treated as implicit success, missing logging boundaries for unexpected failures, or caller-facing errors that are vague, unstable, or leak internal details
 - Check whether the change forms a complete end-to-end path instead of stopping at one layer
 - Check whether the capability owner and single source of truth remain clear, or whether the change introduced duplicate state semantics or multiple writers
+- Check whether replay, duplicate delivery, authorization, signature, injection, or sensitive-data boundaries are missing, bypassed, or only implied by comments
+- Check whether known security patterns were handled by an explicit guard, validation, or fail-closed branch instead of a silent fallback
 - Call out missing tests, missing regeneration steps, and residual risk
 - For `G2` and `G3` paths, call out missing failure-mode coverage, duplicate-trigger handling, rollback or recovery story, and user-visible degradation handling
 - If a high-risk path changed but was not actually validated, say exactly which path remains unverified
@@ -43,3 +47,9 @@ Area-specific reminders:
 - Backend-heavy review: name the handler/logic/store or worker path, any DTO or contract change, whether unexpected errors reach one structured logging boundary, whether public error semantics stay clear and stable, and whether regeneration steps may be relevant.
 - Web-heavy review: name the route or component path, expected loading or error behavior, and any sensitive fields or dangerous actions involved.
 - Mini Program-heavy review: name the page or component path, expected weak-network or re-entry behavior, and any state-recovery expectations.
+
+Security review reminders:
+
+- Prefer findings that identify the exact security boundary and the exact bypass path, not just a generic security smell.
+- If a known attack class is relevant but not covered by the diff, call that out as a gap only if this change should have enforced it.
+- Do not invent new security policy in review if the relevant rule already belongs in standards; point to the missing standard or missing hook instead.

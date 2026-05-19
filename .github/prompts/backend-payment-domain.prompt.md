@@ -11,6 +11,10 @@ Choose the provider domain README first:
 - WeChat payment and platform-ecommerce work: `.github/standards/domains/wechat-payment/README.md`
 - Baofoo/Baofu/BaoCaiTong account, merchant-report, aggregate payment, share, refund, withdrawal, or callback work: `.github/standards/domains/baofu-payment/README.md`
 
+Use `.github/standards/backend/EXTERNAL_API_CONTRACT_STANDARDS.md` as the shared backend rule for provider contract truth, field matrices, error mapping, explicit downgrade, and drift review.
+
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions, and confirm the active provider and capability group before writing the request. Do not keep relying on stale context.
+
 ## Payment Change Request
 
 Target area: `locallife/wechat/`, `locallife/baofu/`, or related backend payment and platform-ecommerce flows

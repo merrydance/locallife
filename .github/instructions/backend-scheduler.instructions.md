@@ -6,6 +6,8 @@ applyTo: "locallife/scheduler/**"
 
 Apply these rules for files under `locallife/scheduler/`.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions and prompt, and confirm the task scope before continuing. Do not keep relying on stale context.
+
 ## Role Of This Layer
 
 - Keep this layer responsible for recurring jobs, scheduler registration, and time-based orchestration.

@@ -6,6 +6,8 @@ applyTo: "locallife/wechat/**"
 
 Apply these rules for files under `locallife/wechat/`.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions and prompt, and confirm the task scope before continuing. Do not keep relying on stale context.
+
 ## Read First
 
 - `.github/standards/domains/wechat-payment/README.md`

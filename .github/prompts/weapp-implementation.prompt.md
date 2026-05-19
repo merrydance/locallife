@@ -6,6 +6,8 @@ description: "Use when drafting any Mini Program implementation request for weap
 
 Use this template when asking for a concrete Mini Program change in `weapp/`.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions, and confirm the implementation scope before writing the request. Do not keep relying on stale context.
+
 This is the default implementation prompt for Mini Program page work, including new non-consumer pages, management surfaces, diagnosis-first page方案, and payment-adjacent flows.
 
 Use the Mini Program row in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` as the shared source for implementation push items, prohibited shortcuts, and review-ready hand-off expectations.

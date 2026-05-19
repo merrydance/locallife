@@ -6,6 +6,8 @@ description: "Use when drafting a backend review request focused on SQL queries,
 
 Use this template when asking for a backend review centered on `db/query/`, `db/sqlc/`, migrations, or SQL-driven behavior changes.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions, and confirm the SQL scope before writing the request. Do not keep relying on stale context.
+
 ## SQL Change Review
 
 Target area: `locallife/`

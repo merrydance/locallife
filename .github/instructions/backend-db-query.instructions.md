@@ -6,6 +6,8 @@ applyTo: "locallife/db/query/**"
 
 Apply these rules for files under `locallife/db/query/`.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions and prompt, and confirm the task scope before continuing. Do not keep relying on stale context.
+
 Use `.github/standards/backend/SQL_STANDARDS.md` as the canonical SQL authoring and migration standard for this layer.
 
 ## Role Of This Layer

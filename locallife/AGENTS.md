@@ -18,6 +18,8 @@ For any non-trivial backend task, read these first:
 
 Use the prompt templates in `../.github/prompts/` when the task matches. Legacy `.codex/prompts/` files should be treated as backend-local wrappers, not the long-term source of truth.
 
+If the session is new, compacted, forked, or handed off, rerun routing from `../.github/README.md`, then reopen the matching backend instructions, prompt, and standards before continuing. Do not keep relying on stale context.
+
 ## Working Rules
 
 - Trace the full production path before editing: `api` -> `logic` -> `db/sqlc` -> `worker`/`scheduler`/`webhook`.

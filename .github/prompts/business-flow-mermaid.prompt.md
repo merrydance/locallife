@@ -6,6 +6,8 @@ description: "Use when turning rough business steps into a reviewable Mermaid fl
 
 Use this template when asking for a Mermaid flowchart from a business process description.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions, and confirm the flow scope before writing the request. Do not keep relying on stale context.
+
 ## Flowchart Request
 
 Request:

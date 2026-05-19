@@ -110,6 +110,31 @@
 
 Prompt 库必须接受和代码同等级的基础门禁。
 
+### 2.0 Context Rehydration Gate
+
+AI 任务不能依赖旧上下文里的“我记得”。以下情况必须先重新执行路由，再继续实现、审查或总结：
+
+- 新会话开始。
+- 上下文被压缩或摘要替换。
+- 分叉到子 Agent、并行 Agent、接手 Agent 或新的执行者。
+- 任务范围、目标路径或风险级别发生变化。
+- 从计划、审查、修复、文档同步等阶段切换到另一个阶段。
+
+重装载顺序：
+
+1. Rerun routing from `.github/README.md` and the active `AGENTS.md` / `.github/copilot-instructions.md` entrypoint.
+2. 确认目标区域和风险等级。
+3. 打开匹配的 `.github/instructions/*.instructions.md`。
+4. 如果任务是实现、审查、bugfix、集成测试、接手、事故回灌、任务闭环或图表工作，打开匹配的 `.github/prompts/*.prompt.md`。
+5. 只在路径、风险或 prompt 指向时打开更深的 `.github/standards/**` 或 domain README。
+
+执行要求：
+
+- Prompt、instructions 和 AGENTS 入口必须把这条规则写成短门禁，而不是复制完整标准正文。
+- Prompt governance lint 必须校验这些入口仍然引用本节或包含等价门禁。
+- 交付说明中如果发生过压缩、分叉、接手或阶段切换，应说明已经重新确认了目标 area、prompt/instructions 和相关 standards。
+- Do not keep relying on stale context.
+
 ### 2.1 Required Lint Checks
 
 - Frontmatter 完整：每个 `.prompt.md` 必须有 `name` 与 `description`。

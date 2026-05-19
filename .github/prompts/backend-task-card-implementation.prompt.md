@@ -6,6 +6,8 @@ description: "Use when drafting a backend implementation request from one task c
 
 Use this template when asking for a concrete backend fix from one scoped task card.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions, and confirm the card scope before writing the request. Do not keep relying on stale context.
+
 ## Backend Task Card Fix
 
 Request:

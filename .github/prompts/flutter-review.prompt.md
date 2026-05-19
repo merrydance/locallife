@@ -6,6 +6,8 @@ description: "Use when drafting a Flutter merchant app review request with findi
 
 Use this template when asking for a review in `merchant_app/`.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions, and confirm the review scope before writing the request. Do not keep relying on stale context.
+
 Use the Flutter Merchant App row in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` as the shared source for implementation push items, prohibited shortcuts, and findings-first review checks.
 Use `.github/standards/flutter/README.md` as the standards index, `.github/standards/flutter/PRODUCTION_ROBUSTNESS_BASELINE.md` as the default review baseline, and `.github/standards/flutter/REVIEW_CHECKLIST.md` as the compact checklist, then open the smallest relevant deep doc for visual design, push, auth, architecture, or keep-alive behavior.
 Infer or state the task risk level (`G0`/`G1`/`G2`/`G3`) using `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md`, then scale validation and residual-risk expectations with `.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md`.

@@ -6,6 +6,8 @@ description: "Use when drafting a Flutter implementation request for merchant_ap
 
 Use this template when asking for a concrete Flutter change in `merchant_app/`.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions, and confirm the implementation scope before writing the request. Do not keep relying on stale context.
+
 Use `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md` as the cross-frontend baseline for user-task-first design, repository/use-case/presentation boundaries, ViewState modeling, and API-flattening anti-patterns.
 Use the Flutter Merchant App row in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` as the shared source for implementation push items, prohibited shortcuts, and review-ready hand-off expectations.
 Use `.github/standards/flutter/README.md` as the standards index, `.github/standards/flutter/PRODUCTION_ROBUSTNESS_BASELINE.md` as the default reliability baseline, and the smallest relevant deep doc such as visual design, architecture, push, auth, or keep-alive instead of copying the full standards body here.

@@ -6,6 +6,8 @@ applyTo: "web/**"
 
 Apply these rules for files under `web/`.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions and prompt, and confirm the task scope before continuing. Do not keep relying on stale context.
+
 More specific web instruction files under `.github/instructions/` take precedence when their `applyTo` pattern matches, especially for `web/src/app/operator/`, `web/src/app/merchant/`, and `web/src/components/ui/`.
 
 ## Read First

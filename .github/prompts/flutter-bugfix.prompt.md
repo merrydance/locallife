@@ -6,6 +6,8 @@ description: "Use when drafting a Flutter merchant app bugfix or regression-fix 
 
 Use this template when asking for a regression or production bug fix in `merchant_app/`.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions, and confirm the bug scope before writing the request. Do not keep relying on stale context.
+
 Use `.github/standards/flutter/PRODUCTION_ROBUSTNESS_BASELINE.md` to establish the failure model, state-owner expectations, prohibited shortcuts, and validation depth. Then open the smallest relevant Flutter deep doc such as architecture, auth binding, push notification standards, or Android keep-alive guide.
 Classify the task as `G0`, `G1`, `G2`, or `G3` using `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md`, then choose validation depth and residual-risk wording using `.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md`.
 

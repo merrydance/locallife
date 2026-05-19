@@ -12,6 +12,8 @@ Read first:
 - `.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md`
 - `.github/standards/engineering/INCIDENT_FEEDBACK_LOOP.md`
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions, and confirm the incident scope before writing the request. Do not keep relying on stale context.
+
 Request:
 
 - Summarize the incident or escaped defect in one short paragraph
