@@ -338,9 +338,7 @@ class _OrderListPageState extends ConsumerState<OrderListPage> {
                             children: [
                               _OrderList(
                                 orders: orderState.orders
-                                    .where(
-                                      (o) => o.status == OrderStatus.pending,
-                                    )
+                                    .where((o) => o.isAwaitingAcceptance)
                                     .toList(),
                                 canOpenDetail: isAuthenticated,
                               ),
@@ -348,7 +346,7 @@ class _OrderListPageState extends ConsumerState<OrderListPage> {
                                 orders: orderState.orders
                                     .where(
                                       (o) =>
-                                          o.status != OrderStatus.pending &&
+                                          !o.isAwaitingAcceptance &&
                                           o.status != OrderStatus.completed &&
                                           o.status != OrderStatus.cancelled,
                                     )
@@ -399,6 +397,11 @@ class _OrderList extends ConsumerWidget {
       itemCount: orders.length,
       itemBuilder: (context, index) {
         final order = orders[index];
+        final isProcessing = ref.watch(
+          orderProvider.select(
+            (state) => state.actionInFlightOrderIds.contains(order.id),
+          ),
+        );
         return Card(
           margin: const EdgeInsets.symmetric(
             vertical: AppSpacing.sm,
@@ -497,67 +500,93 @@ class _OrderList extends ConsumerWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            order.hasReliableItems
-                                ? '${order.items.length} 件商品'
-                                : '明细同步中',
-                            style: const TextStyle(
-                              color: AppColors.onSurfaceVariant,
-                              fontSize: 12,
-                            ),
-                          ),
-                          if ((order.userName ?? '').trim().isNotEmpty)
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              order.userName!.trim(),
+                              order.hasReliableItems
+                                  ? '${order.items.length} 件商品'
+                                  : '明细同步中',
                               style: const TextStyle(
                                 color: AppColors.onSurfaceVariant,
                                 fontSize: 12,
                               ),
                             ),
-                        ],
+                            if ((order.userName ?? '').trim().isNotEmpty)
+                              Text(
+                                order.userName!.trim(),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: AppColors.onSurfaceVariant,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            if (order.deliveryFeeDisplayAmount > 0)
+                              Text(
+                                '代取费另列 ¥${order.deliveryFeeDisplayAmount.toStringAsFixed(2)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: AppColors.onSurfaceVariant,
+                                  fontSize: 12,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
-                      Text(
-                        '总计: ¥${order.amount.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.secondary,
+                      const SizedBox(width: AppSpacing.md),
+                      Flexible(
+                        child: Text(
+                          '餐费: ¥${order.merchantFoodDisplayAmount.toStringAsFixed(2)}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.secondary,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  if (order.status == OrderStatus.pending)
+                  if (order.isAwaitingAcceptance)
                     Padding(
                       padding: const EdgeInsets.only(top: AppSpacing.lg),
                       child: MerchantPrimaryButton(
                         expand: true,
-                        label: '立即接单',
-                        onPressed: () async {
-                          final success = await ref
-                              .read(orderProvider.notifier)
-                              .acceptOrder(order.id);
-                          if (success) {
-                            final notificationSettings = ref.read(
-                              notificationSettingsProvider,
-                            );
-                            final printerState = ref.read(printerProvider);
-                            final merchantName =
-                                ref.read(authProvider).merchantName ?? '商户工作台';
-                            if (notificationSettings
-                                    .autoPrintAfterAcceptEnabled &&
-                                printerState.connectedDevice != null) {
-                              await ref
-                                  .read(printerProvider.notifier)
-                                  .printAcceptedOrder(
-                                    order,
-                                    shopName: merchantName,
+                        label: isProcessing ? '正在接单...' : '立即接单',
+                        isLoading: isProcessing,
+                        onPressed: isProcessing
+                            ? null
+                            : () async {
+                                final success = await ref
+                                    .read(orderProvider.notifier)
+                                    .acceptOrder(order.id);
+                                if (success) {
+                                  final notificationSettings = ref.read(
+                                    notificationSettingsProvider,
                                   );
-                            }
-                          }
-                        },
+                                  final printerState = ref.read(
+                                    printerProvider,
+                                  );
+                                  final merchantName =
+                                      ref.read(authProvider).merchantName ??
+                                      '商户工作台';
+                                  if (notificationSettings
+                                          .autoPrintAfterAcceptEnabled &&
+                                      printerState.connectedDevice != null) {
+                                    await ref
+                                        .read(printerProvider.notifier)
+                                        .printAcceptedOrder(
+                                          order,
+                                          shopName: merchantName,
+                                        );
+                                  }
+                                }
+                              },
                       ),
                     ),
                 ],
@@ -645,14 +674,23 @@ class _OrderItemsEmptyText extends StatelessWidget {
 MerchantStatusTone _statusToneFor(OrderStatus status) {
   switch (status) {
     case OrderStatus.pending:
-      return MerchantStatusTone.warning;
+      return MerchantStatusTone.neutral;
     case OrderStatus.cancelled:
       return MerchantStatusTone.danger;
     case OrderStatus.completed:
       return MerchantStatusTone.neutral;
-    case OrderStatus.accepted:
+    case OrderStatus.paid:
+      return MerchantStatusTone.warning;
     case OrderStatus.preparing:
+    case OrderStatus.accepted:
+    case OrderStatus.ready:
+    case OrderStatus.courierAccepted:
+    case OrderStatus.picked:
     case OrderStatus.delivering:
+    case OrderStatus.riderDelivered:
+    case OrderStatus.userDelivered:
       return MerchantStatusTone.positive;
+    case OrderStatus.unknown:
+      return MerchantStatusTone.neutral;
   }
 }

@@ -3,24 +3,31 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/io.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:merchant_app/config/env.dart';
 import 'package:merchant_app/core/service/message_dedup.dart';
 import 'package:merchant_app/models/push_message.dart';
 
+typedef WsConnector = Future<WebSocketChannel> Function(Uri uri);
+
 class WsClient {
   final MessageDeduplicator _deduplicator;
-  IOWebSocketChannel? _channel;
+  final WsConnector _connector;
+  WebSocketChannel? _channel;
   Timer? _reconnectTimer;
   bool _isDisposed = false;
   bool _isConnecting = false;
   int _reconnectAttempts = 0;
   String? _currentToken;
+  int _connectionGeneration = 0;
 
   void Function(PushMessage)? onNewOrder;
   void Function(Map<String, dynamic>)? onTableStatusChange;
   void Function(bool)? onStatusChange;
+  Future<String?> Function()? onAuthenticationFailure;
 
-  WsClient(this._deduplicator);
+  WsClient(this._deduplicator, {WsConnector? connector})
+    : _connector = connector ?? _connectWebSocket;
 
   Future<void> connect(String token) async {
     if (_isDisposed) return;
@@ -28,6 +35,13 @@ class WsClient {
     if (_channel != null && _currentToken == token) return;
 
     _isConnecting = true;
+    _reconnectTimer?.cancel();
+    if (_channel != null) {
+      _connectionGeneration += 1;
+      await _channel!.sink.close();
+      _channel = null;
+    }
+    final generation = _connectionGeneration;
     _currentToken = token;
     final uri = Uri.parse('${Env.wsUrl}?token=$token');
     if (kDebugMode) {
@@ -35,17 +49,24 @@ class WsClient {
     }
 
     try {
-      final socket = await WebSocket.connect(uri.toString());
-      socket.pingInterval = const Duration(seconds: 20);
-      _channel = IOWebSocketChannel(socket);
+      final channel = await _connector(uri);
+      if (_isDisposed || generation != _connectionGeneration) {
+        await channel.sink.close();
+        return;
+      }
+
+      _channel = channel;
       _reconnectAttempts = 0;
       onStatusChange?.call(true);
 
-      _channel!.stream.listen(
+      channel.stream.listen(
         (message) async {
           await _handleMessage(message);
         },
         onDone: () {
+          if (generation != _connectionGeneration) {
+            return;
+          }
           if (kDebugMode) {
             debugPrint('WebSocket closed');
           }
@@ -54,6 +75,9 @@ class WsClient {
           _scheduleReconnect(token);
         },
         onError: (error) {
+          if (generation != _connectionGeneration) {
+            return;
+          }
           if (kDebugMode) {
             debugPrint('WebSocket error: $error');
           }
@@ -63,12 +87,19 @@ class WsClient {
         },
       );
     } catch (e) {
+      if (generation != _connectionGeneration) {
+        return;
+      }
       if (kDebugMode) {
         debugPrint('WebSocket connect error: $e');
       }
       _channel = null;
       onStatusChange?.call(false);
-      _scheduleReconnect(token);
+      if (isWebSocketAuthenticationFailure(e)) {
+        _scheduleAuthenticatedReconnect(token);
+      } else {
+        _scheduleReconnect(token);
+      }
     } finally {
       _isConnecting = false;
     }
@@ -125,10 +156,35 @@ class WsClient {
     });
   }
 
+  void _scheduleAuthenticatedReconnect(String expiredToken) {
+    _reconnectTimer?.cancel();
+    if (_isDisposed) return;
+
+    _reconnectAttempts += 1;
+    final delaySeconds = (_reconnectAttempts * 5).clamp(5, 30);
+
+    _reconnectTimer = Timer(Duration(seconds: delaySeconds), () async {
+      final refresh = onAuthenticationFailure;
+      if (refresh == null) {
+        connect(expiredToken);
+        return;
+      }
+
+      final freshToken = await refresh();
+      if (_isDisposed) return;
+
+      if (freshToken == null || freshToken.isEmpty) {
+        return;
+      }
+      connect(freshToken);
+    });
+  }
+
   void disconnect() {
     _reconnectTimer?.cancel();
     _reconnectAttempts = 0;
     _currentToken = null;
+    _connectionGeneration += 1;
     _channel?.sink.close();
     _channel = null;
     onStatusChange?.call(false);
@@ -138,6 +194,21 @@ class WsClient {
     _isDisposed = true;
     disconnect();
   }
+}
+
+Future<WebSocketChannel> _connectWebSocket(Uri uri) async {
+  final socket = await WebSocket.connect(uri.toString());
+  socket.pingInterval = const Duration(seconds: 20);
+  return IOWebSocketChannel(socket);
+}
+
+@visibleForTesting
+bool isWebSocketAuthenticationFailure(Object error) {
+  if (error is WebSocketException && error.message.contains('401')) {
+    return true;
+  }
+
+  return error.toString().contains('401');
 }
 
 @visibleForTesting

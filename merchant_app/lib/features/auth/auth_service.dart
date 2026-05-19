@@ -110,16 +110,19 @@ class AuthService {
 
   /// Refresh access token using refresh token
   Future<Map<String, dynamic>> refreshToken(String refreshToken) async {
-    final response = await _apiClient.post(
-      '/auth/refresh',
-      requiresAuth: false,
-      data: {'refresh_token': refreshToken},
-    );
-    final envelope = response.data;
-    if (envelope is Map && envelope.containsKey('data')) {
-      return envelope['data'] as Map<String, dynamic>;
+    if (refreshToken.isEmpty) {
+      return <String, dynamic>{};
     }
-    return envelope;
+
+    final tokens = await _apiClient.refreshSessionTokens();
+    if (tokens == null) {
+      return <String, dynamic>{};
+    }
+
+    return <String, dynamic>{
+      'access_token': tokens['accessToken'],
+      'refresh_token': tokens['refreshToken'],
+    };
   }
 
   Future<Map<String, String?>?> tryAutoLogin() async {

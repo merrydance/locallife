@@ -20,6 +20,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final AuthService _authService;
   final AuthSessionController _sessionController;
   Future<void>? _bindingLoginFuture;
+  Future<Map<String, String?>?>? _refreshSessionFuture;
   bool _manualLoginStarted = false;
 
   AuthNotifier(this._authService, this._sessionController)
@@ -58,9 +59,85 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   void _handleSessionInvalidation() {
+    final latestAccessToken = _sessionController.latestAccessToken;
+    final latestRefreshToken = _sessionController.latestRefreshToken;
+    if (latestAccessToken != null && latestRefreshToken != null) {
+      state = state.copyWith(
+        accessToken: latestAccessToken,
+        refreshToken: latestRefreshToken,
+        isAuthenticated: true,
+      );
+      _sessionController.clearTokenUpdate();
+      return;
+    }
+
     final reason = _sessionController.lastInvalidationReason;
+    if (reason == null) {
+      return;
+    }
+
     state = AuthState(isAuthenticated: false, isLoading: false, error: reason);
     _sessionController.clearInvalidation();
+  }
+
+  Future<Map<String, String?>?> refreshSession() async {
+    final existingRefresh = _refreshSessionFuture;
+    if (existingRefresh != null) {
+      return existingRefresh;
+    }
+
+    _refreshSessionFuture = _performRefreshSession();
+    return _refreshSessionFuture!.whenComplete(
+      () => _refreshSessionFuture = null,
+    );
+  }
+
+  Future<Map<String, String?>?> _performRefreshSession() async {
+    final refreshToken = state.refreshToken;
+    if (refreshToken == null || refreshToken.isEmpty) {
+      return null;
+    }
+
+    try {
+      final data = await _authService.refreshToken(refreshToken);
+      final accessToken = data['access_token']?.toString();
+      final newRefreshToken = data['refresh_token']?.toString();
+
+      if (accessToken == null || newRefreshToken == null) {
+        await _authService.clearTokens();
+        state = AuthState(
+          isAuthenticated: false,
+          isLoading: false,
+          error: '登录状态已失效，请重新绑定',
+        );
+        return null;
+      }
+
+      await _authService.saveTokens(
+        accessToken,
+        newRefreshToken,
+        merchantName: state.merchantName,
+      );
+      state = state.copyWith(
+        accessToken: accessToken,
+        refreshToken: newRefreshToken,
+        isAuthenticated: true,
+      );
+
+      return {
+        'accessToken': accessToken,
+        'refreshToken': newRefreshToken,
+        'merchantName': state.merchantName,
+      };
+    } catch (_) {
+      await _authService.clearTokens();
+      state = AuthState(
+        isAuthenticated: false,
+        isLoading: false,
+        error: '登录状态已失效，请重新绑定',
+      );
+      return null;
+    }
   }
 
   Future<void> loginWithBindingCode(String code) async {

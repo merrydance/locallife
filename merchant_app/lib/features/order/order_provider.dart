@@ -62,6 +62,23 @@ class OrderNotifier extends StateNotifier<OrderState> {
     }
   }
 
+  Future<List<OrderModel>> fetchAwaitingAcceptanceOrders() async {
+    try {
+      final response = await _apiClient.get(
+        '/merchant/orders',
+        queryParameters: const {
+          'page_id': 1,
+          'page_size': 20,
+          'status': 'paid',
+        },
+      );
+      return _extractOrdersFromResponse(response.data);
+    } catch (e) {
+      state = state.copyWith(error: ErrorHandler.getErrorMessage(e));
+      return const <OrderModel>[];
+    }
+  }
+
   Future<OrderModel?> fetchOrderDetail(String orderId) async {
     try {
       final response = await _apiClient.get('/merchant/orders/$orderId');
@@ -95,6 +112,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
                 id: o.id,
                 orderNum: o.orderNum,
                 amount: o.amount,
+                feeBreakdown: o.feeBreakdown,
                 status: OrderStatus.accepted,
                 createdAt: o.createdAt,
                 userName: o.userName,
@@ -135,6 +153,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
                 id: o.id,
                 orderNum: o.orderNum,
                 amount: o.amount,
+                feeBreakdown: o.feeBreakdown,
                 status: OrderStatus.cancelled,
                 createdAt: o.createdAt,
                 userName: o.userName,
@@ -207,6 +226,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
           ? incoming.orderNum
           : existing.orderNum,
       amount: incoming.amount > 0 ? incoming.amount : existing.amount,
+      feeBreakdown: incoming.feeBreakdown ?? existing.feeBreakdown,
       status: incoming.status,
       createdAt: incoming.createdAt,
       userName: incoming.userName ?? existing.userName,

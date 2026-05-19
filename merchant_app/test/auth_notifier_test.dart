@@ -43,6 +43,54 @@ void main() {
       await login;
     },
   );
+
+  test('updates in-memory tokens when api refresh succeeds', () async {
+    final sessionController = AuthSessionController();
+    final authService = _FakeAuthService();
+    final notifier = AuthNotifier(authService, sessionController);
+
+    authService.completeAutoLogin({
+      'accessToken': 'old-access-token',
+      'refreshToken': 'old-refresh-token',
+      'merchantName': '测试商户',
+    });
+    await authService.autoLoginCompleted;
+    await Future<void>.delayed(Duration.zero);
+
+    sessionController.updateTokens(
+      accessToken: 'fresh-access-token',
+      refreshToken: 'fresh-refresh-token',
+    );
+
+    expect(notifier.state.accessToken, 'fresh-access-token');
+    expect(notifier.state.refreshToken, 'fresh-refresh-token');
+    expect(notifier.state.merchantName, '测试商户');
+    expect(notifier.state.isAuthenticated, isTrue);
+  });
+
+  test('shares in-flight manual refresh requests', () async {
+    final authService = _FakeAuthService();
+    final notifier = AuthNotifier(authService, AuthSessionController());
+
+    authService.completeAutoLogin({
+      'accessToken': 'old-access-token',
+      'refreshToken': 'old-refresh-token',
+      'merchantName': '测试商户',
+    });
+    await authService.autoLoginCompleted;
+    await Future<void>.delayed(Duration.zero);
+
+    final firstRefresh = notifier.refreshSession();
+    final secondRefresh = notifier.refreshSession();
+
+    expect(authService.refreshCalls, 1);
+
+    authService.completeRefresh();
+    final results = await Future.wait([firstRefresh, secondRefresh]);
+
+    expect(results[0]?['accessToken'], 'fresh-access-token');
+    expect(results[1]?['accessToken'], 'fresh-access-token');
+  });
 }
 
 class _FakeAuthService implements AuthService {
@@ -51,7 +99,10 @@ class _FakeAuthService implements AuthService {
       Completer<Map<String, String?>?>();
   final Completer<Map<String, dynamic>> _verifyCompleter =
       Completer<Map<String, dynamic>>();
+  final Completer<Map<String, dynamic>> _refreshCompleter =
+      Completer<Map<String, dynamic>>();
   int verifyCalls = 0;
+  int refreshCalls = 0;
 
   Future<void> get autoLoginCompleted => _autoLoginCompleter.future;
 
@@ -71,6 +122,15 @@ class _FakeAuthService implements AuthService {
     }
   }
 
+  void completeRefresh() {
+    if (!_refreshCompleter.isCompleted) {
+      _refreshCompleter.complete({
+        'access_token': 'fresh-access-token',
+        'refresh_token': 'fresh-refresh-token',
+      });
+    }
+  }
+
   @override
   Future<void> clearTokens() async {}
 
@@ -83,7 +143,8 @@ class _FakeAuthService implements AuthService {
 
   @override
   Future<Map<String, dynamic>> refreshToken(String refreshToken) {
-    throw UnimplementedError();
+    refreshCalls++;
+    return _refreshCompleter.future;
   }
 
   @override

@@ -7,6 +7,7 @@ import 'package:merchant_app/features/auth/auth_provider.dart';
 import 'package:merchant_app/features/order/order_alert_coordinator.dart';
 import 'package:merchant_app/features/order/order_provider.dart';
 import 'package:merchant_app/features/order/working_status_provider.dart';
+import 'package:merchant_app/models/order.dart';
 
 final orderPollerProvider = Provider<OrderPoller>((ref) {
   final poller = OrderPoller(ref);
@@ -65,14 +66,25 @@ class OrderPoller {
       await _ref.read(deviceSyncServiceProvider).sendHeartbeat();
       debugPrint('OrderPoller: Fetching latest orders (fallback).');
       final previousOrders = List.of(_ref.read(orderProvider).orders);
-      final latestOrders = await _ref.read(orderProvider.notifier).fetchOrders();
-      await _ref.read(orderAlertCoordinatorProvider).handlePolledOrders(
+      final latestOrders = await fetchLatestAwaitingAcceptanceOrders(
+        _ref.read(orderProvider.notifier),
+      );
+      await _ref
+          .read(orderAlertCoordinatorProvider)
+          .handlePolledOrders(
             previousOrders: previousOrders,
             latestOrders: latestOrders,
           );
     } catch (e) {
       debugPrint('OrderPoller error: $e');
     }
+  }
+
+  @visibleForTesting
+  static Future<List<OrderModel>> fetchLatestAwaitingAcceptanceOrders(
+    OrderNotifier orderNotifier,
+  ) {
+    return orderNotifier.fetchAwaitingAcceptanceOrders();
   }
 
   void dispose() {

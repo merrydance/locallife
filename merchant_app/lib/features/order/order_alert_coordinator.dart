@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:merchant_app/core/audio/sound_player.dart';
+import 'package:merchant_app/core/audio/order_audio_alert.dart';
 import 'package:merchant_app/core/audio/tts_service.dart';
 import 'package:merchant_app/core/push/local_notification_service.dart';
 import 'package:merchant_app/core/service/navigation_service.dart';
@@ -29,6 +30,7 @@ final orderAlertCoordinatorProvider = Provider<OrderAlertCoordinator>((ref) {
 class OrderAlertCoordinator {
   OrderAlertCoordinator(this._ref);
 
+  final OrderAudioAlert _orderAudioAlert = OrderAudioAlert();
   final Ref _ref;
   final Set<String> _presentingOrderIds = <String>{};
 
@@ -45,15 +47,17 @@ class OrderAlertCoordinator {
     }
 
     final notificationSettings = _ref.read(notificationSettingsProvider);
-    if (notificationSettings.soundEnabled) {
-      await SoundPlayer.playNewOrderAlert();
-    }
-    if (notificationSettings.voiceEnabled) {
-      await TtsService.speakOrderAlert(
-        hydratedMessage.displayOrderNumber,
-        hydratedMessage.amount,
-      );
-    }
+    await _orderAudioAlert.runWithAlertVolume(() async {
+      if (notificationSettings.soundEnabled) {
+        await SoundPlayer.playNewOrderAlert();
+      }
+      if (notificationSettings.voiceEnabled) {
+        await TtsService.speakOrderAlert(
+          hydratedMessage.displayOrderNumber,
+          hydratedMessage.amount,
+        );
+      }
+    });
 
     if (notificationSettings.autoAcceptEnabled) {
       final accepted = await _acceptAndPrint(hydratedMessage);
@@ -74,7 +78,7 @@ class OrderAlertCoordinator {
               id: message.orderId,
               orderNum: message.orderNumber,
               amount: message.amount,
-              status: OrderStatus.pending,
+              status: OrderStatus.paid,
               createdAt: message.timestamp,
               items: message.items,
               note: message.note,
@@ -94,7 +98,7 @@ class OrderAlertCoordinator {
         .read(orderProvider.notifier)
         .fetchOrderDetail(message.orderId);
     if (hydratedOrder != null) {
-      if (hydratedOrder.status == OrderStatus.pending) {
+      if (hydratedOrder.isAwaitingAcceptance) {
         _presentAlert(message.withOrderSnapshot(hydratedOrder));
         return;
       }
@@ -119,7 +123,7 @@ class OrderAlertCoordinator {
       return;
     }
 
-    if (order.status == OrderStatus.pending) {
+    if (order.isAwaitingAcceptance) {
       _presentAlert(message.withOrderSnapshot(order));
       return;
     }
@@ -143,34 +147,32 @@ class OrderAlertCoordinator {
     required List<OrderModel> previousOrders,
     required List<OrderModel> latestOrders,
   }) async {
-    final newlyPendingOrders = identifyNewPendingOrders(
+    final newlyAwaitingAcceptanceOrders = identifyNewAwaitingAcceptanceOrders(
       previousOrders: previousOrders,
       latestOrders: latestOrders,
     );
 
-    for (final order in newlyPendingOrders) {
+    for (final order in newlyAwaitingAcceptanceOrders) {
       final message = PushMessage.fromOrder(order, shopName: _merchantName);
       await handleIncomingOrder(message, showLocalNotification: true);
     }
   }
 
-  static List<OrderModel> identifyNewPendingOrders({
+  static List<OrderModel> identifyNewAwaitingAcceptanceOrders({
     required List<OrderModel> previousOrders,
     required List<OrderModel> latestOrders,
   }) {
-    final previousPendingIds = previousOrders
-        .where((order) => order.status == OrderStatus.pending)
+    final previousAwaitingAcceptanceIds = previousOrders
+        .where((order) => order.isAwaitingAcceptance)
         .map((order) => order.id)
         .toSet();
 
-    final latestPendingOrders =
-        latestOrders
-            .where((order) => order.status == OrderStatus.pending)
-            .toList()
+    final latestAwaitingAcceptanceOrders =
+        latestOrders.where((order) => order.isAwaitingAcceptance).toList()
           ..sort((left, right) => left.createdAt.compareTo(right.createdAt));
 
-    return latestPendingOrders
-        .where((order) => !previousPendingIds.contains(order.id))
+    return latestAwaitingAcceptanceOrders
+        .where((order) => !previousAwaitingAcceptanceIds.contains(order.id))
         .toList(growable: false);
   }
 

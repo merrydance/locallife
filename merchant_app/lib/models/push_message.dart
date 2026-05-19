@@ -7,6 +7,7 @@ class PushMessage {
   final String title;
   final String content;
   final double amount;
+  final OrderFeeBreakdown? feeBreakdown;
   final String shopName;
   final String? note;
   final List<OrderItem> items;
@@ -20,6 +21,7 @@ class PushMessage {
     required this.title,
     required this.content,
     required this.amount,
+    this.feeBreakdown,
     required this.shopName,
     this.note,
     this.items = const <OrderItem>[],
@@ -40,6 +42,7 @@ class PushMessage {
       amount: json.containsKey('total_amount')
           ? order.amount
           : _amountFromPush(json),
+      feeBreakdown: order.feeBreakdown,
       shopName: json['shop_name'] ?? '',
       note: order.note,
       items: order.items,
@@ -56,6 +59,7 @@ class PushMessage {
       content:
           '订单号 ${order.orderNum.isNotEmpty ? order.orderNum : order.id}，请及时处理',
       amount: order.amount,
+      feeBreakdown: order.feeBreakdown,
       shopName: shopName,
       note: order.note,
       items: order.items,
@@ -72,6 +76,7 @@ class PushMessage {
       title: title,
       content: content,
       amount: amount,
+      feeBreakdown: feeBreakdown,
       shopName: shopName,
       note: note,
       items: items,
@@ -88,6 +93,7 @@ class PushMessage {
       title: title,
       content: content,
       amount: order.amount > 0 ? order.amount : amount,
+      feeBreakdown: order.feeBreakdown ?? feeBreakdown,
       shopName: shopName,
       note: order.note ?? note,
       items: order.items,
@@ -104,6 +110,7 @@ class PushMessage {
       'title': title,
       'content': content,
       'amount': amount,
+      'fee_breakdown': feeBreakdown?.toJson(),
       'shop_name': shopName,
       'notes': note,
       'items': items

@@ -21,6 +21,11 @@ final wsClientProvider = Provider((ref) {
     ref.read(tableProvider.notifier).updateTableFromWebSocket(data);
   };
 
+  client.onAuthenticationFailure = () async {
+    final tokens = await ref.read(authProvider.notifier).refreshSession();
+    return tokens?['accessToken'];
+  };
+
   // Clean up on dispose
   ref.onDispose(() => client.dispose());
 

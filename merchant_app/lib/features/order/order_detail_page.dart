@@ -41,6 +41,8 @@ class OrderDetailPage extends ConsumerWidget {
               _buildCustomerInfoCard(context, currentOrder),
               const SizedBox(height: AppSpacing.lg),
               _buildItemsCard(context, currentOrder),
+              const SizedBox(height: AppSpacing.lg),
+              _buildFeeBreakdownCard(context, currentOrder),
               if ((currentOrder.note ?? '').trim().isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.lg),
                 _buildNoteCard(context, currentOrder),
@@ -107,7 +109,7 @@ class OrderDetailPage extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        '订单总额',
+                        '餐费',
                         style: TextStyle(
                           color: AppColors.onSurfaceVariant,
                           fontSize: 12,
@@ -115,7 +117,7 @@ class OrderDetailPage extends ConsumerWidget {
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       Text(
-                        '¥${order.amount.toStringAsFixed(2)}',
+                        '¥${order.merchantFoodDisplayAmount.toStringAsFixed(2)}',
                         style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.w700,
@@ -209,9 +211,9 @@ class OrderDetailPage extends ConsumerWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                const Text('总计 ', style: TextStyle(fontSize: 16)),
+                const Text('餐费小计 ', style: TextStyle(fontSize: 16)),
                 Text(
-                  '¥${order.amount.toStringAsFixed(2)}',
+                  '¥${order.merchantFoodDisplayAmount.toStringAsFixed(2)}',
                   style: const TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w700,
@@ -223,6 +225,90 @@ class OrderDetailPage extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildFeeBreakdownCard(BuildContext context, OrderModel order) {
+    final feeBreakdown = order.feeBreakdown;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '费用清单',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            if (feeBreakdown == null)
+              _buildItemsStateText('费用清单同步中，请稍后刷新订单。')
+            else ...[
+              _buildFeeRow(
+                label: '餐费',
+                value: feeBreakdown.foodPayableAmount,
+                isStrong: true,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              _buildFeeRow(
+                label: '平台服务费',
+                value: -feeBreakdown.platformServiceFeeAmount,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              _buildFeeRow(
+                label: '支付通道费',
+                value: -feeBreakdown.paymentChannelFeeAmount,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              _buildFeeRow(
+                label: '预计到账',
+                value: feeBreakdown.merchantReceivableAmount,
+                isStrong: true,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceLow,
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                ),
+                child: _buildFeeRow(
+                  label: '代取费',
+                  value: feeBreakdown.deliveryPayableAmount,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeeRow({
+    required String label,
+    required double value,
+    bool isStrong = false,
+  }) {
+    final prefix = value < 0 ? '-¥' : '¥';
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: isStrong ? AppColors.onSurface : AppColors.onSurfaceVariant,
+            fontWeight: isStrong ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+        Text(
+          '$prefix${value.abs().toStringAsFixed(2)}',
+          style: TextStyle(
+            color: isStrong ? AppColors.secondary : AppColors.onSurfaceVariant,
+            fontWeight: isStrong ? FontWeight.w700 : FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 
@@ -345,7 +431,7 @@ class OrderDetailPage extends ConsumerWidget {
       ),
     );
 
-    if (order.status != OrderStatus.pending || !isAuthenticated) {
+    if (!order.isAwaitingAcceptance || !isAuthenticated) {
       return const SizedBox.shrink();
     }
 
@@ -507,14 +593,23 @@ class OrderDetailPage extends ConsumerWidget {
 MerchantStatusTone _detailStatusToneFor(OrderStatus status) {
   switch (status) {
     case OrderStatus.pending:
-      return MerchantStatusTone.warning;
+      return MerchantStatusTone.neutral;
     case OrderStatus.cancelled:
       return MerchantStatusTone.danger;
     case OrderStatus.completed:
       return MerchantStatusTone.neutral;
-    case OrderStatus.accepted:
+    case OrderStatus.paid:
+      return MerchantStatusTone.warning;
     case OrderStatus.preparing:
+    case OrderStatus.accepted:
+    case OrderStatus.ready:
+    case OrderStatus.courierAccepted:
+    case OrderStatus.picked:
     case OrderStatus.delivering:
+    case OrderStatus.riderDelivered:
+    case OrderStatus.userDelivered:
       return MerchantStatusTone.positive;
+    case OrderStatus.unknown:
+      return MerchantStatusTone.neutral;
   }
 }
