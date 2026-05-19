@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/baofu"
 	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -256,6 +257,11 @@ func expectActiveMerchantBaofuAccountForPaymentAPI(store *mockdb.MockStore, merc
 type fakeAPIBaofuAggregateClient struct {
 	calledUnified bool
 	lastUnified   aggregatecontracts.UnifiedOrderRequest
+	queryErr      error
+	queryResult   *aggregatecontracts.UnifiedOrderResult
+	lastQuery     aggregatecontracts.PaymentQueryRequest
+	closeErr      error
+	closeResult   *aggregatecontracts.OrderCloseResult
 }
 
 func (c *fakeAPIBaofuAggregateClient) CreateUnifiedOrder(_ context.Context, req aggregatecontracts.UnifiedOrderRequest) (*aggregatecontracts.UnifiedOrderResult, error) {
@@ -269,7 +275,14 @@ func (c *fakeAPIBaofuAggregateClient) CreateUnifiedOrder(_ context.Context, req 
 	}, nil
 }
 
-func (c *fakeAPIBaofuAggregateClient) QueryPayment(context.Context, aggregatecontracts.PaymentQueryRequest) (*aggregatecontracts.UnifiedOrderResult, error) {
+func (c *fakeAPIBaofuAggregateClient) QueryPayment(_ context.Context, req aggregatecontracts.PaymentQueryRequest) (*aggregatecontracts.UnifiedOrderResult, error) {
+	c.lastQuery = req
+	if c.queryErr != nil {
+		return nil, c.queryErr
+	}
+	if c.queryResult != nil {
+		return c.queryResult, nil
+	}
 	return nil, errors.New("not implemented in api baofu payment test")
 }
 
@@ -290,6 +303,12 @@ func (c *fakeAPIBaofuAggregateClient) QueryRefund(context.Context, aggregatecont
 }
 
 func (c *fakeAPIBaofuAggregateClient) CloseOrder(context.Context, aggregatecontracts.OrderCloseRequest) (*aggregatecontracts.OrderCloseResult, error) {
+	if c.closeErr != nil {
+		return nil, c.closeErr
+	}
+	if c.closeResult != nil {
+		return c.closeResult, nil
+	}
 	return nil, errors.New("not implemented in api baofu payment test")
 }
 
@@ -1196,6 +1215,137 @@ func TestClosePaymentOrderAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestClosePaymentOrderAPI_BaofuProviderErrorReturnsStableChineseMessage(t *testing.T) {
+	user, _ := randomUser(t)
+	paymentOrder := randomPaymentOrder(user.ID, nil)
+	paymentOrder.ID = 77101
+	paymentOrder.PaymentChannel = db.PaymentChannelBaofuAggregate
+	paymentOrder.Status = PaymentStatusPending
+	paymentOrder.OutTradeNo = "BF_API_CLOSE_ERR_1"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	baofuClient := &fakeAPIBaofuAggregateClient{
+		closeErr: baofu.NewProviderBusinessError("order_close", "ORDER_NOT_EXIST", "provider-secret-detail"),
+	}
+	store.EXPECT().
+		GetPaymentOrder(gomock.Any(), paymentOrder.ID).
+		Return(paymentOrder, nil)
+	store.EXPECT().
+		CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
+		Return(db.ExternalPaymentCommand{ID: 77102}, nil)
+
+	server := newTestServer(t, store)
+	server.SetBaofuAggregateClientForTest(baofuClient, logic.BaofuAggregateFacadeConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+		MiniProgramAppID:  "wxapp",
+		PaymentNotifyURL:  "https://api.example.com/v1/webhooks/baofu/payment",
+	})
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodPost, fmt.Sprintf("/v1/payments/%d/close", paymentOrder.ID), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadGateway, recorder.Code)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, CodeBadGateway, resp.Code)
+	require.Equal(t, "宝付支付状态暂不可确认，请稍后刷新支付状态；如持续失败请联系平台处理", resp.Message)
+	require.NotContains(t, recorder.Body.String(), "ORDER_NOT_EXIST")
+	require.NotContains(t, recorder.Body.String(), "provider-secret-detail")
+}
+
+func TestClosePaymentOrderAPI_BaofuServiceNotConfiguredReturnsStableChineseMessage(t *testing.T) {
+	user, _ := randomUser(t)
+	paymentOrder := randomPaymentOrder(user.ID, nil)
+	paymentOrder.ID = 77111
+	paymentOrder.PaymentChannel = db.PaymentChannelBaofuAggregate
+	paymentOrder.Status = PaymentStatusPending
+	paymentOrder.OutTradeNo = "BF_API_CLOSE_CFG_1"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetPaymentOrder(gomock.Any(), paymentOrder.ID).
+		Return(paymentOrder, nil)
+
+	server := newTestServer(t, store)
+	server.SetBaofuAggregateClientForTest(&fakeAPIBaofuAggregateClient{}, logic.BaofuAggregateFacadeConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+	})
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodPost, fmt.Sprintf("/v1/payments/%d/close", paymentOrder.ID), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, CodeServiceUnavail, resp.Code)
+	require.Equal(t, "宝付支付服务暂不可用，请联系平台处理", resp.Message)
+	require.NotContains(t, recorder.Body.String(), logic.ErrBaofuPaymentServiceNotConfigured.Error())
+}
+
+func TestQueryPaymentOrderAPI_BaofuProviderErrorReturnsStableChineseMessage(t *testing.T) {
+	user, _ := randomUser(t)
+	paymentOrder := randomPaymentOrder(user.ID, nil)
+	paymentOrder.ID = 77121
+	paymentOrder.PaymentChannel = db.PaymentChannelBaofuAggregate
+	paymentOrder.Status = PaymentStatusPending
+	paymentOrder.OutTradeNo = "BF_API_QUERY_ERR_1"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	baofuClient := &fakeAPIBaofuAggregateClient{
+		queryErr: baofu.NewProviderBusinessError("order_query", "SYSTEM_BUSY", "provider-secret-detail"),
+	}
+	store.EXPECT().
+		GetPaymentOrder(gomock.Any(), paymentOrder.ID).
+		Return(paymentOrder, nil)
+
+	server := newTestServer(t, store)
+	server.SetBaofuAggregateClientForTest(baofuClient, logic.BaofuAggregateFacadeConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+		MiniProgramAppID:  "wxapp",
+		PaymentNotifyURL:  "https://api.example.com/v1/webhooks/baofu/payment",
+	})
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/v1/payments/%d/query", paymentOrder.ID), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadGateway, recorder.Code)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, CodeBadGateway, resp.Code)
+	require.Equal(t, "宝付支付状态暂不可确认，请稍后刷新支付状态；如持续失败请联系平台处理", resp.Message)
+	require.NotContains(t, recorder.Body.String(), "SYSTEM_BUSY")
+	require.NotContains(t, recorder.Body.String(), "provider-secret-detail")
+	require.Equal(t, aggregatecontracts.PaymentQueryRequest{
+		MerchantID: "COLLECT_MER",
+		TerminalID: "COLLECT_TER",
+		OutTradeNo: paymentOrder.OutTradeNo,
+	}, baofuClient.lastQuery)
 }
 
 func TestCreatePaymentOrderAPI_ServiceUnavailableWhenEcommerceClientMissing(t *testing.T) {

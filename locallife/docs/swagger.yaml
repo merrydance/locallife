@@ -26080,6 +26080,14 @@ paths:
           description: 服务器内部错误
           schema:
             $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 宝付支付状态暂不可确认
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 支付关闭服务不可用
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
       summary: 关闭支付订单
@@ -26117,6 +26125,10 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
         "404":
           description: 支付订单不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 宝付支付状态暂不可确认
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "503":

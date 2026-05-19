@@ -124,6 +124,86 @@ func TestBaofuPaymentServiceCreateWechatJSAPIOrderRejectsMissingClientIP(t *test
 	require.False(t, client.called)
 }
 
+func TestBaofuPaymentServiceCloseOrderRecordsCommandBeforeClientCall(t *testing.T) {
+	store := &fakeBaofuPaymentStore{}
+	client := &fakeBaofuAggregatePaymentClient{
+		closeResult: &aggregatecontracts.OrderCloseResult{
+			MerchantID: "COLLECT_MER",
+			TerminalID: "COLLECT_TER",
+			OutTradeNo: "PO202605030009",
+			ResultCode: aggregatecontracts.BusinessResultCodeSuccess,
+		},
+	}
+	now := time.Date(2026, 5, 3, 10, 31, 12, 0, time.UTC)
+	service := NewBaofuPaymentService(store, client, BaofuPaymentServiceConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+	})
+	service.now = func() time.Time { return now }
+
+	result, err := service.CloseOrder(context.Background(), CloseBaofuOrderInput{
+		PaymentOrder: db.PaymentOrder{
+			ID:         99,
+			OutTradeNo: "PO202605030009",
+		},
+		BusinessOwner: db.ExternalPaymentBusinessOwnerOrder,
+	})
+
+	require.NoError(t, err)
+	require.True(t, store.commandCreatedBeforeClientCall)
+	require.True(t, client.closeCalled)
+	require.Equal(t, db.ExternalPaymentProviderBaofu, store.lastCommand.Provider)
+	require.Equal(t, db.PaymentChannelBaofuAggregate, store.lastCommand.Channel)
+	require.Equal(t, db.ExternalPaymentCapabilityBaofuPayment, store.lastCommand.Capability)
+	require.Equal(t, db.ExternalPaymentCommandTypeClosePayment, store.lastCommand.CommandType)
+	require.Equal(t, db.ExternalPaymentBusinessOwnerOrder, store.lastCommand.BusinessOwner)
+	require.Equal(t, "payment_order", store.lastCommand.BusinessObjectType.String)
+	require.Equal(t, int64(99), store.lastCommand.BusinessObjectID.Int64)
+	require.Equal(t, db.ExternalPaymentObjectBaofuPaymentOrder, store.lastCommand.ExternalObjectType)
+	require.Equal(t, "PO202605030009", store.lastCommand.ExternalObjectKey)
+	require.Equal(t, db.ExternalPaymentCommandStatusSubmitted, store.lastCommand.CommandStatus)
+	require.Equal(t, now, store.lastCommand.SubmittedAt)
+	require.Equal(t, "COLLECT_MER", client.lastClose.MerchantID)
+	require.Equal(t, "COLLECT_TER", client.lastClose.TerminalID)
+	require.Equal(t, "PO202605030009", client.lastClose.OutTradeNo)
+	require.Equal(t, "PO202605030009", result.OutTradeNo)
+}
+
+func TestBaofuPaymentServiceQueryOrderUsesTransactionIDWhenPresent(t *testing.T) {
+	store := &fakeBaofuPaymentStore{}
+	client := &fakeBaofuAggregatePaymentClient{
+		queryResult: &aggregatecontracts.UnifiedOrderResult{
+			MerchantID:       "COLLECT_MER",
+			TerminalID:       "COLLECT_TER",
+			OutTradeNo:       "PO202605030010",
+			TradeNo:          "BFTX202605030010",
+			TxnState:         aggregatecontracts.PaymentStateWaitPaying,
+			ResultCode:       aggregatecontracts.BusinessResultCodeSuccess,
+			SuccessAmountFen: 1200,
+		},
+	}
+	service := NewBaofuPaymentService(store, client, BaofuPaymentServiceConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+	})
+
+	result, err := service.QueryOrder(context.Background(), QueryBaofuOrderInput{
+		PaymentOrder: db.PaymentOrder{
+			ID:            100,
+			OutTradeNo:    "PO202605030010",
+			TransactionID: pgtype.Text{String: "BFTX202605030010", Valid: true},
+		},
+	})
+
+	require.NoError(t, err)
+	require.True(t, client.queryCalled)
+	require.Equal(t, "COLLECT_MER", client.lastQuery.MerchantID)
+	require.Equal(t, "COLLECT_TER", client.lastQuery.TerminalID)
+	require.Equal(t, "BFTX202605030010", client.lastQuery.TradeNo)
+	require.Empty(t, client.lastQuery.OutTradeNo)
+	require.Equal(t, aggregatecontracts.PaymentStateWaitPaying, result.TxnState)
+}
+
 func TestBaofuPaymentServiceRecordPaymentCallbackFactCreatesTerminalApplication(t *testing.T) {
 	store := &fakeBaofuPaymentStore{}
 	now := time.Date(2026, 5, 3, 10, 20, 0, 0, time.UTC)
@@ -218,6 +298,37 @@ func TestBaofuPaymentServiceRecordPaymentQueryFactSkipsProcessingApplication(t *
 	require.False(t, store.lastFact.IsTerminal)
 	require.Equal(t, "baofu:query:payment:PO202605030001:WAIT_PAYING", store.lastFact.DedupeKey)
 	require.False(t, store.applicationCreated)
+}
+
+func TestBaofuPaymentServiceRecordReservationPaymentQueryFactCreatesReservationApplication(t *testing.T) {
+	store := &fakeBaofuPaymentStore{}
+	now := time.Date(2026, 5, 3, 10, 25, 30, 0, time.UTC)
+	service := NewBaofuPaymentService(store, nil, BaofuPaymentServiceConfig{})
+	service.now = func() time.Time { return now }
+
+	result, err := service.RecordPaymentFact(context.Background(), RecordBaofuPaymentFactInput{
+		PaymentOrder: db.PaymentOrder{
+			ID:           188,
+			Amount:       22345,
+			OutTradeNo:   "BFR202605030001",
+			BusinessType: db.ExternalPaymentBusinessOwnerReservation,
+		},
+		FactSource: db.ExternalPaymentFactSourceQuery,
+		Fact: aggregatecontracts.PaymentFact{
+			OutTradeNo:       "BFR202605030001",
+			TradeNo:          "BFPAY202605030188",
+			TransactionState: aggregatecontracts.PaymentStateSuccess,
+			SuccessAmountFen: 22345,
+			Raw:              json.RawMessage(`{"outTradeNo":"BFR202605030001","tradeNo":"BFPAY202605030188","txnState":"SUCCESS"}`),
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result.Application)
+	require.Equal(t, db.ExternalPaymentBusinessOwnerReservation, store.lastFact.BusinessOwner.String)
+	require.Equal(t, "reservation_domain", store.lastApplication.Consumer)
+	require.Equal(t, "payment_order", store.lastApplication.BusinessObjectType)
+	require.Equal(t, int64(188), store.lastApplication.BusinessObjectID)
 }
 
 func TestBaofuPaymentServiceRecordPaymentQueryFactKeepsMissingUpstreamAmountEmpty(t *testing.T) {
@@ -368,6 +479,14 @@ type fakeBaofuAggregatePaymentClient struct {
 	lastRequest   aggregatecontracts.UnifiedOrderRequest
 	unifiedResult *aggregatecontracts.UnifiedOrderResult
 	err           error
+	queryCalled   bool
+	lastQuery     aggregatecontracts.PaymentQueryRequest
+	queryResult   *aggregatecontracts.UnifiedOrderResult
+	queryErr      error
+	closeCalled   bool
+	lastClose     aggregatecontracts.OrderCloseRequest
+	closeResult   *aggregatecontracts.OrderCloseResult
+	closeErr      error
 }
 
 func (c *fakeBaofuAggregatePaymentClient) CreateUnifiedOrder(ctx context.Context, req aggregatecontracts.UnifiedOrderRequest) (*aggregatecontracts.UnifiedOrderResult, error) {
@@ -387,7 +506,15 @@ func (c *fakeBaofuAggregatePaymentClient) CreateProfitSharing(ctx context.Contex
 }
 
 func (c *fakeBaofuAggregatePaymentClient) QueryPayment(ctx context.Context, req aggregatecontracts.PaymentQueryRequest) (*aggregatecontracts.UnifiedOrderResult, error) {
-	return nil, errors.New("not implemented in payment tests")
+	c.queryCalled = true
+	c.lastQuery = req
+	if c.queryErr != nil {
+		return nil, c.queryErr
+	}
+	if c.queryResult == nil {
+		return nil, errors.New("not implemented in payment tests")
+	}
+	return c.queryResult, nil
 }
 
 func (c *fakeBaofuAggregatePaymentClient) QueryProfitSharing(ctx context.Context, req aggregatecontracts.ShareQueryRequest) (*aggregatecontracts.ShareResult, error) {
@@ -403,7 +530,15 @@ func (c *fakeBaofuAggregatePaymentClient) QueryRefund(ctx context.Context, req a
 }
 
 func (c *fakeBaofuAggregatePaymentClient) CloseOrder(ctx context.Context, req aggregatecontracts.OrderCloseRequest) (*aggregatecontracts.OrderCloseResult, error) {
-	return nil, errors.New("not implemented in payment tests")
+	c.closeCalled = true
+	c.lastClose = req
+	if c.closeErr != nil {
+		return nil, c.closeErr
+	}
+	if c.closeResult == nil {
+		return nil, errors.New("missing close result")
+	}
+	return c.closeResult, nil
 }
 
 type fakeBaofuPaymentCommandStore struct {

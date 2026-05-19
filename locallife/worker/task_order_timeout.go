@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/rs/zerolog/log"
 )
@@ -91,6 +92,19 @@ func (p *RedisTaskProcessor) ProcessTaskOrderPaymentTimeout(ctx context.Context,
 		return nil
 	}
 
+	delegated, err := p.delegatePendingBaofuOrderPaymentTimeout(ctx, order)
+	if err != nil {
+		log.Error().Err(err).
+			Int64("order_id", order.ID).
+			Str("order_no", order.OrderNo).
+			Str("operation", "delegate_order_timeout_to_payment_order_timeout").
+			Msg("delegate baofu order payment timeout failed")
+		return err
+	}
+	if delegated {
+		return nil
+	}
+
 	// 取消订单
 	_, err = p.store.CancelOrderTx(ctx, db.CancelOrderTxParams{
 		OrderID:      order.ID,
@@ -109,4 +123,39 @@ func (p *RedisTaskProcessor) ProcessTaskOrderPaymentTimeout(ctx context.Context,
 		Msg("order payment timeout, cancelled successfully")
 
 	return nil
+}
+
+func (p *RedisTaskProcessor) delegatePendingBaofuOrderPaymentTimeout(ctx context.Context, order db.Order) (bool, error) {
+	paymentOrder, err := p.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+	})
+	if err != nil {
+		if err == db.ErrRecordNotFound {
+			return false, nil
+		}
+		return false, fmt.Errorf("get latest payment order for order timeout: %w", err)
+	}
+	if paymentOrder.PaymentChannel != db.PaymentChannelBaofuAggregate || paymentOrder.Status != "pending" {
+		return false, nil
+	}
+
+	log.Info().
+		Int64("order_id", order.ID).
+		Str("order_no", order.OrderNo).
+		Int64("payment_order_id", paymentOrder.ID).
+		Str("payment_order_no", paymentOrder.OutTradeNo).
+		Str("payment_channel", paymentOrder.PaymentChannel).
+		Str("operation", "delegate_order_timeout_to_payment_order_timeout").
+		Msg("delegating legacy order payment timeout to payment order timeout")
+
+	payload, err := json.Marshal(PayloadPaymentOrderTimeout{PaymentOrderNo: paymentOrder.OutTradeNo})
+	if err != nil {
+		return false, fmt.Errorf("marshal delegated baofu payment timeout payload: %w", err)
+	}
+	task := asynq.NewTask(TaskPaymentOrderTimeout, payload)
+	if err := p.ProcessTaskPaymentOrderTimeout(ctx, task); err != nil {
+		return true, fmt.Errorf("process delegated baofu payment order timeout: %w", err)
+	}
+	return true, nil
 }

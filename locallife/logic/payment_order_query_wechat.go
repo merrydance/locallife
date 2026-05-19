@@ -35,6 +35,9 @@ func (svc *PaymentOrderService) QueryPaymentOrder(ctx context.Context, input Que
 	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
 		return svc.queryOrdinaryServiceProviderPaymentOrder(ctx, paymentOrder)
 	}
+	if paymentOrderUsesBaofuAggregateChannel(paymentOrder) {
+		return svc.queryBaofuAggregatePaymentOrder(ctx, paymentOrder)
+	}
 	if paymentOrder.PaymentChannel == db.PaymentChannelDirect {
 		return svc.queryDirectPaymentOrder(ctx, paymentOrder)
 	}
@@ -101,6 +104,23 @@ func (svc *PaymentOrderService) queryOrdinaryServiceProviderPaymentOrder(ctx con
 		payParams = ordinaryJSAPIPayParamsToWechat(ordinaryPayParams)
 	}
 
+	return QueryPaymentOrderResult{
+		PaymentOrder: paymentOrder,
+		PayParams:    payParams,
+		WechatOrder:  wechatOrder,
+	}, nil
+}
+
+func (svc *PaymentOrderService) queryBaofuAggregatePaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder) (QueryPaymentOrderResult, error) {
+	if svc.baofuPaymentService == nil {
+		return QueryPaymentOrderResult{}, ErrBaofuPaymentServiceNotConfigured
+	}
+	queryResp, err := svc.baofuPaymentService.QueryOrder(ctx, QueryBaofuOrderInput{PaymentOrder: paymentOrder})
+	if err != nil {
+		return QueryPaymentOrderResult{}, fmt.Errorf("query baofu payment order: %w", err)
+	}
+	wechatOrder := mapBaofuAggregatePaymentWechatOrder(queryResp)
+	var payParams *wechat.JSAPIPayParams
 	return QueryPaymentOrderResult{
 		PaymentOrder: paymentOrder,
 		PayParams:    payParams,

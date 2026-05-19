@@ -1249,6 +1249,9 @@ func (svc *PaymentOrderService) ClosePaymentOrder(ctx context.Context, input Clo
 }
 
 func (svc *PaymentOrderService) closePendingPaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder) (ClosePaymentOrderResult, error) {
+	if paymentOrderUsesBaofuAggregateChannel(paymentOrder) {
+		return svc.closeBaofuAggregatePaymentOrder(ctx, paymentOrder)
+	}
 	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
 		if paymentOrder.CombinedPaymentID.Valid {
 			return svc.closeCombinedPaymentOrder(ctx, paymentOrder)

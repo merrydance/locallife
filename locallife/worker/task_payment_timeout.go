@@ -149,12 +149,16 @@ func (p *RedisTaskProcessor) ProcessTaskPaymentOrderTimeout(ctx context.Context,
 
 type paymentOrderTimeoutRemoteClose struct {
 	required bool
+	baofu    bool
 	direct   bool
 	ordinary bool
 	subMchID string
 }
 
 func (p *RedisTaskProcessor) preparePaymentOrderTimeoutClose(ctx context.Context, paymentOrder db.PaymentOrder) (paymentOrderTimeoutRemoteClose, bool, error) {
+	if paymentOrder.PaymentChannel == db.PaymentChannelBaofuAggregate {
+		return p.prepareBaofuPaymentOrderTimeoutClose(ctx, paymentOrder)
+	}
 	if paymentOrderUsesEcommerceChannel(paymentOrder) {
 		return p.prepareEcommercePaymentOrderTimeoutClose(ctx, paymentOrder)
 	}
@@ -382,6 +386,9 @@ func (p *RedisTaskProcessor) closeRemotePaymentOrderForTimeout(ctx context.Conte
 	if !remoteClose.required {
 		return nil
 	}
+	if remoteClose.baofu {
+		return p.closeBaofuPaymentOrderForTimeout(ctx, paymentOrder)
+	}
 	if remoteClose.direct {
 		if err := p.directPaymentClient.CloseOrder(ctx, paymentOrder.OutTradeNo); err != nil && !wechatPayErrorCodeIs(err, "ORDER_CLOSED") {
 			return fmt.Errorf("close direct payment order before local timeout close: %w", err)
@@ -482,36 +489,4 @@ func ordinaryProviderErrorCodeIs(err error, code string) bool {
 		return false
 	}
 	return strings.EqualFold(strings.TrimSpace(providerErr.ProviderCode), code)
-}
-
-func (p *RedisTaskProcessor) publishPaymentTimeoutRemoteAmountMismatchAlert(ctx context.Context, paymentOrder db.PaymentOrder, remoteAmount int64, remoteState string) {
-	p.publishAlert(ctx, AlertData{
-		AlertType:   AlertTypePaymentTimeout,
-		Level:       AlertLevelCritical,
-		Title:       "支付超时扫描发现远端支付金额不一致",
-		Message:     fmt.Sprintf("支付单 %s 超时扫描发现微信侧状态为 %s，但远端金额 %d 与本地金额 %d 不一致，系统已停止自动关单。", paymentOrder.OutTradeNo, remoteState, remoteAmount, paymentOrder.Amount),
-		RelatedID:   paymentOrder.ID,
-		RelatedType: "payment_order",
-		Extra: map[string]interface{}{
-			"out_trade_no":    paymentOrder.OutTradeNo,
-			"remote_state":    remoteState,
-			"expected_amount": paymentOrder.Amount,
-			"actual_amount":   remoteAmount,
-		},
-	})
-}
-
-func (p *RedisTaskProcessor) publishPaymentTimeoutUnexpectedRemoteStateAlert(ctx context.Context, paymentOrder db.PaymentOrder, remoteState string) {
-	p.publishAlert(ctx, AlertData{
-		AlertType:   AlertTypePaymentTimeout,
-		Level:       AlertLevelCritical,
-		Title:       "支付超时扫描遇到异常远端状态",
-		Message:     fmt.Sprintf("支付单 %s 超时扫描发现微信侧状态为 %s，系统已停止自动关单，请人工核对。", paymentOrder.OutTradeNo, remoteState),
-		RelatedID:   paymentOrder.ID,
-		RelatedType: "payment_order",
-		Extra: map[string]interface{}{
-			"out_trade_no": paymentOrder.OutTradeNo,
-			"remote_state": remoteState,
-		},
-	})
 }

@@ -36,8 +36,9 @@ type baofuPaymentFeeActualStore interface {
 }
 
 const (
-	baofuOrderPaymentFactConsumerDomain = "order_domain"
-	baofuPaymentFactBusinessObjectOrder = "payment_order"
+	baofuOrderPaymentFactConsumerDomain       = "order_domain"
+	baofuReservationPaymentFactConsumerDomain = "reservation_domain"
+	baofuPaymentFactBusinessObjectOrder       = "payment_order"
 )
 
 type BaofuPaymentServiceConfig struct {
@@ -83,6 +84,10 @@ type CreateBaofuWechatJSAPIOrderResult struct {
 type CloseBaofuOrderInput struct {
 	PaymentOrder  db.PaymentOrder
 	BusinessOwner string
+}
+
+type QueryBaofuOrderInput struct {
+	PaymentOrder db.PaymentOrder
 }
 
 type RecordBaofuPaymentFactInput struct {
@@ -204,6 +209,11 @@ func (s *BaofuPaymentService) RecordPaymentFact(ctx context.Context, input Recor
 	if len(rawResource) == 0 {
 		rawResource = []byte(`{}`)
 	}
+	businessOwner := strings.TrimSpace(paymentOrder.BusinessType)
+	if businessOwner == "" {
+		businessOwner = db.ExternalPaymentBusinessOwnerOrder
+	}
+	consumer := baofuPaymentFactConsumer(businessOwner)
 
 	fact, err := factStore.CreateExternalPaymentFact(ctx, db.CreateExternalPaymentFactParams{
 		Provider:             db.ExternalPaymentProviderBaofu,
@@ -215,7 +225,7 @@ func (s *BaofuPaymentService) RecordPaymentFact(ctx context.Context, input Recor
 		ExternalObjectType:   db.ExternalPaymentObjectBaofuPaymentOrder,
 		ExternalObjectKey:    outTradeNo,
 		ExternalSecondaryKey: pgtype.Text{String: strings.TrimSpace(paymentFact.TradeNo), Valid: strings.TrimSpace(paymentFact.TradeNo) != ""},
-		BusinessOwner:        pgtype.Text{String: db.ExternalPaymentBusinessOwnerOrder, Valid: true},
+		BusinessOwner:        pgtype.Text{String: businessOwner, Valid: businessOwner != ""},
 		BusinessObjectType:   pgtype.Text{String: baofuPaymentFactBusinessObjectOrder, Valid: true},
 		BusinessObjectID:     pgtype.Int8{Int64: paymentOrder.ID, Valid: true},
 		UpstreamState:        upstreamState,
@@ -261,7 +271,7 @@ func (s *BaofuPaymentService) RecordPaymentFact(ctx context.Context, input Recor
 	}
 	application, err := factStore.CreateExternalPaymentFactApplication(ctx, db.CreateExternalPaymentFactApplicationParams{
 		FactID:             fact.ID,
-		Consumer:           baofuOrderPaymentFactConsumerDomain,
+		Consumer:           consumer,
 		BusinessObjectType: baofuPaymentFactBusinessObjectOrder,
 		BusinessObjectID:   paymentOrder.ID,
 		Status:             db.ExternalPaymentFactApplicationStatusPending,
@@ -271,6 +281,15 @@ func (s *BaofuPaymentService) RecordPaymentFact(ctx context.Context, input Recor
 	}
 	result.Application = &application
 	return result, nil
+}
+
+func baofuPaymentFactConsumer(businessOwner string) string {
+	switch strings.TrimSpace(businessOwner) {
+	case db.ExternalPaymentBusinessOwnerReservation, reservationAddonBusiness:
+		return baofuReservationPaymentFactConsumerDomain
+	default:
+		return baofuOrderPaymentFactConsumerDomain
+	}
 }
 
 func (s *BaofuPaymentService) CloseOrder(ctx context.Context, input CloseBaofuOrderInput) (*aggregatecontracts.OrderCloseResult, error) {
@@ -310,6 +329,30 @@ func (s *BaofuPaymentService) CloseOrder(ctx context.Context, input CloseBaofuOr
 		TerminalID: strings.TrimSpace(cfg.CollectTerminalID),
 		OutTradeNo: strings.TrimSpace(paymentOrder.OutTradeNo),
 	})
+}
+
+func (s *BaofuPaymentService) QueryOrder(ctx context.Context, input QueryBaofuOrderInput) (*aggregatecontracts.UnifiedOrderResult, error) {
+	if s == nil || s.client == nil {
+		return nil, ErrBaofuPaymentServiceNotConfigured
+	}
+	cfg := s.config.normalized()
+	if cfg.CollectMerchantID == "" || cfg.CollectTerminalID == "" {
+		return nil, ErrBaofuPaymentServiceNotConfigured
+	}
+	paymentOrder := input.PaymentOrder
+	if paymentOrder.ID == 0 || strings.TrimSpace(paymentOrder.OutTradeNo) == "" {
+		return nil, ErrBaofuPaymentInvalidInput
+	}
+	req := aggregatecontracts.PaymentQueryRequest{
+		MerchantID: strings.TrimSpace(cfg.CollectMerchantID),
+		TerminalID: strings.TrimSpace(cfg.CollectTerminalID),
+	}
+	if paymentOrder.TransactionID.Valid && strings.TrimSpace(paymentOrder.TransactionID.String) != "" {
+		req.TradeNo = strings.TrimSpace(paymentOrder.TransactionID.String)
+	} else {
+		req.OutTradeNo = strings.TrimSpace(paymentOrder.OutTradeNo)
+	}
+	return s.client.QueryPayment(ctx, req)
 }
 
 func validateCreateBaofuWechatJSAPIOrderInput(input CreateBaofuWechatJSAPIOrderInput) error {

@@ -382,6 +382,7 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "支付订单不属于当前用户"
 // @Failure 404 {object} ErrorResponse "支付订单不存在"
+// @Failure 502 {object} ErrorResponse "宝付支付状态暂不可确认"
 // @Failure 503 {object} ErrorResponse "支付服务不可用"
 // @Router /v1/payments/{id}/query [get]
 // @Security BearerAuth
@@ -405,6 +406,14 @@ func (server *Server) queryPaymentOrder(ctx *gin.Context) {
 	if err != nil {
 		if isEcommerceClientNotConfigured(err) {
 			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "商户支付能力未完成配置，当前无法确认支付状态，请联系平台处理", "query payment client not configured"))
+			return
+		}
+		if isBaofuPaymentServiceNotConfigured(err) {
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "宝付支付服务暂不可用，请联系平台处理", "query baofu payment service not configured"))
+			return
+		}
+		if isBaofuProviderPaymentError(err) {
+			ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "宝付支付状态暂不可确认，请稍后刷新支付状态；如持续失败请联系平台处理", "query baofu payment provider failed"))
 			return
 		}
 		if writeLogicRequestError(ctx, err) {
@@ -1055,6 +1064,8 @@ type closePaymentOrderRequest struct {
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "非订单所有者"
 // @Failure 404 {object} ErrorResponse "支付订单不存在"
+// @Failure 502 {object} ErrorResponse "宝付支付状态暂不可确认"
+// @Failure 503 {object} ErrorResponse "支付关闭服务不可用"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Router /v1/payments/{id}/close [post]
 // @Security BearerAuth
@@ -1079,6 +1090,14 @@ func (server *Server) closePaymentOrder(ctx *gin.Context) {
 	if err != nil {
 		if isEcommerceClientNotConfigured(err) {
 			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "支付关闭服务暂不可用，请稍后重试", "close payment client not configured"))
+			return
+		}
+		if isBaofuPaymentServiceNotConfigured(err) {
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "宝付支付服务暂不可用，请联系平台处理", "close baofu payment service not configured"))
+			return
+		}
+		if isBaofuProviderPaymentError(err) {
+			ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "宝付支付状态暂不可确认，请稍后刷新支付状态；如持续失败请联系平台处理", "close baofu payment provider failed"))
 			return
 		}
 		if writeLogicRequestError(ctx, err) {

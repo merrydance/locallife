@@ -23220,6 +23220,18 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
+                    },
+                    "502": {
+                        "description": "宝付支付状态暂不可确认",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "支付关闭服务不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
                     }
                 }
             }
@@ -23278,6 +23290,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "支付订单不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "宝付支付状态暂不可确认",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
