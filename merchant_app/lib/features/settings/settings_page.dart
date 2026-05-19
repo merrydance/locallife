@@ -153,7 +153,7 @@ class SettingsPage extends ConsumerWidget {
                           if (confirm == true) {
                             ref
                                 .read(workingStatusProvider.notifier)
-                                .setStatus(false);
+                                .resetLocal();
                             ref.read(orderProvider.notifier).clearOrders();
                             ref.read(authProvider.notifier).logout();
                           }

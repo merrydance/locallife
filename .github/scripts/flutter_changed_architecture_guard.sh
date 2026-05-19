@@ -56,6 +56,15 @@ for file in "${changed_files[@]}"; do
       violations=$((violations + 1))
     fi
   fi
+
+  if [[ "$file" == "merchant_app/lib/features/order/working_status_provider.dart" ]]; then
+    if ! grep -q "package:merchant_app/core/network/api_client.dart" "$abs_path" || \
+       ! grep -q "/merchants/me/status" "$abs_path"; then
+      echo "  ❌ working status provider must keep merchant open status backed by /merchants/me/status"
+      echo "     $file"
+      violations=$((violations + 1))
+    fi
+  fi
 done
 
 rm -f /tmp/flutter_guard_match.txt

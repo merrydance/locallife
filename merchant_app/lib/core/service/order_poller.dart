@@ -18,7 +18,9 @@ final orderPollerProvider = Provider<OrderPoller>((ref) {
 // A provider that just watches the necessary states and keeps the poller running
 final orderPollerManagerProvider = Provider<void>((ref) {
   final authState = ref.watch(authProvider);
-  final isWorking = ref.watch(workingStatusProvider);
+  final isWorking = ref.watch(
+    workingStatusProvider.select((state) => state.isOnline),
+  );
   final hasNetwork = ref.watch(connectivityProvider).value ?? false;
 
   final poller = ref.watch(orderPollerProvider);

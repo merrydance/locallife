@@ -25,9 +25,8 @@ class _OrderListPageState extends ConsumerState<OrderListPage> {
   @override
   void initState() {
     super.initState();
-    // Initial fetch only if already working (unlikely with new default but good for state persistence)
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (ref.read(workingStatusProvider)) {
+      if (ref.read(workingStatusProvider).isOnline) {
         ref.read(orderProvider.notifier).fetchOrders();
       }
     });
@@ -35,9 +34,25 @@ class _OrderListPageState extends ConsumerState<OrderListPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(workingStatusProvider.select((state) => state.isOnline), (
+      previous,
+      next,
+    ) {
+      if (next) {
+        ref.read(orderProvider.notifier).fetchOrders();
+      } else if (previous == true) {
+        ref.read(orderProvider.notifier).clearOrders();
+      }
+    });
+
     final authState = ref.watch(authProvider);
     final orderState = ref.watch(orderProvider);
-    final isWorking = ref.watch(workingStatusProvider);
+    final workingStatusState = ref.watch(workingStatusProvider);
+    final isWorking = workingStatusState.isOnline;
+    final isStatusBusy =
+        workingStatusState.isLoading || workingStatusState.isUpdating;
+    final isInitialStatusSync =
+        workingStatusState.isLoading && !workingStatusState.hasConfirmedState;
     final hasNetwork = ref.watch(connectivityProvider).value ?? true;
     final isWsConnected = ref.watch(wsStatusProvider);
     final isAuthenticated = authState.isAuthenticated;
@@ -55,11 +70,16 @@ class _OrderListPageState extends ConsumerState<OrderListPage> {
       child: Scaffold(
         appBar: AppBar(
           title: Text(
-            canReceiveOrders
+            isInitialStatusSync
+                ? '$displayTitle (状态同步中)'
+                : canReceiveOrders
                 ? '$displayTitle (在线营业)'
-                : (isAuthenticated
-                      ? '$displayTitle (离线打烊)'
-                      : '$displayTitle (待绑定)'),
+                : isAuthenticated
+                ? (workingStatusState.error != null &&
+                          !workingStatusState.hasConfirmedState
+                      ? '$displayTitle (状态异常)'
+                      : '$displayTitle (离线打烊)')
+                : '$displayTitle (待绑定)',
           ),
           backgroundColor: canReceiveOrders
               ? Theme.of(context).colorScheme.surface
@@ -75,10 +95,18 @@ class _OrderListPageState extends ConsumerState<OrderListPage> {
           actions: [
             Switch(
               value: canReceiveOrders,
-              onChanged: isAuthenticated
-                  ? (val) {
-                      ref.read(workingStatusProvider.notifier).setStatus(val);
-                      if (val) {
+              onChanged: isAuthenticated && !isStatusBusy
+                  ? (val) async {
+                      final result = await ref
+                          .read(workingStatusProvider.notifier)
+                          .setStatus(val);
+                      final latestStatus = ref.read(workingStatusProvider);
+                      if (context.mounted && latestStatus.error != null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(latestStatus.error!)),
+                        );
+                      }
+                      if (result) {
                         ref.read(orderProvider.notifier).fetchOrders();
                       }
                     }
@@ -172,7 +200,7 @@ class _OrderListPageState extends ConsumerState<OrderListPage> {
                     return;
                   }
 
-                  ref.read(workingStatusProvider.notifier).setStatus(false);
+                  ref.read(workingStatusProvider.notifier).resetLocal();
                   ref.read(orderProvider.notifier).clearOrders();
                   await ref.read(authProvider.notifier).logout();
                 },
@@ -238,6 +266,83 @@ class _OrderListPageState extends ConsumerState<OrderListPage> {
                   ),
                 ),
               )
+            : isInitialStatusSync
+            ? const MerchantContentShell(
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: AppSpacing.lg),
+                      Text('正在同步营业状态...'),
+                    ],
+                  ),
+                ),
+              )
+            : workingStatusState.error != null &&
+                  !workingStatusState.hasConfirmedState
+            ? MerchantContentShell(
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(AppSpacing.xxl),
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerLowest,
+                      borderRadius: BorderRadius.circular(AppRadius.xl),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 88,
+                          height: 88,
+                          decoration: BoxDecoration(
+                            color: AppColors.warningSoft,
+                            borderRadius: BorderRadius.circular(AppRadius.xl),
+                          ),
+                          child: Icon(
+                            Icons.sync_problem_rounded,
+                            size: 44,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
+                        const Text(
+                          '营业状态同步失败',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        Text(
+                          workingStatusState.error!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
+                        MerchantPrimaryButton(
+                          label: '重新同步',
+                          isLoading: workingStatusState.isLoading,
+                          onPressed: workingStatusState.isLoading
+                              ? null
+                              : () => ref
+                                    .read(workingStatusProvider.notifier)
+                                    .syncFromBackend(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
             : !isWorking
             ? MerchantContentShell(
                 child: Center(
@@ -289,12 +394,30 @@ class _OrderListPageState extends ConsumerState<OrderListPage> {
                         const SizedBox(height: AppSpacing.xl),
                         MerchantPrimaryButton(
                           label: '立即上线营业',
-                          onPressed: () {
-                            ref
-                                .read(workingStatusProvider.notifier)
-                                .setStatus(true);
-                            ref.read(orderProvider.notifier).fetchOrders();
-                          },
+                          isLoading: workingStatusState.isUpdating,
+                          onPressed: workingStatusState.isUpdating
+                              ? null
+                              : () async {
+                                  final result = await ref
+                                      .read(workingStatusProvider.notifier)
+                                      .setStatus(true);
+                                  final latestStatus = ref.read(
+                                    workingStatusProvider,
+                                  );
+                                  if (context.mounted &&
+                                      latestStatus.error != null) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(latestStatus.error!),
+                                      ),
+                                    );
+                                  }
+                                  if (result) {
+                                    ref
+                                        .read(orderProvider.notifier)
+                                        .fetchOrders();
+                                  }
+                                },
                         ),
                       ],
                     ),
