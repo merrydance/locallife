@@ -68,5 +68,9 @@ Page({
 
   onOpenSettlementAccount() {
     wx.navigateTo({ url: '/pages/operator/finance/settlement-account/index' })
+  },
+
+  onOpenWithdrawals() {
+    wx.navigateTo({ url: '/pages/operator/finance/withdrawals/index' })
   }
 })

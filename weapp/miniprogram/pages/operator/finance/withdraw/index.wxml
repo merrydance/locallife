@@ -54,7 +54,8 @@
     </view>
 
     <t-cell-group>
-      <t-cell title="宝付结算账户" note="开通后接收运营商分账" arrow bind:tap="onOpenSettlementAccount" />
+      <t-cell title="结算账户" note="用于接收分账和提现到账" arrow bind:tap="onOpenSettlementAccount" />
+      <t-cell title="提现" note="查看可提现余额和提现记录" arrow bind:tap="onOpenWithdrawals" />
     </t-cell-group>
 
     <view class="card summary-card">

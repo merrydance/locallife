@@ -1,0 +1,44 @@
+<custom-navbar title="提现详情" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: var(--spacer-lg);">
+  <view wx:if="{{initialLoading}}" class="page-content">
+    <t-loading theme="circular" size="40rpx" text="加载提现详情中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="page-content">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '提现详情加载失败，请重试'}}" />
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
+  </view>
+
+  <view wx:else class="page-content">
+    <t-cell-group wx:if="{{createdNotice && item}}">
+      <t-cell title="提现已受理" note="{{item.statusView.syncMessage}}" />
+    </t-cell-group>
+
+    <t-cell-group wx:if="{{refreshErrorMessage}}">
+      <t-cell title="状态同步失败" note="{{refreshErrorMessage}}">
+        <view slot="right-icon">
+          <t-button size="extra-small" theme="primary" variant="text" loading="{{loadingDetail}}" bind:tap="onRefresh">重试</t-button>
+        </view>
+      </t-cell>
+    </t-cell-group>
+
+    <t-cell-group wx:if="{{item}}">
+      <t-cell title="提现金额" note="{{item.amountText}}" />
+      <t-cell title="当前状态">
+        <view slot="note">
+          <t-tag theme="{{item.statusView.theme}}" size="small">{{item.statusView.text}}</t-tag>
+        </view>
+      </t-cell>
+      <t-cell title="申请单号" note="{{item.out_request_no}}" />
+      <t-cell title="申请时间" note="{{item.createdAtText}}" />
+      <t-cell title="更新时间" note="{{item.updatedAtText}}" />
+      <t-cell title="状态说明" note="{{item.statusView.syncMessage}}" />
+    </t-cell-group>
+
+    <view class="form-actions">
+      <t-button theme="primary" loading="{{loadingDetail}}" bind:tap="onRefresh">刷新状态</t-button>
+      <t-button theme="default" bind:tap="onBackToList">返回列表</t-button>
+    </view>
+  </view>
+</view>

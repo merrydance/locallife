@@ -47,6 +47,9 @@
         "safety/report/index",
         "safety/detail/index",
         "finance/withdraw/index",
+        "finance/withdrawals/index",
+        "finance/withdrawals/create/index",
+        "finance/withdrawals/detail/index",
         "finance/settlement-account/index",
         "finance/settlement-account/submit/index",
         "region-expansion/index"
