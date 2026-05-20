@@ -95,6 +95,11 @@ SELECT COALESCE(SUM(refund_amount), 0)::bigint as total_refunded
 FROM refund_orders
 WHERE payment_order_id = $1 AND status IN ('pending', 'processing', 'success');
 
+-- name: GetTotalSuccessfulRefundedByPaymentOrder :one
+SELECT COALESCE(SUM(refund_amount), 0)::bigint as total_successful_refunded
+FROM refund_orders
+WHERE payment_order_id = $1 AND status = 'success';
+
 -- name: GetBaofuPaymentOrderRefundGuardForUpdate :one
 SELECT po.id,
        po.status,
@@ -160,8 +165,8 @@ WHERE r.status = 'success'
     AND p.payment_channel = 'ecommerce';
 
 -- name: ListStuckProcessingRefundOrders :many
--- 查找持续处于 processing 状态超过阈值时间的退款单（微信回调可能永久丢失）
--- 用于运营告警，让人工核查微信商户平台退款结果
+-- 查找持续处于 processing 状态超过阈值时间的退款单（支付通道回调可能永久丢失）
+-- 用于运营告警，让人工核查对应支付后台退款结果
 SELECT ro.id, ro.out_refund_no, ro.refund_id, ro.refund_amount, ro.status, ro.created_at,
        po.payment_type
 FROM refund_orders ro

@@ -430,7 +430,7 @@ func (s *RefundRecoveryScheduler) persistUnsupportedRefundRecoveryFactAlert(ctx 
 		string(AlertTypeRefundFailed),
 		string(AlertLevelCritical),
 		"退款恢复查询缺少事实应用目标",
-		fmt.Sprintf("退款单 %s 查询微信侧已进入 %s，但当前业务类型 %s/%s 没有可用的退款 fact application target，系统已停止 legacy result worker fallback，请人工核对并补建 owner terminalizer。", refundOrder.OutRefundNo, refundStatus, paymentOrder.PaymentChannel, paymentOrder.BusinessType),
+		fmt.Sprintf("退款单 %s 查询支付通道已进入 %s，但当前业务类型 %s/%s 没有可用的退款 fact application target，系统已停止 legacy result worker fallback，请人工核对并补建 owner terminalizer。", refundOrder.OutRefundNo, refundStatus, paymentOrder.PaymentChannel, paymentOrder.BusinessType),
 		refundOrder.ID,
 		"refund_order",
 		map[string]any{

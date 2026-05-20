@@ -333,6 +333,8 @@ func TestRefundRecoverySchedulerRunOncePersistsAlertForUnsupportedDirectRefundFa
 			require.Equal(t, string(worker.AlertLevelCritical), arg.Level)
 			require.Equal(t, stuckRefund.ID, arg.RelatedID)
 			require.Equal(t, "refund_order", arg.RelatedType)
+			require.Contains(t, arg.Message, "查询支付通道已进入")
+			require.NotContains(t, arg.Message, "查询微信侧")
 			return db.PlatformAlertEvent{ID: 701, AlertType: arg.AlertType}, nil
 		})
 

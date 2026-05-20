@@ -464,7 +464,12 @@ func (server *Server) handleBaofuRefundNotify(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, baofuCallbackResponse{Code: "FAIL", Message: "persist callback failed"})
 		return
 	}
-	server.enqueueOrderRefundPaymentFactApplication(ctx.Request.Context(), application)
+	switch application.Consumer {
+	case paymentFactConsumerReservationDomain:
+		server.enqueueReservationRefundPaymentFactApplication(ctx.Request.Context(), application)
+	default:
+		server.enqueueOrderRefundPaymentFactApplication(ctx.Request.Context(), application)
+	}
 	log.Info().
 		Int64("refund_order_id", refundOrder.ID).
 		Str("out_refund_no", strings.TrimSpace(notification.Fact.OutTradeNo)).

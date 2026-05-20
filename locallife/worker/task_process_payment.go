@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/merrydance/locallife/baofu"
 	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
@@ -186,19 +187,19 @@ func (processor *RedisTaskProcessor) publishAlert(ctx context.Context, alert Ale
 // maybeMarkPaymentOrderRefunded 仅在累计退款额 >= 支付金额时才将支付单标记为 refunded，
 // 避免部分退款错误终结支付单。
 func (processor *RedisTaskProcessor) maybeMarkPaymentOrderRefunded(ctx context.Context, paymentOrderID int64, paymentAmount int64) {
-	totalRefunded, err := processor.store.GetTotalRefundedByPaymentOrder(ctx, paymentOrderID)
+	totalSuccessfulRefunded, err := processor.store.GetTotalSuccessfulRefundedByPaymentOrder(ctx, paymentOrderID)
 	if err != nil {
-		log.Error().Err(err).Int64("payment_order_id", paymentOrderID).Msg("failed to get total refunded amount")
+		log.Error().Err(err).Int64("payment_order_id", paymentOrderID).Msg("failed to get total successful refunded amount")
 		return
 	}
-	if totalRefunded >= paymentAmount {
+	if totalSuccessfulRefunded >= paymentAmount {
 		if _, dbErr := processor.store.UpdatePaymentOrderToRefunded(ctx, paymentOrderID); dbErr != nil {
 			log.Error().Err(dbErr).Int64("payment_order_id", paymentOrderID).Msg("failed to mark payment order as refunded")
 		}
 	} else {
 		log.Info().
 			Int64("payment_order_id", paymentOrderID).
-			Int64("total_refunded", totalRefunded).
+			Int64("total_successful_refunded", totalSuccessfulRefunded).
 			Int64("payment_amount", paymentAmount).
 			Msg("partial refund: payment order not yet fully refunded")
 	}
@@ -2270,7 +2271,7 @@ func (processor *RedisTaskProcessor) processBaofuAggregateRefund(
 		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
 			return errors.Join(err, fmt.Errorf("mark refund order as failed: %w", dbErr))
 		}
-		recordWorkerBaofuRefundCommand(ctx, processor.store, refundOrder, nil, db.ExternalPaymentCommandStatusRejected, err)
+		recordWorkerBaofuRefundCommand(ctx, processor.store, paymentOrder, refundOrder, nil, db.ExternalPaymentCommandStatusRejected, err)
 		return fmt.Errorf("%w: %w", err, asynq.SkipRetry)
 	}
 	cfg := processor.baofuProfitSharingConfig.normalized()
@@ -2279,7 +2280,7 @@ func (processor *RedisTaskProcessor) processBaofuAggregateRefund(
 		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
 			return errors.Join(err, fmt.Errorf("mark refund order as failed: %w", dbErr))
 		}
-		recordWorkerBaofuRefundCommand(ctx, processor.store, refundOrder, nil, db.ExternalPaymentCommandStatusRejected, err)
+		recordWorkerBaofuRefundCommand(ctx, processor.store, paymentOrder, refundOrder, nil, db.ExternalPaymentCommandStatusRejected, err)
 		return fmt.Errorf("%w: %w", err, asynq.SkipRetry)
 	}
 
@@ -2289,7 +2290,7 @@ func (processor *RedisTaskProcessor) processBaofuAggregateRefund(
 		OutTradeNo:      strings.TrimSpace(outRefundNo),
 		NotifyURL:       cfg.RefundNotifyURL,
 		RefundAmountFen: payload.RefundAmount,
-		TotalAmountFen:  refundRequestTotalAmount(paymentOrder.Amount, payload.RefundAmount),
+		TotalAmountFen:  payload.RefundAmount,
 		TransactionTime: time.Now().UTC().Format("20060102150405"),
 		RefundReason:    strings.TrimSpace(payload.Reason),
 	}
@@ -2305,7 +2306,7 @@ func (processor *RedisTaskProcessor) processBaofuAggregateRefund(
 		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
 			return errors.Join(fmt.Errorf("call baofu refund API: %w", err), fmt.Errorf("mark refund order as failed: %w", dbErr))
 		}
-		recordWorkerBaofuRefundCommand(ctx, processor.store, refundOrder, refundResp, db.ExternalPaymentCommandStatusRejected, err)
+		recordWorkerBaofuRefundCommand(ctx, processor.store, paymentOrder, refundOrder, refundResp, db.ExternalPaymentCommandStatusRejected, err)
 		return fmt.Errorf("call baofu refund API: %w", err)
 	}
 	if refundResp == nil {
@@ -2313,7 +2314,7 @@ func (processor *RedisTaskProcessor) processBaofuAggregateRefund(
 		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
 			return errors.Join(err, fmt.Errorf("mark refund order as failed: %w", dbErr))
 		}
-		recordWorkerBaofuRefundCommand(ctx, processor.store, refundOrder, nil, db.ExternalPaymentCommandStatusRejected, err)
+		recordWorkerBaofuRefundCommand(ctx, processor.store, paymentOrder, refundOrder, nil, db.ExternalPaymentCommandStatusRejected, err)
 		return err
 	}
 
@@ -2329,12 +2330,12 @@ func (processor *RedisTaskProcessor) processBaofuAggregateRefund(
 		}); dbErr != nil {
 			return fmt.Errorf("mark baofu refund order as processing: %w", dbErr)
 		}
-		recordWorkerBaofuRefundCommand(ctx, processor.store, refundOrder, refundResp, db.ExternalPaymentCommandStatusAccepted, nil)
+		recordWorkerBaofuRefundCommand(ctx, processor.store, paymentOrder, refundOrder, refundResp, db.ExternalPaymentCommandStatusAccepted, nil)
 	case aggregatecontracts.BusinessResultCodeFail:
 		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
 			return fmt.Errorf("mark baofu refund order as failed: %w", dbErr)
 		}
-		recordWorkerBaofuRefundCommand(ctx, processor.store, refundOrder, refundResp, db.ExternalPaymentCommandStatusRejected, nil)
+		recordWorkerBaofuRefundCommand(ctx, processor.store, paymentOrder, refundOrder, refundResp, db.ExternalPaymentCommandStatusRejected, nil)
 		return fmt.Errorf("baofu refund request rejected: %w", asynq.SkipRetry)
 	default:
 		if dbErr := processor.markRefundOrderProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
@@ -2343,7 +2344,7 @@ func (processor *RedisTaskProcessor) processBaofuAggregateRefund(
 		}); dbErr != nil {
 			return fmt.Errorf("mark baofu refund order as processing: %w", dbErr)
 		}
-		recordWorkerBaofuRefundCommand(ctx, processor.store, refundOrder, refundResp, db.ExternalPaymentCommandStatusUnknown, nil)
+		recordWorkerBaofuRefundCommand(ctx, processor.store, paymentOrder, refundOrder, refundResp, db.ExternalPaymentCommandStatusUnknown, nil)
 	}
 
 	log.Info().
@@ -2954,7 +2955,7 @@ func recordWorkerProfitSharingReturnCommandRejected(ctx context.Context, store d
 	}
 }
 
-func recordWorkerBaofuRefundCommand(ctx context.Context, store db.Store, refundOrder db.RefundOrder, refundResp *aggregatecontracts.RefundResult, status string, commandErr error) {
+func recordWorkerBaofuRefundCommand(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder, refundResp *aggregatecontracts.RefundResult, status string, commandErr error) {
 	refundID := ""
 	resultCode := ""
 	refundState := ""
@@ -2968,14 +2969,23 @@ func recordWorkerBaofuRefundCommand(ctx context.Context, store db.Store, refundO
 		resultCode = strings.TrimSpace(refundResp.ResultCode)
 		refundState = strings.TrimSpace(refundResp.RefundState)
 		errorCode = strings.TrimSpace(refundResp.ErrorCode)
-		errorMessage = strings.TrimSpace(refundResp.ErrorMessage)
+		if errorCode != "" || strings.TrimSpace(refundResp.ErrorMessage) != "" || strings.EqualFold(resultCode, aggregatecontracts.BusinessResultCodeFail) {
+			errorMessage = strings.TrimSpace(baofu.BaofuCommandMessage(refundResp.ErrorCode, refundResp.ErrorMessage))
+		}
 	}
 	if commandErr != nil && errorMessage == "" {
-		errorMessage = commandErr.Error()
+		var providerErr *baofu.ProviderError
+		if errors.As(commandErr, &providerErr) {
+			errorCode = strings.TrimSpace(providerErr.UpstreamCode)
+			errorMessage = strings.TrimSpace(baofu.BaofuCommandMessage(providerErr.UpstreamCode, providerErr.UpstreamMessage))
+		} else {
+			errorMessage = strings.TrimSpace(commandErr.Error())
+		}
 	}
 
 	paymentCommandSvc := logic.NewPaymentCommandService(store)
 	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbWorkerBaofuRefundCommandInput(
+		paymentOrder,
 		refundOrder,
 		status,
 		workerStringPtrIfNotEmpty(refundID),
@@ -3016,6 +3026,10 @@ func workerPaymentCommandErrorFields(err error) (*string, *string) {
 	var wxErr *wechat.WechatPayError
 	if errors.As(err, &wxErr) {
 		return workerStringPtrIfNotEmpty(wxErr.Code), workerStringPtrIfNotEmpty(wxErr.Message)
+	}
+	var baofuErr *baofu.ProviderError
+	if errors.As(err, &baofuErr) {
+		return workerStringPtrIfNotEmpty(baofuErr.UpstreamCode), workerStringPtrIfNotEmpty(strings.TrimSpace(baofu.BaofuCommandMessage(baofuErr.UpstreamCode, baofuErr.UpstreamMessage)))
 	}
 	var ordinaryErr *ordinaryserviceprovider.ProviderError
 	if errors.As(err, &ordinaryErr) {
@@ -3065,6 +3079,7 @@ func dbWorkerEcommerceRefundCommandInput(
 }
 
 func dbWorkerBaofuRefundCommandInput(
+	paymentOrder db.PaymentOrder,
 	refundOrder db.RefundOrder,
 	commandStatus string,
 	externalSecondaryKey *string,
@@ -3079,7 +3094,7 @@ func dbWorkerBaofuRefundCommandInput(
 		Channel:              db.PaymentChannelBaofuAggregate,
 		Capability:           db.ExternalPaymentCapabilityBaofuRefund,
 		CommandType:          db.ExternalPaymentCommandTypeCreateRefund,
-		BusinessOwner:        db.ExternalPaymentBusinessOwnerOrder,
+		BusinessOwner:        workerBaofuRefundBusinessOwner(paymentOrder),
 		BusinessObjectType:   &businessObjectType,
 		BusinessObjectID:     &businessObjectID,
 		ExternalObjectType:   db.ExternalPaymentObjectRefund,
@@ -3090,6 +3105,13 @@ func dbWorkerBaofuRefundCommandInput(
 		LastErrorMessage:     lastErrorMessage,
 		ResponseSnapshot:     responseSnapshot,
 	}
+}
+
+func workerBaofuRefundBusinessOwner(paymentOrder db.PaymentOrder) string {
+	if paymentOrder.BusinessType == "reservation" || paymentOrder.BusinessType == "reservation_addon" || paymentOrder.ReservationID.Valid {
+		return db.ExternalPaymentBusinessOwnerReservation
+	}
+	return db.ExternalPaymentBusinessOwnerOrder
 }
 
 func workerBaofuRefundCommandSnapshot(values map[string]string) []byte {

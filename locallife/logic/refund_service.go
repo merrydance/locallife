@@ -56,19 +56,19 @@ func NewRefundService(
 // maybeMarkPaymentOrderRefunded 仅在累计退款额 >= 支付金额时才将支付单标记为 refunded，
 // 避免部分退款错误终结支付单。
 func (s *RefundService) maybeMarkPaymentOrderRefunded(ctx context.Context, paymentOrderID int64, paymentAmount int64) {
-	totalRefunded, err := s.store.GetTotalRefundedByPaymentOrder(ctx, paymentOrderID)
+	totalSuccessfulRefunded, err := s.store.GetTotalSuccessfulRefundedByPaymentOrder(ctx, paymentOrderID)
 	if err != nil {
-		log.Error().Err(err).Int64("payment_order_id", paymentOrderID).Msg("failed to get total refunded amount")
+		log.Error().Err(err).Int64("payment_order_id", paymentOrderID).Msg("failed to get total successful refunded amount")
 		return
 	}
-	if totalRefunded >= paymentAmount {
+	if totalSuccessfulRefunded >= paymentAmount {
 		if _, dbErr := s.store.UpdatePaymentOrderToRefunded(ctx, paymentOrderID); dbErr != nil {
 			log.Error().Err(dbErr).Int64("payment_order_id", paymentOrderID).Msg("failed to mark payment order as refunded")
 		}
 	} else {
 		log.Info().
 			Int64("payment_order_id", paymentOrderID).
-			Int64("total_refunded", totalRefunded).
+			Int64("total_successful_refunded", totalSuccessfulRefunded).
 			Int64("payment_amount", paymentAmount).
 			Msg("partial refund: payment order not yet fully refunded")
 	}
@@ -772,20 +772,24 @@ func (s *RefundService) processBaofuPreShareRefund(ctx context.Context, paymentO
 	}
 
 	req := aggregatecontracts.RefundBeforeShareRequest{
-		OriginOutTradeNo: strings.TrimSpace(paymentOrder.OutTradeNo),
-		OutTradeNo:       strings.TrimSpace(refundOrder.OutRefundNo),
-		NotifyURL:        s.paymentFacade.BaofuRefundNotifyURL(),
-		RefundAmountFen:  input.RefundAmount,
-		TotalAmountFen:   input.RefundAmount,
-		TransactionTime:  s.clock.Now().UTC().Format("20060102150405"),
-		RefundReason:     strings.TrimSpace(input.RefundReason),
+		OutTradeNo:      strings.TrimSpace(refundOrder.OutRefundNo),
+		NotifyURL:       s.paymentFacade.BaofuRefundNotifyURL(),
+		RefundAmountFen: input.RefundAmount,
+		TotalAmountFen:  input.RefundAmount,
+		TransactionTime: s.clock.Now().UTC().Format("20060102150405"),
+		RefundReason:    strings.TrimSpace(input.RefundReason),
+	}
+	if paymentOrder.TransactionID.Valid && strings.TrimSpace(paymentOrder.TransactionID.String) != "" {
+		req.OriginTradeNo = strings.TrimSpace(paymentOrder.TransactionID.String)
+	} else {
+		req.OriginOutTradeNo = strings.TrimSpace(paymentOrder.OutTradeNo)
 	}
 	refundResp, err := s.paymentFacade.CreateBaofuRefund(ctx, req)
 	if err != nil {
 		if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
 			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark baofu refund as failed")
 		}
-		recordBaofuRefundCommand(ctx, s.store, refundOrder, nil, db.ExternalPaymentCommandStatusRejected, err)
+		recordBaofuRefundCommand(ctx, s.store, paymentOrder, refundOrder, nil, db.ExternalPaymentCommandStatusRejected, err)
 		return mapBaofuRefundCreateError(err)
 	}
 	if refundResp == nil {
@@ -793,7 +797,7 @@ func (s *RefundService) processBaofuPreShareRefund(ctx context.Context, paymentO
 		if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
 			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark baofu refund as failed")
 		}
-		recordBaofuRefundCommand(ctx, s.store, refundOrder, nil, db.ExternalPaymentCommandStatusRejected, err)
+		recordBaofuRefundCommand(ctx, s.store, paymentOrder, refundOrder, nil, db.ExternalPaymentCommandStatusRejected, err)
 		return err
 	}
 
@@ -806,12 +810,12 @@ func (s *RefundService) processBaofuPreShareRefund(ctx context.Context, paymentO
 		}); dbErr != nil {
 			return fmt.Errorf("update baofu refund order to processing: %w", dbErr)
 		}
-		recordBaofuRefundCommand(ctx, s.store, refundOrder, refundResp, db.ExternalPaymentCommandStatusAccepted, nil)
+		recordBaofuRefundCommand(ctx, s.store, paymentOrder, refundOrder, refundResp, db.ExternalPaymentCommandStatusAccepted, nil)
 	case aggregatecontracts.BusinessResultCodeFail:
 		if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
 			return fmt.Errorf("update baofu refund order to failed: %w", dbErr)
 		}
-		recordBaofuRefundCommand(ctx, s.store, refundOrder, refundResp, db.ExternalPaymentCommandStatusRejected, nil)
+		recordBaofuRefundCommand(ctx, s.store, paymentOrder, refundOrder, refundResp, db.ExternalPaymentCommandStatusRejected, nil)
 		return NewRequestError(http.StatusBadGateway, errors.New("宝付退款受理失败，请稍后重试或联系平台处理"))
 	default:
 		if _, dbErr := s.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
@@ -820,7 +824,7 @@ func (s *RefundService) processBaofuPreShareRefund(ctx context.Context, paymentO
 		}); dbErr != nil {
 			return fmt.Errorf("update baofu refund order to processing: %w", dbErr)
 		}
-		recordBaofuRefundCommand(ctx, s.store, refundOrder, refundResp, db.ExternalPaymentCommandStatusUnknown, nil)
+		recordBaofuRefundCommand(ctx, s.store, paymentOrder, refundOrder, refundResp, db.ExternalPaymentCommandStatusUnknown, nil)
 	}
 	return nil
 }
@@ -851,10 +855,11 @@ func mapBaofuRefundCreateError(err error) error {
 	return NewRequestErrorWithCause(status, errors.New(classified.PublicMessage), err)
 }
 
-func recordBaofuRefundCommand(ctx context.Context, store db.Store, refundOrder db.RefundOrder, refundResp *aggregatecontracts.RefundResult, status string, cause error) {
+func recordBaofuRefundCommand(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder, refundResp *aggregatecontracts.RefundResult, status string, cause error) {
 	snapshot := buildBaofuRefundCommandSnapshot(refundOrder, refundResp, cause)
 	var secondary pgtype.Text
 	var errorCode pgtype.Text
+	var errorMessage pgtype.Text
 	if refundResp != nil {
 		if tradeNo := strings.TrimSpace(refundResp.TradeNo); tradeNo != "" {
 			secondary = pgtype.Text{String: tradeNo, Valid: true}
@@ -862,26 +867,72 @@ func recordBaofuRefundCommand(ctx context.Context, store db.Store, refundOrder d
 		if code := strings.TrimSpace(refundResp.ErrorCode); code != "" {
 			errorCode = pgtype.Text{String: code, Valid: true}
 		}
+		if message := baofuRefundCommandErrorMessage(refundResp.ErrorCode, refundResp.ErrorMessage, cause); message != "" {
+			errorMessage = pgtype.Text{String: message, Valid: true}
+		}
+	} else {
+		var providerErr *baofu.ProviderError
+		if errors.As(cause, &providerErr) {
+			if code := strings.TrimSpace(providerErr.UpstreamCode); code != "" {
+				errorCode = pgtype.Text{String: code, Valid: true}
+			}
+		}
+		if message := baofuRefundCommandErrorMessage("", "", cause); message != "" {
+			errorMessage = pgtype.Text{String: message, Valid: true}
+		}
 	}
-	_, err := store.CreateExternalPaymentCommand(ctx, db.CreateExternalPaymentCommandParams{
+	arg := db.CreateExternalPaymentCommandParams{
 		Provider:             db.ExternalPaymentProviderBaofu,
 		Channel:              db.PaymentChannelBaofuAggregate,
 		Capability:           db.ExternalPaymentCapabilityBaofuRefund,
 		CommandType:          db.ExternalPaymentCommandTypeCreateRefund,
-		BusinessOwner:        db.ExternalPaymentBusinessOwnerOrder,
+		BusinessOwner:        refundServiceBaofuRefundBusinessOwner(paymentOrder),
 		BusinessObjectType:   pgtype.Text{String: "refund_order", Valid: true},
 		BusinessObjectID:     pgtype.Int8{Int64: refundOrder.ID, Valid: true},
 		ExternalObjectType:   db.ExternalPaymentObjectRefund,
 		ExternalObjectKey:    strings.TrimSpace(refundOrder.OutRefundNo),
 		ExternalSecondaryKey: secondary,
 		CommandStatus:        status,
-		LastErrorCode:        errorCode,
 		SubmittedAt:          time.Now().UTC(),
 		ResponseSnapshot:     snapshot,
-	})
+	}
+	if status == db.ExternalPaymentCommandStatusAccepted {
+		arg.AcceptedAt = pgtype.Timestamptz{Time: arg.SubmittedAt, Valid: true}
+	}
+	if status == db.ExternalPaymentCommandStatusRejected {
+		arg.RejectedAt = pgtype.Timestamptz{Time: arg.SubmittedAt, Valid: true}
+	}
+	if errorCode.Valid {
+		arg.LastErrorCode = errorCode
+	}
+	if errorMessage.Valid {
+		arg.LastErrorMessage = errorMessage
+	}
+	_, err := store.CreateExternalPaymentCommand(ctx, arg)
 	if err != nil {
 		log.Error().Err(err).Int64("refund_order_id", refundOrder.ID).Msg("failed to record baofu refund command")
 	}
+}
+
+func baofuRefundCommandErrorMessage(errorCode string, upstreamMessage string, cause error) string {
+	if trimmedCode := strings.TrimSpace(errorCode); trimmedCode != "" || strings.TrimSpace(upstreamMessage) != "" {
+		return strings.TrimSpace(baofu.BaofuCommandMessage(trimmedCode, upstreamMessage))
+	}
+	var providerErr *baofu.ProviderError
+	if errors.As(cause, &providerErr) {
+		return strings.TrimSpace(baofu.BaofuCommandMessage(providerErr.UpstreamCode, providerErr.UpstreamMessage))
+	}
+	if cause != nil {
+		return strings.TrimSpace(cause.Error())
+	}
+	return ""
+}
+
+func refundServiceBaofuRefundBusinessOwner(paymentOrder db.PaymentOrder) string {
+	if paymentOrder.BusinessType == businessTypeReservation || paymentOrder.BusinessType == reservationAddonBusiness || paymentOrder.ReservationID.Valid {
+		return db.ExternalPaymentBusinessOwnerReservation
+	}
+	return db.ExternalPaymentBusinessOwnerOrder
 }
 
 func buildBaofuRefundCommandSnapshot(refundOrder db.RefundOrder, refundResp *aggregatecontracts.RefundResult, cause error) []byte {
@@ -904,9 +955,18 @@ func buildBaofuRefundCommandSnapshot(refundOrder db.RefundOrder, refundResp *agg
 		snapshot.RefundState = strings.TrimSpace(refundResp.RefundState)
 		snapshot.ResultCode = strings.TrimSpace(refundResp.ResultCode)
 		snapshot.ErrorCode = strings.TrimSpace(refundResp.ErrorCode)
+		if strings.EqualFold(strings.TrimSpace(refundResp.ResultCode), aggregatecontracts.BusinessResultCodeFail) ||
+			strings.TrimSpace(refundResp.ErrorCode) != "" ||
+			strings.TrimSpace(refundResp.ErrorMessage) != "" {
+			snapshot.ErrorPresent = true
+		}
 	}
 	if cause != nil {
 		snapshot.ErrorPresent = true
+		var providerErr *baofu.ProviderError
+		if errors.As(cause, &providerErr) {
+			snapshot.ErrorCode = strings.TrimSpace(providerErr.UpstreamCode)
+		}
 	}
 	raw, err := json.Marshal(snapshot)
 	if err != nil {

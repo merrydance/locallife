@@ -24,5 +24,5 @@ func logRefundRequestFailure(refundOrderID, paymentOrderID int64, outRefundNo, r
 		Int64("payment_order_id", paymentOrderID).
 		Str("out_refund_no", outRefundNo).
 		Str("refund_channel", refundChannel).
-		Msg("wechat refund request failed")
+		Msg("refund request failed")
 }

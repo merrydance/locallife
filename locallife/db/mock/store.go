@@ -11517,6 +11517,21 @@ func (mr *MockStoreMockRecorder) GetTotalRefundedByPaymentOrder(ctx, paymentOrde
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTotalRefundedByPaymentOrder", reflect.TypeOf((*MockStore)(nil).GetTotalRefundedByPaymentOrder), ctx, paymentOrderID)
 }
 
+// GetTotalSuccessfulRefundedByPaymentOrder mocks base method.
+func (m *MockStore) GetTotalSuccessfulRefundedByPaymentOrder(ctx context.Context, paymentOrderID int64) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTotalSuccessfulRefundedByPaymentOrder", ctx, paymentOrderID)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTotalSuccessfulRefundedByPaymentOrder indicates an expected call of GetTotalSuccessfulRefundedByPaymentOrder.
+func (mr *MockStoreMockRecorder) GetTotalSuccessfulRefundedByPaymentOrder(ctx, paymentOrderID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTotalSuccessfulRefundedByPaymentOrder", reflect.TypeOf((*MockStore)(nil).GetTotalSuccessfulRefundedByPaymentOrder), ctx, paymentOrderID)
+}
+
 // GetUnconfirmedFraudPatterns mocks base method.
 func (m *MockStore) GetUnconfirmedFraudPatterns(ctx context.Context, limit int32) ([]db.FraudPattern, error) {
 	m.ctrl.T.Helper()

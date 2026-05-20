@@ -239,6 +239,19 @@ func (q *Queries) GetTotalRefundedByPaymentOrder(ctx context.Context, paymentOrd
 	return total_refunded, err
 }
 
+const getTotalSuccessfulRefundedByPaymentOrder = `-- name: GetTotalSuccessfulRefundedByPaymentOrder :one
+SELECT COALESCE(SUM(refund_amount), 0)::bigint as total_successful_refunded
+FROM refund_orders
+WHERE payment_order_id = $1 AND status = 'success'
+`
+
+func (q *Queries) GetTotalSuccessfulRefundedByPaymentOrder(ctx context.Context, paymentOrderID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, getTotalSuccessfulRefundedByPaymentOrder, paymentOrderID)
+	var total_successful_refunded int64
+	err := row.Scan(&total_successful_refunded)
+	return total_successful_refunded, err
+}
+
 const listEcommerceRefundOrdersForReconciliation = `-- name: ListEcommerceRefundOrdersForReconciliation :many
 SELECT r.id, r.out_refund_no, r.refund_id, r.refund_amount, r.status
 FROM refund_orders r
@@ -587,8 +600,8 @@ type ListStuckProcessingRefundOrdersRow struct {
 	PaymentType  string      `json:"payment_type"`
 }
 
-// 查找持续处于 processing 状态超过阈值时间的退款单（微信回调可能永久丢失）
-// 用于运营告警，让人工核查微信商户平台退款结果
+// 查找持续处于 processing 状态超过阈值时间的退款单（支付通道回调可能永久丢失）
+// 用于运营告警，让人工核查对应支付后台退款结果
 func (q *Queries) ListStuckProcessingRefundOrders(ctx context.Context, arg ListStuckProcessingRefundOrdersParams) ([]ListStuckProcessingRefundOrdersRow, error) {
 	rows, err := q.db.Query(ctx, listStuckProcessingRefundOrders, arg.CreatedBefore, arg.Limit)
 	if err != nil {

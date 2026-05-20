@@ -1095,6 +1095,7 @@ type Querier interface {
 	// 菜品销量排行: 从order_items实时聚合
 	GetTopSellingDishes(ctx context.Context, arg GetTopSellingDishesParams) ([]GetTopSellingDishesRow, error)
 	GetTotalRefundedByPaymentOrder(ctx context.Context, paymentOrderID int64) (int64, error)
+	GetTotalSuccessfulRefundedByPaymentOrder(ctx context.Context, paymentOrderID int64) (int64, error)
 	GetUnconfirmedFraudPatterns(ctx context.Context, limit int32) ([]FraudPattern, error)
 	GetUploadSession(ctx context.Context, id string) (MediaUploadSession, error)
 	GetUser(ctx context.Context, id int64) (User, error)
@@ -1532,8 +1533,8 @@ type Querier interface {
 	ListSearchHistory(ctx context.Context, arg ListSearchHistoryParams) ([]ListSearchHistoryRow, error)
 	ListStaleUnprocessedWechatNotifications(ctx context.Context, arg ListStaleUnprocessedWechatNotificationsParams) ([]WechatNotification, error)
 	ListStuckProcessingProfitSharingReturns(ctx context.Context, arg ListStuckProcessingProfitSharingReturnsParams) ([]ProfitSharingReturn, error)
-	// 查找持续处于 processing 状态超过阈值时间的退款单（微信回调可能永久丢失）
-	// 用于运营告警，让人工核查微信商户平台退款结果
+	// 查找持续处于 processing 状态超过阈值时间的退款单（支付通道回调可能永久丢失）
+	// 用于运营告警，让人工核查对应支付后台退款结果
 	ListStuckProcessingRefundOrders(ctx context.Context, arg ListStuckProcessingRefundOrdersParams) ([]ListStuckProcessingRefundOrdersRow, error)
 	// 批量查询（用于退款流程判断是否需要退回补差）
 	ListSubsidyOrdersByPaymentIDs(ctx context.Context, paymentOrderIds []int64) ([]SubsidyOrder, error)
