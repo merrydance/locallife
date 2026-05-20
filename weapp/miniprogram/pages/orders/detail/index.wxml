@@ -42,9 +42,14 @@
 
   <!-- 3. 正常内容 -->
   <view wx:if="{{order}}" class="detail-content animate-fade-in">
-    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
+  <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
       <text class="inline-banner-text">{{refreshErrorMessage}}</text>
       <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    </view>
+
+    <view wx:if="{{cancelRefundExpected && (cancelRefundPending || cancelRefundId)}}" class="inline-banner inline-banner-warning">
+      <text class="inline-banner-text">{{cancelRefundStatusText}}：{{cancelRefundHint}}</text>
+      <text wx:if="{{cancelRefundActionText && cancelRefundId}}" class="inline-banner-action" bindtap="onViewCancelRefundDetail">{{cancelRefundActionText}}</text>
     </view>
 
     <!-- 顶部状态区 -->
@@ -187,5 +192,21 @@
         <t-button wx:if="{{showReorderButton}}" theme="primary" size="medium" shape="round" bindtap="onReorder">再来一单</t-button>
       </view>
    </view>
-   <t-toast id="t-toast" />
+  <t-toast id="t-toast" />
 </view>
+
+<t-dialog
+  visible="{{showCancelDialog}}"
+  title="取消订单"
+  confirm-btn="{{ { content: cancelSubmitting ? '提交中...' : '确认取消', theme: 'danger', loading: cancelSubmitting } }}"
+  cancel-btn="暂不取消"
+  bind:confirm="confirmCancelOrder"
+  bind:cancel="onCloseCancelDialog"
+>
+  <view slot="content" class="dialog-content">
+    <view class="dialog-tips">{{cancelRefundExpected ? '已支付订单取消后，退款会异步处理并原路返回。' : '取消后订单会立即关闭。'}}</view>
+    <t-radio-group value="{{cancelReason}}" bind:change="onCancelReasonChange">
+      <t-radio wx:for="{{cancelReasons}}" wx:key="*this" value="{{item}}" label="{{item}}" />
+    </t-radio-group>
+  </view>
+</t-dialog>

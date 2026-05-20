@@ -18,6 +18,7 @@ export interface Order {
     badges?: string[]             // 徽章文本
     actions?: string[]            // 可执行动作
     paymentContext?: OrderPaymentContext
+    paidAt?: string               // 支付时间
     pickupCodeMasked?: string     // 取餐码（脱敏）
     overtime?: boolean            // 是否超时
     fulfillmentStatus?: FulfillmentStatus // 履约状态
@@ -64,6 +65,7 @@ export interface OrderDetail extends Order {
     contactName?: string          // 配送联系人
     contactPhone?: string         // 配送联系电话
     merchantPhone?: string        // 商户电话
+    paidAt?: string               // 支付时间
     estimatedDeliveryAt?: string  // 预计送达时间戳
     deliveryEtaMinutes?: number   // 预计送达总时长（分钟）
     expectDeliverTime?: string    // 展示用的送达时间段
