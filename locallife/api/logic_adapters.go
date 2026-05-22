@@ -10,7 +10,6 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/websocket"
-	ordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider"
 	"github.com/merrydance/locallife/worker"
 	"github.com/rs/zerolog/log"
 )
@@ -143,10 +142,11 @@ func (s apiTaskScheduler) SchedulePaymentOrderTimeout(ctx context.Context, payme
 }
 
 func (s apiTaskScheduler) ScheduleCombinedPaymentOrderTimeout(ctx context.Context, combineOutTradeNo string, at time.Time) error {
-	if s.server.taskDistributor == nil {
-		return nil
-	}
-	return s.server.taskDistributor.DistributeTaskCombinedPaymentOrderTimeout(ctx, &worker.PayloadCombinedPaymentOrderTimeout{CombineOutTradeNo: combineOutTradeNo}, asynq.ProcessAt(at))
+	log.Info().
+		Str("combine_out_trade_no", combineOutTradeNo).
+		Time("scheduled_at", at).
+		Msg("skip combined payment timeout scheduling: combined payment is not active after payment channel removal")
+	return nil
 }
 
 func (s apiTaskScheduler) ScheduleProcessRefund(ctx context.Context, input logic.ProcessRefundTaskInput) error {
@@ -164,49 +164,20 @@ func (s apiTaskScheduler) ScheduleProcessRefund(ctx context.Context, input logic
 }
 
 func (s apiTaskScheduler) ScheduleProfitSharing(ctx context.Context, paymentOrderID, orderID int64) error {
-	if s.server.taskDistributor == nil {
-		return nil
-	}
-	if orderID > 0 {
-		order, err := s.server.store.GetOrder(ctx, orderID)
-		if err != nil {
-			return err
-		}
-		if order.OrderType == db.OrderTypeTakeout {
-			log.Info().
-				Int64("payment_order_id", paymentOrderID).
-				Int64("order_id", orderID).
-				Str("order_type", order.OrderType).
-				Msg("skip takeout profit sharing scheduling outside settlement")
-			return nil
-		}
-		if (order.OrderType == "dine_in" && !order.ReservationID.Valid) || order.OrderType == "takeaway" {
-			log.Info().
-				Int64("payment_order_id", paymentOrderID).
-				Int64("order_id", orderID).
-				Str("order_type", order.OrderType).
-				Msg("skip non-profit-sharing order scheduling outside settlement")
-			return nil
-		}
-	}
-	return s.server.taskDistributor.DistributeTaskProcessProfitSharing(ctx, &worker.ProfitSharingPayload{
-		PaymentOrderID: paymentOrderID,
-		OrderID:        orderID,
-	})
+	log.Info().
+		Int64("payment_order_id", paymentOrderID).
+		Int64("order_id", orderID).
+		Msg("skip legacy profit sharing scheduling: Baofu profit sharing is handled by Baofu worker path")
+	return nil
 }
 
 func (s apiTaskScheduler) ScheduleProfitSharingReturnResult(ctx context.Context, input logic.ProfitSharingReturnResultTaskInput) error {
-	if s.server.taskDistributor == nil {
-		return nil
-	}
-	return s.server.taskDistributor.DistributeTaskProcessProfitSharingReturnResult(ctx, &worker.ProfitSharingReturnResultPayload{
-		ProfitSharingReturnID: input.ProfitSharingReturnID,
-		OutReturnNo:           input.OutReturnNo,
-		OutOrderNo:            input.OutOrderNo,
-		SubMchID:              input.SubMchID,
-		RefundOrderID:         input.RefundOrderID,
-		RetryCount:            input.RetryCount,
-	}, asynq.ProcessIn(input.Delay))
+	log.Info().
+		Int64("profit_sharing_return_id", input.ProfitSharingReturnID).
+		Str("out_return_no", input.OutReturnNo).
+		Str("out_order_no", input.OutOrderNo).
+		Msg("skip legacy profit sharing return result scheduling after payment channel removal")
+	return nil
 }
 
 func (s apiTaskScheduler) ScheduleOrderPrint(ctx context.Context, input logic.OrderPrintTaskInput) error {
@@ -347,6 +318,7 @@ func (server *Server) buildOrderCommandService() logic.OrderCommandService {
 		taskScheduler = apiTaskScheduler{server: server}
 	}
 
+	paymentFacade := server.buildPaymentFacade()
 	service := logic.NewOrderService(
 		server.store,
 		apiNotificationPublisher{server: server},
@@ -355,11 +327,10 @@ func (server *Server) buildOrderCommandService() logic.OrderCommandService {
 		taskScheduler,
 		apiDishCustomizationNormalizer{server: server},
 		server.directPaymentClient,
-		server.ecommerceClient,
+		paymentFacade,
 		nil,
 		nil,
 		nil,
-		server.mainBusinessOrdinaryServiceProviderClient(),
 	)
 	if service == nil {
 		log.Error().Msg("buildOrderCommandService: failed to initialize service")
@@ -387,11 +358,10 @@ func (server *Server) buildOrderQueryService() logic.OrderQueryService {
 		taskScheduler,
 		apiDishCustomizationNormalizer{server: server},
 		server.directPaymentClient,
-		server.ecommerceClient,
 		nil,
 		nil,
 		nil,
-		server.mainBusinessOrdinaryServiceProviderClient(),
+		nil,
 	)
 	if service == nil {
 		log.Error().Msg("buildOrderQueryService: failed to initialize service")
@@ -408,7 +378,7 @@ func (server *Server) buildPaymentFacade() logic.PaymentFacade {
 			server.baofuAggregateFacadeConfig(),
 		)
 	}
-	return logic.NewDefaultPaymentFacadeWithOrdinaryServiceProvider(server.store, server.directPaymentClient, server.ecommerceClient, server.ordinarySPClient)
+	return logic.NewDefaultPaymentFacade(server.store, server.directPaymentClient)
 }
 
 func (server *Server) buildRefundOrchestrator() logic.RefundOrchestrator {
@@ -420,8 +390,8 @@ func (server *Server) buildRefundOrchestrator() logic.RefundOrchestrator {
 			server.baofuAggregateClient,
 			server.baofuAggregateFacadeConfig(),
 		)
-	} else if server.directPaymentClient != nil || server.ecommerceClient != nil || server.ordinarySPClient != nil {
-		paymentFacade = logic.NewDefaultPaymentFacadeWithOrdinaryServiceProvider(server.store, server.directPaymentClient, server.ecommerceClient, server.ordinarySPClient)
+	} else if server.directPaymentClient != nil {
+		paymentFacade = logic.NewDefaultPaymentFacade(server.store, server.directPaymentClient)
 	}
 
 	var taskScheduler logic.TaskScheduler
@@ -442,17 +412,6 @@ func (server *Server) usesBaofuMainBusinessPayments() bool {
 	return server != nil && server.config.BaofuMainBusinessEnabled
 }
 
-func (server *Server) usesOrdinaryServiceProviderMainBusinessPayments() bool {
-	return server != nil && !server.usesBaofuMainBusinessPayments() && server.ordinarySPClient != nil
-}
-
-func (server *Server) mainBusinessOrdinaryServiceProviderClient() ordinaryserviceprovider.OrdinaryServiceProviderClientInterface {
-	if server.usesBaofuMainBusinessPayments() {
-		return nil
-	}
-	return server.ordinarySPClient
-}
-
 func (server *Server) baofuAggregateFacadeConfig() logic.BaofuAggregateFacadeConfig {
 	if server == nil {
 		return logic.BaofuAggregateFacadeConfig{}
@@ -467,14 +426,10 @@ func (server *Server) baofuAggregateFacadeConfig() logic.BaofuAggregateFacadeCon
 	}
 }
 
-func (server *Server) buildProfitSharingReceiverLifecycleService() *logic.ProfitSharingReceiverLifecycleService {
-	return logic.NewProfitSharingReceiverLifecycleService(server.store, server.ecommerceClient)
-}
-
 func (server *Server) buildOperatorStatusService() *logic.OperatorStatusService {
-	return logic.NewOperatorStatusService(server.store, server.ecommerceClient)
+	return logic.NewOperatorStatusService(server.store)
 }
 
 func (server *Server) buildRiderDepositRefundService() *logic.RiderDepositRefundService {
-	return logic.NewRiderDepositRefundService(server.store, server.directPaymentClient, server.ecommerceClient)
+	return logic.NewRiderDepositRefundService(server.store, server.directPaymentClient)
 }

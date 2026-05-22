@@ -7,7 +7,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/wechat"
 )
 
 const (
@@ -31,8 +30,7 @@ type OperatorStatusService struct {
 	store db.Store
 }
 
-func NewOperatorStatusService(store db.Store, ecommerceClient wechat.EcommerceClientInterface) *OperatorStatusService {
-	_ = ecommerceClient
+func NewOperatorStatusService(store db.Store) *OperatorStatusService {
 	return &OperatorStatusService{
 		store: store,
 	}

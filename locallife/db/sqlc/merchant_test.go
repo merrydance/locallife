@@ -124,6 +124,21 @@ func createRandomMerchantApplicationWithUser(t *testing.T, userID int64) Merchan
 	return application
 }
 
+func createRandomMerchantPaymentConfig(t *testing.T, merchant Merchant) MerchantPaymentConfig {
+	t.Helper()
+
+	cfg, err := testStore.CreateMerchantPaymentConfig(context.Background(), CreateMerchantPaymentConfigParams{
+		MerchantID: merchant.ID,
+		SubMchID:   "sub_" + util.RandomString(12),
+		Status:     MerchantPaymentConfigStatusActive,
+	})
+	require.NoError(t, err)
+	require.Equal(t, merchant.ID, cfg.MerchantID)
+	require.Equal(t, MerchantPaymentConfigStatusActive, cfg.Status)
+	require.NotEmpty(t, cfg.SubMchID)
+	return cfg
+}
+
 // ==================== Merchant Tests ====================
 
 func TestCreateMerchant(t *testing.T) {

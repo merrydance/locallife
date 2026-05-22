@@ -23,7 +23,6 @@ import (
 	"github.com/merrydance/locallife/baofu/merchantreport"
 	db "github.com/merrydance/locallife/db/sqlc"
 	_ "github.com/merrydance/locallife/docs" // Swagger docs
-	"github.com/merrydance/locallife/internal/wechatruntime"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/scheduler"
@@ -32,7 +31,6 @@ import (
 	"github.com/merrydance/locallife/weather"
 	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/wechat"
-	ordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider"
 	"github.com/merrydance/locallife/worker"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -190,14 +188,6 @@ func main() {
 		directPaymentClient = merchantRuntimeClient
 		transferClient = merchantRuntimeClient
 	}
-	ecommerceClient, err := buildEcommerceClient(config)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create ecommerce client for runtime")
-	}
-	ordinarySPClient, err := buildOrdinaryServiceProviderClient(config)
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to create ordinary service provider client for runtime")
-	}
 	baofuAggregateClient, err := buildBaofuAggregateClient(config)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to create baofu aggregate client for runtime")
@@ -226,7 +216,7 @@ func main() {
 			Password: config.RedisPassword,
 		})
 		deliveryBroadcast := logic.NewDeliveryBroadcastLogic(store, redisClient)
-		taskDistributor = runTaskProcessor(ctx, waitGroup, config, redisOpt, store, directPaymentClient, transferClient, ecommerceClient, ordinarySPClient, baofuAggregateClient, baofuAccountClient, baofuMerchantReportClient, dataEncryptor, deliveryBroadcast)
+		taskDistributor = runTaskProcessor(ctx, waitGroup, config, redisOpt, store, directPaymentClient, transferClient, baofuAggregateClient, baofuAccountClient, baofuMerchantReportClient, dataEncryptor, deliveryBroadcast)
 		reconciliationPublisher = websocket.NewRedisPublisher(redisClient)
 	}
 
@@ -254,9 +244,6 @@ func main() {
 	} else {
 		log.Warn().Msg("payment domain outbox scheduler disabled: task distributor does not support payment domain outbox tasks")
 	}
-	profitSharingRecoveryScheduler := worker.NewProfitSharingRecoveryScheduler(store, taskDistributor, ecommerceClient)
-	profitSharingRecoveryScheduler.SetOrdinaryServiceProviderClient(ordinarySPClient)
-	schedulerManager.Register("profit-sharing-recovery", profitSharingRecoveryScheduler)
 	baofuPaymentRecoveryScheduler := worker.NewBaofuPaymentRecoveryScheduler(store, taskDistributor)
 	if baofuAggregateClient != nil {
 		baofuPaymentRecoveryScheduler.SetBaofuAggregateClient(baofuAggregateClient, worker.BaofuProfitSharingWorkerConfig{
@@ -302,19 +289,10 @@ func main() {
 	} else if config.BaofuMainBusinessEnabled {
 		log.Warn().Msg("baofu merchant report recovery scheduler disabled: baofu merchant report client not configured")
 	}
-	schedulerManager.Register("profit-sharing-receiver-lifecycle", worker.NewProfitSharingReceiverLifecycleScheduler(store, taskDistributor))
 	if directPaymentClient == nil {
 		log.Warn().Msg("refund recovery direct status branch disabled: payment client not configured")
 	}
-	if ecommerceClient == nil {
-		log.Warn().Msg("refund recovery ecommerce status branch disabled: ecommerce client not configured")
-		log.Warn().Msg("profit sharing return recovery remote-query branch disabled: ecommerce client not configured")
-	}
-	if ordinarySPClient == nil {
-		log.Warn().Msg("applyment recovery remote-query branch disabled: ordinary service provider client not configured")
-	}
-	refundRecoveryScheduler := worker.NewRefundRecoveryScheduler(store, taskDistributor, directPaymentClient, ecommerceClient)
-	refundRecoveryScheduler.SetOrdinaryServiceProviderClient(ordinarySPClient)
+	refundRecoveryScheduler := worker.NewRefundRecoveryScheduler(store, taskDistributor, directPaymentClient)
 	if baofuAggregateClient != nil {
 		refundRecoveryScheduler.SetBaofuAggregateClient(baofuAggregateClient, worker.BaofuProfitSharingWorkerConfig{
 			CollectMerchantID: config.BaofuCollectMerchantID,
@@ -325,14 +303,7 @@ func main() {
 		log.Warn().Msg("refund recovery baofu status branch disabled: baofu aggregate client not configured")
 	}
 	schedulerManager.Register("refund-recovery", refundRecoveryScheduler)
-	schedulerManager.Register("applyment-recovery", worker.NewApplymentRecoveryScheduler(store, taskDistributor, ordinarySPClient))
-	if ordinarySPClient != nil {
-		schedulerManager.Register("applyment-settlement-verification", worker.NewApplymentSettlementVerificationScheduler(store, taskDistributor, ordinarySPClient))
-	} else {
-		log.Warn().Msg("applyment settlement verification scheduler disabled: ordinary service provider client not configured")
-	}
-	schedulerManager.Register("merchant-withdraw-recovery", worker.NewMerchantWithdrawRecoveryScheduler(store, taskDistributor))
-	schedulerManager.Register("merchant-cancel-withdraw-recovery", worker.NewMerchantCancelWithdrawRecoveryScheduler(store, taskDistributor))
+	// legacy wechat applyment recovery and settlement verification are removed
 	if transferClient != nil {
 		schedulerManager.Register("claim-payout-recovery", worker.NewClaimPayoutRecoveryScheduler(store, transferClient))
 	} else {
@@ -343,7 +314,7 @@ func main() {
 	schedulerManager.Register("merchant-open-status", scheduler.NewMerchantOpenStatusScheduler(store))
 	schedulerManager.Register("order-timeout", scheduler.NewOrderTimeoutScheduler(store))
 	schedulerManager.Register("takeout-auto-complete", scheduler.NewTakeoutAutoCompleteScheduler(store, taskDistributor))
-	schedulerManager.Register("data-cleanup", scheduler.NewDataCleanupScheduler(store, taskDistributor, reconciliationPublisher, ecommerceClient))
+	schedulerManager.Register("data-cleanup", scheduler.NewDataCleanupScheduler(store, taskDistributor, reconciliationPublisher))
 	schedulerManager.StartAll(ctx, waitGroup)
 
 	runGinServer(ctx, waitGroup, config, store, weatherCache, taskDistributor)
@@ -403,18 +374,10 @@ func validateProductionPaymentRuntime(config util.Config) error {
 	if config.BaofuMainBusinessEnabled {
 		return config.ValidateBaofuConfig()
 	}
-	if !config.HasWechatOrdinaryServiceProviderRuntimeConfig() {
-		return fmt.Errorf("wechat ordinary service provider runtime config is required in production for main-business payments")
+	if !config.BaofuMainBusinessEnabled {
+		return fmt.Errorf("baofu main business runtime config is required in production for main-business payments")
 	}
-	return config.ValidateWechatOrdinaryServiceProviderConfig()
-}
-
-func buildEcommerceClient(config util.Config) (wechat.EcommerceClientInterface, error) {
-	return wechatruntime.BuildEcommerceClient(config)
-}
-
-func buildOrdinaryServiceProviderClient(config util.Config) (*ordinaryserviceprovider.Client, error) {
-	return wechatruntime.BuildOrdinaryServiceProviderClient(config)
+	return config.ValidateBaofuConfig()
 }
 
 func buildBaofuAggregateClient(config util.Config) (aggregatepay.Client, error) {
@@ -467,8 +430,6 @@ func runTaskProcessor(
 	store db.Store,
 	directPaymentClient wechat.DirectPaymentClientInterface,
 	transferClient wechat.TransferClientInterface,
-	ecommerceClient wechat.EcommerceClientInterface,
-	ordinarySPClient worker.OrdinaryServiceProviderWorkerClient,
 	baofuAggregateClient aggregatepay.Client,
 	baofuAccountClient logic.BaofuAccountClient,
 	baofuMerchantReportClient *merchantreport.Client,
@@ -478,15 +439,8 @@ func runTaskProcessor(
 	// 创建任务分发器
 	taskDistributor := worker.NewRedisTaskDistributor(redisOpt)
 
-	// 创建基础微信小程序客户端，用于 OCR 与发货信息等非普通服务商资金协议能力。
+	// 创建基础微信小程序客户端，用于 OCR 与发货信息等非主业务资金协议能力。
 	wechatClient := wechat.NewClient(config.WechatMiniAppID, config.WechatMiniAppSecret, store)
-
-	if ecommerceClient != nil {
-		log.Info().Msg("ecommerce client created for historical and cold-reserve platform ecommerce paths")
-	}
-	if ordinarySPClient != nil {
-		log.Info().Msg("ordinary service provider client created for main-business payments")
-	}
 
 	var mediaStorage media.ObjectStorage
 	if config.FileStorageProvider == "oss" {
@@ -508,10 +462,9 @@ func runTaskProcessor(
 	mediaRegistry := media.NewRegistry(store, mediaStorage)
 
 	// 创建并启动任务处理器（传入 distributor 以支持任务链）
-	taskProcessor := worker.NewRedisTaskProcessor(redisOpt, store, taskDistributor, wechatClient, ecommerceClient, deliveryBroadcast, mediaRegistry, config)
+	taskProcessor := worker.NewRedisTaskProcessor(redisOpt, store, taskDistributor, wechatClient, deliveryBroadcast, mediaRegistry, config)
 	taskProcessor.SetDirectPaymentClient(directPaymentClient)
 	taskProcessor.SetTransferClient(transferClient)
-	taskProcessor.SetOrdinaryServiceProviderClient(ordinarySPClient)
 	if baofuAggregateClient != nil {
 		taskProcessor.SetBaofuAggregateClient(baofuAggregateClient, worker.BaofuProfitSharingWorkerConfig{
 			CollectMerchantID: config.BaofuCollectMerchantID,

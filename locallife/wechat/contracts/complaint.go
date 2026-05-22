@@ -142,7 +142,7 @@ type ComplaintAdditionalInfo struct {
 	SharePowerInfo *ComplaintSharePowerInfo `json:"share_power_info,omitempty"`
 }
 
-type EcommerceComplaintInfo struct {
+type ComplaintInfo struct {
 	ComplaintID           string                      `json:"complaint_id"`
 	ComplaintTime         string                      `json:"complaint_time"`
 	ComplaintDetail       string                      `json:"complaint_detail"`
@@ -167,7 +167,7 @@ type EcommerceComplaintInfo struct {
 }
 
 // 官方文档：GET /v3/merchant-service/complaints-v2
-type EcommerceComplaintListRequest struct {
+type ComplaintListRequest struct {
 	Limit            int64  `json:"limit,omitempty"`
 	Offset           int64  `json:"offset,omitempty"`
 	BeginDate        string `json:"begin_date"`
@@ -176,15 +176,15 @@ type EcommerceComplaintListRequest struct {
 }
 
 // 官方文档：GET /v3/merchant-service/complaints-v2
-type EcommerceComplaintListResponse struct {
-	Data       []EcommerceComplaintInfo `json:"data,omitempty"`
-	Limit      int64                    `json:"limit,omitempty"`
-	Offset     int64                    `json:"offset,omitempty"`
-	TotalCount int64                    `json:"total_count,omitempty"`
+type ComplaintListResponse struct {
+	Data       []ComplaintInfo `json:"data,omitempty"`
+	Limit      int64           `json:"limit,omitempty"`
+	Offset     int64           `json:"offset,omitempty"`
+	TotalCount int64           `json:"total_count,omitempty"`
 }
 
 // 官方文档：GET /v3/merchant-service/complaints-v2/{complaint_id}
-type EcommerceComplaintDetailRequest struct {
+type ComplaintDetailRequest struct {
 	ComplaintID string `json:"complaint_id"`
 }
 

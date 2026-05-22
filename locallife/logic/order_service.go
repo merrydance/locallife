@@ -11,7 +11,6 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/rules"
 	"github.com/merrydance/locallife/wechat"
-	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -33,17 +32,10 @@ type OrderService struct {
 	taskScheduler         TaskScheduler
 	normalizer            DishCustomizationNormalizer
 	paymentClient         wechat.DirectPaymentClientInterface
-	ecommerceClient       wechat.EcommerceClientInterface
-	ordinarySPClient      ordinaryServiceProviderOrderClient
+	paymentFacade         PaymentFacade
 	clock                 Clock
 	idGenerator           IDGenerator
 	orderPolicy           OrderPolicy
-}
-
-type ordinaryServiceProviderOrderClient interface {
-	ordinaryServiceProviderPaymentClient
-	RefundNotifyURL() string
-	CreateRefund(ctx context.Context, req ospcontracts.RefundCreateRequest) (*ospcontracts.RefundResponse, error)
 }
 
 func NewOrderService(
@@ -54,11 +46,10 @@ func NewOrderService(
 	taskScheduler TaskScheduler,
 	normalizer DishCustomizationNormalizer,
 	paymentClient wechat.DirectPaymentClientInterface,
-	ecommerceClient wechat.EcommerceClientInterface,
+	paymentFacade PaymentFacade,
 	clock Clock,
 	idGenerator IDGenerator,
 	orderPolicy OrderPolicy,
-	ordinaryClients ...ordinaryServiceProviderOrderClient,
 ) *OrderService {
 	if clock == nil {
 		clock = SystemClock{}
@@ -70,11 +61,6 @@ func NewOrderService(
 		orderPolicy = DefaultOrderPolicy{}
 	}
 
-	var ordinaryClient ordinaryServiceProviderOrderClient
-	if len(ordinaryClients) > 0 {
-		ordinaryClient = ordinaryClients[0]
-	}
-
 	return &OrderService{
 		store:                 store,
 		notificationPublisher: notificationPublisher,
@@ -83,8 +69,7 @@ func NewOrderService(
 		taskScheduler:         taskScheduler,
 		normalizer:            normalizer,
 		paymentClient:         paymentClient,
-		ecommerceClient:       ecommerceClient,
-		ordinarySPClient:      ordinaryClient,
+		paymentFacade:         paymentFacade,
 		clock:                 clock,
 		idGenerator:           idGenerator,
 		orderPolicy:           orderPolicy,
@@ -496,7 +481,7 @@ func (s *OrderService) UrgeOrder(ctx context.Context, input UrgeOrderInput) (Urg
 
 func (s *OrderService) ReplaceOrder(ctx context.Context, input ReplaceOrderInput) (ReplaceOrderResult, error) {
 	normalize := s.buildNormalizerFunc()
-	result, err := ReplaceReservationOrderWithOrdinaryServiceProvider(ctx, s.store, s.ecommerceClient, s.ordinarySPClient, input, normalize)
+	result, err := ReplaceReservationOrderWithBaofu(ctx, s.store, s.paymentFacade, input, normalize)
 	if err != nil {
 		return ReplaceOrderResult{}, err
 	}
@@ -614,7 +599,7 @@ func (s *OrderService) RejectMerchantOrder(ctx context.Context, input MerchantOr
 		})
 	}
 
-	refundResult, refundErr := ProcessMerchantRejectRefundWithOrdinaryServiceProvider(ctx, s.store, s.ecommerceClient, s.ordinarySPClient, MerchantRejectRefundInput{
+	refundResult, refundErr := ProcessMerchantRejectRefund(ctx, s.store, s.paymentFacade, MerchantRejectRefundInput{
 		MerchantID: input.MerchantID,
 		OrderID:    result.Order.ID,
 		Reason:     input.Reason,

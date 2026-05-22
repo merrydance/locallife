@@ -2,12 +2,145 @@ package db
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
 )
+
+func TestCreateBaofuProfitSharingOrderTxRejectsActiveRefund(t *testing.T) {
+	ctx := context.Background()
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	paymentOrder, err := testStore.CreatePaymentOrder(ctx, CreatePaymentOrderParams{
+		UserID:                createRandomUser(t).ID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+		BusinessType:          ExternalPaymentBusinessOwnerOrder,
+		Amount:                10000,
+		OutTradeNo:            "BFPS_REFUND_GUARD_" + util.RandomString(12),
+	})
+	require.NoError(t, err)
+	paymentOrder, err = testStore.UpdatePaymentOrderToPaid(ctx, UpdatePaymentOrderToPaidParams{
+		ID:            paymentOrder.ID,
+		TransactionID: pgtype.Text{String: "BF_TX_" + util.RandomString(20), Valid: true},
+	})
+	require.NoError(t, err)
+	_ = createRandomRefundOrder(t, paymentOrder.ID, 500)
+
+	_, err = testStore.CreateBaofuProfitSharingOrderTx(ctx, CreateBaofuProfitSharingOrderTxParams{
+		ProfitSharingOrder: CreateProfitSharingOrderParams{
+			PaymentOrderID:      paymentOrder.ID,
+			MerchantID:          merchant.ID,
+			OrderSource:         "takeout",
+			TotalAmount:         paymentOrder.Amount,
+			DistributableAmount: paymentOrder.Amount,
+			PlatformRate:        200,
+			OperatorRate:        300,
+			PlatformCommission:  200,
+			OperatorCommission:  300,
+			MerchantAmount:      9440,
+			OutOrderNo:          "pso_refund_guard_" + util.RandomString(16),
+			Status:              ProfitSharingOrderStatusPending,
+			PaymentFee:          30,
+			PaymentFeeRateBps:   30,
+			Provider:            ExternalPaymentProviderBaofu,
+			Channel:             PaymentChannelBaofuAggregate,
+		},
+		PaymentFeeLedger: CreateBaofuFeeLedgerParams{
+			FeeType:            BaofuFeeTypePaymentFee,
+			PayerType:          BaofuFeePayerTypePlatform,
+			BusinessObjectType: "payment_order",
+			BusinessObjectID:   paymentOrder.ID,
+			Amount:             30,
+			Status:             "recorded",
+		},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "订单已有退款申请或退款成功记录")
+	statusCode, ok := IsRefundRequestError(err)
+	require.True(t, ok)
+	require.Equal(t, http.StatusBadRequest, statusCode)
+
+	_, getErr := testStore.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
+	require.ErrorIs(t, getErr, ErrRecordNotFound)
+}
+
+func TestCreateBaofuProfitSharingOrderTxRejectsDuplicateProfitSharingOrder(t *testing.T) {
+	ctx := context.Background()
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	paymentOrder, err := testStore.CreatePaymentOrder(ctx, CreatePaymentOrderParams{
+		UserID:                createRandomUser(t).ID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+		BusinessType:          ExternalPaymentBusinessOwnerOrder,
+		Amount:                10000,
+		OutTradeNo:            "BFPS_DUP_" + util.RandomString(12),
+	})
+	require.NoError(t, err)
+	paymentOrder, err = testStore.UpdatePaymentOrderToPaid(ctx, UpdatePaymentOrderToPaidParams{
+		ID:            paymentOrder.ID,
+		TransactionID: pgtype.Text{String: "BF_TX_" + util.RandomString(20), Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CreateProfitSharingOrder(ctx, CreateProfitSharingOrderParams{
+		PaymentOrderID:      paymentOrder.ID,
+		MerchantID:          merchant.ID,
+		OrderSource:         "takeout",
+		TotalAmount:         paymentOrder.Amount,
+		DistributableAmount: paymentOrder.Amount,
+		PlatformRate:        200,
+		OperatorRate:        300,
+		PlatformCommission:  200,
+		OperatorCommission:  300,
+		MerchantAmount:      9440,
+		OutOrderNo:          "pso_dup_guard_" + util.RandomString(16),
+		Status:              ProfitSharingOrderStatusPending,
+		PaymentFee:          30,
+		PaymentFeeRateBps:   30,
+		Provider:            ExternalPaymentProviderBaofu,
+		Channel:             PaymentChannelBaofuAggregate,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CreateBaofuProfitSharingOrderTx(ctx, CreateBaofuProfitSharingOrderTxParams{
+		ProfitSharingOrder: CreateProfitSharingOrderParams{
+			PaymentOrderID:      paymentOrder.ID,
+			MerchantID:          merchant.ID,
+			OrderSource:         "takeout",
+			TotalAmount:         paymentOrder.Amount,
+			DistributableAmount: paymentOrder.Amount,
+			PlatformRate:        200,
+			OperatorRate:        300,
+			PlatformCommission:  200,
+			OperatorCommission:  300,
+			MerchantAmount:      9440,
+			OutOrderNo:          "pso_dup_guard_2_" + util.RandomString(16),
+			Status:              ProfitSharingOrderStatusPending,
+			PaymentFee:          30,
+			PaymentFeeRateBps:   30,
+			Provider:            ExternalPaymentProviderBaofu,
+			Channel:             PaymentChannelBaofuAggregate,
+		},
+		PaymentFeeLedger: CreateBaofuFeeLedgerParams{
+			FeeType:            BaofuFeeTypePaymentFee,
+			PayerType:          BaofuFeePayerTypePlatform,
+			BusinessObjectType: "payment_order",
+			BusinessObjectID:   paymentOrder.ID,
+			Amount:             30,
+			Status:             "recorded",
+		},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "订单已存在宝付分账单")
+	statusCode, ok := IsRefundRequestError(err)
+	require.True(t, ok)
+	require.Equal(t, http.StatusBadRequest, statusCode)
+}
 
 func TestCreateBaofuProfitSharingOrderTxCreatesOrderAndFeeLedgers(t *testing.T) {
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)

@@ -60,10 +60,7 @@ type SubmitRiderDepositWithdrawalResult struct {
 func NewRiderDepositRefundService(
 	store db.Store,
 	paymentClient wechat.DirectPaymentClientInterface,
-	ecommerceClients ...wechat.EcommerceClientInterface,
 ) *RiderDepositRefundService {
-	_ = ecommerceClients
-
 	return &RiderDepositRefundService{
 		store:             store,
 		paymentClient:     paymentClient,
@@ -396,12 +393,12 @@ func (s *RiderDepositRefundService) maybeRequestRiderReceiverAbsent(ctx context.
 }
 
 func (s *RiderDepositRefundService) maybeMarkPaymentOrderRefunded(ctx context.Context, paymentOrderID int64, paymentAmount int64) {
-	totalRefunded, err := s.store.GetTotalRefundedByPaymentOrder(ctx, paymentOrderID)
+	totalSuccessfulRefunded, err := s.store.GetTotalSuccessfulRefundedByPaymentOrder(ctx, paymentOrderID)
 	if err != nil {
-		log.Error().Err(err).Int64("payment_order_id", paymentOrderID).Msg("failed to get total refunded amount")
+		log.Error().Err(err).Int64("payment_order_id", paymentOrderID).Msg("failed to get total successful refunded amount")
 		return
 	}
-	if totalRefunded >= paymentAmount {
+	if totalSuccessfulRefunded >= paymentAmount {
 		if _, dbErr := s.store.UpdatePaymentOrderToRefunded(ctx, paymentOrderID); dbErr != nil {
 			log.Error().Err(dbErr).Int64("payment_order_id", paymentOrderID).Msg("failed to mark payment order as refunded")
 		}

@@ -16,7 +16,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestUpdateMerchantOpenStatus_RequireApplymentWhenOpen_NoPaymentConfig(t *testing.T) {
+func TestUpdateMerchantOpenStatus_RequireBaofuWhenOpen_NoPaymentConfig(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          88,
@@ -32,7 +32,10 @@ func TestUpdateMerchantOpenStatus_RequireApplymentWhenOpen_NoPaymentConfig(t *te
 	store := mockdb.NewMockStore(ctrl)
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 	store.EXPECT().GetMerchantProfile(gomock.Any(), merchant.ID).Return(db.GetMerchantProfileRow{}, db.ErrRecordNotFound)
-	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchant.ID).Return(db.MerchantPaymentConfig{}, db.ErrRecordNotFound)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+		OwnerType: db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:   merchant.ID,
+	}).Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
 	store.EXPECT().UpdateMerchantIsOpen(gomock.Any(), gomock.Any()).Times(0)
 
 	server := newTestServer(t, store)
@@ -47,12 +50,11 @@ func TestUpdateMerchantOpenStatus_RequireApplymentWhenOpen_NoPaymentConfig(t *te
 
 	server.router.ServeHTTP(recorder, req)
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
-	require.Contains(t, recorder.Body.String(), "普通服务商")
-	require.Contains(t, recorder.Body.String(), "完成微信支付进件")
-	require.Contains(t, recorder.Body.String(), "结算账户")
+	require.Contains(t, recorder.Body.String(), "商户结算账户未开通")
+	require.NotContains(t, recorder.Body.String(), "普通服务商")
 }
 
-func TestUpdateMerchantOpenStatus_RequireApplymentWhenOpen_InactivePaymentConfig(t *testing.T) {
+func TestUpdateMerchantOpenStatus_RequireBaofuWhenOpen_ChannelPending(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := db.Merchant{
 		ID:          89,
@@ -68,11 +70,10 @@ func TestUpdateMerchantOpenStatus_RequireApplymentWhenOpen_InactivePaymentConfig
 	store := mockdb.NewMockStore(ctrl)
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 	store.EXPECT().GetMerchantProfile(gomock.Any(), merchant.ID).Return(db.GetMerchantProfileRow{}, db.ErrRecordNotFound)
-	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchant.ID).Return(db.MerchantPaymentConfig{
-		MerchantID: merchant.ID,
-		SubMchID:   "",
-		Status:     "pending",
-	}, nil)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+		OwnerType: db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:   merchant.ID,
+	}).Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
 	store.EXPECT().UpdateMerchantIsOpen(gomock.Any(), gomock.Any()).Times(0)
 
 	server := newTestServer(t, store)
@@ -87,10 +88,8 @@ func TestUpdateMerchantOpenStatus_RequireApplymentWhenOpen_InactivePaymentConfig
 
 	server.router.ServeHTTP(recorder, req)
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
-	require.Contains(t, recorder.Body.String(), "普通服务商特约商户未激活")
-	require.NotContains(t, recorder.Body.String(), "开户意愿授权")
-	require.Contains(t, recorder.Body.String(), "微信支付进件")
-	require.Contains(t, recorder.Body.String(), "结算账户")
+	require.Contains(t, recorder.Body.String(), "商户结算账户未开通")
+	require.NotContains(t, recorder.Body.String(), "普通服务商")
 }
 
 func TestUpdateMerchantOpenStatus_RequireBaofuAccountWhenOpen_MissingBinding(t *testing.T) {
@@ -109,11 +108,6 @@ func TestUpdateMerchantOpenStatus_RequireBaofuAccountWhenOpen_MissingBinding(t *
 	store := mockdb.NewMockStore(ctrl)
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 	store.EXPECT().GetMerchantProfile(gomock.Any(), merchant.ID).Return(db.GetMerchantProfileRow{}, db.ErrRecordNotFound)
-	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchant.ID).Return(db.MerchantPaymentConfig{
-		MerchantID: merchant.ID,
-		SubMchID:   "190000090",
-		Status:     "active",
-	}, nil)
 	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
 		OwnerType: db.BaofuAccountOwnerTypeMerchant,
 		OwnerID:   merchant.ID,
@@ -153,11 +147,6 @@ func TestUpdateMerchantOpenStatus_RequireBaofuAccountWhenOpen_WechatChannelPendi
 	store := mockdb.NewMockStore(ctrl)
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 	store.EXPECT().GetMerchantProfile(gomock.Any(), merchant.ID).Return(db.GetMerchantProfileRow{}, db.ErrRecordNotFound)
-	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchant.ID).Return(db.MerchantPaymentConfig{
-		MerchantID: merchant.ID,
-		SubMchID:   "190000091",
-		Status:     "active",
-	}, nil)
 	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
 		OwnerType: db.BaofuAccountOwnerTypeMerchant,
 		OwnerID:   merchant.ID,

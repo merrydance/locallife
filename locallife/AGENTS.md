@@ -4,7 +4,7 @@ This file applies to `/home/sam/locallife/locallife`.
 
 ## Scope
 
-- Backend stack: Go monolith with `gin`, `pgx/sqlc`, `redis`, `asynq`, cron schedulers, WeChat Pay/Ecommerce, OCR, media storage, WebSocket push.
+- Backend stack: Go monolith with `gin`, `pgx/sqlc`, `redis`, `asynq`, cron schedulers, retained WeChat direct payment, Baofu/BaoCaiTong payments, OCR, media storage, WebSocket push.
 - Frontend code lives outside this scope. Do not assume `weapp/` conventions apply here.
 
 ## First Reads

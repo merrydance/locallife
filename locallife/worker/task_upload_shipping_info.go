@@ -74,62 +74,6 @@ func (processor *RedisTaskProcessor) ProcessTaskUploadShippingInfo(ctx context.C
 	now := time.Now()
 
 	switch {
-	case paymentOrderUsesEcommerceChannel(po):
-		if !po.CombinedPaymentID.Valid {
-			transactionID := ""
-			if po.TransactionID.Valid {
-				transactionID = po.TransactionID.String
-			}
-			if transactionID == "" && po.OutTradeNo == "" {
-				log.Warn().Int64("payment_order_id", po.ID).Msg("shipping upload: partner profit_sharing order missing transaction_id and out_trade_no, skip")
-				return nil
-			}
-
-			if err := processor.wechatClient.UploadShippingInfo(ctx, &wechat.UploadShippingInfoRequest{
-				TransactionID: transactionID,
-				OutTradeNo:    po.OutTradeNo,
-				PayerOpenID:   user.WechatOpenid,
-				NotifyURL:     notifyURL,
-				UploadTime:    now,
-			}); err != nil {
-				return fmt.Errorf("upload_shipping_info for partner profit_sharing failed: %w", err)
-			}
-			log.Info().Int64("order_id", payload.OrderID).Msg("upload_shipping_info for partner profit_sharing ok")
-			return nil
-		}
-
-		combinedPaymentOrder, err := processor.store.GetCombinedPaymentOrder(ctx, po.CombinedPaymentID.Int64)
-		if err != nil {
-			return fmt.Errorf("shipping upload: get combined payment order failed: %w", err)
-		}
-
-		subOrders, err := processor.store.GetCombinedPaymentSubOrdersByOrder(ctx, payload.OrderID)
-		if err != nil {
-			return fmt.Errorf("shipping upload: get combined sub orders failed: %w", err)
-		}
-		if len(subOrders) == 0 {
-			return fmt.Errorf("shipping upload: no sub orders found for order %d", payload.OrderID)
-		}
-
-		var shippingSubs []wechat.ShippingSubOrder
-		for _, sub := range subOrders {
-			shippingSubs = append(shippingSubs, wechat.ShippingSubOrder{
-				MchID:      sub.SubMchid,
-				OutTradeNo: sub.OutTradeNo,
-			})
-		}
-
-		if err := processor.wechatClient.UploadCombinedShippingInfo(ctx, &wechat.UploadCombinedShippingInfoRequest{
-			CombineOutTradeNo: combinedPaymentOrder.CombineOutTradeNo,
-			PayerOpenID:       user.WechatOpenid,
-			NotifyURL:         notifyURL,
-			UploadTime:        now,
-			SubOrders:         shippingSubs,
-		}); err != nil {
-			return fmt.Errorf("upload_combined_shipping_info failed: %w", err)
-		}
-		log.Info().Int64("order_id", payload.OrderID).Msg("upload_combined_shipping_info ok")
-
 	case po.PaymentType == "miniprogram":
 		transactionID := ""
 		if po.TransactionID.Valid {
@@ -152,7 +96,7 @@ func (processor *RedisTaskProcessor) ProcessTaskUploadShippingInfo(ctx context.C
 		log.Info().Int64("order_id", payload.OrderID).Msg("upload_shipping_info ok")
 
 	default:
-		// 余额支付等无需上报
+		// 余额支付、宝付主业务等无需上报
 	}
 
 	return nil

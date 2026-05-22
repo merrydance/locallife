@@ -547,21 +547,6 @@ func (server *Server) updateMerchantOpenStatus(ctx *gin.Context) {
 	}
 
 	if *req.IsOpen {
-		paymentConfig, err := server.store.GetMerchantPaymentConfig(ctx, merchant.ID)
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("尚未开通普通服务商特约商户，请先完成微信支付进件和结算账户配置后再开业")))
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		if paymentConfig.SubMchID == "" || paymentConfig.Status != "active" {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("普通服务商特约商户未激活，请先完成微信支付进件和结算账户配置后再开业")))
-			return
-		}
-
 		if err := server.ensureMerchantBaofuPaymentReady(ctx, merchant); err != nil {
 			if errors.Is(err, errMerchantBaofuAccountMissing) || errors.Is(err, errMerchantBaofuWechatChannelPending) {
 				ctx.JSON(http.StatusBadRequest, errorResponse(err))

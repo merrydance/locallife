@@ -32,6 +32,12 @@ func (fn directPaymentRoundTripFunc) RoundTrip(req *http.Request) (*http.Respons
 	return fn(req)
 }
 
+type testRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn testRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
+}
+
 func testWeChatKey(seed string) string {
 	if len(seed) >= 32 {
 		return seed[:32]
@@ -344,9 +350,9 @@ func signedDirectPaymentTransport(t *testing.T, privateKey *rsa.PrivateKey, seri
 	})
 }
 
-func signedEcommerceTransport(t *testing.T, privateKey *rsa.PrivateKey, serial string, fn ecommerceRoundTripFunc) http.RoundTripper {
+func signedTestTransport(t *testing.T, privateKey *rsa.PrivateKey, serial string, fn testRoundTripFunc) http.RoundTripper {
 	t.Helper()
-	return ecommerceRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+	return testRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		resp, err := fn(req)
 		if err != nil {
 			return nil, err

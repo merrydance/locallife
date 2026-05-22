@@ -16,7 +16,7 @@ func TestOperatorStatusService_UpdateStatus_SuspendsOperatorAndRoleWithoutReceiv
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	service := NewOperatorStatusService(store, nil)
+	service := NewOperatorStatusService(store)
 
 	operator := db.Operator{
 		ID:          61,
@@ -50,7 +50,7 @@ func TestOperatorStatusService_UpdateStatus_SuspendRoleFailureDoesNotPersistOper
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	service := NewOperatorStatusService(store, nil)
+	service := NewOperatorStatusService(store)
 
 	operator := db.Operator{
 		ID:          62,
@@ -79,7 +79,7 @@ func TestOperatorStatusService_UpdateStatus_RepeatedSuspendDoesNotRewriteOperato
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	service := NewOperatorStatusService(store, nil)
+	service := NewOperatorStatusService(store)
 
 	operator := db.Operator{
 		ID:          63,

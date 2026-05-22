@@ -153,17 +153,6 @@ WHERE r.status = 'success'
   AND r.refunded_at < $2
     AND p.payment_channel = 'direct';
 
--- name: ListEcommerceRefundOrdersForReconciliation :many
--- 获取指定日期范围内收付通退款成功记录（payment_channel='ecommerce'）
--- 对应微信 /v3/ecommerce/refunds/apply 产生的退款账单
-SELECT r.id, r.out_refund_no, r.refund_id, r.refund_amount, r.status
-FROM refund_orders r
-JOIN payment_orders p ON p.id = r.payment_order_id
-WHERE r.status = 'success'
-  AND r.refunded_at >= $1
-  AND r.refunded_at < $2
-    AND p.payment_channel = 'ecommerce';
-
 -- name: ListStuckProcessingRefundOrders :many
 -- 查找持续处于 processing 状态超过阈值时间的退款单（支付通道回调可能永久丢失）
 -- 用于运营告警，让人工核查对应支付后台退款结果

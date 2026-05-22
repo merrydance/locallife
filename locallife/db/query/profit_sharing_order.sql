@@ -45,7 +45,7 @@ INSERT INTO profit_sharing_orders (
     COALESCE(sqlc.narg(payment_fee), 0),
     COALESCE(sqlc.narg(payment_fee_rate_bps), 30),
     COALESCE(sqlc.narg(provider), 'wechat'),
-    COALESCE(sqlc.narg(channel), 'ecommerce'),
+    COALESCE(sqlc.narg(channel), 'baofu_aggregate'),
     sqlc.narg(merchant_sharing_mer_id),
     sqlc.narg(rider_sharing_mer_id),
     sqlc.narg(operator_sharing_mer_id),
@@ -435,7 +435,7 @@ JOIN orders o ON po.order_id = o.id
 LEFT JOIN profit_sharing_orders pso ON po.id = pso.payment_order_id
 WHERE 
     po.status = 'paid' 
-    AND po.payment_channel = 'ordinary_service_provider'
+    AND po.payment_channel = 'baofu_aggregate'
     AND po.requires_profit_sharing = TRUE
     AND o.status = 'completed'
   AND o.order_type <> 'takeout'

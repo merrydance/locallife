@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -102,12 +101,6 @@ func (processor *RedisTaskProcessor) dispatchPaymentDomainOutbox(ctx context.Con
 		return processor.dispatchReservationPaymentSucceededOutbox(ctx, outbox)
 	case db.PaymentDomainOutboxEventProfitSharingResultReady:
 		return processor.dispatchProfitSharingResultReadyOutbox(ctx, outbox)
-	case db.PaymentDomainOutboxEventApplymentActivated:
-		return processor.dispatchApplymentActivatedOutbox(ctx, outbox)
-	case db.PaymentDomainOutboxEventApplymentPendingStateReady:
-		return processor.dispatchApplymentPendingStateOutbox(ctx, outbox)
-	case db.PaymentDomainOutboxEventApplymentTerminalStateReady:
-		return processor.dispatchApplymentTerminalStateOutbox(ctx, outbox)
 	case db.PaymentDomainOutboxEventOrderRefundSucceeded:
 		return processor.dispatchOrderRefundSucceededOutbox(ctx, outbox)
 	case db.PaymentDomainOutboxEventOrderRefundAbnormal:
@@ -119,229 +112,6 @@ func (processor *RedisTaskProcessor) dispatchPaymentDomainOutbox(ctx context.Con
 	default:
 		return fmt.Errorf("unsupported payment domain outbox event type %q", outbox.EventType)
 	}
-}
-
-func (processor *RedisTaskProcessor) dispatchApplymentActivatedOutbox(ctx context.Context, outbox db.PaymentDomainOutbox) error {
-	if outbox.AggregateType != db.PaymentDomainOutboxAggregateEcommerceApplyment {
-		return fmt.Errorf("unsupported applyment outbox aggregate type %q", outbox.AggregateType)
-	}
-
-	var payload struct {
-		ApplymentID              int64  `json:"applyment_id"`
-		MerchantID               int64  `json:"merchant_id"`
-		OutRequestNo             string `json:"out_request_no"`
-		SubMchID                 string `json:"sub_mch_id"`
-		ExternalPaymentFactID    int64  `json:"external_payment_fact_id"`
-		PaymentFactApplicationID int64  `json:"payment_fact_application_id"`
-	}
-	if err := json.Unmarshal(outbox.Payload, &payload); err != nil {
-		return fmt.Errorf("unmarshal applyment activated outbox payload: %w", err)
-	}
-	if payload.ApplymentID == 0 {
-		payload.ApplymentID = outbox.AggregateID
-	}
-	if payload.ApplymentID != outbox.AggregateID {
-		return fmt.Errorf("applyment outbox aggregate id %d does not match payload applyment id %d", outbox.AggregateID, payload.ApplymentID)
-	}
-
-	applyment, err := processor.store.GetEcommerceApplyment(ctx, payload.ApplymentID)
-	if err != nil {
-		return fmt.Errorf("get applyment: %w", err)
-	}
-	if applyment.SubjectType != "merchant" {
-		return fmt.Errorf("applyment %d subject type %q is not merchant", applyment.ID, applyment.SubjectType)
-	}
-	merchant, err := processor.store.GetMerchant(ctx, applyment.SubjectID)
-	if err != nil {
-		return fmt.Errorf("get merchant: %w", err)
-	}
-	if processor.distributor == nil {
-		return fmt.Errorf("task distributor not configured")
-	}
-
-	expiresAt := time.Now().Add(7 * 24 * time.Hour)
-	if err := processor.distributor.DistributeTaskSendNotification(ctx, &SendNotificationPayload{
-		UserID:      merchant.OwnerUserID,
-		Type:        "system",
-		Title:       "微信支付开户成功",
-		Content:     fmt.Sprintf("您的商户「%s」已完成微信支付开户，可以开始接单收款了！", merchant.Name),
-		RelatedType: "applyment",
-		RelatedID:   applyment.ID,
-		ExpiresAt:   &expiresAt,
-	}, asynq.Queue(QueueDefault), asynq.MaxRetry(3)); err != nil {
-		return fmt.Errorf("enqueue applyment activated notification: %w", err)
-	}
-
-	if err := processor.store.MarkEcommerceApplymentResultProcessed(ctx, db.MarkEcommerceApplymentResultProcessedParams{
-		ID:                       applyment.ID,
-		ResultTaskProcessedState: pgtype.Text{String: "finish", Valid: true},
-	}); err != nil {
-		return fmt.Errorf("mark applyment result processed after outbox publish: %w", err)
-	}
-	return nil
-}
-
-func (processor *RedisTaskProcessor) dispatchApplymentTerminalStateOutbox(ctx context.Context, outbox db.PaymentDomainOutbox) error {
-	if outbox.AggregateType != db.PaymentDomainOutboxAggregateEcommerceApplyment {
-		return fmt.Errorf("unsupported applyment terminal outbox aggregate type %q", outbox.AggregateType)
-	}
-
-	var payload struct {
-		ApplymentID              int64  `json:"applyment_id"`
-		MerchantID               int64  `json:"merchant_id"`
-		OutRequestNo             string `json:"out_request_no"`
-		ApplymentStatus          string `json:"applyment_status"`
-		RejectReason             string `json:"reject_reason"`
-		ExternalPaymentFactID    int64  `json:"external_payment_fact_id"`
-		PaymentFactApplicationID int64  `json:"payment_fact_application_id"`
-	}
-	if err := json.Unmarshal(outbox.Payload, &payload); err != nil {
-		return fmt.Errorf("unmarshal applyment terminal outbox payload: %w", err)
-	}
-	if payload.ApplymentID == 0 {
-		payload.ApplymentID = outbox.AggregateID
-	}
-	if payload.ApplymentID != outbox.AggregateID {
-		return fmt.Errorf("applyment terminal outbox aggregate id %d does not match payload applyment id %d", outbox.AggregateID, payload.ApplymentID)
-	}
-
-	applyment, err := processor.store.GetEcommerceApplyment(ctx, payload.ApplymentID)
-	if err != nil {
-		return fmt.Errorf("get applyment: %w", err)
-	}
-	if applyment.SubjectType != "merchant" {
-		return fmt.Errorf("applyment %d subject type %q is not merchant", applyment.ID, applyment.SubjectType)
-	}
-	merchant, err := processor.store.GetMerchant(ctx, applyment.SubjectID)
-	if err != nil {
-		return fmt.Errorf("get merchant: %w", err)
-	}
-	if processor.distributor == nil {
-		return fmt.Errorf("task distributor not configured")
-	}
-
-	status := strings.TrimSpace(payload.ApplymentStatus)
-	if status == "" {
-		status = strings.TrimSpace(applyment.Status)
-	}
-	title := "微信支付开户已作废"
-	content := fmt.Sprintf("您的商户「%s」微信支付开户申请已作废，请检查资料后重新发起申请", merchant.Name)
-	switch status {
-	case "rejected":
-		rejectReason := strings.TrimSpace(payload.RejectReason)
-		if rejectReason == "" && applyment.RejectReason.Valid {
-			rejectReason = strings.TrimSpace(applyment.RejectReason.String)
-		}
-		if rejectReason == "" {
-			rejectReason = "请登录后台查看详情"
-		}
-		title = "微信支付开户被驳回"
-		content = fmt.Sprintf("您的商户「%s」微信支付开户申请被驳回，原因：%s", merchant.Name, rejectReason)
-	case "frozen":
-		title = "微信支付开户已冻结"
-		content = fmt.Sprintf("您的商户「%s」微信支付开户状态已被冻结，请登录后台查看详情并联系平台处理", merchant.Name)
-	case "canceled":
-		// use default title/content
-	default:
-		return fmt.Errorf("unsupported applyment terminal status %q", status)
-	}
-
-	expiresAt := time.Now().Add(7 * 24 * time.Hour)
-	if err := processor.distributor.DistributeTaskSendNotification(ctx, &SendNotificationPayload{
-		UserID:      merchant.OwnerUserID,
-		Type:        "system",
-		Title:       title,
-		Content:     content,
-		RelatedType: "applyment",
-		RelatedID:   applyment.ID,
-		ExpiresAt:   &expiresAt,
-	}, asynq.Queue(QueueDefault), asynq.MaxRetry(3)); err != nil {
-		return fmt.Errorf("enqueue applyment terminal notification: %w", err)
-	}
-
-	if err := processor.store.MarkEcommerceApplymentResultProcessed(ctx, db.MarkEcommerceApplymentResultProcessedParams{
-		ID:                       applyment.ID,
-		ResultTaskProcessedState: pgtype.Text{String: status, Valid: true},
-	}); err != nil {
-		return fmt.Errorf("mark applyment result processed after terminal outbox publish: %w", err)
-	}
-	return nil
-}
-
-func (processor *RedisTaskProcessor) dispatchApplymentPendingStateOutbox(ctx context.Context, outbox db.PaymentDomainOutbox) error {
-	if outbox.AggregateType != db.PaymentDomainOutboxAggregateEcommerceApplyment {
-		return fmt.Errorf("unsupported applyment pending outbox aggregate type %q", outbox.AggregateType)
-	}
-
-	var payload struct {
-		ApplymentID              int64  `json:"applyment_id"`
-		MerchantID               int64  `json:"merchant_id"`
-		OutRequestNo             string `json:"out_request_no"`
-		ApplymentStatus          string `json:"applyment_status"`
-		ExternalPaymentFactID    int64  `json:"external_payment_fact_id"`
-		PaymentFactApplicationID int64  `json:"payment_fact_application_id"`
-	}
-	if err := json.Unmarshal(outbox.Payload, &payload); err != nil {
-		return fmt.Errorf("unmarshal applyment pending outbox payload: %w", err)
-	}
-	if payload.ApplymentID == 0 {
-		payload.ApplymentID = outbox.AggregateID
-	}
-	if payload.ApplymentID != outbox.AggregateID {
-		return fmt.Errorf("applyment pending outbox aggregate id %d does not match payload applyment id %d", outbox.AggregateID, payload.ApplymentID)
-	}
-
-	applyment, err := processor.store.GetEcommerceApplyment(ctx, payload.ApplymentID)
-	if err != nil {
-		return fmt.Errorf("get applyment: %w", err)
-	}
-	if applyment.SubjectType != "merchant" {
-		return fmt.Errorf("applyment %d subject type %q is not merchant", applyment.ID, applyment.SubjectType)
-	}
-	merchant, err := processor.store.GetMerchant(ctx, applyment.SubjectID)
-	if err != nil {
-		return fmt.Errorf("get merchant: %w", err)
-	}
-	if processor.distributor == nil {
-		return fmt.Errorf("task distributor not configured")
-	}
-
-	status := strings.TrimSpace(payload.ApplymentStatus)
-	if status == "" {
-		status = strings.TrimSpace(applyment.Status)
-	}
-	content := fmt.Sprintf("您的商户「%s」微信支付开户需要签约，请登录微信支付商户平台完成签约", merchant.Name)
-	switch status {
-	case "account_need_verify":
-		content = fmt.Sprintf("您的商户「%s」微信支付开户需要完成账户验证，请按页面指引完成汇款验证或法人扫码验证", merchant.Name)
-	case "to_be_confirmed":
-		content = fmt.Sprintf("您的商户「%s」微信支付开户需要确认，请登录微信支付商户平台完成确认", merchant.Name)
-	case "to_be_signed":
-		// use default content
-	default:
-		return fmt.Errorf("unsupported applyment pending status %q", status)
-	}
-
-	expiresAt := time.Now().Add(3 * 24 * time.Hour)
-	if err := processor.distributor.DistributeTaskSendNotification(ctx, &SendNotificationPayload{
-		UserID:      merchant.OwnerUserID,
-		Type:        "system",
-		Title:       "微信支付开户待处理",
-		Content:     content,
-		RelatedType: "applyment",
-		RelatedID:   applyment.ID,
-		ExpiresAt:   &expiresAt,
-	}, asynq.Queue(QueueDefault), asynq.MaxRetry(3)); err != nil {
-		return fmt.Errorf("enqueue applyment pending notification: %w", err)
-	}
-
-	if err := processor.store.MarkEcommerceApplymentResultProcessed(ctx, db.MarkEcommerceApplymentResultProcessedParams{
-		ID:                       applyment.ID,
-		ResultTaskProcessedState: pgtype.Text{String: status, Valid: true},
-	}); err != nil {
-		return fmt.Errorf("mark applyment result processed after pending outbox publish: %w", err)
-	}
-	return nil
 }
 
 func (processor *RedisTaskProcessor) dispatchOrderPaymentSucceededOutbox(ctx context.Context, outbox db.PaymentDomainOutbox) error {
@@ -391,14 +161,6 @@ func (processor *RedisTaskProcessor) dispatchOrderPaymentSucceededOutbox(ctx con
 
 	if processor.distributor == nil {
 		return fmt.Errorf("task distributor not configured")
-	}
-	if paymentOrderUsesEcommerceChannel(paymentOrder) && paymentOrderRequiresProfitSharing(paymentOrder) && shouldDispatchOrderProfitSharing(order) {
-		if err := processor.distributor.DistributeTaskProcessProfitSharing(ctx, &ProfitSharingPayload{
-			PaymentOrderID: paymentOrder.ID,
-			OrderID:        paymentOrder.OrderID.Int64,
-		}, asynq.MaxRetry(5), asynq.ProcessIn(2*time.Second), asynq.Queue(QueueCritical)); err != nil {
-			return fmt.Errorf("enqueue order profit sharing after order payment outbox: %w", err)
-		}
 	}
 
 	result, err := processor.loadOrderPaymentNotificationResult(ctx, order)
@@ -454,15 +216,6 @@ func (processor *RedisTaskProcessor) dispatchReservationPaymentSucceededOutbox(c
 	if err != nil {
 		return fmt.Errorf("get reservation: %w", err)
 	}
-	if paymentOrder.PaymentChannel != db.PaymentChannelBaofuAggregate {
-		if err := processor.distributor.DistributeTaskProcessProfitSharing(ctx, &ProfitSharingPayload{
-			PaymentOrderID: paymentOrder.ID,
-			ReservationID:  reservation.ID,
-		}, asynq.MaxRetry(5), asynq.Queue(QueueCritical)); err != nil {
-			return fmt.Errorf("enqueue reservation profit sharing after reservation payment outbox: %w", err)
-		}
-	}
-
 	hours := reservation.ReservationTime.Microseconds / 1000000 / 3600
 	minutes := (reservation.ReservationTime.Microseconds / 1000000 % 3600) / 60
 	alertTime := time.Date(
@@ -653,7 +406,6 @@ func (processor *RedisTaskProcessor) dispatchReservationRefundAbnormalOutbox(ctx
 		"external_payment_fact_id":    payload.ExternalPaymentFactID,
 		"payment_fact_application_id": payload.PaymentFactApplicationID,
 	})
-	alertExtra = mergeAlertExtra(alertExtra, abnormalRefundActionExtra(paymentOrder, refundOrder))
 	processor.publishAlert(ctx, AlertData{
 		AlertType:   AlertTypeRefundFailed,
 		Level:       AlertLevelCritical,
@@ -804,7 +556,6 @@ func (processor *RedisTaskProcessor) dispatchOrderRefundAbnormalOutbox(ctx conte
 		"external_payment_fact_id":    payload.ExternalPaymentFactID,
 		"payment_fact_application_id": payload.PaymentFactApplicationID,
 	})
-	alertExtra = mergeAlertExtra(alertExtra, abnormalRefundActionExtra(paymentOrder, refundOrder))
 	processor.publishAlert(ctx, AlertData{
 		AlertType:   AlertTypeRefundFailed,
 		Level:       AlertLevelCritical,

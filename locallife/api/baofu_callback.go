@@ -44,6 +44,26 @@ func (server *Server) SetBaofuAggregatePaymentNotificationParserForTest(parser b
 	server.baofuPaymentNotificationParser = parser
 }
 
+func (server *Server) enqueueOrderPaymentFactApplication(ctx context.Context, application *db.ExternalPaymentFactApplication) error {
+	if application == nil {
+		return nil
+	}
+	if server.taskDistributor == nil {
+		return fmt.Errorf("payment fact application distributor not configured")
+	}
+	distributor, ok := server.taskDistributor.(worker.PaymentFactApplicationTaskDistributor)
+	if !ok {
+		return fmt.Errorf("payment fact application distributor not configured")
+	}
+	return distributor.DistributeTaskProcessPaymentFactApplication(
+		ctx,
+		&worker.PaymentFactApplicationPayload{ApplicationID: application.ID},
+		asynq.MaxRetry(5),
+		asynq.Queue(worker.QueueCritical),
+		asynq.Unique(paymentFactApplicationTaskUnique),
+	)
+}
+
 func (server *Server) handleBaofuAccountOpenNotify(ctx *gin.Context) {
 	if server.baofuAccountNotificationParser == nil {
 		log.Error().Msg("baofu account callback received but parser is not configured")

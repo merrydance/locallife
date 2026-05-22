@@ -90,7 +90,7 @@ func TestExtractMarkdown_WechatMethodAndStandalonePathPattern(t *testing.T) {
 		"## 接口说明\n\n" +
 		"支持商户：【平台商户】\n\n" +
 		"请求方式：【POST】\n" +
-		"`/v3/ecommerce/applyments/`\n\n" +
+		"`/v3/pay/transactions/jsapi`\n\n" +
 		"## 查询结算账户\n\n" +
 		"请求方式：【GET】\n" +
 		"`/v3/apply4sub/sub_merchants/{sub_mchid}/settlement`\n"
@@ -102,7 +102,7 @@ func TestExtractMarkdown_WechatMethodAndStandalonePathPattern(t *testing.T) {
 	require.NotNil(t, submitSection)
 	require.Len(t, submitSection.Endpoints, 1)
 	require.Equal(t, "POST", submitSection.Endpoints[0].Method)
-	require.Equal(t, "/v3/ecommerce/applyments/", submitSection.Endpoints[0].Path)
+	require.Equal(t, "/v3/pay/transactions/jsapi", submitSection.Endpoints[0].Path)
 
 	querySection := findSectionByPath(result.Sections, []string{"商户进件", "查询结算账户"})
 	require.NotNil(t, querySection)

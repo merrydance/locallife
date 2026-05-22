@@ -9,7 +9,6 @@ import (
 	"github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/rules"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
-	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 )
 
 type OrderCommandService interface {
@@ -48,16 +47,8 @@ type PaymentFacade interface {
 	ClosePaymentOrder(ctx context.Context, input ClosePaymentOrderInput) (ClosePaymentOrderResult, error)
 
 	CreateRefund(ctx context.Context, req *wechatcontracts.DirectRefundRequest) (*wechatcontracts.DirectRefundResponse, error)
-	CreateEcommerceRefund(ctx context.Context, req *wechatcontracts.EcommerceRefundRequest) (*wechatcontracts.EcommerceRefundCreateResponse, error)
-	CreateOrdinaryServiceProviderRefund(ctx context.Context, req ospcontracts.RefundCreateRequest) (*ospcontracts.RefundResponse, error)
-	OrdinaryServiceProviderRefundNotifyURL() string
 	CreateBaofuRefund(ctx context.Context, req aggregatecontracts.RefundBeforeShareRequest) (*aggregatecontracts.RefundResult, error)
 	BaofuRefundNotifyURL() string
-	CreateOrdinaryServiceProviderProfitSharingReturn(ctx context.Context, req ospcontracts.ProfitSharingReturnRequest) (*ospcontracts.ProfitSharingReturnResponse, error)
-	ApplyEcommerceAbnormalRefund(ctx context.Context, req *wechatcontracts.EcommerceAbnormalRefundRequest) (*wechatcontracts.EcommerceRefundQueryResponse, error)
-	CreateProfitSharingReturn(ctx context.Context, req *wechatcontracts.ProfitSharingReturnRequest) (*wechatcontracts.ProfitSharingReturnResponse, error)
-	SpMchID() string
-	OrdinaryServiceProviderMchID() string
 }
 
 type RefundOrchestrator interface {
@@ -65,7 +56,6 @@ type RefundOrchestrator interface {
 	GetRefundOrder(ctx context.Context, input GetRefundOrderInput) (GetRefundOrderResult, error)
 	ListRefundOrdersByPayment(ctx context.Context, input ListRefundOrdersByPaymentInput) (ListRefundOrdersByPaymentResult, error)
 	ListProfitSharingReturnsByRefund(ctx context.Context, input ListProfitSharingReturnsByRefundInput) (ListProfitSharingReturnsByRefundResult, error)
-	ApplyAbnormalRefund(ctx context.Context, input ApplyAbnormalRefundInput) (ApplyAbnormalRefundResult, error)
 }
 
 type NotificationInput struct {
@@ -251,19 +241,6 @@ type ListProfitSharingReturnsByRefundInput struct {
 
 type ListProfitSharingReturnsByRefundResult struct {
 	Returns []db.ProfitSharingReturn
-}
-
-type ApplyAbnormalRefundInput struct {
-	RefundID    int64
-	Type        string
-	BankType    string
-	BankAccount string
-	RealName    string
-}
-
-type ApplyAbnormalRefundResult struct {
-	RefundOrder  db.RefundOrder
-	WechatRefund wechatcontracts.EcommerceRefundQueryResponse
 }
 
 type GetUserOrderQueryInput struct {

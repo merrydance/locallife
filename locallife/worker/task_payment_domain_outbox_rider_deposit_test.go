@@ -130,7 +130,7 @@ func TestProcessTaskPaymentDomainOutbox_PublishesReservationRefundAbnormalAlert(
 		ID:             111,
 		ReservationID:  pgtype.Int8{Int64: 222, Valid: true},
 		PaymentType:    "profit_sharing",
-		PaymentChannel: db.PaymentChannelEcommerce,
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
 		BusinessType:   "reservation_addon",
 		Amount:         1200,
 		OutTradeNo:     "OT_RES_111",
@@ -165,7 +165,6 @@ func TestProcessTaskPaymentDomainOutbox_PublishesReservationRefundAbnormalAlert(
 	require.Equal(t, float64(333), extra["merchant_id"])
 	require.Equal(t, float64(1704), extra["external_payment_fact_id"])
 	require.Equal(t, float64(1804), extra["payment_fact_application_id"])
-	require.Equal(t, true, extra["abnormal_refund_api_available"])
 }
 
 func TestProcessTaskPaymentDomainOutbox_DispatchesOrderRefundSucceededNotification(t *testing.T) {
@@ -190,7 +189,7 @@ func TestProcessTaskPaymentDomainOutbox_DispatchesOrderRefundSucceededNotificati
 
 	outbox := db.PaymentDomainOutbox{ID: 929, EventType: db.PaymentDomainOutboxEventOrderRefundSucceeded, AggregateType: db.PaymentDomainOutboxAggregateRefundOrder, AggregateID: 244, Payload: rawPayload, Status: db.PaymentDomainOutboxStatusProcessing}
 	refundOrder := db.RefundOrder{ID: 244, PaymentOrderID: 211, OutRefundNo: "RF_ORDER_244", RefundAmount: 1200, RefundID: pgtype.Text{String: "WR_ORDER_244", Valid: true}}
-	paymentOrder := db.PaymentOrder{ID: 211, OrderID: pgtype.Int8{Int64: 222, Valid: true}, UserID: 333, PaymentChannel: db.PaymentChannelEcommerce, BusinessType: db.ExternalPaymentBusinessOwnerOrder}
+	paymentOrder := db.PaymentOrder{ID: 211, OrderID: pgtype.Int8{Int64: 222, Valid: true}, UserID: 333, PaymentChannel: db.PaymentChannelBaofuAggregate, BusinessType: db.ExternalPaymentBusinessOwnerOrder}
 
 	store.EXPECT().ClaimPaymentDomainOutbox(gomock.Any(), gomock.Any()).Return(outbox, nil)
 	store.EXPECT().GetRefundOrder(gomock.Any(), refundOrder.ID).Return(refundOrder, nil)
@@ -233,7 +232,7 @@ func TestProcessTaskPaymentDomainOutbox_OrderRefundSucceededWithoutDistributorMa
 
 	outbox := db.PaymentDomainOutbox{ID: 930, EventType: db.PaymentDomainOutboxEventOrderRefundSucceeded, AggregateType: db.PaymentDomainOutboxAggregateRefundOrder, AggregateID: 245, Payload: rawPayload, Status: db.PaymentDomainOutboxStatusProcessing}
 	refundOrder := db.RefundOrder{ID: 245, PaymentOrderID: 212, OutRefundNo: "RF_ORDER_245", RefundAmount: 1200, RefundID: pgtype.Text{String: "WR_ORDER_245", Valid: true}}
-	paymentOrder := db.PaymentOrder{ID: 212, OrderID: pgtype.Int8{Int64: 223, Valid: true}, UserID: 334, PaymentChannel: db.PaymentChannelEcommerce, BusinessType: db.ExternalPaymentBusinessOwnerOrder}
+	paymentOrder := db.PaymentOrder{ID: 212, OrderID: pgtype.Int8{Int64: 223, Valid: true}, UserID: 334, PaymentChannel: db.PaymentChannelBaofuAggregate, BusinessType: db.ExternalPaymentBusinessOwnerOrder}
 
 	store.EXPECT().ClaimPaymentDomainOutbox(gomock.Any(), gomock.Any()).Return(outbox, nil)
 	store.EXPECT().GetRefundOrder(gomock.Any(), refundOrder.ID).Return(refundOrder, nil)
@@ -272,7 +271,7 @@ func TestProcessTaskPaymentDomainOutbox_PublishesOrderRefundAbnormalAlert(t *tes
 
 	outbox := db.PaymentDomainOutbox{ID: 939, EventType: db.PaymentDomainOutboxEventOrderRefundAbnormal, AggregateType: db.PaymentDomainOutboxAggregateRefundOrder, AggregateID: 344, Payload: rawPayload, Status: db.PaymentDomainOutboxStatusProcessing}
 	refundOrder := db.RefundOrder{ID: 344, PaymentOrderID: 311, OutRefundNo: "RF_ORDER_344", RefundAmount: 1300, RefundType: "user_cancel", RefundID: pgtype.Text{String: "WR_ORDER_344", Valid: true}}
-	paymentOrder := db.PaymentOrder{ID: 311, OrderID: pgtype.Int8{Int64: 322, Valid: true}, PaymentChannel: db.PaymentChannelEcommerce, BusinessType: db.ExternalPaymentBusinessOwnerOrder, OutTradeNo: "OT_311"}
+	paymentOrder := db.PaymentOrder{ID: 311, OrderID: pgtype.Int8{Int64: 322, Valid: true}, PaymentChannel: db.PaymentChannelBaofuAggregate, BusinessType: db.ExternalPaymentBusinessOwnerOrder, OutTradeNo: "OT_311"}
 
 	store.EXPECT().ClaimPaymentDomainOutbox(gomock.Any(), gomock.Any()).Return(outbox, nil)
 	store.EXPECT().GetRefundOrder(gomock.Any(), refundOrder.ID).Return(refundOrder, nil)
@@ -299,5 +298,4 @@ func TestProcessTaskPaymentDomainOutbox_PublishesOrderRefundAbnormalAlert(t *tes
 	require.Equal(t, float64(355), extra["merchant_id"])
 	require.Equal(t, float64(3704), extra["external_payment_fact_id"])
 	require.Equal(t, float64(3804), extra["payment_fact_application_id"])
-	require.Equal(t, true, extra["abnormal_refund_api_available"])
 }

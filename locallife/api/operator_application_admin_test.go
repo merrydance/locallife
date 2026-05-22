@@ -104,7 +104,7 @@ func TestListPendingOperatorApplicationsAdminAPI(t *testing.T) {
 	}
 }
 
-func TestApproveOperatorApplicationAdmin_WritesProfitSharingReceiverTargetIntent(t *testing.T) {
+func TestApproveOperatorApplicationAdmin_CreatesOperatorAndRole(t *testing.T) {
 	admin, _ := randomUser(t)
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -133,8 +133,6 @@ func TestApproveOperatorApplicationAdmin_WritesProfitSharingReceiverTargetIntent
 		ContactPhone: "13800138000",
 		Status:       "active",
 	}
-	user := db.User{ID: application.UserID, WechatOpenid: "operator-openid-88"}
-
 	store.EXPECT().
 		ListUserRoles(gomock.Any(), admin.ID).
 		Return([]db.UserRole{{UserID: admin.ID, Role: RoleAdmin, Status: "active"}}, nil)
@@ -147,9 +145,6 @@ func TestApproveOperatorApplicationAdmin_WritesProfitSharingReceiverTargetIntent
 	store.EXPECT().
 		GetActiveOperatorByRegion(gomock.Any(), application.RegionID).
 		Return(db.Operator{}, db.ErrRecordNotFound)
-	store.EXPECT().
-		GetUser(gomock.Any(), application.UserID).
-		Return(user, nil)
 	store.EXPECT().
 		ApproveOperatorApplication(gomock.Any(), gomock.Any()).
 		Return(approved, nil)

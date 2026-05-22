@@ -80,7 +80,7 @@ func TestCreateRefundOrderTx_AllowsProductionRefundTypes(t *testing.T) {
 			payment, err := testStore.CreatePaymentOrder(ctx, CreatePaymentOrderParams{
 				UserID:                user.ID,
 				PaymentType:           "profit_sharing",
-				PaymentChannel:        PaymentChannelEcommerce,
+				PaymentChannel:        PaymentChannelBaofuAggregate,
 				RequiresProfitSharing: true,
 				BusinessType:          "order",
 				Amount:                1459,

@@ -107,7 +107,7 @@ func TestReplaceOrderPaymentClientMissingReturnsActionableChinese(t *testing.T) 
 	user, _ := randomUser(t)
 	server := newTestServer(t, nil)
 	server.orderCommandSvc = replaceOrderErrorCommandService{
-		err: errors.New("ordinary service provider client: not configured"),
+		err: errors.New("payment service not configured"),
 	}
 
 	body := `{"items":[{"dish_id":1001,"quantity":1}]}`
@@ -124,7 +124,7 @@ func TestReplaceOrderPaymentClientMissingReturnsActionableChinese(t *testing.T) 
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Contains(t, resp.Message, "商户支付能力未完成配置")
 	require.Contains(t, resp.Message, "联系平台")
-	require.NotContains(t, resp.Message, "ordinary service provider")
+	require.NotContains(t, resp.Message, "payment service")
 	require.NotContains(t, resp.Message, "not configured")
 }
 

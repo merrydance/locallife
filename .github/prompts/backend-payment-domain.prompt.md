@@ -1,14 +1,14 @@
 ---
 name: "后端支付变更与审查模板"
-description: "Use when drafting a WeChat, Baofoo/Baofu, platform-ecommerce, or external payment backend implementation or review request. Trigger phrases: change payment flow, 微信支付, 宝付, Baofu, Baofoo, 宝财通, account opening, 开户, 平台收付通, 商户进件, 进件申请单, 商户注销, 支付回调, review callback handling, 退款链路, 分账, 商户提现, 结算账户, 消费者投诉, adjust refund path, inspect audit ledger consistency, update payment domain guidance. 适用于发起微信支付、宝付宝财通、平台收付通、商户进件与高风险资金链路相关后端实现、审查与运维闭环任务。"
+description: "Use when drafting a WeChat direct-payment, Baofoo/Baofu, or external payment backend implementation or review request. Trigger phrases: change payment flow, 微信支付, 宝付, Baofu, Baofoo, 宝财通, account opening, 开户, 商户进件, 进件申请单, 商户注销, 支付回调, review callback handling, 退款链路, 分账, 商户提现, 结算账户, 消费者投诉, adjust refund path, inspect audit ledger consistency, update payment domain guidance. 适用于发起微信直连支付、宝付宝财通与高风险资金链路相关后端实现、审查与运维闭环任务；微信平台收付通/普通服务商为退役范围，只能作为移除或历史审计对象出现。"
 ---
 # Backend Payment Domain Template
 
-Use this template when asking for changes or reviews related to WeChat payment, Baofoo/Baofu BaoCaiTong, platform ecommerce, applyment, merchant account flows, or related payment-domain paths.
+Use this template when asking for changes or reviews related to retained WeChat direct-payment paths, Baofoo/Baofu BaoCaiTong, merchant account flows, or related payment-domain paths. Legacy WeChat platform-ecommerce / ordinary-service-provider paths are retired and should only appear in removal, migration cleanup, or historical audit tasks.
 
 Choose the provider domain README first:
 
-- WeChat payment and platform-ecommerce work: `.github/standards/domains/wechat-payment/README.md`
+- Retained WeChat direct-payment work: `.github/standards/domains/wechat-payment/README.md`
 - Baofoo/Baofu/BaoCaiTong account, merchant-report, aggregate payment, share, refund, withdrawal, or callback work: `.github/standards/domains/baofu-payment/README.md`
 
 Use `.github/standards/backend/EXTERNAL_API_CONTRACT_STANDARDS.md` as the shared backend rule for provider contract truth, field matrices, error mapping, explicit downgrade, and drift review.
@@ -17,7 +17,7 @@ If this session is new, compacted, forked, or handed off, rerun routing from `.g
 
 ## Payment Change Request
 
-Target area: `locallife/wechat/`, `locallife/baofu/`, or related backend payment and platform-ecommerce flows
+Target area: `locallife/wechat/`, `locallife/baofu/`, or related backend payment flows
 
 Request:
 

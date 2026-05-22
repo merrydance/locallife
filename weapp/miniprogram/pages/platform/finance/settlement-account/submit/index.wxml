@@ -103,7 +103,7 @@
       </t-cell-group>
 
       <applyment-bank-form
-        apiBasePath="/v1/platform/finance/applyment"
+        manualCatalog="{{true}}"
         initialDraft="{{bankDraft}}"
         defaultAccountType="ACCOUNT_TYPE_BUSINESS"
         embedded="{{true}}"

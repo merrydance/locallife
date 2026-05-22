@@ -35,7 +35,7 @@ interface DashboardEntryDefinition {
   title: string
   icon: DashboardIconConfig
   path: string
-  badgeKey?: 'orders' | 'complaints'
+  badgeKey?: 'orders'
 }
 
 interface DashboardEntryView extends DashboardEntryDefinition {
@@ -251,18 +251,15 @@ export function isDashboardRequestOk<T>(result: DashboardRequestResult<T>): resu
 export function buildOverviewMetrics(params: {
   monthlyOrders: number | null
   monthlySales: number | null
-  complaintBacklog: number | null
 }): OverviewMetric[] {
   return [
     { id: 'orders', label: '本月订单', value: formatCount(params.monthlyOrders), note: '已完成订单' },
-    { id: 'sales', label: '本月成交额', value: formatMoney(params.monthlySales), note: '扣折后金额' },
-    { id: 'complaints', label: '投诉待办', value: formatCount(params.complaintBacklog), note: '当前待跟进' }
+    { id: 'sales', label: '本月成交额', value: formatMoney(params.monthlySales), note: '扣折后金额' }
   ]
 }
 
 export function buildSections(params: {
   pendingOrders: number | null
-  pendingComplaints: number | null
   canManageDeviceSettings: boolean
   canManageMerchantApplyment: boolean
 }): DashboardSectionView[] {
@@ -278,9 +275,6 @@ export function buildSections(params: {
       let badgeText = ''
       if (item.badgeKey === 'orders') {
         badgeText = toBadgeText(params.pendingOrders)
-      }
-      if (item.badgeKey === 'complaints') {
-        badgeText = toBadgeText(params.pendingComplaints)
       }
 
       return {

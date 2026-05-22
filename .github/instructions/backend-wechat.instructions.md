@@ -12,7 +12,7 @@ If this session is new, compacted, forked, or handed off, rerun routing from `.g
 
 - `.github/standards/domains/wechat-payment/README.md`
 
-Use `.github/standards/domains/wechat-payment/README.md` as the single payment-domain source of truth inside the repository. Identify the active capability group, current payment split, official document set, and implementation rules from that README before implementing or reviewing any WeChat payment or platform-ecommerce API.
+Use `.github/standards/domains/wechat-payment/README.md` as the single payment-domain source of truth inside the repository. Identify the active capability group, current payment split, official document set, and implementation rules from that README before implementing or reviewing any retained WeChat direct-payment API. Legacy platform-ecommerce / ordinary-service-provider APIs are retired and must not be reintroduced.
 
 If the change touches applyment creation, applyment status query, sign-state handling, account validation, settlement-account follow-up, or the `UploadImage` path inside the applyment group, first read the applyment section in `.github/standards/domains/wechat-payment/README.md`, then verify the exact official pages before changing code.
 
@@ -20,7 +20,7 @@ If the change touches `/v3/merchant/media/upload` or the `UploadImage` path, re-
 
 ## Role Of This Layer
 
-- Keep this package responsible for WeChat-facing client integrations such as payment, ecommerce, shipping, complaint, bill, wxacode, and related security or content-check helpers.
+- Keep this package responsible for retained WeChat-facing client integrations such as direct payment, shipping, complaint, bill, wxacode, and related security or content-check helpers.
 - Use this package as an external integration boundary, not as a place to hide unrelated business workflows that should stay in logic, worker, or scheduler layers.
 
 ## Integration Conventions
@@ -53,5 +53,5 @@ If the change touches `/v3/merchant/media/upload` or the `UploadImage` path, re-
 ## Validation Defaults
 
 - Prefer focused unit tests for client, payment, callback, and error-mapping behavior.
-- For async or grouped platform-ecommerce changes, do not stop at client tests; also verify the active capability group has caller-propagation coverage in code and tests, and explicitly record any still-unverified propagation path.
+- For async or grouped payment changes, do not stop at client tests; also verify the active capability group has caller-propagation coverage in code and tests, and explicitly record any still-unverified propagation path.
 - If a change affects payment-domain guidance, service-provider config, or callbacks, update the linked domain standards alongside code.

@@ -25,6 +25,7 @@ type CreatePartnerPaymentTxParams struct {
 	Attach                string
 	PaymentChannel        string
 	RequiresProfitSharing bool
+	AllowPartialOrderPay  bool
 }
 
 // CreatePartnerPaymentTxResult 返回创建结果及商户服务商配置。
@@ -35,10 +36,10 @@ type CreatePartnerPaymentTxResult struct {
 
 // CreatePartnerPaymentTx 创建服务商单笔支付记录并校验商户配置与并发 pending 冲突。
 func (store *SQLStore) CreatePartnerPaymentTx(ctx context.Context, arg CreatePartnerPaymentTxParams) (CreatePartnerPaymentTxResult, error) {
-	var result CreatePartnerPaymentTxResult
-	var linkedReservationID pgtype.Int8
-	resolvedMerchantID := arg.MerchantID
-	requiresProfitSharing := false
+var result CreatePartnerPaymentTxResult
+var linkedReservationID pgtype.Int8
+resolvedMerchantID := arg.MerchantID
+requiresProfitSharing := false
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		if arg.OrderID > 0 {
@@ -59,7 +60,11 @@ func (store *SQLStore) CreatePartnerPaymentTx(ctx context.Context, arg CreatePar
 			if err != nil {
 				return fmt.Errorf("resolve order %d payable amount: %w", arg.OrderID, err)
 			}
-			if payAmount != arg.Amount {
+			if arg.AllowPartialOrderPay {
+				if arg.Amount <= 0 || arg.Amount > payAmount {
+					return &requestError{statusCode: http.StatusConflict, err: fmt.Errorf("order %d payable amount changed", arg.OrderID)}
+				}
+			} else if payAmount != arg.Amount {
 				return &requestError{statusCode: http.StatusConflict, err: fmt.Errorf("order %d payable amount changed", arg.OrderID)}
 			}
 			resolvedMerchantID = order.MerchantID
@@ -140,7 +145,7 @@ func (store *SQLStore) CreatePartnerPaymentTx(ctx context.Context, arg CreatePar
 
 		paymentChannel := arg.PaymentChannel
 		if paymentChannel == "" {
-			paymentChannel = PaymentChannelOrdinaryServiceProvider
+			paymentChannel = PaymentChannelBaofuAggregate
 		}
 		if arg.RequiresProfitSharing {
 			requiresProfitSharing = true
@@ -178,6 +183,8 @@ func (store *SQLStore) CreatePartnerPaymentTx(ctx context.Context, arg CreatePar
 
 	return result, err
 }
+
+var ErrOrderPendingPaymentConflict = errors.New("order already has a pending payment order")
 
 func IsPartnerPaymentRequestError(err error) (int, bool) {
 	var re *requestError

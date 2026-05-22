@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/wechat"
-	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
-	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -28,29 +28,11 @@ type MerchantRejectRefundResult struct {
 	RefundOrder  *db.RefundOrder
 }
 
-type merchantRejectOrdinaryRefundClient interface {
-	RefundNotifyURL() string
-	CreateRefund(ctx context.Context, req ospcontracts.RefundCreateRequest) (*ospcontracts.RefundResponse, error)
-}
-
 // ProcessMerchantRejectRefund handles full refund for a merchant-rejected order.
-// Deprecated active callers should use ProcessMerchantRejectRefundWithOrdinaryServiceProvider.
 func ProcessMerchantRejectRefund(
 	ctx context.Context,
 	store db.Store,
-	ecommerceClient wechat.EcommerceClientInterface,
-	input MerchantRejectRefundInput,
-) (MerchantRejectRefundResult, error) {
-	return ProcessMerchantRejectRefundWithOrdinaryServiceProvider(ctx, store, ecommerceClient, nil, input)
-}
-
-// ProcessMerchantRejectRefundWithOrdinaryServiceProvider handles full refund for a merchant-rejected order.
-// Main-business refunds route by the persisted payment channel; ecommerce remains a cold-reserve branch only.
-func ProcessMerchantRejectRefundWithOrdinaryServiceProvider(
-	ctx context.Context,
-	store db.Store,
-	ecommerceClient wechat.EcommerceClientInterface,
-	ordinaryClient merchantRejectOrdinaryRefundClient,
+	paymentFacade PaymentFacade,
 	input MerchantRejectRefundInput,
 ) (MerchantRejectRefundResult, error) {
 	var result MerchantRejectRefundResult
@@ -85,8 +67,8 @@ func ProcessMerchantRejectRefundWithOrdinaryServiceProvider(
 		}
 	}
 	result.PaymentOrder = &paymentOrder
-	if !paymentOrderUsesEcommerceChannel(paymentOrder) && !db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
-		return result, mainBusinessEcommerceOnlyError("处理商户拒单退款")
+	if !paymentOrderUsesBaofuAggregateChannel(paymentOrder) {
+		return result, mainBusinessBaofuOnlyError("处理商户拒单退款")
 	}
 
 	reason := fmt.Sprintf("商户拒单：%s", input.Reason)
@@ -110,102 +92,55 @@ func ProcessMerchantRejectRefundWithOrdinaryServiceProvider(
 	}
 	refundOrder := txResult.RefundOrder
 	result.RefundOrder = &refundOrder
-	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
-		return result, processMerchantRejectOrdinaryServiceProviderRefund(ctx, store, ordinaryClient, paymentOrder, refundOrder, outRefundNo, reason, input.MerchantID)
+	if err := processMerchantRejectBaofuRefund(ctx, store, paymentFacade, paymentOrder, refundOrder, reason); err != nil {
+		return result, err
 	}
-	return result, processMerchantRejectEcommerceRefund(ctx, store, ecommerceClient, paymentOrder, refundOrder, outRefundNo, reason, input.MerchantID)
+	return result, nil
 }
 
-// processMerchantRejectEcommerceRefund 收付通合单支付订单的商户拒单退款。
-// 商户拒单时分账尚未执行，可直接调用电商退款接口，无需分账回退。
-func processMerchantRejectEcommerceRefund(
+func processMerchantRejectBaofuRefund(
 	ctx context.Context,
 	store db.Store,
-	ecommerceClient wechat.EcommerceClientInterface,
+	paymentFacade PaymentFacade,
 	paymentOrder db.PaymentOrder,
 	refundOrder db.RefundOrder,
-	outRefundNo, reason string,
-	merchantID int64,
+	reason string,
 ) error {
-	if ecommerceClient == nil {
-		return nil
-	}
-
-	paymentConfig, err := store.GetMerchantPaymentConfig(ctx, merchantID)
-	if err != nil {
-		return fmt.Errorf("get merchant payment config: %w", err)
-	}
-
-	wxRefund, err := createEcommerceRefundContract(ctx, ecommerceClient, &wechatcontracts.EcommerceRefundRequest{
-		SubMchID:    paymentConfig.SubMchID,
-		OutTradeNo:  paymentOrder.OutTradeNo,
-		OutRefundNo: outRefundNo,
-		Reason:      reason,
-		Amount: &wechatcontracts.EcommerceRefundRequestAmount{
-			Refund:   paymentOrder.Amount,
-			Total:    paymentOrder.Amount,
-			Currency: wechatcontracts.EcommerceRefundCurrencyCNY,
-		},
-	})
-	if err != nil {
-		// 微信API失败时保持pending状态，由 RefundRecoveryScheduler 每5分钟自动补偿重试
-		return fmt.Errorf("wechat ecommerce refund api: %w", err)
-	}
-
-	if _, dbErr := store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
-		ID:       refundOrder.ID,
-		RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: wxRefund.RefundID != ""},
-	}); dbErr != nil {
-		log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
-	}
-	recordMerchantRejectRefundCommandAccepted(ctx, store, paymentOrder, refundOrder, outRefundNo, wxRefund.RefundID)
-	return nil
-}
-
-// processMerchantRejectOrdinaryServiceProviderRefund handles merchant-reject refund for ordinary service-provider orders.
-func processMerchantRejectOrdinaryServiceProviderRefund(
-	ctx context.Context,
-	store db.Store,
-	ordinaryClient merchantRejectOrdinaryRefundClient,
-	paymentOrder db.PaymentOrder,
-	refundOrder db.RefundOrder,
-	outRefundNo, reason string,
-	merchantID int64,
-) error {
-	if ordinaryClient == nil {
-		configErr := errors.New("ordinary service provider client not configured")
+	if paymentFacade == nil {
+		configErr := errors.New("baofu payment facade not configured")
 		log.Error().
 			Err(configErr).
 			Int64("payment_order_id", paymentOrder.ID).
 			Int64("refund_order_id", refundOrder.ID).
-			Msg("ordinary service provider refund client missing for merchant reject refund")
-		return NewRequestErrorWithCause(http.StatusServiceUnavailable, errors.New("微信服务商退款配置未完成，当前无法发起退款，请联系平台处理"), configErr)
+			Msg("baofu refund facade missing for merchant reject refund")
+		return NewRequestErrorWithCause(http.StatusServiceUnavailable, errors.New("宝付退款通道未配置，请联系平台处理"), configErr)
 	}
 
-	paymentConfig, err := store.GetMerchantPaymentConfig(ctx, merchantID)
+	req := aggregatecontracts.RefundBeforeShareRequest{
+		OutTradeNo:      strings.TrimSpace(refundOrder.OutRefundNo),
+		NotifyURL:       paymentFacade.BaofuRefundNotifyURL(),
+		RefundAmountFen: refundOrder.RefundAmount,
+		TotalAmountFen:  refundOrder.RefundAmount,
+		TransactionTime: time.Now().UTC().Format("20060102150405"),
+		RefundReason:    strings.TrimSpace(reason),
+	}
+	if paymentOrder.TransactionID.Valid && strings.TrimSpace(paymentOrder.TransactionID.String) != "" {
+		req.OriginTradeNo = strings.TrimSpace(paymentOrder.TransactionID.String)
+	} else {
+		req.OriginOutTradeNo = strings.TrimSpace(paymentOrder.OutTradeNo)
+	}
+
+	baofuRefund, err := paymentFacade.CreateBaofuRefund(ctx, req)
 	if err != nil {
-		return fmt.Errorf("get merchant payment config: %w", err)
+		if _, dbErr := store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark baofu merchant reject refund as failed")
+		}
+		recordBaofuRefundCommand(ctx, store, paymentOrder, refundOrder, nil, db.ExternalPaymentCommandStatusRejected, err)
+		return mapBaofuRefundCreateError(err)
 	}
-
-	wxRefund, err := ordinaryClient.CreateRefund(ctx, ospcontracts.RefundCreateRequest{
-		SubMchID:    paymentConfig.SubMchID,
-		OutTradeNo:  paymentOrder.OutTradeNo,
-		OutRefundNo: outRefundNo,
-		Reason:      reason,
-		NotifyURL:   ordinaryClient.RefundNotifyURL(),
-		Amount: ospcontracts.RefundAmountRequest{
-			Refund:   paymentOrder.Amount,
-			Total:    paymentOrder.Amount,
-			Currency: ospcontracts.CurrencyCNY,
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("wechat ordinary service provider refund api: %w", mapOrdinaryServiceProviderRefundCreateError(err))
-	}
-
 	refundID := ""
-	if wxRefund != nil {
-		refundID = wxRefund.RefundID
+	if baofuRefund != nil {
+		refundID = strings.TrimSpace(baofuRefund.TradeNo)
 	}
 	if _, dbErr := store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
 		ID:       refundOrder.ID,
@@ -213,7 +148,7 @@ func processMerchantRejectOrdinaryServiceProviderRefund(
 	}); dbErr != nil {
 		log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
 	}
-	recordMerchantRejectRefundCommandAccepted(ctx, store, paymentOrder, refundOrder, outRefundNo, refundID)
+	recordBaofuRefundCommand(ctx, store, paymentOrder, refundOrder, baofuRefund, db.ExternalPaymentCommandStatusAccepted, nil)
 	return nil
 }
 
@@ -241,7 +176,7 @@ func recordMerchantRejectRefundCommandAccepted(
 		log.Error().Err(err).
 			Int64("refund_order_id", refundOrder.ID).
 			Str("out_refund_no", outRefundNo).
-			Msg("record merchant reject ecommerce refund command accepted failed")
+			Msg("record merchant reject refund command accepted failed")
 	}
 }
 
@@ -258,7 +193,7 @@ func dbMerchantRejectRefundCommandInput(
 	return RecordExternalPaymentCommandInput{
 		Provider:             db.ExternalPaymentProviderWechat,
 		Channel:              paymentOrder.PaymentChannel,
-		Capability:           refundServiceCreateRefundCapability(paymentOrder.PaymentChannel),
+		Capability:           db.ExternalPaymentCapabilityBaofuRefund,
 		CommandType:          db.ExternalPaymentCommandTypeCreateRefund,
 		BusinessOwner:        db.ExternalPaymentBusinessOwnerOrder,
 		BusinessObjectType:   &businessObjectType,

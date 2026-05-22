@@ -1,6 +1,14 @@
 package db
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+const (
+	errBaofuProfitSharingRefundStarted = "订单已有退款申请或退款成功记录，不能继续发起宝付分账"
+	errBaofuProfitSharingAlreadyExists = "订单已存在宝付分账单，不能重复发起分账"
+)
 
 // CreateBaofuProfitSharingOrderTxParams contains the durable share order and
 // matching Baofu fee ledger rows that must commit atomically.
@@ -20,6 +28,22 @@ type CreateBaofuProfitSharingOrderTxResult struct {
 func (store *SQLStore) CreateBaofuProfitSharingOrderTx(ctx context.Context, arg CreateBaofuProfitSharingOrderTxParams) (CreateBaofuProfitSharingOrderTxResult, error) {
 	var result CreateBaofuProfitSharingOrderTxResult
 	err := store.execTx(ctx, func(q *Queries) error {
+		if _, err := q.GetPaymentOrderForUpdate(ctx, arg.ProfitSharingOrder.PaymentOrderID); err != nil {
+			return err
+		}
+		occupiedRefundAmount, err := q.GetTotalRefundedByPaymentOrder(ctx, arg.ProfitSharingOrder.PaymentOrderID)
+		if err != nil {
+			return err
+		}
+		if occupiedRefundAmount > 0 {
+			return &requestError{statusCode: 400, err: errors.New(errBaofuProfitSharingRefundStarted)}
+		}
+		if _, err := q.GetProfitSharingOrderByPaymentOrder(ctx, arg.ProfitSharingOrder.PaymentOrderID); err == nil {
+			return &requestError{statusCode: 400, err: errors.New(errBaofuProfitSharingAlreadyExists)}
+		} else if !errors.Is(err, ErrRecordNotFound) {
+			return err
+		}
+
 		profitSharingOrder, err := q.CreateProfitSharingOrder(ctx, arg.ProfitSharingOrder)
 		if err != nil {
 			return err

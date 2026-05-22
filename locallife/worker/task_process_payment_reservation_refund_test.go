@@ -8,10 +8,9 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
+	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/wechat"
-	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/merrydance/locallife/worker"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -22,37 +21,43 @@ func TestProcessTaskInitiateRefund_ReservationAddonRefund_UsesProvidedOutRefundN
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	baofuClient := &fakeWorkerBaofuRefundClient{refundResult: &aggregatecontracts.RefundResult{
+		OriginTradeNo:    "BF_RA_PAY_12",
+		OutTradeNo:       "RF_RA_12_1",
+		TradeNo:          "BFREFUND_RA_12",
+		RefundAmountFen:  300,
+		TotalAmountFen:   300,
+		ResultCode:       aggregatecontracts.BusinessResultCodeSuccess,
+		RefundState:      aggregatecontracts.RefundStateAccepted,
+		SuccessAmountFen: 300,
+	}}
 
 	reservationID := int64(88)
 	paymentOrder := db.PaymentOrder{
 		ID:             12,
 		ReservationID:  pgtype.Int8{Int64: reservationID, Valid: true},
 		OutTradeNo:     "RA_PAY_12",
+		TransactionID:  pgtype.Text{String: "BF_RA_PAY_12", Valid: true},
 		Amount:         600,
 		Status:         "paid",
 		BusinessType:   "reservation_addon",
 		PaymentType:    "profit_sharing",
-		PaymentChannel: db.PaymentChannelEcommerce,
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
 	}
 	refundOrder := db.RefundOrder{ID: 33, PaymentOrderID: paymentOrder.ID, RefundAmount: 300, Status: "pending", OutRefundNo: "RF_RA_12_1"}
 
 	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
 	store.EXPECT().GetTableReservation(gomock.Any(), reservationID).Return(db.TableReservation{ID: reservationID, MerchantID: 55}, nil)
-	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), int64(55)).Return(db.MerchantPaymentConfig{MerchantID: 55, SubMchID: "sub_mch_55"}, nil)
 	store.EXPECT().GetRefundOrderByOutRefundNo(gomock.Any(), refundOrder.OutRefundNo).Return(refundOrder, nil)
-	ecommerceClient.EXPECT().CreateEcommerceRefund(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *wechat.EcommerceRefundRequest) (*wechat.EcommerceRefundResponse, error) {
-		require.Equal(t, "sub_mch_55", req.SubMchID)
-		require.Equal(t, paymentOrder.OutTradeNo, req.OutTradeNo)
-		require.Equal(t, refundOrder.OutRefundNo, req.OutRefundNo)
-		require.Equal(t, int64(300), req.RefundAmount)
-		require.Equal(t, paymentOrder.Amount, req.TotalAmount)
-		return &wechat.EcommerceRefundResponse{RefundID: "refund_ra_12"}, nil
-	})
-	store.EXPECT().UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{ID: refundOrder.ID, RefundID: pgtype.Text{String: "refund_ra_12", Valid: true}}).Return(db.RefundOrder{ID: refundOrder.ID, PaymentOrderID: refundOrder.PaymentOrderID, RefundAmount: refundOrder.RefundAmount, Status: "processing", OutRefundNo: refundOrder.OutRefundNo}, nil)
-	expectWorkerEcommerceRefundAcceptedCommand(t, store, refundOrder.ID, refundOrder.OutRefundNo, "refund_ra_12", db.ExternalPaymentBusinessOwnerReservation, 9602)
+	store.EXPECT().UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{ID: refundOrder.ID, RefundID: pgtype.Text{String: "BFREFUND_RA_12", Valid: true}}).Return(db.RefundOrder{ID: refundOrder.ID, PaymentOrderID: refundOrder.PaymentOrderID, RefundAmount: refundOrder.RefundAmount, Status: "processing", OutRefundNo: refundOrder.OutRefundNo}, nil)
+	expectWorkerExternalRefundCommand(t, store, db.ExternalPaymentProviderBaofu, db.PaymentChannelBaofuAggregate, db.ExternalPaymentCapabilityBaofuRefund, refundOrder.ID, refundOrder.OutRefundNo, "BFREFUND_RA_12", db.ExternalPaymentBusinessOwnerReservation, db.ExternalPaymentCommandStatusAccepted, "", 9602)
 
-	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
+	processor.SetBaofuAggregateClient(baofuClient, worker.BaofuProfitSharingWorkerConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+		RefundNotifyURL:   "https://api.example.com/v1/webhooks/baofu/refund",
+	})
 	payloadBytes, err := json.Marshal(worker.PayloadProcessRefund{
 		PaymentOrderID: paymentOrder.ID,
 		ReservationID:  reservationID,
@@ -65,6 +70,16 @@ func TestProcessTaskInitiateRefund_ReservationAddonRefund_UsesProvidedOutRefundN
 	task := asynq.NewTask(worker.TaskProcessRefund, payloadBytes)
 	err = processor.ProcessTaskInitiateRefund(context.Background(), task)
 	require.NoError(t, err)
+	require.True(t, baofuClient.called)
+	require.Equal(t, "COLLECT_MER", baofuClient.lastRefundRequest.MerchantID)
+	require.Equal(t, "COLLECT_TER", baofuClient.lastRefundRequest.TerminalID)
+	require.Equal(t, "BF_RA_PAY_12", baofuClient.lastRefundRequest.OriginTradeNo)
+	require.Empty(t, baofuClient.lastRefundRequest.OriginOutTradeNo)
+	require.Equal(t, refundOrder.OutRefundNo, baofuClient.lastRefundRequest.OutTradeNo)
+	require.Equal(t, "https://api.example.com/v1/webhooks/baofu/refund", baofuClient.lastRefundRequest.NotifyURL)
+	require.Equal(t, int64(300), baofuClient.lastRefundRequest.RefundAmountFen)
+	require.Equal(t, int64(300), baofuClient.lastRefundRequest.TotalAmountFen)
+	require.Equal(t, "Reservation dish change refund", baofuClient.lastRefundRequest.RefundReason)
 }
 
 func TestProcessTaskRefundResult_ReservationRefundSuccess_UpdatesPrepaidAmount(t *testing.T) {
@@ -150,12 +165,15 @@ func TestProcessTaskRefundResult_OrderRefundSuccess_SendsNotificationAndMarksPay
 		Amount:         500,
 		Status:         "paid",
 		BusinessType:   db.ExternalPaymentBusinessOwnerOrder,
-		PaymentChannel: db.PaymentChannelEcommerce,
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
 		UserID:         567,
 	}
 
 	store.EXPECT().GetRefundOrderByOutRefundNo(gomock.Any(), refundOrder.OutRefundNo).Return(refundOrder, nil)
 	store.EXPECT().GetPaymentOrder(gomock.Any(), refundOrder.PaymentOrderID).Return(paymentOrder, nil)
+	store.EXPECT().UpdateRefundOrderToSuccess(gomock.Any(), refundOrder.ID).Return(db.RefundOrder{ID: refundOrder.ID, PaymentOrderID: refundOrder.PaymentOrderID, RefundAmount: refundOrder.RefundAmount, Status: "success", OutRefundNo: refundOrder.OutRefundNo}, nil)
+	store.EXPECT().GetTotalSuccessfulRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder.Amount, nil)
+	store.EXPECT().UpdatePaymentOrderToRefunded(gomock.Any(), paymentOrder.ID).Return(db.PaymentOrder{ID: paymentOrder.ID, Status: "refunded"}, nil)
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
 	payloadBytes, err := json.Marshal(worker.RefundResultPayload{
@@ -167,9 +185,7 @@ func TestProcessTaskRefundResult_OrderRefundSuccess_SendsNotificationAndMarksPay
 
 	task := asynq.NewTask(worker.TaskProcessRefundResult, payloadBytes)
 	err = processor.ProcessTaskRefundResult(context.Background(), task)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "order refund results must be applied via payment fact application")
-	require.True(t, errors.Is(err, asynq.SkipRetry))
+	require.NoError(t, err)
 }
 
 func TestProcessTaskRefundResult_PaymentOrderLookupFailureReturnsError(t *testing.T) {

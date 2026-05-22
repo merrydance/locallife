@@ -17,7 +17,6 @@ import (
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/wechat"
-	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/rs/zerolog/log"
 )
 
@@ -32,8 +31,6 @@ type TaskProcessor interface {
 	Shutdown()
 	// ProcessTaskPaymentOrderTimeout 处理支付订单超时任务
 	ProcessTaskPaymentOrderTimeout(ctx context.Context, task *asynq.Task) error
-	// ProcessTaskCombinedPaymentOrderTimeout 处理合单支付超时任务
-	ProcessTaskCombinedPaymentOrderTimeout(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskReservationPaymentTimeout 处理预定支付超时任务
 	ProcessTaskReservationPaymentTimeout(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskReservationNoShowAlert 处理预定未到店提醒任务
@@ -42,12 +39,6 @@ type TaskProcessor interface {
 	ProcessTaskReservationFoodSafetyAlert(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskRefundResult 处理退款结果任务
 	ProcessTaskRefundResult(ctx context.Context, task *asynq.Task) error
-	// ProcessTaskProfitSharing 处理分账任务
-	ProcessTaskProfitSharing(ctx context.Context, task *asynq.Task) error
-	// ProcessTaskProfitSharingReceiverTarget 处理分账接收方生命周期同步任务
-	ProcessTaskProfitSharingReceiverTarget(ctx context.Context, task *asynq.Task) error
-	// ProcessTaskProfitSharingReturnResult 处理分账回退结果任务
-	ProcessTaskProfitSharingReturnResult(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskClaimPayout 处理索赔平台赔付任务
 	ProcessTaskClaimPayout(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskPaymentFactApplication 处理外部支付事实应用任务
@@ -63,8 +54,6 @@ type RedisTaskProcessor struct {
 	wechatClient              wechat.WechatClient                 // 微信小程序客户端（用于证照OCR等）
 	directPaymentClient       wechat.DirectPaymentClientInterface // 直连支付客户端（骑手押金/追偿退款）
 	transferClient            wechat.TransferClientInterface      // 商家转账客户端（索赔赔付到零钱）
-	ecommerceClient           wechat.EcommerceClientInterface     // 平台收付通客户端（历史/冷备路径）
-	ordinarySPClient          OrdinaryServiceProviderWorkerClient // 普通服务商支付客户端（商户主业务支付）
 	baofuAggregateClient      aggregatepay.Client                 // 宝付聚合支付/分账客户端
 	baofuAccountClient        logic.BaofuAccountClient
 	baofuMerchantReportClient baofuMerchantReportContinuationClient
@@ -99,34 +88,9 @@ func (s testStoreWithNoopPlatformAlertPersistence) CreatePlatformAlertEvent(_ co
 	return db.PlatformAlertEvent{}, nil
 }
 
-func (s testStoreWithNoopPlatformAlertPersistence) MarkEcommerceApplymentResultProcessed(_ context.Context, _ db.MarkEcommerceApplymentResultProcessedParams) error {
-	return nil
-}
-
 type cachedUserRoles struct {
 	roles     []db.UserRole
 	expiresAt time.Time
-}
-
-type OrdinaryServiceProviderWorkerClient interface {
-	ServiceProviderAppID() string
-	ServiceProviderMchID() string
-	ServiceProviderMchName() string
-	QueryPayment(ctx context.Context, req ospcontracts.PaymentQueryRequest) (*ospcontracts.PaymentQueryResponse, error)
-	ClosePayment(ctx context.Context, req ospcontracts.PaymentCloseRequest) error
-	QueryCombinePayment(ctx context.Context, req ospcontracts.CombineQueryRequest) (*ospcontracts.CombineQueryResponse, error)
-	CloseCombinePayment(ctx context.Context, req ospcontracts.CombineCloseRequest) error
-	RefundNotifyURL() string
-	CreateRefund(ctx context.Context, req ospcontracts.RefundCreateRequest) (*ospcontracts.RefundResponse, error)
-	QueryRefund(ctx context.Context, req ospcontracts.RefundQueryRequest) (*ospcontracts.RefundResponse, error)
-	AddProfitSharingReceiver(ctx context.Context, req ospcontracts.ProfitSharingReceiverAddRequest) (*ospcontracts.ProfitSharingReceiverResponse, error)
-	DeleteProfitSharingReceiver(ctx context.Context, req ospcontracts.ProfitSharingReceiverDeleteRequest) (*ospcontracts.ProfitSharingReceiverResponse, error)
-	CreateProfitSharingOrder(ctx context.Context, req ospcontracts.ProfitSharingOrderRequest) (*ospcontracts.ProfitSharingOrderResponse, error)
-	QueryProfitSharingOrder(ctx context.Context, req ospcontracts.ProfitSharingQueryRequest) (*ospcontracts.ProfitSharingOrderResponse, error)
-	CreateProfitSharingReturn(ctx context.Context, req ospcontracts.ProfitSharingReturnRequest) (*ospcontracts.ProfitSharingReturnResponse, error)
-	QueryProfitSharingReturn(ctx context.Context, req ospcontracts.ProfitSharingReturnQueryRequest) (*ospcontracts.ProfitSharingReturnResponse, error)
-	UnfreezeProfitSharing(ctx context.Context, req ospcontracts.ProfitSharingUnfreezeRequest) (*ospcontracts.ProfitSharingUnfreezeResponse, error)
-	QueryProfitSharingRemainingAmount(ctx context.Context, req ospcontracts.ProfitSharingRemainingAmountRequest) (*ospcontracts.ProfitSharingRemainingAmountResponse, error)
 }
 
 func NewRedisTaskProcessor(
@@ -134,7 +98,6 @@ func NewRedisTaskProcessor(
 	store db.Store,
 	distributor TaskDistributor,
 	wechatClient wechat.WechatClient,
-	ecommerceClient wechat.EcommerceClientInterface,
 	deliveryBroadcast *logic.DeliveryBroadcastLogic,
 	mediaRegistry *media.Registry,
 	config util.Config,
@@ -182,7 +145,6 @@ func NewRedisTaskProcessor(
 		distributor:         distributor,
 		wechatClient:        wechatClient,
 		transferClient:      nil,
-		ecommerceClient:     ecommerceClient,
 		pubSubPublisher:     pubSubPublisher,
 		deliveryBroadcast:   deliveryBroadcast,
 		mediaRegistry:       mediaRegistry,
@@ -204,10 +166,6 @@ func (processor *RedisTaskProcessor) SetDirectPaymentClient(directPaymentClient 
 
 func (processor *RedisTaskProcessor) SetTransferClient(transferClient wechat.TransferClientInterface) {
 	processor.transferClient = transferClient
-}
-
-func (processor *RedisTaskProcessor) SetOrdinaryServiceProviderClient(client OrdinaryServiceProviderWorkerClient) {
-	processor.ordinarySPClient = client
 }
 
 func (processor *RedisTaskProcessor) SetBaofuAggregateClient(client aggregatepay.Client, config BaofuProfitSharingWorkerConfig) {
@@ -237,7 +195,6 @@ func NewTestTaskProcessor(
 	store db.Store,
 	distributor TaskDistributor,
 	wechatClient wechat.WechatClient,
-	ecommerceClient wechat.EcommerceClientInterface,
 	paymentClient ...wechat.DirectPaymentClientInterface,
 ) *RedisTaskProcessor {
 	if store != nil {
@@ -250,7 +207,6 @@ func NewTestTaskProcessor(
 		store:               store,
 		distributor:         distributor,
 		wechatClient:        wechatClient,
-		ecommerceClient:     ecommerceClient,
 		ocrService:          ocrService,
 		onboardingReviewSvc: onboardingReviewSvc,
 		credentialGovSvc:    credentialGovSvc,
@@ -261,8 +217,11 @@ func NewTestTaskProcessor(
 		roleCache:           make(map[int64]cachedUserRoles),
 		roleCacheTTL:        1 * time.Minute,
 	}
-	if len(paymentClient) > 0 {
-		p.directPaymentClient = paymentClient[0]
+	for _, client := range paymentClient {
+		if client != nil {
+			p.directPaymentClient = client
+			break
+		}
 	}
 	return p
 }
@@ -299,20 +258,14 @@ func (processor *RedisTaskProcessor) Start() error {
 
 	// 注册任务处理器
 	mux.HandleFunc(TaskPaymentOrderTimeout, processor.ProcessTaskPaymentOrderTimeout)
-	mux.HandleFunc(TaskCombinedPaymentOrderTimeout, processor.ProcessTaskCombinedPaymentOrderTimeout)
 	mux.HandleFunc(TaskReservationPaymentTimeout, processor.ProcessTaskReservationPaymentTimeout)
 	mux.HandleFunc(TaskOrderPaymentTimeout, processor.ProcessTaskOrderPaymentTimeout)
 	mux.HandleFunc(TaskReservationNoShowAlert, processor.ProcessTaskReservationNoShowAlert)
 	mux.HandleFunc(TaskReservationFoodSafetyAlert, processor.ProcessTaskReservationFoodSafetyAlert)
 	mux.HandleFunc(TaskProcessRefund, processor.ProcessTaskInitiateRefund)
 	mux.HandleFunc(TaskProcessRefundResult, processor.ProcessTaskRefundResult)
-	mux.HandleFunc(TaskProcessProfitSharing, processor.ProcessTaskProfitSharing)
-	mux.HandleFunc(TaskProcessProfitSharingReceiverTarget, processor.ProcessTaskProfitSharingReceiverTarget)
 	mux.HandleFunc(TaskSendNotification, processor.ProcessTaskSendNotification)
 	mux.HandleFunc(TaskOperatorPendingDispatchAlert, processor.ProcessTaskOperatorPendingDispatchAlert)
-	mux.HandleFunc(TaskProcessProfitSharingReturnResult, processor.ProcessTaskProfitSharingReturnResult)
-	mux.HandleFunc(TaskProcessMerchantWithdrawResult, processor.ProcessTaskMerchantWithdrawResult)
-	mux.HandleFunc(TaskProcessMerchantCancelWithdrawResult, processor.ProcessTaskMerchantCancelWithdrawResult)
 	mux.HandleFunc(TaskProcessAnomalyRefund, processor.ProcessTaskAnomalyRefund)
 	mux.HandleFunc(TaskPrintOrder, processor.ProcessTaskPrintOrder)
 
@@ -328,8 +281,7 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskClaimBehaviorAction, processor.ProcessTaskClaimBehaviorAction)
 	mux.HandleFunc(TaskClaimPayout, processor.ProcessTaskClaimPayout)
 
-	// 进件结果和支付事实/outbox 处理任务
-	mux.HandleFunc(TaskProcessApplymentResult, processor.ProcessTaskApplymentResult)
+	// 支付事实/outbox 处理任务
 	mux.HandleFunc(TaskProcessPaymentFactApplication, processor.ProcessTaskPaymentFactApplication)
 	mux.HandleFunc(TaskProcessPaymentDomainOutbox, processor.ProcessTaskPaymentDomainOutbox)
 	mux.HandleFunc(TaskProcessBaofuProfitSharing, processor.ProcessTaskBaofuProfitSharing)
@@ -349,9 +301,6 @@ func (processor *RedisTaskProcessor) Start() error {
 
 	// 微信发货信息上报任务（合规）
 	mux.HandleFunc(TaskUploadShippingInfo, processor.ProcessTaskUploadShippingInfo)
-
-	// 微信投诉单同步任务
-	mux.HandleFunc(TaskSyncComplaints, processor.ProcessTaskSyncComplaints)
 
 	return processor.server.Start(mux)
 }

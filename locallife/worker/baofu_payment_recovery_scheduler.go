@@ -22,6 +22,7 @@ const (
 	baofuPaymentRecoveryCron       = "*/5 * * * *"
 	baofuPaymentRecoveryBatchLimit = int32(200)
 	baofuShareTaskUniqueWindow     = 30 * time.Second
+	baofuShareRecoveryMinAge       = 2 * time.Minute
 	baofuPlatformRateBps           = int32(200)
 	baofuOperatorRateBps           = int32(300)
 )
@@ -321,7 +322,7 @@ func (s *BaofuPaymentRecoveryScheduler) queryProcessingProfitSharingOrders(ctx c
 	}
 
 	orders, err := s.store.ListBaofuProcessingProfitSharingOrdersForRecovery(ctx, db.ListBaofuProcessingProfitSharingOrdersForRecoveryParams{
-		CreatedBefore: time.Now().Add(-profitSharingRecoveryMinAge),
+		CreatedBefore: time.Now().Add(-baofuShareRecoveryMinAge),
 		Limit:         baofuPaymentRecoveryBatchLimit,
 	})
 	if err != nil {

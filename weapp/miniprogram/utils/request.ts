@@ -96,8 +96,7 @@ function containsChineseText(text: string): boolean {
 function isBusinessMessagePreserveEndpoint(url: string): boolean {
   return (
     url === '/v1/merchant/application/submit' ||
-    url === '/v1/rider/application/submit' ||
-    url === '/v1/merchant/applyment/bindbank'
+    url === '/v1/rider/application/submit'
   )
 }
 

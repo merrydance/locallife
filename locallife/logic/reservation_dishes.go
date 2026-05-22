@@ -10,8 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
-	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
-	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 
 	"github.com/rs/zerolog/log"
 )
@@ -28,8 +26,7 @@ type AddReservationDishesInput struct {
 	ReservationID   int64
 	Items           []ReservationItemInput
 	Now             time.Time
-	EcommerceClient wechat.EcommerceClientInterface
-	OrdinaryClient  ordinaryServiceProviderCombineClient
+	PaymentFacade   PaymentFacade
 	ClientIP        string
 }
 
@@ -95,7 +92,7 @@ func AddReservationDishes(ctx context.Context, store db.Store, input AddReservat
 	result.AddedAmount = addedAmount
 
 	if reservation.PaymentMode == paymentModeFull {
-		paymentOrder, payParams, err := createReservationAddonPaymentOrder(ctx, store, input.EcommerceClient, input.OrdinaryClient, reservation, input.UserID, addedAmount, input.Now, input.ClientIP)
+		paymentOrder, payParams, err := createReservationAddonPaymentOrder(ctx, store, input.PaymentFacade, reservation, input.UserID, addedAmount, input.Now, input.ClientIP)
 		if err != nil {
 			return result, err
 		}
@@ -112,8 +109,7 @@ type ModifyReservationDishesInput struct {
 	ReservationID   int64
 	Items           []ReservationItemInput
 	Now             time.Time
-	EcommerceClient wechat.EcommerceClientInterface
-	OrdinaryClient  ordinaryServiceProviderCombineClient
+	PaymentFacade   PaymentFacade
 	ClientIP        string
 	TaskScheduler   TaskScheduler
 }
@@ -217,7 +213,7 @@ func ModifyReservationDishes(
 	}
 
 	if delta > 0 {
-		paymentOrder, payParams, err := createReservationAddonPaymentOrder(ctx, store, input.EcommerceClient, input.OrdinaryClient, reservation, input.UserID, delta, input.Now, input.ClientIP)
+		paymentOrder, payParams, err := createReservationAddonPaymentOrder(ctx, store, input.PaymentFacade, reservation, input.UserID, delta, input.Now, input.ClientIP)
 		if err != nil {
 			return result, err
 		}
@@ -349,8 +345,7 @@ func minInt64(left, right int64) int64 {
 func createReservationAddonPaymentOrder(
 	ctx context.Context,
 	store db.Store,
-	ecommerceClient wechat.EcommerceClientInterface,
-	ordinaryClient ordinaryServiceProviderCombineClient,
+	paymentFacade PaymentFacade,
 	reservation db.TableReservation,
 	userID, amount int64,
 	now time.Time,
@@ -359,303 +354,20 @@ func createReservationAddonPaymentOrder(
 	if amount <= 0 {
 		return db.PaymentOrder{}, nil, NewRequestError(http.StatusBadRequest, errors.New("payment amount must be greater than 0"))
 	}
-	if ordinaryClient == nil {
-		return db.PaymentOrder{}, nil, fmt.Errorf("ordinary service provider client: not configured")
-	}
-	usesOrdinary := true
-
-	user, err := store.GetUser(ctx, userID)
-	if err != nil {
-		return db.PaymentOrder{}, nil, fmt.Errorf("get user: %w", err)
-	}
-	if user.WechatOpenid == "" {
-		return db.PaymentOrder{}, nil, NewRequestError(http.StatusBadRequest, errors.New("wechat openid not found"))
+	if paymentFacade == nil {
+		return db.PaymentOrder{}, nil, fmt.Errorf("baofu payment facade not configured")
 	}
 
-	expiresAt := now.Add(30 * time.Minute)
-
-	combineOutTradeNo, err := generateCombineOutTradeNoForSingle("RA")
-	if err != nil {
-		return db.PaymentOrder{}, nil, fmt.Errorf("generate combine out trade no: %w", err)
-	}
-
-	var txResult db.CreateEcommercePaymentTxResult
-	paymentChannel := db.PaymentChannelEcommerce
-	if usesOrdinary {
-		paymentChannel = db.PaymentChannelOrdinaryServiceProvider
-	}
-	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
-		outTradeNo, genErr := generateOutTradeNoWithPrefix("RA")
-		if genErr != nil {
-			return db.PaymentOrder{}, nil, fmt.Errorf("generate out trade no: %w", genErr)
-		}
-		txResult, err = store.CreateEcommercePaymentTx(ctx, db.CreateEcommercePaymentTxParams{
-			UserID:            userID,
-			MerchantID:        reservation.MerchantID,
-			Amount:            amount,
-			BusinessType:      reservationAddonBusiness,
-			ReservationID:     reservation.ID,
-			CombineOutTradeNo: combineOutTradeNo,
-			OutTradeNo:        outTradeNo,
-			ExpiresAt:         expiresAt,
-			Attach:            "",
-			PaymentChannel:    paymentChannel,
-		})
-		if err == nil {
-			break
-		}
-		if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
-			if !sleepWithContext(ctx, outTradeNoRetryBaseBack*time.Duration(attempt)) {
-				return db.PaymentOrder{}, nil, NewRequestError(http.StatusRequestTimeout, errors.New("request canceled"))
-			}
-			continue
-		}
-		return db.PaymentOrder{}, nil, mapReservationEcommerceError(err)
-	}
-
-	prepayID, payParams, err := createRemoteReservationAddonPayment(ctx, ecommerceClient, ordinaryClient, usesOrdinary, combineOutTradeNo, txResult.SubMchID, txResult.PaymentOrder.OutTradeNo, user.WechatOpenid, amount, expiresAt, clientIP)
-	if err != nil {
-		cleanupCtx := context.Background()
-		if closeReservationAddonPaymentCommandAnchor(cleanupCtx, store, txResult.PaymentOrder, txResult.CombinedPaymentOrder) {
-			recordReservationAddonCombinePaymentCommandRejected(cleanupCtx, store, txResult.PaymentOrder, txResult.CombinedPaymentOrder, err)
-		}
-		return db.PaymentOrder{}, nil, fmt.Errorf("create combine order: %w", err)
-	}
-	if prepayID == "" {
-		cleanupCtx := context.Background()
-		emptyPrepayErr := errors.New("create combine order: empty prepay id")
-		if closeReservationAddonPaymentCommandAnchor(cleanupCtx, store, txResult.PaymentOrder, txResult.CombinedPaymentOrder) {
-			recordReservationAddonCombinePaymentCommandRejected(cleanupCtx, store, txResult.PaymentOrder, txResult.CombinedPaymentOrder, emptyPrepayErr)
-		}
-		return db.PaymentOrder{}, nil, fmt.Errorf("create combine order: empty prepay id")
-	}
-
-	updatedPayment, err := store.UpdatePaymentOrderPrepayId(ctx, db.UpdatePaymentOrderPrepayIdParams{
-		ID:       txResult.PaymentOrder.ID,
-		PrepayID: pgtype.Text{String: prepayID, Valid: true},
+	baofuResult, err := paymentFacade.CreatePaymentOrder(ctx, CreatePaymentOrderInput{
+		UserID:       userID,
+		OrderID:      reservation.ID,
+		PaymentType:  paymentTypeMiniProgram,
+		BusinessType: reservationAddonBusiness,
+		ClientIP:     clientIP,
+		Amount:       amount,
 	})
 	if err != nil {
-		cleanupCtx := context.Background()
-		markReservationAddonPaymentOrderFailedForCleanup(cleanupCtx, store, txResult.PaymentOrder.ID, "failed to mark reservation addon payment order failed after prepay update failure")
-		markReservationAddonCombinedPaymentOrderFailedForCleanup(cleanupCtx, store, txResult.CombinedPaymentOrder.ID, "failed to mark reservation addon combined payment order failed after prepay update failure")
-		closeReservationAddonRemoteCombineForCleanup(cleanupCtx, ordinaryClient, txResult, "close ordinary service provider reservation addon combine order after prepay update failure")
-		return db.PaymentOrder{}, nil, fmt.Errorf("update prepay id: %w", err)
+		return db.PaymentOrder{}, nil, err
 	}
-
-	_, err = store.UpdateCombinedPaymentOrderPrepay(ctx, db.UpdateCombinedPaymentOrderPrepayParams{
-		ID:       txResult.CombinedPaymentOrder.ID,
-		PrepayID: pgtype.Text{String: prepayID, Valid: true},
-	})
-	if err != nil {
-		cleanupCtx := context.Background()
-		markReservationAddonPaymentOrderFailedForCleanup(cleanupCtx, store, txResult.PaymentOrder.ID, "failed to mark reservation addon payment order failed after combined prepay update failure")
-		markReservationAddonCombinedPaymentOrderFailedForCleanup(cleanupCtx, store, txResult.CombinedPaymentOrder.ID, "failed to mark reservation addon combined payment order failed after combined prepay update failure")
-		closeReservationAddonRemoteCombineForCleanup(cleanupCtx, ordinaryClient, txResult, "close ordinary service provider reservation addon combine order after combined prepay update failure")
-		return db.PaymentOrder{}, nil, fmt.Errorf("update combined payment prepay: %w", err)
-	}
-	recordReservationAddonCombinePaymentCommandAccepted(ctx, store, updatedPayment, txResult.CombinedPaymentOrder, prepayID)
-
-	return updatedPayment, payParams, nil
-}
-
-func createRemoteReservationAddonPayment(
-	ctx context.Context,
-	ecommerceClient wechat.EcommerceClientInterface,
-	ordinaryClient ordinaryServiceProviderCombineClient,
-	usesOrdinary bool,
-	combineOutTradeNo string,
-	subMchID string,
-	outTradeNo string,
-	openID string,
-	amount int64,
-	expiresAt time.Time,
-	clientIP string,
-) (string, *wechat.JSAPIPayParams, error) {
-	if usesOrdinary {
-		combineResp, err := ordinaryClient.CreateCombinePayment(ctx, ospcontracts.CombinePrepayRequest{
-			CombineAppID:      ordinaryClient.ServiceProviderAppID(),
-			CombineMchID:      ordinaryClient.ServiceProviderMchID(),
-			CombineOutTradeNo: combineOutTradeNo,
-			CombinePayerInfo:  ospcontracts.CombinePayerInfo{OpenID: openID},
-			SubOrders: []ospcontracts.CombineSubOrder{
-				{
-					MchID:       ordinaryClient.ServiceProviderMchID(),
-					SubMchID:    subMchID,
-					Amount:      ospcontracts.CombineSubOrderAmount{TotalAmount: amount, Currency: ospcontracts.CurrencyCNY},
-					OutTradeNo:  outTradeNo,
-					Description: "Reservation add-on",
-				},
-			},
-			TimeExpire: expiresAt.Format(time.RFC3339),
-			NotifyURL:  ordinaryClient.CombineNotifyURL(),
-			SceneInfo:  &ospcontracts.CombineSceneInfo{PayerClientIP: clientIP},
-		})
-		if err != nil {
-			return "", nil, err
-		}
-		if combineResp == nil || combineResp.PrepayID == "" {
-			return "", nil, nil
-		}
-		payParams, err := ordinaryClient.GenerateJSAPIPayParams(combineResp.PrepayID)
-		if err != nil {
-			return "", nil, fmt.Errorf("generate ordinary service provider combine pay params: %w", err)
-		}
-		return combineResp.PrepayID, ordinaryJSAPIPayParamsToWechat(payParams), nil
-	}
-
-	combineResp, payParams, err := ecommerceClient.CreateCombineOrder(ctx, &wechatcontracts.CombineOrderRequest{
-		CombineOutTradeNo: combineOutTradeNo,
-		SubOrders: []wechatcontracts.SubOrder{
-			{
-				SubMchID:    subMchID,
-				Amount:      amount,
-				OutTradeNo:  outTradeNo,
-				Description: "Reservation add-on",
-				Attach:      "",
-			},
-		},
-		PayerOpenID: openID,
-		ExpireTime:  expiresAt,
-		SceneInfo: &wechatcontracts.CombineSceneInfo{
-			PayerClientIP: clientIP,
-		},
-	})
-	if err != nil {
-		return "", nil, err
-	}
-	if combineResp == nil {
-		return "", payParams, nil
-	}
-	return combineResp.PrepayID, payParams, nil
-}
-
-func closeReservationAddonPaymentCommandAnchor(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, combinedPayment db.CombinedPaymentOrder) bool {
-	allClosed := true
-	if _, closeErr := store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID); closeErr != nil {
-		allClosed = false
-		log.Error().Err(closeErr).Int64("payment_order_id", paymentOrder.ID).Msg("failed to close reservation addon payment order after create rejection")
-	}
-	if _, closeErr := store.UpdateCombinedPaymentOrderToClosed(ctx, combinedPayment.ID); closeErr != nil {
-		allClosed = false
-		log.Error().Err(closeErr).Int64("combined_payment_order_id", combinedPayment.ID).Msg("failed to close reservation addon combined payment order after create rejection")
-	}
-	return allClosed
-}
-
-func markReservationAddonPaymentOrderFailedForCleanup(ctx context.Context, store db.Store, paymentOrderID int64, message string) {
-	if _, err := store.UpdatePaymentOrderToFailed(ctx, paymentOrderID); err != nil {
-		log.Error().Err(err).
-			Int64("payment_order_id", paymentOrderID).
-			Msg(message)
-	}
-}
-
-func markReservationAddonCombinedPaymentOrderFailedForCleanup(ctx context.Context, store db.Store, combinedPaymentOrderID int64, message string) {
-	if _, err := store.UpdateCombinedPaymentOrderToFailed(ctx, combinedPaymentOrderID); err != nil {
-		log.Error().Err(err).
-			Int64("combined_payment_order_id", combinedPaymentOrderID).
-			Msg(message)
-	}
-}
-
-func closeReservationAddonRemoteCombineForCleanup(ctx context.Context, ordinaryClient ordinaryServiceProviderCombineClient, txResult db.CreateEcommercePaymentTxResult, message string) {
-	if ordinaryClient == nil {
-		return
-	}
-	if err := ordinaryClient.CloseCombinePayment(ctx, ospcontracts.CombineCloseRequest{
-		CombineAppID:      ordinaryClient.ServiceProviderAppID(),
-		CombineMchID:      ordinaryClient.ServiceProviderMchID(),
-		CombineOutTradeNo: txResult.CombinedPaymentOrder.CombineOutTradeNo,
-		SubOrders: []ospcontracts.CombineCloseSubOrder{
-			{
-				MchID:      ordinaryClient.ServiceProviderMchID(),
-				SubMchID:   txResult.SubMchID,
-				OutTradeNo: txResult.PaymentOrder.OutTradeNo,
-			},
-		},
-	}); err != nil {
-		log.Warn().Err(err).
-			Int64("payment_order_id", txResult.PaymentOrder.ID).
-			Int64("combined_payment_order_id", txResult.CombinedPaymentOrder.ID).
-			Str("combine_out_trade_no", txResult.CombinedPaymentOrder.CombineOutTradeNo).
-			Str("out_trade_no", txResult.PaymentOrder.OutTradeNo).
-			Msg(message)
-	}
-}
-
-func recordReservationAddonCombinePaymentCommandAccepted(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, combinedPayment db.CombinedPaymentOrder, prepayID string) {
-	paymentCommandSvc := NewPaymentCommandService(store)
-	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbReservationAddonCombinePaymentCommandInput(
-		paymentOrder,
-		combinedPayment,
-		db.ExternalPaymentCommandStatusAccepted,
-		stringPtrIfNotEmpty(prepayID),
-		nil,
-		nil,
-		combinePaymentCommandSnapshot(map[string]string{
-			"combine_out_trade_no": combinedPayment.CombineOutTradeNo,
-			"out_trade_no":         paymentOrder.OutTradeNo,
-			"prepay_id":            prepayID,
-		}),
-	))
-	if err != nil {
-		log.Error().Err(err).
-			Int64("payment_order_id", paymentOrder.ID).
-			Str("combine_out_trade_no", combinedPayment.CombineOutTradeNo).
-			Msg("record reservation addon combine payment command accepted failed")
-	}
-}
-
-func recordReservationAddonCombinePaymentCommandRejected(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, combinedPayment db.CombinedPaymentOrder, paymentErr error) {
-	paymentCommandSvc := NewPaymentCommandService(store)
-	errorCode, errorMessage := partnerPaymentCommandErrorFields(paymentErr)
-	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbReservationAddonCombinePaymentCommandInput(
-		paymentOrder,
-		combinedPayment,
-		db.ExternalPaymentCommandStatusRejected,
-		nil,
-		errorCode,
-		errorMessage,
-		combinePaymentCommandSnapshot(map[string]string{
-			"combine_out_trade_no": combinedPayment.CombineOutTradeNo,
-			"out_trade_no":         paymentOrder.OutTradeNo,
-			"error_code":           stringValue(errorCode),
-			"error_message":        stringValue(errorMessage),
-		}),
-	))
-	if err != nil {
-		log.Error().Err(err).
-			Int64("payment_order_id", paymentOrder.ID).
-			Str("combine_out_trade_no", combinedPayment.CombineOutTradeNo).
-			Msg("record reservation addon combine payment command rejected failed")
-	}
-}
-
-func dbReservationAddonCombinePaymentCommandInput(
-	paymentOrder db.PaymentOrder,
-	combinedPayment db.CombinedPaymentOrder,
-	commandStatus string,
-	externalSecondaryKey *string,
-	lastErrorCode *string,
-	lastErrorMessage *string,
-	responseSnapshot []byte,
-) RecordExternalPaymentCommandInput {
-	businessObjectType := "payment_order"
-	businessObjectID := paymentOrder.ID
-	return RecordExternalPaymentCommandInput{
-		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              paymentOrder.PaymentChannel,
-		Capability:           db.ExternalPaymentCapabilityCombinePayment,
-		CommandType:          db.ExternalPaymentCommandTypeCreatePayment,
-		BusinessOwner:        db.ExternalPaymentBusinessOwnerReservation,
-		BusinessObjectType:   &businessObjectType,
-		BusinessObjectID:     &businessObjectID,
-		ExternalObjectType:   db.ExternalPaymentObjectCombinedPayment,
-		ExternalObjectKey:    combinedPayment.CombineOutTradeNo,
-		ExternalSecondaryKey: externalSecondaryKey,
-		CommandStatus:        commandStatus,
-		LastErrorCode:        lastErrorCode,
-		LastErrorMessage:     lastErrorMessage,
-		ResponseSnapshot:     responseSnapshot,
-	}
+	return baofuResult.PaymentOrder, baofuResult.PayParams, nil
 }

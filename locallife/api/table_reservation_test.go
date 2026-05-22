@@ -29,7 +29,7 @@ func TestWriteReservationPaymentConfigErrorReturnsActionable503(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(w)
 	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/reservations/123/cancel", nil)
 
-	handled := writeReservationPaymentConfigError(ctx, errors.New("ordinary service provider client: not configured"), "cancel reservation")
+	handled := writeReservationPaymentConfigError(ctx, errors.New("payment service not configured"), "cancel reservation")
 	require.True(t, handled)
 	require.Equal(t, http.StatusServiceUnavailable, w.Code)
 

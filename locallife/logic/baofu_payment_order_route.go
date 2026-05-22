@@ -33,7 +33,7 @@ func (svc *PaymentOrderService) createReservationBaofuPayment(
 			}
 		}
 	}
-	return svc.createBaofuPayment(ctx, ordinaryPaymentCreateInput{
+	return svc.createBaofuPayment(ctx, baofuPaymentCreateInput{
 		CreatePaymentOrderInput: input,
 		MerchantID:              merchantID,
 		MerchantName:            merchantName,
@@ -61,7 +61,7 @@ func (svc *PaymentOrderService) createOrderBaofuPayment(
 			merchantName = merchant.Name + " - Order Payment"
 		}
 	}
-	return svc.createBaofuPayment(ctx, ordinaryPaymentCreateInput{
+	return svc.createBaofuPayment(ctx, baofuPaymentCreateInput{
 		CreatePaymentOrderInput: input,
 		MerchantID:              merchantID,
 		MerchantName:            merchantName,
@@ -73,7 +73,7 @@ func (svc *PaymentOrderService) createOrderBaofuPayment(
 	})
 }
 
-func (svc *PaymentOrderService) createBaofuPayment(ctx context.Context, createInput ordinaryPaymentCreateInput) (CreatePaymentOrderResult, error) {
+func (svc *PaymentOrderService) createBaofuPayment(ctx context.Context, createInput baofuPaymentCreateInput) (CreatePaymentOrderResult, error) {
 	var result CreatePaymentOrderResult
 	if svc.baofuPaymentService == nil {
 		return result, mapBaofuPaymentCreateError(fmt.Errorf("baofu payment service: not configured"))
@@ -128,7 +128,7 @@ func (svc *PaymentOrderService) createBaofuPayment(ctx context.Context, createIn
 	return result, nil
 }
 
-func (svc *PaymentOrderService) createLocalBaofuPaymentOrder(ctx context.Context, createInput ordinaryPaymentCreateInput) (db.CreatePartnerPaymentTxResult, error) {
+func (svc *PaymentOrderService) createLocalBaofuPaymentOrder(ctx context.Context, createInput baofuPaymentCreateInput) (db.CreatePartnerPaymentTxResult, error) {
 	prefix := "BF"
 	orderID := createInput.OrderID
 	reservationID := int64(0)
@@ -156,7 +156,7 @@ func (svc *PaymentOrderService) createLocalBaofuPaymentOrder(ctx context.Context
 		RequiresProfitSharing: true,
 	})
 	if err != nil {
-		return db.CreatePartnerPaymentTxResult{}, mapReservationEcommerceError(err)
+		return db.CreatePartnerPaymentTxResult{}, mapBaofuPaymentOrderCreateError(err)
 	}
 	return txResult, nil
 }

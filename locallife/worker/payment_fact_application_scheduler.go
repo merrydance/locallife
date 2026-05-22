@@ -18,7 +18,6 @@ const (
 	paymentFactApplicationTaskUnique        = 30 * time.Second
 	claimRecoveryPaymentFactConsumer        = "claim_recovery_domain"
 	baofuVerifyFeePaymentFactConsumerDomain = "baofu_account_verify_fee_domain"
-	settlementFactBusinessObjectConfig      = "merchant_payment_config"
 )
 
 var paymentFactApplicationSchedulerTargets = []struct {
@@ -27,11 +26,6 @@ var paymentFactApplicationSchedulerTargets = []struct {
 }{
 	{consumer: profitSharingFactConsumerDomain, businessObjectType: profitSharingFactBusinessObjectOrder},
 	{consumer: profitSharingFactConsumerDomain, businessObjectType: profitSharingReturnFactBusinessObject},
-	{consumer: applymentFactConsumerDomain, businessObjectType: applymentFactBusinessObjectApplyment},
-	{consumer: settlementVerificationFactConsumerDomain, businessObjectType: applymentFactBusinessObjectApplyment},
-	{consumer: settlementVerificationFactConsumerDomain, businessObjectType: settlementFactBusinessObjectConfig},
-	{consumer: merchantWithdrawFactConsumerDomain, businessObjectType: merchantWithdrawFactBusinessType},
-	{consumer: merchantWithdrawFactConsumerDomain, businessObjectType: merchantCancelWithdrawFactBusinessType},
 	{consumer: claimRecoveryPaymentFactConsumer, businessObjectType: orderPaymentFactBusinessObjectOrder},
 	{consumer: riderDepositPaymentFactConsumerDomain, businessObjectType: riderDepositPaymentFactBusinessObjectOrder},
 	{consumer: baofuVerifyFeePaymentFactConsumerDomain, businessObjectType: orderPaymentFactBusinessObjectOrder},

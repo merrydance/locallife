@@ -16,13 +16,6 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
-	// DistributeTaskCombinedPaymentOrderTimeout 分发合单支付超时任务
-	DistributeTaskCombinedPaymentOrderTimeout(
-		ctx context.Context,
-		payload *PayloadCombinedPaymentOrderTimeout,
-		opts ...asynq.Option,
-	) error
-
 	// DistributeTaskReservationPaymentTimeout 分发预定支付超时任务
 	DistributeTaskReservationPaymentTimeout(
 		ctx context.Context,
@@ -65,13 +58,6 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
-	// DistributeTaskProcessProfitSharing 分发分账处理任务
-	DistributeTaskProcessProfitSharing(
-		ctx context.Context,
-		payload *ProfitSharingPayload,
-		opts ...asynq.Option,
-	) error
-
 	// DistributeTaskProcessBaofuProfitSharing 分发宝付确认分账任务
 	DistributeTaskProcessBaofuProfitSharing(
 		ctx context.Context,
@@ -83,41 +69,6 @@ type TaskDistributor interface {
 	DistributeTaskProcessBaofuWithdrawalFactApplication(
 		ctx context.Context,
 		payload *BaofuWithdrawalFactApplicationPayload,
-		opts ...asynq.Option,
-	) error
-
-	// DistributeTaskProcessProfitSharingReceiverTarget 分发分账接收方生命周期同步任务
-	DistributeTaskProcessProfitSharingReceiverTarget(
-		ctx context.Context,
-		payload *ProfitSharingReceiverTargetPayload,
-		opts ...asynq.Option,
-	) error
-
-	// DistributeTaskProcessApplymentResult 分发进件结果处理任务
-	DistributeTaskProcessApplymentResult(
-		ctx context.Context,
-		payload *ApplymentResultPayload,
-		opts ...asynq.Option,
-	) error
-
-	// DistributeTaskProcessProfitSharingReturnResult 分发分账回退结果处理任务
-	DistributeTaskProcessProfitSharingReturnResult(
-		ctx context.Context,
-		payload *ProfitSharingReturnResultPayload,
-		opts ...asynq.Option,
-	) error
-
-	// DistributeTaskProcessMerchantWithdrawResult 分发商户提现状态轮询任务
-	DistributeTaskProcessMerchantWithdrawResult(
-		ctx context.Context,
-		payload *MerchantWithdrawResultPayload,
-		opts ...asynq.Option,
-	) error
-
-	// DistributeTaskProcessMerchantCancelWithdrawResult 分发商户注销提现状态轮询任务
-	DistributeTaskProcessMerchantCancelWithdrawResult(
-		ctx context.Context,
-		payload *MerchantCancelWithdrawResultPayload,
 		opts ...asynq.Option,
 	) error
 
@@ -278,13 +229,6 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
-	// DistributeTaskSyncComplaints 分发微信投诉单同步任务（按日期范围批量拉取并写入 DB）
-	DistributeTaskSyncComplaints(
-		ctx context.Context,
-		payload *SyncComplaintsPayload,
-		opts ...asynq.Option,
-	) error
-
 	// DistributeTaskProcessAnomalyRefund 分发已关闭/失败订单异常退款任务
 	DistributeTaskProcessAnomalyRefund(
 		ctx context.Context,
@@ -345,16 +289,4 @@ func NewRedisTaskDistributor(redisOpt asynq.RedisClientOpt) TaskDistributor {
 	return &RedisTaskDistributor{
 		client: client,
 	}
-}
-
-func WithProfitSharingEnqueueDedupForTest(opts ...asynq.Option) []asynq.Option {
-	return withProfitSharingEnqueueDedup(opts...)
-}
-
-func ProfitSharingTaskIdempotencyKeyForTest(payload ProfitSharingPayload) string {
-	return profitSharingTaskIdempotencyKey(payload)
-}
-
-func NormalizeProfitSharingPayloadForTest(payload *ProfitSharingPayload) ProfitSharingPayload {
-	return normalizeProfitSharingPayload(payload)
 }

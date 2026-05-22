@@ -247,7 +247,7 @@ func TestProcessPaymentSuccessTx_OrderSetsPaidFields(t *testing.T) {
 		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
 		UserID:                user.ID,
 		PaymentType:           "miniprogram",
-		PaymentChannel:        PaymentChannelEcommerce,
+		PaymentChannel:        PaymentChannelBaofuAggregate,
 		RequiresProfitSharing: true,
 		BusinessType:          "order",
 		Amount:                order.TotalAmount,

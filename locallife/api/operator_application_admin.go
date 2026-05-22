@@ -329,13 +329,6 @@ func (server *Server) mapOperatorStatusUpdateError(ctx *gin.Context, operator db
 		return http.StatusBadRequest, errorResponse(err)
 	case errors.As(err, &conflictErr):
 		return http.StatusConflict, errorResponse(ErrRegionHasOperator)
-	case errors.Is(err, logic.ErrProfitSharingReceiverOpenIDRequired):
-		log.Error().Err(err).
-			Int64("operator_id", operator.ID).
-			Int64("user_id", operator.UserID).
-			Str("target_status", targetStatus).
-			Msg("operator status update rejected because receiver openid is missing")
-		return http.StatusBadRequest, errorResponse(err)
 	default:
 		log.Error().Err(err).
 			Int64("operator_id", operator.ID).
@@ -517,16 +510,6 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 		return
 	}
 
-	user, err := server.store.GetUser(ctx, app.UserID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	if strings.TrimSpace(user.WechatOpenid) == "" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(logic.ErrProfitSharingReceiverOpenIDRequired))
-		return
-	}
-
 	operatorName := operatorNameFromApprovedApplication(app)
 	if operatorName == "" {
 		ctx.JSON(http.StatusBadRequest, errorResponse(ErrOperatorNameRequired))
@@ -563,11 +546,6 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 		})
 		if txErr != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, txErr))
-			return
-		}
-
-		if err := server.recordApprovedOperatorReceiverIntent(ctx, result.Operator); err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
 
@@ -641,21 +619,8 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 		}
 	}
 
-	if err := server.recordApprovedOperatorReceiverIntent(ctx, operator); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
 	regionName := server.getRegionName(ctx, approved.RegionID)
 	server.writeOperatorApplicationResponse(ctx, http.StatusOK, approved, regionName)
-}
-
-func (server *Server) recordApprovedOperatorReceiverIntent(_ *gin.Context, operator db.Operator) error {
-	log.Info().
-		Int64("operator_id", operator.ID).
-		Int64("user_id", operator.UserID).
-		Msg("skip global profit sharing receiver target intent after operator approval; ordinary service provider receiver sync is payment-order scoped")
-	return nil
 }
 
 func (server *Server) rejectOperatorApplicationAdmin(ctx *gin.Context) {

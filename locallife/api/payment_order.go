@@ -297,7 +297,7 @@ func sleepWithContext(ctx context.Context, d time.Duration) bool {
 // @Summary 创建支付订单
 // @Description 为订单或预定创建支付订单，当前主路径会按业务类型自动选择真实支付链路。
 // @Description
-// @Description `payment_type` 为兼容字段，可不传；当前 `order` 和 `reservation` 主支付统一走普通服务商小程序支付。
+// @Description `payment_type` 为兼容字段，可不传；当前 `order` 和 `reservation` 主支付统一走宝付聚合支付；直连微信仅用于押金、追偿和补偿等保留场景。
 // @Description
 // @Description **业务类型：**
 // @Description - order: 订单支付
@@ -343,7 +343,7 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 		ClientIP:     ctx.ClientIP(),
 	})
 	if err != nil {
-		if isEcommerceClientNotConfigured(err) {
+		if isPaymentServiceNotConfigured(err) {
 			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "商户支付能力未完成配置，请联系平台处理", "merchant payment client not configured"))
 			return
 		}
@@ -372,7 +372,7 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 
 // queryPaymentOrder godoc
 // @Summary 查询支付订单远端状态
-// @Description 查询本地普通支付订单详情，并按支付通道拉取微信普通服务商、平台收付通冷备或直连支付最新状态，供小程序恢复支付或判断后续动作
+// @Description 查询本地普通支付订单详情，并按支付通道拉取宝付聚合支付或直连微信最新状态，供小程序恢复支付或判断后续动作
 // @Tags 支付管理
 // @Accept json
 // @Produce json
@@ -404,7 +404,7 @@ func (server *Server) queryPaymentOrder(ctx *gin.Context) {
 		PaymentOrderID: req.ID,
 	})
 	if err != nil {
-		if isEcommerceClientNotConfigured(err) {
+		if isPaymentServiceNotConfigured(err) {
 			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "商户支付能力未完成配置，当前无法确认支付状态，请联系平台处理", "query payment client not configured"))
 			return
 		}
@@ -441,18 +441,10 @@ func (server *Server) scheduleTimeoutForPaymentOrder(ctx context.Context, paymen
 	}
 
 	if paymentOrder.CombinedPaymentID.Valid {
-		combinedPaymentOrder, getErr := server.store.GetCombinedPaymentOrder(ctx, paymentOrder.CombinedPaymentID.Int64)
-		if getErr != nil {
-			log.Error().Err(getErr).Int64("combined_payment_id", paymentOrder.CombinedPaymentID.Int64).Msg("failed to load combined payment order for timeout scheduling")
-			return
-		}
-		if enqErr := server.taskDistributor.DistributeTaskCombinedPaymentOrderTimeout(
-			ctx,
-			&worker.PayloadCombinedPaymentOrderTimeout{CombineOutTradeNo: combinedPaymentOrder.CombineOutTradeNo},
-			asynq.ProcessAt(paymentOrder.ExpiresAt.Time),
-		); enqErr != nil {
-			log.Error().Err(enqErr).Str("combine_out_trade_no", combinedPaymentOrder.CombineOutTradeNo).Msg("failed to enqueue combined payment order timeout task")
-		}
+		log.Info().
+			Int64("payment_order_id", paymentOrder.ID).
+			Int64("combined_payment_id", paymentOrder.CombinedPaymentID.Int64).
+			Msg("skip combined payment timeout scheduling: combined payment is not active after payment channel removal")
 		return
 	}
 
@@ -586,7 +578,7 @@ func legacyPaymentRequestMessage(normalized string) string {
 		return "退款单未处于失败状态，请刷新后确认是否仍需异常退款"
 	case "refund order has no wechat refund id":
 		return "退款单缺少微信退款号，请联系平台处理"
-	case "refund order is not an ecommerce refund":
+	case "refund order does not support abnormal refund":
 		return "当前退款单不支持异常退款处理，请刷新退款状态"
 	case "access denied":
 		return "当前账号无权查看该记录"
@@ -621,17 +613,20 @@ func respondPaymentRequestError(ctx *gin.Context, operation string, err error, p
 	ctx.JSON(http.StatusBadRequest, errorResponse(errors.New(publicMessage)))
 }
 
-func isEcommerceClientNotConfigured(err error) bool {
+func isPaymentServiceNotConfigured(err error) bool {
 	if err == nil {
 		return false
 	}
+	if errors.Is(err, logic.ErrBaofuPaymentServiceNotConfigured) {
+		return false
+	}
 	msg := strings.ToLower(err.Error())
-	return (strings.Contains(msg, "ecommerce client") || strings.Contains(msg, "ordinary service provider client")) && strings.Contains(msg, "not configured")
+	return (strings.Contains(msg, "payment service") || strings.Contains(msg, "payment client")) && strings.Contains(msg, "not configured")
 }
 
-// createCombinedPaymentOrder 创建普通服务商多订单合单支付订单
+// createCombinedPaymentOrder 创建多订单合单支付订单
 // @Summary 创建多订单合单支付订单
-// @Description 为单次结算中的多个订单创建普通服务商合单支付订单，当前主要用于多商户外卖一起结算；平台收付通仅作为历史冷备通道保留
+// @Description 为单次结算中的多个订单创建合单支付订单，当前主业务支付不再使用微信旧平台能力；如支付聚合能力未启用将返回服务不可用。
 // @Tags 支付管理
 // @Accept json
 // @Produce json
@@ -664,7 +659,7 @@ func (server *Server) createCombinedPaymentOrder(ctx *gin.Context) {
 		ClientIP: ctx.ClientIP(),
 	})
 	if err != nil {
-		if isEcommerceClientNotConfigured(err) {
+		if isPaymentServiceNotConfigured(err) {
 			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "合单支付能力未完成配置，请联系平台处理", "combined payment client not configured"))
 			return
 		}
@@ -710,16 +705,6 @@ func (server *Server) createCombinedPaymentOrder(ctx *gin.Context) {
 			Package:   result.PayParams.Package,
 			SignType:  result.PayParams.SignType,
 			PaySign:   result.PayParams.PaySign,
-		}
-	}
-
-	if server.taskDistributor != nil && combinedPayment.ExpiresAt.Valid {
-		if enqErr := server.taskDistributor.DistributeTaskCombinedPaymentOrderTimeout(
-			ctx,
-			&worker.PayloadCombinedPaymentOrderTimeout{CombineOutTradeNo: combinedPayment.CombineOutTradeNo},
-			asynq.ProcessAt(combinedPayment.ExpiresAt.Time),
-		); enqErr != nil {
-			log.Error().Err(enqErr).Str("combine_out_trade_no", combinedPayment.CombineOutTradeNo).Msg("⚠️ failed to enqueue combined payment timeout task")
 		}
 	}
 
@@ -813,7 +798,7 @@ func (server *Server) queryCombinedPaymentOrder(ctx *gin.Context) {
 		CombinedPaymentID: req.ID,
 	})
 	if err != nil {
-		if isEcommerceClientNotConfigured(err) {
+		if isPaymentServiceNotConfigured(err) {
 			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "合单支付能力未完成配置，当前无法确认支付状态，请联系平台处理", "query combined payment client not configured"))
 			return
 		}
@@ -872,7 +857,7 @@ func (server *Server) closeCombinedPaymentOrder(ctx *gin.Context) {
 		CombinedPaymentID: req.ID,
 	})
 	if err != nil {
-		if isEcommerceClientNotConfigured(err) {
+		if isPaymentServiceNotConfigured(err) {
 			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "合单支付能力未完成配置，当前无法关闭支付单，请联系平台处理", "close combined payment client not configured"))
 			return
 		}
@@ -1088,7 +1073,7 @@ func (server *Server) closePaymentOrder(ctx *gin.Context) {
 		PaymentOrderID: req.ID,
 	})
 	if err != nil {
-		if isEcommerceClientNotConfigured(err) {
+		if isPaymentServiceNotConfigured(err) {
 			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "支付关闭服务暂不可用，请稍后重试", "close payment client not configured"))
 			return
 		}
@@ -1150,16 +1135,6 @@ type applyAbnormalRefundBodyRequest struct {
 	RealName    string `json:"real_name,omitempty" binding:"omitempty,max=128"`
 }
 
-type abnormalRefundWechatResponse struct {
-	RefundID string `json:"refund_id,omitempty"`
-	Status   string `json:"status"`
-}
-
-type applyAbnormalRefundResponse struct {
-	RefundOrder refundOrderResponse          `json:"refund_order"`
-	Wechat      abnormalRefundWechatResponse `json:"wechat"`
-}
-
 func newProfitSharingReturnResponse(r db.ProfitSharingReturn) profitSharingReturnResponse {
 	resp := profitSharingReturnResponse{
 		ID:            r.ID,
@@ -1203,64 +1178,6 @@ func newRefundOrderResponse(r db.RefundOrder) refundOrderResponse {
 	}
 
 	return resp
-}
-
-// applyPlatformAbnormalRefund 平台人工发起异常退款处理
-// @Summary 平台人工发起异常退款处理
-// @Description 平台管理员对微信返回 ABNORMAL 的收付通退款单发起人工异常退款处理。
-// @Tags 平台退款管理
-// @Accept json
-// @Produce json
-// @Param id path int true "退款订单ID"
-// @Param request body applyAbnormalRefundBodyRequest true "异常退款处理参数"
-// @Success 200 {object} applyAbnormalRefundResponse "异常退款处理结果"
-// @Failure 400 {object} ErrorResponse "请求参数错误或退款状态不允许处理"
-// @Failure 401 {object} ErrorResponse "未授权"
-// @Failure 403 {object} ErrorResponse "非平台管理员"
-// @Failure 404 {object} ErrorResponse "退款订单不存在"
-// @Failure 500 {object} ErrorResponse "服务器内部错误"
-// @Router /v1/platform/refunds/{id}/apply-abnormal-refund [post]
-// @Security BearerAuth
-func (server *Server) applyPlatformAbnormalRefund(ctx *gin.Context) {
-	var uriReq applyAbnormalRefundURIRequest
-	if err := ctx.ShouldBindUri(&uriReq); err != nil {
-		respondPaymentRequestError(ctx, "apply_abnormal_refund_bind_uri", err, "退款单编号无效，请刷新页面后重试")
-		return
-	}
-
-	var bodyReq applyAbnormalRefundBodyRequest
-	if err := ctx.ShouldBindJSON(&bodyReq); err != nil {
-		respondPaymentRequestError(ctx, "apply_abnormal_refund_bind_request", err, "异常退款处理参数格式无效，请核对收款账户类型和银行卡信息后重试")
-		return
-	}
-
-	orchestrator := server.refundOrchestrator
-	if orchestrator == nil {
-		orchestrator = server.buildRefundOrchestrator()
-	}
-
-	result, err := orchestrator.ApplyAbnormalRefund(ctx, logic.ApplyAbnormalRefundInput{
-		RefundID:    uriReq.ID,
-		Type:        bodyReq.Type,
-		BankType:    bodyReq.BankType,
-		BankAccount: bodyReq.BankAccount,
-		RealName:    bodyReq.RealName,
-	})
-	if err != nil {
-		if writeLogicRequestError(ctx, err) {
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, applyAbnormalRefundResponse{
-		RefundOrder: newRefundOrderResponse(result.RefundOrder),
-		Wechat: abnormalRefundWechatResponse{
-			RefundID: result.WechatRefund.RefundID,
-			Status:   result.WechatRefund.Status,
-		},
-	})
 }
 
 // createRefundOrder 创建退款订单（商户端）

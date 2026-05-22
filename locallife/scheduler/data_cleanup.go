@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/websocket"
-	"github.com/merrydance/locallife/wechat"
 	"github.com/merrydance/locallife/worker"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
@@ -41,7 +40,6 @@ type DataCleanupScheduler struct {
 	store           db.Store
 	taskDistributor worker.TaskDistributor
 	publisher       websocket.PubSubPublisher
-	ecommerceClient wechat.EcommerceClientInterface
 	mu              sync.Mutex
 	alertedPrintLog map[string]time.Time
 }
@@ -51,13 +49,7 @@ func NewDataCleanupScheduler(
 	store db.Store,
 	taskDistributor worker.TaskDistributor,
 	publisher websocket.PubSubPublisher,
-	ecommerceClients ...wechat.EcommerceClientInterface,
 ) *DataCleanupScheduler {
-	var ecommerceClient wechat.EcommerceClientInterface
-	if len(ecommerceClients) > 0 {
-		ecommerceClient = ecommerceClients[0]
-	}
-
 	return &DataCleanupScheduler{
 		cron: cron.New(
 			cron.WithSeconds(),
@@ -69,7 +61,6 @@ func NewDataCleanupScheduler(
 		store:           store,
 		taskDistributor: taskDistributor,
 		publisher:       publisher,
-		ecommerceClient: ecommerceClient,
 		alertedPrintLog: make(map[string]time.Time),
 	}
 }
@@ -172,7 +163,7 @@ func (s *DataCleanupScheduler) Start() error {
 		return err
 	}
 
-	// 每30分钟检查是否存在卡死在 processing 状态的退款单（微信回调可能永久丢失）
+	// 每30分钟检查是否存在卡死在 processing 状态的退款单（支付通道回调可能永久丢失）
 	_, err = s.cron.AddFunc("0 */30 * * * *", s.alertStuckProcessingRefundOrders)
 	if err != nil {
 		return err
@@ -232,7 +223,7 @@ func (s *DataCleanupScheduler) markExpiredOperators() {
 		return
 	}
 
-	statusService := logic.NewOperatorStatusService(s.store, s.ecommerceClient)
+	statusService := logic.NewOperatorStatusService(s.store)
 	expiredCount := 0
 	for _, row := range rows {
 		operator := db.Operator{
@@ -1529,7 +1520,7 @@ const (
 )
 
 // alertStuckProcessingRefundOrders 扫描持续处于 processing 状态超过阈值的退款单，
-// 向运营平台发布告警。这类退款单的微信回调可能已永久丢失，需人工在微信商户平台核查。
+// 向运营平台发布告警。这类退款单的支付通道回调可能已永久丢失，需人工在对应支付后台核查。
 func (s *DataCleanupScheduler) alertStuckProcessingRefundOrders() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -1550,14 +1541,14 @@ func (s *DataCleanupScheduler) alertStuckProcessingRefundOrders() {
 	log.Warn().
 		Int("count", len(orders)).
 		Time("threshold", createdBefore).
-		Msg("found stuck processing refund orders — wechat callback may be lost")
+		Msg("found stuck processing refund orders; payment callback may be lost")
 
 	for _, ro := range orders {
 		s.publishPlatformAlert(ctx, worker.AlertData{
 			AlertType:   worker.AlertTypeRefundFailed,
 			Level:       worker.AlertLevelCritical,
-			Title:       "退款单长期卡在 processing — 可能缺失微信回调",
-			Message:     fmt.Sprintf("退款单 %s（ID=%d）于 %s 提交退款请求后超过 %v 仍未收到微信回调，请在微信商户平台查询退款结果并手动更新状态。退款类型：%s。", ro.OutRefundNo, ro.ID, ro.CreatedAt.In(time.Local).Format("2006-01-02 15:04"), stuckProcessingRefundThreshold, ro.PaymentType),
+			Title:       "退款单长期卡在 processing，可能缺失支付通道回调",
+			Message:     fmt.Sprintf("退款单 %s（ID=%d）于 %s 提交退款请求后超过 %v 仍未进入终态，请在对应支付后台查询退款结果；系统恢复任务会继续尝试查询并应用终态。退款类型：%s。", ro.OutRefundNo, ro.ID, ro.CreatedAt.In(time.Local).Format("2006-01-02 15:04"), stuckProcessingRefundThreshold, ro.PaymentType),
 			RelatedID:   ro.ID,
 			RelatedType: "refund_order",
 			Extra: map[string]interface{}{

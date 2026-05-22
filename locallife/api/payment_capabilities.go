@@ -25,24 +25,10 @@ type paymentCapabilitiesResponse struct {
 // @Router /v1/payments/capabilities [get]
 // @Security BearerAuth
 func (server *Server) getPaymentCapabilities(ctx *gin.Context) {
-	channel := db.PaymentChannelEcommerce
-	combinedSupported := true
-	splitRequired := false
-	unavailableMessage := ""
-
-	if server.usesBaofuMainBusinessPayments() {
-		channel = db.PaymentChannelBaofuAggregate
-		combinedSupported = false
-		splitRequired = true
-		unavailableMessage = "宝付暂不支持合单支付，请按商户分别下单支付"
-	} else if server.usesOrdinaryServiceProviderMainBusinessPayments() {
-		channel = db.PaymentChannelOrdinaryServiceProvider
-	}
-
 	ctx.JSON(http.StatusOK, paymentCapabilitiesResponse{
-		MainBusinessPaymentChannel:        channel,
-		CombinedPaymentSupported:          combinedSupported,
-		SplitCheckoutRequired:             splitRequired,
-		CombinedPaymentUnavailableMessage: unavailableMessage,
+		MainBusinessPaymentChannel:        db.PaymentChannelBaofuAggregate,
+		CombinedPaymentSupported:          false,
+		SplitCheckoutRequired:             true,
+		CombinedPaymentUnavailableMessage: "宝付暂不支持合单支付，请按商户分别下单支付",
 	})
 }

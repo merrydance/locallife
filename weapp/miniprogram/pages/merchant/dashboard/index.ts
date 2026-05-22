@@ -12,7 +12,6 @@ import {
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 import {
-  fetchMerchantDashboardComplaintSummary,
   fetchMerchantDashboardOrderSummary,
   fetchMerchantDashboardOverview
 } from '../../../services/merchant-dashboard'
@@ -71,9 +70,7 @@ Page({
     gridGutter: GRID_GUTTER,
     monthlyOrdersValue: null as number | null,
     monthlySalesValue: null as number | null,
-    complaintBacklogValue: null as number | null,
     pendingOrdersValue: null as number | null,
-    pendingComplaintsValue: null as number | null,
     canManageDeviceSettings: false,
     canManageMerchantApplyment: false,
     appBindPopupVisible: false,
@@ -85,12 +82,10 @@ Page({
     appBindRemainingLabel: formatAppBindRemaining(0),
     overviewMetrics: buildOverviewMetrics({
       monthlyOrders: null,
-      monthlySales: null,
-      complaintBacklog: null
+      monthlySales: null
     }) as OverviewMetric[],
     sections: buildSections({
       pendingOrders: null,
-      pendingComplaints: null,
       canManageDeviceSettings: false,
       canManageMerchantApplyment: false
     }) as DashboardSectionView[],
@@ -191,8 +186,7 @@ Page({
         openStatusResult,
         settlementAccountResult,
         overviewResult,
-        orderSummaryResult,
-        complaintSummaryResult
+        orderSummaryResult
       ] = await Promise.all([
         captureDashboardRequest(fetchMerchantStorefrontProfile()),
         captureDashboardRequest(fetchMerchantStorefrontOpenStatus()),
@@ -200,8 +194,7 @@ Page({
           ? captureDashboardRequest(fetchMerchantBaofuSettlementAccountView())
           : Promise.resolve({ ok: true as const, value: null as BaofuSettlementAccountView | null }),
         captureDashboardRequest(fetchMerchantDashboardOverview(monthStart, monthEnd)),
-        captureDashboardRequest(fetchMerchantDashboardOrderSummary()),
-        captureDashboardRequest(fetchMerchantDashboardComplaintSummary())
+        captureDashboardRequest(fetchMerchantDashboardOrderSummary())
       ] as const)
 
       if (!isDashboardRequestOk(profileResult)) {
@@ -236,9 +229,6 @@ Page({
       const pendingOrders = isDashboardRequestOk(orderSummaryResult)
         ? (orderSummaryResult.value.paid_count || 0)
         : this.data.pendingOrdersValue
-      const complaintBacklog = isDashboardRequestOk(complaintSummaryResult)
-        ? (complaintSummaryResult.value.pending_response || 0) + (complaintSummaryResult.value.processing || 0)
-        : this.data.complaintBacklogValue
       const monthlyOrdersValue = isDashboardRequestOk(overviewResult)
         ? overviewResult.value.total_orders
         : this.data.monthlyOrdersValue
@@ -250,8 +240,7 @@ Page({
         openStatusResult,
         settlementAccountResult,
         overviewResult,
-        orderSummaryResult,
-        complaintSummaryResult
+        orderSummaryResult
       ].some((result) => !result.ok)
 
       this.setData({
@@ -269,17 +258,13 @@ Page({
         settlementAccountView,
         monthlyOrdersValue,
         monthlySalesValue,
-        complaintBacklogValue: complaintBacklog,
         pendingOrdersValue: pendingOrders,
-        pendingComplaintsValue: complaintBacklog,
         overviewMetrics: buildOverviewMetrics({
           monthlyOrders: monthlyOrdersValue,
-          monthlySales: monthlySalesValue,
-          complaintBacklog
+          monthlySales: monthlySalesValue
         }),
         sections: buildSections({
           pendingOrders,
-          pendingComplaints: complaintBacklog,
           canManageDeviceSettings: this.data.canManageDeviceSettings,
           canManageMerchantApplyment: this.data.canManageMerchantApplyment
         })

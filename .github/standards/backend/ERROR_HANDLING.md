@@ -137,23 +137,18 @@ not `internalError()`. When the status is 5xx, this silently skips structured lo
 ```go
 // WRONG — 500 bypasses internalError(), leaves no log trace
 return result, logic.NewRequestError(http.StatusInternalServerError,
-    errors.New("ecommerce client not configured"))
+    errors.New("payment client not configured"))
 
 // CORRECT — plain fmt.Errorf propagates to internalError() in the handler
-return result, fmt.Errorf("ecommerce client: not configured")
+return result, fmt.Errorf("payment client: not configured")
 ```
 
-**Known instances** (as of initial audit):
+**Known instances** (as of initial audit; some paths have since been removed or renamed during payment-channel cleanup):
 
 | File | Line(s) | Message |
 |------|---------|---------|
-| `logic/combined_payment_service.go` | 104, 241 | "ecommerce client not configured" |
-| `logic/reservation_dishes.go` | 359 | "ecommerce client not configured" |
 | `logic/order_calculation.go` | 108, 194 | "customizations handler not configured", "delivery fee calculator required" |
 | `logic/order_service.go` | 168, 693 | "delivery fee calculator required", "print scheduler not configured" |
-| `logic/replace_order.go` | 225 | "ecommerce client not configured" |
-| `logic/payment_order_service.go` | 299, 424, 739 | "ecommerce client not configured" |
-| `logic/refund_service.go` | 296, 496, 508, 518 | "ecommerce client not configured", profit-sharing failures |
 | `logic/claim_recovery_payment.go` | 100 | "payment client not configured" (503) |
 
 ### ❌ Anti-pattern B — `ctx.JSON(5xx, errorResponse(...))` in api/
