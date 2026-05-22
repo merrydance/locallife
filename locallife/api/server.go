@@ -80,6 +80,7 @@ type Server struct {
 	taskDistributor                worker.TaskDistributor
 	wsHub                          *websocket.Hub           // WebSocket连接管理（骑手和商户）
 	wsPubSub                       *websocket.PubSubManager // Redis Pub/Sub管理（跨进程推送）
+	merchantStatusChangePublisher  websocket.MerchantStatusChangePublisher
 	deliveryBroadcast              *logic.DeliveryBroadcastLogic
 	rateLimiter                    *RateLimiter
 	mediaRegistry                  *media.Registry
@@ -287,9 +288,15 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		printerClient:             cloudprint.NewFeieyunClientFromConfig(config),
 		wsHub:                     wsHub,
 		wsPubSub:                  wsPubSub,
-		rulesEngine:               engine,
-		imageDeleter:              newImageDeleteWorker(),
-		keywordWorker:             newSearchKeywordWorker(store),
+		merchantStatusChangePublisher: func() websocket.MerchantStatusChangePublisher {
+			if wsPubSub != nil {
+				return websocket.NewRedisMerchantStatusChangePublisher(websocket.NewRedisPublisher(wsPubSub.GetRedisClient()))
+			}
+			return websocket.NewMerchantStatusChangeLocalPublisher(wsHub)
+		}(),
+		rulesEngine:   engine,
+		imageDeleter:  newImageDeleteWorker(),
+		keywordWorker: newSearchKeywordWorker(store),
 		paymentFactService: logic.NewPaymentFactService(store).
 			WithPaymentSuccessConfig(config.RiderAverageSpeed, config.DefaultPrepareTime).
 			WithBaofuVerifyFeeContinuation(logic.NewBaofuAccountOnboardingService(store, baofuAccountClient, paymentClient, dataEncryptor, logic.BaofuAccountOnboardingConfig{
@@ -390,6 +397,11 @@ func wsReliableGate(enabled bool, percent int) func(websocket.ClientInfo) bool {
 // GetWebSocketHub returns the WebSocket hub for external access
 func (server *Server) GetWebSocketHub() *websocket.Hub {
 	return server.wsHub
+}
+
+// GetMerchantStatusChangePublisher returns the merchant status change publisher for external wiring.
+func (server *Server) GetMerchantStatusChangePublisher() websocket.MerchantStatusChangePublisher {
+	return server.merchantStatusChangePublisher
 }
 
 // Shutdown releases server-side resources created outside the HTTP server.

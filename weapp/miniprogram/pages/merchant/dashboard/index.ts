@@ -45,8 +45,16 @@ import {
 import {
   MERCHANT_SETTLEMENT_ACCOUNT_PAGE_PATH
 } from '../../../utils/merchant-finance-entry-view'
+import { wsManager, WSMessageType } from '../../../utils/websocket'
 
 const SETTLEMENT_ACCOUNT_PAGE_PATH = MERCHANT_SETTLEMENT_ACCOUNT_PAGE_PATH
+
+interface MerchantStatusChangePayload {
+  merchant_id?: number
+  is_open?: boolean
+  auto_close_at?: string
+  source?: string
+}
 
 Page({
   data: {
@@ -89,7 +97,8 @@ Page({
       canManageDeviceSettings: false,
       canManageMerchantApplyment: false
     }) as DashboardSectionView[],
-    skeletonRows: SKELETON_ROWS
+    skeletonRows: SKELETON_ROWS,
+    _wsListeners: [] as Array<() => void>
   },
 
   appBindCountdownTimer: 0 as number,
@@ -102,6 +111,8 @@ Page({
 
   onUnload() {
     this.clearAppBindCountdown()
+    this.cleanupWebSocketListeners()
+    wsManager.disconnect()
   },
 
   async onShow() {
@@ -109,11 +120,49 @@ Page({
       return
     }
 
+    this.initWebSocketListeners()
+
     if (!shouldAutoRefreshDashboard(this.data)) {
       return
     }
 
     await this.loadDashboard({ silent: true })
+  },
+
+  cleanupWebSocketListeners() {
+    if (this.data._wsListeners?.length) {
+      this.data._wsListeners.forEach((unsubscribe) => unsubscribe())
+      this.data._wsListeners = []
+    }
+  },
+
+  initWebSocketListeners() {
+    this.cleanupWebSocketListeners()
+    wsManager.connect()
+
+    const statusChangeSub = wsManager.on(WSMessageType.MERCHANT_STATUS_CHANGE, (data) => {
+      const payload = typeof data === 'object' && data !== null
+        ? (data as MerchantStatusChangePayload)
+        : {}
+
+      if (payload.merchant_id !== this.data.activeMerchant.id) {
+        return
+      }
+
+      this.loadDashboard({ silent: true }).catch((err) => logger.error('Merchant dashboard status change refresh failed', err))
+    })
+
+    const blockedSub = wsManager.on(WSMessageType.CONNECTION_BLOCKED, (payload) => {
+      const message = typeof payload === 'object' && payload !== null && 'message' in payload
+        ? String((payload as { message?: unknown }).message || '')
+        : ''
+      if (!message) {
+        return
+      }
+      this.setData({ refreshErrorMessage: message })
+    })
+
+    this.data._wsListeners = [statusChangeSub, blockedSub]
   },
 
   async bootstrapPage() {
@@ -157,6 +206,7 @@ Page({
 
     this.setData({ canManageDeviceSettings })
 
+    this.initWebSocketListeners()
     await this.loadDashboard()
   },
 
@@ -468,6 +518,7 @@ Page({
         lastRefreshAt: Date.now(),
         refreshErrorMessage: ''
       })
+      this.initWebSocketListeners()
     } catch (err) {
       logger.error('Merchant dashboard update open status failed', err)
       wx.showToast({

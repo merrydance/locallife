@@ -3,8 +3,11 @@ package scheduler
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
+	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -20,7 +23,32 @@ func TestMerchantOpenStatusScheduler_RunOnce(t *testing.T) {
 			return []int64{1001}, nil
 		},
 	)
+	store.EXPECT().GetMerchantIsOpen(gomock.Any(), int64(1001)).DoAndReturn(
+		func(ctx context.Context, merchantID int64) (db.GetMerchantIsOpenRow, error) {
+			require.NotNil(t, ctx)
+			require.Equal(t, int64(1001), merchantID)
+			return db.GetMerchantIsOpenRow{ID: merchantID, IsOpen: true, AutoCloseAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}, nil
+		},
+	)
 
-	s := NewMerchantOpenStatusScheduler(store)
+	publisher := &testMerchantStatusChangePublisher{}
+
+	s := NewMerchantOpenStatusScheduler(store, publisher)
 	s.RunOnce()
+	require.Equal(t, int64(1001), publisher.merchantID)
+	require.True(t, publisher.isOpen)
+	require.Equal(t, "business_hours", publisher.source)
+}
+
+type testMerchantStatusChangePublisher struct {
+	merchantID int64
+	isOpen     bool
+	source     string
+}
+
+func (p *testMerchantStatusChangePublisher) PublishMerchantStatusChange(_ context.Context, merchantID int64, isOpen bool, _ *time.Time, source string) error {
+	p.merchantID = merchantID
+	p.isOpen = isOpen
+	p.source = source
+	return nil
 }

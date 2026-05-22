@@ -311,7 +311,6 @@ func main() {
 	}
 	schedulerManager.Register("claim-behavior-action-recovery", worker.NewClaimBehaviorActionRecoveryScheduler(store, taskDistributor))
 	schedulerManager.Register("claim-recovery", worker.NewClaimRecoveryScheduler(store, taskDistributor))
-	schedulerManager.Register("merchant-open-status", scheduler.NewMerchantOpenStatusScheduler(store))
 	schedulerManager.Register("order-timeout", scheduler.NewOrderTimeoutScheduler(store))
 	schedulerManager.Register("takeout-auto-complete", scheduler.NewTakeoutAutoCompleteScheduler(store, taskDistributor))
 	schedulerManager.Register("data-cleanup", scheduler.NewDataCleanupScheduler(store, taskDistributor, reconciliationPublisher))
@@ -523,6 +522,10 @@ func runGinServer(
 	if err != nil {
 		log.Fatal().Err(err).Msg("cannot create server")
 	}
+
+	schedulerManager := scheduler.NewManager()
+	schedulerManager.Register("merchant-open-status", scheduler.NewMerchantOpenStatusScheduler(store, server.GetMerchantStatusChangePublisher()))
+	schedulerManager.StartAll(ctx, waitGroup)
 
 	// 创建 http.Server 用于优雅关闭
 	httpServer := &http.Server{

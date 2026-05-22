@@ -8,17 +8,19 @@ import (
 	"github.com/rs/zerolog/log"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/websocket"
 )
 
 const merchantOpenStatusCron = "0 * * * * *"
 
 // MerchantOpenStatusScheduler 根据营业时间自动切换显式开启自动模式的商户营业状态。
 type MerchantOpenStatusScheduler struct {
-	cron  *cron.Cron
-	store db.Store
+	cron      *cron.Cron
+	store     db.Store
+	publisher websocket.MerchantStatusChangePublisher
 }
 
-func NewMerchantOpenStatusScheduler(store db.Store) *MerchantOpenStatusScheduler {
+func NewMerchantOpenStatusScheduler(store db.Store, publisher websocket.MerchantStatusChangePublisher) *MerchantOpenStatusScheduler {
 	return &MerchantOpenStatusScheduler{
 		cron: cron.New(
 			cron.WithSeconds(),
@@ -27,7 +29,8 @@ func NewMerchantOpenStatusScheduler(store db.Store) *MerchantOpenStatusScheduler
 				cron.Recover(cron.DefaultLogger),
 			),
 		),
-		store: store,
+		store:     store,
+		publisher: publisher,
 	}
 }
 
@@ -63,6 +66,25 @@ func (s *MerchantOpenStatusScheduler) syncMerchantOpenStatus() {
 
 	if len(updatedMerchantIDs) == 0 {
 		return
+	}
+
+	for _, merchantID := range updatedMerchantIDs {
+		row, err := s.store.GetMerchantIsOpen(ctx, merchantID)
+		if err != nil {
+			log.Error().Err(err).Int64("merchant_id", merchantID).Msg("failed to load merchant status after sync")
+			continue
+		}
+
+		var autoCloseAt *time.Time
+		if row.AutoCloseAt.Valid {
+			autoCloseAt = &row.AutoCloseAt.Time
+		}
+
+		if s.publisher != nil {
+			if err := s.publisher.PublishMerchantStatusChange(ctx, merchantID, row.IsOpen, autoCloseAt, "business_hours"); err != nil {
+				log.Error().Err(err).Int64("merchant_id", merchantID).Msg("failed to publish merchant status change after business-hour sync")
+			}
+		}
 	}
 
 	log.Info().Int("updated_count", len(updatedMerchantIDs)).Msg("synced merchant open status by business hours")
