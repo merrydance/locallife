@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/ocr"
 	mockworker "github.com/merrydance/locallife/worker/mock"
 	"github.com/stretchr/testify/require"
@@ -38,6 +40,22 @@ func (w *auditSpyWriter) Entries() []AuditLogInput {
 	return entries
 }
 
+func ocrTestMediaAsset(id, uploadedBy int64, category media.Category, uploadStatus, moderationStatus string) db.MediaAsset {
+	visibility := string(media.VisibilityPublic)
+	switch category {
+	case media.CategoryIDCardFront, media.CategoryIDCardBack, media.CategoryHealthCert, media.CategoryGroupLicense:
+		visibility = string(media.VisibilityPrivate)
+	}
+	return db.MediaAsset{
+		ID:               id,
+		Visibility:       visibility,
+		MediaCategory:    string(category),
+		UploadStatus:     uploadStatus,
+		ModerationStatus: moderationStatus,
+		UploadedBy:       uploadedBy,
+	}
+}
+
 func TestCreateOCRJob_CreatesMerchantBusinessLicenseJob(t *testing.T) {
 	user, _ := randomUser(t)
 	app := randomMerchantAppDraft(user.ID)
@@ -50,7 +68,8 @@ func TestCreateOCRJob_CreatesMerchantBusinessLicenseJob(t *testing.T) {
 
 	gomock.InOrder(
 		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
-		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(501)).Return(db.MediaAsset{ID: 501, ModerationStatus: "approved"}, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(501)).Return(ocrTestMediaAsset(501, user.ID, media.CategoryBusinessLicense, "confirmed", "approved"), nil),
 		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
 			require.Equal(t, int64(501), arg.MediaAssetID)
 			require.Equal(t, "merchant_application", arg.OwnerType)
@@ -94,6 +113,96 @@ func TestCreateOCRJob_CreatesMerchantBusinessLicenseJob(t *testing.T) {
 	require.Equal(t, int64(501), entries[0].Metadata["media_asset_id"])
 }
 
+func TestCreateOCRJob_RejectsMediaOwnedByAnotherUser(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomMerchantAppDraft(user.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	gomock.InOrder(
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(90101)).Return(ocrTestMediaAsset(90101, user.ID+99, media.CategoryBusinessLicense, "confirmed", "approved"), nil),
+	)
+
+	server := newTestServer(t, store)
+	server.SetTaskDistributorForTest(distributor)
+
+	body, err := json.Marshal(createOCRJobRequest{DocumentType: "business_license", MediaAssetID: 90101, OwnerType: "merchant_application", OwnerID: app.ID})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/ocr/jobs", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+}
+
+func TestCreateOCRJob_RejectsWrongMediaCategoryForIDCardSide(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomMerchantAppDraft(user.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	gomock.InOrder(
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(90102)).Return(ocrTestMediaAsset(90102, user.ID, media.CategoryIDCardBack, "confirmed", "approved"), nil),
+	)
+
+	server := newTestServer(t, store)
+	server.SetTaskDistributorForTest(distributor)
+
+	body, err := json.Marshal(createOCRJobRequest{DocumentType: "id_card", MediaAssetID: 90102, OwnerType: "merchant_application", OwnerID: app.ID, Side: "front"})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/ocr/jobs", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
+func TestCreateOCRJob_RejectsUnconfirmedMedia(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomMerchantAppDraft(user.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	gomock.InOrder(
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(90103)).Return(ocrTestMediaAsset(90103, user.ID, media.CategoryBusinessLicense, "uploaded", "approved"), nil),
+	)
+
+	server := newTestServer(t, store)
+	server.SetTaskDistributorForTest(distributor)
+
+	body, err := json.Marshal(createOCRJobRequest{DocumentType: "business_license", MediaAssetID: 90103, OwnerType: "merchant_application", OwnerID: app.ID})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/ocr/jobs", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
 func TestCreateOCRJob_SetsIDCardRetentionUntil(t *testing.T) {
 	user, _ := randomUser(t)
 	app := randomMerchantAppDraft(user.ID)
@@ -106,7 +215,8 @@ func TestCreateOCRJob_SetsIDCardRetentionUntil(t *testing.T) {
 
 	gomock.InOrder(
 		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
-		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(601)).Return(db.MediaAsset{ID: 601, ModerationStatus: "approved"}, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(601)).Return(ocrTestMediaAsset(601, user.ID, media.CategoryIDCardFront, "confirmed", "approved"), nil),
 		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
 			require.Equal(t, string(ocr.DocumentTypeIDCard), arg.DocumentType)
 			require.Equal(t, string(ocr.DocumentSideFront), arg.Side)
@@ -182,7 +292,7 @@ func TestCreateOCRJob_MarksRiderHealthCertPending(t *testing.T) {
 	gomock.InOrder(
 		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
 		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
-		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(701)).Return(db.MediaAsset{ID: 701, ModerationStatus: "approved"}, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(701)).Return(ocrTestMediaAsset(701, user.ID, media.CategoryHealthCert, "confirmed", "approved"), nil),
 		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
 			require.Equal(t, string(ocr.DocumentTypeHealthCert), arg.DocumentType)
 			require.Equal(t, string(ocr.OwnerTypeRiderApplication), arg.OwnerType)
@@ -237,7 +347,7 @@ func TestCreateOCRJob_MarksRiderIDCardPending_PreservesExistingFields(t *testing
 	gomock.InOrder(
 		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
 		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
-		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(702)).Return(db.MediaAsset{ID: 702, ModerationStatus: "approved"}, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(702)).Return(ocrTestMediaAsset(702, user.ID, media.CategoryIDCardBack, "confirmed", "approved"), nil),
 		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
 			require.Equal(t, string(ocr.DocumentTypeIDCard), arg.DocumentType)
 			require.Equal(t, string(ocr.OwnerTypeRiderApplication), arg.OwnerType)
@@ -290,7 +400,7 @@ func TestCreateOCRJob_MarksRiderIDCardPending_ClearsReplacedSideFields(t *testin
 	gomock.InOrder(
 		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
 		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
-		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(703)).Return(db.MediaAsset{ID: 703, ModerationStatus: "approved"}, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(703)).Return(ocrTestMediaAsset(703, user.ID, media.CategoryIDCardFront, "confirmed", "approved"), nil),
 		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).Return(job, nil),
 		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
 		store.EXPECT().UpdateRiderApplicationIDCard(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpdateRiderApplicationIDCardParams) (db.RiderApplication, error) {
@@ -365,7 +475,8 @@ func TestCreateOCRJob_MarksGroupBusinessLicensePending(t *testing.T) {
 
 	gomock.InOrder(
 		store.EXPECT().GetGroupApplication(gomock.Any(), app.ID).Return(app, nil),
-		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(801)).Return(db.MediaAsset{ID: 801, ModerationStatus: "approved"}, nil),
+		store.EXPECT().GetGroupApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(801)).Return(ocrTestMediaAsset(801, user.ID, media.CategoryGroupLicense, "confirmed", "approved"), nil),
 		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
 			require.Equal(t, string(ocr.DocumentTypeBusinessLicense), arg.DocumentType)
 			require.Equal(t, string(ocr.OwnerTypeGroupApplication), arg.OwnerType)
@@ -420,7 +531,8 @@ func TestCreateOCRJob_MarksGroupIDCardPending(t *testing.T) {
 
 	gomock.InOrder(
 		store.EXPECT().GetGroupApplication(gomock.Any(), app.ID).Return(app, nil),
-		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(802)).Return(db.MediaAsset{ID: 802, ModerationStatus: "approved"}, nil),
+		store.EXPECT().GetGroupApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(802)).Return(ocrTestMediaAsset(802, user.ID, media.CategoryIDCardFront, "confirmed", "approved"), nil),
 		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
 			require.Equal(t, string(ocr.DocumentTypeIDCard), arg.DocumentType)
 			require.Equal(t, string(ocr.OwnerTypeGroupApplication), arg.OwnerType)
@@ -479,13 +591,13 @@ func TestCreateOCRJob_GroupPendingRejectsInvalidExistingApplicationData(t *testi
 
 	gomock.InOrder(
 		store.EXPECT().GetGroupApplication(gomock.Any(), app.ID).Return(app, nil),
-		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(803)).Return(db.MediaAsset{ID: 803, ModerationStatus: "approved"}, nil),
+		store.EXPECT().GetGroupApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(803)).Return(ocrTestMediaAsset(803, user.ID, media.CategoryGroupLicense, "confirmed", "approved"), nil),
 		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
 			require.Equal(t, string(ocr.DocumentTypeBusinessLicense), arg.DocumentType)
 			require.Equal(t, string(ocr.OwnerTypeGroupApplication), arg.OwnerType)
 			return job, nil
 		}),
-		distributor.EXPECT().DistributeTaskGroupApplicationBusinessLicenseOCR(gomock.Any(), app.ID, int64(803), int64(333)).Return(nil),
 		store.EXPECT().GetGroupApplication(gomock.Any(), app.ID).Return(app, nil),
 	)
 
@@ -519,7 +631,8 @@ func TestCreateOCRJob_AllowsOwnerOnlyPrivateIDCardDespiteModerationStatus(t *tes
 
 	gomock.InOrder(
 		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
-		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(803)).Return(db.MediaAsset{ID: 803, Visibility: "private", MediaCategory: "id_card_front", ModerationStatus: "quarantined"}, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(803)).Return(ocrTestMediaAsset(803, user.ID, media.CategoryIDCardFront, "confirmed", "quarantined"), nil),
 		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
 			require.Equal(t, string(ocr.DocumentTypeIDCard), arg.DocumentType)
 			require.Equal(t, int64(803), arg.MediaAssetID)
@@ -563,7 +676,7 @@ func TestCreateOCRJob_AllowsPrivateHealthCertDespiteModerationStatus(t *testing.
 	gomock.InOrder(
 		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
 		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
-		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(804)).Return(db.MediaAsset{ID: 804, Visibility: "private", MediaCategory: "health_cert", ModerationStatus: "quarantined"}, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(804)).Return(ocrTestMediaAsset(804, user.ID, media.CategoryHealthCert, "confirmed", "quarantined"), nil),
 		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
 			require.Equal(t, string(ocr.DocumentTypeHealthCert), arg.DocumentType)
 			require.Equal(t, int64(804), arg.MediaAssetID)
@@ -606,7 +719,8 @@ func TestCreateOCRJob_DelaysDispatchWhileMediaModerationPending(t *testing.T) {
 
 	gomock.InOrder(
 		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
-		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(901)).Return(db.MediaAsset{ID: 901, ModerationStatus: "pending"}, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(901)).Return(ocrTestMediaAsset(901, user.ID, media.CategoryBusinessLicense, "confirmed", "pending"), nil),
 		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
 			require.Equal(t, int64(901), arg.MediaAssetID)
 			return job, nil
@@ -641,6 +755,74 @@ func TestCreateOCRJob_DelaysDispatchWhileMediaModerationPending(t *testing.T) {
 	require.Equal(t, string(ocr.JobStatusPending), resp.Status)
 }
 
+func TestCreateOCRJob_DoesNotEnqueueWhenMarkPendingFails(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomMerchantAppDraft(user.ID)
+	job := db.OcrJob{ID: 9012, Status: string(ocr.JobStatusPending), DocumentType: string(ocr.DocumentTypeBusinessLicense), Provider: string(ocr.ProviderNameAliyun), MediaAssetID: 903, OwnerType: string(ocr.OwnerTypeMerchantApplication), OwnerID: app.ID, CreatedAt: time.Now()}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+	markErr := errors.New("mark pending failed")
+
+	gomock.InOrder(
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(903)).Return(ocrTestMediaAsset(903, user.ID, media.CategoryBusinessLicense, "confirmed", "approved"), nil),
+		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).Return(job, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().UpdateMerchantApplicationBusinessLicense(gomock.Any(), gomock.Any()).Return(db.MerchantApplication{}, markErr),
+	)
+
+	server := newTestServer(t, store)
+	server.SetTaskDistributorForTest(distributor)
+	body, err := json.Marshal(createOCRJobRequest{DocumentType: "business_license", MediaAssetID: 903, OwnerType: "merchant_application", OwnerID: app.ID})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/ocr/jobs", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+}
+
+func TestCreateOCRJob_MarksPendingBeforeEnqueue(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomMerchantAppDraft(user.ID)
+	job := db.OcrJob{ID: 9013, Status: string(ocr.JobStatusPending), DocumentType: string(ocr.DocumentTypeBusinessLicense), Provider: string(ocr.ProviderNameAliyun), MediaAssetID: 904, OwnerType: string(ocr.OwnerTypeMerchantApplication), OwnerID: app.ID, CreatedAt: time.Now()}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	gomock.InOrder(
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(904)).Return(ocrTestMediaAsset(904, user.ID, media.CategoryBusinessLicense, "confirmed", "approved"), nil),
+		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).Return(job, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().UpdateMerchantApplicationBusinessLicense(gomock.Any(), gomock.Any()).Return(app, nil),
+		distributor.EXPECT().DistributeTaskMerchantApplicationBusinessLicenseOCR(gomock.Any(), app.ID, int64(904), int64(9013)).Return(nil),
+	)
+
+	server := newTestServer(t, store)
+	server.SetTaskDistributorForTest(distributor)
+	body, err := json.Marshal(createOCRJobRequest{DocumentType: "business_license", MediaAssetID: 904, OwnerType: "merchant_application", OwnerID: app.ID})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/ocr/jobs", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
 func TestCreateOCRJob_RejectsRejectedModerationMedia(t *testing.T) {
 	user, _ := randomUser(t)
 	app := randomMerchantAppDraft(user.ID)
@@ -651,7 +833,8 @@ func TestCreateOCRJob_RejectsRejectedModerationMedia(t *testing.T) {
 
 	gomock.InOrder(
 		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
-		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(902)).Return(db.MediaAsset{ID: 902, ModerationStatus: "rejected"}, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(902)).Return(ocrTestMediaAsset(902, user.ID, media.CategoryBusinessLicense, "confirmed", "rejected"), nil),
 	)
 
 	server := newTestServer(t, store)
@@ -797,7 +980,8 @@ func TestRetryOCRJob_CreatesNewJobAndEnqueues(t *testing.T) {
 	distributor := mockworker.NewMockTaskDistributor(ctrl)
 	gomock.InOrder(
 		store.EXPECT().GetOCRJob(gomock.Any(), int64(304)).Return(oldJob, nil),
-		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(501)).Return(db.MediaAsset{ID: 501, ModerationStatus: "approved"}, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(501)).Return(ocrTestMediaAsset(501, user.ID, media.CategoryBusinessLicense, "confirmed", "approved"), nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
 		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
 			require.Contains(t, arg.IdempotencyKey, oldJob.IdempotencyKey+":retry:")
 			return newJob, nil
@@ -842,7 +1026,8 @@ func TestRetryOCRJob_IDCardSetsRetentionUntil(t *testing.T) {
 	distributor := mockworker.NewMockTaskDistributor(ctrl)
 	gomock.InOrder(
 		store.EXPECT().GetOCRJob(gomock.Any(), int64(314)).Return(oldJob, nil),
-		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(701)).Return(db.MediaAsset{ID: 701, ModerationStatus: "approved"}, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(701)).Return(ocrTestMediaAsset(701, user.ID, media.CategoryIDCardFront, "confirmed", "approved"), nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
 		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
 			require.True(t, arg.RetentionUntil.Valid)
 			retention := time.Until(arg.RetentionUntil.Time)
@@ -882,7 +1067,7 @@ func TestRetryOCRJob_RejectsModerationBlockedMedia(t *testing.T) {
 	defer ctrl.Finish()
 	store := mockdb.NewMockStore(ctrl)
 	store.EXPECT().GetOCRJob(gomock.Any(), int64(316)).Return(oldJob, nil)
-	store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(702)).Return(db.MediaAsset{ID: 702, ModerationStatus: "rejected"}, nil)
+	store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(702)).Return(ocrTestMediaAsset(702, user.ID, media.CategoryBusinessLicense, "confirmed", "rejected"), nil)
 
 	server := newTestServer(t, store)
 	request, err := http.NewRequest(http.MethodPost, "/v1/ocr/jobs/316/retry", nil)
@@ -893,6 +1078,64 @@ func TestRetryOCRJob_RejectsModerationBlockedMedia(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 	require.Contains(t, recorder.Body.String(), ErrImageContentSafetyFailed.Message)
+}
+
+func TestRetryOCRJob_DoesNotEnqueueWhenMarkPendingFails(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomMerchantAppDraft(user.ID)
+	app.ID = 97
+	oldJob := db.OcrJob{ID: 90105, Status: string(ocr.JobStatusFailed), AttemptCount: 1, MaxAttempts: 3, IdempotencyKey: "905:business_license:merchant_application:97:", DocumentType: string(ocr.DocumentTypeBusinessLicense), Provider: string(ocr.ProviderNameAliyun), MediaAssetID: 905, OwnerType: string(ocr.OwnerTypeMerchantApplication), OwnerID: 97, RequestedBy: user.ID, CreatedAt: time.Now()}
+	newJob := db.OcrJob{ID: 90106, Status: string(ocr.JobStatusPending), DocumentType: oldJob.DocumentType, Provider: oldJob.Provider, MediaAssetID: oldJob.MediaAssetID, OwnerType: oldJob.OwnerType, OwnerID: oldJob.OwnerID, CreatedAt: time.Now()}
+	markErr := errors.New("mark pending failed")
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	gomock.InOrder(
+		store.EXPECT().GetOCRJob(gomock.Any(), int64(90105)).Return(oldJob, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(905)).Return(ocrTestMediaAsset(905, user.ID, media.CategoryBusinessLicense, "confirmed", "approved"), nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).Return(newJob, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().UpdateMerchantApplicationBusinessLicense(gomock.Any(), gomock.Any()).Return(db.MerchantApplication{}, markErr),
+	)
+
+	server := newTestServer(t, store)
+	server.SetTaskDistributorForTest(distributor)
+	request, err := http.NewRequest(http.MethodPost, "/v1/ocr/jobs/90105/retry", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+}
+
+func TestRetryOCRJob_RevalidatesMediaOwnership(t *testing.T) {
+	user, _ := randomUser(t)
+	oldJob := db.OcrJob{ID: 90104, Status: string(ocr.JobStatusFailed), AttemptCount: 1, MaxAttempts: 3, IdempotencyKey: "90104:business_license:merchant_application:99:", DocumentType: string(ocr.DocumentTypeBusinessLicense), Provider: string(ocr.ProviderNameAliyun), MediaAssetID: 90104, OwnerType: string(ocr.OwnerTypeMerchantApplication), OwnerID: 99, RequestedBy: user.ID, CreatedAt: time.Now()}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	gomock.InOrder(
+		store.EXPECT().GetOCRJob(gomock.Any(), int64(90104)).Return(oldJob, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(90104)).Return(ocrTestMediaAsset(90104, user.ID+99, media.CategoryBusinessLicense, "confirmed", "approved"), nil),
+	)
+
+	server := newTestServer(t, store)
+	server.SetTaskDistributorForTest(distributor)
+	request, err := http.NewRequest(http.MethodPost, "/v1/ocr/jobs/90104/retry", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
 }
 
 func TestBatchQueryOCRJobs_ReturnsJobs(t *testing.T) {

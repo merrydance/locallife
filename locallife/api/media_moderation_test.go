@@ -365,6 +365,12 @@ func TestMiniProgramMediaCheckNotify_QuarantinedFailsPendingOCRJobs(t *testing.T
 	failedJob.Status = string(ocr.JobStatusFailed)
 	failedJob.ErrorCode = pgtype.Text{String: "ocr_bad_request", Valid: true}
 	failedJob.ErrorMessage = pgtype.Text{String: "media moderation quarantined the uploaded image", Valid: true}
+	app := db.MerchantApplication{
+		ID:                          job.OwnerID,
+		Status:                      "draft",
+		BusinessLicenseMediaAssetID: pgtype.Int8{Int64: asset.ID, Valid: true},
+		BusinessLicenseOcr:          []byte(`{"status":"pending","ocr_job_id":601}`),
+	}
 
 	gomock.InOrder(
 		store.EXPECT().SetMediaAssetModerationStatusByTraceID(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(
@@ -375,6 +381,7 @@ func TestMiniProgramMediaCheckNotify_QuarantinedFailsPendingOCRJobs(t *testing.T
 			},
 		),
 		store.EXPECT().ListPendingOCRJobsByMediaAsset(gomock.Any(), asset.ID).Return([]db.OcrJob{job}, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), job.OwnerID).Return(app, nil),
 		store.EXPECT().FailPendingOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.FailPendingOCRJobParams) (db.OcrJob, error) {
 			require.Equal(t, job.ID, arg.ID)
 			require.True(t, arg.ErrorCode.Valid)
@@ -383,6 +390,7 @@ func TestMiniProgramMediaCheckNotify_QuarantinedFailsPendingOCRJobs(t *testing.T
 			require.Contains(t, arg.ErrorMessage.String, "moderation quarantined")
 			return failedJob, nil
 		}),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), failedJob.OwnerID).Return(app, nil),
 		store.EXPECT().UpdateMerchantApplicationBusinessLicense(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationBusinessLicenseParams) (db.MerchantApplication, error) {
 			var payload BusinessLicenseOCRData
 			require.NoError(t, json.Unmarshal(arg.BusinessLicenseOcr, &payload))
@@ -407,6 +415,64 @@ func TestMiniProgramMediaCheckNotify_QuarantinedFailsPendingOCRJobs(t *testing.T
 <MsgType><![CDATA[event]]></MsgType>
 <Event><![CDATA[wxa_media_check]]></Event>
 <trace_id><![CDATA[trace-quarantined]]></trace_id>
+<result>
+<suggest><![CDATA[review]]></suggest>
+<label><![CDATA[20001]]></label>
+</result>
+</xml>`
+
+	recorder := httptest.NewRecorder()
+	url := fmt.Sprintf("/v1/webhooks/wechat-miniprogram/media-check?signature=%s&timestamp=%s&nonce=%s", signature, timestamp, nonce)
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBufferString(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/xml")
+
+	server.router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "success", recorder.Body.String())
+}
+
+func TestMiniProgramMediaCheckNotify_QuarantinedSkipsReboundPendingOCRJob(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	asset := randomMediaAsset(18, 1, "public", "merchant/dish/1/20260318/moderation-stale.jpg")
+	asset.ModerationStatus = "quarantined"
+	asset.ModerationTraceID = pgtype.Text{String: "trace-stale-quarantined", Valid: true}
+	job := db.OcrJob{ID: 602, Status: string(ocr.JobStatusPending), DocumentType: string(ocr.DocumentTypeBusinessLicense), Provider: string(ocr.ProviderNameAliyun), MediaAssetID: asset.ID, OwnerType: string(ocr.OwnerTypeMerchantApplication), OwnerID: 100, CreatedAt: time.Now()}
+	app := db.MerchantApplication{
+		ID:                          job.OwnerID,
+		Status:                      "draft",
+		BusinessLicenseMediaAssetID: pgtype.Int8{Int64: asset.ID + 1, Valid: true},
+		BusinessLicenseOcr:          []byte(`{"status":"pending","ocr_job_id":602}`),
+	}
+
+	gomock.InOrder(
+		store.EXPECT().SetMediaAssetModerationStatusByTraceID(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, arg db.SetMediaAssetModerationStatusByTraceIDParams) (db.MediaAsset, error) {
+				require.Equal(t, "trace-stale-quarantined", arg.ModerationTraceID.String)
+				require.Equal(t, "quarantined", arg.ModerationStatus)
+				return asset, nil
+			},
+		),
+		store.EXPECT().ListPendingOCRJobsByMediaAsset(gomock.Any(), asset.ID).Return([]db.OcrJob{job}, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), job.OwnerID).Return(app, nil),
+	)
+
+	server, _ := newTestServerForMedia(t, store)
+	server.config.WechatMiniAppID = "wx-test-app"
+	server.config.WechatMiniAppMessageToken = "mini-token"
+
+	timestamp := "1710000005"
+	nonce := "nonce-stale-quarantined"
+	signature := signMiniProgramCallback(server.config.WechatMiniAppMessageToken, timestamp, nonce)
+	body := `<xml>
+<AppID><![CDATA[wx-test-app]]></AppID>
+<MsgType><![CDATA[event]]></MsgType>
+<Event><![CDATA[wxa_media_check]]></Event>
+<trace_id><![CDATA[trace-stale-quarantined]]></trace_id>
 <result>
 <suggest><![CDATA[review]]></suggest>
 <label><![CDATA[20001]]></label>

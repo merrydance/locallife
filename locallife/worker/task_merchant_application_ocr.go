@@ -115,11 +115,28 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantApplicationBusinessLicen
 }
 
 func (processor *RedisTaskProcessor) processMerchantApplicationBusinessLicenseOCRJob(ctx context.Context, payload *merchantApplicationOCRPayload) error {
+	binding := workerOCRPayloadBinding{
+		ApplicationID: payload.ApplicationID,
+		MediaAssetID:  payload.MediaAssetID,
+		OCRJobID:      payload.OCRJobID,
+	}
+	_, _, stale, err := processor.guardMerchantOCRWriteback(ctx, binding, ocr.DocumentTypeBusinessLicense, ocr.DocumentSideUnknown)
+	if err != nil {
+		return err
+	}
+	if stale {
+		return nil
+	}
 	job, err := processor.ocrService.ExecuteJob(ctx, ocr.ExecuteJobParams{
 		JobID:      payload.OCRJobID,
 		LeaseOwner: "worker:merchant_business_license",
 	})
 	if err != nil {
+		if _, stale, guardErr := processor.guardMerchantOCRCurrentBinding(ctx, binding, ocr.DocumentTypeBusinessLicense, ocr.DocumentSideUnknown); guardErr != nil {
+			return guardErr
+		} else if stale {
+			return nil
+		}
 		alertEmittedAt := processor.publishOCRFailureAlert(ctx, job, err)
 		failed := map[string]any{
 			"status":           string(ocr.JobStatusFailed),
@@ -143,6 +160,13 @@ func (processor *RedisTaskProcessor) processMerchantApplicationBusinessLicenseOC
 	normalized, decodeErr := ocr.UnmarshalNormalizedResult(job.NormalizedResult)
 	if decodeErr != nil {
 		return fmt.Errorf("decode normalized business license result: %w", decodeErr)
+	}
+	_, stale, err = processor.guardMerchantOCRCurrentBinding(ctx, binding, ocr.DocumentTypeBusinessLicense, ocr.DocumentSideUnknown)
+	if err != nil {
+		return err
+	}
+	if stale {
+		return nil
 	}
 	ocrData := map[string]any{
 		"status":     "done",
@@ -214,11 +238,28 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantApplicationFoodPermitOCR
 }
 
 func (processor *RedisTaskProcessor) processMerchantApplicationFoodPermitOCRJob(ctx context.Context, payload *merchantApplicationOCRPayload) error {
+	binding := workerOCRPayloadBinding{
+		ApplicationID: payload.ApplicationID,
+		MediaAssetID:  payload.MediaAssetID,
+		OCRJobID:      payload.OCRJobID,
+	}
+	_, _, stale, err := processor.guardMerchantOCRWriteback(ctx, binding, ocr.DocumentTypeFoodPermit, ocr.DocumentSideUnknown)
+	if err != nil {
+		return err
+	}
+	if stale {
+		return nil
+	}
 	job, err := processor.ocrService.ExecuteJob(ctx, ocr.ExecuteJobParams{
 		JobID:      payload.OCRJobID,
 		LeaseOwner: "worker:merchant_food_permit",
 	})
 	if err != nil {
+		if _, stale, guardErr := processor.guardMerchantOCRCurrentBinding(ctx, binding, ocr.DocumentTypeFoodPermit, ocr.DocumentSideUnknown); guardErr != nil {
+			return guardErr
+		} else if stale {
+			return nil
+		}
 		log.Warn().Err(err).Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", payload.OCRJobID).Str("provider", job.Provider).Msg("food permit OCR job failed")
 		alertEmittedAt := processor.publishOCRFailureAlert(ctx, job, err)
 		failed := foodPermitOCRData{
@@ -243,6 +284,13 @@ func (processor *RedisTaskProcessor) processMerchantApplicationFoodPermitOCRJob(
 	normalized, decodeErr := ocr.UnmarshalNormalizedResult(job.NormalizedResult)
 	if decodeErr != nil {
 		return fmt.Errorf("decode normalized food permit result: %w", decodeErr)
+	}
+	_, stale, err = processor.guardMerchantOCRCurrentBinding(ctx, binding, ocr.DocumentTypeFoodPermit, ocr.DocumentSideUnknown)
+	if err != nil {
+		return err
+	}
+	if stale {
+		return nil
 	}
 	ocrData := foodPermitOCRData{
 		Status:    "done",
@@ -292,11 +340,30 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantApplicationIDCardOCR(ctx
 }
 
 func (processor *RedisTaskProcessor) processMerchantApplicationIDCardOCRJob(ctx context.Context, payload *merchantApplicationOCRPayload) error {
+	binding := workerOCRPayloadBinding{
+		ApplicationID: payload.ApplicationID,
+		MediaAssetID:  payload.MediaAssetID,
+		OCRJobID:      payload.OCRJobID,
+		Side:          payload.Side,
+	}
+	side := workerOCRSide(payload.Side)
+	_, _, stale, err := processor.guardMerchantOCRWriteback(ctx, binding, ocr.DocumentTypeIDCard, side)
+	if err != nil {
+		return err
+	}
+	if stale {
+		return nil
+	}
 	job, err := processor.ocrService.ExecuteJob(ctx, ocr.ExecuteJobParams{
 		JobID:      payload.OCRJobID,
 		LeaseOwner: "worker:merchant_id_card",
 	})
 	if err != nil {
+		if _, stale, guardErr := processor.guardMerchantOCRCurrentBinding(ctx, binding, ocr.DocumentTypeIDCard, side); guardErr != nil {
+			return guardErr
+		} else if stale {
+			return nil
+		}
 		alertEmittedAt := processor.publishOCRFailureAlert(ctx, job, err)
 		failed := merchantIDCardOCRData{
 			Status:         string(ocr.JobStatusFailed),
@@ -321,6 +388,13 @@ func (processor *RedisTaskProcessor) processMerchantApplicationIDCardOCRJob(ctx 
 	normalized, decodeErr := ocr.UnmarshalNormalizedResult(job.NormalizedResult)
 	if decodeErr != nil {
 		return fmt.Errorf("decode normalized id card result: %w", decodeErr)
+	}
+	_, stale, err = processor.guardMerchantOCRCurrentBinding(ctx, binding, ocr.DocumentTypeIDCard, side)
+	if err != nil {
+		return err
+	}
+	if stale {
+		return nil
 	}
 	ocrData := merchantIDCardOCRData{
 		Status:    "done",
