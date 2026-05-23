@@ -103,7 +103,7 @@ func CalculateBaofuSettlementAmounts(input BaofuSettlementCalculationInput) (Bao
 		result.ProviderPaymentFeeFen = input.ProviderPaymentFeeFen
 		result.ProviderPaymentFeeSource = BaofuProviderPaymentFeeSourceActual
 	} else {
-		result.ProviderPaymentFeeFen = ceilBaofuFeeFen(input.TotalAmountFen, DefaultBaofuProviderPaymentFeeRateBps)
+		result.ProviderPaymentFeeFen = roundBaofuFeeFen(input.TotalAmountFen, DefaultBaofuProviderPaymentFeeRateBps)
 		result.ProviderPaymentFeeSource = BaofuProviderPaymentFeeSourceEstimated
 	}
 	result.ShareableAmountFen = input.TotalAmountFen - result.ProviderPaymentFeeFen
@@ -114,11 +114,11 @@ func CalculateBaofuSettlementAmounts(input BaofuSettlementCalculationInput) (Bao
 	switch input.OrderScene {
 	case BaofuSettlementSceneTakeout:
 		result.SettlementMode = BaofuSettlementModeCommissionShare
-		if input.HasRiderReceiver {
-			result.RiderGrossAmountFen = minInt64(input.DeliveryFeeFen, input.TotalAmountFen)
-		}
+		result.RiderGrossAmountFen = minInt64(input.DeliveryFeeFen, input.TotalAmountFen)
 		result.MerchantPaymentFeeBaseFen = input.TotalAmountFen - result.RiderGrossAmountFen
-		result.RiderPaymentFeeBaseFen = result.RiderGrossAmountFen
+		if input.HasRiderReceiver {
+			result.RiderPaymentFeeBaseFen = result.RiderGrossAmountFen
+		}
 		result.CommissionBaseFen = result.MerchantPaymentFeeBaseFen
 	case BaofuSettlementSceneReservation:
 		result.SettlementMode = BaofuSettlementModeCommissionShare
@@ -135,8 +135,8 @@ func CalculateBaofuSettlementAmounts(input BaofuSettlementCalculationInput) (Bao
 		result.MerchantPaymentFeeBaseFen = 0
 	}
 
-	result.MerchantPaymentFeeFen = ceilBaofuFeeFen(result.MerchantPaymentFeeBaseFen, result.MerchantPaymentFeeRateBps)
-	result.RiderPaymentFeeFen = ceilBaofuFeeFen(result.RiderPaymentFeeBaseFen, result.RiderPaymentFeeRateBps)
+	result.MerchantPaymentFeeFen = roundBaofuFeeFen(result.MerchantPaymentFeeBaseFen, result.MerchantPaymentFeeRateBps)
+	result.RiderPaymentFeeFen = roundBaofuFeeFen(result.RiderPaymentFeeBaseFen, result.RiderPaymentFeeRateBps)
 	result.PlatformCommissionFen = commissionBaofuFen(result.CommissionBaseFen, result.PlatformCommissionRateBps)
 	result.OperatorCommissionFen = commissionBaofuFen(result.CommissionBaseFen, result.OperatorCommissionRateBps)
 	if !input.HasOperatorReceiver && result.OperatorCommissionFen > 0 && input.RedirectMissingOperatorFee {
@@ -145,9 +145,11 @@ func CalculateBaofuSettlementAmounts(input BaofuSettlementCalculationInput) (Bao
 		result.OperatorCommissionRedirectedToPlatform = true
 	}
 
-	result.RiderAmountFen = result.RiderGrossAmountFen - result.RiderPaymentFeeFen
-	if result.RiderAmountFen < 0 {
-		return BaofuSettlementCalculationResult{}, ErrBaofuSettlementRiderAmountNegative
+	if input.HasRiderReceiver {
+		result.RiderAmountFen = result.RiderGrossAmountFen - result.RiderPaymentFeeFen
+		if result.RiderAmountFen < 0 {
+			return BaofuSettlementCalculationResult{}, ErrBaofuSettlementRiderAmountNegative
+		}
 	}
 	result.MerchantAmountFen = result.MerchantPaymentFeeBaseFen -
 		result.MerchantPaymentFeeFen -
@@ -167,11 +169,11 @@ func CalculateBaofuSettlementAmounts(input BaofuSettlementCalculationInput) (Bao
 	return result, nil
 }
 
-func ceilBaofuFeeFen(baseFen int64, rateBps int32) int64 {
+func roundBaofuFeeFen(baseFen int64, rateBps int32) int64 {
 	if baseFen <= 0 || rateBps <= 0 {
 		return 0
 	}
-	return (baseFen*int64(rateBps) + 9999) / 10000
+	return (baseFen*int64(rateBps) + 5000) / 10000
 }
 
 func commissionBaofuFen(baseFen int64, rateBps int32) int64 {

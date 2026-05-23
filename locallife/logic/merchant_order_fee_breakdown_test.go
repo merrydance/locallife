@@ -60,6 +60,46 @@ func TestBuildMerchantOrderFeeBreakdown_BaofuV2UsesMerchantVisibleAmounts(t *tes
 	require.Equal(t, int64(795), breakdown.RiderNetEarningsAmount)
 }
 
+func TestBuildMerchantOrderFeeBreakdown_UsesLabTakeoutAmounts(t *testing.T) {
+	order := db.Order{
+		ID:          101,
+		Subtotal:    1000,
+		DeliveryFee: 459,
+		TotalAmount: 1459,
+		Status:      db.OrderStatusPaid,
+		OrderType:   db.OrderTypeTakeout,
+	}
+	profitSharingOrder := db.ProfitSharingOrder{
+		ID:                           202,
+		PaymentOrderID:               303,
+		TotalAmount:                  1459,
+		DeliveryFee:                  459,
+		PlatformCommission:           20,
+		OperatorCommission:           30,
+		MerchantAmount:               944,
+		PaymentFee:                   4,
+		CalculationVersion:           BaofuSettlementCalculationVersionV2,
+		MerchantPaymentFee:           6,
+		MerchantPaymentFeeBaseAmount: 1000,
+		RiderGrossAmount:             459,
+	}
+
+	breakdown, err := BuildMerchantOrderFeeBreakdown(BuildMerchantOrderFeeBreakdownInput{
+		Order:              order,
+		ProfitSharingOrder: &profitSharingOrder,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, int64(1000), breakdown.FoodAmount)
+	require.Equal(t, int64(459), breakdown.DeliveryFeeAmount)
+	require.Equal(t, int64(1459), breakdown.CustomerPayableAmount)
+	require.Equal(t, int64(50), breakdown.PlatformServiceFeeAmount)
+	require.Equal(t, int64(6), breakdown.PaymentChannelFeeAmount)
+	require.Equal(t, int64(944), breakdown.MerchantReceivableAmount)
+	require.Equal(t, int64(459), breakdown.RiderGrossAmount)
+	require.Equal(t, int64(0), breakdown.RiderNetEarningsAmount)
+}
+
 func TestBuildMerchantOrderFeeBreakdown_ReturnsUnavailableWhenProfitSharingMissing(t *testing.T) {
 	_, err := BuildMerchantOrderFeeBreakdown(BuildMerchantOrderFeeBreakdownInput{
 		Order: db.Order{

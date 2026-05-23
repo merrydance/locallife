@@ -1233,8 +1233,8 @@ func (svc *PaymentFactService) ensureBaofuOrderPaymentBill(ctx context.Context, 
 		OrderSource:     orderSource,
 		TotalAmountFen:  paymentOrder.Amount,
 		DeliveryFeeFen:  order.DeliveryFee,
-		PlatformRateBps: config.PlatformRate,
-		OperatorRateBps: config.OperatorRate,
+		PlatformRateBps: profitSharingPercentToBps(config.PlatformRate),
+		OperatorRateBps: profitSharingPercentToBps(config.OperatorRate),
 		OutOrderNo:      fmt.Sprintf("BFPS%dO%d", paymentOrder.ID, order.ID),
 	})
 	if err != nil {
@@ -1248,6 +1248,13 @@ func baofuProfitSharingOrderSource(order db.Order) string {
 		return db.OrderTypeReservation
 	}
 	return order.OrderType
+}
+
+func profitSharingPercentToBps(rate int32) int32 {
+	if rate <= 0 {
+		return 0
+	}
+	return rate * 100
 }
 
 func (svc *PaymentFactService) createReservationPaymentOutbox(ctx context.Context, application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact, reservationPayment ApplyReservationPaymentFactResult) (*db.PaymentDomainOutbox, error) {

@@ -666,7 +666,7 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuOrderPayment
 			OrderSource: db.OrderTypeTakeout,
 			MerchantID:  pgtype.Int8{Int64: merchant.ID, Valid: true},
 			RegionID:    pgtype.Int8{Int64: merchant.RegionID, Valid: true},
-		}).Return(db.ProfitSharingConfig{PlatformRate: 200, OperatorRate: 300, RiderEnabled: true}, nil),
+		}).Return(db.ProfitSharingConfig{PlatformRate: 2, OperatorRate: 3, RiderEnabled: true}, nil),
 		store.EXPECT().GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).Return(operator, nil),
 		store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{OwnerType: db.BaofuAccountOwnerTypeMerchant, OwnerID: merchant.ID}).Return(activeBaofuReceiverBinding(db.BaofuAccountOwnerTypeMerchant, merchant.ID, "MER_CONTRACT", "MER_SHARE"), nil),
 		store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{OwnerType: db.BaofuAccountOwnerTypeOperator, OwnerID: operator.ID}).Return(activeBaofuReceiverBinding(db.BaofuAccountOwnerTypeOperator, operator.ID, "OP_CONTRACT", "OP_SHARE"), nil),
@@ -679,7 +679,20 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuOrderPayment
 			require.Equal(t, db.ExternalPaymentProviderBaofu, arg.ProfitSharingOrder.Provider)
 			require.Equal(t, db.PaymentChannelBaofuAggregate, arg.ProfitSharingOrder.Channel)
 			require.Equal(t, db.ProfitSharingOrderStatusPending, arg.ProfitSharingOrder.Status)
-			require.Equal(t, int64(0), arg.FeeBreakdown.RiderGrossAmount)
+			require.Equal(t, int32(200), arg.ProfitSharingOrder.PlatformRate)
+			require.Equal(t, int32(300), arg.ProfitSharingOrder.OperatorRate)
+			require.Equal(t, int64(12400), arg.ProfitSharingOrder.DistributableAmount)
+			require.Equal(t, int64(248), arg.ProfitSharingOrder.PlatformCommission)
+			require.Equal(t, int64(372), arg.ProfitSharingOrder.OperatorCommission)
+			require.Equal(t, int64(11706), arg.ProfitSharingOrder.MerchantAmount)
+			require.Equal(t, int64(39), arg.ProfitSharingOrder.PaymentFee)
+			require.Equal(t, int64(12400), arg.FeeBreakdown.MerchantPaymentFeeBaseAmount)
+			require.Equal(t, int64(74), arg.FeeBreakdown.MerchantPaymentFee)
+			require.Equal(t, int64(500), arg.FeeBreakdown.RiderGrossAmount)
+			require.Equal(t, int64(0), arg.FeeBreakdown.RiderPaymentFeeBaseAmount)
+			require.Equal(t, int64(0), arg.FeeBreakdown.RiderPaymentFee)
+			require.Equal(t, int64(12400), arg.FeeBreakdown.CommissionBaseAmount)
+			require.Equal(t, int64(283), arg.FeeBreakdown.PlatformReceiverAmount)
 			return db.CreateBaofuProfitSharingOrderTxResult{ProfitSharingOrder: db.ProfitSharingOrder{ID: 9901, PaymentOrderID: paymentOrder.ID}}, nil
 		}),
 		store.EXPECT().CreatePaymentDomainOutboxOnce(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreatePaymentDomainOutboxOnceParams) (db.PaymentDomainOutbox, error) {
@@ -733,7 +746,7 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuOrderPayment
 		OrderResult:  &orderResult,
 	}, nil)
 	store.EXPECT().GetMerchant(gomock.Any(), merchant.ID).Return(merchant, nil)
-	store.EXPECT().GetActiveProfitSharingConfig(gomock.Any(), gomock.Any()).Return(db.ProfitSharingConfig{PlatformRate: 200, OperatorRate: 300, RiderEnabled: true}, nil)
+	store.EXPECT().GetActiveProfitSharingConfig(gomock.Any(), gomock.Any()).Return(db.ProfitSharingConfig{PlatformRate: 2, OperatorRate: 3, RiderEnabled: true}, nil)
 	store.EXPECT().GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).Return(operator, nil)
 	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{OwnerType: db.BaofuAccountOwnerTypeMerchant, OwnerID: merchant.ID}).Return(activeBaofuReceiverBinding(db.BaofuAccountOwnerTypeMerchant, merchant.ID, "MER_CONTRACT", "MER_SHARE"), nil)
 	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{OwnerType: db.BaofuAccountOwnerTypeOperator, OwnerID: operator.ID}).Return(activeBaofuReceiverBinding(db.BaofuAccountOwnerTypeOperator, operator.ID, "OP_CONTRACT", "OP_SHARE"), nil)

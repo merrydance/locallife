@@ -43,6 +43,65 @@ func TestCalculateBaofuSettlementTakeoutChargesMerchantAndRiderFees(t *testing.T
 	)
 }
 
+func TestCalculateBaofuSettlementTakeoutUsesItemBaseBeforeRiderAccepts(t *testing.T) {
+	result, err := CalculateBaofuSettlementAmounts(BaofuSettlementCalculationInput{
+		OrderScene:                BaofuSettlementSceneTakeout,
+		TotalAmountFen:            1459,
+		DeliveryFeeFen:            459,
+		PlatformCommissionRateBps: 200,
+		OperatorCommissionRateBps: 300,
+		MerchantPaymentFeeRateBps: 60,
+		RiderPaymentFeeRateBps:    60,
+		HasOperatorReceiver:       true,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(4), result.ProviderPaymentFeeFen)
+	require.Equal(t, int64(1000), result.MerchantPaymentFeeBaseFen)
+	require.Equal(t, int64(6), result.MerchantPaymentFeeFen)
+	require.Equal(t, int64(459), result.RiderGrossAmountFen)
+	require.Equal(t, int64(0), result.RiderPaymentFeeBaseFen)
+	require.Equal(t, int64(0), result.RiderPaymentFeeFen)
+	require.Equal(t, int64(1000), result.CommissionBaseFen)
+	require.Equal(t, int64(20), result.PlatformCommissionFen)
+	require.Equal(t, int64(30), result.OperatorCommissionFen)
+	require.Equal(t, int64(944), result.MerchantAmountFen)
+	require.Equal(t, int64(0), result.RiderAmountFen)
+	require.Equal(t, int64(22), result.PlatformReceiverAmountFen)
+}
+
+func TestCalculateBaofuSettlementTakeoutCompletesRiderSplitAfterRiderAccepts(t *testing.T) {
+	result, err := CalculateBaofuSettlementAmounts(BaofuSettlementCalculationInput{
+		OrderScene:                BaofuSettlementSceneTakeout,
+		TotalAmountFen:            1459,
+		DeliveryFeeFen:            459,
+		PlatformCommissionRateBps: 200,
+		OperatorCommissionRateBps: 300,
+		MerchantPaymentFeeRateBps: 60,
+		RiderPaymentFeeRateBps:    60,
+		HasRiderReceiver:          true,
+		HasOperatorReceiver:       true,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(4), result.ProviderPaymentFeeFen)
+	require.Equal(t, int64(1000), result.MerchantPaymentFeeBaseFen)
+	require.Equal(t, int64(6), result.MerchantPaymentFeeFen)
+	require.Equal(t, int64(459), result.RiderGrossAmountFen)
+	require.Equal(t, int64(459), result.RiderPaymentFeeBaseFen)
+	require.Equal(t, int64(3), result.RiderPaymentFeeFen)
+	require.Equal(t, int64(1000), result.CommissionBaseFen)
+	require.Equal(t, int64(20), result.PlatformCommissionFen)
+	require.Equal(t, int64(30), result.OperatorCommissionFen)
+	require.Equal(t, int64(944), result.MerchantAmountFen)
+	require.Equal(t, int64(456), result.RiderAmountFen)
+	require.Equal(t, int64(25), result.PlatformReceiverAmountFen)
+	require.Equal(t,
+		result.ShareableAmountFen,
+		result.MerchantAmountFen+result.RiderAmountFen+result.OperatorCommissionFen+result.PlatformReceiverAmountFen,
+	)
+}
+
 func TestCalculateBaofuSettlementReservationChargesMerchantFeeAndCommission(t *testing.T) {
 	result, err := CalculateBaofuSettlementAmounts(BaofuSettlementCalculationInput{
 		OrderScene:                BaofuSettlementSceneReservation,
