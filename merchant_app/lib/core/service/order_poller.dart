@@ -45,7 +45,7 @@ class OrderPoller {
     debugPrint('OrderPoller started. Polling every 30 seconds...');
 
     _timer = Timer.periodic(const Duration(seconds: 30), (_) {
-      _pollOrders();
+      unawaited(pollOnce());
     });
   }
 
@@ -57,7 +57,7 @@ class OrderPoller {
     _timer = null;
   }
 
-  Future<void> _pollOrders() async {
+  Future<void> pollOnce() async {
     final authState = _ref.read(authProvider);
     if (!authState.isAuthenticated || authState.accessToken == null) {
       debugPrint('OrderPoller: Skipping poll, not authenticated.');
@@ -65,6 +65,25 @@ class OrderPoller {
     }
 
     try {
+      await _ref.read(workingStatusProvider.notifier).syncFromBackend();
+
+      final latestAuthState = _ref.read(authProvider);
+      if (!latestAuthState.isAuthenticated ||
+          latestAuthState.accessToken == null) {
+        debugPrint(
+          'OrderPoller: Skipping poll, authentication expired during status sync.',
+        );
+        return;
+      }
+
+      final workingStatusState = _ref.read(workingStatusProvider);
+      if (!workingStatusState.isOnline) {
+        debugPrint(
+          'OrderPoller: Skipping order poll because merchant is closed.',
+        );
+        return;
+      }
+
       await _ref.read(deviceSyncServiceProvider).sendHeartbeat();
       debugPrint('OrderPoller: Fetching latest orders (fallback).');
       final previousOrders = List.of(_ref.read(orderProvider).orders);

@@ -40,7 +40,6 @@ class OrderModel {
   final List<OrderItem> items;
   final String? note;
   final bool itemsLoadFailed;
-  final FeeBreakdown? feeBreakdown;
 
   OrderModel({
     required this.id,
@@ -54,7 +53,6 @@ class OrderModel {
     required this.items,
     this.note,
     this.itemsLoadFailed = false,
-    this.feeBreakdown,
   });
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
@@ -75,8 +73,14 @@ class OrderModel {
       createdAt:
           DateTime.tryParse(json['created_at']?.toString() ?? '') ??
           DateTime.now(),
-      userName: json['user_name']?.toString(),
-      userPhone: json['user_phone']?.toString(),
+      userName: _firstNullableString(json, const [
+        'delivery_contact_name',
+        'user_name',
+      ]),
+      userPhone: _firstNullableString(json, const [
+        'delivery_contact_phone',
+        'user_phone',
+      ]),
       items:
           (json['items'] as List?)
               ?.whereType<Map>()
@@ -87,7 +91,6 @@ class OrderModel {
           [],
       note: _firstNullableString(json, const ['notes', 'note']),
       itemsLoadFailed: json['items_load_failed'] == true,
-      feeBreakdown: FeeBreakdown.fromJsonOrNull(json['fee_breakdown']),
     );
   }
 
@@ -107,118 +110,55 @@ class OrderModel {
 }
 
 class OrderFeeBreakdown {
-  final double foodAmount;
-  final double merchantDiscountAmount;
-  final double voucherDiscountAmount;
-  final double foodPayableAmount;
-  final double deliveryFeeAmount;
-  final double deliveryFeeDiscountAmount;
-  final double deliveryPayableAmount;
-  final double customerPayableAmount;
-  final double platformServiceFeeAmount;
-  final double paymentChannelFeeAmount;
-  final double merchantReceivableAmount;
-
-  const OrderFeeBreakdown({
-    required this.foodAmount,
-    required this.merchantDiscountAmount,
-    required this.voucherDiscountAmount,
-    required this.foodPayableAmount,
-    required this.deliveryFeeAmount,
-    required this.deliveryFeeDiscountAmount,
-    required this.deliveryPayableAmount,
-    required this.customerPayableAmount,
-    required this.platformServiceFeeAmount,
-    required this.paymentChannelFeeAmount,
-    required this.merchantReceivableAmount,
-  });
-
-  factory OrderFeeBreakdown.fromJson(Map<String, dynamic> json) {
-    return OrderFeeBreakdown(
-      foodAmount: _moneyYuan(json, centsKeys: const ['food_amount']),
-      merchantDiscountAmount: _moneyYuan(
-        json,
-        centsKeys: const ['merchant_discount_amount'],
-      ),
-      voucherDiscountAmount: _moneyYuan(
-        json,
-        centsKeys: const ['voucher_discount_amount'],
-      ),
-      foodPayableAmount: _moneyYuan(
-        json,
-        centsKeys: const ['food_payable_amount'],
-      ),
-      deliveryFeeAmount: _moneyYuan(
-        json,
-        centsKeys: const ['delivery_fee_amount'],
-      ),
-      deliveryFeeDiscountAmount: _moneyYuan(
-        json,
-        centsKeys: const ['delivery_fee_discount_amount'],
-      ),
-      deliveryPayableAmount: _moneyYuan(
-        json,
-        centsKeys: const ['delivery_payable_amount'],
-      ),
-      customerPayableAmount: _moneyYuan(
-        json,
-        centsKeys: const ['customer_payable_amount'],
-      ),
-      platformServiceFeeAmount: _moneyYuan(
-        json,
-        centsKeys: const ['platform_service_fee_amount'],
-      ),
-      paymentChannelFeeAmount: _moneyYuan(
-        json,
-        centsKeys: const ['payment_channel_fee_amount'],
-      ),
-      merchantReceivableAmount: _moneyYuan(
-        json,
-        centsKeys: const ['merchant_receivable_amount'],
-      ),
-    );
-  }
-
-  Map<String, int> toJson() {
-    return {
-      'food_amount': _yuanToCents(foodAmount),
-      'merchant_discount_amount': _yuanToCents(merchantDiscountAmount),
-      'voucher_discount_amount': _yuanToCents(voucherDiscountAmount),
-      'food_payable_amount': _yuanToCents(foodPayableAmount),
-      'delivery_fee_amount': _yuanToCents(deliveryFeeAmount),
-      'delivery_fee_discount_amount': _yuanToCents(deliveryFeeDiscountAmount),
-      'delivery_payable_amount': _yuanToCents(deliveryPayableAmount),
-      'customer_payable_amount': _yuanToCents(customerPayableAmount),
-      'platform_service_fee_amount': _yuanToCents(platformServiceFeeAmount),
-      'payment_channel_fee_amount': _yuanToCents(paymentChannelFeeAmount),
-      'merchant_receivable_amount': _yuanToCents(merchantReceivableAmount),
-    };
-  }
-}
-
-class FeeBreakdown {
+  final int foodAmountCents;
+  final int merchantDiscountAmountCents;
+  final int voucherDiscountAmountCents;
+  final int foodPayableAmountCents;
+  final int deliveryFeeAmountCents;
+  final int deliveryFeeDiscountAmountCents;
+  final int deliveryPayableAmountCents;
   final int customerPayableAmountCents;
   final int platformServiceFeeAmountCents;
   final int paymentChannelFeeAmountCents;
   final int merchantReceivableAmountCents;
-  final int deliveryFeeAmountCents;
   final int riderGrossAmountCents;
   final int riderPaymentFeeCents;
   final int riderNetEarningsCents;
 
-  const FeeBreakdown({
-    required this.customerPayableAmountCents,
-    required this.platformServiceFeeAmountCents,
-    required this.paymentChannelFeeAmountCents,
-    required this.merchantReceivableAmountCents,
+  const OrderFeeBreakdown({
+    this.foodAmountCents = 0,
+    this.merchantDiscountAmountCents = 0,
+    this.voucherDiscountAmountCents = 0,
+    this.foodPayableAmountCents = 0,
     this.deliveryFeeAmountCents = 0,
+    this.deliveryFeeDiscountAmountCents = 0,
+    this.deliveryPayableAmountCents = 0,
+    this.customerPayableAmountCents = 0,
+    this.platformServiceFeeAmountCents = 0,
+    this.paymentChannelFeeAmountCents = 0,
+    this.merchantReceivableAmountCents = 0,
     this.riderGrossAmountCents = 0,
     this.riderPaymentFeeCents = 0,
     this.riderNetEarningsCents = 0,
   });
 
-  factory FeeBreakdown.fromJson(Map<String, dynamic> json) {
-    return FeeBreakdown(
+  factory OrderFeeBreakdown.fromJson(Map<String, dynamic> json) {
+    return OrderFeeBreakdown(
+      foodAmountCents: _firstInt(json, const ['food_amount']),
+      merchantDiscountAmountCents: _firstInt(json, const [
+        'merchant_discount_amount',
+      ]),
+      voucherDiscountAmountCents: _firstInt(json, const [
+        'voucher_discount_amount',
+      ]),
+      foodPayableAmountCents: _firstInt(json, const ['food_payable_amount']),
+      deliveryFeeAmountCents: _firstInt(json, const ['delivery_fee_amount']),
+      deliveryFeeDiscountAmountCents: _firstInt(json, const [
+        'delivery_fee_discount_amount',
+      ]),
+      deliveryPayableAmountCents: _firstInt(json, const [
+        'delivery_payable_amount',
+      ]),
       customerPayableAmountCents: _firstInt(json, const [
         'customer_payable_amount',
       ]),
@@ -231,7 +171,6 @@ class FeeBreakdown {
       merchantReceivableAmountCents: _firstInt(json, const [
         'merchant_receivable_amount',
       ]),
-      deliveryFeeAmountCents: _firstInt(json, const ['delivery_fee_amount']),
       riderGrossAmountCents: _firstInt(json, const [
         'rider_gross_amount',
         'delivery_fee_amount',
@@ -248,26 +187,47 @@ class FeeBreakdown {
     );
   }
 
-  static FeeBreakdown? fromJsonOrNull(dynamic value) {
-    if (value is Map) {
-      return FeeBreakdown.fromJson(Map<String, dynamic>.from(value));
-    }
-    return null;
-  }
-
-  Map<String, dynamic> toJson() {
+  Map<String, int> toJson() {
     return {
+      'food_amount': foodAmountCents,
+      'merchant_discount_amount': merchantDiscountAmountCents,
+      'voucher_discount_amount': voucherDiscountAmountCents,
+      'food_payable_amount': foodPayableAmountCents,
+      'delivery_fee_amount': deliveryFeeAmountCents,
+      'delivery_fee_discount_amount': deliveryFeeDiscountAmountCents,
+      'delivery_payable_amount': deliveryPayableAmountCents,
       'customer_payable_amount': customerPayableAmountCents,
       'platform_service_fee_amount': platformServiceFeeAmountCents,
       'payment_channel_fee_amount': paymentChannelFeeAmountCents,
       'merchant_receivable_amount': merchantReceivableAmountCents,
-      'delivery_fee_amount': deliveryFeeAmountCents,
       'rider_gross_amount': riderGrossAmountCents,
       'rider_payment_fee_amount': riderPaymentFeeCents,
       'rider_net_earnings_amount': riderNetEarningsCents,
     };
   }
+
+  static OrderFeeBreakdown? fromJsonOrNull(dynamic value) {
+    if (value is Map) {
+      return OrderFeeBreakdown.fromJson(Map<String, dynamic>.from(value));
+    }
+    return null;
+  }
+
+  double get foodAmount => foodAmountCents / 100.0;
+  double get merchantDiscountAmount => merchantDiscountAmountCents / 100.0;
+  double get voucherDiscountAmount => voucherDiscountAmountCents / 100.0;
+  double get foodPayableAmount => foodPayableAmountCents / 100.0;
+  double get deliveryFeeAmount => deliveryFeeAmountCents / 100.0;
+  double get deliveryFeeDiscountAmount =>
+      deliveryFeeDiscountAmountCents / 100.0;
+  double get deliveryPayableAmount => deliveryPayableAmountCents / 100.0;
+  double get customerPayableAmount => customerPayableAmountCents / 100.0;
+  double get platformServiceFeeAmount => platformServiceFeeAmountCents / 100.0;
+  double get paymentChannelFeeAmount => paymentChannelFeeAmountCents / 100.0;
+  double get merchantReceivableAmount => merchantReceivableAmountCents / 100.0;
 }
+
+typedef FeeBreakdown = OrderFeeBreakdown;
 
 class OrderItem {
   final String name;
@@ -355,10 +315,5 @@ double _moneyYuan(
 }
 
 OrderFeeBreakdown? _feeBreakdownFromJson(dynamic value) {
-  if (value is! Map) {
-    return null;
-  }
-  return OrderFeeBreakdown.fromJson(Map<String, dynamic>.from(value));
+  return OrderFeeBreakdown.fromJsonOrNull(value);
 }
-
-int _yuanToCents(double value) => (value * 100).round();

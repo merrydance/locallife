@@ -65,6 +65,8 @@ void main() {
         'total_amount': 8800,
         'status': 'paid',
         'created_at': '2026-04-12T08:00:00Z',
+        'delivery_contact_name': '张三',
+        'delivery_contact_phone': '13800138000',
         'notes': '少放葱',
         'fee_breakdown': {
           'customer_payable_amount': 8800,
@@ -92,6 +94,8 @@ void main() {
       expect(order.amount, 88.0);
       expect(order.status, OrderStatus.paid);
       expect(order.isAwaitingAcceptance, isTrue);
+      expect(order.userName, '张三');
+      expect(order.userPhone, '13800138000');
       expect(order.note, '少放葱');
       expect(order.hasReliableItems, isTrue);
       expect(order.feeBreakdown, isNotNull);
@@ -332,17 +336,17 @@ void main() {
         content: '您有一笔新订单',
         amount: 103.0,
         feeBreakdown: const OrderFeeBreakdown(
-          foodAmount: 100,
-          merchantDiscountAmount: 3,
-          voucherDiscountAmount: 2,
-          foodPayableAmount: 95,
-          deliveryFeeAmount: 8,
-          deliveryFeeDiscountAmount: 0,
-          deliveryPayableAmount: 8,
-          customerPayableAmount: 103,
-          platformServiceFeeAmount: 4.75,
-          paymentChannelFeeAmount: 0.57,
-          merchantReceivableAmount: 89.68,
+          foodAmountCents: 10000,
+          merchantDiscountAmountCents: 300,
+          voucherDiscountAmountCents: 200,
+          foodPayableAmountCents: 9500,
+          deliveryFeeAmountCents: 800,
+          deliveryFeeDiscountAmountCents: 0,
+          deliveryPayableAmountCents: 800,
+          customerPayableAmountCents: 10300,
+          platformServiceFeeAmountCents: 475,
+          paymentChannelFeeAmountCents: 57,
+          merchantReceivableAmountCents: 8968,
         ),
         shopName: '测试门店',
       );
