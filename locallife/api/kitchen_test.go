@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -176,9 +178,22 @@ func TestStartPreparingAPI(t *testing.T) {
 				updatedOrder := order
 				updatedOrder.Status = "preparing"
 				store.EXPECT().
-					UpdateOrderToPreparing(gomock.Any(), gomock.Eq(order.ID)).
+					GetOrderForUpdate(gomock.Any(), gomock.Eq(order.ID)).
 					Times(1).
-					Return(updatedOrder, nil)
+					Return(order, nil)
+				store.EXPECT().
+					GetMerchantProfile(gomock.Any(), merchant.ID).
+					Times(1).
+					Return(db.GetMerchantProfileRow{MerchantID: merchant.ID, IsTakeoutSuspended: false}, nil)
+				store.EXPECT().
+					UpdateOrderStatusTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ any, arg db.UpdateOrderStatusTxParams) (db.UpdateOrderStatusTxResult, error) {
+						require.Equal(t, order.ID, arg.OrderID)
+						require.Equal(t, db.OrderStatusPreparing, arg.NewStatus)
+						require.Equal(t, db.OrderStatusPaid, arg.OldStatus)
+						return db.UpdateOrderStatusTxResult{Order: updatedOrder}, nil
+					})
 
 				// Mock for convertToKitchenOrder
 				store.EXPECT().
@@ -190,6 +205,7 @@ func TestStartPreparingAPI(t *testing.T) {
 					CountOrderUrges(gomock.Any(), gomock.Eq(order.ID)).
 					Times(1).
 					Return(int64(0), nil)
+				expectReadyPrintConfigFallback(store, merchant.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -197,6 +213,65 @@ func TestStartPreparingAPI(t *testing.T) {
 				var response kitchenOrderResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "preparing", response.Status)
+			},
+		},
+		{
+			name:    "OK_TakeoutCreatesDeliveryPoolEntry",
+			orderID: order.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				takeoutOrder := order
+				takeoutOrder.OrderType = db.OrderTypeTakeout
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(order.ID)).
+					Times(1).
+					Return(takeoutOrder, nil)
+
+				updatedOrder := takeoutOrder
+				updatedOrder.Status = db.OrderStatusPreparing
+				store.EXPECT().
+					GetOrderForUpdate(gomock.Any(), gomock.Eq(order.ID)).
+					Times(1).
+					Return(takeoutOrder, nil)
+				store.EXPECT().
+					GetMerchantProfile(gomock.Any(), merchant.ID).
+					Times(1).
+					Return(db.GetMerchantProfileRow{MerchantID: merchant.ID, IsTakeoutSuspended: false}, nil)
+				store.EXPECT().
+					AcceptTakeoutOrderTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ any, arg db.AcceptTakeoutOrderTxParams) (db.AcceptTakeoutOrderTxResult, error) {
+						require.Equal(t, takeoutOrder.ID, arg.OrderID)
+						require.Equal(t, db.OrderStatusPaid, arg.OldStatus)
+						require.Equal(t, user.ID, arg.OperatorID)
+						require.Equal(t, "merchant", arg.OperatorType)
+						return db.AcceptTakeoutOrderTxResult{
+							Order:    updatedOrder,
+							PoolItem: db.DeliveryPool{OrderID: takeoutOrder.ID, MerchantID: merchant.ID},
+						}, nil
+					})
+
+				store.EXPECT().
+					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(order.ID)).
+					Times(1).
+					Return([]db.OrderItem{}, nil)
+
+				store.EXPECT().
+					CountOrderUrges(gomock.Any(), gomock.Eq(order.ID)).
+					Times(1).
+					Return(int64(0), nil)
+				expectReadyPrintConfigFallback(store, merchant.ID)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response kitchenOrderResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, db.OrderStatusPreparing, response.Status)
 			},
 		},
 		{
@@ -256,9 +331,13 @@ func TestStartPreparingAPI(t *testing.T) {
 					Return(preparingOrder, nil)
 
 				store.EXPECT().
-					UpdateOrderToPreparing(gomock.Any(), gomock.Eq(order.ID)).
+					GetOrderForUpdate(gomock.Any(), gomock.Eq(order.ID)).
 					Times(1).
-					Return(db.Order{}, db.ErrRecordNotFound)
+					Return(preparingOrder, nil)
+				store.EXPECT().
+					GetMerchantProfile(gomock.Any(), merchant.ID).
+					Times(1).
+					Return(db.GetMerchantProfileRow{MerchantID: merchant.ID, IsTakeoutSuspended: false}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -333,9 +412,18 @@ func TestMarkKitchenOrderReadyAPI(t *testing.T) {
 				updatedOrder := order
 				updatedOrder.Status = "ready"
 				store.EXPECT().
-					UpdateOrderToReady(gomock.Any(), gomock.Eq(order.ID)).
+					GetOrderForUpdate(gomock.Any(), gomock.Eq(order.ID)).
 					Times(1).
-					Return(updatedOrder, nil)
+					Return(order, nil)
+				store.EXPECT().
+					UpdateOrderStatusTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ any, arg db.UpdateOrderStatusTxParams) (db.UpdateOrderStatusTxResult, error) {
+						require.Equal(t, order.ID, arg.OrderID)
+						require.Equal(t, db.OrderStatusReady, arg.NewStatus)
+						require.Equal(t, db.OrderStatusPreparing, arg.OldStatus)
+						return db.UpdateOrderStatusTxResult{Order: updatedOrder}, nil
+					})
 				// Mock for convertToKitchenOrder
 				store.EXPECT().
 					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(order.ID)).
@@ -346,6 +434,7 @@ func TestMarkKitchenOrderReadyAPI(t *testing.T) {
 					CountOrderUrges(gomock.Any(), gomock.Eq(order.ID)).
 					Times(1).
 					Return(int64(0), nil)
+				expectReadyPrintConfigFallback(store, merchant.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -371,13 +460,51 @@ func TestMarkKitchenOrderReadyAPI(t *testing.T) {
 					Times(1).
 					Return(paidOrder, nil)
 
-				updatedOrder := order
-				updatedOrder.Status = "ready"
 				store.EXPECT().
-					UpdateOrderToReady(gomock.Any(), gomock.Eq(order.ID)).
+					GetOrderForUpdate(gomock.Any(), gomock.Eq(order.ID)).
 					Times(1).
-					Return(updatedOrder, nil)
-				// Mock for convertToKitchenOrder
+					Return(paidOrder, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:    "OK_TakeoutMarksReadyWithoutCreatingDeliveryPoolEntry",
+			orderID: order.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				takeoutOrder := order
+				takeoutOrder.OrderType = db.OrderTypeTakeout
+				takeoutOrder.Status = db.OrderStatusPreparing
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(order.ID)).
+					Times(1).
+					Return(takeoutOrder, nil)
+
+				updatedOrder := takeoutOrder
+				updatedOrder.Status = db.OrderStatusReady
+				store.EXPECT().
+					GetOrderForUpdate(gomock.Any(), gomock.Eq(order.ID)).
+					Times(1).
+					Return(takeoutOrder, nil)
+				store.EXPECT().
+					MarkTakeoutOrderReadyTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ any, arg db.MarkTakeoutOrderReadyTxParams) (db.MarkTakeoutOrderReadyTxResult, error) {
+						require.Equal(t, takeoutOrder.ID, arg.OrderID)
+						require.Equal(t, db.OrderStatusPreparing, arg.OldStatus)
+						require.Equal(t, user.ID, arg.OperatorID)
+						require.Equal(t, "merchant", arg.OperatorType)
+						return db.MarkTakeoutOrderReadyTxResult{
+							Order: updatedOrder,
+						}, nil
+					})
+
 				store.EXPECT().
 					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(order.ID)).
 					Times(1).
@@ -387,9 +514,14 @@ func TestMarkKitchenOrderReadyAPI(t *testing.T) {
 					CountOrderUrges(gomock.Any(), gomock.Eq(order.ID)).
 					Times(1).
 					Return(int64(0), nil)
+				expectReadyPrintConfigFallback(store, merchant.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response kitchenOrderResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, db.OrderStatusReady, response.Status)
 			},
 		},
 		{
@@ -409,9 +541,9 @@ func TestMarkKitchenOrderReadyAPI(t *testing.T) {
 					Return(completedOrder, nil)
 
 				store.EXPECT().
-					UpdateOrderToReady(gomock.Any(), gomock.Eq(order.ID)).
+					GetOrderForUpdate(gomock.Any(), gomock.Eq(order.ID)).
 					Times(1).
-					Return(db.Order{}, db.ErrRecordNotFound)
+					Return(completedOrder, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -438,6 +570,73 @@ func TestMarkKitchenOrderReadyAPI(t *testing.T) {
 			tc.setupAuth(t, request, server.tokenMaker)
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
+func expectReadyPrintConfigFallback(store *mockdb.MockStore, merchantID int64) {
+	store.EXPECT().
+		GetOrderDisplayConfigByMerchant(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.OrderDisplayConfig{}, db.ErrRecordNotFound)
+}
+
+func TestMarkKitchenOrderReadyAPILogicErrorMapping(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	merchant.IsOpen = true
+	order := randomKitchenOrder(merchant.ID, user.ID)
+	order.Status = db.OrderStatusPreparing
+	order.OrderType = db.OrderTypeTakeout
+
+	testCases := []struct {
+		name       string
+		serviceErr error
+		wantCode   int
+	}{
+		{
+			name:       "FoodSafetySuspended",
+			serviceErr: logic.NewRequestError(http.StatusForbidden, errors.New("食安暂停期间不可继续处理外卖订单")),
+			wantCode:   http.StatusForbidden,
+		},
+		{
+			name:       "InfraFailure",
+			serviceErr: errors.New("database unavailable"),
+			wantCode:   http.StatusInternalServerError,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+			store.EXPECT().
+				GetOrder(gomock.Any(), gomock.Eq(order.ID)).
+				Times(1).
+				Return(order, nil)
+			store.EXPECT().
+				GetOrderForUpdate(gomock.Any(), gomock.Eq(order.ID)).
+				Times(1).
+				Return(order, nil)
+			store.EXPECT().
+				MarkTakeoutOrderReadyTx(gomock.Any(), gomock.Any()).
+				Times(1).
+				Return(db.MarkTakeoutOrderReadyTxResult{}, tc.serviceErr)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			url := fmt.Sprintf("/v1/kitchen/orders/%d/ready", order.ID)
+			request, err := http.NewRequest(http.MethodPost, url, nil)
+			require.NoError(t, err)
+
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			server.router.ServeHTTP(recorder, request)
+			require.Equal(t, tc.wantCode, recorder.Code)
 		})
 	}
 }

@@ -123,7 +123,7 @@ func TestAcceptMerchantOrder(t *testing.T) {
 			},
 		},
 		{
-			name: "TakeoutSuccessDoesNotAddPoolEntry",
+			name: "TakeoutSuccessAddsPoolEntry",
 			buildStubs: func(store *mockdb.MockStore) {
 				order := baseOrder
 				order.OrderType = db.OrderTypeTakeout
@@ -143,13 +143,17 @@ func TestAcceptMerchantOrder(t *testing.T) {
 						require.Equal(t, db.OrderStatusPaid, arg.OldStatus)
 						updated := order
 						updated.Status = db.OrderStatusPreparing
-						return db.AcceptTakeoutOrderTxResult{Order: updated}, nil
+						return db.AcceptTakeoutOrderTxResult{
+							Order:    updated,
+							PoolItem: db.DeliveryPool{OrderID: input.OrderID, MerchantID: input.MerchantID},
+						}, nil
 					})
 			},
 			check: func(t *testing.T, result MerchantOrderUpdateResult, err error) {
 				require.NoError(t, err)
 				require.Equal(t, db.OrderStatusPreparing, result.Order.Status)
-				require.Nil(t, result.PoolItem)
+				require.NotNil(t, result.PoolItem)
+				require.Equal(t, input.OrderID, result.PoolItem.OrderID)
 			},
 		},
 	}
@@ -288,7 +292,7 @@ func TestMarkMerchantOrderReady(t *testing.T) {
 			},
 		},
 		{
-			name: "TakeoutSuccessAddsPoolEntry",
+			name: "TakeoutSuccessDoesNotAddPoolEntry",
 			buildStubs: func(store *mockdb.MockStore) {
 				order := baseOrder
 				order.OrderType = db.OrderTypeTakeout
@@ -305,16 +309,14 @@ func TestMarkMerchantOrderReady(t *testing.T) {
 						updated := order
 						updated.Status = db.OrderStatusReady
 						return db.MarkTakeoutOrderReadyTxResult{
-							Order:    updated,
-							PoolItem: db.DeliveryPool{OrderID: input.OrderID, MerchantID: input.MerchantID},
+							Order: updated,
 						}, nil
 					})
 			},
 			check: func(t *testing.T, result MerchantOrderUpdateResult, err error) {
 				require.NoError(t, err)
 				require.Equal(t, db.OrderStatusReady, result.Order.Status)
-				require.NotNil(t, result.PoolItem)
-				require.Equal(t, input.OrderID, result.PoolItem.OrderID)
+				require.Nil(t, result.PoolItem)
 			},
 		},
 	}

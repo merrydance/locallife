@@ -61,7 +61,7 @@ func AcceptMerchantOrder(ctx context.Context, store db.Store, input MerchantOrde
 			return MerchantOrderUpdateResult{}, err
 		}
 
-		return MerchantOrderUpdateResult{Order: result.Order, Previous: order}, nil
+		return MerchantOrderUpdateResult{Order: result.Order, Previous: order, PoolItem: &result.PoolItem}, nil
 	}
 
 	fulfillment := db.FulfillmentStatusPreparing
@@ -145,7 +145,7 @@ func MarkMerchantOrderReady(ctx context.Context, store db.Store, input MerchantO
 			return MerchantOrderUpdateResult{}, err
 		}
 
-		return MerchantOrderUpdateResult{Order: result.Order, Previous: order, PoolItem: &result.PoolItem}, nil
+		return MerchantOrderUpdateResult{Order: result.Order, Previous: order}, nil
 	}
 
 	fulfillment := db.FulfillmentStatusReady

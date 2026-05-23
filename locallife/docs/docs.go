@@ -8230,7 +8230,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "将订单标记为制作中状态（仅已支付订单可操作）",
+                "description": "商户接单并将订单标记为制作中状态（仅已支付订单可操作；外卖订单会进入骑手接单池）",
                 "produces": [
                     "application/json"
                 ],
@@ -8294,7 +8294,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "将订单标记为出餐完成/待取餐状态（仅制作中或已支付订单可操作）",
+                "description": "将订单标记为出餐完成/待取餐状态（仅制作中订单可操作）",
                 "produces": [
                     "application/json"
                 ],

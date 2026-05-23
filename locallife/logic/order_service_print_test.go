@@ -15,6 +15,20 @@ type orderPrintTaskSchedulerStub struct {
 	inputs []OrderPrintTaskInput
 }
 
+type orderServiceEventPublisherStub struct {
+	pooled []db.DeliveryPool
+}
+
+func (s *orderServiceEventPublisherStub) PublishMerchantOrderSnapshot(ctx context.Context, merchantID int64, order db.Order, messageType string) {
+}
+
+func (s *orderServiceEventPublisherStub) PublishMerchantUserRiskAlert(ctx context.Context, merchantID int64, alert MerchantUserRiskAlert) {
+}
+
+func (s *orderServiceEventPublisherStub) PublishTakeoutOrderPooled(ctx context.Context, order db.Order, poolItem db.DeliveryPool) {
+	s.pooled = append(s.pooled, poolItem)
+}
+
 func (s *orderPrintTaskSchedulerStub) ScheduleOrderPaymentTimeout(ctx context.Context, orderID int64, atTime time.Time) error {
 	return nil
 }
@@ -79,6 +93,33 @@ func TestOrderServiceAcceptMerchantOrder_SchedulesPrintWhenAcceptedTriggerEnable
 	require.Equal(t, OrderPrintTaskInput{OrderID: input.OrderID, Trigger: "accepted"}, scheduler.inputs[0])
 }
 
+func TestOrderServiceAcceptMerchantOrder_BroadcastsTakeoutPoolEntry(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	events := &orderServiceEventPublisherStub{}
+	service := NewOrderService(store, nil, nil, events, nil, nil, nil, nil, nil, nil, nil)
+
+	input := MerchantOrderUpdateInput{MerchantID: 10, OrderID: 20, OperatorID: 30}
+	order := db.Order{ID: input.OrderID, MerchantID: input.MerchantID, OrderType: db.OrderTypeTakeout, Status: db.OrderStatusPaid}
+	poolItem := db.DeliveryPool{OrderID: input.OrderID, MerchantID: input.MerchantID}
+
+	store.EXPECT().GetOrderForUpdate(gomock.Any(), input.OrderID).Return(order, nil)
+	store.EXPECT().GetMerchantProfile(gomock.Any(), input.MerchantID).Return(db.GetMerchantProfileRow{MerchantID: input.MerchantID, IsTakeoutSuspended: false}, nil)
+	store.EXPECT().AcceptTakeoutOrderTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.AcceptTakeoutOrderTxParams) (db.AcceptTakeoutOrderTxResult, error) {
+		updated := order
+		updated.Status = db.OrderStatusPreparing
+		return db.AcceptTakeoutOrderTxResult{Order: updated, PoolItem: poolItem}, nil
+	})
+
+	result, err := service.AcceptMerchantOrder(context.Background(), input)
+	require.NoError(t, err)
+	require.Equal(t, db.OrderStatusPreparing, result.Order.Status)
+	require.Len(t, events.pooled, 1)
+	require.Equal(t, poolItem.OrderID, events.pooled[0].OrderID)
+}
+
 func TestOrderServiceMarkMerchantOrderReady_RespectsPrintTrigger(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -111,6 +152,30 @@ func TestOrderServiceMarkMerchantOrderReady_RespectsPrintTrigger(t *testing.T) {
 	require.Equal(t, db.OrderStatusReady, result.Order.Status)
 	require.Len(t, scheduler.inputs, 1)
 	require.Equal(t, OrderPrintTaskInput{OrderID: input.OrderID, Trigger: "ready"}, scheduler.inputs[0])
+}
+
+func TestOrderServiceMarkMerchantOrderReady_DoesNotBroadcastTakeoutPoolEntry(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	events := &orderServiceEventPublisherStub{}
+	service := NewOrderService(store, nil, nil, events, nil, nil, nil, nil, nil, nil, nil)
+
+	input := MerchantOrderUpdateInput{MerchantID: 11, OrderID: 21, OperatorID: 31}
+	order := db.Order{ID: input.OrderID, MerchantID: input.MerchantID, OrderType: db.OrderTypeTakeout, Status: db.OrderStatusPreparing}
+
+	store.EXPECT().GetOrderForUpdate(gomock.Any(), input.OrderID).Return(order, nil)
+	store.EXPECT().MarkTakeoutOrderReadyTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.MarkTakeoutOrderReadyTxParams) (db.MarkTakeoutOrderReadyTxResult, error) {
+		updated := order
+		updated.Status = db.OrderStatusReady
+		return db.MarkTakeoutOrderReadyTxResult{Order: updated}, nil
+	})
+
+	result, err := service.MarkMerchantOrderReady(context.Background(), input)
+	require.NoError(t, err)
+	require.Equal(t, db.OrderStatusReady, result.Order.Status)
+	require.Empty(t, events.pooled)
 }
 
 func TestOrderServicePrintMerchantOrder_SchedulesManualPrintWhenEnabled(t *testing.T) {

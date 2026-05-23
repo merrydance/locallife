@@ -571,6 +571,9 @@ func (s *OrderService) AcceptMerchantOrder(ctx context.Context, input MerchantOr
 
 	if s.eventPublisher != nil {
 		s.eventPublisher.PublishMerchantOrderSnapshot(ctx, input.MerchantID, result.Order, "order_update")
+		if result.PoolItem != nil {
+			s.eventPublisher.PublishTakeoutOrderPooled(ctx, result.Order, *result.PoolItem)
+		}
 	}
 
 	s.scheduleOrderPrint(ctx, result.Order, printTriggerAccepted)
@@ -642,9 +645,6 @@ func (s *OrderService) MarkMerchantOrderReady(ctx context.Context, input Merchan
 
 	if s.eventPublisher != nil {
 		s.eventPublisher.PublishMerchantOrderSnapshot(ctx, input.MerchantID, result.Order, "order_update")
-		if result.PoolItem != nil {
-			s.eventPublisher.PublishTakeoutOrderPooled(ctx, result.Order, *result.PoolItem)
-		}
 	}
 
 	s.scheduleOrderPrint(ctx, result.Order, printTriggerReady)

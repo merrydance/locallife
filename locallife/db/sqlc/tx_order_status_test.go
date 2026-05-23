@@ -76,7 +76,7 @@ func TestUpdateOrderStatusTx_MerchantAccept(t *testing.T) {
 	require.Equal(t, "merchant", result.StatusLog.OperatorType.String)
 }
 
-func TestAcceptTakeoutOrderTx_DoesNotAddOrderToDeliveryPool(t *testing.T) {
+func TestAcceptTakeoutOrderTx_AddsOrderToDeliveryPool(t *testing.T) {
 	user := createRandomUser(t)
 	merchantOwner := createRandomUser(t)
 	merchant := createMerchantWithLocation(t, merchantOwner.ID)
@@ -122,15 +122,23 @@ func TestAcceptTakeoutOrderTx_DoesNotAddOrderToDeliveryPool(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, OrderStatusPreparing, result.Order.Status)
+	require.Equal(t, createResult.Order.ID, result.Delivery.OrderID)
+	require.Equal(t, createResult.Order.ID, result.PoolItem.OrderID)
+	require.Equal(t, merchant.ID, result.PoolItem.MerchantID)
+	require.Equal(t, int32(2), result.PoolItem.Priority)
+	require.Equal(t, merchant.Address, result.Delivery.PickupAddress)
+	require.Equal(t, address.DetailAddress, result.Delivery.DeliveryAddress)
 
-	_, err = testStore.GetDeliveryByOrderID(context.Background(), createResult.Order.ID)
-	require.ErrorIs(t, err, ErrRecordNotFound)
+	delivery, err := testStore.GetDeliveryByOrderID(context.Background(), createResult.Order.ID)
+	require.NoError(t, err)
+	require.Equal(t, result.Delivery.ID, delivery.ID)
 
-	_, err = testStore.GetDeliveryPoolByOrderID(context.Background(), createResult.Order.ID)
-	require.ErrorIs(t, err, ErrRecordNotFound)
+	poolItem, err := testStore.GetDeliveryPoolByOrderID(context.Background(), createResult.Order.ID)
+	require.NoError(t, err)
+	require.Equal(t, result.PoolItem.ID, poolItem.ID)
 }
 
-func TestMarkTakeoutOrderReadyTx_AddsOrderToDeliveryPool(t *testing.T) {
+func TestMarkTakeoutOrderReadyTx_DoesNotCreateDeliveryPoolEntry(t *testing.T) {
 	user := createRandomUser(t)
 	merchantOwner := createRandomUser(t)
 	merchant := createMerchantWithLocation(t, merchantOwner.ID)
@@ -165,7 +173,7 @@ func TestMarkTakeoutOrderReadyTx_AddsOrderToDeliveryPool(t *testing.T) {
 	_, err = testStore.GetDeliveryByOrderID(context.Background(), createResult.Order.ID)
 	require.ErrorIs(t, err, ErrRecordNotFound)
 
-	_, err = testStore.AcceptTakeoutOrderTx(context.Background(), AcceptTakeoutOrderTxParams{
+	acceptResult, err := testStore.AcceptTakeoutOrderTx(context.Background(), AcceptTakeoutOrderTxParams{
 		OrderID:      createResult.Order.ID,
 		OldStatus:    OrderStatusPaid,
 		OperatorID:   merchantOwner.ID,
@@ -173,8 +181,8 @@ func TestMarkTakeoutOrderReadyTx_AddsOrderToDeliveryPool(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = testStore.GetDeliveryPoolByOrderID(context.Background(), createResult.Order.ID)
-	require.ErrorIs(t, err, ErrRecordNotFound)
+	err = testStore.RemoveFromDeliveryPool(context.Background(), createResult.Order.ID)
+	require.NoError(t, err)
 
 	result, err := testStore.MarkTakeoutOrderReadyTx(context.Background(), MarkTakeoutOrderReadyTxParams{
 		OrderID:      createResult.Order.ID,
@@ -184,16 +192,11 @@ func TestMarkTakeoutOrderReadyTx_AddsOrderToDeliveryPool(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, OrderStatusReady, result.Order.Status)
-	require.Equal(t, createResult.Order.ID, result.Delivery.OrderID)
-	require.Equal(t, createResult.Order.ID, result.PoolItem.OrderID)
-	require.Equal(t, merchant.ID, result.PoolItem.MerchantID)
-	require.Equal(t, int32(2), result.PoolItem.Priority)
-	require.Equal(t, merchant.Address, result.Delivery.PickupAddress)
-	require.Equal(t, address.DetailAddress, result.Delivery.DeliveryAddress)
+	require.NotZero(t, acceptResult.Delivery.ID)
+	require.NotZero(t, acceptResult.PoolItem.ID)
 
-	poolItem, err := testStore.GetDeliveryPoolByOrderID(context.Background(), createResult.Order.ID)
-	require.NoError(t, err)
-	require.Equal(t, result.PoolItem.ID, poolItem.ID)
+	_, err = testStore.GetDeliveryPoolByOrderID(context.Background(), createResult.Order.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
 }
 
 func TestMarkTakeoutOrderReadyTx_UsesOrderDeliverySnapshotAfterAddressUpdate(t *testing.T) {
@@ -252,20 +255,23 @@ func TestMarkTakeoutOrderReadyTx_UsesOrderDeliverySnapshotAfterAddressUpdate(t *
 	})
 	require.NoError(t, err)
 
-	result, err := testStore.MarkTakeoutOrderReadyTx(context.Background(), MarkTakeoutOrderReadyTxParams{
+	_, err = testStore.MarkTakeoutOrderReadyTx(context.Background(), MarkTakeoutOrderReadyTxParams{
 		OrderID:      createResult.Order.ID,
 		OldStatus:    OrderStatusPreparing,
 		OperatorID:   merchantOwner.ID,
 		OperatorType: "merchant",
 	})
 	require.NoError(t, err)
-	require.Equal(t, address.DetailAddress, result.Delivery.DeliveryAddress)
-	require.True(t, result.Delivery.DeliveryContact.Valid)
-	require.Equal(t, address.ContactName, result.Delivery.DeliveryContact.String)
-	require.True(t, result.Delivery.DeliveryPhone.Valid)
-	require.Equal(t, address.ContactPhone, result.Delivery.DeliveryPhone.String)
-	require.Equal(t, address.Longitude, result.Delivery.DeliveryLongitude)
-	require.Equal(t, address.Latitude, result.Delivery.DeliveryLatitude)
+
+	delivery, err := testStore.GetDeliveryByOrderID(context.Background(), createResult.Order.ID)
+	require.NoError(t, err)
+	require.Equal(t, address.DetailAddress, delivery.DeliveryAddress)
+	require.True(t, delivery.DeliveryContact.Valid)
+	require.Equal(t, address.ContactName, delivery.DeliveryContact.String)
+	require.True(t, delivery.DeliveryPhone.Valid)
+	require.Equal(t, address.ContactPhone, delivery.DeliveryPhone.String)
+	require.Equal(t, address.Longitude, delivery.DeliveryLongitude)
+	require.Equal(t, address.Latitude, delivery.DeliveryLatitude)
 }
 
 func TestUpdateOrderStatusTx_MarkReady(t *testing.T) {

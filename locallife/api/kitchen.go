@@ -7,6 +7,7 @@ import (
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 
@@ -248,7 +249,7 @@ func (server *Server) listKitchenOrders(ctx *gin.Context) {
 
 // startPreparing godoc
 // @Summary 开始制作订单
-// @Description 将订单标记为制作中状态（仅已支付订单可操作）
+// @Description 商户接单并将订单标记为制作中状态（仅已支付订单可操作；外卖订单会进入骑手接单池）
 // @Tags 厨房管理(KDS)
 // @Produce json
 // @Param id path int true "订单ID"
@@ -298,17 +299,24 @@ func (server *Server) startPreparing(ctx *gin.Context) {
 		return
 	}
 
-	// P1-035 修复：使用带状态条件的原子 UPDATE，防止并发竞态
-	// WHERE id = $1 AND status = 'paid'，如果状态不匹配则返回 no rows
-	updatedOrder, err := server.store.UpdateOrderToPreparing(ctx, uri.OrderID)
+	service := server.orderCommandSvc
+	if service == nil {
+		service = server.buildOrderCommandService()
+	}
+
+	result, err := service.AcceptMerchantOrder(ctx, logic.MerchantOrderUpdateInput{
+		MerchantID: merchant.ID,
+		OrderID:    uri.OrderID,
+		OperatorID: authPayload.UserID,
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order is not in paid status or already being processed")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+	updatedOrder := result.Order
 
 	// 转换为厨房订单响应
 	ko, err := server.convertToKitchenOrder(ctx, updatedOrder)
@@ -322,7 +330,7 @@ func (server *Server) startPreparing(ctx *gin.Context) {
 
 // markKitchenOrderReady godoc
 // @Summary 标记订单出餐完成
-// @Description 将订单标记为出餐完成/待取餐状态（仅制作中或已支付订单可操作）
+// @Description 将订单标记为出餐完成/待取餐状态（仅制作中订单可操作）
 // @Tags 厨房管理(KDS)
 // @Produce json
 // @Param id path int true "订单ID"
@@ -355,7 +363,7 @@ func (server *Server) markKitchenOrderReady(ctx *gin.Context) {
 		return
 	}
 
-	// 获取订单（仅用于归属校验和通知）
+	// 获取订单（用于归属校验；统一订单服务负责后续状态流转和通知）
 	order, err := server.store.GetOrder(ctx, uri.OrderID)
 	if err != nil {
 		if isNotFoundError(err) {
@@ -372,27 +380,24 @@ func (server *Server) markKitchenOrderReady(ctx *gin.Context) {
 		return
 	}
 
-	// P1-035 修复：使用带状态条件的原子 UPDATE，防止并发竞态
-	// WHERE id = $1 AND status IN ('paid', 'preparing')，如果状态不匹配则返回 no rows
-	updatedOrder, err := server.store.UpdateOrderToReady(ctx, uri.OrderID)
+	service := server.orderCommandSvc
+	if service == nil {
+		service = server.buildOrderCommandService()
+	}
+
+	result, err := service.MarkMerchantOrderReady(ctx, logic.MerchantOrderUpdateInput{
+		MerchantID: merchant.ID,
+		OrderID:    uri.OrderID,
+		OperatorID: authPayload.UserID,
+	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("order is not in preparing or paid status, or already being processed")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-
-	// 发送出餐通知给用户
-	_ = server.SendNotification(ctx, SendNotificationParams{
-		UserID:      order.UserID,
-		Title:       "您的订单已出餐",
-		Content:     fmt.Sprintf("订单 %s 已准备就绪，请及时取餐/等待配送", order.OrderNo),
-		Type:        "order_ready",
-		RelatedType: "order",
-		RelatedID:   order.ID,
-	})
+	updatedOrder := result.Order
 
 	// 转换为厨房订单响应
 	ko, err := server.convertToKitchenOrder(ctx, updatedOrder)

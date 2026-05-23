@@ -28,6 +28,8 @@ type AcceptTakeoutOrderTxParams struct {
 type AcceptTakeoutOrderTxResult struct {
 	Order     Order
 	StatusLog OrderStatusLog
+	Delivery  Delivery
+	PoolItem  DeliveryPool
 }
 
 type MarkTakeoutOrderReadyTxParams struct {
@@ -40,8 +42,6 @@ type MarkTakeoutOrderReadyTxParams struct {
 type MarkTakeoutOrderReadyTxResult struct {
 	Order     Order
 	StatusLog OrderStatusLog
-	Delivery  Delivery
-	PoolItem  DeliveryPool
 }
 
 func (store *SQLStore) AcceptTakeoutOrderTx(ctx context.Context, arg AcceptTakeoutOrderTxParams) (AcceptTakeoutOrderTxResult, error) {
@@ -73,6 +73,16 @@ func (store *SQLStore) AcceptTakeoutOrderTx(ctx context.Context, arg AcceptTakeo
 		})
 		if err != nil {
 			return fmt.Errorf("create takeout accept status log: %w", err)
+		}
+
+		result.Delivery, err = ensureTakeoutDeliveryCreated(ctx, q, result.Order)
+		if err != nil {
+			return err
+		}
+
+		result.PoolItem, err = addTakeoutOrderToDeliveryPool(ctx, q, result.Order, result.Delivery)
+		if err != nil {
+			return err
 		}
 
 		return nil
@@ -110,16 +120,6 @@ func (store *SQLStore) MarkTakeoutOrderReadyTx(ctx context.Context, arg MarkTake
 		})
 		if err != nil {
 			return fmt.Errorf("create takeout ready status log: %w", err)
-		}
-
-		result.Delivery, err = ensureTakeoutDeliveryCreated(ctx, q, result.Order)
-		if err != nil {
-			return err
-		}
-
-		result.PoolItem, err = addTakeoutOrderToDeliveryPool(ctx, q, result.Order, result.Delivery)
-		if err != nil {
-			return err
 		}
 
 		return nil
