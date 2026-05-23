@@ -2,7 +2,6 @@ import Navigation from '../../../utils/navigation'
 import { logger } from '../../../utils/logger'
 import CartService from '../../../services/cart'
 import {
-  confirmOrder,
   urgeOrder,
   isCancelledOrderStatus,
   isDeliveringOrderStatus,
@@ -15,6 +14,7 @@ import {
   isTrackableOrderStatus
 } from '../../../api/order'
 import { startPaymentOrderWorkflow } from '../../../services/payment-workflow'
+import { confirmReceiptWithRecovery } from '../../../services/order-receipt-confirmation'
 import { OrderAdapter } from '../../../adapters/order'
 import { OrderDetail } from '../../../models/order'
 import { generateOrderTimeline } from '../../../utils/timeline'
@@ -407,48 +407,14 @@ Page({
     const { orderDTO } = this.data
     if (!orderDTO) return
 
-    const transactionId = orderDTO.wechat_transaction_id
-    if (!transactionId) {
-      // 无微信支付交易号（如余额支付），直接走本地确认
-      wx.showModal({
-        title: '确认收货',
-        content: '确认已收到订单？',
-        success: async (res) => {
-          if (res.confirm) {
-            wx.showLoading({ title: '处理中...' })
-            try {
-              await confirmOrder(parseInt(this.data.orderId))
-              wx.hideLoading()
-              await this.loadOrderDetail()
-            } catch (error) {
-              wx.hideLoading()
-              logger.error('确认收货失败', error, 'Detail.onConfirmReceipt')
-              wx.showToast({ title: '确认失败', icon: 'error' })
-            }
-          }
-        }
-      })
-      return
-    }
-
-    // 有微信支付交易号：通过微信官方确认收货组件
-    const app = getApp<IAppOption>()
-    app.globalData.pendingConfirmOrderId = parseInt(this.data.orderId)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((wx as any).openBusinessView) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (wx as any).openBusinessView({
-        businessType: 'weappOrderConfirm',
-        extraData: { transaction_id: transactionId },
-        fail() {
-          app.globalData.pendingConfirmOrderId = undefined
-          logger.error('打开确认收货组件失败', undefined, 'Detail.onConfirmReceipt')
-          wx.showToast({ title: '打开失败，请重试', icon: 'none' })
-        }
-      })
-    } else {
-      app.globalData.pendingConfirmOrderId = undefined
-      wx.showToast({ title: '请升级微信后重试', icon: 'none' })
+    const result = await confirmReceiptWithRecovery({
+      orderId: parseInt(this.data.orderId, 10),
+      transactionId: orderDTO.wechat_transaction_id,
+      modalContent: '确认已收到订单？',
+      source: 'Detail.onConfirmReceipt'
+    })
+    if (result.status === 'confirmed') {
+      await this.loadOrderDetail()
     }
   },
   

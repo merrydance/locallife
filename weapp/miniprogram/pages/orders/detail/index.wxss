@@ -290,20 +290,32 @@
 }
 
 .bottom-actions {
-  display: flex;
-  justify-content: space-between;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.bottom-actions-row {
+  display: inline-flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  min-width: 100%;
 }
 
 .secondary-actions {
   display: flex;
+  flex: 0 0 auto;
   gap: 16rpx;
 }
 
 .primary-actions {
   display: flex;
+  flex: 0 0 auto;
   gap: 16rpx;
-  margin-left: auto;
+}
+
+.bottom-action-button {
+  flex: 0 0 auto;
 }
 
 /* weapp-gate allow-tdesign-internal-class: 订单详情 CTA 仍沿用 TDesign medium 尺寸档位，按钮字重待切到外层类控制后移除 */

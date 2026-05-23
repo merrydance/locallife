@@ -1,9 +1,8 @@
-import DeliveryService, { Delivery, DeliveryLocationPoint } from '../../../api/delivery'
-import { mapService, MapMarker, MapPoint, MapPolyline } from '../../../services/map'
+import DeliveryService, { Delivery } from '../../../api/delivery'
 import { logger } from '../../../utils/logger'
 import { locationService } from '../../../utils/location'
 import { normalizeLocationError, syncRiderDeliveryLocation } from '../../../utils/rider-location'
-import { riderLiveLocationSession, RiderLiveLocationState } from '../../../utils/rider-live-location'
+import { riderLiveLocationSession } from '../../../utils/rider-live-location'
 import {
     getRiderDeliveryActionState,
     getRiderDeliveryDeadline,
@@ -12,10 +11,8 @@ import {
     isRiderDeliveryTrackedStatus,
     RiderDeliveryActionKey
 } from '../../../utils/rider-delivery-view'
-import { getRiderLocationStatusView } from '../../../utils/rider-location-status-view'
 import { buildRiderDeliveryIncomeView, RiderDeliveryIncomeView } from '../../../utils/rider-delivery-income-view'
 import { getStableBarHeights } from '../../../utils/responsive'
-import { resolveStatusTagTheme, type StatusTagTheme } from '../../../utils/status-tag'
 
 interface RiderTaskDetailOptions {
     id?: string
@@ -34,8 +31,6 @@ type DeliveryView = Delivery & {
     income_view: RiderDeliveryIncomeView
 }
 
-let taskDetailLocationUnsubscribe: null | (() => void) = null
-
 const DELIVERY_ACTION_METHODS: Record<Exclude<RiderDeliveryActionKey, ''>, DeliveryAction> = {
     start_pickup: DeliveryService.startPickup,
     confirm_pickup: DeliveryService.confirmPickup,
@@ -48,40 +43,12 @@ function getUserMessage(err: unknown, fallback: string) {
     return typeof userMessage === 'string' && userMessage ? userMessage : fallback
 }
 
-function formatRelativeTime(timeStr: string): string {
-    if (!timeStr) return '刚刚'
-
-    const diff = Date.now() - new Date(timeStr).getTime()
-    if (!Number.isFinite(diff) || diff < 0) {
-        return '刚刚'
-    }
-
-    const minutes = Math.floor(diff / 60000)
-    if (minutes < 1) return '刚刚'
-    if (minutes < 60) return `${minutes} 分钟前`
-
-    const hours = Math.floor(minutes / 60)
-    if (hours < 24) return `${hours} 小时前`
-
-    const days = Math.floor(hours / 24)
-    return `${days} 天前`
-}
-
-function toMapPoint(point: DeliveryLocationPoint | null): MapPoint | null {
-    if (!point) return null
-    return {
-        latitude: point.latitude,
-        longitude: point.longitude
-    }
-}
-
 Page({
     data: {
         orderId: 0,
         delivery: null as DeliveryView | null,
         loading: false,
         actionLoading: false,
-        locationRetrying: false,
         errorMessage: '',
         syncWarningMessage: '',
         navBarHeight: 88,
@@ -93,26 +60,7 @@ Page({
             { title: '配送中', status: 'delivering' },
             { title: '已送达', status: 'completed' }
         ],
-        currentStep: 0,
-
-        mapCenter: { latitude: 39.9, longitude: 116.4 },
-        mapScale: 13,
-        markers: [] as MapMarker[],
-        polyline: [] as MapPolyline[],
-        includePoints: [] as MapPoint[],
-        serverTrackPoints: [] as MapPoint[],
-        routePoints: [] as MapPoint[],
-        serverLatestPoint: null as MapPoint | null,
-        serverLatestRecordedAt: '',
-        routeSummary: '',
-
-        locationStatusText: '等待进入配送',
-        locationStatusTheme: resolveStatusTagTheme('neutral') as StatusTagTheme,
-        locationPendingText: '',
-        locationUpdatedText: '暂无定位记录',
-        locationActionText: '立即刷新',
-        showLocationAction: false,
-        needsLocationPermission: false
+        currentStep: 0
     },
 
     onLoad(options: RiderTaskDetailOptions) {
@@ -121,7 +69,6 @@ Page({
             navBarHeight,
             orderId: Number(options.id || 0)
         })
-        this.bindLocationSession()
         this.fetchTaskDetail()
     },
 
@@ -131,13 +78,6 @@ Page({
         }
         if (this.data.delivery && !this.data.loading && !this.data.actionLoading) {
             void this.fetchTaskDetail(true)
-        }
-    },
-
-    onUnload() {
-        if (taskDetailLocationUnsubscribe) {
-            taskDetailLocationUnsubscribe()
-            taskDetailLocationUnsubscribe = null
         }
     },
 
@@ -156,13 +96,9 @@ Page({
                 syncWarningMessage: ''
             })
 
-            await this.loadLocationMap(deliveryView)
-
             if (isRiderDeliveryTrackedStatus(deliveryView.status)) {
                 await riderLiveLocationSession.setActiveDelivery(deliveryView.id, 'rider_task_detail_fetch')
             }
-
-            this.applyLocationSessionState(riderLiveLocationSession.getState())
         } catch (err: unknown) {
             logger.error('Fetch task detail failed', err)
             const message = getUserMessage(err, '任务详情加载失败，请稍后重试')
@@ -191,7 +127,6 @@ Page({
                 currentStep: this.mapStatusToStep(latest.status),
                 errorMessage: ''
             })
-            await this.loadLocationMap(deliveryView)
             return true
         } catch (err: unknown) {
             logger.warn('Reconcile task detail state failed', { expectedStatus, err }, 'RiderTaskDetail')
@@ -232,165 +167,6 @@ Page({
         }
 
         return `${hours}:${minutes} 前`
-    },
-
-    bindLocationSession() {
-        if (taskDetailLocationUnsubscribe) {
-            taskDetailLocationUnsubscribe()
-        }
-
-        taskDetailLocationUnsubscribe = riderLiveLocationSession.subscribe((state) => {
-            this.applyLocationSessionState(state)
-        })
-    },
-
-    buildLocationView(state: RiderLiveLocationState | null, fallbackRecordedAt: string) {
-        if (!state || !state.activeDeliveryId || !this.data.delivery || state.activeDeliveryId !== this.data.delivery.id) {
-            return {
-                locationStatusText: isRiderDeliveryTrackedStatus(this.data.delivery?.status) ? '等待连续定位启动' : '当前状态无需定位',
-                locationStatusTheme: resolveStatusTagTheme('neutral') as StatusTagTheme,
-                locationPendingText: '',
-                locationUpdatedText: fallbackRecordedAt ? `最近轨迹 ${formatRelativeTime(fallbackRecordedAt)}` : '暂无定位记录',
-                locationActionText: '立即刷新',
-                showLocationAction: !!this.data.delivery && isRiderDeliveryTrackedStatus(this.data.delivery.status),
-                needsLocationPermission: false
-            }
-        }
-
-        const updatedText = state.lastUploadedAt
-            ? `最近上传 ${formatRelativeTime(state.lastUploadedAt)}`
-            : (fallbackRecordedAt ? `最近轨迹 ${formatRelativeTime(fallbackRecordedAt)}` : '暂未上传')
-
-        const pendingText = state.pendingCount > 0
-            ? `待补发 ${state.pendingCount} 个定位点`
-            : ''
-
-        const baseView = {
-            locationPendingText: pendingText,
-            locationUpdatedText: updatedText,
-            locationActionText: state.uploadState === 'permission_required' ? '开启定位' : '立即刷新',
-            showLocationAction: state.uploadState === 'permission_required' || state.uploadState === 'retrying' || state.uploadState === 'tracking',
-            needsLocationPermission: state.uploadState === 'permission_required'
-        }
-
-        const locationStatusView = getRiderLocationStatusView(state.uploadState)
-        return {
-            ...baseView,
-            locationStatusText: locationStatusView.text,
-            locationStatusTheme: locationStatusView.theme,
-            needsLocationPermission: locationStatusView.needsPermission
-        }
-    },
-
-    applyLocationSessionState(state: RiderLiveLocationState) {
-        const delivery = this.data.delivery
-        if (!delivery) {
-            return
-        }
-
-        const view = this.buildLocationView(state, this.data.serverLatestRecordedAt)
-        this.setData(view)
-
-        const riderPoint = state.activeDeliveryId === delivery.id && state.latestPoint
-            ? {
-                latitude: state.latestPoint.latitude,
-                longitude: state.latestPoint.longitude
-            }
-            : this.data.serverLatestPoint
-
-        this.renderDeliveryMap(delivery, riderPoint)
-    },
-
-    async loadLocationMap(delivery: DeliveryView) {
-        const pickupPoint: MapPoint = {
-            latitude: delivery.pickup_latitude,
-            longitude: delivery.pickup_longitude
-        }
-        const deliveryPoint: MapPoint = {
-            latitude: delivery.delivery_latitude,
-            longitude: delivery.delivery_longitude
-        }
-
-        const [latestResult, trackResult, routeResult] = await Promise.all([
-            DeliveryService.getRiderLocation(delivery.id).catch(() => null),
-            DeliveryService.getDeliveryTrack(delivery.id).catch(() => [] as DeliveryLocationPoint[]),
-            mapService.planRoute(pickupPoint, deliveryPoint).catch(() => null)
-        ])
-
-        const serverLatestPoint = latestResult
-            ? { latitude: latestResult.latitude, longitude: latestResult.longitude }
-            : null
-        const serverLatestRecordedAt = latestResult?.recorded_at || ''
-        const serverTrackPoints = trackResult
-            .map((point) => toMapPoint(point))
-            .filter((point): point is MapPoint => !!point)
-
-        const routeSummary = routeResult
-            ? `预计路程 ${(routeResult.distance / 1000).toFixed(1)}km · 约 ${Math.max(1, Math.round(routeResult.duration / 60))} 分钟`
-            : '已展示配送主线路，实时位置会随骑手移动更新'
-
-        this.setData({
-            serverLatestPoint,
-            serverLatestRecordedAt,
-            serverTrackPoints,
-            routePoints: routeResult?.points || [],
-            routeSummary
-        })
-
-        this.renderDeliveryMap(delivery, serverLatestPoint)
-    },
-
-    renderDeliveryMap(delivery: DeliveryView, riderPoint: MapPoint | null) {
-        const pickupPoint: MapPoint = {
-            latitude: delivery.pickup_latitude,
-            longitude: delivery.pickup_longitude
-        }
-        const deliveryPoint: MapPoint = {
-            latitude: delivery.delivery_latitude,
-            longitude: delivery.delivery_longitude
-        }
-
-        const markers: MapMarker[] = [
-            mapService.createMarker(1, pickupPoint, '商家', '/assets/merchant.png'),
-            mapService.createMarker(3, deliveryPoint, '顾客', '/assets/customer.png')
-        ]
-        const includePoints: MapPoint[] = [pickupPoint, deliveryPoint]
-
-        if (riderPoint) {
-            markers.push(mapService.createMarker(2, riderPoint, '骑手', '/assets/rider.png'))
-            includePoints.push(riderPoint)
-        }
-
-        const plannedRoutePoints = this.data.routePoints.length > 1
-            ? this.data.routePoints
-            : [pickupPoint, deliveryPoint]
-        const polyline: MapPolyline[] = [
-            mapService.createPolyline(plannedRoutePoints, {
-                color: '#1d63ff',
-                width: 6,
-                dottedLine: plannedRoutePoints.length < 3 && this.data.serverTrackPoints.length < 2
-            })
-        ]
-
-        if (this.data.serverTrackPoints.length > 1) {
-            polyline.push(mapService.createPolyline(this.data.serverTrackPoints, {
-                color: '#00897B',
-                width: 8,
-                arrowLine: true
-            }))
-        }
-
-        const mapCenter = riderPoint || {
-            latitude: (pickupPoint.latitude + deliveryPoint.latitude) / 2,
-            longitude: (pickupPoint.longitude + deliveryPoint.longitude) / 2
-        }
-
-        this.setData({
-            markers,
-            polyline,
-            includePoints,
-            mapCenter
-        })
     },
 
     /**
@@ -491,45 +267,6 @@ Page({
         } catch (err: unknown) {
             throw normalizeLocationError(err)
         }
-    },
-
-    async onRetryLocationSync() {
-        if (this.data.locationRetrying) return
-        const delivery = this.data.delivery
-        if (!delivery || !isRiderDeliveryTrackedStatus(delivery.status)) {
-            return
-        }
-
-        this.setData({ locationRetrying: true })
-        wx.showLoading({ title: '刷新定位中...' })
-        try {
-            if (this.data.needsLocationPermission) {
-                const granted = await riderLiveLocationSession.requestPermissionAndRestart()
-                if (!granted) {
-                    wx.showToast({ title: '请先开启定位权限', icon: 'none' })
-                    return
-                }
-            } else {
-                await riderLiveLocationSession.refreshNow('rider_task_detail_manual_retry')
-                await riderLiveLocationSession.flushNow()
-            }
-
-            this.applyLocationSessionState(riderLiveLocationSession.getState())
-        } catch (err: unknown) {
-            const message = getUserMessage(err, '定位刷新失败，请稍后重试')
-            wx.showToast({ title: message, icon: 'none' })
-        } finally {
-            wx.hideLoading()
-            this.setData({ locationRetrying: false })
-        }
-    },
-
-    onGoToNavigation() {
-        if (!this.data.orderId) return
-
-        wx.navigateTo({
-            url: `/pages/rider/navigation/index?id=${this.data.orderId}`
-        })
     },
 
     onCopyOrderNo() {

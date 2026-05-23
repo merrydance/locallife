@@ -2,12 +2,10 @@ import { RiderInfo, RiderStatus } from '../../../api/rider'
 import { RecommendedOrder } from '../../../api/delivery'
 import {
   DashboardDeliveryView,
-  TagTheme,
   WsUnsubscribe,
   riderDashboardRuntimeMethods
 } from '../../../utils/rider-dashboard-runtime'
 import { RiderWorkbenchDashboardView } from '../../../services/rider-workbench'
-import { resolveStatusTagTheme } from '../../../utils/status-tag'
 
 const emptyWorkbenchView: RiderWorkbenchDashboardView = {
   riderStatus: {
@@ -38,7 +36,6 @@ Page({
     onlineSwitchLoading: false,
     grabActionLoading: false,
     deliveryActionLoadingIds: [] as number[],
-    locationActionLoading: false,
     initError: '',
     initErrorCanRetry: true,
     workbenchRefreshError: '',
@@ -69,13 +66,6 @@ Page({
       todayEarnings: 0,
       creditScore: 0
     },
-
-    locationDeliveryId: 0,
-    locationStatusText: '',
-    locationStatusTheme: resolveStatusTagTheme('neutral') as TagTheme,
-    locationPendingText: '',
-    locationUpdatedText: '',
-    locationNeedsPermission: false,
 
     newOrdersCount: 0,
     _wsListeners: [] as WsUnsubscribe[]

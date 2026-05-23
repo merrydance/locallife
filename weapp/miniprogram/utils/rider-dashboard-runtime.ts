@@ -7,8 +7,7 @@ import { buildRiderWorkbenchDashboardView } from '../services/rider-workbench'
 import { logger } from './logger'
 import { locationService } from './location'
 import { normalizeLocationError, syncRiderDeliveryLocation } from './rider-location'
-import { getRiderLocationStatusView } from './rider-location-status-view'
-import { riderLiveLocationSession, RiderLiveLocationState } from './rider-live-location'
+import { riderLiveLocationSession } from './rider-live-location'
 import { buildRiderDeliveryIncomeView, RiderDeliveryIncomeView } from './rider-delivery-income-view'
 import { getStableBarHeights } from './responsive'
 import { resolveStatusTagTheme, type StatusTagTheme } from './status-tag'
@@ -25,7 +24,6 @@ const DEPOSIT_BLOCK_REASON_PATTERN = /押金不足/
 const BAOFU_SETTLEMENT_BLOCK_MESSAGE = '结算账户未开通，暂不能接收配送费分账订单'
 
 let runtimeNetworkUnsubscribe: null | (() => void) = null
-let dashboardLocationUnsubscribe: null | (() => void) = null
 
 export type WsUnsubscribe = () => void
 export type DeliveryActionType = 'startPickup' | 'confirmPickup' | 'startDelivery' | 'confirmDelivery'
@@ -101,24 +99,6 @@ function buildBannerState(states: Array<{ message: string, canRetry: boolean }>)
   }
 }
 
-function formatRelativeTime(timeStr: string): string {
-  if (!timeStr) return '刚刚'
-
-  const diff = Date.now() - new Date(timeStr).getTime()
-  if (!Number.isFinite(diff) || diff < 0) {
-    return '刚刚'
-  }
-
-  const minutes = Math.floor(diff / 60000)
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes} 分钟前`
-
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours} 小时前`
-
-  return `${Math.floor(hours / 24)} 天前`
-}
-
 function isTrackableDelivery(status: Delivery['status']): boolean {
   return status === 'assigned' || status === 'picking' || status === 'picked' || status === 'delivering'
 }
@@ -156,7 +136,6 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
     this.bindNetworkMonitor()
-    this.bindLocationSession()
     this.initData().catch((err: unknown) => logger.error('Load init error', err))
   },
 
@@ -200,10 +179,6 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
   onUnload() {
     this.cleanupWebSocket()
     this.unbindNetworkMonitor()
-    if (dashboardLocationUnsubscribe) {
-      dashboardLocationUnsubscribe()
-      dashboardLocationUnsubscribe = null
-    }
   },
 
   bindNetworkMonitor() {
@@ -273,27 +248,12 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
         hallTabLabel: '接单大厅 0',
         myTabLabel: '我的任务 0',
         workbenchRefreshError: '',
-        locationDeliveryId: 0,
-        locationStatusText: '',
-        locationPendingText: '',
-        locationUpdatedText: '',
-        locationNeedsPermission: false,
         ...statusViewData
       })
       await this.syncLocationSession([])
     } finally {
       this.setData({ loading: false })
     }
-  },
-
-  bindLocationSession() {
-    if (dashboardLocationUnsubscribe) {
-      dashboardLocationUnsubscribe()
-    }
-
-    dashboardLocationUnsubscribe = riderLiveLocationSession.subscribe((state) => {
-      this.applyLocationSessionState(state)
-    })
   },
 
   getDepositReminderText(status: RiderStatus | null, riderInfo?: RiderInfo | null) {
@@ -508,42 +468,6 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
         myLoadError: ''
       })
     }
-  },
-
-  applyLocationSessionState(state: RiderLiveLocationState) {
-    const trackedDelivery = this.data.activeDeliveries.find((delivery: Delivery) => delivery.id === state.activeDeliveryId)
-
-    if (!trackedDelivery) {
-      this.setData({
-        locationDeliveryId: 0,
-        locationStatusText: '',
-        locationStatusTheme: resolveStatusTagTheme('neutral'),
-        locationPendingText: '',
-        locationUpdatedText: '',
-        locationNeedsPermission: false
-      })
-      return
-    }
-
-    const fallbackUpdatedAt = trackedDelivery.location_updated_at || ''
-    const locationUpdatedText = state.lastUploadedAt
-      ? `最近上传 ${formatRelativeTime(state.lastUploadedAt)}`
-      : (fallbackUpdatedAt ? `最近上传 ${formatRelativeTime(fallbackUpdatedAt)}` : '暂未上传定位')
-
-    const locationPendingText = state.pendingCount > 0
-      ? `待补发 ${state.pendingCount} 个定位点`
-      : ''
-
-    const locationStatusView = getRiderLocationStatusView(state.uploadState)
-
-    this.setData({
-      locationDeliveryId: trackedDelivery.id,
-      locationStatusText: locationStatusView.text,
-      locationStatusTheme: locationStatusView.theme,
-      locationPendingText,
-      locationUpdatedText,
-      locationNeedsPermission: locationStatusView.needsPermission
-    })
   },
 
   async syncLocationSession(deliveries: Delivery[]) {
@@ -1074,47 +998,6 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
     } catch (err: unknown) {
       logger.error('Retry refresh error', err)
     }
-  },
-
-  async onRetryLocationSync() {
-    if (this.data.locationActionLoading) return
-
-    this.setData({ locationActionLoading: true })
-    wx.showLoading({ title: '刷新定位中...' })
-    try {
-      if (this.data.locationNeedsPermission) {
-        const granted = await riderLiveLocationSession.requestPermissionAndRestart()
-        if (!granted) {
-          wx.showToast({ title: '请先开启定位权限', icon: 'none' })
-          return
-        }
-      } else {
-        await riderLiveLocationSession.refreshNow('rider_dashboard_manual_retry')
-        await riderLiveLocationSession.flushNow()
-      }
-    } catch (err: unknown) {
-      const message = getUserMessage(err, '定位刷新失败，请稍后重试')
-      wx.showToast({ title: message, icon: 'none' })
-    } finally {
-      wx.hideLoading()
-      this.setData({ locationActionLoading: false })
-    }
-  },
-
-  async onResolveLocationPermission() {
-    if (this.data.locationActionLoading) return
-
-    this.setData({ locationActionLoading: true })
-    wx.showLoading({ title: '开启定位中...' })
-    try {
-      const granted = await riderLiveLocationSession.requestPermissionAndRestart()
-      if (!granted) {
-        wx.showToast({ title: '请先开启定位权限', icon: 'none' })
-        return
-      }
-    } finally {
-      wx.hideLoading()
-      this.setData({ locationActionLoading: false })
-    }
   }
+
 }

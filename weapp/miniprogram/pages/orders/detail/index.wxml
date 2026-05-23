@@ -174,24 +174,26 @@
 
 <!-- 底部固定操作栏 -->
 <view wx:if="{{!loading && order}}" class="bottom-bar">
-   <view class="bottom-actions">
+   <scroll-view class="bottom-actions" scroll-x="{{true}}" enhanced="{{true}}" show-scrollbar="{{false}}">
+    <view class="bottom-actions-row">
       <!-- 辅助按钮 -->
       <view class="secondary-actions">
-         <t-button wx:if="{{showCancelButton}}" size="medium" shape="round" bindtap="onCancelOrder">取消订单</t-button>
-         <t-button wx:if="{{showContactButton}}" size="medium" icon="chat" shape="round" bindtap="onContact">联系客服</t-button>
-        <t-button wx:if="{{showFoodSafetyButton}}" size="medium" icon="error-circle" shape="round" bindtap="onReportFoodSafety">食安反馈</t-button>
+         <t-button wx:if="{{showCancelButton}}" class="bottom-action-button" size="medium" shape="round" bindtap="onCancelOrder">取消订单</t-button>
+         <t-button wx:if="{{showContactButton}}" class="bottom-action-button" size="medium" icon="chat" shape="round" bindtap="onContact">联系客服</t-button>
+        <t-button wx:if="{{showFoodSafetyButton}}" class="bottom-action-button" size="medium" icon="error-circle" shape="round" bindtap="onReportFoodSafety">食安反馈</t-button>
       </view>
 
       <!-- 主要按钮 -->
       <view class="primary-actions">
-         <t-button wx:if="{{showPayButton}}" theme="primary" size="medium" shape="round" loading="{{paying}}" disabled="{{paying}}" bindtap="onPayOrder">去支付</t-button>
-         <t-button wx:if="{{showUrgeButton}}" theme="primary" size="medium" shape="round" bindtap="onUrgeOrder" disabled="{{urgeCountdown > 0}}">{{urgeCountdown > 0 ? urgeCountdown + 's' : '催单'}}</t-button>
-         <t-button wx:if="{{showConfirmButton}}" theme="primary" size="medium" shape="round" bindtap="onConfirmReceipt">确认收货</t-button>
-        <t-button wx:if="{{showPickupConfirmButton}}" theme="primary" size="medium" shape="round" bindtap="onConfirmReceipt">我已取餐</t-button>
-         <t-button wx:if="{{showReviewButton}}" theme="primary" size="medium" shape="round" bindtap="onReview">{{isReviewed ? '查看评价' : '发表评价'}}</t-button>
-        <t-button wx:if="{{showReorderButton}}" theme="primary" size="medium" shape="round" bindtap="onReorder">再来一单</t-button>
+         <t-button wx:if="{{showPayButton}}" class="bottom-action-button" theme="primary" size="medium" shape="round" loading="{{paying}}" disabled="{{paying}}" bindtap="onPayOrder">去支付</t-button>
+         <t-button wx:if="{{showUrgeButton}}" class="bottom-action-button" theme="primary" size="medium" shape="round" bindtap="onUrgeOrder" disabled="{{urgeCountdown > 0}}">{{urgeCountdown > 0 ? urgeCountdown + 's' : '催单'}}</t-button>
+         <t-button wx:if="{{showConfirmButton}}" class="bottom-action-button" theme="primary" size="medium" shape="round" bindtap="onConfirmReceipt">确认收货</t-button>
+        <t-button wx:if="{{showPickupConfirmButton}}" class="bottom-action-button" theme="primary" size="medium" shape="round" bindtap="onConfirmReceipt">我已取餐</t-button>
+         <t-button wx:if="{{showReviewButton}}" class="bottom-action-button" theme="primary" size="medium" shape="round" bindtap="onReview">{{isReviewed ? '查看评价' : '发表评价'}}</t-button>
+        <t-button wx:if="{{showReorderButton}}" class="bottom-action-button" theme="primary" size="medium" shape="round" bindtap="onReorder">再来一单</t-button>
       </view>
-   </view>
+    </view>
+   </scroll-view>
   <t-toast id="t-toast" />
 </view>
 

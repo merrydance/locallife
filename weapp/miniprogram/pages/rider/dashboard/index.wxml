@@ -62,16 +62,6 @@
             colors="{{['#00897B', 'var(--td-bg-color-component)']}}"
           />
         </view>
-
-        <view class="runtime-status-strip" wx:if="{{locationDeliveryId > 0}}">
-          <view class="runtime-status-main">
-            <text class="runtime-status-title">定位运行中</text>
-            <text class="runtime-status-desc">{{locationStatusText}} · {{locationUpdatedText}}</text>
-            <text class="runtime-status-pending" wx:if="{{locationPendingText}}">{{locationPendingText}}</text>
-          </view>
-          <t-button wx:if="{{locationNeedsPermission}}" theme="primary" variant="outline" size="small" loading="{{locationActionLoading}}" disabled="{{locationActionLoading}}" bindtap="onResolveLocationPermission">开启定位</t-button>
-          <t-button wx:else theme="primary" variant="text" size="small" loading="{{locationActionLoading}}" disabled="{{locationActionLoading}}" bindtap="onRetryLocationSync">刷新</t-button>
-        </view>
       </view>
     </t-sticky>
 
@@ -132,10 +122,6 @@
           <view class="current-mission-meta-item">
             <text class="meta-label">时限</text>
             <text class="meta-value">{{currentDelivery.deadline_desc || '尽快送达'}}</text>
-          </view>
-          <view class="current-mission-meta-item">
-            <text class="meta-label">定位</text>
-            <text class="meta-value">{{locationDeliveryId === currentDelivery.id ? locationStatusText : '待初始化'}}</text>
           </view>
         </view>
 

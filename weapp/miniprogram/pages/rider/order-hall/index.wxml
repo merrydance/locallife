@@ -32,16 +32,6 @@
             colors="{{['#00897B', 'var(--td-bg-color-component)']}}"
           />
         </view>
-
-        <view class="runtime-status-strip" wx:if="{{locationDeliveryId > 0}}">
-          <view class="runtime-status-main">
-            <text class="runtime-status-title">定位运行中</text>
-            <text class="runtime-status-desc">{{locationStatusText}} · {{locationUpdatedText}}</text>
-            <text class="runtime-status-pending" wx:if="{{locationPendingText}}">{{locationPendingText}}</text>
-          </view>
-          <t-button wx:if="{{locationNeedsPermission}}" theme="primary" variant="outline" size="small" loading="{{locationActionLoading}}" disabled="{{locationActionLoading}}" bindtap="onResolveLocationPermission">开启定位</t-button>
-          <t-button wx:else theme="primary" variant="text" size="small" loading="{{locationActionLoading}}" disabled="{{locationActionLoading}}" bindtap="onRetryLocationSync">刷新</t-button>
-        </view>
       </view>
     </t-sticky>
 
@@ -239,21 +229,6 @@
                 <view class="order-notes" wx:if="{{item.notes}}">
                   <text class="notes-label">备注：</text>
                   <text class="notes-content">{{item.notes}}</text>
-                </view>
-
-                <view class="location-runtime-card" wx:if="{{item.id === locationDeliveryId}}">
-                  <view class="location-runtime-main">
-                    <view class="location-runtime-header">
-                      <text class="location-runtime-title">实时定位</text>
-                      <t-tag theme="{{locationStatusTheme}}" variant="light" size="small">{{locationStatusText}}</t-tag>
-                    </view>
-                    <text class="location-runtime-meta">{{locationUpdatedText}}</text>
-                    <text class="location-runtime-pending" wx:if="{{locationPendingText}}">{{locationPendingText}}</text>
-                  </view>
-                  <view class="location-runtime-actions">
-                    <t-button wx:if="{{locationNeedsPermission}}" theme="primary" variant="outline" size="small" loading="{{locationActionLoading}}" disabled="{{locationActionLoading}}" catchtap="onResolveLocationPermission">开启定位</t-button>
-                    <t-button wx:else theme="primary" variant="text" size="small" loading="{{locationActionLoading}}" disabled="{{locationActionLoading}}" catchtap="onRetryLocationSync">刷新</t-button>
-                  </view>
                 </view>
 
                 <view class="order-footer">
