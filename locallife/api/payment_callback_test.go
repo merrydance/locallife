@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -1721,14 +1722,15 @@ func TestHandleOrderSettlementNotify_DirectShippingSettlementRecordsNotification
 	defer ctrl.Finish()
 
 	store := newMockStoreWithAlertSink(ctrl)
-	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 	taskDistributor := &settlementProfitSharingTaskRecorder{}
-	server := newTestServerWithPaymentClient(t, store, paymentClient)
+	server := newTestServer(t, store)
+	server.config.WechatMiniAppMessageToken = "mini-token"
 	server.SetTaskDistributorForTest(taskDistributor)
 
-	notificationID := util.RandomString(32)
 	merchantTradeNo := "WXSHIP_" + util.RandomString(16)
 	transactionID := "WX_" + util.RandomString(20)
+	settlementTime := int64(1769169600)
+	expectedEventID := fmt.Sprintf("mpmsg:%s:%d", transactionID, settlementTime)
 	paymentOrder := db.PaymentOrder{
 		ID:                    7101,
 		OrderID:               pgtype.Int8{Int64: 8101, Valid: true},
@@ -1759,30 +1761,14 @@ func TestHandleOrderSettlementNotify_DirectShippingSettlementRecordsNotification
 		PlatformSharingMerID: pgtype.Text{String: "platform-sharing", Valid: true},
 	}
 
-	paymentClient.EXPECT().
-		VerifyNotificationSignature(gomock.Eq("test_signature"), gomock.Eq("1234567890"), gomock.Eq("test_nonce"), gomock.Eq("test_serial"), gomock.Any()).
-		Return(nil)
-
 	store.EXPECT().
 		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, arg db.CreateWechatNotificationParams) (bool, error) {
-			require.Equal(t, notificationID, arg.ID)
+			require.Equal(t, expectedEventID, arg.ID)
 			require.Equal(t, "trade_manage_order_settlement", arg.EventType)
+			require.Equal(t, pgtype.Text{String: "mini-program-message", Valid: true}, arg.ResourceType)
 			return true, nil
 		})
-
-	rawResource, err := json.Marshal(map[string]any{
-		"appid":                  "wx-mini-app",
-		"transaction_id":         transactionID,
-		"merchant_trade_no":      merchantTradeNo,
-		"confirm_receive_method": 1,
-		"settlement_time":        "2026-05-22T12:00:00+08:00",
-		"success_time":           "2026-05-22T11:58:00+08:00",
-	})
-	require.NoError(t, err)
-	paymentClient.EXPECT().
-		DecryptNotificationRaw(gomock.Any()).
-		Return(rawResource, nil)
 
 	store.EXPECT().
 		GetPaymentOrderByTransactionId(gomock.Any(), pgtype.Text{String: transactionID, Valid: true}).
@@ -1800,8 +1786,8 @@ func TestHandleOrderSettlementNotify_DirectShippingSettlementRecordsNotification
 			require.Equal(t, db.PaymentChannelDirect, arg.Channel)
 			require.Equal(t, db.ExternalPaymentCapabilityBaofuProfitSharing, arg.Capability)
 			require.Equal(t, db.ExternalPaymentFactSourceCallback, arg.FactSource)
-			require.Equal(t, pgtype.Text{String: notificationID, Valid: true}, arg.SourceEventID)
-			require.Equal(t, pgtype.Text{String: wechatcontracts.ShippingSettlementEventType, Valid: true}, arg.SourceEventType)
+			require.Equal(t, pgtype.Text{String: expectedEventID, Valid: true}, arg.SourceEventID)
+			require.Equal(t, pgtype.Text{String: wechatcontracts.OrderShippingEventType, Valid: true}, arg.SourceEventType)
 			require.Equal(t, db.ExternalPaymentObjectPayment, arg.ExternalObjectType)
 			require.Equal(t, transactionID, arg.ExternalObjectKey)
 			require.Equal(t, pgtype.Text{String: merchantTradeNo, Valid: true}, arg.ExternalSecondaryKey)
@@ -1811,12 +1797,12 @@ func TestHandleOrderSettlementNotify_DirectShippingSettlementRecordsNotification
 			require.Equal(t, "SETTLED", arg.UpstreamState)
 			require.Equal(t, db.ExternalPaymentTerminalStatusSuccess, arg.TerminalStatus)
 			require.True(t, arg.IsTerminal)
-			require.Equal(t, "wechat:settlement:trade_manage_order_settlement:"+notificationID, arg.DedupeKey)
+			require.Equal(t, fmt.Sprintf("wechat:settlement:%s:%d", transactionID, settlementTime), arg.DedupeKey)
 			return db.ExternalPaymentFact{ID: 101, DedupeKey: arg.DedupeKey}, nil
 		})
 
 	recorder := httptest.NewRecorder()
-	request := newSettlementNotifyRequest(t, notificationID)
+	request := newMiniProgramSettlementRequest(t, server.config.WechatMiniAppMessageToken, miniProgramSettlementXML(transactionID, merchantTradeNo, settlementTime))
 	server.router.ServeHTTP(recorder, request)
 
 	assertWechatNoContentResponse(t, recorder)
@@ -1828,19 +1814,20 @@ func TestHandleOrderSettlementNotify_ReleasesClaimWhenEnqueueFails(t *testing.T)
 	defer ctrl.Finish()
 
 	store := newMockStoreWithAlertSink(ctrl)
-	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
-	notificationID := util.RandomString(32)
 	merchantTradeNo := "WXSHIP_" + util.RandomString(16)
 	transactionID := "WX_" + util.RandomString(20)
+	settlementTime := int64(1769169600)
+	expectedEventID := fmt.Sprintf("mpmsg:%s:%d", transactionID, settlementTime)
 	taskDistributor := &settlementProfitSharingTaskRecorder{
 		err: errors.New("redis unavailable"),
 		beforeEnqueue: func() {
 			store.EXPECT().
-				ReleaseWechatNotificationClaim(gomock.Any(), notificationID).
+				ReleaseWechatNotificationClaim(gomock.Any(), expectedEventID).
 				Return(nil)
 		},
 	}
-	server := newTestServerWithPaymentClient(t, store, paymentClient)
+	server := newTestServer(t, store)
+	server.config.WechatMiniAppMessageToken = "mini-token"
 	server.SetTaskDistributorForTest(taskDistributor)
 
 	paymentOrder := db.PaymentOrder{
@@ -1873,26 +1860,19 @@ func TestHandleOrderSettlementNotify_ReleasesClaimWhenEnqueueFails(t *testing.T)
 		PlatformSharingMerID: pgtype.Text{String: "platform-sharing", Valid: true},
 	}
 
-	paymentClient.EXPECT().
-		VerifyNotificationSignature(gomock.Eq("test_signature"), gomock.Eq("1234567890"), gomock.Eq("test_nonce"), gomock.Eq("test_serial"), gomock.Any()).
-		Return(nil)
-	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
-	rawResource, err := json.Marshal(map[string]any{
-		"appid":                  "wx-mini-app",
-		"transaction_id":         transactionID,
-		"merchant_trade_no":      merchantTradeNo,
-		"confirm_receive_method": 1,
-		"settlement_time":        "2026-05-22T12:00:00+08:00",
-	})
-	require.NoError(t, err)
-	paymentClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return(rawResource, nil)
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateWechatNotificationParams) (bool, error) {
+			require.Equal(t, expectedEventID, arg.ID)
+			return true, nil
+		})
 	store.EXPECT().GetPaymentOrderByTransactionId(gomock.Any(), pgtype.Text{String: transactionID, Valid: true}).Return(paymentOrder, nil)
 	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(profitSharingOrder, nil)
 	store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(int64(0), nil)
 	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentFactParams{})).Return(db.ExternalPaymentFact{ID: 102}, nil)
 
 	recorder := httptest.NewRecorder()
-	request := newSettlementNotifyRequest(t, notificationID)
+	request := newMiniProgramSettlementRequest(t, server.config.WechatMiniAppMessageToken, miniProgramSettlementXML(transactionID, merchantTradeNo, settlementTime))
 	server.router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusInternalServerError, recorder.Code)
@@ -1905,14 +1885,15 @@ func TestHandleOrderSettlementNotify_ReturnsFailWhenProfitSharingBillMissing(t *
 	defer ctrl.Finish()
 
 	store := newMockStoreWithAlertSink(ctrl)
-	paymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
 	taskDistributor := &settlementProfitSharingTaskRecorder{}
-	server := newTestServerWithPaymentClient(t, store, paymentClient)
+	server := newTestServer(t, store)
+	server.config.WechatMiniAppMessageToken = "mini-token"
 	server.SetTaskDistributorForTest(taskDistributor)
 
-	notificationID := util.RandomString(32)
 	merchantTradeNo := "WXSHIP_" + util.RandomString(16)
 	transactionID := "WX_" + util.RandomString(20)
+	settlementTime := int64(1769169600)
+	expectedEventID := fmt.Sprintf("mpmsg:%s:%d", transactionID, settlementTime)
 	paymentOrder := db.PaymentOrder{
 		ID:                    7103,
 		OrderID:               pgtype.Int8{Int64: 8103, Valid: true},
@@ -1925,58 +1906,23 @@ func TestHandleOrderSettlementNotify_ReturnsFailWhenProfitSharingBillMissing(t *
 		RequiresProfitSharing: true,
 	}
 
-	paymentClient.EXPECT().
-		VerifyNotificationSignature(gomock.Eq("test_signature"), gomock.Eq("1234567890"), gomock.Eq("test_nonce"), gomock.Eq("test_serial"), gomock.Any()).
-		Return(nil)
-	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
-	rawResource, err := json.Marshal(map[string]any{
-		"appid":                  "wx-mini-app",
-		"transaction_id":         transactionID,
-		"merchant_trade_no":      merchantTradeNo,
-		"confirm_receive_method": 1,
-		"settlement_time":        "2026-05-22T12:00:00+08:00",
-	})
-	require.NoError(t, err)
-	paymentClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return(rawResource, nil)
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateWechatNotificationParams) (bool, error) {
+			require.Equal(t, expectedEventID, arg.ID)
+			return true, nil
+		})
 	store.EXPECT().GetPaymentOrderByTransactionId(gomock.Any(), pgtype.Text{String: transactionID, Valid: true}).Return(paymentOrder, nil)
 	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(db.ProfitSharingOrder{}, db.ErrRecordNotFound)
-	store.EXPECT().ReleaseWechatNotificationClaim(gomock.Any(), notificationID).Return(nil)
+	store.EXPECT().ReleaseWechatNotificationClaim(gomock.Any(), expectedEventID).Return(nil)
 
 	recorder := httptest.NewRecorder()
-	request := newSettlementNotifyRequest(t, notificationID)
+	request := newMiniProgramSettlementRequest(t, server.config.WechatMiniAppMessageToken, miniProgramSettlementXML(transactionID, merchantTradeNo, settlementTime))
 	server.router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusInternalServerError, recorder.Code)
 	assertWechatFailResponse(t, recorder, "profit sharing bill not found")
 	require.Empty(t, taskDistributor.profitSharingOrderIDs)
-}
-
-func newSettlementNotifyRequest(t *testing.T, notificationID string) *http.Request {
-	t.Helper()
-
-	requestBody := map[string]interface{}{
-		"id":            notificationID,
-		"event_type":    "trade_manage_order_settlement",
-		"resource_type": "encrypt-resource",
-		"resource": map[string]interface{}{
-			"algorithm":       "AEAD_AES_256_GCM",
-			"ciphertext":      "mock_encrypted_data",
-			"nonce":           "mock_nonce",
-			"associated_data": "settlement",
-		},
-	}
-	bodyBytes, err := json.Marshal(requestBody)
-	require.NoError(t, err)
-
-	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-miniprogram/settlement-notify", bytes.NewReader(bodyBytes))
-	require.NoError(t, err)
-
-	request.Header.Set("Wechatpay-Timestamp", "1234567890")
-	request.Header.Set("Wechatpay-Nonce", "test_nonce")
-	request.Header.Set("Wechatpay-Signature", "test_signature")
-	request.Header.Set("Wechatpay-Serial", "test_serial")
-
-	return request
 }
 
 func assertWechatSuccessResponse(t *testing.T, recorder *httptest.ResponseRecorder, expectedMessage string) {

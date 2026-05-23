@@ -527,6 +527,7 @@ func (server *Server) setupRouter() {
 		webhooksGroup.POST("/wechat-pay/notify", server.handlePaymentNotify)
 		webhooksGroup.POST("/wechat-pay/refund-notify", server.handleRefundNotify)
 		webhooksGroup.POST("/wechat-pay/merchant-transfer-notify", server.handleMerchantTransferNotify)
+		webhooksGroup.GET("/wechat-miniprogram/settlement-notify", server.verifyOrderShippingSettlementWebhook)
 		webhooksGroup.POST("/wechat-miniprogram/settlement-notify", server.handleOrderSettlementNotify)
 		// 宝付宝财通回调
 		webhooksGroup.GET("/baofu/account/open", server.handleBaofuAccountOpenNotify)

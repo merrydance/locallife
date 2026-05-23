@@ -1382,23 +1382,29 @@ func (server *Server) handleRefundNotify(ctx *gin.Context) {
 	server.markNotificationProcessed(ctx, notification.ID, resource.OutTradeNo, resource.TransactionID)
 }
 
-// handleOrderSettlementNotify handles the retained Mini Program shipping
-// settlement event. It acknowledges the shipping-compliance callback without
-// reviving retired WeChat platform profit-sharing or payment-acquisition flows.
+// verifyOrderShippingSettlementWebhook verifies the WeChat Mini Program message
+// push URL configured for order shipping settlement events.
+func (server *Server) verifyOrderShippingSettlementWebhook(ctx *gin.Context) {
+	if !server.verifyMiniProgramMessageSignature(ctx.Query("signature"), ctx.Query("timestamp"), ctx.Query("nonce")) {
+		ctx.String(http.StatusUnauthorized, "invalid signature")
+		return
+	}
+	ctx.String(http.StatusOK, ctx.Query("echostr"))
+}
+
+// handleOrderSettlementNotify handles the Mini Program order-shipping message
+// push. This is not a WeChat Pay V3 encrypted notification; it uses the Mini
+// Program message-token signature and the Mini Program message-push body format.
 func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
-	if server.directPaymentClient == nil {
-		log.Error().Msg("shipping settlement callback received but payment client is not configured")
-		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
-			Code:    "FAIL",
-			Message: "payment client not configured",
-		})
+	if !server.verifyMiniProgramMessageSignature(ctx.Query("signature"), ctx.Query("timestamp"), ctx.Query("nonce")) {
+		ctx.String(http.StatusUnauthorized, "invalid signature")
 		return
 	}
 
 	body, status, err := readWebhookBody(ctx)
 	if err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("settlement", "read_body").Inc()
-		log.Error().Err(err).Msg("read shipping settlement notification body")
+		log.Error().Err(err).Msg("read order shipping settlement message body")
 		ctx.JSON(status, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "read body failed",
@@ -1406,65 +1412,43 @@ func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
 		return
 	}
 
-	signature := ctx.GetHeader("Wechatpay-Signature")
-	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
-	nonce := ctx.GetHeader("Wechatpay-Nonce")
-	serial := ctx.GetHeader("Wechatpay-Serial")
-
-	if err := server.directPaymentClient.VerifyNotificationSignature(signature, timestamp, nonce, serial, string(body)); err != nil {
-		paymentCallbackFailuresTotal.WithLabelValues("settlement", "signature").Inc()
-		log.Error().Err(err).Msg("invalid wechat signature for shipping settlement notification")
-		ctx.JSON(http.StatusUnauthorized, wechatPaymentNotifyResponse{
-			Code:    "FAIL",
-			Message: "signature verification failed",
-		})
-		return
-	}
-
-	var notification wechat.PaymentNotification
-	if err := json.Unmarshal(body, &notification); err != nil {
+	message, err := wechatcontracts.ParseOrderShippingSettlementMessage(body)
+	if err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("settlement", "parse").Inc()
-		log.Error().Err(err).Msg("parse shipping settlement notification")
+		log.Error().Err(err).Int("raw_message_bytes", len(body)).Msg("parse order shipping settlement message")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
-			Message: "parse notification failed",
+			Message: "parse message failed",
 		})
 		return
 	}
 
-	if notification.EventType != wechatcontracts.ShippingSettlementEventType {
-		log.Info().Str("event_type", notification.EventType).Msg("ignore non-shipping-settlement notification")
+	if !message.IsSettlementEvent() {
+		log.Info().Str("event", message.Event).Msg("ignore non-order-shipping-settlement mini program message")
+		writeWechatNotifySuccess(ctx, "settlement")
+		return
+	}
+	if !message.IsSettled() {
+		log.Info().
+			Str("transaction_id", message.TransactionID).
+			Str("merchant_trade_no", message.MerchantTradeNo).
+			Int64("estimated_settlement_time", message.EstimatedSettlementTime).
+			Msg("received order shipping shipment message; waiting for settlement")
 		writeWechatNotifySuccess(ctx, "settlement")
 		return
 	}
 
+	eventID := orderShippingSettlementEventID(message)
+	notification := wechat.PaymentNotification{
+		ID:           eventID,
+		EventType:    wechatcontracts.OrderShippingEventType,
+		ResourceType: "mini-program-message",
+		Summary:      "order shipping settlement message",
+	}
 	if !server.tryClaimNotification(ctx, notification, "settlement") {
 		return
 	}
-
-	rawResource, err := server.directPaymentClient.DecryptNotificationRaw(&notification)
-	if err != nil {
-		paymentCallbackFailuresTotal.WithLabelValues("settlement", "decrypt").Inc()
-		log.Error().Err(err).Msg("decrypt shipping settlement notification")
-		server.releaseNotification(ctx, notification.ID, "settlement")
-		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
-			Code:    "FAIL",
-			Message: "decrypt failed",
-		})
-		return
-	}
-
-	var resource wechatcontracts.ShippingSettlementNotificationResource
-	if err := json.Unmarshal(rawResource, &resource); err != nil {
-		paymentCallbackFailuresTotal.WithLabelValues("settlement", "parse_resource").Inc()
-		log.Error().Err(err).Msg("parse shipping settlement notification resource")
-		server.releaseNotification(ctx, notification.ID, "settlement")
-		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
-			Code:    "FAIL",
-			Message: "parse resource failed",
-		})
-		return
-	}
+	resource := orderShippingSettlementResource(message)
 
 	log.Info().
 		Str("transaction_id", resource.TransactionID).
@@ -1473,14 +1457,14 @@ func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
 		Int("confirm_receive_method", resource.ConfirmReceiveMethod).
 		Msg("received shipping settlement notification")
 
-	if err := server.processShippingSettlementProfitSharing(ctx, notification, resource, rawResource); err != nil {
+	if err := server.processShippingSettlementProfitSharing(ctx, settlementEventMetaFromMessage(message, eventID), resource, body); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("settlement", "apply_business").Inc()
 		log.Error().Err(err).
-			Str("notification_id", notification.ID).
+			Str("event_id", eventID).
 			Str("transaction_id", resource.TransactionID).
 			Str("merchant_trade_no", resource.MerchantTradeNo).
 			Msg("shipping settlement profit sharing trigger failed")
-		server.releaseNotification(ctx, notification.ID, "settlement")
+		server.releaseNotification(ctx, eventID, "settlement")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: settlementNotifyFailureMessage(err),
@@ -1488,7 +1472,7 @@ func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
 		return
 	}
 
-	server.markNotificationProcessed(ctx, notification.ID, resource.MerchantTradeNo, resource.TransactionID)
+	server.markNotificationProcessed(ctx, eventID, resource.MerchantTradeNo, resource.TransactionID)
 	writeWechatNotifySuccess(ctx, "settlement")
 }
 
@@ -1505,13 +1489,82 @@ func settlementNotifyFailureMessage(err error) string {
 	return "apply notification failed"
 }
 
+func orderShippingSettlementResource(message wechatcontracts.OrderShippingSettlementMessage) wechatcontracts.ShippingSettlementNotificationResource {
+	return wechatcontracts.ShippingSettlementNotificationResource{
+		TransactionID:        strings.TrimSpace(message.TransactionID),
+		MerchantTradeNo:      strings.TrimSpace(message.MerchantTradeNo),
+		ConfirmReceiveMethod: message.ConfirmReceiveMethod,
+		SettlementTime:       wechatUnixTimeRFC3339(message.SettlementTime),
+		SuccessTime:          wechatUnixTimeRFC3339(message.ConfirmReceiveTime),
+	}
+}
+
+func settlementEventMetaFromMessage(message wechatcontracts.OrderShippingSettlementMessage, eventID string) shippingSettlementEventMeta {
+	settlementTime := orderShippingSettlementEventTime(message)
+	externalKey := strings.TrimSpace(message.TransactionID)
+	if externalKey == "" {
+		externalKey = strings.TrimSpace(message.MerchantTradeNo)
+	}
+	return shippingSettlementEventMeta{
+		SourceEventID:   eventID,
+		SourceEventType: wechatcontracts.OrderShippingEventType,
+		DedupeKey:       fmt.Sprintf("wechat:settlement:%s:%d", externalKey, settlementTime),
+		OccurredAt:      wechatUnixTime(settlementTime),
+	}
+}
+
+func orderShippingSettlementEventID(message wechatcontracts.OrderShippingSettlementMessage) string {
+	settlementTime := orderShippingSettlementEventTime(message)
+	externalKey := strings.TrimSpace(message.TransactionID)
+	if externalKey == "" {
+		externalKey = strings.TrimSpace(message.MerchantTradeNo)
+	}
+	if externalKey == "" {
+		externalKey = strings.TrimSpace(message.FromUserName)
+	}
+	return fmt.Sprintf("mpmsg:%s:%d", externalKey, settlementTime)
+}
+
+func orderShippingSettlementEventTime(message wechatcontracts.OrderShippingSettlementMessage) int64 {
+	if message.SettlementTime > 0 {
+		return message.SettlementTime
+	}
+	if message.ConfirmReceiveTime > 0 {
+		return message.ConfirmReceiveTime
+	}
+	return message.CreateTime
+}
+
+func wechatUnixTimeRFC3339(value int64) string {
+	parsed := wechatUnixTime(value)
+	if parsed == nil {
+		return ""
+	}
+	return parsed.Format(time.RFC3339)
+}
+
+func wechatUnixTime(value int64) *time.Time {
+	if value <= 0 {
+		return nil
+	}
+	parsed := time.Unix(value, 0).UTC()
+	return &parsed
+}
+
 var (
 	errSettlementProfitSharingEnqueueFailed = errors.New("settlement profit sharing enqueue failed")
 	errSettlementPaymentOrderNotFound       = errors.New("settlement payment order not found")
 	errSettlementProfitSharingBillNotFound  = errors.New("settlement profit sharing bill not found")
 )
 
-func (server *Server) processShippingSettlementProfitSharing(ctx context.Context, notification wechat.PaymentNotification, resource wechatcontracts.ShippingSettlementNotificationResource, rawResource []byte) error {
+type shippingSettlementEventMeta struct {
+	SourceEventID   string
+	SourceEventType string
+	DedupeKey       string
+	OccurredAt      *time.Time
+}
+
+func (server *Server) processShippingSettlementProfitSharing(ctx context.Context, eventMeta shippingSettlementEventMeta, resource wechatcontracts.ShippingSettlementNotificationResource, rawResource []byte) error {
 	paymentOrder, err := server.resolveSettlementPaymentOrder(ctx, resource)
 	if err != nil {
 		return err
@@ -1534,16 +1587,16 @@ func (server *Server) processShippingSettlementProfitSharing(ctx context.Context
 		return err
 	}
 
-	fact, err := server.recordShippingSettlementTrigger(ctx, notification, resource, paymentOrder, profitSharingOrder, rawResource)
+	fact, err := server.recordShippingSettlementTrigger(ctx, eventMeta, resource, paymentOrder, profitSharingOrder, rawResource)
 	if err != nil {
 		return err
 	}
-	if err := server.enqueueSettlementProfitSharing(ctx, notification.ID, profitSharingOrder.ID); err != nil {
+	if err := server.enqueueSettlementProfitSharing(ctx, eventMeta.SourceEventID, profitSharingOrder.ID); err != nil {
 		return err
 	}
 
 	log.Info().
-		Str("notification_id", notification.ID).
+		Str("source_event_id", eventMeta.SourceEventID).
 		Int64("payment_order_id", paymentOrder.ID).
 		Int64("profit_sharing_order_id", profitSharingOrder.ID).
 		Int64("settlement_trigger_fact_id", fact.ID).
@@ -1622,7 +1675,7 @@ func validateSettlementRefundSafety(ctx context.Context, store db.Store, payment
 	return nil
 }
 
-func (server *Server) recordShippingSettlementTrigger(ctx context.Context, notification wechat.PaymentNotification, resource wechatcontracts.ShippingSettlementNotificationResource, paymentOrder db.PaymentOrder, profitSharingOrder db.ProfitSharingOrder, rawResource []byte) (db.ExternalPaymentFact, error) {
+func (server *Server) recordShippingSettlementTrigger(ctx context.Context, eventMeta shippingSettlementEventMeta, resource wechatcontracts.ShippingSettlementNotificationResource, paymentOrder db.PaymentOrder, profitSharingOrder db.ProfitSharingOrder, rawResource []byte) (db.ExternalPaymentFact, error) {
 	raw := rawResource
 	if len(raw) == 0 {
 		raw = []byte(`{}`)
@@ -1635,9 +1688,18 @@ func (server *Server) recordShippingSettlementTrigger(ctx context.Context, notif
 	if occurredAt == nil {
 		occurredAt = parseWechatFactTime(resource.SuccessTime)
 	}
+	if occurredAt == nil {
+		occurredAt = eventMeta.OccurredAt
+	}
 	occurredAtParam := pgtype.Timestamptz{}
 	if occurredAt != nil {
 		occurredAtParam = pgtype.Timestamptz{Time: occurredAt.UTC(), Valid: true}
+	}
+	sourceEventID := strings.TrimSpace(eventMeta.SourceEventID)
+	sourceEventType := strings.TrimSpace(eventMeta.SourceEventType)
+	dedupeKey := strings.TrimSpace(eventMeta.DedupeKey)
+	if dedupeKey == "" {
+		dedupeKey = fmt.Sprintf("wechat:settlement:%s:%s", sourceEventType, sourceEventID)
 	}
 
 	fact, err := server.store.CreateExternalPaymentFact(ctx, db.CreateExternalPaymentFactParams{
@@ -1645,8 +1707,8 @@ func (server *Server) recordShippingSettlementTrigger(ctx context.Context, notif
 		Channel:              db.PaymentChannelDirect,
 		Capability:           db.ExternalPaymentCapabilityBaofuProfitSharing,
 		FactSource:           db.ExternalPaymentFactSourceCallback,
-		SourceEventID:        pgtype.Text{String: notification.ID, Valid: strings.TrimSpace(notification.ID) != ""},
-		SourceEventType:      pgtype.Text{String: notification.EventType, Valid: strings.TrimSpace(notification.EventType) != ""},
+		SourceEventID:        pgtype.Text{String: sourceEventID, Valid: sourceEventID != ""},
+		SourceEventType:      pgtype.Text{String: sourceEventType, Valid: sourceEventType != ""},
 		ExternalObjectType:   db.ExternalPaymentObjectPayment,
 		ExternalObjectKey:    externalObjectKey,
 		ExternalSecondaryKey: pgtype.Text{String: strings.TrimSpace(resource.MerchantTradeNo), Valid: strings.TrimSpace(resource.MerchantTradeNo) != ""},
@@ -1662,7 +1724,7 @@ func (server *Server) recordShippingSettlementTrigger(ctx context.Context, notif
 		UpstreamUpdatedAt:    occurredAtParam,
 		ObservedAt:           time.Now().UTC(),
 		RawResource:          raw,
-		DedupeKey:            fmt.Sprintf("wechat:settlement:%s:%s", notification.EventType, notification.ID),
+		DedupeKey:            dedupeKey,
 		ProcessingStatus:     db.ExternalPaymentFactProcessingStatusReceived,
 	})
 	if err != nil {

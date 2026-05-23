@@ -492,11 +492,13 @@ Page({
         businessType: 'weappOrderConfirm',
         extraData: { transaction_id: transactionId },
         fail() {
+          app.globalData.pendingConfirmOrderId = undefined
           logger.error('打开确认收货组件失败', undefined, 'Detail.onConfirmReceipt')
           wx.showToast({ title: '打开失败，请重试', icon: 'none' })
         }
       })
     } else {
+      app.globalData.pendingConfirmOrderId = undefined
       wx.showToast({ title: '请升级微信后重试', icon: 'none' })
     }
   },

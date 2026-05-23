@@ -21,9 +21,13 @@ type UploadShippingInfoRequest struct {
 	TransactionID string
 	// OutTradeNo 商户子单号（当 TransactionID 为空时使用）
 	OutTradeNo string
+	// MchID 商户号。使用 out_trade_no 作为订单标识时必填。
+	MchID string
 	// PayerOpenID 支付者 openid
 	PayerOpenID string
-	// NotifyURL 结算事件回调地址（trade_manage_order_settlement）
+	// ItemDesc 商品信息，例如商品名称摘要。
+	ItemDesc string
+	// NotifyURL 保留兼容旧调用；微信发货结算事件通过小程序消息推送 URL 配置接收。
 	NotifyURL string
 	// UploadTime 发货时间
 	UploadTime time.Time
@@ -35,7 +39,9 @@ type UploadCombinedShippingInfoRequest struct {
 	CombineOutTradeNo string
 	// PayerOpenID 支付者 openid
 	PayerOpenID string
-	// NotifyURL 结算事件回调地址
+	// ItemDesc 商品信息默认值，子单未设置时使用。
+	ItemDesc string
+	// NotifyURL 保留兼容旧调用；微信发货结算事件通过小程序消息推送 URL 配置接收。
 	NotifyURL string
 	// UploadTime 发货时间
 	UploadTime time.Time
@@ -49,6 +55,8 @@ type ShippingSubOrder struct {
 	MchID string
 	// OutTradeNo 子单商户订单号
 	OutTradeNo string
+	// ItemDesc 商品信息，例如商品名称摘要。
+	ItemDesc string
 }
 
 type shippingAPIResponse struct {
@@ -68,12 +76,13 @@ func (c *Client) UploadShippingInfo(ctx context.Context, req *UploadShippingInfo
 	var orderKey map[string]interface{}
 	if req.TransactionID != "" {
 		orderKey = map[string]interface{}{
-			"order_number_type": 1,
+			"order_number_type": 2,
 			"transaction_id":    req.TransactionID,
 		}
 	} else {
 		orderKey = map[string]interface{}{
-			"order_number_type": 2,
+			"order_number_type": 1,
+			"mchid":             req.MchID,
 			"out_trade_no":      req.OutTradeNo,
 		}
 	}
@@ -83,15 +92,12 @@ func (c *Client) UploadShippingInfo(ctx context.Context, req *UploadShippingInfo
 		"logistics_type": 2, // 同城配送
 		"delivery_mode":  1, // 统一配送
 		"shipping_list": []map[string]string{
-			{"tracking_no": "", "express_company": ""},
+			{"tracking_no": "", "express_company": "", "item_desc": req.ItemDesc},
 		},
 		"upload_time": req.UploadTime.Format(time.RFC3339),
 		"payer": map[string]string{
 			"openid": req.PayerOpenID,
 		},
-	}
-	if req.NotifyURL != "" {
-		body["notify_url"] = req.NotifyURL
 	}
 
 	return c.doShippingAPICall(ctx, fmt.Sprintf(uploadShippingInfoURL, token), body)
@@ -106,6 +112,10 @@ func (c *Client) UploadCombinedShippingInfo(ctx context.Context, req *UploadComb
 
 	subOrders := make([]map[string]interface{}, len(req.SubOrders))
 	for i, sub := range req.SubOrders {
+		itemDesc := sub.ItemDesc
+		if itemDesc == "" {
+			itemDesc = req.ItemDesc
+		}
 		subOrders[i] = map[string]interface{}{
 			"mchid":          sub.MchID,
 			"out_trade_no":   sub.OutTradeNo,
@@ -113,7 +123,7 @@ func (c *Client) UploadCombinedShippingInfo(ctx context.Context, req *UploadComb
 			"delivery_mode":  1, // 统一配送
 			"deadline_type":  1, // 不承诺时效
 			"shipping_list": []map[string]string{
-				{"tracking_no": "", "express_company": ""},
+				{"tracking_no": "", "express_company": "", "item_desc": itemDesc},
 			},
 		}
 	}
@@ -125,9 +135,6 @@ func (c *Client) UploadCombinedShippingInfo(ctx context.Context, req *UploadComb
 		},
 		"upload_time": req.UploadTime.Format(time.RFC3339),
 		"sub_orders":  subOrders,
-	}
-	if req.NotifyURL != "" {
-		body["notify_url"] = req.NotifyURL
 	}
 
 	return c.doShippingAPICall(ctx, fmt.Sprintf(uploadCombinedShippingInfoURL, token), body)

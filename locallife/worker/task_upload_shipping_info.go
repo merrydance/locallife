@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -45,8 +46,6 @@ func (processor *RedisTaskProcessor) ProcessTaskUploadShippingInfo(ctx context.C
 		return fmt.Errorf("wechat client not configured: %w", asynq.SkipRetry)
 	}
 
-	notifyURL := processor.config.WechatShippingSettleNotifyURL
-
 	// 1. 查询支付订单
 	po, err := processor.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
 		OrderID:      pgtype.Int8{Int64: payload.OrderID, Valid: true},
@@ -73,22 +72,33 @@ func (processor *RedisTaskProcessor) ProcessTaskUploadShippingInfo(ctx context.C
 
 	now := time.Now()
 
-	switch {
-	case po.PaymentType == "miniprogram":
-		transactionID := ""
-		if po.TransactionID.Valid {
-			transactionID = po.TransactionID.String
-		}
+	switch po.PaymentChannel {
+	case db.PaymentChannelDirect, db.PaymentChannelBaofuAggregate:
+		transactionID := shippingUploadTransactionID(po)
 		if transactionID == "" && po.OutTradeNo == "" {
 			log.Warn().Int64("payment_order_id", po.ID).Msg("shipping upload: no transaction_id or out_trade_no, skip")
+			return nil
+		}
+		mchID := shippingUploadMchID(po)
+		if transactionID == "" && mchID == "" {
+			log.Warn().Int64("payment_order_id", po.ID).Msg("shipping upload: merchant order key missing mchid, skip")
+			return nil
+		}
+		itemDesc, err := processor.shippingUploadItemDesc(ctx, payload.OrderID)
+		if err != nil {
+			return err
+		}
+		if itemDesc == "" {
+			log.Warn().Int64("order_id", payload.OrderID).Msg("shipping upload: item desc empty, skip")
 			return nil
 		}
 
 		if err := processor.wechatClient.UploadShippingInfo(ctx, &wechat.UploadShippingInfoRequest{
 			TransactionID: transactionID,
 			OutTradeNo:    po.OutTradeNo,
+			MchID:         mchID,
 			PayerOpenID:   user.WechatOpenid,
-			NotifyURL:     notifyURL,
+			ItemDesc:      itemDesc,
 			UploadTime:    now,
 		}); err != nil {
 			return fmt.Errorf("upload_shipping_info failed: %w", err)
@@ -96,10 +106,75 @@ func (processor *RedisTaskProcessor) ProcessTaskUploadShippingInfo(ctx context.C
 		log.Info().Int64("order_id", payload.OrderID).Msg("upload_shipping_info ok")
 
 	default:
-		// 余额支付、宝付主业务等无需上报
+		log.Debug().
+			Int64("order_id", payload.OrderID).
+			Str("payment_channel", po.PaymentChannel).
+			Msg("shipping upload: unsupported payment channel, skip")
 	}
 
 	return nil
+}
+
+func (processor *RedisTaskProcessor) shippingUploadItemDesc(ctx context.Context, orderID int64) (string, error) {
+	items, err := processor.store.ListOrderItemsByOrder(ctx, orderID)
+	if err != nil {
+		return "", fmt.Errorf("shipping upload: list order items failed: %w", err)
+	}
+	return buildShippingItemDesc(items), nil
+}
+
+func buildShippingItemDesc(items []db.OrderItem) string {
+	const maxShippingItemDescRunes = 120
+
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		name := strings.TrimSpace(item.Name)
+		if name == "" {
+			continue
+		}
+		quantity := item.Quantity
+		if quantity <= 0 {
+			quantity = 1
+		}
+		parts = append(parts, fmt.Sprintf("%sx%d", name, quantity))
+	}
+	desc := strings.Join(parts, "、")
+	if len([]rune(desc)) <= maxShippingItemDescRunes {
+		return desc
+	}
+	runes := []rune(desc)
+	return string(runes[:maxShippingItemDescRunes])
+}
+
+func shippingUploadTransactionID(paymentOrder db.PaymentOrder) string {
+	if paymentOrder.PaymentChannel != db.PaymentChannelDirect {
+		return ""
+	}
+	if !paymentOrder.TransactionID.Valid {
+		return ""
+	}
+	return strings.TrimSpace(paymentOrder.TransactionID.String)
+}
+
+func shippingUploadMchID(paymentOrder db.PaymentOrder) string {
+	if paymentOrder.PaymentChannel == db.PaymentChannelDirect {
+		return ""
+	}
+	return shippingUploadSubMchIDFromAttach(paymentOrder.Attach.String, paymentOrder.Attach.Valid)
+}
+
+func shippingUploadSubMchIDFromAttach(attach string, valid bool) string {
+	if !valid {
+		return ""
+	}
+	for _, segment := range strings.Split(strings.TrimSpace(attach), ";") {
+		key, value, ok := strings.Cut(strings.TrimSpace(segment), ":")
+		if !ok || strings.TrimSpace(key) != "sub_mchid" {
+			continue
+		}
+		return strings.TrimSpace(value)
+	}
+	return ""
 }
 
 // DistributeTaskUploadShippingInfo 分发发货信息上报任务
