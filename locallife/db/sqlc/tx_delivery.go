@@ -10,16 +10,18 @@ import (
 
 var ErrDeliveryStateTransitionConflict = errors.New("delivery state changed concurrently")
 var ErrTakeoutOrderPausedByFoodSafety = errors.New("takeout order is paused due to food safety suspension")
+var ErrBaofuProfitSharingBillNotPending = errors.New("baofu profit sharing bill is not pending")
 
 // ==================== 骑手抢单事务 ====================
 
 // GrabOrderTxParams contains the input parameters for grabbing an order
 type GrabOrderTxParams struct {
-	DeliveryID   int64
-	RiderID      int64
-	RiderUserID  int64
-	OrderID      int64
-	FreezeAmount int64 // 需要冻结的押金金额
+	DeliveryID             int64
+	RiderID                int64
+	RiderUserID            int64
+	OrderID                int64
+	FreezeAmount           int64 // 需要冻结的押金金额
+	ProfitSharingRiderBill *UpdateProfitSharingOrderRiderBillByPaymentOrderParams
 }
 
 // GrabOrderTxResult contains the result of the grab order transaction
@@ -229,6 +231,15 @@ func (store *SQLStore) GrabOrderTx(ctx context.Context, arg GrabOrderTxParams) (
 		})
 		if err != nil {
 			return fmt.Errorf("assign delivery: %w", err)
+		}
+
+		if arg.ProfitSharingRiderBill != nil {
+			if _, err := q.UpdateProfitSharingOrderRiderBillByPaymentOrder(ctx, *arg.ProfitSharingRiderBill); err != nil {
+				if errors.Is(err, ErrRecordNotFound) {
+					return ErrBaofuProfitSharingBillNotPending
+				}
+				return fmt.Errorf("update baofu rider profit sharing bill: %w", err)
+			}
 		}
 
 		// 4. 从订单池中移除

@@ -20,6 +20,10 @@ class EscPosUtils {
     if (message.itemsLoadFailed) {
       throw StateError('订单明细未完成同步，不能打印小票');
     }
+    final feeBreakdown = message.feeBreakdown;
+    if (feeBreakdown == null) {
+      throw StateError('订单收款账单仍在同步，暂不打印小票');
+    }
 
     List<int> bytes = [];
 
@@ -65,8 +69,42 @@ class EscPosUtils {
     }
     bytes.addAll(_encode("--------------------------------\n"));
     bytes.addAll(_boldOn);
-    bytes.addAll(_encode("订单总额: ¥${message.amount.toStringAsFixed(2)}\n"));
+    bytes.addAll(
+      _encode(
+        "用户实付: ${_formatCents(feeBreakdown.customerPayableAmountCents)}\n",
+      ),
+    );
     bytes.addAll(_boldOff);
+    bytes.addAll(
+      _encode(
+        "平台服务费: ${_formatCents(feeBreakdown.platformServiceFeeAmountCents)}\n",
+      ),
+    );
+    bytes.addAll(
+      _encode(
+        "支付通道费: ${_formatCents(feeBreakdown.paymentChannelFeeAmountCents)}\n",
+      ),
+    );
+    bytes.addAll(
+      _encode(
+        "商户实收: ${_formatCents(feeBreakdown.merchantReceivableAmountCents)}\n",
+      ),
+    );
+    final riderGrossAmount = feeBreakdown.riderGrossAmountCents > 0
+        ? feeBreakdown.riderGrossAmountCents
+        : feeBreakdown.deliveryFeeAmountCents;
+    if (riderGrossAmount > 0) {
+      bytes.addAll(_encode("配送费: ${_formatCents(riderGrossAmount)}\n"));
+    }
+    if (feeBreakdown.riderPaymentFeeCents > 0 ||
+        feeBreakdown.riderNetEarningsCents > 0) {
+      bytes.addAll(
+        _encode("骑手通道费: ${_formatCents(feeBreakdown.riderPaymentFeeCents)}\n"),
+      );
+      bytes.addAll(
+        _encode("骑手实收: ${_formatCents(feeBreakdown.riderNetEarningsCents)}\n"),
+      );
+    }
     bytes.addAll(_encode("--------------------------------\n"));
 
     // Footer
@@ -81,5 +119,9 @@ class EscPosUtils {
 
   static List<int> _encode(String text) {
     return utf8.encode(text);
+  }
+
+  static String _formatCents(int cents) {
+    return "¥${(cents / 100.0).toStringAsFixed(2)}";
   }
 }

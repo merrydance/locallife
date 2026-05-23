@@ -12,42 +12,42 @@ import (
 )
 
 const (
-	paymentFactConsumerProfitSharingDomain          = "profit_sharing_domain"
-	paymentFactConsumerOrderDomain                  = "order_domain"
-	paymentFactConsumerClaimRecoveryDomain          = "claim_recovery_domain"
-	paymentFactConsumerRiderDepositDomain           = "rider_deposit_domain"
-	paymentFactConsumerReservationDomain            = "reservation_domain"
-	paymentFactConsumerBaofuAccountVerifyFeeDomain  = "baofu_account_verify_fee_domain"
-	paymentFactBusinessObjectPaymentOrder           = "payment_order"
-	paymentFactBusinessObjectRefundOrder            = "refund_order"
-	paymentFactBusinessObjectProfitSharingOrder     = "profit_sharing_order"
-	paymentFactBusinessObjectProfitSharingReturn     = "profit_sharing_return"
-	paymentFactApplicationRetryDelay                = 5 * time.Minute
+	paymentFactConsumerProfitSharingDomain         = "profit_sharing_domain"
+	paymentFactConsumerOrderDomain                 = "order_domain"
+	paymentFactConsumerClaimRecoveryDomain         = "claim_recovery_domain"
+	paymentFactConsumerRiderDepositDomain          = "rider_deposit_domain"
+	paymentFactConsumerReservationDomain           = "reservation_domain"
+	paymentFactConsumerBaofuAccountVerifyFeeDomain = "baofu_account_verify_fee_domain"
+	paymentFactBusinessObjectPaymentOrder          = "payment_order"
+	paymentFactBusinessObjectRefundOrder           = "refund_order"
+	paymentFactBusinessObjectProfitSharingOrder    = "profit_sharing_order"
+	paymentFactBusinessObjectProfitSharingReturn   = "profit_sharing_return"
+	paymentFactApplicationRetryDelay               = 5 * time.Minute
 )
 
 type ApplyExternalPaymentFactApplicationResult struct {
-	Application                   db.ExternalPaymentFactApplication
-	Fact                          db.ExternalPaymentFact
-	Outbox                        *db.PaymentDomainOutbox
-	OrderPayment                  *ApplyOrderPaymentFactResult
-	ClaimRecoveryPayment          *claimRecoveryPaymentDomainResult
-	ReservationPayment            *ApplyReservationPaymentFactResult
-	BaofuVerifyFeePayment         *baofuVerifyFeePaymentDomainResult
-	Applied                       bool
-	Skipped                       bool
+	Application           db.ExternalPaymentFactApplication
+	Fact                  db.ExternalPaymentFact
+	Outbox                *db.PaymentDomainOutbox
+	OrderPayment          *ApplyOrderPaymentFactResult
+	ClaimRecoveryPayment  *claimRecoveryPaymentDomainResult
+	ReservationPayment    *ApplyReservationPaymentFactResult
+	BaofuVerifyFeePayment *baofuVerifyFeePaymentDomainResult
+	Applied               bool
+	Skipped               bool
 }
 
 type appliedPaymentFactDomainResult struct {
-	ProfitSharingOrder            *db.ProfitSharingOrder
-	ProfitSharingReturn           *profitSharingReturnDomainResult
-	OrderPayment                  *ApplyOrderPaymentFactResult
-	ClaimRecoveryPayment          *claimRecoveryPaymentDomainResult
-	ReservationPayment            *ApplyReservationPaymentFactResult
-	RiderDepositPayment           *riderDepositPaymentDomainResult
-	BaofuVerifyFeePayment         *baofuVerifyFeePaymentDomainResult
-	RiderDepositRefund            *riderDepositRefundDomainResult
-	OrderRefund                   *orderRefundDomainResult
-	ReservationRefund             *reservationRefundDomainResult
+	ProfitSharingOrder    *db.ProfitSharingOrder
+	ProfitSharingReturn   *profitSharingReturnDomainResult
+	OrderPayment          *ApplyOrderPaymentFactResult
+	ClaimRecoveryPayment  *claimRecoveryPaymentDomainResult
+	ReservationPayment    *ApplyReservationPaymentFactResult
+	RiderDepositPayment   *riderDepositPaymentDomainResult
+	BaofuVerifyFeePayment *baofuVerifyFeePaymentDomainResult
+	RiderDepositRefund    *riderDepositRefundDomainResult
+	OrderRefund           *orderRefundDomainResult
+	ReservationRefund     *reservationRefundDomainResult
 }
 
 type riderDepositPaymentDomainResult struct {
@@ -1141,6 +1141,10 @@ func (svc *PaymentFactService) createOrderPaymentOutbox(ctx context.Context, app
 		return nil, nil
 	}
 
+	if err := svc.ensureBaofuOrderPaymentBill(ctx, orderPayment.PaymentOrder, orderPayment.OrderResult.Order); err != nil {
+		return nil, err
+	}
+
 	payload, err := json.Marshal(orderPaymentSucceededOutboxPayload{
 		PaymentOrderID:           orderPayment.PaymentOrder.ID,
 		OrderID:                  orderPayment.OrderResult.Order.ID,
@@ -1164,6 +1168,74 @@ func (svc *PaymentFactService) createOrderPaymentOutbox(ctx context.Context, app
 		return nil, fmt.Errorf("create order payment outbox: %w", err)
 	}
 	return &outbox, nil
+}
+
+func (svc *PaymentFactService) ensureBaofuOrderPaymentBill(ctx context.Context, paymentOrder db.PaymentOrder, order db.Order) error {
+	if !db.PaymentOrderRequiresProfitSharing(paymentOrder) {
+		return nil
+	}
+	if paymentOrder.BusinessType != db.ExternalPaymentBusinessOwnerOrder {
+		return fmt.Errorf("payment order %d business type %q is not order for baofu profit sharing bill", paymentOrder.ID, paymentOrder.BusinessType)
+	}
+	if paymentOrder.Status != paymentStatusPaid {
+		return fmt.Errorf("payment order %d status %q is not paid for baofu profit sharing bill", paymentOrder.ID, paymentOrder.Status)
+	}
+	if paymentOrder.Amount <= 0 {
+		return fmt.Errorf("payment order %d amount is required for baofu profit sharing bill", paymentOrder.ID)
+	}
+	if order.ID <= 0 || order.MerchantID <= 0 {
+		return fmt.Errorf("order is required for baofu profit sharing bill: payment_order_id=%d order_id=%d merchant_id=%d", paymentOrder.ID, order.ID, order.MerchantID)
+	}
+	if paymentOrder.OrderID.Valid && paymentOrder.OrderID.Int64 != order.ID {
+		return fmt.Errorf("payment order %d order id %d does not match applied order %d", paymentOrder.ID, paymentOrder.OrderID.Int64, order.ID)
+	}
+
+	merchant, err := svc.store.GetMerchant(ctx, order.MerchantID)
+	if err != nil {
+		return fmt.Errorf("get merchant for baofu profit sharing bill: %w", err)
+	}
+	orderSource := baofuProfitSharingOrderSource(order)
+	config, err := svc.store.GetActiveProfitSharingConfig(ctx, db.GetActiveProfitSharingConfigParams{
+		OrderSource: orderSource,
+		MerchantID:  pgtype.Int8{Int64: order.MerchantID, Valid: true},
+		RegionID:    pgtype.Int8{Int64: merchant.RegionID, Valid: merchant.RegionID > 0},
+	})
+	if err != nil {
+		return fmt.Errorf("get active profit sharing config for baofu bill: %w", err)
+	}
+
+	operatorID := int64(0)
+	if merchant.RegionID > 0 && config.OperatorRate > 0 {
+		operator, err := svc.store.GetActiveOperatorByRegion(ctx, merchant.RegionID)
+		if err != nil {
+			return fmt.Errorf("get active operator for baofu profit sharing bill: %w", err)
+		}
+		operatorID = operator.ID
+	}
+
+	_, err = NewBaofuProfitSharingService(svc.store).CreatePendingOrder(ctx, BaofuProfitSharingOrderInput{
+		PaymentOrderID:  paymentOrder.ID,
+		MerchantID:      order.MerchantID,
+		OperatorID:      operatorID,
+		PlatformOwnerID: 0,
+		OrderSource:     orderSource,
+		TotalAmountFen:  paymentOrder.Amount,
+		DeliveryFeeFen:  order.DeliveryFee,
+		PlatformRateBps: config.PlatformRate,
+		OperatorRateBps: config.OperatorRate,
+		OutOrderNo:      fmt.Sprintf("BFPS%dO%d", paymentOrder.ID, order.ID),
+	})
+	if err != nil {
+		return fmt.Errorf("ensure baofu profit sharing bill: %w", err)
+	}
+	return nil
+}
+
+func baofuProfitSharingOrderSource(order db.Order) string {
+	if order.ReservationID.Valid && order.OrderType == orderTypeDineIn {
+		return db.OrderTypeReservation
+	}
+	return order.OrderType
 }
 
 func (svc *PaymentFactService) createReservationPaymentOutbox(ctx context.Context, application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact, reservationPayment ApplyReservationPaymentFactResult) (*db.PaymentDomainOutbox, error) {

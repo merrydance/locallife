@@ -52,6 +52,15 @@ void main() {
         'status': 'paid',
         'created_at': '2026-04-12T08:00:00Z',
         'notes': '少放葱',
+        'fee_breakdown': {
+          'customer_payable_amount': 8800,
+          'platform_service_fee_amount': 475,
+          'payment_channel_fee_amount': 31,
+          'merchant_receivable_amount': 8294,
+          'rider_gross_amount': 800,
+          'rider_payment_fee_amount': 5,
+          'rider_net_earnings_amount': 795,
+        },
         'items': [
           {
             'id': 801,
@@ -70,6 +79,14 @@ void main() {
       expect(order.status, OrderStatus.pending);
       expect(order.note, '少放葱');
       expect(order.hasReliableItems, isTrue);
+      expect(order.feeBreakdown, isNotNull);
+      expect(order.feeBreakdown!.customerPayableAmountCents, 8800);
+      expect(order.feeBreakdown!.platformServiceFeeAmountCents, 475);
+      expect(order.feeBreakdown!.paymentChannelFeeAmountCents, 31);
+      expect(order.feeBreakdown!.merchantReceivableAmountCents, 8294);
+      expect(order.feeBreakdown!.riderGrossAmountCents, 800);
+      expect(order.feeBreakdown!.riderPaymentFeeCents, 5);
+      expect(order.feeBreakdown!.riderNetEarningsCents, 795);
       expect(order.items.single.price, 28.0);
       expect(order.items.single.subtotal, 56.0);
       expect(order.items.single.specsText, '大份 / 少辣');
@@ -109,6 +126,15 @@ void main() {
         'amount': 8800,
         'shop_name': '测试门店',
         'notes': '少放葱',
+        'fee_breakdown': {
+          'customer_payable_amount': 8800,
+          'platform_service_fee_amount': 475,
+          'payment_channel_fee_amount': 31,
+          'merchant_receivable_amount': 8294,
+          'rider_gross_amount': 800,
+          'rider_payment_fee_amount': 5,
+          'rider_net_earnings_amount': 795,
+        },
         'items': [
           {
             'name': '测试菜品',
@@ -125,6 +151,11 @@ void main() {
       expect(message.displayOrderNumber, 'ORD501');
       expect(message.amount, 88.0);
       expect(message.note, '少放葱');
+      expect(message.feeBreakdown, isNotNull);
+      expect(message.feeBreakdown!.merchantReceivableAmountCents, 8294);
+      expect(message.feeBreakdown!.riderGrossAmountCents, 800);
+      expect(message.feeBreakdown!.riderPaymentFeeCents, 5);
+      expect(message.feeBreakdown!.riderNetEarningsCents, 795);
       expect(message.items.single.specsText, '大份 / 少辣');
       expect(message.itemsLoadFailed, isFalse);
     });
@@ -143,6 +174,15 @@ void main() {
           'order_no': 'ORD501',
           'total_amount': 8800,
           'notes': '少放葱',
+          'fee_breakdown': {
+            'customer_payable_amount': 8800,
+            'platform_service_fee_amount': 475,
+            'payment_channel_fee_amount': 31,
+            'merchant_receivable_amount': 8294,
+            'rider_gross_amount': 800,
+            'rider_payment_fee_amount': 5,
+            'rider_net_earnings_amount': 795,
+          },
           'items': [
             {
               'name': '测试菜品',
@@ -160,6 +200,11 @@ void main() {
         expect(hydrated.displayOrderNumber, 'ORD501');
         expect(hydrated.amount, 88.0);
         expect(hydrated.note, '少放葱');
+        expect(hydrated.feeBreakdown, isNotNull);
+        expect(hydrated.feeBreakdown!.merchantReceivableAmountCents, 8294);
+        expect(hydrated.feeBreakdown!.riderGrossAmountCents, 800);
+        expect(hydrated.feeBreakdown!.riderPaymentFeeCents, 5);
+        expect(hydrated.feeBreakdown!.riderNetEarningsCents, 795);
         expect(hydrated.items.single.specsText, '大份 / 少辣');
       },
     );

@@ -35,6 +35,7 @@ type wechatPaymentNotifyResponse struct {
 const maxWebhookBodyBytes int64 = 1 << 20 // 1MB
 const notificationClaimStaleWindow = 2 * time.Minute
 const notificationReleaseReasonProcessingFailed = "processing_failed"
+const settlementProfitSharingTaskUniqueWindow = 12 * time.Minute
 
 const (
 	paymentFactBusinessObjectPaymentOrder       = "payment_order"
@@ -1472,6 +1473,217 @@ func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
 		Int("confirm_receive_method", resource.ConfirmReceiveMethod).
 		Msg("received shipping settlement notification")
 
+	if err := server.processShippingSettlementProfitSharing(ctx, notification, resource, rawResource); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("settlement", "apply_business").Inc()
+		log.Error().Err(err).
+			Str("notification_id", notification.ID).
+			Str("transaction_id", resource.TransactionID).
+			Str("merchant_trade_no", resource.MerchantTradeNo).
+			Msg("shipping settlement profit sharing trigger failed")
+		server.releaseNotification(ctx, notification.ID, "settlement")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: settlementNotifyFailureMessage(err),
+		})
+		return
+	}
+
 	server.markNotificationProcessed(ctx, notification.ID, resource.MerchantTradeNo, resource.TransactionID)
 	writeWechatNotifySuccess(ctx, "settlement")
+}
+
+func settlementNotifyFailureMessage(err error) string {
+	if errors.Is(err, errSettlementProfitSharingEnqueueFailed) {
+		return "enqueue failed, please retry"
+	}
+	if errors.Is(err, errSettlementPaymentOrderNotFound) {
+		return "payment order not found"
+	}
+	if errors.Is(err, errSettlementProfitSharingBillNotFound) {
+		return "profit sharing bill not found"
+	}
+	return "apply notification failed"
+}
+
+var (
+	errSettlementProfitSharingEnqueueFailed = errors.New("settlement profit sharing enqueue failed")
+	errSettlementPaymentOrderNotFound       = errors.New("settlement payment order not found")
+	errSettlementProfitSharingBillNotFound  = errors.New("settlement profit sharing bill not found")
+)
+
+func (server *Server) processShippingSettlementProfitSharing(ctx context.Context, notification wechat.PaymentNotification, resource wechatcontracts.ShippingSettlementNotificationResource, rawResource []byte) error {
+	paymentOrder, err := server.resolveSettlementPaymentOrder(ctx, resource)
+	if err != nil {
+		return err
+	}
+	if err := validateSettlementPaymentOrder(paymentOrder); err != nil {
+		return err
+	}
+
+	profitSharingOrder, err := server.store.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
+	if errors.Is(err, db.ErrRecordNotFound) {
+		return fmt.Errorf("%w: payment_order_id=%d", errSettlementProfitSharingBillNotFound, paymentOrder.ID)
+	}
+	if err != nil {
+		return fmt.Errorf("get profit sharing bill by payment order: %w", err)
+	}
+	if err := validateSettlementProfitSharingOrder(profitSharingOrder, paymentOrder); err != nil {
+		return err
+	}
+	if err := validateSettlementRefundSafety(ctx, server.store, paymentOrder); err != nil {
+		return err
+	}
+
+	fact, err := server.recordShippingSettlementTrigger(ctx, notification, resource, paymentOrder, profitSharingOrder, rawResource)
+	if err != nil {
+		return err
+	}
+	if err := server.enqueueSettlementProfitSharing(ctx, notification.ID, profitSharingOrder.ID); err != nil {
+		return err
+	}
+
+	log.Info().
+		Str("notification_id", notification.ID).
+		Int64("payment_order_id", paymentOrder.ID).
+		Int64("profit_sharing_order_id", profitSharingOrder.ID).
+		Int64("settlement_trigger_fact_id", fact.ID).
+		Msg("shipping settlement trigger recorded and baofu profit sharing task enqueued")
+	return nil
+}
+
+func (server *Server) resolveSettlementPaymentOrder(ctx context.Context, resource wechatcontracts.ShippingSettlementNotificationResource) (db.PaymentOrder, error) {
+	transactionID := strings.TrimSpace(resource.TransactionID)
+	if transactionID != "" {
+		paymentOrder, err := server.store.GetPaymentOrderByTransactionId(ctx, pgtype.Text{String: transactionID, Valid: true})
+		if err == nil {
+			return paymentOrder, nil
+		}
+		if !errors.Is(err, db.ErrRecordNotFound) {
+			return db.PaymentOrder{}, fmt.Errorf("get payment order by transaction id: %w", err)
+		}
+	}
+
+	merchantTradeNo := strings.TrimSpace(resource.MerchantTradeNo)
+	if merchantTradeNo == "" {
+		return db.PaymentOrder{}, fmt.Errorf("%w: missing merchant_trade_no and transaction_id", errSettlementPaymentOrderNotFound)
+	}
+	paymentOrder, err := server.store.GetPaymentOrderByOutTradeNo(ctx, merchantTradeNo)
+	if errors.Is(err, db.ErrRecordNotFound) {
+		return db.PaymentOrder{}, fmt.Errorf("%w: merchant_trade_no=%s", errSettlementPaymentOrderNotFound, merchantTradeNo)
+	}
+	if err != nil {
+		return db.PaymentOrder{}, fmt.Errorf("get payment order by merchant trade no: %w", err)
+	}
+	return paymentOrder, nil
+}
+
+func validateSettlementPaymentOrder(paymentOrder db.PaymentOrder) error {
+	if paymentOrder.Status != "paid" {
+		return fmt.Errorf("settlement payment order %d status %q is not paid", paymentOrder.ID, paymentOrder.Status)
+	}
+	if !paymentOrder.OrderID.Valid || paymentOrder.ReservationID.Valid || paymentOrder.BusinessType != db.ExternalPaymentBusinessOwnerOrder {
+		return fmt.Errorf("settlement payment order %d is not main business order payment", paymentOrder.ID)
+	}
+	if !db.PaymentOrderRequiresProfitSharing(paymentOrder) {
+		return fmt.Errorf("settlement payment order %d does not require baofu profit sharing", paymentOrder.ID)
+	}
+	return nil
+}
+
+func validateSettlementProfitSharingOrder(profitSharingOrder db.ProfitSharingOrder, paymentOrder db.PaymentOrder) error {
+	if profitSharingOrder.PaymentOrderID != paymentOrder.ID {
+		return fmt.Errorf("profit sharing bill %d does not belong to payment order %d", profitSharingOrder.ID, paymentOrder.ID)
+	}
+	if profitSharingOrder.Provider != db.ExternalPaymentProviderBaofu || profitSharingOrder.Channel != db.PaymentChannelBaofuAggregate {
+		return fmt.Errorf("profit sharing bill %d is not baofu aggregate", profitSharingOrder.ID)
+	}
+	if profitSharingOrder.Status != db.ProfitSharingOrderStatusPending && profitSharingOrder.Status != db.ProfitSharingOrderStatusFailed {
+		return fmt.Errorf("profit sharing bill %d status %q cannot be triggered by settlement notification", profitSharingOrder.ID, profitSharingOrder.Status)
+	}
+	if profitSharingOrder.OrderSource == db.OrderTypeTakeout && profitSharingOrder.DeliveryFee > 0 {
+		if !profitSharingOrder.RiderID.Valid ||
+			strings.TrimSpace(profitSharingOrder.RiderSharingMerID.String) == "" ||
+			profitSharingOrder.RiderGrossAmount <= 0 ||
+			profitSharingOrder.RiderAmount < 0 {
+			return fmt.Errorf("takeout profit sharing bill %d rider portion is incomplete", profitSharingOrder.ID)
+		}
+	}
+	return nil
+}
+
+func validateSettlementRefundSafety(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder) error {
+	refundedAmount, err := store.GetTotalRefundedByPaymentOrder(ctx, paymentOrder.ID)
+	if err != nil {
+		return fmt.Errorf("get refunded amount before settlement sharing: %w", err)
+	}
+	if refundedAmount > 0 {
+		return fmt.Errorf("payment order %d has active refund amount %d before settlement sharing", paymentOrder.ID, refundedAmount)
+	}
+	return nil
+}
+
+func (server *Server) recordShippingSettlementTrigger(ctx context.Context, notification wechat.PaymentNotification, resource wechatcontracts.ShippingSettlementNotificationResource, paymentOrder db.PaymentOrder, profitSharingOrder db.ProfitSharingOrder, rawResource []byte) (db.ExternalPaymentFact, error) {
+	raw := rawResource
+	if len(raw) == 0 {
+		raw = []byte(`{}`)
+	}
+	externalObjectKey := strings.TrimSpace(resource.TransactionID)
+	if externalObjectKey == "" {
+		externalObjectKey = strings.TrimSpace(resource.MerchantTradeNo)
+	}
+	occurredAt := parseWechatFactTime(resource.SettlementTime)
+	if occurredAt == nil {
+		occurredAt = parseWechatFactTime(resource.SuccessTime)
+	}
+	occurredAtParam := pgtype.Timestamptz{}
+	if occurredAt != nil {
+		occurredAtParam = pgtype.Timestamptz{Time: occurredAt.UTC(), Valid: true}
+	}
+
+	fact, err := server.store.CreateExternalPaymentFact(ctx, db.CreateExternalPaymentFactParams{
+		Provider:             db.ExternalPaymentProviderWechat,
+		Channel:              db.PaymentChannelDirect,
+		Capability:           db.ExternalPaymentCapabilityBaofuProfitSharing,
+		FactSource:           db.ExternalPaymentFactSourceCallback,
+		SourceEventID:        pgtype.Text{String: notification.ID, Valid: strings.TrimSpace(notification.ID) != ""},
+		SourceEventType:      pgtype.Text{String: notification.EventType, Valid: strings.TrimSpace(notification.EventType) != ""},
+		ExternalObjectType:   db.ExternalPaymentObjectPayment,
+		ExternalObjectKey:    externalObjectKey,
+		ExternalSecondaryKey: pgtype.Text{String: strings.TrimSpace(resource.MerchantTradeNo), Valid: strings.TrimSpace(resource.MerchantTradeNo) != ""},
+		BusinessOwner:        pgtype.Text{String: db.ExternalPaymentBusinessOwnerProfitSharing, Valid: true},
+		BusinessObjectType:   pgtype.Text{String: paymentFactBusinessObjectProfitSharingOrder, Valid: true},
+		BusinessObjectID:     pgtype.Int8{Int64: profitSharingOrder.ID, Valid: true},
+		UpstreamState:        "SETTLED",
+		TerminalStatus:       db.ExternalPaymentTerminalStatusSuccess,
+		IsTerminal:           true,
+		Amount:               pgtype.Int8{Int64: paymentOrder.Amount, Valid: paymentOrder.Amount > 0},
+		Currency:             "CNY",
+		OccurredAt:           occurredAtParam,
+		UpstreamUpdatedAt:    occurredAtParam,
+		ObservedAt:           time.Now().UTC(),
+		RawResource:          raw,
+		DedupeKey:            fmt.Sprintf("wechat:settlement:%s:%s", notification.EventType, notification.ID),
+		ProcessingStatus:     db.ExternalPaymentFactProcessingStatusReceived,
+	})
+	if err != nil {
+		return db.ExternalPaymentFact{}, fmt.Errorf("record settlement trigger fact: %w", err)
+	}
+	return fact, nil
+}
+
+func (server *Server) enqueueSettlementProfitSharing(ctx context.Context, notificationID string, profitSharingOrderID int64) error {
+	if server.taskDistributor == nil {
+		return fmt.Errorf("%w: task distributor missing", errSettlementProfitSharingEnqueueFailed)
+	}
+	if err := server.taskDistributor.DistributeTaskProcessBaofuProfitSharing(
+		ctx,
+		&worker.BaofuProfitSharingPayload{ProfitSharingOrderID: profitSharingOrderID},
+		asynq.MaxRetry(5),
+		asynq.Queue(worker.QueueCritical),
+		asynq.Unique(settlementProfitSharingTaskUniqueWindow),
+	); err != nil {
+		return fmt.Errorf("%w: %v", errSettlementProfitSharingEnqueueFailed, err)
+	}
+	_ = notificationID
+	return nil
 }

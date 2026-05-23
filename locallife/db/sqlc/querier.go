@@ -87,6 +87,7 @@ type Querier interface {
 	// 检查用户是否是某商户的 Boss
 	CheckUserIsBoss(ctx context.Context, arg CheckUserIsBossParams) (bool, error)
 	CheckUserVoucherExists(ctx context.Context, arg CheckUserVoucherExistsParams) (bool, error)
+	CheckWechatSettlementTriggerForProfitSharingOrder(ctx context.Context, profitSharingOrderID pgtype.Int8) (bool, error)
 	ClaimExternalPaymentFactApplication(ctx context.Context, id int64) (ExternalPaymentFactApplication, error)
 	ClaimMerchantTakeoutSuspensionIfAvailable(ctx context.Context, arg ClaimMerchantTakeoutSuspensionIfAvailableParams) (int64, error)
 	ClaimPaymentDomainOutbox(ctx context.Context, arg ClaimPaymentDomainOutboxParams) (PaymentDomainOutbox, error)
@@ -1824,6 +1825,7 @@ type Querier interface {
 	UpdateProfitSharingConfig(ctx context.Context, arg UpdateProfitSharingConfigParams) (ProfitSharingConfig, error)
 	UpdateProfitSharingConfigStatus(ctx context.Context, arg UpdateProfitSharingConfigStatusParams) (ProfitSharingConfig, error)
 	UpdateProfitSharingOrderFeeBreakdown(ctx context.Context, arg UpdateProfitSharingOrderFeeBreakdownParams) (ProfitSharingOrder, error)
+	UpdateProfitSharingOrderRiderBillByPaymentOrder(ctx context.Context, arg UpdateProfitSharingOrderRiderBillByPaymentOrderParams) (ProfitSharingOrder, error)
 	UpdateProfitSharingOrderToFailed(ctx context.Context, id int64) (ProfitSharingOrder, error)
 	UpdateProfitSharingOrderToFinished(ctx context.Context, id int64) (ProfitSharingOrder, error)
 	UpdateProfitSharingOrderToProcessing(ctx context.Context, arg UpdateProfitSharingOrderToProcessingParams) (ProfitSharingOrder, error)

@@ -35192,10 +35192,25 @@ const docTemplate = `{
                 "pickup_phone": {
                     "type": "string"
                 },
+                "profit_sharing_order_id": {
+                    "type": "integer"
+                },
+                "profit_sharing_status": {
+                    "type": "string"
+                },
                 "rider_earnings": {
                     "type": "integer"
                 },
+                "rider_gross_amount": {
+                    "type": "integer"
+                },
                 "rider_id": {
+                    "type": "integer"
+                },
+                "rider_net_earnings": {
+                    "type": "integer"
+                },
+                "rider_payment_fee": {
                     "type": "integer"
                 },
                 "status": {
@@ -37914,6 +37929,18 @@ const docTemplate = `{
                 "platform_service_fee_amount": {
                     "type": "integer",
                     "example": 475
+                },
+                "rider_gross_amount": {
+                    "type": "integer",
+                    "example": 800
+                },
+                "rider_net_earnings_amount": {
+                    "type": "integer",
+                    "example": 795
+                },
+                "rider_payment_fee_amount": {
+                    "type": "integer",
+                    "example": 5
                 },
                 "voucher_discount_amount": {
                     "type": "integer",
@@ -42809,7 +42836,22 @@ const docTemplate = `{
                 "pickup_address": {
                     "type": "string"
                 },
+                "profit_sharing_order_id": {
+                    "type": "integer"
+                },
+                "profit_sharing_status": {
+                    "type": "string"
+                },
                 "rider_earnings": {
+                    "type": "integer"
+                },
+                "rider_gross_amount": {
+                    "type": "integer"
+                },
+                "rider_net_earnings": {
+                    "type": "integer"
+                },
+                "rider_payment_fee": {
                     "type": "integer"
                 },
                 "status": {

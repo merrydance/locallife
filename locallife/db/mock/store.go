@@ -791,6 +791,21 @@ func (mr *MockStoreMockRecorder) CheckUserVoucherExists(ctx, arg any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckUserVoucherExists", reflect.TypeOf((*MockStore)(nil).CheckUserVoucherExists), ctx, arg)
 }
 
+// CheckWechatSettlementTriggerForProfitSharingOrder mocks base method.
+func (m *MockStore) CheckWechatSettlementTriggerForProfitSharingOrder(ctx context.Context, profitSharingOrderID pgtype.Int8) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CheckWechatSettlementTriggerForProfitSharingOrder", ctx, profitSharingOrderID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CheckWechatSettlementTriggerForProfitSharingOrder indicates an expected call of CheckWechatSettlementTriggerForProfitSharingOrder.
+func (mr *MockStoreMockRecorder) CheckWechatSettlementTriggerForProfitSharingOrder(ctx, profitSharingOrderID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckWechatSettlementTriggerForProfitSharingOrder", reflect.TypeOf((*MockStore)(nil).CheckWechatSettlementTriggerForProfitSharingOrder), ctx, profitSharingOrderID)
+}
+
 // ClaimExternalPaymentFactApplication mocks base method.
 func (m *MockStore) ClaimExternalPaymentFactApplication(ctx context.Context, id int64) (db.ExternalPaymentFactApplication, error) {
 	m.ctrl.T.Helper()
@@ -5831,6 +5846,21 @@ func (m *MockStore) DeleteVoucher(ctx context.Context, id int64) error {
 func (mr *MockStoreMockRecorder) DeleteVoucher(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteVoucher", reflect.TypeOf((*MockStore)(nil).DeleteVoucher), ctx, id)
+}
+
+// EnsureBaofuProfitSharingBillTx mocks base method.
+func (m *MockStore) EnsureBaofuProfitSharingBillTx(ctx context.Context, arg db.CreateBaofuProfitSharingOrderTxParams) (db.CreateBaofuProfitSharingOrderTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EnsureBaofuProfitSharingBillTx", ctx, arg)
+	ret0, _ := ret[0].(db.CreateBaofuProfitSharingOrderTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// EnsureBaofuProfitSharingBillTx indicates an expected call of EnsureBaofuProfitSharingBillTx.
+func (mr *MockStoreMockRecorder) EnsureBaofuProfitSharingBillTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureBaofuProfitSharingBillTx", reflect.TypeOf((*MockStore)(nil).EnsureBaofuProfitSharingBillTx), ctx, arg)
 }
 
 // ExpireStaleUploadSessions mocks base method.
@@ -20511,6 +20541,21 @@ func (m *MockStore) UpdateProfitSharingOrderFeeBreakdown(ctx context.Context, ar
 func (mr *MockStoreMockRecorder) UpdateProfitSharingOrderFeeBreakdown(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateProfitSharingOrderFeeBreakdown", reflect.TypeOf((*MockStore)(nil).UpdateProfitSharingOrderFeeBreakdown), ctx, arg)
+}
+
+// UpdateProfitSharingOrderRiderBillByPaymentOrder mocks base method.
+func (m *MockStore) UpdateProfitSharingOrderRiderBillByPaymentOrder(ctx context.Context, arg db.UpdateProfitSharingOrderRiderBillByPaymentOrderParams) (db.ProfitSharingOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateProfitSharingOrderRiderBillByPaymentOrder", ctx, arg)
+	ret0, _ := ret[0].(db.ProfitSharingOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateProfitSharingOrderRiderBillByPaymentOrder indicates an expected call of UpdateProfitSharingOrderRiderBillByPaymentOrder.
+func (mr *MockStoreMockRecorder) UpdateProfitSharingOrderRiderBillByPaymentOrder(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateProfitSharingOrderRiderBillByPaymentOrder", reflect.TypeOf((*MockStore)(nil).UpdateProfitSharingOrderRiderBillByPaymentOrder), ctx, arg)
 }
 
 // UpdateProfitSharingOrderToFailed mocks base method.

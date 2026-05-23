@@ -85,7 +85,7 @@
 
       <view class="card-footer">
         <text class="order-no">订单: {{item.order_id}}</text>
-        <view class="income">+¥{{item.rider_earnings / 100}}</view>
+        <view class="income">{{item.income_view.summaryText}}</view>
       </view>
     </view>
     

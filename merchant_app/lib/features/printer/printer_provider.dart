@@ -152,6 +152,10 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
       state = state.copyWith(error: "订单明细仍在同步，暂不打印小票");
       return;
     }
+    if (message.feeBreakdown == null) {
+      state = state.copyWith(error: "订单收款账单仍在同步，暂不打印小票");
+      return;
+    }
 
     try {
       // Find write characteristic
@@ -214,6 +218,7 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
         note: order.note,
         items: order.items,
         itemsLoadFailed: order.itemsLoadFailed,
+        feeBreakdown: order.feeBreakdown,
       ),
     );
   }

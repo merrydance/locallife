@@ -32,6 +32,7 @@ class OrderModel {
   final List<OrderItem> items;
   final String? note;
   final bool itemsLoadFailed;
+  final FeeBreakdown? feeBreakdown;
 
   OrderModel({
     required this.id,
@@ -44,6 +45,7 @@ class OrderModel {
     required this.items,
     this.note,
     this.itemsLoadFailed = false,
+    this.feeBreakdown,
   });
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
@@ -75,12 +77,86 @@ class OrderModel {
           [],
       note: _firstNullableString(json, const ['notes', 'note']),
       itemsLoadFailed: json['items_load_failed'] == true,
+      feeBreakdown: FeeBreakdown.fromJsonOrNull(json['fee_breakdown']),
     );
   }
 
   String get formattedDate => DateFormat('MM-dd HH:mm').format(createdAt);
 
   bool get hasReliableItems => !itemsLoadFailed;
+}
+
+class FeeBreakdown {
+  final int customerPayableAmountCents;
+  final int platformServiceFeeAmountCents;
+  final int paymentChannelFeeAmountCents;
+  final int merchantReceivableAmountCents;
+  final int deliveryFeeAmountCents;
+  final int riderGrossAmountCents;
+  final int riderPaymentFeeCents;
+  final int riderNetEarningsCents;
+
+  const FeeBreakdown({
+    required this.customerPayableAmountCents,
+    required this.platformServiceFeeAmountCents,
+    required this.paymentChannelFeeAmountCents,
+    required this.merchantReceivableAmountCents,
+    this.deliveryFeeAmountCents = 0,
+    this.riderGrossAmountCents = 0,
+    this.riderPaymentFeeCents = 0,
+    this.riderNetEarningsCents = 0,
+  });
+
+  factory FeeBreakdown.fromJson(Map<String, dynamic> json) {
+    return FeeBreakdown(
+      customerPayableAmountCents: _firstInt(json, const [
+        'customer_payable_amount',
+      ]),
+      platformServiceFeeAmountCents: _firstInt(json, const [
+        'platform_service_fee_amount',
+      ]),
+      paymentChannelFeeAmountCents: _firstInt(json, const [
+        'payment_channel_fee_amount',
+      ]),
+      merchantReceivableAmountCents: _firstInt(json, const [
+        'merchant_receivable_amount',
+      ]),
+      deliveryFeeAmountCents: _firstInt(json, const ['delivery_fee_amount']),
+      riderGrossAmountCents: _firstInt(json, const [
+        'rider_gross_amount',
+        'delivery_fee_amount',
+      ]),
+      riderPaymentFeeCents: _firstInt(json, const [
+        'rider_payment_fee_amount',
+        'rider_payment_fee',
+      ]),
+      riderNetEarningsCents: _firstInt(json, const [
+        'rider_net_earnings_amount',
+        'rider_amount',
+        'rider_net_earnings',
+      ]),
+    );
+  }
+
+  static FeeBreakdown? fromJsonOrNull(dynamic value) {
+    if (value is Map) {
+      return FeeBreakdown.fromJson(Map<String, dynamic>.from(value));
+    }
+    return null;
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'customer_payable_amount': customerPayableAmountCents,
+      'platform_service_fee_amount': platformServiceFeeAmountCents,
+      'payment_channel_fee_amount': paymentChannelFeeAmountCents,
+      'merchant_receivable_amount': merchantReceivableAmountCents,
+      'delivery_fee_amount': deliveryFeeAmountCents,
+      'rider_gross_amount': riderGrossAmountCents,
+      'rider_payment_fee_amount': riderPaymentFeeCents,
+      'rider_net_earnings_amount': riderNetEarningsCents,
+    };
+  }
 }
 
 class OrderItem {

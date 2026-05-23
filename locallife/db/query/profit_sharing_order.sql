@@ -95,6 +95,29 @@ SET
 WHERE id = sqlc.arg(id)
 RETURNING *;
 
+-- name: UpdateProfitSharingOrderRiderBillByPaymentOrder :one
+UPDATE profit_sharing_orders
+SET
+    rider_id = sqlc.arg(rider_id),
+    rider_sharing_mer_id = sqlc.arg(rider_sharing_mer_id),
+    rider_amount = sqlc.arg(rider_amount),
+    distributable_amount = sqlc.arg(distributable_amount),
+    platform_commission = sqlc.arg(platform_commission),
+    operator_commission = sqlc.arg(operator_commission),
+    merchant_amount = sqlc.arg(merchant_amount),
+    sharing_detail_snapshot = sqlc.arg(sharing_detail_snapshot),
+    rider_gross_amount = sqlc.arg(rider_gross_amount),
+    rider_payment_fee = sqlc.arg(rider_payment_fee),
+    rider_payment_fee_rate_bps = sqlc.arg(rider_payment_fee_rate_bps),
+    rider_payment_fee_base_amount = sqlc.arg(rider_payment_fee_base_amount),
+    merchant_payment_fee = sqlc.arg(merchant_payment_fee),
+    merchant_payment_fee_base_amount = sqlc.arg(merchant_payment_fee_base_amount),
+    commission_base_amount = sqlc.arg(commission_base_amount),
+    platform_receiver_amount = sqlc.arg(platform_receiver_amount)
+WHERE payment_order_id = sqlc.arg(payment_order_id)
+  AND status = 'pending'
+RETURNING *;
+
 -- name: GetProfitSharingOrder :one
 SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount FROM profit_sharing_orders
 WHERE id = $1 LIMIT 1;

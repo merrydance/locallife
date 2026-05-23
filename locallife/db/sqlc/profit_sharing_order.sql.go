@@ -2240,6 +2240,120 @@ func (q *Queries) UpdateProfitSharingOrderFeeBreakdown(ctx context.Context, arg 
 	return i, err
 }
 
+const updateProfitSharingOrderRiderBillByPaymentOrder = `-- name: UpdateProfitSharingOrderRiderBillByPaymentOrder :one
+UPDATE profit_sharing_orders
+SET
+    rider_id = $1,
+    rider_sharing_mer_id = $2,
+    rider_amount = $3,
+    distributable_amount = $4,
+    platform_commission = $5,
+    operator_commission = $6,
+    merchant_amount = $7,
+    sharing_detail_snapshot = $8,
+    rider_gross_amount = $9,
+    rider_payment_fee = $10,
+    rider_payment_fee_rate_bps = $11,
+    rider_payment_fee_base_amount = $12,
+    merchant_payment_fee = $13,
+    merchant_payment_fee_base_amount = $14,
+    commission_base_amount = $15,
+    platform_receiver_amount = $16
+WHERE payment_order_id = $17
+  AND status = 'pending'
+RETURNING id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount
+`
+
+type UpdateProfitSharingOrderRiderBillByPaymentOrderParams struct {
+	RiderID                      pgtype.Int8 `json:"rider_id"`
+	RiderSharingMerID            pgtype.Text `json:"rider_sharing_mer_id"`
+	RiderAmount                  int64       `json:"rider_amount"`
+	DistributableAmount          int64       `json:"distributable_amount"`
+	PlatformCommission           int64       `json:"platform_commission"`
+	OperatorCommission           int64       `json:"operator_commission"`
+	MerchantAmount               int64       `json:"merchant_amount"`
+	SharingDetailSnapshot        []byte      `json:"sharing_detail_snapshot"`
+	RiderGrossAmount             int64       `json:"rider_gross_amount"`
+	RiderPaymentFee              int64       `json:"rider_payment_fee"`
+	RiderPaymentFeeRateBps       int32       `json:"rider_payment_fee_rate_bps"`
+	RiderPaymentFeeBaseAmount    int64       `json:"rider_payment_fee_base_amount"`
+	MerchantPaymentFee           int64       `json:"merchant_payment_fee"`
+	MerchantPaymentFeeBaseAmount int64       `json:"merchant_payment_fee_base_amount"`
+	CommissionBaseAmount         int64       `json:"commission_base_amount"`
+	PlatformReceiverAmount       int64       `json:"platform_receiver_amount"`
+	PaymentOrderID               int64       `json:"payment_order_id"`
+}
+
+func (q *Queries) UpdateProfitSharingOrderRiderBillByPaymentOrder(ctx context.Context, arg UpdateProfitSharingOrderRiderBillByPaymentOrderParams) (ProfitSharingOrder, error) {
+	row := q.db.QueryRow(ctx, updateProfitSharingOrderRiderBillByPaymentOrder,
+		arg.RiderID,
+		arg.RiderSharingMerID,
+		arg.RiderAmount,
+		arg.DistributableAmount,
+		arg.PlatformCommission,
+		arg.OperatorCommission,
+		arg.MerchantAmount,
+		arg.SharingDetailSnapshot,
+		arg.RiderGrossAmount,
+		arg.RiderPaymentFee,
+		arg.RiderPaymentFeeRateBps,
+		arg.RiderPaymentFeeBaseAmount,
+		arg.MerchantPaymentFee,
+		arg.MerchantPaymentFeeBaseAmount,
+		arg.CommissionBaseAmount,
+		arg.PlatformReceiverAmount,
+		arg.PaymentOrderID,
+	)
+	var i ProfitSharingOrder
+	err := row.Scan(
+		&i.ID,
+		&i.PaymentOrderID,
+		&i.MerchantID,
+		&i.OperatorID,
+		&i.OrderSource,
+		&i.TotalAmount,
+		&i.PlatformCommission,
+		&i.OperatorCommission,
+		&i.MerchantAmount,
+		&i.OutOrderNo,
+		&i.SharingOrderID,
+		&i.Status,
+		&i.FinishedAt,
+		&i.CreatedAt,
+		&i.DeliveryFee,
+		&i.RiderID,
+		&i.RiderAmount,
+		&i.DistributableAmount,
+		&i.PlatformRate,
+		&i.OperatorRate,
+		&i.PaymentFee,
+		&i.PaymentFeeRateBps,
+		&i.Provider,
+		&i.Channel,
+		&i.MerchantSharingMerID,
+		&i.RiderSharingMerID,
+		&i.OperatorSharingMerID,
+		&i.PlatformSharingMerID,
+		&i.SharingDetailSnapshot,
+		&i.CalculationVersion,
+		&i.SettlementMode,
+		&i.ProviderPaymentFee,
+		&i.ProviderPaymentFeeRateBps,
+		&i.ProviderPaymentFeeBaseAmount,
+		&i.ProviderPaymentFeeSource,
+		&i.MerchantPaymentFee,
+		&i.MerchantPaymentFeeRateBps,
+		&i.MerchantPaymentFeeBaseAmount,
+		&i.RiderGrossAmount,
+		&i.RiderPaymentFee,
+		&i.RiderPaymentFeeRateBps,
+		&i.RiderPaymentFeeBaseAmount,
+		&i.CommissionBaseAmount,
+		&i.PlatformReceiverAmount,
+	)
+	return i, err
+}
+
 const updateProfitSharingOrderToFailed = `-- name: UpdateProfitSharingOrderToFailed :one
 UPDATE profit_sharing_orders
 SET

@@ -65,6 +65,7 @@ type Store interface {
 	CreatePartnerPaymentTx(ctx context.Context, arg CreatePartnerPaymentTxParams) (CreatePartnerPaymentTxResult, error)
 	CloseCombinedPaymentOrderTx(ctx context.Context, arg CloseCombinedPaymentOrderTxParams) (CloseCombinedPaymentOrderTxResult, error)
 	CreateBaofuProfitSharingOrderTx(ctx context.Context, arg CreateBaofuProfitSharingOrderTxParams) (CreateBaofuProfitSharingOrderTxResult, error)
+	EnsureBaofuProfitSharingBillTx(ctx context.Context, arg CreateBaofuProfitSharingOrderTxParams) (CreateBaofuProfitSharingOrderTxResult, error)
 	// Notification idempotency transactions
 	TryClaimWechatNotification(ctx context.Context, arg CreateWechatNotificationParams) (bool, error)
 	ReleaseWechatNotificationClaim(ctx context.Context, id string) error

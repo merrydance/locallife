@@ -12,6 +12,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const checkWechatSettlementTriggerForProfitSharingOrder = `-- name: CheckWechatSettlementTriggerForProfitSharingOrder :one
+SELECT EXISTS (
+    SELECT 1
+    FROM external_payment_facts
+    WHERE provider = 'wechat'
+      AND channel = 'direct'
+      AND capability = 'baofu_profit_sharing'
+      AND fact_source = 'callback'
+      AND source_event_type = 'trade_manage_order_settlement'
+      AND business_owner = 'profit_sharing'
+      AND business_object_type = 'profit_sharing_order'
+      AND business_object_id = $1
+      AND terminal_status = 'success'
+      AND is_terminal = TRUE
+)
+`
+
+func (q *Queries) CheckWechatSettlementTriggerForProfitSharingOrder(ctx context.Context, profitSharingOrderID pgtype.Int8) (bool, error) {
+	row := q.db.QueryRow(ctx, checkWechatSettlementTriggerForProfitSharingOrder, profitSharingOrderID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const claimExternalPaymentFactApplication = `-- name: ClaimExternalPaymentFactApplication :one
 UPDATE external_payment_fact_applications
 SET status = 'processing',

@@ -640,8 +640,10 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuOrderPayment
 	now := time.Date(2026, 5, 3, 11, 0, 0, 0, time.UTC)
 	application := buildOrderPaymentFactApplication(823, 723, db.ExternalPaymentFactApplicationStatusProcessing)
 	fact := buildBaofuOrderPaymentFact(723, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess)
-	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, BusinessType: db.ExternalPaymentBusinessOwnerOrder, PaymentChannel: db.PaymentChannelBaofuAggregate}
-	orderResult := db.ProcessOrderPaymentTxResult{Order: db.Order{ID: 6401, MerchantID: 7301, OrderNo: "ORD6401"}}
+	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, BusinessType: db.ExternalPaymentBusinessOwnerOrder, PaymentChannel: db.PaymentChannelBaofuAggregate, RequiresProfitSharing: true, Amount: 12900, Status: paymentStatusPaid}
+	orderResult := db.ProcessOrderPaymentTxResult{Order: db.Order{ID: 6401, MerchantID: 7301, OrderNo: "ORD6401", OrderType: db.OrderTypeTakeout, DeliveryFee: 500}}
+	merchant := db.Merchant{ID: orderResult.Order.MerchantID, RegionID: 8301}
+	operator := db.Operator{ID: 9301}
 
 	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
 	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
@@ -658,12 +660,35 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuOrderPayment
 		PaymentOrder: paymentOrder,
 		OrderResult:  &orderResult,
 	}, nil)
-	store.EXPECT().CreatePaymentDomainOutboxOnce(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreatePaymentDomainOutboxOnceParams) (db.PaymentDomainOutbox, error) {
-		require.Equal(t, db.PaymentDomainOutboxEventOrderPaymentSucceeded, arg.EventType)
-		require.Equal(t, db.PaymentDomainOutboxAggregatePaymentOrder, arg.AggregateType)
-		require.Equal(t, paymentOrder.ID, arg.AggregateID)
-		return db.PaymentDomainOutbox{ID: 8401, EventType: arg.EventType, AggregateType: arg.AggregateType, AggregateID: arg.AggregateID, Payload: arg.Payload, Status: arg.Status}, nil
-	})
+	gomock.InOrder(
+		store.EXPECT().GetMerchant(gomock.Any(), merchant.ID).Return(merchant, nil),
+		store.EXPECT().GetActiveProfitSharingConfig(gomock.Any(), db.GetActiveProfitSharingConfigParams{
+			OrderSource: db.OrderTypeTakeout,
+			MerchantID:  pgtype.Int8{Int64: merchant.ID, Valid: true},
+			RegionID:    pgtype.Int8{Int64: merchant.RegionID, Valid: true},
+		}).Return(db.ProfitSharingConfig{PlatformRate: 200, OperatorRate: 300, RiderEnabled: true}, nil),
+		store.EXPECT().GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).Return(operator, nil),
+		store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{OwnerType: db.BaofuAccountOwnerTypeMerchant, OwnerID: merchant.ID}).Return(activeBaofuReceiverBinding(db.BaofuAccountOwnerTypeMerchant, merchant.ID, "MER_CONTRACT", "MER_SHARE"), nil),
+		store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{OwnerType: db.BaofuAccountOwnerTypeOperator, OwnerID: operator.ID}).Return(activeBaofuReceiverBinding(db.BaofuAccountOwnerTypeOperator, operator.ID, "OP_CONTRACT", "OP_SHARE"), nil),
+		store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{OwnerType: db.BaofuAccountOwnerTypePlatform, OwnerID: int64(0)}).Return(activeBaofuReceiverBinding(db.BaofuAccountOwnerTypePlatform, 0, "PLATFORM_CONTRACT", "PLATFORM_SHARE"), nil),
+		store.EXPECT().EnsureBaofuProfitSharingBillTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateBaofuProfitSharingOrderTxParams) (db.CreateBaofuProfitSharingOrderTxResult, error) {
+			require.Equal(t, paymentOrder.ID, arg.ProfitSharingOrder.PaymentOrderID)
+			require.Equal(t, merchant.ID, arg.ProfitSharingOrder.MerchantID)
+			require.False(t, arg.ProfitSharingOrder.RiderID.Valid)
+			require.Equal(t, "BFPS6001O6401", arg.ProfitSharingOrder.OutOrderNo)
+			require.Equal(t, db.ExternalPaymentProviderBaofu, arg.ProfitSharingOrder.Provider)
+			require.Equal(t, db.PaymentChannelBaofuAggregate, arg.ProfitSharingOrder.Channel)
+			require.Equal(t, db.ProfitSharingOrderStatusPending, arg.ProfitSharingOrder.Status)
+			require.Equal(t, int64(0), arg.FeeBreakdown.RiderGrossAmount)
+			return db.CreateBaofuProfitSharingOrderTxResult{ProfitSharingOrder: db.ProfitSharingOrder{ID: 9901, PaymentOrderID: paymentOrder.ID}}, nil
+		}),
+		store.EXPECT().CreatePaymentDomainOutboxOnce(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreatePaymentDomainOutboxOnceParams) (db.PaymentDomainOutbox, error) {
+			require.Equal(t, db.PaymentDomainOutboxEventOrderPaymentSucceeded, arg.EventType)
+			require.Equal(t, db.PaymentDomainOutboxAggregatePaymentOrder, arg.AggregateType)
+			require.Equal(t, paymentOrder.ID, arg.AggregateID)
+			return db.PaymentDomainOutbox{ID: 8401, EventType: arg.EventType, AggregateType: arg.AggregateType, AggregateID: arg.AggregateID, Payload: arg.Payload, Status: arg.Status}, nil
+		}),
+	)
 	expectFactTerminalized(t, store, fact.ID, now)
 	expectApplicationApplied(t, store, application, now)
 
@@ -677,6 +702,53 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuOrderPayment
 	require.True(t, result.OrderPayment.Processed)
 	require.NotNil(t, result.Outbox)
 	require.Equal(t, db.PaymentDomainOutboxEventOrderPaymentSucceeded, result.Outbox.EventType)
+}
+
+func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuOrderPaymentBillFailureBlocksOutbox(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	now := time.Date(2026, 5, 3, 11, 10, 0, 0, time.UTC)
+	application := buildOrderPaymentFactApplication(826, 726, db.ExternalPaymentFactApplicationStatusProcessing)
+	fact := buildBaofuOrderPaymentFact(726, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess)
+	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, BusinessType: db.ExternalPaymentBusinessOwnerOrder, PaymentChannel: db.PaymentChannelBaofuAggregate, RequiresProfitSharing: true, Amount: 12900, Status: paymentStatusPaid}
+	orderResult := db.ProcessOrderPaymentTxResult{Order: db.Order{ID: 6402, MerchantID: 7302, OrderNo: "ORD6402", OrderType: db.OrderTypeTakeout, DeliveryFee: 500}}
+	merchant := db.Merchant{ID: orderResult.Order.MerchantID, RegionID: 8302}
+	operator := db.Operator{ID: 9302}
+
+	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
+	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().UpdatePaymentOrderToPaid(gomock.Any(), db.UpdatePaymentOrderToPaidParams{
+		ID:            application.BusinessObjectID,
+		TransactionID: pgtype.Text{String: "BFPAY_6401", Valid: true},
+	}).Return(paymentOrder, nil)
+	store.EXPECT().ProcessPaymentSuccessTx(gomock.Any(), db.ProcessPaymentSuccessTxParams{
+		PaymentOrderID:     application.BusinessObjectID,
+		RiderAverageSpeed:  15000,
+		DefaultPrepareTime: 20,
+	}).Return(db.ProcessPaymentSuccessTxResult{
+		Processed:    true,
+		PaymentOrder: paymentOrder,
+		OrderResult:  &orderResult,
+	}, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), merchant.ID).Return(merchant, nil)
+	store.EXPECT().GetActiveProfitSharingConfig(gomock.Any(), gomock.Any()).Return(db.ProfitSharingConfig{PlatformRate: 200, OperatorRate: 300, RiderEnabled: true}, nil)
+	store.EXPECT().GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).Return(operator, nil)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{OwnerType: db.BaofuAccountOwnerTypeMerchant, OwnerID: merchant.ID}).Return(activeBaofuReceiverBinding(db.BaofuAccountOwnerTypeMerchant, merchant.ID, "MER_CONTRACT", "MER_SHARE"), nil)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{OwnerType: db.BaofuAccountOwnerTypeOperator, OwnerID: operator.ID}).Return(activeBaofuReceiverBinding(db.BaofuAccountOwnerTypeOperator, operator.ID, "OP_CONTRACT", "OP_SHARE"), nil)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{OwnerType: db.BaofuAccountOwnerTypePlatform, OwnerID: int64(0)}).Return(activeBaofuReceiverBinding(db.BaofuAccountOwnerTypePlatform, 0, "PLATFORM_CONTRACT", "PLATFORM_SHARE"), nil)
+	store.EXPECT().EnsureBaofuProfitSharingBillTx(gomock.Any(), gomock.Any()).Return(db.CreateBaofuProfitSharingOrderTxResult{}, db.ErrRecordNotFound)
+	expectApplicationFailed(t, store, application, now, "ensure baofu profit sharing bill")
+
+	svc := NewPaymentFactService(store).WithPaymentSuccessConfig(15000, 20)
+	svc.now = func() time.Time { return now }
+
+	result, err := svc.ApplyExternalPaymentFactApplication(context.Background(), application.ID)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "ensure baofu profit sharing bill")
+	require.False(t, result.Applied)
+	require.Nil(t, result.Outbox)
 }
 
 func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuOrderPaymentClosedMarksPaymentClosedWithoutSuccessOutbox(t *testing.T) {

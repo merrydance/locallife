@@ -26,6 +26,9 @@ export interface MerchantOrderFeeBreakdown {
     platform_service_fee_amount: number
     payment_channel_fee_amount: number
     merchant_receivable_amount: number
+    rider_gross_amount?: number
+    rider_payment_fee_amount?: number
+    rider_net_earnings_amount?: number
 }
 
 /**

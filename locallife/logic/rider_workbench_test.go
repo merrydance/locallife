@@ -37,6 +37,10 @@ type riderWorkbenchStoreStub struct {
 	unreadNotificationCount  int64
 	unreadNotificationErr    error
 	completedDeliveriesRange db.CountRiderCompletedDeliveriesInRangeParams
+	paymentOrdersByOrder     map[int64]db.PaymentOrder
+	paymentOrderErr          error
+	profitSharingByPayment   map[int64]db.ProfitSharingOrder
+	profitSharingErr         error
 }
 
 func (stub *riderWorkbenchStoreStub) GetRiderByUserID(ctx context.Context, userID int64) (db.Rider, error) {
@@ -45,6 +49,30 @@ func (stub *riderWorkbenchStoreStub) GetRiderByUserID(ctx context.Context, userI
 
 func (stub *riderWorkbenchStoreStub) ListRiderActiveDeliveries(ctx context.Context, riderID pgtype.Int8) ([]db.Delivery, error) {
 	return stub.activeDeliveries, stub.activeDeliveriesErr
+}
+
+func (stub *riderWorkbenchStoreStub) GetLatestPaymentOrderByOrder(ctx context.Context, arg db.GetLatestPaymentOrderByOrderParams) (db.PaymentOrder, error) {
+	if stub.paymentOrderErr != nil {
+		return db.PaymentOrder{}, stub.paymentOrderErr
+	}
+	if stub.paymentOrdersByOrder != nil {
+		if paymentOrder, ok := stub.paymentOrdersByOrder[arg.OrderID.Int64]; ok {
+			return paymentOrder, nil
+		}
+	}
+	return db.PaymentOrder{}, db.ErrRecordNotFound
+}
+
+func (stub *riderWorkbenchStoreStub) GetProfitSharingOrderByPaymentOrder(ctx context.Context, paymentOrderID int64) (db.ProfitSharingOrder, error) {
+	if stub.profitSharingErr != nil {
+		return db.ProfitSharingOrder{}, stub.profitSharingErr
+	}
+	if stub.profitSharingByPayment != nil {
+		if profitSharingOrder, ok := stub.profitSharingByPayment[paymentOrderID]; ok {
+			return profitSharingOrder, nil
+		}
+	}
+	return db.ProfitSharingOrder{}, db.ErrRecordNotFound
 }
 
 func (stub *riderWorkbenchStoreStub) CountDeliveryPool(ctx context.Context) (int64, error) {
@@ -100,6 +128,14 @@ func TestRiderWorkbenchServiceGetSummary(t *testing.T) {
 		RegionID:      pgtype.Int8{Int64: 1, Valid: true},
 	}
 	deliveryCreatedAt := now.Add(-time.Hour)
+	paymentOrder := db.PaymentOrder{
+		ID:                    31,
+		OrderID:               pgtype.Int8{Int64: 22, Valid: true},
+		BusinessType:          db.ExternalPaymentBusinessOwnerOrder,
+		Status:                "paid",
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+	}
 	store := &riderWorkbenchStoreStub{
 		rider: rider,
 		activeDeliveries: []db.Delivery{{
@@ -120,6 +156,19 @@ func TestRiderWorkbenchServiceGetSummary(t *testing.T) {
 		operator:                db.Operator{ID: 1, RiderDeposit: 20000},
 		pendingClaimCount:       4,
 		unreadNotificationCount: 5,
+		paymentOrdersByOrder: map[int64]db.PaymentOrder{
+			22: paymentOrder,
+		},
+		profitSharingByPayment: map[int64]db.ProfitSharingOrder{
+			paymentOrder.ID: {
+				ID:               41,
+				PaymentOrderID:   paymentOrder.ID,
+				Status:           db.ProfitSharingOrderStatusPending,
+				RiderGrossAmount: 800,
+				RiderPaymentFee:  5,
+				RiderAmount:      795,
+			},
+		},
 	}
 	service := NewRiderWorkbenchService(store)
 	service.now = func() time.Time { return now }
@@ -131,6 +180,11 @@ func TestRiderWorkbenchServiceGetSummary(t *testing.T) {
 	require.True(t, result.RiderStatus.CanGoOnline)
 	require.False(t, result.RiderStatus.CanGoOffline)
 	require.Equal(t, 1, result.CurrentDeliveries.ActiveCount)
+	require.Equal(t, int64(800), result.CurrentDeliveries.Items[0].RiderGrossAmount)
+	require.Equal(t, int64(5), result.CurrentDeliveries.Items[0].RiderPaymentFee)
+	require.Equal(t, int64(795), result.CurrentDeliveries.Items[0].RiderNetEarnings)
+	require.Equal(t, int64(41), result.CurrentDeliveries.Items[0].ProfitSharingOrderID)
+	require.Equal(t, db.ProfitSharingOrderStatusPending, result.CurrentDeliveries.Items[0].ProfitSharingStatus)
 	require.Equal(t, int64(3), result.OrderPool.AvailableCount)
 	require.Equal(t, "2026-04-28", result.Today.Date)
 	require.Equal(t, int64(2), result.Today.CompletedDeliveries)
@@ -178,6 +232,58 @@ func TestRiderWorkbenchServiceDegradesOptionalSection(t *testing.T) {
 	require.Equal(t, int64(3), result.OrderPool.AvailableCount)
 }
 
+func TestRiderWorkbenchServiceDegradesCurrentDeliveriesWhenBillMissing(t *testing.T) {
+	now := time.Date(2026, 4, 28, 14, 30, 0, 0, time.UTC)
+	rider := db.Rider{
+		ID:            7,
+		UserID:        9,
+		Status:        db.RiderStatusActive,
+		IsOnline:      true,
+		DepositAmount: 30000,
+		RegionID:      pgtype.Int8{Int64: 1, Valid: true},
+	}
+	paymentOrder := db.PaymentOrder{
+		ID:                    31,
+		OrderID:               pgtype.Int8{Int64: 22, Valid: true},
+		BusinessType:          db.ExternalPaymentBusinessOwnerOrder,
+		Status:                "paid",
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+	}
+	store := &riderWorkbenchStoreStub{
+		rider: rider,
+		activeDeliveries: []db.Delivery{{
+			ID:              11,
+			OrderID:         22,
+			Status:          "delivering",
+			DeliveryFee:     800,
+			RiderEarnings:   720,
+			PickupAddress:   "取餐地址",
+			DeliveryAddress: "送达地址",
+			CreatedAt:       now.Add(-time.Hour),
+		}},
+		deliveryPoolCount:       3,
+		completedCount:          2,
+		incomeStats:             db.GetRiderProfitSharingStatsRow{TotalRiderIncome: 900},
+		pendingRefundAmount:     0,
+		operator:                db.Operator{ID: 1, RiderDeposit: 20000},
+		pendingClaimCount:       4,
+		unreadNotificationCount: 5,
+		paymentOrdersByOrder: map[int64]db.PaymentOrder{
+			22: paymentOrder,
+		},
+	}
+	service := NewRiderWorkbenchService(store)
+	service.now = func() time.Time { return now }
+
+	result, err := service.GetSummary(context.Background(), rider.UserID)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.CurrentDeliveries.ActiveCount)
+	require.Empty(t, result.CurrentDeliveries.Items[0].ProfitSharingStatus)
+	require.False(t, sectionAvailable(result.Sections, RiderWorkbenchSectionCurrentDeliveries))
+	require.Equal(t, "当前任务收益账单暂不可用，请稍后重试", sectionMessage(result.Sections, RiderWorkbenchSectionCurrentDeliveries))
+}
+
 func sectionAvailable(sections []RiderWorkbenchSectionStatus, section string) bool {
 	for _, item := range sections {
 		if item.Section == section {
@@ -185,6 +291,15 @@ func sectionAvailable(sections []RiderWorkbenchSectionStatus, section string) bo
 		}
 	}
 	return false
+}
+
+func sectionMessage(sections []RiderWorkbenchSectionStatus, section string) string {
+	for _, item := range sections {
+		if item.Section == section {
+			return item.Message
+		}
+	}
+	return ""
 }
 
 func requireRequestErrorStatus(t *testing.T, err error, status int) {

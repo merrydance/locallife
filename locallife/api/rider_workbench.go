@@ -46,18 +46,23 @@ type riderWorkbenchCurrentDeliveriesResponse struct {
 }
 
 type riderWorkbenchDeliveryItemResponse struct {
-	ID                  int64      `json:"id"`
-	OrderID             int64      `json:"order_id"`
-	Status              string     `json:"status"`
-	DeliveryFee         int64      `json:"delivery_fee"`
-	RiderEarnings       int64      `json:"rider_earnings"`
-	PickupAddress       string     `json:"pickup_address"`
-	DeliveryAddress     string     `json:"delivery_address"`
-	EstimatedPickupAt   *time.Time `json:"estimated_pickup_at,omitempty"`
-	EstimatedDeliveryAt *time.Time `json:"estimated_delivery_at,omitempty"`
-	PickedAt            *time.Time `json:"picked_at,omitempty"`
-	DeliveredAt         *time.Time `json:"delivered_at,omitempty"`
-	CreatedAt           time.Time  `json:"created_at"`
+	ID                   int64      `json:"id"`
+	OrderID              int64      `json:"order_id"`
+	Status               string     `json:"status"`
+	DeliveryFee          int64      `json:"delivery_fee"`
+	RiderEarnings        int64      `json:"rider_earnings"`
+	RiderGrossAmount     int64      `json:"rider_gross_amount,omitempty"`
+	RiderPaymentFee      int64      `json:"rider_payment_fee,omitempty"`
+	RiderNetEarnings     int64      `json:"rider_net_earnings,omitempty"`
+	ProfitSharingOrderID int64      `json:"profit_sharing_order_id,omitempty"`
+	ProfitSharingStatus  string     `json:"profit_sharing_status,omitempty"`
+	PickupAddress        string     `json:"pickup_address"`
+	DeliveryAddress      string     `json:"delivery_address"`
+	EstimatedPickupAt    *time.Time `json:"estimated_pickup_at,omitempty"`
+	EstimatedDeliveryAt  *time.Time `json:"estimated_delivery_at,omitempty"`
+	PickedAt             *time.Time `json:"picked_at,omitempty"`
+	DeliveredAt          *time.Time `json:"delivered_at,omitempty"`
+	CreatedAt            time.Time  `json:"created_at"`
 }
 
 type riderWorkbenchOrderPoolResponse struct {
@@ -110,18 +115,23 @@ func newRiderWorkbenchSummaryResponse(result logic.RiderWorkbenchSummary) riderW
 	items := make([]riderWorkbenchDeliveryItemResponse, 0, len(result.CurrentDeliveries.Items))
 	for _, item := range result.CurrentDeliveries.Items {
 		items = append(items, riderWorkbenchDeliveryItemResponse{
-			ID:                  item.ID,
-			OrderID:             item.OrderID,
-			Status:              item.Status,
-			DeliveryFee:         item.DeliveryFee,
-			RiderEarnings:       item.RiderEarnings,
-			PickupAddress:       item.PickupAddress,
-			DeliveryAddress:     item.DeliveryAddress,
-			EstimatedPickupAt:   item.EstimatedPickupAt,
-			EstimatedDeliveryAt: item.EstimatedDeliveryAt,
-			PickedAt:            item.PickedAt,
-			DeliveredAt:         item.DeliveredAt,
-			CreatedAt:           item.CreatedAt,
+			ID:                   item.ID,
+			OrderID:              item.OrderID,
+			Status:               item.Status,
+			DeliveryFee:          item.DeliveryFee,
+			RiderEarnings:        item.RiderEarnings,
+			RiderGrossAmount:     item.RiderGrossAmount,
+			RiderPaymentFee:      item.RiderPaymentFee,
+			RiderNetEarnings:     item.RiderNetEarnings,
+			ProfitSharingOrderID: item.ProfitSharingOrderID,
+			ProfitSharingStatus:  item.ProfitSharingStatus,
+			PickupAddress:        item.PickupAddress,
+			DeliveryAddress:      item.DeliveryAddress,
+			EstimatedPickupAt:    item.EstimatedPickupAt,
+			EstimatedDeliveryAt:  item.EstimatedDeliveryAt,
+			PickedAt:             item.PickedAt,
+			DeliveredAt:          item.DeliveredAt,
+			CreatedAt:            item.CreatedAt,
 		})
 	}
 

@@ -213,6 +213,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
       itemsLoadFailed: preserveItems
           ? existing.itemsLoadFailed
           : incoming.itemsLoadFailed,
+      feeBreakdown: incoming.feeBreakdown ?? existing.feeBreakdown,
     );
   }
 

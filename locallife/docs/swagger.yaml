@@ -2909,9 +2909,19 @@ definitions:
         type: number
       pickup_phone:
         type: string
+      profit_sharing_order_id:
+        type: integer
+      profit_sharing_status:
+        type: string
       rider_earnings:
         type: integer
+      rider_gross_amount:
+        type: integer
       rider_id:
+        type: integer
+      rider_net_earnings:
+        type: integer
+      rider_payment_fee:
         type: integer
       status:
         type: string
@@ -4732,6 +4742,15 @@ definitions:
         type: integer
       platform_service_fee_amount:
         example: 475
+        type: integer
+      rider_gross_amount:
+        example: 800
+        type: integer
+      rider_net_earnings_amount:
+        example: 795
+        type: integer
+      rider_payment_fee_amount:
+        example: 5
         type: integer
       voucher_discount_amount:
         example: 200
@@ -8033,7 +8052,17 @@ definitions:
         type: string
       pickup_address:
         type: string
+      profit_sharing_order_id:
+        type: integer
+      profit_sharing_status:
+        type: string
       rider_earnings:
+        type: integer
+      rider_gross_amount:
+        type: integer
+      rider_net_earnings:
+        type: integer
+      rider_payment_fee:
         type: integer
       status:
         type: string

@@ -33,6 +33,9 @@ func TestBuildMerchantOrderFeeBreakdown_BaofuV2UsesMerchantVisibleAmounts(t *tes
 		CommissionBaseAmount:         9500,
 		DistributableAmount:          9500,
 		MerchantPaymentFeeBaseAmount: 9500,
+		RiderGrossAmount:             800,
+		RiderPaymentFee:              5,
+		RiderAmount:                  795,
 	}
 
 	breakdown, err := BuildMerchantOrderFeeBreakdown(BuildMerchantOrderFeeBreakdownInput{
@@ -52,6 +55,9 @@ func TestBuildMerchantOrderFeeBreakdown_BaofuV2UsesMerchantVisibleAmounts(t *tes
 	require.Equal(t, int64(475), breakdown.PlatformServiceFeeAmount)
 	require.Equal(t, int64(57), breakdown.PaymentChannelFeeAmount)
 	require.Equal(t, int64(8968), breakdown.MerchantReceivableAmount)
+	require.Equal(t, int64(800), breakdown.RiderGrossAmount)
+	require.Equal(t, int64(5), breakdown.RiderPaymentFeeAmount)
+	require.Equal(t, int64(795), breakdown.RiderNetEarningsAmount)
 }
 
 func TestBuildMerchantOrderFeeBreakdown_ReturnsUnavailableWhenProfitSharingMissing(t *testing.T) {
@@ -86,4 +92,24 @@ func TestBuildMerchantOrderFeeBreakdown_ReturnsInconsistentWhenCustomerPayableMi
 
 	require.ErrorIs(t, err, ErrMerchantFeeBreakdownInconsistent)
 	require.True(t, errors.Is(err, ErrMerchantFeeBreakdownInconsistent))
+}
+
+func TestBuildMerchantOrderFeeBreakdown_ReturnsInconsistentWhenBillTotalMismatchesOrder(t *testing.T) {
+	profitSharingOrder := db.ProfitSharingOrder{ID: 201, TotalAmount: 1201, MerchantAmount: 1000}
+
+	_, err := BuildMerchantOrderFeeBreakdown(BuildMerchantOrderFeeBreakdownInput{
+		Order: db.Order{
+			ID:                  101,
+			Status:              db.OrderStatusCancelled,
+			Subtotal:            1000,
+			DiscountAmount:      0,
+			VoucherAmount:       0,
+			DeliveryFee:         200,
+			DeliveryFeeDiscount: 0,
+			TotalAmount:         1200,
+		},
+		ProfitSharingOrder: &profitSharingOrder,
+	})
+
+	require.ErrorIs(t, err, ErrMerchantFeeBreakdownInconsistent)
 }

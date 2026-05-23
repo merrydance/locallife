@@ -60,6 +60,9 @@ type merchantOrderFeeBreakdownResponse struct {
 	PlatformServiceFeeAmount  int64 `json:"platform_service_fee_amount" example:"475"`
 	PaymentChannelFeeAmount   int64 `json:"payment_channel_fee_amount" example:"57"`
 	MerchantReceivableAmount  int64 `json:"merchant_receivable_amount" example:"8968"`
+	RiderGrossAmount          int64 `json:"rider_gross_amount" example:"800"`
+	RiderPaymentFeeAmount     int64 `json:"rider_payment_fee_amount" example:"5"`
+	RiderNetEarningsAmount    int64 `json:"rider_net_earnings_amount" example:"795"`
 }
 
 func newMerchantOrderFeeBreakdownResponse(b logic.MerchantOrderFeeBreakdown) *merchantOrderFeeBreakdownResponse {
@@ -75,6 +78,9 @@ func newMerchantOrderFeeBreakdownResponse(b logic.MerchantOrderFeeBreakdown) *me
 		PlatformServiceFeeAmount:  b.PlatformServiceFeeAmount,
 		PaymentChannelFeeAmount:   b.PaymentChannelFeeAmount,
 		MerchantReceivableAmount:  b.MerchantReceivableAmount,
+		RiderGrossAmount:          b.RiderGrossAmount,
+		RiderPaymentFeeAmount:     b.RiderPaymentFeeAmount,
+		RiderNetEarningsAmount:    b.RiderNetEarningsAmount,
 	}
 }
 

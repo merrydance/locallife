@@ -392,17 +392,6 @@ func (processor *RedisTaskProcessor) distributeTaskSendNotificationWithLog(ctx c
 
 // notifyMerchantNewOrder 通知商户有新订单
 func (processor *RedisTaskProcessor) notifyMerchantNewOrder(ctx context.Context, order db.Order) error {
-	if order.Status != db.OrderStatusPaid {
-		log.Error().
-			Int64("order_id", order.ID).
-			Int64("merchant_id", order.MerchantID).
-			Str("order_no", order.OrderNo).
-			Str("status", order.Status).
-			Str("payment_method", order.PaymentMethod.String).
-			Msg("merchant new order notification attempted for unpaid order")
-		return fmt.Errorf("merchant new order notification requires paid order: order_id=%d status=%s", order.ID, order.Status)
-	}
-
 	// 获取商户信息
 	merchant, err := processor.store.GetMerchant(ctx, order.MerchantID)
 	if err != nil {
@@ -410,14 +399,6 @@ func (processor *RedisTaskProcessor) notifyMerchantNewOrder(ctx context.Context,
 	}
 	merchantPayload := logic.BuildMerchantNewOrderNotification(order, merchant.Name)
 
-	items, err := processor.store.ListOrderItemsWithDishByOrder(ctx, order.ID)
-	if err != nil {
-		return fmt.Errorf("load order items for merchant new order snapshot: %w", err)
-	}
-	itemViews, err := logic.BuildOrderItemViews(items)
-	if err != nil {
-		return fmt.Errorf("build order items for merchant new order snapshot: %w", err)
-	}
 	feeBreakdown, err := processor.loadMerchantOrderFeeBreakdown(ctx, order)
 	if err != nil {
 		log.Error().Err(err).
@@ -427,6 +408,15 @@ func (processor *RedisTaskProcessor) notifyMerchantNewOrder(ctx context.Context,
 			Str("status", order.Status).
 			Msg("merchant new order fee breakdown unavailable")
 		return fmt.Errorf("build merchant new order fee breakdown: %w", err)
+	}
+
+	items, err := processor.store.ListOrderItemsWithDishByOrder(ctx, order.ID)
+	if err != nil {
+		return fmt.Errorf("load order items for merchant new order snapshot: %w", err)
+	}
+	itemViews, err := logic.BuildOrderItemViews(items)
+	if err != nil {
+		return fmt.Errorf("build order items for merchant new order snapshot: %w", err)
 	}
 
 	// 通过异步任务发送通知给商户
@@ -508,9 +498,23 @@ func (processor *RedisTaskProcessor) loadMerchantOrderFeeBreakdown(ctx context.C
 	if err != nil {
 		return logic.MerchantOrderFeeBreakdown{}, fmt.Errorf("get latest payment order by order: %w", err)
 	}
+	if paymentOrder.Status != "paid" {
+		return logic.MerchantOrderFeeBreakdown{}, fmt.Errorf("merchant new order notification requires paid payment order: order_id=%d payment_order_id=%d status=%s", order.ID, paymentOrder.ID, paymentOrder.Status)
+	}
+	if !paymentOrder.OrderID.Valid || paymentOrder.OrderID.Int64 != order.ID || paymentOrder.BusinessType != db.ExternalPaymentBusinessOwnerOrder {
+		return logic.MerchantOrderFeeBreakdown{}, fmt.Errorf("%w: payment order mismatch for order_id=%d payment_order_id=%d", logic.ErrMerchantFeeBreakdownInconsistent, order.ID, paymentOrder.ID)
+	}
+	if paymentOrder.Amount != order.TotalAmount {
+		return logic.MerchantOrderFeeBreakdown{}, fmt.Errorf("%w: payment amount mismatch for order_id=%d payment_order_id=%d", logic.ErrMerchantFeeBreakdownInconsistent, order.ID, paymentOrder.ID)
+	}
 	profitSharingOrder, err := processor.store.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
 	if err != nil {
 		return logic.MerchantOrderFeeBreakdown{}, fmt.Errorf("get profit sharing order by payment order: %w", err)
+	}
+	if profitSharingOrder.PaymentOrderID != paymentOrder.ID ||
+		profitSharingOrder.MerchantID != order.MerchantID ||
+		profitSharingOrder.TotalAmount != order.TotalAmount {
+		return logic.MerchantOrderFeeBreakdown{}, fmt.Errorf("%w: profit sharing bill mismatch for order_id=%d payment_order_id=%d profit_sharing_order_id=%d", logic.ErrMerchantFeeBreakdownInconsistent, order.ID, paymentOrder.ID, profitSharingOrder.ID)
 	}
 	breakdown, err := logic.BuildMerchantOrderFeeBreakdown(logic.BuildMerchantOrderFeeBreakdownInput{
 		Order:              order,

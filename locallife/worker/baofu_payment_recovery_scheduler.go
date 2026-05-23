@@ -163,6 +163,27 @@ func (s *BaofuPaymentRecoveryScheduler) createReadyProfitSharingOrders(ctx conte
 				Msg("create baofu profit sharing order failed")
 			continue
 		}
+		hasSettlementTrigger, err := s.store.CheckWechatSettlementTriggerForProfitSharingOrder(ctx, pgtype.Int8{
+			Int64: created.ProfitSharingOrder.ID,
+			Valid: true,
+		})
+		if err != nil {
+			log.Error().Err(err).
+				Int64("profit_sharing_order_id", created.ProfitSharingOrder.ID).
+				Int64("payment_order_id", row.PaymentOrderID).
+				Msg("check wechat settlement trigger for baofu profit sharing failed")
+			continue
+		}
+		if !hasSettlementTrigger {
+			log.Info().
+				Int64("profit_sharing_order_id", created.ProfitSharingOrder.ID).
+				Int64("payment_order_id", row.PaymentOrderID).
+				Int64("order_id", row.OrderID.Int64).
+				Int64("reservation_id", row.ReservationID.Int64).
+				Str("business_type", row.BusinessType).
+				Msg("skip baofu profit sharing command because wechat settlement trigger has not been recorded")
+			continue
+		}
 		if err := s.distributor.DistributeTaskProcessBaofuProfitSharing(ctx, &BaofuProfitSharingPayload{
 			ProfitSharingOrderID: created.ProfitSharingOrder.ID,
 		}, asynq.MaxRetry(5), asynq.Queue(QueueCritical), asynq.Unique(baofuShareTaskUniqueWindow)); err != nil {

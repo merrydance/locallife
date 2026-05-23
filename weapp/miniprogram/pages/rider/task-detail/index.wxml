@@ -41,8 +41,18 @@
       <!-- 收入与时间 -->
       <view class="detail-card income-card">
         <view class="info-item">
-          <text class="label">预计收益</text>
-          <view class="value price">¥{{delivery.rider_earnings / 100 || '--'}}</view>
+          <text class="label">配送费</text>
+          <view class="value">{{delivery.income_view.grossText}}</view>
+        </view>
+        <t-divider layout="vertical" />
+        <view class="info-item">
+          <text class="label">通道费</text>
+          <view class="value">{{delivery.income_view.feeText}}</view>
+        </view>
+        <t-divider layout="vertical" />
+        <view class="info-item">
+          <text class="label">预计实收</text>
+          <view class="value price {{delivery.income_view.hasBill ? '' : 'price--pending'}}">{{delivery.income_view.netText}}</view>
         </view>
         <t-divider layout="vertical" />
         <view class="info-item">

@@ -161,6 +161,78 @@ func TestCreateProfitSharingOrderPersistsBaofuFields(t *testing.T) {
 	require.JSONEq(t, string(snapshot), string(profitSharingOrder.SharingDetailSnapshot))
 }
 
+func TestUpdateProfitSharingOrderRiderBillByPaymentOrderRequiresPending(t *testing.T) {
+	ctx := context.Background()
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	operator := createRandomOperatorForRegion(t, merchant.RegionID)
+	paymentOrder := createRandomPaymentOrder(t, createRandomUser(t).ID)
+
+	order, err := testStore.CreateProfitSharingOrder(ctx, CreateProfitSharingOrderParams{
+		PaymentOrderID:       paymentOrder.ID,
+		MerchantID:           merchant.ID,
+		OperatorID:           pgtype.Int8{Int64: operator.ID, Valid: true},
+		OrderSource:          OrderTypeTakeout,
+		TotalAmount:          10000,
+		DeliveryFee:          500,
+		DistributableAmount:  10000,
+		PlatformRate:         200,
+		OperatorRate:         300,
+		PlatformCommission:   200,
+		OperatorCommission:   300,
+		MerchantAmount:       9440,
+		OutOrderNo:           "pso_rider_bill_" + util.RandomString(16),
+		Status:               ProfitSharingOrderStatusPending,
+		PaymentFee:           30,
+		PaymentFeeRateBps:    30,
+		Provider:             ExternalPaymentProviderBaofu,
+		Channel:              PaymentChannelBaofuAggregate,
+		MerchantSharingMerID: pgtype.Text{String: "MER_SHARE", Valid: true},
+		OperatorSharingMerID: pgtype.Text{String: "OP_SHARE", Valid: true},
+		PlatformSharingMerID: pgtype.Text{String: "PLATFORM_SHARE", Valid: true},
+	})
+	require.NoError(t, err)
+
+	updated, err := testStore.UpdateProfitSharingOrderRiderBillByPaymentOrder(ctx, UpdateProfitSharingOrderRiderBillByPaymentOrderParams{
+		PaymentOrderID:               paymentOrder.ID,
+		RiderID:                      pgtype.Int8{Int64: 202, Valid: true},
+		RiderSharingMerID:            pgtype.Text{String: "RIDER_SHARE", Valid: true},
+		RiderAmount:                  497,
+		DistributableAmount:          9500,
+		PlatformCommission:           190,
+		OperatorCommission:           285,
+		MerchantAmount:               8968,
+		SharingDetailSnapshot:        []byte(`{"receivers":[{"role":"rider","sharing_mer_id":"RIDER_SHARE","amount":497}]}`),
+		RiderGrossAmount:             500,
+		RiderPaymentFee:              3,
+		RiderPaymentFeeRateBps:       60,
+		RiderPaymentFeeBaseAmount:    500,
+		MerchantPaymentFee:           57,
+		MerchantPaymentFeeBaseAmount: 9500,
+		CommissionBaseAmount:         9500,
+		PlatformReceiverAmount:       220,
+	})
+	require.NoError(t, err)
+	require.Equal(t, order.ID, updated.ID)
+	require.Equal(t, ProfitSharingOrderStatusPending, updated.Status)
+	require.Equal(t, int64(202), updated.RiderID.Int64)
+	require.Equal(t, int64(500), updated.RiderGrossAmount)
+	require.Equal(t, int64(3), updated.RiderPaymentFee)
+	require.Equal(t, int64(497), updated.RiderAmount)
+
+	processing, err := testStore.UpdateProfitSharingOrderToProcessing(ctx, UpdateProfitSharingOrderToProcessingParams{
+		ID:             order.ID,
+		SharingOrderID: pgtype.Text{String: "BF_SHARING_" + util.RandomString(12), Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, ProfitSharingOrderStatusProcessing, processing.Status)
+
+	_, err = testStore.UpdateProfitSharingOrderRiderBillByPaymentOrder(ctx, UpdateProfitSharingOrderRiderBillByPaymentOrderParams{
+		PaymentOrderID: paymentOrder.ID,
+		RiderID:        pgtype.Int8{Int64: 303, Valid: true},
+	})
+	require.ErrorIs(t, err, ErrRecordNotFound)
+}
+
 func TestListProfitSharingOrdersByOrderIDsForMerchantScopesMerchantAndOrders(t *testing.T) {
 	ctx := context.Background()
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)

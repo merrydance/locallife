@@ -1,5 +1,6 @@
 import { Delivery, getDeliveryStatusDisplay } from '../../../api/delivery'
 import { deliveryTaskManagementService } from '../../../api/delivery-task-management'
+import { buildRiderDeliveryIncomeView, RiderDeliveryIncomeView } from '../../../utils/rider-delivery-income-view'
 import { logger } from '../../../utils/logger'
 import { locationService } from '../../../utils/location'
 import { getStableBarHeights } from '../../../utils/responsive'
@@ -10,6 +11,7 @@ type DeliveryHistoryView = Delivery & {
   display_time: string
   status_text: string
   status_theme: 'success' | 'warning' | 'danger' | 'primary' | 'default'
+  income_view: RiderDeliveryIncomeView
 }
 
 interface DeliveryHistoryResponse {
@@ -31,7 +33,8 @@ function decorateHistoryDelivery(delivery: Delivery): DeliveryHistoryView {
     ...delivery,
     display_time: delivery.completed_at || delivery.delivered_at || delivery.created_at || '',
     status_text: statusMeta.text,
-    status_theme: statusMeta.theme
+    status_theme: statusMeta.theme,
+    income_view: buildRiderDeliveryIncomeView(delivery)
   }
 }
 

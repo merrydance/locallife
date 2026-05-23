@@ -11,6 +11,7 @@ class PushMessage {
   final String? note;
   final List<OrderItem> items;
   final bool itemsLoadFailed;
+  final FeeBreakdown? feeBreakdown;
   final DateTime timestamp;
 
   PushMessage({
@@ -24,6 +25,7 @@ class PushMessage {
     this.note,
     this.items = const <OrderItem>[],
     this.itemsLoadFailed = false,
+    this.feeBreakdown,
     DateTime? timestamp,
   }) : timestamp = timestamp ?? DateTime.now();
 
@@ -44,6 +46,7 @@ class PushMessage {
       note: order.note,
       items: order.items,
       itemsLoadFailed: order.itemsLoadFailed,
+      feeBreakdown: order.feeBreakdown,
     );
   }
 
@@ -60,6 +63,7 @@ class PushMessage {
       note: order.note,
       items: order.items,
       itemsLoadFailed: order.itemsLoadFailed,
+      feeBreakdown: order.feeBreakdown,
       timestamp: order.createdAt,
     );
   }
@@ -76,6 +80,7 @@ class PushMessage {
       note: note,
       items: items,
       itemsLoadFailed: itemsLoadFailed,
+      feeBreakdown: feeBreakdown,
       timestamp: timestamp,
     );
   }
@@ -92,6 +97,7 @@ class PushMessage {
       note: order.note ?? note,
       items: order.items,
       itemsLoadFailed: order.itemsLoadFailed,
+      feeBreakdown: order.feeBreakdown ?? feeBreakdown,
       timestamp: timestamp,
     );
   }
@@ -118,6 +124,7 @@ class PushMessage {
           )
           .toList(),
       'items_load_failed': itemsLoadFailed,
+      if (feeBreakdown != null) 'fee_breakdown': feeBreakdown!.toJson(),
     };
   }
 

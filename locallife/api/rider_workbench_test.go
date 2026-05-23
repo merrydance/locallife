@@ -24,6 +24,22 @@ func TestGetRiderWorkbenchSummaryAPI(t *testing.T) {
 	rider.FrozenDeposit = 1000
 	riderID := pgtype.Int8{Int64: rider.ID, Valid: true}
 	activeDelivery := db.Delivery{ID: 11, OrderID: 22, Status: "delivering", DeliveryFee: 800, RiderEarnings: 720, PickupAddress: "取餐地址", DeliveryAddress: "送达地址", CreatedAt: time.Now().UTC()}
+	paymentOrder := db.PaymentOrder{
+		ID:                    31,
+		OrderID:               pgtype.Int8{Int64: activeDelivery.OrderID, Valid: true},
+		BusinessType:          db.ExternalPaymentBusinessOwnerOrder,
+		Status:                "paid",
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+	}
+	profitSharingOrder := db.ProfitSharingOrder{
+		ID:               41,
+		PaymentOrderID:   paymentOrder.ID,
+		Status:           db.ProfitSharingOrderStatusPending,
+		RiderGrossAmount: 800,
+		RiderPaymentFee:  5,
+		RiderAmount:      795,
+	}
 
 	testCases := []struct {
 		name          string
@@ -39,6 +55,13 @@ func TestGetRiderWorkbenchSummaryAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().GetRiderByUserID(gomock.Any(), user.ID).Return(rider, nil)
 				store.EXPECT().ListRiderActiveDeliveries(gomock.Any(), riderID).Return([]db.Delivery{activeDelivery}, nil)
+				store.EXPECT().
+					GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+						OrderID:      pgtype.Int8{Int64: activeDelivery.OrderID, Valid: true},
+						BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+					}).
+					Return(paymentOrder, nil)
+				store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(profitSharingOrder, nil)
 				store.EXPECT().GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), user.ID).Return(int64(0), nil)
 				expectRiderThresholdFromRegionRule(store, rider, 200*fenPerYuan)
 				store.EXPECT().CountDeliveryPool(gomock.Any()).Return(int64(3), nil)
@@ -61,6 +84,21 @@ func TestGetRiderWorkbenchSummaryAPI(t *testing.T) {
 				require.Equal(t, int64(4), response.Claims.PendingActionCount)
 				require.Equal(t, int64(5), response.Notifications.UnreadCount)
 				require.True(t, apiSectionAvailable(response.Sections, "income"))
+
+				var raw map[string]any
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &raw)
+				currentDeliveries, ok := raw["current_deliveries"].(map[string]any)
+				require.True(t, ok)
+				items, ok := currentDeliveries["items"].([]any)
+				require.True(t, ok)
+				require.Len(t, items, 1)
+				item, ok := items[0].(map[string]any)
+				require.True(t, ok)
+				require.Equal(t, float64(800), item["rider_gross_amount"])
+				require.Equal(t, float64(5), item["rider_payment_fee"])
+				require.Equal(t, float64(795), item["rider_net_earnings"])
+				require.Equal(t, float64(profitSharingOrder.ID), item["profit_sharing_order_id"])
+				require.Equal(t, profitSharingOrder.Status, item["profit_sharing_status"])
 			},
 		},
 		{
