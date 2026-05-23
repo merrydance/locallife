@@ -1,0 +1,3 @@
+-- No-op: subsidy_orders was removed by 000235 as part of retiring WeChat
+-- platform ecommerce payment surfaces. Keep this migration number reserved so
+-- already-created local branches do not need to renumber following migrations.

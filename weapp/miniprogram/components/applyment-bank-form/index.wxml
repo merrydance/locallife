@@ -57,7 +57,40 @@
       bind:click="onToggleAccountNumberVisibility"
     />
 
+    <t-input
+      wx:if="{{useManualCatalog}}"
+      label="开户银行"
+      t-class-label="form-required-label"
+      placeholder="例如 招商银行"
+      value="{{form.account_bank}}"
+      data-field="account_bank"
+      align="right"
+      bind:change="onManualBankFieldChange"
+    />
+
+    <t-input
+      wx:if="{{useManualCatalog}}"
+      label="开户省份"
+      placeholder="例如 浙江省"
+      value="{{form.bank_address_code}}"
+      data-field="bank_address_code"
+      align="right"
+      bind:change="onManualBankFieldChange"
+    />
+
+    <t-input
+      wx:if="{{useManualCatalog}}"
+      label="开户支行"
+      t-class-label="form-required-label"
+      placeholder="例如 招商银行杭州支行"
+      value="{{form.bank_name}}"
+      data-field="bank_name"
+      align="right"
+      bind:change="onManualBankFieldChange"
+    />
+
     <t-cell
+      wx:else
       required
       title="开户银行"
       hover

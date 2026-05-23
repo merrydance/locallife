@@ -3,6 +3,7 @@ package contracts
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 type DirectJSAPIOrderRequestValidationError struct {
@@ -256,6 +257,16 @@ func formatDirectOrderingValidationMessage(defaultOperation, operation, format s
 		prefix = defaultOperation
 	}
 	return fmt.Sprintf("%s: %s", prefix, fmt.Sprintf(format, args...))
+}
+
+func validateRFC3339Timestamp(field, value string, errorFactory func(string, ...any) error) error {
+	if strings.TrimSpace(value) == "" {
+		return errorFactory("%s is required", field)
+	}
+	if _, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(value)); err != nil {
+		return errorFactory("%s must be RFC3339: %v", field, err)
+	}
+	return nil
 }
 
 func validateDirectPromotionDetails(details []DirectPromotionDetail, requireName bool, errorFactory func(string, ...any) error, fieldPrefix string) error {

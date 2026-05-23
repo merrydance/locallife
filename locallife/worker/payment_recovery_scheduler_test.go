@@ -13,7 +13,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestPaymentRecoverySchedulerRunOnceSkipsRefundingOrders(t *testing.T) {
+func TestPaymentRecoverySchedulerRunOnceSkipsBaofuAggregateMainBusinessPayments(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -21,11 +21,12 @@ func TestPaymentRecoverySchedulerRunOnceSkipsRefundingOrders(t *testing.T) {
 	distributor := &paymentRecoverySchedulerTestDistributor{}
 
 	order := db.PaymentOrder{
-		ID:           101,
-		OutTradeNo:   "PAY_RECOVERY_SKIP",
-		BusinessType: "order",
+		ID:             101,
+		OutTradeNo:     "PAY_RECOVERY_BAOFU_SKIP",
+		BusinessType:   db.ExternalPaymentBusinessOwnerOrder,
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
 		TransactionID: pgtype.Text{
-			String: "wx_tx_101",
+			String: "bf_tx_101",
 			Valid:  true,
 		},
 	}
@@ -33,53 +34,6 @@ func TestPaymentRecoverySchedulerRunOnceSkipsRefundingOrders(t *testing.T) {
 	store.EXPECT().
 		ListPaidUnprocessedPaymentOrders(gomock.Any(), gomock.Any()).
 		Return([]db.PaymentOrder{order}, nil)
-	store.EXPECT().
-		ListRefundOrdersByPaymentOrder(gomock.Any(), order.ID).
-		Return([]db.RefundOrder{{ID: 9001, PaymentOrderID: order.ID, Status: "pending"}}, nil)
-
-	scheduler := worker.NewPaymentRecoveryScheduler(store, distributor)
-	scheduler.RunOnce()
-}
-
-func TestPaymentRecoverySchedulerRunOnceCreatesOrderPaymentFactApplication(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-	distributor := &paymentRecoverySchedulerTestDistributor{}
-
-	order := db.PaymentOrder{
-		ID:             202,
-		OutTradeNo:     "PAY_RECOVERY_OK",
-		BusinessType:   "order",
-		PaymentChannel: db.PaymentChannelEcommerce,
-		TransactionID: pgtype.Text{
-			String: "wx_tx_202",
-			Valid:  true,
-		},
-	}
-
-	store.EXPECT().
-		ListPaidUnprocessedPaymentOrders(gomock.Any(), gomock.Any()).
-		Return([]db.PaymentOrder{order}, nil)
-	store.EXPECT().
-		ListRefundOrdersByPaymentOrder(gomock.Any(), order.ID).
-		Return([]db.RefundOrder{}, nil)
-	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
-		require.Equal(t, db.ExternalPaymentCapabilityPartnerJSAPIPayment, arg.Capability)
-		require.Equal(t, db.ExternalPaymentFactSourceManualReconciliation, arg.FactSource)
-		require.Equal(t, order.OutTradeNo, arg.ExternalObjectKey)
-		return db.ExternalPaymentFact{ID: 3001, IsTerminal: true}, nil
-	})
-	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactApplicationParams) (db.ExternalPaymentFactApplication, error) {
-		require.Equal(t, int64(3001), arg.FactID)
-		require.Equal(t, int64(202), arg.BusinessObjectID)
-		return db.ExternalPaymentFactApplication{ID: 4001, FactID: arg.FactID, Consumer: arg.Consumer, BusinessObjectType: arg.BusinessObjectType, BusinessObjectID: arg.BusinessObjectID}, nil
-	})
-	distributor.processPaymentFactApplication = func(_ context.Context, payload *worker.PaymentFactApplicationPayload, _ ...asynq.Option) error {
-		require.Equal(t, int64(4001), payload.ApplicationID)
-		return nil
-	}
 
 	scheduler := worker.NewPaymentRecoveryScheduler(store, distributor)
 	scheduler.RunOnce()
@@ -107,9 +61,6 @@ func TestPaymentRecoverySchedulerRunOnceCreatesRiderDepositPaymentFactApplicatio
 	store.EXPECT().
 		ListPaidUnprocessedPaymentOrders(gomock.Any(), gomock.Any()).
 		Return([]db.PaymentOrder{order}, nil)
-	store.EXPECT().
-		ListRefundOrdersByPaymentOrder(gomock.Any(), order.ID).
-		Return([]db.RefundOrder{}, nil)
 	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
 		require.Equal(t, db.PaymentChannelDirect, arg.Channel)
 		require.Equal(t, db.ExternalPaymentCapabilityDirectJSAPIPayment, arg.Capability)
@@ -156,9 +107,6 @@ func TestPaymentRecoverySchedulerRunOnceCreatesClaimRecoveryPaymentFactApplicati
 	store.EXPECT().
 		ListPaidUnprocessedPaymentOrders(gomock.Any(), gomock.Any()).
 		Return([]db.PaymentOrder{order}, nil)
-	store.EXPECT().
-		ListRefundOrdersByPaymentOrder(gomock.Any(), order.ID).
-		Return([]db.RefundOrder{}, nil)
 	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
 		require.Equal(t, db.PaymentChannelDirect, arg.Channel)
 		require.Equal(t, db.ExternalPaymentCapabilityDirectJSAPIPayment, arg.Capability)
@@ -176,51 +124,6 @@ func TestPaymentRecoverySchedulerRunOnceCreatesClaimRecoveryPaymentFactApplicati
 	})
 	distributor.processPaymentFactApplication = func(_ context.Context, payload *worker.PaymentFactApplicationPayload, _ ...asynq.Option) error {
 		require.Equal(t, int64(4003), payload.ApplicationID)
-		return nil
-	}
-
-	scheduler := worker.NewPaymentRecoveryScheduler(store, distributor)
-	scheduler.RunOnce()
-}
-
-func TestPaymentRecoverySchedulerRunOnceRecordsReservationPaymentFact(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-	distributor := &paymentRecoverySchedulerTestDistributor{}
-
-	order := db.PaymentOrder{
-		ID:             305,
-		OutTradeNo:     "PAY_RECOVERY_RESERVATION",
-		BusinessType:   db.ExternalPaymentBusinessOwnerReservation,
-		PaymentChannel: db.PaymentChannelEcommerce,
-		ReservationID:  pgtype.Int8{Int64: 405, Valid: true},
-		TransactionID: pgtype.Text{
-			String: "wx_tx_305",
-			Valid:  true,
-		},
-		Amount: 5600,
-	}
-
-	store.EXPECT().
-		ListPaidUnprocessedPaymentOrders(gomock.Any(), gomock.Any()).
-		Return([]db.PaymentOrder{order}, nil)
-	store.EXPECT().
-		ListRefundOrdersByPaymentOrder(gomock.Any(), order.ID).
-		Return([]db.RefundOrder{}, nil)
-	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactParams) (db.ExternalPaymentFact, error) {
-		require.Equal(t, db.ExternalPaymentBusinessOwnerReservation, arg.BusinessOwner.String)
-		require.Equal(t, order.ID, arg.BusinessObjectID.Int64)
-		return db.ExternalPaymentFact{ID: 811, IsTerminal: true}, nil
-	})
-	store.EXPECT().CreateExternalPaymentFactApplication(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentFactApplicationParams) (db.ExternalPaymentFactApplication, error) {
-		require.Equal(t, int64(811), arg.FactID)
-		require.Equal(t, order.ID, arg.BusinessObjectID)
-		return db.ExternalPaymentFactApplication{ID: 911, FactID: arg.FactID, Consumer: arg.Consumer, BusinessObjectType: arg.BusinessObjectType, BusinessObjectID: arg.BusinessObjectID}, nil
-	})
-	distributor.processPaymentFactApplication = func(_ context.Context, payload *worker.PaymentFactApplicationPayload, _ ...asynq.Option) error {
-		require.Equal(t, int64(911), payload.ApplicationID)
 		return nil
 	}
 

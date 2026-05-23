@@ -2,6 +2,9 @@ package wechat
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,4 +55,29 @@ func TestGetAccessToken(t *testing.T) {
 			tc.checkResult(t, token, err)
 		})
 	}
+}
+
+func TestCode2SessionRejectsMissingOpenID(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	client := NewClient("test_app_id", "test_app_secret", store)
+	client.httpClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodGet, req.Method)
+			require.Contains(t, req.URL.String(), "jscode2session")
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"errcode":0,"session_key":"session-key-without-openid"}`)),
+				Header:     make(http.Header),
+			}, nil
+		}),
+	}
+
+	resp, err := client.Code2Session(context.Background(), "code-with-empty-openid")
+
+	require.Nil(t, resp)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "missing openid")
 }

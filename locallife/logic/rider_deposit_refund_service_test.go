@@ -524,7 +524,7 @@ func TestRiderDepositRefundService_ResolveRefund_DoesNotWriteReceiverAbsentTarge
 			RefundStatus:  riderDepositRefundStatusSuccess,
 			RefundID:      "WX_REFUND_701",
 		}).Return(db.ResolveRiderDepositRefundTxResult{}, nil),
-		store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder.Amount, nil),
+		store.EXPECT().GetTotalSuccessfulRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder.Amount, nil),
 		store.EXPECT().UpdatePaymentOrderToRefunded(gomock.Any(), paymentOrder.ID).Return(db.PaymentOrder{ID: paymentOrder.ID, Status: "refunded"}, nil),
 	)
 

@@ -24,6 +24,9 @@ type MerchantOrderFeeBreakdown struct {
 	PlatformServiceFeeAmount  int64 `json:"platform_service_fee_amount"`
 	PaymentChannelFeeAmount   int64 `json:"payment_channel_fee_amount"`
 	MerchantReceivableAmount  int64 `json:"merchant_receivable_amount"`
+	RiderGrossAmount          int64 `json:"rider_gross_amount"`
+	RiderPaymentFeeAmount     int64 `json:"rider_payment_fee_amount"`
+	RiderNetEarningsAmount    int64 `json:"rider_net_earnings_amount"`
 }
 
 type BuildMerchantOrderFeeBreakdownInput struct {
@@ -46,7 +49,10 @@ func BuildMerchantOrderFeeBreakdown(input BuildMerchantOrderFeeBreakdownInput) (
 		order.TotalAmount < 0 ||
 		profitSharingOrder.PlatformCommission < 0 ||
 		profitSharingOrder.OperatorCommission < 0 ||
-		profitSharingOrder.MerchantAmount < 0 {
+		profitSharingOrder.MerchantAmount < 0 ||
+		profitSharingOrder.RiderGrossAmount < 0 ||
+		profitSharingOrder.RiderPaymentFee < 0 ||
+		profitSharingOrder.RiderAmount < 0 {
 		return MerchantOrderFeeBreakdown{}, fmt.Errorf("%w: negative amount for order_id=%d profit_sharing_order_id=%d", ErrMerchantFeeBreakdownInconsistent, order.ID, profitSharingOrder.ID)
 	}
 
@@ -57,6 +63,9 @@ func BuildMerchantOrderFeeBreakdown(input BuildMerchantOrderFeeBreakdownInput) (
 	}
 	if foodPayable+deliveryPayable != order.TotalAmount {
 		return MerchantOrderFeeBreakdown{}, fmt.Errorf("%w: customer payable mismatch for order_id=%d profit_sharing_order_id=%d", ErrMerchantFeeBreakdownInconsistent, order.ID, profitSharingOrder.ID)
+	}
+	if profitSharingOrder.TotalAmount != order.TotalAmount {
+		return MerchantOrderFeeBreakdown{}, fmt.Errorf("%w: bill total mismatch for order_id=%d profit_sharing_order_id=%d", ErrMerchantFeeBreakdownInconsistent, order.ID, profitSharingOrder.ID)
 	}
 
 	paymentChannelFee := profitSharingOrder.PaymentFee
@@ -79,5 +88,8 @@ func BuildMerchantOrderFeeBreakdown(input BuildMerchantOrderFeeBreakdownInput) (
 		PlatformServiceFeeAmount:  profitSharingOrder.PlatformCommission + profitSharingOrder.OperatorCommission,
 		PaymentChannelFeeAmount:   paymentChannelFee,
 		MerchantReceivableAmount:  profitSharingOrder.MerchantAmount,
+		RiderGrossAmount:          profitSharingOrder.RiderGrossAmount,
+		RiderPaymentFeeAmount:     profitSharingOrder.RiderPaymentFee,
+		RiderNetEarningsAmount:    profitSharingOrder.RiderAmount,
 	}, nil
 }

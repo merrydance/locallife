@@ -192,36 +192,41 @@ type grabOrderRequest struct {
 }
 
 type deliveryResponse struct {
-	ID                  int64          `json:"id"`
-	OrderID             int64          `json:"order_id"`
-	OrderNo             string         `json:"order_no,omitempty"`
-	RiderID             *int64         `json:"rider_id,omitempty"`
-	MerchantName        string         `json:"merchant_name,omitempty"`
-	PickupAddress       string         `json:"pickup_address"`
-	PickupLongitude     float64        `json:"pickup_longitude"`
-	PickupLatitude      float64        `json:"pickup_latitude"`
-	PickupContact       string         `json:"pickup_contact,omitempty"`
-	PickupPhone         string         `json:"pickup_phone,omitempty"`
-	DeliveryAddress     string         `json:"delivery_address"`
-	DeliveryLongitude   float64        `json:"delivery_longitude"`
-	DeliveryLatitude    float64        `json:"delivery_latitude"`
-	DeliveryContact     string         `json:"delivery_contact,omitempty"`
-	DeliveryPhone       string         `json:"delivery_phone,omitempty"`
-	Distance            int32          `json:"distance"`
-	DeliveryFee         int64          `json:"delivery_fee"`
-	RiderEarnings       int64          `json:"rider_earnings"`
-	FreezeAmount        int64          `json:"freeze_amount,omitempty"`
-	ItemCount           int            `json:"item_count,omitempty"`
-	Status              string         `json:"status"`
-	EstimatedPickupAt   *time.Time     `json:"estimated_pickup_at,omitempty"`
-	EstimatedDeliveryAt *time.Time     `json:"estimated_delivery_at,omitempty"`
-	PickedAt            *time.Time     `json:"picked_at,omitempty"`
-	DeliveredAt         *time.Time     `json:"delivered_at,omitempty"`
-	CreatedAt           time.Time      `json:"created_at"`
-	AssignedAt          *time.Time     `json:"assigned_at,omitempty"`
-	CompletedAt         *time.Time     `json:"completed_at,omitempty"`
-	Notes               string         `json:"notes,omitempty"`
-	Items               []deliveryItem `json:"items,omitempty"`
+	ID                   int64          `json:"id"`
+	OrderID              int64          `json:"order_id"`
+	OrderNo              string         `json:"order_no,omitempty"`
+	RiderID              *int64         `json:"rider_id,omitempty"`
+	MerchantName         string         `json:"merchant_name,omitempty"`
+	PickupAddress        string         `json:"pickup_address"`
+	PickupLongitude      float64        `json:"pickup_longitude"`
+	PickupLatitude       float64        `json:"pickup_latitude"`
+	PickupContact        string         `json:"pickup_contact,omitempty"`
+	PickupPhone          string         `json:"pickup_phone,omitempty"`
+	DeliveryAddress      string         `json:"delivery_address"`
+	DeliveryLongitude    float64        `json:"delivery_longitude"`
+	DeliveryLatitude     float64        `json:"delivery_latitude"`
+	DeliveryContact      string         `json:"delivery_contact,omitempty"`
+	DeliveryPhone        string         `json:"delivery_phone,omitempty"`
+	Distance             int32          `json:"distance"`
+	DeliveryFee          int64          `json:"delivery_fee"`
+	RiderEarnings        int64          `json:"rider_earnings"`
+	RiderGrossAmount     int64          `json:"rider_gross_amount,omitempty"`
+	RiderPaymentFee      int64          `json:"rider_payment_fee,omitempty"`
+	RiderNetEarnings     int64          `json:"rider_net_earnings,omitempty"`
+	ProfitSharingOrderID int64          `json:"profit_sharing_order_id,omitempty"`
+	ProfitSharingStatus  string         `json:"profit_sharing_status,omitempty"`
+	FreezeAmount         int64          `json:"freeze_amount,omitempty"`
+	ItemCount            int            `json:"item_count,omitempty"`
+	Status               string         `json:"status"`
+	EstimatedPickupAt    *time.Time     `json:"estimated_pickup_at,omitempty"`
+	EstimatedDeliveryAt  *time.Time     `json:"estimated_delivery_at,omitempty"`
+	PickedAt             *time.Time     `json:"picked_at,omitempty"`
+	DeliveredAt          *time.Time     `json:"delivered_at,omitempty"`
+	CreatedAt            time.Time      `json:"created_at"`
+	AssignedAt           *time.Time     `json:"assigned_at,omitempty"`
+	CompletedAt          *time.Time     `json:"completed_at,omitempty"`
+	Notes                string         `json:"notes,omitempty"`
+	Items                []deliveryItem `json:"items,omitempty"`
 }
 
 type deliveryItem struct {
@@ -259,6 +264,7 @@ func (server *Server) newDeliveryResponse(ctx context.Context, d db.Delivery) de
 			resp.MerchantName = merchant.Name
 		}
 		resp.Notes = order.Notes.String
+		server.attachRiderProfitSharingBillToDeliveryResponse(ctx, order, &resp)
 	}
 	if count, err := server.store.CountOrderItems(ctx, d.OrderID); err == nil {
 		resp.ItemCount = int(count)
@@ -307,6 +313,42 @@ func (server *Server) newDeliveryResponse(ctx context.Context, d db.Delivery) de
 	}
 
 	return resp
+}
+
+func (server *Server) attachRiderProfitSharingBillToDeliveryResponse(ctx context.Context, order db.Order, resp *deliveryResponse) {
+	if order.OrderType != db.OrderTypeTakeout {
+		return
+	}
+	paymentOrder, err := server.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+	})
+	if err != nil {
+		if !errors.Is(err, db.ErrRecordNotFound) {
+			log.Error().Err(err).Int64("order_id", order.ID).Msg("load rider delivery settlement payment order failed")
+		}
+		return
+	}
+	if !db.PaymentOrderRequiresProfitSharing(paymentOrder) {
+		return
+	}
+	bill, err := server.store.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			log.Warn().Int64("order_id", order.ID).Int64("payment_order_id", paymentOrder.ID).Msg("rider delivery settlement bill missing")
+		} else {
+			log.Error().Err(err).Int64("order_id", order.ID).Int64("payment_order_id", paymentOrder.ID).Msg("load rider delivery settlement bill failed")
+		}
+		return
+	}
+	resp.ProfitSharingOrderID = bill.ID
+	resp.ProfitSharingStatus = bill.Status
+	resp.RiderGrossAmount = bill.RiderGrossAmount
+	resp.RiderPaymentFee = bill.RiderPaymentFee
+	resp.RiderNetEarnings = bill.RiderAmount
+	if bill.RiderAmount > 0 {
+		resp.RiderEarnings = bill.RiderAmount
+	}
 }
 
 // grabOrder godoc

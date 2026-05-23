@@ -36,3 +36,10 @@ Append one section per formal backend audit or durable review pass.
 - Durable docs updated: .github/review/open-findings.md; .github/review/audit-log.md; .github/standards/backend/BACKEND_REVIEW_CLOSEOUT_CHECKLIST.md; .github/standards/backend/FORMAL_REVIEW_DURABILITY.md; .github/standards/backend/GO_PRACTICES.md; .github/scripts/backend_go_guard.sh
 - Remaining scope: This pass did not convert existing production handlers yet. Raw internal-detail leakage on 4xx paths such as `errorResponse(fmt.Errorf(...%w...))`, and context-dependent nil/silent-fallback patterns, were reviewed as follow-up candidates but not promoted into a grep-based guard because the current signal-to-noise ratio is not yet good enough.
 
+### 2026-05-19 - Subsidy authz and idempotency deferred pending platform re-enable
+
+- Scope: Recorded the subsidy authz and idempotency follow-up state after confirming the WeChat platform e-commerce payment chain is disabled.
+- Reviewed paths: artifacts/backend-subsidy-authz-task-card-2026-05-19.md; artifacts/backend-subsidy-idempotency-task-card-2026-05-19.md; artifacts/backend-ocr-subsidy-authz-idempotency-review-fix-index-2026-05-19.md; .github/review/open-findings.md
+- Findings logged: BE-AUDIT-2026-05-19-01; BE-AUDIT-2026-05-19-02
+- Durable docs updated: artifacts/backend-subsidy-authz-task-card-2026-05-19.md; artifacts/backend-subsidy-idempotency-task-card-2026-05-19.md; artifacts/backend-ocr-subsidy-authz-idempotency-review-fix-index-2026-05-19.md; .github/review/open-findings.md
+- Remaining scope: No subsidy code changes were made in this pass. Reopen both deferred task cards when the platform payment chain is re-enabled, then implement the fixes before subsidy traffic resumes.

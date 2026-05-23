@@ -547,21 +547,6 @@ func (server *Server) updateMerchantOpenStatus(ctx *gin.Context) {
 	}
 
 	if *req.IsOpen {
-		paymentConfig, err := server.store.GetMerchantPaymentConfig(ctx, merchant.ID)
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("尚未开通普通服务商特约商户，请先完成微信支付进件和结算账户配置后再开业")))
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		if paymentConfig.SubMchID == "" || paymentConfig.Status != "active" {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("普通服务商特约商户未激活，请先完成微信支付进件和结算账户配置后再开业")))
-			return
-		}
-
 		if err := server.ensureMerchantBaofuPaymentReady(ctx, merchant); err != nil {
 			if errors.Is(err, errMerchantBaofuAccountMissing) || errors.Is(err, errMerchantBaofuWechatChannelPending) {
 				ctx.JSON(http.StatusBadRequest, errorResponse(err))
@@ -588,7 +573,7 @@ func (server *Server) updateMerchantOpenStatus(ctx *gin.Context) {
 	}
 
 	// 更新营业状态
-	_, err = server.store.UpdateMerchantIsOpen(ctx, db.UpdateMerchantIsOpenParams{
+	updatedMerchant, err := server.store.UpdateMerchantIsOpen(ctx, db.UpdateMerchantIsOpenParams{
 		ID:          merchant.ID,
 		IsOpen:      *req.IsOpen,
 		AutoCloseAt: autoCloseAt,
@@ -596,6 +581,15 @@ func (server *Server) updateMerchantOpenStatus(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
+	}
+
+	if server.merchantStatusChangePublisher != nil {
+		autoCloseAtPtr := pgTimeToPtr(updatedMerchant.AutoCloseAt)
+		if err := server.merchantStatusChangePublisher.PublishMerchantStatusChange(ctx, updatedMerchant.ID, updatedMerchant.IsOpen, autoCloseAtPtr, "manual"); err != nil {
+			log.Error().Err(err).
+				Int64("merchant_id", updatedMerchant.ID).
+				Msg("failed to publish merchant status change event")
+		}
 	}
 
 	// 构建响应消息
@@ -611,8 +605,8 @@ func (server *Server) updateMerchantOpenStatus(ctx *gin.Context) {
 		IsOpen:  *req.IsOpen,
 		Message: message,
 	}
-	if autoCloseAt.Valid {
-		resp.AutoCloseAt = &autoCloseAt.Time
+	if updatedMerchant.AutoCloseAt.Valid {
+		resp.AutoCloseAt = &updatedMerchant.AutoCloseAt.Time
 	}
 
 	ctx.JSON(http.StatusOK, resp)

@@ -44,6 +44,12 @@ Prefer the smallest customization primitive that solves the routing problem.
 2. Use `prompts/` for implementation, review, refactor, test, or diagram requests.
 3. Use `agents/` only when the mode needs a real boundary such as read-only analysis, a deliberately restricted tool set, or a clearly separate working persona.
 
+Context rehydration rule:
+
+- When a session starts, gets compacted, forks, or hands off to another agent, rerun routing from `.github/README.md` before using any prompt or instruction content.
+- Then reopen the matching `instructions/` file and the narrowest matching prompt or standards file for the new task context.
+- Do not keep relying on stale context.
+
 Practical defaults for this workspace:
 
 - Default to a prompt, not an agent.
@@ -85,6 +91,7 @@ Backend:
 - `.github/standards/backend/GO_PRACTICES.md`
 - `.github/standards/backend/SQL_STANDARDS.md`
 - `.github/standards/backend/API_CONTRACT_STANDARDS.md`
+- `.github/standards/backend/EXTERNAL_API_CONTRACT_STANDARDS.md`
 - `.github/standards/backend/RUNTIME_ARCHITECTURE.md`
 - `.github/standards/backend/WORKFLOW_AND_VALIDATION.md`
 - `.github/standards/backend/BACKEND_CHANGE_SAFETY_CHECKLIST.md`

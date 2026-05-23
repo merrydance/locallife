@@ -8,7 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
-	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -258,35 +257,6 @@ func TestNormalizeProfitSharingTerminalStatus(t *testing.T) {
 	require.Equal(t, db.ExternalPaymentTerminalStatusProcessing, NormalizeProfitSharingTerminalStatus("PROCESSING"))
 	require.Equal(t, db.ExternalPaymentTerminalStatusProcessing, NormalizeProfitSharingTerminalStatus("pending"))
 	require.Equal(t, db.ExternalPaymentTerminalStatusUnknown, NormalizeProfitSharingTerminalStatus("NEW_STATE"))
-}
-
-func TestResolveProfitSharingQueryFinalResult(t *testing.T) {
-	t.Run("success when finished and all receivers success", func(t *testing.T) {
-		result, failReason := ResolveProfitSharingQueryFinalResult(&wechatcontracts.ProfitSharingQueryResponse{
-			Status:    wechatcontracts.ProfitSharingStatusFinished,
-			Receivers: []wechatcontracts.ProfitSharingReceiverResult{{Result: wechatcontracts.ProfitSharingResultSuccess}},
-		})
-		require.Equal(t, "SUCCESS", result)
-		require.Empty(t, failReason)
-	})
-
-	t.Run("failed when any receiver failed", func(t *testing.T) {
-		result, failReason := ResolveProfitSharingQueryFinalResult(&wechatcontracts.ProfitSharingQueryResponse{
-			Status:    wechatcontracts.ProfitSharingStatusFinished,
-			Receivers: []wechatcontracts.ProfitSharingReceiverResult{{Result: "FAILED", FailReason: "NO_RELATION"}},
-		})
-		require.Equal(t, "FAILED", result)
-		require.Equal(t, "NO_RELATION", failReason)
-	})
-
-	t.Run("processing when receiver result is unsupported", func(t *testing.T) {
-		result, failReason := ResolveProfitSharingQueryFinalResult(&wechatcontracts.ProfitSharingQueryResponse{
-			Status:    wechatcontracts.ProfitSharingStatusFinished,
-			Receivers: []wechatcontracts.ProfitSharingReceiverResult{{Result: "UNSUPPORTED_RESULT"}},
-		})
-		require.Equal(t, "PROCESSING", result)
-		require.Empty(t, failReason)
-	})
 }
 
 func buildRecordExternalPaymentFactInput(now time.Time) RecordExternalPaymentFactInput {

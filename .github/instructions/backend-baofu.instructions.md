@@ -6,6 +6,8 @@ applyTo: "locallife/baofu/**"
 
 Apply these rules for files under `locallife/baofu/`.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions and prompt, and confirm the task scope before continuing. Do not keep relying on stale context.
+
 ## Read First
 
 - `.github/standards/domains/baofu-payment/README.md`

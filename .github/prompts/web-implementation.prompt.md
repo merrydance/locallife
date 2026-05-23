@@ -6,6 +6,8 @@ description: "Use when drafting a web implementation or UI change request for we
 
 Use this template when asking for a concrete web change in `web/`.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions, and confirm the implementation scope before writing the request. Do not keep relying on stale context.
+
 Use the web row in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` as the shared source for implementation push items, prohibited shortcuts, and review-ready hand-off expectations.
 
 ## Web Page Or Component Change

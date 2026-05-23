@@ -13,10 +13,6 @@ func createDirectRefundContract(ctx context.Context, paymentClient wechat.Direct
 	return wechatruntime.CreateDirectRefundContract(ctx, paymentClient, req)
 }
 
-func createEcommerceRefundContract(ctx context.Context, ecommerceClient wechat.EcommerceClientInterface, req *wechatcontracts.EcommerceRefundRequest) (*wechatcontracts.EcommerceRefundCreateResponse, error) {
-	return wechatruntime.CreateEcommerceRefundContract(ctx, ecommerceClient, req)
-}
-
 func logRefundRequestFailure(refundOrderID, paymentOrderID int64, outRefundNo, refundChannel string, err error) {
 	log.Error().
 		Err(err).
@@ -24,5 +20,5 @@ func logRefundRequestFailure(refundOrderID, paymentOrderID int64, outRefundNo, r
 		Int64("payment_order_id", paymentOrderID).
 		Str("out_refund_no", outRefundNo).
 		Str("refund_channel", refundChannel).
-		Msg("wechat refund request failed")
+		Msg("refund request failed")
 }

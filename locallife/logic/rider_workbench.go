@@ -26,6 +26,8 @@ const (
 type RiderWorkbenchStore interface {
 	GetRiderByUserID(ctx context.Context, userID int64) (db.Rider, error)
 	ListRiderActiveDeliveries(ctx context.Context, riderID pgtype.Int8) ([]db.Delivery, error)
+	GetLatestPaymentOrderByOrder(ctx context.Context, arg db.GetLatestPaymentOrderByOrderParams) (db.PaymentOrder, error)
+	GetProfitSharingOrderByPaymentOrder(ctx context.Context, paymentOrderID int64) (db.ProfitSharingOrder, error)
 	CountDeliveryPool(ctx context.Context) (int64, error)
 	CountRiderCompletedDeliveriesInRange(ctx context.Context, arg db.CountRiderCompletedDeliveriesInRangeParams) (int64, error)
 	GetRiderProfitSharingStats(ctx context.Context, arg db.GetRiderProfitSharingStatsParams) (db.GetRiderProfitSharingStatsRow, error)
@@ -83,18 +85,23 @@ type RiderWorkbenchCurrentDeliveries struct {
 }
 
 type RiderWorkbenchDeliveryItem struct {
-	ID                  int64
-	OrderID             int64
-	Status              string
-	DeliveryFee         int64
-	RiderEarnings       int64
-	PickupAddress       string
-	DeliveryAddress     string
-	EstimatedPickupAt   *time.Time
-	EstimatedDeliveryAt *time.Time
-	PickedAt            *time.Time
-	DeliveredAt         *time.Time
-	CreatedAt           time.Time
+	ID                   int64
+	OrderID              int64
+	Status               string
+	DeliveryFee          int64
+	RiderEarnings        int64
+	RiderGrossAmount     int64
+	RiderPaymentFee      int64
+	RiderNetEarnings     int64
+	ProfitSharingOrderID int64
+	ProfitSharingStatus  string
+	PickupAddress        string
+	DeliveryAddress      string
+	EstimatedPickupAt    *time.Time
+	EstimatedDeliveryAt  *time.Time
+	PickedAt             *time.Time
+	DeliveredAt          *time.Time
+	CreatedAt            time.Time
 }
 
 type RiderWorkbenchOrderPool struct {
@@ -164,9 +171,13 @@ func (service *RiderWorkbenchService) GetSummary(ctx context.Context, userID int
 		result.RiderStatus.ActiveDeliveries = len(activeDeliveries)
 		result.RiderStatus.OnlineStatus = riderWorkbenchOnlineStatus(rider.IsOnline, len(activeDeliveries))
 		result.RiderStatus.CanGoOffline = rider.IsOnline && len(activeDeliveries) == 0
+		items, billAvailable := service.newRiderWorkbenchDeliveryItems(ctx, activeDeliveries)
+		if !billAvailable {
+			result.degrade(RiderWorkbenchSectionCurrentDeliveries, "当前任务收益账单暂不可用，请稍后重试")
+		}
 		result.CurrentDeliveries = RiderWorkbenchCurrentDeliveries{
 			ActiveCount: len(activeDeliveries),
-			Items:       newRiderWorkbenchDeliveryItems(activeDeliveries),
+			Items:       items,
 		}
 	}
 
@@ -371,10 +382,11 @@ func riderWorkbenchFenToYuanString(fen int64) string {
 	return fmt.Sprintf("%d.%02d", yuan, cents)
 }
 
-func newRiderWorkbenchDeliveryItems(deliveries []db.Delivery) []RiderWorkbenchDeliveryItem {
+func (service *RiderWorkbenchService) newRiderWorkbenchDeliveryItems(ctx context.Context, deliveries []db.Delivery) ([]RiderWorkbenchDeliveryItem, bool) {
 	items := make([]RiderWorkbenchDeliveryItem, 0, len(deliveries))
+	billAvailable := true
 	for _, delivery := range deliveries {
-		items = append(items, RiderWorkbenchDeliveryItem{
+		item := RiderWorkbenchDeliveryItem{
 			ID:                  delivery.ID,
 			OrderID:             delivery.OrderID,
 			Status:              delivery.Status,
@@ -387,9 +399,57 @@ func newRiderWorkbenchDeliveryItems(deliveries []db.Delivery) []RiderWorkbenchDe
 			PickedAt:            pgTimestamptzPtr(delivery.PickedAt),
 			DeliveredAt:         pgTimestamptzPtr(delivery.DeliveredAt),
 			CreatedAt:           delivery.CreatedAt,
-		})
+		}
+		if !service.attachRiderDeliveryBill(ctx, delivery, &item) {
+			billAvailable = false
+		}
+		items = append(items, item)
 	}
-	return items
+	return items, billAvailable
+}
+
+func (service *RiderWorkbenchService) attachRiderDeliveryBill(ctx context.Context, delivery db.Delivery, item *RiderWorkbenchDeliveryItem) bool {
+	paymentOrder, err := service.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: delivery.OrderID, Valid: true},
+		BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+	})
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			log.Warn().Int64("order_id", delivery.OrderID).Int64("delivery_id", delivery.ID).Msg("rider workbench delivery payment order missing")
+		} else {
+			log.Error().Err(err).Int64("order_id", delivery.OrderID).Int64("delivery_id", delivery.ID).Msg("rider workbench delivery payment order load failed")
+		}
+		return false
+	}
+	if !db.PaymentOrderRequiresProfitSharing(paymentOrder) {
+		return true
+	}
+	profitSharingOrder, err := service.store.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			log.Warn().
+				Int64("order_id", delivery.OrderID).
+				Int64("delivery_id", delivery.ID).
+				Int64("payment_order_id", paymentOrder.ID).
+				Msg("rider workbench delivery profit sharing bill missing")
+		} else {
+			log.Error().Err(err).
+				Int64("order_id", delivery.OrderID).
+				Int64("delivery_id", delivery.ID).
+				Int64("payment_order_id", paymentOrder.ID).
+				Msg("rider workbench delivery profit sharing bill load failed")
+		}
+		return false
+	}
+	item.RiderGrossAmount = profitSharingOrder.RiderGrossAmount
+	item.RiderPaymentFee = profitSharingOrder.RiderPaymentFee
+	item.RiderNetEarnings = profitSharingOrder.RiderAmount
+	item.ProfitSharingOrderID = profitSharingOrder.ID
+	item.ProfitSharingStatus = profitSharingOrder.Status
+	if profitSharingOrder.RiderAmount > 0 {
+		item.RiderEarnings = profitSharingOrder.RiderAmount
+	}
+	return true
 }
 
 func newRiderWorkbenchIncome(stats db.GetRiderProfitSharingStatsRow, statusRows []db.GetRiderProfitSharingStatusSummaryRow) RiderWorkbenchIncome {

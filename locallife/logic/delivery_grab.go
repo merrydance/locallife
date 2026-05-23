@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
 )
@@ -77,6 +78,7 @@ func GrabDeliveryOrder(ctx context.Context, store db.Store, input GrabOrderInput
 	if !settlementReadiness.PaymentReady {
 		return result, NewRequestError(http.StatusBadRequest, errors.New("骑手结算账户未开通，暂不能接收配送费分账订单"))
 	}
+	riderSharingMerID := settlementReadiness.SubMchID
 
 	availableDeposit := rider.DepositAmount - rider.FrozenDeposit
 
@@ -136,17 +138,25 @@ func GrabDeliveryOrder(ctx context.Context, store db.Store, input GrabOrderInput
 	if freezeAmount > 0 && availableDeposit < freezeAmount {
 		return result, NewRequestError(http.StatusBadRequest, errors.New("押金余额不足，无法接单"))
 	}
+	riderBill, err := buildBaofuRiderProfitSharingBillUpdate(ctx, store, order, rider, riderSharingMerID)
+	if err != nil {
+		return result, err
+	}
 
 	txResult, err := store.GrabOrderTx(ctx, db.GrabOrderTxParams{
-		DeliveryID:   delivery.ID,
-		RiderID:      rider.ID,
-		RiderUserID:  rider.UserID,
-		OrderID:      input.OrderID,
-		FreezeAmount: freezeAmount,
+		DeliveryID:             delivery.ID,
+		RiderID:                rider.ID,
+		RiderUserID:            rider.UserID,
+		OrderID:                input.OrderID,
+		FreezeAmount:           freezeAmount,
+		ProfitSharingRiderBill: riderBill,
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrTakeoutOrderPausedByFoodSafety) {
 			return result, NewRequestError(http.StatusForbidden, errors.New("该外卖订单因食安事件已暂停履约，请等待平台处理"))
+		}
+		if errors.Is(err, db.ErrBaofuProfitSharingBillNotPending) {
+			return result, NewRequestError(http.StatusConflict, errors.New("订单结算已进入处理，不能重新接单"))
 		}
 		return result, err
 	}
@@ -164,6 +174,96 @@ func GrabDeliveryOrder(ctx context.Context, store db.Store, input GrabOrderInput
 	return result, nil
 }
 
+func buildBaofuRiderProfitSharingBillUpdate(ctx context.Context, store db.Store, order db.Order, rider db.Rider, riderSharingMerID string) (*db.UpdateProfitSharingOrderRiderBillByPaymentOrderParams, error) {
+	if order.OrderType != db.OrderTypeTakeout || order.DeliveryFee <= 0 {
+		return nil, nil
+	}
+	paymentOrder, err := store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType: businessTypeOrder,
+	})
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return nil, NewRequestError(http.StatusConflict, errors.New("订单配送收益账单暂不可用，请稍后重试"))
+		}
+		return nil, fmt.Errorf("get latest payment order for rider profit sharing bill: %w", err)
+	}
+	if !db.PaymentOrderRequiresProfitSharing(paymentOrder) {
+		return nil, nil
+	}
+	if paymentOrder.Status != paymentStatusPaid {
+		return nil, NewRequestError(http.StatusConflict, errors.New("订单配送收益账单暂不可用，请稍后重试"))
+	}
+	if paymentOrder.OrderID.Valid && paymentOrder.OrderID.Int64 != order.ID {
+		return nil, fmt.Errorf("payment order %d order id %d does not match grabbed order %d", paymentOrder.ID, paymentOrder.OrderID.Int64, order.ID)
+	}
+	bill, err := store.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return nil, NewRequestError(http.StatusConflict, errors.New("订单配送收益账单暂不可用，请稍后重试"))
+		}
+		return nil, fmt.Errorf("get baofu profit sharing bill for rider accept: %w", err)
+	}
+	if bill.Status != db.ProfitSharingOrderStatusPending {
+		return nil, NewRequestError(http.StatusConflict, errors.New("订单结算已进入处理，不能重新接单"))
+	}
+	if bill.Provider != db.ExternalPaymentProviderBaofu || bill.Channel != db.PaymentChannelBaofuAggregate {
+		return nil, fmt.Errorf("profit sharing bill %d provider/channel is not baofu aggregate", bill.ID)
+	}
+	if bill.MerchantID != order.MerchantID || bill.PaymentOrderID != paymentOrder.ID || bill.TotalAmount != paymentOrder.Amount {
+		return nil, NewRequestError(http.StatusConflict, errors.New("订单配送收益账单暂不可用，请稍后重试"))
+	}
+	if riderSharingMerID == "" {
+		return nil, NewRequestError(http.StatusBadRequest, errors.New("骑手结算账户未开通，暂不能接收配送费分账订单"))
+	}
+
+	receivers := BaofuProfitSharingReceiverResult{
+		MerchantSharingMerID: textValue(bill.MerchantSharingMerID),
+		RiderSharingMerID:    riderSharingMerID,
+		OperatorSharingMerID: textValue(bill.OperatorSharingMerID),
+		PlatformSharingMerID: textValue(bill.PlatformSharingMerID),
+	}
+	amounts, err := CalculateBaofuSettlementAmounts(BaofuSettlementCalculationInput{
+		OrderScene:                 bill.OrderSource,
+		TotalAmountFen:             bill.TotalAmount,
+		DeliveryFeeFen:             bill.DeliveryFee,
+		ProviderPaymentFeeFen:      bill.ProviderPaymentFee,
+		PlatformCommissionRateBps:  bill.PlatformRate,
+		OperatorCommissionRateBps:  bill.OperatorRate,
+		MerchantPaymentFeeRateBps:  bill.MerchantPaymentFeeRateBps,
+		RiderPaymentFeeRateBps:     DefaultBaofuPaymentServiceFeeRateBps,
+		HasRiderReceiver:           true,
+		HasOperatorReceiver:        bill.OperatorID.Valid,
+		RedirectMissingOperatorFee: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("calculate baofu rider profit sharing bill: %w", err)
+	}
+	snapshot, err := buildBaofuSharingDetailSnapshot(amounts, receivers)
+	if err != nil {
+		return nil, fmt.Errorf("build baofu rider profit sharing snapshot: %w", err)
+	}
+	return &db.UpdateProfitSharingOrderRiderBillByPaymentOrderParams{
+		PaymentOrderID:               paymentOrder.ID,
+		RiderID:                      pgtype.Int8{Int64: rider.ID, Valid: true},
+		RiderSharingMerID:            pgtype.Text{String: riderSharingMerID, Valid: riderSharingMerID != ""},
+		RiderAmount:                  amounts.RiderAmountFen,
+		DistributableAmount:          amounts.MerchantPaymentFeeBaseFen,
+		PlatformCommission:           amounts.PlatformCommissionFen,
+		OperatorCommission:           amounts.OperatorCommissionFen,
+		MerchantAmount:               amounts.MerchantAmountFen,
+		SharingDetailSnapshot:        snapshot,
+		RiderGrossAmount:             amounts.RiderGrossAmountFen,
+		RiderPaymentFee:              amounts.RiderPaymentFeeFen,
+		RiderPaymentFeeRateBps:       amounts.RiderPaymentFeeRateBps,
+		RiderPaymentFeeBaseAmount:    amounts.RiderPaymentFeeBaseFen,
+		MerchantPaymentFee:           amounts.MerchantPaymentFeeFen,
+		MerchantPaymentFeeBaseAmount: amounts.MerchantPaymentFeeBaseFen,
+		CommissionBaseAmount:         amounts.CommissionBaseFen,
+		PlatformReceiverAmount:       amounts.PlatformReceiverAmountFen,
+	}, nil
+}
+
 func riderBaofuSettlementReadiness(ctx context.Context, store db.Store, rider db.Rider) (BaofuAccountReadiness, error) {
 	service := NewBaofuAccountService(nil, nil)
 	binding, err := store.GetBaofuAccountBindingByOwner(ctx, db.GetBaofuAccountBindingByOwnerParams{
@@ -176,5 +276,14 @@ func riderBaofuSettlementReadiness(ctx context.Context, store db.Store, rider db
 		}
 		return BaofuAccountReadiness{}, err
 	}
-	return service.ReadinessFromBinding(binding, true), nil
+	readiness := service.ReadinessFromBinding(binding, true)
+	readiness.SubMchID = textValue(binding.SharingMerID)
+	return readiness, nil
+}
+
+func textValue(value pgtype.Text) string {
+	if !value.Valid {
+		return ""
+	}
+	return value.String
 }

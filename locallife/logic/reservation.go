@@ -2,7 +2,6 @@ package logic
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -12,9 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/util"
-	"github.com/merrydance/locallife/wechat"
-	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
-	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 
 	"github.com/rs/zerolog/log"
 )
@@ -468,21 +464,6 @@ func CompleteReservation(ctx context.Context, store db.Store, userID, reservatio
 func CancelReservation(
 	ctx context.Context,
 	store db.Store,
-	ecommerceClient wechat.EcommerceClientInterface,
-	userID,
-	reservationID int64,
-	reason string,
-	refundPolicy ReservationRefundPolicy,
-	now time.Time,
-) (ReservationStatusUpdateResult, error) {
-	return CancelReservationWithOrdinaryServiceProvider(ctx, store, ecommerceClient, nil, userID, reservationID, reason, refundPolicy, now)
-}
-
-func CancelReservationWithOrdinaryServiceProvider(
-	ctx context.Context,
-	store db.Store,
-	ecommerceClient wechat.EcommerceClientInterface,
-	ordinaryClient ordinaryServiceProviderOrderClient,
 	userID,
 	reservationID int64,
 	reason string,
@@ -528,7 +509,6 @@ func CancelReservationWithOrdinaryServiceProvider(
 	}
 
 	var refundPaymentOrder *db.PaymentOrder
-	var refundPaymentConfig *db.MerchantPaymentConfig
 	refundAmount := int64(0)
 	if (reservation.Status == reservationStatusPaid || reservation.Status == reservationStatusConfirmed) && refundPercent > 0 {
 		paymentOrder, err := store.GetLatestPaymentOrderByReservation(ctx, db.GetLatestPaymentOrderByReservationParams{
@@ -544,15 +524,13 @@ func CancelReservationWithOrdinaryServiceProvider(
 			if refundAmount <= 0 {
 				refundEligible = false
 			} else {
-				if err := ensureWechatServiceProviderRefundClientConfigured(paymentOrder, ecommerceClient, ordinaryClient, "取消预约退款"); err != nil {
-					return ReservationStatusUpdateResult{}, err
-				}
-				paymentConfig, err := store.GetMerchantPaymentConfig(ctx, reservation.MerchantID)
-				if err != nil {
-					return ReservationStatusUpdateResult{}, fmt.Errorf("get merchant payment config: %w", err)
+				if paymentOrder.PaymentChannel != db.PaymentChannelBaofuAggregate {
+					return ReservationStatusUpdateResult{}, NewRequestError(
+						http.StatusConflict,
+						fmt.Errorf("预定支付单支付通道 %s 已废弃，无法发起自动退款，请联系平台处理", paymentOrder.PaymentChannel),
+					)
 				}
 				refundPaymentOrder = &paymentOrder
-				refundPaymentConfig = &paymentConfig
 			}
 		}
 	}
@@ -573,9 +551,8 @@ func CancelReservationWithOrdinaryServiceProvider(
 		return ReservationStatusUpdateResult{}, err
 	}
 
-	if refundPaymentOrder != nil && refundPaymentConfig != nil && refundAmount > 0 {
+	if refundPaymentOrder != nil && refundAmount > 0 {
 		paymentOrder := *refundPaymentOrder
-		paymentConfig := *refundPaymentConfig
 		outRefundNo, err := generateOutRefundNo()
 		if err != nil {
 			return ReservationStatusUpdateResult{}, fmt.Errorf("generate out refund no: %w", err)
@@ -596,21 +573,12 @@ func CancelReservationWithOrdinaryServiceProvider(
 			} else {
 				log.Error().Err(createErr).Int64("payment_order_id", paymentOrder.ID).Msg("create reservation refund order tx failed")
 			}
-		} else {
-			refundOrder := txResult.RefundOrder
-			refundID, err := createCancelReservationRefund(ctx, ecommerceClient, ordinaryClient, paymentOrder, paymentConfig.SubMchID, outRefundNo, refundAmount)
-			if err != nil {
-				// 微信API失败时保持pending状态，由恢复调度器自动补偿重试
-				log.Error().Err(err).Int64("refund_order_id", refundOrder.ID).Msg("wechat refund api failed for reservation, pending recovery")
-			} else {
-				if _, dbErr := store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
-					ID:       refundOrder.ID,
-					RefundID: pgtype.Text{String: refundID, Valid: refundID != ""},
-				}); dbErr != nil {
-					log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
-				}
-				recordCancelReservationRefundCommandAccepted(ctx, store, paymentOrder, refundOrder, outRefundNo, refundID)
-			}
+		} else if txResult.RefundOrder.ID > 0 {
+			log.Info().
+				Int64("refund_order_id", txResult.RefundOrder.ID).
+				Int64("payment_order_id", paymentOrder.ID).
+				Str("out_refund_no", outRefundNo).
+				Msg("reservation cancel refund order created; async recovery will submit baofu refund")
 		}
 	}
 
@@ -619,127 +587,6 @@ func CancelReservationWithOrdinaryServiceProvider(
 		PreviousStatus: reservation.Status,
 		RefundEligible: refundPercent > 0,
 	}, nil
-}
-
-func createCancelReservationRefund(
-	ctx context.Context,
-	ecommerceClient wechat.EcommerceClientInterface,
-	ordinaryClient ordinaryServiceProviderOrderClient,
-	paymentOrder db.PaymentOrder,
-	subMchID string,
-	outRefundNo string,
-	refundAmount int64,
-) (string, error) {
-	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
-		if ordinaryClient == nil {
-			return "", errors.New("ordinary service provider client not configured")
-		}
-		resp, err := ordinaryClient.CreateRefund(ctx, ospcontracts.RefundCreateRequest{
-			SubMchID:    subMchID,
-			OutTradeNo:  paymentOrder.OutTradeNo,
-			OutRefundNo: outRefundNo,
-			Reason:      "预定取消退款",
-			NotifyURL:   ordinaryClient.RefundNotifyURL(),
-			Amount: ospcontracts.RefundAmountRequest{
-				Refund:   refundAmount,
-				Total:    paymentOrder.Amount,
-				Currency: ospcontracts.CurrencyCNY,
-			},
-		})
-		if err != nil {
-			return "", mapOrdinaryServiceProviderRefundCreateError(err)
-		}
-		if resp == nil {
-			return "", nil
-		}
-		return resp.RefundID, nil
-	}
-
-	if ecommerceClient == nil {
-		return "", errors.New("ecommerce client not configured")
-	}
-	wxRefund, err := createEcommerceRefundContract(ctx, ecommerceClient, &wechatcontracts.EcommerceRefundRequest{
-		SubMchID:    subMchID,
-		OutTradeNo:  paymentOrder.OutTradeNo,
-		OutRefundNo: outRefundNo,
-		Reason:      "预定取消退款",
-		Amount: &wechatcontracts.EcommerceRefundRequestAmount{
-			Refund:   refundAmount,
-			Total:    paymentOrder.Amount,
-			Currency: wechatcontracts.EcommerceRefundCurrencyCNY,
-		},
-	})
-	if err != nil {
-		return "", err
-	}
-	if wxRefund == nil {
-		return "", nil
-	}
-	return wxRefund.RefundID, nil
-}
-
-func recordCancelReservationRefundCommandAccepted(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder, outRefundNo string, refundID string) {
-	paymentCommandSvc := NewPaymentCommandService(store)
-	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbCancelReservationRefundCommandInput(
-		paymentOrder,
-		refundOrder,
-		outRefundNo,
-		db.ExternalPaymentCommandStatusAccepted,
-		stringPtrIfNotEmpty(refundID),
-		cancelReservationRefundCommandSnapshot(map[string]string{
-			"out_refund_no": outRefundNo,
-			"refund_id":     refundID,
-		}),
-	))
-	if err != nil {
-		log.Error().Err(err).
-			Int64("refund_order_id", refundOrder.ID).
-			Str("out_refund_no", outRefundNo).
-			Msg("record cancel reservation ecommerce refund command accepted failed")
-	}
-}
-
-func dbCancelReservationRefundCommandInput(
-	paymentOrder db.PaymentOrder,
-	refundOrder db.RefundOrder,
-	outRefundNo string,
-	commandStatus string,
-	externalSecondaryKey *string,
-	responseSnapshot []byte,
-) RecordExternalPaymentCommandInput {
-	businessObjectType := "refund_order"
-	businessObjectID := refundOrder.ID
-	return RecordExternalPaymentCommandInput{
-		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              paymentOrder.PaymentChannel,
-		Capability:           refundServiceCreateRefundCapability(paymentOrder.PaymentChannel),
-		CommandType:          db.ExternalPaymentCommandTypeCreateRefund,
-		BusinessOwner:        db.ExternalPaymentBusinessOwnerReservation,
-		BusinessObjectType:   &businessObjectType,
-		BusinessObjectID:     &businessObjectID,
-		ExternalObjectType:   db.ExternalPaymentObjectRefund,
-		ExternalObjectKey:    outRefundNo,
-		ExternalSecondaryKey: externalSecondaryKey,
-		CommandStatus:        commandStatus,
-		ResponseSnapshot:     responseSnapshot,
-	}
-}
-
-func cancelReservationRefundCommandSnapshot(values map[string]string) []byte {
-	filtered := make(map[string]string, len(values))
-	for key, value := range values {
-		if value != "" {
-			filtered[key] = value
-		}
-	}
-	if len(filtered) == 0 {
-		return []byte(`{}`)
-	}
-	data, err := json.Marshal(filtered)
-	if err != nil {
-		return []byte(`{}`)
-	}
-	return data
 }
 
 // MarkReservationNoShow marks a reservation as no-show and releases inventory.

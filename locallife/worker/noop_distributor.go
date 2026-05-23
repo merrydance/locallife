@@ -24,10 +24,6 @@ func (NoopTaskDistributor) DistributeTaskPaymentOrderTimeout(ctx context.Context
 	return nil
 }
 
-func (NoopTaskDistributor) DistributeTaskCombinedPaymentOrderTimeout(ctx context.Context, payload *PayloadCombinedPaymentOrderTimeout, opts ...asynq.Option) error {
-	return nil
-}
-
 func (NoopTaskDistributor) DistributeTaskReservationPaymentTimeout(ctx context.Context, payload *PayloadReservationPaymentTimeout, opts ...asynq.Option) error {
 	return nil
 }
@@ -52,36 +48,12 @@ func (NoopTaskDistributor) DistributeTaskProcessRefundResult(ctx context.Context
 	return financialTaskDistributorUnavailable("refund result")
 }
 
-func (NoopTaskDistributor) DistributeTaskProcessProfitSharing(ctx context.Context, payload *ProfitSharingPayload, opts ...asynq.Option) error {
-	return financialTaskDistributorUnavailable("profit sharing")
-}
-
 func (NoopTaskDistributor) DistributeTaskProcessBaofuProfitSharing(ctx context.Context, payload *BaofuProfitSharingPayload, opts ...asynq.Option) error {
 	return financialTaskDistributorUnavailable("baofu profit sharing")
 }
 
 func (NoopTaskDistributor) DistributeTaskProcessBaofuWithdrawalFactApplication(ctx context.Context, payload *BaofuWithdrawalFactApplicationPayload, opts ...asynq.Option) error {
 	return financialTaskDistributorUnavailable("baofu withdrawal fact application")
-}
-
-func (NoopTaskDistributor) DistributeTaskProcessProfitSharingReceiverTarget(ctx context.Context, payload *ProfitSharingReceiverTargetPayload, opts ...asynq.Option) error {
-	return financialTaskDistributorUnavailable("profit sharing receiver target")
-}
-
-func (NoopTaskDistributor) DistributeTaskProcessApplymentResult(ctx context.Context, payload *ApplymentResultPayload, opts ...asynq.Option) error {
-	return nil
-}
-
-func (NoopTaskDistributor) DistributeTaskProcessProfitSharingReturnResult(ctx context.Context, payload *ProfitSharingReturnResultPayload, opts ...asynq.Option) error {
-	return financialTaskDistributorUnavailable("profit sharing return result")
-}
-
-func (NoopTaskDistributor) DistributeTaskProcessMerchantWithdrawResult(ctx context.Context, payload *MerchantWithdrawResultPayload, opts ...asynq.Option) error {
-	return financialTaskDistributorUnavailable("merchant withdraw result")
-}
-
-func (NoopTaskDistributor) DistributeTaskProcessMerchantCancelWithdrawResult(ctx context.Context, payload *MerchantCancelWithdrawResultPayload, opts ...asynq.Option) error {
-	return financialTaskDistributorUnavailable("merchant cancel withdraw result")
 }
 
 func (NoopTaskDistributor) DistributeTaskSendNotification(ctx context.Context, payload *SendNotificationPayload, opts ...asynq.Option) error {
@@ -157,10 +129,6 @@ func (NoopTaskDistributor) DistributeTaskGroupApplicationIDCardOCR(ctx context.C
 }
 
 func (NoopTaskDistributor) DistributeTaskUploadShippingInfo(ctx context.Context, payload *UploadShippingInfoPayload, opts ...asynq.Option) error {
-	return nil
-}
-
-func (NoopTaskDistributor) DistributeTaskSyncComplaints(ctx context.Context, payload *SyncComplaintsPayload, opts ...asynq.Option) error {
 	return nil
 }
 

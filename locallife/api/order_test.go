@@ -107,7 +107,7 @@ func TestReplaceOrderPaymentClientMissingReturnsActionableChinese(t *testing.T) 
 	user, _ := randomUser(t)
 	server := newTestServer(t, nil)
 	server.orderCommandSvc = replaceOrderErrorCommandService{
-		err: errors.New("ordinary service provider client: not configured"),
+		err: errors.New("payment service not configured"),
 	}
 
 	body := `{"items":[{"dish_id":1001,"quantity":1}]}`
@@ -124,7 +124,7 @@ func TestReplaceOrderPaymentClientMissingReturnsActionableChinese(t *testing.T) 
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Contains(t, resp.Message, "商户支付能力未完成配置")
 	require.Contains(t, resp.Message, "联系平台")
-	require.NotContains(t, resp.Message, "ordinary service provider")
+	require.NotContains(t, resp.Message, "payment service")
 	require.NotContains(t, resp.Message, "not configured")
 }
 
@@ -1641,6 +1641,41 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 			},
 		},
 		{
+			name:  "CancelledOrdersDoNotRequireFeeBreakdown",
+			query: "page_id=1&page_size=10",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				cancelledOrders := []db.Order{orders[0], orders[1]}
+				cancelledOrders[0].Status = db.OrderStatusCancelled
+				cancelledOrders[1].Status = db.OrderStatusCancelled
+
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+
+				store.EXPECT().
+					ListOrdersByMerchantWithFilters(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(cancelledOrders, nil)
+				store.EXPECT().
+					CountOrdersByMerchantWithFilters(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(len(cancelledOrders)), nil)
+				store.EXPECT().
+					ListOrderItemsWithDishByOrderIDs(gomock.Any(), gomock.Eq([]int64{cancelledOrders[0].ID, cancelledOrders[1].ID})).
+					Times(1).
+					Return([]db.ListOrderItemsWithDishByOrderIDsRow{}, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp listMerchantOrdersResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.Orders, 2)
+				require.Nil(t, resp.Orders[0].FeeBreakdown)
+				require.Nil(t, resp.Orders[1].FeeBreakdown)
+			},
+		},
+		{
 			name:  "InvalidStatus",
 			query: "page_id=1&page_size=10&status=invalid",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
@@ -2541,6 +2576,33 @@ func TestGetMerchantOrderAPI(t *testing.T) {
 				var resp APIResponse
 				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 				require.Equal(t, "订单费用明细暂不可用，请稍后重试", resp.Message)
+			},
+		},
+		{
+			name:    "CancelledOrderDoesNotRequireFeeBreakdown",
+			orderID: order.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				cancelledOrder := order
+				cancelledOrder.Status = db.OrderStatusCancelled
+
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
+				store.EXPECT().
+					GetOrder(gomock.Any(), order.ID).
+					Times(1).
+					Return(cancelledOrder, nil)
+				store.EXPECT().
+					ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).
+					Times(1).
+					Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp orderResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Nil(t, resp.FeeBreakdown)
 			},
 		},
 		{

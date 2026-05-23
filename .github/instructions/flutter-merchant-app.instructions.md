@@ -6,6 +6,8 @@ applyTo: "merchant_app/**"
 
 Apply these rules for files under `merchant_app/`.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions and prompt, and confirm the task scope before continuing. Do not keep relying on stale context.
+
 ## Read First
 
 - `.github/standards/frontend/FRONTEND_ARCHITECTURE_BASELINE.md`

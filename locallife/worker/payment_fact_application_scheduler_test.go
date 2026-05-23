@@ -26,19 +26,14 @@ func TestPaymentFactApplicationSchedulerRunOnceEnqueuesConfiguredTargets(t *test
 	}{
 		{consumer: "profit_sharing_domain", businessObjectType: "profit_sharing_order", applicationID: 801},
 		{consumer: "profit_sharing_domain", businessObjectType: "profit_sharing_return", applicationID: 802},
-		{consumer: "applyment_domain", businessObjectType: "ordinary_service_provider_applyment", applicationID: 803},
-		{consumer: "settlement_domain", businessObjectType: "ordinary_service_provider_applyment", applicationID: 804},
-		{consumer: "settlement_domain", businessObjectType: "merchant_payment_config", applicationID: 805},
-		{consumer: "merchant_funds_domain", businessObjectType: "withdrawal_record", applicationID: 806},
-		{consumer: "merchant_funds_domain", businessObjectType: "merchant_cancel_withdraw_application", applicationID: 807},
-		{consumer: "claim_recovery_domain", businessObjectType: "payment_order", applicationID: 808},
-		{consumer: "rider_deposit_domain", businessObjectType: "payment_order", applicationID: 809},
-		{consumer: "baofu_account_verify_fee_domain", businessObjectType: "payment_order", applicationID: 810},
-		{consumer: "order_domain", businessObjectType: "payment_order", applicationID: 811},
-		{consumer: "reservation_domain", businessObjectType: "payment_order", applicationID: 812},
-		{consumer: "order_domain", businessObjectType: "refund_order", applicationID: 813},
-		{consumer: "reservation_domain", businessObjectType: "refund_order", applicationID: 814},
-		{consumer: "rider_deposit_domain", businessObjectType: "refund_order", applicationID: 815},
+		{consumer: "claim_recovery_domain", businessObjectType: "payment_order", applicationID: 803},
+		{consumer: "rider_deposit_domain", businessObjectType: "payment_order", applicationID: 804},
+		{consumer: "baofu_account_verify_fee_domain", businessObjectType: "payment_order", applicationID: 805},
+		{consumer: "order_domain", businessObjectType: "payment_order", applicationID: 806},
+		{consumer: "reservation_domain", businessObjectType: "payment_order", applicationID: 807},
+		{consumer: "order_domain", businessObjectType: "refund_order", applicationID: 808},
+		{consumer: "reservation_domain", businessObjectType: "refund_order", applicationID: 809},
+		{consumer: "rider_deposit_domain", businessObjectType: "refund_order", applicationID: 810},
 	}
 	calls := make([]any, 0, len(expectedTargets))
 	for _, expected := range expectedTargets {
@@ -63,7 +58,7 @@ func TestPaymentFactApplicationSchedulerRunOnceEnqueuesConfiguredTargets(t *test
 	scheduler := worker.NewPaymentFactApplicationScheduler(store, distributor)
 	scheduler.RunOnce()
 
-	require.Equal(t, []int64{801, 802, 803, 804, 805, 806, 807, 808, 809, 810, 811, 812, 813, 814, 815}, distributor.applicationIDs)
+	require.Equal(t, []int64{801, 802, 803, 804, 805, 806, 807, 808, 809, 810}, distributor.applicationIDs)
 	require.Len(t, distributor.optionCounts, len(expectedTargets))
 	for _, optionCount := range distributor.optionCounts {
 		require.GreaterOrEqual(t, optionCount, 3)

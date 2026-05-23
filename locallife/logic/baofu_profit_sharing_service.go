@@ -20,7 +20,7 @@ var (
 
 type baofuProfitSharingOrderStore interface {
 	baofuProfitSharingReceiverStore
-	CreateBaofuProfitSharingOrderTx(ctx context.Context, arg db.CreateBaofuProfitSharingOrderTxParams) (db.CreateBaofuProfitSharingOrderTxResult, error)
+	EnsureBaofuProfitSharingBillTx(ctx context.Context, arg db.CreateBaofuProfitSharingOrderTxParams) (db.CreateBaofuProfitSharingOrderTxResult, error)
 }
 
 type BaofuProfitSharingService struct {
@@ -122,7 +122,7 @@ func (s *BaofuProfitSharingService) CreatePendingOrder(ctx context.Context, inpu
 		return db.CreateBaofuProfitSharingOrderTxResult{}, err
 	}
 
-	return s.store.CreateBaofuProfitSharingOrderTx(ctx, db.CreateBaofuProfitSharingOrderTxParams{
+	return s.store.EnsureBaofuProfitSharingBillTx(ctx, db.CreateBaofuProfitSharingOrderTxParams{
 		ProfitSharingOrder: db.CreateProfitSharingOrderParams{
 			PaymentOrderID:        input.PaymentOrderID,
 			MerchantID:            input.MerchantID,

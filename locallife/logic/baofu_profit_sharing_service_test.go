@@ -159,7 +159,7 @@ type fakeBaofuProfitSharingOrderStore struct {
 	lastTx db.CreateBaofuProfitSharingOrderTxParams
 }
 
-func (s *fakeBaofuProfitSharingOrderStore) CreateBaofuProfitSharingOrderTx(_ context.Context, arg db.CreateBaofuProfitSharingOrderTxParams) (db.CreateBaofuProfitSharingOrderTxResult, error) {
+func (s *fakeBaofuProfitSharingOrderStore) EnsureBaofuProfitSharingBillTx(_ context.Context, arg db.CreateBaofuProfitSharingOrderTxParams) (db.CreateBaofuProfitSharingOrderTxResult, error) {
 	s.lastTx = arg
 	return db.CreateBaofuProfitSharingOrderTxResult{ProfitSharingOrder: db.ProfitSharingOrder{PaymentOrderID: arg.ProfitSharingOrder.PaymentOrderID}, PaymentFeeLedger: db.BaofuFeeLedger{Amount: arg.PaymentFeeLedger.Amount}}, nil
 }
@@ -254,7 +254,7 @@ type fakeBaofuProfitSharingFactStore struct {
 	lastApplication db.CreateExternalPaymentFactApplicationParams
 }
 
-func (s *fakeBaofuProfitSharingFactStore) CreateBaofuProfitSharingOrderTx(context.Context, db.CreateBaofuProfitSharingOrderTxParams) (db.CreateBaofuProfitSharingOrderTxResult, error) {
+func (s *fakeBaofuProfitSharingFactStore) EnsureBaofuProfitSharingBillTx(context.Context, db.CreateBaofuProfitSharingOrderTxParams) (db.CreateBaofuProfitSharingOrderTxResult, error) {
 	return db.CreateBaofuProfitSharingOrderTxResult{}, nil
 }
 

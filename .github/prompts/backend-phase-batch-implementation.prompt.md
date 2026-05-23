@@ -6,6 +6,8 @@ description: "Use when drafting a controlled backend implementation request for 
 
 Use this template when asking for a controlled batch implementation for one phase from a task-card set or phase map.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions, and confirm the phase scope before writing the request. Do not keep relying on stale context.
+
 ## Backend Phase Batch Fix
 
 Request:

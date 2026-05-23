@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/cloudprint"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/rs/zerolog/log"
 )
 
@@ -43,6 +45,11 @@ type printJob struct {
 	printer db.CloudPrinter
 	slip    string
 	content string
+}
+
+type printSettlementBill struct {
+	breakdown          logic.MerchantOrderFeeBreakdown
+	profitSharingOrder db.ProfitSharingOrder
 }
 
 // DistributeTaskPrintOrder 分发订单打印任务。
@@ -124,6 +131,12 @@ func (processor *RedisTaskProcessor) ProcessTaskPrintOrder(ctx context.Context, 
 	}
 	jobs, err := processor.buildPrintJobs(ctx, order, printers, config)
 	if err != nil {
+		log.Error().Err(err).
+			Int64("order_id", order.ID).
+			Int64("merchant_id", order.MerchantID).
+			Str("order_no", order.OrderNo).
+			Str("status", order.Status).
+			Msg("build order print jobs failed")
 		return err
 	}
 	if len(jobs) == 0 {
@@ -283,7 +296,12 @@ func (processor *RedisTaskProcessor) buildPrintJobs(
 		}
 	}
 
-	fullContent := buildFeieReceipt(order, items, user, printSlipFull)
+	settlementBill, err := processor.loadPrintSettlementBill(ctx, order)
+	if err != nil {
+		return nil, fmt.Errorf("load print settlement bill: %w", err)
+	}
+
+	fullContent := buildFeieReceipt(order, items, user, printSlipFull, settlementBill)
 	jobs := make([]printJob, 0, len(eligible))
 	splitEnabled := config.PrintDispatchMode == printDispatchModeSplit && len(eligible) > 1 && len(frontPrinters) > 0 && len(kitchenPrinters) > 0
 	if !splitEnabled {
@@ -293,7 +311,7 @@ func (processor *RedisTaskProcessor) buildPrintJobs(
 		return jobs, nil
 	}
 
-	kitchenContent := buildFeieReceipt(order, items, user, printSlipKitchen)
+	kitchenContent := buildFeieReceipt(order, items, user, printSlipKitchen, nil)
 	for _, printer := range frontPrinters {
 		jobs = append(jobs, printJob{printer: printer, slip: printSlipFull, content: fullContent})
 	}
@@ -303,7 +321,89 @@ func (processor *RedisTaskProcessor) buildPrintJobs(
 	return jobs, nil
 }
 
-func buildFeieReceipt(order db.GetOrderWithDetailsRow, items []db.ListOrderItemsWithDishByOrderRow, user db.User, slip string) string {
+func (processor *RedisTaskProcessor) loadPrintSettlementBill(ctx context.Context, order db.GetOrderWithDetailsRow) (*printSettlementBill, error) {
+	paymentOrder, err := processor.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+	})
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get latest payment order by order: %w", err)
+	}
+	if !paymentOrder.OrderID.Valid || paymentOrder.OrderID.Int64 != order.ID || paymentOrder.BusinessType != db.ExternalPaymentBusinessOwnerOrder {
+		return nil, fmt.Errorf("%w: payment order mismatch for order_id=%d payment_order_id=%d", logic.ErrMerchantFeeBreakdownInconsistent, order.ID, paymentOrder.ID)
+	}
+	if !db.PaymentOrderRequiresProfitSharing(paymentOrder) {
+		return nil, nil
+	}
+	if paymentOrder.Status != "paid" {
+		return nil, fmt.Errorf("baofu profit sharing receipt requires paid payment order: order_id=%d payment_order_id=%d status=%s", order.ID, paymentOrder.ID, paymentOrder.Status)
+	}
+	if paymentOrder.Amount != order.TotalAmount {
+		return nil, fmt.Errorf("%w: payment amount mismatch for order_id=%d payment_order_id=%d", logic.ErrMerchantFeeBreakdownInconsistent, order.ID, paymentOrder.ID)
+	}
+
+	profitSharingOrder, err := processor.store.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
+	if err != nil {
+		return nil, fmt.Errorf("get profit sharing order by payment order: %w", err)
+	}
+	if profitSharingOrder.PaymentOrderID != paymentOrder.ID ||
+		profitSharingOrder.MerchantID != order.MerchantID ||
+		profitSharingOrder.Provider != db.ExternalPaymentProviderBaofu ||
+		profitSharingOrder.Channel != db.PaymentChannelBaofuAggregate {
+		return nil, fmt.Errorf("%w: profit sharing bill mismatch for order_id=%d payment_order_id=%d profit_sharing_order_id=%d", logic.ErrMerchantFeeBreakdownInconsistent, order.ID, paymentOrder.ID, profitSharingOrder.ID)
+	}
+
+	breakdown, err := logic.BuildMerchantOrderFeeBreakdown(logic.BuildMerchantOrderFeeBreakdownInput{
+		Order:              orderDetailsRowToOrder(order),
+		ProfitSharingOrder: &profitSharingOrder,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &printSettlementBill{
+		breakdown:          breakdown,
+		profitSharingOrder: profitSharingOrder,
+	}, nil
+}
+
+func orderDetailsRowToOrder(order db.GetOrderWithDetailsRow) db.Order {
+	return db.Order{
+		ID:                  order.ID,
+		OrderNo:             order.OrderNo,
+		UserID:              order.UserID,
+		MerchantID:          order.MerchantID,
+		OrderType:           order.OrderType,
+		AddressID:           order.AddressID,
+		DeliveryFee:         order.DeliveryFee,
+		DeliveryDistance:    order.DeliveryDistance,
+		TableID:             order.TableID,
+		ReservationID:       order.ReservationID,
+		Subtotal:            order.Subtotal,
+		DiscountAmount:      order.DiscountAmount,
+		DeliveryFeeDiscount: order.DeliveryFeeDiscount,
+		TotalAmount:         order.TotalAmount,
+		Status:              order.Status,
+		PaymentMethod:       order.PaymentMethod,
+		PaidAt:              order.PaidAt,
+		Notes:               order.Notes,
+		CreatedAt:           order.CreatedAt,
+		UpdatedAt:           order.UpdatedAt,
+		CompletedAt:         order.CompletedAt,
+		CancelledAt:         order.CancelledAt,
+		CancelReason:        order.CancelReason,
+		FinalAmount:         order.FinalAmount,
+		PlatformCommission:  order.PlatformCommission,
+		UserVoucherID:       order.UserVoucherID,
+		VoucherAmount:       order.VoucherAmount,
+		BalancePaid:         order.BalancePaid,
+		MembershipID:        order.MembershipID,
+	}
+}
+
+func buildFeieReceipt(order db.GetOrderWithDetailsRow, items []db.ListOrderItemsWithDishByOrderRow, user db.User, slip string, settlementBill *printSettlementBill) string {
 	var builder strings.Builder
 	title := "乐客来福"
 	if order.PickupCode.Valid && order.PickupCode.String != "" {
@@ -338,6 +438,9 @@ func buildFeieReceipt(order db.GetOrderWithDetailsRow, items []db.ListOrderItems
 		builder.WriteString("跑腿费：" + fenToYuan(order.DeliveryFee) + "<BR>")
 	}
 	builder.WriteString("<BOLD>实付：" + fenToYuan(order.TotalAmount) + "</BOLD><BR>")
+	if slip == printSlipFull && settlementBill != nil {
+		writeFeieSettlementBill(&builder, settlementBill)
+	}
 
 	if order.Notes.Valid && order.Notes.String != "" {
 		builder.WriteString("备注：" + order.Notes.String + "<BR>")
@@ -355,6 +458,23 @@ func buildFeieReceipt(order db.GetOrderWithDetailsRow, items []db.ListOrderItems
 	builder.WriteString(ticketCodeBlock(order.OrderNo))
 	builder.WriteString("<CUT>")
 	return builder.String()
+}
+
+func writeFeieSettlementBill(builder *strings.Builder, settlementBill *printSettlementBill) {
+	breakdown := settlementBill.breakdown
+	profitSharingOrder := settlementBill.profitSharingOrder
+
+	builder.WriteString("--------------------------------<BR>")
+	builder.WriteString("用户实付：" + fenToYuan(breakdown.CustomerPayableAmount) + "<BR>")
+	builder.WriteString("平台服务费：-" + fenToYuan(breakdown.PlatformServiceFeeAmount) + "<BR>")
+	builder.WriteString("支付通道费：-" + fenToYuan(breakdown.PaymentChannelFeeAmount) + "<BR>")
+	builder.WriteString("<BOLD>商户实收：" + fenToYuan(breakdown.MerchantReceivableAmount) + "</BOLD><BR>")
+
+	if profitSharingOrder.RiderGrossAmount > 0 || profitSharingOrder.RiderPaymentFee > 0 || profitSharingOrder.RiderAmount > 0 {
+		builder.WriteString("配送费：" + fenToYuan(profitSharingOrder.RiderGrossAmount) + "<BR>")
+		builder.WriteString("骑手通道费：-" + fenToYuan(profitSharingOrder.RiderPaymentFee) + "<BR>")
+		builder.WriteString("骑手实收：" + fenToYuan(profitSharingOrder.RiderAmount) + "<BR>")
+	}
 }
 
 func displayConfigSupportsOrder(config db.OrderDisplayConfig, orderType string) bool {

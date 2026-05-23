@@ -16,7 +16,7 @@ func TestResponseEnvelopeMiddleware_SanitizesRawServiceUnavailableMessage(t *tes
 	router := gin.New()
 	router.Use(ResponseEnvelopeMiddleware())
 	router.GET("/test", func(ctx *gin.Context) {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("ecommerce client not configured")))
+		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("payment service not configured")))
 	})
 
 	recorder := httptest.NewRecorder()
@@ -29,7 +29,7 @@ func TestResponseEnvelopeMiddleware_SanitizesRawServiceUnavailableMessage(t *tes
 	var resp APIResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Equal(t, CodeServiceUnavail, resp.Code)
-	require.Equal(t, "微信支付服务暂不可用，请稍后重试", resp.Message)
+	require.Equal(t, "支付服务暂不可用，请稍后重试", resp.Message)
 	require.Empty(t, resp.Data)
 }
 

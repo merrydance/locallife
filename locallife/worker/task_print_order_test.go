@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -94,6 +95,12 @@ func TestProcessTaskPrintOrder_SplitFrontAndKitchenReceipts(t *testing.T) {
 	store.EXPECT().ListActiveCloudPrintersByMerchant(gomock.Any(), order.MerchantID).Return([]db.CloudPrinter{frontPrinter, kitchenPrinter}, nil)
 	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return(items, nil)
 	store.EXPECT().GetUser(gomock.Any(), order.UserID).Return(db.User{ID: order.UserID, FullName: "张三"}, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+			BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+		}).
+		Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 	store.EXPECT().GetPrintLogByTaskKeyAndPrinter(gomock.Any(), gomock.Any()).Times(2).Return(db.PrintLog{}, db.ErrRecordNotFound)
 	store.EXPECT().CreatePrintLog(gomock.Any(), gomock.Any()).Times(2).DoAndReturn(func(_ context.Context, arg db.CreatePrintLogParams) (db.PrintLog, error) {
 		require.True(t, arg.TaskKey.Valid)
@@ -119,6 +126,165 @@ func TestProcessTaskPrintOrder_SplitFrontAndKitchenReceipts(t *testing.T) {
 	require.NotContains(t, printerClient.inputs[1].Content, "顾客：")
 	require.NotContains(t, printerClient.inputs[1].Content, "地址：")
 	require.True(t, strings.Contains(printerClient.inputs[0].Content, "<QR>") || strings.Contains(printerClient.inputs[0].Content, "<BC128_A>"))
+}
+
+func TestProcessTaskPrintOrder_FullReceiptIncludesBaofuProfitSharingBill(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	processor := NewTestTaskProcessor(store, NewNoopTaskDistributor(), nil, nil)
+	printerClient := &printClientRecorder{}
+	processor.SetPrinterClientForTest(printerClient)
+
+	order := db.GetOrderWithDetailsRow{
+		ID:                  104,
+		UserID:              204,
+		MerchantID:          304,
+		OrderNo:             "20260401115000BILL",
+		OrderType:           db.OrderTypeTakeout,
+		Status:              db.OrderStatusPreparing,
+		Subtotal:            10000,
+		DiscountAmount:      300,
+		VoucherAmount:       200,
+		DeliveryFee:         800,
+		TotalAmount:         10300,
+		CreatedAt:           time.Date(2026, 4, 1, 11, 50, 0, 0, time.Local),
+		DeliveryContactName: "张三",
+		DeliveryAddress:     "测试路 88 号",
+	}
+	config := db.OrderDisplayConfig{
+		MerchantID:        order.MerchantID,
+		EnablePrint:       true,
+		PrintTakeout:      true,
+		PrintDineIn:       true,
+		PrintReservation:  true,
+		PrintDispatchMode: "single_full",
+		PrintTriggerMode:  "accepted",
+	}
+	printer := db.CloudPrinter{ID: 6, MerchantID: order.MerchantID, PrinterName: "前台", PrinterSn: "front-sn", PrinterType: "feieyun", PrinterRole: "front", PrintTakeout: true, IsActive: true}
+	paymentOrder := db.PaymentOrder{
+		ID:                    704,
+		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType:          db.ExternalPaymentBusinessOwnerOrder,
+		Amount:                order.TotalAmount,
+		Status:                "paid",
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+	}
+	profitSharingOrder := db.ProfitSharingOrder{
+		ID:                 804,
+		PaymentOrderID:     paymentOrder.ID,
+		MerchantID:         order.MerchantID,
+		OrderSource:        order.OrderType,
+		TotalAmount:        order.TotalAmount,
+		PlatformCommission: 190,
+		OperatorCommission: 285,
+		PaymentFee:         31,
+		Provider:           db.ExternalPaymentProviderBaofu,
+		Channel:            db.PaymentChannelBaofuAggregate,
+		MerchantPaymentFee: 57,
+		MerchantAmount:     8968,
+		CalculationVersion: "baofu_fee_v2",
+		RiderGrossAmount:   800,
+		RiderPaymentFee:    5,
+		RiderAmount:        795,
+	}
+
+	store.EXPECT().GetOrderWithDetails(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().GetOrderDisplayConfigByMerchant(gomock.Any(), order.MerchantID).Return(config, nil)
+	store.EXPECT().ListActiveCloudPrintersByMerchant(gomock.Any(), order.MerchantID).Return([]db.CloudPrinter{printer}, nil)
+	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return([]db.ListOrderItemsWithDishByOrderRow{{Name: "牛肉面", Quantity: 2, Subtotal: 5600}}, nil)
+	store.EXPECT().GetUser(gomock.Any(), order.UserID).Return(db.User{ID: order.UserID, FullName: "张三"}, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+			BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+		}).
+		Return(paymentOrder, nil)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(profitSharingOrder, nil)
+	store.EXPECT().GetPrintLogByTaskKeyAndPrinter(gomock.Any(), gomock.Any()).Times(1).Return(db.PrintLog{}, db.ErrRecordNotFound)
+	store.EXPECT().CreatePrintLog(gomock.Any(), gomock.Any()).Times(1).Return(db.PrintLog{ID: 1, OrderID: order.ID, PrinterID: printer.ID, Status: "pending"}, nil)
+	store.EXPECT().UpdatePrintLogStatus(gomock.Any(), gomock.Any()).Times(1).Return(db.PrintLog{}, nil)
+
+	payload, err := json.Marshal(PrintOrderPayload{OrderID: order.ID, Trigger: "accepted", TaskKey: "order:104:accepted"})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskPrintOrder(context.Background(), asynq.NewTask(TaskPrintOrder, payload))
+	require.NoError(t, err)
+	require.Len(t, printerClient.inputs, 1)
+	content := printerClient.inputs[0].Content
+	require.Contains(t, content, "用户实付：103.00")
+	require.Contains(t, content, "平台服务费：-4.75")
+	require.Contains(t, content, "支付通道费：-0.57")
+	require.Contains(t, content, "商户实收：89.68")
+	require.Contains(t, content, "配送费：8.00")
+	require.Contains(t, content, "骑手通道费：-0.05")
+	require.Contains(t, content, "骑手实收：7.95")
+}
+
+func TestProcessTaskPrintOrder_BlocksBaofuProfitSharingReceiptWhenBillMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	processor := NewTestTaskProcessor(store, NewNoopTaskDistributor(), nil, nil)
+	printerClient := &printClientRecorder{}
+	processor.SetPrinterClientForTest(printerClient)
+
+	order := db.GetOrderWithDetailsRow{
+		ID:          105,
+		UserID:      205,
+		MerchantID:  305,
+		OrderNo:     "20260401115500MISS",
+		OrderType:   db.OrderTypeTakeout,
+		Status:      db.OrderStatusPreparing,
+		Subtotal:    10000,
+		DeliveryFee: 800,
+		TotalAmount: 10800,
+		CreatedAt:   time.Date(2026, 4, 1, 11, 55, 0, 0, time.Local),
+	}
+	config := db.OrderDisplayConfig{
+		MerchantID:        order.MerchantID,
+		EnablePrint:       true,
+		PrintTakeout:      true,
+		PrintDineIn:       true,
+		PrintReservation:  true,
+		PrintDispatchMode: "single_full",
+		PrintTriggerMode:  "accepted",
+	}
+	printer := db.CloudPrinter{ID: 7, MerchantID: order.MerchantID, PrinterName: "前台", PrinterSn: "front-sn", PrinterType: "feieyun", PrinterRole: "front", PrintTakeout: true, IsActive: true}
+	paymentOrder := db.PaymentOrder{
+		ID:                    705,
+		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType:          db.ExternalPaymentBusinessOwnerOrder,
+		Amount:                order.TotalAmount,
+		Status:                "paid",
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+	}
+
+	store.EXPECT().GetOrderWithDetails(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().GetOrderDisplayConfigByMerchant(gomock.Any(), order.MerchantID).Return(config, nil)
+	store.EXPECT().ListActiveCloudPrintersByMerchant(gomock.Any(), order.MerchantID).Return([]db.CloudPrinter{printer}, nil)
+	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return([]db.ListOrderItemsWithDishByOrderRow{{Name: "牛肉面", Quantity: 1, Subtotal: 10000}}, nil)
+	store.EXPECT().GetUser(gomock.Any(), order.UserID).Return(db.User{ID: order.UserID, FullName: "张三"}, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+			BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+		}).
+		Return(paymentOrder, nil)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(db.ProfitSharingOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().CreatePrintLog(gomock.Any(), gomock.Any()).Times(0)
+
+	payload, err := json.Marshal(PrintOrderPayload{OrderID: order.ID, Trigger: "accepted", TaskKey: "order:105:accepted"})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskPrintOrder(context.Background(), asynq.NewTask(TaskPrintOrder, payload))
+	require.Error(t, err)
+	require.True(t, errors.Is(err, db.ErrRecordNotFound))
+	require.Empty(t, printerClient.inputs)
 }
 
 func TestProcessTaskPrintOrder_ManualTriggerRequiresManualConfig(t *testing.T) {
@@ -177,6 +343,12 @@ func TestProcessTaskPrintOrder_ManualTriggerRequiresManualConfig(t *testing.T) {
 	}}, nil)
 	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return([]db.ListOrderItemsWithDishByOrderRow{{Name: "牛肉面", Quantity: 1, Subtotal: 1800}}, nil)
 	store.EXPECT().GetUser(gomock.Any(), order.UserID).Return(db.User{ID: order.UserID, FullName: "张三"}, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+			BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+		}).
+		Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 	store.EXPECT().GetPrintLogByTaskKeyAndPrinter(gomock.Any(), gomock.Any()).Times(1).Return(db.PrintLog{}, db.ErrRecordNotFound)
 	store.EXPECT().CreatePrintLog(gomock.Any(), gomock.Any()).Return(db.PrintLog{ID: 1, OrderID: order.ID, PrinterID: 1, Status: "pending"}, nil)
 	store.EXPECT().UpdatePrintLogStatus(gomock.Any(), gomock.Any()).Return(db.PrintLog{}, nil)
@@ -222,6 +394,12 @@ func TestProcessTaskPrintOrder_SkipsUnsupportedPrinterType(t *testing.T) {
 	store.EXPECT().ListActiveCloudPrintersByMerchant(gomock.Any(), order.MerchantID).Return([]db.CloudPrinter{legacyPrinter, supportedPrinter}, nil)
 	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return([]db.ListOrderItemsWithDishByOrderRow{{Name: "牛肉面", Quantity: 1, Subtotal: 1800}}, nil)
 	store.EXPECT().GetUser(gomock.Any(), order.UserID).Return(db.User{ID: order.UserID, FullName: "张三"}, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+			BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+		}).
+		Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 	store.EXPECT().GetPrintLogByTaskKeyAndPrinter(gomock.Any(), gomock.Any()).Times(1).Return(db.PrintLog{}, db.ErrRecordNotFound)
 	store.EXPECT().CreatePrintLog(gomock.Any(), gomock.Any()).Times(1).Return(db.PrintLog{ID: 1, OrderID: order.ID, PrinterID: supportedPrinter.ID, Status: "pending"}, nil)
 	store.EXPECT().UpdatePrintLogStatus(gomock.Any(), gomock.Any()).Times(1).Return(db.PrintLog{}, nil)
@@ -321,6 +499,12 @@ func TestProcessTaskPrintOrder_SkipsDuplicateTaskKeyReentry(t *testing.T) {
 	store.EXPECT().ListActiveCloudPrintersByMerchant(gomock.Any(), order.MerchantID).Return([]db.CloudPrinter{printer}, nil)
 	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return([]db.ListOrderItemsWithDishByOrderRow{{Name: "牛肉面", Quantity: 1, Subtotal: 1800}}, nil)
 	store.EXPECT().GetUser(gomock.Any(), order.UserID).Return(db.User{ID: order.UserID, FullName: "张三"}, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+			BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+		}).
+		Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 	store.EXPECT().GetPrintLogByTaskKeyAndPrinter(gomock.Any(), gomock.Any()).Times(1).Return(db.PrintLog{ID: 88, OrderID: order.ID, PrinterID: printer.ID, Status: "success"}, nil)
 	store.EXPECT().CreatePrintLog(gomock.Any(), gomock.Any()).Times(0)
 

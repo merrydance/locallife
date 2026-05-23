@@ -19,6 +19,7 @@ See `.github/README.md` for the normalized index of standards, instructions, pro
 3. Prefer updating existing patterns over introducing a new architecture.
 4. Link to authoritative docs in this repo instead of duplicating them in code comments or new docs.
 5. Prefer area index docs and broad instructions first; only drill into deeper standards when the active path actually needs them.
+6. If the session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, then reopen the matching instructions and prompt before continuing. Do not keep relying on stale context.
 
 Area-specific instructions live in `.github/instructions/` and should be treated as stricter rules when the current file matches their `applyTo` patterns.
 

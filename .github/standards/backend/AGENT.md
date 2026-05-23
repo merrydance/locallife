@@ -7,6 +7,7 @@
 > 后端目录总入口见 `.github/standards/backend/README.md`。
 > 仓库级高风险入口见 `.github/standards/backend/README.md` 与匹配的 domain README。
 > 当前仓库真实运行结构与生成触点见 `.github/standards/backend/RUNTIME_ARCHITECTURE.md`。
+> 外部 API / provider 契约真值、字段矩阵、错误映射与降级约束见 `.github/standards/backend/EXTERNAL_API_CONTRACT_STANDARDS.md`。
 > 常用命令、再生成规则和验证工作流见 `.github/standards/backend/WORKFLOW_AND_VALIDATION.md`。
 > 交付与评审收口清单见 `.github/standards/backend/BACKEND_CHANGE_SAFETY_CHECKLIST.md` 与 `.github/standards/backend/BACKEND_REVIEW_CLOSEOUT_CHECKLIST.md`。
 > 正式审查如何形成 durable knowledge 见 `.github/standards/backend/FORMAL_REVIEW_DURABILITY.md`。
@@ -75,6 +76,8 @@
 - 新增异步任务时，检查分发、处理、重试/幂等、观测日志是否完整。
 - 关键业务状态必须有唯一写入口；如果多个包都能直接推进同一状态，默认按边界设计缺陷处理。
 - 如果一个动作既改本地状态又触发外部副作用，必须显式说明 durable state 与副作用的先后顺序，不得把外部副作用放进事务持有期内。
+- 接入或修改外部 API / provider 时，必须先确认官方契约、样例、字段矩阵、错误码和条件必填规则；禁止盲猜字段、枚举、单位、嵌套结构或从旧 DTO / 相邻接口反推契约。
+- 外部 API 的隐式降级、静默吞错、空 DTO 成功、未知枚举成功、原始 provider 错误透传给前端均禁止；失败必须有结构化日志边界和稳定业务语义。
 
 ## 11. 禁止出现的半成品信号
 

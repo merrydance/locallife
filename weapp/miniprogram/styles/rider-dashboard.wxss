@@ -839,6 +839,22 @@
   font-family: 'DIN Alternate', sans-serif;
 }
 
+.earnings-info .price--pending {
+  color: var(--td-text-color-secondary);
+  font-family: inherit;
+  font-size: var(--font-size-base);
+  font-weight: 600;
+}
+
+.income-breakdown {
+  display: flex;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding-bottom: 16rpx;
+  color: var(--td-text-color-secondary);
+  font-size: var(--font-size-sm);
+}
+
 .action-group {
   display: flex;
   align-items: center;

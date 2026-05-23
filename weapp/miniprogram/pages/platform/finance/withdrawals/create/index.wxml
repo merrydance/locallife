@@ -1,0 +1,34 @@
+<custom-navbar title="申请提现" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: var(--spacer-lg);">
+  <view wx:if="{{initialLoading}}" class="page-content">
+    <t-loading theme="circular" size="40rpx" text="加载可提现余额中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="page-content">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '可提现余额加载失败，请重试'}}" />
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
+  </view>
+
+  <view wx:else class="page-content">
+    <t-cell-group>
+      <t-cell title="平台账户余额" note="{{balanceView.availableAmountText}}" />
+      <t-cell title="最低提现金额" note="{{balanceView.minWithdrawAmountText}}" />
+      <t-cell wx:if="{{!balanceView.canSubmit}}" title="暂不能提现" note="{{balanceView.disabledReason}}" />
+      <t-input
+        label="提现金额"
+        type="digit"
+        suffix="元"
+        placeholder="例如 100.00"
+        value="{{amountInput}}"
+        disabled="{{!balanceView.canSubmit || submitting}}"
+        bind:change="onAmountChange"
+      />
+      <t-cell title="结算账户" arrow url="/pages/platform/finance/settlement-account/index" />
+    </t-cell-group>
+
+    <view class="form-actions">
+      <t-button theme="primary" loading="{{submitting}}" disabled="{{submitting || !balanceView.canSubmit}}" bind:tap="onSubmit">确认提现</t-button>
+    </view>
+  </view>
+</view>

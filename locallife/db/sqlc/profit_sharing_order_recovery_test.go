@@ -10,6 +10,43 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func backdateBaofuProfitSharingFixtures(t *testing.T, paymentOrderID int64, orderID int64, reservationID int64, hasOrder bool, hasReservation bool, at time.Time) {
+	t.Helper()
+
+	store, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+
+	if hasOrder {
+		_, err := store.connPool.Exec(context.Background(), `
+			UPDATE orders
+			SET created_at = $1,
+			    updated_at = $1,
+			    completed_at = $1
+			WHERE id = $2
+		`, at, orderID)
+		require.NoError(t, err)
+	}
+
+	if hasReservation {
+		_, err := store.connPool.Exec(context.Background(), `
+			UPDATE table_reservations
+			SET created_at = $1,
+			    updated_at = $1,
+			    paid_at = $1
+			WHERE id = $2
+		`, at, reservationID)
+		require.NoError(t, err)
+	}
+
+	_, err := store.connPool.Exec(context.Background(), `
+		UPDATE payment_orders
+		SET created_at = $1,
+		    paid_at = $1
+		WHERE id = $2
+	`, at, paymentOrderID)
+	require.NoError(t, err)
+}
+
 func TestListCompletedOrdersMissingProfitSharing_ExcludesTakeout(t *testing.T) {
 	user := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
@@ -42,7 +79,7 @@ func TestListCompletedOrdersMissingProfitSharing_ExcludesTakeout(t *testing.T) {
 		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
 		UserID:                user.ID,
 		PaymentType:           "miniprogram",
-		PaymentChannel:        PaymentChannelOrdinaryServiceProvider,
+		PaymentChannel:        PaymentChannelBaofuAggregate,
 		RequiresProfitSharing: true,
 		BusinessType:          "order",
 		Amount:                order.TotalAmount,
@@ -97,7 +134,7 @@ func TestListCompletedOrdersMissingProfitSharing_IncludesNonTakeout(t *testing.T
 		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
 		UserID:                user.ID,
 		PaymentType:           "miniprogram",
-		PaymentChannel:        PaymentChannelOrdinaryServiceProvider,
+		PaymentChannel:        PaymentChannelBaofuAggregate,
 		RequiresProfitSharing: true,
 		BusinessType:          "order",
 		Amount:                order.TotalAmount,
@@ -174,8 +211,11 @@ func TestListBaofuOrdersReadyForProfitSharing_GatesCompletedPaidAndRefundClosed(
 	})
 	require.NoError(t, err)
 
+	profitSharingAnchor := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	backdateBaofuProfitSharingFixtures(t, paymentOrder.ID, order.ID, 0, true, false, profitSharingAnchor)
+
 	rows, err := testStore.ListBaofuOrdersReadyForProfitSharing(context.Background(), ListBaofuOrdersReadyForProfitSharingParams{
-		RefundClosedBefore: pgtype.Timestamptz{Time: time.Now().Add(time.Minute), Valid: true},
+		RefundClosedBefore: pgtype.Timestamptz{Time: profitSharingAnchor.Add(time.Minute), Valid: true},
 		Limit:              200,
 	})
 	require.NoError(t, err)
@@ -240,8 +280,11 @@ func TestListBaofuOrdersReadyForProfitSharing_IncludesPaidReservations(t *testin
 	})
 	require.NoError(t, err)
 
+	profitSharingAnchor := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	backdateBaofuProfitSharingFixtures(t, paymentOrder.ID, 0, reservation.ID, false, true, profitSharingAnchor)
+
 	rows, err := testStore.ListBaofuOrdersReadyForProfitSharing(context.Background(), ListBaofuOrdersReadyForProfitSharingParams{
-		RefundClosedBefore: pgtype.Timestamptz{Time: time.Now().Add(time.Minute), Valid: true},
+		RefundClosedBefore: pgtype.Timestamptz{Time: profitSharingAnchor.Add(time.Minute), Valid: true},
 		Limit:              200,
 	})
 	require.NoError(t, err)

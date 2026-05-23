@@ -141,6 +141,15 @@ func ClassifyBaofuError(code string, upstreamMessage string) ClassifiedError {
 	return classified
 }
 
+func BaofuCommandMessage(code string, upstreamMessage string) string {
+	classified := ClassifyBaofuError(code, upstreamMessage)
+	message := strings.TrimSpace(classified.PublicMessage)
+	if action := strings.TrimSpace(classified.PublicAction); action != "" {
+		message = strings.TrimSpace(message + "，" + action)
+	}
+	return message
+}
+
 func (c ClassifiedError) FrontendGuidance() FrontendGuidance {
 	return FrontendGuidance{
 		Code:      "BAOFU_" + strings.ToUpper(string(c.Category)),

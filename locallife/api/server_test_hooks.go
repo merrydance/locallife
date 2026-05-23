@@ -5,7 +5,6 @@ import (
 	"github.com/merrydance/locallife/cloudprint"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/wechat"
-	ordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider"
 	"github.com/merrydance/locallife/worker"
 )
 
@@ -56,31 +55,6 @@ func (server *Server) SetTaskDistributorForTest(distributor worker.TaskDistribut
 	}
 }
 
-// SetEcommerceClientForTest injects an ecommerce client in tests.
-// It also clears the cached paymentFacade and refundOrchestrator so they are
-// rebuilt with the new client on the next request.
-func (server *Server) SetEcommerceClientForTest(client wechat.EcommerceClientInterface) {
-	server.ecommerceClient = client
-	newSvc := server.buildOrderCommandService()
-	server.orderCommandSvc = newSvc
-	if qs, ok := newSvc.(logic.OrderQueryService); ok {
-		server.orderQuerySvc = qs
-	}
-	server.paymentFacade = nil
-	server.refundOrchestrator = nil
-}
-
-func (server *Server) SetOrdinaryServiceProviderClientForTest(client ordinaryserviceprovider.OrdinaryServiceProviderClientInterface) {
-	server.ordinarySPClient = client
-	newSvc := server.buildOrderCommandService()
-	server.orderCommandSvc = newSvc
-	if qs, ok := newSvc.(logic.OrderQueryService); ok {
-		server.orderQuerySvc = qs
-	}
-	server.paymentFacade = nil
-	server.refundOrchestrator = nil
-}
-
 func (server *Server) SetBaofuAggregateClientForTest(client aggregatepay.Client, config logic.BaofuAggregateFacadeConfig) {
 	server.baofuAggregateClient = client
 	server.config.BaofuMainBusinessEnabled = true
@@ -91,6 +65,15 @@ func (server *Server) SetBaofuAggregateClientForTest(client aggregatepay.Client,
 	server.config.BaofuRefundNotifyURL = config.RefundNotifyURL
 	server.paymentFacade = nil
 	server.refundOrchestrator = nil
+	newSvc := server.buildOrderCommandService()
+	server.orderCommandSvc = newSvc
+	if qs, ok := newSvc.(logic.OrderQueryService); ok {
+		server.orderQuerySvc = qs
+	}
+}
+
+func (server *Server) SetBaofuWithdrawServiceForTest(service *logic.BaofuWithdrawService) {
+	server.baofuWithdrawService = service
 }
 
 func (server *Server) SetPrinterClientForTest(client cloudprint.Client) {

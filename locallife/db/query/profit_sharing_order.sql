@@ -45,7 +45,7 @@ INSERT INTO profit_sharing_orders (
     COALESCE(sqlc.narg(payment_fee), 0),
     COALESCE(sqlc.narg(payment_fee_rate_bps), 30),
     COALESCE(sqlc.narg(provider), 'wechat'),
-    COALESCE(sqlc.narg(channel), 'ecommerce'),
+    COALESCE(sqlc.narg(channel), 'baofu_aggregate'),
     sqlc.narg(merchant_sharing_mer_id),
     sqlc.narg(rider_sharing_mer_id),
     sqlc.narg(operator_sharing_mer_id),
@@ -93,6 +93,29 @@ SET
     commission_base_amount = sqlc.arg(commission_base_amount),
     platform_receiver_amount = sqlc.arg(platform_receiver_amount)
 WHERE id = sqlc.arg(id)
+RETURNING *;
+
+-- name: UpdateProfitSharingOrderRiderBillByPaymentOrder :one
+UPDATE profit_sharing_orders
+SET
+    rider_id = sqlc.arg(rider_id),
+    rider_sharing_mer_id = sqlc.arg(rider_sharing_mer_id),
+    rider_amount = sqlc.arg(rider_amount),
+    distributable_amount = sqlc.arg(distributable_amount),
+    platform_commission = sqlc.arg(platform_commission),
+    operator_commission = sqlc.arg(operator_commission),
+    merchant_amount = sqlc.arg(merchant_amount),
+    sharing_detail_snapshot = sqlc.arg(sharing_detail_snapshot),
+    rider_gross_amount = sqlc.arg(rider_gross_amount),
+    rider_payment_fee = sqlc.arg(rider_payment_fee),
+    rider_payment_fee_rate_bps = sqlc.arg(rider_payment_fee_rate_bps),
+    rider_payment_fee_base_amount = sqlc.arg(rider_payment_fee_base_amount),
+    merchant_payment_fee = sqlc.arg(merchant_payment_fee),
+    merchant_payment_fee_base_amount = sqlc.arg(merchant_payment_fee_base_amount),
+    commission_base_amount = sqlc.arg(commission_base_amount),
+    platform_receiver_amount = sqlc.arg(platform_receiver_amount)
+WHERE payment_order_id = sqlc.arg(payment_order_id)
+  AND status = 'pending'
 RETURNING *;
 
 -- name: GetProfitSharingOrder :one
@@ -435,7 +458,7 @@ JOIN orders o ON po.order_id = o.id
 LEFT JOIN profit_sharing_orders pso ON po.id = pso.payment_order_id
 WHERE 
     po.status = 'paid' 
-    AND po.payment_channel = 'ordinary_service_provider'
+    AND po.payment_channel = 'baofu_aggregate'
     AND po.requires_profit_sharing = TRUE
     AND o.status = 'completed'
   AND o.order_type <> 'takeout'

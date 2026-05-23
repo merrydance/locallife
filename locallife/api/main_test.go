@@ -184,6 +184,7 @@ func newTestServer(t *testing.T, store db.Store) *Server {
 	// Disable websocket side effects for unit tests.
 	server.wsHub = nil
 	server.wsPubSub = nil
+	server.merchantStatusChangePublisher = nil
 	server.onboardingReviewService = nil
 	server.credentialGovernanceService = nil
 

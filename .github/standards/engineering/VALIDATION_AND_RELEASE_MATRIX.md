@@ -63,8 +63,9 @@
 5. 并发冲突或重复请求
 6. 回调、worker、scheduler、outbox 的重复执行
 7. 超时、重试与部分失败
-8. 错误映射、日志与审计字段
-9. 生成物漂移：sqlc、mock、swagger 等
+8. 外部 API / provider 契约真值、字段矩阵、枚举/错误码、解析失败和漂移复核
+9. 错误映射、日志与审计字段
+10. 生成物漂移：sqlc、mock、swagger 等
 
 ### 3.2 Web 通用维度
 
@@ -84,6 +85,15 @@
 4. 支付、登录恢复、realtime、轮询结果等异步路径的未知态承接
 5. 结构性反馈是否替代了 toast 叠加
 6. 敏感字段、私有材料、权限相关状态是否安全显示
+
+### 3.4 Security Pattern Coverage
+
+1. 重放、重复提交、重复消费、重复回调、重复投递
+2. 身份伪造、对象级越权、租户串扰、权限回退、签名绕过
+3. SQL / 命令 / 模板 / HTML / 路径 / 对象键 / 反序列化 / 开放重定向注入
+4. token、密钥、证书、银行卡号、身份证号、原始 provider payload、堆栈、调试痕迹泄漏
+5. 空成功、nil-success、silent fallback、伪成功、隐藏失败
+6. 无界 fan-out、TOCTOU、claim 竞争、重复执行不收敛、超时与重试语义不清
 
 ## 4. 最小自动化门禁基线
 
@@ -126,8 +136,9 @@
 3. 人工验证了哪些场景。
 4. 哪些高风险分支未验证。
 5. 是否存在生成物、发布、回滚或观测相关缺口。
-6. 安全扫描若命中可触达高危或关键依赖漏洞，是已修复、已降级为不可达，还是带着明确剩余风险暂时放行。
-7. 若安全扫描仅剩不可达模块风险，是否已登记到 `.github/standards/engineering/UNREACHABLE_DEPENDENCY_RISK_REGISTER.md`，并说明重新评估触发条件。
+6. 若改动涉及外部 API / provider，官方契约、source matrix、field matrix、样例夹具、错误码、枚举和降级分支验证到了哪里。
+7. 安全扫描若命中可触达高危或关键依赖漏洞，是已修复、已降级为不可达，还是带着明确剩余风险暂时放行。
+8. 若安全扫描仅剩不可达模块风险，是否已登记到 `.github/standards/engineering/UNREACHABLE_DEPENDENCY_RISK_REGISTER.md`，并说明重新评估触发条件。
 
 ## 6. 剩余风险表达规范
 

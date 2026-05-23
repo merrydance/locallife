@@ -12,7 +12,6 @@ import {
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 import {
-  fetchMerchantDashboardComplaintSummary,
   fetchMerchantDashboardOrderSummary,
   fetchMerchantDashboardOverview
 } from '../../../services/merchant-dashboard'
@@ -43,8 +42,19 @@ import {
   shouldAutoRefreshDashboard,
   SKELETON_ROWS
 } from '../../../utils/merchant-dashboard-view'
+import {
+  MERCHANT_SETTLEMENT_ACCOUNT_PAGE_PATH
+} from '../../../utils/merchant-finance-entry-view'
+import { wsManager, WSMessageType } from '../../../utils/websocket'
 
-const BAOFU_SETTLEMENT_ACCOUNT_PAGE_PATH = '/pages/merchant/finance/settlement-account/index'
+const SETTLEMENT_ACCOUNT_PAGE_PATH = MERCHANT_SETTLEMENT_ACCOUNT_PAGE_PATH
+
+interface MerchantStatusChangePayload {
+  merchant_id?: number
+  is_open?: boolean
+  auto_close_at?: string
+  source?: string
+}
 
 Page({
   data: {
@@ -68,9 +78,7 @@ Page({
     gridGutter: GRID_GUTTER,
     monthlyOrdersValue: null as number | null,
     monthlySalesValue: null as number | null,
-    complaintBacklogValue: null as number | null,
     pendingOrdersValue: null as number | null,
-    pendingComplaintsValue: null as number | null,
     canManageDeviceSettings: false,
     canManageMerchantApplyment: false,
     appBindPopupVisible: false,
@@ -82,16 +90,15 @@ Page({
     appBindRemainingLabel: formatAppBindRemaining(0),
     overviewMetrics: buildOverviewMetrics({
       monthlyOrders: null,
-      monthlySales: null,
-      complaintBacklog: null
+      monthlySales: null
     }) as OverviewMetric[],
     sections: buildSections({
       pendingOrders: null,
-      pendingComplaints: null,
       canManageDeviceSettings: false,
       canManageMerchantApplyment: false
     }) as DashboardSectionView[],
-    skeletonRows: SKELETON_ROWS
+    skeletonRows: SKELETON_ROWS,
+    _wsListeners: [] as Array<() => void>
   },
 
   appBindCountdownTimer: 0 as number,
@@ -104,6 +111,8 @@ Page({
 
   onUnload() {
     this.clearAppBindCountdown()
+    this.cleanupWebSocketListeners()
+    wsManager.disconnect()
   },
 
   async onShow() {
@@ -111,11 +120,49 @@ Page({
       return
     }
 
+    this.initWebSocketListeners()
+
     if (!shouldAutoRefreshDashboard(this.data)) {
       return
     }
 
     await this.loadDashboard({ silent: true })
+  },
+
+  cleanupWebSocketListeners() {
+    if (this.data._wsListeners?.length) {
+      this.data._wsListeners.forEach((unsubscribe) => unsubscribe())
+      this.data._wsListeners = []
+    }
+  },
+
+  initWebSocketListeners() {
+    this.cleanupWebSocketListeners()
+    wsManager.connect()
+
+    const statusChangeSub = wsManager.on(WSMessageType.MERCHANT_STATUS_CHANGE, (data) => {
+      const payload = typeof data === 'object' && data !== null
+        ? (data as MerchantStatusChangePayload)
+        : {}
+
+      if (payload.merchant_id !== this.data.activeMerchant.id) {
+        return
+      }
+
+      this.loadDashboard({ silent: true }).catch((err) => logger.error('Merchant dashboard status change refresh failed', err))
+    })
+
+    const blockedSub = wsManager.on(WSMessageType.CONNECTION_BLOCKED, (payload) => {
+      const message = typeof payload === 'object' && payload !== null && 'message' in payload
+        ? String((payload as { message?: unknown }).message || '')
+        : ''
+      if (!message) {
+        return
+      }
+      this.setData({ refreshErrorMessage: message })
+    })
+
+    this.data._wsListeners = [statusChangeSub, blockedSub]
   },
 
   async bootstrapPage() {
@@ -159,6 +206,7 @@ Page({
 
     this.setData({ canManageDeviceSettings })
 
+    this.initWebSocketListeners()
     await this.loadDashboard()
   },
 
@@ -188,8 +236,7 @@ Page({
         openStatusResult,
         settlementAccountResult,
         overviewResult,
-        orderSummaryResult,
-        complaintSummaryResult
+        orderSummaryResult
       ] = await Promise.all([
         captureDashboardRequest(fetchMerchantStorefrontProfile()),
         captureDashboardRequest(fetchMerchantStorefrontOpenStatus()),
@@ -197,8 +244,7 @@ Page({
           ? captureDashboardRequest(fetchMerchantBaofuSettlementAccountView())
           : Promise.resolve({ ok: true as const, value: null as BaofuSettlementAccountView | null }),
         captureDashboardRequest(fetchMerchantDashboardOverview(monthStart, monthEnd)),
-        captureDashboardRequest(fetchMerchantDashboardOrderSummary()),
-        captureDashboardRequest(fetchMerchantDashboardComplaintSummary())
+        captureDashboardRequest(fetchMerchantDashboardOrderSummary())
       ] as const)
 
       if (!isDashboardRequestOk(profileResult)) {
@@ -233,9 +279,6 @@ Page({
       const pendingOrders = isDashboardRequestOk(orderSummaryResult)
         ? (orderSummaryResult.value.paid_count || 0)
         : this.data.pendingOrdersValue
-      const complaintBacklog = isDashboardRequestOk(complaintSummaryResult)
-        ? (complaintSummaryResult.value.pending_response || 0) + (complaintSummaryResult.value.processing || 0)
-        : this.data.complaintBacklogValue
       const monthlyOrdersValue = isDashboardRequestOk(overviewResult)
         ? overviewResult.value.total_orders
         : this.data.monthlyOrdersValue
@@ -247,8 +290,7 @@ Page({
         openStatusResult,
         settlementAccountResult,
         overviewResult,
-        orderSummaryResult,
-        complaintSummaryResult
+        orderSummaryResult
       ].some((result) => !result.ok)
 
       this.setData({
@@ -266,17 +308,13 @@ Page({
         settlementAccountView,
         monthlyOrdersValue,
         monthlySalesValue,
-        complaintBacklogValue: complaintBacklog,
         pendingOrdersValue: pendingOrders,
-        pendingComplaintsValue: complaintBacklog,
         overviewMetrics: buildOverviewMetrics({
           monthlyOrders: monthlyOrdersValue,
-          monthlySales: monthlySalesValue,
-          complaintBacklog
+          monthlySales: monthlySalesValue
         }),
         sections: buildSections({
           pendingOrders,
-          pendingComplaints: complaintBacklog,
           canManageDeviceSettings: this.data.canManageDeviceSettings,
           canManageMerchantApplyment: this.data.canManageMerchantApplyment
         })
@@ -406,7 +444,7 @@ Page({
         return true
       }
 
-      const content = settlementAccountView.statusDesc || settlementAccountView.nextActionText || '宝付结算账户仍在处理，请稍后再试'
+      const content = settlementAccountView.statusDesc || settlementAccountView.nextActionText || '结算账户仍在处理，请稍后再试'
 
       const result = await new Promise<boolean>((resolve) => {
         wx.showModal({
@@ -420,7 +458,7 @@ Page({
       })
 
       if (result) {
-        wx.navigateTo({ url: BAOFU_SETTLEMENT_ACCOUNT_PAGE_PATH })
+        wx.navigateTo({ url: SETTLEMENT_ACCOUNT_PAGE_PATH })
       }
 
       return false
@@ -480,6 +518,7 @@ Page({
         lastRefreshAt: Date.now(),
         refreshErrorMessage: ''
       })
+      this.initWebSocketListeners()
     } catch (err) {
       logger.error('Merchant dashboard update open status failed', err)
       wx.showToast({

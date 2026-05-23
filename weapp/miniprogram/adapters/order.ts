@@ -62,6 +62,7 @@ export class OrderAdapter {
       badges: badgeTexts,
       actions: dto.actions,
       paymentContext: dto.payment_context,
+      paidAt: dto.paid_at,
       pickupCodeMasked: dto.pickup_code_masked,
       overtime: dto.overtime,
       fulfillmentStatus: dto.fulfillment_status,
@@ -109,6 +110,7 @@ export class OrderAdapter {
       payableAmount,
       payableAmountDisplay: `¥${(payableAmount / 100).toFixed(2)}`,
       notes: dto.notes,
+      paidAt: dto.paid_at,
       // 配送地址信息
       address: dto.delivery_address,
       contactName: dto.delivery_contact_name,

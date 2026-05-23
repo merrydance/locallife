@@ -3,7 +3,9 @@ import {
   MerchantOrderManagementService,
   OrderResponse,
   OrderManagementAdapter,
-  MERCHANT_REJECT_REASON_OPTIONS
+  MERCHANT_REJECT_REASON_OPTIONS,
+  MerchantOrderStatusFilter,
+  normalizeMerchantVisibleOrderStatusFilter
 } from '../../../../api/order-management'
 import { logger } from '../../../../utils/logger'
 import dayjs from 'dayjs'
@@ -14,10 +16,10 @@ import {
   isMerchantConsoleAccessDenied,
   isMerchantConsoleAccessGranted
 } from '../../../../utils/console-access'
+import { buildMerchantOrderFeeBreakdownView } from '../../../../utils/merchant-order-detail-view'
 import { wsManager, WSMessageType } from '../../../../utils/websocket'
 
-type OrderStatus = OrderResponse['status']
-type OrderStatusFilter = '' | OrderStatus
+type OrderStatusFilter = MerchantOrderStatusFilter
 type OrderTypeFilter = '' | OrderResponse['order_type']
 type WsUnsubscribe = () => void
 
@@ -35,6 +37,9 @@ interface MerchantOrderListItem extends OrderResponse {
   scene_label: string
   scene_value: string
   status_hint_label: string
+  customer_payable_text: string
+  merchant_receivable_text: string
+  fee_breakdown_available: boolean
   submitting: boolean
   can_accept: boolean
   can_reject: boolean
@@ -103,7 +108,7 @@ Page({
     const { navBarHeight } = getStableBarHeights()
     this.setData({
       navBarHeight,
-      currentStatus: options.status || 'paid',
+      currentStatus: normalizeMerchantVisibleOrderStatusFilter(options.status),
       orderTypeFilter: options.order_type || '',
       pageTitle: '订单中心'
     })
@@ -343,6 +348,7 @@ Page({
 
   formatOrder(order: OrderResponse): MerchantOrderListItem {
     const scene = this.buildSceneSummary(order)
+    const feeBreakdownView = buildMerchantOrderFeeBreakdownView(order)
     return {
       ...order,
       order_no_short: order.order_no.slice(-6).toUpperCase(),
@@ -353,6 +359,9 @@ Page({
       scene_label: scene.label,
       scene_value: scene.value,
       status_hint_label: order.status_hint || OrderManagementAdapter.getMerchantOrderStatusHint(order),
+      customer_payable_text: feeBreakdownView.customer_payable_text,
+      merchant_receivable_text: feeBreakdownView.merchant_receivable_text,
+      fee_breakdown_available: feeBreakdownView.available,
       submitting: false,
       can_accept: OrderManagementAdapter.canAcceptOrder(order),
       can_reject: OrderManagementAdapter.canRejectOrder(order),
@@ -552,13 +561,19 @@ Page({
 
     this.setData({ [`orders[${index}].submitting`]: true })
     try {
-      const updatedOrder = await request() as OrderResponse
-      this.syncOrderAfterAction(updatedOrder)
+      await request()
+      await this.loadOrders(true, {
+        showLoading: false,
+        preserveCurrent: this.data.orders.length > 0
+      })
     } catch (err) {
       logger.error('Order action failed', err)
       wx.showToast({ title: getErrorMessage(err, '操作失败，请稍后重试'), icon: 'none' })
     } finally {
-      this.setData({ [`orders[${index}].submitting`]: false })
+      const nextIndex = this.data.orders.findIndex((order) => order.id === id)
+      if (nextIndex !== -1) {
+        this.setData({ [`orders[${nextIndex}].submitting`]: false })
+      }
     }
   },
 

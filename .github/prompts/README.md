@@ -61,7 +61,7 @@ See `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` for the authoritativ
 Use this order to avoid prompt collisions:
 
 1. If the request is diagramming only, use `business-flow-mermaid.prompt.md`.
-2. If the request is backend payment-specific or belongs to WeChat platform-ecommerce or Baofoo/Baofu/BaoCaiTong flows such as account opening, applyment, settlement account, merchant report, withdraw, profit sharing, refund, complaint, or payment callbacks, use `backend-payment-domain.prompt.md`.
+2. If the request is backend payment-specific or belongs to retained WeChat direct-payment or Baofoo/Baofu/BaoCaiTong flows such as account opening, merchant report, withdraw, profit sharing, refund, complaint, or payment callbacks, use `backend-payment-domain.prompt.md`. Legacy WeChat platform-ecommerce / ordinary-service-provider work should route here only for removal or historical-audit cleanup.
 3. If the request is backend takeover or onboarding focused, use `backend-takeover.prompt.md`.
 4. If the request is backend production bugfix or regression focused, use `backend-bugfix.prompt.md`.
 5. If the request is backend SQL or migration review-focused, use `backend-sql-review.prompt.md`.
@@ -83,7 +83,7 @@ Use this order to avoid prompt collisions:
 - `backend-implementation.prompt.md`: normal backend feature work outside payment-specialized, takeover, root-cause bugfix, or task-card-specialized flows.
 - `backend-takeover.prompt.md`: backend onboarding or new-owner context-building requests before implementation starts.
 - `backend-sql-review.prompt.md`: backend SQL, migration, sqlc propagation, index, or persistence-focused review requests.
-- `backend-payment-domain.prompt.md`: WeChat payment, Baofoo/Baofu/BaoCaiTong, or platform-ecommerce work, including account opening, applyment, settlement account, merchant report, closeout, callback, refund, profit sharing, withdraw, complaint, or audit-ledger paths.
+- `backend-payment-domain.prompt.md`: retained WeChat direct-payment, Baofoo/Baofu/BaoCaiTong, or legacy WeChat platform-payment removal/audit work, including account opening, merchant report, closeout, callback, refund, profit sharing, withdraw, complaint, or audit-ledger paths.
 - `flutter-bugfix.prompt.md`: Flutter merchant app regression,漏单、重复提醒、auth refresh、keep-alive、dedup、接单链路等根因修复请求。
 - `flutter-implementation.prompt.md`: all Flutter merchant app implementation requests, including auth binding, push, keep-alive, order alert, dedup, and weak-network recovery work.
 - `flutter-review.prompt.md`: all Flutter merchant app review requests, especially reliability-sensitive flows such as dedup, auth refresh, keep-alive, and accept-order paths.
@@ -115,7 +115,7 @@ Expected target: `backend-review-closure.prompt.md`
 5. "给微信支付回调和退款链路做一次实现和审查请求模板。"
 Expected target: `backend-payment-domain.prompt.md`
 
-6. "补一下平台收付通商户进件申请单查询和签约状态处理，顺便检查字段和错误码是不是跟官方文档完全一致。"
+6. "移除残留的平台收付通商户进件申请单查询和签约状态处理，顺便检查是否还有运行时入口。"
 Expected target: `backend-payment-domain.prompt.md`
 
 7. "补一下宝付宝财通开户字段和回调解析，重点防止字段漂移并运行 make check-baofu-contract。"

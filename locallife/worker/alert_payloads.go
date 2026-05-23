@@ -2,10 +2,8 @@ package worker
 
 import (
 	"context"
-	"fmt"
 
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/wechat"
 )
 
 func mergeAlertExtra(base map[string]interface{}, extras map[string]interface{}) map[string]interface{} {
@@ -81,24 +79,6 @@ func refundOrderAlertExtra(paymentOrder db.PaymentOrder, refundOrder db.RefundOr
 	return mergeAlertExtra(base, extras)
 }
 
-func abnormalRefundActionExtra(paymentOrder db.PaymentOrder, refundOrder db.RefundOrder) map[string]interface{} {
-	if !paymentOrderUsesEcommerceChannel(paymentOrder) {
-		return nil
-	}
-	if !refundOrder.RefundID.Valid || refundOrder.RefundID.String == "" {
-		return nil
-	}
-
-	return map[string]interface{}{
-		"abnormal_refund_api_available":                  true,
-		"abnormal_refund_api_method":                     "POST",
-		"abnormal_refund_api_path":                       fmt.Sprintf("/v1/platform/refunds/%d/apply-abnormal-refund", refundOrder.ID),
-		"abnormal_refund_default_type":                   wechat.EcommerceAbnormalRefundTypeMerchantBankCard,
-		"abnormal_refund_supported_types":                []string{wechat.EcommerceAbnormalRefundTypeMerchantBankCard, wechat.EcommerceAbnormalRefundTypeUserBankCard},
-		"abnormal_refund_user_bank_card_required_fields": []string{"bank_type", "bank_account", "real_name"},
-	}
-}
-
 func profitSharingOrderAlertExtra(order db.ProfitSharingOrder, extras map[string]interface{}) map[string]interface{} {
 	base := map[string]interface{}{
 		"profit_sharing_order_id": order.ID,
@@ -116,31 +96,6 @@ func profitSharingOrderAlertExtra(order db.ProfitSharingOrder, extras map[string
 	}
 	if order.RiderID.Valid {
 		base["rider_id"] = order.RiderID.Int64
-	}
-
-	return mergeAlertExtra(base, extras)
-}
-
-func withdrawalAlertExtra(record db.WithdrawalRecord, accountInfo merchantWithdrawAccountInfo, extras map[string]interface{}) map[string]interface{} {
-	base := map[string]interface{}{
-		"withdrawal_record_id": record.ID,
-		"user_id":              record.UserID,
-		"amount":               record.Amount,
-		"channel":              record.Channel,
-		"out_request_no":       accountInfo.OutRequestNo,
-		"sub_mch_id":           accountInfo.SubMchID,
-	}
-	if accountInfo.MerchantID > 0 {
-		base["merchant_id"] = accountInfo.MerchantID
-	}
-	if accountInfo.OperatorID > 0 {
-		base["operator_id"] = accountInfo.OperatorID
-	}
-	if accountInfo.WithdrawID != "" {
-		base["withdraw_id"] = accountInfo.WithdrawID
-	}
-	if accountInfo.Remark != "" {
-		base["remark"] = accountInfo.Remark
 	}
 
 	return mergeAlertExtra(base, extras)

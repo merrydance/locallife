@@ -16,7 +16,10 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	api "github.com/merrydance/locallife/api"
+	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
+	baofuaggregatenotification "github.com/merrydance/locallife/baofu/aggregatepay/notification"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/scheduler"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
@@ -348,12 +351,6 @@ type claimRecoveryPaymentCreateResponse struct {
 	PayParams      *recoveryPayParamsResponse  `json:"pay_params"`
 }
 
-type takeoutCombinedPaymentFixture struct {
-	Customer db.User
-	Order    db.Order
-	Combined combinedPaymentOrderResponse
-}
-
 func markClaimRecoveryPaymentPaid(t *testing.T, store *db.SQLStore, paymentOrderID int64, transactionID string) {
 	t.Helper()
 
@@ -386,213 +383,232 @@ func claimRecoveryIDForIntegration(t *testing.T, store *db.SQLStore, claimID int
 	return recovery.ID
 }
 
-func createTakeoutCombinedPaymentFixture(t *testing.T, server *api.Server, store *db.SQLStore) takeoutCombinedPaymentFixture {
+type integrationBaofuAggregateClient struct {
+	lastUnified aggregatecontracts.UnifiedOrderRequest
+}
+
+func (c *integrationBaofuAggregateClient) CreateUnifiedOrder(_ context.Context, req aggregatecontracts.UnifiedOrderRequest) (*aggregatecontracts.UnifiedOrderResult, error) {
+	c.lastUnified = req
+	return &aggregatecontracts.UnifiedOrderResult{
+		MerchantID: req.MerchantID,
+		TerminalID: req.TerminalID,
+		OutTradeNo: req.OutTradeNo,
+		TradeNo:    "BFPAY_" + util.RandomString(10),
+		ResultCode: aggregatecontracts.BusinessResultCodeSuccess,
+		ChannelReturn: aggregatecontracts.ChannelReturn{
+			WechatPayData: json.RawMessage(`{"timeStamp":"1767225600","nonceStr":"nonce-baofu-integration","package":"prepay_id=baofu-integration","signType":"RSA","paySign":"pay-sign-baofu-integration"}`),
+		},
+	}, nil
+}
+
+func (c *integrationBaofuAggregateClient) QueryPayment(context.Context, aggregatecontracts.PaymentQueryRequest) (*aggregatecontracts.UnifiedOrderResult, error) {
+	return nil, errors.New("not implemented in takeout journey integration test")
+}
+
+func (c *integrationBaofuAggregateClient) CreateProfitSharing(context.Context, aggregatecontracts.ShareAfterPayRequest) (*aggregatecontracts.ShareResult, error) {
+	return nil, errors.New("not implemented in takeout journey integration test")
+}
+
+func (c *integrationBaofuAggregateClient) QueryProfitSharing(context.Context, aggregatecontracts.ShareQueryRequest) (*aggregatecontracts.ShareResult, error) {
+	return nil, errors.New("not implemented in takeout journey integration test")
+}
+
+func (c *integrationBaofuAggregateClient) CreateRefund(_ context.Context, req aggregatecontracts.RefundBeforeShareRequest) (*aggregatecontracts.RefundResult, error) {
+	return &aggregatecontracts.RefundResult{
+		OriginTradeNo:    req.OriginTradeNo,
+		OriginOutTradeNo: req.OriginOutTradeNo,
+		OutTradeNo:       req.OutTradeNo,
+		TradeNo:          "BFREFUND_" + util.RandomString(10),
+		RefundAmountFen:  req.RefundAmountFen,
+		TotalAmountFen:   req.TotalAmountFen,
+		ResultCode:       aggregatecontracts.BusinessResultCodeSuccess,
+		RefundState:      aggregatecontracts.RefundStateAccepted,
+	}, nil
+}
+
+func (c *integrationBaofuAggregateClient) QueryRefund(context.Context, aggregatecontracts.RefundQueryRequest) (*aggregatecontracts.RefundResult, error) {
+	return nil, errors.New("not implemented in takeout journey integration test")
+}
+
+func (c *integrationBaofuAggregateClient) CloseOrder(_ context.Context, req aggregatecontracts.OrderCloseRequest) (*aggregatecontracts.OrderCloseResult, error) {
+	return &aggregatecontracts.OrderCloseResult{
+		MerchantID: req.MerchantID,
+		TerminalID: req.TerminalID,
+		OutTradeNo: req.OutTradeNo,
+		TradeNo:    req.TradeNo,
+		ResultCode: aggregatecontracts.BusinessResultCodeSuccess,
+	}, nil
+}
+
+func configureIntegrationBaofuAggregate(t *testing.T, server *api.Server) *integrationBaofuAggregateClient {
+	t.Helper()
+
+	client := &integrationBaofuAggregateClient{}
+	server.SetBaofuAggregateClientForTest(client, logic.BaofuAggregateFacadeConfig{
+		CollectMerchantID: "102004465",
+		CollectTerminalID: "200005200",
+		MiniProgramAppID:  "wx-integration-app",
+		PaymentNotifyURL:  "https://api.example.com/v1/webhooks/baofu/payment",
+		RefundNotifyURL:   "https://api.example.com/v1/webhooks/baofu/refund",
+	})
+	server.SetBaofuAggregatePaymentNotificationParserForTest(baofuaggregatenotification.NewParser())
+	return client
+}
+
+func postIntegrationBaofuPaymentNotify(t *testing.T, server *api.Server, notificationID, outTradeNo string, amount int64) *httptest.ResponseRecorder {
+	t.Helper()
+
+	body := map[string]any{
+		"notifyId":   notificationID,
+		"notifyType": "PAYMENT",
+		"merId":      "102004465",
+		"terId":      "200005200",
+		"outTradeNo": outTradeNo,
+		"tradeNo":    "BFPAY_" + util.RandomString(10),
+		"txnState":   "SUCCESS",
+		"payCode":    aggregatecontracts.PayCodeWechatJSAPI,
+		"succAmt":    amount,
+	}
+	bodyBytes, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPost, "/v1/webhooks/baofu/payment", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+	return rec
+}
+
+func postIntegrationBaofuRefundNotify(t *testing.T, server *api.Server, notificationID, outRefundNo, refundID string, amount int64) *httptest.ResponseRecorder {
+	t.Helper()
+
+	body := map[string]any{
+		"notifyId":    notificationID,
+		"notifyType":  "REFUND",
+		"merId":       "102004465",
+		"terId":       "200005200",
+		"outTradeNo":  outRefundNo,
+		"tradeNo":     refundID,
+		"refundState": aggregatecontracts.RefundStateSuccess,
+		"resultCode":  aggregatecontracts.BusinessResultCodeSuccess,
+		"txnTime":     time.Now().UTC().Format("20060102150405"),
+		"succAmt":     amount,
+	}
+	bodyBytes, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPost, "/v1/webhooks/baofu/refund", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+	return rec
+}
+
+func ensureIntegrationMerchantBaofuReady(t *testing.T, store *db.SQLStore, merchantID int64, subMchID string) {
 	t.Helper()
 
 	ctx := context.Background()
-	region := createIntegrationRegion(t, store)
-	merchantOwner := createIntegrationUser(t, store)
-	merchant := createIntegrationMerchant(t, store, merchantOwner.ID, region.ID)
-
-	_, err := store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{ID: merchant.ID, Status: "active"})
-	require.NoError(t, err)
-	_, err = store.UpdateMerchantIsOpen(ctx, db.UpdateMerchantIsOpenParams{ID: merchant.ID, IsOpen: true, AutoCloseAt: pgtype.Timestamptz{Valid: false}})
-	require.NoError(t, err)
-	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
-
-	_, err = store.CreateMerchantPaymentConfig(ctx, db.CreateMerchantPaymentConfigParams{
-		MerchantID: merchant.ID,
-		SubMchID:   "sub_mch_001",
-		Status:     "active",
+	binding, err := store.UpsertBaofuAccountBinding(ctx, db.UpsertBaofuAccountBindingParams{
+		OwnerType:             db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:               merchantID,
+		AccountType:           db.BaofuAccountTypeBusiness,
+		LoginNo:               pgtype.Text{String: "login_" + util.RandomString(8), Valid: true},
+		OpenState:             db.BaofuAccountOpenStateProcessing,
+		WechatSubMchID:        pgtype.Text{String: subMchID, Valid: true},
+		LastOpenTransSerialNo: pgtype.Text{String: "OPEN_" + util.RandomString(8), Valid: true},
+		RawSnapshot:           []byte(`{}`),
 	})
 	require.NoError(t, err)
-
-	dish := createIntegrationDish(t, store, merchant.ID)
-	customer := createIntegrationUser(t, store)
-	addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
-
-	createBody := map[string]any{
-		"merchant_id":           merchant.ID,
-		"order_type":            "takeout",
-		"address_id":            addr.ID,
-		"items":                 []map[string]any{{"dish_id": dish.ID, "quantity": 1}},
-		"use_balance":           false,
-		"delivery_fee":          int64(500),
-		"delivery_distance":     int32(1000),
-		"delivery_fee_discount": int64(0),
-	}
-
-	var created takeoutOrderResponse
-	{
-		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
-		require.Equal(t, "pending", created.Status)
-	}
-
-	order, err := store.GetOrder(ctx, created.ID)
+	_, err = store.MarkBaofuAccountBindingActive(ctx, db.MarkBaofuAccountBindingActiveParams{
+		ID:           binding.ID,
+		ContractNo:   pgtype.Text{String: "BCT_CONTRACT_" + util.RandomString(8), Valid: true},
+		SharingMerID: pgtype.Text{String: "BCT_SHARING_" + util.RandomString(8), Valid: true},
+		RawSnapshot:  []byte(`{}`),
+	})
 	require.NoError(t, err)
-
-	customerRow, err := store.GetUser(ctx, customer.ID)
+	report, err := store.UpsertBaofuMerchantReportProcessing(ctx, db.UpsertBaofuMerchantReportProcessingParams{
+		OwnerType:   db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:     merchantID,
+		ReportType:  db.BaofuMerchantReportTypeWechat,
+		ReportNo:    "BMR_" + util.RandomString(10),
+		BctMerID:    "BCT_MER_" + util.RandomString(8),
+		RawSnapshot: []byte(`{}`),
+	})
 	require.NoError(t, err)
-	if customerRow.WechatOpenid == "" {
-		_, err = integrationPool.Exec(ctx, `UPDATE users SET wechat_openid = $2 WHERE id = $1`, customer.ID, "wx_openid_"+util.RandomString(8))
-		require.NoError(t, err)
-	}
-
-	if existingPayment, err := store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
-		OrderID:      pgtype.Int8{Int64: created.ID, Valid: true},
-		BusinessType: "order",
-	}); err == nil {
-		if existingPayment.Status == "pending" && !db.PaymentOrderUsesEcommerceChannel(existingPayment) {
-			_, err = integrationPool.Exec(ctx, `UPDATE payment_orders SET status = 'closed' WHERE id = $1`, existingPayment.ID)
-			require.NoError(t, err)
-		}
-	}
-
-	var combined combinedPaymentOrderResponse
-	{
-		body := map[string]any{
-			"order_ids": []int64{created.ID},
-		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/payments/combined", body, customer.ID)
-		require.Equalf(t, http.StatusCreated, rec.Code, "create combined payment failed: %s", rec.Body.String())
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &combined)
-		require.Greater(t, combined.ID, int64(0))
-		require.Equal(t, "pending", combined.Status)
-		require.Equal(t, order.TotalAmount, combined.TotalAmount)
-		require.Len(t, combined.SubOrders, 1)
-		require.Equal(t, created.ID, combined.SubOrders[0].OrderID)
-	}
-
-	return takeoutCombinedPaymentFixture{
-		Customer: customer,
-		Order:    order,
-		Combined: combined,
-	}
+	_, err = store.MarkBaofuMerchantReportSucceeded(ctx, db.MarkBaofuMerchantReportSucceededParams{
+		ID:            report.ID,
+		SubMchID:      pgtype.Text{String: subMchID, Valid: true},
+		PlatformBizNo: pgtype.Text{String: "PLAT_" + util.RandomString(8), Valid: true},
+		RawSnapshot:   []byte(`{}`),
+	})
+	require.NoError(t, err)
+	_, err = store.MarkBaofuMerchantReportAppletAuthSucceeded(ctx, report.ID)
+	require.NoError(t, err)
 }
 
-func newIntegrationCombineQueryResponse(combineOutTradeNo, outTradeNo, tradeState, transactionID string, amount int64) *wechatcontracts.CombineQueryResponse {
-	resp := &wechatcontracts.CombineQueryResponse{
-		CombineOutTradeNo: combineOutTradeNo,
-		SubOrders: []wechatcontracts.CombineSubOrderResult{{
-			OutTradeNo:    outTradeNo,
-			TransactionID: transactionID,
-			TradeType:     "JSAPI",
-			TradeState:    tradeState,
-			SuccessTime:   time.Now().UTC().Format(time.RFC3339),
-		}},
-	}
-	resp.SubOrders[0].Amount = struct {
-		TotalAmount    int64  `json:"total_amount"`
-		PayerAmount    int64  `json:"payer_amount"`
-		Currency       string `json:"currency"`
-		PayerCurrency  string `json:"payer_currency"`
-		SettlementRate int64  `json:"settlement_rate"`
-	}{
-		TotalAmount:   amount,
-		PayerAmount:   amount,
-		Currency:      "CNY",
-		PayerCurrency: "CNY",
-	}
-	return resp
-}
-
-func newIntegrationCombinePaymentNotification(combineOutTradeNo, outTradeNo, transactionID string, amount int64) *wechatcontracts.CombinePaymentNotification {
-	resp := &wechatcontracts.CombinePaymentNotification{
-		CombineAppID:      "wx-integration-app",
-		CombineMchID:      "combine-mch-integration",
-		CombineOutTradeNo: combineOutTradeNo,
-		CombinePayerInfo:  &wechatcontracts.CombinePaymentNotificationPayerInfo{OpenID: "integration-openid"},
-		SubOrders: []wechatcontracts.CombinePaymentNotificationSubOrder{{
-			MchID:         "sub-mch-integration",
-			OutTradeNo:    outTradeNo,
-			TransactionID: transactionID,
-			TradeState:    "SUCCESS",
-			TradeType:     "JSAPI",
-			BankType:      "CMC",
-			SuccessTime:   time.Now().UTC().Format(time.RFC3339),
-		}},
-	}
-	resp.SubOrders[0].Amount = struct {
-		TotalAmount    int64  `json:"total_amount"`
-		PayerAmount    int64  `json:"payer_amount"`
-		Currency       string `json:"currency"`
-		PayerCurrency  string `json:"payer_currency"`
-		SettlementRate int64  `json:"settlement_rate"`
-	}{
-		TotalAmount:   amount,
-		PayerAmount:   amount,
-		Currency:      "CNY",
-		PayerCurrency: "CNY",
-	}
-	return resp
-}
-
-func postIntegrationCombinedPaymentNotify(t *testing.T, server *api.Server, notificationID string) *httptest.ResponseRecorder {
+func ensureIntegrationRiderBaofuReady(t *testing.T, store *db.SQLStore, riderID int64) {
 	t.Helper()
 
-	body := map[string]any{
-		"id":            notificationID,
-		"event_type":    "TRANSACTION.SUCCESS",
-		"resource_type": "encrypt-resource",
-		"resource": map[string]any{
-			"algorithm":       "AEAD_AES_256_GCM",
-			"ciphertext":      "mock_ciphertext",
-			"nonce":           "mock_nonce",
-			"associated_data": "transaction",
-			"original_type":   "transaction",
-		},
-		"summary": "success",
-	}
-
-	bodyBytes, err := json.Marshal(body)
+	ctx := context.Background()
+	binding, err := store.UpsertBaofuAccountBinding(ctx, db.UpsertBaofuAccountBindingParams{
+		OwnerType:             db.BaofuAccountOwnerTypeRider,
+		OwnerID:               riderID,
+		AccountType:           db.BaofuAccountTypePersonal,
+		LoginNo:               pgtype.Text{String: "login_" + util.RandomString(8), Valid: true},
+		OpenState:             db.BaofuAccountOpenStateProcessing,
+		WechatSubMchID:        pgtype.Text{String: "sub_mch_rider_" + util.RandomString(8), Valid: true},
+		LastOpenTransSerialNo: pgtype.Text{String: "OPEN_" + util.RandomString(8), Valid: true},
+		RawSnapshot:           []byte(`{}`),
+	})
 	require.NoError(t, err)
-
-	req, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/combine-notify", bytes.NewReader(bodyBytes))
+	_, err = store.MarkBaofuAccountBindingActive(ctx, db.MarkBaofuAccountBindingActiveParams{
+		ID:           binding.ID,
+		ContractNo:   pgtype.Text{String: "BCT_CONTRACT_" + util.RandomString(8), Valid: true},
+		SharingMerID: pgtype.Text{String: "BCT_RIDER_" + util.RandomString(8), Valid: true},
+		RawSnapshot:  []byte(`{}`),
+	})
 	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Wechatpay-Timestamp", "1234567890")
-	req.Header.Set("Wechatpay-Nonce", "test_nonce")
-	req.Header.Set("Wechatpay-Signature", "test_signature")
-	req.Header.Set("Wechatpay-Serial", "test_serial")
-
-	rec := httptest.NewRecorder()
-	server.Handler().ServeHTTP(rec, req)
-	return rec
 }
 
-func postIntegrationEcommercePaymentNotify(t *testing.T, server *api.Server, notificationID string) *httptest.ResponseRecorder {
+func ensureIntegrationPlatformBaofuReady(t *testing.T, store *db.SQLStore) {
 	t.Helper()
 
-	body := map[string]any{
-		"id":            notificationID,
-		"event_type":    "TRANSACTION.SUCCESS",
-		"resource_type": "encrypt-resource",
-		"resource": map[string]any{
-			"algorithm":       "AEAD_AES_256_GCM",
-			"ciphertext":      "mock_ciphertext",
-			"nonce":           "mock_nonce",
-			"associated_data": "transaction",
-			"original_type":   "transaction",
-		},
-		"summary": "success",
+	ctx := context.Background()
+	binding, err := store.UpsertBaofuAccountBinding(ctx, db.UpsertBaofuAccountBindingParams{
+		OwnerType:             db.BaofuAccountOwnerTypePlatform,
+		OwnerID:               0,
+		AccountType:           db.BaofuAccountTypeBusiness,
+		LoginNo:               pgtype.Text{String: "login_" + util.RandomString(8), Valid: true},
+		OpenState:             db.BaofuAccountOpenStateProcessing,
+		WechatSubMchID:        pgtype.Text{String: "sub_mch_platform_" + util.RandomString(8), Valid: true},
+		LastOpenTransSerialNo: pgtype.Text{String: "OPEN_" + util.RandomString(8), Valid: true},
+		RawSnapshot:           []byte(`{}`),
+	})
+	require.NoError(t, err)
+	_, err = store.MarkBaofuAccountBindingActive(ctx, db.MarkBaofuAccountBindingActiveParams{
+		ID:           binding.ID,
+		ContractNo:   pgtype.Text{String: "BCT_CONTRACT_" + util.RandomString(8), Valid: true},
+		SharingMerID: pgtype.Text{String: "PLATFORM_SHARE_" + util.RandomString(8), Valid: true},
+		RawSnapshot:  []byte(`{}`),
+	})
+	require.NoError(t, err)
+}
+
+func clearIntegrationBaofuFeeTables(t *testing.T) {
+	t.Helper()
+
+	if integrationPool == nil {
+		return
 	}
-
-	bodyBytes, err := json.Marshal(body)
+	ctx := context.Background()
+	_, err := integrationPool.Exec(ctx, `DELETE FROM order_payment_fee_ledgers`)
 	require.NoError(t, err)
-
-	req, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/payment-notify", bytes.NewReader(bodyBytes))
+	_, err = integrationPool.Exec(ctx, `DELETE FROM baofu_fee_ledger`)
 	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Wechatpay-Timestamp", "1234567890")
-	req.Header.Set("Wechatpay-Nonce", "test_nonce")
-	req.Header.Set("Wechatpay-Signature", "test_signature")
-	req.Header.Set("Wechatpay-Serial", "test_serial")
-
-	rec := httptest.NewRecorder()
-	server.Handler().ServeHTTP(rec, req)
-	return rec
 }
 
 func processCapturedPaymentFactApplicationPayload(t *testing.T, store *db.SQLStore, payload worker.PaymentFactApplicationPayload) {
@@ -643,52 +659,6 @@ type deliveryRecommendResponse struct {
 	MerchantID int64 `json:"merchant_id"`
 }
 
-type combinedPaymentSubOrderResponse struct {
-	OrderID    int64  `json:"order_id"`
-	SubMchID   string `json:"sub_mch_id"`
-	OutTradeNo string `json:"out_trade_no"`
-}
-
-type combinedPaymentWechatAmountResult struct {
-	TotalAmount   int64  `json:"total_amount"`
-	PayerAmount   int64  `json:"payer_amount"`
-	Currency      string `json:"currency"`
-	PayerCurrency string `json:"payer_currency,omitempty"`
-}
-
-type combinedPaymentWechatSubOrderResult struct {
-	MchID         string                            `json:"mchid"`
-	SubMchID      string                            `json:"sub_mch_id,omitempty"`
-	SubAppID      string                            `json:"sub_appid,omitempty"`
-	SubOpenID     string                            `json:"sub_openid,omitempty"`
-	OutTradeNo    string                            `json:"out_trade_no"`
-	TransactionID string                            `json:"transaction_id,omitempty"`
-	TradeType     string                            `json:"trade_type,omitempty"`
-	TradeState    string                            `json:"trade_state"`
-	BankType      string                            `json:"bank_type,omitempty"`
-	Attach        string                            `json:"attach,omitempty"`
-	SuccessTime   string                            `json:"success_time,omitempty"`
-	Amount        combinedPaymentWechatAmountResult `json:"amount"`
-}
-
-type combinedPaymentWechatQueryResult struct {
-	CombineOutTradeNo   string                                `json:"combine_out_trade_no"`
-	AggregateTradeState string                                `json:"aggregate_trade_state"`
-	SubOrders           []combinedPaymentWechatSubOrderResult `json:"sub_orders"`
-}
-
-type combinedPaymentOrderResponse struct {
-	ID                int64                             `json:"id"`
-	Status            string                            `json:"status"`
-	CombineOutTradeNo string                            `json:"combine_out_trade_no"`
-	TotalAmount       int64                             `json:"total_amount"`
-	PrepayID          *string                           `json:"prepay_id,omitempty"`
-	PayParams         *recoveryPayParamsResponse        `json:"pay_params,omitempty"`
-	ExpiresAt         *time.Time                        `json:"expires_at,omitempty"`
-	WechatQuery       *combinedPaymentWechatQueryResult `json:"wechat_query,omitempty"`
-	SubOrders         []combinedPaymentSubOrderResponse `json:"sub_orders"`
-}
-
 type listTodayReservationsResponse struct {
 	Reservations []reservationStatusResponse `json:"reservations"`
 }
@@ -736,6 +706,8 @@ func TestTakeoutJourneyB1Integration(t *testing.T) {
 		Status:     "active",
 	})
 	require.NoError(t, err)
+	configureIntegrationBaofuAggregate(t, server)
+	ensureIntegrationMerchantBaofuReady(t, store, merchant.ID, "sub_mch_b1_001")
 
 	dish := createIntegrationDish(t, store, merchant.ID)
 	customer := createIntegrationUser(t, store)
@@ -746,23 +718,6 @@ func TestTakeoutJourneyB1Integration(t *testing.T) {
 		_, err = integrationPool.Exec(ctx, `UPDATE users SET wechat_openid = $2 WHERE id = $1`, customer.ID, "wx_openid_"+util.RandomString(8))
 		require.NoError(t, err)
 	}
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	mockEcommerceClient.EXPECT().
-		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_b1_integration_001"}, &wechat.JSAPIPayParams{
-			TimeStamp: "1",
-			NonceStr:  "nonce",
-			Package:   "prepay_id=prepay_b1_integration_001",
-			SignType:  "RSA",
-			PaySign:   "sign",
-		}, nil)
-	server.SetEcommerceClientForTest(mockEcommerceClient)
-	defer server.SetEcommerceClientForTest(nil)
 
 	operatorUser := createIntegrationUser(t, store)
 	commissionRate := pgtype.Numeric{}
@@ -794,6 +749,7 @@ func TestTakeoutJourneyB1Integration(t *testing.T) {
 	require.NoError(t, err)
 	_, err = store.UpdateRiderStatus(ctx, db.UpdateRiderStatusParams{ID: rider.ID, Status: "active"})
 	require.NoError(t, err)
+	ensureIntegrationRiderBaofuReady(t, store, rider.ID)
 	_, err = store.UpdateRiderDeposit(ctx, db.UpdateRiderDepositParams{ID: rider.ID, DepositAmount: 100_000, FrozenDeposit: 0})
 	require.NoError(t, err)
 	_, err = store.UpdateRiderOnlineStatus(ctx, db.UpdateRiderOnlineStatusParams{ID: rider.ID, IsOnline: true})
@@ -947,6 +903,7 @@ func TestTakeoutJourneyB1Integration(t *testing.T) {
 	// 9) 骑手上报当前位置：/v1/rider/location
 	{
 		body := map[string]any{
+			"region_id": region.ID,
 			"locations": []map[string]any{
 				{
 					"delivery_id": delivery.ID,
@@ -998,7 +955,7 @@ func TestTakeoutJourneyB1Integration(t *testing.T) {
 }
 
 // TestTakeoutJourneyB1WebhookIntegration
-// 外卖旅程（B1）端到端验收：走微信支付回调路径 + 任务入队，再由 worker 处理支付成功推进。
+// 外卖旅程（B1）端到端验收：走宝付聚合支付回调路径 + 任务入队，再由 worker 处理支付成功推进。
 func TestTakeoutJourneyB1WebhookIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
@@ -1021,6 +978,8 @@ func TestTakeoutJourneyB1WebhookIntegration(t *testing.T) {
 		Status:     "active",
 	})
 	require.NoError(t, err)
+	configureIntegrationBaofuAggregate(t, server)
+	ensureIntegrationMerchantBaofuReady(t, store, merchant.ID, "sub_mch_b1_webhook_001")
 
 	dish := createIntegrationDish(t, store, merchant.ID)
 
@@ -1032,23 +991,6 @@ func TestTakeoutJourneyB1WebhookIntegration(t *testing.T) {
 		_, err = integrationPool.Exec(ctx, `UPDATE users SET wechat_openid = $2 WHERE id = $1`, customer.ID, "wx_openid_"+util.RandomString(8))
 		require.NoError(t, err)
 	}
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	mockEcommerceClient.EXPECT().
-		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_b1_webhook_001"}, &wechat.JSAPIPayParams{
-			TimeStamp: "1",
-			NonceStr:  "nonce",
-			Package:   "prepay_id=prepay_b1_webhook_001",
-			SignType:  "RSA",
-			PaySign:   "sign",
-		}, nil)
-	server.SetEcommerceClientForTest(mockEcommerceClient)
-	defer server.SetEcommerceClientForTest(nil)
 
 	// 1) C端下单
 	createBody := map[string]any{
@@ -1088,79 +1030,28 @@ func TestTakeoutJourneyB1WebhookIntegration(t *testing.T) {
 	paymentOrder, err := store.GetPaymentOrder(ctx, payment.ID)
 	require.NoError(t, err)
 
-	// 3) 注入 mock payment client 与任务分发器
-	mockPaymentClient := mockwechat.NewMockDirectPaymentClientInterface(ctrl)
-	mockPaymentClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(nil)
-
-	mockPaymentClient.EXPECT().
-		DecryptPaymentNotification(gomock.Any()).
-		Times(1).
-		Return(&wechatcontracts.DirectPaymentNotificationResource{
-			TransactionID: "integration_tx_webhook_001",
-			OutTradeNo:    paymentOrder.OutTradeNo,
-			TradeState:    "SUCCESS",
-			Amount: wechatcontracts.DirectOrderQueryAmount{
-				Total:         paymentOrder.Amount,
-				PayerTotal:    paymentOrder.Amount,
-				Currency:      "CNY",
-				PayerCurrency: "CNY",
-			},
-		}, nil)
-
+	// 3) 走宝付聚合支付回调 + 任务入队
 	distributor := &capturePaymentSuccessDistributor{}
-	server.SetDirectPaymentClientForTest(mockPaymentClient)
 	server.SetTaskDistributorForTest(distributor)
-	defer server.SetDirectPaymentClientForTest(nil)
 	defer server.SetTaskDistributorForTest(nil)
 
-	// 4) 触发支付回调
 	notificationID := "notify_" + util.RandomString(8)
-	body := map[string]any{
-		"id":            notificationID,
-		"event_type":    "TRANSACTION.SUCCESS",
-		"resource_type": "encrypt-resource",
-		"resource": map[string]any{
-			"algorithm":       "AEAD_AES_256_GCM",
-			"ciphertext":      "mock_ciphertext",
-			"nonce":           "mock_nonce",
-			"associated_data": "transaction",
-			"original_type":   "transaction",
-		},
-		"summary": "success",
-	}
-
-	bodyBytes, err := json.Marshal(body)
-	require.NoError(t, err)
-
-	req, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-pay/notify", bytes.NewReader(bodyBytes))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Wechatpay-Timestamp", "1234567890")
-	req.Header.Set("Wechatpay-Nonce", "test_nonce")
-	req.Header.Set("Wechatpay-Signature", "test_signature")
-	req.Header.Set("Wechatpay-Serial", "test_serial")
-
-	rec := httptest.NewRecorder()
-	server.Handler().ServeHTTP(rec, req)
-	require.Equal(t, http.StatusNoContent, rec.Code)
+	rec := postIntegrationBaofuPaymentNotify(t, server, notificationID, paymentOrder.OutTradeNo, paymentOrder.Amount)
+	require.Equal(t, http.StatusOK, rec.Code)
 
 	updatedPayment, err := store.GetPaymentOrder(ctx, payment.ID)
 	require.NoError(t, err)
-	require.Equal(t, "paid", updatedPayment.Status)
+	require.Equal(t, "pending", updatedPayment.Status)
 
 	// 5) 运行支付成功任务，推进订单与配送单（不立即入池）
 	payloads := distributor.Payloads()
 	require.Len(t, payloads, 1)
 
-	payloadBytes, err := json.Marshal(payloads[0])
-	require.NoError(t, err)
+	processCapturedPaymentFactApplicationPayload(t, store, payloads[0])
 
-	processor := worker.NewTestTaskProcessor(store, worker.NewNoopTaskDistributor(), nil, nil)
-	task := asynq.NewTask(worker.TaskProcessPaymentFactApplication, payloadBytes)
-	require.NoError(t, processor.ProcessTaskPaymentFactApplication(ctx, task))
+	updatedPayment, err = store.GetPaymentOrder(ctx, payment.ID)
+	require.NoError(t, err)
+	require.Equal(t, "paid", updatedPayment.Status)
 
 	order, err := store.GetOrder(ctx, orderID)
 	require.NoError(t, err)
@@ -1170,326 +1061,6 @@ func TestTakeoutJourneyB1WebhookIntegration(t *testing.T) {
 	require.ErrorIs(t, err, db.ErrRecordNotFound)
 	_, err = store.GetDeliveryPoolByOrderID(ctx, orderID)
 	require.ErrorIs(t, err, db.ErrRecordNotFound)
-}
-
-// TestTakeoutJourneyB0CombinedPaymentIntegration
-// 外卖旅程（B0）端到端验收：合单支付创建与关闭。
-func TestTakeoutJourneyB0CombinedPaymentIntegration(t *testing.T) {
-	server, store := initIntegrationServer(t)
-	resetIntegrationData(t)
-
-	ctx := context.Background()
-
-	region := createIntegrationRegion(t, store)
-	merchantOwner := createIntegrationUser(t, store)
-	merchant := createIntegrationMerchant(t, store, merchantOwner.ID, region.ID)
-
-	_, err := store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{ID: merchant.ID, Status: "active"})
-	require.NoError(t, err)
-	_, err = store.UpdateMerchantIsOpen(ctx, db.UpdateMerchantIsOpenParams{ID: merchant.ID, IsOpen: true, AutoCloseAt: pgtype.Timestamptz{Valid: false}})
-	require.NoError(t, err)
-	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
-
-	_, err = store.CreateMerchantPaymentConfig(ctx, db.CreateMerchantPaymentConfigParams{
-		MerchantID: merchant.ID,
-		SubMchID:   "sub_mch_001",
-		Status:     "active",
-	})
-	require.NoError(t, err)
-
-	dish := createIntegrationDish(t, store, merchant.ID)
-	customer := createIntegrationUser(t, store)
-	addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
-
-	// 1) 创建外卖订单
-	createBody := map[string]any{
-		"merchant_id":           merchant.ID,
-		"order_type":            "takeout",
-		"address_id":            addr.ID,
-		"items":                 []map[string]any{{"dish_id": dish.ID, "quantity": 1}},
-		"use_balance":           false,
-		"delivery_fee":          int64(500),
-		"delivery_distance":     int32(1000),
-		"delivery_fee_discount": int64(0),
-	}
-
-	var created takeoutOrderResponse
-	{
-		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
-		require.Equal(t, "pending", created.Status)
-	}
-	orderID := created.ID
-
-	order, err := store.GetOrder(ctx, orderID)
-	require.NoError(t, err)
-
-	customerRow, err := store.GetUser(ctx, customer.ID)
-	require.NoError(t, err)
-	if customerRow.WechatOpenid == "" {
-		_, err = integrationPool.Exec(ctx, `UPDATE users SET wechat_openid = $2 WHERE id = $1`, customer.ID, "wx_openid_"+util.RandomString(8))
-		require.NoError(t, err)
-	}
-
-	if existingPayment, err := store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
-		OrderID:      pgtype.Int8{Int64: orderID, Valid: true},
-		BusinessType: "order",
-	}); err == nil {
-		if existingPayment.Status == "pending" && !db.PaymentOrderUsesEcommerceChannel(existingPayment) {
-			_, err = integrationPool.Exec(ctx, `UPDATE payment_orders SET status = 'closed' WHERE id = $1`, existingPayment.ID)
-			require.NoError(t, err)
-		}
-	}
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	mockEcommerceClient.EXPECT().
-		CreateCombineOrder(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(&wechatcontracts.CombineOrderResponse{PrepayID: "prepay_combined_001"}, &wechat.JSAPIPayParams{
-			TimeStamp: "1",
-			NonceStr:  "nonce",
-			Package:   "prepay_id=prepay_combined_001",
-			SignType:  "RSA",
-			PaySign:   "sign",
-		}, nil)
-	mockEcommerceClient.EXPECT().
-		CloseCombineOrder(gomock.Any(), gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(nil)
-
-	server.SetEcommerceClientForTest(mockEcommerceClient)
-	defer server.SetEcommerceClientForTest(nil)
-
-	// 2) 创建合单支付
-	var combined combinedPaymentOrderResponse
-	{
-		body := map[string]any{
-			"order_ids": []int64{orderID},
-		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/payments/combined", body, customer.ID)
-		require.Equalf(t, http.StatusCreated, rec.Code, "create combined payment failed: %s", rec.Body.String())
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &combined)
-		require.Greaterf(t, combined.ID, int64(0), "create combined payment returned empty id: %s", rec.Body.String())
-		require.Equal(t, "pending", combined.Status)
-		require.Equal(t, order.TotalAmount, combined.TotalAmount)
-		require.Len(t, combined.SubOrders, 1)
-		require.Equal(t, orderID, combined.SubOrders[0].OrderID)
-	}
-
-	// 3) 查询合单支付详情
-	{
-		url := fmt.Sprintf("/v1/payments/combined/%d", combined.ID)
-		rec := doGET(t, server, url, customer.ID)
-		require.Equalf(t, http.StatusOK, rec.Code, "get combined payment failed: %s", rec.Body.String())
-		var detail combinedPaymentOrderResponse
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &detail)
-		require.Equal(t, combined.ID, detail.ID)
-		require.Equal(t, combined.Status, detail.Status)
-		require.Len(t, detail.SubOrders, 1)
-		require.Equal(t, orderID, detail.SubOrders[0].OrderID)
-	}
-
-	// 4) 关闭合单支付
-	{
-		url := fmt.Sprintf("/v1/payments/combined/%d/close", combined.ID)
-		rec := doJSON(t, server, http.MethodPost, url, nil, customer.ID)
-		require.Equalf(t, http.StatusOK, rec.Code, "close combined payment failed: %s", rec.Body.String())
-		var closed combinedPaymentOrderResponse
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &closed)
-		require.Equal(t, "closed", closed.Status)
-	}
-}
-
-// TestTakeoutJourneyB0CombinedPaymentQueryRecoveryBeforeCallbackIntegration
-// 外卖旅程（B0）端到端验收：回调到达前查询合单，后端仅暴露可恢复的 pay_params，且不改写本地状态。
-func TestTakeoutJourneyB0CombinedPaymentQueryRecoveryBeforeCallbackIntegration(t *testing.T) {
-	server, store := initIntegrationServer(t)
-	resetIntegrationData(t)
-
-	ctx := context.Background()
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	mockEcommerceClient.EXPECT().
-		CreateCombineOrder(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(&wechatcontracts.CombineOrderResponse{PrepayID: "prepay_combined_recovery_001"}, &wechat.JSAPIPayParams{
-			TimeStamp: "1",
-			NonceStr:  "nonce",
-			Package:   "prepay_id=prepay_combined_recovery_001",
-			SignType:  "RSA",
-			PaySign:   "sign",
-		}, nil)
-
-	server.SetEcommerceClientForTest(mockEcommerceClient)
-	defer server.SetEcommerceClientForTest(nil)
-
-	fixture := createTakeoutCombinedPaymentFixture(t, server, store)
-
-	mockEcommerceClient.EXPECT().
-		GenerateJSAPIPayParams("prepay_combined_recovery_001").
-		Times(1).
-		Return(&wechat.JSAPIPayParams{
-			TimeStamp: "2",
-			NonceStr:  "nonce-recovery",
-			Package:   "prepay_id=prepay_combined_recovery_001",
-			SignType:  "RSA",
-			PaySign:   "sign-recovery",
-		}, nil)
-	mockEcommerceClient.EXPECT().
-		QueryCombineOrder(gomock.Any(), fixture.Combined.CombineOutTradeNo).
-		Times(1).
-		Return(newIntegrationCombineQueryResponse(fixture.Combined.CombineOutTradeNo, fixture.Combined.SubOrders[0].OutTradeNo, "NOTPAY", "", fixture.Order.TotalAmount), nil)
-
-	url := fmt.Sprintf("/v1/payments/combined/%d/query", fixture.Combined.ID)
-	rec := doGET(t, server, url, fixture.Customer.ID)
-	require.Equalf(t, http.StatusOK, rec.Code, "query combined payment failed: %s", rec.Body.String())
-
-	var queried combinedPaymentOrderResponse
-	requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &queried)
-	require.Equal(t, fixture.Combined.ID, queried.ID)
-	require.Equal(t, "pending", queried.Status)
-	require.NotNil(t, queried.PayParams)
-	require.NotNil(t, queried.WechatQuery)
-	require.Equal(t, "pending", queried.WechatQuery.AggregateTradeState)
-	require.Len(t, queried.WechatQuery.SubOrders, 1)
-	require.Equal(t, fixture.Combined.SubOrders[0].OutTradeNo, queried.WechatQuery.SubOrders[0].OutTradeNo)
-
-	combinedOrder, err := store.GetCombinedPaymentOrder(ctx, fixture.Combined.ID)
-	require.NoError(t, err)
-	require.Equal(t, "pending", combinedOrder.Status)
-
-	paymentOrder, err := store.GetPaymentOrderByOutTradeNo(ctx, fixture.Combined.SubOrders[0].OutTradeNo)
-	require.NoError(t, err)
-	require.Equal(t, "pending", paymentOrder.Status)
-
-	order, err := store.GetOrder(ctx, fixture.Order.ID)
-	require.NoError(t, err)
-	require.Equal(t, "pending", order.Status)
-}
-
-// TestTakeoutJourneyB0CombinedPaymentDelayedCallbackRecoveryIntegration
-// 外卖旅程（B0）端到端验收：远端已支付但回调延迟时，query 不再返回 pay_params；待回调与 worker 完成后本地状态收敛。
-func TestTakeoutJourneyB0CombinedPaymentDelayedCallbackRecoveryIntegration(t *testing.T) {
-	server, store := initIntegrationServer(t)
-	resetIntegrationData(t)
-
-	ctx := context.Background()
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	mockEcommerceClient.EXPECT().
-		CreateCombineOrder(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(&wechatcontracts.CombineOrderResponse{PrepayID: "prepay_combined_delayed_001"}, &wechat.JSAPIPayParams{
-			TimeStamp: "1",
-			NonceStr:  "nonce",
-			Package:   "prepay_id=prepay_combined_delayed_001",
-			SignType:  "RSA",
-			PaySign:   "sign",
-		}, nil)
-
-	server.SetEcommerceClientForTest(mockEcommerceClient)
-	defer server.SetEcommerceClientForTest(nil)
-
-	distributor := &capturePaymentSuccessDistributor{}
-	server.SetTaskDistributorForTest(distributor)
-	defer server.SetTaskDistributorForTest(nil)
-
-	fixture := createTakeoutCombinedPaymentFixture(t, server, store)
-
-	remotePaidResp := newIntegrationCombineQueryResponse(
-		fixture.Combined.CombineOutTradeNo,
-		fixture.Combined.SubOrders[0].OutTradeNo,
-		"SUCCESS",
-		"integration_tx_delayed_001",
-		fixture.Order.TotalAmount,
-	)
-
-	mockEcommerceClient.EXPECT().
-		QueryCombineOrder(gomock.Any(), fixture.Combined.CombineOutTradeNo).
-		Times(1).
-		Return(remotePaidResp, nil)
-
-	queryURL := fmt.Sprintf("/v1/payments/combined/%d/query", fixture.Combined.ID)
-	queryBeforeCallback := doGET(t, server, queryURL, fixture.Customer.ID)
-	require.Equalf(t, http.StatusOK, queryBeforeCallback.Code, "query before callback failed: %s", queryBeforeCallback.Body.String())
-
-	var beforeCallback combinedPaymentOrderResponse
-	requireUnmarshalAPIResponseData(t, queryBeforeCallback.Body.Bytes(), &beforeCallback)
-	require.Equal(t, "pending", beforeCallback.Status)
-	require.Nil(t, beforeCallback.PayParams)
-	require.NotNil(t, beforeCallback.WechatQuery)
-	require.Equal(t, "paid", beforeCallback.WechatQuery.AggregateTradeState)
-
-	combinedOrder, err := store.GetCombinedPaymentOrder(ctx, fixture.Combined.ID)
-	require.NoError(t, err)
-	require.Equal(t, "pending", combinedOrder.Status)
-
-	paymentOrder, err := store.GetPaymentOrderByOutTradeNo(ctx, fixture.Combined.SubOrders[0].OutTradeNo)
-	require.NoError(t, err)
-	require.Equal(t, "pending", paymentOrder.Status)
-
-	mockEcommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(nil)
-	mockEcommerceClient.EXPECT().
-		GetSpMchID().
-		Times(1).
-		Return("combine-mch-integration")
-	mockEcommerceClient.EXPECT().
-		GetSpAppID().
-		Times(1).
-		Return("wx-integration-app")
-	mockEcommerceClient.EXPECT().
-		DecryptCombinePaymentNotification(gomock.Any()).
-		Times(1).
-		Return(newIntegrationCombinePaymentNotification(
-			fixture.Combined.CombineOutTradeNo,
-			fixture.Combined.SubOrders[0].OutTradeNo,
-			"integration_tx_delayed_001",
-			fixture.Order.TotalAmount,
-		), nil)
-	mockEcommerceClient.EXPECT().
-		QueryCombineOrder(gomock.Any(), fixture.Combined.CombineOutTradeNo).
-		Times(1).
-		Return(remotePaidResp, nil)
-
-	callbackRec := postIntegrationCombinedPaymentNotify(t, server, "notify_delayed_"+util.RandomString(8))
-	require.Equalf(t, http.StatusNoContent, callbackRec.Code, "combine payment callback failed: %s", callbackRec.Body.String())
-
-	combinedOrder, err = store.GetCombinedPaymentOrder(ctx, fixture.Combined.ID)
-	require.NoError(t, err)
-	require.Equal(t, "paid", combinedOrder.Status)
-
-	paymentOrder, err = store.GetPaymentOrderByOutTradeNo(ctx, fixture.Combined.SubOrders[0].OutTradeNo)
-	require.NoError(t, err)
-	require.Equal(t, "paid", paymentOrder.Status)
-
-	payloads := distributor.Payloads()
-	require.Len(t, payloads, 1)
-	processCapturedPaymentFactApplicationPayload(t, store, payloads[0])
-
-	order, err := store.GetOrder(ctx, fixture.Order.ID)
-	require.NoError(t, err)
-	require.Equal(t, "paid", order.Status)
-
-	queryAfterCallback := doGET(t, server, queryURL, fixture.Customer.ID)
-	require.Equalf(t, http.StatusOK, queryAfterCallback.Code, "query after callback failed: %s", queryAfterCallback.Body.String())
-
-	var afterCallback combinedPaymentOrderResponse
-	requireUnmarshalAPIResponseData(t, queryAfterCallback.Body.Bytes(), &afterCallback)
-	require.Equal(t, "paid", afterCallback.Status)
-	require.Nil(t, afterCallback.PayParams)
-	require.NotNil(t, afterCallback.WechatQuery)
-	require.Equal(t, "paid", afterCallback.WechatQuery.AggregateTradeState)
 }
 
 // TestTakeoutJourneyB0DeliveryRecommendIntegration
@@ -1515,6 +1086,10 @@ func TestTakeoutJourneyB0DeliveryRecommendIntegration(t *testing.T) {
 		Status:     "active",
 	})
 	require.NoError(t, err)
+	configureIntegrationBaofuAggregate(t, server)
+	ensureIntegrationMerchantBaofuReady(t, store, merchant.ID, "sub_mch_b7_001")
+	configureIntegrationBaofuAggregate(t, server)
+	ensureIntegrationMerchantBaofuReady(t, store, merchant.ID, "sub_mch_b7_001")
 
 	dish := createIntegrationDish(t, store, merchant.ID)
 	customer := createIntegrationUser(t, store)
@@ -1560,7 +1135,7 @@ func TestTakeoutJourneyB0DeliveryRecommendIntegration(t *testing.T) {
 		OrderID:        pgtype.Int8{Int64: orderID, Valid: true},
 		UserID:         customer.ID,
 		PaymentType:    "miniprogram",
-		PaymentChannel: db.PaymentChannelEcommerce,
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
 		BusinessType:   "order",
 		Amount:         orderForPayment.TotalAmount,
 		OutTradeNo:     fmt.Sprintf("b0_recommend_%d_%d", orderID, util.RandomInt(1000, 9999)),
@@ -1791,6 +1366,8 @@ func TestTakeoutJourneyB7MerchantRejectRefundIntegration(t *testing.T) {
 		Status:     "active",
 	})
 	require.NoError(t, err)
+	configureIntegrationBaofuAggregate(t, server)
+	ensureIntegrationMerchantBaofuReady(t, store, merchant.ID, "sub_mch_b7_001")
 
 	dish := createIntegrationDish(t, store, merchant.ID)
 	customer := createIntegrationUser(t, store)
@@ -1801,23 +1378,6 @@ func TestTakeoutJourneyB7MerchantRejectRefundIntegration(t *testing.T) {
 		_, err = integrationPool.Exec(ctx, `UPDATE users SET wechat_openid = $2 WHERE id = $1`, customer.ID, "wx_openid_"+util.RandomString(8))
 		require.NoError(t, err)
 	}
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	mockEcommerceClient.EXPECT().
-		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_b7_integration_001"}, &wechat.JSAPIPayParams{
-			TimeStamp: "1",
-			NonceStr:  "nonce",
-			Package:   "prepay_id=prepay_b7_integration_001",
-			SignType:  "RSA",
-			PaySign:   "sign",
-		}, nil)
-	server.SetEcommerceClientForTest(mockEcommerceClient)
-	defer server.SetEcommerceClientForTest(nil)
 
 	// 1) 创建外卖订单
 	createBody := map[string]any{
@@ -1877,11 +1437,6 @@ func TestTakeoutJourneyB7MerchantRejectRefundIntegration(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	mockEcommerceClient.EXPECT().
-		CreateEcommerceRefund(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(&wechat.EcommerceRefundResponse{Status: wechat.RefundStatusProcessing, RefundID: "refund_reject_001"}, nil)
-
 	// 3) 商户拒单
 	{
 		body := map[string]any{"reason": "out_of_stock"}
@@ -1909,7 +1464,27 @@ func TestTakeoutJourneyB7MerchantRejectRefundIntegration(t *testing.T) {
 	refunds, err := store.ListRefundOrdersByPaymentOrder(ctx, latestPayment.ID)
 	require.NoError(t, err)
 	require.NotEmpty(t, refunds)
-	require.Equal(t, "processing", refunds[0].Status)
+	refund := refunds[0]
+	require.Equal(t, "processing", refund.Status)
+	require.NotEmpty(t, refund.OutRefundNo)
+
+	processor := worker.NewTestTaskProcessor(store, worker.NewNoopTaskDistributor(), nil, nil)
+	payloadBytes, err := json.Marshal(worker.RefundResultPayload{
+		OutRefundNo:  refund.OutRefundNo,
+		RefundStatus: "SUCCESS",
+		RefundID:     "refund_order_reject_001",
+	})
+	require.NoError(t, err)
+	require.NoError(t, processor.ProcessTaskRefundResult(ctx, asynq.NewTask(worker.TaskProcessRefundResult, payloadBytes)))
+
+	refundedPayment, err := store.GetPaymentOrder(ctx, latestPayment.ID)
+	require.NoError(t, err)
+	require.Equal(t, "refunded", refundedPayment.Status)
+
+	updatedRefund, err := store.GetRefundOrder(ctx, refund.ID)
+	require.NoError(t, err)
+	require.Equal(t, "success", updatedRefund.Status)
+	require.Equal(t, "refund_order_reject_001", updatedRefund.RefundID.String)
 }
 
 // TestTakeoutJourneyB5PaymentRecoveryIntegration
@@ -2609,29 +2184,14 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 		Status:     "active",
 	})
 	require.NoError(t, err)
+	configureIntegrationBaofuAggregate(t, server)
+	ensureIntegrationMerchantBaofuReady(t, store, merchant.ID, "sub_mch_reservation_c1")
 
 	room := createIntegrationRoomTable(t, store, merchant.ID)
 	customer := createIntegrationUser(t, store)
 
 	reservationDate := time.Now().Add(24 * time.Hour).Format("2006-01-02")
 	reservationTime := "19:00"
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	mockEcommerceClient.EXPECT().
-		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_c1_001"}, &wechat.JSAPIPayParams{
-			TimeStamp: "1",
-			NonceStr:  "nonce",
-			Package:   "prepay_id=prepay_reservation_c1_001",
-			SignType:  "RSA",
-			PaySign:   "sign",
-		}, nil)
-	server.SetEcommerceClientForTest(mockEcommerceClient)
-	defer server.SetEcommerceClientForTest(nil)
 
 	// 1) 创建预订（定金模式）
 	var created reservationStatusResponse
@@ -2651,7 +2211,7 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 		require.Equal(t, "pending", created.Status)
 	}
 
-	// 2) 创建预订支付单（平台收付通普通支付）
+	// 2) 创建预订支付单（宝付聚合支付）
 	var payment takeoutPaymentOrderResponse
 	{
 		payBody := map[string]any{
@@ -2668,49 +2228,14 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 	po, err := store.GetPaymentOrder(ctx, payment.ID)
 	require.NoError(t, err)
 
-	// 3) 走平台收付通普通支付回调 + 任务入队
-	mockEcommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(nil)
-	mockEcommerceClient.EXPECT().
-		GetSpMchID().
-		Times(1).
-		Return("sp_mch_reservation_c1")
-	mockEcommerceClient.EXPECT().
-		GetSpAppID().
-		Times(1).
-		Return("wx-integration-app")
-
-	mockEcommerceClient.EXPECT().
-		DecryptPartnerPaymentNotification(gomock.Any()).
-		Times(1).
-		Return(&wechatcontracts.PartnerPaymentNotificationResource{
-			SpAppID:        "wx-integration-app",
-			SpMchID:        "sp_mch_reservation_c1",
-			SubMchID:       "sub_mch_reservation_c1",
-			OutTradeNo:     po.OutTradeNo,
-			TransactionID:  "integration_tx_reservation_001",
-			TradeType:      "JSAPI",
-			TradeState:     "SUCCESS",
-			TradeStateDesc: "支付成功",
-			BankType:       "CMC",
-			SuccessTime:    time.Now().UTC().Format(time.RFC3339),
-			Amount: wechatcontracts.PartnerOrderQueryAmount{
-				Total:         po.Amount,
-				PayerTotal:    po.Amount,
-				Currency:      "CNY",
-				PayerCurrency: "CNY",
-			},
-		}, nil)
-
+	// 3) 走宝付聚合支付回调 + 任务入队
 	distributor := &capturePaymentSuccessDistributor{}
 	server.SetTaskDistributorForTest(distributor)
 	defer server.SetTaskDistributorForTest(nil)
 
 	notificationID := "notify_reservation_" + util.RandomString(8)
-	rec := postIntegrationEcommercePaymentNotify(t, server, notificationID)
-	require.Equal(t, http.StatusNoContent, rec.Code)
+	rec := postIntegrationBaofuPaymentNotify(t, server, notificationID, po.OutTradeNo, po.Amount)
+	require.Equal(t, http.StatusOK, rec.Code)
 
 	// 4) 处理支付成功任务
 	payloads := distributor.Payloads()
@@ -2789,6 +2314,7 @@ func TestReservationJourneyC2StartCookingIntegration(t *testing.T) {
 
 	room := createIntegrationRoomTable(t, store, merchant.ID)
 	customer := createIntegrationUser(t, store)
+	dish := createIntegrationDish(t, store, merchant.ID)
 
 	reservationDate := time.Now().Add(24 * time.Hour).Format("2006-01-02")
 	reservationTime := "19:00"
@@ -2796,19 +2322,20 @@ func TestReservationJourneyC2StartCookingIntegration(t *testing.T) {
 	// 1) 创建预订
 	var created reservationStatusResponse
 	{
-		body := map[string]any{
-			"table_id":      room.ID,
-			"date":          reservationDate,
-			"time":          reservationTime,
-			"guest_count":   2,
-			"contact_name":  "张三",
-			"contact_phone": "13800138001",
-			"payment_mode":  "deposit",
-		}
-		rec := doJSON(t, server, http.MethodPost, "/v1/reservations", body, customer.ID)
-		require.Equal(t, http.StatusCreated, rec.Code)
-		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
-		require.Equal(t, "pending", created.Status)
+			body := map[string]any{
+				"table_id":      room.ID,
+				"date":          reservationDate,
+				"time":          reservationTime,
+				"guest_count":   2,
+				"contact_name":  "张三",
+				"contact_phone": "13800138001",
+				"payment_mode":  "full",
+				"items":         []map[string]any{{"dish_id": dish.ID, "quantity": 1}},
+			}
+			rec := doJSON(t, server, http.MethodPost, "/v1/reservations", body, customer.ID)
+			require.Equal(t, http.StatusCreated, rec.Code)
+			requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
+			require.Equal(t, "pending", created.Status)
 	}
 
 	_, err = store.UpdateReservationStatus(ctx, db.UpdateReservationStatusParams{
@@ -2980,29 +2507,14 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 		Status:     "active",
 	})
 	require.NoError(t, err)
+	configureIntegrationBaofuAggregate(t, server)
+	ensureIntegrationMerchantBaofuReady(t, store, merchant.ID, "sub_mch_reservation_noshow")
 
 	room := createIntegrationRoomTable(t, store, merchant.ID)
 	customer := createIntegrationUser(t, store)
 
 	reservationDate := time.Now().Add(24 * time.Hour).Format("2006-01-02")
 	reservationTime := "19:00"
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	mockEcommerceClient.EXPECT().
-		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_noshow_001"}, &wechat.JSAPIPayParams{
-			TimeStamp: "1",
-			NonceStr:  "nonce",
-			Package:   "prepay_id=prepay_reservation_noshow_001",
-			SignType:  "RSA",
-			PaySign:   "sign",
-		}, nil)
-	server.SetEcommerceClientForTest(mockEcommerceClient)
-	defer server.SetEcommerceClientForTest(nil)
 
 	// 1) 创建预订
 	var created reservationStatusResponse
@@ -3022,7 +2534,7 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 		require.Equal(t, "pending", created.Status)
 	}
 
-	// 2) 创建预订支付单（平台收付通普通支付）
+	// 2) 创建预订支付单（宝付聚合支付）
 	var payment takeoutPaymentOrderResponse
 	{
 		payBody := map[string]any{
@@ -3039,49 +2551,14 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 	po, err := store.GetPaymentOrder(ctx, payment.ID)
 	require.NoError(t, err)
 
-	// 3) 走平台收付通普通支付回调 + 任务入队
-	mockEcommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(nil)
-	mockEcommerceClient.EXPECT().
-		GetSpMchID().
-		Times(1).
-		Return("sp_mch_reservation_noshow")
-	mockEcommerceClient.EXPECT().
-		GetSpAppID().
-		Times(1).
-		Return("wx-integration-app")
-
-	mockEcommerceClient.EXPECT().
-		DecryptPartnerPaymentNotification(gomock.Any()).
-		Times(1).
-		Return(&wechatcontracts.PartnerPaymentNotificationResource{
-			SpAppID:        "wx-integration-app",
-			SpMchID:        "sp_mch_reservation_noshow",
-			SubMchID:       "sub_mch_reservation_noshow",
-			OutTradeNo:     po.OutTradeNo,
-			TransactionID:  "integration_tx_reservation_noshow_001",
-			TradeType:      "JSAPI",
-			TradeState:     "SUCCESS",
-			TradeStateDesc: "支付成功",
-			BankType:       "CMC",
-			SuccessTime:    time.Now().UTC().Format(time.RFC3339),
-			Amount: wechatcontracts.PartnerOrderQueryAmount{
-				Total:         po.Amount,
-				PayerTotal:    po.Amount,
-				Currency:      "CNY",
-				PayerCurrency: "CNY",
-			},
-		}, nil)
-
+	// 3) 走宝付聚合支付回调 + 任务入队
 	distributor := &capturePaymentSuccessDistributor{}
 	server.SetTaskDistributorForTest(distributor)
 	defer server.SetTaskDistributorForTest(nil)
 
 	notificationID := "notify_reservation_noshow_" + util.RandomString(8)
-	rec := postIntegrationEcommercePaymentNotify(t, server, notificationID)
-	require.Equal(t, http.StatusNoContent, rec.Code)
+	rec := postIntegrationBaofuPaymentNotify(t, server, notificationID, po.OutTradeNo, po.Amount)
+	require.Equal(t, http.StatusOK, rec.Code)
 
 	// 4) 处理支付成功任务
 	payloads := distributor.Payloads()
@@ -3138,29 +2615,14 @@ func TestReservationJourneyCCancelRefundIntegration(t *testing.T) {
 		Status:     "active",
 	})
 	require.NoError(t, err)
+	configureIntegrationBaofuAggregate(t, server)
+	ensureIntegrationMerchantBaofuReady(t, store, merchant.ID, "sub_mch_reservation_cancel")
 
 	room := createIntegrationRoomTable(t, store, merchant.ID)
 	customer := createIntegrationUser(t, store)
 
 	reservationDate := time.Now().Add(24 * time.Hour).Format("2006-01-02")
 	reservationTime := "19:00"
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	mockEcommerceClient.EXPECT().
-		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_cancel_001"}, &wechat.JSAPIPayParams{
-			TimeStamp: "1",
-			NonceStr:  "nonce",
-			Package:   "prepay_id=prepay_reservation_cancel_001",
-			SignType:  "RSA",
-			PaySign:   "sign",
-		}, nil)
-	server.SetEcommerceClientForTest(mockEcommerceClient)
-	defer server.SetEcommerceClientForTest(nil)
 
 	// 1) 创建预订
 	var created reservationStatusResponse
@@ -3180,7 +2642,7 @@ func TestReservationJourneyCCancelRefundIntegration(t *testing.T) {
 		require.Equal(t, "pending", created.Status)
 	}
 
-	// 2) 创建预订支付单（收付通合单支付）
+	// 2) 创建预订支付单（宝付聚合支付）
 	var payment takeoutPaymentOrderResponse
 	{
 		payBody := map[string]any{
@@ -3203,27 +2665,24 @@ func TestReservationJourneyCCancelRefundIntegration(t *testing.T) {
 		TransactionID: pgtype.Text{String: "tx_cancel_001", Valid: true},
 	})
 	require.NoError(t, err)
-	_, err = store.UpdateReservationStatus(ctx, db.UpdateReservationStatusParams{
-		ID:     created.ID,
-		Status: "paid",
+	payRes, err := store.ProcessPaymentSuccessTx(ctx, db.ProcessPaymentSuccessTxParams{
+		PaymentOrderID:     po.ID,
+		RiderAverageSpeed:  15000,
+		DefaultPrepareTime: 20,
 	})
 	require.NoError(t, err)
+	require.True(t, payRes.Processed)
 
 	currentReservation, err := store.GetTableReservation(ctx, created.ID)
 	require.NoError(t, err)
 	require.Equal(t, "paid", currentReservation.Status)
 	require.True(t, time.Now().Before(currentReservation.RefundDeadline))
+	require.Greater(t, currentReservation.PrepaidAmount, int64(0))
 
 	currentPayment, err := store.GetPaymentOrder(ctx, payment.ID)
 	require.NoError(t, err)
 	require.Equal(t, "paid", currentPayment.Status)
 	require.Greater(t, currentPayment.Amount, int64(0))
-
-	// 退款走收付通路径（payment_channel = "ecommerce"）
-	mockEcommerceClient.EXPECT().
-		CreateEcommerceRefund(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(&wechat.EcommerceRefundResponse{Status: wechat.RefundStatusSuccess, RefundID: "refund_001"}, nil)
 
 	// 5) 取消预订（退款截止前）
 	{
@@ -3245,7 +2704,35 @@ func TestReservationJourneyCCancelRefundIntegration(t *testing.T) {
 	refunds, err := store.ListRefundOrdersByPaymentOrder(ctx, payment.ID)
 	require.NoError(t, err)
 	require.NotEmpty(t, refunds)
-	require.Equal(t, "processing", refunds[0].Status)
+	refund := refunds[0]
+	require.Equal(t, "pending", refund.Status)
+	require.NotEmpty(t, refund.OutRefundNo)
+
+	distributor := &capturePaymentFactApplicationDistributor{}
+	server.SetTaskDistributorForTest(distributor)
+	defer server.SetTaskDistributorForTest(nil)
+
+	notificationID := "refund_notify_" + util.RandomString(8)
+	rec := postIntegrationBaofuRefundNotify(t, server, notificationID, refund.OutRefundNo, "refund_notify_id_001", currentPayment.Amount)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	payloads := distributor.Payloads()
+	require.Len(t, payloads, 1)
+	processCapturedPaymentFactApplicationPayload(t, store, payloads[0])
+
+	refundedPayment, err := store.GetPaymentOrder(ctx, payment.ID)
+	require.NoError(t, err)
+	require.Equal(t, "refunded", refundedPayment.Status)
+
+	updatedRefund, err := store.GetRefundOrder(ctx, refund.ID)
+	require.NoError(t, err)
+	require.Equal(t, "success", updatedRefund.Status)
+	require.Equal(t, "refund_notify_id_001", updatedRefund.RefundID.String)
+
+	updatedReservation, err := store.GetTableReservation(ctx, created.ID)
+	require.NoError(t, err)
+	require.Equal(t, "paid", updatedReservation.Status)
+	require.Equal(t, int64(0), updatedReservation.PrepaidAmount)
 }
 
 // TestReservationJourneyCCancelAfterDeadlineIntegration
@@ -3270,29 +2757,14 @@ func TestReservationJourneyCCancelAfterDeadlineIntegration(t *testing.T) {
 		Status:     "active",
 	})
 	require.NoError(t, err)
+	configureIntegrationBaofuAggregate(t, server)
+	ensureIntegrationMerchantBaofuReady(t, store, merchant.ID, "sub_mch_reservation_cancel_deadline")
 
 	room := createIntegrationRoomTable(t, store, merchant.ID)
 	customer := createIntegrationUser(t, store)
 
 	reservationDate := time.Now().Add(24 * time.Hour).Format("2006-01-02")
 	reservationTime := "19:00"
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	mockEcommerceClient.EXPECT().
-		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_cancel_deadline_001"}, &wechat.JSAPIPayParams{
-			TimeStamp: "1",
-			NonceStr:  "nonce",
-			Package:   "prepay_id=prepay_reservation_cancel_deadline_001",
-			SignType:  "RSA",
-			PaySign:   "sign",
-		}, nil)
-	server.SetEcommerceClientForTest(mockEcommerceClient)
-	defer server.SetEcommerceClientForTest(nil)
 
 	// 1) 创建预订
 	var created reservationStatusResponse
@@ -3312,7 +2784,7 @@ func TestReservationJourneyCCancelAfterDeadlineIntegration(t *testing.T) {
 		require.Equal(t, "pending", created.Status)
 	}
 
-	// 2) 创建预订支付单（收付通合单支付）
+	// 2) 创建预订支付单（宝付聚合支付）
 	var payment takeoutPaymentOrderResponse
 	{
 		payBody := map[string]any{
@@ -3384,29 +2856,14 @@ func TestReservationJourneyCRefundNotifyIntegration(t *testing.T) {
 		Status:     "active",
 	})
 	require.NoError(t, err)
+	configureIntegrationBaofuAggregate(t, server)
+	ensureIntegrationMerchantBaofuReady(t, store, merchant.ID, "sub_mch_reservation_refund_notify")
 
 	room := createIntegrationRoomTable(t, store, merchant.ID)
 	customer := createIntegrationUser(t, store)
 
 	reservationDate := time.Now().Add(24 * time.Hour).Format("2006-01-02")
 	reservationTime := "19:00"
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	mockEcommerceClient.EXPECT().
-		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(&wechatcontracts.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_refund_notify_001"}, &wechat.JSAPIPayParams{
-			TimeStamp: "1",
-			NonceStr:  "nonce",
-			Package:   "prepay_id=prepay_reservation_refund_notify_001",
-			SignType:  "RSA",
-			PaySign:   "sign",
-		}, nil)
-	server.SetEcommerceClientForTest(mockEcommerceClient)
-	defer server.SetEcommerceClientForTest(nil)
 
 	// 1) 创建预订
 	var created reservationStatusResponse
@@ -3426,7 +2883,7 @@ func TestReservationJourneyCRefundNotifyIntegration(t *testing.T) {
 		require.Equal(t, "pending", created.Status)
 	}
 
-	// 2) 创建预订支付单（平台收付通普通支付）并标记已支付
+	// 2) 创建预订支付单（宝付聚合支付）并标记已支付
 	var payment takeoutPaymentOrderResponse
 	{
 		payBody := map[string]any{
@@ -3465,66 +2922,17 @@ func TestReservationJourneyCRefundNotifyIntegration(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 3) 退款回调通知（收付通渠道）
-	mockEcommerceClient.EXPECT().
-		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(nil)
-
-	mockEcommerceClient.EXPECT().
-		DecryptEcommerceRefundNotification(gomock.Any()).
-		Times(1).
-		Return(&wechat.EcommerceRefundNotification{
-			OutTradeNo:   po.OutTradeNo,
-			OutRefundNo:  outRefundNo,
-			RefundID:     "refund_notify_id_001",
-			RefundStatus: "SUCCESS",
-			Amount: wechat.EcommerceRefundAmount{
-				Total:       po.Amount,
-				Refund:      po.Amount,
-				PayerTotal:  po.Amount,
-				PayerRefund: po.Amount,
-			},
-		}, nil)
-
-	distributor := &captureRefundResultDistributor{}
+	// 3) 退款回调通知（宝付聚合渠道）
+	distributor := &capturePaymentFactApplicationDistributor{}
 	server.SetTaskDistributorForTest(distributor)
 	defer server.SetTaskDistributorForTest(nil)
 
 	notificationID := "refund_notify_" + util.RandomString(8)
-	body := map[string]any{
-		"id":            notificationID,
-		"event_type":    "REFUND.SUCCESS",
-		"resource_type": "encrypt-resource",
-		"resource": map[string]any{
-			"algorithm":       "AEAD_AES_256_GCM",
-			"ciphertext":      "mock_ciphertext",
-			"nonce":           "mock_nonce",
-			"associated_data": "refund",
-		},
-		"summary": "refund success",
-	}
-
-	bodyBytes, err := json.Marshal(body)
-	require.NoError(t, err)
-
-	req, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/refund-notify", bytes.NewReader(bodyBytes))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Wechatpay-Timestamp", "1234567890")
-	req.Header.Set("Wechatpay-Nonce", "test_nonce")
-	req.Header.Set("Wechatpay-Signature", "test_signature")
-	req.Header.Set("Wechatpay-Serial", "test_serial")
-
-	rec := httptest.NewRecorder()
-	server.Handler().ServeHTTP(rec, req)
-	require.Equal(t, http.StatusNoContent, rec.Code)
+	rec := postIntegrationBaofuRefundNotify(t, server, notificationID, outRefundNo, "refund_notify_id_001", po.Amount)
+	require.Equal(t, http.StatusOK, rec.Code)
 
 	payloads := distributor.Payloads()
 	require.Len(t, payloads, 1)
-	require.Equal(t, outRefundNo, payloads[0].OutRefundNo)
-	require.Equal(t, "SUCCESS", payloads[0].RefundStatus)
-	require.Equal(t, "refund_notify_id_001", payloads[0].RefundID)
 }
 
 // TestRiderDepositRefundCallbackAccountingIntegration
@@ -7928,6 +7336,7 @@ func TestTakeoutJourneyB2Integration(t *testing.T) {
 			"locations": []map[string]any{
 				{
 					"delivery_id": delivery.ID,
+					"region_id":   region.ID,
 					"longitude":   116.3975,
 					"latitude":    39.9084,
 					"recorded_at": time.Now().UTC().Format(time.RFC3339),
@@ -7973,10 +7382,10 @@ type captureTaskDistributor struct {
 	worker.NoopTaskDistributor
 
 	mu    sync.Mutex
-	calls []worker.ProfitSharingPayload
+	calls []worker.BaofuProfitSharingPayload
 }
 
-func (d *captureTaskDistributor) DistributeTaskProcessProfitSharing(ctx context.Context, payload *worker.ProfitSharingPayload, opts ...asynq.Option) error {
+func (d *captureTaskDistributor) DistributeTaskProcessBaofuProfitSharing(ctx context.Context, payload *worker.BaofuProfitSharingPayload, opts ...asynq.Option) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if payload != nil {
@@ -7985,10 +7394,10 @@ func (d *captureTaskDistributor) DistributeTaskProcessProfitSharing(ctx context.
 	return nil
 }
 
-func (d *captureTaskDistributor) Calls() []worker.ProfitSharingPayload {
+func (d *captureTaskDistributor) Calls() []worker.BaofuProfitSharingPayload {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	out := make([]worker.ProfitSharingPayload, len(d.calls))
+	out := make([]worker.BaofuProfitSharingPayload, len(d.calls))
 	copy(out, d.calls)
 	return out
 }
@@ -8142,8 +7551,8 @@ func (d *captureRefundResultDistributor) Payloads() []worker.RefundResultPayload
 //
 // integration harness 不配置队列/worker（taskDistributor=nil），这里按文档“兜底证据”口径验收：
 // - 构造一条超龄 pending 的 profit_sharing_orders 记录
-// - 触发 profit sharing recovery scheduler 扫描
-// - 断言它会尝试入队 payment:process_profit_sharing（通过捕获 distributor 调用）
+// - 触发 Baofu payment recovery scheduler 扫描
+// - 断言它会尝试入队 baofu:process_profit_sharing（通过捕获 distributor 调用）
 func TestTakeoutJourneyB3Integration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
@@ -8176,6 +7585,11 @@ func TestTakeoutJourneyB3Integration(t *testing.T) {
 	require.NoError(t, err)
 	_, err = store.UpdateRiderOnlineStatus(ctx, db.UpdateRiderOnlineStatusParams{ID: rider.ID, IsOnline: true})
 	require.NoError(t, err)
+	ensureIntegrationPlatformBaofuReady(t, store)
+	clearIntegrationBaofuFeeTables(t)
+	t.Cleanup(func() {
+		clearIntegrationBaofuFeeTables(t)
+	})
 
 	// 1) 下单
 	createBody := map[string]any{
@@ -8201,12 +7615,12 @@ func TestTakeoutJourneyB3Integration(t *testing.T) {
 	order, err := store.GetOrder(ctx, orderID)
 	require.NoError(t, err)
 
-	// 2) 创建 ecommerce 支付单（API 不支持该类型；这里直接落库以验收分账/恢复逻辑）
+	// 2) 创建宝付聚合支付单（直接落库以验收分账/恢复逻辑）
 	po, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
 		OrderID:               pgtype.Int8{Int64: orderID, Valid: true},
 		UserID:                customer.ID,
 		PaymentType:           "miniprogram",
-		PaymentChannel:        db.PaymentChannelEcommerce,
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
 		RequiresProfitSharing: db.OrderRequiresProfitSharing(order),
 		BusinessType:          "order",
 		Amount:                order.TotalAmount,
@@ -8266,6 +7680,7 @@ func TestTakeoutJourneyB3Integration(t *testing.T) {
 	}
 	{
 		body := map[string]any{
+			"region_id": region.ID,
 			"locations": []map[string]any{
 				{
 					"delivery_id": delivery.ID,
@@ -8295,39 +7710,23 @@ func TestTakeoutJourneyB3Integration(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "completed", updatedOrder.Status)
 
-	// 6) 构造一条“超龄 pending”的分账记录，验证 recovery 会尝试入队
-	ps, err := store.CreateProfitSharingOrder(ctx, db.CreateProfitSharingOrderParams{
-		PaymentOrderID:      po.ID,
-		MerchantID:          merchant.ID,
-		OperatorID:          pgtype.Int8{Valid: false},
-		OrderSource:         "takeout",
-		TotalAmount:         order.TotalAmount,
-		DeliveryFee:         order.DeliveryFee,
-		RiderID:             pgtype.Int8{Int64: rider.ID, Valid: true},
-		RiderAmount:         order.DeliveryFee,
-		DistributableAmount: order.TotalAmount - order.DeliveryFee,
-		PlatformRate:        0,
-		OperatorRate:        0,
-		PlatformCommission:  0,
-		OperatorCommission:  0,
-		MerchantAmount:      order.TotalAmount,
-		OutOrderNo:          fmt.Sprintf("PS_OUT_%d", orderID),
-		Status:              "pending",
-	})
-	require.NoError(t, err)
-
-	// backdate created_at so ListProfitSharingOrdersForRetry can pick it up
-	_, err = integrationPool.Exec(ctx, `UPDATE profit_sharing_orders SET created_at = $2 WHERE id = $1`, ps.ID, time.Now().Add(-20*time.Minute))
+	// 6) 构造一条“超龄 completed”订单，验证 recovery 会尝试创建分账单并入队
+	_, err = integrationPool.Exec(ctx, `UPDATE orders SET completed_at = $2, updated_at = $2 WHERE id = $1`, orderID, time.Now().Add(-20*time.Minute))
 	require.NoError(t, err)
 
 	d := &captureTaskDistributor{}
-	recovery := worker.NewProfitSharingRecoveryScheduler(store, d, nil)
+	recovery := worker.NewBaofuPaymentRecoveryScheduler(store, d)
+	recovery.SetBaofuAggregateClient(&integrationBaofuAggregateClient{}, worker.BaofuProfitSharingWorkerConfig{
+		CollectMerchantID: "102004465",
+		CollectTerminalID: "200005200",
+		ShareNotifyURL:    "https://api.example.com/v1/webhooks/baofu/share",
+		RefundNotifyURL:   "https://api.example.com/v1/webhooks/baofu/refund",
+	})
 	recovery.RunOnce()
 
 	calls := d.Calls()
 	require.Len(t, calls, 1)
-	require.Equal(t, po.ID, calls[0].PaymentOrderID)
-	require.Equal(t, orderID, calls[0].OrderID)
+	require.NotZero(t, calls[0].ProfitSharingOrderID)
 }
 
 func ensureIntegrationOperatorRegionBinding(t *testing.T, userID int64) {
@@ -8380,6 +7779,7 @@ func doJSON(t *testing.T, server *api.Server, method, url string, body any, user
 	req, err := http.NewRequest(method, url, bytes.NewReader(payload))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "203.0.113.9:12345"
 	addAuthorization(t, req, integrationTokenMaker, userID, time.Minute)
 
 	rec := httptest.NewRecorder()
@@ -8393,6 +7793,7 @@ func doGET(t *testing.T, server *api.Server, url string, userID int64) *httptest
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	require.NoError(t, err)
+	req.RemoteAddr = "203.0.113.9:12345"
 	addAuthorization(t, req, integrationTokenMaker, userID, time.Minute)
 
 	rec := httptest.NewRecorder()

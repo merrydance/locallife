@@ -12,6 +12,8 @@ This directory contains auto-matched AI instruction files.
 
 When multiple instruction files match the same file, the more specific directory-focused file should be treated as stricter guidance than the broader workspace or backend file.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions and prompt, and confirm the task scope before continuing. Do not keep relying on stale context.
+
 ## Current Coverage
 
 Backend base and layers:

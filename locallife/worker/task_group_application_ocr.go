@@ -78,8 +78,25 @@ func (processor *RedisTaskProcessor) ProcessTaskGroupApplicationBusinessLicenseO
 		return fmt.Errorf("ocr service not configured for group business license: %w", asynq.SkipRetry)
 	}
 
+	binding := workerOCRPayloadBinding{
+		ApplicationID: payload.ApplicationID,
+		MediaAssetID:  payload.MediaAssetID,
+		OCRJobID:      payload.OCRJobID,
+	}
+	_, _, stale, err := processor.guardGroupOCRWriteback(ctx, binding, ocr.DocumentTypeBusinessLicense, ocr.DocumentSideUnknown)
+	if err != nil {
+		return err
+	}
+	if stale {
+		return nil
+	}
 	job, err := processor.ocrService.ExecuteJob(ctx, ocr.ExecuteJobParams{JobID: payload.OCRJobID, LeaseOwner: "worker:group_business_license"})
 	if err != nil {
+		if _, stale, guardErr := processor.guardGroupOCRCurrentBinding(ctx, binding, ocr.DocumentTypeBusinessLicense, ocr.DocumentSideUnknown); guardErr != nil {
+			return guardErr
+		} else if stale {
+			return nil
+		}
 		alertEmittedAt := processor.publishOCRFailureAlert(ctx, job, err)
 		app, getErr := processor.store.GetGroupApplication(ctx, payload.ApplicationID)
 		if getErr == nil {
@@ -97,9 +114,12 @@ func (processor *RedisTaskProcessor) ProcessTaskGroupApplicationBusinessLicenseO
 	if decodeErr != nil {
 		return fmt.Errorf("decode normalized group business license result: %w", decodeErr)
 	}
-	app, err := processor.store.GetGroupApplication(ctx, payload.ApplicationID)
+	app, stale, err := processor.guardGroupOCRCurrentBinding(ctx, binding, ocr.DocumentTypeBusinessLicense, ocr.DocumentSideUnknown)
 	if err != nil {
-		return fmt.Errorf("get group application: %w", err)
+		return err
+	}
+	if stale {
+		return nil
 	}
 
 	data := mergeGroupApplicationData(app.ApplicationData)
@@ -146,8 +166,27 @@ func (processor *RedisTaskProcessor) ProcessTaskGroupApplicationIDCardOCR(ctx co
 		return fmt.Errorf("ocr service not configured for group id card: %w", asynq.SkipRetry)
 	}
 
+	binding := workerOCRPayloadBinding{
+		ApplicationID: payload.ApplicationID,
+		MediaAssetID:  payload.MediaAssetID,
+		OCRJobID:      payload.OCRJobID,
+		Side:          payload.Side,
+	}
+	side := workerOCRSide(payload.Side)
+	_, _, stale, err := processor.guardGroupOCRWriteback(ctx, binding, ocr.DocumentTypeIDCard, side)
+	if err != nil {
+		return err
+	}
+	if stale {
+		return nil
+	}
 	job, err := processor.ocrService.ExecuteJob(ctx, ocr.ExecuteJobParams{JobID: payload.OCRJobID, LeaseOwner: "worker:group_id_card"})
 	if err != nil {
+		if _, stale, guardErr := processor.guardGroupOCRCurrentBinding(ctx, binding, ocr.DocumentTypeIDCard, side); guardErr != nil {
+			return guardErr
+		} else if stale {
+			return nil
+		}
 		alertEmittedAt := processor.publishOCRFailureAlert(ctx, job, err)
 		app, getErr := processor.store.GetGroupApplication(ctx, payload.ApplicationID)
 		if getErr == nil {
@@ -178,9 +217,12 @@ func (processor *RedisTaskProcessor) ProcessTaskGroupApplicationIDCardOCR(ctx co
 	if decodeErr != nil {
 		return fmt.Errorf("decode normalized group id card result: %w", decodeErr)
 	}
-	app, err := processor.store.GetGroupApplication(ctx, payload.ApplicationID)
+	app, stale, err := processor.guardGroupOCRCurrentBinding(ctx, binding, ocr.DocumentTypeIDCard, side)
 	if err != nil {
-		return fmt.Errorf("get group application: %w", err)
+		return err
+	}
+	if stale {
+		return nil
 	}
 
 	data := mergeGroupApplicationData(app.ApplicationData)

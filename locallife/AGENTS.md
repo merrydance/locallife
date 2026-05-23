@@ -4,7 +4,7 @@ This file applies to `/home/sam/locallife/locallife`.
 
 ## Scope
 
-- Backend stack: Go monolith with `gin`, `pgx/sqlc`, `redis`, `asynq`, cron schedulers, WeChat Pay/Ecommerce, OCR, media storage, WebSocket push.
+- Backend stack: Go monolith with `gin`, `pgx/sqlc`, `redis`, `asynq`, cron schedulers, retained WeChat direct payment, Baofu/BaoCaiTong payments, OCR, media storage, WebSocket push.
 - Frontend code lives outside this scope. Do not assume `weapp/` conventions apply here.
 
 ## First Reads
@@ -17,6 +17,8 @@ For any non-trivial backend task, read these first:
 4. matching domain README for the active high-risk area, for example `../.github/standards/domains/wechat-payment/README.md` or `../.github/standards/domains/baofu-payment/README.md`
 
 Use the prompt templates in `../.github/prompts/` when the task matches. Legacy `.codex/prompts/` files should be treated as backend-local wrappers, not the long-term source of truth.
+
+If the session is new, compacted, forked, or handed off, rerun routing from `../.github/README.md`, then reopen the matching backend instructions, prompt, and standards before continuing. Do not keep relying on stale context.
 
 ## Working Rules
 

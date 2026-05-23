@@ -1,52 +1,23 @@
 import {
-  RiderIncomeLedgerResponse,
-  riderIncomeApi,
-  RiderIncomeStatus
-} from '../../../api/rider-income'
-import RiderService from '../../../api/rider'
-import {
+  buildEmptyRiderIncomeSummaryView,
+  buildEmptyRiderIncomeWithdrawalBalanceView,
   buildDefaultRiderIncomeDateRange,
-  buildRiderIncomeDailyItemView,
   buildRiderIncomeDateRangeLabel,
-  buildRiderIncomeLedgerItemView,
-  buildRiderIncomeSummaryView,
+  loadRiderIncomeLedgerPage,
+  loadRiderIncomePageData,
   RIDER_INCOME_PAGE_SIZE,
   RiderIncomeDateRange,
   RiderIncomeDailyItemView,
   RiderIncomeLedgerItemView,
-  RiderIncomeStatusFilter,
-  RiderIncomeSummaryView
+  RiderIncomeStatusFilter
 } from '../../../services/rider-income'
+import type { BaofuWithdrawalBalanceView } from '../../../services/baofu-withdrawal-workflow'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 const DAILY_PREVIEW_LIMIT = 7
-
-function emptySummaryView(): RiderIncomeSummaryView {
-  return buildRiderIncomeSummaryView({
-    total_deliveries: 0,
-    total_rider_income: 0,
-    total_delivery_fee: 0,
-    status_summary: []
-  })
-}
-
-function normalizeLedgerPage(response: RiderIncomeLedgerResponse, fallbackPage: number) {
-  return {
-    items: (response.items || []).map(buildRiderIncomeLedgerItemView),
-    pageId: response.page_id || fallbackPage,
-    pageSize: response.page_size || RIDER_INCOME_PAGE_SIZE,
-    total: typeof response.total === 'number' ? response.total : 0,
-    hasMore: typeof response.has_more === 'boolean'
-      ? response.has_more
-      : (response.page_id || fallbackPage) * (response.page_size || RIDER_INCOME_PAGE_SIZE) < (response.total || 0)
-  }
-}
-
-function statusFilterToParam(status: RiderIncomeStatusFilter): RiderIncomeStatus | undefined {
-  return status === 'all' ? undefined : status
-}
+const EMPTY_WITHDRAWAL_BALANCE_VIEW = buildEmptyRiderIncomeWithdrawalBalanceView()
 
 Page({
   data: {
@@ -58,12 +29,15 @@ Page({
     listErrorMessage: '',
     loadMoreErrorMessage: '',
     settlementNotice: '',
+    withdrawalBalanceReady: false,
+    withdrawalEntryNote: '',
+    withdrawalBalanceView: EMPTY_WITHDRAWAL_BALANCE_VIEW as BaofuWithdrawalBalanceView,
     loading: false,
     loadingMore: false,
     statusTab: 'all' as RiderIncomeStatusFilter,
     dateRange: buildDefaultRiderIncomeDateRange() as RiderIncomeDateRange,
     dateRangeLabel: '',
-    summary: emptySummaryView(),
+    summary: buildEmptyRiderIncomeSummaryView(),
     dailyItems: [] as RiderIncomeDailyItemView[],
     ledgerItems: [] as RiderIncomeLedgerItemView[],
     pageId: 1,
@@ -119,6 +93,10 @@ Page({
     wx.navigateTo({ url: '/pages/rider/settlement-account/index' })
   },
 
+  onGoToWithdrawals() {
+    wx.navigateTo({ url: '/pages/rider/income/withdrawals/index' })
+  },
+
   onStatusTabChange(e: WechatMiniprogram.CustomEvent<{ value: RiderIncomeStatusFilter }>) {
     const statusTab = e.detail.value
     if (statusTab === this.data.statusTab) {
@@ -152,31 +130,24 @@ Page({
       : { loading: true, refreshErrorMessage: '', listErrorMessage: '', loadMoreErrorMessage: '' })
 
     try {
-      const range = this.data.dateRange
-      const [summary, daily, ledger, riderStatus] = await Promise.all([
-        riderIncomeApi.getSummary(range),
-        riderIncomeApi.getDaily(range),
-        riderIncomeApi.listLedger({
-          ...range,
-          status: statusFilterToParam(this.data.statusTab as RiderIncomeStatusFilter),
-          page_id: 1,
-          page_size: RIDER_INCOME_PAGE_SIZE
-        }),
-        RiderService.getStatus()
-      ])
-      const settlementNotice = riderStatus.settlement_account?.payment_ready === false
-        ? '结算账户未开通，暂不能接收配送费分账订单'
-        : ''
-      const ledgerPage = normalizeLedgerPage(ledger, 1)
+      const pageView = await loadRiderIncomePageData({
+        dateRange: this.data.dateRange,
+        statusTab: this.data.statusTab as RiderIncomeStatusFilter,
+        dailyPreviewLimit: DAILY_PREVIEW_LIMIT,
+        pageSize: RIDER_INCOME_PAGE_SIZE
+      })
       this.setData({
-        settlementNotice,
-        summary: buildRiderIncomeSummaryView(summary),
-        dailyItems: (daily.items || []).slice(0, DAILY_PREVIEW_LIMIT).map(buildRiderIncomeDailyItemView),
-        ledgerItems: ledgerPage.items,
-        pageId: ledgerPage.pageId,
-        pageSize: ledgerPage.pageSize,
-        total: ledgerPage.total,
-        hasMore: ledgerPage.hasMore,
+        settlementNotice: pageView.settlementNotice,
+        withdrawalBalanceReady: pageView.withdrawalBalanceReady,
+        withdrawalBalanceView: pageView.withdrawalBalanceView,
+        withdrawalEntryNote: pageView.withdrawalEntryNote,
+        summary: pageView.summary,
+        dailyItems: pageView.dailyItems,
+        ledgerItems: pageView.ledgerPage.items,
+        pageId: pageView.ledgerPage.pageId,
+        pageSize: pageView.ledgerPage.pageSize,
+        total: pageView.ledgerPage.total,
+        hasMore: pageView.ledgerPage.hasMore,
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
@@ -192,7 +163,7 @@ Page({
           initialLoading: false,
           initialError: true,
           initialErrorMessage: message,
-          summary: emptySummaryView(),
+          summary: buildEmptyRiderIncomeSummaryView(),
           dailyItems: [],
           ledgerItems: [],
           pageId: 1,
@@ -218,13 +189,12 @@ Page({
     }
 
     try {
-      const response = await riderIncomeApi.listLedger({
-        ...this.data.dateRange,
-        status: statusFilterToParam(this.data.statusTab as RiderIncomeStatusFilter),
-        page_id: pageId,
-        page_size: RIDER_INCOME_PAGE_SIZE
+      const ledgerPage = await loadRiderIncomeLedgerPage({
+        dateRange: this.data.dateRange,
+        statusTab: this.data.statusTab as RiderIncomeStatusFilter,
+        pageId,
+        pageSize: RIDER_INCOME_PAGE_SIZE
       })
-      const ledgerPage = normalizeLedgerPage(response, pageId)
       this.setData({
         ledgerItems: reset ? ledgerPage.items : this.data.ledgerItems.concat(ledgerPage.items),
         pageId: ledgerPage.pageId,

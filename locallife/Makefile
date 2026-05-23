@@ -33,8 +33,7 @@ sqlc:
 	$(HOME)/go/bin/mockgen -package mockdb -destination db/mock/store.go github.com/merrydance/locallife/db/sqlc Store
 	$(HOME)/go/bin/mockgen -package mockwk -destination worker/mock/distributor.go github.com/merrydance/locallife/worker TaskDistributor
 	$(HOME)/go/bin/mockgen -package mockwechat -destination wechat/mock/wechat_client.go github.com/merrydance/locallife/wechat WechatClient
-	$(HOME)/go/bin/mockgen -package mockwechat -destination wechat/mock/payment_client.go github.com/merrydance/locallife/wechat DirectPaymentClientInterface,TransferClientInterface,EcommerceClientInterface
-	$(HOME)/go/bin/mockgen -package mockordinaryserviceprovider -destination wechat/ordinaryserviceprovider/mock/client.go github.com/merrydance/locallife/wechat/ordinaryserviceprovider OrdinaryServiceProviderClientInterface
+	$(HOME)/go/bin/mockgen -package mockwechat -destination wechat/mock/payment_client.go github.com/merrydance/locallife/wechat DirectPaymentClientInterface,TransferClientInterface
 
 test:
 	go test -v -cover -short ./...
@@ -76,8 +75,7 @@ mock:
 	$(HOME)/go/bin/mockgen -package mockdb -destination db/mock/store.go github.com/merrydance/locallife/db/sqlc Store
 	$(HOME)/go/bin/mockgen -package mockwk -destination worker/mock/distributor.go github.com/merrydance/locallife/worker TaskDistributor
 	$(HOME)/go/bin/mockgen -package mockwechat -destination wechat/mock/wechat_client.go github.com/merrydance/locallife/wechat WechatClient
-	$(HOME)/go/bin/mockgen -package mockwechat -destination wechat/mock/payment_client.go github.com/merrydance/locallife/wechat DirectPaymentClientInterface,TransferClientInterface,EcommerceClientInterface
-	$(HOME)/go/bin/mockgen -package mockordinaryserviceprovider -destination wechat/ordinaryserviceprovider/mock/client.go github.com/merrydance/locallife/wechat/ordinaryserviceprovider OrdinaryServiceProviderClientInterface
+	$(HOME)/go/bin/mockgen -package mockwechat -destination wechat/mock/payment_client.go github.com/merrydance/locallife/wechat DirectPaymentClientInterface,TransferClientInterface
 
 proto:
 	rm -f pb/*.go

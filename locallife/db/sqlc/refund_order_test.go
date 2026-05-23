@@ -165,6 +165,10 @@ func TestGetTotalRefundedByPaymentOrder(t *testing.T) {
 	totalRefunded, err := testStore.GetTotalRefundedByPaymentOrder(context.Background(), payment.ID)
 	require.NoError(t, err)
 	require.Equal(t, refundPendingAmount+refundProcessingAmount+refundSuccessAmount, totalRefunded)
+
+	successfulRefunded, err := testStore.GetTotalSuccessfulRefundedByPaymentOrder(context.Background(), payment.ID)
+	require.NoError(t, err)
+	require.Equal(t, refundSuccessAmount, successfulRefunded)
 }
 
 func TestUpdateRefundOrderToProcessing(t *testing.T) {

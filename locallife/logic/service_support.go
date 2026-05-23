@@ -13,7 +13,6 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
-	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 )
 
 type SystemClock struct{}
@@ -63,19 +62,6 @@ func (DefaultIDGenerator) OutRefundNo(now time.Time) (string, error) {
 	return "R" + dateStr + hex.EncodeToString(b), nil
 }
 
-func ordinaryJSAPIPayParamsToWechat(payParams *ospcontracts.JSAPIPayParams) *wechat.JSAPIPayParams {
-	if payParams == nil {
-		return nil
-	}
-	return &wechat.JSAPIPayParams{
-		TimeStamp: payParams.TimeStamp,
-		NonceStr:  payParams.NonceStr,
-		Package:   payParams.Package,
-		SignType:  payParams.SignType,
-		PaySign:   payParams.PaySign,
-	}
-}
-
 type DefaultOrderPolicy struct{}
 
 func (DefaultOrderPolicy) ValidateCreateInput(input CreateOrderCommandInput) error {
@@ -114,14 +100,12 @@ func (DefaultOrderPolicy) ValidateCreateInput(input CreateOrderCommandInput) err
 }
 
 type DefaultPaymentFacade struct {
-	paymentClient      wechat.DirectPaymentClientInterface
-	ecommerceClient    wechat.EcommerceClientInterface
-	ordinaryServicePay ordinaryServiceProviderFacadeClient
-	baofuAggregatePay  aggregatepay.Client
-	baofuConfig        BaofuAggregateFacadeConfig
-	paymentService     *PaymentOrderService
-	ledgerService      *PaymentLedgerService
-	combinedService    *CombinedPaymentService
+	paymentClient     wechat.DirectPaymentClientInterface
+	baofuAggregatePay aggregatepay.Client
+	baofuConfig       BaofuAggregateFacadeConfig
+	paymentService    *PaymentOrderService
+	ledgerService     *PaymentLedgerService
+	combinedService   *CombinedPaymentService
 }
 
 type BaofuAggregateFacadeConfig struct {
@@ -133,41 +117,15 @@ type BaofuAggregateFacadeConfig struct {
 	TimeExpireMinutes int
 }
 
-type ordinaryServiceProviderFacadeClient interface {
-	ordinaryServiceProviderPaymentClient
-	ordinaryServiceProviderCombineClient
-	RefundNotifyURL() string
-	CreateRefund(ctx context.Context, req ospcontracts.RefundCreateRequest) (*ospcontracts.RefundResponse, error)
-	CreateProfitSharingReturn(ctx context.Context, req ospcontracts.ProfitSharingReturnRequest) (*ospcontracts.ProfitSharingReturnResponse, error)
-}
-
 func NewDefaultPaymentFacade(
 	store db.Store,
 	paymentClient wechat.DirectPaymentClientInterface,
-	ecommerceClient wechat.EcommerceClientInterface,
 ) PaymentFacade {
 	return &DefaultPaymentFacade{
 		paymentClient:   paymentClient,
-		ecommerceClient: ecommerceClient,
-		paymentService:  NewPaymentOrderServiceWithClients(store, paymentClient, ecommerceClient),
+		paymentService:  NewPaymentOrderServiceWithDirectPayment(store, paymentClient),
 		ledgerService:   NewPaymentLedgerService(store),
-		combinedService: NewCombinedPaymentService(store, ecommerceClient),
-	}
-}
-
-func NewDefaultPaymentFacadeWithOrdinaryServiceProvider(
-	store db.Store,
-	paymentClient wechat.DirectPaymentClientInterface,
-	ecommerceClient wechat.EcommerceClientInterface,
-	ordinaryClient ordinaryServiceProviderFacadeClient,
-) PaymentFacade {
-	return &DefaultPaymentFacade{
-		paymentClient:      paymentClient,
-		ecommerceClient:    ecommerceClient,
-		ordinaryServicePay: ordinaryClient,
-		paymentService:     NewPaymentOrderServiceWithOrdinaryServiceProvider(store, paymentClient, ordinaryClient),
-		ledgerService:      NewPaymentLedgerService(store),
-		combinedService:    NewCombinedPaymentServiceWithOrdinaryServiceProvider(store, ordinaryClient),
+		combinedService: NewCombinedPaymentServiceWithBaofuUnsupported(store),
 	}
 }
 
@@ -258,24 +216,6 @@ func (f *DefaultPaymentFacade) CreateRefund(ctx context.Context, req *wechatcont
 	return createDirectRefundContract(ctx, f.paymentClient, req)
 }
 
-func (f *DefaultPaymentFacade) CreateEcommerceRefund(ctx context.Context, req *wechatcontracts.EcommerceRefundRequest) (*wechatcontracts.EcommerceRefundCreateResponse, error) {
-	return createEcommerceRefundContract(ctx, f.ecommerceClient, req)
-}
-
-func (f *DefaultPaymentFacade) CreateOrdinaryServiceProviderRefund(ctx context.Context, req ospcontracts.RefundCreateRequest) (*ospcontracts.RefundResponse, error) {
-	if f.ordinaryServicePay == nil {
-		return nil, fmt.Errorf("ordinary service provider client not configured")
-	}
-	return f.ordinaryServicePay.CreateRefund(ctx, req)
-}
-
-func (f *DefaultPaymentFacade) OrdinaryServiceProviderRefundNotifyURL() string {
-	if f.ordinaryServicePay == nil {
-		return ""
-	}
-	return f.ordinaryServicePay.RefundNotifyURL()
-}
-
 func (f *DefaultPaymentFacade) CreateBaofuRefund(ctx context.Context, req aggregatecontracts.RefundBeforeShareRequest) (*aggregatecontracts.RefundResult, error) {
 	if f.baofuAggregatePay == nil {
 		return nil, fmt.Errorf("baofu aggregate client not configured")
@@ -295,38 +235,6 @@ func (f *DefaultPaymentFacade) CreateBaofuRefund(ctx context.Context, req aggreg
 
 func (f *DefaultPaymentFacade) BaofuRefundNotifyURL() string {
 	return f.baofuConfig.normalized().RefundNotifyURL
-}
-
-func (f *DefaultPaymentFacade) CreateOrdinaryServiceProviderProfitSharingReturn(ctx context.Context, req ospcontracts.ProfitSharingReturnRequest) (*ospcontracts.ProfitSharingReturnResponse, error) {
-	if f.ordinaryServicePay == nil {
-		return nil, fmt.Errorf("ordinary service provider client not configured")
-	}
-	return f.ordinaryServicePay.CreateProfitSharingReturn(ctx, req)
-}
-
-func (f *DefaultPaymentFacade) ApplyEcommerceAbnormalRefund(ctx context.Context, req *wechatcontracts.EcommerceAbnormalRefundRequest) (*wechatcontracts.EcommerceRefundQueryResponse, error) {
-	return applyEcommerceAbnormalRefundContract(ctx, f.ecommerceClient, req)
-}
-
-func (f *DefaultPaymentFacade) CreateProfitSharingReturn(ctx context.Context, req *wechatcontracts.ProfitSharingReturnRequest) (*wechatcontracts.ProfitSharingReturnResponse, error) {
-	if f.ecommerceClient == nil {
-		return nil, fmt.Errorf("ecommerce client not configured")
-	}
-	return f.ecommerceClient.CreateProfitSharingReturn(ctx, req)
-}
-
-func (f *DefaultPaymentFacade) SpMchID() string {
-	if f.ecommerceClient == nil {
-		return ""
-	}
-	return f.ecommerceClient.GetSpMchID()
-}
-
-func (f *DefaultPaymentFacade) OrdinaryServiceProviderMchID() string {
-	if f.ordinaryServicePay == nil {
-		return ""
-	}
-	return f.ordinaryServicePay.ServiceProviderMchID()
 }
 
 // resolveMerchantForUser returns the merchant associated with userID.

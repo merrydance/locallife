@@ -5,6 +5,8 @@ argument-hint: "Provide target area, ordered task list or task-card links, accep
 ---
 Run the provided task list through a closed delivery loop.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions, and confirm the task area before starting the first loop. Do not keep relying on stale context.
+
 Required input:
 
 - Target area: <backend, web, weapp, or mixed>
@@ -22,6 +24,8 @@ Optional input:
 Execution rules:
 
 - Work one task at a time.
+- If a provided task is too broad to fit one bounded context, split it before execution instead of guessing through a large fuzzy task.
+- Each task should be clear enough that a new session can resume it without inventing intent or scope.
 - For task-card driven work, treat one accepted task card as one loop unit unless the input explicitly groups several cards into a single gated batch.
 - At the start of each task, classify the task risk as `G0`, `G1`, `G2`, or `G3` using `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md` when the classification is not already given.
 - Choose validation depth and hand-off detail using `.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md`.

@@ -44,6 +44,11 @@ export interface RiderWorkbenchDeliveryItem {
   status: 'pending' | 'assigned' | 'picking' | 'picked' | 'delivering' | 'delivered' | 'completed' | 'cancelled' | 'exception'
   delivery_fee: number
   rider_earnings: number
+  rider_gross_amount?: number
+  rider_payment_fee?: number
+  rider_net_earnings?: number
+  profit_sharing_order_id?: number
+  profit_sharing_status?: string
   pickup_address: string
   delivery_address: string
   estimated_pickup_at?: string

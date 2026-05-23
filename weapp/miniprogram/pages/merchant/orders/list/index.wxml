@@ -101,7 +101,14 @@
                    <text>{{item.notes}}</text>
                  </view>
                  <view class="total-info">
-                   合计 <text class="total-price">¥{{item.total_amount / 100}}</text>
+                   <view class="total-line">
+                     <text>实付</text>
+                     <text class="total-price">{{item.customer_payable_text}}</text>
+                   </view>
+                   <view class="income-line {{item.fee_breakdown_available ? '' : 'income-line--pending'}}">
+                     <text>实收</text>
+                     <text>{{item.merchant_receivable_text}}</text>
+                   </view>
                  </view>
               </view>
             </view>

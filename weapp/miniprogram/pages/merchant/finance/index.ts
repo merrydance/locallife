@@ -4,43 +4,14 @@ import {
   isMerchantConsoleAccessDenied,
   isMerchantConsoleAccessGranted
 } from '../../../utils/console-access'
+import {
+  buildMerchantFinanceEntries,
+  type MerchantFinanceEntryView
+} from '../../../utils/merchant-finance-entry-view'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 
 const FINANCE_AUTO_REFRESH_WINDOW_MS = 60 * 1000
-const BILLS_PAGE_PATH = '/pages/merchant/finance/bills/index'
-const SETTLEMENTS_PAGE_PATH = '/pages/merchant/finance/settlements/index'
-const BAOFU_SETTLEMENT_ACCOUNT_PAGE_PATH = '/pages/merchant/finance/settlement-account/index'
-
-interface FinanceEntryView {
-  id: string
-  title: string
-  icon: string
-  path: string
-}
-
-function buildFinanceEntries(): FinanceEntryView[] {
-  return [
-    {
-      id: 'bills',
-      title: '订单流水',
-      icon: 'chart-bar',
-      path: BILLS_PAGE_PATH
-    },
-    {
-      id: 'settlements',
-      title: '结算',
-      icon: 'time',
-      path: SETTLEMENTS_PAGE_PATH
-    },
-    {
-      id: 'settlement-account',
-      title: '宝付结算账户',
-      icon: 'creditcard',
-      path: BAOFU_SETTLEMENT_ACCOUNT_PAGE_PATH
-    }
-  ]
-}
 
 function shouldAutoRefresh(lastLoadedAt: number): boolean {
   return !lastLoadedAt || Date.now() - lastLoadedAt >= FINANCE_AUTO_REFRESH_WINDOW_MS
@@ -58,7 +29,7 @@ Page({
     refreshErrorMessage: '',
     loadingFinance: false,
     lastLoadedAt: 0,
-    entries: buildFinanceEntries()
+    entries: buildMerchantFinanceEntries() as MerchantFinanceEntryView[]
   },
 
   async onLoad() {
@@ -152,7 +123,7 @@ Page({
         refreshErrorMessage: '',
         loadingFinance: false,
         lastLoadedAt: loadedAt,
-        entries: buildFinanceEntries()
+        entries: buildMerchantFinanceEntries()
       })
     } catch (error) {
       logger.warn('Merchant finance guidance load failed', error)

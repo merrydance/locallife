@@ -6,6 +6,8 @@ applyTo: "web/src/app/operator/**"
 
 Apply these rules for files under `web/src/app/operator/`.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions and prompt, and confirm the task scope before continuing. Do not keep relying on stale context.
+
 ## Role Of This Surface
 
 - Keep operator pages optimized for operational clarity, dense but readable scanning, and explicit state handling.

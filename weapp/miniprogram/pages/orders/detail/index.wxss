@@ -30,6 +30,11 @@
   color: var(--td-error-color);
 }
 
+.inline-banner-warning {
+  background: rgba(255, 193, 7, 0.14);
+  color: var(--td-warning-color);
+}
+
 .inline-banner-text {
   flex: 1;
   font-size: var(--font-size-sm);
@@ -40,6 +45,18 @@
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--td-brand-color);
+}
+
+.dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+
+.dialog-tips {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary);
+  line-height: 1.6;
 }
 
 @keyframes fadeIn {

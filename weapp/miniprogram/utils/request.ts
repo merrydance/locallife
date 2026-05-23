@@ -8,6 +8,8 @@ import { CacheManager, CacheStrategy } from './cache'
 import { API_CONFIG, ENV } from '../config/index'
 import { performanceMonitor } from './performance-monitor'
 import { mapBackendMessageToUserMessage } from './user-facing'
+import { buildDefaultRequestId } from './request-id'
+import { ensureWechatLoginSession } from './wechat-login-session'
 
 export const API_BASE = API_CONFIG.BASE_URL
 
@@ -37,8 +39,6 @@ interface RefreshTokenPayload {
   refresh_token?: string
   access_token_expires_at?: string
 }
-
-type WechatLoginPayload = RefreshTokenPayload
 
 const _inflightGetRequests = new Map<string, Promise<unknown>>()
 
@@ -96,8 +96,7 @@ function containsChineseText(text: string): boolean {
 function isBusinessMessagePreserveEndpoint(url: string): boolean {
   return (
     url === '/v1/merchant/application/submit' ||
-    url === '/v1/rider/application/submit' ||
-    url === '/v1/merchant/applyment/bindbank'
+    url === '/v1/rider/application/submit'
   )
 }
 
@@ -317,7 +316,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     loadingText = '加载中...',
     timeout = API_CONFIG.TIMEOUT,
     context,
-    requestId = `${method}_${url}_${Date.now()}`,
+    requestId = buildDefaultRequestId(method, url),
     retry = false,
     useCache = false,
     cacheTTL = 5 * 60 * 1000, // 默认5分钟
@@ -901,7 +900,6 @@ async function refreshTokenWithTimeout(): Promise<void> {
 async function refreshTokenOnce(): Promise<void> {
   try {
     const { getRefreshToken } = require('./auth')
-    const { getDeviceId } = require('./location')
     const refreshToken = getRefreshToken()
 
     // 策略1: 使用refresh_token刷新
@@ -934,34 +932,10 @@ async function refreshTokenOnce(): Promise<void> {
       }
     }
 
-    // 策略2: 降级到wx.login重新登录
+    // 策略2: 降级到共享的 wx.login 重新登录
     logger.info('开始wx.login重新登录', undefined, 'refreshTokenOnce')
-    const code = await new Promise<string>((resolve, reject) => {
-      wx.login({
-        success: (res) => res.code ? resolve(res.code) : reject(new Error('获取code失败: res.code missing')),
-        fail: (err) => reject(err || new Error('wx.login failed')),
-        timeout: TOKEN_REFRESH_REQUEST_TIMEOUT
-      })
-    })
-
-    const deviceId = getDeviceId()
-    const res2 = await new Promise<WechatMiniprogram.RequestSuccessCallbackResult>((resolve, reject) => {
-      wx.request({
-        url: `${API_BASE}/v1/auth/wechat-login`,
-        method: 'POST',
-        data: { code, device_id: deviceId, device_type: 'miniprogram' },
-        header: { 'Content-Type': 'application/json', 'X-Response-Envelope': '1' },
-        success: resolve,
-        fail: reject,
-        timeout: TOKEN_REFRESH_REQUEST_TIMEOUT
-      })
-    })
-
-    const response2 = res2.data as ApiResponse<WechatLoginPayload>
-    if (res2.statusCode === 200 && response2.code === ErrorCode.SUCCESS && response2.data?.access_token) {
-      const d = response2.data
-      const expiresAt = d.access_token_expires_at ? new Date(d.access_token_expires_at).getTime() : undefined
-      setToken(d.access_token, expiresAt, d.refresh_token)
+    const loginData = await ensureWechatLoginSession()
+    if (loginData?.access_token) {
       logger.info('wx.login重登录成功', undefined, 'refreshTokenOnce')
       return
     }

@@ -162,8 +162,6 @@ func isExternalPaymentProvider(provider string) bool {
 func isExternalPaymentChannel(channel string) bool {
 	switch channel {
 	case db.PaymentChannelDirect,
-		db.PaymentChannelEcommerce,
-		db.PaymentChannelOrdinaryServiceProvider,
 		db.PaymentChannelBaofuAggregate:
 		return true
 	default:
@@ -175,16 +173,6 @@ func isExternalPaymentCapability(capability string) bool {
 	switch capability {
 	case db.ExternalPaymentCapabilityDirectJSAPIPayment,
 		db.ExternalPaymentCapabilityDirectRefund,
-		db.ExternalPaymentCapabilityPartnerJSAPIPayment,
-		db.ExternalPaymentCapabilityPartnerRefund,
-		db.ExternalPaymentCapabilityCombinePayment,
-		db.ExternalPaymentCapabilityEcommerceRefund,
-		db.ExternalPaymentCapabilityProfitSharing,
-		db.ExternalPaymentCapabilitySubsidy,
-		db.ExternalPaymentCapabilityApplyment,
-		db.ExternalPaymentCapabilitySettlement,
-		db.ExternalPaymentCapabilityWithdraw,
-		db.ExternalPaymentCapabilityCancelWithdraw,
 		db.ExternalPaymentCapabilityMerchantTransfer,
 		db.ExternalPaymentCapabilityBaofuAccount,
 		db.ExternalPaymentCapabilityBaofuPayment,
@@ -205,19 +193,15 @@ func isExternalPaymentCommandType(commandType string) bool {
 		db.ExternalPaymentCommandTypeCreateProfitSharing,
 		db.ExternalPaymentCommandTypeCreateProfitSharingReturn,
 		db.ExternalPaymentCommandTypeFinishProfitSharing,
-		db.ExternalPaymentCommandTypeCreateSubsidy,
-		db.ExternalPaymentCommandTypeReturnSubsidy,
-		db.ExternalPaymentCommandTypeCancelSubsidy,
-		db.ExternalPaymentCommandTypeCreateApplyment,
-		db.ExternalPaymentCommandTypeCreateSettlement,
-		db.ExternalPaymentCommandTypeCreateWithdraw,
-		db.ExternalPaymentCommandTypeCreateCancelWithdraw,
 		db.ExternalPaymentCommandTypeCreateTransfer,
 		db.ExternalPaymentCommandTypeOpenBaofuAccount,
 		db.ExternalPaymentCommandTypeQueryBaofuAccount,
 		db.ExternalPaymentCommandTypeQueryBaofuBalance,
 		db.ExternalPaymentCommandTypeCreateBaofuWithdraw,
-		db.ExternalPaymentCommandTypeQueryBaofuWithdraw:
+		db.ExternalPaymentCommandTypeQueryBaofuWithdraw,
+		db.ExternalPaymentCommandTypeBaofuMerchantReport,
+		db.ExternalPaymentCommandTypeBaofuMerchantReportQuery,
+		db.ExternalPaymentCommandTypeBaofuBindSubConfig:
 		return true
 	default:
 		return false
@@ -227,13 +211,16 @@ func isExternalPaymentCommandType(commandType string) bool {
 func isExternalPaymentBusinessOwner(owner string) bool {
 	switch owner {
 	case db.ExternalPaymentBusinessOwnerRiderDeposit,
+		db.ExternalPaymentBusinessOwnerBaofuVerifyFee,
 		db.ExternalPaymentBusinessOwnerOrder,
 		db.ExternalPaymentBusinessOwnerReservation,
 		db.ExternalPaymentBusinessOwnerClaimRecovery,
 		db.ExternalPaymentBusinessOwnerProfitSharing,
-		db.ExternalPaymentBusinessOwnerSubsidy,
 		db.ExternalPaymentBusinessOwnerApplyment,
-		db.ExternalPaymentBusinessOwnerMerchantFunds:
+		db.ExternalPaymentBusinessOwnerMerchantFunds,
+		db.ExternalPaymentBusinessOwnerRiderIncome,
+		db.ExternalPaymentBusinessOwnerOperatorFunds,
+		db.ExternalPaymentBusinessOwnerPlatformFunds:
 		return true
 	default:
 		return false
@@ -247,15 +234,9 @@ func isExternalPaymentObjectType(objectType string) bool {
 		db.ExternalPaymentObjectRefund,
 		db.ExternalPaymentObjectProfitSharing,
 		db.ExternalPaymentObjectProfitSharingReturn,
-		db.ExternalPaymentObjectSubsidy,
-		db.ExternalPaymentObjectSubsidyReturn,
 		db.ExternalPaymentObjectApplyment,
 		db.ExternalPaymentObjectWithdraw,
-		db.ExternalPaymentObjectCancelWithdraw,
 		db.ExternalPaymentObjectMerchantTransfer,
-		db.ExternalPaymentObjectComplaint,
-		db.ExternalPaymentObjectViolation,
-		db.ExternalPaymentObjectSettlement,
 		db.ExternalPaymentObjectBaofuPaymentOrder:
 		return true
 	default:

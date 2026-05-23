@@ -6,6 +6,8 @@ applyTo: "locallife/integration/**"
 
 Apply these rules for files under `locallife/integration/`.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions and prompt, and confirm the task scope before continuing. Do not keep relying on stale context.
+
 ## Role Of This Layer
 
 - Keep this directory focused on end-to-end and database-backed integration coverage for real workflows.

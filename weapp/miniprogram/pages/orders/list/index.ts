@@ -358,21 +358,42 @@ Page({
       itemList: CANCEL_REASONS,
       success: async (res) => {
         const reason = CANCEL_REASONS[res.tapIndex]
-        await this.doCancelOrder(Number(id), reason)
+        const selectedOrder = this.data.orders.find((order) => order.id === id)
+        const refundExpected = Boolean(selectedOrder?.paidAt)
+        wx.showModal({
+          title: '取消订单',
+          content: refundExpected
+            ? '已支付订单取消后，退款会异步处理并原路返回。'
+            : '取消后订单会立即关闭。',
+          confirmText: '确认取消',
+          cancelText: '暂不取消',
+          success: async (modalRes) => {
+            if (!modalRes.confirm) return
+            await this.doCancelOrder(Number(id), reason, refundExpected)
+          }
+        })
       }
     })
   },
 
-  async doCancelOrder(orderId: number, reason: string) {
+  async doCancelOrder(orderId: number, reason: string, refundExpected: boolean) {
     wx.showLoading({ title: '取消中...' })
     try {
       await cancelOrder(orderId, { reason })
       wx.hideLoading()
-      await this.loadOrders(true)
+      try {
+        await this.loadOrders(true)
+      } catch (refreshError) {
+        logger.warn('取消后刷新订单列表失败，将保留已受理结果', refreshError, 'List.doCancelOrder')
+      }
+      wx.showToast({
+        title: refundExpected ? '已受理，退款进度请到订单详情查看' : '已取消',
+        icon: 'none'
+      })
     } catch (error) {
       wx.hideLoading()
       logger.error('取消订单失败', error, 'List.doCancelOrder')
-      wx.showToast({ title: '取消失败', icon: 'error' })
+      wx.showToast({ title: '取消失败，请稍后重试', icon: 'error' })
     }
   },
 

@@ -6,6 +6,8 @@ applyTo: "web/src/app/merchant/**"
 
 Apply these rules for files under `web/src/app/merchant/`.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions and prompt, and confirm the task scope before continuing. Do not keep relying on stale context.
+
 ## Role Of This Surface
 
 - Keep merchant pages focused on day-to-day operations such as orders, dishes, finance, reservations, tables, and marketing workflows.

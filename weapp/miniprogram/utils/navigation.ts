@@ -126,6 +126,12 @@ export class Navigation {
     wx.redirectTo({ url: `/pages/payment/result/index?${query.join('&')}` })
   }
 
+  static toRefundDetail(refundId: string | number) {
+    wx.navigateTo({
+      url: `/pages/user_center/refund-detail/index?id=${refundId}`
+    })
+  }
+
   /**
      * 跳转到订单列表页
      */

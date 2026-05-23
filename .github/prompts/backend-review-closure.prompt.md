@@ -13,6 +13,8 @@ Use `.github/standards/backend/README.md` plus the matching domain README to bia
 Use `.github/standards/backend/BACKEND_REVIEW_CLOSEOUT_CHECKLIST.md` when the review is formal enough that findings, residual risk, or systemic feedback should become durable project knowledge.
 Use `.github/standards/backend/FORMAL_REVIEW_DURABILITY.md` when deciding where reusable findings should be written back.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions, and confirm the review scope before writing findings. Do not keep relying on stale context.
+
 ## Backend Closure Review
 
 Target area: `locallife/`

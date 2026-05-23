@@ -6,6 +6,8 @@ applyTo: "locallife/**"
 
 Apply these rules for files under `locallife/`.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions and prompt, and confirm the task scope before continuing. Do not keep relying on stale context.
+
 More specific backend instruction files under `.github/instructions/` take precedence when their `applyTo` pattern matches, especially for `locallife/api/`, `locallife/logic/`, `locallife/db/query/`, `locallife/db/sqlc/`, `locallife/worker/`, `locallife/scheduler/`, `locallife/integration/`, `locallife/cmd/`, `locallife/media/`, `locallife/ocr/`, and `locallife/wechat/`.
 
 ## Read First
@@ -21,6 +23,7 @@ Open the smallest relevant backend deep docs for the current task instead of rea
 - `WORKFLOW_AND_VALIDATION.md`: regeneration triggers, local commands, and validation depth
 - `API_CONTRACT_STANDARDS.md`: contract semantics, status codes, empty states, and route behavior
 - `ERROR_HANDLING.md`: logging boundary, public error semantics, and safe 4xx/5xx handling when a task changes error paths or caller-facing failure behavior
+- `EXTERNAL_API_CONTRACT_STANDARDS.md`: external API/provider truth source, field matrix, drift review, error mapping, and explicit downgrade rules
 - `SYSTEM_PROMPT.md`: detailed layering, middleware, DTO, and implementation-shape rules when a task truly needs the deeper contract
 - matching `domain README`: payment, media, OCR, and other high-risk domains
 
@@ -35,7 +38,8 @@ Prompt routing defaults for this area:
 - Treat low-risk copy or presentation-only fixes as `G0` only when they do not change state semantics, trust boundaries, or user action outcomes.
 - Treat normal backend product changes as `G1` when they stay within ordinary CRUD or business-path adjustments without changing money movement, authz, callbacks, async recovery, or cross-layer status semantics.
 - Escalate to `G2` when the change affects status transitions, retries, workers, schedulers, idempotency, recovery, weakly ordered events, or complex field propagation across handler, logic, store, worker, or UI expectations.
-- Escalate to `G3` when the change touches payment, refund, profit sharing, withdrawal, authentication, authorization, tenant boundaries, callbacks, uploads/downloads, media visibility, OCR, sensitive data, or any path that could cause a high-impact production or security incident.
+- Escalate to `G2` or higher when the change touches external API/provider request, response, callback, error mapping, field propagation, or user-visible provider state.
+- Escalate to `G3` when the change touches payment, refund, profit sharing, withdrawal, authentication, authorization, tenant boundaries, callbacks, uploads/downloads, media visibility, OCR, sensitive data, provider contracts for high-impact flows, or any path that could cause a high-impact production or security incident.
 - When in doubt, classify upward and validate more heavily rather than treating a path as routine.
 
 ## Architecture Boundaries
@@ -57,7 +61,11 @@ Prompt routing defaults for this area:
 - Use structured logging. Do not add `fmt.Println` or other unstructured logging in request paths.
 - Do not silently swallow unexpected errors, collapse `nil` / zero-row / missing-dependency cases into implicit success, or convert infrastructure failures into vague business success without an explicit contract that says the no-op is intentional.
 - Do not ignore JSON decode or encode errors for persisted data, response-building blobs, or upstream payload fragments that affect outward behavior or stored state. Best-effort downgrade is allowed only when the contract explicitly says the field is optional and the degraded semantics are still correct.
+- Do not guess external API/provider field names, nesting, types, amount units, enum values, requiredness, callback resource structure, or error codes. Use official docs and provider-confirmed samples as contract truth and update the matching domain source or field matrix before relying on the field in code.
+- Do not silently downgrade external API/provider failures, malformed payloads, missing required fields, unknown enum values, signature failures, or timeouts into nil, empty DTOs, no-op states, or vague business success. Downgrade is allowed only when `.github/standards/backend/EXTERNAL_API_CONTRACT_STANDARDS.md` permits it and tests cover the branch.
 - Unexpected failures must propagate to one deliberate logging boundary with enough context for diagnosis. Caller-facing responses and UI-visible messages must stay stable and semantically clear without exposing raw SQL, driver, provider, or stack details.
+- For security-sensitive work, explicitly check replay, duplicate delivery, authorization, signature, injection, and sensitive-data leakage boundaries instead of assuming the caller or provider behaves correctly.
+- Prefer fail-closed branches over silent fallback when a known attack class or trust-boundary pattern is relevant to the change.
 - Do not add fire-and-forget goroutines in request paths; if work must outlive the request, move it to a worker, scheduler, outbox, or another explicit background boundary.
 - Do not replace upstream request or task context with `context.Background()` in ordinary flows; keep cancellation, timeout, and tracing semantics threaded through the call chain.
 - Do not store `context.Context` in struct fields.
@@ -73,6 +81,8 @@ Prompt routing defaults for this area:
 ## High-Risk Change Gates
 
 - For payment, refund, callback, webhook, upload, media, OCR, or other externally triggered flows, verify the server-side trust boundary explicitly instead of relying on client-provided identity, status, or ownership fields.
+- For external API/provider work, name the active provider and capability group, check `.github/standards/backend/EXTERNAL_API_CONTRACT_STANDARDS.md`, and use the matching domain README/source matrix when one exists. Treat official docs and provider-confirmed samples as the only structure truth source.
+- For provider, callback, webhook, or replay-sensitive paths, call out the exact security pattern being enforced, the boundary that enforces it, and any residual risk if the enforcement is partial.
 - For API and async failure-path changes, preserve the backend error-handling contract: business errors should stay machine- and caller-meaningful, infrastructure failures should still be observable in logs, and internal details should not leak into user-facing responses.
 - For money movement, status transitions, and async recovery paths, make the persistence boundary explicit. Important state changes must be backed by persisted records, idempotency guards, and auditable transitions instead of in-memory assumptions.
 - For order, delivery, reservation, and inventory work, treat conditional state updates, exclusivity rules, and release/recovery behavior as first-class concerns; do not rely on transaction-external checks or process-local state to keep them correct.
@@ -95,6 +105,7 @@ Prompt routing defaults for this area:
 - Prefer `make test-unit` for focused validation.
 - Run `make test-integration` only when the change touches integration flows or database-backed behavior.
 - When changing backend error handling, response builders, or persisted-data decoding paths, run at least one focused failure-path regression for the affected dependency, malformed blob, or degraded branch instead of validating only the happy path.
+- When changing external API/provider DTOs, parsers, validators, request builders, callback handlers, or error classifiers, run focused tests or fixture checks that lock field names, types, requiredness, enum values, malformed payload handling, and error mapping.
 - Common local commands: `make server`, `make test`, `make migrateup`, `make new_migration name=<name>`.
 - Use `.github/standards/backend/BACKEND_CHANGE_SAFETY_CHECKLIST.md` before closing a non-trivial backend implementation or fix.
 - Use `.github/standards/backend/BACKEND_REVIEW_CLOSEOUT_CHECKLIST.md` after formal backend review or subsystem audit.

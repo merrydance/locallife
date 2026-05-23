@@ -19,6 +19,7 @@
 - 是否检查了 `make sqlc`、`make mock`、`make swagger`、`make check-generated`、`make test-safety` 等必要生成或验证步骤？
 - 若改动触及错误处理、空值回退、5xx 返回、上游失败映射或前端提示语义，是否明确检查了 unexpected error 是否到达唯一结构化日志边界、业务错误与基础设施错误是否正确分流、以及对前端是否保持稳定且不泄漏内部细节的语义？
 - 是否明确检查了 `nil`、0-row conditional update、空 DTO、silent early return 或 fallback/no-op 分支没有把真实失败伪装成成功？
+- 若改动触及外部 API / provider 契约，是否按 `.github/standards/backend/EXTERNAL_API_CONTRACT_STANDARDS.md` 检查官方文档、source matrix、field matrix、样例夹具、字段类型、必填性、枚举、错误码、降级规则和漂移复核？
 
 ## 3. Durable Knowledge
 
@@ -26,6 +27,7 @@
 - 如果本仓库已有风险地图、review backlog、审计日志或 domain audit 机制，是否把高价值 finding 写入对应 artifact，而不是只留在聊天记录里？
 - 如果现有治理资产缺少该 bug class 的默认约束，是否明确指出应该补到哪里？
 - 如果 finding 属于静默吞错、5xx 跳过日志、raw upstream error 透传、或 caller-facing error semantics 含糊这类重复问题，是否检查 `.github/standards/backend/ERROR_HANDLING.md`、`.github/instructions/backend-locallife.instructions.md`、相关 backend prompt，以及 `.github/scripts/backend_go_guard.sh` 是否需要同步补门禁？
+- 如果 finding 属于盲猜 provider 字段、外部 API 契约未沉淀、字段矩阵漂移、未知枚举成功、隐式降级或 provider 错误映射含糊，是否检查 `.github/standards/backend/EXTERNAL_API_CONTRACT_STANDARDS.md`、匹配 domain README、backend instructions、backend prompt 和相关合同矩阵是否需要同步补强？
 
 ## 4. Scope And Remaining Work
 
@@ -42,4 +44,3 @@
 3. 审查范围、未覆盖区域和下一步行动是否对后续接手者清晰可见
 
 如果这些问题答不清，该 review 只能算一次临时意见交换，不能算 durable closeout。
-

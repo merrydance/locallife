@@ -7,7 +7,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/logic"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 )
@@ -110,59 +109,6 @@ func (s *PaymentRecoveryScheduler) runOnce(ctx context.Context) {
 	}
 
 	for _, order := range orders {
-		refundOrders, err := s.store.ListRefundOrdersByPaymentOrder(ctx, order.ID)
-		if err != nil {
-			log.Error().Err(err).
-				Int64("payment_order_id", order.ID).
-				Str("out_trade_no", order.OutTradeNo).
-				Msg("list refund orders for payment recovery failed")
-			continue
-		}
-		if len(refundOrders) > 0 {
-			log.Warn().
-				Int64("payment_order_id", order.ID).
-				Str("out_trade_no", order.OutTradeNo).
-				Int("refund_order_count", len(refundOrders)).
-				Msg("skip payment recovery because refund activity exists")
-			continue
-		}
-
-		if shouldRecordOrderPaymentRecoveryFact(order) {
-			application, factErr := recordRecoveredOrderPaymentFact(ctx, s.store, order)
-			if factErr != nil {
-				log.Error().Err(factErr).
-					Int64("payment_order_id", order.ID).
-					Str("out_trade_no", order.OutTradeNo).
-					Msg("record recovered order payment fact failed")
-				continue
-			}
-			enqueueErr := enqueueOrderPaymentFactApplication(ctx, s.distributor, application)
-			if enqueueErr != nil {
-				log.Error().Err(enqueueErr).
-					Int64("payment_order_id", order.ID).
-					Str("out_trade_no", order.OutTradeNo).
-					Msg("enqueue recovered order payment fact application failed")
-			}
-			continue
-		}
-		if shouldRecordReservationPaymentRecoveryFact(order) {
-			application, factErr := recordRecoveredReservationPaymentFact(ctx, s.store, order)
-			if factErr != nil {
-				log.Error().Err(factErr).
-					Int64("payment_order_id", order.ID).
-					Str("out_trade_no", order.OutTradeNo).
-					Msg("record recovered reservation payment fact failed")
-				continue
-			}
-			enqueueErr := enqueueReservationPaymentFactApplication(ctx, s.distributor, application)
-			if enqueueErr != nil {
-				log.Error().Err(enqueueErr).
-					Int64("payment_order_id", order.ID).
-					Str("out_trade_no", order.OutTradeNo).
-					Msg("enqueue recovered reservation payment fact application failed")
-			}
-			continue
-		}
 		if shouldRecordDirectPaymentRecoveryFact(order) {
 			application, factErr := recordRecoveredDirectPaymentFact(ctx, s.store, order)
 			if factErr != nil {
@@ -184,6 +130,16 @@ func (s *PaymentRecoveryScheduler) runOnce(ctx context.Context) {
 			continue
 		}
 
+		if order.PaymentChannel == db.PaymentChannelBaofuAggregate {
+			log.Warn().
+				Int64("payment_order_id", order.ID).
+				Str("out_trade_no", order.OutTradeNo).
+				Str("payment_channel", order.PaymentChannel).
+				Str("business_type", order.BusinessType).
+				Msg("skip paid unprocessed payment recovery because baofu recovery is handled by the dedicated baofu scheduler")
+			continue
+		}
+
 		log.Warn().
 			Int64("payment_order_id", order.ID).
 			Str("out_trade_no", order.OutTradeNo).
@@ -191,44 +147,4 @@ func (s *PaymentRecoveryScheduler) runOnce(ctx context.Context) {
 			Str("business_type", order.BusinessType).
 			Msg("skip paid unprocessed payment recovery because no fact application target is configured")
 	}
-}
-
-func shouldRecordOrderPaymentRecoveryFact(order db.PaymentOrder) bool {
-	return order.BusinessType == db.ExternalPaymentBusinessOwnerOrder && db.PaymentOrderUsesEcommerceChannel(order)
-}
-
-func recordRecoveredOrderPaymentFact(ctx context.Context, store db.Store, order db.PaymentOrder) (*db.ExternalPaymentFactApplication, error) {
-	capability := db.ExternalPaymentCapabilityPartnerJSAPIPayment
-	if order.CombinedPaymentID.Valid {
-		capability = db.ExternalPaymentCapabilityCombinePayment
-	}
-
-	service := logic.NewPaymentFactService(store)
-	result, err := service.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
-		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              db.PaymentChannelEcommerce,
-		Capability:           capability,
-		FactSource:           db.ExternalPaymentFactSourceManualReconciliation,
-		ExternalObjectType:   db.ExternalPaymentObjectPayment,
-		ExternalObjectKey:    order.OutTradeNo,
-		ExternalSecondaryKey: orderPaymentOptionalStringPtr(order.TransactionID),
-		BusinessOwner:        orderPaymentStringPtr(db.ExternalPaymentBusinessOwnerOrder),
-		BusinessObjectType:   orderPaymentStringPtr(orderPaymentFactBusinessObjectOrder),
-		BusinessObjectID:     orderPaymentInt64Ptr(order.ID),
-		UpstreamState:        "SUCCESS",
-		TerminalStatus:       db.ExternalPaymentTerminalStatusSuccess,
-		Amount:               orderPaymentInt64Ptr(order.Amount),
-		Currency:             "CNY",
-		RawResource:          recoveredOrderPaymentFactResource(order),
-		DedupeKey:            recoveredOrderPaymentFactDedupeKey(order, capability),
-		Application: &logic.ExternalPaymentFactApplicationTarget{
-			Consumer:           orderPaymentFactConsumerDomain,
-			BusinessObjectType: orderPaymentFactBusinessObjectOrder,
-			BusinessObjectID:   order.ID,
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-	return result.Application, nil
 }

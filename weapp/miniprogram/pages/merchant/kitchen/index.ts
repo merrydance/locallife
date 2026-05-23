@@ -18,6 +18,13 @@ interface KitchenBoardFilterOption {
   value: KitchenBoardFilter
 }
 
+interface MerchantStatusChangePayload {
+  merchant_id?: number
+  is_open?: boolean
+  auto_close_at?: string
+  source?: string
+}
+
 interface KitchenBoardOrder extends KitchenOrderResponse {
   order_no_short: string
   order_type_label: string
@@ -154,6 +161,7 @@ Page({
     boardInitialErrorMessage: '',
     boardRefreshErrorMessage: '',
     boardLoading: false,
+    isMerchantOpen: true,
     actionOrderId: 0,
     actionType: '' as KitchenActionType,
     stats: {
@@ -225,23 +233,33 @@ Page({
   },
 
   onHide() {
-    this.stopRealtimeRuntime()
+    this.stopRealtimeRuntime({ disconnect: true })
   },
 
   onUnload() {
-    this.stopRealtimeRuntime()
+    this.stopRealtimeRuntime({ disconnect: true })
   },
 
   initWebSocket() {
     this.cleanupWebSocket()
     wsManager.connect()
 
+    const statusChangeSub = wsManager.on(WSMessageType.MERCHANT_STATUS_CHANGE, (data) => {
+      const payload = typeof data === 'object' && data !== null
+        ? (data as MerchantStatusChangePayload)
+        : {}
+
+      if (payload.merchant_id && payload.merchant_id > 0) {
+        this.applyMerchantOpenStatus(Boolean(payload.is_open))
+      }
+    })
+
     const sub = wsManager.on(WSMessageType.NOTIFICATION, (data) => {
       const notification = typeof data === 'object' && data !== null
         ? (data as { type?: string })
         : {}
 
-      if (notification.type === 'order') {
+      if (this.data.isMerchantOpen && notification.type === 'order') {
         this.loadKitchenOrders(false)
       }
     })
@@ -258,7 +276,7 @@ Page({
       wx.showToast({ title: message, icon: 'none' })
     })
 
-    this.data._wsListeners = [sub, blockedSub]
+    this.data._wsListeners = [statusChangeSub, sub, blockedSub]
   },
 
   cleanupWebSocket() {
@@ -268,18 +286,23 @@ Page({
     }
   },
 
-  stopRealtimeRuntime() {
+  stopRealtimeRuntime(options: { disconnect?: boolean } = {}) {
     this.cleanupWebSocket()
-    wsManager.disconnect()
+    if (options.disconnect) {
+      wsManager.disconnect()
+    }
   },
 
   syncRealtimeRuntime(isOpen: boolean) {
-    if (!isOpen) {
-      this.stopRealtimeRuntime()
-      return
-    }
-
+    this.applyMerchantOpenStatus(isOpen)
     this.initWebSocket()
+  },
+
+  applyMerchantOpenStatus(isOpen: boolean) {
+    this.setData({
+      isMerchantOpen: isOpen,
+      boardRefreshErrorMessage: isOpen ? '' : '当前门店已打烊，后厨实时订单已暂停'
+    })
   },
 
   async refreshRealtimeRuntime() {
@@ -288,7 +311,7 @@ Page({
       this.syncRealtimeRuntime(Boolean(status?.is_open))
     } catch (err) {
       logger.warn('Load merchant open status for kitchen realtime failed', err)
-      this.stopRealtimeRuntime()
+      this.stopRealtimeRuntime({ disconnect: true })
     }
   },
 

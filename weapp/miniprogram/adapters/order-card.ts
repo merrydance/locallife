@@ -22,6 +22,7 @@ export interface OrderCardViewModel {
     canReorder: boolean
     canCancel: boolean
     canPay: boolean
+    paidAt?: string
     actions?: string[]
     paymentContext?: OrderPaymentContext
     itemCount: number
@@ -61,6 +62,7 @@ export const OrderCardAdapter = {
             canReorder: ['completed', 'cancelled', 'user_delivered'].includes(order.status),
             canCancel,
             canPay,
+            paidAt: order.paid_at,
             actions,
             paymentContext: order.payment_context,
             itemCount: order.items ? order.items.reduce((acc, item) => acc + item.quantity, 0) : 0,
@@ -294,5 +296,4 @@ function formatCreatedAt(timeStr: string): string {
         return timeStr
     }
 }
-
 

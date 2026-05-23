@@ -77,7 +77,7 @@ func isBaofuMainBusinessPaymentFact(fact db.ExternalPaymentFact) bool {
 }
 
 func isSupportedMainBusinessPaymentFact(fact db.ExternalPaymentFact) bool {
-	return isWechatMainBusinessPaymentFact(fact) || isBaofuMainBusinessPaymentFact(fact)
+	return isBaofuMainBusinessPaymentFact(fact)
 }
 
 func isBaofuMainBusinessProfitSharingFact(fact db.ExternalPaymentFact) bool {
@@ -87,5 +87,5 @@ func isBaofuMainBusinessProfitSharingFact(fact db.ExternalPaymentFact) bool {
 }
 
 func isSupportedMainBusinessProfitSharingFact(fact db.ExternalPaymentFact) bool {
-	return isWechatMainBusinessProfitSharingFact(fact) || isBaofuMainBusinessProfitSharingFact(fact)
+	return isBaofuMainBusinessProfitSharingFact(fact)
 }

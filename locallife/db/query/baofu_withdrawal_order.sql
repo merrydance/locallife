@@ -38,6 +38,12 @@ ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(limit_count)::int
 OFFSET sqlc.arg(offset_count)::int;
 
+-- name: CountBaofuWithdrawalOrdersByOwner :one
+SELECT COUNT(*)::bigint
+FROM baofu_withdrawal_orders
+WHERE owner_type = sqlc.arg(owner_type)
+  AND owner_id = sqlc.arg(owner_id);
+
 -- name: ListProcessingBaofuWithdrawalOrdersForRecovery :many
 SELECT id, owner_type, owner_id, account_binding_id, out_request_no, baofu_withdraw_no, amount, status, raw_snapshot, finished_at, created_at, updated_at
 FROM baofu_withdrawal_orders

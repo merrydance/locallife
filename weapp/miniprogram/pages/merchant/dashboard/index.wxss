@@ -155,10 +155,6 @@
   color: var(--td-brand-color);
 }
 
-.metric-card--complaints .metric-value {
-  color: var(--td-warning-color);
-}
-
 .metric-note {
   display: block;
   margin-top: 6rpx;

@@ -13,6 +13,7 @@ import {
     RiderDeliveryActionKey
 } from '../../../utils/rider-delivery-view'
 import { getRiderLocationStatusView } from '../../../utils/rider-location-status-view'
+import { buildRiderDeliveryIncomeView, RiderDeliveryIncomeView } from '../../../utils/rider-delivery-income-view'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { resolveStatusTagTheme, type StatusTagTheme } from '../../../utils/status-tag'
 
@@ -30,6 +31,7 @@ type DeliveryView = Delivery & {
     deadline_desc: string
     can_update_status: boolean
     action_label: string
+    income_view: RiderDeliveryIncomeView
 }
 
 let taskDetailLocationUnsubscribe: null | (() => void) = null
@@ -204,7 +206,8 @@ Page({
             ...delivery,
             deadline_desc: this.formatDeadline(deadline),
             can_update_status: actionState.canUpdate,
-            action_label: actionState.label
+            action_label: actionState.label,
+            income_view: buildRiderDeliveryIncomeView(delivery)
         }
     },
 

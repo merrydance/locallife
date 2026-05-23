@@ -173,8 +173,6 @@ func sanitizeServerErrorMessage(status int, message string) string {
 
 	normalized := strings.ToLower(trimmed)
 	switch {
-	case strings.Contains(normalized, "wechat ecommerce client is not configured"), strings.Contains(normalized, "ecommerce client not configured"):
-		return "微信支付服务暂不可用，请稍后重试"
 	case strings.Contains(normalized, "payment service not configured"), strings.Contains(normalized, "payment service not available"):
 		return "支付服务暂不可用，请稍后重试"
 	case strings.Contains(normalized, "media storage not configured"):

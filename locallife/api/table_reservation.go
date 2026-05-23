@@ -38,7 +38,7 @@ const (
 )
 
 func writeReservationPaymentConfigError(ctx *gin.Context, err error, operation string) bool {
-	if !isEcommerceClientNotConfigured(err) {
+	if !isPaymentServiceNotConfigured(err) {
 		return false
 	}
 	ctx.JSON(http.StatusServiceUnavailable, loggedServerError(
@@ -1368,7 +1368,7 @@ func (server *Server) cancelReservation(ctx *gin.Context) {
 		MerchantBeforeDeadlinePercent: server.config.ReservationMerchantRefundPercentBeforeDeadline,
 		MerchantAfterDeadlinePercent:  server.config.ReservationMerchantRefundPercentAfterDeadline,
 	}
-	result, err := logic.CancelReservationWithOrdinaryServiceProvider(ctx, server.store, server.ecommerceClient, server.ordinarySPClient, authPayload.UserID, uriReq.ID, req.Reason, policy, time.Now())
+	result, err := logic.CancelReservation(ctx, server.store, authPayload.UserID, uriReq.ID, req.Reason, policy, time.Now())
 	if err != nil {
 		if writeReservationPaymentConfigError(ctx, err, "cancel reservation") {
 			return
@@ -1530,13 +1530,11 @@ func (server *Server) addDishesToReservation(ctx *gin.Context) {
 	}
 
 	result, err := logic.AddReservationDishes(ctx, server.store, logic.AddReservationDishesInput{
-		UserID:          authPayload.UserID,
-		ReservationID:   uriReq.ID,
-		Items:           addItems,
-		Now:             time.Now(),
-		EcommerceClient: server.ecommerceClient,
-		OrdinaryClient:  server.ordinarySPClient,
-		ClientIP:        ctx.ClientIP(),
+		UserID:        authPayload.UserID,
+		ReservationID: uriReq.ID,
+		Items:         addItems,
+		Now:           time.Now(),
+		ClientIP:      ctx.ClientIP(),
 	})
 	if err != nil {
 		if writeReservationPaymentConfigError(ctx, err, "add reservation dishes") {
@@ -1626,14 +1624,12 @@ func (server *Server) modifyReservationDishes(ctx *gin.Context) {
 	}
 
 	result, err := logic.ModifyReservationDishes(ctx, server.store, logic.ModifyReservationDishesInput{
-		UserID:          authPayload.UserID,
-		ReservationID:   uriReq.ID,
-		Items:           modifyItems,
-		Now:             time.Now(),
-		EcommerceClient: server.ecommerceClient,
-		OrdinaryClient:  server.ordinarySPClient,
-		ClientIP:        ctx.ClientIP(),
-		TaskScheduler:   apiTaskScheduler{server: server},
+		UserID:        authPayload.UserID,
+		ReservationID: uriReq.ID,
+		Items:         modifyItems,
+		Now:           time.Now(),
+		ClientIP:      ctx.ClientIP(),
+		TaskScheduler: apiTaskScheduler{server: server},
 	})
 	if err != nil {
 		if writeReservationPaymentConfigError(ctx, err, "modify reservation dishes") {

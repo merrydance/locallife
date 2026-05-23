@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -183,6 +184,16 @@ func (stubPartialBusinessLicenseOCRProvider) Recognize(_ context.Context, capabi
 	}, nil
 }
 
+type failingBusinessLicenseOCRProvider struct{}
+
+func (failingBusinessLicenseOCRProvider) Name() ocr.ProviderName {
+	return ocr.ProviderNameWechat
+}
+
+func (failingBusinessLicenseOCRProvider) Recognize(_ context.Context, capability ocr.Capability, req ocr.RecognizeRequest) (ocr.RecognizeResponse, error) {
+	return ocr.RecognizeResponse{}, errors.New("provider failed")
+}
+
 func TestProcessTaskMerchantApplicationFoodPermitOCR_UsesOCRJob(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -204,6 +215,12 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_UsesOCRJob(t *testing.T) {
 			stubFoodPermitBinaryReader{},
 		),
 	}
+	app := db.MerchantApplication{
+		ID:                     66,
+		Status:                 "draft",
+		FoodPermitOcr:          []byte(`{"status":"pending","ocr_job_id":77}`),
+		FoodPermitMediaAssetID: pgtype.Int8{Int64: 88, Valid: true},
+	}
 
 	createdAt := time.Date(2026, 3, 25, 9, 59, 0, 0, time.UTC)
 	startedAt := time.Date(2026, 3, 25, 9, 59, 30, 0, time.UTC)
@@ -219,6 +236,12 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_UsesOCRJob(t *testing.T) {
 	}
 
 	gomock.InOrder(
+		store.EXPECT().
+			GetOCRJob(gomock.Any(), int64(77)).
+			Return(baseJob, nil),
+		store.EXPECT().
+			GetMerchantApplication(gomock.Any(), int64(66)).
+			Return(app, nil),
 		store.EXPECT().
 			GetOCRJob(gomock.Any(), int64(77)).
 			Return(baseJob, nil),
@@ -248,6 +271,9 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_UsesOCRJob(t *testing.T) {
 				return job, nil
 			}),
 		store.EXPECT().
+			GetMerchantApplication(gomock.Any(), int64(66)).
+			Return(app, nil),
+		store.EXPECT().
 			UpdateMerchantApplicationFoodPermit(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationFoodPermitParams) (db.MerchantApplication, error) {
 				require.Equal(t, int64(66), arg.ID)
@@ -262,7 +288,7 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_UsesOCRJob(t *testing.T) {
 				require.Equal(t, "本地生活餐饮店", payload.CompanyName)
 				require.Equal(t, "2027年01月08日", payload.ValidTo)
 				require.Contains(t, payload.RawText, "许可证编号")
-				return db.MerchantApplication{ID: 66}, nil
+				return app, nil
 			}),
 		store.EXPECT().
 			CreateAuditLog(gomock.Any(), gomock.Any()).
@@ -283,6 +309,7 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_UsesOCRJob(t *testing.T) {
 
 	payload, err := json.Marshal(merchantApplicationOCRPayload{
 		ApplicationID: 66,
+		MediaAssetID:  88,
 		OCRJobID:      77,
 	})
 	require.NoError(t, err)
@@ -313,6 +340,12 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_PrefersStructuredFields(t *
 			stubFoodPermitBinaryReader{},
 		),
 	}
+	app := db.MerchantApplication{
+		ID:                     77,
+		Status:                 "draft",
+		FoodPermitMediaAssetID: pgtype.Int8{Int64: 99, Valid: true},
+		FoodPermitOcr:          []byte(`{"status":"pending","ocr_job_id":88}`),
+	}
 
 	createdAt := time.Date(2026, 3, 25, 10, 4, 0, 0, time.UTC)
 	startedAt := time.Date(2026, 3, 25, 10, 4, 30, 0, time.UTC)
@@ -329,6 +362,8 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_PrefersStructuredFields(t *
 
 	gomock.InOrder(
 		store.EXPECT().GetOCRJob(gomock.Any(), int64(88)).Return(baseJob, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), int64(77)).Return(app, nil),
+		store.EXPECT().GetOCRJob(gomock.Any(), int64(88)).Return(baseJob, nil),
 		store.EXPECT().MarkOCRJobProcessing(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, _ db.MarkOCRJobProcessingParams) (db.OcrJob, error) {
 			job := baseJob
 			job.Status = string(ocr.JobStatusProcessing)
@@ -344,6 +379,7 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_PrefersStructuredFields(t *
 			job.FinishedAt = pgtype.Timestamptz{Time: startedAt.Add(6 * time.Second), Valid: true}
 			return job, nil
 		}),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), int64(77)).Return(app, nil),
 		store.EXPECT().UpdateMerchantApplicationFoodPermit(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationFoodPermitParams) (db.MerchantApplication, error) {
 			var payload foodPermitOCRData
 			require.NoError(t, json.Unmarshal(arg.FoodPermitOcr, &payload))
@@ -353,7 +389,7 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_PrefersStructuredFields(t *
 			require.Equal(t, "2025年01月08日", payload.ValidFrom)
 			require.Equal(t, "2030年12月31日", payload.ValidTo)
 			require.Equal(t, "经营场所：北京市朝阳区测试路100号1楼", payload.RawText)
-			return db.MerchantApplication{ID: 77}, nil
+			return app, nil
 		}),
 	)
 	expectOCRSuccessAuditLog(t, store, db.OcrJob{
@@ -363,7 +399,7 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_PrefersStructuredFields(t *
 		Provider:  string(ocr.ProviderNameAliyun),
 	})
 
-	payload, err := json.Marshal(merchantApplicationOCRPayload{ApplicationID: 77, OCRJobID: 88})
+	payload, err := json.Marshal(merchantApplicationOCRPayload{ApplicationID: 77, MediaAssetID: 99, OCRJobID: 88})
 	require.NoError(t, err)
 
 	task := asynq.NewTask(TaskMerchantApplicationFoodPermitOCR, payload)
@@ -425,6 +461,12 @@ func TestProcessTaskMerchantApplicationBusinessLicenseOCR_UsesOCRJob(t *testing.
 			stubFoodPermitBinaryReader{},
 		),
 	}
+	app := db.MerchantApplication{
+		ID:                          67,
+		Status:                      "draft",
+		BusinessLicenseMediaAssetID: pgtype.Int8{Int64: 98, Valid: true},
+		BusinessLicenseOcr:          []byte(`{"status":"pending","ocr_job_id":78}`),
+	}
 
 	createdAt := time.Date(2026, 3, 25, 10, 59, 0, 0, time.UTC)
 	startedAt := time.Date(2026, 3, 25, 10, 59, 30, 0, time.UTC)
@@ -440,6 +482,12 @@ func TestProcessTaskMerchantApplicationBusinessLicenseOCR_UsesOCRJob(t *testing.
 	}
 
 	gomock.InOrder(
+		store.EXPECT().
+			GetOCRJob(gomock.Any(), int64(78)).
+			Return(baseJob, nil),
+		store.EXPECT().
+			GetMerchantApplication(gomock.Any(), int64(67)).
+			Return(app, nil),
 		store.EXPECT().
 			GetOCRJob(gomock.Any(), int64(78)).
 			Return(baseJob, nil),
@@ -463,6 +511,7 @@ func TestProcessTaskMerchantApplicationBusinessLicenseOCR_UsesOCRJob(t *testing.
 				job.FinishedAt = pgtype.Timestamptz{Time: startedAt.Add(10 * time.Second), Valid: true}
 				return job, nil
 			}),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), int64(67)).Return(app, nil),
 		store.EXPECT().
 			UpdateMerchantApplicationBusinessLicense(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationBusinessLicenseParams) (db.MerchantApplication, error) {
@@ -474,16 +523,285 @@ func TestProcessTaskMerchantApplicationBusinessLicenseOCR_UsesOCRJob(t *testing.
 				require.Equal(t, "done", payload["status"])
 				require.Equal(t, float64(78), payload["ocr_job_id"])
 				require.Equal(t, "本地生活科技有限公司", payload["enterprise_name"])
-				return db.MerchantApplication{ID: 67}, nil
+				return app, nil
 			}),
 	)
 
-	payload, err := json.Marshal(merchantApplicationOCRPayload{ApplicationID: 67, OCRJobID: 78})
+	payload, err := json.Marshal(merchantApplicationOCRPayload{ApplicationID: 67, MediaAssetID: 98, OCRJobID: 78})
 	require.NoError(t, err)
 	expectOCRSuccessAuditLog(t, store, db.OcrJob{ID: 78, OwnerType: string(ocr.OwnerTypeMerchantApplication)})
 
 	task := asynq.NewTask(TaskMerchantApplicationBusinessLicenseOCR, payload)
 	err = processor.ProcessTaskMerchantApplicationBusinessLicenseOCR(context.Background(), task)
+	require.NoError(t, err)
+}
+
+func TestProcessTaskMerchantApplicationBusinessLicenseOCR_SkipsStaleAssetBeforeProvider(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	router, err := ocr.NewStaticRouter(map[ocr.DocumentType]ocr.Route{
+		ocr.DocumentTypeBusinessLicense: {
+			Provider:   stubBusinessLicenseOCRProvider{},
+			Capability: ocr.CapabilityWechatBusinessLicense,
+		},
+	})
+	require.NoError(t, err)
+	processor := &RedisTaskProcessor{store: store, ocrService: ocr.NewService(store, router, stubFoodPermitBinaryReader{})}
+
+	job := db.OcrJob{
+		ID:           7801,
+		DocumentType: string(ocr.DocumentTypeBusinessLicense),
+		Provider:     string(ocr.ProviderNameWechat),
+		MediaAssetID: 9801,
+		OwnerType:    string(ocr.OwnerTypeMerchantApplication),
+		OwnerID:      6701,
+		Status:       string(ocr.JobStatusPending),
+		CreatedAt:    time.Now(),
+	}
+	app := db.MerchantApplication{
+		ID:                          6701,
+		Status:                      "draft",
+		BusinessLicenseMediaAssetID: pgtype.Int8{Int64: 9802, Valid: true},
+		BusinessLicenseOcr:          []byte(`{"status":"pending","ocr_job_id":7801}`),
+	}
+
+	gomock.InOrder(
+		store.EXPECT().GetOCRJob(gomock.Any(), int64(7801)).Return(job, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), int64(6701)).Return(app, nil),
+	)
+
+	payload, err := json.Marshal(merchantApplicationOCRPayload{ApplicationID: 6701, MediaAssetID: 9801, OCRJobID: 7801})
+	require.NoError(t, err)
+	task := asynq.NewTask(TaskMerchantApplicationBusinessLicenseOCR, payload)
+	err = processor.ProcessTaskMerchantApplicationBusinessLicenseOCR(context.Background(), task)
+	require.NoError(t, err)
+}
+
+func TestProcessTaskMerchantApplicationBusinessLicenseOCR_SkipsStaleAssetAfterProvider(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	router, err := ocr.NewStaticRouter(map[ocr.DocumentType]ocr.Route{
+		ocr.DocumentTypeBusinessLicense: {
+			Provider:   stubBusinessLicenseOCRProvider{},
+			Capability: ocr.CapabilityWechatBusinessLicense,
+		},
+	})
+	require.NoError(t, err)
+
+	processor := &RedisTaskProcessor{
+		store: store,
+		ocrService: ocr.NewService(
+			store,
+			router,
+			stubFoodPermitBinaryReader{},
+		),
+	}
+	initialApp := db.MerchantApplication{
+		ID:                          6801,
+		Status:                      "draft",
+		BusinessLicenseMediaAssetID: pgtype.Int8{Int64: 9801, Valid: true},
+		BusinessLicenseOcr:          []byte(`{"status":"pending","ocr_job_id":7801}`),
+	}
+	updatedApp := initialApp
+	updatedApp.BusinessLicenseMediaAssetID = pgtype.Int8{Int64: 9802, Valid: true}
+
+	createdAt := time.Date(2026, 3, 25, 10, 59, 0, 0, time.UTC)
+	startedAt := time.Date(2026, 3, 25, 10, 59, 30, 0, time.UTC)
+	baseJob := db.OcrJob{
+		ID:           7801,
+		DocumentType: string(ocr.DocumentTypeBusinessLicense),
+		Provider:     string(ocr.ProviderNameWechat),
+		MediaAssetID: 9801,
+		OwnerType:    string(ocr.OwnerTypeMerchantApplication),
+		OwnerID:      6801,
+		Status:       string(ocr.JobStatusPending),
+		CreatedAt:    createdAt,
+	}
+
+	gomock.InOrder(
+		store.EXPECT().GetOCRJob(gomock.Any(), int64(7801)).Return(baseJob, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), int64(6801)).Return(initialApp, nil),
+		store.EXPECT().GetOCRJob(gomock.Any(), int64(7801)).Return(baseJob, nil),
+		store.EXPECT().MarkOCRJobProcessing(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, _ db.MarkOCRJobProcessingParams) (db.OcrJob, error) {
+			job := baseJob
+			job.Status = string(ocr.JobStatusProcessing)
+			job.StartedAt = pgtype.Timestamptz{Time: startedAt, Valid: true}
+			return job, nil
+		}),
+		store.EXPECT().CompleteOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CompleteOCRJobParams) (db.OcrJob, error) {
+			job := baseJob
+			job.Status = string(ocr.JobStatusSucceeded)
+			job.StartedAt = pgtype.Timestamptz{Time: startedAt, Valid: true}
+			job.NormalizedResult = arg.NormalizedResult
+			job.RawResult = arg.RawResult
+			job.FinishedAt = pgtype.Timestamptz{Time: startedAt.Add(10 * time.Second), Valid: true}
+			return job, nil
+		}),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), int64(6801)).Return(updatedApp, nil),
+	)
+
+	payload, err := json.Marshal(merchantApplicationOCRPayload{ApplicationID: 6801, MediaAssetID: 9801, OCRJobID: 7801})
+	require.NoError(t, err)
+	task := asynq.NewTask(TaskMerchantApplicationBusinessLicenseOCR, payload)
+	err = processor.ProcessTaskMerchantApplicationBusinessLicenseOCR(context.Background(), task)
+	require.NoError(t, err)
+}
+
+func TestProcessTaskMerchantApplicationBusinessLicenseOCR_SkipsStaleFailureAfterProvider(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	router, err := ocr.NewStaticRouter(map[ocr.DocumentType]ocr.Route{
+		ocr.DocumentTypeBusinessLicense: {
+			Provider:   failingBusinessLicenseOCRProvider{},
+			Capability: ocr.CapabilityWechatBusinessLicense,
+		},
+	})
+	require.NoError(t, err)
+
+	processor := &RedisTaskProcessor{
+		store: store,
+		ocrService: ocr.NewService(
+			store,
+			router,
+			stubFoodPermitBinaryReader{},
+		),
+	}
+	initialApp := db.MerchantApplication{
+		ID:                          6802,
+		Status:                      "draft",
+		BusinessLicenseMediaAssetID: pgtype.Int8{Int64: 9803, Valid: true},
+		BusinessLicenseOcr:          []byte(`{"status":"pending","ocr_job_id":7802}`),
+	}
+	updatedApp := initialApp
+	updatedApp.BusinessLicenseOcr = []byte(`{"status":"pending","ocr_job_id":7803}`)
+
+	createdAt := time.Date(2026, 3, 25, 11, 0, 0, 0, time.UTC)
+	startedAt := time.Date(2026, 3, 25, 11, 0, 30, 0, time.UTC)
+	baseJob := db.OcrJob{
+		ID:           7802,
+		DocumentType: string(ocr.DocumentTypeBusinessLicense),
+		Provider:     string(ocr.ProviderNameWechat),
+		MediaAssetID: 9803,
+		OwnerType:    string(ocr.OwnerTypeMerchantApplication),
+		OwnerID:      6802,
+		Status:       string(ocr.JobStatusPending),
+		CreatedAt:    createdAt,
+	}
+	failedJob := baseJob
+	failedJob.Status = string(ocr.JobStatusFailed)
+	failedJob.StartedAt = pgtype.Timestamptz{Time: startedAt, Valid: true}
+
+	gomock.InOrder(
+		store.EXPECT().GetOCRJob(gomock.Any(), int64(7802)).Return(baseJob, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), int64(6802)).Return(initialApp, nil),
+		store.EXPECT().GetOCRJob(gomock.Any(), int64(7802)).Return(baseJob, nil),
+		store.EXPECT().MarkOCRJobProcessing(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, _ db.MarkOCRJobProcessingParams) (db.OcrJob, error) {
+			job := baseJob
+			job.Status = string(ocr.JobStatusProcessing)
+			job.StartedAt = pgtype.Timestamptz{Time: startedAt, Valid: true}
+			return job, nil
+		}),
+		store.EXPECT().FailOCRJob(gomock.Any(), gomock.Any()).Return(failedJob, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), int64(6802)).Return(updatedApp, nil),
+	)
+
+	payload, err := json.Marshal(merchantApplicationOCRPayload{ApplicationID: 6802, MediaAssetID: 9803, OCRJobID: 7802})
+	require.NoError(t, err)
+	task := asynq.NewTask(TaskMerchantApplicationBusinessLicenseOCR, payload)
+	err = processor.ProcessTaskMerchantApplicationBusinessLicenseOCR(context.Background(), task)
+	require.NoError(t, err)
+}
+
+func TestProcessTaskMerchantApplicationBusinessLicenseOCR_SkipsNonDraftApplication(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	router, err := ocr.NewStaticRouter(map[ocr.DocumentType]ocr.Route{
+		ocr.DocumentTypeBusinessLicense: {
+			Provider:   stubBusinessLicenseOCRProvider{},
+			Capability: ocr.CapabilityWechatBusinessLicense,
+		},
+	})
+	require.NoError(t, err)
+	processor := &RedisTaskProcessor{store: store, ocrService: ocr.NewService(store, router, stubFoodPermitBinaryReader{})}
+
+	job := db.OcrJob{
+		ID:           7802,
+		DocumentType: string(ocr.DocumentTypeBusinessLicense),
+		Provider:     string(ocr.ProviderNameWechat),
+		MediaAssetID: 9803,
+		OwnerType:    string(ocr.OwnerTypeMerchantApplication),
+		OwnerID:      6702,
+		Status:       string(ocr.JobStatusPending),
+		CreatedAt:    time.Now(),
+	}
+	app := db.MerchantApplication{
+		ID:                          6702,
+		Status:                      "submitted",
+		BusinessLicenseMediaAssetID: pgtype.Int8{Int64: 9803, Valid: true},
+		BusinessLicenseOcr:          []byte(`{"status":"pending","ocr_job_id":7802}`),
+	}
+
+	gomock.InOrder(
+		store.EXPECT().GetOCRJob(gomock.Any(), int64(7802)).Return(job, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), int64(6702)).Return(app, nil),
+	)
+
+	payload, err := json.Marshal(merchantApplicationOCRPayload{ApplicationID: 6702, MediaAssetID: 9803, OCRJobID: 7802})
+	require.NoError(t, err)
+	task := asynq.NewTask(TaskMerchantApplicationBusinessLicenseOCR, payload)
+	err = processor.ProcessTaskMerchantApplicationBusinessLicenseOCR(context.Background(), task)
+	require.NoError(t, err)
+}
+
+func TestProcessTaskMerchantApplicationIDCardOCR_SkipsStaleAssetBeforeProvider(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	router, err := ocr.NewStaticRouter(map[ocr.DocumentType]ocr.Route{
+		ocr.DocumentTypeIDCard: {
+			Provider:   stubIDCardOCRProvider{},
+			Capability: ocr.CapabilityWechatIDCard,
+		},
+	})
+	require.NoError(t, err)
+	processor := &RedisTaskProcessor{store: store, ocrService: ocr.NewService(store, router, stubFoodPermitBinaryReader{})}
+
+	job := db.OcrJob{
+		ID:           7901,
+		DocumentType: string(ocr.DocumentTypeIDCard),
+		Provider:     string(ocr.ProviderNameWechat),
+		MediaAssetID: 9901,
+		OwnerType:    string(ocr.OwnerTypeMerchantApplication),
+		OwnerID:      6801,
+		Status:       string(ocr.JobStatusPending),
+		Side:         string(ocr.DocumentSideFront),
+		CreatedAt:    time.Now(),
+	}
+	app := db.MerchantApplication{
+		ID:                      6801,
+		Status:                  "draft",
+		IDCardFrontMediaAssetID: pgtype.Int8{Int64: 9902, Valid: true},
+		IDCardFrontOcr:          []byte(`{"status":"pending","ocr_job_id":7901}`),
+	}
+
+	gomock.InOrder(
+		store.EXPECT().GetOCRJob(gomock.Any(), int64(7901)).Return(job, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), int64(6801)).Return(app, nil),
+	)
+
+	payload, err := json.Marshal(merchantApplicationOCRPayload{ApplicationID: 6801, MediaAssetID: 9901, OCRJobID: 7901, Side: "Front"})
+	require.NoError(t, err)
+	task := asynq.NewTask(TaskMerchantApplicationIDCardOCR, payload)
+	err = processor.ProcessTaskMerchantApplicationIDCardOCR(context.Background(), task)
 	require.NoError(t, err)
 }
 
@@ -508,6 +826,12 @@ func TestProcessTaskMerchantApplicationBusinessLicenseOCR_WritesPartialReadiness
 			stubFoodPermitBinaryReader{},
 		),
 	}
+	app := db.MerchantApplication{
+		ID:                          167,
+		Status:                      "draft",
+		BusinessLicenseMediaAssetID: pgtype.Int8{Int64: 198, Valid: true},
+		BusinessLicenseOcr:          []byte(`{"status":"pending","ocr_job_id":178}`),
+	}
 
 	createdAt := time.Date(2026, 3, 25, 11, 4, 0, 0, time.UTC)
 	startedAt := time.Date(2026, 3, 25, 11, 4, 30, 0, time.UTC)
@@ -523,6 +847,8 @@ func TestProcessTaskMerchantApplicationBusinessLicenseOCR_WritesPartialReadiness
 	}
 
 	gomock.InOrder(
+		store.EXPECT().GetOCRJob(gomock.Any(), int64(178)).Return(baseJob, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), int64(167)).Return(app, nil),
 		store.EXPECT().GetOCRJob(gomock.Any(), int64(178)).Return(baseJob, nil),
 		store.EXPECT().
 			MarkOCRJobProcessing(gomock.Any(), gomock.Any()).
@@ -544,6 +870,7 @@ func TestProcessTaskMerchantApplicationBusinessLicenseOCR_WritesPartialReadiness
 				job.FinishedAt = pgtype.Timestamptz{Time: startedAt.Add(12 * time.Second), Valid: true}
 				return job, nil
 			}),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), int64(167)).Return(app, nil),
 		store.EXPECT().
 			UpdateMerchantApplicationBusinessLicense(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationBusinessLicenseParams) (db.MerchantApplication, error) {
@@ -559,11 +886,11 @@ func TestProcessTaskMerchantApplicationBusinessLicenseOCR_WritesPartialReadiness
 				require.Equal(t, ocrReadinessReasonRequiredFieldMissing, readiness["reason_code"])
 				require.Equal(t, []any{"valid_period"}, readiness["missing_fields"])
 				require.Equal(t, "", payload["valid_period"])
-				return db.MerchantApplication{ID: 167}, nil
+				return app, nil
 			}),
 	)
 
-	payload, err := json.Marshal(merchantApplicationOCRPayload{ApplicationID: 167, OCRJobID: 178})
+	payload, err := json.Marshal(merchantApplicationOCRPayload{ApplicationID: 167, MediaAssetID: 198, OCRJobID: 178})
 	require.NoError(t, err)
 	expectOCRSuccessAuditLog(t, store, db.OcrJob{ID: 178, OwnerType: string(ocr.OwnerTypeMerchantApplication)})
 
@@ -593,6 +920,12 @@ func TestProcessTaskMerchantApplicationIDCardOCR_UsesOCRJob(t *testing.T) {
 			stubFoodPermitBinaryReader{},
 		),
 	}
+	app := db.MerchantApplication{
+		ID:                      68,
+		Status:                  "draft",
+		IDCardFrontMediaAssetID: pgtype.Int8{Int64: 99, Valid: true},
+		IDCardFrontOcr:          []byte(`{"status":"pending","ocr_job_id":79}`),
+	}
 
 	createdAt := time.Date(2026, 3, 25, 11, 59, 0, 0, time.UTC)
 	startedAt := time.Date(2026, 3, 25, 11, 59, 30, 0, time.UTC)
@@ -609,6 +942,8 @@ func TestProcessTaskMerchantApplicationIDCardOCR_UsesOCRJob(t *testing.T) {
 	}
 
 	gomock.InOrder(
+		store.EXPECT().GetOCRJob(gomock.Any(), int64(79)).Return(baseJob, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), int64(68)).Return(app, nil),
 		store.EXPECT().GetOCRJob(gomock.Any(), int64(79)).Return(baseJob, nil),
 		store.EXPECT().
 			MarkOCRJobProcessing(gomock.Any(), gomock.Any()).
@@ -629,6 +964,7 @@ func TestProcessTaskMerchantApplicationIDCardOCR_UsesOCRJob(t *testing.T) {
 				job.FinishedAt = pgtype.Timestamptz{Time: startedAt.Add(10 * time.Second), Valid: true}
 				return job, nil
 			}),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), int64(68)).Return(app, nil),
 		store.EXPECT().
 			UpdateMerchantApplicationIDCardFront(gomock.Any(), gomock.Any()).
 			DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationIDCardFrontParams) (db.MerchantApplication, error) {
@@ -641,11 +977,11 @@ func TestProcessTaskMerchantApplicationIDCardOCR_UsesOCRJob(t *testing.T) {
 				require.NotNil(t, payload.OCRJobID)
 				require.Equal(t, int64(79), *payload.OCRJobID)
 				require.Equal(t, "张三", payload.Name)
-				return db.MerchantApplication{ID: 68}, nil
+				return app, nil
 			}),
 	)
 
-	payload, err := json.Marshal(merchantApplicationOCRPayload{ApplicationID: 68, OCRJobID: 79, Side: "Front"})
+	payload, err := json.Marshal(merchantApplicationOCRPayload{ApplicationID: 68, MediaAssetID: 99, OCRJobID: 79, Side: "Front"})
 	require.NoError(t, err)
 	expectOCRSuccessAuditLog(t, store, db.OcrJob{ID: 79, OwnerType: string(ocr.OwnerTypeMerchantApplication)})
 

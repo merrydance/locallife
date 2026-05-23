@@ -71,6 +71,9 @@ func notifyMerchantFeeBreakdownProfitSharingOrder(order db.Order) db.ProfitShari
 		OperatorCommission: 285,
 		PaymentFee:         31,
 		MerchantAmount:     9794,
+		RiderGrossAmount:   order.DeliveryFee,
+		RiderPaymentFee:    5,
+		RiderAmount:        order.DeliveryFee - 5,
 	}
 }
 
@@ -149,9 +152,13 @@ func TestNotifyMerchantNewOrder_PublishesMerchantAppPayload(t *testing.T) {
 	order := notifyMerchantFeeBreakdownOrder()
 	merchant := db.Merchant{ID: 601, OwnerUserID: 701, Name: "测试商户"}
 	paymentOrder := db.PaymentOrder{
-		ID:           701,
-		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
-		BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+		ID:                    701,
+		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType:          db.ExternalPaymentBusinessOwnerOrder,
+		Amount:                order.TotalAmount,
+		Status:                "paid",
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
 	}
 	profitSharingOrder := notifyMerchantFeeBreakdownProfitSharingOrder(order)
 
@@ -187,6 +194,9 @@ func TestNotifyMerchantNewOrder_PublishesMerchantAppPayload(t *testing.T) {
 	require.Equal(t, int64(10000), breakdown.FoodAmount)
 	require.Equal(t, int64(475), breakdown.PlatformServiceFeeAmount)
 	require.Equal(t, int64(31), breakdown.PaymentChannelFeeAmount)
+	require.Equal(t, int64(800), breakdown.RiderGrossAmount)
+	require.Equal(t, int64(5), breakdown.RiderPaymentFeeAmount)
+	require.Equal(t, int64(795), breakdown.RiderNetEarningsAmount)
 
 	require.Len(t, publisher.records, 1)
 	require.Equal(t, "notification:merchant:601", publisher.records[0].channel)
@@ -211,6 +221,9 @@ func TestNotifyMerchantNewOrder_PublishesMerchantAppPayload(t *testing.T) {
 	require.Equal(t, float64(10000), feeBreakdown["food_amount"])
 	require.Equal(t, float64(475), feeBreakdown["platform_service_fee_amount"])
 	require.Equal(t, float64(31), feeBreakdown["payment_channel_fee_amount"])
+	require.Equal(t, float64(800), feeBreakdown["rider_gross_amount"])
+	require.Equal(t, float64(5), feeBreakdown["rider_payment_fee_amount"])
+	require.Equal(t, float64(795), feeBreakdown["rider_net_earnings_amount"])
 	require.NotContains(t, feeBreakdown, "provider_payment_fee")
 	require.NotContains(t, feeBreakdown, "provider_payment_fee_rate_bps")
 	require.NotContains(t, feeBreakdown, "operator_commission")
@@ -225,6 +238,51 @@ func TestNotifyMerchantNewOrder_PublishesMerchantAppPayload(t *testing.T) {
 	require.Equal(t, "大份 / 少辣", item["specs_text"])
 }
 
+func TestNotifyMerchantNewOrder_PublishesWhenPaidOrderWasCancelled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &merchantNotificationRecorder{}
+	publisher := &recordingPublisher{}
+	processor := NewTestTaskProcessor(store, distributor, nil, nil)
+	processor.pubSubPublisher = publisher
+
+	order := notifyMerchantFeeBreakdownOrder()
+	order.Status = db.OrderStatusCancelled
+	merchant := db.Merchant{ID: order.MerchantID, OwnerUserID: 701, Name: "测试商户"}
+	paymentOrder := db.PaymentOrder{
+		ID:                    701,
+		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType:          db.ExternalPaymentBusinessOwnerOrder,
+		Amount:                order.TotalAmount,
+		Status:                "paid",
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+	}
+	profitSharingOrder := notifyMerchantFeeBreakdownProfitSharingOrder(order)
+
+	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(merchant, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+			BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+		}).
+		Return(paymentOrder, nil)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(profitSharingOrder, nil)
+	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+
+	err := processor.notifyMerchantNewOrder(context.Background(), order)
+	require.NoError(t, err)
+
+	require.NotNil(t, distributor.payload)
+	require.Equal(t, merchant.OwnerUserID, distributor.payload.UserID)
+	breakdown, ok := distributor.payload.ExtraData["fee_breakdown"].(logic.MerchantOrderFeeBreakdown)
+	require.True(t, ok)
+	require.Equal(t, order.TotalAmount, breakdown.CustomerPayableAmount)
+	require.Len(t, publisher.records, 1)
+}
+
 func TestNotifyMerchantNewOrder_ReturnsErrorBeforePublishingWhenItemsFail(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -235,10 +293,44 @@ func TestNotifyMerchantNewOrder_ReturnsErrorBeforePublishingWhenItemsFail(t *tes
 	processor := NewTestTaskProcessor(store, distributor, nil, nil)
 	processor.pubSubPublisher = publisher
 
-	order := db.Order{ID: 502, MerchantID: 602, OrderNo: "ORD502", OrderType: "takeout", Status: db.OrderStatusPaid, TotalAmount: 9900}
+	order := db.Order{
+		ID:          502,
+		MerchantID:  602,
+		OrderNo:     "ORD502",
+		OrderType:   "takeout",
+		Status:      db.OrderStatusPaid,
+		Subtotal:    9900,
+		TotalAmount: 9900,
+	}
 	merchant := db.Merchant{ID: 602, OwnerUserID: 702, Name: "测试商户"}
+	paymentOrder := db.PaymentOrder{
+		ID:                    702,
+		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType:          db.ExternalPaymentBusinessOwnerOrder,
+		Amount:                order.TotalAmount,
+		Status:                "paid",
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+	}
+	profitSharingOrder := db.ProfitSharingOrder{
+		ID:                 802,
+		PaymentOrderID:     paymentOrder.ID,
+		MerchantID:         order.MerchantID,
+		TotalAmount:        order.TotalAmount,
+		PlatformCommission: 0,
+		OperatorCommission: 0,
+		PaymentFee:         0,
+		MerchantAmount:     order.TotalAmount,
+	}
 
 	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(merchant, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+			BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+		}).
+		Return(paymentOrder, nil)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(profitSharingOrder, nil)
 	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return(nil, errors.New("database unavailable"))
 
 	err := processor.notifyMerchantNewOrder(context.Background(), order)
@@ -264,13 +356,16 @@ func TestNotifyMerchantNewOrder_ReturnsErrorBeforePublishingWhenFeeBreakdownMiss
 	order.MerchantID = 604
 	merchant := db.Merchant{ID: 604, OwnerUserID: 704, Name: "测试商户"}
 	paymentOrder := db.PaymentOrder{
-		ID:           704,
-		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
-		BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+		ID:                    704,
+		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType:          db.ExternalPaymentBusinessOwnerOrder,
+		Amount:                order.TotalAmount,
+		Status:                "paid",
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
 	}
 
 	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(merchant, nil)
-	store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
 	store.EXPECT().
 		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
 			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
@@ -286,7 +381,7 @@ func TestNotifyMerchantNewOrder_ReturnsErrorBeforePublishingWhenFeeBreakdownMiss
 	require.Empty(t, publisher.records)
 }
 
-func TestNotifyMerchantNewOrder_ReturnsErrorBeforePublishingWhenOrderUnpaid(t *testing.T) {
+func TestNotifyMerchantNewOrder_ReturnsErrorBeforePublishingWhenPaymentOrderUnpaid(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -296,11 +391,29 @@ func TestNotifyMerchantNewOrder_ReturnsErrorBeforePublishingWhenOrderUnpaid(t *t
 	processor := NewTestTaskProcessor(store, distributor, nil, nil)
 	processor.pubSubPublisher = publisher
 
-	order := db.Order{ID: 503, MerchantID: 603, OrderNo: "ORD503", OrderType: "takeout", Status: db.OrderStatusPending, TotalAmount: 9900}
+	order := db.Order{ID: 503, MerchantID: 603, OrderNo: "ORD503", OrderType: "takeout", Status: db.OrderStatusCancelled, TotalAmount: 9900}
+	merchant := db.Merchant{ID: 603, OwnerUserID: 703, Name: "测试商户"}
+	paymentOrder := db.PaymentOrder{
+		ID:                    703,
+		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType:          db.ExternalPaymentBusinessOwnerOrder,
+		Amount:                order.TotalAmount,
+		Status:                "pending",
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+	}
+
+	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(merchant, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+			BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+		}).
+		Return(paymentOrder, nil)
 
 	err := processor.notifyMerchantNewOrder(context.Background(), order)
 
-	require.ErrorContains(t, err, "merchant new order notification requires paid order")
+	require.ErrorContains(t, err, "merchant new order notification requires paid payment order")
 	require.Nil(t, distributor.payload)
 	require.Empty(t, publisher.records)
 }

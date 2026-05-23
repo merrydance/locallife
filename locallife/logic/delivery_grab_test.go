@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math/big"
+	"net/http"
 	"testing"
 	"time"
 
@@ -122,10 +123,10 @@ func TestGrabDeliveryOrder_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	rider := db.Rider{ID: 10, UserID: 1, Status: db.RiderStatusActive, IsOnline: true, DepositAmount: 1000}
+	rider := db.Rider{ID: 10, UserID: 1, Status: db.RiderStatusActive, IsOnline: true, DepositAmount: 20000}
 	merchant := db.Merchant{ID: 20, RegionID: 9}
 	delivery := db.Delivery{ID: 30, OrderID: 2}
-	order := db.Order{ID: 2, Status: db.OrderStatusReady, TotalAmount: 500}
+	order := db.Order{ID: 2, Status: db.OrderStatusReady, TotalAmount: 500, OrderType: orderTypeTakeaway}
 
 	store.EXPECT().
 		GetRiderByUserID(gomock.Any(), int64(1)).
@@ -161,6 +162,104 @@ func TestGrabDeliveryOrder_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, delivery.ID, result.Delivery.ID)
 	require.Equal(t, db.OrderStatusCourierAccepted, result.Order.Status)
+}
+
+func TestGrabDeliveryOrder_UpdatesBaofuRiderBillAfterAccept(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	rider := db.Rider{ID: 10, UserID: 1, Status: db.RiderStatusActive, IsOnline: true, DepositAmount: 20000}
+	merchant := db.Merchant{ID: 20, RegionID: 9}
+	delivery := db.Delivery{ID: 30, OrderID: 2, DeliveryFee: 500}
+	order := db.Order{ID: 2, MerchantID: merchant.ID, Status: db.OrderStatusReady, OrderType: db.OrderTypeTakeout, TotalAmount: 10000, DeliveryFee: 500}
+	paymentOrder := db.PaymentOrder{ID: 6001, OrderID: pgtype.Int8{Int64: order.ID, Valid: true}, PaymentChannel: db.PaymentChannelBaofuAggregate, RequiresProfitSharing: true, BusinessType: businessTypeOrder, Amount: 10000, Status: paymentStatusPaid}
+	bill := db.ProfitSharingOrder{
+		ID:                           7001,
+		PaymentOrderID:               paymentOrder.ID,
+		MerchantID:                   merchant.ID,
+		OperatorID:                   pgtype.Int8{Int64: 30, Valid: true},
+		OrderSource:                  db.OrderTypeTakeout,
+		TotalAmount:                  10000,
+		DeliveryFee:                  500,
+		PlatformRate:                 200,
+		OperatorRate:                 300,
+		Status:                       db.ProfitSharingOrderStatusPending,
+		Provider:                     db.ExternalPaymentProviderBaofu,
+		Channel:                      db.PaymentChannelBaofuAggregate,
+		MerchantSharingMerID:         pgtype.Text{String: "MER_SHARE", Valid: true},
+		OperatorSharingMerID:         pgtype.Text{String: "OP_SHARE", Valid: true},
+		PlatformSharingMerID:         pgtype.Text{String: "PLATFORM_SHARE", Valid: true},
+		ProviderPaymentFee:           30,
+		ProviderPaymentFeeRateBps:    30,
+		ProviderPaymentFeeBaseAmount: 10000,
+		ProviderPaymentFeeSource:     BaofuProviderPaymentFeeSourceEstimated,
+		SettlementMode:               BaofuSettlementModeCommissionShare,
+		CalculationVersion:           BaofuSettlementCalculationVersionV2,
+	}
+	acceptedOrder := order
+	acceptedOrder.Status = db.OrderStatusCourierAccepted
+	acceptedDelivery := delivery
+	acceptedDelivery.RiderID = pgtype.Int8{Int64: rider.ID, Valid: true}
+
+	store.EXPECT().GetRiderByUserID(gomock.Any(), int64(1)).Return(rider, nil)
+	store.EXPECT().GetRiderProfile(gomock.Any(), rider.ID).Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+	expectActiveRiderBaofuBindingForGrab(store, rider.ID)
+	store.EXPECT().GetDeliveryPoolByOrderID(gomock.Any(), order.ID).Return(db.DeliveryPool{OrderID: order.ID, MerchantID: merchant.ID, ExpiresAt: time.Now().Add(time.Hour), DeliveryFee: 500}, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), merchant.ID).Return(merchant, nil)
+	store.EXPECT().GetDeliveryByOrderID(gomock.Any(), order.ID).Return(delivery, nil)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType: businessTypeOrder,
+	}).Return(paymentOrder, nil)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(bill, nil)
+	store.EXPECT().GrabOrderTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.GrabOrderTxParams) (db.GrabOrderTxResult, error) {
+			require.NotNil(t, arg.ProfitSharingRiderBill)
+			riderBill := *arg.ProfitSharingRiderBill
+			require.Equal(t, paymentOrder.ID, riderBill.PaymentOrderID)
+			require.Equal(t, rider.ID, riderBill.RiderID.Int64)
+			require.Equal(t, "CP123", riderBill.RiderSharingMerID.String)
+			require.Equal(t, int64(500), riderBill.RiderGrossAmount)
+			require.Equal(t, int64(3), riderBill.RiderPaymentFee)
+			require.Equal(t, int64(497), riderBill.RiderAmount)
+			require.Equal(t, int64(9500), riderBill.DistributableAmount)
+			require.Equal(t, int64(57), riderBill.MerchantPaymentFee)
+			require.Contains(t, string(riderBill.SharingDetailSnapshot), `"role":"rider"`)
+			return db.GrabOrderTxResult{Delivery: acceptedDelivery, Order: acceptedOrder}, nil
+		})
+
+	result, err := GrabDeliveryOrder(context.Background(), store, GrabOrderInput{UserID: 1, OrderID: order.ID, MaxDistanceMeters: 5000})
+	require.NoError(t, err)
+	require.Equal(t, acceptedDelivery.ID, result.Delivery.ID)
+}
+
+func TestGrabDeliveryOrder_BlocksWhenBaofuRiderBillMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	rider := db.Rider{ID: 10, UserID: 1, Status: db.RiderStatusActive, IsOnline: true, DepositAmount: 20000}
+	merchant := db.Merchant{ID: 20, RegionID: 9}
+	delivery := db.Delivery{ID: 30, OrderID: 2, DeliveryFee: 500}
+	order := db.Order{ID: 2, MerchantID: merchant.ID, Status: db.OrderStatusReady, OrderType: db.OrderTypeTakeout, TotalAmount: 10000, DeliveryFee: 500}
+	paymentOrder := db.PaymentOrder{ID: 6001, OrderID: pgtype.Int8{Int64: order.ID, Valid: true}, PaymentChannel: db.PaymentChannelBaofuAggregate, RequiresProfitSharing: true, BusinessType: businessTypeOrder, Amount: 10000, Status: paymentStatusPaid}
+
+	store.EXPECT().GetRiderByUserID(gomock.Any(), int64(1)).Return(rider, nil)
+	store.EXPECT().GetRiderProfile(gomock.Any(), rider.ID).Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+	expectActiveRiderBaofuBindingForGrab(store, rider.ID)
+	store.EXPECT().GetDeliveryPoolByOrderID(gomock.Any(), order.ID).Return(db.DeliveryPool{OrderID: order.ID, MerchantID: merchant.ID, ExpiresAt: time.Now().Add(time.Hour), DeliveryFee: 500}, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), merchant.ID).Return(merchant, nil)
+	store.EXPECT().GetDeliveryByOrderID(gomock.Any(), order.ID).Return(delivery, nil)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).Return(paymentOrder, nil)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(db.ProfitSharingOrder{}, db.ErrRecordNotFound)
+
+	_, err := GrabDeliveryOrder(context.Background(), store, GrabOrderInput{UserID: 1, OrderID: order.ID, MaxDistanceMeters: 5000})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusConflict, reqErr.Status)
+	require.Equal(t, "订单配送收益账单暂不可用，请稍后重试", reqErr.Err.Error())
 }
 
 func TestGrabDeliveryOrder_BlocksMissingBaofuSettlementAccount(t *testing.T) {

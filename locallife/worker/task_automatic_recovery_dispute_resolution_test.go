@@ -52,9 +52,6 @@ func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskOperat
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskPaymentOrderTimeout(context.Context, *PayloadPaymentOrderTimeout, ...asynq.Option) error {
 	return nil
 }
-func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskCombinedPaymentOrderTimeout(context.Context, *PayloadCombinedPaymentOrderTimeout, ...asynq.Option) error {
-	return nil
-}
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskReservationPaymentTimeout(context.Context, *PayloadReservationPaymentTimeout, ...asynq.Option) error {
 	return nil
 }
@@ -73,28 +70,10 @@ func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProces
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessRefundResult(context.Context, *RefundResultPayload, ...asynq.Option) error {
 	return nil
 }
-func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessProfitSharing(context.Context, *ProfitSharingPayload, ...asynq.Option) error {
-	return nil
-}
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessBaofuProfitSharing(context.Context, *BaofuProfitSharingPayload, ...asynq.Option) error {
 	return nil
 }
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessBaofuWithdrawalFactApplication(context.Context, *BaofuWithdrawalFactApplicationPayload, ...asynq.Option) error {
-	return nil
-}
-func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessProfitSharingReceiverTarget(context.Context, *ProfitSharingReceiverTargetPayload, ...asynq.Option) error {
-	return nil
-}
-func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessApplymentResult(context.Context, *ApplymentResultPayload, ...asynq.Option) error {
-	return nil
-}
-func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessProfitSharingReturnResult(context.Context, *ProfitSharingReturnResultPayload, ...asynq.Option) error {
-	return nil
-}
-func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessMerchantWithdrawResult(context.Context, *MerchantWithdrawResultPayload, ...asynq.Option) error {
-	return nil
-}
-func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessMerchantCancelWithdrawResult(context.Context, *MerchantCancelWithdrawResultPayload, ...asynq.Option) error {
 	return nil
 }
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskCheckMerchantForeignObject(context.Context, int64, ...asynq.Option) error {
@@ -146,9 +125,6 @@ func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskGroupA
 	return nil
 }
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskUploadShippingInfo(context.Context, *UploadShippingInfoPayload, ...asynq.Option) error {
-	return nil
-}
-func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskSyncComplaints(context.Context, *SyncComplaintsPayload, ...asynq.Option) error {
 	return nil
 }
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessAnomalyRefund(context.Context, *PayloadProcessAnomalyRefund, ...asynq.Option) error {

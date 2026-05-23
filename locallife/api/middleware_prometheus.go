@@ -67,7 +67,7 @@ var (
 			Name: "payment_callback_failures_total",
 			Help: "Total number of payment callback failures",
 		},
-		[]string{"type", "reason"}, // payment/refund/ecommerce_refund/profit_sharing
+		[]string{"type", "reason"}, // payment/refund/direct_refund/profit_sharing
 	)
 
 	wsMessagesTotal = promauto.NewCounterVec(

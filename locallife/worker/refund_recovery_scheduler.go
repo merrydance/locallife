@@ -15,7 +15,6 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/wechat"
-	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 )
@@ -27,28 +26,24 @@ const (
 )
 
 var (
-	errRefundRecoveryPaymentClientMissing   = errors.New("refund recovery payment client not configured")
-	errRefundRecoveryEcommerceClientMissing = errors.New("refund recovery ecommerce client not configured")
-	errRefundRecoveryOrdinaryClientMissing  = errors.New("refund recovery ordinary service provider client not configured")
-	errRefundRecoverySubMchIDMissing        = errors.New("refund recovery sub mchid missing")
-	errRefundRecoveryMerchantUnresolved     = errors.New("refund recovery merchant could not be resolved")
+	errRefundRecoveryPaymentClientMissing = errors.New("refund recovery payment client not configured")
+	errRefundRecoverySubMchIDMissing      = errors.New("refund recovery sub mchid missing")
+	errRefundRecoveryMerchantUnresolved   = errors.New("refund recovery merchant could not be resolved")
 )
 
 // RefundRecoveryScheduler 扫描已取消但未退款的订单并触发退款任务
 type RefundRecoveryScheduler struct {
-	cron            *cron.Cron
-	wg              sync.WaitGroup
-	stopCtx         context.Context
-	stopCancel      context.CancelFunc
-	runMu           sync.Mutex
-	store           db.Store
-	distributor     TaskDistributor
-	paymentClient   wechat.DirectPaymentClientInterface
-	ecommerceClient wechat.EcommerceClientInterface
-	ordinaryClient  OrdinaryServiceProviderWorkerClient
-	baofuClient     aggregatepay.Client
-	baofuConfig     BaofuProfitSharingWorkerConfig
-	paymentFactSvc  *logic.PaymentFactService
+	cron           *cron.Cron
+	wg             sync.WaitGroup
+	stopCtx        context.Context
+	stopCancel     context.CancelFunc
+	runMu          sync.Mutex
+	store          db.Store
+	distributor    TaskDistributor
+	paymentClient  wechat.DirectPaymentClientInterface
+	baofuClient    aggregatepay.Client
+	baofuConfig    BaofuProfitSharingWorkerConfig
+	paymentFactSvc *logic.PaymentFactService
 }
 
 // NewRefundRecoveryScheduler 创建新的退款恢复调度器
@@ -56,7 +51,6 @@ func NewRefundRecoveryScheduler(
 	store db.Store,
 	distributor TaskDistributor,
 	paymentClient wechat.DirectPaymentClientInterface,
-	ecommerceClient wechat.EcommerceClientInterface,
 ) *RefundRecoveryScheduler {
 	stopCtx, stopCancel := context.WithCancel(context.Background())
 	return &RefundRecoveryScheduler{
@@ -64,18 +58,13 @@ func NewRefundRecoveryScheduler(
 			cron.SkipIfStillRunning(cron.DefaultLogger),
 			cron.Recover(cron.DefaultLogger),
 		)),
-		stopCtx:         stopCtx,
-		stopCancel:      stopCancel,
-		store:           store,
-		distributor:     distributor,
-		paymentClient:   paymentClient,
-		ecommerceClient: ecommerceClient,
-		paymentFactSvc:  logic.NewPaymentFactService(store),
+		stopCtx:        stopCtx,
+		stopCancel:     stopCancel,
+		store:          store,
+		distributor:    distributor,
+		paymentClient:  paymentClient,
+		paymentFactSvc: logic.NewPaymentFactService(store),
 	}
-}
-
-func (s *RefundRecoveryScheduler) SetOrdinaryServiceProviderClient(client OrdinaryServiceProviderWorkerClient) {
-	s.ordinaryClient = client
 }
 
 func (s *RefundRecoveryScheduler) SetBaofuAggregateClient(client aggregatepay.Client, config BaofuProfitSharingWorkerConfig) {
@@ -361,7 +350,7 @@ func (s *RefundRecoveryScheduler) recoverStuckProcessingRefunds(ctx context.Cont
 			continue
 		}
 		if application != nil {
-			enqueueRiderDepositRefundPaymentFactApplication(ctx, s.distributor, application)
+			enqueueOrderPaymentFactApplication(ctx, s.distributor, application)
 			log.Info().
 				Int64("refund_order_id", refundOrder.ID).
 				Str("out_refund_no", refundOrder.OutRefundNo).
@@ -371,37 +360,17 @@ func (s *RefundRecoveryScheduler) recoverStuckProcessingRefunds(ctx context.Cont
 			continue
 		}
 
-		application, err = s.recordReservationEcommerceRefundQueryFact(ctx, paymentOrder, refundOrder, refundStatus, refundID)
+		application, err = s.recordBaofuRefundQueryFact(ctx, paymentOrder, refundOrder, refundStatus, refundID)
 		if err != nil {
 			log.Error().Err(err).
 				Int64("refund_order_id", refundOrder.ID).
 				Str("out_refund_no", refundOrder.OutRefundNo).
 				Str("refund_status", refundStatus).
-				Msg("record reservation ecommerce refund query fact failed")
+				Msg("record baofu refund query fact failed")
 			continue
 		}
 		if application != nil {
-			enqueueReservationRefundPaymentFactApplication(ctx, s.distributor, application)
-			log.Info().
-				Int64("refund_order_id", refundOrder.ID).
-				Str("out_refund_no", refundOrder.OutRefundNo).
-				Str("refund_status", refundStatus).
-				Int64("payment_fact_application_id", application.ID).
-				Msg("stuck reservation refund fact application enqueued")
-			continue
-		}
-
-		application, err = s.recordOrderEcommerceRefundQueryFact(ctx, paymentOrder, refundOrder, refundStatus, refundID)
-		if err != nil {
-			log.Error().Err(err).
-				Int64("refund_order_id", refundOrder.ID).
-				Str("out_refund_no", refundOrder.OutRefundNo).
-				Str("refund_status", refundStatus).
-				Msg("record order ecommerce refund query fact failed")
-			continue
-		}
-		if application != nil {
-			enqueueOrderRefundPaymentFactApplication(ctx, s.distributor, application)
+			enqueueOrderPaymentFactApplication(ctx, s.distributor, application)
 			log.Info().
 				Int64("refund_order_id", refundOrder.ID).
 				Str("out_refund_no", refundOrder.OutRefundNo).
@@ -430,7 +399,7 @@ func (s *RefundRecoveryScheduler) persistUnsupportedRefundRecoveryFactAlert(ctx 
 		string(AlertTypeRefundFailed),
 		string(AlertLevelCritical),
 		"退款恢复查询缺少事实应用目标",
-		fmt.Sprintf("退款单 %s 查询微信侧已进入 %s，但当前业务类型 %s/%s 没有可用的退款 fact application target，系统已停止 legacy result worker fallback，请人工核对并补建 owner terminalizer。", refundOrder.OutRefundNo, refundStatus, paymentOrder.PaymentChannel, paymentOrder.BusinessType),
+		fmt.Sprintf("退款单 %s 查询支付通道已进入 %s，但当前业务类型 %s/%s 没有可用的退款 fact application target，系统已停止 legacy result worker fallback，请人工核对并补建 owner terminalizer。", refundOrder.OutRefundNo, refundStatus, paymentOrder.PaymentChannel, paymentOrder.BusinessType),
 		refundOrder.ID,
 		"refund_order",
 		map[string]any{
@@ -457,11 +426,8 @@ func (s *RefundRecoveryScheduler) persistUnsupportedRefundRecoveryFactAlert(ctx 
 }
 
 func (s *RefundRecoveryScheduler) validateStatusRecoveryCapability(paymentOrder db.PaymentOrder) error {
-	if requiresEcommerceRefund(paymentOrder) && !paymentOrderUsesMainBusinessRefundChannel(paymentOrder) {
-		return mainBusinessRefundChannelDriftError(paymentOrder, "query refund status")
-	}
-
-	if paymentOrder.PaymentChannel == db.PaymentChannelBaofuAggregate {
+	switch paymentOrder.PaymentChannel {
+	case db.PaymentChannelBaofuAggregate:
 		if s.baofuClient == nil {
 			return errors.New("refund recovery baofu aggregate client not configured")
 		}
@@ -470,29 +436,19 @@ func (s *RefundRecoveryScheduler) validateStatusRecoveryCapability(paymentOrder 
 			return errors.New("refund recovery baofu collect merchant config not configured")
 		}
 		return nil
-	}
-	if paymentOrderUsesEcommerceChannel(paymentOrder) {
-		if s.ecommerceClient == nil {
-			return errRefundRecoveryEcommerceClientMissing
+	case db.PaymentChannelDirect:
+		if s.paymentClient == nil {
+			return errRefundRecoveryPaymentClientMissing
 		}
 		return nil
+	default:
+		return fmt.Errorf("refund recovery unsupported payment channel %s", paymentOrder.PaymentChannel)
 	}
-	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
-		if s.ordinaryClient == nil {
-			return errRefundRecoveryOrdinaryClientMissing
-		}
-		return nil
-	}
-
-	if s.paymentClient == nil {
-		return errRefundRecoveryPaymentClientMissing
-	}
-
-	return nil
 }
 
 func (s *RefundRecoveryScheduler) queryRefundStatus(ctx context.Context, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder) (string, string, error) {
-	if paymentOrder.PaymentChannel == db.PaymentChannelBaofuAggregate {
+	switch paymentOrder.PaymentChannel {
+	case db.PaymentChannelBaofuAggregate:
 		cfg := s.baofuConfig.normalized()
 		resp, err := s.baofuClient.QueryRefund(ctx, aggregatecontracts.RefundQueryRequest{
 			MerchantID: cfg.CollectMerchantID,
@@ -510,45 +466,19 @@ func (s *RefundRecoveryScheduler) queryRefundStatus(ctx context.Context, payment
 			refundID = strings.TrimSpace(resp.OutTradeNo)
 		}
 		return baofuRefundResultUpstreamState(resp), refundID, nil
-	}
-	if paymentOrderUsesEcommerceChannel(paymentOrder) {
-
-		subMchID, err := s.resolveSubMchID(ctx, paymentOrder)
-		if err != nil {
-			return "", "", err
-		}
-
-		resp, err := s.ecommerceClient.QueryEcommerceRefund(ctx, subMchID, refundOrder.OutRefundNo)
+	case db.PaymentChannelDirect:
+		resp, err := s.paymentClient.QueryRefund(ctx, refundOrder.OutRefundNo)
 		if err != nil {
 			return "", "", err
 		}
 		return resp.Status, resp.RefundID, nil
+	default:
+		return "", "", fmt.Errorf("refund recovery unsupported payment channel %s", paymentOrder.PaymentChannel)
 	}
-
-	if db.PaymentOrderUsesOrdinaryServiceProviderChannel(paymentOrder) {
-		subMchID, err := s.resolveSubMchID(ctx, paymentOrder)
-		if err != nil {
-			return "", "", err
-		}
-		resp, err := s.ordinaryClient.QueryRefund(ctx, ospcontracts.RefundQueryRequest{
-			SubMchID:    subMchID,
-			OutRefundNo: refundOrder.OutRefundNo,
-		})
-		if err != nil {
-			return "", "", err
-		}
-		return string(resp.Status), resp.RefundID, nil
-	}
-
-	resp, err := s.paymentClient.QueryRefund(ctx, refundOrder.OutRefundNo)
-	if err != nil {
-		return "", "", err
-	}
-	return resp.Status, resp.RefundID, nil
 }
 
 func (s *RefundRecoveryScheduler) recordRiderDepositDirectRefundQueryFact(ctx context.Context, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder, refundStatus, refundID string) (*db.ExternalPaymentFactApplication, error) {
-	if s.paymentFactSvc == nil || paymentOrder.BusinessType != db.ExternalPaymentBusinessOwnerRiderDeposit || paymentOrderUsesEcommerceChannel(paymentOrder) {
+	if s.paymentFactSvc == nil || paymentOrder.BusinessType != db.ExternalPaymentBusinessOwnerRiderDeposit || paymentOrder.PaymentChannel != db.PaymentChannelDirect {
 		return nil, nil
 	}
 	amount := refundOrder.RefundAmount
@@ -581,69 +511,49 @@ func (s *RefundRecoveryScheduler) recordRiderDepositDirectRefundQueryFact(ctx co
 	return result.Application, nil
 }
 
-func (s *RefundRecoveryScheduler) recordReservationEcommerceRefundQueryFact(ctx context.Context, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder, refundStatus, refundID string) (*db.ExternalPaymentFactApplication, error) {
-	if s.paymentFactSvc == nil || !paymentOrderUsesMainBusinessRefundChannel(paymentOrder) || !isReservationRefundPayment(paymentOrder) {
+func (s *RefundRecoveryScheduler) recordBaofuRefundQueryFact(ctx context.Context, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder, refundStatus, refundID string) (*db.ExternalPaymentFactApplication, error) {
+	if s.paymentFactSvc == nil || paymentOrder.PaymentChannel != db.PaymentChannelBaofuAggregate {
 		return nil, nil
 	}
-	provider, channel, capability := mainBusinessRefundFactProviderChannelCapability(paymentOrder.PaymentChannel)
+	var (
+		businessOwner      string
+		businessObjectType string
+		consumer           string
+	)
+	switch paymentOrder.BusinessType {
+	case db.ExternalPaymentBusinessOwnerReservation:
+		businessOwner = db.ExternalPaymentBusinessOwnerReservation
+		businessObjectType = reservationRefundFactBusinessObjectOrder
+		consumer = reservationRefundFactConsumerDomain
+	case db.ExternalPaymentBusinessOwnerOrder:
+		businessOwner = db.ExternalPaymentBusinessOwnerOrder
+		businessObjectType = orderRefundFactBusinessObjectOrder
+		consumer = orderRefundFactConsumerDomain
+	default:
+		return nil, nil
+	}
 	amount := refundOrder.RefundAmount
 	terminalStatus := normalizeRefundTerminalStatusForPaymentOrder(paymentOrder, refundStatus)
 	result, err := s.paymentFactSvc.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
-		Provider:             provider,
-		Channel:              channel,
-		Capability:           capability,
+		Provider:             db.ExternalPaymentProviderBaofu,
+		Channel:              db.PaymentChannelBaofuAggregate,
+		Capability:           db.ExternalPaymentCapabilityBaofuRefund,
 		FactSource:           db.ExternalPaymentFactSourceQuery,
 		ExternalObjectType:   db.ExternalPaymentObjectRefund,
 		ExternalObjectKey:    refundOrder.OutRefundNo,
 		ExternalSecondaryKey: paymentFactStringPtr(refundID),
-		BusinessOwner:        paymentFactStringPtr(db.ExternalPaymentBusinessOwnerReservation),
-		BusinessObjectType:   paymentFactStringPtr(reservationRefundFactBusinessObjectOrder),
+		BusinessOwner:        paymentFactStringPtr(businessOwner),
+		BusinessObjectType:   paymentFactStringPtr(businessObjectType),
 		BusinessObjectID:     paymentFactInt64Ptr(refundOrder.ID),
 		UpstreamState:        refundStatus,
 		TerminalStatus:       terminalStatus,
 		Amount:               &amount,
 		Currency:             "CNY",
-		RawResource:          mainBusinessRefundQueryFactResource(refundOrder.OutRefundNo, refundID, refundStatus),
-		DedupeKey:            mainBusinessRefundQueryFactDedupeKey(provider, channel, refundOrder.OutRefundNo, terminalStatus),
+		RawResource:          baofuRefundQueryFactResource(refundOrder.OutRefundNo, refundID, refundStatus),
+		DedupeKey:            baofuRefundQueryFactDedupeKey(refundOrder.OutRefundNo, terminalStatus),
 		Application: &logic.ExternalPaymentFactApplicationTarget{
-			Consumer:           reservationRefundFactConsumerDomain,
-			BusinessObjectType: reservationRefundFactBusinessObjectOrder,
-			BusinessObjectID:   refundOrder.ID,
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-	return result.Application, nil
-}
-
-func (s *RefundRecoveryScheduler) recordOrderEcommerceRefundQueryFact(ctx context.Context, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder, refundStatus, refundID string) (*db.ExternalPaymentFactApplication, error) {
-	if s.paymentFactSvc == nil || !paymentOrderUsesMainBusinessRefundChannel(paymentOrder) || !paymentOrder.OrderID.Valid || paymentOrder.ReservationID.Valid || paymentOrder.BusinessType != db.ExternalPaymentBusinessOwnerOrder {
-		return nil, nil
-	}
-	provider, channel, capability := mainBusinessRefundFactProviderChannelCapability(paymentOrder.PaymentChannel)
-	amount := refundOrder.RefundAmount
-	terminalStatus := normalizeRefundTerminalStatusForPaymentOrder(paymentOrder, refundStatus)
-	result, err := s.paymentFactSvc.RecordExternalPaymentFact(ctx, logic.RecordExternalPaymentFactInput{
-		Provider:             provider,
-		Channel:              channel,
-		Capability:           capability,
-		FactSource:           db.ExternalPaymentFactSourceQuery,
-		ExternalObjectType:   db.ExternalPaymentObjectRefund,
-		ExternalObjectKey:    refundOrder.OutRefundNo,
-		ExternalSecondaryKey: paymentFactStringPtr(refundID),
-		BusinessOwner:        paymentFactStringPtr(db.ExternalPaymentBusinessOwnerOrder),
-		BusinessObjectType:   paymentFactStringPtr(orderRefundFactBusinessObjectOrder),
-		BusinessObjectID:     paymentFactInt64Ptr(refundOrder.ID),
-		UpstreamState:        refundStatus,
-		TerminalStatus:       terminalStatus,
-		Amount:               &amount,
-		Currency:             "CNY",
-		RawResource:          mainBusinessRefundQueryFactResource(refundOrder.OutRefundNo, refundID, refundStatus),
-		DedupeKey:            mainBusinessRefundQueryFactDedupeKey(provider, channel, refundOrder.OutRefundNo, terminalStatus),
-		Application: &logic.ExternalPaymentFactApplicationTarget{
-			Consumer:           orderRefundFactConsumerDomain,
-			BusinessObjectType: orderRefundFactBusinessObjectOrder,
+			Consumer:           consumer,
+			BusinessObjectType: businessObjectType,
 			BusinessObjectID:   refundOrder.ID,
 		},
 	})
@@ -657,15 +567,8 @@ func directRefundQueryFactDedupeKey(outRefundNo, refundStatus string) string {
 	return "wechat:query:direct:refund:" + outRefundNo + ":" + logic.NormalizeDirectRefundTerminalStatus(refundStatus)
 }
 
-func ecommerceRefundQueryFactDedupeKey(outRefundNo, refundStatus string) string {
-	return mainBusinessRefundQueryFactDedupeKey(db.ExternalPaymentProviderWechat, db.PaymentChannelEcommerce, outRefundNo, logic.NormalizeEcommerceRefundTerminalStatus(refundStatus))
-}
-
-func mainBusinessRefundQueryFactDedupeKey(provider, channel, outRefundNo, terminalStatus string) string {
-	if provider == db.ExternalPaymentProviderBaofu {
-		return "baofu:query:refund:" + outRefundNo + ":" + terminalStatus
-	}
-	return "wechat:query:" + channel + ":refund:" + outRefundNo + ":" + terminalStatus
+func baofuRefundQueryFactDedupeKey(outRefundNo, terminalStatus string) string {
+	return "baofu:query:refund:" + outRefundNo + ":" + terminalStatus
 }
 
 func directRefundQueryFactResource(outRefundNo, refundID, refundStatus string) []byte {
@@ -681,31 +584,17 @@ func directRefundQueryFactResource(outRefundNo, refundID, refundStatus string) [
 	return raw
 }
 
-func ecommerceRefundQueryFactResource(outRefundNo, refundID, refundStatus string) []byte {
-	return mainBusinessRefundQueryFactResource(outRefundNo, refundID, refundStatus)
-}
-
-func mainBusinessRefundQueryFactResource(outRefundNo, refundID, refundStatus string) []byte {
+func baofuRefundQueryFactResource(outRefundNo, refundID, refundStatus string) []byte {
 	raw, err := json.Marshal(map[string]any{
 		"out_refund_no": outRefundNo,
 		"refund_id":     refundID,
 		"refund_status": refundStatus,
 	})
 	if err != nil {
-		log.Warn().Err(err).Str("out_refund_no", outRefundNo).Msg("marshal ecommerce refund query fact resource failed")
+		log.Warn().Err(err).Str("out_refund_no", outRefundNo).Msg("marshal baofu refund query fact resource failed")
 		return nil
 	}
 	return raw
-}
-
-func mainBusinessRefundFactProviderChannelCapability(channel string) (string, string, string) {
-	if channel == db.PaymentChannelBaofuAggregate {
-		return db.ExternalPaymentProviderBaofu, db.PaymentChannelBaofuAggregate, db.ExternalPaymentCapabilityBaofuRefund
-	}
-	if channel == db.PaymentChannelOrdinaryServiceProvider {
-		return db.ExternalPaymentProviderWechat, db.PaymentChannelOrdinaryServiceProvider, db.ExternalPaymentCapabilityPartnerRefund
-	}
-	return db.ExternalPaymentProviderWechat, db.PaymentChannelEcommerce, db.ExternalPaymentCapabilityEcommerceRefund
 }
 
 func normalizeRefundTerminalStatusForPaymentOrder(paymentOrder db.PaymentOrder, refundStatus string) string {
@@ -718,7 +607,7 @@ func normalizeRefundTerminalStatusForPaymentOrder(paymentOrder db.PaymentOrder, 
 	if paymentOrder.PaymentChannel == db.PaymentChannelDirect {
 		return logic.NormalizeDirectRefundTerminalStatus(refundStatus)
 	}
-	return logic.NormalizeEcommerceRefundTerminalStatus(refundStatus)
+	return ""
 }
 
 func baofuRefundResultUpstreamState(result *aggregatecontracts.RefundResult) string {

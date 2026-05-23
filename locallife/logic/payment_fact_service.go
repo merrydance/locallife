@@ -8,37 +8,15 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/wechat"
-	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
-	ospcontracts "github.com/merrydance/locallife/wechat/ordinaryserviceprovider/contracts"
 )
-
-type paymentFactRefundCreator interface {
-	CreateEcommerceRefund(ctx context.Context, req *wechatcontracts.EcommerceRefundRequest) (*wechatcontracts.EcommerceRefundCreateResponse, error)
-}
-
-type paymentFactOrdinaryRefundCreator interface {
-	CreateOrdinaryServiceProviderRefund(ctx context.Context, req ospcontracts.RefundCreateRequest) (*ospcontracts.RefundResponse, error)
-	OrdinaryServiceProviderRefundNotifyURL() string
-}
 
 type baofuVerifyFeeContinuation interface {
 	ContinueAfterVerifyFeePaid(ctx context.Context, paymentOrder db.PaymentOrder) error
 }
 
-type paymentFactEcommerceRefundCreatorAdapter struct {
-	client wechat.EcommerceClientInterface
-}
-
-func (a paymentFactEcommerceRefundCreatorAdapter) CreateEcommerceRefund(ctx context.Context, req *wechatcontracts.EcommerceRefundRequest) (*wechatcontracts.EcommerceRefundCreateResponse, error) {
-	return createEcommerceRefundContract(ctx, a.client, req)
-}
-
 type PaymentFactService struct {
 	store              db.Store
 	now                func() time.Time
-	ecommerceClient    wechat.EcommerceClientInterface
-	refundCreator      paymentFactRefundCreator
 	baofuContinuation  baofuVerifyFeeContinuation
 	riderAverageSpeed  int
 	defaultPrepareTime int
@@ -49,20 +27,6 @@ func NewPaymentFactService(store db.Store) *PaymentFactService {
 		store: store,
 		now:   time.Now,
 	}
-}
-
-func (svc *PaymentFactService) WithEcommerceClient(client wechat.EcommerceClientInterface) *PaymentFactService {
-	svc.ecommerceClient = client
-	svc.refundCreator = nil
-	if client != nil {
-		svc.refundCreator = paymentFactEcommerceRefundCreatorAdapter{client: client}
-	}
-	return svc
-}
-
-func (svc *PaymentFactService) WithRefundCreator(creator paymentFactRefundCreator) *PaymentFactService {
-	svc.refundCreator = creator
-	return svc
 }
 
 func (svc *PaymentFactService) WithBaofuVerifyFeeContinuation(continuation baofuVerifyFeeContinuation) *PaymentFactService {
@@ -308,21 +272,6 @@ func NormalizeDirectRefundTerminalStatus(upstreamState string) string {
 	}
 }
 
-func NormalizeEcommerceRefundTerminalStatus(upstreamState string) string {
-	switch upstreamState {
-	case "SUCCESS":
-		return db.ExternalPaymentTerminalStatusSuccess
-	case "CLOSED":
-		return db.ExternalPaymentTerminalStatusClosed
-	case "ABNORMAL":
-		return db.ExternalPaymentTerminalStatusFailed
-	case "PROCESSING":
-		return db.ExternalPaymentTerminalStatusProcessing
-	default:
-		return db.ExternalPaymentTerminalStatusUnknown
-	}
-}
-
 func NormalizeProfitSharingTerminalStatus(upstreamState string) string {
 	switch strings.ToUpper(strings.TrimSpace(upstreamState)) {
 	case "SUCCESS", "FINISHED":
@@ -335,41 +284,6 @@ func NormalizeProfitSharingTerminalStatus(upstreamState string) string {
 		return db.ExternalPaymentTerminalStatusProcessing
 	default:
 		return db.ExternalPaymentTerminalStatusUnknown
-	}
-}
-
-func ResolveProfitSharingQueryFinalResult(queryResp *wechatcontracts.ProfitSharingQueryResponse) (string, string) {
-	if queryResp == nil {
-		return "PROCESSING", ""
-	}
-
-	allSuccess := strings.ToUpper(queryResp.Status) == wechatcontracts.ProfitSharingStatusFinished
-	hasFailed := false
-	failedReasons := make([]string, 0)
-
-	for _, receiver := range queryResp.Receivers {
-		result := strings.ToUpper(strings.TrimSpace(receiver.Result))
-		switch result {
-		case wechatcontracts.ProfitSharingResultSuccess:
-			// pass
-		case "FAILED", wechatcontracts.ProfitSharingResultClosed:
-			hasFailed = true
-			allSuccess = false
-			if receiver.FailReason != "" {
-				failedReasons = append(failedReasons, receiver.FailReason)
-			}
-		default:
-			allSuccess = false
-		}
-	}
-
-	switch {
-	case hasFailed:
-		return "FAILED", strings.Join(failedReasons, ";")
-	case allSuccess:
-		return "SUCCESS", ""
-	default:
-		return "PROCESSING", ""
 	}
 }
 

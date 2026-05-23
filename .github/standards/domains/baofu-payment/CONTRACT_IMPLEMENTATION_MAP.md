@@ -123,7 +123,7 @@ withdrawal
 | Unified order/refund | `mktInfo` / `mktRefundInfo` | First version does not use marketing flows; if added later, amount relationship tests must be added before production use. |
 | Share after pay | `sharingDetails[]` | Require non-empty array; each item requires `sharingMerId` from BaoCaiTong account binding and positive `sharingAmt` in fen. |
 | Refund | `sharingRefundInfo[]` | First version rejects this because LocalLife only supports pre-share refund. Add a new contract group before enabling post-share refund. |
-| Aggregate response/callback | `chlRetParam` | Treat as method/payCode-specific nested data. For WeChat JSAPI, preserve `wc_pay_data` as JSON and tolerate documented/observed string-number scalar variance only at parser boundary. |
+| Aggregate response/callback | `chlRetParam` | Treat as method/payCode-specific nested data. For WeChat JSAPI, preserve `wc_pay_data` as JSON and tolerate documented/observed string-encoded JSON objects plus string-number scalar variance only at parser boundary. |
 
 ## 9. Enum / Status Ownership
 

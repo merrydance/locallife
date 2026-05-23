@@ -60,7 +60,7 @@ func TestProcessTaskInitiateRefund_RiderDepositMismatchRefund(t *testing.T) {
 		UpdateRefundOrderToSuccess(gomock.Any(), refundOrder.ID).
 		Return(db.RefundOrder{ID: refundOrder.ID, PaymentOrderID: refundOrder.PaymentOrderID, Status: "success", OutRefundNo: refundOrder.OutRefundNo}, nil)
 	store.EXPECT().
-		GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).
+		GetTotalSuccessfulRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).
 		Return(int64(12000), nil)
 	store.EXPECT().
 		UpdatePaymentOrderToRefunded(gomock.Any(), paymentOrder.ID).
@@ -79,7 +79,7 @@ func TestProcessTaskInitiateRefund_RiderDepositMismatchRefund(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestProcessTaskInitiateRefund_ClaimRecoveryDirectRefundWithoutEcommerceConfig(t *testing.T) {
+func TestProcessTaskInitiateRefund_ClaimRecoveryDirectRefundUsesDirectPaymentClient(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -128,7 +128,7 @@ func TestProcessTaskInitiateRefund_ClaimRecoveryDirectRefundWithoutEcommerceConf
 		UpdateRefundOrderToSuccess(gomock.Any(), refundOrder.ID).
 		Return(db.RefundOrder{ID: refundOrder.ID, PaymentOrderID: refundOrder.PaymentOrderID, Status: "success", OutRefundNo: refundOrder.OutRefundNo}, nil)
 	store.EXPECT().
-		GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).
+		GetTotalSuccessfulRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).
 		Return(int64(1200), nil)
 
 	processor := worker.NewTestTaskProcessor(store, nil, nil, nil, paymentClient)
@@ -144,7 +144,7 @@ func TestProcessTaskInitiateRefund_ClaimRecoveryDirectRefundWithoutEcommerceConf
 	require.NoError(t, err)
 }
 
-func TestProcessTaskAnomalyRefund_ClaimRecoveryDirectRefundWithoutEcommerceConfig(t *testing.T) {
+func TestProcessTaskAnomalyRefund_ClaimRecoveryDirectRefundUsesDirectPaymentClient(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -160,11 +160,15 @@ func TestProcessTaskAnomalyRefund_ClaimRecoveryDirectRefundWithoutEcommerceConfi
 		PaymentType:  "miniprogram",
 		OrderID:      toPgInt8(17),
 	}
+	order := db.Order{ID: 17, MerchantID: 27}
 	refundOrder := db.RefundOrder{ID: 77, PaymentOrderID: 7, Status: "pending", OutRefundNo: "CRF7"}
 
 	store.EXPECT().
 		GetPaymentOrder(gomock.Any(), int64(7)).
 		Return(paymentOrder, nil)
+	store.EXPECT().
+		GetOrder(gomock.Any(), int64(17)).
+		Return(order, nil)
 	store.EXPECT().
 		CreateAnomalyRefundRecord(gomock.Any(), db.CreateAnomalyRefundRecordParams{
 			PaymentOrderID: paymentOrder.ID,
@@ -185,7 +189,7 @@ func TestProcessTaskAnomalyRefund_ClaimRecoveryDirectRefundWithoutEcommerceConfi
 		UpdateRefundOrderToSuccess(gomock.Any(), refundOrder.ID).
 		Return(db.RefundOrder{ID: refundOrder.ID, PaymentOrderID: refundOrder.PaymentOrderID, Status: "success", OutRefundNo: refundOrder.OutRefundNo}, nil)
 	store.EXPECT().
-		GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).
+		GetTotalSuccessfulRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).
 		Return(int64(6600), nil)
 	store.EXPECT().
 		UpdatePaymentOrderToRefunded(gomock.Any(), paymentOrder.ID).

@@ -152,18 +152,43 @@
   font-size: 26rpx;
   color: var(--td-text-color-secondary);
   margin-bottom: 16rpx;
+  gap: 24rpx;
 }
 
-.total-row {
+.summary-row--total,
+.summary-row--income {
   color: var(--td-text-color-primary);
   font-weight: bold;
   font-size: 30rpx;
   margin-top: 8rpx;
 }
 
+.summary-row--discount {
+  color: var(--td-success-color);
+}
+
+.summary-row--fee {
+  color: var(--td-text-color-secondary);
+}
+
 .total-val {
   color: var(--td-brand-color);
   font-size: 36rpx;
+}
+
+.income-val {
+  color: var(--td-success-color);
+  font-size: 36rpx;
+}
+
+.price-summary-unavailable {
+  margin-top: 24rpx;
+  padding: 20rpx 24rpx;
+  border-radius: var(--radius-md);
+  background: var(--td-warning-color-1);
+  color: var(--td-text-color-secondary);
+  font-size: 24rpx;
+  line-height: 1.6;
 }
 
 .notes-text {
@@ -214,4 +239,3 @@
 .card-inline-hint-success {
   background: var(--td-success-color-1);
 }
-

@@ -14,6 +14,23 @@ export const MERCHANT_REJECT_REASON_OPTIONS = [
 
 // ==================== 订单数据类型定义 ====================
 
+export interface MerchantOrderFeeBreakdown {
+    food_amount: number
+    merchant_discount_amount: number
+    voucher_discount_amount: number
+    food_payable_amount: number
+    delivery_fee_amount: number
+    delivery_fee_discount_amount: number
+    delivery_payable_amount: number
+    customer_payable_amount: number
+    platform_service_fee_amount: number
+    payment_channel_fee_amount: number
+    merchant_receivable_amount: number
+    rider_gross_amount?: number
+    rider_payment_fee_amount?: number
+    rider_net_earnings_amount?: number
+}
+
 /**
  * 订单响应 - 完全对齐 api.orderResponse
  */
@@ -34,6 +51,7 @@ export interface OrderResponse {
     delivery_fee_discount: number                // 配送费优惠（分）
     discount_amount: number                      // 优惠金额（分）
     total_amount: number                         // 订单总金额（分）
+    fee_breakdown?: MerchantOrderFeeBreakdown     // 商户视角费用清单（金额单位：分）
     fulfillment_status?: 'scheduled' | 'pending_kitchen' | 'preparing' | 'ready' | 'completed' | 'cancelled'
     payment_method?: 'wechat' | 'balance'        // 支付方式
     notes?: string                               // 订单备注
@@ -69,6 +87,16 @@ export interface OrderResponse {
         type?: string
         locale?: string
     }>
+}
+
+export type MerchantVisibleOrderStatus = Exclude<OrderResponse['status'], 'pending'>
+export type MerchantOrderStatusFilter = '' | MerchantVisibleOrderStatus
+
+export function normalizeMerchantVisibleOrderStatusFilter(status?: OrderResponse['status'] | MerchantOrderStatusFilter): MerchantOrderStatusFilter {
+    if (!status || status === 'pending') {
+        return 'paid'
+    }
+    return status
 }
 
 /**
@@ -281,7 +309,7 @@ export class MerchantOrderManagementService {
     static async getOrderList(params: {
         page_id: number                            // 页码（必填）
         page_size: number                          // 每页数量（必填，5-50）
-        status?: 'pending' | 'paid' | 'preparing' | 'ready' | 'courier_accepted' | 'picked' | 'delivering' | 'rider_delivered' | 'user_delivered' | 'completed' | 'cancelled'  // 状态筛选
+        status?: MerchantVisibleOrderStatus        // 状态筛选，商户侧不可请求 pending
         order_type?: OrderResponse['order_type']   // 订单类型筛选
     }): Promise<MerchantOrderListResult> {
         const response = await request<OrderResponse[] | MerchantOrderListResult | { orders?: OrderResponse[], total?: number, page_id?: number, page_size?: number }>({
@@ -555,11 +583,21 @@ export class OrderManagementAdapter {
         return methodMap[paymentMethod] || paymentMethod
     }
 
+    static getCustomerPayableAmount(order: OrderResponse): number {
+        return order.fee_breakdown?.customer_payable_amount ?? order.total_amount
+    }
+
+    static getMerchantReceivableAmount(order: OrderResponse): number | null {
+        return typeof order.fee_breakdown?.merchant_receivable_amount === 'number'
+            ? order.fee_breakdown.merchant_receivable_amount
+            : null
+    }
+
     /**
-     * 计算订单实际支付金额
+     * @deprecated 商户侧金额真值来自后端 fee_breakdown；请使用 getCustomerPayableAmount。
      */
     static calculateActualAmount(order: OrderResponse): number {
-        return order.subtotal + order.delivery_fee - order.delivery_fee_discount - order.discount_amount
+        return this.getCustomerPayableAmount(order)
     }
 
     /**

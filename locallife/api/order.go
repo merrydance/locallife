@@ -945,7 +945,7 @@ func (server *Server) replaceOrder(ctx *gin.Context) {
 		Notes:   req.Notes,
 	})
 	if err != nil {
-		if isEcommerceClientNotConfigured(err) {
+		if isPaymentServiceNotConfigured(err) {
 			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "商户支付能力未完成配置，当前无法处理改菜支付或退款，请联系平台处理后重试", "replace order payment client not configured"))
 			return
 		}
@@ -1150,7 +1150,9 @@ func (server *Server) listMerchantOrders(ctx *gin.Context) {
 		return
 	}
 	for index, order := range orders {
-		resp[index].FeeBreakdown = newMerchantOrderFeeBreakdownResponse(feeBreakdowns[order.ID])
+		if breakdown, ok := feeBreakdowns[order.ID]; ok {
+			resp[index].FeeBreakdown = newMerchantOrderFeeBreakdownResponse(breakdown)
+		}
 	}
 
 	ctx.JSON(http.StatusOK, listMerchantOrdersResponse{
@@ -1248,7 +1250,9 @@ func (server *Server) getMerchantOrder(ctx *gin.Context) {
 		writeMerchantOrderFeeBreakdownError(ctx, merchant.ID, []db.Order{order}, err)
 		return
 	}
-	resp.FeeBreakdown = newMerchantOrderFeeBreakdownResponse(feeBreakdowns[order.ID])
+	if breakdown, ok := feeBreakdowns[order.ID]; ok {
+		resp.FeeBreakdown = newMerchantOrderFeeBreakdownResponse(breakdown)
+	}
 
 	ctx.JSON(http.StatusOK, resp)
 }

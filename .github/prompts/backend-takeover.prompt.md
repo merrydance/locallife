@@ -6,6 +6,8 @@ description: "Use when drafting a backend takeover or onboarding request for loc
 
 Use this template when a new engineer or agent is taking over backend work in `locallife/` and needs a durable, development-ready understanding of the system before making changes.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions, and confirm the takeover scope before writing the request. Do not keep relying on stale context.
+
 Use `.github/standards/backend/RUNTIME_ARCHITECTURE.md` to establish the real composition roots and async boundaries, `.github/standards/backend/WORKFLOW_AND_VALIDATION.md` to establish generation and test workflow, and `.github/standards/backend/README.md` plus the matching domain README to identify the highest-risk production chains.
 
 ## Backend Takeover
@@ -42,5 +44,4 @@ Acceptance checklist:
 - It names which flows must be read across `api`, `logic`, `db/sqlc`, `worker`, `scheduler`, and webhook or callback boundaries
 - It highlights concrete high-risk domains instead of giving a flat package tour
 - It identifies at least the minimum validation and regeneration workflow a new owner must preserve
-
 

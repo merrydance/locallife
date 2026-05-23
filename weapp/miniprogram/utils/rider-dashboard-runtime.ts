@@ -9,6 +9,7 @@ import { locationService } from './location'
 import { normalizeLocationError, syncRiderDeliveryLocation } from './rider-location'
 import { getRiderLocationStatusView } from './rider-location-status-view'
 import { riderLiveLocationSession, RiderLiveLocationState } from './rider-live-location'
+import { buildRiderDeliveryIncomeView, RiderDeliveryIncomeView } from './rider-delivery-income-view'
 import { getStableBarHeights } from './responsive'
 import { resolveStatusTagTheme, type StatusTagTheme } from './status-tag'
 import { wsManager, WSMessageType } from './websocket'
@@ -43,6 +44,7 @@ export type DashboardDeliveryView = Delivery & {
   can_start_delivery: boolean
   can_confirm_delivery: boolean
   is_action_loading: boolean
+  income_view: RiderDeliveryIncomeView
 }
 
 interface DeliveryActionConfig {
@@ -471,7 +473,8 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
           can_confirm_pickup: actionState.canConfirmPickup,
           can_start_delivery: actionState.canStartDelivery,
           can_confirm_delivery: actionState.canConfirmDelivery,
-          is_action_loading: (this.data.deliveryActionLoadingIds || []).includes(d.id)
+          is_action_loading: (this.data.deliveryActionLoadingIds || []).includes(d.id),
+          income_view: buildRiderDeliveryIncomeView(d)
         }
       }) as DashboardDeliveryView[]
 

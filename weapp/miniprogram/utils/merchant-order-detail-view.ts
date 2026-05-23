@@ -28,6 +28,7 @@ export interface MerchantOrderDetailView extends OrderResponse {
   location_secondary: string
   contact_name: string
   contact_phone: string
+  fee_breakdown_view: MerchantOrderFeeBreakdownView
   can_accept: boolean
   can_reject: boolean
   can_mark_ready: boolean
@@ -92,12 +93,91 @@ export interface RefundFormData {
   refund_reason: string
 }
 
+export interface MerchantOrderFeeBreakdownRow {
+  key: string
+  label: string
+  value: number
+  value_text: string
+  tone: 'default' | 'discount' | 'total' | 'income' | 'fee'
+  visible: boolean
+}
+
+export interface MerchantOrderFeeBreakdownView {
+  available: boolean
+  unavailable_text: string
+  customer_payable_text: string
+  merchant_receivable_text: string
+  summary_rows: MerchantOrderFeeBreakdownRow[]
+  settlement_rows: MerchantOrderFeeBreakdownRow[]
+}
+
 export function createDefaultRefundForm(): RefundFormData {
   return { refund_type: 'full', refund_amount: '', refund_reason: '' }
 }
 
 function formatMoney(amount: number) {
   return `¥${(amount / 100).toFixed(2)}`
+}
+
+function formatSignedMoney(amount: number) {
+  if (amount < 0) {
+    return `-¥${(Math.abs(amount) / 100).toFixed(2)}`
+  }
+  return formatMoney(amount)
+}
+
+function createFeeBreakdownRow(
+  key: string,
+  label: string,
+  value: number,
+  tone: MerchantOrderFeeBreakdownRow['tone'],
+  alwaysVisible = false
+): MerchantOrderFeeBreakdownRow {
+  return {
+    key,
+    label,
+    value,
+    value_text: formatSignedMoney(value),
+    tone,
+    visible: alwaysVisible || value !== 0
+  }
+}
+
+export function buildMerchantOrderFeeBreakdownView(order: OrderResponse): MerchantOrderFeeBreakdownView {
+  const breakdown = order.fee_breakdown
+  if (!breakdown) {
+    const customerPayable = formatMoney(order.total_amount || 0)
+    return {
+      available: false,
+      unavailable_text: '订单费用明细暂不可用，请稍后重试',
+      customer_payable_text: customerPayable,
+      merchant_receivable_text: '金额同步中',
+      summary_rows: [],
+      settlement_rows: []
+    }
+  }
+
+  return {
+    available: true,
+    unavailable_text: '',
+    customer_payable_text: formatMoney(breakdown.customer_payable_amount),
+    merchant_receivable_text: formatMoney(breakdown.merchant_receivable_amount),
+    summary_rows: [
+      createFeeBreakdownRow('food_amount', '餐费原价', breakdown.food_amount, 'default'),
+      createFeeBreakdownRow('merchant_discount_amount', '商户优惠', -breakdown.merchant_discount_amount, 'discount'),
+      createFeeBreakdownRow('voucher_discount_amount', '平台/券优惠', -breakdown.voucher_discount_amount, 'discount'),
+      createFeeBreakdownRow('food_payable_amount', '餐费应付', breakdown.food_payable_amount, 'default'),
+      createFeeBreakdownRow('delivery_fee_amount', '配送费', breakdown.delivery_fee_amount, 'default'),
+      createFeeBreakdownRow('delivery_fee_discount_amount', '配送优惠', -breakdown.delivery_fee_discount_amount, 'discount'),
+      createFeeBreakdownRow('delivery_payable_amount', '配送应付', breakdown.delivery_payable_amount, 'default'),
+      createFeeBreakdownRow('customer_payable_amount', '用户实付', breakdown.customer_payable_amount, 'total', true)
+    ],
+    settlement_rows: [
+      createFeeBreakdownRow('platform_service_fee_amount', '平台服务费', breakdown.platform_service_fee_amount, 'fee', true),
+      createFeeBreakdownRow('payment_channel_fee_amount', '支付通道费', breakdown.payment_channel_fee_amount, 'fee', true),
+      createFeeBreakdownRow('merchant_receivable_amount', '商户实收', breakdown.merchant_receivable_amount, 'income', true)
+    ]
+  }
 }
 
 function getPaymentStatusLabel(status: string) {

@@ -1,0 +1,54 @@
+<custom-navbar title="提现" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: var(--spacer-lg);">
+  <view wx:if="{{initialLoading}}" class="page-content">
+    <t-loading theme="circular" size="40rpx" text="加载提现信息中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="page-content">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '提现信息加载失败，请重试'}}" />
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
+  </view>
+
+  <view wx:else class="page-content">
+    <t-cell-group wx:if="{{refreshErrorMessage}}">
+      <t-cell title="提现信息同步失败" note="{{refreshErrorMessage}}">
+        <view slot="right-icon">
+          <t-button size="extra-small" theme="primary" variant="text" loading="{{loadingWithdrawals}}" bind:tap="onRetry">重试</t-button>
+        </view>
+      </t-cell>
+    </t-cell-group>
+
+    <t-cell-group>
+      <t-cell title="可提现余额" note="{{balanceView.availableAmountText}}" />
+      <t-cell title="提现处理中" note="{{balanceView.pendingAmountText}}" />
+      <t-cell wx:if="{{!balanceView.canSubmit}}" title="暂不能提现" note="{{balanceView.disabledReason}}" />
+      <t-cell title="结算账户" note="{{balanceView.statusDesc || '结算账户已开通'}}" arrow url="/pages/operator/finance/settlement-account/index" />
+    </t-cell-group>
+
+    <t-notice-bar wx:if="{{balanceErrorMessage}}" theme="warning" content="{{balanceErrorMessage}}" />
+
+    <t-button theme="primary" block loading="{{loadingWithdrawals}}" disabled="{{!balanceView.canSubmit || loadingWithdrawals}}" bind:tap="onOpenCreate">申请提现</t-button>
+
+    <t-empty wx:if="{{recordsErrorMessage && !rows.length}}" icon="error-circle" description="{{recordsErrorMessage}}" />
+    <t-empty wx:elif="{{!rows.length}}" icon="info-circle" description="暂无提现记录" />
+    <t-cell-group wx:else>
+      <t-cell
+        wx:for="{{rows}}"
+        wx:key="id"
+        title="提现申请"
+        description="{{item.createdAtText}}"
+        note="{{item.amountText}}"
+        data-id="{{item.id}}"
+        arrow
+        bind:click="onOpenDetail"
+      >
+        <view slot="right-icon">
+          <t-tag theme="{{item.statusView.theme}}" size="small">{{item.statusView.text}}</t-tag>
+        </view>
+      </t-cell>
+    </t-cell-group>
+
+    <t-button wx:if="{{hasMore}}" theme="default" loading="{{loadingWithdrawals}}" bind:tap="onLoadMore">加载更多</t-button>
+  </view>
+</view>

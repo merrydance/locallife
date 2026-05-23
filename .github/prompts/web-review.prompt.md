@@ -6,6 +6,8 @@ description: "Use when drafting a web review request with findings-first output.
 
 Use this template when asking for a web review in `web/`.
 
+If this session is new, compacted, forked, or handed off, rerun routing from `.github/README.md`, reopen the matching instructions, and confirm the review scope before writing the request. Do not keep relying on stale context.
+
 Use the web row in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` as the shared source for implementation push items, prohibited shortcuts, and findings-first review checks.
 
 ## Web Review

@@ -3,7 +3,6 @@ import { logger } from '../../../utils/logger'
 import CartService from '../../../services/cart'
 import {
   confirmOrder,
-  cancelOrder,
   urgeOrder,
   isCancelledOrderStatus,
   isDeliveringOrderStatus,
@@ -33,15 +32,12 @@ import { OrderDetail } from '../../../models/order'
 import { generateOrderTimeline } from '../../../utils/timeline'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import { loadOrderDetailBundle, getOrderReview, type OrderDetailReservation } from '../../../services/order-detail'
-
-// 取消原因选项
-const CANCEL_REASONS = [
-  '不想要了',
-  '信息填写错误',
-  '商品价格较贵',
-  '配送时间太长',
-  '其他原因'
-]
+import {
+  disposeOrderCancelRefundWorkflow,
+  orderCancelRefundInitialState,
+  orderCancelRefundWorkflow,
+  startRefundTrackingAfterCancel
+} from '../../../services/order-cancel-refund-workflow'
 
 type PageWithUrgeTimer = {
   _urgeTimer?: ReturnType<typeof setInterval>
@@ -62,7 +58,6 @@ Page({
     // UI Flags
     showTrackingButton: false,
     showConfirmButton: false,
-    showCancelButton: false,
     showPayButton: false,
     showUrgeButton: false,
     showContactButton: true, // 总是显示联系客服/商家
@@ -70,6 +65,7 @@ Page({
     showPickupConfirmButton: false,
     showReorderButton: false,
     showFoodSafetyButton: false,
+    ...orderCancelRefundInitialState,
     isReviewed: false,
     paying: false,
     statusHeaderDesc: '',
@@ -109,7 +105,18 @@ Page({
     }
 
     try {
-      const { orderDTO, reservationInfo } = await loadOrderDetailBundle(parseInt(this.data.orderId))
+      const { orderDTO: fetchedOrderDTO, reservationInfo } = await loadOrderDetailBundle(parseInt(this.data.orderId))
+      const preservedCancelledState = this.data.cancelRefundExpected && isCancelledOrderStatus(this.data.orderDTO?.status) && !isCancelledOrderStatus(fetchedOrderDTO.status)
+      const orderDTO = preservedCancelledState
+        ? {
+            ...fetchedOrderDTO,
+            status: 'cancelled' as const,
+            paid_at: this.data.orderDTO?.paid_at || fetchedOrderDTO.paid_at,
+            cancel_reason: this.data.orderDTO?.cancel_reason || fetchedOrderDTO.cancel_reason
+          }
+        : isCancelledOrderStatus(fetchedOrderDTO.status) && this.data.cancelRefundExpected && this.data.orderDTO?.paid_at && !fetchedOrderDTO.paid_at
+          ? { ...fetchedOrderDTO, paid_at: this.data.orderDTO.paid_at }
+        : fetchedOrderDTO
       const order = OrderAdapter.toDetailViewModel(orderDTO)
 
       const actions = orderDTO.actions || []
@@ -155,7 +162,7 @@ Page({
         loading: false,
         showTrackingButton,
         showConfirmButton,
-        showCancelButton,
+        showCancelButton: showCancelButton && !isCancelledOrderStatus(orderDTO.status),
         showPayButton,
         showUrgeButton,
         showReviewButton: isCompletedOrderStatus(orderDTO.status),
@@ -165,6 +172,12 @@ Page({
         statusHeaderDesc,
         statusHeaderIcon
       })
+
+      if (isCancelledOrderStatus(orderDTO.status)) {
+        void startRefundTrackingAfterCancel(this)
+      } else {
+        disposeOrderCancelRefundWorkflow(this)
+      }
 
       // 检查评价状态
       if (isCompletedOrderStatus(orderDTO.status)) {
@@ -228,6 +241,7 @@ Page({
   onUnload() {
      const page = this as unknown as PageWithUrgeTimer
      if (page._urgeTimer) clearInterval(page._urgeTimer)
+     disposeOrderCancelRefundWorkflow(this)
   },
 
   // 复制订单号
@@ -279,28 +293,7 @@ Page({
     })
   },
 
-  onCancelOrder() {
-    wx.showActionSheet({
-      itemList: CANCEL_REASONS,
-      success: async (res) => {
-        const reason = CANCEL_REASONS[res.tapIndex]
-        await this.doCancelOrder(reason)
-      }
-    })
-  },
-
-  async doCancelOrder(reason: string) {
-    wx.showLoading({ title: '取消中...' })
-    try {
-      await cancelOrder(parseInt(this.data.orderId), { reason })
-      wx.hideLoading()
-      this.loadOrderDetail()
-    } catch (error) {
-      wx.hideLoading()
-      logger.error('取消订单失败', error, 'Detail.doCancelOrder')
-      wx.showToast({ title: '取消失败', icon: 'error' })
-    }
-  },
+  ...orderCancelRefundWorkflow,
 
   async onUrgeOrder() {
     const { urgeCountdown } = this.data

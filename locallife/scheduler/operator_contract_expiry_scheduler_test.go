@@ -83,7 +83,7 @@ func TestDataCleanupScheduler_MarkExpiredOperators_KeepsLocalSuspensionWithoutRe
 	s.markExpiredOperators()
 }
 
-func TestDataCleanupScheduler_MarkExpiredOperators_NoExpiredOperatorsWithoutEcommerceClient(t *testing.T) {
+func TestDataCleanupScheduler_MarkExpiredOperators_NoExpiredOperators(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 

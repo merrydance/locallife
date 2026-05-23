@@ -70,7 +70,11 @@ const SAFE_COPY_PREFIXES = [
   '图片',
   '内容',
   '服务',
-  '登录'
+  '登录',
+  '提现',
+  '可提现',
+  '结算账户',
+  '余额'
 ]
 
 function asNonEmptyString(value: unknown): string | undefined {
@@ -276,7 +280,7 @@ export function mapBackendMessageToUserMessage(rawMessage: string, fallback: str
     normalized.includes(`完成${applymentName}签约`) ||
     normalized.includes(`完成${applymentName}流程`)
   ) {
-    return '请先完成宝付结算账户开户后再恢复营业'
+    return '请先完成结算账户开户后再恢复营业'
   }
 
   if (normalized.includes('wallet account not bound')) {

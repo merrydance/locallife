@@ -16,11 +16,3 @@ func generateOutRefundNo() (string, error) {
 func createDirectRefundContract(ctx context.Context, paymentClient wechat.DirectPaymentClientInterface, req *wechatcontracts.DirectRefundRequest) (*wechatcontracts.DirectRefundResponse, error) {
 	return wechatruntime.CreateDirectRefundContract(ctx, paymentClient, req)
 }
-
-func createEcommerceRefundContract(ctx context.Context, ecommerceClient wechat.EcommerceClientInterface, req *wechatcontracts.EcommerceRefundRequest) (*wechatcontracts.EcommerceRefundCreateResponse, error) {
-	return wechatruntime.CreateEcommerceRefundContract(ctx, ecommerceClient, req)
-}
-
-func applyEcommerceAbnormalRefundContract(ctx context.Context, ecommerceClient wechat.EcommerceClientInterface, req *wechatcontracts.EcommerceAbnormalRefundRequest) (*wechatcontracts.EcommerceRefundQueryResponse, error) {
-	return wechatruntime.ApplyEcommerceAbnormalRefundContract(ctx, ecommerceClient, req)
-}

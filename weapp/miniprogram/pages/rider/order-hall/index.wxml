@@ -87,8 +87,8 @@
               <view class="order-card" wx:for="{{recommendOrders}}" wx:key="order_id">
                 <view class="order-header">
                   <view class="earnings-box">
-                    <text class="label">预计收入</text>
-                    <text class="value">¥{{item.rider_earnings / 100}}</text>
+                    <text class="label">配送费</text>
+                    <text class="value">¥{{item.delivery_fee / 100}}</text>
                   </view>
                   <view class="tags-group">
                     <t-tag theme="warning" variant="light" size="small">{{item.expires_at_format}}</t-tag>
@@ -258,8 +258,12 @@
 
                 <view class="order-footer">
                   <view class="earnings-info">
-                    <text class="label">预计总收益</text>
-                    <text class="price">¥{{item.rider_earnings / 100}}</text>
+                    <text class="label">预计实收</text>
+                    <text class="price {{item.income_view.hasBill ? '' : 'price--pending'}}">{{item.income_view.summaryText}}</text>
+                  </view>
+                  <view class="income-breakdown" wx:if="{{item.income_view.hasBill}}">
+                    <text>配送费 {{item.income_view.grossText}}</text>
+                    <text>通道费 {{item.income_view.feeText}}</text>
                   </view>
                   <view class="action-btns">
                     <t-button wx:if="{{item.can_start_pickup}}" theme="primary" block loading="{{item.is_action_loading}}" disabled="{{item.is_action_loading}}" data-id="{{item.id}}" data-action="startPickup" catchtap="onUpdateStatus">我已到店</t-button>

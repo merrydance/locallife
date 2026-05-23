@@ -98,7 +98,7 @@ type ComplaintResponseRequest struct {
 
 // ListComplaints 查询投诉单列表（支持分页 + 状态过滤）
 // 对应 GET /v3/merchant-service/complaints-v2
-func (c *EcommerceClient) ListComplaints(ctx context.Context, req ListComplaintsRequest) (*ListComplaintsResponse, error) {
+func (c *DirectPaymentClient) ListComplaints(ctx context.Context, req ListComplaintsRequest) (*ListComplaintsResponse, error) {
 	if req.Limit <= 0 {
 		req.Limit = 5
 	}
@@ -134,7 +134,7 @@ func (c *EcommerceClient) ListComplaints(ctx context.Context, req ListComplaints
 
 // GetComplaintDetail 查询投诉单详情
 // 对应 GET /v3/merchant-service/complaints-v2/{complaint_id}
-func (c *EcommerceClient) GetComplaintDetail(ctx context.Context, complaintID string) (*ComplaintDetail, error) {
+func (c *DirectPaymentClient) GetComplaintDetail(ctx context.Context, complaintID string) (*ComplaintDetail, error) {
 	apiPath := fmt.Sprintf(complaintDetailURL, complaintID)
 	respBody, err := c.doRequest(ctx, http.MethodGet, apiPath, nil)
 	if err != nil {
@@ -151,9 +151,9 @@ func (c *EcommerceClient) GetComplaintDetail(ctx context.Context, complaintID st
 // RespondComplaint 回复投诉
 // 对应 POST /v3/merchant-service/complaints-v2/{complaint_id}/response
 // 回复成功后投诉状态将变为 PROCESSING
-func (c *EcommerceClient) RespondComplaint(ctx context.Context, req ComplaintResponseRequest) error {
+func (c *DirectPaymentClient) RespondComplaint(ctx context.Context, req ComplaintResponseRequest) error {
 	body := map[string]interface{}{
-		"complainted_mchid": c.spMchID,
+		"complainted_mchid": c.mchID,
 		"response_content":  req.ResponseContent,
 	}
 	if req.JumpURL != "" {
@@ -170,9 +170,9 @@ func (c *EcommerceClient) RespondComplaint(ctx context.Context, req ComplaintRes
 // CompleteComplaint 完结投诉
 // 对应 POST /v3/merchant-service/complaints-v2/{complaint_id}/complete
 // 仅当问题已解决且用户不再追加投诉时调用
-func (c *EcommerceClient) CompleteComplaint(ctx context.Context, complaintID string) error {
+func (c *DirectPaymentClient) CompleteComplaint(ctx context.Context, complaintID string) error {
 	body := map[string]interface{}{
-		"complainted_mchid": c.spMchID,
+		"complainted_mchid": c.mchID,
 	}
 	apiPath := fmt.Sprintf(complaintCompleteURL, complaintID)
 	_, err := c.doRequest(ctx, http.MethodPost, apiPath, body)
@@ -203,7 +203,7 @@ type ComplaintNotification struct {
 }
 
 // DecryptComplaintNotification 解密投诉通知
-func (c *EcommerceClient) DecryptComplaintNotification(notification *PaymentNotification) (*ComplaintNotification, error) {
+func (c *DirectPaymentClient) DecryptComplaintNotification(notification *PaymentNotification) (*ComplaintNotification, error) {
 	raw, err := c.DecryptNotificationRaw(notification)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt complaint notification: %w", err)

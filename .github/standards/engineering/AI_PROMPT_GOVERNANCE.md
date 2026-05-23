@@ -110,6 +110,31 @@
 
 Prompt 库必须接受和代码同等级的基础门禁。
 
+### 2.0 Context Rehydration Gate
+
+AI 任务不能依赖旧上下文里的“我记得”。以下情况必须先重新执行路由，再继续实现、审查或总结：
+
+- 新会话开始。
+- 上下文被压缩或摘要替换。
+- 分叉到子 Agent、并行 Agent、接手 Agent 或新的执行者。
+- 任务范围、目标路径或风险级别发生变化。
+- 从计划、审查、修复、文档同步等阶段切换到另一个阶段。
+
+重装载顺序：
+
+1. Rerun routing from `.github/README.md` and the active `AGENTS.md` / `.github/copilot-instructions.md` entrypoint.
+2. 确认目标区域和风险等级。
+3. 打开匹配的 `.github/instructions/*.instructions.md`。
+4. 如果任务是实现、审查、bugfix、集成测试、接手、事故回灌、任务闭环或图表工作，打开匹配的 `.github/prompts/*.prompt.md`。
+5. 只在路径、风险或 prompt 指向时打开更深的 `.github/standards/**` 或 domain README。
+
+执行要求：
+
+- Prompt、instructions 和 AGENTS 入口必须把这条规则写成短门禁，而不是复制完整标准正文。
+- Prompt governance lint 必须校验这些入口仍然引用本节或包含等价门禁。
+- 交付说明中如果发生过压缩、分叉、接手或阶段切换，应说明已经重新确认了目标 area、prompt/instructions 和相关 standards。
+- Do not keep relying on stale context.
+
 ### 2.1 Required Lint Checks
 
 - Frontmatter 完整：每个 `.prompt.md` 必须有 `name` 与 `description`。
@@ -148,7 +173,7 @@ Prompt 库必须接受和代码同等级的基础门禁。
 
 | Area | Implementation Must Push | Implementation Must Not | Review Must Check |
 | --- | --- | --- | --- |
-| Backend | 闭环打通 handler / logic / store / route / DTO / tests；先说明能力归属哪个模块、关键状态由谁唯一写入；状态常量复用 `db/sqlc/constants.go`；识别并执行 `make sqlc` / `make mock` / `make swagger`；说明 unexpected error 在哪里被记录、业务错误与基础设施错误如何分流、以及前端或调用方会收到什么稳定语义；对仓库级高风险链路参考 `backend/README.md` 与匹配的 domain README；说明事务边界、副作用边界、验证范围与残余风险 | 不要把业务逻辑塞进 handler；不要新增魔法状态字符串；不要只改 SQL、DTO 或 handler 而不做全链路传播；不要让多个包同时写同一关键状态；不要为了“以后可能复用”提前抽共享层；不要跳过生成步骤判断；不要把生产 bugfix 当成表层补丁而不追真实写边界或恢复路径；不要静默吞掉 unexpected error、把 nil 或 0-row/no-op 当成功、或把内部错误细节直接透给前端 | 传播是否断层；模块所有权是否清楚；关键状态是否存在多头写入；事务与副作用边界是否分离；新增逻辑是否真正可达；生成物是否提交；是否存在静默吞错、nil-as-success、缺失结构化日志边界、或对前端语义含糊/泄漏内部细节的错误映射；回调、异步、支付、上传、OCR、鉴权等高风险路径是否真实验证；正式 review 是否形成 durable closeout |
+| Backend | 闭环打通 handler / logic / store / route / DTO / tests；先说明能力归属哪个模块、关键状态由谁唯一写入；状态常量复用 `db/sqlc/constants.go`；识别并执行 `make sqlc` / `make mock` / `make swagger`；说明 unexpected error 在哪里被记录、业务错误与基础设施错误如何分流、以及前端或调用方会收到什么稳定语义；对仓库级高风险链路参考 `backend/README.md` 与匹配的 domain README；外部 API/provider 变更必须先确认官方契约、样例、字段矩阵、错误码、枚举、条件必填和漂移复核；说明事务边界、副作用边界、验证范围与残余风险 | 不要把业务逻辑塞进 handler；不要新增魔法状态字符串；不要只改 SQL、DTO 或 handler 而不做全链路传播；不要让多个包同时写同一关键状态；不要为了“以后可能复用”提前抽共享层；不要跳过生成步骤判断；不要把生产 bugfix 当成表层补丁而不追真实写边界或恢复路径；不要静默吞掉 unexpected error、把 nil 或 0-row/no-op 当成功、或把内部错误细节直接透给前端；不要盲猜 provider 字段、枚举、单位、嵌套结构或把外部 API 异常隐式降级成成功 | 传播是否断层；模块所有权是否清楚；关键状态是否存在多头写入；事务与副作用边界是否分离；新增逻辑是否真正可达；生成物是否提交；是否存在静默吞错、nil-as-success、缺失结构化日志边界、或对前端语义含糊/泄漏内部细节的错误映射；外部 API/provider 是否有官方真值、字段矩阵、source/evidence ledger、显式降级规则、parser/validator/error mapper 测试和清晰调用方指引；回调、异步、支付、上传、OCR、鉴权等高风险路径是否真实验证；正式 review 是否形成 durable closeout |
 
 ### 3.2 Web
 
@@ -178,12 +203,37 @@ Prompt 库必须接受和代码同等级的基础门禁。
 
 以下规则适用于 implementation prompt、instructions 与相关执行门禁，是跨技术栈的默认行为基线：
 
+- 任务必须尽量单一、边界清晰、可在一个上下文窗口内完整理解和完成；如果任务拆开后更容易丢失语义或需要反复猜测，就先拆成更小的独立任务。
+- 每个任务应明确目标、输入、涉及文件、输出、验收标准与验证范围；任务描述必须足够具体，即使失去当前会话上下文也能按文件和约束继续执行，而不是靠“看着办”。
+- 当一个请求同时包含多个独立能力、多个产品面、多个高风险分支或多个不共享状态的改动时，优先先拆分再执行；不要把多个可独立交付的工作包装成一个模糊的大任务。
+- 对于实现或审查入口，任务边界越清楚，越应该把“写什么”“不写什么”“验证什么”“不验证什么”讲明白。
 - 先显式说明会影响行为、范围或验证口径的关键假设与歧义；如果存在多个会导致不同实现的合理解释，不要静默选一个。
 - 默认选择最简单、最小的可交付实现；不要为了未来可能复用而提前加抽象、配置层或扩展点。
 - 默认做外科式改动；不要顺手重构相邻代码、重写无关注释或清理与当前请求无关的历史问题。若本次改动引入了新的 unused import、unused variable 或 orphan，再由实现方一并清理。
 - 对 bugfix、refactor 或多步骤任务，prompt 应要求把工作转成可验证的短计划或成功标准，并在每一步之后执行最小相关验证，而不是只报告“已完成”。
 - 当实现方无法确定需求边界时，应先暴露不确定性与取舍，再决定是否需要向上游提问；不要靠隐式猜测推进高影响改动。
 - Instructions 层只镜像这些规则的高频执行版本；prompt 层只保留协议化输入输出要求，避免把同一段长文本复制到多个模板中。
+
+## 3.6 Security Pattern Baseline
+
+安全约束应写入提示词系统，但要按“高频、可执行、可审查、可门禁化”的方式分层，不做无边界漏洞清单。
+
+### Must Cover
+
+- 重放、重复提交、重复消费、重复回调、重复投递、竞态与时序漂移。
+- 身份伪造、对象级越权、租户串扰、权限回退、签名绕过、回调伪造。
+- 注入类风险：SQL、命令、模板、HTML/JS、路径、对象键、反序列化、开放重定向。
+- 敏感信息泄漏：token、密钥、证书、银行卡号、身份证号、原始 provider payload、堆栈、调试痕迹、内部主键。
+- 失效和降级类风险：空成功、nil-success、silent fallback、伪成功、隐藏失败、未观测失败。
+- 资源与并发类风险：无界 fan-out、TOCTOU、claim 竞争、重复执行不收敛、超时和重试语义不清。
+
+### Where To Put Them
+
+- 长期原则放在 `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md`。
+- 后端高频实现约束放在 `.github/standards/backend/AGENT.md`、`ERROR_HANDLING.md`、`IDEMPOTENCY_STANDARDS.md`、`EXTERNAL_API_CONTRACT_STANDARDS.md` 和匹配 domain README。
+- 高风险审查检查项放在 `.github/instructions/review.instructions.md` 与 backend review prompt。
+- 能自动识别的模式优先做成 workflow、脚本或 guard，而不是只靠人记。
+- 不要把已知攻击面写成无限增长的枚举表；优先收敛成模式、边界和验证要求。
 
 ## 4. Prompt Addition Rules
 

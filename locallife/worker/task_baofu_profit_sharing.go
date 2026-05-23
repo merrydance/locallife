@@ -21,6 +21,7 @@ type BaofuProfitSharingWorkerConfig struct {
 	CollectMerchantID string
 	CollectTerminalID string
 	ShareNotifyURL    string
+	RefundNotifyURL   string
 }
 
 type BaofuProfitSharingPayload struct {
@@ -223,5 +224,6 @@ func (c BaofuProfitSharingWorkerConfig) normalized() BaofuProfitSharingWorkerCon
 	c.CollectMerchantID = strings.TrimSpace(c.CollectMerchantID)
 	c.CollectTerminalID = strings.TrimSpace(c.CollectTerminalID)
 	c.ShareNotifyURL = strings.TrimSpace(c.ShareNotifyURL)
+	c.RefundNotifyURL = strings.TrimSpace(c.RefundNotifyURL)
 	return c
 }

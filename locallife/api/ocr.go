@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,7 +13,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/ocr"
 	"github.com/merrydance/locallife/token"
 	"github.com/rs/zerolog/log"
@@ -390,7 +390,7 @@ func (server *Server) markOperatorApplicationOCRPending(ctx *gin.Context, job db
 		return err
 	}
 	if app.Status != "draft" {
-		return nil
+		return ErrApplicationNotDraft
 	}
 
 	queuedAt := job.CreatedAt.Format(time.RFC3339)
@@ -464,7 +464,7 @@ func (server *Server) markGroupApplicationOCRPending(ctx *gin.Context, job db.Oc
 		return err
 	}
 	if app.Status != "draft" {
-		return nil
+		return ErrApplicationNotDraft
 	}
 
 	queuedAt := job.CreatedAt.Format(time.RFC3339)
@@ -556,15 +556,8 @@ func readRiderHealthCertOCRData(data []byte) HealthCertOCRData {
 	return payload
 }
 
-func (server *Server) getOCRMediaModerationStatus(ctx *gin.Context, mediaAssetID int64) (string, error) {
-	asset, err := server.store.GetMediaAssetByID(ctx, mediaAssetID)
-	if err != nil {
-		return "", err
-	}
-	if asset.Visibility == string(media.VisibilityPrivate) && isPrivateDocumentMediaModerationExempt(asset.MediaCategory) {
-		return "approved", nil
-	}
-	return strings.ToLower(strings.TrimSpace(asset.ModerationStatus)), nil
+type ocrPendingBinding struct {
+	OCRJobID *int64 `json:"ocr_job_id,omitempty"`
 }
 
 func ocrMediaModerationFailure(moderationStatus string) (string, string) {
@@ -578,12 +571,43 @@ func ocrMediaModerationFailure(moderationStatus string) (string, string) {
 	}
 }
 
+func (server *Server) markOCRJobDispatchFailed(ctx *gin.Context, job db.OcrJob, cause error) {
+	failedJob, err := server.store.FailPendingOCRJob(ctx, db.FailPendingOCRJobParams{
+		ID:           job.ID,
+		ErrorCode:    pgtype.Text{String: "ocr_enqueue_failed", Valid: true},
+		ErrorMessage: pgtype.Text{String: "enqueue OCR job failed", Valid: true},
+	})
+	if err != nil {
+		log.Error().Int64("ocr_job_id", job.ID).Err(err).Msg("fail pending OCR job after enqueue failure failed")
+		return
+	}
+	if err := server.markOCRFailed(ctx, failedJob, "ocr_enqueue_failed", "enqueue OCR job failed"); err != nil {
+		log.Error().Int64("ocr_job_id", job.ID).Err(err).Msg("mark OCR owner failed after enqueue failure failed")
+		return
+	}
+	log.Error().Int64("ocr_job_id", job.ID).Err(cause).Msg("marked OCR job failed after enqueue failure")
+}
+
 func (server *Server) markOCRFailed(ctx *gin.Context, job db.OcrJob, errorCode, errorMessage string) error {
 	queuedAt := job.CreatedAt.Format(time.RFC3339)
 	ocrJobID := job.ID
 
 	switch ocr.OwnerType(job.OwnerType) {
 	case ocr.OwnerTypeMerchantApplication:
+		app, err := server.store.GetMerchantApplication(ctx, job.OwnerID)
+		if err != nil {
+			return err
+		}
+		if !server.ocrJobStillBoundToMerchantApplication(app, job) {
+			log.Info().
+				Int64("application_id", job.OwnerID).
+				Int64("ocr_job_id", job.ID).
+				Int64("media_asset_id", job.MediaAssetID).
+				Str("document_type", job.DocumentType).
+				Str("side", job.Side).
+				Msg("skip stale merchant OCR failure writeback")
+			return nil
+		}
 		switch ocr.DocumentType(job.DocumentType) {
 		case ocr.DocumentTypeBusinessLicense:
 			payload, err := json.Marshal(BusinessLicenseOCRData{
@@ -636,6 +660,20 @@ func (server *Server) markOCRFailed(ctx *gin.Context, job db.OcrJob, errorCode, 
 			return err
 		}
 	case ocr.OwnerTypeOperatorApplication:
+		app, err := server.store.GetOperatorApplicationByID(ctx, job.OwnerID)
+		if err != nil {
+			return err
+		}
+		if !server.ocrJobStillBoundToOperatorApplication(app, job) {
+			log.Info().
+				Int64("application_id", job.OwnerID).
+				Int64("ocr_job_id", job.ID).
+				Int64("media_asset_id", job.MediaAssetID).
+				Str("document_type", job.DocumentType).
+				Str("side", job.Side).
+				Msg("skip stale operator OCR failure writeback")
+			return nil
+		}
 		switch ocr.DocumentType(job.DocumentType) {
 		case ocr.DocumentTypeBusinessLicense:
 			payload, err := json.Marshal(BusinessLicenseOCRData{
@@ -733,6 +771,16 @@ func (server *Server) markOCRFailed(ctx *gin.Context, job db.OcrJob, errorCode, 
 		if err != nil {
 			return err
 		}
+		if !server.ocrJobStillBoundToGroupApplication(app, job) {
+			log.Info().
+				Int64("application_id", job.OwnerID).
+				Int64("ocr_job_id", job.ID).
+				Int64("media_asset_id", job.MediaAssetID).
+				Str("document_type", job.DocumentType).
+				Str("side", job.Side).
+				Msg("skip stale group OCR failure writeback")
+			return nil
+		}
 		applicationData, err := mergeGroupApplicationData(app.ApplicationData)
 		if err != nil {
 			return fmt.Errorf("decode group application data for OCR failure: %w", err)
@@ -778,6 +826,112 @@ func (server *Server) markOCRFailed(ctx *gin.Context, job db.OcrJob, errorCode, 
 	return nil
 }
 
+func (server *Server) ocrJobStillBoundToMerchantApplication(app db.MerchantApplication, job db.OcrJob) bool {
+	var currentOCR []byte
+	switch ocr.DocumentType(job.DocumentType) {
+	case ocr.DocumentTypeBusinessLicense:
+		if !app.BusinessLicenseMediaAssetID.Valid || app.BusinessLicenseMediaAssetID.Int64 != job.MediaAssetID {
+			return false
+		}
+		currentOCR = app.BusinessLicenseOcr
+	case ocr.DocumentTypeFoodPermit:
+		if !app.FoodPermitMediaAssetID.Valid || app.FoodPermitMediaAssetID.Int64 != job.MediaAssetID {
+			return false
+		}
+		currentOCR = app.FoodPermitOcr
+	case ocr.DocumentTypeIDCard:
+		if strings.EqualFold(job.Side, string(ocr.DocumentSideBack)) {
+			if !app.IDCardBackMediaAssetID.Valid || app.IDCardBackMediaAssetID.Int64 != job.MediaAssetID {
+				return false
+			}
+			currentOCR = app.IDCardBackOcr
+			break
+		}
+		if !app.IDCardFrontMediaAssetID.Valid || app.IDCardFrontMediaAssetID.Int64 != job.MediaAssetID {
+			return false
+		}
+		currentOCR = app.IDCardFrontOcr
+	default:
+		return false
+	}
+	return ocrPayloadMatchesJob(currentOCR, job.ID)
+}
+
+func (server *Server) ocrJobStillBoundToOperatorApplication(app db.OperatorApplication, job db.OcrJob) bool {
+	var currentOCR []byte
+	switch ocr.DocumentType(job.DocumentType) {
+	case ocr.DocumentTypeBusinessLicense:
+		if !app.BusinessLicenseMediaAssetID.Valid || app.BusinessLicenseMediaAssetID.Int64 != job.MediaAssetID {
+			return false
+		}
+		currentOCR = app.BusinessLicenseOcr
+	case ocr.DocumentTypeIDCard:
+		if strings.EqualFold(job.Side, string(ocr.DocumentSideBack)) {
+			if !app.IDCardBackMediaAssetID.Valid || app.IDCardBackMediaAssetID.Int64 != job.MediaAssetID {
+				return false
+			}
+			currentOCR = app.IDCardBackOcr
+			break
+		}
+		if !app.IDCardFrontMediaAssetID.Valid || app.IDCardFrontMediaAssetID.Int64 != job.MediaAssetID {
+			return false
+		}
+		currentOCR = app.IDCardFrontOcr
+	default:
+		return false
+	}
+	return ocrPayloadMatchesJob(currentOCR, job.ID)
+}
+
+func (server *Server) ocrJobStillBoundToGroupApplication(app db.MerchantGroupApplication, job db.OcrJob) bool {
+	applicationData, err := mergeGroupApplicationData(app.ApplicationData)
+	if err != nil {
+		return false
+	}
+	var currentOCR json.RawMessage
+	switch ocr.DocumentType(job.DocumentType) {
+	case ocr.DocumentTypeBusinessLicense:
+		if !app.LicenseMediaAssetID.Valid || app.LicenseMediaAssetID.Int64 != job.MediaAssetID {
+			return false
+		}
+		currentOCR = applicationData["business_license_ocr"]
+	case ocr.DocumentTypeIDCard:
+		if strings.EqualFold(job.Side, string(ocr.DocumentSideBack)) {
+			if groupOCRAssetID(applicationData["id_card_back_asset_id"]) != job.MediaAssetID {
+				return false
+			}
+			currentOCR = applicationData["id_card_back_ocr"]
+			break
+		}
+		if groupOCRAssetID(applicationData["id_card_front_asset_id"]) != job.MediaAssetID {
+			return false
+		}
+		currentOCR = applicationData["id_card_front_ocr"]
+	default:
+		return false
+	}
+	return ocrPayloadMatchesJob(currentOCR, job.ID)
+}
+
+func ocrPayloadMatchesJob(data []byte, jobID int64) bool {
+	var binding ocrPendingBinding
+	if err := decodeOCRPayload(data, &binding); err != nil {
+		return false
+	}
+	return binding.OCRJobID != nil && *binding.OCRJobID == jobID
+}
+
+func groupOCRAssetID(raw json.RawMessage) int64 {
+	var assetID int64
+	if len(raw) == 0 {
+		return 0
+	}
+	if err := json.Unmarshal(raw, &assetID); err != nil {
+		return 0
+	}
+	return assetID
+}
+
 func (server *Server) processPendingOCRJobsForMediaModeration(ctx *gin.Context, asset db.MediaAsset) error {
 	jobs, err := server.store.ListPendingOCRJobsByMediaAsset(ctx, asset.ID)
 	if err != nil {
@@ -800,6 +954,16 @@ func (server *Server) processPendingOCRJobsForMediaModeration(ctx *gin.Context, 
 
 	errorCode, errorMessage := ocrMediaModerationFailure(moderationStatus)
 	for _, job := range jobs {
+		if !server.ocrJobStillBoundToCurrentOwner(ctx, job) {
+			log.Info().
+				Int64("media_id", asset.ID).
+				Int64("ocr_job_id", job.ID).
+				Str("owner_type", job.OwnerType).
+				Str("document_type", job.DocumentType).
+				Str("side", job.Side).
+				Msg("skip stale delayed ocr failure writeback")
+			continue
+		}
 		failedJob, err := server.store.FailPendingOCRJob(ctx, db.FailPendingOCRJobParams{
 			ID:           job.ID,
 			ErrorCode:    pgtype.Text{String: errorCode, Valid: true},
@@ -818,6 +982,31 @@ func (server *Server) processPendingOCRJobsForMediaModeration(ctx *gin.Context, 
 	}
 
 	return nil
+}
+
+func (server *Server) ocrJobStillBoundToCurrentOwner(ctx context.Context, job db.OcrJob) bool {
+	switch ocr.OwnerType(job.OwnerType) {
+	case ocr.OwnerTypeMerchantApplication:
+		app, err := server.store.GetMerchantApplication(ctx, job.OwnerID)
+		if err != nil {
+			return false
+		}
+		return server.ocrJobStillBoundToMerchantApplication(app, job)
+	case ocr.OwnerTypeOperatorApplication:
+		app, err := server.store.GetOperatorApplicationByID(ctx, job.OwnerID)
+		if err != nil {
+			return false
+		}
+		return server.ocrJobStillBoundToOperatorApplication(app, job)
+	case ocr.OwnerTypeGroupApplication:
+		app, err := server.store.GetGroupApplication(ctx, job.OwnerID)
+		if err != nil {
+			return false
+		}
+		return server.ocrJobStillBoundToGroupApplication(app, job)
+	default:
+		return false
+	}
 }
 
 func riderApplicationMatchesIDCardAsset(app db.RiderApplication, side string, mediaAssetID int64) bool {
@@ -903,15 +1092,24 @@ func (server *Server) createOCRJob(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
-	moderationStatus, err := server.getOCRMediaModerationStatus(ctx, req.MediaAssetID)
+	authorizedMedia, err := server.loadAuthorizedOCRMediaAsset(ctx, authPayload, ownerType, documentType, side, req.MediaAssetID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("media asset not found")))
 			return
 		}
+		if errors.Is(err, errOCRMediaUnauthorized) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("forbidden")))
+			return
+		}
+		if errors.Is(err, errOCRMediaWrongCategory) || errors.Is(err, errOCRMediaNotConfirmed) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+	moderationStatus := authorizedMedia.ModerationStatus
 	if moderationStatus != "approved" && moderationStatus != "pending" {
 		ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageContentSafetyFailed))
 		return
@@ -937,19 +1135,19 @@ func (server *Server) createOCRJob(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	shouldEnqueue := moderationStatus == "approved" && job.Status == string(ocr.JobStatusPending)
-	if shouldEnqueue {
-		if err := server.enqueueOCRJob(ctx, job); err != nil {
-			log.Error().Int64("ocr_job_id", job.ID).Err(err).Msg("enqueue unified ocr job failed")
-			ctx.JSON(http.StatusBadGateway, internalError(ctx, err))
-			return
-		}
-	}
 	if job.Status == string(ocr.JobStatusPending) {
 		if err := server.markOCRPending(ctx, job); err != nil {
 			log.Error().Int64("ocr_job_id", job.ID).Err(err).Msg("mark unified ocr owner pending failed")
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
+		}
+		if moderationStatus == "approved" {
+			if err := server.enqueueOCRJob(ctx, job); err != nil {
+				log.Error().Int64("ocr_job_id", job.ID).Err(err).Msg("enqueue unified ocr job failed")
+				server.markOCRJobDispatchFailed(ctx, job, err)
+				ctx.JSON(http.StatusBadGateway, internalError(ctx, err))
+				return
+			}
 		}
 	}
 	server.writeAuditLog(ctx, AuditLogInput{
@@ -977,6 +1175,31 @@ func (server *Server) createOCRJob(ctx *gin.Context) {
 
 func (server *Server) validateOCRJobOwnerEditable(ctx *gin.Context, ownerType ocr.OwnerType, ownerID int64) error {
 	switch ownerType {
+	case ocr.OwnerTypeMerchantApplication:
+		app, err := server.store.GetMerchantApplication(ctx, ownerID)
+		if err != nil {
+			return err
+		}
+		editable, _, errMsg := checkApplicationEditable(app.Status)
+		if !editable {
+			return errors.New(errMsg)
+		}
+	case ocr.OwnerTypeOperatorApplication:
+		app, err := server.store.GetOperatorApplicationByID(ctx, ownerID)
+		if err != nil {
+			return err
+		}
+		if app.Status != "draft" {
+			return ErrApplicationNotDraft
+		}
+	case ocr.OwnerTypeGroupApplication:
+		app, err := server.store.GetGroupApplication(ctx, ownerID)
+		if err != nil {
+			return err
+		}
+		if app.Status != "draft" {
+			return ErrApplicationNotDraft
+		}
 	case ocr.OwnerTypeRiderApplication:
 		app, err := server.store.GetRiderApplication(ctx, ownerID)
 		if err != nil {
@@ -1189,17 +1412,37 @@ func (server *Server) retryOCRJob(ctx *gin.Context) {
 	}
 	newKey := fmt.Sprintf("%s:retry:%d", job.IdempotencyKey, time.Now().UnixNano())
 	retentionUntil := ocr.DefaultRetentionUntil(ocr.DocumentType(job.DocumentType), time.Now())
-	moderationStatus, err := server.getOCRMediaModerationStatus(ctx, job.MediaAssetID)
+	ownerType := ocr.OwnerType(job.OwnerType)
+	documentType := ocr.DocumentType(job.DocumentType)
+	side := ocr.DocumentSide(job.Side)
+	authorizedMedia, err := server.loadAuthorizedOCRMediaAsset(ctx, authPayload, ownerType, documentType, side, job.MediaAssetID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("media asset not found")))
 			return
 		}
+		if errors.Is(err, errOCRMediaUnauthorized) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("forbidden")))
+			return
+		}
+		if errors.Is(err, errOCRMediaWrongCategory) || errors.Is(err, errOCRMediaNotConfirmed) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+	moderationStatus := authorizedMedia.ModerationStatus
 	if moderationStatus != "approved" && moderationStatus != "pending" {
 		ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageContentSafetyFailed))
+		return
+	}
+	if err := server.validateOCRJobOwnerEditable(ctx, ownerType, job.OwnerID); err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("ocr owner not found")))
+			return
+		}
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 	retried, err := server.store.UpsertOCRJob(ctx, db.UpsertOCRJobParams{
@@ -1218,17 +1461,20 @@ func (server *Server) retryOCRJob(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	if moderationStatus == "approved" {
-		if err := server.enqueueOCRJob(ctx, retried); err != nil {
-			log.Error().Int64("ocr_job_id", retried.ID).Err(err).Msg("enqueue retried unified ocr job failed")
-			ctx.JSON(http.StatusBadGateway, internalError(ctx, err))
+	if retried.Status == string(ocr.JobStatusPending) {
+		if err := server.markOCRPending(ctx, retried); err != nil {
+			log.Error().Int64("ocr_job_id", retried.ID).Err(err).Msg("mark retried ocr owner pending failed")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-	}
-	if err := server.markOCRPending(ctx, retried); err != nil {
-		log.Error().Int64("ocr_job_id", retried.ID).Err(err).Msg("mark retried ocr owner pending failed")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+		if moderationStatus == "approved" {
+			if err := server.enqueueOCRJob(ctx, retried); err != nil {
+				log.Error().Int64("ocr_job_id", retried.ID).Err(err).Msg("enqueue retried unified ocr job failed")
+				server.markOCRJobDispatchFailed(ctx, retried, err)
+				ctx.JSON(http.StatusBadGateway, internalError(ctx, err))
+				return
+			}
+		}
 	}
 	ctx.JSON(http.StatusOK, newOCRJobResponse(retried))
 }

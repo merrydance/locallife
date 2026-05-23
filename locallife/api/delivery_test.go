@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
@@ -253,20 +255,67 @@ func TestGrabOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GrabOrderTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.GrabOrderTxResult{Delivery: delivery, Order: db.Order{ID: orderID, Status: db.OrderStatusCourierAccepted}}, nil)
+					DoAndReturn(func(_ context.Context, arg db.GrabOrderTxParams) (db.GrabOrderTxResult, error) {
+						require.NotNil(t, arg.ProfitSharingRiderBill)
+						return db.GrabOrderTxResult{Delivery: delivery, Order: db.Order{ID: orderID, Status: db.OrderStatusCourierAccepted}}, nil
+					})
 
 				// Mock for notification - GetOrder
 				order := db.Order{
-					ID:         orderID,
-					UserID:     util.RandomInt(1, 1000),
-					MerchantID: merchantID,
-					OrderNo:    util.RandomString(10),
-					Status:     db.OrderStatusReady,
+					ID:          orderID,
+					UserID:      util.RandomInt(1, 1000),
+					MerchantID:  merchantID,
+					OrderNo:     util.RandomString(10),
+					Status:      db.OrderStatusReady,
+					OrderType:   db.OrderTypeTakeout,
+					TotalAmount: 10000,
+					DeliveryFee: 500,
 				}
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
 					Times(2).
 					Return(order, nil)
+				paymentOrder := db.PaymentOrder{
+					ID:                    util.RandomInt(1000, 2000),
+					OrderID:               pgtype.Int8{Int64: orderID, Valid: true},
+					BusinessType:          db.ExternalPaymentBusinessOwnerOrder,
+					PaymentChannel:        db.PaymentChannelBaofuAggregate,
+					RequiresProfitSharing: true,
+					Status:                "paid",
+					Amount:                10000,
+				}
+				store.EXPECT().
+					GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{OrderID: pgtype.Int8{Int64: orderID, Valid: true}, BusinessType: db.ExternalPaymentBusinessOwnerOrder}).
+					Times(2).
+					Return(paymentOrder, nil)
+				store.EXPECT().
+					GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).
+					Times(2).
+					Return(db.ProfitSharingOrder{
+						ID:                           7001,
+						PaymentOrderID:               paymentOrder.ID,
+						MerchantID:                   merchantID,
+						OrderSource:                  db.OrderTypeTakeout,
+						TotalAmount:                  paymentOrder.Amount,
+						DeliveryFee:                  500,
+						PlatformRate:                 200,
+						OperatorRate:                 300,
+						Status:                       db.ProfitSharingOrderStatusPending,
+						Provider:                     db.ExternalPaymentProviderBaofu,
+						Channel:                      db.PaymentChannelBaofuAggregate,
+						MerchantSharingMerID:         pgtype.Text{String: "MER_SHARE", Valid: true},
+						OperatorID:                   pgtype.Int8{Int64: 9001, Valid: true},
+						OperatorSharingMerID:         pgtype.Text{String: "OP_SHARE", Valid: true},
+						PlatformSharingMerID:         pgtype.Text{String: "PLATFORM_SHARE", Valid: true},
+						ProviderPaymentFee:           30,
+						ProviderPaymentFeeRateBps:    30,
+						ProviderPaymentFeeBaseAmount: paymentOrder.Amount,
+						ProviderPaymentFeeSource:     logic.BaofuProviderPaymentFeeSourceEstimated,
+						MerchantPaymentFeeRateBps:    logic.DefaultBaofuPaymentServiceFeeRateBps,
+						RiderGrossAmount:             500,
+						RiderPaymentFee:              3,
+						RiderAmount:                  497,
+					}, nil)
 
 				store.EXPECT().
 					CountOrderItems(gomock.Any(), gomock.Eq(orderID)).
@@ -290,6 +339,14 @@ func TestGrabOrderAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				var body map[string]any
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &body)
+				require.Equal(t, float64(500), body["rider_gross_amount"])
+				require.Equal(t, float64(3), body["rider_payment_fee"])
+				require.Equal(t, float64(497), body["rider_net_earnings"])
+				require.Equal(t, float64(497), body["rider_earnings"])
+				require.Equal(t, float64(7001), body["profit_sharing_order_id"])
+				require.Equal(t, db.ProfitSharingOrderStatusPending, body["profit_sharing_status"])
 			},
 		},
 		{

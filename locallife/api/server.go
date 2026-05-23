@@ -7,7 +7,6 @@ import (
 	"hash/fnv"
 	"net/http"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -22,7 +21,6 @@ import (
 	"github.com/merrydance/locallife/cloudprint"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/docs"
-	"github.com/merrydance/locallife/internal/wechatruntime"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/media"
@@ -32,7 +30,6 @@ import (
 	"github.com/merrydance/locallife/weather"
 	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/wechat"
-	ordinaryserviceprovider "github.com/merrydance/locallife/wechat/ordinaryserviceprovider"
 	"github.com/merrydance/locallife/worker"
 	"github.com/rs/zerolog/log"
 	swaggerFiles "github.com/swaggo/files"
@@ -71,19 +68,19 @@ type Server struct {
 	tokenMaker                     token.Maker
 	auditWriter                    AuditWriter
 	wechatClient                   wechat.WechatClient
-	directPaymentClient            wechat.DirectPaymentClientInterface                            // 小程序直连支付（骑手押金、追偿付款）
-	transferClient                 wechat.TransferClientInterface                                 // 商家转账到零钱（索赔赔付）
-	ecommerceClient                wechat.EcommerceClientInterface                                // 平台收付通（历史/冷备路径）
-	ordinarySPClient               ordinaryserviceprovider.OrdinaryServiceProviderClientInterface // 普通服务商支付（商户主业务支付）
-	baofuAggregateClient           aggregatepay.Client                                            // 宝付聚合支付（主业务支付替换路径）
-	baofuAccountClient             logic.BaofuAccountClient                                       // 宝付宝财通二级户开户
-	baofuMerchantReportClient      *merchantreport.Client                                         // 宝付微信商户报备/授权目录
-	dataEncryptor                  util.DataEncryptor                                             // 敏感数据加密器（本地存储加密）
-	mapClient                      maps.TencentMapClientInterface                                 // 地图客户端（自建 OSM）
+	directPaymentClient            wechat.DirectPaymentClientInterface // 小程序直连支付（骑手押金、追偿付款）
+	transferClient                 wechat.TransferClientInterface      // 商家转账到零钱（索赔赔付）
+	baofuAggregateClient           aggregatepay.Client                 // 宝付聚合支付（主业务支付替换路径）
+	baofuAccountClient             logic.BaofuAccountClient            // 宝付宝财通二级户开户
+	baofuWithdrawService           *logic.BaofuWithdrawService         // 宝付宝财通二级户提现
+	baofuMerchantReportClient      *merchantreport.Client              // 宝付微信商户报备/授权目录
+	dataEncryptor                  util.DataEncryptor                  // 敏感数据加密器（本地存储加密）
+	mapClient                      maps.TencentMapClientInterface      // 地图客户端（自建 OSM）
 	weatherCache                   weather.WeatherCache
 	taskDistributor                worker.TaskDistributor
 	wsHub                          *websocket.Hub           // WebSocket连接管理（骑手和商户）
 	wsPubSub                       *websocket.PubSubManager // Redis Pub/Sub管理（跨进程推送）
+	merchantStatusChangePublisher  websocket.MerchantStatusChangePublisher
 	deliveryBroadcast              *logic.DeliveryBroadcastLogic
 	rateLimiter                    *RateLimiter
 	mediaRegistry                  *media.Registry
@@ -104,8 +101,6 @@ type Server struct {
 	mediaStorage                   media.ObjectStorage
 	printerClient                  cloudprint.Client
 	router                         *gin.Engine
-	applymentCatalogCache          *applymentCatalogCache
-	applymentCatalogCacheMu        sync.Mutex
 	redisClient                    *redis.Client // Redis 客户端（绑定码等功能使用）
 }
 
@@ -124,10 +119,9 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	// 创建微信支付客户端（如果配置了支付参数）
 	var paymentClient wechat.DirectPaymentClientInterface
 	var transferClient wechat.TransferClientInterface
-	var ecommerceClient wechat.EcommerceClientInterface
-	var ordinarySPClient ordinaryserviceprovider.OrdinaryServiceProviderClientInterface
 	var baofuAggregateClient aggregatepay.Client
 	var baofuAccountClient logic.BaofuAccountClient
+	var baofuWithdrawClient logic.BaofuWithdrawClient
 	var baofuMerchantReportClient *merchantreport.Client
 	var baofuAccountNotificationParser baofuAccountNotificationParser
 	var baofuPaymentNotificationParser baofuAggregatePaymentNotificationParser
@@ -157,18 +151,6 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		transferClient = merchantClient
 	}
 
-	if config.HasWechatEcommerceRuntimeConfig() {
-		ecommerceClient, err = wechatruntime.BuildEcommerceClient(config)
-		if err != nil {
-			return nil, fmt.Errorf("cannot create ecommerce client: %w", err)
-		}
-	}
-	if config.HasWechatOrdinaryServiceProviderRuntimeConfig() {
-		ordinarySPClient, err = wechatruntime.BuildOrdinaryServiceProviderClient(config)
-		if err != nil {
-			return nil, fmt.Errorf("cannot create ordinary service provider client: %w", err)
-		}
-	}
 	if config.HasBaofuRuntimeConfig() {
 		if err := config.ValidateBaofuConfig(); err != nil {
 			return nil, err
@@ -177,7 +159,9 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		if err != nil {
 			return nil, fmt.Errorf("cannot create baofu client: %w", err)
 		}
-		baofuAccountClient = baofuaccount.NewClient(baofuRootClient)
+		accountClient := baofuaccount.NewClient(baofuRootClient)
+		baofuAccountClient = accountClient
+		baofuWithdrawClient = accountClient
 		baofuAggregateClient = aggregatepay.NewClient(baofuRootClient)
 		baofuMerchantReportClient = merchantreport.NewClient(baofuRootClient)
 		baofuAccountNotificationParser = baofuaccountnotification.NewParser(baofuRootClient.Config().BaofuPublicKeyPEM)
@@ -280,17 +264,22 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	}
 
 	server := &Server{
-		config:                    config,
-		store:                     store,
-		tokenMaker:                tokenMaker,
-		auditWriter:               auditWriter,
-		wechatClient:              wechatClient,
-		directPaymentClient:       paymentClient,
-		transferClient:            transferClient,
-		ecommerceClient:           ecommerceClient,
-		ordinarySPClient:          ordinarySPClient,
-		baofuAggregateClient:      baofuAggregateClient,
-		baofuAccountClient:        baofuAccountClient,
+		config:               config,
+		store:                store,
+		tokenMaker:           tokenMaker,
+		auditWriter:          auditWriter,
+		wechatClient:         wechatClient,
+		directPaymentClient:  paymentClient,
+		transferClient:       transferClient,
+		baofuAggregateClient: baofuAggregateClient,
+		baofuAccountClient:   baofuAccountClient,
+		baofuWithdrawService: logic.NewBaofuWithdrawService(store, baofuWithdrawClient, logic.BaofuWithdrawServiceConfig{
+			CollectMerchantID: config.BaofuCollectMerchantID,
+			CollectTerminalID: config.BaofuCollectTerminalID,
+			PayoutMerchantID:  config.BaofuPayoutMerchantID,
+			PayoutTerminalID:  config.BaofuPayoutTerminalID,
+			WithdrawNotifyURL: config.EffectiveBaofuWithdrawNotifyURL(),
+		}),
 		baofuMerchantReportClient: baofuMerchantReportClient,
 		dataEncryptor:             dataEncryptor,
 		mapClient:                 mapClient,
@@ -299,9 +288,15 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		printerClient:             cloudprint.NewFeieyunClientFromConfig(config),
 		wsHub:                     wsHub,
 		wsPubSub:                  wsPubSub,
-		rulesEngine:               engine,
-		imageDeleter:              newImageDeleteWorker(),
-		keywordWorker:             newSearchKeywordWorker(store),
+		merchantStatusChangePublisher: func() websocket.MerchantStatusChangePublisher {
+			if wsPubSub != nil {
+				return websocket.NewRedisMerchantStatusChangePublisher(websocket.NewRedisPublisher(wsPubSub.GetRedisClient()))
+			}
+			return websocket.NewMerchantStatusChangeLocalPublisher(wsHub)
+		}(),
+		rulesEngine:   engine,
+		imageDeleter:  newImageDeleteWorker(),
+		keywordWorker: newSearchKeywordWorker(store),
 		paymentFactService: logic.NewPaymentFactService(store).
 			WithPaymentSuccessConfig(config.RiderAverageSpeed, config.DefaultPrepareTime).
 			WithBaofuVerifyFeeContinuation(logic.NewBaofuAccountOnboardingService(store, baofuAccountClient, paymentClient, dataEncryptor, logic.BaofuAccountOnboardingConfig{
@@ -404,6 +399,11 @@ func (server *Server) GetWebSocketHub() *websocket.Hub {
 	return server.wsHub
 }
 
+// GetMerchantStatusChangePublisher returns the merchant status change publisher for external wiring.
+func (server *Server) GetMerchantStatusChangePublisher() websocket.MerchantStatusChangePublisher {
+	return server.merchantStatusChangePublisher
+}
+
 // Shutdown releases server-side resources created outside the HTTP server.
 func (server *Server) Shutdown() {
 	if server.wsPubSub != nil {
@@ -432,7 +432,8 @@ func (server *Server) setupRouter() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Recovery())
 	// Limit in-memory multipart parsing to reduce RAM spikes under concurrent uploads.
 	// Parts larger than this will be stored in temporary files.
 	router.MaxMultipartMemory = 8 << 20 // 8 MiB
@@ -526,19 +527,7 @@ func (server *Server) setupRouter() {
 		webhooksGroup.POST("/wechat-pay/notify", server.handlePaymentNotify)
 		webhooksGroup.POST("/wechat-pay/refund-notify", server.handleRefundNotify)
 		webhooksGroup.POST("/wechat-pay/merchant-transfer-notify", server.handleMerchantTransferNotify)
-		// 平台收付通回调
-		webhooksGroup.POST("/wechat-ecommerce/payment-notify", server.handleEcommercePaymentNotify)
-		webhooksGroup.POST("/wechat-ecommerce/combine-notify", server.handleCombinePaymentNotify)
-		webhooksGroup.POST("/wechat-ecommerce/refund-notify", server.handleEcommerceRefundNotify)
-		webhooksGroup.POST("/wechat-ecommerce/withdraw-notify", server.handleEcommerceWithdrawNotify)
-		webhooksGroup.POST("/wechat-ecommerce/applyment-notify", server.handleApplymentStateNotify)
-		webhooksGroup.POST("/wechat-ecommerce/profit-sharing-notify", server.handleProfitSharingNotify)
-		// 普通服务商回调
-		webhooksGroup.POST("/wechat-ordinary/payment-notify", server.handleOrdinaryServiceProviderPaymentNotify)
-		webhooksGroup.POST("/wechat-ordinary/combine-notify", server.handleOrdinaryServiceProviderCombinePaymentNotify)
-		webhooksGroup.POST("/wechat-ordinary/refund-notify", server.handleOrdinaryServiceProviderRefundNotify)
-		webhooksGroup.POST("/wechat-ordinary/profit-sharing-notify", server.handleOrdinaryServiceProviderProfitSharingNotify)
-		webhooksGroup.POST("/wechat-ordinary/violation-notify", server.handleOrdinaryServiceProviderViolationNotify)
+		webhooksGroup.POST("/wechat-miniprogram/settlement-notify", server.handleOrderSettlementNotify)
 		// 宝付宝财通回调
 		webhooksGroup.GET("/baofu/account/open", server.handleBaofuAccountOpenNotify)
 		webhooksGroup.POST("/baofu/account/open", server.handleBaofuAccountOpenNotify)
@@ -546,11 +535,6 @@ func (server *Server) setupRouter() {
 		webhooksGroup.POST("/baofu/payment", server.handleBaofuPaymentNotify)
 		webhooksGroup.POST("/baofu/share", server.handleBaofuShareNotify)
 		webhooksGroup.POST("/baofu/refund", server.handleBaofuRefundNotify)
-		// 微信用户投诉通知（合规要求，状态变更实时推送）
-		webhooksGroup.POST("/wechat-ecommerce/complaint-notify", server.handleComplaintNotify)
-		webhooksGroup.POST("/wechat-ecommerce/violation-notify", server.handleViolationNotify)
-		// 小程序「发货信息管理」结算事件（trade_manage_order_settlement）
-		webhooksGroup.POST("/wechat-miniprogram/settlement-notify", server.handleOrderSettlementNotify)
 	}
 
 	// 需要认证的路由
@@ -700,30 +684,6 @@ func (server *Server) setupRouter() {
 		merchantAppGroup.DELETE("/documents/:document_type", server.deleteMerchantApplicationDocument)
 		merchantAppGroup.POST("/submit", server.submitMerchantApplication) // 提交申请（自动审核）
 		merchantAppGroup.POST("/reset", server.resetMerchantApplication)   // 重置申请（被拒后）
-	}
-
-	// M3.2: 商户开户（微信支付二级商户进件）
-	merchantApplymentGroup := authGroup.Group("/merchant/applyment")
-	merchantApplymentGroup.Use(server.MerchantOwnerOnlyMiddleware())
-	{
-		merchantApplymentGroup.GET("/banks", server.listApplymentBanks)
-		merchantApplymentGroup.GET("/banks/search-by-bank-account", server.searchApplymentBanksByAccount)
-		merchantApplymentGroup.GET("/banks/:bank_alias_code/branches", server.listApplymentBankBranches)
-		merchantApplymentGroup.GET("/areas/provinces", server.listApplymentProvinces)
-		merchantApplymentGroup.GET("/areas/provinces/:province_code/cities", server.listApplymentCities)
-		merchantApplymentGroup.POST("/bindbank", server.merchantBindBank)        // 绑定银行卡开户
-		merchantApplymentGroup.GET("/status", server.getMerchantApplymentStatus) // 获取开户状态
-	}
-
-	// 商户端：用户投诉管理（合规要求，商户需在指定时效内回复）
-	merchantComplaintsGroup := authGroup.Group("/merchant/complaints")
-	merchantComplaintsGroup.Use(server.MerchantStaffMiddleware("owner", "manager"))
-	{
-		merchantComplaintsGroup.GET("", server.listMerchantComplaints)
-		merchantComplaintsGroup.GET("/summary", server.getMerchantComplaintSummary)
-		merchantComplaintsGroup.GET("/:id", server.getMerchantComplaintDetail)
-		merchantComplaintsGroup.POST("/:id/response", server.respondToComplaint)
-		merchantComplaintsGroup.POST("/:id/complete", server.completeComplaint)
 	}
 
 	merchantBaofuSettlementAccountReadGroup := authGroup.Group("/merchant/settlement-account")
@@ -1114,6 +1074,10 @@ func (server *Server) setupRouter() {
 		riderGroup.GET("/income/summary", server.getRiderIncomeSummary)
 		riderGroup.GET("/income/ledger", server.listRiderIncomeLedger)
 		riderGroup.GET("/income/daily", server.getRiderIncomeDaily)
+		riderGroup.GET("/income/baofu-withdrawal/balance", server.RiderMiddleware(), server.getRiderBaofuIncomeWithdrawalBalance)
+		riderGroup.GET("/income/baofu-withdrawal/withdrawals", server.RiderMiddleware(), server.listRiderBaofuIncomeWithdrawals)
+		riderGroup.GET("/income/baofu-withdrawal/withdrawals/:id", server.RiderMiddleware(), server.getRiderBaofuIncomeWithdrawal)
+		riderGroup.POST("/income/baofu-withdrawal/withdraw", server.RiderMiddleware(), server.createRiderBaofuIncomeWithdrawal)
 
 		// 工作台摘要
 		riderGroup.GET("/workbench/summary", server.getRiderWorkbenchSummary)
@@ -1254,22 +1218,15 @@ func (server *Server) setupRouter() {
 		merchantFinanceGroup.GET("/daily", server.listMerchantDailyFinance)
 		merchantFinanceGroup.GET("/settlements", server.listMerchantSettlements)
 		merchantFinanceGroup.GET("/settlement-timeline", server.listMerchantSettlementTimeline)
-		merchantFinanceGroup.GET("/account/balance", server.gateEcommerceFundManagementWhenOrdinaryActive("merchant account balance", server.getMerchantAccountBalance))
-		merchantFinanceGroup.GET("/account/settlement-account", server.getMerchantSettlementAccount)
-		merchantFinanceGroup.GET("/account/cancel-withdraw/eligibility", server.gateEcommerceFundManagementWhenOrdinaryActive("merchant cancel-withdraw eligibility", server.getMerchantCancelWithdrawEligibility))
-		merchantFinanceGroup.GET("/account/cancel-withdraw/applications", server.gateEcommerceFundManagementWhenOrdinaryActive("merchant cancel-withdraw application list", server.listMerchantCancelWithdrawApplications))
-		merchantFinanceGroup.GET("/account/cancel-withdraw/applications/:id", server.gateEcommerceFundManagementWhenOrdinaryActive("merchant cancel-withdraw application detail", server.getMerchantCancelWithdrawApplication))
-		merchantFinanceGroup.GET("/account/withdrawals", server.gateEcommerceFundManagementWhenOrdinaryActive("merchant withdrawal list", server.listMerchantAccountWithdrawals))
-		merchantFinanceGroup.GET("/account/withdrawals/:id", server.gateEcommerceFundManagementWhenOrdinaryActive("merchant withdrawal detail", server.getMerchantAccountWithdrawal))
+		merchantFinanceGroup.GET("/baofu-withdrawal/balance", server.getMerchantBaofuWithdrawalBalance)
+		merchantFinanceGroup.GET("/baofu-withdrawal/withdrawals", server.listMerchantBaofuWithdrawals)
+		merchantFinanceGroup.GET("/baofu-withdrawal/withdrawals/:id", server.getMerchantBaofuWithdrawal)
 	}
 
 	merchantFinanceOwnerGroup := authGroup.Group("/merchant/finance")
 	merchantFinanceOwnerGroup.Use(server.MerchantStaffMiddleware("owner"))
 	{
-		merchantFinanceOwnerGroup.POST("/account/withdraw", server.gateEcommerceFundManagementWhenOrdinaryActive("merchant withdrawal create", server.createMerchantAccountWithdraw))
-		merchantFinanceOwnerGroup.POST("/account/cancel-withdraw/applications", server.gateEcommerceFundManagementWhenOrdinaryActive("merchant cancel-withdraw create", server.createMerchantCancelWithdrawApplication))
-		merchantFinanceOwnerGroup.POST("/account/settlement-account", server.modifyMerchantSettlementAccount)
-		merchantFinanceOwnerGroup.GET("/account/settlement-account/applications/:application_no", server.getMerchantSettlementApplication)
+		merchantFinanceOwnerGroup.POST("/baofu-withdrawal/withdraw", server.createMerchantBaofuWithdrawal)
 	}
 
 	authGroup.GET("/merchant/devices/access", server.getMerchantDeviceAccess)
@@ -1363,6 +1320,10 @@ func (server *Server) setupRouter() {
 	operatorsGroup.Use(server.CasbinRoleMiddleware(RoleOperator), server.LoadOperatorMiddleware())
 	{
 		operatorsGroup.GET("/finance/overview", server.getOperatorFinanceOverview)
+		operatorsGroup.GET("/finance/baofu-withdrawal/balance", server.getOperatorBaofuWithdrawalBalance)
+		operatorsGroup.GET("/finance/baofu-withdrawal/withdrawals", server.listOperatorBaofuWithdrawals)
+		operatorsGroup.GET("/finance/baofu-withdrawal/withdrawals/:id", server.getOperatorBaofuWithdrawal)
+		operatorsGroup.POST("/finance/baofu-withdrawal/withdraw", server.createOperatorBaofuWithdrawal)
 		operatorsGroup.GET("/commission", server.getOperatorCommission)
 		operatorsGroup.GET("/settlement-account", server.getOperatorBaofuSettlementAccount)
 		operatorsGroup.POST("/settlement-account", server.createOperatorBaofuSettlementAccount)
@@ -1372,20 +1333,6 @@ func (server *Server) setupRouter() {
 		operatorsGroup.GET("/notifications/:id", server.getOperatorNotification)
 		operatorsGroup.PUT("/notifications/:id/read", server.markOperatorNotificationAsRead)
 		operatorsGroup.PUT("/notifications/read-all", server.markAllOperatorNotificationsAsRead)
-
-		// 用户投诉管理（运营商视角：查看所有待处理投诉，可完结投诉）
-		operatorsGroup.GET("/complaints", server.listPendingComplaints)
-		operatorsGroup.POST("/complaints/:id/complete", server.completeComplaint)
-
-		// 补差管理（Finding 4 deferred：暂保留 legacy operator 补差路由，不在本轮推进对象级授权整改）
-		operatorPaymentGroup := operatorsGroup.Group("/payment-orders/:id")
-		{
-			operatorPaymentGroup.GET("/profit-sharing/amounts", server.getProfitSharingAmounts)
-			operatorPaymentGroup.POST("/profit-sharing/receivers/delete", server.deleteProfitSharingReceiver)
-			operatorPaymentGroup.POST("/subsidies", server.gateEcommerceFundManagementWhenOrdinaryActive("operator subsidy create", server.createSubsidy))
-			operatorPaymentGroup.POST("/subsidies/return", server.gateEcommerceFundManagementWhenOrdinaryActive("operator subsidy return", server.returnSubsidy))
-			operatorPaymentGroup.POST("/subsidies/cancel", server.gateEcommerceFundManagementWhenOrdinaryActive("operator subsidy cancel", server.cancelSubsidy))
-		}
 
 		operatorRulesProxyGroup := operatorsGroup.Group("/rules")
 		{
@@ -1429,10 +1376,6 @@ func (server *Server) setupRouter() {
 		platformProfitSharingGroup.GET("/configs", server.listProfitSharingConfigs)
 		platformProfitSharingGroup.PATCH("/configs/:id", server.updateProfitSharingConfig)
 		platformProfitSharingGroup.POST("/configs/:id/disable", server.disableProfitSharingConfig)
-		platformProfitSharingGroup.GET("/receiver-lifecycle/targets", server.listProfitSharingReceiverLifecycleTargets)
-		platformProfitSharingGroup.GET("/receiver-lifecycle/targets/:id", server.getProfitSharingReceiverLifecycleTarget)
-		platformProfitSharingGroup.GET("/receiver-lifecycle/targets/:id/attempts", server.listProfitSharingReceiverLifecycleAttempts)
-		platformProfitSharingGroup.POST("/receiver-lifecycle/repair", server.gateEcommerceReceiverLifecycleWhenOrdinaryActive("profit-sharing receiver lifecycle repair", server.repairProfitSharingReceiverLifecycle))
 	}
 
 	platformRulesGroup := authGroup.Group("/platform/rules")
@@ -1451,30 +1394,13 @@ func (server *Server) setupRouter() {
 	platformFinanceGroup := authGroup.Group("/platform/finance")
 	platformFinanceGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
 	{
-		platformFinanceGroup.GET("/account/balance", server.gateEcommerceFundManagementWhenOrdinaryActive("platform account balance", server.getPlatformAccountBalance))
-		platformFinanceGroup.GET("/applyment/banks", server.listApplymentBanks)
-		platformFinanceGroup.GET("/applyment/banks/search-by-bank-account", server.searchApplymentBanksByAccount)
-		platformFinanceGroup.GET("/applyment/banks/:bank_alias_code/branches", server.listApplymentBankBranches)
-		platformFinanceGroup.GET("/applyment/areas/provinces", server.listApplymentProvinces)
-		platformFinanceGroup.GET("/applyment/areas/provinces/:province_code/cities", server.listApplymentCities)
 		platformFinanceGroup.GET("/settlement-account", server.getPlatformBaofuSettlementAccount)
 		platformFinanceGroup.POST("/settlement-account", server.createPlatformBaofuSettlementAccount)
 		platformFinanceGroup.GET("/settlement-account/status", server.getPlatformBaofuSettlementStatus)
-		platformFinanceGroup.GET("/wechat-ecommerce/violation-notification", server.getPlatformViolationNotificationConfig)
-		platformFinanceGroup.POST("/wechat-ecommerce/violation-notification", server.createPlatformViolationNotificationConfig)
-		platformFinanceGroup.PUT("/wechat-ecommerce/violation-notification", server.updatePlatformViolationNotificationConfig)
-		platformFinanceGroup.DELETE("/wechat-ecommerce/violation-notification", server.deletePlatformViolationNotificationConfig)
-		platformFinanceGroup.GET("/wechat-ecommerce/violations", server.listPlatformWechatMerchantViolations)
-		platformFinanceGroup.GET("/wechat-ecommerce/violations/:record_id", server.getPlatformWechatMerchantViolation)
-		platformFinanceGroup.GET("/wechat-ordinary/violation-notification", server.getPlatformViolationNotificationConfig)
-		platformFinanceGroup.POST("/wechat-ordinary/violation-notification", server.createPlatformViolationNotificationConfig)
-		platformFinanceGroup.PUT("/wechat-ordinary/violation-notification", server.updatePlatformViolationNotificationConfig)
-		platformFinanceGroup.DELETE("/wechat-ordinary/violation-notification", server.deletePlatformViolationNotificationConfig)
-		platformFinanceGroup.GET("/wechat-ordinary/violations", server.listPlatformWechatMerchantViolations)
-		platformFinanceGroup.GET("/wechat-ordinary/violations/:record_id", server.getPlatformWechatMerchantViolation)
-		platformFinanceGroup.GET("/wechat-ordinary/merchant-limitations/:sub_mch_id", server.getOrdinaryMerchantLimitationDiagnostic)
-		platformFinanceGroup.POST("/wechat-ordinary/merchant-limitations/:sub_mch_id/inactive-identity-verifications", server.createInactiveMerchantIdentityVerification)
-		platformFinanceGroup.GET("/wechat-ordinary/merchant-limitations/:sub_mch_id/inactive-identity-verifications/:verification_id", server.getInactiveMerchantIdentityVerification)
+		platformFinanceGroup.GET("/baofu-withdrawal/balance", server.getPlatformBaofuWithdrawalBalance)
+		platformFinanceGroup.GET("/baofu-withdrawal/withdrawals", server.listPlatformBaofuWithdrawals)
+		platformFinanceGroup.GET("/baofu-withdrawal/withdrawals/:id", server.getPlatformBaofuWithdrawal)
+		platformFinanceGroup.POST("/baofu-withdrawal/withdraw", server.createPlatformBaofuWithdrawal)
 	}
 
 	platformOperatorRulesGroup := authGroup.Group("/platform/operator-rules")
@@ -1489,12 +1415,6 @@ func (server *Server) setupRouter() {
 	{
 		platformOperationalConfigsGroup.GET("", server.listPlatformOperationalConfigs)
 		platformOperationalConfigsGroup.PATCH("/:key", server.updatePlatformOperationalConfig)
-	}
-
-	platformRefundGroup := authGroup.Group("/platform/refunds")
-	platformRefundGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
-	{
-		platformRefundGroup.POST("/:id/apply-abnormal-refund", server.gateEcommerceFundManagementWhenOrdinaryActive("platform abnormal refund", server.applyPlatformAbnormalRefund))
 	}
 
 	// 用户索赔路由

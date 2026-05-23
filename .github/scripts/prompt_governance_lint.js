@@ -171,6 +171,17 @@ function lintFileContains(errors, relativePath, snippets, messageSuffix) {
   }
 }
 
+function lintFileContainsCaseInsensitive(errors, relativePath, snippets, messageSuffix) {
+  const filePath = path.join(repoRoot, relativePath);
+  const content = readFile(filePath).toLowerCase();
+
+  for (const snippet of snippets) {
+    if (!content.includes(snippet.toLowerCase())) {
+      errors.push(`${relativePath}: ${messageSuffix} '${snippet}'`);
+    }
+  }
+}
+
 function lintFileOmits(errors, relativePath, snippets, messageSuffix) {
   const filePath = path.join(repoRoot, relativePath);
   const content = readFile(filePath);
@@ -380,6 +391,41 @@ function lintWeappPromptBoundaries(errors) {
   );
 }
 
+function lintContextRehydrationGate(errors) {
+  const fileRequirements = {
+    '.github/README.md': ['rerun routing from `.github/README.md`', 'Do not keep relying on stale context.'],
+    '.github/copilot-instructions.md': ['rerun routing from `.github/README.md`', 'Do not keep relying on stale context.'],
+    '.github/standards/engineering/AI_PROMPT_GOVERNANCE.md': ['rerun routing from `.github/README.md`', 'Do not keep relying on stale context.'],
+    'locallife/AGENTS.md': ['rerun routing from `../.github/README.md`', 'Do not keep relying on stale context.']
+  };
+
+  for (const [relativePath, snippets] of Object.entries(fileRequirements)) {
+    lintFileContainsCaseInsensitive(
+      errors,
+      relativePath,
+      snippets,
+      'context rehydration gate must be declared in the canonical entrypoints'
+    );
+  }
+
+  const gateSnippets = [
+    'new, compacted, forked, or handed off',
+    'rerun routing from',
+    'reopen the matching instructions',
+    'Do not keep relying on stale context.'
+  ];
+
+  const promptAndInstructionFiles = [
+    ...fs.readdirSync(promptDir).filter((name) => name.endsWith('.prompt.md')).map((name) => path.join(promptDir, name)),
+    ...walkMarkdownFiles(path.join(repoRoot, '.github', 'instructions'))
+  ];
+
+  for (const filePath of promptAndInstructionFiles) {
+    const relativePath = path.relative(repoRoot, filePath);
+    lintFileContainsCaseInsensitive(errors, relativePath, gateSnippets, 'prompt or instruction must keep the context rehydration gate');
+  }
+}
+
 function main() {
   const errors = [];
   const promptFiles = fs.readdirSync(promptDir)
@@ -518,6 +564,7 @@ function main() {
 
   lintBackendCanonicalOwners(errors);
   lintWeappPromptBoundaries(errors);
+  lintContextRehydrationGate(errors);
 
   const seenReferences = new Set();
   for (const filePath of aiFacingFiles) {

@@ -1,10 +1,23 @@
 import {
+  riderIncomeApi,
   RiderIncomeDailyItem,
+  RiderIncomeDailyResponse,
   RiderIncomeLedgerItem,
+  RiderIncomeLedgerResponse,
   RiderIncomeStatus,
   RiderIncomeStatusSummary,
   RiderIncomeSummaryResponse
 } from '../api/rider-income'
+import {
+  getBaofuWithdrawalBalance,
+  type BaofuWithdrawalBalanceResponse
+} from '../api/baofu-withdrawal'
+import RiderService from '../api/rider'
+import {
+  buildBaofuWithdrawalBalanceView,
+  type BaofuWithdrawalBalanceView
+} from './baofu-withdrawal-workflow'
+import { logger } from '../utils/logger'
 
 export type RiderIncomeStatusFilter = 'all' | RiderIncomeStatus
 export type RiderIncomeTagTheme = 'default' | 'primary' | 'success' | 'warning' | 'danger'
@@ -51,6 +64,24 @@ export interface RiderIncomeDailyItemView {
   dateLabel: string
   deliveryCountText: string
   dailyIncomeDisplay: string
+}
+
+export interface RiderIncomeLedgerPageView {
+  items: RiderIncomeLedgerItemView[]
+  pageId: number
+  pageSize: number
+  total: number
+  hasMore: boolean
+}
+
+export interface RiderIncomePageDataView {
+  settlementNotice: string
+  withdrawalBalanceReady: boolean
+  withdrawalEntryNote: string
+  withdrawalBalanceView: BaofuWithdrawalBalanceView
+  summary: RiderIncomeSummaryView
+  dailyItems: RiderIncomeDailyItemView[]
+  ledgerPage: RiderIncomeLedgerPageView
 }
 
 export const RIDER_INCOME_PAGE_SIZE = 20
@@ -186,5 +217,139 @@ export function buildRiderIncomeDailyItemView(item: RiderIncomeDailyItem): Rider
     dateLabel: formatDate(item.date),
     deliveryCountText: `${item.delivery_count || 0} 单`,
     dailyIncomeDisplay: `¥${formatRiderIncomeFen(item.daily_income || 0)}`
+  }
+}
+
+export function buildEmptyRiderIncomeSummaryView(): RiderIncomeSummaryView {
+  return buildRiderIncomeSummaryView({
+    total_deliveries: 0,
+    total_rider_income: 0,
+    total_delivery_fee: 0,
+    status_summary: []
+  })
+}
+
+export function buildEmptyRiderIncomeWithdrawalBalanceView(): BaofuWithdrawalBalanceView {
+  return buildBaofuWithdrawalBalanceView(null)
+}
+
+export function normalizeRiderIncomeLedgerPage(
+  response: RiderIncomeLedgerResponse,
+  fallbackPage: number
+): RiderIncomeLedgerPageView {
+  const pageSize = response.page_size || RIDER_INCOME_PAGE_SIZE
+  const pageId = response.page_id || fallbackPage
+  const total = typeof response.total === 'number' ? response.total : 0
+
+  return {
+    items: (response.items || []).map(buildRiderIncomeLedgerItemView),
+    pageId,
+    pageSize,
+    total,
+    hasMore: typeof response.has_more === 'boolean'
+      ? response.has_more
+      : pageId * pageSize < total
+  }
+}
+
+export function statusFilterToParam(status: RiderIncomeStatusFilter): RiderIncomeStatus | undefined {
+  return status === 'all' ? undefined : status
+}
+
+export async function loadRiderIncomePageData(input: {
+  dateRange: RiderIncomeDateRange
+  statusTab: RiderIncomeStatusFilter
+  dailyPreviewLimit?: number
+  pageSize?: number
+}): Promise<RiderIncomePageDataView> {
+  const pageSize = input.pageSize || RIDER_INCOME_PAGE_SIZE
+  const [summary, daily, ledger, riderStatus, withdrawalBalance] = await Promise.all([
+    riderIncomeApi.getSummary(input.dateRange),
+    riderIncomeApi.getDaily(input.dateRange),
+    riderIncomeApi.listLedger({
+      ...input.dateRange,
+      status: statusFilterToParam(input.statusTab),
+      page_id: 1,
+      page_size: pageSize
+    }),
+    RiderService.getStatus(),
+    loadRiderIncomeWithdrawalBalance()
+  ])
+
+  return buildRiderIncomePageDataView({
+    summary,
+    daily,
+    ledger,
+    withdrawalBalance,
+    settlementPaymentReady: riderStatus.settlement_account?.payment_ready,
+    fallbackPage: 1,
+    dailyPreviewLimit: input.dailyPreviewLimit,
+    pageSize
+  })
+}
+
+export async function loadRiderIncomeLedgerPage(input: {
+  dateRange: RiderIncomeDateRange
+  statusTab: RiderIncomeStatusFilter
+  pageId: number
+  pageSize?: number
+}): Promise<RiderIncomeLedgerPageView> {
+  const response = await riderIncomeApi.listLedger({
+    ...input.dateRange,
+    status: statusFilterToParam(input.statusTab),
+    page_id: input.pageId,
+    page_size: input.pageSize || RIDER_INCOME_PAGE_SIZE
+  })
+  return normalizeRiderIncomeLedgerPage(response, input.pageId)
+}
+
+function buildRiderIncomePageDataView(input: {
+  summary: RiderIncomeSummaryResponse
+  daily: RiderIncomeDailyResponse
+  ledger: RiderIncomeLedgerResponse
+  withdrawalBalance: BaofuWithdrawalBalanceResponse | null
+  settlementPaymentReady?: boolean
+  fallbackPage: number
+  dailyPreviewLimit?: number
+  pageSize: number
+}): RiderIncomePageDataView {
+  const withdrawalBalanceView = input.withdrawalBalance
+    ? buildBaofuWithdrawalBalanceView(input.withdrawalBalance)
+    : buildEmptyRiderIncomeWithdrawalBalanceView()
+
+  return {
+    settlementNotice: input.settlementPaymentReady === false
+      ? '结算账户未开通，暂不能接收配送费分账订单'
+      : '',
+    withdrawalBalanceReady: Boolean(input.withdrawalBalance),
+    withdrawalBalanceView,
+    withdrawalEntryNote: buildRiderIncomeWithdrawalEntryNote(input.withdrawalBalance, withdrawalBalanceView),
+    summary: buildRiderIncomeSummaryView(input.summary),
+    dailyItems: (input.daily.items || [])
+      .slice(0, input.dailyPreviewLimit || 7)
+      .map(buildRiderIncomeDailyItemView),
+    ledgerPage: normalizeRiderIncomeLedgerPage(input.ledger, input.fallbackPage)
+  }
+}
+
+function buildRiderIncomeWithdrawalEntryNote(
+  withdrawalBalance: BaofuWithdrawalBalanceResponse | null,
+  withdrawalBalanceView: BaofuWithdrawalBalanceView
+): string {
+  if (!withdrawalBalance) {
+    return ''
+  }
+  if (withdrawalBalanceView.canSubmit) {
+    return `可提现 ${withdrawalBalanceView.availableAmountText}`
+  }
+  return withdrawalBalanceView.disabledReason || withdrawalBalanceView.statusDesc || '暂不能提现'
+}
+
+async function loadRiderIncomeWithdrawalBalance(): Promise<BaofuWithdrawalBalanceResponse | null> {
+  try {
+    return await getBaofuWithdrawalBalance('rider')
+  } catch (error) {
+    logger.warn('Load rider income baofu withdrawal balance failed', error)
+    return null
   }
 }

@@ -7,6 +7,7 @@ import type {
 import type { ClaimResponse } from '../api/appeals-customer-service'
 import type { DashboardDeliveryView, TagTheme } from '../utils/rider-dashboard-runtime'
 import { getDeliveryStatusDisplay } from '../api/delivery'
+import { buildRiderDeliveryIncomeView } from '../utils/rider-delivery-income-view'
 import { formatPriceNoSymbol } from '../utils/util'
 import { resolveStatusTagTheme } from '../utils/status-tag'
 import { buildRiderDepositWorkbenchSummaryView } from './rider-deposit-finance'
@@ -93,6 +94,11 @@ function buildDashboardDelivery(item: RiderWorkbenchDeliveryItem): DashboardDeli
     status: item.status,
     delivery_fee: item.delivery_fee,
     rider_earnings: item.rider_earnings,
+    rider_gross_amount: item.rider_gross_amount,
+    rider_payment_fee: item.rider_payment_fee,
+    rider_net_earnings: item.rider_net_earnings,
+    profit_sharing_order_id: item.profit_sharing_order_id,
+    profit_sharing_status: item.profit_sharing_status,
     pickup_address: item.pickup_address,
     pickup_longitude: 0,
     pickup_latitude: 0,
@@ -114,7 +120,8 @@ function buildDashboardDelivery(item: RiderWorkbenchDeliveryItem): DashboardDeli
     can_confirm_pickup: item.status === 'picking',
     can_start_delivery: item.status === 'picked',
     can_confirm_delivery: item.status === 'delivering',
-    is_action_loading: false
+    is_action_loading: false,
+    income_view: buildRiderDeliveryIncomeView(item)
   }
 }
 

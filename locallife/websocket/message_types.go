@@ -2,10 +2,11 @@ package websocket
 
 // 消息类型常量
 const (
-	MessageTypeNotification = "notification"
-	MessageTypePing         = "ping"
-	MessageTypePong         = "pong"
-	MessageTypeAlert        = "alert"
+	MessageTypeNotification         = "notification"
+	MessageTypePing                 = "ping"
+	MessageTypePong                 = "pong"
+	MessageTypeAlert                = "alert"
+	MessageTypeMerchantStatusChange = "merchant_status_change"
 
 	// 配送相关消息类型
 	MessageTypeDeliveryPoolNew    = "delivery_pool_new"    // 配送池新增订单
