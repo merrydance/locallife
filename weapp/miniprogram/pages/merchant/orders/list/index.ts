@@ -93,7 +93,7 @@ Page({
     refreshErrorMessage: '',
     loading: false,
     orders: [] as MerchantOrderListItem[],
-    currentStatus: 'paid' as OrderStatusFilter,
+    currentStatus: '' as OrderStatusFilter,
     orderTypeFilter: '' as OrderTypeFilter,
     orderTypeOptions: ORDER_TYPE_OPTIONS,
     pageTitle: '订单中心',

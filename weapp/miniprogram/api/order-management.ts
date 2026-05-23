@@ -93,7 +93,10 @@ export type MerchantVisibleOrderStatus = Exclude<OrderResponse['status'], 'pendi
 export type MerchantOrderStatusFilter = '' | MerchantVisibleOrderStatus
 
 export function normalizeMerchantVisibleOrderStatusFilter(status?: OrderResponse['status'] | MerchantOrderStatusFilter): MerchantOrderStatusFilter {
-    if (!status || status === 'pending') {
+    if (!status) {
+        return ''
+    }
+    if (status === 'pending') {
         return 'paid'
     }
     return status
