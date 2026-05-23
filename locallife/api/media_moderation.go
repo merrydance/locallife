@@ -66,23 +66,6 @@ func (server *Server) triggerMediaModeration(ctx *gin.Context, asset *db.MediaAs
 	if asset == nil {
 		return nil
 	}
-	if asset.Visibility == string(media.VisibilityPrivate) && isPrivateDocumentMediaModerationExempt(asset.MediaCategory) {
-		updated, err := server.store.SetMediaAssetModerationStatus(ctx, db.SetMediaAssetModerationStatusParams{
-			ID:               asset.ID,
-			ModerationStatus: "approved",
-		})
-		if err != nil {
-			return fmt.Errorf("auto approve moderation-exempt private document media: %w", err)
-		}
-		*asset = updated
-		log.Info().
-			Int64("media_id", asset.ID).
-			Str("object_key", asset.ObjectKey).
-			Str("media_category", asset.MediaCategory).
-			Str("visibility", asset.Visibility).
-			Msg("media moderation skipped for moderation-exempt private document media")
-		return nil
-	}
 	if asset.ModerationStatus != "pending" || asset.ModerationTraceID.Valid {
 		log.Info().
 			Int64("media_id", asset.ID).
@@ -90,6 +73,23 @@ func (server *Server) triggerMediaModeration(ctx *gin.Context, asset *db.MediaAs
 			Str("moderation_status", asset.ModerationStatus).
 			Str("moderation_trace_id", asset.ModerationTraceID.String).
 			Msg("media moderation skipped because asset is already processed or queued")
+		return nil
+	}
+	if !usesWechatMediaModeration(asset.MediaCategory) {
+		updated, err := server.store.SetMediaAssetModerationStatus(ctx, db.SetMediaAssetModerationStatusParams{
+			ID:               asset.ID,
+			ModerationStatus: "approved",
+		})
+		if err != nil {
+			return fmt.Errorf("auto approve media outside wechat moderation scope: %w", err)
+		}
+		*asset = updated
+		log.Info().
+			Int64("media_id", asset.ID).
+			Str("object_key", asset.ObjectKey).
+			Str("media_category", asset.MediaCategory).
+			Str("visibility", asset.Visibility).
+			Msg("media moderation skipped because category does not require wechat moderation")
 		return nil
 	}
 	if !strings.HasPrefix(asset.MimeType, "image/") {
@@ -213,6 +213,10 @@ func (server *Server) triggerMediaModeration(ctx *gin.Context, asset *db.MediaAs
 		Str("trace_id", result.TraceID).
 		Msg("async media moderation trace id persisted")
 	return nil
+}
+
+func usesWechatMediaModeration(category string) bool {
+	return category == string(media.CategoryReviewImage)
 }
 
 func (server *Server) mediaModerationSourceURL(ctx *gin.Context, asset db.MediaAsset) (string, error) {

@@ -207,6 +207,19 @@ func TestRegistry_CompleteUpload_OK(t *testing.T) {
 		Times(1).
 		Return(createdAsset, nil)
 
+	confirmedAsset := createdAsset
+	confirmedAsset.UploadStatus = "confirmed"
+	confirmedAsset.MimeType = "image/jpeg"
+	confirmedAsset.FileSize = 500_000
+	store.EXPECT().
+		ConfirmMediaAssetUploaded(gomock.Any(), db.ConfirmMediaAssetUploadedParams{
+			ID:       createdAsset.ID,
+			MimeType: "image/jpeg",
+			FileSize: 500_000,
+		}).
+		Times(1).
+		Return(confirmedAsset, nil)
+
 	store.EXPECT().
 		CompleteUploadSession(gomock.Any(), gomock.Any()).
 		Times(1).
@@ -219,6 +232,7 @@ func TestRegistry_CompleteUpload_OK(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(42), result.Asset.ID)
+	require.Equal(t, "confirmed", result.Asset.UploadStatus)
 }
 
 func TestRegistry_CompleteUpload_SessionNotFound(t *testing.T) {
@@ -351,18 +365,29 @@ func TestRegistry_CompleteUpload_Idempotent(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	reg := NewRegistry(store, &stubStorage{})
+	storage := &stubStorage{statMeta: ObjectMetadata{ContentType: "image/jpeg", Size: 500_000}}
+	reg := NewRegistry(store, storage)
 
 	const assetID int64 = 77
-	existingAsset := db.MediaAsset{ID: assetID, ObjectKey: "dish/1/up_abc/photo.jpg"}
+	existingAsset := db.MediaAsset{
+		ID:            assetID,
+		ObjectKey:     "dish/1/up_abc/photo.jpg",
+		UploadStatus:  "pending",
+		MimeType:      "image/jpeg",
+		MediaCategory: string(CategoryDishImage),
+		Visibility:    string(VisibilityPublic),
+	}
 
 	// 会话已 completed
 	session := db.MediaUploadSession{
-		ID:           "up_abc",
-		UserID:       1,
-		Status:       "completed",
-		MediaAssetID: pgtype.Int8{Int64: assetID, Valid: true},
-		ExpireAt:     time.Now().Add(time.Hour),
+		ID:            "up_abc",
+		UserID:        1,
+		MediaCategory: string(CategoryDishImage),
+		ObjectKey:     existingAsset.ObjectKey,
+		ContentType:   "image/jpeg",
+		Status:        "completed",
+		MediaAssetID:  pgtype.Int8{Int64: assetID, Valid: true},
+		ExpireAt:      time.Now().Add(time.Hour),
 	}
 	store.EXPECT().
 		GetUploadSession(gomock.Any(), "up_abc").
@@ -374,12 +399,24 @@ func TestRegistry_CompleteUpload_Idempotent(t *testing.T) {
 		Times(1).
 		Return(existingAsset, nil)
 
+	confirmedAsset := existingAsset
+	confirmedAsset.UploadStatus = "confirmed"
+	store.EXPECT().
+		ConfirmMediaAssetUploaded(gomock.Any(), db.ConfirmMediaAssetUploadedParams{
+			ID:       assetID,
+			MimeType: "image/jpeg",
+			FileSize: 500_000,
+		}).
+		Times(1).
+		Return(confirmedAsset, nil)
+
 	result, err := reg.CompleteUpload(context.Background(), CompleteRequest{
 		UploadID: "up_abc",
 		UserID:   1,
 	})
 	require.NoError(t, err)
 	require.Equal(t, assetID, result.Asset.ID)
+	require.Equal(t, "confirmed", result.Asset.UploadStatus)
 }
 
 // ==================== GetAsset ====================

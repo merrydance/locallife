@@ -27,7 +27,7 @@ import (
 
 func TestCompleteMediaUploadTriggersAsyncModeration(t *testing.T) {
 	user, _ := randomUser(t)
-	objectKey := "merchant/dish/1/20260318/moderation.jpg"
+	objectKey := "user/review/1/20260318/moderation.jpg"
 	uploadID := "up_test_moderation"
 
 	ctrl := gomock.NewController(t)
@@ -36,15 +36,17 @@ func TestCompleteMediaUploadTriggersAsyncModeration(t *testing.T) {
 	store := mockdb.NewMockStore(ctrl)
 	wxClient := mockwechat.NewMockWechatClient(ctrl)
 
-	session := randomUploadSession(user.ID, "dish", "public", objectKey, false)
+	session := randomUploadSession(user.ID, string(media.CategoryReviewImage), "public", objectKey, false)
 	session.ID = uploadID
 	asset := randomMediaAsset(10, user.ID, "public", objectKey)
+	asset.MediaCategory = string(media.CategoryReviewImage)
 	asset.ModerationStatus = "pending"
 	updatedAsset := asset
 	updatedAsset.ModerationTraceID = pgtype.Text{String: "trace-123", Valid: true}
 
 	store.EXPECT().GetUploadSession(gomock.Any(), uploadID).Times(1).Return(session, nil)
 	store.EXPECT().CreateMediaAsset(gomock.Any(), gomock.Any()).Times(1).Return(asset, nil)
+	store.EXPECT().ConfirmMediaAssetUploaded(gomock.Any(), gomock.Any()).Times(1).Return(asset, nil)
 	store.EXPECT().CompleteUploadSession(gomock.Any(), gomock.Any()).Times(1).Return(session, nil)
 	store.EXPECT().GetUser(gomock.Any(), user.ID).Times(1).Return(user, nil)
 	wxClient.EXPECT().MediaCheckAsync(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(
@@ -83,6 +85,107 @@ func TestCompleteMediaUploadTriggersAsyncModeration(t *testing.T) {
 	require.Len(t, resp.Variants, 0)
 }
 
+func TestCompleteMediaUploadAutoApprovesNonReviewImagesWithoutWechatModeration(t *testing.T) {
+	user, _ := randomUser(t)
+
+	testCases := []struct {
+		name       string
+		category   media.Category
+		visibility string
+		objectKey  string
+		mediaID    int64
+	}{
+		{
+			name:       "merchant business license",
+			category:   media.CategoryBusinessLicense,
+			visibility: string(media.VisibilityPublic),
+			objectKey:  "merchant/license/business/1/20260318/license.jpg",
+			mediaID:    21,
+		},
+		{
+			name:       "dish image",
+			category:   media.CategoryDishImage,
+			visibility: string(media.VisibilityPublic),
+			objectKey:  "merchant/dish/1/20260318/dish.jpg",
+			mediaID:    22,
+		},
+		{
+			name:       "table image",
+			category:   media.CategoryTableImage,
+			visibility: string(media.VisibilityPublic),
+			objectKey:  "merchant/table/1/20260318/table.jpg",
+			mediaID:    23,
+		},
+		{
+			name:       "rider health cert",
+			category:   media.CategoryHealthCert,
+			visibility: string(media.VisibilityPrivate),
+			objectKey:  "rider/health_cert/1/20260318/health-cert.jpg",
+			mediaID:    24,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			uploadID := "up_test_skip_" + strings.ReplaceAll(tc.name, " ", "_")
+
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			wxClient := mockwechat.NewMockWechatClient(ctrl)
+
+			session := randomUploadSession(user.ID, string(tc.category), tc.visibility, tc.objectKey, false)
+			session.ID = uploadID
+			asset := randomMediaAsset(tc.mediaID, user.ID, tc.visibility, tc.objectKey)
+			asset.MediaCategory = string(tc.category)
+			asset.ModerationStatus = "pending"
+			approvedAsset := asset
+			approvedAsset.ModerationStatus = "approved"
+
+			store.EXPECT().GetUploadSession(gomock.Any(), uploadID).Times(1).Return(session, nil)
+			store.EXPECT().CreateMediaAsset(gomock.Any(), gomock.Any()).Times(1).Return(asset, nil)
+			store.EXPECT().ConfirmMediaAssetUploaded(gomock.Any(), gomock.Any()).Times(1).Return(asset, nil)
+			store.EXPECT().CompleteUploadSession(gomock.Any(), gomock.Any()).Times(1).Return(session, nil)
+			store.EXPECT().SetMediaAssetModerationStatus(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(
+				func(_ context.Context, arg db.SetMediaAssetModerationStatusParams) (db.MediaAsset, error) {
+					require.Equal(t, asset.ID, arg.ID)
+					require.Equal(t, "approved", arg.ModerationStatus)
+					return approvedAsset, nil
+				},
+			)
+
+			server, tempDir := newTestServerForMedia(t, store)
+			server.config.WechatMiniAppID = "wx-test-app"
+			server.config.WechatMiniAppSecret = "secret"
+			server.wechatClient = wxClient
+			writeLocalFile(t, tempDir, tc.objectKey)
+
+			recorder := httptest.NewRecorder()
+			req, err := http.NewRequest(http.MethodPost, "/v1/media/complete", marshalBody(t, completeUploadRequest{
+				UploadID:  uploadID,
+				ObjectKey: tc.objectKey,
+			}))
+			require.NoError(t, err)
+			req.Header.Set("Content-Type", "application/json")
+			addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+			server.router.ServeHTTP(recorder, req)
+
+			require.Equal(t, http.StatusOK, recorder.Code)
+			var resp completeUploadResponse
+			requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+			require.EqualValues(t, tc.mediaID, resp.MediaID)
+			require.Equal(t, "approved", resp.Status)
+			if tc.visibility == string(media.VisibilityPublic) {
+				require.NotEmpty(t, resp.Variants["original"])
+			} else {
+				require.Empty(t, resp.Variants)
+			}
+		})
+	}
+}
+
 func TestCompleteMediaUploadSkipsModerationForOwnerOnlyPrivateMedia(t *testing.T) {
 	user, _ := randomUser(t)
 	objectKey := "id_card/front/1/20260329/private-id-card.jpg"
@@ -104,6 +207,7 @@ func TestCompleteMediaUploadSkipsModerationForOwnerOnlyPrivateMedia(t *testing.T
 
 	store.EXPECT().GetUploadSession(gomock.Any(), uploadID).Times(1).Return(session, nil)
 	store.EXPECT().CreateMediaAsset(gomock.Any(), gomock.Any()).Times(1).Return(asset, nil)
+	store.EXPECT().ConfirmMediaAssetUploaded(gomock.Any(), gomock.Any()).Times(1).Return(asset, nil)
 	store.EXPECT().CompleteUploadSession(gomock.Any(), gomock.Any()).Times(1).Return(session, nil)
 	store.EXPECT().SetMediaAssetModerationStatus(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(
 		func(_ context.Context, arg db.SetMediaAssetModerationStatusParams) (db.MediaAsset, error) {
@@ -159,6 +263,7 @@ func TestCompleteMediaUploadSkipsModerationForPrivateHealthCert(t *testing.T) {
 
 	store.EXPECT().GetUploadSession(gomock.Any(), uploadID).Times(1).Return(session, nil)
 	store.EXPECT().CreateMediaAsset(gomock.Any(), gomock.Any()).Times(1).Return(asset, nil)
+	store.EXPECT().ConfirmMediaAssetUploaded(gomock.Any(), gomock.Any()).Times(1).Return(asset, nil)
 	store.EXPECT().CompleteUploadSession(gomock.Any(), gomock.Any()).Times(1).Return(session, nil)
 	store.EXPECT().SetMediaAssetModerationStatus(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(
 		func(_ context.Context, arg db.SetMediaAssetModerationStatusParams) (db.MediaAsset, error) {

@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -275,7 +276,9 @@ func TestCompleteMediaUploadAPI(t *testing.T) {
 
 				store.EXPECT().GetUploadSession(gomock.Any(), validReq.UploadID).Times(1).Return(session, nil)
 				// CreateMediaAsset succeeds directly → GetMediaAssetByObjectKey NOT called
-				store.EXPECT().CreateMediaAsset(gomock.Any(), gomock.Any()).Times(1).Return(randomMediaAsset(10, user.ID, "public", objectKey), nil)
+				asset := randomMediaAsset(10, user.ID, "public", objectKey)
+				store.EXPECT().CreateMediaAsset(gomock.Any(), gomock.Any()).Times(1).Return(asset, nil)
+				store.EXPECT().ConfirmMediaAssetUploaded(gomock.Any(), gomock.Any()).Times(1).Return(asset, nil)
 				store.EXPECT().CompleteUploadSession(gomock.Any(), gomock.Any()).Times(1).Return(session, nil)
 			},
 			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
@@ -310,7 +313,7 @@ func TestCompleteMediaUploadAPI(t *testing.T) {
 			},
 		},
 		{
-			name: "OK pending moderation returns empty urls object",
+			name: "OK non-review public image auto-approved returns urls",
 			body: validReq,
 			setupAuth: func(t *testing.T, req *http.Request, server *Server) {
 				addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -324,19 +327,29 @@ func TestCompleteMediaUploadAPI(t *testing.T) {
 				asset := randomMediaAsset(11, user.ID, "public", objectKey)
 				asset.MediaCategory = string(media.CategoryAvatar)
 				asset.ModerationStatus = "pending"
+				approvedAsset := asset
+				approvedAsset.ModerationStatus = "approved"
 
 				store.EXPECT().GetUploadSession(gomock.Any(), validReq.UploadID).Times(1).Return(session, nil)
 				store.EXPECT().CreateMediaAsset(gomock.Any(), gomock.Any()).Times(1).Return(asset, nil)
+				store.EXPECT().ConfirmMediaAssetUploaded(gomock.Any(), gomock.Any()).Times(1).Return(asset, nil)
 				store.EXPECT().CompleteUploadSession(gomock.Any(), gomock.Any()).Times(1).Return(session, nil)
+				store.EXPECT().SetMediaAssetModerationStatus(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(
+					func(_ context.Context, arg db.SetMediaAssetModerationStatusParams) (db.MediaAsset, error) {
+						require.Equal(t, asset.ID, arg.ID)
+						require.Equal(t, "approved", arg.ModerationStatus)
+						return approvedAsset, nil
+					},
+				)
 			},
 			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, rec.Code)
 				var resp completeUploadResponse
 				requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &resp)
 				require.EqualValues(t, 11, resp.MediaID)
-				require.Equal(t, "pending", resp.Status)
+				require.Equal(t, "approved", resp.Status)
 				require.NotNil(t, resp.Variants)
-				require.Empty(t, resp.Variants)
+				require.NotEmpty(t, resp.Variants["original"])
 			},
 		},
 		{

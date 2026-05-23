@@ -189,6 +189,13 @@ func (r *Registry) CompleteUpload(ctx context.Context, req CompleteRequest) (Com
 	if session.Status == "completed" && session.MediaAssetID.Valid {
 		asset, aErr := r.store.GetMediaAssetByID(ctx, session.MediaAssetID.Int64)
 		if aErr == nil {
+			if asset.UploadStatus != "confirmed" {
+				confirmedAsset, cErr := r.confirmUploadedAsset(ctx, session, asset)
+				if cErr != nil {
+					return CompleteResult{}, cErr
+				}
+				asset = confirmedAsset
+			}
 			return CompleteResult{Asset: asset}, nil
 		}
 	}
@@ -228,6 +235,11 @@ func (r *Registry) CompleteUpload(ctx context.Context, req CompleteRequest) (Com
 		}
 	}
 
+	asset, err = r.confirmUploadedAssetWithMeta(ctx, session, asset, meta)
+	if err != nil {
+		return CompleteResult{}, err
+	}
+
 	// 更新上传会话状态
 	_, _ = r.store.CompleteUploadSession(ctx, db.CompleteUploadSessionParams{
 		ID:           session.ID,
@@ -235,6 +247,34 @@ func (r *Registry) CompleteUpload(ctx context.Context, req CompleteRequest) (Com
 	})
 
 	return CompleteResult{Asset: asset}, nil
+}
+
+func (r *Registry) confirmUploadedAsset(ctx context.Context, session db.MediaUploadSession, asset db.MediaAsset) (db.MediaAsset, error) {
+	bucket, err := r.policy.BucketFor(Category(session.MediaCategory), r.storage)
+	if err != nil {
+		return db.MediaAsset{}, err
+	}
+	meta, err := r.storage.StatObject(ctx, bucket, session.ObjectKey)
+	if err != nil {
+		return db.MediaAsset{}, ErrUploadNotConfirmed
+	}
+	return r.confirmUploadedAssetWithMeta(ctx, session, asset, meta)
+}
+
+func (r *Registry) confirmUploadedAssetWithMeta(ctx context.Context, session db.MediaUploadSession, asset db.MediaAsset, meta ObjectMetadata) (db.MediaAsset, error) {
+	mimeType := meta.ContentType
+	if mimeType == "" {
+		mimeType = session.ContentType
+	}
+	confirmedAsset, err := r.store.ConfirmMediaAssetUploaded(ctx, db.ConfirmMediaAssetUploadedParams{
+		ID:       asset.ID,
+		MimeType: mimeType,
+		FileSize: meta.Size,
+	})
+	if err != nil {
+		return db.MediaAsset{}, fmt.Errorf("media: confirm media asset uploaded: %w", err)
+	}
+	return confirmedAsset, nil
 }
 
 // GetAsset 按 media_asset_id 查询媒体资产。
