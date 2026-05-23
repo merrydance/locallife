@@ -67,17 +67,30 @@ export function reverseGeocode(params: { latitude: number, longitude: number }):
     })
 }
 
-export interface BicyclingDirectionResponse {
-    code: number
-    message?: string
-    data?: {
-        distance?: number
-        duration?: number
-    }
+export interface BicyclingRoutePoint {
+    lat?: number
+    lng?: number
+    latitude?: number
+    longitude?: number
 }
 
+export interface BicyclingDirectionData {
+    distance?: number
+    // LocalLife 后端已将腾讯 LBS 路线规划时长统一转换为秒。
+    duration?: number
+    points?: BicyclingRoutePoint[]
+}
+
+export interface BicyclingDirectionEnvelope {
+    code: number
+    message?: string
+    data?: BicyclingDirectionData
+}
+
+export type BicyclingDirectionResponse = BicyclingDirectionData | BicyclingDirectionEnvelope
+
 export function getBicyclingDirection(params: { from: string, to: string }): Promise<BicyclingDirectionResponse> {
-    return request({
+    return request<BicyclingDirectionResponse>({
         url: '/v1/location/direction/bicycling',
         method: 'GET',
         data: params

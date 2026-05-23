@@ -8403,14 +8403,14 @@
         },
         "/v1/location/direction/bicycling": {
             "get": {
-                "description": "调用自建 OSRM /route 获取骑行距离与耗时。",
+                "description": "调用腾讯 LBS 电动车路线规划，返回骑行距离、耗时与已解压路线坐标点。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "位置"
                 ],
-                "summary": "自建 OSM 骑行路线",
+                "summary": "腾讯 LBS 电动车路线",
                 "parameters": [
                     {
                         "type": "string",
@@ -8453,7 +8453,7 @@
         },
         "/v1/location/reverse-geocode": {
             "get": {
-                "description": "使用自建 OSM Nominatim 将经纬度解析为地址。",
+                "description": "使用腾讯 LBS 将经纬度解析为地址。",
                 "produces": [
                     "application/json"
                 ],
@@ -45869,6 +45869,19 @@
                 }
             }
         },
+        "maps.Location": {
+            "type": "object",
+            "properties": {
+                "lat": {
+                    "description": "纬度",
+                    "type": "number"
+                },
+                "lng": {
+                    "description": "经度",
+                    "type": "number"
+                }
+            }
+        },
         "maps.RouteResult": {
             "type": "object",
             "properties": {
@@ -45879,6 +45892,13 @@
                 "duration": {
                     "description": "时间（秒）",
                     "type": "integer"
+                },
+                "points": {
+                    "description": "路线坐标点串，已解压为 lat,lng",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/maps.Location"
+                    }
                 }
             }
         },

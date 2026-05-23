@@ -37,6 +37,7 @@ const (
 
 // TencentMapClient 腾讯地图客户端
 type TencentMapClient struct {
+	baseURL    string
 	key        string
 	httpClient *http.Client
 }
@@ -69,8 +70,9 @@ func (l Location) String() string {
 
 // RouteResult 路径规划结果
 type RouteResult struct {
-	Distance int `json:"distance"` // 距离（米）
-	Duration int `json:"duration"` // 时间（秒）
+	Distance int        `json:"distance"`         // 距离（米）
+	Duration int        `json:"duration"`         // 时间（秒）
+	Points   []Location `json:"points,omitempty"` // 路线坐标点串，已解压为 lat,lng
 }
 
 // DistanceMatrixResult 距离矩阵结果
@@ -111,7 +113,8 @@ type ReverseGeocodeResult struct {
 // NewTencentMapClient 创建腾讯地图客户端
 func NewTencentMapClient(key string) *TencentMapClient {
 	return &TencentMapClient{
-		key: key,
+		baseURL: baseURL,
+		key:     key,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -128,8 +131,9 @@ type apiResponse struct {
 
 type routeAPIResult struct {
 	Routes []struct {
-		Distance int `json:"distance"`
-		Duration int `json:"duration"`
+		Distance int       `json:"distance"`
+		Duration int       `json:"duration"` // 腾讯路线规划返回分钟，LocalLife RouteResult 统一转换为秒
+		Polyline []float64 `json:"polyline"`
 	} `json:"routes"`
 }
 
@@ -190,7 +194,7 @@ func (c *TencentMapClient) getRoute(ctx context.Context, apiURL string, from, to
 	params.Set("to", to.String())
 	params.Set("key", c.key)
 
-	reqURL := baseURL + apiURL + "?" + params.Encode()
+	reqURL := c.baseURL + apiURL + "?" + params.Encode()
 
 	body, err := c.doRequest(ctx, reqURL)
 	if err != nil {
@@ -208,8 +212,26 @@ func (c *TencentMapClient) getRoute(ctx context.Context, apiURL string, from, to
 
 	return &RouteResult{
 		Distance: result.Routes[0].Distance,
-		Duration: result.Routes[0].Duration,
+		Duration: result.Routes[0].Duration * 60,
+		Points:   decodeTencentPolyline(result.Routes[0].Polyline),
 	}, nil
+}
+
+func decodeTencentPolyline(polyline []float64) []Location {
+	if len(polyline) < 2 || len(polyline)%2 != 0 {
+		return nil
+	}
+
+	coors := append([]float64(nil), polyline...)
+	for i := 2; i < len(coors); i++ {
+		coors[i] = coors[i-2] + coors[i]/1000000
+	}
+
+	points := make([]Location, 0, len(coors)/2)
+	for i := 0; i < len(coors); i += 2 {
+		points = append(points, Location{Lat: coors[i], Lng: coors[i+1]})
+	}
+	return points
 }
 
 // ==================== 距离矩阵 ====================
@@ -232,7 +254,7 @@ func (c *TencentMapClient) GetDistanceMatrix(ctx context.Context, froms, tos []L
 	params.Set("mode", mode)
 	params.Set("key", c.key)
 
-	reqURL := baseURL + distanceMatrixURL + "?" + params.Encode()
+	reqURL := c.baseURL + distanceMatrixURL + "?" + params.Encode()
 
 	body, err := c.doRequest(ctx, reqURL)
 	if err != nil {
@@ -280,7 +302,7 @@ func (c *TencentMapClient) Geocode(ctx context.Context, address string) (*Geocod
 	params.Set("address", address)
 	params.Set("key", c.key)
 
-	reqURL := baseURL + geocodeURL + "?" + params.Encode()
+	reqURL := c.baseURL + geocodeURL + "?" + params.Encode()
 
 	body, err := c.doRequest(ctx, reqURL)
 	if err != nil {
@@ -307,7 +329,7 @@ func (c *TencentMapClient) ReverseGeocode(ctx context.Context, location Location
 	params.Set("location", location.String())
 	params.Set("key", c.key)
 
-	reqURL := baseURL + geocodeURL + "?" + params.Encode()
+	reqURL := c.baseURL + geocodeURL + "?" + params.Encode()
 
 	body, err := c.doRequest(ctx, reqURL)
 	if err != nil {

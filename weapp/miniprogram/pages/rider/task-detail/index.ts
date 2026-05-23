@@ -101,6 +101,7 @@ Page({
         polyline: [] as MapPolyline[],
         includePoints: [] as MapPoint[],
         serverTrackPoints: [] as MapPoint[],
+        routePoints: [] as MapPoint[],
         serverLatestPoint: null as MapPoint | null,
         serverLatestRecordedAt: '',
         routeSummary: '',
@@ -332,6 +333,7 @@ Page({
             serverLatestPoint,
             serverLatestRecordedAt,
             serverTrackPoints,
+            routePoints: routeResult?.points || [],
             routeSummary
         })
 
@@ -359,11 +361,14 @@ Page({
             includePoints.push(riderPoint)
         }
 
+        const plannedRoutePoints = this.data.routePoints.length > 1
+            ? this.data.routePoints
+            : [pickupPoint, deliveryPoint]
         const polyline: MapPolyline[] = [
-            mapService.createPolyline([pickupPoint, deliveryPoint], {
+            mapService.createPolyline(plannedRoutePoints, {
                 color: '#1d63ff',
                 width: 6,
-                dottedLine: this.data.serverTrackPoints.length < 2
+                dottedLine: plannedRoutePoints.length < 3 && this.data.serverTrackPoints.length < 2
             })
         ]
 

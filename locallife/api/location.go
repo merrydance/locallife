@@ -154,9 +154,9 @@ type routeAPIResponse struct {
 
 var _ routeAPIResponse
 
-// reverseGeocode uses self-hosted OSM (Nominatim) to convert (lat,lng) into an address.
+// reverseGeocode uses the configured LBS provider to convert (lat,lng) into an address.
 // @Summary 逆地址解析
-// @Description 使用自建 OSM Nominatim 将经纬度解析为地址。
+// @Description 使用腾讯 LBS 将经纬度解析为地址。
 // @Tags 位置
 // @Produce json
 // @Param latitude query number true "纬度" example(39.908722)
@@ -198,9 +198,9 @@ func (server *Server) reverseGeocode(ctx *gin.Context) {
 	})
 }
 
-// getBicyclingRoute uses self-hosted OSRM to return cycling route.
-// @Summary 自建 OSM 骑行路线
-// @Description 调用自建 OSRM /route 获取骑行距离与耗时。
+// getBicyclingRoute uses the configured LBS provider to return ebicycling route.
+// @Summary 腾讯 LBS 电动车路线
+// @Description 调用腾讯 LBS 电动车路线规划，返回骑行距离、耗时与已解压路线坐标点。
 // @Tags 位置
 // @Produce json
 // @Param from query string true "起点坐标，格式: lat,lng" example("39.908722,116.397499")
@@ -243,7 +243,7 @@ func (server *Server) getBicyclingRoute(ctx *gin.Context) {
 }
 
 // matchRegionID 根据经纬度匹配 region_id
-// 优先使用自建 OSM 逆地址解析获取 adcode 匹配，失败则回退到球面距离最近匹配
+// 优先使用 LBS 逆地址解析获取 adcode 匹配，失败则回退到球面距离最近匹配
 func (server *Server) matchRegionID(ctx context.Context, lat, lon float64) (int64, error) {
 	// 1. 尝试通过地图 API 获取 adcode
 	if server.mapClient != nil {
@@ -267,7 +267,7 @@ func (server *Server) matchRegionID(ctx context.Context, lat, lon float64) (int6
 				}
 			}
 
-			// OSM 逆地理编码的 adcode 可能是邮编，改用名称匹配作为兜底
+			// 部分 LBS provider 的 adcode 可能不是行政区划码，改用名称匹配作为兜底
 			var cityRegion *db.Region
 			if res.City != "" {
 				if city, err := server.store.GetRegionByNameAndLevel(ctx, db.GetRegionByNameAndLevelParams{

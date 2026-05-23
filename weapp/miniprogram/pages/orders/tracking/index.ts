@@ -4,7 +4,7 @@ import DeliveryService, {
   DeliveryResponse,
   getDeliveryStatusDisplay
 } from '../../../api/delivery'
-import { getBicyclingDirection } from '../../../api/location'
+import { BicyclingDirectionResponse, getBicyclingDirection } from '../../../api/location'
 import { confirmOrder, getOrderDetail } from '../../../api/order'
 import { logger } from '../../../utils/logger'
 import { getErrorUserMessage } from '../../../utils/user-facing'
@@ -12,6 +12,13 @@ import { getErrorUserMessage } from '../../../utils/user-facing'
 interface MapPoint {
   latitude: number
   longitude: number
+}
+
+interface RoutePointCandidate {
+  lat?: number
+  lng?: number
+  latitude?: number
+  longitude?: number
 }
 
 interface MiniMarker {
@@ -65,6 +72,10 @@ Page({
     markers: [] as MiniMarker[],
     polyline: [] as Polyline[],
     includePoints: [] as MapPoint[],
+    merchantPoint: null as MapPoint | null,
+    customerPoint: null as MapPoint | null,
+    riderPoint: null as MapPoint | null,
+    routePoints: [] as MapPoint[],
     // 进度
     progress: [] as DeliveryProgressView[],
     // 位置刷新定时器
@@ -248,7 +259,16 @@ Page({
       longitude: (merchantPoint.longitude + customerPoint.longitude) / 2
     }
 
-    this.setData({ markers, includePoints, mapCenter })
+    this.setData({
+      markers,
+      includePoints,
+      mapCenter,
+      merchantPoint,
+      customerPoint,
+      riderPoint: null,
+      routePoints: [],
+      polyline: []
+    })
 
     // 获取骑手位置
     await this.updateRiderLocation()
@@ -298,7 +318,13 @@ Page({
           }
         ]
 
-        this.setData({ markers, includePoints })
+        this.setData({ markers, includePoints, riderPoint })
+        this.renderRoutePolyline(
+          this.data.routePoints,
+          this.data.merchantPoint,
+          this.data.customerPoint,
+          this.shouldAdvanceRouteByRider() ? riderPoint : null
+        )
       }
     } catch (error) {
       logger.warn('获取骑手位置失败', error, 'tracking.updateRiderLocation')
@@ -320,33 +346,120 @@ Page({
       const toStr = `${customerPoint.latitude},${customerPoint.longitude}`
 
       const data = await getBicyclingDirection({ from: fromStr, to: toStr })
+      const routeData = this.unwrapDirectionData(data)
+      const routePoints = this.normalizeRoutePoints(routeData?.points)
 
-      // 自建 OSM 返回 {code,message,data{distance,duration}}
-      if (data.code === 0) {
-        this.setData({
-          polyline: [
-            {
-              points: [merchantPoint, customerPoint],
-              color: '#1d63ff',
-              width: 8,
-              arrowLine: true
-            }
-          ]
-        })
+      if (routePoints.length > 1) {
+        this.setData({ routePoints })
+        this.renderRoutePolyline(
+          routePoints,
+          merchantPoint,
+          customerPoint,
+          this.shouldAdvanceRouteByRider() ? this.data.riderPoint : null
+        )
       } else {
+        this.setData({ routePoints: [] })
         this.useFallbackRoute(merchantPoint, customerPoint)
       }
     } catch (error) {
       logger.warn('路线规划失败', error, 'tracking.planRoute')
+      this.setData({ routePoints: [] })
       this.useFallbackRoute(merchantPoint, customerPoint)
     }
   },
 
+  unwrapDirectionData(response: BicyclingDirectionResponse) {
+    if ('code' in response) {
+      return response.code === 0 ? response.data : undefined
+    }
+    return response
+  },
+
+  normalizeRoutePoints(points?: RoutePointCandidate[]): MapPoint[] {
+    if (!Array.isArray(points)) {
+      return []
+    }
+
+    return points
+      .map((point) => {
+        const latitude = typeof point.latitude === 'number' ? point.latitude : point.lat
+        const longitude = typeof point.longitude === 'number' ? point.longitude : point.lng
+        if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+          return null
+        }
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          return null
+        }
+        return { latitude, longitude }
+      })
+      .filter((point): point is MapPoint => !!point)
+  },
+
+  shouldAdvanceRouteByRider(): boolean {
+    return getDeliveryStatusDisplay(this.data.delivery?.status).isLocationTracked
+  },
+
+  renderRoutePolyline(
+    routePoints: MapPoint[],
+    merchantPoint: MapPoint | null,
+    customerPoint: MapPoint | null,
+    riderPoint?: MapPoint | null
+  ) {
+    if (!merchantPoint || !customerPoint) return
+
+    const remainingPoints = this.getRemainingRoutePoints(routePoints, customerPoint, riderPoint)
+    const points = remainingPoints.length > 1 ? remainingPoints : routePoints
+
+    if (points.length > 1) {
+      this.setData({
+        polyline: [
+          {
+            points,
+            color: '#1d63ff',
+            width: 8,
+            dottedLine: false,
+            arrowLine: true
+          }
+        ]
+      })
+      return
+    }
+
+    this.useFallbackRoute(merchantPoint, customerPoint)
+  },
+
+  getRemainingRoutePoints(
+    routePoints: MapPoint[],
+    customerPoint: MapPoint,
+    riderPoint?: MapPoint | null
+  ): MapPoint[] {
+    if (!riderPoint || routePoints.length < 2) {
+      return routePoints
+    }
+
+    let nearestIndex = 0
+    let nearestDistance = Number.POSITIVE_INFINITY
+    routePoints.forEach((point, index) => {
+      const latDelta = point.latitude - riderPoint.latitude
+      const lngDelta = point.longitude - riderPoint.longitude
+      const distance = latDelta * latDelta + lngDelta * lngDelta
+      if (distance < nearestDistance) {
+        nearestDistance = distance
+        nearestIndex = index
+      }
+    })
+
+    const remaining = routePoints.slice(Math.min(nearestIndex + 1, routePoints.length - 1))
+    const points = [riderPoint, ...remaining]
+    return points.length > 1 ? points : [riderPoint, customerPoint]
+  },
+
   useFallbackRoute(merchantPoint: MapPoint, customerPoint: MapPoint) {
+    const startPoint = this.shouldAdvanceRouteByRider() ? this.data.riderPoint || merchantPoint : merchantPoint
     this.setData({
       polyline: [
         {
-          points: [merchantPoint, customerPoint],
+          points: [startPoint, customerPoint],
           color: '#1d63ff',
           width: 6,
           dottedLine: true

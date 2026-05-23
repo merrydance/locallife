@@ -23,8 +23,8 @@ var (
 	ErrDistanceMatrixUnsupported = errors.New("distance matrix unsupported by provider")
 )
 
-// TiandituMapClient 天地图客户端（仅用于地理编码/逆地理编码）
-// 路径规划/距离矩阵由 OSM(OSRM) 提供，本客户端仅作为地理编码兜底。
+// TiandituMapClient 天地图客户端（仅用于地理编码/逆地理编码）。
+// 当前运行时统一使用腾讯 LBS；该实现保留为历史兼容能力。
 type TiandituMapClient struct {
 	key        string
 	baseURL    string

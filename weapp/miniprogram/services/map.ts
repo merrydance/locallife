@@ -27,10 +27,23 @@ export interface RouteResult {
 interface RouteApiResponse {
   code?: number
   message?: string
-  data?: {
-    distance?: number
-    duration?: number
-  }
+  data?: RouteApiData
+  distance?: number
+  duration?: number // 秒
+  points?: RoutePointCandidate[]
+}
+
+interface RouteApiData {
+  distance?: number
+  duration?: number // 秒
+  points?: RoutePointCandidate[]
+}
+
+interface RoutePointCandidate {
+  lat?: number
+  lng?: number
+  latitude?: number
+  longitude?: number
 }
 
 /**
@@ -70,7 +83,7 @@ export interface MapPolyline {
  */
 class MapService {
   /**
-   * 规划路线（使用后端代理的自建 OSM OSRM 骑行路线）
+   * 规划路线（后端代理腾讯 LBS 电动车路线）
    * 后端接口：GET /v1/location/direction/bicycling
    * 参数：from=lat,lng&to=lat,lng
    */
@@ -98,12 +111,13 @@ class MapService {
         }
       })
 
-      // 后端已改为返回 {code,message,data{distance,duration}}
-      if (data.code === 0 && data.data) {
+      const routeData = this.unwrapRouteApiData(data)
+      if (routeData) {
+        const routePoints = this.normalizeRoutePoints(routeData.points)
         const result = {
-          points: [], // OSRM 不返回 polyline，这里留空以免误用
-          distance: data.data.distance || 0,
-          duration: data.data.duration || 0
+          points: routePoints,
+          distance: routeData.distance || 0,
+          duration: routeData.duration || 0
         }
 
         logger.info(
@@ -126,6 +140,34 @@ class MapService {
       logger.error('路线规划请求失败', err, 'MapService.planRoute')
       throw err
     }
+  }
+
+  private unwrapRouteApiData(response: RouteApiResponse): RouteApiData | undefined {
+    if (typeof response.code === 'number') {
+      return response.code === 0 ? response.data : undefined
+    }
+    return response
+  }
+
+  private normalizeRoutePoints(points?: RoutePointCandidate[]): MapPoint[] {
+    if (!Array.isArray(points)) {
+      return []
+    }
+
+    return points
+      .map((point) => {
+        const candidate = point as { lat?: unknown, lng?: unknown, latitude?: unknown, longitude?: unknown }
+        const latitude = typeof candidate.latitude === 'number' ? candidate.latitude : candidate.lat
+        const longitude = typeof candidate.longitude === 'number' ? candidate.longitude : candidate.lng
+        if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+          return null
+        }
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          return null
+        }
+        return { latitude, longitude }
+      })
+      .filter((point): point is MapPoint => !!point)
   }
 
   /**
@@ -262,15 +304,21 @@ class MapService {
    * 格式化时长显示
    */
   formatDuration(seconds: number): string {
-    if (seconds < 60) {
-      return `${seconds}秒`
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      return '不足1分钟'
     }
-    const minutes = Math.floor(seconds / 60)
+    if (seconds < 60) {
+      return '不足1分钟'
+    }
+    const minutes = Math.max(1, Math.round(seconds / 60))
     if (minutes < 60) {
       return `${minutes}分钟`
     }
     const hours = Math.floor(minutes / 60)
     const remainMinutes = minutes % 60
+    if (remainMinutes === 0) {
+      return `${hours}小时`
+    }
     return `${hours}小时${remainMinutes}分钟`
   }
 }

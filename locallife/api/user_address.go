@@ -80,7 +80,7 @@ func (server *Server) createUserAddress(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 经纬度：优先使用客户端传入；若格式异常或缺失则回退到 OSM 按地址地理编码
+	// 经纬度：优先使用客户端传入；若格式异常或缺失则回退到 LBS 按地址地理编码
 	var lat, lon float64
 	latStr := ""
 	lonStr := ""

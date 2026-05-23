@@ -75,7 +75,7 @@ type Server struct {
 	baofuWithdrawService           *logic.BaofuWithdrawService         // 宝付宝财通二级户提现
 	baofuMerchantReportClient      *merchantreport.Client              // 宝付微信商户报备/授权目录
 	dataEncryptor                  util.DataEncryptor                  // 敏感数据加密器（本地存储加密）
-	mapClient                      maps.TencentMapClientInterface      // 地图客户端（自建 OSM）
+	mapClient                      maps.TencentMapClientInterface      // 地图客户端（腾讯 LBS）
 	weatherCache                   weather.WeatherCache
 	taskDistributor                worker.TaskDistributor
 	wsHub                          *websocket.Hub           // WebSocket连接管理（骑手和商户）
@@ -548,8 +548,7 @@ func (server *Server) setupRouter() {
 	authClientLogGroup.POST("/error", server.reportClientErrorLog)
 
 	// M2: 地区查询路由
-	// 说明：前端已改为使用自建 OSM 获取行政区划/POI 数据。
-	// 这里的 /v1/regions* 接口作为后备能力保留（降级/灾备/未来切回），暂时可能不会被调用。
+	// 这里的 /v1/regions* 接口作为区域数据能力保留，供前端选择区县或降级查询使用。
 	authGroup.GET("/regions/available", server.listAvailableRegions)
 	authGroup.GET("/regions/:id/check", server.checkRegionAvailability)
 	authGroup.GET("/regions/:id", server.getRegion)
