@@ -10,6 +10,7 @@ import { logger } from '../../../../utils/logger'
 import { isSettledFulfilled, isSettledRejected, settleAll } from '../../../../utils/promise'
 import dayjs from 'dayjs'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
+import { waitForRefundTerminalResult } from '../../../../services/refund-workflow'
 import {
   buildPaymentView,
   buildMerchantOrderFeeBreakdownView,
@@ -487,23 +488,39 @@ Page({
 
     this.setData({ refundSubmitting: true })
     wx.showLoading({ title: '提交中...' })
+    let createdRefundId = 0
     try {
-      await createRefund({
+      const refund = await createRefund({
         payment_order_id: payment.id,
         refund_type: refundType,
         refund_amount: refundAmount,
         refund_reason: refundReason || undefined
       })
+      createdRefundId = refund.id
 
       this.setData({
         refundPopupVisible: false,
         refundForm: createDefaultRefundForm(),
-        refundNoticeMessage: '退款申请已提交，后续会按微信侧处理进度自动更新。'
+        refundNoticeMessage: '退款申请已提交，正在确认退款结果。'
       })
+      wx.showLoading({ title: '确认退款结果...' })
+      const waitResult = await waitForRefundTerminalResult(createdRefundId)
       await this.loadDetail(false)
+      const resultNotice = waitResult.terminal
+        ? `退款结果已更新：${buildRefundView(waitResult.refund, []).status_label}`
+        : '退款结果还在同步中，请稍后查看退款详情。'
+      this.setData({ refundNoticeMessage: resultNotice })
+      wx.navigateTo({ url: `/pages/user_center/refund-detail/index?id=${createdRefundId}` })
     } catch (err) {
-      logger.error('Create merchant refund failed', err)
-      wx.showToast({ title: getErrorMessage(err, '发起退款失败，请稍后重试'), icon: 'none' })
+      if (createdRefundId) {
+        logger.warn('Wait merchant refund terminal failed after creation', err, 'merchant-order-detail.onSubmitRefund')
+        await this.loadDetail(false)
+        this.setData({ refundNoticeMessage: '退款申请已提交，结果还在同步中，请稍后查看退款详情。' })
+        wx.navigateTo({ url: `/pages/user_center/refund-detail/index?id=${createdRefundId}` })
+      } else {
+        logger.error('Create merchant refund failed', err)
+        wx.showToast({ title: getErrorMessage(err, '发起退款失败，请稍后重试'), icon: 'none' })
+      }
     } finally {
       wx.hideLoading()
       this.setData({ refundSubmitting: false })

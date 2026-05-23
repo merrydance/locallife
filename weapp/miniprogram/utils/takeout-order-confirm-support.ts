@@ -1,12 +1,6 @@
 import { CartItemResponse } from '../api/cart'
 import { CreateOrderRequest, OrderItemRequest, OrderType } from '../api/order'
-import {
-  CombinedPaymentOrderResponse,
-  getCombinedPaymentFollowupMessage,
-  shouldRecreateCombinedPayment
-} from '../api/payment'
 import { getPublicImageUrl } from './image'
-import Navigation from './navigation'
 import { formatPriceNoSymbol } from './util'
 import { globalStore } from './global-store'
 import type { CheckoutAddress } from '../services/takeout-checkout'
@@ -101,33 +95,6 @@ export const ORDER_CONFIRM_CONCURRENCY = 3
 export const isWechatPayCancelled = (error: unknown): boolean => {
   const wxError = error as { errMsg?: string }
   return !!wxError?.errMsg?.includes('cancel')
-}
-
-export const navigateToCombinedPaymentSuccess = (combinedPayment: CombinedPaymentOrderResponse, orderIds: number[]) => {
-  const firstOrderId = combinedPayment.sub_orders?.[0]?.order_id || orderIds[0]
-  const amount = (combinedPayment.total_amount / 100).toFixed(2)
-  const orderNo = combinedPayment.combine_out_trade_no || String(firstOrderId)
-
-  Navigation.toPaymentResult({
-    status: 'paid',
-    businessId: firstOrderId,
-    businessType: 'order',
-    orderNo,
-    amount
-  })
-}
-
-export const getCombinedPaymentPageMessage = (combinedPayment: CombinedPaymentOrderResponse): string => {
-  const baseMessage = getCombinedPaymentFollowupMessage(combinedPayment)
-  if (shouldRecreateCombinedPayment(combinedPayment)) {
-    return '订单已创建，但当前合单已失效，请在订单列表重新发起支付。'
-  }
-
-  if (baseMessage.includes('支付状态正在同步')) {
-    return '订单支付状态正在同步，请在订单列表刷新后确认。'
-  }
-
-  return '订单已创建，可在订单列表继续完成合单支付。'
 }
 
 export async function mapWithConcurrency<T, R>(

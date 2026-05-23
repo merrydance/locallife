@@ -128,12 +128,15 @@
       <text class="total-label">合计:</text>
       <text class="total-price">{{checkoutTotalDisplay}}</text>
     </view>
+    <view class="total-row" wx:if="{{singleMerchantCheckoutNotice}}">
+      <text class="total-label checkout-warning">{{singleMerchantCheckoutNotice}}</text>
+    </view>
   </view>
   <t-button 
     class="checkout-btn" 
     theme="primary" 
     size="large" 
-    disabled="{{selectedCartIds.length === 0}}"
+    disabled="{{selectedCartIds.length === 0 || !!singleMerchantCheckoutNotice}}"
     bindtap="onCheckout"
     t-class="checkout-btn-inner"
    shape="round">

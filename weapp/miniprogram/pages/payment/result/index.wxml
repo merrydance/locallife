@@ -2,11 +2,7 @@
 
 <view class="payment-result-page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <view class="result-content">
-    <view wx:if="{{waitingForTerminal}}" class="terminal-waiting">
-      <t-loading theme="circular" size="56rpx" text="正在确认支付结果..." />
-    </view>
-
-    <t-result wx:else theme="{{theme}}" title="{{title}}" description="{{description}}" />
+    <t-result theme="{{theme}}" title="{{title}}" description="{{description}}" />
 
     <view class="result-summary" wx:if="{{showSummary}}">
       <view class="summary-row" wx:if="{{amount}}">
@@ -25,7 +21,7 @@
 
     <view class="status-note" wx:if="{{statusNote}}">{{statusNote}}</view>
 
-    <view class="result-actions" wx:if="{{!waitingForTerminal}}">
+    <view class="result-actions">
       <t-button theme="primary" block size="large" shape="round" loading="{{refreshing}}" disabled="{{refreshing}}" bindtap="onPrimaryAction">{{primaryButtonText}}</t-button>
       <t-button theme="default" variant="outline" block size="large" shape="round" disabled="{{refreshing}}" bindtap="onSecondaryAction">{{secondaryButtonText}}</t-button>
     </view>

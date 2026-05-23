@@ -1,8 +1,7 @@
 import { buildRefundProgress, getRefundById, getRefundReturns, getRefundStatusView, isRefundStatusTerminal, ProfitSharingReturn, RefundOrder, RefundProgressView } from '../../../api/payment'
 import { logger } from '../../../utils/logger'
 import { getProfitSharingReturnStatusView, isProfitSharingReturnTerminal, ProfitSharingReturnStatusTheme } from '../../../utils/profit-sharing-return-view'
-
-const REFUND_TERMINAL_POLL_INTERVAL_MS = 2000
+import { waitForRefundTerminalResult } from '../../../services/refund-workflow'
 
 let refundTerminalWaitToken = 0
 
@@ -32,10 +31,6 @@ function buildProfitSharingReturnView(item: ProfitSharingReturn, formatTime: (ti
         displayTime: item.finished_at ? formatTime(item.finished_at) : formatTime(item.created_at),
         failReasonText: item.fail_reason || ''
     }
-}
-
-function delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 Page({
@@ -112,26 +107,49 @@ Page({
     },
 
     async waitForTerminalRefund(token: number) {
-        while (token === refundTerminalWaitToken && this.data.refundId) {
-            try {
-                const refund = await getRefundById(this.data.refundId)
-                if (isRefundStatusTerminal(refund.status)) {
+        try {
+            const result = await waitForRefundTerminalResult(this.data.refundId, {
+                maxAttempts: 8,
+                initialIntervalMs: 1000,
+                maxIntervalMs: 8000,
+                backoffFactor: 2,
+                shouldContinue: () => token === refundTerminalWaitToken,
+                onAttempt: (refund) => {
                     if (token !== refundTerminalWaitToken) {
                         return
                     }
                     this.processRefund(refund)
-                    await this.loadProfitSharingReturns()
-                    this.setData({ loading: false, waitingForTerminal: false, statusNote: '', initialLoading: false })
-                    return
+                    this.setData({
+                        statusNote: isRefundStatusTerminal(refund.status)
+                            ? ''
+                            : '退款结果还在同步中，请稍后查看。'
+                    })
                 }
+            })
 
-                this.setData({ statusNote: '' })
-            } catch (error) {
-                logger.warn('等待退款终态失败，将继续重试', error, 'refund-detail.waitForTerminalRefund')
-                this.setData({ statusNote: '退款结果还没有回写完成，系统正在继续确认。' })
+            if (token !== refundTerminalWaitToken) {
+                return
             }
 
-            await delay(REFUND_TERMINAL_POLL_INTERVAL_MS)
+            this.processRefund(result.refund)
+            await this.loadProfitSharingReturns()
+            this.setData({
+                loading: false,
+                waitingForTerminal: false,
+                statusNote: result.terminal ? '' : '退款结果还在同步中，请稍后查看。',
+                initialLoading: false
+            })
+        } catch (error) {
+            if (token !== refundTerminalWaitToken) {
+                return
+            }
+            logger.warn('等待退款终态失败', error, 'refund-detail.waitForTerminalRefund')
+            this.setData({
+                loading: false,
+                waitingForTerminal: false,
+                statusNote: '退款结果还在同步中，请稍后查看。',
+                initialLoading: false
+            })
         }
     },
 

@@ -14,8 +14,8 @@
         {{selectedPayCount === pendingPayableCount ? '取消全选' : '全选待支付'}}
       </t-button>
       <text class="batch-tip">已选{{selectedPayCount}}单</text>
-      <t-button size="small" theme="primary" shape="round" bindtap="onBatchPay" disabled="{{selectedPayCount === 0 || paying}}">
-        合并支付
+      <t-button size="small" theme="primary" shape="round" bindtap="onSelectedPay" disabled="{{selectedPayCount === 0 || paying}}">
+        去支付
       </t-button>
     </view>
   </view>

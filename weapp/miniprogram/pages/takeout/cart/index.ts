@@ -1,5 +1,4 @@
 import * as CartAPI from '@/api/cart'
-import { loadCheckoutPaymentCapabilities } from '@/services/takeout-checkout'
 import { logger } from '@/utils/logger'
 import {
   buildCartSummary,
@@ -15,7 +14,7 @@ import {
 
 let _loadAllCartsPromise: Promise<void> | null = null
 let _lastLoadAllCartsAt = 0
-let _loadPaymentCapabilitiesPromise: Promise<void> | null = null
+const SINGLE_MERCHANT_CHECKOUT_NOTICE = '暂不支持多商户一起支付，请选择一家商户的商品结算。'
 
 Page({
   data: {
@@ -33,8 +32,7 @@ Page({
     selectedCartIds: [] as number[],
     checkoutTotal: 0,
     checkoutTotalDisplay: '¥0.00',
-    splitCheckoutRequired: false,
-    splitCheckoutNotice: '',
+    singleMerchantCheckoutNotice: '',
     removingUnavailableItemIds: {} as Record<string, boolean>
   },
 
@@ -103,11 +101,10 @@ Page({
 
         // 预先计算费用并校验商户状态（在显示前完成）
         merchantGroups = await this.calculateDeliveryFees(merchantGroups, true)
-        await this.loadPaymentCapabilities()
 
-        // 默认全选（排除有错误的商户）
+        // 当前支付设计只支持单商户结算，默认选中第一家可用商户。
         const availableGroups = merchantGroups.filter((g) => !g.errorStatus)
-        const selectedCartIds = availableGroups.map((g) => g.cartId)
+        const selectedCartIds = availableGroups.slice(0, 1).map((g) => g.cartId)
         merchantGroups = merchantGroups.map((group) => ({
           ...group,
           selected: selectedCartIds.includes(group.cartId)
@@ -141,28 +138,6 @@ Page({
     return _loadAllCartsPromise
   },
 
-  async loadPaymentCapabilities() {
-    if (_loadPaymentCapabilitiesPromise) {
-      return _loadPaymentCapabilitiesPromise
-    }
-
-    _loadPaymentCapabilitiesPromise = (async () => {
-      try {
-        const capabilities = await loadCheckoutPaymentCapabilities()
-        const splitCheckoutRequired = capabilities.splitCheckoutRequired
-        this.setData({
-          splitCheckoutRequired,
-          splitCheckoutNotice: capabilities.splitCheckoutNotice
-        })
-      } catch (error) {
-        logger.warn('Failed to load payment capabilities', error, 'cart.loadPaymentCapabilities')
-      }
-    })().finally(() => {
-      _loadPaymentCapabilitiesPromise = null
-    })
-
-    return _loadPaymentCapabilitiesPromise
-  },
   /**
    * 同步购物车状态到全局存储
    */
@@ -300,9 +275,25 @@ Page({
 
     this.setData({
       selectedCartIds,
-      merchantGroups: updatedGroups
+      merchantGroups: updatedGroups,
+      singleMerchantCheckoutNotice: this.hasMultiMerchantSelection(selectedCartIds, updatedGroups)
+        ? SINGLE_MERCHANT_CHECKOUT_NOTICE
+        : ''
     })
     this.calculateCheckoutTotal()
+  },
+
+  getSelectedMerchantIds(selectedCartIds: number[], merchantGroups: MerchantCartGroup[]): number[] {
+    const merchantIds = merchantGroups
+      .filter((group) => selectedCartIds.includes(group.cartId))
+      .map((group) => group.merchantId)
+      .filter(Boolean)
+
+    return Array.from(new Set(merchantIds))
+  },
+
+  hasMultiMerchantSelection(selectedCartIds: number[], merchantGroups: MerchantCartGroup[]): boolean {
+    return this.getSelectedMerchantIds(selectedCartIds, merchantGroups).length > 1
   },
 
   /**
@@ -496,7 +487,10 @@ Page({
 
     this.setData({
       merchantGroups: updatedGroups,
-      selectedCartIds: nextSelectedCartIds
+      selectedCartIds: nextSelectedCartIds,
+      singleMerchantCheckoutNotice: this.hasMultiMerchantSelection(nextSelectedCartIds, updatedGroups)
+        ? SINGLE_MERCHANT_CHECKOUT_NOTICE
+        : ''
     }, () => {
       if (updatedGroups.length === 0) {
         this.setData({
@@ -542,7 +536,10 @@ Page({
 
               this.setData({
                 merchantGroups: newGroups,
-                selectedCartIds: newSelectedIds
+                selectedCartIds: newSelectedIds,
+                singleMerchantCheckoutNotice: this.hasMultiMerchantSelection(newSelectedIds, newGroups)
+                  ? SINGLE_MERCHANT_CHECKOUT_NOTICE
+                  : ''
               })
 
               // 重新计算总价并同步
@@ -567,10 +564,12 @@ Page({
       wx.showToast({ title: '请选择要结算的商品', icon: 'none' })
       return
     }
-    if (this.data.splitCheckoutRequired && selectedCartIds.length > 1) {
+
+    if (this.hasMultiMerchantSelection(selectedCartIds, merchantGroups)) {
+      this.setData({ singleMerchantCheckoutNotice: SINGLE_MERCHANT_CHECKOUT_NOTICE })
       wx.showModal({
-        title: '暂不支持合单支付',
-        content: this.data.splitCheckoutNotice || '请一次选择一家商户下单。',
+        title: '暂不支持多商户一起支付',
+        content: '请只选择一家商户的商品结算。',
         showCancel: false,
         confirmText: '知道了'
       })

@@ -14,19 +14,7 @@ import {
   isReadyOrderStatus,
   isTrackableOrderStatus
 } from '../../../api/order'
-import {
-  createOrderPayment,
-  getCombinedPaymentFollowupMessage,
-  recoverCombinedPaymentOrder
-} from '../../../api/payment'
-import {
-  completeCombinedPaymentWorkflow,
-  completePaymentWorkflow,
-  isCombinedPaymentWorkflowCancelled,
-  isCombinedPaymentWorkflowPaid,
-  shouldRecreateCombinedPaymentWorkflow,
-  startPaymentOrderWorkflow
-} from '../../../services/payment-workflow'
+import { startPaymentOrderWorkflow } from '../../../services/payment-workflow'
 import { OrderAdapter } from '../../../adapters/order'
 import { OrderDetail } from '../../../models/order'
 import { generateOrderTimeline } from '../../../utils/timeline'
@@ -382,50 +370,11 @@ Page({
   },
 
   async onPayOrder() {
-    const { orderId, paying, orderDTO } = this.data
+    const { orderId, paying } = this.data
     if (!orderId || paying) return
 
     this.setData({ paying: true })
     try {
-      const combinedPaymentID = orderDTO?.payment_context?.combined_payment_id
-      if (combinedPaymentID) {
-        const combinedResult = await completeCombinedPaymentWorkflow(await recoverCombinedPaymentOrder(combinedPaymentID), { context: this })
-        const combinedPayment = combinedResult.combinedPayment
-
-        if (isCombinedPaymentWorkflowPaid(combinedResult.status)) {
-          Navigation.toPaymentResult({
-            status: 'paid',
-            businessId: orderId,
-            businessType: 'order',
-            orderNo: combinedPayment.combine_out_trade_no || this.data.order?.orderNo || orderId,
-            amount: (combinedPayment.total_amount / 100).toFixed(2)
-          })
-          return
-        }
-
-        if (isCombinedPaymentWorkflowCancelled(combinedResult.status)) {
-          wx.showToast({ title: '已取消支付，可继续完成原合单支付', icon: 'none' })
-          return
-        }
-
-        if (!shouldRecreateCombinedPaymentWorkflow(combinedResult.status)) {
-          wx.showToast({ title: `${getCombinedPaymentFollowupMessage(combinedPayment)}，订单详情稍后会自动同步。`, icon: 'none' })
-          return
-        }
-
-        const fallbackResult = await completePaymentWorkflow(await createOrderPayment(parseInt(orderId, 10)), { context: this })
-
-        Navigation.toPaymentResult({
-          status: fallbackResult.status,
-          paymentOrderId: fallbackResult.paymentOrderId,
-          businessId: orderId,
-          businessType: fallbackResult.businessType || 'order',
-          orderNo: fallbackResult.outTradeNo || this.data.order?.orderNo || orderId,
-          amount: fallbackResult.amountFen ? (fallbackResult.amountFen / 100).toFixed(2) : undefined
-        })
-        return
-      }
-
       const paymentResult = await startPaymentOrderWorkflow({
         orderId: parseInt(orderId, 10),
         businessType: 'order',

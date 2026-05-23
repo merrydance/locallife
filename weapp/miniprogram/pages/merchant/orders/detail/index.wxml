@@ -311,7 +311,7 @@
 <t-popup wx:if="{{refundPopupVisible}}" visible="{{refundPopupVisible}}" placement="bottom" bind:visible-change="onRefundPopupVisibleChange">
   <view class="popup-sheet">
     <view class="popup-title">发起退款</view>
-    <text class="popup-subtitle">剩余可退金额 {{payment ? payment.remaining_refund_text : '--'}}，提交后会按微信侧退款进度继续流转。</text>
+    <text class="popup-subtitle">剩余可退金额 {{payment ? payment.remaining_refund_text : '--'}}，提交后会继续同步退款处理进度。</text>
 
     <view class="popup-block">
       <text class="popup-label">退款方式</text>

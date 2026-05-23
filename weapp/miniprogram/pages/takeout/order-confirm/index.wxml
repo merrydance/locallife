@@ -22,9 +22,9 @@
 
   <!-- 2. 正常内容 -->
   <block wx:else>
-    <view wx:if="{{splitCheckoutRequired && carts.length > 1 && splitCheckoutNotice}}" class="split-checkout-notice card">
+    <view wx:if="{{singleMerchantCheckoutNotice}}" class="split-checkout-notice card">
       <t-icon name="info-circle" size="32rpx" color="var(--td-warning-color)" />
-      <text>{{splitCheckoutNotice}}</text>
+      <text>{{singleMerchantCheckoutNotice}}</text>
     </view>
 
     <!-- 收货地址 -->
@@ -217,7 +217,7 @@
     shape="round"
     size="large"
     loading="{{loading}}"
-    disabled="{{loading || !!loadError || !!pricingError || !(address && address.id) || !(carts && carts.length)}}"
+    disabled="{{loading || !!loadError || !!pricingError || !!singleMerchantCheckoutNotice || !(address && address.id) || !(carts && carts.length)}}"
     bindtap="onSubmitOrder"
   >
     去支付

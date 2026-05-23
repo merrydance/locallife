@@ -118,32 +118,6 @@ export interface AddDishesRequest extends Record<string, unknown> {
     items: AddDishItem[]      // 商品列表（1-50个）
 }
 
-/** 合单结算商品项 - 对齐 api.combinedCheckoutItem */
-export interface CombinedCheckoutItem {
-    merchant_id: number       // 商户ID
-    merchant_name: string     // 商户名称
-    order_type: string        // 订单类型
-    subtotal: number          // 商品小计（分）
-    delivery_fee: number      // 配送费（分）
-    total_amount: number      // 小计+配送费（分）
-}
-
-/** 合单结算请求 - 对齐 api.combinedCheckoutRequest */
-export interface CombinedCheckoutRequest extends Record<string, unknown> {
-    cart_ids: number[]        // 要结算的购物车ID列表（1-10个）
-    address_id?: number       // 配送地址ID（外卖时必填）
-}
-
-/** 合单结算响应 - 对齐 api.combinedCheckoutResponse */
-export interface CombinedCheckoutResponse {
-    items: CombinedCheckoutItem[]  // 各商户订单
-    total_subtotal: number         // 商品合计（分）
-    total_delivery_fee: number     // 配送费合计（分）
-    total_amount: number           // 支付总额（分）
-    can_combine_pay: boolean       // 是否可以合单支付
-    message?: string               // 提示信息
-}
-
 /** 购物车计算结果 - 对齐 api.calculateCartResponse */
 export interface CalculateCartResponse {
     subtotal: number              // 商品小计（分）
@@ -319,19 +293,6 @@ export async function calculateCart(
         method: 'POST',
         data: params,
         ...(options || {})
-    })
-}
-
-/**
- * 预览合单结算
- * 多商户合单结算预览，返回各商户子单和合计金额
- * @param params 合单结算请求
- */
-export async function previewCombinedCheckout(params: CombinedCheckoutRequest): Promise<CombinedCheckoutResponse> {
-    return request({
-        url: '/v1/cart/combined-checkout/preview',
-        method: 'POST',
-        data: params
     })
 }
 

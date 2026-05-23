@@ -316,6 +316,10 @@
   color: var(--td-text-color-secondary);
 }
 
+.checkout-warning {
+  color: var(--td-warning-color);
+}
+
 .total-price {
   font-size: 36rpx;
   color: var(--td-brand-color);

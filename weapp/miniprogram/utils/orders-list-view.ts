@@ -1,8 +1,4 @@
-import type { OrderCardViewModel } from '../adapters/order-card'
-import type { CombinedPaymentOrderResponse } from '../api/payment'
 import type { OrderResponse, OrderStatus, OrderType } from '../api/order'
-import Navigation from './navigation'
-import { getCombinedPaymentFollowupMessage, isCombinedPaymentSuccessful, shouldRecreateCombinedPayment } from '../api/payment'
 
 export const STATUS_TABS = [
   { label: '全部', value: '' },
@@ -63,50 +59,4 @@ export const isOrderResponse = (value: unknown): value is OrderResponse => {
 export const isWechatPayCancelled = (error: unknown): boolean => {
   const wxError = error as { errMsg?: string }
   return !!wxError?.errMsg?.includes('cancel')
-}
-
-export const navigateToCombinedPaymentSuccess = (combinedPayment: CombinedPaymentOrderResponse, orderIds: number[]) => {
-  const firstOrderId = combinedPayment.sub_orders?.[0]?.order_id || orderIds[0]
-  Navigation.toPaymentResult({
-    status: 'paid',
-    businessId: firstOrderId,
-    businessType: 'order',
-    orderNo: combinedPayment.combine_out_trade_no || String(firstOrderId),
-    amount: (combinedPayment.total_amount / 100).toFixed(2)
-  })
-}
-
-export const getCombinedPaymentToastMessage = (combinedPayment: CombinedPaymentOrderResponse): string => {
-  const baseMessage = getCombinedPaymentFollowupMessage(combinedPayment)
-  if (shouldRecreateCombinedPayment(combinedPayment)) {
-    return baseMessage
-  }
-
-  return `${baseMessage}，订单列表稍后会自动同步。`
-}
-
-export const getSharedCombinedPaymentID = (orders: OrderCardViewModel[], orderIds: number[]): number | null => {
-  const selectedOrders = orders.filter((order) => orderIds.includes(order.id))
-  if (selectedOrders.length === 0) {
-    return null
-  }
-
-  const firstPaymentID = selectedOrders[0].paymentContext?.combined_payment_id
-  if (!firstPaymentID) {
-    return null
-  }
-
-  return selectedOrders.every((order) => order.paymentContext?.combined_payment_id === firstPaymentID)
-    ? firstPaymentID
-    : null
-}
-
-export const isCombinedPaymentReady = (combinedPayment: CombinedPaymentOrderResponse) => {
-  if (isCombinedPaymentSuccessful(combinedPayment)) {
-    return 'completed' as const
-  }
-  if (shouldRecreateCombinedPayment(combinedPayment)) {
-    return 'fallback' as const
-  }
-  return 'handled' as const
 }

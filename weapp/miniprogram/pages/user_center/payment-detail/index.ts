@@ -1,4 +1,4 @@
-import { BusinessType, closePayment, getPaymentById, getPaymentRefunds, getPayments, getPaymentStatusView, getRefundStatusView, isRefundStatusTerminal, PaymentOrder, RefundOrder } from '../../../api/payment'
+import { BusinessType, closePayment, getPaymentById, getPaymentRefunds, getPayments, getPaymentStatusView, getRefundStatusView, PaymentOrder, RefundOrder } from '../../../api/payment'
 import {
     continuePendingRiderDepositRecharge,
     getRiderDepositRechargeWorkflowStatusView,
@@ -266,7 +266,6 @@ Page({
             const refundsResponse = await getPaymentRefunds(this.data.paymentId)
             // 处理退款显示字段
             const processedRefunds: RefundView[] = refundsResponse.refund_orders
-                .filter((refund) => isRefundStatusTerminal(refund.status))
                 .map((refund) => {
                     const statusView = getRefundStatusView(refund.status)
                     return {
