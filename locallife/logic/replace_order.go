@@ -21,10 +21,11 @@ import (
 
 // ReplaceOrderInput defines the input for replacing a reservation order.
 type ReplaceOrderInput struct {
-	UserID  int64
-	OrderID int64
-	Items   []OrderItemInput
-	Notes   string
+	UserID   int64
+	OrderID  int64
+	Items    []OrderItemInput
+	Notes    string
+	ClientIP string
 }
 
 // ReplaceOrderResult reports the replacement outcome.
@@ -140,7 +141,7 @@ func ReplaceReservationOrderWithBaofu(
 			}
 			allocatedRefundAmount := sumReservationRefundAllocations(refundAllocations)
 			if allocatedRefundAmount != refundAmount {
-				return ReplaceOrderResult{}, NewRequestError(http.StatusConflict, errors.New("reservation refund funding chain changed, please retry"))
+				return ReplaceOrderResult{}, NewRequestError(http.StatusConflict, errors.New("预订退款资金链路已变化，请刷新后重试"))
 			}
 			// 退款路径已统一到 Baofu，实际退款在后续创建退款单时校验。
 		}
@@ -185,7 +186,7 @@ func ReplaceReservationOrderWithBaofu(
 	}
 
 	if delta > 0 {
-		payOrder, createErr := createReplaceOrderBaofuPayment(ctx, store, paymentFacade, input.UserID, replaceTx.NewOrder, delta)
+		payOrder, createErr := createReplaceOrderBaofuPayment(ctx, store, paymentFacade, input.UserID, replaceTx.NewOrder, delta, input.ClientIP)
 		if createErr != nil {
 			return ReplaceOrderResult{}, createErr
 		}
@@ -250,9 +251,20 @@ func createReplaceOrderBaofuPayment(
 	userID int64,
 	order db.Order,
 	amount int64,
+	clientIP string,
 ) (db.PaymentOrder, error) {
 	if paymentFacade == nil {
 		return db.PaymentOrder{}, fmt.Errorf("baofu payment facade not configured")
+	}
+	clientIP = strings.TrimSpace(clientIP)
+	if clientIP == "" {
+		log.Error().
+			Int64("user_id", userID).
+			Int64("order_id", order.ID).
+			Str("operation", "replace_order_baofu_payment").
+			Str("reason", "missing_client_ip").
+			Msg("replace order baofu payment missing client ip")
+		return db.PaymentOrder{}, NewRequestError(http.StatusBadRequest, errors.New("支付环境信息缺失，请刷新页面后重试"))
 	}
 
 	user, err := store.GetUser(ctx, userID)
@@ -268,7 +280,7 @@ func createReplaceOrderBaofuPayment(
 		OrderID:      order.ID,
 		PaymentType:  paymentTypeMiniProgram,
 		BusinessType: businessTypeOrder,
-		ClientIP:     "",
+		ClientIP:     clientIP,
 		Amount:       amount,
 	})
 	if err != nil {
@@ -303,18 +315,80 @@ func processReplaceOrderRefundWithBaofu(
 		return "", "", err
 	}
 	_ = merchantID
-	_ = reason
-	_ = refundAmount
-	_, err = paymentFacade.CreateBaofuRefund(ctx, aggregatecontracts.RefundBeforeShareRequest{
-		OutTradeNo:      outRefundNo,
+	req := aggregatecontracts.RefundBeforeShareRequest{
+		OutTradeNo:      strings.TrimSpace(outRefundNo),
+		NotifyURL:       paymentFacade.BaofuRefundNotifyURL(),
 		RefundAmountFen: refundAmount,
-		TotalAmountFen:  paymentOrder.Amount,
-		RefundReason:    reason,
-	})
+		TotalAmountFen:  refundAmount,
+		TransactionTime: time.Now().UTC().Format("20060102150405"),
+		RefundReason:    strings.TrimSpace(reason),
+	}
+	if paymentOrder.TransactionID.Valid && strings.TrimSpace(paymentOrder.TransactionID.String) != "" {
+		req.OriginTradeNo = strings.TrimSpace(paymentOrder.TransactionID.String)
+	} else {
+		req.OriginOutTradeNo = strings.TrimSpace(paymentOrder.OutTradeNo)
+	}
+	baofuRefund, err := paymentFacade.CreateBaofuRefund(ctx, req)
 	if err != nil {
+		log.Error().
+			Err(LoggableError(err)).
+			Int64("payment_order_id", paymentOrder.ID).
+			Int64("refund_order_id", refundOrder.ID).
+			Str("out_refund_no", outRefundNo).
+			Str("origin_out_trade_no", strings.TrimSpace(paymentOrder.OutTradeNo)).
+			Bool("origin_trade_no_present", strings.TrimSpace(req.OriginTradeNo) != "").
+			Int64("refund_amount", refundAmount).
+			Str("operation", "replace_order_baofu_refund").
+			Msg("replace order baofu refund create failed")
+		return "", "", mapBaofuRefundCreateError(err)
+	}
+	if baofuRefund == nil || strings.TrimSpace(baofuRefund.TradeNo) == "" {
+		err := errors.New("baofu refund returned empty result")
+		log.Error().
+			Err(err).
+			Int64("payment_order_id", paymentOrder.ID).
+			Int64("refund_order_id", refundOrder.ID).
+			Str("out_refund_no", outRefundNo).
+			Str("origin_out_trade_no", strings.TrimSpace(paymentOrder.OutTradeNo)).
+			Bool("origin_trade_no_present", strings.TrimSpace(req.OriginTradeNo) != "").
+			Int64("refund_amount", refundAmount).
+			Str("operation", "replace_order_baofu_refund").
+			Msg("replace order baofu refund response invalid")
+		return "", "", NewRequestErrorWithCause(http.StatusBadGateway, errors.New("退款提交失败，请稍后重试或联系平台处理"), err)
+	}
+	if strings.EqualFold(strings.TrimSpace(baofuRefund.ResultCode), aggregatecontracts.BusinessResultCodeFail) {
+		err := baofuRefundRejectedRequestError(baofuRefund)
+		log.Error().
+			Err(LoggableError(err)).
+			Int64("payment_order_id", paymentOrder.ID).
+			Int64("refund_order_id", refundOrder.ID).
+			Str("out_refund_no", outRefundNo).
+			Str("origin_out_trade_no", strings.TrimSpace(paymentOrder.OutTradeNo)).
+			Bool("origin_trade_no_present", strings.TrimSpace(req.OriginTradeNo) != "").
+			Int64("refund_amount", refundAmount).
+			Str("result_code", strings.TrimSpace(baofuRefund.ResultCode)).
+			Str("refund_state", strings.TrimSpace(baofuRefund.RefundState)).
+			Str("error_code", strings.TrimSpace(baofuRefund.ErrorCode)).
+			Str("operation", "replace_order_baofu_refund").
+			Msg("replace order baofu refund rejected by provider")
 		return "", "", err
 	}
-	return string(wechatcontracts.DirectRefundStatusProcessing), refundOrder.RefundID.String, nil
+	refundID := strings.TrimSpace(baofuRefund.TradeNo)
+	return string(wechatcontracts.DirectRefundStatusProcessing), refundID, nil
+}
+
+func baofuRefundRejectedRequestError(refundResp *aggregatecontracts.RefundResult) error {
+	upstreamCode := strings.TrimSpace(refundResp.ErrorCode)
+	if upstreamCode == "" {
+		upstreamCode = strings.TrimSpace(refundResp.ResultCode)
+	}
+	cause := &baofu.ProviderError{
+		Operation:       "order_refund",
+		Capability:      db.ExternalPaymentCapabilityBaofuRefund,
+		UpstreamCode:    upstreamCode,
+		UpstreamMessage: strings.TrimSpace(refundResp.ErrorMessage),
+	}
+	return NewRequestErrorWithCause(http.StatusBadGateway, errors.New("退款提交失败，请稍后重试或联系平台处理"), cause)
 }
 
 func recordReplaceReservationRefundCommandAccepted(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder, outRefundNo string, refundID string) {
@@ -380,7 +454,7 @@ func dbReplaceReservationRefundCommandInput(
 	businessObjectType := "refund_order"
 	businessObjectID := refundOrder.ID
 	return RecordExternalPaymentCommandInput{
-		Provider:             db.ExternalPaymentProviderWechat,
+		Provider:             db.ExternalPaymentProviderBaofu,
 		Channel:              paymentOrder.PaymentChannel,
 		Capability:           db.ExternalPaymentCapabilityBaofuRefund,
 		CommandType:          db.ExternalPaymentCommandTypeCreateRefund,
@@ -402,7 +476,7 @@ func refundCommandErrorFields(err error) (*string, *string) {
 	var providerErr *baofu.ProviderError
 	if errors.As(loggableErr, &providerErr) {
 		if code := strings.TrimSpace(providerErr.UpstreamCode); code != "" {
-			return stringPtrIfNotEmpty(code), stringPtrIfNotEmpty(strings.TrimSpace(providerErr.UpstreamMessage))
+			return stringPtrIfNotEmpty(code), stringPtrIfNotEmpty(baofu.BaofuCommandMessage(code, providerErr.UpstreamMessage))
 		}
 	}
 	if loggableErr == nil {

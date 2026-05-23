@@ -461,7 +461,27 @@ func mapBaofuPaymentOrderCreateError(err error) error {
 		return nil
 	}
 	if status, ok := db.IsPartnerPaymentRequestError(err); ok {
-		return NewRequestError(status, errors.New(err.Error()))
+		msg := err.Error()
+		switch {
+		case strings.Contains(msg, "config invalid") || strings.Contains(msg, "inactive"):
+			return NewRequestError(status, errors.New("商户支付能力未完成配置，请联系平台处理后重试"))
+		case strings.Contains(msg, "does not belong to user"):
+			return NewRequestError(status, errors.New("当前支付对象不属于你"))
+		case strings.Contains(msg, "addon amount must be greater than 0"):
+			return NewRequestError(status, errors.New("补差金额必须大于 0，请返回预订页面重新确认菜品"))
+		case strings.Contains(msg, "expect paid/confirmed/checked_in"):
+			return NewRequestError(status, errors.New("当前预订状态不支持补差支付，请刷新后重试"))
+		case strings.Contains(msg, "status is") || strings.Contains(msg, "expect pending"):
+			return NewRequestError(status, errors.New("当前支付对象已不在待支付状态，请刷新页面确认"))
+		case strings.Contains(msg, "payable amount changed") || strings.Contains(msg, "payment mode changed"):
+			return NewRequestError(status, errors.New("支付金额或支付模式已变化，请返回订单页重新发起支付"))
+		case strings.Contains(msg, "merchant changed"):
+			return NewRequestError(status, errors.New("支付商户信息已变化，请刷新后重试"))
+		case strings.Contains(msg, "has pending payment order"):
+			return NewRequestError(status, errors.New("已有待支付补差订单，请先刷新支付结果后再决定是否重试"))
+		default:
+			return NewRequestError(status, errors.New("支付订单状态已变化，请刷新后重试"))
+		}
 	}
 	msg := err.Error()
 	switch {

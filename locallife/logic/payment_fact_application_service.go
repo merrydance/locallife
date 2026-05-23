@@ -398,6 +398,15 @@ func (svc *PaymentFactService) applyReservationPaymentFact(ctx context.Context, 
 	if err := validateReservationPaymentFactApplication(application, fact); err != nil {
 		return result, err
 	}
+	if isBaofuMainBusinessPaymentFact(fact) {
+		switch fact.TerminalStatus {
+		case db.ExternalPaymentTerminalStatusClosed, db.ExternalPaymentTerminalStatusFailed:
+			return svc.applyBaofuReservationPaymentTerminalFailure(ctx, application, fact)
+		}
+		if _, err := svc.markBaofuPaymentOrderPaid(ctx, application, fact); err != nil {
+			return result, err
+		}
+	}
 
 	paymentResult, err := svc.store.ProcessPaymentSuccessTx(ctx, db.ProcessPaymentSuccessTxParams{
 		PaymentOrderID: application.BusinessObjectID,
@@ -423,7 +432,10 @@ func validateReservationPaymentFactApplication(application db.ExternalPaymentFac
 	if !fact.IsTerminal {
 		return fmt.Errorf("payment fact %d is not terminal", fact.ID)
 	}
-	if fact.TerminalStatus != db.ExternalPaymentTerminalStatusSuccess {
+	if fact.TerminalStatus != db.ExternalPaymentTerminalStatusSuccess &&
+		!(isBaofuMainBusinessPaymentFact(fact) &&
+			(fact.TerminalStatus == db.ExternalPaymentTerminalStatusClosed ||
+				fact.TerminalStatus == db.ExternalPaymentTerminalStatusFailed)) {
 		return fmt.Errorf("payment fact %d terminal status %q is not success", fact.ID, fact.TerminalStatus)
 	}
 	if !isSupportedMainBusinessPaymentFact(fact) {

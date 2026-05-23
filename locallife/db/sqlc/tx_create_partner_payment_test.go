@@ -61,6 +61,58 @@ func TestCreatePartnerPaymentTx_ReservationAmountChanged(t *testing.T) {
 	require.Contains(t, err.Error(), "payable amount changed")
 }
 
+func TestCreatePartnerPaymentTx_ReservationAddonLocksReservationAndCreatesReservationLinkedPayment(t *testing.T) {
+	user := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	paymentConfig := createRandomMerchantPaymentConfig(t, merchant)
+	table := createRandomRoom(t, merchant.ID)
+	reservation := createRandomReservation(t, user.ID, merchant.ID, table.ID, "confirmed")
+
+	result, err := testStore.CreatePartnerPaymentTx(context.Background(), CreatePartnerPaymentTxParams{
+		UserID:                user.ID,
+		MerchantID:            merchant.ID,
+		OrderID:               0,
+		ReservationID:         reservation.ID,
+		PaymentMode:           reservation.PaymentMode,
+		BusinessType:          "reservation_addon",
+		Amount:                3600,
+		OutTradeNo:            "RA" + util.RandomString(20),
+		ExpiresAt:             time.Now().Add(time.Hour),
+		Attach:                "reservation_id:2007;payment_mode:full;addon:true",
+		PaymentChannel:        PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+	})
+	require.NoError(t, err)
+	require.False(t, result.PaymentOrder.OrderID.Valid)
+	require.True(t, result.PaymentOrder.ReservationID.Valid)
+	require.Equal(t, reservation.ID, result.PaymentOrder.ReservationID.Int64)
+	require.Equal(t, "reservation_addon", result.PaymentOrder.BusinessType)
+	require.Equal(t, PaymentChannelBaofuAggregate, result.PaymentOrder.PaymentChannel)
+	require.True(t, result.PaymentOrder.RequiresProfitSharing)
+	require.Equal(t, int64(3600), result.PaymentOrder.Amount)
+	require.Equal(t, paymentConfig.SubMchID, result.SubMchID)
+
+	_, err = testStore.CreatePartnerPaymentTx(context.Background(), CreatePartnerPaymentTxParams{
+		UserID:                user.ID,
+		MerchantID:            merchant.ID,
+		OrderID:               0,
+		ReservationID:         reservation.ID,
+		PaymentMode:           reservation.PaymentMode,
+		BusinessType:          "reservation_addon",
+		Amount:                1800,
+		OutTradeNo:            "RA" + util.RandomString(20),
+		ExpiresAt:             time.Now().Add(time.Hour),
+		PaymentChannel:        PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+	})
+	require.Error(t, err)
+	status, ok := IsPartnerPaymentRequestError(err)
+	require.True(t, ok)
+	require.Equal(t, http.StatusConflict, status)
+	require.Contains(t, err.Error(), "pending payment order")
+}
+
 func TestCreatePartnerPaymentTx_CopiesReservationIDFromOrder(t *testing.T) {
 	user := createRandomUser(t)
 	owner := createRandomUser(t)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/rs/zerolog/log"
 )
 
 func (svc *PaymentFactService) markBaofuPaymentOrderPaid(ctx context.Context, application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) (db.PaymentOrder, error) {
@@ -40,6 +41,28 @@ func (svc *PaymentFactService) markBaofuPaymentOrderPaid(ctx context.Context, ap
 
 func (svc *PaymentFactService) applyBaofuOrderPaymentTerminalFailure(ctx context.Context, application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) (ApplyOrderPaymentFactResult, error) {
 	var result ApplyOrderPaymentFactResult
+	paymentOrder, err := svc.applyBaofuPaymentTerminalFailure(ctx, application, fact)
+	if err != nil {
+		return result, err
+	}
+	result.PaymentOrder = paymentOrder
+	return result, nil
+}
+
+func (svc *PaymentFactService) applyBaofuReservationPaymentTerminalFailure(ctx context.Context, application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) (ApplyReservationPaymentFactResult, error) {
+	var result ApplyReservationPaymentFactResult
+	paymentOrder, err := svc.applyBaofuPaymentTerminalFailure(ctx, application, fact)
+	if err != nil {
+		return result, err
+	}
+	result.PaymentOrder = paymentOrder
+	if paymentOrder.ReservationID.Valid {
+		result.ReservationID = paymentOrder.ReservationID.Int64
+	}
+	return result, nil
+}
+
+func (svc *PaymentFactService) applyBaofuPaymentTerminalFailure(ctx context.Context, application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) (db.PaymentOrder, error) {
 	var (
 		paymentOrder db.PaymentOrder
 		err          error
@@ -50,24 +73,52 @@ func (svc *PaymentFactService) applyBaofuOrderPaymentTerminalFailure(ctx context
 	case db.ExternalPaymentTerminalStatusFailed:
 		paymentOrder, err = svc.store.UpdatePaymentOrderToFailed(ctx, application.BusinessObjectID)
 	default:
-		return result, fmt.Errorf("unsupported baofu payment terminal status %q", fact.TerminalStatus)
+		return db.PaymentOrder{}, fmt.Errorf("unsupported baofu payment terminal status %q", fact.TerminalStatus)
 	}
 	if err == nil {
-		result.PaymentOrder = paymentOrder
-		return result, nil
+		return paymentOrder, nil
 	}
 	if !errors.Is(err, db.ErrRecordNotFound) {
-		return result, fmt.Errorf("mark baofu payment order terminal %s: %w", fact.TerminalStatus, err)
+		return db.PaymentOrder{}, fmt.Errorf("mark baofu payment order terminal %s: %w", fact.TerminalStatus, err)
 	}
 	current, getErr := svc.store.GetPaymentOrder(ctx, application.BusinessObjectID)
 	if getErr != nil {
-		return result, fmt.Errorf("get baofu payment order after terminal update conflict: %w", getErr)
+		return db.PaymentOrder{}, fmt.Errorf("get baofu payment order after terminal update conflict: %w", getErr)
 	}
-	if current.Status == "closed" || current.Status == "failed" || current.Status == "paid" || current.Status == "refunded" {
-		result.PaymentOrder = current
-		return result, nil
+	if baofuPaymentTerminalStatusMatchesLocal(fact.TerminalStatus, current.Status) {
+		return current, nil
 	}
-	return result, fmt.Errorf("baofu payment order %d is not terminal after %s fact: status=%s", current.ID, fact.TerminalStatus, current.Status)
+	logBaofuPaymentTerminalConflict(application, fact, current)
+	return db.PaymentOrder{}, fmt.Errorf("baofu payment order %d is not terminal after %s fact: status=%s", current.ID, fact.TerminalStatus, current.Status)
+}
+
+func baofuPaymentTerminalStatusMatchesLocal(terminalStatus string, localStatus string) bool {
+	switch terminalStatus {
+	case db.ExternalPaymentTerminalStatusClosed:
+		return localStatus == "closed"
+	case db.ExternalPaymentTerminalStatusFailed:
+		return localStatus == "failed"
+	default:
+		return false
+	}
+}
+
+func logBaofuPaymentTerminalConflict(application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact, current db.PaymentOrder) {
+	logger := log.Error().
+		Int64("payment_order_id", application.BusinessObjectID).
+		Int64("payment_fact_application_id", application.ID).
+		Int64("fact_id", fact.ID).
+		Str("terminal_status", fact.TerminalStatus).
+		Str("current_payment_status", current.Status).
+		Str("business_type", current.BusinessType).
+		Str("operation", "apply_baofu_payment_terminal_failure")
+	if current.ReservationID.Valid {
+		logger = logger.Int64("reservation_id", current.ReservationID.Int64)
+	}
+	if current.OrderID.Valid {
+		logger = logger.Int64("order_id", current.OrderID.Int64)
+	}
+	logger.Msg("baofu payment terminal fact conflicts with local payment status")
 }
 
 func isBaofuMainBusinessPaymentFact(fact db.ExternalPaymentFact) bool {

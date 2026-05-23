@@ -939,10 +939,11 @@ func (server *Server) replaceOrder(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	result, err := server.orderCommandSvc.ReplaceOrder(ctx, logic.ReplaceOrderInput{
-		UserID:  authPayload.UserID,
-		OrderID: uriReq.ID,
-		Items:   toOrderItemInputs(req.Items),
-		Notes:   req.Notes,
+		UserID:   authPayload.UserID,
+		OrderID:  uriReq.ID,
+		Items:    toOrderItemInputs(req.Items),
+		Notes:    req.Notes,
+		ClientIP: ctx.ClientIP(),
 	})
 	if err != nil {
 		if isPaymentServiceNotConfigured(err) {

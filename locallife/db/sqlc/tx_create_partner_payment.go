@@ -36,10 +36,10 @@ type CreatePartnerPaymentTxResult struct {
 
 // CreatePartnerPaymentTx 创建服务商单笔支付记录并校验商户配置与并发 pending 冲突。
 func (store *SQLStore) CreatePartnerPaymentTx(ctx context.Context, arg CreatePartnerPaymentTxParams) (CreatePartnerPaymentTxResult, error) {
-var result CreatePartnerPaymentTxResult
-var linkedReservationID pgtype.Int8
-resolvedMerchantID := arg.MerchantID
-requiresProfitSharing := false
+	var result CreatePartnerPaymentTxResult
+	var linkedReservationID pgtype.Int8
+	resolvedMerchantID := arg.MerchantID
+	requiresProfitSharing := false
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		if arg.OrderID > 0 {
@@ -127,6 +127,41 @@ requiresProfitSharing := false
 			}
 			if err != nil && err != ErrRecordNotFound {
 				return fmt.Errorf("get latest payment order for reservation %d: %w", arg.ReservationID, err)
+			}
+		}
+		if arg.ReservationID > 0 && arg.BusinessType == "reservation_addon" {
+			reservation, err := q.GetTableReservationForUpdate(ctx, arg.ReservationID)
+			if err != nil {
+				if errors.Is(err, ErrRecordNotFound) {
+					return &requestError{statusCode: http.StatusNotFound, err: errors.New("reservation not found")}
+				}
+				return fmt.Errorf("get reservation %d: %w", arg.ReservationID, err)
+			}
+			if reservation.UserID != arg.UserID {
+				return &requestError{statusCode: http.StatusForbidden, err: fmt.Errorf("reservation %d does not belong to user", arg.ReservationID)}
+			}
+			if reservation.Status != "paid" && reservation.Status != "confirmed" && reservation.Status != "checked_in" {
+				return &requestError{statusCode: http.StatusBadRequest, err: fmt.Errorf("reservation %d status is %s, expect paid/confirmed/checked_in", arg.ReservationID, reservation.Status)}
+			}
+			resolvedMerchantID = reservation.MerchantID
+			if arg.MerchantID > 0 && reservation.MerchantID != arg.MerchantID {
+				return &requestError{statusCode: http.StatusConflict, err: fmt.Errorf("reservation %d merchant changed", arg.ReservationID)}
+			}
+			if arg.PaymentMode != "" && reservation.PaymentMode != arg.PaymentMode {
+				return &requestError{statusCode: http.StatusConflict, err: fmt.Errorf("reservation %d payment mode changed", arg.ReservationID)}
+			}
+			if arg.Amount <= 0 {
+				return &requestError{statusCode: http.StatusBadRequest, err: fmt.Errorf("reservation %d addon amount must be greater than 0", arg.ReservationID)}
+			}
+			existingPO, err := q.GetLatestPaymentOrderByReservation(ctx, GetLatestPaymentOrderByReservationParams{
+				ReservationID: pgtype.Int8{Int64: arg.ReservationID, Valid: true},
+				BusinessType:  arg.BusinessType,
+			})
+			if err == nil && existingPO.Status == "pending" {
+				return &requestError{statusCode: http.StatusConflict, err: fmt.Errorf("reservation %d has pending payment order: %w", arg.ReservationID, ErrOrderPendingPaymentConflict)}
+			}
+			if err != nil && err != ErrRecordNotFound {
+				return fmt.Errorf("get latest payment order for reservation addon %d: %w", arg.ReservationID, err)
 			}
 		}
 

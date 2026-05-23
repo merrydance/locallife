@@ -103,6 +103,29 @@ func (s replaceOrderErrorCommandService) PrintMerchantOrder(context.Context, log
 	return logic.MerchantOrderPrintResult{}, nil
 }
 
+type replaceOrderCaptureCommandService struct {
+	replaceOrderErrorCommandService
+	input logic.ReplaceOrderInput
+}
+
+func (s *replaceOrderCaptureCommandService) ReplaceOrder(_ context.Context, input logic.ReplaceOrderInput) (logic.ReplaceOrderResult, error) {
+	s.input = input
+	return logic.ReplaceOrderResult{
+		NewOrder: db.Order{
+			ID:          456,
+			OrderNo:     "ORD456",
+			UserID:      input.UserID,
+			MerchantID:  789,
+			OrderType:   "dine_in",
+			Subtotal:    2600,
+			TotalAmount: 2600,
+			Status:      "pending",
+			CreatedAt:   time.Now(),
+		},
+		Delta: 2600,
+	}, nil
+}
+
 func TestReplaceOrderPaymentClientMissingReturnsActionableChinese(t *testing.T) {
 	user, _ := randomUser(t)
 	server := newTestServer(t, nil)
@@ -126,6 +149,28 @@ func TestReplaceOrderPaymentClientMissingReturnsActionableChinese(t *testing.T) 
 	require.Contains(t, resp.Message, "联系平台")
 	require.NotContains(t, resp.Message, "payment service")
 	require.NotContains(t, resp.Message, "not configured")
+}
+
+func TestReplaceOrderPassesClientIPToLogic(t *testing.T) {
+	user, _ := randomUser(t)
+	server := newTestServer(t, nil)
+	captureSvc := &replaceOrderCaptureCommandService{}
+	server.orderCommandSvc = captureSvc
+
+	body := `{"items":[{"dish_id":1001,"quantity":1}]}`
+	req, err := http.NewRequest(http.MethodPost, "/v1/orders/123/replace", strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "203.0.113.77:12345"
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "203.0.113.77", captureSvc.input.ClientIP)
+	require.Equal(t, user.ID, captureSvc.input.UserID)
+	require.Equal(t, int64(123), captureSvc.input.OrderID)
 }
 
 func TestReplaceOrderInvalidRequestReturnsActionableChinese(t *testing.T) {

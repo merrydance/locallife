@@ -132,7 +132,7 @@ func (svc *PaymentOrderService) createLocalBaofuPaymentOrder(ctx context.Context
 	prefix := "BF"
 	orderID := createInput.OrderID
 	reservationID := int64(0)
-	if createInput.BusinessType == businessTypeReservation {
+	if createInput.BusinessType == businessTypeReservation || createInput.BusinessType == reservationAddonBusiness {
 		prefix = "BFR"
 		orderID = 0
 		reservationID = createInput.OrderID
