@@ -402,6 +402,32 @@ func jsonScalarToString(raw json.RawMessage) (string, error) {
 	return "", errors.New("baofu json scalar must be string or number")
 }
 
+func jsonIntegerStringOrNumber(field string, raw json.RawMessage) (int64, error) {
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		parsed, err := strconv.ParseInt(strings.TrimSpace(text), 10, 64)
+		if err != nil {
+			return 0, errors.New(field + " must be an integer")
+		}
+		return parsed, nil
+	}
+	value := strings.TrimSpace(string(raw))
+	if value == "" || value == "null" {
+		return 0, nil
+	}
+	var number json.Number
+	decoder := json.NewDecoder(strings.NewReader(value))
+	decoder.UseNumber()
+	if err := decoder.Decode(&number); err == nil {
+		parsed, err := number.Int64()
+		if err != nil {
+			return 0, errors.New(field + " must be an integer")
+		}
+		return parsed, nil
+	}
+	return 0, errors.New(field + " must be an integer")
+}
+
 func normalizeJSONRawMessagePayload(field string, raw json.RawMessage) (json.RawMessage, error) {
 	trimmed := json.RawMessage(strings.TrimSpace(string(raw)))
 	for i := 0; i < 2; i++ {
@@ -698,6 +724,51 @@ type ShareResult struct {
 	SuccessAmountFen int64           `json:"succAmt,omitempty"`
 	ClearingDate     string          `json:"clearingDate,omitempty"`
 	Raw              json.RawMessage `json:"-"`
+}
+
+func (r *ShareResult) UnmarshalJSON(raw []byte) error {
+	var aux struct {
+		AgentMerchantID  string          `json:"agentMerId,omitempty"`
+		AgentTerminalID  string          `json:"agentTerId,omitempty"`
+		MerchantID       string          `json:"merId,omitempty"`
+		TerminalID       string          `json:"terId,omitempty"`
+		ResultCode       string          `json:"resultCode,omitempty"`
+		ErrorCode        string          `json:"errCode,omitempty"`
+		ErrorMessage     string          `json:"errMsg,omitempty"`
+		TradeNo          string          `json:"tradeNo,omitempty"`
+		OutTradeNo       string          `json:"outTradeNo,omitempty"`
+		TxnState         string          `json:"txnState,omitempty"`
+		FinishTime       string          `json:"finishTime,omitempty"`
+		SuccessAmountFen json.RawMessage `json:"succAmt,omitempty"`
+		ClearingDate     string          `json:"clearingDate,omitempty"`
+	}
+	if err := json.Unmarshal(raw, &aux); err != nil {
+		return err
+	}
+	var successAmountFen int64
+	if len(aux.SuccessAmountFen) > 0 {
+		parsed, err := jsonIntegerStringOrNumber("baofu share response succAmt", aux.SuccessAmountFen)
+		if err != nil {
+			return err
+		}
+		successAmountFen = parsed
+	}
+	*r = ShareResult{
+		AgentMerchantID:  aux.AgentMerchantID,
+		AgentTerminalID:  aux.AgentTerminalID,
+		MerchantID:       aux.MerchantID,
+		TerminalID:       aux.TerminalID,
+		ResultCode:       aux.ResultCode,
+		ErrorCode:        aux.ErrorCode,
+		ErrorMessage:     aux.ErrorMessage,
+		TradeNo:          aux.TradeNo,
+		OutTradeNo:       aux.OutTradeNo,
+		TxnState:         aux.TxnState,
+		FinishTime:       aux.FinishTime,
+		SuccessAmountFen: successAmountFen,
+		ClearingDate:     aux.ClearingDate,
+	}
+	return nil
 }
 
 type ShareFact struct {

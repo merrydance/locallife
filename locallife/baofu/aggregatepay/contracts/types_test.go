@@ -387,6 +387,24 @@ func TestShareResultCoversOfficialAgentFields(t *testing.T) {
 	require.Equal(t, int64(100), result.SuccessAmountFen)
 }
 
+func TestShareResultAcceptsStringSuccessAmount(t *testing.T) {
+	var result ShareResult
+
+	err := json.Unmarshal([]byte(`{"agentMerId":"agent-merchant","agentTerId":"agent-terminal","merId":"102004465","terId":"200005200","resultCode":"SUCCESS","tradeNo":"260500000001","outTradeNo":"SH202605050001","txnState":"SUCCESS","succAmt":"100","clearingDate":"20260505"}`), &result)
+
+	require.NoError(t, err)
+	require.Equal(t, int64(100), result.SuccessAmountFen)
+	require.NoError(t, result.ValidateShareQueryResponse())
+}
+
+func TestShareResultRejectsFractionalStringSuccessAmount(t *testing.T) {
+	var result ShareResult
+
+	err := json.Unmarshal([]byte(`{"merId":"102004465","terId":"200005200","resultCode":"SUCCESS","tradeNo":"260500000001","outTradeNo":"SH202605050001","txnState":"SUCCESS","succAmt":"100.5"}`), &result)
+
+	require.EqualError(t, err, "baofu share response succAmt must be an integer")
+}
+
 func TestShareResultValidatesMethodSpecificResponses(t *testing.T) {
 	result := ShareResult{MerchantID: "102004465", TerminalID: "200005200", ResultCode: BusinessResultCodeSuccess, TxnState: ShareStateProcessing}
 	require.NoError(t, result.ValidateShareAfterPayResponse())
