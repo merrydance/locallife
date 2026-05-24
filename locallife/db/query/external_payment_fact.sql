@@ -145,22 +145,6 @@ WHERE provider = $1
     AND external_object_key = $4
 ORDER BY created_at DESC, id DESC;
 
--- name: CheckWechatSettlementTriggerForProfitSharingOrder :one
-SELECT EXISTS (
-    SELECT 1
-    FROM external_payment_facts
-    WHERE provider = 'wechat'
-      AND channel = 'direct'
-      AND capability = 'baofu_profit_sharing'
-      AND fact_source = 'callback'
-      AND source_event_type = 'trade_manage_order_settlement'
-      AND business_owner = 'profit_sharing'
-      AND business_object_type = 'profit_sharing_order'
-      AND business_object_id = sqlc.arg(profit_sharing_order_id)
-      AND terminal_status = 'success'
-      AND is_terminal = TRUE
-);
-
 -- name: UpdateExternalPaymentFactProcessingStatus :one
 UPDATE external_payment_facts
 SET processing_status = sqlc.arg(processing_status),

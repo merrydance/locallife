@@ -55,6 +55,7 @@ func TestProcessTaskBaofuProfitSharingCreatesShareCommand(t *testing.T) {
 
 	store.EXPECT().GetProfitSharingOrder(gomock.Any(), profitSharingOrder.ID).Return(profitSharingOrder, nil)
 	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(int64(0), nil)
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
 		require.Equal(t, db.ExternalPaymentProviderBaofu, arg.Provider)
 		require.Equal(t, db.PaymentChannelBaofuAggregate, arg.Channel)
@@ -92,6 +93,52 @@ func TestProcessTaskBaofuProfitSharingCreatesShareCommand(t *testing.T) {
 		{SharingMerID: "OP_SHARE", SharingAmountFen: 300},
 		{SharingMerID: "PLATFORM_SHARE", SharingAmountFen: 200},
 	}, client.lastShareRequest.SharingDetails)
+}
+
+func TestProcessTaskBaofuProfitSharingSkipsWhenRefundAmountIsOccupied(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	client := &fakeBaofuProfitSharingClient{shareResult: &aggregatecontracts.ShareResult{
+		TradeNo:    "BFSHARE_UP_3002",
+		OutTradeNo: "BFSHARE_3002",
+		TxnState:   aggregatecontracts.ShareStateProcessing,
+	}}
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
+	processor.SetBaofuAggregateClient(client, worker.BaofuProfitSharingWorkerConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+		ShareNotifyURL:    "https://api.example.com/v1/webhooks/baofu/share",
+	})
+
+	profitSharingOrder := db.ProfitSharingOrder{
+		ID:                    3002,
+		PaymentOrderID:        4002,
+		OutOrderNo:            "BFSHARE_3002",
+		Status:                db.ProfitSharingOrderStatusFailed,
+		Provider:              db.ExternalPaymentProviderBaofu,
+		Channel:               db.PaymentChannelBaofuAggregate,
+		SharingDetailSnapshot: []byte(`{"receivers":[{"sharing_mer_id":"MER_SHARE","amount":1000}]}`),
+	}
+	paymentOrder := db.PaymentOrder{
+		ID:             4002,
+		OutTradeNo:     "PO_BAOFU_4002",
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+		Status:         "paid",
+	}
+
+	store.EXPECT().GetProfitSharingOrder(gomock.Any(), profitSharingOrder.ID).Return(profitSharingOrder, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(int64(300), nil)
+
+	payloadBytes, err := json.Marshal(worker.BaofuProfitSharingPayload{ProfitSharingOrderID: profitSharingOrder.ID})
+	require.NoError(t, err)
+	err = processor.ProcessTaskBaofuProfitSharing(context.Background(), asynq.NewTask(worker.TaskProcessBaofuProfitSharing, payloadBytes))
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "active refund amount")
+	require.False(t, client.called)
 }
 
 type fakeBaofuProfitSharingClient struct {

@@ -14,7 +14,6 @@
     "check:takeout-cart-split-checkout-ux": "node scripts/check-takeout-cart-split-checkout-ux.js",
     "check:payment-refund-terminal-flow": "node scripts/check-payment-refund-terminal-flow.js",
     "check:request-id": "node scripts/check-request-id.test.js",
-    "check:order-receipt-confirmation": "node scripts/check-order-receipt-confirmation.test.js",
     "check:order-detail-bottom-actions": "node scripts/check-order-detail-bottom-actions.js",
     "check:merchant-order-list-default-tab": "node scripts/check-merchant-order-list-default-tab.js",
     "check:merchant-order-fee-breakdown": "node scripts/check-merchant-order-fee-breakdown.js",
@@ -38,7 +37,7 @@
     "gate:business-status-boundary": "node scripts/check-business-status-boundary.js",
     "gate:payment-workflow-boundary": "node scripts/check-payment-workflow-boundary.js",
     "gate:weapp": "npm run gate:page-shell && npm run gate:wxml-expression-safety && npm run gate:component-policy && npm run gate:tdesign-component-declarations && npm run gate:tdesign-boundary && npm run gate:non-consumer-ui-patterns && npm run gate:frontend-architecture-boundary && npm run gate:page-responsibility && npm run gate:page-complexity && npm run gate:super-service-boundary && npm run gate:request-boundary && npm run gate:role-contract && npm run gate:business-status-boundary && npm run gate:payment-workflow-boundary",
-    "quality:check": "npm run check:request-id && npm run check:order-receipt-confirmation && npm run check:order-detail-bottom-actions && npm run check:merchant-order-list-default-tab && npm run check:merchant-order-fee-breakdown && npm run check:baofu-withdrawal-workflow && npm run check:payment-refund-terminal-flow && npm run check:review-create-page && npm run check:food-safety-page-layout && npm run check:user-reviews-page && npm run lint:all && npm run compile && npm run gate:weapp"
+    "quality:check": "npm run check:request-id && npm run check:order-detail-bottom-actions && npm run check:merchant-order-list-default-tab && npm run check:merchant-order-fee-breakdown && npm run check:baofu-withdrawal-workflow && npm run check:payment-refund-terminal-flow && npm run check:review-create-page && npm run check:food-safety-page-layout && npm run check:user-reviews-page && npm run lint:all && npm run compile && npm run gate:weapp"
   },
   "keywords": [],
   "author": "",

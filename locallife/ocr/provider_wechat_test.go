@@ -68,18 +68,6 @@ func (c stubWechatOCRClient) GetWXACodeUnlimited(ctx context.Context, req *wecha
 	return nil, errors.New("not implemented")
 }
 
-func (c stubWechatOCRClient) UploadShippingInfo(ctx context.Context, req *wechat.UploadShippingInfoRequest) error {
-	_ = ctx
-	_ = req
-	return errors.New("not implemented")
-}
-
-func (c stubWechatOCRClient) UploadCombinedShippingInfo(ctx context.Context, req *wechat.UploadCombinedShippingInfoRequest) error {
-	_ = ctx
-	_ = req
-	return errors.New("not implemented")
-}
-
 func TestWechatPrintedTextProviderRecognizeFoodPermit(t *testing.T) {
 	provider := NewWechatPrintedTextProvider(stubWechatOCRClient{printedTextResp: &wechat.PrintedTextOCRResponse{Items: []wechat.PrintedTextItem{{Text: "许可证编号 JY123"}, {Text: "企业名称 测试餐厅"}}}})
 	resp, err := provider.Recognize(context.Background(), CapabilityWechatPrintedText, RecognizeRequest{DocumentType: DocumentTypeFoodPermit, Data: []byte("img")})

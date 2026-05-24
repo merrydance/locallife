@@ -87,7 +87,6 @@ type Querier interface {
 	// 检查用户是否是某商户的 Boss
 	CheckUserIsBoss(ctx context.Context, arg CheckUserIsBossParams) (bool, error)
 	CheckUserVoucherExists(ctx context.Context, arg CheckUserVoucherExistsParams) (bool, error)
-	CheckWechatSettlementTriggerForProfitSharingOrder(ctx context.Context, profitSharingOrderID pgtype.Int8) (bool, error)
 	ClaimExternalPaymentFactApplication(ctx context.Context, id int64) (ExternalPaymentFactApplication, error)
 	ClaimMerchantTakeoutSuspensionIfAvailable(ctx context.Context, arg ClaimMerchantTakeoutSuspensionIfAvailableParams) (int64, error)
 	ClaimPaymentDomainOutbox(ctx context.Context, arg ClaimPaymentDomainOutboxParams) (PaymentDomainOutbox, error)
@@ -1193,6 +1192,7 @@ type Querier interface {
 	ListBaofuOrdersReadyForProfitSharing(ctx context.Context, arg ListBaofuOrdersReadyForProfitSharingParams) ([]ListBaofuOrdersReadyForProfitSharingRow, error)
 	ListBaofuPendingPaymentOrdersForRecovery(ctx context.Context, arg ListBaofuPendingPaymentOrdersForRecoveryParams) ([]PaymentOrder, error)
 	ListBaofuProcessingProfitSharingOrdersForRecovery(ctx context.Context, arg ListBaofuProcessingProfitSharingOrdersForRecoveryParams) ([]ProfitSharingOrder, error)
+	ListBaofuProfitSharingOrdersReadyForCommand(ctx context.Context, arg ListBaofuProfitSharingOrdersReadyForCommandParams) ([]ProfitSharingOrder, error)
 	ListBaofuWithdrawalOrdersByOwner(ctx context.Context, arg ListBaofuWithdrawalOrdersByOwnerParams) ([]BaofuWithdrawalOrder, error)
 	ListBehaviorActionsByDecision(ctx context.Context, decisionID int64) ([]BehaviorAction, error)
 	ListBehaviorActionsByStatusAndType(ctx context.Context, arg ListBehaviorActionsByStatusAndTypeParams) ([]BehaviorAction, error)

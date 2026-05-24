@@ -438,7 +438,7 @@ func runTaskProcessor(
 	// 创建任务分发器
 	taskDistributor := worker.NewRedisTaskDistributor(redisOpt)
 
-	// 创建基础微信小程序客户端，用于 OCR 与发货信息等非主业务资金协议能力。
+	// 创建基础微信小程序客户端，用于 OCR、内容安全、小程序码等非主业务资金协议能力。
 	wechatClient := wechat.NewClient(config.WechatMiniAppID, config.WechatMiniAppSecret, store)
 
 	var mediaStorage media.ObjectStorage

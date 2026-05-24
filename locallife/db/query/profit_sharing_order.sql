@@ -170,6 +170,37 @@ WHERE status IN ('pending', 'failed', 'processing')
 ORDER BY created_at ASC, id ASC
 LIMIT $2;
 
+-- name: ListBaofuProfitSharingOrdersReadyForCommand :many
+SELECT pso.id, pso.payment_order_id, pso.merchant_id, pso.operator_id, pso.order_source, pso.total_amount, pso.platform_commission, pso.operator_commission, pso.merchant_amount, pso.out_order_no, pso.sharing_order_id, pso.status, pso.finished_at, pso.created_at, pso.delivery_fee, pso.rider_id, pso.rider_amount, pso.distributable_amount, pso.platform_rate, pso.operator_rate, pso.payment_fee, pso.payment_fee_rate_bps, pso.provider, pso.channel, pso.merchant_sharing_mer_id, pso.rider_sharing_mer_id, pso.operator_sharing_mer_id, pso.platform_sharing_mer_id, pso.sharing_detail_snapshot, pso.calculation_version, pso.settlement_mode, pso.provider_payment_fee, pso.provider_payment_fee_rate_bps, pso.provider_payment_fee_base_amount, pso.provider_payment_fee_source, pso.merchant_payment_fee, pso.merchant_payment_fee_rate_bps, pso.merchant_payment_fee_base_amount, pso.rider_gross_amount, pso.rider_payment_fee, pso.rider_payment_fee_rate_bps, pso.rider_payment_fee_base_amount, pso.commission_base_amount, pso.platform_receiver_amount
+FROM profit_sharing_orders pso
+JOIN payment_orders po ON po.id = pso.payment_order_id
+LEFT JOIN orders o ON po.business_type = 'order' AND po.order_id = o.id
+LEFT JOIN table_reservations r ON po.business_type IN ('reservation', 'reservation_addon') AND po.reservation_id = r.id
+WHERE pso.provider = 'baofu'
+  AND pso.channel = 'baofu_aggregate'
+  AND pso.status IN ('pending', 'failed')
+  AND pso.created_at <= sqlc.arg(created_before)
+  AND po.status = 'paid'
+  AND po.payment_channel = 'baofu_aggregate'
+  AND po.requires_profit_sharing = TRUE
+  AND (
+      (
+          po.business_type = 'order'
+          AND o.status = 'completed'
+      )
+      OR (
+          po.business_type IN ('reservation', 'reservation_addon')
+          AND r.status IN ('paid', 'confirmed', 'checked_in', 'completed')
+      )
+  )
+  AND NOT EXISTS (
+      SELECT 1 FROM refund_orders ro
+      WHERE ro.payment_order_id = po.id
+        AND ro.status IN ('pending', 'processing', 'success')
+  )
+ORDER BY pso.created_at ASC, pso.id ASC
+LIMIT sqlc.arg('limit')::int;
+
 -- name: GetProfitSharingReconciliationSummary :many
 SELECT
     status,

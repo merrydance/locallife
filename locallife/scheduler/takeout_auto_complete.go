@@ -5,12 +5,14 @@ import (
 	"errors"
 	"time"
 
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/worker"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 )
 
 const (
@@ -21,11 +23,12 @@ const (
 // TakeoutAutoCompleteScheduler 外卖订单自动完成调度器
 // 规则：骑手送达后，用户未手动完成且无索赔的情况下，1小时后自动完成
 type TakeoutAutoCompleteScheduler struct {
-	cron  *cron.Cron
-	store db.Store
+	cron        *cron.Cron
+	store       db.Store
+	distributor worker.TaskDistributor
 }
 
-func NewTakeoutAutoCompleteScheduler(store db.Store, _ worker.TaskDistributor) *TakeoutAutoCompleteScheduler {
+func NewTakeoutAutoCompleteScheduler(store db.Store, distributor worker.TaskDistributor) *TakeoutAutoCompleteScheduler {
 	return &TakeoutAutoCompleteScheduler{
 		cron: cron.New(
 			cron.WithSeconds(),
@@ -34,7 +37,8 @@ func NewTakeoutAutoCompleteScheduler(store db.Store, _ worker.TaskDistributor) *
 				cron.Recover(cron.DefaultLogger),
 			),
 		),
-		store: store,
+		store:       store,
+		distributor: distributor,
 	}
 }
 
@@ -108,6 +112,7 @@ func (s *TakeoutAutoCompleteScheduler) autoCompleteTakeoutOrders() {
 		})
 
 		completedCount++
+		s.scheduleBaofuProfitSharing(ctx, updated)
 	}
 
 	log.Info().Int("completed", completedCount).Int("total", len(orders)).Msg("takeout auto-complete scan finished")
@@ -132,4 +137,26 @@ func (s *TakeoutAutoCompleteScheduler) hasClaimForOrder(ctx context.Context, ord
 	}
 
 	return false, nil
+}
+
+func (s *TakeoutAutoCompleteScheduler) scheduleBaofuProfitSharing(ctx context.Context, order db.Order) {
+	if s.distributor == nil {
+		return
+	}
+	profitSharingOrder, err := logic.ResolveCompletedOrderBaofuProfitSharingOrder(ctx, s.store, order)
+	if err != nil {
+		log.Warn().Err(err).Int64("order_id", order.ID).Msg("skip auto-complete baofu profit sharing scheduling")
+		return
+	}
+	if profitSharingOrder.ID <= 0 {
+		return
+	}
+	if err := s.distributor.DistributeTaskProcessBaofuProfitSharing(ctx, &worker.BaofuProfitSharingPayload{
+		ProfitSharingOrderID: profitSharingOrder.ID,
+	}, asynq.MaxRetry(5), asynq.Queue(worker.QueueCritical), asynq.Unique(30*time.Second)); err != nil {
+		log.Warn().Err(err).
+			Int64("order_id", order.ID).
+			Int64("profit_sharing_order_id", profitSharingOrder.ID).
+			Msg("enqueue auto-complete baofu profit sharing failed")
+	}
 }

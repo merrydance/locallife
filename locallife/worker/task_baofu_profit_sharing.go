@@ -98,6 +98,13 @@ func (processor *RedisTaskProcessor) ProcessTaskBaofuProfitSharing(ctx context.C
 	if paymentOrder.PaymentChannel != db.PaymentChannelBaofuAggregate {
 		return fmt.Errorf("payment order %d channel %q is not baofu aggregate: %w", paymentOrder.ID, paymentOrder.PaymentChannel, asynq.SkipRetry)
 	}
+	refundedAmount, err := processor.store.GetTotalRefundedByPaymentOrder(ctx, paymentOrder.ID)
+	if err != nil {
+		return fmt.Errorf("get refunded amount before baofu profit sharing command: %w", err)
+	}
+	if refundedAmount > 0 {
+		return fmt.Errorf("payment order %d has active refund amount %d before baofu profit sharing command: %w", paymentOrder.ID, refundedAmount, asynq.SkipRetry)
+	}
 
 	req, err := buildBaofuShareAfterPayRequest(cfg, paymentOrder, profitSharingOrder)
 	if err != nil {

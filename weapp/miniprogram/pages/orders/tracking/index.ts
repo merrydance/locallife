@@ -5,7 +5,6 @@ import DeliveryService, {
   getDeliveryStatusDisplay
 } from '../../../api/delivery'
 import { BicyclingDirectionResponse, getBicyclingDirection } from '../../../api/location'
-import { getOrderDetail } from '../../../api/order'
 import { logger } from '../../../utils/logger'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import { confirmReceiptWithRecovery } from '../../../services/order-receipt-confirmation'
@@ -122,13 +121,8 @@ Page({
 
   async onConfirmReceipt() {
     try {
-      wx.showLoading({ title: '加载中...' })
-      const order = await getOrderDetail(this.data.orderId)
-      wx.hideLoading()
-
       const result = await confirmReceiptWithRecovery({
         orderId: this.data.orderId,
-        transactionId: order.wechat_transaction_id,
         modalContent: '确认已收到包裹？',
         source: 'Tracking.onConfirmReceipt'
       })

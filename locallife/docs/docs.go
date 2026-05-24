@@ -39971,7 +39971,7 @@ const docTemplate = `{
                     "example": 10001
                 },
                 "wechat_transaction_id": {
-                    "description": "微信支付交易号，用于拉起小程序确认收货组件",
+                    "description": "微信或上游支付交易号，用于支付查询与历史兼容展示",
                     "type": "string"
                 }
             }

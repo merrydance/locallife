@@ -9,12 +9,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
-	"github.com/merrydance/locallife/worker"
 	"github.com/rs/zerolog/log"
 )
 
@@ -42,28 +40,6 @@ func (server *Server) sendDeliveryStatusNotification(
 		},
 		ExpiresAt: &expiresAt,
 	})
-}
-
-// uploadShippingInfoAsync 骑手取货后将发货信息上报任务投入 asynq 队列。
-// 满足「发货信息管理」合规要求，触发后续结算事件推送。
-// 仅对已支付的 profit_sharing 订单上报（堂食/自取无需上报）。
-// 任务由 worker/task_upload_shipping_info.go 处理，支持指数退避重试。
-func (server *Server) uploadShippingInfoAsync(_ context.Context, orderID int64, userID int64) {
-	if server.wechatClient == nil || server.taskDistributor == nil {
-		return
-	}
-	err := server.taskDistributor.DistributeTaskUploadShippingInfo(
-		context.Background(),
-		&worker.UploadShippingInfoPayload{
-			OrderID: orderID,
-			UserID:  userID,
-		},
-		asynq.Queue(worker.QueueDefault),
-		asynq.MaxRetry(5),
-	)
-	if err != nil {
-		log.Error().Err(err).Int64("order_id", orderID).Msg("failed to enqueue upload_shipping_info task")
-	}
 }
 
 // ==================== 推荐订单 ====================
@@ -561,9 +537,6 @@ func (server *Server) confirmPickup(ctx *gin.Context) {
 		"骑手已取餐",
 		fmt.Sprintf("订单%s骑手已取到餐品，即将配送", order.OrderNo),
 	)
-
-	// 📦 合规：骑手取货即视为「货已发出」，异步上报微信发货信息
-	server.uploadShippingInfoAsync(ctx, order.ID, order.UserID)
 
 	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, updated))
 }

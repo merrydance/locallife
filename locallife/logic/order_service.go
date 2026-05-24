@@ -545,6 +545,8 @@ func (s *OrderService) ConfirmOrder(ctx context.Context, input ConfirmOrderInput
 		}
 	}
 
+	s.scheduleBaofuProfitSharingForCompletedOrder(ctx, result.Order)
+
 	return result, nil
 }
 
@@ -734,6 +736,26 @@ func (s *OrderService) scheduleOrderPrint(ctx context.Context, order db.Order, t
 
 	if err := s.taskScheduler.ScheduleOrderPrint(ctx, OrderPrintTaskInput{OrderID: order.ID, Trigger: trigger}); err != nil {
 		log.Warn().Err(err).Int64("order_id", order.ID).Str("trigger", trigger).Msg("schedule order print failed")
+	}
+}
+
+func (s *OrderService) scheduleBaofuProfitSharingForCompletedOrder(ctx context.Context, order db.Order) {
+	if s.taskScheduler == nil {
+		return
+	}
+	profitSharingOrder, err := ResolveCompletedOrderBaofuProfitSharingOrder(ctx, s.store, order)
+	if err != nil {
+		log.Warn().Err(err).Int64("order_id", order.ID).Msg("skip scheduling baofu profit sharing for completed order")
+		return
+	}
+	if profitSharingOrder.ID <= 0 {
+		return
+	}
+	if err := s.taskScheduler.ScheduleProfitSharing(ctx, profitSharingOrder.ID); err != nil {
+		log.Warn().Err(err).
+			Int64("order_id", order.ID).
+			Int64("profit_sharing_order_id", profitSharingOrder.ID).
+			Msg("schedule baofu profit sharing failed")
 	}
 }
 

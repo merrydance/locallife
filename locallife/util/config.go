@@ -48,7 +48,6 @@ type Config struct {
 	WechatPayNotifyURL                 string        `mapstructure:"WECHAT_PAY_NOTIFY_URL"`                   // 支付回调URL
 	WechatPayRefundNotifyURL           string        `mapstructure:"WECHAT_PAY_REFUND_NOTIFY_URL"`            // 退款回调URL
 	WechatPayMerchantTransferNotifyURL string        `mapstructure:"WECHAT_PAY_MERCHANT_TRANSFER_NOTIFY_URL"` // 商家转账回调URL
-	WechatShippingSettleNotifyURL      string        `mapstructure:"WECHAT_SHIPPING_SETTLE_NOTIFY_URL"`       // 发货结算事件回调URL（trade_manage_order_settlement）
 	WechatPayPlatformPublicKeyPath     string        `mapstructure:"WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH"`     // 微信支付平台公钥路径（推荐）
 	WechatPayPlatformPublicKeyID       string        `mapstructure:"WECHAT_PAY_PLATFORM_PUBLIC_KEY_ID"`       // 微信支付平台公钥ID
 	WechatPayHTTPTimeout               time.Duration `mapstructure:"WECHAT_PAY_HTTP_TIMEOUT"`                 // HTTP请求超时时间

@@ -2414,6 +2414,13 @@ func TestConfirmOrderAPI(t *testing.T) {
 					GetDeliveryByOrderID(gomock.Any(), order.ID).
 					Times(1).
 					Return(db.Delivery{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+						OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+						BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+					}).
+					Times(1).
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

@@ -44,8 +44,6 @@ interface IAppOption {
             name: string
             address?: string
         } | null
-        // 微信发货信息管理：等待确认收货的订单ID
-        pendingConfirmOrderId?: number
     }
     userInfoReadyCallback?: WechatMiniprogram.GetUserInfoSuccessCallback
     silentLogin(attempt?: number): void

@@ -70,7 +70,7 @@ func TestLoadConfig_DefaultsAndTrimQuotes(t *testing.T) {
 
 func TestLoadConfig_ReadsWechatPaymentConfig(t *testing.T) {
 	payKey := testWechatPayAPIV3Key()
-	configDir := writeTestConfigFile(t, fmt.Sprintf("ENVIRONMENT=test\nDB_SOURCE=postgresql:///test\nMIGRATION_URL=file://db/migration\nWECHAT_MINI_APP_ID=wx-mini-app\nWECHAT_MINI_APP_SECRET=mini-secret\nWECHAT_PAY_MCH_ID=1900000109\nWECHAT_PAY_SERIAL_NUMBER=serial-001\nWECHAT_PAY_PRIVATE_KEY_PATH=./certs/apiclient_key.pem\nWECHAT_PAY_API_V3_KEY=%s\nWECHAT_PAY_NOTIFY_URL=https://example.com/pay/notify\nWECHAT_PAY_REFUND_NOTIFY_URL=https://example.com/pay/refund-notify\nWECHAT_PAY_MERCHANT_TRANSFER_NOTIFY_URL=https://example.com/pay/merchant-transfer-notify\nWECHAT_SHIPPING_SETTLE_NOTIFY_URL=https://example.com/pay/settlement-notify\nWECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH=./certs/platform.pem\nWECHAT_PAY_PLATFORM_PUBLIC_KEY_ID=PUB_KEY_ID_001\nWECHAT_PAY_HTTP_TIMEOUT=45s\nREDIS_REQUIRED=true\n", payKey))
+	configDir := writeTestConfigFile(t, fmt.Sprintf("ENVIRONMENT=test\nDB_SOURCE=postgresql:///test\nMIGRATION_URL=file://db/migration\nWECHAT_MINI_APP_ID=wx-mini-app\nWECHAT_MINI_APP_SECRET=mini-secret\nWECHAT_PAY_MCH_ID=1900000109\nWECHAT_PAY_SERIAL_NUMBER=serial-001\nWECHAT_PAY_PRIVATE_KEY_PATH=./certs/apiclient_key.pem\nWECHAT_PAY_API_V3_KEY=%s\nWECHAT_PAY_NOTIFY_URL=https://example.com/pay/notify\nWECHAT_PAY_REFUND_NOTIFY_URL=https://example.com/pay/refund-notify\nWECHAT_PAY_MERCHANT_TRANSFER_NOTIFY_URL=https://example.com/pay/merchant-transfer-notify\nWECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH=./certs/platform.pem\nWECHAT_PAY_PLATFORM_PUBLIC_KEY_ID=PUB_KEY_ID_001\nWECHAT_PAY_HTTP_TIMEOUT=45s\nREDIS_REQUIRED=true\n", payKey))
 
 	config, err := LoadConfig(configDir)
 	require.NoError(t, err)
@@ -84,7 +84,6 @@ func TestLoadConfig_ReadsWechatPaymentConfig(t *testing.T) {
 	require.Equal(t, "https://example.com/pay/notify", config.WechatPayNotifyURL)
 	require.Equal(t, "https://example.com/pay/refund-notify", config.WechatPayRefundNotifyURL)
 	require.Equal(t, "https://example.com/pay/merchant-transfer-notify", config.WechatPayMerchantTransferNotifyURL)
-	require.Equal(t, "https://example.com/pay/settlement-notify", config.WechatShippingSettleNotifyURL)
 	require.Equal(t, "./certs/platform.pem", config.WechatPayPlatformPublicKeyPath)
 	require.Equal(t, "PUB_KEY_ID_001", config.WechatPayPlatformPublicKeyID)
 	require.Equal(t, 45*time.Second, config.WechatPayHTTPTimeout)

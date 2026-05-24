@@ -163,37 +163,34 @@ func (s *BaofuPaymentRecoveryScheduler) createReadyProfitSharingOrders(ctx conte
 				Msg("create baofu profit sharing order failed")
 			continue
 		}
-		hasSettlementTrigger, err := s.store.CheckWechatSettlementTriggerForProfitSharingOrder(ctx, pgtype.Int8{
-			Int64: created.ProfitSharingOrder.ID,
-			Valid: true,
-		})
-		if err != nil {
-			log.Error().Err(err).
-				Int64("profit_sharing_order_id", created.ProfitSharingOrder.ID).
-				Int64("payment_order_id", row.PaymentOrderID).
-				Msg("check wechat settlement trigger for baofu profit sharing failed")
-			continue
-		}
-		if !hasSettlementTrigger {
-			log.Info().
-				Int64("profit_sharing_order_id", created.ProfitSharingOrder.ID).
-				Int64("payment_order_id", row.PaymentOrderID).
-				Int64("order_id", row.OrderID.Int64).
-				Int64("reservation_id", row.ReservationID.Int64).
-				Str("business_type", row.BusinessType).
-				Msg("skip baofu profit sharing command because wechat settlement trigger has not been recorded")
-			continue
-		}
-		if err := s.distributor.DistributeTaskProcessBaofuProfitSharing(ctx, &BaofuProfitSharingPayload{
-			ProfitSharingOrderID: created.ProfitSharingOrder.ID,
-		}, asynq.MaxRetry(5), asynq.Queue(QueueCritical), asynq.Unique(baofuShareTaskUniqueWindow)); err != nil {
-			log.Error().Err(err).
-				Int64("profit_sharing_order_id", created.ProfitSharingOrder.ID).
-				Int64("payment_order_id", row.PaymentOrderID).
-				Msg("enqueue baofu profit sharing command failed")
-		}
+		s.enqueueBaofuProfitSharing(ctx, created.ProfitSharingOrder)
+	}
+
+	existing, err := s.store.ListBaofuProfitSharingOrdersReadyForCommand(ctx, db.ListBaofuProfitSharingOrdersReadyForCommandParams{
+		CreatedBefore: time.Now().Add(-baofuShareRecoveryMinAge).UTC(),
+		Limit:         baofuPaymentRecoveryBatchLimit,
+	})
+	if err != nil {
+		return fmt.Errorf("list baofu profit sharing orders ready for command: %w", err)
+	}
+	for _, profitSharingOrder := range existing {
+		s.enqueueBaofuProfitSharing(ctx, profitSharingOrder)
 	}
 	return nil
+}
+
+func (s *BaofuPaymentRecoveryScheduler) enqueueBaofuProfitSharing(ctx context.Context, profitSharingOrder db.ProfitSharingOrder) {
+	if profitSharingOrder.ID <= 0 {
+		return
+	}
+	if err := s.distributor.DistributeTaskProcessBaofuProfitSharing(ctx, &BaofuProfitSharingPayload{
+		ProfitSharingOrderID: profitSharingOrder.ID,
+	}, asynq.MaxRetry(5), asynq.Queue(QueueCritical), asynq.Unique(baofuShareTaskUniqueWindow)); err != nil {
+		log.Error().Err(err).
+			Int64("profit_sharing_order_id", profitSharingOrder.ID).
+			Int64("payment_order_id", profitSharingOrder.PaymentOrderID).
+			Msg("enqueue baofu profit sharing command failed")
+	}
 }
 
 func (s *BaofuPaymentRecoveryScheduler) createBaofuProfitSharingOrder(ctx context.Context, service *logic.BaofuProfitSharingService, paymentOrderID int64, orderID int64) (db.CreateBaofuProfitSharingOrderTxResult, error) {

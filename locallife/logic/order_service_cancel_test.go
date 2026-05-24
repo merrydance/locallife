@@ -33,7 +33,7 @@ func (s *cancelOrderTaskSchedulerStub) ScheduleProcessRefund(ctx context.Context
 	return s.err
 }
 
-func (s *cancelOrderTaskSchedulerStub) ScheduleProfitSharing(ctx context.Context, paymentOrderID, orderID int64) error {
+func (s *cancelOrderTaskSchedulerStub) ScheduleProfitSharing(ctx context.Context, profitSharingOrderID int64) error {
 	return nil
 }
 

@@ -16,7 +16,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestBaofuPaymentRecoverySchedulerRunOnceCreatesPendingShareButSkipsCommandWithoutSettlementTrigger(t *testing.T) {
+func TestBaofuPaymentRecoverySchedulerRunOnceCreatesPendingShareAndEnqueuesCommand(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -83,16 +83,15 @@ func TestBaofuPaymentRecoverySchedulerRunOnceCreatesPendingShareButSkipsCommandW
 			}, nil
 		})
 	store.EXPECT().
-		CheckWechatSettlementTriggerForProfitSharingOrder(gomock.Any(), pgtype.Int8{Int64: 801, Valid: true}).
-		Return(false, nil)
-
+		ListBaofuProfitSharingOrdersReadyForCommand(gomock.Any(), gomock.AssignableToTypeOf(db.ListBaofuProfitSharingOrdersReadyForCommandParams{})).
+		Return([]db.ProfitSharingOrder{}, nil)
 	scheduler := worker.NewBaofuPaymentRecoveryScheduler(store, distributor)
 	scheduler.RunOnce()
 
-	require.Empty(t, distributor.profitSharingOrderIDs)
+	require.Equal(t, []int64{801}, distributor.profitSharingOrderIDs)
 }
 
-func TestBaofuPaymentRecoverySchedulerRunOnceCreatesReservationShareButSkipsCommandWithoutSettlementTrigger(t *testing.T) {
+func TestBaofuPaymentRecoverySchedulerRunOnceCreatesReservationShareAndEnqueuesCommand(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -157,76 +156,36 @@ func TestBaofuPaymentRecoverySchedulerRunOnceCreatesReservationShareButSkipsComm
 			}, nil
 		})
 	store.EXPECT().
-		CheckWechatSettlementTriggerForProfitSharingOrder(gomock.Any(), pgtype.Int8{Int64: 802, Valid: true}).
-		Return(false, nil)
-
+		ListBaofuProfitSharingOrdersReadyForCommand(gomock.Any(), gomock.AssignableToTypeOf(db.ListBaofuProfitSharingOrdersReadyForCommandParams{})).
+		Return([]db.ProfitSharingOrder{}, nil)
 	scheduler := worker.NewBaofuPaymentRecoveryScheduler(store, distributor)
 	scheduler.RunOnce()
 
-	require.Empty(t, distributor.profitSharingOrderIDs)
+	require.Equal(t, []int64{802}, distributor.profitSharingOrderIDs)
 }
 
-func TestBaofuPaymentRecoverySchedulerRunOnceCreatesPendingShareAndEnqueuesCommandWithSettlementTrigger(t *testing.T) {
+func TestBaofuPaymentRecoverySchedulerRunOnceEnqueuesExistingPendingShare(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
 	distributor := &baofuProfitSharingEnqueueRecorder{}
 
-	paymentOrder := db.PaymentOrder{
-		ID:                    303,
-		OrderID:               pgtype.Int8{Int64: 403, Valid: true},
-		BusinessType:          db.ExternalPaymentBusinessOwnerOrder,
-		Amount:                10000,
-		OutTradeNo:            "BFPAY_303",
-		TransactionID:         pgtype.Text{String: "BFUP_303", Valid: true},
-		Status:                "paid",
-		PaymentChannel:        db.PaymentChannelBaofuAggregate,
-		RequiresProfitSharing: true,
+	shareOrder := db.ProfitSharingOrder{
+		ID:             803,
+		PaymentOrderID: 303,
+		Provider:       db.ExternalPaymentProviderBaofu,
+		Channel:        db.PaymentChannelBaofuAggregate,
+		Status:         db.ProfitSharingOrderStatusPending,
+		CreatedAt:      time.Now().Add(-3 * time.Minute),
 	}
-	order := db.Order{
-		ID:          403,
-		MerchantID:  503,
-		OrderType:   "dine_in",
-		TotalAmount: 10000,
-		Status:      db.OrderStatusCompleted,
-		CompletedAt: pgtype.Timestamptz{
-			Time:  time.Now().Add(-time.Minute),
-			Valid: true,
-		},
-	}
-	merchant := db.Merchant{ID: 503, RegionID: 603}
-	operator := db.Operator{ID: 703, RegionID: 603}
 
 	store.EXPECT().
 		ListBaofuOrdersReadyForProfitSharing(gomock.Any(), gomock.AssignableToTypeOf(db.ListBaofuOrdersReadyForProfitSharingParams{})).
-		Return([]db.ListBaofuOrdersReadyForProfitSharingRow{{
-			PaymentOrderID: paymentOrder.ID,
-			OrderID:        paymentOrder.OrderID,
-			BusinessType:   paymentOrder.BusinessType,
-		}}, nil)
-	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
-	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
-	store.EXPECT().GetMerchant(gomock.Any(), merchant.ID).Return(merchant, nil)
-	store.EXPECT().GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).Return(operator, nil)
-	expectBaofuReceiverLookup(store, db.BaofuAccountOwnerTypeMerchant, merchant.ID, "MER_SHARE")
-	expectBaofuReceiverLookup(store, db.BaofuAccountOwnerTypeOperator, operator.ID, "OP_SHARE")
-	expectBaofuReceiverLookup(store, db.BaofuAccountOwnerTypePlatform, int64(0), "PLATFORM_SHARE")
+		Return([]db.ListBaofuOrdersReadyForProfitSharingRow{}, nil)
 	store.EXPECT().
-		EnsureBaofuProfitSharingBillTx(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.CreateBaofuProfitSharingOrderTxParams) (db.CreateBaofuProfitSharingOrderTxResult, error) {
-			require.Equal(t, paymentOrder.ID, arg.ProfitSharingOrder.PaymentOrderID)
-			require.Equal(t, merchant.ID, arg.ProfitSharingOrder.MerchantID)
-			require.Equal(t, "BFPS303O403", arg.ProfitSharingOrder.OutOrderNo)
-			return db.CreateBaofuProfitSharingOrderTxResult{
-				ProfitSharingOrder: db.ProfitSharingOrder{ID: 803, PaymentOrderID: paymentOrder.ID, OutOrderNo: arg.ProfitSharingOrder.OutOrderNo},
-				PaymentFeeLedger:   db.BaofuFeeLedger{ID: 903},
-			}, nil
-		})
-	store.EXPECT().
-		CheckWechatSettlementTriggerForProfitSharingOrder(gomock.Any(), pgtype.Int8{Int64: 803, Valid: true}).
-		Return(true, nil)
-
+		ListBaofuProfitSharingOrdersReadyForCommand(gomock.Any(), gomock.AssignableToTypeOf(db.ListBaofuProfitSharingOrdersReadyForCommandParams{})).
+		Return([]db.ProfitSharingOrder{shareOrder}, nil)
 	scheduler := worker.NewBaofuPaymentRecoveryScheduler(store, distributor)
 	scheduler.RunOnce()
 
@@ -265,6 +224,9 @@ func TestBaofuPaymentRecoverySchedulerRunOnceQueriesProcessingShareAndEnqueuesFa
 	store.EXPECT().
 		ListBaofuOrdersReadyForProfitSharing(gomock.Any(), gomock.Any()).
 		Return([]db.ListBaofuOrdersReadyForProfitSharingRow{}, nil)
+	store.EXPECT().
+		ListBaofuProfitSharingOrdersReadyForCommand(gomock.Any(), gomock.AssignableToTypeOf(db.ListBaofuProfitSharingOrdersReadyForCommandParams{})).
+		Return([]db.ProfitSharingOrder{}, nil)
 	store.EXPECT().
 		ListBaofuProcessingProfitSharingOrdersForRecovery(gomock.Any(), gomock.Any()).
 		Return([]db.ProfitSharingOrder{shareOrder}, nil)
@@ -330,6 +292,9 @@ func TestBaofuPaymentRecoverySchedulerRunOnceQueriesPendingPaymentAndEnqueuesFac
 		ListBaofuOrdersReadyForProfitSharing(gomock.Any(), gomock.Any()).
 		Return([]db.ListBaofuOrdersReadyForProfitSharingRow{}, nil)
 	store.EXPECT().
+		ListBaofuProfitSharingOrdersReadyForCommand(gomock.Any(), gomock.AssignableToTypeOf(db.ListBaofuProfitSharingOrdersReadyForCommandParams{})).
+		Return([]db.ProfitSharingOrder{}, nil)
+	store.EXPECT().
 		ListBaofuProcessingProfitSharingOrdersForRecovery(gomock.Any(), gomock.Any()).
 		Return([]db.ProfitSharingOrder{}, nil)
 	store.EXPECT().
@@ -394,6 +359,9 @@ func TestBaofuPaymentRecoverySchedulerRunOnceRecordsEmptyPaymentStateAsUnknown(t
 	store.EXPECT().
 		ListBaofuOrdersReadyForProfitSharing(gomock.Any(), gomock.Any()).
 		Return([]db.ListBaofuOrdersReadyForProfitSharingRow{}, nil)
+	store.EXPECT().
+		ListBaofuProfitSharingOrdersReadyForCommand(gomock.Any(), gomock.AssignableToTypeOf(db.ListBaofuProfitSharingOrdersReadyForCommandParams{})).
+		Return([]db.ProfitSharingOrder{}, nil)
 	store.EXPECT().
 		ListBaofuProcessingProfitSharingOrdersForRecovery(gomock.Any(), gomock.Any()).
 		Return([]db.ProfitSharingOrder{}, nil)

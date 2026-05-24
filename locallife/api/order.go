@@ -229,7 +229,7 @@ type orderResponse struct {
 	DeliveryContactName  *string             `json:"delivery_contact_name,omitempty" example:"张三"`
 	DeliveryContactPhone *string             `json:"delivery_contact_phone,omitempty" example:"13800138000"`
 	DeliveryAddress      *string             `json:"delivery_address,omitempty" example:"北京市朝阳区某小区1号楼"`
-	// 微信支付交易号，用于拉起小程序确认收货组件
+	// 微信或上游支付交易号，用于支付查询与历史兼容展示
 	WechatTransactionID *string                            `json:"wechat_transaction_id,omitempty"`
 	PaymentContext      *orderPaymentContextResponse       `json:"payment_context,omitempty"`
 	FeeBreakdown        *merchantOrderFeeBreakdownResponse `json:"fee_breakdown,omitempty"`

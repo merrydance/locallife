@@ -409,7 +409,6 @@ Page({
 
     const result = await confirmReceiptWithRecovery({
       orderId: parseInt(this.data.orderId, 10),
-      transactionId: orderDTO.wechat_transaction_id,
       modalContent: '确认已收到订单？',
       source: 'Detail.onConfirmReceipt'
     })

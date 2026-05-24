@@ -163,12 +163,17 @@ func (s apiTaskScheduler) ScheduleProcessRefund(ctx context.Context, input logic
 	})
 }
 
-func (s apiTaskScheduler) ScheduleProfitSharing(ctx context.Context, paymentOrderID, orderID int64) error {
-	log.Info().
-		Int64("payment_order_id", paymentOrderID).
-		Int64("order_id", orderID).
-		Msg("skip legacy profit sharing scheduling: Baofu profit sharing is handled by Baofu worker path")
-	return nil
+func (s apiTaskScheduler) ScheduleProfitSharing(ctx context.Context, profitSharingOrderID int64) error {
+	if s.server.taskDistributor == nil || profitSharingOrderID <= 0 {
+		return nil
+	}
+	return s.server.taskDistributor.DistributeTaskProcessBaofuProfitSharing(
+		ctx,
+		&worker.BaofuProfitSharingPayload{ProfitSharingOrderID: profitSharingOrderID},
+		asynq.Queue(worker.QueueCritical),
+		asynq.MaxRetry(5),
+		asynq.Unique(30*time.Second),
+	)
 }
 
 func (s apiTaskScheduler) ScheduleProfitSharingReturnResult(ctx context.Context, input logic.ProfitSharingReturnResultTaskInput) error {

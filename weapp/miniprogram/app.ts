@@ -6,13 +6,9 @@ import { networkMonitor } from './utils/network-monitor'
 import { themeManager } from './utils/theme'
 import { locationService } from './utils/location'
 import { getCurrentRegion } from './api/location'
-import { confirmOrder } from './api/order'
 import { getErrorDebugMessage, isRetryableNetworkError } from './utils/user-facing'
 import { installPromptFeedbackGuards } from './utils/prompt-feedback'
 import { ensureWechatLoginSession } from './utils/wechat-login-session'
-
-// 微信发货信息管理 — 确认收货组件的 appId
-const WECHAT_ORDER_CONFIRM_APPID = 'wx1183b055aeec94d1'
 
 App<IAppOption>({
   globalData: {
@@ -135,37 +131,11 @@ App<IAppOption>({
     tracker.log(EventType.APP_OPEN)
   },
 
-  onShow(options?: WechatMiniprogram.App.LaunchShowOption) {
+  onShow() {
     // 桌面微信长时间后台后，网络状态可能滞后；前台恢复时主动刷新
     networkMonitor.refreshStatus(true).catch(() => {
       // 忽略刷新失败，不影响主流程
     })
-
-    // 处理微信发货信息管理「确认收货组件」回调
-    // 组件通过 wx.navigateBackMiniProgram 返回，触发此 onShow
-    const referrer = options?.referrerInfo
-    if (
-      referrer?.appId === WECHAT_ORDER_CONFIRM_APPID &&
-      (referrer?.extraData as { status?: string } | undefined)?.status === 'success'
-    ) {
-      const orderId = this.globalData.pendingConfirmOrderId
-      this.globalData.pendingConfirmOrderId = undefined
-      if (orderId) {
-        confirmOrder(orderId).then(() => {
-          logger.info('微信确认收货后同步本地状态成功', { orderId }, 'App.onShow')
-          // 刷新当前页面订单状态
-          const pages = getCurrentPages()
-          const currentPage = pages[pages.length - 1]
-          if (currentPage && typeof (currentPage as WechatMiniprogram.Page.Instance<Record<string, unknown>, Record<string, unknown>> & { loadOrderDetail?: () => void, loadDeliveryData?: () => void }).loadOrderDetail === 'function') {
-            (currentPage as WechatMiniprogram.Page.Instance<Record<string, unknown>, Record<string, unknown>> & { loadOrderDetail?: () => void }).loadOrderDetail!()
-          } else if (currentPage && typeof (currentPage as WechatMiniprogram.Page.Instance<Record<string, unknown>, Record<string, unknown>> & { loadDeliveryData?: () => void }).loadDeliveryData === 'function') {
-            (currentPage as WechatMiniprogram.Page.Instance<Record<string, unknown>, Record<string, unknown>> & { loadDeliveryData?: () => void }).loadDeliveryData!()
-          }
-        }).catch((err) => {
-          logger.error('微信确认收货后同步本地状态失败', err, 'App.onShow')
-        })
-      }
-    }
   },
 
   /**

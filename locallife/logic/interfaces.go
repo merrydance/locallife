@@ -147,7 +147,7 @@ type TaskScheduler interface {
 	SchedulePaymentOrderTimeout(ctx context.Context, paymentOrderNo string, at time.Time) error
 	ScheduleCombinedPaymentOrderTimeout(ctx context.Context, combineOutTradeNo string, at time.Time) error
 	ScheduleProcessRefund(ctx context.Context, input ProcessRefundTaskInput) error
-	ScheduleProfitSharing(ctx context.Context, paymentOrderID, orderID int64) error
+	ScheduleProfitSharing(ctx context.Context, profitSharingOrderID int64) error
 	ScheduleProfitSharingReturnResult(ctx context.Context, input ProfitSharingReturnResultTaskInput) error
 	ScheduleOrderPrint(ctx context.Context, input OrderPrintTaskInput) error
 }

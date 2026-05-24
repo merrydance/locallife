@@ -1,196 +1,113 @@
-# WeChat Shipping Settlement Fix Implementation Plan
+# WeChat Shipping Settlement Removal And Baofu Sharing Plan
 
-> For agentic workers: REQUIRED SUB-SKILL: Use `superpowers:executing-plans` or equivalent task-by-task execution. Steps use checkbox syntax for tracking.
+> Status: supersedes the previous "upload WeChat shipping info and wait for settlement push" plan. The BaoFu technical confirmation is that LocalLife does not need to upload shipping information to WeChat for the current BaoFu aggregate-payment flow.
 
-**Goal:** Make takeout same-city delivery orders upload valid Mini Program shipping information to WeChat and make the backend receive the real `trade_manage_order_settlement` Mini Program message push before triggering Baofu profit sharing.
+## Goal
 
-**Architecture:** Keep WeChat API request shaping inside `locallife/wechat`, shipping upload orchestration in `worker`, HTTP webhook parsing in `api`, and Baofu profit-sharing business decisions in the existing backend flow. Treat Mini Program message push as a separate trust boundary from WeChat Pay V3 encrypted notifications.
+Remove the WeChat Mini Program shipping-information upload and same-city delivery settlement-notify dependency from the active frontend/backend flow. Trigger BaoFu profit sharing from LocalLife-owned order completion semantics instead:
 
-**Tech Stack:** Go, Gin, sqlc store interfaces, asynq worker tasks, WeChat Mini Program server APIs, WeChat Mini Program message push, Baofu aggregate payment domain, WeChat Mini Program TypeScript.
+- User confirms receipt and the order enters `completed`.
+- The auto-complete scheduler moves delivered takeout orders to `completed`.
+- The BaoFu payment recovery scheduler backfills existing pending/failed BaoFu profit-sharing orders that are ready to be commanded.
 
----
+## Decision
+
+- Do not call WeChat `upload_shipping_info`.
+- Do not expose or consume `/v1/webhooks/wechat-miniprogram/settlement-notify`.
+- Do not rely on `trade_manage_order_settlement` / shipping-settlement pushes to release or trigger BaoFu profit sharing.
+- Keep BaoFu merchant reporting and APPLET binding as the payment-channel compliance path; it does not imply LocalLife must also upload WeChat shipping information in this flow.
+- Keep `wechat_transaction_id` only as a historical/payment-query display compatibility field. The Mini Program must not use it to launch WeChat's confirm-receipt component.
 
 ## Risk And Scope
 
-- Risk: `G3`, because this touches payment-adjacent provider contracts, external callbacks, idempotency, and Baofu profit-sharing trigger timing.
-- Premise status: conditionally valid. LocalLife does not need to reintroduce WeChat direct payment for main-business orders, but only WeChat Pay-backed orders can be uploaded to WeChat Mini Program shipping management. Baofu aggregate `WECHAT_JSAPI` is in scope only when the merchant has completed Baofu's WeChat channel report and APPLET binding so the order is created under a WeChat-generated `subMchId`.
+- Risk: `G3`, because the change touches payment-adjacent completion semantics, profit-sharing trigger timing, async worker retries, scheduler recovery, and Mini Program order confirmation.
 - In scope:
-  - `upload_shipping_info` request contract fixes.
-  - Shipping upload worker payload enrichment.
-  - Mini Program message-push webhook verification and parsing for `trade_manage_order_settlement`.
-  - Guarding profit sharing so only real settlement events trigger it.
-  - Mini Program confirm-receipt pending-state cleanup on component launch failure.
+  - Remove active backend shipping-upload task, WeChat shipping client methods/contracts, and settlement-notify route/handler/tests.
+  - Remove active Mini Program WeChat confirm-receipt component usage.
+  - Trigger BaoFu profit-sharing command when a completed order has an existing ready BaoFu profit-sharing order and refund guard passes.
+  - Let recovery enqueue existing ready `pending` / `failed` BaoFu profit-sharing orders without checking a WeChat settlement trigger.
+  - Regenerate sqlc mocks and Swagger after query/interface/API-comment changes.
 - Out of scope:
-  - Reintroducing WeChat as main-business payment acquisition.
-  - New Baofu payment/refund/share provider contracts beyond the existing profit-sharing task trigger.
-  - Mini Program brand application or trade-type-change automation; these are app-level qualification/governance steps, not the merchant payment-channel report path.
-  - End-to-end sandbox proof unless credentials and provider callbacks are available.
+  - `weapp/demo-lab/**`, per product direction. It may retain historical demonstration references.
+  - Historical artifact cleanup outside this plan.
+  - BaoFu provider contract changes beyond command scheduling and recovery trigger timing.
 
-## Premise And Operating Preconditions
+## Implementation Plan
 
-### Evidence Summary
+### 1. Backend Removal
 
-- WeChat Mini Program shipping upload identifies a payment order using either:
-  - `order_number_type=2` plus `transaction_id`, where `transaction_id` is the WeChat Pay order number.
-  - `order_number_type=1` plus `mchid` and `out_trade_no`, where `mchid` is the payment merchant number generated by WeChat Pay.
-- WeChat Open Platform API calls use JSON request bodies by default unless an API page says otherwise. The shipping upload API is an outbound WeChat server API call, so LocalLife must send JSON.
-- WeChat Mini Program message push is a separate inbound callback channel. The Mini Program message-push configuration has a `data format` option that can be XML or JSON, and the encryption mode can be plaintext, compatible, or secure mode.
-- Baofu merchant reporting is the LocalLife merchant payment-channel report path:
-  - `merchant_report(reportType=WECHAT, bctMerId=<sharing_mer_id>)` applies for WeChat services including `JSAPI` and `APPLET`.
-  - `merchant_report_query` returns or normalizes the WeChat/Alipay channel identity as `subMchId` / `sub_mch_id`.
-  - `bind_sub_config(authType=APPLET, authContent=<LocalLife mini appid>)` binds the LocalLife Mini Program appid to the reported merchant identity.
-  - Production `pre_unified_order(payCode=WECHAT_JSAPI)` sends that `subMchId`, `payExtend.sub_appid`, and `payExtend.sub_openid`, and returns WeChat JSAPI payment data.
-- WeChat Pay service-provider documentation supports this model: a Mini Program can pull up payment in service-provider mode through `sub_appid` and `sub_mch_id`; the Mini Program appid does not need to separately open direct WeChat Pay when it is configured as the sub appid for the special merchant.
-- WeChat Mini Program settlement management is a separate gate:
-  - `is_trade_managed` checks whether shipping management is enabled.
-  - `is_trade_management_confirmation_completed` checks whether the Mini Program completed settlement-management confirmation, meaning all merchant IDs associated with the Mini Program have completed order-management authorization or have been unbound.
-  - Once a merchant ID has completed order-management authorization, orders from that merchant ID must use shipping management.
-- WeChat `famousbrand/apply` and `setwxatradetypecgi` are Mini Program-level brand/trade-type qualification APIs:
-  - `famousbrand/apply` takes brand application material such as `apply_for` and brand audit info.
-  - `setwxatradetypecgi` changes the Mini Program trade type, for example comprehensive, physical e-commerce, offline service, or online service.
-  - They do not create or bind per-merchant WeChat Pay `subMchId`, and should not be treated as "替商户报备".
+- [x] Delete shipping-upload worker task and tests:
+  - `locallife/worker/task_upload_shipping_info.go`
+  - `locallife/worker/task_upload_shipping_info_test.go`
+- [x] Delete WeChat shipping upload client/contracts/tests:
+  - `locallife/wechat/shipping.go`
+  - `locallife/wechat/shipping_test.go`
+  - `locallife/wechat/contracts/order_shipping_message.go`
+  - `locallife/wechat/contracts/shipping_settlement.go`
+- [x] Remove worker distributor/processor/no-op/mock upload-shipping interfaces and registrations.
+- [x] Remove rider-pickup `uploadShippingInfoAsync` enqueue path from `locallife/api/delivery.go`.
+- [x] Remove Mini Program settlement-notify route and handler from `locallife/api/server.go` and `locallife/api/payment_callback.go`.
+- [x] Remove `WECHAT_SHIPPING_SETTLE_NOTIFY_URL` config and examples.
+- [x] Remove SQL query `CheckWechatSettlementTriggerForProfitSharingOrder`.
 
-### Decision
+### 2. BaoFu Profit-Sharing Trigger
 
-- Continuing the shipping/settlement work is meaningful only for orders paid through a real WeChat Pay-backed channel.
-- For LocalLife's main-business Baofu aggregate flow, "报备" means Baofu WeChat channel merchant reporting plus APPLET binding, not switching back to WeChat direct payment.
-- Brand application is not required just because merchants are reported through Baofu. It is only required if the Mini Program's own brand or trade-governance status demands it.
+- [x] Change `TaskScheduler.ScheduleProfitSharing` to accept a BaoFu profit-sharing order ID directly.
+- [x] Add `logic.ResolveCompletedOrderBaofuProfitSharingOrder` to find and validate a ready BaoFu profit-sharing order for a completed order.
+- [x] Keep guardrails:
+  - payment order exists and is paid
+  - profit-sharing order provider is BaoFu
+  - profit-sharing order status is `pending` or `failed`
+  - `PaymentOrderRequiresProfitSharing` remains true
+  - no `pending` / `processing` / `success` refund amount exists for the payment order
+- [x] Trigger BaoFu profit-sharing command after user confirmation completes the order.
+- [x] Trigger BaoFu profit-sharing command after takeout auto-complete completes the order.
+- [x] Restore recovery scheduler fallback:
+  - Create missing pending share orders through the existing recovery path.
+  - Enqueue existing ready `pending` / `failed` BaoFu share orders through `ListBaofuProfitSharingOrdersReadyForCommand`.
 
-### Required Runtime Gates
+### 3. Mini Program Removal
 
-- Before enabling upload for a merchant/order:
-  - Baofu account opening has produced `sharing_mer_id`.
-  - Baofu `merchant_report(WECHAT)` has succeeded.
-  - A non-empty WeChat channel `subMchId` has been persisted from `merchant_report` or `merchant_report_query`.
-  - Baofu `bind_sub_config(APPLET, <LocalLife mini appid>)` has succeeded and any provider-side activation window has passed.
-  - The order was created with Baofu `WECHAT_JSAPI`, the same `subMchId`, the LocalLife Mini Program appid as `sub_appid`, and payer `sub_openid`.
-  - The Mini Program has shipping management enabled and settlement-management confirmation completed.
-  - The Mini Program message-push callback configuration for this route is confirmed. Current implementation supports plaintext JSON and plaintext XML; secure AES mode requires an explicit follow-up implementation before enabling that configuration.
-- If any gate is missing, skip or fail closed with operator-visible diagnostics instead of uploading malformed shipping information.
+- [x] Replace active Mini Program confirm-receipt component flow with local confirmation modal plus backend `confirmOrder`.
+- [x] Remove active `openBusinessView`, `weappOrderConfirm`, `pendingConfirmOrderId`, and `WECHAT_ORDER_CONFIRM_APPID` usage from `weapp/miniprogram/**`.
+- [x] Stop passing `transactionId` from active order detail/tracking pages into confirm receipt.
+- [x] Remove the active static check script for WeChat confirm-receipt component usage.
+- [x] Keep the exported `confirmReceiptWithRecovery` name as a compatibility wrapper around the new local/backend flow.
 
-### Identifier Rules
+### 4. Generated Artifacts And Docs
 
-- Do not treat Baofu `tradeNo` as a WeChat Pay `transaction_id`.
-- For Baofu aggregate orders, upload shipping using `order_number_type=1`, `mchid=<Baofu reported WeChat subMchId>`, and `out_trade_no=<LocalLife/Baofu outTradeNo>`, unless a provider-confirmed real WeChat Pay `transaction_id` is captured.
-- Keep Baofu `tradeNo` for Baofu query/refund/share contracts. It can stay in `payment_orders.transaction_id` for current Baofu internals, but callers crossing into WeChat shipping must branch by `payment_channel`.
-- For WeChat direct orders, using a true WeChat Pay `transaction_id` remains valid.
+- [x] Run `make sqlc` after SQL/interface changes.
+- [x] Run `make swagger` after route and API comment changes.
+- [x] Run `make check-generated` before handoff.
 
-## Task 1: Fix WeChat Shipping Upload Request Contract
+### 5. Validation Plan
 
-**Files:**
-- Modify: `locallife/wechat/shipping.go`
-- Test: `locallife/wechat/shipping_test.go`
+- [x] Focused backend tests already run during implementation:
+  - `go test ./logic -run TestOrderServiceConfirmOrder_SchedulesBaofuProfitSharing -count=1`
+  - `go test ./scheduler -run TestTakeoutAutoCompleteScheduler_AutoCompletesWithoutClaim -count=1`
+  - `go test ./worker -run 'TestBaofuPaymentRecoverySchedulerRunOnceCreatesPendingShareAndEnqueuesCommand|TestBaofuPaymentRecoverySchedulerRunOnceCreatesReservationShareAndEnqueuesCommand|TestBaofuPaymentRecoverySchedulerRunOnceEnqueuesExistingPendingShare' -count=1`
+- [x] Run focused package validation for changed backend packages.
+- [x] Run `make check-generated`.
+- [x] Run `make test-safety` because this is a `G3` funds-adjacent change.
+- [x] Run active Mini Program validation from `weapp/`:
+  - `npm run lint`
+  - `npm run compile`
 
-- [x] Add focused tests that capture the JSON body sent to `/wxa/sec/order/upload_shipping_info`.
-- [x] Verify the tests fail against the current implementation:
-  - `transaction_id` currently uses `order_number_type=1` instead of `2`.
-  - `out_trade_no` currently uses `order_number_type=2` instead of `1`.
-  - `out_trade_no` fallback currently omits `mchid`.
-  - `shipping_list` currently omits required `item_desc`.
-  - `notify_url` is currently sent even though this flow should use Mini Program message push configuration.
-- [x] Add `MchID` and `ItemDesc` to the shipping request structs.
-- [x] Build `order_key` as:
-  - `transaction_id` path: `order_number_type=2`, `transaction_id`.
-  - merchant order path: `order_number_type=1`, `mchid`, `out_trade_no`.
-- [x] Put `item_desc` in every `shipping_list` entry.
-- [x] Stop including `notify_url` in shipping upload payloads.
-- [x] Run `go test ./wechat -run 'TestUploadShippingInfo|TestUploadCombinedShippingInfo' -count=1`.
+## Validation Results
 
-## Task 2: Enrich Worker Shipping Upload Data
-
-**Files:**
-- Modify: `locallife/worker/task_upload_shipping_info.go`
-- Potential test: `locallife/worker/task_upload_shipping_info_test.go`
-
-- [x] Inspect existing order-item query helpers and choose the smallest query path for building a concise item description.
-- [x] Add worker tests for:
-  - Upload receives a non-empty item description.
-  - Direct WeChat and Baofu aggregate channels do not get mixed by `payment_type` alone.
-  - Baofu aggregate does not send `payment_orders.transaction_id` as WeChat `transaction_id` when that value is only Baofu `tradeNo`; it should use `sub_mchid + out_trade_no`.
-  - Missing required order identity data skips or fails with structured logging instead of producing an invalid WeChat request.
-- [x] Pass `MchID` and `ItemDesc` to `wechat.UploadShippingInfo`.
-- [x] Prefer `transaction_id` only for direct WeChat orders or for a provider-confirmed real WeChat Pay transaction id source.
-- [x] For Baofu aggregate orders, use merchant-order identity: `MchID=<sub_mchid>` and `OutTradeNo=<payment_orders.out_trade_no>`.
-- [x] For `out_trade_no` fallback, require a known merchant id before uploading.
-- [x] Run focused worker tests.
-
-## Task 3: Add Mini Program Message Push Settlement Contract
-
-**Files:**
-- Create: `locallife/wechat/contracts/order_shipping_message.go`
-- Modify: `locallife/api/payment_callback.go` or split a new focused callback file if needed
-- Modify: `locallife/api/server.go`
-- Test: `locallife/api/payment_callback_test.go` or a new focused test file
-
-- [x] Define a DTO for Mini Program message push `trade_manage_order_settlement`.
-- [x] Add `GET /v1/webhooks/wechat-miniprogram/settlement-notify` for URL verification using `signature/timestamp/nonce/echostr`.
-- [x] Change POST handling for this route to verify Mini Program message signature, not WeChat Pay V3 `Wechatpay-*` headers.
-- [x] Parse plaintext JSON and XML Mini Program message-push payloads; do not treat outbound WeChat API JSON rules as proof that inbound message push cannot be configured as XML.
-- [x] Document secure AES mode as an explicit runtime gate if the Mini Program backend is configured for secure message encryption.
-- [x] Return success for unknown non-settlement Mini Program events after signature verification.
-- [x] Add tests proving a real Mini Program message-push payload is accepted without WeChat Pay V3 headers.
-- [x] Add tests proving invalid Mini Program signature is rejected.
-
-## Task 4: Trigger Baofu Profit Sharing Only On Settlement
-
-**Files:**
-- Modify: `locallife/api/payment_callback.go`
-- Modify or replace: `locallife/wechat/contracts/shipping_settlement.go`
-- Test: `locallife/api/payment_callback_test.go`
-
-- [x] Split shipping event handling into:
-  - shipment push: has `estimated_settlement_time`, lacks `settlement_time`; acknowledge and record/log, no Baofu share task.
-  - settlement push: has `settlement_time` or `confirm_receive_time`; may trigger Baofu share task.
-- [x] Replace WeChat Pay V3 notification-id dependency with a deterministic Mini Program event idempotency key, for example `wechat:shipping_settlement:<transaction_id-or-merchant_trade_no>:<settlement_time-or-confirm_receive_time>`.
-- [x] Keep existing payment order resolution by `transaction_id` first and `merchant_trade_no` second.
-- [x] Keep existing safety checks:
-  - paid payment order
-  - main-business order payment
-  - `PaymentOrderRequiresProfitSharing`
-  - Baofu aggregate profit-sharing order exists
-  - refund safety check
-- [x] Add tests:
-  - shipment push does not enqueue Baofu profit sharing.
-  - settlement push enqueues exactly once.
-  - duplicate settlement push is idempotent.
-
-## Task 5: Mini Program Confirm-Receipt Failure Cleanup
-
-**Files:**
-- Modify: `weapp/miniprogram/pages/orders/detail/index.ts`
-- Modify: `weapp/miniprogram/pages/orders/tracking/index.ts`
-
-- [x] On `wx.openBusinessView` failure, clear `app.globalData.pendingConfirmOrderId`.
-- [x] Add or update the smallest available Mini Program static check if the repo already has a pattern for this flow.
-- [x] Run `npm run lint` and `npm run compile` from `weapp/`.
-
-## Task 6: Validation And Handoff
-
-- [x] Run focused backend tests:
-  - `cd locallife && go test ./wechat ./api ./worker -count=1`
-- [x] Run focused payment-domain safety checks if package tests expose payment state changes:
-  - `cd locallife && make test-safety`
-- [x] Run Mini Program validation:
-  - `cd weapp && npm run lint`
-  - `cd weapp && npm run compile`
-- [x] State whether regeneration was required:
-  - `make sqlc`: only if SQL/query/store interfaces changed.
-  - `make mock`: if mock-backed interfaces changed.
-  - `make swagger`: if Swagger annotations/public route docs changed.
-- [x] Document residual risk: provider-side confirmation is still required for whether Baofu aggregate WeChat JSAPI orders are accepted by WeChat Mini Program shipping API using `transaction_id` or `mchid + out_trade_no`.
-
-### Validation Notes
-
-- `go test ./wechat -run 'TestUploadShippingInfo|TestUploadCombinedShippingInfo' -count=1`: passed.
-- `go test ./worker -run 'TestProcessTaskUploadShippingInfo' -count=1`: passed.
-- `go test ./api -run 'TestOrderShippingSettlementNotify|TestHandleOrderSettlementNotify' -count=1`: passed.
-- `go test ./wechat ./worker ./api -count=1`: `./worker` and `./api` passed; `./wechat` failed in pre-existing direct refund coverage `TestCreateRefund_AcceptsProcessingResponseWithoutOptionalFields` with `amount.total must be positive`, outside this shipping-settlement change path.
-- `PATH="/usr/local/go/bin:$PATH" make test-safety`: passed.
+- `go test ./logic ./scheduler ./worker ./api ./util -count=1`: passed.
+- `go test ./worker -run 'TestProcessTaskBaofuProfitSharing|TestBaofuPaymentRecoverySchedulerRunOnce' -count=1`: passed, including the regression that a BaoFu share command is not created when a refund amount is already occupied.
+- `make check-generated`: passed; generated sqlc, mocks, and Swagger are in sync.
+- `make test-safety`: passed.
 - `npm run lint` from `weapp/`: passed.
 - `npm run compile` from `weapp/`: passed.
+- `go test ./wechat -run 'TestCreateRefund_AcceptsProcessingResponseWithoutOptionalFields' -count=1`: failed with the pre-existing direct WeChat refund validation error `amount.total must be positive`; this is outside the removed shipping/settlement path and should be triaged separately before treating `./wechat` package-wide tests as a clean gate.
+- Active frontend/backend residual scan excluding `weapp/demo-lab/**`: no old shipping-upload, settlement-notify, `openBusinessView`, or `pendingConfirmOrderId` references remain.
 
-### Residual Risks
+## Residual Risk To Watch
 
-- Mini Program message push secure AES mode is not implemented in this round. The deployed Mini Program backend configuration for this route must use plaintext JSON or plaintext XML until `EncodingAESKey`, `msg_signature`, and encrypted body handling are added.
-- Provider-side production proof is still required that Baofu aggregate `WECHAT_JSAPI` orders uploaded with `mchid=<reported subMchId>` and `out_trade_no=<LocalLife/Baofu outTradeNo>` are accepted by WeChat Mini Program shipping management.
-- The broader `./wechat` package currently has an unrelated direct refund test failure that should be triaged before using that package-wide test as a clean release gate.
+- BaoFu profit-sharing command execution itself remains provider-async and retry-driven; this plan changes when LocalLife enqueues the command, not BaoFu's final share result semantics.
+- Duplicate enqueue is controlled by the worker task uniqueness window and provider/order status guards, but delayed duplicate tasks may still reach the worker and must remain idempotent there.
+- Refund/share race protection is split across existing persistence guards: BaoFu share-order creation rejects existing occupied refunds, and BaoFu refund creation rejects existing `pending` / `processing` / `finished` share orders. The completion-time enqueue helper also checks occupied refund amount before scheduling.
+- The direct WeChat refund unit-test failure noted above is unrelated to shipping/settlement removal but remains a package-level `./wechat` verification gap.
+- Historical references under `weapp/demo-lab/**` and older `artifacts/**` are intentionally not part of the active-code cleanup.

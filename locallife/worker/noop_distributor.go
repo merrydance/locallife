@@ -128,10 +128,6 @@ func (NoopTaskDistributor) DistributeTaskGroupApplicationIDCardOCR(ctx context.C
 	return nil
 }
 
-func (NoopTaskDistributor) DistributeTaskUploadShippingInfo(ctx context.Context, payload *UploadShippingInfoPayload, opts ...asynq.Option) error {
-	return nil
-}
-
 func (NoopTaskDistributor) DistributeTaskProcessAnomalyRefund(ctx context.Context, payload *PayloadProcessAnomalyRefund, opts ...asynq.Option) error {
 	return financialTaskDistributorUnavailable("anomaly refund")
 }

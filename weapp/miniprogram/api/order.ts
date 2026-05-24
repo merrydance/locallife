@@ -129,7 +129,7 @@ export interface OrderResponse {
   // 预定相关
   reservation_id?: number
   replaced_by_order_id?: number
-  // 微信支付交易号，用于拉起小程序确认收货组件
+  // 微信或上游支付交易号，用于支付查询与历史兼容展示
   wechat_transaction_id?: string
   payment_context?: OrderPaymentContext
 }
@@ -522,4 +522,3 @@ export const previewOrder = calculateOrder
 
 /** @deprecated 使用 CreateOrderRequest 替代 */
 export type CreateOrderData = CreateOrderRequest
-

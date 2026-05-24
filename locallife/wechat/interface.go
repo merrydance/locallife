@@ -52,13 +52,6 @@ type WechatClient interface {
 	// scene: 场景参数，page: 跳转页面路径
 	// 返回PNG图片数据
 	GetWXACodeUnlimited(ctx context.Context, req *WXACodeRequest) ([]byte, error)
-
-	// UploadShippingInfo 上传单商户支付发货信息（同城配送）
-	// 在骑手取货后调用，logistics_type=2（同城配送）
-	UploadShippingInfo(ctx context.Context, req *UploadShippingInfoRequest) error
-
-	// UploadCombinedShippingInfo 上传合单支付发货信息（同城配送）
-	UploadCombinedShippingInfo(ctx context.Context, req *UploadCombinedShippingInfoRequest) error
 }
 
 // DirectPaymentClientInterface 直连支付客户端接口

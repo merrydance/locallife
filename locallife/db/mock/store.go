@@ -791,21 +791,6 @@ func (mr *MockStoreMockRecorder) CheckUserVoucherExists(ctx, arg any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckUserVoucherExists", reflect.TypeOf((*MockStore)(nil).CheckUserVoucherExists), ctx, arg)
 }
 
-// CheckWechatSettlementTriggerForProfitSharingOrder mocks base method.
-func (m *MockStore) CheckWechatSettlementTriggerForProfitSharingOrder(ctx context.Context, profitSharingOrderID pgtype.Int8) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CheckWechatSettlementTriggerForProfitSharingOrder", ctx, profitSharingOrderID)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CheckWechatSettlementTriggerForProfitSharingOrder indicates an expected call of CheckWechatSettlementTriggerForProfitSharingOrder.
-func (mr *MockStoreMockRecorder) CheckWechatSettlementTriggerForProfitSharingOrder(ctx, profitSharingOrderID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckWechatSettlementTriggerForProfitSharingOrder", reflect.TypeOf((*MockStore)(nil).CheckWechatSettlementTriggerForProfitSharingOrder), ctx, profitSharingOrderID)
-}
-
 // ClaimExternalPaymentFactApplication mocks base method.
 func (m *MockStore) ClaimExternalPaymentFactApplication(ctx context.Context, id int64) (db.ExternalPaymentFactApplication, error) {
 	m.ctrl.T.Helper()
@@ -12531,6 +12516,21 @@ func (m *MockStore) ListBaofuProcessingProfitSharingOrdersForRecovery(ctx contex
 func (mr *MockStoreMockRecorder) ListBaofuProcessingProfitSharingOrdersForRecovery(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListBaofuProcessingProfitSharingOrdersForRecovery", reflect.TypeOf((*MockStore)(nil).ListBaofuProcessingProfitSharingOrdersForRecovery), ctx, arg)
+}
+
+// ListBaofuProfitSharingOrdersReadyForCommand mocks base method.
+func (m *MockStore) ListBaofuProfitSharingOrdersReadyForCommand(ctx context.Context, arg db.ListBaofuProfitSharingOrdersReadyForCommandParams) ([]db.ProfitSharingOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListBaofuProfitSharingOrdersReadyForCommand", ctx, arg)
+	ret0, _ := ret[0].([]db.ProfitSharingOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListBaofuProfitSharingOrdersReadyForCommand indicates an expected call of ListBaofuProfitSharingOrdersReadyForCommand.
+func (mr *MockStoreMockRecorder) ListBaofuProfitSharingOrdersReadyForCommand(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListBaofuProfitSharingOrdersReadyForCommand", reflect.TypeOf((*MockStore)(nil).ListBaofuProfitSharingOrdersReadyForCommand), ctx, arg)
 }
 
 // ListBaofuWithdrawalOrdersByOwner mocks base method.

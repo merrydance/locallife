@@ -2,16 +2,14 @@ import { confirmOrder, OrderResponse } from '../api/order'
 import { logger } from '../utils/logger'
 import { getErrorUserMessage } from '../utils/user-facing'
 
-type ConfirmReceiptStatus = 'confirmed' | 'cancelled' | 'wechat_opened' | 'failed'
+type ConfirmReceiptStatus = 'confirmed' | 'cancelled' | 'failed'
 
 export interface ConfirmReceiptOptions {
   orderId: number
-  transactionId?: string
   modalContent?: string
   loadingTitle?: string
   successToastTitle?: string
   confirmFailureToastTitle?: string
-  wechatFailureToastTitle?: string
   source?: string
 }
 
@@ -21,23 +19,8 @@ export interface ConfirmReceiptResult {
   error?: unknown
 }
 
-type OpenBusinessViewOptions = {
-  businessType: string
-  extraData: Record<string, string>
-  success?: (res: unknown) => void
-  fail?: (error: unknown) => void
-}
-
-type WxWithBusinessView = typeof wx & {
-  openBusinessView?: (options: OpenBusinessViewOptions) => void
-}
-
 function normalizeOrderId(orderId: number): number {
   return Number.isFinite(orderId) ? orderId : 0
-}
-
-function hasWechatOrderConfirmComponent(): boolean {
-  return typeof (wx as WxWithBusinessView).openBusinessView === 'function'
 }
 
 function showConfirmModal(content: string): Promise<boolean> {
@@ -53,7 +36,13 @@ function showConfirmModal(content: string): Promise<boolean> {
   })
 }
 
-async function confirmLocally(options: ConfirmReceiptOptions): Promise<ConfirmReceiptResult> {
+export async function confirmReceiptWithRecovery(options: ConfirmReceiptOptions): Promise<ConfirmReceiptResult> {
+  const orderId = normalizeOrderId(options.orderId)
+  if (!orderId) {
+    wx.showToast({ title: '订单信息缺失，请刷新后重试', icon: 'none' })
+    return { status: 'failed' }
+  }
+
   const confirmed = await showConfirmModal(options.modalContent || '确认已收到订单？')
   if (!confirmed) {
     return { status: 'cancelled' }
@@ -61,7 +50,7 @@ async function confirmLocally(options: ConfirmReceiptOptions): Promise<ConfirmRe
 
   wx.showLoading({ title: options.loadingTitle || '处理中...' })
   try {
-    const order = await confirmOrder(options.orderId)
+    const order = await confirmOrder(orderId)
     wx.hideLoading()
     wx.showToast({ title: options.successToastTitle || '已确认收货', icon: 'none' })
     return { status: 'confirmed', order }
@@ -74,48 +63,4 @@ async function confirmLocally(options: ConfirmReceiptOptions): Promise<ConfirmRe
     })
     return { status: 'failed', error }
   }
-}
-
-function openWechatOrderConfirm(orderId: number, transactionId: string, source?: string): Promise<ConfirmReceiptResult> {
-  return new Promise((resolve) => {
-    const app = getApp<IAppOption>()
-    app.globalData.pendingConfirmOrderId = orderId
-
-    ;(wx as WxWithBusinessView).openBusinessView?.({
-      businessType: 'weappOrderConfirm',
-      extraData: { transaction_id: transactionId },
-      success() {
-        resolve({ status: 'wechat_opened' })
-      },
-      fail(error: unknown) {
-        app.globalData.pendingConfirmOrderId = undefined
-        logger.warn('打开微信确认收货组件失败，回退本地确认', error, source || 'order-receipt-confirmation')
-        resolve({ status: 'failed', error })
-      }
-    })
-  })
-}
-
-export async function confirmReceiptWithRecovery(options: ConfirmReceiptOptions): Promise<ConfirmReceiptResult> {
-  const orderId = normalizeOrderId(options.orderId)
-  if (!orderId) {
-    wx.showToast({ title: '订单信息缺失，请刷新后重试', icon: 'none' })
-    return { status: 'failed' }
-  }
-
-  const transactionId = (options.transactionId || '').trim()
-  if (!transactionId || !hasWechatOrderConfirmComponent()) {
-    return confirmLocally({ ...options, orderId })
-  }
-
-  const wechatResult = await openWechatOrderConfirm(orderId, transactionId, options.source)
-  if (wechatResult.status === 'wechat_opened') {
-    return wechatResult
-  }
-
-  wx.showToast({
-    title: options.wechatFailureToastTitle || '微信确认暂不可用，已改为本页确认',
-    icon: 'none'
-  })
-  return confirmLocally({ ...options, orderId })
 }

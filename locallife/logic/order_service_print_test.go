@@ -45,7 +45,7 @@ func (s *orderPrintTaskSchedulerStub) ScheduleProcessRefund(ctx context.Context,
 	return nil
 }
 
-func (s *orderPrintTaskSchedulerStub) ScheduleProfitSharing(ctx context.Context, paymentOrderID, orderID int64) error {
+func (s *orderPrintTaskSchedulerStub) ScheduleProfitSharing(ctx context.Context, profitSharingOrderID int64) error {
 	return nil
 }
 

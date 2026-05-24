@@ -14,8 +14,7 @@ import (
 
 type confirmOrderTaskSchedulerStub struct {
 	profitSharingCalled bool
-	paymentOrderID      int64
-	orderID             int64
+	profitSharingOrderID int64
 }
 
 func (s *confirmOrderTaskSchedulerStub) ScheduleOrderPaymentTimeout(ctx context.Context, orderID int64, at time.Time) error {
@@ -34,10 +33,9 @@ func (s *confirmOrderTaskSchedulerStub) ScheduleProcessRefund(ctx context.Contex
 	return nil
 }
 
-func (s *confirmOrderTaskSchedulerStub) ScheduleProfitSharing(ctx context.Context, paymentOrderID, orderID int64) error {
+func (s *confirmOrderTaskSchedulerStub) ScheduleProfitSharing(ctx context.Context, profitSharingOrderID int64) error {
 	s.profitSharingCalled = true
-	s.paymentOrderID = paymentOrderID
-	s.orderID = orderID
+	s.profitSharingOrderID = profitSharingOrderID
 	return nil
 }
 
@@ -49,7 +47,7 @@ func (s *confirmOrderTaskSchedulerStub) ScheduleOrderPrint(ctx context.Context, 
 	return nil
 }
 
-func TestOrderServiceConfirmOrder_DoesNotScheduleProfitSharing(t *testing.T) {
+func TestOrderServiceConfirmOrder_SchedulesBaofuProfitSharing(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -83,6 +81,46 @@ func TestOrderServiceConfirmOrder_DoesNotScheduleProfitSharing(t *testing.T) {
 		GetDeliveryByOrderID(gomock.Any(), order.ID).
 		Times(1).
 		Return(db.Delivery{RiderID: pgtype.Int8{Int64: 808, Valid: true}}, nil)
+	paymentOrder := db.PaymentOrder{
+		ID:                    90,
+		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType:          db.ExternalPaymentBusinessOwnerOrder,
+		Status:                "paid",
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+		Amount:                1200,
+	}
+	profitSharingOrder := db.ProfitSharingOrder{
+		ID:             190,
+		PaymentOrderID: paymentOrder.ID,
+		Provider:       db.ExternalPaymentProviderBaofu,
+		Channel:        db.PaymentChannelBaofuAggregate,
+		Status:         db.ProfitSharingOrderStatusPending,
+		OrderSource:    db.OrderTypeTakeout,
+		DeliveryFee:    600,
+		RiderID:        pgtype.Int8{Int64: 808, Valid: true},
+		RiderSharingMerID: pgtype.Text{
+			String: "RIDER_SHARE",
+			Valid:  true,
+		},
+		RiderGrossAmount: 600,
+		RiderAmount:      590,
+	}
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+			BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+		}).
+		Times(1).
+		Return(paymentOrder, nil)
+	store.EXPECT().
+		GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).
+		Times(1).
+		Return(profitSharingOrder, nil)
+	store.EXPECT().
+		GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).
+		Times(1).
+		Return(int64(0), nil)
 
 	service := NewOrderService(store, nil, nil, nil, taskScheduler, nil, nil, nil, nil, nil, nil)
 
@@ -90,7 +128,6 @@ func TestOrderServiceConfirmOrder_DoesNotScheduleProfitSharing(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, db.OrderStatusCompleted, result.Order.Status)
 	require.False(t, result.AlreadyCompleted)
-	require.False(t, taskScheduler.profitSharingCalled)
-	require.Zero(t, taskScheduler.paymentOrderID)
-	require.Zero(t, taskScheduler.orderID)
+	require.True(t, taskScheduler.profitSharingCalled)
+	require.Equal(t, profitSharingOrder.ID, taskScheduler.profitSharingOrderID)
 }

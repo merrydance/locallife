@@ -124,9 +124,6 @@ func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskGroupA
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskGroupApplicationIDCardOCR(context.Context, int64, int64, int64, string, ...asynq.Option) error {
 	return nil
 }
-func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskUploadShippingInfo(context.Context, *UploadShippingInfoPayload, ...asynq.Option) error {
-	return nil
-}
 func (d *automaticRecoveryDisputeResolutionTestDistributor) DistributeTaskProcessAnomalyRefund(context.Context, *PayloadProcessAnomalyRefund, ...asynq.Option) error {
 	return nil
 }
