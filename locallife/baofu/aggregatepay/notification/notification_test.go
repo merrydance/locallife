@@ -329,6 +329,16 @@ func TestParserParseShareNotificationNormalizesShareFact(t *testing.T) {
 	require.JSONEq(t, string(body), string(notification.Raw))
 }
 
+func TestParserParseShareNotificationAcceptsStringAmountFields(t *testing.T) {
+	parser := NewParser()
+
+	notification, err := parser.ParseShareNotification([]byte(`{"notifyType":"SHARING","tradeNo":"BFSHARE_UP_3001","txnState":"SUCCESS","resultCode":"SUCCESS","succAmt":"9470"}`))
+
+	require.NoError(t, err)
+	require.Equal(t, int64(9470), notification.Fact.SuccessAmountFen)
+	require.JSONEq(t, `{"notifyType":"SHARING","tradeNo":"BFSHARE_UP_3001","txnState":"SUCCESS","resultCode":"SUCCESS","succAmt":9470}`, string(notification.Raw))
+}
+
 func TestParserParseShareNotificationAcceptsOfficialTradeNoOnly(t *testing.T) {
 	parser := NewParser()
 

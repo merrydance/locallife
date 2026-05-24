@@ -8,6 +8,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/baofu"
 	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -263,6 +264,133 @@ func TestBaofuPaymentRecoverySchedulerRunOnceQueriesProcessingShareAndEnqueuesFa
 	require.Empty(t, client.lastShareQuery.OutTradeNo)
 }
 
+func TestBaofuPaymentRecoverySchedulerRunOnceQueriesProcessingShareByOutTradeNoWhenUpstreamShareIDMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &baofuProfitSharingEnqueueRecorder{}
+	client := &baofuRecoveryAggregateClient{
+		shareResult: &aggregatecontracts.ShareResult{
+			TradeNo:          "BFSHARE_UP_302",
+			OutTradeNo:       "BFPS302O402",
+			TxnState:         aggregatecontracts.ShareStateSuccess,
+			SuccessAmountFen: 10000,
+			Raw:              json.RawMessage(`{"txnState":"SUCCESS"}`),
+		},
+	}
+	shareOrder := db.ProfitSharingOrder{
+		ID:                 802,
+		PaymentOrderID:     302,
+		OutOrderNo:         "BFPS302O402",
+		SharingOrderID:     pgtype.Text{String: "BFPS302O402", Valid: true},
+		Status:             db.ProfitSharingOrderStatusProcessing,
+		Provider:           db.ExternalPaymentProviderBaofu,
+		Channel:            db.PaymentChannelBaofuAggregate,
+		MerchantAmount:     9470,
+		PlatformCommission: 200,
+		OperatorCommission: 300,
+		PaymentFee:         30,
+	}
+
+	store.EXPECT().
+		ListBaofuOrdersReadyForProfitSharing(gomock.Any(), gomock.Any()).
+		Return([]db.ListBaofuOrdersReadyForProfitSharingRow{}, nil)
+	store.EXPECT().
+		ListBaofuProfitSharingOrdersReadyForCommand(gomock.Any(), gomock.AssignableToTypeOf(db.ListBaofuProfitSharingOrdersReadyForCommandParams{})).
+		Return([]db.ProfitSharingOrder{}, nil)
+	store.EXPECT().
+		ListBaofuProcessingProfitSharingOrdersForRecovery(gomock.Any(), gomock.Any()).
+		Return([]db.ProfitSharingOrder{shareOrder}, nil)
+	store.EXPECT().
+		ListBaofuPendingPaymentOrdersForRecovery(gomock.Any(), gomock.Any()).
+		Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().
+		CreateExternalPaymentFact(gomock.Any(), gomock.Any()).
+		Return(db.ExternalPaymentFact{ID: 1102, IsTerminal: true}, nil)
+	store.EXPECT().
+		CreateExternalPaymentFactApplication(gomock.Any(), gomock.Any()).
+		Return(db.ExternalPaymentFactApplication{ID: 1202}, nil)
+
+	scheduler := worker.NewBaofuPaymentRecoveryScheduler(store, distributor)
+	scheduler.SetBaofuAggregateClient(client, worker.BaofuProfitSharingWorkerConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+	})
+	scheduler.RunOnce()
+
+	require.Equal(t, []int64{1202}, distributor.factApplicationIDs)
+	require.Empty(t, client.lastShareQuery.TradeNo)
+	require.Equal(t, "BFPS302O402", client.lastShareQuery.OutTradeNo)
+}
+
+func TestBaofuPaymentRecoverySchedulerRunOnceRetriesProcessingShareByOutTradeNoWhenTradeNoInvalidData(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &baofuProfitSharingEnqueueRecorder{}
+	client := &baofuRecoveryAggregateClient{
+		shareErrors: []error{&baofu.ProviderError{
+			Operation:    "share_query",
+			UpstreamCode: baofu.PublicEnvelopeUpstreamCodeInvalidDataContent,
+		}},
+		shareResults: []*aggregatecontracts.ShareResult{nil, {
+			TradeNo:          "260524111107334577001122",
+			OutTradeNo:       "BFPS303O403",
+			TxnState:         aggregatecontracts.ShareStateSuccess,
+			SuccessAmountFen: 10000,
+			Raw:              json.RawMessage(`{"txnState":"SUCCESS"}`),
+		}},
+	}
+	shareOrder := db.ProfitSharingOrder{
+		ID:                 803,
+		PaymentOrderID:     303,
+		OutOrderNo:         "BFPS303O403",
+		SharingOrderID:     pgtype.Text{String: "260524111107334577001122", Valid: true},
+		Status:             db.ProfitSharingOrderStatusProcessing,
+		Provider:           db.ExternalPaymentProviderBaofu,
+		Channel:            db.PaymentChannelBaofuAggregate,
+		MerchantAmount:     9470,
+		PlatformCommission: 200,
+		OperatorCommission: 300,
+		PaymentFee:         30,
+	}
+
+	store.EXPECT().
+		ListBaofuOrdersReadyForProfitSharing(gomock.Any(), gomock.Any()).
+		Return([]db.ListBaofuOrdersReadyForProfitSharingRow{}, nil)
+	store.EXPECT().
+		ListBaofuProfitSharingOrdersReadyForCommand(gomock.Any(), gomock.AssignableToTypeOf(db.ListBaofuProfitSharingOrdersReadyForCommandParams{})).
+		Return([]db.ProfitSharingOrder{}, nil)
+	store.EXPECT().
+		ListBaofuProcessingProfitSharingOrdersForRecovery(gomock.Any(), gomock.Any()).
+		Return([]db.ProfitSharingOrder{shareOrder}, nil)
+	store.EXPECT().
+		ListBaofuPendingPaymentOrdersForRecovery(gomock.Any(), gomock.Any()).
+		Return([]db.PaymentOrder{}, nil)
+	store.EXPECT().
+		CreateExternalPaymentFact(gomock.Any(), gomock.Any()).
+		Return(db.ExternalPaymentFact{ID: 1103, IsTerminal: true}, nil)
+	store.EXPECT().
+		CreateExternalPaymentFactApplication(gomock.Any(), gomock.Any()).
+		Return(db.ExternalPaymentFactApplication{ID: 1203}, nil)
+
+	scheduler := worker.NewBaofuPaymentRecoveryScheduler(store, distributor)
+	scheduler.SetBaofuAggregateClient(client, worker.BaofuProfitSharingWorkerConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+	})
+	scheduler.RunOnce()
+
+	require.Equal(t, []int64{1203}, distributor.factApplicationIDs)
+	require.Len(t, client.shareQueries, 2)
+	require.Equal(t, "260524111107334577001122", client.shareQueries[0].TradeNo)
+	require.Empty(t, client.shareQueries[0].OutTradeNo)
+	require.Empty(t, client.shareQueries[1].TradeNo)
+	require.Equal(t, "BFPS303O403", client.shareQueries[1].OutTradeNo)
+}
+
 func TestBaofuPaymentRecoverySchedulerRunOnceQueriesPendingPaymentAndEnqueuesFactApplication(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -407,9 +535,12 @@ func (d *baofuProfitSharingEnqueueRecorder) DistributeTaskProcessPaymentFactAppl
 type baofuRecoveryAggregateClient struct {
 	paymentResult    *aggregatecontracts.UnifiedOrderResult
 	shareResult      *aggregatecontracts.ShareResult
+	shareResults     []*aggregatecontracts.ShareResult
+	shareErrors      []error
 	refundResult     *aggregatecontracts.RefundResult
 	lastPaymentQuery aggregatecontracts.PaymentQueryRequest
 	lastShareQuery   aggregatecontracts.ShareQueryRequest
+	shareQueries     []aggregatecontracts.ShareQueryRequest
 	lastRefundQuery  aggregatecontracts.RefundQueryRequest
 }
 
@@ -428,6 +559,14 @@ func (c *baofuRecoveryAggregateClient) QueryPayment(_ context.Context, req aggre
 
 func (c *baofuRecoveryAggregateClient) QueryProfitSharing(_ context.Context, req aggregatecontracts.ShareQueryRequest) (*aggregatecontracts.ShareResult, error) {
 	c.lastShareQuery = req
+	c.shareQueries = append(c.shareQueries, req)
+	index := len(c.shareQueries) - 1
+	if index < len(c.shareErrors) && c.shareErrors[index] != nil {
+		return nil, c.shareErrors[index]
+	}
+	if index < len(c.shareResults) && c.shareResults[index] != nil {
+		return c.shareResults[index], nil
+	}
 	return c.shareResult, nil
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/baofu"
 	"github.com/merrydance/locallife/baofu/aggregatepay"
 	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -389,12 +390,31 @@ func (s *BaofuPaymentRecoveryScheduler) queryBaofuProfitSharing(ctx context.Cont
 		MerchantID: cfg.CollectMerchantID,
 		TerminalID: cfg.CollectTerminalID,
 	}
-	if order.SharingOrderID.Valid && strings.TrimSpace(order.SharingOrderID.String) != "" {
+	sharingOrderID := strings.TrimSpace(order.SharingOrderID.String)
+	outOrderNo := strings.TrimSpace(order.OutOrderNo)
+	if order.SharingOrderID.Valid && sharingOrderID != "" && sharingOrderID != outOrderNo {
 		req.TradeNo = strings.TrimSpace(order.SharingOrderID.String)
 	} else {
-		req.OutTradeNo = strings.TrimSpace(order.OutOrderNo)
+		req.OutTradeNo = outOrderNo
 	}
+	result, err := s.client.QueryProfitSharing(ctx, req)
+	if err == nil || req.TradeNo == "" || outOrderNo == "" || !baofuShareQueryShouldRetryByOutTradeNo(err) {
+		return result, err
+	}
+
+	log.Warn().
+		Err(err).
+		Int64("profit_sharing_order_id", order.ID).
+		Str("out_order_no", outOrderNo).
+		Msg("baofu share query by tradeNo returned invalid data; retrying by outTradeNo")
+	req.TradeNo = ""
+	req.OutTradeNo = outOrderNo
 	return s.client.QueryProfitSharing(ctx, req)
+}
+
+func baofuShareQueryShouldRetryByOutTradeNo(err error) bool {
+	var providerErr *baofu.ProviderError
+	return errors.As(err, &providerErr) && strings.EqualFold(strings.TrimSpace(providerErr.UpstreamCode), baofu.PublicEnvelopeUpstreamCodeInvalidDataContent)
 }
 
 func baofuShareFactFromQueryResult(result *aggregatecontracts.ShareResult, order db.ProfitSharingOrder) aggregatecontracts.ShareFact {

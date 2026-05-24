@@ -138,16 +138,14 @@ func (processor *RedisTaskProcessor) ProcessTaskBaofuProfitSharing(ctx context.C
 	if result == nil {
 		return fmt.Errorf("create baofu profit sharing returned empty result")
 	}
-	sharingOrderID := strings.TrimSpace(result.TradeNo)
-	if sharingOrderID == "" {
-		sharingOrderID = strings.TrimSpace(result.OutTradeNo)
-	}
-	if sharingOrderID == "" {
-		return fmt.Errorf("create baofu profit sharing missing upstream share id")
+	upstreamShareID := strings.TrimSpace(result.TradeNo)
+	responseOutTradeNo := strings.TrimSpace(result.OutTradeNo)
+	if upstreamShareID == "" && responseOutTradeNo == "" {
+		return fmt.Errorf("create baofu profit sharing missing upstream share reference")
 	}
 	if _, err := processor.store.UpdateProfitSharingOrderToProcessing(ctx, db.UpdateProfitSharingOrderToProcessingParams{
 		ID:             profitSharingOrder.ID,
-		SharingOrderID: pgtype.Text{String: sharingOrderID, Valid: true},
+		SharingOrderID: pgtype.Text{String: upstreamShareID, Valid: upstreamShareID != ""},
 	}); err != nil {
 		return fmt.Errorf("mark baofu profit sharing order processing: %w", err)
 	}

@@ -600,19 +600,31 @@ func normalizeAggregateNotificationStringScalars(raw []byte) ([]byte, error) {
 	}
 	changed := false
 	for key, value := range payload {
-		if !isAggregateNotificationStringField(key) {
+		if isAggregateNotificationStringField(key) {
+			text, ok := jsonStringOrNumber(value)
+			if !ok {
+				continue
+			}
+			encoded, err := json.Marshal(text)
+			if err != nil {
+				return nil, err
+			}
+			payload[key] = encoded
+			changed = true
 			continue
 		}
-		text, ok := jsonStringOrNumber(value)
-		if !ok {
-			continue
+		if isAggregateNotificationIntegerField(key) {
+			amount, ok := jsonIntegerOrNumber(value)
+			if !ok {
+				continue
+			}
+			encoded, err := json.Marshal(amount)
+			if err != nil {
+				return nil, err
+			}
+			payload[key] = encoded
+			changed = true
 		}
-		encoded, err := json.Marshal(text)
-		if err != nil {
-			return nil, err
-		}
-		payload[key] = encoded
-		changed = true
 	}
 	if !changed {
 		return raw, nil
@@ -636,6 +648,32 @@ func jsonStringOrNumber(raw json.RawMessage) (string, bool) {
 		return strings.TrimSpace(number.String()), true
 	}
 	return "", false
+}
+
+func jsonIntegerOrNumber(raw json.RawMessage) (int64, bool) {
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		parsed, err := strconv.ParseInt(strings.TrimSpace(text), 10, 64)
+		if err != nil {
+			return 0, false
+		}
+		return parsed, true
+	}
+	value := strings.TrimSpace(string(raw))
+	if value == "" || value == "null" {
+		return 0, false
+	}
+	var number json.Number
+	decoder := json.NewDecoder(strings.NewReader(value))
+	decoder.UseNumber()
+	if err := decoder.Decode(&number); err == nil {
+		parsed, err := number.Int64()
+		if err != nil {
+			return 0, false
+		}
+		return parsed, true
+	}
+	return 0, false
 }
 
 func jsonRawString(raw json.RawMessage) string {
