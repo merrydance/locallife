@@ -80,6 +80,8 @@
           <view class="card-footer">
             <t-tag size="small" variant="dark" theme="{{item.visibilityTheme}}">{{item.visibilityLabel}}</t-tag>
             <view class="footer-actions">
+              <t-button size="small" variant="text" icon="edit" data-id="{{item.id}}" bindtap="onEditReview">编辑</t-button>
+              <t-button size="small" theme="danger" variant="text" icon="delete" data-id="{{item.id}}" loading="{{item.deleting}}" disabled="{{item.deleting}}" bindtap="onDeleteReview">删除</t-button>
               <t-button size="small" variant="text" icon="shop" data-id="{{item.merchantId}}" bindtap="onMerchantClick">商家</t-button>
               <t-button size="small" theme="primary" variant="text" icon="order-adjustment" data-id="{{item.orderId}}" bindtap="onOrderDetail">订单</t-button>
             </view>
@@ -95,5 +97,20 @@
       </view>
     </scroll-view>
   </block>
+
+  <t-dialog
+    visible="{{deleteDialogVisible}}"
+    title="删除评价"
+    using-custom-navbar="{{true}}"
+    confirm-btn="{{ { content: '确认删除', theme: 'danger', loading: deleteDialogSubmitting } }}"
+    cancel-btn="取消"
+    bind:confirm="onConfirmDeleteReview"
+    bind:cancel="onCancelDeleteDialog"
+    bind:close="onCancelDeleteDialog"
+  >
+    <view slot="content" class="delete-dialog-content">
+      <text>删除后无法恢复，确定删除对“{{deleteDialogMerchantName}}”的这条评价吗？</text>
+    </view>
+  </t-dialog>
 
 </view>

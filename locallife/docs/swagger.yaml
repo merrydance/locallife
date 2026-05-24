@@ -7607,6 +7607,10 @@ definitions:
         type: string
       id:
         type: integer
+      image_asset_ids:
+        items:
+          type: integer
+        type: array
       image_urls:
         items:
           type: string
@@ -9416,6 +9420,20 @@ definitions:
       time:
         description: HH:MM
         type: string
+    type: object
+  api.updateReviewRequest:
+    properties:
+      content:
+        maxLength: 1000
+        minLength: 1
+        type: string
+      media_asset_ids:
+        items:
+          type: integer
+        maxItems: 9
+        type: array
+    required:
+    - content
     type: object
   api.updateRiderApplicationBasicRequest:
     properties:
@@ -27321,7 +27339,7 @@ paths:
     delete:
       consumes:
       - application/json
-      description: 运营商删除违规评价，只能删除自己管辖区域商户的评价
+      description: 用户可删除自己创建的评价；运营商可删除自己管辖区域商户的评价。
       parameters:
       - description: 评价ID
         in: path
@@ -27344,7 +27362,7 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "403":
-          description: 只能删除管辖区域商户的评价
+          description: 只能删除自己的评价或管辖区域商户的评价
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "404":
@@ -27357,9 +27375,9 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: 删除评价（运营商）
+      summary: 删除评价
       tags:
-      - 评价管理-运营商
+      - 评价管理
     get:
       consumes:
       - application/json
@@ -27392,6 +27410,58 @@ paths:
       security:
       - BearerAuth: []
       summary: 获取评价详情
+      tags:
+      - 评价管理
+    patch:
+      consumes:
+      - application/json
+      description: 用户更新自己创建的评价内容和图片。内容会重新进行文本安全检测。
+      parameters:
+      - description: 评价ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 评价更新信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.updateReviewRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 评价更新成功
+          schema:
+            $ref: '#/definitions/api.reviewResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 只能更新自己的评价
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 评价不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 内容安全检测失败
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新本人评价
       tags:
       - 评价管理
   /v1/reviews/{id}/reply:

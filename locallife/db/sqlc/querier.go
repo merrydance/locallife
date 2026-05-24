@@ -1855,6 +1855,7 @@ type Querier interface {
 	UpdateReservationToExpired(ctx context.Context, id int64) (TableReservation, error)
 	UpdateReservationToNoShow(ctx context.Context, id int64) (TableReservation, error)
 	UpdateReservationToPaid(ctx context.Context, id int64) (TableReservation, error)
+	UpdateReviewContent(ctx context.Context, arg UpdateReviewContentParams) (Review, error)
 	UpdateReviewVisibility(ctx context.Context, arg UpdateReviewVisibilityParams) (Review, error)
 	// 更新基础信息（姓名、手机号）
 	UpdateRiderApplicationBasicInfo(ctx context.Context, arg UpdateRiderApplicationBasicInfoParams) (RiderApplication, error)

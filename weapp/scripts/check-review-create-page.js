@@ -124,6 +124,28 @@ function main() {
     !ts.includes('请选择总体评分'),
     'review create submit handler must not ask for unsupported rating'
   )
+  assert(
+    /reviewId:\s*0/.test(ts) &&
+      /mode:\s*'create' as 'create' \| 'edit'/.test(ts) &&
+      /ReviewService\.getReview\(this\.data\.reviewId\)/.test(ts),
+    'review create page must support edit mode by loading the backend review by reviewId'
+  )
+  assert(
+    /ReviewService\.updateReview\(reviewId, reviewData\)/.test(ts) &&
+      /(interface|type) UpdateReviewParams/.test(reviewApi),
+    'review edit submit must call the backend PATCH contract'
+  )
+  assert(
+    /image_asset_ids/.test(reviewApi) &&
+      /normalizeReviewImageAssetIds/.test(ts) &&
+      /mediaId:\s*assetIds\[index\]/.test(ts),
+    'review edit must preserve backend image_asset_ids for existing uploaded images'
+  )
+  assert(
+    /title="\{\{pageTitle\}\}"/.test(wxml) &&
+      /\{\{submitText\}\}/.test(wxml),
+    'review create page should render create/edit title and submit text from page state'
+  )
 
   const pageRule = getRule(wxss, '.page-container')
   assert(

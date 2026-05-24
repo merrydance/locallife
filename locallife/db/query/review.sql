@@ -48,6 +48,12 @@ SET merchant_reply = $2,
 WHERE id = $1
 RETURNING *;
 
+-- name: UpdateReviewContent :one
+UPDATE reviews
+SET content = $2
+WHERE id = $1
+RETURNING id, order_id, user_id, merchant_id, content, is_visible, merchant_reply, replied_at, created_at;
+
 -- name: UpdateReviewVisibility :one
 UPDATE reviews
 SET is_visible = $2

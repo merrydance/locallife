@@ -1504,6 +1504,12 @@ func (server *Server) setupRouter() {
 		// 创建评价
 		reviewsGroup.POST("", server.createReview)
 
+		// 更新本人评价
+		reviewsGroup.PATCH("/:id", server.updateOwnReview)
+
+		// 删除本人评价；运营商删除仍由 handler 继续按区域权限校验
+		reviewsGroup.DELETE("/:id", server.deleteReview)
+
 		// 查询评价详情
 		reviewsGroup.GET("/:id", server.getReview)
 
@@ -1527,14 +1533,6 @@ func (server *Server) setupRouter() {
 	{
 		merchantReviewsGroup.GET("/merchants/:id/all", server.listMerchantAllReviews)
 		merchantReviewsGroup.POST("/:id/reply", server.replyReview)
-	}
-
-	// 删除评价（运营商权限）
-	// 使用 Casbin 中间件验证 operator 角色
-	reviewsOperatorGroup := authGroup.Group("/reviews")
-	reviewsOperatorGroup.Use(server.CasbinRoleMiddleware(RoleOperator), server.LoadOperatorMiddleware())
-	{
-		reviewsOperatorGroup.DELETE("/:id", server.deleteReview)
 	}
 
 	// M11: 千人千面推荐引擎路由已下线

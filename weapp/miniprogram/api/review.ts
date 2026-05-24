@@ -8,6 +8,8 @@ export interface Review {
     user_id: number
     merchant_id: number
     content: string
+    image_asset_ids?: number[]
+    imageAssetIds?: number[]
     image_urls?: string[]
     imageUrls?: string[]
     images?: string[]
@@ -41,11 +43,21 @@ export interface CreateReviewParams {
     media_asset_ids?: number[]
 }
 
+export interface UpdateReviewParams {
+    content: string
+    media_asset_ids?: number[]
+}
+
 export interface ReplyReviewParams {
     reply: string
 }
 
 function normalizeReview(review: Review): Review {
+    const imageAssetIds = Array.isArray(review.image_asset_ids)
+        ? review.image_asset_ids
+        : Array.isArray(review.imageAssetIds)
+            ? review.imageAssetIds
+            : []
     const imageUrls = Array.isArray(review.image_urls)
         ? review.image_urls
         : Array.isArray(review.imageUrls)
@@ -56,6 +68,8 @@ function normalizeReview(review: Review): Review {
 
     return {
         ...review,
+        image_asset_ids: imageAssetIds,
+        imageAssetIds,
         image_urls: imageUrls,
         images: imageUrls,
         merchant_logo: review.merchant_logo || review.merchant_logo_url
@@ -109,6 +123,23 @@ export class ReviewService {
         })
 
         return normalizeReview(review)
+    }
+
+    static async updateReview(id: number, data: UpdateReviewParams): Promise<Review> {
+        const review = await request<Review>({
+            url: `/v1/reviews/${id}`,
+            method: 'PATCH',
+            data
+        })
+
+        return normalizeReview(review)
+    }
+
+    static async deleteReview(id: number): Promise<void> {
+        await request<void>({
+            url: `/v1/reviews/${id}`,
+            method: 'DELETE'
+        })
     }
 
     /**

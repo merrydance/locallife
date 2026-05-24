@@ -29,6 +29,7 @@ interface ReviewDisplay {
   visibilityTheme: 'success' | 'warning'
   merchantReply?: string
   repliedAt?: string
+  deleting?: boolean
 }
 
 function normalizeReviewImages(review: Review): string[] {
@@ -53,7 +54,11 @@ Page({
     page: 1,
     pageSize: 10,
     hasMore: true,
-    error: ''
+    error: '',
+    deleteDialogVisible: false,
+    deleteDialogSubmitting: false,
+    deleteDialogReviewId: 0,
+    deleteDialogMerchantName: ''
   },
 
   onLoad() {
@@ -142,6 +147,76 @@ Page({
     Navigation.toOrderDetail(String(id))
   },
 
+  onEditReview(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as IdDataset
+    if (!id) return
+    wx.navigateTo({
+      url: `/pages/user_center/reviews/create/index?reviewId=${id}`
+    })
+  },
+
+  onDeleteReview(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as IdDataset
+    if (!id || this.data.deleteDialogSubmitting) return
+
+    const review = this.data.reviews.find((item) => item.id === id)
+    if (!review) return
+
+    this.setData({
+      deleteDialogVisible: true,
+      deleteDialogSubmitting: false,
+      deleteDialogReviewId: id,
+      deleteDialogMerchantName: review.merchantName || '该商家'
+    })
+  },
+
+  onCancelDeleteDialog() {
+    if (this.data.deleteDialogSubmitting) return
+    this.setData({
+      deleteDialogVisible: false,
+      deleteDialogSubmitting: false,
+      deleteDialogReviewId: 0,
+      deleteDialogMerchantName: ''
+    })
+  },
+
+  async onConfirmDeleteReview() {
+    const id = Number(this.data.deleteDialogReviewId || 0)
+    if (!id || this.data.deleteDialogSubmitting) {
+      this.onCancelDeleteDialog()
+      return
+    }
+
+    const pendingReviews = this.data.reviews.map((review) => (
+      review.id === id ? { ...review, deleting: true } : review
+    ))
+    this.setData({
+      reviews: pendingReviews,
+      deleteDialogSubmitting: true
+    })
+
+    try {
+      await ReviewService.deleteReview(id)
+      this.setData({
+        reviews: pendingReviews.filter((review) => review.id !== id),
+        deleteDialogVisible: false,
+        deleteDialogSubmitting: false,
+        deleteDialogReviewId: 0,
+        deleteDialogMerchantName: ''
+      })
+      wx.showToast({ title: '评价已删除', icon: 'none' })
+    } catch (error) {
+      logger.error('删除评价失败', error, 'Reviews.deleteReview')
+      this.setData({
+        reviews: pendingReviews.map((review) => (
+          review.id === id ? { ...review, deleting: false } : review
+        )),
+        deleteDialogSubmitting: false
+      })
+      wx.showToast({ title: getErrorUserMessage(error, '删除失败，请稍后重试'), icon: 'none' })
+    }
+  },
+
   onImagePreview(e: WechatMiniprogram.TouchEvent) {
     const { reviewId, imageIndex = 0 } = e.currentTarget.dataset as PreviewDataset
     if (!reviewId) return
@@ -162,5 +237,9 @@ Page({
 
   onGoHome() {
     Navigation.toTakeoutHome()
+  },
+
+  onReviewUpdated() {
+    this.loadReviews(true)
   }
 })

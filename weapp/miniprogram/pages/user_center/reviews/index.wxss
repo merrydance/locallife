@@ -152,6 +152,7 @@
 }
 
 .card-footer {
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--spacer-sm);
   margin-top: var(--spacer-md);
@@ -160,8 +161,9 @@
 }
 
 .footer-actions {
-  flex-shrink: 0;
+  flex: 1;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: var(--spacer-xs);
 }
 
@@ -193,4 +195,10 @@
 
 .skeleton-item {
   margin-bottom: 0;
+}
+
+.delete-dialog-content {
+  font-size: var(--font-size-base);
+  color: var(--td-text-color-primary);
+  line-height: 1.6;
 }

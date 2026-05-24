@@ -425,6 +425,35 @@ func (q *Queries) UpdateMerchantReply(ctx context.Context, arg UpdateMerchantRep
 	return i, err
 }
 
+const updateReviewContent = `-- name: UpdateReviewContent :one
+UPDATE reviews
+SET content = $2
+WHERE id = $1
+RETURNING id, order_id, user_id, merchant_id, content, is_visible, merchant_reply, replied_at, created_at
+`
+
+type UpdateReviewContentParams struct {
+	ID      int64  `json:"id"`
+	Content string `json:"content"`
+}
+
+func (q *Queries) UpdateReviewContent(ctx context.Context, arg UpdateReviewContentParams) (Review, error) {
+	row := q.db.QueryRow(ctx, updateReviewContent, arg.ID, arg.Content)
+	var i Review
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.UserID,
+		&i.MerchantID,
+		&i.Content,
+		&i.IsVisible,
+		&i.MerchantReply,
+		&i.RepliedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const updateReviewVisibility = `-- name: UpdateReviewVisibility :one
 UPDATE reviews
 SET is_visible = $2

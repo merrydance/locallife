@@ -20932,6 +20932,36 @@ func (mr *MockStoreMockRecorder) UpdateReservationToPaid(ctx, id any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReservationToPaid", reflect.TypeOf((*MockStore)(nil).UpdateReservationToPaid), ctx, id)
 }
 
+// UpdateReviewContent mocks base method.
+func (m *MockStore) UpdateReviewContent(ctx context.Context, arg db.UpdateReviewContentParams) (db.Review, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateReviewContent", ctx, arg)
+	ret0, _ := ret[0].(db.Review)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateReviewContent indicates an expected call of UpdateReviewContent.
+func (mr *MockStoreMockRecorder) UpdateReviewContent(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReviewContent", reflect.TypeOf((*MockStore)(nil).UpdateReviewContent), ctx, arg)
+}
+
+// UpdateReviewTx mocks base method.
+func (m *MockStore) UpdateReviewTx(ctx context.Context, arg db.UpdateReviewTxParams) (db.UpdateReviewTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateReviewTx", ctx, arg)
+	ret0, _ := ret[0].(db.UpdateReviewTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateReviewTx indicates an expected call of UpdateReviewTx.
+func (mr *MockStoreMockRecorder) UpdateReviewTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReviewTx", reflect.TypeOf((*MockStore)(nil).UpdateReviewTx), ctx, arg)
+}
+
 // UpdateReviewVisibility mocks base method.
 func (m *MockStore) UpdateReviewVisibility(ctx context.Context, arg db.UpdateReviewVisibilityParams) (db.Review, error) {
 	m.ctrl.T.Helper()

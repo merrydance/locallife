@@ -26611,7 +26611,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "运营商删除违规评价，只能删除自己管辖区域商户的评价",
+                "description": "用户可删除自己创建的评价；运营商可删除自己管辖区域商户的评价。",
                 "consumes": [
                     "application/json"
                 ],
@@ -26619,9 +26619,9 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "评价管理-运营商"
+                    "评价管理"
                 ],
-                "summary": "删除评价（运营商）",
+                "summary": "删除评价",
                 "parameters": [
                     {
                         "type": "integer",
@@ -26651,7 +26651,7 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "只能删除管辖区域商户的评价",
+                        "description": "只能删除自己的评价或管辖区域商户的评价",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -26664,6 +26664,86 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "用户更新自己创建的评价内容和图片。内容会重新进行文本安全检测。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "评价管理"
+                ],
+                "summary": "更新本人评价",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "评价ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "评价更新信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.updateReviewRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "评价更新成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.reviewResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "只能更新自己的评价",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "评价不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "内容安全检测失败",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -42165,6 +42245,12 @@ const docTemplate = `{
                 "id": {
                     "type": "integer"
                 },
+                "image_asset_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
                 "image_urls": {
                     "type": "array",
                     "items": {
@@ -44854,6 +44940,26 @@ const docTemplate = `{
                 "time": {
                     "description": "HH:MM",
                     "type": "string"
+                }
+            }
+        },
+        "api.updateReviewRequest": {
+            "type": "object",
+            "required": [
+                "content"
+            ],
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "maxLength": 1000,
+                    "minLength": 1
+                },
+                "media_asset_ids": {
+                    "type": "array",
+                    "maxItems": 9,
+                    "items": {
+                        "type": "integer"
+                    }
                 }
             }
         },

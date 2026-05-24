@@ -1,4 +1,4 @@
-<custom-navbar title="发表评价" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="{{pageTitle}}" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <view class="review-create-wrap">
@@ -52,7 +52,7 @@
     bindtap="onSubmit"
     shape="round"
   >
-    发布评价
+    {{submitText}}
   </t-button>
   <view class="policy-tip">发布内容将经过系统安全审核</view>
 </view>

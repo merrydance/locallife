@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -25,6 +26,61 @@ func createRandomReview(t *testing.T, orderID, userID, merchantID int64) Review 
 	require.NotZero(t, review.ID)
 
 	return review
+}
+
+func createReviewMediaAsset(t *testing.T, userID int64) MediaAsset {
+	store, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+
+	asset := MediaAsset{}
+	objectKey := fmt.Sprintf("user/review/%d/%d.jpg", userID, time.Now().UnixNano())
+	checksum := fmt.Sprintf("%064d", time.Now().UnixNano())
+	bucketTypes := []string{"public", "public_bucket", "oss_public", "local"}
+	var lastErr error
+
+	for _, bucketType := range bucketTypes {
+		err := store.connPool.QueryRow(context.Background(), `
+			INSERT INTO media_assets (
+				object_key,
+				visibility,
+				media_category,
+				mime_type,
+				file_size,
+				checksum_sha256,
+				upload_status,
+				moderation_status,
+				uploaded_by,
+				source_client,
+				bucket_type
+			) VALUES (
+				$1, $2, $3, $4, $5, $6,
+				'confirmed', 'pending',
+				$7, $8, $9
+			)
+			RETURNING id, object_key, visibility, media_category, mime_type, file_size, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at
+		`, objectKey, "public", "review", "image/jpeg", int64(1024), checksum, userID, "test", bucketType).Scan(
+			&asset.ID,
+			&asset.ObjectKey,
+			&asset.Visibility,
+			&asset.MediaCategory,
+			&asset.MimeType,
+			&asset.FileSize,
+			&asset.ChecksumSha256,
+			&asset.UploadStatus,
+			&asset.ModerationStatus,
+			&asset.UploadedBy,
+			&asset.SourceClient,
+			&asset.CreatedAt,
+			&asset.UpdatedAt,
+		)
+		if err == nil {
+			return asset
+		}
+		lastErr = err
+	}
+
+	require.NoError(t, lastErr)
+	return asset
 }
 
 // ==================== CreateReview Tests ====================
@@ -325,6 +381,66 @@ func TestUpdateMerchantReply(t *testing.T) {
 	require.True(t, updated.MerchantReply.Valid)
 	require.Equal(t, reply.String, updated.MerchantReply.String)
 	require.True(t, updated.RepliedAt.Valid)
+}
+
+func TestUpdateReviewContent(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+
+	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
+	review := createRandomReview(t, order.ID, user.ID, merchant.ID)
+
+	updated, err := testStore.UpdateReviewContent(context.Background(), UpdateReviewContentParams{
+		ID:      review.ID,
+		Content: "更新后的评价内容",
+	})
+	require.NoError(t, err)
+	require.Equal(t, review.ID, updated.ID)
+	require.Equal(t, review.UserID, updated.UserID)
+	require.Equal(t, review.MerchantID, updated.MerchantID)
+	require.Equal(t, "更新后的评价内容", updated.Content)
+	require.Equal(t, review.IsVisible, updated.IsVisible)
+	require.False(t, updated.MerchantReply.Valid)
+}
+
+func TestUpdateReviewTx_ReplacesContentAndImages(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+
+	order := createCompletedOrderForStats(t, user.ID, merchant.ID, 10000, "takeout", time.Now())
+	review := createRandomReview(t, order.ID, user.ID, merchant.ID)
+	oldAsset := createReviewMediaAsset(t, user.ID)
+	newAssetOne := createReviewMediaAsset(t, user.ID)
+	newAssetTwo := createReviewMediaAsset(t, user.ID)
+
+	_, err := testStore.AddReviewImage(context.Background(), AddReviewImageParams{
+		ReviewID:     review.ID,
+		MediaAssetID: oldAsset.ID,
+		SortOrder:    0,
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.UpdateReviewTx(context.Background(), UpdateReviewTxParams{
+		ID:            review.ID,
+		Content:       "更新后的评价和图片",
+		MediaAssetIDs: []int64{newAssetOne.ID, newAssetTwo.ID},
+	})
+	require.NoError(t, err)
+	require.Equal(t, review.ID, result.Review.ID)
+	require.Equal(t, "更新后的评价和图片", result.Review.Content)
+	require.Len(t, result.Images, 2)
+	require.Equal(t, newAssetOne.ID, result.Images[0].MediaAssetID)
+	require.Equal(t, int32(0), result.Images[0].SortOrder)
+	require.Equal(t, newAssetTwo.ID, result.Images[1].MediaAssetID)
+	require.Equal(t, int32(1), result.Images[1].SortOrder)
+
+	images, err := testStore.ListReviewImages(context.Background(), review.ID)
+	require.NoError(t, err)
+	require.Len(t, images, 2)
+	require.Equal(t, newAssetOne.ID, images[0].MediaAssetID)
+	require.Equal(t, newAssetTwo.ID, images[1].MediaAssetID)
 }
 
 func TestUpdateReviewVisibility(t *testing.T) {

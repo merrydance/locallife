@@ -121,10 +121,32 @@ function main() {
 
   assert(!/\bt-rate\b|item\.rating|r\.rating/.test(wxml + ts + json), 'user reviews page must not render unsupported rating fields')
   assert(!/item\.tags|r\.tags|tag-row/.test(wxml + ts + wxss), 'user reviews page must not render unsupported review tags')
-  assert(!/deleteReview|updateReview|removeReview|DELETE|PATCH|PUT/.test(ts + reviewApi), 'consumer review management must not expose unsupported edit/delete review API calls')
+  assert(
+    /static async updateReview\(id: number/.test(reviewApi) &&
+      /method:\s*'PATCH'/.test(reviewApi) &&
+      /static async deleteReview\(id: number/.test(reviewApi) &&
+      /method:\s*'DELETE'/.test(reviewApi),
+    'review API must expose backend-supported owner update/delete methods'
+  )
+  assert(
+    /bindtap="onEditReview"/.test(wxml) &&
+      /bindtap="onDeleteReview"/.test(wxml) &&
+      /onEditReview/.test(ts) &&
+      /onConfirmDeleteReview/.test(ts),
+    'user reviews page must expose edit/delete management actions for owner reviews'
+  )
+  assert(
+    /<t-dialog[\s\S]*confirm-btn="\{\{ \{ content: '确认删除', theme: 'danger', loading: deleteDialogSubmitting \} \}\}"/.test(wxml) &&
+      /ReviewService\.deleteReview\(id\)/.test(ts),
+    'delete review must use a TDesign confirmation dialog and call the real backend delete API'
+  )
+  assert(
+    /\/pages\/user_center\/reviews\/create\/index\?reviewId=\$\{id\}/.test(ts),
+    'edit review action must navigate to the review editor with reviewId'
+  )
 
   assert(
-    json.includes('"t-image"') && json.includes('"t-button"') && json.includes('"t-tag"'),
+    json.includes('"t-image"') && json.includes('"t-button"') && json.includes('"t-tag"') && json.includes('"t-dialog"'),
     'user reviews page must declare the TDesign components it renders'
   )
 

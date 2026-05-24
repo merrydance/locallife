@@ -38,7 +38,7 @@ type reviewResponse struct {
 	MerchantReply       *string  `json:"merchant_reply,omitempty"`
 	RepliedAt           *string  `json:"replied_at,omitempty"`
 	CreatedAt           string   `json:"created_at"`
-	ImageAssetIDs       []int64  `json:"-"`
+	ImageAssetIDs       []int64  `json:"image_asset_ids,omitempty"`
 	ImageURLs           []string `json:"image_urls,omitempty"`
 }
 
@@ -146,6 +146,15 @@ func (server *Server) createReview(ctx *gin.Context) {
 		return
 	}
 
+	if err := server.validateReviewImageAssets(ctx, req.MediaAssetIDs, authPayload.UserID); err != nil {
+		if errors.Is(err, errInvalidReviewImageAsset) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errInvalidReviewImageAsset))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
 	// 5. 创建评价
 	review, err := server.store.CreateReview(ctx, db.CreateReviewParams{
 		OrderID:    req.OrderID,
@@ -217,7 +226,13 @@ func (server *Server) getReview(ctx *gin.Context) {
 	}
 
 	resp := newReviewResponse(review)
-	server.enrichSingleReviewImages(ctx, &resp)
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	if review.UserID == authPayload.UserID {
+		server.enrichOwnerSingleReviewImages(ctx, &resp, authPayload.UserID)
+	} else {
+		server.enrichSingleReviewImages(ctx, &resp)
+		resp.ImageAssetIDs = nil
+	}
 	ctx.JSON(http.StatusOK, resp)
 }
 
@@ -242,7 +257,13 @@ func (server *Server) getReviewByOrder(ctx *gin.Context) {
 	}
 
 	resp := newReviewResponse(review)
-	server.enrichSingleReviewImages(ctx, &resp)
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	if review.UserID == authPayload.UserID {
+		server.enrichOwnerSingleReviewImages(ctx, &resp, authPayload.UserID)
+	} else {
+		server.enrichSingleReviewImages(ctx, &resp)
+		resp.ImageAssetIDs = nil
+	}
 	ctx.JSON(http.StatusOK, resp)
 }
 
@@ -533,17 +554,17 @@ func (server *Server) replyReview(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, resp)
 }
 
-// deleteReview 删除评价（运营商）
-// @Summary 删除评价（运营商）
-// @Description 运营商删除违规评价，只能删除自己管辖区域商户的评价
-// @Tags 评价管理-运营商
+// deleteReview 删除评价
+// @Summary 删除评价
+// @Description 用户可删除自己创建的评价；运营商可删除自己管辖区域商户的评价。
+// @Tags 评价管理
 // @Accept json
 // @Produce json
 // @Param id path int true "评价ID"
 // @Success 200 {object} successMessageResponse "删除成功"
 // @Failure 400 {object} ErrorResponse "无效的评价ID"
 // @Failure 401 {object} ErrorResponse "未授权"
-// @Failure 403 {object} ErrorResponse "只能删除管辖区域商户的评价"
+// @Failure 403 {object} ErrorResponse "只能删除自己的评价或管辖区域商户的评价"
 // @Failure 404 {object} ErrorResponse "评价不存在"
 // @Failure 500 {object} ErrorResponse "内部错误"
 // @Router /v1/reviews/{id} [delete]
@@ -565,6 +586,26 @@ func (server *Server) deleteReview(ctx *gin.Context) {
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	if review.UserID == authPayload.UserID {
+		if err := server.store.DeleteReview(ctx, uri.ID); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		ctx.JSON(http.StatusOK, successMessage("review deleted successfully"))
+		return
+	}
+
+	hasOperatorRole, err := server.currentUserHasActiveRole(ctx, authPayload.UserID, RoleOperator)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if !hasOperatorRole {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you can only delete your own review")))
 		return
 	}
 
@@ -634,7 +675,6 @@ func (server *Server) enrichSingleReviewImages(ctx *gin.Context, resp *reviewRes
 	for i, img := range images {
 		assetIDs[i] = img.MediaAssetID
 	}
-	resp.ImageAssetIDs = assetIDs
 	urls := server.batchPublicImageURLs(ctx, assetIDs, media.VariantOriginal)
 	for _, id := range assetIDs {
 		if u, ok := urls[id]; ok {
@@ -643,20 +683,33 @@ func (server *Server) enrichSingleReviewImages(ctx *gin.Context, resp *reviewRes
 	}
 }
 
+func (server *Server) enrichOwnerSingleReviewImages(ctx *gin.Context, resp *reviewResponse, uploaderID int64) {
+	images, err := server.store.ListReviewImages(ctx, resp.ID)
+	if err != nil || len(images) == 0 {
+		return
+	}
+	assetIDs := make([]int64, len(images))
+	for i, img := range images {
+		assetIDs[i] = img.MediaAssetID
+	}
+	resp.ImageAssetIDs = assetIDs
+	resp.ImageURLs = server.orderedOwnerReviewImageURLs(ctx, assetIDs, uploaderID)
+}
+
 // enrichReviewListImages batch-loads and enriches image URLs for a slice of reviewResponse.
 func (server *Server) enrichReviewListImages(ctx *gin.Context, reviews []reviewResponse) {
-	server.enrichReviewListImagesWithResolver(ctx, reviews, func(assetIDs []int64) map[int64]string {
+	server.enrichReviewListImagesWithResolver(ctx, reviews, false, func(assetIDs []int64) map[int64]string {
 		return server.batchPublicImageURLs(ctx, assetIDs, media.VariantOriginal)
 	})
 }
 
 func (server *Server) enrichOwnerReviewListImages(ctx *gin.Context, reviews []reviewResponse, uploaderID int64) {
-	server.enrichReviewListImagesWithResolver(ctx, reviews, func(assetIDs []int64) map[int64]string {
+	server.enrichReviewListImagesWithResolver(ctx, reviews, true, func(assetIDs []int64) map[int64]string {
 		return server.batchOwnerVisibleReviewImageURLs(ctx, assetIDs, media.VariantOriginal, uploaderID)
 	})
 }
 
-func (server *Server) enrichReviewListImagesWithResolver(ctx *gin.Context, reviews []reviewResponse, resolveURLs func([]int64) map[int64]string) {
+func (server *Server) enrichReviewListImagesWithResolver(ctx *gin.Context, reviews []reviewResponse, exposeAssetIDs bool, resolveURLs func([]int64) map[int64]string) {
 	if len(reviews) == 0 {
 		return
 	}
@@ -684,7 +737,9 @@ func (server *Server) enrichReviewListImagesWithResolver(ctx *gin.Context, revie
 		if !ok {
 			continue
 		}
-		reviews[i].ImageAssetIDs = assetIDs
+		if exposeAssetIDs {
+			reviews[i].ImageAssetIDs = assetIDs
+		}
 		for _, id := range assetIDs {
 			if u, ok := urlMap[id]; ok {
 				reviews[i].ImageURLs = append(reviews[i].ImageURLs, u)

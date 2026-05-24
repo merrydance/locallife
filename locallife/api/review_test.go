@@ -132,6 +132,13 @@ func TestCreateReviewAPI(t *testing.T) {
 					Return(user, nil)
 
 				store.EXPECT().
+					ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{101})).
+					Times(1).
+					Return([]db.ListMediaAssetsByIDsRow{
+						reviewImageAssetRow(101, user.ID),
+					}, nil)
+
+				store.EXPECT().
 					CreateReview(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.Review{
@@ -158,6 +165,49 @@ func TestCreateReviewAPI(t *testing.T) {
 				var resp APIResponse
 				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 				require.Equal(t, "internal server error", resp.Message)
+			},
+		},
+		{
+			name: "MediaAssetNotOwned",
+			body: map[string]interface{}{
+				"order_id":        order.ID,
+				"content":         "Great food with someone else's photo!",
+				"media_asset_ids": []int64{101},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(order.ID)).
+					Times(1).
+					Return(order, nil)
+
+				store.EXPECT().
+					GetReviewByOrderID(gomock.Any(), gomock.Eq(order.ID)).
+					Times(1).
+					Return(db.Review{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					GetUser(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(user, nil)
+
+				asset := reviewImageAssetRow(101, user.ID+999)
+				store.EXPECT().
+					ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{101})).
+					Times(1).
+					Return([]db.ListMediaAssetsByIDsRow{asset}, nil)
+
+				store.EXPECT().
+					CreateReview(gomock.Any(), gomock.Any()).
+					Times(0)
+				store.EXPECT().
+					AddReviewImage(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 		{
@@ -283,9 +333,9 @@ func TestCreateReviewAPI(t *testing.T) {
 					MsgSecCheck(gomock.Any(), gomock.Eq(user.WechatOpenid), gomock.Eq(2), gomock.Eq("Great food and service!")).
 					Times(1).
 					Return(nil)
-			case "AddReviewImageFailure":
+			case "AddReviewImageFailure", "MediaAssetNotOwned":
 				wechatClient.EXPECT().
-					MsgSecCheck(gomock.Any(), gomock.Eq(user.WechatOpenid), gomock.Eq(2), gomock.Eq("Great food with photos!")).
+					MsgSecCheck(gomock.Any(), gomock.Eq(user.WechatOpenid), gomock.Eq(2), gomock.Eq(tc.body["content"].(string))).
 					Times(1).
 					Return(nil)
 			}
@@ -599,9 +649,201 @@ func TestReplyReviewAPI(t *testing.T) {
 	}
 }
 
+func TestUpdateOwnReviewAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	otherUser, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	review := randomReview(user.ID, merchant.ID)
+	updatedReview := review
+	updatedReview.Content = "Updated review with fresh photos"
+
+	testCases := []struct {
+		name          string
+		authUserID    int64
+		reviewID      int64
+		body          map[string]interface{}
+		buildStubs    func(store *mockdb.MockStore)
+		buildWechat   func(ctrl *gomock.Controller) *mockwechat.MockWechatClient
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:       "OK",
+			authUserID: user.ID,
+			reviewID:   review.ID,
+			body: map[string]interface{}{
+				"content":         "Updated review with fresh photos",
+				"media_asset_ids": []int64{101, 102},
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetReview(gomock.Any(), gomock.Eq(review.ID)).
+					Times(1).
+					Return(review, nil)
+				store.EXPECT().
+					GetUser(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(user, nil)
+				store.EXPECT().
+					ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{101, 102})).
+					Times(1).
+					Return([]db.ListMediaAssetsByIDsRow{
+						reviewImageAssetRow(101, user.ID),
+						reviewImageAssetRow(102, user.ID),
+					}, nil)
+				store.EXPECT().
+					UpdateReviewTx(gomock.Any(), gomock.Eq(db.UpdateReviewTxParams{
+						ID:            review.ID,
+						Content:       "Updated review with fresh photos",
+						MediaAssetIDs: []int64{101, 102},
+					})).
+					Times(1).
+					Return(db.UpdateReviewTxResult{
+						Review: updatedReview,
+						Images: []db.ReviewImage{
+							{ReviewID: review.ID, MediaAssetID: 101, SortOrder: 0},
+							{ReviewID: review.ID, MediaAssetID: 102, SortOrder: 1},
+						},
+					}, nil)
+				store.EXPECT().
+					ListMediaAssetsByIDs(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.ListMediaAssetsByIDsRow{
+						{
+							ID:               101,
+							ObjectKey:        "reviews/101.jpg",
+							Visibility:       "public",
+							MediaCategory:    "review",
+							ModerationStatus: "pending",
+							UploadedBy:       user.ID,
+						},
+						{
+							ID:               102,
+							ObjectKey:        "reviews/102.jpg",
+							Visibility:       "public",
+							MediaCategory:    "review",
+							ModerationStatus: "pending",
+							UploadedBy:       user.ID,
+						},
+					}, nil)
+			},
+			buildWechat: func(ctrl *gomock.Controller) *mockwechat.MockWechatClient {
+				wechatClient := mockwechat.NewMockWechatClient(ctrl)
+				wechatClient.EXPECT().
+					MsgSecCheck(gomock.Any(), gomock.Eq(user.WechatOpenid), gomock.Eq(2), gomock.Eq("Updated review with fresh photos")).
+					Times(1).
+					Return(nil)
+				return wechatClient
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response reviewResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, updatedReview.Content, response.Content)
+				require.Equal(t, []int64{101, 102}, response.ImageAssetIDs)
+				require.Len(t, response.ImageURLs, 2)
+			},
+		},
+		{
+			name:       "MediaAssetWrongCategory",
+			authUserID: user.ID,
+			reviewID:   review.ID,
+			body: map[string]interface{}{
+				"content":         "Updated review with fresh photos",
+				"media_asset_ids": []int64{101},
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetReview(gomock.Any(), gomock.Eq(review.ID)).
+					Times(1).
+					Return(review, nil)
+				store.EXPECT().
+					GetUser(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(user, nil)
+				asset := reviewImageAssetRow(101, user.ID)
+				asset.MediaCategory = "dish"
+				store.EXPECT().
+					ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{101})).
+					Times(1).
+					Return([]db.ListMediaAssetsByIDsRow{asset}, nil)
+				store.EXPECT().
+					UpdateReviewTx(gomock.Any(), gomock.Any()).
+					Times(0)
+				store.EXPECT().
+					UpdateReviewContent(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			buildWechat: func(ctrl *gomock.Controller) *mockwechat.MockWechatClient {
+				wechatClient := mockwechat.NewMockWechatClient(ctrl)
+				wechatClient.EXPECT().
+					MsgSecCheck(gomock.Any(), gomock.Eq(user.WechatOpenid), gomock.Eq(2), gomock.Eq("Updated review with fresh photos")).
+					Times(1).
+					Return(nil)
+				return wechatClient
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:       "NotOwner",
+			authUserID: otherUser.ID,
+			reviewID:   review.ID,
+			body: map[string]interface{}{
+				"content": "Trying to edit someone else's review",
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetReview(gomock.Any(), gomock.Eq(review.ID)).
+					Times(1).
+					Return(review, nil)
+				store.EXPECT().
+					UpdateReviewTx(gomock.Any(), gomock.Any()).
+					Times(0)
+				store.EXPECT().
+					UpdateReviewContent(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			buildWechat: func(ctrl *gomock.Controller) *mockwechat.MockWechatClient {
+				return mockwechat.NewMockWechatClient(ctrl)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+			wechatClient := tc.buildWechat(ctrl)
+			server := newTestServerWithWechat(t, store, wechatClient)
+			recorder := httptest.NewRecorder()
+
+			data, err := json.Marshal(tc.body)
+			require.NoError(t, err)
+
+			url := fmt.Sprintf("/v1/reviews/%d", tc.reviewID)
+			request, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(data))
+			require.NoError(t, err)
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, tc.authUserID, time.Minute)
+
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
 func TestDeleteReviewAPI(t *testing.T) {
 	operatorUser, _ := randomUser(t)
 	user, _ := randomUser(t)
+	otherUser, _ := randomUser(t)
 	regionID := int64(1)
 
 	// 创建带有 RegionID 的商户
@@ -636,7 +878,7 @@ func TestDeleteReviewAPI(t *testing.T) {
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
-			name:     "OK",
+			name:     "OperatorOK",
 			reviewID: review.ID,
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, operatorUser.ID, time.Minute)
@@ -669,26 +911,42 @@ func TestDeleteReviewAPI(t *testing.T) {
 			},
 		},
 		{
-			name:     "NotOperator",
+			name:     "OwnerOK",
 			reviewID: review.ID,
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// Mock for CasbinRoleMiddleware - 用户没有 operator 角色
 				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
+					GetReview(gomock.Any(), gomock.Eq(review.ID)).
 					Times(1).
-					Return([]db.UserRole{{UserID: user.ID, Role: "customer", Status: "active"}}, nil)
-
-				// 以下 mock 不应该被调用
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), gomock.Any()).
-					Times(0)
+					Return(review, nil)
 
 				store.EXPECT().
-					GetReview(gomock.Any(), gomock.Any()).
-					Times(0)
+					DeleteReview(gomock.Any(), gomock.Eq(review.ID)).
+					Times(1).
+					Return(nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name:     "NotOwnerOrOperator",
+			reviewID: review.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, otherUser.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetReview(gomock.Any(), gomock.Eq(review.ID)).
+					Times(1).
+					Return(review, nil)
+
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), otherUser.ID).
+					Times(1).
+					Return([]db.UserRole{{UserID: otherUser.ID, Role: RoleCustomer, Status: "active"}}, nil)
 
 				store.EXPECT().
 					DeleteReview(gomock.Any(), gomock.Any()).
@@ -738,18 +996,6 @@ func TestDeleteReviewAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, operatorUser.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// Mock for CasbinRoleMiddleware
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), operatorUser.ID).
-					Times(1).
-					Return([]db.UserRole{{UserID: operatorUser.ID, Role: "operator", Status: "active", RelatedEntityID: pgtype.Int8{Int64: regionID, Valid: true}}}, nil)
-
-				// Mock for LoadOperatorMiddleware
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), gomock.Eq(operatorUser.ID)).
-					Times(1).
-					Return(operator, nil)
-
 				// Mock GetReview - not found
 				store.EXPECT().
 					GetReview(gomock.Any(), gomock.Eq(int64(99999))).
@@ -800,6 +1046,18 @@ func randomReview(userID, merchantID int64) db.Review {
 		Content:    "Great food and service!",
 		IsVisible:  true,
 		CreatedAt:  time.Now(),
+	}
+}
+
+func reviewImageAssetRow(id int64, uploadedBy int64) db.ListMediaAssetsByIDsRow {
+	return db.ListMediaAssetsByIDsRow{
+		ID:               id,
+		ObjectKey:        fmt.Sprintf("user/review/%d/photo.jpg", id),
+		Visibility:       "public",
+		MediaCategory:    "review",
+		UploadStatus:     "confirmed",
+		ModerationStatus: "pending",
+		UploadedBy:       uploadedBy,
 	}
 }
 
