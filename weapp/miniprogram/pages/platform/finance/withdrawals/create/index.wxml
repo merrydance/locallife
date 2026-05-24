@@ -14,6 +14,7 @@
     <t-cell-group>
       <t-cell title="平台账户余额" note="{{balanceView.availableAmountText}}" />
       <t-cell title="最低提现金额" note="{{balanceView.minWithdrawAmountText}}" />
+      <t-cell title="单笔最高提现" note="{{balanceView.maxWithdrawAmountText}}" />
       <t-cell wx:if="{{!balanceView.canSubmit}}" title="暂不能提现" note="{{balanceView.disabledReason}}" />
       <t-input
         label="提现金额"

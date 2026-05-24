@@ -55,6 +55,7 @@
 
     <t-cell-group>
       <t-cell title="结算账户" note="用于接收分账和提现到账" arrow bind:tap="onOpenSettlementAccount" />
+      <t-cell title="佣金账单" note="查看每日佣金和区域订单收入" arrow bind:tap="onOpenBills" />
       <t-cell title="提现" note="查看可提现余额和提现记录" arrow bind:tap="onOpenWithdrawals" />
     </t-cell-group>
 

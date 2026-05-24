@@ -94,16 +94,7 @@ export interface OperatorCommissionResponse {
         total_orders: number
     }
     total: number
-    id?: number
-    operator_id?: number
-    order_id?: number
-    merchant_id?: number
-    commission_amount?: number
-    commission_rate?: number
-    order_amount?: number
-    settlement_status?: 'pending' | 'settled' | 'cancelled'
-    settlement_date?: string
-    created_at?: string
+    total_count: number
 }
 
 /** 佣金明细项 - 对齐 api.operatorCommissionItem */
@@ -119,8 +110,6 @@ export interface OperatorCommissionItem {
 export interface CommissionQueryParams extends Record<string, unknown> {
     start_date?: string
     end_date?: string
-    merchant_id?: number
-    settlement_status?: 'pending' | 'settled' | 'cancelled'
     page?: number
     limit?: number
 }
@@ -283,13 +272,7 @@ export class OperatorBasicManagementService {
      * 获取佣金明细列表
      * @param params 查询参数
      */
-    async getCommissionList(params: CommissionQueryParams): Promise<{
-        commissions: OperatorCommissionResponse[]
-        total: number
-        page: number
-        limit: number
-        has_more: boolean
-    }> {
+    async getCommissionList(params: CommissionQueryParams): Promise<OperatorCommissionResponse> {
         // 确保有日期参数，默认为最近30天
         const end = params.end_date || new Date().toISOString().split('T')[0]
         const start = params.start_date || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
@@ -624,35 +607,6 @@ export class OperatorBasicManagementAdapter {
             activeMerchantCount: 0,
             orderCount: data.current_month?.total_orders ?? 0,
             gmv: data.total?.total_gmv ?? 0
-        }
-    }
-
-    /**
-     * 适配佣金响应数据
-     */
-    static adaptCommissionResponse(data: OperatorCommissionResponse): {
-        id: number
-        operatorId: number
-        orderId: number
-        merchantId: number
-        commissionAmount: number
-        commissionRate: number
-        orderAmount: number
-        settlementStatus: 'pending' | 'settled' | 'cancelled'
-        settlementDate?: string
-        createdAt: string
-    } {
-        return {
-            id: data.id ?? 0,
-            operatorId: data.operator_id ?? 0,
-            orderId: data.order_id ?? 0,
-            merchantId: data.merchant_id ?? 0,
-            commissionAmount: data.commission_amount ?? 0,
-            commissionRate: data.commission_rate ?? 0,
-            orderAmount: data.order_amount ?? 0,
-            settlementStatus: data.settlement_status ?? 'pending',
-            settlementDate: data.settlement_date,
-            createdAt: data.created_at ?? ''
         }
     }
 

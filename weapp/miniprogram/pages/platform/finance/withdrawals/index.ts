@@ -7,12 +7,14 @@ import {
 import {
   buildBaofuWithdrawalBalanceView,
   buildBaofuWithdrawalItemView,
+  buildBaofuWithdrawalLoadedSummaryView,
   isBaofuWithdrawalRequestFulfilled,
   isBaofuWithdrawalRequestRejected,
   settleBaofuWithdrawalRequest,
   withdrawalBalanceUnavailableView,
   type BaofuWithdrawalBalanceView,
-  type BaofuWithdrawalItemView
+  type BaofuWithdrawalItemView,
+  type BaofuWithdrawalLoadedSummaryView
 } from '../../../../services/baofu-withdrawal-workflow'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
@@ -32,6 +34,7 @@ interface PlatformWithdrawalFetchResult {
 }
 
 const EMPTY_BALANCE_VIEW = buildBaofuWithdrawalBalanceView(null)
+const EMPTY_LOADED_SUMMARY_VIEW = buildBaofuWithdrawalLoadedSummaryView([])
 
 Page({
   data: {
@@ -44,6 +47,7 @@ Page({
     recordsErrorMessage: '',
     loadingWithdrawals: false,
     balanceView: EMPTY_BALANCE_VIEW as BaofuWithdrawalBalanceView,
+    loadedSummary: EMPTY_LOADED_SUMMARY_VIEW as BaofuWithdrawalLoadedSummaryView,
     rows: [] as BaofuWithdrawalItemView[],
     page: 1,
     totalPages: 0,
@@ -115,6 +119,7 @@ Page({
         recordsErrorMessage: result.recordsErrorMessage,
         loadingWithdrawals: false,
         balanceView,
+        loadedSummary: buildBaofuWithdrawalLoadedSummaryView(rows),
         rows,
         page: result.page,
         totalPages: result.totalPages,

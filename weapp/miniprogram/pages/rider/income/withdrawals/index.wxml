@@ -21,7 +21,7 @@
 
     <t-cell-group>
       <t-cell title="可提现收入" note="{{balanceView.availableAmountText}}" />
-      <t-cell title="提现处理中" note="{{balanceView.pendingAmountText}}" />
+      <t-cell title="账户在途提现" note="{{balanceView.pendingAmountText}}" />
       <t-cell wx:if="{{!balanceView.canSubmit}}" title="暂不能提现" note="{{balanceView.disabledReason}}" />
       <t-cell title="结算账户" note="{{balanceView.statusDesc || '结算账户已开通'}}" arrow url="/pages/rider/settlement-account/index" />
     </t-cell-group>

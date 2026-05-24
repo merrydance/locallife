@@ -70,6 +70,10 @@ Page({
     wx.navigateTo({ url: '/pages/operator/finance/settlement-account/index' })
   },
 
+  onOpenBills() {
+    wx.navigateTo({ url: '/pages/operator/finance/bills/index' })
+  },
+
   onOpenWithdrawals() {
     wx.navigateTo({ url: '/pages/operator/finance/withdrawals/index' })
   }

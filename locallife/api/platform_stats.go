@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 )
@@ -205,8 +206,8 @@ func (server *Server) getPlatformProfitSharingReconciliation(ctx *gin.Context) {
 	endDate = endDate.Add(24*time.Hour - time.Nanosecond)
 
 	rows, err := server.store.GetProfitSharingReconciliationSummary(ctx, db.GetProfitSharingReconciliationSummaryParams{
-		StartAt: startDate,
-		EndAt:   endDate,
+		StartAt: pgtype.Timestamptz{Time: startDate, Valid: true},
+		EndAt:   pgtype.Timestamptz{Time: endDate, Valid: true},
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -282,8 +283,8 @@ func (server *Server) getPlatformProfitSharingSlaSummary(ctx *gin.Context) {
 	endDate = endDate.Add(24*time.Hour - time.Nanosecond)
 
 	stats, err := server.store.GetProfitSharingSlaSummary(ctx, db.GetProfitSharingSlaSummaryParams{
-		StartAt: startDate,
-		EndAt:   endDate,
+		StartAt: pgtype.Timestamptz{Time: startDate, Valid: true},
+		EndAt:   pgtype.Timestamptz{Time: endDate, Valid: true},
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

@@ -116,6 +116,65 @@ func TestProfitSharingListQueriesUseIDTieBreaker(t *testing.T) {
 	require.Equal(t, firstOrder.ID, financeOrders[1].ID)
 }
 
+func TestProfitSharingReconciliationSummaryUsesFinishedDateForFinishedOrders(t *testing.T) {
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	operator := createRandomOperatorForRegion(t, merchant.RegionID)
+	rangeStart := time.Date(2096, time.Month(util.RandomInt(1, 12)), int(util.RandomInt(1, 20)), int(util.RandomInt(1, 20)), 0, 0, 0, time.UTC)
+	rangeEnd := rangeStart.Add(time.Hour - time.Nanosecond)
+
+	createOrder := func(outOrderNo string, amount int64, createdAt time.Time, finishedAt time.Time) {
+		paymentOrder := createRandomPaymentOrder(t, createRandomUser(t).ID)
+		profitSharingOrder, err := testStore.CreateProfitSharingOrder(context.Background(), CreateProfitSharingOrderParams{
+			PaymentOrderID:      paymentOrder.ID,
+			MerchantID:          merchant.ID,
+			OperatorID:          pgtype.Int8{Int64: operator.ID, Valid: true},
+			OrderSource:         "takeout",
+			TotalAmount:         amount,
+			DeliveryFee:         500,
+			RiderID:             pgtype.Int8{Valid: false},
+			RiderAmount:         0,
+			DistributableAmount: amount - 500,
+			PlatformRate:        2,
+			OperatorRate:        3,
+			PlatformCommission:  amount / 50,
+			OperatorCommission:  amount / 25,
+			MerchantAmount:      amount - amount/50 - amount/25,
+			OutOrderNo:          outOrderNo,
+			Status:              ProfitSharingOrderStatusFinished,
+		})
+		require.NoError(t, err)
+
+		_, err = testStore.(*SQLStore).connPool.Exec(context.Background(),
+			`UPDATE profit_sharing_orders SET created_at = $1, finished_at = $2 WHERE id = $3`,
+			createdAt,
+			finishedAt,
+			profitSharingOrder.ID,
+		)
+		require.NoError(t, err)
+	}
+
+	createOrder("pso_finished_in_range_"+util.RandomString(16), 31000, rangeStart.AddDate(0, 0, -2), rangeStart.Add(30*time.Minute))
+	createOrder("pso_created_in_range_finished_later_"+util.RandomString(16), 17000, rangeStart.Add(30*time.Minute), rangeStart.AddDate(0, 0, 1))
+
+	rows, err := testStore.GetProfitSharingReconciliationSummary(context.Background(), GetProfitSharingReconciliationSummaryParams{
+		StartAt: pgtype.Timestamptz{Time: rangeStart, Valid: true},
+		EndAt:   pgtype.Timestamptz{Time: rangeEnd, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, ProfitSharingOrderStatusFinished, rows[0].Status)
+	require.Equal(t, int64(1), rows[0].TotalOrders)
+	require.Equal(t, int64(31000), rows[0].TotalAmount)
+
+	sla, err := testStore.GetProfitSharingSlaSummary(context.Background(), GetProfitSharingSlaSummaryParams{
+		StartAt: pgtype.Timestamptz{Time: rangeStart, Valid: true},
+		EndAt:   pgtype.Timestamptz{Time: rangeEnd, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), sla.TotalOrders)
+	require.Equal(t, int64(1), sla.FinishedOrders)
+}
+
 func TestCreateProfitSharingOrderPersistsBaofuFields(t *testing.T) {
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
 	operator := createRandomOperatorForRegion(t, merchant.RegionID)

@@ -886,14 +886,15 @@ SELECT
     COALESCE(SUM(platform_commission), 0)::bigint as total_platform_commission,
     COALESCE(SUM(operator_commission), 0)::bigint as total_operator_commission
 FROM profit_sharing_orders
-WHERE created_at >= $1 AND created_at <= $2
+WHERE COALESCE(finished_at, created_at) >= $1
+  AND COALESCE(finished_at, created_at) <= $2
 GROUP BY status
 ORDER BY status
 `
 
 type GetProfitSharingReconciliationSummaryParams struct {
-	StartAt time.Time `json:"start_at"`
-	EndAt   time.Time `json:"end_at"`
+	StartAt pgtype.Timestamptz `json:"start_at"`
+	EndAt   pgtype.Timestamptz `json:"end_at"`
 }
 
 type GetProfitSharingReconciliationSummaryRow struct {
@@ -939,12 +940,13 @@ SELECT
   COALESCE(AVG(EXTRACT(EPOCH FROM (finished_at - created_at))) FILTER (WHERE status = 'finished' AND finished_at IS NOT NULL), 0)::bigint as avg_finish_seconds,
   COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (finished_at - created_at))) FILTER (WHERE status = 'finished' AND finished_at IS NOT NULL), 0)::bigint as p95_finish_seconds
 FROM profit_sharing_orders
-WHERE created_at >= $1 AND created_at <= $2
+WHERE COALESCE(finished_at, created_at) >= $1
+  AND COALESCE(finished_at, created_at) <= $2
 `
 
 type GetProfitSharingSlaSummaryParams struct {
-	StartAt time.Time `json:"start_at"`
-	EndAt   time.Time `json:"end_at"`
+	StartAt pgtype.Timestamptz `json:"start_at"`
+	EndAt   pgtype.Timestamptz `json:"end_at"`
 }
 
 type GetProfitSharingSlaSummaryRow struct {

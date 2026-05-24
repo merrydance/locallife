@@ -1,0 +1,110 @@
+<custom-navbar title="对账账单" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: var(--spacer-lg);">
+  <view wx:if="{{initialLoading}}" class="page-content">
+    <t-loading theme="circular" size="40rpx" text="加载对账账单中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="page-content">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '对账账单加载失败，请重试'}}" />
+    <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
+  </view>
+
+  <view wx:else class="page-content">
+    <t-cell-group wx:if="{{refreshErrorMessage}}">
+      <t-cell title="对账同步失败" note="{{refreshErrorMessage}}">
+        <view slot="right-icon">
+          <t-button size="extra-small" theme="primary" variant="text" loading="{{loadingReconciliation}}" bind:tap="onRetry">重试</t-button>
+        </view>
+      </t-cell>
+    </t-cell-group>
+
+    <t-cell-group>
+      <t-cell title="对账区间" note="{{view.rangeLabel}}" arrow bind:tap="onOpenRangePicker" />
+    </t-cell-group>
+
+    <view class="quick-range-row">
+      <t-button
+        wx:for="{{quickRanges}}"
+        wx:key="id"
+        size="small"
+        theme="{{item.active ? 'primary' : 'default'}}"
+        variant="{{item.active ? 'base' : 'outline'}}"
+        data-range="{{item.id}}"
+        disabled="{{loadingReconciliation}}"
+        bind:tap="onUseQuickRange"
+      >{{item.label}}</t-button>
+    </view>
+
+    <t-cell-group>
+      <t-cell title="平台佣金汇总" note="{{view.summary.platformCommissionText}}" />
+      <t-cell title="运营商佣金汇总" note="{{view.summary.operatorCommissionText}}" />
+      <t-cell title="区间提现成功" note="{{view.summary.withdrawSucceededText}}" />
+      <t-cell title="区间提现申请处理中" note="{{view.summary.withdrawProcessingText}}" />
+      <t-cell title="当前可提现余额" note="{{view.summary.currentAvailableAmountText}}" />
+      <t-cell title="当前账户在途提现" note="{{view.summary.currentPendingAmountText}}" />
+      <t-cell title="余额状态" note="{{view.summary.balanceStatusText}}" />
+    </t-cell-group>
+
+    <view class="section-title">区间汇总</view>
+    <t-cell-group>
+      <t-cell title="分账订单" note="{{view.summary.totalOrdersText}}" />
+      <t-cell title="分账订单金额" note="{{view.summary.totalProfitSharingAmountText}}" />
+      <t-cell title="支付金额" note="{{view.summary.paidAmountText}}" />
+      <t-cell title="商户入账" note="{{view.summary.merchantAmountText}}" />
+      <t-cell title="骑手入账" note="{{view.summary.riderAmountText}}" />
+      <t-cell title="异常项" note="{{view.summary.exceptionCountText}}" />
+    </t-cell-group>
+
+    <view class="metric-grid">
+      <view wx:for="{{view.metrics}}" wx:key="label" class="metric-item">
+        <text class="metric-label">{{item.label}}</text>
+        <text class="metric-value">{{item.value}}</text>
+      </view>
+    </view>
+
+    <view class="section-title">分账状态</view>
+    <t-empty wx:if="{{!view.statusRows.length}}" icon="info-circle" description="当前区间暂无分账对账数据" />
+    <t-cell-group wx:else>
+      <t-cell
+        wx:for="{{view.statusRows}}"
+        wx:key="id"
+        title="{{item.label}}"
+        description="平台佣金 {{item.platformCommissionText}} · 运营商佣金 {{item.operatorCommissionText}}"
+        note="{{item.totalAmountText}}"
+      >
+        <view slot="right-icon">
+          <t-tag theme="{{item.theme}}" size="small">{{item.totalOrdersText}}</t-tag>
+        </view>
+      </t-cell>
+    </t-cell-group>
+
+    <view class="section-title">宝付日对账</view>
+    <t-empty wx:if="{{!view.dailyRows.length}}" icon="info-circle" description="当前区间暂无宝付日对账数据" />
+    <t-cell-group wx:else>
+      <t-cell
+        wx:for="{{view.dailyRows}}"
+        wx:key="id"
+        title="{{item.date}}"
+        description="商户 {{item.merchantAmountText}} · 骑手 {{item.riderAmountText}}"
+        note="支付 {{item.paidAmountText}} · 提现成功 {{item.withdrawSucceededText}}"
+      >
+        <view slot="right-icon">
+          <t-tag theme="warning" size="small">{{item.exceptionCountText}}</t-tag>
+        </view>
+      </t-cell>
+    </t-cell-group>
+  </view>
+
+  <t-calendar
+    title="选择对账区间"
+    type="range"
+    visible="{{rangePickerVisible}}"
+    value="{{rangePickerValue}}"
+    minDate="{{rangePickerMinDate}}"
+    maxDate="{{rangePickerMaxDate}}"
+    confirmBtn="确定"
+    bind:confirm="onConfirmRangePicker"
+    bind:close="onCancelRangePicker"
+  />
+</view>

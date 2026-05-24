@@ -103,6 +103,13 @@ Page({
                 url: '/pages/platform/finance/withdrawals/index'
             },
             {
+                id: 'reconciliation',
+                title: '对账账单',
+                desc: '查看分账、宝付日对账和异常计数',
+                icon: 'chart-bar',
+                url: '/pages/platform/finance/reconciliation/index'
+            },
+            {
                 id: 'groups',
                 title: '集团申请审核',
                 desc: '审核集团入驻申请',

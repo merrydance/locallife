@@ -256,6 +256,48 @@ export interface PlatformDailyStatRow {
     active_merchants: number          // 活跃商户数
 }
 
+/** 分账对账状态汇总行 - 对齐 api.platformProfitSharingReconciliationRow */
+export interface PlatformProfitSharingReconciliationRow {
+    status: string
+    total_orders: number
+    total_amount: number
+    total_platform_commission: number
+    total_operator_commission: number
+}
+
+/** 分账 SLA 汇总 - 对齐 api.platformProfitSharingSlaSummaryResponse */
+export interface PlatformProfitSharingSlaResponse {
+    total_orders: number
+    finished_orders: number
+    failed_orders: number
+    pending_orders: number
+    avg_finish_seconds: number
+    p95_finish_seconds: number
+}
+
+/** 宝付每日对账汇总行 - 对齐 api.platformBaofuDailyReconciliationRow */
+export interface PlatformBaofuDailyReconciliationRow {
+    date: string
+    provider: string
+    channel: string
+    paid_amount: number
+    payment_fee: number
+    provider_payment_fee: number
+    merchant_payment_fee: number
+    rider_payment_fee: number
+    platform_payment_fee_income: number
+    platform_net_payment_fee_margin: number
+    merchant_amount: number
+    rider_amount: number
+    platform_commission: number
+    operator_commission: number
+    withdraw_succeeded_amount: number
+    withdraw_processing_amount: number
+    unapplied_fact_count: number
+    unknown_command_count: number
+    fee_ledger_mismatch_count: number
+}
+
 /** 分类统计行 - 对齐 api.categoryStatRow */
 export interface CategoryStatRow {
     category_name: string             // 分类名称
@@ -380,6 +422,30 @@ export class PlatformDashboardService {
     async getRegionComparison(params: RegionComparisonParams): Promise<RegionComparisonRow[]> {
         return request({
             url: '/v1/platform/stats/regions/compare',
+            method: 'GET',
+            data: params
+        })
+    }
+
+    async getProfitSharingReconciliation(params: PlatformOverviewParams): Promise<PlatformProfitSharingReconciliationRow[]> {
+        return request({
+            url: '/v1/platform/stats/profit-sharing/reconciliation',
+            method: 'GET',
+            data: params
+        })
+    }
+
+    async getProfitSharingSla(params: PlatformOverviewParams): Promise<PlatformProfitSharingSlaResponse> {
+        return request({
+            url: '/v1/platform/stats/profit-sharing/sla',
+            method: 'GET',
+            data: params
+        })
+    }
+
+    async getBaofuDailyReconciliation(params: PlatformOverviewParams): Promise<PlatformBaofuDailyReconciliationRow[]> {
+        return request({
+            url: '/v1/platform/stats/baofu/reconciliation/daily',
             method: 'GET',
             data: params
         })

@@ -1,0 +1,44 @@
+.page-container {
+  min-height: 100vh;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacer-sm);
+}
+
+.quick-range-row {
+  display: flex;
+  gap: var(--spacer-sm);
+  flex-wrap: wrap;
+}
+
+.metric-item {
+  min-height: 112rpx;
+  padding: var(--spacer-sm);
+  border-radius: var(--radius-sm);
+  background: var(--td-bg-color-container);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.metric-label {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+}
+
+.metric-value {
+  margin-top: var(--spacer-xs);
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.section-title {
+  font-size: var(--font-size-heading);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}

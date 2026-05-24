@@ -209,7 +209,8 @@ SELECT
     COALESCE(SUM(platform_commission), 0)::bigint as total_platform_commission,
     COALESCE(SUM(operator_commission), 0)::bigint as total_operator_commission
 FROM profit_sharing_orders
-WHERE created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at')
+WHERE COALESCE(finished_at, created_at) >= sqlc.arg('start_at')
+  AND COALESCE(finished_at, created_at) <= sqlc.arg('end_at')
 GROUP BY status
 ORDER BY status;
 
@@ -222,7 +223,8 @@ SELECT
   COALESCE(AVG(EXTRACT(EPOCH FROM (finished_at - created_at))) FILTER (WHERE status = 'finished' AND finished_at IS NOT NULL), 0)::bigint as avg_finish_seconds,
   COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (finished_at - created_at))) FILTER (WHERE status = 'finished' AND finished_at IS NOT NULL), 0)::bigint as p95_finish_seconds
 FROM profit_sharing_orders
-WHERE created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at');
+WHERE COALESCE(finished_at, created_at) >= sqlc.arg('start_at')
+  AND COALESCE(finished_at, created_at) <= sqlc.arg('end_at');
 
 -- name: UpdateProfitSharingOrderToProcessing :one
 UPDATE profit_sharing_orders

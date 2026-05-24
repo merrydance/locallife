@@ -89,6 +89,16 @@ assert.strictEqual(workflow.buildBaofuWithdrawalBalanceView({
   can_withdraw: false,
   disabled_reason: ''
 }).disabledReason, '可提现金额不足')
+assert.strictEqual(workflow.buildBaofuWithdrawalSubmitCheck('200.00', workflow.buildBaofuWithdrawalBalanceView({
+  available_amount: 30000,
+  pending_amount: 0,
+  ledger_amount: 30000,
+  frozen_amount: 0,
+  min_withdraw_amount: 100,
+  max_withdraw_amount: 10000,
+  can_withdraw: true,
+  disabled_reason: ''
+})).errorMessage, '提现金额最多 ¥100.00')
 
 const merchantWithdrawalSources = [
   read('miniprogram/pages/merchant/finance/withdrawals/index.ts'),

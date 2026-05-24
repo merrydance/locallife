@@ -54,6 +54,15 @@ export interface BaofuWithdrawalItemView extends BaofuWithdrawalItem {
   updatedAtText: string
 }
 
+export interface BaofuWithdrawalLoadedSummaryView {
+  loadedCountText: string
+  loadedAmountText: string
+  succeededAmountText: string
+  processingAmountText: string
+  failedAmountText: string
+  returnedAmountText: string
+}
+
 export type BaofuWithdrawalSettledResult<T> =
   | { status: 'fulfilled', value: T }
   | { status: 'rejected', reason: unknown }
@@ -249,6 +258,13 @@ export function buildBaofuWithdrawalSubmitCheck(
       errorMessage: `提现金额至少 ${balanceView.minWithdrawAmountText}`
     }
   }
+  if (parsed.amount > balanceView.maxWithdrawAmount) {
+    return {
+      amount: parsed.amount,
+      canSubmit: false,
+      errorMessage: `提现金额最多 ${balanceView.maxWithdrawAmountText}`
+    }
+  }
   if (parsed.amount > balanceView.availableAmount) {
     return { amount: parsed.amount, canSubmit: false, errorMessage: '超过可提现余额' }
   }
@@ -269,6 +285,33 @@ export function buildBaofuWithdrawalItemView(item: BaofuWithdrawalItem): BaofuWi
     statusView: buildBaofuWithdrawalStatusView(item.status, item.sync_state, item.sync_message),
     createdAtText: formatDateTimeText(item.created_at),
     updatedAtText: formatDateTimeText(item.updated_at)
+  }
+}
+
+export function buildBaofuWithdrawalLoadedSummaryView(
+  rows: BaofuWithdrawalItemView[]
+): BaofuWithdrawalLoadedSummaryView {
+  const totalAmount = rows.reduce((total, row) => total + normalizeAmount(row.amount), 0)
+  const succeededAmount = rows
+    .filter((row) => row.statusView.isSucceeded)
+    .reduce((total, row) => total + normalizeAmount(row.amount), 0)
+  const processingAmount = rows
+    .filter((row) => row.statusView.isProcessing)
+    .reduce((total, row) => total + normalizeAmount(row.amount), 0)
+  const failedAmount = rows
+    .filter((row) => row.statusView.isFailed)
+    .reduce((total, row) => total + normalizeAmount(row.amount), 0)
+  const returnedAmount = rows
+    .filter((row) => row.statusView.isReturned)
+    .reduce((total, row) => total + normalizeAmount(row.amount), 0)
+
+  return {
+    loadedCountText: `${rows.length} 笔`,
+    loadedAmountText: formatFenToYuanText(totalAmount),
+    succeededAmountText: formatFenToYuanText(succeededAmount),
+    processingAmountText: formatFenToYuanText(processingAmount),
+    failedAmountText: formatFenToYuanText(failedAmount),
+    returnedAmountText: formatFenToYuanText(returnedAmount)
   }
 }
 
