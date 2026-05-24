@@ -66,6 +66,23 @@ export interface OrderPaymentContext {
   combine_out_trade_no: string
 }
 
+export interface OrderFeeBreakdown {
+  food_amount: number
+  merchant_discount_amount: number
+  voucher_discount_amount: number
+  food_payable_amount: number
+  delivery_fee_amount: number
+  delivery_fee_discount_amount: number
+  delivery_payable_amount: number
+  customer_payable_amount: number
+  platform_service_fee_amount: number
+  payment_channel_fee_amount: number
+  merchant_receivable_amount: number
+  rider_gross_amount?: number
+  rider_payment_fee_amount?: number
+  rider_net_earnings_amount?: number
+}
+
 const TRACKABLE_ORDER_STATUSES = new Set<OrderStatus>(['delivering', 'rider_delivered', 'picked'])
 const COMPLETED_ORDER_STATUSES = new Set<OrderStatus>(['completed'])
 const CANCELLED_ORDER_STATUSES = new Set<OrderStatus>(['cancelled'])
@@ -132,6 +149,7 @@ export interface OrderResponse {
   // 微信或上游支付交易号，用于支付查询与历史兼容展示
   wechat_transaction_id?: string
   payment_context?: OrderPaymentContext
+  fee_breakdown?: OrderFeeBreakdown
 }
 
 /** 计算后的应付金额（便捷属性，total_amount - discount_amount） */
@@ -239,6 +257,7 @@ export interface OrderCalculationResponse {
   promotions?: PromotionApplied[]   // 优惠明细
   subtotal: number                  // 商品小计（分）
   total_amount: number              // 最终应付金额（分）
+  fee_breakdown?: OrderFeeBreakdown
 }
 
 /** 计算后的商品项 */

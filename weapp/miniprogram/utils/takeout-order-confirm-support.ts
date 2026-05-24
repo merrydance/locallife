@@ -1,9 +1,11 @@
 import { CartItemResponse } from '../api/cart'
 import { CreateOrderRequest, OrderItemRequest, OrderType } from '../api/order'
 import { getPublicImageUrl } from './image'
+import { buildCustomerOrderFeeBreakdownView, type CustomerOrderFeeBreakdownView } from './order-fee-breakdown-view'
 import { formatPriceNoSymbol } from './util'
 import { globalStore } from './global-store'
 import type { CheckoutAddress } from '../services/takeout-checkout'
+import type { OrderFeeBreakdown } from '../api/order'
 
 export interface CartItemView {
   id: number
@@ -45,6 +47,7 @@ export interface MerchantCartView {
   ladderPromotions: Array<{ name: string, thresholdDisplay: string, discountDisplay: string, currentHit: boolean, missingNeedDisplay: string }>
   voucherTrials: Array<{ voucherName: string, amountDisplay: string, trialPayableDisplay: string }>
   paymentHint: string
+  feeBreakdownView: CustomerOrderFeeBreakdownView
 }
 
 interface CheckoutSnapshotItem {
@@ -88,6 +91,7 @@ type PricingResult = {
   ladder_promotions?: Array<{ name?: string, threshold?: number, discount?: number, current_hit?: boolean, missing_need?: number }>
   voucher_trials?: Array<{ voucher_name?: string, amount?: number, trial_payable?: number }>
   payment_assessment?: { payment_hint?: string }
+  fee_breakdown?: OrderFeeBreakdown
 }
 
 export const ORDER_CONFIRM_CONCURRENCY = 3
@@ -182,7 +186,8 @@ export function buildCheckoutSnapshotPatch(payload: CheckoutSnapshotPayload, cur
       appliedPromotions: [],
       ladderPromotions: [],
       voucherTrials: [],
-      paymentHint: ''
+      paymentHint: '',
+      feeBreakdownView: buildCustomerOrderFeeBreakdownView()
     }
   })
 
@@ -256,7 +261,8 @@ export function buildOrderConfirmCartViews(
         appliedPromotions: [],
         ladderPromotions: [],
         voucherTrials: [],
-        paymentHint: ''
+        paymentHint: '',
+        feeBreakdownView: buildCustomerOrderFeeBreakdownView()
       }
     })
 }
@@ -363,7 +369,8 @@ export function buildPricingSuccessPatch(
           amountDisplay: formatPriceNoSymbol(trial.amount || 0),
           trialPayableDisplay: formatPriceNoSymbol(trial.trial_payable || 0)
         })),
-        paymentHint: result.payment_assessment?.payment_hint || ''
+        paymentHint: result.payment_assessment?.payment_hint || '',
+        feeBreakdownView: buildCustomerOrderFeeBreakdownView(result.fee_breakdown)
       }
     })
 

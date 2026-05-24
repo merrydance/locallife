@@ -4,6 +4,7 @@
  */
 
 import { request } from '../utils/request'
+import type { OrderFeeBreakdown } from './order'
 
 // ==================== 数据类型定义 ====================
 
@@ -165,6 +166,7 @@ export interface CalculateCartResponse {
         bonus_part: number
         payment_hint: string
     }
+    fee_breakdown?: OrderFeeBreakdown
 }
 
 // ==================== API接口函数 ====================

@@ -25,11 +25,13 @@ function assertNotContains(content, pattern, message) {
 
 const orderApi = read('miniprogram/api/order-management.ts')
 const detailView = read('miniprogram/utils/merchant-order-detail-view.ts')
+const sharedFeeBreakdownView = read('miniprogram/utils/order-fee-breakdown-view.ts')
 const detailWxml = read('miniprogram/pages/merchant/orders/detail/index.wxml')
 const listWxml = read('miniprogram/pages/merchant/orders/list/index.wxml')
 const merchantOrderSources = [
   orderApi,
   detailView,
+  sharedFeeBreakdownView,
   detailWxml,
   listWxml,
   read('miniprogram/pages/merchant/orders/detail/index.ts'),
@@ -61,7 +63,7 @@ assertContains(detailView, /MerchantOrderFeeBreakdownView/, 'Detail view helper 
 assertContains(detailWxml, 'fee_breakdown_view.summary_rows', 'Merchant order detail must render fee breakdown summary rows')
 assertContains(detailWxml, 'fee_breakdown_view.settlement_groups', 'Merchant order detail must render fee breakdown settlement groups')
 for (const label of ['用户实付', '商户部分', '骑手部分', '商户实收', '骑手收入']) {
-  assertContains(detailView, label, `Merchant order detail view model must include ${label}`)
+  assertContains(`${detailView}\n${sharedFeeBreakdownView}`, label, `Merchant order detail view model must include ${label}`)
 }
 assertContains(listWxml, '实收', 'Merchant order list must render merchant receivable summary')
 
@@ -81,31 +83,43 @@ for (const forbidden of [
 }
 
 function loadDetailViewModule() {
-  const sourcePath = path.join(ROOT, 'miniprogram', 'utils', 'merchant-order-detail-view.ts')
-  const source = fs.readFileSync(sourcePath, 'utf8')
-  const compiled = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2018,
-      esModuleInterop: true
-    }
-  }).outputText
+  const moduleCache = {}
 
-  const sandbox = {
-    exports: {},
-    module: { exports: {} },
-    require(modulePath) {
-      if (modulePath === 'dayjs') return require('dayjs')
-      throw new Error(`unexpected require: ${modulePath}`)
-    },
-    Date,
-    Math,
-    Number,
-    String
+  function loadTsModule(relativePath) {
+    const sourcePath = path.join(ROOT, relativePath)
+    if (moduleCache[sourcePath]) return moduleCache[sourcePath].exports
+
+    const module = { exports: {} }
+    moduleCache[sourcePath] = module
+    const source = fs.readFileSync(sourcePath, 'utf8')
+    const compiled = ts.transpileModule(source, {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2018,
+        esModuleInterop: true
+      }
+    }).outputText
+
+    const sandbox = {
+      exports: module.exports,
+      module,
+      require(modulePath) {
+        if (modulePath === 'dayjs') return require('dayjs')
+        if (modulePath === './order-fee-breakdown-view') {
+          return loadTsModule(path.join('miniprogram', 'utils', 'order-fee-breakdown-view.ts'))
+        }
+        throw new Error(`unexpected require: ${modulePath}`)
+      },
+      Date,
+      Math,
+      Number,
+      String
+    }
+    vm.runInNewContext(compiled, sandbox, { filename: sourcePath })
+    return module.exports
   }
-  sandbox.exports = sandbox.module.exports
-  vm.runInNewContext(compiled, sandbox, { filename: sourcePath })
-  return sandbox.module.exports
+
+  return loadTsModule(path.join('miniprogram', 'utils', 'merchant-order-detail-view.ts'))
 }
 
 const { buildMerchantOrderFeeBreakdownView } = loadDetailViewModule()

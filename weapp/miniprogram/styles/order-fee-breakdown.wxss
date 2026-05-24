@@ -1,0 +1,83 @@
+.profit-sharing-section {
+  border-top: 1rpx solid var(--td-bg-color-secondarycontainer);
+}
+
+.order-card .profit-sharing-section {
+  margin: 24rpx 32rpx 0;
+  padding-top: 24rpx;
+}
+
+.module-section .profit-sharing-section {
+  margin-top: var(--spacer-sm);
+  padding-top: var(--spacer-sm);
+}
+
+.profit-sharing-title {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--td-text-color-primary);
+  margin-bottom: var(--spacer-xs);
+}
+
+.profit-sharing-group {
+  padding: var(--spacer-sm);
+  border: 1rpx solid var(--td-border-level-1-color);
+  border-radius: var(--radius-sm);
+  background: var(--td-bg-color-container);
+  margin-bottom: var(--spacer-sm);
+}
+
+.profit-sharing-group:last-child {
+  margin-bottom: 0;
+}
+
+.profit-sharing-group-header,
+.profit-sharing-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacer-md);
+}
+
+.profit-sharing-group-header {
+  margin-bottom: var(--spacer-xs);
+}
+
+.profit-sharing-group-title,
+.profit-sharing-group-total {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--td-text-color-primary);
+}
+
+.profit-sharing-row {
+  padding: 4rpx 0;
+}
+
+.profit-sharing-label,
+.profit-sharing-value {
+  font-size: var(--font-size-xs);
+}
+
+.profit-sharing-label {
+  color: var(--td-text-color-secondary);
+}
+
+.profit-sharing-value {
+  flex-shrink: 0;
+  color: var(--td-text-color-primary);
+  font-family: 'DIN Alternate', sans-serif;
+}
+
+.profit-sharing-row--discount .profit-sharing-value {
+  color: var(--td-error-color);
+}
+
+.profit-sharing-row--income .profit-sharing-value,
+.profit-sharing-row--total .profit-sharing-value {
+  font-weight: 700;
+}
+
+.profit-sharing-row--fee .profit-sharing-value {
+  color: var(--td-text-color-secondary);
+}

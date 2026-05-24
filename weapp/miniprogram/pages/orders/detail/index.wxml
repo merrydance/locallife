@@ -132,6 +132,32 @@
          <text class="total-label">实付</text>
          <text class="total-price">{{order.payableAmountDisplay}}</text>
       </view>
+
+      <view wx:if="{{order.feeBreakdownView && order.feeBreakdownView.available}}" class="profit-sharing-section">
+        <view class="profit-sharing-title">分账明细</view>
+        <view
+          wx:for="{{order.feeBreakdownView.settlement_groups}}"
+          wx:key="key"
+          wx:for-item="group"
+          wx:if="{{group.visible}}"
+          class="profit-sharing-group profit-sharing-group--{{group.tone}}"
+        >
+          <view class="profit-sharing-group-header">
+            <text class="profit-sharing-group-title">{{group.title}}</text>
+            <text class="profit-sharing-group-total">{{group.total_text}}</text>
+          </view>
+          <view
+            wx:for="{{group.rows}}"
+            wx:key="key"
+            wx:for-item="row"
+            wx:if="{{row.visible}}"
+            class="profit-sharing-row profit-sharing-row--{{row.tone}}"
+          >
+            <text class="profit-sharing-label">{{row.label}}</text>
+            <text class="profit-sharing-value">{{row.value_text}}</text>
+          </view>
+        </view>
+      </view>
     </view>
 
     <!-- 代取/预订信息卡片 -->

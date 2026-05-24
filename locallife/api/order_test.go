@@ -1181,6 +1181,74 @@ func TestGetOrderAPI(t *testing.T) {
 				require.NotNil(t, response.PaymentContext)
 				require.Equal(t, int64(9001), response.PaymentContext.CombinedPaymentID)
 				require.Equal(t, "CP202604061234560001", response.PaymentContext.CombineOutTradeNo)
+				require.Nil(t, response.FeeBreakdown)
+			},
+		},
+		{
+			name:    "PaidOrderShowsCustomerProfitSharingBreakdown",
+			orderID: order.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				paidOrder := order
+				paidOrder.Status = db.OrderStatusPaid
+				paidOrder.Subtotal = 10000
+				paidOrder.DiscountAmount = 300
+				paidOrder.VoucherAmount = 200
+				paidOrder.DeliveryFee = 500
+				paidOrder.DeliveryFeeDiscount = 0
+				paidOrder.TotalAmount = 10000
+				orderWithDetails := orderWithDetailsFromOrder(paidOrder)
+
+				store.EXPECT().
+					GetOrderWithDetails(gomock.Any(), order.ID).
+					Times(1).
+					Return(orderWithDetails, nil)
+
+				store.EXPECT().
+					ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).
+					Times(1).
+					Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+
+				store.EXPECT().
+					GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Eq(db.GetLatestPaymentOrderByOrderParams{
+						OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+						BusinessType: "order",
+					})).
+					Times(1).
+					Return(db.PaymentOrder{
+						ID:           9101,
+						OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+						UserID:       user.ID,
+						BusinessType: "order",
+						Status:       "paid",
+					}, nil)
+
+				store.EXPECT().
+					GetProfitSharingOrderByPaymentOrder(gomock.Any(), int64(9101)).
+					Times(1).
+					Return(db.ProfitSharingOrder{
+						ID:                 9201,
+						PaymentOrderID:     9101,
+						Status:             db.ProfitSharingOrderStatusPending,
+						TotalAmount:        paidOrder.TotalAmount,
+						PlatformCommission: 300,
+						PaymentFee:         32,
+						MerchantAmount:     8968,
+						RiderGrossAmount:   500,
+						RiderPaymentFee:    3,
+						RiderAmount:        497,
+					}, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response orderResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.NotNil(t, response.FeeBreakdown)
+				require.Equal(t, int64(8968), response.FeeBreakdown.MerchantReceivableAmount)
+				require.Equal(t, int64(497), response.FeeBreakdown.RiderNetEarningsAmount)
 			},
 		},
 		{

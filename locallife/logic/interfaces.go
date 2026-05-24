@@ -254,6 +254,7 @@ type GetUserOrderQueryResult struct {
 	DeliveryEtaMinutes  *int32
 	EstimatedDeliveryAt *time.Time
 	WechatTransactionID *string
+	FeeBreakdown        *MerchantOrderFeeBreakdown
 }
 
 type ListUserOrdersQueryInput struct {

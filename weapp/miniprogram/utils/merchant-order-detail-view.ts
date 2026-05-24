@@ -5,6 +5,13 @@ import {
   type OrderResponse
 } from '../api/order-management'
 import { type PaymentOrder, type ProfitSharingReturn, type RefundOrder } from '../api/payment'
+import {
+  buildOrderFeeSettlementGroups,
+  createOrderFeeBreakdownRow,
+  formatOrderFeeMoney,
+  type OrderFeeBreakdownRow,
+  type OrderFeeSettlementGroup
+} from './order-fee-breakdown-view'
 
 export interface MerchantOrderDetailOptions {
   id?: string
@@ -94,23 +101,8 @@ export interface RefundFormData {
   refund_reason: string
 }
 
-export interface MerchantOrderFeeBreakdownRow {
-  key: string
-  label: string
-  value: number
-  value_text: string
-  tone: 'default' | 'discount' | 'total' | 'income' | 'fee'
-  visible: boolean
-}
-
-export interface MerchantOrderFeeSettlementGroup {
-  key: string
-  title: string
-  total_text: string
-  tone: 'merchant' | 'rider'
-  visible: boolean
-  rows: MerchantOrderFeeBreakdownRow[]
-}
+export type MerchantOrderFeeBreakdownRow = OrderFeeBreakdownRow
+export type MerchantOrderFeeSettlementGroup = OrderFeeSettlementGroup
 
 export interface MerchantOrderFeeBreakdownView {
   available: boolean
@@ -126,31 +118,7 @@ export function createDefaultRefundForm(): RefundFormData {
 }
 
 function formatMoney(amount: number) {
-  return `¥${(amount / 100).toFixed(2)}`
-}
-
-function formatSignedMoney(amount: number) {
-  if (amount < 0) {
-    return `-¥${(Math.abs(amount) / 100).toFixed(2)}`
-  }
-  return formatMoney(amount)
-}
-
-function createFeeBreakdownRow(
-  key: string,
-  label: string,
-  value: number,
-  tone: MerchantOrderFeeBreakdownRow['tone'],
-  alwaysVisible = false
-): MerchantOrderFeeBreakdownRow {
-  return {
-    key,
-    label,
-    value,
-    value_text: formatSignedMoney(value),
-    tone,
-    visible: alwaysVisible || value !== 0
-  }
+  return formatOrderFeeMoney(amount)
 }
 
 export function buildMerchantOrderFeeBreakdownView(order: OrderResponse): MerchantOrderFeeBreakdownView {
@@ -167,54 +135,22 @@ export function buildMerchantOrderFeeBreakdownView(order: OrderResponse): Mercha
     }
   }
 
-  const merchantRows = [
-    createFeeBreakdownRow('merchant_food_payable_amount', '餐费应分', breakdown.food_payable_amount, 'default', true),
-    createFeeBreakdownRow('merchant_platform_service_fee_amount', '平台服务费', -breakdown.platform_service_fee_amount, 'fee', true),
-    createFeeBreakdownRow('merchant_payment_channel_fee_amount', '支付通道费', -breakdown.payment_channel_fee_amount, 'fee', true),
-    createFeeBreakdownRow('merchant_receivable_amount', '商户实收', breakdown.merchant_receivable_amount, 'income', true)
-  ]
-  const riderGrossAmount = breakdown.rider_gross_amount || 0
-  const riderPaymentFeeAmount = breakdown.rider_payment_fee_amount || 0
-  const riderNetEarningsAmount = breakdown.rider_net_earnings_amount || 0
-  const riderRows = [
-    createFeeBreakdownRow('rider_gross_amount', '骑手应分', riderGrossAmount, 'default', true),
-    createFeeBreakdownRow('rider_payment_fee_amount', '骑手通道费', -riderPaymentFeeAmount, 'fee', true),
-    createFeeBreakdownRow('rider_net_earnings_amount', '骑手收入', riderNetEarningsAmount, 'income', true)
-  ]
-
   return {
     available: true,
     unavailable_text: '',
     customer_payable_text: formatMoney(breakdown.customer_payable_amount),
     merchant_receivable_text: formatMoney(breakdown.merchant_receivable_amount),
     summary_rows: [
-      createFeeBreakdownRow('food_amount', '餐费原价', breakdown.food_amount, 'default'),
-      createFeeBreakdownRow('merchant_discount_amount', '商户优惠', -breakdown.merchant_discount_amount, 'discount'),
-      createFeeBreakdownRow('voucher_discount_amount', '平台/券优惠', -breakdown.voucher_discount_amount, 'discount'),
-      createFeeBreakdownRow('food_payable_amount', '餐费应付', breakdown.food_payable_amount, 'default'),
-      createFeeBreakdownRow('delivery_fee_amount', '代取费', breakdown.delivery_fee_amount, 'default'),
-      createFeeBreakdownRow('delivery_fee_discount_amount', '代取优惠', -breakdown.delivery_fee_discount_amount, 'discount'),
-      createFeeBreakdownRow('delivery_payable_amount', '代取应付', breakdown.delivery_payable_amount, 'default'),
-      createFeeBreakdownRow('customer_payable_amount', '用户实付', breakdown.customer_payable_amount, 'total', true)
+      createOrderFeeBreakdownRow('food_amount', '餐费原价', breakdown.food_amount, 'default'),
+      createOrderFeeBreakdownRow('merchant_discount_amount', '商户优惠', -breakdown.merchant_discount_amount, 'discount'),
+      createOrderFeeBreakdownRow('voucher_discount_amount', '平台/券优惠', -breakdown.voucher_discount_amount, 'discount'),
+      createOrderFeeBreakdownRow('food_payable_amount', '餐费应付', breakdown.food_payable_amount, 'default'),
+      createOrderFeeBreakdownRow('delivery_fee_amount', '代取费', breakdown.delivery_fee_amount, 'default'),
+      createOrderFeeBreakdownRow('delivery_fee_discount_amount', '代取优惠', -breakdown.delivery_fee_discount_amount, 'discount'),
+      createOrderFeeBreakdownRow('delivery_payable_amount', '代取应付', breakdown.delivery_payable_amount, 'default'),
+      createOrderFeeBreakdownRow('customer_payable_amount', '用户实付', breakdown.customer_payable_amount, 'total', true)
     ],
-    settlement_groups: [
-      {
-        key: 'merchant',
-        title: '商户部分',
-        total_text: formatMoney(breakdown.merchant_receivable_amount),
-        tone: 'merchant',
-        visible: true,
-        rows: merchantRows
-      },
-      {
-        key: 'rider',
-        title: '骑手部分',
-        total_text: formatMoney(riderNetEarningsAmount),
-        tone: 'rider',
-        visible: riderGrossAmount !== 0 || riderPaymentFeeAmount !== 0 || riderNetEarningsAmount !== 0,
-        rows: riderRows
-      }
-    ]
+    settlement_groups: buildOrderFeeSettlementGroups(breakdown)
   }
 }
 

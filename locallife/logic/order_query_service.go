@@ -35,11 +35,17 @@ func (s *OrderService) GetUserOrder(ctx context.Context, input GetUserOrderQuery
 	etaMinutes, estimatedDeliveryAt := s.buildGetUserOrderDeliveryETA(ctx, order)
 
 	var wechatTransactionID *string
+	var feeBreakdown *MerchantOrderFeeBreakdown
 	if po, err := s.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
 		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
 		BusinessType: "order",
-	}); err == nil && po.TransactionID.Valid {
-		wechatTransactionID = &po.TransactionID.String
+	}); err == nil {
+		if po.TransactionID.Valid {
+			wechatTransactionID = &po.TransactionID.String
+		}
+		feeBreakdown = s.buildUserOrderFeeBreakdown(ctx, order, po)
+	} else if !errors.Is(err, db.ErrRecordNotFound) {
+		log.Warn().Err(err).Int64("order_id", order.ID).Msg("get user order payment order failed")
 	}
 
 	return GetUserOrderQueryResult{
@@ -48,7 +54,41 @@ func (s *OrderService) GetUserOrder(ctx context.Context, input GetUserOrderQuery
 		DeliveryEtaMinutes:  etaMinutes,
 		EstimatedDeliveryAt: estimatedDeliveryAt,
 		WechatTransactionID: wechatTransactionID,
+		FeeBreakdown:        feeBreakdown,
 	}, nil
+}
+
+func (s *OrderService) buildUserOrderFeeBreakdown(ctx context.Context, order db.GetOrderWithDetailsRow, paymentOrder db.PaymentOrder) *MerchantOrderFeeBreakdown {
+	if paymentOrder.Status != paymentStatusPaid {
+		return nil
+	}
+
+	profitSharingOrder, err := s.store.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
+	if err != nil {
+		if !errors.Is(err, db.ErrRecordNotFound) {
+			log.Warn().Err(err).Int64("order_id", order.ID).Int64("payment_order_id", paymentOrder.ID).Msg("get user order profit sharing breakdown failed")
+		}
+		return nil
+	}
+
+	breakdown, err := BuildMerchantOrderFeeBreakdown(BuildMerchantOrderFeeBreakdownInput{
+		Order: db.Order{
+			ID:                  order.ID,
+			Subtotal:            order.Subtotal,
+			DiscountAmount:      order.DiscountAmount,
+			VoucherAmount:       order.VoucherAmount,
+			DeliveryFee:         order.DeliveryFee,
+			DeliveryFeeDiscount: order.DeliveryFeeDiscount,
+			TotalAmount:         order.TotalAmount,
+		},
+		ProfitSharingOrder: &profitSharingOrder,
+	})
+	if err != nil {
+		log.Warn().Err(err).Int64("order_id", order.ID).Int64("profit_sharing_order_id", profitSharingOrder.ID).Msg("build user order fee breakdown failed")
+		return nil
+	}
+
+	return &breakdown
 }
 
 func (s *OrderService) buildGetUserOrderDeliveryETA(ctx context.Context, order db.GetOrderWithDetailsRow) (*int32, *time.Time) {

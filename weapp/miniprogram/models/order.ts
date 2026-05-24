@@ -1,4 +1,5 @@
 import type { OrderStatus, OrderType, FulfillmentStatus, OrderPaymentContext } from '../api/order'
+import type { CustomerOrderFeeBreakdownView } from '../utils/order-fee-breakdown-view'
 
 /**
  * 订单视图模型 - 用于UI展示
@@ -78,6 +79,7 @@ export interface OrderDetail extends Order {
     reservationTime?: string
     guestCount?: number
     timeline?: OrderTimelineItem[]
+    feeBreakdownView?: CustomerOrderFeeBreakdownView
 }
 
 /**

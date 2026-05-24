@@ -1,6 +1,7 @@
 import { Order, OrderDetail, OrderItem } from '../models/order'
 import { OrderResponse, getPayableAmount } from '../api/order'
 import { getPublicImageUrl } from '../utils/image'
+import { buildCustomerOrderFeeBreakdownView } from '../utils/order-fee-breakdown-view'
 import dayjs from 'dayjs'
 
 /**
@@ -125,6 +126,7 @@ export class OrderAdapter {
       replacedByOrderId: dto.replaced_by_order_id,
       fulfillmentStatus: dto.fulfillment_status,
       paymentContext: dto.payment_context,
+      feeBreakdownView: buildCustomerOrderFeeBreakdownView(dto.fee_breakdown),
       timeline: dto.fulfillment_status ? [{
         time: dto.updated_at || dto.created_at,
         title: FULFILLMENT_STATUS_TEXT[dto.fulfillment_status] || dto.fulfillment_status

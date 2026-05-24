@@ -1,4 +1,5 @@
 @import '../../../styles/customer.wxss';
+@import '../../../styles/order-fee-breakdown.wxss';
 
 /* Pages Order Detail */
 .page-container {

@@ -696,6 +696,9 @@ func (server *Server) getOrder(ctx *gin.Context) {
 	resp.DeliveryEtaMinutes = result.DeliveryEtaMinutes
 	resp.EstimatedDeliveryAt = result.EstimatedDeliveryAt
 	resp.WechatTransactionID = result.WechatTransactionID
+	if result.FeeBreakdown != nil {
+		resp.FeeBreakdown = newMerchantOrderFeeBreakdownResponse(*result.FeeBreakdown)
+	}
 
 	ctx.JSON(http.StatusOK, resp)
 }
