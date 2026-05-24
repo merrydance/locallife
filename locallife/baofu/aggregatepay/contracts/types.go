@@ -348,6 +348,65 @@ type UnifiedOrderResult struct {
 	Raw                     json.RawMessage `json:"-"`
 }
 
+func (r *UnifiedOrderResult) UnmarshalJSON(raw []byte) error {
+	var aux struct {
+		AgentMerchantID         string          `json:"agentMerId,omitempty"`
+		AgentTerminalID         string          `json:"agentTerId,omitempty"`
+		MerchantID              string          `json:"merId,omitempty"`
+		TerminalID              string          `json:"terId,omitempty"`
+		OutTradeNo              string          `json:"outTradeNo,omitempty"`
+		TxnState                string          `json:"txnState,omitempty"`
+		TradeNo                 string          `json:"tradeNo,omitempty"`
+		FinishTime              string          `json:"finishTime,omitempty"`
+		SuccessAmountFen        json.RawMessage `json:"succAmt,omitempty"`
+		FeeAmountFen            json.RawMessage `json:"feeAmt,omitempty"`
+		InstallmentFeeAmountFen json.RawMessage `json:"instFeeAmt,omitempty"`
+		RequestChannelNo        string          `json:"reqChlNo,omitempty"`
+		PayCode                 string          `json:"payCode,omitempty"`
+		ChannelReturn           ChannelReturn   `json:"chlRetParam,omitempty"`
+		ClearingDate            string          `json:"clearingDate,omitempty"`
+		ResultCode              string          `json:"resultCode,omitempty"`
+		ErrorCode               string          `json:"errCode,omitempty"`
+		ErrorMessage            string          `json:"errMsg,omitempty"`
+	}
+	if err := json.Unmarshal(raw, &aux); err != nil {
+		return err
+	}
+	successAmountFen, err := optionalJSONIntegerStringOrNumber("baofu unified order response succAmt", aux.SuccessAmountFen)
+	if err != nil {
+		return err
+	}
+	feeAmountFen, err := optionalJSONIntegerStringOrNumber("baofu unified order response feeAmt", aux.FeeAmountFen)
+	if err != nil {
+		return err
+	}
+	installmentFeeAmountFen, err := optionalJSONIntegerStringOrNumber("baofu unified order response instFeeAmt", aux.InstallmentFeeAmountFen)
+	if err != nil {
+		return err
+	}
+	*r = UnifiedOrderResult{
+		AgentMerchantID:         aux.AgentMerchantID,
+		AgentTerminalID:         aux.AgentTerminalID,
+		MerchantID:              aux.MerchantID,
+		TerminalID:              aux.TerminalID,
+		OutTradeNo:              aux.OutTradeNo,
+		TxnState:                aux.TxnState,
+		TradeNo:                 aux.TradeNo,
+		FinishTime:              aux.FinishTime,
+		SuccessAmountFen:        successAmountFen,
+		FeeAmountFen:            feeAmountFen,
+		InstallmentFeeAmountFen: installmentFeeAmountFen,
+		RequestChannelNo:        aux.RequestChannelNo,
+		PayCode:                 aux.PayCode,
+		ChannelReturn:           aux.ChannelReturn,
+		ClearingDate:            aux.ClearingDate,
+		ResultCode:              aux.ResultCode,
+		ErrorCode:               aux.ErrorCode,
+		ErrorMessage:            aux.ErrorMessage,
+	}
+	return nil
+}
+
 type ChannelReturn struct {
 	PrepayID      string          `json:"prepay_id,omitempty"`
 	WechatPayData json.RawMessage `json:"wc_pay_data,omitempty"`
@@ -426,6 +485,13 @@ func jsonIntegerStringOrNumber(field string, raw json.RawMessage) (int64, error)
 		return parsed, nil
 	}
 	return 0, errors.New(field + " must be an integer")
+}
+
+func optionalJSONIntegerStringOrNumber(field string, raw json.RawMessage) (int64, error) {
+	if len(raw) == 0 {
+		return 0, nil
+	}
+	return jsonIntegerStringOrNumber(field, raw)
 }
 
 func normalizeJSONRawMessagePayload(field string, raw json.RawMessage) (json.RawMessage, error) {
@@ -745,13 +811,9 @@ func (r *ShareResult) UnmarshalJSON(raw []byte) error {
 	if err := json.Unmarshal(raw, &aux); err != nil {
 		return err
 	}
-	var successAmountFen int64
-	if len(aux.SuccessAmountFen) > 0 {
-		parsed, err := jsonIntegerStringOrNumber("baofu share response succAmt", aux.SuccessAmountFen)
-		if err != nil {
-			return err
-		}
-		successAmountFen = parsed
+	successAmountFen, err := optionalJSONIntegerStringOrNumber("baofu share response succAmt", aux.SuccessAmountFen)
+	if err != nil {
+		return err
 	}
 	*r = ShareResult{
 		AgentMerchantID:  aux.AgentMerchantID,
@@ -1048,6 +1110,55 @@ type RefundResult struct {
 	ErrorMessage     string          `json:"errMsg,omitempty"`
 	RequestReserved  string          `json:"reqReserved,omitempty"`
 	Raw              json.RawMessage `json:"-"`
+}
+
+func (r *RefundResult) UnmarshalJSON(raw []byte) error {
+	var aux struct {
+		OriginTradeNo    string          `json:"originTradeNo,omitempty"`
+		OriginOutTradeNo string          `json:"originOutTradeNo,omitempty"`
+		OutTradeNo       string          `json:"outTradeNo,omitempty"`
+		TradeNo          string          `json:"tradeNo,omitempty"`
+		RefundAmountFen  json.RawMessage `json:"refundAmt,omitempty"`
+		TotalAmountFen   json.RawMessage `json:"totalAmt,omitempty"`
+		ResultCode       string          `json:"resultCode,omitempty"`
+		RefundState      string          `json:"refundState,omitempty"`
+		FinishTime       string          `json:"finishTime,omitempty"`
+		SuccessAmountFen json.RawMessage `json:"succAmt,omitempty"`
+		ErrorCode        string          `json:"errCode,omitempty"`
+		ErrorMessage     string          `json:"errMsg,omitempty"`
+		RequestReserved  string          `json:"reqReserved,omitempty"`
+	}
+	if err := json.Unmarshal(raw, &aux); err != nil {
+		return err
+	}
+	refundAmountFen, err := optionalJSONIntegerStringOrNumber("baofu refund response refundAmt", aux.RefundAmountFen)
+	if err != nil {
+		return err
+	}
+	totalAmountFen, err := optionalJSONIntegerStringOrNumber("baofu refund response totalAmt", aux.TotalAmountFen)
+	if err != nil {
+		return err
+	}
+	successAmountFen, err := optionalJSONIntegerStringOrNumber("baofu refund response succAmt", aux.SuccessAmountFen)
+	if err != nil {
+		return err
+	}
+	*r = RefundResult{
+		OriginTradeNo:    aux.OriginTradeNo,
+		OriginOutTradeNo: aux.OriginOutTradeNo,
+		OutTradeNo:       aux.OutTradeNo,
+		TradeNo:          aux.TradeNo,
+		RefundAmountFen:  refundAmountFen,
+		TotalAmountFen:   totalAmountFen,
+		ResultCode:       aux.ResultCode,
+		RefundState:      aux.RefundState,
+		FinishTime:       aux.FinishTime,
+		SuccessAmountFen: successAmountFen,
+		ErrorCode:        aux.ErrorCode,
+		ErrorMessage:     aux.ErrorMessage,
+		RequestReserved:  aux.RequestReserved,
+	}
+	return nil
 }
 
 type RefundFact struct {

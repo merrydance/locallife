@@ -243,6 +243,37 @@ func TestUnifiedOrderResultCoversOfficialOrderQueryFields(t *testing.T) {
 	require.Equal(t, "sub-openid-001", result.ChannelReturn.SubOpenID)
 }
 
+func TestUnifiedOrderResultAcceptsStringAmountFields(t *testing.T) {
+	var result UnifiedOrderResult
+
+	err := json.Unmarshal([]byte(`{
+		"merId":"102004465",
+		"terId":"200005200",
+		"outTradeNo":"PO202605050001",
+		"tradeNo":"260500000001",
+		"txnState":"SUCCESS",
+		"succAmt":"100",
+		"feeAmt":"1",
+		"instFeeAmt":"2",
+		"payCode":"WECHAT_JSAPI",
+		"resultCode":"SUCCESS"
+	}`), &result)
+
+	require.NoError(t, err)
+	require.Equal(t, int64(100), result.SuccessAmountFen)
+	require.Equal(t, int64(1), result.FeeAmountFen)
+	require.Equal(t, int64(2), result.InstallmentFeeAmountFen)
+	require.NoError(t, result.ValidateOrderQueryResponse())
+}
+
+func TestUnifiedOrderResultRejectsFractionalStringAmountFields(t *testing.T) {
+	var result UnifiedOrderResult
+
+	err := json.Unmarshal([]byte(`{"resultCode":"SUCCESS","succAmt":"100.5"}`), &result)
+
+	require.EqualError(t, err, "baofu unified order response succAmt must be an integer")
+}
+
 func TestUnifiedOrderResultValidatesMethodSpecificResponses(t *testing.T) {
 	unified := UnifiedOrderResult{MerchantID: "102004465", TerminalID: "200005200", OutTradeNo: "BF202605040001", ResultCode: BusinessResultCodeSuccess, PayCode: PayCodeWechatJSAPI, TxnState: PaymentStateWaitPaying}
 	require.NoError(t, unified.ValidateUnifiedOrderResponse())
@@ -485,6 +516,35 @@ func TestRefundQueryRequiresRefundReference(t *testing.T) {
 
 	req.OutTradeNo = "RF202605040001"
 	require.NoError(t, req.Validate())
+}
+
+func TestRefundResultAcceptsStringAmountFields(t *testing.T) {
+	var result RefundResult
+
+	err := json.Unmarshal([]byte(`{
+		"originOutTradeNo":"PO202605050001",
+		"outTradeNo":"RF202605050001",
+		"tradeNo":"260500000002",
+		"refundAmt":"300",
+		"totalAmt":"300",
+		"succAmt":"300",
+		"resultCode":"SUCCESS",
+		"refundState":"REFUND"
+	}`), &result)
+
+	require.NoError(t, err)
+	require.Equal(t, int64(300), result.RefundAmountFen)
+	require.Equal(t, int64(300), result.TotalAmountFen)
+	require.Equal(t, int64(300), result.SuccessAmountFen)
+	require.NoError(t, result.ValidateRefundQueryResponse())
+}
+
+func TestRefundResultRejectsFractionalStringAmountFields(t *testing.T) {
+	var result RefundResult
+
+	err := json.Unmarshal([]byte(`{"resultCode":"SUCCESS","refundAmt":"300.5"}`), &result)
+
+	require.EqualError(t, err, "baofu refund response refundAmt must be an integer")
 }
 
 func TestRefundAndCloseResultsValidateMethodSpecificResponses(t *testing.T) {
