@@ -5,8 +5,8 @@
         "t-icon": "tdesign-miniprogram/icon/icon",
         "t-tag": "tdesign-miniprogram/tag/tag",
         "t-button": "tdesign-miniprogram/button/button",
-        "t-divider": "tdesign-miniprogram/divider/divider",
         "t-empty": "tdesign-miniprogram/empty/empty",
-        "t-loading": "tdesign-miniprogram/loading/loading"
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-calendar": "tdesign-miniprogram/calendar/calendar"
     }
 }

@@ -1,4 +1,4 @@
-<custom-navbar title="代取历史" showBack="{{true}}" />
+<custom-navbar title="代取历史" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <scroll-view 
   scroll-y 
@@ -6,6 +6,18 @@
   style="--page-shell-nav-height: {{navBarHeight}}px;"
   bindscrolltolower="onReachBottom"
 >
+  <view class="history-filter">
+    <view class="date-filter-main" bindtap="onOpenRangePicker">
+      <t-icon name="calendar" size="34rpx" />
+      <view class="date-filter-text">
+        <text class="date-filter-label">日期范围</text>
+        <text class="date-filter-value">{{dateRangeLabel}}</text>
+      </view>
+      <t-icon name="chevron-right" size="32rpx" />
+    </view>
+    <t-button wx:if="{{hasDateRange}}" size="small" theme="default" variant="outline" bindtap="onClearDateRange">全部</t-button>
+  </view>
+
   <view wx:if="{{loading && deliveries.length === 0}}" class="history-loading">
     <t-loading theme="circular" size="40rpx" text="正在加载历史任务..." />
   </view>
@@ -22,17 +34,8 @@
     <t-button theme="primary" variant="text" size="small" bindtap="onRetry">重试</t-button>
   </view>
 
-  <!-- 历史概览 -->
-  <view class="history-summary">
-    <view class="summary-item">
-      <view class="val">{{totalCount}}</view>
-      <view class="lab">累计完成</view>
-    </view>
-    <t-divider layout="vertical" />
-    <view class="summary-item">
-      <view class="val">¥{{totalEarnings / 100}}</view>
-      <view class="lab">累计收益</view>
-    </view>
+  <view class="history-count-row">
+    <text>{{totalCount}} 条任务</text>
   </view>
 
   <!-- 历史列表 -->
@@ -94,9 +97,21 @@
       <text class="load-more-error">{{loadMoreError}}</text>
       <t-button theme="primary" variant="outline" bindtap="onRetryLoadMore">重试加载更多</t-button>
     </view>
-    <view class="no-more" wx:if="{{!hasMore && !loadMoreError}}">已显示最近半年的记录</view>
+    <view class="no-more" wx:if="{{!hasMore && !loadMoreError}}">没有更多任务了</view>
   </view>
   
-  <t-empty wx:else icon="order-adjustment" description="暂无历史纪录" />
+  <t-empty wx:else icon="order-adjustment" description="暂无历史任务" />
   </block>
+
+  <t-calendar
+    title="选择日期范围"
+    type="range"
+    visible="{{rangePickerVisible}}"
+    value="{{rangePickerValue}}"
+    minDate="{{rangePickerMinDate}}"
+    maxDate="{{rangePickerMaxDate}}"
+    confirmBtn="确定"
+    bind:confirm="onConfirmRangePicker"
+    bind:close="onCloseRangePicker"
+  />
 </scroll-view>

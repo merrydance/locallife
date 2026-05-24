@@ -923,6 +923,8 @@ func normalizeInt64Result(raw interface{}) (int64, error) {
 // @Accept json
 // @Produce json
 // @Param status query string false "状态过滤" Enums(assigned, picking, picked, delivering, delivered, completed, cancelled)
+// @Param start_date query string false "开始日期，格式 YYYY-MM-DD"
+// @Param end_date query string false "结束日期，格式 YYYY-MM-DD"
 // @Param page query int false "页码" default(1) minimum(1)
 // @Param limit query int false "每页数量" default(20) minimum(1) maximum(100)
 // @Success 200 {object} listMyDeliveriesResponse "代取单列表"
@@ -934,12 +936,18 @@ func normalizeInt64Result(raw interface{}) (int64, error) {
 // @Security BearerAuth
 func (server *Server) listMyDeliveries(ctx *gin.Context) {
 	var req struct {
-		Status string `form:"status" binding:"omitempty,oneof=assigned picking picked delivering delivered completed cancelled"`
-		Page   int32  `form:"page" binding:"min=1"`
-		Limit  int32  `form:"limit" binding:"min=1,max=100"`
+		Status    string `form:"status" binding:"omitempty,oneof=assigned picking picked delivering delivered completed cancelled"`
+		StartDate string `form:"start_date" binding:"omitempty,datetime=2006-01-02"`
+		EndDate   string `form:"end_date" binding:"omitempty,datetime=2006-01-02"`
+		Page      int32  `form:"page" binding:"min=1"`
+		Limit     int32  `form:"limit" binding:"min=1,max=100"`
 	}
 	if err := ctx.ShouldBindQuery(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if (req.StartDate == "") != (req.EndDate == "") {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("start_date and end_date must be provided together")))
 		return
 	}
 
@@ -948,6 +956,18 @@ func (server *Server) listMyDeliveries(ctx *gin.Context) {
 	}
 	if req.Limit == 0 {
 		req.Limit = 20
+	}
+
+	startAt := pgtype.Timestamptz{}
+	endAt := pgtype.Timestamptz{}
+	if req.StartDate != "" {
+		startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 0)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+		startAt = pgtype.Timestamptz{Time: startDate, Valid: true}
+		endAt = pgtype.Timestamptz{Time: endDate.AddDate(0, 0, 1), Valid: true}
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
@@ -965,27 +985,26 @@ func (server *Server) listMyDeliveries(ctx *gin.Context) {
 	riderID := pgtype.Int8{Int64: rider.ID, Valid: true}
 
 	var deliveries []db.Delivery
-	total := int64(0)
-
-	if req.Status != "" {
-		deliveries, err = server.store.ListDeliveriesByRiderAndStatus(ctx, db.ListDeliveriesByRiderAndStatusParams{
-			RiderID: riderID,
-			Status:  req.Status,
-			Limit:   req.Limit,
-			Offset:  pageOffset(req.Page, req.Limit),
-		})
-		total = int64(len(deliveries))
-	} else {
-		deliveries, err = server.store.ListDeliveriesByRider(ctx, db.ListDeliveriesByRiderParams{
-			RiderID: riderID,
-			Limit:   req.Limit,
-			Offset:  pageOffset(req.Page, req.Limit),
-		})
-		if err == nil {
-			total, err = server.store.CountRiderDeliveries(ctx, riderID)
-		}
+	historyArg := db.ListDeliveriesByRiderHistoryParams{
+		RiderID: riderID,
+		Status:  pgtype.Text{String: req.Status, Valid: req.Status != ""},
+		StartAt: startAt,
+		EndAt:   endAt,
+		Limit:   req.Limit,
+		Offset:  pageOffset(req.Page, req.Limit),
+	}
+	deliveries, err = server.store.ListDeliveriesByRiderHistory(ctx, historyArg)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
 	}
 
+	total, err := server.store.CountDeliveriesByRiderHistory(ctx, db.CountDeliveriesByRiderHistoryParams{
+		RiderID: riderID,
+		Status:  historyArg.Status,
+		StartAt: historyArg.StartAt,
+		EndAt:   historyArg.EndAt,
+	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return

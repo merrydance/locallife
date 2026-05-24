@@ -116,6 +116,22 @@ WHERE rider_id = $1 AND status = $2
 ORDER BY created_at DESC, id DESC
 LIMIT $3 OFFSET $4;
 
+-- name: ListDeliveriesByRiderHistory :many
+SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at FROM deliveries
+WHERE rider_id = sqlc.arg('rider_id')
+  AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status')::text)
+  AND (sqlc.narg('start_at')::timestamptz IS NULL OR created_at >= sqlc.narg('start_at')::timestamptz)
+  AND (sqlc.narg('end_at')::timestamptz IS NULL OR created_at < sqlc.narg('end_at')::timestamptz)
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: CountDeliveriesByRiderHistory :one
+SELECT COUNT(*) FROM deliveries
+WHERE rider_id = sqlc.arg('rider_id')
+  AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status')::text)
+  AND (sqlc.narg('start_at')::timestamptz IS NULL OR created_at >= sqlc.narg('start_at')::timestamptz)
+  AND (sqlc.narg('end_at')::timestamptz IS NULL OR created_at < sqlc.narg('end_at')::timestamptz);
+
 -- name: ListRiderActiveDeliveries :many
 SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at FROM deliveries
 WHERE rider_id = $1 AND status IN ('assigned', 'picking', 'picked', 'delivering')

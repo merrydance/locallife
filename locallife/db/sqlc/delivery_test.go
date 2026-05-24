@@ -497,6 +497,63 @@ func TestDeliveryListQueriesUseIDTieBreaker(t *testing.T) {
 	require.Equal(t, delivery1.ID, assignedDeliveries[1].ID)
 }
 
+func TestListDeliveriesByRiderHistoryFiltersByStatusAndCreatedAt(t *testing.T) {
+	rider := createOnlineRider(t)
+	beforeRange := createAssignedDelivery(t, rider.ID)
+	inRange := createAssignedDelivery(t, rider.ID)
+	endBoundary := createAssignedDelivery(t, rider.ID)
+	rangeStart := time.Date(2026, time.May, 1, 0, 0, 0, 0, time.UTC)
+	rangeEnd := time.Date(2026, time.May, 4, 0, 0, 0, 0, time.UTC)
+
+	store, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+
+	_, err := store.connPool.Exec(context.Background(),
+		`UPDATE deliveries
+		 SET created_at = CASE id
+		   WHEN $1 THEN $4::timestamptz
+		   WHEN $2 THEN $5::timestamptz
+		   WHEN $3 THEN $6::timestamptz
+		 END,
+		 status = CASE id
+		   WHEN $1 THEN 'completed'
+		   WHEN $2 THEN 'completed'
+		   WHEN $3 THEN 'completed'
+		 END
+		 WHERE id = ANY($7)`,
+		beforeRange.ID,
+		inRange.ID,
+		endBoundary.ID,
+		rangeStart.Add(-time.Second),
+		rangeStart.Add(36*time.Hour),
+		rangeEnd,
+		[]int64{beforeRange.ID, inRange.ID, endBoundary.ID},
+	)
+	require.NoError(t, err)
+
+	arg := ListDeliveriesByRiderHistoryParams{
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+		Status:  pgtype.Text{String: "completed", Valid: true},
+		StartAt: pgtype.Timestamptz{Time: rangeStart, Valid: true},
+		EndAt:   pgtype.Timestamptz{Time: rangeEnd, Valid: true},
+		Limit:   10,
+		Offset:  0,
+	}
+	deliveries, err := testStore.ListDeliveriesByRiderHistory(context.Background(), arg)
+	require.NoError(t, err)
+	require.Len(t, deliveries, 1)
+	require.Equal(t, inRange.ID, deliveries[0].ID)
+
+	count, err := testStore.CountDeliveriesByRiderHistory(context.Background(), CountDeliveriesByRiderHistoryParams{
+		RiderID: arg.RiderID,
+		Status:  arg.Status,
+		StartAt: arg.StartAt,
+		EndAt:   arg.EndAt,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), count)
+}
+
 func TestListDeliveryPool(t *testing.T) {
 	// 创建几个订单池项
 	for i := 0; i < 3; i++ {

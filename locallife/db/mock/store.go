@@ -1609,6 +1609,21 @@ func (mr *MockStoreMockRecorder) CountComboSetsByMerchant(ctx, arg any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountComboSetsByMerchant", reflect.TypeOf((*MockStore)(nil).CountComboSetsByMerchant), ctx, arg)
 }
 
+// CountDeliveriesByRiderHistory mocks base method.
+func (m *MockStore) CountDeliveriesByRiderHistory(ctx context.Context, arg db.CountDeliveriesByRiderHistoryParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountDeliveriesByRiderHistory", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountDeliveriesByRiderHistory indicates an expected call of CountDeliveriesByRiderHistory.
+func (mr *MockStoreMockRecorder) CountDeliveriesByRiderHistory(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountDeliveriesByRiderHistory", reflect.TypeOf((*MockStore)(nil).CountDeliveriesByRiderHistory), ctx, arg)
+}
+
 // CountDeliveryPool mocks base method.
 func (m *MockStore) CountDeliveryPool(ctx context.Context) (int64, error) {
 	m.ctrl.T.Helper()
@@ -12981,6 +12996,21 @@ func (m *MockStore) ListDeliveriesByRiderAndStatus(ctx context.Context, arg db.L
 func (mr *MockStoreMockRecorder) ListDeliveriesByRiderAndStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListDeliveriesByRiderAndStatus", reflect.TypeOf((*MockStore)(nil).ListDeliveriesByRiderAndStatus), ctx, arg)
+}
+
+// ListDeliveriesByRiderHistory mocks base method.
+func (m *MockStore) ListDeliveriesByRiderHistory(ctx context.Context, arg db.ListDeliveriesByRiderHistoryParams) ([]db.Delivery, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListDeliveriesByRiderHistory", ctx, arg)
+	ret0, _ := ret[0].([]db.Delivery)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListDeliveriesByRiderHistory indicates an expected call of ListDeliveriesByRiderHistory.
+func (mr *MockStoreMockRecorder) ListDeliveriesByRiderHistory(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListDeliveriesByRiderHistory", reflect.TypeOf((*MockStore)(nil).ListDeliveriesByRiderHistory), ctx, arg)
 }
 
 // ListDeliveryFeeConfigs mocks base method.

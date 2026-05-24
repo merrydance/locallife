@@ -736,6 +736,144 @@ func TestListMyActiveDeliveriesAPI(t *testing.T) {
 		})
 	}
 }
+
+func TestListMyDeliveriesAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	rider := randomRider(user.ID)
+	riderID := pgtype.Int8{Int64: rider.ID, Valid: true}
+	startAt := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	endAt := time.Date(2026, 5, 4, 0, 0, 0, 0, time.UTC)
+	delivery := randomDelivery(util.RandomInt(1, 1000), rider.ID)
+	delivery.Status = "completed"
+	delivery.CreatedAt = time.Date(2026, 5, 2, 10, 30, 0, 0, time.UTC)
+	delivery.CompletedAt = pgtype.Timestamptz{Time: time.Date(2026, 5, 2, 11, 15, 0, 0, time.UTC), Valid: true}
+	order := db.Order{
+		ID:         delivery.OrderID,
+		UserID:     user.ID,
+		MerchantID: util.RandomInt(1, 1000),
+		OrderNo:    util.RandomString(10),
+		OrderType:  db.OrderTypeTakeaway,
+		Notes:      pgtype.Text{String: "leave at front desk", Valid: true},
+	}
+	merchant := db.Merchant{ID: order.MerchantID, Name: util.RandomString(10)}
+
+	testCases := []struct {
+		name          string
+		query         string
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:  "OK_WithDateRange",
+			query: "?page=2&limit=10&status=completed&start_date=2026-05-01&end_date=2026-05-03",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(rider, nil)
+
+				arg := db.ListDeliveriesByRiderHistoryParams{
+					RiderID: riderID,
+					Status:  pgtype.Text{String: "completed", Valid: true},
+					StartAt: pgtype.Timestamptz{Time: startAt, Valid: true},
+					EndAt:   pgtype.Timestamptz{Time: endAt, Valid: true},
+					Limit:   10,
+					Offset:  10,
+				}
+				store.EXPECT().
+					ListDeliveriesByRiderHistory(gomock.Any(), gomock.Eq(arg)).
+					Times(1).
+					Return([]db.Delivery{delivery}, nil)
+				store.EXPECT().
+					CountDeliveriesByRiderHistory(gomock.Any(), gomock.Eq(db.CountDeliveriesByRiderHistoryParams{
+						RiderID: riderID,
+						Status:  arg.Status,
+						StartAt: arg.StartAt,
+						EndAt:   arg.EndAt,
+					})).
+					Times(1).
+					Return(int64(12), nil)
+				store.EXPECT().
+					CountRiderCompletedDeliveries(gomock.Any(), riderID).
+					Times(1).
+					Return(int64(7), nil)
+				store.EXPECT().
+					GetRiderEarnings(gomock.Any(), riderID).
+					Times(1).
+					Return(int64(2400), nil)
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(delivery.OrderID)).
+					Times(1).
+					Return(order, nil)
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(order.MerchantID)).
+					Times(1).
+					Return(merchant, nil)
+				store.EXPECT().
+					CountOrderItems(gomock.Any(), gomock.Eq(delivery.OrderID)).
+					Times(1).
+					Return(int64(0), nil)
+				store.EXPECT().
+					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(delivery.OrderID)).
+					Times(1).
+					Return([]db.OrderItem{}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var response listMyDeliveriesResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Len(t, response.Deliveries, 1)
+				require.Equal(t, int64(12), response.Total)
+				require.Equal(t, int64(7), response.CompletedTotal)
+				require.Equal(t, int64(2400), response.TotalEarnings)
+				require.Equal(t, int32(2), response.PageID)
+				require.Equal(t, int32(10), response.PageSize)
+			},
+		},
+		{
+			name:  "InvalidDateRange",
+			query: "?start_date=2026-05-04&end_date=2026-05-03",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			request, err := http.NewRequest(http.MethodGet, "/v1/delivery/history"+tc.query, nil)
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
 func TestGetDeliveryByOrderAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	riderUser, _ := randomUser(t)

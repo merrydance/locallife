@@ -80,9 +80,9 @@ export interface DeliveryResponse {
 export interface DeliveryHistoryParams extends Record<string, unknown> {
     page_id: number
     page_size: number
+    status?: DeliveryStatus
     start_date?: string
     end_date?: string
-    status?: DeliveryStatus
 }
 
 /** 代取操作请求 */
@@ -144,10 +144,22 @@ export class DeliveryTaskManagementService {
         page_size: number
         has_more: boolean
     }> {
+        const data: { page: number, limit: number, status?: DeliveryStatus, start_date?: string, end_date?: string } = {
+            page: params.page_id,
+            limit: params.page_size
+        }
+        if (params.status) {
+            data.status = params.status
+        }
+        if (params.start_date && params.end_date) {
+            data.start_date = params.start_date
+            data.end_date = params.end_date
+        }
+
         return request({
             url: '/v1/delivery/history',
             method: 'GET',
-            data: params
+            data
         })
     }
 

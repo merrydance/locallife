@@ -151,6 +151,7 @@ type Querier interface {
 	CountBrowseHistoryByType(ctx context.Context, arg CountBrowseHistoryByTypeParams) (int64, error)
 	CountCombinedPaymentSubOrders(ctx context.Context, combinedPaymentID int64) (int32, error)
 	CountComboSetsByMerchant(ctx context.Context, arg CountComboSetsByMerchantParams) (int64, error)
+	CountDeliveriesByRiderHistory(ctx context.Context, arg CountDeliveriesByRiderHistoryParams) (int64, error)
 	CountDeliveryPool(ctx context.Context) (int64, error)
 	CountDishesByMerchant(ctx context.Context, arg CountDishesByMerchantParams) (int64, error)
 	// 统计时间窗口内发起索赔的不同用户数
@@ -1230,6 +1231,7 @@ type Querier interface {
 	ListDailyInventoryByMerchant(ctx context.Context, arg ListDailyInventoryByMerchantParams) ([]ListDailyInventoryByMerchantRow, error)
 	ListDeliveriesByRider(ctx context.Context, arg ListDeliveriesByRiderParams) ([]Delivery, error)
 	ListDeliveriesByRiderAndStatus(ctx context.Context, arg ListDeliveriesByRiderAndStatusParams) ([]Delivery, error)
+	ListDeliveriesByRiderHistory(ctx context.Context, arg ListDeliveriesByRiderHistoryParams) ([]Delivery, error)
 	ListDeliveryFeeConfigs(ctx context.Context, arg ListDeliveryFeeConfigsParams) ([]DeliveryFeeConfig, error)
 	ListDeliveryLocations(ctx context.Context, deliveryID pgtype.Int8) ([]RiderLocation, error)
 	ListDeliveryLocationsSince(ctx context.Context, arg ListDeliveryLocationsSinceParams) ([]RiderLocation, error)

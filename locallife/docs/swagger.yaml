@@ -12825,6 +12825,14 @@ paths:
         in: query
         name: status
         type: string
+      - description: 开始日期，格式 YYYY-MM-DD
+        in: query
+        name: start_date
+        type: string
+      - description: 结束日期，格式 YYYY-MM-DD
+        in: query
+        name: end_date
+        type: string
       - default: 1
         description: 页码
         in: query

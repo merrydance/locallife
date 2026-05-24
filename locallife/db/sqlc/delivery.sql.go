@@ -64,6 +64,33 @@ func (q *Queries) AssignDelivery(ctx context.Context, arg AssignDeliveryParams) 
 	return i, err
 }
 
+const countDeliveriesByRiderHistory = `-- name: CountDeliveriesByRiderHistory :one
+SELECT COUNT(*) FROM deliveries
+WHERE rider_id = $1
+  AND ($2::text IS NULL OR status = $2::text)
+  AND ($3::timestamptz IS NULL OR created_at >= $3::timestamptz)
+  AND ($4::timestamptz IS NULL OR created_at < $4::timestamptz)
+`
+
+type CountDeliveriesByRiderHistoryParams struct {
+	RiderID pgtype.Int8        `json:"rider_id"`
+	Status  pgtype.Text        `json:"status"`
+	StartAt pgtype.Timestamptz `json:"start_at"`
+	EndAt   pgtype.Timestamptz `json:"end_at"`
+}
+
+func (q *Queries) CountDeliveriesByRiderHistory(ctx context.Context, arg CountDeliveriesByRiderHistoryParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countDeliveriesByRiderHistory,
+		arg.RiderID,
+		arg.Status,
+		arg.StartAt,
+		arg.EndAt,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countRiderCompletedDeliveries = `-- name: CountRiderCompletedDeliveries :one
 SELECT COUNT(*) FROM deliveries
 WHERE rider_id = $1 AND status = 'completed'
@@ -448,6 +475,82 @@ func (q *Queries) ListDeliveriesByRiderAndStatus(ctx context.Context, arg ListDe
 		arg.Status,
 		arg.Limit,
 		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Delivery{}
+	for rows.Next() {
+		var i Delivery
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderID,
+			&i.RiderID,
+			&i.PickupAddress,
+			&i.PickupLongitude,
+			&i.PickupLatitude,
+			&i.PickupContact,
+			&i.PickupPhone,
+			&i.PickedAt,
+			&i.DeliveryAddress,
+			&i.DeliveryLongitude,
+			&i.DeliveryLatitude,
+			&i.DeliveryContact,
+			&i.DeliveryPhone,
+			&i.DeliveredAt,
+			&i.Distance,
+			&i.DeliveryFee,
+			&i.RiderEarnings,
+			&i.Status,
+			&i.EstimatedPickupAt,
+			&i.EstimatedDeliveryAt,
+			&i.IsDamaged,
+			&i.IsDelayed,
+			&i.DamageAmount,
+			&i.DamageReason,
+			&i.CreatedAt,
+			&i.AssignedAt,
+			&i.CompletedAt,
+			&i.RiderDeliveredAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDeliveriesByRiderHistory = `-- name: ListDeliveriesByRiderHistory :many
+SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at FROM deliveries
+WHERE rider_id = $1
+  AND ($2::text IS NULL OR status = $2::text)
+  AND ($3::timestamptz IS NULL OR created_at >= $3::timestamptz)
+  AND ($4::timestamptz IS NULL OR created_at < $4::timestamptz)
+ORDER BY created_at DESC, id DESC
+LIMIT $6 OFFSET $5
+`
+
+type ListDeliveriesByRiderHistoryParams struct {
+	RiderID pgtype.Int8        `json:"rider_id"`
+	Status  pgtype.Text        `json:"status"`
+	StartAt pgtype.Timestamptz `json:"start_at"`
+	EndAt   pgtype.Timestamptz `json:"end_at"`
+	Offset  int32              `json:"offset"`
+	Limit   int32              `json:"limit"`
+}
+
+func (q *Queries) ListDeliveriesByRiderHistory(ctx context.Context, arg ListDeliveriesByRiderHistoryParams) ([]Delivery, error) {
+	rows, err := q.db.Query(ctx, listDeliveriesByRiderHistory,
+		arg.RiderID,
+		arg.Status,
+		arg.StartAt,
+		arg.EndAt,
+		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err
