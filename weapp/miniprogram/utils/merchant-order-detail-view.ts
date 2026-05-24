@@ -26,6 +26,7 @@ export interface MerchantOrderDetailView extends OrderResponse {
   location_label: string
   location_primary: string
   location_secondary: string
+  pickup_code_display: string
   contact_name: string
   contact_phone: string
   fee_breakdown_view: MerchantOrderFeeBreakdownView

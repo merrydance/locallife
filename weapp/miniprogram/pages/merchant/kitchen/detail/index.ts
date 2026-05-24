@@ -17,7 +17,7 @@ interface KitchenDetailItemView extends KitchenOrderItem {
 }
 
 interface KitchenDetailView extends KitchenOrderResponse {
-  orderNoShort: string
+  pickupCodeDisplay: string
   orderTypeLabel: string
   statusLabel: string
   statusTheme: KitchenStatusTheme
@@ -45,6 +45,14 @@ function formatTime(value?: string) {
   return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm') : value
 }
 
+function formatPickupCodeDisplay(order: KitchenOrderResponse): string {
+  const pickupCode = String(order.pickup_code || order.pickup_number || '').trim()
+  if (/^\d{4}$/.test(pickupCode)) {
+    return pickupCode
+  }
+  return '----'
+}
+
 function formatKitchenItem(item: KitchenOrderItem): KitchenDetailItemView {
   const customizationSummary = Array.isArray(item.customizations) && item.customizations.length
     ? item.customizations.map((option) => option.value || option.name).filter(Boolean).join('、')
@@ -61,18 +69,17 @@ function formatKitchenItem(item: KitchenOrderItem): KitchenDetailItemView {
 function buildKitchenDetailView(order: KitchenOrderResponse): KitchenDetailView {
   const remainingMinutes = Math.round(OrderManagementAdapter.getRemainingTime(order))
   const statusView = getKitchenStatusView(order.status)
+  const pickupCodeDisplay = formatPickupCodeDisplay(order)
   const seatOrPickupLabel = order.table_number || order.table_no
     ? `${order.table_number || order.table_no}号桌`
-    : order.pickup_number
-      ? `取餐号 ${order.pickup_number}`
-      : order.customer_name || '现场订单'
+    : `取餐码 ${pickupCodeDisplay}`
   const items = (order.items || []).map(formatKitchenItem)
   const totalQuantity = items.reduce((sum, item) => sum + (item.quantity || 0), 0)
 
   return {
     ...order,
     items,
-    orderNoShort: order.order_no.slice(-6).toUpperCase(),
+    pickupCodeDisplay,
     orderTypeLabel: OrderManagementAdapter.formatOrderType(order.order_type),
     statusLabel: statusView.label,
     statusTheme: statusView.theme,

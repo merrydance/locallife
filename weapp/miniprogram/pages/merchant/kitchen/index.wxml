@@ -97,7 +97,7 @@
               <view class="order-head">
                 <view class="order-id-row">
                   <t-tag theme="primary" variant="light" size="small">{{item.order_type_label}}</t-tag>
-                  <text class="order-no">#{{item.order_no_short}}</text>
+                  <text class="order-no">#{{item.pickup_code_display}}</text>
                 </view>
                 <t-tag theme="warning" variant="light" size="small">等待 {{item.waiting_label}}</t-tag>
               </view>
@@ -137,7 +137,7 @@
               <view class="order-head">
                 <view class="order-id-row">
                   <t-tag theme="primary" variant="light" size="small">{{item.order_type_label}}</t-tag>
-                  <text class="order-no">#{{item.order_no_short}}</text>
+                  <text class="order-no">#{{item.pickup_code_display}}</text>
                 </view>
                 <t-tag theme="{{item.remaining_tag_theme}}" variant="light" size="small">{{item.remaining_tag_text}}</t-tag>
               </view>
@@ -183,7 +183,7 @@
               <view class="order-head">
                 <view class="order-id-row">
                   <t-tag theme="success" variant="light" size="small">{{item.order_type_label}}</t-tag>
-                  <text class="order-no">#{{item.order_no_short}}</text>
+                  <text class="order-no">#{{item.pickup_code_display}}</text>
                 </view>
                 <t-tag theme="success" variant="light" size="small">已出餐</t-tag>
               </view>

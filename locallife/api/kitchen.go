@@ -60,7 +60,10 @@ type kitchenOrderResponse struct {
 	// 桌台号 (堂食订单)
 	TableNo *string `json:"table_no,omitempty"`
 
-	// 取餐号 (打包自取)
+	// 取餐码
+	PickupCode *string `json:"pickup_code,omitempty"`
+
+	// 取餐码兼容别名
 	PickupNumber *string `json:"pickup_number,omitempty"`
 
 	// 订单备注
@@ -582,6 +585,11 @@ func (server *Server) convertToKitchenOrder(ctx *gin.Context, order db.Order) (k
 	if order.Notes.Valid && order.Notes.String != "" {
 		notes = &order.Notes.String
 	}
+	var pickupCode *string
+	if order.PickupCode.Valid && order.PickupCode.String != "" {
+		code := formatPickupCode(order.PickupCode.String)
+		pickupCode = &code
+	}
 
 	// 支付时间
 	paidAt := order.CreatedAt
@@ -595,6 +603,8 @@ func (server *Server) convertToKitchenOrder(ctx *gin.Context, order db.Order) (k
 		OrderType:        order.OrderType,
 		Status:           order.Status,
 		TableNo:          tableNo,
+		PickupCode:       pickupCode,
+		PickupNumber:     pickupCode,
 		Notes:            notes,
 		Items:            kitchenItems,
 		EstimatedReadyAt: estimatedReadyAt,

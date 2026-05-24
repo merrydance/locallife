@@ -59,6 +59,46 @@ func expectNoPackagingPolicy(store *mockdb.MockStore) {
 		Return(int64(0), nil)
 }
 
+func TestNewOrderResponseKeepsFourDigitPickupCodeVisible(t *testing.T) {
+	resp, err := newOrderResponse(db.Order{
+		ID:                1,
+		OrderNo:           "ORD202605240001",
+		UserID:            10,
+		MerchantID:        20,
+		OrderType:         "takeaway",
+		Status:            db.OrderStatusPaid,
+		FulfillmentStatus: db.FulfillmentStatusScheduled,
+		PickupCode:        pgtype.Text{String: "0001", Valid: true},
+		CreatedAt:         time.Now(),
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, resp.PickupCode)
+	require.Equal(t, "0001", *resp.PickupCode)
+	require.NotNil(t, resp.PickupCodeMasked)
+	require.Equal(t, "0001", *resp.PickupCodeMasked)
+}
+
+func TestNewOrderResponsePadsLegacyPickupCodeToFourDigits(t *testing.T) {
+	resp, err := newOrderResponse(db.Order{
+		ID:                1,
+		OrderNo:           "ORD202605240001",
+		UserID:            10,
+		MerchantID:        20,
+		OrderType:         "takeaway",
+		Status:            db.OrderStatusPaid,
+		FulfillmentStatus: db.FulfillmentStatusScheduled,
+		PickupCode:        pgtype.Text{String: "1", Valid: true},
+		CreatedAt:         time.Now(),
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, resp.PickupCode)
+	require.Equal(t, "0001", *resp.PickupCode)
+	require.NotNil(t, resp.PickupCodeMasked)
+	require.Equal(t, "0001", *resp.PickupCodeMasked)
+}
+
 type replaceOrderErrorCommandService struct {
 	err error
 }

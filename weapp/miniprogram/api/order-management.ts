@@ -250,7 +250,8 @@ export interface KitchenOrderResponse {
     order_no: string                             // 订单编号
     order_type: string                           // 订单类型
     paid_at?: string                             // 支付时间
-    pickup_number?: string                       // 取餐号（打包自取）
+    pickup_code?: string                         // 取餐码
+    pickup_number?: string                       // 取餐码兼容别名
     status: string                               // 订单状态
     table_no?: string                            // 桌台号（堂食订单）
     table_number?: string                        // 桌台号（前端兼容）

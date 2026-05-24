@@ -64,11 +64,11 @@
 
         <block wx:else>
           <view class="order-card" wx:for="{{orders}}" wx:key="id" bindtap="onViewDetail" data-id="{{item.id}}" data-status="{{item.status}}">
-            <!-- 头部：订单号 + 类型标签 -->
+            <!-- 头部：取餐码 + 类型标签 -->
             <view class="card-header">
               <view class="order-no-row">
                 <t-tag size="extra-small" variant="dark" theme="default" shape="round" class="type-tag {{item.order_type}}">{{item.order_type_label}}</t-tag>
-                <text class="order-no">#{{item.order_no_short}}</text>
+                <text class="order-no">#{{item.pickup_code_display}}</text>
               </view>
               <view class="status-label" style="color: {{item.status_color}}">{{item.status_label}}</view>
             </view>

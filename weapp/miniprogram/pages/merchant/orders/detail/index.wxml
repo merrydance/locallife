@@ -82,7 +82,7 @@
         </view>
       </view>
       <view class="card-wrap detail-card">
-        <t-cell title="订单编号" note="{{order.order_no}}" bordered="{{false}}" />
+        <t-cell title="取餐码" note="{{order.pickup_code_display}}" bordered="{{false}}" />
         <t-cell title="下单时间" note="{{order.created_at_fmt}}" bordered="{{false}}" />
         <t-cell title="支付方式" note="{{order.payment_method_label}}" bordered="{{false}}" />
         <t-cell wx:if="{{order.cancel_reason}}" title="取消原因" note="{{order.cancel_reason}}" bordered="{{false}}" />

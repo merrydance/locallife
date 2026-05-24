@@ -36486,8 +36486,12 @@ const docTemplate = `{
                     "description": "支付时间（订单开始计时的时间）",
                     "type": "string"
                 },
+                "pickup_code": {
+                    "description": "取餐码",
+                    "type": "string"
+                },
                 "pickup_number": {
-                    "description": "取餐号 (打包自取)",
+                    "description": "取餐码兼容别名",
                     "type": "string"
                 },
                 "status": {

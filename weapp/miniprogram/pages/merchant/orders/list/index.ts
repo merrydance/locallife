@@ -29,7 +29,7 @@ interface OrderTypeOption {
 }
 
 interface MerchantOrderListItem extends OrderResponse {
-  order_no_short: string
+  pickup_code_display: string
   order_type_label: string
   status_label: string
   status_color: string
@@ -62,6 +62,14 @@ const ORDER_TYPE_OPTIONS: OrderTypeOption[] = [
 ]
 
 const getErrorMessage = getErrorUserMessage
+
+function formatPickupCodeDisplay(order: Pick<OrderResponse, 'pickup_code' | 'pickup_code_masked'>): string {
+  const pickupCode = String(order.pickup_code || '').trim()
+  if (/^\d{4}$/.test(pickupCode)) {
+    return pickupCode
+  }
+  return String(order.pickup_code_masked || '').trim() || '----'
+}
 
 interface LoadOrdersOptions {
   showLoading?: boolean
@@ -351,7 +359,7 @@ Page({
     const feeBreakdownView = buildMerchantOrderFeeBreakdownView(order)
     return {
       ...order,
-      order_no_short: order.order_no.slice(-6).toUpperCase(),
+      pickup_code_display: formatPickupCodeDisplay(order),
       order_type_label: OrderManagementAdapter.formatOrderType(order.order_type),
       status_label: OrderManagementAdapter.formatOrderStatus(order.status),
       status_color: OrderManagementAdapter.getStatusColor(order.status),
@@ -382,14 +390,14 @@ Page({
     if (order.order_type === 'dine_in') {
       return {
         label: '就餐位置',
-        value: order.table_id ? `${order.table_id} 号桌` : '堂食就餐'
+        value: order.table_id ? `${order.table_id} 号桌` : `取餐码 ${formatPickupCodeDisplay(order)}`
       }
     }
 
     if (order.order_type === 'takeaway') {
       return {
         label: '取餐方式',
-        value: order.pickup_code_masked ? `取餐码 ${order.pickup_code_masked}` : '到店自取'
+        value: `取餐码 ${formatPickupCodeDisplay(order)}`
       }
     }
 

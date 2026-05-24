@@ -274,17 +274,47 @@ func TestCreateOrderTxAllocatesMerchantDailyPickupCode(t *testing.T) {
 	first, err := testStore.CreateOrderTx(context.Background(), newOrderParams(util.RandomString(20), pickupTime))
 	require.NoError(t, err)
 	require.True(t, first.Order.PickupCode.Valid)
-	require.Equal(t, "1", first.Order.PickupCode.String)
+	require.Equal(t, "0001", first.Order.PickupCode.String)
 
 	second, err := testStore.CreateOrderTx(context.Background(), newOrderParams(util.RandomString(20), pickupTime.Add(2*time.Hour)))
 	require.NoError(t, err)
 	require.True(t, second.Order.PickupCode.Valid)
-	require.Equal(t, "2", second.Order.PickupCode.String)
+	require.Equal(t, "0002", second.Order.PickupCode.String)
 
 	third, err := testStore.CreateOrderTx(context.Background(), newOrderParams(util.RandomString(20), pickupTime.Add(24*time.Hour)))
 	require.NoError(t, err)
 	require.True(t, third.Order.PickupCode.Valid)
-	require.Equal(t, "1", third.Order.PickupCode.String)
+	require.Equal(t, "0001", third.Order.PickupCode.String)
+}
+
+func TestCreateOrderTxAllocatesPickupCodeForDineInOrder(t *testing.T) {
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	pickupTime := time.Date(2026, 4, 1, 10, 0, 0, 0, time.Local)
+
+	result, err := testStore.CreateOrderTx(context.Background(), CreateOrderTxParams{
+		CreateOrderParams: CreateOrderParams{
+			OrderNo:     util.RandomString(20),
+			UserID:      user.ID,
+			MerchantID:  merchant.ID,
+			OrderType:   OrderTypeDineIn,
+			Subtotal:    1800,
+			TotalAmount: 1800,
+			Status:      OrderStatusPending,
+			PickupCode:  pgtype.Text{},
+		},
+		Items: []CreateOrderItemParams{{
+			DishID:    pgtype.Int8{Int64: 1, Valid: true},
+			Name:      "堂食菜品",
+			UnitPrice: 1800,
+			Quantity:  1,
+			Subtotal:  1800,
+		}},
+		PickupTime: pickupTime,
+	})
+	require.NoError(t, err)
+	require.True(t, result.Order.PickupCode.Valid)
+	require.Equal(t, "0001", result.Order.PickupCode.String)
 }
 
 func TestCreateOrderTxEmptyItems(t *testing.T) {

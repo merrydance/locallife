@@ -33,12 +33,12 @@ func (DefaultIDGenerator) OrderNo(now time.Time) (string, error) {
 }
 
 func (DefaultIDGenerator) PickupCode(_ time.Time) (string, error) {
-	b := make([]byte, 3)
+	b := make([]byte, 2)
 	if _, err := rand.Read(b); err != nil {
 		return "", fmt.Errorf("crypto/rand.Read failed: %w", err)
 	}
-	num := int(b[0])<<16 | int(b[1])<<8 | int(b[2])
-	return fmt.Sprintf("%06d", num%1000000), nil
+	num := int(b[0])<<8 | int(b[1])
+	return fmt.Sprintf("%04d", num%10000), nil
 }
 
 func (DefaultIDGenerator) OutTradeNo(prefix string, now time.Time) (string, error) {

@@ -3727,8 +3727,11 @@ definitions:
       paid_at:
         description: 支付时间（订单开始计时的时间）
         type: string
+      pickup_code:
+        description: 取餐码
+        type: string
       pickup_number:
-        description: 取餐号 (打包自取)
+        description: 取餐码兼容别名
         type: string
       status:
         description: '订单状态: paid-新订单, preparing-制作中, ready-出餐完成'

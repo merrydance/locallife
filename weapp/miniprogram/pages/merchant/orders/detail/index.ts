@@ -79,7 +79,7 @@ Page({
       this.setData({
         loading: false,
         initialError: true,
-        initialErrorMessage: '缺少订单编号，无法查看详情'
+        initialErrorMessage: '缺少订单标识，无法查看详情'
       })
       return
     }
@@ -231,6 +231,7 @@ Page({
   formatDetail(order: OrderResponse): MerchantOrderDetailView {
     const timeline = this.buildTimeline(order)
     const scene = this.buildSceneInfo(order)
+    const pickupCodeDisplay = this.formatPickupCodeDisplay(order)
 
     return {
       ...order,
@@ -249,6 +250,7 @@ Page({
       location_label: scene.label,
       location_primary: scene.primary,
       location_secondary: scene.secondary,
+      pickup_code_display: pickupCodeDisplay,
       contact_name: order.delivery_contact_name || '',
       contact_phone: order.delivery_contact_phone || '',
       fee_breakdown_view: buildMerchantOrderFeeBreakdownView(order),
@@ -261,6 +263,8 @@ Page({
   },
 
   buildSceneInfo(order: OrderResponse) {
+    const pickupCodeDisplay = this.formatPickupCodeDisplay(order)
+
     if (order.order_type === 'takeout') {
       return {
         label: '配送地址',
@@ -273,15 +277,15 @@ Page({
       return {
         label: '就餐位置',
         primary: order.table_id ? `${order.table_id} 号桌` : '堂食就餐',
-        secondary: order.reservation_id ? `预订 #${order.reservation_id}` : '到店就餐'
+        secondary: `取餐码 ${pickupCodeDisplay}`
       }
     }
 
     if (order.order_type === 'takeaway') {
       return {
         label: '取餐方式',
-        primary: order.pickup_code_masked ? `取餐码 ${order.pickup_code_masked}` : '到店自取',
-        secondary: order.pickup_code ? `原始取餐码 ${order.pickup_code}` : '顾客到店后核销'
+        primary: `取餐码 ${pickupCodeDisplay}`,
+        secondary: '顾客到店后核销'
       }
     }
 
@@ -290,6 +294,14 @@ Page({
       primary: order.reservation_id ? `预订 #${order.reservation_id}` : '预订点菜',
       secondary: order.table_id ? `${order.table_id} 号桌` : '到店后履约'
     }
+  },
+
+  formatPickupCodeDisplay(order: Pick<OrderResponse, 'pickup_code' | 'pickup_code_masked'>) {
+    const pickupCode = String(order.pickup_code || '').trim()
+    if (/^\d{4}$/.test(pickupCode)) {
+      return pickupCode
+    }
+    return String(order.pickup_code_masked || '').trim() || '----'
   },
 
   buildTimeline(order: OrderResponse) {

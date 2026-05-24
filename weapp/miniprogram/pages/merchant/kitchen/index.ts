@@ -26,7 +26,7 @@ interface MerchantStatusChangePayload {
 }
 
 interface KitchenBoardOrder extends KitchenOrderResponse {
-  order_no_short: string
+  pickup_code_display: string
   order_type_label: string
   waiting_label: string
   remaining_label: string
@@ -55,18 +55,25 @@ const BOARD_FILTER_OPTIONS: KitchenBoardFilterOption[] = [
   { label: '待取餐', value: 'ready' }
 ]
 
+function formatPickupCodeDisplay(order: KitchenOrderResponse): string {
+  const pickupCode = String(order.pickup_code || order.pickup_number || '').trim()
+  if (/^\d{4}$/.test(pickupCode)) {
+    return pickupCode
+  }
+  return '----'
+}
+
 function formatKitchenOrder(order: KitchenOrderResponse): KitchenBoardOrder {
   const remainingMinutes = Math.round(OrderManagementAdapter.getRemainingTime(order))
   const preparationMinutes = OrderManagementAdapter.calculatePreparationTime(order)
+  const pickupCodeDisplay = formatPickupCodeDisplay(order)
   const seatOrPickupLabel = order.table_number || order.table_no
     ? `${order.table_number || order.table_no}号桌`
-    : order.pickup_number
-      ? `取餐号 ${order.pickup_number}`
-      : order.customer_name || '现场订单'
+    : `取餐码 ${pickupCodeDisplay}`
 
   return {
     ...order,
-    order_no_short: order.order_no.slice(-6).toUpperCase(),
+    pickup_code_display: pickupCodeDisplay,
     order_type_label: OrderManagementAdapter.formatOrderType(order.order_type),
     waiting_label: `${order.waiting_minutes || 0}分钟`,
     remaining_label: remainingMinutes > 0 ? `剩余${remainingMinutes}分钟` : '请尽快处理',

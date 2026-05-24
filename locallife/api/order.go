@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -388,11 +390,24 @@ func maskPickupCode(code string) *string {
 	if code == "" {
 		return nil
 	}
-	if len(code) <= 2 {
+	if len(code) <= 4 {
 		return ptrString(code)
 	}
 	masked := "****" + code[len(code)-2:]
 	return &masked
+}
+
+func formatPickupCode(code string) string {
+	trimmed := strings.TrimSpace(code)
+	if trimmed == "" || len(trimmed) > 4 {
+		return trimmed
+	}
+	for _, r := range trimmed {
+		if !unicode.IsDigit(r) {
+			return trimmed
+		}
+	}
+	return fmt.Sprintf("%04s", trimmed)
 }
 
 func orderActions(o db.Order) []string {

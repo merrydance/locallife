@@ -62,6 +62,8 @@ const (
 	ClaimStatusWithdrawn                   = "withdrawn"
 
 	OrderTypeTakeout     = "takeout"
+	OrderTypeDineIn      = "dine_in"
+	OrderTypeTakeaway    = "takeaway"
 	OrderTypeReservation = "reservation"
 
 	BehaviorDecisionModeMerchantRecovery = "merchant_recovery"

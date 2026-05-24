@@ -708,6 +708,10 @@ func TestGetKitchenOrderDetailsAPI(t *testing.T) {
 				var response kitchenOrderResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, order.ID, response.ID)
+				require.NotNil(t, response.PickupCode)
+				require.Equal(t, "0001", *response.PickupCode)
+				require.NotNil(t, response.PickupNumber)
+				require.Equal(t, "0001", *response.PickupNumber)
 				require.True(t, response.IsUrged)
 				// 验证订单商品包含制作时间
 				require.Len(t, response.Items, 1)
@@ -834,6 +838,7 @@ func randomKitchenOrder(merchantID, userID int64) db.Order {
 		OrderType:   "dine_in",
 		Status:      "paid",
 		TotalAmount: 10000,
+		PickupCode:  pgtype.Text{String: "0001", Valid: true},
 		CreatedAt:   time.Now(),
 		PaidAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	}

@@ -26,7 +26,7 @@
         <view class="hero-copy">
           <view class="hero-order-row">
             <t-tag size="small" theme="{{detail.statusTheme}}" variant="dark">{{detail.statusLabel}}</t-tag>
-            <text class="hero-order-no">#{{detail.orderNoShort}}</text>
+            <text class="hero-order-no">#{{detail.pickupCodeDisplay}}</text>
           </view>
           <text class="hero-title">{{detail.orderTypeLabel}} · {{detail.seatOrPickupLabel}}</text>
           <text class="hero-subtitle">下单于 {{detail.createdAtLabel}}</text>
@@ -95,8 +95,8 @@
     <view class="card">
       <view class="card-title">订单信息</view>
       <view class="row">
-        <text class="label">订单编号</text>
-        <text class="value">{{detail.order_no}}</text>
+        <text class="label">取餐码</text>
+        <text class="value">{{detail.pickupCodeDisplay}}</text>
       </view>
       <view class="row">
         <text class="label">订单类型</text>

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -55,7 +54,7 @@ func (store *SQLStore) CreateOrderTx(ctx context.Context, arg CreateOrderTxParam
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
 
-		if (arg.CreateOrderParams.OrderType == OrderTypeTakeout || arg.CreateOrderParams.OrderType == "takeaway") && !arg.CreateOrderParams.PickupCode.Valid {
+		if orderTypeUsesDailyPickupCode(arg.CreateOrderParams.OrderType) && !arg.CreateOrderParams.PickupCode.Valid {
 			pickupTime := arg.PickupTime
 			if pickupTime.IsZero() {
 				pickupTime = time.Now()
@@ -69,7 +68,11 @@ func (store *SQLStore) CreateOrderTx(ctx context.Context, arg CreateOrderTxParam
 				return fmt.Errorf("allocate pickup sequence: %w", err)
 			}
 
-			arg.CreateOrderParams.PickupCode = pgtype.Text{String: strconv.FormatInt(int64(sequence), 10), Valid: true}
+			if sequence > 9999 {
+				return fmt.Errorf("pickup sequence exhausted for merchant %d on %s", arg.CreateOrderParams.MerchantID, pickupTime.Format("2006-01-02"))
+			}
+
+			arg.CreateOrderParams.PickupCode = pgtype.Text{String: fmt.Sprintf("%04d", sequence), Valid: true}
 		}
 
 		if arg.EnforceSingleActiveReservationOrder && arg.CreateOrderParams.ReservationID.Valid {
@@ -248,6 +251,15 @@ func (store *SQLStore) CreateOrderTx(ctx context.Context, arg CreateOrderTxParam
 	})
 
 	return result, err
+}
+
+func orderTypeUsesDailyPickupCode(orderType string) bool {
+	switch orderType {
+	case OrderTypeTakeout, OrderTypeTakeaway, OrderTypeDineIn:
+		return true
+	default:
+		return false
+	}
 }
 
 // ProcessOrderPaymentTxParams contains the input parameters for processing order payment

@@ -226,10 +226,11 @@ func (f orderNullableFields) applyTo(resp *orderResponse) error {
 	resp.UserDeliveredAt = pgtypeTimestamptzPtr(f.UserDeliveredAt)
 	resp.AutoUserDeliveredAt = pgtypeTimestamptzPtr(f.AutoUserDeliveredAt)
 
-	// PickupCode 有特殊处理：需要同时生成 masked 版本
+	// PickupCode 有特殊处理：对外统一为四位取餐码，并同时生成 masked 版本
 	if f.PickupCode.Valid {
-		resp.PickupCode = &f.PickupCode.String
-		resp.PickupCodeMasked = maskPickupCode(f.PickupCode.String)
+		pickupCode := formatPickupCode(f.PickupCode.String)
+		resp.PickupCode = &pickupCode
+		resp.PickupCodeMasked = maskPickupCode(pickupCode)
 	}
 
 	// Badges
