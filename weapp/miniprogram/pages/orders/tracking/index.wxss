@@ -14,7 +14,7 @@
 
 .hero-card {
   position: relative;
-  height: 480rpx;
+  height: 640rpx;
   border-radius: 28rpx;
   overflow: hidden;
   box-shadow: 0 12rpx 30rpx rgba(18, 30, 63, 0.15);
@@ -24,6 +24,40 @@
 .hero-map {
   width: 100%;
   height: 100%;
+}
+
+.route-summary {
+  position: absolute;
+  left: 24rpx;
+  right: 24rpx;
+  bottom: 24rpx;
+  z-index: 2;
+  padding: 20rpx 24rpx;
+  border-radius: 20rpx;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8rpx 24rpx rgba(18, 30, 63, 0.14);
+}
+
+.route-summary__label {
+  font-size: 22rpx;
+  color: #57618c;
+}
+
+.route-summary__main {
+  display: flex;
+  align-items: baseline;
+  gap: 18rpx;
+  margin-top: 6rpx;
+  font-size: 34rpx;
+  line-height: 42rpx;
+  font-weight: 600;
+  color: #1d2750;
+}
+
+.route-summary__time {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: #8b95b4;
 }
 
 /* 状态卡片 */

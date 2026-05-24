@@ -5,6 +5,7 @@ import DeliveryService, {
   getDeliveryStatusDisplay
 } from '../../../api/delivery'
 import { BicyclingDirectionResponse, getBicyclingDirection } from '../../../api/location'
+import { mapService } from '../../../services/map'
 import { logger } from '../../../utils/logger'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import { confirmReceiptWithRecovery } from '../../../services/order-receipt-confirmation'
@@ -76,6 +77,12 @@ Page({
     customerPoint: null as MapPoint | null,
     riderPoint: null as MapPoint | null,
     routePoints: [] as MapPoint[],
+    remainingRoutePoints: [] as MapPoint[],
+    remainingStageText: '',
+    remainingDistanceText: '',
+    remainingDurationText: '',
+    lastRiderLocationText: '',
+    showRouteSummary: false,
     // 进度
     progress: [] as DeliveryProgressView[],
     // 位置刷新定时器
@@ -228,14 +235,20 @@ Page({
       customerPoint,
       riderPoint: null,
       routePoints: [],
+      remainingRoutePoints: [],
+      remainingStageText: '',
+      remainingDistanceText: '',
+      remainingDurationText: '',
+      lastRiderLocationText: '',
+      showRouteSummary: false,
       polyline: []
     })
 
-    // 获取骑手位置
-    await this.updateRiderLocation()
-
     // 规划路线
-    this.planRoute(merchantPoint, customerPoint)
+    await this.planRoute(merchantPoint, customerPoint)
+
+    // 获取骑手位置并按最新位置刷新剩余路线
+    await this.updateRiderLocation()
   },
 
   async updateRiderLocation() {
@@ -244,7 +257,11 @@ Page({
 
     try {
       const location = await DeliveryService.getRiderLocation(deliveryId)
-      if (location && location.latitude && location.longitude) {
+      if (
+        location
+        && Number.isFinite(location.latitude)
+        && Number.isFinite(location.longitude)
+      ) {
         const riderPoint: MapPoint = {
           latitude: location.latitude,
           longitude: location.longitude
@@ -279,13 +296,21 @@ Page({
           }
         ]
 
-        this.setData({ markers, includePoints, riderPoint })
-        this.renderRoutePolyline(
-          this.data.routePoints,
-          this.data.merchantPoint,
-          this.data.customerPoint,
-          this.shouldAdvanceRouteByRider() ? riderPoint : null
-        )
+        const shouldShowRemainingRoute = this.shouldAdvanceRouteByRider()
+
+        this.setData({
+          markers,
+          includePoints,
+          riderPoint,
+          showRouteSummary: shouldShowRemainingRoute,
+          lastRiderLocationText: location.recorded_at ? `最近同步 ${this.formatRelativeTime(location.recorded_at)}` : ''
+        })
+
+        if (shouldShowRemainingRoute) {
+          await this.planRemainingRoute(riderPoint)
+        } else {
+          this.renderRoutePolyline(this.data.routePoints, this.data.merchantPoint, this.data.customerPoint)
+        }
       }
     } catch (error) {
       logger.warn('获取骑手位置失败', error, 'tracking.updateRiderLocation')
@@ -293,6 +318,8 @@ Page({
   },
 
   startLocationTracking() {
+    if (this.data.locationTimer !== null) return
+
     // 每10秒刷新一次骑手位置
     const timer = setInterval(() => {
       this.updateRiderLocation()
@@ -315,8 +342,7 @@ Page({
         this.renderRoutePolyline(
           routePoints,
           merchantPoint,
-          customerPoint,
-          this.shouldAdvanceRouteByRider() ? this.data.riderPoint : null
+          customerPoint
         )
       } else {
         this.setData({ routePoints: [] })
@@ -326,6 +352,47 @@ Page({
       logger.warn('路线规划失败', error, 'tracking.planRoute')
       this.setData({ routePoints: [] })
       this.useFallbackRoute(merchantPoint, customerPoint)
+    }
+  },
+
+  async planRemainingRoute(riderPoint: MapPoint) {
+    const targetPoint = this.getRemainingRouteTarget()
+    if (!targetPoint) {
+      return
+    }
+
+    try {
+      const fromStr = `${riderPoint.latitude},${riderPoint.longitude}`
+      const toStr = `${targetPoint.latitude},${targetPoint.longitude}`
+      const data = await getBicyclingDirection({ from: fromStr, to: toStr })
+      const routeData = this.unwrapDirectionData(data)
+      const remainingRoutePoints = this.normalizeRoutePoints(routeData?.points)
+      const points = remainingRoutePoints.length > 1
+        ? remainingRoutePoints
+        : [riderPoint, targetPoint]
+
+      this.setData({
+        remainingRoutePoints: points,
+        remainingStageText: this.getRemainingStageText(),
+        remainingDistanceText: typeof routeData?.distance === 'number'
+          ? mapService.formatDistance(routeData.distance)
+          : '',
+        remainingDurationText: typeof routeData?.duration === 'number'
+          ? mapService.formatDuration(routeData.duration)
+          : ''
+      })
+
+      this.renderRoutePolyline(points, riderPoint, targetPoint)
+    } catch (error) {
+      logger.warn('剩余路线规划失败', error, 'tracking.planRemainingRoute')
+      const fallbackPoints = [riderPoint, targetPoint]
+      this.setData({
+        remainingRoutePoints: fallbackPoints,
+        remainingStageText: this.getRemainingStageText(),
+        remainingDistanceText: '',
+        remainingDurationText: ''
+      })
+      this.renderRoutePolyline(fallbackPoints, riderPoint, targetPoint)
     }
   },
 
@@ -358,6 +425,22 @@ Page({
 
   shouldAdvanceRouteByRider(): boolean {
     return getDeliveryStatusDisplay(this.data.delivery?.status).isLocationTracked
+  },
+
+  getRemainingRouteTarget(): MapPoint | null {
+    const statusDisplay = getDeliveryStatusDisplay(this.data.delivery?.status)
+    if (statusDisplay.isAssignedStage) {
+      return this.data.merchantPoint
+    }
+    if (statusDisplay.isPickedStage || statusDisplay.isDeliveringStage) {
+      return this.data.customerPoint
+    }
+    return null
+  },
+
+  getRemainingStageText(): string {
+    const statusDisplay = getDeliveryStatusDisplay(this.data.delivery?.status)
+    return statusDisplay.isAssignedStage ? '距取餐点' : '距送达点'
   },
 
   renderRoutePolyline(
@@ -452,6 +535,21 @@ Page({
         bgColor: '#fff'
       }
     }
+  },
+
+  formatRelativeTime(timeStr: string): string {
+    const timestamp = new Date(timeStr).getTime()
+    const diff = Date.now() - timestamp
+    if (!Number.isFinite(diff) || diff < 0) return '刚刚'
+
+    const minutes = Math.floor(diff / 60000)
+    if (minutes < 1) return '刚刚'
+    if (minutes < 60) return `${minutes}分钟前`
+
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours}小时前`
+
+    return `${Math.floor(hours / 24)}天前`
   },
 
   onCallRider() {

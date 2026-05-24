@@ -6,7 +6,23 @@ const vm = require('vm')
 
 const sourcePath = path.join(__dirname, '..', 'miniprogram', 'pages', 'orders', 'tracking', 'index.ts')
 
-function loadPage({ directionResponse }) {
+function getDeliveryStatusDisplay(status) {
+  const trackedStatuses = new Set(['assigned', 'picking', 'picked', 'delivering'])
+  const isAssignedStage = status === 'assigned' || status === 'picking'
+  const isPickedStage = status === 'picked'
+  const isDeliveringStage = status === 'delivering'
+  return {
+    isAssignedStage,
+    isPickedStage,
+    isDeliveringStage,
+    isDeliveredStage: status === 'delivered' || status === 'completed',
+    isLocationTracked: trackedStatuses.has(status),
+    canConfirmReceipt: status === 'delivered',
+    text: status || ''
+  }
+}
+
+function loadPage({ directionResponse, riderLocation = null }) {
   const source = fs.readFileSync(sourcePath, 'utf8')
   const compiled = ts.transpileModule(source, {
     compilerOptions: {
@@ -25,17 +41,34 @@ function loadPage({ directionResponse }) {
           __esModule: true,
           default: {
             getRiderLocation() {
-              return Promise.resolve(null)
+              return Promise.resolve(riderLocation)
             }
           },
           buildDeliveryProgress: () => [],
-          getDeliveryStatusDisplay: () => ({})
+          getDeliveryStatusDisplay
         }
       }
       if (modulePath === '../../../api/location') {
         return {
           getBicyclingDirection() {
             return Promise.resolve(directionResponse)
+          }
+        }
+      }
+      if (modulePath === '../../../services/map') {
+        return {
+          mapService: {
+            formatDistance(meters) {
+              return meters < 1000 ? `${meters}米` : `${(meters / 1000).toFixed(1)}公里`
+            },
+            formatDuration(seconds) {
+              if (!Number.isFinite(seconds) || seconds <= 0 || seconds < 60) return '不足1分钟'
+              const minutes = Math.max(1, Math.round(seconds / 60))
+              if (minutes < 60) return `${minutes}分钟`
+              const hours = Math.floor(minutes / 60)
+              const remainMinutes = minutes % 60
+              return remainMinutes === 0 ? `${hours}小时` : `${hours}小时${remainMinutes}分钟`
+            }
           }
         }
       }
@@ -201,12 +234,61 @@ async function testRouteProgressWaitsUntilDeliveryIsTracked() {
       }
     }
   })
-  page.data.delivery = { status: 'assigned' }
+  page.data.delivery = { status: 'pending' }
   page.data.riderPoint = riderPoint
 
   await page.planRoute(merchantPoint, customerPoint)
 
   assert.deepStrictEqual(plain(page.data.polyline[0].points), [merchantPoint, routePoint, customerPoint])
+}
+
+async function testDeliveringShowsRiderMarkerAndRemainingToCustomer() {
+  const riderPoint = {
+    latitude: 39.906000,
+    longitude: 116.396000,
+    recorded_at: '2026-05-24T08:00:00.000Z'
+  }
+  const pickupPoint = { latitude: 39.908722, longitude: 116.397499 }
+  const deliveryPoint = { latitude: 39.914722, longitude: 116.404499 }
+  const routePoint = { latitude: 39.907100, longitude: 116.396800 }
+  const page = loadPage({
+    riderLocation: riderPoint,
+    directionResponse: {
+      code: 0,
+      data: {
+        distance: 1200,
+        duration: 500,
+        points: [riderPoint, routePoint, deliveryPoint]
+      }
+    }
+  })
+  page.data.deliveryId = 88
+  page.data.delivery = {
+    id: 88,
+    status: 'delivering',
+    pickup_latitude: pickupPoint.latitude,
+    pickup_longitude: pickupPoint.longitude,
+    delivery_latitude: deliveryPoint.latitude,
+    delivery_longitude: deliveryPoint.longitude
+  }
+  page.data.markers = [
+    page.buildMarker(1, pickupPoint, '商家', '/assets/merchant.png'),
+    page.buildMarker(3, deliveryPoint, '我', '/assets/customer.png')
+  ]
+  page.data.merchantPoint = pickupPoint
+  page.data.customerPoint = deliveryPoint
+
+  await page.updateRiderLocation()
+
+  assert(page.data.markers.some((marker) => marker.id === 2), 'rider marker should be visible while delivering')
+  assert.strictEqual(page.data.remainingStageText, '距送达点')
+  assert.strictEqual(page.data.remainingDistanceText, '1.2公里')
+  assert.strictEqual(page.data.remainingDurationText, '8分钟')
+  assert.deepStrictEqual(plain(page.data.polyline[0].points), [
+    { latitude: riderPoint.latitude, longitude: riderPoint.longitude },
+    routePoint,
+    deliveryPoint
+  ])
 }
 
 (async () => {
@@ -215,6 +297,7 @@ async function testRouteProgressWaitsUntilDeliveryIsTracked() {
   await testFallsBackWhenDirectionHasNoRoutePoints()
   await testRouteProgressFollowsRiderLocation()
   await testRouteProgressWaitsUntilDeliveryIsTracked()
+  await testDeliveringShowsRiderMarkerAndRemainingToCustomer()
 })().then(() => {
   console.log('check-tracking-route-polyline tests passed')
 }, (error) => {
