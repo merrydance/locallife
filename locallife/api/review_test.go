@@ -1195,6 +1195,7 @@ func TestListUserReviewsAPI_WithOwnPendingReviewImages(t *testing.T) {
 	review := db.ListReviewsByUserRow{
 		ID:         1,
 		OrderID:    1,
+		OrderNo:    "202605240729390001",
 		UserID:     user.ID,
 		MerchantID: merchant.ID,
 		Content:    "Great with photos!",
@@ -1249,6 +1250,7 @@ func TestListUserReviewsAPI_WithOwnPendingReviewImages(t *testing.T) {
 	}
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 	require.Len(t, response.Reviews, 1)
+	require.Equal(t, review.OrderNo, response.Reviews[0].OrderNo)
 	require.Len(t, response.Reviews[0].ImageURLs, 1, "my reviews should include owner-visible pending review image URL")
 	require.Contains(t, response.Reviews[0].ImageURLs[0], "https://cdn.test.example.com")
 	require.Contains(t, response.Reviews[0].ImageURLs[0], imageAsset.ObjectKey)

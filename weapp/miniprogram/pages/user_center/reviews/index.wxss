@@ -33,7 +33,8 @@
 .merchant-main,
 .shop-title,
 .card-footer,
-.footer-actions,
+.footer-tabs,
+.footer-tab,
 .reply-header {
   display: flex;
   align-items: center;
@@ -47,12 +48,6 @@
 .merchant-main {
   flex: 1;
   min-width: 0;
-  gap: var(--spacer-sm);
-}
-
-.merchant-logo {
-  flex-shrink: 0;
-  background: var(--td-bg-color-secondarycontainer);
 }
 
 .merchant-copy {
@@ -152,19 +147,42 @@
 }
 
 .card-footer {
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--spacer-sm);
   margin-top: var(--spacer-md);
   padding-top: var(--spacer-sm);
   border-top: 1rpx solid var(--td-border-level-1-color);
 }
 
-.footer-actions {
-  flex: 1;
-  justify-content: flex-end;
-  flex-wrap: wrap;
+.footer-tabs {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  min-height: 72rpx;
+}
+
+.footer-tab {
+  justify-content: center;
   gap: var(--spacer-xs);
+  min-width: 0;
+  height: 72rpx;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.footer-tab + .footer-tab {
+  border-left: 1rpx solid var(--td-border-level-1-color);
+}
+
+.footer-tab--delete {
+  color: var(--td-error-color);
+}
+
+.footer-tab--active {
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.footer-tab--disabled {
+  opacity: 0.6;
 }
 
 .load-more {

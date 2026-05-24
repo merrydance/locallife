@@ -28,6 +28,7 @@ type createReviewRequest struct {
 type reviewResponse struct {
 	ID                  int64    `json:"id"`
 	OrderID             int64    `json:"order_id"`
+	OrderNo             string   `json:"order_no,omitempty"`
 	UserID              int64    `json:"user_id"`
 	MerchantID          int64    `json:"merchant_id"`
 	MerchantName        string   `json:"merchant_name,omitempty"`
@@ -754,6 +755,7 @@ func newListReviewByUserResponse(reviews []db.ListReviewsByUserRow) []reviewResp
 		resp := reviewResponse{
 			ID:           r.ID,
 			OrderID:      r.OrderID,
+			OrderNo:      r.OrderNo,
 			UserID:       r.UserID,
 			MerchantID:   r.MerchantID,
 			MerchantName: r.MerchantName,

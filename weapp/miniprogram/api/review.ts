@@ -5,6 +5,8 @@ import { normalizePaginatedResult, type PaginatedListResult, type PaginationEnve
 export interface Review {
     id: number
     order_id: number
+    order_no?: string
+    orderNo?: string
     user_id: number
     merchant_id: number
     content: string
@@ -68,6 +70,7 @@ function normalizeReview(review: Review): Review {
 
     return {
         ...review,
+        order_no: review.order_no || review.orderNo,
         image_asset_ids: imageAssetIds,
         imageAssetIds,
         image_urls: imageUrls,

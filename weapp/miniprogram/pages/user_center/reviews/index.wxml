@@ -38,7 +38,6 @@
         >
           <view class="card-header" bindtap="onMerchantClick" data-id="{{item.merchantId}}">
             <view class="merchant-main">
-              <t-image src="{{item.logoUrl}}" mode="aspectFill" width="64rpx" height="64rpx" shape="circle" class="merchant-logo" />
               <view class="merchant-copy">
                 <view class="shop-title">
                   <text class="name">{{item.merchantName}}</text>
@@ -78,12 +77,16 @@
           </view>
 
           <view class="card-footer">
-            <t-tag size="small" variant="dark" theme="{{item.visibilityTheme}}">{{item.visibilityLabel}}</t-tag>
-            <view class="footer-actions">
-              <t-button size="small" variant="text" icon="edit" data-id="{{item.id}}" bindtap="onEditReview">编辑</t-button>
-              <t-button size="small" theme="danger" variant="text" icon="delete" data-id="{{item.id}}" loading="{{item.deleting}}" disabled="{{item.deleting}}" bindtap="onDeleteReview">删除</t-button>
-              <t-button size="small" variant="text" icon="shop" data-id="{{item.merchantId}}" bindtap="onMerchantClick">商家</t-button>
-              <t-button size="small" theme="primary" variant="text" icon="order-adjustment" data-id="{{item.orderId}}" bindtap="onOrderDetail">订单</t-button>
+            <view class="footer-tabs">
+              <view class="footer-tab" data-id="{{item.id}}" bindtap="onEditReview" hover-class="footer-tab--active">
+                <t-icon name="edit" size="36rpx" color="var(--td-text-color-primary)" />
+                <text>编辑</text>
+              </view>
+              <view class="footer-tab footer-tab--delete {{item.deleting ? 'footer-tab--disabled' : ''}}" data-id="{{item.id}}" bindtap="onDeleteReview" hover-class="footer-tab--active">
+                <t-icon wx:if="{{!item.deleting}}" name="delete" size="36rpx" color="var(--td-error-color)" />
+                <t-loading wx:else theme="circular" size="32rpx" />
+                <text>删除</text>
+              </view>
             </view>
           </view>
         </view>

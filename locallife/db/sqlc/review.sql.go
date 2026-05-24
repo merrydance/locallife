@@ -335,9 +335,10 @@ func (q *Queries) ListReviewsByMerchant(ctx context.Context, arg ListReviewsByMe
 }
 
 const listReviewsByUser = `-- name: ListReviewsByUser :many
-SELECT r.id, r.order_id, r.user_id, r.merchant_id, r.content, r.is_visible, r.merchant_reply, r.replied_at, r.created_at, m.name as merchant_name, m.logo_media_asset_id as merchant_logo_media_asset_id
+SELECT r.id, r.order_id, o.order_no, r.user_id, r.merchant_id, r.content, r.is_visible, r.merchant_reply, r.replied_at, r.created_at, m.name as merchant_name, m.logo_media_asset_id as merchant_logo_media_asset_id
 FROM reviews r
 JOIN merchants m ON r.merchant_id = m.id
+JOIN orders o ON r.order_id = o.id AND o.user_id = r.user_id
 WHERE r.user_id = $1
 ORDER BY r.created_at DESC, r.id DESC
 LIMIT $2 OFFSET $3
@@ -352,6 +353,7 @@ type ListReviewsByUserParams struct {
 type ListReviewsByUserRow struct {
 	ID                       int64              `json:"id"`
 	OrderID                  int64              `json:"order_id"`
+	OrderNo                  string             `json:"order_no"`
 	UserID                   int64              `json:"user_id"`
 	MerchantID               int64              `json:"merchant_id"`
 	Content                  string             `json:"content"`
@@ -375,6 +377,7 @@ func (q *Queries) ListReviewsByUser(ctx context.Context, arg ListReviewsByUserPa
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrderID,
+			&i.OrderNo,
 			&i.UserID,
 			&i.MerchantID,
 			&i.Content,

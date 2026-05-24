@@ -88,6 +88,11 @@ function main() {
     'user reviews page must normalize backend image_urls, imageUrls, and legacy images before rendering'
   )
   assert(
+    ts.includes("from '../../../utils/image'") &&
+      /getPublicImageUrl\(url\)/.test(ts),
+    'user reviews image URLs must pass through getPublicImageUrl before rendering'
+  )
+  assert(
     /review\.image_urls/.test(reviewApi) &&
       /review\.imageUrls/.test(reviewApi) &&
       /review\.images/.test(reviewApi),
@@ -113,11 +118,16 @@ function main() {
     'user reviews preview handler must resolve the image list from page state'
   )
 
+  assert(/orderNo:\s*string/.test(ts), 'user reviews view model should expose the backend order_no')
+  assert(/orderNo\?:\s*string/.test(reviewApi), 'review API contract must expose backend order_no when available')
+  assert(/orderNo:\s*r\.order_no\s*\|\|/.test(ts), 'user reviews view model must prefer backend order_no over internal order_id')
+  assert(!/订单 #\$\{r\.order_id\}/.test(ts), 'user reviews page must not display internal order_id as the order number')
   assert(/orderId:\s*number/.test(ts), 'user reviews view model should expose orderId for supported management actions')
   assert(/orderIdLabel:\s*string/.test(ts), 'user reviews view model should expose a display order label')
-  assert(/bindtap="onOrderDetail"/.test(wxml), 'user reviews page should expose a backend-supported order detail action')
-  assert(/Navigation\.toOrderDetail\(String\(id\)\)/.test(ts), 'user reviews order action must navigate to the existing order detail page')
-  assert(/icon="shop"[\s\S]*bindtap="onMerchantClick"/.test(wxml), 'user reviews page should expose a backend-supported merchant action')
+  assert(!/bindtap="onOrderDetail"/.test(wxml), 'user reviews card footer must not expose an order detail button')
+  assert(!/icon="shop"[\s\S]*bindtap="onMerchantClick"/.test(wxml), 'user reviews card footer must not expose a merchant button')
+  assert(!/<t-image[^>]*item\.logoUrl/.test(wxml), 'user reviews cards must not render merchant logo')
+  assert(!/<t-tag[^>]*visibilityLabel/.test(wxml), 'user reviews cards must not render public visibility tags')
 
   assert(!/\bt-rate\b|item\.rating|r\.rating/.test(wxml + ts + json), 'user reviews page must not render unsupported rating fields')
   assert(!/item\.tags|r\.tags|tag-row/.test(wxml + ts + wxss), 'user reviews page must not render unsupported review tags')
@@ -136,6 +146,12 @@ function main() {
     'user reviews page must expose edit/delete management actions for owner reviews'
   )
   assert(
+    /class="footer-tabs"/.test(wxml) &&
+      /class="footer-tab footer-tab--delete/.test(wxml) &&
+      /grid-template-columns:\s*repeat\(2,\s*1fr\)/.test(wxss),
+    'user reviews edit/delete actions must render as two bottom tab buttons'
+  )
+  assert(
     /<t-dialog[\s\S]*confirm-btn="\{\{ \{ content: '确认删除', theme: 'danger', loading: deleteDialogSubmitting \} \}\}"/.test(wxml) &&
       /ReviewService\.deleteReview\(id\)/.test(ts),
     'delete review must use a TDesign confirmation dialog and call the real backend delete API'
@@ -146,7 +162,7 @@ function main() {
   )
 
   assert(
-    json.includes('"t-image"') && json.includes('"t-button"') && json.includes('"t-tag"') && json.includes('"t-dialog"'),
+    json.includes('"t-image"') && json.includes('"t-button"') && !json.includes('"t-tag"') && json.includes('"t-dialog"'),
     'user reviews page must declare the TDesign components it renders'
   )
 

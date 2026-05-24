@@ -42291,6 +42291,9 @@ const docTemplate = `{
                 "order_id": {
                     "type": "integer"
                 },
+                "order_no": {
+                    "type": "string"
+                },
                 "replied_at": {
                     "type": "string"
                 },

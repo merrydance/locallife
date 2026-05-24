@@ -5,6 +5,7 @@ import { getStableBarHeights } from '../../../utils/responsive'
 import { logger } from '../../../utils/logger'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import Navigation from '../../../utils/navigation'
+import { getPublicImageUrl } from '../../../utils/image'
 
 interface IdDataset {
   id?: number
@@ -18,15 +19,13 @@ interface PreviewDataset {
 interface ReviewDisplay {
   id: number
   orderId: number
+  orderNo: string
   orderIdLabel: string
   merchantId: number
   merchantName: string
-  logoUrl: string
   content: string
   images: string[]
   createdAt: string
-  visibilityLabel: string
-  visibilityTheme: 'success' | 'warning'
   merchantReply?: string
   repliedAt?: string
   deleting?: boolean
@@ -41,7 +40,18 @@ function normalizeReviewImages(review: Review): string[] {
         ? review.images
         : []
 
-  return imageUrls.filter((url): url is string => typeof url === 'string' && url.length > 0)
+  return imageUrls
+    .filter((url): url is string => typeof url === 'string' && url.length > 0)
+    .map((url) => getPublicImageUrl(url) || url)
+}
+
+function getReviewOrderNo(review: Review): string {
+  return review.order_no || review.orderNo || ''
+}
+
+function getReviewOrderLabel(review: Review): string {
+  const orderNo = getReviewOrderNo(review)
+  return orderNo ? `订单号 ${orderNo}` : `订单 ID ${review.order_id}`
 }
 
 Page({
@@ -87,12 +97,11 @@ Page({
         ...ConsumerProfileAdapter.toReviewMerchantViewModel(r),
         id: r.id,
         orderId: r.order_id,
-        orderIdLabel: `订单 #${r.order_id}`,
+        orderNo: r.order_no || r.orderNo || '',
+        orderIdLabel: getReviewOrderLabel(r),
         content: r.content,
         images: normalizeReviewImages(r),
         createdAt: formatTime(new Date(r.created_at)),
-        visibilityLabel: r.is_visible ? '公开展示' : '安全审核中',
-        visibilityTheme: r.is_visible ? 'success' : 'warning',
         merchantReply: r.merchant_reply,
         repliedAt: r.replied_at ? formatTime(new Date(r.replied_at)) : undefined
       }))

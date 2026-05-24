@@ -208,6 +208,9 @@ func TestListReviewsByUser(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, reviews, 3)
+	for _, review := range reviews {
+		require.NotEmpty(t, review.OrderNo)
+	}
 }
 
 func TestListAllReviewsByMerchant(t *testing.T) {

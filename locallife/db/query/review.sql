@@ -30,9 +30,10 @@ WHERE merchant_id = $1
   AND is_visible = true;
 
 -- name: ListReviewsByUser :many
-SELECT r.id, r.order_id, r.user_id, r.merchant_id, r.content, r.is_visible, r.merchant_reply, r.replied_at, r.created_at, m.name as merchant_name, m.logo_media_asset_id as merchant_logo_media_asset_id
+SELECT r.id, r.order_id, o.order_no, r.user_id, r.merchant_id, r.content, r.is_visible, r.merchant_reply, r.replied_at, r.created_at, m.name as merchant_name, m.logo_media_asset_id as merchant_logo_media_asset_id
 FROM reviews r
 JOIN merchants m ON r.merchant_id = m.id
+JOIN orders o ON r.order_id = o.id AND o.user_id = r.user_id
 WHERE r.user_id = $1
 ORDER BY r.created_at DESC, r.id DESC
 LIMIT $2 OFFSET $3;
