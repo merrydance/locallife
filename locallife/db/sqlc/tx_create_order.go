@@ -29,9 +29,9 @@ type CreateOrderTxParams struct {
 	BalancePaidPrincipal int64  // 余额支付本金
 	BalancePaidBonus     int64  // 余额支付赠额
 
-	// 配送精度相关（可选）
-	// 配送精度相关（可选）
-	DeliveryDuration   int32 // 配送预计在途时间（秒），由 LBS 真实路径计算得出
+	// 代取精度相关（可选）
+	// 代取精度相关（可选）
+	DeliveryDuration   int32 // 代取预计在途时间（秒），由 LBS 真实路径计算得出
 	RiderAverageSpeed  int   // 骑手平均速度（km/h），用于兜底估算
 	DefaultPrepareTime int   // 默认出餐时间（分钟），用于兜底估算
 	PickupTime         time.Time
@@ -268,14 +268,14 @@ type ProcessOrderPaymentTxParams struct {
 	PaymentMethod      string
 	RiderAverageSpeed  int
 	DefaultPrepareTime int
-	DeliveryDuration   int32 // 配送预计在途时间（秒），由 LBS 提供
+	DeliveryDuration   int32 // 代取预计在途时间（秒），由 LBS 提供
 }
 
 // ProcessOrderPaymentTxResult contains the result of order payment processing
 type ProcessOrderPaymentTxResult struct {
 	Order    Order
-	Delivery *Delivery     // 外卖订单仅在后续显式投池动作后才会有配送单
-	PoolItem *DeliveryPool // 仅在订单已被投放到配送池时才有值
+	Delivery *Delivery     // 外卖订单仅在后续显式投池动作后才会有代取单
+	PoolItem *DeliveryPool // 仅在订单已被投放到代取池时才有值
 }
 
 // ProcessOrderPaymentTx processes order payment and decrements inventory in a single transaction

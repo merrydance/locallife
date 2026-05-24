@@ -51,7 +51,7 @@ function formatClaimType(claimType?: string): string {
     refund: '退款',
     compensation: '补偿',
     quality_issue: '质量问题',
-    delivery_issue: '配送问题',
+    delivery_issue: '代取问题',
     'foreign-object': '异物',
     damage: '餐损',
     timeout: '超时',

@@ -1299,7 +1299,7 @@ func TestCombinedCheckoutAPI(t *testing.T) {
 						Longitude: pgtype.Numeric{Valid: false},
 					}, nil)
 
-				// Mock: 获取配送费配置（用于配送费计算）
+				// Mock: 获取代取费配置（用于代取费计算）
 				store.EXPECT().
 					GetDeliveryFeeConfigByRegion(gomock.Any(), gomock.Any()).
 					AnyTimes().

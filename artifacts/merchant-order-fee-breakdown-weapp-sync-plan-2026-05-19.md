@@ -43,9 +43,9 @@ export interface MerchantOrderFeeBreakdown {
 - `merchant_discount_amount`：商户优惠金额。
 - `voucher_discount_amount`：用户券/平台券金额。
 - `food_payable_amount`：餐费应付。
-- `delivery_fee_amount`：配送费原价。
-- `delivery_fee_discount_amount`：配送费优惠。
-- `delivery_payable_amount`：用户实际承担配送费。
+- `delivery_fee_amount`：代取费原价。
+- `delivery_fee_discount_amount`：代取费优惠。
+- `delivery_payable_amount`：用户实际承担代取费。
 - `customer_payable_amount`：用户订单实付。
 - `platform_service_fee_amount`：商户可见平台服务费合计，不拆平台/运营商。
 - `payment_channel_fee_amount`：商户承担的支付通道费。
@@ -65,7 +65,7 @@ export interface MerchantOrderFeeBreakdown {
 
 - `weapp/miniprogram/api/order-management.ts` 的 `OrderResponse` 没有 `fee_breakdown`。
 - `OrderManagementAdapter.calculateActualAmount()` 仍前端自算旧金额，且漏掉 `voucher_discount_amount`。
-- `weapp/miniprogram/pages/merchant/orders/detail/index.wxml` 只显示商品小计、配送费、实付金额。
+- `weapp/miniprogram/pages/merchant/orders/detail/index.wxml` 只显示商品小计、代取费、实付金额。
 - `weapp/miniprogram/pages/merchant/orders/list/index.wxml` 只显示 `total_amount`。
 - `weapp/miniprogram/pages/merchant/orders/list/index.ts` 动作成功后用动作响应直接覆盖列表行，可能抹掉已经加载的 `fee_breakdown`。
 - `weapp/miniprogram/api/merchant-finance.ts` 仍是旧财务口径；本任务记录为后续独立任务，不在本次执行范围内。
@@ -82,9 +82,9 @@ export interface MerchantOrderFeeBreakdown {
    - 商户优惠
    - 平台/券优惠
    - 餐费应付
-   - 配送费
-   - 配送优惠
-   - 配送应付
+   - 代取费
+   - 代取优惠
+   - 代取应付
    - 用户实付
    - 平台服务费
    - 支付通道费
@@ -221,7 +221,7 @@ export interface MerchantOrderFeeBreakdownView {
 
 - [ ] `MerchantOrderDetailView` 增加 `fee_breakdown_view: MerchantOrderFeeBreakdownView`。
 - [ ] `formatDetail()` 调用 `buildMerchantOrderFeeBreakdownView(order)`。
-- [ ] WXML 中把原 `商品小计 / 配送费 / 实付金额` 替换为：
+- [ ] WXML 中把原 `商品小计 / 代取费 / 实付金额` 替换为：
   - `fee_breakdown_view.available` 为真时展示 `summary_rows` 和 `settlement_rows`。
   - 为假时展示就近短提示，不做解释大卡片。
 - [ ] 样式保持非顾客侧克制工具风格；只补布局、行高、颜色，不新增营销感卡片。

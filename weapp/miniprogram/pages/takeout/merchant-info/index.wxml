@@ -87,7 +87,7 @@
             <text class="promo-text">{{item.name}}: ¥{{item.amount / 100}}</text>
           </view>
           <view class="promo-item" wx:for="{{restaurant.delivery_promotions}}" wx:key="id">
-            <t-tag theme="success" variant="dark" size="small" class="promo-tag">配送费</t-tag>
+            <t-tag theme="success" variant="dark" size="small" class="promo-tag">代取费</t-tag>
             <text class="promo-text">满 {{item.min_order_amount / 100}} 减免 {{item.discount_amount / 100}}</text>
           </view>
         </view>

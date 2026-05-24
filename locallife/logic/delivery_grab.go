@@ -39,7 +39,7 @@ func newGrabOrderStatusError(status string) error {
 		return NewRequestError(http.StatusBadRequest, errors.New("商户未出餐，暂不可抢单"))
 	case db.OrderStatusCourierAccepted, db.OrderStatusPicked, db.OrderStatusDelivering,
 		db.OrderStatusRiderDelivered, db.OrderStatusUserDelivered, db.OrderStatusCompleted:
-		return NewRequestError(http.StatusBadRequest, errors.New("订单已被接走或已进入配送流程"))
+		return NewRequestError(http.StatusBadRequest, errors.New("订单已被接走或已进入代取流程"))
 	case db.OrderStatusCancelled:
 		return NewRequestError(http.StatusBadRequest, errors.New("订单已取消，无法抢单"))
 	default:
@@ -76,7 +76,7 @@ func GrabDeliveryOrder(ctx context.Context, store db.Store, input GrabOrderInput
 		return result, err
 	}
 	if !settlementReadiness.PaymentReady {
-		return result, NewRequestError(http.StatusBadRequest, errors.New("骑手结算账户未开通，暂不能接收配送费分账订单"))
+		return result, NewRequestError(http.StatusBadRequest, errors.New("骑手结算账户未开通，暂不能接收代取费分账订单"))
 	}
 	riderSharingMerID := settlementReadiness.SubMchID
 
@@ -117,7 +117,7 @@ func GrabDeliveryOrder(ctx context.Context, store db.Store, input GrabOrderInput
 	delivery, err := store.GetDeliveryByOrderID(ctx, input.OrderID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
-			return result, NewRequestError(http.StatusNotFound, errors.New("该订单配置异常(缺少配送单信息)，无法抢单。如果是Mock数据，请确保deliveries表有相应记录"))
+			return result, NewRequestError(http.StatusNotFound, errors.New("该订单配置异常(缺少代取单信息)，无法抢单。如果是Mock数据，请确保deliveries表有相应记录"))
 		}
 		return result, err
 	}
@@ -184,7 +184,7 @@ func buildBaofuRiderProfitSharingBillUpdate(ctx context.Context, store db.Store,
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
-			return nil, NewRequestError(http.StatusConflict, errors.New("订单配送收益账单暂不可用，请稍后重试"))
+			return nil, NewRequestError(http.StatusConflict, errors.New("订单代取收益账单暂不可用，请稍后重试"))
 		}
 		return nil, fmt.Errorf("get latest payment order for rider profit sharing bill: %w", err)
 	}
@@ -192,7 +192,7 @@ func buildBaofuRiderProfitSharingBillUpdate(ctx context.Context, store db.Store,
 		return nil, nil
 	}
 	if paymentOrder.Status != paymentStatusPaid {
-		return nil, NewRequestError(http.StatusConflict, errors.New("订单配送收益账单暂不可用，请稍后重试"))
+		return nil, NewRequestError(http.StatusConflict, errors.New("订单代取收益账单暂不可用，请稍后重试"))
 	}
 	if paymentOrder.OrderID.Valid && paymentOrder.OrderID.Int64 != order.ID {
 		return nil, fmt.Errorf("payment order %d order id %d does not match grabbed order %d", paymentOrder.ID, paymentOrder.OrderID.Int64, order.ID)
@@ -200,7 +200,7 @@ func buildBaofuRiderProfitSharingBillUpdate(ctx context.Context, store db.Store,
 	bill, err := store.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
-			return nil, NewRequestError(http.StatusConflict, errors.New("订单配送收益账单暂不可用，请稍后重试"))
+			return nil, NewRequestError(http.StatusConflict, errors.New("订单代取收益账单暂不可用，请稍后重试"))
 		}
 		return nil, fmt.Errorf("get baofu profit sharing bill for rider accept: %w", err)
 	}
@@ -211,10 +211,10 @@ func buildBaofuRiderProfitSharingBillUpdate(ctx context.Context, store db.Store,
 		return nil, fmt.Errorf("profit sharing bill %d provider/channel is not baofu aggregate", bill.ID)
 	}
 	if bill.MerchantID != order.MerchantID || bill.PaymentOrderID != paymentOrder.ID || bill.TotalAmount != paymentOrder.Amount {
-		return nil, NewRequestError(http.StatusConflict, errors.New("订单配送收益账单暂不可用，请稍后重试"))
+		return nil, NewRequestError(http.StatusConflict, errors.New("订单代取收益账单暂不可用，请稍后重试"))
 	}
 	if riderSharingMerID == "" {
-		return nil, NewRequestError(http.StatusBadRequest, errors.New("骑手结算账户未开通，暂不能接收配送费分账订单"))
+		return nil, NewRequestError(http.StatusBadRequest, errors.New("骑手结算账户未开通，暂不能接收代取费分账订单"))
 	}
 
 	receivers := BaofuProfitSharingReceiverResult{

@@ -14,7 +14,7 @@ const DECISION_REASON_CODE_LABELS: Record<string, string> = {
   damage: "餐品受损",
   quality: "质量问题",
   timeout: "超时问题",
-  delay: "配送延误",
+  delay: "代取延误",
   "missing-item": "缺少商品",
   "food-safety": "食品安全",
   other: "其他原因",
@@ -51,7 +51,7 @@ const DECISION_STATUS_LABELS: Record<string, string> = {
 const CLAIM_TYPE_LABELS: Record<string, string> = {
   "foreign-object": "异物问题",
   damage: "餐品受损",
-  delay: "配送延误",
+  delay: "代取延误",
   timeout: "超时问题",
   quality: "质量问题",
   "missing-item": "缺少商品",

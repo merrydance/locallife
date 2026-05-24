@@ -1,4 +1,4 @@
-<custom-navbar title="配送详情" showBack="{{true}}" />
+<custom-navbar title="代取详情" showBack="{{true}}" />
 
 <scroll-view 
   scroll-y 
@@ -41,7 +41,7 @@
       <!-- 收入与时间 -->
       <view class="detail-card income-card">
         <view class="info-item">
-          <text class="label">配送费</text>
+          <text class="label">代取费</text>
           <view class="value">{{delivery.income_view.grossText}}</view>
         </view>
         <t-divider layout="vertical" />

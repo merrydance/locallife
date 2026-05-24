@@ -99,22 +99,22 @@ export function decorateDepositRecord(record: DepositRecord): DepositRecordView 
 
   if (record.type === 'freeze') {
     if (remark === '接单冻结押金') {
-      displayTypeText = '配送冻结'
-      displayRemark = '订单配送中，押金暂时冻结。'
+      displayTypeText = '代取冻结'
+      displayRemark = '订单代取中，押金暂时冻结。'
       statusText = '冻结中'
       statusTheme = 'warning'
     }
   }
 
   if (record.type === 'unfreeze') {
-    if (remark === '配送完成解冻押金') {
-      displayTypeText = '配送解冻'
-      displayRemark = '订单已完成，配送冻结已释放。'
+    if (remark === '代取完成解冻押金') {
+      displayTypeText = '代取解冻'
+      displayRemark = '订单已完成，代取冻结已释放。'
       statusText = '已释放'
       statusTheme = 'success'
     } else if (remark === '订单取消解冻押金') {
       displayTypeText = '取消退回'
-      displayRemark = '订单取消后，配送冻结已退回可用押金。'
+      displayRemark = '订单取消后，代取冻结已退回可用押金。'
       statusText = '已退回'
       statusTheme = 'success'
     } else if (remark === WITHDRAW_FAILED_UNFREEZE_REMARK) {

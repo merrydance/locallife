@@ -21,7 +21,7 @@ type RiderDashboardPageContext = WechatMiniprogram.Page.Instance<Record<string, 
 
 const MAX_GRAB_DISTANCE = 5000
 const DEPOSIT_BLOCK_REASON_PATTERN = /押金不足/
-const BAOFU_SETTLEMENT_BLOCK_MESSAGE = '结算账户未开通，暂不能接收配送费分账订单'
+const BAOFU_SETTLEMENT_BLOCK_MESSAGE = '结算账户未开通，暂不能接收代取费分账订单'
 
 let runtimeNetworkUnsubscribe: null | (() => void) = null
 
@@ -489,8 +489,8 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
     const map: Record<string, string> = {
       assigned: '前往商家',
       picking: '取餐中',
-      picked: '准备配送',
-      delivering: '配送中',
+      picked: '准备代取',
+      delivering: '代取中',
       completed: '已送达',
       exception: '订单异常'
     }
@@ -561,7 +561,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
     const actionMap: Record<DeliveryActionType, DeliveryActionConfig> = {
       startPickup: { method: DeliveryService.startPickup, loading: '正在操作...', source: 'rider_dashboard_start_pickup' },
       confirmPickup: { method: DeliveryService.confirmPickup, loading: '确认取餐中...', source: 'rider_dashboard_confirm_pickup' },
-      startDelivery: { method: DeliveryService.startDelivery, loading: '开始配送...', source: 'rider_dashboard_start_delivery' },
+      startDelivery: { method: DeliveryService.startDelivery, loading: '开始代取...', source: 'rider_dashboard_start_delivery' },
       confirmDelivery: { method: DeliveryService.confirmDelivery, loading: '确认送达中...', source: 'rider_dashboard_confirm_delivery' }
     }
 
@@ -688,7 +688,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
       if (!canToggle) {
         const message = targetOnline
           ? (latestStatus.online_block_reason || '当前无法上线')
-          : (latestStatus.active_deliveries > 0 ? '有配送中的订单，无法下线' : '当前无法下线')
+          : (latestStatus.active_deliveries > 0 ? '有代取中的订单，无法下线' : '当前无法下线')
 
         const statusViewData = this.buildStatusViewData(latestStatus)
 

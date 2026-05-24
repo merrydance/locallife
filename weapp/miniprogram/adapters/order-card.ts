@@ -193,9 +193,9 @@ function generateHighlight(order: OrderResponse): string {
         case 'courier_accepted':
             return '骑手已接单，正在前往取餐'
         case 'picked':
-            return '骑手已取餐，正在配送'
+            return '骑手已取餐，正在代取'
         case 'delivering':
-            return '骑手正在配送中，请耐心等待'
+            return '骑手正在代取中，请耐心等待'
         case 'rider_delivered':
             return '订单已送达，请确认收餐'
         case 'ready':

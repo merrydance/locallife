@@ -20,7 +20,7 @@
       <text class="distance">{{restaurant.distance}}</text>
     </view>
     
-    <!-- 第3行: 配送费 + 月售 -->
+    <!-- 第3行: 代取费 + 月售 -->
     <view class="row-3">
       <text wx:if="{{restaurant.deliveryFeeDisplay}}" class="delivery-fee">{{restaurant.deliveryFeeDisplay}}</text>
       <text wx:if="{{restaurant.monthlySales > 0}}" class="monthly-sales">月售{{restaurant.monthlySales}}</text>

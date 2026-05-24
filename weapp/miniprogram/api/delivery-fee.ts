@@ -1,14 +1,14 @@
 /**
- * 配送费管理接口 (Phase 4)
+ * 代取费管理接口 (Phase 4)
  * 基于 swagger.json 实现
- * 包含：配送费计算、区域配置、峰时配置、商户促销
+ * 包含：代取费计算、区域配置、峰时配置、商户促销
  */
 
 import { request } from '../utils/request'
 
 // ==================== 数据类型定义 ====================
 
-/** 配送费计算请求 */
+/** 代取费计算请求 */
 export interface CalculateDeliveryFeeRequest {
     merchant_id: number
     user_location: {
@@ -18,24 +18,24 @@ export interface CalculateDeliveryFeeRequest {
     items_price: number // 分
 }
 
-/** 配送费计算结果 */
+/** 代取费计算结果 */
 export interface DeliveryFeeResult {
-    total_fee: number          // 总配送费
+    total_fee: number          // 总代取费
     base_fee: number           // 基础费
     distance_fee: number       // 距离费
     peak_fee: number           // 峰时加价
-    delivery_promotion: number // 配送优惠抵扣
+    delivery_promotion: number // 代取优惠抵扣
     final_fee: number          // 最终费用
-    distance_meters: number    // 配送距离(米)
+    distance_meters: number    // 代取距离(米)
     region_id: number          // 所属区域ID
 }
 
-/** 配送费配置响应 */
+/** 代取费配置响应 */
 export interface DeliveryFeeConfigResponse {
     id: number
     region_id: number
-    base_fee: number             // 基础配送费(分)
-    base_distance: number        // 基础配送距离(米)
+    base_fee: number             // 基础代取费(分)
+    base_distance: number        // 基础代取距离(米)
     extra_fee_per_km: number     // 超出距离每公里的费用(分)
     value_ratio: number          // 货值费率(0.01 = 1%)
     min_fee: number              // 最低运费(分)
@@ -44,7 +44,7 @@ export interface DeliveryFeeConfigResponse {
     created_at: string
 }
 
-/** 创建/更新配送费配置请求 */
+/** 创建/更新代取费配置请求 */
 export interface CreateDeliveryFeeConfigRequest {
     region_id: number
     base_fee: number
@@ -76,7 +76,7 @@ export interface CreatePeakHourConfigRequest {
     days_of_week: number[]
 }
 
-/** 配送优惠响应 */
+/** 代取优惠响应 */
 export interface DeliveryPromotionResponse {
     id: number
     merchant_id: number
@@ -93,7 +93,7 @@ export interface DeliveryPromotionResponse {
     updated_at?: string
 }
 
-/** 创建配送优惠请求 */
+/** 创建代取优惠请求 */
 export interface CreateDeliveryPromotionRequest {
     name: string
     min_order_amount: number  // 分
@@ -102,7 +102,7 @@ export interface CreateDeliveryPromotionRequest {
     valid_until: string       // RFC3339
 }
 
-/** 更新配送优惠请求（所有字段可选） */
+/** 更新代取优惠请求（所有字段可选） */
 export interface UpdateDeliveryPromotionRequest {
     name?: string
     min_order_amount?: number
@@ -168,11 +168,11 @@ export function buildDeliveryPromotionStatusView(
     }
 }
 
-// ==================== 配送费管理服务类 ====================
+// ==================== 代取费管理服务类 ====================
 
 export class DeliveryFeeService {
     /**
-     * 计算配送费
+     * 计算代取费
      */
     async calculateFee(data: CalculateDeliveryFeeRequest): Promise<DeliveryFeeResult> {
         return request({
@@ -183,7 +183,7 @@ export class DeliveryFeeService {
     }
 
     /**
-     * 获取区域配送费配置
+     * 获取区域代取费配置
      * @param regionId 区域ID
      */
     async getRegionConfig(regionId: number): Promise<DeliveryFeeConfigResponse> {
@@ -194,7 +194,7 @@ export class DeliveryFeeService {
     }
 
     /**
-     * 创建/更新区域配送费配置 (Operator)
+     * 创建/更新区域代取费配置 (Operator)
      * @param regionId 区域ID
      * @param data 配置数据
      */
@@ -255,7 +255,7 @@ export class DeliveryFeeService {
     }
 
     /**
-     * 获取商户配送优惠列表 (Merchant)
+     * 获取商户代取优惠列表 (Merchant)
      */
     async getMerchantPromotions(merchantId: number): Promise<DeliveryPromotionResponse[]> {
         return request({
@@ -265,7 +265,7 @@ export class DeliveryFeeService {
     }
 
     /**
-     * 创建商户配送优惠 (Merchant)
+     * 创建商户代取优惠 (Merchant)
      */
     async createMerchantPromotion(merchantId: number, data: CreateDeliveryPromotionRequest): Promise<DeliveryPromotionResponse> {
         return request({
@@ -276,7 +276,7 @@ export class DeliveryFeeService {
     }
 
     /**
-     * 更新商户配送优惠 (Merchant)
+     * 更新商户代取优惠 (Merchant)
      */
     async updateMerchantPromotion(merchantId: number, promoId: number, data: UpdateDeliveryPromotionRequest): Promise<DeliveryPromotionResponse> {
         return request({
@@ -287,7 +287,7 @@ export class DeliveryFeeService {
     }
 
     /**
-     * 删除商户配送优惠 (Merchant)
+     * 删除商户代取优惠 (Merchant)
      */
     async deleteMerchantPromotion(merchantId: number, promoId: number): Promise<void> {
         return request({

@@ -414,8 +414,8 @@ Use stable Chinese messages. Proposed messages:
 | --- | --- | --- |
 | Merchant bill not ready when merchant detail loads | `500` unless caused by known business conflict | `订单收款账单暂不可用，请稍后重试或联系平台处理` |
 | Bill exists but values conflict with order/payment | `500`, alert operator | `订单收款账单异常，请联系平台处理` |
-| Rider BaoFu account missing | `400` | `骑手结算账户未开通，暂不能接收配送费分账订单` |
-| Rider bill cannot be calculated because merchant bill missing | `409` or `500` depending cause | `订单配送收益账单暂不可用，请稍后重试` |
+| Rider BaoFu account missing | `400` | `骑手结算账户未开通，暂不能接收代取费分账订单` |
+| Rider bill cannot be calculated because merchant bill missing | `409` or `500` depending cause | `订单代取收益账单暂不可用，请稍后重试` |
 | Rider bill cannot update because sharing already submitted | `409` | `订单结算已进入处理，不能重新接单` |
 | WeChat settlement callback signature failure | WeChat notify `FAIL` | `signature verification failed` in callback response; log Chinese internal context |
 | WeChat settlement callback cannot find payment order | WeChat notify `FAIL` | `payment order not found` in callback response; log internal context |
@@ -776,7 +776,7 @@ Implementation requirements:
   - `支付通道费`
   - `商户实收`
 - For takeout with rider:
-  - `配送费`
+  - `代取费`
   - `骑手通道费`
   - `骑手实收`
 - Kitchen split slip may omit financial details if product confirms it is kitchen-only. Full/front slip must include the bill.

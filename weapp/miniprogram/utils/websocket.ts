@@ -14,9 +14,9 @@ export enum WSMessageType {
   CONNECTION_BLOCKED = 'connection_blocked',
   MERCHANT_STATUS_CHANGE = 'merchant_status_change',
   
-  // 配送业务相关 (与后端 websocket/message_types.go 保持同步)
-  DELIVERY_POOL_NEW = 'delivery_pool_new',   // 配送池新增订单
-  DELIVERY_POOL_GONE = 'delivery_pool_gone', // 配送池订单被抢/移除
+  // 代取业务相关 (与后端 websocket/message_types.go 保持同步)
+  DELIVERY_POOL_NEW = 'delivery_pool_new',   // 代取池新增订单
+  DELIVERY_POOL_GONE = 'delivery_pool_gone', // 代取池订单被抢/移除
 }
 
 /**

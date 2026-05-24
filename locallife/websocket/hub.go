@@ -100,7 +100,7 @@ type BroadcastMessage struct {
 
 // ReplayFilter 是断线重连消息回放的可选过滤函数。
 // 返回 true 表示该消息应当回放；返回 false 跳过此消息。
-// 典型用途：骑手回放时过滤掉已被他人接走的配送池订单。
+// 典型用途：骑手回放时过滤掉已被他人接走的代取池订单。
 type ReplayFilter func(ctx context.Context, info ClientInfo, msg Message) bool
 
 type RetryConfig struct {

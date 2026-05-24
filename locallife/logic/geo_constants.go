@@ -10,7 +10,7 @@ const (
 	// 更精确的计算应使用 MetersPerLatDegree * cos(latitude)（见 delivery_quote.go 的 Haversine 降级计算）
 	MetersPerLngDegree = 96_000
 
-	// DefaultDeliveryDistance 当无法通过地图 API 获取真实路线时使用的默认配送距离（米）
+	// DefaultDeliveryDistance 当无法通过地图 API 获取真实路线时使用的默认代取距离（米）
 	DefaultDeliveryDistance = 3_000
 
 	// MinDeliveryDistance 骑行路线计算结果低于此值时的下限（米），防止 0 距离异常

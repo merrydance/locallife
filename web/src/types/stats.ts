@@ -168,7 +168,7 @@ export interface DateRangeParams {
  * 订单类型标签映射
  */
 export const ORDER_TYPE_LABELS: Record<string, string> = {
-  takeout: "外卖配送",
+  takeout: "外卖代取",
   dine_in: "堂食点餐",
   pickup: "到店自取",
   reservation: "预订",

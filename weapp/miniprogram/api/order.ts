@@ -12,10 +12,10 @@ export type OrderStatus =
   | 'pending'     // 待支付
   | 'paid'        // 已支付
   | 'preparing'   // 制作中
-  | 'ready'       // 待配送/待取餐
+  | 'ready'       // 待代取/待取餐
   | 'courier_accepted' // 骑手已接单
   | 'picked'      // 已取餐
-  | 'delivering'  // 配送中
+  | 'delivering'  // 代取中
   | 'rider_delivered' // 骑手已送达
   | 'user_delivered'  // 用户已确认
   | 'completed'   // 已完成
@@ -97,7 +97,7 @@ export interface OrderResponse {
   order_type: OrderType
   payment_method?: 'wechat' | 'balance'
   items?: OrderItemResponse[]
-  subtotal: number              // 商品小计（分，不含配送费）
+  subtotal: number              // 商品小计（分，不含代取费）
   total_amount: number          // 订单总金额（分）
   delivery_fee: number
   delivery_fee_discount: number
@@ -118,12 +118,12 @@ export interface OrderResponse {
   completed_at?: string
   cancelled_at?: string
   cancel_reason?: string
-  // 配送相关
+  // 代取相关
   address_id?: number
   delivery_distance?: number
-  delivery_contact_name?: string   // 配送联系人
-  delivery_contact_phone?: string  // 配送联系电话
-  delivery_address?: string        // 配送地址
+  delivery_contact_name?: string   // 代取联系人
+  delivery_contact_phone?: string  // 代取联系电话
+  delivery_address?: string        // 代取地址
   // 堂食相关
   table_id?: number
   // 预定相关
@@ -177,7 +177,7 @@ export function isFoodSafetyReportableOrder(order?: Pick<OrderResponse, 'order_t
 
 /** 创建订单请求 - 对齐 api.createOrderRequest */
 export interface CreateOrderRequest extends Record<string, unknown> {
-  address_id?: number           // 配送地址ID（外卖订单必填）
+  address_id?: number           // 代取地址ID（外卖订单必填）
   items: OrderItemRequest[]     // 订单商品列表
   merchant_id: number           // 商户ID
   notes?: string                // 订单备注
@@ -187,9 +187,9 @@ export interface CreateOrderRequest extends Record<string, unknown> {
   billing_group_id?: number     // 账单组ID（堂食可选）
   use_balance?: boolean         // 是否使用会员余额支付
   user_voucher_id?: number      // 用户优惠券ID
-  delivery_fee?: number         // 前端计算的配送费（分）
-  delivery_fee_discount?: number// 前端计算的配送费优惠（分）
-  delivery_distance?: number    // 前端计算的配送距离（米）
+  delivery_fee?: number         // 前端计算的代取费（分）
+  delivery_fee_discount?: number// 前端计算的代取费优惠（分）
+  delivery_distance?: number    // 前端计算的代取距离（米）
 }
 
 /** 订单商品请求 - 对齐 api.orderItemRequest */
@@ -232,8 +232,8 @@ export interface CalculateOrderParams extends Record<string, unknown> {
 /** 订单计算结果 - 对齐 api.calculateCartResponse */
 /** 订单计算结果 - 对齐 api.orderCalculationResponse */
 export interface OrderCalculationResponse {
-  delivery_fee: number              // 配送费（分）
-  delivery_fee_discount: number     // 配送费优惠（分）
+  delivery_fee: number              // 代取费（分）
+  delivery_fee_discount: number     // 代取费优惠（分）
   discount_amount: number           // 满减优惠（分）
   items: CalculatedItemResponse[]   // 商品明细
   promotions?: PromotionApplied[]   // 优惠明细

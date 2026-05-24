@@ -21,7 +21,7 @@
         <view class="entry-icon entry-icon--timeout">
           <t-icon name="time" size="48rpx" />
         </view>
-        <text class="entry-label">配送超时</text>
+        <text class="entry-label">代取超时</text>
       </view>
       <view class="entry-item" bindtap="onQuickEntry" data-type="food-safety-report">
         <view class="entry-icon entry-icon--safety">

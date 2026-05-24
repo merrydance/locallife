@@ -242,7 +242,7 @@ type Querier interface {
 	CountRiderDeliveries(ctx context.Context, riderID pgtype.Int8) (int64, error)
 	CountRiderDeposits(ctx context.Context, riderID int64) (int64, error)
 	CountRiderLocations(ctx context.Context, riderID int64) (int64, error)
-	// 骑手配送费明细总数
+	// 骑手代取费明细总数
 	CountRiderProfitSharingOrders(ctx context.Context, arg CountRiderProfitSharingOrdersParams) (int64, error)
 	// 骑手追偿争议计数
 	CountRiderRecoveryDisputes(ctx context.Context, arg CountRiderRecoveryDisputesParams) (int64, error)
@@ -660,7 +660,7 @@ type Querier interface {
 	// ==========================================
 	// 获取欺诈模式关联的所有索赔详情
 	GetClaimsByFraudPattern(ctx context.Context, dollar_1 []int64) ([]GetClaimsByFraudPatternRow, error)
-	// 查询使用相同配送地址的索赔
+	// 查询使用相同代取地址的索赔
 	GetClaimsWithSameAddress(ctx context.Context, arg GetClaimsWithSameAddressParams) ([]GetClaimsWithSameAddressRow, error)
 	// 根据经纬度获取最近的区县级区域
 	GetClosestRegion(ctx context.Context, arg GetClosestRegionParams) (Region, error)
@@ -893,10 +893,10 @@ type Querier interface {
 	GetOperatorRegion(ctx context.Context, arg GetOperatorRegionParams) (OperatorRegion, error)
 	GetOperatorRegionApplication(ctx context.Context, id int64) (OperatorRegionApplication, error)
 	GetOperatorRegionApplicationByOperatorAndRegion(ctx context.Context, arg GetOperatorRegionApplicationByOperatorAndRegionParams) (OperatorRegionApplication, error)
-	// 运营商区域内骑手绩效排行(通过配送订单关联区域)
+	// 运营商区域内骑手绩效排行(通过代取订单关联区域)
 	GetOperatorRiderRanking(ctx context.Context, arg GetOperatorRiderRankingParams) ([]GetOperatorRiderRankingRow, error)
 	// M12: 运营商骑手统计查询（按指定时间段）
-	// 运营商视角：单个骑手在指定时间段内的配送统计
+	// 运营商视角：单个骑手在指定时间段内的代取统计
 	GetOperatorRiderStats(ctx context.Context, arg GetOperatorRiderStatsParams) (GetOperatorRiderStatsRow, error)
 	// 获取或创建用户余额账户（原子操作）
 	GetOrCreateUserBalance(ctx context.Context, userID int64) (UserBalance, error)
@@ -1022,7 +1022,7 @@ type Querier interface {
 	GetRiderDailyEarnings(ctx context.Context, arg GetRiderDailyEarningsParams) (interface{}, error)
 	// 骑手每日收入汇总
 	GetRiderDailyIncome(ctx context.Context, arg GetRiderDailyIncomeParams) ([]GetRiderDailyIncomeRow, error)
-	// 获取骑手在指定时间窗口内的配送统计
+	// 获取骑手在指定时间窗口内的代取统计
 	GetRiderDeliveryStats(ctx context.Context, arg GetRiderDeliveryStatsParams) (GetRiderDeliveryStatsRow, error)
 	GetRiderDeposit(ctx context.Context, id int64) (RiderDeposit, error)
 	GetRiderDepositByPaymentOrderID(ctx context.Context, paymentOrderID pgtype.Int8) (RiderDeposit, error)
@@ -1040,9 +1040,9 @@ type Querier interface {
 	GetRiderProfile(ctx context.Context, riderID int64) (RiderProfile, error)
 	GetRiderProfileForUpdate(ctx context.Context, riderID int64) (RiderProfile, error)
 	// ==================== 骑手分账查询 ====================
-	// 骑手配送费收入统计
+	// 骑手代取费收入统计
 	GetRiderProfitSharingStats(ctx context.Context, arg GetRiderProfitSharingStatsParams) (GetRiderProfitSharingStatsRow, error)
-	// 骑手配送费按分账状态汇总
+	// 骑手代取费按分账状态汇总
 	GetRiderProfitSharingStatusSummary(ctx context.Context, arg GetRiderProfitSharingStatusSummaryParams) ([]GetRiderProfitSharingStatusSummaryRow, error)
 	// 骑手查看自己的追偿争议详情
 	GetRiderRecoveryDisputeDetail(ctx context.Context, arg GetRiderRecoveryDisputeDetailParams) (GetRiderRecoveryDisputeDetailRow, error)
@@ -1233,7 +1233,7 @@ type Querier interface {
 	ListDeliveryFeeConfigs(ctx context.Context, arg ListDeliveryFeeConfigsParams) ([]DeliveryFeeConfig, error)
 	ListDeliveryLocations(ctx context.Context, deliveryID pgtype.Int8) ([]RiderLocation, error)
 	ListDeliveryLocationsSince(ctx context.Context, arg ListDeliveryLocationsSinceParams) ([]RiderLocation, error)
-	// 列出所有待接单的配送池订单
+	// 列出所有待接单的代取池订单
 	// 外卖订单始终可见直到被接单或取消
 	// 动态优先级 = 基础优先级 + 等待时间加成（每等待10分钟加1级）
 	ListDeliveryPool(ctx context.Context, arg ListDeliveryPoolParams) ([]ListDeliveryPoolRow, error)
@@ -1277,7 +1277,7 @@ type Querier interface {
 	ListMediaAssetsByUploader(ctx context.Context, arg ListMediaAssetsByUploaderParams) ([]MediaAsset, error)
 	ListMembershipTransactions(ctx context.Context, arg ListMembershipTransactionsParams) ([]MembershipTransaction, error)
 	ListMembershipTransactionsByType(ctx context.Context, arg ListMembershipTransactionsByTypeParams) ([]MembershipTransaction, error)
-	// 获取商户当前有效的配送费优惠
+	// 获取商户当前有效的代取费优惠
 	ListMerchantActiveDeliveryPromotions(ctx context.Context, merchantID int64) ([]MerchantDeliveryPromotion, error)
 	// 获取商户当前有效的满减规则
 	ListMerchantActiveDiscountRules(ctx context.Context, merchantID int64) ([]DiscountRule, error)
@@ -1390,7 +1390,7 @@ type Querier interface {
 	// 查询待支付且已过期的合单（用于定时关闭）
 	ListPendingCombinedPaymentOrders(ctx context.Context, limit int32) ([]CombinedPaymentOrder, error)
 	ListPendingDeliveries(ctx context.Context, limit int32) ([]Delivery, error)
-	// 获取超时未接单的配送单
+	// 获取超时未接单的代取单
 	ListPendingDeliveriesBefore(ctx context.Context, arg ListPendingDeliveriesBeforeParams) ([]Delivery, error)
 	ListPendingDeliveriesBeforeWithoutAlert(ctx context.Context, arg ListPendingDeliveriesBeforeWithoutAlertParams) ([]Delivery, error)
 	ListPendingOCRJobsByMediaAsset(ctx context.Context, mediaAssetID int64) ([]OcrJob, error)
@@ -1459,7 +1459,7 @@ type Querier interface {
 	// 列出骑手申请（管理员用）
 	ListRiderApplications(ctx context.Context, arg ListRiderApplicationsParams) ([]RiderApplication, error)
 	ListRiderClaims(ctx context.Context, arg ListRiderClaimsParams) ([]Claim, error)
-	// 骑手查看收到的索赔列表（通过配送单关联）
+	// 骑手查看收到的索赔列表（通过代取单关联）
 	ListRiderClaimsForRider(ctx context.Context, arg ListRiderClaimsForRiderParams) ([]ListRiderClaimsForRiderRow, error)
 	ListRiderDepositCreditsForReminderWindow(ctx context.Context, arg ListRiderDepositCreditsForReminderWindowParams) ([]RiderDepositCredit, error)
 	ListRiderDepositLedgerAnomalies(ctx context.Context, arg ListRiderDepositLedgerAnomaliesParams) ([]ListRiderDepositLedgerAnomaliesRow, error)
@@ -1467,7 +1467,7 @@ type Querier interface {
 	ListRiderDeposits(ctx context.Context, arg ListRiderDepositsParams) ([]RiderDeposit, error)
 	ListRiderDepositsByType(ctx context.Context, arg ListRiderDepositsByTypeParams) ([]RiderDeposit, error)
 	ListRiderLocations(ctx context.Context, arg ListRiderLocationsParams) ([]RiderLocation, error)
-	// 骑手配送费明细
+	// 骑手代取费明细
 	ListRiderProfitSharingOrders(ctx context.Context, arg ListRiderProfitSharingOrdersParams) ([]ListRiderProfitSharingOrdersRow, error)
 	// =========================== 骑手视角 ===========================
 	// 骑手查询自己的追偿争议列表

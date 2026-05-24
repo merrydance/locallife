@@ -465,7 +465,7 @@ export class WebSocketManager {
 // ==================== 实时位置追踪 ====================
 
 /**
- * 配送实时追踪管理器
+ * 代取实时追踪管理器
  */
 export class DeliveryTrackingManager {
   private trackingMap = new Map<number, ReturnType<typeof setInterval>>()
@@ -479,7 +479,7 @@ export class DeliveryTrackingManager {
   }
 
   /**
-   * 获取配送追踪信息
+   * 获取代取追踪信息
    */
   async getDeliveryTracking(deliveryId: number): Promise<DeliveryTrackingInfo> {
     return request({
@@ -489,7 +489,7 @@ export class DeliveryTrackingManager {
   }
 
   /**
-   * 开始追踪配送
+   * 开始追踪代取
    */
   async startTracking(
     deliveryId: number,
@@ -504,7 +504,7 @@ export class DeliveryTrackingManager {
       const trackingInfo = await this.getDeliveryTracking(deliveryId)
       onLocationUpdate(trackingInfo)
     } catch (error) {
-      console.error('获取配送追踪信息失败:', error)
+      console.error('获取代取追踪信息失败:', error)
     }
 
     // 设置定时轮询
@@ -513,12 +513,12 @@ export class DeliveryTrackingManager {
         const trackingInfo = await this.getDeliveryTracking(deliveryId)
         onLocationUpdate(trackingInfo)
 
-        // 如果配送已完成，停止追踪
+        // 如果代取已完成，停止追踪
         if (trackingInfo.status === 'delivered') {
           this.stopTracking(deliveryId)
         }
       } catch (error) {
-        console.error('轮询配送追踪信息失败:', error)
+        console.error('轮询代取追踪信息失败:', error)
       }
     }, interval)
 
@@ -531,7 +531,7 @@ export class DeliveryTrackingManager {
   }
 
   /**
-   * 停止追踪配送
+   * 停止追踪代取
    */
   stopTracking(deliveryId: number): void {
     const timeoutId = this.trackingMap.get(deliveryId)
@@ -562,7 +562,7 @@ export class DeliveryTrackingManager {
   }
 
   /**
-   * 获取正在追踪的配送列表
+   * 获取正在追踪的代取列表
    */
   getTrackingDeliveries(): number[] {
     return Array.from(this.trackingMap.keys())
@@ -700,7 +700,7 @@ export class WebSocketUtils {
   }
 
   /**
-   * 获取配送追踪管理器
+   * 获取代取追踪管理器
    */
   static getDeliveryTrackingManager(): DeliveryTrackingManager {
     if (!this.trackingManager) {
@@ -817,7 +817,7 @@ export class RealtimeUtils {
   }
 
   /**
-   * 开始追踪订单配送
+   * 开始追踪订单代取
    */
   static async startOrderTracking(
     deliveryId: number,
@@ -828,7 +828,7 @@ export class RealtimeUtils {
   }
 
   /**
-   * 停止追踪订单配送
+   * 停止追踪订单代取
    */
   static stopOrderTracking(deliveryId: number): void {
     const trackingManager = WebSocketUtils.getDeliveryTrackingManager()

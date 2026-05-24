@@ -36,7 +36,7 @@ export const VOUCHERS_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 const ALL_ORDER_TYPES: OrderType[] = ['takeout', 'dine_in', 'takeaway', 'reservation']
 
 const ORDER_TYPE_LABEL_MAP: Record<OrderType, string> = {
-  takeout: '外卖配送',
+  takeout: '外卖代取',
   dine_in: '堂食',
   takeaway: '到店自取',
   reservation: '预订'

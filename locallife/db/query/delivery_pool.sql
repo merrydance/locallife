@@ -44,7 +44,7 @@ DELETE FROM delivery_pool
 WHERE expires_at < now();
 
 -- name: ListDeliveryPool :many
--- 列出所有待接单的配送池订单
+-- 列出所有待接单的代取池订单
 -- 外卖订单始终可见直到被接单或取消
 -- 动态优先级 = 基础优先级 + 等待时间加成（每等待10分钟加1级）
 SELECT id, order_id, merchant_id, pickup_longitude, pickup_latitude, delivery_longitude, delivery_latitude, distance, delivery_fee, expected_pickup_at, expires_at, priority, created_at, expected_delivery_at,

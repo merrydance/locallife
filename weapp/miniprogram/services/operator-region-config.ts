@@ -50,7 +50,7 @@ export function createEmptyOperatorRegionConfigSummary(): OperatorRegionConfigSu
     valueRatio: '未配置',
     minFee: '未配置',
     maxFee: '不限',
-    statusText: '当前区域还没有基础配送费配置'
+    statusText: '当前区域还没有基础代取费配置'
   }
 }
 

@@ -163,7 +163,7 @@ WHERE id = $1
 RETURNING *;
 
 -- name: ListPendingDeliveriesBefore :many
--- 获取超时未接单的配送单
+-- 获取超时未接单的代取单
 SELECT id, order_id, rider_id, pickup_address, pickup_longitude, pickup_latitude, pickup_contact, pickup_phone, picked_at, delivery_address, delivery_longitude, delivery_latitude, delivery_contact, delivery_phone, delivered_at, distance, delivery_fee, rider_earnings, status, estimated_pickup_at, estimated_delivery_at, is_damaged, is_delayed, damage_amount, damage_reason, created_at, assigned_at, completed_at, rider_delivered_at FROM deliveries
 WHERE status = sqlc.arg('status')
   AND created_at < sqlc.arg('created_at')

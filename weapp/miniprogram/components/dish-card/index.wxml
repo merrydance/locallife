@@ -19,7 +19,7 @@
       </block>
     </view>
     
-    <!-- 第3行: 距离 + 预估配送时间 -->
+    <!-- 第3行: 距离 + 预估代取时间 -->
     <view class="row-3">
       <text class="distance">📍{{dish.distance}}</text>
       <text class="delivery-time">🕐{{dish.deliveryTimeDisplay}}</text>

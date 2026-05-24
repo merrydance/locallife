@@ -3,7 +3,7 @@
 -- - 区域级别：region_id 关联到区县级别，一个区县一个运营商
 -- - 高峰配置：同一区域的时段不允许重叠，代码层面校验
 -- - 满返促销：门槛式，阶梯取最优（满足条件的取减免金额最大的那条）
--- - 深夜配送：在 peak_hour_configs 中配置，支持跨天时段
+-- - 深夜代取：在 peak_hour_configs 中配置，支持跨天时段
 
 -- 运费配置表（按区县配置基础运费规则）
 CREATE TABLE "delivery_fee_configs" (
@@ -123,10 +123,10 @@ COMMENT ON COLUMN "weather_coefficients"."warning_severity" IS '严重程度: mi
 COMMENT ON COLUMN "weather_coefficients"."weather_coefficient" IS '天气系数';
 COMMENT ON COLUMN "weather_coefficients"."warning_coefficient" IS '预警系数';
 COMMENT ON COLUMN "weather_coefficients"."final_coefficient" IS '最终系数 = max(天气系数, 预警系数)';
-COMMENT ON COLUMN "weather_coefficients"."delivery_suspended" IS '是否暂停配送（极端天气）';
+COMMENT ON COLUMN "weather_coefficients"."delivery_suspended" IS '是否暂停代取（极端天气）';
 
-COMMENT ON TABLE "peak_hour_configs" IS '高峰/特殊时段配置表（午高峰、晚高峰、深夜配送等）';
-COMMENT ON COLUMN "peak_hour_configs"."name" IS '配置名称，如：午高峰、晚高峰、深夜配送';
+COMMENT ON TABLE "peak_hour_configs" IS '高峰/特殊时段配置表（午高峰、晚高峰、深夜代取等）';
+COMMENT ON COLUMN "peak_hour_configs"."name" IS '配置名称，如：午高峰、晚高峰、深夜代取';
 COMMENT ON COLUMN "peak_hour_configs"."end_time" IS '结束时间，可小于start_time表示跨天（如22:00-06:00）';
 COMMENT ON COLUMN "peak_hour_configs"."coefficient" IS '运费系数，如1.20表示加价20%';
 COMMENT ON COLUMN "peak_hour_configs"."days_of_week" IS '生效的星期：1=周一...7=周日';

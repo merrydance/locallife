@@ -537,7 +537,7 @@ func (s *OrderService) ConfirmOrder(ctx context.Context, input ConfirmOrderInput
 			_ = s.notificationPublisher.Send(ctx, NotificationInput{
 				UserID:      *result.RiderID,
 				Type:        "delivery_completed",
-				Title:       "配送已完成",
+				Title:       "代取已完成",
 				Content:     fmt.Sprintf("订单 %s 用户已确认收货", result.Order.OrderNo),
 				RelatedType: "order",
 				RelatedID:   result.Order.ID,

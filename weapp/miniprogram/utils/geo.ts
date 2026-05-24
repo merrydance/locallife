@@ -1,12 +1,12 @@
 /**
  * 地理位置工具函数
- * 用于前端计算距离和配送时间
+ * 用于前端计算距离和代取时间
  */
 
 import { logger } from './logger'
 
 const EARTH_RADIUS_KM = 6371 // 地球半径（千米）
-const AVERAGE_DELIVERY_SPEED_KMH = 20 // 平均配送速度（公里/小时）
+const AVERAGE_DELIVERY_SPEED_KMH = 20 // 平均代取速度（公里/小时）
 const ROAD_FACTOR = 1.3 // 路况系数（城市道路实际速度更慢）
 const BASE_PREP_TIME_MINUTES = 15 // 基础备餐时间（分钟）
 
@@ -47,10 +47,10 @@ export function haversineDistance(
 }
 
 /**
- * 估算配送时间（分钟）
+ * 估算代取时间（分钟）
  * @param distanceKm 距离（千米）
  * @param prepMinutes 备餐时间（分钟）
- * @returns 预计配送时间（分钟）
+ * @returns 预计代取时间（分钟）
  */
 export function estimateDeliveryTime(
   distanceKm: number,
@@ -60,10 +60,10 @@ export function estimateDeliveryTime(
     return prepMinutes
   }
 
-  // 配送时间 = 距离 / 速度 * 60（转换为分钟）
+  // 代取时间 = 距离 / 速度 * 60（转换为分钟）
   const deliveryMinutes = (distanceKm / AVERAGE_DELIVERY_SPEED_KMH) * 60 * ROAD_FACTOR
 
-  // 总时间 = 备餐时间 + 配送时间
+  // 总时间 = 备餐时间 + 代取时间
   const totalMinutes = prepMinutes + deliveryMinutes
 
   // 向上取整到5分钟

@@ -9,12 +9,12 @@ const PAGE_SIZE = 20
 const CLAIM_TYPE_DISPLAY: Record<string, string> = {
   'foreign-object': '异物问题',
   'damage': '餐品损坏',
-  'timeout': '配送超时',
+  'timeout': '代取超时',
   'food-safety': '食品安全',
   'refund': '退款',
   'compensation': '赔偿',
   'quality_issue': '质量问题',
-  'delivery_issue': '配送问题'
+  'delivery_issue': '代取问题'
 }
 
 function displayClaimType(type: string): string {

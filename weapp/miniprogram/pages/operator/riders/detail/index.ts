@@ -41,7 +41,7 @@ Page({
       this.setData({ loading: false, error: message })
       return
     }
-    // 加载配送统计
+    // 加载代取统计
     this.setData({ statsLoading: true })
     try {
       this.setData({ stats: await loadOperatorRiderStatsView(this.data.id, 30) })

@@ -167,7 +167,7 @@ func TestProcessTaskPaymentDomainOutbox_PublishesRiderProfitSharingResultReady(t
 	require.Equal(t, int64(9003), payloads[0].UserID)
 	require.Equal(t, int64(9103), payloads[1].UserID)
 	require.Equal(t, "finance", payloads[1].Type)
-	require.Equal(t, "配送费已到账", payloads[1].Title)
+	require.Equal(t, "代取费已到账", payloads[1].Title)
 	require.Equal(t, "profit_sharing_order", payloads[1].RelatedType)
 	require.Equal(t, int64(3003), payloads[1].RelatedID)
 	require.True(t, payloads[1].IgnorePreferences)
@@ -236,7 +236,7 @@ func TestProcessTaskPaymentDomainOutbox_PublishesRiderFailedProfitSharingResultR
 	distributor.EXPECT().DistributeTaskSendNotification(gomock.Any(), gomock.AssignableToTypeOf(&worker.SendNotificationPayload{}), gomock.Any()).DoAndReturn(func(_ context.Context, payload *worker.SendNotificationPayload, opts ...asynq.Option) error {
 		require.Len(t, opts, 1)
 		require.Equal(t, int64(9105), payload.UserID)
-		require.Equal(t, "配送费结算处理中", payload.Title)
+		require.Equal(t, "代取费结算处理中", payload.Title)
 		require.NotContains(t, payload.Content, "NO_RELATION")
 		require.True(t, payload.IgnorePreferences)
 		require.Equal(t, int64(3005), payload.ExtraData["profit_sharing_order_id"])

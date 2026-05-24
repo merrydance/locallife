@@ -183,7 +183,7 @@
         </view>
       </view>
 
-      <!-- 商户优惠中心（展示所有优惠：满减、配送、优惠券、充值活动） -->
+      <!-- 商户优惠中心（展示所有优惠：满减、代取、优惠券、充值活动） -->
       <merchant-promos 
         merchantId="{{merchantId}}"
         showInsufficientTip="{{balanceInsufficient}}"

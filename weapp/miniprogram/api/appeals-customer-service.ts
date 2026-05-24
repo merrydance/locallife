@@ -1086,7 +1086,7 @@ export function formatClaimType(claimType: ClaimType): string {
         refund: '退款',
         compensation: '赔偿',
         quality_issue: '质量问题',
-        delivery_issue: '配送问题'
+        delivery_issue: '代取问题'
     }
     return typeMap[claimType] || claimType
 }

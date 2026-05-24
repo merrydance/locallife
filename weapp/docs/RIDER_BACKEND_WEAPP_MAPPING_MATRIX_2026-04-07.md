@@ -48,7 +48,7 @@
 | 我的进行中任务 | `GET /v1/delivery/active` | `api/delivery.go` `api/server.go` | `rider/dashboard` | 页面直接请求；辅以 `delivery.ts` 类型 | 已闭环 |
 | 履约状态流转 | `POST /v1/delivery/:delivery_id/start-pickup` `POST /v1/delivery/:delivery_id/confirm-pickup` `POST /v1/delivery/:delivery_id/start-delivery` `POST /v1/delivery/:delivery_id/confirm-delivery` | `api/delivery.go` `api/server.go` | `rider/dashboard` `rider/task-detail` | `delivery.ts` | 已闭环 |
 | 任务详情与历史任务 | `GET /v1/delivery/order/:order_id` `GET /v1/delivery/history` | `api/delivery.go` `api/server.go` | `rider/task-detail` `rider/tasks` | `delivery.ts`；历史页直接请求 | 已闭环 |
-| 配送轨迹与导航 | `GET /v1/delivery/:delivery_id/track` `GET /v1/delivery/:delivery_id/rider-location` | `api/delivery.go` `api/server.go` | `rider/task-detail` `rider/navigation` | `delivery.ts` | 已闭环 |
+| 代取轨迹与导航 | `GET /v1/delivery/:delivery_id/track` `GET /v1/delivery/:delivery_id/rider-location` | `api/delivery.go` `api/server.go` | `rider/task-detail` `rider/navigation` | `delivery.ts` | 已闭环 |
 | 骑手索赔与追偿 | `GET /v1/rider/claims` `GET /v1/rider/claims/summary` `GET /v1/rider/claims/:id` `GET /v1/rider/claims/:id/decision` `GET /v1/rider/claims/behavior-summary` `GET /v1/rider/claims/:id/recovery` `POST /v1/rider/claims/:id/recovery/pay` | `api/appeal.go` `api/claim_recovery.go` `api/server.go` | `rider/claims` `rider/claims/detail` | `appeals-customer-service.ts` `payment.ts` | 已闭环 |
 | 骑手申诉 | `POST /v1/rider/appeals` `GET /v1/rider/appeals` `GET /v1/rider/appeals/:id` | `api/appeal.go` `api/server.go` | `rider/claims` `rider/claims/detail` | `appeals-customer-service.ts` | 已闭环 |
 
@@ -58,8 +58,8 @@
 | --- | --- | --- | --- | --- |
 | 骑手注册 | `pages/register/rider/index` | `rider-application.ts` `ocr-jobs.ts` `utils/media.ts` | `/v1/rider/application*` 以及共享媒体/OCR基础设施 | 协议确认、证照上传、OCR 自动回填、基础资料保存、自动审核提交 |
 | 骑手工作台 | `pages/rider/dashboard/index` | `rider.ts` `delivery.ts` `utils/rider-location.ts` `utils/rider-live-location.ts` | `/v1/rider/me` `/v1/rider/status` `/v1/rider/online` `/v1/rider/offline` `/v1/delivery/active` `/v1/delivery/recommend` `/v1/delivery/grab/:order_id` `/v1/delivery/:delivery_id/*` `/v1/rider/location` | 上下线、抢单大厅、我的任务、位置连续上报、履约动作入口、押金不足拦截、跳转钱包和索赔页 |
-| 押金与账单 | `pages/rider/deposit/index` | `rider.ts` `payment.ts` | `/v1/rider/deposit` `/v1/rider/deposits` `/v1/rider/withdraw` | 押金余额、配送冻结/提现处理中拆分展示、充值支付、提现、账单分页 |
-| 历史任务 | `pages/rider/tasks/index` | 页面直接请求 `request` | `/v1/delivery/history` | 历史配送分页、累计收益、跳转详情与地图 |
+| 押金与账单 | `pages/rider/deposit/index` | `rider.ts` `payment.ts` | `/v1/rider/deposit` `/v1/rider/deposits` `/v1/rider/withdraw` | 押金余额、代取冻结/提现处理中拆分展示、充值支付、提现、账单分页 |
+| 历史任务 | `pages/rider/tasks/index` | 页面直接请求 `request` | `/v1/delivery/history` | 历史代取分页、累计收益、跳转详情与地图 |
 | 任务详情 | `pages/rider/task-detail/index` | `delivery.ts` `utils/rider-live-location.ts` | `/v1/delivery/order/:order_id` `/v1/delivery/:delivery_id/track` `/v1/delivery/:delivery_id/rider-location` `/v1/delivery/:delivery_id/start-pickup` `/confirm-pickup` `/start-delivery` `/confirm-delivery` | 任务详情、轨迹地图、履约状态推进、定位补发状态展示 |
 | 导航页 | `pages/rider/navigation/index` | `delivery.ts` `utils/rider-live-location.ts` | `/v1/delivery/order/:order_id` `/v1/delivery/:delivery_id/track` `/v1/delivery/:delivery_id/rider-location` | 下一站导航、轨迹渲染、连续定位状态提示 |
 | 索赔与申诉列表 | `pages/rider/claims/index` | `appeals-customer-service.ts` | `/v1/rider/claims` `/v1/rider/claims/summary` `/v1/rider/appeals` | 索赔记录、待处理分桶、申诉记录、分页加载 |

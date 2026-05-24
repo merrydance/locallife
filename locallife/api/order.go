@@ -35,10 +35,10 @@ const (
 	OrderStatusPending         = db.OrderStatusPending         // 待支付
 	OrderStatusPaid            = db.OrderStatusPaid            // 已支付
 	OrderStatusPreparing       = db.OrderStatusPreparing       // 制作中
-	OrderStatusReady           = db.OrderStatusReady           // 待取餐/待配送
+	OrderStatusReady           = db.OrderStatusReady           // 待取餐/待代取
 	OrderStatusCourierAccepted = db.OrderStatusCourierAccepted // 骑手已接单
 	OrderStatusPicked          = db.OrderStatusPicked          // 已取餐
-	OrderStatusDelivering      = db.OrderStatusDelivering      // 配送中
+	OrderStatusDelivering      = db.OrderStatusDelivering      // 代取中
 	OrderStatusRiderDelivered  = db.OrderStatusRiderDelivered  // 骑手送达（待用户确认）
 	OrderStatusUserDelivered   = db.OrderStatusUserDelivered   // 用户确认送达
 	OrderStatusCompleted       = db.OrderStatusCompleted       // 已完成
@@ -104,7 +104,7 @@ type createOrderRequest struct {
 	// 订单类型 (必填，枚举值: takeout-外卖, dine_in-堂食, takeaway-打包自取, reservation-预定点菜)
 	OrderType string `json:"order_type" binding:"required,oneof=takeout dine_in takeaway reservation" enums:"takeout,dine_in,takeaway,reservation" example:"takeout"`
 
-	// 配送地址ID (外卖订单必填)
+	// 代取地址ID (外卖订单必填)
 	AddressID *int64 `json:"address_id,omitempty" binding:"omitempty,min=1" example:"5001"`
 
 	// 桌台ID (堂食订单必填)
@@ -125,11 +125,11 @@ type createOrderRequest struct {
 	// 用户优惠券ID (选填，使用已领取的优惠券抵扣)
 	UserVoucherID *int64 `json:"user_voucher_id,omitempty" binding:"omitempty,min=1" example:"9001"`
 
-	// 前端已计算的配送费（分），用于直落且供服务端校验
+	// 前端已计算的代取费（分），用于直落且供服务端校验
 	DeliveryFee int64 `json:"delivery_fee,omitempty" example:"500"`
-	// 前端已计算的配送费优惠（分）
+	// 前端已计算的代取费优惠（分）
 	DeliveryFeeDiscount int64 `json:"delivery_fee_discount,omitempty" example:"200"`
-	// 前端已计算的配送距离（米）
+	// 前端已计算的代取距离（米）
 	DeliveryDistance int32 `json:"delivery_distance,omitempty" example:"2500"`
 
 	// 是否使用会员余额支付 (选填，仅堂食和自提支持)
@@ -309,7 +309,7 @@ func (server *Server) requireMerchantForOrder(ctx *gin.Context, userID int64) (d
 	return merchant, true
 }
 
-// newOrderWithDetailsResponse 用于订单详情，包含商户信息和配送地址
+// newOrderWithDetailsResponse 用于订单详情，包含商户信息和代取地址
 func newOrderWithDetailsResponse(o db.GetOrderWithDetailsRow) (orderResponse, error) {
 	resp := orderResponse{
 		ID:                  o.ID,
@@ -349,7 +349,7 @@ func newOrderWithDetailsResponse(o db.GetOrderWithDetailsRow) (orderResponse, er
 		return orderResponse{}, fmt.Errorf("decode order %d badges: %w", o.ID, err)
 	}
 
-	// 订单详情独有：商户电话和配送地址
+	// 订单详情独有：商户电话和代取地址
 	if o.MerchantPhone != "" {
 		resp.MerchantPhone = &o.MerchantPhone
 	}
@@ -738,10 +738,10 @@ type urgeOrderResponse struct {
 // @Description - pending: 待支付
 // @Description - paid: 已支付
 // @Description - preparing: 制作中
-// @Description - ready: 待配送/待取餐
+// @Description - ready: 待代取/待取餐
 // @Description - courier_accepted: 骑手已接单
 // @Description - picked: 已取餐
-// @Description - delivering: 配送中
+// @Description - delivering: 代取中
 // @Description - rider_delivered: 骑手送达
 // @Description - user_delivered: 用户确认送达
 // @Description - completed: 已完成
@@ -1077,10 +1077,10 @@ type listMerchantOrdersResponse struct {
 // @Description - pending: 待支付
 // @Description - paid: 已支付
 // @Description - preparing: 制作中
-// @Description - ready: 待配送/待取餐
+// @Description - ready: 待代取/待取餐
 // @Description - courier_accepted: 骑手已接单
 // @Description - picked: 已取餐
-// @Description - delivering: 配送中
+// @Description - delivering: 代取中
 // @Description - rider_delivered: 骑手送达
 // @Description - user_delivered: 用户确认送达
 // @Description - completed: 已完成
@@ -1483,7 +1483,7 @@ type markOrderReadyRequest struct {
 
 // markOrderReady godoc
 // @Summary 标记出餐完成
-// @Description 商户标记订单已出餐，等待配送或顾客取餐
+// @Description 商户标记订单已出餐，等待代取或顾客取餐
 // @Tags 商户订单管理
 // @Accept json
 // @Produce json
@@ -2498,9 +2498,9 @@ func (server *Server) getMerchantOrderSummary(ctx *gin.Context) {
 type orderCalculationResponse struct {
 	// 商品小计 (单位：分)
 	Subtotal int64 `json:"subtotal" example:"5760"`
-	// 配送费 (单位：分)
+	// 代取费 (单位：分)
 	DeliveryFee int64 `json:"delivery_fee" example:"500"`
-	// 配送费优惠 (单位：分)
+	// 代取费优惠 (单位：分)
 	DeliveryFeeDiscount int64 `json:"delivery_fee_discount" example:"200"`
 	// 营销优惠总减免（分），包含商户优惠和优惠券抵扣
 	DiscountAmount int64 `json:"discount_amount" example:"500"`
@@ -2541,13 +2541,13 @@ type orderCalculationItem struct {
 // @Description
 // @Description **计算内容：**
 // @Description - 商品小计（基于购物车商品）
-// @Description - 配送费（外卖订单，基于实时位置或配送地址）
+// @Description - 代取费（外卖订单，基于实时位置或代取地址）
 // @Description - 商户营销优惠与优惠券抵扣
 // @Description - 满返运费优惠
 // @Description - 推荐优惠券、阶梯优惠和代金券试算
 // @Description - 会员余额支付能力评估
 // @Description
-// @Description **配送费计算方式：**
+// @Description **代取费计算方式：**
 // @Description - 传入 latitude/longitude：使用实时位置计算（浏览阶段）
 // @Description - 传入 address_id：使用已保存地址计算（下单阶段）
 // @Description - 两者都传：优先使用 address_id
@@ -2558,7 +2558,7 @@ type orderCalculationItem struct {
 // @Param order_type query string true "订单类型" Enums(takeout,dine_in,takeaway)
 // @Param latitude query number false "用户实时纬度（浏览阶段使用）"
 // @Param longitude query number false "用户实时经度（浏览阶段使用）"
-// @Param address_id query int64 false "配送地址ID（下单阶段使用）"
+// @Param address_id query int64 false "代取地址ID（下单阶段使用）"
 // @Param user_voucher_id query int64 false "用户优惠券ID"
 // @Success 200 {object} orderCalculationResponse "计算结果"
 // @Failure 400 {object} ErrorResponse "参数错误/购物车为空"

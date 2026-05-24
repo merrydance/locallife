@@ -20,16 +20,16 @@ Status: draft for implementation planning
 
 ### 2.2 收入与分账模型
 
-- 骑手配送费通过微信分账到骑手个人 `openid`，不是平台钱包余额。
+- 骑手代取费通过微信分账到骑手个人 `openid`，不是平台钱包余额。
 - 骑手侧不建设收入提现能力。
-- 骑手侧需要的是微信分账结算账本：每单配送费、分账状态、到账时间、失败原因或平台处理中状态。
+- 骑手侧需要的是微信分账结算账本：每单代取费、分账状态、到账时间、失败原因或平台处理中状态。
 
-### 2.3 微信同城配送与分账边界
+### 2.3 微信同城代取与分账边界
 
-- 微信同城配送订单上报是否成功，属于微信同城配送/订单上报子域自己的职责。
-- 分账不主动耦合同城配送上报状态、冻结期计算或微信确认收货过程。
+- 微信同城代取订单上报是否成功，属于微信同城代取/订单上报子域自己的职责。
+- 分账不主动耦合同城代取上报状态、冻结期计算或微信确认收货过程。
 - 分账域只消费支付/微信事实域已经产出的可分账事实或分账触发事件。
-- 骑手侧页面只展示骑手能理解和行动的结算状态，不暴露同城配送上报内部状态。
+- 骑手侧页面只展示骑手能理解和行动的结算状态，不暴露同城代取上报内部状态。
 
 ### 2.4 消费者保护与索赔边界
 
@@ -42,7 +42,7 @@ Status: draft for implementation planning
 ### 3.1 后端事实
 
 - 骑手基础资料、上线、押金、押金退款入口在 `locallife/api/rider.go`。
-- 骑手配送历史与收入统计当前主要来自 delivery 维度，在 `locallife/api/delivery.go`。
+- 骑手代取历史与收入统计当前主要来自 delivery 维度，在 `locallife/api/delivery.go`。
 - 骑手个人分账接收方使用 `PERSONAL_OPENID`，由 `locallife/logic/profit_sharing_receiver_sync_service.go` 维护。
 - 骑手分账金额、订单号、商户名、日收入统计已经有 SQL 查询基础，见 `locallife/db/query/profit_sharing_order.sql`。
 - 通知持久化与 WebSocket replay 基础已经存在，见 `locallife/api/notification.go`、`locallife/db/query/notification.sql`、`locallife/websocket/message_store_redis.go`。
@@ -79,7 +79,7 @@ Status: draft for implementation planning
 
 工作台聚合层不负责：
 
-- 判定微信同城配送是否上报成功。
+- 判定微信同城代取是否上报成功。
 - 判定订单是否可分账。
 - 执行分账或退款。
 - 改写押金冻结、追偿、申诉状态机。
@@ -118,10 +118,10 @@ Status: draft for implementation planning
 
 - 骑手基础状态。
 - 在线状态与上线阻塞原因。
-- 当前进行中配送。
+- 当前进行中代取。
 - 附近可抢订单数量或推荐订单摘要。
 - 今日完成单数。
-- 今日配送费摘要，按分账账本口径优先。
+- 今日代取费摘要，按分账账本口径优先。
 - 押金可用/冻结摘要。
 - 待处理追偿或申诉数量。
 - 未读关键通知数量。
@@ -150,7 +150,7 @@ Status: draft for implementation planning
 - 推荐订单/附近订单。
 - 当前任务详情。
 - 履约状态流转动作。
-- 历史配送列表。
+- 历史代取列表。
 
 异步能力：
 
@@ -169,17 +169,17 @@ Status: draft for implementation planning
 边界：
 
 - 不建设平台派单。
-- 不把配送历史等同于收入账本。
+- 不把代取历史等同于收入账本。
 - 不在履约页面处理分账规则。
 
-## 5.3 能力组 C：配送费分账账本
+## 5.3 能力组 C：代取费分账账本
 
-目标：让骑手看到配送费如何从完成任务走到微信分账到账。
+目标：让骑手看到代取费如何从完成任务走到微信分账到账。
 
 同步能力：
 
 - 收入摘要：今日已到账、待结算、分账失败或处理中数量。
-- 分账明细：订单号、商户、配送费、骑手分账金额、状态、完成时间、到账时间。
+- 分账明细：订单号、商户、代取费、骑手分账金额、状态、完成时间、到账时间。
 - 日收入趋势。
 
 异步能力：
@@ -198,7 +198,7 @@ Status: draft for implementation planning
 
 - 不做平台余额。
 - 不做骑手收入提现。
-- 不展示微信同城配送上报内部状态。
+- 不展示微信同城代取上报内部状态。
 - 不在前端猜测分账完成时间。
 
 ## 5.4 能力组 D：押金与风险保障
@@ -208,7 +208,7 @@ Status: draft for implementation planning
 同步能力：
 
 - 押金余额。
-- 配送冻结金额。
+- 代取冻结金额。
 - 提现处理中金额。
 - 押金流水。
 - 充值和押金提现工作流。
@@ -227,7 +227,7 @@ Status: draft for implementation planning
 
 边界：
 
-- 押金提现不是配送收入提现。
+- 押金提现不是代取收入提现。
 - 不把押金页升级成骑手资金全账户。
 
 ## 5.5 能力组 E：追偿与申诉自助处理
@@ -297,8 +297,8 @@ Status: draft for implementation planning
 | `rider/task-detail` | 单任务履约 | B | 不承接分账规则 |
 | `rider/navigation` | 导航与定位辅助 | B | 不承担订单状态解释 |
 | `rider/tasks` | 历史履约记录 | B | 不再作为收入真值页 |
-| `rider/income` | 配送费分账账本 | C | 建议新增，或经评估后作为 `tasks` 的独立 tab |
-| `rider/deposit` | 押金账户与押金退款 | D | 不做配送收入提现 |
+| `rider/income` | 代取费分账账本 | C | 建议新增，或经评估后作为 `tasks` 的独立 tab |
+| `rider/deposit` | 押金账户与押金退款 | D | 不做代取收入提现 |
 | `rider/claims` | 追偿与申诉 | E | 自助处理，不扩展工单 |
 | `rider/notifications` | 关键通知中心 | F | 可复用通用通知能力，但需骑手分类 |
 
@@ -402,7 +402,7 @@ Owner：architecture / backend / weapp jointly
 
 - 不新增接口。
 - 不改页面。
-- 不把微信同城配送上报纳入分账或 rider 页面契约。
+- 不把微信同城代取上报纳入分账或 rider 页面契约。
 
 验收：
 
@@ -412,7 +412,7 @@ Owner：architecture / backend / weapp jointly
 
 ## BE-01 骑手收入分账读模型 API
 
-目标：提供骑手配送费分账账本读模型。
+目标：提供骑手代取费分账账本读模型。
 
 Owner：backend rider income read model
 
@@ -430,16 +430,16 @@ Owner：backend rider income read model
 
 输出：
 
-- 今日/区间已到账配送费。
+- 今日/区间已到账代取费。
 - 待结算或处理中金额。
 - 分账失败数量。
-- 明细：订单号、商户名、配送费、骑手分账金额、状态、完成时间、到账时间。
+- 明细：订单号、商户名、代取费、骑手分账金额、状态、完成时间、到账时间。
 
 不做：
 
 - 不新增骑手钱包余额。
 - 不新增骑手收入提现。
-- 不读取或判断微信同城配送上报状态。
+- 不读取或判断微信同城代取上报状态。
 - 不把 delivery history 统计直接当作分账到账统计。
 
 验收：
@@ -473,7 +473,7 @@ Owner：backend rider workbench read model
 - 当前任务摘要。
 - 可抢订单数量或推荐订单摘要。
 - 今日完成单数。
-- 今日配送费分账摘要。
+- 今日代取费分账摘要。
 - 押金可用/冻结摘要。
 - 待处理追偿数量。
 - 关键未读通知数量。
@@ -482,7 +482,7 @@ Owner：backend rider workbench read model
 
 - 聚合层只组合各子域读模型，不复制子域业务规则。
 - 子域失败允许局部降级，响应需能表达哪个区块不可用。
-- 不把分账准入、同城配送上报、押金冻结规则写进聚合层。
+- 不把分账准入、同城代取上报、押金冻结规则写进聚合层。
 
 验收：
 
@@ -553,7 +553,7 @@ Owner：weapp rider page group
 
 ## WEAPP-02 骑手收入领域组件与页面
 
-目标：承接骑手配送费分账账本。
+目标：承接骑手代取费分账账本。
 
 Owner：weapp rider income capability
 
@@ -577,7 +577,7 @@ Owner：weapp rider income capability
 
 文案边界：
 
-- 使用“配送费结算”“微信分账”“已到账”。
+- 使用“代取费结算”“微信分账”“已到账”。
 - 不使用“余额”“可提现”“钱包”。
 - 不暴露 provider 原始错误。
 
@@ -674,13 +674,13 @@ Owner：weapp rider deposit summary
 不做：
 
 - 不重复实现押金支付 workflow。
-- 不展示配送收入提现入口。
+- 不展示代取收入提现入口。
 
 验收：
 
 - 押金阻塞上线时，入口和原因清晰。
 - 非阻塞时不占据首屏主位。
-- 文案不混淆押金和配送费收入。
+- 文案不混淆押金和代取费收入。
 
 验证：
 
@@ -807,7 +807,7 @@ Owner：weapp rider notification center
 - 不做平台派单。
 - 不做骑手排班。
 - 不做骑手收入提现钱包。
-- 不把微信同城配送上报状态耦合到 profit sharing 或 rider 页面。
+- 不把微信同城代取上报状态耦合到 profit sharing 或 rider 页面。
 - 不在骑手页面实现消费者索赔受理时限判断。
 - 不把 dashboard 扩张成所有 rider 能力的大而全页面。
 - 不新增顶部解释性大卡片、全宽长期提示条或说明型入口墙。
@@ -878,7 +878,7 @@ Review checklist:
 
 - [x] Page owner is `pages/rider/income`; dashboard only provides navigation and does not duplicate ledger state or list logic.
 - [x] Fields and status semantics come from BE-01; no frontend-only settlement truth was invented.
-- [x] Page copy uses “配送费结算”, “分账”, and “已到账”; no rider income wallet or withdrawal surface was introduced.
+- [x] Page copy uses “代取费结算”, “分账”, and “已到账”; no rider income wallet or withdrawal surface was introduced.
 - [x] No platform dispatch, WeChat same-city reporting, freeze/unfreeze, or provider-internal status was exposed in the page.
 - [x] Existing trusted data is preserved on silent refresh failure; first-screen failure and load-more failure have visible retry paths.
 - [x] TDesign components are used for tabs, status tags, loading, empty state, icon, and buttons; no shared component was added, so no `component-policy.json` is required.

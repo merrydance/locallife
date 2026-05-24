@@ -9,7 +9,7 @@ import (
 func TestProfitSharingCalculator_Takeout(t *testing.T) {
 	// 外卖订单分账测试
 	// 用户支付：¥88（8800分）
-	// 配送费：¥8（800分）
+	// 代取费：¥8（800分）
 	// 可分账金额：¥80（8000分）
 	// 平台(2%)：¥1.60（160分）
 	// 运营商(3%)：¥2.40（240分）
@@ -30,7 +30,7 @@ func TestProfitSharingCalculator_Takeout(t *testing.T) {
 	require.Equal(t, int64(800), result.DeliveryFee)
 	require.Equal(t, int64(8000), result.DistributableAmount)
 
-	require.Equal(t, int64(800), result.RiderAmount)     // 骑手拿配送费
+	require.Equal(t, int64(800), result.RiderAmount)     // 骑手拿代取费
 	require.Equal(t, int64(160), result.PlatformAmount)  // 8000 * 2% = 160
 	require.Equal(t, int64(240), result.OperatorAmount)  // 8000 * 3% = 240
 	require.Equal(t, int64(7600), result.MerchantAmount) // 8000 - 160 - 240 = 7600
@@ -43,7 +43,7 @@ func TestProfitSharingCalculator_Takeout(t *testing.T) {
 func TestProfitSharingCalculator_DineIn(t *testing.T) {
 	// 堂食订单分账测试
 	// 用户支付：¥100（10000分）
-	// 无配送费
+	// 无代取费
 	// 平台(0%)：¥0
 	// 运营商(0%)：¥0
 	// 商户(100%)：¥100（10000分）
@@ -88,7 +88,7 @@ func TestProfitSharingCalculator_Takeaway(t *testing.T) {
 }
 
 func TestProfitSharingCalculator_Reservation(t *testing.T) {
-	// 预定订单测试（按外卖规则但无配送）
+	// 预定订单测试（按外卖规则但无代取）
 	calculator := NewDefaultCalculator()
 	result := calculator.Calculate(ProfitSharingInput{
 		TotalAmount: 20000,
@@ -117,16 +117,16 @@ func TestProfitSharingCalculator_InvalidInput(t *testing.T) {
 	require.False(t, result.IsValid)
 	require.Contains(t, result.Error, "大于0")
 
-	// 测试配送费大于总额
+	// 测试代取费大于总额
 	result = calculator.Calculate(ProfitSharingInput{
 		TotalAmount: 1000,
 		DeliveryFee: 2000,
 		OrderSource: "takeout",
 	})
 	require.False(t, result.IsValid)
-	require.Contains(t, result.Error, "配送费不能大于")
+	require.Contains(t, result.Error, "代取费不能大于")
 
-	// 测试负配送费
+	// 测试负代取费
 	result = calculator.Calculate(ProfitSharingInput{
 		TotalAmount: 1000,
 		DeliveryFee: -100,
@@ -146,21 +146,21 @@ func TestProfitSharingCalculator_Combined(t *testing.T) {
 				MerchantID:  1,
 				OrderID:     101,
 				Amount:      1500, // ¥15 奶茶
-				DeliveryFee: 300,  // ¥3 配送费
+				DeliveryFee: 300,  // ¥3 代取费
 				OrderSource: "takeout",
 			},
 			{
 				MerchantID:  2,
 				OrderID:     102,
 				Amount:      2500, // ¥25 炸鸡
-				DeliveryFee: 300,  // ¥3 配送费
+				DeliveryFee: 300,  // ¥3 代取费
 				OrderSource: "takeout",
 			},
 			{
 				MerchantID:  3,
 				OrderID:     103,
 				Amount:      1800, // ¥18 甜品
-				DeliveryFee: 200,  // ¥2 配送费
+				DeliveryFee: 200,  // ¥2 代取费
 				OrderSource: "takeout",
 			},
 		},
@@ -173,7 +173,7 @@ func TestProfitSharingCalculator_Combined(t *testing.T) {
 
 	// 验证合计
 	require.Equal(t, int64(5800), result.TotalAmount) // 1500+2500+1800
-	require.Equal(t, int64(800), result.TotalRider)   // 300+300+200 配送费总和
+	require.Equal(t, int64(800), result.TotalRider)   // 300+300+200 代取费总和
 
 	// 验证各商户分账
 	// 商户1：可分账1200，平台24，运营商36，商户1140
@@ -233,10 +233,10 @@ func TestProfitSharingCalculator_SmallAmount(t *testing.T) {
 }
 
 func TestProfitSharingCalculator_OnlyDeliveryFee(t *testing.T) {
-	// 极端情况：只有配送费（商品免费）
+	// 极端情况：只有代取费（商品免费）
 	calculator := NewDefaultCalculator()
 	result := calculator.Calculate(ProfitSharingInput{
-		TotalAmount: 500, // 全部是配送费
+		TotalAmount: 500, // 全部是代取费
 		DeliveryFee: 500,
 		OrderSource: "takeout",
 	})

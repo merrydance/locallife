@@ -284,7 +284,7 @@ func TestSubmitClaimAPI_UsesPersistedRiderRecoveryOutcome(t *testing.T) {
 		OrderID:            order.ID,
 		UserID:             user.ID,
 		ClaimType:          "damage",
-		Description:        "配送中餐品破损，需要平台介入处理",
+		Description:        "代取中餐品破损，需要平台介入处理",
 		ClaimAmount:        approvedAmount,
 		ApprovedAmount:     pgtype.Int8{Int64: approvedAmount, Valid: true},
 		Status:             db.ClaimStatusWaitingCustomerConfirmation,
@@ -342,7 +342,7 @@ func TestSubmitClaimAPI_UsesPersistedRiderRecoveryOutcome(t *testing.T) {
 		OrderID:     order.ID,
 		ClaimType:   "damage",
 		ClaimAmount: approvedAmount,
-		ClaimReason: "配送中餐品破损，需要平台介入处理",
+		ClaimReason: "代取中餐品破损，需要平台介入处理",
 	})
 	require.NoError(t, err)
 

@@ -158,7 +158,7 @@ type searchMerchantResponse struct {
 	RegionID             int64     `json:"region_id"`                        // 区域ID，用于运费计算
 	TotalOrders          int32     `json:"total_orders,omitempty"`           // 总销量
 	Distance             *int      `json:"distance,omitempty"`               // 距离（米），需要传入用户位置
-	EstimatedDeliveryFee *int64    `json:"estimated_delivery_fee,omitempty"` // 预估配送费（分），需要传入用户位置
+	EstimatedDeliveryFee *int64    `json:"estimated_delivery_fee,omitempty"` // 预估代取费（分），需要传入用户位置
 	Tags                 []string  `json:"tags,omitempty"`
 	SystemLabels         []string  `json:"system_labels,omitempty"`
 	CreatedAt            time.Time `json:"created_at"`      // 入驻时间，前端用于判断新店
@@ -373,7 +373,7 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 			return
 		}
 
-		// 使用路网距离计算配送费
+		// 使用路网距离计算代取费
 		feeResult, err := server.calculateDeliveryFeeInternal(ctx, dish.MerchantRegionID, dish.MerchantID, int32(distanceMeters), 0)
 		if err != nil {
 			log.Error().Err(err).

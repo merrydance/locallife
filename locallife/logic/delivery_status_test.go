@@ -95,7 +95,7 @@ func TestStartPickup_StateConflict(t *testing.T) {
 	_, err := StartPickup(context.Background(), store, DeliveryStatusInput{UserID: 1, DeliveryID: 2})
 	reqErr := assertRequestError(t, err)
 	require.Equal(t, 409, reqErr.Status)
-	require.Equal(t, "配送状态已变化，请刷新后重试", reqErr.Err.Error())
+	require.Equal(t, "代取状态已变化，请刷新后重试", reqErr.Err.Error())
 }
 
 func TestConfirmPickup_Success(t *testing.T) {

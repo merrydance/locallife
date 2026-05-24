@@ -1,14 +1,14 @@
 /**
- * 配送任务管理接口重构 (Task 3.2)
+ * 代取任务管理接口重构 (Task 3.2)
  * 基于swagger.json完全重构，移除所有没有后端支持的旧功能
- * 包含：任务获取、配送流程、任务历史
+ * 包含：任务获取、代取流程、任务历史
  */
 
 import { request } from '../utils/request'
 
 // ==================== 数据类型定义 ====================
 
-/** 配送状态枚举 */
+/** 代取状态枚举 */
 export type DeliveryStatus = 'assigned' | 'picked_up' | 'delivering' | 'delivered' | 'completed' | 'cancelled'
 
 // ==================== 推荐订单相关类型 ====================
@@ -41,9 +41,9 @@ export interface RecommendOrdersParams extends Record<string, unknown> {
     longitude: number
 }
 
-// ==================== 配送任务相关类型 ====================
+// ==================== 代取任务相关类型 ====================
 
-/** 配送响应 - 基于swagger api.deliveryResponse */
+/** 代取响应 - 基于swagger api.deliveryResponse */
 export interface DeliveryResponse {
     id: number
     order_id: number
@@ -76,7 +76,7 @@ export interface DeliveryResponse {
     completed_at?: string
 }
 
-/** 配送历史查询参数 */
+/** 代取历史查询参数 */
 export interface DeliveryHistoryParams extends Record<string, unknown> {
     page_id: number
     page_size: number
@@ -85,7 +85,7 @@ export interface DeliveryHistoryParams extends Record<string, unknown> {
     status?: DeliveryStatus
 }
 
-/** 配送操作请求 */
+/** 代取操作请求 */
 export interface DeliveryActionRequest extends Record<string, unknown> {
     latitude?: number
     longitude?: number
@@ -93,11 +93,11 @@ export interface DeliveryActionRequest extends Record<string, unknown> {
     photos?: string[]
 }
 
-// ==================== 配送任务管理服务类 ====================
+// ==================== 代取任务管理服务类 ====================
 
 /**
- * 配送任务管理服务
- * 提供任务获取、配送流程管理等功能
+ * 代取任务管理服务
+ * 提供任务获取、代取流程管理等功能
  */
 export class DeliveryTaskManagementService {
     /**
@@ -124,7 +124,7 @@ export class DeliveryTaskManagementService {
     }
 
     /**
-     * 获取当前活跃配送任务
+     * 获取当前活跃代取任务
      */
     async getActiveDeliveries(): Promise<DeliveryResponse[]> {
         return request({
@@ -134,7 +134,7 @@ export class DeliveryTaskManagementService {
     }
 
     /**
-     * 获取配送历史
+     * 获取代取历史
      * @param params 查询参数
      */
     async getDeliveryHistory(params: DeliveryHistoryParams): Promise<{
@@ -152,8 +152,8 @@ export class DeliveryTaskManagementService {
     }
 
     /**
-     * 获取配送任务详情
-     * @param deliveryId 配送任务ID
+     * 获取代取任务详情
+     * @param deliveryId 代取任务ID
      */
     async getDeliveryDetail(deliveryId: number): Promise<DeliveryResponse> {
         return request({
@@ -164,7 +164,7 @@ export class DeliveryTaskManagementService {
 
     /**
      * 开始取餐
-     * @param deliveryId 配送任务ID
+     * @param deliveryId 代取任务ID
      * @param actionData 操作数据
      */
     async startPickup(deliveryId: number, actionData?: DeliveryActionRequest): Promise<DeliveryResponse> {
@@ -177,7 +177,7 @@ export class DeliveryTaskManagementService {
 
     /**
      * 确认取餐完成
-     * @param deliveryId 配送任务ID
+     * @param deliveryId 代取任务ID
      * @param actionData 操作数据
      */
     async confirmPickup(deliveryId: number, actionData?: DeliveryActionRequest): Promise<DeliveryResponse> {
@@ -189,8 +189,8 @@ export class DeliveryTaskManagementService {
     }
 
     /**
-     * 开始配送
-     * @param deliveryId 配送任务ID
+     * 开始代取
+     * @param deliveryId 代取任务ID
      * @param actionData 操作数据
      */
     async startDelivery(deliveryId: number, actionData?: DeliveryActionRequest): Promise<DeliveryResponse> {
@@ -203,7 +203,7 @@ export class DeliveryTaskManagementService {
 
     /**
      * 确认送达
-     * @param deliveryId 配送任务ID
+     * @param deliveryId 代取任务ID
      * @param actionData 操作数据
      */
     async confirmDelivery(deliveryId: number, actionData?: DeliveryActionRequest): Promise<DeliveryResponse> {
@@ -215,16 +215,16 @@ export class DeliveryTaskManagementService {
     }
 }
 
-// ==================== 配送流程管理服务类 ====================
+// ==================== 代取流程管理服务类 ====================
 
 /**
- * 配送流程管理服务
- * 提供配送流程的状态管理和操作指导
+ * 代取流程管理服务
+ * 提供代取流程的状态管理和操作指导
  */
 export class DeliveryProcessService {
     /**
-     * 获取配送流程的下一步操作
-     * @param delivery 配送任务信息
+     * 获取代取流程的下一步操作
+     * @param delivery 代取任务信息
      */
     getNextAction(delivery: DeliveryResponse): {
         action: string
@@ -248,7 +248,7 @@ export class DeliveryProcessService {
             case 'delivering':
                 return {
                     action: 'start_delivery',
-                    actionText: '开始配送',
+                    actionText: '开始代取',
                     canExecute: true
                 }
             case 'delivered':
@@ -262,28 +262,28 @@ export class DeliveryProcessService {
                     action: 'none',
                     actionText: '已完成',
                     canExecute: false,
-                    reason: '配送任务已完成'
+                    reason: '代取任务已完成'
                 }
             case 'cancelled':
                 return {
                     action: 'none',
                     actionText: '已取消',
                     canExecute: false,
-                    reason: '配送任务已取消'
+                    reason: '代取任务已取消'
                 }
             default:
                 return {
                     action: 'unknown',
                     actionText: '未知状态',
                     canExecute: false,
-                    reason: '未知的配送状态'
+                    reason: '未知的代取状态'
                 }
         }
     }
 
     /**
-     * 执行配送流程操作
-     * @param delivery 配送任务信息
+     * 执行代取流程操作
+     * @param delivery 代取任务信息
      * @param actionData 操作数据
      */
     async executeDeliveryAction(
@@ -347,7 +347,7 @@ export const deliveryProcessService = new DeliveryProcessService()
 // ==================== 便捷函数 ====================
 
 /**
- * 获取骑手配送工作台数据
+ * 获取骑手代取工作台数据
  * @param latitude 当前纬度
  * @param longitude 当前经度
  */
@@ -394,8 +394,8 @@ export function formatDistance(distance: number): string {
 }
 
 /**
- * 格式化配送费显示
- * @param fee 配送费（分）
+ * 格式化代取费显示
+ * @param fee 代取费（分）
  * @param showUnit 是否显示单位
  */
 export function formatDeliveryFee(fee: number, showUnit: boolean = true): string {

@@ -90,11 +90,11 @@ export function getDeliveryStatusDisplay(status?: Delivery['status']) {
         assigned: { text: '骑手已接单', theme: 'primary' },
         picking: { text: '骑手正在取餐', theme: 'primary' },
         picked: { text: '骑手已取餐', theme: 'primary' },
-        delivering: { text: '骑手正在配送', theme: 'primary' },
+        delivering: { text: '骑手正在代取', theme: 'primary' },
         delivered: { text: '已送达', theme: 'success' },
         completed: { text: '已送达', theme: 'success' },
-        cancelled: { text: '配送已取消', theme: 'warning' },
-        exception: { text: '配送异常', theme: 'danger' }
+        cancelled: { text: '代取已取消', theme: 'warning' },
+        exception: { text: '代取异常', theme: 'danger' }
     }
 
     const meta = statusMap[status || ''] || { text: status || '', theme: 'default' as const }
@@ -137,7 +137,7 @@ export function buildDeliveryProgress(delivery: Delivery, formatTime: (timeStr: 
             active: statusDisplay.isPickedStage
         },
         {
-            title: '配送中',
+            title: '代取中',
             time: '',
             done: isAtLeastDelivering,
             active: statusDisplay.isDeliveringStage
@@ -234,7 +234,7 @@ export class DeliveryService {
     }
 
     /**
-     * 获取配送轨迹
+     * 获取代取轨迹
      */
     static async getDeliveryTrack(deliveryId: number, since?: string): Promise<DeliveryLocationPoint[]> {
         return await request({

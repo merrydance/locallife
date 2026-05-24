@@ -609,7 +609,7 @@ func buildOrderSnapshotPayload(order db.Order, items []logic.OrderItemView) map[
 	return payload
 }
 
-// notifyRidersNewDelivery 通知附近骑手有新配送订单
+// notifyRidersNewDelivery 通知附近骑手有新代取订单
 // 推送策略：从100米开始按100米递增，超过1000米则改为全区县推送
 func (processor *RedisTaskProcessor) notifyRidersNewDelivery(ctx context.Context, order db.Order, delivery *db.Delivery, poolItem *db.DeliveryPool) {
 	// 获取商户信息
@@ -1699,11 +1699,11 @@ func (processor *RedisTaskProcessor) distributeRiderProfitSharingResultNotificat
 		return nil
 	}
 
-	title := "配送费已到账"
-	content := fmt.Sprintf("本单配送费%.2f元已通过微信分账到账，可在收入账本查看。", float64(profitSharingOrder.RiderAmount)/100)
+	title := "代取费已到账"
+	content := fmt.Sprintf("本单代取费%.2f元已通过微信分账到账，可在收入账本查看。", float64(profitSharingOrder.RiderAmount)/100)
 	if result != "SUCCESS" {
-		title = "配送费结算处理中"
-		content = "本单配送费结算暂未完成，平台正在核对处理，可在收入账本查看状态。"
+		title = "代取费结算处理中"
+		content = "本单代取费结算暂未完成，平台正在核对处理，可在收入账本查看状态。"
 	}
 
 	err = processor.distributor.DistributeTaskSendNotification(ctx, &SendNotificationPayload{

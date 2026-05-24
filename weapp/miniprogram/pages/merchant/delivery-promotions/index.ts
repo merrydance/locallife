@@ -25,11 +25,11 @@ interface PromotionView extends DeliveryPromotionResponse {
 const PROMOTIONS_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 
 function buildResultSummaryText(visibleCount: number) {
-  return `当前共 ${visibleCount} 条配送优惠`
+  return `当前共 ${visibleCount} 条代取优惠`
 }
 
 function buildEmptyDescription() {
-  return '当前还没有配送优惠，先新增一个'
+  return '当前还没有代取优惠，先新增一个'
 }
 
 function buildPresentationUpdate(promotions: PromotionView[]) {
@@ -97,8 +97,8 @@ Page({
     refreshErrorMessage: '',
     loading: false,
     promotions: [] as PromotionView[],
-    resultSummaryText: '当前共 0 条配送优惠',
-    emptyDescription: '当前还没有配送优惠，先新增一个',
+    resultSummaryText: '当前共 0 条代取优惠',
+    emptyDescription: '当前还没有代取优惠，先新增一个',
     merchantId: 0,
     lastLoadedAt: 0,
     needsReloadOnShow: false,
@@ -311,7 +311,7 @@ Page({
       })
     } catch (err) {
       logger.error('Failed to load delivery promotions', err)
-      const message = getErrorUserMessage(err, '加载配送优惠失败，请稍后重试')
+      const message = getErrorUserMessage(err, '加载代取优惠失败，请稍后重试')
 
       if (this.data.initialLoading || !hasConfirmedData) {
         this.setData({
@@ -414,7 +414,7 @@ Page({
         refreshErrorMessage: '',
         lastLoadedAt: Date.now()
       })
-      wx.showToast({ title: updatedPromotion.is_active ? '配送优惠已启用' : '配送优惠已停用', icon: 'none' })
+      wx.showToast({ title: updatedPromotion.is_active ? '代取优惠已启用' : '代取优惠已停用', icon: 'none' })
     } catch (err) {
       logger.error('Toggle promo status failed', err)
       const restoredPromotions = pendingPromotions.map((promotion) => (
@@ -494,7 +494,7 @@ Page({
         refreshErrorMessage: '',
         lastLoadedAt: Date.now()
       })
-      wx.showToast({ title: '配送优惠已删除', icon: 'none' })
+      wx.showToast({ title: '代取优惠已删除', icon: 'none' })
     } catch (err) {
       logger.error('Delete promotion failed', err)
       const restoredPromotions = pendingPromotions.map((promotion) => (

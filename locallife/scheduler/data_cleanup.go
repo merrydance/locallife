@@ -79,13 +79,13 @@ func (s *DataCleanupScheduler) Start() error {
 		return err
 	}
 
-	// 每10分钟执行配送单超时检查
+	// 每10分钟执行代取单超时检查
 	_, err = s.cron.AddFunc("0 */10 * * * *", s.cleanupStaleDeliveries)
 	if err != nil {
 		return err
 	}
 
-	// 每分钟检查 3 分钟无人接单的配送单，并触发运营商提醒
+	// 每分钟检查 3 分钟无人接单的代取单，并触发运营商提醒
 	_, err = s.cron.AddFunc("0 * * * * *", s.enqueueOperatorPendingDispatchAlerts)
 	if err != nil {
 		return err
@@ -1239,9 +1239,9 @@ func (s *DataCleanupScheduler) backfillAbnormalStatsDaily() {
 	log.Info().Str("start", start.Format("2006-01-02")).Str("end", end.Format("2006-01-02")).Msg("backfilled abnormal stats daily")
 }
 
-// cleanupStaleDeliveries 清理过期的配送单
-// 超过2小时未被接单的配送单，触发重新分配或人工处理警报
-// cleanupStaleDeliveries 清理过期的配送单
+// cleanupStaleDeliveries 清理过期的代取单
+// 超过2小时未被接单的代取单，触发重新分配或人工处理警报
+// cleanupStaleDeliveries 清理过期的代取单
 // 1. 超过 20 分钟未接单：通知商户和运营商（触发告警）
 // 2. 超过 60 分钟未接单：自动取消订单并已付款退款
 func (s *DataCleanupScheduler) cleanupStaleDeliveries() {
@@ -1278,7 +1278,7 @@ func (s *DataCleanupScheduler) cleanupStaleDeliveries() {
 			cancelResult, err := s.store.CancelOrderTx(ctx, db.CancelOrderTxParams{
 				OrderID:      delivery.OrderID,
 				OldStatus:    order.Status,
-				CancelReason: "配送无人接单，系统自动取消",
+				CancelReason: "代取无人接单，系统自动取消",
 				OperatorID:   0, // 系统
 				OperatorType: "system",
 			})
@@ -1313,7 +1313,7 @@ func (s *DataCleanupScheduler) cleanupStaleDeliveries() {
 						PaymentOrderID: successPayment.ID,
 						OrderID:        cancelResult.Order.ID,
 						RefundAmount:   successPayment.Amount, // 全额退款
-						Reason:         "配送无人接单，系统自动取消",
+						Reason:         "代取无人接单，系统自动取消",
 					}
 					opts := []asynq.Option{
 						asynq.MaxRetry(10),
@@ -1339,7 +1339,7 @@ func (s *DataCleanupScheduler) cleanupStaleDeliveries() {
 	// 查看 db/query/delivery.sql 发现有 UpdateDeliveryDelayed
 
 	alertTime := time.Now().Add(-20 * time.Minute)
-	// 我们需要一个新的查询来查找 "pending 且未 delayed 且超过 20 分钟" 的配送单
+	// 我们需要一个新的查询来查找 "pending 且未 delayed 且超过 20 分钟" 的代取单
 	// 由于 SQLStore 生成的代码限制，我们先复用 ListPendingDeliveriesBefore，在内存中过滤 is_delayed (假设 struct 有这个字段)
 	// 查阅 Model 定义： Delivery 应该有 IsDelayed bool
 
@@ -1401,7 +1401,7 @@ func (s *DataCleanupScheduler) cleanupStaleDeliveries() {
 			err = s.taskDistributor.DistributeTaskSendNotification(ctx, &worker.SendNotificationPayload{
 				UserID:      merchantUserID,
 				Type:        "delivery",
-				Title:       "配送超时告警",
+				Title:       "代取超时告警",
 				Content:     "您的订单已有20分钟未接单，请及时处理或联系客服。",
 				RelatedType: "delivery",
 				RelatedID:   delivery.ID,

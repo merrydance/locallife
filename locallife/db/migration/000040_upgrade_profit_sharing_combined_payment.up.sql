@@ -1,12 +1,12 @@
--- 升级分账系统：支持配送费分账给骑手 + 合单支付
+-- 升级分账系统：支持代取费分账给骑手 + 合单支付
 -- 分账公式：
---   骑手收入 = 配送费
---   可分账金额 = 支付总额 - 配送费
+--   骑手收入 = 代取费
+--   可分账金额 = 支付总额 - 代取费
 --   平台收入 = 可分账金额 × platform_rate%
 --   运营商收入 = 可分账金额 × operator_rate%
 --   商户收入 = 可分账金额 - 平台收入 - 运营商收入
 
--- 1. 升级 profit_sharing_orders 表，添加配送费和骑手分账字段
+-- 1. 升级 profit_sharing_orders 表，添加代取费和骑手分账字段
 ALTER TABLE profit_sharing_orders 
     ADD COLUMN IF NOT EXISTS delivery_fee BIGINT NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS rider_id BIGINT REFERENCES riders(id),
@@ -15,7 +15,7 @@ ALTER TABLE profit_sharing_orders
     ADD COLUMN IF NOT EXISTS platform_rate INT NOT NULL DEFAULT 2,
     ADD COLUMN IF NOT EXISTS operator_rate INT NOT NULL DEFAULT 3;
 
--- 更新约束：骑手分账金额必须等于配送费
+-- 更新约束：骑手分账金额必须等于代取费
 ALTER TABLE profit_sharing_orders 
     DROP CONSTRAINT IF EXISTS profit_sharing_orders_rider_amount_check;
 ALTER TABLE profit_sharing_orders 
@@ -25,9 +25,9 @@ ALTER TABLE profit_sharing_orders
 -- 添加骑手索引
 CREATE INDEX IF NOT EXISTS profit_sharing_orders_rider_id_idx ON profit_sharing_orders(rider_id);
 
-COMMENT ON COLUMN profit_sharing_orders.delivery_fee IS '配送费（分），外卖订单专用';
-COMMENT ON COLUMN profit_sharing_orders.rider_id IS '骑手ID，配送订单关联';
-COMMENT ON COLUMN profit_sharing_orders.rider_amount IS '骑手分账金额（分），等于配送费';
+COMMENT ON COLUMN profit_sharing_orders.delivery_fee IS '代取费（分），外卖订单专用';
+COMMENT ON COLUMN profit_sharing_orders.rider_id IS '骑手ID，代取订单关联';
+COMMENT ON COLUMN profit_sharing_orders.rider_amount IS '骑手分账金额（分），等于代取费';
 COMMENT ON COLUMN profit_sharing_orders.distributable_amount IS '可分账金额（分）= total_amount - delivery_fee';
 COMMENT ON COLUMN profit_sharing_orders.platform_rate IS '平台分账比例（百分比），默认2%';
 COMMENT ON COLUMN profit_sharing_orders.operator_rate IS '运营商分账比例（百分比），默认3%';
@@ -129,7 +129,7 @@ CREATE INDEX IF NOT EXISTS payment_orders_combined_payment_id_idx ON payment_ord
 COMMENT ON COLUMN payment_orders.combined_payment_id IS '关联的合单支付ID，单商户支付时为NULL';
 
 
--- 5. 更新现有分账数据的 distributable_amount（可分账金额 = 总金额 - 配送费）
+-- 5. 更新现有分账数据的 distributable_amount（可分账金额 = 总金额 - 代取费）
 UPDATE profit_sharing_orders 
 SET distributable_amount = total_amount - delivery_fee
 WHERE distributable_amount IS NULL;

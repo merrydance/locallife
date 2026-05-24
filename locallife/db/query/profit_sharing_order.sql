@@ -416,7 +416,7 @@ WHERE merchant_id = sqlc.arg('merchant_id')
 -- ==================== 骑手分账查询 ====================
 
 -- name: GetRiderProfitSharingStats :one
--- 骑手配送费收入统计
+-- 骑手代取费收入统计
 SELECT 
     COUNT(*) as total_deliveries,
     COALESCE(SUM(rider_amount), 0)::bigint as total_rider_income,
@@ -428,7 +428,7 @@ WHERE rider_id = sqlc.arg('rider_id') AND status = 'finished'
   AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at');
 
 -- name: ListRiderProfitSharingOrders :many
--- 骑手配送费明细
+-- 骑手代取费明细
 SELECT 
   p.id, p.payment_order_id, p.merchant_id, p.operator_id, p.order_source, p.total_amount, p.platform_commission, p.operator_commission, p.merchant_amount, p.out_order_no, p.sharing_order_id, p.status, p.finished_at, p.created_at, p.delivery_fee, p.rider_id, p.rider_amount, p.distributable_amount, p.platform_rate, p.operator_rate, p.payment_fee, p.payment_fee_rate_bps, p.provider, p.channel, p.merchant_sharing_mer_id, p.rider_sharing_mer_id, p.operator_sharing_mer_id, p.platform_sharing_mer_id, p.sharing_detail_snapshot, p.calculation_version, p.settlement_mode, p.provider_payment_fee, p.provider_payment_fee_rate_bps, p.provider_payment_fee_base_amount, p.provider_payment_fee_source, p.merchant_payment_fee, p.merchant_payment_fee_rate_bps, p.merchant_payment_fee_base_amount, p.rider_gross_amount, p.rider_payment_fee, p.rider_payment_fee_rate_bps, p.rider_payment_fee_base_amount, p.commission_base_amount, p.platform_receiver_amount,
     po.order_id,
@@ -445,7 +445,7 @@ ORDER BY p.created_at DESC, p.id DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountRiderProfitSharingOrders :one
--- 骑手配送费明细总数
+-- 骑手代取费明细总数
 SELECT COUNT(*)::bigint
 FROM profit_sharing_orders
 WHERE rider_id = sqlc.arg('rider_id')
@@ -453,7 +453,7 @@ WHERE rider_id = sqlc.arg('rider_id')
   AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at');
 
 -- name: GetRiderProfitSharingStatusSummary :many
--- 骑手配送费按分账状态汇总
+-- 骑手代取费按分账状态汇总
 SELECT
     status,
     COUNT(*)::bigint as order_count,

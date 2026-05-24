@@ -595,7 +595,7 @@ type DailyInventory struct {
 	ReservedQuantity int32              `json:"reserved_quantity"`
 }
 
-// 配送单表
+// 代取单表
 type Delivery struct {
 	ID                int64              `json:"id"`
 	OrderID           int64              `json:"order_id"`
@@ -612,12 +612,12 @@ type Delivery struct {
 	DeliveryContact   pgtype.Text        `json:"delivery_contact"`
 	DeliveryPhone     pgtype.Text        `json:"delivery_phone"`
 	DeliveredAt       pgtype.Timestamptz `json:"delivered_at"`
-	// 配送距离（米）
+	// 代取距离（米）
 	Distance    int32 `json:"distance"`
 	DeliveryFee int64 `json:"delivery_fee"`
-	// 骑手配送收益（分）
+	// 骑手代取收益（分）
 	RiderEarnings int64 `json:"rider_earnings"`
-	// 状态：pending待分配/assigned已分配/picking取餐中/picked已取餐/delivering配送中/delivered已送达/completed已完成/cancelled已取消
+	// 状态：pending待分配/assigned已分配/picking取餐中/picked已取餐/delivering代取中/delivered已送达/completed已完成/cancelled已取消
 	Status              string             `json:"status"`
 	EstimatedPickupAt   pgtype.Timestamptz `json:"estimated_pickup_at"`
 	EstimatedDeliveryAt pgtype.Timestamptz `json:"estimated_delivery_at"`
@@ -653,7 +653,7 @@ type DeliveryFeeConfig struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
-// 配送围栏事件（到店/驻留/到达收货点）
+// 代取围栏事件（到店/驻留/到达收货点）
 type DeliveryLocationEvent struct {
 	ID         int64          `json:"id"`
 	DeliveryID int64          `json:"delivery_id"`
@@ -681,7 +681,7 @@ type DeliveryPool struct {
 	PickupLatitude    pgtype.Numeric `json:"pickup_latitude"`
 	DeliveryLongitude pgtype.Numeric `json:"delivery_longitude"`
 	DeliveryLatitude  pgtype.Numeric `json:"delivery_latitude"`
-	// 配送距离（米）
+	// 代取距离（米）
 	Distance         int32     `json:"distance"`
 	DeliveryFee      int64     `json:"delivery_fee"`
 	ExpectedPickupAt time.Time `json:"expected_pickup_at"`
@@ -692,7 +692,7 @@ type DeliveryPool struct {
 	ExpectedDeliveryAt pgtype.Timestamptz `json:"expected_delivery_at"`
 }
 
-// 配送超时提醒去重真值，避免调度器重复下发同一配送单的同一阈值提醒
+// 代取超时提醒去重真值，避免调度器重复下发同一代取单的同一阈值提醒
 type DeliveryTimeoutAlert struct {
 	ID         int64 `json:"id"`
 	DeliveryID int64 `json:"delivery_id"`
@@ -909,7 +909,7 @@ type FoodSafetyIncident struct {
 	OrderSnapshot []byte `json:"order_snapshot"`
 	// 商户快照（菜单、当班员工）
 	MerchantSnapshot []byte `json:"merchant_snapshot"`
-	// 骑手快照（配送路线、时间）
+	// 骑手快照（代取路线、时间）
 	RiderSnapshot []byte `json:"rider_snapshot"`
 	// merchant-suspended: 商户已熔断，需整改和人工审核
 	Status              string             `json:"status"`
@@ -1650,7 +1650,7 @@ type Order struct {
 	RiderDeliveredAt    pgtype.Timestamptz `json:"rider_delivered_at"`
 	UserDeliveredAt     pgtype.Timestamptz `json:"user_delivered_at"`
 	AutoUserDeliveredAt pgtype.Timestamptz `json:"auto_user_delivered_at"`
-	// 配送预计在途时间（秒），由 LBS 真实路径计算得出
+	// 代取预计在途时间（秒），由 LBS 真实路径计算得出
 	DeliveryDuration             pgtype.Int4    `json:"delivery_duration"`
 	DeliveryContactNameSnapshot  pgtype.Text    `json:"delivery_contact_name_snapshot"`
 	DeliveryContactPhoneSnapshot pgtype.Text    `json:"delivery_contact_phone_snapshot"`
@@ -1767,11 +1767,11 @@ type PaymentOrder struct {
 	RequiresProfitSharing bool               `json:"requires_profit_sharing"`
 }
 
-// 高峰/特殊时段配置表（午高峰、晚高峰、深夜配送等）
+// 高峰/特殊时段配置表（午高峰、晚高峰、深夜代取等）
 type PeakHourConfig struct {
 	ID       int64 `json:"id"`
 	RegionID int64 `json:"region_id"`
-	// 配置名称，如：午高峰、晚高峰、深夜配送
+	// 配置名称，如：午高峰、晚高峰、深夜代取
 	Name      string      `json:"name"`
 	StartTime pgtype.Time `json:"start_time"`
 	// 结束时间，可小于start_time表示跨天（如22:00-06:00）
@@ -1866,11 +1866,11 @@ type ProfitSharingOrder struct {
 	Status             string             `json:"status"`
 	FinishedAt         pgtype.Timestamptz `json:"finished_at"`
 	CreatedAt          time.Time          `json:"created_at"`
-	// 配送费（分），外卖订单专用
+	// 代取费（分），外卖订单专用
 	DeliveryFee int64 `json:"delivery_fee"`
-	// 骑手ID，配送订单关联
+	// 骑手ID，代取订单关联
 	RiderID pgtype.Int8 `json:"rider_id"`
-	// 骑手分账金额（分），等于配送费
+	// 骑手分账金额（分），等于代取费
 	RiderAmount int64 `json:"rider_amount"`
 	// 可分账金额（分）= total_amount - delivery_fee
 	DistributableAmount int64 `json:"distributable_amount"`
@@ -2647,7 +2647,7 @@ type WeatherCoefficient struct {
 	WarningCoefficient pgtype.Numeric `json:"warning_coefficient"`
 	// 最终系数 = max(天气系数, 预警系数)
 	FinalCoefficient pgtype.Numeric `json:"final_coefficient"`
-	// 是否暂停配送（极端天气）
+	// 是否暂停代取（极端天气）
 	DeliverySuspended bool        `json:"delivery_suspended"`
 	SuspendReason     pgtype.Text `json:"suspend_reason"`
 	CreatedAt         time.Time   `json:"created_at"`

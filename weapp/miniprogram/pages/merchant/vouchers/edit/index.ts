@@ -38,7 +38,7 @@ interface CurrencyInputState {
 const VOUCHER_PAGE_SIZE = 50
 const ALL_ORDER_TYPES: OrderType[] = ['takeout', 'dine_in', 'takeaway', 'reservation']
 const ORDER_TYPE_OPTIONS: Array<{ value: OrderType, label: string }> = [
-  { value: 'takeout', label: '外卖配送' },
+  { value: 'takeout', label: '外卖代取' },
   { value: 'dine_in', label: '堂食' },
   { value: 'takeaway', label: '到店自取' },
   { value: 'reservation', label: '预订' }

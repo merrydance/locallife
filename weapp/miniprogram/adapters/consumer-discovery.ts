@@ -50,7 +50,7 @@ export class ConsumerDiscoveryAdapter {
       monthlySales: source.total_orders ?? source.monthly_sales ?? 0,
       deliveryFee,
       deliveryFeeDisplay: deliveryFee !== undefined
-        ? `配送费¥${(deliveryFee / 100).toFixed(0)}起`
+        ? `代取费¥${(deliveryFee / 100).toFixed(0)}起`
         : '',
       isOpen: source.is_open ?? true,
       label: source.label || ''

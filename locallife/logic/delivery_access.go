@@ -43,7 +43,7 @@ func GetDeliveryForViewerByOrder(ctx context.Context, store db.Store, input Deli
 	delivery, err := store.GetDeliveryByOrderID(ctx, input.OrderID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
-			return db.Delivery{}, NewRequestError(http.StatusNotFound, errors.New("配送单不存在"))
+			return db.Delivery{}, NewRequestError(http.StatusNotFound, errors.New("代取单不存在"))
 		}
 		return db.Delivery{}, err
 	}
@@ -62,7 +62,7 @@ func GetDeliveryForViewerByOrder(ctx context.Context, store db.Store, input Deli
 
 	msg := input.ForbiddenMessage
 	if msg == "" {
-		msg = "无权查看此订单配送信息"
+		msg = "无权查看此订单代取信息"
 	}
 	return db.Delivery{}, NewRequestError(http.StatusForbidden, errors.New(msg))
 }
@@ -74,7 +74,7 @@ func ValidateDeliveryViewer(ctx context.Context, store db.Store, input DeliveryV
 	delivery, err := store.GetDelivery(ctx, input.DeliveryID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
-			return result, NewRequestError(http.StatusNotFound, errors.New("配送单不存在"))
+			return result, NewRequestError(http.StatusNotFound, errors.New("代取单不存在"))
 		}
 		return result, err
 	}
@@ -98,7 +98,7 @@ func ValidateDeliveryViewer(ctx context.Context, store db.Store, input DeliveryV
 	if !isOwner && !isRider {
 		msg := input.ForbiddenMessage
 		if msg == "" {
-			msg = "无权查看此配送单"
+			msg = "无权查看此代取单"
 		}
 		return result, NewRequestError(http.StatusForbidden, errors.New(msg))
 	}

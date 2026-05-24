@@ -267,8 +267,8 @@ Page({
 
     if (order.order_type === 'takeout') {
       return {
-        label: '配送地址',
-        primary: order.delivery_address || '待同步配送地址',
+        label: '代取地址',
+        primary: order.delivery_address || '待同步代取地址',
         secondary: [order.delivery_contact_name, order.delivery_contact_phone].filter(Boolean).join(' ')
       }
     }

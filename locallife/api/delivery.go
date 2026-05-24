@@ -16,7 +16,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// sendDeliveryStatusNotification 异步发送配送状态通知
+// sendDeliveryStatusNotification 异步发送代取状态通知
 func (server *Server) sendDeliveryStatusNotification(
 	ctx context.Context,
 	userID int64,
@@ -78,7 +78,7 @@ type recommendedOrderResponse struct {
 // getRecommendedOrders godoc
 // @Summary 获取推荐订单
 // @Description 根据骑手当前位置获取推荐的可接订单列表，按综合评分排序
-// @Tags 配送管理-骑手
+// @Tags 代取管理-骑手
 // @Accept json
 // @Produce json
 // @Param longitude query number true "骑手当前经度" minimum(-180) maximum(180)
@@ -330,11 +330,11 @@ func (server *Server) attachRiderProfitSharingBillToDeliveryResponse(ctx context
 // grabOrder godoc
 // @Summary 抢单
 // @Description 骑手抢单接单，会自动冻结押金并从订单池移除
-// @Tags 配送管理-骑手
+// @Tags 代取管理-骑手
 // @Accept json
 // @Produce json
 // @Param order_id path int true "订单ID" minimum(1)
-// @Success 200 {object} deliveryResponse "抢单成功，返回配送单详情"
+// @Success 200 {object} deliveryResponse "抢单成功，返回代取单详情"
 // @Failure 400 {object} ErrorResponse "参数校验失败或骑手未上线/押金不足/订单已过期"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "订单不在服务区域"
@@ -370,7 +370,7 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 	delivery := result.Delivery
 
 	// 骑手接单后，使用自建 LBS 重新计算更精确的预估送达时间
-	// 预估送达时间 = 当前时间 + 骑手到商户时间 + 出餐等待时间 + 商户到顾客配送时间
+	// 预估送达时间 = 当前时间 + 骑手到商户时间 + 出餐等待时间 + 商户到顾客代取时间
 	estimateResult, err := logic.UpdateDeliveryEstimatedTime(ctx, server.store, logic.DeliveryEstimateInput{
 		Delivery:                delivery,
 		Rider:                   rider,
@@ -418,7 +418,7 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 		}
 	}
 
-	// 重新获取更新后的配送单
+	// 重新获取更新后的代取单
 	updatedDelivery, err := server.store.GetDelivery(ctx, delivery.ID)
 	if err != nil {
 		// 即使获取失败也返回原结果
@@ -429,7 +429,7 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, updatedDelivery))
 }
 
-// ==================== 配送状态更新 ====================
+// ==================== 代取状态更新 ====================
 
 type updateDeliveryRequest struct {
 	ID int64 `uri:"delivery_id" binding:"required,min=1"`
@@ -438,15 +438,15 @@ type updateDeliveryRequest struct {
 // startPickup godoc
 // @Summary 开始取餐
 // @Description 骑手开始前往商家取餐。只能在assigned状态下调用
-// @Tags 配送管理-骑手
+// @Tags 代取管理-骑手
 // @Accept json
 // @Produce json
-// @Param delivery_id path int true "配送单ID" minimum(1)
+// @Param delivery_id path int true "代取单ID" minimum(1)
 // @Success 200 {object} deliveryResponse "状态更新成功"
 // @Failure 400 {object} ErrorResponse "参数校验失败或状态不允许"
 // @Failure 401 {object} ErrorResponse "未授权"
-// @Failure 403 {object} ErrorResponse "无权操作此配送单"
-// @Failure 404 {object} ErrorResponse "配送单不存在"
+// @Failure 403 {object} ErrorResponse "无权操作此代取单"
+// @Failure 404 {object} ErrorResponse "代取单不存在"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Router /v1/delivery/:delivery_id/start-pickup [post]
 // @Security BearerAuth
@@ -491,15 +491,15 @@ func (server *Server) startPickup(ctx *gin.Context) {
 // confirmPickup godoc
 // @Summary 确认取餐
 // @Description 骑手确认已从商家取到餐品。只能在picking状态下调用
-// @Tags 配送管理-骑手
+// @Tags 代取管理-骑手
 // @Accept json
 // @Produce json
-// @Param delivery_id path int true "配送单ID" minimum(1)
+// @Param delivery_id path int true "代取单ID" minimum(1)
 // @Success 200 {object} deliveryResponse "状态更新成功"
 // @Failure 400 {object} ErrorResponse "参数校验失败或状态不允许"
 // @Failure 401 {object} ErrorResponse "未授权"
-// @Failure 403 {object} ErrorResponse "无权操作此配送单"
-// @Failure 404 {object} ErrorResponse "配送单不存在"
+// @Failure 403 {object} ErrorResponse "无权操作此代取单"
+// @Failure 404 {object} ErrorResponse "代取单不存在"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Router /v1/delivery/:delivery_id/confirm-pickup [post]
 // @Security BearerAuth
@@ -535,24 +535,24 @@ func (server *Server) confirmPickup(ctx *gin.Context) {
 		updated.ID,
 		"picked",
 		"骑手已取餐",
-		fmt.Sprintf("订单%s骑手已取到餐品，即将配送", order.OrderNo),
+		fmt.Sprintf("订单%s骑手已取到餐品，即将代取", order.OrderNo),
 	)
 
 	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, updated))
 }
 
 // startDelivery godoc
-// @Summary 开始配送
-// @Description 骑手开始配送餐品给顾客。只能在picked状态下调用
-// @Tags 配送管理-骑手
+// @Summary 开始代取
+// @Description 骑手开始代取餐品给顾客。只能在picked状态下调用
+// @Tags 代取管理-骑手
 // @Accept json
 // @Produce json
-// @Param delivery_id path int true "配送单ID" minimum(1)
+// @Param delivery_id path int true "代取单ID" minimum(1)
 // @Success 200 {object} deliveryResponse "状态更新成功"
 // @Failure 400 {object} ErrorResponse "参数校验失败或状态不允许"
 // @Failure 401 {object} ErrorResponse "未授权"
-// @Failure 403 {object} ErrorResponse "无权操作此配送单"
-// @Failure 404 {object} ErrorResponse "配送单不存在"
+// @Failure 403 {object} ErrorResponse "无权操作此代取单"
+// @Failure 404 {object} ErrorResponse "代取单不存在"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Router /v1/delivery/:delivery_id/start-delivery [post]
 // @Security BearerAuth
@@ -580,15 +580,15 @@ func (server *Server) startDelivery(ctx *gin.Context) {
 	updated := result.Delivery
 	order := result.Order
 
-	// 📢 P1: 异步发送骑手配送中通知给用户
+	// 📢 P1: 异步发送骑手代取中通知给用户
 	server.sendDeliveryStatusNotification(
 		ctx,
 		order.UserID,
 		updated.OrderID,
 		updated.ID,
 		"delivering",
-		"骑手配送中",
-		fmt.Sprintf("订单%s骑手正在配送途中，请保持电话畅通", order.OrderNo),
+		"骑手代取中",
+		fmt.Sprintf("订单%s骑手正在代取途中，请保持电话畅通", order.OrderNo),
 	)
 
 	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, updated))
@@ -596,16 +596,16 @@ func (server *Server) startDelivery(ctx *gin.Context) {
 
 // confirmDelivery godoc
 // @Summary 确认送达
-// @Description 骑手确认已将餐品送达给顾客，会自动解冻押金并结算配送费。只能在delivering状态下调用
-// @Tags 配送管理-骑手
+// @Description 骑手确认已将餐品送达给顾客，会自动解冻押金并结算代取费。只能在delivering状态下调用
+// @Tags 代取管理-骑手
 // @Accept json
 // @Produce json
-// @Param delivery_id path int true "配送单ID" minimum(1)
+// @Param delivery_id path int true "代取单ID" minimum(1)
 // @Success 200 {object} deliveryResponse "送达成功"
 // @Failure 400 {object} ErrorResponse "参数校验失败或状态不允许"
 // @Failure 401 {object} ErrorResponse "未授权"
-// @Failure 403 {object} ErrorResponse "无权操作此配送单"
-// @Failure 404 {object} ErrorResponse "配送单不存在"
+// @Failure 403 {object} ErrorResponse "无权操作此代取单"
+// @Failure 404 {object} ErrorResponse "代取单不存在"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Router /v1/delivery/:delivery_id/confirm-delivery [post]
 // @Security BearerAuth
@@ -662,24 +662,24 @@ func (server *Server) confirmDelivery(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, updated))
 }
 
-// ==================== 顾客查询配送状态 ====================
+// ==================== 顾客查询代取状态 ====================
 
 type getDeliveryRequest struct {
 	OrderID int64 `uri:"order_id" binding:"required,min=1"`
 }
 
 // getDeliveryByOrder godoc
-// @Summary 根据订单查询配送信息
-// @Description 获取指定订单的配送信息，仅订单所有者可查看
-// @Tags 配送管理-顾客
+// @Summary 根据订单查询代取信息
+// @Description 获取指定订单的代取信息，仅订单所有者可查看
+// @Tags 代取管理-顾客
 // @Accept json
 // @Produce json
 // @Param order_id path int true "订单ID" minimum(1)
-// @Success 200 {object} deliveryResponse "配送单详情"
+// @Success 200 {object} deliveryResponse "代取单详情"
 // @Failure 400 {object} ErrorResponse "参数校验失败"
 // @Failure 401 {object} ErrorResponse "未授权"
-// @Failure 403 {object} ErrorResponse "无权查看此订单配送信息"
-// @Failure 404 {object} ErrorResponse "配送单不存在"
+// @Failure 403 {object} ErrorResponse "无权查看此订单代取信息"
+// @Failure 404 {object} ErrorResponse "代取单不存在"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Router /v1/delivery/order/:order_id [get]
 // @Security BearerAuth
@@ -695,7 +695,7 @@ func (server *Server) getDeliveryByOrder(ctx *gin.Context) {
 	delivery, err := logic.GetDeliveryForViewerByOrder(ctx, server.store, logic.DeliveryOrderViewerInput{
 		UserID:           authPayload.UserID,
 		OrderID:          req.OrderID,
-		ForbiddenMessage: "无权查看此订单配送信息",
+		ForbiddenMessage: "无权查看此订单代取信息",
 	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
@@ -720,18 +720,18 @@ type locationResponse struct {
 }
 
 // getDeliveryTrack godoc
-// @Summary 获取配送轨迹
-// @Description 获取骑手配送过程中的位置历史，仅订单所有者或配送骑手可查看
-// @Tags 配送管理-顾客
+// @Summary 获取代取轨迹
+// @Description 获取骑手代取过程中的位置历史，仅订单所有者或代取骑手可查看
+// @Tags 代取管理-顾客
 // @Accept json
 // @Produce json
-// @Param delivery_id path int true "配送单ID" minimum(1)
+// @Param delivery_id path int true "代取单ID" minimum(1)
 // @Param since query string false "获取指定时间之后的位置" format(date-time)
 // @Success 200 {array} locationResponse "位置历史列表"
 // @Failure 400 {object} ErrorResponse "参数校验失败"
 // @Failure 401 {object} ErrorResponse "未授权"
-// @Failure 403 {object} ErrorResponse "无权查看此配送单轨迹"
-// @Failure 404 {object} ErrorResponse "配送单不存在"
+// @Failure 403 {object} ErrorResponse "无权查看此代取单轨迹"
+// @Failure 404 {object} ErrorResponse "代取单不存在"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Router /v1/delivery/:delivery_id/track [get]
 // @Security BearerAuth
@@ -749,7 +749,7 @@ func (server *Server) getDeliveryTrack(ctx *gin.Context) {
 	_, err := logic.ValidateDeliveryViewer(ctx, server.store, logic.DeliveryViewerInput{
 		UserID:           authPayload.UserID,
 		DeliveryID:       uriReq.ID,
-		ForbiddenMessage: "无权查看此配送单轨迹",
+		ForbiddenMessage: "无权查看此代取单轨迹",
 	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
@@ -812,16 +812,16 @@ func (server *Server) getDeliveryTrack(ctx *gin.Context) {
 
 // getRiderLatestLocation godoc
 // @Summary 获取骑手最新位置
-// @Description 获取配送骑手的最新位置，仅订单所有者或配送骑手可查看
-// @Tags 配送管理-顾客
+// @Description 获取代取骑手的最新位置，仅订单所有者或代取骑手可查看
+// @Tags 代取管理-顾客
 // @Accept json
 // @Produce json
-// @Param delivery_id path int true "配送单ID" minimum(1)
+// @Param delivery_id path int true "代取单ID" minimum(1)
 // @Success 200 {object} locationResponse "骑手最新位置"
 // @Failure 400 {object} ErrorResponse "参数校验失败"
 // @Failure 401 {object} ErrorResponse "未授权"
-// @Failure 403 {object} ErrorResponse "无权查看此配送单位置"
-// @Failure 404 {object} ErrorResponse "配送单不存在或无位置信息"
+// @Failure 403 {object} ErrorResponse "无权查看此代取单位置"
+// @Failure 404 {object} ErrorResponse "代取单不存在或无位置信息"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Router /v1/delivery/:delivery_id/rider-location [get]
 // @Security BearerAuth
@@ -839,7 +839,7 @@ func (server *Server) getRiderLatestLocation(ctx *gin.Context) {
 	_, err := logic.ValidateDeliveryViewer(ctx, server.store, logic.DeliveryViewerInput{
 		UserID:           authPayload.UserID,
 		DeliveryID:       req.DeliveryID,
-		ForbiddenMessage: "无权查看此配送单位置",
+		ForbiddenMessage: "无权查看此代取单位置",
 	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
@@ -884,7 +884,7 @@ func (server *Server) getRiderLatestLocation(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, resp)
 }
 
-// ==================== 骑手查询自己的配送单 ====================
+// ==================== 骑手查询自己的代取单 ====================
 
 type listMyDeliveriesResponse struct {
 	Deliveries     []deliveryResponse `json:"deliveries"`
@@ -917,15 +917,15 @@ func normalizeInt64Result(raw interface{}) (int64, error) {
 }
 
 // listMyDeliveries godoc
-// @Summary 查询配送历史
-// @Description 获取骑手的配送历史列表，支持状态过滤和分页
-// @Tags 配送管理-骑手
+// @Summary 查询代取历史
+// @Description 获取骑手的代取历史列表，支持状态过滤和分页
+// @Tags 代取管理-骑手
 // @Accept json
 // @Produce json
 // @Param status query string false "状态过滤" Enums(assigned, picking, picked, delivering, delivered, completed, cancelled)
 // @Param page query int false "页码" default(1) minimum(1)
 // @Param limit query int false "每页数量" default(20) minimum(1) maximum(100)
-// @Success 200 {object} listMyDeliveriesResponse "配送单列表"
+// @Success 200 {object} listMyDeliveriesResponse "代取单列表"
 // @Failure 400 {object} ErrorResponse "参数校验失败"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 404 {object} ErrorResponse "非骑手用户"
@@ -1025,12 +1025,12 @@ func (server *Server) listMyDeliveries(ctx *gin.Context) {
 }
 
 // listMyActiveDeliveries godoc
-// @Summary 查询当前活跃配送
-// @Description 获取骑手当前正在进行的配送单列表
-// @Tags 配送管理-骑手
+// @Summary 查询当前活跃代取
+// @Description 获取骑手当前正在进行的代取单列表
+// @Tags 代取管理-骑手
 // @Accept json
 // @Produce json
-// @Success 200 {array} deliveryResponse "活跃配送单列表"
+// @Success 200 {array} deliveryResponse "活跃代取单列表"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 404 {object} ErrorResponse "非骑手用户"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"

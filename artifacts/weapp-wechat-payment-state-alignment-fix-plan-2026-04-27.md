@@ -710,7 +710,7 @@ Navigation.toPaymentSuccess(...)
 
 1. 建立押金账务不变量清单：
    - `riders.deposit_amount` 必须等于已入账押金减已成功提现和扣减后的主余额。
-   - `riders.frozen_deposit` 必须能拆成配送冻结和提现处理中。
+   - `riders.frozen_deposit` 必须能拆成代取冻结和提现处理中。
    - `rider_deposit_credits.refundable_amount` 合计不能大于可提现押金，且应与可退款窗口内的支付单一致。
    - `refund_orders(status IN pending, processing)` 必须和提现处理中金额一致。
 2. 增加对账查询或内部审计脚本，找出这些漂移：
@@ -1178,7 +1178,7 @@ rg "status: 'unknown'" weapp/miniprogram/api weapp/miniprogram/services
 - 退款详情：`GET /v1/refunds/:id` 返回 `refund_reason`、`out_refund_no`、`refunded_at`。
 - 会员充值：`POST /v1/memberships/recharge` 当前返回 `503`。
 - 骑手提现：`POST /v1/rider/withdraw` 可能返回 `200 success` 或 `202 processing`。
-- 骑手押金余额：`GET /v1/rider/deposit` 当前返回总押金、冻结押金、配送冻结、提现处理中和可用押金，但还缺少本次提现维度的终态查询。
+- 骑手押金余额：`GET /v1/rider/deposit` 当前返回总押金、冻结押金、代取冻结、提现处理中和可用押金，但还缺少本次提现维度的终态查询。
 
 ## 12. 验收标准
 
@@ -1383,7 +1383,7 @@ rg "status: 'unknown'" weapp/miniprogram/api weapp/miniprogram/services
 
 已确认闭环：
 
-1. `/v1/rider/deposit` 已使用 `GetPendingRiderDepositRefundAmountByUserID` 和 `db.CalculateRiderDepositAvailability()`，将配送冻结与提现处理中金额拆开计算，可用押金不会只依赖 `riders.frozen_deposit`。
+1. `/v1/rider/deposit` 已使用 `GetPendingRiderDepositRefundAmountByUserID` 和 `db.CalculateRiderDepositAvailability()`，将代取冻结与提现处理中金额拆开计算，可用押金不会只依赖 `riders.frozen_deposit`。
 2. `SubmitWithdrawal()` 和 `PrepareRiderDepositRefundTx()` 已使用同一押金可用余额口径；事务层会锁 rider、扣减可退款 credit、创建 refund order 和隐藏型 freeze 流水。
 3. `ResolveRiderDepositRefundTx()` 已覆盖提现成功扣减、失败/关闭恢复、重复终态回调幂等和微信已全额退款后的 stale credit drain。
 4. `/v1/rider/withdrawals/status` 已返回本次提现 refund orders、accepted/processing/success/failed 汇总和用户可读状态，小程序能等待终态或展示刷新入口。

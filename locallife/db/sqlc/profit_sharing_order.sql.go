@@ -94,7 +94,7 @@ type CountRiderProfitSharingOrdersParams struct {
 	EndAt   time.Time   `json:"end_at"`
 }
 
-// 骑手配送费明细总数
+// 骑手代取费明细总数
 func (q *Queries) CountRiderProfitSharingOrders(ctx context.Context, arg CountRiderProfitSharingOrdersParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countRiderProfitSharingOrders,
 		arg.RiderID,
@@ -1054,7 +1054,7 @@ type GetRiderProfitSharingStatsRow struct {
 }
 
 // ==================== 骑手分账查询 ====================
-// 骑手配送费收入统计
+// 骑手代取费收入统计
 func (q *Queries) GetRiderProfitSharingStats(ctx context.Context, arg GetRiderProfitSharingStatsParams) (GetRiderProfitSharingStatsRow, error) {
 	row := q.db.QueryRow(ctx, getRiderProfitSharingStats, arg.RiderID, arg.StartAt, arg.EndAt)
 	var i GetRiderProfitSharingStatsRow
@@ -1098,7 +1098,7 @@ type GetRiderProfitSharingStatusSummaryRow struct {
 	RiderPaymentFee  int64  `json:"rider_payment_fee"`
 }
 
-// 骑手配送费按分账状态汇总
+// 骑手代取费按分账状态汇总
 func (q *Queries) GetRiderProfitSharingStatusSummary(ctx context.Context, arg GetRiderProfitSharingStatusSummaryParams) ([]GetRiderProfitSharingStatusSummaryRow, error) {
 	rows, err := q.db.Query(ctx, getRiderProfitSharingStatusSummary, arg.RiderID, arg.StartAt, arg.EndAt)
 	if err != nil {
@@ -2156,7 +2156,7 @@ type ListRiderProfitSharingOrdersRow struct {
 	MerchantName                 string             `json:"merchant_name"`
 }
 
-// 骑手配送费明细
+// 骑手代取费明细
 func (q *Queries) ListRiderProfitSharingOrders(ctx context.Context, arg ListRiderProfitSharingOrdersParams) ([]ListRiderProfitSharingOrdersRow, error) {
 	rows, err := q.db.Query(ctx, listRiderProfitSharingOrders,
 		arg.RiderID,

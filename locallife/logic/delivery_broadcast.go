@@ -20,13 +20,13 @@ const (
 	broadcastRiderLimitCount     = 1000
 )
 
-// DeliveryBroadcastLogic 处理配送相关的实时广播逻辑
+// DeliveryBroadcastLogic 处理代取相关的实时广播逻辑
 type DeliveryBroadcastLogic struct {
 	store       db.Store
 	redisClient *redis.Client
 }
 
-// NewDeliveryBroadcastLogic 创建配送广播逻辑实例
+// NewDeliveryBroadcastLogic 创建代取广播逻辑实例
 func NewDeliveryBroadcastLogic(store db.Store, redisClient *redis.Client) *DeliveryBroadcastLogic {
 	return &DeliveryBroadcastLogic{
 		store:       store,
@@ -34,7 +34,7 @@ func NewDeliveryBroadcastLogic(store db.Store, redisClient *redis.Client) *Deliv
 	}
 }
 
-// BroadcastOrderGone 通知取餐点附近的在线骑手，某个订单已从配送池中消失（被抢走或取消）
+// BroadcastOrderGone 通知取餐点附近的在线骑手，某个订单已从代取池中消失（被抢走或取消）
 func (l *DeliveryBroadcastLogic) BroadcastOrderGone(ctx context.Context, orderID int64, pickupLat float64, pickupLng float64) error {
 	riders, err := l.listNearbyBroadcastRiders(ctx, pickupLat, pickupLng)
 	if err != nil {

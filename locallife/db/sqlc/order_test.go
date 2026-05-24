@@ -430,7 +430,7 @@ func TestCreateTakeoutOrder(t *testing.T) {
 		MerchantID:          merchant.ID,
 		OrderType:           "takeout",
 		AddressID:           pgtype.Int8{Int64: address.ID, Valid: true},
-		DeliveryFee:         500,                                   // 5元配送费
+		DeliveryFee:         500,                                   // 5元代取费
 		DeliveryDistance:    pgtype.Int4{Int32: 3000, Valid: true}, // 3公里
 		Subtotal:            5000,
 		DiscountAmount:      0,

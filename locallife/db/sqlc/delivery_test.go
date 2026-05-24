@@ -262,7 +262,7 @@ func TestUpdateDeliveryToCompleted(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 完成配送
+	// 完成代取
 	updated, err := testStore.UpdateDeliveryToCompleted(context.Background(), UpdateDeliveryToCompletedParams{
 		ID:            delivery.ID,
 		RiderEarnings: 400,
@@ -295,12 +295,12 @@ func TestUpdateDeliveryToPicked_WrongStatus(t *testing.T) {
 	require.Error(t, err, "应该因为状态不是picking而失败")
 }
 
-// TestUpdateDeliveryToDelivering_WrongStatus 测试在错误状态下尝试开始配送
+// TestUpdateDeliveryToDelivering_WrongStatus 测试在错误状态下尝试开始代取
 func TestUpdateDeliveryToDelivering_WrongStatus(t *testing.T) {
 	rider := createOnlineRider(t)
 	delivery := createAssignedDelivery(t, rider.ID)
 
-	// 尝试在assigned状态直接开始配送（应该失败，因为SQL要求status='picked'）
+	// 尝试在assigned状态直接开始代取（应该失败，因为SQL要求status='picked'）
 	_, err := testStore.UpdateDeliveryToDelivering(context.Background(), UpdateDeliveryToDeliveringParams{
 		ID:      delivery.ID,
 		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
@@ -327,7 +327,7 @@ func TestUpdateDeliveryToPicked_WrongRider(t *testing.T) {
 	rider2 := createOnlineRider(t)
 	delivery := createAssignedDelivery(t, rider1.ID)
 
-	// rider1的配送单，先正常开始取餐
+	// rider1的代取单，先正常开始取餐
 	_, err := testStore.UpdateDeliveryToPickup(context.Background(), UpdateDeliveryToPickupParams{
 		ID:      delivery.ID,
 		RiderID: pgtype.Int8{Int64: rider1.ID, Valid: true},
@@ -342,28 +342,28 @@ func TestUpdateDeliveryToPicked_WrongRider(t *testing.T) {
 	require.Error(t, err, "应该因为骑手不匹配而失败")
 }
 
-// TestAssignDelivery_AlreadyAssigned 测试重复分配（已分配的配送单不能再分配）
+// TestAssignDelivery_AlreadyAssigned 测试重复分配（已分配的代取单不能再分配）
 func TestAssignDelivery_AlreadyAssigned(t *testing.T) {
 	rider1 := createOnlineRider(t)
 	rider2 := createOnlineRider(t)
 
 	delivery := createAssignedDelivery(t, rider1.ID)
 
-	// 尝试将已分配的配送单再次分配给rider2（应该失败，因为SQL要求rider_id IS NULL）
+	// 尝试将已分配的代取单再次分配给rider2（应该失败，因为SQL要求rider_id IS NULL）
 	_, err := testStore.AssignDelivery(context.Background(), AssignDeliveryParams{
 		ID:      delivery.ID,
 		RiderID: pgtype.Int8{Int64: rider2.ID, Valid: true},
 	})
-	require.Error(t, err, "应该因为配送单已分配而失败")
+	require.Error(t, err, "应该因为代取单已分配而失败")
 }
 
-// TestGetDelivery_NotFound 测试查询不存在的配送单
+// TestGetDelivery_NotFound 测试查询不存在的代取单
 func TestGetDelivery_NotFound(t *testing.T) {
 	_, err := testStore.GetDelivery(context.Background(), 999999999)
 	require.Error(t, err, "应该返回不存在错误")
 }
 
-// TestGetDeliveryByOrderID_NotFound 测试按订单ID查询不存在的配送单
+// TestGetDeliveryByOrderID_NotFound 测试按订单ID查询不存在的代取单
 func TestGetDeliveryByOrderID_NotFound(t *testing.T) {
 	_, err := testStore.GetDeliveryByOrderID(context.Background(), 999999999)
 	require.Error(t, err, "应该返回不存在错误")
@@ -372,7 +372,7 @@ func TestGetDeliveryByOrderID_NotFound(t *testing.T) {
 func TestListRiderActiveDeliveries(t *testing.T) {
 	rider := createOnlineRider(t)
 
-	// 创建几个分配给该骑手的配送单
+	// 创建几个分配给该骑手的代取单
 	for i := 0; i < 3; i++ {
 		createAssignedDelivery(t, rider.ID)
 	}
@@ -608,19 +608,19 @@ func TestListDeliveryPool_EffectivePriority(t *testing.T) {
 			break
 		}
 	}
-	require.True(t, found, "应该能找到刚创建的配送池项")
+	require.True(t, found, "应该能找到刚创建的代取池项")
 }
 
-// TestRemoveFromDeliveryPool_NotFound 测试删除不存在的配送池项
+// TestRemoveFromDeliveryPool_NotFound 测试删除不存在的代取池项
 func TestRemoveFromDeliveryPool_NotFound(t *testing.T) {
 	// 删除不存在的订单应该不报错（DELETE不报no rows）
 	err := testStore.RemoveFromDeliveryPool(context.Background(), 999999999)
 	require.NoError(t, err)
 }
 
-// TestAddToDeliveryPool_DuplicateOrder 测试重复添加同一订单到配送池
+// TestAddToDeliveryPool_DuplicateOrder 测试重复添加同一订单到代取池
 func TestAddToDeliveryPool_DuplicateOrder(t *testing.T) {
-	// 创建第一个配送池项
+	// 创建第一个代取池项
 	poolItem := createRandomDeliveryPoolItem(t)
 
 	// 尝试用同一订单ID再次添加（应该失败，order_id有唯一约束）
@@ -655,10 +655,10 @@ func TestGrabOrderTx(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 创建配送池订单
+	// 创建代取池订单
 	poolItem := createRandomDeliveryPoolItem(t)
 
-	// 创建对应的配送单
+	// 创建对应的代取单
 	delivery := createRandomDeliveryWithOrder(t, poolItem.OrderID)
 
 	// 执行抢单事务
@@ -671,7 +671,7 @@ func TestGrabOrderTx(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 验证配送单已分配
+	// 验证代取单已分配
 	require.Equal(t, "assigned", result.Delivery.Status)
 	require.Equal(t, rider.ID, result.Delivery.RiderID.Int64)
 
@@ -684,9 +684,9 @@ func TestGrabOrderTx(t *testing.T) {
 	require.True(t, result.StatusLog.FromStatus.Valid)
 	require.Equal(t, OrderStatusReady, result.StatusLog.FromStatus.String)
 
-	// 验证订单已从配送池移除
+	// 验证订单已从代取池移除
 	_, err = testStore.GetDeliveryPoolByOrderID(context.Background(), poolItem.OrderID)
-	require.Error(t, err, "订单应该已从配送池移除")
+	require.Error(t, err, "订单应该已从代取池移除")
 
 	// 验证骑手押金已冻结
 	updatedRider, err := testStore.GetRider(context.Background(), rider.ID)
@@ -754,7 +754,7 @@ func TestGrabOrderTx_Concurrent(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// 创建一个配送池订单
+	// 创建一个代取池订单
 	poolItem := createRandomDeliveryPoolItem(t)
 	delivery := createRandomDeliveryWithOrder(t, poolItem.OrderID)
 
@@ -795,7 +795,7 @@ func TestGrabOrderTx_Concurrent(t *testing.T) {
 	require.Equal(t, 1, errorCount, "另一个骑手应该失败")
 }
 
-// TestGrabOrderTx_AlreadyAssignedDelivery 测试抢已分配的配送单
+// TestGrabOrderTx_AlreadyAssignedDelivery 测试抢已分配的代取单
 func TestGrabOrderTx_AlreadyAssignedDelivery(t *testing.T) {
 	rider1 := createOnlineRider(t)
 	rider2 := createOnlineRider(t)
@@ -810,7 +810,7 @@ func TestGrabOrderTx_AlreadyAssignedDelivery(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// 创建配送池订单和配送单
+	// 创建代取池订单和代取单
 	poolItem := createRandomDeliveryPoolItem(t)
 	delivery := createRandomDeliveryWithOrder(t, poolItem.OrderID)
 
@@ -824,7 +824,7 @@ func TestGrabOrderTx_AlreadyAssignedDelivery(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// rider2 再次尝试抢同一单（配送单已分配，应该失败）
+	// rider2 再次尝试抢同一单（代取单已分配，应该失败）
 	_, err = testStore.GrabOrderTx(context.Background(), GrabOrderTxParams{
 		DeliveryID:   delivery.ID,
 		RiderID:      rider2.ID,
@@ -832,10 +832,10 @@ func TestGrabOrderTx_AlreadyAssignedDelivery(t *testing.T) {
 		OrderID:      poolItem.OrderID,
 		FreezeAmount: 500,
 	})
-	require.Error(t, err, "配送单已分配，应该无法再抢")
+	require.Error(t, err, "代取单已分配，应该无法再抢")
 }
 
-// TestGrabOrderTx_NotFoundDelivery 测试抢不存在的配送单
+// TestGrabOrderTx_NotFoundDelivery 测试抢不存在的代取单
 func TestGrabOrderTx_NotFoundDelivery(t *testing.T) {
 	rider := createOnlineRider(t)
 
@@ -846,7 +846,7 @@ func TestGrabOrderTx_NotFoundDelivery(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 尝试抢一个不存在的配送单
+	// 尝试抢一个不存在的代取单
 	_, err = testStore.GrabOrderTx(context.Background(), GrabOrderTxParams{
 		DeliveryID:   999999999,
 		RiderID:      rider.ID,
@@ -854,7 +854,7 @@ func TestGrabOrderTx_NotFoundDelivery(t *testing.T) {
 		OrderID:      999999999,
 		FreezeAmount: 500,
 	})
-	require.Error(t, err, "配送单不存在，应该失败")
+	require.Error(t, err, "代取单不存在，应该失败")
 }
 
 // TestGrabOrderTx_RiderNotFound 测试不存在的骑手抢单
@@ -873,7 +873,7 @@ func TestGrabOrderTx_RiderNotFound(t *testing.T) {
 	require.Error(t, err, "骑手不存在，应该失败")
 }
 
-// TestCompleteDeliveryTx 测试完成配送事务
+// TestCompleteDeliveryTx 测试完成代取事务
 func TestCompleteDeliveryTx(t *testing.T) {
 	rider := createOnlineRider(t)
 
@@ -885,7 +885,7 @@ func TestCompleteDeliveryTx(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 创建一个已分配的配送单并走完状态流程到delivering
+	// 创建一个已分配的代取单并走完状态流程到delivering
 	delivery := createAssignedDelivery(t, rider.ID)
 
 	// assigned -> picking
@@ -913,17 +913,17 @@ func TestCompleteDeliveryTx(t *testing.T) {
 	deliveryData, err := testStore.GetDelivery(context.Background(), delivery.ID)
 	require.NoError(t, err)
 
-	// 执行完成配送事务
+	// 执行完成代取事务
 	result, err := testStore.CompleteDeliveryTx(context.Background(), CompleteDeliveryTxParams{
 		DeliveryID:     delivery.ID,
 		RiderID:        rider.ID,
 		OrderID:        deliveryData.OrderID,
 		UnfreezeAmount: 500,
-		DeliveryFee:    800, // 8元配送费
+		DeliveryFee:    800, // 8元代取费
 	})
 	require.NoError(t, err)
 
-	// 验证配送状态
+	// 验证代取状态
 	require.Equal(t, "delivered", result.Delivery.Status)
 
 	// 验证押金流水
@@ -994,7 +994,7 @@ func TestCompleteDeliveryTx_AutoOfflineNonActiveRiderAfterLastDelivery(t *testin
 	require.False(t, updatedRider.IsOnline)
 }
 
-// TestCompleteDeliveryTx_WrongStatus 测试在错误状态下完成配送
+// TestCompleteDeliveryTx_WrongStatus 测试在错误状态下完成代取
 func TestCompleteDeliveryTx_WrongStatus(t *testing.T) {
 	rider := createOnlineRider(t)
 
@@ -1005,12 +1005,12 @@ func TestCompleteDeliveryTx_WrongStatus(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 创建一个刚分配的配送单（状态为assigned，不是delivering）
+	// 创建一个刚分配的代取单（状态为assigned，不是delivering）
 	delivery := createAssignedDelivery(t, rider.ID)
 	deliveryData, err := testStore.GetDelivery(context.Background(), delivery.ID)
 	require.NoError(t, err)
 
-	// 尝试完成配送（应该失败，因为状态不是delivering）
+	// 尝试完成代取（应该失败，因为状态不是delivering）
 	_, err = testStore.CompleteDeliveryTx(context.Background(), CompleteDeliveryTxParams{
 		DeliveryID:     delivery.ID,
 		RiderID:        rider.ID,

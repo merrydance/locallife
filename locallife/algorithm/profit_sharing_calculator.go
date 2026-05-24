@@ -28,7 +28,7 @@ var DineInProfitSharingConfig = ProfitSharingConfig{
 // ProfitSharingInput 分账计算输入
 type ProfitSharingInput struct {
 	TotalAmount int64  // 用户实际支付金额（分）
-	DeliveryFee int64  // 配送费（分）
+	DeliveryFee int64  // 代取费（分）
 	OrderSource string // 订单来源：takeout（外卖）、dine_in（堂食）、takeaway（打包自提）
 }
 
@@ -36,7 +36,7 @@ type ProfitSharingInput struct {
 type ProfitSharingResult struct {
 	// 输入值
 	TotalAmount int64 // 用户支付总额
-	DeliveryFee int64 // 配送费
+	DeliveryFee int64 // 代取费
 
 	// 分账比例
 	PlatformRate int // 平台比例
@@ -46,7 +46,7 @@ type ProfitSharingResult struct {
 	DistributableAmount int64 // 可分账金额 = TotalAmount - DeliveryFee
 
 	// 分账结果
-	RiderAmount    int64 // 骑手收入 = 配送费
+	RiderAmount    int64 // 骑手收入 = 代取费
 	PlatformAmount int64 // 平台收入 = DistributableAmount * PlatformRate%
 	OperatorAmount int64 // 运营商收入 = DistributableAmount * OperatorRate%
 	MerchantAmount int64 // 商户收入 = DistributableAmount - PlatformAmount - OperatorAmount
@@ -87,12 +87,12 @@ func (c *ProfitSharingCalculator) Calculate(input ProfitSharingInput) ProfitShar
 	}
 
 	if input.DeliveryFee < 0 {
-		result.Error = "配送费不能为负数"
+		result.Error = "代取费不能为负数"
 		return result
 	}
 
 	if input.DeliveryFee > input.TotalAmount {
-		result.Error = "配送费不能大于支付总额"
+		result.Error = "代取费不能大于支付总额"
 		return result
 	}
 
@@ -101,12 +101,12 @@ func (c *ProfitSharingCalculator) Calculate(input ProfitSharingInput) ProfitShar
 	result.PlatformRate = config.PlatformRate
 	result.OperatorRate = config.OperatorRate
 
-	// 1. 骑手先拿配送费（仅外卖订单）
+	// 1. 骑手先拿代取费（仅外卖订单）
 	if config.EnableRider && input.DeliveryFee > 0 {
 		result.RiderAmount = input.DeliveryFee
 	}
 
-	// 2. 计算可分账金额（扣除配送费后）
+	// 2. 计算可分账金额（扣除代取费后）
 	result.DistributableAmount = input.TotalAmount - input.DeliveryFee
 
 	// 3. 计算平台分成
@@ -143,7 +143,7 @@ func (c *ProfitSharingCalculator) getConfigByOrderSource(orderSource string) Pro
 		return ProfitSharingConfig{
 			PlatformRate: c.config.PlatformRate,
 			OperatorRate: c.config.OperatorRate,
-			EnableRider:  false, // 预定不涉及配送
+			EnableRider:  false, // 预定不涉及代取
 		}
 	default:
 		return c.config
@@ -190,7 +190,7 @@ type SubOrderInput struct {
 	MerchantID  int64  // 商户ID
 	OrderID     int64  // 订单ID
 	Amount      int64  // 子单金额（用户支付）
-	DeliveryFee int64  // 配送费
+	DeliveryFee int64  // 代取费
 	OrderSource string // 订单来源
 	RiderID     *int64 // 骑手ID（可选）
 }

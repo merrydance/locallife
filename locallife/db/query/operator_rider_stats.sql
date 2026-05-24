@@ -1,7 +1,7 @@
 -- M12: 运营商骑手统计查询（按指定时间段）
 
 -- name: GetOperatorRiderStats :one
--- 运营商视角：单个骑手在指定时间段内的配送统计
+-- 运营商视角：单个骑手在指定时间段内的代取统计
 SELECT
     COUNT(d.id)::int                                                              AS total_deliveries,
     COUNT(CASE WHEN d.status = 'completed' THEN 1 END)::int                       AS completed_deliveries,

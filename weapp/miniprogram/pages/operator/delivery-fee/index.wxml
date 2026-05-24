@@ -1,4 +1,4 @@
-<custom-navbar title="配送费规则配置" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="代取费规则配置" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <view class="content">
@@ -23,7 +23,7 @@
         <view class="section">
           <view class="section-title">基础计费</view>
           <t-cell-group theme="card">
-            <t-input label="基础配送费" suffix="元" type="digit" value="{{config.base_fee}}" bind:change="onInput" data-field="base_fee" align="right" />
+            <t-input label="基础代取费" suffix="元" type="digit" value="{{config.base_fee}}" bind:change="onInput" data-field="base_fee" align="right" />
             <t-input label="基础距离" suffix="米" type="number" value="{{config.base_distance}}" bind:change="onInput" data-field="base_distance" align="right" />
           </t-cell-group>
         </view>

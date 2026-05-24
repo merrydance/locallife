@@ -382,8 +382,8 @@ Page({
   buildSceneSummary(order: OrderResponse) {
     if (order.order_type === 'takeout') {
       return {
-        label: '配送地址',
-        value: order.delivery_address || order.delivery_contact_name || '外卖配送'
+        label: '代取地址',
+        value: order.delivery_address || order.delivery_contact_name || '外卖代取'
       }
     }
 

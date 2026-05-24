@@ -245,7 +245,7 @@ WHERE a.id = $1
 LIMIT 1;
 
 -- name: ListRiderClaimsForRider :many
--- 骑手查看收到的索赔列表（通过配送单关联）
+-- 骑手查看收到的索赔列表（通过代取单关联）
 SELECT 
   c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason,
     o.order_no,

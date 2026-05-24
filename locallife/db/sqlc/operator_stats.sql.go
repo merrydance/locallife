@@ -189,7 +189,7 @@ type GetOperatorRiderRankingRow struct {
 	TotalEarnings   int64  `json:"total_earnings"`
 }
 
-// 运营商区域内骑手绩效排行(通过配送订单关联区域)
+// 运营商区域内骑手绩效排行(通过代取订单关联区域)
 func (q *Queries) GetOperatorRiderRanking(ctx context.Context, arg GetOperatorRiderRankingParams) ([]GetOperatorRiderRankingRow, error) {
 	rows, err := q.db.Query(ctx, getOperatorRiderRanking,
 		arg.StartAt,

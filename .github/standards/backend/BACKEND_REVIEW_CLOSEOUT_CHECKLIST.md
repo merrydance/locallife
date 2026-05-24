@@ -14,7 +14,7 @@
 
 ## 2. High-Risk Coverage
 
-- 若范围涉及资金、支付、退款、分账、配送、预订、callback、worker、scheduler、OCR、上传下载或 authz，是否明确检查了高风险路径？
+- 若范围涉及资金、支付、退款、分账、代取、预订、callback、worker、scheduler、OCR、上传下载或 authz，是否明确检查了高风险路径？
 - 若高风险路径没有实际验证证据，是否明确点名未验证的是哪个 callback、retry、recovery、duplicate-delivery 或 authz 分支？
 - 是否检查了 `make sqlc`、`make mock`、`make swagger`、`make check-generated`、`make test-safety` 等必要生成或验证步骤？
 - 若改动触及错误处理、空值回退、5xx 返回、上游失败映射或前端提示语义，是否明确检查了 unexpected error 是否到达唯一结构化日志边界、业务错误与基础设施错误是否正确分流、以及对前端是否保持稳定且不泄漏内部细节的语义？

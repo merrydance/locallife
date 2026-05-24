@@ -261,7 +261,7 @@
 | `pending` | 待接单 |
 | `accepted` | 已接单 |
 | `preparing` | 制作中 |
-| `delivering` | 配送中 |
+| `delivering` | 代取中 |
 | `completed` | 已完成 |
 | `cancelled` | 已取消 |
 

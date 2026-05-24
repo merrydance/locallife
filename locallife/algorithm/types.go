@@ -16,8 +16,8 @@ type PoolOrder struct {
 	MerchantID         int64     `json:"merchant_id"`
 	PickupLocation     Location  `json:"pickup_location"`
 	DeliveryLocation   Location  `json:"delivery_location"`
-	Distance           int       `json:"distance"`     // 配送距离（米）
-	DeliveryFee        int64     `json:"delivery_fee"` // 配送费（分）
+	Distance           int       `json:"distance"`     // 代取距离（米）
+	DeliveryFee        int64     `json:"delivery_fee"` // 代取费（分）
 	ExpectedPickupAt   time.Time `json:"expected_pickup_at"`
 	ExpectedDeliveryAt time.Time `json:"expected_delivery_at"`
 	ExpiresAt          time.Time `json:"expires_at"`
@@ -25,7 +25,7 @@ type PoolOrder struct {
 	CreatedAt          time.Time `json:"created_at"`
 }
 
-// ActiveDelivery 骑手当前正在配送的订单
+// ActiveDelivery 骑手当前正在代取的订单
 type ActiveDelivery struct {
 	DeliveryID       int64     `json:"delivery_id"`
 	OrderID          int64     `json:"order_id"`
@@ -47,7 +47,7 @@ type ScoredOrder struct {
 	// 计算结果
 	DistanceToPickup int `json:"distance_to_pickup"` // 到取餐点距离（米）
 	ExtraDistance    int `json:"extra_distance"`     // 额外绕路距离（米）
-	EstimatedMinutes int `json:"estimated_minutes"`  // 预计配送时间（分钟）
+	EstimatedMinutes int `json:"estimated_minutes"`  // 预计代取时间（分钟）
 
 	// 原始订单信息
 	PoolOrder PoolOrder `json:"pool_order"`

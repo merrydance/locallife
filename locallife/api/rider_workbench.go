@@ -189,7 +189,7 @@ func newRiderWorkbenchSummaryResponse(result logic.RiderWorkbenchSummary) riderW
 
 // getRiderWorkbenchSummary godoc
 // @Summary 获取骑手工作台摘要
-// @Description 获取当前骑手首屏经营摘要，聚合状态、当前任务、订单池、配送费结算、押金、追偿和通知摘要
+// @Description 获取当前骑手首屏经营摘要，聚合状态、当前任务、订单池、代取费结算、押金、追偿和通知摘要
 // @Tags 骑手
 // @Accept json
 // @Produce json

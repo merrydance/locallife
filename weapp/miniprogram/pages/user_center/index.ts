@@ -46,7 +46,7 @@ Page({
     workbenches: [] as Array<{ id: string, name: string, path: string, icon: string, description?: string, disabled?: boolean, message?: string }>,
     registrationOptions: [
       { id: 'merchant', name: '餐厅入驻', desc: '开通商家账号', path: '/pages/register/merchant/index', icon: 'shop' },
-      { id: 'rider', name: '骑手入驻', desc: '成为配送骑手', path: '/pages/register/rider/index', icon: 'undertake-delivery' },
+      { id: 'rider', name: '骑手入驻', desc: '成为代取骑手', path: '/pages/register/rider/index', icon: 'undertake-delivery' },
       { id: 'operator', name: '运营商入驻', desc: '区域运营合作', path: '/pages/register/operator/index', icon: 'root-list' }
     ],
     navBarHeight: 88,

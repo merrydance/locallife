@@ -1,5 +1,5 @@
 -- =============================================
--- M8: 骑手与配送系统
+-- M8: 骑手与代取系统
 -- =============================================
 
 -- 骑手表
@@ -63,7 +63,7 @@ CREATE INDEX rider_deposits_rider_id_idx ON rider_deposits(rider_id);
 CREATE INDEX rider_deposits_created_at_idx ON rider_deposits(created_at);
 CREATE INDEX rider_deposits_type_idx ON rider_deposits(type);
 
--- 配送单表
+-- 代取单表
 CREATE TABLE "deliveries" (
     "id" bigserial PRIMARY KEY,
     "order_id" bigint NOT NULL REFERENCES "orders"("id"),
@@ -178,7 +178,7 @@ VALUES ('default', 0.40, 0.30, 0.20, 0.10, 5000, 20, true);
 
 COMMENT ON TABLE riders IS '骑手表';
 COMMENT ON TABLE rider_deposits IS '骑手押金流水';
-COMMENT ON TABLE deliveries IS '配送单表';
+COMMENT ON TABLE deliveries IS '代取单表';
 COMMENT ON TABLE rider_locations IS '骑手位置记录';
 COMMENT ON TABLE delivery_pool IS '可接单订单池';
 COMMENT ON TABLE recommend_configs IS '推荐算法配置';
@@ -186,11 +186,11 @@ COMMENT ON TABLE recommend_configs IS '推荐算法配置';
 COMMENT ON COLUMN riders.deposit_amount IS '可用押金余额（分）';
 COMMENT ON COLUMN riders.frozen_deposit IS '冻结押金（分）';
 COMMENT ON COLUMN riders.online_duration IS '累计在线时长（秒）';
-COMMENT ON COLUMN deliveries.distance IS '配送距离（米）';
-COMMENT ON COLUMN deliveries.rider_earnings IS '骑手配送收益（分）';
-COMMENT ON COLUMN deliveries.status IS '状态：pending待分配/assigned已分配/picking取餐中/picked已取餐/delivering配送中/delivered已送达/completed已完成/cancelled已取消';
+COMMENT ON COLUMN deliveries.distance IS '代取距离（米）';
+COMMENT ON COLUMN deliveries.rider_earnings IS '骑手代取收益（分）';
+COMMENT ON COLUMN deliveries.status IS '状态：pending待分配/assigned已分配/picking取餐中/picked已取餐/delivering代取中/delivered已送达/completed已完成/cancelled已取消';
 COMMENT ON COLUMN rider_locations.accuracy IS '定位精度（米）';
 COMMENT ON COLUMN rider_locations.speed IS '速度 m/s';
 COMMENT ON COLUMN rider_locations.heading IS '方向角度';
-COMMENT ON COLUMN delivery_pool.distance IS '配送距离（米）';
+COMMENT ON COLUMN delivery_pool.distance IS '代取距离（米）';
 COMMENT ON COLUMN recommend_configs.max_distance IS '最大推荐距离（米）';

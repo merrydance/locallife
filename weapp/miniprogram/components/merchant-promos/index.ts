@@ -1,6 +1,6 @@
 /**
  * 商户优惠中心组件
- * 展示商户所有优惠活动：满减、配送优惠、优惠券、充值活动
+ * 展示商户所有优惠活动：满减、代取优惠、优惠券、充值活动
  * 可用于所有支付页面
  */
 
@@ -123,7 +123,7 @@ Component({
                 // 处理满减规则（过滤已过期）
                 const discountRules = (result.discount_rules || []).filter(isNotExpired)
                 
-                // 处理配送优惠（过滤已过期）
+                // 处理代取优惠（过滤已过期）
                 const deliveryFeeRules = (result.delivery_fee_rules || []).filter(isNotExpired).map((rule) => {
                     const valueStr = formatPriceNoSymbol(rule.value)
                     return {

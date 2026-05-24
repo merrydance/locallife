@@ -65,7 +65,7 @@ func CancelOrder(ctx context.Context, store db.Store, input CancelOrderInput) (C
 			OperatorType: pgtype.Text{String: "user", Valid: true},
 			Notes:        pgtype.Text{String: "用户申请取消，进入售后通道", Valid: true},
 		})
-		return CancelOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("订单已制作/配送，已记录取消诉求，请联系商户或客服处理"))
+		return CancelOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("订单已制作/代取，已记录取消诉求，请联系商户或客服处理"))
 	}
 
 	if order.Status != db.OrderStatusPending && order.Status != db.OrderStatusPaid {

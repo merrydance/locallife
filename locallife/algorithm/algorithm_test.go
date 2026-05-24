@@ -178,7 +178,7 @@ func TestSimpleRecommender_WithActiveOrders(t *testing.T) {
 
 	riderLocation := Location{Longitude: 116.4, Latitude: 39.9}
 
-	// 骑手已有一个正在配送的订单
+	// 骑手已有一个正在代取的订单
 	activeOrders := []ActiveDelivery{
 		{
 			DeliveryID:       1,

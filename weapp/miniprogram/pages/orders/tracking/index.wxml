@@ -1,4 +1,4 @@
-<custom-navbar title="配送追踪" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="代取追踪" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view
   class="page page-shell page-shell--with-nav page-shell--bottom-safe"
@@ -59,7 +59,7 @@
       />
     </view>
 
-    <!-- 配送状态 -->
+    <!-- 代取状态 -->
     <view class="status-card animate-slide-up">
       <view class="status-main">
         <t-icon name="delivery" size="48rpx" color="#1d63ff" />
@@ -82,9 +82,9 @@
       </view>
     </view>
 
-    <!-- 配送进度 -->
+    <!-- 代取进度 -->
     <view class="progress-card animate-slide-up" style="animation-delay: 0.2s;">
-      <view class="card-title">配送进度</view>
+      <view class="card-title">代取进度</view>
       <view class="progress-list">
         <view 
           wx:for="{{progress}}" 
@@ -101,7 +101,7 @@
       </view>
     </view>
 
-    <!-- 配送地址 -->
+    <!-- 代取地址 -->
     <view class="address-card animate-slide-up" style="animation-delay: 0.3s;">
       <view class="address-row">
         <view class="address-icon merchant"></view>
@@ -131,8 +131,8 @@
     </view>
   </block>
 
-  <!-- 无配送信息 -->
+  <!-- 无代取信息 -->
   <view wx:elif="{{!loading && !delivery}}" class="empty">
-    <t-empty description="暂无配送信息" />
+    <t-empty description="暂无代取信息" />
   </view>
 </view>

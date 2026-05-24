@@ -915,7 +915,7 @@ func (server *Server) getMerchantRecoveryDisputeDetail(ctx *gin.Context) {
 
 // listRiderClaims 骑手查看收到的索赔列表
 // @Summary 获取骑手收到的索赔列表
-// @Description 骑手查看与自己配送订单相关的已批准索赔列表
+// @Description 骑手查看与自己代取订单相关的已批准索赔列表
 // @Tags 骑手索赔管理
 // @Accept json
 // @Produce json

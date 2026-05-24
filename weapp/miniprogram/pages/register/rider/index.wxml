@@ -17,7 +17,7 @@
         <view class="hero-icon">
           <t-icon name="user-talk" size="120rpx" color="var(--td-brand-color)" />
         </view>
-        <view class="hero-title">成为自主经营配送员</view>
+        <view class="hero-title">成为自主经营代取员</view>
         <view class="hero-subtitle">无抽佣负担，每一分汗水都属于自己</view>
         
         <view class="benefit-grid">

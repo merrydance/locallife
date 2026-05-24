@@ -78,7 +78,7 @@
 | A. 发现与决策 | 找店、看菜、看套餐、看包间、看优惠、收藏 | `takeout`, `reservation`, `restaurant-detail`, `search`, `category` | `customer-discovery-workflow`, 商户卡片、商品卡片、优惠券领取组件、收藏动作组件 |
 | B. 交易与结算 | 加购物车、试算、确认订单、发起支付、支付结果恢复 | `takeout/cart`, `order-confirm`, `payment/result`, `orders` | `customer-checkout-workflow`, 购物车摘要、金额试算、支付恢复、券/余额选择组件 |
 | C. 堂食与预订 | 扫码入座、开台、点餐、转台、结账、预订到店 | `dine-in`, `reservation` | `customer-dining-workflow`, 会话状态组件、账单组组件、桌台状态组件 |
-| D. 履约与订单 | 订单列表、订单详情、催单、取消、确认收货、配送跟踪 | `orders/list`, `orders/detail`, `orders/tracking` | `customer-order-workflow`, 订单卡片、状态时间线、配送跟踪组件、动作栏组件 |
+| D. 履约与订单 | 订单列表、订单详情、催单、取消、确认收货、代取跟踪 | `orders/list`, `orders/detail`, `orders/tracking` | `customer-order-workflow`, 订单卡片、状态时间线、代取跟踪组件、动作栏组件 |
 | E. 售后与安全 | 退款、索赔、确认继续、撤回、食安反馈、证据上传 | `service_center`, `refund-detail`, `orders/detail` | `customer-aftersales-workflow`, 索赔状态组件、食安反馈组件、证据上传组件 |
 | F. 复购与资产 | 优惠券、会员、钱包、收藏、评价、地址 | `user_center`, `coupons`, `membership`, `wallet`, `favorites`, `reviews`, `addresses` | `customer-profile-workflow`, 资产摘要、会员卡、券列表、收藏列表、评价列表 |
 | G. 通知与状态回流 | 通知列表、未读、偏好、跳转、订单/售后状态回流 | `notification`, 相关详情页 | `customer-notification-workflow`, 通知列表、偏好设置、跳转解析器 |
@@ -338,13 +338,13 @@ ViewState：membership loading、empty、balance stale、ledger loading、ledger
 页面组 owner：`notification`, `orders/detail`, `orders/tracking`, `refund-detail`  
 workflow owner：`customer-notification-workflow`, `customer-order-workflow`
 
-问题：通知、订单状态、配送状态、支付/退款状态属于同一个“顾客知道进展”的能力组，不能让通知页只做消息列表，订单页各自解释状态。
+问题：通知、订单状态、代取状态、支付/退款状态属于同一个“顾客知道进展”的能力组，不能让通知页只做消息列表，订单页各自解释状态。
 
 范围：
 
 - 补齐通知删除、偏好查询、偏好更新。
 - 通知跳转以后端 `related_type`/`related_id` 为真值，经 workflow 映射到页面。
-- 订单详情、配送跟踪、支付/退款详情统一状态文案与回查策略。
+- 订单详情、代取跟踪、支付/退款详情统一状态文案与回查策略。
 - 未知通知类型进入安全降级，不导致页面异常。
 
 ViewState：notification loading、empty、error、marking read、deleting、preference loading、preference saving、unknown target、target stale after jump。
@@ -399,9 +399,9 @@ workflow owner：`customer-order-workflow`, `customer-notification-workflow`
 范围：
 
 - 确认顾客端本期是否接入 WebSocket。
-- 若不接入，定义订单列表、详情、配送跟踪、通知跳转后的刷新/回查策略。
+- 若不接入，定义订单列表、详情、代取跟踪、通知跳转后的刷新/回查策略。
 - 若接入，定义连接权限、订阅范围、断线重连、后台恢复和重复消息去重。
-- 与支付结果、售后详情、配送跟踪状态统一。
+- 与支付结果、售后详情、代取跟踪状态统一。
 
 ViewState：subscribing、connected、disconnected with cached data、polling、manual refresh、event deduped、stale after resume、fallback to query。
 
@@ -409,7 +409,7 @@ ViewState：subscribing、connected、disconnected with cached data、polling、
 
 验收：
 
-- 订单列表、订单详情、配送跟踪在退出重进、后台恢复、弱网后能回到可信状态。
+- 订单列表、订单详情、代取跟踪在退出重进、后台恢复、弱网后能回到可信状态。
 - 未接入实时能力时不展示伪实时文案。
 - 接入实时能力时重复消息不会造成重复动作或状态倒退。
 
@@ -447,7 +447,7 @@ workflow owner：各能力组 owner
 | 发现与决策 | 外卖首页、搜索、分类、餐厅详情、菜品/套餐详情、收藏动作、无位置/弱网状态 |
 | 交易与结算 | 购物车、试算、创建订单、支付创建、支付回查、取消/失败/未知结果恢复、重复点击 |
 | 堂食与预订 | 扫码进入、开台、点餐、支付成功 checkout、预订创建/详情/取消/到店、重入恢复 |
-| 履约与订单 | 订单列表、详情、配送跟踪、催单、取消、确认收货、返回恢复、弱网刷新 |
+| 履约与订单 | 订单列表、详情、代取跟踪、催单、取消、确认收货、返回恢复、弱网刷新 |
 | 售后与安全 | 索赔提交/详情/确认继续/撤回、食安反馈、证据上传失败、重复提交 |
 | 复购与资产 | 优惠券、会员卡、钱包、收藏、评价、地址，且入口不形成卡片墙 |
 | 通知与状态回流 | 通知列表/已读/全读/删除/偏好、通知跳转、未知类型降级、订单/售后状态回查 |

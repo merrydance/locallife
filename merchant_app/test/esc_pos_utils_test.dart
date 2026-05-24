@@ -51,7 +51,7 @@ void main() {
     expect(text, contains('平台服务费: ¥4.75'));
     expect(text, contains('支付通道费: ¥0.31'));
     expect(text, contains('商户实收: ¥82.94'));
-    expect(text, contains('配送费: ¥7.00'));
+    expect(text, contains('代取费: ¥7.00'));
     expect(text, contains('骑手通道费: ¥0.05'));
     expect(text, contains('骑手实收: ¥7.95'));
   });

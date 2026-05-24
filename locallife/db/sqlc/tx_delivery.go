@@ -32,7 +32,7 @@ type GrabOrderTxResult struct {
 	StatusLog  OrderStatusLog
 }
 
-// ==================== 配送状态同步事务 ====================
+// ==================== 代取状态同步事务 ====================
 
 // UpdateDeliveryToPickedTxParams contains the input parameters for updating delivery to picked
 type UpdateDeliveryToPickedTxParams struct {
@@ -224,7 +224,7 @@ func (store *SQLStore) GrabOrderTx(ctx context.Context, arg GrabOrderTxParams) (
 			return fmt.Errorf("押金余额不足，无法接单")
 		}
 
-		// 3. 分配配送单给骑手
+		// 3. 分配代取单给骑手
 		result.Delivery, err = q.AssignDelivery(ctx, AssignDeliveryParams{
 			ID:      arg.DeliveryID,
 			RiderID: pgtype.Int8{Int64: arg.RiderID, Valid: true},
@@ -304,7 +304,7 @@ type CompleteDeliveryTxParams struct {
 	RiderID        int64
 	OrderID        int64
 	UnfreezeAmount int64 // 需要解冻的押金金额
-	DeliveryFee    int64 // 配送费（分）：用于更新收益
+	DeliveryFee    int64 // 代取费（分）：用于更新收益
 }
 
 // CompleteDeliveryTxResult contains the result of the complete delivery transaction
@@ -332,7 +332,7 @@ func (store *SQLStore) CompleteDeliveryTx(ctx context.Context, arg CompleteDeliv
 			return fmt.Errorf("get rider for update: %w", err)
 		}
 
-		// 2. 更新配送状态为已送达
+		// 2. 更新代取状态为已送达
 		result.Delivery, err = q.UpdateDeliveryToDelivered(ctx, UpdateDeliveryToDeliveredParams{
 			ID:      arg.DeliveryID,
 			RiderID: pgtype.Int8{Int64: arg.RiderID, Valid: true},
@@ -366,7 +366,7 @@ func (store *SQLStore) CompleteDeliveryTx(ctx context.Context, arg CompleteDeliv
 			Type:           "unfreeze",
 			RelatedOrderID: pgtype.Int8{Int64: arg.OrderID, Valid: true},
 			BalanceAfter:   rider.DepositAmount - rider.FrozenDeposit + arg.UnfreezeAmount,
-			Remark:         pgtype.Text{String: "配送完成解冻押金", Valid: true},
+			Remark:         pgtype.Text{String: "代取完成解冻押金", Valid: true},
 		})
 		if err != nil {
 			return fmt.Errorf("create deposit log: %w", err)

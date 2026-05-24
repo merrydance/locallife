@@ -39,7 +39,7 @@ import (
 
 // @title           LocalLife API
 // @version         1.0
-// @description     本地生活服务平台 API 文档，包含用户、商户、订单、配送、支付等完整业务功能。
+// @description     本地生活服务平台 API 文档，包含用户、商户、订单、代取、支付等完整业务功能。
 // @description
 // @description     【图片URL约定】公共展示图片字段（如 image_url / avatar_url / logo_url）应返回可直接访问的绝对 URL（通常为 CDN 地址）。
 // @description     - 公共展示素材不应再依赖客户端拼接 /uploads/... 路径。

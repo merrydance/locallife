@@ -1097,7 +1097,7 @@ func TestListPeakHourConfigsAPI(t *testing.T) {
 	}
 }
 
-// ==================== 商家配送优惠测试 ====================
+// ==================== 商家代取优惠测试 ====================
 
 // randomMerchantForPromo 生成随机商户用于优惠测试
 func randomMerchantForPromo(userID int64) db.Merchant {
@@ -1369,7 +1369,7 @@ func TestListDeliveryPromotionsAPI(t *testing.T) {
 	}
 }
 
-// TestDeleteDeliveryPromotionAPI 测试删除配送优惠
+// TestDeleteDeliveryPromotionAPI 测试删除代取优惠
 func TestDeleteDeliveryPromotionAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchantForPromo(user.ID)

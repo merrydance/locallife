@@ -24,7 +24,7 @@ func TestGetDeliveryForViewerByOrder(t *testing.T) {
 	}{
 		{
 			name:  "OwnerSuccess",
-			input: DeliveryOrderViewerInput{UserID: userID, OrderID: orderID, ForbiddenMessage: "无权查看此订单配送信息"},
+			input: DeliveryOrderViewerInput{UserID: userID, OrderID: orderID, ForbiddenMessage: "无权查看此订单代取信息"},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), orderID).
@@ -42,7 +42,7 @@ func TestGetDeliveryForViewerByOrder(t *testing.T) {
 		},
 		{
 			name:  "AssignedRiderSuccess",
-			input: DeliveryOrderViewerInput{UserID: userID, OrderID: orderID, ForbiddenMessage: "无权查看此订单配送信息"},
+			input: DeliveryOrderViewerInput{UserID: userID, OrderID: orderID, ForbiddenMessage: "无权查看此订单代取信息"},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), orderID).
@@ -64,7 +64,7 @@ func TestGetDeliveryForViewerByOrder(t *testing.T) {
 		},
 		{
 			name:  "ForbiddenForOtherUser",
-			input: DeliveryOrderViewerInput{UserID: userID, OrderID: orderID, ForbiddenMessage: "无权查看此订单配送信息"},
+			input: DeliveryOrderViewerInput{UserID: userID, OrderID: orderID, ForbiddenMessage: "无权查看此订单代取信息"},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), orderID).
@@ -82,7 +82,7 @@ func TestGetDeliveryForViewerByOrder(t *testing.T) {
 			check: func(t *testing.T, _ db.Delivery, err error) {
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, 403, reqErr.Status)
-				require.Equal(t, "无权查看此订单配送信息", reqErr.Err.Error())
+				require.Equal(t, "无权查看此订单代取信息", reqErr.Err.Error())
 			},
 		},
 	}
@@ -117,7 +117,7 @@ func TestValidateDeliveryViewer(t *testing.T) {
 	}{
 		{
 			name:  "DeliveryNotFound",
-			input: DeliveryViewerInput{UserID: userID, DeliveryID: deliveryID, ForbiddenMessage: "无权查看此配送单轨迹"},
+			input: DeliveryViewerInput{UserID: userID, DeliveryID: deliveryID, ForbiddenMessage: "无权查看此代取单轨迹"},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetDelivery(gomock.Any(), deliveryID).
@@ -127,12 +127,12 @@ func TestValidateDeliveryViewer(t *testing.T) {
 			check: func(t *testing.T, _ DeliveryViewerResult, err error) {
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, 404, reqErr.Status)
-				require.Equal(t, "配送单不存在", reqErr.Err.Error())
+				require.Equal(t, "代取单不存在", reqErr.Err.Error())
 			},
 		},
 		{
 			name:  "OrderNotFound",
-			input: DeliveryViewerInput{UserID: userID, DeliveryID: deliveryID, ForbiddenMessage: "无权查看此配送单轨迹"},
+			input: DeliveryViewerInput{UserID: userID, DeliveryID: deliveryID, ForbiddenMessage: "无权查看此代取单轨迹"},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetDelivery(gomock.Any(), deliveryID).
@@ -151,7 +151,7 @@ func TestValidateDeliveryViewer(t *testing.T) {
 		},
 		{
 			name:  "Forbidden",
-			input: DeliveryViewerInput{UserID: userID, DeliveryID: deliveryID, ForbiddenMessage: "无权查看此配送单轨迹"},
+			input: DeliveryViewerInput{UserID: userID, DeliveryID: deliveryID, ForbiddenMessage: "无权查看此代取单轨迹"},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetDelivery(gomock.Any(), deliveryID).
@@ -169,12 +169,12 @@ func TestValidateDeliveryViewer(t *testing.T) {
 			check: func(t *testing.T, _ DeliveryViewerResult, err error) {
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, 403, reqErr.Status)
-				require.Equal(t, "无权查看此配送单轨迹", reqErr.Err.Error())
+				require.Equal(t, "无权查看此代取单轨迹", reqErr.Err.Error())
 			},
 		},
 		{
 			name:  "Owner",
-			input: DeliveryViewerInput{UserID: userID, DeliveryID: deliveryID, ForbiddenMessage: "无权查看此配送单轨迹"},
+			input: DeliveryViewerInput{UserID: userID, DeliveryID: deliveryID, ForbiddenMessage: "无权查看此代取单轨迹"},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetDelivery(gomock.Any(), deliveryID).
@@ -193,7 +193,7 @@ func TestValidateDeliveryViewer(t *testing.T) {
 		},
 		{
 			name:  "Rider",
-			input: DeliveryViewerInput{UserID: userID, DeliveryID: deliveryID, ForbiddenMessage: "无权查看此配送单轨迹"},
+			input: DeliveryViewerInput{UserID: userID, DeliveryID: deliveryID, ForbiddenMessage: "无权查看此代取单轨迹"},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetDelivery(gomock.Any(), deliveryID).

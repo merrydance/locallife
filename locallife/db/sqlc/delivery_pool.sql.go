@@ -233,7 +233,7 @@ type ListDeliveryPoolRow struct {
 	EffectivePriority  int32              `json:"effective_priority"`
 }
 
-// 列出所有待接单的配送池订单
+// 列出所有待接单的代取池订单
 // 外卖订单始终可见直到被接单或取消
 // 动态优先级 = 基础优先级 + 等待时间加成（每等待10分钟加1级）
 func (q *Queries) ListDeliveryPool(ctx context.Context, arg ListDeliveryPoolParams) ([]ListDeliveryPoolRow, error) {

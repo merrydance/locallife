@@ -68,7 +68,7 @@ func (r *SimpleRecommender) Recommend(ctx context.Context, input RecommendInput)
 				float64(profitScore)*config.ProfitWeight,
 		)
 
-		// 预计配送时间
+		// 预计代取时间
 		estimatedMinutes := EstimateTime(distanceToPickup + order.Distance)
 
 		scored = append(scored, ScoredOrder{
@@ -119,7 +119,7 @@ func (r *SimpleRecommender) calculateRouteScore(order PoolOrder, activeOrders []
 		return 100
 	}
 
-	// 计算当前配送路径的方向（只看第一个活跃订单）
+	// 计算当前代取路径的方向（只看第一个活跃订单）
 	var targetLocation Location
 	if len(activeOrders) > 0 {
 		active := activeOrders[0]
@@ -183,13 +183,13 @@ func (r *SimpleRecommender) calculateUrgencyScore(order PoolOrder, now time.Time
 }
 
 // calculateProfitScore 计算收益分 (0-100)
-// 配送费/距离 的性价比
+// 代取费/距离 的性价比
 func (r *SimpleRecommender) calculateProfitScore(order PoolOrder) int {
 	if order.Distance <= 0 {
 		return 100
 	}
 
-	// 计算每公里配送费（分/公里）
+	// 计算每公里代取费（分/公里）
 	feePerKm := float64(order.DeliveryFee) / (float64(order.Distance) / 1000)
 
 	// 假设 5元/公里 = 100分，0元/公里 = 0分

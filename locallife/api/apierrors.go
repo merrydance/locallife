@@ -157,7 +157,7 @@ var (
 	ErrRiderHasActiveOrders     = apierr(40015, "cannot perform this action while you have active delivery orders")
 	ErrRiderNoRegionAssigned    = apierr(40016, "rider has no region assigned")
 	ErrRiderDepositFrozen       = apierr(40971, "cannot withdraw while deposit is frozen")
-	ErrRiderBaofuAccountMissing = apierr(40062, "骑手结算账户未开通，暂不能接收配送费分账订单")
+	ErrRiderBaofuAccountMissing = apierr(40062, "骑手结算账户未开通，暂不能接收代取费分账订单")
 )
 
 // ==================== 金融/金额 (Finance) ====================
@@ -187,7 +187,7 @@ var (
 	ErrSessionConflictAccount = apierr(40966, "login session has been confirmed by another account")
 )
 
-// ==================== 骑手操作/配送 (Rider Operations / Delivery) ====================
+// ==================== 骑手操作/代取 (Rider Operations / Delivery) ====================
 
 var (
 	ErrRiderOffline                = apierr(40035, "rider is currently offline")

@@ -259,7 +259,7 @@ func TestGrabDeliveryOrder_BlocksWhenBaofuRiderBillMissing(t *testing.T) {
 	_, err := GrabDeliveryOrder(context.Background(), store, GrabOrderInput{UserID: 1, OrderID: order.ID, MaxDistanceMeters: 5000})
 	reqErr := assertRequestError(t, err)
 	require.Equal(t, http.StatusConflict, reqErr.Status)
-	require.Equal(t, "订单配送收益账单暂不可用，请稍后重试", reqErr.Err.Error())
+	require.Equal(t, "订单代取收益账单暂不可用，请稍后重试", reqErr.Err.Error())
 }
 
 func TestGrabDeliveryOrder_BlocksMissingBaofuSettlementAccount(t *testing.T) {
@@ -288,7 +288,7 @@ func TestGrabDeliveryOrder_BlocksMissingBaofuSettlementAccount(t *testing.T) {
 	_, err := GrabDeliveryOrder(context.Background(), store, GrabOrderInput{UserID: 1, OrderID: 2})
 	reqErr := assertRequestError(t, err)
 	require.Equal(t, 400, reqErr.Status)
-	require.Equal(t, "骑手结算账户未开通，暂不能接收配送费分账订单", reqErr.Err.Error())
+	require.Equal(t, "骑手结算账户未开通，暂不能接收代取费分账订单", reqErr.Err.Error())
 }
 
 func TestGrabDeliveryOrder_PreparingOrderRejected(t *testing.T) {

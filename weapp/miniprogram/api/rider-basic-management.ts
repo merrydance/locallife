@@ -373,7 +373,7 @@ export async function smartOnlineManagement(action: 'online' | 'offline'): Promi
             if (!status.can_go_offline) {
                 return {
                     success: false,
-                    message: status.active_deliveries > 0 ? '有配送中的订单，无法下线' : '当前无法下线'
+                    message: status.active_deliveries > 0 ? '有代取中的订单，无法下线' : '当前无法下线'
                 }
             }
 
@@ -503,7 +503,7 @@ export function formatOnlineStatus(onlineStatus: OnlineStatus): string {
     const statusMap: Record<OnlineStatus, string> = {
         offline: '离线',
         online: '在线',
-        delivering: '配送中'
+        delivering: '代取中'
     }
     return statusMap[onlineStatus] || onlineStatus
 }

@@ -36,7 +36,7 @@ type DeliveryStatusResult struct {
 
 func mapDeliveryStateTransitionError(err error) error {
 	if errors.Is(err, db.ErrDeliveryStateTransitionConflict) {
-		return NewRequestError(http.StatusConflict, errors.New("配送状态已变化，请刷新后重试"))
+		return NewRequestError(http.StatusConflict, errors.New("代取状态已变化，请刷新后重试"))
 	}
 	if errors.Is(err, db.ErrTakeoutOrderPausedByFoodSafety) {
 		return NewRequestError(http.StatusForbidden, errors.New("该外卖订单因食安事件已暂停履约，请等待平台处理"))
@@ -101,7 +101,7 @@ func validateDeliveryConfirmRadius(rider db.Rider, delivery db.Delivery, confirm
 			DistanceMeters: distance,
 			RadiusMeters:   confirmRadiusMeters,
 			Message: fmt.Sprintf(
-				"您距离配送地址%d米，请靠近后确认送达（需在%d米内）",
+				"您距离代取地址%d米，请靠近后确认送达（需在%d米内）",
 				distance,
 				confirmRadiusMeters,
 			),
@@ -126,13 +126,13 @@ func StartPickup(ctx context.Context, store db.Store, input DeliveryStatusInput)
 	delivery, err := store.GetDelivery(ctx, input.DeliveryID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
-			return result, NewRequestError(http.StatusNotFound, errors.New("配送单不存在"))
+			return result, NewRequestError(http.StatusNotFound, errors.New("代取单不存在"))
 		}
 		return result, err
 	}
 
 	if !delivery.RiderID.Valid || delivery.RiderID.Int64 != rider.ID {
-		return result, NewRequestError(http.StatusForbidden, errors.New("无权操作此配送单"))
+		return result, NewRequestError(http.StatusForbidden, errors.New("无权操作此代取单"))
 	}
 
 	if delivery.Status != "assigned" {
@@ -182,13 +182,13 @@ func ConfirmPickup(ctx context.Context, store db.Store, input DeliveryStatusInpu
 	delivery, err := store.GetDelivery(ctx, input.DeliveryID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
-			return result, NewRequestError(http.StatusNotFound, errors.New("配送单不存在"))
+			return result, NewRequestError(http.StatusNotFound, errors.New("代取单不存在"))
 		}
 		return result, err
 	}
 
 	if !delivery.RiderID.Valid || delivery.RiderID.Int64 != rider.ID {
-		return result, NewRequestError(http.StatusForbidden, errors.New("无权操作此配送单"))
+		return result, NewRequestError(http.StatusForbidden, errors.New("无权操作此代取单"))
 	}
 
 	if delivery.Status != "picking" {
@@ -252,17 +252,17 @@ func StartDelivery(ctx context.Context, store db.Store, input DeliveryStatusInpu
 	delivery, err := store.GetDelivery(ctx, input.DeliveryID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
-			return result, NewRequestError(http.StatusNotFound, errors.New("配送单不存在"))
+			return result, NewRequestError(http.StatusNotFound, errors.New("代取单不存在"))
 		}
 		return result, err
 	}
 
 	if !delivery.RiderID.Valid || delivery.RiderID.Int64 != rider.ID {
-		return result, NewRequestError(http.StatusForbidden, errors.New("无权操作此配送单"))
+		return result, NewRequestError(http.StatusForbidden, errors.New("无权操作此代取单"))
 	}
 
 	if delivery.Status != "picked" {
-		return result, NewRequestError(http.StatusBadRequest, fmt.Errorf("当前状态(%s)不允许开始配送", delivery.Status))
+		return result, NewRequestError(http.StatusBadRequest, fmt.Errorf("当前状态(%s)不允许开始代取", delivery.Status))
 	}
 
 	order, err := store.GetOrder(ctx, delivery.OrderID)
@@ -290,7 +290,7 @@ func StartDelivery(ctx context.Context, store db.Store, input DeliveryStatusInpu
 			ToStatus:     "delivering",
 			OperatorID:   pgtype.Int8{Int64: rider.UserID, Valid: true},
 			OperatorType: pgtype.Text{String: "rider", Valid: true},
-			Notes:        pgtype.Text{String: "骑手开始配送", Valid: true},
+			Notes:        pgtype.Text{String: "骑手开始代取", Valid: true},
 		})
 	}
 
@@ -319,7 +319,7 @@ func ConfirmDelivery(ctx context.Context, store db.Store, input ConfirmDeliveryI
 	}
 
 	if !delivery.RiderID.Valid || delivery.RiderID.Int64 != rider.ID {
-		return result, NewRequestError(http.StatusForbidden, errors.New("无权操作此配送单"))
+		return result, NewRequestError(http.StatusForbidden, errors.New("无权操作此代取单"))
 	}
 
 	if delivery.Status != "delivering" {

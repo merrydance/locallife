@@ -160,7 +160,7 @@
   color: var(--td-text-color-primary);
 }
 
-/* 配送时间 */
+/* 代取时间 */
 .eta-row {
   padding: var(--spacer-sm);
   background: var(--td-brand-color-light);

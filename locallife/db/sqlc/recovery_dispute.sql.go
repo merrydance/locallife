@@ -1330,7 +1330,7 @@ type ListRiderClaimsForRiderRow struct {
 	RecoveryStatus        string             `json:"recovery_status"`
 }
 
-// 骑手查看收到的索赔列表（通过配送单关联）
+// 骑手查看收到的索赔列表（通过代取单关联）
 func (q *Queries) ListRiderClaimsForRider(ctx context.Context, arg ListRiderClaimsForRiderParams) ([]ListRiderClaimsForRiderRow, error) {
 	rows, err := q.db.Query(ctx, listRiderClaimsForRider,
 		arg.RiderID,

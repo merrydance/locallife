@@ -26,7 +26,7 @@ const TYPE_CLASS_MAP: Record<string, string> = {
 const TYPE_TABS = [
   { label: '全部', value: '' },
   { label: '订单', value: 'order' },
-  { label: '配送', value: 'delivery' },
+  { label: '代取', value: 'delivery' },
   { label: '支付', value: 'payment' },
   { label: '系统', value: 'system' }
 ]
@@ -89,7 +89,7 @@ function getRiderNotificationCategory(item: Notification): NotificationCategory 
     return 'deposit'
   }
 
-  if (relatedType.includes('income') || relatedType.includes('profit') || extra.profit_sharing_order_id || text.includes('分账') || text.includes('结算') || text.includes('配送费')) {
+  if (relatedType.includes('income') || relatedType.includes('profit') || extra.profit_sharing_order_id || text.includes('分账') || text.includes('结算') || text.includes('代取费')) {
     return 'income'
   }
 

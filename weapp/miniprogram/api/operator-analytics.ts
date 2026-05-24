@@ -330,7 +330,7 @@ export class DataAnalysisService {
 
         // 骑手洞察
         if (stats.rider_stats.online_riders / stats.rider_stats.active_riders < 0.5) {
-            insights.push('在线骑手比例偏低，可能影响配送效率')
+            insights.push('在线骑手比例偏低，可能影响代取效率')
         }
 
         // 订单洞察
@@ -372,7 +372,7 @@ export class DataAnalysisService {
 
         // 骑手相关建议
         if (stats.rider_stats.avg_delivery_time > 3600) {
-            recommendations.push('平均配送时间较长，建议优化配送路线和调度')
+            recommendations.push('平均代取时间较长，建议优化代取路线和调度')
         }
 
         // 订单相关建议

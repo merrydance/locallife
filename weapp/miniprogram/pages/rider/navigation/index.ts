@@ -138,7 +138,7 @@ Page({
         syncWarningMessage: '',
         routeSummary: routeResult
           ? `预计总路程 ${mapService.formatDistance(routeResult.distance)} · 约 ${mapService.formatDuration(routeResult.duration)}`
-          : '已展示配送主线路，可直接打开导航',
+          : '已展示代取主线路，可直接打开导航',
         latestUpdateText: latestResult?.recorded_at ? `最近上传 ${formatRelativeTime(latestResult.recorded_at)}` : '暂无定位记录'
       })
 

@@ -283,7 +283,7 @@
   },
   "permission": {
     "scope.userLocation": {
-      "desc": "用于推荐附近的门店、堂食桌台与配送路线"
+      "desc": "用于推荐附近的门店、堂食桌台与代取路线"
     }
   },
   "requiredPrivateInfos": [

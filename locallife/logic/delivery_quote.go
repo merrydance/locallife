@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	// 配送距离下限与经纬度转米常量已迁移至 logic/geo_constants.go，这里保留内部别名
+	// 代取距离下限与经纬度转米常量已迁移至 logic/geo_constants.go，这里保留内部别名
 	minDeliveryDistanceMeters = MinDeliveryDistance
 	metersPerDegree           = MetersPerLatDegree
 )

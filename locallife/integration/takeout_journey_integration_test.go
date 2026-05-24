@@ -678,7 +678,7 @@ type calculateCartResponse struct {
 }
 
 // TestTakeoutJourneyB1Integration
-// 外卖旅程（B1）端到端验收：下单 -> 支付成功推进 -> 商户接单/出餐 -> 骑手抢单/取餐/配送/送达 -> 用户确认完成。
+// 外卖旅程（B1）端到端验收：下单 -> 支付成功推进 -> 商户接单/出餐 -> 骑手抢单/取餐/代取/送达 -> 用户确认完成。
 //
 // 说明：支付回调与异步 worker 在 integration harness 中未配置（taskDistributor=nil），
 // 这里用 store 事务直接模拟“支付成功后置处理”：
@@ -889,7 +889,7 @@ func TestTakeoutJourneyB1Integration(t *testing.T) {
 		require.Equal(t, "picked", resp.Status)
 	}
 
-	// 8) 骑手开始配送：/v1/delivery/:delivery_id/start-delivery
+	// 8) 骑手开始代取：/v1/delivery/:delivery_id/start-delivery
 	{
 		url := fmt.Sprintf("/v1/delivery/%d/start-delivery", delivery.ID)
 		rec := doJSON(t, server, http.MethodPost, url, nil, riderUser.ID)
@@ -1043,7 +1043,7 @@ func TestTakeoutJourneyB1WebhookIntegration(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "pending", updatedPayment.Status)
 
-	// 5) 运行支付成功任务，推进订单与配送单（不立即入池）
+	// 5) 运行支付成功任务，推进订单与代取单（不立即入池）
 	payloads := distributor.Payloads()
 	require.Len(t, payloads, 1)
 
@@ -1064,7 +1064,7 @@ func TestTakeoutJourneyB1WebhookIntegration(t *testing.T) {
 }
 
 // TestTakeoutJourneyB0DeliveryRecommendIntegration
-// 外卖旅程（B0）端到端验收：骑手推荐订单列表包含待配送订单。
+// 外卖旅程（B0）端到端验收：骑手推荐订单列表包含待代取订单。
 func TestTakeoutJourneyB0DeliveryRecommendIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
 	resetIntegrationData(t)
@@ -1162,7 +1162,7 @@ func TestTakeoutJourneyB0DeliveryRecommendIntegration(t *testing.T) {
 	_, err = store.GetDeliveryPoolByOrderID(ctx, orderID)
 	require.ErrorIs(t, err, db.ErrRecordNotFound)
 
-	// 3) 商户接单并出餐后才进入配送池
+	// 3) 商户接单并出餐后才进入代取池
 	{
 		url := fmt.Sprintf("/v1/merchant/orders/%d/accept", orderID)
 		rec := doJSON(t, server, http.MethodPost, url, nil, merchantOwner.ID)
@@ -2322,20 +2322,20 @@ func TestReservationJourneyC2StartCookingIntegration(t *testing.T) {
 	// 1) 创建预订
 	var created reservationStatusResponse
 	{
-			body := map[string]any{
-				"table_id":      room.ID,
-				"date":          reservationDate,
-				"time":          reservationTime,
-				"guest_count":   2,
-				"contact_name":  "张三",
-				"contact_phone": "13800138001",
-				"payment_mode":  "full",
-				"items":         []map[string]any{{"dish_id": dish.ID, "quantity": 1}},
-			}
-			rec := doJSON(t, server, http.MethodPost, "/v1/reservations", body, customer.ID)
-			require.Equal(t, http.StatusCreated, rec.Code)
-			requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
-			require.Equal(t, "pending", created.Status)
+		body := map[string]any{
+			"table_id":      room.ID,
+			"date":          reservationDate,
+			"time":          reservationTime,
+			"guest_count":   2,
+			"contact_name":  "张三",
+			"contact_phone": "13800138001",
+			"payment_mode":  "full",
+			"items":         []map[string]any{{"dish_id": dish.ID, "quantity": 1}},
+		}
+		rec := doJSON(t, server, http.MethodPost, "/v1/reservations", body, customer.ID)
+		require.Equal(t, http.StatusCreated, rec.Code)
+		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
+		require.Equal(t, "pending", created.Status)
 	}
 
 	_, err = store.UpdateReservationStatus(ctx, db.UpdateReservationStatusParams{
@@ -3342,7 +3342,7 @@ func TestClaimJourneyD3RiderRecoveryDisputeIntegration(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 	}
 
-	// 4) 骑手抢单，建立配送关联
+	// 4) 骑手抢单，建立代取关联
 	{
 		url := fmt.Sprintf("/v1/delivery/grab/%d", orderID)
 		rec := doJSON(t, server, http.MethodPost, url, nil, riderUser.ID)
@@ -3627,7 +3627,7 @@ func TestClaimJourneyD12RiderRecoveryPayIntegration(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 	}
 
-	// 4) 骑手抢单，建立配送关联
+	// 4) 骑手抢单，建立代取关联
 	{
 		url := fmt.Sprintf("/v1/delivery/grab/%d", orderID)
 		rec := doJSON(t, server, http.MethodPost, url, nil, riderUser.ID)
@@ -4007,7 +4007,7 @@ func TestClaimJourneyD15RiderRecoveryViewIntegration(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 	}
 
-	// 4) 骑手抢单，建立配送关联
+	// 4) 骑手抢单，建立代取关联
 	{
 		url := fmt.Sprintf("/v1/delivery/grab/%d", orderID)
 		rec := doJSON(t, server, http.MethodPost, url, nil, riderUser.ID)
@@ -4273,7 +4273,7 @@ func TestClaimJourneyD17RiderRecoveryForbiddenIntegration(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 	}
 
-	// 4) 骑手抢单，建立配送关联
+	// 4) 骑手抢单，建立代取关联
 	{
 		url := fmt.Sprintf("/v1/delivery/grab/%d", orderID)
 		rec := doJSON(t, server, http.MethodPost, url, nil, riderUser.ID)
@@ -4705,7 +4705,7 @@ func TestClaimJourneyD23RiderRecoveryViewAfterPayIntegration(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 	}
 
-	// 4) 骑手抢单，建立配送关联
+	// 4) 骑手抢单，建立代取关联
 	{
 		url := fmt.Sprintf("/v1/delivery/grab/%d", orderID)
 		rec := doJSON(t, server, http.MethodPost, url, nil, riderUser.ID)
@@ -5148,7 +5148,7 @@ func TestClaimJourneyD26RiderRecoveryDisputeDetailNotFoundIntegration(t *testing
 		require.Equal(t, http.StatusOK, rec.Code)
 	}
 
-	// 4) 骑手抢单，建立配送关联
+	// 4) 骑手抢单，建立代取关联
 	{
 		url := fmt.Sprintf("/v1/delivery/grab/%d", orderID)
 		rec := doJSON(t, server, http.MethodPost, url, nil, riderUser.ID)
@@ -5916,7 +5916,7 @@ func TestClaimJourneyD31RiderRecoveryDisputeDuplicateIntegration(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 	}
 
-	// 4) 骑手抢单，建立配送关联
+	// 4) 骑手抢单，建立代取关联
 	{
 		url := fmt.Sprintf("/v1/delivery/grab/%d", orderID)
 		rec := doJSON(t, server, http.MethodPost, url, nil, riderUser.ID)
@@ -6085,7 +6085,7 @@ func TestClaimJourneyD32RiderRecoveryDisputeDuplicateConflictIntegration(t *test
 		require.Equal(t, http.StatusOK, rec.Code)
 	}
 
-	// 4) 骑手抢单，建立配送关联
+	// 4) 骑手抢单，建立代取关联
 	{
 		url := fmt.Sprintf("/v1/delivery/grab/%d", orderID)
 		rec := doJSON(t, server, http.MethodPost, url, nil, riderUser.ID)
@@ -7655,7 +7655,7 @@ func TestTakeoutJourneyB3Integration(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code)
 	}
 
-	// 4) 骑手配送到送达
+	// 4) 骑手代取到送达
 	{
 		url := fmt.Sprintf("/v1/delivery/grab/%d", orderID)
 		rec := doJSON(t, server, http.MethodPost, url, nil, riderUser.ID)

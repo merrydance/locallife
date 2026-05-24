@@ -582,7 +582,7 @@ func TestConfirmPickupAPI(t *testing.T) {
 					Times(1).
 					Return(rider, nil)
 
-				// 配送单属于另一个骑手
+				// 代取单属于另一个骑手
 				otherRiderDelivery := delivery
 				otherRiderDelivery.RiderID = pgtype.Int8{Int64: rider.ID + 1, Valid: true}
 				store.EXPECT().
@@ -606,7 +606,7 @@ func TestConfirmPickupAPI(t *testing.T) {
 					Times(1).
 					Return(rider, nil)
 
-				// 配送单状态不正确（assigned而不是picking）
+				// 代取单状态不正确（assigned而不是picking）
 				wrongStatusDelivery := delivery
 				wrongStatusDelivery.Status = "assigned"
 				store.EXPECT().
@@ -1153,7 +1153,7 @@ func TestStartPickupAPI(t *testing.T) {
 					Times(1).
 					Return(rider, nil)
 
-				// 配送单属于另一个骑手
+				// 代取单属于另一个骑手
 				otherRiderDelivery := delivery
 				otherRiderDelivery.RiderID = pgtype.Int8{Int64: rider.ID + 1, Valid: true}
 				store.EXPECT().

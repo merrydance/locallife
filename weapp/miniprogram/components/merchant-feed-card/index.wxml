@@ -25,7 +25,7 @@
       <text class="merchant-name">{{merchant.name}}</text>
     </view>
 
-    <!-- 第2行: 月售 | 距离 | 配送费 | 出餐时间 -->
+    <!-- 第2行: 月售 | 距离 | 代取费 | 出餐时间 -->
     <view class="row-2">
       <block wx:if="{{merchant.monthlySales > 0}}">
         <text class="meta">月售{{merchant.monthlySales}}</text>

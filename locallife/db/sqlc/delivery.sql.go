@@ -568,7 +568,7 @@ type ListPendingDeliveriesBeforeParams struct {
 	Limit     int32     `json:"limit"`
 }
 
-// 获取超时未接单的配送单
+// 获取超时未接单的代取单
 func (q *Queries) ListPendingDeliveriesBefore(ctx context.Context, arg ListPendingDeliveriesBeforeParams) ([]Delivery, error) {
 	rows, err := q.db.Query(ctx, listPendingDeliveriesBefore, arg.Status, arg.CreatedAt, arg.Limit)
 	if err != nil {

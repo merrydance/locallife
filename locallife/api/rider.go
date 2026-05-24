@@ -326,8 +326,8 @@ type depositBalanceResponse struct {
 	CurrentRegionID            int64 `json:"current_region_id"`            // 当前运营区域
 	RequiredDeposit            int64 `json:"required_deposit"`             // 当前区域上线所需押金
 	TotalDeposit               int64 `json:"total_deposit"`                // 总押金
-	FrozenDeposit              int64 `json:"frozen_deposit"`               // 冻结押金（兼容字段，等于配送冻结+提现处理中）
-	DeliveryFrozenDeposit      int64 `json:"delivery_frozen_deposit"`      // 配送冻结
+	FrozenDeposit              int64 `json:"frozen_deposit"`               // 冻结押金（兼容字段，等于代取冻结+提现处理中）
+	DeliveryFrozenDeposit      int64 `json:"delivery_frozen_deposit"`      // 代取冻结
 	WithdrawalProcessingAmount int64 `json:"withdrawal_processing_amount"` // 提现处理中
 	AvailableDeposit           int64 `json:"available_deposit"`            // 可用押金
 }
@@ -505,7 +505,7 @@ func (server *Server) depositRider(ctx *gin.Context) {
 
 // withdrawRider godoc
 // @Summary 骑手押金提现
-// @Description 从骑手账户提取押金到微信零钱，需要确保没有进行中的配送订单。最小提现金额1元，单次最大提现金额50000元。
+// @Description 从骑手账户提取押金到微信零钱，需要确保没有进行中的代取订单。最小提现金额1元，单次最大提现金额50000元。
 // @Tags 骑手
 // @Accept json
 // @Produce json
@@ -645,7 +645,7 @@ type listRiderDepositsResponse struct {
 
 // listRiderDeposits godoc
 // @Summary 查询押金流水
-// @Description 分页查询当前骑手的押金变动流水记录，包括充值、提现、配送冻结、解冻、扣款等；提现冻结中间流水不作为账单明细返回
+// @Description 分页查询当前骑手的押金变动流水记录，包括充值、提现、代取冻结、解冻、扣款等；提现冻结中间流水不作为账单明细返回
 // @Tags 骑手
 // @Accept json
 // @Produce json
@@ -726,7 +726,7 @@ type riderStatusResponse struct {
 	Status            string                            `json:"status"`            // 账号状态：approved/active/suspended
 	IsOnline          bool                              `json:"is_online"`         // 是否在线
 	OnlineStatus      string                            `json:"online_status"`     // 在线状态描述：offline/online/delivering
-	ActiveDeliveries  int                               `json:"active_deliveries"` // 当前配送中订单数量
+	ActiveDeliveries  int                               `json:"active_deliveries"` // 当前代取中订单数量
 	CurrentRegionID   int64                             `json:"current_region_id"`
 	RequiredDeposit   int64                             `json:"required_deposit"`
 	CurrentLongitude  *float64                          `json:"current_longitude,omitempty"`
@@ -746,7 +746,7 @@ type baofuSettlementReadinessResponse struct {
 
 // getRiderStatus godoc
 // @Summary 获取骑手当前状态
-// @Description 获取骑手当前在线状态、位置信息、配送状态等
+// @Description 获取骑手当前在线状态、位置信息、代取状态等
 // @Tags 骑手
 // @Accept json
 // @Produce json
@@ -773,7 +773,7 @@ func (server *Server) getRiderStatus(ctx *gin.Context) {
 		return
 	}
 
-	// 获取活跃配送数量
+	// 获取活跃代取数量
 	activeDeliveries, err := server.store.ListRiderActiveDeliveries(ctx, pgtype.Int8{Int64: rider.ID, Valid: true})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -840,7 +840,7 @@ func (server *Server) getRiderStatus(ctx *gin.Context) {
 		resp.CanGoOnline = true
 	}
 
-	// 有活跃配送时不能下线
+	// 有活跃代取时不能下线
 	resp.CanGoOffline = rider.IsOnline && len(activeDeliveries) == 0
 
 	ctx.JSON(http.StatusOK, resp)
@@ -934,7 +934,7 @@ func (server *Server) goOnline(ctx *gin.Context) {
 
 // goOffline godoc
 // @Summary 骑手下线
-// @Description 设置骑手状态为离线，停止接单。如果有进行中的配送订单则无法下线
+// @Description 设置骑手状态为离线，停止接单。如果有进行中的代取订单则无法下线
 // @Tags 骑手
 // @Accept json
 // @Produce json
@@ -1013,7 +1013,7 @@ type locationPoint struct {
 
 // updateRiderLocation godoc
 // @Summary 更新骑手位置
-// @Description 批量上报骑手GPS位置点，仅在线状态可调用。可选传 delivery_id（必须为当前进行中配送）与 source 标识上报来源
+// @Description 批量上报骑手GPS位置点，仅在线状态可调用。可选传 delivery_id（必须为当前进行中代取）与 source 标识上报来源
 // @Tags 骑手
 // @Accept json
 // @Produce json

@@ -341,7 +341,7 @@ type operatorRiderRankingRow struct {
 
 // getOperatorRiderRanking 获取区域骑手排行
 // @Summary 获取骑手排行
-// @Description 获取运营商管理区域内骑手的配送绩效排行榜
+// @Description 获取运营商管理区域内骑手的代取绩效排行榜
 // @Tags 运营商数据统计
 // @Accept json
 // @Produce json

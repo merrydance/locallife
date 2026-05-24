@@ -97,7 +97,7 @@
               <view class="rank-num rank-{{item.rank}}">{{item.rank}}</view>
               <view class="merchant-info">
                 <text class="merchant-name">{{item.name}}</text>
-                <text class="merchant-orders">配送 {{item.deliveries}} 单 | 完成率 {{item.completionRate}}</text>
+                <text class="merchant-orders">代取 {{item.deliveries}} 单 | 完成率 {{item.completionRate}}</text>
               </view>
               <text class="merchant-gmv">¥{{item.earnings}}</text>
             </view>

@@ -95,7 +95,7 @@ type kitchenOrdersResponse struct {
 	// 制作中订单列表
 	PreparingOrders []kitchenOrderResponse `json:"preparing_orders"`
 
-	// 待取餐/待配送订单列表
+	// 待取餐/待代取订单列表
 	ReadyOrders []kitchenOrderResponse `json:"ready_orders"`
 
 	// 统计信息

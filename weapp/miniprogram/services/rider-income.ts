@@ -319,7 +319,7 @@ function buildRiderIncomePageDataView(input: {
 
   return {
     settlementNotice: input.settlementPaymentReady === false
-      ? '结算账户未开通，暂不能接收配送费分账订单'
+      ? '结算账户未开通，暂不能接收代取费分账订单'
       : '',
     withdrawalBalanceReady: Boolean(input.withdrawalBalance),
     withdrawalBalanceView,

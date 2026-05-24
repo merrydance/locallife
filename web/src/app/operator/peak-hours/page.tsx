@@ -96,7 +96,7 @@ export default function OperatorPeakHoursPage() {
     <PageShell>
       <PageHeader
         title="高峰时段"
-        description="配置区域配送高峰时段系数"
+        description="配置区域代取高峰时段系数"
         actions={<Badge variant="secondary">运营商</Badge>}
       />
       <PageContent className="space-y-4">

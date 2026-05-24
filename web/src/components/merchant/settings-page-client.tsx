@@ -1189,7 +1189,7 @@ export function MerchantSettingsPageClient() {
           </DialogHeader>
           <div className="py-4">
             <Textarea 
-              placeholder="例如：希望统一品牌运营，使用集团配送资源..."
+              placeholder="例如：希望统一品牌运营，使用集团代取资源..."
               value={joinReason}
               onChange={e => setJoinReason(e.target.value)}
               className="min-h-25"

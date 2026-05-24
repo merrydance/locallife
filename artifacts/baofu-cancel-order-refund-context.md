@@ -13,7 +13,7 @@ When a paid takeaway order is canceled, the system must keep the order itself in
 - Order `202605191920420fbb3f`:
   - `orders.id = 7`
   - `orders.status = cancelled`
-  - `orders.cancel_reason = 配送时间太长`
+  - `orders.cancel_reason = 代取时间太长`
 - Payment:
   - `payment_orders.id = 19`
   - `payment_orders.status = paid`
@@ -84,7 +84,7 @@ The production server is reachable through `ssh -p 22333 sam@aliyun`. The DB was
 curl -X POST http://127.0.0.1:8080/v1/refunds \
   -H "Authorization: Bearer <short-lived-token>" \
   -H "Content-Type: application/json" \
-  --data '{"payment_order_id":19,"refund_type":"full","refund_amount":1459,"refund_reason":"配送时间太长（旧退款失败后重试）"}'
+  --data '{"payment_order_id":19,"refund_type":"full","refund_amount":1459,"refund_reason":"代取时间太长（旧退款失败后重试）"}'
 ```
 
 - API returned HTTP `201` with `refund_orders.id = 79` and `status = processing`.

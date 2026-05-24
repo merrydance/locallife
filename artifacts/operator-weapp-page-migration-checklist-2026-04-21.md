@@ -42,7 +42,7 @@
 - 运营规则页 `pages/operator/rules/index`
 - 区域选择页 `pages/operator/region/index`
 - 区域配置摘要页 `pages/operator/region/config`
-- 配送费页 `pages/operator/delivery-fee/index`
+- 代取费页 `pages/operator/delivery-fee/index`
 - 峰时时段页 `pages/operator/timeslot/index`
 - 食安案件列表页 `pages/operator/safety/report/index`
 - 食安案件详情页 `pages/operator/safety/detail/index`
@@ -106,7 +106,7 @@
 - 不存在 `POST /v1/operator/riders/:id/suspend`
 - 不存在 `POST /v1/operator/riders/:id/resume`
 
-### 经营规则与配送费
+### 经营规则与代取费
 
 - `GET /v1/operator/rules`
 - `PATCH /v1/operator/rules/:key`
@@ -216,12 +216,12 @@
 ### 5. 区域配置摘要页
 
 - 页面：`weapp/miniprogram/pages/operator/region/config.ts`
-- 当前主要调用：区域配置摘要、跳转配送费页和峰时页。
+- 当前主要调用：区域配置摘要、跳转代取费页和峰时页。
 - 真实后端：相关配置接口都存在。
 - 结论：保留。
 - 改法建议：作为“区域配置入口页”继续保留即可。
 
-### 6. 配送费页
+### 6. 代取费页
 
 - 页面：`weapp/miniprogram/pages/operator/delivery-fee/index.ts`
 - 当前主要调用：
@@ -437,7 +437,7 @@
 - 分析页
 - 规则页
 - 区域配置相关页面
-- 配送费页
+- 代取费页
 - 峰时页
 - 食安页
 - 区域扩展页

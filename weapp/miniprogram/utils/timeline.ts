@@ -39,8 +39,8 @@ export function generateOrderTimeline(order: OrderResponse): TimelineNode[] {
 
         case 'delivering':
             nodes.push({
-                title: '配送中',
-                desc: '骑手正在配送，请耐心等待',
+                title: '代取中',
+                desc: '骑手正在代取，请耐心等待',
                 time: '进行中',
                 status: 'active'
             })
@@ -48,9 +48,9 @@ export function generateOrderTimeline(order: OrderResponse): TimelineNode[] {
 
         case 'ready':
             nodes.push({
-                title: '待配送',
+                title: '待代取',
                 desc: '商家已备餐完成，等待骑手取餐',
-                time: '待配送',
+                time: '待代取',
                 status: 'active'
             })
             break
@@ -90,7 +90,7 @@ export function generateOrderTimeline(order: OrderResponse): TimelineNode[] {
  * 格式化时间显示
  */
 export function formatTimelineTime(timeStr: string): string {
-    if (!timeStr || timeStr === '进行中' || timeStr === '待配送' || timeStr === '制作中') {
+    if (!timeStr || timeStr === '进行中' || timeStr === '待代取' || timeStr === '制作中') {
         return timeStr
     }
 

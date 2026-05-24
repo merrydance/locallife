@@ -52,8 +52,8 @@ export interface DishSummary {
     merchant_region_id: number                   // 商户区域ID
     merchant_is_open?: boolean                   // 商户是否营业
     distance?: number                            // 距离（米）
-    estimated_delivery_time?: number             // 预估配送时间（秒）
-    estimated_delivery_fee?: number              // 预估配送费（分）
+    estimated_delivery_time?: number             // 预估代取时间（秒）
+    estimated_delivery_fee?: number              // 预估代取费（分）
     monthly_sales?: number                       // 近30天销量
     repurchase_rate?: number                     // 复购率 (0-1)
     attributes?: string[]                        // 菜品属性/标签
@@ -517,8 +517,8 @@ export interface ComboSummary {
     merchant_region_id: number                   // 商户区域ID
     merchant_is_open?: boolean                   // 商户是否营业
     distance?: number                            // 距离（米）
-    estimated_delivery_time?: number             // 预估配送时间（秒）
-    estimated_delivery_fee?: number              // 预估配送费（分）
+    estimated_delivery_time?: number             // 预估代取时间（秒）
+    estimated_delivery_fee?: number              // 预估代取费（分）
 }
 
 // ==================== 标签管理服务 ====================
@@ -1182,8 +1182,8 @@ export interface RecommendCombosParams {
     limit?: number
     page?: number
     keyword?: string              // 搜索关键词
-    user_latitude?: number        // 用户纬度（用于计算距离和配送费）
-    user_longitude?: number       // 用户经度（用于计算距离和配送费）
+    user_latitude?: number        // 用户纬度（用于计算距离和代取费）
+    user_longitude?: number       // 用户经度（用于计算距离和代取费）
 }
 
 /**

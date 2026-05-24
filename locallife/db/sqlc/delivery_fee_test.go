@@ -226,7 +226,7 @@ func TestDeletePeakHourConfig(t *testing.T) {
 	require.Error(t, err)
 }
 
-// ==================== 商家配送优惠测试 ====================
+// ==================== 商家代取优惠测试 ====================
 
 func createRandomDeliveryPromotion(t *testing.T) MerchantDeliveryPromotion {
 	merchant := getTestMerchant(t)
@@ -533,7 +533,7 @@ func TestWeatherCoefficientWithWarning(t *testing.T) {
 func TestWeatherCoefficientSuspendDelivery(t *testing.T) {
 	regionID := getCleanRegionID(t)
 
-	// 红色预警，暂停配送
+	// 红色预警，暂停代取
 	weatherCoeff := pgtype.Numeric{}
 	_ = weatherCoeff.Scan("1.0")
 	warningCoeff := pgtype.Numeric{}
@@ -560,7 +560,7 @@ func TestWeatherCoefficientSuspendDelivery(t *testing.T) {
 		WarningCoefficient: warningCoeff,
 		FinalCoefficient:   finalCoeff,
 		DeliverySuspended:  true,
-		SuspendReason:      pgtype.Text{String: "极端天气预警，暂停配送", Valid: true},
+		SuspendReason:      pgtype.Text{String: "极端天气预警，暂停代取", Valid: true},
 	}
 
 	coeff, err := testStore.CreateWeatherCoefficient(context.Background(), arg)
@@ -570,5 +570,5 @@ func TestWeatherCoefficientSuspendDelivery(t *testing.T) {
 	require.True(t, coeff.HasWarning)
 	require.Equal(t, "red", coeff.WarningLevel.String)
 	require.True(t, coeff.DeliverySuspended)
-	require.Equal(t, "极端天气预警，暂停配送", coeff.SuspendReason.String)
+	require.Equal(t, "极端天气预警，暂停代取", coeff.SuspendReason.String)
 }

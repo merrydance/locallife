@@ -14,7 +14,7 @@
 
 - 风险等级：G3，高风险资金链路。原因：支付、分账、提现、手续费、退款互斥、外部回调和查询补偿都会改变真实资金状态。
 - 首版切换方式：未正式开展业务，宝付链路上线即全量承接主业务交易；不做微信普通服务商/平台收付通分账灰度并行。
-- 固定业务规则：开户验证费由平台承担；支付手续费 0.3% 由商户承担；分账后不退款；骑手必须开宝付个人二级户才可接收配送费分账。
+- 固定业务规则：开户验证费由平台承担；支付手续费 0.3% 由商户承担；分账后不退款；骑手必须开宝付个人二级户才可接收代取费分账。
 - 账户边界：为避免和微信 `subMchId` 混淆，统一称 `宝付收单一级商户号` 与 `宝付代付一级商户号`。宝付收单一级商户号用于开户、转账、支付、分账；宝付代付一级商户号用于提现、提现查询，并承接平台预存的开户验证费。
 - 分账接收方：已确认分账接口直接上送开户接口返回的二级商户号。本地用 `sharing_mer_id` 作为分账接收方规范字段；开户/查询解析层必须把宝付返回的二级商户号写入 `sharing_mer_id`，后续分账只读 `sharing_mer_id`。`contract_no` 只保留上游开户/查询字段和对账留痕，不作为分账创建兜底字段。不得使用微信 `openid`、微信报备 `subMchId` 或平台宝付收款商户号作为分账接收方。
 - 聚合商户报备：已向宝付技术支持确认，LocalLife 不再需要保留项目内微信支付特约商户进件流程，且宝付支持异主体报备。宝付开户成功后，主业务商户逐户做 `merchant_report` 取得微信渠道 `subMchId`，再调用 `bind_sub_config(authType=APPLET, authContent=<LocalLife 小程序 appid>)` 绑定平台小程序。
@@ -578,7 +578,7 @@ merchant payment creation additionally requires final subMchId/payment-channel r
 
 - [x] **Step 2: Block rider assignment without active Baofu account**
 
-In delivery/rider eligibility code, reject riders whose `baofu_account_bindings` row is missing or not active. User-facing Chinese copy: `骑手结算账户未开通，暂不能接收配送费分账订单`.
+In delivery/rider eligibility code, reject riders whose `baofu_account_bindings` row is missing or not active. User-facing Chinese copy: `骑手结算账户未开通，暂不能接收代取费分账订单`.
 
 - [x] **Step 3: Surface onboarding states**
 
@@ -1130,7 +1130,7 @@ Use these Chinese labels consistently:
 
 - [x] **Step 3: Rider onboarding and income gating**
 
-When rider Baofu account is not active, display: `结算账户未开通，暂不能接收配送费分账订单` and hide withdrawal action.
+When rider Baofu account is not active, display: `结算账户未开通，暂不能接收代取费分账订单` and hide withdrawal action.
 
 - [x] **Step 4: Web operator/platform pages**
 
@@ -1241,7 +1241,7 @@ make test-integration
 ### 2026-05-03 Task 3 Partial - Rider Online Readiness
 
 - Added the first onboarding propagation guard: `POST /v1/rider/online` now requires an active rider BaoCaiTong personal account with `sharing_mer_id` before the rider can go online to receive delivery-fee profit-sharing orders.
-- The public error is semantic and product-facing: `骑手结算账户未开通，暂不能接收配送费分账订单`; internal storage errors still flow to the existing logged internal-error boundary.
+- The public error is semantic and product-facing: `骑手结算账户未开通，暂不能接收代取费分账订单`; internal storage errors still flow to the existing logged internal-error boundary.
 - Added rider API regression coverage for a missing Baofu account and updated successful online cases to require an active Baofu rider binding.
 - Verification run from `locallife/`: `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestGoOnlineAPI/BaofuAccountMissing|TestGoOnlineAPI/OK|TestGoOnlineAPI/ApprovedRiderPromotedByCurrentRegionDeposit' -count=1`; `PATH="/usr/local/go/bin:$PATH" go test ./api -run 'TestGoOnlineAPI' -count=1`; `git diff --check`.
 - Additional lint attempt: `PATH="/usr/local/go/bin:$PATH" make lint-filesize` still fails on 71 pre-existing oversized Go files; this partial moved the Baofu readiness helper to a new small file and only added the necessary call site to the existing `api/rider.go`.
@@ -1250,7 +1250,7 @@ make test-integration
 ### 2026-05-03 Task 3 Partial - Rider Readiness Status And Assignment Guard
 
 - Added `logic.BaofuAccountService.ReadinessFromBinding` with product-facing states: `资料待提交`, `宝付开户处理中`, `微信渠道待报备`, `结算账户可用`, `开通失败`.
-- `GET /v1/rider/status` now returns sanitized `settlement_account` readiness and blocks `can_go_online` with `骑手结算账户未开通，暂不能接收配送费分账订单` when the rider lacks a ready Baofu personal account.
+- `GET /v1/rider/status` now returns sanitized `settlement_account` readiness and blocks `can_go_online` with `骑手结算账户未开通，暂不能接收代取费分账订单` when the rider lacks a ready Baofu personal account.
 - `logic.GrabDeliveryOrder` now blocks rider assignment before pool/order mutation if the rider Baofu settlement account is missing or not payment-ready; the response uses the same safe product copy and does not expose contract numbers, sharing IDs, raw upstream payloads, cards, ID numbers, or phone numbers.
 - Delivery API tests now model the new Baofu readiness store read before grab-order flow proceeds to pool, merchant, deposit, and transaction checks.
 - Assignment-path review: current rider order assignment entrypoint is `api.grabOrder` -> `logic.GrabDeliveryOrder` -> `db.GrabOrderTx`; no separate worker/scheduler auto-assignment path was found in this slice.
@@ -1486,7 +1486,7 @@ make test-integration
 ### 2026-05-04 Task 10 - Frontend Payment, Settlement, Finance, And Reconciliation Surfaces
 
 - Mini Program payment invocation now normalizes the backend-returned WeChat payment payload into the exact `wx.requestPayment` fields (`timeStamp`, `nonceStr`, `package`, `signType`, `paySign`) and does not construct nonce/package/sign locally. Missing fields fail with `支付参数缺失，请重新发起支付`.
-- Mini Program rider surfaces now carry sanitized `settlement_account` readiness through rider status/workbench types. Rider dashboard, order hall, and income page display `结算账户未开通，暂不能接收配送费分账订单` when the BaoCaiTong personal account is not payment-ready; no `contractNo`, `sharingMerId`, raw payload, card, ID, phone, signature, or provider diagnostic is shown.
+- Mini Program rider surfaces now carry sanitized `settlement_account` readiness through rider status/workbench types. Rider dashboard, order hall, and income page display `结算账户未开通，暂不能接收代取费分账订单` when the BaoCaiTong personal account is not payment-ready; no `contractNo`, `sharingMerId`, raw payload, card, ID, phone, signature, or provider diagnostic is shown.
 - Merchant Flutter app added a settings entry and `结算账户` page with the agreed labels: `宝付支付开通`、`微信渠道报备`、`结算账户可用`、`支付手续费`、`待结算金额`、`可提现金额`、`提现中`、`提现成功`、`提现退回`. This page is product-copy only and does not invent unsupported withdrawal API calls.
 - Web merchant finance types and page now display merchant-borne `支付手续费` separately in overview, daily stats, order income rows, and service-fee/deduction views; `待结算收入` copy was changed to `待结算金额`.
 - Web platform reconciliation now loads `GET /v1/platform/stats/baofu/reconciliation/daily` and `GET /v1/platform/finance/settlement-account/status`, displays Baofu daily payment fees, withdrawal processing/succeeded amounts, anomaly counts, and the platform commission receiver as masked `contract_no` / `sharing_mer_id`. The backend status response now returns only masked identifiers and sanitized readiness.

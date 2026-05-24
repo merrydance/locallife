@@ -201,7 +201,7 @@ Page({
         // 捕获错误并显示给用户（如商户打烊、超出范围）
         updatedGroups[i] = {
           ...group,
-          errorStatus: userMessage || '暂不支持配送',
+          errorStatus: userMessage || '暂不支持代取',
           selected: false // 有错误时自动取消选中
         }
       }

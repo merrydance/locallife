@@ -1110,7 +1110,7 @@ type GetClaimsWithSameAddressRow struct {
 	UserID_2           int64              `json:"user_id_2"`
 }
 
-// 查询使用相同配送地址的索赔
+// 查询使用相同代取地址的索赔
 func (q *Queries) GetClaimsWithSameAddress(ctx context.Context, arg GetClaimsWithSameAddressParams) ([]GetClaimsWithSameAddressRow, error) {
 	rows, err := q.db.Query(ctx, getClaimsWithSameAddress, arg.AddressID, arg.CreatedAt, arg.ID)
 	if err != nil {
@@ -1953,7 +1953,7 @@ type GetRiderDeliveryStatsRow struct {
 	TimeoutOrders   int64 `json:"timeout_orders"`
 }
 
-// 获取骑手在指定时间窗口内的配送统计
+// 获取骑手在指定时间窗口内的代取统计
 func (q *Queries) GetRiderDeliveryStats(ctx context.Context, arg GetRiderDeliveryStatsParams) (GetRiderDeliveryStatsRow, error) {
 	row := q.db.QueryRow(ctx, getRiderDeliveryStats, arg.RiderID, arg.CreatedAt)
 	var i GetRiderDeliveryStatsRow

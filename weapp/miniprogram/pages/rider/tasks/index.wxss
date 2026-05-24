@@ -1,4 +1,4 @@
-/* 配送历史样式 */
+/* 代取历史样式 */
 
 .page-container {
   background: var(--td-bg-color-page);

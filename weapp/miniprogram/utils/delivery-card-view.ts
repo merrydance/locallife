@@ -39,7 +39,7 @@ const DELIVERY_CARD_VIEW_MAP: Record<DeliveryTaskStatusBucket, Omit<DeliveryCard
   },
   deliver: {
     statusClass: 'green',
-    statusText: '配送中',
+    statusText: '代取中',
     buttonClass: 'btn-green',
     buttonText: '确认送达',
     nextAction: 'deliver'

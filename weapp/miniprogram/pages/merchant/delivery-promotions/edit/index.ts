@@ -186,7 +186,7 @@ Page({
         this.setData({
           initialLoading: false,
           initialError: true,
-          initialErrorMessage: '未找到该配送优惠，可能已被删除'
+          initialErrorMessage: '未找到该代取优惠，可能已被删除'
         })
         return
       }
@@ -202,7 +202,7 @@ Page({
       this.setData({
         initialLoading: false,
         initialError: true,
-        initialErrorMessage: getErrorUserMessage(err, '配送优惠详情加载失败，请稍后重试')
+        initialErrorMessage: getErrorUserMessage(err, '代取优惠详情加载失败，请稍后重试')
       })
     }
   },
@@ -342,7 +342,7 @@ Page({
       }
 
       wx.showToast({
-        title: isEdit ? '配送优惠已更新' : '配送优惠已创建',
+        title: isEdit ? '代取优惠已更新' : '代取优惠已创建',
         icon: 'success'
       })
       wx.navigateBack()

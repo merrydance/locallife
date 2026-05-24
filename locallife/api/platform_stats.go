@@ -808,15 +808,15 @@ func (server *Server) getMerchantGrowthStats(ctx *gin.Context) {
 type riderRankingRow struct {
 	RiderID                int64  `json:"rider_id"`                  // 骑手ID
 	RiderName              string `json:"rider_name"`                // 骑手姓名
-	DeliveryCount          int32  `json:"delivery_count"`            // 配送次数
+	DeliveryCount          int32  `json:"delivery_count"`            // 代取次数
 	CompletedCount         int32  `json:"completed_count"`           // 完成次数
-	AvgDeliveryTimeSeconds int32  `json:"avg_delivery_time_seconds"` // 平均配送时长(秒)
+	AvgDeliveryTimeSeconds int32  `json:"avg_delivery_time_seconds"` // 平均代取时长(秒)
 	TotalEarnings          int64  `json:"total_earnings"`            // 总收入(分)
 }
 
 // getRiderRanking 获取骑手绩效排行
 // @Summary 获取骑手绩效排行榜
-// @Description 获取骑手按完成配送数排序的绩效排行榜，支持分页
+// @Description 获取骑手按完成代取数排序的绩效排行榜，支持分页
 // @Tags Platform
 // @Accept json
 // @Produce json
@@ -974,7 +974,7 @@ type realtimeDashboardResponse struct {
 	PendingOrders      int32 `json:"pending_orders"`       // 待接单订单数
 	PreparingOrders    int32 `json:"preparing_orders"`     // 制作中订单数
 	ReadyOrders        int32 `json:"ready_orders"`         // 待取餐订单数
-	DeliveringOrders   int32 `json:"delivering_orders"`    // 配送中订单数
+	DeliveringOrders   int32 `json:"delivering_orders"`    // 代取中订单数
 }
 
 // getRealtimeDashboard 获取实时大盘数据

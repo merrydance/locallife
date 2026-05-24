@@ -98,7 +98,7 @@ func TestCreateRefundOrderTx_AllowsProductionRefundTypes(t *testing.T) {
 				PaymentOrderID: payment.ID,
 				RefundType:     refundType,
 				RefundAmount:   payment.Amount,
-				RefundReason:   "配送时间太长",
+				RefundReason:   "代取时间太长",
 				OutRefundNo:    util.RandomString(32),
 			})
 			require.NoError(t, err)

@@ -1,4 +1,4 @@
-<custom-navbar title="配送历史" showBack="{{true}}" />
+<custom-navbar title="代取历史" showBack="{{true}}" />
 
 <scroll-view 
   scroll-y 

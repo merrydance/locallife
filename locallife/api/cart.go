@@ -478,7 +478,7 @@ type calculateCartRequest struct {
 	TableID *int64 `json:"table_id"`
 	// 预约ID
 	ReservationID *int64 `json:"reservation_id"`
-	// 配送地址ID (选填，用于计算配送费)
+	// 代取地址ID (选填，用于计算代取费)
 	AddressID *int64 `json:"address_id" binding:"omitempty,min=1"`
 	// 用户当前位置纬度 (选填，当无地址时作为fallback)
 	Latitude *float64 `json:"latitude" binding:"omitempty"`
@@ -491,13 +491,13 @@ type calculateCartRequest struct {
 type calculateCartResponse struct {
 	// 商品小计（分）
 	Subtotal int64 `json:"subtotal"`
-	// 配送费（分）
+	// 代取费（分）
 	DeliveryFee int64 `json:"delivery_fee"`
-	// 配送费满返减免（分）
+	// 代取费满返减免（分）
 	DeliveryFeeDiscount int64 `json:"delivery_fee_discount"`
-	// 配送距离（米），仅当成功计算时返回
+	// 代取距离（米），仅当成功计算时返回
 	DeliveryDistance int32 `json:"delivery_distance,omitempty"`
-	// 预计送达总时长（分钟），包含出餐、骑手到店、配送、缓冲
+	// 预计送达总时长（分钟），包含出餐、骑手到店、代取、缓冲
 	DeliveryEtaMinutes int32 `json:"delivery_eta_minutes,omitempty"`
 	// 出餐时间（分钟）
 	PrepareMinutes int32 `json:"prepare_minutes,omitempty"`
@@ -534,7 +534,7 @@ type calculateCartResponse struct {
 
 // calculateCart godoc
 // @Summary 计算购物车金额
-// @Description 计算购物车总金额，包括商品小计、配送费、优惠减免等。可选传入地址ID计算真实配送费，传入优惠券ID计算优惠减免
+// @Description 计算购物车总金额，包括商品小计、代取费、优惠减免等。可选传入地址ID计算真实代取费，传入优惠券ID计算优惠减免
 // @Tags 购物车
 // @Accept json
 // @Produce json
@@ -979,7 +979,7 @@ func (server *Server) getUserCartsSummary(ctx *gin.Context) {
 type combinedCheckoutRequest struct {
 	// 要结算的购物车ID列表（必填，最多10个）
 	CartIDs []int64 `json:"cart_ids" binding:"required,min=1,max=10"`
-	// 配送地址ID（外卖时必填）
+	// 代取地址ID（外卖时必填）
 	AddressID *int64 `json:"address_id" binding:"omitempty,min=1"`
 }
 
@@ -992,9 +992,9 @@ type combinedCheckoutItem struct {
 	OrderType string `json:"order_type"`
 	// 商品小计（分）
 	Subtotal int64 `json:"subtotal"`
-	// 配送费（分）
+	// 代取费（分）
 	DeliveryFee int64 `json:"delivery_fee"`
-	// 小计+配送费（分）
+	// 小计+代取费（分）
 	TotalAmount int64 `json:"total_amount"`
 }
 

@@ -12,7 +12,7 @@
       <text class="currency">¥</text>
       <text class="total-price">{{computedPriceDisplay}}</text>
     </view>
-    <view class="delivery-tip" wx:if="{{!hideFee}}">{{computedDeliveryDisplay ? '预估配送费 ¥' + computedDeliveryDisplay : '结算时计算配送费'}}</view>
+    <view class="delivery-tip" wx:if="{{!hideFee}}">{{computedDeliveryDisplay ? '预估代取费 ¥' + computedDeliveryDisplay : '结算时计算代取费'}}</view>
     <view class="delivery-tip" wx:elif="{{hideFee}}">点击查看购物车</view>
   </view>
   

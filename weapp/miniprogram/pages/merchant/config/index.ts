@@ -60,7 +60,7 @@ const CONFIG_SECTIONS: ConfigSection[] = [
       { id: 'membership', title: '叠加规则', desc: '配置余额与赠送金可用场景及叠加规则', path: '/pages/merchant/settings/membership/index' },
       { id: 'recharge-rules', title: '充值规则', desc: '维护会员充值赠送活动与有效期', path: '/pages/merchant/settings/recharge-rules/index' },
       { id: 'discount-rules', title: '满减规则', desc: '维护订单满减活动与叠加规则', path: '/pages/merchant/discount-rules/index' },
-      { id: 'delivery-promotions', title: '配送优惠', desc: '维护配送活动与优惠策略', path: '/pages/merchant/delivery-promotions/index' },
+      { id: 'delivery-promotions', title: '代取优惠', desc: '维护代取活动与优惠策略', path: '/pages/merchant/delivery-promotions/index' },
       { id: 'vouchers', title: '代金券管理', desc: '维护代金券金额、门槛与适用订单类型', path: '/pages/merchant/vouchers/index' }
     ]
   },

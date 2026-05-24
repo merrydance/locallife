@@ -22,7 +22,7 @@
         <view class="section-card">
           <view class="section-header">
             <view>
-              <view class="section-title">基础配送费</view>
+              <view class="section-title">基础代取费</view>
               <view class="section-subtitle">基础计费、超距规则、货值费率统一在这里维护</view>
             </view>
             <t-button size="small" theme="primary" bind:tap="onOpenDeliveryFee">去配置</t-button>
@@ -30,7 +30,7 @@
 
           <view class="summary-grid">
             <view class="summary-item">
-              <text class="summary-label">基础配送费</text>
+              <text class="summary-label">基础代取费</text>
               <text class="summary-value">{{feeSummary.baseFee}}</text>
             </view>
             <view class="summary-item">
@@ -62,7 +62,7 @@
           <view class="section-header">
             <view>
               <view class="section-title">峰时时段</view>
-              <view class="section-subtitle">时段系数单独维护，和基础配送费分离</view>
+              <view class="section-subtitle">时段系数单独维护，和基础代取费分离</view>
             </view>
             <t-button size="small" theme="primary" bind:tap="onOpenTimeslot">去管理</t-button>
           </view>

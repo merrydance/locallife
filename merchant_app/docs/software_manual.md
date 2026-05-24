@@ -623,7 +623,7 @@ App 每次启动时从安全存储中读取 Token，通过 `POST /v1/auth/refres
 | pending | 待接单 | 订单已生成，商家尚未确认 |
 | accepted | 已接单 | 商家已确认，准备处理 |
 | preparing | 制作中 | 订单正在准备（餐品制作等） |
-| delivering | 配送中 | 订单已交付配送 |
+| delivering | 代取中 | 订单已交付代取 |
 | completed | 已完成 | 订单全流程完结 |
 | cancelled | 已取消 | 订单已被取消 |
 

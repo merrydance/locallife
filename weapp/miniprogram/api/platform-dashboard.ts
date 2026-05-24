@@ -20,7 +20,7 @@ export type UserRole = 'customer' | 'merchant' | 'rider' | 'operator' | 'admin'
 export interface RealtimeDashboardData {
     active_merchants_24h: number      // 24小时活跃商户数
     active_users_24h: number          // 24小时活跃用户数
-    delivering_orders: number         // 配送中订单数
+    delivering_orders: number         // 代取中订单数
     gmv_24h: number                   // 24小时GMV(分)
     orders_24h: number                // 24小时订单数
     pending_orders: number            // 待接单订单数
@@ -185,9 +185,9 @@ export interface MerchantRankingRow {
 
 /** 骑手排行榜行 - 对齐 api.riderRankingRow */
 export interface RiderRankingRow {
-    avg_delivery_time_seconds: number // 平均配送时长(秒)
+    avg_delivery_time_seconds: number // 平均代取时长(秒)
     completed_count: number           // 完成次数
-    delivery_count: number            // 配送次数
+    delivery_count: number            // 代取次数
     rider_id: number                  // 骑手ID
     rider_name: string                // 骑手姓名
     total_earnings: number            // 总收入(分)
@@ -1194,7 +1194,7 @@ export function formatOrderStatus(status: OrderStatus): string {
         confirmed: '已确认',
         preparing: '制作中',
         ready: '待取餐',
-        delivering: '配送中',
+        delivering: '代取中',
         completed: '已完成',
         cancelled: '已取消'
     }

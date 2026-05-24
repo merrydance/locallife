@@ -805,7 +805,7 @@ func (server *Server) deletePeakHourConfig(ctx *gin.Context) {
 }
 
 // ============================================================================
-// 商家配送优惠 API
+// 商家代取优惠 API
 // ============================================================================
 
 type createDeliveryPromotionRequest struct {

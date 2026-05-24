@@ -256,7 +256,7 @@ export const NIUMENYAN_DISHES: MockDish[] = [
     images: [DEMO_IMAGES.dish5],
     price: 16800,
     original_price: 19800,
-    description: '精选牛骨熬制8小时高汤底，配送牛肉片、牛肚、牛筋、时蔬拼盘。锅底可选清汤/麻辣。',
+    description: '精选牛骨熬制8小时高汤底，代取牛肉片、牛肚、牛筋、时蔬拼盘。锅底可选清汤/麻辣。',
     category_id: 'cat_hotpot',
     category_name: '牛肉火锅',
     merchant_id: NIUMENYAN_MERCHANT.id,
@@ -464,7 +464,7 @@ export const NIUMENYAN_REVIEWS: MockReview[] = [
     id: 'review_003',
     user_name: '王**',
     rating: 4,
-    content: '火锅味道不错，牛骨汤很鲜。就是配送时间有点长，希望改进。',
+    content: '火锅味道不错，牛骨汤很鲜。就是代取时间有点长，希望改进。',
     images: [DEMO_IMAGES.dish5],
     created_at: '2025-11-25',
     dish_name: '牛门宴招牌火锅'

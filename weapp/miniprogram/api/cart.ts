@@ -72,7 +72,7 @@ export interface CalculateCartRequest extends Record<string, unknown> {
     order_type?: string
     table_id?: number
     reservation_id?: number
-    address_id?: number       // 配送地址ID，用于计算配送费
+    address_id?: number       // 代取地址ID，用于计算代取费
     latitude?: number         // 用户当前位置纬度（address_id的fallback）
     longitude?: number        // 用户当前位置经度（address_id的fallback）
     voucher_id?: number       // 优惠券ID，用于计算优惠
@@ -121,9 +121,9 @@ export interface AddDishesRequest extends Record<string, unknown> {
 /** 购物车计算结果 - 对齐 api.calculateCartResponse */
 export interface CalculateCartResponse {
     subtotal: number              // 商品小计（分）
-    delivery_fee: number          // 配送费（分）
-    delivery_fee_discount: number // 配送费满返减免（分）
-    delivery_distance?: number    // 配送距离（米）
+    delivery_fee: number          // 代取费（分）
+    delivery_fee_discount: number // 代取费满返减免（分）
+    delivery_distance?: number    // 代取距离（米）
     delivery_eta_minutes?: number // 预计送达总时长（分钟）
     prepare_minutes?: number      // 出餐时间（分钟）
     rider_to_store_minutes?: number // 骑手到店时间（分钟）

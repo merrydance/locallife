@@ -62,7 +62,7 @@
 | 会员与充值 | 会员设置、会员列表/详情、线下代录充值、余额调整、充值规则 CRUD、active 读口；`/v1/merchants/:id/members/**`、`/recharge-rules/**` | `locallife/api/membership.go` | `settings/membership`、`settings/members`、`settings/recharge-rules`、`settings/recharge-rules/edit` | 管理主链已闭环；active 读口未被页面消费，属于便利读口 | G2/G1 |
 | 代金券 | 代金券 CRUD、active 读口；`/v1/merchants/:id/vouchers/**` | `locallife/api/voucher.go` | `vouchers/index`、`vouchers/edit`、`coupon.ts` | 管理主链已闭环；`vouchers/active` 有 API 封装但商户管理页不依赖 | G1 |
 | 满减规则 | 创建、列表、详情、active、applicable、best、更新、删除；`/v1/merchants/:id/discounts/**` | `locallife/api/discount.go` | `discount-rules/index`、`discount-rules/edit`、`merchant.ts` | 管理主链已闭环；`active/applicable/best` 读口更偏下单/便利读取，商户页未消费 | G1 |
-| 配送促销 | 配送优惠 CRUD；`/v1/delivery-fee/merchants/:merchant_id/promotions/**` | `locallife/api/delivery_fee.go` | `delivery-promotions/index`、`delivery-promotions/edit` | 已闭环 | G1 |
+| 代取促销 | 代取优惠 CRUD；`/v1/delivery-fee/merchants/:merchant_id/promotions/**` | `locallife/api/delivery_fee.go` | `delivery-promotions/index`、`delivery-promotions/edit` | 已闭环 | G1 |
 | 集团申请与加入 | 集团申请草稿/更新/删除材料/提交、搜索集团、加入集团；`/v1/groups/applications/**`、`/v1/groups`、`/v1/groups/:id/join-requests` | `locallife/api/group.go` | `group/application`、`group/join` | 已闭环 | G1/G2 |
 | 集团品牌/商户管理 | 集团详情、集团商户、品牌列表/创建、政策、菜单模板；`/v1/groups/:id/**`、`/v1/brands/:id/**` | `locallife/api/group.go` | 商户页仅承接申请/加入，不承接集团治理 | 可能属于集团负责人/平台治理后续任务，不作为当前商户控制台缺口 | G1 |
 | 包装策略 | 当前未见 `/v1/merchants/me/packaging-policy` 路由；后端仅见下单校验逻辑 `logic/packaging_policy.go` | `locallife/logic/packaging_policy.go` | Weapp 未见页面或 API | 旧矩阵中包装策略应降级为内部订单校验事实；若要商户配置，需先补后端接口 | G1 |
@@ -88,7 +88,7 @@
 | 订单 | `orders/list/index`、`orders/detail/index`、`orders/print-anomalies/index` | 订单处理、详情、打印任务、打印异常 |
 | 桌台设备 | `tables/index`、`tables/edit/index`、`printers/index`、`printers/edit/index` | 桌台/包间、桌台资产、打印机、同步恢复 |
 | 门店图片 | `profile-images/index` | Logo、门头图、媒体资产 |
-| 营销 | `discount-rules/index`、`discount-rules/edit/index`、`delivery-promotions/index`、`delivery-promotions/edit/index`、`vouchers/index`、`vouchers/edit/index` | 满减、配送促销、代金券 |
+| 营销 | `discount-rules/index`、`discount-rules/edit/index`、`delivery-promotions/index`、`delivery-promotions/edit/index`、`vouchers/index`、`vouchers/edit/index` | 满减、代取促销、代金券 |
 
 ## 缺口与边界清单
 

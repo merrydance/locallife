@@ -1,4 +1,4 @@
-<custom-navbar title="{{isEdit ? '编辑配送优惠' : '新增配送优惠'}}" showBack="{{true}}" />
+<custom-navbar title="{{isEdit ? '编辑代取优惠' : '新增代取优惠'}}" showBack="{{true}}" />
 
 <view
   class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
@@ -14,11 +14,11 @@
   </view>
 
   <view wx:elif="{{initialLoading}}" class="state-block">
-    <t-loading theme="circular" size="40rpx" text="加载配送优惠信息中..." vertical />
+    <t-loading theme="circular" size="40rpx" text="加载代取优惠信息中..." vertical />
   </view>
 
   <view wx:elif="{{initialError}}" class="state-block">
-    <t-empty icon="error-circle" description="{{initialErrorMessage || '配送优惠编辑页加载失败，请重试'}}" />
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '代取优惠编辑页加载失败，请重试'}}" />
     <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
@@ -87,14 +87,14 @@
         </view>
 
         <t-cell-group theme="card">
-          <t-cell title="启用状态" description="关闭后当前优惠不再参与新的配送费计算">
+          <t-cell title="启用状态" description="关闭后当前优惠不再参与新的代取费计算">
             <t-switch slot="note" value="{{formData.is_active}}" data-field="is_active" bind:change="onSwitchChange" />
           </t-cell>
         </t-cell-group>
       </view>
       <view class="form-actions">
         <t-button theme="primary" loading="{{submitting}}" bind:tap="onSubmit">
-        {{isEdit ? '保存配送优惠' : '创建配送优惠'}}
+        {{isEdit ? '保存代取优惠' : '创建代取优惠'}}
         </t-button>
       </view>
     </view>

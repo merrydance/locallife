@@ -237,7 +237,7 @@ func (service *RiderWorkbenchService) loadToday(ctx context.Context, riderID pgt
 		EndAt:   pgtype.Timestamptz{Time: endAt, Valid: true},
 	})
 	if err != nil {
-		result.degrade(RiderWorkbenchSectionToday, "今日配送摘要暂不可用")
+		result.degrade(RiderWorkbenchSectionToday, "今日代取摘要暂不可用")
 		log.Warn().Err(err).Int64("rider_id", riderID.Int64).Msg("rider workbench today summary degraded")
 		return
 	}
@@ -251,7 +251,7 @@ func (service *RiderWorkbenchService) loadIncome(ctx context.Context, riderID pg
 		EndAt:   endAt.Add(-time.Nanosecond),
 	})
 	if err != nil {
-		result.degrade(RiderWorkbenchSectionIncome, "配送费结算暂不可用")
+		result.degrade(RiderWorkbenchSectionIncome, "代取费结算暂不可用")
 		log.Warn().Err(err).Int64("rider_id", riderID.Int64).Msg("rider workbench income stats degraded")
 		return
 	}
@@ -262,7 +262,7 @@ func (service *RiderWorkbenchService) loadIncome(ctx context.Context, riderID pg
 		EndAt:   endAt.Add(-time.Nanosecond),
 	})
 	if err != nil {
-		result.degrade(RiderWorkbenchSectionIncome, "配送费结算暂不可用")
+		result.degrade(RiderWorkbenchSectionIncome, "代取费结算暂不可用")
 		log.Warn().Err(err).Int64("rider_id", riderID.Int64).Msg("rider workbench income status summary degraded")
 		return
 	}

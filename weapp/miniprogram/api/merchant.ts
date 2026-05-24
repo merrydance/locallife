@@ -19,7 +19,7 @@ export interface MerchantSummary {
   logo_url?: string                            // Logo URL
   cover_image?: string                         // 门头照（列表卡片封面）
   distance?: number                            // 距离（米）
-  estimated_delivery_fee?: number              // 预估配送费（分）
+  estimated_delivery_fee?: number              // 预估代取费（分）
   total_orders?: number                        // 总销量（搜索返回）
   monthly_sales?: number                       // 近30天订单量（旧字段）
   region_id?: number                           // 区域ID

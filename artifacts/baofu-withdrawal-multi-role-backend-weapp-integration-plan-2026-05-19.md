@@ -161,7 +161,7 @@
   - 后端对应 `POST /v1/rider/withdraw` 和 `GET /v1/rider/withdrawals/status`。
   - 这不是宝付收入提现，不能混入本任务。
 - `weapp/miniprogram/pages/rider/income/index.ts`
-  - 当前是配送费收入账本和结算账户提示。
+  - 当前是代取费收入账本和结算账户提示。
   - 没有收入提现入口，也没有宝付提现 API。
 
 小程序已有宝付结算账户跨角色复用模式，可作为提现前端复用参考：
@@ -271,7 +271,7 @@
 
 骑手收入注意事项：
 
-- 当前 rider income 页面展示配送费结算账本，但没有“可提现余额”合同。
+- 当前 rider income 页面展示代取费结算账本，但没有“可提现余额”合同。
 - 不能用 `summary.totalRiderIncome` 当作可提现余额，已到账收入可能已提现或被冲正。
 - 骑手收入提现上线前，后端必须先给出收入钱包/账本的 `withdrawable_amount`、`pending_withdraw_amount`、`total_withdrawn_amount` 或等价字段。
 
@@ -863,11 +863,11 @@ function baofuWithdrawalEndpoint(role: BaofuAccountOwnerRole): string {
 2. 在 `pages/rider/income/index` 仅当后端 balance 返回收入可提现能力时展示 `提现` 入口。
 3. 页面调用 `role='rider'` 的共享 API。
 4. 如果后端暂未定义收入可提现余额，则只展示收入账本和结算账户提示，不展示提现入口。
-5. 骑手收入提现文案使用 `配送费提现` 或 `收入提现`，不得写成 `保证金提现`。
+5. 骑手收入提现文案使用 `代取费提现` 或 `收入提现`，不得写成 `保证金提现`。
 
 **验收：**
 
-- 骑手保证金退款和配送费收入提现入口不会互相跳转。
+- 骑手保证金退款和代取费收入提现入口不会互相跳转。
 - 骑手收入提现不使用 `summary.totalRiderIncome` 自行推断可提现余额。
 - 骑手未开通结算账户时，收入页提示去开通结算账户，不展示可提交提现表单。
 

@@ -56,7 +56,7 @@ export default function PlatformAuditPage() {
       { label: "待接单", value: realtime.pending_orders },
       { label: "制作中", value: realtime.preparing_orders },
       { label: "待取餐", value: realtime.ready_orders },
-      { label: "配送中", value: realtime.delivering_orders },
+      { label: "代取中", value: realtime.delivering_orders },
     ];
   }, [realtime]);
 

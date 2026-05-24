@@ -57,7 +57,7 @@ Page({
     loading: true,
     isError: false,
     errorMsg: '',
-    // 配送信息
+    // 代取信息
     delivery: null as DeliveryResponse | null,
     riderName: '',
     riderPhone: '',
@@ -139,7 +139,7 @@ Page({
   async loadDeliveryData() {
     this.setData({ loading: true, isError: false })
     try {
-      // 1. 获取配送信息
+      // 1. 获取代取信息
       const delivery = await DeliveryService.getDeliveryByOrder(this.data.orderId)
 
       // 2. 处理骑手信息
@@ -149,7 +149,7 @@ Page({
         : ''
       const statusDisplay = getDeliveryStatusDisplay(delivery.status)
 
-      // 3. 生成配送进度
+      // 3. 生成代取进度
       const progress = buildDeliveryProgress(delivery, this.formatTime)
 
       // 4. 设置地图标记点
@@ -181,16 +181,16 @@ Page({
       // 5. 设置地图
       this.setupMap(merchantPoint, customerPoint)
 
-      // 6. 开始位置追踪（配送中状态）
+      // 6. 开始位置追踪（代取中状态）
       if (statusDisplay.isLocationTracked) {
         this.startLocationTracking()
       }
     } catch (error: unknown) {
-      logger.error('加载配送信息失败', error, 'tracking.loadDeliveryData')
+      logger.error('加载代取信息失败', error, 'tracking.loadDeliveryData')
       this.setData({ 
         loading: false, 
         isError: true, 
-        errorMsg: getErrorMessage(error, '获取配送信息失败') 
+        errorMsg: getErrorMessage(error, '获取代取信息失败') 
       })
     }
   },

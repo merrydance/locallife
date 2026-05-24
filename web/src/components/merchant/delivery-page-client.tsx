@@ -371,7 +371,7 @@ export function DeliveryPageClient() {
                         <div className="grid gap-2">
                           <Label className="text-slate-700">活动名称 <span className="text-rose-500">*</span></Label>
                           <Input 
-                            placeholder="例如：配送费满30减5、新春运费免除" 
+                            placeholder="例如：代取费满30减5、新春运费免除" 
                             className="bg-slate-50/50 focus:bg-white transition-all shadow-sm"
                             value={formData.name || ""}
                             onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))}
@@ -476,7 +476,7 @@ export function DeliveryPageClient() {
                         <div className="space-y-1">
                             <h4 className="text-sm font-semibold text-amber-900">营销提示</h4>
                             <p className="text-xs text-amber-800/80 leading-relaxed">
-                                这里的“减免金额”将由商户账户承担。客户支付订单时，若满足条件，该金额将从订单总额中扣除。骑手收到的配送费由系统运费配置决定，不受此页面影响。
+                                这里的“减免金额”将由商户账户承担。客户支付订单时，若满足条件，该金额将从订单总额中扣除。骑手收到的代取费由系统运费配置决定，不受此页面影响。
                             </p>
                         </div>
                     </div>

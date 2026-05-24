@@ -8,7 +8,7 @@ import { request } from '../utils/request'
 export const MERCHANT_REJECT_REASON_OPTIONS = [
     '门店临时打烊',
     '商品已售罄',
-    '配送资源不足',
+    '代取资源不足',
     '订单信息异常'
 ] as const
 
@@ -47,8 +47,8 @@ export interface OrderResponse {
     reservation_id?: number                      // 预定ID（预定订单）
     items: OrderItemResponse[]                   // 订单商品列表
     subtotal: number                             // 商品小计（分）
-    delivery_fee: number                         // 配送费（分）
-    delivery_fee_discount: number                // 配送费优惠（分）
+    delivery_fee: number                         // 代取费（分）
+    delivery_fee_discount: number                // 代取费优惠（分）
     discount_amount: number                      // 优惠金额（分）
     total_amount: number                         // 订单总金额（分）
     fee_breakdown?: MerchantOrderFeeBreakdown     // 商户视角费用清单（金额单位：分）
@@ -68,7 +68,7 @@ export interface OrderResponse {
     delivery_contact_name?: string
     delivery_contact_phone?: string
     delivery_address?: string
-    delivery_distance?: number                   // 配送距离（米）
+    delivery_distance?: number                   // 代取距离（米）
     created_at: string                           // 创建时间
     paid_at?: string                             // 支付时间
     prep_start_at?: string
@@ -136,8 +136,8 @@ export interface OrderStatsResponse {
     pending_count: number                        // 待处理订单数
     paid_count: number                           // 已支付订单数
     preparing_count: number                      // 制作中订单数
-    ready_count: number                          // 待取餐/待配送订单数
-    delivering_count: number                     // 配送中订单数
+    ready_count: number                          // 待取餐/待代取订单数
+    delivering_count: number                     // 代取中订单数
     completed_count: number                      // 已完成订单数（含用户确认收货）
     cancelled_count: number                      // 已取消订单数
 }
@@ -554,7 +554,7 @@ export class OrderManagementAdapter {
             'ready': '待交付',
             'courier_accepted': '骑手已接单',
             'picked': '骑手已取餐',
-            'delivering': '配送中',
+            'delivering': '代取中',
             'rider_delivered': '骑手已送达',
             'user_delivered': '用户已确认',
             'completed': '已完成',
@@ -631,13 +631,13 @@ export class OrderManagementAdapter {
             case 'preparing':
                 return '商户正在制作中，可在出餐后标记完成'
             case 'ready':
-                return order.order_type === 'takeout' ? '等待骑手取餐或系统分配送力' : '等待顾客取餐或到店核销'
+                return order.order_type === 'takeout' ? '等待骑手取餐或系统分代取力' : '等待顾客取餐或到店核销'
             case 'courier_accepted':
                 return '骑手已接单，正在到店取餐'
             case 'picked':
-                return '骑手已取餐，订单即将配送'
+                return '骑手已取餐，订单即将代取'
             case 'delivering':
-                return '配送途中，请关注异常和超时情况'
+                return '代取途中，请关注异常和超时情况'
             case 'rider_delivered':
                 return '骑手已送达，等待顾客确认'
             case 'user_delivered':

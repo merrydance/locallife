@@ -147,7 +147,7 @@ func TestCalculateCoefficient_WithRedWarning(t *testing.T) {
 
 	require.Equal(t, 1.8, coef.Coefficient)        // 暴雨 1.8 倍
 	require.Equal(t, 2.0, coef.WarningCoefficient) // 红色预警 2.0
-	require.True(t, coef.SuspendDelivery)          // 红色预警暂停配送
+	require.True(t, coef.SuspendDelivery)          // 红色预警暂停代取
 	require.Equal(t, "暴雨", coef.WarningType)
 }
 
@@ -163,7 +163,7 @@ func TestCalculateCoefficient_ExtremeWeather(t *testing.T) {
 
 	require.Equal(t, "extreme", coef.WeatherType)
 	require.Equal(t, 2.0, coef.Coefficient) // 极端天气 2.0 倍
-	require.True(t, coef.SuspendDelivery)   // 极端天气暂停配送
+	require.True(t, coef.SuspendDelivery)   // 极端天气暂停代取
 }
 
 func TestCalculateCoefficient_CloudyWeather(t *testing.T) {

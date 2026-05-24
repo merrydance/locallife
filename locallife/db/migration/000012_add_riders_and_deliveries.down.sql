@@ -1,4 +1,4 @@
--- 删除骑手与配送相关表
+-- 删除骑手与代取相关表
 DROP TABLE IF EXISTS "recommend_configs";
 DROP TABLE IF EXISTS "delivery_pool";
 DROP TABLE IF EXISTS "rider_locations";

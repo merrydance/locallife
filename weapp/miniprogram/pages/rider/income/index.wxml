@@ -1,4 +1,4 @@
-<custom-navbar title="配送费结算" showBack="{{true}}" />
+<custom-navbar title="代取费结算" showBack="{{true}}" />
 
 <view class="income-page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <view wx:if="{{initialLoading}}" class="state-block">
@@ -6,7 +6,7 @@
   </view>
 
   <view wx:elif="{{initialError}}" class="state-block">
-    <t-empty icon="error-circle" description="{{initialErrorMessage || '配送费结算加载失败，请重试'}}" />
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '代取费结算加载失败，请重试'}}" />
     <t-button theme="primary" bindtap="onRetryPage">重新加载</t-button>
   </view>
 
@@ -57,7 +57,7 @@
             <t-tag size="small" theme="{{item.theme}}" variant="light">{{item.orderCount}} 单</t-tag>
           </view>
           <text class="status-item__amount">¥{{item.riderAmountDisplay}}</text>
-          <text class="status-item__sub">配送费 ¥{{item.deliveryFeeDisplay}}</text>
+          <text class="status-item__sub">代取费 ¥{{item.deliveryFeeDisplay}}</text>
         </view>
       </view>
 
@@ -111,7 +111,7 @@
             <text class="ledger-item__amount">{{item.amountDisplay}}</text>
             <view class="ledger-item__meta">
               <view class="ledger-meta-row">
-                <text>配送费</text>
+                <text>代取费</text>
                 <text>{{item.deliveryFeeDisplay}}</text>
               </view>
               <view class="ledger-meta-row">

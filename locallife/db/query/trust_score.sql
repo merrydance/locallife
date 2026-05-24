@@ -692,7 +692,7 @@ WHERE c.created_at >= sqlc.arg('start_at')
 ORDER BY c.created_at DESC;
 
 -- name: GetClaimsWithSameAddress :many
--- 查询使用相同配送地址的索赔
+-- 查询使用相同代取地址的索赔
 SELECT DISTINCT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason, c.user_id
 FROM claims c
 JOIN orders o ON c.order_id = o.id
@@ -878,7 +878,7 @@ WHERE d.rider_id = $1
   AND c.created_at >= $3;
 
 -- name: GetRiderDeliveryStats :one
--- 获取骑手在指定时间窗口内的配送统计
+-- 获取骑手在指定时间窗口内的代取统计
 SELECT 
     COUNT(*) as total_orders,
     COUNT(*) FILTER (WHERE status = 'delivered') as completed_orders,

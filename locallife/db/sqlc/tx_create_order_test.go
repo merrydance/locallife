@@ -868,7 +868,7 @@ func TestGetBillingGroupAmounts_ExcludesCancelledAndReplacedOrders(t *testing.T)
 
 // ==================== ProcessOrderPaymentTx Transaction Tests ====================
 
-// createMerchantWithLocation 创建带有经纬度的商户（用于配送测试）
+// createMerchantWithLocation 创建带有经纬度的商户（用于代取测试）
 func createMerchantWithLocation(t *testing.T, ownerID int64) Merchant {
 	region := createRandomRegion(t)
 
@@ -939,13 +939,13 @@ func TestProcessOrderPaymentTx_TakeoutOrder(t *testing.T) {
 	// 验证订单已更新为支付完成且ID一致
 	require.Equal(t, createResult.Order.ID, result.Order.ID)
 
-	// ✅ 核心验证：外卖订单支付成功后既不创建配送单，也不立即进入配送池
-	require.Nil(t, result.Delivery, "外卖订单支付成功后不应立即创建配送单")
+	// ✅ 核心验证：外卖订单支付成功后既不创建代取单，也不立即进入代取池
+	require.Nil(t, result.Delivery, "外卖订单支付成功后不应立即创建代取单")
 	_, err = testStore.GetDeliveryByOrderID(context.Background(), createResult.Order.ID)
 	require.ErrorIs(t, err, ErrRecordNotFound)
 
-	// ✅ 关键调整：支付成功后不立即进入配送池
-	require.Nil(t, result.PoolItem, "外卖订单支付成功后不应立即进入配送池")
+	// ✅ 关键调整：支付成功后不立即进入代取池
+	require.Nil(t, result.PoolItem, "外卖订单支付成功后不应立即进入代取池")
 	_, err = testStore.GetDeliveryPoolByOrderID(context.Background(), createResult.Order.ID)
 	require.ErrorIs(t, err, ErrRecordNotFound)
 }
@@ -995,7 +995,7 @@ func TestProcessOrderPaymentTx_TakeoutOrder_HighDeliveryFee(t *testing.T) {
 }
 
 func TestProcessOrderPaymentTx_DineInOrder(t *testing.T) {
-	// 堂食订单不应该创建配送单和配送池
+	// 堂食订单不应该创建代取单和代取池
 	user := createRandomUser(t)
 	merchantOwner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, merchantOwner.ID)
@@ -1031,13 +1031,13 @@ func TestProcessOrderPaymentTx_DineInOrder(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, FulfillmentStatusPendingKitchen, result.Order.FulfillmentStatus)
 
-	// ✅ 堂食订单不应该有配送单和配送池
-	require.Nil(t, result.Delivery, "堂食订单不应该创建配送单")
-	require.Nil(t, result.PoolItem, "堂食订单不应该进入配送池")
+	// ✅ 堂食订单不应该有代取单和代取池
+	require.Nil(t, result.Delivery, "堂食订单不应该创建代取单")
+	require.Nil(t, result.PoolItem, "堂食订单不应该进入代取池")
 }
 
 func TestProcessOrderPaymentTx_TakeawayOrder(t *testing.T) {
-	// 外带订单（自取）不应该创建配送单
+	// 外带订单（自取）不应该创建代取单
 	user := createRandomUser(t)
 	merchantOwner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, merchantOwner.ID)
@@ -1071,18 +1071,18 @@ func TestProcessOrderPaymentTx_TakeawayOrder(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, FulfillmentStatusPendingKitchen, result.Order.FulfillmentStatus)
 
-	// ✅ 外带自取订单不应该有配送单
-	require.Nil(t, result.Delivery, "外带订单不应该创建配送单")
-	require.Nil(t, result.PoolItem, "外带订单不应该进入配送池")
+	// ✅ 外带自取订单不应该有代取单
+	require.Nil(t, result.Delivery, "外带订单不应该创建代取单")
+	require.Nil(t, result.PoolItem, "外带订单不应该进入代取池")
 }
 
 func TestProcessOrderPaymentTx_TakeoutWithoutAddress(t *testing.T) {
-	// 外卖订单缺少配送地址应该报错
+	// 外卖订单缺少代取地址应该报错
 	user := createRandomUser(t)
 	merchantOwner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, merchantOwner.ID)
 
-	// 创建外卖订单但不设置配送地址
+	// 创建外卖订单但不设置代取地址
 	orderNo := util.RandomString(20)
 	createResult, err := testStore.CreateOrderTx(context.Background(), CreateOrderTxParams{
 		CreateOrderParams: CreateOrderParams{
@@ -1108,7 +1108,7 @@ func TestProcessOrderPaymentTx_TakeoutWithoutAddress(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 当前实现会先完成支付与库存扣减，配送单在商家后续推进履约时再创建。
+	// 当前实现会先完成支付与库存扣减，代取单在商家后续推进履约时再创建。
 	result, err := testStore.ProcessOrderPaymentTx(context.Background(), ProcessOrderPaymentTxParams{
 		OrderID: createResult.Order.ID,
 	})

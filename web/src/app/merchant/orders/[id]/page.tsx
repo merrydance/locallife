@@ -194,11 +194,11 @@ export default async function OrderDetailPage({
             <span className="font-medium">¥{formatAmount(detail.subtotal)}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">配送费</span>
+            <span className="text-muted-foreground">代取费</span>
             <span className="font-medium">¥{formatAmount(detail.delivery_fee)}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">配送减免</span>
+            <span className="text-muted-foreground">代取减免</span>
             <span className="font-medium">
               -¥{formatAmount(detail.delivery_fee_discount)}
             </span>

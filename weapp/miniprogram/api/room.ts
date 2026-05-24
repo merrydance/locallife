@@ -86,7 +86,7 @@ export interface ExploreRoomItem {
     capacity?: number                            // 容量
     description?: string                         // 描述
     distance?: number                            // 距离（米）
-    estimated_delivery_fee?: number              // 预估配送费（分）
+    estimated_delivery_fee?: number              // 预估代取费（分）
     id?: number                                  // 包间ID
     merchant_address?: string                    // 商户地址
     merchant_id?: number                         // 商户ID

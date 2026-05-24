@@ -81,7 +81,7 @@
 
 - 同时包含生成查询代码与手写事务文件。
 - `db/sqlc/store.go` 是核心接口边界。
-- 订单、支付、退款、配送等关键状态推进通常落在 `tx_*.go` 中。
+- 订单、支付、退款、代取等关键状态推进通常落在 `tx_*.go` 中。
 
 ### `locallife/worker/`
 
@@ -103,7 +103,7 @@
 - `locallife/logic/order_service.go`
 - `locallife/db/sqlc/tx_create_order.go`
 
-配送与履约状态常会联动：抢单、取货、配送中、送达、完成，以及押金、库存、通知、结算语义。
+代取与履约状态常会联动：抢单、取货、代取中、送达、完成，以及押金、库存、通知、结算语义。
 
 ### Payments and funds
 

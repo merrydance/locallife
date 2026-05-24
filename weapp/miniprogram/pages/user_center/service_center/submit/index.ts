@@ -27,7 +27,7 @@ function normalizeUserClaimType(claimType?: string): UserClaimType | null {
 const TYPE_TITLE_MAP: Record<UserClaimType, string> = {
   'foreign-object': '异物问题反馈',
   'damage': '餐品损坏反馈',
-  'timeout': '配送超时反馈'
+  'timeout': '代取超时反馈'
 }
 
 /** 最小索赔原因字数 */

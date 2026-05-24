@@ -1218,7 +1218,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 					Times(1).
 					Return(int64(0), nil)
 
-				// 检查活跃配送
+				// 检查活跃代取
 				store.EXPECT().
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
@@ -1469,7 +1469,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 				store.EXPECT().
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return([]db.Delivery{{ID: 1}}, nil) // 有活跃配送
+					Return([]db.Delivery{{ID: 1}}, nil) // 有活跃代取
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -1932,7 +1932,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "delivering", resp.OnlineStatus)
 				require.Equal(t, 1, resp.ActiveDeliveries)
-				require.False(t, resp.CanGoOffline) // 有配送中订单不能下线
+				require.False(t, resp.CanGoOffline) // 有代取中订单不能下线
 			},
 		},
 		{
@@ -2017,7 +2017,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 				var resp riderStatusResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.False(t, resp.CanGoOnline)
-				require.Equal(t, "骑手结算账户未开通，暂不能接收配送费分账订单", resp.OnlineBlockReason)
+				require.Equal(t, "骑手结算账户未开通，暂不能接收代取费分账订单", resp.OnlineBlockReason)
 				require.NotNil(t, resp.SettlementAccount)
 				require.Equal(t, "资料待提交", resp.SettlementAccount.Label)
 			},

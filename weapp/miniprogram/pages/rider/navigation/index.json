@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "配送导航",
+  "navigationBarTitleText": "代取导航",
   "navigationStyle": "custom",
   "usingComponents": {
     "custom-navbar": "/components/custom-navbar/index",

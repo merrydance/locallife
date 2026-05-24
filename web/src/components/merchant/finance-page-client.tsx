@@ -830,8 +830,8 @@ export function FinancePageClient() {
                       <TableHead>订单号</TableHead>
                       <TableHead>类型</TableHead>
                       <TableHead className="text-right">商品金额</TableHead>
-                      <TableHead className="text-right">配送费</TableHead>
-                      <TableHead className="text-right">配送优惠</TableHead>
+                      <TableHead className="text-right">代取费</TableHead>
+                      <TableHead className="text-right">代取优惠</TableHead>
                       <TableHead className="text-right">订单金额</TableHead>
                       <TableHead className="text-right">时间</TableHead>
                     </TableRow>

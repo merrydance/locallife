@@ -471,7 +471,7 @@ func writeFeieSettlementBill(builder *strings.Builder, settlementBill *printSett
 	builder.WriteString("<BOLD>商户实收：" + fenToYuan(breakdown.MerchantReceivableAmount) + "</BOLD><BR>")
 
 	if profitSharingOrder.RiderGrossAmount > 0 || profitSharingOrder.RiderPaymentFee > 0 || profitSharingOrder.RiderAmount > 0 {
-		builder.WriteString("配送费：" + fenToYuan(profitSharingOrder.RiderGrossAmount) + "<BR>")
+		builder.WriteString("代取费：" + fenToYuan(profitSharingOrder.RiderGrossAmount) + "<BR>")
 		builder.WriteString("骑手通道费：-" + fenToYuan(profitSharingOrder.RiderPaymentFee) + "<BR>")
 		builder.WriteString("骑手实收：" + fenToYuan(profitSharingOrder.RiderAmount) + "<BR>")
 	}

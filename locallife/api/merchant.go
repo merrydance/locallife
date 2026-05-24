@@ -920,7 +920,7 @@ func (server *Server) getMerchantBusinessHours(ctx *gin.Context) {
 //
 // 📌 前端开发注意：商户优惠活动的管理入口分布在不同模块
 //
-// 1. 配送费优惠（满X元减配送费）
+// 1. 代取费优惠（满X元减代取费）
 //    - 管理接口在 delivery_fee.go
 //    - POST   /v1/delivery-fee/merchants/:merchant_id/promotions  创建
 //    - GET    /v1/delivery-fee/merchants/:merchant_id/promotions  列表
@@ -1101,7 +1101,7 @@ type publicMerchantDetailResponse struct {
 	BusinessHours           []businessHourItem        `json:"business_hours,omitempty"`             // 营业时间
 	DiscountRules           []publicDiscountRule      `json:"discount_rules,omitempty"`             // 满减规则
 	Vouchers                []publicVoucher           `json:"vouchers,omitempty"`                   // 代金券
-	DeliveryPromotions      []publicDeliveryPromotion `json:"delivery_promotions,omitempty"`        // 配送费优惠
+	DeliveryPromotions      []publicDeliveryPromotion `json:"delivery_promotions,omitempty"`        // 代取费优惠
 }
 
 type publicDiscountRule struct {
@@ -1330,7 +1330,7 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 		}
 	}
 
-	// 获取配送费优惠
+	// 获取代取费优惠
 	deliveryPromotions, err := server.store.ListMerchantActiveDeliveryPromotions(ctx, merchant.ID)
 	if err == nil {
 		for _, p := range deliveryPromotions {

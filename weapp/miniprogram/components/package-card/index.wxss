@@ -84,7 +84,7 @@
   font-size: var(--font-size-xs);
 }
 
-/* 配送费标签 */
+/* 代取费标签 */
 .package-card .delivery-fee {
   font-size: var(--font-size-xxs);
   color: var(--td-text-color-secondary);

@@ -1,5 +1,5 @@
 {
-    "navigationBarTitleText": "配送历史",
+    "navigationBarTitleText": "代取历史",
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
         "t-icon": "tdesign-miniprogram/icon/icon",

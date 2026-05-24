@@ -68,7 +68,7 @@
           <view class="stats-row">
             <view class="stat-item">
               <text class="stat-value">{{item.delivery_count}}</text>
-              <text class="stat-label">配送单</text>
+              <text class="stat-label">代取单</text>
             </view>
             <view class="stat-item">
               <text class="stat-value">{{item.total_earnings_display}}</text>

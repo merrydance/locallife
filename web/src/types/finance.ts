@@ -103,8 +103,8 @@ export interface PromotionExpenseItem {
   order_no: string;               // 订单编号
   order_type: string;             // 订单类型
   subtotal: number;               // 商品小计 (分, int64)
-  delivery_fee: number;           // 配送费 (分, int64)
-  delivery_fee_discount: number;  // 配送费优惠 (分, int64)
+  delivery_fee: number;           // 代取费 (分, int64)
+  delivery_fee_discount: number;  // 代取费优惠 (分, int64)
   total_amount: number;           // 订单总额 (分, int64)
   created_at: string;             // 创建时间 (RFC3339)
   completed_at?: string;          // 完成时间 (RFC3339, 可选)

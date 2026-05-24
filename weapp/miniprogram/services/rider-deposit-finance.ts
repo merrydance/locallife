@@ -40,14 +40,14 @@ export function buildWithdrawHint(
   if (activeDeliveries > 0) {
     return {
       canWithdraw: false,
-      withdrawHint: `当前有 ${activeDeliveries} 单进行中的配送，完成后才可申请提现`
+      withdrawHint: `当前有 ${activeDeliveries} 单进行中的代取，完成后才可申请提现`
     }
   }
 
   if (withdrawalProcessingAmount > 0 && deliveryFrozenDeposit > 0) {
     return {
       canWithdraw: false,
-      withdrawHint: `当前有 ${formatFenToYuan(deliveryFrozenDeposit)} 配送冻结，另有 ${formatFenToYuan(withdrawalProcessingAmount)} 提现处理中，暂不可再次提现`
+      withdrawHint: `当前有 ${formatFenToYuan(deliveryFrozenDeposit)} 代取冻结，另有 ${formatFenToYuan(withdrawalProcessingAmount)} 提现处理中，暂不可再次提现`
     }
   }
 
@@ -61,7 +61,7 @@ export function buildWithdrawHint(
   if (deliveryFrozenDeposit > 0) {
     return {
       canWithdraw: false,
-      withdrawHint: `当前有 ${formatFenToYuan(deliveryFrozenDeposit)} 配送冻结，待订单完成或取消后可提现`
+      withdrawHint: `当前有 ${formatFenToYuan(deliveryFrozenDeposit)} 代取冻结，待订单完成或取消后可提现`
     }
   }
 

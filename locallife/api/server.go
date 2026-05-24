@@ -211,14 +211,14 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		hubOptions = append(hubOptions, websocket.WithQueueStore(websocket.NewMemoryQueueStore(30*time.Minute, 200, time.Now)))
 	}
 
-	// 骑手回放过滤器：delivery_pool_new 类消息仅当订单仍在配送池（未被抢）时才回放。
+	// 骑手回放过滤器：delivery_pool_new 类消息仅当订单仍在代取池（未被抢）时才回放。
 	hubOptions = append(hubOptions, websocket.WithReplayFilter(
 		func(ctx context.Context, info websocket.ClientInfo, msg websocket.Message) bool {
 			if info.ClientType != websocket.ClientTypeRider {
 				return true // 非骑手客户端不做业务过滤
 			}
 			if msg.Type != websocket.MessageTypeDeliveryPoolNew {
-				return true // 只过滤配送池新单通知，其他消息正常回放
+				return true // 只过滤代取池新单通知，其他消息正常回放
 			}
 			// 解析消息中的 order_id
 			var payload struct {
@@ -227,7 +227,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 			if err := json.Unmarshal(msg.Data, &payload); err != nil || payload.OrderID == 0 {
 				return false // 无法解析则丢弃，避免推送无效单
 			}
-			// 查询配送池：若记录已被删除则说明订单已被抢或已取消，跳过回放
+			// 查询代取池：若记录已被删除则说明订单已被抢或已取消，跳过回放
 			_, err := store.GetDeliveryPoolByOrderID(ctx, payload.OrderID)
 			return err == nil
 		},
@@ -817,11 +817,11 @@ func (server *Server) setupRouter() {
 		inventoryGroup.GET("/stats", server.getInventoryStats)
 	}
 
-	// M6: 配送费管理路由（运营商管理）
+	// M6: 代取费管理路由（运营商管理）
 	// 运营商相关路由使用 RBAC 中间件
 	deliveryFeeGroup := authGroup.Group("/delivery-fee")
 	{
-		// 配送费配置（按区域）- 运营商权限，验证 operator 管理该区域
+		// 代取费配置（按区域）- 运营商权限，验证 operator 管理该区域
 		deliveryFeeOperatorGroup := deliveryFeeGroup.Group("")
 		deliveryFeeOperatorGroup.Use(server.CasbinRoleMiddleware(RoleOperator), server.LoadOperatorMiddleware(), server.ValidateOperatorRegionMiddleware("region_id"))
 		{
@@ -829,10 +829,10 @@ func (server *Server) setupRouter() {
 			deliveryFeeOperatorGroup.PATCH("/regions/:region_id/config", server.updateDeliveryFeeConfig)
 		}
 
-		// 配送费查询（公开访问）
+		// 代取费查询（公开访问）
 		deliveryFeeGroup.GET("/regions/:region_id/config", server.getDeliveryFeeConfig)
 
-		// 商家配送优惠（商户权限 - 使用 MerchantStaffMiddleware 支持员工角色）
+		// 商家代取优惠（商户权限 - 使用 MerchantStaffMiddleware 支持员工角色）
 		deliveryFeeMerchantGroup := deliveryFeeGroup.Group("/merchants/:merchant_id")
 		deliveryFeeMerchantGroup.Use(server.MerchantStaffMiddleware("owner", "manager"))
 		{
@@ -1101,7 +1101,7 @@ func (server *Server) setupRouter() {
 		riderGroup.GET("/recovery-disputes/:id", server.getRiderRecoveryDisputeDetail)
 	}
 
-	// M8: 配送管理路由
+	// M8: 代取管理路由
 	deliveryGroup := authGroup.Group("/delivery")
 	{
 		// 推荐订单（骑手获取附近可接订单）
@@ -1110,17 +1110,17 @@ func (server *Server) setupRouter() {
 		// 抢单
 		deliveryGroup.POST("/grab/:order_id", server.grabOrder)
 
-		// 骑手当前配送列表
+		// 骑手当前代取列表
 		deliveryGroup.GET("/active", server.listMyActiveDeliveries)
 		deliveryGroup.GET("/history", server.listMyDeliveries)
 
-		// 配送状态更新
+		// 代取状态更新
 		deliveryGroup.POST("/:delivery_id/start-pickup", server.startPickup)
 		deliveryGroup.POST("/:delivery_id/confirm-pickup", server.confirmPickup)
 		deliveryGroup.POST("/:delivery_id/start-delivery", server.startDelivery)
 		deliveryGroup.POST("/:delivery_id/confirm-delivery", server.confirmDelivery)
 
-		// 配送详情
+		// 代取详情
 		deliveryGroup.GET("/order/:order_id", server.getDeliveryByOrder)
 		deliveryGroup.GET("/:delivery_id/track", server.getDeliveryTrack)
 		deliveryGroup.GET("/:delivery_id/rider-location", server.getRiderLatestLocation)

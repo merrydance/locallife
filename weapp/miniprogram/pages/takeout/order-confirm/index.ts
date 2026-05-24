@@ -186,7 +186,7 @@ Page({
 
       this.setData({ carts: cartViews, initLoading: false })
 
-      // 根据地址计算每个商户配送费。通过 key 去重，避免 onLoad 并发加载购物车与默认地址时重复试算。
+      // 根据地址计算每个商户代取费。通过 key 去重，避免 onLoad 并发加载购物车与默认地址时重复试算。
       this.requestPricingRefresh(true)
       
       // 加载会员信息
@@ -304,7 +304,7 @@ Page({
   },
 
   /**
-   * 计算配送费并更新应付总额
+   * 计算代取费并更新应付总额
    */
   async calculateDeliveryFee(_silent: boolean = false) {
     const { address } = this.data
@@ -353,7 +353,7 @@ Page({
       if (requestVersion !== this._pricingRequestVersion) {
         return
       }
-      const pricingError = getErrorUserMessage(error, '配送费计算失败，请重试')
+      const pricingError = getErrorUserMessage(error, '代取费计算失败，请重试')
       this.setData({ pricingError })
     } finally {
       if (requestVersion === this._pricingRequestVersion) {
@@ -404,7 +404,7 @@ Page({
     }
 
     if (pricingError) {
-      wx.showToast({ title: '请先重试配送费计算', icon: 'none' })
+      wx.showToast({ title: '请先重试代取费计算', icon: 'none' })
       return
     }
 

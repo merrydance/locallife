@@ -168,9 +168,9 @@ export function buildMerchantOrderFeeBreakdownView(order: OrderResponse): Mercha
       createFeeBreakdownRow('merchant_discount_amount', '商户优惠', -breakdown.merchant_discount_amount, 'discount'),
       createFeeBreakdownRow('voucher_discount_amount', '平台/券优惠', -breakdown.voucher_discount_amount, 'discount'),
       createFeeBreakdownRow('food_payable_amount', '餐费应付', breakdown.food_payable_amount, 'default'),
-      createFeeBreakdownRow('delivery_fee_amount', '配送费', breakdown.delivery_fee_amount, 'default'),
-      createFeeBreakdownRow('delivery_fee_discount_amount', '配送优惠', -breakdown.delivery_fee_discount_amount, 'discount'),
-      createFeeBreakdownRow('delivery_payable_amount', '配送应付', breakdown.delivery_payable_amount, 'default'),
+      createFeeBreakdownRow('delivery_fee_amount', '代取费', breakdown.delivery_fee_amount, 'default'),
+      createFeeBreakdownRow('delivery_fee_discount_amount', '代取优惠', -breakdown.delivery_fee_discount_amount, 'discount'),
+      createFeeBreakdownRow('delivery_payable_amount', '代取应付', breakdown.delivery_payable_amount, 'default'),
       createFeeBreakdownRow('customer_payable_amount', '用户实付', breakdown.customer_payable_amount, 'total', true)
     ],
     settlement_rows: [
@@ -327,8 +327,8 @@ export function getMerchantOrderStatusDesc(order: OrderResponse) {
     preparing: '订单已进入制作阶段',
     ready: order.order_type === 'takeout' ? '餐品已备妥，等待骑手接力' : '餐品已备妥，等待顾客取餐或到店核销',
     courier_accepted: '骑手已接单，正在前往门店',
-    picked: '骑手已取餐，订单即将配送',
-    delivering: '骑手配送中，请留意异常与超时',
+    picked: '骑手已取餐，订单即将代取',
+    delivering: '骑手代取中，请留意异常与超时',
     rider_delivered: '骑手已送达，等待顾客确认',
     user_delivered: '顾客已确认收货，订单即将完结',
     completed: '订单已成功履约完成',
@@ -360,7 +360,7 @@ export function buildMerchantOrderTimeline(order: OrderResponse) {
       { title: '出餐完成', content: formatOrderTimelineValue(order.ready_at, order.status === 'preparing' ? '制作中' : '--') },
       { title: '骑手接单', content: formatOrderTimelineValue(order.courier_accept_at, order.status === 'ready' ? '待分配骑手' : '--') },
       { title: '骑手取餐', content: formatOrderTimelineValue(order.picked_at, order.status === 'courier_accepted' ? '骑手前往取餐' : '--') },
-      { title: '送达完成', content: formatOrderTimelineValue(order.user_delivered_at || order.auto_user_delivered_at || order.rider_delivered_at || order.completed_at, order.status === 'delivering' ? '配送途中' : '--') }
+      { title: '送达完成', content: formatOrderTimelineValue(order.user_delivered_at || order.auto_user_delivered_at || order.rider_delivered_at || order.completed_at, order.status === 'delivering' ? '代取途中' : '--') }
     ]
 
     const currentMap: Record<string, number> = {

@@ -94,7 +94,7 @@ class EscPosUtils {
         ? feeBreakdown.riderGrossAmountCents
         : feeBreakdown.deliveryFeeAmountCents;
     if (riderGrossAmount > 0) {
-      bytes.addAll(_encode("配送费: ${_formatCents(riderGrossAmount)}\n"));
+      bytes.addAll(_encode("代取费: ${_formatCents(riderGrossAmount)}\n"));
     }
     if (feeBreakdown.riderPaymentFeeCents > 0 ||
         feeBreakdown.riderNetEarningsCents > 0) {

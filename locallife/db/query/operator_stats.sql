@@ -48,7 +48,7 @@ ORDER BY total_sales DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: GetOperatorRiderRanking :many
--- 运营商区域内骑手绩效排行(通过配送订单关联区域)
+-- 运营商区域内骑手绩效排行(通过代取订单关联区域)
 SELECT 
     r.id AS rider_id,
     u.full_name AS rider_name,

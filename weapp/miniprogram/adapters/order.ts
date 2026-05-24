@@ -20,10 +20,10 @@ const ORDER_STATUS_MAP: Record<string, { text: string, color: string }> = {
   'pending': { text: '待支付', color: '#E34D59' },
   'paid': { text: '已支付', color: '#ED7B2F' },
   'preparing': { text: '制作中', color: '#0052D9' },
-  'ready': { text: '待配送', color: '#0052D9' },
+  'ready': { text: '待代取', color: '#0052D9' },
   'courier_accepted': { text: '骑手已接单', color: '#0052D9' },
   'picked': { text: '骑手已取餐', color: '#0052D9' },
-  'delivering': { text: '配送中', color: '#0052D9' },
+  'delivering': { text: '代取中', color: '#0052D9' },
   'rider_delivered': { text: '已送达待确认', color: '#0052D9' },
   'user_delivered': { text: '已送达', color: '#00A870' },
   'completed': { text: '已完成', color: '#00A870' },
@@ -34,7 +34,7 @@ const FULFILLMENT_STATUS_TEXT: Record<string, string> = {
   'scheduled': '已预约',
   'pending_kitchen': '待出餐',
   'preparing': '制作中',
-  'ready': '待取/待配送',
+  'ready': '待取/待代取',
   'completed': '已完成',
   'cancelled': '已取消'
 }
@@ -102,7 +102,7 @@ export class OrderAdapter {
       subtotal: dto.subtotal,
       subtotalDisplay: `¥${(dto.subtotal / 100).toFixed(2)}`,
       deliveryFee: dto.delivery_fee,
-      deliveryFeeDisplay: dto.delivery_fee > 0 ? `¥${(dto.delivery_fee / 100).toFixed(2)}` : '免配送费',
+      deliveryFeeDisplay: dto.delivery_fee > 0 ? `¥${(dto.delivery_fee / 100).toFixed(2)}` : '免代取费',
       deliveryFeeDiscount: dto.delivery_fee_discount,
       deliveryFeeDiscountDisplay: dto.delivery_fee_discount > 0 ? `-¥${(dto.delivery_fee_discount / 100).toFixed(2)}` : '',
       discountAmount: dto.discount_amount,
@@ -111,7 +111,7 @@ export class OrderAdapter {
       payableAmountDisplay: `¥${(payableAmount / 100).toFixed(2)}`,
       notes: dto.notes,
       paidAt: dto.paid_at,
-      // 配送地址信息
+      // 代取地址信息
       address: dto.delivery_address,
       contactName: dto.delivery_contact_name,
       contactPhone: dto.delivery_contact_phone,

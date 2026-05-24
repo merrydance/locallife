@@ -25,7 +25,7 @@
       <view class="rank-num {{index < 3 ? 'top-' + (index + 1) : ''}}">{{index + 1}}</view>
       <view class="rank-main">
         <view class="rank-name">{{item.rider_name}}</view>
-        <view class="rank-sub">配送 {{item.delivery_count}}单 | 准时率 {{item.completion_rate}}%</view>
+        <view class="rank-sub">代取 {{item.delivery_count}}单 | 准时率 {{item.completion_rate}}%</view>
       </view>
       <view class="rank-val">¥{{item.total_earnings / 100}}</view>
     </view>

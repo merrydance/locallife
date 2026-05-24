@@ -1665,7 +1665,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "计算购物车总金额，包括商品小计、配送费、优惠减免等。可选传入地址ID计算真实配送费，传入优惠券ID计算优惠减免",
+                "description": "计算购物车总金额，包括商品小计、代取费、优惠减免等。可选传入地址ID计算真实代取费，传入优惠券ID计算优惠减免",
                 "consumes": [
                     "application/json"
                 ],
@@ -3524,7 +3524,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "骑手确认已将餐品送达给顾客，会自动解冻押金并结算配送费。只能在delivering状态下调用",
+                "description": "骑手确认已将餐品送达给顾客，会自动解冻押金并结算代取费。只能在delivering状态下调用",
                 "consumes": [
                     "application/json"
                 ],
@@ -3532,14 +3532,14 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "配送管理-骑手"
+                    "代取管理-骑手"
                 ],
                 "summary": "确认送达",
                 "parameters": [
                     {
                         "minimum": 1,
                         "type": "integer",
-                        "description": "配送单ID",
+                        "description": "代取单ID",
                         "name": "delivery_id",
                         "in": "path",
                         "required": true
@@ -3565,13 +3565,13 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "无权操作此配送单",
+                        "description": "无权操作此代取单",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "配送单不存在",
+                        "description": "代取单不存在",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -3600,14 +3600,14 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "配送管理-骑手"
+                    "代取管理-骑手"
                 ],
                 "summary": "确认取餐",
                 "parameters": [
                     {
                         "minimum": 1,
                         "type": "integer",
-                        "description": "配送单ID",
+                        "description": "代取单ID",
                         "name": "delivery_id",
                         "in": "path",
                         "required": true
@@ -3633,13 +3633,13 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "无权操作此配送单",
+                        "description": "无权操作此代取单",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "配送单不存在",
+                        "description": "代取单不存在",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -3660,7 +3660,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "获取配送骑手的最新位置，仅订单所有者或配送骑手可查看",
+                "description": "获取代取骑手的最新位置，仅订单所有者或代取骑手可查看",
                 "consumes": [
                     "application/json"
                 ],
@@ -3668,14 +3668,14 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "配送管理-顾客"
+                    "代取管理-顾客"
                 ],
                 "summary": "获取骑手最新位置",
                 "parameters": [
                     {
                         "minimum": 1,
                         "type": "integer",
-                        "description": "配送单ID",
+                        "description": "代取单ID",
                         "name": "delivery_id",
                         "in": "path",
                         "required": true
@@ -3701,13 +3701,13 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "无权查看此配送单位置",
+                        "description": "无权查看此代取单位置",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "配送单不存在或无位置信息",
+                        "description": "代取单不存在或无位置信息",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -3728,7 +3728,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "骑手开始配送餐品给顾客。只能在picked状态下调用",
+                "description": "骑手开始代取餐品给顾客。只能在picked状态下调用",
                 "consumes": [
                     "application/json"
                 ],
@@ -3736,14 +3736,14 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "配送管理-骑手"
+                    "代取管理-骑手"
                 ],
-                "summary": "开始配送",
+                "summary": "开始代取",
                 "parameters": [
                     {
                         "minimum": 1,
                         "type": "integer",
-                        "description": "配送单ID",
+                        "description": "代取单ID",
                         "name": "delivery_id",
                         "in": "path",
                         "required": true
@@ -3769,13 +3769,13 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "无权操作此配送单",
+                        "description": "无权操作此代取单",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "配送单不存在",
+                        "description": "代取单不存在",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -3804,14 +3804,14 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "配送管理-骑手"
+                    "代取管理-骑手"
                 ],
                 "summary": "开始取餐",
                 "parameters": [
                     {
                         "minimum": 1,
                         "type": "integer",
-                        "description": "配送单ID",
+                        "description": "代取单ID",
                         "name": "delivery_id",
                         "in": "path",
                         "required": true
@@ -3837,13 +3837,13 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "无权操作此配送单",
+                        "description": "无权操作此代取单",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "配送单不存在",
+                        "description": "代取单不存在",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -3864,7 +3864,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "获取骑手配送过程中的位置历史，仅订单所有者或配送骑手可查看",
+                "description": "获取骑手代取过程中的位置历史，仅订单所有者或代取骑手可查看",
                 "consumes": [
                     "application/json"
                 ],
@@ -3872,14 +3872,14 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "配送管理-顾客"
+                    "代取管理-顾客"
                 ],
-                "summary": "获取配送轨迹",
+                "summary": "获取代取轨迹",
                 "parameters": [
                     {
                         "minimum": 1,
                         "type": "integer",
-                        "description": "配送单ID",
+                        "description": "代取单ID",
                         "name": "delivery_id",
                         "in": "path",
                         "required": true
@@ -3915,13 +3915,13 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "无权查看此配送单轨迹",
+                        "description": "无权查看此代取单轨迹",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "配送单不存在",
+                        "description": "代取单不存在",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -3942,7 +3942,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "获取骑手当前正在进行的配送单列表",
+                "description": "获取骑手当前正在进行的代取单列表",
                 "consumes": [
                     "application/json"
                 ],
@@ -3950,12 +3950,12 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "配送管理-骑手"
+                    "代取管理-骑手"
                 ],
-                "summary": "查询当前活跃配送",
+                "summary": "查询当前活跃代取",
                 "responses": {
                     "200": {
-                        "description": "活跃配送单列表",
+                        "description": "活跃代取单列表",
                         "schema": {
                             "type": "array",
                             "items": {
@@ -3999,7 +3999,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "配送管理-骑手"
+                    "代取管理-骑手"
                 ],
                 "summary": "抢单",
                 "parameters": [
@@ -4014,7 +4014,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "抢单成功，返回配送单详情",
+                        "description": "抢单成功，返回代取单详情",
                         "schema": {
                             "$ref": "#/definitions/api.deliveryResponse"
                         }
@@ -4059,7 +4059,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "获取骑手的配送历史列表，支持状态过滤和分页",
+                "description": "获取骑手的代取历史列表，支持状态过滤和分页",
                 "consumes": [
                     "application/json"
                 ],
@@ -4067,9 +4067,9 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "配送管理-骑手"
+                    "代取管理-骑手"
                 ],
-                "summary": "查询配送历史",
+                "summary": "查询代取历史",
                 "parameters": [
                     {
                         "enum": [
@@ -4106,7 +4106,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "配送单列表",
+                        "description": "代取单列表",
                         "schema": {
                             "$ref": "#/definitions/api.listMyDeliveriesResponse"
                         }
@@ -4145,7 +4145,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "获取指定订单的配送信息，仅订单所有者可查看",
+                "description": "获取指定订单的代取信息，仅订单所有者可查看",
                 "consumes": [
                     "application/json"
                 ],
@@ -4153,9 +4153,9 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "配送管理-顾客"
+                    "代取管理-顾客"
                 ],
-                "summary": "根据订单查询配送信息",
+                "summary": "根据订单查询代取信息",
                 "parameters": [
                     {
                         "minimum": 1,
@@ -4168,7 +4168,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "配送单详情",
+                        "description": "代取单详情",
                         "schema": {
                             "$ref": "#/definitions/api.deliveryResponse"
                         }
@@ -4186,13 +4186,13 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "无权查看此订单配送信息",
+                        "description": "无权查看此订单代取信息",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "配送单不存在",
+                        "description": "代取单不存在",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -4221,7 +4221,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "配送管理-骑手"
+                    "代取管理-骑手"
                 ],
                 "summary": "获取推荐订单",
                 "parameters": [
@@ -11282,7 +11282,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "分页获取当前商户的订单列表，支持按状态筛选\n\n**订单状态枚举：**\n- pending: 待支付\n- paid: 已支付\n- preparing: 制作中\n- ready: 待配送/待取餐\n- courier_accepted: 骑手已接单\n- picked: 已取餐\n- delivering: 配送中\n- rider_delivered: 骑手送达\n- user_delivered: 用户确认送达\n- completed: 已完成\n- cancelled: 已取消",
+                "description": "分页获取当前商户的订单列表，支持按状态筛选\n\n**订单状态枚举：**\n- pending: 待支付\n- paid: 已支付\n- preparing: 制作中\n- ready: 待代取/待取餐\n- courier_accepted: 骑手已接单\n- picked: 已取餐\n- delivering: 代取中\n- rider_delivered: 骑手送达\n- user_delivered: 用户确认送达\n- completed: 已完成\n- cancelled: 已取消",
                 "consumes": [
                     "application/json"
                 ],
@@ -12067,7 +12067,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "商户标记订单已出餐，等待配送或顾客取餐",
+                "description": "商户标记订单已出餐，等待代取或顾客取餐",
                 "consumes": [
                     "application/json"
                 ],
@@ -18930,7 +18930,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "获取运营商管理区域内骑手的配送绩效排行榜",
+                "description": "获取运营商管理区域内骑手的代取绩效排行榜",
                 "consumes": [
                     "application/json"
                 ],
@@ -19140,7 +19140,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "运营商获取指定骑手在指定天数范围内的配送绩效统计",
+                "description": "运营商获取指定骑手在指定天数范围内的代取绩效统计",
                 "consumes": [
                     "application/json"
                 ],
@@ -19150,7 +19150,7 @@ const docTemplate = `{
                 "tags": [
                     "运营商-商户骑手管理"
                 ],
-                "summary": "获取骑手配送统计",
+                "summary": "获取骑手代取统计",
                 "parameters": [
                     {
                         "type": "integer",
@@ -20567,7 +20567,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "分页获取当前用户的订单列表，支持按状态筛选。\n\n**订单状态枚举：**\n- pending: 待支付\n- paid: 已支付\n- preparing: 制作中\n- ready: 待配送/待取餐\n- courier_accepted: 骑手已接单\n- picked: 已取餐\n- delivering: 配送中\n- rider_delivered: 骑手送达\n- user_delivered: 用户确认送达\n- completed: 已完成\n- cancelled: 已取消",
+                "description": "分页获取当前用户的订单列表，支持按状态筛选。\n\n**订单状态枚举：**\n- pending: 待支付\n- paid: 已支付\n- preparing: 制作中\n- ready: 待代取/待取餐\n- courier_accepted: 骑手已接单\n- picked: 已取餐\n- delivering: 代取中\n- rider_delivered: 骑手送达\n- user_delivered: 用户确认送达\n- completed: 已完成\n- cancelled: 已取消",
                 "consumes": [
                     "application/json"
                 ],
@@ -20737,7 +20737,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "根据购物车商品计算订单金额，用于下单前预览。\n\n**计算内容：**\n- 商品小计（基于购物车商品）\n- 配送费（外卖订单，基于实时位置或配送地址）\n- 商户营销优惠与优惠券抵扣\n- 满返运费优惠\n- 推荐优惠券、阶梯优惠和代金券试算\n- 会员余额支付能力评估\n\n**配送费计算方式：**\n- 传入 latitude/longitude：使用实时位置计算（浏览阶段）\n- 传入 address_id：使用已保存地址计算（下单阶段）\n- 两者都传：优先使用 address_id",
+                "description": "根据购物车商品计算订单金额，用于下单前预览。\n\n**计算内容：**\n- 商品小计（基于购物车商品）\n- 代取费（外卖订单，基于实时位置或代取地址）\n- 商户营销优惠与优惠券抵扣\n- 满返运费优惠\n- 推荐优惠券、阶梯优惠和代金券试算\n- 会员余额支付能力评估\n\n**代取费计算方式：**\n- 传入 latitude/longitude：使用实时位置计算（浏览阶段）\n- 传入 address_id：使用已保存地址计算（下单阶段）\n- 两者都传：优先使用 address_id",
                 "consumes": [
                     "application/json"
                 ],
@@ -20785,7 +20785,7 @@ const docTemplate = `{
                     {
                         "type": "integer",
                         "format": "int64",
-                        "description": "配送地址ID（下单阶段使用）",
+                        "description": "代取地址ID（下单阶段使用）",
                         "name": "address_id",
                         "in": "query"
                     },
@@ -23856,7 +23856,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "获取骑手按完成配送数排序的绩效排行榜，支持分页",
+                "description": "获取骑手按完成代取数排序的绩效排行榜，支持分页",
                 "consumes": [
                     "application/json"
                 ],
@@ -27154,7 +27154,7 @@ const docTemplate = `{
                         "Bearer": []
                     }
                 ],
-                "description": "骑手查看与自己配送订单相关的已批准索赔列表",
+                "description": "骑手查看与自己代取订单相关的已批准索赔列表",
                 "consumes": [
                     "application/json"
                 ],
@@ -27594,7 +27594,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "分页查询当前骑手的押金变动流水记录，包括充值、提现、配送冻结、解冻、扣款等；提现冻结中间流水不作为账单明细返回",
+                "description": "分页查询当前骑手的押金变动流水记录，包括充值、提现、代取冻结、解冻、扣款等；提现冻结中间流水不作为账单明细返回",
                 "consumes": [
                     "application/json"
                 ],
@@ -27890,7 +27890,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "批量上报骑手GPS位置点，仅在线状态可调用。可选传 delivery_id（必须为当前进行中配送）与 source 标识上报来源",
+                "description": "批量上报骑手GPS位置点，仅在线状态可调用。可选传 delivery_id（必须为当前进行中代取）与 source 标识上报来源",
                 "consumes": [
                     "application/json"
                 ],
@@ -28013,7 +28013,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "设置骑手状态为离线，停止接单。如果有进行中的配送订单则无法下线",
+                "description": "设置骑手状态为离线，停止接单。如果有进行中的代取订单则无法下线",
                 "consumes": [
                     "application/json"
                 ],
@@ -28614,7 +28614,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "获取骑手当前在线状态、位置信息、配送状态等",
+                "description": "获取骑手当前在线状态、位置信息、代取状态等",
                 "consumes": [
                     "application/json"
                 ],
@@ -28660,7 +28660,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "从骑手账户提取押金到微信零钱，需要确保没有进行中的配送订单。最小提现金额1元，单次最大提现金额50000元。",
+                "description": "从骑手账户提取押金到微信零钱，需要确保没有进行中的代取订单。最小提现金额1元，单次最大提现金额50000元。",
                 "consumes": [
                     "application/json"
                 ],
@@ -28794,7 +28794,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "获取当前骑手首屏经营摘要，聚合状态、当前任务、订单池、配送费结算、押金、追偿和通知摘要",
+                "description": "获取当前骑手首屏经营摘要，聚合状态、当前任务、订单池、代取费结算、押金、追偿和通知摘要",
                 "consumes": [
                     "application/json"
                 ],
@@ -32893,7 +32893,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "address_id": {
-                    "description": "配送地址ID (选填，用于计算配送费)",
+                    "description": "代取地址ID (选填，用于计算代取费)",
                     "type": "integer",
                     "minimum": 1
                 },
@@ -32944,19 +32944,19 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "delivery_distance": {
-                    "description": "配送距离（米），仅当成功计算时返回",
+                    "description": "代取距离（米），仅当成功计算时返回",
                     "type": "integer"
                 },
                 "delivery_eta_minutes": {
-                    "description": "预计送达总时长（分钟），包含出餐、骑手到店、配送、缓冲",
+                    "description": "预计送达总时长（分钟），包含出餐、骑手到店、代取、缓冲",
                     "type": "integer"
                 },
                 "delivery_fee": {
-                    "description": "配送费（分）",
+                    "description": "代取费（分）",
                     "type": "integer"
                 },
                 "delivery_fee_discount": {
-                    "description": "配送费满返减免（分）",
+                    "description": "代取费满返减免（分）",
                     "type": "integer"
                 },
                 "discount_amount": {
@@ -33333,7 +33333,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "delivery_fee": {
-                    "description": "配送费（分）",
+                    "description": "代取费（分）",
                     "type": "integer"
                 },
                 "merchant_id": {
@@ -33353,7 +33353,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total_amount": {
-                    "description": "小计+配送费（分）",
+                    "description": "小计+代取费（分）",
                     "type": "integer"
                 }
             }
@@ -33365,7 +33365,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "address_id": {
-                    "description": "配送地址ID（外卖时必填）",
+                    "description": "代取地址ID（外卖时必填）",
                     "type": "integer",
                     "minimum": 1
                 },
@@ -34192,7 +34192,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "address_id": {
-                    "description": "配送地址ID (外卖订单必填)",
+                    "description": "代取地址ID (外卖订单必填)",
                     "type": "integer",
                     "minimum": 1,
                     "example": 5001
@@ -34204,17 +34204,17 @@ const docTemplate = `{
                     "example": 12001
                 },
                 "delivery_distance": {
-                    "description": "前端已计算的配送距离（米）",
+                    "description": "前端已计算的代取距离（米）",
                     "type": "integer",
                     "example": 2500
                 },
                 "delivery_fee": {
-                    "description": "前端已计算的配送费（分），用于直落且供服务端校验",
+                    "description": "前端已计算的代取费（分），用于直落且供服务端校验",
                     "type": "integer",
                     "example": 500
                 },
                 "delivery_fee_discount": {
-                    "description": "前端已计算的配送费优惠（分）",
+                    "description": "前端已计算的代取费优惠（分）",
                     "type": "integer",
                     "example": 200
                 },
@@ -35310,11 +35310,11 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "delivery_frozen_deposit": {
-                    "description": "配送冻结",
+                    "description": "代取冻结",
                     "type": "integer"
                 },
                 "frozen_deposit": {
-                    "description": "冻结押金（兼容字段，等于配送冻结+提现处理中）",
+                    "description": "冻结押金（兼容字段，等于代取冻结+提现处理中）",
                     "type": "integer"
                 },
                 "required_deposit": {
@@ -36526,7 +36526,7 @@ const docTemplate = `{
                     }
                 },
                 "ready_orders": {
-                    "description": "待取餐/待配送订单列表",
+                    "description": "待取餐/待代取订单列表",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/api.kitchenOrderResponse"
@@ -39513,12 +39513,12 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "delivery_fee": {
-                    "description": "配送费 (单位：分)",
+                    "description": "代取费 (单位：分)",
                     "type": "integer",
                     "example": 500
                 },
                 "delivery_fee_discount": {
-                    "description": "配送费优惠 (单位：分)",
+                    "description": "代取费优惠 (单位：分)",
                     "type": "integer",
                     "example": 200
                 },
@@ -41102,7 +41102,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "delivery_promotions": {
-                    "description": "配送费优惠",
+                    "description": "代取费优惠",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/api.publicDeliveryPromotion"
@@ -41280,7 +41280,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "delivering_orders": {
-                    "description": "配送中订单数",
+                    "description": "代取中订单数",
                     "type": "integer"
                 },
                 "gmv_24h": {
@@ -42603,7 +42603,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "avg_delivery_time_seconds": {
-                    "description": "平均配送时长(秒)",
+                    "description": "平均代取时长(秒)",
                     "type": "integer"
                 },
                 "completed_count": {
@@ -42611,7 +42611,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "delivery_count": {
-                    "description": "配送次数",
+                    "description": "代取次数",
                     "type": "integer"
                 },
                 "rider_id": {
@@ -42714,7 +42714,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "active_deliveries": {
-                    "description": "当前配送中订单数量",
+                    "description": "当前代取中订单数量",
                     "type": "integer"
                 },
                 "can_go_offline": {
@@ -43650,7 +43650,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "estimated_delivery_fee": {
-                    "description": "预估配送费（分），需要传入用户位置",
+                    "description": "预估代取费（分），需要传入用户位置",
                     "type": "integer"
                 },
                 "id": {
@@ -46090,7 +46090,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/v1",
 	Schemes:          []string{},
 	Title:            "LocalLife API",
-	Description:      "本地生活服务平台 API 文档，包含用户、商户、订单、配送、支付等完整业务功能。\n\n【图片URL约定】公共展示图片字段（如 image_url / avatar_url / logo_url）应返回可直接访问的绝对 URL（通常为 CDN 地址）。\n- 公共展示素材不应再依赖客户端拼接 /uploads/... 路径。\n- 敏感材料应使用 media_asset_id + POST /v1/media/private-access 获取短期访问地址。",
+	Description:      "本地生活服务平台 API 文档，包含用户、商户、订单、代取、支付等完整业务功能。\n\n【图片URL约定】公共展示图片字段（如 image_url / avatar_url / logo_url）应返回可直接访问的绝对 URL（通常为 CDN 地址）。\n- 公共展示素材不应再依赖客户端拼接 /uploads/... 路径。\n- 敏感材料应使用 media_asset_id + POST /v1/media/private-access 获取短期访问地址。",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

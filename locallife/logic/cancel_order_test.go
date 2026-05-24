@@ -66,7 +66,7 @@ func TestCancelOrder_LateStatus(t *testing.T) {
 	_, err := CancelOrder(context.Background(), store, CancelOrderInput{UserID: order.UserID, OrderID: order.ID})
 	reqErr := assertRequestError(t, err)
 	require.Equal(t, 400, reqErr.Status)
-	require.Equal(t, "订单已制作/配送，已记录取消诉求，请联系商户或客服处理", reqErr.Err.Error())
+	require.Equal(t, "订单已制作/代取，已记录取消诉求，请联系商户或客服处理", reqErr.Err.Error())
 }
 
 func TestCancelOrder_InvalidStatus(t *testing.T) {

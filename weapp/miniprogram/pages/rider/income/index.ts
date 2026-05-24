@@ -44,7 +44,7 @@ Page({
     pageSize: RIDER_INCOME_PAGE_SIZE,
     total: 0,
     hasMore: false,
-    emptyDescription: '当前范围暂无配送费结算记录'
+    emptyDescription: '当前范围暂无代取费结算记录'
   },
 
   onLoad() {
@@ -111,7 +111,7 @@ Page({
       hasMore: false,
       listErrorMessage: '',
       loadMoreErrorMessage: '',
-      emptyDescription: statusTab === 'all' ? '当前范围暂无配送费结算记录' : '当前状态下暂无结算记录'
+      emptyDescription: statusTab === 'all' ? '当前范围暂无代取费结算记录' : '当前状态下暂无结算记录'
     })
     this.loadLedger(1, true)
   },
@@ -157,7 +157,7 @@ Page({
       })
     } catch (error) {
       logger.error('Load rider income page failed', error)
-      const message = getErrorUserMessage(error, '配送费结算加载失败，请稍后重试')
+      const message = getErrorUserMessage(error, '代取费结算加载失败，请稍后重试')
       if (shouldShowInitialLoading) {
         this.setData({
           initialLoading: false,

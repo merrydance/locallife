@@ -108,7 +108,7 @@ func TestCuratePaymentBalance(t *testing.T) {
 
 	curatePaymentBalance(OrderContext{OrderType: "takeout"}, res, assessment)
 	require.Equal(t, int64(800), assessment.BonusPart)
-	require.Equal(t, "支付提示：您的赠送金额暂不可抵扣配送费", assessment.PaymentHint)
+	require.Equal(t, "支付提示：您的赠送金额暂不可抵扣代取费", assessment.PaymentHint)
 
 	res = &PriceCalculationResult{TotalAmount: 500}
 	assessment = &PaymentAssessment{PrincipalPart: 100, BonusPart: 200}

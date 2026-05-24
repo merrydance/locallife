@@ -35,7 +35,7 @@ const DELIVERY_ACTION_STATE_MAP: Partial<Record<Delivery['status'], Omit<RiderDe
     locationSource: 'rider_task_detail_confirm_pickup'
   },
   picked: {
-    label: '开始配送',
+    label: '开始代取',
     actionKey: 'start_delivery',
     expectedStatus: 'delivering',
     locationSource: 'rider_task_detail_start_delivery'

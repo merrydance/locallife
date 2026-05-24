@@ -2838,7 +2838,7 @@
  5631    pending('待接单'),
  5632    accepted('已接单'),
  5633    preparing('制作中'),
- 5634    delivering('配送中'),
+ 5634    delivering('代取中'),
  5635    completed('已完成'),
  5636    cancelled('已取消');
  5637

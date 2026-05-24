@@ -866,7 +866,7 @@ WHERE merchant_id = $1
 ORDER BY min_order_amount ASC
 `
 
-// 获取商户当前有效的配送费优惠
+// 获取商户当前有效的代取费优惠
 func (q *Queries) ListMerchantActiveDeliveryPromotions(ctx context.Context, merchantID int64) ([]MerchantDeliveryPromotion, error) {
 	rows, err := q.db.Query(ctx, listMerchantActiveDeliveryPromotions, merchantID)
 	if err != nil {

@@ -77,7 +77,7 @@
               <view class="order-card" wx:for="{{recommendOrders}}" wx:key="order_id">
                 <view class="order-header">
                   <view class="earnings-box">
-                    <text class="label">配送费</text>
+                    <text class="label">代取费</text>
                     <text class="value">¥{{item.delivery_fee / 100}}</text>
                   </view>
                   <view class="tags-group">
@@ -97,7 +97,7 @@
                   </view>
                   <view class="route-divider">
                     <view class="line"></view>
-                    <view class="mid-dist">配送 {{item.route_distance_km}} km</view>
+                    <view class="mid-dist">代取 {{item.route_distance_km}} km</view>
                   </view>
                   <view class="route-item delivery">
                     <view class="marker-dot green"></view>
@@ -237,13 +237,13 @@
                     <text class="price {{item.income_view.hasBill ? '' : 'price--pending'}}">{{item.income_view.summaryText}}</text>
                   </view>
                   <view class="income-breakdown" wx:if="{{item.income_view.hasBill}}">
-                    <text>配送费 {{item.income_view.grossText}}</text>
+                    <text>代取费 {{item.income_view.grossText}}</text>
                     <text>通道费 {{item.income_view.feeText}}</text>
                   </view>
                   <view class="action-btns">
                     <t-button wx:if="{{item.can_start_pickup}}" theme="primary" block loading="{{item.is_action_loading}}" disabled="{{item.is_action_loading}}" data-id="{{item.id}}" data-action="startPickup" catchtap="onUpdateStatus">我已到店</t-button>
                     <t-button wx:if="{{item.can_confirm_pickup}}" theme="warning" block loading="{{item.is_action_loading}}" disabled="{{item.is_action_loading}}" data-id="{{item.id}}" data-action="confirmPickup" catchtap="onUpdateStatus">确认取餐</t-button>
-                    <t-button wx:if="{{item.can_start_delivery}}" theme="primary" block loading="{{item.is_action_loading}}" disabled="{{item.is_action_loading}}" data-id="{{item.id}}" data-action="startDelivery" catchtap="onUpdateStatus">开始配送</t-button>
+                    <t-button wx:if="{{item.can_start_delivery}}" theme="primary" block loading="{{item.is_action_loading}}" disabled="{{item.is_action_loading}}" data-id="{{item.id}}" data-action="startDelivery" catchtap="onUpdateStatus">开始代取</t-button>
                     <t-button wx:if="{{item.can_confirm_delivery}}" theme="primary" block loading="{{item.is_action_loading}}" disabled="{{item.is_action_loading}}" data-id="{{item.id}}" data-action="confirmDelivery" catchtap="onUpdateStatus">确认送达</t-button>
                   </view>
                 </view>

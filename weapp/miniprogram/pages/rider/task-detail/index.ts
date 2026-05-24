@@ -57,7 +57,7 @@ Page({
         statusSteps: [
             { title: '已接单', status: 'assigned' },
             { title: '取餐中', status: 'picking' },
-            { title: '配送中', status: 'delivering' },
+            { title: '代取中', status: 'delivering' },
             { title: '已送达', status: 'completed' }
         ],
         currentStep: 0
@@ -170,7 +170,7 @@ Page({
     },
 
     /**
-     * 更新配送状态按钮点击
+     * 更新代取状态按钮点击
      */
     async onUpdateStatus() {
         if (this.data.actionLoading) return

@@ -4851,7 +4851,7 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 					Times(1).
 					Return([]db.DiscountRule{}, nil)
 
-				// 配送费计算相关mock
+				// 代取费计算相关mock
 				store.EXPECT().
 					GetDeliveryFeeConfigByRegion(gomock.Any(), region.ID).
 					Times(1).

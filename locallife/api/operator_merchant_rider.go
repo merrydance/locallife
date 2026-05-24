@@ -1083,9 +1083,9 @@ type riderStatsResponse struct {
 	DelayedCount              int32 `json:"delayed_count"`
 }
 
-// getOperatorRiderStats 获取骑手配送统计
-// @Summary 获取骑手配送统计
-// @Description 运营商获取指定骑手在指定天数范围内的配送绩效统计
+// getOperatorRiderStats 获取骑手代取统计
+// @Summary 获取骑手代取统计
+// @Description 运营商获取指定骑手在指定天数范围内的代取绩效统计
 // @Tags 运营商-商户骑手管理
 // @Accept json
 // @Produce json

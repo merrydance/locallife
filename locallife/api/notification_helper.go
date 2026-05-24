@@ -30,7 +30,7 @@ type SendNotificationParams struct {
 	RiderID        int64 // 骑手ID（当PushToRider=true时必填）
 	MerchantID     int64 // 商户ID（当PushToMerchant=true时必填）
 
-	// 是否忽略用户偏好设置（用于关键通知，如支付成功、配送完成等）
+	// 是否忽略用户偏好设置（用于关键通知，如支付成功、代取完成等）
 	IgnorePreferences bool
 }
 

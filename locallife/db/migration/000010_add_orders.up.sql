@@ -14,7 +14,7 @@ CREATE TABLE orders (
     -- 订单类型
     order_type TEXT NOT NULL,
     
-    -- 配送信息（外卖专用）
+    -- 代取信息（外卖专用）
     address_id BIGINT REFERENCES user_addresses(id),
     delivery_fee BIGINT NOT NULL DEFAULT 0,
     delivery_distance INTEGER,

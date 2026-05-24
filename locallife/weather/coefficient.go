@@ -14,7 +14,7 @@ import (
 type WeatherCoefficient struct {
 	Coefficient        float64 // 基础天气系数
 	WarningCoefficient float64 // 预警系数
-	SuspendDelivery    bool    // 是否暂停配送
+	SuspendDelivery    bool    // 是否暂停代取
 	WeatherType        string  // 天气类型：sunny/cloudy/rainy/snowy/extreme
 	Temperature        int     // 温度
 	Humidity           int     // 湿度
@@ -58,7 +58,7 @@ func CalculateCoefficient(ctx context.Context, store db.Store, regionID int64, w
 	// 计算基础天气系数
 	result.Coefficient = calculateBaseCoefficient(ctx, store, regionID, result.WeatherType, temp, windScale, vis)
 
-	// 极端天气暂停配送
+	// 极端天气暂停代取
 	if result.WeatherType == "extreme" {
 		result.SuspendDelivery = true
 	}
@@ -253,7 +253,7 @@ func calculateWarningCoefficient(warnings []WarningAlert) (coefficient float64, 
 
 		switch level {
 		case "red":
-			// 红色预警，暂停配送
+			// 红色预警，暂停代取
 			currentCoef = 2.00
 			currentSuspend = true
 		case "orange":
@@ -269,7 +269,7 @@ func calculateWarningCoefficient(warnings []WarningAlert) (coefficient float64, 
 			currentCoef = 1.00
 		}
 
-		// 特定极端天气类型直接暂停配送
+		// 特定极端天气类型直接暂停代取
 		if containsExtremeEvent(eventName) {
 			currentSuspend = true
 			currentCoef = 2.00

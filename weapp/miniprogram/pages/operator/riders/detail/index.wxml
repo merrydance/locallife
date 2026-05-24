@@ -45,10 +45,10 @@
       <view class="row"><text class="label">定位更新</text><text class="value">{{detail.location_updated_at || '-'}}</text></view>
     </view>
 
-    <!-- 配送统计 -->
+    <!-- 代取统计 -->
     <view class="card">
       <view class="section-header">
-        <text class="section-title">配送统计</text>
+        <text class="section-title">代取统计</text>
         <t-tag wx:if="{{stats}}" variant="outline" size="small">近30天</t-tag>
       </view>
 
@@ -75,7 +75,7 @@
         <view class="stat-grid">
           <view class="stat-item">
             <text class="stat-value">{{stats.total_deliveries}}</text>
-            <text class="stat-label">配送单数</text>
+            <text class="stat-label">代取单数</text>
           </view>
           <view class="stat-item">
             <text class="stat-value">{{stats.completed_deliveries}}</text>
@@ -87,7 +87,7 @@
           </view>
           <view class="stat-item">
             <text class="stat-value">{{stats.avg_delivery_min}}分钟</text>
-            <text class="stat-label">平均配送时长</text>
+            <text class="stat-label">平均代取时长</text>
           </view>
           <view class="stat-item">
             <text class="stat-value">¥{{stats.period_earnings_display}}</text>

@@ -49,11 +49,11 @@
       refresher-triggered="{{refreshing}}"
     >
       <view class="list-header">
-        <view class="list-header__title">待接单配送单</view>
+        <view class="list-header__title">待接单代取单</view>
         <view class="list-header__total">共 {{total}} 单</view>
       </view>
 
-      <page-state wx:if="{{dispatches.length === 0 && !loading}}" description="当前区域没有待接单配送单" />
+      <page-state wx:if="{{dispatches.length === 0 && !loading}}" description="当前区域没有待接单代取单" />
 
       <view wx:else class="dispatch-list">
         <view wx:for="{{dispatches}}" wx:key="delivery_id" class="dispatch-card">
@@ -71,7 +71,7 @@
           </view>
 
           <view class="dispatch-card__row">
-            <text class="dispatch-card__label">配送费</text>
+            <text class="dispatch-card__label">代取费</text>
             <text class="dispatch-card__value">{{item.deliveryFeeText}}</text>
           </view>
 
@@ -83,7 +83,7 @@
 
         <view class="loading-wrap">
           <t-loading wx:if="{{loadingMore}}" theme="circular" size="32rpx" />
-          <text wx:elif="{{!hasMore && dispatches.length > 0}}" class="no-more-text">没有更多待接单配送单了</text>
+          <text wx:elif="{{!hasMore && dispatches.length > 0}}" class="no-more-text">没有更多待接单代取单了</text>
         </view>
       </view>
     </scroll-view>

@@ -841,7 +841,7 @@ func TestCreateRiderRecoveryDisputeAPI(t *testing.T) {
 			name: "OK",
 			body: gin.H{
 				"claim_id": claim.ID,
-				"reason":   "因恶劣天气导致配送延迟，非骑手原因",
+				"reason":   "因恶劣天气导致代取延迟，非骑手原因",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -916,7 +916,7 @@ func TestCreateRiderRecoveryDisputeAPI(t *testing.T) {
 			name: "NotRider",
 			body: gin.H{
 				"claim_id": claim.ID,
-				"reason":   "因恶劣天气导致配送延迟，非骑手原因",
+				"reason":   "因恶劣天气导致代取延迟，非骑手原因",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -935,7 +935,7 @@ func TestCreateRiderRecoveryDisputeAPI(t *testing.T) {
 			name: "ClaimNotRelatedToRider",
 			body: gin.H{
 				"claim_id": claim.ID,
-				"reason":   "因恶劣天气导致配送延迟，非骑手原因",
+				"reason":   "因恶劣天气导致代取延迟，非骑手原因",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -1714,7 +1714,7 @@ func TestListRiderClaimsAPI(t *testing.T) {
 		OrderID:        100,
 		UserID:         200,
 		ClaimType:      "delay",
-		Description:    "配送延迟",
+		Description:    "代取延迟",
 		ClaimAmount:    300,
 		Status:         "approved",
 		RecoveryStatus: "pending",
@@ -1857,7 +1857,7 @@ func TestListRiderRecoveryDisputesAPI(t *testing.T) {
 		RegionID:         region.ID,
 		ClaimType:        "delay",
 		ClaimAmount:      300,
-		ClaimDescription: "配送延迟",
+		ClaimDescription: "代取延迟",
 		OrderNo:          "20240101120000123456",
 		CreatedAt:        time.Now(),
 	}
@@ -2089,7 +2089,7 @@ func TestGetRiderClaimDetailAPI(t *testing.T) {
 		OrderID:     100,
 		UserID:      200,
 		ClaimType:   "delay",
-		Description: "配送延迟",
+		Description: "代取延迟",
 		ClaimAmount: 300,
 		Status:      "approved",
 		OrderNo:     "20240101120000123456",
@@ -2482,7 +2482,7 @@ func TestGetRiderRecoveryDisputeDetailAPI(t *testing.T) {
 		RegionID:         region.ID,
 		ClaimType:        "delay",
 		ClaimAmount:      300,
-		ClaimDescription: "配送延迟",
+		ClaimDescription: "代取延迟",
 		OrderNo:          "20240101120000123456",
 		OrderAmount:      3000,
 		UserPhone:        pgtype.Text{String: "13800138000", Valid: true},

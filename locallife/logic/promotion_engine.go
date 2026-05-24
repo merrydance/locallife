@@ -457,7 +457,7 @@ func curatePaymentBalance(opt OrderContext, res *PriceCalculationResult, assessm
 			originalBonus := assessment.BonusPart
 			assessment.BonusPart = maxBonusCoverage
 			if assessment.BonusPart < originalBonus {
-				assessment.PaymentHint = "支付提示：您的赠送金额暂不可抵扣配送费"
+				assessment.PaymentHint = "支付提示：您的赠送金额暂不可抵扣代取费"
 			}
 		}
 	}

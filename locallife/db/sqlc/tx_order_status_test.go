@@ -301,14 +301,14 @@ func TestUpdateOrderStatusTx_StartDelivery(t *testing.T) {
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
 	order := createRandomOrderWithStatus(t, user.ID, merchant.ID, "ready")
 
-	// 系统自动派单开始配送（数据库约束 operator_type 只允许 user/merchant/system）
+	// 系统自动派单开始代取（数据库约束 operator_type 只允许 user/merchant/system）
 	arg := UpdateOrderStatusTxParams{
 		OrderID:      order.ID,
 		NewStatus:    "delivering",
 		OldStatus:    "ready",
 		OperatorID:   user.ID, // 用于记录关联用户
 		OperatorType: "system",
-		Notes:        "系统派单，开始配送",
+		Notes:        "系统派单，开始代取",
 	}
 
 	result, err := testStore.UpdateOrderStatusTx(context.Background(), arg)
@@ -852,7 +852,7 @@ func TestOrderLifecycle_Takeout(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 5. 系统派单开始配送 (ready -> delivering)
+	// 5. 系统派单开始代取 (ready -> delivering)
 	// 数据库约束 operator_type 只允许 user/merchant/system
 	_, err = testStore.UpdateOrderStatusTx(context.Background(), UpdateOrderStatusTxParams{
 		OrderID:      order.ID,
@@ -860,7 +860,7 @@ func TestOrderLifecycle_Takeout(t *testing.T) {
 		OldStatus:    "ready",
 		OperatorID:   user.ID,
 		OperatorType: "system",
-		Notes:        "系统派单，开始配送",
+		Notes:        "系统派单，开始代取",
 	})
 	require.NoError(t, err)
 

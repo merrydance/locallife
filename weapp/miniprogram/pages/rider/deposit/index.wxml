@@ -32,7 +32,7 @@
           </view>
           <view class="balance-divider"></view>
           <view class="sub-item">
-            <text class="sub-label">配送冻结</text>
+            <text class="sub-label">代取冻结</text>
             <text class="sub-value">¥{{deliveryFrozenDepositDisplay}}</text>
           </view>
           <view class="balance-divider"></view>
@@ -172,7 +172,7 @@
         t-class="amount-input"
       />
       <view wx:if="{{withdrawErrorMessage}}" class="dialog-error-message">{{withdrawErrorMessage}}</view>
-      <view class="dialog-tips">最低提现 1.00 元，需无配送冻结和处理中提现。</view>
+      <view class="dialog-tips">最低提现 1.00 元，需无代取冻结和处理中提现。</view>
     </view>
   </t-dialog>
 </view>

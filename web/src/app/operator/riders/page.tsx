@@ -61,14 +61,14 @@ export default function OperatorRidersPage() {
         <Card>
           <CardHeader>
             <CardTitle>骑手绩效排行</CardTitle>
-            <CardDescription>以配送完成率与收入综合排序</CardDescription>
+            <CardDescription>以代取完成率与收入综合排序</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>骑手</TableHead>
-                  <TableHead>配送单量</TableHead>
+                  <TableHead>代取单量</TableHead>
                   <TableHead>完成率</TableHead>
                   <TableHead>平均时长</TableHead>
                   <TableHead>收入</TableHead>

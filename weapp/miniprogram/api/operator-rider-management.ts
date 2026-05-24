@@ -145,9 +145,9 @@ export interface RiderRankingParams extends Record<string, unknown> {
 export interface OperatorRiderRankingRow {
     rider_id: number                             // 骑手ID
     rider_name: string                           // 骑手姓名
-    delivery_count: number                       // 配送次数
+    delivery_count: number                       // 代取次数
     completed_count: number                      // 完成次数
-    avg_delivery_time_seconds: number            // 平均配送时长（秒）
+    avg_delivery_time_seconds: number            // 平均代取时长（秒）
     total_earnings: number                       // 总收入（分）
 }
 
@@ -162,7 +162,7 @@ export interface ResumeOperatorRiderRequest extends Record<string, unknown> {
     reason: string                               // 恢复原因（5-500字符，必填）
 }
 
-/** 骑手配送统计响应 - 对齐 api.riderStatsResponse */
+/** 骑手代取统计响应 - 对齐 api.riderStatsResponse */
 export interface RiderStatsResponse {
     days: number
     total_deliveries: number
@@ -261,7 +261,7 @@ export class OperatorRiderManagementService {
     }
 
     /**
-     * 获取骑手配送统计
+     * 获取骑手代取统计
      * @param riderId 骑手ID
      * @param days 统计天数（默认30）
      */

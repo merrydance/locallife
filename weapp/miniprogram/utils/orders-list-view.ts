@@ -4,7 +4,7 @@ export const STATUS_TABS = [
   { label: '全部', value: '' },
   { label: '待支付', value: 'pending' },
   { label: '制作中', value: 'preparing' },
-  { label: '配送中', value: 'delivering' },
+  { label: '代取中', value: 'delivering' },
   { label: '已完成', value: 'completed' },
   { label: '已取消', value: 'cancelled' }
 ]
@@ -13,7 +13,7 @@ export const CANCEL_REASONS = [
   '不想要了',
   '信息填写错误',
   '商品价格较贵',
-  '配送时间太长',
+  '代取时间太长',
   '其他原因'
 ]
 

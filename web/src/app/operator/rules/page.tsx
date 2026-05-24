@@ -94,7 +94,7 @@ export default function OperatorRulesPage() {
     <PageShell>
       <PageHeader
         title="规则配置"
-        description="按区域管理配送规则与天气系数"
+        description="按区域管理代取规则与天气系数"
         actions={<Badge variant="secondary">运营商</Badge>}
       />
       <PageContent className="space-y-4">

@@ -24,7 +24,7 @@ export class DishAdapter {
       ratingDisplay: '0.0', // 菜品详情中没有评分信息
       distance: '距离未知',
       deliveryTimeDisplay: DishAdapter.formatDeliveryTime(dto.prepare_time),
-      deliveryFeeDisplay: '配送费待定',
+      deliveryFeeDisplay: '代取费待定',
       discountRule: '',
       tags: dto.tags?.map((tag) => tag.name) || [],
       isPremade: dto.tags?.some((tag) => tag.name.includes('预制')) || false,

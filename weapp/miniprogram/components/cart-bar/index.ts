@@ -28,7 +28,7 @@ Component({
     },
     hideFee: {
       type: Boolean,
-      value: false  // 堂食/包间场景不显示配送费提示
+      value: false  // 堂食/包间场景不显示代取费提示
     },
     dockBottom: {
       type: Boolean,

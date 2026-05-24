@@ -49,7 +49,7 @@ const ALL_CONSOLE_WORKBENCHES: ConsoleWorkbench[] = [
   },
   {
     id: 'rider',
-    name: '骑手配送',
+    name: '骑手代取',
     icon: '/assets/icons/rider.svg',
     path: '/pages/rider/dashboard/index'
   },

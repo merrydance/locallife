@@ -39,7 +39,7 @@ const STATUS_LABELS: Record<string, string> = {
   ready: "待出餐",
   courier_accepted: "骑手已接单",
   picked: "已取餐",
-  delivering: "配送中",
+  delivering: "代取中",
   rider_delivered: "骑手送达",
   user_delivered: "用户确认送达",
   completed: "已完成",
@@ -563,7 +563,7 @@ export function OrdersPageClient({
                                <Badge variant="outline" className="font-normal border-amber-200 bg-amber-50 text-amber-700">
                                  {selectedOrder.fulfillment_status === 'pending_kitchen' ? '待接单' : 
                                   selectedOrder.fulfillment_status === 'preparing' ? '制作中' :
-                                  selectedOrder.fulfillment_status === 'ready' ? '待配送/取' :
+                                  selectedOrder.fulfillment_status === 'ready' ? '待代取/取' :
                                   selectedOrder.fulfillment_status === 'completed' ? '履约完成' : selectedOrder.fulfillment_status}
                                </Badge>
                              </div>
@@ -654,7 +654,7 @@ export function OrdersPageClient({
                            </div>
                            {selectedOrder.delivery_fee > 0 && (
                              <div className="flex justify-between text-xs text-muted-foreground">
-                               <span>配送费</span>
+                               <span>代取费</span>
                                <span>¥{formatAmount(selectedOrder.delivery_fee)}</span>
                              </div>
                            )}

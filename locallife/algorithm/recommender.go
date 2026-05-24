@@ -18,7 +18,7 @@ type OrderRecommender interface {
 
 // RouteOptimizer 路径优化器接口
 type RouteOptimizer interface {
-	// OptimalPath 计算最优配送路径
+	// OptimalPath 计算最优代取路径
 	// 输入：起点、取餐点列表、送餐点列表
 	// 输出：最优访问顺序
 	OptimalPath(start Location, pickups, deliveries []Location) []Location

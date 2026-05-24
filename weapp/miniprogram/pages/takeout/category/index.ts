@@ -34,7 +34,7 @@ interface RestaurantViewModel {
 
 function deriveMerchantPromotions(tags: string[] = [], deliveryFee?: number) {
   const promoTag = tags.find((tag) => /促销|满减|折扣|优惠|券/.test(tag)) || ''
-  let subsidyTag = tags.find((tag) => /补贴|免配送|免运费|运费减免|配送补贴/.test(tag)) || ''
+  let subsidyTag = tags.find((tag) => /补贴|免代取|免运费|运费减免|代取补贴/.test(tag)) || ''
   if (!subsidyTag && deliveryFee === 0) {
     subsidyTag = '运费补贴'
   }

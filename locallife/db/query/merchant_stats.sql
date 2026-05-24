@@ -353,7 +353,7 @@ WHERE merchant_id = $1
 ORDER BY amount DESC;
 
 -- name: ListMerchantActiveDeliveryPromotions :many
--- 获取商户当前有效的配送费优惠
+-- 获取商户当前有效的代取费优惠
 SELECT id, merchant_id, name, min_order_amount, discount_amount, valid_from, valid_until, is_active, created_at, updated_at FROM merchant_delivery_promotions
 WHERE merchant_id = $1
   AND is_active = true

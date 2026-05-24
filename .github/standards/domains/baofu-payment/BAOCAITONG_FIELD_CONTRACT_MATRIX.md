@@ -1579,7 +1579,7 @@ Source: `https://doc.mandao.com/docs/bct/bct-1f9qrefjkin2b`; updated: `2026-03-2
 | Path | 中文名 | 变量名 | 必填 | 类型 | 示例值 | 枚举/条件/格式要求 | 官方描述 | 契约实现要求 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `bct-1f9qrefjkin2b.table28.tradeScene` | 交易场景 | `tradeScene` | 是 | S | 01 | conditional rule in description | 商户传入，线上场景必填，01（线上）/02（线下） | Validate required; add missing-field test |
-| `bct-1f9qrefjkin2b.table28.ifPickup` | 自提标记 | `ifPickup` | 否 | S | 01 |  | 是否为自提订单，01（配送）/02（自提） | Optional: omit empty outbound; tolerate absent inbound |
+| `bct-1f9qrefjkin2b.table28.ifPickup` | 自提标记 | `ifPickup` | 否 | S | 01 |  | 是否为自提订单，01（代取）/02（自提） | Optional: omit empty outbound; tolerate absent inbound |
 | `bct-1f9qrefjkin2b.table28.province` | 收货省 | `province` | 否 | S |  | conditional rule in description | 用于省市聚集校验，线上场景必填 | Optional: omit empty outbound; tolerate absent inbound |
 | `bct-1f9qrefjkin2b.table28.city` | 收货市 | `city` | 否 | S |  | conditional rule in description | 同上，线上场景必填 | Optional: omit empty outbound; tolerate absent inbound |
 | `bct-1f9qrefjkin2b.table28.orderSource` | 下单来源 | `orderSource` | 是 | S | 京东金融 | conditional rule in description | 传中文：微信APP扫一扫、京东金融、京东、支付宝APP扫一扫，线下or自提必填 | Validate required; add missing-field test |

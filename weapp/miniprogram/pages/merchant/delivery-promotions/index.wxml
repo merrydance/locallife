@@ -1,4 +1,4 @@
-<custom-navbar title="配送优惠管理" showBack="{{true}}" />
+<custom-navbar title="代取优惠管理" showBack="{{true}}" />
 
 <view
   class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
@@ -14,11 +14,11 @@
   </view>
 
   <view wx:elif="{{initialLoading}}" class="state-block">
-    <t-loading theme="circular" size="40rpx" text="加载配送优惠中..." vertical />
+    <t-loading theme="circular" size="40rpx" text="加载代取优惠中..." vertical />
   </view>
 
   <view wx:elif="{{initialError}}" class="state-block">
-    <t-empty icon="error-circle" description="{{initialErrorMessage || '配送优惠加载失败，请重试'}}" />
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '代取优惠加载失败，请重试'}}" />
     <t-button theme="primary" bind:tap="onRetry">重新加载</t-button>
   </view>
 
@@ -29,7 +29,7 @@
       </view>
 
       <view wx:if="{{loading && !promotions.length}}" class="loading-state">
-        <t-loading theme="circular" size="40rpx" text="加载配送优惠中..." vertical />
+        <t-loading theme="circular" size="40rpx" text="加载代取优惠中..." vertical />
       </view>
 
       <t-empty wx:elif="{{!loading && !promotions.length}}" icon="info-circle" description="{{emptyDescription}}" />
@@ -107,7 +107,7 @@
 
   <t-dialog
     visible="{{deleteDialogVisible}}"
-    title="确认删除配送优惠"
+    title="确认删除代取优惠"
     using-custom-navbar="{{true}}"
     confirm-btn="{{ { content: '确认删除', theme: 'danger', loading: deleteDialogSubmitting } }}"
     cancel-btn="取消"

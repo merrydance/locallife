@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS rider_premium_score_logs (
     -- 变更原因
     change_type VARCHAR(32) NOT NULL,         -- normal_order：接普通单，premium_order：接高值单，adjustment：人工调整
     related_order_id BIGINT REFERENCES orders(id), -- 关联订单
-    related_delivery_id BIGINT REFERENCES deliveries(id), -- 关联配送单
+    related_delivery_id BIGINT REFERENCES deliveries(id), -- 关联代取单
     remark TEXT,                               -- 备注
     
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

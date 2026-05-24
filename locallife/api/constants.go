@@ -48,9 +48,9 @@ const (
 	// Geofencing Constants (地理围栏相关常量)
 	// P1-003 修复：骑手抢单最大距离（米）
 	MaxGrabOrderDistanceMeters = 5000 // 5公里
-	// P1-005 修复：配送确认半径（米）
+	// P1-005 修复：代取确认半径（米）
 	DeliveryConfirmRadiusMeters = 500 // 500米
-	// P1-005 修复：配送确认定位最大时效（秒）
+	// P1-005 修复：代取确认定位最大时效（秒）
 	DeliveryConfirmLocationMaxAgeSec = 120 // 2分钟
 
 	// Recovery dispute constants (追偿争议相关常量)

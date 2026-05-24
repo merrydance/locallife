@@ -1,7 +1,7 @@
 /**
  * 平台管理接口重构 (Task 5.2)
  * 基于swagger.json完全重构，移除所有没有后端支持的旧功能
- * 包含：商户审核、骑手审核、配送费配置、高峰时段管理
+ * 包含：商户审核、骑手审核、代取费配置、高峰时段管理
  */
 
 import { request } from '../utils/request'
@@ -309,9 +309,9 @@ export interface UpdatePlatformProfitSharingConfigRequest extends Record<string,
     priority?: number
 }
 
-// ==================== 配送费配置相关类型 ====================
+// ==================== 代取费配置相关类型 ====================
 
-/** 配送费配置响应 - 对齐 api.deliveryFeeConfigResponse */
+/** 代取费配置响应 - 对齐 api.deliveryFeeConfigResponse */
 export interface DeliveryFeeConfigResponse {
     base_distance: number
     base_fee: number
@@ -332,7 +332,7 @@ export interface DeliveryFeeConfigResponse {
     created_by: string
 }
 
-/** 创建配送费配置请求 - 对齐 api.createDeliveryFeeConfigRequest */
+/** 创建代取费配置请求 - 对齐 api.createDeliveryFeeConfigRequest */
 export interface CreateDeliveryFeeConfigRequest extends Record<string, unknown> {
     base_distance: number
     base_fee: number
@@ -347,7 +347,7 @@ export interface CreateDeliveryFeeConfigRequest extends Record<string, unknown> 
     surge_multiplier: number
 }
 
-/** 更新配送费配置请求 - 对齐 api.updateDeliveryFeeConfigRequest */
+/** 更新代取费配置请求 - 对齐 api.updateDeliveryFeeConfigRequest */
 export interface UpdateDeliveryFeeConfigRequest extends Record<string, unknown> {
     base_distance?: number
     base_fee?: number
@@ -419,7 +419,7 @@ export interface AdminRiderQueryParams extends Record<string, unknown> {
 
 /**
  * 平台管理服务
- * 提供商户审核、骑手审核、配送费配置等功能
+ * 提供商户审核、骑手审核、代取费配置等功能
  */
 export class PlatformManagementService {
     /**
@@ -705,7 +705,7 @@ export class PlatformManagementService {
     }
 
     /**
-     * 获取配送费配置
+     * 获取代取费配置
      * @param regionId 区域ID
      */
     async getDeliveryFeeConfig(regionId: number): Promise<DeliveryFeeConfigResponse> {
@@ -716,7 +716,7 @@ export class PlatformManagementService {
     }
 
     /**
-     * 创建配送费配置
+     * 创建代取费配置
      * @param regionId 区域ID
      * @param configData 配置数据
      */
@@ -732,7 +732,7 @@ export class PlatformManagementService {
     }
 
     /**
-     * 更新配送费配置
+     * 更新代取费配置
      * @param regionId 区域ID
      * @param configData 配置数据
      */

@@ -74,9 +74,9 @@
 - `merchant_discount_amount`：商户优惠金额，对应现有 `orders.discount_amount`。
 - `voucher_discount_amount`：用户券/平台券金额，对应 `orders.voucher_amount`，按现有订单金额语义确认是否计入商户结算基数。
 - `food_payable_amount`：餐费应付金额，默认 `subtotal - discount_amount - voucher_amount`，不得小于 0；如现有结算已有更权威基数，以持久化分账记录为准。
-- `delivery_fee_amount`：配送费原价，对应 `orders.delivery_fee`。
-- `delivery_fee_discount_amount`：配送费优惠，对应 `orders.delivery_fee_discount`。
-- `delivery_payable_amount`：用户实际承担配送费，默认 `delivery_fee - delivery_fee_discount`，不得小于 0。
+- `delivery_fee_amount`：代取费原价，对应 `orders.delivery_fee`。
+- `delivery_fee_discount_amount`：代取费优惠，对应 `orders.delivery_fee_discount`。
+- `delivery_payable_amount`：用户实际承担代取费，默认 `delivery_fee - delivery_fee_discount`，不得小于 0。
 - `customer_payable_amount`：用户订单实付，必须与 `orders.total_amount` 或支付单金额一致。
 - `platform_service_fee_amount`：商户可见平台服务费总额，等于 `profit_sharing_orders.platform_commission + profit_sharing_orders.operator_commission`。不拆平台 2% 和运营商 3%。
 - `payment_channel_fee_amount`：商户承担支付通道费金额。宝付 v2 使用 `profit_sharing_orders.merchant_payment_fee`；旧微信/收付通路径使用商户侧等价字段或补齐后的持久化字段。只展示金额，不展示 60bps。
@@ -237,7 +237,7 @@ type BuildMerchantOrderFeeBreakdownInput struct {
 ```
 
 3. 计算规则：
-   - 商品/配送/优惠从 `orders` 表取。
+   - 商品/代取/优惠从 `orders` 表取。
    - `food_payable_amount + delivery_payable_amount` 必须等于 `customer_payable_amount`，除非既有业务明确有余额抵扣等字段需要单列；若不一致，返回错误。
    - `platform_service_fee_amount = platform_commission + operator_commission`。
    - `payment_channel_fee_amount` 对 Baofoo v2 使用 `merchant_payment_fee`；旧路径使用商户承担的 payment fee 字段。不得使用 `provider_payment_fee`。

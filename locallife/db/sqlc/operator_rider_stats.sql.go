@@ -55,7 +55,7 @@ type GetOperatorRiderStatsRow struct {
 }
 
 // M12: 运营商骑手统计查询（按指定时间段）
-// 运营商视角：单个骑手在指定时间段内的配送统计
+// 运营商视角：单个骑手在指定时间段内的代取统计
 func (q *Queries) GetOperatorRiderStats(ctx context.Context, arg GetOperatorRiderStatsParams) (GetOperatorRiderStatsRow, error) {
 	row := q.db.QueryRow(ctx, getOperatorRiderStats, arg.RiderID, arg.StartAt, arg.EndAt)
 	var i GetOperatorRiderStatsRow

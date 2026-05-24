@@ -48,7 +48,7 @@ const sectionLabelMap: Record<string, string> = {
   current_deliveries: '当前任务',
   order_pool: '抢单大厅',
   today: '今日经营',
-  income: '配送费结算',
+  income: '代取费结算',
   deposit: '押金摘要',
   claims: '追偿待处理',
   notifications: '未读通知'
@@ -197,7 +197,7 @@ export function buildRiderWorkbenchDashboardView(
         key: 'settlement_account',
         label: '结算账户',
         value: settlementAccount?.label || '未开通',
-        note: '结算账户未开通，暂不能接收配送费分账订单',
+        note: '结算账户未开通，暂不能接收代取费分账订单',
         highlight: true,
         highlightClass: 'is-highlight',
         actionText: ''

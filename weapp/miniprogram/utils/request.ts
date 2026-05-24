@@ -170,7 +170,7 @@ function mapKnownBackendMessage(url: string, backendMessage: string): string | u
   }
 
   if (normalized.includes('active delivery orders')) {
-    return '当前有进行中的配送订单，完成后才能申请提现'
+    return '当前有进行中的代取订单，完成后才能申请提现'
   }
 
   if (normalized.includes('deposit is currently frozen')) {
