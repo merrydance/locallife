@@ -2,31 +2,45 @@ import ReviewService, { Review } from '../../../api/review'
 import ConsumerProfileAdapter from '../../../adapters/consumer-profile'
 import { formatTime } from '../../../utils/util'
 import { getStableBarHeights } from '../../../utils/responsive'
-import { ErrorHandler } from '../../../utils/error-handler'
+import { logger } from '../../../utils/logger'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 import Navigation from '../../../utils/navigation'
 
-interface MerchantDataset {
+interface IdDataset {
   id?: number
 }
 
 interface PreviewDataset {
-  urls?: string[]
-  current?: string
+  reviewId?: number
+  imageIndex?: number
 }
 
 interface ReviewDisplay {
   id: number
+  orderId: number
+  orderIdLabel: string
   merchantId: number
   merchantName: string
   logoUrl: string
   content: string
   images: string[]
-  rating: number
-  tags: string[]
   createdAt: string
-  isVisible: boolean
+  visibilityLabel: string
+  visibilityTheme: 'success' | 'warning'
   merchantReply?: string
   repliedAt?: string
+}
+
+function normalizeReviewImages(review: Review): string[] {
+  const imageUrls = Array.isArray(review.image_urls)
+    ? review.image_urls
+    : Array.isArray(review.imageUrls)
+      ? review.imageUrls
+      : Array.isArray(review.images)
+        ? review.images
+        : []
+
+  return imageUrls.filter((url): url is string => typeof url === 'string' && url.length > 0)
 }
 
 Page({
@@ -38,7 +52,8 @@ Page({
     refreshing: false,
     page: 1,
     pageSize: 10,
-    hasMore: true
+    hasMore: true,
+    error: ''
   },
 
   onLoad() {
@@ -47,11 +62,17 @@ Page({
     this.loadReviews(true)
   },
 
+  onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>) {
+    if (e.detail.navBarHeight) {
+      this.setData({ navBarHeight: e.detail.navBarHeight })
+    }
+  },
+
   async loadReviews(reset = false) {
     if (this.data.loading && !this.data.initialLoading && !this.data.refreshing) return
     if (!reset && !this.data.hasMore) return
 
-    this.setData({ loading: true })
+    this.setData({ loading: true, error: reset ? '' : this.data.error })
 
     try {
       const page = reset ? 1 : this.data.page
@@ -60,12 +81,13 @@ Page({
       const newReviews: ReviewDisplay[] = res.reviews.map((r: Review) => ({
         ...ConsumerProfileAdapter.toReviewMerchantViewModel(r),
         id: r.id,
-        rating: r.rating || 5,
-        tags: r.tags || [],
+        orderId: r.order_id,
+        orderIdLabel: `订单 #${r.order_id}`,
         content: r.content,
-        images: r.images || [],
+        images: normalizeReviewImages(r),
         createdAt: formatTime(new Date(r.created_at)),
-        isVisible: r.is_visible,
+        visibilityLabel: r.is_visible ? '公开展示' : '安全审核中',
+        visibilityTheme: r.is_visible ? 'success' : 'warning',
         merchantReply: r.merchant_reply,
         repliedAt: r.replied_at ? formatTime(new Date(r.replied_at)) : undefined
       }))
@@ -78,14 +100,20 @@ Page({
         hasMore: res.hasMore,
         loading: false,
         initialLoading: false,
-        refreshing: false
+        refreshing: false,
+        error: ''
       })
     } catch (error) {
-      ErrorHandler.handle(error, 'Reviews.listMyReviews')
+      logger.error('加载我的评价失败', error, 'Reviews.listMyReviews')
+      const errorMessage = getErrorUserMessage(error, '评价列表加载失败，请稍后重试')
+      if (!reset) {
+        wx.showToast({ title: errorMessage, icon: 'none' })
+      }
       this.setData({ 
         loading: false,
         initialLoading: false,
-        refreshing: false
+        refreshing: false,
+        error: reset ? errorMessage : this.data.error
       })
       if (reset) this.setData({ reviews: [] })
     }
@@ -103,18 +131,33 @@ Page({
   },
 
   onMerchantClick(e: WechatMiniprogram.TouchEvent) {
-    const { id } = e.currentTarget.dataset as MerchantDataset
+    const { id } = e.currentTarget.dataset as IdDataset
     if (!id) return
     Navigation.toRestaurantDetail(id)
   },
 
+  onOrderDetail(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as IdDataset
+    if (!id) return
+    Navigation.toOrderDetail(String(id))
+  },
+
   onImagePreview(e: WechatMiniprogram.TouchEvent) {
-    const { urls, current } = e.currentTarget.dataset as PreviewDataset
-    if (!urls || urls.length === 0) return
+    const { reviewId, imageIndex = 0 } = e.currentTarget.dataset as PreviewDataset
+    if (!reviewId) return
+
+    const review = this.data.reviews.find((item) => item.id === reviewId)
+    if (!review || review.images.length === 0) return
+
+    const current = review.images[imageIndex] || review.images[0]
     wx.previewImage({
-        urls,
-        current: current || urls[0]
+      urls: review.images,
+      current
     })
+  },
+
+  onRetry() {
+    this.loadReviews(true)
   },
 
   onGoHome() {

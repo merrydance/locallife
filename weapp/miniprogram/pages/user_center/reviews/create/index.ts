@@ -21,15 +21,6 @@ Page({
     initialLoading: true,
     submitting: false,
 
-    // 快捷标签
-    quickTags: [
-      '山珍多汁', '卖相工整', '分量足', '干净卫生',
-      '服务好', '送餐快', '包装好', '性价比高', '值得复购'
-    ] as string[],
-    selectedTags: [] as string[],
-
-    // 表单数据
-    rating: 0,
     content: '',
     fileList: [] as ReviewUploadFile[],
     maxImages: 9,
@@ -46,6 +37,12 @@ Page({
     } else {
       wx.showToast({ title: '无效的任务订单', icon: 'none' })
       setTimeout(() => wx.navigateBack(), 2000)
+    }
+  },
+
+  onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>) {
+    if (e.detail.navBarHeight) {
+      this.setData({ navBarHeight: e.detail.navBarHeight })
     }
   },
 
@@ -71,22 +68,6 @@ Page({
     this.setData({ content: e.detail.value })
   },
 
-  onRatingChange(e: WechatMiniprogram.CustomEvent<{ value: number }>) {
-    this.setData({ rating: e.detail.value })
-  },
-
-  onTagTap(e: WechatMiniprogram.TouchEvent) {
-    const { tag } = e.currentTarget.dataset as { tag: string }
-    const selected = [...this.data.selectedTags]
-    const idx = selected.indexOf(tag)
-    if (idx === -1) {
-      selected.push(tag)
-    } else {
-      selected.splice(idx, 1)
-    }
-    this.setData({ selectedTags: selected })
-  },
-
   // 图片添加回调
   async onAddImage(e: WechatMiniprogram.CustomEvent<{ files: Array<{ url: string }> }>) {
     const { files } = e.detail
@@ -108,21 +89,24 @@ Page({
         const currentIndex = fileList.length + i
         
         try {
-            const { mediaId } = await ReviewService.uploadReviewImage(file.url)
-            this.updateFileStatus(currentIndex, 'done', mediaId)
+            const { mediaId, displayUrl } = await ReviewService.uploadReviewImage(file.url)
+            this.updateFileStatus(currentIndex, 'done', mediaId, displayUrl)
         } catch (err) {
             this.updateFileStatus(currentIndex, 'failed')
         }
     }
   },
 
-  updateFileStatus(index: number, status: 'loading' | 'done' | 'failed', mediaId?: number) {
+  updateFileStatus(index: number, status: 'loading' | 'done' | 'failed', mediaId?: number, url?: string) {
     const { fileList } = this.data
     if (!fileList[index]) return
     
     fileList[index].status = status
     if (mediaId) {
         fileList[index].mediaId = mediaId
+    }
+    if (url) {
+        fileList[index].url = url
     }
     
     this.setData({ fileList })
@@ -140,7 +124,7 @@ Page({
 
     if (submitting) return
 
-    if (!content || content.length < 10) {
+    if (!content || content.trim().length < 10) {
       wx.showToast({ title: '评价内容至少10个字', icon: 'none' })
       return
     }
@@ -162,9 +146,7 @@ Page({
 
       const reviewData: CreateReviewParams = {
         order_id: orderId,
-        rating: this.data.rating,
-        content,
-        tags: this.data.selectedTags.length > 0 ? this.data.selectedTags : undefined,
+        content: content.trim(),
         media_asset_ids: mediaAssetIds.length > 0 ? mediaAssetIds : undefined
       }
 

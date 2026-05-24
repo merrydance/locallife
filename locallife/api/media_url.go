@@ -40,6 +40,45 @@ func (server *Server) batchPublicImageURLs(ctx context.Context, assetIDs []int64
 	return result
 }
 
+// batchOwnerVisibleReviewImageURLs resolves review image URLs for the uploading
+// user. Public consumers still use batchPublicImageURLs, which only returns
+// approved assets.
+func (server *Server) batchOwnerVisibleReviewImageURLs(ctx context.Context, assetIDs []int64, variant media.Variant, uploaderID int64) map[int64]string {
+	result := make(map[int64]string, len(assetIDs))
+	if len(assetIDs) == 0 {
+		return result
+	}
+
+	seen := make(map[int64]struct{}, len(assetIDs))
+	dedupIDs := assetIDs[:0:len(assetIDs)]
+	dedupIDs = dedupIDs[:0]
+	for _, id := range assetIDs {
+		if _, ok := seen[id]; !ok {
+			seen[id] = struct{}{}
+			dedupIDs = append(dedupIDs, id)
+		}
+	}
+
+	assets, err := server.store.ListMediaAssetsByIDs(ctx, dedupIDs)
+	if err != nil {
+		return result
+	}
+
+	for _, a := range assets {
+		if a.Visibility != string(media.VisibilityPublic) {
+			continue
+		}
+		ownerPendingReview := a.MediaCategory == string(media.CategoryReviewImage) &&
+			a.UploadedBy == uploaderID &&
+			a.ModerationStatus == "pending"
+		if a.ModerationStatus != "approved" && !ownerPendingReview {
+			continue
+		}
+		result[a.ID] = server.mediaResolver.PublicURL(a.ObjectKey, variant)
+	}
+	return result
+}
+
 // publicImageURL 针对单个 asset ID 解析 CDN URL。
 // 用于 create/update 等单项响应不值得批量查询的场景。
 func (server *Server) publicImageURL(ctx context.Context, assetID *int64, variant media.Variant) string {

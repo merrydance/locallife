@@ -2,7 +2,6 @@
   "usingComponents": {
     "t-icon": "tdesign-miniprogram/icon/icon",
     "t-button": "tdesign-miniprogram/button/button",
-    "t-rate": "tdesign-miniprogram/rate/rate",
     "t-textarea": "tdesign-miniprogram/textarea/textarea",
     "t-upload": "tdesign-miniprogram/upload/upload",
     "t-message": "tdesign-miniprogram/message/message",

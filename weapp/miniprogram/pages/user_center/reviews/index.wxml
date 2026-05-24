@@ -1,8 +1,6 @@
-<custom-navbar title="我的评价" showBack="{{true}}" />
+<custom-navbar title="我的评价" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
-  
-  <!-- 1. 骨架屏 -->
   <view wx:if="{{initialLoading}}" class="skeleton-wrap">
     <t-skeleton 
       wx:for="{{3}}" 
@@ -13,14 +11,18 @@
   </view>
 
   <block wx:else>
-    <!-- 2. 空状态 -->
-    <view wx:if="{{reviews.length === 0}}" class="empty-state animate-fade-in">
+    <view wx:if="{{error}}" class="state-wrap">
+      <t-empty icon="info-circle" description="{{error}}" />
+      <t-button theme="primary" size="small" shape="round" bindtap="onRetry">重试</t-button>
+    </view>
+
+    <view wx:elif="{{reviews.length === 0}}" class="empty-state">
       <t-empty icon="chat" description="还没有评价过订单" />
       <t-button theme="primary" size="small" shape="round" bindtap="onGoHome">去探索美食</t-button>
     </view>
 
-    <!-- 3. 评价列表 -->
     <scroll-view 
+      wx:else
       scroll-y 
       class="review-scroll"
       bindscrolltolower="onReachBottom"
@@ -29,53 +31,44 @@
       refresher-triggered="{{refreshing}}"
     >
       <view class="list-inner">
-        <view 
-          class="review-card animate-slide-up" 
+        <view
+          class="review-card"
           wx:for="{{reviews}}" 
           wx:key="id"
-          style="animation-delay: {{index * 0.05}}s"
         >
-          <!-- 商家简头 -->
           <view class="card-header" bindtap="onMerchantClick" data-id="{{item.merchantId}}">
-            <view class="shop-title">
-              <t-icon name="shop" size="32rpx" color="#666" />
-              <text class="name">{{item.merchantName}}</text>
-              <t-icon name="chevron-right" size="32rpx" color="#ccc" />
+            <view class="merchant-main">
+              <t-image src="{{item.logoUrl}}" mode="aspectFill" width="64rpx" height="64rpx" shape="circle" class="merchant-logo" />
+              <view class="merchant-copy">
+                <view class="shop-title">
+                  <text class="name">{{item.merchantName}}</text>
+                  <t-icon name="chevron-right" size="32rpx" color="var(--td-text-color-placeholder)" />
+                </view>
+                <text class="order-label">{{item.orderIdLabel}}</text>
+              </view>
             </view>
             <view class="date">{{item.createdAt}}</view>
           </view>
 
-          <!-- 新增：星级评分 -->
-          <view class="rating-row" style="margin-bottom: 16rpx; display: flex; align-items: center;">
-            <t-rate value="{{item.rating}}" size="28" readonly disabled />
-          </view>
-
-          <!-- 标签行 -->
-          <view class="tag-row" wx:if="{{item.tags && item.tags.length > 0}}">
-            <t-tag wx:for="{{item.tags}}" wx:key="*this" size="small" variant="dark" theme="default" shape="round">{{item}}</t-tag>
-          </view>
-
-          <!-- 评价内容 -->
           <view class="card-body">
             <view class="content-text">{{item.content}}</view>
             
-            <!-- 图片九宫格/单图 -->
             <view class="media-grid" wx:if="{{item.images.length > 0}}">
               <view 
                 class="media-item {{item.images.length === 1 ? 'large' : ''}}"
                 wx:for="{{item.images}}"
                 wx:for-item="img"
+                wx:for-index="imageIndex"
                 wx:key="*this"
                 catchtap="onImagePreview"
-                data-urls="{{item.images}}"
-                data-current="{{img}}"
+                data-review-id="{{item.id}}"
+                data-image-index="{{imageIndex}}"
               >
-                <t-image src="{{img}}" mode="aspectFill" width="100%" height="100%" />
+                <t-image src="{{img}}" mode="aspectFill" width="100%" height="100%" lazy />
               </view>
             </view>
           </view>
 
-          <!-- 商家回复面板 -->
           <view class="reply-box" wx:if="{{item.merchantReply}}">
             <view class="reply-header">
               <text class="label">商家回复</text>
@@ -84,18 +77,17 @@
             <view class="reply-content">{{item.merchantReply}}</view>
           </view>
 
-          <!-- 操作栏(逻辑暂留) -->
           <view class="card-footer">
-            <view class="visibility-status {{item.isVisible ? 'public' : 'audit'}}">
-              <t-icon name="{{item.isVisible ? 'check-circle' : 'error-circle'}}" size="28rpx" />
-              <text>{{item.isVisible ? '公开展示' : '安全审核中'}}</text>
+            <t-tag size="small" variant="dark" theme="{{item.visibilityTheme}}">{{item.visibilityLabel}}</t-tag>
+            <view class="footer-actions">
+              <t-button size="small" variant="text" icon="shop" data-id="{{item.merchantId}}" bindtap="onMerchantClick">商家</t-button>
+              <t-button size="small" theme="primary" variant="text" icon="order-adjustment" data-id="{{item.orderId}}" bindtap="onOrderDetail">订单</t-button>
             </view>
           </view>
         </view>
 
-        <!-- 加载状态 -->
         <view class="load-more" wx:if="{{loading && !refreshing}}">
-          <t-loading theme="circular" size="32rpx" text="正在搜寻更多记忆..." />
+          <t-loading theme="circular" size="32rpx" text="正在加载..." />
         </view>
         <view class="no-more" wx:if="{{!hasMore && reviews.length > 0}}">
           已加载全部评价

@@ -5,7 +5,6 @@
       <text class="name">{{showMerchant ? review.merchant_name : review.user_name}}</text>
       <text class="date">{{review.created_at}}</text>
     </view>
-    <t-rate value="{{review.rating}}" size="14" disabled />
   </view>
 
   <view class="content">

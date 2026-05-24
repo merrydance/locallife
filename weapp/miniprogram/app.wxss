@@ -192,7 +192,7 @@ page[data-theme="dark"] {
 }
 
 .page-shell--with-nav {
-  padding-top: calc(var(--page-shell-nav-height, 0px) + var(--spacer-sm));
+  padding-top: calc(var(--page-shell-nav-height, 0px) + var(--page-shell-nav-gap, var(--spacer-sm)));
 }
 
 .page-shell--bottom-safe {
@@ -200,8 +200,8 @@ page[data-theme="dark"] {
 }
 
 .page-shell--page-gutter {
-  padding-left: var(--spacer-md);
-  padding-right: var(--spacer-md);
+  padding-left: var(--page-shell-horizontal-gutter, var(--spacer-md));
+  padding-right: var(--page-shell-horizontal-gutter, var(--spacer-md));
 }
 
 .page-content {

@@ -174,7 +174,7 @@ func (server *Server) createReview(ctx *gin.Context) {
 	resp := newReviewResponse(review)
 	if len(req.MediaAssetIDs) > 0 {
 		resp.ImageAssetIDs = req.MediaAssetIDs
-		urls := server.batchPublicImageURLs(ctx, req.MediaAssetIDs, media.VariantOriginal)
+		urls := server.batchOwnerVisibleReviewImageURLs(ctx, req.MediaAssetIDs, media.VariantOriginal, authPayload.UserID)
 		for _, id := range req.MediaAssetIDs {
 			if u, ok := urls[id]; ok {
 				resp.ImageURLs = append(resp.ImageURLs, u)
@@ -436,7 +436,7 @@ func (server *Server) listUserReviews(ctx *gin.Context) {
 			}
 		}
 	}
-	server.enrichReviewListImages(ctx, response.Reviews)
+	server.enrichOwnerReviewListImages(ctx, response.Reviews, authPayload.UserID)
 	ctx.JSON(http.StatusOK, response)
 }
 
@@ -645,6 +645,18 @@ func (server *Server) enrichSingleReviewImages(ctx *gin.Context, resp *reviewRes
 
 // enrichReviewListImages batch-loads and enriches image URLs for a slice of reviewResponse.
 func (server *Server) enrichReviewListImages(ctx *gin.Context, reviews []reviewResponse) {
+	server.enrichReviewListImagesWithResolver(ctx, reviews, func(assetIDs []int64) map[int64]string {
+		return server.batchPublicImageURLs(ctx, assetIDs, media.VariantOriginal)
+	})
+}
+
+func (server *Server) enrichOwnerReviewListImages(ctx *gin.Context, reviews []reviewResponse, uploaderID int64) {
+	server.enrichReviewListImagesWithResolver(ctx, reviews, func(assetIDs []int64) map[int64]string {
+		return server.batchOwnerVisibleReviewImageURLs(ctx, assetIDs, media.VariantOriginal, uploaderID)
+	})
+}
+
+func (server *Server) enrichReviewListImagesWithResolver(ctx *gin.Context, reviews []reviewResponse, resolveURLs func([]int64) map[int64]string) {
 	if len(reviews) == 0 {
 		return
 	}
@@ -666,7 +678,7 @@ func (server *Server) enrichReviewListImages(ctx *gin.Context, reviews []reviewR
 	for _, img := range allImages {
 		allAssetIDs = append(allAssetIDs, img.MediaAssetID)
 	}
-	urlMap := server.batchPublicImageURLs(ctx, allAssetIDs, media.VariantOriginal)
+	urlMap := resolveURLs(allAssetIDs)
 	for i := range reviews {
 		assetIDs, ok := byReview[reviews[i].ID]
 		if !ok {

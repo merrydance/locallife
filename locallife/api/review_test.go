@@ -873,3 +873,125 @@ func TestListMerchantReviewsAPI_WithImages(t *testing.T) {
 	require.Contains(t, response.Reviews[0].ImageURLs[0], "https://cdn.test.example.com")
 	require.Contains(t, response.Reviews[0].ImageURLs[0], imageAsset.ObjectKey)
 }
+
+func TestListMerchantReviewsAPI_HidesPendingReviewImages(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	review := db.Review{
+		ID: 1, OrderID: 1, UserID: user.ID, MerchantID: merchant.ID,
+		Content: "Great!", IsVisible: true, CreatedAt: time.Now(),
+	}
+
+	const imageAssetID int64 = 99
+	reviewImage := db.ReviewImage{ReviewID: review.ID, MediaAssetID: imageAssetID}
+	imageAsset := db.ListMediaAssetsByIDsRow{
+		ID:               imageAssetID,
+		ObjectKey:        "review/image/99/photo.jpg",
+		Visibility:       "public",
+		MediaCategory:    "review",
+		ModerationStatus: "pending",
+		UploadedBy:       user.ID,
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListReviewsByMerchant(gomock.Any(), gomock.Any()).
+		Times(1).Return([]db.Review{review}, nil)
+	store.EXPECT().
+		CountReviewsByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+		Times(1).Return(int64(1), nil)
+	store.EXPECT().
+		ListReviewImagesByReviews(gomock.Any(), gomock.Any()).
+		Times(1).Return([]db.ReviewImage{reviewImage}, nil)
+	store.EXPECT().
+		ListMediaAssetsByIDs(gomock.Any(), gomock.Any()).
+		Times(1).Return([]db.ListMediaAssetsByIDsRow{imageAsset}, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+
+	url := fmt.Sprintf("/v1/reviews/merchants/%d?page_id=1&page_size=10", merchant.ID)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response struct {
+		Reviews []reviewResponse `json:"reviews"`
+	}
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Len(t, response.Reviews, 1)
+	require.Empty(t, response.Reviews[0].ImageURLs, "public merchant reviews must hide pending images")
+}
+
+// TestListUserReviewsAPI_WithOwnPendingReviewImages locks the owner-view media contract:
+// users may see their own just-uploaded review images before async moderation finishes.
+func TestListUserReviewsAPI_WithOwnPendingReviewImages(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	review := db.ListReviewsByUserRow{
+		ID:         1,
+		OrderID:    1,
+		UserID:     user.ID,
+		MerchantID: merchant.ID,
+		Content:    "Great with photos!",
+		IsVisible:  true,
+		CreatedAt:  time.Now(),
+	}
+
+	const imageAssetID int64 = 101
+	reviewImage := db.ReviewImage{ReviewID: review.ID, MediaAssetID: imageAssetID}
+	imageAsset := db.ListMediaAssetsByIDsRow{
+		ID:               imageAssetID,
+		ObjectKey:        "user/review/101/photo.jpg",
+		Visibility:       "public",
+		MediaCategory:    "review",
+		ModerationStatus: "pending",
+		UploadedBy:       user.ID,
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListReviewsByUser(gomock.Any(), gomock.Eq(db.ListReviewsByUserParams{
+			UserID: user.ID,
+			Limit:  10,
+			Offset: 0,
+		})).
+		Times(1).Return([]db.ListReviewsByUserRow{review}, nil)
+	store.EXPECT().
+		CountReviewsByUser(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).Return(int64(1), nil)
+	store.EXPECT().
+		ListReviewImagesByReviews(gomock.Any(), gomock.Any()).
+		Times(1).Return([]db.ReviewImage{reviewImage}, nil)
+	store.EXPECT().
+		ListMediaAssetsByIDs(gomock.Any(), gomock.Any()).
+		Times(1).Return([]db.ListMediaAssetsByIDsRow{imageAsset}, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/reviews/me?page_id=1&page_size=10", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response struct {
+		Reviews []reviewResponse `json:"reviews"`
+	}
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Len(t, response.Reviews, 1)
+	require.Len(t, response.Reviews[0].ImageURLs, 1, "my reviews should include owner-visible pending review image URL")
+	require.Contains(t, response.Reviews[0].ImageURLs[0], "https://cdn.test.example.com")
+	require.Contains(t, response.Reviews[0].ImageURLs[0], imageAsset.ObjectKey)
+}

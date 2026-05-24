@@ -8,9 +8,8 @@ export interface Review {
     user_id: number
     merchant_id: number
     content: string
-    rating?: number
-    tags?: string[]
     image_urls?: string[]
+    imageUrls?: string[]
     images?: string[]
     is_visible: boolean
     merchant_reply?: string
@@ -39,8 +38,6 @@ type ReviewsResponse = PaginationEnvelope & {
 export interface CreateReviewParams {
     order_id: number
     content: string
-    rating?: number
-    tags?: string[]
     media_asset_ids?: number[]
 }
 
@@ -51,9 +48,11 @@ export interface ReplyReviewParams {
 function normalizeReview(review: Review): Review {
     const imageUrls = Array.isArray(review.image_urls)
         ? review.image_urls
-        : Array.isArray(review.images)
-            ? review.images
-            : []
+        : Array.isArray(review.imageUrls)
+            ? review.imageUrls
+            : Array.isArray(review.images)
+                ? review.images
+                : []
 
     return {
         ...review,
