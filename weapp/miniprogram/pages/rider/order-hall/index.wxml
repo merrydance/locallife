@@ -81,7 +81,7 @@
                     <text class="value">¥{{item.delivery_fee / 100}}</text>
                   </view>
                   <view class="tags-group">
-                    <t-tag theme="warning" variant="light" size="small">{{item.expires_at_format}}</t-tag>
+                    <t-tag theme="{{item.deadline_desc === '已超时' || item.is_very_urgent ? 'warning' : 'primary'}}" variant="light" size="small">{{item.deadline_desc}}</t-tag>
                     <t-tag theme="primary" variant="light" size="small">{{item.pickup_distance_km}}km 到店</t-tag>
                   </view>
                 </view>
@@ -108,7 +108,7 @@
                     <view class="arrival-time">
                       <view class="time-group">
                         <text class="label">送达前</text>
-                        <text class="time">{{item.estimated_delivery_time || '尽快'}}</text>
+                        <text class="time">{{item.expected_delivery_time_label || '尽快'}}</text>
                       </view>
                     </view>
                   </view>

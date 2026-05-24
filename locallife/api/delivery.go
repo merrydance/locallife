@@ -119,23 +119,25 @@ func (server *Server) getRecommendedOrders(ctx *gin.Context) {
 	var response []recommendedOrderResponse
 	for _, s := range scored {
 		resp := recommendedOrderResponse{
-			OrderID:            s.OrderID,
-			MerchantID:         s.PoolOrder.MerchantID,
-			TotalScore:         s.TotalScore,
-			DistanceScore:      s.DistanceScore,
-			RouteScore:         s.RouteScore,
-			UrgencyScore:       s.UrgencyScore,
-			ProfitScore:        s.ProfitScore,
-			DistanceToPickup:   s.DistanceToPickup,
-			EstimatedMinutes:   s.EstimatedMinutes,
-			DeliveryFee:        s.PoolOrder.DeliveryFee,
-			Distance:           s.PoolOrder.Distance,
-			PickupLongitude:    s.PoolOrder.PickupLocation.Longitude,
-			PickupLatitude:     s.PoolOrder.PickupLocation.Latitude,
-			DeliveryLongitude:  s.PoolOrder.DeliveryLocation.Longitude,
-			DeliveryLatitude:   s.PoolOrder.DeliveryLocation.Latitude,
-			ExpiresAt:          s.PoolOrder.ExpiresAt,
-			ExpectedDeliveryAt: &s.PoolOrder.ExpectedDeliveryAt,
+			OrderID:           s.OrderID,
+			MerchantID:        s.PoolOrder.MerchantID,
+			TotalScore:        s.TotalScore,
+			DistanceScore:     s.DistanceScore,
+			RouteScore:        s.RouteScore,
+			UrgencyScore:      s.UrgencyScore,
+			ProfitScore:       s.ProfitScore,
+			DistanceToPickup:  s.DistanceToPickup,
+			EstimatedMinutes:  s.EstimatedMinutes,
+			DeliveryFee:       s.PoolOrder.DeliveryFee,
+			Distance:          s.PoolOrder.Distance,
+			PickupLongitude:   s.PoolOrder.PickupLocation.Longitude,
+			PickupLatitude:    s.PoolOrder.PickupLocation.Latitude,
+			DeliveryLongitude: s.PoolOrder.DeliveryLocation.Longitude,
+			DeliveryLatitude:  s.PoolOrder.DeliveryLocation.Latitude,
+			ExpiresAt:         s.PoolOrder.ExpiresAt,
+		}
+		if !s.PoolOrder.ExpectedDeliveryAt.IsZero() {
+			resp.ExpectedDeliveryAt = &s.PoolOrder.ExpectedDeliveryAt
 		}
 
 		// 补充商户和订单信息

@@ -9,6 +9,7 @@ import { locationService } from './location'
 import { normalizeLocationError, syncRiderDeliveryLocation } from './rider-location'
 import { riderLiveLocationSession } from './rider-live-location'
 import { buildRiderDeliveryIncomeView, RiderDeliveryIncomeView } from './rider-delivery-income-view'
+import { buildRecommendedOrderCardView } from './rider-order-hall-view'
 import { getStableBarHeights } from './responsive'
 import { resolveStatusTagTheme, type StatusTagTheme } from './status-tag'
 import { wsManager, WSMessageType } from './websocket'
@@ -389,13 +390,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
       ])
 
       const hallOrders = hallOrdersResult.ok
-        ? (hallOrdersResult.value || []).map((o: RecommendedOrder) => ({
-            ...o,
-            expires_at_format: this.formatExpiry(o.expires_at),
-            distance_km: (o.distance / 1000).toFixed(1),
-            pickup_distance_km: (o.distance_to_pickup / 1000).toFixed(1),
-            route_distance_km: (((o.real_distance || o.distance_to_pickup || o.distance) || 0) / 1000).toFixed(1)
-          }))
+        ? (hallOrdersResult.value || []).map((o: RecommendedOrder) => buildRecommendedOrderCardView(o))
         : []
 
       if (!hallOrdersResult.ok && !hallLoadError) {
@@ -512,12 +507,6 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
       return `剩 ${Math.floor(diff / 60000)} 分钟 (${h}:${m})`
     }
     return `${h}:${m} 前`
-  },
-
-  formatExpiry(expiresAt: string) {
-    const diff = new Date(expiresAt).getTime() - Date.now()
-    if (diff <= 0) return '即将消失'
-    return `剩 ${Math.ceil(diff / 60000)} 分钟`
   },
 
   onCall(e: WechatMiniprogram.TouchEvent) {

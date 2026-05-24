@@ -18,6 +18,7 @@ export interface RecommendedOrder {
     delivery_longitude: number
     delivery_latitude: number
     expires_at: string
+    expected_delivery_at?: string
 }
 
 export interface Delivery {

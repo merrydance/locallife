@@ -229,6 +229,28 @@ func TestSimpleRecommender_WithActiveOrders(t *testing.T) {
 	require.Greater(t, result[0].RouteScore, result[1].RouteScore)
 }
 
+func TestSimpleRecommender_UrgencyUsesExpectedDeliveryAt(t *testing.T) {
+	recommender := NewSimpleRecommender()
+	now := time.Now()
+	retentionExpiresAt := now.Add(365 * 24 * time.Hour)
+
+	urgentScore := recommender.calculateUrgencyScore(PoolOrder{
+		ExpectedDeliveryAt: now.Add(5 * time.Minute),
+		ExpiresAt:          retentionExpiresAt,
+	}, now)
+	normalScore := recommender.calculateUrgencyScore(PoolOrder{
+		ExpectedDeliveryAt: now.Add(50 * time.Minute),
+		ExpiresAt:          retentionExpiresAt,
+	}, now)
+	missingExpectedScore := recommender.calculateUrgencyScore(PoolOrder{
+		ExpiresAt: now.Add(5 * time.Minute),
+	}, now)
+
+	require.Equal(t, 100, urgentScore)
+	require.Greater(t, urgentScore, normalScore)
+	require.Equal(t, 0, missingExpectedScore)
+}
+
 func TestSimpleRecommender_ExpiredOrders(t *testing.T) {
 	recommender := NewSimpleRecommender()
 	ctx := context.Background()

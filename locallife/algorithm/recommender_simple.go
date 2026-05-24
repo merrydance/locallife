@@ -158,9 +158,13 @@ func (r *SimpleRecommender) calculateRouteScore(order PoolOrder, activeOrders []
 }
 
 // calculateUrgencyScore 计算时效分 (0-100)
-// 越接近过期时间分数越高
+// 越接近预计送达时间分数越高
 func (r *SimpleRecommender) calculateUrgencyScore(order PoolOrder, now time.Time) int {
-	remaining := order.ExpiresAt.Sub(now)
+	deadline := order.ExpectedDeliveryAt
+	if deadline.IsZero() {
+		return 0
+	}
+	remaining := deadline.Sub(now)
 
 	// 已过期
 	if remaining <= 0 {
