@@ -102,11 +102,11 @@ func (c *HTTPClient) QueryProfitSharing(ctx context.Context, req contracts.Share
 	if err := c.root.PostAggregatePay(ctx, "share_query", req, &result); err != nil {
 		return nil, err
 	}
-	if err := result.ValidateShareQueryResponseForRequest(req); err != nil {
-		return nil, baofu.NewProviderContractError("share_query", err)
-	}
 	if err := aggregateBusinessFailureError("share_query", result.ResultCode, result.ErrorCode, result.ErrorMessage); err != nil {
 		return nil, err
+	}
+	if err := result.ValidateShareQueryResponseForRequest(req); err != nil {
+		return nil, baofu.NewProviderContractError("share_query", err)
 	}
 	return &result, nil
 }

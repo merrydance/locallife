@@ -16,6 +16,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/robfig/cron/v3"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
@@ -402,19 +403,51 @@ func (s *BaofuPaymentRecoveryScheduler) queryBaofuProfitSharing(ctx context.Cont
 		return result, err
 	}
 
-	log.Warn().
-		Err(err).
-		Int64("profit_sharing_order_id", order.ID).
-		Str("out_order_no", outOrderNo).
-		Msg("baofu share query by tradeNo returned invalid data; retrying by outTradeNo")
+	logBaofuProfitSharingQueryError(log.Warn().Err(err), order, "tradeNo", err).
+		Msg("baofu share query by tradeNo failed; retrying by outTradeNo")
 	req.TradeNo = ""
 	req.OutTradeNo = outOrderNo
-	return s.client.QueryProfitSharing(ctx, req)
+	result, err = s.client.QueryProfitSharing(ctx, req)
+	if err != nil {
+		logBaofuProfitSharingQueryError(log.Warn().Err(err), order, "outTradeNo", err).
+			Msg("baofu share query by outTradeNo failed after tradeNo retry")
+	}
+	return result, err
 }
 
 func baofuShareQueryShouldRetryByOutTradeNo(err error) bool {
 	var providerErr *baofu.ProviderError
-	return errors.As(err, &providerErr) && strings.EqualFold(strings.TrimSpace(providerErr.UpstreamCode), baofu.PublicEnvelopeUpstreamCodeInvalidDataContent)
+	if !errors.As(err, &providerErr) || providerErr == nil {
+		return false
+	}
+	if baofu.IsProviderBusinessResponseError(err) {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(providerErr.UpstreamCode), baofu.PublicEnvelopeUpstreamCodeInvalidDataContent)
+}
+
+func logBaofuProfitSharingQueryError(event *zerolog.Event, order db.ProfitSharingOrder, queryKeyMode string, err error) *zerolog.Event {
+	event = event.
+		Int64("profit_sharing_order_id", order.ID).
+		Str("out_order_no", strings.TrimSpace(order.OutOrderNo)).
+		Str("provider_operation", "share_query").
+		Str("query_key_mode", strings.TrimSpace(queryKeyMode))
+	var providerErr *baofu.ProviderError
+	if errors.As(err, &providerErr) && providerErr != nil {
+		event = event.
+			Str("provider_method", strings.TrimSpace(providerErr.Operation)).
+			Str("provider_capability", strings.TrimSpace(providerErr.Capability)).
+			Str("upstream_code", strings.TrimSpace(providerErr.UpstreamCode)).
+			Str("frontend_code", strings.TrimSpace(providerErr.Frontend.Code)).
+			Bool("retryable", providerErr.Frontend.Retryable)
+		if providerErr.StatusCode != 0 {
+			event = event.Int("http_status", providerErr.StatusCode)
+		}
+		if cause := errors.Unwrap(providerErr); cause != nil {
+			event = event.Str("provider_error_cause", strings.TrimSpace(cause.Error()))
+		}
+	}
+	return event
 }
 
 func baofuShareFactFromQueryResult(result *aggregatecontracts.ShareResult, order db.ProfitSharingOrder) aggregatecontracts.ShareFact {
