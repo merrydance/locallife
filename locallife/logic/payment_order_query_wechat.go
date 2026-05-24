@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
@@ -46,6 +47,11 @@ func (svc *PaymentOrderService) queryBaofuAggregatePaymentOrder(ctx context.Cont
 		return QueryPaymentOrderResult{}, fmt.Errorf("query baofu payment order: %w", err)
 	}
 	wechatOrder := mapBaofuAggregatePaymentWechatOrder(queryResp)
+	updatedPaymentOrder, err := svc.recordAndApplyBaofuAggregatePaymentQueryFact(ctx, paymentOrder, queryResp)
+	if err != nil {
+		return QueryPaymentOrderResult{}, err
+	}
+	paymentOrder = updatedPaymentOrder
 	var payParams *wechat.JSAPIPayParams
 	return QueryPaymentOrderResult{
 		PaymentOrder: paymentOrder,
@@ -203,6 +209,96 @@ func mapDirectPromotionGoodsDetails(items []wechatcontracts.DirectPromotionGoods
 		})
 	}
 	return mapped
+}
+
+func (svc *PaymentOrderService) recordAndApplyBaofuAggregatePaymentQueryFact(ctx context.Context, paymentOrder db.PaymentOrder, queryResp *aggregatecontracts.UnifiedOrderResult) (db.PaymentOrder, error) {
+	if queryResp == nil {
+		return paymentOrder, nil
+	}
+	terminalStatus := aggregatecontracts.NormalizePaymentTerminalStatus(queryResp.TxnState)
+	if !isExternalPaymentTerminalStatus(terminalStatus) {
+		return paymentOrder, nil
+	}
+	if terminalStatus == db.ExternalPaymentTerminalStatusSuccess &&
+		queryResp.SuccessAmountFen != paymentOrder.Amount {
+		log.Error().
+			Int64("payment_order_id", paymentOrder.ID).
+			Str("out_trade_no", paymentOrder.OutTradeNo).
+			Str("transaction_id", strings.TrimSpace(queryResp.TradeNo)).
+			Int64("expected_amount", paymentOrder.Amount).
+			Int64("remote_amount", queryResp.SuccessAmountFen).
+			Msg("baofu aggregate payment query success amount mismatch; skip local paid transition")
+		return paymentOrder, nil
+	}
+
+	factResult, err := svc.baofuPaymentService.RecordPaymentFact(ctx, RecordBaofuPaymentFactInput{
+		PaymentOrder: paymentOrder,
+		Fact:         baofuPaymentFactFromQueryResult(queryResp, paymentOrder),
+		FactSource:   db.ExternalPaymentFactSourceQuery,
+		OccurredAt:   parseBaofuPaymentQueryFactTime(queryResp.FinishTime),
+		ObservedAt:   svc.now().UTC(),
+	})
+	if err != nil {
+		return paymentOrder, fmt.Errorf("record baofu aggregate payment query fact: %w", err)
+	}
+	if factResult.Application == nil {
+		return paymentOrder, nil
+	}
+	if _, err := NewPaymentFactService(svc.store).ApplyExternalPaymentFactApplication(ctx, factResult.Application.ID); err != nil {
+		return paymentOrder, fmt.Errorf("apply baofu aggregate payment query fact: %w", err)
+	}
+	updatedPaymentOrder, err := svc.store.GetPaymentOrder(ctx, paymentOrder.ID)
+	if err != nil {
+		return paymentOrder, fmt.Errorf("get baofu aggregate payment order after query fact application: %w", err)
+	}
+	return updatedPaymentOrder, nil
+}
+
+func baofuPaymentFactFromQueryResult(result *aggregatecontracts.UnifiedOrderResult, paymentOrder db.PaymentOrder) aggregatecontracts.PaymentFact {
+	if result == nil {
+		return aggregatecontracts.PaymentFact{OutTradeNo: paymentOrder.OutTradeNo, TransactionState: aggregatecontracts.PaymentStateAbnormal}
+	}
+	outTradeNo := strings.TrimSpace(result.OutTradeNo)
+	if outTradeNo == "" {
+		outTradeNo = strings.TrimSpace(paymentOrder.OutTradeNo)
+	}
+	raw := result.Raw
+	if len(raw) == 0 {
+		raw, _ = json.Marshal(result)
+	}
+	return aggregatecontracts.PaymentFact{
+		AgentMerchantID:         strings.TrimSpace(result.AgentMerchantID),
+		AgentTerminalID:         strings.TrimSpace(result.AgentTerminalID),
+		MerchantID:              strings.TrimSpace(result.MerchantID),
+		TerminalID:              strings.TrimSpace(result.TerminalID),
+		OutTradeNo:              outTradeNo,
+		TradeNo:                 strings.TrimSpace(result.TradeNo),
+		TransactionState:        strings.TrimSpace(result.TxnState),
+		FinishTime:              strings.TrimSpace(result.FinishTime),
+		SuccessAmountFen:        result.SuccessAmountFen,
+		FeeAmountFen:            result.FeeAmountFen,
+		InstallmentFeeAmountFen: result.InstallmentFeeAmountFen,
+		ResultCode:              strings.TrimSpace(result.ResultCode),
+		ErrorCode:               strings.TrimSpace(result.ErrorCode),
+		ErrorMessage:            strings.TrimSpace(result.ErrorMessage),
+		RequestChannelNo:        strings.TrimSpace(result.RequestChannelNo),
+		PayCode:                 strings.TrimSpace(result.PayCode),
+		ClearingDate:            strings.TrimSpace(result.ClearingDate),
+		Raw:                     raw,
+	}
+}
+
+func parseBaofuPaymentQueryFactTime(value string) time.Time {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}
+	}
+	for _, layout := range []string{time.RFC3339, "20060102150405", "2006-01-02 15:04:05"} {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed.UTC()
+		}
+	}
+	return time.Time{}
 }
 
 func (svc *PaymentOrderService) recordAndApplyDirectPaymentQueryFact(ctx context.Context, paymentOrder db.PaymentOrder, queryResp *wechatcontracts.DirectOrderQueryResponse) (db.PaymentOrder, error) {
