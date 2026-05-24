@@ -101,20 +101,31 @@ func (store *SQLStore) MarkTakeoutOrderReadyTx(ctx context.Context, arg MarkTake
 			return err
 		}
 
-		result.Order, err = q.UpdateOrderStatus(ctx, UpdateOrderStatusParams{
-			ID:                arg.OrderID,
-			Status:            OrderStatusReady,
-			ExpectedStatus:    arg.OldStatus,
-			FulfillmentStatus: pgtype.Text{String: FulfillmentStatusReady, Valid: true},
-		})
-		if err != nil {
-			return fmt.Errorf("update takeout order to ready: %w", err)
+		toStatus := OrderStatusReady
+		switch arg.OldStatus {
+		case OrderStatusPreparing:
+			result.Order, err = q.UpdateOrderStatus(ctx, UpdateOrderStatusParams{
+				ID:                arg.OrderID,
+				Status:            OrderStatusReady,
+				ExpectedStatus:    arg.OldStatus,
+				FulfillmentStatus: pgtype.Text{String: FulfillmentStatusReady, Valid: true},
+			})
+			if err != nil {
+				return fmt.Errorf("update takeout order to ready: %w", err)
+			}
+		case OrderStatusCourierAccepted:
+			result.Order, err = q.MarkCourierAcceptedTakeoutOrderReady(ctx, arg.OrderID)
+			if err != nil {
+				return fmt.Errorf("mark courier accepted takeout order ready: %w", err)
+			}
+		default:
+			return ErrRecordNotFound
 		}
 
 		result.StatusLog, err = q.CreateOrderStatusLog(ctx, CreateOrderStatusLogParams{
 			OrderID:      arg.OrderID,
 			FromStatus:   pgtype.Text{String: arg.OldStatus, Valid: true},
-			ToStatus:     OrderStatusReady,
+			ToStatus:     toStatus,
 			OperatorID:   pgtype.Int8{Int64: arg.OperatorID, Valid: true},
 			OperatorType: pgtype.Text{String: arg.OperatorType, Valid: true},
 		})

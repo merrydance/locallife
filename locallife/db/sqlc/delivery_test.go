@@ -694,6 +694,93 @@ func TestGrabOrderTx(t *testing.T) {
 	require.Equal(t, int64(500), updatedRider.FrozenDeposit)
 }
 
+func TestGrabOrderTx_PreparingPooledOrder(t *testing.T) {
+	rider := createOnlineRider(t)
+	_, err := testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
+		ID:            rider.ID,
+		DepositAmount: 10000,
+		FrozenDeposit: 0,
+	})
+	require.NoError(t, err)
+
+	poolItem := createRandomDeliveryPoolItem(t)
+	order, err := testStore.GetOrder(context.Background(), poolItem.OrderID)
+	require.NoError(t, err)
+	_, err = testStore.UpdateOrderStatus(context.Background(), UpdateOrderStatusParams{
+		ID:                order.ID,
+		Status:            OrderStatusPreparing,
+		ExpectedStatus:    order.Status,
+		FulfillmentStatus: pgtype.Text{String: FulfillmentStatusPreparing, Valid: true},
+	})
+	require.NoError(t, err)
+
+	delivery := createRandomDeliveryWithOrder(t, poolItem.OrderID)
+
+	result, err := testStore.GrabOrderTx(context.Background(), GrabOrderTxParams{
+		DeliveryID:   delivery.ID,
+		RiderID:      rider.ID,
+		RiderUserID:  rider.UserID,
+		OrderID:      poolItem.OrderID,
+		FreezeAmount: 500,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "assigned", result.Delivery.Status)
+	require.Equal(t, OrderStatusCourierAccepted, result.Order.Status)
+	require.Equal(t, OrderStatusCourierAccepted, result.StatusLog.ToStatus)
+	require.True(t, result.StatusLog.FromStatus.Valid)
+	require.Equal(t, OrderStatusPreparing, result.StatusLog.FromStatus.String)
+
+	_, err = testStore.GetDeliveryPoolByOrderID(context.Background(), poolItem.OrderID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+}
+
+func TestUpdateDeliveryToPickedTx_CourierAcceptedButNotReadyRejected(t *testing.T) {
+	rider := createOnlineRider(t)
+	_, err := testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
+		ID:            rider.ID,
+		DepositAmount: 10000,
+		FrozenDeposit: 0,
+	})
+	require.NoError(t, err)
+
+	poolItem := createRandomDeliveryPoolItem(t)
+	order, err := testStore.GetOrder(context.Background(), poolItem.OrderID)
+	require.NoError(t, err)
+	_, err = testStore.UpdateOrderStatus(context.Background(), UpdateOrderStatusParams{
+		ID:                order.ID,
+		Status:            OrderStatusPreparing,
+		ExpectedStatus:    order.Status,
+		FulfillmentStatus: pgtype.Text{String: FulfillmentStatusPreparing, Valid: true},
+	})
+	require.NoError(t, err)
+
+	delivery := createRandomDeliveryWithOrder(t, poolItem.OrderID)
+	grabResult, err := testStore.GrabOrderTx(context.Background(), GrabOrderTxParams{
+		DeliveryID:   delivery.ID,
+		RiderID:      rider.ID,
+		RiderUserID:  rider.UserID,
+		OrderID:      poolItem.OrderID,
+		FreezeAmount: 500,
+	})
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusCourierAccepted, grabResult.Order.Status)
+
+	pickingResult, err := testStore.UpdateDeliveryToPickupTx(context.Background(), UpdateDeliveryToPickupTxParams{
+		DeliveryID: grabResult.Delivery.ID,
+		RiderID:    rider.ID,
+		OrderID:    poolItem.OrderID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "picking", pickingResult.Delivery.Status)
+
+	_, err = testStore.UpdateDeliveryToPickedTx(context.Background(), UpdateDeliveryToPickedTxParams{
+		DeliveryID: grabResult.Delivery.ID,
+		RiderID:    rider.ID,
+		OrderID:    poolItem.OrderID,
+	})
+	require.ErrorIs(t, err, ErrDeliveryStateTransitionConflict)
+}
+
 func TestUpdateDeliveryToPickupTx_RollsBackWhenOrderSyncFails(t *testing.T) {
 	rider := createOnlineRider(t)
 	delivery := createAssignedDelivery(t, rider.ID)

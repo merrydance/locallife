@@ -291,7 +291,7 @@ func TestGrabDeliveryOrder_BlocksMissingBaofuSettlementAccount(t *testing.T) {
 	require.Equal(t, "骑手结算账户未开通，暂不能接收代取费分账订单", reqErr.Err.Error())
 }
 
-func TestGrabDeliveryOrder_PreparingOrderRejected(t *testing.T) {
+func TestGrabDeliveryOrder_PreparingPooledOrderAccepted(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -299,7 +299,9 @@ func TestGrabDeliveryOrder_PreparingOrderRejected(t *testing.T) {
 	rider := db.Rider{ID: 10, UserID: 1, Status: db.RiderStatusActive, IsOnline: true, DepositAmount: 1000}
 	merchant := db.Merchant{ID: 20, RegionID: 9}
 	delivery := db.Delivery{ID: 30, OrderID: 2}
-	order := db.Order{ID: 2, Status: db.OrderStatusPreparing, TotalAmount: 500}
+	order := db.Order{ID: 2, Status: db.OrderStatusPreparing, TotalAmount: 500, OrderType: db.OrderTypeTakeout}
+	acceptedOrder := order
+	acceptedOrder.Status = db.OrderStatusCourierAccepted
 
 	store.EXPECT().
 		GetRiderByUserID(gomock.Any(), int64(1)).
@@ -326,11 +328,15 @@ func TestGrabDeliveryOrder_PreparingOrderRejected(t *testing.T) {
 		GetOrder(gomock.Any(), int64(2)).
 		Times(1).
 		Return(order, nil)
+	store.EXPECT().
+		GrabOrderTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.GrabOrderTxResult{Delivery: delivery, Order: acceptedOrder}, nil)
 
-	_, err := GrabDeliveryOrder(context.Background(), store, GrabOrderInput{UserID: 1, OrderID: 2})
-	reqErr := assertRequestError(t, err)
-	require.Equal(t, 400, reqErr.Status)
-	require.Equal(t, "商户未出餐，暂不可抢单", reqErr.Err.Error())
+	result, err := GrabDeliveryOrder(context.Background(), store, GrabOrderInput{UserID: 1, OrderID: 2})
+	require.NoError(t, err)
+	require.Equal(t, delivery.ID, result.Delivery.ID)
+	require.Equal(t, db.OrderStatusCourierAccepted, result.Order.Status)
 }
 
 func TestGrabDeliveryOrder_PaidOrderRejected(t *testing.T) {

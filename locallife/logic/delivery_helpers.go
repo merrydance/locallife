@@ -9,7 +9,7 @@ import (
 func IsOrderStatusAllowedForDeliveryAction(status string, action string) bool {
 	switch action {
 	case "grab":
-		return status == db.OrderStatusReady
+		return status == db.OrderStatusPreparing || status == db.OrderStatusReady
 	case "start_pickup":
 		return status == db.OrderStatusCourierAccepted
 	case "confirm_pickup":
@@ -21,6 +21,13 @@ func IsOrderStatusAllowedForDeliveryAction(status string, action string) bool {
 	default:
 		return false
 	}
+}
+
+func IsOrderAllowedForDeliveryAction(order db.Order, action string) bool {
+	if action == "confirm_pickup" {
+		return order.Status == db.OrderStatusCourierAccepted && order.FulfillmentStatus == db.FulfillmentStatusReady
+	}
+	return IsOrderStatusAllowedForDeliveryAction(order.Status, action)
 }
 
 // OrderFreezeAmount determines how much deposit should be frozen for an order.

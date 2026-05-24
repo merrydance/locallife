@@ -211,9 +211,10 @@ func TestMaybeAutoConfirmPickup(t *testing.T) {
 	}
 
 	order := db.Order{
-		ID:     delivery.OrderID,
-		UserID: 200,
-		Status: OrderStatusCourierAccepted,
+		ID:                delivery.OrderID,
+		UserID:            200,
+		Status:            OrderStatusCourierAccepted,
+		FulfillmentStatus: db.FulfillmentStatusReady,
 	}
 
 	store.EXPECT().

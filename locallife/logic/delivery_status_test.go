@@ -105,7 +105,7 @@ func TestConfirmPickup_Success(t *testing.T) {
 	store := mockdb.NewMockStore(ctrl)
 	rider := db.Rider{ID: 10, UserID: 1}
 	delivery := db.Delivery{ID: 20, OrderID: 2, Status: "picking", RiderID: pgtype.Int8{Int64: 10, Valid: true}}
-	order := db.Order{ID: 2, Status: "courier_accepted"}
+	order := db.Order{ID: 2, Status: "courier_accepted", FulfillmentStatus: db.FulfillmentStatusReady}
 
 	store.EXPECT().
 		GetRiderByUserID(gomock.Any(), int64(1)).
@@ -131,6 +131,34 @@ func TestConfirmPickup_Success(t *testing.T) {
 	result, err := ConfirmPickup(context.Background(), store, DeliveryStatusInput{UserID: 1, DeliveryID: 2})
 	require.NoError(t, err)
 	require.Equal(t, "picked", result.Order.Status)
+}
+
+func TestConfirmPickup_CourierAcceptedButNotReadyRejected(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	rider := db.Rider{ID: 10, UserID: 1}
+	delivery := db.Delivery{ID: 20, OrderID: 2, Status: "picking", RiderID: pgtype.Int8{Int64: 10, Valid: true}}
+	order := db.Order{ID: 2, Status: "courier_accepted", FulfillmentStatus: db.FulfillmentStatusPreparing}
+
+	store.EXPECT().
+		GetRiderByUserID(gomock.Any(), int64(1)).
+		Times(1).
+		Return(rider, nil)
+	store.EXPECT().
+		GetDelivery(gomock.Any(), int64(2)).
+		Times(1).
+		Return(delivery, nil)
+	store.EXPECT().
+		GetOrder(gomock.Any(), int64(2)).
+		Times(1).
+		Return(order, nil)
+
+	_, err := ConfirmPickup(context.Background(), store, DeliveryStatusInput{UserID: 1, DeliveryID: 2})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "商户未出餐，暂不可确认取餐", reqErr.Err.Error())
 }
 
 func TestStartDelivery_Success(t *testing.T) {

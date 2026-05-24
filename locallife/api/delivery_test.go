@@ -531,11 +531,12 @@ func TestConfirmPickupAPI(t *testing.T) {
 
 				// Mock for notification
 				order := db.Order{
-					ID:         orderID,
-					UserID:     util.RandomInt(1, 1000),
-					MerchantID: util.RandomInt(1, 1000),
-					OrderNo:    util.RandomString(10),
-					Status:     "courier_accepted",
+					ID:                orderID,
+					UserID:            util.RandomInt(1, 1000),
+					MerchantID:        util.RandomInt(1, 1000),
+					OrderNo:           util.RandomString(10),
+					Status:            "courier_accepted",
+					FulfillmentStatus: db.FulfillmentStatusReady,
 				}
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
@@ -1088,11 +1089,12 @@ func TestStartPickupAPI(t *testing.T) {
 					Return(db.UpdateDeliveryToPickupTxResult{Delivery: pickingDelivery}, nil)
 
 				order := db.Order{
-					ID:         orderID,
-					UserID:     util.RandomInt(1, 1000),
-					MerchantID: util.RandomInt(1, 1000),
-					OrderNo:    util.RandomString(10),
-					Status:     "courier_accepted",
+					ID:                orderID,
+					UserID:            util.RandomInt(1, 1000),
+					MerchantID:        util.RandomInt(1, 1000),
+					OrderNo:           util.RandomString(10),
+					Status:            "courier_accepted",
+					FulfillmentStatus: db.FulfillmentStatusReady,
 				}
 				store.EXPECT().
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).

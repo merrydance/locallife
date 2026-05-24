@@ -16715,6 +16715,21 @@ func (mr *MockStoreMockRecorder) MarkClaimRecoveryWaived(ctx, id any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkClaimRecoveryWaived", reflect.TypeOf((*MockStore)(nil).MarkClaimRecoveryWaived), ctx, id)
 }
 
+// MarkCourierAcceptedTakeoutOrderReady mocks base method.
+func (m *MockStore) MarkCourierAcceptedTakeoutOrderReady(ctx context.Context, id int64) (db.Order, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkCourierAcceptedTakeoutOrderReady", ctx, id)
+	ret0, _ := ret[0].(db.Order)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkCourierAcceptedTakeoutOrderReady indicates an expected call of MarkCourierAcceptedTakeoutOrderReady.
+func (mr *MockStoreMockRecorder) MarkCourierAcceptedTakeoutOrderReady(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkCourierAcceptedTakeoutOrderReady", reflect.TypeOf((*MockStore)(nil).MarkCourierAcceptedTakeoutOrderReady), ctx, id)
+}
+
 // MarkCredentialLedgerReminderSent mocks base method.
 func (m *MockStore) MarkCredentialLedgerReminderSent(ctx context.Context, arg db.MarkCredentialLedgerReminderSentParams) (db.CredentialLedger, error) {
 	m.ctrl.T.Helper()

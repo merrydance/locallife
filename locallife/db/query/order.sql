@@ -247,7 +247,7 @@ SET
     status = 'courier_accepted',
     courier_accept_at = COALESCE(courier_accept_at, now()),
     updated_at = now()
-WHERE id = $1 AND status IN ('ready', 'courier_accepted')
+WHERE id = $1 AND status IN ('preparing', 'ready', 'courier_accepted')
 RETURNING *;
 
 -- name: UpdateOrderToPicked :one
@@ -257,6 +257,7 @@ SET
     picked_at = COALESCE(picked_at, now()),
     updated_at = now()
 WHERE id = $1 AND status IN ('courier_accepted', 'picked')
+    AND fulfillment_status = 'ready'
 RETURNING *;
 
 -- name: UpdateOrderToDelivering :one
@@ -414,6 +415,18 @@ SET
     ready_at = COALESCE(ready_at, now()),
     updated_at = now()
 WHERE id = $1 AND status = 'preparing'
+RETURNING *;
+
+-- name: MarkCourierAcceptedTakeoutOrderReady :one
+UPDATE orders
+SET
+    fulfillment_status = 'ready',
+    ready_at = COALESCE(ready_at, now()),
+    updated_at = now()
+WHERE id = $1
+    AND order_type = 'takeout'
+    AND status = 'courier_accepted'
+    AND fulfillment_status = 'preparing'
 RETURNING *;
 
 -- name: GetMerchantAvgPrepareTime :one

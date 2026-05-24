@@ -1544,6 +1544,7 @@ type Querier interface {
 	MarkClaimRecoveryPaid(ctx context.Context, id int64) (ClaimRecovery, error)
 	MarkClaimRecoveryPending(ctx context.Context, id int64) (ClaimRecovery, error)
 	MarkClaimRecoveryWaived(ctx context.Context, id int64) (ClaimRecovery, error)
+	MarkCourierAcceptedTakeoutOrderReady(ctx context.Context, id int64) (Order, error)
 	MarkCredentialLedgerReminderSent(ctx context.Context, arg MarkCredentialLedgerReminderSentParams) (CredentialLedger, error)
 	MarkCredentialLedgerResumed(ctx context.Context, arg MarkCredentialLedgerResumedParams) (CredentialLedger, error)
 	MarkCredentialLedgerSuspended(ctx context.Context, arg MarkCredentialLedgerSuspendedParams) (CredentialLedger, error)

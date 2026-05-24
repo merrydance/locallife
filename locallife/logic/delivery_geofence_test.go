@@ -42,7 +42,7 @@ func TestAutoConfirmPickup_Success(t *testing.T) {
 	store := mockdb.NewMockStore(ctrl)
 	rider := db.Rider{ID: 1, UserID: 10}
 	delivery := db.Delivery{ID: 2, OrderID: 3, Status: "picking", RiderID: pgtype.Int8{Int64: 1, Valid: true}}
-	order := db.Order{ID: 3, Status: "courier_accepted"}
+	order := db.Order{ID: 3, Status: "courier_accepted", FulfillmentStatus: db.FulfillmentStatusReady}
 
 	store.EXPECT().
 		GetOrder(gomock.Any(), int64(3)).
@@ -61,6 +61,25 @@ func TestAutoConfirmPickup_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, result.Updated)
 	require.Equal(t, "picked", result.Order.Status)
+}
+
+func TestAutoConfirmPickup_CourierAcceptedButNotReadySkipped(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	rider := db.Rider{ID: 1, UserID: 10}
+	delivery := db.Delivery{ID: 2, OrderID: 3, Status: "picking", RiderID: pgtype.Int8{Int64: 1, Valid: true}}
+	order := db.Order{ID: 3, Status: "courier_accepted", FulfillmentStatus: db.FulfillmentStatusPreparing}
+
+	store.EXPECT().
+		GetOrder(gomock.Any(), int64(3)).
+		Times(1).
+		Return(order, nil)
+
+	result, err := AutoConfirmPickup(context.Background(), store, delivery, rider)
+	require.NoError(t, err)
+	require.False(t, result.Updated)
 }
 
 func TestAutoConfirmDelivery_Success(t *testing.T) {

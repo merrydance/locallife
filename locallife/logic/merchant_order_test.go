@@ -319,6 +319,52 @@ func TestMarkMerchantOrderReady(t *testing.T) {
 				require.Nil(t, result.PoolItem)
 			},
 		},
+		{
+			name: "TakeoutCourierAcceptedCanBeMarkedReady",
+			buildStubs: func(store *mockdb.MockStore) {
+				order := baseOrder
+				order.OrderType = db.OrderTypeTakeout
+				order.Status = db.OrderStatusCourierAccepted
+				store.EXPECT().
+					GetOrderForUpdate(gomock.Any(), input.OrderID).
+					Times(1).
+					Return(order, nil)
+				store.EXPECT().
+					MarkTakeoutOrderReadyTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.MarkTakeoutOrderReadyTxParams) (db.MarkTakeoutOrderReadyTxResult, error) {
+						require.Equal(t, input.OrderID, arg.OrderID)
+						require.Equal(t, db.OrderStatusCourierAccepted, arg.OldStatus)
+						updated := order
+						updated.FulfillmentStatus = db.FulfillmentStatusReady
+						return db.MarkTakeoutOrderReadyTxResult{Order: updated}, nil
+					})
+			},
+			check: func(t *testing.T, result MerchantOrderUpdateResult, err error) {
+				require.NoError(t, err)
+				require.Equal(t, db.OrderStatusCourierAccepted, result.Order.Status)
+				require.Equal(t, db.FulfillmentStatusReady, result.Order.FulfillmentStatus)
+				require.Nil(t, result.PoolItem)
+			},
+		},
+		{
+			name: "TakeoutCourierAcceptedAlreadyReadyRejected",
+			buildStubs: func(store *mockdb.MockStore) {
+				order := baseOrder
+				order.OrderType = db.OrderTypeTakeout
+				order.Status = db.OrderStatusCourierAccepted
+				order.FulfillmentStatus = db.FulfillmentStatusReady
+				store.EXPECT().
+					GetOrderForUpdate(gomock.Any(), input.OrderID).
+					Times(1).
+					Return(order, nil)
+			},
+			check: func(t *testing.T, _ MerchantOrderUpdateResult, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 400, reqErr.Status)
+				require.Equal(t, "order already marked as ready", reqErr.Err.Error())
+			},
+		},
 	}
 
 	for _, tc := range testCases {

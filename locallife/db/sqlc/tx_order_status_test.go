@@ -199,6 +199,77 @@ func TestMarkTakeoutOrderReadyTx_DoesNotCreateDeliveryPoolEntry(t *testing.T) {
 	require.ErrorIs(t, err, ErrRecordNotFound)
 }
 
+func TestMarkTakeoutOrderReadyTx_CourierAcceptedKeepsDeliveryStatus(t *testing.T) {
+	user := createRandomUser(t)
+	merchantOwner := createRandomUser(t)
+	merchant := createMerchantWithLocation(t, merchantOwner.ID)
+	address := createRandomUserAddress(t, user)
+
+	createResult, err := testStore.CreateOrderTx(context.Background(), CreateOrderTxParams{
+		CreateOrderParams: CreateOrderParams{
+			OrderNo:          util.RandomString(20),
+			UserID:           user.ID,
+			MerchantID:       merchant.ID,
+			OrderType:        OrderTypeTakeout,
+			AddressID:        pgtype.Int8{Int64: address.ID, Valid: true},
+			DeliveryFee:      1500,
+			DeliveryDistance: pgtype.Int4{Int32: 3600, Valid: true},
+			Subtotal:         5000,
+			TotalAmount:      6500,
+			Status:           OrderStatusPending,
+		},
+		Items: []CreateOrderItemParams{{
+			DishID:    pgtype.Int8{Int64: 1, Valid: true},
+			Name:      "外卖骑手接单后出餐测试菜品",
+			UnitPrice: 5000,
+			Quantity:  1,
+			Subtotal:  5000,
+		}},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.ProcessOrderPaymentTx(context.Background(), ProcessOrderPaymentTxParams{OrderID: createResult.Order.ID})
+	require.NoError(t, err)
+	acceptResult, err := testStore.AcceptTakeoutOrderTx(context.Background(), AcceptTakeoutOrderTxParams{
+		OrderID:      createResult.Order.ID,
+		OldStatus:    OrderStatusPaid,
+		OperatorID:   merchantOwner.ID,
+		OperatorType: "merchant",
+	})
+	require.NoError(t, err)
+
+	rider := createOnlineRider(t)
+	_, err = testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
+		ID:            rider.ID,
+		DepositAmount: 10000,
+		FrozenDeposit: 0,
+	})
+	require.NoError(t, err)
+	grabResult, err := testStore.GrabOrderTx(context.Background(), GrabOrderTxParams{
+		DeliveryID:   acceptResult.Delivery.ID,
+		RiderID:      rider.ID,
+		RiderUserID:  rider.UserID,
+		OrderID:      createResult.Order.ID,
+		FreezeAmount: 500,
+	})
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusCourierAccepted, grabResult.Order.Status)
+
+	result, err := testStore.MarkTakeoutOrderReadyTx(context.Background(), MarkTakeoutOrderReadyTxParams{
+		OrderID:      createResult.Order.ID,
+		OldStatus:    OrderStatusCourierAccepted,
+		OperatorID:   merchantOwner.ID,
+		OperatorType: "merchant",
+	})
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusCourierAccepted, result.Order.Status)
+	require.Equal(t, FulfillmentStatusReady, result.Order.FulfillmentStatus)
+	require.True(t, result.Order.ReadyAt.Valid)
+	require.Equal(t, OrderStatusCourierAccepted, result.StatusLog.FromStatus.String)
+	require.Equal(t, OrderStatusReady, result.StatusLog.ToStatus)
+	require.Equal(t, "merchant", result.StatusLog.OperatorType.String)
+}
+
 func TestMarkTakeoutOrderReadyTx_UsesOrderDeliverySnapshotAfterAddressUpdate(t *testing.T) {
 	user := createRandomUser(t)
 	merchantOwner := createRandomUser(t)

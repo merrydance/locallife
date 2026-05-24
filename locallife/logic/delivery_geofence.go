@@ -80,7 +80,7 @@ func AutoConfirmPickup(ctx context.Context, store db.Store, delivery db.Delivery
 		}
 		return result, err
 	}
-	if !IsOrderStatusAllowedForDeliveryAction(order.Status, "confirm_pickup") {
+	if !IsOrderAllowedForDeliveryAction(order, "confirm_pickup") {
 		return result, nil
 	}
 

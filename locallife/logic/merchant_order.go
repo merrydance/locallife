@@ -127,11 +127,13 @@ func MarkMerchantOrderReady(ctx context.Context, store db.Store, input MerchantO
 	if order.MerchantID != input.MerchantID {
 		return MerchantOrderUpdateResult{}, NewRequestError(http.StatusForbidden, errors.New("order does not belong to your merchant"))
 	}
-	if order.Status != db.OrderStatusPreparing {
-		return MerchantOrderUpdateResult{}, NewRequestError(http.StatusBadRequest, errors.New("only preparing orders can be marked as ready"))
-	}
-
 	if order.OrderType == db.OrderTypeTakeout {
+		if order.Status != db.OrderStatusPreparing && order.Status != db.OrderStatusCourierAccepted {
+			return MerchantOrderUpdateResult{}, NewRequestError(http.StatusBadRequest, errors.New("only preparing orders can be marked as ready"))
+		}
+		if order.Status == db.OrderStatusCourierAccepted && order.FulfillmentStatus == db.FulfillmentStatusReady {
+			return MerchantOrderUpdateResult{}, NewRequestError(http.StatusBadRequest, errors.New("order already marked as ready"))
+		}
 		result, err := store.MarkTakeoutOrderReadyTx(ctx, db.MarkTakeoutOrderReadyTxParams{
 			OrderID:      input.OrderID,
 			OldStatus:    order.Status,
@@ -146,6 +148,9 @@ func MarkMerchantOrderReady(ctx context.Context, store db.Store, input MerchantO
 		}
 
 		return MerchantOrderUpdateResult{Order: result.Order, Previous: order}, nil
+	}
+	if order.Status != db.OrderStatusPreparing {
+		return MerchantOrderUpdateResult{}, NewRequestError(http.StatusBadRequest, errors.New("only preparing orders can be marked as ready"))
 	}
 
 	fulfillment := db.FulfillmentStatusReady
