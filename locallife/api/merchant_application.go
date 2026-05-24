@@ -24,6 +24,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+const merchantApplicationAddressValidationRadiusMeters = 1000
+
 // loggingReader wraps io.ReadCloser to log progress
 type loggingReader struct {
 	r       io.ReadCloser
@@ -1085,17 +1087,29 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 	}
 
 	// 3. 检查地址匹配（营业执照地址与地图坐标反查地址）
+	// 文本匹配失败时，再用营业执照地址正向解析坐标做 1000m 半径容差。
+	// 这个半径只表示“证照地址与申请定位大致一致”，不参与门店重复判定。
 	reviewAddresses, reviewErr := server.resolveMerchantLocationReviewAddresses(ctx, app)
 	if reviewErr != nil {
 		log.Warn().Err(reviewErr).Int64("application_id", app.ID).Msg("merchant application: reverse geocode failed, fallback to stored address")
 	}
 	matchedAddress, matched := matchMerchantLicenseAddress(documentReview.LicenseAddress, reviewAddresses)
 	if !matched {
-		reviewAddress := app.BusinessAddress
-		if len(reviewAddresses) > 0 {
-			reviewAddress = reviewAddresses[0]
+		distanceMeters, distanceMatched := server.merchantLicenseAddressWithinValidationRadius(ctx, app, documentReview.LicenseAddress)
+		if distanceMatched {
+			log.Info().
+				Int64("application_id", app.ID).
+				Str("license_address", documentReview.LicenseAddress).
+				Int("distance_m", distanceMeters).
+				Int("radius_m", merchantApplicationAddressValidationRadiusMeters).
+				Msg("merchant application address matched by geocoded license radius")
+		} else {
+			reviewAddress := app.BusinessAddress
+			if len(reviewAddresses) > 0 {
+				reviewAddress = reviewAddresses[0]
+			}
+			return apierr(ErrInvalidAddress.Code, fmt.Sprintf("地图定位与营业执照注册地址不一致，请重新在地图上选择店铺位置。营业执照地址：%s；当前定位解析地址：%s。", documentReview.LicenseAddress, strings.TrimSpace(reviewAddress)))
 		}
-		return apierr(ErrInvalidAddress.Code, fmt.Sprintf("地图定位与营业执照注册地址不一致，请重新在地图上选择店铺位置。营业执照地址：%s；当前定位解析地址：%s。", documentReview.LicenseAddress, strings.TrimSpace(reviewAddress)))
 	}
 	if matchedAddress != "" && matchedAddress != app.BusinessAddress {
 		log.Info().
@@ -1109,6 +1123,7 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 	// 五家店同写"希望路北段路东"但各自打了不同坐标 → 各 GPS 距离 > 20m，均可入驻。
 	// 同一商户重复申请或两家店坐标几乎完全相同 → 距离 ≤ 20m，拒绝。
 	// 字符串比较在模糊地址（无门牌号）场景下天生有歧义，GPS 是唯一可靠手段。
+	// 这里的 20m 是物理门店点位去重阈值，不是证照地址匹配半径。
 	if !app.Longitude.Valid || !app.Latitude.Valid {
 		return apierr(ErrMerchantLocationRequired.Code, "请选择商户地理位置")
 	}
@@ -1172,6 +1187,31 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 	}
 
 	return nil
+}
+
+func (server *Server) merchantLicenseAddressWithinValidationRadius(ctx context.Context, app db.MerchantApplication, licenseAddress string) (int, bool) {
+	if server.mapClient == nil || !app.Latitude.Valid || !app.Longitude.Valid || strings.TrimSpace(licenseAddress) == "" {
+		return 0, false
+	}
+
+	result, err := server.mapClient.Geocode(ctx, licenseAddress)
+	if err != nil || result == nil {
+		if err != nil {
+			log.Warn().Err(err).Int64("application_id", app.ID).Msg("merchant application: geocode license address for radius match failed")
+		}
+		return 0, false
+	}
+
+	appLoc := algorithm.Location{
+		Latitude:  pgNumericToFloat64(app.Latitude),
+		Longitude: pgNumericToFloat64(app.Longitude),
+	}
+	licenseLoc := algorithm.Location{
+		Latitude:  result.Location.Lat,
+		Longitude: result.Location.Lng,
+	}
+	distanceMeters := algorithm.HaversineDistance(appLoc, licenseLoc)
+	return distanceMeters, distanceMeters <= merchantApplicationAddressValidationRadiusMeters
 }
 
 func merchantDocumentReviewAPIError(err error) error {

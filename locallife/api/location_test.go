@@ -20,6 +20,8 @@ import (
 type stubMapClient struct {
 	routeResult   *maps.RouteResult
 	routeErr      error
+	geocodeResult *maps.GeocodeResult
+	geocodeErr    error
 	reverseResult *maps.ReverseGeocodeResult
 	reverseErr    error
 }
@@ -41,7 +43,10 @@ func (s stubMapClient) GetDistanceMatrix(ctx context.Context, froms, tos []maps.
 }
 
 func (s stubMapClient) Geocode(ctx context.Context, address string) (*maps.GeocodeResult, error) {
-	return nil, errors.New("not implemented")
+	if s.geocodeResult == nil && s.geocodeErr == nil {
+		return nil, errors.New("not implemented")
+	}
+	return s.geocodeResult, s.geocodeErr
 }
 
 func (s stubMapClient) ReverseGeocode(ctx context.Context, location maps.Location) (*maps.ReverseGeocodeResult, error) {
