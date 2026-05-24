@@ -103,13 +103,22 @@ export interface MerchantOrderFeeBreakdownRow {
   visible: boolean
 }
 
+export interface MerchantOrderFeeSettlementGroup {
+  key: string
+  title: string
+  total_text: string
+  tone: 'merchant' | 'rider'
+  visible: boolean
+  rows: MerchantOrderFeeBreakdownRow[]
+}
+
 export interface MerchantOrderFeeBreakdownView {
   available: boolean
   unavailable_text: string
   customer_payable_text: string
   merchant_receivable_text: string
   summary_rows: MerchantOrderFeeBreakdownRow[]
-  settlement_rows: MerchantOrderFeeBreakdownRow[]
+  settlement_groups: MerchantOrderFeeSettlementGroup[]
 }
 
 export function createDefaultRefundForm(): RefundFormData {
@@ -154,9 +163,24 @@ export function buildMerchantOrderFeeBreakdownView(order: OrderResponse): Mercha
       customer_payable_text: customerPayable,
       merchant_receivable_text: '金额同步中',
       summary_rows: [],
-      settlement_rows: []
+      settlement_groups: []
     }
   }
+
+  const merchantRows = [
+    createFeeBreakdownRow('merchant_food_payable_amount', '餐费应分', breakdown.food_payable_amount, 'default', true),
+    createFeeBreakdownRow('merchant_platform_service_fee_amount', '平台服务费', -breakdown.platform_service_fee_amount, 'fee', true),
+    createFeeBreakdownRow('merchant_payment_channel_fee_amount', '支付通道费', -breakdown.payment_channel_fee_amount, 'fee', true),
+    createFeeBreakdownRow('merchant_receivable_amount', '商户实收', breakdown.merchant_receivable_amount, 'income', true)
+  ]
+  const riderGrossAmount = breakdown.rider_gross_amount || 0
+  const riderPaymentFeeAmount = breakdown.rider_payment_fee_amount || 0
+  const riderNetEarningsAmount = breakdown.rider_net_earnings_amount || 0
+  const riderRows = [
+    createFeeBreakdownRow('rider_gross_amount', '骑手应分', riderGrossAmount, 'default', true),
+    createFeeBreakdownRow('rider_payment_fee_amount', '骑手通道费', -riderPaymentFeeAmount, 'fee', true),
+    createFeeBreakdownRow('rider_net_earnings_amount', '骑手收入', riderNetEarningsAmount, 'income', true)
+  ]
 
   return {
     available: true,
@@ -173,10 +197,23 @@ export function buildMerchantOrderFeeBreakdownView(order: OrderResponse): Mercha
       createFeeBreakdownRow('delivery_payable_amount', '代取应付', breakdown.delivery_payable_amount, 'default'),
       createFeeBreakdownRow('customer_payable_amount', '用户实付', breakdown.customer_payable_amount, 'total', true)
     ],
-    settlement_rows: [
-      createFeeBreakdownRow('platform_service_fee_amount', '平台服务费', breakdown.platform_service_fee_amount, 'fee', true),
-      createFeeBreakdownRow('payment_channel_fee_amount', '支付通道费', breakdown.payment_channel_fee_amount, 'fee', true),
-      createFeeBreakdownRow('merchant_receivable_amount', '商户实收', breakdown.merchant_receivable_amount, 'income', true)
+    settlement_groups: [
+      {
+        key: 'merchant',
+        title: '商户部分',
+        total_text: formatMoney(breakdown.merchant_receivable_amount),
+        tone: 'merchant',
+        visible: true,
+        rows: merchantRows
+      },
+      {
+        key: 'rider',
+        title: '骑手部分',
+        total_text: formatMoney(riderNetEarningsAmount),
+        tone: 'rider',
+        visible: riderGrossAmount !== 0 || riderPaymentFeeAmount !== 0 || riderNetEarningsAmount !== 0,
+        rows: riderRows
+      }
     ]
   }
 }

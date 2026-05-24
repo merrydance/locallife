@@ -67,14 +67,29 @@
             <text class="{{item.tone === 'total' ? 'total-val' : ''}}">{{item.value_text}}</text>
           </view>
           <t-divider />
-          <view
-            wx:for="{{order.fee_breakdown_view.settlement_rows}}"
-            wx:key="key"
-            wx:if="{{item.visible}}"
-            class="summary-row summary-row--{{item.tone}}"
-          >
-            <text>{{item.label}}</text>
-            <text class="{{item.tone === 'income' ? 'income-val' : ''}}">{{item.value_text}}</text>
+          <view class="settlement-groups">
+            <view
+              wx:for="{{order.fee_breakdown_view.settlement_groups}}"
+              wx:key="key"
+              wx:for-item="group"
+              wx:if="{{group.visible}}"
+              class="settlement-group settlement-group--{{group.tone}}"
+            >
+              <view class="settlement-group__header">
+                <text class="settlement-group__title">{{group.title}}</text>
+                <text class="settlement-group__total">{{group.total_text}}</text>
+              </view>
+              <view
+                wx:for="{{group.rows}}"
+                wx:key="key"
+                wx:for-item="row"
+                wx:if="{{row.visible}}"
+                class="summary-row settlement-row summary-row--{{row.tone}}"
+              >
+                <text>{{row.label}}</text>
+                <text class="{{row.tone === 'income' ? 'income-val' : ''}}">{{row.value_text}}</text>
+              </view>
+            </view>
           </view>
         </view>
         <view wx:else class="price-summary-unavailable">

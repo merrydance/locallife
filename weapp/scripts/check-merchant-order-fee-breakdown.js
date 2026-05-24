@@ -1,5 +1,7 @@
 const fs = require('fs')
 const path = require('path')
+const ts = require('typescript')
+const vm = require('vm')
 
 const ROOT = path.resolve(__dirname, '..')
 
@@ -57,8 +59,8 @@ assertContains(detailView, /buildMerchantOrderFeeBreakdownView/, 'Detail view he
 assertContains(detailView, /MerchantOrderFeeBreakdownView/, 'Detail view helper must expose MerchantOrderFeeBreakdownView')
 
 assertContains(detailWxml, 'fee_breakdown_view.summary_rows', 'Merchant order detail must render fee breakdown summary rows')
-assertContains(detailWxml, 'fee_breakdown_view.settlement_rows', 'Merchant order detail must render fee breakdown settlement rows')
-for (const label of ['用户实付', '平台服务费', '支付通道费', '商户实收']) {
+assertContains(detailWxml, 'fee_breakdown_view.settlement_groups', 'Merchant order detail must render fee breakdown settlement groups')
+for (const label of ['用户实付', '商户部分', '骑手部分', '商户实收', '骑手收入']) {
   assertContains(detailView, label, `Merchant order detail view model must include ${label}`)
 }
 assertContains(listWxml, '实收', 'Merchant order list must render merchant receivable summary')
@@ -76,6 +78,73 @@ for (const forbidden of [
   'operator_commission'
 ]) {
   assertNotContains(merchantOrderSources, forbidden, `Merchant order weapp code must not expose internal field ${forbidden}`)
+}
+
+function loadDetailViewModule() {
+  const sourcePath = path.join(ROOT, 'miniprogram', 'utils', 'merchant-order-detail-view.ts')
+  const source = fs.readFileSync(sourcePath, 'utf8')
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2018,
+      esModuleInterop: true
+    }
+  }).outputText
+
+  const sandbox = {
+    exports: {},
+    module: { exports: {} },
+    require(modulePath) {
+      if (modulePath === 'dayjs') return require('dayjs')
+      throw new Error(`unexpected require: ${modulePath}`)
+    },
+    Date,
+    Math,
+    Number,
+    String
+  }
+  sandbox.exports = sandbox.module.exports
+  vm.runInNewContext(compiled, sandbox, { filename: sourcePath })
+  return sandbox.module.exports
+}
+
+const { buildMerchantOrderFeeBreakdownView } = loadDetailViewModule()
+const feeBreakdownView = buildMerchantOrderFeeBreakdownView({
+  total_amount: 10300,
+  fee_breakdown: {
+    food_amount: 10000,
+    merchant_discount_amount: 300,
+    voucher_discount_amount: 200,
+    food_payable_amount: 9500,
+    delivery_fee_amount: 800,
+    delivery_fee_discount_amount: 0,
+    delivery_payable_amount: 800,
+    customer_payable_amount: 10300,
+    platform_service_fee_amount: 475,
+    payment_channel_fee_amount: 57,
+    merchant_receivable_amount: 8968,
+    rider_gross_amount: 800,
+    rider_payment_fee_amount: 5,
+    rider_net_earnings_amount: 795
+  }
+})
+
+if (!Array.isArray(feeBreakdownView.settlement_groups)) {
+  throw new Error('Merchant order detail fee breakdown must expose grouped settlement view state')
+}
+
+const settlementGroupLabels = feeBreakdownView.settlement_groups.map((group) => group.title)
+if (settlementGroupLabels.join('|') !== '商户部分|骑手部分') {
+  throw new Error(`Merchant order detail fee breakdown must group settlements by participant, got ${settlementGroupLabels.join('|')}`)
+}
+
+const merchantGroup = feeBreakdownView.settlement_groups[0]
+const riderGroup = feeBreakdownView.settlement_groups[1]
+if (merchantGroup.total_text !== '¥89.68' || riderGroup.total_text !== '¥7.95') {
+  throw new Error('Merchant order detail fee breakdown must summarize merchant and rider totals separately')
+}
+if (!merchantGroup.rows.some((row) => row.label === '平台服务费') || !riderGroup.rows.some((row) => row.label === '骑手通道费')) {
+  throw new Error('Merchant order detail fee breakdown must keep fee rows inside their participant groups')
 }
 
 console.log('Merchant order fee breakdown contract check passed')
