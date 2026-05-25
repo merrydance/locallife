@@ -170,8 +170,8 @@ INSERT INTO profit_sharing_orders (
     $14,
     $15,
     $16,
-    COALESCE($17, 0),
-    COALESCE($18, 30),
+    $17::bigint,
+    COALESCE(NULLIF($18::integer, 0), 30),
     COALESCE($19, 'wechat'),
     COALESCE($20, 'baofu_aggregate'),
     $21,
@@ -199,8 +199,8 @@ type CreateProfitSharingOrderParams struct {
 	MerchantAmount        int64       `json:"merchant_amount"`
 	OutOrderNo            string      `json:"out_order_no"`
 	Status                string      `json:"status"`
-	PaymentFee            interface{} `json:"payment_fee"`
-	PaymentFeeRateBps     interface{} `json:"payment_fee_rate_bps"`
+	PaymentFee            int64       `json:"payment_fee"`
+	PaymentFeeRateBps     int32       `json:"payment_fee_rate_bps"`
 	Provider              interface{} `json:"provider"`
 	Channel               interface{} `json:"channel"`
 	MerchantSharingMerID  pgtype.Text `json:"merchant_sharing_mer_id"`

@@ -120,17 +120,17 @@ func (q *Queries) GetRiderDepositByPaymentOrderID(ctx context.Context, paymentOr
 
 const getRiderDepositStats = `-- name: GetRiderDepositStats :one
 SELECT 
-    COALESCE(SUM(CASE WHEN type = 'deposit' THEN amount ELSE 0 END), 0) AS total_deposit,
-    COALESCE(SUM(CASE WHEN type = 'withdraw' THEN amount ELSE 0 END), 0) AS total_withdraw,
-    COALESCE(SUM(CASE WHEN type = 'deduct' THEN amount ELSE 0 END), 0) AS total_deduct
+    COALESCE(SUM(CASE WHEN type = 'deposit' THEN amount ELSE 0 END), 0)::bigint AS total_deposit,
+    COALESCE(SUM(CASE WHEN type = 'withdraw' THEN amount ELSE 0 END), 0)::bigint AS total_withdraw,
+    COALESCE(SUM(CASE WHEN type = 'deduct' THEN amount ELSE 0 END), 0)::bigint AS total_deduct
 FROM rider_deposits
 WHERE rider_id = $1
 `
 
 type GetRiderDepositStatsRow struct {
-	TotalDeposit  interface{} `json:"total_deposit"`
-	TotalWithdraw interface{} `json:"total_withdraw"`
-	TotalDeduct   interface{} `json:"total_deduct"`
+	TotalDeposit  int64 `json:"total_deposit"`
+	TotalWithdraw int64 `json:"total_withdraw"`
+	TotalDeduct   int64 `json:"total_deduct"`
 }
 
 func (q *Queries) GetRiderDepositStats(ctx context.Context, riderID int64) (GetRiderDepositStatsRow, error) {

@@ -1018,13 +1018,7 @@ func (server *Server) listMyDeliveries(ctx *gin.Context) {
 		return
 	}
 
-	totalEarningsRaw, err := server.store.GetRiderEarnings(ctx, riderID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	totalEarnings, err := normalizeInt64Result(totalEarningsRaw)
+	totalEarnings, err := server.store.GetRiderEarnings(ctx, riderID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return

@@ -230,8 +230,8 @@ SELECT
     COUNT(*) as total_count,
     COUNT(*) FILTER (WHERE status = 'completed') as completed_count,
     COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_count,
-    COALESCE(SUM(deposit_amount) FILTER (WHERE status = 'completed'), 0) as total_deposit,
-    COALESCE(SUM(prepaid_amount) FILTER (WHERE status = 'completed'), 0) as total_prepaid
+    COALESCE(SUM(deposit_amount) FILTER (WHERE status = 'completed'), 0)::bigint as total_deposit,
+    COALESCE(SUM(prepaid_amount) FILTER (WHERE status = 'completed'), 0)::bigint as total_prepaid
 FROM table_reservations
 WHERE merchant_id = sqlc.arg('merchant_id')
   AND reservation_date >= sqlc.arg('start_date')
@@ -353,4 +353,3 @@ WHERE tr.merchant_id = $1
   AND tr.reservation_date = CURRENT_DATE
   AND tr.status IN ('paid', 'confirmed', 'checked_in')
 ORDER BY tr.reservation_time, t.table_no;
-

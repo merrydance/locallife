@@ -40,9 +40,9 @@ LIMIT $3 OFFSET $4;
 
 -- name: GetRiderDepositStats :one
 SELECT 
-    COALESCE(SUM(CASE WHEN type = 'deposit' THEN amount ELSE 0 END), 0) AS total_deposit,
-    COALESCE(SUM(CASE WHEN type = 'withdraw' THEN amount ELSE 0 END), 0) AS total_withdraw,
-    COALESCE(SUM(CASE WHEN type = 'deduct' THEN amount ELSE 0 END), 0) AS total_deduct
+    COALESCE(SUM(CASE WHEN type = 'deposit' THEN amount ELSE 0 END), 0)::bigint AS total_deposit,
+    COALESCE(SUM(CASE WHEN type = 'withdraw' THEN amount ELSE 0 END), 0)::bigint AS total_withdraw,
+    COALESCE(SUM(CASE WHEN type = 'deduct' THEN amount ELSE 0 END), 0)::bigint AS total_deduct
 FROM rider_deposits
 WHERE rider_id = $1;
 

@@ -10589,10 +10589,10 @@ func (mr *MockStoreMockRecorder) GetRiderClaimDetailForRider(ctx, arg any) *gomo
 }
 
 // GetRiderDailyEarnings mocks base method.
-func (m *MockStore) GetRiderDailyEarnings(ctx context.Context, arg db.GetRiderDailyEarningsParams) (any, error) {
+func (m *MockStore) GetRiderDailyEarnings(ctx context.Context, arg db.GetRiderDailyEarningsParams) (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRiderDailyEarnings", ctx, arg)
-	ret0, _ := ret[0].(any)
+	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -10724,10 +10724,10 @@ func (mr *MockStoreMockRecorder) GetRiderDepositStats(ctx, riderID any) *gomock.
 }
 
 // GetRiderEarnings mocks base method.
-func (m *MockStore) GetRiderEarnings(ctx context.Context, riderID pgtype.Int8) (any, error) {
+func (m *MockStore) GetRiderEarnings(ctx context.Context, riderID pgtype.Int8) (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRiderEarnings", ctx, riderID)
-	ret0, _ := ret[0].(any)
+	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

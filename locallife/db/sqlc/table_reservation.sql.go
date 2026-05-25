@@ -421,8 +421,8 @@ SELECT
     COUNT(*) as total_count,
     COUNT(*) FILTER (WHERE status = 'completed') as completed_count,
     COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_count,
-    COALESCE(SUM(deposit_amount) FILTER (WHERE status = 'completed'), 0) as total_deposit,
-    COALESCE(SUM(prepaid_amount) FILTER (WHERE status = 'completed'), 0) as total_prepaid
+    COALESCE(SUM(deposit_amount) FILTER (WHERE status = 'completed'), 0)::bigint as total_deposit,
+    COALESCE(SUM(prepaid_amount) FILTER (WHERE status = 'completed'), 0)::bigint as total_prepaid
 FROM table_reservations
 WHERE merchant_id = $1
   AND reservation_date >= $2
@@ -436,11 +436,11 @@ type GetReservationStatsByDateRangeParams struct {
 }
 
 type GetReservationStatsByDateRangeRow struct {
-	TotalCount     int64       `json:"total_count"`
-	CompletedCount int64       `json:"completed_count"`
-	CancelledCount int64       `json:"cancelled_count"`
-	TotalDeposit   interface{} `json:"total_deposit"`
-	TotalPrepaid   interface{} `json:"total_prepaid"`
+	TotalCount     int64 `json:"total_count"`
+	CompletedCount int64 `json:"completed_count"`
+	CancelledCount int64 `json:"cancelled_count"`
+	TotalDeposit   int64 `json:"total_deposit"`
+	TotalPrepaid   int64 `json:"total_prepaid"`
 }
 
 // Get reservation statistics for a merchant within date range
