@@ -344,15 +344,23 @@ func TestGetPlatformProfitSharingReconciliationAPI(t *testing.T) {
 							Status:                  "finished",
 							TotalOrders:             12,
 							TotalAmount:             120000,
+							TotalMerchantFlow:       108000,
+							TotalRiderFlow:          12000,
 							TotalPlatformCommission: 3600,
 							TotalOperatorCommission: 2400,
+							TotalMerchantAmount:     102000,
+							TotalRiderAmount:        11000,
 						},
 						{
 							Status:                  "failed",
 							TotalOrders:             2,
 							TotalAmount:             20000,
+							TotalMerchantFlow:       18000,
+							TotalRiderFlow:          2000,
 							TotalPlatformCommission: 0,
 							TotalOperatorCommission: 0,
+							TotalMerchantAmount:     18000,
+							TotalRiderAmount:        2000,
 						},
 					}, nil)
 			},
@@ -365,8 +373,12 @@ func TestGetPlatformProfitSharingReconciliationAPI(t *testing.T) {
 				require.Equal(t, "finished", resp[0].Status)
 				require.Equal(t, int64(12), resp[0].TotalOrders)
 				require.Equal(t, int64(120000), resp[0].TotalAmount)
+				require.Equal(t, int64(108000), resp[0].TotalMerchantFlow)
+				require.Equal(t, int64(12000), resp[0].TotalRiderFlow)
 				require.Equal(t, int64(3600), resp[0].TotalPlatformCommission)
 				require.Equal(t, int64(2400), resp[0].TotalOperatorCommission)
+				require.Equal(t, int64(102000), resp[0].TotalMerchantAmount)
+				require.Equal(t, int64(11000), resp[0].TotalRiderAmount)
 			},
 		},
 		{
@@ -430,6 +442,96 @@ func TestGetPlatformProfitSharingReconciliationAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestGetPlatformProfitSharingReconciliationDetailsAPI(t *testing.T) {
+	admin, _ := randomUser(t)
+	createdAt := time.Date(2026, time.May, 1, 10, 0, 0, 0, time.UTC)
+	finishedAt := time.Date(2026, time.May, 2, 11, 30, 0, 0, time.UTC)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), admin.ID).
+		Return([]db.UserRole{{
+			UserID: admin.ID,
+			Role:   "admin",
+			Status: "active",
+		}}, nil)
+	store.EXPECT().
+		CountPlatformProfitSharingReconciliationDetails(gomock.Any(), db.CountPlatformProfitSharingReconciliationDetailsParams{
+			StartAt: pgtype.Timestamptz{Time: time.Date(2026, time.May, 1, 0, 0, 0, 0, time.UTC), Valid: true},
+			EndAt:   pgtype.Timestamptz{Time: time.Date(2026, time.May, 3, 23, 59, 59, int(time.Second-time.Nanosecond), time.UTC), Valid: true},
+		}).
+		Return(int64(3), nil)
+	store.EXPECT().
+		ListPlatformProfitSharingReconciliationDetails(gomock.Any(), db.ListPlatformProfitSharingReconciliationDetailsParams{
+			StartAt: pgtype.Timestamptz{Time: time.Date(2026, time.May, 1, 0, 0, 0, 0, time.UTC), Valid: true},
+			EndAt:   pgtype.Timestamptz{Time: time.Date(2026, time.May, 3, 23, 59, 59, int(time.Second-time.Nanosecond), time.UTC), Valid: true},
+			Offset:  1,
+			Limit:   1,
+		}).
+		Return([]db.ProfitSharingOrder{{
+			ID:                     101,
+			PaymentOrderID:         201,
+			MerchantID:             301,
+			OperatorID:             pgtype.Int8{Int64: 401, Valid: true},
+			OrderSource:            "takeout",
+			TotalAmount:            10000,
+			PlatformCommission:     200,
+			OperatorCommission:     300,
+			MerchantAmount:         8800,
+			OutOrderNo:             "PSO202605020001",
+			SharingOrderID:         pgtype.Text{String: "SHARE202605020001", Valid: true},
+			Status:                 db.ProfitSharingOrderStatusFinished,
+			CreatedAt:              createdAt,
+			FinishedAt:             pgtype.Timestamptz{Time: finishedAt, Valid: true},
+			DeliveryFee:            700,
+			RiderID:                pgtype.Int8{Int64: 501, Valid: true},
+			RiderAmount:            690,
+			DistributableAmount:    9300,
+			RiderGrossAmount:       700,
+			Provider:               "baofu",
+			Channel:                "baofu_aggregate",
+			CalculationVersion:     "baofu_fee_v2",
+			SettlementMode:         "commission_share",
+			PlatformReceiverAmount: 200,
+		}}, nil)
+
+	server := newTestServer(t, store)
+	auditWriter := &auditSpyWriter{}
+	server.auditWriter = auditWriter
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/platform/stats/profit-sharing/details?start_date=2026-05-01&end_date=2026-05-03&page_id=2&page_size=1", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, admin.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var resp platformProfitSharingDetailsResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, int64(3), resp.Total)
+	require.Equal(t, int32(2), resp.PageID)
+	require.Equal(t, int32(1), resp.PageSize)
+	require.True(t, resp.HasMore)
+	require.Len(t, resp.Items, 1)
+	require.Equal(t, int64(9300), resp.Items[0].MerchantFlow)
+	require.Equal(t, int64(700), resp.Items[0].RiderFlow)
+	require.Equal(t, int64(690), resp.Items[0].RiderAmount)
+	require.Equal(t, "2026-05-02", resp.Items[0].ReconciliationDate)
+	require.Equal(t, "SHARE202605020001", resp.Items[0].SharingOrderID)
+
+	entries := auditWriter.Entries()
+	require.Len(t, entries, 1)
+	require.Equal(t, "platform_profit_sharing_details_viewed", entries[0].Action)
+	require.Equal(t, "profit_sharing_orders", entries[0].TargetType)
+	require.Equal(t, "2026-05-01", entries[0].Metadata["start_date"])
+	require.Equal(t, "2026-05-03", entries[0].Metadata["end_date"])
+	require.Equal(t, int32(2), entries[0].Metadata["page_id"])
+	require.Equal(t, int32(1), entries[0].Metadata["page_size"])
 }
 
 func TestGetPlatformBaofuDailyReconciliationAPI(t *testing.T) {

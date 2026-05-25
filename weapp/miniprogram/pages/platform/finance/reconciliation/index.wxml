@@ -19,41 +19,42 @@
       </t-cell>
     </t-cell-group>
 
-    <t-cell-group>
-      <t-cell title="对账区间" note="{{view.rangeLabel}}" arrow bind:tap="onOpenRangePicker" />
-    </t-cell-group>
+    <view class="range-card" bind:tap="onOpenRangePicker">
+      <view class="range-card__caption">可选择区间日期的日历</view>
+      <view class="range-card__body">
+        <text class="range-card__date">{{range.start_date}}</text>
+        <text class="range-card__separator">→</text>
+        <text class="range-card__date">{{range.end_date}}</text>
+      </view>
+    </view>
 
-    <view class="quick-range-row">
-      <t-button
-        wx:for="{{quickRanges}}"
-        wx:key="id"
-        size="small"
-        theme="{{item.active ? 'primary' : 'default'}}"
-        variant="{{item.active ? 'base' : 'outline'}}"
-        data-range="{{item.id}}"
-        disabled="{{loadingReconciliation}}"
-        bind:tap="onUseQuickRange"
-      >{{item.label}}</t-button>
+    <view class="section-title">日期区间内的汇总</view>
+    <view class="summary-grid">
+      <view
+        wx:for="{{view.summaryCards}}"
+        wx:key="key"
+        class="summary-card"
+        data-target="{{item.detailTarget}}"
+        bind:tap="onSummaryCardTap"
+      >
+        <text class="summary-card__label">{{item.label}}</text>
+        <text class="summary-card__value">{{item.value}}</text>
+      </view>
     </view>
 
     <t-cell-group>
-      <t-cell title="平台佣金汇总" note="{{view.summary.platformCommissionText}}" />
-      <t-cell title="运营商佣金汇总" note="{{view.summary.operatorCommissionText}}" />
+      <t-cell title="分账订单" note="{{view.summary.totalOrdersText}}" />
+      <t-cell title="分账订单金额" note="{{view.summary.totalProfitSharingAmountText}}" />
+      <t-cell title="区间支付金额" note="{{view.summary.paidAmountText}}" />
       <t-cell title="区间提现成功" note="{{view.summary.withdrawSucceededText}}" />
       <t-cell title="区间提现申请处理中" note="{{view.summary.withdrawProcessingText}}" />
+      <t-cell title="异常项" note="{{view.summary.exceptionCountText}}" />
+    </t-cell-group>
+
+    <t-cell-group>
       <t-cell title="当前可提现余额" note="{{view.summary.currentAvailableAmountText}}" />
       <t-cell title="当前账户在途提现" note="{{view.summary.currentPendingAmountText}}" />
       <t-cell title="余额状态" note="{{view.summary.balanceStatusText}}" />
-    </t-cell-group>
-
-    <view class="section-title">区间汇总</view>
-    <t-cell-group>
-      <t-cell title="分账订单" note="{{view.summary.totalOrdersText}}" />
-      <t-cell title="分账订单金额" note="{{view.summary.totalProfitSharingAmountText}}" />
-      <t-cell title="支付金额" note="{{view.summary.paidAmountText}}" />
-      <t-cell title="商户入账" note="{{view.summary.merchantAmountText}}" />
-      <t-cell title="骑手入账" note="{{view.summary.riderAmountText}}" />
-      <t-cell title="异常项" note="{{view.summary.exceptionCountText}}" />
     </t-cell-group>
 
     <view class="metric-grid">
@@ -63,14 +64,78 @@
       </view>
     </view>
 
-    <view class="section-title">分账状态</view>
-    <t-empty wx:if="{{!view.statusRows.length}}" icon="info-circle" description="当前区间暂无分账对账数据" />
+    <view id="profit-sharing-details" class="section-header">
+      <text class="section-title">分账明细</text>
+      <text class="section-count">{{view.detailsTotalText}}</text>
+    </view>
+    <view wx:if="{{detailsErrorMessage}}" class="detail-state">
+      <t-empty icon="error-circle" description="{{detailsErrorMessage}}" />
+      <t-button theme="primary" loading="{{loadingDetails}}" bind:tap="onRetryDetails">重新加载</t-button>
+    </view>
+    <t-empty wx:elif="{{!view.detailRows.length}}" icon="info-circle" description="当前区间暂无分账明细" />
+    <view wx:else class="detail-list">
+      <view wx:for="{{view.detailRows}}" wx:key="id" class="detail-card">
+        <view class="detail-card__header">
+          <view class="detail-card__title-wrap">
+            <text class="detail-card__title">{{item.title}}</text>
+            <text class="detail-card__meta">{{item.reconciliationDate}} · {{item.providerText}}</text>
+          </view>
+          <t-tag theme="{{item.statusTheme}}" size="small">{{item.statusLabel}}</t-tag>
+        </view>
+        <view class="detail-card__amount-row">
+          <text>订单金额</text>
+          <text>{{item.totalAmountText}}</text>
+        </view>
+        <view class="detail-grid">
+          <view class="detail-grid__item">
+            <text class="detail-grid__label">商户流水</text>
+            <text class="detail-grid__value">{{item.merchantFlowText}}</text>
+          </view>
+          <view class="detail-grid__item">
+            <text class="detail-grid__label">骑手流水</text>
+            <text class="detail-grid__value">{{item.riderFlowText}}</text>
+          </view>
+          <view class="detail-grid__item">
+            <text class="detail-grid__label">平台分账</text>
+            <text class="detail-grid__value">{{item.platformCommissionText}}</text>
+          </view>
+          <view class="detail-grid__item">
+            <text class="detail-grid__label">运营商分账</text>
+            <text class="detail-grid__value">{{item.operatorCommissionText}}</text>
+          </view>
+          <view class="detail-grid__item">
+            <text class="detail-grid__label">商户分账</text>
+            <text class="detail-grid__value">{{item.merchantAmountText}}</text>
+          </view>
+          <view class="detail-grid__item">
+            <text class="detail-grid__label">骑手分账</text>
+            <text class="detail-grid__value">{{item.riderAmountText}}</text>
+          </view>
+        </view>
+        <view class="detail-card__footer">
+          <text>完成时间</text>
+          <text>{{item.finishedAtText}}</text>
+        </view>
+      </view>
+      <view wx:if="{{loadingDetails}}" class="list-footer">
+        <t-loading theme="circular" size="32rpx" text="加载更多中..." vertical />
+      </view>
+      <view wx:elif="{{loadMoreDetailsErrorMessage}}" class="list-footer list-footer-error">
+        <text>{{loadMoreDetailsErrorMessage}}</text>
+        <t-button size="small" theme="primary" variant="outline" bind:tap="onLoadMoreDetails">重试</t-button>
+      </view>
+      <t-button wx:elif="{{view.detailsHasMore}}" theme="default" loading="{{loadingDetails}}" bind:tap="onLoadMoreDetails">加载更多</t-button>
+      <view wx:else class="list-footer list-footer-end">没有更多分账明细了</view>
+    </view>
+
+    <view class="section-title">分账状态汇总</view>
+    <t-empty wx:if="{{!view.statusRows.length}}" icon="info-circle" description="当前区间暂无分账状态数据" />
     <t-cell-group wx:else>
       <t-cell
         wx:for="{{view.statusRows}}"
         wx:key="id"
         title="{{item.label}}"
-        description="平台佣金 {{item.platformCommissionText}} · 运营商佣金 {{item.operatorCommissionText}}"
+        description="平台 {{item.platformCommissionText}} · 运营商 {{item.operatorCommissionText}}"
         note="{{item.totalAmountText}}"
       >
         <view slot="right-icon">
@@ -79,7 +144,7 @@
       </t-cell>
     </t-cell-group>
 
-    <view class="section-title">宝付日对账</view>
+    <view id="daily-details" class="section-title">日对账明细</view>
     <t-empty wx:if="{{!view.dailyRows.length}}" icon="info-circle" description="当前区间暂无宝付日对账数据" />
     <t-cell-group wx:else>
       <t-cell

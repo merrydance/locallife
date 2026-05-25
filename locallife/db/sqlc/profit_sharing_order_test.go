@@ -165,6 +165,12 @@ func TestProfitSharingReconciliationSummaryUsesFinishedDateForFinishedOrders(t *
 	require.Equal(t, ProfitSharingOrderStatusFinished, rows[0].Status)
 	require.Equal(t, int64(1), rows[0].TotalOrders)
 	require.Equal(t, int64(31000), rows[0].TotalAmount)
+	require.Equal(t, int64(30500), rows[0].TotalMerchantFlow)
+	require.Equal(t, int64(0), rows[0].TotalRiderFlow)
+	require.Equal(t, int64(620), rows[0].TotalPlatformCommission)
+	require.Equal(t, int64(1240), rows[0].TotalOperatorCommission)
+	require.Equal(t, int64(29140), rows[0].TotalMerchantAmount)
+	require.Equal(t, int64(0), rows[0].TotalRiderAmount)
 
 	sla, err := testStore.GetProfitSharingSlaSummary(context.Background(), GetProfitSharingSlaSummaryParams{
 		StartAt: pgtype.Timestamptz{Time: rangeStart, Valid: true},

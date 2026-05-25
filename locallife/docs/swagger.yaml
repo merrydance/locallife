@@ -6463,17 +6463,91 @@ definitions:
         description: 总订单数
         type: integer
     type: object
+  api.platformProfitSharingDetailResponse:
+    properties:
+      calculation_version:
+        type: string
+      channel:
+        type: string
+      created_at:
+        type: string
+      finished_at:
+        type: string
+      id:
+        type: integer
+      merchant_amount:
+        type: integer
+      merchant_flow:
+        type: integer
+      merchant_id:
+        type: integer
+      operator_commission:
+        type: integer
+      operator_id:
+        type: integer
+      order_source:
+        type: string
+      out_order_no:
+        type: string
+      payment_order_id:
+        type: integer
+      platform_commission:
+        type: integer
+      platform_receiver_amount:
+        type: integer
+      provider:
+        type: string
+      reconciliation_date:
+        type: string
+      rider_amount:
+        type: integer
+      rider_flow:
+        type: integer
+      rider_id:
+        type: integer
+      settlement_mode:
+        type: string
+      sharing_order_id:
+        type: string
+      status:
+        type: string
+      total_amount:
+        type: integer
+    type: object
+  api.platformProfitSharingDetailsResponse:
+    properties:
+      has_more:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/api.platformProfitSharingDetailResponse'
+        type: array
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+    type: object
   api.platformProfitSharingReconciliationRow:
     properties:
       status:
         type: string
       total_amount:
         type: integer
+      total_merchant_amount:
+        type: integer
+      total_merchant_flow:
+        type: integer
       total_operator_commission:
         type: integer
       total_orders:
         type: integer
       total_platform_commission:
+        type: integer
+      total_rider_amount:
+        type: integer
+      total_rider_flow:
         type: integer
     type: object
   api.platformProfitSharingSlaSummaryResponse:
@@ -25577,6 +25651,63 @@ paths:
       security:
       - BearerAuth: []
       summary: 获取分账规则审计记录
+      tags:
+      - Platform
+  /v1/platform/stats/profit-sharing/details:
+    get:
+      consumes:
+      - application/json
+      description: 分页获取指定时间范围内的分账订单明细，日期口径与分账对账汇总一致
+      parameters:
+      - description: '开始日期 (格式: 2025-01-01)'
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: '结束日期 (格式: 2025-01-31)'
+        in: query
+        name: end_date
+        required: true
+        type: string
+      - default: 1
+        description: 页码
+        in: query
+        minimum: 1
+        name: page_id
+        type: integer
+      - default: 20
+        description: 每页条数
+        in: query
+        maximum: 50
+        minimum: 1
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 分账对账明细
+          schema:
+            $ref: '#/definitions/api.platformProfitSharingDetailsResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取平台分账对账明细
       tags:
       - Platform
   /v1/platform/stats/profit-sharing/reconciliation:

@@ -18,6 +18,13 @@ type getPlatformOverviewRequest struct {
 	EndDate   string `form:"end_date" binding:"required"`   // 格式: 2025-11-30
 }
 
+type getPlatformProfitSharingDetailsRequest struct {
+	StartDate string `form:"start_date" binding:"required"`
+	EndDate   string `form:"end_date" binding:"required"`
+	PageID    int32  `form:"page_id" binding:"omitempty,min=1"`
+	PageSize  int32  `form:"page_size" binding:"omitempty,min=1,max=50"`
+}
+
 type platformOverviewResponse struct {
 	TotalOrders     int32 `json:"total_orders"`     // 总订单数
 	TotalGMV        int64 `json:"total_gmv"`        // 总GMV(分)
@@ -171,8 +178,102 @@ type platformProfitSharingReconciliationRow struct {
 	Status                  string `json:"status"`
 	TotalOrders             int64  `json:"total_orders"`
 	TotalAmount             int64  `json:"total_amount"`
+	TotalMerchantFlow       int64  `json:"total_merchant_flow"`
+	TotalRiderFlow          int64  `json:"total_rider_flow"`
 	TotalPlatformCommission int64  `json:"total_platform_commission"`
 	TotalOperatorCommission int64  `json:"total_operator_commission"`
+	TotalMerchantAmount     int64  `json:"total_merchant_amount"`
+	TotalRiderAmount        int64  `json:"total_rider_amount"`
+}
+
+type platformProfitSharingDetailResponse struct {
+	ID                  int64   `json:"id"`
+	PaymentOrderID      int64   `json:"payment_order_id"`
+	MerchantID          int64   `json:"merchant_id"`
+	OperatorID          *int64  `json:"operator_id,omitempty"`
+	RiderID             *int64  `json:"rider_id,omitempty"`
+	OrderSource         string  `json:"order_source"`
+	Status              string  `json:"status"`
+	TotalAmount         int64   `json:"total_amount"`
+	MerchantFlow        int64   `json:"merchant_flow"`
+	RiderFlow           int64   `json:"rider_flow"`
+	PlatformCommission  int64   `json:"platform_commission"`
+	OperatorCommission  int64   `json:"operator_commission"`
+	MerchantAmount      int64   `json:"merchant_amount"`
+	RiderAmount         int64   `json:"rider_amount"`
+	OutOrderNo          string  `json:"out_order_no"`
+	SharingOrderID      string  `json:"sharing_order_id,omitempty"`
+	ReconciliationDate  string  `json:"reconciliation_date"`
+	CreatedAt           string  `json:"created_at"`
+	FinishedAt          *string `json:"finished_at,omitempty"`
+	Provider            string  `json:"provider"`
+	Channel             string  `json:"channel"`
+	CalculationVersion  string  `json:"calculation_version"`
+	SettlementMode      string  `json:"settlement_mode"`
+	PlatformReceiverAmt int64   `json:"platform_receiver_amount"`
+}
+
+type platformProfitSharingDetailsResponse struct {
+	Items    []platformProfitSharingDetailResponse `json:"items"`
+	Total    int64                                 `json:"total"`
+	PageID   int32                                 `json:"page_id"`
+	PageSize int32                                 `json:"page_size"`
+	HasMore  bool                                  `json:"has_more"`
+}
+
+func profitSharingReconciliationTime(order db.ProfitSharingOrder) time.Time {
+	if order.FinishedAt.Valid {
+		return order.FinishedAt.Time
+	}
+	return order.CreatedAt
+}
+
+func newPlatformProfitSharingDetailResponse(order db.ProfitSharingOrder) platformProfitSharingDetailResponse {
+	var operatorID *int64
+	if order.OperatorID.Valid {
+		operatorID = &order.OperatorID.Int64
+	}
+	var riderID *int64
+	if order.RiderID.Valid {
+		riderID = &order.RiderID.Int64
+	}
+	var finishedAt *string
+	if order.FinishedAt.Valid {
+		formatted := order.FinishedAt.Time.Format(time.RFC3339)
+		finishedAt = &formatted
+	}
+	sharingOrderID := ""
+	if order.SharingOrderID.Valid {
+		sharingOrderID = order.SharingOrderID.String
+	}
+	reconciliationTime := profitSharingReconciliationTime(order)
+
+	return platformProfitSharingDetailResponse{
+		ID:                  order.ID,
+		PaymentOrderID:      order.PaymentOrderID,
+		MerchantID:          order.MerchantID,
+		OperatorID:          operatorID,
+		RiderID:             riderID,
+		OrderSource:         order.OrderSource,
+		Status:              order.Status,
+		TotalAmount:         order.TotalAmount,
+		MerchantFlow:        order.DistributableAmount,
+		RiderFlow:           order.RiderGrossAmount,
+		PlatformCommission:  order.PlatformCommission,
+		OperatorCommission:  order.OperatorCommission,
+		MerchantAmount:      order.MerchantAmount,
+		RiderAmount:         order.RiderAmount,
+		OutOrderNo:          order.OutOrderNo,
+		SharingOrderID:      sharingOrderID,
+		ReconciliationDate:  reconciliationTime.Format("2006-01-02"),
+		CreatedAt:           order.CreatedAt.Format(time.RFC3339),
+		FinishedAt:          finishedAt,
+		Provider:            order.Provider,
+		Channel:             order.Channel,
+		CalculationVersion:  order.CalculationVersion,
+		SettlementMode:      order.SettlementMode,
+		PlatformReceiverAmt: order.PlatformReceiverAmount,
+	}
 }
 
 // getPlatformProfitSharingReconciliation 获取分账对账汇总
@@ -233,12 +334,102 @@ func (server *Server) getPlatformProfitSharingReconciliation(ctx *gin.Context) {
 			Status:                  row.Status,
 			TotalOrders:             row.TotalOrders,
 			TotalAmount:             row.TotalAmount,
+			TotalMerchantFlow:       row.TotalMerchantFlow,
+			TotalRiderFlow:          row.TotalRiderFlow,
 			TotalPlatformCommission: row.TotalPlatformCommission,
 			TotalOperatorCommission: row.TotalOperatorCommission,
+			TotalMerchantAmount:     row.TotalMerchantAmount,
+			TotalRiderAmount:        row.TotalRiderAmount,
 		}
 	}
 
 	ctx.JSON(http.StatusOK, result)
+}
+
+// getPlatformProfitSharingReconciliationDetails 获取平台分账对账明细
+// @Summary 获取平台分账对账明细
+// @Description 分页获取指定时间范围内的分账订单明细，日期口径与分账对账汇总一致
+// @Tags Platform
+// @Accept json
+// @Produce json
+// @Param start_date query string true "开始日期 (格式: 2025-01-01)"
+// @Param end_date query string true "结束日期 (格式: 2025-01-31)"
+// @Param page_id query int false "页码" default(1) minimum(1)
+// @Param page_size query int false "每页条数" default(20) minimum(1) maximum(50)
+// @Security BearerAuth
+// @Success 200 {object} platformProfitSharingDetailsResponse "分账对账明细"
+// @Failure 400 {object} errorRes "请求参数错误"
+// @Failure 401 {object} errorRes "未授权"
+// @Failure 403 {object} errorRes "权限不足"
+// @Failure 500 {object} errorRes "服务器内部错误"
+// @Router /v1/platform/stats/profit-sharing/details [get]
+func (server *Server) getPlatformProfitSharingReconciliationDetails(ctx *gin.Context) {
+	var req getPlatformProfitSharingDetailsRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if req.PageID == 0 {
+		req.PageID = 1
+	}
+	if req.PageSize == 0 {
+		req.PageSize = 20
+	}
+
+	startDate, endDate, err := parseDateRange(req.StartDate, req.EndDate, 365)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	endDate = endDate.Add(24*time.Hour - time.Nanosecond)
+	rangeParams := db.CountPlatformProfitSharingReconciliationDetailsParams{
+		StartAt: pgtype.Timestamptz{Time: startDate, Valid: true},
+		EndAt:   pgtype.Timestamptz{Time: endDate, Valid: true},
+	}
+
+	total, err := server.store.CountPlatformProfitSharingReconciliationDetails(ctx, rangeParams)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	rows, err := server.store.ListPlatformProfitSharingReconciliationDetails(ctx, db.ListPlatformProfitSharingReconciliationDetailsParams{
+		StartAt: rangeParams.StartAt,
+		EndAt:   rangeParams.EndAt,
+		Offset:  pageOffset(req.PageID, req.PageSize),
+		Limit:   req.PageSize,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	items := make([]platformProfitSharingDetailResponse, len(rows))
+	for i, row := range rows {
+		items[i] = newPlatformProfitSharingDetailResponse(row)
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "platform",
+		Action:      "platform_profit_sharing_details_viewed",
+		TargetType:  "profit_sharing_orders",
+		RegionID:    nil,
+		Metadata: map[string]any{
+			"start_date": req.StartDate,
+			"end_date":   req.EndDate,
+			"page_id":    req.PageID,
+			"page_size":  req.PageSize,
+		},
+	})
+
+	ctx.JSON(http.StatusOK, platformProfitSharingDetailsResponse{
+		Items:    items,
+		Total:    total,
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
+		HasMore:  int64(pageOffset(req.PageID, req.PageSize))+int64(len(items)) < total,
+	})
 }
 
 // ==================== 分账 SLA 汇总 ====================

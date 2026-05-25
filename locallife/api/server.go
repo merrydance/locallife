@@ -1354,6 +1354,7 @@ func (server *Server) setupRouter() {
 		platformStatsGroup.GET("/daily", server.getPlatformDailyStats)
 		platformStatsGroup.GET("/baofu/reconciliation/daily", server.getPlatformBaofuDailyReconciliation)
 		platformStatsGroup.GET("/profit-sharing/reconciliation", server.getPlatformProfitSharingReconciliation)
+		platformStatsGroup.GET("/profit-sharing/details", server.getPlatformProfitSharingReconciliationDetails)
 		platformStatsGroup.GET("/profit-sharing/sla", server.getPlatformProfitSharingSlaSummary)
 		platformStatsGroup.GET("/profit-sharing/config-audits", server.getPlatformProfitSharingConfigAudits)
 		platformStatsGroup.GET("/regions/compare", server.getRegionComparison)

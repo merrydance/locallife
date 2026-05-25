@@ -244,6 +244,11 @@ export interface RegionComparisonParams extends Record<string, unknown> {
     end_date: string
 }
 
+export interface PlatformProfitSharingDetailsParams extends PlatformOverviewParams {
+    page_id?: number
+    page_size?: number
+}
+
 /** 平台日统计行 - 对齐 api.platformDailyStatRow */
 export interface PlatformDailyStatRow {
     date: string                      // 日期
@@ -261,8 +266,48 @@ export interface PlatformProfitSharingReconciliationRow {
     status: string
     total_orders: number
     total_amount: number
+    total_merchant_flow: number
+    total_rider_flow: number
     total_platform_commission: number
     total_operator_commission: number
+    total_merchant_amount: number
+    total_rider_amount: number
+}
+
+/** 分账对账明细行 - 对齐 api.platformProfitSharingDetailResponse */
+export interface PlatformProfitSharingDetailRow {
+    id: number
+    payment_order_id: number
+    merchant_id: number
+    operator_id?: number
+    rider_id?: number
+    order_source: string
+    status: string
+    total_amount: number
+    merchant_flow: number
+    rider_flow: number
+    platform_commission: number
+    operator_commission: number
+    merchant_amount: number
+    rider_amount: number
+    out_order_no: string
+    sharing_order_id?: string
+    reconciliation_date: string
+    created_at: string
+    finished_at?: string
+    provider: string
+    channel: string
+    calculation_version: string
+    settlement_mode: string
+    platform_receiver_amount: number
+}
+
+export interface PlatformProfitSharingDetailsResponse {
+    items: PlatformProfitSharingDetailRow[]
+    total: number
+    page_id: number
+    page_size: number
+    has_more: boolean
 }
 
 /** 分账 SLA 汇总 - 对齐 api.platformProfitSharingSlaSummaryResponse */
@@ -430,6 +475,14 @@ export class PlatformDashboardService {
     async getProfitSharingReconciliation(params: PlatformOverviewParams): Promise<PlatformProfitSharingReconciliationRow[]> {
         return request({
             url: '/v1/platform/stats/profit-sharing/reconciliation',
+            method: 'GET',
+            data: params
+        })
+    }
+
+    async getProfitSharingDetails(params: PlatformProfitSharingDetailsParams): Promise<PlatformProfitSharingDetailsResponse> {
+        return request({
+            url: '/v1/platform/stats/profit-sharing/details',
             method: 'GET',
             data: params
         })

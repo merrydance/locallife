@@ -163,6 +163,19 @@ WHERE status = $1
 ORDER BY created_at ASC, id ASC
 LIMIT $2 OFFSET $3;
 
+-- name: ListPlatformProfitSharingReconciliationDetails :many
+SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount FROM profit_sharing_orders
+WHERE COALESCE(finished_at, created_at) >= sqlc.arg('start_at')
+  AND COALESCE(finished_at, created_at) <= sqlc.arg('end_at')
+ORDER BY COALESCE(finished_at, created_at) DESC, id DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
+-- name: CountPlatformProfitSharingReconciliationDetails :one
+SELECT COUNT(*)::bigint
+FROM profit_sharing_orders
+WHERE COALESCE(finished_at, created_at) >= sqlc.arg('start_at')
+  AND COALESCE(finished_at, created_at) <= sqlc.arg('end_at');
+
 -- name: ListProfitSharingOrdersForRetry :many
 SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate, payment_fee, payment_fee_rate_bps, provider, channel, merchant_sharing_mer_id, rider_sharing_mer_id, operator_sharing_mer_id, platform_sharing_mer_id, sharing_detail_snapshot, calculation_version, settlement_mode, provider_payment_fee, provider_payment_fee_rate_bps, provider_payment_fee_base_amount, provider_payment_fee_source, merchant_payment_fee, merchant_payment_fee_rate_bps, merchant_payment_fee_base_amount, rider_gross_amount, rider_payment_fee, rider_payment_fee_rate_bps, rider_payment_fee_base_amount, commission_base_amount, platform_receiver_amount FROM profit_sharing_orders
 WHERE status IN ('pending', 'failed', 'processing')
@@ -206,8 +219,12 @@ SELECT
     status,
     COUNT(*) as total_orders,
     COALESCE(SUM(total_amount), 0)::bigint as total_amount,
+    COALESCE(SUM(distributable_amount), 0)::bigint as total_merchant_flow,
+    COALESCE(SUM(rider_gross_amount), 0)::bigint as total_rider_flow,
     COALESCE(SUM(platform_commission), 0)::bigint as total_platform_commission,
-    COALESCE(SUM(operator_commission), 0)::bigint as total_operator_commission
+    COALESCE(SUM(operator_commission), 0)::bigint as total_operator_commission,
+    COALESCE(SUM(merchant_amount), 0)::bigint as total_merchant_amount,
+    COALESCE(SUM(rider_amount), 0)::bigint as total_rider_amount
 FROM profit_sharing_orders
 WHERE COALESCE(finished_at, created_at) >= sqlc.arg('start_at')
   AND COALESCE(finished_at, created_at) <= sqlc.arg('end_at')

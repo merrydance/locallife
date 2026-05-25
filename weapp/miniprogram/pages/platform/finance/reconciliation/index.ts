@@ -1,7 +1,8 @@
 import {
-  buildPlatformReconciliationMonthRange,
   buildPlatformReconciliationRange,
+  loadPlatformFinanceReconciliationDetailsPage,
   loadPlatformFinanceReconciliationPage,
+  type PlatformFinanceReconciliationDetailTarget,
   type PlatformFinanceReconciliationRange,
   type PlatformFinanceReconciliationPageView
 } from '../../../../services/platform-finance-reconciliation'
@@ -14,8 +15,12 @@ const EMPTY_VIEW: PlatformFinanceReconciliationPageView = {
   summary: {
     totalOrdersText: '0 单',
     totalProfitSharingAmountText: '¥0.00',
+    merchantFlowText: '¥0.00',
+    riderFlowText: '¥0.00',
     platformCommissionText: '¥0.00',
     operatorCommissionText: '¥0.00',
+    merchantShareText: '¥0.00',
+    riderShareText: '¥0.00',
     paidAmountText: '¥0.00',
     merchantAmountText: '¥0.00',
     riderAmountText: '¥0.00',
@@ -29,17 +34,19 @@ const EMPTY_VIEW: PlatformFinanceReconciliationPageView = {
     balanceStatusText: '当前余额暂不可确认',
     balanceUnavailable: true
   },
+  summaryCards: [],
   metrics: [],
   statusRows: [],
+  detailRows: [],
+  detailsTotal: 0,
+  detailsTotalText: '共 0 条',
+  detailsPageId: 1,
+  detailsPageSize: 20,
+  detailsHasMore: false,
   dailyRows: []
 }
 const DEFAULT_RANGE = buildPlatformReconciliationRange()
-
-interface PlatformReconciliationQuickRange {
-  id: string
-  label: string
-  active: boolean
-}
+let detailsRequestSeq = 0
 
 interface LoadReconciliationOptions {
   silent?: boolean
@@ -78,19 +85,6 @@ function getRangeCalendarValue(range: PlatformFinanceReconciliationRange): numbe
   return [getDateTime(start), getDateTime(end)]
 }
 
-function buildQuickRanges(activeRange: PlatformFinanceReconciliationRange): PlatformReconciliationQuickRange[] {
-  const rangeOptions = [
-    { id: '7', label: '近7天', range: buildPlatformReconciliationRange(7) },
-    { id: '30', label: '近30天', range: buildPlatformReconciliationRange(30) },
-    { id: 'month', label: '本月', range: buildPlatformReconciliationMonthRange() }
-  ]
-  return rangeOptions.map((option) => ({
-    id: option.id,
-    label: option.label,
-    active: option.range.start_date === activeRange.start_date && option.range.end_date === activeRange.end_date
-  }))
-}
-
 Page({
   data: {
     navBarHeight: 88,
@@ -100,8 +94,10 @@ Page({
     refreshErrorMessage: '',
     hasLoadedOnce: false,
     loadingReconciliation: false,
+    loadingDetails: false,
+    detailsErrorMessage: '',
+    loadMoreDetailsErrorMessage: '',
     range: DEFAULT_RANGE as PlatformFinanceReconciliationRange,
-    quickRanges: buildQuickRanges(DEFAULT_RANGE) as PlatformReconciliationQuickRange[],
     rangePickerVisible: false,
     rangePickerValue: getRangeCalendarValue(DEFAULT_RANGE),
     rangePickerMinDate: getDateTime(new Date(new Date().getFullYear() - 1, 0, 1)),
@@ -133,8 +129,10 @@ Page({
     const range = options.range || this.data.range
     const hasTrustedData = this.data.hasLoadedOnce
 
+    detailsRequestSeq += 1
     this.setData({
       loadingReconciliation: true,
+      loadingDetails: false,
       ...(silent || hasTrustedData
         ? { refreshErrorMessage: '' }
         : {
@@ -154,11 +152,14 @@ Page({
         refreshErrorMessage: '',
         hasLoadedOnce: true,
         loadingReconciliation: false,
+        loadingDetails: false,
+        detailsErrorMessage: '',
+        loadMoreDetailsErrorMessage: '',
         range,
-        quickRanges: buildQuickRanges(range),
         rangePickerValue: getRangeCalendarValue(range),
         view
       })
+      void this.loadDetailsPage(1, true)
     } catch (error) {
       logger.warn('Platform finance reconciliation load failed', error, 'platform-finance-reconciliation')
       const message = getErrorUserMessage(error, '对账账单加载失败，请稍后重试')
@@ -167,7 +168,8 @@ Page({
         initialError: !hasTrustedData,
         initialErrorMessage: hasTrustedData ? '' : message,
         refreshErrorMessage: hasTrustedData ? message : '',
-        loadingReconciliation: false
+        loadingReconciliation: false,
+        loadingDetails: false
       })
     } finally {
       wx.stopPullDownRefresh()
@@ -204,25 +206,106 @@ Page({
     })
   },
 
-  onUseQuickRange(e: WechatMiniprogram.BaseEvent) {
-    const rangeID = String(e.currentTarget.dataset.range || '')
-    if (rangeID === '7') {
-      this.applyRange(buildPlatformReconciliationRange(7))
+  applyRange(range: PlatformFinanceReconciliationRange) {
+    this.setData({
+      rangePickerVisible: false,
+      detailsErrorMessage: '',
+      loadMoreDetailsErrorMessage: ''
+    })
+    void this.loadReconciliation({ range })
+  },
+
+  async loadDetailsPage(pageId: number, reset: boolean) {
+    if (!reset && this.data.loadingDetails) {
       return
     }
-    if (rangeID === '30') {
-      this.applyRange(buildPlatformReconciliationRange(30))
+    if (!reset && !this.data.view.detailsHasMore) {
       return
     }
-    if (rangeID === 'month') {
-      this.applyRange(buildPlatformReconciliationMonthRange())
+
+    const requestSeq = ++detailsRequestSeq
+    this.setData(reset
+      ? { loadingDetails: true, detailsErrorMessage: '', loadMoreDetailsErrorMessage: '' }
+      : { loadingDetails: true, loadMoreDetailsErrorMessage: '' })
+
+    try {
+      const detailPage = await loadPlatformFinanceReconciliationDetailsPage({
+        range: this.data.range,
+        pageId,
+        pageSize: this.data.view.detailsPageSize
+      })
+      if (requestSeq !== detailsRequestSeq) {
+        return
+      }
+      this.setData({
+        view: {
+          ...this.data.view,
+          detailRows: reset
+            ? detailPage.detailRows
+            : this.data.view.detailRows.concat(detailPage.detailRows),
+          detailsTotal: detailPage.detailsTotal,
+          detailsTotalText: detailPage.detailsTotalText,
+          detailsPageId: detailPage.detailsPageId,
+          detailsPageSize: detailPage.detailsPageSize,
+          detailsHasMore: detailPage.detailsHasMore
+        },
+        detailsErrorMessage: '',
+        loadMoreDetailsErrorMessage: ''
+      })
+    } catch (error) {
+      if (requestSeq !== detailsRequestSeq) {
+        return
+      }
+      logger.warn('Platform finance reconciliation details load failed', error, 'platform-finance-reconciliation')
+      const message = getErrorUserMessage(error, '分账明细加载失败，请稍后重试')
+      if (reset) {
+        this.setData({
+          detailsErrorMessage: message,
+          view: {
+            ...this.data.view,
+            detailRows: [],
+            detailsTotal: 0,
+            detailsTotalText: '共 0 条',
+            detailsPageId: 1,
+            detailsHasMore: false
+          }
+        })
+      } else {
+        this.setData({ loadMoreDetailsErrorMessage: message })
+      }
+    } finally {
+      if (requestSeq === detailsRequestSeq) {
+        this.setData({ loadingDetails: false })
+      }
     }
   },
 
-  applyRange(range: PlatformFinanceReconciliationRange) {
-    this.setData({
-      rangePickerVisible: false
-    })
-    void this.loadReconciliation({ range })
+  onLoadMoreDetails() {
+    void this.loadDetailsPage(this.data.view.detailsPageId + 1, false)
+  },
+
+  onRetryDetails() {
+    void this.loadDetailsPage(1, true)
+  },
+
+  onSummaryCardTap(e: WechatMiniprogram.BaseEvent) {
+    const detailTarget = String(e.currentTarget.dataset.target || '') as PlatformFinanceReconciliationDetailTarget
+    const selector = detailTarget === 'dailyDetails' ? '#daily-details' : '#profit-sharing-details'
+    wx.createSelectorQuery()
+      .select(selector)
+      .boundingClientRect()
+      .selectViewport()
+      .scrollOffset()
+      .exec((result) => {
+        const target = result[0] as WechatMiniprogram.BoundingClientRectCallbackResult | null
+        const viewport = result[1] as WechatMiniprogram.ScrollOffsetCallbackResult | null
+        if (!target || !viewport) {
+          return
+        }
+        wx.pageScrollTo({
+          scrollTop: viewport.scrollTop + target.top - this.data.navBarHeight - 12,
+          duration: 240
+        })
+      })
   }
 })

@@ -2299,6 +2299,21 @@ func (mr *MockStoreMockRecorder) CountPlatformAlertEvents(ctx any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountPlatformAlertEvents", reflect.TypeOf((*MockStore)(nil).CountPlatformAlertEvents), ctx)
 }
 
+// CountPlatformProfitSharingReconciliationDetails mocks base method.
+func (m *MockStore) CountPlatformProfitSharingReconciliationDetails(ctx context.Context, arg db.CountPlatformProfitSharingReconciliationDetailsParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountPlatformProfitSharingReconciliationDetails", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountPlatformProfitSharingReconciliationDetails indicates an expected call of CountPlatformProfitSharingReconciliationDetails.
+func (mr *MockStoreMockRecorder) CountPlatformProfitSharingReconciliationDetails(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountPlatformProfitSharingReconciliationDetails", reflect.TypeOf((*MockStore)(nil).CountPlatformProfitSharingReconciliationDetails), ctx, arg)
+}
+
 // CountProfitSharingReturnsByRefundOrder mocks base method.
 func (m *MockStore) CountProfitSharingReturnsByRefundOrder(ctx context.Context, refundOrderID int64) (int32, error) {
 	m.ctrl.T.Helper()
@@ -14991,6 +15006,21 @@ func (m *MockStore) ListPlatformConfigsByKey(ctx context.Context, configKey stri
 func (mr *MockStoreMockRecorder) ListPlatformConfigsByKey(ctx, configKey any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPlatformConfigsByKey", reflect.TypeOf((*MockStore)(nil).ListPlatformConfigsByKey), ctx, configKey)
+}
+
+// ListPlatformProfitSharingReconciliationDetails mocks base method.
+func (m *MockStore) ListPlatformProfitSharingReconciliationDetails(ctx context.Context, arg db.ListPlatformProfitSharingReconciliationDetailsParams) ([]db.ProfitSharingOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPlatformProfitSharingReconciliationDetails", ctx, arg)
+	ret0, _ := ret[0].([]db.ProfitSharingOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPlatformProfitSharingReconciliationDetails indicates an expected call of ListPlatformProfitSharingReconciliationDetails.
+func (mr *MockStoreMockRecorder) ListPlatformProfitSharingReconciliationDetails(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPlatformProfitSharingReconciliationDetails", reflect.TypeOf((*MockStore)(nil).ListPlatformProfitSharingReconciliationDetails), ctx, arg)
 }
 
 // ListPrintLogsByOrder mocks base method.

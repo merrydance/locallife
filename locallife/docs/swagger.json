@@ -23599,6 +23599,91 @@
                 }
             }
         },
+        "/v1/platform/stats/profit-sharing/details": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "分页获取指定时间范围内的分账订单明细，日期口径与分账对账汇总一致",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取平台分账对账明细",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "开始日期 (格式: 2025-01-01)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束日期 (格式: 2025-01-31)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page_id",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 50,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页条数",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "分账对账明细",
+                        "schema": {
+                            "$ref": "#/definitions/api.platformProfitSharingDetailsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/platform/stats/profit-sharing/reconciliation": {
             "get": {
                 "security": [
@@ -40551,6 +40636,106 @@
                 }
             }
         },
+        "api.platformProfitSharingDetailResponse": {
+            "type": "object",
+            "properties": {
+                "calculation_version": {
+                    "type": "string"
+                },
+                "channel": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "merchant_amount": {
+                    "type": "integer"
+                },
+                "merchant_flow": {
+                    "type": "integer"
+                },
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "operator_commission": {
+                    "type": "integer"
+                },
+                "operator_id": {
+                    "type": "integer"
+                },
+                "order_source": {
+                    "type": "string"
+                },
+                "out_order_no": {
+                    "type": "string"
+                },
+                "payment_order_id": {
+                    "type": "integer"
+                },
+                "platform_commission": {
+                    "type": "integer"
+                },
+                "platform_receiver_amount": {
+                    "type": "integer"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "reconciliation_date": {
+                    "type": "string"
+                },
+                "rider_amount": {
+                    "type": "integer"
+                },
+                "rider_flow": {
+                    "type": "integer"
+                },
+                "rider_id": {
+                    "type": "integer"
+                },
+                "settlement_mode": {
+                    "type": "string"
+                },
+                "sharing_order_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "total_amount": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.platformProfitSharingDetailsResponse": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.platformProfitSharingDetailResponse"
+                    }
+                },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.platformProfitSharingReconciliationRow": {
             "type": "object",
             "properties": {
@@ -40560,6 +40745,12 @@
                 "total_amount": {
                     "type": "integer"
                 },
+                "total_merchant_amount": {
+                    "type": "integer"
+                },
+                "total_merchant_flow": {
+                    "type": "integer"
+                },
                 "total_operator_commission": {
                     "type": "integer"
                 },
@@ -40567,6 +40758,12 @@
                     "type": "integer"
                 },
                 "total_platform_commission": {
+                    "type": "integer"
+                },
+                "total_rider_amount": {
+                    "type": "integer"
+                },
+                "total_rider_flow": {
                     "type": "integer"
                 }
             }
