@@ -13,13 +13,10 @@ export interface PlatformFinanceReconciliationRange extends Record<string, unkno
   end_date: string
 }
 
-export type PlatformFinanceReconciliationDetailTarget = 'profitSharingDetails'
-
 export interface PlatformFinanceSummaryCardView {
   key: string
   label: string
   value: string
-  detailTarget: PlatformFinanceReconciliationDetailTarget
 }
 
 export interface PlatformFinanceReconciliationSummaryView {
@@ -44,7 +41,6 @@ export interface PlatformProfitSharingDetailView {
   operatorCommissionText: string
   merchantAmountText: string
   riderAmountText: string
-  providerText: string
   finishedAtText: string
 }
 
@@ -132,8 +128,6 @@ function buildProfitSharingDetailRows(rows: PlatformProfitSharingDetailRow[]): P
   return rows.map((row) => {
     const status = getStatusView(row.status)
     const outOrderNo = row.out_order_no || `分账单 ${row.id}`
-    const provider = row.provider ? row.provider.toUpperCase() : '分账'
-    const channel = row.channel || '默认通道'
 
     return {
       id: String(row.id),
@@ -148,7 +142,6 @@ function buildProfitSharingDetailRows(rows: PlatformProfitSharingDetailRow[]): P
       operatorCommissionText: formatPlatformFinanceFen(row.operator_commission),
       merchantAmountText: formatPlatformFinanceFen(row.merchant_amount),
       riderAmountText: formatPlatformFinanceFen(row.rider_amount),
-      providerText: `${provider} · ${channel}`,
       finishedAtText: formatDateTime(row.finished_at)
     }
   })
@@ -194,12 +187,12 @@ function buildSummary(reconciliationRows: PlatformProfitSharingReconciliationRow
 
 function buildSummaryCards(summary: PlatformFinanceReconciliationSummaryView): PlatformFinanceSummaryCardView[] {
   return [
-    { key: 'merchant_flow', label: '商户流水', value: summary.merchantFlowText, detailTarget: 'profitSharingDetails' },
-    { key: 'rider_flow', label: '骑手流水', value: summary.riderFlowText, detailTarget: 'profitSharingDetails' },
-    { key: 'platform_share', label: '平台分账', value: summary.platformCommissionText, detailTarget: 'profitSharingDetails' },
-    { key: 'merchant_share', label: '商户分账', value: summary.merchantShareText, detailTarget: 'profitSharingDetails' },
-    { key: 'rider_share', label: '骑手分账', value: summary.riderShareText, detailTarget: 'profitSharingDetails' },
-    { key: 'operator_share', label: '运营商分账', value: summary.operatorCommissionText, detailTarget: 'profitSharingDetails' }
+    { key: 'merchant_flow', label: '商户流水', value: summary.merchantFlowText },
+    { key: 'rider_flow', label: '骑手流水', value: summary.riderFlowText },
+    { key: 'platform_share', label: '平台分账', value: summary.platformCommissionText },
+    { key: 'merchant_share', label: '商户分账', value: summary.merchantShareText },
+    { key: 'rider_share', label: '骑手分账', value: summary.riderShareText },
+    { key: 'operator_share', label: '运营商分账', value: summary.operatorCommissionText }
   ]
 }
 

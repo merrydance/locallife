@@ -90,7 +90,7 @@ const view = service.buildPlatformFinanceReconciliationPageView({
         created_at: '2026-05-01T10:00:00Z',
         finished_at: '2026-05-01T10:05:00Z',
         provider: 'baofu',
-        channel: 'wechat_jsapi',
+        channel: 'baofu_aggregate',
         calculation_version: 'v1',
         settlement_mode: 'split',
         platform_receiver_amount: 200
@@ -104,20 +104,22 @@ const view = service.buildPlatformFinanceReconciliationPageView({
 })
 
 assert.deepStrictEqual(
-  JSON.parse(JSON.stringify(view.summaryCards.map((card) => [card.key, card.label, card.value, card.detailTarget]))),
+  JSON.parse(JSON.stringify(view.summaryCards.map((card) => [card.key, card.label, card.value]))),
   [
-    ['merchant_flow', '商户流水', '¥104.00', 'profitSharingDetails'],
-    ['rider_flow', '骑手流水', '¥13.00', 'profitSharingDetails'],
-    ['platform_share', '平台分账', '¥7.80', 'profitSharingDetails'],
-    ['merchant_share', '商户分账', '¥102.80', 'profitSharingDetails'],
-    ['rider_share', '骑手分账', '¥11.90', 'profitSharingDetails'],
-    ['operator_share', '运营商分账', '¥5.20', 'profitSharingDetails']
+    ['merchant_flow', '商户流水', '¥104.00'],
+    ['rider_flow', '骑手流水', '¥13.00'],
+    ['platform_share', '平台分账', '¥7.80'],
+    ['merchant_share', '商户分账', '¥102.80'],
+    ['rider_share', '骑手分账', '¥11.90'],
+    ['operator_share', '运营商分账', '¥5.20']
   ]
 )
 
 assert.strictEqual(view.detailRows.length, 1, 'page view must expose backed profit-sharing detail rows')
 assert.strictEqual(view.detailRows[0].statusLabel, '已完成')
 assert.strictEqual(view.detailRows[0].merchantFlowText, '¥42.00')
+assert(!('providerText' in view.detailRows[0]), 'detail rows must not expose provider/channel implementation labels')
+assert(!JSON.stringify(view.detailRows[0]).includes('baofu_aggregate'), 'detail rows must not expose raw channel values')
 assert.strictEqual(view.detailsTotalText, '共 1 条')
 assert.strictEqual(view.detailsHasMore, false)
 
@@ -133,9 +135,11 @@ const summaryLoadSource = summaryLoadStart >= 0 && detailLoadStart > summaryLoad
 
 assert(pageSource.includes('summary-card'), 'platform reconciliation page must render summary cards')
 assert(pageSource.includes('view.summaryCards'), 'summary cards must come from service view model')
-assert(pageSource.includes('bind:tap="onSummaryCardTap"'), 'summary cards must open the backed detail section')
+assert(!pageSource.includes('bind:tap="onSummaryCardTap"'), 'summary cards must be display-only')
+assert(!pageSource.includes('data-target="{{item.detailTarget}}"'), 'summary cards must not carry action targets')
 assert(pageSource.includes('view.detailRows'), 'profit-sharing details section must render backed detail rows')
 assert(pageSource.includes('onLoadMoreDetails'), 'profit-sharing details section must expose pagination')
+assert(!pageSource.includes('providerText'), 'detail cards must not render provider/channel implementation labels')
 assert(!pageSource.includes('range-card__caption'), 'range selector must not render a redundant explanatory caption')
 assert(!pageSource.includes('分账订单金额'), 'legacy cell summary must not remain on the page')
 assert(!pageSource.includes('当前可提现余额'), 'withdrawal balance cells do not belong on reconciliation detail page')
@@ -146,10 +150,13 @@ assert(!pageSource.includes('title="对账区间"'), 'range selector must not sh
 assert(!pageSource.includes('quick-range-row'), 'quick range row must be removed from the page')
 assert(!pageLogic.includes('onUseQuickRange'), 'quick range handler must be removed')
 assert(!pageLogic.includes('buildQuickRanges'), 'quick range view state must be removed')
+assert(!pageLogic.includes('onSummaryCardTap'), 'summary cards must not have tap handlers')
 assert(pageLogic.includes('loadPlatformFinanceReconciliationDetailsPage'), 'page must load backed profit-sharing detail pages')
 assert(pageLogic.includes('detailsRequestSeq'), 'page must ignore stale detail responses after range changes')
 assert(serviceSource.includes('buildProfitSharingDetailRows'), 'service must build a detail-row view model')
 assert(serviceSource.includes('getProfitSharingDetails'), 'service must call the backed detail API')
+assert(!serviceSource.includes('providerText'), 'service must not expose raw provider/channel text to this page')
+assert(!serviceSource.includes('detailTarget'), 'summary cards must not expose action targets')
 assert(!serviceSource.includes('getProfitSharingSla'), 'page service must not request SLA metrics for this view')
 assert(!serviceSource.includes('getBaofuDailyReconciliation'), 'page service must not request daily Baofu reconciliation for this view')
 assert(!serviceSource.includes('getBaofuWithdrawalBalance'), 'page service must not request withdrawal balance for this view')

@@ -268,25 +268,5 @@ Page({
 
   onRetryDetails() {
     void this.loadDetailsPage(1, true)
-  },
-
-  onSummaryCardTap() {
-    const selector = '#profit-sharing-details'
-    wx.createSelectorQuery()
-      .select(selector)
-      .boundingClientRect()
-      .selectViewport()
-      .scrollOffset()
-      .exec((result) => {
-        const target = result[0] as WechatMiniprogram.BoundingClientRectCallbackResult | null
-        const viewport = result[1] as WechatMiniprogram.ScrollOffsetCallbackResult | null
-        if (!target || !viewport) {
-          return
-        }
-        wx.pageScrollTo({
-          scrollTop: viewport.scrollTop + target.top - this.data.navBarHeight - 12,
-          duration: 240
-        })
-      })
   }
 })

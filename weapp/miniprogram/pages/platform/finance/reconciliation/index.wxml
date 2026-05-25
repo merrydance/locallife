@@ -33,8 +33,6 @@
         wx:for="{{view.summaryCards}}"
         wx:key="key"
         class="summary-card"
-        data-target="{{item.detailTarget}}"
-        bind:tap="onSummaryCardTap"
       >
         <text class="summary-card__label">{{item.label}}</text>
         <text class="summary-card__value">{{item.value}}</text>
@@ -55,7 +53,7 @@
         <view class="detail-card__header">
           <view class="detail-card__title-wrap">
             <text class="detail-card__title">{{item.title}}</text>
-            <text class="detail-card__meta">{{item.reconciliationDate}} · {{item.providerText}}</text>
+            <text class="detail-card__meta">{{item.reconciliationDate}}</text>
           </view>
           <t-tag theme="{{item.statusTheme}}" size="small">{{item.statusLabel}}</t-tag>
         </view>
