@@ -6,7 +6,7 @@ import { locationService } from '../../../utils/location'
 import { getStableBarHeights } from '../../../utils/responsive'
 
 const PAGE_SIZE = 20
-const EMPTY_DATE_RANGE: DeliveryHistoryDateRange = { start_date: '', end_date: '' }
+const DEFAULT_HISTORY_DAYS = 30
 const DATE_PICKER_MIN_YEAR = 2020
 
 let historyRequestSeq = 0
@@ -59,6 +59,16 @@ function getDateTime(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
 }
 
+function buildDefaultDateRange(days = DEFAULT_HISTORY_DAYS): DeliveryHistoryDateRange {
+  const end = new Date()
+  const start = new Date(end)
+  start.setDate(end.getDate() - Math.max(1, days - 1))
+  return {
+    start_date: formatDate(start),
+    end_date: formatDate(end)
+  }
+}
+
 function hasCompleteDateRange(range: DeliveryHistoryDateRange): boolean {
   return Boolean(range.start_date && range.end_date)
 }
@@ -72,16 +82,6 @@ function getRangeCalendarValue(range: DeliveryHistoryDateRange): number[] {
   return [getDateTime(start), getDateTime(end)]
 }
 
-function buildDateRangeLabel(range: DeliveryHistoryDateRange): string {
-  if (!hasCompleteDateRange(range)) {
-    return '全部日期'
-  }
-  if (range.start_date === range.end_date) {
-    return range.start_date
-  }
-  return `${range.start_date} 至 ${range.end_date}`
-}
-
 function decorateHistoryDelivery(delivery: Delivery): DeliveryHistoryView {
   const statusMeta = getDeliveryStatusDisplay(delivery.status)
   return {
@@ -92,6 +92,8 @@ function decorateHistoryDelivery(delivery: Delivery): DeliveryHistoryView {
     income_view: buildRiderDeliveryIncomeView(delivery)
   }
 }
+
+const DEFAULT_DATE_RANGE = buildDefaultDateRange()
 
 Page({
   data: {
@@ -105,11 +107,9 @@ Page({
     pageID: 1,
     hasMore: true,
     totalCount: 0,
-    dateRange: { ...EMPTY_DATE_RANGE } as DeliveryHistoryDateRange,
-    dateRangeLabel: buildDateRangeLabel(EMPTY_DATE_RANGE),
-    hasDateRange: false,
+    dateRange: DEFAULT_DATE_RANGE as DeliveryHistoryDateRange,
     rangePickerVisible: false,
-    rangePickerValue: [] as number[],
+    rangePickerValue: getRangeCalendarValue(DEFAULT_DATE_RANGE),
     rangePickerMinDate: getDateTime(new Date(DATE_PICKER_MIN_YEAR, 0, 1)),
     rangePickerMaxDate: getDateTime(new Date())
   },
@@ -223,16 +223,9 @@ Page({
     })
   },
 
-  onClearDateRange() {
-    if (!this.data.hasDateRange) return
-    this.applyDateRange({ ...EMPTY_DATE_RANGE })
-  },
-
   applyDateRange(range: DeliveryHistoryDateRange) {
     this.setData({
       dateRange: range,
-      dateRangeLabel: buildDateRangeLabel(range),
-      hasDateRange: hasCompleteDateRange(range),
       rangePickerVisible: false,
       rangePickerValue: getRangeCalendarValue(range),
       deliveries: [],

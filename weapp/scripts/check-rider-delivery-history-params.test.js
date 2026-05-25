@@ -64,7 +64,7 @@ function loadModule() {
   await loaded.module.deliveryTaskManagementService.getDeliveryHistory({
     page_id: 3,
     page_size: 20,
-    status: 'completed'
+    status: 'picked'
   })
 
   assert.strictEqual(loaded.requests.length, 1)
@@ -72,8 +72,14 @@ function loadModule() {
   assert.deepStrictEqual(plain(loaded.requests[0].data), {
     page: 3,
     limit: 20,
-    status: 'completed'
+    status: 'picked'
   })
+
+  const processService = loaded.module.deliveryProcessService
+  assert.strictEqual(processService.getNextAction({ status: 'picking' }).action, 'confirm_pickup')
+  assert.strictEqual(processService.getNextAction({ status: 'picked' }).action, 'start_delivery')
+  assert.strictEqual(processService.getNextAction({ status: 'delivering' }).action, 'confirm_delivery')
+  assert.strictEqual(processService.getNextAction({ status: 'delivered' }).action, 'none')
 
   await loaded.module.deliveryTaskManagementService.getDeliveryHistory({
     page_id: 1,
@@ -105,12 +111,23 @@ function loadModule() {
   const pageWxml = fs.readFileSync(pageWxmlPath, 'utf8')
   const pageJson = fs.readFileSync(pageJsonPath, 'utf8')
 
+  assert(pageTs.includes('DEFAULT_HISTORY_DAYS = 30'), 'history page should use a bounded default range')
+  assert(pageTs.includes('buildDefaultDateRange'), 'history page should build a default date range')
   assert(pageTs.includes('buildHistoryParams'), 'history page should build params from current date range')
-  assert(pageTs.includes('dateRangeLabel'), 'history page should expose a date range label')
-  assert(pageTs.includes('onClearDateRange'), 'history page should allow returning to all records')
+  assert(pageTs.includes('const DEFAULT_DATE_RANGE = buildDefaultDateRange()'), 'history page should initialize from the bounded date range')
+  assert(!pageTs.includes('EMPTY_DATE_RANGE'), 'history page must not default to an unbounded all-date request')
+  assert(!pageTs.includes('dateRangeLabel'), 'history page should not keep the legacy date range label state')
+  assert(!pageTs.includes('onClearDateRange'), 'history page should not allow unbounded all-date requests')
   assert(pageWxml.includes('bindtap="onOpenRangePicker"'), 'history page should open date range picker')
+  assert(pageWxml.includes('range-card__body'), 'history page should use the unified range card layout')
+  assert(pageWxml.includes('{{dateRange.start_date}}'), 'history page should render start date directly')
+  assert(pageWxml.includes('{{dateRange.end_date}}'), 'history page should render end date directly')
   assert(pageWxml.includes('<t-calendar'), 'history page should render a date range calendar')
   assert(pageWxml.includes('bind:confirm="onConfirmRangePicker"'), 'history page should handle calendar confirmation')
+  assert(!pageWxml.includes('日期范围'), 'history page should not render the legacy date range title')
+  assert(!pageWxml.includes('全部日期'), 'history page should not render unbounded all-date copy')
+  assert(!pageWxml.includes('onClearDateRange'), 'history page should not expose the legacy clear date action')
+  assert(!pageWxml.includes('chevron-right'), 'history page should not render the legacy cell arrow')
   assert(!pageWxml.includes('已显示最近半年的记录'), 'history page should not describe the list as recent half-year only')
   assert(pageWxml.includes('没有更多任务了'), 'history page should use all-history no-more copy')
   assert(pageJson.includes('"t-calendar"'), 'history page should declare t-calendar')

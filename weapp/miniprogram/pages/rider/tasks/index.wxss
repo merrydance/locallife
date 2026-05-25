@@ -15,50 +15,41 @@
   gap: 24rpx;
 }
 
-.history-filter {
-  display: flex;
-  align-items: center;
-  gap: var(--spacer-sm);
+.range-card {
   margin-bottom: var(--spacer-md);
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
 }
 
-.date-filter-main {
-  flex: 1;
-  min-width: 0;
+.range-card__body {
   min-height: 96rpx;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 56rpx 1fr;
   align-items: center;
-  gap: var(--spacer-sm);
-  padding: 0 var(--spacer-md);
-  border-radius: var(--radius-md);
-  background: #FFFFFF;
-  border: 1rpx solid var(--td-border-level-1-color);
+  padding: 0 28rpx;
+  box-sizing: border-box;
+}
+
+.range-card__date {
   color: var(--td-text-color-primary);
+  font-size: var(--font-size-base);
+  font-weight: 600;
 }
 
-.date-filter-text {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacer-xxs);
+.range-card__date:last-child {
+  text-align: right;
 }
 
-.date-filter-label,
+.range-card__separator {
+  text-align: center;
+  color: var(--td-text-color-placeholder);
+  font-size: var(--font-size-base);
+}
+
 .history-count-row {
   font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
-}
-
-.date-filter-value {
-  font-size: var(--font-size-base);
-  font-weight: 600;
-  color: var(--td-text-color-primary);
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
-.history-count-row {
   display: flex;
   align-items: center;
   margin-bottom: var(--spacer-md);

@@ -9,7 +9,7 @@ import { request } from '../utils/request'
 // ==================== 数据类型定义 ====================
 
 /** 代取状态枚举 */
-export type DeliveryStatus = 'assigned' | 'picked_up' | 'delivering' | 'delivered' | 'completed' | 'cancelled'
+export type DeliveryStatus = 'assigned' | 'picking' | 'picked' | 'delivering' | 'delivered' | 'completed' | 'cancelled'
 
 // ==================== 推荐订单相关类型 ====================
 
@@ -251,23 +251,30 @@ export class DeliveryProcessService {
                     actionText: '开始取餐',
                     canExecute: true
                 }
-            case 'picked_up':
+            case 'picking':
                 return {
                     action: 'confirm_pickup',
                     actionText: '确认取餐',
                     canExecute: true
                 }
-            case 'delivering':
+            case 'picked':
                 return {
                     action: 'start_delivery',
                     actionText: '开始代取',
                     canExecute: true
                 }
-            case 'delivered':
+            case 'delivering':
                 return {
                     action: 'confirm_delivery',
                     actionText: '确认送达',
                     canExecute: true
+                }
+            case 'delivered':
+                return {
+                    action: 'none',
+                    actionText: '已送达',
+                    canExecute: false,
+                    reason: '代取任务已送达'
                 }
             case 'completed':
                 return {

@@ -6,16 +6,12 @@
   style="--page-shell-nav-height: {{navBarHeight}}px;"
   bindscrolltolower="onReachBottom"
 >
-  <view class="history-filter">
-    <view class="date-filter-main" bindtap="onOpenRangePicker">
-      <t-icon name="calendar" size="34rpx" />
-      <view class="date-filter-text">
-        <text class="date-filter-label">日期范围</text>
-        <text class="date-filter-value">{{dateRangeLabel}}</text>
-      </view>
-      <t-icon name="chevron-right" size="32rpx" />
+  <view class="range-card" bindtap="onOpenRangePicker">
+    <view class="range-card__body">
+      <text class="range-card__date">{{dateRange.start_date}}</text>
+      <text class="range-card__separator">→</text>
+      <text class="range-card__date">{{dateRange.end_date}}</text>
     </view>
-    <t-button wx:if="{{hasDateRange}}" size="small" theme="default" variant="outline" bindtap="onClearDateRange">全部</t-button>
   </view>
 
   <view wx:if="{{loading && deliveries.length === 0}}" class="history-loading">
@@ -104,7 +100,7 @@
   </block>
 
   <t-calendar
-    title="选择日期范围"
+    title="选择日期区间"
     type="range"
     visible="{{rangePickerVisible}}"
     value="{{rangePickerValue}}"
