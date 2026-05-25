@@ -6,6 +6,7 @@ import 'package:merchant_app/features/table/providers/table_provider.dart';
 import 'package:merchant_app/features/table/ui/widgets/table_card.dart';
 import 'package:merchant_app/features/table/ui/widgets/table_action_sheet.dart';
 import 'package:merchant_app/features/table/ui/widgets/table_config_sheet.dart';
+import 'package:merchant_app/features/table/ui/widgets/table_filter_bar.dart';
 
 class TableGridScreen extends ConsumerStatefulWidget {
   const TableGridScreen({super.key});
@@ -15,6 +16,8 @@ class TableGridScreen extends ConsumerStatefulWidget {
 }
 
 class _TableGridScreenState extends ConsumerState<TableGridScreen> {
+  TableStatus? _selectedStatus;
+
   @override
   void initState() {
     super.initState();
@@ -31,7 +34,9 @@ class _TableGridScreenState extends ConsumerState<TableGridScreen> {
       builder: (context) => TableActionSheet(
         table: table,
         onUpdateStatus: (status) async {
-          return await ref.read(tableProvider.notifier).updateTableStatus(table.id, status);
+          return await ref
+              .read(tableProvider.notifier)
+              .updateTableStatus(table.id, status);
         },
       ),
     );
@@ -61,18 +66,44 @@ class _TableGridScreenState extends ConsumerState<TableGridScreen> {
             ),
           ],
         ),
-        body: tableState.isLoading && tableState.tables.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : TabBarView(
-                children: [
-                  _buildGrid(
-                    tableState.tables.where((t) => t.tableType == TableType.table).toList(),
-                  ),
-                  _buildGrid(
-                    tableState.tables.where((t) => t.tableType == TableType.room).toList(),
-                  ),
-                ],
-              ),
+        body: Column(
+          children: [
+            TableFilterBar(
+              selectedStatus: _selectedStatus,
+              onStatusChanged: (status) {
+                setState(() => _selectedStatus = status);
+              },
+            ),
+            Expanded(
+              child: tableState.isLoading && tableState.tables.isEmpty
+                  ? const Center(child: CircularProgressIndicator())
+                  : TabBarView(
+                      children: [
+                        _buildGrid(
+                          tableState.tables
+                              .where(
+                                (t) =>
+                                    t.tableType == TableType.table &&
+                                    (_selectedStatus == null ||
+                                        t.status == _selectedStatus),
+                              )
+                              .toList(),
+                        ),
+                        _buildGrid(
+                          tableState.tables
+                              .where(
+                                (t) =>
+                                    t.tableType == TableType.room &&
+                                    (_selectedStatus == null ||
+                                        t.status == _selectedStatus),
+                              )
+                              .toList(),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
         floatingActionButton: FloatingActionButton(
           onPressed: () {
             showModalBottomSheet(

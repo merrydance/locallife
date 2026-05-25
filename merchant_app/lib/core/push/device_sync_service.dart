@@ -25,8 +25,9 @@ class DeviceSyncService {
   String? _lastRegisteredPushToken;
 
   Future<void> ensureRegistered() {
-    _registrationFuture ??= _performEnsureRegistered()
-        .whenComplete(() => _registrationFuture = null);
+    _registrationFuture ??= _performEnsureRegistered().whenComplete(
+      () => _registrationFuture = null,
+    );
     return _registrationFuture!;
   }
 
@@ -36,8 +37,9 @@ class DeviceSyncService {
       return;
     }
 
-    _lastRegisteredPushToken ??=
-        await _storage.read(key: _lastRegisteredPushTokenKey);
+    _lastRegisteredPushToken ??= await _storage.read(
+      key: _lastRegisteredPushTokenKey,
+    );
     if (_lastRegisteredPushToken == registrationId) {
       return;
     }
@@ -88,20 +90,27 @@ class DeviceSyncService {
     }
   }
 
-  Future<Map<String, dynamic>> _buildDevicePayload(String registrationId) async {
+  Future<Map<String, dynamic>> _buildDevicePayload(
+    String registrationId,
+  ) async {
     final deviceInfo = DeviceInfoPlugin();
     var deviceModel = 'Unknown';
     var osVersion = 'Unknown';
 
     try {
-      if (Platform.isAndroid) {
-        final androidInfo = await deviceInfo.androidInfo;
-        deviceModel = androidInfo.model;
-        osVersion = 'Android ${androidInfo.version.release}';
-      } else if (Platform.isIOS) {
-        final iosInfo = await deviceInfo.iosInfo;
-        deviceModel = iosInfo.model;
-        osVersion = 'iOS ${iosInfo.systemVersion}';
+      if (!kIsWeb) {
+        if (Platform.isAndroid) {
+          final androidInfo = await deviceInfo.androidInfo;
+          deviceModel = androidInfo.model;
+          osVersion = 'Android ${androidInfo.version.release}';
+        } else if (Platform.isIOS) {
+          final iosInfo = await deviceInfo.iosInfo;
+          deviceModel = iosInfo.model;
+          osVersion = 'iOS ${iosInfo.systemVersion}';
+        }
+      } else {
+        deviceModel = 'Web Browser';
+        osVersion = 'Web';
       }
     } catch (_) {
       if (kDebugMode) {
@@ -127,7 +136,7 @@ class DeviceSyncService {
       'device_model': deviceModel,
       'os_version': osVersion,
       'app_version': appVersion,
-      'platform': Platform.isIOS ? 'ios' : 'android',
+      'platform': kIsWeb ? 'web' : (Platform.isIOS ? 'ios' : 'android'),
     };
   }
 

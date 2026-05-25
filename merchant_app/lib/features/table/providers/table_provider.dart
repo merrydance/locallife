@@ -1,8 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:merchant_app/core/network/api_client.dart';
 import 'package:merchant_app/core/network/api_provider.dart';
 import 'package:merchant_app/core/utils/error_handler.dart';
 import 'package:merchant_app/features/table/models/table_model.dart';
+import 'package:merchant_app/features/table/repositories/table_repository.dart';
 
 class TableState {
   final List<TableModel> tables;
@@ -27,39 +28,39 @@ class TableState {
       tables: tables ?? this.tables,
       isLoading: isLoading ?? this.isLoading,
       error: error,
-      actionInFlightTableIds: actionInFlightTableIds ?? this.actionInFlightTableIds,
+      actionInFlightTableIds:
+          actionInFlightTableIds ?? this.actionInFlightTableIds,
     );
   }
 }
 
 class TableNotifier extends StateNotifier<TableState> {
-  final ApiClient _apiClient;
+  final TableRepository _repository;
   final Map<int, Future<bool>> _pendingTableActions = {};
 
-  TableNotifier(this._apiClient) : super(TableState());
+  TableNotifier(this._repository) : super(TableState());
 
   Future<void> fetchTables() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final response = await _apiClient.get('/tables');
-      final List data = response.data['tables'] ?? [];
-      final tables = data.map((json) => TableModel.fromJson(json)).toList();
+      final tables = await _repository.listTables();
       state = state.copyWith(tables: tables, isLoading: false);
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('fetchTables error: $e\n$stackTrace');
       state = state.copyWith(
-          error: ErrorHandler.getErrorMessage(e), isLoading: false);
+        error: ErrorHandler.getErrorMessage(e),
+        isLoading: false,
+      );
     }
   }
 
   Future<bool> updateTableStatus(int tableId, String status) async {
     return _runSingleFlightAction(tableId, () async {
       try {
-        final response = await _apiClient.patch(
-          '/tables/$tableId/status',
-          data: {'status': status},
+        final updatedTable = await _repository.updateTableStatus(
+          tableId,
+          status,
         );
-
-        final updatedTable = TableModel.fromJson(response.data);
         final newTables = state.tables.map((t) {
           if (t.id == tableId) return updatedTable;
           return t;
@@ -74,47 +75,80 @@ class TableNotifier extends StateNotifier<TableState> {
     });
   }
 
+  /// 创建桌台 — 支持后端全部字段
   Future<bool> createTable({
     required String tableNo,
     required String tableType,
     required int capacity,
+    String? description,
+    int? minimumSpend,
+    String? accessCode,
+    List<int>? tagIds,
   }) async {
-    try {
-      final response = await _apiClient.post(
-        '/tables',
-        data: {
-          'table_no': tableNo,
-          'table_type': tableType,
-          'capacity': capacity,
-        },
-      );
-
-      final newTable = TableModel.fromJson(response.data);
-      state = state.copyWith(tables: [...state.tables, newTable]);
-      return true;
-    } catch (e) {
-      state = state.copyWith(error: ErrorHandler.getErrorMessage(e));
-      return false;
-    }
+    final id = await createTableAndReturnId(
+      tableNo: tableNo,
+      tableType: tableType,
+      capacity: capacity,
+      description: description,
+      minimumSpend: minimumSpend,
+      accessCode: accessCode,
+      tagIds: tagIds,
+    );
+    return id != null;
   }
 
-  Future<bool> updateTable({
-    required int tableId,
+  /// 创建桌台并返回新建桌台的 ID（用于后续关联图片等操作）
+  Future<int?> createTableAndReturnId({
     required String tableNo,
     required String tableType,
     required int capacity,
+    String? description,
+    int? minimumSpend,
+    String? accessCode,
+    List<int>? tagIds,
   }) async {
     try {
-      final response = await _apiClient.put(
-        '/tables/$tableId',
-        data: {
-          'table_no': tableNo,
-          'table_type': tableType,
-          'capacity': capacity,
-        },
+      final newTable = await _repository.createTable(
+        tableNo: tableNo,
+        tableType: tableType,
+        capacity: capacity,
+        description: description,
+        minimumSpend: minimumSpend,
+        accessCode: accessCode,
+        tagIds: tagIds,
       );
 
-      final updatedTable = TableModel.fromJson(response.data);
+      state = state.copyWith(tables: [...state.tables, newTable]);
+      return newTable.id;
+    } catch (e) {
+      state = state.copyWith(error: ErrorHandler.getErrorMessage(e));
+      return null;
+    }
+  }
+
+  /// 更新桌台 — 使用 PATCH，支持后端全部字段
+  Future<bool> updateTable({
+    required int tableId,
+    String? tableNo,
+    String? tableType,
+    int? capacity,
+    String? description,
+    int? minimumSpend,
+    String? accessCode,
+    List<int>? tagIds,
+  }) async {
+    try {
+      final updatedTable = await _repository.updateTable(
+        tableId,
+        tableNo: tableNo,
+        tableType: tableType,
+        capacity: capacity,
+        description: description,
+        minimumSpend: minimumSpend,
+        accessCode: accessCode,
+        tagIds: tagIds,
+      );
+
       final newTables = state.tables.map((t) {
         if (t.id == tableId) return updatedTable;
         return t;
@@ -130,7 +164,7 @@ class TableNotifier extends StateNotifier<TableState> {
 
   Future<bool> deleteTable(int tableId) async {
     try {
-      await _apiClient.delete('/tables/$tableId');
+      await _repository.deleteTable(tableId);
 
       final newTables = state.tables.where((t) => t.id != tableId).toList();
       state = state.copyWith(tables: newTables);
@@ -168,21 +202,28 @@ class TableNotifier extends StateNotifier<TableState> {
   }
 
   void updateTableFromWebSocket(Map<String, dynamic> data) {
-     final tableId = data['id'];
-     final status = data['status'];
-     if (tableId != null && status != null) {
-       final newTables = state.tables.map((t) {
-         if (t.id == tableId) {
-           return t.copyWith(status: TableStatus.fromString(status as String?));
-         }
-         return t;
-       }).toList();
-       state = state.copyWith(tables: newTables);
-     }
+    final tableId = data['id'];
+    final status = data['status'];
+    if (tableId != null && status != null) {
+      final newTables = state.tables.map((t) {
+        if (t.id == tableId) {
+          return t.copyWith(status: TableStatus.fromString(status as String?));
+        }
+        return t;
+      }).toList();
+      state = state.copyWith(tables: newTables);
+    }
   }
 }
 
-final tableProvider = StateNotifierProvider<TableNotifier, TableState>((ref) {
+/// Repository provider — 桌台数据层的依赖注入
+final tableRepositoryProvider = Provider<TableRepository>((ref) {
   final apiClient = ref.watch(apiClientProvider);
-  return TableNotifier(apiClient);
+  return TableRepository(apiClient);
+});
+
+/// 桌台列表状态 provider
+final tableProvider = StateNotifierProvider<TableNotifier, TableState>((ref) {
+  final repository = ref.watch(tableRepositoryProvider);
+  return TableNotifier(repository);
 });

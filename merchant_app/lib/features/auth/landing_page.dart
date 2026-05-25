@@ -89,7 +89,7 @@ class LandingPage extends StatelessWidget {
                 ),
                 child: MerchantPrimaryButton(
                   label: '立即绑定设备',
-                  onPressed: () => context.push('/login'),
+                  onPressed: () => context.go('/login'),
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),

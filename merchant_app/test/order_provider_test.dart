@@ -1,0 +1,135 @@
+import 'package:dio/dio.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:merchant_app/core/network/api_client.dart';
+import 'package:merchant_app/core/service/order_poller.dart';
+import 'package:merchant_app/features/order/order_provider.dart';
+import 'package:merchant_app/models/order.dart';
+
+void main() {
+  test(
+    'fetchOrders includes backend-required pagination query params',
+    () async {
+      final apiClient = _FakeApiClient();
+      final notifier = OrderNotifier(apiClient);
+
+      await notifier.fetchOrders();
+
+      expect(apiClient.lastPath, '/merchant/orders');
+      expect(apiClient.lastQueryParameters, <String, dynamic>{
+        'page_id': 1,
+        'page_size': 20,
+      });
+    },
+  );
+
+  test(
+    'fetchAwaitingAcceptanceOrders requests only backend paid orders',
+    () async {
+      final apiClient = _FakeApiClient(
+        orders: [_orderJson(id: 'paid-1', status: 'paid')],
+      );
+      final notifier = OrderNotifier(apiClient);
+
+      final orders = await notifier.fetchAwaitingAcceptanceOrders();
+
+      expect(apiClient.lastPath, '/merchant/orders');
+      expect(apiClient.lastQueryParameters, <String, dynamic>{
+        'page_id': 1,
+        'page_size': 20,
+        'status': 'paid',
+      });
+      expect(orders.single.status, OrderStatus.paid);
+      expect(notifier.state.orders, isEmpty);
+    },
+  );
+
+  test('order poller fetches awaiting acceptance orders only', () async {
+    final apiClient = _FakeApiClient(
+      orders: [_orderJson(id: 'paid-1', status: 'paid')],
+    );
+    final notifier = OrderNotifier(apiClient);
+
+    await OrderPoller.fetchLatestAwaitingAcceptanceOrders(notifier);
+
+    expect(apiClient.lastQueryParameters, containsPair('status', 'paid'));
+  });
+}
+
+class _FakeApiClient implements ApiClient {
+  _FakeApiClient({this.orders = const <Map<String, dynamic>>[]});
+
+  final List<Map<String, dynamic>> orders;
+  String? lastPath;
+  Map<String, dynamic>? lastQueryParameters;
+
+  @override
+  Future<Response<dynamic>> get(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    bool requiresAuth = true,
+  }) async {
+    lastPath = path;
+    lastQueryParameters = queryParameters;
+    return Response<dynamic>(
+      requestOptions: RequestOptions(path: path),
+      data: <String, dynamic>{
+        'code': 0,
+        'message': 'ok',
+        'data': <String, dynamic>{
+          'orders': orders,
+          'total': 0,
+          'page_id': 1,
+          'page_size': 20,
+        },
+      },
+    );
+  }
+
+  @override
+  Future<Response<dynamic>> post(
+    String path, {
+    dynamic data,
+    bool requiresAuth = true,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Response<dynamic>> put(
+    String path, {
+    dynamic data,
+    bool requiresAuth = true,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Response<dynamic>> patch(
+    String path, {
+    dynamic data,
+    bool requiresAuth = true,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Response<dynamic>> delete(String path, {bool requiresAuth = true}) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Map<String, String?>?> refreshSessionTokens() {
+    throw UnimplementedError();
+  }
+}
+
+Map<String, dynamic> _orderJson({required String id, required String status}) {
+  return <String, dynamic>{
+    'id': id,
+    'order_no': 'ORD-$id',
+    'total_amount': 1800,
+    'status': status,
+    'created_at': '2026-04-12T08:00:00Z',
+    'items': <Map<String, dynamic>>[],
+  };
+}

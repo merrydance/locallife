@@ -7,6 +7,7 @@ import 'package:merchant_app/features/auth/auth_provider.dart';
 import 'package:merchant_app/features/order/order_alert_coordinator.dart';
 import 'package:merchant_app/features/order/order_provider.dart';
 import 'package:merchant_app/features/order/working_status_provider.dart';
+import 'package:merchant_app/models/order.dart';
 
 final orderPollerProvider = Provider<OrderPoller>((ref) {
   final poller = OrderPoller(ref);
@@ -17,7 +18,9 @@ final orderPollerProvider = Provider<OrderPoller>((ref) {
 // A provider that just watches the necessary states and keeps the poller running
 final orderPollerManagerProvider = Provider<void>((ref) {
   final authState = ref.watch(authProvider);
-  final isWorking = ref.watch(workingStatusProvider);
+  final isWorking = ref.watch(
+    workingStatusProvider.select((state) => state.isOnline),
+  );
   final hasNetwork = ref.watch(connectivityProvider).value ?? false;
 
   final poller = ref.watch(orderPollerProvider);
@@ -42,7 +45,7 @@ class OrderPoller {
     debugPrint('OrderPoller started. Polling every 30 seconds...');
 
     _timer = Timer.periodic(const Duration(seconds: 30), (_) {
-      _pollOrders();
+      unawaited(pollOnce());
     });
   }
 
@@ -54,7 +57,7 @@ class OrderPoller {
     _timer = null;
   }
 
-  Future<void> _pollOrders() async {
+  Future<void> pollOnce() async {
     final authState = _ref.read(authProvider);
     if (!authState.isAuthenticated || authState.accessToken == null) {
       debugPrint('OrderPoller: Skipping poll, not authenticated.');
@@ -62,17 +65,47 @@ class OrderPoller {
     }
 
     try {
+      await _ref.read(workingStatusProvider.notifier).syncFromBackend();
+
+      final latestAuthState = _ref.read(authProvider);
+      if (!latestAuthState.isAuthenticated ||
+          latestAuthState.accessToken == null) {
+        debugPrint(
+          'OrderPoller: Skipping poll, authentication expired during status sync.',
+        );
+        return;
+      }
+
+      final workingStatusState = _ref.read(workingStatusProvider);
+      if (!workingStatusState.isOnline) {
+        debugPrint(
+          'OrderPoller: Skipping order poll because merchant is closed.',
+        );
+        return;
+      }
+
       await _ref.read(deviceSyncServiceProvider).sendHeartbeat();
       debugPrint('OrderPoller: Fetching latest orders (fallback).');
       final previousOrders = List.of(_ref.read(orderProvider).orders);
-      final latestOrders = await _ref.read(orderProvider.notifier).fetchOrders();
-      await _ref.read(orderAlertCoordinatorProvider).handlePolledOrders(
+      final latestOrders = await fetchLatestAwaitingAcceptanceOrders(
+        _ref.read(orderProvider.notifier),
+      );
+      await _ref
+          .read(orderAlertCoordinatorProvider)
+          .handlePolledOrders(
             previousOrders: previousOrders,
             latestOrders: latestOrders,
           );
     } catch (e) {
       debugPrint('OrderPoller error: $e');
     }
+  }
+
+  @visibleForTesting
+  static Future<List<OrderModel>> fetchLatestAwaitingAcceptanceOrders(
+    OrderNotifier orderNotifier,
+  ) {
+    return orderNotifier.fetchAwaitingAcceptanceOrders();
   }
 
   void dispose() {

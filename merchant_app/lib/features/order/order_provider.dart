@@ -46,7 +46,10 @@ class OrderNotifier extends StateNotifier<OrderState> {
   Future<List<OrderModel>> fetchOrders() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final response = await _apiClient.get('/merchant/orders');
+      final response = await _apiClient.get(
+        '/merchant/orders',
+        queryParameters: const {'page_id': 1, 'page_size': 20},
+      );
       final orders = _extractOrdersFromResponse(response.data);
       state = state.copyWith(orders: orders, isLoading: false);
       return List<OrderModel>.from(orders);
@@ -55,6 +58,23 @@ class OrderNotifier extends StateNotifier<OrderState> {
         error: ErrorHandler.getErrorMessage(e),
         isLoading: false,
       );
+      return const <OrderModel>[];
+    }
+  }
+
+  Future<List<OrderModel>> fetchAwaitingAcceptanceOrders() async {
+    try {
+      final response = await _apiClient.get(
+        '/merchant/orders',
+        queryParameters: const {
+          'page_id': 1,
+          'page_size': 20,
+          'status': 'paid',
+        },
+      );
+      return _extractOrdersFromResponse(response.data);
+    } catch (e) {
+      state = state.copyWith(error: ErrorHandler.getErrorMessage(e));
       return const <OrderModel>[];
     }
   }
@@ -92,6 +112,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
                 id: o.id,
                 orderNum: o.orderNum,
                 amount: o.amount,
+                feeBreakdown: o.feeBreakdown,
                 status: OrderStatus.accepted,
                 createdAt: o.createdAt,
                 userName: o.userName,
@@ -132,6 +153,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
                 id: o.id,
                 orderNum: o.orderNum,
                 amount: o.amount,
+                feeBreakdown: o.feeBreakdown,
                 status: OrderStatus.cancelled,
                 createdAt: o.createdAt,
                 userName: o.userName,
@@ -204,6 +226,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
           ? incoming.orderNum
           : existing.orderNum,
       amount: incoming.amount > 0 ? incoming.amount : existing.amount,
+      feeBreakdown: incoming.feeBreakdown ?? existing.feeBreakdown,
       status: incoming.status,
       createdAt: incoming.createdAt,
       userName: incoming.userName ?? existing.userName,
@@ -213,7 +236,6 @@ class OrderNotifier extends StateNotifier<OrderState> {
       itemsLoadFailed: preserveItems
           ? existing.itemsLoadFailed
           : incoming.itemsLoadFailed,
-      feeBreakdown: incoming.feeBreakdown ?? existing.feeBreakdown,
     );
   }
 

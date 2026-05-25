@@ -21,6 +21,11 @@ final wsClientProvider = Provider((ref) {
     ref.read(tableProvider.notifier).updateTableFromWebSocket(data);
   };
 
+  client.onAuthenticationFailure = () async {
+    final tokens = await ref.read(authProvider.notifier).refreshSession();
+    return tokens?['accessToken'];
+  };
+
   // Clean up on dispose
   ref.onDispose(() => client.dispose());
 
@@ -31,7 +36,9 @@ final wsClientProvider = Provider((ref) {
 final wsConnectionManagerProvider = Provider((ref) {
   final authState = ref.watch(authProvider);
   final wsClient = ref.watch(wsClientProvider);
-  final isWorking = ref.watch(workingStatusProvider);
+  final isWorking = ref.watch(
+    workingStatusProvider.select((state) => state.isOnline),
+  );
   final hasNetwork = ref.watch(connectivityProvider).value ?? false;
   final deviceSyncService = ref.watch(deviceSyncServiceProvider);
 

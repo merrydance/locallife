@@ -6,13 +6,16 @@ import 'package:merchant_app/models/push_message.dart';
 
 typedef TokenCallback = Future<void> Function(String token, String provider);
 
-typedef PushOrderCallback = Future<void> Function(
-  PushMessage message, {
-  required bool showLocalNotification,
-});
+typedef PushOrderCallback =
+    Future<void> Function(
+      PushMessage message, {
+      required bool showLocalNotification,
+    });
 
 class NativePushManager {
-  static const MethodChannel _channel = MethodChannel('com.locallife.merchant/push');
+  static const MethodChannel _channel = MethodChannel(
+    'com.locallife.merchant/push',
+  );
 
   final MessageDeduplicator _deduplicator;
 
@@ -24,14 +27,13 @@ class NativePushManager {
   NativePushManager(this._deduplicator);
 
   Future<void> init() async {
+    if (kIsWeb) return;
     _channel.setMethodCallHandler(_handleMethodCall);
 
     // Initial native setup
     try {
       final String manufacturer = await _getManufacturer();
-      await _channel.invokeMethod('initialize', {
-        'manufacturer': manufacturer,
-      });
+      await _channel.invokeMethod('initialize', {'manufacturer': manufacturer});
       debugPrint('NativePushManager initialized for $manufacturer');
     } on PlatformException catch (e) {
       debugPrint('Failed to initialize native push: ${e.message}');
@@ -50,11 +52,15 @@ class NativePushManager {
   Future<void> _handleMethodCall(MethodCall call) async {
     switch (call.method) {
       case 'onReceiveMessage':
-        final Map<String, dynamic> message = Map<String, dynamic>.from(call.arguments);
+        final Map<String, dynamic> message = Map<String, dynamic>.from(
+          call.arguments,
+        );
         await _handleIncomingMessage(message, showLocalNotification: true);
         break;
       case 'onNotificationOpened':
-        final Map<String, dynamic> message = Map<String, dynamic>.from(call.arguments);
+        final Map<String, dynamic> message = Map<String, dynamic>.from(
+          call.arguments,
+        );
         final parsedMessage = _extractPushMessage(message);
         if (parsedMessage != null) {
           await onNotificationOpened?.call(parsedMessage);
@@ -101,6 +107,7 @@ class NativePushManager {
   }
 
   Future<String?> getRegistrationID() async {
+    if (kIsWeb) return null;
     return await _channel.invokeMethod<String>('getRegistrationId');
   }
 }

@@ -15,16 +15,17 @@ class SettingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isAuthenticated = ref.watch(authProvider.select((state) => state.isAuthenticated));
+    final isAuthenticated = ref.watch(
+      authProvider.select((state) => state.isAuthenticated),
+    );
     final printerState = ref.watch(printerProvider);
     final notificationSettings = ref.watch(notificationSettingsProvider);
-    final notificationSettingsNotifier =
-        ref.read(notificationSettingsProvider.notifier);
+    final notificationSettingsNotifier = ref.read(
+      notificationSettingsProvider.notifier,
+    );
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('系统设置'),
-      ),
+      appBar: AppBar(title: const Text('系统设置')),
       body: ListView(
         padding: EdgeInsets.zero,
         children: [
@@ -44,7 +45,9 @@ class SettingsPage extends ConsumerWidget {
                           ? '已连接 ${printerState.connectedDevice!.platformName}'
                           : '未连接蓝牙打印机',
                       badge: MerchantStatusBadge(
-                        label: printerState.connectedDevice != null ? '已连接' : '未连接',
+                        label: printerState.connectedDevice != null
+                            ? '已连接'
+                            : '未连接',
                         tone: printerState.connectedDevice != null
                             ? MerchantStatusTone.positive
                             : MerchantStatusTone.neutral,
@@ -79,7 +82,8 @@ class SettingsPage extends ConsumerWidget {
                       title: '自动接单',
                       subtitle: '新订单到达后自动确认接单；如果失败，订单仍会保留为待处理。',
                       value: notificationSettings.autoAcceptEnabled,
-                      onChanged: notificationSettingsNotifier.setAutoAcceptEnabled,
+                      onChanged:
+                          notificationSettingsNotifier.setAutoAcceptEnabled,
                     ),
                     const SizedBox(height: AppSpacing.md),
                     _buildToggleTile(
@@ -87,7 +91,8 @@ class SettingsPage extends ConsumerWidget {
                       title: '接单后自动打印',
                       subtitle: '手工接单或自动接单成功后，如已连接蓝牙打印机则自动打印小票。',
                       value: notificationSettings.autoPrintAfterAcceptEnabled,
-                      onChanged: notificationSettingsNotifier.setAutoPrintAfterAcceptEnabled,
+                      onChanged: notificationSettingsNotifier
+                          .setAutoPrintAfterAcceptEnabled,
                     ),
                     const SizedBox(height: AppSpacing.md),
                     _buildActionTile(
@@ -134,7 +139,8 @@ class SettingsPage extends ConsumerWidget {
                               content: const Text('确定要退出当前商户账号吗？'),
                               actions: [
                                 TextButton(
-                                  onPressed: () => Navigator.pop(context, false),
+                                  onPressed: () =>
+                                      Navigator.pop(context, false),
                                   child: const Text('取消'),
                                 ),
                                 TextButton(
@@ -145,7 +151,9 @@ class SettingsPage extends ConsumerWidget {
                             ),
                           );
                           if (confirm == true) {
-                            ref.read(workingStatusProvider.notifier).setStatus(false);
+                            ref
+                                .read(workingStatusProvider.notifier)
+                                .resetLocal();
                             ref.read(orderProvider.notifier).clearOrders();
                             ref.read(authProvider.notifier).logout();
                           }
@@ -157,7 +165,7 @@ class SettingsPage extends ConsumerWidget {
                         icon: Icons.login,
                         title: '绑定商户',
                         subtitle: '输入微信小程序生成的 6 位绑定码后开始接单。',
-                        onTap: () => context.push('/login'),
+                        onTap: () => context.go('/login'),
                       ),
                   ],
                 ),
@@ -235,10 +243,7 @@ class SettingsPage extends ConsumerWidget {
           children: [
             Text(
               title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(

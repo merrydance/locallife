@@ -1,4 +1,4 @@
-
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
 
@@ -16,6 +16,10 @@ class MessageDeduplicator {
   }
 
   Future<void> _initialize() async {
+    if (kIsWeb) {
+      // sqflite does not support Web, fallback to memory-only
+      return;
+    }
     final databasesPath = await getDatabasesPath();
     final databasePath = path.join(databasesPath, 'message_dedup.db');
     _database = await openDatabase(
@@ -59,7 +63,11 @@ class MessageDeduplicator {
     final cutoff = now.subtract(_retention).millisecondsSinceEpoch;
     final db = _database;
     if (db == null) {
-      return false;
+      // Memory fallback for Web or missing db
+      for (final key in keys) {
+        _remember(key, now);
+      }
+      return true;
     }
 
     final placeholders = List.filled(keys.length, '?').join(', ');
@@ -77,14 +85,10 @@ class MessageDeduplicator {
     final batch = db.batch();
     for (final key in keys) {
       _remember(key, now);
-      batch.insert(
-        'processed_messages',
-        {
-          'message_id': key,
-          'processed_at': now.millisecondsSinceEpoch,
-        },
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
+      batch.insert('processed_messages', {
+        'message_id': key,
+        'processed_at': now.millisecondsSinceEpoch,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
     }
     await batch.commit(noResult: true);
 
@@ -103,7 +107,9 @@ class MessageDeduplicator {
     _memoryCache[messageId] = timestamp;
     if (_memoryCache.length > _maxMemorySize) {
       final oldestKey = _memoryCache.entries
-          .reduce((left, right) => left.value.isBefore(right.value) ? left : right)
+          .reduce(
+            (left, right) => left.value.isBefore(right.value) ? left : right,
+          )
           .key;
       _memoryCache.remove(oldestKey);
     }
@@ -121,6 +127,8 @@ class MessageDeduplicator {
       where: 'processed_at < ?',
       whereArgs: [cutoff],
     );
-    _memoryCache.removeWhere((_, processedAt) => processedAt.millisecondsSinceEpoch < cutoff);
+    _memoryCache.removeWhere(
+      (_, processedAt) => processedAt.millisecondsSinceEpoch < cutoff,
+    );
   }
 }
