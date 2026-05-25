@@ -22,6 +22,13 @@ function requireContains(relativePath, expected) {
   }
 }
 
+function requireNotContains(relativePath, unexpected) {
+  const content = read(relativePath)
+  if (content.includes(unexpected)) {
+    throw new Error(`${relativePath} must not include ${unexpected}`)
+  }
+}
+
 function requireAllFiles(prefix) {
   for (const ext of ['ts', 'wxml', 'json', 'wxss']) {
     requireFile(`${prefix}/index.${ext}`)
@@ -62,15 +69,10 @@ requireContains('miniprogram/pages/platform/finance/reconciliation/index.ts', 'o
 requireContains('miniprogram/pages/platform/finance/reconciliation/index.ts', 'onSummaryCardTap')
 requireContains('miniprogram/pages/platform/finance/reconciliation/index.ts', 'onLoadMoreDetails')
 requireContains('miniprogram/pages/platform/finance/reconciliation/index.ts', 'loadPlatformFinanceReconciliationDetailsPage')
-requireContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', '可选择区间日期的日历')
 requireContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', 'view.summaryCards')
 requireContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', 'summary-card')
 requireContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', 'view.detailRows')
-requireContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', '分账状态汇总')
-requireContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', '区间提现成功')
-requireContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', '区间提现申请处理中')
-requireContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', '当前账户在途提现')
-requireContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', '分账订单金额')
+requireContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', '分账明细')
 requireContains('miniprogram/services/platform-finance-reconciliation.ts', 'summary')
 requireContains('miniprogram/services/platform-finance-reconciliation.ts', 'merchantFlowText')
 requireContains('miniprogram/services/platform-finance-reconciliation.ts', 'riderFlowText')
@@ -78,10 +80,20 @@ requireContains('miniprogram/services/platform-finance-reconciliation.ts', 'merc
 requireContains('miniprogram/services/platform-finance-reconciliation.ts', 'riderShareText')
 requireContains('miniprogram/services/platform-finance-reconciliation.ts', 'platformCommissionText')
 requireContains('miniprogram/services/platform-finance-reconciliation.ts', 'buildProfitSharingDetailRows')
-requireContains('miniprogram/services/platform-finance-reconciliation.ts', 'withdrawSucceededText')
-requireContains('miniprogram/services/platform-finance-reconciliation.ts', 'currentAvailableAmountText')
-requireContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', '当前可提现余额')
-requireContains('miniprogram/services/platform-finance-reconciliation.ts', 'getBaofuWithdrawalBalance')
+requireNotContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', '可选择区间日期的日历')
+requireNotContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', '分账状态汇总')
+requireNotContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', '日对账明细')
+requireNotContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', '区间提现成功')
+requireNotContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', '区间提现申请处理中')
+requireNotContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', '当前账户在途提现')
+requireNotContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', '分账订单金额')
+requireNotContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', '当前可提现余额')
+requireNotContains('miniprogram/pages/platform/finance/reconciliation/index.wxml', 'view.metrics')
+requireNotContains('miniprogram/services/platform-finance-reconciliation.ts', 'withdrawSucceededText')
+requireNotContains('miniprogram/services/platform-finance-reconciliation.ts', 'currentAvailableAmountText')
+requireNotContains('miniprogram/services/platform-finance-reconciliation.ts', 'getProfitSharingSla')
+requireNotContains('miniprogram/services/platform-finance-reconciliation.ts', 'getBaofuDailyReconciliation')
+requireNotContains('miniprogram/services/platform-finance-reconciliation.ts', 'getBaofuWithdrawalBalance')
 
 requireContains('miniprogram/pages/platform/finance/withdrawals/index.ts', 'buildBaofuWithdrawalLoadedSummaryView')
 requireContains('miniprogram/pages/platform/finance/withdrawals/index.wxml', '当前列表小计')

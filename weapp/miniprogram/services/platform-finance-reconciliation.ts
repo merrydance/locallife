@@ -1,19 +1,9 @@
 import {
   platformDashboardService,
-  type PlatformBaofuDailyReconciliationRow,
   type PlatformProfitSharingDetailRow,
   type PlatformProfitSharingDetailsResponse,
-  type PlatformProfitSharingReconciliationRow,
-  type PlatformProfitSharingSlaResponse
+  type PlatformProfitSharingReconciliationRow
 } from '../api/platform-dashboard'
-import { getBaofuWithdrawalBalance } from '../api/baofu-withdrawal'
-import {
-  buildBaofuWithdrawalBalanceView,
-  isBaofuWithdrawalRequestFulfilled,
-  settleBaofuWithdrawalRequest,
-  withdrawalBalanceUnavailableView,
-  type BaofuWithdrawalBalanceView
-} from './baofu-withdrawal-workflow'
 
 const DEFAULT_RECONCILIATION_DAYS = 30
 const DEFAULT_DETAILS_PAGE_SIZE = 20
@@ -23,12 +13,7 @@ export interface PlatformFinanceReconciliationRange extends Record<string, unkno
   end_date: string
 }
 
-export interface PlatformFinanceMetricView {
-  label: string
-  value: string
-}
-
-export type PlatformFinanceReconciliationDetailTarget = 'profitSharingDetails' | 'dailyDetails'
+export type PlatformFinanceReconciliationDetailTarget = 'profitSharingDetails'
 
 export interface PlatformFinanceSummaryCardView {
   key: string
@@ -38,36 +23,12 @@ export interface PlatformFinanceSummaryCardView {
 }
 
 export interface PlatformFinanceReconciliationSummaryView {
-  totalOrdersText: string
-  totalProfitSharingAmountText: string
   merchantFlowText: string
   riderFlowText: string
   platformCommissionText: string
   operatorCommissionText: string
   merchantShareText: string
   riderShareText: string
-  paidAmountText: string
-  merchantAmountText: string
-  riderAmountText: string
-  withdrawSucceededText: string
-  withdrawProcessingText: string
-  exceptionCountText: string
-  currentAvailableAmountText: string
-  currentPendingAmountText: string
-  currentLedgerAmountText: string
-  currentFrozenAmountText: string
-  balanceStatusText: string
-  balanceUnavailable: boolean
-}
-
-export interface PlatformProfitSharingStatusView {
-  id: string
-  label: string
-  theme: 'success' | 'warning' | 'danger' | 'default'
-  totalOrdersText: string
-  totalAmountText: string
-  platformCommissionText: string
-  operatorCommissionText: string
 }
 
 export interface PlatformProfitSharingDetailView {
@@ -96,32 +57,16 @@ export interface PlatformProfitSharingDetailsPageView {
   detailsHasMore: boolean
 }
 
-export interface PlatformBaofuDailyReconciliationView {
-  id: string
-  date: string
-  paidAmountText: string
-  merchantAmountText: string
-  riderAmountText: string
-  platformCommissionText: string
-  operatorCommissionText: string
-  withdrawSucceededText: string
-  withdrawProcessingText: string
-  exceptionCountText: string
-}
-
 export interface PlatformFinanceReconciliationPageView {
   rangeLabel: string
   summary: PlatformFinanceReconciliationSummaryView
   summaryCards: PlatformFinanceSummaryCardView[]
-  metrics: PlatformFinanceMetricView[]
-  statusRows: PlatformProfitSharingStatusView[]
   detailRows: PlatformProfitSharingDetailView[]
   detailsTotal: number
   detailsTotalText: string
   detailsPageId: number
   detailsPageSize: number
   detailsHasMore: boolean
-  dailyRows: PlatformBaofuDailyReconciliationView[]
 }
 
 export function formatPlatformFinanceFen(fen?: number): string {
@@ -150,18 +95,7 @@ function buildRangeLabel(range: PlatformFinanceReconciliationRange): string {
   return `${range.start_date} 至 ${range.end_date}`
 }
 
-function formatDuration(seconds?: number): string {
-  const normalized = Number.isFinite(seconds) ? Math.max(Number(seconds), 0) : 0
-  if (normalized < 60) {
-    return `${Math.round(normalized)} 秒`
-  }
-  if (normalized < 3600) {
-    return `${Math.round(normalized / 60)} 分钟`
-  }
-  return `${(normalized / 3600).toFixed(1)} 小时`
-}
-
-function getStatusView(status: string): { label: string, theme: PlatformProfitSharingStatusView['theme'] } {
+function getStatusView(status: string): { label: string, theme: PlatformProfitSharingDetailView['statusTheme'] } {
   switch (status) {
     case 'finished':
       return { label: '已完成', theme: 'success' }
@@ -192,21 +126,6 @@ function formatDateTime(value?: string): string {
   const hours = `${date.getHours()}`.padStart(2, '0')
   const minutes = `${date.getMinutes()}`.padStart(2, '0')
   return `${month}-${day} ${hours}:${minutes}`
-}
-
-function buildStatusRows(rows: PlatformProfitSharingReconciliationRow[]): PlatformProfitSharingStatusView[] {
-  return rows.map((row) => {
-    const status = getStatusView(row.status)
-    return {
-      id: row.status || status.label,
-      label: status.label,
-      theme: status.theme,
-      totalOrdersText: `${Number(row.total_orders || 0)} 单`,
-      totalAmountText: formatPlatformFinanceFen(row.total_amount),
-      platformCommissionText: formatPlatformFinanceFen(row.total_platform_commission),
-      operatorCommissionText: formatPlatformFinanceFen(row.total_operator_commission)
-    }
-  })
 }
 
 function buildProfitSharingDetailRows(rows: PlatformProfitSharingDetailRow[]): PlatformProfitSharingDetailView[] {
@@ -255,35 +174,6 @@ function buildProfitSharingDetailsPageView(
   }
 }
 
-function buildSlaMetrics(sla: PlatformProfitSharingSlaResponse): PlatformFinanceMetricView[] {
-  return [
-    { label: '分账单', value: `${Number(sla.total_orders || 0)} 单` },
-    { label: '已完成', value: `${Number(sla.finished_orders || 0)} 单` },
-    { label: '待处理', value: `${Number(sla.pending_orders || 0)} 单` },
-    { label: '失败', value: `${Number(sla.failed_orders || 0)} 单` },
-    { label: '平均完成', value: formatDuration(sla.avg_finish_seconds) },
-    { label: 'P95 完成', value: formatDuration(sla.p95_finish_seconds) }
-  ]
-}
-
-function buildDailyRows(rows: PlatformBaofuDailyReconciliationRow[]): PlatformBaofuDailyReconciliationView[] {
-  return rows.map((row) => {
-    const exceptionCount = Number(row.unapplied_fact_count || 0) + Number(row.unknown_command_count || 0) + Number(row.fee_ledger_mismatch_count || 0)
-    return {
-      id: `${row.date}-${row.provider}-${row.channel}`,
-      date: row.date,
-      paidAmountText: formatPlatformFinanceFen(row.paid_amount),
-      merchantAmountText: formatPlatformFinanceFen(row.merchant_amount),
-      riderAmountText: formatPlatformFinanceFen(row.rider_amount),
-      platformCommissionText: formatPlatformFinanceFen(row.platform_commission),
-      operatorCommissionText: formatPlatformFinanceFen(row.operator_commission),
-      withdrawSucceededText: formatPlatformFinanceFen(row.withdraw_succeeded_amount),
-      withdrawProcessingText: formatPlatformFinanceFen(row.withdraw_processing_amount),
-      exceptionCountText: `${exceptionCount} 项`
-    }
-  })
-}
-
 function sumValues<T>(rows: T[], selector: (row: T) => number | undefined): number {
   return rows.reduce((total, row) => {
     const value = selector(row)
@@ -291,40 +181,14 @@ function sumValues<T>(rows: T[], selector: (row: T) => number | undefined): numb
   }, 0)
 }
 
-function buildSummary(input: {
-  reconciliationRows: PlatformProfitSharingReconciliationRow[]
-  dailyRows: PlatformBaofuDailyReconciliationRow[]
-  balanceView: BaofuWithdrawalBalanceView
-}): PlatformFinanceReconciliationSummaryView {
-  const exceptionCount = sumValues(input.dailyRows, (row) => row.unapplied_fact_count) +
-    sumValues(input.dailyRows, (row) => row.unknown_command_count) +
-    sumValues(input.dailyRows, (row) => row.fee_ledger_mismatch_count)
-  const balanceUnavailable = input.balanceView.availableAmountText === '--'
-  const balanceStatusText = input.balanceView.statusDesc ||
-    (balanceUnavailable ? '当前余额暂不可确认' : '') ||
-    (input.balanceView.canSubmit ? '结算账户可提现' : input.balanceView.disabledReason)
-
+function buildSummary(reconciliationRows: PlatformProfitSharingReconciliationRow[]): PlatformFinanceReconciliationSummaryView {
   return {
-    totalOrdersText: `${sumValues(input.reconciliationRows, (row) => row.total_orders)} 单`,
-    totalProfitSharingAmountText: formatPlatformFinanceFen(sumValues(input.reconciliationRows, (row) => row.total_amount)),
-    merchantFlowText: formatPlatformFinanceFen(sumValues(input.reconciliationRows, (row) => row.total_merchant_flow)),
-    riderFlowText: formatPlatformFinanceFen(sumValues(input.reconciliationRows, (row) => row.total_rider_flow)),
-    platformCommissionText: formatPlatformFinanceFen(sumValues(input.reconciliationRows, (row) => row.total_platform_commission)),
-    operatorCommissionText: formatPlatformFinanceFen(sumValues(input.reconciliationRows, (row) => row.total_operator_commission)),
-    merchantShareText: formatPlatformFinanceFen(sumValues(input.reconciliationRows, (row) => row.total_merchant_amount)),
-    riderShareText: formatPlatformFinanceFen(sumValues(input.reconciliationRows, (row) => row.total_rider_amount)),
-    paidAmountText: formatPlatformFinanceFen(sumValues(input.dailyRows, (row) => row.paid_amount)),
-    merchantAmountText: formatPlatformFinanceFen(sumValues(input.dailyRows, (row) => row.merchant_amount)),
-    riderAmountText: formatPlatformFinanceFen(sumValues(input.dailyRows, (row) => row.rider_amount)),
-    withdrawSucceededText: formatPlatformFinanceFen(sumValues(input.dailyRows, (row) => row.withdraw_succeeded_amount)),
-    withdrawProcessingText: formatPlatformFinanceFen(sumValues(input.dailyRows, (row) => row.withdraw_processing_amount)),
-    exceptionCountText: `${exceptionCount} 项`,
-    currentAvailableAmountText: input.balanceView.availableAmountText,
-    currentPendingAmountText: input.balanceView.pendingAmountText,
-    currentLedgerAmountText: input.balanceView.ledgerAmountText,
-    currentFrozenAmountText: input.balanceView.frozenAmountText,
-    balanceStatusText,
-    balanceUnavailable
+    merchantFlowText: formatPlatformFinanceFen(sumValues(reconciliationRows, (row) => row.total_merchant_flow)),
+    riderFlowText: formatPlatformFinanceFen(sumValues(reconciliationRows, (row) => row.total_rider_flow)),
+    platformCommissionText: formatPlatformFinanceFen(sumValues(reconciliationRows, (row) => row.total_platform_commission)),
+    operatorCommissionText: formatPlatformFinanceFen(sumValues(reconciliationRows, (row) => row.total_operator_commission)),
+    merchantShareText: formatPlatformFinanceFen(sumValues(reconciliationRows, (row) => row.total_merchant_amount)),
+    riderShareText: formatPlatformFinanceFen(sumValues(reconciliationRows, (row) => row.total_rider_amount))
   }
 }
 
@@ -342,50 +206,29 @@ function buildSummaryCards(summary: PlatformFinanceReconciliationSummaryView): P
 export function buildPlatformFinanceReconciliationPageView(input: {
   range: PlatformFinanceReconciliationRange
   reconciliationRows: PlatformProfitSharingReconciliationRow[]
-  sla: PlatformProfitSharingSlaResponse
-  dailyRows: PlatformBaofuDailyReconciliationRow[]
   detailsResponse?: PlatformProfitSharingDetailsResponse
-  balanceView?: BaofuWithdrawalBalanceView
 }): PlatformFinanceReconciliationPageView {
-  const balanceView = input.balanceView || withdrawalBalanceUnavailableView('当前可提现余额暂不可确认')
   const detailsPage = buildProfitSharingDetailsPageView(input.detailsResponse, 1)
-  const summary = buildSummary({
-    reconciliationRows: input.reconciliationRows,
-    dailyRows: input.dailyRows,
-    balanceView
-  })
+  const summary = buildSummary(input.reconciliationRows)
   return {
     rangeLabel: buildRangeLabel(input.range),
     summary,
     summaryCards: buildSummaryCards(summary),
-    metrics: buildSlaMetrics(input.sla),
-    statusRows: buildStatusRows(input.reconciliationRows),
     detailRows: detailsPage.detailRows,
     detailsTotal: detailsPage.detailsTotal,
     detailsTotalText: detailsPage.detailsTotalText,
     detailsPageId: detailsPage.detailsPageId,
     detailsPageSize: detailsPage.detailsPageSize,
-    detailsHasMore: detailsPage.detailsHasMore,
-    dailyRows: buildDailyRows(input.dailyRows)
+    detailsHasMore: detailsPage.detailsHasMore
   }
 }
 
 export async function loadPlatformFinanceReconciliationPage(range = buildPlatformReconciliationRange()): Promise<PlatformFinanceReconciliationPageView> {
-  const [reconciliationRows, sla, dailyRows, balanceResult] = await Promise.all([
-    platformDashboardService.getProfitSharingReconciliation(range),
-    platformDashboardService.getProfitSharingSla(range),
-    platformDashboardService.getBaofuDailyReconciliation(range),
-    settleBaofuWithdrawalRequest(getBaofuWithdrawalBalance('platform'))
-  ])
+  const reconciliationRows = await platformDashboardService.getProfitSharingReconciliation(range)
 
   return buildPlatformFinanceReconciliationPageView({
     range,
-    reconciliationRows,
-    sla,
-    dailyRows,
-    balanceView: isBaofuWithdrawalRequestFulfilled(balanceResult)
-      ? buildBaofuWithdrawalBalanceView(balanceResult.value)
-      : withdrawalBalanceUnavailableView('当前可提现余额暂不可确认')
+    reconciliationRows
   })
 }
 

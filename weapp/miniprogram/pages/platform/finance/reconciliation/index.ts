@@ -2,7 +2,6 @@ import {
   buildPlatformReconciliationRange,
   loadPlatformFinanceReconciliationDetailsPage,
   loadPlatformFinanceReconciliationPage,
-  type PlatformFinanceReconciliationDetailTarget,
   type PlatformFinanceReconciliationRange,
   type PlatformFinanceReconciliationPageView
 } from '../../../../services/platform-finance-reconciliation'
@@ -13,37 +12,20 @@ import { getErrorUserMessage } from '../../../../utils/user-facing'
 const EMPTY_VIEW: PlatformFinanceReconciliationPageView = {
   rangeLabel: '',
   summary: {
-    totalOrdersText: '0 单',
-    totalProfitSharingAmountText: '¥0.00',
     merchantFlowText: '¥0.00',
     riderFlowText: '¥0.00',
     platformCommissionText: '¥0.00',
     operatorCommissionText: '¥0.00',
     merchantShareText: '¥0.00',
-    riderShareText: '¥0.00',
-    paidAmountText: '¥0.00',
-    merchantAmountText: '¥0.00',
-    riderAmountText: '¥0.00',
-    withdrawSucceededText: '¥0.00',
-    withdrawProcessingText: '¥0.00',
-    exceptionCountText: '0 项',
-    currentAvailableAmountText: '--',
-    currentPendingAmountText: '--',
-    currentLedgerAmountText: '--',
-    currentFrozenAmountText: '--',
-    balanceStatusText: '当前余额暂不可确认',
-    balanceUnavailable: true
+    riderShareText: '¥0.00'
   },
   summaryCards: [],
-  metrics: [],
-  statusRows: [],
   detailRows: [],
   detailsTotal: 0,
   detailsTotalText: '共 0 条',
   detailsPageId: 1,
   detailsPageSize: 20,
-  detailsHasMore: false,
-  dailyRows: []
+  detailsHasMore: false
 }
 const DEFAULT_RANGE = buildPlatformReconciliationRange()
 let detailsRequestSeq = 0
@@ -288,9 +270,8 @@ Page({
     void this.loadDetailsPage(1, true)
   },
 
-  onSummaryCardTap(e: WechatMiniprogram.BaseEvent) {
-    const detailTarget = String(e.currentTarget.dataset.target || '') as PlatformFinanceReconciliationDetailTarget
-    const selector = detailTarget === 'dailyDetails' ? '#daily-details' : '#profit-sharing-details'
+  onSummaryCardTap() {
+    const selector = '#profit-sharing-details'
     wx.createSelectorQuery()
       .select(selector)
       .boundingClientRect()

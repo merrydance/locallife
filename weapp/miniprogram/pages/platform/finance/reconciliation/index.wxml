@@ -20,7 +20,6 @@
     </t-cell-group>
 
     <view class="range-card" bind:tap="onOpenRangePicker">
-      <view class="range-card__caption">可选择区间日期的日历</view>
       <view class="range-card__body">
         <text class="range-card__date">{{range.start_date}}</text>
         <text class="range-card__separator">→</text>
@@ -39,28 +38,6 @@
       >
         <text class="summary-card__label">{{item.label}}</text>
         <text class="summary-card__value">{{item.value}}</text>
-      </view>
-    </view>
-
-    <t-cell-group>
-      <t-cell title="分账订单" note="{{view.summary.totalOrdersText}}" />
-      <t-cell title="分账订单金额" note="{{view.summary.totalProfitSharingAmountText}}" />
-      <t-cell title="区间支付金额" note="{{view.summary.paidAmountText}}" />
-      <t-cell title="区间提现成功" note="{{view.summary.withdrawSucceededText}}" />
-      <t-cell title="区间提现申请处理中" note="{{view.summary.withdrawProcessingText}}" />
-      <t-cell title="异常项" note="{{view.summary.exceptionCountText}}" />
-    </t-cell-group>
-
-    <t-cell-group>
-      <t-cell title="当前可提现余额" note="{{view.summary.currentAvailableAmountText}}" />
-      <t-cell title="当前账户在途提现" note="{{view.summary.currentPendingAmountText}}" />
-      <t-cell title="余额状态" note="{{view.summary.balanceStatusText}}" />
-    </t-cell-group>
-
-    <view class="metric-grid">
-      <view wx:for="{{view.metrics}}" wx:key="label" class="metric-item">
-        <text class="metric-label">{{item.label}}</text>
-        <text class="metric-value">{{item.value}}</text>
       </view>
     </view>
 
@@ -127,38 +104,6 @@
       <t-button wx:elif="{{view.detailsHasMore}}" theme="default" loading="{{loadingDetails}}" bind:tap="onLoadMoreDetails">加载更多</t-button>
       <view wx:else class="list-footer list-footer-end">没有更多分账明细了</view>
     </view>
-
-    <view class="section-title">分账状态汇总</view>
-    <t-empty wx:if="{{!view.statusRows.length}}" icon="info-circle" description="当前区间暂无分账状态数据" />
-    <t-cell-group wx:else>
-      <t-cell
-        wx:for="{{view.statusRows}}"
-        wx:key="id"
-        title="{{item.label}}"
-        description="平台 {{item.platformCommissionText}} · 运营商 {{item.operatorCommissionText}}"
-        note="{{item.totalAmountText}}"
-      >
-        <view slot="right-icon">
-          <t-tag theme="{{item.theme}}" size="small">{{item.totalOrdersText}}</t-tag>
-        </view>
-      </t-cell>
-    </t-cell-group>
-
-    <view id="daily-details" class="section-title">日对账明细</view>
-    <t-empty wx:if="{{!view.dailyRows.length}}" icon="info-circle" description="当前区间暂无宝付日对账数据" />
-    <t-cell-group wx:else>
-      <t-cell
-        wx:for="{{view.dailyRows}}"
-        wx:key="id"
-        title="{{item.date}}"
-        description="商户 {{item.merchantAmountText}} · 骑手 {{item.riderAmountText}}"
-        note="支付 {{item.paidAmountText}} · 提现成功 {{item.withdrawSucceededText}}"
-      >
-        <view slot="right-icon">
-          <t-tag theme="warning" size="small">{{item.exceptionCountText}}</t-tag>
-        </view>
-      </t-cell>
-    </t-cell-group>
   </view>
 
   <t-calendar

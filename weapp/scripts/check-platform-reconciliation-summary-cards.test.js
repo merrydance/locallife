@@ -26,23 +26,6 @@ function loadTsModule(relativePath) {
     module: { exports: {} },
     require(id) {
       if (id === '../api/platform-dashboard') return {}
-      if (id === '../api/baofu-withdrawal') return {}
-      if (id === './baofu-withdrawal-workflow') {
-        return {
-          buildBaofuWithdrawalBalanceView: () => ({}),
-          isBaofuWithdrawalRequestFulfilled: () => false,
-          settleBaofuWithdrawalRequest: () => Promise.resolve({ ok: false }),
-          withdrawalBalanceUnavailableView: (message) => ({
-            availableAmountText: '--',
-            pendingAmountText: '--',
-            ledgerAmountText: '--',
-            frozenAmountText: '--',
-            canSubmit: false,
-            disabledReason: '',
-            statusDesc: message
-          })
-        }
-      }
       throw new Error(`unexpected require: ${id}`)
     },
     Date,
@@ -84,15 +67,6 @@ const view = service.buildPlatformFinanceReconciliationPageView({
       total_rider_amount: 290
     }
   ],
-  sla: {
-    total_orders: 3,
-    finished_orders: 2,
-    failed_orders: 0,
-    pending_orders: 1,
-    avg_finish_seconds: 120,
-    p95_finish_seconds: 180
-  },
-  dailyRows: [],
   detailsResponse: {
     items: [
       {
@@ -162,6 +136,12 @@ assert(pageSource.includes('view.summaryCards'), 'summary cards must come from s
 assert(pageSource.includes('bind:tap="onSummaryCardTap"'), 'summary cards must open the backed detail section')
 assert(pageSource.includes('view.detailRows'), 'profit-sharing details section must render backed detail rows')
 assert(pageSource.includes('onLoadMoreDetails'), 'profit-sharing details section must expose pagination')
+assert(!pageSource.includes('range-card__caption'), 'range selector must not render a redundant explanatory caption')
+assert(!pageSource.includes('分账订单金额'), 'legacy cell summary must not remain on the page')
+assert(!pageSource.includes('当前可提现余额'), 'withdrawal balance cells do not belong on reconciliation detail page')
+assert(!pageSource.includes('view.metrics'), 'SLA metric cards do not belong on this page')
+assert(!pageSource.includes('分账状态汇总'), 'status aggregate must not appear below the detail list')
+assert(!pageSource.includes('日对账明细'), 'daily Baofu reconciliation list must not appear below the detail list')
 assert(!pageSource.includes('title="对账区间"'), 'range selector must not show the legacy 对账区间 cell title')
 assert(!pageSource.includes('quick-range-row'), 'quick range row must be removed from the page')
 assert(!pageLogic.includes('onUseQuickRange'), 'quick range handler must be removed')
@@ -170,6 +150,9 @@ assert(pageLogic.includes('loadPlatformFinanceReconciliationDetailsPage'), 'page
 assert(pageLogic.includes('detailsRequestSeq'), 'page must ignore stale detail responses after range changes')
 assert(serviceSource.includes('buildProfitSharingDetailRows'), 'service must build a detail-row view model')
 assert(serviceSource.includes('getProfitSharingDetails'), 'service must call the backed detail API')
+assert(!serviceSource.includes('getProfitSharingSla'), 'page service must not request SLA metrics for this view')
+assert(!serviceSource.includes('getBaofuDailyReconciliation'), 'page service must not request daily Baofu reconciliation for this view')
+assert(!serviceSource.includes('getBaofuWithdrawalBalance'), 'page service must not request withdrawal balance for this view')
 assert(summaryLoadSource, 'test must locate the summary load function')
 assert(!summaryLoadSource.includes('getProfitSharingDetails'), 'summary load must not fail just because the detail page request failed')
 assert(dashboardApiSource.includes('/v1/platform/stats/profit-sharing/details'), 'API layer must expose the detail endpoint')
