@@ -153,6 +153,16 @@ func TestGeofenceAccuracyGate(t *testing.T) {
 	require.False(t, shouldSkipByAccuracy(nil, minAccuracy))
 }
 
+func TestNormalizeEventSourceTrimsAndLimitsDatabaseLength(t *testing.T) {
+	require.Equal(t, "gps", normalizeEventSource(""))
+	require.Equal(t, "gps", normalizeEventSource("   "))
+	require.Equal(t, "wechat_miniprogram", normalizeEventSource(" wechat_miniprogram "))
+
+	normalized := normalizeEventSource("wechat_miniprogram_location_source_extra")
+	require.LessOrEqual(t, len([]rune(normalized)), 30)
+	require.Equal(t, "wechat_miniprogram_location_so", normalized)
+}
+
 func TestGeofenceWithinRadius(t *testing.T) {
 	loc := locationPoint{Longitude: 116.404, Latitude: 39.915}
 	target := algorithm.Location{Longitude: 116.404, Latitude: 39.915}

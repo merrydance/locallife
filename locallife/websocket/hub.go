@@ -40,14 +40,65 @@ type ClientInfo struct {
 
 // Client 表示一个WebSocket客户端连接
 type Client struct {
-	info      ClientInfo
-	hub       *Hub
-	send      chan Message
-	ctx       context.Context
-	done      chan struct{}
-	conn      *gorilla_websocket.Conn // gorilla websocket连接
-	closeOnce sync.Once               // 确保 send channel 只关闭一次
-	seq       uint64                  // per-client sequence counter
+	info       ClientInfo
+	hub        *Hub
+	send       chan Message
+	ctx        context.Context
+	done       chan struct{}
+	conn       *gorilla_websocket.Conn // gorilla websocket连接
+	closeOnce  sync.Once               // 确保 send channel 只关闭一次
+	doneOnce   sync.Once               // 确保 done channel 只关闭一次
+	sendMu     sync.RWMutex            // protects sends racing with channel close
+	sendClosed bool
+	seq        uint64 // per-client sequence counter
+}
+
+type clientSendResult int
+
+const (
+	clientSendResultSent clientSendResult = iota
+	clientSendResultFull
+	clientSendResultClosed
+)
+
+func (c *Client) closeDone() {
+	c.doneOnce.Do(func() {
+		close(c.done)
+	})
+}
+
+func (c *Client) closeSend() {
+	c.closeOnce.Do(func() {
+		c.sendMu.Lock()
+		defer c.sendMu.Unlock()
+		c.sendClosed = true
+		close(c.send)
+	})
+}
+
+func (c *Client) trySend(message Message) clientSendResult {
+	select {
+	case <-c.done:
+		return clientSendResultClosed
+	default:
+	}
+
+	c.sendMu.RLock()
+	defer c.sendMu.RUnlock()
+	select {
+	case <-c.done:
+		return clientSendResultClosed
+	default:
+	}
+	if c.sendClosed {
+		return clientSendResultClosed
+	}
+	select {
+	case c.send <- message:
+		return clientSendResultSent
+	default:
+		return clientSendResultFull
+	}
 }
 
 // Hub 管理所有WebSocket连接
@@ -291,7 +342,7 @@ func (h *Hub) registerClient(client *Client) {
 	case ClientTypeRider:
 		if old, exists := h.riders[client.info.EntityID]; exists {
 			// 关闭旧连接
-			close(old.done)
+			old.closeDone()
 		}
 		h.riders[client.info.EntityID] = client
 		h.updateConnectionMetricsLocked()
@@ -304,7 +355,7 @@ func (h *Hub) registerClient(client *Client) {
 	case ClientTypeMerchant:
 		if old, exists := h.merchants[client.info.EntityID]; exists {
 			// 关闭旧连接
-			close(old.done)
+			old.closeDone()
 		}
 		h.merchants[client.info.EntityID] = client
 		h.updateConnectionMetricsLocked()
@@ -317,7 +368,7 @@ func (h *Hub) registerClient(client *Client) {
 	case ClientTypePlatform:
 		if old, exists := h.platforms[client.info.EntityID]; exists {
 			// 关闭旧连接
-			close(old.done)
+			old.closeDone()
 		}
 		h.platforms[client.info.EntityID] = client
 		h.updateConnectionMetricsLocked()
@@ -342,9 +393,8 @@ func (h *Hub) unregisterClient(client *Client) {
 			delete(h.riders, client.info.EntityID)
 			h.updateConnectionMetricsLocked()
 			atomic.AddInt64(&h.alertDisconnects, 1)
-			client.closeOnce.Do(func() {
-				close(client.send)
-			})
+			client.closeDone()
+			client.closeSend()
 			log.Info().
 				Int64("rider_id", client.info.EntityID).
 				Msg("Rider disconnected from WebSocket")
@@ -356,9 +406,8 @@ func (h *Hub) unregisterClient(client *Client) {
 			delete(h.merchants, client.info.EntityID)
 			h.updateConnectionMetricsLocked()
 			atomic.AddInt64(&h.alertDisconnects, 1)
-			client.closeOnce.Do(func() {
-				close(client.send)
-			})
+			client.closeDone()
+			client.closeSend()
 			log.Info().
 				Int64("merchant_id", client.info.EntityID).
 				Msg("Merchant disconnected from WebSocket")
@@ -369,9 +418,8 @@ func (h *Hub) unregisterClient(client *Client) {
 			delete(h.platforms, client.info.EntityID)
 			h.updateConnectionMetricsLocked()
 			atomic.AddInt64(&h.alertDisconnects, 1)
-			client.closeOnce.Do(func() {
-				close(client.send)
-			})
+			client.closeDone()
+			client.closeSend()
 			log.Info().
 				Int64("platform_user_id", client.info.EntityID).
 				Msg("Platform operator disconnected from WebSocket")
@@ -451,10 +499,12 @@ func (h *Hub) sendToClient(client *Client, msg Message, label string) {
 		h.scheduleRetry(client.info, message)
 	}
 
-	select {
-	case client.send <- message:
+	switch client.trySend(message) {
+	case clientSendResultSent:
 		h.metrics.RecordSend(client.info.ClientType, "sent")
-	default:
+	case clientSendResultClosed:
+		h.metrics.RecordSend(client.info.ClientType, "dropped")
+	case clientSendResultFull:
 		// 连接侧背压：缓冲满时落入队列（若启用可靠投递）。
 		if h.queueStore != nil && h.reliableGate(client.info) {
 			if err := h.queueStore.Enqueue(h.ctx, client.info, message); err != nil {
@@ -506,10 +556,12 @@ func (h *Hub) sendStoredToClient(client *Client, msg Message, label string) {
 		message.Timestamp = time.Now()
 	}
 
-	select {
-	case client.send <- message:
+	switch client.trySend(message) {
+	case clientSendResultSent:
 		h.metrics.RecordReplay(client.info.ClientType)
-	default:
+	case clientSendResultClosed:
+		h.metrics.RecordSend(client.info.ClientType, "dropped")
+	case clientSendResultFull:
 		switch label {
 		case "rider":
 			log.Warn().Int64("rider_id", client.info.EntityID).Msg("Rider send buffer full, dropping message")
@@ -1013,22 +1065,19 @@ func (h *Hub) Shutdown() {
 
 	// 关闭所有骑手连接
 	for _, client := range h.riders {
-		client.closeOnce.Do(func() {
-			close(client.send)
-		})
+		client.closeDone()
+		client.closeSend()
 	}
 
 	// 关闭所有商户连接
 	for _, client := range h.merchants {
-		client.closeOnce.Do(func() {
-			close(client.send)
-		})
+		client.closeDone()
+		client.closeSend()
 	}
 
 	// 关闭所有平台运营人员连接
 	for _, client := range h.platforms {
-		client.closeOnce.Do(func() {
-			close(client.send)
-		})
+		client.closeDone()
+		client.closeSend()
 	}
 }

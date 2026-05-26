@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -13,10 +14,11 @@ import (
 )
 
 const (
-	geofenceEventArrivePickup  = "arrive_pickup"
-	geofenceEventDwellPickup   = "dwell_pickup"
-	geofenceEventArriveDropoff = "arrive_dropoff"
-	geofenceEventDwellDropoff  = "dwell_dropoff"
+	geofenceEventArrivePickup   = "arrive_pickup"
+	geofenceEventDwellPickup    = "dwell_pickup"
+	geofenceEventArriveDropoff  = "arrive_dropoff"
+	geofenceEventDwellDropoff   = "dwell_dropoff"
+	geofenceEventSourceMaxRunes = 30
 )
 
 func (server *Server) processDeliveryLocationEvents(ctx context.Context, rider db.Rider, deliveryID int64, latest locationPoint) {
@@ -123,8 +125,12 @@ func shouldSkipByAccuracy(accuracy *float64, minAccuracyMeters int) bool {
 }
 
 func normalizeEventSource(source string) string {
+	source = strings.TrimSpace(source)
 	if source == "" {
 		return "gps"
+	}
+	if len([]rune(source)) > geofenceEventSourceMaxRunes {
+		return string([]rune(source)[:geofenceEventSourceMaxRunes])
 	}
 	return source
 }

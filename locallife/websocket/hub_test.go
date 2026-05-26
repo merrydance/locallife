@@ -570,6 +570,33 @@ func TestHub_Replay(t *testing.T) {
 	}
 }
 
+func TestHub_SendStoredToClientDoesNotPanicAfterUnregister(t *testing.T) {
+	ctx := context.Background()
+	hub := NewHub(ctx)
+
+	client := &Client{
+		info: ClientInfo{
+			UserID:     2,
+			ClientType: ClientTypeMerchant,
+			EntityID:   200,
+		},
+		hub:  hub,
+		send: make(chan Message, 10),
+		done: make(chan struct{}),
+	}
+
+	hub.registerClient(client)
+	hub.unregisterClient(client)
+
+	require.NotPanics(t, func() {
+		hub.sendStoredToClient(client, Message{
+			ID:        "closed-client-replay",
+			Type:      "notification",
+			Timestamp: time.Now(),
+		}, "merchant")
+	})
+}
+
 func BenchmarkHubBroadcastToRiders(b *testing.B) {
 	ctx := context.Background()
 	hub := NewHub(ctx)
