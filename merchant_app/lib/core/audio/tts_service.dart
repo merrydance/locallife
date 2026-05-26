@@ -3,6 +3,8 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:merchant_app/core/audio/order_audio_alert.dart';
 
 class TtsService {
+  static const String newOrderAlertText = '您有乐客来福新外卖单了';
+
   static final FlutterTts _flutterTts = FlutterTts();
   static final OrderAudioSpeech _nativeSpeech = NativeOrderAudioSpeech();
 
@@ -27,8 +29,9 @@ class TtsService {
     }
   }
 
+  // Kept for API compatibility with callers that still pass order details.
+  // ignore: avoid-unused-parameters
   static Future<void> speakOrderAlert(String orderNum, double amount) async {
-    final text = "订单 $orderNum 号，金额 ${amount.toStringAsFixed(2)} 元";
-    await speak(text);
+    await speak(newOrderAlertText);
   }
 }

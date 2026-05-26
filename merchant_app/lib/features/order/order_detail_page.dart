@@ -72,7 +72,7 @@ class OrderDetailPage extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '订单 ${order.orderNum}',
+                        '订单 ${order.displayOrderNumber}',
                         style: const TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w700,
@@ -431,7 +431,38 @@ class OrderDetailPage extends ConsumerWidget {
       ),
     );
 
-    if (!order.isAwaitingAcceptance || !isAuthenticated) {
+    if (!isAuthenticated) {
+      return const SizedBox.shrink();
+    }
+
+    if (order.canMarkReady) {
+      return MerchantPrimaryButton(
+        expand: true,
+        label: isProcessing ? '正在提交...' : '制作完成',
+        isLoading: isProcessing,
+        onPressed: isProcessing
+            ? null
+            : () async {
+                final success = await ref
+                    .read(orderProvider.notifier)
+                    .markOrderReady(order.id);
+                if (!context.mounted) {
+                  return;
+                }
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      success
+                          ? '制作已完成'
+                          : ref.read(orderProvider).error ?? '制作完成提交失败，请稍后再试',
+                    ),
+                  ),
+                );
+              },
+      );
+    }
+
+    if (!order.isAwaitingAcceptance) {
       return const SizedBox.shrink();
     }
 

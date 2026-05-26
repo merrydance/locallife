@@ -77,6 +77,8 @@ class OrderAlertCoordinator {
             OrderModel(
               id: message.orderId,
               orderNum: message.orderNumber,
+              pickupCode: message.pickupCode,
+              pickupCodeMasked: message.pickupCodeMasked,
               amount: message.amount,
               status: OrderStatus.paid,
               createdAt: message.timestamp,

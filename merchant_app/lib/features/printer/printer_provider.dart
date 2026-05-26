@@ -211,6 +211,8 @@ class PrinterNotifier extends StateNotifier<PrinterState> {
         messageId: 'accepted-${order.id}',
         orderId: order.id,
         orderNumber: order.orderNum,
+        pickupCode: order.pickupCode,
+        pickupCodeMasked: order.pickupCodeMasked,
         title: '订单已接单',
         content: '订单已确认，准备打印小票',
         amount: order.amount,

@@ -97,6 +97,57 @@ void main() {
       expect(payload['order_id'], 'legacy-order-1');
     });
 
+    test(
+      'unwraps backend notification rows without using notification id as order id',
+      () {
+        final payload = extractMerchantNewOrderPayload({
+          'id': 9001,
+          'type': 'notification',
+          'data': {
+            'id': 9001,
+            'type': 'order',
+            'title': '新订单',
+            'content': '您有一笔新订单 ORD501，请及时处理',
+            'related_type': 'order',
+            'related_id': 501,
+            'extra_data': {
+              'message_id': 'merchant:new_order:501',
+              'order_no': 'ORD501',
+              'total_amount': 10300,
+              'shop_name': '测试门店',
+              'fee_breakdown': {'food_payable_amount': 9500},
+            },
+          },
+        });
+
+        expect(payload, isNotNull);
+        expect(payload!['message_id'], 'merchant:new_order:501');
+        expect(payload['order_id'], 501);
+        expect(payload['order_no'], 'ORD501');
+        expect(payload['total_amount'], 10300);
+        expect(payload['shop_name'], '测试门店');
+        expect(payload['fee_breakdown'], isA<Map>());
+        expect(payload['id'], isNot(9001));
+      },
+    );
+
+    test('ignores unrelated notification rows', () {
+      final payload = extractMerchantNewOrderPayload({
+        'id': 9002,
+        'type': 'notification',
+        'data': {
+          'id': 9002,
+          'type': 'system',
+          'title': '系统通知',
+          'related_type': 'merchant',
+          'related_id': 7,
+          'extra_data': {'message_id': 'merchant:system:7'},
+        },
+      });
+
+      expect(payload, isNull);
+    });
+
     test('ignores unrelated websocket messages', () {
       final payload = extractMerchantNewOrderPayload({
         'type': 'table_status_change',

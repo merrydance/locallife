@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
 import 'package:merchant_app/core/audio/order_audio_alert.dart';
+import 'package:merchant_app/core/audio/tts_service.dart';
 
 void main() {
   test('wraps alert playback in an elevated alarm volume session', () async {
@@ -59,6 +60,10 @@ void main() {
       });
     },
   );
+
+  test('uses fixed merchant new order alert copy', () {
+    expect(TtsService.newOrderAlertText, '您有乐客来福新外卖单了');
+  });
 }
 
 class _FakeOrderAudioControl implements OrderAudioControl {

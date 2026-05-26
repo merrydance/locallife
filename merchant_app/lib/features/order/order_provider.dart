@@ -111,9 +111,11 @@ class OrderNotifier extends StateNotifier<OrderState> {
               return OrderModel(
                 id: o.id,
                 orderNum: o.orderNum,
+                pickupCode: o.pickupCode,
+                pickupCodeMasked: o.pickupCodeMasked,
                 amount: o.amount,
                 feeBreakdown: o.feeBreakdown,
-                status: OrderStatus.accepted,
+                status: OrderStatus.preparing,
                 createdAt: o.createdAt,
                 userName: o.userName,
                 userPhone: o.userPhone,
@@ -152,9 +154,53 @@ class OrderNotifier extends StateNotifier<OrderState> {
               return OrderModel(
                 id: o.id,
                 orderNum: o.orderNum,
+                pickupCode: o.pickupCode,
+                pickupCodeMasked: o.pickupCodeMasked,
                 amount: o.amount,
                 feeBreakdown: o.feeBreakdown,
                 status: OrderStatus.cancelled,
+                createdAt: o.createdAt,
+                userName: o.userName,
+                userPhone: o.userPhone,
+                items: o.items,
+                note: o.note,
+                itemsLoadFailed: o.itemsLoadFailed,
+              );
+            }
+            return o;
+          }).toList(),
+        );
+        return true;
+      } catch (e) {
+        state = state.copyWith(error: ErrorHandler.getErrorMessage(e));
+        return false;
+      }
+    });
+  }
+
+  Future<bool> markOrderReady(String orderId) async {
+    return _runSingleFlightAction(orderId, () async {
+      try {
+        final response = await _apiClient.post(
+          '/merchant/orders/$orderId/ready',
+        );
+        final updatedOrder = _extractOrderFromResponse(response.data);
+        if (updatedOrder != null) {
+          addOrUpdateOrder(updatedOrder);
+          return true;
+        }
+
+        state = state.copyWith(
+          orders: state.orders.map((o) {
+            if (o.id == orderId) {
+              return OrderModel(
+                id: o.id,
+                orderNum: o.orderNum,
+                pickupCode: o.pickupCode,
+                pickupCodeMasked: o.pickupCodeMasked,
+                amount: o.amount,
+                feeBreakdown: o.feeBreakdown,
+                status: OrderStatus.ready,
                 createdAt: o.createdAt,
                 userName: o.userName,
                 userPhone: o.userPhone,
@@ -225,6 +271,8 @@ class OrderNotifier extends StateNotifier<OrderState> {
       orderNum: incoming.orderNum.isNotEmpty
           ? incoming.orderNum
           : existing.orderNum,
+      pickupCode: incoming.pickupCode ?? existing.pickupCode,
+      pickupCodeMasked: incoming.pickupCodeMasked ?? existing.pickupCodeMasked,
       amount: incoming.amount > 0 ? incoming.amount : existing.amount,
       feeBreakdown: incoming.feeBreakdown ?? existing.feeBreakdown,
       status: incoming.status,

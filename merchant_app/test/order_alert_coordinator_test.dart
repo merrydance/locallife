@@ -4,8 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:dio/dio.dart';
 import 'package:merchant_app/core/network/api_client.dart';
 import 'package:merchant_app/core/network/api_provider.dart';
+import 'package:merchant_app/core/service/auth_session_controller.dart';
+import 'package:merchant_app/features/auth/auth_provider.dart';
+import 'package:merchant_app/features/auth/auth_service.dart';
+import 'package:merchant_app/features/auth/auth_state.dart';
 import 'package:merchant_app/features/order/order_alert_page.dart';
 import 'package:merchant_app/features/order/order_alert_coordinator.dart';
+import 'package:merchant_app/features/order/order_detail_page.dart';
 import 'package:merchant_app/models/order.dart';
 import 'package:merchant_app/models/push_message.dart';
 
@@ -54,6 +59,21 @@ void main() {
       expect(message.orderId, 'internal-id-1');
       expect(message.displayOrderNumber, 'LKLF-20260412-001');
       expect(message.shopName, '测试门店');
+    });
+
+    test('uses pickup code as merchant-facing display number', () {
+      final order = _buildOrder(
+        id: 'internal-id-1',
+        orderNum: 'ORD20260412000001',
+        pickupCode: '0386',
+        status: OrderStatus.paid,
+      );
+
+      final message = PushMessage.fromOrder(order, shopName: '测试门店');
+
+      expect(message.orderId, 'internal-id-1');
+      expect(message.orderNumber, 'ORD20260412000001');
+      expect(message.displayOrderNumber, '0386');
     });
   });
 
@@ -109,6 +129,23 @@ void main() {
       expect(order.items.single.price, 28.0);
       expect(order.items.single.subtotal, 56.0);
       expect(order.items.single.specsText, '大份 / 少辣');
+    });
+
+    test('prefers backend pickup code for merchant display number', () {
+      final order = OrderModel.fromJson({
+        'id': 501,
+        'order_no': 'ORD20260412000001',
+        'pickup_code': '0386',
+        'pickup_code_masked': '03**',
+        'total_amount': 8800,
+        'status': 'paid',
+        'created_at': '2026-04-12T08:00:00Z',
+      });
+
+      expect(order.orderNum, 'ORD20260412000001');
+      expect(order.pickupCode, '0386');
+      expect(order.pickupCodeMasked, '03**');
+      expect(order.displayOrderNumber, '0386');
     });
 
     test('parses merchant fee breakdown from backend cents', () {
@@ -236,6 +273,24 @@ void main() {
       expect(message.itemsLoadFailed, isFalse);
     });
 
+    test('uses pickup code from notification payload as display number', () {
+      final message = PushMessage.fromJson({
+        'message_id': 'merchant:new_order:501',
+        'order_id': 501,
+        'order_no': 'ORD20260412000001',
+        'pickup_code': '0386',
+        'pickup_code_masked': '03**',
+        'amount': 8800,
+        'shop_name': '测试门店',
+      });
+
+      expect(message.orderId, '501');
+      expect(message.orderNumber, 'ORD20260412000001');
+      expect(message.pickupCode, '0386');
+      expect(message.pickupCodeMasked, '03**');
+      expect(message.displayOrderNumber, '0386');
+    });
+
     test('carries fee breakdown through push hydration', () {
       final message = PushMessage.fromJson({
         'message_id': 'merchant:new_order:501',
@@ -332,6 +387,7 @@ void main() {
         messageId: 'merchant:new_order:501',
         orderId: '501',
         orderNumber: 'ORD501',
+        pickupCode: '0386',
         title: '新订单',
         content: '您有一笔新订单',
         amount: 103.0,
@@ -363,6 +419,48 @@ void main() {
       expect(find.text('稍后处理'), findsOneWidget);
       expect(find.text('¥ 95.00'), findsOneWidget);
       expect(find.text('代取费另列 ¥8.00'), findsOneWidget);
+      expect(find.text('订单号 0386'), findsOneWidget);
+      expect(find.text('订单号 ORD501'), findsNothing);
+    });
+  });
+
+  group('OrderDetailPage', () {
+    testWidgets('shows mark-ready action for preparing orders', (tester) async {
+      final authService = _FakeAuthService();
+      final sessionController = AuthSessionController();
+      final order = _buildOrder(
+        id: '501',
+        orderNum: 'ORD20260412000001',
+        pickupCode: '0386',
+        status: OrderStatus.preparing,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            apiClientProvider.overrideWithValue(_FakeApiClient()),
+            authServiceProvider.overrideWithValue(authService),
+            authSessionControllerProvider.overrideWithValue(sessionController),
+            authProvider.overrideWith(
+              (ref) =>
+                  AuthNotifier(authService, sessionController)
+                    ..state = AuthState(
+                      accessToken: 'access-token',
+                      refreshToken: 'refresh-token',
+                      merchantName: '测试门店',
+                      isAuthenticated: true,
+                    ),
+            ),
+          ],
+          child: MaterialApp(home: OrderDetailPage(order: order)),
+        ),
+      );
+
+      await tester.pump();
+
+      expect(find.text('订单 0386'), findsOneWidget);
+      expect(find.text('制作完成'), findsOneWidget);
+      expect(find.text('立即接单'), findsNothing);
     });
   });
 }
@@ -415,14 +513,59 @@ class _FakeApiClient implements ApiClient {
   }
 }
 
+class _FakeAuthService implements AuthService {
+  @override
+  Future<void> clearTokens() async {}
+
+  @override
+  Future<Map<String, String?>> getTokens() async => <String, String?>{
+    'accessToken': 'access-token',
+    'refreshToken': 'refresh-token',
+    'merchantName': '测试门店',
+  };
+
+  @override
+  Future<Map<String, dynamic>> refreshToken(String refreshToken) async {
+    return <String, dynamic>{
+      'access_token': 'access-token',
+      'refresh_token': 'refresh-token',
+    };
+  }
+
+  @override
+  Future<void> saveTokens(
+    String access,
+    String refresh, {
+    String? merchantName,
+  }) async {}
+
+  @override
+  Future<Map<String, String?>?> tryAutoLogin() async {
+    return <String, String?>{
+      'accessToken': 'access-token',
+      'refreshToken': 'refresh-token',
+      'merchantName': '测试门店',
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> verifyBindingCode(String code) {
+    throw UnimplementedError();
+  }
+}
+
 OrderModel _buildOrder({
   required String id,
   required OrderStatus status,
   String orderNum = '',
+  String? pickupCode,
+  String? pickupCodeMasked,
 }) {
   return OrderModel(
     id: id,
     orderNum: orderNum,
+    pickupCode: pickupCode,
+    pickupCodeMasked: pickupCodeMasked,
     amount: 18.5,
     status: status,
     createdAt: DateTime.parse('2026-04-12T08:00:00Z'),

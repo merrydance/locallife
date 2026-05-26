@@ -53,13 +53,48 @@ void main() {
 
     expect(apiClient.lastQueryParameters, containsPair('status', 'paid'));
   });
+
+  test('markOrderReady posts ready endpoint and updates local state', () async {
+    final apiClient = _FakeApiClient(
+      orders: [_orderJson(id: '501', status: 'preparing')],
+      postResponseOrder: _orderJson(id: '501', status: 'ready'),
+    );
+    final notifier = OrderNotifier(apiClient);
+
+    await notifier.fetchOrders();
+    final success = await notifier.markOrderReady('501');
+
+    expect(success, isTrue);
+    expect(apiClient.lastPostPath, '/merchant/orders/501/ready');
+    expect(notifier.state.orders.single.status, OrderStatus.ready);
+  });
+
+  test('acceptOrder fallback uses backend preparing status', () async {
+    final apiClient = _FakeApiClient(
+      orders: [_orderJson(id: '501', status: 'paid')],
+    );
+    final notifier = OrderNotifier(apiClient);
+
+    await notifier.fetchOrders();
+    final success = await notifier.acceptOrder('501');
+
+    expect(success, isTrue);
+    expect(apiClient.lastPostPath, '/merchant/orders/501/accept');
+    expect(notifier.state.orders.single.status, OrderStatus.preparing);
+    expect(notifier.state.orders.single.canMarkReady, isTrue);
+  });
 }
 
 class _FakeApiClient implements ApiClient {
-  _FakeApiClient({this.orders = const <Map<String, dynamic>>[]});
+  _FakeApiClient({
+    this.orders = const <Map<String, dynamic>>[],
+    this.postResponseOrder,
+  });
 
   final List<Map<String, dynamic>> orders;
+  final Map<String, dynamic>? postResponseOrder;
   String? lastPath;
+  String? lastPostPath;
   Map<String, dynamic>? lastQueryParameters;
 
   @override
@@ -90,8 +125,16 @@ class _FakeApiClient implements ApiClient {
     String path, {
     dynamic data,
     bool requiresAuth = true,
-  }) {
-    throw UnimplementedError();
+  }) async {
+    lastPostPath = path;
+    return Response<dynamic>(
+      requestOptions: RequestOptions(path: path),
+      data: <String, dynamic>{
+        'code': 0,
+        'message': 'ok',
+        'data': postResponseOrder,
+      },
+    );
   }
 
   @override

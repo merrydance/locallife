@@ -31,6 +31,8 @@ enum OrderStatus {
 class OrderModel {
   final String id;
   final String orderNum;
+  final String? pickupCode;
+  final String? pickupCodeMasked;
   final double amount;
   final OrderFeeBreakdown? feeBreakdown;
   final OrderStatus status;
@@ -44,6 +46,8 @@ class OrderModel {
   OrderModel({
     required this.id,
     required this.orderNum,
+    this.pickupCode,
+    this.pickupCodeMasked,
     required this.amount,
     this.feeBreakdown,
     required this.status,
@@ -62,6 +66,13 @@ class OrderModel {
         'order_no',
         'order_num',
         'order_number',
+      ]),
+      pickupCode: _firstNullableString(json, const [
+        'pickup_code',
+        'pickup_number',
+      ]),
+      pickupCodeMasked: _firstNullableString(json, const [
+        'pickup_code_masked',
       ]),
       amount: _moneyYuan(
         json,
@@ -99,6 +110,20 @@ class OrderModel {
   bool get hasReliableItems => !itemsLoadFailed;
 
   bool get isAwaitingAcceptance => status == OrderStatus.paid;
+
+  bool get canMarkReady => status == OrderStatus.preparing;
+
+  String get displayOrderNumber {
+    final pickup = pickupCode?.trim() ?? '';
+    if (pickup.isNotEmpty) {
+      return pickup;
+    }
+    final masked = pickupCodeMasked?.trim() ?? '';
+    if (masked.isNotEmpty) {
+      return masked;
+    }
+    return orderNum.isNotEmpty ? orderNum : id;
+  }
 
   double get merchantFoodDisplayAmount =>
       feeBreakdown?.foodPayableAmount ?? amount;

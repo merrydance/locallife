@@ -223,12 +223,15 @@ Map<String, dynamic>? extractMerchantNewOrderPayload(
   final innerType = payload['type']?.toString();
   final event = payload['event']?.toString();
 
+  if (outerType == 'notification') {
+    return _extractNewOrderFromNotification(data, payload);
+  }
+
   final isNewOrder =
       outerType == 'new_order' ||
       innerType == 'new_order' ||
       event == 'new_order' ||
-      outerType == 'order_notification' ||
-      outerType == 'notification';
+      outerType == 'order_notification';
   if (!isNewOrder) {
     return null;
   }
@@ -239,4 +242,59 @@ Map<String, dynamic>? extractMerchantNewOrderPayload(
   }
   payload['order_id'] ??= payload['id'];
   return payload;
+}
+
+Map<String, dynamic>? _extractNewOrderFromNotification(
+  Map<String, dynamic> envelope,
+  Map<String, dynamic> payload,
+) {
+  final extraData = _mapFromValue(payload['extra_data']);
+  final relatedType = payload['related_type']?.toString().toLowerCase();
+  final relatedId = payload['related_id'];
+
+  if (extraData != null && relatedType == 'order' && relatedId != null) {
+    final messageId = extraData['message_id']?.toString();
+    final event = extraData['event']?.toString();
+    final isMerchantNewOrder =
+        event == 'new_order' ||
+        messageId?.startsWith('merchant:new_order:') == true ||
+        extraData.containsKey('order_id') ||
+        extraData.containsKey('order_no') ||
+        extraData.containsKey('total_amount');
+    if (!isMerchantNewOrder) {
+      return null;
+    }
+
+    final normalized = <String, dynamic>{
+      ...extraData,
+      'order_id': extraData['order_id'] ?? relatedId,
+      'id': extraData['order_id'] ?? relatedId,
+    };
+    for (final key in const ['message_id', 'title', 'content']) {
+      normalized[key] ??= payload[key] ?? envelope[key];
+    }
+    return normalized;
+  }
+
+  final hasLegacyOrderIdentity =
+      payload['message_id'] != null && payload['order_id'] != null;
+  final legacyEvent = payload['event']?.toString();
+  final legacyType = payload['type']?.toString();
+  final hasNoLegacyType = legacyEvent == null && legacyType == null;
+  if (hasLegacyOrderIdentity &&
+      (hasNoLegacyType ||
+          legacyEvent == 'new_order' ||
+          legacyType == 'new_order' ||
+          legacyType == 'order')) {
+    return payload;
+  }
+
+  return null;
+}
+
+Map<String, dynamic>? _mapFromValue(dynamic value) {
+  if (value is Map) {
+    return Map<String, dynamic>.from(value);
+  }
+  return null;
 }

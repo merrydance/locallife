@@ -549,7 +549,7 @@ class _OrderList extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '订单 ${order.orderNum}',
+                              '订单 ${order.displayOrderNumber}',
                               style: const TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w700,
@@ -709,6 +709,35 @@ class _OrderList extends ConsumerWidget {
                                         );
                                   }
                                 }
+                              },
+                      ),
+                    )
+                  else if (order.canMarkReady)
+                    Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.lg),
+                      child: MerchantPrimaryButton(
+                        expand: true,
+                        label: isProcessing ? '正在提交...' : '制作完成',
+                        isLoading: isProcessing,
+                        onPressed: isProcessing
+                            ? null
+                            : () async {
+                                final success = await ref
+                                    .read(orderProvider.notifier)
+                                    .markOrderReady(order.id);
+                                if (!context.mounted) {
+                                  return;
+                                }
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      success
+                                          ? '制作已完成'
+                                          : ref.read(orderProvider).error ??
+                                                '制作完成提交失败，请稍后再试',
+                                    ),
+                                  ),
+                                );
                               },
                       ),
                     ),
