@@ -33,7 +33,6 @@ interface MerchantFeedData {
   voucherText: string
   deliveryPromoText: string
   isNewStore: boolean
-  hasOrdered: boolean
   detailLoading: boolean
 }
 
@@ -124,4 +123,3 @@ Component({
     }
   }
 })
-

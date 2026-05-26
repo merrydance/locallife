@@ -1,7 +1,7 @@
 import CartService from '../../services/cart'
 import type { TakeoutCategoryGridItem } from '../../adapters/takeout-categories'
 import { getUserCarts } from '../../api/cart'
-import { searchMerchantsWithMeta, getPublicMerchantDishes, getPublicMerchantDetail, getHasUserOrderedFromMerchant } from '../../api/merchant'
+import { searchMerchantsWithMeta, getPublicMerchantDishes, getPublicMerchantDetail } from '../../api/merchant'
 import Navigation from '../../utils/navigation'
 import { logger } from '../../utils/logger'
 import { isRateLimitError } from '../../utils/user-facing'
@@ -431,11 +431,8 @@ Page({
   async hydrateMerchantMetaBatch(merchantIds: number[], generation: number) {
     const results = await settleAll(
       merchantIds.map(async (merchantId) => {
-        const [detail, hasOrdered] = await Promise.all([
-          getPublicMerchantDetail(merchantId, true),
-          getHasUserOrderedFromMerchant(merchantId)
-        ])
-        return { merchantId, detail, hasOrdered }
+        const detail = await getPublicMerchantDetail(merchantId, true)
+        return { merchantId, detail }
       })
     )
 
@@ -451,9 +448,9 @@ Page({
 
       if (result.status !== 'fulfilled') return
 
-      const { detail, hasOrdered } = result.value
+      const { detail } = result.value
 
-      const metaPatch = buildTakeoutMerchantMetaPatch(detail, hasOrdered)
+      const metaPatch = buildTakeoutMerchantMetaPatch(detail)
       Object.entries(metaPatch).forEach(([key, value]) => {
         updates[`merchantFeed[${feedIndex}].${key}`] = value
       })

@@ -8,13 +8,12 @@
       <t-image class="merchant-image" src="{{merchant.imageUrl}}" mode="aspectFill" shape="round" lazy />
       <view
         class="merchant-tag-row"
-        wx:if="{{merchant.isOrderingSuspended || merchant.label || merchant.isNewStore || merchant.hasOrdered || merchant.isOpen === false}}"
+        wx:if="{{merchant.isOrderingSuspended || merchant.label || merchant.isNewStore || merchant.isOpen === false}}"
       >
         <t-tag wx:if="{{merchant.isOrderingSuspended}}" theme="danger" size="small" variant="dark">暂停接单</t-tag>
         <t-tag wx:if="{{merchant.label === '推荐'}}" theme="success" size="small" variant="dark">推荐</t-tag>
         <t-tag wx:elif="{{merchant.label === '热销'}}" theme="warning" size="small" variant="dark">热销</t-tag>
         <t-tag wx:if="{{merchant.isNewStore}}" theme="primary" size="small" variant="dark">新店</t-tag>
-        <t-tag wx:if="{{merchant.hasOrdered}}" theme="success" size="small" variant="light">再来一单</t-tag>
         <t-tag wx:if="{{merchant.isOpen === false}}" theme="danger" size="small" variant="dark">休息中</t-tag>
       </view>
     </view>

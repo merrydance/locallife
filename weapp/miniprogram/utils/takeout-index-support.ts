@@ -54,7 +54,6 @@ export interface MerchantFeedViewModel {
   voucherText: string
   deliveryPromoText: string
   isNewStore: boolean
-  hasOrdered: boolean
   detailLoading: boolean
   label?: string
 }
@@ -123,7 +122,6 @@ export function buildTakeoutMerchantFeedItems(merchants: MerchantSummary[]) {
       voucherText: '',
       deliveryPromoText: '',
       isNewStore,
-      hasOrdered: false,
       detailLoading: true,
       label: merchantSummary.label
     } satisfies MerchantFeedViewModel
@@ -311,7 +309,7 @@ export function buildDeliveryPromoText(deliveryPromotions?: PublicDeliveryPromot
     : `满${(threshold / 100).toFixed(0)}免运费`
 }
 
-export function buildTakeoutMerchantMetaPatch(detail: PublicMerchantDetail, hasOrdered: boolean) {
+export function buildTakeoutMerchantMetaPatch(detail: PublicMerchantDetail) {
   return {
     avgPrepMinutes: (detail.avg_prep_minutes && detail.avg_prep_minutes > 0)
       ? detail.avg_prep_minutes
@@ -322,7 +320,6 @@ export function buildTakeoutMerchantMetaPatch(detail: PublicMerchantDetail, hasO
     isOrderingSuspended: !!detail.is_ordering_suspended,
     discountPromoText: buildDiscountPromoText(detail.discount_rules),
     voucherText: buildVoucherText(detail.vouchers),
-    deliveryPromoText: buildDeliveryPromoText(detail.delivery_promotions),
-    hasOrdered
+    deliveryPromoText: buildDeliveryPromoText(detail.delivery_promotions)
   }
 }

@@ -385,23 +385,6 @@ export async function getPublicMerchantCombos(merchantId: number): Promise<Publi
   })
 }
 
-/**
- * 查询当前用户是否曾在该商户成功下单（用于展示"再来一单"标识）
- */
-export async function getHasUserOrderedFromMerchant(merchantId: number): Promise<boolean> {
-  try {
-    const result = await request<{ has_ordered: boolean }>({
-      url: `/v1/public/merchants/${merchantId}/has-ordered`,
-      method: 'GET',
-      useCache: true,
-      cacheTTL: 10 * 60 * 1000
-    })
-    return result.has_ordered ?? false
-  } catch {
-    return false
-  }
-}
-
 // ==================== 数据适配器 (仅保留顾客端相关) ====================
 
 export class MerchantManagementAdapter {
