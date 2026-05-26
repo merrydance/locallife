@@ -1021,6 +1021,104 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			},
 		},
 		{
+			name: "Approved_BusinessLicenseOCRRawValidDateFallback",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				ocrJobID := int64(778)
+				businessLicenseOCR, err := json.Marshal(BusinessLicenseOCRData{
+					OCRJobID:            &ocrJobID,
+					EnterpriseName:      "测试餐饮有限公司",
+					CreditCode:          "91110000MA12345678",
+					BusinessScope:       "餐饮服务",
+					Address:             "北京市朝阳区测试路100号",
+					LegalRepresentative: "张三",
+					Readiness: &OCRReadiness{
+						State:         "partial",
+						ReasonCode:    "required_field_missing",
+						MissingFields: []string{"valid_period"},
+					},
+					OCRAt: time.Now().Format(time.RFC3339),
+				})
+				require.NoError(t, err)
+				app.BusinessLicenseOcr = businessLicenseOCR
+
+				rawResult := []byte(`{"Data":"{\"data\":{\"creditCode\":\"91110000MA12345678\",\"companyName\":\"测试餐饮有限公司\",\"businessAddress\":\"北京市朝阳区测试路100号\",\"legalPerson\":\"张三\",\"businessScope\":\"餐饮服务\",\"validFromDate\":\"20170104\",\"validToDate\":\"29991231\"}}"}`)
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				store.EXPECT().
+					GetOCRJob(gomock.Any(), ocrJobID).
+					Times(1).
+					Return(db.OcrJob{ID: ocrJobID, Provider: "aliyun", Status: "succeeded", RawResult: rawResult}, nil)
+
+				store.EXPECT().
+					UpdateMerchantApplicationBusinessLicense(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationBusinessLicenseParams) (db.MerchantApplication, error) {
+						require.Equal(t, app.ID, arg.ID)
+						var repaired BusinessLicenseOCRData
+						require.NoError(t, json.Unmarshal(arg.BusinessLicenseOcr, &repaired))
+						require.Equal(t, "2017年01月04日至长期", repaired.ValidPeriod)
+						app.BusinessLicenseOcr = arg.BusinessLicenseOcr
+						return app, nil
+					})
+
+				submittedApp := app
+				submittedApp.Status = "submitted"
+				store.EXPECT().
+					SubmitMerchantApplication(gomock.Any(), app.ID).
+					Times(1).
+					DoAndReturn(func(context.Context, int64) (db.MerchantApplication, error) {
+						submittedApp.BusinessLicenseOcr = app.BusinessLicenseOcr
+						return submittedApp, nil
+					})
+
+				store.EXPECT().
+					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+					Times(1).
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+				store.EXPECT().
+					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+						ID:                    submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+						ID:                  submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				approvedApp := submittedApp
+				approvedApp.Status = "approved"
+				store.EXPECT().
+					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.ApproveMerchantApplicationTxResult{
+						Application: approvedApp,
+						Merchant:    db.Merchant{ID: 1},
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp merchantApplicationDraftResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, "approved", resp.Status)
+			},
+		},
+		{
 			name: "Approved_FoodPermitRegistrationTitleIgnored",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)

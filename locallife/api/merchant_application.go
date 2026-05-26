@@ -1057,6 +1057,27 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 		return merchantDocumentReviewAPIError(err)
 	}
 
+	if payloadResult.Input.BusinessLicense.ValidPeriod == "" && server.store != nil && payloadResult.Input.BusinessLicense.OCRJobID != nil && *payloadResult.Input.BusinessLicense.OCRJobID > 0 {
+		ocrJobID := *payloadResult.Input.BusinessLicense.OCRJobID
+		job, jobErr := server.store.GetOCRJob(ctx, ocrJobID)
+		if jobErr != nil {
+			log.Warn().Err(jobErr).Int64("application_id", app.ID).Int64("ocr_job_id", ocrJobID).Msg("submit merchant application: load business license ocr job for repair failed")
+		} else if len(job.RawResult) > 0 {
+			repairedBusinessLicenseJSON, changed, repairErr := logic.RepairMerchantBusinessLicenseFromRawResult(&payloadResult.Input.BusinessLicense, job.RawResult)
+			if repairErr != nil {
+				log.Warn().Err(repairErr).Int64("application_id", app.ID).Int64("ocr_job_id", job.ID).Msg("submit merchant application: decode business license ocr raw result failed")
+			} else if changed {
+				if _, updateErr := server.store.UpdateMerchantApplicationBusinessLicense(ctx, db.UpdateMerchantApplicationBusinessLicenseParams{
+					ID:                 app.ID,
+					BusinessLicenseOcr: repairedBusinessLicenseJSON,
+				}); updateErr != nil {
+					log.Warn().Err(updateErr).Int64("application_id", app.ID).Msg("submit merchant application: persist repaired business license ocr failed")
+					return errors.New("系统繁忙，请稍后重试")
+				}
+			}
+		}
+	}
+
 	if payloadResult.FoodPermitNeedsNormalizedRepair && server.store != nil && payloadResult.Input.FoodPermit.OCRJobID != nil && *payloadResult.Input.FoodPermit.OCRJobID > 0 {
 		ocrJobID := *payloadResult.Input.FoodPermit.OCRJobID
 		job, jobErr := server.store.GetOCRJob(ctx, ocrJobID)

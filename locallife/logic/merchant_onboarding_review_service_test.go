@@ -188,12 +188,48 @@ func TestEvaluateMerchantDocumentReview_UsesFoodPermitProviderFailure(t *testing
 	require.Equal(t, "食品经营许可证OCR处理失败，请重新上传清晰完整的食品经营许可证照片", reviewErr.Message)
 }
 
+func TestRepairMerchantBusinessLicenseFromRawResult_UsesAliyunValidDates(t *testing.T) {
+	ocrJobID := int64(778)
+	businessLicense := MerchantReviewBusinessLicenseOCRData{
+		OCRJobID:            &ocrJobID,
+		EnterpriseName:      "测试餐饮有限公司",
+		LegalRepresentative: "张三",
+		Address:             "北京市朝阳区测试路100号",
+		BusinessScope:       "餐饮服务",
+		Readiness: &MerchantReviewOCRReadiness{
+			State:         merchantOCRReadinessStatePartial,
+			ReasonCode:    merchantOCRReadinessReasonRequiredFieldMissing,
+			MissingFields: []string{"valid_period"},
+		},
+	}
+	rawResult := []byte(`{"Data":"{\"data\":{\"validFromDate\":\"20170104\",\"validToDate\":\"29991231\"}}"}`)
+
+	repairedPayload, changed, err := RepairMerchantBusinessLicenseFromRawResult(&businessLicense, rawResult)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.NotEmpty(t, repairedPayload)
+	require.Equal(t, "2017年01月04日至长期", businessLicense.ValidPeriod)
+	require.Equal(t, merchantOCRReadinessStateReady, businessLicense.Readiness.State)
+	require.Equal(t, "ok", businessLicense.Readiness.ReasonCode)
+	require.Empty(t, businessLicense.Readiness.MissingFields)
+}
+
+func TestRepairMerchantBusinessLicenseFromRawResult_TreatsStartOnlyAsLongTerm(t *testing.T) {
+	businessLicense := MerchantReviewBusinessLicenseOCRData{}
+	rawResult := []byte(`{"Data":"{\"data\":{\"registrationDate\":\"20170104\"}}"}`)
+
+	_, changed, err := RepairMerchantBusinessLicenseFromRawResult(&businessLicense, rawResult)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.Equal(t, "长期", businessLicense.ValidPeriod)
+}
+
 func TestBuildMerchantDocumentReviewInputFromPayloads_RepairsFoodPermitFromRawText(t *testing.T) {
 	payloadResult, err := BuildMerchantDocumentReviewInputFromPayloads(MerchantDocumentReviewPayloads{
 		BusinessLicenseJSON: []byte(`{"enterprise_name":"测试餐饮有限公司","legal_representative":"张三","address":"北京市朝阳区测试路100号","business_scope":"餐饮服务","valid_period":"2020年01月01日至2040年01月01日"}`),
-		FoodPermitJSON: []byte(`{"raw_text":"商号名称：测试餐饮有限公司\n经营者姓名：张三\n登记证编号：2130528020946\n有效期至：2030年12月31日","company_name":"","operator_name":"","permit_no":"","valid_to":""}`),
-		IDCardFrontJSON: []byte(`{"name":"张三","id_number":"110101199001011234"}`),
-		IDCardBackJSON: []byte(`{"valid_date":"2020.01.01-2035.01.01"}`),
+		FoodPermitJSON:      []byte(`{"raw_text":"商号名称：测试餐饮有限公司\n经营者姓名：张三\n登记证编号：2130528020946\n有效期至：2030年12月31日","company_name":"","operator_name":"","permit_no":"","valid_to":""}`),
+		IDCardFrontJSON:     []byte(`{"name":"张三","id_number":"110101199001011234"}`),
+		IDCardBackJSON:      []byte(`{"valid_date":"2020.01.01-2035.01.01"}`),
 	})
 	require.NoError(t, err)
 	require.Equal(t, "测试餐饮有限公司", payloadResult.Input.FoodPermit.CompanyName)

@@ -174,6 +174,12 @@ func normalizeAliyunBusinessLicenseResult(raw json.RawMessage) *BusinessLicenseR
 	address := firstAliyunField(fields, "address", "business_address", "businessaddress")
 	businessScope := firstAliyunField(fields, "business_scope", "businessscope", "scope")
 	validPeriod := firstAliyunField(fields, "valid_period", "validperiod", "period")
+	if validPeriod == "" {
+		validPeriod = buildAliyunBusinessLicenseValidPeriod(
+			firstAliyunField(fields, "validfromdate", "valid_from_date", "registrationdate", "registration_date", "validfrom", "valid_from"),
+			firstAliyunField(fields, "validtodate", "valid_to_date", "validto", "valid_to"),
+		)
+	}
 	if creditCode == "" && registrationNumber == "" && enterpriseName == "" && legalRepresentative == "" && address == "" && businessScope == "" && validPeriod == "" {
 		return nil
 	}
@@ -186,6 +192,79 @@ func normalizeAliyunBusinessLicenseResult(raw json.RawMessage) *BusinessLicenseR
 		BusinessScope:       businessScope,
 		ValidPeriod:         validPeriod,
 	}
+}
+
+func buildAliyunBusinessLicenseValidPeriod(validFromDate string, validToDate string) string {
+	formattedFrom := normalizeAliyunBusinessLicenseDate(validFromDate)
+	formattedTo := normalizeAliyunBusinessLicenseDate(validToDate)
+
+	switch {
+	case formattedFrom == "" && formattedTo == "":
+		return ""
+	case formattedTo == "长期":
+		if formattedFrom != "" {
+			return formattedFrom + "至长期"
+		}
+		return "长期"
+	case formattedFrom != "" && formattedTo != "":
+		return formattedFrom + "至" + formattedTo
+	case formattedTo != "":
+		return formattedTo
+	default:
+		return formattedFrom
+	}
+}
+
+func normalizeAliyunBusinessLicenseDate(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+	if strings.Contains(trimmed, "长期") || strings.Contains(trimmed, "永久") {
+		return "长期"
+	}
+	if trimmed == "29991231" || trimmed == "99991231" {
+		return "长期"
+	}
+	parsed, ok := parseAliyunBusinessLicenseDate(trimmed)
+	if !ok {
+		return trimmed
+	}
+	return parsed.Format("2006年01月02日")
+}
+
+func parseAliyunBusinessLicenseDate(raw string) (time.Time, bool) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return time.Time{}, false
+	}
+	if len(trimmed) == 8 {
+		allDigits := true
+		for _, r := range trimmed {
+			if r < '0' || r > '9' {
+				allDigits = false
+				break
+			}
+		}
+		if allDigits {
+			if parsed, err := time.Parse("20060102", trimmed); err == nil {
+				return parsed, true
+			}
+		}
+	}
+	normalized := strings.NewReplacer(
+		"年", "-",
+		"月", "-",
+		"日", "",
+		"/", "-",
+		".", "-",
+		" ", "",
+	).Replace(trimmed)
+	parsed, err := time.Parse("2006-1-2", normalized)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return parsed, true
 }
 
 func normalizeAliyunIDCardResult(raw json.RawMessage) *IDCardResult {

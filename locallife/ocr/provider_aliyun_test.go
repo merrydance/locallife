@@ -268,6 +268,33 @@ func TestAliyunProviderRecognizeNormalizesBusinessLicense(t *testing.T) {
 	}
 }
 
+func TestAliyunProviderRecognizeNormalizesBusinessLicenseFromValidDates(t *testing.T) {
+	raw := json.RawMessage(`{
+		"Data": {
+			"creditCode": "913301095U78M2HC4A",
+			"companyName": "杭州橘子文化传媒有限公司",
+			"businessAddress": "萧山区宁围街道泰宏巷40号联合中心北区",
+			"legalPerson": "陈云平",
+			"businessScope": "影视文化艺术活动策划",
+			"registeredCapital": "壹佰万元整",
+			"RegistrationDate": "2017年01月04日",
+			"validFromDate": 20170104,
+			"validToDate": 29991231
+		}
+	}`)
+	provider := NewAliyunProvider(stubAliyunClient{raw: raw})
+	resp, err := provider.Recognize(context.Background(), CapabilityAliyunBusinessLicense, RecognizeRequest{DocumentType: DocumentTypeBusinessLicense})
+	if err != nil {
+		t.Fatalf("Recognize error = %v", err)
+	}
+	if resp.Normalized.BusinessLicense == nil {
+		t.Fatal("expected normalized business license result")
+	}
+	if resp.Normalized.BusinessLicense.ValidPeriod != "2017年01月04日至长期" {
+		t.Fatalf("valid period = %s", resp.Normalized.BusinessLicense.ValidPeriod)
+	}
+}
+
 func TestAliyunProviderRecognizeNormalizesIDCard(t *testing.T) {
 	raw := json.RawMessage(`{
 		"Data": {

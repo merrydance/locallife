@@ -75,6 +75,25 @@ func BuildMerchantDocumentReviewInputFromPayloads(payloads MerchantDocumentRevie
 	return result, nil
 }
 
+func RepairMerchantBusinessLicenseFromRawResult(businessLicense *MerchantReviewBusinessLicenseOCRData, rawResult []byte) ([]byte, bool, error) {
+	if businessLicense == nil || len(rawResult) == 0 || strings.TrimSpace(businessLicense.ValidPeriod) != "" {
+		return nil, false, nil
+	}
+
+	validPeriod := merchantExtractBusinessLicenseValidPeriodFromRawResult(rawResult)
+	if strings.TrimSpace(validPeriod) == "" {
+		return nil, false, nil
+	}
+
+	businessLicense.ValidPeriod = validPeriod
+	repairMerchantBusinessLicenseReadinessAfterValidPeriod(businessLicense)
+	payload, err := json.Marshal(businessLicense)
+	if err != nil {
+		return nil, false, err
+	}
+	return payload, true, nil
+}
+
 func RepairMerchantFoodPermitFromNormalized(foodPermit *MerchantReviewFoodPermitOCRData, normalizedResult []byte) ([]byte, bool, error) {
 	if foodPermit == nil || len(normalizedResult) == 0 || !merchantFoodPermitNeedsRepair(*foodPermit) {
 		return nil, false, nil
