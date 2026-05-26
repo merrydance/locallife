@@ -55,13 +55,20 @@ func configureBaofuWithdrawServiceForAPITest(server *Server, store db.Store, cli
 
 func activeBaofuWithdrawalBinding(ownerType string, ownerID int64) db.BaofuAccountBinding {
 	return db.BaofuAccountBinding{
-		ID:          ownerID + 1000,
-		OwnerType:   ownerType,
-		OwnerID:     ownerID,
-		AccountType: baofuWithdrawalAccountTypeForOwner(ownerType),
-		OpenState:   db.BaofuAccountOpenStateActive,
-		ContractNo:  pgtype.Text{String: "SECRET_CONTRACT_" + ownerType, Valid: true},
+		ID:           ownerID + 1000,
+		OwnerType:    ownerType,
+		OwnerID:      ownerID,
+		AccountType:  baofuWithdrawalAccountTypeForOwner(ownerType),
+		OpenState:    db.BaofuAccountOpenStateActive,
+		ContractNo:   pgtype.Text{String: "SECRET_CONTRACT_" + ownerType, Valid: true},
+		SharingMerID: pgtype.Text{String: "SECRET_SHARE_" + ownerType, Valid: true},
 	}
+}
+
+func activeBaofuWithdrawalBindingWithoutFeeMember(ownerType string, ownerID int64) db.BaofuAccountBinding {
+	binding := activeBaofuWithdrawalBinding(ownerType, ownerID)
+	binding.SharingMerID = pgtype.Text{}
+	return binding
 }
 
 func baofuWithdrawalAccountTypeForOwner(ownerType string) string {
@@ -519,6 +526,47 @@ func TestCreateBaofuWithdrawalMapsBalanceQueryFailureToBadGateway(t *testing.T) 
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Equal(t, CodeBadGateway, resp.Code)
 	require.Equal(t, "提现账户余额暂不可确认，请稍后刷新", resp.Message)
+	require.Empty(t, client.withdrawReqs)
+}
+
+func TestCreateBaofuWithdrawalRejectsMissingFeeMemberBeforeProviderCall(t *testing.T) {
+	owner, _ := randomUser(t)
+	merchant := randomMerchant(owner.ID)
+	binding := activeBaofuWithdrawalBindingWithoutFeeMember(db.BaofuAccountOwnerTypeMerchant, merchant.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
+	store.EXPECT().
+		GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+			OwnerType: db.BaofuAccountOwnerTypeMerchant,
+			OwnerID:   merchant.ID,
+		}).
+		Return(binding, nil)
+
+	client := &fakeAPIBaofuWithdrawClient{
+		balanceRes: &baofucontracts.BalanceResult{ContractNo: binding.ContractNo.String, AvailableAmountFen: 5000},
+	}
+	server := newTestServer(t, store)
+	configureBaofuWithdrawServiceForAPITest(server, store, client)
+
+	body := []byte(`{"amount":1200,"remark":"测试提现"}`)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/finance/baofu-withdrawal/withdraw", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, owner.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusConflict, recorder.Code)
+	var resp APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, CodeConflict, resp.Code)
+	require.Equal(t, "结算账户状态异常，请联系平台处理", resp.Message)
+	require.Empty(t, client.balanceReqs)
 	require.Empty(t, client.withdrawReqs)
 }
 
