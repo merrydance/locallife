@@ -107,6 +107,7 @@
 }
 
 .media-item {
+  position: relative;
   width: calc((100% - 32rpx) / 3);
   height: 200rpx;
   border-radius: var(--radius-md);
@@ -117,6 +118,12 @@
 .media-item.large {
   width: 400rpx;
   height: 400rpx;
+}
+
+.review-image {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .reply-box {

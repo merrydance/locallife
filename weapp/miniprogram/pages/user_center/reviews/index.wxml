@@ -63,7 +63,7 @@
                 data-review-id="{{item.id}}"
                 data-image-index="{{imageIndex}}"
               >
-                <t-image src="{{img}}" mode="aspectFill" width="100%" height="100%" lazy />
+                <t-image class="review-image" src="{{img}}" mode="aspectFill" />
               </view>
             </view>
           </view>

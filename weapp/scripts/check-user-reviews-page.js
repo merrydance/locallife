@@ -103,6 +103,21 @@ function main() {
     'user reviews view model must use the image normalization helper'
   )
   assert(
+    /<t-image[^>]*class="review-image"/.test(wxml) &&
+      !/<t-image[^>]*width="100%"[^>]*height="100%"/.test(wxml) &&
+      !/<t-image[^>]*\slazy(?:\s|\/|>)/.test(wxml),
+    'user review thumbnails must give t-image a stable class size and avoid lazy placeholder-only rendering in scroll-view'
+  )
+  const mediaItemRule = getRule(wxss, '.media-item')
+  const reviewImageRule = getRule(wxss, '.review-image')
+  assert(
+    /position:\s*relative/.test(mediaItemRule) &&
+      /width:\s*100%/.test(reviewImageRule) &&
+      /height:\s*100%/.test(reviewImageRule) &&
+      /display:\s*block/.test(reviewImageRule),
+    'user review thumbnail styles must size both the media wrapper and t-image root deterministically'
+  )
+  assert(
     !/data-urls="\{\{item\.images\}\}"/.test(wxml),
     'user reviews image preview must not pass image arrays through WXML dataset'
   )
