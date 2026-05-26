@@ -104,9 +104,10 @@ func (s *BaofuWithdrawService) QueryBalance(ctx context.Context, input BaofuBala
 	result.Binding = binding
 
 	upstream, err := s.client.QueryBalance(ctx, baofucontracts.BalanceQueryRequest{
-		MerchantID: cfg.CollectMerchantID,
-		TerminalID: cfg.CollectTerminalID,
-		ContractNo: strings.TrimSpace(binding.ContractNo.String),
+		MerchantID:  cfg.CollectMerchantID,
+		TerminalID:  cfg.CollectTerminalID,
+		ContractNo:  strings.TrimSpace(binding.ContractNo.String),
+		AccountType: strings.TrimSpace(binding.AccountType),
 	})
 	if err != nil {
 		return result, err
@@ -142,9 +143,10 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 		return result, err
 	}
 	balance, err := s.client.QueryBalance(ctx, baofucontracts.BalanceQueryRequest{
-		MerchantID: cfg.CollectMerchantID,
-		TerminalID: cfg.CollectTerminalID,
-		ContractNo: strings.TrimSpace(binding.ContractNo.String),
+		MerchantID:  cfg.CollectMerchantID,
+		TerminalID:  cfg.CollectTerminalID,
+		ContractNo:  strings.TrimSpace(binding.ContractNo.String),
+		AccountType: strings.TrimSpace(binding.AccountType),
 	})
 	if err != nil {
 		return result, fmt.Errorf("%w: %w", ErrBaofuWithdrawBalanceUnavailable, err)

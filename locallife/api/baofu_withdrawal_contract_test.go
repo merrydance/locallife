@@ -58,9 +58,18 @@ func activeBaofuWithdrawalBinding(ownerType string, ownerID int64) db.BaofuAccou
 		ID:          ownerID + 1000,
 		OwnerType:   ownerType,
 		OwnerID:     ownerID,
-		AccountType: db.BaofuAccountTypePersonal,
+		AccountType: baofuWithdrawalAccountTypeForOwner(ownerType),
 		OpenState:   db.BaofuAccountOpenStateActive,
 		ContractNo:  pgtype.Text{String: "SECRET_CONTRACT_" + ownerType, Valid: true},
+	}
+}
+
+func baofuWithdrawalAccountTypeForOwner(ownerType string) string {
+	switch ownerType {
+	case db.BaofuAccountOwnerTypeRider, db.BaofuAccountOwnerTypeOperator:
+		return db.BaofuAccountTypePersonal
+	default:
+		return db.BaofuAccountTypeBusiness
 	}
 }
 
@@ -268,6 +277,7 @@ func TestBaofuWithdrawalBalanceRoutesUseServerResolvedOwnerScope(t *testing.T) {
 			require.True(t, resp.CanWithdraw)
 			require.Len(t, client.balanceReqs, 1)
 			require.Equal(t, binding.ContractNo.String, client.balanceReqs[0].ContractNo)
+			require.Equal(t, binding.AccountType, client.balanceReqs[0].AccountType)
 			require.NotContains(t, recorder.Body.String(), binding.ContractNo.String)
 		})
 	}

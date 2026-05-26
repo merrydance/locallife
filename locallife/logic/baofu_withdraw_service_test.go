@@ -80,6 +80,7 @@ func TestBaofuWithdrawServiceQueryBalanceUsesCollectMerchant(t *testing.T) {
 	require.Equal(t, "COLLECT_MER", client.balanceReq.MerchantID)
 	require.Equal(t, "COLLECT_TER", client.balanceReq.TerminalID)
 	require.Equal(t, "CM_BINDING", client.balanceReq.ContractNo)
+	require.Equal(t, db.BaofuAccountTypePersonal, client.balanceReq.AccountType)
 }
 
 func TestBaofuWithdrawServiceCreateWithdrawalUsesPayoutMerchantAndRecordsCommand(t *testing.T) {
@@ -163,6 +164,7 @@ func TestBaofuWithdrawServiceCreateWithdrawalUsesPayoutMerchantAndRecordsCommand
 	})
 	require.NoError(t, err)
 	require.Equal(t, withdrawal.ID, result.WithdrawalOrder.ID)
+	require.Equal(t, db.BaofuAccountTypePersonal, client.balanceReq.AccountType)
 	require.Equal(t, "PAYOUT_MER", client.withdrawReq.MerchantID)
 	require.Equal(t, "PAYOUT_TER", client.withdrawReq.TerminalID)
 	require.Equal(t, "CM_BINDING", client.withdrawReq.ContractNo)
