@@ -112,9 +112,9 @@ Page({
   },
 
   onShow() {
-    // 页面重新显示时恢复轮询（副作用：也刻刷新一次位置）
-    if (this.data.deliveryId && this.data.delivery && getDeliveryStatusDisplay(this.data.delivery.status).isLocationTracked) {
-      this.updateRiderLocation()
+    // 页面重新显示时恢复轮询（副作用：也立即刷新状态和位置）
+    if (this.data.deliveryId && this.data.delivery && this.shouldPollTrackingState(this.data.delivery.status)) {
+      this.refreshTrackingState()
       this.startLocationTracking()
     }
   },
@@ -188,8 +188,8 @@ Page({
       // 5. 设置地图
       this.setupMap(merchantPoint, customerPoint)
 
-      // 6. 开始位置追踪（代取中状态）
-      if (statusDisplay.isLocationTracked) {
+      // 6. 开始追踪状态，等待接单后继续刷新骑手位置
+      if (this.shouldPollTrackingState(delivery.status)) {
         this.startLocationTracking()
       }
     } catch (error: unknown) {
@@ -320,12 +320,54 @@ Page({
   startLocationTracking() {
     if (this.data.locationTimer !== null) return
 
-    // 每10秒刷新一次骑手位置
+    // 每10秒刷新一次代取状态和骑手位置
     const timer = setInterval(() => {
-      this.updateRiderLocation()
+      this.refreshTrackingState()
     }, 10000) as unknown as number
 
     this.setData({ locationTimer: timer })
+  },
+
+  shouldPollTrackingState(status?: DeliveryResponse['status']): boolean {
+    return status === 'pending' || getDeliveryStatusDisplay(status).isLocationTracked
+  },
+
+  async refreshTrackingState() {
+    if (!this.data.orderId) return
+
+    try {
+      const delivery = await DeliveryService.getDeliveryByOrder(this.data.orderId)
+      const statusDisplay = getDeliveryStatusDisplay(delivery.status)
+      const progress = buildDeliveryProgress(delivery, this.formatTime)
+
+      this.setData({
+        delivery,
+        deliveryId: delivery.id,
+        deliveryStatus: delivery.status,
+        deliveryStatusText: statusDisplay.text,
+        showConfirmReceipt: statusDisplay.canConfirmReceipt,
+        progress,
+        estimatedDeliveryTime: delivery.estimated_delivery_at
+          ? this.formatTime(delivery.estimated_delivery_at)
+          : '计算中'
+      })
+
+      const hasMapAnchors = !!this.data.merchantPoint && !!this.data.customerPoint
+      if (!hasMapAnchors) {
+        await this.setupMap(
+          { latitude: delivery.pickup_latitude, longitude: delivery.pickup_longitude },
+          { latitude: delivery.delivery_latitude, longitude: delivery.delivery_longitude }
+        )
+      } else if (statusDisplay.isLocationTracked) {
+        await this.updateRiderLocation()
+      }
+
+      if (!this.shouldPollTrackingState(delivery.status)) {
+        this.stopLocationTracking()
+      }
+    } catch (error) {
+      logger.warn('刷新代取追踪状态失败', error, 'tracking.refreshTrackingState')
+    }
   },
 
   async planRoute(merchantPoint: MapPoint, customerPoint: MapPoint) {

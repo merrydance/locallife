@@ -838,7 +838,7 @@ func (server *Server) getRiderLatestLocation(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	_, err := logic.ValidateDeliveryViewer(ctx, server.store, logic.DeliveryViewerInput{
+	viewer, err := logic.ValidateDeliveryViewer(ctx, server.store, logic.DeliveryViewerInput{
 		UserID:           authPayload.UserID,
 		DeliveryID:       req.DeliveryID,
 		ForbiddenMessage: "无权查看此代取单位置",
@@ -854,6 +854,9 @@ func (server *Server) getRiderLatestLocation(ctx *gin.Context) {
 	location, err := server.store.GetDeliveryLatestLocation(ctx, pgtype.Int8{Int64: req.DeliveryID, Valid: true})
 	if err != nil {
 		if isNotFoundError(err) {
+			if writeAssignedRiderCurrentLocation(ctx, server.store, viewer.Delivery) {
+				return
+			}
 			ctx.JSON(http.StatusNotFound, errorResponse(ErrNoLocationAvailable))
 			return
 		}
@@ -861,28 +864,10 @@ func (server *Server) getRiderLatestLocation(ctx *gin.Context) {
 		return
 	}
 
-	lng, _ := location.Longitude.Float64Value()
-	lat, _ := location.Latitude.Float64Value()
-
-	resp := locationResponse{
-		Longitude:  lng.Float64,
-		Latitude:   lat.Float64,
-		RecordedAt: location.RecordedAt,
+	resp, ok := latestLocationResponseWithRiderCurrent(ctx, server.store, viewer.Delivery, location)
+	if !ok {
+		return
 	}
-
-	if location.Accuracy.Valid {
-		acc, _ := location.Accuracy.Float64Value()
-		resp.Accuracy = &acc.Float64
-	}
-	if location.Speed.Valid {
-		spd, _ := location.Speed.Float64Value()
-		resp.Speed = &spd.Float64
-	}
-	if location.Heading.Valid {
-		hdg, _ := location.Heading.Float64Value()
-		resp.Heading = &hdg.Float64
-	}
-
 	ctx.JSON(http.StatusOK, resp)
 }
 

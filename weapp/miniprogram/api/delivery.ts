@@ -107,7 +107,7 @@ export function getDeliveryStatusDisplay(status?: Delivery['status']) {
         isPickedStage,
         isDeliveringStage,
         isDeliveredStage,
-        isLocationTracked: isPickedStage || isDeliveringStage,
+        isLocationTracked: isAssignedStage || isPickedStage || isDeliveringStage,
         canConfirmReceipt: status === 'delivered'
     }
 }

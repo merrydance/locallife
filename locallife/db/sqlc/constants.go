@@ -54,6 +54,15 @@ const (
 	OrderExceptionStateFoodSafetyPaused = "food_safety_paused"
 	ClaimChannelFoodSafety              = "food_safety"
 
+	DeliveryStatusPending    = "pending"
+	DeliveryStatusAssigned   = "assigned"
+	DeliveryStatusPicking    = "picking"
+	DeliveryStatusPicked     = "picked"
+	DeliveryStatusDelivering = "delivering"
+	DeliveryStatusDelivered  = "delivered"
+	DeliveryStatusCompleted  = "completed"
+	DeliveryStatusCancelled  = "cancelled"
+
 	ClaimStatusPending                     = "pending"
 	ClaimStatusAutoApproved                = "auto-approved"
 	ClaimStatusWaitingCustomerConfirmation = "waiting_customer_confirmation"

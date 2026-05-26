@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -1174,6 +1175,286 @@ func TestGetDeliveryTrackAPI(t *testing.T) {
 			recorder := httptest.NewRecorder()
 
 			url := fmt.Sprintf("/v1/delivery/%d/track", tc.deliveryID)
+			request, err := http.NewRequest(http.MethodGet, url, nil)
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
+func TestGetRiderLatestLocationAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	orderID := util.RandomInt(1, 1000)
+	deliveryID := util.RandomInt(1, 1000)
+	riderID := util.RandomInt(1, 1000)
+	recordedAt := time.Now().Add(-30 * time.Second).UTC()
+
+	order := db.Order{
+		ID:         orderID,
+		UserID:     user.ID,
+		MerchantID: util.RandomInt(1, 1000),
+		OrderNo:    util.RandomString(10),
+	}
+
+	delivery := randomDelivery(orderID, riderID)
+	delivery.ID = deliveryID
+	delivery.Status = db.DeliveryStatusDelivering
+
+	rider := randomRider(util.RandomInt(1, 1000))
+	rider.ID = riderID
+	rider.CurrentLongitude = numericFromFloat(116.407)
+	rider.CurrentLatitude = numericFromFloat(39.918)
+	rider.LocationUpdatedAt = pgtype.Timestamptz{Time: recordedAt, Valid: true}
+
+	deliveryLocation := db.RiderLocation{
+		ID:         util.RandomInt(1, 1000),
+		RiderID:    riderID,
+		DeliveryID: pgtype.Int8{Int64: deliveryID, Valid: true},
+		Longitude:  numericFromFloat(116.408),
+		Latitude:   numericFromFloat(39.919),
+		RecordedAt: recordedAt.Add(10 * time.Second),
+	}
+
+	staleDeliveryLocation := deliveryLocation
+	staleDeliveryLocation.RecordedAt = recordedAt.Add(-10 * time.Second)
+
+	testCases := []struct {
+		name          string
+		deliveryID    int64
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:       "FallbackToAssignedRiderCurrentLocation",
+			deliveryID: deliveryID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
+					Times(1).
+					Return(delivery, nil)
+
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(order, nil)
+
+				store.EXPECT().
+					GetDeliveryLatestLocation(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.RiderLocation{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					GetRider(gomock.Any(), gomock.Eq(riderID)).
+					Times(1).
+					Return(rider, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp locationResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.InEpsilon(t, 116.407, resp.Longitude, 0.000001)
+				require.InEpsilon(t, 39.918, resp.Latitude, 0.000001)
+				require.Equal(t, recordedAt.Unix(), resp.RecordedAt.Unix())
+			},
+		},
+		{
+			name:       "OK_DeliveryLocation",
+			deliveryID: deliveryID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
+					Times(1).
+					Return(delivery, nil)
+
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(order, nil)
+
+				store.EXPECT().
+					GetDeliveryLatestLocation(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(deliveryLocation, nil)
+
+				store.EXPECT().
+					GetRider(gomock.Any(), gomock.Eq(riderID)).
+					Times(1).
+					Return(rider, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp locationResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.InEpsilon(t, 116.408, resp.Longitude, 0.000001)
+				require.InEpsilon(t, 39.919, resp.Latitude, 0.000001)
+				require.Equal(t, deliveryLocation.RecordedAt.Unix(), resp.RecordedAt.Unix())
+			},
+		},
+		{
+			name:       "StaleDeliveryLocationUsesNewerRiderCurrentLocation",
+			deliveryID: deliveryID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
+					Times(1).
+					Return(delivery, nil)
+
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(order, nil)
+
+				store.EXPECT().
+					GetDeliveryLatestLocation(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(staleDeliveryLocation, nil)
+
+				store.EXPECT().
+					GetRider(gomock.Any(), gomock.Eq(riderID)).
+					Times(1).
+					Return(rider, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp locationResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.InEpsilon(t, 116.407, resp.Longitude, 0.000001)
+				require.InEpsilon(t, 39.918, resp.Latitude, 0.000001)
+				require.Equal(t, recordedAt.Unix(), resp.RecordedAt.Unix())
+			},
+		},
+		{
+			name:       "RiderCurrentLocationLoadErrorKeepsDeliveryLocation",
+			deliveryID: deliveryID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
+					Times(1).
+					Return(delivery, nil)
+
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(order, nil)
+
+				store.EXPECT().
+					GetDeliveryLatestLocation(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(deliveryLocation, nil)
+
+				store.EXPECT().
+					GetRider(gomock.Any(), gomock.Eq(riderID)).
+					Times(1).
+					Return(db.Rider{}, errors.New("rider store unavailable"))
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp locationResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.InEpsilon(t, 116.408, resp.Longitude, 0.000001)
+				require.InEpsilon(t, 39.919, resp.Latitude, 0.000001)
+				require.Equal(t, deliveryLocation.RecordedAt.Unix(), resp.RecordedAt.Unix())
+			},
+		},
+		{
+			name:       "NoLocationAvailable",
+			deliveryID: deliveryID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				missingLocationRider := rider
+				missingLocationRider.CurrentLongitude = pgtype.Numeric{}
+
+				store.EXPECT().
+					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
+					Times(1).
+					Return(delivery, nil)
+
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(order, nil)
+
+				store.EXPECT().
+					GetDeliveryLatestLocation(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.RiderLocation{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
+					GetRider(gomock.Any(), gomock.Eq(riderID)).
+					Times(1).
+					Return(missingLocationRider, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusNotFound, recorder.Code)
+			},
+		},
+		{
+			name:       "CompletedDeliveryDoesNotExposeRiderCurrentLocation",
+			deliveryID: deliveryID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				completedDelivery := delivery
+				completedDelivery.Status = db.DeliveryStatusCompleted
+
+				store.EXPECT().
+					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
+					Times(1).
+					Return(completedDelivery, nil)
+
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(order, nil)
+
+				store.EXPECT().
+					GetDeliveryLatestLocation(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.RiderLocation{}, db.ErrRecordNotFound)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusNotFound, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			url := fmt.Sprintf("/v1/delivery/%d/rider-location", tc.deliveryID)
 			request, err := http.NewRequest(http.MethodGet, url, nil)
 			require.NoError(t, err)
 
