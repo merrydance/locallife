@@ -410,12 +410,17 @@ func TestGetLatestPaymentOrderByOrder(t *testing.T) {
 
 func TestListPaidUnprocessedPaymentOrdersUsesIDTieBreaker(t *testing.T) {
 	user := createRandomUser(t)
-	tiedPaidAt := time.Now().UTC().Truncate(time.Microsecond)
+	var earliestPaidAt time.Time
+	err := testStore.(*SQLStore).connPool.QueryRow(context.Background(),
+		`SELECT COALESCE(min(paid_at), now()) FROM payment_orders WHERE status = 'paid' AND processed_at IS NULL`,
+	).Scan(&earliestPaidAt)
+	require.NoError(t, err)
+	tiedPaidAt := earliestPaidAt.Add(-time.Second).UTC().Truncate(time.Microsecond)
 	var paymentIDs []int64
 
 	for i := 0; i < 2; i++ {
 		payment := createRandomPaymentOrder(t, user.ID)
-		_, err := testStore.UpdatePaymentOrderToPaid(context.Background(), UpdatePaymentOrderToPaidParams{
+		_, err = testStore.UpdatePaymentOrderToPaid(context.Background(), UpdatePaymentOrderToPaidParams{
 			ID:            payment.ID,
 			TransactionID: pgtype.Text{String: util.RandomString(32), Valid: true},
 		})
@@ -423,7 +428,7 @@ func TestListPaidUnprocessedPaymentOrdersUsesIDTieBreaker(t *testing.T) {
 		paymentIDs = append(paymentIDs, payment.ID)
 	}
 
-	_, err := testStore.(*SQLStore).connPool.Exec(context.Background(),
+	_, err = testStore.(*SQLStore).connPool.Exec(context.Background(),
 		`UPDATE payment_orders SET paid_at = $1 WHERE id = ANY($2)`,
 		tiedPaidAt,
 		paymentIDs,
