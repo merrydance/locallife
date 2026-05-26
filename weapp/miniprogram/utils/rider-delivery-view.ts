@@ -17,9 +17,29 @@ interface RiderNavigationStopView {
   longitude: number
 }
 
+export interface RiderDeliveryDeadlineView {
+  text: string
+  deadline?: string
+  isOverdue: boolean
+  isVeryUrgent: boolean
+}
+
 const PICKUP_STAGE_STATUSES = new Set<Delivery['status']>(['assigned', 'picking'])
 const TRACKED_STATUSES = new Set<Delivery['status']>(['assigned', 'picking', 'picked', 'delivering'])
 const DELIVERED_STATUSES = new Set<Delivery['status']>(['delivered', 'completed'])
+
+function getTimestamp(timeStr?: string): number | null {
+  if (!timeStr) return null
+  const timestamp = new Date(timeStr).getTime()
+  return Number.isFinite(timestamp) ? timestamp : null
+}
+
+function formatClock(timestamp: number): string {
+  const date = new Date(timestamp)
+  const hours = date.getHours().toString().padStart(2, '0')
+  const minutes = date.getMinutes().toString().padStart(2, '0')
+  return `${hours}:${minutes}`
+}
 
 const DELIVERY_ACTION_STATE_MAP: Partial<Record<Delivery['status'], Omit<RiderDeliveryActionState, 'canUpdate'>>> = {
   assigned: {
@@ -129,6 +149,50 @@ export function getRiderDeliveryStep(status?: string): number {
 
 export function getRiderDeliveryDeadline(delivery: Pick<Delivery, 'status' | 'estimated_pickup_at' | 'estimated_delivery_at'>): string | undefined {
   return PICKUP_STAGE_STATUSES.has(delivery.status) ? delivery.estimated_pickup_at : delivery.estimated_delivery_at
+}
+
+export function buildRiderDeliveryDeadlineView(
+  delivery: Pick<Delivery, 'status' | 'estimated_pickup_at' | 'estimated_delivery_at' | 'delivered_at' | 'completed_at'>,
+  now: number = Date.now()
+): RiderDeliveryDeadlineView {
+  const deadline = getRiderDeliveryDeadline(delivery)
+  const deadlineTimestamp = getTimestamp(deadline)
+
+  if (DELIVERED_STATUSES.has(delivery.status)) {
+    const deliveredTimestamp = getTimestamp(delivery.delivered_at || delivery.completed_at)
+    if (!deliveredTimestamp) {
+      return { text: '已送达', deadline, isOverdue: false, isVeryUrgent: false }
+    }
+
+    const isLate = deadlineTimestamp !== null && deliveredTimestamp > deadlineTimestamp
+    return {
+      text: isLate ? '超时送达' : `${formatClock(deliveredTimestamp)} 送达`,
+      deadline,
+      isOverdue: isLate,
+      isVeryUrgent: false
+    }
+  }
+
+  if (deadlineTimestamp === null) {
+    return { text: '尽快送达', deadline, isOverdue: false, isVeryUrgent: false }
+  }
+
+  const diff = deadlineTimestamp - now
+  if (diff < 0) {
+    return { text: '已超时', deadline, isOverdue: true, isVeryUrgent: false }
+  }
+
+  const clock = formatClock(deadlineTimestamp)
+  return {
+    text: diff < 60 * 60 * 1000 ? `剩 ${Math.max(1, Math.floor(diff / 60000))} 分钟 (${clock})` : `${clock} 前`,
+    deadline,
+    isOverdue: false,
+    isVeryUrgent: diff < 15 * 60 * 1000
+  }
+}
+
+export function isRiderDeliveryOverdue(delivery: Pick<Delivery, 'status' | 'estimated_pickup_at' | 'estimated_delivery_at' | 'delivered_at' | 'completed_at'>): boolean {
+  return buildRiderDeliveryDeadlineView(delivery).isOverdue
 }
 
 export function getRiderNavigationNextStop(delivery: Pick<Delivery, 'status' | 'pickup_address' | 'pickup_latitude' | 'pickup_longitude' | 'delivery_address' | 'delivery_latitude' | 'delivery_longitude'>): RiderNavigationStopView {

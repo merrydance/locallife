@@ -4,8 +4,8 @@ import { locationService } from '../../../utils/location'
 import { normalizeLocationError, syncRiderDeliveryLocation } from '../../../utils/rider-location'
 import { riderLiveLocationSession } from '../../../utils/rider-live-location'
 import {
+    buildRiderDeliveryDeadlineView,
     getRiderDeliveryActionState,
-    getRiderDeliveryDeadline,
     getRiderDeliveryStep,
     isExpectedDeliveryStatusReached,
     isRiderDeliveryTrackedStatus,
@@ -136,11 +136,11 @@ Page({
 
     decorateDelivery(delivery: Delivery): DeliveryView {
         const actionState = getRiderDeliveryActionState(delivery.status)
-        const deadline = getRiderDeliveryDeadline(delivery)
+        const deadlineView = buildRiderDeliveryDeadlineView(delivery)
 
         return {
             ...delivery,
-            deadline_desc: this.formatDeadline(deadline),
+            deadline_desc: deadlineView.text,
             can_update_status: actionState.canUpdate,
             action_label: actionState.label,
             income_view: buildRiderDeliveryIncomeView(delivery)
@@ -149,24 +149,6 @@ Page({
 
     mapStatusToStep(status: string): number {
         return getRiderDeliveryStep(status)
-    },
-
-    formatDeadline(timeStr?: string) {
-        if (!timeStr) return '尽快送达'
-
-        const date = new Date(timeStr)
-        const diff = date.getTime() - Date.now()
-        if (diff < 0) {
-            return '已超时'
-        }
-
-        const hours = date.getHours().toString().padStart(2, '0')
-        const minutes = date.getMinutes().toString().padStart(2, '0')
-        if (diff < 60 * 60 * 1000) {
-            return `剩 ${Math.max(1, Math.floor(diff / 60000))} 分钟 (${hours}:${minutes})`
-        }
-
-        return `${hours}:${minutes} 前`
     },
 
     /**

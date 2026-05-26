@@ -8,6 +8,7 @@ import { logger } from './logger'
 import { locationService } from './location'
 import { normalizeLocationError, syncRiderDeliveryLocation } from './rider-location'
 import { riderLiveLocationSession } from './rider-live-location'
+import { buildRiderDeliveryDeadlineView } from './rider-delivery-view'
 import { buildRiderDeliveryIncomeView, RiderDeliveryIncomeView } from './rider-delivery-income-view'
 import { buildRecommendedOrderCardView } from './rider-order-hall-view'
 import { getStableBarHeights } from './responsive'
@@ -411,8 +412,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
       }
 
       const myDeliveries = myDeliveriesSource.map((d: Delivery) => {
-        const isOverdue = d.estimated_delivery_at ? new Date(d.estimated_delivery_at).getTime() < Date.now() : false
-        const deadline = d.status === 'assigned' || d.status === 'picking' ? d.estimated_pickup_at : d.estimated_delivery_at
+        const deadlineView = buildRiderDeliveryDeadlineView(d)
         const statusDisplay = getDeliveryStatusDisplay(d.status)
         const actionState = buildDashboardDeliveryActionState(d.status)
 
@@ -420,9 +420,9 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
           ...d,
           status_desc: statusDisplay.text || this.getStatusDesc(d.status),
           status_tag_theme: actionState.statusTagTheme,
-          deadline_desc: this.formatDeadline(deadline),
-          is_overdue: isOverdue,
-          is_very_urgent: !isOverdue && deadline ? (new Date(deadline).getTime() - Date.now() < 15 * 60 * 1000) : false,
+          deadline_desc: deadlineView.text,
+          is_overdue: deadlineView.isOverdue,
+          is_very_urgent: deadlineView.isVeryUrgent,
           is_pickup_finished: actionState.isPickupFinished,
           can_start_pickup: actionState.canStartPickup,
           can_confirm_pickup: actionState.canConfirmPickup,
@@ -490,23 +490,6 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
       exception: '订单异常'
     }
     return map[status] || status
-  },
-
-  formatDeadline(timeStr?: string) {
-    if (!timeStr) return ''
-    const date = new Date(timeStr)
-    const now = new Date()
-    const diff = date.getTime() - now.getTime()
-
-    if (diff < 0) return '已超时'
-
-    const h = date.getHours().toString().padStart(2, '0')
-    const m = date.getMinutes().toString().padStart(2, '0')
-
-    if (diff < 60 * 60 * 1000) {
-      return `剩 ${Math.floor(diff / 60000)} 分钟 (${h}:${m})`
-    }
-    return `${h}:${m} 前`
   },
 
   onCall(e: WechatMiniprogram.TouchEvent) {
