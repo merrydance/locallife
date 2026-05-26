@@ -137,8 +137,11 @@ func CalculateBaofuSettlementAmounts(input BaofuSettlementCalculationInput) (Bao
 
 	result.MerchantPaymentFeeFen = roundBaofuFeeFen(result.MerchantPaymentFeeBaseFen, result.MerchantPaymentFeeRateBps)
 	result.RiderPaymentFeeFen = roundBaofuFeeFen(result.RiderPaymentFeeBaseFen, result.RiderPaymentFeeRateBps)
-	result.PlatformCommissionFen = commissionBaofuFen(result.CommissionBaseFen, result.PlatformCommissionRateBps)
-	result.OperatorCommissionFen = commissionBaofuFen(result.CommissionBaseFen, result.OperatorCommissionRateBps)
+	result.PlatformCommissionFen, result.OperatorCommissionFen = allocateBaofuCommissionFen(
+		result.CommissionBaseFen,
+		result.PlatformCommissionRateBps,
+		result.OperatorCommissionRateBps,
+	)
 	if !input.HasOperatorReceiver && result.OperatorCommissionFen > 0 && input.RedirectMissingOperatorFee {
 		result.PlatformCommissionFen += result.OperatorCommissionFen
 		result.OperatorCommissionFen = 0
@@ -176,9 +179,51 @@ func roundBaofuFeeFen(baseFen int64, rateBps int32) int64 {
 	return (baseFen*int64(rateBps) + 5000) / 10000
 }
 
-func commissionBaofuFen(baseFen int64, rateBps int32) int64 {
-	if baseFen <= 0 || rateBps <= 0 {
-		return 0
+func allocateBaofuCommissionFen(baseFen int64, platformRateBps int32, operatorRateBps int32) (int64, int64) {
+	if baseFen <= 0 {
+		return 0, 0
 	}
-	return baseFen * int64(rateBps) / 10000
+	totalRateBps := platformRateBps + operatorRateBps
+	if totalRateBps <= 0 {
+		return 0, 0
+	}
+
+	platformRaw := baseFen * int64(platformRateBps)
+	operatorRaw := baseFen * int64(operatorRateBps)
+	platform := platformRaw / 10000
+	operator := operatorRaw / 10000
+	remainder := roundBaofuFeeFen(baseFen, totalRateBps) - platform - operator
+	if remainder <= 0 {
+		return platform, operator
+	}
+
+	platformRemainder := platformRaw % 10000
+	operatorRemainder := operatorRaw % 10000
+	if platformRemainder >= operatorRemainder {
+		if remainder > 0 && platformRateBps > 0 {
+			platform++
+			remainder--
+		}
+		if remainder > 0 && operatorRateBps > 0 {
+			operator++
+			remainder--
+		}
+	} else {
+		if remainder > 0 && operatorRateBps > 0 {
+			operator++
+			remainder--
+		}
+		if remainder > 0 && platformRateBps > 0 {
+			platform++
+			remainder--
+		}
+	}
+	if remainder > 0 {
+		if platformRateBps > 0 {
+			platform += remainder
+		} else {
+			operator += remainder
+		}
+	}
+	return platform, operator
 }

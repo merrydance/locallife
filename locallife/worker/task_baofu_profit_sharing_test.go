@@ -142,6 +142,51 @@ func TestProcessTaskBaofuProfitSharingDoesNotPersistLocalOutOrderNoAsUpstreamSha
 	require.NoError(t, err)
 }
 
+func TestProcessTaskBaofuProfitSharingRejectsSnapshotAmountMismatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	client := &fakeBaofuProfitSharingClient{shareResult: &aggregatecontracts.ShareResult{
+		TradeNo:    "BFSHARE_UP_3004",
+		OutTradeNo: "BFSHARE_3004",
+		TxnState:   aggregatecontracts.ShareStateProcessing,
+	}}
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
+	processor.SetBaofuAggregateClient(client, worker.BaofuProfitSharingWorkerConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+	})
+
+	profitSharingOrder := db.ProfitSharingOrder{
+		ID:                    3004,
+		PaymentOrderID:        4004,
+		OutOrderNo:            "BFSHARE_3004",
+		Status:                db.ProfitSharingOrderStatusPending,
+		Provider:              db.ExternalPaymentProviderBaofu,
+		Channel:               db.PaymentChannelBaofuAggregate,
+		SharingDetailSnapshot: []byte(`{"shareable_amount":9970,"receivers":[{"sharing_mer_id":"MER_SHARE","amount":9969}]}`),
+	}
+	paymentOrder := db.PaymentOrder{
+		ID:             4004,
+		OutTradeNo:     "PO_BAOFU_4004",
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+		Status:         "paid",
+	}
+
+	store.EXPECT().GetProfitSharingOrder(gomock.Any(), profitSharingOrder.ID).Return(profitSharingOrder, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(int64(0), nil)
+
+	payloadBytes, err := json.Marshal(worker.BaofuProfitSharingPayload{ProfitSharingOrderID: profitSharingOrder.ID})
+	require.NoError(t, err)
+	err = processor.ProcessTaskBaofuProfitSharing(context.Background(), asynq.NewTask(worker.TaskProcessBaofuProfitSharing, payloadBytes))
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "receiver amount mismatch")
+	require.False(t, client.called)
+}
+
 func TestProcessTaskBaofuProfitSharingSkipsWhenRefundAmountIsOccupied(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

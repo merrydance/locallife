@@ -43,6 +43,31 @@ func TestCalculateBaofuSettlementTakeoutChargesMerchantAndRiderFees(t *testing.T
 	)
 }
 
+func TestCalculateBaofuSettlementAllocatesCommissionRemaindersByLargestRemainder(t *testing.T) {
+	result, err := CalculateBaofuSettlementAmounts(BaofuSettlementCalculationInput{
+		OrderScene:                BaofuSettlementSceneReservation,
+		TotalAmountFen:            999,
+		PlatformCommissionRateBps: 200,
+		OperatorCommissionRateBps: 300,
+		MerchantPaymentFeeRateBps: 60,
+		RiderPaymentFeeRateBps:    60,
+		HasOperatorReceiver:       true,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(3), result.ProviderPaymentFeeFen)
+	require.Equal(t, int64(6), result.MerchantPaymentFeeFen)
+	require.Equal(t, int64(20), result.PlatformCommissionFen)
+	require.Equal(t, int64(30), result.OperatorCommissionFen)
+	require.Equal(t, int64(943), result.MerchantAmountFen)
+	require.Equal(t, int64(23), result.PlatformReceiverAmountFen)
+	require.Equal(t, int64(996), result.ShareableAmountFen)
+	require.Equal(t,
+		result.ShareableAmountFen,
+		result.MerchantAmountFen+result.OperatorCommissionFen+result.PlatformReceiverAmountFen,
+	)
+}
+
 func TestCalculateBaofuSettlementTakeoutUsesItemBaseBeforeRiderAccepts(t *testing.T) {
 	result, err := CalculateBaofuSettlementAmounts(BaofuSettlementCalculationInput{
 		OrderScene:                BaofuSettlementSceneTakeout,

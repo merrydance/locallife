@@ -50,7 +50,8 @@ func (distributor *RedisTaskDistributor) DistributeTaskProcessBaofuProfitSharing
 }
 
 type baofuProfitSharingSnapshot struct {
-	Receivers []baofuProfitSharingSnapshotReceiver `json:"receivers"`
+	ShareableAmount int64                                `json:"shareable_amount"`
+	Receivers       []baofuProfitSharingSnapshotReceiver `json:"receivers"`
 }
 
 type baofuProfitSharingSnapshotReceiver struct {
@@ -189,15 +190,20 @@ func baofuSharingDetailsFromSnapshot(raw []byte) ([]aggregatecontracts.SharingDe
 		return nil, fmt.Errorf("decode baofu sharing detail snapshot: %w", err)
 	}
 	details := make([]aggregatecontracts.SharingDetail, 0, len(snapshot.Receivers))
+	var totalAmount int64
 	for _, receiver := range snapshot.Receivers {
 		sharingMerID := strings.TrimSpace(receiver.SharingMerID)
 		if sharingMerID == "" || receiver.Amount <= 0 {
 			return nil, fmt.Errorf("baofu sharing detail snapshot receiver is invalid")
 		}
+		totalAmount += receiver.Amount
 		details = append(details, aggregatecontracts.SharingDetail{SharingMerID: sharingMerID, SharingAmountFen: receiver.Amount})
 	}
 	if len(details) == 0 {
 		return nil, fmt.Errorf("baofu sharing detail snapshot receivers are required")
+	}
+	if snapshot.ShareableAmount > 0 && totalAmount != snapshot.ShareableAmount {
+		return nil, fmt.Errorf("baofu sharing detail snapshot receiver amount mismatch")
 	}
 	return details, nil
 }
