@@ -76,7 +76,6 @@ export interface RiderIncomeLedgerPageView {
 
 export interface RiderIncomePageDataView {
   settlementNotice: string
-  withdrawalBalanceReady: boolean
   withdrawalEntryNote: string
   withdrawalBalanceView: BaofuWithdrawalBalanceView
   summary: RiderIncomeSummaryView
@@ -321,7 +320,6 @@ function buildRiderIncomePageDataView(input: {
     settlementNotice: input.settlementPaymentReady === false
       ? '结算账户未开通，暂不能接收代取费分账订单'
       : '',
-    withdrawalBalanceReady: Boolean(input.withdrawalBalance),
     withdrawalBalanceView,
     withdrawalEntryNote: buildRiderIncomeWithdrawalEntryNote(input.withdrawalBalance, withdrawalBalanceView),
     summary: buildRiderIncomeSummaryView(input.summary),
@@ -337,7 +335,7 @@ function buildRiderIncomeWithdrawalEntryNote(
   withdrawalBalanceView: BaofuWithdrawalBalanceView
 ): string {
   if (!withdrawalBalance) {
-    return ''
+    return '可提现余额暂不可确认'
   }
   if (withdrawalBalanceView.canSubmit) {
     return `可提现 ${withdrawalBalanceView.availableAmountText}`

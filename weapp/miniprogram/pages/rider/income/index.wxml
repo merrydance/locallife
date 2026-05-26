@@ -24,7 +24,7 @@
         <t-button size="small" theme="primary" variant="text" bindtap="onGoToSettlementAccount">去开通</t-button>
       </view>
 
-      <t-cell-group wx:if="{{withdrawalBalanceReady}}">
+      <t-cell-group>
         <t-cell title="收入提现" note="{{withdrawalEntryNote}}" arrow bind:tap="onGoToWithdrawals" />
       </t-cell-group>
 

@@ -72,7 +72,7 @@ func TestBaofuWithdrawalBalanceRoutesReturnStableUnavailableWhenServiceMissing(t
 	operator := randomOperator(operatorUser.ID)
 	riderUser, _ := randomUser(t)
 	rider := randomRider(riderUser.ID)
-	rider.Status = "approved"
+	rider.Status = "active"
 
 	testCases := []struct {
 		name       string

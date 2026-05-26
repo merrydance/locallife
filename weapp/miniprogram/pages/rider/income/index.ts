@@ -29,7 +29,6 @@ Page({
     listErrorMessage: '',
     loadMoreErrorMessage: '',
     settlementNotice: '',
-    withdrawalBalanceReady: false,
     withdrawalEntryNote: '',
     withdrawalBalanceView: EMPTY_WITHDRAWAL_BALANCE_VIEW as BaofuWithdrawalBalanceView,
     loading: false,
@@ -138,7 +137,6 @@ Page({
       })
       this.setData({
         settlementNotice: pageView.settlementNotice,
-        withdrawalBalanceReady: pageView.withdrawalBalanceReady,
         withdrawalBalanceView: pageView.withdrawalBalanceView,
         withdrawalEntryNote: pageView.withdrawalEntryNote,
         summary: pageView.summary,

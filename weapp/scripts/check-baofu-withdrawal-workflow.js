@@ -232,9 +232,13 @@ assert(platformDashboard.includes("url: '/pages/platform/finance/withdrawals/ind
 assert(!platformDashboard.includes('宝付结算账户'), 'Platform dashboard must not expose Baofoo provider wording')
 
 const riderIncomePage = read('miniprogram/pages/rider/income/index.ts')
+const riderIncomeWxml = read('miniprogram/pages/rider/income/index.wxml')
 const riderIncomeService = read('miniprogram/services/rider-income.ts')
 assert(riderIncomePage.includes('loadRiderIncomePageData'), 'Rider income page must load withdrawal entry through the rider income task-domain service')
+assert(riderIncomeWxml.includes('title="收入提现"'), 'Rider income page must expose income withdrawal entry')
+assert(!riderIncomeWxml.includes('wx:if="{{withdrawalBalanceReady}}"'), 'Rider income page must not hide withdrawal entry when balance check fails')
 assert(riderIncomeService.includes("getBaofuWithdrawalBalance('rider')"), 'Rider income service must use backend withdrawal balance for income withdrawal entry')
+assert(riderIncomeService.includes('可提现余额暂不可确认'), 'Rider income service must provide unavailable-balance copy for the withdrawal entry')
 assert(!riderIncomePage.includes('summary.totalRiderIncome'), 'Rider income page must not infer withdrawable balance from cumulative income')
 
 const riderDepositSources = [

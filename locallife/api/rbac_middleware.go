@@ -277,7 +277,7 @@ func (server *Server) RiderMiddleware() gin.HandlerFunc {
 		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 		if cachedRider, ok := GetRiderFromContext(ctx); ok {
-			if cachedRider.Status != "approved" {
+			if cachedRider.Status != "approved" && cachedRider.Status != "active" {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 					errors.New("rider account is not approved"),
 				))
@@ -301,7 +301,7 @@ func (server *Server) RiderMiddleware() gin.HandlerFunc {
 		}
 
 		// 检查骑手状态
-		if rider.Status != "approved" {
+		if rider.Status != "approved" && rider.Status != "active" {
 			ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 				errors.New("rider account is not approved"),
 			))
