@@ -96,6 +96,7 @@ type Server struct {
 	paymentFactService             *logic.PaymentFactService
 	onboardingReviewService        *logic.OnboardingReviewService
 	credentialGovernanceService    *logic.CredentialGovernanceService
+	foodPermitOfficialVerifier     merchantFoodPermitOfficialVerifier
 	baofuAccountNotificationParser baofuAccountNotificationParser
 	baofuPaymentNotificationParser baofuAggregatePaymentNotificationParser
 	mediaStorage                   media.ObjectStorage
@@ -308,6 +309,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		baofuPaymentNotificationParser: baofuPaymentNotificationParser,
 		onboardingReviewService:        logic.NewOnboardingReviewService(store),
 		credentialGovernanceService:    logic.NewCredentialGovernanceService(store),
+		foodPermitOfficialVerifier:     logic.NewMerchantFoodPermitOfficialVerifier(logic.MerchantFoodPermitOfficialVerifierConfig{}),
 	}
 
 	// 初始化 Redis 客户端（供绑定码等功能使用）

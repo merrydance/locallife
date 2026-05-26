@@ -27,6 +27,15 @@ import (
 
 // ==================== 辅助函数 ====================
 
+type stubFoodPermitOfficialVerifier struct {
+	result logic.MerchantFoodPermitOfficialVerification
+	err    error
+}
+
+func (stub stubFoodPermitOfficialVerifier) VerifyMerchantFoodPermit(ctx context.Context, rawResult []byte) (logic.MerchantFoodPermitOfficialVerification, error) {
+	return stub.result, stub.err
+}
+
 func randomMerchantAppDraft(userID int64) db.MerchantApplication {
 	return db.MerchantApplication{
 		ID:                    1,
@@ -128,6 +137,35 @@ func expectMerchantApplicationPublicDocumentLookups(store *mockdb.MockStore, use
 			}
 			return asset, nil
 		})
+}
+
+func TestMerchantFoodPermitNeedsOfficialVerification(t *testing.T) {
+	t.Parallel()
+
+	license := logic.MerchantReviewBusinessLicenseOCRData{EnterpriseName: "宁晋县周鹏饭店"}
+
+	require.False(t, merchantFoodPermitNeedsOfficialVerification(license, logic.MerchantReviewFoodPermitOCRData{CompanyName: "宁晋县周鹏饭店"}))
+	require.False(t, merchantFoodPermitNeedsOfficialVerification(
+		logic.MerchantReviewBusinessLicenseOCRData{EnterpriseName: "测试食品有限公司"},
+		logic.MerchantReviewFoodPermitOCRData{CompanyName: "测试食品有限公司"},
+	))
+	require.True(t, merchantFoodPermitNeedsOfficialVerification(license, logic.MerchantReviewFoodPermitOCRData{CompanyName: "食品小作坊小餐饮登记证2130528020270"}))
+	require.True(t, merchantFoodPermitNeedsOfficialVerification(license, logic.MerchantReviewFoodPermitOCRData{CompanyName: ""}))
+}
+
+func TestMerchantFoodPermitOfficialVerificationMatchesLicense(t *testing.T) {
+	t.Parallel()
+
+	app := db.MerchantApplication{BusinessLicenseNumber: "92130528MA0A5XB46A"}
+	license := logic.MerchantReviewBusinessLicenseOCRData{CreditCode: " 92130528ma0a5xb46a "}
+
+	require.True(t, merchantFoodPermitOfficialVerificationMatchesLicense(app, license, logic.MerchantFoodPermitOfficialVerification{
+		CreditCode: "92130528MA0A5XB46A",
+	}))
+	require.True(t, merchantFoodPermitOfficialVerificationMatchesLicense(app, logic.MerchantReviewBusinessLicenseOCRData{}, logic.MerchantFoodPermitOfficialVerification{}))
+	require.False(t, merchantFoodPermitOfficialVerificationMatchesLicense(app, license, logic.MerchantFoodPermitOfficialVerification{
+		CreditCode: "91110000MA12345678",
+	}))
 }
 
 func TestCheckMerchantApplicationApproval_UsesBusinessLicenseReadiness(t *testing.T) {
@@ -1011,6 +1049,151 @@ func TestSubmitMerchantApplication(t *testing.T) {
 						Application: approvedApp,
 						Merchant:    db.Merchant{ID: 1},
 					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp merchantApplicationDraftResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, "approved", resp.Status)
+			},
+		},
+		{
+			name: "Approved_FoodPermitOfficialQRCodeFallback",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				ocrJobID := int64(779)
+				licenseOCR, err := json.Marshal(BusinessLicenseOCRData{
+					EnterpriseName:      "宁晋县周鹏饭店",
+					CreditCode:          "92130528MA0A5XB46A",
+					BusinessScope:       "餐饮服务",
+					ValidPeriod:         "长期",
+					Address:             "河北省邢台市宁晋县经济开发区吉祥路与晶龙街交叉口东侧",
+					LegalRepresentative: "周松涛",
+					OCRAt:               time.Now().Format(time.RFC3339),
+				})
+				require.NoError(t, err)
+				app.BusinessLicenseOcr = licenseOCR
+				app.BusinessLicenseNumber = "92130528MA0A5XB46A"
+				app.LegalPersonName = "周松涛"
+				app.LegalPersonIDNumber = "130528199001011234"
+				app.BusinessAddress = "河北省邢台市宁晋县经济开发区吉祥路与晶龙街交叉口东侧"
+				idCardFrontOCR, err := json.Marshal(MerchantIDCardOCRData{
+					Name:  "周松涛",
+					OCRAt: time.Now().Format(time.RFC3339),
+				})
+				require.NoError(t, err)
+				app.IDCardFrontOcr = idCardFrontOCR
+
+				foodPermitOCR, err := json.Marshal(FoodPermitOCRData{
+					OCRJobID:     &ocrJobID,
+					PermitNo:     "",
+					CompanyName:  "",
+					OperatorName: "",
+					ValidTo:      "2028年12月21日",
+					RawText:      "主体名称：食品小作坊小餐饮登记证2130528020270\n地址：生祠经营场所面积在50平米以上的小餐饮办理《食品\n有效期至：2028年12月21日",
+					Readiness: &OCRReadiness{
+						State:      "ready",
+						ReasonCode: "ok",
+					},
+					OCRAt: time.Now().Format(time.RFC3339),
+				})
+				require.NoError(t, err)
+				app.FoodPermitOcr = foodPermitOCR
+
+				normalizedResult, err := ocr.MarshalNormalizedResult(ocr.NormalizedResult{
+					DocumentType: ocr.DocumentTypeFoodPermit,
+					RecognizedAt: time.Now(),
+					FoodPermit: &ocr.FoodPermitResult{
+						BusinessName: "食品小作坊小餐饮登记证2130528020270",
+						ValidPeriod:  "2028年12月21日",
+						RawText:      "主体名称：食品小作坊小餐饮登记证2130528020270\n地址：生祠经营场所面积在50平米以上的小餐饮办理《食品\n有效期至：2028年12月21日",
+					},
+				})
+				require.NoError(t, err)
+				rawResult := []byte(`{"Data":"{\"codes\":[{\"data\":\"http://121.28.87.7:8081/OrcodeXcyXzf.jsp?flowId=86&zsId=655926252\",\"type\":\"QRcode\"}],\"data\":{\"operatorName\":\"食品小作坊小餐饮登记证2130528020270\",\"validToDate\":\"2028年12月21日\"}}"}`)
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				store.EXPECT().
+					GetOCRJob(gomock.Any(), ocrJobID).
+					Times(1).
+					Return(db.OcrJob{ID: ocrJobID, Provider: "aliyun", Status: "succeeded", NormalizedResult: normalizedResult, RawResult: rawResult}, nil)
+
+				store.EXPECT().
+					UpdateMerchantApplicationFoodPermit(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationFoodPermitParams) (db.MerchantApplication, error) {
+						require.Equal(t, app.ID, arg.ID)
+						var repaired FoodPermitOCRData
+						require.NoError(t, json.Unmarshal(arg.FoodPermitOcr, &repaired))
+						require.Equal(t, "宁晋县周鹏饭店", repaired.CompanyName)
+						require.Equal(t, "周松涛", repaired.OperatorName)
+						require.Equal(t, "2130528020270", repaired.PermitNo)
+						require.Equal(t, "2028年12月21日", repaired.ValidTo)
+						require.Contains(t, repaired.RawText, "主体名称：宁晋县周鹏饭店")
+						app.FoodPermitOcr = arg.FoodPermitOcr
+						return app, nil
+					})
+
+				submittedApp := app
+				submittedApp.Status = "submitted"
+				store.EXPECT().
+					SubmitMerchantApplication(gomock.Any(), app.ID).
+					Times(1).
+					DoAndReturn(func(context.Context, int64) (db.MerchantApplication, error) {
+						submittedApp.FoodPermitOcr = app.FoodPermitOcr
+						return submittedApp, nil
+					})
+
+				store.EXPECT().
+					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+					Times(1).
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+				store.EXPECT().
+					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+						ID:                    submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+						ID:                  submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				approvedApp := submittedApp
+				approvedApp.Status = "approved"
+				store.EXPECT().
+					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.ApproveMerchantApplicationTxResult{
+						Application: approvedApp,
+						Merchant:    db.Merchant{ID: 1},
+					}, nil)
+			},
+			configureServer: func(server *Server) {
+				server.foodPermitOfficialVerifier = stubFoodPermitOfficialVerifier{
+					result: logic.MerchantFoodPermitOfficialVerification{
+						CompanyName:  "宁晋县周鹏饭店",
+						OperatorName: "周松涛",
+						PermitNo:     "2130528020270",
+						CreditCode:   "92130528MA0A5XB46A",
+						Address:      "河北省邢台市宁晋县经济开发区吉祥路与晶龙街交叉口东侧",
+						ValidTo:      "2028年12月21日",
+					},
+				}
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

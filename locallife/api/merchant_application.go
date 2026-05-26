@@ -1078,23 +1078,47 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 		}
 	}
 
-	if payloadResult.FoodPermitNeedsNormalizedRepair && server.store != nil && payloadResult.Input.FoodPermit.OCRJobID != nil && *payloadResult.Input.FoodPermit.OCRJobID > 0 {
+	if server.store != nil && payloadResult.Input.FoodPermit.OCRJobID != nil && *payloadResult.Input.FoodPermit.OCRJobID > 0 {
 		ocrJobID := *payloadResult.Input.FoodPermit.OCRJobID
 		job, jobErr := server.store.GetOCRJob(ctx, ocrJobID)
 		if jobErr != nil {
 			log.Warn().Err(jobErr).Int64("application_id", app.ID).Int64("ocr_job_id", ocrJobID).Msg("submit merchant application: load food permit ocr job for repair failed")
-		} else if len(job.NormalizedResult) > 0 {
-			repairedFoodPermitJSON, changed, repairErr := logic.RepairMerchantFoodPermitFromNormalized(&payloadResult.Input.FoodPermit, job.NormalizedResult)
-			if repairErr != nil {
-				log.Warn().Err(repairErr).Int64("application_id", app.ID).Int64("ocr_job_id", job.ID).Msg("submit merchant application: decode food permit ocr normalized result failed")
-			} else if changed {
-				payloadResult.RepairedFoodPermitJSON = repairedFoodPermitJSON
-				log.Info().Int64("application_id", app.ID).Int64("ocr_job_id", job.ID).Str("ocr_provider", job.Provider).Msg("submit merchant application: repaired food permit ocr from job result")
+		} else {
+			if payloadResult.FoodPermitNeedsNormalizedRepair && len(job.NormalizedResult) > 0 {
+				repairedFoodPermitJSON, changed, repairErr := logic.RepairMerchantFoodPermitFromNormalized(&payloadResult.Input.FoodPermit, job.NormalizedResult)
+				if repairErr != nil {
+					log.Warn().Err(repairErr).Int64("application_id", app.ID).Int64("ocr_job_id", job.ID).Msg("submit merchant application: decode food permit ocr normalized result failed")
+				} else if changed {
+					payloadResult.RepairedFoodPermitJSON = repairedFoodPermitJSON
+					log.Info().Int64("application_id", app.ID).Int64("ocr_job_id", job.ID).Str("ocr_provider", job.Provider).Msg("submit merchant application: repaired food permit ocr from job result")
+				}
+			}
+			if merchantFoodPermitNeedsOfficialVerification(payloadResult.Input.BusinessLicense, payloadResult.Input.FoodPermit) && server.foodPermitOfficialVerifier != nil && len(job.RawResult) > 0 {
+				verification, verifyErr := server.foodPermitOfficialVerifier.VerifyMerchantFoodPermit(ctx, job.RawResult)
+				if verifyErr != nil {
+					logFoodPermitOfficialVerificationFailure(verifyErr, app.ID, job.ID, job.Provider)
+				} else if !merchantFoodPermitOfficialVerificationMatchesLicense(app, payloadResult.Input.BusinessLicense, verification) {
+					log.Warn().
+						Int64("application_id", app.ID).
+						Int64("ocr_job_id", job.ID).
+						Str("ocr_provider", job.Provider).
+						Msg("submit merchant application: food permit official verification credit code mismatch")
+				} else {
+					repairedFoodPermitJSON, changed, repairErr := logic.RepairMerchantFoodPermitFromOfficialVerification(&payloadResult.Input.FoodPermit, verification)
+					if repairErr != nil {
+						log.Warn().Err(repairErr).Int64("application_id", app.ID).Int64("ocr_job_id", job.ID).Msg("submit merchant application: repair food permit from official verification failed")
+					} else if changed {
+						payloadResult.RepairedFoodPermitJSON = repairedFoodPermitJSON
+						log.Info().Int64("application_id", app.ID).Int64("ocr_job_id", job.ID).Str("ocr_provider", job.Provider).Msg("submit merchant application: repaired food permit ocr from official verification")
+					}
+				}
 			}
 		}
 	}
 
-	server.persistRepairedFoodPermitOCR(ctx, app.ID, payloadResult.RepairedFoodPermitJSON)
+	if err := server.persistRepairedFoodPermitOCR(ctx, app.ID, payloadResult.RepairedFoodPermitJSON); err != nil {
+		return errors.New("系统繁忙，请稍后重试")
+	}
 
 	documentReview, err := logic.EvaluateMerchantDocumentReview(payloadResult.Input, time.Now())
 	if err != nil {
@@ -1265,6 +1289,73 @@ func merchantDocumentReviewAPIError(err error) error {
 	}
 }
 
+func merchantFoodPermitNeedsOfficialVerification(businessLicense logic.MerchantReviewBusinessLicenseOCRData, foodPermit logic.MerchantReviewFoodPermitOCRData) bool {
+	licenseName := strings.TrimSpace(businessLicense.EnterpriseName)
+	permitName := strings.TrimSpace(foodPermit.CompanyName)
+	if licenseName == "" {
+		return false
+	}
+	if permitName == "" || merchantFoodPermitNameLooksLikeCertificateText(permitName) {
+		return true
+	}
+	return !merchantCompanyNamesRoughlyEqual(licenseName, permitName)
+}
+
+func merchantFoodPermitNameLooksLikeCertificateText(name string) bool {
+	for _, keyword := range []string{"地址", "经营场所", "面积", "办理", "许可证", "登记证", "小餐饮", "小作坊", "《"} {
+		if strings.Contains(name, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func merchantCompanyNamesRoughlyEqual(a string, b string) bool {
+	a = strings.TrimSpace(a)
+	b = strings.TrimSpace(b)
+	if a == "" || b == "" {
+		return false
+	}
+	if a == b {
+		return true
+	}
+	return strings.Contains(a, b) || strings.Contains(b, a)
+}
+
+func merchantFoodPermitOfficialVerificationMatchesLicense(app db.MerchantApplication, businessLicense logic.MerchantReviewBusinessLicenseOCRData, verification logic.MerchantFoodPermitOfficialVerification) bool {
+	officialCreditCode := merchantNormalizeBusinessCreditCode(verification.CreditCode)
+	if officialCreditCode == "" {
+		return true
+	}
+	for _, candidate := range []string{businessLicense.CreditCode, businessLicense.RegNum, app.BusinessLicenseNumber} {
+		if merchantNormalizeBusinessCreditCode(candidate) == officialCreditCode {
+			return true
+		}
+	}
+	return false
+}
+
+func merchantNormalizeBusinessCreditCode(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.ReplaceAll(value, " ", "")
+	value = strings.ReplaceAll(value, "\t", "")
+	value = strings.ReplaceAll(value, "\n", "")
+	value = strings.ReplaceAll(value, "\r", "")
+	return strings.ToUpper(value)
+}
+
+func logFoodPermitOfficialVerificationFailure(err error, applicationID int64, ocrJobID int64, provider string) {
+	logger := log.Warn()
+	if errors.Is(err, logic.ErrMerchantFoodPermitOfficialVerificationUnavailable) {
+		logger = log.Info()
+	}
+	logger.Err(err).
+		Int64("application_id", applicationID).
+		Int64("ocr_job_id", ocrJobID).
+		Str("ocr_provider", provider).
+		Msg("submit merchant application: food permit official verification failed")
+}
+
 func (server *Server) logFoodPermitValidationFailure(ctx *gin.Context, app db.MerchantApplication, foodPermitOCR logic.MerchantReviewFoodPermitOCRData, licenseName, permitName, reason string) {
 	logger := log.Warn().
 		Int64("application_id", app.ID).
@@ -1289,16 +1380,18 @@ func (server *Server) logFoodPermitValidationFailure(ctx *gin.Context, app db.Me
 	logger.Msg("submit merchant application: food permit validation failed")
 }
 
-func (server *Server) persistRepairedFoodPermitOCR(ctx context.Context, appID int64, foodPermitOCR []byte) {
+func (server *Server) persistRepairedFoodPermitOCR(ctx context.Context, appID int64, foodPermitOCR []byte) error {
 	if len(foodPermitOCR) == 0 || server.store == nil {
-		return
+		return nil
 	}
 	if _, err := server.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
 		ID:            appID,
 		FoodPermitOcr: foodPermitOCR,
 	}); err != nil {
 		log.Warn().Err(err).Int64("application_id", appID).Msg("submit merchant application: persist repaired food permit ocr failed")
+		return err
 	}
+	return nil
 }
 
 func truncateMerchantOCRText(text string, maxLen int) string {
