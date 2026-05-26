@@ -78,6 +78,9 @@ func BaofuAccountOpeningInputMissingFields(ownerType string, input BaofuAccountO
 			baofuAccountOpeningProfileField{code: "deposit_bank_city", value: input.DepositBankCity},
 			baofuAccountOpeningProfileField{code: "deposit_bank_name", value: input.DepositBankName},
 		)
+		if !baofuDepositBankLocationLooksConsistent(input.DepositBankProvince, input.DepositBankCity, input.DepositBankName) {
+			fields = append(fields, baofuAccountOpeningProfileField{code: "deposit_bank_city", value: ""})
+		}
 		if input.SelfEmployed && strings.TrimSpace(input.CardUserName) != "" {
 			fields = append(fields, baofuAccountOpeningProfileField{code: "corporate_mobile", value: input.CorporateMobile})
 		}
@@ -109,6 +112,9 @@ func BaofuAccountOpeningProfileMissingFields(profile db.BaofuAccountOpeningProfi
 			baofuAccountOpeningProfileField{code: "deposit_bank_city", value: profile.DepositBankCity.String},
 			baofuAccountOpeningProfileField{code: "deposit_bank_name", value: profile.DepositBankName.String},
 		)
+		if !baofuDepositBankLocationLooksConsistent(profile.DepositBankProvince.String, profile.DepositBankCity.String, profile.DepositBankName.String) {
+			fields = append(fields, baofuAccountOpeningProfileField{code: "deposit_bank_city", value: ""})
+		}
 		if baofuProfileUsesPrivateBusinessCard(profile) {
 			fields = append(fields, baofuAccountOpeningProfileField{code: "corporate_mobile", value: profile.CorporateMobileCiphertext.String})
 		}
@@ -121,6 +127,20 @@ func BaofuAccountOpeningProfileMissingFields(profile db.BaofuAccountOpeningProfi
 		return []string{"owner_type"}
 	}
 	return missingBaofuProfileFieldCodes(fields)
+}
+
+func baofuDepositBankLocationLooksConsistent(province, city, branch string) bool {
+	province = strings.TrimSpace(province)
+	city = strings.TrimSpace(city)
+	if city == "" {
+		return false
+	}
+	for _, municipality := range []string{"北京市", "天津市", "上海市", "重庆市"} {
+		if city == municipality && province != "" && province != municipality {
+			return false
+		}
+	}
+	return true
 }
 
 func baofuProfileUsesPrivateBusinessCard(profile db.BaofuAccountOpeningProfile) bool {
@@ -141,9 +161,14 @@ func baofuProfileUsesPrivateBusinessCard(profile db.BaofuAccountOpeningProfile) 
 
 func missingBaofuProfileFieldCodes(fields []baofuAccountOpeningProfileField) []string {
 	missing := make([]string, 0)
+	seen := make(map[string]struct{}, len(fields))
 	for _, field := range fields {
 		if strings.TrimSpace(field.value) == "" {
+			if _, ok := seen[field.code]; ok {
+				continue
+			}
 			missing = append(missing, field.code)
+			seen[field.code] = struct{}{}
 		}
 	}
 	return missing

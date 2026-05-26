@@ -25,6 +25,45 @@ func TestValidateDirectRefundCreateResponse_ReturnsTypedContractError(t *testing
 	require.EqualError(t, err, "create direct refund: refund_id is required")
 }
 
+func TestValidateDirectRefundCreateResponse_AcceptsAmountWithoutTotal(t *testing.T) {
+	err := ValidateDirectRefundCreateResponse("create direct refund", &DirectRefundResponse{
+		RefundID:      "refund-id-1",
+		OutRefundNo:   "refund-1",
+		TransactionID: "transaction-1",
+		OutTradeNo:    "order-1",
+		CreateTime:    "2026-04-24T18:50:03+08:00",
+		Status:        DirectRefundStatusProcessing,
+		Amount: DirectRefundAmount{
+			Refund:   100,
+			Currency: DirectRefundCurrencyCNY,
+		},
+	})
+
+	require.NoError(t, err)
+}
+
+func TestValidateDirectRefundQueryResponse_RequiresAmountTotal(t *testing.T) {
+	err := ValidateDirectRefundQueryResponse("query direct refund", &DirectRefundResponse{
+		RefundID:            "refund-id-1",
+		OutRefundNo:         "refund-1",
+		TransactionID:       "transaction-1",
+		OutTradeNo:          "order-1",
+		Channel:             DirectRefundChannelOriginal,
+		UserReceivedAccount: "user",
+		CreateTime:          "2026-04-24T18:50:03+08:00",
+		Status:              DirectRefundStatusProcessing,
+		FundsAccount:        DirectRefundFundsAccountAvailable,
+		Amount: DirectRefundAmount{
+			Refund:   100,
+			Currency: DirectRefundCurrencyCNY,
+		},
+	})
+
+	var contractErr *RefundContractError
+	require.ErrorAs(t, err, &contractErr)
+	require.EqualError(t, err, "query direct refund: amount.total must be positive")
+}
+
 func TestValidateDirectQueryRefundByOutRefundNoInput_RejectsBlankValue(t *testing.T) {
 	_, err := ValidateDirectQueryRefundByOutRefundNoInput(" ")
 

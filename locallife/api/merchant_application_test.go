@@ -915,6 +915,11 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Return(app, nil)
 
 				store.EXPECT().
+					GetOCRJob(gomock.Any(), ocrJobID).
+					Times(1).
+					Return(db.OcrJob{}, db.ErrRecordNotFound)
+
+				store.EXPECT().
 					UpdateMerchantApplicationFoodPermit(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(app, nil)

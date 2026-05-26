@@ -7333,10 +7333,10 @@ func TestTakeoutJourneyB2Integration(t *testing.T) {
 	}
 	{
 		body := map[string]any{
+			"region_id": region.ID,
 			"locations": []map[string]any{
 				{
 					"delivery_id": delivery.ID,
-					"region_id":   region.ID,
 					"longitude":   116.3975,
 					"latitude":    39.9084,
 					"recorded_at": time.Now().UTC().Format(time.RFC3339),
@@ -7586,6 +7586,8 @@ func TestTakeoutJourneyB3Integration(t *testing.T) {
 	_, err = store.UpdateRiderOnlineStatus(ctx, db.UpdateRiderOnlineStatusParams{ID: rider.ID, IsOnline: true})
 	require.NoError(t, err)
 	ensureIntegrationPlatformBaofuReady(t, store)
+	ensureIntegrationMerchantBaofuReady(t, store, merchant.ID, "sub_mch_b3_001")
+	ensureIntegrationRiderBaofuReady(t, store, rider.ID)
 	clearIntegrationBaofuFeeTables(t)
 	t.Cleanup(func() {
 		clearIntegrationBaofuFeeTables(t)
@@ -7642,6 +7644,20 @@ func TestTakeoutJourneyB3Integration(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, payRes.Processed)
+
+	pso, err := logic.NewBaofuProfitSharingService(store).CreatePendingOrder(ctx, logic.BaofuProfitSharingOrderInput{
+		PaymentOrderID:  po.ID,
+		MerchantID:      merchant.ID,
+		OperatorID:      0,
+		PlatformOwnerID: 0,
+		OrderSource:     "takeout",
+		TotalAmountFen:  po.Amount,
+		DeliveryFeeFen:  order.DeliveryFee,
+		PlatformRateBps: 200, // 2%
+		OperatorRateBps: 0,
+		OutOrderNo:      fmt.Sprintf("BFPS%dO%d", po.ID, orderID),
+	})
+	require.NoError(t, err)
 
 	// 3) 商户接单/出餐
 	{
@@ -7712,6 +7728,8 @@ func TestTakeoutJourneyB3Integration(t *testing.T) {
 
 	// 6) 构造一条“超龄 completed”订单，验证 recovery 会尝试创建分账单并入队
 	_, err = integrationPool.Exec(ctx, `UPDATE orders SET completed_at = $2, updated_at = $2 WHERE id = $1`, orderID, time.Now().Add(-20*time.Minute))
+	require.NoError(t, err)
+	_, err = integrationPool.Exec(ctx, `UPDATE profit_sharing_orders SET created_at = $2 WHERE id = $1`, pso.ProfitSharingOrder.ID, time.Now().Add(-20*time.Minute))
 	require.NoError(t, err)
 
 	d := &captureTaskDistributor{}

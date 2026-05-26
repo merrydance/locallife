@@ -165,6 +165,40 @@ func TestBaofuAccountOnboardingServiceStart_BusinessPrivateCardRequiresCorporate
 	require.Zero(t, store.openAccountCalls)
 }
 
+func TestBaofuAccountOnboardingServiceStart_BusinessManualBankRequiresCity(t *testing.T) {
+	store := newFakeBaofuAccountOnboardingStore()
+	service := NewBaofuAccountOnboardingService(store, &fakeBaofuOnboardingAccountClient{}, nil, nil, BaofuAccountOnboardingConfig{
+		VerifyFeeFen: 200,
+		IndustryID:   "9931",
+	})
+
+	result, err := service.StartOrRecoverOpening(context.Background(), BaofuAccountOpeningInput{
+		OwnerType: db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:   88,
+		UserID:    99,
+		Profile: &BaofuAccountOpeningProfileInput{
+			LegalName:           "宁晋县周鹏饭店",
+			BusinessLicenseNo:   "92130528MA00000001",
+			LegalPersonName:     "周松涛",
+			LegalPersonIDNumber: "130528199001010011",
+			Email:               "merchant@example.com",
+			BankAccountNo:       "6222020202020202",
+			BankName:            "邢台银行",
+			DepositBankProvince: "河北省",
+			DepositBankCity:     "北京市",
+			DepositBankName:     "邢台银行宁晋支行",
+			CardUserName:        "周松涛",
+			CorporateMobile:     "13800138000",
+			SelfEmployed:        true,
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, db.BaofuAccountOpeningStateProfilePending, result.State)
+	require.ElementsMatch(t, []string{"deposit_bank_city"}, result.MissingFields)
+	require.Zero(t, store.openAccountCalls)
+}
+
 func TestBaofuAccountOnboardingServiceStart_BusinessPrivateCardPassesOfficialFields(t *testing.T) {
 	store := newFakeBaofuAccountOnboardingStore()
 	client := &fakeBaofuOnboardingAccountClient{

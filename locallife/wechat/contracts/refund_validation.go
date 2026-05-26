@@ -306,9 +306,6 @@ func validateDirectRefundCreateAmountContract(operation string, field string, am
 	if amount.Refund <= 0 {
 		return newRefundContractError(operation, "%s.refund must be positive", field)
 	}
-	if amount.Total <= 0 {
-		return newRefundContractError(operation, "%s.total must be positive", field)
-	}
 	if strings.TrimSpace(amount.Currency) != "" && strings.TrimSpace(amount.Currency) != DirectRefundCurrencyCNY {
 		return newRefundContractError(operation, "%s.currency must be %q", field, DirectRefundCurrencyCNY)
 	}
@@ -316,7 +313,13 @@ func validateDirectRefundCreateAmountContract(operation string, field string, am
 }
 
 func validateDirectRefundAmountContract(operation string, field string, amount *DirectRefundAmount) error {
-	return validateDirectRefundCreateAmountContract(operation, field, amount)
+	if err := validateDirectRefundCreateAmountContract(operation, field, amount); err != nil {
+		return err
+	}
+	if amount.Total <= 0 {
+		return newRefundContractError(operation, "%s.total must be positive", field)
+	}
+	return nil
 }
 
 func newRefundValidationError(operation string, format string, args ...any) error {
