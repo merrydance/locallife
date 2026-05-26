@@ -18,6 +18,7 @@ export interface CartResponse {
     items: CartItemResponse[]
     subtotal: number
     total_count: number
+    packaging_required: boolean
 }
 
 /** 购物车商品项 - 对齐 api.cartItemResponse */
@@ -32,6 +33,7 @@ export interface CartItemResponse {
     subtotal: number          // 小计金额
     member_price?: number     // 会员价
     is_available: boolean
+    is_packaging: boolean
     customizations?: Record<string, unknown>  // 定制选项原始 ID
     customization_details?: Array<{           // 解析后的详细信息
         name: string

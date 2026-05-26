@@ -20,6 +20,7 @@ export interface CartItemView {
   subtotal: number
   subtotalDisplay: string
   isAvailable: boolean
+  isPackaging: boolean
   specDisplay?: string
   customizations?: Record<string, unknown>
   dishImages?: string[]
@@ -42,6 +43,7 @@ export interface MerchantCartGroup {
   totalAmountDisplay: string
   itemCount: number
   allAvailable: boolean
+  packagingRequired: boolean
   selected: boolean
   errorStatus?: string
 }
@@ -107,6 +109,7 @@ export function buildMerchantGroup(merchantCart: MerchantCartResponse, cartDetai
     subtotal: item.subtotal,
     subtotalDisplay: formatCurrency(item.subtotal),
     isAvailable: item.is_available,
+    isPackaging: item.is_packaging,
     specDisplay: item.spec_text || '',
     customizations: item.customizations,
     dishImages: item.combo_member_images?.map((url) => getPublicImageUrl(url)) || []
@@ -132,6 +135,7 @@ export function buildMerchantGroup(merchantCart: MerchantCartResponse, cartDetai
     totalAmountDisplay: formatCurrency(subtotal),
     itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
     allAvailable: items.every((item) => item.isAvailable),
+    packagingRequired: cartDetail.packaging_required,
     selected: true
   }
 }
@@ -173,4 +177,25 @@ export function getCheckoutTotal(groups: MerchantCartGroup[], selectedCartIds: n
 
 export function getTotalCount(groups: MerchantCartGroup[]): number {
   return groups.reduce((sum, group) => sum + group.itemCount, 0)
+}
+
+export function getPackagingCheckoutBlocker(groups: MerchantCartGroup[], selectedCartIds: number[]): string {
+  for (const group of groups) {
+    if (!selectedCartIds.includes(group.cartId) || !group.packagingRequired) {
+      continue
+    }
+
+    const selectedPackagingCount = group.items.reduce((sum, item) => {
+      return item.isPackaging ? sum + item.quantity : sum
+    }, 0)
+
+    if (selectedPackagingCount === 0) {
+      return '请先选择包装方式'
+    }
+    if (selectedPackagingCount > 1) {
+      return '只能选择一种包装方式'
+    }
+  }
+
+  return ''
 }

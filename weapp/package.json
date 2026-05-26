@@ -12,6 +12,7 @@
     "check:baofu-personal-profile-form": "node scripts/check-baofu-personal-profile-form.js",
     "check:takeout-payment-error-copy": "node scripts/check-takeout-payment-error-copy.js",
     "check:takeout-cart-split-checkout-ux": "node scripts/check-takeout-cart-split-checkout-ux.js",
+    "check:takeout-cart-packaging-checkout": "node scripts/check-takeout-cart-packaging-checkout.test.js",
     "check:payment-refund-terminal-flow": "node scripts/check-payment-refund-terminal-flow.js",
     "check:request-id": "node scripts/check-request-id.test.js",
     "check:order-detail-bottom-actions": "node scripts/check-order-detail-bottom-actions.js",

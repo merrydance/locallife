@@ -33200,6 +33200,9 @@ const docTemplate = `{
                 "is_available": {
                     "type": "boolean"
                 },
+                "is_packaging": {
+                    "type": "boolean"
+                },
                 "member_price": {
                     "type": "integer"
                 },
@@ -33239,6 +33242,9 @@ const docTemplate = `{
                 },
                 "order_type": {
                     "type": "string"
+                },
+                "packaging_required": {
+                    "type": "boolean"
                 },
                 "reservation_id": {
                     "type": "integer"

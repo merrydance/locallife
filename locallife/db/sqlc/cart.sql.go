@@ -718,6 +718,7 @@ SELECT
     d.price AS dish_price,
     d.member_price AS dish_member_price,
     d.is_available AS dish_is_available,
+    d.is_packaging AS dish_is_packaging,
     cs.name AS combo_name,
     cs.image_media_asset_id AS combo_image_media_asset_id,
     cs.original_price AS combo_original_price,
@@ -744,6 +745,7 @@ type ListCartItemsRow struct {
 	DishPrice              pgtype.Int8 `json:"dish_price"`
 	DishMemberPrice        pgtype.Int8 `json:"dish_member_price"`
 	DishIsAvailable        pgtype.Bool `json:"dish_is_available"`
+	DishIsPackaging        pgtype.Bool `json:"dish_is_packaging"`
 	ComboName              pgtype.Text `json:"combo_name"`
 	ComboImageMediaAssetID pgtype.Int8 `json:"combo_image_media_asset_id"`
 	ComboOriginalPrice     pgtype.Int8 `json:"combo_original_price"`
@@ -774,6 +776,7 @@ func (q *Queries) ListCartItems(ctx context.Context, cartID int64) ([]ListCartIt
 			&i.DishPrice,
 			&i.DishMemberPrice,
 			&i.DishIsAvailable,
+			&i.DishIsPackaging,
 			&i.ComboName,
 			&i.ComboImageMediaAssetID,
 			&i.ComboOriginalPrice,

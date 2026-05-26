@@ -7,6 +7,7 @@ import {
   buildRecalculatedGroup,
   buildUpdatedGroupWithDeliveryFee,
   getCheckoutTotal,
+  getPackagingCheckoutBlocker,
   getTotalCount,
   isAbortLikeError,
   type MerchantCartGroup
@@ -582,6 +583,12 @@ Page({
         wx.showToast({ title: '部分商品已下架，请移除后再结算', icon: 'none' })
         return
       }
+    }
+
+    const packagingBlocker = getPackagingCheckoutBlocker(merchantGroups, selectedCartIds)
+    if (packagingBlocker) {
+      wx.showToast({ title: packagingBlocker, icon: 'none' })
+      return
     }
 
     const checkoutCarts = merchantGroups

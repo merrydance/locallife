@@ -39,18 +39,20 @@ type cartItemResponse struct {
 	UnitPrice    int64  `json:"unit_price"`
 	MemberPrice  *int64 `json:"member_price,omitempty"`
 	IsAvailable  bool   `json:"is_available"`
+	IsPackaging  bool   `json:"is_packaging"`
 	Subtotal     int64  `json:"subtotal"`
 }
 
 type cartResponse struct {
-	ID            int64              `json:"id"`
-	MerchantID    int64              `json:"merchant_id"`
-	OrderType     string             `json:"order_type"`
-	TableID       *int64             `json:"table_id,omitempty"`
-	ReservationID *int64             `json:"reservation_id,omitempty"`
-	Items         []cartItemResponse `json:"items"`
-	TotalCount    int                `json:"total_count"`
-	Subtotal      int64              `json:"subtotal"`
+	ID                int64              `json:"id"`
+	MerchantID        int64              `json:"merchant_id"`
+	OrderType         string             `json:"order_type"`
+	TableID           *int64             `json:"table_id,omitempty"`
+	ReservationID     *int64             `json:"reservation_id,omitempty"`
+	Items             []cartItemResponse `json:"items"`
+	TotalCount        int                `json:"total_count"`
+	Subtotal          int64              `json:"subtotal"`
+	PackagingRequired bool               `json:"packaging_required"`
 }
 
 // getCart godoc
@@ -126,22 +128,28 @@ func (server *Server) getCart(ctx *gin.Context) {
 	}
 
 	logicResp := logic.BuildCartResponse(cart, items)
-	resp := toCartResponse(logicResp)
+	packagingRequired, err := logic.HasPackagingRequirement(ctx, server.store, logicResp.MerchantID, logicResp.OrderType)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("resolve cart packaging requirement: %w", err)))
+		return
+	}
+	resp := toCartResponse(logicResp, packagingRequired)
 	server.enrichCartItems(ctx, resp.Items)
 	server.enrichCartImageURLs(ctx, resp.Items)
 	server.enrichComboImages(ctx, resp.Items)
 	ctx.JSON(http.StatusOK, resp)
 }
 
-func toCartResponse(logicResp logic.CartResponse) cartResponse {
+func toCartResponse(logicResp logic.CartResponse, packagingRequired bool) cartResponse {
 	resp := cartResponse{
-		ID:            logicResp.ID,
-		MerchantID:    logicResp.MerchantID,
-		OrderType:     logicResp.OrderType,
-		TableID:       logicResp.TableID,
-		ReservationID: logicResp.ReservationID,
-		TotalCount:    logicResp.TotalCount,
-		Subtotal:      logicResp.Subtotal,
+		ID:                logicResp.ID,
+		MerchantID:        logicResp.MerchantID,
+		OrderType:         logicResp.OrderType,
+		TableID:           logicResp.TableID,
+		ReservationID:     logicResp.ReservationID,
+		TotalCount:        logicResp.TotalCount,
+		Subtotal:          logicResp.Subtotal,
+		PackagingRequired: packagingRequired,
 	}
 	resp.Items = make([]cartItemResponse, 0, len(logicResp.Items))
 	for _, item := range logicResp.Items {
@@ -156,6 +164,7 @@ func toCartResponse(logicResp logic.CartResponse) cartResponse {
 			UnitPrice:      item.UnitPrice,
 			MemberPrice:    item.MemberPrice,
 			IsAvailable:    item.IsAvailable,
+			IsPackaging:    item.IsPackaging,
 			Subtotal:       item.Subtotal,
 		})
 	}
@@ -256,7 +265,12 @@ func (server *Server) returnUpdatedCart(ctx *gin.Context, cart db.Cart, statusCo
 		return
 	}
 	logicResp := logic.BuildCartResponse(cart, items)
-	response := toCartResponse(logicResp)
+	packagingRequired, err := logic.HasPackagingRequirement(ctx, server.store, logicResp.MerchantID, logicResp.OrderType)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("resolve cart packaging requirement: %w", err)))
+		return
+	}
+	response := toCartResponse(logicResp, packagingRequired)
 	server.enrichCartItems(ctx, response.Items)
 	server.enrichCartImageURLs(ctx, response.Items)
 	server.enrichComboImages(ctx, response.Items)

@@ -57,6 +57,7 @@ func randomListCartItemsRow(cartItem db.CartItem, dish db.Dish) db.ListCartItems
 		DishPrice:              pgtype.Int8{Int64: dish.Price, Valid: true},
 		DishImageMediaAssetID:  dish.ImageMediaAssetID,
 		DishIsAvailable:        pgtype.Bool{Bool: dish.IsOnline, Valid: true},
+		DishIsPackaging:        pgtype.Bool{Bool: dish.IsPackaging, Valid: true},
 		ComboName:              pgtype.Text{Valid: false},
 		ComboPrice:             pgtype.Int8{Valid: false},
 		ComboImageMediaAssetID: pgtype.Int8{},
@@ -185,6 +186,56 @@ func TestGetCartAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestGetCartAPIIncludesPackagingCheckoutState(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	cart := randomCart(user.ID, merchant.ID)
+	dish := randomDish(merchant.ID, nil)
+	dish.IsPackaging = true
+	dish.IsOnline = true
+	dish.IsAvailable = true
+	cart.OrderType = db.OrderTypeTakeout
+	cartItem := randomCartItem(cart.ID, dish)
+	listRow := randomListCartItemsRow(cartItem, dish)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), gomock.Eq(db.GetCartByUserAndMerchantParams{
+			UserID:     user.ID,
+			MerchantID: merchant.ID,
+			OrderType:  "takeout",
+		})).
+		Times(1).
+		Return(cart, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), gomock.Eq(cart.ID)).
+		Times(1).
+		Return([]db.ListCartItemsRow{listRow}, nil)
+	store.EXPECT().
+		CountActivePackagingDishesByMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(int64(1), nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/v1/cart?merchant_id=%d", merchant.ID), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response cartResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.True(t, response.PackagingRequired)
+	require.Len(t, response.Items, 1)
+	require.True(t, response.Items[0].IsPackaging)
 }
 
 // ==================== AddCartItem Tests ====================

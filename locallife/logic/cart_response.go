@@ -19,6 +19,7 @@ type CartItemResponse struct {
 	UnitPrice      int64                  `json:"unit_price"`
 	MemberPrice    *int64                 `json:"member_price,omitempty"`
 	IsAvailable    bool                   `json:"is_available"`
+	IsPackaging    bool                   `json:"is_packaging"`
 	Subtotal       int64                  `json:"subtotal"`
 }
 
@@ -68,6 +69,11 @@ func BuildCartResponse(cart db.Cart, items []db.ListCartItemsRow) CartResponse {
 			isAvailable = item.ComboIsAvailable.Bool
 		}
 
+		isPackaging := false
+		if item.DishID.Valid {
+			isPackaging = item.DishIsPackaging.Bool
+		}
+
 		itemSubtotal := unitPrice * int64(item.Quantity)
 		subtotal += itemSubtotal
 		totalCount += int(item.Quantity)
@@ -80,6 +86,7 @@ func BuildCartResponse(cart db.Cart, items []db.ListCartItemsRow) CartResponse {
 			UnitPrice:    unitPrice,
 			MemberPrice:  memberPrice,
 			IsAvailable:  isAvailable,
+			IsPackaging:  isPackaging,
 			Subtotal:     itemSubtotal,
 		}
 

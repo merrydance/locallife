@@ -29,16 +29,26 @@ func uniqueInt64s(values []int64) []int64 {
 	return result
 }
 
-func (s *OrderService) validatePackagingPolicy(ctx context.Context, merchantID int64, orderType string, items []db.CreateOrderItemParams) error {
+// HasPackagingRequirement reports whether this cart flow requires one packaging dish.
+func HasPackagingRequirement(ctx context.Context, store db.Store, merchantID int64, orderType string) (bool, error) {
 	if !allowedPackagingOrderType(orderType) {
-		return nil
+		return false, nil
 	}
 
-	activePackagingCount, err := s.store.CountActivePackagingDishesByMerchant(ctx, merchantID)
+	activePackagingCount, err := store.CountActivePackagingDishesByMerchant(ctx, merchantID)
+	if err != nil {
+		return false, err
+	}
+
+	return activePackagingCount > 0, nil
+}
+
+func (s *OrderService) validatePackagingPolicy(ctx context.Context, merchantID int64, orderType string, items []db.CreateOrderItemParams) error {
+	packagingRequired, err := HasPackagingRequirement(ctx, s.store, merchantID, orderType)
 	if err != nil {
 		return err
 	}
-	if activePackagingCount == 0 {
+	if !packagingRequired {
 		return nil
 	}
 
