@@ -358,7 +358,7 @@ func (q *Queries) GetDeliveryForUpdate(ctx context.Context, id int64) (Delivery,
 }
 
 const getRiderDailyEarnings = `-- name: GetRiderDailyEarnings :one
-SELECT COALESCE(SUM(rider_earnings), 0) AS daily_earnings
+SELECT COALESCE(SUM(rider_earnings), 0)::bigint AS daily_earnings
 FROM deliveries
 WHERE rider_id = $1
     AND status = 'completed'
@@ -372,22 +372,22 @@ type GetRiderDailyEarningsParams struct {
 	EndAt   pgtype.Timestamptz `json:"end_at"`
 }
 
-func (q *Queries) GetRiderDailyEarnings(ctx context.Context, arg GetRiderDailyEarningsParams) (interface{}, error) {
+func (q *Queries) GetRiderDailyEarnings(ctx context.Context, arg GetRiderDailyEarningsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, getRiderDailyEarnings, arg.RiderID, arg.StartAt, arg.EndAt)
-	var daily_earnings interface{}
+	var daily_earnings int64
 	err := row.Scan(&daily_earnings)
 	return daily_earnings, err
 }
 
 const getRiderEarnings = `-- name: GetRiderEarnings :one
-SELECT COALESCE(SUM(rider_earnings), 0) AS total_earnings
+SELECT COALESCE(SUM(rider_earnings), 0)::bigint AS total_earnings
 FROM deliveries
 WHERE rider_id = $1 AND status = 'completed'
 `
 
-func (q *Queries) GetRiderEarnings(ctx context.Context, riderID pgtype.Int8) (interface{}, error) {
+func (q *Queries) GetRiderEarnings(ctx context.Context, riderID pgtype.Int8) (int64, error) {
 	row := q.db.QueryRow(ctx, getRiderEarnings, riderID)
-	var total_earnings interface{}
+	var total_earnings int64
 	err := row.Scan(&total_earnings)
 	return total_earnings, err
 }

@@ -1021,7 +1021,7 @@ type Querier interface {
 	GetRiderByUserID(ctx context.Context, userID int64) (Rider, error)
 	// 骑手查看索赔详情
 	GetRiderClaimDetailForRider(ctx context.Context, arg GetRiderClaimDetailForRiderParams) (GetRiderClaimDetailForRiderRow, error)
-	GetRiderDailyEarnings(ctx context.Context, arg GetRiderDailyEarningsParams) (interface{}, error)
+	GetRiderDailyEarnings(ctx context.Context, arg GetRiderDailyEarningsParams) (int64, error)
 	// 骑手每日收入汇总
 	GetRiderDailyIncome(ctx context.Context, arg GetRiderDailyIncomeParams) ([]GetRiderDailyIncomeRow, error)
 	// 获取骑手在指定时间窗口内的代取统计
@@ -1032,7 +1032,7 @@ type Querier interface {
 	GetRiderDepositCreditByPaymentOrderID(ctx context.Context, paymentOrderID int64) (RiderDepositCredit, error)
 	GetRiderDepositCreditForUpdate(ctx context.Context, id int64) (RiderDepositCredit, error)
 	GetRiderDepositStats(ctx context.Context, riderID int64) (GetRiderDepositStatsRow, error)
-	GetRiderEarnings(ctx context.Context, riderID pgtype.Int8) (interface{}, error)
+	GetRiderEarnings(ctx context.Context, riderID pgtype.Int8) (int64, error)
 	// 获取骑手押金信息（用于扣款前检查）
 	GetRiderForDeposit(ctx context.Context, id int64) (GetRiderForDepositRow, error)
 	GetRiderForUpdate(ctx context.Context, id int64) (Rider, error)

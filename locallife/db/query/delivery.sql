@@ -159,12 +159,12 @@ WHERE rider_id = sqlc.arg('rider_id')
     AND completed_at < sqlc.arg('end_at');
 
 -- name: GetRiderEarnings :one
-SELECT COALESCE(SUM(rider_earnings), 0) AS total_earnings
+SELECT COALESCE(SUM(rider_earnings), 0)::bigint AS total_earnings
 FROM deliveries
 WHERE rider_id = $1 AND status = 'completed';
 
 -- name: GetRiderDailyEarnings :one
-SELECT COALESCE(SUM(rider_earnings), 0) AS daily_earnings
+SELECT COALESCE(SUM(rider_earnings), 0)::bigint AS daily_earnings
 FROM deliveries
 WHERE rider_id = sqlc.arg('rider_id')
     AND status = 'completed'

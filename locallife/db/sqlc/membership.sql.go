@@ -556,8 +556,8 @@ func (q *Queries) GetMembershipTransactionByPaymentOrderID(ctx context.Context, 
 const getMembershipTransactionStats = `-- name: GetMembershipTransactionStats :one
 SELECT 
     COUNT(*) as total_count,
-    SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as total_recharge,
-    SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as total_consume
+    COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0)::bigint as total_recharge,
+    COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0)::bigint as total_consume
 FROM membership_transactions
 WHERE membership_id = $1
 `
