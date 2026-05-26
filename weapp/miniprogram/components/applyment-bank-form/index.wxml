@@ -71,9 +71,21 @@
     <t-input
       wx:if="{{useManualCatalog}}"
       label="开户省份"
+      t-class-label="form-required-label"
       placeholder="例如 浙江省"
       value="{{form.bank_address_code}}"
       data-field="bank_address_code"
+      align="right"
+      bind:change="onManualBankFieldChange"
+    />
+
+    <t-input
+      wx:if="{{useManualCatalog}}"
+      label="开户城市"
+      t-class-label="form-required-label"
+      placeholder="例如 杭州市"
+      value="{{form.manual_bank_city}}"
+      data-field="manual_bank_city"
       align="right"
       bind:change="onManualBankFieldChange"
     />

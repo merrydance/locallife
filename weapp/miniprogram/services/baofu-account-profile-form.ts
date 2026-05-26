@@ -103,16 +103,20 @@ export function buildBaofuEnterpriseBankDraftFromDefaults(
 
   const selfEmployed = Boolean(defaults.self_employed)
   const hasBranch = Boolean(defaults.bank_branch_id)
+  const depositBankProvince = normalizeText(defaults.deposit_bank_province)
+  const depositBankCity = normalizeText(defaults.deposit_bank_city)
+  const depositBankName = normalizeText(defaults.deposit_bank_name)
   return {
     account_type: selfEmployed ? 'ACCOUNT_TYPE_PRIVATE' : 'ACCOUNT_TYPE_BUSINESS',
     account_bank: normalizeText(defaults.account_bank || defaults.bank_name),
     account_bank_code: defaults.account_bank_code || 0,
     bank_alias: normalizeText(defaults.bank_alias || defaults.bank_name),
     bank_alias_code: normalizeText(defaults.bank_alias_code),
-    need_bank_branch: hasBranch,
-    bank_address_code: hasBranch ? normalizeText(defaults.bank_address_code) : '',
-    bank_branch_id: hasBranch ? normalizeText(defaults.bank_branch_id) : '',
-    bank_name: hasBranch ? normalizeText(defaults.deposit_bank_name) : '',
+    need_bank_branch: hasBranch || Boolean(depositBankProvince || depositBankCity || depositBankName),
+    bank_address_code: hasBranch ? normalizeText(defaults.bank_address_code) : depositBankProvince,
+    manual_bank_city: depositBankCity,
+    bank_branch_id: hasBranch ? normalizeText(defaults.bank_branch_id) : depositBankName,
+    bank_name: depositBankName,
     account_number: '',
     account_name: normalizeText(selfEmployed ? (defaults.card_user_name || defaults.legal_person_name) : defaults.legal_name),
     contact_email: ''
@@ -134,8 +138,8 @@ export function buildBaofuEnterpriseProfilePayload(
     email: form.email.trim(),
     bank_account_no: normalizeText(bank.account_number),
     bank_name: normalizeText(bank.account_bank || bank.bank_alias || defaults?.bank_name),
-    deposit_bank_province: normalizeText(bank.deposit_bank_province || defaults?.deposit_bank_province || '北京市'),
-    deposit_bank_city: normalizeText(bank.deposit_bank_city || defaults?.deposit_bank_city || '北京市'),
+    deposit_bank_province: normalizeText(bank.deposit_bank_province || defaults?.deposit_bank_province),
+    deposit_bank_city: normalizeText(bank.deposit_bank_city || defaults?.deposit_bank_city),
     deposit_bank_name: normalizeText(bank.bank_name || bank.account_bank || bank.bank_alias || defaults?.deposit_bank_name)
   }
 

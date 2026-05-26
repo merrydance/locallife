@@ -34,6 +34,8 @@ function assert(condition, message) {
 function main() {
   const {
     emptyBaofuPersonalProfileForm,
+    buildBaofuEnterpriseBankDraftFromDefaults,
+    buildBaofuEnterpriseProfilePayload,
     buildBaofuPersonalProfilePayload,
     validateBaofuPersonalProfileForm
   } = loadModule()
@@ -66,6 +68,63 @@ function main() {
     bank_mobile: '13800138000'
   })
   assert(validationMessage === '', 'valid personal profile should pass validation')
+
+  const enterpriseDraft = buildBaofuEnterpriseBankDraftFromDefaults({
+    bank_name: '邢台银行',
+    deposit_bank_province: '河北省',
+    deposit_bank_city: '邢台市',
+    deposit_bank_name: '邢台银行宁晋支行',
+    self_employed: true,
+    card_user_name: '周松涛'
+  })
+  assert(enterpriseDraft.bank_address_code === '河北省', 'enterprise draft should restore manual province from defaults')
+  assert(enterpriseDraft.manual_bank_city === '邢台市', 'enterprise draft should restore manual city from defaults')
+  assert(enterpriseDraft.bank_branch_id === '邢台银行宁晋支行', 'enterprise draft should keep manual branch identifier in sync with branch name')
+  assert(enterpriseDraft.bank_name === '邢台银行宁晋支行', 'enterprise draft should restore manual branch from defaults')
+  assert(enterpriseDraft.need_bank_branch === true, 'enterprise draft should keep manual bank location required')
+
+  const enterprisePayload = buildBaofuEnterpriseProfilePayload({
+    legal_name: '宁晋县周鹏饭店',
+    business_license_number: '92130528MA00000001',
+    legal_person_name: '周松涛',
+    legal_person_id_number: '130528199001010011',
+    corporate_mobile: '13800138000',
+    email: 'merchant@example.com'
+  }, {
+    account_type: 'ACCOUNT_TYPE_PRIVATE',
+    account_bank: '邢台银行',
+    bank_alias: '邢台银行',
+    need_bank_branch: true,
+    bank_address_code: '河北省',
+    deposit_bank_province: '河北省',
+    deposit_bank_city: '邢台市',
+    bank_name: '邢台银行宁晋支行',
+    account_number: '6222020202020202',
+    account_name: '周松涛'
+  })
+  assert(enterprisePayload.deposit_bank_province === '河北省', 'enterprise manual bank payload should keep submitted province')
+  assert(enterprisePayload.deposit_bank_city === '邢台市', 'enterprise manual bank payload should keep submitted city')
+  assert(enterprisePayload.deposit_bank_city !== '北京市', 'enterprise manual bank payload must not hardcode Beijing city')
+
+  const missingManualCityPayload = buildBaofuEnterpriseProfilePayload({
+    legal_name: '宁晋县周鹏饭店',
+    business_license_number: '92130528MA00000001',
+    legal_person_name: '周松涛',
+    legal_person_id_number: '130528199001010011',
+    corporate_mobile: '13800138000',
+    email: 'merchant@example.com'
+  }, {
+    account_type: 'ACCOUNT_TYPE_PRIVATE',
+    account_bank: '邢台银行',
+    bank_alias: '邢台银行',
+    need_bank_branch: true,
+    bank_address_code: '河北省',
+    deposit_bank_province: '河北省',
+    bank_name: '邢台银行宁晋支行',
+    account_number: '6222020202020202',
+    account_name: '周松涛'
+  })
+  assert(missingManualCityPayload.deposit_bank_city === '', 'missing manual city should stay empty for validation instead of defaulting to Beijing')
 
   console.log('check-baofu-personal-profile-form: validated personal profile payload shape')
 }

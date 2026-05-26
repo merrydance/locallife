@@ -40,6 +40,14 @@ requireContains('miniprogram/app.json', '"finance/reconciliation/index"')
 
 requireAllFiles('miniprogram/pages/operator/finance/bills')
 requireAllFiles('miniprogram/pages/platform/finance/reconciliation')
+for (const prefix of [
+  'miniprogram/pages/merchant/finance/bills',
+  'miniprogram/pages/merchant/finance/settlements'
+]) {
+  for (const ext of ['ts', 'wxml', 'json']) {
+    requireFile(`${prefix}/index.${ext}`)
+  }
+}
 
 requireContains('miniprogram/pages/operator/finance/withdraw/index.wxml', '佣金账单')
 requireContains('miniprogram/pages/operator/finance/withdraw/index.ts', 'onOpenBills')
@@ -50,6 +58,22 @@ requireContains('miniprogram/pages/operator/finance/bills/index.ts', 'onOpenRang
 requireContains('miniprogram/pages/operator/finance/bills/index.ts', 'onConfirmRangePicker')
 requireContains('miniprogram/pages/operator/finance/bills/index.ts', 'onUseQuickRange')
 requireContains('miniprogram/services/operator-finance.ts', 'buildOperatorCommissionBillMonthRange')
+
+requireContains('miniprogram/pages/merchant/finance/bills/index.json', '"t-calendar"')
+requireContains('miniprogram/pages/merchant/finance/bills/index.wxml', 'type="range"')
+requireContains('miniprogram/pages/merchant/finance/bills/index.wxml', '区间收入')
+requireContains('miniprogram/pages/merchant/finance/bills/index.wxml', '账单区间')
+requireContains('miniprogram/pages/merchant/finance/bills/index.ts', 'onOpenRangePicker')
+requireContains('miniprogram/pages/merchant/finance/bills/index.ts', 'onConfirmRangePicker')
+requireContains('miniprogram/pages/merchant/finance/bills/index.ts', 'onUseQuickRange')
+requireContains('miniprogram/pages/merchant/finance/bills/index.ts', 'getMerchantFinanceOverview')
+requireContains('miniprogram/pages/merchant/finance/settlements/index.json', '"t-calendar"')
+requireContains('miniprogram/pages/merchant/finance/settlements/index.wxml', 'type="range"')
+requireContains('miniprogram/pages/merchant/finance/settlements/index.wxml', '区间分账')
+requireContains('miniprogram/pages/merchant/finance/settlements/index.wxml', '账单区间')
+requireContains('miniprogram/pages/merchant/finance/settlements/index.ts', 'onOpenRangePicker')
+requireContains('miniprogram/pages/merchant/finance/settlements/index.ts', 'onConfirmRangePicker')
+requireContains('miniprogram/pages/merchant/finance/settlements/index.ts', 'onUseQuickRange')
 
 requireContains('miniprogram/pages/platform/dashboard/dashboard.ts', 'reconciliation')
 requireContains('miniprogram/pages/platform/dashboard/dashboard.ts', '/pages/platform/finance/reconciliation/index')
@@ -107,6 +131,11 @@ requireContains('miniprogram/pages/platform/finance/withdrawals/index.wxml', '�
 requireContains('miniprogram/pages/platform/finance/withdrawals/index.wxml', '冻结金额')
 requireContains('miniprogram/pages/operator/finance/withdrawals/index.wxml', '账户在途提现')
 requireContains('miniprogram/pages/merchant/finance/withdrawals/index.wxml', '账户在途提现')
+requireContains('miniprogram/pages/merchant/finance/withdrawals/index.wxml', '当前列表小计')
+requireContains('miniprogram/pages/merchant/finance/withdrawals/index.wxml', '列表申请处理中')
+requireContains('miniprogram/pages/merchant/finance/withdrawals/index.wxml', '账面余额')
+requireContains('miniprogram/pages/merchant/finance/withdrawals/index.wxml', '冻结金额')
+requireContains('miniprogram/pages/merchant/finance/withdrawals/index.ts', 'buildBaofuWithdrawalLoadedSummaryView')
 requireContains('miniprogram/pages/rider/income/withdrawals/index.wxml', '账户在途提现')
 requireContains('miniprogram/pages/platform/finance/withdrawals/create/index.ts', 'buildBaofuWithdrawalSubmitCheck')
 requireContains('miniprogram/pages/platform/finance/withdrawals/create/index.ts', 'onAmountChange')

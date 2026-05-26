@@ -30,6 +30,7 @@ interface ApplymentBindBankDraft {
   bank_alias_code: string
   need_bank_branch: boolean
   bank_address_code: string
+  manual_bank_city: string
   bank_branch_id: string
   bank_name: string
   account_number: string
@@ -105,6 +106,7 @@ function createEmptyDraft(accountType: ApplymentAccountType): ApplymentBindBankD
     bank_alias_code: '',
     need_bank_branch: false,
     bank_address_code: '',
+    manual_bank_city: '',
     bank_branch_id: '',
     bank_name: '',
     account_number: '',
@@ -174,6 +176,7 @@ function normalizeDraft(
     bank_alias_code: typeof draft.bank_alias_code === 'string' ? draft.bank_alias_code : '',
     need_bank_branch: Boolean(draft.need_bank_branch),
     bank_address_code: typeof draft.bank_address_code === 'string' ? draft.bank_address_code : '',
+    manual_bank_city: typeof draft.manual_bank_city === 'string' ? draft.manual_bank_city : '',
     bank_branch_id: typeof draft.bank_branch_id === 'string' ? draft.bank_branch_id : '',
     bank_name: typeof draft.bank_name === 'string' ? draft.bank_name : '',
     account_number: typeof draft.account_number === 'string' ? draft.account_number : '',
@@ -299,7 +302,8 @@ function getSubmitBlockMessage(
   requireContactEmail?: boolean,
   requireAccountName: boolean = true,
   allowSavedAccountNumber: boolean = false,
-  requireBankBranch: boolean = false
+  requireBankBranch: boolean = false,
+  useManualCatalog: boolean = false
 ): string {
   if (!form.account_number.trim() && !allowSavedAccountNumber) {
     return '请先填写银行账号'
@@ -343,12 +347,16 @@ function getSubmitBlockMessage(
     }
   }
 
-  if (!form.need_bank_branch && !requireBankBranch) {
+  if (!form.need_bank_branch && !requireBankBranch && !useManualCatalog) {
     return ''
   }
 
   if (!form.bank_address_code.trim()) {
-    return '请先选择开户城市'
+    return useManualCatalog ? '请先填写开户省份' : '请先选择开户城市'
+  }
+
+  if (useManualCatalog && !form.manual_bank_city.trim()) {
+    return '请先填写开户城市'
   }
 
   if (!form.bank_alias_code.trim() && !form.bank_name.trim()) {
@@ -368,9 +376,10 @@ function canSubmitForm(
   requireContactEmail?: boolean,
   requireAccountName: boolean = true,
   allowSavedAccountNumber: boolean = false,
-  requireBankBranch: boolean = false
+  requireBankBranch: boolean = false,
+  useManualCatalog: boolean = false
 ): boolean {
-  return !getSubmitBlockMessage(form, showContactFields, requireContactEmail, requireAccountName, allowSavedAccountNumber, requireBankBranch)
+  return !getSubmitBlockMessage(form, showContactFields, requireContactEmail, requireAccountName, allowSavedAccountNumber, requireBankBranch, useManualCatalog)
 }
 
 Component({
@@ -558,7 +567,8 @@ Component({
           properties.requireContactEmail,
           properties.requireAccountName,
           properties.allowSavedAccountNumber,
-          properties.requireBankBranch
+          properties.requireBankBranch,
+          useManualCatalog
         ),
         submitBlockMessage: getSubmitBlockMessage(
           initialDraft,
@@ -566,7 +576,8 @@ Component({
           properties.requireContactEmail,
           properties.requireAccountName,
           properties.allowSavedAccountNumber,
-          properties.requireBankBranch
+          properties.requireBankBranch,
+          useManualCatalog
         )
       }, { emitDraft: false, syncSubmit: false })
 
@@ -591,10 +602,11 @@ Component({
 
     emitDraftChange(nextForm?: ApplymentBindBankDraft) {
       const form = nextForm || (this.data.form as ApplymentBindBankDraft)
+      const manualCity = this.usesManualCatalog() ? form.manual_bank_city.trim() : ''
       this.triggerEvent('draftchange', {
         ...form,
-        deposit_bank_province: this.data.selectedProvinceLabel || undefined,
-        deposit_bank_city: this.data.selectedCityLabel || undefined
+        deposit_bank_province: this.data.selectedProvinceLabel || form.bank_address_code.trim() || undefined,
+        deposit_bank_city: this.data.selectedCityLabel || manualCity || undefined
       })
     },
 
@@ -714,7 +726,8 @@ Component({
         this.properties.requireContactEmail,
         this.properties.requireAccountName,
         this.properties.allowSavedAccountNumber,
-        this.properties.requireBankBranch
+        this.properties.requireBankBranch,
+        this.usesManualCatalog()
       )
       const submitBlockMessage = getSubmitBlockMessage(
         form,
@@ -722,7 +735,8 @@ Component({
         this.properties.requireContactEmail,
         this.properties.requireAccountName,
         this.properties.allowSavedAccountNumber,
-        this.properties.requireBankBranch
+        this.properties.requireBankBranch,
+        this.usesManualCatalog()
       )
       this.setData({ canSubmit, submitBlockMessage })
     },
@@ -1540,7 +1554,8 @@ Component({
         properties.requireContactEmail,
         properties.requireAccountName,
         properties.allowSavedAccountNumber,
-        properties.requireBankBranch
+        properties.requireBankBranch,
+        this.usesManualCatalog()
       )
       if (submitBlockMessage) {
         wx.showToast({ title: submitBlockMessage, icon: 'none' })
@@ -1556,7 +1571,8 @@ Component({
         need_bank_branch: (form.need_bank_branch || properties.requireBankBranch) || undefined,
         bank_address_code: form.bank_address_code.trim() || undefined,
         deposit_bank_province: this.data.selectedProvinceLabel || form.bank_address_code.trim() || undefined,
-        deposit_bank_city: this.data.selectedCityLabel || undefined,
+        deposit_bank_city: this.data.selectedCityLabel || (this.usesManualCatalog() ? form.manual_bank_city.trim() : '') || undefined,
+        manual_bank_city: this.usesManualCatalog() ? form.manual_bank_city.trim() || undefined : undefined,
         bank_branch_id: form.bank_branch_id.trim() || undefined,
         bank_name: form.bank_name.trim() || undefined,
         account_number: form.account_number.trim(),

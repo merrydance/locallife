@@ -9,11 +9,11 @@ export interface MerchantFinanceOverviewResponse {
   completed_orders: number
   pending_orders: number
   total_gmv: number
-  total_income: number
-  total_platform_fee: number
-  total_operator_fee: number
-  total_service_fee: number
-  pending_income: number
+  total_merchant_receivable_amount: number
+  total_platform_service_fee_amount: number
+  total_payment_channel_fee_amount: number
+  total_deduction_fee_amount: number
+  pending_merchant_receivable_amount: number
   promotion_orders: number
   total_promotion_exp: number
   net_income: number
@@ -25,9 +25,9 @@ export interface MerchantFinanceOrderItem {
   order_id?: number
   order_source: string
   total_amount: number
-  platform_commission: number
-  operator_commission: number
-  merchant_amount: number
+  platform_service_fee_amount: number
+  payment_channel_fee_amount: number
+  merchant_receivable_amount: number
   status: string
   created_at: string
   finished_at?: string
@@ -97,9 +97,9 @@ export interface MerchantSettlementItem {
   payment_order_id: number
   order_source?: string
   total_amount: number
-  platform_commission: number
-  operator_commission: number
-  merchant_amount: number
+  platform_service_fee_amount: number
+  payment_channel_fee_amount: number
+  merchant_receivable_amount: number
   out_order_no: string
   sharing_order_id?: string
   status: string
@@ -114,9 +114,9 @@ export interface MerchantSettlementsResponse {
   limit: number
   total_pages: number
   total_amount: number
-  total_merchant_amount: number
-  total_platform_fee: number
-  total_operator_fee: number
+  total_merchant_receivable_amount: number
+  total_platform_service_fee_amount: number
+  total_payment_channel_fee_amount: number
 }
 
 export interface MerchantSettlementTimelineItem {
@@ -125,9 +125,9 @@ export interface MerchantSettlementTimelineItem {
   payment_order_id: number
   order_source?: string
   total_amount: number
-  platform_commission: number
-  operator_commission: number
-  merchant_amount: number
+  platform_service_fee_amount: number
+  payment_channel_fee_amount: number
+  merchant_receivable_amount: number
   out_order_no: string
   sharing_order_id?: string
   status: string
@@ -228,4 +228,3 @@ export function getMerchantFinanceOrderStatusView(status?: string) {
       return { text: '待同步', theme: 'default' as MerchantFinanceStatusTheme }
   }
 }
-
