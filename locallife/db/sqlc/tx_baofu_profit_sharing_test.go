@@ -209,6 +209,90 @@ func TestEnsureBaofuProfitSharingBillTxReturnsExistingIdenticalBill(t *testing.T
 	require.Equal(t, 1, count)
 }
 
+func TestEnsureBaofuProfitSharingBillTxReturnsExistingBillAfterRiderAssigned(t *testing.T) {
+	ctx := context.Background()
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	paymentOrder := createRandomPaymentOrder(t, createRandomUser(t).ID)
+	outOrderNo := "pso_bill_rider_" + util.RandomString(16)
+
+	withRider := CreateBaofuProfitSharingOrderTxParams{
+		ProfitSharingOrder: CreateProfitSharingOrderParams{
+			PaymentOrderID:        paymentOrder.ID,
+			MerchantID:            merchant.ID,
+			OperatorID:            pgtype.Int8{Int64: 1, Valid: true},
+			RiderID:               pgtype.Int8{Int64: 1, Valid: true},
+			OrderSource:           "takeout",
+			TotalAmount:           759,
+			DeliveryFee:           559,
+			RiderAmount:           556,
+			DistributableAmount:   200,
+			PlatformRate:          200,
+			OperatorRate:          300,
+			PlatformCommission:    4,
+			OperatorCommission:    6,
+			MerchantAmount:        189,
+			OutOrderNo:            outOrderNo,
+			Status:                ProfitSharingOrderStatusPending,
+			PaymentFee:            2,
+			PaymentFeeRateBps:     30,
+			Provider:              ExternalPaymentProviderBaofu,
+			Channel:               PaymentChannelBaofuAggregate,
+			MerchantSharingMerID:  pgtype.Text{String: "MER_SHARE", Valid: true},
+			RiderSharingMerID:     pgtype.Text{String: "RIDER_SHARE", Valid: true},
+			OperatorSharingMerID:  pgtype.Text{String: "OP_SHARE", Valid: true},
+			PlatformSharingMerID:  pgtype.Text{String: "PLATFORM_SHARE", Valid: true},
+			SharingDetailSnapshot: []byte(`{"receivers":[{"role":"merchant","sharing_mer_id":"MER_SHARE","amount":189},{"role":"rider","sharing_mer_id":"RIDER_SHARE","amount":556},{"role":"operator","sharing_mer_id":"OP_SHARE","amount":6},{"role":"platform","sharing_mer_id":"PLATFORM_SHARE","amount":6}]}`),
+		},
+		PaymentFeeLedger: CreateBaofuFeeLedgerParams{
+			FeeType:            BaofuFeeTypePaymentFee,
+			PayerType:          BaofuFeePayerTypePlatform,
+			BusinessObjectType: "payment_order",
+			BusinessObjectID:   paymentOrder.ID,
+			Amount:             2,
+			FeeRateBps:         pgtype.Int4{Int32: 30, Valid: true},
+			Status:             "recorded",
+		},
+		FeeBreakdown: UpdateProfitSharingOrderFeeBreakdownParams{
+			CalculationVersion:           "baofu_fee_v2",
+			SettlementMode:               ProfitSharingSettlementModeCommissionShare,
+			ProviderPaymentFee:           2,
+			ProviderPaymentFeeRateBps:    30,
+			ProviderPaymentFeeBaseAmount: 759,
+			ProviderPaymentFeeSource:     "estimated",
+			MerchantPaymentFee:           1,
+			MerchantPaymentFeeRateBps:    60,
+			MerchantPaymentFeeBaseAmount: 200,
+			RiderGrossAmount:             559,
+			RiderPaymentFee:              3,
+			RiderPaymentFeeRateBps:       60,
+			RiderPaymentFeeBaseAmount:    559,
+			CommissionBaseAmount:         200,
+			PlatformReceiverAmount:       6,
+		},
+	}
+	first, err := testStore.EnsureBaofuProfitSharingBillTx(ctx, withRider)
+	require.NoError(t, err)
+
+	withoutRider := withRider
+	withoutRider.ProfitSharingOrder.RiderID = pgtype.Int8{}
+	withoutRider.ProfitSharingOrder.RiderAmount = 0
+	withoutRider.ProfitSharingOrder.MerchantAmount = 189
+	withoutRider.ProfitSharingOrder.RiderSharingMerID = pgtype.Text{}
+	withoutRider.ProfitSharingOrder.SharingDetailSnapshot = []byte(`{"receivers":[{"role":"merchant","sharing_mer_id":"MER_SHARE","amount":189},{"role":"operator","sharing_mer_id":"OP_SHARE","amount":6},{"role":"platform","sharing_mer_id":"PLATFORM_SHARE","amount":3}]}`)
+	withoutRider.FeeBreakdown.RiderGrossAmount = 559
+	withoutRider.FeeBreakdown.RiderPaymentFee = 0
+	withoutRider.FeeBreakdown.RiderPaymentFeeBaseAmount = 0
+	withoutRider.FeeBreakdown.PlatformReceiverAmount = 3
+
+	second, err := testStore.EnsureBaofuProfitSharingBillTx(ctx, withoutRider)
+	require.NoError(t, err)
+	require.Equal(t, first.ProfitSharingOrder.ID, second.ProfitSharingOrder.ID)
+	require.True(t, second.ProfitSharingOrder.RiderID.Valid)
+	require.Equal(t, int64(1), second.ProfitSharingOrder.RiderID.Int64)
+	require.Equal(t, int64(556), second.ProfitSharingOrder.RiderAmount)
+	require.Equal(t, int64(6), second.ProfitSharingOrder.PlatformReceiverAmount)
+}
+
 func TestEnsureBaofuProfitSharingBillTxRejectsConflictingBill(t *testing.T) {
 	ctx := context.Background()
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)

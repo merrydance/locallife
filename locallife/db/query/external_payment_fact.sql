@@ -271,6 +271,11 @@ INSERT INTO payment_domain_outbox (
 ON CONFLICT (event_type, aggregate_type, aggregate_id)
 DO UPDATE SET updated_at = payment_domain_outbox.updated_at
 WHERE payment_domain_outbox.payload = excluded.payload
+   OR (
+      payment_domain_outbox.payload - 'external_payment_fact_id' - 'payment_fact_application_id'
+      =
+      excluded.payload - 'external_payment_fact_id' - 'payment_fact_application_id'
+   )
 RETURNING id, event_type, aggregate_type, aggregate_id, payload, status, attempt_count, next_retry_at, last_error, created_at, updated_at;
 
 -- name: ListPendingPaymentDomainOutbox :many

@@ -369,6 +369,29 @@ func TestCreatePaymentDomainOutboxOnce_DedupesIdenticalEventAndAggregate(t *test
 	require.JSONEq(t, string(first.Payload), string(duplicate.Payload))
 }
 
+func TestCreatePaymentDomainOutboxOnce_DedupesPayloadWithDifferentAuditFactIDs(t *testing.T) {
+	aggregateID := time.Now().UnixNano()
+	first, err := testStore.CreatePaymentDomainOutboxOnce(context.Background(), CreatePaymentDomainOutboxOnceParams{
+		EventType:     PaymentDomainOutboxEventProfitSharingResultReady,
+		AggregateType: PaymentDomainOutboxAggregateProfitSharingOrder,
+		AggregateID:   aggregateID,
+		Payload:       []byte(`{"profit_sharing_order_id":1,"out_order_no":"BFPS20O8","result":"SUCCESS","merchant_id":2,"external_payment_fact_id":62,"payment_fact_application_id":44}`),
+		Status:        PaymentDomainOutboxStatusPending,
+	})
+	require.NoError(t, err)
+
+	duplicate, err := testStore.CreatePaymentDomainOutboxOnce(context.Background(), CreatePaymentDomainOutboxOnceParams{
+		EventType:     PaymentDomainOutboxEventProfitSharingResultReady,
+		AggregateType: PaymentDomainOutboxAggregateProfitSharingOrder,
+		AggregateID:   aggregateID,
+		Payload:       []byte(`{"profit_sharing_order_id":1,"out_order_no":"BFPS20O8","result":"SUCCESS","merchant_id":2,"external_payment_fact_id":63,"payment_fact_application_id":45}`),
+		Status:        PaymentDomainOutboxStatusPending,
+	})
+	require.NoError(t, err)
+	require.Equal(t, first.ID, duplicate.ID)
+	require.JSONEq(t, string(first.Payload), string(duplicate.Payload))
+}
+
 func TestCreatePaymentDomainOutboxOnce_RejectsDifferentPayloadForSameEventAndAggregate(t *testing.T) {
 	aggregateID := time.Now().UnixNano()
 	_, err := testStore.CreatePaymentDomainOutboxOnce(context.Background(), CreatePaymentDomainOutboxOnceParams{

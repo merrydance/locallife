@@ -154,7 +154,6 @@ func baofuProfitSharingBillMatches(existing ProfitSharingOrder, arg CreateBaofuP
 		existing.OrderSource != expected.OrderSource ||
 		existing.TotalAmount != expected.TotalAmount ||
 		existing.DeliveryFee != expected.DeliveryFee ||
-		existing.RiderAmount != expected.RiderAmount ||
 		existing.DistributableAmount != expected.DistributableAmount ||
 		existing.PlatformRate != expected.PlatformRate ||
 		existing.OperatorRate != expected.OperatorRate ||
@@ -169,17 +168,23 @@ func baofuProfitSharingBillMatches(existing ProfitSharingOrder, arg CreateBaofuP
 		return false
 	}
 	if !pgtypeInt8Equal(existing.OperatorID, expected.OperatorID) ||
-		!pgtypeInt8Equal(existing.RiderID, expected.RiderID) ||
 		!pgtypeTextEqual(existing.MerchantSharingMerID, expected.MerchantSharingMerID) ||
-		!pgtypeTextEqual(existing.RiderSharingMerID, expected.RiderSharingMerID) ||
 		!pgtypeTextEqual(existing.OperatorSharingMerID, expected.OperatorSharingMerID) ||
 		!pgtypeTextEqual(existing.PlatformSharingMerID, expected.PlatformSharingMerID) {
 		return false
 	}
+	riderAssignedAfterBillCreation := !expected.RiderID.Valid && existing.RiderID.Valid
+	if !riderAssignedAfterBillCreation {
+		if existing.RiderAmount != expected.RiderAmount ||
+			!pgtypeInt8Equal(existing.RiderID, expected.RiderID) ||
+			!pgtypeTextEqual(existing.RiderSharingMerID, expected.RiderSharingMerID) {
+			return false
+		}
+	}
 	if arg.FeeBreakdown.CalculationVersion == "" {
 		return true
 	}
-	return existing.CalculationVersion == arg.FeeBreakdown.CalculationVersion &&
+	baseFeeBreakdownMatches := existing.CalculationVersion == arg.FeeBreakdown.CalculationVersion &&
 		existing.SettlementMode == arg.FeeBreakdown.SettlementMode &&
 		existing.ProviderPaymentFee == arg.FeeBreakdown.ProviderPaymentFee &&
 		existing.ProviderPaymentFeeRateBps == arg.FeeBreakdown.ProviderPaymentFeeRateBps &&
@@ -188,11 +193,18 @@ func baofuProfitSharingBillMatches(existing ProfitSharingOrder, arg CreateBaofuP
 		existing.MerchantPaymentFee == arg.FeeBreakdown.MerchantPaymentFee &&
 		existing.MerchantPaymentFeeRateBps == arg.FeeBreakdown.MerchantPaymentFeeRateBps &&
 		existing.MerchantPaymentFeeBaseAmount == arg.FeeBreakdown.MerchantPaymentFeeBaseAmount &&
-		existing.RiderGrossAmount == arg.FeeBreakdown.RiderGrossAmount &&
+		existing.CommissionBaseAmount == arg.FeeBreakdown.CommissionBaseAmount
+	if !baseFeeBreakdownMatches {
+		return false
+	}
+	if riderAssignedAfterBillCreation {
+		return existing.RiderGrossAmount == arg.FeeBreakdown.RiderGrossAmount &&
+			existing.RiderPaymentFeeRateBps == arg.FeeBreakdown.RiderPaymentFeeRateBps
+	}
+	return existing.RiderGrossAmount == arg.FeeBreakdown.RiderGrossAmount &&
 		existing.RiderPaymentFee == arg.FeeBreakdown.RiderPaymentFee &&
 		existing.RiderPaymentFeeRateBps == arg.FeeBreakdown.RiderPaymentFeeRateBps &&
 		existing.RiderPaymentFeeBaseAmount == arg.FeeBreakdown.RiderPaymentFeeBaseAmount &&
-		existing.CommissionBaseAmount == arg.FeeBreakdown.CommissionBaseAmount &&
 		existing.PlatformReceiverAmount == arg.FeeBreakdown.PlatformReceiverAmount
 }
 

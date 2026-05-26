@@ -381,6 +381,80 @@ func TestNotifyMerchantNewOrder_ReturnsErrorBeforePublishingWhenFeeBreakdownMiss
 	require.Empty(t, publisher.records)
 }
 
+func TestNotifyMerchantNewOrder_SkipsCancelledLegacyOrderWhenFeeBreakdownMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &merchantNotificationRecorder{}
+	publisher := &recordingPublisher{}
+	processor := NewTestTaskProcessor(store, distributor, nil, nil)
+	processor.pubSubPublisher = publisher
+
+	order := notifyMerchantFeeBreakdownOrder()
+	order.ID = 505
+	order.OrderNo = "ORD505"
+	order.MerchantID = 605
+	order.Status = db.OrderStatusCancelled
+	merchant := db.Merchant{ID: 605, OwnerUserID: 705, Name: "测试商户"}
+	paymentOrder := db.PaymentOrder{
+		ID:                    705,
+		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType:          db.ExternalPaymentBusinessOwnerOrder,
+		Amount:                order.TotalAmount,
+		Status:                "paid",
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+	}
+
+	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(merchant, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+			BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+		}).
+		Return(paymentOrder, nil)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(db.ProfitSharingOrder{}, db.ErrRecordNotFound)
+
+	err := processor.notifyMerchantNewOrder(context.Background(), order)
+
+	require.NoError(t, err)
+	require.Nil(t, distributor.payload)
+	require.Empty(t, publisher.records)
+}
+
+func TestNotifyMerchantNewOrder_ReturnsErrorForCancelledOrderWhenPaymentOrderMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &merchantNotificationRecorder{}
+	publisher := &recordingPublisher{}
+	processor := NewTestTaskProcessor(store, distributor, nil, nil)
+	processor.pubSubPublisher = publisher
+
+	order := notifyMerchantFeeBreakdownOrder()
+	order.ID = 506
+	order.OrderNo = "ORD506"
+	order.MerchantID = 606
+	order.Status = db.OrderStatusCancelled
+	merchant := db.Merchant{ID: 606, OwnerUserID: 706, Name: "测试商户"}
+
+	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(merchant, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+			BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+		}).
+		Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+
+	err := processor.notifyMerchantNewOrder(context.Background(), order)
+
+	require.ErrorContains(t, err, "get latest payment order by order")
+	require.Nil(t, distributor.payload)
+	require.Empty(t, publisher.records)
+}
+
 func TestNotifyMerchantNewOrder_ReturnsErrorBeforePublishingWhenPaymentOrderUnpaid(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

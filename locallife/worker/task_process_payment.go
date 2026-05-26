@@ -24,6 +24,8 @@ import (
 // Redis 告警频道
 const AlertChannel = "notification:platform:alerts"
 
+var errMerchantOrderProfitSharingBillMissing = errors.New("merchant order profit sharing bill missing")
+
 // AlertType 告警类型
 type AlertType string
 
@@ -401,6 +403,15 @@ func (processor *RedisTaskProcessor) notifyMerchantNewOrder(ctx context.Context,
 
 	feeBreakdown, err := processor.loadMerchantOrderFeeBreakdown(ctx, order)
 	if err != nil {
+		if isTerminalOrderStatus(order.Status) && errors.Is(err, errMerchantOrderProfitSharingBillMissing) {
+			log.Warn().Err(err).
+				Int64("order_id", order.ID).
+				Int64("merchant_id", order.MerchantID).
+				Str("order_no", order.OrderNo).
+				Str("status", order.Status).
+				Msg("skip merchant new order notification for terminal legacy order without fee breakdown")
+			return nil
+		}
 		log.Error().Err(err).
 			Int64("order_id", order.ID).
 			Int64("merchant_id", order.MerchantID).
@@ -490,6 +501,10 @@ func (processor *RedisTaskProcessor) notifyMerchantNewOrder(ctx context.Context,
 	return nil
 }
 
+func isTerminalOrderStatus(status string) bool {
+	return status == db.OrderStatusCancelled || status == db.OrderStatusCompleted
+}
+
 func (processor *RedisTaskProcessor) loadMerchantOrderFeeBreakdown(ctx context.Context, order db.Order) (logic.MerchantOrderFeeBreakdown, error) {
 	paymentOrder, err := processor.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
 		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
@@ -509,6 +524,9 @@ func (processor *RedisTaskProcessor) loadMerchantOrderFeeBreakdown(ctx context.C
 	}
 	profitSharingOrder, err := processor.store.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
 	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return logic.MerchantOrderFeeBreakdown{}, fmt.Errorf("%w: get profit sharing order by payment order: %w", errMerchantOrderProfitSharingBillMissing, err)
+		}
 		return logic.MerchantOrderFeeBreakdown{}, fmt.Errorf("get profit sharing order by payment order: %w", err)
 	}
 	if profitSharingOrder.PaymentOrderID != paymentOrder.ID ||
