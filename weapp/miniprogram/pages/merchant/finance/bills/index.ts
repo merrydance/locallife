@@ -1,45 +1,50 @@
 import {
-  getMerchantFinanceOrderStatusView,
-  listMerchantFinanceOrders,
-  type MerchantFinanceStatusTheme
-} from '../../../../api/merchant-finance'
-import {
   buildDefaultFinanceRange,
-  formatDateTimeText,
-  formatFenToYuan,
-  getMerchantFinanceUserMessage
+  buildMerchantFinanceMonthRange,
+  loadMerchantFinanceBillPage,
+  MERCHANT_FINANCE_BILL_MAX_RANGE_DAYS,
+  MERCHANT_FINANCE_PAGE_SIZE,
+  type MerchantFinanceBillPageView,
+  type MerchantFinanceBillRowView,
+  type MerchantFinanceBillSummaryView,
+  type MerchantFinanceRange
 } from '../../../../services/merchant-finance-workflow'
+import {
+  formatFinanceDateParam,
+  getFinanceDateTime,
+  getFinanceRangeCalendarValue,
+  validateFinanceDateRange
+} from '../../../../utils/finance-date-range'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
-interface BillRowView {
+const EMPTY_SUMMARY: MerchantFinanceBillSummaryView = {
+  rangeLabel: '',
+  totalIncomeText: '¥0.00',
+  totalGmvText: '¥0.00',
+  totalOrdersText: '0 单',
+  pendingIncomeText: '¥0.00'
+}
+const DEFAULT_RANGE = buildDefaultFinanceRange()
+
+interface MerchantFinanceQuickRange {
   id: string
-  title: string
-  note: string
-  amountText: string
-  statusText: string
-  statusTheme: MerchantFinanceStatusTheme
+  label: string
+  active: boolean
 }
 
-interface BillFetchResult {
-  rows: BillRowView[]
-  page: number
-  totalPages: number
-}
-
-function getOrderSourceText(source?: string): string {
-  switch (source) {
-    case 'takeout':
-      return '外卖'
-    case 'dine_in':
-      return '堂食'
-    case 'reservation':
-      return '预订'
-    case 'takeaway':
-      return '自提'
-    default:
-      return '订单'
-  }
+function buildQuickRanges(activeRange: MerchantFinanceRange): MerchantFinanceQuickRange[] {
+  const ranges = [
+    { id: '7', label: '近7天', range: buildDefaultFinanceRange(7) },
+    { id: '30', label: '近30天', range: buildDefaultFinanceRange(30) },
+    { id: 'month', label: '本月', range: buildMerchantFinanceMonthRange() }
+  ]
+  return ranges.map((item) => ({
+    id: item.id,
+    label: item.label,
+    active: item.range.start_date === activeRange.start_date && item.range.end_date === activeRange.end_date
+  }))
 }
 
 Page({
@@ -49,11 +54,20 @@ Page({
     initialError: false,
     initialErrorMessage: '',
     refreshErrorMessage: '',
+    hasLoadedOnce: false,
     loadingBills: false,
-    rows: [] as BillRowView[],
+    range: DEFAULT_RANGE as MerchantFinanceRange,
+    quickRanges: buildQuickRanges(DEFAULT_RANGE) as MerchantFinanceQuickRange[],
+    rangePickerVisible: false,
+    rangePickerValue: getFinanceRangeCalendarValue(DEFAULT_RANGE),
+    rangePickerMinDate: getFinanceDateTime(new Date(new Date().getFullYear() - 1, 0, 1)),
+    rangePickerMaxDate: getFinanceDateTime(new Date()),
+    rows: [] as MerchantFinanceBillRowView[],
+    summary: EMPTY_SUMMARY,
     page: 1,
     totalPages: 0,
-    hasMore: false
+    hasMore: false,
+    totalCount: 0
   },
 
   async onLoad() {
@@ -70,65 +84,139 @@ Page({
     void this.loadBills({ silent: true, page: 1 })
   },
 
-  onReachBottom() { void this.onLoadMore() },
+  onReachBottom() {
+    void this.onLoadMore()
+  },
 
   async onLoadMore() {
     if (!this.data.hasMore || this.data.loadingBills) {
       return
     }
-    await this.loadBills({ silent: true, page: this.data.page + 1, append: true })
+    await this.loadBills({ silent: true, append: true, page: this.data.page + 1, range: this.data.range })
   },
 
-  async loadBills(options: { silent?: boolean, page?: number, append?: boolean } = {}) {
+  async loadBills(options: { silent?: boolean, append?: boolean, page?: number, range?: MerchantFinanceRange } = {}) {
     if (this.data.loadingBills) {
       wx.stopPullDownRefresh()
       return
     }
-    const { silent = false, page = 1, append = false } = options
-    const hasTrustedData = this.data.rows.length > 0
+
+    const { silent = false, append = false, page = 1 } = options
+    const range = options.range || this.data.range
+    const hasTrustedData = this.data.hasLoadedOnce
+
     this.setData({
       loadingBills: true,
-      ...(silent || hasTrustedData ? { refreshErrorMessage: '' } : { initialLoading: true, initialError: false, initialErrorMessage: '', refreshErrorMessage: '' })
+      ...(silent || hasTrustedData
+        ? { refreshErrorMessage: '' }
+        : {
+            initialLoading: true,
+            initialError: false,
+            initialErrorMessage: '',
+            refreshErrorMessage: ''
+          })
     })
 
     try {
-      const range = buildDefaultFinanceRange(30)
-      const result = await this.fetchRows(range, page)
-      const rows = append ? this.data.rows.concat(result.rows) : result.rows
+      const view = await loadMerchantFinanceBillPage({
+        page,
+        limit: MERCHANT_FINANCE_PAGE_SIZE,
+        range
+      })
+      this.applyBillView(view, append, range)
+    } catch (error) {
+      logger.warn('Merchant finance bills load failed', error, 'merchant-finance-bills')
+      const message = getErrorUserMessage(error, '订单流水加载失败，请稍后重试')
       this.setData({
         initialLoading: false,
-        initialError: false,
-        initialErrorMessage: '',
-        refreshErrorMessage: '',
-        loadingBills: false,
-        rows,
-        page: result.page,
-        totalPages: result.totalPages,
-        hasMore: result.page < result.totalPages
+        initialError: !hasTrustedData,
+        initialErrorMessage: hasTrustedData ? '' : message,
+        refreshErrorMessage: hasTrustedData ? message : '',
+        loadingBills: false
       })
-    } catch (error) {
-      logger.warn('Merchant finance bills load failed', error)
-      const message = getMerchantFinanceUserMessage(error, '订单流水加载失败，请稍后重试')
-      this.setData({ initialLoading: false, initialError: !hasTrustedData, initialErrorMessage: hasTrustedData ? '' : message, refreshErrorMessage: hasTrustedData ? message : '', loadingBills: false })
     } finally {
       wx.stopPullDownRefresh()
     }
   },
 
-  async fetchRows(range: { start_date: string, end_date: string }, page: number): Promise<BillFetchResult> {
-    const response = await listMerchantFinanceOrders({ ...range, page, limit: 20 })
-    return { rows: response.orders.map((item) => {
-      const status = getMerchantFinanceOrderStatusView(item.status)
-      return {
-        id: `${item.id}`,
-        title: `${getOrderSourceText(item.order_source)}入账`,
-        note: formatDateTimeText(item.finished_at || item.created_at),
-        amountText: formatFenToYuan(item.merchant_amount || 0),
-        statusText: status.text,
-        statusTheme: status.theme
-      }
-    }), page: response.page, totalPages: response.total_pages }
+  applyBillView(view: MerchantFinanceBillPageView, append: boolean, range: MerchantFinanceRange) {
+    const rows = append ? this.data.rows.concat(view.rows) : view.rows
+
+    this.setData({
+      initialLoading: false,
+      initialError: false,
+      initialErrorMessage: '',
+      hasLoadedOnce: true,
+      loadingBills: false,
+      range,
+      quickRanges: buildQuickRanges(range),
+      rangePickerValue: getFinanceRangeCalendarValue(range),
+      rows,
+      summary: append && view.summaryErrorMessage ? this.data.summary : view.summary,
+      refreshErrorMessage: view.summaryErrorMessage,
+      page: view.page,
+      totalPages: view.totalPages,
+      hasMore: view.hasMore,
+      totalCount: view.totalCount
+    })
   },
 
-  onRetry() { void this.loadBills({ page: 1 }) }
+  onRetry() {
+    void this.loadBills({ page: 1, range: this.data.range })
+  },
+
+  onOpenRangePicker() {
+    this.setData({
+      rangePickerVisible: true,
+      rangePickerValue: getFinanceRangeCalendarValue(this.data.range)
+    })
+  },
+
+  onCancelRangePicker() {
+    this.setData({ rangePickerVisible: false })
+  },
+
+  onConfirmRangePicker(e: WechatMiniprogram.CustomEvent<{ value?: number[] }>) {
+    const value = Array.isArray(e.detail.value) ? e.detail.value : []
+    const start = value[0] ? new Date(value[0]) : null
+    const end = value[1] ? new Date(value[1]) : null
+    if (!start || !end) {
+      wx.showToast({ title: '请选择完整日期区间', icon: 'none' })
+      return
+    }
+    const range = {
+      start_date: formatFinanceDateParam(start),
+      end_date: formatFinanceDateParam(end)
+    }
+    const validation = validateFinanceDateRange(
+      range,
+      MERCHANT_FINANCE_BILL_MAX_RANGE_DAYS,
+      '订单流水'
+    )
+    if (!validation.valid) {
+      wx.showToast({ title: validation.message || '订单流水最多选择90天', icon: 'none' })
+      return
+    }
+    this.applyRange(range)
+  },
+
+  onUseQuickRange(e: WechatMiniprogram.BaseEvent) {
+    const rangeID = String(e.currentTarget.dataset.range || '')
+    if (rangeID === '7') {
+      this.applyRange(buildDefaultFinanceRange(7))
+      return
+    }
+    if (rangeID === '30') {
+      this.applyRange(buildDefaultFinanceRange(30))
+      return
+    }
+    if (rangeID === 'month') {
+      this.applyRange(buildMerchantFinanceMonthRange())
+    }
+  },
+
+  applyRange(range: MerchantFinanceRange) {
+    this.setData({ rangePickerVisible: false })
+    void this.loadBills({ page: 1, range })
+  }
 })

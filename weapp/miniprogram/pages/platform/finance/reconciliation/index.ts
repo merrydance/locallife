@@ -5,10 +5,17 @@ import {
   type PlatformFinanceReconciliationRange,
   type PlatformFinanceReconciliationPageView
 } from '../../../../services/platform-finance-reconciliation'
+import {
+  formatFinanceDateParam,
+  getFinanceDateTime,
+  getFinanceRangeCalendarValue,
+  validateFinanceDateRange
+} from '../../../../utils/finance-date-range'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
+const PLATFORM_RECONCILIATION_MAX_RANGE_DAYS = 365
 const EMPTY_VIEW: PlatformFinanceReconciliationPageView = {
   rangeLabel: '',
   summary: {
@@ -35,38 +42,6 @@ interface LoadReconciliationOptions {
   range?: PlatformFinanceReconciliationRange
 }
 
-function parseDateValue(value?: string): Date | null {
-  if (!value) {
-    return null
-  }
-  const normalized = value.replace(/-/g, '/')
-  const date = new Date(normalized)
-  if (Number.isNaN(date.getTime())) {
-    return null
-  }
-  return date
-}
-
-function formatDate(date: Date): string {
-  const year = date.getFullYear()
-  const month = `${date.getMonth() + 1}`.padStart(2, '0')
-  const day = `${date.getDate()}`.padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function getDateTime(date: Date): number {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
-}
-
-function getRangeCalendarValue(range: PlatformFinanceReconciliationRange): number[] {
-  const start = parseDateValue(range.start_date)
-  const end = parseDateValue(range.end_date)
-  if (!start || !end) {
-    return []
-  }
-  return [getDateTime(start), getDateTime(end)]
-}
-
 Page({
   data: {
     navBarHeight: 88,
@@ -81,9 +56,9 @@ Page({
     loadMoreDetailsErrorMessage: '',
     range: DEFAULT_RANGE as PlatformFinanceReconciliationRange,
     rangePickerVisible: false,
-    rangePickerValue: getRangeCalendarValue(DEFAULT_RANGE),
-    rangePickerMinDate: getDateTime(new Date(new Date().getFullYear() - 1, 0, 1)),
-    rangePickerMaxDate: getDateTime(new Date()),
+    rangePickerValue: getFinanceRangeCalendarValue(DEFAULT_RANGE),
+    rangePickerMinDate: getFinanceDateTime(new Date(new Date().getFullYear() - 1, 0, 1)),
+    rangePickerMaxDate: getFinanceDateTime(new Date()),
     view: EMPTY_VIEW
   },
 
@@ -138,7 +113,7 @@ Page({
         detailsErrorMessage: '',
         loadMoreDetailsErrorMessage: '',
         range,
-        rangePickerValue: getRangeCalendarValue(range),
+        rangePickerValue: getFinanceRangeCalendarValue(range),
         view
       })
       void this.loadDetailsPage(1, true)
@@ -165,7 +140,7 @@ Page({
   onOpenRangePicker() {
     this.setData({
       rangePickerVisible: true,
-      rangePickerValue: getRangeCalendarValue(this.data.range)
+      rangePickerValue: getFinanceRangeCalendarValue(this.data.range)
     })
   },
 
@@ -182,10 +157,20 @@ Page({
       return
     }
 
-    this.applyRange({
-      start_date: formatDate(start),
-      end_date: formatDate(end)
-    })
+    const range = {
+      start_date: formatFinanceDateParam(start),
+      end_date: formatFinanceDateParam(end)
+    }
+    const validation = validateFinanceDateRange(
+      range,
+      PLATFORM_RECONCILIATION_MAX_RANGE_DAYS,
+      '对账账单'
+    )
+    if (!validation.valid) {
+      wx.showToast({ title: validation.message || '对账账单最多选择365天', icon: 'none' })
+      return
+    }
+    this.applyRange(range)
   },
 
   applyRange(range: PlatformFinanceReconciliationRange) {

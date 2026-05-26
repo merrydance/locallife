@@ -22,6 +22,8 @@
     <t-cell-group>
       <t-cell title="可提现余额" note="{{balanceView.availableAmountText}}" />
       <t-cell title="账户在途提现" note="{{balanceView.pendingAmountText}}" />
+      <t-cell title="账面余额" note="{{balanceView.ledgerAmountText}}" />
+      <t-cell title="冻结金额" note="{{balanceView.frozenAmountText}}" />
       <t-cell wx:if="{{!balanceView.canSubmit}}" title="暂不能提现" note="{{balanceView.disabledReason}}" />
       <t-cell title="结算账户" note="{{balanceView.statusDesc || '结算账户已开通'}}" arrow url="/pages/merchant/finance/settlement-account/index" />
     </t-cell-group>
@@ -29,6 +31,15 @@
     <t-notice-bar wx:if="{{balanceErrorMessage}}" theme="warning" content="{{balanceErrorMessage}}" />
 
     <t-button theme="primary" block loading="{{loadingWithdrawals}}" disabled="{{!balanceView.canSubmit || loadingWithdrawals}}" bind:tap="onOpenCreate">申请提现</t-button>
+
+    <t-cell-group wx:if="{{rows.length}}">
+      <t-cell title="当前列表小计" note="{{loadedSummary.loadedAmountText}}" />
+      <t-cell title="已加载记录" note="{{loadedSummary.loadedCountText}}" />
+      <t-cell title="列表提现成功" note="{{loadedSummary.succeededAmountText}}" />
+      <t-cell title="列表申请处理中" note="{{loadedSummary.processingAmountText}}" />
+      <t-cell title="列表提现失败" note="{{loadedSummary.failedAmountText}}" />
+      <t-cell title="列表提现退票" note="{{loadedSummary.returnedAmountText}}" />
+    </t-cell-group>
 
     <t-empty wx:if="{{recordsErrorMessage && !rows.length}}" icon="error-circle" description="{{recordsErrorMessage}}" />
     <t-empty wx:elif="{{!rows.length}}" icon="info-circle" description="暂无提现记录" />

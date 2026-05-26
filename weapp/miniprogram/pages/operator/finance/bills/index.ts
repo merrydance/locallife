@@ -8,10 +8,17 @@ import {
   type OperatorCommissionBillRowView,
   type OperatorCommissionBillSummaryView
 } from '../../../../services/operator-finance'
+import {
+  formatFinanceDateParam,
+  getFinanceDateTime,
+  getFinanceRangeCalendarValue,
+  validateFinanceDateRange
+} from '../../../../utils/finance-date-range'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
+const OPERATOR_COMMISSION_BILL_MAX_RANGE_DAYS = 365
 const EMPTY_SUMMARY: OperatorCommissionBillSummaryView = {
   rangeLabel: '',
   totalCommissionText: '¥0.00',
@@ -24,37 +31,6 @@ interface OperatorCommissionQuickRange {
   id: string
   label: string
   active: boolean
-}
-
-function parseDateValue(value?: string): Date | null {
-  if (!value) {
-    return null
-  }
-  const date = new Date(value.replace(/-/g, '/'))
-  if (Number.isNaN(date.getTime())) {
-    return null
-  }
-  return date
-}
-
-function formatDate(date: Date): string {
-  const year = date.getFullYear()
-  const month = `${date.getMonth() + 1}`.padStart(2, '0')
-  const day = `${date.getDate()}`.padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function getDateTime(date: Date): number {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
-}
-
-function getRangeCalendarValue(range: OperatorCommissionBillRange): number[] {
-  const start = parseDateValue(range.start_date)
-  const end = parseDateValue(range.end_date)
-  if (!start || !end) {
-    return []
-  }
-  return [getDateTime(start), getDateTime(end)]
 }
 
 function buildQuickRanges(activeRange: OperatorCommissionBillRange): OperatorCommissionQuickRange[] {
@@ -82,9 +58,9 @@ Page({
     range: DEFAULT_RANGE as OperatorCommissionBillRange,
     quickRanges: buildQuickRanges(DEFAULT_RANGE) as OperatorCommissionQuickRange[],
     rangePickerVisible: false,
-    rangePickerValue: getRangeCalendarValue(DEFAULT_RANGE),
-    rangePickerMinDate: getDateTime(new Date(new Date().getFullYear() - 1, 0, 1)),
-    rangePickerMaxDate: getDateTime(new Date()),
+    rangePickerValue: getFinanceRangeCalendarValue(DEFAULT_RANGE),
+    rangePickerMinDate: getFinanceDateTime(new Date(new Date().getFullYear() - 1, 0, 1)),
+    rangePickerMaxDate: getFinanceDateTime(new Date()),
     rows: [] as OperatorCommissionBillRowView[],
     summary: EMPTY_SUMMARY,
     page: 1,
@@ -174,7 +150,7 @@ Page({
       loadingBills: false,
       range,
       quickRanges: buildQuickRanges(range),
-      rangePickerValue: getRangeCalendarValue(range),
+      rangePickerValue: getFinanceRangeCalendarValue(range),
       rows,
       summary: view.summary,
       page: view.page,
@@ -191,7 +167,7 @@ Page({
   onOpenRangePicker() {
     this.setData({
       rangePickerVisible: true,
-      rangePickerValue: getRangeCalendarValue(this.data.range)
+      rangePickerValue: getFinanceRangeCalendarValue(this.data.range)
     })
   },
 
@@ -207,10 +183,20 @@ Page({
       wx.showToast({ title: '请选择完整日期区间', icon: 'none' })
       return
     }
-    this.applyRange({
-      start_date: formatDate(start),
-      end_date: formatDate(end)
-    })
+    const range = {
+      start_date: formatFinanceDateParam(start),
+      end_date: formatFinanceDateParam(end)
+    }
+    const validation = validateFinanceDateRange(
+      range,
+      OPERATOR_COMMISSION_BILL_MAX_RANGE_DAYS,
+      '佣金账单'
+    )
+    if (!validation.valid) {
+      wx.showToast({ title: validation.message || '佣金账单最多选择365天', icon: 'none' })
+      return
+    }
+    this.applyRange(range)
   },
 
   onUseQuickRange(e: WechatMiniprogram.BaseEvent) {

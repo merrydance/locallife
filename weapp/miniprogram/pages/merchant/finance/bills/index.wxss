@@ -1,0 +1,9 @@
+.page-container {
+  min-height: 100vh;
+}
+
+.quick-range-row {
+  display: flex;
+  gap: var(--spacer-sm);
+  flex-wrap: wrap;
+}
