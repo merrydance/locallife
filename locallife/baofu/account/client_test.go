@@ -414,6 +414,7 @@ func TestAccountClientCreateWithdrawTreatsSyncAcceptedAsProcessing(t *testing.T)
 		ContractNo:    "CP610000000000542938",
 		TransSerialNo: "WD202605050001",
 		AmountFen:     100,
+		FeeMemberID:   "CP610000000000542938",
 		NotifyURL:     "https://api.example.com/v1/webhooks/baofu/account/withdraw",
 	})
 
@@ -422,7 +423,7 @@ func TestAccountClientCreateWithdrawTreatsSyncAcceptedAsProcessing(t *testing.T)
 	require.Equal(t, "1", result.UpstreamState)
 	env := accountRequestEnvelopeForTest(t, doer)
 	require.Equal(t, "T-1001-013-14", env.Header.ServiceType)
-	require.JSONEq(t, `{"version":"4.2.0","contractNo":"CP610000000000542938","transSerialNo":"WD202605050001","dealAmount":"1.00","returnUrl":"https://api.example.com/v1/webhooks/baofu/account/withdraw"}`, partialJSONForAccountTest(t, env.Body, "version", "contractNo", "transSerialNo", "dealAmount", "returnUrl"))
+	require.JSONEq(t, `{"version":"4.2.0","contractNo":"CP610000000000542938","transSerialNo":"WD202605050001","dealAmount":"1.00","feeMemberId":"CP610000000000542938","returnUrl":"https://api.example.com/v1/webhooks/baofu/account/withdraw"}`, partialJSONForAccountTest(t, env.Body, "version", "contractNo", "transSerialNo", "dealAmount", "feeMemberId", "returnUrl"))
 }
 
 func TestAccountClientQueryWithdrawSendsOfficialTradeTimeAndParsesAmounts(t *testing.T) {

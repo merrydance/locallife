@@ -63,12 +63,13 @@ func TestBaofuWithdrawServiceQueryBalanceUsesCollectMerchant(t *testing.T) {
 		OwnerType: db.BaofuAccountOwnerTypeRider,
 		OwnerID:   9,
 	}).Return(db.BaofuAccountBinding{
-		ID:          81,
-		OwnerType:   db.BaofuAccountOwnerTypeRider,
-		OwnerID:     9,
-		AccountType: db.BaofuAccountTypePersonal,
-		OpenState:   db.BaofuAccountOpenStateActive,
-		ContractNo:  pgtype.Text{String: "CM_BINDING", Valid: true},
+		ID:           81,
+		OwnerType:    db.BaofuAccountOwnerTypeRider,
+		OwnerID:      9,
+		AccountType:  db.BaofuAccountTypePersonal,
+		OpenState:    db.BaofuAccountOpenStateActive,
+		ContractNo:   pgtype.Text{String: "CM_BINDING", Valid: true},
+		SharingMerID: pgtype.Text{String: "RIDER_SHARE_001", Valid: true},
 	}, nil)
 
 	result, err := service.QueryBalance(context.Background(), BaofuBalanceQueryInput{
@@ -109,12 +110,13 @@ func TestBaofuWithdrawServiceCreateWithdrawalUsesPayoutMerchantAndRecordsCommand
 	service.now = func() time.Time { return time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC) }
 
 	binding := db.BaofuAccountBinding{
-		ID:          81,
-		OwnerType:   db.BaofuAccountOwnerTypeRider,
-		OwnerID:     9,
-		AccountType: db.BaofuAccountTypePersonal,
-		OpenState:   db.BaofuAccountOpenStateActive,
-		ContractNo:  pgtype.Text{String: "CM_BINDING", Valid: true},
+		ID:           81,
+		OwnerType:    db.BaofuAccountOwnerTypeRider,
+		OwnerID:      9,
+		AccountType:  db.BaofuAccountTypePersonal,
+		OpenState:    db.BaofuAccountOpenStateActive,
+		ContractNo:   pgtype.Text{String: "CM_BINDING", Valid: true},
+		SharingMerID: pgtype.Text{String: "RIDER_SHARE_001", Valid: true},
 	}
 	withdrawal := db.BaofuWithdrawalOrder{
 		ID:               91,
@@ -169,6 +171,7 @@ func TestBaofuWithdrawServiceCreateWithdrawalUsesPayoutMerchantAndRecordsCommand
 	require.Equal(t, "PAYOUT_TER", client.withdrawReq.TerminalID)
 	require.Equal(t, "CM_BINDING", client.withdrawReq.ContractNo)
 	require.Equal(t, int64(1200), client.withdrawReq.AmountFen)
+	require.Equal(t, "RIDER_SHARE_001", client.withdrawReq.FeeMemberID)
 	require.Equal(t, "https://api.example.com/v1/webhooks/baofu/withdraw", client.withdrawReq.NotifyURL)
 }
 
@@ -179,6 +182,46 @@ func TestBaofuWithdrawServiceCreateWithdrawalRejectsInsufficientBalanceBeforeOrd
 	store := mockdb.NewMockStore(ctrl)
 	client := &baofuWithdrawClientRecorder{
 		balanceRes: &baofucontracts.BalanceResult{ContractNo: "CM_BINDING", AvailableAmountFen: 1000},
+	}
+	service := NewBaofuWithdrawService(store, client, BaofuWithdrawServiceConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+		PayoutMerchantID:  "PAYOUT_MER",
+		PayoutTerminalID:  "PAYOUT_TER",
+		WithdrawNotifyURL: "https://api.example.com/v1/webhooks/baofu/withdraw",
+	})
+
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+		OwnerType: db.BaofuAccountOwnerTypeRider,
+		OwnerID:   9,
+	}).Return(db.BaofuAccountBinding{
+		ID:           81,
+		OwnerType:    db.BaofuAccountOwnerTypeRider,
+		OwnerID:      9,
+		AccountType:  db.BaofuAccountTypePersonal,
+		OpenState:    db.BaofuAccountOpenStateActive,
+		ContractNo:   pgtype.Text{String: "CM_BINDING", Valid: true},
+		SharingMerID: pgtype.Text{String: "RIDER_SHARE_001", Valid: true},
+	}, nil)
+	store.EXPECT().CreateBaofuWithdrawalOrder(gomock.Any(), gomock.Any()).Times(0)
+
+	_, err := service.CreateWithdrawal(context.Background(), BaofuCreateWithdrawalInput{
+		OwnerType:    db.BaofuAccountOwnerTypeRider,
+		OwnerID:      9,
+		AmountFen:    1200,
+		OutRequestNo: "WD_OUT_002",
+	})
+	require.ErrorIs(t, err, ErrBaofuWithdrawInsufficientBalance)
+	require.Empty(t, client.withdrawReq.TransSerialNo)
+}
+
+func TestBaofuWithdrawServiceCreateWithdrawalRequiresFeeMemberIDBeforeOrder(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	client := &baofuWithdrawClientRecorder{
+		balanceRes: &baofucontracts.BalanceResult{ContractNo: "CM_BINDING", AvailableAmountFen: 5000},
 	}
 	service := NewBaofuWithdrawService(store, client, BaofuWithdrawServiceConfig{
 		CollectMerchantID: "COLLECT_MER",
@@ -205,9 +248,10 @@ func TestBaofuWithdrawServiceCreateWithdrawalRejectsInsufficientBalanceBeforeOrd
 		OwnerType:    db.BaofuAccountOwnerTypeRider,
 		OwnerID:      9,
 		AmountFen:    1200,
-		OutRequestNo: "WD_OUT_002",
+		OutRequestNo: "WD_OUT_003",
 	})
-	require.ErrorIs(t, err, ErrBaofuWithdrawInsufficientBalance)
+	require.ErrorIs(t, err, ErrBaofuWithdrawFeeMemberIDRequired)
+	require.Empty(t, client.balanceReq.ContractNo)
 	require.Empty(t, client.withdrawReq.TransSerialNo)
 }
 
@@ -236,12 +280,13 @@ func TestBaofuWithdrawServiceCreateMerchantWithdrawalRecordsMerchantFundsOwner(t
 	})
 
 	binding := db.BaofuAccountBinding{
-		ID:          82,
-		OwnerType:   db.BaofuAccountOwnerTypeMerchant,
-		OwnerID:     19,
-		AccountType: db.BaofuAccountTypeBusiness,
-		OpenState:   db.BaofuAccountOpenStateActive,
-		ContractNo:  pgtype.Text{String: "MERCHANT_CONTRACT", Valid: true},
+		ID:           82,
+		OwnerType:    db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:      19,
+		AccountType:  db.BaofuAccountTypeBusiness,
+		OpenState:    db.BaofuAccountOpenStateActive,
+		ContractNo:   pgtype.Text{String: "MERCHANT_CONTRACT", Valid: true},
+		SharingMerID: pgtype.Text{String: "MERCHANT_SHARE_001", Valid: true},
 	}
 	withdrawal := db.BaofuWithdrawalOrder{
 		ID:               92,
@@ -272,6 +317,7 @@ func TestBaofuWithdrawServiceCreateMerchantWithdrawalRecordsMerchantFundsOwner(t
 		OutRequestNo: "MBW_OUT_001",
 	})
 	require.NoError(t, err)
+	require.Equal(t, "MERCHANT_SHARE_001", client.withdrawReq.FeeMemberID)
 }
 
 func TestBaofuWithdrawServiceCreateWithdrawalMarksRejectedAcceptanceFailed(t *testing.T) {
@@ -301,12 +347,13 @@ func TestBaofuWithdrawServiceCreateWithdrawalMarksRejectedAcceptanceFailed(t *te
 	service.now = func() time.Time { return time.Date(2026, 5, 19, 12, 0, 0, 0, time.UTC) }
 
 	binding := db.BaofuAccountBinding{
-		ID:          81,
-		OwnerType:   db.BaofuAccountOwnerTypeRider,
-		OwnerID:     9,
-		AccountType: db.BaofuAccountTypePersonal,
-		OpenState:   db.BaofuAccountOpenStateActive,
-		ContractNo:  pgtype.Text{String: "CM_BINDING", Valid: true},
+		ID:           81,
+		OwnerType:    db.BaofuAccountOwnerTypeRider,
+		OwnerID:      9,
+		AccountType:  db.BaofuAccountTypePersonal,
+		OpenState:    db.BaofuAccountOpenStateActive,
+		ContractNo:   pgtype.Text{String: "CM_BINDING", Valid: true},
+		SharingMerID: pgtype.Text{String: "RIDER_SHARE_001", Valid: true},
 	}
 	withdrawal := db.BaofuWithdrawalOrder{
 		ID:               91,
@@ -386,12 +433,13 @@ func TestBaofuWithdrawServiceCreateWithdrawalReturnsUnknownAfterProviderError(t 
 	service.now = func() time.Time { return time.Date(2026, 5, 19, 12, 0, 0, 0, time.UTC) }
 
 	binding := db.BaofuAccountBinding{
-		ID:          81,
-		OwnerType:   db.BaofuAccountOwnerTypeRider,
-		OwnerID:     9,
-		AccountType: db.BaofuAccountTypePersonal,
-		OpenState:   db.BaofuAccountOpenStateActive,
-		ContractNo:  pgtype.Text{String: "CM_BINDING", Valid: true},
+		ID:           81,
+		OwnerType:    db.BaofuAccountOwnerTypeRider,
+		OwnerID:      9,
+		AccountType:  db.BaofuAccountTypePersonal,
+		OpenState:    db.BaofuAccountOpenStateActive,
+		ContractNo:   pgtype.Text{String: "CM_BINDING", Valid: true},
+		SharingMerID: pgtype.Text{String: "RIDER_SHARE_001", Valid: true},
 	}
 	withdrawal := db.BaofuWithdrawalOrder{
 		ID:               91,

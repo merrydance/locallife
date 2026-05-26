@@ -261,7 +261,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 本地缺口：
 
 - `WithdrawRequest` 仍使用本地 `AmountFen`，已在官方 DTO 边界转换为元金额并校验最多 2 位小数；`dealAmount=0` fail-closed。
-- `directPlatformNo/feeMemberId/transAbstract/reqReserved` 仍未完整接入业务输入。
+- `feeMemberId` 已按 2026-05-26 宝付技术确认接入提现请求，当前传提现二级户绑定的 `sharing_mer_id` 作为手续费承担方客户号；`directPlatformNo/transAbstract/reqReserved` 仍未完整接入业务输入。
 - 提现 client 已存在，但收/付一级商户号边界和开户手续费/提现资金账户扣款仍需沙箱验证。
 
 ### 6.6 提现查询 `T-1001-013-15` 与提现通知

@@ -167,6 +167,7 @@ type WithdrawRequest struct {
 	ContractNo    string
 	TransSerialNo string
 	AmountFen     int64
+	FeeMemberID   string
 	NotifyURL     string
 }
 

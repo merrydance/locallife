@@ -18,6 +18,7 @@ var (
 	ErrBaofuWithdrawServiceNotConfigured = errors.New("baofu withdraw service is not configured")
 	ErrBaofuWithdrawAccountNotReady      = errors.New("宝付结算账户未开通，暂不能提现")
 	ErrBaofuWithdrawContractNoRequired   = errors.New("宝付结算账户缺少提现账户标识，暂不能提现")
+	ErrBaofuWithdrawFeeMemberIDRequired  = errors.New("宝付结算账户缺少提现手续费承担方标识，暂不能提现")
 	ErrBaofuWithdrawBalanceUnavailable   = errors.New("baofu withdraw balance unavailable")
 	ErrBaofuWithdrawInsufficientBalance  = errors.New("可提现金额不足")
 	ErrBaofuWithdrawCreateRejected       = errors.New("baofu withdraw create rejected")
@@ -142,6 +143,10 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 	if err != nil {
 		return result, err
 	}
+	feeMemberID := strings.TrimSpace(binding.SharingMerID.String)
+	if feeMemberID == "" {
+		return result, ErrBaofuWithdrawFeeMemberIDRequired
+	}
 	balance, err := s.client.QueryBalance(ctx, baofucontracts.BalanceQueryRequest{
 		MerchantID:  cfg.CollectMerchantID,
 		TerminalID:  cfg.CollectTerminalID,
@@ -177,6 +182,7 @@ func (s *BaofuWithdrawService) CreateWithdrawal(ctx context.Context, input Baofu
 		ContractNo:    strings.TrimSpace(binding.ContractNo.String),
 		TransSerialNo: outRequestNo,
 		AmountFen:     input.AmountFen,
+		FeeMemberID:   feeMemberID,
 		NotifyURL:     cfg.WithdrawNotifyURL,
 	})
 	if err != nil {

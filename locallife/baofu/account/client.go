@@ -101,6 +101,7 @@ func (c *Client) CreateWithdraw(ctx context.Context, req contracts.WithdrawReque
 		ContractNo:    strings.TrimSpace(req.ContractNo),
 		TransSerialNo: strings.TrimSpace(req.TransSerialNo),
 		DealAmount:    amount,
+		FeeMemberID:   strings.TrimSpace(req.FeeMemberID),
 		ReturnURL:     strings.TrimSpace(req.NotifyURL),
 	}
 	if err := officialReq.Validate(); err != nil {

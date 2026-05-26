@@ -396,6 +396,8 @@ func (server *Server) respondBaofuWithdrawalError(ctx *gin.Context, err error) {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("结算账户未开通，暂不能提现")))
 	case errors.Is(err, logic.ErrBaofuWithdrawContractNoRequired):
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("结算账户状态异常，请联系平台处理")))
+	case errors.Is(err, logic.ErrBaofuWithdrawFeeMemberIDRequired):
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("结算账户状态异常，请联系平台处理")))
 	default:
 		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "提现账户余额暂不可确认，请稍后刷新", "baofu withdrawal provider request failed"))
 	}
@@ -408,6 +410,8 @@ func (server *Server) respondBaofuWithdrawalCreateError(ctx *gin.Context, err er
 	case errors.Is(err, logic.ErrBaofuWithdrawAccountNotReady):
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("结算账户未开通，暂不能提现")))
 	case errors.Is(err, logic.ErrBaofuWithdrawContractNoRequired):
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("结算账户状态异常，请联系平台处理")))
+	case errors.Is(err, logic.ErrBaofuWithdrawFeeMemberIDRequired):
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("结算账户状态异常，请联系平台处理")))
 	case errors.Is(err, logic.ErrBaofuWithdrawInsufficientBalance):
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("可提现金额不足")))
