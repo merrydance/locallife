@@ -1032,14 +1032,14 @@ func (server *Server) updateRiderLocation(ctx *gin.Context) {
 		return
 	}
 
-	// 时间验证：不允许超过5分钟的未来时间，不允许超过1小时的历史时间
+	// 时间验证：设备时间可能漂移，未来时间统一收敛到服务端接收时间；
+	// 历史时间仍拒绝，避免轨迹和围栏判断使用过期位置。
 	now := time.Now()
-	maxFuture := now.Add(5 * time.Minute)
 	maxPast := now.Add(-1 * time.Hour)
-	for _, loc := range req.Locations {
-		if loc.RecordedAt.After(maxFuture) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(ErrLocationTimestampFuture))
-			return
+	for i := range req.Locations {
+		loc := &req.Locations[i]
+		if loc.RecordedAt.After(now) {
+			loc.RecordedAt = now
 		}
 		if loc.RecordedAt.Before(maxPast) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(ErrLocationTimestampTooOld))

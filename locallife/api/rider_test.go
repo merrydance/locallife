@@ -2292,14 +2292,14 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 			},
 		},
 		{
-			name: "FutureTime",
+			name: "FutureTime_ClampedToServerNow",
 			body: map[string]interface{}{
 				"region_id": rider.RegionID.Int64,
 				"locations": []map[string]interface{}{
 					{
 						"longitude":   116.404,
 						"latitude":    39.915,
-						"recorded_at": time.Now().Add(10 * time.Minute).Format(time.RFC3339), // 未来时间
+						"recorded_at": time.Now().Add(1 * time.Minute).Format(time.RFC3339), // 设备时间快于服务器
 					},
 				},
 			},
@@ -2307,9 +2307,34 @@ func TestUpdateRiderLocationAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(rider, nil)
+
+				store.EXPECT().
+					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.Delivery{}, nil)
+
+				store.EXPECT().
+					BatchCreateRiderLocations(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, locations []db.BatchCreateRiderLocationsParams) (int64, error) {
+						require.Len(t, locations, 1)
+						require.False(t, locations[0].RecordedAt.After(time.Now()))
+						return int64(1), nil
+					})
+
+				store.EXPECT().
+					UpdateRiderLocation(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(rider, nil)
+
+				expectCurrentRiderRegionSyncNoChange(store, rider, 200*fenPerYuan)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
 		{
