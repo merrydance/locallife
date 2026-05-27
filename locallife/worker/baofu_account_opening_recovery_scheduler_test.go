@@ -217,20 +217,19 @@ func TestBaofuAccountOpeningRecoverySchedulerSubmitsMerchantReportAndMarksReady(
 		Return(db.ExternalPaymentCommand{ID: 2, CommandType: db.ExternalPaymentCommandTypeBaofuBindSubConfig}, nil)
 	store.EXPECT().MarkBaofuMerchantReportAppletAuthSucceeded(gomock.Any(), int64(788)).
 		Return(db.BaofuMerchantReport{ID: 788, OwnerType: flow.OwnerType, OwnerID: flow.OwnerID, ReportType: db.BaofuMerchantReportTypeWechat, ReportState: db.BaofuMerchantReportStateSucceeded, AppletAuthState: db.BaofuMerchantReportAppletAuthStateSucceeded, SubMchID: pgtype.Text{String: "1900000118", Valid: true}}, nil)
-	store.EXPECT().UpsertMerchantPaymentConfig(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.UpsertMerchantPaymentConfigParams) (db.MerchantPaymentConfig, error) {
-			require.Equal(t, flow.OwnerID, arg.MerchantID)
-			require.Equal(t, "1900000118", arg.SubMchID)
-			require.Equal(t, db.MerchantPaymentConfigStatusActive, arg.Status)
-			return db.MerchantPaymentConfig{MerchantID: arg.MerchantID, SubMchID: arg.SubMchID, Status: arg.Status}, nil
-		})
-	store.EXPECT().MarkBaofuAccountOpeningFlowReady(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountOpeningFlowReadyParams) (db.BaofuAccountOpeningFlow, error) {
-			require.Equal(t, flow.ID, arg.ID)
-			require.Equal(t, pgtype.Int8{Int64: 788, Valid: true}, arg.MerchantReportID)
+	store.EXPECT().MarkMerchantBaofuAccountOpeningReadyTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.MarkMerchantBaofuAccountOpeningReadyTxParams) (db.MarkMerchantBaofuAccountOpeningReadyTxResult, error) {
+			require.Equal(t, flow.OwnerID, arg.PaymentConfig.MerchantID)
+			require.Equal(t, "1900000118", arg.PaymentConfig.SubMchID)
+			require.Equal(t, db.MerchantPaymentConfigStatusActive, arg.PaymentConfig.Status)
+			require.Equal(t, flow.ID, arg.Flow.ID)
+			require.Equal(t, pgtype.Int8{Int64: 788, Valid: true}, arg.Flow.MerchantReportID)
 			flow.State = db.BaofuAccountOpeningStateReady
-			flow.MerchantReportID = arg.MerchantReportID
-			return flow, nil
+			flow.MerchantReportID = arg.Flow.MerchantReportID
+			return db.MarkMerchantBaofuAccountOpeningReadyTxResult{
+				PaymentConfig: db.MerchantPaymentConfig{MerchantID: arg.PaymentConfig.MerchantID, SubMchID: arg.PaymentConfig.SubMchID, Status: arg.PaymentConfig.Status},
+				Flow:          flow,
+			}, nil
 		})
 
 	scheduler := worker.NewBaofuAccountOpeningRecoveryScheduler(store, accountClient, nil, worker.BaofuAccountOpeningRecoveryConfig{

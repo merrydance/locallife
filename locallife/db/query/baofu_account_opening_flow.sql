@@ -153,12 +153,43 @@ SET
     state = 'ready',
     account_binding_id = COALESCE(sqlc.narg(account_binding_id), account_binding_id),
     merchant_report_id = COALESCE(sqlc.narg(merchant_report_id), merchant_report_id),
+    failure_code = NULL,
+    failure_message = NULL,
     raw_snapshot = sqlc.arg(raw_snapshot),
     updated_at = now()
 WHERE id = sqlc.arg(id)
   AND (
       state IN ('opening_processing', 'merchant_report_processing', 'applet_auth_pending', 'ready')
       OR (state = 'failed' AND failure_code IN ('BF00060', 'EXISTED_LOGIN_NO'))
+  )
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at;
+
+-- name: RecoverFailedBaofuAccountOpeningFlowFromActiveBinding :one
+UPDATE baofu_account_opening_flows
+SET
+    state = CASE
+        WHEN baofu_account_opening_flows.owner_type = 'merchant'
+             AND baofu_account_opening_flows.state = 'failed' THEN 'merchant_report_processing'
+        ELSE 'ready'
+    END,
+    account_binding_id = sqlc.arg(account_binding_id),
+    failure_code = NULL,
+    failure_message = NULL,
+    raw_snapshot = sqlc.arg(raw_snapshot),
+    updated_at = now()
+WHERE baofu_account_opening_flows.id = sqlc.arg(id)
+  AND baofu_account_opening_flows.state IN ('failed', 'ready')
+  AND baofu_account_opening_flows.open_trans_serial_no = sqlc.arg(open_trans_serial_no)
+  AND EXISTS (
+      SELECT 1
+      FROM baofu_account_bindings AS b
+      WHERE b.id = sqlc.arg(account_binding_id)
+        AND b.owner_type = baofu_account_opening_flows.owner_type
+        AND b.owner_id = baofu_account_opening_flows.owner_id
+        AND b.account_type = baofu_account_opening_flows.account_type
+        AND b.open_state = 'active'
+        AND b.last_open_trans_serial_no = baofu_account_opening_flows.open_trans_serial_no
+        AND b.contract_no = sqlc.arg(contract_no)
   )
 RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at;
 

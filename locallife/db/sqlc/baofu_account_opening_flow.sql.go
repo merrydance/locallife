@@ -562,6 +562,8 @@ SET
     state = 'ready',
     account_binding_id = COALESCE($1, account_binding_id),
     merchant_report_id = COALESCE($2, merchant_report_id),
+    failure_code = NULL,
+    failure_message = NULL,
     raw_snapshot = $3,
     updated_at = now()
 WHERE id = $4
@@ -686,6 +688,76 @@ type MarkBaofuAccountOpeningFlowVerifyFeeProcessingParams struct {
 
 func (q *Queries) MarkBaofuAccountOpeningFlowVerifyFeeProcessing(ctx context.Context, arg MarkBaofuAccountOpeningFlowVerifyFeeProcessingParams) (BaofuAccountOpeningFlow, error) {
 	row := q.db.QueryRow(ctx, markBaofuAccountOpeningFlowVerifyFeeProcessing, arg.VerifyFeePaymentOrderID, arg.RawSnapshot, arg.ID)
+	var i BaofuAccountOpeningFlow
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerType,
+		&i.OwnerID,
+		&i.AccountType,
+		&i.ProfileID,
+		&i.State,
+		&i.VerifyFeeAmount,
+		&i.VerifyFeePaymentOrderID,
+		&i.OpenTransSerialNo,
+		&i.LoginNo,
+		&i.AccountBindingID,
+		&i.MerchantReportID,
+		&i.FailureCode,
+		&i.FailureMessage,
+		&i.ProviderRequestSnapshot,
+		&i.RawSnapshot,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const recoverFailedBaofuAccountOpeningFlowFromActiveBinding = `-- name: RecoverFailedBaofuAccountOpeningFlowFromActiveBinding :one
+UPDATE baofu_account_opening_flows
+SET
+    state = CASE
+        WHEN baofu_account_opening_flows.owner_type = 'merchant'
+             AND baofu_account_opening_flows.state = 'failed' THEN 'merchant_report_processing'
+        ELSE 'ready'
+    END,
+    account_binding_id = $1,
+    failure_code = NULL,
+    failure_message = NULL,
+    raw_snapshot = $2,
+    updated_at = now()
+WHERE baofu_account_opening_flows.id = $3
+  AND baofu_account_opening_flows.state IN ('failed', 'ready')
+  AND baofu_account_opening_flows.open_trans_serial_no = $4
+  AND EXISTS (
+      SELECT 1
+      FROM baofu_account_bindings AS b
+      WHERE b.id = $1
+        AND b.owner_type = baofu_account_opening_flows.owner_type
+        AND b.owner_id = baofu_account_opening_flows.owner_id
+        AND b.account_type = baofu_account_opening_flows.account_type
+        AND b.open_state = 'active'
+        AND b.last_open_trans_serial_no = baofu_account_opening_flows.open_trans_serial_no
+        AND b.contract_no = $5
+  )
+RETURNING id, owner_type, owner_id, account_type, profile_id, state, verify_fee_amount, verify_fee_payment_order_id, open_trans_serial_no, login_no, account_binding_id, merchant_report_id, failure_code, failure_message, provider_request_snapshot, raw_snapshot, created_at, updated_at
+`
+
+type RecoverFailedBaofuAccountOpeningFlowFromActiveBindingParams struct {
+	AccountBindingID  pgtype.Int8 `json:"account_binding_id"`
+	RawSnapshot       []byte      `json:"raw_snapshot"`
+	ID                int64       `json:"id"`
+	OpenTransSerialNo pgtype.Text `json:"open_trans_serial_no"`
+	ContractNo        pgtype.Text `json:"contract_no"`
+}
+
+func (q *Queries) RecoverFailedBaofuAccountOpeningFlowFromActiveBinding(ctx context.Context, arg RecoverFailedBaofuAccountOpeningFlowFromActiveBindingParams) (BaofuAccountOpeningFlow, error) {
+	row := q.db.QueryRow(ctx, recoverFailedBaofuAccountOpeningFlowFromActiveBinding,
+		arg.AccountBindingID,
+		arg.RawSnapshot,
+		arg.ID,
+		arg.OpenTransSerialNo,
+		arg.ContractNo,
+	)
 	var i BaofuAccountOpeningFlow
 	err := row.Scan(
 		&i.ID,

@@ -319,6 +319,168 @@ func TestMarkBaofuAccountOpeningFlowReadyAllowsDuplicateFailedRecovery(t *testin
 
 	require.NoError(t, err)
 	require.Equal(t, BaofuAccountOpeningStateReady, ready.State)
+	require.False(t, ready.FailureCode.Valid)
+	require.False(t, ready.FailureMessage.Valid)
+}
+
+func TestRecoverFailedBaofuAccountOpeningFlowFromActiveBinding(t *testing.T) {
+	ctx := context.Background()
+	ownerID := time.Now().UnixNano()
+	contractNo := "CP" + util.RandomString(18)
+	openTransSerialNo := "OPEN" + util.RandomString(18)
+	flow := createBaofuOpeningFlowForTest(t, BaofuAccountOwnerTypeRider, ownerID, BaofuAccountTypePersonal, BaofuAccountOpeningStateVerifyFeePending)
+	payment := createBaofuVerifyFeePaymentOrderForTest(t, BaofuAccountOwnerTypeRider, ownerID, "paid")
+	flow, err := testStore.MarkBaofuAccountOpeningFlowOpeningProcessing(ctx, MarkBaofuAccountOpeningFlowOpeningProcessingParams{
+		ID:                      flow.ID,
+		VerifyFeePaymentOrderID: pgtype.Int8{Int64: payment.ID, Valid: true},
+		OpenTransSerialNo:       pgtype.Text{String: openTransSerialNo, Valid: true},
+		LoginNo:                 pgtype.Text{String: "LLBFOR" + util.RandomString(12), Valid: true},
+		ProviderRequestSnapshot: []byte(`{}`),
+		RawSnapshot:             []byte(`{}`),
+	})
+	require.NoError(t, err)
+	failed, err := testStore.MarkBaofuAccountOpeningFlowFailed(ctx, MarkBaofuAccountOpeningFlowFailedParams{
+		ID:             flow.ID,
+		FailureCode:    pgtype.Text{String: "BF0003", Valid: true},
+		FailureMessage: pgtype.Text{String: "支付通道异常，请联系平台处理", Valid: true},
+		RawSnapshot:    []byte(`{"state":"failed","errorCode":"BF0003"}`),
+	})
+	require.NoError(t, err)
+	binding, err := testStore.UpsertBaofuAccountBinding(ctx, UpsertBaofuAccountBindingParams{
+		OwnerType:             BaofuAccountOwnerTypeRider,
+		OwnerID:               ownerID,
+		AccountType:           BaofuAccountTypePersonal,
+		LoginNo:               failed.LoginNo,
+		OpenState:             BaofuAccountOpenStateProcessing,
+		LastOpenTransSerialNo: failed.OpenTransSerialNo,
+		RawSnapshot:           []byte(`{"state":"processing"}`),
+	})
+	require.NoError(t, err)
+	binding, err = testStore.MarkBaofuAccountBindingActive(ctx, MarkBaofuAccountBindingActiveParams{
+		ID:           binding.ID,
+		ContractNo:   pgtype.Text{String: contractNo, Valid: true},
+		SharingMerID: pgtype.Text{String: contractNo, Valid: true},
+		RawSnapshot:  []byte(`{"state":"active"}`),
+	})
+	require.NoError(t, err)
+
+	ready, err := testStore.RecoverFailedBaofuAccountOpeningFlowFromActiveBinding(ctx, RecoverFailedBaofuAccountOpeningFlowFromActiveBindingParams{
+		AccountBindingID:  pgtype.Int8{Int64: binding.ID, Valid: true},
+		RawSnapshot:       []byte(`{"state":"1"}`),
+		ID:                failed.ID,
+		OpenTransSerialNo: failed.OpenTransSerialNo,
+		ContractNo:        binding.ContractNo,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, BaofuAccountOpeningStateReady, ready.State)
+	require.Equal(t, binding.ID, ready.AccountBindingID.Int64)
+	require.False(t, ready.FailureCode.Valid)
+	require.False(t, ready.FailureMessage.Valid)
+}
+
+func TestRecoverFailedBaofuAccountOpeningFlowFromActiveBindingMerchantContinuesReport(t *testing.T) {
+	ctx := context.Background()
+	merchant := createRandomMerchantForTest(t)
+	contractNo := "CM" + util.RandomString(18)
+	openTransSerialNo := "OPEN" + util.RandomString(18)
+	flow := createBaofuOpeningFlowForTest(t, BaofuAccountOwnerTypeMerchant, merchant.ID, BaofuAccountTypeBusiness, BaofuAccountOpeningStateProfilePending)
+	flow, err := testStore.MarkBaofuAccountOpeningFlowOpeningProcessing(ctx, MarkBaofuAccountOpeningFlowOpeningProcessingParams{
+		ID:                      flow.ID,
+		OpenTransSerialNo:       pgtype.Text{String: openTransSerialNo, Valid: true},
+		LoginNo:                 pgtype.Text{String: "LLBFOM" + util.RandomString(12), Valid: true},
+		ProviderRequestSnapshot: []byte(`{}`),
+		RawSnapshot:             []byte(`{}`),
+	})
+	require.NoError(t, err)
+	failed, err := testStore.MarkBaofuAccountOpeningFlowFailed(ctx, MarkBaofuAccountOpeningFlowFailedParams{
+		ID:             flow.ID,
+		FailureCode:    pgtype.Text{String: "BF0003", Valid: true},
+		FailureMessage: pgtype.Text{String: "支付通道异常，请联系平台处理", Valid: true},
+		RawSnapshot:    []byte(`{"state":"failed","errorCode":"BF0003"}`),
+	})
+	require.NoError(t, err)
+	binding, err := testStore.UpsertBaofuAccountBinding(ctx, UpsertBaofuAccountBindingParams{
+		OwnerType:             BaofuAccountOwnerTypeMerchant,
+		OwnerID:               merchant.ID,
+		AccountType:           BaofuAccountTypeBusiness,
+		LoginNo:               failed.LoginNo,
+		OpenState:             BaofuAccountOpenStateProcessing,
+		LastOpenTransSerialNo: failed.OpenTransSerialNo,
+		RawSnapshot:           []byte(`{"state":"processing"}`),
+	})
+	require.NoError(t, err)
+	binding, err = testStore.MarkBaofuAccountBindingActive(ctx, MarkBaofuAccountBindingActiveParams{
+		ID:           binding.ID,
+		ContractNo:   pgtype.Text{String: contractNo, Valid: true},
+		SharingMerID: pgtype.Text{String: contractNo, Valid: true},
+		RawSnapshot:  []byte(`{"state":"active"}`),
+	})
+	require.NoError(t, err)
+
+	recovered, err := testStore.RecoverFailedBaofuAccountOpeningFlowFromActiveBinding(ctx, RecoverFailedBaofuAccountOpeningFlowFromActiveBindingParams{
+		AccountBindingID:  pgtype.Int8{Int64: binding.ID, Valid: true},
+		RawSnapshot:       []byte(`{"state":"1"}`),
+		ID:                failed.ID,
+		OpenTransSerialNo: failed.OpenTransSerialNo,
+		ContractNo:        binding.ContractNo,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, BaofuAccountOpeningStateMerchantReportProcessing, recovered.State)
+	require.Equal(t, binding.ID, recovered.AccountBindingID.Int64)
+	require.False(t, recovered.FailureCode.Valid)
+	require.False(t, recovered.FailureMessage.Valid)
+}
+
+func TestRecoverFailedBaofuAccountOpeningFlowFromActiveBindingRejectsMismatch(t *testing.T) {
+	ctx := context.Background()
+	ownerID := time.Now().UnixNano()
+	flow := createBaofuOpeningFlowForTest(t, BaofuAccountOwnerTypeRider, ownerID, BaofuAccountTypePersonal, BaofuAccountOpeningStateVerifyFeePending)
+	payment := createBaofuVerifyFeePaymentOrderForTest(t, BaofuAccountOwnerTypeRider, ownerID, "paid")
+	flow, err := testStore.MarkBaofuAccountOpeningFlowOpeningProcessing(ctx, MarkBaofuAccountOpeningFlowOpeningProcessingParams{
+		ID:                      flow.ID,
+		VerifyFeePaymentOrderID: pgtype.Int8{Int64: payment.ID, Valid: true},
+		OpenTransSerialNo:       pgtype.Text{String: "OPEN" + util.RandomString(18), Valid: true},
+		LoginNo:                 pgtype.Text{String: "LLBFOR" + util.RandomString(12), Valid: true},
+		ProviderRequestSnapshot: []byte(`{}`),
+		RawSnapshot:             []byte(`{}`),
+	})
+	require.NoError(t, err)
+	failed, err := testStore.MarkBaofuAccountOpeningFlowFailed(ctx, MarkBaofuAccountOpeningFlowFailedParams{
+		ID:             flow.ID,
+		FailureCode:    pgtype.Text{String: "BF0003", Valid: true},
+		FailureMessage: pgtype.Text{String: "支付通道异常，请联系平台处理", Valid: true},
+		RawSnapshot:    []byte(`{"state":"failed","errorCode":"BF0003"}`),
+	})
+	require.NoError(t, err)
+	binding, err := testStore.UpsertBaofuAccountBinding(ctx, UpsertBaofuAccountBindingParams{
+		OwnerType:             BaofuAccountOwnerTypeRider,
+		OwnerID:               ownerID,
+		AccountType:           BaofuAccountTypePersonal,
+		LoginNo:               failed.LoginNo,
+		OpenState:             BaofuAccountOpenStateProcessing,
+		LastOpenTransSerialNo: failed.OpenTransSerialNo,
+		RawSnapshot:           []byte(`{"state":"processing"}`),
+	})
+	require.NoError(t, err)
+	binding, err = testStore.MarkBaofuAccountBindingActive(ctx, MarkBaofuAccountBindingActiveParams{
+		ID:           binding.ID,
+		ContractNo:   pgtype.Text{String: "CP" + util.RandomString(18), Valid: true},
+		SharingMerID: pgtype.Text{String: "CP_SHARE" + util.RandomString(12), Valid: true},
+		RawSnapshot:  []byte(`{"state":"active"}`),
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.RecoverFailedBaofuAccountOpeningFlowFromActiveBinding(ctx, RecoverFailedBaofuAccountOpeningFlowFromActiveBindingParams{
+		AccountBindingID:  pgtype.Int8{Int64: binding.ID, Valid: true},
+		RawSnapshot:       []byte(`{"state":"1"}`),
+		ID:                failed.ID,
+		OpenTransSerialNo: failed.OpenTransSerialNo,
+		ContractNo:        pgtype.Text{String: "CP_MISMATCH", Valid: true},
+	})
+
+	require.ErrorIs(t, err, ErrRecordNotFound)
 }
 
 func TestListRecoverableBaofuAccountOpeningFlowsIncludesLatestDuplicateFailure(t *testing.T) {

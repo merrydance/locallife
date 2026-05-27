@@ -17417,6 +17417,21 @@ func (mr *MockStoreMockRecorder) RecordBrowseHistory(ctx, arg any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordBrowseHistory", reflect.TypeOf((*MockStore)(nil).RecordBrowseHistory), ctx, arg)
 }
 
+// RecoverFailedBaofuAccountOpeningFlowFromActiveBinding mocks base method.
+func (m *MockStore) RecoverFailedBaofuAccountOpeningFlowFromActiveBinding(ctx context.Context, arg db.RecoverFailedBaofuAccountOpeningFlowFromActiveBindingParams) (db.BaofuAccountOpeningFlow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecoverFailedBaofuAccountOpeningFlowFromActiveBinding", ctx, arg)
+	ret0, _ := ret[0].(db.BaofuAccountOpeningFlow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RecoverFailedBaofuAccountOpeningFlowFromActiveBinding indicates an expected call of RecoverFailedBaofuAccountOpeningFlowFromActiveBinding.
+func (mr *MockStoreMockRecorder) RecoverFailedBaofuAccountOpeningFlowFromActiveBinding(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecoverFailedBaofuAccountOpeningFlowFromActiveBinding", reflect.TypeOf((*MockStore)(nil).RecoverFailedBaofuAccountOpeningFlowFromActiveBinding), ctx, arg)
+}
+
 // RefreshSessionTx mocks base method.
 func (m *MockStore) RefreshSessionTx(ctx context.Context, arg db.RefreshSessionTxParams) (db.RefreshSessionTxResult, error) {
 	m.ctrl.T.Helper()

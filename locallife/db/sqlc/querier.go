@@ -1583,6 +1583,7 @@ type Querier interface {
 	MarkUserVoucherAsUsed(ctx context.Context, arg MarkUserVoucherAsUsedParams) (UserVoucher, error)
 	// 浏览历史查询
 	RecordBrowseHistory(ctx context.Context, arg RecordBrowseHistoryParams) (BrowseHistory, error)
+	RecoverFailedBaofuAccountOpeningFlowFromActiveBinding(ctx context.Context, arg RecoverFailedBaofuAccountOpeningFlowFromActiveBindingParams) (BaofuAccountOpeningFlow, error)
 	RegisterMerchantAppDevice(ctx context.Context, arg RegisterMerchantAppDeviceParams) (MerchantAppDevice, error)
 	// 拒绝商户申请
 	RejectMerchantApplication(ctx context.Context, arg RejectMerchantApplicationParams) (MerchantApplication, error)

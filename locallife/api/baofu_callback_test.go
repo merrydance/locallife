@@ -250,6 +250,90 @@ func TestBaofuAccountOpenCallbackAcceptsDuplicateFactBeforeAck(t *testing.T) {
 	require.Equal(t, "OK", recorder.Body.String())
 }
 
+func TestBaofuAccountOpenCallbackDuplicateFactRecoversFailedFlowBeforeAck(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAccountNotificationParserForTest(fakeBaofuOpenAccountParser{})
+	server.config.BaofuCollectMerchantID = "102004465"
+	server.config.BaofuCollectTerminalID = "200005200"
+
+	flow := db.BaofuAccountOpeningFlow{
+		ID:                7115,
+		OwnerType:         db.BaofuAccountOwnerTypeRider,
+		OwnerID:           2,
+		AccountType:       db.BaofuAccountTypePersonal,
+		State:             db.BaofuAccountOpeningStateFailed,
+		FailureCode:       pgtype.Text{String: "BF0003", Valid: true},
+		FailureMessage:    pgtype.Text{String: "支付通道异常，请联系平台处理", Valid: true},
+		OpenTransSerialNo: pgtype.Text{String: "OPEN123", Valid: true},
+		LoginNo:           pgtype.Text{String: "LLBFOR0000000002", Valid: true},
+	}
+	binding := db.BaofuAccountBinding{
+		ID:                    6115,
+		OwnerType:             db.BaofuAccountOwnerTypeRider,
+		OwnerID:               2,
+		AccountType:           db.BaofuAccountTypePersonal,
+		ContractNo:            pgtype.Text{String: "CM_BCT_123", Valid: true},
+		SharingMerID:          pgtype.Text{String: "CM_BCT_123", Valid: true},
+		LoginNo:               pgtype.Text{String: "LLBFOR0000000002", Valid: true},
+		OpenState:             db.BaofuAccountOpenStateActive,
+		LastOpenTransSerialNo: pgtype.Text{String: "OPEN123", Valid: true},
+		RawSnapshot:           []byte(`{"state":"active"}`),
+	}
+	dedupeKey := "baofu:callback:account:OPEN123:1"
+
+	store.EXPECT().GetBaofuAccountOpeningFlowByOpenTransSerialNo(gomock.Any(), pgtype.Text{String: "OPEN123", Valid: true}).Return(flow, nil)
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).Return(db.ExternalPaymentFact{}, db.ErrRecordNotFound)
+	store.EXPECT().GetExternalPaymentFactByDedupeKey(gomock.Any(), dedupeKey).Return(db.ExternalPaymentFact{
+		ID:                   115,
+		Provider:             db.ExternalPaymentProviderBaofu,
+		Channel:              db.PaymentChannelBaofuAggregate,
+		Capability:           db.ExternalPaymentCapabilityBaofuAccount,
+		FactSource:           db.ExternalPaymentFactSourceCallback,
+		SourceEventID:        pgtype.Text{String: "OPEN123", Valid: true},
+		SourceEventType:      pgtype.Text{String: "BAOFU_ACCOUNT_OPEN", Valid: true},
+		ExternalObjectType:   "baofu_account",
+		ExternalObjectKey:    "OPEN123",
+		ExternalSecondaryKey: pgtype.Text{String: "CM_BCT_123", Valid: true},
+		BusinessOwner:        pgtype.Text{String: db.BaofuAccountOwnerTypeRider, Valid: true},
+		BusinessObjectType:   pgtype.Text{String: "baofu_account_opening_flow", Valid: true},
+		BusinessObjectID:     pgtype.Int8{Int64: 7115, Valid: true},
+		UpstreamState:        "1",
+		TerminalStatus:       db.ExternalPaymentTerminalStatusSuccess,
+		IsTerminal:           true,
+		Currency:             "CNY",
+		DedupeKey:            dedupeKey,
+		ProcessingStatus:     db.ExternalPaymentFactProcessingStatusReceived,
+	}, nil)
+	store.EXPECT().GetBaofuAccountBindingByContractNo(gomock.Any(), pgtype.Text{String: "CM_BCT_123", Valid: true}).Return(binding, nil)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+		OwnerType: db.BaofuAccountOwnerTypeRider,
+		OwnerID:   2,
+	}).Return(binding, nil).Times(2)
+	store.EXPECT().RecoverFailedBaofuAccountOpeningFlowFromActiveBinding(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.RecoverFailedBaofuAccountOpeningFlowFromActiveBindingParams) (db.BaofuAccountOpeningFlow, error) {
+			require.Equal(t, int64(7115), arg.ID)
+			require.Equal(t, pgtype.Int8{Int64: 6115, Valid: true}, arg.AccountBindingID)
+			require.Equal(t, pgtype.Text{String: "OPEN123", Valid: true}, arg.OpenTransSerialNo)
+			require.Equal(t, pgtype.Text{String: "CM_BCT_123", Valid: true}, arg.ContractNo)
+			require.JSONEq(t, `{"transSerialNo":"OPEN123","state":"1","contractNo":"CM_BCT_123"}`, string(arg.RawSnapshot))
+			flow.State = db.BaofuAccountOpeningStateReady
+			flow.AccountBindingID = arg.AccountBindingID
+			flow.FailureCode = pgtype.Text{}
+			flow.FailureMessage = pgtype.Text{}
+			return flow, nil
+		})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/account/open", bytes.NewBufferString(`{"encrypted":true}`))
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "OK", recorder.Body.String())
+}
+
 func TestBaofuAccountOpenCallbackRejectsMismatchedDuplicateFact(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

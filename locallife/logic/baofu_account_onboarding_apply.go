@@ -37,6 +37,9 @@ func (s *BaofuAccountOnboardingService) ApplyAccountOpenResult(ctx context.Conte
 			strings.TrimSpace(flow.State) == db.BaofuAccountOpeningStateAppletAuthPending {
 			return BaofuAccountOpenApplyResult{Flow: flow, Binding: &binding}, nil
 		}
+		if strings.TrimSpace(flow.State) == db.BaofuAccountOpeningStateFailed && !baofuAccountDuplicateFailureCode(flow.FailureCode.String) {
+			return s.recoverFailedFlowFromActiveBinding(ctx, flow, &normalized)
+		}
 		if flow.OwnerType == db.BaofuAccountOwnerTypeMerchant {
 			updated, err := s.store.MarkBaofuAccountOpeningFlowMerchantReportProcessing(ctx, db.MarkBaofuAccountOpeningFlowMerchantReportProcessingParams{
 				ID:               flow.ID,
@@ -388,4 +391,59 @@ func (s *BaofuAccountOnboardingService) markBindingActive(ctx context.Context, b
 		return txResult.Binding, nil
 	}
 	return s.store.MarkBaofuAccountBindingActive(ctx, activeParams)
+}
+
+func (s *BaofuAccountOnboardingService) recoverFailedFlowFromActiveBinding(ctx context.Context, flow db.BaofuAccountOpeningFlow, result *baofucontracts.AccountResult) (BaofuAccountOpenApplyResult, error) {
+	binding, err := s.store.GetBaofuAccountBindingByOwner(ctx, db.GetBaofuAccountBindingByOwnerParams{OwnerType: flow.OwnerType, OwnerID: flow.OwnerID})
+	if err != nil {
+		return BaofuAccountOpenApplyResult{}, err
+	}
+	if strings.TrimSpace(binding.OpenState) != db.BaofuAccountOpenStateActive {
+		return BaofuAccountOpenApplyResult{}, db.ErrRecordNotFound
+	}
+	if strings.TrimSpace(binding.AccountType) != "" && strings.TrimSpace(binding.AccountType) != strings.TrimSpace(flow.AccountType) {
+		return BaofuAccountOpenApplyResult{}, fmt.Errorf("baofu account binding account type mismatch for flow %d", flow.ID)
+	}
+	openTrans := strings.TrimSpace(flow.OpenTransSerialNo.String)
+	if openTrans == "" || strings.TrimSpace(binding.LastOpenTransSerialNo.String) != openTrans {
+		return BaofuAccountOpenApplyResult{}, db.ErrRecordNotFound
+	}
+	contractNo := strings.TrimSpace(binding.ContractNo.String)
+	if result != nil {
+		resultContractNo := strings.TrimSpace(result.ContractNo)
+		if resultContractNo != "" {
+			contractNo = resultContractNo
+		}
+	}
+	if contractNo == "" || strings.TrimSpace(binding.ContractNo.String) != contractNo {
+		return BaofuAccountOpenApplyResult{}, db.ErrRecordNotFound
+	}
+	rawSnapshot := binding.RawSnapshot
+	if result != nil {
+		rawSnapshot = baofuAccountRawSnapshot(result.Raw)
+	}
+	rawSnapshot = baofuAccountRawSnapshot(rawSnapshot)
+	updated, err := s.store.RecoverFailedBaofuAccountOpeningFlowFromActiveBinding(ctx, db.RecoverFailedBaofuAccountOpeningFlowFromActiveBindingParams{
+		AccountBindingID:  pgtype.Int8{Int64: binding.ID, Valid: binding.ID > 0},
+		RawSnapshot:       rawSnapshot,
+		ID:                flow.ID,
+		OpenTransSerialNo: pgtype.Text{String: openTrans, Valid: true},
+		ContractNo:        pgtype.Text{String: contractNo, Valid: true},
+	})
+	if err != nil {
+		return BaofuAccountOpenApplyResult{}, err
+	}
+	if updated.OwnerType == db.BaofuAccountOwnerTypeMerchant &&
+		strings.TrimSpace(updated.State) == db.BaofuAccountOpeningStateMerchantReportProcessing &&
+		s.merchantReportClient != nil {
+		merchantReportStore, ok := s.store.(baofuAccountMerchantReportStore)
+		if !ok {
+			return BaofuAccountOpenApplyResult{}, ErrBaofuMerchantReportServiceNotConfigured
+		}
+		updated, err = NewBaofuAccountMerchantReportService(merchantReportStore, s.merchantReportClient, s.encryptor, s.merchantReportConfig).RecoverMerchantReportFlow(ctx, updated)
+		if err != nil {
+			return BaofuAccountOpenApplyResult{}, err
+		}
+	}
+	return BaofuAccountOpenApplyResult{Flow: updated, Binding: &binding}, nil
 }

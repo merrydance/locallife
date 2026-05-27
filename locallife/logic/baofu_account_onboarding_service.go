@@ -33,6 +33,7 @@ type baofuAccountOnboardingStore interface {
 	MarkBaofuAccountOpeningFlowOpeningProcessing(ctx context.Context, arg db.MarkBaofuAccountOpeningFlowOpeningProcessingParams) (db.BaofuAccountOpeningFlow, error)
 	MarkBaofuAccountOpeningFlowMerchantReportProcessing(ctx context.Context, arg db.MarkBaofuAccountOpeningFlowMerchantReportProcessingParams) (db.BaofuAccountOpeningFlow, error)
 	MarkBaofuAccountOpeningFlowReady(ctx context.Context, arg db.MarkBaofuAccountOpeningFlowReadyParams) (db.BaofuAccountOpeningFlow, error)
+	RecoverFailedBaofuAccountOpeningFlowFromActiveBinding(ctx context.Context, arg db.RecoverFailedBaofuAccountOpeningFlowFromActiveBindingParams) (db.BaofuAccountOpeningFlow, error)
 	MarkBaofuAccountOpeningFlowFailed(ctx context.Context, arg db.MarkBaofuAccountOpeningFlowFailedParams) (db.BaofuAccountOpeningFlow, error)
 	GetBaofuAccountBindingByContractNo(ctx context.Context, contractNo pgtype.Text) (db.BaofuAccountBinding, error)
 	UpsertBaofuAccountBinding(ctx context.Context, arg db.UpsertBaofuAccountBindingParams) (db.BaofuAccountBinding, error)
@@ -313,6 +314,15 @@ func (s *BaofuAccountOnboardingService) ContinueAfterVerifyFeePaid(ctx context.C
 		db.BaofuAccountOpeningStateAppletAuthPending,
 		db.BaofuAccountOpeningStateReady:
 		return nil
+	}
+	if strings.TrimSpace(flow.State) == db.BaofuAccountOpeningStateFailed {
+		recovered, err := s.recoverFailedFlowFromActiveBinding(ctx, flow, nil)
+		if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
+			return err
+		}
+		if err == nil && strings.TrimSpace(recovered.Flow.State) == db.BaofuAccountOpeningStateReady {
+			return nil
+		}
 	}
 	profileID := flow.ProfileID
 	if !profileID.Valid {
