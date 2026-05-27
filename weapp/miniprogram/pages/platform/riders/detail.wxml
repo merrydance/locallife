@@ -1,4 +1,4 @@
-<custom-navbar title="运营商详情" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
+<custom-navbar title="骑手详情" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
 
 <view
   class="detail-page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
@@ -17,58 +17,53 @@
       </view>
 
       <view wx:elif="{{!detail}}" class="section-card status-wrap">
-        <t-empty description="未找到运营商详情" />
+        <t-empty description="未找到骑手详情" />
       </view>
 
       <block wx:else>
         <view class="section-card">
           <view class="title-row">
-            <text class="title">{{detail.name || ('运营商#' + detail.id)}}</text>
-            <t-tag theme="{{detail.statusTheme}}" variant="light">{{detail.statusLabel}}</t-tag>
+            <text class="title">{{detail.name || ('骑手#' + detail.id)}}</text>
+            <t-tag theme="{{detail.activeTheme}}" variant="light">{{detail.activeLabel}}</t-tag>
           </view>
           <view class="meta-row">
-            <text class="meta-label">联系人</text>
-            <text class="meta-value">{{detail.contact_name || '--'}}</text>
+            <text class="meta-label">区县</text>
+            <text class="meta-value">{{detail.regionText}}</text>
           </view>
           <view class="meta-row">
-            <text class="meta-label">联系电话</text>
-            <text class="meta-value">{{detail.contact_phone || '--'}}</text>
+            <text class="meta-label">年龄</text>
+            <text class="meta-value">{{detail.ageText}}</text>
           </view>
           <view class="meta-row">
-            <text class="meta-label">主要区县</text>
-            <text class="meta-value">{{detail.region_name || '--'}}</text>
+            <text class="meta-label">性别</text>
+            <text class="meta-value">{{detail.genderText}}</text>
+          </view>
+          <view class="meta-row">
+            <text class="meta-label">接单状态</text>
+            <text class="meta-value">{{detail.statusLabel}}</text>
           </view>
         </view>
 
         <view class="section-card">
-          <view class="section-title">运营概况</view>
+          <view class="section-title">接单统计</view>
           <view class="metric-grid">
             <view class="metric-item">
-              <text class="metric-label">管理区县</text>
-              <text class="metric-value">{{detail.regionText}}</text>
+              <text class="metric-label">接单总数</text>
+              <text class="metric-value">{{detail.order_stats.total_orders}}</text>
             </view>
             <view class="metric-item">
-              <text class="metric-label">商户数量</text>
-              <text class="metric-value">{{detail.merchantText}}</text>
+              <text class="metric-label">总收入</text>
+              <text class="metric-value">{{detail.totalIncomeText}}</text>
             </view>
             <view class="metric-item">
-              <text class="metric-label">近一个月订单</text>
+              <text class="metric-label">近一个月接单</text>
               <text class="metric-value">{{detail.order_stats.last_month_orders}}</text>
             </view>
             <view class="metric-item">
-              <text class="metric-label">近一个月流水</text>
-              <text class="metric-value">{{detail.lastMonthRevenueText}}</text>
+              <text class="metric-label">近一个月收入</text>
+              <text class="metric-value">{{detail.lastMonthIncomeText}}</text>
             </view>
           </view>
-        </view>
-
-        <view class="section-card">
-          <view class="section-title">管理区县</view>
-          <view wx:for="{{detail.regions}}" wx:key="region_id" class="meta-row">
-            <text class="meta-label">{{item.region_name}}</text>
-            <text class="meta-value">{{item.status}}</text>
-          </view>
-          <view wx:if="{{detail.regions.length === 0}}" class="empty-line">暂无区县</view>
         </view>
 
         <view class="section-card">
@@ -84,13 +79,13 @@
           <view wx:if="{{detail.categories.length === 0}}" class="empty-line">暂无投诉分类</view>
         </view>
 
-        <view wx:if="{{detail.can_suspend || detail.can_resume}}" class="section-card">
+        <view wx:if="{{detail.can_pause_accepting || detail.can_resume_accepting}}" class="section-card">
           <t-button
-            theme="{{detail.can_suspend ? 'danger' : 'primary'}}"
+            theme="{{detail.can_pause_accepting ? 'danger' : 'primary'}}"
             block
             loading="{{submitting}}"
-            bind:tap="onToggleStatus"
-          >{{detail.can_suspend ? '暂停运营商' : '恢复运营商'}}</t-button>
+            bind:tap="onToggleAccepting"
+          >{{detail.can_pause_accepting ? '暂停接单' : '恢复接单'}}</t-button>
         </view>
       </block>
     </view>

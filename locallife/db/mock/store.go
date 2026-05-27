@@ -2299,6 +2299,36 @@ func (mr *MockStoreMockRecorder) CountPlatformAlertEvents(ctx any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountPlatformAlertEvents", reflect.TypeOf((*MockStore)(nil).CountPlatformAlertEvents), ctx)
 }
 
+// CountPlatformMerchants mocks base method.
+func (m *MockStore) CountPlatformMerchants(ctx context.Context) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountPlatformMerchants", ctx)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountPlatformMerchants indicates an expected call of CountPlatformMerchants.
+func (mr *MockStoreMockRecorder) CountPlatformMerchants(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountPlatformMerchants", reflect.TypeOf((*MockStore)(nil).CountPlatformMerchants), ctx)
+}
+
+// CountPlatformOperators mocks base method.
+func (m *MockStore) CountPlatformOperators(ctx context.Context) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountPlatformOperators", ctx)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountPlatformOperators indicates an expected call of CountPlatformOperators.
+func (mr *MockStoreMockRecorder) CountPlatformOperators(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountPlatformOperators", reflect.TypeOf((*MockStore)(nil).CountPlatformOperators), ctx)
+}
+
 // CountPlatformProfitSharingReconciliationDetails mocks base method.
 func (m *MockStore) CountPlatformProfitSharingReconciliationDetails(ctx context.Context, arg db.CountPlatformProfitSharingReconciliationDetailsParams) (int64, error) {
 	m.ctrl.T.Helper()
@@ -2312,6 +2342,21 @@ func (m *MockStore) CountPlatformProfitSharingReconciliationDetails(ctx context.
 func (mr *MockStoreMockRecorder) CountPlatformProfitSharingReconciliationDetails(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountPlatformProfitSharingReconciliationDetails", reflect.TypeOf((*MockStore)(nil).CountPlatformProfitSharingReconciliationDetails), ctx, arg)
+}
+
+// CountPlatformRiders mocks base method.
+func (m *MockStore) CountPlatformRiders(ctx context.Context) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountPlatformRiders", ctx)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountPlatformRiders indicates an expected call of CountPlatformRiders.
+func (mr *MockStoreMockRecorder) CountPlatformRiders(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountPlatformRiders", reflect.TypeOf((*MockStore)(nil).CountPlatformRiders), ctx)
 }
 
 // CountProfitSharingReturnsByRefundOrder mocks base method.
@@ -9793,6 +9838,36 @@ func (mr *MockStoreMockRecorder) GetPlatformDailyStats(ctx, arg any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPlatformDailyStats", reflect.TypeOf((*MockStore)(nil).GetPlatformDailyStats), ctx, arg)
 }
 
+// GetPlatformMerchantDetail mocks base method.
+func (m *MockStore) GetPlatformMerchantDetail(ctx context.Context, id int64) (db.GetPlatformMerchantDetailRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPlatformMerchantDetail", ctx, id)
+	ret0, _ := ret[0].(db.GetPlatformMerchantDetailRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPlatformMerchantDetail indicates an expected call of GetPlatformMerchantDetail.
+func (mr *MockStoreMockRecorder) GetPlatformMerchantDetail(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPlatformMerchantDetail", reflect.TypeOf((*MockStore)(nil).GetPlatformMerchantDetail), ctx, id)
+}
+
+// GetPlatformOperatorDetail mocks base method.
+func (m *MockStore) GetPlatformOperatorDetail(ctx context.Context, id int64) (db.GetPlatformOperatorDetailRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPlatformOperatorDetail", ctx, id)
+	ret0, _ := ret[0].(db.GetPlatformOperatorDetailRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPlatformOperatorDetail indicates an expected call of GetPlatformOperatorDetail.
+func (mr *MockStoreMockRecorder) GetPlatformOperatorDetail(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPlatformOperatorDetail", reflect.TypeOf((*MockStore)(nil).GetPlatformOperatorDetail), ctx, id)
+}
+
 // GetPlatformOverview mocks base method.
 func (m *MockStore) GetPlatformOverview(ctx context.Context, arg db.GetPlatformOverviewParams) (db.GetPlatformOverviewRow, error) {
 	m.ctrl.T.Helper()
@@ -9806,6 +9881,21 @@ func (m *MockStore) GetPlatformOverview(ctx context.Context, arg db.GetPlatformO
 func (mr *MockStoreMockRecorder) GetPlatformOverview(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPlatformOverview", reflect.TypeOf((*MockStore)(nil).GetPlatformOverview), ctx, arg)
+}
+
+// GetPlatformRiderDetail mocks base method.
+func (m *MockStore) GetPlatformRiderDetail(ctx context.Context, id int64) (db.GetPlatformRiderDetailRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPlatformRiderDetail", ctx, id)
+	ret0, _ := ret[0].(db.GetPlatformRiderDetailRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPlatformRiderDetail indicates an expected call of GetPlatformRiderDetail.
+func (mr *MockStoreMockRecorder) GetPlatformRiderDetail(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPlatformRiderDetail", reflect.TypeOf((*MockStore)(nil).GetPlatformRiderDetail), ctx, id)
 }
 
 // GetPopularCombos mocks base method.
@@ -15008,6 +15098,81 @@ func (mr *MockStoreMockRecorder) ListPlatformConfigsByKey(ctx, configKey any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPlatformConfigsByKey", reflect.TypeOf((*MockStore)(nil).ListPlatformConfigsByKey), ctx, configKey)
 }
 
+// ListPlatformMerchantCards mocks base method.
+func (m *MockStore) ListPlatformMerchantCards(ctx context.Context, arg db.ListPlatformMerchantCardsParams) ([]db.ListPlatformMerchantCardsRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPlatformMerchantCards", ctx, arg)
+	ret0, _ := ret[0].([]db.ListPlatformMerchantCardsRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPlatformMerchantCards indicates an expected call of ListPlatformMerchantCards.
+func (mr *MockStoreMockRecorder) ListPlatformMerchantCards(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPlatformMerchantCards", reflect.TypeOf((*MockStore)(nil).ListPlatformMerchantCards), ctx, arg)
+}
+
+// ListPlatformMerchantComplaintCategories mocks base method.
+func (m *MockStore) ListPlatformMerchantComplaintCategories(ctx context.Context, merchantID int64) ([]db.ListPlatformMerchantComplaintCategoriesRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPlatformMerchantComplaintCategories", ctx, merchantID)
+	ret0, _ := ret[0].([]db.ListPlatformMerchantComplaintCategoriesRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPlatformMerchantComplaintCategories indicates an expected call of ListPlatformMerchantComplaintCategories.
+func (mr *MockStoreMockRecorder) ListPlatformMerchantComplaintCategories(ctx, merchantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPlatformMerchantComplaintCategories", reflect.TypeOf((*MockStore)(nil).ListPlatformMerchantComplaintCategories), ctx, merchantID)
+}
+
+// ListPlatformOperatorCards mocks base method.
+func (m *MockStore) ListPlatformOperatorCards(ctx context.Context, arg db.ListPlatformOperatorCardsParams) ([]db.ListPlatformOperatorCardsRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPlatformOperatorCards", ctx, arg)
+	ret0, _ := ret[0].([]db.ListPlatformOperatorCardsRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPlatformOperatorCards indicates an expected call of ListPlatformOperatorCards.
+func (mr *MockStoreMockRecorder) ListPlatformOperatorCards(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPlatformOperatorCards", reflect.TypeOf((*MockStore)(nil).ListPlatformOperatorCards), ctx, arg)
+}
+
+// ListPlatformOperatorComplaintCategories mocks base method.
+func (m *MockStore) ListPlatformOperatorComplaintCategories(ctx context.Context, operatorID int64) ([]db.ListPlatformOperatorComplaintCategoriesRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPlatformOperatorComplaintCategories", ctx, operatorID)
+	ret0, _ := ret[0].([]db.ListPlatformOperatorComplaintCategoriesRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPlatformOperatorComplaintCategories indicates an expected call of ListPlatformOperatorComplaintCategories.
+func (mr *MockStoreMockRecorder) ListPlatformOperatorComplaintCategories(ctx, operatorID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPlatformOperatorComplaintCategories", reflect.TypeOf((*MockStore)(nil).ListPlatformOperatorComplaintCategories), ctx, operatorID)
+}
+
+// ListPlatformOperatorRegions mocks base method.
+func (m *MockStore) ListPlatformOperatorRegions(ctx context.Context, operatorID int64) ([]db.ListPlatformOperatorRegionsRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPlatformOperatorRegions", ctx, operatorID)
+	ret0, _ := ret[0].([]db.ListPlatformOperatorRegionsRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPlatformOperatorRegions indicates an expected call of ListPlatformOperatorRegions.
+func (mr *MockStoreMockRecorder) ListPlatformOperatorRegions(ctx, operatorID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPlatformOperatorRegions", reflect.TypeOf((*MockStore)(nil).ListPlatformOperatorRegions), ctx, operatorID)
+}
+
 // ListPlatformProfitSharingReconciliationDetails mocks base method.
 func (m *MockStore) ListPlatformProfitSharingReconciliationDetails(ctx context.Context, arg db.ListPlatformProfitSharingReconciliationDetailsParams) ([]db.ProfitSharingOrder, error) {
 	m.ctrl.T.Helper()
@@ -15021,6 +15186,36 @@ func (m *MockStore) ListPlatformProfitSharingReconciliationDetails(ctx context.C
 func (mr *MockStoreMockRecorder) ListPlatformProfitSharingReconciliationDetails(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPlatformProfitSharingReconciliationDetails", reflect.TypeOf((*MockStore)(nil).ListPlatformProfitSharingReconciliationDetails), ctx, arg)
+}
+
+// ListPlatformRiderCards mocks base method.
+func (m *MockStore) ListPlatformRiderCards(ctx context.Context, arg db.ListPlatformRiderCardsParams) ([]db.ListPlatformRiderCardsRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPlatformRiderCards", ctx, arg)
+	ret0, _ := ret[0].([]db.ListPlatformRiderCardsRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPlatformRiderCards indicates an expected call of ListPlatformRiderCards.
+func (mr *MockStoreMockRecorder) ListPlatformRiderCards(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPlatformRiderCards", reflect.TypeOf((*MockStore)(nil).ListPlatformRiderCards), ctx, arg)
+}
+
+// ListPlatformRiderComplaintCategories mocks base method.
+func (m *MockStore) ListPlatformRiderComplaintCategories(ctx context.Context, riderID int64) ([]db.ListPlatformRiderComplaintCategoriesRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPlatformRiderComplaintCategories", ctx, riderID)
+	ret0, _ := ret[0].([]db.ListPlatformRiderComplaintCategoriesRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPlatformRiderComplaintCategories indicates an expected call of ListPlatformRiderComplaintCategories.
+func (mr *MockStoreMockRecorder) ListPlatformRiderComplaintCategories(ctx, riderID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPlatformRiderComplaintCategories", reflect.TypeOf((*MockStore)(nil).ListPlatformRiderComplaintCategories), ctx, riderID)
 }
 
 // ListPrintLogsByOrder mocks base method.

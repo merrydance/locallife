@@ -6,6 +6,11 @@
 import { platformDashboardService, type RealtimeDashboardData, type PlatformOverviewResponse } from '@/api/platform-dashboard'
 import { platformAlertsService } from '@/api/platform-alerts'
 import { responsiveBehavior } from '@/utils/responsive'
+import {
+    buildPlatformDashboardView,
+    type PlatformDashboardEntry,
+    type PlatformDashboardView
+} from '@/services/platform-dashboard-view'
 import { getConsoleDashboardErrorState } from '../../../utils/console-dashboard'
 import { wsManager, WSMessageType } from '../../../utils/websocket'
 import {
@@ -15,43 +20,24 @@ import {
     type ActionableAbnormalRefundAlert
 } from '../../../utils/platform-alerts'
 
-type ActionTapEvent = WechatMiniprogram.CustomEvent & {
-    currentTarget: {
-        dataset: {
-            id?: string
-            url?: string
-        }
-    }
-}
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
-
-interface PlatformSummaryCards {
-    totalOrders: string
-    totalGMV: string
-    activeUsers: string
-    activeMerchants: string
-    onlineRiders: string
-    pendingOrders: string
-    pendingRiders: string
-}
-
-interface StateCardItem {
-    label: string
-    value: string
-    theme?: 'success' | 'warning' | 'danger'
-}
-
-interface ManagementAction {
-    id: string
-    title: string
-    desc: string
-    icon: string
-    url?: string
-    badge?: string
-}
 
 interface AlertFeedItem extends ActionableAbnormalRefundAlert {
     timeDisplay: string
+}
+
+function createDashboardView(
+    overviewData: PlatformOverviewResponse | null,
+    realtimeData: RealtimeDashboardData | null,
+    abnormalRefundAlerts: AlertFeedItem[],
+    alertFeedReady: boolean
+): PlatformDashboardView {
+    return buildPlatformDashboardView({
+        overviewData,
+        realtimeData,
+        abnormalRefundCount: abnormalRefundAlerts.length,
+        alertFeedReady
+    })
 }
 
 Page({
@@ -64,73 +50,9 @@ Page({
         errorCanRetry: true,
         overviewData: null as PlatformOverviewResponse | null,
         realtimeData: null as RealtimeDashboardData | null,
-        summaryCards: {
-            totalOrders: '0',
-            totalGMV: '¥0.00',
-            activeUsers: '0',
-            activeMerchants: '0',
-            onlineRiders: '0',
-            pendingOrders: '0',
-            pendingRiders: '0'
-        } as PlatformSummaryCards,
-        actions: [
-            {
-                id: 'operators',
-                title: '运营商管理',
-                desc: '运营商入驻与区域管理',
-                icon: 'root-list',
-                url: '/pages/platform/operators/index'
-            },
-            {
-                id: 'rules',
-                title: '运营配置',
-                desc: '平台真实运营参数配置',
-                icon: 'setting',
-                url: '/pages/platform/operational-configs/index'
-            },
-            {
-                id: 'settlement-account',
-                title: '结算账户',
-                desc: '平台结算账户开户与状态同步',
-                icon: 'wallet',
-                url: '/pages/platform/finance/settlement-account/index'
-            },
-            {
-                id: 'withdrawals',
-                title: '提现',
-                desc: '查看平台可提现余额和提现记录',
-                icon: 'money',
-                url: '/pages/platform/finance/withdrawals/index'
-            },
-            {
-                id: 'reconciliation',
-                title: '对账账单',
-                desc: '查看分账、宝付日对账和异常计数',
-                icon: 'chart-bar',
-                url: '/pages/platform/finance/reconciliation/index'
-            },
-            {
-                id: 'groups',
-                title: '集团申请审核',
-                desc: '审核集团入驻申请',
-                icon: 'app',
-                url: '/pages/platform/groups/index'
-            },
-            {
-                id: 'riders',
-                title: '骑手管理',
-                desc: '骑手审核与状态管理',
-                icon: 'undertake-delivery',
-                url: '/pages/platform/riders/index'
-            }
-        ] as ManagementAction[],
-        realtimeCards: [
-            { label: '在线骑手', value: '0', theme: 'success' },
-            { label: '待处理订单', value: '0', theme: 'warning' },
-            { label: '待审骑手', value: '0', theme: 'danger' }
-        ] as StateCardItem[],
         abnormalRefundAlerts: [] as AlertFeedItem[],
         alertFeedReady: false,
+        dashboardView: createDashboardView(null, null, [], false),
         _alertListeners: [] as Array<() => void>,
         refreshTimer: null as number | null,
         navBarHeight: 0
@@ -186,44 +108,15 @@ Page({
                 platformDashboardService.getRealtimeDashboard()
             ])
 
-            const overviewSummary = overviewData.summary || {
-                total_orders: overviewData.total_orders || 0,
-                total_gmv: overviewData.total_gmv || 0,
-                active_merchants: overviewData.active_merchants || 0
-            }
-
-            const realtimeStats = realtimeData.realtime_stats || {
-                online_riders: 0
-            }
-
-            const pendingOrders = realtimeData.pending_orders || 0
-            const onlineRiders = realtimeStats.online_riders || 0
-
-            const actions = this.data.actions.map((item) => {
-                return {
-                    ...item,
-                    badge: ''
-                }
-            })
-
             this.setData({
                 overviewData,
                 realtimeData,
-                summaryCards: {
-                    totalOrders: String(overviewSummary.total_orders || 0),
-                    totalGMV: this.formatAmount(overviewSummary.total_gmv || 0),
-                    activeUsers: String(overviewData.active_users || 0),
-                    activeMerchants: String(overviewSummary.active_merchants || 0),
-                    onlineRiders: String(onlineRiders),
-                    pendingOrders: String(pendingOrders),
-                    pendingRiders: '0'
-                },
-                realtimeCards: [
-                    { label: '在线骑手', value: String(onlineRiders), theme: 'success' },
-                    { label: '待处理订单', value: String(pendingOrders), theme: 'warning' },
-                    { label: '待审骑手', value: '0', theme: 'danger' }
-                ],
-                actions
+                dashboardView: createDashboardView(
+                    overviewData,
+                    realtimeData,
+                    this.data.abnormalRefundAlerts,
+                    this.data.alertFeedReady
+                )
             })
         } catch (error) {
             console.error('加载平台管理中心数据失败:', error)
@@ -265,20 +158,22 @@ Page({
         this.loadDashboardData()
     },
 
-    /**
-     * 快捷操作点击
-     */
-    onActionTap(e: ActionTapEvent) {
+    onRiskTap(e: WechatMiniprogram.CustomEvent & { currentTarget: { dataset: { url?: string } } }) {
         const { url } = e.currentTarget.dataset
-
-        if (url) {
-            wx.navigateTo({ url })
-        } else {
-            wx.showToast({
-                title: '功能开发中',
-                icon: 'none'
-            })
+        if (!url || url === '/pages/platform/dashboard/dashboard') {
+            return
         }
+
+        wx.navigateTo({ url })
+    },
+
+    onEntryTap(e: WechatMiniprogram.CustomEvent & { currentTarget: { dataset: PlatformDashboardEntry } }) {
+        const { url } = e.currentTarget.dataset
+        if (!url) {
+            return
+        }
+
+        wx.navigateTo({ url })
     },
 
     /**
@@ -323,7 +218,13 @@ Page({
 
             this.setData({
                 abnormalRefundAlerts: nextItems,
-                alertFeedReady: true
+                alertFeedReady: true,
+                dashboardView: createDashboardView(
+                    this.data.overviewData,
+                    this.data.realtimeData,
+                    nextItems,
+                    true
+                )
             })
         })
 
@@ -352,10 +253,24 @@ Page({
 
             this.setData({
                 abnormalRefundAlerts: alerts,
-                alertFeedReady: true
+                alertFeedReady: true,
+                dashboardView: createDashboardView(
+                    this.data.overviewData,
+                    this.data.realtimeData,
+                    alerts,
+                    true
+                )
             })
         } catch (_error) {
-            this.setData({ alertFeedReady: true })
+            this.setData({
+                alertFeedReady: true,
+                dashboardView: createDashboardView(
+                    this.data.overviewData,
+                    this.data.realtimeData,
+                    this.data.abnormalRefundAlerts,
+                    true
+                )
+            })
         }
     },
 
@@ -421,13 +336,6 @@ Page({
                 wx.showToast({ title: '处理参数已复制', icon: 'success' })
             }
         })
-    },
-
-    /**
-     * 格式化金额
-     */
-    formatAmount(amount: number): string {
-        return `¥${(amount / 100).toFixed(2)}`
     },
 
     /**

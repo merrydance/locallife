@@ -1,7 +1,7 @@
 /**
  * 平台管理接口重构 (Task 5.2)
  * 基于swagger.json完全重构，移除所有没有后端支持的旧功能
- * 包含：商户审核、骑手审核、代取费配置、高峰时段管理
+ * 包含：商户审核、实体管理、代取费配置、高峰时段管理
  */
 
 import { request } from '../utils/request'
@@ -56,58 +56,6 @@ export interface ReviewMerchantApplicationRequest extends Record<string, unknown
     application_id: number
     approve: boolean
     reject_reason?: string
-}
-
-// ==================== 骑手审核相关类型 ====================
-
-/** 骑手列表响应 - 基于swagger api.listAdminRidersResponse */
-export interface ListAdminRidersResponse {
-    riders: AdminRiderItem[]
-    total: number
-    page: number
-    limit: number
-    has_more: boolean
-    stats: {
-        pending_count: number
-        approved_count: number
-        rejected_count: number
-        active_count: number
-    }
-}
-
-/** 管理员骑手项 - 基于swagger api.adminRiderItem */
-export interface AdminRiderItem {
-    id: number
-    user_id: number
-    name: string
-    phone: string
-    id_card: string
-    region_id: number
-    region_name: string
-    vehicle_type: 'bicycle' | 'electric' | 'motorcycle'
-    status: ApplicationStatus
-    applied_at: string
-    approved_at?: string
-    reviewer_id?: number
-    reviewer_name?: string
-    review_notes?: string
-    documents: {
-        id_card_front?: string
-        id_card_back?: string
-        health_certificate?: string
-        vehicle_license?: string
-    }
-}
-
-/** 骑手审核请求 - 基于swagger api.approveRiderRequest */
-export interface ApproveRiderRequest extends Record<string, unknown> {
-    review_notes?: string
-}
-
-/** 骑手拒绝请求 - 基于swagger api.rejectRiderRequest */
-export interface RejectRiderRequest extends Record<string, unknown> {
-    rejection_reason: string
-    review_notes?: string
 }
 
 // ==================== 运营商审核相关类型 ====================
@@ -401,27 +349,263 @@ export interface MerchantApplicationQueryParams extends Record<string, unknown> 
     limit?: number
 }
 
-/** 骑手查询参数 */
-export interface AdminRiderQueryParams extends Record<string, unknown> {
-    status?: ApplicationStatus
-    region_id?: number
-    vehicle_type?: 'bicycle' | 'electric' | 'motorcycle'
-    applied_start?: string
-    applied_end?: string
-    keyword?: string
-    sort_by?: 'applied_at' | 'approved_at' | 'name'
-    sort_order?: 'asc' | 'desc'
+// ==================== 平台实体管理类型 ====================
+
+export type PlatformEntityStatus = 'active' | 'approved' | 'suspended' | string
+
+export interface PlatformEntityListParams extends Record<string, unknown> {
     page?: number
     limit?: number
+}
+
+export interface PlatformComplaintCategory {
+    category: string
+    count: number
+}
+
+export interface PlatformOrderStats {
+    total_orders: number
+    total_income: number
+    last_month_orders: number
+    last_month_income: number
+}
+
+export interface PlatformServiceStats {
+    complaint_count: number
+    complaint_categories: PlatformComplaintCategory[]
+}
+
+export interface PlatformRiderCard {
+    id: number
+    name: string
+    region_id?: number
+    region_name: string
+    status: PlatformEntityStatus
+    active: boolean
+    complaint_count: number
+}
+
+export interface PlatformRiderListResponse {
+    riders: PlatformRiderCard[]
+    total: number
+    page: number
+    limit: number
+    has_more: boolean
+}
+
+export interface PlatformRiderBasicInfo {
+    name: string
+    region_id?: number
+    region_name: string
+    age?: number
+    gender: string
+    status: PlatformEntityStatus
+    active: boolean
+}
+
+export interface PlatformRiderDetail {
+    id: number
+    name: string
+    basic: PlatformRiderBasicInfo
+    order_stats: PlatformOrderStats
+    service: PlatformServiceStats
+    created_at: string
+    location_updated_at?: string
+    can_pause_accepting: boolean
+    can_resume_accepting: boolean
+}
+
+export interface PlatformRiderStatusResponse {
+    id: number
+    status: PlatformEntityStatus
+}
+
+export interface PlatformOperatorCard {
+    id: number
+    name: string
+    status: PlatformEntityStatus
+    region_count: number
+    merchant_count: number
+    complaint_count: number
+}
+
+export interface PlatformOperatorListResponse {
+    operators: PlatformOperatorCard[]
+    total: number
+    page: number
+    limit: number
+    has_more: boolean
+}
+
+export interface PlatformOperatorRegion {
+    region_id: number
+    region_name: string
+    status: PlatformEntityStatus
+}
+
+export interface PlatformOperatorDetail {
+    id: number
+    name: string
+    contact_name: string
+    contact_phone: string
+    status: PlatformEntityStatus
+    region_id: number
+    region_name: string
+    region_count: number
+    merchant_count: number
+    regions: PlatformOperatorRegion[]
+    order_stats: PlatformOrderStats
+    service: PlatformServiceStats
+    created_at: string
+    can_suspend: boolean
+    can_resume: boolean
+}
+
+export interface PlatformOperatorStatusResponse {
+    id: number
+    user_id: number
+    region_id: number
+    status: PlatformEntityStatus
+}
+
+export interface PlatformMerchantCard {
+    id: number
+    name: string
+    region_id: number
+    region_name: string
+    status: PlatformEntityStatus
+    is_open: boolean
+    month_orders: number
+    complaint_count: number
+}
+
+export interface PlatformMerchantListResponse {
+    merchants: PlatformMerchantCard[]
+    total: number
+    page: number
+    limit: number
+    has_more: boolean
+}
+
+export interface PlatformMerchantBasicInfo {
+    name: string
+    phone: string
+    address: string
+    region_id: number
+    region_name: string
+    status: PlatformEntityStatus
+    is_open: boolean
+}
+
+export interface PlatformMerchantDetail {
+    id: number
+    name: string
+    basic: PlatformMerchantBasicInfo
+    order_stats: PlatformOrderStats
+    service: PlatformServiceStats
+    created_at: string
+    can_suspend: boolean
+    can_resume: boolean
+}
+
+export interface PlatformMerchantStatusResponse {
+    id: number
+    status: PlatformEntityStatus
 }
 
 // ==================== 平台管理服务类 ====================
 
 /**
  * 平台管理服务
- * 提供商户审核、骑手审核、代取费配置等功能
+ * 提供商户审核、平台实体管理、代取费配置等功能
  */
 export class PlatformManagementService {
+    async listPlatformRiders(params: PlatformEntityListParams): Promise<PlatformRiderListResponse> {
+        return request({
+            url: '/v1/admin/riders',
+            method: 'GET',
+            data: params
+        })
+    }
+
+    async getPlatformRiderDetail(riderId: number): Promise<PlatformRiderDetail> {
+        return request({
+            url: `/v1/admin/riders/${riderId}`,
+            method: 'GET'
+        })
+    }
+
+    async pausePlatformRiderAccepting(riderId: number): Promise<PlatformRiderStatusResponse> {
+        return request({
+            url: `/v1/admin/riders/${riderId}/pause-accepting`,
+            method: 'POST',
+            strictEnvelope: true
+        })
+    }
+
+    async resumePlatformRiderAccepting(riderId: number): Promise<PlatformRiderStatusResponse> {
+        return request({
+            url: `/v1/admin/riders/${riderId}/resume-accepting`,
+            method: 'POST',
+            strictEnvelope: true
+        })
+    }
+
+    async listPlatformOperators(params: PlatformEntityListParams): Promise<PlatformOperatorListResponse> {
+        return request({
+            url: '/v1/admin/operators',
+            method: 'GET',
+            data: params
+        })
+    }
+
+    async getPlatformOperatorDetail(operatorId: number): Promise<PlatformOperatorDetail> {
+        return request({
+            url: `/v1/admin/operators/${operatorId}`,
+            method: 'GET'
+        })
+    }
+
+    async updatePlatformOperatorStatus(operatorId: number, status: 'active' | 'suspended'): Promise<PlatformOperatorStatusResponse> {
+        return request({
+            url: `/v1/admin/operators/${operatorId}/status`,
+            method: 'POST',
+            data: { status },
+            strictEnvelope: true
+        })
+    }
+
+    async listPlatformMerchants(params: PlatformEntityListParams): Promise<PlatformMerchantListResponse> {
+        return request({
+            url: '/v1/admin/merchants',
+            method: 'GET',
+            data: params
+        })
+    }
+
+    async getPlatformMerchantDetail(merchantId: number): Promise<PlatformMerchantDetail> {
+        return request({
+            url: `/v1/admin/merchants/${merchantId}`,
+            method: 'GET'
+        })
+    }
+
+    async suspendPlatformMerchant(merchantId: number): Promise<PlatformMerchantStatusResponse> {
+        return request({
+            url: `/v1/admin/merchants/${merchantId}/suspend`,
+            method: 'POST',
+            strictEnvelope: true
+        })
+    }
+
+    async resumePlatformMerchant(merchantId: number): Promise<PlatformMerchantStatusResponse> {
+        return request({
+            url: `/v1/admin/merchants/${merchantId}/resume`,
+            method: 'POST',
+            strictEnvelope: true
+        })
+    }
+
     /**
      * 获取商户申请列表
      * @param params 查询参数
@@ -461,46 +645,6 @@ export class PlatformManagementService {
             url: '/v1/admin/merchants/applications/review',
             method: 'POST',
             data: Object.assign({ application_id: applicationId }, reviewData),
-            strictEnvelope: true
-        })
-    }
-
-    /**
-     * 获取骑手列表
-     * @param params 查询参数
-     */
-    async getAdminRiders(params: AdminRiderQueryParams): Promise<ListAdminRidersResponse> {
-        return request({
-            url: '/v1/admin/riders',
-            method: 'GET',
-            data: params
-        })
-    }
-
-    /**
-     * 批准骑手申请
-     * @param riderId 骑手ID
-     * @param approveData 批准数据
-     */
-    async approveRider(riderId: number, approveData: ApproveRiderRequest): Promise<AdminRiderItem> {
-        return request({
-            url: `/v1/admin/riders/${riderId}/approve`,
-            method: 'POST',
-            data: approveData,
-            strictEnvelope: true
-        })
-    }
-
-    /**
-     * 拒绝骑手申请
-     * @param riderId 骑手ID
-     * @param rejectData 拒绝数据
-     */
-    async rejectRider(riderId: number, rejectData: RejectRiderRequest): Promise<AdminRiderItem> {
-        return request({
-            url: `/v1/admin/riders/${riderId}/reject`,
-            method: 'POST',
-            data: rejectData,
             strictEnvelope: true
         })
     }
@@ -809,42 +953,6 @@ export async function batchReviewMerchantApplications(
         } catch (error) {
             failed.push({
                 id: applicationId,
-                error: error instanceof Error ? error.message : '审核失败'
-            })
-        }
-    }
-
-    return { success, failed }
-}
-
-/**
- * 批量审核骑手申请
- * @param riderIds 骑手ID列表
- * @param action 操作类型
- * @param actionData 操作数据
- */
-export async function batchReviewRiders(
-    riderIds: number[],
-    action: 'approve' | 'reject',
-    actionData: ApproveRiderRequest | RejectRiderRequest
-): Promise<{
-    success: number[]
-    failed: Array<{ id: number, error: string }>
-}> {
-    const success: number[] = []
-    const failed: Array<{ id: number, error: string }> = []
-
-    for (const riderId of riderIds) {
-        try {
-            if (action === 'approve') {
-                await platformManagementService.approveRider(riderId, actionData as ApproveRiderRequest)
-            } else {
-                await platformManagementService.rejectRider(riderId, actionData as RejectRiderRequest)
-            }
-            success.push(riderId)
-        } catch (error) {
-            failed.push({
-                id: riderId,
                 error: error instanceof Error ? error.message : '审核失败'
             })
         }

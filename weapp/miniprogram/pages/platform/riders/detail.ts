@@ -2,7 +2,7 @@ import { responsiveBehavior } from '@/utils/responsive'
 import {
   platformManagementService,
   type PlatformComplaintCategory,
-  type PlatformOperatorDetail
+  type PlatformRiderDetail
 } from '@/api/platform-management'
 import { getErrorUserMessage } from '@/utils/user-facing'
 import { resolveStatusTagTheme, type StatusTagTheme } from '@/utils/status-tag'
@@ -13,12 +13,15 @@ interface ComplaintCategoryView extends PlatformComplaintCategory {
   countText: string
 }
 
-interface OperatorDetailView extends PlatformOperatorDetail {
-  statusLabel: string
-  statusTheme: StatusTagTheme
+interface RiderDetailView extends PlatformRiderDetail {
   regionText: string
-  merchantText: string
-  lastMonthRevenueText: string
+  ageText: string
+  genderText: string
+  activeLabel: string
+  activeTheme: StatusTagTheme
+  statusLabel: string
+  totalIncomeText: string
+  lastMonthIncomeText: string
   complaintText: string
   categories: ComplaintCategoryView[]
 }
@@ -30,40 +33,34 @@ function formatMoney(fen?: number): string {
   return `¥${(fen / 100).toFixed(2)}`
 }
 
-function operatorStatusLabel(status: string): string {
+function riderStatusLabel(status: string): string {
   switch (status) {
     case 'active':
-      return '运营中'
+      return '可接单'
+    case 'approved':
+      return '已通过'
     case 'suspended':
-      return '已暂停'
+      return '暂停接单'
     default:
       return status || '--'
   }
 }
 
-function operatorStatusTheme(status: string): StatusTagTheme {
-  switch (status) {
-    case 'active':
-      return resolveStatusTagTheme('success')
-    case 'suspended':
-      return resolveStatusTagTheme('danger')
-    default:
-      return resolveStatusTagTheme('warning')
-  }
-}
-
-function buildOperatorDetailView(detail: PlatformOperatorDetail): OperatorDetailView {
+function buildRiderDetailView(detail: PlatformRiderDetail): RiderDetailView {
   const categories = (detail.service?.complaint_categories || []).map((item) => ({
     ...item,
     countText: `${item.count || 0} 次`
   }))
   return {
     ...detail,
-    statusLabel: operatorStatusLabel(detail.status),
-    statusTheme: operatorStatusTheme(detail.status),
-    regionText: `${detail.region_count || 0} 个`,
-    merchantText: `${detail.merchant_count || 0} 家`,
-    lastMonthRevenueText: formatMoney(detail.order_stats?.last_month_income),
+    regionText: detail.basic?.region_name || '--',
+    ageText: typeof detail.basic?.age === 'number' ? `${detail.basic.age} 岁` : '--',
+    genderText: detail.basic?.gender || '--',
+    activeLabel: detail.basic?.active ? '近3天活跃' : '近3天未接单',
+    activeTheme: detail.basic?.active ? resolveStatusTagTheme('success') : resolveStatusTagTheme('warning'),
+    statusLabel: riderStatusLabel(detail.basic?.status || ''),
+    totalIncomeText: formatMoney(detail.order_stats?.total_income),
+    lastMonthIncomeText: formatMoney(detail.order_stats?.last_month_income),
     complaintText: `${detail.service?.complaint_count || 0} 次`,
     categories
   }
@@ -77,18 +74,18 @@ Page({
     requesting: false,
     submitting: false,
     error: null as string | null,
-    operatorID: 0,
-    detail: null as OperatorDetailView | null
+    riderID: 0,
+    detail: null as RiderDetailView | null
   },
 
   onLoad(options: Record<string, string>) {
-    const operatorID = Number(options.id || 0)
-    if (!operatorID) {
-      this.setData({ loading: false, error: '运营商ID无效' })
+    const riderID = Number(options.id || 0)
+    if (!riderID) {
+      this.setData({ loading: false, error: '骑手ID无效' })
       return
     }
 
-    this.setData({ operatorID })
+    this.setData({ riderID })
     this.loadDetail()
   },
 
@@ -97,14 +94,14 @@ Page({
   },
 
   async loadDetail() {
-    if (this.data.requesting || !this.data.operatorID) return
+    if (this.data.requesting || !this.data.riderID) return
 
     this.setData({ loading: true, requesting: true, error: null })
     try {
-      const detail = await platformManagementService.getPlatformOperatorDetail(this.data.operatorID)
-      this.setData({ detail: buildOperatorDetailView(detail) })
+      const detail = await platformManagementService.getPlatformRiderDetail(this.data.riderID)
+      this.setData({ detail: buildRiderDetailView(detail) })
     } catch (error: unknown) {
-      this.setData({ error: getErrorUserMessage(error, '加载运营商详情失败，请稍后重试') })
+      this.setData({ error: getErrorUserMessage(error, '加载骑手详情失败，请稍后重试') })
     } finally {
       this.setData({ loading: false, requesting: false })
     }
@@ -114,15 +111,15 @@ Page({
     this.loadDetail()
   },
 
-  async onToggleStatus() {
+  async onToggleAccepting() {
     const detail = this.data.detail
     if (!detail || this.data.submitting) return
 
-    const suspend = detail.can_suspend
+    const pause = detail.can_pause_accepting
     const confirm = await new Promise<boolean>((resolve) => {
       wx.showModal({
-        title: suspend ? '暂停运营商' : '恢复运营商',
-        content: suspend ? '确认暂停该运营商？' : '确认恢复该运营商？',
+        title: pause ? '暂停接单' : '恢复接单',
+        content: pause ? '确认暂停该骑手接单？' : '确认恢复该骑手接单？',
         success: (res) => resolve(res.confirm),
         fail: () => resolve(false)
       })
@@ -131,9 +128,13 @@ Page({
 
     try {
       this.setData({ submitting: true })
-      await platformManagementService.updatePlatformOperatorStatus(detail.id, suspend ? 'suspended' : 'active')
+      if (pause) {
+        await platformManagementService.pausePlatformRiderAccepting(detail.id)
+      } else {
+        await platformManagementService.resumePlatformRiderAccepting(detail.id)
+      }
       await this.loadDetail()
-      wx.showToast({ title: suspend ? '已暂停' : '已恢复', icon: 'success' })
+      wx.showToast({ title: pause ? '已暂停接单' : '已恢复接单', icon: 'success' })
     } catch (error: unknown) {
       wx.showToast({ title: getErrorUserMessage(error, '操作失败，请稍后重试'), icon: 'none' })
     } finally {

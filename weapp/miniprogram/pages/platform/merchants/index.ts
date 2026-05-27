@@ -1,7 +1,7 @@
 import { responsiveBehavior } from '@/utils/responsive'
 import {
   platformManagementService,
-  type PlatformOperatorCard
+  type PlatformMerchantCard
 } from '@/api/platform-management'
 import { getErrorUserMessage } from '@/utils/user-facing'
 import { resolveStatusTagTheme, type StatusTagTheme } from '@/utils/status-tag'
@@ -15,43 +15,55 @@ type TapEvent = WechatMiniprogram.CustomEvent & {
   }
 }
 
-interface PlatformOperatorCardView extends PlatformOperatorCard {
+interface PlatformMerchantCardView extends PlatformMerchantCard {
   statusLabel: string
   statusTheme: StatusTagTheme
   regionText: string
-  merchantText: string
+  openLabel: string
+  monthOrdersText: string
   complaintText: string
 }
 
-function operatorStatusLabel(status: string): string {
+function merchantStatusLabel(status: string): string {
   switch (status) {
     case 'active':
-      return '运营中'
+      return '正常'
+    case 'approved':
+      return '已通过'
     case 'suspended':
       return '已暂停'
+    case 'pending':
+      return '待处理'
+    case 'rejected':
+      return '已拒绝'
     default:
       return status || '--'
   }
 }
 
-function operatorStatusTheme(status: string): StatusTagTheme {
+function merchantStatusTheme(status: string): StatusTagTheme {
   switch (status) {
     case 'active':
+    case 'approved':
       return resolveStatusTagTheme('success')
     case 'suspended':
+    case 'rejected':
       return resolveStatusTagTheme('danger')
+    case 'pending':
+      return resolveStatusTagTheme('warning')
     default:
       return resolveStatusTagTheme('warning')
   }
 }
 
-function buildOperatorCardView(item: PlatformOperatorCard): PlatformOperatorCardView {
+function buildMerchantCardView(item: PlatformMerchantCard): PlatformMerchantCardView {
   return {
     ...item,
-    statusLabel: operatorStatusLabel(item.status),
-    statusTheme: operatorStatusTheme(item.status),
-    regionText: `${item.region_count || 0} 个`,
-    merchantText: `${item.merchant_count || 0} 家`,
+    statusLabel: merchantStatusLabel(item.status),
+    statusTheme: merchantStatusTheme(item.status),
+    regionText: item.region_name || '--',
+    openLabel: item.is_open ? '营业中' : '休息中',
+    monthOrdersText: `${item.month_orders || 0} 单`,
     complaintText: `${item.complaint_count || 0} 次`
   }
 }
@@ -68,16 +80,16 @@ Page({
     limit: 20,
     total: 0,
     hasMore: false,
-    operators: [] as PlatformOperatorCardView[]
+    merchants: [] as PlatformMerchantCardView[]
   },
 
   onLoad() {
-    this.loadOperators(true)
+    this.loadMerchants(true)
   },
 
   onShow() {
-    if (!this.data.requesting && this.data.operators.length > 0) {
-      this.loadOperators(true)
+    if (!this.data.requesting && this.data.merchants.length > 0) {
+      this.loadMerchants(true)
     }
   },
 
@@ -88,7 +100,7 @@ Page({
   async onRefresh() {
     this.setData({ refreshing: true })
     try {
-      await this.loadOperators(true)
+      await this.loadMerchants(true)
     } finally {
       this.setData({ refreshing: false })
     }
@@ -96,41 +108,41 @@ Page({
 
   async onLoadMore() {
     if (!this.data.hasMore || this.data.loading) return
-    await this.loadOperators(false)
+    await this.loadMerchants(false)
   },
 
-  async loadOperators(reset: boolean) {
+  async loadMerchants(reset: boolean) {
     if (this.data.requesting) return
 
     const page = reset ? 1 : this.data.page + 1
     this.setData({ loading: true, requesting: true, error: null })
     try {
-      const response = await platformManagementService.listPlatformOperators({
+      const response = await platformManagementService.listPlatformMerchants({
         page,
         limit: this.data.limit
       })
-      const incoming = (response.operators || []).map(buildOperatorCardView)
+      const incoming = (response.merchants || []).map(buildMerchantCardView)
 
       this.setData({
-        operators: reset ? incoming : this.data.operators.concat(incoming),
+        merchants: reset ? incoming : this.data.merchants.concat(incoming),
         total: response.total || 0,
         page: response.page || page,
         hasMore: Boolean(response.has_more)
       })
     } catch (error: unknown) {
-      this.setData({ error: getErrorUserMessage(error, '加载运营商列表失败，请稍后重试') })
+      this.setData({ error: getErrorUserMessage(error, '加载商户列表失败，请稍后重试') })
     } finally {
       this.setData({ loading: false, requesting: false })
     }
   },
 
   onRetry() {
-    this.loadOperators(true)
+    this.loadMerchants(true)
   },
 
   onDetailTap(e: TapEvent) {
     const id = Number(e.currentTarget.dataset.id || 0)
     if (!id) return
-    wx.navigateTo({ url: `/pages/platform/operators/detail?id=${id}` })
+    wx.navigateTo({ url: `/pages/platform/merchants/detail?id=${id}` })
   }
 })

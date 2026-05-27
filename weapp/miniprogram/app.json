@@ -88,6 +88,9 @@
         "finance/withdrawals/create/index",
         "finance/withdrawals/detail/index",
         "riders/index",
+        "riders/detail",
+        "merchants/index",
+        "merchants/detail",
         "tables/tags/index",
         "groups/index",
         "groups/detail"

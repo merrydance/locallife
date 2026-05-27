@@ -225,7 +225,10 @@ assert(operatorFinanceOverview.includes('title="结算账户"'), 'Operator finan
 assert(operatorFinanceOverview.includes('title="提现"'), 'Operator finance overview must expose withdrawal entry')
 assert(!operatorFinanceOverview.includes('宝付结算账户'), 'Operator finance overview must not expose Baofoo provider wording')
 
-const platformDashboard = read('miniprogram/pages/platform/dashboard/dashboard.ts')
+const platformDashboard = [
+  read('miniprogram/pages/platform/dashboard/dashboard.ts'),
+  read('miniprogram/services/platform-dashboard-view.ts')
+].join('\n')
 assert(platformDashboard.includes("title: '结算账户'"), 'Platform dashboard must expose user-facing settlement account wording')
 assert(platformDashboard.includes("title: '提现'"), 'Platform dashboard must expose withdrawal entry')
 assert(platformDashboard.includes("url: '/pages/platform/finance/withdrawals/index'"), 'Platform dashboard must link to platform withdrawals')

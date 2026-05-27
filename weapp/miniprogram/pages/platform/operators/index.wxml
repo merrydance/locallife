@@ -13,197 +13,45 @@
     bindscrolltolower="onLoadMore"
   >
     <view class="operators-container">
-      <view class="tab-wrap">
-        <t-tabs value="{{activeTab}}" bind:change="onTabChange" theme="tag" space-evenly="{{false}}">
-          <t-tab-panel label="运营商入驻" value="onboarding" />
-          <t-tab-panel label="区域扩展申请 {{regionFilterStats.pending > 0 ? '(' + regionFilterStats.pending + ')' : ''}}" value="region" />
-        </t-tabs>
+      <view class="summary-card">
+        <text class="summary-title">运营商总数</text>
+        <text class="summary-value">{{total}}</text>
       </view>
-      <block wx:if="{{activeTab === 'onboarding'}}">
-        <view class="summary-card">
-          <text class="summary-title">申请总数</text>
-          <text class="summary-value">{{filterStats.all || total}}</text>
+
+      <view wx:if="{{loading}}" class="section-card">
+        <view wx:for="{{3}}" wx:key="index" class="skeleton-item skeleton-shimmer"></view>
+      </view>
+
+      <view wx:if="{{error}}" class="section-card status-wrap">
+        <t-empty icon="error-circle" description="{{error}}">
+          <t-button slot="action" theme="primary" bind:tap="onRetry">重试</t-button>
+        </t-empty>
+      </view>
+
+      <view wx:if="{{!loading && !error && operators.length === 0}}" class="section-card status-wrap">
+        <t-empty description="暂无运营商" />
+      </view>
+
+      <view wx:for="{{operators}}" wx:key="id" class="section-card operator-card" bind:tap="onDetailTap" data-id="{{item.id}}">
+        <view class="title-row">
+          <view class="name">{{item.name || ('运营商#' + item.id)}}</view>
+          <t-tag theme="{{item.statusTheme}}" variant="light">{{item.statusLabel}}</t-tag>
         </view>
-
-        <view class="section-card controls-card">
-          <view class="filter-row">
-            <t-tag size="small" variant="dark" theme="default" shape="round" class="filter-chip {{statusFilter === 'all' ? 'active' : ''}}" data-name="all" bind:tap="onFilterChange">
-              全部 ({{filterStats.all}})
-            </t-tag>
-            <t-tag size="small" variant="dark" theme="default" shape="round" class="filter-chip {{statusFilter === 'submitted' ? 'active' : ''}}" data-name="submitted" bind:tap="onFilterChange">
-              待审核 ({{filterStats.submitted}})
-            </t-tag>
-            <t-tag size="small" variant="dark" theme="default" shape="round" class="filter-chip {{statusFilter === 'approved' ? 'active' : ''}}" data-name="approved" bind:tap="onFilterChange">
-              已通过 ({{filterStats.approved}})
-            </t-tag>
-            <t-tag size="small" variant="dark" theme="default" shape="round" class="filter-chip {{statusFilter === 'rejected' ? 'active' : ''}}" data-name="rejected" bind:tap="onFilterChange">
-              已驳回 ({{filterStats.rejected}})
-            </t-tag>
-          </view>
-
-          <view class="sort-row">
-            <text class="sort-label">排序</text>
-            <view class="sort-picker" bind:tap="onOpenSortPicker">{{sortOptionLabels[sortIndex]}}</view>
-          </view>
+        <view class="meta-row">
+          <text class="meta-label">管理区县</text>
+          <text class="meta-value">{{item.regionText}}</text>
         </view>
-
-        <view wx:if="{{loading}}" class="section-card">
-          <view wx:for="{{3}}" wx:key="index" class="skeleton-item skeleton-shimmer"></view>
+        <view class="meta-row">
+          <text class="meta-label">商户数量</text>
+          <text class="meta-value">{{item.merchantText}}</text>
         </view>
-
-        <view wx:if="{{error}}" class="section-card status-wrap">
-          <t-empty icon="error-circle" description="{{error}}">
-            <t-button slot="action" theme="primary" bind:tap="onRetry">重试</t-button>
-          </t-empty>
+        <view class="meta-row">
+          <text class="meta-label">被投诉</text>
+          <text class="meta-value">{{item.complaintText}}</text>
         </view>
+      </view>
 
-        <t-picker
-          visible="{{sortPickerVisible}}"
-          value="{{[String(sortIndex)]}}"
-          title="选择排序方式"
-          cancelBtn="取消"
-          confirmBtn="确认"
-          bind:confirm="onSortConfirm"
-          bind:cancel="onCloseSortPicker"
-        >
-          <t-picker-item options="{{sortPickerOptions}}" />
-        </t-picker>
-
-        <view wx:if="{{!loading && !error && applications.length === 0}}" class="section-card status-wrap">
-          <t-empty description="当前筛选下暂无运营商申请" />
-        </view>
-
-        <view wx:for="{{applications}}" wx:key="id" class="section-card app-card" bind:tap="onDetailTap" data-id="{{item.id}}">
-          <view class="title-row">
-            <view class="name">{{item.name || item.legal_person_name || ('申请#' + item.id)}}</view>
-            <t-tag theme="{{item.statusTheme}}" variant="dark">{{item.statusLabel}}</t-tag>
-          </view>
-          <view class="meta-row">
-            <text class="meta-label">提交人</text>
-            <text class="meta-value">{{item.applicant_name || item.contact_name || ('用户#' + item.user_id)}}</text>
-          </view>
-          <view class="meta-row">
-            <text class="meta-label">提交手机号</text>
-            <text class="meta-value">{{item.applicant_phone || item.contact_phone || '-'}}</text>
-          </view>
-          <view class="meta-row">
-            <text class="meta-label">联系人</text>
-            <text class="meta-value">{{item.contact_name || '-'}}</text>
-          </view>
-          <view class="meta-row">
-            <text class="meta-label">电话</text>
-            <text class="meta-value">{{item.contact_phone || '-'}}</text>
-          </view>
-          <view class="meta-row">
-            <text class="meta-label">区域</text>
-            <text class="meta-value">{{item.region_name}} ({{item.region_code}})</text>
-          </view>
-          <view class="meta-row">
-            <text class="meta-label">申请时间</text>
-            <text class="meta-value">{{item.submitted_at || item.created_at}}</text>
-          </view>
-        </view>
-
-        <view wx:if="{{!loading && !hasMore && applications.length > 0}}" class="no-more">没有更多了</view>
-      </block>
-      <block wx:elif="{{activeTab === 'region'}}">
-        <view class="summary-card">
-          <text class="summary-title">扩展申请总数</text>
-          <text class="summary-value">{{regionFilterStats.all || regionTotal}}</text>
-        </view>
-
-        <view class="section-card controls-card">
-          <view class="filter-row">
-            <t-tag size="small" variant="dark" theme="default" shape="round" class="filter-chip {{regionStatusFilter === 'all' ? 'active' : ''}}" data-name="all" bind:tap="onRegionFilterChange">
-              全部 ({{regionFilterStats.all}})
-            </t-tag>
-            <t-tag size="small" variant="dark" theme="default" shape="round" class="filter-chip {{regionStatusFilter === 'pending' ? 'active' : ''}}" data-name="pending" bind:tap="onRegionFilterChange">
-              待审核 ({{regionFilterStats.pending}})
-            </t-tag>
-            <t-tag size="small" variant="dark" theme="default" shape="round" class="filter-chip {{regionStatusFilter === 'approved' ? 'active' : ''}}" data-name="approved" bind:tap="onRegionFilterChange">
-              已通过 ({{regionFilterStats.approved}})
-            </t-tag>
-            <t-tag size="small" variant="dark" theme="default" shape="round" class="filter-chip {{regionStatusFilter === 'rejected' ? 'active' : ''}}" data-name="rejected" bind:tap="onRegionFilterChange">
-              已驳回 ({{regionFilterStats.rejected}})
-            </t-tag>
-          </view>
-        </view>
-
-        <view wx:if="{{regionLoading}}" class="section-card">
-          <view wx:for="{{3}}" wx:key="index" class="skeleton-item skeleton-shimmer"></view>
-        </view>
-
-        <view wx:if="{{regionError}}" class="section-card status-wrap">
-          <t-empty icon="error-circle" description="{{regionError}}">
-            <t-button slot="action" theme="primary" bind:tap="onRegionRetry">重试</t-button>
-          </t-empty>
-        </view>
-
-        <view wx:if="{{!regionLoading && !regionError && regionDisplayApps.length === 0}}" class="section-card status-wrap">
-          <t-empty description="当前筛选下暂无区域扩展申请" />
-        </view>
-
-        <view wx:for="{{regionDisplayApps}}" wx:key="id" class="section-card app-card">
-          <view class="title-row">
-            <view class="name">{{item.operator_name || ('运营商#' + item.operator_id)}}</view>
-            <t-tag theme="{{item.statusTheme}}" variant="dark">{{item.statusLabel}}</t-tag>
-          </view>
-          <view class="meta-row">
-            <text class="meta-label">联系人</text>
-            <text class="meta-value">{{item.contact_name || '-'}}</text>
-          </view>
-          <view class="meta-row">
-            <text class="meta-label">电话</text>
-            <text class="meta-value">{{item.contact_phone || '-'}}</text>
-          </view>
-          <view class="meta-row">
-            <text class="meta-label">申请区域</text>
-            <text class="meta-value">{{item.region_name}} ({{item.region_code || '-'}})</text>
-          </view>
-          <view class="meta-row">
-            <text class="meta-label">申请时间</text>
-            <text class="meta-value">{{item.created_at}}</text>
-          </view>
-          <view wx:if="{{item.isRejected && item.reject_reason}}" class="meta-row">
-            <text class="meta-label">驳回原因</text>
-            <text class="meta-value meta-danger">{{item.reject_reason}}</text>
-          </view>
-          <view wx:if="{{item.canReview}}" class="action-row">
-            <t-button
-              size="small" theme="primary"
-              data-id="{{item.id}}" data-name="{{item.operator_name}}" data-region="{{item.region_name}}"
-              bind:tap="onApproveRegion"
-            >通过</t-button>
-            <t-button
-              size="small" theme="danger" variant="outline"
-              data-id="{{item.id}}" data-name="{{item.operator_name}}" data-region="{{item.region_name}}"
-              bind:tap="onRejectRegion"
-            >驳回</t-button>
-          </view>
-        </view>
-
-        <view wx:if="{{!regionLoading && !regionHasMore && regionDisplayApps.length > 0}}" class="no-more">没有更多了</view>
-      </block>
+      <view wx:if="{{!loading && !hasMore && operators.length > 0}}" class="no-more">没有更多了</view>
     </view>
   </scroll-view>
 </view>
-<t-dialog
-  visible="{{rejectDialogVisible}}"
-  title="驳回申请"
-  cancel-btn="取消"
-  confirm-btn="确认驳回"
-  bind:cancel="onRejectCancel"
-  bind:confirm="onRejectConfirm"
->
-  <view slot="content">
-    <view class="dialog-desc">{{rejectTargetDesc}}</view>
-    <t-textarea
-      placeholder="至少 2 字"
-      value="{{rejectReason}}"
-      bind:change="onRejectReasonInput"
-      maxlength="200"
-      autosize
-    />
-  </view>
-</t-dialog>
-

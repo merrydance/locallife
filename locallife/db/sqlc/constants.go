@@ -13,6 +13,7 @@ const (
 
 	MerchantStatusActive            = "active"
 	MerchantStatusBindbankSubmitted = "bindbank_submitted"
+	MerchantStatusSuspended         = "suspended"
 
 	MerchantPaymentConfigStatusActive               = "active"
 	MerchantPaymentConfigStatusPendingAuthorization = "pending_authorization"

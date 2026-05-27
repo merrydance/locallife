@@ -216,7 +216,10 @@ type Querier interface {
 	CountPendingPrintLogs(ctx context.Context, printerID int64) (int64, error)
 	CountPendingRegionApplications(ctx context.Context) (int64, error)
 	CountPlatformAlertEvents(ctx context.Context) (int64, error)
+	CountPlatformMerchants(ctx context.Context) (int64, error)
+	CountPlatformOperators(ctx context.Context) (int64, error)
 	CountPlatformProfitSharingReconciliationDetails(ctx context.Context, arg CountPlatformProfitSharingReconciliationDetailsParams) (int64, error)
+	CountPlatformRiders(ctx context.Context) (int64, error)
 	CountProfitSharingReturnsByRefundOrder(ctx context.Context, refundOrderID int64) (int32, error)
 	CountProfitSharingReturnsByRefundOrderStatus(ctx context.Context, arg CountProfitSharingReturnsByRefundOrderStatusParams) (int32, error)
 	// 统计多个用户最近N天的索赔总数
@@ -931,9 +934,12 @@ type Querier interface {
 	GetPlatformConfig(ctx context.Context, arg GetPlatformConfigParams) (PlatformConfig, error)
 	// 平台日统计
 	GetPlatformDailyStats(ctx context.Context, arg GetPlatformDailyStatsParams) ([]GetPlatformDailyStatsRow, error)
+	GetPlatformMerchantDetail(ctx context.Context, id int64) (GetPlatformMerchantDetailRow, error)
+	GetPlatformOperatorDetail(ctx context.Context, id int64) (GetPlatformOperatorDetailRow, error)
 	// M12: 平台端统计查询
 	// 平台全局概览
 	GetPlatformOverview(ctx context.Context, arg GetPlatformOverviewParams) (GetPlatformOverviewRow, error)
+	GetPlatformRiderDetail(ctx context.Context, id int64) (GetPlatformRiderDetailRow, error)
 	// ============================================
 	// 套餐推荐查询
 	// ============================================
@@ -1412,7 +1418,14 @@ type Querier interface {
 	ListPendingWithdrawalRecordsByChannel(ctx context.Context, arg ListPendingWithdrawalRecordsByChannelParams) ([]WithdrawalRecord, error)
 	ListPlatformAlertEvents(ctx context.Context, arg ListPlatformAlertEventsParams) ([]PlatformAlertEvent, error)
 	ListPlatformConfigsByKey(ctx context.Context, configKey string) ([]PlatformConfig, error)
+	ListPlatformMerchantCards(ctx context.Context, arg ListPlatformMerchantCardsParams) ([]ListPlatformMerchantCardsRow, error)
+	ListPlatformMerchantComplaintCategories(ctx context.Context, merchantID int64) ([]ListPlatformMerchantComplaintCategoriesRow, error)
+	ListPlatformOperatorCards(ctx context.Context, arg ListPlatformOperatorCardsParams) ([]ListPlatformOperatorCardsRow, error)
+	ListPlatformOperatorComplaintCategories(ctx context.Context, operatorID int64) ([]ListPlatformOperatorComplaintCategoriesRow, error)
+	ListPlatformOperatorRegions(ctx context.Context, operatorID int64) ([]ListPlatformOperatorRegionsRow, error)
 	ListPlatformProfitSharingReconciliationDetails(ctx context.Context, arg ListPlatformProfitSharingReconciliationDetailsParams) ([]ProfitSharingOrder, error)
+	ListPlatformRiderCards(ctx context.Context, arg ListPlatformRiderCardsParams) ([]ListPlatformRiderCardsRow, error)
+	ListPlatformRiderComplaintCategories(ctx context.Context, riderID int64) ([]ListPlatformRiderComplaintCategoriesRow, error)
 	ListPrintLogsByOrder(ctx context.Context, orderID int64) ([]ListPrintLogsByOrderRow, error)
 	ListPrintLogsByPrinter(ctx context.Context, arg ListPrintLogsByPrinterParams) ([]PrintLog, error)
 	ListProcessingBaofuAccountBindings(ctx context.Context, arg ListProcessingBaofuAccountBindingsParams) ([]BaofuAccountBinding, error)

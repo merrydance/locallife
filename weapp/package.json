@@ -19,6 +19,7 @@
     "check:merchant-order-list-default-tab": "node scripts/check-merchant-order-list-default-tab.js",
     "check:merchant-order-fee-breakdown": "node scripts/check-merchant-order-fee-breakdown.js",
     "check:baofu-withdrawal-workflow": "node scripts/check-baofu-withdrawal-workflow.js",
+    "check:platform-dashboard-operations-view": "node scripts/check-platform-dashboard-operations-view.test.js",
     "check:rider-delivery-history-params": "node scripts/check-rider-delivery-history-params.test.js",
     "check:rider-delivery-deadline-view": "node scripts/check-rider-delivery-deadline-view.test.js",
     "check:finance-bill-pages": "node scripts/check-finance-bill-pages.js",
@@ -42,7 +43,7 @@
     "gate:business-status-boundary": "node scripts/check-business-status-boundary.js",
     "gate:payment-workflow-boundary": "node scripts/check-payment-workflow-boundary.js",
     "gate:weapp": "npm run gate:page-shell && npm run gate:wxml-expression-safety && npm run gate:component-policy && npm run gate:tdesign-component-declarations && npm run gate:tdesign-boundary && npm run gate:non-consumer-ui-patterns && npm run gate:frontend-architecture-boundary && npm run gate:page-responsibility && npm run gate:page-complexity && npm run gate:super-service-boundary && npm run gate:request-boundary && npm run gate:role-contract && npm run gate:business-status-boundary && npm run gate:payment-workflow-boundary",
-    "quality:check": "npm run check:request-id && npm run check:order-detail-bottom-actions && npm run check:merchant-order-list-default-tab && npm run check:merchant-order-fee-breakdown && npm run check:baofu-withdrawal-workflow && npm run check:rider-delivery-history-params && npm run check:rider-delivery-deadline-view && npm run check:finance-bill-pages && npm run check:platform-reconciliation-summary-cards && npm run check:payment-refund-terminal-flow && npm run check:review-create-page && npm run check:food-safety-page-layout && npm run check:user-reviews-page && npm run lint:all && npm run compile && npm run gate:weapp"
+    "quality:check": "npm run check:request-id && npm run check:order-detail-bottom-actions && npm run check:merchant-order-list-default-tab && npm run check:merchant-order-fee-breakdown && npm run check:baofu-withdrawal-workflow && npm run check:platform-dashboard-operations-view && npm run check:rider-delivery-history-params && npm run check:rider-delivery-deadline-view && npm run check:finance-bill-pages && npm run check:platform-reconciliation-summary-cards && npm run check:payment-refund-terminal-flow && npm run check:review-create-page && npm run check:food-safety-page-layout && npm run check:user-reviews-page && npm run lint:all && npm run compile && npm run gate:weapp"
   },
   "keywords": [],
   "author": "",

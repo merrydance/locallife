@@ -32,6 +32,13 @@ function requireNotContains(relativePath, unexpected) {
   }
 }
 
+function requireAnyContains(relativePaths, expected, label) {
+  const combined = relativePaths.map((relativePath) => read(relativePath)).join('\n')
+  if (!combined.includes(expected)) {
+    throw new Error(`${label} must include ${expected}`)
+  }
+}
+
 function requireAllFiles(prefix) {
   for (const ext of ['ts', 'wxml', 'json', 'wxss']) {
     requireFile(`${prefix}/index.${ext}`)
@@ -118,8 +125,16 @@ requireContains('miniprogram/pages/merchant/finance/settlements/index.ts', 'MERC
 requireContains('miniprogram/pages/merchant/finance/settlements/index.ts', '结算记录最多选择365天')
 requireContains('miniprogram/pages/merchant/finance/settlements/index.ts', 'loadMerchantFinanceSettlementPage')
 
-requireContains('miniprogram/pages/platform/dashboard/dashboard.ts', 'reconciliation')
-requireContains('miniprogram/pages/platform/dashboard/dashboard.ts', '/pages/platform/finance/reconciliation/index')
+requireAnyContains(
+  ['miniprogram/pages/platform/dashboard/dashboard.ts', 'miniprogram/services/platform-dashboard-view.ts'],
+  'reconciliation',
+  'platform dashboard entry surface'
+)
+requireAnyContains(
+  ['miniprogram/pages/platform/dashboard/dashboard.ts', 'miniprogram/services/platform-dashboard-view.ts'],
+  '/pages/platform/finance/reconciliation/index',
+  'platform dashboard entry surface'
+)
 
 requireContains('miniprogram/api/platform-dashboard.ts', 'getProfitSharingReconciliation')
 requireContains('miniprogram/api/platform-dashboard.ts', 'getProfitSharingDetails')

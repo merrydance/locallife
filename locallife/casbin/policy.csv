@@ -49,8 +49,21 @@ p, admin, /v1/platform/operator-rules/:key, PATCH
 
 # Rider Management
 p, admin, /v1/admin/riders, GET
-p, admin, /v1/admin/riders/:rider_id/approve, POST
-p, admin, /v1/admin/riders/:rider_id/reject, POST
+p, admin, /v1/admin/riders/:rider_id, GET
+p, admin, /v1/admin/riders/:rider_id/pause-accepting, POST
+p, admin, /v1/admin/riders/:rider_id/resume-accepting, POST
+
+# Merchant Management
+p, admin, /v1/admin/merchants, GET
+p, admin, /v1/admin/merchants/:merchant_id, GET
+p, admin, /v1/admin/merchants/:merchant_id/suspend, POST
+p, admin, /v1/admin/merchants/:merchant_id/resume, POST
+
+# Operator Management
+p, admin, /v1/admin/operators, GET
+p, admin, /v1/admin/operators/:operator_id, GET
+p, admin, /v1/admin/operators/:operator_id/status, POST
+p, admin, /v1/admin/operators/batch/status, POST
 
 # Operator Application Review
 p, admin, /v1/admin/operators/applications, GET

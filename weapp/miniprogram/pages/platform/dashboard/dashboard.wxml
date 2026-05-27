@@ -15,54 +15,83 @@
         <t-button wx:if="{{errorCanRetry}}" theme="primary" bind:tap="onRetry">重新加载</t-button>
       </view>
 
-      <view class="section-card">
-        <view class="section-head">
-          <text class="section-title">基础统计</text>
-          <t-tag theme="primary" variant="dark">近30天</t-tag>
+      <view class="operations-header">
+        <view>
+          <view class="operations-eyebrow">平台运行</view>
+          <view class="operations-title">{{dashboardView.operationsStatus.summary}}</view>
         </view>
-
-        <view wx:if="{{loading}}" class="skeleton-grid">
-          <view wx:for="{{4}}" wx:key="index" class="skeleton-card skeleton-shimmer"></view>
+        <view class="operations-meta">
+          <t-tag theme="{{dashboardView.operationsStatus.healthTheme}}" variant="dark">{{dashboardView.operationsStatus.healthText}}</t-tag>
+          <text class="operations-sync">{{dashboardView.operationsStatus.syncText}}</text>
         </view>
-
-        <t-grid wx:else border="{{false}}" column="{{2}}" class="stats-grid">
-          <t-grid-item text="累计订单" description="{{summaryCards.totalOrders}}" icon="cart" />
-          <t-grid-item text="累计GMV" description="{{summaryCards.totalGMV}}" icon="money" />
-          <t-grid-item text="活跃用户" description="{{summaryCards.activeUsers}}" icon="user" />
-          <t-grid-item text="活跃商户" description="{{summaryCards.activeMerchants}}" icon="shop" />
-        </t-grid>
       </view>
 
-      <view class="section-card">
+      <view wx:if="{{loading}}" class="metric-grid metric-grid--primary">
+        <view wx:for="{{4}}" wx:key="index" class="metric-card metric-card--skeleton skeleton-shimmer"></view>
+      </view>
+
+      <view wx:else class="metric-grid metric-grid--primary">
+        <view wx:for="{{dashboardView.todayCards}}" wx:key="key" class="metric-card metric-card--{{item.theme}}">
+          <text class="metric-label">{{item.label}}</text>
+          <text class="metric-value">{{item.value}}</text>
+          <text class="metric-note">{{item.note}}</text>
+        </view>
+      </view>
+
+      <view class="section-card section-card--priority">
         <view class="section-head">
-          <text class="section-title">实时状态</text>
-          <t-tag theme="success" variant="dark">自动刷新</t-tag>
+          <text class="section-title">待办与风险</text>
+          <t-tag theme="warning" variant="light">优先处理</t-tag>
         </view>
-
-        <view wx:if="{{loading}}" class="state-list">
-          <view wx:for="{{3}}" wx:key="index" class="state-item skeleton-shimmer"></view>
-        </view>
-
-        <view wx:else class="state-list">
-          <view wx:for="{{realtimeCards}}" wx:key="label" class="state-item">
-            <view class="state-label-wrap">
-              <view class="state-dot state-{{item.theme}}"></view>
-              <text class="state-label">{{item.label}}</text>
+        <view class="risk-list">
+          <view
+            wx:for="{{dashboardView.riskItems}}"
+            wx:key="key"
+            class="risk-item risk-item--{{item.theme}}"
+            bindtap="onRiskTap"
+            data-url="{{item.url}}"
+          >
+            <view class="risk-copy">
+              <text class="risk-title">{{item.title}}</text>
+              <text class="risk-desc">{{item.desc}}</text>
             </view>
-            <text class="state-value">{{item.value}}</text>
+            <view class="risk-action">
+              <text class="risk-value">{{item.value}}</text>
+              <t-icon wx:if="{{item.url}}" name="chevron-right" size="28rpx" />
+            </view>
           </view>
         </view>
       </view>
 
       <view class="section-card">
         <view class="section-head">
+          <text class="section-title">实时履约</text>
+          <t-tag theme="success" variant="light">自动刷新</t-tag>
+        </view>
+
+        <view wx:if="{{loading}}" class="state-grid">
+          <view wx:for="{{3}}" wx:key="index" class="state-item skeleton-shimmer"></view>
+        </view>
+
+        <view wx:else class="state-grid">
+          <view wx:for="{{dashboardView.realtimeRows}}" wx:key="key" class="state-item">
+            <view class="state-label-wrap">
+              <view class="state-dot state-{{item.theme}}"></view>
+              <text class="state-label">{{item.label}}</text>
+            </view>
+            <text class="state-value">{{item.value}}</text>
+            <text class="state-note">{{item.note}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="section-card" wx:if="{{abnormalRefundAlerts.length > 0}}">
+        <view class="section-head">
           <text class="section-title">异常退款人工处理</text>
           <t-tag theme="danger" variant="dark">实时告警</t-tag>
         </view>
 
-        <t-empty wx:if="{{alertFeedReady && abnormalRefundAlerts.length === 0}}" description="当前没有待人工介入的异常退款" />
-
-        <view wx:else class="alert-list">
+        <view class="alert-list">
           <view
             wx:for="{{abnormalRefundAlerts}}"
             wx:key="refundOrderId"
@@ -80,38 +109,61 @@
             <view class="alert-card__message">{{item.message}}</view>
             <view class="alert-card__chips">
               <text class="alert-card__chip">退款单 #{{item.refundOrderId}}</text>
-              <text class="alert-card__chip">微信退款ID {{item.refundId}}</text>
-              <text class="alert-card__chip">默认 {{item.defaultType}}</text>
+              <text class="alert-card__chip">退款ID {{item.refundId}}</text>
+              <text class="alert-card__chip">去向 {{item.defaultType}}</text>
             </view>
-            <view class="alert-card__hint">点按查看说明或复制处理参数</view>
+            <view class="alert-card__hint">点按查看处理说明</view>
           </view>
         </view>
       </view>
 
       <view class="section-card">
         <view class="section-head">
-          <text class="section-title">管理入口</text>
-          <t-tag theme="warning" variant="dark">按角色开放</t-tag>
+          <text class="section-title">经营累计</text>
+          <t-tag theme="primary" variant="light">近30天</t-tag>
         </view>
 
-        <t-grid border="{{false}}" column="{{2}}" class="actions-grid">
-          <t-grid-item
-            wx:for="{{actions}}"
-            wx:key="id"
-            text="{{item.title}}"
-            description="{{item.desc}}"
-            icon="{{item.icon}}"
-            bind:click="onActionTap"
-            data-id="{{item.id}}"
-            data-url="{{item.url}}"
-          />
-        </t-grid>
+        <view class="metric-grid metric-grid--compact">
+          <view wx:for="{{dashboardView.cumulativeCards}}" wx:key="key" class="metric-card metric-card--compact">
+            <text class="metric-label">{{item.label}}</text>
+            <text class="metric-value metric-value--compact">{{item.value}}</text>
+            <text class="metric-note">{{item.note}}</text>
+          </view>
+        </view>
       </view>
 
-      <view wx:if="{{!loading && !error && !summaryCards.totalOrders}}" class="section-card status-wrap">
+      <view class="entry-section">
+        <view wx:for="{{dashboardView.entryGroups}}" wx:key="title" class="section-card entry-group">
+          <view class="section-head">
+            <text class="section-title">{{item.title}}</text>
+          </view>
+          <view class="entry-list">
+            <view
+              wx:for="{{item.items}}"
+              wx:for-item="entry"
+              wx:key="id"
+              class="entry-item"
+              bindtap="onEntryTap"
+              data-id="{{entry.id}}"
+              data-title="{{entry.title}}"
+              data-url="{{entry.url}}"
+            >
+              <view class="entry-icon">
+                <t-icon name="{{entry.icon}}" size="36rpx" />
+              </view>
+              <view class="entry-copy">
+                <text class="entry-title">{{entry.title}}</text>
+                <text class="entry-desc">{{entry.desc}}</text>
+              </view>
+              <t-icon name="chevron-right" size="28rpx" />
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{!loading && !error && dashboardView.cumulativeCards[0].value === '0'}}" class="section-card status-wrap">
         <t-empty description="暂无统计数据" />
       </view>
     </view>
   </scroll-view>
 </view>
-

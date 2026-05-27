@@ -1130,9 +1130,12 @@ func (server *Server) setupRouter() {
 
 	// M8: 运营商骑手审核路由（需要运营商或管理员角色）
 	adminRiderGroup := authGroup.Group("/admin/riders")
-	adminRiderGroup.Use(server.CasbinMiddleware())
+	adminRiderGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
 	{
-		adminRiderGroup.GET("", server.listRiders)
+		adminRiderGroup.GET("", server.listPlatformRiders)
+		adminRiderGroup.GET("/:rider_id", server.getPlatformRiderDetail)
+		adminRiderGroup.POST("/:rider_id/pause-accepting", server.pausePlatformRiderAccepting)
+		adminRiderGroup.POST("/:rider_id/resume-accepting", server.resumePlatformRiderAccepting)
 	}
 
 	// 平台管理员审核运营商申请
@@ -1149,9 +1152,21 @@ func (server *Server) setupRouter() {
 	adminOperatorEntityGroup := authGroup.Group("/admin/operators")
 	adminOperatorEntityGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
 	{
+		adminOperatorEntityGroup.GET("", server.listPlatformOperators)
 		adminOperatorEntityGroup.POST("/batch/status", server.batchUpdateOperatorStatusAdmin)
+		adminOperatorEntityGroup.GET("/:operator_id", server.getPlatformOperatorDetail)
 		adminOperatorEntityGroup.GET("/:operator_id/regions", server.getOperatorRegionsAdmin)
 		adminOperatorEntityGroup.POST("/:operator_id/status", server.updateOperatorStatusAdmin)
+	}
+
+	// 平台管理员管理商户实体
+	adminMerchantEntityGroup := authGroup.Group("/admin/merchants")
+	adminMerchantEntityGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
+	{
+		adminMerchantEntityGroup.GET("", server.listPlatformMerchants)
+		adminMerchantEntityGroup.GET("/:merchant_id", server.getPlatformMerchantDetail)
+		adminMerchantEntityGroup.POST("/:merchant_id/suspend", server.suspendPlatformMerchant)
+		adminMerchantEntityGroup.POST("/:merchant_id/resume", server.resumePlatformMerchant)
 	}
 
 	// 平台管理员审核运营商区域扩展申请

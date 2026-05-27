@@ -2,7 +2,7 @@ import { responsiveBehavior } from '@/utils/responsive'
 import {
   platformManagementService,
   type PlatformComplaintCategory,
-  type PlatformOperatorDetail
+  type PlatformMerchantDetail
 } from '@/api/platform-management'
 import { getErrorUserMessage } from '@/utils/user-facing'
 import { resolveStatusTagTheme, type StatusTagTheme } from '@/utils/status-tag'
@@ -13,12 +13,15 @@ interface ComplaintCategoryView extends PlatformComplaintCategory {
   countText: string
 }
 
-interface OperatorDetailView extends PlatformOperatorDetail {
+interface MerchantDetailView extends PlatformMerchantDetail {
   statusLabel: string
   statusTheme: StatusTagTheme
   regionText: string
-  merchantText: string
-  lastMonthRevenueText: string
+  openLabel: string
+  phoneText: string
+  addressText: string
+  totalIncomeText: string
+  lastMonthIncomeText: string
   complaintText: string
   categories: ComplaintCategoryView[]
 }
@@ -30,40 +33,54 @@ function formatMoney(fen?: number): string {
   return `¥${(fen / 100).toFixed(2)}`
 }
 
-function operatorStatusLabel(status: string): string {
+function merchantStatusLabel(status: string): string {
   switch (status) {
     case 'active':
-      return '运营中'
+      return '正常'
+    case 'approved':
+      return '已通过'
     case 'suspended':
       return '已暂停'
+    case 'pending':
+      return '待处理'
+    case 'rejected':
+      return '已拒绝'
     default:
       return status || '--'
   }
 }
 
-function operatorStatusTheme(status: string): StatusTagTheme {
+function merchantStatusTheme(status: string): StatusTagTheme {
   switch (status) {
     case 'active':
+    case 'approved':
       return resolveStatusTagTheme('success')
     case 'suspended':
+    case 'rejected':
       return resolveStatusTagTheme('danger')
+    case 'pending':
+      return resolveStatusTagTheme('warning')
     default:
       return resolveStatusTagTheme('warning')
   }
 }
 
-function buildOperatorDetailView(detail: PlatformOperatorDetail): OperatorDetailView {
+function buildMerchantDetailView(detail: PlatformMerchantDetail): MerchantDetailView {
   const categories = (detail.service?.complaint_categories || []).map((item) => ({
     ...item,
     countText: `${item.count || 0} 次`
   }))
+
   return {
     ...detail,
-    statusLabel: operatorStatusLabel(detail.status),
-    statusTheme: operatorStatusTheme(detail.status),
-    regionText: `${detail.region_count || 0} 个`,
-    merchantText: `${detail.merchant_count || 0} 家`,
-    lastMonthRevenueText: formatMoney(detail.order_stats?.last_month_income),
+    statusLabel: merchantStatusLabel(detail.basic?.status || ''),
+    statusTheme: merchantStatusTheme(detail.basic?.status || ''),
+    regionText: detail.basic?.region_name || '--',
+    openLabel: detail.basic?.is_open ? '营业中' : '休息中',
+    phoneText: detail.basic?.phone || '--',
+    addressText: detail.basic?.address || '--',
+    totalIncomeText: formatMoney(detail.order_stats?.total_income),
+    lastMonthIncomeText: formatMoney(detail.order_stats?.last_month_income),
     complaintText: `${detail.service?.complaint_count || 0} 次`,
     categories
   }
@@ -77,18 +94,18 @@ Page({
     requesting: false,
     submitting: false,
     error: null as string | null,
-    operatorID: 0,
-    detail: null as OperatorDetailView | null
+    merchantID: 0,
+    detail: null as MerchantDetailView | null
   },
 
   onLoad(options: Record<string, string>) {
-    const operatorID = Number(options.id || 0)
-    if (!operatorID) {
-      this.setData({ loading: false, error: '运营商ID无效' })
+    const merchantID = Number(options.id || 0)
+    if (!merchantID) {
+      this.setData({ loading: false, error: '商户ID无效' })
       return
     }
 
-    this.setData({ operatorID })
+    this.setData({ merchantID })
     this.loadDetail()
   },
 
@@ -97,14 +114,14 @@ Page({
   },
 
   async loadDetail() {
-    if (this.data.requesting || !this.data.operatorID) return
+    if (this.data.requesting || !this.data.merchantID) return
 
     this.setData({ loading: true, requesting: true, error: null })
     try {
-      const detail = await platformManagementService.getPlatformOperatorDetail(this.data.operatorID)
-      this.setData({ detail: buildOperatorDetailView(detail) })
+      const detail = await platformManagementService.getPlatformMerchantDetail(this.data.merchantID)
+      this.setData({ detail: buildMerchantDetailView(detail) })
     } catch (error: unknown) {
-      this.setData({ error: getErrorUserMessage(error, '加载运营商详情失败，请稍后重试') })
+      this.setData({ error: getErrorUserMessage(error, '加载商户详情失败，请稍后重试') })
     } finally {
       this.setData({ loading: false, requesting: false })
     }
@@ -121,8 +138,8 @@ Page({
     const suspend = detail.can_suspend
     const confirm = await new Promise<boolean>((resolve) => {
       wx.showModal({
-        title: suspend ? '暂停运营商' : '恢复运营商',
-        content: suspend ? '确认暂停该运营商？' : '确认恢复该运营商？',
+        title: suspend ? '暂停商户' : '恢复商户',
+        content: suspend ? '确认暂停该商户？' : '确认恢复该商户？',
         success: (res) => resolve(res.confirm),
         fail: () => resolve(false)
       })
@@ -131,7 +148,11 @@ Page({
 
     try {
       this.setData({ submitting: true })
-      await platformManagementService.updatePlatformOperatorStatus(detail.id, suspend ? 'suspended' : 'active')
+      if (suspend) {
+        await platformManagementService.suspendPlatformMerchant(detail.id)
+      } else {
+        await platformManagementService.resumePlatformMerchant(detail.id)
+      }
       await this.loadDetail()
       wx.showToast({ title: suspend ? '已暂停' : '已恢复', icon: 'success' })
     } catch (error: unknown) {

@@ -10,7 +10,6 @@ type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
 type PlatformRuleKey =
   | 'PLATFORM_COMMISSION'
   | 'OPERATOR_COMMISSION'
-  | 'MERCHANT_DEPOSIT'
   | 'RIDER_DEPOSIT'
 
 type RuleValueMap = Record<PlatformRuleKey, string>
@@ -23,7 +22,6 @@ interface SaveRuleUpdate {
 const EMPTY_RULE_VALUES: RuleValueMap = {
   PLATFORM_COMMISSION: '',
   OPERATOR_COMMISSION: '',
-  MERCHANT_DEPOSIT: '',
   RIDER_DEPOSIT: ''
 }
 
@@ -36,7 +34,6 @@ function buildRuleValueMap(rules: PlatformOperationalConfigItem[]): RuleValueMap
   return {
     PLATFORM_COMMISSION: findRuleValue(rules, 'PLATFORM_COMMISSION'),
     OPERATOR_COMMISSION: findRuleValue(rules, 'OPERATOR_COMMISSION'),
-    MERCHANT_DEPOSIT: findRuleValue(rules, 'MERCHANT_DEPOSIT'),
     RIDER_DEPOSIT: findRuleValue(rules, 'RIDER_DEPOSIT')
   }
 }
@@ -83,7 +80,6 @@ Page({
     ruleValues: { ...EMPTY_RULE_VALUES } as RuleValueMap,
     platformRateInput: '',
     operatorRateInput: '',
-    merchantDepositInput: '',
     riderDepositInput: ''
   },
 
@@ -113,7 +109,6 @@ Page({
         ruleValues,
         platformRateInput: ruleValues.PLATFORM_COMMISSION,
         operatorRateInput: ruleValues.OPERATOR_COMMISSION,
-        merchantDepositInput: ruleValues.MERCHANT_DEPOSIT,
         riderDepositInput: ruleValues.RIDER_DEPOSIT,
         error: null
       })
@@ -137,10 +132,6 @@ Page({
 
   onOperatorRateChange(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
     this.setData({ operatorRateInput: String(e?.detail?.value || '') })
-  },
-
-  onMerchantDepositChange(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
-    this.setData({ merchantDepositInput: String(e?.detail?.value || '') })
   },
 
   onRiderDepositChange(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
@@ -214,28 +205,23 @@ Page({
   },
 
   async onSaveDepositConfig() {
-    const { depositSubmitting, merchantDepositInput, riderDepositInput, ruleValues } = this.data
+    const { depositSubmitting, riderDepositInput, ruleValues } = this.data
     if (depositSubmitting) return
 
-    const merchantDeposit = Number(merchantDepositInput)
     const riderDeposit = Number(riderDepositInput)
 
-    if (!Number.isFinite(merchantDeposit) || !Number.isFinite(riderDeposit)) {
+    if (!Number.isFinite(riderDeposit)) {
       wx.showToast({ title: '请输入有效金额', icon: 'none' })
       return
     }
-    if (merchantDeposit < 0 || riderDeposit < 0) {
+    if (riderDeposit < 0) {
       wx.showToast({ title: '金额不能小于0', icon: 'none' })
       return
     }
 
-    const normalizedMerchantDeposit = normalizeMoneyValue(merchantDeposit)
     const normalizedRiderDeposit = normalizeMoneyValue(riderDeposit)
     const updates: SaveRuleUpdate[] = []
 
-    if (hasValueChanged(ruleValues.MERCHANT_DEPOSIT, normalizedMerchantDeposit)) {
-      updates.push({ key: 'MERCHANT_DEPOSIT', value: normalizedMerchantDeposit })
-    }
     if (hasValueChanged(ruleValues.RIDER_DEPOSIT, normalizedRiderDeposit)) {
       updates.push({ key: 'RIDER_DEPOSIT', value: normalizedRiderDeposit })
     }
@@ -248,7 +234,7 @@ Page({
     try {
       this.setData({ depositSubmitting: true })
       await this.applyRuleUpdates(updates)
-      wx.showToast({ title: '保证金配置已保存', icon: 'success' })
+      wx.showToast({ title: '骑手押金已保存', icon: 'success' })
     } catch (error: unknown) {
       const message = getErrorUserMessage(error, '保存失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })

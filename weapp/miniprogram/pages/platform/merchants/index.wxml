@@ -1,7 +1,7 @@
-<custom-navbar title="骑手管理" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
+<custom-navbar title="商户管理" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
 
 <view
-  class="riders-page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  class="merchants-page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
   style="--page-shell-nav-height: {{navBarHeight}}px"
 >
   <scroll-view
@@ -12,9 +12,9 @@
     bindrefresherrefresh="onRefresh"
     bindscrolltolower="onLoadMore"
   >
-    <view class="riders-container">
+    <view class="merchants-container">
       <view class="summary-card">
-        <text class="summary-title">骑手总数</text>
+        <text class="summary-title">商户总数</text>
         <text class="summary-value">{{total}}</text>
       </view>
 
@@ -28,22 +28,26 @@
         </t-empty>
       </view>
 
-      <view wx:if="{{!loading && !error && riders.length === 0}}" class="section-card status-wrap">
-        <t-empty description="暂无骑手" />
+      <view wx:if="{{!loading && !error && merchants.length === 0}}" class="section-card status-wrap">
+        <t-empty description="暂无商户" />
       </view>
 
-      <view wx:for="{{riders}}" wx:key="id" class="section-card rider-card" bind:tap="onDetailTap" data-id="{{item.id}}">
+      <view wx:for="{{merchants}}" wx:key="id" class="section-card merchant-card" bind:tap="onDetailTap" data-id="{{item.id}}">
         <view class="title-row">
-          <view class="name">{{item.name || ('骑手#' + item.id)}}</view>
-          <t-tag theme="{{item.activeTheme}}" variant="light">{{item.activeLabel}}</t-tag>
+          <view class="name">{{item.name || ('商户#' + item.id)}}</view>
+          <t-tag theme="{{item.statusTheme}}" variant="light">{{item.statusLabel}}</t-tag>
         </view>
         <view class="meta-row">
           <text class="meta-label">区县</text>
           <text class="meta-value">{{item.regionText}}</text>
         </view>
         <view class="meta-row">
-          <text class="meta-label">接单状态</text>
-          <text class="meta-value">{{item.statusLabel}}</text>
+          <text class="meta-label">营业状态</text>
+          <text class="meta-value">{{item.openLabel}}</text>
+        </view>
+        <view class="meta-row">
+          <text class="meta-label">近一月订单</text>
+          <text class="meta-value">{{item.monthOrdersText}}</text>
         </view>
         <view class="meta-row">
           <text class="meta-label">被投诉</text>
@@ -51,7 +55,7 @@
         </view>
       </view>
 
-      <view wx:if="{{!loading && !hasMore && riders.length > 0}}" class="no-more">没有更多了</view>
+      <view wx:if="{{!loading && !hasMore && merchants.length > 0}}" class="no-more">没有更多了</view>
     </view>
   </scroll-view>
 </view>

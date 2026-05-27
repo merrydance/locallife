@@ -1,4 +1,4 @@
-<custom-navbar title="运营商详情" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
+<custom-navbar title="商户详情" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
 
 <view
   class="detail-page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
@@ -17,58 +17,53 @@
       </view>
 
       <view wx:elif="{{!detail}}" class="section-card status-wrap">
-        <t-empty description="未找到运营商详情" />
+        <t-empty description="未找到商户详情" />
       </view>
 
       <block wx:else>
         <view class="section-card">
           <view class="title-row">
-            <text class="title">{{detail.name || ('运营商#' + detail.id)}}</text>
+            <text class="title">{{detail.name || ('商户#' + detail.id)}}</text>
             <t-tag theme="{{detail.statusTheme}}" variant="light">{{detail.statusLabel}}</t-tag>
           </view>
           <view class="meta-row">
-            <text class="meta-label">联系人</text>
-            <text class="meta-value">{{detail.contact_name || '--'}}</text>
+            <text class="meta-label">区县</text>
+            <text class="meta-value">{{detail.regionText}}</text>
           </view>
           <view class="meta-row">
             <text class="meta-label">联系电话</text>
-            <text class="meta-value">{{detail.contact_phone || '--'}}</text>
+            <text class="meta-value">{{detail.phoneText}}</text>
           </view>
           <view class="meta-row">
-            <text class="meta-label">主要区县</text>
-            <text class="meta-value">{{detail.region_name || '--'}}</text>
+            <text class="meta-label">营业状态</text>
+            <text class="meta-value">{{detail.openLabel}}</text>
+          </view>
+          <view class="meta-row">
+            <text class="meta-label">地址</text>
+            <text class="meta-value">{{detail.addressText}}</text>
           </view>
         </view>
 
         <view class="section-card">
-          <view class="section-title">运营概况</view>
+          <view class="section-title">订单统计</view>
           <view class="metric-grid">
             <view class="metric-item">
-              <text class="metric-label">管理区县</text>
-              <text class="metric-value">{{detail.regionText}}</text>
+              <text class="metric-label">订单总数</text>
+              <text class="metric-value">{{detail.order_stats.total_orders}}</text>
             </view>
             <view class="metric-item">
-              <text class="metric-label">商户数量</text>
-              <text class="metric-value">{{detail.merchantText}}</text>
+              <text class="metric-label">总收入</text>
+              <text class="metric-value">{{detail.totalIncomeText}}</text>
             </view>
             <view class="metric-item">
               <text class="metric-label">近一个月订单</text>
               <text class="metric-value">{{detail.order_stats.last_month_orders}}</text>
             </view>
             <view class="metric-item">
-              <text class="metric-label">近一个月流水</text>
-              <text class="metric-value">{{detail.lastMonthRevenueText}}</text>
+              <text class="metric-label">近一个月收入</text>
+              <text class="metric-value">{{detail.lastMonthIncomeText}}</text>
             </view>
           </view>
-        </view>
-
-        <view class="section-card">
-          <view class="section-title">管理区县</view>
-          <view wx:for="{{detail.regions}}" wx:key="region_id" class="meta-row">
-            <text class="meta-label">{{item.region_name}}</text>
-            <text class="meta-value">{{item.status}}</text>
-          </view>
-          <view wx:if="{{detail.regions.length === 0}}" class="empty-line">暂无区县</view>
         </view>
 
         <view class="section-card">
@@ -90,7 +85,7 @@
             block
             loading="{{submitting}}"
             bind:tap="onToggleStatus"
-          >{{detail.can_suspend ? '暂停运营商' : '恢复运营商'}}</t-button>
+          >{{detail.can_suspend ? '暂停商户' : '恢复商户'}}</t-button>
         </view>
       </block>
     </view>

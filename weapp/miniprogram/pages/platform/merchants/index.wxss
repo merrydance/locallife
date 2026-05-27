@@ -1,6 +1,6 @@
 @import "../../../styles/platform-operators-shared.wxss";
 
-.riders-page {
+.merchants-page {
   min-height: 100vh;
   background: var(--td-bg-color-page);
 }
@@ -9,7 +9,7 @@
   height: calc(100vh - var(--page-shell-nav-height, 88px) - var(--spacer-sm));
 }
 
-.riders-container {
+.merchants-container {
   padding: 0;
 }
 
@@ -36,7 +36,7 @@
   font-weight: 600;
 }
 
-.rider-card {
+.merchant-card {
   padding-bottom: var(--spacer-sm);
 }
 
@@ -47,7 +47,7 @@
 }
 
 .meta-label {
-  min-width: 120rpx;
+  min-width: 140rpx;
 }
 
 .meta-value {
