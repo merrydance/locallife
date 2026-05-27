@@ -327,6 +327,53 @@ func TestBaofuPaymentRecoverySchedulerRunOnceQueriesProcessingShareByOutTradeNoW
 	require.Equal(t, "BFPS302O402", client.lastShareQuery.OutTradeNo)
 }
 
+func TestBaofuPaymentRecoverySchedulerRunOnceMarksProcessingShareFailedWhenProviderHasNoRelation(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &baofuProfitSharingEnqueueRecorder{}
+	client := &baofuRecoveryAggregateClient{
+		shareErrors: []error{baofu.NewProviderBusinessError("share_query", "ORDER_NOT_EXIST", "raw upstream order not found")},
+	}
+	shareOrder := db.ProfitSharingOrder{
+		ID:             805,
+		PaymentOrderID: 305,
+		OutOrderNo:     "BFPS305O405",
+		Status:         db.ProfitSharingOrderStatusProcessing,
+		Provider:       db.ExternalPaymentProviderBaofu,
+		Channel:        db.PaymentChannelBaofuAggregate,
+	}
+
+	store.EXPECT().
+		ListBaofuOrdersReadyForProfitSharing(gomock.Any(), gomock.Any()).
+		Return([]db.ListBaofuOrdersReadyForProfitSharingRow{}, nil)
+	store.EXPECT().
+		ListBaofuProfitSharingOrdersReadyForCommand(gomock.Any(), gomock.AssignableToTypeOf(db.ListBaofuProfitSharingOrdersReadyForCommandParams{})).
+		Return([]db.ProfitSharingOrder{}, nil)
+	store.EXPECT().
+		ListBaofuProcessingProfitSharingOrdersForRecovery(gomock.Any(), gomock.Any()).
+		Return([]db.ProfitSharingOrder{shareOrder}, nil)
+	store.EXPECT().
+		UpdateProfitSharingOrderToFailed(gomock.Any(), shareOrder.ID).
+		Return(profitSharingOrderWithStatus(shareOrder, db.ProfitSharingOrderStatusFailed), nil)
+	store.EXPECT().
+		ListBaofuPendingPaymentOrdersForRecovery(gomock.Any(), gomock.Any()).
+		Return([]db.PaymentOrder{}, nil)
+
+	scheduler := worker.NewBaofuPaymentRecoveryScheduler(store, distributor)
+	scheduler.SetBaofuAggregateClient(client, worker.BaofuProfitSharingWorkerConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+	})
+	scheduler.RunOnce()
+
+	require.Empty(t, distributor.factApplicationIDs)
+	require.Len(t, client.shareQueries, 1)
+	require.Empty(t, client.lastShareQuery.TradeNo)
+	require.Equal(t, shareOrder.OutOrderNo, client.lastShareQuery.OutTradeNo)
+}
+
 func TestBaofuPaymentRecoverySchedulerRunOnceRetriesProcessingShareByOutTradeNoWhenTradeNoInvalidData(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

@@ -1877,31 +1877,32 @@ type ProfitSharingOrder struct {
 	// 平台分账比例（百分比），默认2%
 	PlatformRate int32 `json:"platform_rate"`
 	// 运营商分账比例（百分比），默认3%
-	OperatorRate                 int32       `json:"operator_rate"`
-	PaymentFee                   int64       `json:"payment_fee"`
-	PaymentFeeRateBps            int32       `json:"payment_fee_rate_bps"`
-	Provider                     string      `json:"provider"`
-	Channel                      string      `json:"channel"`
-	MerchantSharingMerID         pgtype.Text `json:"merchant_sharing_mer_id"`
-	RiderSharingMerID            pgtype.Text `json:"rider_sharing_mer_id"`
-	OperatorSharingMerID         pgtype.Text `json:"operator_sharing_mer_id"`
-	PlatformSharingMerID         pgtype.Text `json:"platform_sharing_mer_id"`
-	SharingDetailSnapshot        []byte      `json:"sharing_detail_snapshot"`
-	CalculationVersion           string      `json:"calculation_version"`
-	SettlementMode               string      `json:"settlement_mode"`
-	ProviderPaymentFee           int64       `json:"provider_payment_fee"`
-	ProviderPaymentFeeRateBps    int32       `json:"provider_payment_fee_rate_bps"`
-	ProviderPaymentFeeBaseAmount int64       `json:"provider_payment_fee_base_amount"`
-	ProviderPaymentFeeSource     string      `json:"provider_payment_fee_source"`
-	MerchantPaymentFee           int64       `json:"merchant_payment_fee"`
-	MerchantPaymentFeeRateBps    int32       `json:"merchant_payment_fee_rate_bps"`
-	MerchantPaymentFeeBaseAmount int64       `json:"merchant_payment_fee_base_amount"`
-	RiderGrossAmount             int64       `json:"rider_gross_amount"`
-	RiderPaymentFee              int64       `json:"rider_payment_fee"`
-	RiderPaymentFeeRateBps       int32       `json:"rider_payment_fee_rate_bps"`
-	RiderPaymentFeeBaseAmount    int64       `json:"rider_payment_fee_base_amount"`
-	CommissionBaseAmount         int64       `json:"commission_base_amount"`
-	PlatformReceiverAmount       int64       `json:"platform_receiver_amount"`
+	OperatorRate                 int32              `json:"operator_rate"`
+	PaymentFee                   int64              `json:"payment_fee"`
+	PaymentFeeRateBps            int32              `json:"payment_fee_rate_bps"`
+	Provider                     string             `json:"provider"`
+	Channel                      string             `json:"channel"`
+	MerchantSharingMerID         pgtype.Text        `json:"merchant_sharing_mer_id"`
+	RiderSharingMerID            pgtype.Text        `json:"rider_sharing_mer_id"`
+	OperatorSharingMerID         pgtype.Text        `json:"operator_sharing_mer_id"`
+	PlatformSharingMerID         pgtype.Text        `json:"platform_sharing_mer_id"`
+	SharingDetailSnapshot        []byte             `json:"sharing_detail_snapshot"`
+	CalculationVersion           string             `json:"calculation_version"`
+	SettlementMode               string             `json:"settlement_mode"`
+	ProviderPaymentFee           int64              `json:"provider_payment_fee"`
+	ProviderPaymentFeeRateBps    int32              `json:"provider_payment_fee_rate_bps"`
+	ProviderPaymentFeeBaseAmount int64              `json:"provider_payment_fee_base_amount"`
+	ProviderPaymentFeeSource     string             `json:"provider_payment_fee_source"`
+	MerchantPaymentFee           int64              `json:"merchant_payment_fee"`
+	MerchantPaymentFeeRateBps    int32              `json:"merchant_payment_fee_rate_bps"`
+	MerchantPaymentFeeBaseAmount int64              `json:"merchant_payment_fee_base_amount"`
+	RiderGrossAmount             int64              `json:"rider_gross_amount"`
+	RiderPaymentFee              int64              `json:"rider_payment_fee"`
+	RiderPaymentFeeRateBps       int32              `json:"rider_payment_fee_rate_bps"`
+	RiderPaymentFeeBaseAmount    int64              `json:"rider_payment_fee_base_amount"`
+	CommissionBaseAmount         int64              `json:"commission_base_amount"`
+	PlatformReceiverAmount       int64              `json:"platform_receiver_amount"`
+	CommandStartedAt             pgtype.Timestamptz `json:"command_started_at"`
 }
 
 // 分账回退记录表，退款前的分账回退流水

@@ -107,7 +107,7 @@ SELECT po.id,
        EXISTS (
            SELECT 1 FROM profit_sharing_orders pso
            WHERE pso.payment_order_id = po.id
-             AND pso.status IN ('pending', 'processing', 'finished')
+             AND pso.status IN ('processing', 'finished')
        ) AS has_started_profit_sharing
 FROM payment_orders po
 WHERE po.id = $1

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/util"
@@ -66,6 +67,78 @@ func TestCreateBaofuProfitSharingOrderTxRejectsActiveRefund(t *testing.T) {
 
 	_, getErr := testStore.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
 	require.ErrorIs(t, getErr, ErrRecordNotFound)
+}
+
+func TestPrepareBaofuProfitSharingCommandTxRejectsActiveRefund(t *testing.T) {
+	ctx := context.Background()
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	paymentOrder, profitSharingOrder := createPaidBaofuPaymentWithProfitSharingOrder(t, ctx, user.ID, merchant.ID, ProfitSharingOrderStatusPending, "pso_prepare_refund_")
+	_ = createRandomRefundOrder(t, paymentOrder.ID, 500)
+
+	_, err := testStore.PrepareBaofuProfitSharingCommandTx(ctx, PrepareBaofuProfitSharingCommandTxParams{
+		ProfitSharingOrderID: profitSharingOrder.ID,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "订单已有退款申请或退款成功记录")
+	statusCode, ok := IsRefundRequestError(err)
+	require.True(t, ok)
+	require.Equal(t, http.StatusBadRequest, statusCode)
+
+	current, getErr := testStore.GetProfitSharingOrder(ctx, profitSharingOrder.ID)
+	require.NoError(t, getErr)
+	require.Equal(t, ProfitSharingOrderStatusPending, current.Status)
+}
+
+func TestPrepareBaofuProfitSharingCommandTxMarksPendingOrderProcessing(t *testing.T) {
+	ctx := context.Background()
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	paymentOrder, profitSharingOrder := createPaidBaofuPaymentWithProfitSharingOrder(t, ctx, user.ID, merchant.ID, ProfitSharingOrderStatusPending, "pso_prepare_pending_")
+
+	result, err := testStore.PrepareBaofuProfitSharingCommandTx(ctx, PrepareBaofuProfitSharingCommandTxParams{
+		ProfitSharingOrderID: profitSharingOrder.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, paymentOrder.ID, result.PaymentOrder.ID)
+	require.Equal(t, profitSharingOrder.ID, result.ProfitSharingOrder.ID)
+	require.Equal(t, ProfitSharingOrderStatusProcessing, result.ProfitSharingOrder.Status)
+	require.False(t, result.ProfitSharingOrder.SharingOrderID.Valid)
+
+	current, err := testStore.GetProfitSharingOrder(ctx, profitSharingOrder.ID)
+	require.NoError(t, err)
+	require.Equal(t, ProfitSharingOrderStatusProcessing, current.Status)
+}
+
+func TestPrepareBaofuProfitSharingCommandTxSetsCommandStartedAt(t *testing.T) {
+	ctx := context.Background()
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	_, profitSharingOrder := createPaidBaofuPaymentWithProfitSharingOrder(t, ctx, user.ID, merchant.ID, ProfitSharingOrderStatusPending, "pso_prepare_started_")
+
+	before := time.Now().UTC().Add(-time.Second)
+	result, err := testStore.PrepareBaofuProfitSharingCommandTx(ctx, PrepareBaofuProfitSharingCommandTxParams{
+		ProfitSharingOrderID: profitSharingOrder.ID,
+	})
+	after := time.Now().UTC().Add(time.Second)
+	require.NoError(t, err)
+	require.True(t, result.ProfitSharingOrder.CommandStartedAt.Valid)
+	require.False(t, result.ProfitSharingOrder.CommandStartedAt.Time.Before(before))
+	require.False(t, result.ProfitSharingOrder.CommandStartedAt.Time.After(after))
+}
+
+func TestPrepareBaofuProfitSharingCommandTxRetriesFailedOrder(t *testing.T) {
+	ctx := context.Background()
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	_, profitSharingOrder := createPaidBaofuPaymentWithProfitSharingOrder(t, ctx, user.ID, merchant.ID, ProfitSharingOrderStatusFailed, "pso_prepare_failed_")
+
+	result, err := testStore.PrepareBaofuProfitSharingCommandTx(ctx, PrepareBaofuProfitSharingCommandTxParams{
+		ProfitSharingOrderID: profitSharingOrder.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, profitSharingOrder.ID, result.ProfitSharingOrder.ID)
+	require.Equal(t, ProfitSharingOrderStatusProcessing, result.ProfitSharingOrder.Status)
 }
 
 func TestEnsureBaofuProfitSharingBillTxAllowsRefundedPaymentForBillOnly(t *testing.T) {

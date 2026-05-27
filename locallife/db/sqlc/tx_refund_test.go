@@ -109,7 +109,40 @@ func TestCreateRefundOrderTx_AllowsProductionRefundTypes(t *testing.T) {
 	}
 }
 
-func TestCreateRefundOrderTx_BaofuRejectsRefundAfterProfitSharingStarts(t *testing.T) {
+func TestCreateRefundOrderTx_BaofuRejectsRefundAfterProfitSharingCommandStarted(t *testing.T) {
+	for _, status := range []string{ProfitSharingOrderStatusProcessing, ProfitSharingOrderStatusFinished} {
+		t.Run(status, func(t *testing.T) {
+			ctx := context.Background()
+			user := createRandomUser(t)
+			merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+			payment, profitSharingOrder := createPaidBaofuPaymentWithProfitSharingOrder(t, ctx, user.ID, merchant.ID, status, "baofu_refund_guard_")
+
+			_, err := testStore.CreateRefundOrderTx(ctx, CreateRefundOrderTxParams{
+				PaymentOrderID: payment.ID,
+				RefundType:     "profit_sharing",
+				RefundAmount:   100,
+				RefundReason:   "商品售罄",
+				OutRefundNo:    util.RandomString(32),
+			})
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "订单已进入结算分账流程，不支持退款")
+
+			statusCode, ok := IsRefundRequestError(err)
+			require.True(t, ok)
+			require.Equal(t, http.StatusBadRequest, statusCode)
+
+			refunds, err := testStore.ListRefundOrdersByPaymentOrder(ctx, payment.ID)
+			require.NoError(t, err)
+			require.Empty(t, refunds)
+
+			currentProfitSharingOrder, err := testStore.GetProfitSharingOrder(ctx, profitSharingOrder.ID)
+			require.NoError(t, err)
+			require.Equal(t, status, currentProfitSharingOrder.Status)
+		})
+	}
+}
+
+func TestCreateRefundOrderTx_BaofuAllowsRefundWhenOnlyPendingProfitSharingBillExists(t *testing.T) {
 	ctx := context.Background()
 	user := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
@@ -144,7 +177,7 @@ func TestCreateRefundOrderTx_BaofuRejectsRefundAfterProfitSharingStarts(t *testi
 		PlatformCommission:  20,
 		OperatorCommission:  30,
 		MerchantAmount:      947,
-		OutOrderNo:          "baofu_refund_guard_" + util.RandomString(16),
+		OutOrderNo:          "baofu_refund_pending_" + util.RandomString(16),
 		Status:              ProfitSharingOrderStatusPending,
 		PaymentFee:          3,
 		PaymentFeeRateBps:   30,
@@ -153,23 +186,59 @@ func TestCreateRefundOrderTx_BaofuRejectsRefundAfterProfitSharingStarts(t *testi
 	})
 	require.NoError(t, err)
 
-	_, err = testStore.CreateRefundOrderTx(ctx, CreateRefundOrderTxParams{
+	result, err := testStore.CreateRefundOrderTx(ctx, CreateRefundOrderTxParams{
 		PaymentOrderID: payment.ID,
 		RefundType:     "profit_sharing",
 		RefundAmount:   100,
 		RefundReason:   "商品售罄",
 		OutRefundNo:    util.RandomString(32),
 	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "订单已进入结算分账流程，不支持退款")
-
-	statusCode, ok := IsRefundRequestError(err)
-	require.True(t, ok)
-	require.Equal(t, http.StatusBadRequest, statusCode)
-
-	refunds, err := testStore.ListRefundOrdersByPaymentOrder(ctx, payment.ID)
 	require.NoError(t, err)
-	require.Empty(t, refunds)
+	require.Equal(t, payment.ID, result.RefundOrder.PaymentOrderID)
+	require.Equal(t, "pending", result.RefundOrder.Status)
+}
+
+func createPaidBaofuPaymentWithProfitSharingOrder(t *testing.T, ctx context.Context, userID int64, merchantID int64, profitSharingStatus string, outOrderPrefix string) (PaymentOrder, ProfitSharingOrder) {
+	payment, err := testStore.CreatePaymentOrder(ctx, CreatePaymentOrderParams{
+		UserID:                userID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+		BusinessType:          "order",
+		Amount:                1000,
+		OutTradeNo:            util.RandomString(32),
+		ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
+	})
+	require.NoError(t, err)
+
+	payment, err = testStore.UpdatePaymentOrderToPaid(ctx, UpdatePaymentOrderToPaidParams{
+		ID:            payment.ID,
+		TransactionID: pgtype.Text{String: util.RandomString(32), Valid: true},
+	})
+	require.NoError(t, err)
+
+	profitSharingOrder, err := testStore.CreateProfitSharingOrder(ctx, CreateProfitSharingOrderParams{
+		PaymentOrderID:      payment.ID,
+		MerchantID:          merchantID,
+		OrderSource:         "takeout",
+		TotalAmount:         payment.Amount,
+		DeliveryFee:         0,
+		RiderAmount:         0,
+		DistributableAmount: payment.Amount,
+		PlatformRate:        200,
+		OperatorRate:        300,
+		PlatformCommission:  20,
+		OperatorCommission:  30,
+		MerchantAmount:      947,
+		OutOrderNo:          outOrderPrefix + util.RandomString(16),
+		Status:              profitSharingStatus,
+		PaymentFee:          3,
+		PaymentFeeRateBps:   30,
+		Provider:            ExternalPaymentProviderBaofu,
+		Channel:             PaymentChannelBaofuAggregate,
+	})
+	require.NoError(t, err)
+	return payment, profitSharingOrder
 }
 
 func TestCreateRefundOrderTx_BaofuAllowsRefundWhenOnlyFailedProfitSharingExists(t *testing.T) {

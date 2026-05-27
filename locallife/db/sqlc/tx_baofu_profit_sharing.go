@@ -12,6 +12,7 @@ const (
 	errBaofuProfitSharingRefundStarted = "订单已有退款申请或退款成功记录，不能继续发起宝付分账"
 	errBaofuProfitSharingAlreadyExists = "订单已存在宝付分账单，不能重复发起分账"
 	errBaofuProfitSharingBillConflict  = "订单已存在不同的宝付分账账单"
+	errBaofuProfitSharingNotReady      = "宝付分账单当前状态不允许发起分账"
 )
 
 // CreateBaofuProfitSharingOrderTxParams contains the durable share order and
@@ -27,6 +28,15 @@ type CreateBaofuProfitSharingOrderTxResult struct {
 	ProfitSharingOrder     ProfitSharingOrder
 	PaymentFeeLedger       BaofuFeeLedger
 	OrderPaymentFeeLedgers []OrderPaymentFeeLedger
+}
+
+type PrepareBaofuProfitSharingCommandTxParams struct {
+	ProfitSharingOrderID int64
+}
+
+type PrepareBaofuProfitSharingCommandTxResult struct {
+	ProfitSharingOrder ProfitSharingOrder
+	PaymentOrder       PaymentOrder
 }
 
 func (store *SQLStore) CreateBaofuProfitSharingOrderTx(ctx context.Context, arg CreateBaofuProfitSharingOrderTxParams) (CreateBaofuProfitSharingOrderTxResult, error) {
@@ -107,6 +117,51 @@ func (store *SQLStore) EnsureBaofuProfitSharingBillTx(ctx context.Context, arg C
 			return err
 		}
 		result = created
+		return nil
+	})
+	return result, err
+}
+
+func (store *SQLStore) PrepareBaofuProfitSharingCommandTx(ctx context.Context, arg PrepareBaofuProfitSharingCommandTxParams) (PrepareBaofuProfitSharingCommandTxResult, error) {
+	var result PrepareBaofuProfitSharingCommandTxResult
+	err := store.execTx(ctx, func(q *Queries) error {
+		profitSharingOrder, err := q.GetProfitSharingOrderForUpdate(ctx, arg.ProfitSharingOrderID)
+		if err != nil {
+			return err
+		}
+		if profitSharingOrder.Provider != ExternalPaymentProviderBaofu ||
+			profitSharingOrder.Channel != PaymentChannelBaofuAggregate ||
+			(profitSharingOrder.Status != ProfitSharingOrderStatusPending && profitSharingOrder.Status != ProfitSharingOrderStatusFailed) {
+			return &requestError{statusCode: 400, err: errors.New(errBaofuProfitSharingNotReady)}
+		}
+
+		paymentOrder, err := q.GetPaymentOrderForUpdate(ctx, profitSharingOrder.PaymentOrderID)
+		if err != nil {
+			return err
+		}
+		if paymentOrder.Status != "paid" ||
+			paymentOrder.PaymentChannel != PaymentChannelBaofuAggregate ||
+			!paymentOrder.RequiresProfitSharing {
+			return &requestError{statusCode: 400, err: errors.New(errBaofuProfitSharingNotReady)}
+		}
+
+		occupiedRefundAmount, err := q.GetTotalRefundedByPaymentOrder(ctx, paymentOrder.ID)
+		if err != nil {
+			return err
+		}
+		if occupiedRefundAmount > 0 {
+			return &requestError{statusCode: 400, err: errors.New(errBaofuProfitSharingRefundStarted)}
+		}
+
+		profitSharingOrder, err = q.UpdateProfitSharingOrderToProcessing(ctx, UpdateProfitSharingOrderToProcessingParams{
+			ID:             profitSharingOrder.ID,
+			SharingOrderID: profitSharingOrder.SharingOrderID,
+		})
+		if err != nil {
+			return err
+		}
+		result.ProfitSharingOrder = profitSharingOrder
+		result.PaymentOrder = paymentOrder
 		return nil
 	})
 	return result, err

@@ -17342,6 +17342,21 @@ func (mr *MockStoreMockRecorder) Ping(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ping", reflect.TypeOf((*MockStore)(nil).Ping), ctx)
 }
 
+// PrepareBaofuProfitSharingCommandTx mocks base method.
+func (m *MockStore) PrepareBaofuProfitSharingCommandTx(ctx context.Context, arg db.PrepareBaofuProfitSharingCommandTxParams) (db.PrepareBaofuProfitSharingCommandTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PrepareBaofuProfitSharingCommandTx", ctx, arg)
+	ret0, _ := ret[0].(db.PrepareBaofuProfitSharingCommandTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PrepareBaofuProfitSharingCommandTx indicates an expected call of PrepareBaofuProfitSharingCommandTx.
+func (mr *MockStoreMockRecorder) PrepareBaofuProfitSharingCommandTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrepareBaofuProfitSharingCommandTx", reflect.TypeOf((*MockStore)(nil).PrepareBaofuProfitSharingCommandTx), ctx, arg)
+}
+
 // PrepareRiderDepositRefundTx mocks base method.
 func (m *MockStore) PrepareRiderDepositRefundTx(ctx context.Context, arg db.PrepareRiderDepositRefundTxParams) (db.PrepareRiderDepositRefundTxResult, error) {
 	m.ctrl.T.Helper()
@@ -20871,6 +20886,21 @@ func (m *MockStore) UpdateProfitSharingOrderRiderBillByPaymentOrder(ctx context.
 func (mr *MockStoreMockRecorder) UpdateProfitSharingOrderRiderBillByPaymentOrder(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateProfitSharingOrderRiderBillByPaymentOrder", reflect.TypeOf((*MockStore)(nil).UpdateProfitSharingOrderRiderBillByPaymentOrder), ctx, arg)
+}
+
+// UpdateProfitSharingOrderSharingID mocks base method.
+func (m *MockStore) UpdateProfitSharingOrderSharingID(ctx context.Context, arg db.UpdateProfitSharingOrderSharingIDParams) (db.ProfitSharingOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateProfitSharingOrderSharingID", ctx, arg)
+	ret0, _ := ret[0].(db.ProfitSharingOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateProfitSharingOrderSharingID indicates an expected call of UpdateProfitSharingOrderSharingID.
+func (mr *MockStoreMockRecorder) UpdateProfitSharingOrderSharingID(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateProfitSharingOrderSharingID", reflect.TypeOf((*MockStore)(nil).UpdateProfitSharingOrderSharingID), ctx, arg)
 }
 
 // UpdateProfitSharingOrderToFailed mocks base method.

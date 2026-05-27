@@ -92,26 +92,25 @@ func (processor *RedisTaskProcessor) ProcessTaskBaofuProfitSharing(ctx context.C
 		return fmt.Errorf("baofu profit sharing order %d status %q cannot create share command: %w", profitSharingOrder.ID, profitSharingOrder.Status, asynq.SkipRetry)
 	}
 
-	paymentOrder, err := processor.store.GetPaymentOrder(ctx, profitSharingOrder.PaymentOrderID)
+	prepared, err := processor.store.PrepareBaofuProfitSharingCommandTx(ctx, db.PrepareBaofuProfitSharingCommandTxParams{
+		ProfitSharingOrderID: profitSharingOrder.ID,
+	})
 	if err != nil {
-		return fmt.Errorf("get payment order for baofu profit sharing: %w", err)
+		if _, ok := db.IsRefundRequestError(err); ok {
+			return fmt.Errorf("prepare baofu profit sharing command: %v: %w", err, asynq.SkipRetry)
+		}
+		return fmt.Errorf("prepare baofu profit sharing command: %w", err)
 	}
-	if paymentOrder.PaymentChannel != db.PaymentChannelBaofuAggregate {
-		return fmt.Errorf("payment order %d channel %q is not baofu aggregate: %w", paymentOrder.ID, paymentOrder.PaymentChannel, asynq.SkipRetry)
-	}
-	refundedAmount, err := processor.store.GetTotalRefundedByPaymentOrder(ctx, paymentOrder.ID)
-	if err != nil {
-		return fmt.Errorf("get refunded amount before baofu profit sharing command: %w", err)
-	}
-	if refundedAmount > 0 {
-		return fmt.Errorf("payment order %d has active refund amount %d before baofu profit sharing command: %w", paymentOrder.ID, refundedAmount, asynq.SkipRetry)
-	}
+	profitSharingOrder = prepared.ProfitSharingOrder
+	paymentOrder := prepared.PaymentOrder
 
 	req, err := buildBaofuShareAfterPayRequest(cfg, paymentOrder, profitSharingOrder)
 	if err != nil {
+		_ = processor.markBaofuProfitSharingCommandFailed(ctx, profitSharingOrder.ID)
 		return err
 	}
 	if err := req.Validate(); err != nil {
+		_ = processor.markBaofuProfitSharingCommandFailed(ctx, profitSharingOrder.ID)
 		return fmt.Errorf("build baofu share request: %w", err)
 	}
 	if _, err := processor.store.CreateExternalPaymentCommand(ctx, db.CreateExternalPaymentCommandParams{
@@ -129,6 +128,7 @@ func (processor *RedisTaskProcessor) ProcessTaskBaofuProfitSharing(ctx context.C
 		SubmittedAt:          time.Now().UTC(),
 		ResponseSnapshot:     baofuProfitSharingCommandSnapshot(profitSharingOrder),
 	}); err != nil {
+		_ = processor.markBaofuProfitSharingCommandFailed(ctx, profitSharingOrder.ID)
 		return fmt.Errorf("create baofu profit sharing command: %w", err)
 	}
 
@@ -144,11 +144,11 @@ func (processor *RedisTaskProcessor) ProcessTaskBaofuProfitSharing(ctx context.C
 	if upstreamShareID == "" && responseOutTradeNo == "" {
 		return fmt.Errorf("create baofu profit sharing missing upstream share reference")
 	}
-	if _, err := processor.store.UpdateProfitSharingOrderToProcessing(ctx, db.UpdateProfitSharingOrderToProcessingParams{
+	if _, err := processor.store.UpdateProfitSharingOrderSharingID(ctx, db.UpdateProfitSharingOrderSharingIDParams{
 		ID:             profitSharingOrder.ID,
 		SharingOrderID: pgtype.Text{String: upstreamShareID, Valid: upstreamShareID != ""},
 	}); err != nil {
-		return fmt.Errorf("mark baofu profit sharing order processing: %w", err)
+		return fmt.Errorf("record baofu profit sharing upstream reference: %w", err)
 	}
 
 	log.Info().
@@ -157,6 +157,16 @@ func (processor *RedisTaskProcessor) ProcessTaskBaofuProfitSharing(ctx context.C
 		Str("out_order_no", profitSharingOrder.OutOrderNo).
 		Str("baofu_share_state", strings.TrimSpace(result.TxnState)).
 		Msg("baofu profit sharing command accepted")
+	return nil
+}
+
+func (processor *RedisTaskProcessor) markBaofuProfitSharingCommandFailed(ctx context.Context, profitSharingOrderID int64) error {
+	if _, err := processor.store.UpdateProfitSharingOrderToFailed(ctx, profitSharingOrderID); err != nil {
+		log.Error().Err(err).
+			Int64("profit_sharing_order_id", profitSharingOrderID).
+			Msg("mark baofu profit sharing order failed after command preparation failed")
+		return err
+	}
 	return nil
 }
 

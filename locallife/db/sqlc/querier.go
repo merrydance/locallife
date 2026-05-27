@@ -1846,6 +1846,7 @@ type Querier interface {
 	UpdateProfitSharingConfigStatus(ctx context.Context, arg UpdateProfitSharingConfigStatusParams) (ProfitSharingConfig, error)
 	UpdateProfitSharingOrderFeeBreakdown(ctx context.Context, arg UpdateProfitSharingOrderFeeBreakdownParams) (ProfitSharingOrder, error)
 	UpdateProfitSharingOrderRiderBillByPaymentOrder(ctx context.Context, arg UpdateProfitSharingOrderRiderBillByPaymentOrderParams) (ProfitSharingOrder, error)
+	UpdateProfitSharingOrderSharingID(ctx context.Context, arg UpdateProfitSharingOrderSharingIDParams) (ProfitSharingOrder, error)
 	UpdateProfitSharingOrderToFailed(ctx context.Context, id int64) (ProfitSharingOrder, error)
 	UpdateProfitSharingOrderToFinished(ctx context.Context, id int64) (ProfitSharingOrder, error)
 	UpdateProfitSharingOrderToProcessing(ctx context.Context, arg UpdateProfitSharingOrderToProcessingParams) (ProfitSharingOrder, error)

@@ -3,6 +3,7 @@ package worker_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/hibiken/asynq"
@@ -54,8 +55,12 @@ func TestProcessTaskBaofuProfitSharingCreatesShareCommand(t *testing.T) {
 	}
 
 	store.EXPECT().GetProfitSharingOrder(gomock.Any(), profitSharingOrder.ID).Return(profitSharingOrder, nil)
-	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
-	store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(int64(0), nil)
+	store.EXPECT().PrepareBaofuProfitSharingCommandTx(gomock.Any(), db.PrepareBaofuProfitSharingCommandTxParams{
+		ProfitSharingOrderID: profitSharingOrder.ID,
+	}).Return(db.PrepareBaofuProfitSharingCommandTxResult{
+		ProfitSharingOrder: profitSharingOrderWithStatus(profitSharingOrder, db.ProfitSharingOrderStatusProcessing),
+		PaymentOrder:       paymentOrder,
+	}, nil)
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
 		require.Equal(t, db.ExternalPaymentProviderBaofu, arg.Provider)
 		require.Equal(t, db.PaymentChannelBaofuAggregate, arg.Channel)
@@ -71,7 +76,7 @@ func TestProcessTaskBaofuProfitSharingCreatesShareCommand(t *testing.T) {
 		require.NotContains(t, string(arg.ResponseSnapshot), "MER_SHARE")
 		return db.ExternalPaymentCommand{ID: 5001}, nil
 	})
-	store.EXPECT().UpdateProfitSharingOrderToProcessing(gomock.Any(), db.UpdateProfitSharingOrderToProcessingParams{
+	store.EXPECT().UpdateProfitSharingOrderSharingID(gomock.Any(), db.UpdateProfitSharingOrderSharingIDParams{
 		ID:             profitSharingOrder.ID,
 		SharingOrderID: pgtype.Text{String: "BFSHARE_UP_3001", Valid: true},
 	}).Return(db.ProfitSharingOrder{ID: profitSharingOrder.ID, Status: db.ProfitSharingOrderStatusProcessing}, nil)
@@ -127,10 +132,14 @@ func TestProcessTaskBaofuProfitSharingDoesNotPersistLocalOutOrderNoAsUpstreamSha
 	}
 
 	store.EXPECT().GetProfitSharingOrder(gomock.Any(), profitSharingOrder.ID).Return(profitSharingOrder, nil)
-	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
-	store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(int64(0), nil)
+	store.EXPECT().PrepareBaofuProfitSharingCommandTx(gomock.Any(), db.PrepareBaofuProfitSharingCommandTxParams{
+		ProfitSharingOrderID: profitSharingOrder.ID,
+	}).Return(db.PrepareBaofuProfitSharingCommandTxResult{
+		ProfitSharingOrder: profitSharingOrderWithStatus(profitSharingOrder, db.ProfitSharingOrderStatusProcessing),
+		PaymentOrder:       paymentOrder,
+	}, nil)
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).Return(db.ExternalPaymentCommand{ID: 5003}, nil)
-	store.EXPECT().UpdateProfitSharingOrderToProcessing(gomock.Any(), db.UpdateProfitSharingOrderToProcessingParams{
+	store.EXPECT().UpdateProfitSharingOrderSharingID(gomock.Any(), db.UpdateProfitSharingOrderSharingIDParams{
 		ID:             profitSharingOrder.ID,
 		SharingOrderID: pgtype.Text{},
 	}).Return(db.ProfitSharingOrder{ID: profitSharingOrder.ID, Status: db.ProfitSharingOrderStatusProcessing}, nil)
@@ -175,8 +184,13 @@ func TestProcessTaskBaofuProfitSharingRejectsSnapshotAmountMismatch(t *testing.T
 	}
 
 	store.EXPECT().GetProfitSharingOrder(gomock.Any(), profitSharingOrder.ID).Return(profitSharingOrder, nil)
-	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
-	store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(int64(0), nil)
+	store.EXPECT().PrepareBaofuProfitSharingCommandTx(gomock.Any(), db.PrepareBaofuProfitSharingCommandTxParams{
+		ProfitSharingOrderID: profitSharingOrder.ID,
+	}).Return(db.PrepareBaofuProfitSharingCommandTxResult{
+		ProfitSharingOrder: profitSharingOrderWithStatus(profitSharingOrder, db.ProfitSharingOrderStatusProcessing),
+		PaymentOrder:       paymentOrder,
+	}, nil)
+	store.EXPECT().UpdateProfitSharingOrderToFailed(gomock.Any(), profitSharingOrder.ID).Return(profitSharingOrderWithStatus(profitSharingOrder, db.ProfitSharingOrderStatusFailed), nil)
 
 	payloadBytes, err := json.Marshal(worker.BaofuProfitSharingPayload{ProfitSharingOrderID: profitSharingOrder.ID})
 	require.NoError(t, err)
@@ -213,24 +227,116 @@ func TestProcessTaskBaofuProfitSharingSkipsWhenRefundAmountIsOccupied(t *testing
 		Channel:               db.PaymentChannelBaofuAggregate,
 		SharingDetailSnapshot: []byte(`{"receivers":[{"sharing_mer_id":"MER_SHARE","amount":1000}]}`),
 	}
-	paymentOrder := db.PaymentOrder{
-		ID:             4002,
-		OutTradeNo:     "PO_BAOFU_4002",
-		PaymentChannel: db.PaymentChannelBaofuAggregate,
-		Status:         "paid",
-	}
-
 	store.EXPECT().GetProfitSharingOrder(gomock.Any(), profitSharingOrder.ID).Return(profitSharingOrder, nil)
-	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
-	store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(int64(300), nil)
+	store.EXPECT().PrepareBaofuProfitSharingCommandTx(gomock.Any(), db.PrepareBaofuProfitSharingCommandTxParams{
+		ProfitSharingOrderID: profitSharingOrder.ID,
+	}).Return(db.PrepareBaofuProfitSharingCommandTxResult{}, errors.New("订单已有退款申请或退款成功记录，不能继续发起宝付分账"))
 
 	payloadBytes, err := json.Marshal(worker.BaofuProfitSharingPayload{ProfitSharingOrderID: profitSharingOrder.ID})
 	require.NoError(t, err)
 	err = processor.ProcessTaskBaofuProfitSharing(context.Background(), asynq.NewTask(worker.TaskProcessBaofuProfitSharing, payloadBytes))
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "active refund amount")
+	require.Contains(t, err.Error(), "订单已有退款申请或退款成功记录")
 	require.False(t, client.called)
+}
+
+func TestProcessTaskBaofuProfitSharingKeepsProcessingWhenProviderCreateResultUnknown(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	client := &fakeBaofuProfitSharingClient{err: errors.New("provider timeout")}
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
+	processor.SetBaofuAggregateClient(client, worker.BaofuProfitSharingWorkerConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+	})
+
+	profitSharingOrder := db.ProfitSharingOrder{
+		ID:                    3005,
+		PaymentOrderID:        4005,
+		OutOrderNo:            "BFSHARE_3005",
+		Status:                db.ProfitSharingOrderStatusPending,
+		Provider:              db.ExternalPaymentProviderBaofu,
+		Channel:               db.PaymentChannelBaofuAggregate,
+		SharingDetailSnapshot: []byte(`{"receivers":[{"sharing_mer_id":"MER_SHARE","amount":1000}]}`),
+	}
+	paymentOrder := db.PaymentOrder{
+		ID:             4005,
+		OutTradeNo:     "PO_BAOFU_4005",
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+		Status:         "paid",
+	}
+
+	store.EXPECT().GetProfitSharingOrder(gomock.Any(), profitSharingOrder.ID).Return(profitSharingOrder, nil)
+	store.EXPECT().PrepareBaofuProfitSharingCommandTx(gomock.Any(), db.PrepareBaofuProfitSharingCommandTxParams{
+		ProfitSharingOrderID: profitSharingOrder.ID,
+	}).Return(db.PrepareBaofuProfitSharingCommandTxResult{
+		ProfitSharingOrder: profitSharingOrderWithStatus(profitSharingOrder, db.ProfitSharingOrderStatusProcessing),
+		PaymentOrder:       paymentOrder,
+	}, nil)
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).Return(db.ExternalPaymentCommand{ID: 5005}, nil)
+
+	payloadBytes, err := json.Marshal(worker.BaofuProfitSharingPayload{ProfitSharingOrderID: profitSharingOrder.ID})
+	require.NoError(t, err)
+	err = processor.ProcessTaskBaofuProfitSharing(context.Background(), asynq.NewTask(worker.TaskProcessBaofuProfitSharing, payloadBytes))
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "provider timeout")
+	require.True(t, client.called)
+}
+
+func TestProcessTaskBaofuProfitSharingMarksFailedWhenCommandRecordFailsBeforeProviderCall(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	client := &fakeBaofuProfitSharingClient{}
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
+	processor.SetBaofuAggregateClient(client, worker.BaofuProfitSharingWorkerConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+	})
+
+	profitSharingOrder := db.ProfitSharingOrder{
+		ID:                    3006,
+		PaymentOrderID:        4006,
+		OutOrderNo:            "BFSHARE_3006",
+		Status:                db.ProfitSharingOrderStatusPending,
+		Provider:              db.ExternalPaymentProviderBaofu,
+		Channel:               db.PaymentChannelBaofuAggregate,
+		SharingDetailSnapshot: []byte(`{"receivers":[{"sharing_mer_id":"MER_SHARE","amount":1000}]}`),
+	}
+	paymentOrder := db.PaymentOrder{
+		ID:             4006,
+		OutTradeNo:     "PO_BAOFU_4006",
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+		Status:         "paid",
+	}
+
+	store.EXPECT().GetProfitSharingOrder(gomock.Any(), profitSharingOrder.ID).Return(profitSharingOrder, nil)
+	store.EXPECT().PrepareBaofuProfitSharingCommandTx(gomock.Any(), db.PrepareBaofuProfitSharingCommandTxParams{
+		ProfitSharingOrderID: profitSharingOrder.ID,
+	}).Return(db.PrepareBaofuProfitSharingCommandTxResult{
+		ProfitSharingOrder: profitSharingOrderWithStatus(profitSharingOrder, db.ProfitSharingOrderStatusProcessing),
+		PaymentOrder:       paymentOrder,
+	}, nil)
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).Return(db.ExternalPaymentCommand{}, errors.New("db unavailable"))
+	store.EXPECT().UpdateProfitSharingOrderToFailed(gomock.Any(), profitSharingOrder.ID).Return(profitSharingOrderWithStatus(profitSharingOrder, db.ProfitSharingOrderStatusFailed), nil)
+
+	payloadBytes, err := json.Marshal(worker.BaofuProfitSharingPayload{ProfitSharingOrderID: profitSharingOrder.ID})
+	require.NoError(t, err)
+	err = processor.ProcessTaskBaofuProfitSharing(context.Background(), asynq.NewTask(worker.TaskProcessBaofuProfitSharing, payloadBytes))
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "create baofu profit sharing command")
+	require.False(t, client.called)
+}
+
+func profitSharingOrderWithStatus(order db.ProfitSharingOrder, status string) db.ProfitSharingOrder {
+	order.Status = status
+	return order
 }
 
 type fakeBaofuProfitSharingClient struct {

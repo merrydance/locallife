@@ -302,3 +302,46 @@ func TestListBaofuOrdersReadyForProfitSharing_IncludesPaidReservations(t *testin
 	}
 	require.True(t, matched)
 }
+
+func TestListBaofuProcessingProfitSharingOrdersForRecoveryUsesCommandStartedAt(t *testing.T) {
+	ctx := context.Background()
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	paymentOrder, profitSharingOrder := createPaidBaofuPaymentWithProfitSharingOrder(t, ctx, user.ID, merchant.ID, ProfitSharingOrderStatusPending, "pso_processing_recovery_")
+
+	createdAt := time.Now().UTC().Add(-10 * time.Minute)
+	startedAt := time.Now().UTC()
+	_, err := testStore.(*SQLStore).connPool.Exec(ctx, `
+		UPDATE profit_sharing_orders
+		SET created_at = $1,
+		    command_started_at = $2,
+		    status = 'processing'
+		WHERE id = $3
+	`, createdAt, startedAt, profitSharingOrder.ID)
+	require.NoError(t, err)
+
+	rows, err := testStore.ListBaofuProcessingProfitSharingOrdersForRecovery(ctx, ListBaofuProcessingProfitSharingOrdersForRecoveryParams{
+		CreatedBefore: pgtype.Timestamptz{Time: startedAt.Add(-time.Minute), Valid: true},
+		Limit:         200,
+	})
+	require.NoError(t, err)
+	for _, row := range rows {
+		require.NotEqual(t, profitSharingOrder.ID, row.ID)
+	}
+
+	rows, err = testStore.ListBaofuProcessingProfitSharingOrdersForRecovery(ctx, ListBaofuProcessingProfitSharingOrdersForRecoveryParams{
+		CreatedBefore: pgtype.Timestamptz{Time: startedAt.Add(time.Minute), Valid: true},
+		Limit:         200,
+	})
+	require.NoError(t, err)
+	matched := false
+	for _, row := range rows {
+		if row.ID == profitSharingOrder.ID {
+			require.Equal(t, paymentOrder.ID, row.PaymentOrderID)
+			require.True(t, row.CommandStartedAt.Valid)
+			matched = true
+			break
+		}
+	}
+	require.True(t, matched)
+}
