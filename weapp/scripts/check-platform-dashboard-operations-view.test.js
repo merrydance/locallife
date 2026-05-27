@@ -47,21 +47,7 @@ const view = service.buildPlatformDashboardView({
     active_users: 88,
     total_commission: 5300,
     total_gmv: 1250000,
-    total_orders: 321,
-    summary: {
-      total_orders: 321,
-      total_gmv: 1250000,
-      completion_rate: 96.3,
-      active_merchants: 12,
-      active_riders: 9,
-      avg_order_value: 3894
-    },
-    growth_metrics: {
-      user_growth_rate: 1,
-      merchant_growth_rate: 2,
-      order_growth_rate: 3,
-      gmv_growth_rate: 4
-    }
+    total_orders: 321
   },
   realtimeData: {
     active_merchants_24h: 7,
@@ -71,40 +57,7 @@ const view = service.buildPlatformDashboardView({
     orders_24h: 37,
     pending_orders: 5,
     preparing_orders: 6,
-    ready_orders: 3,
-    order_distribution: {
-      pending: 5,
-      confirmed: 2,
-      preparing: 6,
-      ready: 3,
-      delivering: 4,
-      completed: 20,
-      cancelled: 1
-    },
-    today_stats: {
-      new_users: 8,
-      new_merchants: 2,
-      gmv: 456700,
-      order_count: 37,
-      total_orders: 37,
-      completed_orders: 20,
-      cancelled_orders: 1,
-      total_gmv: 456700,
-      avg_order_value: 12343,
-      completion_rate: 96.3,
-      new_riders: 1
-    },
-    realtime_stats: {
-      online_riders: 9,
-      online_merchants: 7,
-      orders_per_minute: 2,
-      online_users: 13,
-      active_orders: 20,
-      gmv_per_minute: 0
-    },
-    top_regions: [],
-    hourly_trends: [],
-    timestamp: Date.parse('2026-05-27T09:30:00+08:00')
+    ready_orders: 3
   },
   abnormalRefundCount: 2,
   alertFeedReady: true
@@ -113,10 +66,20 @@ const view = service.buildPlatformDashboardView({
 assert.deepStrictEqual(
   JSON.parse(JSON.stringify(view.todayCards.map((card) => [card.key, card.label, card.value]))),
   [
-    ['orders24h', '今日订单', '37'],
-    ['gmv24h', '今日GMV', '¥4,567.00'],
-    ['activeOrders', '履约中', '20'],
-    ['onlineRiders', '在线骑手', '9']
+    ['orders24h', '近24h订单', '37'],
+    ['gmv24h', '近24hGMV', '¥4,567.00'],
+    ['activeOrders', '履约中', '18'],
+    ['activeUsers24h', '24h活跃用户', '41']
+  ]
+)
+
+assert.deepStrictEqual(
+  JSON.parse(JSON.stringify(view.realtimeRows.map((row) => [row.key, row.label, row.value]))),
+  [
+    ['pendingOrders', '待接单', '5'],
+    ['preparingOrders', '制作中', '6'],
+    ['readyOrders', '待取餐', '3'],
+    ['deliveringOrders', '代取中', '4']
   ]
 )
 
@@ -129,8 +92,8 @@ assert.deepStrictEqual(
   ]
 )
 
-assert.strictEqual(view.operationsStatus.syncText, '09:30 更新')
-assert.strictEqual(view.operationsStatus.summary, '今日 37 单，履约中 20 单')
+assert.strictEqual(view.operationsStatus.syncText, '自动刷新')
+assert.strictEqual(view.operationsStatus.summary, '近24h 37 单，履约中 18 单')
 assert.strictEqual(view.entryGroups[0].title, '经营实体')
 assert(view.entryGroups[0].items.some((item) => item.title === '骑手管理' && item.url === '/pages/platform/riders/index'), 'rider management entry must link to rider cards')
 assert(view.entryGroups[0].items.some((item) => item.title === '商户管理' && item.url === '/pages/platform/merchants/index'), 'merchant management entry must link to merchant cards')
@@ -138,7 +101,38 @@ assert(view.entryGroups[0].items.some((item) => item.title === '运营商管理'
 assert.strictEqual(view.entryGroups[1].title, '资金结算')
 assert(view.entryGroups[1].items.some((item) => item.url === '/pages/platform/finance/withdrawals/index'), 'finance entries must include withdrawals')
 assert(!JSON.stringify(view).includes('接口'), 'dashboard view must not expose technical interface wording')
+assert(!JSON.stringify(view).includes('在线骑手'), 'dashboard view must not expose unsupported online rider wording')
+assert(!JSON.stringify(view).includes('在线商户'), 'dashboard view must not expose unsupported online merchant wording')
+assert(!JSON.stringify(view).includes('完成率'), 'dashboard view must not expose unsupported overview completion rate wording')
+assert(!JSON.stringify(view).includes('客单'), 'dashboard view must not expose unsupported overview average order wording')
+assert(!JSON.stringify(view).includes('活跃骑手'), 'dashboard view must not expose unsupported overview rider wording')
 assert(!JSON.stringify(view).includes('商户保证金'), 'dashboard view must not expose unsupported merchant deposit wording')
+
+const realtimeContractSource = read('miniprogram/api/platform-dashboard.ts')
+const dashboardViewSource = read('miniprogram/services/platform-dashboard-view.ts')
+for (const unsupported of [
+  'order_distribution',
+  'today_stats',
+  'realtime_stats',
+  'top_regions',
+  'hourly_trends',
+  'online_riders',
+  'online_merchants',
+  'timestamp'
+]) {
+  assert(!realtimeContractSource.includes(unsupported), `realtime contract must not include unsupported field ${unsupported}`)
+  assert(!dashboardViewSource.includes(unsupported), `dashboard view must not read unsupported realtime field ${unsupported}`)
+}
+
+for (const unsupported of [
+  'overviewData?.summary',
+  'growth_metrics',
+  'active_riders',
+  'avg_order_value',
+  'completion_rate'
+]) {
+  assert(!dashboardViewSource.includes(unsupported), `dashboard view must not read unsupported overview field ${unsupported}`)
+}
 
 const pageSource = read('miniprogram/pages/platform/dashboard/dashboard.wxml')
 const pageLogic = read('miniprogram/pages/platform/dashboard/dashboard.ts')

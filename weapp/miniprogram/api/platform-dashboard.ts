@@ -26,55 +26,6 @@ export interface RealtimeDashboardData {
     pending_orders: number            // 待接单订单数
     preparing_orders: number          // 制作中订单数
     ready_orders: number              // 待取餐订单数
-
-    // Missing fields used in analysis
-    order_distribution: {
-        pending: number
-        confirmed: number
-        preparing: number
-        ready: number
-        delivering: number
-        completed: number
-        cancelled: number
-    }
-    today_stats: {
-        new_users: number
-        new_merchants: number
-        gmv: number
-        order_count: number
-
-        // Fields used in Adapter
-        total_orders: number
-        completed_orders: number
-        cancelled_orders: number
-        total_gmv: number
-        avg_order_value: number
-        completion_rate: number
-        new_riders: number
-    }
-    realtime_stats: {
-        online_riders: number
-        online_merchants: number
-        orders_per_minute: number
-
-        // Fields used in Adapter
-        online_users: number
-        active_orders: number
-        gmv_per_minute: number
-    }
-    top_regions: Array<{
-        region_id: number
-        region_name: string
-        order_count: number
-
-        // Fields used in Adapter
-        orders: number
-        gmv: number
-        merchants: number
-        riders: number
-    }>
-    hourly_trends: HourlyDistributionRow[]
-    timestamp: number
 }
 
 /** 平台概览响应 - 对齐 api.platformOverviewResponse */
@@ -84,22 +35,6 @@ export interface PlatformOverviewResponse {
     total_commission: number          // 平台总佣金(分)
     total_gmv: number                 // 总GMV(分)
     total_orders: number              // 总订单数
-
-    // Missing fields used in analysis
-    summary: {
-        total_orders: number
-        total_gmv: number
-        completion_rate: number
-        active_merchants: number
-        active_riders: number
-        avg_order_value: number
-    }
-    growth_metrics: {
-        user_growth_rate: number
-        merchant_growth_rate: number
-        order_growth_rate: number
-        gmv_growth_rate: number
-    }
 }
 
 // ==================== 增长数据相关类型 ====================
@@ -527,7 +462,6 @@ export class PlatformAnalyticsService {
             orderHealth: number
             userHealth: number
             merchantHealth: number
-            riderHealth: number
             financialHealth: number
         }
         alerts: Array<{
@@ -539,28 +473,21 @@ export class PlatformAnalyticsService {
         }>
         insights: string[]
     } {
-        // 计算各维度健康度
-        const orderHealth = this.calculateOrderHealth(overview.summary, realtime.order_distribution)
-        const userHealth = this.calculateUserHealth(overview.growth_metrics, realtime.today_stats)
-        const merchantHealth = this.calculateMerchantHealth(overview.summary, overview.growth_metrics)
-        const riderHealth = this.calculateRiderHealth(overview.summary, realtime.realtime_stats)
-        const financialHealth = this.calculateFinancialHealth(overview.summary)
+        const orderHealth = this.calculateOrderHealth(realtime)
+        const userHealth = this.calculateUserHealth(realtime)
+        const merchantHealth = this.calculateMerchantHealth(overview, realtime)
+        const financialHealth = this.calculateFinancialHealth(overview)
 
-        // 综合健康度评分
         const healthScore = Math.round(
-            (orderHealth * 0.3 + userHealth * 0.2 + merchantHealth * 0.2 + riderHealth * 0.2 + financialHealth * 0.1)
+            (orderHealth * 0.35 + userHealth * 0.2 + merchantHealth * 0.25 + financialHealth * 0.2)
         )
 
-        // 健康等级
         let healthLevel: 'excellent' | 'good' | 'warning' | 'critical' = 'critical'
         if (healthScore >= 85) healthLevel = 'excellent'
         else if (healthScore >= 70) healthLevel = 'good'
         else if (healthScore >= 50) healthLevel = 'warning'
 
-        // 生成告警
         const alerts = this.generateHealthAlerts(overview, realtime)
-
-        // 生成洞察
         const insights = this.generatePlatformInsights(overview, realtime, healthScore)
 
         return {
@@ -570,7 +497,6 @@ export class PlatformAnalyticsService {
                 orderHealth,
                 userHealth,
                 merchantHealth,
-                riderHealth,
                 financialHealth
             },
             alerts,
@@ -691,64 +617,47 @@ export class PlatformAnalyticsService {
     /**
      * 计算订单健康度
      */
-    private calculateOrderHealth(
-        summary: PlatformOverviewResponse['summary'],
-        distribution: RealtimeDashboardData['order_distribution']
-    ): number {
-        const completionRate = summary.completion_rate
-        const activeOrderRatio = (distribution.pending + distribution.confirmed + distribution.preparing + distribution.ready + distribution.delivering) /
-            Math.max(summary.total_orders, 1) * 100
+    private calculateOrderHealth(realtime: RealtimeDashboardData): number {
+        const orders24h = Math.max(realtime.orders_24h, 1)
+        const activeOrders = realtime.pending_orders
+            + realtime.preparing_orders
+            + realtime.ready_orders
+            + realtime.delivering_orders
+        const activePressure = activeOrders / orders24h
+        const pendingPressure = realtime.pending_orders / orders24h
 
-        return Math.min(100, (completionRate + Math.min(activeOrderRatio, 20)) / 1.2)
+        return Math.max(0, Math.round(100 - activePressure * 60 - pendingPressure * 30))
     }
 
     /**
      * 计算用户健康度
      */
-    private calculateUserHealth(
-        growth: PlatformOverviewResponse['growth_metrics'],
-        today: RealtimeDashboardData['today_stats']
-    ): number {
-        const userGrowthScore = Math.min(100, Math.max(0, growth.user_growth_rate + 50))
-        const newUserScore = Math.min(100, (today.new_users / 1000) * 100)
-
-        return (userGrowthScore + newUserScore) / 2
+    private calculateUserHealth(realtime: RealtimeDashboardData): number {
+        return Math.min(100, Math.round((realtime.active_users_24h / 1000) * 100))
     }
 
     /**
      * 计算商户健康度
      */
     private calculateMerchantHealth(
-        summary: PlatformOverviewResponse['summary'],
-        growth: PlatformOverviewResponse['growth_metrics']
+        overview: PlatformOverviewResponse,
+        realtime: RealtimeDashboardData
     ): number {
-        const merchantGrowthScore = Math.min(100, Math.max(0, growth.merchant_growth_rate + 50))
-        const activeMerchantScore = Math.min(100, (summary.active_merchants / 10000) * 100)
+        if (overview.active_merchants <= 0) {
+            return realtime.active_merchants_24h > 0 ? 100 : 0
+        }
 
-        return (merchantGrowthScore + activeMerchantScore) / 2
-    }
-
-    /**
-     * 计算骑手健康度
-     */
-    private calculateRiderHealth(
-        summary: PlatformOverviewResponse['summary'],
-        realtime: RealtimeDashboardData['realtime_stats']
-    ): number {
-        const activeRiderScore = Math.min(100, (summary.active_riders / 5000) * 100)
-        const onlineRiderScore = Math.min(100, (realtime.online_riders / 2000) * 100)
-
-        return (activeRiderScore + onlineRiderScore) / 2
+        return Math.min(100, Math.round((realtime.active_merchants_24h / overview.active_merchants) * 100))
     }
 
     /**
      * 计算财务健康度
      */
-    private calculateFinancialHealth(summary: PlatformOverviewResponse['summary']): number {
-        const gmvScore = Math.min(100, (summary.total_gmv / 10000000) * 100) // 1000万为满分
-        const avgOrderValueScore = Math.min(100, (summary.avg_order_value / 5000) * 100) // 50元为满分
+    private calculateFinancialHealth(overview: PlatformOverviewResponse): number {
+        const gmvScore = Math.min(100, (overview.total_gmv / 10000000) * 100)
+        const commissionScore = Math.min(100, (overview.total_commission / 1000000) * 100)
 
-        return (gmvScore + avgOrderValueScore) / 2
+        return Math.round((gmvScore + commissionScore) / 2)
     }
 
     /**
@@ -772,47 +681,38 @@ export class PlatformAnalyticsService {
             threshold: number
         }> = []
 
-        // 完成率告警
-        if (overview.summary.completion_rate < 80) {
-            alerts.push({
-                level: overview.summary.completion_rate < 70 ? 'error' : 'warning',
-                message: '订单完成率偏低',
-                metric: 'completion_rate',
-                value: overview.summary.completion_rate,
-                threshold: 80
-            })
-        }
-
-        // 在线商户告警
-        if (realtime.realtime_stats.online_merchants < 100) {
+        if (realtime.pending_orders > 0) {
             alerts.push({
                 level: 'warning',
-                message: '在线商户数量偏少',
-                metric: 'online_merchants',
-                value: realtime.realtime_stats.online_merchants,
-                threshold: 100
+                message: '存在待接单订单',
+                metric: 'pending_orders',
+                value: realtime.pending_orders,
+                threshold: 0
             })
         }
 
-        // 在线骑手告警
-        if (realtime.realtime_stats.online_riders < 50) {
+        const activeOrders = realtime.pending_orders
+            + realtime.preparing_orders
+            + realtime.ready_orders
+            + realtime.delivering_orders
+        const activeOrderThreshold = Math.max(10, Math.round(realtime.orders_24h * 0.5))
+        if (activeOrders > activeOrderThreshold) {
             alerts.push({
                 level: 'warning',
-                message: '在线骑手数量偏少',
-                metric: 'online_riders',
-                value: realtime.realtime_stats.online_riders,
-                threshold: 50
+                message: '履约中订单占比较高',
+                metric: 'active_orders',
+                value: activeOrders,
+                threshold: activeOrderThreshold
             })
         }
 
-        // 增长率告警
-        if (overview.growth_metrics.order_growth_rate < 0) {
+        if (overview.total_orders > 0 && overview.total_gmv === 0) {
             alerts.push({
                 level: 'error',
-                message: '订单增长率为负',
-                metric: 'order_growth_rate',
-                value: overview.growth_metrics.order_growth_rate,
-                threshold: 0
+                message: '订单金额统计异常',
+                metric: 'total_gmv',
+                value: overview.total_gmv,
+                threshold: 1
             })
         }
 
@@ -830,21 +730,17 @@ export class PlatformAnalyticsService {
         const insights: string[] = []
 
         if (healthScore >= 85) {
-            insights.push('平台整体运营状况优秀，各项指标表现良好')
+            insights.push('平台核心运营指标稳定')
         } else if (healthScore < 50) {
             insights.push('平台运营状况需要重点关注，建议制定改善计划')
         }
 
-        if (overview.growth_metrics.gmv_growth_rate > 20) {
-            insights.push('GMV增长强劲，平台商业价值快速提升')
+        if (realtime.orders_24h > 0) {
+            insights.push(`近24小时产生${realtime.orders_24h}单`)
         }
 
-        if (realtime.realtime_stats.orders_per_minute > 10) {
-            insights.push('订单频率较高，平台活跃度良好')
-        }
-
-        if (overview.summary.avg_order_value > 4000) {
-            insights.push('客单价较高，用户消费能力强')
+        if (realtime.active_merchants_24h > 0) {
+            insights.push(`近24小时有${realtime.active_merchants_24h}家商户活跃`)
         }
 
         return insights
@@ -1027,86 +923,39 @@ export class PlatformDashboardAdapter {
      * 适配实时大盘数据
      */
     static adaptRealtimeDashboard(data: RealtimeDashboardData): {
-        timestamp: number // Changed to number to match input
-        realtimeStats: {
-            onlineUsers: number
-            onlineMerchants: number
-            onlineRiders: number
-            activeOrders: number
-            ordersPerMinute: number
-            gmvPerMinute: number
-        }
-        todayStats: {
+        recent24h: {
             totalOrders: number
-            completedOrders: number
-            cancelledOrders: number
             totalGmv: number
-            avgOrderValue: number
-            completionRate: number
-            newUsers: number
-            newMerchants: number
-            newRiders: number
+            activeUsers: number
+            activeMerchants: number
+            activeOrders: number
         }
-        orderDistribution: {
+        orderStates: {
             pending: number
-            confirmed: number
             preparing: number
             ready: number
             delivering: number
-            completed: number
-            cancelled: number
         }
-        hourlyTrends: Array<{
-            hour: number
-            orders: number
-            gmv: number
-            completionRate: number
-        }>
-        topRegions: Array<{
-            regionId: number
-            regionName: string
-            orders: number
-            gmv: number
-            merchants: number
-            riders: number
-        }>
     } {
+        const activeOrders = data.pending_orders
+            + data.preparing_orders
+            + data.ready_orders
+            + data.delivering_orders
+
         return {
-            timestamp: data.timestamp,
-            realtimeStats: {
-                onlineUsers: data.realtime_stats.online_users,
-                onlineMerchants: data.realtime_stats.online_merchants,
-                onlineRiders: data.realtime_stats.online_riders,
-                activeOrders: data.realtime_stats.active_orders,
-                ordersPerMinute: data.realtime_stats.orders_per_minute,
-                gmvPerMinute: data.realtime_stats.gmv_per_minute
+            recent24h: {
+                totalOrders: data.orders_24h,
+                totalGmv: data.gmv_24h,
+                activeUsers: data.active_users_24h,
+                activeMerchants: data.active_merchants_24h,
+                activeOrders
             },
-            todayStats: {
-                totalOrders: data.today_stats.total_orders,
-                completedOrders: data.today_stats.completed_orders,
-                cancelledOrders: data.today_stats.cancelled_orders,
-                totalGmv: data.today_stats.total_gmv,
-                avgOrderValue: data.today_stats.avg_order_value,
-                completionRate: data.today_stats.completion_rate,
-                newUsers: data.today_stats.new_users,
-                newMerchants: data.today_stats.new_merchants,
-                newRiders: data.today_stats.new_riders
-            },
-            orderDistribution: data.order_distribution,
-            hourlyTrends: data.hourly_trends.map((item) => ({
-                hour: item.hour,
-                orders: item.orders,
-                gmv: item.gmv,
-                completionRate: item.completion_rate
-            })),
-            topRegions: data.top_regions.map((item) => ({
-                regionId: item.region_id,
-                regionName: item.region_name,
-                orders: item.orders,
-                gmv: item.gmv,
-                merchants: item.merchants,
-                riders: item.riders
-            }))
+            orderStates: {
+                pending: data.pending_orders,
+                preparing: data.preparing_orders,
+                ready: data.ready_orders,
+                delivering: data.delivering_orders
+            }
         }
     }
 }
@@ -1216,11 +1065,11 @@ export async function generatePlatformReport(days: number = 30): Promise<{
         healthScore: dashboardData.healthAnalysis.healthScore,
         healthLevel: dashboardData.healthAnalysis.healthLevel,
         keyMetrics: [
-            `总订单数: ${dashboardData.overview.summary.total_orders.toLocaleString()}`,
-            `总GMV: ¥${(dashboardData.overview.summary.total_gmv / 100).toLocaleString()}`,
-            `完成率: ${dashboardData.overview.summary.completion_rate.toFixed(1)}%`,
-            `活跃商户: ${dashboardData.overview.summary.active_merchants.toLocaleString()}`,
-            `活跃骑手: ${dashboardData.overview.summary.active_riders.toLocaleString()}`
+            `总订单数: ${dashboardData.overview.total_orders.toLocaleString()}`,
+            `总GMV: ¥${(dashboardData.overview.total_gmv / 100).toLocaleString()}`,
+            `平台佣金: ¥${(dashboardData.overview.total_commission / 100).toLocaleString()}`,
+            `活跃商户: ${dashboardData.overview.active_merchants.toLocaleString()}`,
+            `活跃用户: ${dashboardData.overview.active_users.toLocaleString()}`
         ],
         majorAlerts: dashboardData.healthAnalysis.alerts
             .filter((alert) => alert.level === 'error')

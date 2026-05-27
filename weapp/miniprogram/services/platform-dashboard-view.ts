@@ -72,66 +72,7 @@ function formatAmount(amountInCents: number): string {
     })}`
 }
 
-function formatSyncText(timestamp?: number): string {
-    if (!timestamp) {
-        return '刚刚更新'
-    }
-
-    const date = new Date(timestamp)
-    if (Number.isNaN(date.getTime())) {
-        return '刚刚更新'
-    }
-
-    const hours = String(date.getHours()).padStart(2, '0')
-    const minutes = String(date.getMinutes()).padStart(2, '0')
-    return `${hours}:${minutes} 更新`
-}
-
-function getOverviewSummary(overviewData: PlatformOverviewResponse | null) {
-    return overviewData?.summary || {
-        total_orders: overviewData?.total_orders || 0,
-        total_gmv: overviewData?.total_gmv || 0,
-        completion_rate: 0,
-        active_merchants: overviewData?.active_merchants || 0,
-        active_riders: 0,
-        avg_order_value: 0
-    }
-}
-
-function getTodayStats(realtimeData: RealtimeDashboardData | null) {
-    return realtimeData?.today_stats || {
-        new_users: 0,
-        new_merchants: 0,
-        gmv: realtimeData?.gmv_24h || 0,
-        order_count: realtimeData?.orders_24h || 0,
-        total_orders: realtimeData?.orders_24h || 0,
-        completed_orders: 0,
-        cancelled_orders: 0,
-        total_gmv: realtimeData?.gmv_24h || 0,
-        avg_order_value: 0,
-        completion_rate: 0,
-        new_riders: 0
-    }
-}
-
-function getRealtimeStats(realtimeData: RealtimeDashboardData | null) {
-    return realtimeData?.realtime_stats || {
-        online_riders: 0,
-        online_merchants: 0,
-        orders_per_minute: 0,
-        online_users: 0,
-        active_orders: 0,
-        gmv_per_minute: 0
-    }
-}
-
 function getActiveOrders(realtimeData: RealtimeDashboardData | null): number {
-    const realtimeStats = getRealtimeStats(realtimeData)
-    const activeOrders = toNumber(realtimeStats.active_orders)
-    if (activeOrders > 0) {
-        return activeOrders
-    }
-
     return toNumber(realtimeData?.pending_orders)
         + toNumber(realtimeData?.preparing_orders)
         + toNumber(realtimeData?.ready_orders)
@@ -139,41 +80,40 @@ function getActiveOrders(realtimeData: RealtimeDashboardData | null): number {
 }
 
 function buildTodayCards(realtimeData: RealtimeDashboardData | null): PlatformDashboardMetricCard[] {
-    const todayStats = getTodayStats(realtimeData)
-    const realtimeStats = getRealtimeStats(realtimeData)
-    const orders24h = toNumber(realtimeData?.orders_24h) || toNumber(todayStats.order_count) || toNumber(todayStats.total_orders)
-    const gmv24h = toNumber(realtimeData?.gmv_24h) || toNumber(todayStats.gmv) || toNumber(todayStats.total_gmv)
+    const orders24h = toNumber(realtimeData?.orders_24h)
+    const gmv24h = toNumber(realtimeData?.gmv_24h)
     const activeOrders = getActiveOrders(realtimeData)
-    const onlineRiders = toNumber(realtimeStats.online_riders)
+    const activeUsers24h = toNumber(realtimeData?.active_users_24h)
+    const activeMerchants24h = toNumber(realtimeData?.active_merchants_24h)
 
     return [
         {
             key: 'orders24h',
-            label: '今日订单',
+            label: '近24h订单',
             value: formatInteger(orders24h),
-            note: `${formatInteger(toNumber(todayStats.completed_orders))} 单已完成`,
+            note: `${formatInteger(activeOrders)} 单履约中`,
             theme: 'primary'
         },
         {
             key: 'gmv24h',
-            label: '今日GMV',
+            label: '近24hGMV',
             value: formatAmount(gmv24h),
-            note: `${formatInteger(toNumber(todayStats.new_users))} 位新用户`,
+            note: `${formatInteger(activeMerchants24h)} 家商户活跃`,
             theme: 'success'
         },
         {
             key: 'activeOrders',
             label: '履约中',
             value: formatInteger(activeOrders),
-            note: `${formatInteger(toNumber(realtimeData?.delivering_orders))} 单配送中`,
+            note: `${formatInteger(toNumber(realtimeData?.delivering_orders))} 单代取中`,
             theme: activeOrders > 0 ? 'warning' : 'default'
         },
         {
-            key: 'onlineRiders',
-            label: '在线骑手',
-            value: formatInteger(onlineRiders),
-            note: `${formatInteger(toNumber(realtimeStats.online_merchants))} 家商户在线`,
-            theme: onlineRiders > 0 ? 'success' : 'warning'
+            key: 'activeUsers24h',
+            label: '24h活跃用户',
+            value: formatInteger(activeUsers24h),
+            note: `${formatInteger(activeMerchants24h)} 家商户活跃`,
+            theme: activeUsers24h > 0 ? 'success' : 'default'
         }
     ]
 }
@@ -216,15 +156,7 @@ function buildRiskItems(input: BuildPlatformDashboardViewInput): PlatformDashboa
 }
 
 function buildRealtimeRows(realtimeData: RealtimeDashboardData | null): PlatformDashboardMetricCard[] {
-    const realtimeStats = getRealtimeStats(realtimeData)
     return [
-        {
-            key: 'onlineMerchants',
-            label: '在线商户',
-            value: formatInteger(toNumber(realtimeStats.online_merchants)),
-            note: '供给侧在线',
-            theme: 'success'
-        },
         {
             key: 'pendingOrders',
             label: '待接单',
@@ -240,8 +172,15 @@ function buildRealtimeRows(realtimeData: RealtimeDashboardData | null): Platform
             theme: 'primary'
         },
         {
+            key: 'readyOrders',
+            label: '待取餐',
+            value: formatInteger(toNumber(realtimeData?.ready_orders)),
+            note: '等待骑手取餐',
+            theme: toNumber(realtimeData?.ready_orders) > 0 ? 'warning' : 'success'
+        },
+        {
             key: 'deliveringOrders',
-            label: '配送中',
+            label: '代取中',
             value: formatInteger(toNumber(realtimeData?.delivering_orders)),
             note: '骑手侧履约',
             theme: 'primary'
@@ -250,20 +189,26 @@ function buildRealtimeRows(realtimeData: RealtimeDashboardData | null): Platform
 }
 
 function buildCumulativeCards(overviewData: PlatformOverviewResponse | null): PlatformDashboardMetricCard[] {
-    const summary = getOverviewSummary(overviewData)
     return [
         {
             key: 'totalOrders',
             label: '累计订单',
-            value: formatInteger(toNumber(summary.total_orders)),
-            note: `完成率 ${toNumber(summary.completion_rate).toFixed(1)}%`,
+            value: formatInteger(toNumber(overviewData?.total_orders)),
+            note: '近30天订单',
             theme: 'primary'
         },
         {
             key: 'totalGMV',
             label: '累计GMV',
-            value: formatAmount(toNumber(summary.total_gmv)),
-            note: `客单 ${formatAmount(toNumber(summary.avg_order_value))}`,
+            value: formatAmount(toNumber(overviewData?.total_gmv)),
+            note: '近30天GMV',
+            theme: 'success'
+        },
+        {
+            key: 'totalCommission',
+            label: '平台佣金',
+            value: formatAmount(toNumber(overviewData?.total_commission)),
+            note: '近30天佣金',
             theme: 'success'
         },
         {
@@ -276,7 +221,7 @@ function buildCumulativeCards(overviewData: PlatformOverviewResponse | null): Pl
         {
             key: 'activeMerchants',
             label: '活跃商户',
-            value: formatInteger(toNumber(summary.active_merchants)),
+            value: formatInteger(toNumber(overviewData?.active_merchants)),
             note: '近30天',
             theme: 'default'
         }
@@ -360,15 +305,14 @@ function buildEntryGroups(): PlatformDashboardEntryGroup[] {
 }
 
 function buildOperationsStatus(realtimeData: RealtimeDashboardData | null, alertCount: number): PlatformDashboardStatus {
-    const todayStats = getTodayStats(realtimeData)
-    const orders24h = toNumber(realtimeData?.orders_24h) || toNumber(todayStats.order_count) || toNumber(todayStats.total_orders)
+    const orders24h = toNumber(realtimeData?.orders_24h)
     const activeOrders = getActiveOrders(realtimeData)
     const pendingOrders = toNumber(realtimeData?.pending_orders)
     const hasRisk = alertCount > 0 || pendingOrders > 0
 
     return {
-        summary: `今日 ${formatInteger(orders24h)} 单，履约中 ${formatInteger(activeOrders)} 单`,
-        syncText: formatSyncText(realtimeData?.timestamp),
+        summary: `近24h ${formatInteger(orders24h)} 单，履约中 ${formatInteger(activeOrders)} 单`,
+        syncText: '自动刷新',
         healthText: hasRisk ? '有待处理事项' : '运行平稳',
         healthTheme: hasRisk ? 'warning' : 'success'
     }
