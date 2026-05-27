@@ -1,6 +1,7 @@
 import { Delivery } from '../api/delivery'
 
 export type RiderDeliveryActionKey = 'start_pickup' | 'confirm_pickup' | 'start_delivery' | 'confirm_delivery' | ''
+export type RiderDeliveryActionFeedbackMode = 'toast' | 'modal'
 
 interface RiderDeliveryActionState {
   canUpdate: boolean
@@ -8,6 +9,29 @@ interface RiderDeliveryActionState {
   actionKey: RiderDeliveryActionKey
   expectedStatus: Delivery['status'] | null
   locationSource: string
+}
+
+export interface RiderDeliveryActionFeedback {
+  mode: RiderDeliveryActionFeedbackMode
+  title: string
+  content?: string
+  confirmText?: string
+}
+
+interface DeliveryActionErrorLike {
+  userMessage?: unknown
+  message?: unknown
+  detailMessage?: unknown
+  errMsg?: unknown
+  data?: {
+    message?: unknown
+  }
+  body?: {
+    message?: unknown
+  }
+  originalError?: {
+    message?: unknown
+  }
 }
 
 interface RiderNavigationStopView {
@@ -107,6 +131,85 @@ const DELIVERY_STEP_MAP: Partial<Record<Delivery['status'], number>> = {
   completed: 3
 }
 
+function normalizeActionKey(actionKey?: string): string {
+  return String(actionKey || '')
+    .replace(/([a-z])([A-Z])/g, '$1_$2')
+    .trim()
+    .toLowerCase()
+}
+
+function isConfirmDeliveryAction(actionKey?: string): boolean {
+  return normalizeActionKey(actionKey) === 'confirm_delivery'
+}
+
+function asNonEmptyString(value: unknown): string {
+  return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : ''
+}
+
+function getDeliveryActionErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === 'string') {
+    return asNonEmptyString(error) || fallback
+  }
+
+  if (!error || typeof error !== 'object') {
+    return fallback
+  }
+
+  const knownError = error as DeliveryActionErrorLike
+  const candidates = [
+    knownError.userMessage,
+    knownError.message,
+    knownError.detailMessage,
+    knownError.data?.message,
+    knownError.body?.message,
+    knownError.originalError?.message,
+    knownError.errMsg
+  ]
+
+  for (const candidate of candidates) {
+    const message = asNonEmptyString(candidate)
+    if (message) {
+      return message
+    }
+  }
+
+  return fallback
+}
+
+function normalizeDeliveryDistanceMessage(message: string): string {
+  return message
+    .replace(/代取地址/g, '用户位置点')
+    .replace(/收货地址/g, '用户位置点')
+    .replace(/送达地址/g, '用户位置点')
+}
+
+function isDeliveryDistanceBlocked(message: string): boolean {
+  const normalized = message.toLowerCase()
+  return (
+    (
+      message.includes('距离代取地址') ||
+      message.includes('距离收货地址') ||
+      message.includes('距离送达地址') ||
+      message.includes('距离用户位置点')
+    ) &&
+    (message.includes('确认送达') || message.includes('需在') || normalized.includes('distance'))
+  )
+}
+
+function isDeliveryLocationBlocked(message: string): boolean {
+  return (
+    message.includes('骑手定位缺失') ||
+    message.includes('骑手定位已过期') ||
+    message.includes('定位获取失败') ||
+    message.includes('开启定位权限') ||
+    message.includes('刷新定位')
+  )
+}
+
+function isDropoffLocationMissing(message: string): boolean {
+  return message.includes('收货位置缺失') || message.includes('送达位置缺失')
+}
+
 export function isRiderDeliveryTrackedStatus(status?: Delivery['status']): boolean {
   return !!status && TRACKED_STATUSES.has(status)
 }
@@ -135,6 +238,74 @@ export function getRiderDeliveryActionState(status: Delivery['status']): RiderDe
   return {
     canUpdate: true,
     ...config
+  }
+}
+
+export function buildRiderDeliveryActionConfirmFeedback(
+  actionKey: string,
+  actionLabel: string
+): RiderDeliveryActionFeedback {
+  if (isConfirmDeliveryAction(actionKey)) {
+    return {
+      mode: 'modal',
+      title: '确认送达',
+      content: '请确认已到达用户位置点并完成交付；未到达时无法送达。',
+      confirmText: '确认送达'
+    }
+  }
+
+  return {
+    mode: 'modal',
+    title: '状态更新',
+    content: `确定已完成 ${actionLabel.replace('我已', '')} 吗？`,
+    confirmText: '确定'
+  }
+}
+
+export function buildRiderDeliveryActionFailureFeedback(
+  error: unknown,
+  actionKey: string,
+  fallback: string
+): RiderDeliveryActionFeedback {
+  const message = getDeliveryActionErrorMessage(error, fallback)
+
+  if (!isConfirmDeliveryAction(actionKey)) {
+    return {
+      mode: 'toast',
+      title: message || fallback
+    }
+  }
+
+  if (isDeliveryDistanceBlocked(message)) {
+    return {
+      mode: 'modal',
+      title: '暂未到达送达点',
+      content: normalizeDeliveryDistanceMessage(message),
+      confirmText: '知道了'
+    }
+  }
+
+  if (isDeliveryLocationBlocked(message)) {
+    return {
+      mode: 'modal',
+      title: '定位未同步',
+      content: message,
+      confirmText: '知道了'
+    }
+  }
+
+  if (isDropoffLocationMissing(message)) {
+    return {
+      mode: 'modal',
+      title: '送达位置缺失',
+      content: message,
+      confirmText: '知道了'
+    }
+  }
+
+  return {
+    mode: 'toast',
+    title: message || fallback
   }
 }
 

@@ -4,6 +4,8 @@ import { locationService } from '../../../utils/location'
 import { normalizeLocationError, syncRiderDeliveryLocation } from '../../../utils/rider-location'
 import { riderLiveLocationSession } from '../../../utils/rider-live-location'
 import {
+    buildRiderDeliveryActionConfirmFeedback,
+    buildRiderDeliveryActionFailureFeedback,
     buildRiderDeliveryDeadlineView,
     getRiderDeliveryActionState,
     getRiderDeliveryStep,
@@ -41,6 +43,21 @@ const DELIVERY_ACTION_METHODS: Record<Exclude<RiderDeliveryActionKey, ''>, Deliv
 function getUserMessage(err: unknown, fallback: string) {
     const userMessage = (err as UserMessageError).userMessage
     return typeof userMessage === 'string' && userMessage ? userMessage : fallback
+}
+
+function showDeliveryActionFailureFeedback(err: unknown, actionKey: RiderDeliveryActionKey, fallback: string) {
+    const feedback = buildRiderDeliveryActionFailureFeedback(err, actionKey, fallback)
+    if (feedback.mode === 'modal') {
+        wx.showModal({
+            title: feedback.title,
+            content: feedback.content || feedback.title,
+            showCancel: false,
+            confirmText: feedback.confirmText || '知道了'
+        })
+        return
+    }
+
+    wx.showToast({ title: feedback.title, icon: 'none' })
 }
 
 Page({
@@ -163,11 +180,13 @@ Page({
         if (!actionState.canUpdate || !actionState.expectedStatus || !actionState.actionKey) return
         const method = DELIVERY_ACTION_METHODS[actionState.actionKey]
         const nextExpectedStatus = actionState.expectedStatus
+        const confirmFeedback = buildRiderDeliveryActionConfirmFeedback(actionState.actionKey, actionState.label)
 
         this.setData({ actionLoading: true })
         wx.showModal({
-            title: '状态更新',
-            content: `确定已完成 ${actionState.label.replace('我已', '')} 吗？`,
+            title: confirmFeedback.title,
+            content: confirmFeedback.content || '',
+            confirmText: confirmFeedback.confirmText || '确定',
             success: async (res) => {
                 if (!res.confirm) {
                     this.setData({ actionLoading: false })
@@ -200,8 +219,7 @@ Page({
                         return
                     }
 
-                    const message = getUserMessage(err, '操作失败')
-                    wx.showToast({ title: message, icon: 'none' })
+                    showDeliveryActionFailureFeedback(err, actionState.actionKey, getUserMessage(err, '操作失败'))
                 } finally {
                     wx.hideLoading()
                     this.setData({ actionLoading: false })

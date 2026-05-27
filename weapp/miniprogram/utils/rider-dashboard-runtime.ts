@@ -17,6 +17,10 @@ import { wsManager, WSMessageType } from './websocket'
 import { networkMonitor } from './network-monitor'
 import { getConsoleDashboardErrorMessage, getConsoleDashboardErrorState } from './console-dashboard'
 import { resolveCurrentRegionId } from './current-region'
+import {
+  buildRiderDeliveryActionConfirmFeedback,
+  buildRiderDeliveryActionFailureFeedback
+} from './rider-delivery-view'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RiderDashboardPageContext = WechatMiniprogram.Page.Instance<Record<string, any>, Record<string, any>> & Record<string, any>
@@ -55,6 +59,35 @@ interface DeliveryActionConfig {
 
 function getUserMessage(err: unknown, fallback: string) {
   return getConsoleDashboardErrorMessage('rider', err, fallback)
+}
+
+function showRiderDeliveryActionConfirm(action: DeliveryActionType, label: string): Promise<boolean> {
+  const feedback = buildRiderDeliveryActionConfirmFeedback(action, label)
+
+  return new Promise((resolve) => {
+    wx.showModal({
+      title: feedback.title,
+      content: feedback.content || '',
+      confirmText: feedback.confirmText || '确定',
+      success: (res) => resolve(!!res.confirm),
+      fail: () => resolve(false)
+    })
+  })
+}
+
+function showRiderDeliveryActionFailure(err: unknown, action: DeliveryActionType, fallback: string) {
+  const feedback = buildRiderDeliveryActionFailureFeedback(err, action, fallback)
+  if (feedback.mode === 'modal') {
+    wx.showModal({
+      title: feedback.title,
+      content: feedback.content || feedback.title,
+      showCancel: false,
+      confirmText: feedback.confirmText || '知道了'
+    })
+    return
+  }
+
+  wx.showToast({ title: feedback.title, icon: 'none' })
 }
 
 function withDeliveryActionLoading(
@@ -540,6 +573,11 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
     const config = actionMap[action]
     if (!config) return
 
+    if (action === 'confirmDelivery') {
+      const confirmed = await showRiderDeliveryActionConfirm(action, '确认送达')
+      if (!confirmed) return
+    }
+
     setDeliveryActionLoadingState(this, id, true)
     try {
       await this.syncDeliveryLocation(id, config.source)
@@ -553,7 +591,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
       }
 
       const message = getUserMessage(err, '操作失败')
-      wx.showToast({ title: message, icon: 'none' })
+      showRiderDeliveryActionFailure(err, action, message)
     } finally {
       setDeliveryActionLoadingState(this, id, false)
     }
