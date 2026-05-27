@@ -81,6 +81,13 @@
       </view>
     </block>
 
+    <block wx:elif="{{merchant.isOpen === false}}">
+      <view class="paused-panel">
+        <text class="paused-title">商户休息中</text>
+        <text class="paused-desc">该商户当前暂未营业，可进入店铺查看信息。</text>
+      </view>
+    </block>
+
     <!-- 菜品列表 -->
     <block wx:elif="{{merchant.featuredDishes && merchant.featuredDishes.length > 0}}">
       <scroll-view scroll-x class="dish-scroll" enhanced show-scrollbar="{{false}}">

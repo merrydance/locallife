@@ -311,6 +311,7 @@ export function buildDeliveryPromoText(deliveryPromotions?: PublicDeliveryPromot
 
 export function buildTakeoutMerchantMetaPatch(detail: PublicMerchantDetail) {
   return {
+    isOpen: detail.is_open === true,
     avgPrepMinutes: (detail.avg_prep_minutes && detail.avg_prep_minutes > 0)
       ? detail.avg_prep_minutes
       : TAKEOUT_DEFAULT_AVG_PREP_MINUTES,

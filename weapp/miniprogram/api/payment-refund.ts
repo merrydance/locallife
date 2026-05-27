@@ -18,7 +18,7 @@ export {
   getPaymentRefunds,
   getPayments,
   getRefundById,
-  getRefundReturns,
+  getMerchantRefundReturns,
   invokeWechatPay,
   pay,
   pollPaymentStatus,

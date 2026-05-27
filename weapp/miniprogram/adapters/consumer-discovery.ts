@@ -52,7 +52,7 @@ export class ConsumerDiscoveryAdapter {
       deliveryFeeDisplay: deliveryFee !== undefined
         ? `代取费¥${(deliveryFee / 100).toFixed(0)}起`
         : '',
-      isOpen: source.is_open ?? true,
+      isOpen: source.is_open === true,
       label: source.label || ''
     }
   }

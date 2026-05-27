@@ -58,26 +58,6 @@
         </view>
       </view>
 
-        <!-- 分账回退记录 -->
-        <view class="section-container" wx:if="{{profitSharingReturns.length > 0}}">
-          <text class="section-title">分账回退</text>
-          <view class="refund-list">
-            <view class="refund-card" wx:for="{{profitSharingReturns}}" wx:key="id">
-              <view class="refund-card-header">
-                <text class="refund-card-amount">¥{{item.amountDisplay}}</text>
-                <t-tag theme="{{item.statusTheme}}" variant="light" size="small">{{item.statusText}}</t-tag>
-              </view>
-              <view class="refund-card-body">
-                <text class="refund-reason">回退单号：{{item.out_return_no}}</text>
-                <text class="refund-time">{{item.displayTime}}</text>
-              </view>
-              <view class="refund-card-body" wx:if="{{item.failReasonText}}">
-                <text class="refund-reason is-error">失败原因：{{item.failReasonText}}</text>
-              </view>
-            </view>
-          </view>
-        </view>
-
       <!-- 详细信息 -->
       <view class="section-container">
         <view class="section-title">详情信息</view>

@@ -246,6 +246,10 @@
   color: var(--td-text-color-primary);
 }
 
+.item-amount.neutral {
+  color: var(--td-warning-color);
+}
+
 .load-more-tip {
   text-align: center;
   font-size: var(--font-size-sm);

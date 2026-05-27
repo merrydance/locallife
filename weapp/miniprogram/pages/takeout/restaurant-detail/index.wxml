@@ -3,7 +3,12 @@
 <view class="page-shell-anchor" style="padding-top: calc({{navBarHeight}}px + var(--spacer-sm)); height: 0; overflow: hidden;"></view>
 
 <!-- 1. 餐厅头图 (App Shell) -->
-<view class="header-section {{headerCollapsed ? 'collapsed' : ''}}" style="top: calc({{navBarHeight}}px + var(--spacer-sm));">
+<view
+  class="header-section {{headerCollapsed ? 'collapsed' : ''}}"
+  style="top: calc({{navBarHeight}}px + var(--spacer-sm));"
+  capture-bind:touchstart="onMenuTouchStart"
+  capture-bind:touchmove="onMenuTouchMove"
+>
   <!-- 背景图：使用 t-image 支持 lazy 和 fallback -->
   <t-image
     class="header-bg-image"
@@ -17,9 +22,15 @@
   <view wx:if="{{loading && !restaurant}}" class="header-skeleton skeleton-shimmer"></view>
   
   <view class="header-overlay {{loading && !restaurant ? 'hidden' : ''}}">
-    <view class="restaurant-title-row" bindtap="onMerchantInfoTap">
-      <view class="restaurant-name {{headerCollapsed ? 'text-ellipsis' : ''}}">{{restaurant.name || '正在加载...'}}</view>
-      <t-icon name="chevron-right" size="40rpx" class="name-arrow" />
+    <view class="restaurant-title-row">
+      <view class="restaurant-title-main" bindtap="onMerchantInfoTap">
+        <view class="restaurant-name {{headerCollapsed ? 'text-ellipsis' : ''}}">{{restaurant.name || '正在加载...'}}</view>
+        <t-icon name="chevron-right" size="40rpx" class="name-arrow" />
+      </view>
+      <button class="share-btn-reset header-share-btn" open-type="share" catchtap="stopPropagation">
+        <t-icon name="share" size="28rpx" color="rgba(255,255,255,0.85)" />
+        <text class="header-share-text">分享</text>
+      </button>
     </view>
     <view class="restaurant-meta" bindtap="onMerchantInfoTap" wx:if="{{!headerCollapsed}}">
       <view style="display: flex; align-items: center; gap: 8rpx;">
@@ -40,18 +51,17 @@
     <view wx:if="{{restaurant.displayTags.length > 0 && !headerCollapsed}}" class="restaurant-tags">
       <t-tag wx:for="{{restaurant.displayTags}}" wx:key="*this" size="small" variant="dark" theme="default" shape="round">{{item}}</t-tag>
     </view>
-    <view class="header-share-row">
-      <button class="share-btn-reset header-share-btn" open-type="share">
-        <t-icon name="share" size="28rpx" color="rgba(255,255,255,0.85)" />
-        <text class="header-share-text">分享</text>
-      </button>
-    </view>
   </view>
 </view>
 <!-- header-section closing handled below -->
 
 <!-- 2. Tab 导航 (App Shell) -->
-<view class="tabs-section {{headerCollapsed ? 'collapsed' : ''}}" style="top: calc({{navBarHeight}}px + var(--spacer-sm) + {{headerCollapsed ? '100rpx' : '320rpx'}});">
+<view
+  class="tabs-section {{headerCollapsed ? 'collapsed' : ''}}"
+  style="top: calc({{navBarHeight}}px + var(--spacer-sm) + {{headerCollapsed ? '100rpx' : '320rpx'}});"
+  capture-bind:touchstart="onMenuTouchStart"
+  capture-bind:touchmove="onMenuTouchMove"
+>
   <t-tabs value="{{activeTab}}" bind:change="onTabChange" list-style="border-bottom: none;">
     <t-tab-panel label="菜品" value="dishes" />
     <t-tab-panel label="套餐" value="combos" />
@@ -60,7 +70,12 @@
 </view>
 
 <!-- 3. 内容区域 (App Shell with Skeletons) -->
-<view class="content-area {{headerCollapsed ? 'collapsed' : ''}} {{activeTab === 'rooms' ? 'no-cart' : ''}}" style="top: calc({{navBarHeight}}px + var(--spacer-sm) + {{headerCollapsed ? '100rpx' : '320rpx'}} + 96rpx);">
+<view
+  class="content-area {{headerCollapsed ? 'collapsed' : ''}} {{activeTab === 'rooms' ? 'no-cart' : ''}}"
+  style="top: calc({{navBarHeight}}px + var(--spacer-sm) + {{headerCollapsed ? '100rpx' : '320rpx'}} + 96rpx);"
+  capture-bind:touchstart="onMenuTouchStart"
+  capture-bind:touchmove="onMenuTouchMove"
+>
   
   <!-- 错误状态 -->
   <view wx:if="{{isError}}" class="error-container">
@@ -104,7 +119,7 @@
       </scroll-view>
 
       <!-- 右侧商品列表 (Shell + Loading) -->
-      <scroll-view class="dishes-list" scroll-y enhanced show-scrollbar="{{false}}" bindscroll="onScroll">
+      <scroll-view class="dishes-list" scroll-y enhanced show-scrollbar="{{false}}" bindtouchstart="onMenuTouchStart" bindtouchmove="onMenuTouchMove" bindscroll="onScroll">
         <block wx:if="{{loading && filteredDishes.length === 0}}">
           <dish-skeleton wx:for="{{[1,2,3,4,5]}}" wx:key="*this" />
         </block>
@@ -163,7 +178,7 @@
     </view>
 
     <!-- 精选套餐 Tab -->
-    <scroll-view wx:elif="{{activeTab === 'combos'}}" class="combos-tab" scroll-y bindscroll="onScroll">
+    <scroll-view wx:elif="{{activeTab === 'combos'}}" class="combos-tab" scroll-y bindtouchstart="onMenuTouchStart" bindtouchmove="onMenuTouchMove" bindscroll="onScroll">
       <block wx:if="{{loading && combos.length === 0}}">
         <dish-skeleton wx:for="{{[1,2,3]}}" wx:key="*this" />
       </block>
@@ -215,7 +230,7 @@
     </scroll-view>
 
     <!-- 豪华包间 Tab -->
-    <scroll-view wx:elif="{{activeTab === 'rooms'}}" class="rooms-tab" scroll-y bindscroll="onScroll">
+    <scroll-view wx:elif="{{activeTab === 'rooms'}}" class="rooms-tab" scroll-y bindtouchstart="onMenuTouchStart" bindtouchmove="onMenuTouchMove" bindscroll="onScroll">
       <block wx:if="{{loading && rooms.length === 0}}">
         <view wx:for="{{[1,2]}}" wx:key="*this" class="room-skeleton skeleton-shimmer"></view>
       </block>

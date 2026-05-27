@@ -133,9 +133,7 @@ export async function searchMerchantsWithMeta(params: SearchMerchantsParams): Pr
   const response = await request<SearchMerchantsEnvelope>({
     url: '/v1/search/merchants',
     method: 'GET',
-    data: requestParams,
-    useCache: true,
-    cacheTTL: 2 * 60 * 1000
+    data: requestParams
   })
 
   const merchants = (response.merchants || []).map(normalizeMerchantSummary)
@@ -279,9 +277,7 @@ export interface PublicMerchantDetail {
 export async function getPublicMerchantDetail(merchantId: number, lite = false): Promise<PublicMerchantDetail> {
   return await request({
     url: `/v1/public/merchants/${merchantId}${lite ? '?lite=true' : ''}`,
-    method: 'GET',
-    useCache: true,
-    cacheTTL: 5 * 60 * 1000
+    method: 'GET'
   })
 }
 

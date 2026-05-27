@@ -665,7 +665,7 @@ export async function getRefundById(id: number): Promise<RefundOrder> {
   })
 }
 
-export async function getRefundReturns(refundId: number): Promise<ProfitSharingReturn[]> {
+export async function getMerchantRefundReturns(refundId: number): Promise<ProfitSharingReturn[]> {
   return request({
     url: `/v1/refunds/${refundId}/returns`,
     method: 'GET'

@@ -1,36 +1,11 @@
-import { buildRefundProgress, getRefundById, getRefundReturns, getRefundStatusView, isRefundStatusTerminal, ProfitSharingReturn, RefundOrder, RefundProgressView } from '../../../api/payment'
+import { buildRefundProgress, getRefundById, getRefundStatusView, isRefundStatusTerminal, RefundOrder, RefundProgressView } from '../../../api/payment'
 import { logger } from '../../../utils/logger'
-import { getProfitSharingReturnStatusView, isProfitSharingReturnTerminal, ProfitSharingReturnStatusTheme } from '../../../utils/profit-sharing-return-view'
 import { waitForRefundTerminalResult } from '../../../services/refund-workflow'
 
 let refundTerminalWaitToken = 0
 
-type ProfitSharingReturnView = ProfitSharingReturn & {
-    amountDisplay: string
-    statusText: string
-    statusTheme: ProfitSharingReturnStatusTheme
-    createdAtDisplay: string
-    finishedAtDisplay: string
-    displayTime: string
-    failReasonText: string
-}
-
 function formatFen(amount: number): string {
     return (amount / 100).toFixed(2)
-}
-
-function buildProfitSharingReturnView(item: ProfitSharingReturn, formatTime: (timeStr: string) => string): ProfitSharingReturnView {
-    const statusView = getProfitSharingReturnStatusView(item.status)
-    return {
-        ...item,
-        amountDisplay: formatFen(item.amount),
-        statusText: statusView.statusText,
-        statusTheme: statusView.statusTheme,
-        createdAtDisplay: formatTime(item.created_at),
-        finishedAtDisplay: item.finished_at ? formatTime(item.finished_at) : '',
-        displayTime: item.finished_at ? formatTime(item.finished_at) : formatTime(item.created_at),
-        failReasonText: item.fail_reason || ''
-    }
 }
 
 Page({
@@ -48,7 +23,6 @@ Page({
         statusIcon: 'info-circle-filled',
         refundTypeText: '',
         progress: [] as RefundProgressView[],
-        profitSharingReturns: [] as ProfitSharingReturnView[],
         showPendingTip: false,
         waitingForTerminal: false,
         statusNote: '',
@@ -80,7 +54,6 @@ Page({
             }
 
             this.processRefund(refund)
-            await this.loadProfitSharingReturns()
             this.setData({ initialLoading: false, loading: false })
         } catch (error) {
             logger.error('加载退款详情失败', error, 'refund-detail.loadRefundDetail')
@@ -100,8 +73,7 @@ Page({
             loading: true,
             waitingForTerminal: true,
             statusNote: '',
-            refund: null,
-            profitSharingReturns: []
+            refund: null
         })
         void this.waitForTerminalRefund(token)
     },
@@ -132,7 +104,6 @@ Page({
             }
 
             this.processRefund(result.refund)
-            await this.loadProfitSharingReturns()
             this.setData({
                 loading: false,
                 waitingForTerminal: false,
@@ -150,19 +121,6 @@ Page({
                 statusNote: '退款结果还在同步中，请稍后查看。',
                 initialLoading: false
             })
-        }
-    },
-
-    async loadProfitSharingReturns() {
-        try {
-            const returns = await getRefundReturns(this.data.refundId)
-            this.setData({
-                profitSharingReturns: (returns || [])
-                    .filter((item) => isProfitSharingReturnTerminal(item.status))
-                    .map((item) => buildProfitSharingReturnView(item, this.formatTime))
-            })
-        } catch (returnErr) {
-            logger.warn('加载分账回退记录失败', returnErr, 'refund-detail.loadProfitSharingReturns')
         }
     },
 

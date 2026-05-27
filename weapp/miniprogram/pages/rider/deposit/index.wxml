@@ -21,18 +21,18 @@
       <!-- 1. 余额总览卡片 -->
       <view class="wallet-card">
         <view class="balance-main">
-          <text class="label">可用押金 (元)</text>
-          <view class="value">¥{{availableDepositDisplay}}</view>
+          <text class="label">押金总额 (元)</text>
+          <view class="value">¥{{totalDepositDisplay}}</view>
         </view>
         
         <view class="balance-sub">
           <view class="sub-item">
-            <text class="sub-label">押金总额</text>
-            <text class="sub-value">¥{{totalDepositDisplay}}</text>
+            <text class="sub-label">可用押金</text>
+            <text class="sub-value">¥{{availableDepositDisplay}}</text>
           </view>
           <view class="balance-divider"></view>
           <view class="sub-item">
-            <text class="sub-label">代取冻结</text>
+            <text class="sub-label">冻结中</text>
             <text class="sub-value">¥{{deliveryFrozenDepositDisplay}}</text>
           </view>
           <view class="balance-divider"></view>

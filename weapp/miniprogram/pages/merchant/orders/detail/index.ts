@@ -5,7 +5,7 @@ import {
   OrderManagementAdapter,
   MERCHANT_REJECT_REASON_OPTIONS
 } from '../../../../api/order-management'
-import { createRefund, getPaymentRefunds, getPayments, getRefundReturns } from '../../../../api/payment'
+import { createRefund, getMerchantRefundReturns, getPaymentRefunds, getPayments } from '../../../../api/payment'
 import { logger } from '../../../../utils/logger'
 import { isSettledFulfilled, isSettledRejected, settleAll } from '../../../../utils/promise'
 import dayjs from 'dayjs'
@@ -50,6 +50,7 @@ Page({
     refundsLoaded: false,
     refundsError: false,
     refundsErrorMessage: '',
+    refundReturnsErrorMessage: '',
     refundNoticeMessage: '',
     refunds: [] as MerchantOrderRefundView[],
     refundPopupVisible: false,
@@ -159,11 +160,12 @@ Page({
               ? refundsResponse.refund_orders
               : []
             const refundReturnsResults = refundOrders.length
-              ? await settleAll(refundOrders.map((refund) => getRefundReturns(refund.id)))
+              ? await settleAll(refundOrders.map((refund) => getMerchantRefundReturns(refund.id)))
               : []
+            const returnLoadFailed = refundReturnsResults.some(isSettledRejected)
             const refundViews = refundOrders.map((refund, index) => {
               const returnsResult = refundReturnsResults[index]
-              const returns = returnsResult && returnsResult.status === 'fulfilled' && Array.isArray(returnsResult.value)
+              const returns = returnsResult && isSettledFulfilled(returnsResult) && Array.isArray(returnsResult.value)
                 ? returnsResult.value
                 : []
               return buildRefundView(refund, returns)
@@ -173,6 +175,9 @@ Page({
             nextState.refundsLoaded = true
             nextState.refundsError = false
             nextState.refundsErrorMessage = ''
+            nextState.refundReturnsErrorMessage = returnLoadFailed
+              ? '分账回退同步失败，退款记录已保留；请稍后重新同步'
+              : ''
           } catch (refundErr) {
             const message = getErrorMessage(refundErr, '退款记录加载失败，请稍后重试')
             if (canPreserveRefunds && this.data.payment?.id === activePayment.id) {
@@ -181,12 +186,14 @@ Page({
               nextState.refundsLoaded = true
               nextState.refundsError = true
               nextState.refundsErrorMessage = `${message}，当前已保留上次结果`
+              nextState.refundReturnsErrorMessage = ''
             } else {
               nextState.payment = buildPaymentView(activePayment, [])
               nextState.refunds = []
               nextState.refundsLoaded = true
               nextState.refundsError = true
               nextState.refundsErrorMessage = message
+              nextState.refundReturnsErrorMessage = ''
             }
           }
         } else {
@@ -195,6 +202,7 @@ Page({
           nextState.refundsLoaded = true
           nextState.refundsError = false
           nextState.refundsErrorMessage = ''
+          nextState.refundReturnsErrorMessage = ''
         }
       } else if (canPreserveRefunds) {
         nextState.payment = this.data.payment
@@ -202,12 +210,14 @@ Page({
         nextState.refundsLoaded = true
         nextState.refundsError = true
         nextState.refundsErrorMessage = `${getErrorMessage(paymentsResult.reason, '退款信息同步失败')}，当前已保留上次结果`
+        nextState.refundReturnsErrorMessage = ''
       } else {
         nextState.payment = null
         nextState.refunds = []
         nextState.refundsLoaded = true
         nextState.refundsError = true
         nextState.refundsErrorMessage = getErrorMessage(paymentsResult.reason, '退款信息加载失败，请稍后重试')
+        nextState.refundReturnsErrorMessage = ''
       }
 
       this.setData(nextState)
@@ -522,13 +532,11 @@ Page({
         ? `退款结果已更新：${buildRefundView(waitResult.refund, []).status_label}`
         : '退款结果还在同步中，请稍后查看退款详情。'
       this.setData({ refundNoticeMessage: resultNotice })
-      wx.navigateTo({ url: `/pages/user_center/refund-detail/index?id=${createdRefundId}` })
     } catch (err) {
       if (createdRefundId) {
         logger.warn('Wait merchant refund terminal failed after creation', err, 'merchant-order-detail.onSubmitRefund')
         await this.loadDetail(false)
-        this.setData({ refundNoticeMessage: '退款申请已提交，结果还在同步中，请稍后查看退款详情。' })
-        wx.navigateTo({ url: `/pages/user_center/refund-detail/index?id=${createdRefundId}` })
+        this.setData({ refundNoticeMessage: '退款申请已提交，结果还在同步中，请稍后重新同步退款记录。' })
       } else {
         logger.error('Create merchant refund failed', err)
         wx.showToast({ title: getErrorMessage(err, '发起退款失败，请稍后重试'), icon: 'none' })

@@ -43,170 +43,6 @@
   align-items: center;
 }
 
-/* 头图 - 高度及覆盖层优化 */
-.header-section {
-  position: fixed;
-  left: 0;
-  right: 0;
-  height: 320rpx;
-  background-color: var(--td-bg-color-secondarycontainer);
-  background-size: cover;
-  background-position: center;
-  z-index: 10;
-  overflow: hidden;
-  transition: height var(--transition-base), top var(--transition-base);
-}
-
-/* 背景图：t-image 完全覆盖 header-section */
-.header-bg-image {
-  position: absolute !important;
-  top: 0;
-  left: 0;
-  width: 100% !important;
-  height: 100% !important;
-  z-index: 0;
-}
-
-.header-section.collapsed {
-  height: 100rpx;
-}
-
-.header-overlay {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: var(--spacer-md);
-  background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 100%);
-  color: var(--td-text-color-anti);
-  transition: padding var(--transition-base);
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  box-sizing: border-box;
-}
-
-.header-section.collapsed .header-overlay {
-  padding: 0 var(--spacer-md);
-  justify-content: center;
-}
-
-.restaurant-title-row {
-  display: flex;
-  align-items: center;
-  gap: var(--spacer-xs);
-  margin-bottom: var(--spacer-xs);
-  transition: all var(--transition-base);
-}
-
-.header-section.collapsed .restaurant-title-row {
-  margin-bottom: 0;
-}
-
-.restaurant-name {
-  font-size: var(--font-size-title);
-  font-weight: bold;
-  text-shadow: 0 2rpx 8rpx rgba(0,0,0,0.5);
-}
-
-.header-section.collapsed .restaurant-name {
-  font-size: var(--font-size-base);
-}
-
-.text-ellipsis {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 80%;
-}
-
-.name-arrow {
-  color: rgba(255,255,255,0.7);
-}
-
-.restaurant-meta {
-  font-size: var(--font-size-xs);
-  margin-bottom: var(--spacer-xs);
-  opacity: 0.9;
-  transition: opacity var(--transition-base);
-}
-
-.restaurant-service {
-  display: flex;
-  gap: var(--spacer-sm);
-  font-size: var(--font-size-xxs);
-  margin-bottom: var(--spacer-sm);
-  transition: opacity var(--transition-base);
-}
-
-.service-count, .delivery-time {
-  background: rgba(0,0,0,0.3);
-  padding: 4rpx 12rpx;
-  border-radius: var(--radius-sm);
-  backdrop-filter: blur(4px);
-}
-
-.service-count {
-  color: var(--td-warning-color);
-}
-
-.suspension-chip {
-  align-self: flex-start;
-  margin-bottom: var(--spacer-xs);
-  padding: 8rpx 18rpx;
-  border-radius: var(--radius-round);
-  background: rgba(255, 255, 255, 0.18);
-  color: #fff4f4;
-  font-size: var(--font-size-xs);
-  backdrop-filter: blur(4px);
-}
-
-.delivery-time {
-  display: flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  white-space: nowrap;
-}
-
-.restaurant-tags {
-  display: flex;
-  gap: var(--spacer-xs);
-  transition: opacity var(--transition-base);
-}
-
-.share-btn-reset {
-  padding: 0;
-  margin: 0;
-  line-height: normal;
-  background: none;
-  border: none;
-  overflow: visible;
-}
-
-.share-btn-reset::after {
-  border: none;
-}
-
-.header-share-row {
-  margin-top: var(--spacer-xs);
-}
-
-.header-share-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8rpx;
-  padding: 8rpx 20rpx;
-  background: rgba(255, 255, 255, 0.18);
-  border-radius: var(--radius-round);
-  backdrop-filter: blur(4px);
-}
-
-.header-share-text {
-  font-size: var(--font-size-xs);
-  color: rgba(255, 255, 255, 0.9);
-}
-
 /* Tab切换 - 设计系统适配 */
 .tabs-section {
   position: fixed;
@@ -226,7 +62,7 @@
   bottom: calc(120rpx + env(safe-area-inset-bottom));
   background: var(--td-bg-color-page);
   overflow: hidden;
-  transition: bottom var(--transition-base), top var(--transition-base); /* 平滑切换 */
+  transition: bottom var(--transition-base), top var(--transition-base);
 }
 
 .content-area.no-cart {
@@ -347,4 +183,3 @@
   color: var(--td-text-color-placeholder);
   text-decoration: line-through;
 }
-

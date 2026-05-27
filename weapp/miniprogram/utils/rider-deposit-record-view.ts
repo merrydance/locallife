@@ -12,9 +12,9 @@ export interface DepositRecordView extends DepositRecord {
   display_remark?: string
   display_time: string
   display_amount_text: string
-  display_amount_class: 'positive' | 'negative'
+  display_amount_class: 'positive' | 'negative' | 'neutral'
   icon_color: string
-  icon_name: 'add-circle' | 'remove-circle'
+  icon_name: 'add-circle' | 'remove-circle' | 'time'
   status_text: string
   status_theme: 'primary' | 'success' | 'warning' | 'default'
 }
@@ -79,6 +79,12 @@ function formatTransactionTime(timeText?: string): string {
 
 function formatTransactionAmountValue(amount: number, type: string): string {
   const sign = getTransactionSign(type)
+  if (type === 'freeze') {
+    return `冻结 ${(Math.abs(amount) / 100).toFixed(2)}`
+  }
+  if (type === 'unfreeze') {
+    return `释放 ${(Math.abs(amount) / 100).toFixed(2)}`
+  }
   if (sign === 1) {
     return `+${(Math.abs(amount) / 100).toFixed(2)}`
   }
@@ -139,8 +145,9 @@ export function decorateDepositRecord(record: DepositRecord): DepositRecordView 
   }
 
   const sign = getTransactionSign(record.type)
-  const iconName = sign === 1 ? 'add-circle' : 'remove-circle'
-  const displayAmountClass: DepositRecordView['display_amount_class'] = sign === 1 ? 'positive' : 'negative'
+  const isFreezeRecord = record.type === 'freeze'
+  const iconName = isFreezeRecord ? 'time' : sign === 1 ? 'add-circle' : 'remove-circle'
+  const displayAmountClass: DepositRecordView['display_amount_class'] = isFreezeRecord ? 'neutral' : sign === 1 ? 'positive' : 'negative'
 
   return {
     ...record,

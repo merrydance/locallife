@@ -129,6 +129,7 @@
 
         <block wx:elif="{{payment}}">
           <view wx:if="{{refundsError}}" class="card-inline-hint">{{refundsErrorMessage}}</view>
+          <view wx:if="{{refundReturnsErrorMessage}}" class="card-inline-hint">{{refundReturnsErrorMessage}}</view>
 
           <view class="refund-payment-summary">
             <view class="refund-payment-main">

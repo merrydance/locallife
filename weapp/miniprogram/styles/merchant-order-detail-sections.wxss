@@ -5,6 +5,59 @@
   margin-bottom: 20rpx;
 }
 
+.price-summary-unavailable {
+  margin-top: 24rpx;
+  padding: 20rpx 24rpx;
+  border-radius: var(--radius-md);
+  background: var(--td-warning-color-1);
+  color: var(--td-text-color-secondary);
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+
+.notes-text {
+  color: var(--td-warning-color) !important;
+}
+
+.card-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.print-card-hint,
+.refund-card-hint {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.card-state-block {
+  min-height: 220rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacer-md);
+}
+
+.card-inline-hint {
+  margin-bottom: 24rpx;
+  border-radius: var(--radius-md);
+  padding: 16rpx 20rpx;
+  background: var(--td-error-color-1);
+  color: var(--td-text-color-primary);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+.card-inline-hint-success {
+  background: var(--td-success-color-1);
+}
+
 .refund-payment-main {
   display: flex;
   flex-direction: column;

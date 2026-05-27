@@ -24,6 +24,10 @@ import ConsumerMerchantDetailAdapter, { type ConsumerMerchantDetailViewModel } f
 import { getPublicImageUrl } from '../../../utils/image'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import Navigation from '../../../utils/navigation'
+import {
+  resolveRestaurantHeaderCollapsed,
+  type RestaurantHeaderScrollDirection
+} from '../../../utils/restaurant-detail-header'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type RestaurantViewModel = ConsumerMerchantDetailViewModel
@@ -117,7 +121,9 @@ Page({
     loading: true,
     isError: false,
     errorMsg: '',
-    headerCollapsed: false
+    headerCollapsed: false,
+    headerTouchY: 0,
+    headerScrollDirection: 'none' as RestaurantHeaderScrollDirection
   },
 
   onLoad(options: RestaurantPageOptions) {
@@ -514,13 +520,41 @@ Page({
 
   onScroll(e: WechatMiniprogram.CustomEvent) {
     const { scrollTop } = e.detail
-    const { headerCollapsed } = this.data
-    const threshold = 50 // 滚动阈值
+    const { headerCollapsed, headerScrollDirection } = this.data
+    const nextHeaderCollapsed = resolveRestaurantHeaderCollapsed({
+      scrollTop: Number(scrollTop) || 0,
+      headerCollapsed,
+      scrollDirection: headerScrollDirection
+    })
 
-    if (scrollTop > threshold && !headerCollapsed) {
+    if (nextHeaderCollapsed !== headerCollapsed) {
+      this.setData({ headerCollapsed: nextHeaderCollapsed })
+    }
+  },
+
+  onMenuTouchStart(e: WechatMiniprogram.TouchEvent) {
+    this.setData({
+      headerTouchY: e.touches[0]?.clientY || 0,
+      headerScrollDirection: 'none'
+    })
+  },
+
+  onMenuTouchMove(e: WechatMiniprogram.TouchEvent) {
+    const currentY = e.touches[0]?.clientY || 0
+    const previousY = this.data.headerTouchY
+    const deltaY = currentY - previousY
+
+    if (Math.abs(deltaY) < 2) {
+      return
+    }
+
+    this.setData({
+      headerTouchY: currentY,
+      headerScrollDirection: deltaY < 0 ? 'up' : 'down'
+    })
+
+    if (deltaY < 0 && !this.data.headerCollapsed) {
       this.setData({ headerCollapsed: true })
-    } else if (scrollTop <= threshold && headerCollapsed) {
-      this.setData({ headerCollapsed: false })
     }
   },
 

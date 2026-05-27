@@ -41,6 +41,8 @@ interface ComponentData {
   _merchantImageOptimized: boolean
 }
 
+const MERCHANT_RESTING_MESSAGE = '商户休息中～'
+
 Component({
   properties: {
     merchant: {
@@ -70,6 +72,15 @@ Component({
   },
 
   methods: {
+    isMerchantClosed() {
+      const data = this.data as unknown as ComponentData
+      return data.merchant.isOpen === false
+    },
+
+    showMerchantClosedToast() {
+      wx.showToast({ title: MERCHANT_RESTING_MESSAGE, icon: 'none' })
+    },
+
     onMerchantHeaderTap() {
       const data = this.data as unknown as ComponentData
       this.triggerEvent('merchanttap', { id: data.merchant.id })
@@ -79,6 +90,10 @@ Component({
       const data = this.data as unknown as ComponentData
       if (data.merchant.isOrderingSuspended) {
         wx.showToast({ title: '当前商户暂停接单', icon: 'none' })
+        return
+      }
+      if (this.isMerchantClosed()) {
+        this.showMerchantClosedToast()
         return
       }
       const index = e.currentTarget.dataset.index as number
@@ -98,6 +113,10 @@ Component({
         wx.showToast({ title: '当前商户暂停接单', icon: 'none' })
         return
       }
+      if (this.isMerchantClosed()) {
+        this.showMerchantClosedToast()
+        return
+      }
       const index = e.currentTarget.dataset.index as number
       const dish = data.merchant.featuredDishes[index]
       if (!dish) return
@@ -109,6 +128,10 @@ Component({
       const data = this.data as unknown as ComponentData
       if (data.merchant.isOrderingSuspended) {
         wx.showToast({ title: '当前商户暂停接单', icon: 'none' })
+        return
+      }
+      if (this.isMerchantClosed()) {
+        this.showMerchantClosedToast()
         return
       }
       const index = e.currentTarget.dataset.index as number
