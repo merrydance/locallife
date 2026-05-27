@@ -12,6 +12,7 @@ import (
 )
 
 type Querier interface {
+	ActivateApprovedMerchant(ctx context.Context, id int64) (Merchant, error)
 	AddCartItem(ctx context.Context, arg AddCartItemParams) (CartItem, error)
 	// ============================================
 	// 套餐菜品关联查询 (Combo Dish Queries)

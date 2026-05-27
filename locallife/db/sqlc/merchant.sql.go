@@ -12,6 +12,49 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const activateApprovedMerchant = `-- name: ActivateApprovedMerchant :one
+UPDATE merchants
+SET
+  status = 'active',
+  updated_at = now()
+WHERE id = $1
+  AND status = 'approved'
+  AND deleted_at IS NULL
+RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id, auto_open_by_business_hours
+`
+
+func (q *Queries) ActivateApprovedMerchant(ctx context.Context, id int64) (Merchant, error) {
+	row := q.db.QueryRow(ctx, activateApprovedMerchant, id)
+	var i Merchant
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerUserID,
+		&i.Name,
+		&i.Description,
+		&i.Phone,
+		&i.Address,
+		&i.Latitude,
+		&i.Longitude,
+		&i.Status,
+		&i.ApplicationData,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+		&i.RegionID,
+		&i.IsOpen,
+		&i.AutoCloseAt,
+		&i.DeletedAt,
+		&i.PendingOwnerBind,
+		&i.BindCode,
+		&i.BindCodeExpiresAt,
+		&i.GroupID,
+		&i.BrandID,
+		&i.LogoMediaAssetID,
+		&i.AutoOpenByBusinessHours,
+	)
+	return i, err
+}
+
 const addMerchantTag = `-- name: AddMerchantTag :exec
 
 INSERT INTO merchant_tags (

@@ -58,6 +58,21 @@ func (mr *MockStoreMockRecorder) AcceptTakeoutOrderTx(ctx, arg any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptTakeoutOrderTx", reflect.TypeOf((*MockStore)(nil).AcceptTakeoutOrderTx), ctx, arg)
 }
 
+// ActivateApprovedMerchant mocks base method.
+func (m *MockStore) ActivateApprovedMerchant(ctx context.Context, id int64) (db.Merchant, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ActivateApprovedMerchant", ctx, id)
+	ret0, _ := ret[0].(db.Merchant)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ActivateApprovedMerchant indicates an expected call of ActivateApprovedMerchant.
+func (mr *MockStoreMockRecorder) ActivateApprovedMerchant(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActivateApprovedMerchant", reflect.TypeOf((*MockStore)(nil).ActivateApprovedMerchant), ctx, id)
+}
+
 // AddCartItem mocks base method.
 func (m *MockStore) AddCartItem(ctx context.Context, arg db.AddCartItemParams) (db.CartItem, error) {
 	m.ctrl.T.Helper()
@@ -17058,6 +17073,21 @@ func (m *MockStore) MarkExternalPaymentFactApplicationFailed(ctx context.Context
 func (mr *MockStoreMockRecorder) MarkExternalPaymentFactApplicationFailed(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkExternalPaymentFactApplicationFailed", reflect.TypeOf((*MockStore)(nil).MarkExternalPaymentFactApplicationFailed), ctx, arg)
+}
+
+// MarkMerchantBaofuAccountOpeningReadyTx mocks base method.
+func (m *MockStore) MarkMerchantBaofuAccountOpeningReadyTx(ctx context.Context, arg db.MarkMerchantBaofuAccountOpeningReadyTxParams) (db.MarkMerchantBaofuAccountOpeningReadyTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkMerchantBaofuAccountOpeningReadyTx", ctx, arg)
+	ret0, _ := ret[0].(db.MarkMerchantBaofuAccountOpeningReadyTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkMerchantBaofuAccountOpeningReadyTx indicates an expected call of MarkMerchantBaofuAccountOpeningReadyTx.
+func (mr *MockStoreMockRecorder) MarkMerchantBaofuAccountOpeningReadyTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkMerchantBaofuAccountOpeningReadyTx", reflect.TypeOf((*MockStore)(nil).MarkMerchantBaofuAccountOpeningReadyTx), ctx, arg)
 }
 
 // MarkNoShowTx mocks base method.

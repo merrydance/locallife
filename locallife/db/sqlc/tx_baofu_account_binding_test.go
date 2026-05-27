@@ -53,6 +53,72 @@ func TestMarkBaofuAccountBindingActiveWithFeeLedgerTx(t *testing.T) {
 	require.Equal(t, result.AccountOpenFeeLedger.ID, gotLedger.ID)
 }
 
+func TestMarkMerchantBaofuAccountOpeningReadyTxActivatesApprovedMerchant(t *testing.T) {
+	ctx := context.Background()
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	merchant, err := testStore.UpdateMerchantStatus(ctx, UpdateMerchantStatusParams{
+		ID:     merchant.ID,
+		Status: MerchantStatusApproved,
+	})
+	require.NoError(t, err)
+	flow := createBaofuOpeningFlowForTest(t, BaofuAccountOwnerTypeMerchant, merchant.ID, BaofuAccountTypeBusiness, BaofuAccountOpeningStateAppletAuthPending)
+	subMchID := "190" + time.Now().Format("150405000000")
+
+	result, err := testStore.MarkMerchantBaofuAccountOpeningReadyTx(ctx, MarkMerchantBaofuAccountOpeningReadyTxParams{
+		PaymentConfig: UpsertMerchantPaymentConfigParams{
+			MerchantID: merchant.ID,
+			SubMchID:   subMchID,
+			Status:     MerchantPaymentConfigStatusActive,
+		},
+		Flow: MarkBaofuAccountOpeningFlowReadyParams{
+			ID:          flow.ID,
+			RawSnapshot: []byte(`{"state":"ready"}`),
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, BaofuAccountOpeningStateReady, result.Flow.State)
+	require.Equal(t, MerchantStatusActive, result.Merchant.Status)
+	require.Equal(t, subMchID, result.PaymentConfig.SubMchID)
+
+	gotMerchant, err := testStore.GetMerchant(ctx, merchant.ID)
+	require.NoError(t, err)
+	require.Equal(t, MerchantStatusActive, gotMerchant.Status)
+}
+
+func TestMarkMerchantBaofuAccountOpeningReadyTxDoesNotResumeSuspendedMerchant(t *testing.T) {
+	ctx := context.Background()
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	merchant, err := testStore.UpdateMerchantStatus(ctx, UpdateMerchantStatusParams{
+		ID:     merchant.ID,
+		Status: MerchantStatusSuspended,
+	})
+	require.NoError(t, err)
+	flow := createBaofuOpeningFlowForTest(t, BaofuAccountOwnerTypeMerchant, merchant.ID, BaofuAccountTypeBusiness, BaofuAccountOpeningStateAppletAuthPending)
+
+	result, err := testStore.MarkMerchantBaofuAccountOpeningReadyTx(ctx, MarkMerchantBaofuAccountOpeningReadyTxParams{
+		PaymentConfig: UpsertMerchantPaymentConfigParams{
+			MerchantID: merchant.ID,
+			SubMchID:   "190" + time.Now().Format("150405000001"),
+			Status:     MerchantPaymentConfigStatusActive,
+		},
+		Flow: MarkBaofuAccountOpeningFlowReadyParams{
+			ID:          flow.ID,
+			RawSnapshot: []byte(`{"state":"ready"}`),
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, BaofuAccountOpeningStateReady, result.Flow.State)
+	require.Equal(t, MerchantStatusSuspended, result.Merchant.Status)
+
+	gotMerchant, err := testStore.GetMerchant(ctx, merchant.ID)
+	require.NoError(t, err)
+	require.Equal(t, MerchantStatusSuspended, gotMerchant.Status)
+}
+
 func TestMarkBaofuAccountBindingAbnormal(t *testing.T) {
 	binding, err := testStore.UpsertBaofuAccountBinding(context.Background(), UpsertBaofuAccountBindingParams{
 		OwnerType:   BaofuAccountOwnerTypeRider,

@@ -62,6 +62,7 @@ type Store interface {
 	ReplaceReservationItemsTx(ctx context.Context, arg ReplaceReservationItemsTxParams) (ReplaceReservationItemsTxResult, error)
 	// Payment transactions
 	MarkBaofuAccountBindingActiveWithFeeLedgerTx(ctx context.Context, arg MarkBaofuAccountBindingActiveWithFeeLedgerTxParams) (MarkBaofuAccountBindingActiveWithFeeLedgerTxResult, error)
+	MarkMerchantBaofuAccountOpeningReadyTx(ctx context.Context, arg MarkMerchantBaofuAccountOpeningReadyTxParams) (MarkMerchantBaofuAccountOpeningReadyTxResult, error)
 	CreatePartnerPaymentTx(ctx context.Context, arg CreatePartnerPaymentTxParams) (CreatePartnerPaymentTxResult, error)
 	CloseCombinedPaymentOrderTx(ctx context.Context, arg CloseCombinedPaymentOrderTxParams) (CloseCombinedPaymentOrderTxResult, error)
 	CreateBaofuProfitSharingOrderTx(ctx context.Context, arg CreateBaofuProfitSharingOrderTxParams) (CreateBaofuProfitSharingOrderTxResult, error)

@@ -149,6 +149,16 @@ SET
 WHERE id = $1 AND deleted_at IS NULL
 RETURNING *;
 
+-- name: ActivateApprovedMerchant :one
+UPDATE merchants
+SET
+  status = 'active',
+  updated_at = now()
+WHERE id = $1
+  AND status = 'approved'
+  AND deleted_at IS NULL
+RETURNING *;
+
 -- name: UpdateMerchantBindCode :one
 -- 更新商户邀请码
 UPDATE merchants
@@ -671,5 +681,4 @@ WHERE m.status = 'active'
   AND COALESCE(mp.is_takeout_suspended, false) = false
   AND m.region_id = sqlc.narg('region_id')
   AND mt.tag_id = sqlc.arg('tag_id');
-
 

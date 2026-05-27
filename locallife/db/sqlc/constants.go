@@ -11,6 +11,7 @@ const (
 	MerchantStaffRoleOwner    = "owner"
 	MerchantStaffStatusActive = "active"
 
+	MerchantStatusApproved          = "approved"
 	MerchantStatusActive            = "active"
 	MerchantStatusBindbankSubmitted = "bindbank_submitted"
 	MerchantStatusSuspended         = "suspended"

@@ -767,6 +767,53 @@ func TestBaofuAccountOnboardingServiceApplyAccountOpenResult_MerchantActiveWaits
 	require.Equal(t, db.BaofuMerchantReportAppletAuthStateSucceeded, store.merchantReports[0].AppletAuthState)
 }
 
+func TestBaofuAccountMerchantReportServiceRecoverReadyActivatesApprovedMerchant(t *testing.T) {
+	store := newFakeBaofuAccountOnboardingStore()
+	flow := db.BaofuAccountOpeningFlow{
+		ID:               702,
+		OwnerType:        db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:          88,
+		AccountType:      db.BaofuAccountTypeBusiness,
+		State:            db.BaofuAccountOpeningStateAppletAuthPending,
+		AccountBindingID: pgtype.Int8{Int64: 22, Valid: true},
+		MerchantReportID: pgtype.Int8{Int64: 902, Valid: true},
+	}
+	store.flows = append(store.flows, flow)
+	store.merchants[88] = db.Merchant{ID: 88, Status: "approved"}
+	store.merchantReports = append(store.merchantReports, db.BaofuMerchantReport{
+		ID:              902,
+		OwnerType:       db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:         88,
+		ReportType:      db.BaofuMerchantReportTypeWechat,
+		ReportNo:        "MR202605090702",
+		ReportState:     db.BaofuMerchantReportStateSucceeded,
+		AppletAuthState: db.BaofuMerchantReportAppletAuthStatePending,
+		SubMchID:        pgtype.Text{String: "1900000702", Valid: true},
+	})
+	service := NewBaofuAccountMerchantReportService(store, &fakeMerchantReportClient{
+		bindResult: &merchantcontracts.BindSubConfigResult{
+			SubMchID:   "1900000702",
+			AuthType:   merchantcontracts.AuthTypeApplet,
+			ResultCode: "SUCCESS",
+		},
+	}, nil, BaofuAccountMerchantReportConfig{
+		CollectMerchantID: "100000",
+		CollectTerminalID: "200000",
+		MiniProgramAppID:  "wx1234567890abcdef",
+		ChannelID:         "CH001",
+		ChannelName:       "LocalLife",
+		Business:          "758-2",
+	})
+
+	updated, err := service.RecoverMerchantReportFlow(context.Background(), flow)
+
+	require.NoError(t, err)
+	require.Equal(t, db.BaofuAccountOpeningStateReady, updated.State)
+	require.Equal(t, db.MerchantStatusActive, store.merchants[88].Status)
+	require.Len(t, store.merchantPaymentConfigs, 1)
+	require.Equal(t, db.MerchantPaymentConfigStatusActive, store.merchantPaymentConfigs[0].Status)
+}
+
 func TestBaofuAccountMerchantReportServiceRecoverProviderErrorReturnsSafeContext(t *testing.T) {
 	store := newFakeBaofuAccountOnboardingStore()
 	providerErr := &baofu.ProviderError{
@@ -1296,6 +1343,26 @@ func (s *fakeBaofuAccountOnboardingStore) MarkBaofuAccountOpeningFlowReady(_ con
 		flow.State = db.BaofuAccountOpeningStateReady
 		flow.AccountBindingID = arg.AccountBindingID
 	})
+}
+
+func (s *fakeBaofuAccountOnboardingStore) MarkMerchantBaofuAccountOpeningReadyTx(ctx context.Context, arg db.MarkMerchantBaofuAccountOpeningReadyTxParams) (db.MarkMerchantBaofuAccountOpeningReadyTxResult, error) {
+	cfg, err := s.UpsertMerchantPaymentConfig(ctx, arg.PaymentConfig)
+	if err != nil {
+		return db.MarkMerchantBaofuAccountOpeningReadyTxResult{}, err
+	}
+	flow, err := s.MarkBaofuAccountOpeningFlowReady(ctx, arg.Flow)
+	if err != nil {
+		return db.MarkMerchantBaofuAccountOpeningReadyTxResult{}, err
+	}
+	merchant, ok := s.merchants[arg.PaymentConfig.MerchantID]
+	if !ok {
+		return db.MarkMerchantBaofuAccountOpeningReadyTxResult{}, db.ErrRecordNotFound
+	}
+	if merchant.Status == db.MerchantStatusApproved {
+		merchant.Status = db.MerchantStatusActive
+		s.merchants[merchant.ID] = merchant
+	}
+	return db.MarkMerchantBaofuAccountOpeningReadyTxResult{PaymentConfig: cfg, Flow: flow, Merchant: merchant}, nil
 }
 
 func (s *fakeBaofuAccountOnboardingStore) MarkBaofuAccountOpeningFlowFailed(_ context.Context, arg db.MarkBaofuAccountOpeningFlowFailedParams) (db.BaofuAccountOpeningFlow, error) {

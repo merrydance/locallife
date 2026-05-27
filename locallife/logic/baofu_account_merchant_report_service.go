@@ -22,6 +22,7 @@ type baofuAccountMerchantReportStore interface {
 	GetMerchant(ctx context.Context, id int64) (db.Merchant, error)
 	GetRegion(ctx context.Context, id int64) (db.Region, error)
 	UpsertMerchantPaymentConfig(ctx context.Context, arg db.UpsertMerchantPaymentConfigParams) (db.MerchantPaymentConfig, error)
+	MarkMerchantBaofuAccountOpeningReadyTx(ctx context.Context, arg db.MarkMerchantBaofuAccountOpeningReadyTxParams) (db.MarkMerchantBaofuAccountOpeningReadyTxResult, error)
 	MarkBaofuAccountOpeningFlowMerchantReportProcessing(ctx context.Context, arg db.MarkBaofuAccountOpeningFlowMerchantReportProcessingParams) (db.BaofuAccountOpeningFlow, error)
 	MarkBaofuAccountOpeningFlowAppletAuthPending(ctx context.Context, arg db.MarkBaofuAccountOpeningFlowAppletAuthPendingParams) (db.BaofuAccountOpeningFlow, error)
 	MarkBaofuAccountOpeningFlowReady(ctx context.Context, arg db.MarkBaofuAccountOpeningFlowReadyParams) (db.BaofuAccountOpeningFlow, error)
@@ -258,15 +259,7 @@ func (s *BaofuAccountMerchantReportService) loadRegionChain(ctx context.Context,
 
 func (s *BaofuAccountMerchantReportService) applyMerchantReportResult(ctx context.Context, flow db.BaofuAccountOpeningFlow, report db.BaofuMerchantReport) (db.BaofuAccountOpeningFlow, error) {
 	reportID := pgtype.Int8{Int64: report.ID, Valid: report.ID > 0}
-	if strings.TrimSpace(report.SubMchID.String) != "" && strings.TrimSpace(flow.OwnerType) == db.BaofuAccountOwnerTypeMerchant {
-		if _, err := s.store.UpsertMerchantPaymentConfig(ctx, db.UpsertMerchantPaymentConfigParams{
-			MerchantID: flow.OwnerID,
-			SubMchID:   strings.TrimSpace(report.SubMchID.String),
-			Status:     db.MerchantPaymentConfigStatusActive,
-		}); err != nil {
-			return db.BaofuAccountOpeningFlow{}, err
-		}
-	}
+	subMchID := strings.TrimSpace(report.SubMchID.String)
 	if strings.TrimSpace(report.ReportState) == db.BaofuMerchantReportStateFailed || strings.TrimSpace(report.AppletAuthState) == db.BaofuMerchantReportAppletAuthStateFailed {
 		return s.store.MarkBaofuAccountOpeningFlowFailed(ctx, db.MarkBaofuAccountOpeningFlowFailedParams{
 			ID:             flow.ID,
@@ -276,12 +269,35 @@ func (s *BaofuAccountMerchantReportService) applyMerchantReportResult(ctx contex
 		})
 	}
 	if strings.TrimSpace(report.ReportState) == db.BaofuMerchantReportStateSucceeded && strings.TrimSpace(report.AppletAuthState) == db.BaofuMerchantReportAppletAuthStateSucceeded {
-		return s.store.MarkBaofuAccountOpeningFlowReady(ctx, db.MarkBaofuAccountOpeningFlowReadyParams{
-			ID:               flow.ID,
-			AccountBindingID: flow.AccountBindingID,
-			MerchantReportID: reportID,
-			RawSnapshot:      report.RawSnapshot,
+		if subMchID == "" {
+			return db.BaofuAccountOpeningFlow{}, ErrBaofuMerchantReportSubMchIDRequired
+		}
+		result, err := s.store.MarkMerchantBaofuAccountOpeningReadyTx(ctx, db.MarkMerchantBaofuAccountOpeningReadyTxParams{
+			PaymentConfig: db.UpsertMerchantPaymentConfigParams{
+				MerchantID: flow.OwnerID,
+				SubMchID:   subMchID,
+				Status:     db.MerchantPaymentConfigStatusActive,
+			},
+			Flow: db.MarkBaofuAccountOpeningFlowReadyParams{
+				ID:               flow.ID,
+				AccountBindingID: flow.AccountBindingID,
+				MerchantReportID: reportID,
+				RawSnapshot:      report.RawSnapshot,
+			},
 		})
+		if err != nil {
+			return db.BaofuAccountOpeningFlow{}, err
+		}
+		return result.Flow, nil
+	}
+	if subMchID != "" && strings.TrimSpace(flow.OwnerType) == db.BaofuAccountOwnerTypeMerchant {
+		if _, err := s.store.UpsertMerchantPaymentConfig(ctx, db.UpsertMerchantPaymentConfigParams{
+			MerchantID: flow.OwnerID,
+			SubMchID:   subMchID,
+			Status:     db.MerchantPaymentConfigStatusActive,
+		}); err != nil {
+			return db.BaofuAccountOpeningFlow{}, err
+		}
 	}
 	if strings.TrimSpace(report.ReportState) == db.BaofuMerchantReportStateSucceeded {
 		return s.store.MarkBaofuAccountOpeningFlowAppletAuthPending(ctx, db.MarkBaofuAccountOpeningFlowAppletAuthPendingParams{
