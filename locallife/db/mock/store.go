@@ -10108,6 +10108,21 @@ func (mr *MockStoreMockRecorder) GetPrintLogByTaskKeyAndPrinter(ctx, arg any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPrintLogByTaskKeyAndPrinter", reflect.TypeOf((*MockStore)(nil).GetPrintLogByTaskKeyAndPrinter), ctx, arg)
 }
 
+// GetPrintLogByVendorOrderID mocks base method.
+func (m *MockStore) GetPrintLogByVendorOrderID(ctx context.Context, vendorOrderID pgtype.Text) (db.PrintLog, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPrintLogByVendorOrderID", ctx, vendorOrderID)
+	ret0, _ := ret[0].(db.PrintLog)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPrintLogByVendorOrderID indicates an expected call of GetPrintLogByVendorOrderID.
+func (mr *MockStoreMockRecorder) GetPrintLogByVendorOrderID(ctx, vendorOrderID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPrintLogByVendorOrderID", reflect.TypeOf((*MockStore)(nil).GetPrintLogByVendorOrderID), ctx, vendorOrderID)
+}
+
 // GetProfitSharingOrder mocks base method.
 func (m *MockStore) GetProfitSharingOrder(ctx context.Context, id int64) (db.ProfitSharingOrder, error) {
 	m.ctrl.T.Helper()

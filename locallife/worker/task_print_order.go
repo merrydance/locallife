@@ -211,8 +211,9 @@ func (processor *RedisTaskProcessor) executePrintAttempt(ctx context.Context, or
 		ID:     printLog.ID,
 		Status: "success",
 	}
-	if strings.TrimSpace(vendorOrderID) != "" {
-		updateParams.VendorOrderID = pgtype.Text{String: vendorOrderID, Valid: true}
+	trimmedVendorOrderID := strings.TrimSpace(vendorOrderID)
+	if trimmedVendorOrderID != "" {
+		updateParams.VendorOrderID = pgtype.Text{String: trimmedVendorOrderID, Valid: true}
 	}
 	if printErr != nil {
 		updateParams.Status = "failed"
@@ -222,11 +223,29 @@ func (processor *RedisTaskProcessor) executePrintAttempt(ctx context.Context, or
 			Int64("printer_id", printer.ID).
 			Str("slip", slip).
 			Msg("print order failed")
+	} else if processor.printerClient.PrintResultCallbackEnabled() {
+		if trimmedVendorOrderID == "" {
+			updateParams.Status = "failed"
+			updateParams.ErrorMessage = pgtype.Text{String: "feieyun print accepted without vendor order id; callback cannot be matched", Valid: true}
+			log.Error().
+				Int64("order_id", orderID).
+				Int64("printer_id", printer.ID).
+				Str("slip", slip).
+				Msg("feieyun print accepted without vendor order id")
+		} else {
+			updateParams.Status = "pending"
+			log.Info().
+				Int64("order_id", orderID).
+				Int64("printer_id", printer.ID).
+				Str("vendor_order_id", trimmedVendorOrderID).
+				Str("slip", slip).
+				Msg("feieyun accepted print job; waiting for print result callback")
+		}
 	} else {
 		log.Info().
 			Int64("order_id", orderID).
 			Int64("printer_id", printer.ID).
-			Str("vendor_order_id", vendorOrderID).
+			Str("vendor_order_id", trimmedVendorOrderID).
 			Str("slip", slip).
 			Msg("printed order successfully")
 	}

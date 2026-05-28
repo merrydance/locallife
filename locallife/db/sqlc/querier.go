@@ -967,6 +967,7 @@ type Querier interface {
 	GetPrimaryTableImage(ctx context.Context, tableID int64) (TableImage, error)
 	GetPrintLog(ctx context.Context, id int64) (PrintLog, error)
 	GetPrintLogByTaskKeyAndPrinter(ctx context.Context, arg GetPrintLogByTaskKeyAndPrinterParams) (PrintLog, error)
+	GetPrintLogByVendorOrderID(ctx context.Context, vendorOrderID pgtype.Text) (PrintLog, error)
 	GetProfitSharingOrder(ctx context.Context, id int64) (ProfitSharingOrder, error)
 	GetProfitSharingOrderByOutOrderNo(ctx context.Context, outOrderNo string) (ProfitSharingOrder, error)
 	GetProfitSharingOrderByPaymentOrder(ctx context.Context, paymentOrderID int64) (ProfitSharingOrder, error)

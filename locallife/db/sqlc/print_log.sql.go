@@ -178,6 +178,31 @@ func (q *Queries) GetPrintLogByTaskKeyAndPrinter(ctx context.Context, arg GetPri
 	return i, err
 }
 
+const getPrintLogByVendorOrderID = `-- name: GetPrintLogByVendorOrderID :one
+SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key FROM print_logs
+WHERE vendor_order_id = $1
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetPrintLogByVendorOrderID(ctx context.Context, vendorOrderID pgtype.Text) (PrintLog, error) {
+	row := q.db.QueryRow(ctx, getPrintLogByVendorOrderID, vendorOrderID)
+	var i PrintLog
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.PrinterID,
+		&i.PrintContent,
+		&i.Status,
+		&i.ErrorMessage,
+		&i.PrintedAt,
+		&i.CreatedAt,
+		&i.VendorOrderID,
+		&i.TaskKey,
+	)
+	return i, err
+}
+
 const listMerchantPrintAnomalies = `-- name: ListMerchantPrintAnomalies :many
 WITH latest AS (
         SELECT DISTINCT ON (pl.order_id, pl.printer_id)

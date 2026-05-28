@@ -20,6 +20,7 @@ type Client interface {
 	AddPrinter(ctx context.Context, input AddPrinterInput) error
 	RemovePrinter(ctx context.Context, input RemovePrinterInput) error
 	Print(ctx context.Context, input PrintInput) (string, error)
+	PrintResultCallbackEnabled() bool
 	QueryOrderState(ctx context.Context, orderID string) (bool, error)
 	QueryPrinterStatus(ctx context.Context, sn string) (string, error)
 	GetPrinterInfo(ctx context.Context, sn string) (PrinterInfo, error)
@@ -50,10 +51,11 @@ type PrinterInfo struct {
 }
 
 type FeieyunClient struct {
-	baseURL    string
-	user       string
-	ukey       string
-	httpClient *http.Client
+	baseURL          string
+	user             string
+	ukey             string
+	printCallbackURL string
+	httpClient       *http.Client
 }
 
 type feieyunResponse struct {
@@ -83,13 +85,26 @@ func NewFeieyunClientFromConfig(config util.Config) Client {
 	}
 
 	return &FeieyunClient{
-		baseURL: baseURL,
-		user:    config.FeieyunUser,
-		ukey:    config.FeieyunUkey,
+		baseURL:          baseURL,
+		user:             config.FeieyunUser,
+		ukey:             config.FeieyunUkey,
+		printCallbackURL: resolveFeieyunPrintCallbackURL(config),
 		httpClient: &http.Client{
 			Timeout: timeout,
 		},
 	}
+}
+
+func (c *FeieyunClient) PrintResultCallbackEnabled() bool {
+	return c != nil && strings.TrimSpace(c.printCallbackURL) != ""
+}
+
+func resolveFeieyunPrintCallbackURL(config util.Config) string {
+	callbackURL := strings.TrimSpace(config.FeieyunPrintCallbackURL)
+	if callbackURL == "" || strings.TrimSpace(config.FeieyunCallbackPublicKeyPEM) == "" {
+		return ""
+	}
+	return callbackURL
 }
 
 func (c *FeieyunClient) AddPrinter(ctx context.Context, input AddPrinterInput) error {
@@ -153,6 +168,9 @@ func (c *FeieyunClient) Print(ctx context.Context, input PrintInput) (string, er
 	}
 	if input.ExpiredAt != nil {
 		params.Set("expired", strconv.FormatInt(input.ExpiredAt.Unix(), 10))
+	}
+	if c.PrintResultCallbackEnabled() {
+		params.Set("backurl", strings.TrimSpace(c.printCallbackURL))
 	}
 
 	response, err := c.call(ctx, "/Api/Open/printMsg", "Open_printMsg", params)

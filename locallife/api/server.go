@@ -536,6 +536,8 @@ func (server *Server) setupRouter() {
 		webhooksGroup.POST("/baofu/payment", server.handleBaofuPaymentNotify)
 		webhooksGroup.POST("/baofu/share", server.handleBaofuShareNotify)
 		webhooksGroup.POST("/baofu/refund", server.handleBaofuRefundNotify)
+		// 飞鹅云打印结果回调
+		webhooksGroup.POST("/feieyun/print-result", server.handleFeieyunPrintResultNotify)
 	}
 
 	// 需要认证的路由

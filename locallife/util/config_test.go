@@ -219,6 +219,54 @@ func TestLoadConfig_ReadsBaofuPEMValuesFromFilePaths(t *testing.T) {
 	require.Equal(t, strings.TrimSpace(publicPEM), baofuConfig.BaofuPublicKeyPEM)
 }
 
+func TestLoadConfig_ReadsFeieyunCallbackConfig(t *testing.T) {
+	configDir := writeTestConfigFile(t, strings.Join([]string{
+		"ENVIRONMENT=test",
+		"DB_SOURCE=postgresql:///test",
+		"MIGRATION_URL=file://db/migration",
+		"FEIEYUN_ENABLED=true",
+		"FEIEYUN_API_BASE_URL=https://api.feieyun.cn",
+		"FEIEYUN_USER=feie-user",
+		"FEIEYUN_UKEY=feie-ukey",
+		"FEIEYUN_HTTP_TIMEOUT=9s",
+		"FEIEYUN_PRINT_CALLBACK_URL=https://api.example.com/v1/webhooks/feieyun/print-result",
+		`FEIEYUN_CALLBACK_PUBLIC_KEY_PEM=-----BEGIN PUBLIC KEY-----\\npublic-body\\n-----END PUBLIC KEY-----`,
+	}, "\n")+"\n")
+
+	config, err := LoadConfig(configDir)
+	require.NoError(t, err)
+
+	require.True(t, config.FeieyunEnabled)
+	require.Equal(t, "https://api.feieyun.cn", config.FeieyunAPIBaseURL)
+	require.Equal(t, "feie-user", config.FeieyunUser)
+	require.Equal(t, "feie-ukey", config.FeieyunUkey)
+	require.Equal(t, 9*time.Second, config.FeieyunHTTPTimeout)
+	require.Equal(t, "https://api.example.com/v1/webhooks/feieyun/print-result", config.FeieyunPrintCallbackURL)
+	require.Contains(t, config.FeieyunCallbackPublicKeyPEM, "\npublic-body\n")
+	require.NotContains(t, config.FeieyunCallbackPublicKeyPEM, `\n`)
+}
+
+func TestLoadConfig_ReadsFeieyunCallbackPublicKeyFromPath(t *testing.T) {
+	configDir := t.TempDir()
+	certsDir := filepath.Join(configDir, "certs")
+	require.NoError(t, os.MkdirAll(certsDir, 0o700))
+	publicPEM := "-----BEGIN PUBLIC KEY-----\npublic-body\n-----END PUBLIC KEY-----\n"
+	require.NoError(t, os.WriteFile(filepath.Join(certsDir, "feieyun_public.key"), []byte(publicPEM), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "app.env"), []byte(strings.Join([]string{
+		"ENVIRONMENT=test",
+		"DB_SOURCE=postgresql:///test",
+		"MIGRATION_URL=file://db/migration",
+		"FEIEYUN_CALLBACK_PUBLIC_KEY_PEM=bad-public-env",
+		"FEIEYUN_CALLBACK_PUBLIC_KEY_PATH=./certs/feieyun_public.key",
+	}, "\n")+"\n"), 0o600))
+
+	config, err := LoadConfig(configDir)
+	require.NoError(t, err)
+
+	require.Equal(t, "./certs/feieyun_public.key", config.FeieyunCallbackPublicKeyPath)
+	require.Equal(t, strings.TrimSpace(publicPEM), config.FeieyunCallbackPublicKeyPEM)
+}
+
 func TestEffectiveWechatPayMerchantTransferNotifyURL(t *testing.T) {
 	config := Config{
 		WechatPayMerchantTransferNotifyURL: "https://example.com/v1/webhooks/wechat-pay/merchant-transfer-notify",

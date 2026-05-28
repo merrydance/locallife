@@ -19,6 +19,12 @@ WHERE task_key = $1
     AND printer_id = $2
 LIMIT 1;
 
+-- name: GetPrintLogByVendorOrderID :one
+SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key FROM print_logs
+WHERE vendor_order_id = $1
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
+
 -- name: GetLatestPrintLogByOrderAndPrinter :one
 SELECT id, order_id, printer_id, print_content, status, error_message, printed_at, created_at, vendor_order_id, task_key FROM print_logs
 WHERE order_id = $1

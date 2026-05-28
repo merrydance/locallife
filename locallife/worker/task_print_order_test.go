@@ -18,7 +18,10 @@ import (
 )
 
 type printClientRecorder struct {
-	inputs []printInputSnapshot
+	inputs          []printInputSnapshot
+	callbackEnabled bool
+	printOrderID    string
+	printErr        error
 }
 
 type printInputSnapshot struct {
@@ -37,7 +40,14 @@ func (r *printClientRecorder) RemovePrinter(ctx context.Context, input cloudprin
 
 func (r *printClientRecorder) Print(ctx context.Context, input cloudprint.PrintInput) (string, error) {
 	r.inputs = append(r.inputs, printInputSnapshot{SN: input.SN, Content: input.Content, Copies: input.Copies})
-	return "vendor-order-id", nil
+	if r.printOrderID == "" && r.printErr == nil {
+		r.printOrderID = "vendor-order-id"
+	}
+	return r.printOrderID, r.printErr
+}
+
+func (r *printClientRecorder) PrintResultCallbackEnabled() bool {
+	return r.callbackEnabled
 }
 
 func (r *printClientRecorder) QueryOrderState(ctx context.Context, orderID string) (bool, error) {
@@ -50,6 +60,61 @@ func (r *printClientRecorder) QueryPrinterStatus(ctx context.Context, sn string)
 
 func (r *printClientRecorder) GetPrinterInfo(ctx context.Context, sn string) (cloudprint.PrinterInfo, error) {
 	return cloudprint.PrinterInfo{Model: "FEIE-80"}, nil
+}
+
+func TestExecutePrintAttempt_KeepsPendingWhenPrintResultCallbackEnabled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	processor := NewTestTaskProcessor(store, NewNoopTaskDistributor(), nil, nil)
+	printerClient := &printClientRecorder{callbackEnabled: true, printOrderID: "vendor-callback-1"}
+	processor.SetPrinterClientForTest(printerClient)
+	printer := db.CloudPrinter{ID: 11, PrinterSn: "front-sn", PrinterType: "feieyun", IsActive: true}
+
+	store.EXPECT().CreatePrintLog(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.CreatePrintLogParams) (db.PrintLog, error) {
+		require.Equal(t, int64(1001), arg.OrderID)
+		require.Equal(t, printer.ID, arg.PrinterID)
+		require.Equal(t, "pending", arg.Status)
+		return db.PrintLog{ID: 901, OrderID: arg.OrderID, PrinterID: arg.PrinterID, Status: arg.Status}, nil
+	})
+	store.EXPECT().UpdatePrintLogStatus(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.UpdatePrintLogStatusParams) (db.PrintLog, error) {
+		require.Equal(t, int64(901), arg.ID)
+		require.Equal(t, "pending", arg.Status)
+		require.True(t, arg.VendorOrderID.Valid)
+		require.Equal(t, "vendor-callback-1", arg.VendorOrderID.String)
+		require.False(t, arg.ErrorMessage.Valid)
+		return db.PrintLog{}, nil
+	})
+
+	processor.executePrintAttempt(context.Background(), 1001, printer, "<CB>测试</CB>", "full", "")
+
+	require.Len(t, printerClient.inputs, 1)
+}
+
+func TestExecutePrintAttempt_FailsWhenCallbackEnabledWithoutVendorOrderID(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	processor := NewTestTaskProcessor(store, NewNoopTaskDistributor(), nil, nil)
+	printerClient := &printClientRecorder{callbackEnabled: true, printOrderID: " "}
+	processor.SetPrinterClientForTest(printerClient)
+	printer := db.CloudPrinter{ID: 12, PrinterSn: "front-sn", PrinterType: "feieyun", IsActive: true}
+
+	store.EXPECT().CreatePrintLog(gomock.Any(), gomock.Any()).Times(1).Return(db.PrintLog{ID: 902, OrderID: 1002, PrinterID: printer.ID, Status: "pending"}, nil)
+	store.EXPECT().UpdatePrintLogStatus(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.UpdatePrintLogStatusParams) (db.PrintLog, error) {
+		require.Equal(t, int64(902), arg.ID)
+		require.Equal(t, "failed", arg.Status)
+		require.True(t, arg.ErrorMessage.Valid)
+		require.Contains(t, arg.ErrorMessage.String, "vendor order id")
+		require.False(t, arg.VendorOrderID.Valid)
+		return db.PrintLog{}, nil
+	})
+
+	processor.executePrintAttempt(context.Background(), 1002, printer, "<CB>测试</CB>", "full", "")
+
+	require.Len(t, printerClient.inputs, 1)
 }
 
 func TestProcessTaskPrintOrder_SplitFrontAndKitchenReceipts(t *testing.T) {

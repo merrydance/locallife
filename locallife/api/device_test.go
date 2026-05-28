@@ -98,6 +98,10 @@ func (s *printerClientStub) Print(ctx context.Context, input cloudprint.PrintInp
 	return s.printOrderID, s.printErr
 }
 
+func (s *printerClientStub) PrintResultCallbackEnabled() bool {
+	return false
+}
+
 func (s *printerClientStub) QueryOrderState(ctx context.Context, orderID string) (bool, error) {
 	s.queryOrderID = orderID
 	return s.queryPrinted, s.queryOrderErr

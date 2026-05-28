@@ -96,11 +96,14 @@ type Config struct {
 	WebBaseURL string `mapstructure:"WEB_BASE_URL"` // H5页面基础URL，用于分享功能
 
 	// 飞鹅云打印配置（平台统一账号）
-	FeieyunEnabled     bool          `mapstructure:"FEIEYUN_ENABLED"`
-	FeieyunAPIBaseURL  string        `mapstructure:"FEIEYUN_API_BASE_URL"`
-	FeieyunUser        string        `mapstructure:"FEIEYUN_USER"`
-	FeieyunUkey        string        `mapstructure:"FEIEYUN_UKEY"`
-	FeieyunHTTPTimeout time.Duration `mapstructure:"FEIEYUN_HTTP_TIMEOUT"`
+	FeieyunEnabled               bool          `mapstructure:"FEIEYUN_ENABLED"`
+	FeieyunAPIBaseURL            string        `mapstructure:"FEIEYUN_API_BASE_URL"`
+	FeieyunUser                  string        `mapstructure:"FEIEYUN_USER"`
+	FeieyunUkey                  string        `mapstructure:"FEIEYUN_UKEY"`
+	FeieyunHTTPTimeout           time.Duration `mapstructure:"FEIEYUN_HTTP_TIMEOUT"`
+	FeieyunPrintCallbackURL      string        `mapstructure:"FEIEYUN_PRINT_CALLBACK_URL"`
+	FeieyunCallbackPublicKeyPEM  string        `mapstructure:"FEIEYUN_CALLBACK_PUBLIC_KEY_PEM"`
+	FeieyunCallbackPublicKeyPath string        `mapstructure:"FEIEYUN_CALLBACK_PUBLIC_KEY_PATH"`
 
 	// 对外服务的基础 URL（生产环境必填）。设置后 API 生成的签名 URL 将以此为前缀，
 	// 避免依赖客户端可控的 Origin/Host 头（SSRF/开放重定向防护）。
@@ -439,6 +442,9 @@ func LoadConfig(path string) (config Config, err error) {
 	if err = config.loadBaofuPEMFromPaths(path); err != nil {
 		return
 	}
+	if err = config.loadFeieyunCallbackPublicKeyFromPath(path); err != nil {
+		return
+	}
 	return
 }
 
@@ -509,6 +515,21 @@ func (c *Config) loadBaofuPEMFromPaths(configDir string) error {
 		}
 		c.BaofuPublicKeyPEM = string(content)
 	}
+	return nil
+}
+
+func (c *Config) loadFeieyunCallbackPublicKeyFromPath(configDir string) error {
+	publicKeyPath := trimOptionalQuotes(c.FeieyunCallbackPublicKeyPath)
+	c.FeieyunCallbackPublicKeyPath = publicKeyPath
+	c.FeieyunCallbackPublicKeyPEM = normalizeEscapedPEM(c.FeieyunCallbackPublicKeyPEM)
+	if publicKeyPath == "" {
+		return nil
+	}
+	content, err := readConfigRelativeFile(configDir, publicKeyPath)
+	if err != nil {
+		return fmt.Errorf("read FEIEYUN_CALLBACK_PUBLIC_KEY_PATH: %w", err)
+	}
+	c.FeieyunCallbackPublicKeyPEM = strings.TrimSpace(string(content))
 	return nil
 }
 
