@@ -398,6 +398,43 @@ assert.deepStrictEqual(plain(owner.buildMerchantInitialDraftOcrResults({})), {
   idCard: null
 })
 
+const storefrontImage = { url: 'local://storefront.jpg', rawUrl: 'raw/storefront.jpg' }
+const environmentImage = { url: 'local://environment.jpg', rawUrl: 'raw/environment.jpg' }
+assert.deepStrictEqual(plain(owner.buildMerchantShopImagesPatch({
+  kind: 'storefront',
+  images: [storefrontImage],
+  currentFiles: []
+})), {
+  storefrontImages: [storefrontImage],
+  storefrontFiles: [{ url: 'local://storefront.jpg', rawUrl: 'raw/storefront.jpg', status: 'done' }]
+})
+assert.deepStrictEqual(plain(owner.buildMerchantShopImagesPatch({
+  kind: 'environment',
+  images: [environmentImage],
+  currentFiles: []
+})), {
+  environmentImages: [environmentImage],
+  environmentFiles: [{ url: 'local://environment.jpg', rawUrl: 'raw/environment.jpg', status: 'done' }]
+})
+assert.deepStrictEqual(plain(owner.buildMerchantShopImagesPayload({
+  kind: 'storefront',
+  images: [storefrontImage],
+  storefrontImages: [],
+  environmentImages: [environmentImage]
+})), {
+  storefront_images: ['raw/storefront.jpg'],
+  environment_images: ['raw/environment.jpg']
+})
+assert.deepStrictEqual(plain(owner.buildMerchantShopImagesPayload({
+  kind: 'environment',
+  images: [environmentImage],
+  storefrontImages: [storefrontImage],
+  environmentImages: []
+})), {
+  storefront_images: ['raw/storefront.jpg'],
+  environment_images: ['raw/environment.jpg']
+})
+
 const runtimeSource = fs.readFileSync(runtimePath, 'utf8')
 const forbiddenRuntimePatterns = [
   'function buildLegalBusinessAddress',
@@ -425,7 +462,9 @@ const forbiddenRuntimePatterns = [
   'name: safeStr(data.merchant_name)',
   'regionId: Number(data.region_id || 0)',
   'licenseName: safeStr(data.business_license_ocr',
-  'const ocrResults = {'
+  'const ocrResults = {',
+  "kind === 'storefront' ? 'storefrontImages' : 'environmentImages'",
+  'storefront_images: kind ==='
 ]
 
 for (const pattern of forbiddenRuntimePatterns) {

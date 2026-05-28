@@ -20,6 +20,8 @@
 
 **Seventh Remediation Checkpoint:** 96.5 / 100 after the merchant registration initial-draft view patch owner extraction slice.
 
+**Eighth Remediation Checkpoint:** 97 / 100 after the merchant registration shop image patch/payload owner extraction slice.
+
 **Target Score:** 100 / 100
 
 **Review Baseline:**
@@ -84,6 +86,12 @@
 - Extracted merchant registration initial draft form patch and initial OCR result builders into `merchant-store-registration-view.ts`.
 - Kept `initApplication` in `merchant-store-registration-runtime.ts` responsible for backend fetch, status routing, private media signing, and page `setData` timing, while removing another DTO-to-ViewState mapping from the runtime.
 - Extended `check:merchant-store-registration-view-owner` to verify the initial draft mapping and block the extracted initialization mapping from drifting back into the runtime file.
+
+**Eighth Remediation Scope:**
+
+- Extracted merchant registration storefront/environment image state patch, files-field lookup, images-field lookup, and persisted-image payload builders into `merchant-store-registration-view.ts`.
+- Kept the runtime responsible for upload/delete/finalize timing and backend calls, while moving another group of field-name and payload rules to the view owner.
+- Extended `check:merchant-store-registration-view-owner` to verify shop-image patch/payload behavior and block the extracted field selection rules from drifting back into the runtime file.
 
 ---
 

@@ -35,21 +35,25 @@ import {
   buildMerchantLatestOcrFormPatch,
   buildMerchantOcrDisplayState,
   buildMerchantOcrProgressMessage,
+  buildMerchantShopImagesPatch,
+  buildMerchantShopImagesPayload,
   buildMerchantUploadErrorFeedback,
   buildMerchantUploadFeedback,
   buildMerchantUploadProcessingFeedback,
   buildMerchantUploadedImagePatch,
   buildRegionSearchKeywords,
   buildUploadRenderImages,
+  getMerchantShopImageFilesFieldName,
+  getMerchantShopImageImagesFieldName,
   getMerchantStoreRegistrationDocumentRemovalTarget,
   markImagesPersisted,
   pickBestRegionSearchResult,
-  toPersistedImageUrls,
   toSafeNumber,
   type ImageFieldItem,
   type MerchantDraftExt,
   type MerchantOCRDisplayState,
   type MerchantRegistrationUploadField,
+  type MerchantShopImageKind,
   type MerchantUploadFeedback,
   type UploadFeedback
 } from './merchant-store-registration-view'
@@ -251,22 +255,20 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
     this.setData({ navBarHeight: e.detail.navBarHeight })
   },
 
-  setShopImages(kind: 'storefront' | 'environment', images: ImageFieldItem[]) {
-    const imagesFieldName = kind === 'storefront' ? 'storefrontImages' : 'environmentImages'
-    const filesFieldName = kind === 'storefront' ? 'storefrontFiles' : 'environmentFiles'
-    const currentFiles = [...this.data[filesFieldName]] as ImageFieldItem[]
+  setShopImages(kind: MerchantShopImageKind, images: ImageFieldItem[]) {
+    const currentFilesFieldName = getMerchantShopImageFilesFieldName(kind)
+    const currentFiles = [...this.data[currentFilesFieldName]] as ImageFieldItem[]
 
-    this.setData({
-      [imagesFieldName]: images,
-      [filesFieldName]: buildUploadRenderImages(images, currentFiles)
-    } as Record<string, unknown>)
+    this.setData(buildMerchantShopImagesPatch({ kind, images, currentFiles }) as Record<string, unknown>)
   },
 
-  buildShopImagesPayload(kind: 'storefront' | 'environment', images: ImageFieldItem[]) {
-    return {
-      storefront_images: kind === 'storefront' ? toPersistedImageUrls(images) : toPersistedImageUrls(this.data.storefrontImages),
-      environment_images: kind === 'environment' ? toPersistedImageUrls(images) : toPersistedImageUrls(this.data.environmentImages)
-    }
+  buildShopImagesPayload(kind: MerchantShopImageKind, images: ImageFieldItem[]) {
+    return buildMerchantShopImagesPayload({
+      kind,
+      images,
+      storefrontImages: this.data.storefrontImages,
+      environmentImages: this.data.environmentImages
+    })
   },
 
   applyLatestOcrDraft(data: MerchantDraftExt) {
@@ -420,10 +422,12 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
       const storefrontImages = this.data.storefrontImages || []
       const environmentImages = this.data.environmentImages || []
       if (storefrontImages.length > 0 || environmentImages.length > 0) {
-        await updateMerchantImages({
-          storefront_images: toPersistedImageUrls(storefrontImages),
-          environment_images: toPersistedImageUrls(environmentImages)
-        })
+        await updateMerchantImages(buildMerchantShopImagesPayload({
+          kind: 'storefront',
+          images: storefrontImages,
+          storefrontImages,
+          environmentImages
+        }))
       }
 
       console.log('[MerchantRegister] Sync to backend success')
@@ -1236,7 +1240,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
         return
       }
 
-      const fieldName = kind === 'storefront' ? 'storefrontImages' : 'environmentImages'
+      const fieldName = getMerchantShopImageImagesFieldName(kind)
       const currentImages = [...this.data[fieldName]] as ImageFieldItem[]
       const target = currentImages[index]
       if (!target || target.assetId !== mediaId) {

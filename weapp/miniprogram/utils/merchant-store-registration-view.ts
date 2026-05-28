@@ -21,6 +21,8 @@ export type ImageFieldItem = {
 
 export type MerchantRegistrationUploadField = 'license' | 'foodPermit' | 'idCardFront' | 'idCardBack'
 
+export type MerchantShopImageKind = 'storefront' | 'environment'
+
 type UploadFeedbackState = 'idle' | 'processing' | 'success' | 'error'
 
 export type UploadFeedback = {
@@ -151,6 +153,20 @@ const MERCHANT_UPLOAD_IMAGE_FIELDS: Record<MerchantRegistrationUploadField, 'lic
   foodPermit: 'foodLicenseImages',
   idCardFront: 'idCardFrontImages',
   idCardBack: 'idCardBackImages'
+}
+
+const MERCHANT_SHOP_IMAGE_FIELDS: Record<MerchantShopImageKind, {
+  imagesFieldName: 'storefrontImages' | 'environmentImages'
+  filesFieldName: 'storefrontFiles' | 'environmentFiles'
+}> = {
+  storefront: {
+    imagesFieldName: 'storefrontImages',
+    filesFieldName: 'storefrontFiles'
+  },
+  environment: {
+    imagesFieldName: 'environmentImages',
+    filesFieldName: 'environmentFiles'
+  }
 }
 
 type ParsedRegionAddress = {
@@ -385,6 +401,42 @@ export function getMerchantStoreRegistrationDocumentRemovalTarget(field: Merchan
 export function buildMerchantUploadedImagePatch(field: MerchantRegistrationUploadField, path: string, assetId?: number): Record<string, ImageFieldItem[]> {
   return {
     [MERCHANT_UPLOAD_IMAGE_FIELDS[field]]: [{ url: path, assetId }]
+  }
+}
+
+export function buildMerchantShopImagesPatch(params: {
+  kind: MerchantShopImageKind
+  images: ImageFieldItem[]
+  currentFiles?: ImageFieldItem[]
+}): Record<string, ImageFieldItem[]> {
+  const fields = MERCHANT_SHOP_IMAGE_FIELDS[params.kind]
+  return {
+    [fields.imagesFieldName]: params.images,
+    [fields.filesFieldName]: buildUploadRenderImages(params.images, params.currentFiles || [])
+  }
+}
+
+export function getMerchantShopImageFilesFieldName(kind: MerchantShopImageKind): 'storefrontFiles' | 'environmentFiles' {
+  return MERCHANT_SHOP_IMAGE_FIELDS[kind].filesFieldName
+}
+
+export function getMerchantShopImageImagesFieldName(kind: MerchantShopImageKind): 'storefrontImages' | 'environmentImages' {
+  return MERCHANT_SHOP_IMAGE_FIELDS[kind].imagesFieldName
+}
+
+export function buildMerchantShopImagesPayload(params: {
+  kind: MerchantShopImageKind
+  images: ImageFieldItem[]
+  storefrontImages: ImageFieldItem[]
+  environmentImages: ImageFieldItem[]
+}) {
+  return {
+    storefront_images: params.kind === 'storefront'
+      ? toPersistedImageUrls(params.images)
+      : toPersistedImageUrls(params.storefrontImages),
+    environment_images: params.kind === 'environment'
+      ? toPersistedImageUrls(params.images)
+      : toPersistedImageUrls(params.environmentImages)
   }
 }
 
