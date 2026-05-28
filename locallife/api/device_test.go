@@ -42,21 +42,22 @@ func randomCloudPrinter(merchantID int64) db.CloudPrinter {
 
 func randomOrderDisplayConfig(merchantID int64) db.OrderDisplayConfig {
 	return db.OrderDisplayConfig{
-		ID:                util.RandomInt(1, 1000),
-		MerchantID:        merchantID,
-		EnablePrint:       true,
-		PrintTakeout:      true,
-		PrintDineIn:       true,
-		PrintReservation:  true,
-		PrintDispatchMode: "single_full",
-		PrintTriggerMode:  "accepted",
-		EnableVoice:       false,
-		VoiceTakeout:      true,
-		VoiceDineIn:       true,
-		EnableKds:         false,
-		KdsUrl:            pgtype.Text{String: "", Valid: false},
-		CreatedAt:         time.Now(),
-		UpdatedAt:         pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		ID:                   util.RandomInt(1, 1000),
+		MerchantID:           merchantID,
+		EnablePrint:          true,
+		PrintTakeout:         true,
+		PrintDineIn:          true,
+		PrintReservation:     true,
+		PrintDispatchMode:    "single_full",
+		PrintTriggerMode:     "accepted",
+		AutoAcceptPaidOrders: false,
+		EnableVoice:          false,
+		VoiceTakeout:         true,
+		VoiceDineIn:          true,
+		EnableKds:            false,
+		KdsUrl:               pgtype.Text{String: "", Valid: false},
+		CreatedAt:            time.Now(),
+		UpdatedAt:            pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	}
 }
 
@@ -1232,6 +1233,7 @@ func TestGetDisplayConfigAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, config.ID, response.ID)
 				require.Equal(t, config.EnablePrint, response.EnablePrint)
+				require.Equal(t, config.AutoAcceptPaidOrders, response.AutoAcceptPaidOrders)
 			},
 		},
 		{
@@ -1255,6 +1257,7 @@ func TestGetDisplayConfigAPI(t *testing.T) {
 				// 验证默认值
 				require.Equal(t, true, response.EnablePrint)
 				require.Equal(t, true, response.PrintTakeout)
+				require.Equal(t, false, response.AutoAcceptPaidOrders)
 				require.Equal(t, false, response.EnableVoice)
 				require.Equal(t, false, response.EnableKDS)
 			},
@@ -1325,8 +1328,9 @@ func TestUpdateDisplayConfigAPI(t *testing.T) {
 		{
 			name: "OK_UpdateExisting",
 			body: map[string]interface{}{
-				"enable_print": false,
-				"enable_voice": true,
+				"enable_print":            false,
+				"auto_accept_paid_orders": true,
+				"enable_voice":            true,
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -1341,11 +1345,16 @@ func TestUpdateDisplayConfigAPI(t *testing.T) {
 
 				updatedConfig := config
 				updatedConfig.EnablePrint = false
+				updatedConfig.AutoAcceptPaidOrders = true
 				updatedConfig.EnableVoice = true
 				store.EXPECT().
 					UpdateOrderDisplayConfig(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(updatedConfig, nil)
+					DoAndReturn(func(_ context.Context, arg db.UpdateOrderDisplayConfigParams) (db.OrderDisplayConfig, error) {
+						require.True(t, arg.AutoAcceptPaidOrders.Valid)
+						require.True(t, arg.AutoAcceptPaidOrders.Bool)
+						return updatedConfig, nil
+					}).
+					Times(1)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1353,14 +1362,16 @@ func TestUpdateDisplayConfigAPI(t *testing.T) {
 				var response getDisplayConfigResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, false, response.EnablePrint)
+				require.Equal(t, true, response.AutoAcceptPaidOrders)
 				require.Equal(t, true, response.EnableVoice)
 			},
 		},
 		{
 			name: "OK_CreateNew",
 			body: map[string]interface{}{
-				"enable_kds": true,
-				"kds_url":    "https://kds.example.com",
+				"auto_accept_paid_orders": true,
+				"enable_kds":              true,
+				"kds_url":                 "https://kds.example.com",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -1374,12 +1385,16 @@ func TestUpdateDisplayConfigAPI(t *testing.T) {
 					Return(db.OrderDisplayConfig{}, db.ErrRecordNotFound)
 
 				newConfig := config
+				newConfig.AutoAcceptPaidOrders = true
 				newConfig.EnableKds = true
 				newConfig.KdsUrl = pgtype.Text{String: "https://kds.example.com", Valid: true}
 				store.EXPECT().
 					CreateOrderDisplayConfig(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(newConfig, nil)
+					DoAndReturn(func(_ context.Context, arg db.CreateOrderDisplayConfigParams) (db.OrderDisplayConfig, error) {
+						require.True(t, arg.AutoAcceptPaidOrders)
+						return newConfig, nil
+					}).
+					Times(1)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

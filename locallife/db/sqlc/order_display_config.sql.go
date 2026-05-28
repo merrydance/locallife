@@ -20,29 +20,31 @@ INSERT INTO order_display_configs (
     print_reservation,
     print_dispatch_mode,
     print_trigger_mode,
+    auto_accept_paid_orders,
     enable_voice,
     voice_takeout,
     voice_dine_in,
     enable_kds,
     kds_url
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
-) RETURNING id, merchant_id, enable_print, print_takeout, print_dine_in, print_reservation, enable_voice, voice_takeout, voice_dine_in, enable_kds, kds_url, created_at, updated_at, print_dispatch_mode, print_trigger_mode
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+) RETURNING id, merchant_id, enable_print, print_takeout, print_dine_in, print_reservation, enable_voice, voice_takeout, voice_dine_in, enable_kds, kds_url, created_at, updated_at, print_dispatch_mode, print_trigger_mode, auto_accept_paid_orders
 `
 
 type CreateOrderDisplayConfigParams struct {
-	MerchantID        int64       `json:"merchant_id"`
-	EnablePrint       bool        `json:"enable_print"`
-	PrintTakeout      bool        `json:"print_takeout"`
-	PrintDineIn       bool        `json:"print_dine_in"`
-	PrintReservation  bool        `json:"print_reservation"`
-	PrintDispatchMode string      `json:"print_dispatch_mode"`
-	PrintTriggerMode  string      `json:"print_trigger_mode"`
-	EnableVoice       bool        `json:"enable_voice"`
-	VoiceTakeout      bool        `json:"voice_takeout"`
-	VoiceDineIn       bool        `json:"voice_dine_in"`
-	EnableKds         bool        `json:"enable_kds"`
-	KdsUrl            pgtype.Text `json:"kds_url"`
+	MerchantID           int64       `json:"merchant_id"`
+	EnablePrint          bool        `json:"enable_print"`
+	PrintTakeout         bool        `json:"print_takeout"`
+	PrintDineIn          bool        `json:"print_dine_in"`
+	PrintReservation     bool        `json:"print_reservation"`
+	PrintDispatchMode    string      `json:"print_dispatch_mode"`
+	PrintTriggerMode     string      `json:"print_trigger_mode"`
+	AutoAcceptPaidOrders bool        `json:"auto_accept_paid_orders"`
+	EnableVoice          bool        `json:"enable_voice"`
+	VoiceTakeout         bool        `json:"voice_takeout"`
+	VoiceDineIn          bool        `json:"voice_dine_in"`
+	EnableKds            bool        `json:"enable_kds"`
+	KdsUrl               pgtype.Text `json:"kds_url"`
 }
 
 func (q *Queries) CreateOrderDisplayConfig(ctx context.Context, arg CreateOrderDisplayConfigParams) (OrderDisplayConfig, error) {
@@ -54,6 +56,7 @@ func (q *Queries) CreateOrderDisplayConfig(ctx context.Context, arg CreateOrderD
 		arg.PrintReservation,
 		arg.PrintDispatchMode,
 		arg.PrintTriggerMode,
+		arg.AutoAcceptPaidOrders,
 		arg.EnableVoice,
 		arg.VoiceTakeout,
 		arg.VoiceDineIn,
@@ -77,12 +80,13 @@ func (q *Queries) CreateOrderDisplayConfig(ctx context.Context, arg CreateOrderD
 		&i.UpdatedAt,
 		&i.PrintDispatchMode,
 		&i.PrintTriggerMode,
+		&i.AutoAcceptPaidOrders,
 	)
 	return i, err
 }
 
 const getOrderDisplayConfig = `-- name: GetOrderDisplayConfig :one
-SELECT id, merchant_id, enable_print, print_takeout, print_dine_in, print_reservation, enable_voice, voice_takeout, voice_dine_in, enable_kds, kds_url, created_at, updated_at, print_dispatch_mode, print_trigger_mode FROM order_display_configs
+SELECT id, merchant_id, enable_print, print_takeout, print_dine_in, print_reservation, enable_voice, voice_takeout, voice_dine_in, enable_kds, kds_url, created_at, updated_at, print_dispatch_mode, print_trigger_mode, auto_accept_paid_orders FROM order_display_configs
 WHERE id = $1 LIMIT 1
 `
 
@@ -105,12 +109,13 @@ func (q *Queries) GetOrderDisplayConfig(ctx context.Context, id int64) (OrderDis
 		&i.UpdatedAt,
 		&i.PrintDispatchMode,
 		&i.PrintTriggerMode,
+		&i.AutoAcceptPaidOrders,
 	)
 	return i, err
 }
 
 const getOrderDisplayConfigByMerchant = `-- name: GetOrderDisplayConfigByMerchant :one
-SELECT id, merchant_id, enable_print, print_takeout, print_dine_in, print_reservation, enable_voice, voice_takeout, voice_dine_in, enable_kds, kds_url, created_at, updated_at, print_dispatch_mode, print_trigger_mode FROM order_display_configs
+SELECT id, merchant_id, enable_print, print_takeout, print_dine_in, print_reservation, enable_voice, voice_takeout, voice_dine_in, enable_kds, kds_url, created_at, updated_at, print_dispatch_mode, print_trigger_mode, auto_accept_paid_orders FROM order_display_configs
 WHERE merchant_id = $1 LIMIT 1
 `
 
@@ -133,6 +138,7 @@ func (q *Queries) GetOrderDisplayConfigByMerchant(ctx context.Context, merchantI
 		&i.UpdatedAt,
 		&i.PrintDispatchMode,
 		&i.PrintTriggerMode,
+		&i.AutoAcceptPaidOrders,
 	)
 	return i, err
 }
@@ -146,29 +152,31 @@ SET
     print_reservation = COALESCE($5, print_reservation),
     print_dispatch_mode = COALESCE($6, print_dispatch_mode),
     print_trigger_mode = COALESCE($7, print_trigger_mode),
-    enable_voice = COALESCE($8, enable_voice),
-    voice_takeout = COALESCE($9, voice_takeout),
-    voice_dine_in = COALESCE($10, voice_dine_in),
-    enable_kds = COALESCE($11, enable_kds),
-    kds_url = COALESCE($12, kds_url),
+    auto_accept_paid_orders = COALESCE($8, auto_accept_paid_orders),
+    enable_voice = COALESCE($9, enable_voice),
+    voice_takeout = COALESCE($10, voice_takeout),
+    voice_dine_in = COALESCE($11, voice_dine_in),
+    enable_kds = COALESCE($12, enable_kds),
+    kds_url = COALESCE($13, kds_url),
     updated_at = now()
 WHERE merchant_id = $1
-RETURNING id, merchant_id, enable_print, print_takeout, print_dine_in, print_reservation, enable_voice, voice_takeout, voice_dine_in, enable_kds, kds_url, created_at, updated_at, print_dispatch_mode, print_trigger_mode
+RETURNING id, merchant_id, enable_print, print_takeout, print_dine_in, print_reservation, enable_voice, voice_takeout, voice_dine_in, enable_kds, kds_url, created_at, updated_at, print_dispatch_mode, print_trigger_mode, auto_accept_paid_orders
 `
 
 type UpdateOrderDisplayConfigParams struct {
-	MerchantID        int64       `json:"merchant_id"`
-	EnablePrint       pgtype.Bool `json:"enable_print"`
-	PrintTakeout      pgtype.Bool `json:"print_takeout"`
-	PrintDineIn       pgtype.Bool `json:"print_dine_in"`
-	PrintReservation  pgtype.Bool `json:"print_reservation"`
-	PrintDispatchMode pgtype.Text `json:"print_dispatch_mode"`
-	PrintTriggerMode  pgtype.Text `json:"print_trigger_mode"`
-	EnableVoice       pgtype.Bool `json:"enable_voice"`
-	VoiceTakeout      pgtype.Bool `json:"voice_takeout"`
-	VoiceDineIn       pgtype.Bool `json:"voice_dine_in"`
-	EnableKds         pgtype.Bool `json:"enable_kds"`
-	KdsUrl            pgtype.Text `json:"kds_url"`
+	MerchantID           int64       `json:"merchant_id"`
+	EnablePrint          pgtype.Bool `json:"enable_print"`
+	PrintTakeout         pgtype.Bool `json:"print_takeout"`
+	PrintDineIn          pgtype.Bool `json:"print_dine_in"`
+	PrintReservation     pgtype.Bool `json:"print_reservation"`
+	PrintDispatchMode    pgtype.Text `json:"print_dispatch_mode"`
+	PrintTriggerMode     pgtype.Text `json:"print_trigger_mode"`
+	AutoAcceptPaidOrders pgtype.Bool `json:"auto_accept_paid_orders"`
+	EnableVoice          pgtype.Bool `json:"enable_voice"`
+	VoiceTakeout         pgtype.Bool `json:"voice_takeout"`
+	VoiceDineIn          pgtype.Bool `json:"voice_dine_in"`
+	EnableKds            pgtype.Bool `json:"enable_kds"`
+	KdsUrl               pgtype.Text `json:"kds_url"`
 }
 
 func (q *Queries) UpdateOrderDisplayConfig(ctx context.Context, arg UpdateOrderDisplayConfigParams) (OrderDisplayConfig, error) {
@@ -180,6 +188,7 @@ func (q *Queries) UpdateOrderDisplayConfig(ctx context.Context, arg UpdateOrderD
 		arg.PrintReservation,
 		arg.PrintDispatchMode,
 		arg.PrintTriggerMode,
+		arg.AutoAcceptPaidOrders,
 		arg.EnableVoice,
 		arg.VoiceTakeout,
 		arg.VoiceDineIn,
@@ -203,6 +212,7 @@ func (q *Queries) UpdateOrderDisplayConfig(ctx context.Context, arg UpdateOrderD
 		&i.UpdatedAt,
 		&i.PrintDispatchMode,
 		&i.PrintTriggerMode,
+		&i.AutoAcceptPaidOrders,
 	)
 	return i, err
 }
@@ -216,13 +226,14 @@ INSERT INTO order_display_configs (
     print_reservation,
     print_dispatch_mode,
     print_trigger_mode,
+    auto_accept_paid_orders,
     enable_voice,
     voice_takeout,
     voice_dine_in,
     enable_kds,
     kds_url
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
 )
 ON CONFLICT (merchant_id) DO UPDATE SET
     enable_print = EXCLUDED.enable_print,
@@ -231,28 +242,30 @@ ON CONFLICT (merchant_id) DO UPDATE SET
     print_reservation = EXCLUDED.print_reservation,
     print_dispatch_mode = EXCLUDED.print_dispatch_mode,
     print_trigger_mode = EXCLUDED.print_trigger_mode,
+    auto_accept_paid_orders = EXCLUDED.auto_accept_paid_orders,
     enable_voice = EXCLUDED.enable_voice,
     voice_takeout = EXCLUDED.voice_takeout,
     voice_dine_in = EXCLUDED.voice_dine_in,
     enable_kds = EXCLUDED.enable_kds,
     kds_url = EXCLUDED.kds_url,
     updated_at = now()
-RETURNING id, merchant_id, enable_print, print_takeout, print_dine_in, print_reservation, enable_voice, voice_takeout, voice_dine_in, enable_kds, kds_url, created_at, updated_at, print_dispatch_mode, print_trigger_mode
+RETURNING id, merchant_id, enable_print, print_takeout, print_dine_in, print_reservation, enable_voice, voice_takeout, voice_dine_in, enable_kds, kds_url, created_at, updated_at, print_dispatch_mode, print_trigger_mode, auto_accept_paid_orders
 `
 
 type UpsertOrderDisplayConfigParams struct {
-	MerchantID        int64       `json:"merchant_id"`
-	EnablePrint       bool        `json:"enable_print"`
-	PrintTakeout      bool        `json:"print_takeout"`
-	PrintDineIn       bool        `json:"print_dine_in"`
-	PrintReservation  bool        `json:"print_reservation"`
-	PrintDispatchMode string      `json:"print_dispatch_mode"`
-	PrintTriggerMode  string      `json:"print_trigger_mode"`
-	EnableVoice       bool        `json:"enable_voice"`
-	VoiceTakeout      bool        `json:"voice_takeout"`
-	VoiceDineIn       bool        `json:"voice_dine_in"`
-	EnableKds         bool        `json:"enable_kds"`
-	KdsUrl            pgtype.Text `json:"kds_url"`
+	MerchantID           int64       `json:"merchant_id"`
+	EnablePrint          bool        `json:"enable_print"`
+	PrintTakeout         bool        `json:"print_takeout"`
+	PrintDineIn          bool        `json:"print_dine_in"`
+	PrintReservation     bool        `json:"print_reservation"`
+	PrintDispatchMode    string      `json:"print_dispatch_mode"`
+	PrintTriggerMode     string      `json:"print_trigger_mode"`
+	AutoAcceptPaidOrders bool        `json:"auto_accept_paid_orders"`
+	EnableVoice          bool        `json:"enable_voice"`
+	VoiceTakeout         bool        `json:"voice_takeout"`
+	VoiceDineIn          bool        `json:"voice_dine_in"`
+	EnableKds            bool        `json:"enable_kds"`
+	KdsUrl               pgtype.Text `json:"kds_url"`
 }
 
 func (q *Queries) UpsertOrderDisplayConfig(ctx context.Context, arg UpsertOrderDisplayConfigParams) (OrderDisplayConfig, error) {
@@ -264,6 +277,7 @@ func (q *Queries) UpsertOrderDisplayConfig(ctx context.Context, arg UpsertOrderD
 		arg.PrintReservation,
 		arg.PrintDispatchMode,
 		arg.PrintTriggerMode,
+		arg.AutoAcceptPaidOrders,
 		arg.EnableVoice,
 		arg.VoiceTakeout,
 		arg.VoiceDineIn,
@@ -287,6 +301,7 @@ func (q *Queries) UpsertOrderDisplayConfig(ctx context.Context, arg UpsertOrderD
 		&i.UpdatedAt,
 		&i.PrintDispatchMode,
 		&i.PrintTriggerMode,
+		&i.AutoAcceptPaidOrders,
 	)
 	return i, err
 }

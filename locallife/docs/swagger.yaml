@@ -3392,6 +3392,8 @@ definitions:
     type: object
   api.getDisplayConfigResponse:
     properties:
+      auto_accept_paid_orders:
+        type: boolean
       created_at:
         type: string
       enable_kds:
@@ -9200,6 +9202,8 @@ definitions:
     type: object
   api.updateDisplayConfigRequest:
     properties:
+      auto_accept_paid_orders:
+        type: boolean
       enable_kds:
         type: boolean
       enable_print:

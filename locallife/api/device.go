@@ -688,21 +688,22 @@ func interpretFeieyunPrinterStatus(status string) (bool, bool) {
 // ==================== 订单展示配置 ====================
 
 type getDisplayConfigResponse struct {
-	ID                int64  `json:"id"`
-	MerchantID        int64  `json:"merchant_id"`
-	EnablePrint       bool   `json:"enable_print"`
-	PrintTakeout      bool   `json:"print_takeout"`
-	PrintDineIn       bool   `json:"print_dine_in"`
-	PrintReservation  bool   `json:"print_reservation"`
-	PrintDispatchMode string `json:"print_dispatch_mode"`
-	PrintTriggerMode  string `json:"print_trigger_mode"`
-	EnableVoice       bool   `json:"enable_voice"`
-	VoiceTakeout      bool   `json:"voice_takeout"`
-	VoiceDineIn       bool   `json:"voice_dine_in"`
-	EnableKDS         bool   `json:"enable_kds"`
-	KdsURL            string `json:"kds_url,omitempty"`
-	CreatedAt         string `json:"created_at"`
-	UpdatedAt         string `json:"updated_at,omitempty"`
+	ID                   int64  `json:"id"`
+	MerchantID           int64  `json:"merchant_id"`
+	EnablePrint          bool   `json:"enable_print"`
+	PrintTakeout         bool   `json:"print_takeout"`
+	PrintDineIn          bool   `json:"print_dine_in"`
+	PrintReservation     bool   `json:"print_reservation"`
+	PrintDispatchMode    string `json:"print_dispatch_mode"`
+	PrintTriggerMode     string `json:"print_trigger_mode"`
+	AutoAcceptPaidOrders bool   `json:"auto_accept_paid_orders"`
+	EnableVoice          bool   `json:"enable_voice"`
+	VoiceTakeout         bool   `json:"voice_takeout"`
+	VoiceDineIn          bool   `json:"voice_dine_in"`
+	EnableKDS            bool   `json:"enable_kds"`
+	KdsURL               string `json:"kds_url,omitempty"`
+	CreatedAt            string `json:"created_at"`
+	UpdatedAt            string `json:"updated_at,omitempty"`
 }
 
 // getDisplayConfig 获取订单展示配置
@@ -738,17 +739,18 @@ func (server *Server) getDisplayConfig(ctx *gin.Context) {
 		if isNotFoundError(err) {
 			// 返回默认配置
 			ctx.JSON(http.StatusOK, getDisplayConfigResponse{
-				MerchantID:        merchant.ID,
-				EnablePrint:       true,
-				PrintTakeout:      true,
-				PrintDineIn:       true,
-				PrintReservation:  true,
-				PrintDispatchMode: "single_full",
-				PrintTriggerMode:  "accepted",
-				EnableVoice:       false,
-				VoiceTakeout:      true,
-				VoiceDineIn:       true,
-				EnableKDS:         false,
+				MerchantID:           merchant.ID,
+				EnablePrint:          true,
+				PrintTakeout:         true,
+				PrintDineIn:          true,
+				PrintReservation:     true,
+				PrintDispatchMode:    "single_full",
+				PrintTriggerMode:     "accepted",
+				AutoAcceptPaidOrders: false,
+				EnableVoice:          false,
+				VoiceTakeout:         true,
+				VoiceDineIn:          true,
+				EnableKDS:            false,
 			})
 			return
 		}
@@ -767,21 +769,22 @@ func (server *Server) getDisplayConfig(ctx *gin.Context) {
 	}
 
 	resp := getDisplayConfigResponse{
-		ID:                config.ID,
-		MerchantID:        config.MerchantID,
-		EnablePrint:       config.EnablePrint,
-		PrintTakeout:      config.PrintTakeout,
-		PrintDineIn:       config.PrintDineIn,
-		PrintReservation:  config.PrintReservation,
-		PrintDispatchMode: config.PrintDispatchMode,
-		PrintTriggerMode:  config.PrintTriggerMode,
-		EnableVoice:       config.EnableVoice,
-		VoiceTakeout:      config.VoiceTakeout,
-		VoiceDineIn:       config.VoiceDineIn,
-		EnableKDS:         config.EnableKds,
-		KdsURL:            kdsURL,
-		CreatedAt:         config.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:         updatedAt,
+		ID:                   config.ID,
+		MerchantID:           config.MerchantID,
+		EnablePrint:          config.EnablePrint,
+		PrintTakeout:         config.PrintTakeout,
+		PrintDineIn:          config.PrintDineIn,
+		PrintReservation:     config.PrintReservation,
+		PrintDispatchMode:    config.PrintDispatchMode,
+		PrintTriggerMode:     config.PrintTriggerMode,
+		AutoAcceptPaidOrders: config.AutoAcceptPaidOrders,
+		EnableVoice:          config.EnableVoice,
+		VoiceTakeout:         config.VoiceTakeout,
+		VoiceDineIn:          config.VoiceDineIn,
+		EnableKDS:            config.EnableKds,
+		KdsURL:               kdsURL,
+		CreatedAt:            config.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:            updatedAt,
 	}
 
 	ctx.JSON(http.StatusOK, resp)
@@ -790,17 +793,18 @@ func (server *Server) getDisplayConfig(ctx *gin.Context) {
 // ==================== 更新订单展示配置 ====================
 
 type updateDisplayConfigRequest struct {
-	EnablePrint       *bool   `json:"enable_print"`
-	PrintTakeout      *bool   `json:"print_takeout"`
-	PrintDineIn       *bool   `json:"print_dine_in"`
-	PrintReservation  *bool   `json:"print_reservation"`
-	PrintDispatchMode *string `json:"print_dispatch_mode" binding:"omitempty,oneof=single_full split"`
-	PrintTriggerMode  *string `json:"print_trigger_mode" binding:"omitempty,oneof=accepted ready manual"`
-	EnableVoice       *bool   `json:"enable_voice"`
-	VoiceTakeout      *bool   `json:"voice_takeout"`
-	VoiceDineIn       *bool   `json:"voice_dine_in"`
-	EnableKDS         *bool   `json:"enable_kds"`
-	KdsURL            *string `json:"kds_url" binding:"omitempty,url,max=500"`
+	EnablePrint          *bool   `json:"enable_print"`
+	PrintTakeout         *bool   `json:"print_takeout"`
+	PrintDineIn          *bool   `json:"print_dine_in"`
+	PrintReservation     *bool   `json:"print_reservation"`
+	PrintDispatchMode    *string `json:"print_dispatch_mode" binding:"omitempty,oneof=single_full split"`
+	PrintTriggerMode     *string `json:"print_trigger_mode" binding:"omitempty,oneof=accepted ready manual"`
+	AutoAcceptPaidOrders *bool   `json:"auto_accept_paid_orders"`
+	EnableVoice          *bool   `json:"enable_voice"`
+	VoiceTakeout         *bool   `json:"voice_takeout"`
+	VoiceDineIn          *bool   `json:"voice_dine_in"`
+	EnableKDS            *bool   `json:"enable_kds"`
+	KdsURL               *string `json:"kds_url" binding:"omitempty,url,max=500"`
 }
 
 // updateDisplayConfig 更新订单展示配置
@@ -850,17 +854,18 @@ func (server *Server) updateDisplayConfig(ctx *gin.Context) {
 	if configNotFound {
 		// 创建新配置
 		createParams := db.CreateOrderDisplayConfigParams{
-			MerchantID:        merchant.ID,
-			EnablePrint:       true,
-			PrintTakeout:      true,
-			PrintDineIn:       true,
-			PrintReservation:  true,
-			PrintDispatchMode: "single_full",
-			PrintTriggerMode:  "accepted",
-			EnableVoice:       false,
-			VoiceTakeout:      true,
-			VoiceDineIn:       true,
-			EnableKds:         false,
+			MerchantID:           merchant.ID,
+			EnablePrint:          true,
+			PrintTakeout:         true,
+			PrintDineIn:          true,
+			PrintReservation:     true,
+			PrintDispatchMode:    "single_full",
+			PrintTriggerMode:     "accepted",
+			AutoAcceptPaidOrders: false,
+			EnableVoice:          false,
+			VoiceTakeout:         true,
+			VoiceDineIn:          true,
+			EnableKds:            false,
 		}
 
 		// 应用请求中的值
@@ -881,6 +886,9 @@ func (server *Server) updateDisplayConfig(ctx *gin.Context) {
 		}
 		if req.PrintTriggerMode != nil {
 			createParams.PrintTriggerMode = *req.PrintTriggerMode
+		}
+		if req.AutoAcceptPaidOrders != nil {
+			createParams.AutoAcceptPaidOrders = *req.AutoAcceptPaidOrders
 		}
 		if req.EnableVoice != nil {
 			createParams.EnableVoice = *req.EnableVoice
@@ -927,6 +935,9 @@ func (server *Server) updateDisplayConfig(ctx *gin.Context) {
 		if req.PrintTriggerMode != nil {
 			updateParams.PrintTriggerMode = pgtype.Text{String: *req.PrintTriggerMode, Valid: true}
 		}
+		if req.AutoAcceptPaidOrders != nil {
+			updateParams.AutoAcceptPaidOrders = pgtype.Bool{Bool: *req.AutoAcceptPaidOrders, Valid: true}
+		}
 		if req.EnableVoice != nil {
 			updateParams.EnableVoice = pgtype.Bool{Bool: *req.EnableVoice, Valid: true}
 		}
@@ -961,21 +972,22 @@ func (server *Server) updateDisplayConfig(ctx *gin.Context) {
 	}
 
 	resp := getDisplayConfigResponse{
-		ID:                config.ID,
-		MerchantID:        config.MerchantID,
-		EnablePrint:       config.EnablePrint,
-		PrintTakeout:      config.PrintTakeout,
-		PrintDineIn:       config.PrintDineIn,
-		PrintReservation:  config.PrintReservation,
-		PrintDispatchMode: config.PrintDispatchMode,
-		PrintTriggerMode:  config.PrintTriggerMode,
-		EnableVoice:       config.EnableVoice,
-		VoiceTakeout:      config.VoiceTakeout,
-		VoiceDineIn:       config.VoiceDineIn,
-		EnableKDS:         config.EnableKds,
-		KdsURL:            kdsURL,
-		CreatedAt:         config.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:         updatedAt,
+		ID:                   config.ID,
+		MerchantID:           config.MerchantID,
+		EnablePrint:          config.EnablePrint,
+		PrintTakeout:         config.PrintTakeout,
+		PrintDineIn:          config.PrintDineIn,
+		PrintReservation:     config.PrintReservation,
+		PrintDispatchMode:    config.PrintDispatchMode,
+		PrintTriggerMode:     config.PrintTriggerMode,
+		AutoAcceptPaidOrders: config.AutoAcceptPaidOrders,
+		EnableVoice:          config.EnableVoice,
+		VoiceTakeout:         config.VoiceTakeout,
+		VoiceDineIn:          config.VoiceDineIn,
+		EnableKDS:            config.EnableKds,
+		KdsURL:               kdsURL,
+		CreatedAt:            config.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:            updatedAt,
 	}
 
 	ctx.JSON(http.StatusOK, resp)

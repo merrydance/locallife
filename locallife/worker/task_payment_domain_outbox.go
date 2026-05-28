@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/rs/zerolog/log"
 )
 
@@ -163,6 +165,11 @@ func (processor *RedisTaskProcessor) dispatchOrderPaymentSucceededOutbox(ctx con
 		return fmt.Errorf("task distributor not configured")
 	}
 
+	order, err = processor.autoAcceptPaidOrderForPrinting(ctx, order)
+	if err != nil {
+		return err
+	}
+
 	result, err := processor.loadOrderPaymentNotificationResult(ctx, order)
 	if err != nil {
 		return err
@@ -171,6 +178,110 @@ func (processor *RedisTaskProcessor) dispatchOrderPaymentSucceededOutbox(ctx con
 		return err
 	}
 	return nil
+}
+
+func (processor *RedisTaskProcessor) autoAcceptPaidOrderForPrinting(ctx context.Context, order db.Order) (db.Order, error) {
+	if order.Status != db.OrderStatusPaid {
+		if shouldRetryAcceptedPrintForOrder(order) {
+			return order, processor.scheduleAutoAcceptedOrderPrint(ctx, order)
+		}
+		return order, nil
+	}
+
+	config, err := processor.store.GetOrderDisplayConfigByMerchant(ctx, order.MerchantID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return order, nil
+		}
+		return order, fmt.Errorf("get order display config for auto accept: %w", err)
+	}
+	if !config.AutoAcceptPaidOrders || !config.EnablePrint || !displayConfigSupportsOrder(config, order.OrderType) || !printTriggerMatches(config.PrintTriggerMode, printTriggerAccepted) {
+		return order, nil
+	}
+
+	printers, err := processor.store.ListActiveCloudPrintersByMerchant(ctx, order.MerchantID)
+	if err != nil {
+		return order, fmt.Errorf("list active cloud printers for auto accept: %w", err)
+	}
+	if !hasAutoAcceptPrinterForOrder(printers, order.OrderType) {
+		return order, nil
+	}
+
+	result, err := logic.AcceptMerchantOrder(ctx, processor.store, logic.MerchantOrderUpdateInput{
+		MerchantID: order.MerchantID,
+		OrderID:    order.ID,
+		OperatorID: order.MerchantID,
+	})
+	if err != nil {
+		if reqErr, ok := err.(*logic.RequestError); ok && reqErr.Status == http.StatusBadRequest {
+			log.Info().Err(err).Int64("order_id", order.ID).Msg("skip auto accept because order is no longer acceptable")
+			return order, nil
+		}
+		return order, fmt.Errorf("auto accept paid order: %w", err)
+	}
+
+	if err := processor.distributeAutoAcceptedOrderPrint(ctx, result.Order); err != nil {
+		return result.Order, fmt.Errorf("schedule auto accepted order print: %w", err)
+	}
+
+	log.Info().Int64("order_id", order.ID).Int64("merchant_id", order.MerchantID).Msg("auto accepted paid order for printing")
+	return result.Order, nil
+}
+
+func shouldRetryAcceptedPrintForOrder(order db.Order) bool {
+	switch order.Status {
+	case db.OrderStatusPreparing, db.OrderStatusCourierAccepted:
+		return true
+	default:
+		return false
+	}
+}
+
+func (processor *RedisTaskProcessor) scheduleAutoAcceptedOrderPrint(ctx context.Context, order db.Order) error {
+	config, err := processor.store.GetOrderDisplayConfigByMerchant(ctx, order.MerchantID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return nil
+		}
+		return fmt.Errorf("get order display config for auto accepted print: %w", err)
+	}
+	if !config.AutoAcceptPaidOrders || !config.EnablePrint || !displayConfigSupportsOrder(config, order.OrderType) || !printTriggerMatches(config.PrintTriggerMode, printTriggerAccepted) {
+		return nil
+	}
+
+	printers, err := processor.store.ListActiveCloudPrintersByMerchant(ctx, order.MerchantID)
+	if err != nil {
+		return fmt.Errorf("list active cloud printers for auto accepted print: %w", err)
+	}
+	if !hasAutoAcceptPrinterForOrder(printers, order.OrderType) {
+		return nil
+	}
+
+	return processor.distributeAutoAcceptedOrderPrint(ctx, order)
+}
+
+func (processor *RedisTaskProcessor) distributeAutoAcceptedOrderPrint(ctx context.Context, order db.Order) error {
+	return processor.distributor.DistributeTaskPrintOrder(ctx, &PrintOrderPayload{
+		OrderID: order.ID,
+		Trigger: printTriggerAccepted,
+		TaskKey: stableOrderPrintTaskKey(order.ID, printTriggerAccepted),
+	})
+}
+
+func stableOrderPrintTaskKey(orderID int64, trigger string) string {
+	return fmt.Sprintf("order:%d:%s", orderID, trigger)
+}
+
+func hasAutoAcceptPrinterForOrder(printers []db.CloudPrinter, orderType string) bool {
+	for _, printer := range printers {
+		if !printer.IsActive || printer.PrinterType != printerTypeFeieyun {
+			continue
+		}
+		if printerSupportsOrder(printer, orderType) {
+			return true
+		}
+	}
+	return false
 }
 
 func (processor *RedisTaskProcessor) dispatchReservationPaymentSucceededOutbox(ctx context.Context, outbox db.PaymentDomainOutbox) error {

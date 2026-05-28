@@ -1660,21 +1660,22 @@ type Order struct {
 }
 
 type OrderDisplayConfig struct {
-	ID                int64              `json:"id"`
-	MerchantID        int64              `json:"merchant_id"`
-	EnablePrint       bool               `json:"enable_print"`
-	PrintTakeout      bool               `json:"print_takeout"`
-	PrintDineIn       bool               `json:"print_dine_in"`
-	PrintReservation  bool               `json:"print_reservation"`
-	EnableVoice       bool               `json:"enable_voice"`
-	VoiceTakeout      bool               `json:"voice_takeout"`
-	VoiceDineIn       bool               `json:"voice_dine_in"`
-	EnableKds         bool               `json:"enable_kds"`
-	KdsUrl            pgtype.Text        `json:"kds_url"`
-	CreatedAt         time.Time          `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	PrintDispatchMode string             `json:"print_dispatch_mode"`
-	PrintTriggerMode  string             `json:"print_trigger_mode"`
+	ID                   int64              `json:"id"`
+	MerchantID           int64              `json:"merchant_id"`
+	EnablePrint          bool               `json:"enable_print"`
+	PrintTakeout         bool               `json:"print_takeout"`
+	PrintDineIn          bool               `json:"print_dine_in"`
+	PrintReservation     bool               `json:"print_reservation"`
+	EnableVoice          bool               `json:"enable_voice"`
+	VoiceTakeout         bool               `json:"voice_takeout"`
+	VoiceDineIn          bool               `json:"voice_dine_in"`
+	EnableKds            bool               `json:"enable_kds"`
+	KdsUrl               pgtype.Text        `json:"kds_url"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	PrintDispatchMode    string             `json:"print_dispatch_mode"`
+	PrintTriggerMode     string             `json:"print_trigger_mode"`
+	AutoAcceptPaidOrders bool               `json:"auto_accept_paid_orders"`
 }
 
 type OrderItem struct {

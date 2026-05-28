@@ -36104,6 +36104,9 @@ const docTemplate = `{
         "api.getDisplayConfigResponse": {
             "type": "object",
             "properties": {
+                "auto_accept_paid_orders": {
+                    "type": "boolean"
+                },
                 "created_at": {
                     "type": "string"
                 },
@@ -44741,6 +44744,9 @@ const docTemplate = `{
         "api.updateDisplayConfigRequest": {
             "type": "object",
             "properties": {
+                "auto_accept_paid_orders": {
+                    "type": "boolean"
+                },
                 "enable_kds": {
                     "type": "boolean"
                 },
