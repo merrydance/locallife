@@ -51,6 +51,7 @@ func (s *refundServiceTaskSchedulerStub) ScheduleOrderPrint(ctx context.Context,
 
 type refundServiceIDGeneratorStub struct {
 	outRefundNo string
+	err         error
 }
 
 func (s refundServiceIDGeneratorStub) OrderNo(now time.Time) (string, error) {
@@ -66,7 +67,19 @@ func (s refundServiceIDGeneratorStub) OutTradeNo(prefix string, now time.Time) (
 }
 
 func (s refundServiceIDGeneratorStub) OutRefundNo(now time.Time) (string, error) {
+	if s.err != nil {
+		return "", s.err
+	}
 	return s.outRefundNo, nil
+}
+
+func expectNoRefundCreateReplay(t *testing.T, store *mockdb.MockStore, input CreateRefundOrderInput) {
+	t.Helper()
+	store.EXPECT().GetRefundRequestIdempotency(gomock.Any(), db.GetRefundRequestIdempotencyParams{
+		OperationScope: refundCreateIdempotencyScope,
+		ActorUserID:    input.ActorUserID,
+		IdempotencyKey: input.IdempotencyKey,
+	}).Return(db.RefundRequestIdempotency{}, db.ErrRecordNotFound)
 }
 
 func TestRefundServiceBaofuRefundBusinessOwnerUsesReservationForAddonPayments(t *testing.T) {
@@ -104,8 +117,17 @@ func TestCreateRefundOrder_BaofuShareStartedReturnsSettlementBusinessError(t *te
 		OrderID:               pgtype.Int8{Int64: 633, Valid: true},
 	}
 	order := db.Order{ID: 633, MerchantID: merchant.ID}
+	input := CreateRefundOrderInput{
+		ActorUserID:    merchant.OwnerUserID,
+		PaymentOrderID: paymentOrder.ID,
+		RefundType:     "full",
+		RefundAmount:   300,
+		RefundReason:   "用户申请退款",
+		IdempotencyKey: "refund-share-started",
+	}
 
 	store.EXPECT().GetMerchantByOwner(gomock.Any(), merchant.OwnerUserID).Return(merchant, nil)
+	expectNoRefundCreateReplay(t, store, input)
 	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
 	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
 	store.EXPECT().
@@ -117,19 +139,136 @@ func TestCreateRefundOrder_BaofuShareStartedReturnsSettlementBusinessError(t *te
 			HasStartedProfitSharing: true,
 		}, nil)
 
-	_, err := service.CreateRefundOrder(context.Background(), CreateRefundOrderInput{
-		ActorUserID:    merchant.OwnerUserID,
-		PaymentOrderID: paymentOrder.ID,
-		RefundType:     "full",
-		RefundAmount:   300,
-		RefundReason:   "用户申请退款",
-	})
+	_, err := service.CreateRefundOrder(context.Background(), input)
 	require.Error(t, err)
 
 	var requestErr *RequestError
 	require.True(t, errors.As(err, &requestErr))
 	require.Equal(t, http.StatusBadRequest, requestErr.Status)
 	require.EqualError(t, requestErr.Err, "订单已进入结算分账流程，不支持退款")
+}
+
+func TestCreateRefundOrder_RequiresIdempotencyKey(t *testing.T) {
+	service := NewRefundService(
+		mockdb.NewMockStore(gomock.NewController(t)),
+		nil,
+		nil,
+		nil,
+		refundServiceIDGeneratorStub{outRefundNo: "RF-missing-key"},
+	)
+
+	_, err := service.CreateRefundOrder(context.Background(), CreateRefundOrderInput{
+		ActorUserID:    1,
+		PaymentOrderID: 2,
+		RefundType:     "full",
+		RefundAmount:   300,
+		RefundReason:   "用户申请退款",
+	})
+
+	requestErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusBadRequest, requestErr.Status)
+	require.Equal(t, "Idempotency-Key header is required", requestErr.Err.Error())
+}
+
+func TestCreateRefundOrder_IdempotencyReplayReturnsExistingRefundWithoutProviderCall(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	baofuClient := &fakeBaofuRefundAggregateClient{
+		refundResult: &aggregatecontracts.RefundResult{
+			OutTradeNo:  "unexpected-provider-call",
+			TradeNo:     "unexpected-provider-call",
+			RefundState: aggregatecontracts.RefundStateAccepted,
+			ResultCode:  "SUCCESS",
+		},
+	}
+	service := NewRefundService(
+		store,
+		NewDefaultPaymentFacadeWithBaofuAggregate(store, nil, baofuClient, BaofuAggregateFacadeConfig{
+			CollectMerchantID: "102004465",
+			CollectTerminalID: "200005200",
+			RefundNotifyURL:   "https://api.example.com/v1/webhooks/baofu/refund",
+		}),
+		nil,
+		nil,
+		refundServiceIDGeneratorStub{err: errors.New("generator should not be called for idempotent replay")},
+	)
+
+	merchant := db.Merchant{ID: 745, OwnerUserID: 168}
+	paymentOrderID := int64(723)
+	existingRefund := db.RefundOrder{ID: 756, PaymentOrderID: paymentOrderID, OutRefundNo: "RF-idempotency-replay-existing", Status: "processing"}
+	input := CreateRefundOrderInput{
+		ActorUserID:    merchant.OwnerUserID,
+		PaymentOrderID: paymentOrderID,
+		RefundType:     "full",
+		RefundAmount:   300,
+		RefundReason:   "用户申请退款",
+		IdempotencyKey: "refund-replay-1",
+	}
+
+	store.EXPECT().GetMerchantByOwner(gomock.Any(), merchant.OwnerUserID).Return(merchant, nil)
+	store.EXPECT().GetRefundRequestIdempotency(gomock.Any(), db.GetRefundRequestIdempotencyParams{
+		OperationScope: refundCreateIdempotencyScope,
+		ActorUserID:    merchant.OwnerUserID,
+		IdempotencyKey: "refund-replay-1",
+	}).Return(db.RefundRequestIdempotency{
+		OperationScope: refundCreateIdempotencyScope,
+		ActorUserID:    merchant.OwnerUserID,
+		IdempotencyKey: "refund-replay-1",
+		RequestHash:    refundCreateRequestHash(input),
+		RefundOrderID:  existingRefund.ID,
+	}, nil)
+	store.EXPECT().GetRefundOrder(gomock.Any(), existingRefund.ID).Return(existingRefund, nil)
+
+	result, err := service.CreateRefundOrder(context.Background(), input)
+
+	require.NoError(t, err)
+	require.Equal(t, existingRefund.ID, result.RefundOrder.ID)
+	require.Empty(t, baofuClient.lastRefundRequest.OutTradeNo)
+}
+
+func TestCreateRefundOrder_IdempotencyConflictReturnsConflictBeforeMutableStateChecks(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	service := NewRefundService(
+		store,
+		nil,
+		nil,
+		nil,
+		refundServiceIDGeneratorStub{err: errors.New("generator should not be called for idempotency conflict")},
+	)
+
+	merchant := db.Merchant{ID: 746, OwnerUserID: 169}
+	paymentOrderID := int64(724)
+
+	store.EXPECT().GetMerchantByOwner(gomock.Any(), merchant.OwnerUserID).Return(merchant, nil)
+	store.EXPECT().GetRefundRequestIdempotency(gomock.Any(), db.GetRefundRequestIdempotencyParams{
+		OperationScope: refundCreateIdempotencyScope,
+		ActorUserID:    merchant.OwnerUserID,
+		IdempotencyKey: "refund-conflict-1",
+	}).Return(db.RefundRequestIdempotency{
+		OperationScope: refundCreateIdempotencyScope,
+		ActorUserID:    merchant.OwnerUserID,
+		IdempotencyKey: "refund-conflict-1",
+		RequestHash:    "sha256:different",
+		RefundOrderID:  757,
+	}, nil)
+
+	_, err := service.CreateRefundOrder(context.Background(), CreateRefundOrderInput{
+		ActorUserID:    merchant.OwnerUserID,
+		PaymentOrderID: paymentOrderID,
+		RefundType:     "full",
+		RefundAmount:   300,
+		RefundReason:   "用户申请退款",
+		IdempotencyKey: "refund-conflict-1",
+	})
+
+	requestErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusConflict, requestErr.Status)
+	require.Equal(t, "idempotency key already used by a different refund request", requestErr.Err.Error())
 }
 
 func TestCreateRefundOrder_BaofuPreShareRefundAcceptedRecordsCommand(t *testing.T) {
@@ -172,8 +311,17 @@ func TestCreateRefundOrder_BaofuPreShareRefundAcceptedRecordsCommand(t *testing.
 	}
 	order := db.Order{ID: 634, MerchantID: merchant.ID}
 	refundOrder := db.RefundOrder{ID: 656, PaymentOrderID: paymentOrder.ID, OutRefundNo: "RF-baofu-pre-share", Status: "pending"}
+	input := CreateRefundOrderInput{
+		ActorUserID:    merchant.OwnerUserID,
+		PaymentOrderID: paymentOrder.ID,
+		RefundType:     "full",
+		RefundAmount:   300,
+		RefundReason:   "用户申请退款",
+		IdempotencyKey: "refund-pre-share-accepted",
+	}
 
 	store.EXPECT().GetMerchantByOwner(gomock.Any(), merchant.OwnerUserID).Return(merchant, nil)
+	expectNoRefundCreateReplay(t, store, input)
 	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
 	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
 	store.EXPECT().
@@ -185,11 +333,15 @@ func TestCreateRefundOrder_BaofuPreShareRefundAcceptedRecordsCommand(t *testing.
 			HasStartedProfitSharing: false,
 		}, nil)
 	store.EXPECT().CreateRefundOrderTx(gomock.Any(), db.CreateRefundOrderTxParams{
-		PaymentOrderID: paymentOrder.ID,
-		RefundType:     "full",
-		RefundAmount:   300,
-		RefundReason:   "用户申请退款",
-		OutRefundNo:    refundOrder.OutRefundNo,
+		PaymentOrderID:            paymentOrder.ID,
+		RefundType:                "full",
+		RefundAmount:              300,
+		RefundReason:              "用户申请退款",
+		OutRefundNo:               refundOrder.OutRefundNo,
+		IdempotencyOperationScope: refundCreateIdempotencyScope,
+		IdempotencyActorUserID:    merchant.OwnerUserID,
+		IdempotencyKey:            input.IdempotencyKey,
+		IdempotencyRequestHash:    refundCreateRequestHash(input),
 	}).Return(db.CreateRefundOrderTxResult{RefundOrder: refundOrder}, nil)
 	store.EXPECT().UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
 		ID:       refundOrder.ID,
@@ -198,13 +350,7 @@ func TestCreateRefundOrder_BaofuPreShareRefundAcceptedRecordsCommand(t *testing.
 	expectRefundServiceExternalRefundCommand(t, store, db.PaymentChannelBaofuAggregate, db.ExternalPaymentCapabilityBaofuRefund, refundOrder.ID, refundOrder.OutRefundNo, "BFREFUND202605040001", db.ExternalPaymentCommandStatusAccepted, "", 9901, db.ExternalPaymentProviderBaofu)
 	store.EXPECT().GetRefundOrder(gomock.Any(), refundOrder.ID).Return(db.RefundOrder{ID: refundOrder.ID, Status: "processing", OutRefundNo: refundOrder.OutRefundNo}, nil)
 
-	result, err := service.CreateRefundOrder(context.Background(), CreateRefundOrderInput{
-		ActorUserID:    merchant.OwnerUserID,
-		PaymentOrderID: paymentOrder.ID,
-		RefundType:     "full",
-		RefundAmount:   300,
-		RefundReason:   "用户申请退款",
-	})
+	result, err := service.CreateRefundOrder(context.Background(), input)
 
 	require.NoError(t, err)
 	require.Equal(t, refundOrder.ID, result.RefundOrder.ID)
@@ -263,8 +409,17 @@ func TestCreateRefundOrder_BaofuPreShareRefundRejectedRecordsGuidanceFromRefundR
 	}
 	order := db.Order{ID: 636, MerchantID: merchant.ID}
 	refundOrder := db.RefundOrder{ID: 659, PaymentOrderID: paymentOrder.ID, OutRefundNo: "RF-baofu-rejected-response", Status: "pending"}
+	input := CreateRefundOrderInput{
+		ActorUserID:    merchant.OwnerUserID,
+		PaymentOrderID: paymentOrder.ID,
+		RefundType:     "full",
+		RefundAmount:   300,
+		RefundReason:   "用户申请退款",
+		IdempotencyKey: "refund-pre-share-rejected-response",
+	}
 
 	store.EXPECT().GetMerchantByOwner(gomock.Any(), merchant.OwnerUserID).Return(merchant, nil)
+	expectNoRefundCreateReplay(t, store, input)
 	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
 	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
 	store.EXPECT().
@@ -276,11 +431,15 @@ func TestCreateRefundOrder_BaofuPreShareRefundRejectedRecordsGuidanceFromRefundR
 			HasStartedProfitSharing: false,
 		}, nil)
 	store.EXPECT().CreateRefundOrderTx(gomock.Any(), db.CreateRefundOrderTxParams{
-		PaymentOrderID: paymentOrder.ID,
-		RefundType:     "full",
-		RefundAmount:   300,
-		RefundReason:   "用户申请退款",
-		OutRefundNo:    refundOrder.OutRefundNo,
+		PaymentOrderID:            paymentOrder.ID,
+		RefundType:                "full",
+		RefundAmount:              300,
+		RefundReason:              "用户申请退款",
+		OutRefundNo:               refundOrder.OutRefundNo,
+		IdempotencyOperationScope: refundCreateIdempotencyScope,
+		IdempotencyActorUserID:    merchant.OwnerUserID,
+		IdempotencyKey:            input.IdempotencyKey,
+		IdempotencyRequestHash:    refundCreateRequestHash(input),
 	}).Return(db.CreateRefundOrderTxResult{RefundOrder: refundOrder}, nil)
 	store.EXPECT().UpdateRefundOrderToFailed(gomock.Any(), refundOrder.ID).Return(db.RefundOrder{ID: refundOrder.ID, Status: "failed"}, nil)
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
@@ -301,13 +460,7 @@ func TestCreateRefundOrder_BaofuPreShareRefundRejectedRecordsGuidanceFromRefundR
 		return db.ExternalPaymentCommand{ID: 9905}, nil
 	})
 
-	_, err := service.CreateRefundOrder(context.Background(), CreateRefundOrderInput{
-		ActorUserID:    merchant.OwnerUserID,
-		PaymentOrderID: paymentOrder.ID,
-		RefundType:     "full",
-		RefundAmount:   300,
-		RefundReason:   "用户申请退款",
-	})
+	_, err := service.CreateRefundOrder(context.Background(), input)
 
 	requestErr := assertRequestError(t, err)
 	require.Equal(t, http.StatusBadGateway, requestErr.Status)
@@ -352,8 +505,17 @@ func TestCreateRefundOrder_BaofuPreShareRefundFallsBackToOriginOutTradeNoWhenTra
 	}
 	order := db.Order{ID: 644, MerchantID: merchant.ID}
 	refundOrder := db.RefundOrder{ID: 666, PaymentOrderID: paymentOrder.ID, OutRefundNo: "RF-baofu-origin-out-trade", Status: "pending"}
+	input := CreateRefundOrderInput{
+		ActorUserID:    merchant.OwnerUserID,
+		PaymentOrderID: paymentOrder.ID,
+		RefundType:     "full",
+		RefundAmount:   300,
+		RefundReason:   "用户申请退款",
+		IdempotencyKey: "refund-origin-out-trade",
+	}
 
 	store.EXPECT().GetMerchantByOwner(gomock.Any(), merchant.OwnerUserID).Return(merchant, nil)
+	expectNoRefundCreateReplay(t, store, input)
 	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
 	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
 	store.EXPECT().
@@ -365,11 +527,15 @@ func TestCreateRefundOrder_BaofuPreShareRefundFallsBackToOriginOutTradeNoWhenTra
 			HasStartedProfitSharing: false,
 		}, nil)
 	store.EXPECT().CreateRefundOrderTx(gomock.Any(), db.CreateRefundOrderTxParams{
-		PaymentOrderID: paymentOrder.ID,
-		RefundType:     "full",
-		RefundAmount:   300,
-		RefundReason:   "用户申请退款",
-		OutRefundNo:    refundOrder.OutRefundNo,
+		PaymentOrderID:            paymentOrder.ID,
+		RefundType:                "full",
+		RefundAmount:              300,
+		RefundReason:              "用户申请退款",
+		OutRefundNo:               refundOrder.OutRefundNo,
+		IdempotencyOperationScope: refundCreateIdempotencyScope,
+		IdempotencyActorUserID:    merchant.OwnerUserID,
+		IdempotencyKey:            input.IdempotencyKey,
+		IdempotencyRequestHash:    refundCreateRequestHash(input),
 	}).Return(db.CreateRefundOrderTxResult{RefundOrder: refundOrder}, nil)
 	store.EXPECT().UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
 		ID:       refundOrder.ID,
@@ -378,13 +544,7 @@ func TestCreateRefundOrder_BaofuPreShareRefundFallsBackToOriginOutTradeNoWhenTra
 	expectRefundServiceExternalRefundCommand(t, store, db.PaymentChannelBaofuAggregate, db.ExternalPaymentCapabilityBaofuRefund, refundOrder.ID, refundOrder.OutRefundNo, "BFREFUND202605040011", db.ExternalPaymentCommandStatusAccepted, "", 9903, db.ExternalPaymentProviderBaofu)
 	store.EXPECT().GetRefundOrder(gomock.Any(), refundOrder.ID).Return(db.RefundOrder{ID: refundOrder.ID, Status: "processing", OutRefundNo: refundOrder.OutRefundNo}, nil)
 
-	_, err := service.CreateRefundOrder(context.Background(), CreateRefundOrderInput{
-		ActorUserID:    merchant.OwnerUserID,
-		PaymentOrderID: paymentOrder.ID,
-		RefundType:     "full",
-		RefundAmount:   300,
-		RefundReason:   "用户申请退款",
-	})
+	_, err := service.CreateRefundOrder(context.Background(), input)
 
 	require.NoError(t, err)
 	require.Empty(t, baofuClient.lastRefundRequest.OriginTradeNo)
@@ -432,8 +592,17 @@ func TestCreateRefundOrder_BaofuPreShareRefundSyncSuccessStillWaitsForQueryOrCal
 	}
 	order := db.Order{ID: 635, MerchantID: merchant.ID}
 	refundOrder := db.RefundOrder{ID: 657, PaymentOrderID: paymentOrder.ID, OutRefundNo: "RF-baofu-sync-success", Status: "pending"}
+	input := CreateRefundOrderInput{
+		ActorUserID:    merchant.OwnerUserID,
+		PaymentOrderID: paymentOrder.ID,
+		RefundType:     "full",
+		RefundAmount:   300,
+		RefundReason:   "用户申请退款",
+		IdempotencyKey: "refund-sync-success",
+	}
 
 	store.EXPECT().GetMerchantByOwner(gomock.Any(), merchant.OwnerUserID).Return(merchant, nil)
+	expectNoRefundCreateReplay(t, store, input)
 	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
 	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
 	store.EXPECT().
@@ -445,11 +614,15 @@ func TestCreateRefundOrder_BaofuPreShareRefundSyncSuccessStillWaitsForQueryOrCal
 			HasStartedProfitSharing: false,
 		}, nil)
 	store.EXPECT().CreateRefundOrderTx(gomock.Any(), db.CreateRefundOrderTxParams{
-		PaymentOrderID: paymentOrder.ID,
-		RefundType:     "full",
-		RefundAmount:   300,
-		RefundReason:   "用户申请退款",
-		OutRefundNo:    refundOrder.OutRefundNo,
+		PaymentOrderID:            paymentOrder.ID,
+		RefundType:                "full",
+		RefundAmount:              300,
+		RefundReason:              "用户申请退款",
+		OutRefundNo:               refundOrder.OutRefundNo,
+		IdempotencyOperationScope: refundCreateIdempotencyScope,
+		IdempotencyActorUserID:    merchant.OwnerUserID,
+		IdempotencyKey:            input.IdempotencyKey,
+		IdempotencyRequestHash:    refundCreateRequestHash(input),
 	}).Return(db.CreateRefundOrderTxResult{RefundOrder: refundOrder}, nil)
 	store.EXPECT().UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
 		ID:       refundOrder.ID,
@@ -458,13 +631,7 @@ func TestCreateRefundOrder_BaofuPreShareRefundSyncSuccessStillWaitsForQueryOrCal
 	expectRefundServiceExternalRefundCommand(t, store, db.PaymentChannelBaofuAggregate, db.ExternalPaymentCapabilityBaofuRefund, refundOrder.ID, refundOrder.OutRefundNo, "BFREFUND202605040002", db.ExternalPaymentCommandStatusAccepted, "", 9902, db.ExternalPaymentProviderBaofu)
 	store.EXPECT().GetRefundOrder(gomock.Any(), refundOrder.ID).Return(db.RefundOrder{ID: refundOrder.ID, Status: "processing", OutRefundNo: refundOrder.OutRefundNo}, nil)
 
-	result, err := service.CreateRefundOrder(context.Background(), CreateRefundOrderInput{
-		ActorUserID:    merchant.OwnerUserID,
-		PaymentOrderID: paymentOrder.ID,
-		RefundType:     "full",
-		RefundAmount:   300,
-		RefundReason:   "用户申请退款",
-	})
+	result, err := service.CreateRefundOrder(context.Background(), input)
 
 	require.NoError(t, err)
 	require.Equal(t, refundOrder.ID, result.RefundOrder.ID)
@@ -513,8 +680,17 @@ func TestCreateRefundOrder_BaofuPreShareRefundProviderErrorRecordsCommandRejecte
 	}
 	order := db.Order{ID: 636, MerchantID: merchant.ID}
 	refundOrder := db.RefundOrder{ID: 658, PaymentOrderID: paymentOrder.ID, OutRefundNo: "RF-baofu-provider-error", Status: "pending"}
+	input := CreateRefundOrderInput{
+		ActorUserID:    merchant.OwnerUserID,
+		PaymentOrderID: paymentOrder.ID,
+		RefundType:     "full",
+		RefundAmount:   300,
+		RefundReason:   "用户申请退款",
+		IdempotencyKey: "refund-provider-error",
+	}
 
 	store.EXPECT().GetMerchantByOwner(gomock.Any(), merchant.OwnerUserID).Return(merchant, nil)
+	expectNoRefundCreateReplay(t, store, input)
 	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
 	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
 	store.EXPECT().
@@ -526,11 +702,15 @@ func TestCreateRefundOrder_BaofuPreShareRefundProviderErrorRecordsCommandRejecte
 			HasStartedProfitSharing: false,
 		}, nil)
 	store.EXPECT().CreateRefundOrderTx(gomock.Any(), db.CreateRefundOrderTxParams{
-		PaymentOrderID: paymentOrder.ID,
-		RefundType:     "full",
-		RefundAmount:   300,
-		RefundReason:   "用户申请退款",
-		OutRefundNo:    refundOrder.OutRefundNo,
+		PaymentOrderID:            paymentOrder.ID,
+		RefundType:                "full",
+		RefundAmount:              300,
+		RefundReason:              "用户申请退款",
+		OutRefundNo:               refundOrder.OutRefundNo,
+		IdempotencyOperationScope: refundCreateIdempotencyScope,
+		IdempotencyActorUserID:    merchant.OwnerUserID,
+		IdempotencyKey:            input.IdempotencyKey,
+		IdempotencyRequestHash:    refundCreateRequestHash(input),
 	}).Return(db.CreateRefundOrderTxResult{RefundOrder: refundOrder}, nil)
 	store.EXPECT().UpdateRefundOrderToFailed(gomock.Any(), refundOrder.ID).Return(db.RefundOrder{ID: refundOrder.ID, Status: "failed"}, nil)
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
@@ -550,13 +730,7 @@ func TestCreateRefundOrder_BaofuPreShareRefundProviderErrorRecordsCommandRejecte
 		return db.ExternalPaymentCommand{ID: 9904}, nil
 	})
 
-	_, err := service.CreateRefundOrder(context.Background(), CreateRefundOrderInput{
-		ActorUserID:    merchant.OwnerUserID,
-		PaymentOrderID: paymentOrder.ID,
-		RefundType:     "full",
-		RefundAmount:   300,
-		RefundReason:   "用户申请退款",
-	})
+	_, err := service.CreateRefundOrder(context.Background(), input)
 
 	requestErr := assertRequestError(t, err)
 	require.Equal(t, http.StatusBadRequest, requestErr.Status)
@@ -583,18 +757,21 @@ func TestCreateRefundOrder_RejectsMainBusinessNonBaofuPaymentOrder(t *testing.T)
 		PaymentType: paymentTypeMiniProgram,
 		OrderID:     pgtype.Int8{Int64: 34, Valid: true},
 	}
-
-	store.EXPECT().GetMerchantByOwner(gomock.Any(), merchant.OwnerUserID).Return(merchant, nil)
-	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
-	store.EXPECT().GetOrder(gomock.Any(), paymentOrder.OrderID.Int64).Return(db.Order{ID: paymentOrder.OrderID.Int64, MerchantID: merchant.ID}, nil)
-
-	_, err := service.CreateRefundOrder(context.Background(), CreateRefundOrderInput{
+	input := CreateRefundOrderInput{
 		ActorUserID:    merchant.OwnerUserID,
 		PaymentOrderID: paymentOrder.ID,
 		RefundType:     "merchant_cancel",
 		RefundAmount:   300,
 		RefundReason:   "商品售罄",
-	})
+		IdempotencyKey: "refund-non-baofu",
+	}
+
+	store.EXPECT().GetMerchantByOwner(gomock.Any(), merchant.OwnerUserID).Return(merchant, nil)
+	expectNoRefundCreateReplay(t, store, input)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), paymentOrder.OrderID.Int64).Return(db.Order{ID: paymentOrder.OrderID.Int64, MerchantID: merchant.ID}, nil)
+
+	_, err := service.CreateRefundOrder(context.Background(), input)
 	requestErr := assertRequestError(t, err)
 	require.Equal(t, http.StatusBadRequest, requestErr.Status)
 	require.Equal(t, "当前主营业务支付单仅支持宝付链路，无法发起退款，请联系平台处理", requestErr.Err.Error())

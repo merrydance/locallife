@@ -30,6 +30,38 @@ WHERE out_refund_no = $1 LIMIT 1;
 SELECT id, payment_order_id, refund_type, refund_amount, refund_reason, out_refund_no, refund_id, platform_refund, operator_refund, merchant_refund, status, refunded_at, created_at FROM refund_orders
 WHERE refund_id = $1 LIMIT 1;
 
+-- name: GetRefundRequestIdempotency :one
+SELECT id, operation_scope, actor_user_id, idempotency_key, request_hash, refund_order_id, created_at, updated_at
+FROM refund_request_idempotency
+WHERE operation_scope = $1
+  AND actor_user_id = $2
+  AND idempotency_key = $3
+LIMIT 1;
+
+-- name: GetRefundRequestIdempotencyForUpdate :one
+SELECT id, operation_scope, actor_user_id, idempotency_key, request_hash, refund_order_id, created_at, updated_at
+FROM refund_request_idempotency
+WHERE operation_scope = $1
+  AND actor_user_id = $2
+  AND idempotency_key = $3
+LIMIT 1
+FOR UPDATE;
+
+-- name: CreateRefundRequestIdempotency :one
+INSERT INTO refund_request_idempotency (
+    operation_scope,
+    actor_user_id,
+    idempotency_key,
+    request_hash,
+    refund_order_id
+) VALUES (
+    $1, $2, $3, $4, $5
+)
+ON CONFLICT (operation_scope, actor_user_id, idempotency_key) DO UPDATE
+SET updated_at = refund_request_idempotency.updated_at
+WHERE refund_request_idempotency.request_hash = EXCLUDED.request_hash
+RETURNING id, operation_scope, actor_user_id, idempotency_key, request_hash, refund_order_id, created_at, updated_at;
+
 -- name: ListRefundOrdersByPaymentOrder :many
 SELECT id, payment_order_id, refund_type, refund_amount, refund_reason, out_refund_no, refund_id, platform_refund, operator_refund, merchant_refund, status, refunded_at, created_at FROM refund_orders
 WHERE payment_order_id = $1

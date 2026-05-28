@@ -208,6 +208,7 @@ type CreateRefundOrderInput struct {
 	RefundType                       string
 	RefundAmount                     int64
 	RefundReason                     string
+	IdempotencyKey                   string
 	ProfitSharingReturnRetryInterval time.Duration
 }
 

@@ -60,6 +60,80 @@ func TestCreateRefundOrderTx_CountsPendingAndProcessingRefunds(t *testing.T) {
 	require.Equal(t, "pending", latestPendingRefund.Status)
 }
 
+func TestCreateRefundOrderTx_RequestIdempotencyReplayAndConflict(t *testing.T) {
+	ctx := context.Background()
+	user := createRandomUser(t)
+	payment, err := testStore.CreatePaymentOrder(ctx, CreatePaymentOrderParams{
+		UserID:                user.ID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        PaymentChannelDirect,
+		RequiresProfitSharing: false,
+		BusinessType:          "order",
+		Amount:                1000,
+		OutTradeNo:            util.RandomString(32),
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdatePaymentOrderToPaid(ctx, UpdatePaymentOrderToPaidParams{
+		ID:            payment.ID,
+		TransactionID: pgtype.Text{String: util.RandomString(32), Valid: true},
+	})
+	require.NoError(t, err)
+
+	idempotencyKey := "refund-replay-" + util.RandomString(12)
+	requestHash := "sha256:" + util.RandomString(64)
+	first, err := testStore.CreateRefundOrderTx(ctx, CreateRefundOrderTxParams{
+		PaymentOrderID:            payment.ID,
+		RefundType:                "miniprogram",
+		RefundAmount:              300,
+		RefundReason:              " 用户申请退款 ",
+		OutRefundNo:               util.RandomString(32),
+		IdempotencyOperationScope: "merchant_refund_create",
+		IdempotencyActorUserID:    user.ID,
+		IdempotencyKey:            idempotencyKey,
+		IdempotencyRequestHash:    requestHash,
+	})
+	require.NoError(t, err)
+	require.False(t, first.IdempotencyReplayed)
+
+	replayed, err := testStore.CreateRefundOrderTx(ctx, CreateRefundOrderTxParams{
+		PaymentOrderID:            payment.ID,
+		RefundType:                "miniprogram",
+		RefundAmount:              300,
+		RefundReason:              "用户申请退款",
+		OutRefundNo:               util.RandomString(32),
+		IdempotencyOperationScope: "merchant_refund_create",
+		IdempotencyActorUserID:    user.ID,
+		IdempotencyKey:            idempotencyKey,
+		IdempotencyRequestHash:    requestHash,
+	})
+	require.NoError(t, err)
+	require.True(t, replayed.IdempotencyReplayed)
+	require.Equal(t, first.RefundOrder.ID, replayed.RefundOrder.ID)
+	require.Equal(t, first.RefundOrder.OutRefundNo, replayed.RefundOrder.OutRefundNo)
+
+	_, err = testStore.CreateRefundOrderTx(ctx, CreateRefundOrderTxParams{
+		PaymentOrderID:            payment.ID,
+		RefundType:                "miniprogram",
+		RefundAmount:              301,
+		RefundReason:              "用户申请退款",
+		OutRefundNo:               util.RandomString(32),
+		IdempotencyOperationScope: "merchant_refund_create",
+		IdempotencyActorUserID:    user.ID,
+		IdempotencyKey:            idempotencyKey,
+		IdempotencyRequestHash:    "sha256:" + util.RandomString(64),
+	})
+	require.Error(t, err)
+
+	statusCode, ok := IsRefundRequestError(err)
+	require.True(t, ok)
+	require.Equal(t, http.StatusConflict, statusCode)
+
+	refunds, err := testStore.ListRefundOrdersByPaymentOrder(ctx, payment.ID)
+	require.NoError(t, err)
+	require.Len(t, refunds, 1)
+}
+
 func TestCreateRefundOrderTx_AllowsProductionRefundTypes(t *testing.T) {
 	ctx := context.Background()
 	refundTypes := []string{

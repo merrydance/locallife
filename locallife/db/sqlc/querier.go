@@ -462,6 +462,7 @@ type Querier interface {
 	// 创建追偿争议
 	CreateRecoveryDispute(ctx context.Context, arg CreateRecoveryDisputeParams) (RecoveryDispute, error)
 	CreateRefundOrder(ctx context.Context, arg CreateRefundOrderParams) (RefundOrder, error)
+	CreateRefundRequestIdempotency(ctx context.Context, arg CreateRefundRequestIdempotencyParams) (RefundRequestIdempotency, error)
 	CreateRegion(ctx context.Context, arg CreateRegionParams) (Region, error)
 	CreateReservationItem(ctx context.Context, arg CreateReservationItemParams) (ReservationItem, error)
 	CreateReservationPayment(ctx context.Context, arg CreateReservationPaymentParams) (ReservationPayment, error)
@@ -989,6 +990,8 @@ type Querier interface {
 	GetRefundOrderByOutRefundNo(ctx context.Context, outRefundNo string) (RefundOrder, error)
 	GetRefundOrderByRefundId(ctx context.Context, refundID pgtype.Text) (RefundOrder, error)
 	GetRefundOrderForUpdate(ctx context.Context, id int64) (RefundOrder, error)
+	GetRefundRequestIdempotency(ctx context.Context, arg GetRefundRequestIdempotencyParams) (RefundRequestIdempotency, error)
+	GetRefundRequestIdempotencyForUpdate(ctx context.Context, arg GetRefundRequestIdempotencyForUpdateParams) (RefundRequestIdempotency, error)
 	GetRegion(ctx context.Context, id int64) (Region, error)
 	GetRegionByCode(ctx context.Context, code string) (Region, error)
 	GetRegionByNameAndLevel(ctx context.Context, arg GetRegionByNameAndLevelParams) (Region, error)

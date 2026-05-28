@@ -71,6 +71,52 @@ func (q *Queries) CreateRefundOrder(ctx context.Context, arg CreateRefundOrderPa
 	return i, err
 }
 
+const createRefundRequestIdempotency = `-- name: CreateRefundRequestIdempotency :one
+INSERT INTO refund_request_idempotency (
+    operation_scope,
+    actor_user_id,
+    idempotency_key,
+    request_hash,
+    refund_order_id
+) VALUES (
+    $1, $2, $3, $4, $5
+)
+ON CONFLICT (operation_scope, actor_user_id, idempotency_key) DO UPDATE
+SET updated_at = refund_request_idempotency.updated_at
+WHERE refund_request_idempotency.request_hash = EXCLUDED.request_hash
+RETURNING id, operation_scope, actor_user_id, idempotency_key, request_hash, refund_order_id, created_at, updated_at
+`
+
+type CreateRefundRequestIdempotencyParams struct {
+	OperationScope string `json:"operation_scope"`
+	ActorUserID    int64  `json:"actor_user_id"`
+	IdempotencyKey string `json:"idempotency_key"`
+	RequestHash    string `json:"request_hash"`
+	RefundOrderID  int64  `json:"refund_order_id"`
+}
+
+func (q *Queries) CreateRefundRequestIdempotency(ctx context.Context, arg CreateRefundRequestIdempotencyParams) (RefundRequestIdempotency, error) {
+	row := q.db.QueryRow(ctx, createRefundRequestIdempotency,
+		arg.OperationScope,
+		arg.ActorUserID,
+		arg.IdempotencyKey,
+		arg.RequestHash,
+		arg.RefundOrderID,
+	)
+	var i RefundRequestIdempotency
+	err := row.Scan(
+		&i.ID,
+		&i.OperationScope,
+		&i.ActorUserID,
+		&i.IdempotencyKey,
+		&i.RequestHash,
+		&i.RefundOrderID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getBaofuPaymentOrderRefundGuardForUpdate = `-- name: GetBaofuPaymentOrderRefundGuardForUpdate :one
 SELECT po.id,
        po.status,
@@ -222,6 +268,69 @@ func (q *Queries) GetRefundOrderForUpdate(ctx context.Context, id int64) (Refund
 		&i.Status,
 		&i.RefundedAt,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getRefundRequestIdempotency = `-- name: GetRefundRequestIdempotency :one
+SELECT id, operation_scope, actor_user_id, idempotency_key, request_hash, refund_order_id, created_at, updated_at
+FROM refund_request_idempotency
+WHERE operation_scope = $1
+  AND actor_user_id = $2
+  AND idempotency_key = $3
+LIMIT 1
+`
+
+type GetRefundRequestIdempotencyParams struct {
+	OperationScope string `json:"operation_scope"`
+	ActorUserID    int64  `json:"actor_user_id"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+func (q *Queries) GetRefundRequestIdempotency(ctx context.Context, arg GetRefundRequestIdempotencyParams) (RefundRequestIdempotency, error) {
+	row := q.db.QueryRow(ctx, getRefundRequestIdempotency, arg.OperationScope, arg.ActorUserID, arg.IdempotencyKey)
+	var i RefundRequestIdempotency
+	err := row.Scan(
+		&i.ID,
+		&i.OperationScope,
+		&i.ActorUserID,
+		&i.IdempotencyKey,
+		&i.RequestHash,
+		&i.RefundOrderID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getRefundRequestIdempotencyForUpdate = `-- name: GetRefundRequestIdempotencyForUpdate :one
+SELECT id, operation_scope, actor_user_id, idempotency_key, request_hash, refund_order_id, created_at, updated_at
+FROM refund_request_idempotency
+WHERE operation_scope = $1
+  AND actor_user_id = $2
+  AND idempotency_key = $3
+LIMIT 1
+FOR UPDATE
+`
+
+type GetRefundRequestIdempotencyForUpdateParams struct {
+	OperationScope string `json:"operation_scope"`
+	ActorUserID    int64  `json:"actor_user_id"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+func (q *Queries) GetRefundRequestIdempotencyForUpdate(ctx context.Context, arg GetRefundRequestIdempotencyForUpdateParams) (RefundRequestIdempotency, error) {
+	row := q.db.QueryRow(ctx, getRefundRequestIdempotencyForUpdate, arg.OperationScope, arg.ActorUserID, arg.IdempotencyKey)
+	var i RefundRequestIdempotency
+	err := row.Scan(
+		&i.ID,
+		&i.OperationScope,
+		&i.ActorUserID,
+		&i.IdempotencyKey,
+		&i.RequestHash,
+		&i.RefundOrderID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

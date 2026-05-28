@@ -124,6 +124,54 @@ func TestUpsertOCRJob_IsIdempotent(t *testing.T) {
 	require.Equal(t, "pending", job2.Status)
 }
 
+func TestUpsertOCRJob_SameKeyDifferentCanonicalRequestReturnsNoRows(t *testing.T) {
+	user := createRandomUser(t)
+	otherUser := createRandomUser(t)
+	asset := createRandomMediaAsset(t, user.ID)
+	otherAsset := createRandomMediaAsset(t, otherUser.ID)
+	idempotencyKey := fmt.Sprintf("shared-ocr-key-%d", time.Now().UnixNano())
+
+	job, err := testStore.UpsertOCRJob(context.Background(), UpsertOCRJobParams{
+		IdempotencyKey: idempotencyKey,
+		DocumentType:   "business_license",
+		Provider:       "aliyun",
+		MediaAssetID:   asset.ID,
+		OwnerType:      "merchant_application",
+		OwnerID:        user.ID,
+		Side:           "",
+		MaxAttempts:    3,
+		RequestedBy:    user.ID,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpsertOCRJob(context.Background(), UpsertOCRJobParams{
+		IdempotencyKey: idempotencyKey,
+		DocumentType:   "business_license",
+		Provider:       "aliyun",
+		MediaAssetID:   otherAsset.ID,
+		OwnerType:      "merchant_application",
+		OwnerID:        otherUser.ID,
+		Side:           "",
+		MaxAttempts:    3,
+		RequestedBy:    otherUser.ID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	replayed, err := testStore.UpsertOCRJob(context.Background(), UpsertOCRJobParams{
+		IdempotencyKey: idempotencyKey,
+		DocumentType:   "business_license",
+		Provider:       "aliyun",
+		MediaAssetID:   asset.ID,
+		OwnerType:      "merchant_application",
+		OwnerID:        user.ID,
+		Side:           "",
+		MaxAttempts:    3,
+		RequestedBy:    user.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, job.ID, replayed.ID)
+}
+
 func TestOCRJobStateTransition_ProcessingToSucceeded(t *testing.T) {
 	job := createRandomOCRJob(t)
 

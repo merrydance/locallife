@@ -755,6 +755,107 @@ func TestCreateOCRJob_DelaysDispatchWhileMediaModerationPending(t *testing.T) {
 	require.Equal(t, string(ocr.JobStatusPending), resp.Status)
 }
 
+func TestCreateOCRJob_IdempotencyKeyConflictDifferentRequestReturnsConflict(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomMerchantAppDraft(user.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	gomock.InOrder(
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(9021)).Return(ocrTestMediaAsset(9021, user.ID, media.CategoryBusinessLicense, "confirmed", "approved"), nil),
+		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
+			require.Equal(t, "shared-key", arg.IdempotencyKey)
+			return db.OcrJob{}, db.ErrRecordNotFound
+		}),
+	)
+
+	server := newTestServer(t, store)
+	auditWriter := &auditSpyWriter{}
+	server.auditWriter = auditWriter
+	server.SetTaskDistributorForTest(distributor)
+	body, err := json.Marshal(createOCRJobRequest{
+		DocumentType:   "business_license",
+		MediaAssetID:   9021,
+		OwnerType:      "merchant_application",
+		OwnerID:        app.ID,
+		IdempotencyKey: "shared-key",
+	})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/ocr/jobs", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusConflict, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "idempotency key conflicts with a different OCR request")
+	require.Empty(t, auditWriter.Entries())
+}
+
+func TestCreateOCRJob_IdempotencyKeyReplaySameRequestReturnsExistingJob(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomMerchantAppDraft(user.ID)
+	job := db.OcrJob{
+		ID:             9022,
+		Status:         string(ocr.JobStatusSucceeded),
+		IdempotencyKey: "shared-key",
+		DocumentType:   string(ocr.DocumentTypeBusinessLicense),
+		Provider:       string(ocr.ProviderNameAliyun),
+		MediaAssetID:   9022,
+		OwnerType:      string(ocr.OwnerTypeMerchantApplication),
+		OwnerID:        app.ID,
+		RequestedBy:    user.ID,
+		CreatedAt:      time.Now(),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	gomock.InOrder(
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(9022)).Return(ocrTestMediaAsset(9022, user.ID, media.CategoryBusinessLicense, "confirmed", "approved"), nil),
+		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
+			require.Equal(t, "shared-key", arg.IdempotencyKey)
+			require.Equal(t, job.MediaAssetID, arg.MediaAssetID)
+			require.Equal(t, job.OwnerID, arg.OwnerID)
+			require.Equal(t, job.RequestedBy, arg.RequestedBy)
+			return job, nil
+		}),
+	)
+
+	server := newTestServer(t, store)
+	server.SetTaskDistributorForTest(distributor)
+	body, err := json.Marshal(createOCRJobRequest{
+		DocumentType:   "business_license",
+		MediaAssetID:   9022,
+		OwnerType:      "merchant_application",
+		OwnerID:        app.ID,
+		IdempotencyKey: "shared-key",
+	})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/ocr/jobs", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var resp ocrJobResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, job.ID, resp.OCRJobID)
+	require.Equal(t, string(ocr.JobStatusSucceeded), resp.Status)
+}
+
 func TestCreateOCRJob_DoesNotEnqueueWhenMarkPendingFails(t *testing.T) {
 	user, _ := randomUser(t)
 	app := randomMerchantAppDraft(user.ID)

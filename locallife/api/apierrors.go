@@ -146,6 +146,9 @@ var (
 	ErrIDCardImageRequired     = apierr(40024, "ID card image is required")
 	ErrTooManyStorefrontPhotos = apierr(40025, "too many storefront photos: maximum 3 allowed")
 	ErrTooManyAmbientPhotos    = apierr(40026, "too many ambient photos: maximum 5 allowed")
+
+	// 409 类
+	ErrOCRIdempotencyKeyConflict = apierr(40974, "idempotency key conflicts with a different OCR request")
 )
 
 // ==================== 骑手业务 (Rider Business) ====================

@@ -1132,6 +1132,10 @@ func (server *Server) createOCRJob(ctx *gin.Context) {
 		RequestedBy:    authPayload.UserID,
 	})
 	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusConflict, errorResponse(ErrOCRIdempotencyKeyConflict))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}

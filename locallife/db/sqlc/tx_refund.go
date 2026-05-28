@@ -11,17 +11,22 @@ import (
 
 // CreateRefundOrderTxParams 创建退款单事务输入
 type CreateRefundOrderTxParams struct {
-	PaymentOrderID int64
-	RefundType     string
-	RefundAmount   int64
-	RefundReason   string
-	OutRefundNo    string
+	PaymentOrderID            int64
+	RefundType                string
+	RefundAmount              int64
+	RefundReason              string
+	OutRefundNo               string
+	IdempotencyOperationScope string
+	IdempotencyActorUserID    int64
+	IdempotencyKey            string
+	IdempotencyRequestHash    string
 }
 
 // CreateRefundOrderTxResult 创建退款单事务结果
 type CreateRefundOrderTxResult struct {
-	RefundOrder  RefundOrder
-	PaymentOrder PaymentOrder
+	RefundOrder         RefundOrder
+	PaymentOrder        PaymentOrder
+	IdempotencyReplayed bool
 }
 
 // CreateRefundOrderTx 以单一事务原子性地校验退款金额并创建退款单。
@@ -45,6 +50,34 @@ func (store *SQLStore) CreateRefundOrderTx(ctx context.Context, arg CreateRefund
 			return fmt.Errorf("lock payment order: %w", err)
 		}
 		result.PaymentOrder = paymentOrder
+
+		useIdempotency := arg.IdempotencyOperationScope != "" || arg.IdempotencyActorUserID != 0 || arg.IdempotencyKey != "" || arg.IdempotencyRequestHash != ""
+		if useIdempotency {
+			if arg.IdempotencyOperationScope == "" || arg.IdempotencyActorUserID == 0 || arg.IdempotencyKey == "" || arg.IdempotencyRequestHash == "" {
+				return &requestError{statusCode: http.StatusBadRequest, err: errors.New("refund idempotency metadata is incomplete")}
+			}
+
+			binding, bindingErr := q.GetRefundRequestIdempotencyForUpdate(ctx, GetRefundRequestIdempotencyForUpdateParams{
+				OperationScope: arg.IdempotencyOperationScope,
+				ActorUserID:    arg.IdempotencyActorUserID,
+				IdempotencyKey: arg.IdempotencyKey,
+			})
+			if bindingErr == nil {
+				if binding.RequestHash != arg.IdempotencyRequestHash {
+					return &requestError{statusCode: http.StatusConflict, err: errors.New("idempotency key already used by a different refund request")}
+				}
+				refundOrder, getErr := q.GetRefundOrder(ctx, binding.RefundOrderID)
+				if getErr != nil {
+					return fmt.Errorf("get idempotent refund order: %w", getErr)
+				}
+				result.RefundOrder = refundOrder
+				result.IdempotencyReplayed = true
+				return nil
+			}
+			if !errors.Is(bindingErr, ErrRecordNotFound) {
+				return fmt.Errorf("get refund request idempotency: %w", bindingErr)
+			}
+		}
 
 		if paymentOrder.Status != "paid" {
 			return &requestError{statusCode: http.StatusBadRequest, err: errors.New("payment order is not paid")}
@@ -85,6 +118,20 @@ func (store *SQLStore) CreateRefundOrderTx(ctx context.Context, arg CreateRefund
 			return fmt.Errorf("create refund order: %w", err)
 		}
 		result.RefundOrder = refundOrder
+		if useIdempotency {
+			if _, err := q.CreateRefundRequestIdempotency(ctx, CreateRefundRequestIdempotencyParams{
+				OperationScope: arg.IdempotencyOperationScope,
+				ActorUserID:    arg.IdempotencyActorUserID,
+				IdempotencyKey: arg.IdempotencyKey,
+				RequestHash:    arg.IdempotencyRequestHash,
+				RefundOrderID:  refundOrder.ID,
+			}); err != nil {
+				if errors.Is(err, ErrRecordNotFound) {
+					return &requestError{statusCode: http.StatusConflict, err: errors.New("idempotency key already used by a different refund request")}
+				}
+				return fmt.Errorf("create refund request idempotency: %w", err)
+			}
+		}
 		return nil
 	})
 

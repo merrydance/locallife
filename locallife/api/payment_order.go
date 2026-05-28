@@ -1188,18 +1188,25 @@ type createRefundOrderRequest struct {
 	RefundReason   string `json:"refund_reason,omitempty"`
 }
 
+const (
+	refundCreateIdempotencyHeader       = "Idempotency-Key"
+	refundCreateMaxIdempotencyKeyLength = 256
+)
+
 // createRefundOrder godoc
 // @Summary 创建退款订单（商户端）
 // @Description 商户为已支付的支付订单创建退款
 // @Tags 退款管理
 // @Accept json
 // @Produce json
+// @Param Idempotency-Key header string true "幂等键，同一笔退款重试必须复用同一个值"
 // @Param request body createRefundOrderRequest true "退款详情"
-// @Success 200 {object} refundOrderResponse "退款订单"
+// @Success 201 {object} refundOrderResponse "退款订单"
 // @Failure 400 {object} ErrorResponse "请求参数错误或订单状态不允许退款"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "非商户用户"
 // @Failure 404 {object} ErrorResponse "支付订单不存在"
+// @Failure 409 {object} ErrorResponse "幂等键冲突"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Router /v1/refunds [post]
 // @Security BearerAuth
@@ -1207,6 +1214,16 @@ func (server *Server) createRefundOrder(ctx *gin.Context) {
 	var req createRefundOrderRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		respondPaymentRequestError(ctx, "create_refund_order_bind_request", err, "退款申请参数格式无效，请选择支付单、退款类型和退款金额后重试")
+		return
+	}
+
+	idempotencyKey := strings.TrimSpace(ctx.GetHeader(refundCreateIdempotencyHeader))
+	if idempotencyKey == "" {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("Idempotency-Key header is required")))
+		return
+	}
+	if len(idempotencyKey) > refundCreateMaxIdempotencyKeyLength {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("Idempotency-Key header is too long")))
 		return
 	}
 
@@ -1222,6 +1239,7 @@ func (server *Server) createRefundOrder(ctx *gin.Context) {
 		RefundType:                       req.RefundType,
 		RefundAmount:                     req.RefundAmount,
 		RefundReason:                     req.RefundReason,
+		IdempotencyKey:                   idempotencyKey,
 		ProfitSharingReturnRetryInterval: server.config.ProfitSharingReturnRetryInterval,
 	})
 	if err != nil {

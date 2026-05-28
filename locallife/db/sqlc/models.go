@@ -2010,6 +2010,17 @@ type RefundOrder struct {
 	CreatedAt      time.Time          `json:"created_at"`
 }
 
+type RefundRequestIdempotency struct {
+	ID             int64     `json:"id"`
+	OperationScope string    `json:"operation_scope"`
+	ActorUserID    int64     `json:"actor_user_id"`
+	IdempotencyKey string    `json:"idempotency_key"`
+	RequestHash    string    `json:"request_hash"`
+	RefundOrderID  int64     `json:"refund_order_id"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
 type Region struct {
 	ID int64 `json:"id"`
 	// 行政区划代码

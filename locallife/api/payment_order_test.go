@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -955,6 +956,7 @@ func TestCreateRefundOrderAPI(t *testing.T) {
 					require.Equal(t, "full", input.RefundType)
 					require.Equal(t, int64(10000), input.RefundAmount)
 					require.Equal(t, "用户申请退款", input.RefundReason)
+					require.Equal(t, "refund-api-1", input.IdempotencyKey)
 					return logic.CreateRefundOrderResult{RefundOrder: refundOrder}, nil
 				}
 			},
@@ -1133,10 +1135,126 @@ func TestCreateRefundOrderAPI(t *testing.T) {
 			request.Header.Set("Content-Type", "application/json")
 
 			tc.setupAuth(t, request, server.tokenMaker)
+			if tc.name != "NoAuthorization" && tc.name != "InvalidRefundType" && tc.name != "InvalidRefundAmount_Zero" {
+				request.Header.Set("Idempotency-Key", "refund-api-1")
+			}
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestCreateRefundOrderAPI_RequiresIdempotencyKey(t *testing.T) {
+	user, _ := randomUser(t)
+	paymentOrder := randomPaymentOrder(user.ID, nil)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	orchestrator := &stubRefundOrchestrator{
+		createRefundOrderFunc: func(context.Context, logic.CreateRefundOrderInput) (logic.CreateRefundOrderResult, error) {
+			t.Fatal("refund orchestrator should not be called without Idempotency-Key")
+			return logic.CreateRefundOrderResult{}, nil
+		},
+	}
+
+	server := newTestServer(t, store)
+	server.refundOrchestrator = orchestrator
+	recorder := httptest.NewRecorder()
+
+	data, err := json.Marshal(gin.H{
+		"payment_order_id": paymentOrder.ID,
+		"refund_type":      "full",
+		"refund_amount":    int64(10000),
+	})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/refunds", bytes.NewReader(data))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "Idempotency-Key header is required")
+}
+
+func TestCreateRefundOrderAPI_RejectsTooLongIdempotencyKey(t *testing.T) {
+	user, _ := randomUser(t)
+	paymentOrder := randomPaymentOrder(user.ID, nil)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	orchestrator := &stubRefundOrchestrator{
+		createRefundOrderFunc: func(context.Context, logic.CreateRefundOrderInput) (logic.CreateRefundOrderResult, error) {
+			t.Fatal("refund orchestrator should not be called with an oversized Idempotency-Key")
+			return logic.CreateRefundOrderResult{}, nil
+		},
+	}
+
+	server := newTestServer(t, store)
+	server.refundOrchestrator = orchestrator
+	recorder := httptest.NewRecorder()
+
+	data, err := json.Marshal(gin.H{
+		"payment_order_id": paymentOrder.ID,
+		"refund_type":      "full",
+		"refund_amount":    int64(10000),
+	})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/refunds", bytes.NewReader(data))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", strings.Repeat("a", refundCreateMaxIdempotencyKeyLength+1))
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "Idempotency-Key header is too long")
+}
+
+func TestCreateRefundOrderAPI_PassesTrimmedIdempotencyKeyToLogic(t *testing.T) {
+	user, _ := randomUser(t)
+	paymentOrder := randomPaymentOrder(user.ID, nil)
+	refundOrder := randomRefundOrder(paymentOrder.ID, 100*fenPerYuan)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	orchestrator := &stubRefundOrchestrator{
+		createRefundOrderFunc: func(_ context.Context, input logic.CreateRefundOrderInput) (logic.CreateRefundOrderResult, error) {
+			require.Equal(t, "refund-key-1", input.IdempotencyKey)
+			return logic.CreateRefundOrderResult{RefundOrder: refundOrder}, nil
+		},
+	}
+
+	server := newTestServer(t, store)
+	server.refundOrchestrator = orchestrator
+	recorder := httptest.NewRecorder()
+
+	data, err := json.Marshal(gin.H{
+		"payment_order_id": paymentOrder.ID,
+		"refund_type":      "full",
+		"refund_amount":    int64(10000),
+	})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/refunds", bytes.NewReader(data))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", " refund-key-1 ")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusCreated, recorder.Code)
 }
 
 // ==================== GetRefundOrder Tests ====================

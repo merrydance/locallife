@@ -4519,6 +4519,21 @@ func (mr *MockStoreMockRecorder) CreateRefundOrderTx(ctx, arg any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRefundOrderTx", reflect.TypeOf((*MockStore)(nil).CreateRefundOrderTx), ctx, arg)
 }
 
+// CreateRefundRequestIdempotency mocks base method.
+func (m *MockStore) CreateRefundRequestIdempotency(ctx context.Context, arg db.CreateRefundRequestIdempotencyParams) (db.RefundRequestIdempotency, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateRefundRequestIdempotency", ctx, arg)
+	ret0, _ := ret[0].(db.RefundRequestIdempotency)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateRefundRequestIdempotency indicates an expected call of CreateRefundRequestIdempotency.
+func (mr *MockStoreMockRecorder) CreateRefundRequestIdempotency(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRefundRequestIdempotency", reflect.TypeOf((*MockStore)(nil).CreateRefundRequestIdempotency), ctx, arg)
+}
+
 // CreateRegion mocks base method.
 func (m *MockStore) CreateRegion(ctx context.Context, arg db.CreateRegionParams) (db.Region, error) {
 	m.ctrl.T.Helper()
@@ -10346,6 +10361,36 @@ func (m *MockStore) GetRefundOrderForUpdate(ctx context.Context, id int64) (db.R
 func (mr *MockStoreMockRecorder) GetRefundOrderForUpdate(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRefundOrderForUpdate", reflect.TypeOf((*MockStore)(nil).GetRefundOrderForUpdate), ctx, id)
+}
+
+// GetRefundRequestIdempotency mocks base method.
+func (m *MockStore) GetRefundRequestIdempotency(ctx context.Context, arg db.GetRefundRequestIdempotencyParams) (db.RefundRequestIdempotency, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRefundRequestIdempotency", ctx, arg)
+	ret0, _ := ret[0].(db.RefundRequestIdempotency)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRefundRequestIdempotency indicates an expected call of GetRefundRequestIdempotency.
+func (mr *MockStoreMockRecorder) GetRefundRequestIdempotency(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRefundRequestIdempotency", reflect.TypeOf((*MockStore)(nil).GetRefundRequestIdempotency), ctx, arg)
+}
+
+// GetRefundRequestIdempotencyForUpdate mocks base method.
+func (m *MockStore) GetRefundRequestIdempotencyForUpdate(ctx context.Context, arg db.GetRefundRequestIdempotencyForUpdateParams) (db.RefundRequestIdempotency, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRefundRequestIdempotencyForUpdate", ctx, arg)
+	ret0, _ := ret[0].(db.RefundRequestIdempotency)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRefundRequestIdempotencyForUpdate indicates an expected call of GetRefundRequestIdempotencyForUpdate.
+func (mr *MockStoreMockRecorder) GetRefundRequestIdempotencyForUpdate(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRefundRequestIdempotencyForUpdate", reflect.TypeOf((*MockStore)(nil).GetRefundRequestIdempotencyForUpdate), ctx, arg)
 }
 
 // GetRegion mocks base method.

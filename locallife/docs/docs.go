@@ -24509,6 +24509,13 @@ const docTemplate = `{
                 "summary": "创建退款订单（商户端）",
                 "parameters": [
                     {
+                        "type": "string",
+                        "description": "幂等键，同一笔退款重试必须复用同一个值",
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
                         "description": "退款详情",
                         "name": "request",
                         "in": "body",
@@ -24519,7 +24526,7 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
+                    "201": {
                         "description": "退款订单",
                         "schema": {
                             "$ref": "#/definitions/api.refundOrderResponse"
@@ -24545,6 +24552,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "支付订单不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "幂等键冲突",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }

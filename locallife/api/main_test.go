@@ -57,6 +57,8 @@ p, admin, /v1/admin/*, GET
 p, admin, /v1/admin/*, POST
 p, admin, /v1/groups, POST
 p, admin, /v1/groups/applications/:id/review, POST
+p, admin, /v1/food-safety/merchants/:id/suspend, PATCH
+p, admin, /v1/fraud/detect, POST
 
 # Operator policies
 p, operator, /v1/operator/*, GET

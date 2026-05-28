@@ -2,10 +2,12 @@ package logic
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 )
 
 const paymentTypeProfitSharing = "profit_sharing"
+const refundCreateIdempotencyScope = "merchant_refund_create"
 
 type RefundService struct {
 	store         db.Store
@@ -72,12 +75,26 @@ func (s *RefundService) maybeMarkPaymentOrderRefunded(ctx context.Context, payme
 }
 
 func (s *RefundService) CreateRefundOrder(ctx context.Context, input CreateRefundOrderInput) (CreateRefundOrderResult, error) {
+	idempotencyKey := strings.TrimSpace(input.IdempotencyKey)
+	if idempotencyKey == "" {
+		return CreateRefundOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("Idempotency-Key header is required"))
+	}
+
 	merchant, err := resolveMerchantForUser(ctx, s.store, input.ActorUserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			return CreateRefundOrderResult{}, NewRequestError(http.StatusForbidden, errors.New("you are not a merchant"))
 		}
 		return CreateRefundOrderResult{}, err
+	}
+
+	requestHash := refundCreateRequestHash(input)
+	replay, replayHandled, err := s.replayCreateRefundOrder(ctx, input, idempotencyKey, requestHash)
+	if err != nil {
+		return CreateRefundOrderResult{}, err
+	}
+	if replayHandled {
+		return replay, nil
 	}
 
 	paymentOrder, err := s.store.GetPaymentOrder(ctx, input.PaymentOrderID)
@@ -125,11 +142,15 @@ func (s *RefundService) CreateRefundOrder(ctx context.Context, input CreateRefun
 		return CreateRefundOrderResult{}, fmt.Errorf("generate out refund no: %w", err)
 	}
 	txResult, err := s.store.CreateRefundOrderTx(ctx, db.CreateRefundOrderTxParams{
-		PaymentOrderID: input.PaymentOrderID,
-		RefundType:     input.RefundType,
-		RefundAmount:   input.RefundAmount,
-		RefundReason:   input.RefundReason,
-		OutRefundNo:    outRefundNo,
+		PaymentOrderID:            input.PaymentOrderID,
+		RefundType:                input.RefundType,
+		RefundAmount:              input.RefundAmount,
+		RefundReason:              input.RefundReason,
+		OutRefundNo:               outRefundNo,
+		IdempotencyOperationScope: refundCreateIdempotencyScope,
+		IdempotencyActorUserID:    input.ActorUserID,
+		IdempotencyKey:            idempotencyKey,
+		IdempotencyRequestHash:    requestHash,
 	})
 	if err != nil {
 		if statusCode, ok := db.IsRefundRequestError(err); ok {
@@ -138,6 +159,9 @@ func (s *RefundService) CreateRefundOrder(ctx context.Context, input CreateRefun
 		return CreateRefundOrderResult{}, fmt.Errorf("create baofu refund order: %w", err)
 	}
 	refundOrder := txResult.RefundOrder
+	if txResult.IdempotencyReplayed {
+		return CreateRefundOrderResult{RefundOrder: refundOrder}, nil
+	}
 	if err := s.processBaofuPreShareRefund(ctx, paymentOrder, refundOrder, input); err != nil {
 		return CreateRefundOrderResult{}, err
 	}
@@ -145,6 +169,45 @@ func (s *RefundService) CreateRefundOrder(ctx context.Context, input CreateRefun
 		refundOrder = latest
 	}
 	return CreateRefundOrderResult{RefundOrder: refundOrder}, nil
+}
+
+func (s *RefundService) replayCreateRefundOrder(ctx context.Context, input CreateRefundOrderInput, idempotencyKey string, requestHash string) (CreateRefundOrderResult, bool, error) {
+	binding, err := s.store.GetRefundRequestIdempotency(ctx, db.GetRefundRequestIdempotencyParams{
+		OperationScope: refundCreateIdempotencyScope,
+		ActorUserID:    input.ActorUserID,
+		IdempotencyKey: idempotencyKey,
+	})
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return CreateRefundOrderResult{}, false, nil
+		}
+		return CreateRefundOrderResult{}, false, fmt.Errorf("get refund request idempotency: %w", err)
+	}
+	if binding.RequestHash != requestHash {
+		return CreateRefundOrderResult{}, true, NewRequestError(http.StatusConflict, errors.New("idempotency key already used by a different refund request"))
+	}
+	refundOrder, err := s.store.GetRefundOrder(ctx, binding.RefundOrderID)
+	if err != nil {
+		return CreateRefundOrderResult{}, true, fmt.Errorf("get idempotent refund order: %w", err)
+	}
+	if refundOrder.PaymentOrderID != input.PaymentOrderID {
+		return CreateRefundOrderResult{}, true, fmt.Errorf("idempotent refund order payment mismatch")
+	}
+	return CreateRefundOrderResult{RefundOrder: refundOrder}, true, nil
+}
+
+func refundCreateRequestHash(input CreateRefundOrderInput) string {
+	parts := []string{
+		"v1",
+		refundCreateIdempotencyScope,
+		strconv.FormatInt(input.ActorUserID, 10),
+		strconv.FormatInt(input.PaymentOrderID, 10),
+		strings.TrimSpace(input.RefundType),
+		strconv.FormatInt(input.RefundAmount, 10),
+		strings.TrimSpace(input.RefundReason),
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return fmt.Sprintf("sha256:%x", sum[:])
 }
 
 func (s *RefundService) GetRefundOrder(ctx context.Context, input GetRefundOrderInput) (GetRefundOrderResult, error) {

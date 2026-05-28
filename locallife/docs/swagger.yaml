@@ -26266,6 +26266,11 @@ paths:
       - application/json
       description: 商户为已支付的支付订单创建退款
       parameters:
+      - description: 幂等键，同一笔退款重试必须复用同一个值
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
       - description: 退款详情
         in: body
         name: request
@@ -26275,7 +26280,7 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
+        "201":
           description: 退款订单
           schema:
             $ref: '#/definitions/api.refundOrderResponse'
@@ -26293,6 +26298,10 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
         "404":
           description: 支付订单不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: 幂等键冲突
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "500":

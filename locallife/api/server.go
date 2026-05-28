@@ -1448,13 +1448,13 @@ func (server *Server) setupRouter() {
 	foodSafetyGroup := authGroup.Group("/food-safety")
 	{
 		foodSafetyGroup.POST("/report", server.ReportFoodSafety)
-		foodSafetyGroup.PATCH("/merchants/:id/suspend", server.SuspendMerchant)
+		foodSafetyGroup.PATCH("/merchants/:id/suspend", server.CasbinRoleMiddleware(RoleAdmin), server.SuspendMerchant)
 	}
 
 	// 欺诈检测路由
 	fraudGroup := authGroup.Group("/fraud")
 	{
-		fraudGroup.POST("/detect", server.TriggerFraudDetection)
+		fraudGroup.POST("/detect", server.CasbinRoleMiddleware(RoleAdmin), server.TriggerFraudDetection)
 	}
 
 	// 购物车路由

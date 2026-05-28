@@ -519,6 +519,13 @@ INSERT INTO ocr_jobs (
 )
 ON CONFLICT (idempotency_key) DO UPDATE
 SET updated_at = ocr_jobs.updated_at
+WHERE ocr_jobs.document_type = EXCLUDED.document_type
+  AND ocr_jobs.provider = EXCLUDED.provider
+  AND ocr_jobs.media_asset_id = EXCLUDED.media_asset_id
+  AND ocr_jobs.owner_type = EXCLUDED.owner_type
+  AND ocr_jobs.owner_id = EXCLUDED.owner_id
+  AND ocr_jobs.side = EXCLUDED.side
+  AND ocr_jobs.requested_by = EXCLUDED.requested_by
 RETURNING id, idempotency_key, document_type, provider, provider_task_id, media_asset_id, owner_type, owner_id, side, status, attempt_count, max_attempts, next_retry_at, leased_at, lease_owner, error_code, error_message, raw_result, normalized_result, result_version, retention_until, requested_by, created_at, started_at, finished_at, updated_at
 `
 
