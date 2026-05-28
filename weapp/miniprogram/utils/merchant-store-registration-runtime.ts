@@ -36,6 +36,7 @@ import {
   buildMerchantIdCardFrontOcrRecognizedPatch,
   buildMerchantInitialDraftFormPatch,
   buildMerchantInitialDraftOcrResults,
+  buildMerchantInitialShopImagesPatch,
   buildMerchantLatestOcrFormPatch,
   buildMerchantOcrDisplayState,
   buildMerchantOcrProgressMessage,
@@ -201,22 +202,17 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
       const idCardFrontImages = idCardFrontUrl ? [{ url: idCardFrontUrl, rawUrl: buildPrivateAssetKey(data.id_card_front_media_asset_id), assetId: data.id_card_front_media_asset_id ?? undefined }] : []
       const idCardBackImages = idCardBackUrl ? [{ url: idCardBackUrl, rawUrl: buildPrivateAssetKey(data.id_card_back_media_asset_id), assetId: data.id_card_back_media_asset_id ?? undefined }] : []
       const accountPermitImages: Array<{ url: string }> = []
+      const shopImagesPatch = buildMerchantInitialShopImagesPatch({
+        data,
+        resolveDisplayUrl: getMediaDisplayUrl
+      })
 
-      const storefrontRaw: string[] = Array.isArray(data.storefront_images) ? data.storefront_images : []
-      const storefrontImages: Array<{ url: string, rawUrl?: string }> = []
-      for (const url of storefrontRaw) {
-        const resolved = getMediaDisplayUrl(url)
-        if (resolved) storefrontImages.push({ url: resolved, rawUrl: url })
-      }
-
-      const environmentRaw: string[] = Array.isArray(data.environment_images) ? data.environment_images : []
-      const environmentImages: Array<{ url: string, rawUrl?: string }> = []
-      for (const url of environmentRaw) {
-        const resolved = getMediaDisplayUrl(url)
-        if (resolved) environmentImages.push({ url: resolved, rawUrl: url })
-      }
-
-      console.log('[DEBUG] setData payload:', { formData, licenseImages: licenseImages.length, storefrontImages: storefrontImages.length, environmentImages: environmentImages.length })
+      console.log('[DEBUG] setData payload:', {
+        formData,
+        licenseImages: licenseImages.length,
+        storefrontImages: shopImagesPatch.storefrontImages.length,
+        environmentImages: shopImagesPatch.environmentImages.length
+      })
 
       this.setData({
         formData,
@@ -228,10 +224,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
         idCardFrontImages,
         idCardBackImages,
         accountPermitImages,
-        storefrontImages,
-        storefrontFiles: buildUploadRenderImages(storefrontImages),
-        environmentImages,
-        environmentFiles: buildUploadRenderImages(environmentImages)
+        ...shopImagesPatch
       })
 
       logger.debug('[MerchantRegister] initApplication 完成', formData, 'initApplication')

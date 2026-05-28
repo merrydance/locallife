@@ -24,6 +24,8 @@
 
 **Ninth Remediation Checkpoint:** 97.5 / 100 after the merchant registration upload OCR result form patch owner extraction slice.
 
+**Tenth Remediation Checkpoint:** 98 / 100 after the merchant registration initial shop image view patch owner extraction slice.
+
 **Target Score:** 100 / 100
 
 **Review Baseline:**
@@ -100,6 +102,12 @@
 - Extracted merchant registration upload OCR result form-field patches for business license, food permit, ID card front, and ID card back into `merchant-store-registration-view.ts`.
 - Kept upload callbacks in `merchant-store-registration-runtime.ts` responsible for OCR API calls, document submission handling, `setData` timing, and draft persistence while removing another DTO-to-ViewState mapping group from the runtime.
 - Extended `check:merchant-store-registration-view-owner` to verify recognized OCR patch behavior and block the extracted upload callback mappings from drifting back into the runtime file.
+
+**Tenth Remediation Scope:**
+
+- Extracted merchant registration initial storefront/environment image ViewState construction into `merchant-store-registration-view.ts`.
+- Kept `initApplication` responsible for backend fetch, status routing, private media signing, and page `setData` timing while delegating public shop image URL filtering and upload-render file construction to the view owner.
+- Extended `check:merchant-store-registration-view-owner` to verify initial shop image patch behavior and block the extracted raw-image loops from drifting back into the runtime file.
 
 ---
 

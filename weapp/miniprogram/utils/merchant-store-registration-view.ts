@@ -455,6 +455,46 @@ export function buildMerchantShopImagesPayload(params: {
   }
 }
 
+export function buildMerchantInitialShopImagesPatch(params: {
+  data: Pick<MerchantDraftExt, 'storefront_images' | 'environment_images'>
+  resolveDisplayUrl: (rawUrl: string) => string
+}): {
+  storefrontImages: ImageFieldItem[]
+  storefrontFiles: ImageFieldItem[]
+  environmentImages: ImageFieldItem[]
+  environmentFiles: ImageFieldItem[]
+} {
+  const buildInitialImages = (rawUrls?: string[] | null): ImageFieldItem[] => {
+    if (!Array.isArray(rawUrls)) {
+      return []
+    }
+
+    return rawUrls.reduce<ImageFieldItem[]>((images, rawUrl) => {
+      const raw = normalizeImageRawUrl(rawUrl)
+      if (!raw) {
+        return images
+      }
+
+      const resolved = params.resolveDisplayUrl(raw)
+      if (!resolved) {
+        return images
+      }
+
+      images.push({ url: resolved, rawUrl: raw })
+      return images
+    }, [])
+  }
+
+  const storefrontImages = buildInitialImages(params.data.storefront_images)
+  const environmentImages = buildInitialImages(params.data.environment_images)
+  return {
+    storefrontImages,
+    storefrontFiles: buildUploadRenderImages(storefrontImages),
+    environmentImages,
+    environmentFiles: buildUploadRenderImages(environmentImages)
+  }
+}
+
 export function buildMerchantLatestOcrFormPatch(data: MerchantDraftExt, currentAddress?: string): MerchantLatestOcrFormPatch {
   return {
     licenseName: toSafeString(data.business_license_ocr?.enterprise_name),

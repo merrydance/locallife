@@ -481,6 +481,20 @@ assert.deepStrictEqual(plain(owner.buildMerchantShopImagesPayload({
   storefront_images: ['raw/storefront.jpg'],
   environment_images: ['raw/environment.jpg']
 })
+assert.deepStrictEqual(plain(owner.buildMerchantInitialShopImagesPatch({
+  data: {
+    storefront_images: ['raw/storefront.jpg', '', 'raw/missing.jpg'],
+    environment_images: ['raw/environment.jpg']
+  },
+  resolveDisplayUrl(rawUrl) {
+    return rawUrl === 'raw/missing.jpg' ? '' : `https://cdn.local/${rawUrl}`
+  }
+})), {
+  storefrontImages: [{ url: 'https://cdn.local/raw/storefront.jpg', rawUrl: 'raw/storefront.jpg' }],
+  storefrontFiles: [{ url: 'https://cdn.local/raw/storefront.jpg', rawUrl: 'raw/storefront.jpg', status: 'done' }],
+  environmentImages: [{ url: 'https://cdn.local/raw/environment.jpg', rawUrl: 'raw/environment.jpg' }],
+  environmentFiles: [{ url: 'https://cdn.local/raw/environment.jpg', rawUrl: 'raw/environment.jpg', status: 'done' }]
+})
 
 const runtimeSource = fs.readFileSync(runtimePath, 'utf8')
 const forbiddenRuntimePatterns = [
@@ -515,7 +529,9 @@ const forbiddenRuntimePatterns = [
   "'formData.licenseName': ocr.enterprise_name",
   "'formData.foodLicenseValidity': ocr.valid_to",
   "'formData.legalPerson': ocr.name",
-  "'formData.idCardValidity': ocr.valid_date"
+  "'formData.idCardValidity': ocr.valid_date",
+  'const storefrontRaw',
+  'const environmentRaw'
 ]
 
 for (const pattern of forbiddenRuntimePatterns) {
