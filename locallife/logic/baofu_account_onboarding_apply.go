@@ -16,6 +16,14 @@ import (
 )
 
 func (s *BaofuAccountOnboardingService) ApplyAccountOpenResult(ctx context.Context, flow db.BaofuAccountOpeningFlow, result baofucontracts.AccountResult) (BaofuAccountOpenApplyResult, error) {
+	return s.applyAccountOpenResult(ctx, flow, result, true)
+}
+
+func (s *BaofuAccountOnboardingService) ApplyAccountOpenCallbackResult(ctx context.Context, flow db.BaofuAccountOpeningFlow, result baofucontracts.AccountResult) (BaofuAccountOpenApplyResult, error) {
+	return s.applyAccountOpenResult(ctx, flow, result, false)
+}
+
+func (s *BaofuAccountOnboardingService) applyAccountOpenResult(ctx context.Context, flow db.BaofuAccountOpeningFlow, result baofucontracts.AccountResult, continueMerchantReport bool) (BaofuAccountOpenApplyResult, error) {
 	if s == nil || s.store == nil {
 		return BaofuAccountOpenApplyResult{}, ErrBaofuAccountOnboardingNotConfigured
 	}
@@ -38,7 +46,7 @@ func (s *BaofuAccountOnboardingService) ApplyAccountOpenResult(ctx context.Conte
 			return BaofuAccountOpenApplyResult{Flow: flow, Binding: &binding}, nil
 		}
 		if strings.TrimSpace(flow.State) == db.BaofuAccountOpeningStateFailed && !baofuAccountDuplicateFailureCode(flow.FailureCode.String) {
-			return s.recoverFailedFlowFromActiveBinding(ctx, flow, &normalized)
+			return s.recoverFailedFlowFromActiveBinding(ctx, flow, &normalized, continueMerchantReport)
 		}
 		if flow.OwnerType == db.BaofuAccountOwnerTypeMerchant {
 			updated, err := s.store.MarkBaofuAccountOpeningFlowMerchantReportProcessing(ctx, db.MarkBaofuAccountOpeningFlowMerchantReportProcessingParams{
@@ -49,7 +57,7 @@ func (s *BaofuAccountOnboardingService) ApplyAccountOpenResult(ctx context.Conte
 			if err != nil {
 				return BaofuAccountOpenApplyResult{}, err
 			}
-			if s.merchantReportClient != nil {
+			if continueMerchantReport && s.merchantReportClient != nil {
 				merchantReportStore, ok := s.store.(baofuAccountMerchantReportStore)
 				if !ok {
 					return BaofuAccountOpenApplyResult{}, ErrBaofuMerchantReportServiceNotConfigured
@@ -72,7 +80,7 @@ func (s *BaofuAccountOnboardingService) ApplyAccountOpenResult(ctx context.Conte
 		return BaofuAccountOpenApplyResult{Flow: updated, Binding: &binding}, nil
 	case db.BaofuAccountOpenStateFailed, db.BaofuAccountOpenStateAbnormal:
 		if baofuAccountOpenResultRequiresReconcile(normalized) {
-			applied, reconciled, err := s.reconcileDuplicateAccountOpenResult(ctx, flow, normalized)
+			applied, reconciled, err := s.reconcileDuplicateAccountOpenResult(ctx, flow, normalized, continueMerchantReport)
 			if err != nil {
 				return BaofuAccountOpenApplyResult{}, err
 			}
@@ -133,7 +141,7 @@ func baofuAccountOpenResultRequiresReconcile(result baofucontracts.AccountResult
 	return baofuAccountDuplicateFailureCode(result.FailCode)
 }
 
-func (s *BaofuAccountOnboardingService) reconcileDuplicateAccountOpenResult(ctx context.Context, flow db.BaofuAccountOpeningFlow, duplicateResult baofucontracts.AccountResult) (BaofuAccountOpenApplyResult, bool, error) {
+func (s *BaofuAccountOnboardingService) reconcileDuplicateAccountOpenResult(ctx context.Context, flow db.BaofuAccountOpeningFlow, duplicateResult baofucontracts.AccountResult, continueMerchantReport bool) (BaofuAccountOpenApplyResult, bool, error) {
 	if s == nil || s.accountClient == nil {
 		return BaofuAccountOpenApplyResult{}, false, nil
 	}
@@ -183,7 +191,7 @@ func (s *BaofuAccountOnboardingService) reconcileDuplicateAccountOpenResult(ctx 
 			Msg("baofu account duplicate reconciliation accepted query result from previous opening request")
 		normalized = baofuAccountDuplicateReconcileResult(flow, normalized)
 	}
-	applied, err := s.ApplyAccountOpenResult(ctx, flow, normalized)
+	applied, err := s.applyAccountOpenResult(ctx, flow, normalized, continueMerchantReport)
 	if err != nil {
 		return BaofuAccountOpenApplyResult{}, false, err
 	}
@@ -393,7 +401,7 @@ func (s *BaofuAccountOnboardingService) markBindingActive(ctx context.Context, b
 	return s.store.MarkBaofuAccountBindingActive(ctx, activeParams)
 }
 
-func (s *BaofuAccountOnboardingService) recoverFailedFlowFromActiveBinding(ctx context.Context, flow db.BaofuAccountOpeningFlow, result *baofucontracts.AccountResult) (BaofuAccountOpenApplyResult, error) {
+func (s *BaofuAccountOnboardingService) recoverFailedFlowFromActiveBinding(ctx context.Context, flow db.BaofuAccountOpeningFlow, result *baofucontracts.AccountResult, continueMerchantReport bool) (BaofuAccountOpenApplyResult, error) {
 	binding, err := s.store.GetBaofuAccountBindingByOwner(ctx, db.GetBaofuAccountBindingByOwnerParams{OwnerType: flow.OwnerType, OwnerID: flow.OwnerID})
 	if err != nil {
 		return BaofuAccountOpenApplyResult{}, err
@@ -435,6 +443,7 @@ func (s *BaofuAccountOnboardingService) recoverFailedFlowFromActiveBinding(ctx c
 	}
 	if updated.OwnerType == db.BaofuAccountOwnerTypeMerchant &&
 		strings.TrimSpace(updated.State) == db.BaofuAccountOpeningStateMerchantReportProcessing &&
+		continueMerchantReport &&
 		s.merchantReportClient != nil {
 		merchantReportStore, ok := s.store.(baofuAccountMerchantReportStore)
 		if !ok {

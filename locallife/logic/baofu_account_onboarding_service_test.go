@@ -973,6 +973,99 @@ func TestBaofuAccountMerchantReportServiceRecoverReadyActivatesApprovedMerchant(
 	require.Equal(t, db.MerchantPaymentConfigStatusActive, store.merchantPaymentConfigs[0].Status)
 }
 
+func TestBaofuAccountMerchantReportServiceRecoverTreatsRepeatBindAsSucceededWhenCommandExists(t *testing.T) {
+	store := newFakeBaofuAccountOnboardingStore()
+	flow := db.BaofuAccountOpeningFlow{
+		ID:               703,
+		OwnerType:        db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:          88,
+		AccountType:      db.BaofuAccountTypeBusiness,
+		State:            db.BaofuAccountOpeningStateAppletAuthPending,
+		AccountBindingID: pgtype.Int8{Int64: 22, Valid: true},
+		MerchantReportID: pgtype.Int8{Int64: 903, Valid: true},
+	}
+	store.flows = append(store.flows, flow)
+	store.merchants[88] = db.Merchant{ID: 88, Status: "approved"}
+	store.merchantReports = append(store.merchantReports, db.BaofuMerchantReport{
+		ID:              903,
+		OwnerType:       db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:         88,
+		ReportType:      db.BaofuMerchantReportTypeWechat,
+		ReportNo:        "MR202605090703",
+		ReportState:     db.BaofuMerchantReportStateSucceeded,
+		AppletAuthState: db.BaofuMerchantReportAppletAuthStatePending,
+		SubMchID:        pgtype.Text{String: "1900000703", Valid: true},
+	})
+	store.commands = append(store.commands, db.CreateExternalPaymentCommandParams{
+		Provider:           db.ExternalPaymentProviderBaofu,
+		Channel:            db.PaymentChannelBaofuAggregate,
+		Capability:         db.ExternalPaymentCapabilityBaofuMerchantReport,
+		CommandType:        db.ExternalPaymentCommandTypeBaofuBindSubConfig,
+		ExternalObjectType: "baofu_bind_sub_config",
+		ExternalObjectKey:  "1900000703",
+	})
+	service := NewBaofuAccountMerchantReportService(store, &fakeMerchantReportClient{
+		bindErr: baofu.NewProviderBusinessError("bind_sub_config", "BIND_REPEAT_ERROR", "绑定关系已存在"),
+	}, nil, BaofuAccountMerchantReportConfig{
+		CollectMerchantID: "100000",
+		CollectTerminalID: "200000",
+		MiniProgramAppID:  "wx1234567890abcdef",
+		ChannelID:         "CH001",
+		ChannelName:       "LocalLife",
+		Business:          "758-2",
+	})
+
+	updated, err := service.RecoverMerchantReportFlow(context.Background(), flow)
+
+	require.NoError(t, err)
+	require.Equal(t, db.BaofuAccountOpeningStateReady, updated.State)
+	require.Equal(t, db.BaofuMerchantReportAppletAuthStateSucceeded, store.merchantReports[0].AppletAuthState)
+	require.Equal(t, db.MerchantStatusActive, store.merchants[88].Status)
+}
+
+func TestBaofuAccountMerchantReportServiceRecoverDoesNotTreatRepeatBindAsSucceededWithoutPreviousCommand(t *testing.T) {
+	store := newFakeBaofuAccountOnboardingStore()
+	flow := db.BaofuAccountOpeningFlow{
+		ID:               704,
+		OwnerType:        db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:          88,
+		AccountType:      db.BaofuAccountTypeBusiness,
+		State:            db.BaofuAccountOpeningStateAppletAuthPending,
+		AccountBindingID: pgtype.Int8{Int64: 22, Valid: true},
+		MerchantReportID: pgtype.Int8{Int64: 904, Valid: true},
+	}
+	store.flows = append(store.flows, flow)
+	store.merchants[88] = db.Merchant{ID: 88, Status: db.MerchantStatusApproved}
+	store.merchantReports = append(store.merchantReports, db.BaofuMerchantReport{
+		ID:              904,
+		OwnerType:       db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:         88,
+		ReportType:      db.BaofuMerchantReportTypeWechat,
+		ReportNo:        "MR202605090704",
+		ReportState:     db.BaofuMerchantReportStateSucceeded,
+		AppletAuthState: db.BaofuMerchantReportAppletAuthStatePending,
+		SubMchID:        pgtype.Text{String: "1900000704", Valid: true},
+	})
+	service := NewBaofuAccountMerchantReportService(store, &fakeMerchantReportClient{
+		bindErr: baofu.NewProviderBusinessError("bind_sub_config", "BIND_REPEAT_ERROR", "绑定关系已存在"),
+	}, nil, BaofuAccountMerchantReportConfig{
+		CollectMerchantID: "100000",
+		CollectTerminalID: "200000",
+		MiniProgramAppID:  "wx1234567890abcdef",
+		ChannelID:         "CH001",
+		ChannelName:       "LocalLife",
+		Business:          "758-2",
+	})
+
+	_, err := service.RecoverMerchantReportFlow(context.Background(), flow)
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusBadGateway, reqErr.Status)
+	require.EqualError(t, reqErr.Err, "微信支付授权目录绑定失败，请联系平台处理后重试")
+	require.Equal(t, db.BaofuMerchantReportAppletAuthStatePending, store.merchantReports[0].AppletAuthState)
+	require.Equal(t, db.MerchantStatusApproved, store.merchants[88].Status)
+}
+
 func TestBaofuAccountMerchantReportServiceRecoverProviderErrorReturnsSafeContext(t *testing.T) {
 	store := newFakeBaofuAccountOnboardingStore()
 	providerErr := &baofu.ProviderError{
@@ -1250,6 +1343,7 @@ type fakeBaofuAccountOnboardingStore struct {
 	merchants                map[int64]db.Merchant
 	regions                  map[int64]db.Region
 	bindingsByContract       map[string]db.BaofuAccountBinding
+	commands                 []db.CreateExternalPaymentCommandParams
 	alerts                   []db.PlatformAlertEvent
 	activeBinding            db.BaofuAccountBinding
 	lastLedger               db.CreateBaofuFeeLedgerParams
@@ -1646,8 +1740,32 @@ func (s *fakeBaofuAccountOnboardingStore) GetUser(_ context.Context, id int64) (
 	return user, nil
 }
 
-func (s *fakeBaofuAccountOnboardingStore) CreateExternalPaymentCommand(context.Context, db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+func (s *fakeBaofuAccountOnboardingStore) CreateExternalPaymentCommand(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+	s.commands = append(s.commands, arg)
 	return db.ExternalPaymentCommand{ID: s.next()}, nil
+}
+
+func (s *fakeBaofuAccountOnboardingStore) GetExternalPaymentCommandByExternalObject(_ context.Context, arg db.GetExternalPaymentCommandByExternalObjectParams) (db.ExternalPaymentCommand, error) {
+	for i := len(s.commands) - 1; i >= 0; i-- {
+		command := s.commands[i]
+		if command.Provider == arg.Provider &&
+			command.Channel == arg.Channel &&
+			command.Capability == arg.Capability &&
+			command.CommandType == arg.CommandType &&
+			command.ExternalObjectType == arg.ExternalObjectType &&
+			command.ExternalObjectKey == arg.ExternalObjectKey {
+			return db.ExternalPaymentCommand{
+				ID:                 int64(i + 1),
+				Provider:           command.Provider,
+				Channel:            command.Channel,
+				Capability:         command.Capability,
+				CommandType:        command.CommandType,
+				ExternalObjectType: command.ExternalObjectType,
+				ExternalObjectKey:  command.ExternalObjectKey,
+			}, nil
+		}
+	}
+	return db.ExternalPaymentCommand{}, db.ErrRecordNotFound
 }
 
 func (s *fakeBaofuAccountOnboardingStore) UpsertBaofuMerchantReportProcessing(_ context.Context, arg db.UpsertBaofuMerchantReportProcessingParams) (db.BaofuMerchantReport, error) {

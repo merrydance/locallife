@@ -321,6 +321,29 @@ func (s *fakeBaofuMerchantReportStore) CreateExternalPaymentCommand(ctx context.
 	return db.ExternalPaymentCommand{ID: int64(len(s.commands)), CommandType: arg.CommandType}, nil
 }
 
+func (s *fakeBaofuMerchantReportStore) GetExternalPaymentCommandByExternalObject(ctx context.Context, arg db.GetExternalPaymentCommandByExternalObjectParams) (db.ExternalPaymentCommand, error) {
+	for i := len(s.commands) - 1; i >= 0; i-- {
+		command := s.commands[i]
+		if command.Provider == arg.Provider &&
+			command.Channel == arg.Channel &&
+			command.Capability == arg.Capability &&
+			command.CommandType == arg.CommandType &&
+			command.ExternalObjectType == arg.ExternalObjectType &&
+			command.ExternalObjectKey == arg.ExternalObjectKey {
+			return db.ExternalPaymentCommand{
+				ID:                 int64(i + 1),
+				Provider:           command.Provider,
+				Channel:            command.Channel,
+				Capability:         command.Capability,
+				CommandType:        command.CommandType,
+				ExternalObjectType: command.ExternalObjectType,
+				ExternalObjectKey:  command.ExternalObjectKey,
+			}, nil
+		}
+	}
+	return db.ExternalPaymentCommand{}, db.ErrRecordNotFound
+}
+
 func (s *fakeBaofuMerchantReportStore) UpsertBaofuMerchantReportProcessing(ctx context.Context, arg db.UpsertBaofuMerchantReportProcessingParams) (db.BaofuMerchantReport, error) {
 	s.report = db.BaofuMerchantReport{ID: 77, OwnerType: arg.OwnerType, OwnerID: arg.OwnerID, ReportType: arg.ReportType, ReportNo: arg.ReportNo, BctMerID: arg.BctMerID, ReportState: db.BaofuMerchantReportStateProcessing, AppletAuthState: db.BaofuMerchantReportAppletAuthStatePending, RawSnapshot: arg.RawSnapshot}
 	return s.report, nil

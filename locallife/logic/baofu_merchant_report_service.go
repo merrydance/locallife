@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/baofu"
 	merchantcontracts "github.com/merrydance/locallife/baofu/merchantreport/contracts"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -21,6 +23,7 @@ var (
 type baofuMerchantReportStore interface {
 	GetBaofuAccountBindingByOwner(ctx context.Context, arg db.GetBaofuAccountBindingByOwnerParams) (db.BaofuAccountBinding, error)
 	CreateExternalPaymentCommand(ctx context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error)
+	GetExternalPaymentCommandByExternalObject(ctx context.Context, arg db.GetExternalPaymentCommandByExternalObjectParams) (db.ExternalPaymentCommand, error)
 	UpsertBaofuMerchantReportProcessing(ctx context.Context, arg db.UpsertBaofuMerchantReportProcessingParams) (db.BaofuMerchantReport, error)
 	MarkBaofuMerchantReportSucceeded(ctx context.Context, arg db.MarkBaofuMerchantReportSucceededParams) (db.BaofuMerchantReport, error)
 	MarkBaofuMerchantReportFailed(ctx context.Context, arg db.MarkBaofuMerchantReportFailedParams) (db.BaofuMerchantReport, error)
@@ -261,6 +264,10 @@ func (s *BaofuMerchantReportService) bindApplet(ctx context.Context, report db.B
 	if err := bindReq.Validate(); err != nil {
 		return db.BaofuMerchantReport{}, err
 	}
+	previousCommand, previousCommandErr := s.existingBindSubConfigCommand(ctx, subMchID)
+	if previousCommandErr != nil && !errors.Is(previousCommandErr, db.ErrRecordNotFound) {
+		return db.BaofuMerchantReport{}, previousCommandErr
+	}
 	if _, err := s.store.CreateExternalPaymentCommand(ctx, db.CreateExternalPaymentCommandParams{
 		Provider:           db.ExternalPaymentProviderBaofu,
 		Channel:            db.PaymentChannelBaofuAggregate,
@@ -279,12 +286,48 @@ func (s *BaofuMerchantReportService) bindApplet(ctx context.Context, report db.B
 	}
 	result, err := s.client.BindSubConfig(ctx, bindReq)
 	if err != nil {
+		if s.isIdempotentBindSubConfigRepeat(err, previousCommandErr) {
+			log.Warn().
+				Err(err).
+				Int64("baofu_merchant_report_id", report.ID).
+				Int64("owner_id", report.OwnerID).
+				Int64("external_payment_command_id", previousCommand.ID).
+				Str("sub_mch_id_mask", maskSensitiveTail(subMchID, 4)).
+				Msg("baofu bind_sub_config repeat accepted from existing local command")
+			return s.store.MarkBaofuMerchantReportAppletAuthSucceeded(ctx, report.ID)
+		}
 		return report, err
 	}
 	if result != nil && strings.TrimSpace(result.ResultCode) != "" && strings.ToUpper(strings.TrimSpace(result.ResultCode)) != "SUCCESS" {
 		return s.store.MarkBaofuMerchantReportAppletAuthFailed(ctx, db.MarkBaofuMerchantReportAppletAuthFailedParams{ID: report.ID, FailureCode: baofuReportText(result.ErrorCode), FailureMessage: baofuReportText(result.ErrorMessage)})
 	}
 	return s.store.MarkBaofuMerchantReportAppletAuthSucceeded(ctx, report.ID)
+}
+
+func (s *BaofuMerchantReportService) existingBindSubConfigCommand(ctx context.Context, subMchID string) (db.ExternalPaymentCommand, error) {
+	return s.store.GetExternalPaymentCommandByExternalObject(ctx, db.GetExternalPaymentCommandByExternalObjectParams{
+		Provider:           db.ExternalPaymentProviderBaofu,
+		Channel:            db.PaymentChannelBaofuAggregate,
+		Capability:         db.ExternalPaymentCapabilityBaofuMerchantReport,
+		CommandType:        db.ExternalPaymentCommandTypeBaofuBindSubConfig,
+		ExternalObjectType: "baofu_bind_sub_config",
+		ExternalObjectKey:  strings.TrimSpace(subMchID),
+	})
+}
+
+func (s *BaofuMerchantReportService) isIdempotentBindSubConfigRepeat(err error, previousCommandErr error) bool {
+	if previousCommandErr != nil {
+		return false
+	}
+	var providerErr *baofu.ProviderError
+	if !errors.As(err, &providerErr) {
+		return false
+	}
+	if strings.TrimSpace(providerErr.Operation) != "bind_sub_config" ||
+		!strings.EqualFold(strings.TrimSpace(providerErr.UpstreamCode), "BIND_REPEAT_ERROR") {
+		return false
+	}
+	return true
 }
 
 func baofuMerchantReportCommandSnapshot(reportNo, bctMerID string) []byte {

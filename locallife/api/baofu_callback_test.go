@@ -3,7 +3,11 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -13,9 +17,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/baofu"
 	baofunotification "github.com/merrydance/locallife/baofu/account/notification"
 	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	baofuaggregatenotification "github.com/merrydance/locallife/baofu/aggregatepay/notification"
+	"github.com/merrydance/locallife/baofu/merchantreport"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/worker"
@@ -164,6 +170,71 @@ func TestBaofuAccountOpenCallbackMerchantActiveRecordsLedgerAndWaitsForReport(t 
 			return flow, nil
 		})
 
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/account/open", bytes.NewBufferString(`{"encrypted":true}`))
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "OK", recorder.Body.String())
+}
+
+func TestBaofuAccountOpenCallbackMerchantReportFailureStillAcksAccountCallback(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+	server.SetBaofuAccountNotificationParserForTest(fakeBaofuOpenAccountParser{})
+	server.config.BaofuCollectMerchantID = "102004465"
+	server.config.BaofuCollectTerminalID = "200005200"
+	server.config.WechatMiniAppID = "wx1234567890abcdef"
+	server.config.BaofuMerchantReportChannelID = "CH001"
+	server.config.BaofuMerchantReportChannelName = "LocalLife"
+	server.config.BaofuAccountVerifyFeeFen = 200
+	server.baofuMerchantReportClient = merchantreport.NewClient(testAPIBaofuRootClient(t, baofuFailingDoer{}))
+
+	flow := db.BaofuAccountOpeningFlow{
+		ID:                7106,
+		OwnerType:         db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:           88,
+		AccountType:       db.BaofuAccountTypeBusiness,
+		ProfileID:         pgtype.Int8{Int64: 8106, Valid: true},
+		State:             db.BaofuAccountOpeningStateOpeningProcessing,
+		OpenTransSerialNo: pgtype.Text{String: "OPEN123", Valid: true},
+		LoginNo:           pgtype.Text{String: "LLBFOM0000000088", Valid: true},
+	}
+	binding := db.BaofuAccountBinding{
+		ID:          6106,
+		OwnerType:   db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:     88,
+		AccountType: db.BaofuAccountTypeBusiness,
+		LoginNo:     pgtype.Text{String: "LLBFOM0000000088", Valid: true},
+		OpenState:   db.BaofuAccountOpenStateProcessing,
+	}
+	store.EXPECT().GetBaofuAccountOpeningFlowByOpenTransSerialNo(gomock.Any(), pgtype.Text{String: "OPEN123", Valid: true}).Return(flow, nil)
+	store.EXPECT().GetBaofuAccountBindingByContractNo(gomock.Any(), pgtype.Text{String: "CM_BCT_123", Valid: true}).
+		Return(db.BaofuAccountBinding{}, db.ErrRecordNotFound)
+	store.EXPECT().GetBaofuAccountBindingByOwner(gomock.Any(), db.GetBaofuAccountBindingByOwnerParams{
+		OwnerType: db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:   88,
+	}).Return(binding, nil)
+	store.EXPECT().CreateExternalPaymentFact(gomock.Any(), gomock.Any()).
+		Return(db.ExternalPaymentFact{ID: 91, DedupeKey: "baofu:callback:account:OPEN123:1"}, nil)
+	store.EXPECT().MarkBaofuAccountBindingActiveWithFeeLedgerTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountBindingActiveWithFeeLedgerTxParams) (db.MarkBaofuAccountBindingActiveWithFeeLedgerTxResult, error) {
+			binding.OpenState = db.BaofuAccountOpenStateActive
+			binding.ContractNo = arg.ActiveBinding.ContractNo
+			binding.SharingMerID = arg.ActiveBinding.SharingMerID
+			return db.MarkBaofuAccountBindingActiveWithFeeLedgerTxResult{Binding: binding}, nil
+		})
+	store.EXPECT().MarkBaofuAccountOpeningFlowMerchantReportProcessing(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountOpeningFlowMerchantReportProcessingParams) (db.BaofuAccountOpeningFlow, error) {
+			require.Equal(t, int64(7106), arg.ID)
+			require.Equal(t, pgtype.Int8{Int64: 6106, Valid: true}, arg.AccountBindingID)
+			flow.State = db.BaofuAccountOpeningStateMerchantReportProcessing
+			flow.AccountBindingID = arg.AccountBindingID
+			flow.MerchantReportID = pgtype.Int8{Int64: 9106, Valid: true}
+			return flow, nil
+		})
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/v1/webhooks/baofu/account/open", bytes.NewBufferString(`{"encrypted":true}`))
 	server.router.ServeHTTP(recorder, request)
@@ -1600,6 +1671,44 @@ func (c *fakeBaofuAggregateQueryClient) QueryRefund(context.Context, aggregateco
 
 func (c *fakeBaofuAggregateQueryClient) CloseOrder(context.Context, aggregatecontracts.OrderCloseRequest) (*aggregatecontracts.OrderCloseResult, error) {
 	return nil, errors.New("not implemented in baofu callback test")
+}
+
+type baofuFailingDoer struct{}
+
+func (baofuFailingDoer) Do(*http.Request) (*http.Response, error) {
+	return nil, errors.New("baofu merchant report transport unavailable")
+}
+
+func testAPIBaofuRootClient(t *testing.T, doer baofu.HTTPDoer) *baofu.Client {
+	t.Helper()
+	privatePEM, publicPEM := generateAPIBaofuTestKeyPair(t)
+	client, err := baofu.NewClient(baofu.Config{
+		Environment:        baofu.BaofuEnvironmentSandbox,
+		CollectMerchantID:  "102004465",
+		CollectTerminalID:  "200005200",
+		PayoutMerchantID:   "102004466",
+		PayoutTerminalID:   "200005201",
+		AppID:              "wx1234567890abcdef",
+		PrivateKeyPEM:      privatePEM,
+		BaofuPublicKeyPEM:  publicPEM,
+		NotifyBaseURL:      "https://api.example.com/v1/webhooks/baofu",
+		SignSerialNo:       "1",
+		EncryptionSerialNo: "1",
+		Timeout:            5 * time.Second,
+	}, doer)
+	require.NoError(t, err)
+	return client
+}
+
+func generateAPIBaofuTestKeyPair(t *testing.T) (string, string) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	privateDER, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+	publicDER, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	require.NoError(t, err)
+	return string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateDER})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicDER}))
 }
 
 var _ = gin.TestMode

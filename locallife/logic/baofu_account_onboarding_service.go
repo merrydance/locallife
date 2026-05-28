@@ -316,7 +316,7 @@ func (s *BaofuAccountOnboardingService) ContinueAfterVerifyFeePaid(ctx context.C
 		return nil
 	}
 	if strings.TrimSpace(flow.State) == db.BaofuAccountOpeningStateFailed {
-		recovered, err := s.recoverFailedFlowFromActiveBinding(ctx, flow, nil)
+		recovered, err := s.recoverFailedFlowFromActiveBinding(ctx, flow, nil, true)
 		if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
 			return err
 		}

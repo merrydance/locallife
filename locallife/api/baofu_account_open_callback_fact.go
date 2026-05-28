@@ -207,7 +207,7 @@ func (server *Server) applyBaofuAccountOpenCallbackState(ctx context.Context, no
 	}
 	result := baofuAccountResultFromNotification(notification)
 	service := server.newBaofuAccountOnboardingService()
-	_, err := service.ApplyAccountOpenResult(ctx, flow, result)
+	_, err := service.ApplyAccountOpenCallbackResult(ctx, flow, result)
 	return err
 }
 
