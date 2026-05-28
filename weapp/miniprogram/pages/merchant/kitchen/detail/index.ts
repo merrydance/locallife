@@ -31,6 +31,7 @@ interface KitchenDetailView extends KitchenOrderResponse {
   readyAtLabel: string
   noteLabel: string
   urgencyLabel: string
+  statusHintLabel: string
   itemCount: number
   totalQuantity: number
   progressCurrent: number
@@ -68,7 +69,7 @@ function formatKitchenItem(item: KitchenOrderItem): KitchenDetailItemView {
 
 function buildKitchenDetailView(order: KitchenOrderResponse): KitchenDetailView {
   const remainingMinutes = Math.round(OrderManagementAdapter.getRemainingTime(order))
-  const statusView = getKitchenStatusView(order.status)
+  const statusView = getKitchenStatusView(order)
   const pickupCodeDisplay = formatPickupCodeDisplay(order)
   const seatOrPickupLabel = order.table_number || order.table_no
     ? `${order.table_number || order.table_no}号桌`
@@ -93,6 +94,7 @@ function buildKitchenDetailView(order: KitchenOrderResponse): KitchenDetailView 
     readyAtLabel: formatTime(order.ready_at),
     noteLabel: order.notes || '无备注',
     urgencyLabel: order.is_urged ? '顾客已催单，请优先处理' : '当前暂无催单提醒',
+    statusHintLabel: statusView.statusHint,
     itemCount: items.length,
     totalQuantity,
     progressCurrent: statusView.progressCurrent,

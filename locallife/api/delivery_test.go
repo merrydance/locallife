@@ -621,6 +621,50 @@ func TestConfirmPickupAPI(t *testing.T) {
 			},
 		},
 		{
+			name:       "MerchantNotReady",
+			deliveryID: deliveryID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(rider, nil)
+
+				store.EXPECT().
+					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
+					Times(1).
+					Return(delivery, nil)
+
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(db.Order{
+						ID:                orderID,
+						UserID:            util.RandomInt(1, 1000),
+						MerchantID:        util.RandomInt(1, 1000),
+						OrderNo:           util.RandomString(10),
+						Status:            db.OrderStatusCourierAccepted,
+						FulfillmentStatus: db.FulfillmentStatusPreparing,
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusConflict, recorder.Code)
+				var resp APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.Equal(t, ErrDeliveryPickupMerchantNotReady.Message, resp.Message)
+
+				var payload deliveryPickupBlockedResponse
+				require.NoError(t, json.Unmarshal(resp.Data, &payload))
+				require.Equal(t, ErrDeliveryPickupMerchantNotReady.Code, payload.Code)
+				require.Equal(t, "merchant_not_ready", payload.Reason)
+				require.Equal(t, "等待商户出餐", payload.ActionLabel)
+				require.Equal(t, db.OrderStatusCourierAccepted, payload.OrderStatus)
+				require.Equal(t, db.FulfillmentStatusPreparing, payload.FulfillmentStatus)
+			},
+		},
+		{
 			name:       "DeliveryNotFound",
 			deliveryID: deliveryID,
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
@@ -1038,6 +1082,35 @@ func TestGetDeliveryByOrderAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
+			},
+		},
+		{
+			name:    "ResponseOrderLoadFailure",
+			orderID: orderID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(order, nil)
+
+				store.EXPECT().
+					GetDeliveryByOrderID(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(delivery, nil)
+
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(db.Order{}, errors.New("order projection unavailable"))
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				var resp APIResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.Equal(t, "internal server error", resp.Message)
 			},
 		},
 	}
@@ -1537,6 +1610,76 @@ func TestStartPickupAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				var response deliveryResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, db.OrderStatusCourierAccepted, response.OrderStatus)
+				require.Equal(t, db.FulfillmentStatusReady, response.FulfillmentStatus)
+				require.True(t, response.CanConfirmPickup)
+				require.Empty(t, response.PickupBlockReason)
+			},
+		},
+		{
+			name:       "OK_WaitingForMerchantReady",
+			deliveryID: deliveryID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(rider, nil)
+
+				store.EXPECT().
+					GetDelivery(gomock.Any(), gomock.Eq(deliveryID)).
+					Times(1).
+					Return(delivery, nil)
+
+				pickingDelivery := delivery
+				pickingDelivery.Status = "picking"
+				store.EXPECT().
+					UpdateDeliveryToPickupTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.UpdateDeliveryToPickupTxResult{Delivery: pickingDelivery}, nil)
+
+				order := db.Order{
+					ID:                orderID,
+					UserID:            util.RandomInt(1, 1000),
+					MerchantID:        util.RandomInt(1, 1000),
+					OrderNo:           util.RandomString(10),
+					Status:            db.OrderStatusCourierAccepted,
+					FulfillmentStatus: db.FulfillmentStatusPreparing,
+				}
+				store.EXPECT().
+					GetOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(2).
+					Return(order, nil)
+
+				store.EXPECT().
+					GetMerchant(gomock.Any(), gomock.Eq(order.MerchantID)).
+					Times(1).
+					Return(db.Merchant{ID: order.MerchantID, Name: util.RandomString(10)}, nil)
+
+				store.EXPECT().
+					CountOrderItems(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
+					Times(1).
+					Return([]db.OrderItem{}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var response deliveryResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, "picking", response.Status)
+				require.Equal(t, db.OrderStatusCourierAccepted, response.OrderStatus)
+				require.Equal(t, db.FulfillmentStatusPreparing, response.FulfillmentStatus)
+				require.False(t, response.CanConfirmPickup)
+				require.Equal(t, "商户未出餐，暂不可确认取餐", response.PickupBlockReason)
+				require.Equal(t, "等待商户出餐", response.PickupActionLabel)
 			},
 		},
 		{

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -173,6 +174,8 @@ type deliveryResponse struct {
 	ID                   int64          `json:"id"`
 	OrderID              int64          `json:"order_id"`
 	OrderNo              string         `json:"order_no,omitempty"`
+	OrderStatus          string         `json:"order_status"`
+	FulfillmentStatus    string         `json:"fulfillment_status"`
 	RiderID              *int64         `json:"rider_id,omitempty"`
 	MerchantName         string         `json:"merchant_name,omitempty"`
 	PickupAddress        string         `json:"pickup_address"`
@@ -196,6 +199,9 @@ type deliveryResponse struct {
 	FreezeAmount         int64          `json:"freeze_amount,omitempty"`
 	ItemCount            int            `json:"item_count,omitempty"`
 	Status               string         `json:"status"`
+	CanConfirmPickup     bool           `json:"can_confirm_pickup"`
+	PickupBlockReason    string         `json:"pickup_block_reason,omitempty"`
+	PickupActionLabel    string         `json:"pickup_action_label,omitempty"`
 	EstimatedPickupAt    *time.Time     `json:"estimated_pickup_at,omitempty"`
 	EstimatedDeliveryAt  *time.Time     `json:"estimated_delivery_at,omitempty"`
 	PickedAt             *time.Time     `json:"picked_at,omitempty"`
@@ -212,7 +218,18 @@ type deliveryItem struct {
 	Quantity int32  `json:"quantity"`
 }
 
-func (server *Server) newDeliveryResponse(ctx context.Context, d db.Delivery) deliveryResponse {
+type deliveryPickupBlockedResponse struct {
+	Code              int    `json:"code"`
+	Error             string `json:"error"`
+	Reason            string `json:"reason"`
+	ActionLabel       string `json:"action_label"`
+	DeliveryID        int64  `json:"delivery_id"`
+	OrderID           int64  `json:"order_id"`
+	OrderStatus       string `json:"order_status"`
+	FulfillmentStatus string `json:"fulfillment_status"`
+}
+
+func (server *Server) newDeliveryResponse(ctx context.Context, d db.Delivery) (deliveryResponse, error) {
 	pickupLng, _ := d.PickupLongitude.Float64Value()
 	pickupLat, _ := d.PickupLatitude.Float64Value()
 	deliveryLng, _ := d.DeliveryLongitude.Float64Value()
@@ -235,25 +252,44 @@ func (server *Server) newDeliveryResponse(ctx context.Context, d db.Delivery) de
 	}
 
 	// 补充信息
-	if order, err := server.store.GetOrder(ctx, d.OrderID); err == nil {
-		resp.OrderNo = order.OrderNo
-		resp.FreezeAmount = logic.OrderFreezeAmount(order)
-		if merchant, err := server.store.GetMerchant(ctx, order.MerchantID); err == nil {
-			resp.MerchantName = merchant.Name
-		}
-		resp.Notes = order.Notes.String
-		server.attachRiderProfitSharingBillToDeliveryResponse(ctx, order, &resp)
+	order, err := server.store.GetOrder(ctx, d.OrderID)
+	if err != nil {
+		return deliveryResponse{}, fmt.Errorf("build delivery response get order %d: %w", d.OrderID, err)
 	}
-	if count, err := server.store.CountOrderItems(ctx, d.OrderID); err == nil {
-		resp.ItemCount = int(count)
+	resp.OrderNo = order.OrderNo
+	resp.OrderStatus = order.Status
+	resp.FulfillmentStatus = order.FulfillmentStatus
+	resp.FreezeAmount = logic.OrderFreezeAmount(order)
+	resp.Notes = order.Notes.String
+	actionState := logic.GetDeliveryPickupActionState(d, order)
+	resp.CanConfirmPickup = actionState.CanConfirmPickup
+	resp.PickupBlockReason = actionState.PickupBlockReason
+	resp.PickupActionLabel = actionState.PickupActionLabel
+
+	merchant, err := server.store.GetMerchant(ctx, order.MerchantID)
+	if err != nil {
+		return deliveryResponse{}, fmt.Errorf("build delivery response get merchant %d for order %d: %w", order.MerchantID, order.ID, err)
 	}
-	if items, err := server.store.ListOrderItemsByOrder(ctx, d.OrderID); err == nil {
-		for _, item := range items {
-			resp.Items = append(resp.Items, deliveryItem{
-				Name:     item.Name,
-				Quantity: int32(item.Quantity),
-			})
-		}
+	resp.MerchantName = merchant.Name
+	if err := server.attachRiderProfitSharingBillToDeliveryResponse(ctx, order, &resp); err != nil {
+		return deliveryResponse{}, err
+	}
+
+	count, err := server.store.CountOrderItems(ctx, d.OrderID)
+	if err != nil {
+		return deliveryResponse{}, fmt.Errorf("build delivery response count order items for order %d: %w", d.OrderID, err)
+	}
+	resp.ItemCount = int(count)
+
+	items, err := server.store.ListOrderItemsByOrder(ctx, d.OrderID)
+	if err != nil {
+		return deliveryResponse{}, fmt.Errorf("build delivery response list order items for order %d: %w", d.OrderID, err)
+	}
+	for _, item := range items {
+		resp.Items = append(resp.Items, deliveryItem{
+			Name:     item.Name,
+			Quantity: int32(item.Quantity),
+		})
 	}
 
 	if d.RiderID.Valid {
@@ -290,34 +326,29 @@ func (server *Server) newDeliveryResponse(ctx context.Context, d db.Delivery) de
 		resp.CompletedAt = &d.CompletedAt.Time
 	}
 
-	return resp
+	return resp, nil
 }
 
-func (server *Server) attachRiderProfitSharingBillToDeliveryResponse(ctx context.Context, order db.Order, resp *deliveryResponse) {
+func (server *Server) attachRiderProfitSharingBillToDeliveryResponse(ctx context.Context, order db.Order, resp *deliveryResponse) error {
 	if order.OrderType != db.OrderTypeTakeout {
-		return
+		return nil
 	}
 	paymentOrder, err := server.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
 		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
 		BusinessType: db.ExternalPaymentBusinessOwnerOrder,
 	})
 	if err != nil {
-		if !errors.Is(err, db.ErrRecordNotFound) {
-			log.Error().Err(err).Int64("order_id", order.ID).Msg("load rider delivery settlement payment order failed")
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return nil
 		}
-		return
+		return fmt.Errorf("build delivery response load rider delivery settlement payment order for order %d: %w", order.ID, err)
 	}
 	if !db.PaymentOrderRequiresProfitSharing(paymentOrder) {
-		return
+		return nil
 	}
 	bill, err := server.store.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
 	if err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			log.Warn().Int64("order_id", order.ID).Int64("payment_order_id", paymentOrder.ID).Msg("rider delivery settlement bill missing")
-		} else {
-			log.Error().Err(err).Int64("order_id", order.ID).Int64("payment_order_id", paymentOrder.ID).Msg("load rider delivery settlement bill failed")
-		}
-		return
+		return fmt.Errorf("build delivery response load rider delivery settlement bill for order %d payment_order %d: %w", order.ID, paymentOrder.ID, err)
 	}
 	resp.ProfitSharingOrderID = bill.ID
 	resp.ProfitSharingStatus = bill.Status
@@ -327,6 +358,64 @@ func (server *Server) attachRiderProfitSharingBillToDeliveryResponse(ctx context
 	if bill.RiderAmount > 0 {
 		resp.RiderEarnings = bill.RiderAmount
 	}
+	return nil
+}
+
+func (server *Server) writeDeliveryResponse(ctx *gin.Context, d db.Delivery) bool {
+	resp, err := server.newDeliveryResponse(ctx, d)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return false
+	}
+	ctx.JSON(http.StatusOK, resp)
+	return true
+}
+
+func (server *Server) buildDeliveryResponses(ctx *gin.Context, deliveries []db.Delivery) ([]deliveryResponse, bool) {
+	response := make([]deliveryResponse, 0, len(deliveries))
+	for _, d := range deliveries {
+		resp, err := server.newDeliveryResponse(ctx, d)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return nil, false
+		}
+		response = append(response, resp)
+	}
+	return response, true
+}
+
+func writeDeliveryPickupBlockedError(ctx *gin.Context, err error, pickupErr *logic.DeliveryPickupBlockedError, userID int64) {
+	log.Warn().
+		Err(err).
+		Int64("delivery_id", pickupErr.DeliveryID).
+		Int64("order_id", pickupErr.OrderID).
+		Int64("rider_id", pickupErr.RiderID).
+		Int64("user_id", userID).
+		Str("reason", pickupErr.Reason).
+		Str("order_status", pickupErr.OrderStatus).
+		Str("fulfillment_status", pickupErr.FulfillmentStatus).
+		Msg("delivery pickup validation failed")
+
+	payload := deliveryPickupBlockedResponse{
+		Code:              ErrDeliveryPickupMerchantNotReady.Code,
+		Error:             ErrDeliveryPickupMerchantNotReady.Message,
+		Reason:            pickupErr.Reason,
+		ActionLabel:       logic.DeliveryPickupWaitMerchantActionLabel,
+		DeliveryID:        pickupErr.DeliveryID,
+		OrderID:           pickupErr.OrderID,
+		OrderStatus:       pickupErr.OrderStatus,
+		FulfillmentStatus: pickupErr.FulfillmentStatus,
+	}
+	data, marshalErr := json.Marshal(payload)
+	if marshalErr != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("marshal delivery pickup blocked response: %w", marshalErr)))
+		return
+	}
+	ctx.JSON(http.StatusConflict, APIResponse{
+		Code:    ErrDeliveryPickupMerchantNotReady.Code,
+		Message: ErrDeliveryPickupMerchantNotReady.Message,
+		Data:    data,
+	})
 }
 
 // grabOrder godoc
@@ -423,12 +512,11 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 	// 重新获取更新后的代取单
 	updatedDelivery, err := server.store.GetDelivery(ctx, delivery.ID)
 	if err != nil {
-		// 即使获取失败也返回原结果
-		ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, delivery))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get updated delivery after grab %d: %w", delivery.ID, err)))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, updatedDelivery))
+	server.writeDeliveryResponse(ctx, updatedDelivery)
 }
 
 // ==================== 代取状态更新 ====================
@@ -487,7 +575,7 @@ func (server *Server) startPickup(ctx *gin.Context) {
 		fmt.Sprintf("订单%s骑手正在前往商家取餐", order.OrderNo),
 	)
 
-	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, updated))
+	server.writeDeliveryResponse(ctx, updated)
 }
 
 // confirmPickup godoc
@@ -519,6 +607,11 @@ func (server *Server) confirmPickup(ctx *gin.Context) {
 		DeliveryID: req.ID,
 	})
 	if err != nil {
+		var pickupErr *logic.DeliveryPickupBlockedError
+		if errors.As(err, &pickupErr) {
+			writeDeliveryPickupBlockedError(ctx, err, pickupErr, authPayload.UserID)
+			return
+		}
 		if writeLogicRequestError(ctx, err) {
 			return
 		}
@@ -540,7 +633,7 @@ func (server *Server) confirmPickup(ctx *gin.Context) {
 		fmt.Sprintf("订单%s骑手已取到餐品，即将代取", order.OrderNo),
 	)
 
-	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, updated))
+	server.writeDeliveryResponse(ctx, updated)
 }
 
 // startDelivery godoc
@@ -593,7 +686,7 @@ func (server *Server) startDelivery(ctx *gin.Context) {
 		fmt.Sprintf("订单%s骑手正在代取途中，请保持电话畅通", order.OrderNo),
 	)
 
-	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, updated))
+	server.writeDeliveryResponse(ctx, updated)
 }
 
 // confirmDelivery godoc
@@ -661,7 +754,7 @@ func (server *Server) confirmDelivery(ctx *gin.Context) {
 		fmt.Sprintf("您的订单%s已送达，请确认收餐", order.OrderNo),
 	)
 
-	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, updated))
+	server.writeDeliveryResponse(ctx, updated)
 }
 
 // ==================== 顾客查询代取状态 ====================
@@ -707,7 +800,7 @@ func (server *Server) getDeliveryByOrder(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, delivery))
+	server.writeDeliveryResponse(ctx, delivery)
 }
 
 // ==================== 骑手轨迹 ====================
@@ -1009,9 +1102,9 @@ func (server *Server) listMyDeliveries(ctx *gin.Context) {
 		return
 	}
 
-	var response []deliveryResponse
-	for _, d := range deliveries {
-		response = append(response, server.newDeliveryResponse(ctx, d))
+	response, ok := server.buildDeliveryResponses(ctx, deliveries)
+	if !ok {
+		return
 	}
 
 	ctx.JSON(http.StatusOK, listMyDeliveriesResponse{
@@ -1055,9 +1148,9 @@ func (server *Server) listMyActiveDeliveries(ctx *gin.Context) {
 		return
 	}
 
-	var response []deliveryResponse
-	for _, d := range deliveries {
-		response = append(response, server.newDeliveryResponse(ctx, d))
+	response, ok := server.buildDeliveryResponses(ctx, deliveries)
+	if !ok {
+		return
 	}
 
 	ctx.JSON(http.StatusOK, response)

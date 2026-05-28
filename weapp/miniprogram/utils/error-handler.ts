@@ -34,6 +34,7 @@ export class AppError extends Error {
   detailMessage: string
   code?: string | number
   statusCode?: number
+  data?: unknown
   originalError?: unknown
 
   constructor(config: ErrorConfig, originalError?: unknown) {
@@ -45,6 +46,9 @@ export class AppError extends Error {
     this.detailMessage = config.message
     this.code = config.code
     this.statusCode = config.statusCode
+    if (originalError && typeof originalError === 'object' && 'data' in originalError) {
+      this.data = (originalError as { data?: unknown }).data
+    }
     this.originalError = originalError
   }
 }

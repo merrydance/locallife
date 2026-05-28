@@ -1313,6 +1313,9 @@ type Querier interface {
 	// 获取商户未来预订列表（用于熔断后退款处理）
 	ListMerchantFutureReservationsForRefund(ctx context.Context, merchantID int64) ([]TableReservation, error)
 	ListMerchantGroups(ctx context.Context, arg ListMerchantGroupsParams) ([]MerchantGroup, error)
+	// 根据厨房阶段查询订单。厨房阶段与订单主状态不是一一对应关系：
+	// 外卖被骑手接单后，主状态会进入 courier_accepted，但餐品仍可能处于 preparing/ready。
+	ListMerchantKitchenOrdersByStage(ctx context.Context, arg ListMerchantKitchenOrdersByStageParams) ([]Order, error)
 	// 获取区域内所有在营商户的坐标和地址，用于 GPS 距离去重检测
 	ListMerchantLocationsInRegion(ctx context.Context, regionID int64) ([]ListMerchantLocationsInRegionRow, error)
 	ListMerchantMembers(ctx context.Context, arg ListMerchantMembersParams) ([]ListMerchantMembersRow, error)

@@ -12,6 +12,7 @@ import (
 	"github.com/merrydance/locallife/token"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 )
 
 // ==================== 厨房显示系统 (KDS) ====================
@@ -56,6 +57,21 @@ type kitchenOrderResponse struct {
 
 	// 订单状态: paid-新订单, preparing-制作中, ready-出餐完成
 	Status string `json:"status"`
+
+	// 订单主状态
+	OrderStatus string `json:"order_status"`
+
+	// 履约状态
+	FulfillmentStatus string `json:"fulfillment_status"`
+
+	// 厨房阶段: paid/preparing/ready
+	KitchenStatus string `json:"kitchen_status"`
+
+	// 商户当前是否可标记出餐
+	CanMarkReady bool `json:"can_mark_ready"`
+
+	// 当前状态指引
+	StatusHint string `json:"status_hint,omitempty"`
 
 	// 桌台号 (堂食订单)
 	TableNo *string `json:"table_no,omitempty"`
@@ -152,11 +168,9 @@ func (server *Server) listKitchenOrders(ctx *gin.Context) {
 		return
 	}
 
-	// 查询需要在厨房显示的订单（paid, preparing, ready 状态）
-	// 使用 ListMerchantOrdersByStatuses 或类似查询
-	paidOrders, err := server.store.ListMerchantOrdersByStatus(ctx, db.ListMerchantOrdersByStatusParams{
+	paidOrders, err := server.store.ListMerchantKitchenOrdersByStage(ctx, db.ListMerchantKitchenOrdersByStageParams{
 		MerchantID: merchant.ID,
-		Status:     "paid",
+		Stage:      db.OrderStatusPaid,
 		Limit:      KitchenMaxOrdersPerStatus,
 		Offset:     0,
 	})
@@ -165,9 +179,9 @@ func (server *Server) listKitchenOrders(ctx *gin.Context) {
 		return
 	}
 
-	preparingOrders, err := server.store.ListMerchantOrdersByStatus(ctx, db.ListMerchantOrdersByStatusParams{
+	preparingOrders, err := server.store.ListMerchantKitchenOrdersByStage(ctx, db.ListMerchantKitchenOrdersByStageParams{
 		MerchantID: merchant.ID,
-		Status:     "preparing",
+		Stage:      db.OrderStatusPreparing,
 		Limit:      KitchenMaxOrdersPerStatus,
 		Offset:     0,
 	})
@@ -176,9 +190,9 @@ func (server *Server) listKitchenOrders(ctx *gin.Context) {
 		return
 	}
 
-	readyOrders, err := server.store.ListMerchantOrdersByStatus(ctx, db.ListMerchantOrdersByStatusParams{
+	readyOrders, err := server.store.ListMerchantKitchenOrdersByStage(ctx, db.ListMerchantKitchenOrdersByStageParams{
 		MerchantID: merchant.ID,
-		Status:     "ready",
+		Stage:      db.OrderStatusReady,
 		Limit:      KitchenMaxOrdersPerStatus,
 		Offset:     0,
 	})
@@ -196,32 +210,39 @@ func (server *Server) listKitchenOrders(ctx *gin.Context) {
 		CreatedAt:  todayStart,
 	})
 	if err != nil {
-		completedCount = 0 // 忽略统计错误
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("count merchant completed kitchen orders: %w", err)))
+		return
 	}
 
 	// 转换为厨房订单响应格式
 	newKitchenOrders := make([]kitchenOrderResponse, 0, len(paidOrders))
 	for _, o := range paidOrders {
 		ko, err := server.convertToKitchenOrder(ctx, o)
-		if err == nil {
-			newKitchenOrders = append(newKitchenOrders, ko)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("convert paid kitchen order %d: %w", o.ID, err)))
+			return
 		}
+		newKitchenOrders = append(newKitchenOrders, ko)
 	}
 
 	preparingKitchenOrders := make([]kitchenOrderResponse, 0, len(preparingOrders))
 	for _, o := range preparingOrders {
 		ko, err := server.convertToKitchenOrder(ctx, o)
-		if err == nil {
-			preparingKitchenOrders = append(preparingKitchenOrders, ko)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("convert preparing kitchen order %d: %w", o.ID, err)))
+			return
 		}
+		preparingKitchenOrders = append(preparingKitchenOrders, ko)
 	}
 
 	readyKitchenOrders := make([]kitchenOrderResponse, 0, len(readyOrders))
 	for _, o := range readyOrders {
 		ko, err := server.convertToKitchenOrder(ctx, o)
-		if err == nil {
-			readyKitchenOrders = append(readyKitchenOrders, ko)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("convert ready kitchen order %d: %w", o.ID, err)))
+			return
 		}
+		readyKitchenOrders = append(readyKitchenOrders, ko)
 	}
 
 	// 计算平均出餐时间（从最近N天的历史订单数据计算）
@@ -231,8 +252,12 @@ func (server *Server) listKitchenOrders(ctx *gin.Context) {
 		MerchantID: merchant.ID,
 		StartAt:    calcStartTime,
 	})
-	if err != nil || avgPrepareTime <= 0 {
-		// 如果没有历史数据或查询失败，使用默认值
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant average prepare time: %w", err)))
+		return
+	}
+	if avgPrepareTime <= 0 {
+		// 如果没有历史数据，使用默认值
 		avgPrepareTime = DefaultAvgPrepareTimeMinutes
 	}
 
@@ -514,8 +539,16 @@ func (server *Server) convertToKitchenOrder(ctx *gin.Context, order db.Order) (k
 					category, err := server.store.GetDishCategory(ctx, dish.CategoryID.Int64)
 					if err == nil {
 						categoryName = category.Name
+					} else if !isNotFoundError(err) {
+						log.Warn().
+							Err(err).
+							Int64("dish_id", dish.ID).
+							Int64("category_id", dish.CategoryID.Int64).
+							Msg("kitchen order dish category projection skipped")
 					}
 				}
+			} else if !isNotFoundError(err) {
+				return kitchenOrderResponse{}, fmt.Errorf("get kitchen order dish %d: %w", item.DishID.Int64, err)
 			}
 		}
 
@@ -555,6 +588,8 @@ func (server *Server) convertToKitchenOrder(ctx *gin.Context, order db.Order) (k
 		table, err := server.store.GetTable(ctx, order.TableID.Int64)
 		if err == nil {
 			tableNo = &table.TableNo
+		} else if !isNotFoundError(err) {
+			return kitchenOrderResponse{}, fmt.Errorf("get kitchen order table %d: %w", order.TableID.Int64, err)
 		}
 	}
 
@@ -575,7 +610,10 @@ func (server *Server) convertToKitchenOrder(ctx *gin.Context, order db.Order) (k
 
 	// 检查是否被催单（简化实现：检查是否有催单记录）
 	isUrged := false
-	urgeCount, _ := server.store.CountOrderUrges(ctx, order.ID)
+	urgeCount, err := server.store.CountOrderUrges(ctx, order.ID)
+	if err != nil {
+		return kitchenOrderResponse{}, fmt.Errorf("count kitchen order urges %d: %w", order.ID, err)
+	}
 	if urgeCount > 0 {
 		isUrged = true
 	}
@@ -597,20 +635,47 @@ func (server *Server) convertToKitchenOrder(ctx *gin.Context, order db.Order) (k
 		paidAt = order.PaidAt.Time
 	}
 
+	kitchenStatus, canMarkReady, statusHint := kitchenOrderStageState(order)
+
 	return kitchenOrderResponse{
-		ID:               order.ID,
-		OrderNo:          order.OrderNo,
-		OrderType:        order.OrderType,
-		Status:           order.Status,
-		TableNo:          tableNo,
-		PickupCode:       pickupCode,
-		PickupNumber:     pickupCode,
-		Notes:            notes,
-		Items:            kitchenItems,
-		EstimatedReadyAt: estimatedReadyAt,
-		WaitingMinutes:   waitingMinutes,
-		IsUrged:          isUrged,
-		CreatedAt:        order.CreatedAt,
-		PaidAt:           paidAt,
+		ID:                order.ID,
+		OrderNo:           order.OrderNo,
+		OrderType:         order.OrderType,
+		Status:            kitchenStatus,
+		OrderStatus:       order.Status,
+		FulfillmentStatus: order.FulfillmentStatus,
+		KitchenStatus:     kitchenStatus,
+		CanMarkReady:      canMarkReady,
+		StatusHint:        statusHint,
+		TableNo:           tableNo,
+		PickupCode:        pickupCode,
+		PickupNumber:      pickupCode,
+		Notes:             notes,
+		Items:             kitchenItems,
+		EstimatedReadyAt:  estimatedReadyAt,
+		WaitingMinutes:    waitingMinutes,
+		IsUrged:           isUrged,
+		CreatedAt:         order.CreatedAt,
+		PaidAt:            paidAt,
 	}, nil
+}
+
+func kitchenOrderStageState(order db.Order) (string, bool, string) {
+	switch {
+	case order.Status == db.OrderStatusPaid:
+		return db.OrderStatusPaid, false, "顾客已支付，请接单后开始制作"
+	case order.Status == db.OrderStatusPreparing:
+		return db.OrderStatusPreparing, true, "餐品制作中，出餐后请标记完成"
+	case order.Status == db.OrderStatusReady:
+		return db.OrderStatusReady, false, "餐品已出餐，等待取餐"
+	case order.OrderType == db.OrderTypeTakeout && order.Status == db.OrderStatusCourierAccepted && order.FulfillmentStatus == db.FulfillmentStatusPreparing:
+		return db.OrderStatusPreparing, true, "骑手已接单，餐品仍在制作，请出餐后标记完成"
+	case order.OrderType == db.OrderTypeTakeout && order.Status == db.OrderStatusCourierAccepted && order.FulfillmentStatus == db.FulfillmentStatusReady:
+		return db.OrderStatusReady, false, "骑手已接单，等待骑手取餐"
+	default:
+		if order.StatusHint.Valid && order.StatusHint.String != "" {
+			return order.Status, false, order.StatusHint.String
+		}
+		return order.Status, false, ""
+	}
 }

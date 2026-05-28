@@ -382,6 +382,40 @@ WHERE merchant_id = $1 AND status = $2 AND replaced_by_order_id IS NULL
 ORDER BY created_at ASC
 LIMIT $3 OFFSET $4;
 
+-- name: ListMerchantKitchenOrdersByStage :many
+-- 根据厨房阶段查询订单。厨房阶段与订单主状态不是一一对应关系：
+-- 外卖被骑手接单后，主状态会进入 courier_accepted，但餐品仍可能处于 preparing/ready。
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
+WHERE merchant_id = sqlc.arg('merchant_id')
+    AND replaced_by_order_id IS NULL
+    AND (
+        (sqlc.arg('stage')::text = 'paid' AND status = 'paid')
+        OR (
+            sqlc.arg('stage')::text = 'preparing'
+            AND (
+                status = 'preparing'
+                OR (
+                    order_type = 'takeout'
+                    AND status = 'courier_accepted'
+                    AND fulfillment_status = 'preparing'
+                )
+            )
+        )
+        OR (
+            sqlc.arg('stage')::text = 'ready'
+            AND (
+                status = 'ready'
+                OR (
+                    order_type = 'takeout'
+                    AND status = 'courier_accepted'
+                    AND fulfillment_status = 'ready'
+                )
+            )
+        )
+    )
+ORDER BY created_at ASC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
 -- name: CountMerchantOrdersByStatusAfterTime :one
 -- 统计商户在某时间后特定状态的订单数
 SELECT COUNT(*) FROM orders

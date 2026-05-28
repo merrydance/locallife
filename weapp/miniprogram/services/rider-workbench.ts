@@ -12,6 +12,7 @@ import { formatPriceNoSymbol } from '../utils/util'
 import { resolveStatusTagTheme } from '../utils/status-tag'
 import { buildRiderDepositWorkbenchSummaryView } from './rider-deposit-finance'
 import { getRiderClaimActionHint } from '../utils/rider-claims-view'
+import { getRiderDeliveryActionState } from '../utils/rider-delivery-view'
 
 export interface RiderWorkbenchMetricView {
   key: string
@@ -87,10 +88,13 @@ function toRiderStatus(summary: RiderWorkbenchSummaryResponse): RiderStatus {
 function buildDashboardDelivery(item: RiderWorkbenchDeliveryItem): DashboardDeliveryView {
   const statusDisplay = getDeliveryStatusDisplay(item.status)
   const isAssignedStage = item.status === 'assigned' || item.status === 'picking'
+  const pickupActionState = getRiderDeliveryActionState(item)
 
   return {
     id: item.id,
     order_id: item.order_id,
+    order_status: item.order_status,
+    fulfillment_status: item.fulfillment_status,
     status: item.status,
     delivery_fee: item.delivery_fee,
     rider_earnings: item.rider_earnings,
@@ -117,9 +121,11 @@ function buildDashboardDelivery(item: RiderWorkbenchDeliveryItem): DashboardDeli
     is_very_urgent: false,
     is_pickup_finished: item.status === 'picked' || item.status === 'delivering',
     can_start_pickup: item.status === 'assigned',
-    can_confirm_pickup: item.status === 'picking',
+    can_confirm_pickup: item.status === 'picking' && pickupActionState.canUpdate,
     can_start_delivery: item.status === 'picked',
     can_confirm_delivery: item.status === 'delivering',
+    pickup_block_reason: item.status === 'picking' ? pickupActionState.disabledReason : '',
+    pickup_action_label: item.status === 'picking' ? pickupActionState.label : '',
     is_action_loading: false,
     income_view: buildRiderDeliveryIncomeView(item)
   }

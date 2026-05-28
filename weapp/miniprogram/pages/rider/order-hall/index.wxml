@@ -243,6 +243,10 @@
                   <view class="action-btns">
                     <t-button wx:if="{{item.can_start_pickup}}" theme="primary" block loading="{{item.is_action_loading}}" disabled="{{item.is_action_loading}}" data-id="{{item.id}}" data-action="startPickup" catchtap="onUpdateStatus">我已到店</t-button>
                     <t-button wx:if="{{item.can_confirm_pickup}}" theme="warning" block loading="{{item.is_action_loading}}" disabled="{{item.is_action_loading}}" data-id="{{item.id}}" data-action="confirmPickup" catchtap="onUpdateStatus">确认取餐</t-button>
+                    <block wx:elif="{{item.pickup_block_reason}}">
+                      <t-button theme="default" block disabled>{{item.pickup_action_label || '等待商户出餐'}}</t-button>
+                      <view class="action-blocked-hint">{{item.pickup_block_reason}}</view>
+                    </block>
                     <t-button wx:if="{{item.can_start_delivery}}" theme="primary" block loading="{{item.is_action_loading}}" disabled="{{item.is_action_loading}}" data-id="{{item.id}}" data-action="startDelivery" catchtap="onUpdateStatus">开始代取</t-button>
                     <t-button wx:if="{{item.can_confirm_delivery}}" theme="primary" block loading="{{item.is_action_loading}}" disabled="{{item.is_action_loading}}" data-id="{{item.id}}" data-action="confirmDelivery" catchtap="onUpdateStatus">确认送达</t-button>
                   </view>

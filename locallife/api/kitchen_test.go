@@ -37,9 +37,8 @@ func TestListKitchenOrdersAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
-				// Mock ListMerchantOrdersByStatus for paid orders
 				store.EXPECT().
-					ListMerchantOrdersByStatus(gomock.Any(), gomock.Any()).
+					ListMerchantKitchenOrdersByStage(gomock.Any(), gomock.Any()).
 					Times(3). // paid, preparing, ready
 					Return([]db.Order{}, nil)
 
@@ -65,6 +64,68 @@ func TestListKitchenOrdersAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "OK_IncludesCourierAcceptedPreparingAsPreparing",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				order := randomKitchenOrder(merchant.ID, user.ID)
+				order.ID = 601
+				order.OrderType = db.OrderTypeTakeout
+				order.Status = db.OrderStatusCourierAccepted
+				order.FulfillmentStatus = db.FulfillmentStatusPreparing
+
+				store.EXPECT().
+					ListMerchantKitchenOrdersByStage(gomock.Any(), gomock.Any()).
+					Times(3).
+					DoAndReturn(func(_ any, arg db.ListMerchantKitchenOrdersByStageParams) ([]db.Order, error) {
+						require.Equal(t, merchant.ID, arg.MerchantID)
+						switch arg.Stage {
+						case "paid":
+							return []db.Order{}, nil
+						case "preparing":
+							return []db.Order{order}, nil
+						case "ready":
+							return []db.Order{}, nil
+						default:
+							t.Fatalf("unexpected kitchen stage %q", arg.Stage)
+							return nil, nil
+						}
+					})
+
+				store.EXPECT().
+					CountMerchantOrdersByStatusAfterTime(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(0), nil)
+				store.EXPECT().
+					GetMerchantAvgPrepareTime(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(15), nil)
+				store.EXPECT().
+					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(order.ID)).
+					Times(1).
+					Return([]db.OrderItem{}, nil)
+				store.EXPECT().
+					CountOrderUrges(gomock.Any(), gomock.Eq(order.ID)).
+					Times(1).
+					Return(int64(0), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var response kitchenOrdersResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Len(t, response.PreparingOrders, 1)
+				got := response.PreparingOrders[0]
+				require.Equal(t, db.OrderStatusCourierAccepted, got.OrderStatus)
+				require.Equal(t, db.FulfillmentStatusPreparing, got.FulfillmentStatus)
+				require.Equal(t, "preparing", got.KitchenStatus)
+				require.True(t, got.CanMarkReady)
+				require.Contains(t, got.StatusHint, "骑手已接单")
+			},
+		},
+		{
 			name: "OK_NoHistoryData_UseDefault",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -73,7 +134,7 @@ func TestListKitchenOrdersAPI(t *testing.T) {
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
-					ListMerchantOrdersByStatus(gomock.Any(), gomock.Any()).
+					ListMerchantKitchenOrdersByStage(gomock.Any(), gomock.Any()).
 					Times(3).
 					Return([]db.Order{}, nil)
 

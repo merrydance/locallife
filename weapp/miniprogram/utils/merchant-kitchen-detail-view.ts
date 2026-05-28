@@ -8,10 +8,16 @@ interface KitchenStatusView {
   progressCurrent: number
   canStartPreparing: boolean
   canMarkReady: boolean
+  statusHint: string
 }
 
-export function getKitchenStatusView(status?: KitchenOrderResponse['status'] | string): KitchenStatusView {
-  const normalizedStatus = String(status || '').trim().toLowerCase()
+export function getKitchenStatusView(orderOrStatus?: KitchenOrderResponse | KitchenOrderResponse['status'] | string): KitchenStatusView {
+  const order = typeof orderOrStatus === 'object' && orderOrStatus !== null ? orderOrStatus : null
+  const normalizedStatus = String(order?.kitchen_status || order?.status || orderOrStatus || '').trim().toLowerCase()
+  const statusHint = String(order?.status_hint || '').trim()
+  const canMarkReady = typeof order?.can_mark_ready === 'boolean'
+    ? order.can_mark_ready
+    : normalizedStatus === 'preparing'
 
   if (normalizedStatus === 'ready') {
     return {
@@ -19,7 +25,8 @@ export function getKitchenStatusView(status?: KitchenOrderResponse['status'] | s
       theme: 'success',
       progressCurrent: 2,
       canStartPreparing: false,
-      canMarkReady: false
+      canMarkReady: false,
+      statusHint
     }
   }
 
@@ -29,7 +36,8 @@ export function getKitchenStatusView(status?: KitchenOrderResponse['status'] | s
       theme: 'warning',
       progressCurrent: 1,
       canStartPreparing: false,
-      canMarkReady: true
+      canMarkReady,
+      statusHint
     }
   }
 
@@ -38,6 +46,7 @@ export function getKitchenStatusView(status?: KitchenOrderResponse['status'] | s
     theme: 'primary',
     progressCurrent: 0,
     canStartPreparing: normalizedStatus === 'paid',
-    canMarkReady: false
+    canMarkReady: false,
+    statusHint
   }
 }

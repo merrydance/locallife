@@ -198,6 +198,19 @@
   padding-bottom: var(--spacer-md);
 }
 
+.detail-actions--blocked {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.blocked-action-hint {
+  color: var(--td-text-color-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  text-align: center;
+}
+
 /* 商品清单 */
 .items-card .card-title {
   font-size: var(--font-size-base);

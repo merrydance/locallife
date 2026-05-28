@@ -26,6 +26,7 @@ const (
 type RiderWorkbenchStore interface {
 	GetRiderByUserID(ctx context.Context, userID int64) (db.Rider, error)
 	ListRiderActiveDeliveries(ctx context.Context, riderID pgtype.Int8) ([]db.Delivery, error)
+	GetOrder(ctx context.Context, id int64) (db.Order, error)
 	GetLatestPaymentOrderByOrder(ctx context.Context, arg db.GetLatestPaymentOrderByOrderParams) (db.PaymentOrder, error)
 	GetProfitSharingOrderByPaymentOrder(ctx context.Context, paymentOrderID int64) (db.ProfitSharingOrder, error)
 	CountDeliveryPool(ctx context.Context) (int64, error)
@@ -87,7 +88,12 @@ type RiderWorkbenchCurrentDeliveries struct {
 type RiderWorkbenchDeliveryItem struct {
 	ID                   int64
 	OrderID              int64
+	OrderStatus          string
+	FulfillmentStatus    string
 	Status               string
+	CanConfirmPickup     bool
+	PickupBlockReason    string
+	PickupActionLabel    string
 	DeliveryFee          int64
 	RiderEarnings        int64
 	RiderGrossAmount     int64
@@ -171,9 +177,9 @@ func (service *RiderWorkbenchService) GetSummary(ctx context.Context, userID int
 		result.RiderStatus.ActiveDeliveries = len(activeDeliveries)
 		result.RiderStatus.OnlineStatus = riderWorkbenchOnlineStatus(rider.IsOnline, len(activeDeliveries))
 		result.RiderStatus.CanGoOffline = rider.IsOnline && len(activeDeliveries) == 0
-		items, billAvailable := service.newRiderWorkbenchDeliveryItems(ctx, activeDeliveries)
-		if !billAvailable {
-			result.degrade(RiderWorkbenchSectionCurrentDeliveries, "当前任务收益账单暂不可用，请稍后重试")
+		items, currentDeliveriesMessage := service.newRiderWorkbenchDeliveryItems(ctx, activeDeliveries)
+		if currentDeliveriesMessage != "" {
+			result.degrade(RiderWorkbenchSectionCurrentDeliveries, currentDeliveriesMessage)
 		}
 		result.CurrentDeliveries = RiderWorkbenchCurrentDeliveries{
 			ActiveCount: len(activeDeliveries),
@@ -382,9 +388,9 @@ func riderWorkbenchFenToYuanString(fen int64) string {
 	return fmt.Sprintf("%d.%02d", yuan, cents)
 }
 
-func (service *RiderWorkbenchService) newRiderWorkbenchDeliveryItems(ctx context.Context, deliveries []db.Delivery) ([]RiderWorkbenchDeliveryItem, bool) {
+func (service *RiderWorkbenchService) newRiderWorkbenchDeliveryItems(ctx context.Context, deliveries []db.Delivery) ([]RiderWorkbenchDeliveryItem, string) {
 	items := make([]RiderWorkbenchDeliveryItem, 0, len(deliveries))
-	billAvailable := true
+	degradeMessage := ""
 	for _, delivery := range deliveries {
 		item := RiderWorkbenchDeliveryItem{
 			ID:                  delivery.ID,
@@ -400,12 +406,23 @@ func (service *RiderWorkbenchService) newRiderWorkbenchDeliveryItems(ctx context
 			DeliveredAt:         pgTimestamptzPtr(delivery.DeliveredAt),
 			CreatedAt:           delivery.CreatedAt,
 		}
+		order, err := service.store.GetOrder(ctx, delivery.OrderID)
+		if err != nil {
+			log.Error().Err(err).Int64("order_id", delivery.OrderID).Int64("delivery_id", delivery.ID).Msg("rider workbench delivery order load failed")
+			return nil, DeliveryPickupStateUnavailableMessage
+		}
+		item.OrderStatus = order.Status
+		item.FulfillmentStatus = order.FulfillmentStatus
+		actionState := GetDeliveryPickupActionState(delivery, order)
+		item.CanConfirmPickup = actionState.CanConfirmPickup
+		item.PickupBlockReason = actionState.PickupBlockReason
+		item.PickupActionLabel = actionState.PickupActionLabel
 		if !service.attachRiderDeliveryBill(ctx, delivery, &item) {
-			billAvailable = false
+			degradeMessage = "当前任务收益账单暂不可用，请稍后重试"
 		}
 		items = append(items, item)
 	}
-	return items, billAvailable
+	return items, degradeMessage
 }
 
 func (service *RiderWorkbenchService) attachRiderDeliveryBill(ctx context.Context, delivery db.Delivery, item *RiderWorkbenchDeliveryItem) bool {

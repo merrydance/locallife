@@ -19,7 +19,8 @@ import { getConsoleDashboardErrorMessage, getConsoleDashboardErrorState } from '
 import { resolveCurrentRegionId } from './current-region'
 import {
   buildRiderDeliveryActionConfirmFeedback,
-  buildRiderDeliveryActionFailureFeedback
+  buildRiderDeliveryActionFailureFeedback,
+  getRiderDeliveryActionState
 } from './rider-delivery-view'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -47,6 +48,8 @@ export type DashboardDeliveryView = Delivery & {
   can_confirm_pickup: boolean
   can_start_delivery: boolean
   can_confirm_delivery: boolean
+  pickup_block_reason: string
+  pickup_action_label: string
   is_action_loading: boolean
   income_view: RiderDeliveryIncomeView
 }
@@ -138,16 +141,21 @@ function isTrackableDelivery(status: Delivery['status']): boolean {
   return status === 'assigned' || status === 'picking' || status === 'picked' || status === 'delivering'
 }
 
-function buildDashboardDeliveryActionState(status: Delivery['status']) {
+function buildDashboardDeliveryActionState(delivery: Delivery) {
+  const pickupActionState = getRiderDeliveryActionState(delivery)
+  const status = delivery.status
+
   return {
     statusTagTheme: status === 'assigned' || status === 'picking'
       ? resolveStatusTagTheme('warning')
       : resolveStatusTagTheme('success'),
     isPickupFinished: status === 'picked' || status === 'delivering',
     canStartPickup: status === 'assigned',
-    canConfirmPickup: status === 'picking',
+    canConfirmPickup: status === 'picking' && pickupActionState.canUpdate,
     canStartDelivery: status === 'picked',
-    canConfirmDelivery: status === 'delivering'
+    canConfirmDelivery: status === 'delivering',
+    pickupBlockReason: status === 'picking' ? pickupActionState.disabledReason : '',
+    pickupActionLabel: status === 'picking' ? pickupActionState.label : ''
   }
 }
 
@@ -447,7 +455,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
       const myDeliveries = myDeliveriesSource.map((d: Delivery) => {
         const deadlineView = buildRiderDeliveryDeadlineView(d)
         const statusDisplay = getDeliveryStatusDisplay(d.status)
-        const actionState = buildDashboardDeliveryActionState(d.status)
+        const actionState = buildDashboardDeliveryActionState(d)
 
         return {
           ...d,
@@ -461,6 +469,8 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
           can_confirm_pickup: actionState.canConfirmPickup,
           can_start_delivery: actionState.canStartDelivery,
           can_confirm_delivery: actionState.canConfirmDelivery,
+          pickup_block_reason: actionState.pickupBlockReason,
+          pickup_action_label: actionState.pickupActionLabel,
           is_action_loading: (this.data.deliveryActionLoadingIds || []).includes(d.id),
           income_view: buildRiderDeliveryIncomeView(d)
         }

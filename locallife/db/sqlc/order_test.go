@@ -404,6 +404,61 @@ func TestListOrdersByMerchantWithFilters_ExcludesPendingWhenStatusOmitted(t *tes
 	require.Equal(t, int64(len(orders)), count)
 }
 
+func TestListMerchantKitchenOrdersByStageIncludesCourierAcceptedTakeoutStages(t *testing.T) {
+	merchantOwner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, merchantOwner.ID)
+	customer := createRandomUser(t)
+
+	createTakeoutKitchenOrder := func(status, fulfillmentStatus string) Order {
+		order, err := testStore.CreateOrder(context.Background(), CreateOrderParams{
+			OrderNo:             util.RandomString(20),
+			UserID:              customer.ID,
+			MerchantID:          merchant.ID,
+			OrderType:           OrderTypeTakeout,
+			DeliveryFee:         500,
+			Subtotal:            3000,
+			DiscountAmount:      0,
+			DeliveryFeeDiscount: 0,
+			TotalAmount:         3500,
+			Status:              status,
+			FulfillmentStatus:   fulfillmentStatus,
+		})
+		require.NoError(t, err)
+		return order
+	}
+
+	courierAcceptedPreparing := createTakeoutKitchenOrder(OrderStatusCourierAccepted, FulfillmentStatusPreparing)
+	courierAcceptedReady := createTakeoutKitchenOrder(OrderStatusCourierAccepted, FulfillmentStatusReady)
+
+	preparingOrders, err := testStore.ListMerchantKitchenOrdersByStage(context.Background(), ListMerchantKitchenOrdersByStageParams{
+		MerchantID: merchant.ID,
+		Stage:      OrderStatusPreparing,
+		Limit:      20,
+		Offset:     0,
+	})
+	require.NoError(t, err)
+	preparingIDs := make(map[int64]bool, len(preparingOrders))
+	for _, order := range preparingOrders {
+		preparingIDs[order.ID] = true
+	}
+	require.True(t, preparingIDs[courierAcceptedPreparing.ID])
+	require.False(t, preparingIDs[courierAcceptedReady.ID])
+
+	readyOrders, err := testStore.ListMerchantKitchenOrdersByStage(context.Background(), ListMerchantKitchenOrdersByStageParams{
+		MerchantID: merchant.ID,
+		Stage:      OrderStatusReady,
+		Limit:      20,
+		Offset:     0,
+	})
+	require.NoError(t, err)
+	readyIDs := make(map[int64]bool, len(readyOrders))
+	for _, order := range readyOrders {
+		readyIDs[order.ID] = true
+	}
+	require.True(t, readyIDs[courierAcceptedReady.ID])
+	require.False(t, readyIDs[courierAcceptedPreparing.ID])
+}
+
 func TestGetOrderForUpdate(t *testing.T) {
 	order1 := createRandomOrder(t)
 

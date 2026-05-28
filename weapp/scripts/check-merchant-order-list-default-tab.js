@@ -25,6 +25,9 @@ function loadOrderManagementApi() {
       if (modulePath === '../utils/request') {
         return { request: () => Promise.resolve({}) }
       }
+      if (modulePath === '../utils/merchant-order-action-view') {
+        return { canMerchantMarkOrderReady: (order) => order?.status === 'preparing' }
+      }
       throw new Error(`unexpected require from order-management: ${modulePath}`)
     }
   }

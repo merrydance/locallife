@@ -48,6 +48,7 @@
         <view class="meta-chip">{{detail.remainingLabel}}</view>
         <view class="meta-chip {{detail.is_urged ? 'meta-chip-warning' : ''}}">{{detail.urgencyLabel}}</view>
       </view>
+      <view wx:if="{{detail.statusHintLabel}}" class="hero-status-hint">{{detail.statusHintLabel}}</view>
     </view>
 
     <view class="card">

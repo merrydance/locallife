@@ -91,6 +91,10 @@ function formatKitchenOrder(order: KitchenOrderResponse): KitchenBoardOrder {
   }
 }
 
+function getKitchenOrderStage(order: KitchenOrderResponse): string {
+  return String(order.kitchen_status || order.status || '').trim().toLowerCase()
+}
+
 function buildKitchenStats(response: KitchenOrdersResponse): KitchenBoardStats {
   const stats = response.stats
   return {
@@ -420,9 +424,10 @@ Page({
     const preparingOrders = this.data.preparingOrders.filter((item) => item.id !== order.id)
     const readyOrders = this.data.readyOrders.filter((item) => item.id !== order.id)
 
-    if (isPreparingOrderStatus(order.status)) {
+    const kitchenStage = getKitchenOrderStage(order)
+    if (isPreparingOrderStatus(kitchenStage)) {
       preparingOrders.unshift(formattedOrder)
-    } else if (isReadyOrderStatus(order.status)) {
+    } else if (isReadyOrderStatus(kitchenStage)) {
       readyOrders.unshift(formattedOrder)
     } else {
       newOrders.unshift(formattedOrder)

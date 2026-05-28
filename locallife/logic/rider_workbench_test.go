@@ -16,6 +16,8 @@ type riderWorkbenchStoreStub struct {
 	riderErr                 error
 	activeDeliveries         []db.Delivery
 	activeDeliveriesErr      error
+	ordersByID               map[int64]db.Order
+	orderErr                 error
 	deliveryPoolCount        int64
 	deliveryPoolErr          error
 	completedCount           int64
@@ -49,6 +51,18 @@ func (stub *riderWorkbenchStoreStub) GetRiderByUserID(ctx context.Context, userI
 
 func (stub *riderWorkbenchStoreStub) ListRiderActiveDeliveries(ctx context.Context, riderID pgtype.Int8) ([]db.Delivery, error) {
 	return stub.activeDeliveries, stub.activeDeliveriesErr
+}
+
+func (stub *riderWorkbenchStoreStub) GetOrder(ctx context.Context, id int64) (db.Order, error) {
+	if stub.orderErr != nil {
+		return db.Order{}, stub.orderErr
+	}
+	if stub.ordersByID != nil {
+		if order, ok := stub.ordersByID[id]; ok {
+			return order, nil
+		}
+	}
+	return db.Order{}, db.ErrRecordNotFound
 }
 
 func (stub *riderWorkbenchStoreStub) GetLatestPaymentOrderByOrder(ctx context.Context, arg db.GetLatestPaymentOrderByOrderParams) (db.PaymentOrder, error) {
@@ -148,6 +162,13 @@ func TestRiderWorkbenchServiceGetSummary(t *testing.T) {
 			DeliveryAddress: "送达地址",
 			CreatedAt:       deliveryCreatedAt,
 		}},
+		ordersByID: map[int64]db.Order{
+			22: {
+				ID:                22,
+				Status:            db.OrderStatusDelivering,
+				FulfillmentStatus: db.FulfillmentStatusReady,
+			},
+		},
 		deliveryPoolCount:       3,
 		completedCount:          2,
 		incomeStats:             db.GetRiderProfitSharingStatsRow{TotalDeliveries: 1, TotalRiderIncome: 900, TotalDeliveryFee: 1000},
@@ -196,6 +217,109 @@ func TestRiderWorkbenchServiceGetSummary(t *testing.T) {
 	require.Equal(t, int64(5), result.Notifications.UnreadCount)
 	require.Equal(t, pgtype.Timestamptz{Time: time.Date(2026, 4, 28, 0, 0, 0, 0, time.UTC), Valid: true}, store.completedDeliveriesRange.StartAt)
 	require.True(t, sectionAvailable(result.Sections, RiderWorkbenchSectionIncome))
+}
+
+func TestRiderWorkbenchServiceCurrentDeliveryCarriesPickupReadiness(t *testing.T) {
+	now := time.Date(2026, 4, 28, 14, 30, 0, 0, time.UTC)
+	rider := db.Rider{
+		ID:            7,
+		UserID:        9,
+		Status:        db.RiderStatusActive,
+		IsOnline:      true,
+		DepositAmount: 30000,
+		RegionID:      pgtype.Int8{Int64: 1, Valid: true},
+	}
+	delivery := db.Delivery{
+		ID:              11,
+		OrderID:         22,
+		Status:          db.DeliveryStatusPicking,
+		DeliveryFee:     800,
+		RiderEarnings:   720,
+		PickupAddress:   "取餐地址",
+		DeliveryAddress: "送达地址",
+		CreatedAt:       now.Add(-time.Hour),
+	}
+	store := &riderWorkbenchStoreStub{
+		rider:            rider,
+		activeDeliveries: []db.Delivery{delivery},
+		ordersByID: map[int64]db.Order{
+			delivery.OrderID: {
+				ID:                delivery.OrderID,
+				Status:            db.OrderStatusCourierAccepted,
+				FulfillmentStatus: db.FulfillmentStatusPreparing,
+			},
+		},
+		deliveryPoolCount:       3,
+		completedCount:          2,
+		incomeStats:             db.GetRiderProfitSharingStatsRow{TotalRiderIncome: 900},
+		pendingRefundAmount:     0,
+		operator:                db.Operator{ID: 1, RiderDeposit: 20000},
+		pendingClaimCount:       4,
+		unreadNotificationCount: 5,
+		paymentOrdersByOrder: map[int64]db.PaymentOrder{
+			delivery.OrderID: {
+				ID:                    31,
+				OrderID:               pgtype.Int8{Int64: delivery.OrderID, Valid: true},
+				BusinessType:          db.ExternalPaymentBusinessOwnerOrder,
+				Status:                "paid",
+				PaymentChannel:        db.PaymentChannelDirect,
+				RequiresProfitSharing: false,
+			},
+		},
+	}
+	service := NewRiderWorkbenchService(store)
+	service.now = func() time.Time { return now }
+
+	result, err := service.GetSummary(context.Background(), rider.UserID)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.CurrentDeliveries.ActiveCount)
+	got := result.CurrentDeliveries.Items[0]
+	require.Equal(t, db.OrderStatusCourierAccepted, got.OrderStatus)
+	require.Equal(t, db.FulfillmentStatusPreparing, got.FulfillmentStatus)
+	require.False(t, got.CanConfirmPickup)
+	require.Equal(t, "商户未出餐，暂不可确认取餐", got.PickupBlockReason)
+	require.Equal(t, "等待商户出餐", got.PickupActionLabel)
+	require.True(t, sectionAvailable(result.Sections, RiderWorkbenchSectionCurrentDeliveries))
+}
+
+func TestRiderWorkbenchServiceDegradesCurrentDeliveriesWhenOrderStatusUnavailable(t *testing.T) {
+	now := time.Date(2026, 4, 28, 14, 30, 0, 0, time.UTC)
+	rider := db.Rider{
+		ID:            7,
+		UserID:        9,
+		Status:        db.RiderStatusActive,
+		IsOnline:      true,
+		DepositAmount: 30000,
+		RegionID:      pgtype.Int8{Int64: 1, Valid: true},
+	}
+	store := &riderWorkbenchStoreStub{
+		rider: rider,
+		activeDeliveries: []db.Delivery{{
+			ID:              11,
+			OrderID:         22,
+			Status:          db.DeliveryStatusPicking,
+			DeliveryFee:     800,
+			RiderEarnings:   720,
+			PickupAddress:   "取餐地址",
+			DeliveryAddress: "送达地址",
+			CreatedAt:       now.Add(-time.Hour),
+		}},
+		orderErr:                errors.New("order read failed"),
+		deliveryPoolCount:       3,
+		completedCount:          2,
+		incomeStats:             db.GetRiderProfitSharingStatsRow{TotalRiderIncome: 900},
+		pendingRefundAmount:     0,
+		operator:                db.Operator{ID: 1, RiderDeposit: 20000},
+		pendingClaimCount:       4,
+		unreadNotificationCount: 5,
+	}
+	service := NewRiderWorkbenchService(store)
+	service.now = func() time.Time { return now }
+
+	result, err := service.GetSummary(context.Background(), rider.UserID)
+	require.NoError(t, err)
+	require.False(t, sectionAvailable(result.Sections, RiderWorkbenchSectionCurrentDeliveries))
+	require.Equal(t, DeliveryPickupStateUnavailableMessage, sectionMessage(result.Sections, RiderWorkbenchSectionCurrentDeliveries))
 }
 
 func TestRiderWorkbenchServiceRiderNotFound(t *testing.T) {
@@ -262,6 +386,13 @@ func TestRiderWorkbenchServiceDegradesCurrentDeliveriesWhenBillMissing(t *testin
 			DeliveryAddress: "送达地址",
 			CreatedAt:       now.Add(-time.Hour),
 		}},
+		ordersByID: map[int64]db.Order{
+			22: {
+				ID:                22,
+				Status:            db.OrderStatusDelivering,
+				FulfillmentStatus: db.FulfillmentStatusReady,
+			},
+		},
 		deliveryPoolCount:       3,
 		completedCount:          2,
 		incomeStats:             db.GetRiderProfitSharingStatsRow{TotalRiderIncome: 900},

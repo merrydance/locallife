@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -24,6 +25,17 @@ func TestGetRiderWorkbenchSummaryAPI(t *testing.T) {
 	rider.FrozenDeposit = 1000
 	riderID := pgtype.Int8{Int64: rider.ID, Valid: true}
 	activeDelivery := db.Delivery{ID: 11, OrderID: 22, Status: "delivering", DeliveryFee: 800, RiderEarnings: 720, PickupAddress: "取餐地址", DeliveryAddress: "送达地址", CreatedAt: time.Now().UTC()}
+	pickingDelivery := db.Delivery{ID: 12, OrderID: 23, Status: db.DeliveryStatusPicking, DeliveryFee: 800, RiderEarnings: 720, PickupAddress: "取餐地址", DeliveryAddress: "送达地址", CreatedAt: time.Now().UTC()}
+	pickingOrder := db.Order{
+		ID:                pickingDelivery.OrderID,
+		Status:            db.OrderStatusCourierAccepted,
+		FulfillmentStatus: db.FulfillmentStatusPreparing,
+	}
+	activeOrder := db.Order{
+		ID:                activeDelivery.OrderID,
+		Status:            db.OrderStatusDelivering,
+		FulfillmentStatus: db.FulfillmentStatusReady,
+	}
 	paymentOrder := db.PaymentOrder{
 		ID:                    31,
 		OrderID:               pgtype.Int8{Int64: activeDelivery.OrderID, Valid: true},
@@ -55,6 +67,7 @@ func TestGetRiderWorkbenchSummaryAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().GetRiderByUserID(gomock.Any(), user.ID).Return(rider, nil)
 				store.EXPECT().ListRiderActiveDeliveries(gomock.Any(), riderID).Return([]db.Delivery{activeDelivery}, nil)
+				store.EXPECT().GetOrder(gomock.Any(), activeDelivery.OrderID).Return(activeOrder, nil)
 				store.EXPECT().
 					GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
 						OrderID:      pgtype.Int8{Int64: activeDelivery.OrderID, Valid: true},
@@ -99,6 +112,44 @@ func TestGetRiderWorkbenchSummaryAPI(t *testing.T) {
 				require.Equal(t, float64(795), item["rider_net_earnings"])
 				require.Equal(t, float64(profitSharingOrder.ID), item["profit_sharing_order_id"])
 				require.Equal(t, profitSharingOrder.Status, item["profit_sharing_status"])
+			},
+		},
+		{
+			name: "CurrentDeliveryPickupBlocked",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().GetRiderByUserID(gomock.Any(), user.ID).Return(rider, nil)
+				store.EXPECT().ListRiderActiveDeliveries(gomock.Any(), riderID).Return([]db.Delivery{pickingDelivery}, nil)
+				store.EXPECT().GetOrder(gomock.Any(), pickingDelivery.OrderID).Return(pickingOrder, nil)
+				store.EXPECT().
+					GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+						OrderID:      pgtype.Int8{Int64: pickingDelivery.OrderID, Valid: true},
+						BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+					}).
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+				store.EXPECT().GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), user.ID).Return(int64(0), nil)
+				expectRiderThresholdFromRegionRule(store, rider, 200*fenPerYuan)
+				store.EXPECT().CountDeliveryPool(gomock.Any()).Return(int64(3), nil)
+				store.EXPECT().CountRiderCompletedDeliveriesInRange(gomock.Any(), gomock.Any()).Return(int64(2), nil)
+				store.EXPECT().GetRiderProfitSharingStats(gomock.Any(), gomock.Any()).Return(db.GetRiderProfitSharingStatsRow{}, nil)
+				store.EXPECT().GetRiderProfitSharingStatusSummary(gomock.Any(), gomock.Any()).Return(nil, nil)
+				store.EXPECT().CountRiderClaimsForRider(gomock.Any(), gomock.Any()).Return(int64(0), nil)
+				store.EXPECT().CountUnreadNotifications(gomock.Any(), user.ID).Return(int64(0), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response riderWorkbenchSummaryResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Len(t, response.CurrentDeliveries.Items, 1)
+				item := response.CurrentDeliveries.Items[0]
+				require.Equal(t, db.OrderStatusCourierAccepted, item.OrderStatus)
+				require.Equal(t, db.FulfillmentStatusPreparing, item.FulfillmentStatus)
+				require.False(t, item.CanConfirmPickup)
+				require.Equal(t, logic.DeliveryPickupBlockedMerchantNotReadyMessage, item.PickupBlockReason)
+				require.Equal(t, "等待商户出餐", item.PickupActionLabel)
 			},
 		},
 		{

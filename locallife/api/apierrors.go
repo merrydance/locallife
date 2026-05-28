@@ -190,17 +190,18 @@ var (
 // ==================== 骑手操作/代取 (Rider Operations / Delivery) ====================
 
 var (
-	ErrRiderOffline                = apierr(40035, "rider is currently offline")
-	ErrRiderActiveOrderOnly        = apierr(40036, "can only report the current active delivery order")
-	ErrDeliveryAddressRequired     = apierr(40037, "a delivery address is required for merged takeout orders")
-	ErrDeliveryDistanceUnavailable = apierr(40038, "delivery distance unavailable: please reselect the address")
-	ErrDeliveryDistanceCalcFailed  = apierr(40039, "delivery distance calculation failed, please try again later")
-	ErrLocationTimestampFuture     = apierr(40040, "location timestamp cannot be more than 5 minutes in the future")
-	ErrLocationTimestampTooOld     = apierr(40041, "location timestamp cannot be earlier than 1 hour ago")
-	ErrDistanceNegative            = apierr(40042, "distance cannot be negative")
-	ErrRiderNotPending             = apierr(40043, "rider is not in pending review state")
-	ErrRiderCannotApprove          = apierr(40044, "rider's current state does not allow approval")
-	ErrRiderNotOnlineForOrders     = apierr(40045, "please go online first to receive real-time order notifications")
+	ErrRiderOffline                   = apierr(40035, "rider is currently offline")
+	ErrRiderActiveOrderOnly           = apierr(40036, "can only report the current active delivery order")
+	ErrDeliveryAddressRequired        = apierr(40037, "a delivery address is required for merged takeout orders")
+	ErrDeliveryDistanceUnavailable    = apierr(40038, "delivery distance unavailable: please reselect the address")
+	ErrDeliveryDistanceCalcFailed     = apierr(40039, "delivery distance calculation failed, please try again later")
+	ErrLocationTimestampFuture        = apierr(40040, "location timestamp cannot be more than 5 minutes in the future")
+	ErrLocationTimestampTooOld        = apierr(40041, "location timestamp cannot be earlier than 1 hour ago")
+	ErrDistanceNegative               = apierr(40042, "distance cannot be negative")
+	ErrRiderNotPending                = apierr(40043, "rider is not in pending review state")
+	ErrRiderCannotApprove             = apierr(40044, "rider's current state does not allow approval")
+	ErrRiderNotOnlineForOrders        = apierr(40045, "please go online first to receive real-time order notifications")
+	ErrDeliveryPickupMerchantNotReady = apierr(40973, "商户未出餐，暂不可确认取餐")
 )
 
 // ==================== 规则/系数 (Rules / Coefficients) ====================

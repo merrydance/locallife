@@ -154,6 +154,12 @@
           {{delivery.action_label}}
         </t-button>
       </view>
+      <view class="detail-actions detail-actions--blocked" wx:elif="{{delivery && delivery.action_disabled_reason}}">
+        <t-button theme="default" size="large" block disabled>
+          {{delivery.action_label || '暂不可操作'}}
+        </t-button>
+        <view class="blocked-action-hint">{{delivery.action_disabled_reason}}</view>
+      </view>
     </block>
   </view>
 </scroll-view>

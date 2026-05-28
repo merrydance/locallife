@@ -30,6 +30,7 @@ type DeliveryView = Delivery & {
     deadline_desc: string
     can_update_status: boolean
     action_label: string
+    action_disabled_reason: string
     income_view: RiderDeliveryIncomeView
 }
 
@@ -152,7 +153,7 @@ Page({
     },
 
     decorateDelivery(delivery: Delivery): DeliveryView {
-        const actionState = getRiderDeliveryActionState(delivery.status)
+        const actionState = getRiderDeliveryActionState(delivery)
         const deadlineView = buildRiderDeliveryDeadlineView(delivery)
 
         return {
@@ -160,6 +161,7 @@ Page({
             deadline_desc: deadlineView.text,
             can_update_status: actionState.canUpdate,
             action_label: actionState.label,
+            action_disabled_reason: actionState.disabledReason,
             income_view: buildRiderDeliveryIncomeView(delivery)
         }
     },
@@ -174,8 +176,8 @@ Page({
     async onUpdateStatus() {
         if (this.data.actionLoading) return
         if (!this.data.delivery) return
-        const { id, status } = this.data.delivery
-        const actionState = getRiderDeliveryActionState(status)
+        const { id } = this.data.delivery
+        const actionState = getRiderDeliveryActionState(this.data.delivery)
 
         if (!actionState.canUpdate || !actionState.expectedStatus || !actionState.actionKey) return
         const method = DELIVERY_ACTION_METHODS[actionState.actionKey]
@@ -193,8 +195,10 @@ Page({
                     return
                 }
 
+                let loadingVisible = false
                 try {
                     wx.showLoading({ title: '同步中...' })
+                    loadingVisible = true
                     await this.syncDeliveryLocation(id, actionState.locationSource)
                     const updated = await method(id)
                     const updatedView = this.decorateDelivery(updated)
@@ -219,9 +223,15 @@ Page({
                         return
                     }
 
+                    if (loadingVisible) {
+                        wx.hideLoading()
+                        loadingVisible = false
+                    }
                     showDeliveryActionFailureFeedback(err, actionState.actionKey, getUserMessage(err, '操作失败'))
                 } finally {
-                    wx.hideLoading()
+                    if (loadingVisible) {
+                        wx.hideLoading()
+                    }
                     this.setData({ actionLoading: false })
                 }
             },

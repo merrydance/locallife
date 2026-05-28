@@ -48,7 +48,12 @@ type riderWorkbenchCurrentDeliveriesResponse struct {
 type riderWorkbenchDeliveryItemResponse struct {
 	ID                   int64      `json:"id"`
 	OrderID              int64      `json:"order_id"`
+	OrderStatus          string     `json:"order_status"`
+	FulfillmentStatus    string     `json:"fulfillment_status"`
 	Status               string     `json:"status"`
+	CanConfirmPickup     bool       `json:"can_confirm_pickup"`
+	PickupBlockReason    string     `json:"pickup_block_reason,omitempty"`
+	PickupActionLabel    string     `json:"pickup_action_label,omitempty"`
 	DeliveryFee          int64      `json:"delivery_fee"`
 	RiderEarnings        int64      `json:"rider_earnings"`
 	RiderGrossAmount     int64      `json:"rider_gross_amount,omitempty"`
@@ -117,7 +122,12 @@ func newRiderWorkbenchSummaryResponse(result logic.RiderWorkbenchSummary) riderW
 		items = append(items, riderWorkbenchDeliveryItemResponse{
 			ID:                   item.ID,
 			OrderID:              item.OrderID,
+			OrderStatus:          item.OrderStatus,
+			FulfillmentStatus:    item.FulfillmentStatus,
 			Status:               item.Status,
+			CanConfirmPickup:     item.CanConfirmPickup,
+			PickupBlockReason:    item.PickupBlockReason,
+			PickupActionLabel:    item.PickupActionLabel,
 			DeliveryFee:          item.DeliveryFee,
 			RiderEarnings:        item.RiderEarnings,
 			RiderGrossAmount:     item.RiderGrossAmount,

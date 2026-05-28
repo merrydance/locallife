@@ -535,13 +535,20 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
           errorDetail = `限流(${displayCode})`
         }
 
+        const errorMetadata = isRecord(responseData)
+          ? {
+              response: responseData,
+              data: responseData.data
+            }
+          : responseData
+
         throw new AppError({
           type: errorType,
           message: errorDetail,
           userMessage,
           code: displayCode,
           statusCode: result.statusCode
-        }, responseData)
+        }, errorMetadata)
         }
 
       // 常见HTTP错误处理

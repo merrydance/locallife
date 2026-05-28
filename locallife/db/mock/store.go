@@ -13973,6 +13973,21 @@ func (mr *MockStoreMockRecorder) ListMerchantGroups(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantGroups", reflect.TypeOf((*MockStore)(nil).ListMerchantGroups), ctx, arg)
 }
 
+// ListMerchantKitchenOrdersByStage mocks base method.
+func (m *MockStore) ListMerchantKitchenOrdersByStage(ctx context.Context, arg db.ListMerchantKitchenOrdersByStageParams) ([]db.Order, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListMerchantKitchenOrdersByStage", ctx, arg)
+	ret0, _ := ret[0].([]db.Order)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListMerchantKitchenOrdersByStage indicates an expected call of ListMerchantKitchenOrdersByStage.
+func (mr *MockStoreMockRecorder) ListMerchantKitchenOrdersByStage(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantKitchenOrdersByStage", reflect.TypeOf((*MockStore)(nil).ListMerchantKitchenOrdersByStage), ctx, arg)
+}
+
 // ListMerchantLocationsInRegion mocks base method.
 func (m *MockStore) ListMerchantLocationsInRegion(ctx context.Context, regionID int64) ([]db.ListMerchantLocationsInRegionRow, error) {
 	m.ctrl.T.Helper()

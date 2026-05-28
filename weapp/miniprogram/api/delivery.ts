@@ -25,6 +25,8 @@ export interface Delivery {
     id: number
     order_id: number
     order_no?: string
+    order_status?: 'pending' | 'paid' | 'preparing' | 'ready' | 'courier_accepted' | 'picked' | 'delivering' | 'rider_delivered' | 'user_delivered' | 'completed' | 'cancelled'
+    fulfillment_status?: 'scheduled' | 'pending_kitchen' | 'preparing' | 'ready' | 'completed' | 'cancelled'
     rider_id?: number
     merchant_name?: string
     pickup_address: string
@@ -38,6 +40,9 @@ export interface Delivery {
     delivery_contact?: string
     delivery_phone?: string
     status: 'pending' | 'assigned' | 'picking' | 'picked' | 'delivering' | 'delivered' | 'completed' | 'cancelled' | 'exception'
+    can_confirm_pickup?: boolean
+    pickup_block_reason?: string
+    pickup_action_label?: string
     delivery_fee: number
     rider_earnings: number
     rider_gross_amount?: number

@@ -1,4 +1,4 @@
-import { Delivery } from '../api/delivery'
+import type { Delivery } from '../api/delivery'
 
 export type RiderDeliveryActionKey = 'start_pickup' | 'confirm_pickup' | 'start_delivery' | 'confirm_delivery' | ''
 export type RiderDeliveryActionFeedbackMode = 'toast' | 'modal'
@@ -9,7 +9,10 @@ interface RiderDeliveryActionState {
   actionKey: RiderDeliveryActionKey
   expectedStatus: Delivery['status'] | null
   locationSource: string
+  disabledReason: string
 }
+
+type RiderDeliveryActionSource = Pick<Delivery, 'status' | 'can_confirm_pickup' | 'pickup_block_reason' | 'pickup_action_label'>
 
 export interface RiderDeliveryActionFeedback {
   mode: RiderDeliveryActionFeedbackMode
@@ -24,13 +27,40 @@ interface DeliveryActionErrorLike {
   detailMessage?: unknown
   errMsg?: unknown
   data?: {
+    data?: unknown
     message?: unknown
+    reason?: unknown
+    action_label?: unknown
+    error?: unknown
+  }
+  response?: {
+    data?: {
+      reason?: unknown
+      action_label?: unknown
+      error?: unknown
+      message?: unknown
+    }
   }
   body?: {
     message?: unknown
   }
   originalError?: {
     message?: unknown
+    data?: {
+      data?: unknown
+      reason?: unknown
+      action_label?: unknown
+      error?: unknown
+      message?: unknown
+    }
+    response?: {
+      data?: {
+        reason?: unknown
+        action_label?: unknown
+        error?: unknown
+        message?: unknown
+      }
+    }
   }
 }
 
@@ -65,7 +95,9 @@ function formatClock(timestamp: number): string {
   return `${hours}:${minutes}`
 }
 
-const DELIVERY_ACTION_STATE_MAP: Partial<Record<Delivery['status'], Omit<RiderDeliveryActionState, 'canUpdate'>>> = {
+type RiderDeliveryActionConfig = Omit<RiderDeliveryActionState, 'canUpdate' | 'disabledReason'>
+
+const DELIVERY_ACTION_STATE_MAP: Partial<Record<Delivery['status'], RiderDeliveryActionConfig>> = {
   assigned: {
     label: '我已到达商家',
     actionKey: 'start_pickup',
@@ -176,6 +208,43 @@ function getDeliveryActionErrorMessage(error: unknown, fallback: string): string
   return fallback
 }
 
+function getDeliveryActionErrorPayload(error: unknown): { reason: string, actionLabel: string, message: string } {
+  if (!error || typeof error !== 'object') {
+    return { reason: '', actionLabel: '', message: '' }
+  }
+
+  const knownError = error as DeliveryActionErrorLike
+  const payloads = [
+    knownError.data,
+    knownError.data?.data,
+    knownError.response?.data,
+    knownError.originalError?.data,
+    knownError.originalError?.data?.data,
+    knownError.originalError?.response?.data
+  ]
+
+  let fallbackPayload = { reason: '', actionLabel: '', message: '' }
+  for (const payload of payloads) {
+    if (!payload || typeof payload !== 'object') {
+      continue
+    }
+    const payloadRecord = payload as Record<string, unknown>
+    const resolved = {
+      reason: asNonEmptyString(payloadRecord.reason),
+      actionLabel: asNonEmptyString(payloadRecord.action_label),
+      message: asNonEmptyString(payloadRecord.error) || asNonEmptyString(payloadRecord.message)
+    }
+    if (resolved.reason || resolved.actionLabel) {
+      return resolved
+    }
+    if (resolved.message && !fallbackPayload.message) {
+      fallbackPayload = resolved
+    }
+  }
+
+  return fallbackPayload
+}
+
 function normalizeDeliveryDistanceMessage(message: string): string {
   return message
     .replace(/代取地址/g, '用户位置点')
@@ -222,8 +291,41 @@ export function isExpectedDeliveryStatusReached(status: Delivery['status'], expe
   return status === expectedStatus
 }
 
-export function getRiderDeliveryActionState(status: Delivery['status']): RiderDeliveryActionState {
+function normalizeDeliveryInput(deliveryOrStatus: RiderDeliveryActionSource | Delivery['status']): RiderDeliveryActionSource {
+  if (typeof deliveryOrStatus === 'string') {
+    return { status: deliveryOrStatus }
+  }
+  return deliveryOrStatus
+}
+
+export function getRiderDeliveryActionState(deliveryOrStatus: RiderDeliveryActionSource | Delivery['status']): RiderDeliveryActionState {
+  const delivery = normalizeDeliveryInput(deliveryOrStatus)
+  const status = delivery.status
   const config = DELIVERY_ACTION_STATE_MAP[status]
+
+  if (status === 'picking') {
+    if (delivery.can_confirm_pickup !== true) {
+      return {
+        canUpdate: false,
+        label: delivery.pickup_action_label || '等待商户出餐',
+        actionKey: '',
+        expectedStatus: null,
+        locationSource: config?.locationSource || 'rider_task_detail_confirm_pickup',
+        disabledReason: delivery.pickup_block_reason || '当前任务状态暂不可用，请刷新后重试'
+      }
+    }
+
+    if (delivery.pickup_block_reason) {
+      return {
+        canUpdate: false,
+        label: delivery.pickup_action_label || '等待商户出餐',
+        actionKey: '',
+        expectedStatus: null,
+        locationSource: config?.locationSource || 'rider_task_detail_confirm_pickup',
+        disabledReason: delivery.pickup_block_reason
+      }
+    }
+  }
 
   if (!config || !config.actionKey || !config.expectedStatus) {
     return {
@@ -231,13 +333,16 @@ export function getRiderDeliveryActionState(status: Delivery['status']): RiderDe
       label: '',
       actionKey: '',
       expectedStatus: null,
-      locationSource: DELIVERY_ACTION_STATE_MAP[status]?.locationSource || 'rider_task_detail_action'
+      locationSource: DELIVERY_ACTION_STATE_MAP[status]?.locationSource || 'rider_task_detail_action',
+      disabledReason: ''
     }
   }
 
   return {
     canUpdate: true,
-    ...config
+    ...config,
+    label: status === 'picking' && delivery.pickup_action_label ? delivery.pickup_action_label : config.label,
+    disabledReason: ''
   }
 }
 
@@ -267,6 +372,17 @@ export function buildRiderDeliveryActionFailureFeedback(
   actionKey: string,
   fallback: string
 ): RiderDeliveryActionFeedback {
+  const payload = getDeliveryActionErrorPayload(error)
+  if (normalizeActionKey(actionKey) === 'confirm_pickup' && payload.reason === 'merchant_not_ready') {
+    const message = payload.message || getDeliveryActionErrorMessage(error, fallback)
+    return {
+      mode: 'modal',
+      title: payload.actionLabel || '等待商户出餐',
+      content: message || '商户未出餐，暂不可确认取餐',
+      confirmText: '知道了'
+    }
+  }
+
   const message = getDeliveryActionErrorMessage(error, fallback)
 
   if (!isConfirmDeliveryAction(actionKey)) {

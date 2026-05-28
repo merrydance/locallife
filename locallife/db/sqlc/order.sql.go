@@ -1158,6 +1158,126 @@ func (q *Queries) ListMerchantActiveTakeoutOrdersForFoodSafety(ctx context.Conte
 	return items, nil
 }
 
+const listMerchantKitchenOrdersByStage = `-- name: ListMerchantKitchenOrdersByStage :many
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
+WHERE merchant_id = $1
+    AND replaced_by_order_id IS NULL
+    AND (
+        ($2::text = 'paid' AND status = 'paid')
+        OR (
+            $2::text = 'preparing'
+            AND (
+                status = 'preparing'
+                OR (
+                    order_type = 'takeout'
+                    AND status = 'courier_accepted'
+                    AND fulfillment_status = 'preparing'
+                )
+            )
+        )
+        OR (
+            $2::text = 'ready'
+            AND (
+                status = 'ready'
+                OR (
+                    order_type = 'takeout'
+                    AND status = 'courier_accepted'
+                    AND fulfillment_status = 'ready'
+                )
+            )
+        )
+    )
+ORDER BY created_at ASC
+LIMIT $4 OFFSET $3
+`
+
+type ListMerchantKitchenOrdersByStageParams struct {
+	MerchantID int64  `json:"merchant_id"`
+	Stage      string `json:"stage"`
+	Offset     int32  `json:"offset"`
+	Limit      int32  `json:"limit"`
+}
+
+// 根据厨房阶段查询订单。厨房阶段与订单主状态不是一一对应关系：
+// 外卖被骑手接单后，主状态会进入 courier_accepted，但餐品仍可能处于 preparing/ready。
+func (q *Queries) ListMerchantKitchenOrdersByStage(ctx context.Context, arg ListMerchantKitchenOrdersByStageParams) ([]Order, error) {
+	rows, err := q.db.Query(ctx, listMerchantKitchenOrdersByStage,
+		arg.MerchantID,
+		arg.Stage,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Order{}
+	for rows.Next() {
+		var i Order
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderNo,
+			&i.UserID,
+			&i.MerchantID,
+			&i.OrderType,
+			&i.AddressID,
+			&i.DeliveryFee,
+			&i.DeliveryDistance,
+			&i.TableID,
+			&i.ReservationID,
+			&i.Subtotal,
+			&i.DiscountAmount,
+			&i.DeliveryFeeDiscount,
+			&i.TotalAmount,
+			&i.Status,
+			&i.PaymentMethod,
+			&i.PaidAt,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CompletedAt,
+			&i.CancelledAt,
+			&i.CancelReason,
+			&i.FinalAmount,
+			&i.PlatformCommission,
+			&i.UserVoucherID,
+			&i.VoucherAmount,
+			&i.BalancePaid,
+			&i.MembershipID,
+			&i.FulfillmentStatus,
+			&i.ReplacedByOrderID,
+			&i.PickupCode,
+			&i.DispatchOrderID,
+			&i.FlowID,
+			&i.StatusHint,
+			&i.Badges,
+			&i.ExceptionState,
+			&i.ClaimChannel,
+			&i.Overtime,
+			&i.PrepStartAt,
+			&i.ReadyAt,
+			&i.CourierAcceptAt,
+			&i.PickedAt,
+			&i.RiderDeliveredAt,
+			&i.UserDeliveredAt,
+			&i.AutoUserDeliveredAt,
+			&i.DeliveryDuration,
+			&i.DeliveryContactNameSnapshot,
+			&i.DeliveryContactPhoneSnapshot,
+			&i.DeliveryAddressSnapshot,
+			&i.DeliveryLongitudeSnapshot,
+			&i.DeliveryLatitudeSnapshot,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMerchantOrdersByStatus = `-- name: ListMerchantOrdersByStatus :many
 
 SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders

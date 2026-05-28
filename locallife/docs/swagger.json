@@ -35288,6 +35288,9 @@
                 "assigned_at": {
                     "type": "string"
                 },
+                "can_confirm_pickup": {
+                    "type": "boolean"
+                },
                 "completed_at": {
                     "type": "string"
                 },
@@ -35327,6 +35330,9 @@
                 "freeze_amount": {
                     "type": "integer"
                 },
+                "fulfillment_status": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "integer"
                 },
@@ -35351,10 +35357,19 @@
                 "order_no": {
                     "type": "string"
                 },
+                "order_status": {
+                    "type": "string"
+                },
                 "picked_at": {
                     "type": "string"
                 },
+                "pickup_action_label": {
+                    "type": "string"
+                },
                 "pickup_address": {
+                    "type": "string"
+                },
+                "pickup_block_reason": {
                     "type": "string"
                 },
                 "pickup_contact": {
@@ -36544,12 +36559,20 @@
         "api.kitchenOrderResponse": {
             "type": "object",
             "properties": {
+                "can_mark_ready": {
+                    "description": "商户当前是否可标记出餐",
+                    "type": "boolean"
+                },
                 "created_at": {
                     "description": "创建时间",
                     "type": "string"
                 },
                 "estimated_ready_at": {
                     "description": "预计出餐时间",
+                    "type": "string"
+                },
+                "fulfillment_status": {
+                    "description": "履约状态",
                     "type": "string"
                 },
                 "id": {
@@ -36567,12 +36590,20 @@
                         "$ref": "#/definitions/api.kitchenOrderItem"
                     }
                 },
+                "kitchen_status": {
+                    "description": "厨房阶段: paid/preparing/ready",
+                    "type": "string"
+                },
                 "notes": {
                     "description": "订单备注",
                     "type": "string"
                 },
                 "order_no": {
                     "description": "订单编号",
+                    "type": "string"
+                },
+                "order_status": {
+                    "description": "订单主状态",
                     "type": "string"
                 },
                 "order_type": {
@@ -36593,6 +36624,10 @@
                 },
                 "status": {
                     "description": "订单状态: paid-新订单, preparing-制作中, ready-出餐完成",
+                    "type": "string"
+                },
+                "status_hint": {
+                    "description": "当前状态指引",
                     "type": "string"
                 },
                 "table_no": {
@@ -43108,6 +43143,9 @@
         "api.riderWorkbenchDeliveryItemResponse": {
             "type": "object",
             "properties": {
+                "can_confirm_pickup": {
+                    "type": "boolean"
+                },
                 "created_at": {
                     "type": "string"
                 },
@@ -43126,16 +43164,28 @@
                 "estimated_pickup_at": {
                     "type": "string"
                 },
+                "fulfillment_status": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "integer"
                 },
                 "order_id": {
                     "type": "integer"
                 },
+                "order_status": {
+                    "type": "string"
+                },
                 "picked_at": {
                     "type": "string"
                 },
+                "pickup_action_label": {
+                    "type": "string"
+                },
                 "pickup_address": {
+                    "type": "string"
+                },
+                "pickup_block_reason": {
                     "type": "string"
                 },
                 "profit_sharing_order_id": {

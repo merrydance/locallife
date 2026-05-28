@@ -66,3 +66,21 @@ func (e *DeliveryConfirmValidationError) Error() string {
 	}
 	return e.Message
 }
+
+// DeliveryPickupBlockedError carries a machine-readable reason for pickup confirmation rejection.
+type DeliveryPickupBlockedError struct {
+	Reason            string
+	OrderID           int64
+	DeliveryID        int64
+	RiderID           int64
+	OrderStatus       string
+	FulfillmentStatus string
+	Message           string
+}
+
+func (e *DeliveryPickupBlockedError) Error() string {
+	if e == nil || e.Message == "" {
+		return "delivery pickup blocked"
+	}
+	return e.Message
+}

@@ -4,6 +4,7 @@
  */
 
 import { request } from '../utils/request'
+import { canMerchantMarkOrderReady } from '../utils/merchant-order-action-view'
 
 export const MERCHANT_REJECT_REASON_OPTIONS = [
     '门店临时打烊',
@@ -57,6 +58,7 @@ export interface OrderResponse {
     notes?: string                               // 订单备注
     status_hint?: string
     actions?: string[]
+    can_mark_ready?: boolean
     exception_state?: string
     claim_channel?: string
     overtime?: boolean
@@ -253,6 +255,11 @@ export interface KitchenOrderResponse {
     pickup_code?: string                         // 取餐码
     pickup_number?: string                       // 取餐码兼容别名
     status: string                               // 订单状态
+    order_status?: OrderResponse['status'] | string
+    fulfillment_status?: OrderResponse['fulfillment_status'] | string
+    kitchen_status?: string
+    can_mark_ready?: boolean
+    status_hint?: string
     table_no?: string                            // 桌台号（堂食订单）
     table_number?: string                        // 桌台号（前端兼容）
     waiting_minutes: number                      // 等待时间（分钟）
@@ -669,7 +676,7 @@ export class OrderManagementAdapter {
      * 判断订单是否可以标记为准备完成
      */
     static canMarkReady(order: OrderResponse): boolean {
-        return order.status === 'preparing'
+        return canMerchantMarkOrderReady(order)
     }
 
     /**

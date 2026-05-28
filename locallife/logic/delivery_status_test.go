@@ -157,8 +157,19 @@ func TestConfirmPickup_CourierAcceptedButNotReadyRejected(t *testing.T) {
 
 	_, err := ConfirmPickup(context.Background(), store, DeliveryStatusInput{UserID: 1, DeliveryID: 2})
 	reqErr := assertRequestError(t, err)
-	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, 409, reqErr.Status)
 	require.Equal(t, "商户未出餐，暂不可确认取餐", reqErr.Err.Error())
+}
+
+func TestGetDeliveryPickupActionStateUsesStableUserFacingUnavailableMessage(t *testing.T) {
+	state := GetDeliveryPickupActionState(
+		db.Delivery{Status: db.DeliveryStatusPicking},
+		db.Order{Status: db.OrderStatusPicked, FulfillmentStatus: db.FulfillmentStatusReady},
+	)
+
+	require.False(t, state.CanConfirmPickup)
+	require.Equal(t, DeliveryPickupUnavailableMessage, state.PickupBlockReason)
+	require.Equal(t, DeliveryPickupUnavailableActionLabel, state.PickupActionLabel)
 }
 
 func TestStartDelivery_Success(t *testing.T) {

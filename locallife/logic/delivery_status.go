@@ -204,7 +204,16 @@ func ConfirmPickup(ctx context.Context, store db.Store, input DeliveryStatusInpu
 	}
 	oldStatus := order.Status
 	if order.Status == db.OrderStatusCourierAccepted && order.FulfillmentStatus != db.FulfillmentStatusReady {
-		return result, NewRequestError(http.StatusBadRequest, errors.New("商户未出餐，暂不可确认取餐"))
+		blockErr := &DeliveryPickupBlockedError{
+			Reason:            DeliveryPickupBlockReasonMerchantNotReady,
+			OrderID:           order.ID,
+			DeliveryID:        delivery.ID,
+			RiderID:           rider.ID,
+			OrderStatus:       order.Status,
+			FulfillmentStatus: order.FulfillmentStatus,
+			Message:           DeliveryPickupBlockedMerchantNotReadyMessage,
+		}
+		return result, NewRequestError(http.StatusConflict, blockErr)
 	}
 	if !IsOrderAllowedForDeliveryAction(order, "confirm_pickup") {
 		return result, NewRequestError(http.StatusBadRequest, fmt.Errorf("当前订单状态(%s)不允许确认取餐", order.Status))

@@ -140,6 +140,13 @@
   background: rgba(255, 193, 7, 0.18);
 }
 
+.hero-status-hint {
+  margin-top: var(--spacer-sm);
+  color: var(--td-text-color-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
 .card {
   background: var(--td-bg-color-container);
   border-radius: var(--radius-card);
