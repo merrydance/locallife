@@ -10,6 +10,8 @@
 
 **Second Remediation Checkpoint:** 93 / 100 after the first Phase 4 ownership extraction slice.
 
+**Third Remediation Checkpoint:** 94 / 100 after the merchant registration view-owner extraction slice.
+
 **Target Score:** 100 / 100
 
 **Review Baseline:**
@@ -44,6 +46,12 @@
 - Extracted rider dashboard delivery view ownership from `rider-dashboard-runtime.ts` into `rider-dashboard-delivery-view.ts`.
 - Shared the same dashboard delivery builder between rider workbench summary data and rider dashboard runtime refresh data.
 - Added `check:rider-dashboard-runtime-owner` to verify behavior and block the extracted delivery view/distance rules from drifting back into the large runtime file.
+
+**Third Remediation Scope:**
+
+- Extracted merchant store registration image rendering, persisted image URL, map-location label, safe number, and region text matching helpers into `merchant-store-registration-view.ts`.
+- Added `check:merchant-store-registration-view-owner` to verify behavior and block those pure view-owner helpers from drifting back into `merchant-store-registration-runtime.ts`.
+- Kept OCR, upload, media signing, backend sync, and page orchestration inside the existing runtime for later, smaller ownership slices.
 
 ---
 
