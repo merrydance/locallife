@@ -61,7 +61,7 @@
   </view>
 
   <!-- ② 菜品预览横滑行 -->
-  <view class="dish-preview-section">
+  <view class="dish-preview-section" wx:if="{{merchant.isOpen !== false && !merchant.isOrderingSuspended}}">
 
     <!-- 骨架屏（菜品加载中） -->
     <block wx:if="{{merchant.dishesLoading}}">
@@ -71,20 +71,6 @@
           <view class="skeleton-name" />
           <view class="skeleton-price" />
         </view>
-      </view>
-    </block>
-
-    <block wx:elif="{{merchant.isOrderingSuspended}}">
-      <view class="paused-panel">
-        <text class="paused-title">当前暂停接单</text>
-        <text class="paused-desc">该商户暂时无法下外卖单，恢复后会自动恢复展示与下单。</text>
-      </view>
-    </block>
-
-    <block wx:elif="{{merchant.isOpen === false}}">
-      <view class="paused-panel">
-        <text class="paused-title">商户休息中</text>
-        <text class="paused-desc">该商户当前暂未营业，可进入店铺查看信息。</text>
       </view>
     </block>
 

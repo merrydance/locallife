@@ -85,8 +85,7 @@
 
   <block wx:else>
     <view wx:if="{{restaurant && restaurant.biz_status === 'CLOSED' && !restaurant.is_ordering_suspended}}" class="store-closed-banner">
-      <view class="store-closed-banner-title">当前店铺暂未营业</view>
-      <view class="store-closed-banner-desc">该店铺当前支持浏览门店信息与经营内容，暂不支持下单或预订。</view>
+      <view class="store-closed-banner-title">商家休息中，暂不可下单</view>
     </view>
 
     <view wx:if="{{restaurant && restaurant.is_ordering_suspended}}" class="suspension-banner">
