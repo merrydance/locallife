@@ -31,6 +31,7 @@ import {
   DEFAULT_MERCHANT_UPLOAD_FEEDBACK,
   buildLegalBusinessAddress,
   buildMapLocationLabel,
+  buildMerchantLatestOcrFormPatch,
   buildMerchantOcrDisplayState,
   buildMerchantOcrProgressMessage,
   buildMerchantUploadErrorFeedback,
@@ -300,18 +301,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
     this.setData({
       formData: {
         ...this.data.formData,
-        licenseName: toSafeString(data.business_license_ocr?.enterprise_name),
-        creditCode: toSafeString(data.business_license_number || data.business_license_ocr?.reg_num || data.business_license_ocr?.credit_code),
-        address: toSafeString(data.business_address || data.business_license_ocr?.address || this.data.formData.address),
-        registerAddress: toSafeString(data.business_license_ocr?.address),
-        licenseValidity: toSafeString(data.business_license_ocr?.valid_period),
-        businessScope: toSafeString(data.business_scope || data.business_license_ocr?.business_scope),
-        foodLicenseValidity: toSafeString(data.food_permit_ocr?.valid_to),
-        legalPerson: toSafeString(data.id_card_front_ocr?.name || data.legal_person_name || data.business_license_ocr?.legal_representative),
-        idCard: toSafeString(data.id_card_front_ocr?.id_number || data.legal_person_id_number),
-        gender: toSafeString(data.id_card_front_ocr?.gender),
-        hometown: toSafeString(data.id_card_front_ocr?.address),
-        idCardValidity: toSafeString(data.id_card_back_ocr?.valid_date)
+        ...buildMerchantLatestOcrFormPatch(data, this.data.formData.address)
       },
       ocrDisplayState: this.buildMerchantOcrDisplayState(data),
       uploadFeedback: this.buildMerchantUploadFeedback(data),

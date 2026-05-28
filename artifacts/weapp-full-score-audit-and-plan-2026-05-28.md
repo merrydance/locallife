@@ -16,6 +16,8 @@
 
 **Fifth Remediation Checkpoint:** 95.5 / 100 after the merchant registration document field configuration owner extraction slice.
 
+**Sixth Remediation Checkpoint:** 96 / 100 after the merchant registration latest-OCR form patch owner extraction slice.
+
 **Target Score:** 100 / 100
 
 **Review Baseline:**
@@ -68,6 +70,12 @@
 - Extracted merchant store registration document removal targets, uploaded-image state patches, and upload attempt feedback builders into `merchant-store-registration-view.ts`.
 - Kept OCR API submission, backend delete calls, save-draft timing, and OCR result field backfill in `merchant-store-registration-runtime.ts` so side effects remain page-orchestrated.
 - Extended `check:merchant-store-registration-view-owner` to verify document field configuration and block repeated upload feedback copy or inline document maps from drifting back into the runtime file.
+
+**Sixth Remediation Scope:**
+
+- Extracted the latest OCR draft to merchant registration form-field patch mapping into `merchant-store-registration-view.ts`.
+- Kept `applyLatestOcrDraft` in `merchant-store-registration-runtime.ts` responsible for page state merge timing, OCR display refresh, and draft persistence, while removing another direct OCR DTO-to-form mapping from the runtime file.
+- Extended `check:merchant-store-registration-view-owner` to verify OCR form patch fallback behavior and block the extracted field mapping from drifting back into the runtime file.
 
 ---
 

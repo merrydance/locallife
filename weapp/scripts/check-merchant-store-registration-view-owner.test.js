@@ -284,6 +284,48 @@ assert.deepStrictEqual(plain(owner.buildMerchantUploadErrorFeedback('上传失�
   description: '上传失败，请重试'
 })
 
+assert.deepStrictEqual(plain(owner.buildMerchantLatestOcrFormPatch({
+  business_address: '',
+  business_license_number: '91310000MA1LOCAL1X',
+  business_scope: '热食类食品制售',
+  business_license_ocr: {
+    enterprise_name: '本地生活餐饮店',
+    address: '上海市徐汇区',
+    valid_period: '2026-01-01 至 2036-01-01',
+    legal_representative: '张三'
+  },
+  food_permit_ocr: {
+    valid_to: '2030-01-01'
+  },
+  legal_person_name: '',
+  legal_person_id_number: '310101199001010011',
+  id_card_front_ocr: {
+    name: '',
+    id_number: '',
+    gender: '男',
+    address: '上海市黄浦区'
+  },
+  id_card_back_ocr: {
+    valid_date: '2026.01.01-2036.01.01'
+  }
+}, '保留地址')), {
+  licenseName: '本地生活餐饮店',
+  creditCode: '91310000MA1LOCAL1X',
+  address: '上海市徐汇区',
+  registerAddress: '上海市徐汇区',
+  licenseValidity: '2026-01-01 至 2036-01-01',
+  businessScope: '热食类食品制售',
+  foodLicenseValidity: '2030-01-01',
+  legalPerson: '张三',
+  idCard: '310101199001010011',
+  gender: '男',
+  hometown: '上海市黄浦区',
+  idCardValidity: '2026.01.01-2036.01.01'
+})
+assert.strictEqual(owner.buildMerchantLatestOcrFormPatch({
+  business_license_ocr: {}
+}, '保留地址').address, '保留地址')
+
 const runtimeSource = fs.readFileSync(runtimePath, 'utf8')
 const forbiddenRuntimePatterns = [
   'function buildLegalBusinessAddress',
@@ -304,7 +346,10 @@ const forbiddenRuntimePatterns = [
   'function hasMerchantIDCardFrontResult',
   'function hasMerchantIDCardBackResult',
   'const documentMap',
-  '请稍候，识别结果会显示在当前卡片中'
+  '请稍候，识别结果会显示在当前卡片中',
+  'licenseName: toSafeString(data.business_license_ocr',
+  'foodLicenseValidity: toSafeString(data.food_permit_ocr',
+  'idCardValidity: toSafeString(data.id_card_back_ocr'
 ]
 
 for (const pattern of forbiddenRuntimePatterns) {

@@ -53,6 +53,21 @@ export type MerchantDocumentRemovalTarget = {
   data: Record<string, unknown>
 }
 
+export type MerchantLatestOcrFormPatch = {
+  licenseName: string
+  creditCode: string
+  address: string
+  registerAddress: string
+  licenseValidity: string
+  businessScope: string
+  foodLicenseValidity: string
+  legalPerson: string
+  idCard: string
+  gender: string
+  hometown: string
+  idCardValidity: string
+}
+
 export const DEFAULT_MERCHANT_OCR_DISPLAY_STATE: MerchantOCRDisplayState = {
   businessLicenseReady: false,
   businessLicenseProcessing: false,
@@ -249,6 +264,13 @@ export function toSafeNumber(value: unknown): number {
   return Number.isFinite(num) ? num : 0
 }
 
+function toSafeString(value: unknown): string {
+  if (value === null || value === undefined || value === true || value === 'true') {
+    return ''
+  }
+  return String(value)
+}
+
 function normalizeRegionText(value: string): string {
   return value.replace(/\s+/g, '').trim()
 }
@@ -350,6 +372,23 @@ export function getMerchantStoreRegistrationDocumentRemovalTarget(field: Merchan
 export function buildMerchantUploadedImagePatch(field: MerchantRegistrationUploadField, path: string, assetId?: number): Record<string, ImageFieldItem[]> {
   return {
     [MERCHANT_UPLOAD_IMAGE_FIELDS[field]]: [{ url: path, assetId }]
+  }
+}
+
+export function buildMerchantLatestOcrFormPatch(data: MerchantDraftExt, currentAddress?: string): MerchantLatestOcrFormPatch {
+  return {
+    licenseName: toSafeString(data.business_license_ocr?.enterprise_name),
+    creditCode: toSafeString(data.business_license_number || data.business_license_ocr?.reg_num || data.business_license_ocr?.credit_code),
+    address: toSafeString(data.business_address || data.business_license_ocr?.address || currentAddress),
+    registerAddress: toSafeString(data.business_license_ocr?.address),
+    licenseValidity: toSafeString(data.business_license_ocr?.valid_period),
+    businessScope: toSafeString(data.business_scope || data.business_license_ocr?.business_scope),
+    foodLicenseValidity: toSafeString(data.food_permit_ocr?.valid_to),
+    legalPerson: toSafeString(data.id_card_front_ocr?.name || data.legal_person_name || data.business_license_ocr?.legal_representative),
+    idCard: toSafeString(data.id_card_front_ocr?.id_number || data.legal_person_id_number),
+    gender: toSafeString(data.id_card_front_ocr?.gender),
+    hometown: toSafeString(data.id_card_front_ocr?.address),
+    idCardValidity: toSafeString(data.id_card_back_ocr?.valid_date)
   }
 }
 
