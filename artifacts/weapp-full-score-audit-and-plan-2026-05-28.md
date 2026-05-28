@@ -8,6 +8,8 @@
 
 **First Remediation Checkpoint:** 91 / 100 after the 2026-05-28 first implementation pass.
 
+**Second Remediation Checkpoint:** 93 / 100 after the first Phase 4 ownership extraction slice.
+
 **Target Score:** 100 / 100
 
 **Review Baseline:**
@@ -36,6 +38,12 @@
 - Added a placeholder-label drift gate and fixed the visible repeated placeholders found during the audit.
 - Replaced final-sounding Toast-only feedback for platform pause/resume and printer commands with durable in-page result states.
 - Remaining gap to 100 is concentrated in Phase 4 ownership extraction and Phase 5 scenario evidence for money, async, weak-network, and re-entry paths.
+
+**Second Remediation Scope:**
+
+- Extracted rider dashboard delivery view ownership from `rider-dashboard-runtime.ts` into `rider-dashboard-delivery-view.ts`.
+- Shared the same dashboard delivery builder between rider workbench summary data and rider dashboard runtime refresh data.
+- Added `check:rider-dashboard-runtime-owner` to verify behavior and block the extracted delivery view/distance rules from drifting back into the large runtime file.
 
 ---
 

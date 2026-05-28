@@ -4,15 +4,14 @@ import type {
   RiderWorkbenchSectionStatus,
   RiderWorkbenchSummaryResponse
 } from '../api/rider-workbench'
+import type { DashboardDeliveryView, RiderDashboardTagTheme } from '../utils/rider-dashboard-delivery-view'
 import type { ClaimResponse } from '../api/appeals-customer-service'
-import type { DashboardDeliveryView, TagTheme } from '../utils/rider-dashboard-runtime'
-import { getDeliveryStatusDisplay } from '../api/delivery'
-import { buildRiderDeliveryIncomeView } from '../utils/rider-delivery-income-view'
 import { formatPriceNoSymbol } from '../utils/util'
-import { resolveStatusTagTheme } from '../utils/status-tag'
 import { buildRiderDepositWorkbenchSummaryView } from './rider-deposit-finance'
 import { getRiderClaimActionHint } from '../utils/rider-claims-view'
-import { getRiderDeliveryActionState } from '../utils/rider-delivery-view'
+import { buildWorkbenchDashboardDeliveryView } from '../utils/rider-dashboard-delivery-view'
+
+export type TagTheme = RiderDashboardTagTheme
 
 export interface RiderWorkbenchMetricView {
   key: string
@@ -86,49 +85,7 @@ function toRiderStatus(summary: RiderWorkbenchSummaryResponse): RiderStatus {
 }
 
 function buildDashboardDelivery(item: RiderWorkbenchDeliveryItem): DashboardDeliveryView {
-  const statusDisplay = getDeliveryStatusDisplay(item.status)
-  const isAssignedStage = item.status === 'assigned' || item.status === 'picking'
-  const pickupActionState = getRiderDeliveryActionState(item)
-
-  return {
-    id: item.id,
-    order_id: item.order_id,
-    order_status: item.order_status,
-    fulfillment_status: item.fulfillment_status,
-    status: item.status,
-    delivery_fee: item.delivery_fee,
-    rider_earnings: item.rider_earnings,
-    rider_gross_amount: item.rider_gross_amount,
-    rider_payment_fee: item.rider_payment_fee,
-    rider_net_earnings: item.rider_net_earnings,
-    profit_sharing_order_id: item.profit_sharing_order_id,
-    profit_sharing_status: item.profit_sharing_status,
-    pickup_address: item.pickup_address,
-    pickup_longitude: 0,
-    pickup_latitude: 0,
-    delivery_address: item.delivery_address,
-    delivery_longitude: 0,
-    delivery_latitude: 0,
-    estimated_pickup_at: item.estimated_pickup_at,
-    estimated_delivery_at: item.estimated_delivery_at,
-    picked_at: item.picked_at,
-    delivered_at: item.delivered_at,
-    created_at: item.created_at,
-    status_desc: statusDisplay.text || item.status,
-    status_tag_theme: (isAssignedStage ? resolveStatusTagTheme('warning') : resolveStatusTagTheme('success')) as TagTheme,
-    deadline_desc: '',
-    is_overdue: false,
-    is_very_urgent: false,
-    is_pickup_finished: item.status === 'picked' || item.status === 'delivering',
-    can_start_pickup: item.status === 'assigned',
-    can_confirm_pickup: item.status === 'picking' && pickupActionState.canUpdate,
-    can_start_delivery: item.status === 'picked',
-    can_confirm_delivery: item.status === 'delivering',
-    pickup_block_reason: item.status === 'picking' ? pickupActionState.disabledReason : '',
-    pickup_action_label: item.status === 'picking' ? pickupActionState.label : '',
-    is_action_loading: false,
-    income_view: buildRiderDeliveryIncomeView(item)
-  }
+  return buildWorkbenchDashboardDeliveryView(item)
 }
 
 function buildClaimActionNote(pendingClaims: number, latestClaim?: ClaimResponse | null) {

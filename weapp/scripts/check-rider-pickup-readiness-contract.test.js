@@ -147,6 +147,32 @@ const { buildRiderWorkbenchDashboardView } = loadModule('services/rider-workbenc
   '../utils/rider-delivery-view': {
     getRiderDeliveryActionState
   },
+  '../utils/rider-dashboard-delivery-view': {
+    buildWorkbenchDashboardDeliveryView: (item) => {
+      const pickupActionState = getRiderDeliveryActionState(item)
+      return {
+        ...item,
+        pickup_longitude: 0,
+        pickup_latitude: 0,
+        delivery_longitude: 0,
+        delivery_latitude: 0,
+        status_desc: item.status,
+        status_tag_theme: item.status === 'assigned' || item.status === 'picking' ? 'warning' : 'success',
+        deadline_desc: '',
+        is_overdue: false,
+        is_very_urgent: false,
+        is_pickup_finished: item.status === 'picked' || item.status === 'delivering',
+        can_start_pickup: item.status === 'assigned',
+        can_confirm_pickup: item.status === 'picking' && pickupActionState.canUpdate,
+        can_start_delivery: item.status === 'picked',
+        can_confirm_delivery: item.status === 'delivering',
+        pickup_block_reason: item.status === 'picking' ? pickupActionState.disabledReason : '',
+        pickup_action_label: item.status === 'picking' ? pickupActionState.label : '',
+        is_action_loading: false,
+        income_view: { amountText: '0.00' }
+      }
+    }
+  },
   './rider-deposit-finance': {
     buildRiderDepositWorkbenchSummaryView: () => ({})
   },

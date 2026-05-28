@@ -1,6 +1,6 @@
 import RiderService, { RiderInfo, RiderStatus } from '../api/rider'
 import RiderWorkbenchService from '../api/rider-workbench'
-import DeliveryService, { RecommendedOrder, Delivery, getDeliveryStatusDisplay } from '../api/delivery'
+import DeliveryService, { RecommendedOrder, Delivery } from '../api/delivery'
 import { deliveryTaskManagementService } from '../api/delivery-task-management'
 import { claimManagementService } from '../api/appeals-customer-service'
 import { buildRiderWorkbenchDashboardView } from '../services/rider-workbench'
@@ -8,25 +8,27 @@ import { logger } from './logger'
 import { locationService } from './location'
 import { normalizeLocationError, syncRiderDeliveryLocation } from './rider-location'
 import { riderLiveLocationSession } from './rider-live-location'
-import { buildRiderDeliveryDeadlineView } from './rider-delivery-view'
-import { buildRiderDeliveryIncomeView, RiderDeliveryIncomeView } from './rider-delivery-income-view'
 import { buildRecommendedOrderCardView } from './rider-order-hall-view'
 import { getStableBarHeights } from './responsive'
-import { resolveStatusTagTheme, type StatusTagTheme } from './status-tag'
 import { wsManager, WSMessageType } from './websocket'
 import { networkMonitor } from './network-monitor'
 import { getConsoleDashboardErrorMessage, getConsoleDashboardErrorState } from './console-dashboard'
 import { resolveCurrentRegionId } from './current-region'
 import {
   buildRiderDeliveryActionConfirmFeedback,
-  buildRiderDeliveryActionFailureFeedback,
-  getRiderDeliveryActionState
+  buildRiderDeliveryActionFailureFeedback
 } from './rider-delivery-view'
+import {
+  buildDashboardDeliveryView,
+  buildRiderDashboardBannerState,
+  buildRiderDashboardGrabDistanceCheck,
+  isRiderDashboardTrackableDelivery
+} from './rider-dashboard-delivery-view'
+import type { DashboardDeliveryView, RiderDashboardTagTheme } from './rider-dashboard-delivery-view'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RiderDashboardPageContext = WechatMiniprogram.Page.Instance<Record<string, any>, Record<string, any>> & Record<string, any>
 
-const MAX_GRAB_DISTANCE = 5000
 const DEPOSIT_BLOCK_REASON_PATTERN = /押金不足/
 const BAOFU_SETTLEMENT_BLOCK_MESSAGE = '结算账户未开通，暂不能接收代取费分账订单'
 
@@ -35,24 +37,8 @@ let runtimeNetworkUnsubscribe: null | (() => void) = null
 export type WsUnsubscribe = () => void
 export type DeliveryActionType = 'startPickup' | 'confirmPickup' | 'startDelivery' | 'confirmDelivery'
 type DeliveryActionMethod = (deliveryId: number) => Promise<Delivery>
-export type TagTheme = StatusTagTheme
-
-export type DashboardDeliveryView = Delivery & {
-  status_desc: string
-  status_tag_theme: TagTheme
-  deadline_desc: string
-  is_overdue: boolean
-  is_very_urgent: boolean
-  is_pickup_finished: boolean
-  can_start_pickup: boolean
-  can_confirm_pickup: boolean
-  can_start_delivery: boolean
-  can_confirm_delivery: boolean
-  pickup_block_reason: string
-  pickup_action_label: string
-  is_action_loading: boolean
-  income_view: RiderDeliveryIncomeView
-}
+export type TagTheme = RiderDashboardTagTheme
+export type { DashboardDeliveryView }
 
 interface DeliveryActionConfig {
   method: DeliveryActionMethod
@@ -122,56 +108,6 @@ function setDeliveryActionLoadingState(
     : page.data.currentDelivery
 
   page.setData({ deliveryActionLoadingIds: nextLoadingIds, activeDeliveries, currentDelivery })
-}
-
-function buildBannerState(states: Array<{ message: string, canRetry: boolean }>) {
-  if (!states.length) {
-    return { message: '', canRetry: true }
-  }
-
-  const uniqueMessages = Array.from(new Set(states.map((state) => state.message).filter(Boolean)))
-
-  return {
-    message: uniqueMessages.join('；'),
-    canRetry: states.every((state) => state.canRetry)
-  }
-}
-
-function isTrackableDelivery(status: Delivery['status']): boolean {
-  return status === 'assigned' || status === 'picking' || status === 'picked' || status === 'delivering'
-}
-
-function buildDashboardDeliveryActionState(delivery: Delivery) {
-  const pickupActionState = getRiderDeliveryActionState(delivery)
-  const status = delivery.status
-
-  return {
-    statusTagTheme: status === 'assigned' || status === 'picking'
-      ? resolveStatusTagTheme('warning')
-      : resolveStatusTagTheme('success'),
-    isPickupFinished: status === 'picked' || status === 'delivering',
-    canStartPickup: status === 'assigned',
-    canConfirmPickup: status === 'picking' && pickupActionState.canUpdate,
-    canStartDelivery: status === 'picked',
-    canConfirmDelivery: status === 'delivering',
-    pickupBlockReason: status === 'picking' ? pickupActionState.disabledReason : '',
-    pickupActionLabel: status === 'picking' ? pickupActionState.label : ''
-  }
-}
-
-function getDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371e3
-  const φ1 = lat1 * Math.PI / 180
-  const φ2 = lat2 * Math.PI / 180
-  const Δφ = (lat2 - lat1) * Math.PI / 180
-  const Δλ = (lng2 - lng1) * Math.PI / 180
-
-  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-    Math.cos(φ1) * Math.cos(φ2) *
-    Math.sin(Δλ / 2) * Math.sin(Δλ / 2)
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-
-  return R * c
 }
 
 export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<RiderDashboardPageContext> = {
@@ -452,33 +388,15 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
         bannerStates.push({ message: errorState.message, canRetry: errorState.canRetry })
       }
 
-      const myDeliveries = myDeliveriesSource.map((d: Delivery) => {
-        const deadlineView = buildRiderDeliveryDeadlineView(d)
-        const statusDisplay = getDeliveryStatusDisplay(d.status)
-        const actionState = buildDashboardDeliveryActionState(d)
+      const myDeliveries: DashboardDeliveryView[] = myDeliveriesSource.map((d: Delivery) => buildDashboardDeliveryView(
+        d,
+        this.data.deliveryActionLoadingIds || [],
+        this.getStatusDesc
+      ))
 
-        return {
-          ...d,
-          status_desc: statusDisplay.text || this.getStatusDesc(d.status),
-          status_tag_theme: actionState.statusTagTheme,
-          deadline_desc: deadlineView.text,
-          is_overdue: deadlineView.isOverdue,
-          is_very_urgent: deadlineView.isVeryUrgent,
-          is_pickup_finished: actionState.isPickupFinished,
-          can_start_pickup: actionState.canStartPickup,
-          can_confirm_pickup: actionState.canConfirmPickup,
-          can_start_delivery: actionState.canStartDelivery,
-          can_confirm_delivery: actionState.canConfirmDelivery,
-          pickup_block_reason: actionState.pickupBlockReason,
-          pickup_action_label: actionState.pickupActionLabel,
-          is_action_loading: (this.data.deliveryActionLoadingIds || []).includes(d.id),
-          income_view: buildRiderDeliveryIncomeView(d)
-        }
-      }) as DashboardDeliveryView[]
-
-      const currentDelivery = myDeliveries.find((delivery) => isTrackableDelivery(delivery.status)) || myDeliveries[0] || null
+      const currentDelivery = myDeliveries.find((delivery) => isRiderDashboardTrackableDelivery(delivery.status)) || myDeliveries[0] || null
       const tabLabels = this.buildTabLabels(hallOrders.length, myDeliveries.length)
-      const bannerState = buildBannerState(bannerStates)
+      const bannerState = buildRiderDashboardBannerState(bannerStates)
 
       this.setData({
         recommendOrders: hallOrders,
@@ -514,7 +432,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
       return
     }
 
-    const trackedDelivery = deliveries.find((delivery) => isTrackableDelivery(delivery.status))
+    const trackedDelivery = deliveries.find((delivery) => isRiderDashboardTrackableDelivery(delivery.status))
     if (!trackedDelivery) {
       await riderLiveLocationSession.setActiveDelivery(null)
       return
@@ -838,16 +756,16 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
         return
       }
 
-      const distance = getDistance(
-        location.latitude,
-        location.longitude,
-        order.pickup_latitude,
-        order.pickup_longitude
-      )
+      const distanceCheck = buildRiderDashboardGrabDistanceCheck({
+        currentLatitude: location.latitude,
+        currentLongitude: location.longitude,
+        pickupLatitude: order.pickup_latitude,
+        pickupLongitude: order.pickup_longitude
+      })
 
-      if (distance > MAX_GRAB_DISTANCE) {
+      if (!distanceCheck.canGrab) {
         wx.showToast({
-          title: `距离过远 (约${(distance / 1000).toFixed(1)}km)，仅限${MAX_GRAB_DISTANCE / 1000}km内抢单`,
+          title: distanceCheck.message,
           icon: 'none',
           duration: 3000
         })
