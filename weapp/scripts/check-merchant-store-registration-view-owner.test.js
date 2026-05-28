@@ -232,6 +232,58 @@ assert.deepStrictEqual(plain(uploadFeedback.idCardBack), {
   description: ''
 })
 
+assert.deepStrictEqual(plain(owner.getMerchantStoreRegistrationDocumentRemovalTarget('license')), {
+  documentType: 'business_license',
+  data: {
+    licenseImages: [],
+    'formData.licenseName': '',
+    'formData.creditCode': '',
+    'formData.registerAddress': '',
+    'formData.licenseValidity': '',
+    'formData.businessScope': '',
+    'ocrResults.license': null
+  }
+})
+assert.deepStrictEqual(plain(owner.getMerchantStoreRegistrationDocumentRemovalTarget('foodPermit')), {
+  documentType: 'food_permit',
+  data: {
+    foodLicenseImages: [],
+    'formData.foodLicenseValidity': ''
+  }
+})
+assert.deepStrictEqual(plain(owner.getMerchantStoreRegistrationDocumentRemovalTarget('idCardFront')), {
+  documentType: 'id_card_front',
+  data: {
+    idCardFrontImages: [],
+    'formData.legalPerson': '',
+    'formData.idCard': '',
+    'formData.gender': '',
+    'formData.hometown': '',
+    'ocrResults.idCard': null
+  }
+})
+assert.deepStrictEqual(plain(owner.getMerchantStoreRegistrationDocumentRemovalTarget('idCardBack')), {
+  documentType: 'id_card_back',
+  data: {
+    idCardBackImages: [],
+    'formData.idCardValidity': ''
+  }
+})
+
+assert.deepStrictEqual(plain(owner.buildMerchantUploadedImagePatch('idCardBack', 'local://id-back.jpg', 42)), {
+  idCardBackImages: [{ url: 'local://id-back.jpg', assetId: 42 }]
+})
+assert.deepStrictEqual(plain(owner.buildMerchantUploadProcessingFeedback()), {
+  state: 'processing',
+  title: '证照识别中',
+  description: '请稍候，识别结果会显示在当前卡片中'
+})
+assert.deepStrictEqual(plain(owner.buildMerchantUploadErrorFeedback('上传失败，请重试')), {
+  state: 'error',
+  title: '识别失败',
+  description: '上传失败，请重试'
+})
+
 const runtimeSource = fs.readFileSync(runtimePath, 'utf8')
 const forbiddenRuntimePatterns = [
   'function buildLegalBusinessAddress',
@@ -250,7 +302,9 @@ const forbiddenRuntimePatterns = [
   'function hasMerchantBusinessLicenseResult',
   'function hasMerchantFoodPermitResult',
   'function hasMerchantIDCardFrontResult',
-  'function hasMerchantIDCardBackResult'
+  'function hasMerchantIDCardBackResult',
+  'const documentMap',
+  '请稍候，识别结果会显示在当前卡片中'
 ]
 
 for (const pattern of forbiddenRuntimePatterns) {

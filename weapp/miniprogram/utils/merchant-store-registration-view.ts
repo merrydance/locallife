@@ -19,6 +19,8 @@ export type ImageFieldItem = {
   status?: 'loading' | 'done' | 'failed' | 'reload'
 }
 
+export type MerchantRegistrationUploadField = 'license' | 'foodPermit' | 'idCardFront' | 'idCardBack'
+
 type UploadFeedbackState = 'idle' | 'processing' | 'success' | 'error'
 
 export type UploadFeedback = {
@@ -46,6 +48,11 @@ export type MerchantOCRDisplayState = {
   idCardFailed: boolean
 }
 
+export type MerchantDocumentRemovalTarget = {
+  documentType: 'business_license' | 'food_permit' | 'id_card_front' | 'id_card_back'
+  data: Record<string, unknown>
+}
+
 export const DEFAULT_MERCHANT_OCR_DISPLAY_STATE: MerchantOCRDisplayState = {
   businessLicenseReady: false,
   businessLicenseProcessing: false,
@@ -69,6 +76,53 @@ export const DEFAULT_MERCHANT_UPLOAD_FEEDBACK: MerchantUploadFeedback = {
   foodPermit: { ...EMPTY_UPLOAD_FEEDBACK },
   idCardFront: { ...EMPTY_UPLOAD_FEEDBACK },
   idCardBack: { ...EMPTY_UPLOAD_FEEDBACK }
+}
+
+const MERCHANT_DOCUMENT_REMOVAL_TARGETS: Record<MerchantRegistrationUploadField, MerchantDocumentRemovalTarget> = {
+  license: {
+    documentType: 'business_license',
+    data: {
+      licenseImages: [],
+      'formData.licenseName': '',
+      'formData.creditCode': '',
+      'formData.registerAddress': '',
+      'formData.licenseValidity': '',
+      'formData.businessScope': '',
+      'ocrResults.license': null
+    }
+  },
+  foodPermit: {
+    documentType: 'food_permit',
+    data: {
+      foodLicenseImages: [],
+      'formData.foodLicenseValidity': ''
+    }
+  },
+  idCardFront: {
+    documentType: 'id_card_front',
+    data: {
+      idCardFrontImages: [],
+      'formData.legalPerson': '',
+      'formData.idCard': '',
+      'formData.gender': '',
+      'formData.hometown': '',
+      'ocrResults.idCard': null
+    }
+  },
+  idCardBack: {
+    documentType: 'id_card_back',
+    data: {
+      idCardBackImages: [],
+      'formData.idCardValidity': ''
+    }
+  }
+}
+
+const MERCHANT_UPLOAD_IMAGE_FIELDS: Record<MerchantRegistrationUploadField, 'licenseImages' | 'foodLicenseImages' | 'idCardFrontImages' | 'idCardBackImages'> = {
+  license: 'licenseImages',
+  foodPermit: 'foodLicenseImages',
+  idCardFront: 'idCardFrontImages',
+  idCardBack: 'idCardBackImages'
 }
 
 type ParsedRegionAddress = {
@@ -275,6 +329,28 @@ export function pickBestRegionSearchResult(regions: RegionSearchResult[], addres
 
 export function createUploadFeedback(state: UploadFeedbackState, title = '', description = ''): UploadFeedback {
   return { state, title, description }
+}
+
+export function buildMerchantUploadProcessingFeedback(): UploadFeedback {
+  return createUploadFeedback('processing', '证照识别中', '请稍候，识别结果会显示在当前卡片中')
+}
+
+export function buildMerchantUploadErrorFeedback(message: string): UploadFeedback {
+  return createUploadFeedback('error', '识别失败', message)
+}
+
+export function getMerchantStoreRegistrationDocumentRemovalTarget(field: MerchantRegistrationUploadField): MerchantDocumentRemovalTarget {
+  const target = MERCHANT_DOCUMENT_REMOVAL_TARGETS[field]
+  return {
+    documentType: target.documentType,
+    data: { ...target.data }
+  }
+}
+
+export function buildMerchantUploadedImagePatch(field: MerchantRegistrationUploadField, path: string, assetId?: number): Record<string, ImageFieldItem[]> {
+  return {
+    [MERCHANT_UPLOAD_IMAGE_FIELDS[field]]: [{ url: path, assetId }]
+  }
 }
 
 export function hasMerchantBusinessLicenseResult(data?: MerchantDraftExt): boolean {

@@ -33,10 +33,13 @@ import {
   buildMapLocationLabel,
   buildMerchantOcrDisplayState,
   buildMerchantOcrProgressMessage,
+  buildMerchantUploadErrorFeedback,
   buildMerchantUploadFeedback,
+  buildMerchantUploadProcessingFeedback,
+  buildMerchantUploadedImagePatch,
   buildRegionSearchKeywords,
   buildUploadRenderImages,
-  createUploadFeedback,
+  getMerchantStoreRegistrationDocumentRemovalTarget,
   markImagesPersisted,
   pickBestRegionSearchResult,
   toPersistedImageUrls,
@@ -44,6 +47,7 @@ import {
   type ImageFieldItem,
   type MerchantDraftExt,
   type MerchantOCRDisplayState,
+  type MerchantRegistrationUploadField,
   type MerchantUploadFeedback,
   type UploadFeedback
 } from './merchant-store-registration-view'
@@ -80,7 +84,7 @@ export type OCRResult = {
   valid_date?: string
 }
 
-export type UploadField = 'license' | 'foodPermit' | 'idCardFront' | 'idCardBack'
+export type UploadField = MerchantRegistrationUploadField
 
 type OCRFieldKey = 'business_license_ocr' | 'food_permit_ocr' | 'id_card_front_ocr' | 'id_card_back_ocr'
 
@@ -322,50 +326,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
   },
 
   async removeUploadedDocument(field: UploadField) {
-    const documentMap: Record<UploadField, {
-      documentType: 'business_license' | 'food_permit' | 'id_card_front' | 'id_card_back'
-      data: Record<string, unknown>
-    }> = {
-      license: {
-        documentType: 'business_license',
-        data: {
-          licenseImages: [],
-          'formData.licenseName': '',
-          'formData.creditCode': '',
-          'formData.registerAddress': '',
-          'formData.licenseValidity': '',
-          'formData.businessScope': '',
-          'ocrResults.license': null
-        }
-      },
-      foodPermit: {
-        documentType: 'food_permit',
-        data: {
-          foodLicenseImages: [],
-          'formData.foodLicenseValidity': ''
-        }
-      },
-      idCardFront: {
-        documentType: 'id_card_front',
-        data: {
-          idCardFrontImages: [],
-          'formData.legalPerson': '',
-          'formData.idCard': '',
-          'formData.gender': '',
-          'formData.hometown': '',
-          'ocrResults.idCard': null
-        }
-      },
-      idCardBack: {
-        documentType: 'id_card_back',
-        data: {
-          idCardBackImages: [],
-          'formData.idCardValidity': ''
-        }
-      }
-    }
-
-    const target = documentMap[field]
+    const target = getMerchantStoreRegistrationDocumentRemovalTarget(field)
 
     wx.showLoading({ title: '删除中...' })
     try {
@@ -424,21 +385,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
   },
 
   setUploadedImage(field: UploadField, path: string, assetId?: number) {
-    const image = [{ url: path, assetId }]
-    switch (field) {
-      case 'license':
-        this.setData({ licenseImages: image })
-        break
-      case 'foodPermit':
-        this.setData({ foodLicenseImages: image })
-        break
-      case 'idCardFront':
-        this.setData({ idCardFrontImages: image })
-        break
-      default:
-        this.setData({ idCardBackImages: image })
-        break
-    }
+    this.setData(buildMerchantUploadedImagePatch(field, path, assetId))
   },
 
   handleDocumentOCRSubmission(
@@ -868,7 +815,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
     this.setUploadedImage('license', path)
     this.saveDraft()
 
-    this.setUploadFeedback('license', createUploadFeedback('processing', '证照识别中', '请稍候，识别结果会显示在当前卡片中'))
+    this.setUploadFeedback('license', buildMerchantUploadProcessingFeedback())
     try {
       const result = await ocrBusinessLicense(path)
       this.setUploadedImage('license', path, result.mediaId)
@@ -892,7 +839,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
     } catch (error: unknown) {
       logger.error('[MerchantRegister] 营业执照上传失败', error, 'onLicenseUpload')
       const errMsg = getErrorMessage(error, '上传失败，请重试')
-      this.setUploadFeedback('license', createUploadFeedback('error', '识别失败', errMsg))
+      this.setUploadFeedback('license', buildMerchantUploadErrorFeedback(errMsg))
     }
   },
 
@@ -912,7 +859,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
     this.setUploadedImage('foodPermit', path)
     this.saveDraft()
 
-    this.setUploadFeedback('foodPermit', createUploadFeedback('processing', '证照识别中', '请稍候，识别结果会显示在当前卡片中'))
+    this.setUploadFeedback('foodPermit', buildMerchantUploadProcessingFeedback())
     try {
       const result = await ocrFoodPermit(path)
       this.setUploadedImage('foodPermit', path, result.mediaId)
@@ -929,7 +876,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
     } catch (error: unknown) {
       logger.error('[MerchantRegister] 食品许可证上传失败', error, 'onFoodLicenseUpload')
       const errMsg = getErrorMessage(error, '上传失败，请重试')
-      this.setUploadFeedback('foodPermit', createUploadFeedback('error', '识别失败', errMsg))
+      this.setUploadFeedback('foodPermit', buildMerchantUploadErrorFeedback(errMsg))
     }
   },
 
@@ -949,7 +896,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
     this.setUploadedImage('idCardFront', path)
     this.saveDraft()
 
-    this.setUploadFeedback('idCardFront', createUploadFeedback('processing', '证照识别中', '请稍候，识别结果会显示在当前卡片中'))
+    this.setUploadFeedback('idCardFront', buildMerchantUploadProcessingFeedback())
     try {
       const result = await ocrIdCard(path, 'Front')
       this.setUploadedImage('idCardFront', path, result.mediaId)
@@ -970,7 +917,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
     } catch (error: unknown) {
       logger.error('[MerchantRegister] 身份证正面上传失败', error, 'onIdCardFrontUpload')
       const errMsg = getErrorMessage(error, '上传失败，请重试')
-      this.setUploadFeedback('idCardFront', createUploadFeedback('error', '识别失败', errMsg))
+      this.setUploadFeedback('idCardFront', buildMerchantUploadErrorFeedback(errMsg))
     }
   },
 
@@ -990,7 +937,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
     this.setUploadedImage('idCardBack', path)
     this.saveDraft()
 
-    this.setUploadFeedback('idCardBack', createUploadFeedback('processing', '证照识别中', '请稍候，识别结果会显示在当前卡片中'))
+    this.setUploadFeedback('idCardBack', buildMerchantUploadProcessingFeedback())
     try {
       const result = await ocrIdCard(path, 'Back')
       this.setUploadedImage('idCardBack', path, result.mediaId)
@@ -1007,7 +954,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
     } catch (error: unknown) {
       logger.error('[MerchantRegister] 身份证反面上传失败', error, 'onIdCardBackUpload')
       const errMsg = getErrorMessage(error, '上传失败，请重试')
-      this.setUploadFeedback('idCardBack', createUploadFeedback('error', '识别失败', errMsg))
+      this.setUploadFeedback('idCardBack', buildMerchantUploadErrorFeedback(errMsg))
     }
   },
 

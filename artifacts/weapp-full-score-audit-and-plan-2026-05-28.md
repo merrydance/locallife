@@ -14,6 +14,8 @@
 
 **Fourth Remediation Checkpoint:** 95 / 100 after the merchant registration OCR display and upload-feedback owner extraction slice.
 
+**Fifth Remediation Checkpoint:** 95.5 / 100 after the merchant registration document field configuration owner extraction slice.
+
 **Target Score:** 100 / 100
 
 **Review Baseline:**
@@ -60,6 +62,12 @@
 - Extracted merchant store registration OCR readiness, processing, failure, progress-message, and upload-feedback view-state rules into `merchant-store-registration-view.ts`.
 - Kept `merchant-store-registration-runtime.ts` as the page-orchestration boundary for current image arrays, upload calls, and backend refresh, while delegating OCR display state construction to the view owner.
 - Extended `check:merchant-store-registration-view-owner` with OCR display and upload-feedback behavior assertions, plus forbidden runtime patterns to prevent the extracted OCR view rules from drifting back into the runtime file.
+
+**Fifth Remediation Scope:**
+
+- Extracted merchant store registration document removal targets, uploaded-image state patches, and upload attempt feedback builders into `merchant-store-registration-view.ts`.
+- Kept OCR API submission, backend delete calls, save-draft timing, and OCR result field backfill in `merchant-store-registration-runtime.ts` so side effects remain page-orchestrated.
+- Extended `check:merchant-store-registration-view-owner` to verify document field configuration and block repeated upload feedback copy or inline document maps from drifting back into the runtime file.
 
 ---
 
