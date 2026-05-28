@@ -1,4 +1,5 @@
 import type { MerchantApplicationDraftResponse } from '../api/onboarding'
+import { buildMerchantApplicationOCRStatusView } from '../api/onboarding'
 import type { RegionSearchResult } from '../api/location'
 
 export type MerchantDraftExt = MerchantApplicationDraftResponse & {
@@ -16,6 +17,58 @@ export type ImageFieldItem = {
   localFileUrl?: string
   pendingSync?: boolean
   status?: 'loading' | 'done' | 'failed' | 'reload'
+}
+
+type UploadFeedbackState = 'idle' | 'processing' | 'success' | 'error'
+
+export type UploadFeedback = {
+  state: UploadFeedbackState
+  title: string
+  description: string
+}
+
+export type MerchantUploadFeedback = {
+  license: UploadFeedback
+  foodPermit: UploadFeedback
+  idCardFront: UploadFeedback
+  idCardBack: UploadFeedback
+}
+
+export type MerchantOCRDisplayState = {
+  businessLicenseReady: boolean
+  businessLicenseProcessing: boolean
+  businessLicenseFailed: boolean
+  foodPermitReady: boolean
+  foodPermitProcessing: boolean
+  foodPermitFailed: boolean
+  idCardReady: boolean
+  idCardProcessing: boolean
+  idCardFailed: boolean
+}
+
+export const DEFAULT_MERCHANT_OCR_DISPLAY_STATE: MerchantOCRDisplayState = {
+  businessLicenseReady: false,
+  businessLicenseProcessing: false,
+  businessLicenseFailed: false,
+  foodPermitReady: false,
+  foodPermitProcessing: false,
+  foodPermitFailed: false,
+  idCardReady: false,
+  idCardProcessing: false,
+  idCardFailed: false
+}
+
+const EMPTY_UPLOAD_FEEDBACK: UploadFeedback = {
+  state: 'idle',
+  title: '',
+  description: ''
+}
+
+export const DEFAULT_MERCHANT_UPLOAD_FEEDBACK: MerchantUploadFeedback = {
+  license: { ...EMPTY_UPLOAD_FEEDBACK },
+  foodPermit: { ...EMPTY_UPLOAD_FEEDBACK },
+  idCardFront: { ...EMPTY_UPLOAD_FEEDBACK },
+  idCardBack: { ...EMPTY_UPLOAD_FEEDBACK }
 }
 
 type ParsedRegionAddress = {
@@ -218,4 +271,170 @@ export function pickBestRegionSearchResult(regions: RegionSearchResult[], addres
   }
 
   return null
+}
+
+export function createUploadFeedback(state: UploadFeedbackState, title = '', description = ''): UploadFeedback {
+  return { state, title, description }
+}
+
+export function hasMerchantBusinessLicenseResult(data?: MerchantDraftExt): boolean {
+  return Boolean(
+    String(data?.business_license_number || '').trim()
+    || String(data?.business_license_ocr?.enterprise_name || '').trim()
+    || String(data?.business_license_ocr?.credit_code || '').trim()
+    || String(data?.business_license_ocr?.reg_num || '').trim()
+    || String(data?.business_license_ocr?.address || '').trim()
+  )
+}
+
+export function hasMerchantFoodPermitResult(data?: MerchantDraftExt): boolean {
+  return Boolean(
+    String(data?.food_permit_ocr?.valid_to || '').trim()
+    || String(data?.food_permit_ocr?.permit_no || '').trim()
+    || String(data?.food_permit_ocr?.company_name || '').trim()
+    || String(data?.food_permit_ocr?.raw_text || '').trim()
+  )
+}
+
+export function hasMerchantIDCardFrontResult(data?: MerchantDraftExt): boolean {
+  return Boolean(
+    String(data?.id_card_front_ocr?.name || '').trim()
+    || String(data?.legal_person_name || '').trim()
+    || String(data?.business_license_ocr?.legal_representative || '').trim()
+    || String(data?.id_card_front_ocr?.id_number || '').trim()
+    || String(data?.legal_person_id_number || '').trim()
+  )
+}
+
+export function hasMerchantIDCardBackResult(data?: MerchantDraftExt): boolean {
+  return Boolean(String(data?.id_card_back_ocr?.valid_date || '').trim())
+}
+
+export function buildMerchantOcrProgressMessage(params: {
+  data?: MerchantDraftExt
+  hasBusinessLicenseImage: boolean
+  hasFoodPermitImage: boolean
+  hasIdCardFrontImage: boolean
+  hasIdCardBackImage: boolean
+}): string {
+  const data = params.data
+  const checks = [
+    {
+      uploaded: Boolean((data?.business_license_media_asset_id && data.business_license_media_asset_id > 0) || params.hasBusinessLicenseImage),
+      status: data?.business_license_ocr?.status || '',
+      ready: hasMerchantBusinessLicenseResult(data)
+    },
+    {
+      uploaded: Boolean((data?.food_permit_media_asset_id && data.food_permit_media_asset_id > 0) || params.hasFoodPermitImage),
+      status: data?.food_permit_ocr?.status || '',
+      ready: hasMerchantFoodPermitResult(data)
+    },
+    {
+      uploaded: Boolean((data?.id_card_front_media_asset_id && data.id_card_front_media_asset_id > 0) || params.hasIdCardFrontImage),
+      status: data?.id_card_front_ocr?.status || '',
+      ready: hasMerchantIDCardFrontResult(data)
+    },
+    {
+      uploaded: Boolean((data?.id_card_back_media_asset_id && data.id_card_back_media_asset_id > 0) || params.hasIdCardBackImage),
+      status: data?.id_card_back_ocr?.status || '',
+      ready: hasMerchantIDCardBackResult(data)
+    }
+  ]
+
+  const hasInProgress = checks.some((item) => item.uploaded && buildMerchantApplicationOCRStatusView(item.status).isPending && !item.ready)
+  if (!hasInProgress) {
+    return ''
+  }
+
+  return '证照已上传，系统正在自动识别，完成后会自动回填。你可以先继续填写后续信息。'
+}
+
+export function buildMerchantOcrDisplayState(params: {
+  data?: MerchantDraftExt
+  hasBusinessLicenseImage: boolean
+  hasFoodPermitImage: boolean
+  hasIdCardFrontImage: boolean
+  hasIdCardBackImage: boolean
+}): MerchantOCRDisplayState {
+  const data = params.data
+  const businessLicenseUploaded = Boolean((data?.business_license_media_asset_id && data.business_license_media_asset_id > 0) || params.hasBusinessLicenseImage)
+  const foodPermitUploaded = Boolean((data?.food_permit_media_asset_id && data.food_permit_media_asset_id > 0) || params.hasFoodPermitImage)
+  const idCardFrontUploaded = Boolean((data?.id_card_front_media_asset_id && data.id_card_front_media_asset_id > 0) || params.hasIdCardFrontImage)
+  const idCardBackUploaded = Boolean((data?.id_card_back_media_asset_id && data.id_card_back_media_asset_id > 0) || params.hasIdCardBackImage)
+
+  const businessLicenseStatusView = buildMerchantApplicationOCRStatusView(data?.business_license_ocr?.status)
+  const foodPermitStatusView = buildMerchantApplicationOCRStatusView(data?.food_permit_ocr?.status)
+  const idCardFrontStatusView = buildMerchantApplicationOCRStatusView(data?.id_card_front_ocr?.status)
+  const idCardBackStatusView = buildMerchantApplicationOCRStatusView(data?.id_card_back_ocr?.status)
+
+  const businessLicenseDone = businessLicenseStatusView.isReady || hasMerchantBusinessLicenseResult(data)
+  const foodPermitDone = foodPermitStatusView.isReady || hasMerchantFoodPermitResult(data)
+  const idCardFrontDone = idCardFrontStatusView.isReady || hasMerchantIDCardFrontResult(data)
+  const idCardBackDone = idCardBackStatusView.isReady || hasMerchantIDCardBackResult(data)
+
+  return {
+    businessLicenseReady: businessLicenseDone,
+    businessLicenseFailed: !businessLicenseDone && businessLicenseStatusView.isFailed,
+    businessLicenseProcessing: !businessLicenseDone && !businessLicenseStatusView.isFailed && businessLicenseUploaded,
+    foodPermitReady: foodPermitDone,
+    foodPermitFailed: !foodPermitDone && foodPermitStatusView.isFailed,
+    foodPermitProcessing: !foodPermitDone && !foodPermitStatusView.isFailed && foodPermitUploaded,
+    idCardReady: idCardFrontDone && idCardBackDone,
+    idCardFailed: !(idCardFrontDone && idCardBackDone) && (idCardFrontStatusView.isFailed || idCardBackStatusView.isFailed),
+    idCardProcessing: !(idCardFrontDone && idCardBackDone) && !(idCardFrontStatusView.isFailed || idCardBackStatusView.isFailed) && (idCardFrontUploaded || idCardBackUploaded)
+  }
+}
+
+export function buildMerchantUploadFeedback(params: {
+  data?: MerchantDraftExt
+  hasBusinessLicenseImage: boolean
+  hasFoodPermitImage: boolean
+  hasIdCardFrontImage: boolean
+  hasIdCardBackImage: boolean
+}): MerchantUploadFeedback {
+  const data = params.data
+  const businessLicenseUploaded = Boolean((data?.business_license_media_asset_id && data.business_license_media_asset_id > 0) || params.hasBusinessLicenseImage)
+  const foodPermitUploaded = Boolean((data?.food_permit_media_asset_id && data.food_permit_media_asset_id > 0) || params.hasFoodPermitImage)
+  const idCardFrontUploaded = Boolean((data?.id_card_front_media_asset_id && data.id_card_front_media_asset_id > 0) || params.hasIdCardFrontImage)
+  const idCardBackUploaded = Boolean((data?.id_card_back_media_asset_id && data.id_card_back_media_asset_id > 0) || params.hasIdCardBackImage)
+
+  const businessLicenseStatusView = buildMerchantApplicationOCRStatusView(data?.business_license_ocr?.status)
+  const foodPermitStatusView = buildMerchantApplicationOCRStatusView(data?.food_permit_ocr?.status)
+  const idCardFrontStatusView = buildMerchantApplicationOCRStatusView(data?.id_card_front_ocr?.status)
+  const idCardBackStatusView = buildMerchantApplicationOCRStatusView(data?.id_card_back_ocr?.status)
+  const businessLicenseReady = businessLicenseStatusView.isReady || hasMerchantBusinessLicenseResult(data)
+  const foodPermitReady = foodPermitStatusView.isReady || hasMerchantFoodPermitResult(data)
+  const idCardFrontReady = idCardFrontStatusView.isReady || hasMerchantIDCardFrontResult(data)
+  const idCardBackReady = idCardBackStatusView.isReady || hasMerchantIDCardBackResult(data)
+
+  return {
+    license: businessLicenseUploaded
+      ? businessLicenseStatusView.isFailed
+        ? createUploadFeedback('error', '识别失败', data?.business_license_ocr?.error || '请重新上传清晰、完整的营业执照')
+        : businessLicenseReady
+          ? createUploadFeedback('success', '识别成功', '已回填主体名称、统一信用代码和经营范围')
+          : createUploadFeedback('processing', '证照识别中', '正在识别营业执照信息')
+      : { ...EMPTY_UPLOAD_FEEDBACK },
+    foodPermit: foodPermitUploaded
+      ? foodPermitStatusView.isFailed
+        ? createUploadFeedback('error', '识别失败', data?.food_permit_ocr?.error || '请重新上传清晰、完整的食品经营许可证')
+        : foodPermitReady
+          ? createUploadFeedback('success', '识别成功', '已回填食品经营许可证有效期')
+          : createUploadFeedback('processing', '证照识别中', '正在识别食品经营许可证信息')
+      : { ...EMPTY_UPLOAD_FEEDBACK },
+    idCardFront: idCardFrontUploaded
+      ? idCardFrontStatusView.isFailed
+        ? createUploadFeedback('error', '识别失败', data?.id_card_front_ocr?.error || '请重新上传清晰、完整的身份证人像面')
+        : idCardFrontReady
+          ? createUploadFeedback('success', '识别成功', '已回填法人姓名和身份证号')
+          : createUploadFeedback('processing', '证照识别中', '正在识别身份证人像面信息')
+      : { ...EMPTY_UPLOAD_FEEDBACK },
+    idCardBack: idCardBackUploaded
+      ? idCardBackStatusView.isFailed
+        ? createUploadFeedback('error', '识别失败', data?.id_card_back_ocr?.error || '请重新上传清晰、完整的身份证国徽面')
+        : idCardBackReady
+          ? createUploadFeedback('success', '识别成功', '已回填身份证有效期')
+          : createUploadFeedback('processing', '证照识别中', '正在识别身份证国徽面信息')
+      : { ...EMPTY_UPLOAD_FEEDBACK }
+  }
 }

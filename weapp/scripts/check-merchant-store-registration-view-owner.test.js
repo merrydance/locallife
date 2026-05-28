@@ -25,7 +25,21 @@ function loadOwnerModule() {
     exports: {},
     module: { exports: {} },
     require(modulePath) {
-      if (modulePath === '../api/onboarding' || modulePath === '../api/location') {
+      if (modulePath === '../api/onboarding') {
+        return {
+          buildMerchantApplicationOCRStatusView(status) {
+            const normalizedStatus = String(status || '').trim().toLowerCase()
+            return {
+              statusCode: normalizedStatus,
+              text: '',
+              isPending: normalizedStatus === 'processing' || normalizedStatus === 'pending',
+              isReady: normalizedStatus === 'done',
+              isFailed: normalizedStatus === 'failed'
+            }
+          }
+        }
+      }
+      if (modulePath === '../api/location') {
         return {}
       }
       throw new Error(`unexpected require: ${modulePath}`)
@@ -122,6 +136,102 @@ const matched = owner.pickBestRegionSearchResult([
 ], '广东省深圳市南山区科技园')
 assert.strictEqual(matched.id, 2)
 
+assert.strictEqual(owner.hasMerchantBusinessLicenseResult({
+  business_license_ocr: { enterprise_name: '本地生活餐饮店' }
+}), true)
+assert.strictEqual(owner.hasMerchantBusinessLicenseResult({
+  business_license_ocr: { credit_code: '91310000MA1LOCAL1X' }
+}), true)
+assert.strictEqual(owner.hasMerchantBusinessLicenseResult({
+  business_license_ocr: { address: '上海市徐汇区' }
+}), true)
+assert.strictEqual(owner.hasMerchantBusinessLicenseResult({
+  business_license_number: '91310000MA1LOCAL1X'
+}), true)
+assert.strictEqual(owner.hasMerchantBusinessLicenseResult({
+  business_license_ocr: { status: 'done' }
+}), false)
+
+assert.strictEqual(owner.buildMerchantOcrProgressMessage({
+  data: { business_license_ocr: { status: 'processing' } },
+  hasBusinessLicenseImage: true,
+  hasFoodPermitImage: false,
+  hasIdCardFrontImage: false,
+  hasIdCardBackImage: false
+}), '证照已上传，系统正在自动识别，完成后会自动回填。你可以先继续填写后续信息。')
+assert.strictEqual(owner.buildMerchantOcrProgressMessage({
+  data: { business_license_ocr: { status: 'done' } },
+  hasBusinessLicenseImage: true,
+  hasFoodPermitImage: false,
+  hasIdCardFrontImage: false,
+  hasIdCardBackImage: false
+}), '')
+
+assert.deepStrictEqual(plain(owner.buildMerchantOcrDisplayState({
+  data: { business_license_ocr: { status: 'processing' } },
+  hasBusinessLicenseImage: true,
+  hasFoodPermitImage: false,
+  hasIdCardFrontImage: false,
+  hasIdCardBackImage: false
+})), {
+  businessLicenseReady: false,
+  businessLicenseProcessing: true,
+  businessLicenseFailed: false,
+  foodPermitReady: false,
+  foodPermitProcessing: false,
+  foodPermitFailed: false,
+  idCardReady: false,
+  idCardProcessing: false,
+  idCardFailed: false
+})
+
+assert.strictEqual(owner.buildMerchantOcrDisplayState({
+  data: { business_license_ocr: { status: 'failed' } },
+  hasBusinessLicenseImage: true,
+  hasFoodPermitImage: false,
+  hasIdCardFrontImage: false,
+  hasIdCardBackImage: false
+}).businessLicenseFailed, true)
+assert.strictEqual(owner.buildMerchantOcrDisplayState({
+  data: { business_license_ocr: { status: 'done' } },
+  hasBusinessLicenseImage: true,
+  hasFoodPermitImage: false,
+  hasIdCardFrontImage: false,
+  hasIdCardBackImage: false
+}).businessLicenseReady, true)
+
+const uploadFeedback = owner.buildMerchantUploadFeedback({
+  data: {
+    business_license_ocr: { status: 'done' },
+    food_permit_ocr: { status: 'failed', error: '图片模糊' },
+    id_card_front_ocr: { status: 'processing' }
+  },
+  hasBusinessLicenseImage: true,
+  hasFoodPermitImage: true,
+  hasIdCardFrontImage: true,
+  hasIdCardBackImage: false
+})
+assert.deepStrictEqual(plain(uploadFeedback.license), {
+  state: 'success',
+  title: '识别成功',
+  description: '已回填主体名称、统一信用代码和经营范围'
+})
+assert.deepStrictEqual(plain(uploadFeedback.foodPermit), {
+  state: 'error',
+  title: '识别失败',
+  description: '图片模糊'
+})
+assert.deepStrictEqual(plain(uploadFeedback.idCardFront), {
+  state: 'processing',
+  title: '证照识别中',
+  description: '正在识别身份证人像面信息'
+})
+assert.deepStrictEqual(plain(uploadFeedback.idCardBack), {
+  state: 'idle',
+  title: '',
+  description: ''
+})
+
 const runtimeSource = fs.readFileSync(runtimePath, 'utf8')
 const forbiddenRuntimePatterns = [
   'function buildLegalBusinessAddress',
@@ -135,7 +245,12 @@ const forbiddenRuntimePatterns = [
   'function toSafeNumber',
   'function parseRegionAddress',
   'function buildRegionSearchKeywords',
-  'function pickBestRegionSearchResult'
+  'function pickBestRegionSearchResult',
+  'function createUploadFeedback',
+  'function hasMerchantBusinessLicenseResult',
+  'function hasMerchantFoodPermitResult',
+  'function hasMerchantIDCardFrontResult',
+  'function hasMerchantIDCardBackResult'
 ]
 
 for (const pattern of forbiddenRuntimePatterns) {
