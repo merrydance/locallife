@@ -495,6 +495,42 @@ export function buildMerchantInitialShopImagesPatch(params: {
   }
 }
 
+export function buildMerchantInitialDocumentImagesPatch(params: {
+  licenseUrl?: string
+  licenseAssetId?: number | null
+  foodLicenseUrl?: string
+  foodPermitAssetId?: number | null
+  idCardFrontUrl?: string
+  idCardFrontAssetId?: number | null
+  idCardBackUrl?: string
+  idCardBackAssetId?: number | null
+  buildPrivateAssetKey: (assetId?: number | null) => string | undefined
+}): {
+  licenseImages: ImageFieldItem[]
+  foodLicenseImages: ImageFieldItem[]
+  idCardFrontImages: ImageFieldItem[]
+  idCardBackImages: ImageFieldItem[]
+} {
+  return {
+    licenseImages: params.licenseUrl ? [{ url: params.licenseUrl, assetId: params.licenseAssetId ?? undefined }] : [],
+    foodLicenseImages: params.foodLicenseUrl ? [{ url: params.foodLicenseUrl, assetId: params.foodPermitAssetId ?? undefined }] : [],
+    idCardFrontImages: params.idCardFrontUrl
+      ? [{
+          url: params.idCardFrontUrl,
+          rawUrl: params.buildPrivateAssetKey(params.idCardFrontAssetId),
+          assetId: params.idCardFrontAssetId ?? undefined
+        }]
+      : [],
+    idCardBackImages: params.idCardBackUrl
+      ? [{
+          url: params.idCardBackUrl,
+          rawUrl: params.buildPrivateAssetKey(params.idCardBackAssetId),
+          assetId: params.idCardBackAssetId ?? undefined
+        }]
+      : []
+  }
+}
+
 export function buildMerchantLatestOcrFormPatch(data: MerchantDraftExt, currentAddress?: string): MerchantLatestOcrFormPatch {
   return {
     licenseName: toSafeString(data.business_license_ocr?.enterprise_name),

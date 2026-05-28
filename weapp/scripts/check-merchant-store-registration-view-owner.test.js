@@ -495,6 +495,38 @@ assert.deepStrictEqual(plain(owner.buildMerchantInitialShopImagesPatch({
   environmentImages: [{ url: 'https://cdn.local/raw/environment.jpg', rawUrl: 'raw/environment.jpg' }],
   environmentFiles: [{ url: 'https://cdn.local/raw/environment.jpg', rawUrl: 'raw/environment.jpg', status: 'done' }]
 })
+assert.deepStrictEqual(plain(owner.buildMerchantInitialDocumentImagesPatch({
+  licenseUrl: 'https://cdn.local/license.jpg',
+  licenseAssetId: 101,
+  foodLicenseUrl: 'https://cdn.local/food.jpg',
+  foodPermitAssetId: 102,
+  idCardFrontUrl: 'private://front.jpg',
+  idCardFrontAssetId: 201,
+  idCardBackUrl: 'private://back.jpg',
+  idCardBackAssetId: 202,
+  buildPrivateAssetKey(assetId) {
+    return `asset:${assetId}`
+  }
+})), {
+  licenseImages: [{ url: 'https://cdn.local/license.jpg', assetId: 101 }],
+  foodLicenseImages: [{ url: 'https://cdn.local/food.jpg', assetId: 102 }],
+  idCardFrontImages: [{ url: 'private://front.jpg', rawUrl: 'asset:201', assetId: 201 }],
+  idCardBackImages: [{ url: 'private://back.jpg', rawUrl: 'asset:202', assetId: 202 }]
+})
+assert.deepStrictEqual(plain(owner.buildMerchantInitialDocumentImagesPatch({
+  licenseUrl: '',
+  foodLicenseUrl: '',
+  idCardFrontUrl: '',
+  idCardBackUrl: '',
+  buildPrivateAssetKey(assetId) {
+    return `asset:${assetId}`
+  }
+})), {
+  licenseImages: [],
+  foodLicenseImages: [],
+  idCardFrontImages: [],
+  idCardBackImages: []
+})
 
 const runtimeSource = fs.readFileSync(runtimePath, 'utf8')
 const forbiddenRuntimePatterns = [
@@ -531,7 +563,11 @@ const forbiddenRuntimePatterns = [
   "'formData.legalPerson': ocr.name",
   "'formData.idCardValidity': ocr.valid_date",
   'const storefrontRaw',
-  'const environmentRaw'
+  'const environmentRaw',
+  'const licenseImages = licenseUrl',
+  'const foodLicenseImages = foodLicenseUrl',
+  'const idCardFrontImages = idCardFrontUrl',
+  'const idCardBackImages = idCardBackUrl'
 ]
 
 for (const pattern of forbiddenRuntimePatterns) {

@@ -34,6 +34,7 @@ import {
   buildMerchantFoodPermitOcrRecognizedPatch,
   buildMerchantIdCardBackOcrRecognizedPatch,
   buildMerchantIdCardFrontOcrRecognizedPatch,
+  buildMerchantInitialDocumentImagesPatch,
   buildMerchantInitialDraftFormPatch,
   buildMerchantInitialDraftOcrResults,
   buildMerchantInitialShopImagesPatch,
@@ -196,11 +197,17 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
       const foodLicenseUrl = getMediaDisplayUrl(data.food_permit_url || '')
       const idCardFrontUrl = await safeResolve(data.id_card_front_media_asset_id)
       const idCardBackUrl = await safeResolve(data.id_card_back_media_asset_id)
-
-      const licenseImages = licenseUrl ? [{ url: licenseUrl, assetId: data.business_license_media_asset_id ?? undefined }] : []
-      const foodLicenseImages = foodLicenseUrl ? [{ url: foodLicenseUrl, assetId: data.food_permit_media_asset_id ?? undefined }] : []
-      const idCardFrontImages = idCardFrontUrl ? [{ url: idCardFrontUrl, rawUrl: buildPrivateAssetKey(data.id_card_front_media_asset_id), assetId: data.id_card_front_media_asset_id ?? undefined }] : []
-      const idCardBackImages = idCardBackUrl ? [{ url: idCardBackUrl, rawUrl: buildPrivateAssetKey(data.id_card_back_media_asset_id), assetId: data.id_card_back_media_asset_id ?? undefined }] : []
+      const documentImagesPatch = buildMerchantInitialDocumentImagesPatch({
+        licenseUrl,
+        licenseAssetId: data.business_license_media_asset_id,
+        foodLicenseUrl,
+        foodPermitAssetId: data.food_permit_media_asset_id,
+        idCardFrontUrl,
+        idCardFrontAssetId: data.id_card_front_media_asset_id,
+        idCardBackUrl,
+        idCardBackAssetId: data.id_card_back_media_asset_id,
+        buildPrivateAssetKey
+      })
       const accountPermitImages: Array<{ url: string }> = []
       const shopImagesPatch = buildMerchantInitialShopImagesPatch({
         data,
@@ -209,7 +216,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
 
       console.log('[DEBUG] setData payload:', {
         formData,
-        licenseImages: licenseImages.length,
+        licenseImages: documentImagesPatch.licenseImages.length,
         storefrontImages: shopImagesPatch.storefrontImages.length,
         environmentImages: shopImagesPatch.environmentImages.length
       })
@@ -219,10 +226,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
         ocrDisplayState: this.buildMerchantOcrDisplayState(data),
         uploadFeedback: this.buildMerchantUploadFeedback(data),
         ocrResults,
-        licenseImages,
-        foodLicenseImages,
-        idCardFrontImages,
-        idCardBackImages,
+        ...documentImagesPatch,
         accountPermitImages,
         ...shopImagesPatch
       })

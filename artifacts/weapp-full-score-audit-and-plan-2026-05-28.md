@@ -26,6 +26,8 @@
 
 **Tenth Remediation Checkpoint:** 98 / 100 after the merchant registration initial shop image view patch owner extraction slice.
 
+**Eleventh Remediation Checkpoint:** 98.2 / 100 after the merchant registration initial document image view patch owner extraction slice.
+
 **Target Score:** 100 / 100
 
 **Review Baseline:**
@@ -108,6 +110,12 @@
 - Extracted merchant registration initial storefront/environment image ViewState construction into `merchant-store-registration-view.ts`.
 - Kept `initApplication` responsible for backend fetch, status routing, private media signing, and page `setData` timing while delegating public shop image URL filtering and upload-render file construction to the view owner.
 - Extended `check:merchant-store-registration-view-owner` to verify initial shop image patch behavior and block the extracted raw-image loops from drifting back into the runtime file.
+
+**Eleventh Remediation Scope:**
+
+- Extracted merchant registration initial document image ViewState construction for business license, food permit, and ID card images into `merchant-store-registration-view.ts`.
+- Kept `initApplication` responsible for public URL resolution and private ID-card media signing while delegating image-array field construction to the view owner.
+- Extended `check:merchant-store-registration-view-owner` to verify initial document image patch behavior and block the extracted document image ternaries from drifting back into the runtime file.
 
 ---
 
