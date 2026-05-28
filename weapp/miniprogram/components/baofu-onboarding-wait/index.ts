@@ -25,6 +25,22 @@ Component({
       type: String,
       value: ''
     },
+    elapsedSeconds: {
+      type: Number,
+      value: 0
+    },
+    remainingSeconds: {
+      type: Number,
+      value: 0
+    },
+    waitingUntilTerminal: {
+      type: Boolean,
+      value: false
+    },
+    timerVisible: {
+      type: Boolean,
+      value: false
+    },
     theme: {
       type: String,
       value: 'warning'

@@ -70,6 +70,8 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
   return Behavior({
     data: {
       navBarHeight: 88,
+      _pageActive: true,
+      _waitSessionId: 0,
       accessReady: !config.accessGuard,
       accessDenied: false,
       accessDeniedMessage: '',
@@ -88,6 +90,10 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
       waitTitle: '',
       waitDescription: '',
       waitProgressText: '',
+      waitElapsedSeconds: 0,
+      waitRemainingSeconds: 0,
+      waitUntilTerminal: true,
+      waitTimerVisible: false,
       waitPrimaryAction: 'dismiss' as BaofuOnboardingWaitAction,
       waitPrimaryActionText: ''
     },
@@ -111,7 +117,11 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
           initialErrorMessage: '',
           formErrorMessage: '',
           waitVisible: false,
-          waitProgressText: ''
+          waitProgressText: '',
+          waitElapsedSeconds: 0,
+          waitRemainingSeconds: 0,
+          waitUntilTerminal: true,
+          waitTimerVisible: false
         })
 
         try {
@@ -152,7 +162,11 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
           initialErrorMessage: '',
           formErrorMessage: '',
           waitVisible: false,
-          waitProgressText: ''
+          waitProgressText: '',
+          waitElapsedSeconds: 0,
+          waitRemainingSeconds: 0,
+          waitUntilTerminal: true,
+          waitTimerVisible: false
         })
 
         try {
@@ -180,6 +194,10 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
           waitTitle: waitView.title,
           waitDescription: waitView.description,
           waitProgressText: '',
+          waitElapsedSeconds: 0,
+          waitRemainingSeconds: 0,
+          waitUntilTerminal: true,
+          waitTimerVisible: false,
           waitPrimaryAction: waitView.primaryAction,
           waitPrimaryActionText: waitView.primaryActionText
         })
@@ -188,14 +206,38 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
         }
       },
 
-      _handleBaofuOnboardingProgress(progress: BaofuOnboardingPollProgress) {
-        this.setData({ waitProgressText: formatBaofuOnboardingPollProgress(progress) })
+      _beginBaofuLongWaitSession(): number {
+        const nextSessionId = Number(this.data._waitSessionId || 0) + 1
+        this.data._waitSessionId = nextSessionId
+        return nextSessionId
+      },
+
+      _cancelBaofuLongWaitSession() {
+        this.data._waitSessionId = Number(this.data._waitSessionId || 0) + 1
+      },
+
+      _shouldStopBaofuLongWait(sessionId: number): boolean {
+        return !this.data._pageActive || this.data._waitSessionId !== sessionId
+      },
+
+      _handleBaofuOnboardingProgress(progress: BaofuOnboardingPollProgress, sessionId?: number) {
+        if (sessionId !== undefined && this._shouldStopBaofuLongWait(sessionId)) {
+          return
+        }
+        this.setData({
+          waitProgressText: formatBaofuOnboardingPollProgress(progress),
+          waitElapsedSeconds: Math.max(0, Math.round(progress.elapsedSeconds)),
+          waitRemainingSeconds: Math.max(0, Math.ceil(progress.remainingSeconds)),
+          waitUntilTerminal: progress.maxAttempts === 0,
+          waitTimerVisible: true
+        })
       },
 
       // --- Public event handlers bound from WXML ---
 
       onLoad() {
         const { navBarHeight } = getStableBarHeights()
+        this.data._pageActive = true
         this.setData({ navBarHeight })
         if (config.accessGuard) {
           void this._bootstrapSubmitPage()
@@ -206,6 +248,22 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
 
       onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>) {
         this.setData({ navBarHeight: e.detail.navBarHeight || 88 })
+      },
+
+      onShow() {
+        this.data._pageActive = true
+      },
+
+      onHide() {
+        this.data._pageActive = false
+        this._cancelBaofuLongWaitSession()
+        this.setData({ syncing: false })
+      },
+
+      onUnload() {
+        this.data._pageActive = false
+        this._cancelBaofuLongWaitSession()
+        this.setData({ syncing: false })
       },
 
       onRetry() {
@@ -228,6 +286,10 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
         this.setData({
           syncing: true,
           waitVisible: true,
+          waitElapsedSeconds: 0,
+          waitRemainingSeconds: 0,
+          waitUntilTerminal: true,
+          waitTimerVisible: true,
           ...buildBaofuOnboardingWaitViewFromText({
             state: 'opening_processing',
             title: '开户状态同步中',
@@ -239,17 +301,21 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
           waitProgressText: ''
         })
 
+        const sessionId = this._beginBaofuLongWaitSession()
         try {
           const result = await pollBaofuSettlementAccountStatus({
             role: config.role,
             context: this as unknown as WechatMiniprogram.Page.TrivialInstance,
-            maxAttempts: 1,
             loadingMessage: '正在刷新开户状态...',
             silentToast: true,
+            shouldStop: () => this._shouldStopBaofuLongWait(sessionId),
             onProgress: (progress) => {
-              this.setData({ waitProgressText: formatBaofuOnboardingPollProgress(progress) })
+              this._handleBaofuOnboardingProgress(progress, sessionId)
             }
           })
+          if (this._shouldStopBaofuLongWait(sessionId)) {
+            return
+          }
           this._applyWorkflowResult(result)
         } catch (error: unknown) {
           logger.error(`Refresh baofu submit status failed action=refresh_status role=${config.role}`, error, config.logTag)
@@ -264,10 +330,16 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
               primaryAction: 'retry',
               primaryActionText: '重试'
             }),
-            waitProgressText: ''
+            waitProgressText: '',
+            waitElapsedSeconds: 0,
+            waitRemainingSeconds: 0,
+            waitUntilTerminal: true,
+            waitTimerVisible: false
           })
         } finally {
-          this.setData({ syncing: false })
+          if (!this._shouldStopBaofuLongWait(sessionId)) {
+            this.setData({ syncing: false })
+          }
         }
       },
 
@@ -281,7 +353,15 @@ export function baofuSettlementSubmitBehavior(config: BaofuSettlementSubmitConfi
             backToStatusPage()
             break
           default:
-            this.setData({ waitVisible: false, waitProgressText: '' })
+            this._cancelBaofuLongWaitSession()
+            this.setData({
+              waitVisible: false,
+              waitProgressText: '',
+              waitElapsedSeconds: 0,
+              waitRemainingSeconds: 0,
+              waitUntilTerminal: true,
+              waitTimerVisible: false
+            })
             break
         }
       }

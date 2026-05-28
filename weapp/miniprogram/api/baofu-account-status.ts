@@ -85,19 +85,19 @@ export function getBaofuAccountNextActionText(
     case 'verify_fee_pending':
       return `支付 ${feeDisplay} 元核验费后继续开户`
     case 'verify_fee_processing':
-      return '核验费支付结果确认中，请稍后刷新'
+      return '核验费支付结果确认中，正在自动同步'
     case 'opening_processing':
-      return '宝付开户处理中，请稍后刷新'
+      return '宝付开户处理中，正在自动同步'
     case 'merchant_report_processing':
-      return '正在配置微信支付商户展示名称，请稍后刷新'
+      return '正在配置微信支付商户展示名称，正在自动同步'
     case 'applet_auth_pending':
-      return '正在绑定微信支付授权目录，请稍后刷新'
+      return '正在绑定微信支付授权目录，正在自动同步'
     case 'failed':
       return '开户未通过，请核对资料后重试；如持续失败请联系平台处理'
     case 'voided':
       return '开户流程已作废，请联系平台处理'
     default:
-      return '开户状态同步中，请稍后刷新'
+      return '开户状态同步中，正在自动同步'
   }
 }
 

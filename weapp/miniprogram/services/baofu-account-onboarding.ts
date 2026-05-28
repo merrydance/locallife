@@ -19,9 +19,9 @@ import { PAYMENT_STATUS_POLL_INTERVAL_MS, type PaymentOrderResponse } from '../a
 import { completePaymentWorkflow } from './payment-workflow'
 
 const TOAST_SELECTOR = '#t-toast'
-const BAOFU_STATUS_POLL_MAX_ATTEMPTS = 45
 const PENDING_STORAGE_PREFIX = 'baofuSettlementAccountPendingWorkflow:'
 const GENERIC_RETRY_MESSAGE = '开户进度暂时无法同步，请稍后刷新'
+const BAOFU_STATUS_POLL_UNTIL_TERMINAL = 0
 
 export type BaofuOnboardingWorkflowStatus =
   | 'ready'
@@ -68,6 +68,7 @@ interface WorkflowOptions {
   silentToast?: boolean
   maxAttempts?: number
   interval?: number
+  shouldStop?: () => boolean
   onProgress?: (progress: BaofuOnboardingPollProgress) => void
 }
 
@@ -95,28 +96,54 @@ function emitPollProgress(
   options: WorkflowOptions,
   attemptIndex: number,
   maxAttempts: number,
-  interval: number
+  interval: number,
+  elapsedMs = attemptIndex * interval
 ) {
-  if (!options.onProgress || maxAttempts <= 1) {
+  if (!options.onProgress) {
     return
   }
 
-  const elapsedSeconds = Math.max(0, Math.round((attemptIndex * interval) / 1000))
-  const remainingSeconds = Math.max(0, Math.ceil(((maxAttempts - attemptIndex - 1) * interval) / 1000))
+  const waitingUntilTerminal = maxAttempts === BAOFU_STATUS_POLL_UNTIL_TERMINAL
+  const totalWaitMs = waitingUntilTerminal ? 0 : Math.max(0, (maxAttempts - 1) * interval)
+  const elapsedSeconds = Math.max(0, Math.round(elapsedMs / 1000))
+  const remainingSeconds = waitingUntilTerminal ? 0 : Math.max(0, Math.ceil((totalWaitMs - elapsedMs) / 1000))
   options.onProgress({
     attempt: Math.min(attemptIndex + 1, maxAttempts),
     maxAttempts,
     elapsedSeconds,
     remainingSeconds,
-    finalAttempt: attemptIndex >= maxAttempts - 1
+    finalAttempt: !waitingUntilTerminal && (attemptIndex >= maxAttempts - 1 || elapsedMs >= totalWaitMs)
   })
+}
+
+async function delayWithPollProgress(
+  options: WorkflowOptions,
+  attemptIndex: number,
+  maxAttempts: number,
+  interval: number
+): Promise<boolean> {
+  const startElapsedMs = attemptIndex * interval
+  let waitedMs = 0
+
+  while (waitedMs < interval) {
+    if (options.shouldStop?.()) {
+      return false
+    }
+
+    const stepMs = Math.min(1000, interval - waitedMs)
+    await delay(stepMs)
+    waitedMs += stepMs
+    emitPollProgress(options, attemptIndex, maxAttempts, interval, startElapsedMs + waitedMs)
+  }
+
+  return !options.shouldStop?.()
 }
 
 export function formatBaofuOnboardingPollProgress(progress: BaofuOnboardingPollProgress): string {
   const elapsedSeconds = Math.max(0, Math.round(progress.elapsedSeconds))
   const remainingSeconds = Math.max(0, Math.ceil(progress.remainingSeconds))
   if (progress.finalAttempt || remainingSeconds <= 0) {
-    return `已等待 ${elapsedSeconds} 秒，正在确认最后一次状态`
+    return `已等待 ${elapsedSeconds} 秒，正在持续确认状态`
   }
   return `已等待 ${elapsedSeconds} 秒，最多还会自动同步 ${remainingSeconds} 秒`
 }
@@ -414,7 +441,7 @@ export async function pollBaofuSettlementAccountStatus(
   options: WorkflowOptions = {}
 ): Promise<BaofuOnboardingWorkflowResult> {
   const role = options.role || 'rider'
-  const maxAttempts = options.maxAttempts ?? BAOFU_STATUS_POLL_MAX_ATTEMPTS
+  const maxAttempts = options.maxAttempts ?? BAOFU_STATUS_POLL_UNTIL_TERMINAL
   const interval = options.interval ?? PAYMENT_STATUS_POLL_INTERVAL_MS
   const context = options.context
 
@@ -423,15 +450,23 @@ export async function pollBaofuSettlementAccountStatus(
   }
 
   try {
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    for (let attempt = 0; maxAttempts === BAOFU_STATUS_POLL_UNTIL_TERMINAL || attempt < maxAttempts; attempt += 1) {
+      if (options.shouldStop?.()) {
+        const account = await getBaofuSettlementAccount(role)
+        return buildResult(account, 'pending_confirmation')
+      }
+
       emitPollProgress(options, attempt, maxAttempts, interval)
       const account = await getBaofuSettlementAccount(role)
       if (isBaofuSettlementAfterPaymentTerminalStatus(account.status)) {
         return buildResult(account)
       }
 
-      if (attempt < maxAttempts - 1) {
-        await delay(interval)
+      if (maxAttempts === BAOFU_STATUS_POLL_UNTIL_TERMINAL || attempt < maxAttempts - 1) {
+        const keepPolling = await delayWithPollProgress(options, attempt, maxAttempts, interval)
+        if (!keepPolling) {
+          return buildResult(account, 'pending_confirmation')
+        }
       }
     }
 
@@ -467,6 +502,14 @@ async function completePaymentThenPoll(
 
     if (isBaofuSettlementPaymentRequiredStatus(normalizedAccountStatus)) {
       return buildResult(account)
+    }
+
+    if (isBaofuSettlementOpeningProcessingStatus(normalizedAccountStatus)) {
+      return pollBaofuSettlementAccountStatus({
+        ...options,
+        role,
+        loadingMessage: '开户状态同步中...'
+      })
     }
 
     return buildResult(account, 'pay_params_missing')

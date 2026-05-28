@@ -29,6 +29,7 @@ import {
   getPendingBaofuAccountOnboardingContext,
   pollBaofuSettlementAccountStatus,
   shouldClearPendingBaofuAccountOnboardingContext,
+  type BaofuOnboardingPollProgress,
   type BaofuOnboardingWaitAction,
   type BaofuOnboardingWaitState,
   type BaofuOnboardingWorkflowResult
@@ -66,8 +67,10 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
   return Behavior({
     data: {
       navBarHeight: 88,
+      _pageActive: true,
       _accountRequestPending: false,
       _submitRedirectPending: false,
+      _waitSessionId: 0,
       accessReady: !config.accessGuard,
       accessDenied: false,
       accessDeniedMessage: '',
@@ -86,6 +89,10 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
       waitTitle: '',
       waitDescription: '',
       waitProgressText: '',
+      waitElapsedSeconds: 0,
+      waitRemainingSeconds: 0,
+      waitUntilTerminal: true,
+      waitTimerVisible: false,
       waitPrimaryAction: 'refresh_status' as BaofuOnboardingWaitAction,
       waitPrimaryActionText: '刷新状态'
     },
@@ -116,7 +123,11 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
           accountLoaded: false,
           pageView: { ...EMPTY_PAGE_VIEW },
           waitVisible: false,
-          waitProgressText: ''
+          waitProgressText: '',
+          waitElapsedSeconds: 0,
+          waitRemainingSeconds: 0,
+          waitUntilTerminal: true,
+          waitTimerVisible: false
         })
 
         try {
@@ -191,14 +202,124 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
       },
 
       _applyAccount(response: BaofuSettlementAccountResponse, pageView = buildBaofuRolePageView(config.role, response)) {
+        const shouldLongWait = pageView.statusView.isWaiting
+        if (!shouldLongWait) {
+          this._cancelBaofuLongWaitSession()
+        }
         this.setData({
           pageView,
           initialLoading: false,
           initialError: false,
           initialErrorMessage: '',
           refreshErrorMessage: '',
-          accountLoaded: true
+          accountLoaded: true,
+          waitVisible: shouldLongWait ? this.data.waitVisible : false,
+          waitProgressText: shouldLongWait ? this.data.waitProgressText : '',
+          waitElapsedSeconds: shouldLongWait ? this.data.waitElapsedSeconds : 0,
+          waitRemainingSeconds: shouldLongWait ? this.data.waitRemainingSeconds : 0,
+          waitUntilTerminal: true,
+          waitTimerVisible: shouldLongWait ? this.data.waitTimerVisible : false,
+          syncing: shouldLongWait ? this.data.syncing : false
         })
+        if (shouldLongWait && !this.data.syncing) {
+          void this._startLongWaitForProcessing()
+        }
+      },
+
+      _beginBaofuLongWaitSession(): number {
+        const nextSessionId = Number(this.data._waitSessionId || 0) + 1
+        this.data._waitSessionId = nextSessionId
+        return nextSessionId
+      },
+
+      _cancelBaofuLongWaitSession() {
+        this.data._waitSessionId = Number(this.data._waitSessionId || 0) + 1
+      },
+
+      _shouldStopBaofuLongWait(sessionId: number): boolean {
+        return !this.data._pageActive || this.data._waitSessionId !== sessionId
+      },
+
+      _handleBaofuOnboardingProgress(progress: BaofuOnboardingPollProgress, sessionId?: number) {
+        if (sessionId !== undefined && this._shouldStopBaofuLongWait(sessionId)) {
+          return
+        }
+        this.setData({
+          waitProgressText: formatBaofuOnboardingPollProgress(progress),
+          waitElapsedSeconds: Math.max(0, Math.round(progress.elapsedSeconds)),
+          waitRemainingSeconds: Math.max(0, Math.ceil(progress.remainingSeconds)),
+          waitUntilTerminal: progress.maxAttempts === 0,
+          waitTimerVisible: true
+        })
+      },
+
+      async _startLongWaitForProcessing() {
+        if (this.data.syncing) {
+          return
+        }
+
+        const sessionId = this._beginBaofuLongWaitSession()
+        this.setData({
+          syncing: true,
+          refreshErrorMessage: '',
+          waitVisible: true,
+          ...buildBaofuOnboardingWaitViewFromText({
+            state: 'opening_processing',
+            title: '开户状态同步中',
+            description: '正在向后端确认开户、支付报备和授权目录状态。',
+            theme: 'warning',
+            primaryAction: 'refresh_status',
+            primaryActionText: ''
+          }),
+          waitProgressText: '',
+          waitElapsedSeconds: 0,
+          waitRemainingSeconds: 0,
+          waitUntilTerminal: true,
+          waitTimerVisible: true
+        })
+        try {
+          const result = await pollBaofuSettlementAccountStatus({
+            role: config.role,
+            context: this as unknown as WechatMiniprogram.Page.TrivialInstance,
+            loadingMessage: '开户状态同步中...',
+            silentToast: true,
+            shouldStop: () => this._shouldStopBaofuLongWait(sessionId),
+            onProgress: (progress) => {
+              this._handleBaofuOnboardingProgress(progress, sessionId)
+            }
+          })
+          if (this._shouldStopBaofuLongWait(sessionId)) {
+            return
+          }
+          await this._applyWorkflowResult(result)
+        } catch (error: unknown) {
+          if (this._shouldStopBaofuLongWait(sessionId)) {
+            return
+          }
+          logger.error(`Long wait baofu settlement status failed action=long_wait role=${config.role}`, error, config.logTag)
+          const message = getErrorUserMessage(error, config.refreshErrorFallback)
+          this.setData({
+            refreshErrorMessage: message,
+            waitVisible: true,
+            ...buildBaofuOnboardingWaitViewFromText({
+              state: 'error',
+              title: '状态同步失败',
+              description: message,
+              theme: 'error',
+              primaryAction: 'retry',
+              primaryActionText: '重试'
+            }),
+            waitProgressText: '',
+            waitElapsedSeconds: 0,
+            waitRemainingSeconds: 0,
+            waitUntilTerminal: true,
+            waitTimerVisible: false
+          })
+        } finally {
+          if (!this._shouldStopBaofuLongWait(sessionId)) {
+            this.setData({ syncing: false })
+          }
+        }
       },
 
       async _loadAccount(options: { force?: boolean, silent?: boolean, refreshing?: boolean } = {}) {
@@ -243,6 +364,8 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
           return
         }
 
+        let didSetSyncing = false
+        let sessionId = 0
         try {
           const pendingContext = getPendingBaofuAccountOnboardingContext(config.role)
           if (!pendingContext || this.data.syncing) {
@@ -252,6 +375,10 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
           this.setData({
             syncing: true,
             waitVisible: true,
+            waitElapsedSeconds: 0,
+            waitRemainingSeconds: 0,
+            waitUntilTerminal: true,
+            waitTimerVisible: true,
             ...buildBaofuOnboardingWaitViewFromText({
               state: 'payment_confirming',
               title: '开户进度恢复中',
@@ -262,20 +389,29 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
             }),
             waitProgressText: ''
           })
+          didSetSyncing = true
+          sessionId = this._beginBaofuLongWaitSession()
           const result = await continueBaofuAccountPayment({
             role: config.role,
             context: this as unknown as WechatMiniprogram.Page.TrivialInstance,
             loadingMessage: '正在恢复开户进度...',
             silentToast: true,
+            shouldStop: () => this._shouldStopBaofuLongWait(sessionId),
             onProgress: (progress) => {
-              this.setData({ waitProgressText: formatBaofuOnboardingPollProgress(progress) })
+              this._handleBaofuOnboardingProgress(progress, sessionId)
             }
           })
+          if (this._shouldStopBaofuLongWait(sessionId)) {
+            return
+          }
           await this._applyWorkflowResult(result)
           if (shouldClearPendingBaofuAccountOnboardingContext(result)) {
             clearPendingBaofuAccountOnboardingContext(config.role)
           }
         } catch (error: unknown) {
+          if (!this.data._pageActive || (sessionId > 0 && this._shouldStopBaofuLongWait(sessionId))) {
+            return
+          }
           logger.error(`Recover baofu onboarding failed action=recover_pending role=${config.role}`, error, config.logTag)
           this.setData({
             refreshErrorMessage: '开户进度恢复失败，请稍后刷新。',
@@ -288,10 +424,20 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
               primaryAction: 'refresh_status',
               primaryActionText: '刷新状态'
             }),
-            waitProgressText: ''
+            waitProgressText: '',
+            waitElapsedSeconds: 0,
+            waitRemainingSeconds: 0,
+            waitUntilTerminal: true,
+            waitTimerVisible: false
           })
         } finally {
-          this.setData({ syncing: false })
+          if (didSetSyncing && sessionId > 0) {
+            if (!this._shouldStopBaofuLongWait(sessionId)) {
+              this.setData({ syncing: false })
+            }
+          } else if (didSetSyncing && this.data._pageActive) {
+            this.setData({ syncing: false })
+          }
         }
       },
 
@@ -301,13 +447,20 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
           return
         }
         const waitView = buildBaofuOnboardingWaitView(result)
+        const shouldKeepWaitVisible = result.status === 'processing' ||
+          result.status === 'pending_confirmation' ||
+          result.status === 'pay_params_missing'
         this.setData({
-          waitVisible: true,
+          waitVisible: shouldKeepWaitVisible,
           waitState: waitView.state,
           waitTheme: waitView.theme,
           waitTitle: waitView.title,
           waitDescription: waitView.description,
           waitProgressText: '',
+          waitElapsedSeconds: 0,
+          waitRemainingSeconds: 0,
+          waitUntilTerminal: true,
+          waitTimerVisible: false,
           waitPrimaryAction: waitView.primaryAction,
           waitPrimaryActionText: waitView.primaryActionText
         })
@@ -322,6 +475,10 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
           syncing: true,
           refreshErrorMessage: '',
           waitVisible: true,
+          waitElapsedSeconds: 0,
+          waitRemainingSeconds: 0,
+          waitUntilTerminal: true,
+          waitTimerVisible: true,
           ...buildBaofuOnboardingWaitViewFromText({
             state: 'payment_confirming',
             title: '支付结果确认中',
@@ -332,18 +489,26 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
           }),
           waitProgressText: ''
         })
+        const sessionId = this._beginBaofuLongWaitSession()
         try {
           const result = await continueBaofuAccountPayment({
             role: config.role,
             context: this as unknown as WechatMiniprogram.Page.TrivialInstance,
             loadingMessage: '正在核对支付结果...',
             silentToast: true,
+            shouldStop: () => this._shouldStopBaofuLongWait(sessionId),
             onProgress: (progress) => {
-              this.setData({ waitProgressText: formatBaofuOnboardingPollProgress(progress) })
+              this._handleBaofuOnboardingProgress(progress, sessionId)
             }
           })
+          if (this._shouldStopBaofuLongWait(sessionId)) {
+            return
+          }
           await this._applyWorkflowResult(result)
         } catch (error: unknown) {
+          if (this._shouldStopBaofuLongWait(sessionId)) {
+            return
+          }
           logger.error(`Continue baofu settlement payment failed action=continue_payment role=${config.role}`, error, config.logTag)
           const message = getErrorUserMessage(error, '支付进度恢复失败，请稍后重试')
           this.setData({
@@ -355,10 +520,17 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
               theme: 'error',
               primaryAction: 'retry',
               primaryActionText: '重试'
-            })
+            }),
+            waitProgressText: '',
+            waitElapsedSeconds: 0,
+            waitRemainingSeconds: 0,
+            waitUntilTerminal: true,
+            waitTimerVisible: false
           })
         } finally {
-          this.setData({ syncing: false })
+          if (!this._shouldStopBaofuLongWait(sessionId)) {
+            this.setData({ syncing: false })
+          }
         }
       },
 
@@ -366,6 +538,7 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
 
       onLoad() {
         const { navBarHeight } = getStableBarHeights()
+        this.data._pageActive = true
         this.setData({ navBarHeight })
         if (config.accessGuard) {
           void this._bootstrapPage()
@@ -379,6 +552,7 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
       },
 
       onShow() {
+        this.data._pageActive = true
         if (!this._hasAccess() || !this.data.accountLoaded || this.data.initialLoading || this.data.syncing) {
           return
         }
@@ -386,6 +560,18 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
         if (config.supportPaymentRecovery) {
           void this._recoverPendingOnboarding()
         }
+      },
+
+      onHide() {
+        this.data._pageActive = false
+        this._cancelBaofuLongWaitSession()
+        this.setData({ syncing: false })
+      },
+
+      onUnload() {
+        this.data._pageActive = false
+        this._cancelBaofuLongWaitSession()
+        this.setData({ syncing: false })
       },
 
       onPullDownRefresh() {
@@ -431,51 +617,7 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
           return
         }
 
-        this.setData({
-          syncing: true,
-          refreshErrorMessage: '',
-          waitVisible: true,
-          ...buildBaofuOnboardingWaitViewFromText({
-            state: 'opening_processing',
-            title: '开户状态同步中',
-            description: '正在向后端确认最新开户状态。',
-            theme: 'warning',
-            primaryAction: 'refresh_status',
-            primaryActionText: ''
-          }),
-          waitProgressText: ''
-        })
-        try {
-          const result = await pollBaofuSettlementAccountStatus({
-            role: config.role,
-            context: this as unknown as WechatMiniprogram.Page.TrivialInstance,
-            maxAttempts: 1,
-            loadingMessage: '正在刷新开户状态...',
-            silentToast: true,
-            onProgress: (progress) => {
-              this.setData({ waitProgressText: formatBaofuOnboardingPollProgress(progress) })
-            }
-          })
-          await this._applyWorkflowResult(result)
-        } catch (error: unknown) {
-          logger.error(`Refresh baofu settlement status failed action=refresh_status role=${config.role}`, error, config.logTag)
-          const message = getErrorUserMessage(error, config.refreshErrorFallback)
-          this.setData({
-            refreshErrorMessage: message,
-            waitVisible: true,
-            ...buildBaofuOnboardingWaitViewFromText({
-              state: 'error',
-              title: '状态刷新失败',
-              description: message,
-              theme: 'error',
-              primaryAction: 'retry',
-              primaryActionText: '重试'
-            }),
-            waitProgressText: ''
-          })
-        } finally {
-          this.setData({ syncing: false })
-        }
+        await this._startLongWaitForProcessing()
       },
 
       onWaitPrimary() {
@@ -489,7 +631,15 @@ export function baofuSettlementStatusBehavior(config: BaofuSettlementStatusConfi
             break
           case 'dismiss':
           default:
-            this.setData({ waitVisible: false, waitProgressText: '' })
+            this._cancelBaofuLongWaitSession()
+            this.setData({
+              waitVisible: false,
+              waitProgressText: '',
+              waitElapsedSeconds: 0,
+              waitRemainingSeconds: 0,
+              waitUntilTerminal: true,
+              waitTimerVisible: false
+            })
             break
         }
       }

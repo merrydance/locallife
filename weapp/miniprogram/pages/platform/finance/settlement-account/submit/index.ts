@@ -133,6 +133,9 @@ Page({
       submitting: true,
       formErrorMessage: '',
       waitVisible: true,
+      waitElapsedSeconds: 0,
+      waitRemainingSeconds: 0,
+      waitTimerVisible: true,
       ...buildBaofuOnboardingWaitViewFromText({
         state: 'submitting',
         title: '开户资料提交中',
@@ -143,6 +146,8 @@ Page({
       })
     })
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const waitSessionId = (this as any)._beginBaofuLongWaitSession()
     try {
       const result = await startBaofuAccountOnboarding(
         buildBaofuEnterpriseProfilePayload(
@@ -156,12 +161,22 @@ Page({
           loadingMessage: '正在提交开户资料...',
           silentToast: true,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          onProgress: (progress) => (this as any)._handleBaofuOnboardingProgress(progress)
+          shouldStop: () => (this as any)._shouldStopBaofuLongWait(waitSessionId),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          onProgress: (progress) => (this as any)._handleBaofuOnboardingProgress(progress, waitSessionId)
         }
       )
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ;(this as any)._applyWorkflowResult(result)
+      if ((this as any)._shouldStopBaofuLongWait(waitSessionId)) {
+        return
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      void (this as any)._applyWorkflowResult(result)
     } catch (error: unknown) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((this as any)._shouldStopBaofuLongWait(waitSessionId)) {
+        return
+      }
       logger.error('Submit platform baofu settlement profile failed action=submit_profile role=platform', error, 'platform-baofu-settlement-submit')
       const message = getErrorUserMessage(error, '平台宝付开户资料提交失败，请稍后重试')
       this.setData({
