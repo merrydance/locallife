@@ -30,6 +30,10 @@ import {
   DEFAULT_MERCHANT_OCR_DISPLAY_STATE,
   DEFAULT_MERCHANT_UPLOAD_FEEDBACK,
   buildMapLocationLabel,
+  buildMerchantBusinessLicenseOcrRecognizedPatch,
+  buildMerchantFoodPermitOcrRecognizedPatch,
+  buildMerchantIdCardBackOcrRecognizedPatch,
+  buildMerchantIdCardFrontOcrRecognizedPatch,
   buildMerchantInitialDraftFormPatch,
   buildMerchantInitialDraftOcrResults,
   buildMerchantLatestOcrFormPatch,
@@ -789,16 +793,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
       logger.info('[MerchantRegister] 营业执照上传成功', result, 'onLicenseUpload')
       this.handleDocumentOCRSubmission('business_license_ocr', result, (ocr: OCRResult) => {
         if (ocr) {
-          this.setData({
-            'formData.licenseName': ocr.enterprise_name || '',
-            'formData.creditCode': ocr.reg_num || ocr.credit_code || '',
-            'formData.registerAddress': ocr.address || '',
-            'formData.address': ocr.address || this.data.formData.address || '',
-            'formData.legalPerson': ocr.legal_representative || '',
-            'formData.licenseValidity': ocr.valid_period || '',
-            'formData.businessScope': ocr.business_scope || '',
-            'ocrResults.license': ocr
-          })
+          this.setData(buildMerchantBusinessLicenseOcrRecognizedPatch(ocr, this.data.formData.address))
           this.saveDraft()
         }
       })
@@ -833,9 +828,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
       logger.info('[MerchantRegister] 食品许可证上传成功', result, 'onFoodLicenseUpload')
       this.handleDocumentOCRSubmission('food_permit_ocr', result, (ocr: OCRResult) => {
         if (ocr) {
-          this.setData({
-            'formData.foodLicenseValidity': ocr.valid_to || ''
-          })
+          this.setData(buildMerchantFoodPermitOcrRecognizedPatch(ocr))
           this.saveDraft()
         }
       })
@@ -870,13 +863,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
       logger.info('[MerchantRegister] 身份证正面上传成功', result, 'onIdCardFrontUpload')
       this.handleDocumentOCRSubmission('id_card_front_ocr', result, (ocr: OCRResult) => {
         if (ocr) {
-          this.setData({
-            'formData.legalPerson': ocr.name || '',
-            'formData.idCard': ocr.id_number || '',
-            'formData.gender': ocr.gender || '',
-            'formData.hometown': ocr.address || '',
-            'ocrResults.idCard': ocr
-          })
+          this.setData(buildMerchantIdCardFrontOcrRecognizedPatch(ocr))
           this.saveDraft()
         }
       })
@@ -911,9 +898,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
       logger.info('[MerchantRegister] 身份证反面上传成功', result, 'onIdCardBackUpload')
       this.handleDocumentOCRSubmission('id_card_back_ocr', result, (ocr: OCRResult) => {
         if (ocr) {
-          this.setData({
-            'formData.idCardValidity': ocr.valid_date || ''
-          })
+          this.setData(buildMerchantIdCardBackOcrRecognizedPatch(ocr))
           this.saveDraft()
         }
       })

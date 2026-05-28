@@ -398,6 +398,53 @@ assert.deepStrictEqual(plain(owner.buildMerchantInitialDraftOcrResults({})), {
   idCard: null
 })
 
+const recognizedLicenseOcr = {
+  enterprise_name: '本地生活餐饮店',
+  reg_num: '',
+  credit_code: '91310000MA1LOCAL1X',
+  address: '上海市徐汇区',
+  legal_representative: '张三',
+  valid_period: '2026-01-01 至 2036-01-01',
+  business_scope: '热食类食品制售'
+}
+assert.deepStrictEqual(plain(owner.buildMerchantBusinessLicenseOcrRecognizedPatch(recognizedLicenseOcr, '保留地址')), {
+  'formData.licenseName': '本地生活餐饮店',
+  'formData.creditCode': '91310000MA1LOCAL1X',
+  'formData.registerAddress': '上海市徐汇区',
+  'formData.address': '上海市徐汇区',
+  'formData.legalPerson': '张三',
+  'formData.licenseValidity': '2026-01-01 至 2036-01-01',
+  'formData.businessScope': '热食类食品制售',
+  'ocrResults.license': recognizedLicenseOcr
+})
+assert.strictEqual(
+  owner.buildMerchantBusinessLicenseOcrRecognizedPatch({ address: '' }, '保留地址')['formData.address'],
+  '保留地址'
+)
+assert.deepStrictEqual(plain(owner.buildMerchantFoodPermitOcrRecognizedPatch({
+  valid_to: '2030-01-01'
+})), {
+  'formData.foodLicenseValidity': '2030-01-01'
+})
+const recognizedIdCardFrontOcr = {
+  name: '李四',
+  id_number: '310106199001010011',
+  gender: '男',
+  address: '上海市静安区'
+}
+assert.deepStrictEqual(plain(owner.buildMerchantIdCardFrontOcrRecognizedPatch(recognizedIdCardFrontOcr)), {
+  'formData.legalPerson': '李四',
+  'formData.idCard': '310106199001010011',
+  'formData.gender': '男',
+  'formData.hometown': '上海市静安区',
+  'ocrResults.idCard': recognizedIdCardFrontOcr
+})
+assert.deepStrictEqual(plain(owner.buildMerchantIdCardBackOcrRecognizedPatch({
+  valid_date: '2026.01.01-2036.01.01'
+})), {
+  'formData.idCardValidity': '2026.01.01-2036.01.01'
+})
+
 const storefrontImage = { url: 'local://storefront.jpg', rawUrl: 'raw/storefront.jpg' }
 const environmentImage = { url: 'local://environment.jpg', rawUrl: 'raw/environment.jpg' }
 assert.deepStrictEqual(plain(owner.buildMerchantShopImagesPatch({
@@ -464,7 +511,11 @@ const forbiddenRuntimePatterns = [
   'licenseName: safeStr(data.business_license_ocr',
   'const ocrResults = {',
   "kind === 'storefront' ? 'storefrontImages' : 'environmentImages'",
-  'storefront_images: kind ==='
+  'storefront_images: kind ===',
+  "'formData.licenseName': ocr.enterprise_name",
+  "'formData.foodLicenseValidity': ocr.valid_to",
+  "'formData.legalPerson': ocr.name",
+  "'formData.idCardValidity': ocr.valid_date"
 ]
 
 for (const pattern of forbiddenRuntimePatterns) {
