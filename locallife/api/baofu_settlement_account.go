@@ -226,6 +226,7 @@ func merchantBaofuSettlementAccountScope(ctx *gin.Context) (baofuSettlementAccou
 	return baofuSettlementAccountScope{
 		OwnerType:   db.BaofuAccountOwnerTypeMerchant,
 		OwnerID:     merchant.ID,
+		OwnerUserID: merchant.OwnerUserID,
 		AccountType: db.BaofuAccountTypeBusiness,
 		Audience:    "merchant",
 	}, true

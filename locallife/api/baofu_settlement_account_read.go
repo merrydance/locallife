@@ -149,6 +149,9 @@ func shouldMergeBaofuSettlementAccountProfileDefaults(scope baofuSettlementAccou
 	if profile == nil {
 		return false
 	}
+	if strings.TrimSpace(scope.OwnerType) == db.BaofuAccountOwnerTypeMerchant {
+		return true
+	}
 	return len(logic.BaofuAccountOpeningInputMissingFields(scope.OwnerType, *profile)) > 0
 }
 

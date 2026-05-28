@@ -16,6 +16,11 @@ const (
 	MerchantStatusBindbankSubmitted = "bindbank_submitted"
 	MerchantStatusSuspended         = "suspended"
 
+	MerchantApplicationStatusDraft     = "draft"
+	MerchantApplicationStatusSubmitted = "submitted"
+	MerchantApplicationStatusApproved  = "approved"
+	MerchantApplicationStatusRejected  = "rejected"
+
 	MerchantPaymentConfigStatusActive               = "active"
 	MerchantPaymentConfigStatusPendingAuthorization = "pending_authorization"
 

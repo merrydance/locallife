@@ -25,6 +25,51 @@ func (defaults *baofuSettlementAccountProfileDefaultsWithSecrets) mergeFrom(sour
 	defaults.mergeDefaultFlags(source)
 }
 
+func (defaults *baofuSettlementAccountProfileDefaultsWithSecrets) overrideMerchantIdentityFrom(source baofuSettlementAccountProfileDefaultsWithSecrets) {
+	if defaults == nil || source.isZero() {
+		return
+	}
+	if strings.TrimSpace(source.defaults.Source) != "" {
+		defaults.defaults.Source = source.defaults.Source
+	}
+	if strings.TrimSpace(source.defaults.LegalName) != "" {
+		defaults.defaults.LegalName = source.defaults.LegalName
+	}
+	if strings.TrimSpace(source.defaults.BusinessLicenseNumber) != "" {
+		defaults.defaults.BusinessLicenseNumber = source.defaults.BusinessLicenseNumber
+	}
+	if strings.TrimSpace(source.defaults.LegalPersonName) != "" {
+		defaults.defaults.LegalPersonName = source.defaults.LegalPersonName
+	}
+	if strings.TrimSpace(source.defaults.CardUserName) != "" {
+		defaults.defaults.CardUserName = source.defaults.CardUserName
+	}
+	if strings.TrimSpace(source.defaults.LegalPersonIDNumberMask) != "" {
+		defaults.defaults.LegalPersonIDNumberMask = source.defaults.LegalPersonIDNumberMask
+	}
+	if strings.TrimSpace(source.legalName) != "" {
+		defaults.legalName = source.legalName
+	}
+	if strings.TrimSpace(source.businessLicenseNumber) != "" {
+		defaults.businessLicenseNumber = source.businessLicenseNumber
+	}
+	if strings.TrimSpace(source.legalPersonName) != "" {
+		defaults.legalPersonName = source.legalPersonName
+	}
+	if strings.TrimSpace(source.legalPersonIDNumber) != "" {
+		defaults.legalPersonIDNumber = source.legalPersonIDNumber
+	}
+	if strings.TrimSpace(source.cardUserName) != "" {
+		defaults.cardUserName = source.cardUserName
+	}
+	if source.defaults.HasLegalPersonIDNumber {
+		defaults.defaults.HasLegalPersonIDNumber = true
+	}
+	if source.defaults.HasSavedSensitiveDefaults {
+		defaults.defaults.HasSavedSensitiveDefaults = true
+	}
+}
+
 func (defaults *baofuSettlementAccountProfileDefaultsWithSecrets) mergeResponseDefaults(source baofuSettlementAccountProfileDefaultsWithSecrets) {
 	if strings.TrimSpace(defaults.defaults.Source) == "" {
 		defaults.defaults.Source = source.defaults.Source
@@ -224,6 +269,27 @@ func (defaults baofuSettlementAccountProfileDefaultsWithSecrets) mergeIntoOpenin
 	}
 	if strings.TrimSpace(input.ContactMobile) == "" {
 		input.ContactMobile = defaults.contactMobile
+	}
+}
+
+func (defaults baofuSettlementAccountProfileDefaultsWithSecrets) overrideMerchantIdentityIntoOpeningProfileInput(input *logic.BaofuAccountOpeningProfileInput) {
+	if input == nil {
+		return
+	}
+	if strings.TrimSpace(defaults.legalName) != "" {
+		input.LegalName = defaults.legalName
+	}
+	if strings.TrimSpace(defaults.businessLicenseNumber) != "" {
+		input.BusinessLicenseNo = defaults.businessLicenseNumber
+	}
+	if strings.TrimSpace(defaults.legalPersonName) != "" {
+		input.LegalPersonName = defaults.legalPersonName
+	}
+	if strings.TrimSpace(defaults.legalPersonIDNumber) != "" {
+		input.LegalPersonIDNumber = defaults.legalPersonIDNumber
+	}
+	if strings.TrimSpace(defaults.cardUserName) != "" {
+		input.CardUserName = defaults.cardUserName
 	}
 }
 
