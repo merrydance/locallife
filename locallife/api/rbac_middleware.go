@@ -176,6 +176,14 @@ func (server *Server) MerchantOwnerOnlyMiddleware() gin.HandlerFunc {
 // 验证用户是商户老板或员工，检查细分角色权限，加载商户信息到 context
 // allowedRoles: 允许的细分角色列表（owner, manager, chef, cashier）
 func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.HandlerFunc {
+	return server.MerchantStaffMiddlewareWithError(
+		errors.New("insufficient permissions for this operation"),
+		"merchant_staff_permission_denied",
+		allowedRoles...,
+	)
+}
+
+func (server *Server) MerchantStaffMiddlewareWithError(publicErr error, denialReason string, allowedRoles ...string) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
@@ -186,9 +194,7 @@ func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.Handle
 				return
 			}
 			if isNotFoundError(err) {
-				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
-					errors.New("you are not associated with any merchant"),
-				))
+				server.writeMerchantStaffRejection(ctx, authPayload.UserID, merchant, staffRole, allowedRoles, "merchant_association_missing", ErrMerchantAssociationRequired)
 				return
 			}
 			ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -197,28 +203,12 @@ func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.Handle
 
 		// 检查商户状态
 		if merchant.Status != "active" && merchant.Status != "approved" {
-			ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
-				errors.New("merchant account is not active"),
-			))
+			server.writeMerchantStaffRejection(ctx, authPayload.UserID, merchant, staffRole, allowedRoles, "merchant_account_inactive", ErrMerchantAccountInactive)
 			return
 		}
 
 		if merchant.RegionID == 0 {
-			server.writeAuditLog(ctx, AuditLogInput{
-				ActorUserID: authPayload.UserID,
-				ActorRole:   "merchant",
-				Action:      "region_access_denied",
-				TargetType:  "region",
-				RegionID:    nil,
-				Metadata: map[string]any{
-					"reason": "merchant_region_unset",
-					"path":   ctx.Request.URL.Path,
-					"method": ctx.Request.Method,
-				},
-			})
-			ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
-				errors.New("merchant region is not set"),
-			))
+			server.writeMerchantStaffRejection(ctx, authPayload.UserID, merchant, staffRole, allowedRoles, "merchant_region_unset", ErrMerchantRegionUnset)
 			return
 		}
 
@@ -232,9 +222,21 @@ func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.Handle
 		}
 
 		if !hasPermission {
-			ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
-				errors.New("insufficient permissions for this operation"),
-			))
+			server.logSecurityRejection(ctx, securityRejectionInput{
+				ActorUserID: authPayload.UserID,
+				ActorRole:   "merchant",
+				Action:      "merchant_staff_access_denied",
+				TargetType:  "merchant",
+				TargetID:    merchant.ID,
+				MerchantID:  merchant.ID,
+				Reason:      denialReason,
+				Audit:       true,
+				Metadata: map[string]any{
+					"staff_role":    staffRole,
+					"allowed_roles": allowedRoles,
+				},
+			})
+			ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(publicErr))
 			return
 		}
 
@@ -243,6 +245,24 @@ func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.Handle
 		ctx.Set(merchantStaffRoleKey, staffRole)
 		ctx.Next()
 	}
+}
+
+func (server *Server) writeMerchantStaffRejection(ctx *gin.Context, userID int64, merchant db.Merchant, staffRole string, allowedRoles []string, reason string, publicErr error) {
+	server.logSecurityRejection(ctx, securityRejectionInput{
+		ActorUserID: userID,
+		ActorRole:   "merchant",
+		Action:      "merchant_staff_access_denied",
+		TargetType:  "merchant",
+		TargetID:    merchant.ID,
+		MerchantID:  merchant.ID,
+		Reason:      reason,
+		Audit:       true,
+		Metadata: map[string]any{
+			"staff_role":    staffRole,
+			"allowed_roles": allowedRoles,
+		},
+	})
+	ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(publicErr))
 }
 
 func (server *Server) resolveMerchantStaffIdentity(ctx *gin.Context, userID int64) (db.Merchant, string, error) {
@@ -261,7 +281,7 @@ func (server *Server) resolveMerchantStaffIdentity(ctx *gin.Context, userID int6
 	})
 	if err != nil {
 		if isNotFoundError(err) {
-			return db.Merchant{}, "", errors.New("you are not a staff of this merchant")
+			return merchant, "", err
 		}
 		return db.Merchant{}, "", err
 	}

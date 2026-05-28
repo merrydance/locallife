@@ -53,9 +53,11 @@ type Querier interface {
 	ApproveOperatorApplication(ctx context.Context, arg ApproveOperatorApplicationParams) (OperatorApplication, error)
 	// 审批通过区域扩展申请
 	ApproveOperatorRegionApplication(ctx context.Context, id int64) (OperatorRegionApplication, error)
+	ApprovePendingGroupJoinRequest(ctx context.Context, arg ApprovePendingGroupJoinRequestParams) (MerchantGroupJoinRequest, error)
 	// 审核通过骑手申请
 	ApproveRiderApplication(ctx context.Context, arg ApproveRiderApplicationParams) (RiderApplication, error)
 	AssignDelivery(ctx context.Context, arg AssignDeliveryParams) (Delivery, error)
+	AttachMerchantToGroupIfUnassigned(ctx context.Context, arg AttachMerchantToGroupIfUnassignedParams) (int64, error)
 	// 自动打烊（用于定时任务）
 	AutoCloseMerchants(ctx context.Context) ([]int64, error)
 	// 系统自动完成（外卖）：1h 未手动完成且无索赔时触发，记录 auto_user_delivered_at
@@ -757,7 +759,9 @@ type Querier interface {
 	GetFraudPatternsByDevice(ctx context.Context, arg GetFraudPatternsByDeviceParams) ([]FraudPattern, error)
 	GetFraudPatternsByUsers(ctx context.Context, dollar_1 []int64) ([]FraudPattern, error)
 	GetGroupApplication(ctx context.Context, id int64) (MerchantGroupApplication, error)
+	GetGroupApplicationForUpdate(ctx context.Context, id int64) (MerchantGroupApplication, error)
 	GetGroupJoinRequest(ctx context.Context, id int64) (MerchantGroupJoinRequest, error)
+	GetGroupJoinRequestForUpdate(ctx context.Context, id int64) (MerchantGroupJoinRequest, error)
 	GetGroupMemberRole(ctx context.Context, arg GetGroupMemberRoleParams) (string, error)
 	GetGroupPolicies(ctx context.Context, groupID int64) (GroupPolicy, error)
 	// 订单时段分布
@@ -829,6 +833,7 @@ type Querier interface {
 	GetMerchantFinanceOverview(ctx context.Context, arg GetMerchantFinanceOverviewParams) (GetMerchantFinanceOverviewRow, error)
 	GetMerchantGroup(ctx context.Context, id int64) (MerchantGroup, error)
 	GetMerchantGroupAffiliation(ctx context.Context, id int64) (GetMerchantGroupAffiliationRow, error)
+	GetMerchantGroupAffiliationForUpdate(ctx context.Context, id int64) (GetMerchantGroupAffiliationForUpdateRow, error)
 	// 商户增长统计
 	GetMerchantGrowthStats(ctx context.Context, arg GetMerchantGrowthStatsParams) ([]GetMerchantGrowthStatsRow, error)
 	// 商户时段分析: 按小时统计订单分布
@@ -1597,6 +1602,7 @@ type Querier interface {
 	RejectOperatorApplication(ctx context.Context, arg RejectOperatorApplicationParams) (OperatorApplication, error)
 	// 审批拒绝区域扩展申请
 	RejectOperatorRegionApplication(ctx context.Context, arg RejectOperatorRegionApplicationParams) (OperatorRegionApplication, error)
+	RejectPendingGroupJoinRequest(ctx context.Context, arg RejectPendingGroupJoinRequestParams) (MerchantGroupJoinRequest, error)
 	ReleaseMerchantTakeoutSuspensionIfOwned(ctx context.Context, arg ReleaseMerchantTakeoutSuspensionIfOwnedParams) (int64, error)
 	ReleaseReservedInventory(ctx context.Context, arg ReleaseReservedInventoryParams) (DailyInventory, error)
 	ReleaseRiderSuspensionIfOwned(ctx context.Context, arg ReleaseRiderSuspensionIfOwnedParams) (int64, error)
@@ -1642,6 +1648,7 @@ type Querier interface {
 	ReviewGroupApplication(ctx context.Context, arg ReviewGroupApplicationParams) (MerchantGroupApplication, error)
 	// 审核追偿争议
 	ReviewRecoveryDispute(ctx context.Context, arg ReviewRecoveryDisputeParams) (RecoveryDispute, error)
+	ReviewSubmittedGroupApplication(ctx context.Context, arg ReviewSubmittedGroupApplicationParams) (MerchantGroupApplication, error)
 	RevokeSession(ctx context.Context, id int64) (Session, error)
 	RevokeUserSessions(ctx context.Context, userID int64) error
 	// 全局套餐搜索，只返回套餐ID（用于推荐接口的关键词过滤）

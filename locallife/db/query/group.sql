@@ -16,6 +16,11 @@ LIMIT 1;
 SELECT id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id FROM merchant_group_applications
 WHERE id = $1;
 
+-- name: GetGroupApplicationForUpdate :one
+SELECT id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id FROM merchant_group_applications
+WHERE id = $1
+FOR UPDATE;
+
 -- name: UpdateGroupApplicationBasic :one
 UPDATE merchant_group_applications
 SET group_name = COALESCE($2, group_name),
@@ -92,6 +97,17 @@ SET status = $2,
 WHERE id = $1
 RETURNING *;
 
+-- name: ReviewSubmittedGroupApplication :one
+UPDATE merchant_group_applications
+SET status = $2,
+    reject_reason = $3,
+    reviewed_by = $4,
+    reviewed_at = $5,
+    updated_at = now()
+WHERE id = $1
+  AND status = 'submitted'
+RETURNING *;
+
 -- Groups
 -- name: CreateMerchantGroup :one
 INSERT INTO merchant_groups (
@@ -160,6 +176,11 @@ INSERT INTO merchant_group_join_requests (
 -- name: GetGroupJoinRequest :one
 SELECT id, group_id, merchant_id, applicant_user_id, status, reason, reviewed_by, reviewed_at, created_at FROM merchant_group_join_requests WHERE id = $1;
 
+-- name: GetGroupJoinRequestForUpdate :one
+SELECT id, group_id, merchant_id, applicant_user_id, status, reason, reviewed_by, reviewed_at, created_at FROM merchant_group_join_requests
+WHERE id = $1
+FOR UPDATE;
+
 -- name: ListGroupJoinRequestsByGroup :many
 SELECT id, group_id, merchant_id, applicant_user_id, status, reason, reviewed_by, reviewed_at, created_at FROM merchant_group_join_requests
 WHERE group_id = $1
@@ -173,6 +194,24 @@ SET status = $2,
 WHERE id = $1
 RETURNING *;
 
+-- name: ApprovePendingGroupJoinRequest :one
+UPDATE merchant_group_join_requests
+SET status = 'approved',
+    reviewed_by = $2,
+    reviewed_at = $3
+WHERE id = $1
+  AND status = 'pending'
+RETURNING *;
+
+-- name: RejectPendingGroupJoinRequest :one
+UPDATE merchant_group_join_requests
+SET status = 'rejected',
+    reviewed_by = $2,
+    reviewed_at = $3
+WHERE id = $1
+  AND status = 'pending'
+RETURNING *;
+
 -- Merchant affiliation
 -- name: UpdateMerchantGroupAffiliation :exec
 UPDATE merchants
@@ -182,6 +221,17 @@ WHERE id = $1
 
 -- name: GetMerchantGroupAffiliation :one
 SELECT group_id, brand_id FROM merchants WHERE id = $1;
+
+-- name: GetMerchantGroupAffiliationForUpdate :one
+SELECT group_id, brand_id FROM merchants
+WHERE id = $1
+FOR UPDATE;
+
+-- name: AttachMerchantToGroupIfUnassigned :execrows
+UPDATE merchants
+SET group_id = $2, brand_id = $3, updated_at = now()
+WHERE id = $1
+  AND group_id IS NULL;
 
 -- Group policies
 -- name: UpsertGroupPolicies :one

@@ -611,6 +611,8 @@ func (server *Server) reviewGroupApplication(ctx *gin.Context) {
 		return
 	}
 
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
 	app, err := server.store.GetGroupApplication(ctx, id)
 	if err != nil {
 		if isNotFoundError(err) {
@@ -622,11 +624,21 @@ func (server *Server) reviewGroupApplication(ctx *gin.Context) {
 	}
 
 	if app.Status != "submitted" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only submitted applications can be reviewed")))
+		server.logSecurityRejection(ctx, securityRejectionInput{
+			ActorUserID: authPayload.UserID,
+			ActorRole:   "admin",
+			Action:      "group_application_review_conflict",
+			TargetType:  "group_application",
+			TargetID:    app.ID,
+			Reason:      "application_status_not_submitted",
+			Audit:       true,
+			Metadata: map[string]any{
+				"current_status": app.Status,
+			},
+		})
+		ctx.JSON(http.StatusConflict, errorResponse(ErrGroupApplicationReviewConflict))
 		return
 	}
-
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	switch req.Status {
 	case "approved":
@@ -635,6 +647,22 @@ func (server *Server) reviewGroupApplication(ctx *gin.Context) {
 			ReviewerUserID: authPayload.UserID,
 		})
 		if err != nil {
+			if errors.Is(err, db.ErrGroupApplicationReviewConflict) {
+				server.logSecurityRejection(ctx, securityRejectionInput{
+					ActorUserID: authPayload.UserID,
+					ActorRole:   "admin",
+					Action:      "group_application_review_conflict",
+					TargetType:  "group_application",
+					TargetID:    app.ID,
+					Reason:      "approve_conflict",
+					Audit:       true,
+					Metadata: map[string]any{
+						"requested_status": "approved",
+					},
+				})
+				ctx.JSON(http.StatusConflict, errorResponse(ErrGroupApplicationReviewConflict))
+				return
+			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
@@ -653,7 +681,7 @@ func (server *Server) reviewGroupApplication(ctx *gin.Context) {
 			return
 		}
 		reviewedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
-		updated, err := server.store.ReviewGroupApplication(ctx, db.ReviewGroupApplicationParams{
+		updated, err := server.store.ReviewSubmittedGroupApplication(ctx, db.ReviewSubmittedGroupApplicationParams{
 			ID:           app.ID,
 			Status:       "rejected",
 			RejectReason: toPgText(req.RejectReason),
@@ -661,6 +689,22 @@ func (server *Server) reviewGroupApplication(ctx *gin.Context) {
 			ReviewedAt:   reviewedAt,
 		})
 		if err != nil {
+			if isNotFoundError(err) {
+				server.logSecurityRejection(ctx, securityRejectionInput{
+					ActorUserID: authPayload.UserID,
+					ActorRole:   "admin",
+					Action:      "group_application_review_conflict",
+					TargetType:  "group_application",
+					TargetID:    app.ID,
+					Reason:      "reject_conflict",
+					Audit:       true,
+					Metadata: map[string]any{
+						"requested_status": "rejected",
+					},
+				})
+				ctx.JSON(http.StatusConflict, errorResponse(ErrGroupApplicationReviewConflict))
+				return
+			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
@@ -1304,6 +1348,34 @@ func (server *Server) approveGroupJoinRequest(ctx *gin.Context) {
 		BrandID:        brandID,
 	})
 	if err != nil {
+		if errors.Is(err, db.ErrGroupJoinRequestReviewConflict) {
+			server.logSecurityRejection(ctx, securityRejectionInput{
+				ActorUserID: authPayload.UserID,
+				ActorRole:   "group",
+				Action:      "group_join_request_review_conflict",
+				TargetType:  "group_join_request",
+				TargetID:    requestID,
+				GroupID:     groupID,
+				Reason:      "approve_conflict",
+				Audit:       true,
+			})
+			ctx.JSON(http.StatusConflict, errorResponse(ErrGroupJoinRequestReviewConflict))
+			return
+		}
+		if errors.Is(err, db.ErrMerchantAlreadyJoinedGroup) {
+			server.logSecurityRejection(ctx, securityRejectionInput{
+				ActorUserID: authPayload.UserID,
+				ActorRole:   "group",
+				Action:      "merchant_group_affiliation_conflict",
+				TargetType:  "group_join_request",
+				TargetID:    requestID,
+				GroupID:     groupID,
+				Reason:      "merchant_already_joined_group",
+				Audit:       true,
+			})
+			ctx.JSON(http.StatusConflict, errorResponse(ErrMerchantAlreadyJoinedGroup))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -1368,19 +1440,46 @@ func (server *Server) rejectGroupJoinRequest(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("request does not belong to group")))
 		return
 	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	if joinReq.Status != "pending" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only pending requests can be rejected")))
+		server.logSecurityRejection(ctx, securityRejectionInput{
+			ActorUserID: authPayload.UserID,
+			ActorRole:   "group",
+			Action:      "group_join_request_review_conflict",
+			TargetType:  "group_join_request",
+			TargetID:    joinReq.ID,
+			GroupID:     groupID,
+			Reason:      "join_request_status_not_pending",
+			Audit:       true,
+			Metadata: map[string]any{
+				"current_status": joinReq.Status,
+			},
+		})
+		ctx.JSON(http.StatusConflict, errorResponse(ErrGroupJoinRequestReviewConflict))
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	updated, err := server.store.UpdateGroupJoinRequestStatus(ctx, db.UpdateGroupJoinRequestStatusParams{
+	updated, err := server.store.RejectPendingGroupJoinRequest(ctx, db.RejectPendingGroupJoinRequestParams{
 		ID:         joinReq.ID,
-		Status:     "rejected",
 		ReviewedBy: pgtype.Int8{Int64: authPayload.UserID, Valid: true},
 		ReviewedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	})
 	if err != nil {
+		if isNotFoundError(err) {
+			server.logSecurityRejection(ctx, securityRejectionInput{
+				ActorUserID: authPayload.UserID,
+				ActorRole:   "group",
+				Action:      "group_join_request_review_conflict",
+				TargetType:  "group_join_request",
+				TargetID:    joinReq.ID,
+				GroupID:     groupID,
+				Reason:      "reject_conflict",
+				Audit:       true,
+			})
+			ctx.JSON(http.StatusConflict, errorResponse(ErrGroupJoinRequestReviewConflict))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}

@@ -11,6 +11,60 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const approvePendingGroupJoinRequest = `-- name: ApprovePendingGroupJoinRequest :one
+UPDATE merchant_group_join_requests
+SET status = 'approved',
+    reviewed_by = $2,
+    reviewed_at = $3
+WHERE id = $1
+  AND status = 'pending'
+RETURNING id, group_id, merchant_id, applicant_user_id, status, reason, reviewed_by, reviewed_at, created_at
+`
+
+type ApprovePendingGroupJoinRequestParams struct {
+	ID         int64              `json:"id"`
+	ReviewedBy pgtype.Int8        `json:"reviewed_by"`
+	ReviewedAt pgtype.Timestamptz `json:"reviewed_at"`
+}
+
+func (q *Queries) ApprovePendingGroupJoinRequest(ctx context.Context, arg ApprovePendingGroupJoinRequestParams) (MerchantGroupJoinRequest, error) {
+	row := q.db.QueryRow(ctx, approvePendingGroupJoinRequest, arg.ID, arg.ReviewedBy, arg.ReviewedAt)
+	var i MerchantGroupJoinRequest
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.MerchantID,
+		&i.ApplicantUserID,
+		&i.Status,
+		&i.Reason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const attachMerchantToGroupIfUnassigned = `-- name: AttachMerchantToGroupIfUnassigned :execrows
+UPDATE merchants
+SET group_id = $2, brand_id = $3, updated_at = now()
+WHERE id = $1
+  AND group_id IS NULL
+`
+
+type AttachMerchantToGroupIfUnassignedParams struct {
+	ID      int64       `json:"id"`
+	GroupID pgtype.Int8 `json:"group_id"`
+	BrandID pgtype.Int8 `json:"brand_id"`
+}
+
+func (q *Queries) AttachMerchantToGroupIfUnassigned(ctx context.Context, arg AttachMerchantToGroupIfUnassignedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, attachMerchantToGroupIfUnassigned, arg.ID, arg.GroupID, arg.BrandID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const clearGroupApplicationBusinessLicense = `-- name: ClearGroupApplicationBusinessLicense :one
 UPDATE merchant_group_applications
 SET license_media_asset_id = NULL,
@@ -438,12 +492,64 @@ func (q *Queries) GetGroupApplication(ctx context.Context, id int64) (MerchantGr
 	return i, err
 }
 
+const getGroupApplicationForUpdate = `-- name: GetGroupApplicationForUpdate :one
+SELECT id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id FROM merchant_group_applications
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) GetGroupApplicationForUpdate(ctx context.Context, id int64) (MerchantGroupApplication, error) {
+	row := q.db.QueryRow(ctx, getGroupApplicationForUpdate, id)
+	var i MerchantGroupApplication
+	err := row.Scan(
+		&i.ID,
+		&i.ApplicantUserID,
+		&i.GroupName,
+		&i.ContactPhone,
+		&i.LicenseNumber,
+		&i.Address,
+		&i.RegionID,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.ApplicationData,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LicenseMediaAssetID,
+	)
+	return i, err
+}
+
 const getGroupJoinRequest = `-- name: GetGroupJoinRequest :one
 SELECT id, group_id, merchant_id, applicant_user_id, status, reason, reviewed_by, reviewed_at, created_at FROM merchant_group_join_requests WHERE id = $1
 `
 
 func (q *Queries) GetGroupJoinRequest(ctx context.Context, id int64) (MerchantGroupJoinRequest, error) {
 	row := q.db.QueryRow(ctx, getGroupJoinRequest, id)
+	var i MerchantGroupJoinRequest
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.MerchantID,
+		&i.ApplicantUserID,
+		&i.Status,
+		&i.Reason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getGroupJoinRequestForUpdate = `-- name: GetGroupJoinRequestForUpdate :one
+SELECT id, group_id, merchant_id, applicant_user_id, status, reason, reviewed_by, reviewed_at, created_at FROM merchant_group_join_requests
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) GetGroupJoinRequestForUpdate(ctx context.Context, id int64) (MerchantGroupJoinRequest, error) {
+	row := q.db.QueryRow(ctx, getGroupJoinRequestForUpdate, id)
 	var i MerchantGroupJoinRequest
 	err := row.Scan(
 		&i.ID,
@@ -580,6 +686,24 @@ type GetMerchantGroupAffiliationRow struct {
 func (q *Queries) GetMerchantGroupAffiliation(ctx context.Context, id int64) (GetMerchantGroupAffiliationRow, error) {
 	row := q.db.QueryRow(ctx, getMerchantGroupAffiliation, id)
 	var i GetMerchantGroupAffiliationRow
+	err := row.Scan(&i.GroupID, &i.BrandID)
+	return i, err
+}
+
+const getMerchantGroupAffiliationForUpdate = `-- name: GetMerchantGroupAffiliationForUpdate :one
+SELECT group_id, brand_id FROM merchants
+WHERE id = $1
+FOR UPDATE
+`
+
+type GetMerchantGroupAffiliationForUpdateRow struct {
+	GroupID pgtype.Int8 `json:"group_id"`
+	BrandID pgtype.Int8 `json:"brand_id"`
+}
+
+func (q *Queries) GetMerchantGroupAffiliationForUpdate(ctx context.Context, id int64) (GetMerchantGroupAffiliationForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getMerchantGroupAffiliationForUpdate, id)
+	var i GetMerchantGroupAffiliationForUpdateRow
 	err := row.Scan(&i.GroupID, &i.BrandID)
 	return i, err
 }
@@ -741,6 +865,39 @@ func (q *Queries) ListMerchantGroups(ctx context.Context, arg ListMerchantGroups
 	return items, nil
 }
 
+const rejectPendingGroupJoinRequest = `-- name: RejectPendingGroupJoinRequest :one
+UPDATE merchant_group_join_requests
+SET status = 'rejected',
+    reviewed_by = $2,
+    reviewed_at = $3
+WHERE id = $1
+  AND status = 'pending'
+RETURNING id, group_id, merchant_id, applicant_user_id, status, reason, reviewed_by, reviewed_at, created_at
+`
+
+type RejectPendingGroupJoinRequestParams struct {
+	ID         int64              `json:"id"`
+	ReviewedBy pgtype.Int8        `json:"reviewed_by"`
+	ReviewedAt pgtype.Timestamptz `json:"reviewed_at"`
+}
+
+func (q *Queries) RejectPendingGroupJoinRequest(ctx context.Context, arg RejectPendingGroupJoinRequestParams) (MerchantGroupJoinRequest, error) {
+	row := q.db.QueryRow(ctx, rejectPendingGroupJoinRequest, arg.ID, arg.ReviewedBy, arg.ReviewedAt)
+	var i MerchantGroupJoinRequest
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.MerchantID,
+		&i.ApplicantUserID,
+		&i.Status,
+		&i.Reason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const resetGroupApplicationToDraft = `-- name: ResetGroupApplicationToDraft :one
 UPDATE merchant_group_applications
 SET status = 'draft',
@@ -796,6 +953,55 @@ type ReviewGroupApplicationParams struct {
 
 func (q *Queries) ReviewGroupApplication(ctx context.Context, arg ReviewGroupApplicationParams) (MerchantGroupApplication, error) {
 	row := q.db.QueryRow(ctx, reviewGroupApplication,
+		arg.ID,
+		arg.Status,
+		arg.RejectReason,
+		arg.ReviewedBy,
+		arg.ReviewedAt,
+	)
+	var i MerchantGroupApplication
+	err := row.Scan(
+		&i.ID,
+		&i.ApplicantUserID,
+		&i.GroupName,
+		&i.ContactPhone,
+		&i.LicenseNumber,
+		&i.Address,
+		&i.RegionID,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.ApplicationData,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LicenseMediaAssetID,
+	)
+	return i, err
+}
+
+const reviewSubmittedGroupApplication = `-- name: ReviewSubmittedGroupApplication :one
+UPDATE merchant_group_applications
+SET status = $2,
+    reject_reason = $3,
+    reviewed_by = $4,
+    reviewed_at = $5,
+    updated_at = now()
+WHERE id = $1
+  AND status = 'submitted'
+RETURNING id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id
+`
+
+type ReviewSubmittedGroupApplicationParams struct {
+	ID           int64              `json:"id"`
+	Status       string             `json:"status"`
+	RejectReason pgtype.Text        `json:"reject_reason"`
+	ReviewedBy   pgtype.Int8        `json:"reviewed_by"`
+	ReviewedAt   pgtype.Timestamptz `json:"reviewed_at"`
+}
+
+func (q *Queries) ReviewSubmittedGroupApplication(ctx context.Context, arg ReviewSubmittedGroupApplicationParams) (MerchantGroupApplication, error) {
+	row := q.db.QueryRow(ctx, reviewSubmittedGroupApplication,
 		arg.ID,
 		arg.Status,
 		arg.RejectReason,

@@ -42,7 +42,32 @@ func (server *Server) getMerchantUserRisk(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	if _, err := server.getMerchantFromUserID(ctx, authPayload.UserID); err != nil {
+	merchant, ok := GetMerchantFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, errors.New("merchant context missing")))
+		return
+	}
+
+	hasOrdered, err := server.store.HasUserOrderedFromMerchant(ctx, db.HasUserOrderedFromMerchantParams{
+		UserID:     userID,
+		MerchantID: merchant.ID,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if !hasOrdered {
+		server.logSecurityRejection(ctx, securityRejectionInput{
+			ActorUserID: authPayload.UserID,
+			ActorRole:   "merchant",
+			Action:      "merchant_risk_access_denied",
+			TargetType:  "user",
+			TargetID:    userID,
+			MerchantID:  merchant.ID,
+			Reason:      "target_user_not_related_to_merchant",
+			Audit:       true,
+		})
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrMerchantRiskAccessDenied))
 		return
 	}
 

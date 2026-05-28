@@ -664,16 +664,35 @@ func (server *Server) setupRouter() {
 	authGroup.POST("/reviews/images/upload", server.uploadReviewImage)
 	authGroup.GET("/merchants/me", server.getCurrentMerchant)
 	authGroup.GET("/merchants/my", server.listMyMerchants) // 获取用户所有商户（多店铺切换）
-	authGroup.PATCH("/merchants/me", server.updateCurrentMerchant)
-	authGroup.PATCH("/merchants/me/shop-images", server.updateCurrentMerchantShopImages)
 	authGroup.GET("/merchants/me/status", server.getMerchantOpenStatus)
-	authGroup.PATCH("/merchants/me/status", server.updateMerchantOpenStatus)
 	authGroup.GET("/merchants/me/business-hours", server.getMerchantBusinessHours)
-	authGroup.PUT("/merchants/me/business-hours", server.setMerchantBusinessHours)
 	authGroup.GET("/merchants/me/tags", server.getMerchantTags) // 获取商户经营类目
-	authGroup.PUT("/merchants/me/tags", server.setMerchantTags) // 设置商户经营类目
 	authGroup.GET("/merchants/me/membership-settings", server.getMerchantMembershipSettings)
-	authGroup.PUT("/merchants/me/membership-settings", server.updateMerchantMembershipSettings)
+
+	merchantProfileWriteGroup := authGroup.Group("/merchants/me")
+	merchantProfileWriteGroup.Use(server.MerchantStaffMiddlewareWithError(
+		ErrMerchantStaffPermissionDenied,
+		"merchant_profile_write_role_denied",
+		"owner",
+		"manager",
+	))
+	{
+		merchantProfileWriteGroup.PATCH("", server.updateCurrentMerchant)
+		merchantProfileWriteGroup.PATCH("/shop-images", server.updateCurrentMerchantShopImages)
+		merchantProfileWriteGroup.PATCH("/status", server.updateMerchantOpenStatus)
+		merchantProfileWriteGroup.PUT("/business-hours", server.setMerchantBusinessHours)
+		merchantProfileWriteGroup.PUT("/tags", server.setMerchantTags)
+	}
+
+	merchantMembershipSettingsWriteGroup := authGroup.Group("/merchants/me")
+	merchantMembershipSettingsWriteGroup.Use(server.MerchantStaffMiddlewareWithError(
+		ErrMerchantMembershipSettingsOwnerOnly,
+		"merchant_membership_settings_role_denied",
+		"owner",
+	))
+	{
+		merchantMembershipSettingsWriteGroup.PUT("/membership-settings", server.updateMerchantMembershipSettings)
+	}
 
 	// M3.1: 商户入驻申请（新版 - 自动审核）
 	merchantAppGroup := authGroup.Group("/merchant/application")
@@ -1003,22 +1022,43 @@ func (server *Server) setupRouter() {
 	}
 
 	// 商户索赔与追偿争议路由
-	merchantClaimsGroup := authGroup.Group("/merchant")
+	merchantClaimsReadGroup := authGroup.Group("/merchant")
+	merchantClaimsReadGroup.Use(server.MerchantStaffMiddlewareWithError(
+		ErrMerchantRecoveryOwnerRequired,
+		"merchant_recovery_role_denied",
+		"owner",
+		"manager",
+	))
 	{
-		merchantClaimsGroup.GET("/claims", server.listMerchantClaims)
-		merchantClaimsGroup.GET("/claims/summary", server.listMerchantClaimsSummary)
-		merchantClaimsGroup.GET("/claims/:id", server.getMerchantClaimDetail)
-		merchantClaimsGroup.GET("/claims/:id/decision", server.getMerchantClaimDecision)
-		merchantClaimsGroup.GET("/claims/behavior-summary", server.getMerchantClaimBehaviorSummary)
-		merchantClaimsGroup.GET("/recoveries/:id", server.getMerchantClaimRecovery)
-		merchantClaimsGroup.POST("/recoveries/:id/pay", server.payMerchantClaimRecovery)
-		merchantClaimsGroup.POST("/recovery-disputes", server.createMerchantRecoveryDispute)
-		merchantClaimsGroup.GET("/recovery-disputes", server.listMerchantRecoveryDisputes)
-		merchantClaimsGroup.GET("/recovery-disputes/summary", server.listMerchantRecoveryDisputesSummary)
-		merchantClaimsGroup.GET("/recovery-disputes/:id", server.getMerchantRecoveryDisputeDetail)
+		merchantClaimsReadGroup.GET("/claims", server.listMerchantClaims)
+		merchantClaimsReadGroup.GET("/claims/summary", server.listMerchantClaimsSummary)
+		merchantClaimsReadGroup.GET("/claims/:id", server.getMerchantClaimDetail)
+		merchantClaimsReadGroup.GET("/claims/:id/decision", server.getMerchantClaimDecision)
+		merchantClaimsReadGroup.GET("/claims/behavior-summary", server.getMerchantClaimBehaviorSummary)
+		merchantClaimsReadGroup.GET("/recoveries/:id", server.getMerchantClaimRecovery)
+		merchantClaimsReadGroup.POST("/recovery-disputes", server.createMerchantRecoveryDispute)
+		merchantClaimsReadGroup.GET("/recovery-disputes", server.listMerchantRecoveryDisputes)
+		merchantClaimsReadGroup.GET("/recovery-disputes/summary", server.listMerchantRecoveryDisputesSummary)
+		merchantClaimsReadGroup.GET("/recovery-disputes/:id", server.getMerchantRecoveryDisputeDetail)
+	}
+
+	merchantClaimsPaymentGroup := authGroup.Group("/merchant")
+	merchantClaimsPaymentGroup.Use(server.MerchantStaffMiddlewareWithError(
+		ErrMerchantRecoveryPaymentOwnerRequired,
+		"merchant_recovery_payment_role_denied",
+		"owner",
+	))
+	{
+		merchantClaimsPaymentGroup.POST("/recoveries/:id/pay", server.payMerchantClaimRecovery)
 	}
 
 	merchantRiskGroup := authGroup.Group("/merchant/risk")
+	merchantRiskGroup.Use(server.MerchantStaffMiddlewareWithError(
+		ErrMerchantRiskAccessDenied,
+		"merchant_risk_role_denied",
+		"owner",
+		"manager",
+	))
 	{
 		merchantRiskGroup.GET("/users/:id", server.getMerchantUserRisk)
 	}

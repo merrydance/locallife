@@ -40,6 +40,15 @@ var (
 	ErrNotOperator      = apierr(40302, "not an operator")
 	ErrNotRider         = apierr(40303, "not a rider")
 	ErrPermissionDenied = apierr(40304, "permission denied")
+
+	ErrMerchantStaffPermissionDenied        = apierr(40364, "当前员工角色无权执行该商户操作，请联系店主或管理员处理")
+	ErrMerchantRecoveryOwnerRequired        = apierr(40365, "仅店主或授权管理员可查看或处理索赔追偿")
+	ErrMerchantRecoveryPaymentOwnerRequired = apierr(40366, "仅店主可发起追偿支付")
+	ErrMerchantRiskAccessDenied             = apierr(40367, "仅店主或管理员可查看与本店交易相关顾客的风险提示")
+	ErrMerchantAssociationRequired          = apierr(40368, "请先选择或绑定可管理的门店后再操作")
+	ErrMerchantAccountInactive              = apierr(40369, "当前门店尚未启用，暂不能执行该操作")
+	ErrMerchantRegionUnset                  = apierr(40370, "当前门店未配置经营区域，请联系平台处理后再操作")
+	ErrMerchantMembershipSettingsOwnerOnly  = apierr(40371, "仅店主可修改会员设置")
 )
 
 // ==================== 通用资源未找到 (404xx) ====================
@@ -236,12 +245,15 @@ var (
 	ErrRiderNotDeliverer         = apierr(40362, "you are not the assigned rider for this order")
 
 	// 409 类
-	ErrOrderAlreadyHasClaim     = apierr(40967, "a claim record already exists for this order")
-	ErrApplicationStateChanged  = apierr(40968, "application state has changed, action is no longer valid")
-	ErrAccountApplymentPending  = apierr(40969, "已有进行中的结算账户申请，请进入开户状态页查看签约或账户验证进度，等待处理完成后再提交")
-	ErrAccountAlreadyRegistered = apierr(40970, "结算账户开户已完成，无需重复提交；如需变更结算账户，请使用结算账户修改入口")
-	ErrClaimCannotBeWithdrawn   = apierr(40971, "claim cannot be withdrawn after compensation has started or when no adjudicated compensation is pending")
-	ErrClaimCannotContinue      = apierr(40972, "claim cannot continue to compensation in its current state")
+	ErrOrderAlreadyHasClaim           = apierr(40967, "a claim record already exists for this order")
+	ErrApplicationStateChanged        = apierr(40968, "application state has changed, action is no longer valid")
+	ErrAccountApplymentPending        = apierr(40969, "已有进行中的结算账户申请，请进入开户状态页查看签约或账户验证进度，等待处理完成后再提交")
+	ErrAccountAlreadyRegistered       = apierr(40970, "结算账户开户已完成，无需重复提交；如需变更结算账户，请使用结算账户修改入口")
+	ErrClaimCannotBeWithdrawn         = apierr(40971, "claim cannot be withdrawn after compensation has started or when no adjudicated compensation is pending")
+	ErrClaimCannotContinue            = apierr(40972, "claim cannot continue to compensation in its current state")
+	ErrGroupApplicationReviewConflict = apierr(40975, "该集团申请状态已变化，请刷新后查看最新审核结果")
+	ErrGroupJoinRequestReviewConflict = apierr(40976, "该加入申请状态已变化，请刷新后查看最新审核结果")
+	ErrMerchantAlreadyJoinedGroup     = apierr(40977, "该门店已加入其他集团，请刷新后查看最新归属")
 )
 
 // ==================== 区域/运营商扩张 (Region / Operator Expansion) ====================

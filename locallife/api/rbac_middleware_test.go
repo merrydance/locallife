@@ -715,6 +715,23 @@ func TestMerchantStaffMiddleware(t *testing.T) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
 			},
 		},
+		{
+			name:         "Forbidden_ResolvedMerchantButRoleMissing",
+			allowedRoles: []string{"cashier"},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleStaffMerchant(store, user.ID, merchant)
+				store.EXPECT().
+					GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
+						MerchantID: merchant.ID,
+						UserID:     user.ID,
+					})).
+					Times(1).
+					Return("", db.ErrRecordNotFound)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
 	}
 
 	for i := range testCases {

@@ -23,12 +23,27 @@ func (store *SQLStore) ApproveGroupApplicationTx(ctx context.Context, arg Approv
 	var result ApproveGroupApplicationTxResult
 
 	err := store.execTx(ctx, func(q *Queries) error {
-		app, err := q.GetGroupApplication(ctx, arg.ApplicationID)
+		app, err := q.GetGroupApplicationForUpdate(ctx, arg.ApplicationID)
 		if err != nil {
 			return err
 		}
 		if app.Status != "submitted" {
-			return errors.New("application status is not submitted")
+			return ErrGroupApplicationReviewConflict
+		}
+
+		reviewedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+		app, err = q.ReviewSubmittedGroupApplication(ctx, ReviewSubmittedGroupApplicationParams{
+			ID:           app.ID,
+			Status:       "approved",
+			RejectReason: pgtype.Text{Valid: false},
+			ReviewedBy:   pgtype.Int8{Int64: arg.ReviewerUserID, Valid: true},
+			ReviewedAt:   reviewedAt,
+		})
+		if err != nil {
+			if errors.Is(err, ErrRecordNotFound) {
+				return ErrGroupApplicationReviewConflict
+			}
+			return err
 		}
 
 		group, err := q.CreateMerchantGroup(ctx, CreateMerchantGroupParams{
@@ -50,18 +65,6 @@ func (store *SQLStore) ApproveGroupApplicationTx(ctx context.Context, arg Approv
 			UserID:    app.ApplicantUserID,
 			Role:      "owner",
 			InvitedBy: pgtype.Int8{Valid: false},
-		})
-		if err != nil {
-			return err
-		}
-
-		reviewedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
-		app, err = q.ReviewGroupApplication(ctx, ReviewGroupApplicationParams{
-			ID:           app.ID,
-			Status:       "approved",
-			RejectReason: pgtype.Text{Valid: false},
-			ReviewedBy:   pgtype.Int8{Int64: arg.ReviewerUserID, Valid: true},
-			ReviewedAt:   reviewedAt,
 		})
 		if err != nil {
 			return err
@@ -106,7 +109,7 @@ func (store *SQLStore) ApproveGroupJoinRequestTx(ctx context.Context, arg Approv
 	var result ApproveGroupJoinRequestTxResult
 
 	err := store.execTx(ctx, func(q *Queries) error {
-		req, err := q.GetGroupJoinRequest(ctx, arg.RequestID)
+		req, err := q.GetGroupJoinRequestForUpdate(ctx, arg.RequestID)
 		if err != nil {
 			return err
 		}
@@ -114,26 +117,40 @@ func (store *SQLStore) ApproveGroupJoinRequestTx(ctx context.Context, arg Approv
 			return errors.New("group mismatch")
 		}
 		if req.Status != "pending" {
-			return errors.New("request status is not pending")
+			return ErrGroupJoinRequestReviewConflict
+		}
+
+		affiliation, err := q.GetMerchantGroupAffiliationForUpdate(ctx, req.MerchantID)
+		if err != nil {
+			return err
+		}
+		if affiliation.GroupID.Valid {
+			return ErrMerchantAlreadyJoinedGroup
 		}
 
 		reviewedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
-		req, err = q.UpdateGroupJoinRequestStatus(ctx, UpdateGroupJoinRequestStatusParams{
+		req, err = q.ApprovePendingGroupJoinRequest(ctx, ApprovePendingGroupJoinRequestParams{
 			ID:         req.ID,
-			Status:     "approved",
 			ReviewedBy: pgtype.Int8{Int64: arg.ReviewerUserID, Valid: true},
 			ReviewedAt: reviewedAt,
 		})
 		if err != nil {
+			if errors.Is(err, ErrRecordNotFound) {
+				return ErrGroupJoinRequestReviewConflict
+			}
 			return err
 		}
 
-		if err := q.UpdateMerchantGroupAffiliation(ctx, UpdateMerchantGroupAffiliationParams{
+		affected, err := q.AttachMerchantToGroupIfUnassigned(ctx, AttachMerchantToGroupIfUnassignedParams{
 			ID:      req.MerchantID,
 			GroupID: pgtype.Int8{Int64: arg.GroupID, Valid: true},
 			BrandID: arg.BrandID,
-		}); err != nil {
+		})
+		if err != nil {
 			return err
+		}
+		if affected != 1 {
+			return ErrMerchantAlreadyJoinedGroup
 		}
 
 		meta, _ := json.Marshal(map[string]any{

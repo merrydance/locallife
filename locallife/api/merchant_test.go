@@ -179,7 +179,8 @@ func TestUpdateCurrentMerchantAPI(t *testing.T) {
 				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+				requireAPIErrorCode(t, recorder, ErrMerchantAssociationRequired)
 			},
 		},
 		{
@@ -696,6 +697,8 @@ func TestUpdateCurrentMerchantShopImages_ReturnsInternalServerErrorOnInvalidStor
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
+	merchant := randomMerchant(user.ID)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 	store.EXPECT().
 		UpdateMerchantApplicationShopImages(gomock.Any(), gomock.Any()).
 		Times(1).
