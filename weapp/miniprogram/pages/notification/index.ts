@@ -104,7 +104,7 @@ function matchesRiderCategory(item: Notification, category: NotificationCategory
   return !category || getRiderNotificationCategory(item) === category
 }
 
-function resolveRiderNotificationUrl(item: Notification): string {
+export function resolveRiderNotificationUrl(item: Notification): string {
   const relatedType = String(item.related_type || '').toLowerCase()
   const category = getRiderNotificationCategory(item)
 
@@ -123,7 +123,7 @@ function resolveRiderNotificationUrl(item: Notification): string {
 
   if (category === 'orders') {
     const orderID = relatedType.includes('order') ? item.related_id : getExtraNumber(item, 'order_id')
-    return orderID ? `/pages/rider/task-detail/index?id=${orderID}` : '/pages/rider/tasks/index'
+    return orderID ? `/pages/rider/task-detail/index?orderId=${orderID}` : '/pages/rider/tasks/index'
   }
 
   if (relatedType === 'rider') {

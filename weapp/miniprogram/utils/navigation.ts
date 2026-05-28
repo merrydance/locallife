@@ -396,7 +396,7 @@ export class Navigation {
      */
   static toRiderTaskDetail(taskId: string) {
     wx.navigateTo({
-      url: `/pages/rider/task-detail/index?id=${taskId}`
+      url: `/pages/rider/task-detail/index?orderId=${taskId}`
     })
   }
 

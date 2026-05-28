@@ -49,6 +49,18 @@ const FLUSH_INTERVAL_MS = 15000
 const MIN_SAMPLE_INTERVAL_MS = 10000
 const MIN_SAMPLE_DISTANCE_METERS = 30
 const MAX_PENDING_POINTS = 30
+const BACKEND_LOCATION_MAX_PAST_MS = 60 * 60 * 1000
+const STALE_LOCATION_QUEUE_MARGIN_MS = 5 * 60 * 1000
+const MAX_STORED_LOCATION_AGE_MS = BACKEND_LOCATION_MAX_PAST_MS - STALE_LOCATION_QUEUE_MARGIN_MS
+
+function isFreshPendingLocationPoint(point: PendingLocationPoint): boolean {
+  const recordedAt = Date.parse(point.recorded_at)
+  if (!Number.isFinite(recordedAt)) {
+    return false
+  }
+
+  return recordedAt >= Date.now() - MAX_STORED_LOCATION_AGE_MS
+}
 
 function getDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const radius = 6371000
@@ -144,6 +156,13 @@ class RiderLiveLocationSession {
 
   async flushNow(): Promise<void> {
     if (this.isFlushing || this.queue.length === 0 || !this.state.activeDeliveryId) {
+      return
+    }
+
+    this.pruneStaleQueue('before_flush')
+    if (this.queue.length === 0) {
+      this.state.uploadState = this.state.isRunning ? 'tracking' : 'idle'
+      this.notify()
       return
     }
 
@@ -388,11 +407,34 @@ class RiderLiveLocationSession {
         return []
       }
 
-      return stored.filter((item) => item && typeof item === 'object') as PendingLocationPoint[]
+      const validItems = stored.filter((item) => item && typeof item === 'object') as PendingLocationPoint[]
+      const freshItems = validItems.filter(isFreshPendingLocationPoint)
+      if (freshItems.length !== validItems.length) {
+        wx.setStorageSync(STORAGE_KEY, freshItems)
+      }
+
+      return freshItems
     } catch (error) {
       logger.warn('Load rider live location queue failed', error, 'RiderLiveLocationSession')
       return []
     }
+  }
+
+  private pruneStaleQueue(reason: string): void {
+    const before = this.queue.length
+    if (before === 0) {
+      return
+    }
+
+    this.queue = this.queue.filter(isFreshPendingLocationPoint)
+    const removed = before - this.queue.length
+    if (removed === 0) {
+      return
+    }
+
+    logger.info('Prune stale rider live location queue points', { reason, removed }, 'RiderLiveLocationSession')
+    this.state.pendingCount = this.queue.length
+    this.persistQueue()
   }
 
   private clearQueue(reason: string): void {

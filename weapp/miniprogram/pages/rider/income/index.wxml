@@ -115,6 +115,10 @@
                 <text>{{item.deliveryFeeDisplay}}</text>
               </view>
               <view class="ledger-meta-row">
+                <text>支付通道费</text>
+                <text>{{item.riderPaymentFeeDisplay}}</text>
+              </view>
+              <view class="ledger-meta-row">
                 <text>骑手分账</text>
                 <text>{{item.riderAmountDisplay}}</text>
               </view>

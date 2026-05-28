@@ -18,6 +18,10 @@ import { getStableBarHeights } from '../../../utils/responsive'
 
 interface RiderTaskDetailOptions {
     id?: string
+    orderId?: string
+    order_id?: string
+    deliveryId?: string
+    delivery_id?: string
 }
 
 interface UserMessageError {
@@ -61,6 +65,20 @@ function showDeliveryActionFailureFeedback(err: unknown, actionKey: RiderDeliver
     wx.showToast({ title: feedback.title, icon: 'none' })
 }
 
+function parsePositiveNumber(value?: string): number {
+    const numberValue = Number(value || 0)
+    return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : 0
+}
+
+function buildMissingOrderMessage(options: RiderTaskDetailOptions = {}): string {
+    const hasDeliveryIdOnly = parsePositiveNumber(options.deliveryId || options.delivery_id) > 0
+    return hasDeliveryIdOnly ? '缺少订单信息，请从我的任务重新进入' : '缺少订单号，请从我的任务重新进入'
+}
+
+export function resolveRiderTaskDetailOrderId(options: RiderTaskDetailOptions = {}): number {
+    return parsePositiveNumber(options.orderId || options.order_id || options.id)
+}
+
 Page({
     data: {
         orderId: 0,
@@ -83,10 +101,13 @@ Page({
 
     onLoad(options: RiderTaskDetailOptions) {
         const { navBarHeight } = getStableBarHeights()
+        const orderId = resolveRiderTaskDetailOrderId(options)
         this.setData({ 
             navBarHeight,
-            orderId: Number(options.id || 0)
+            orderId,
+            errorMessage: orderId ? '' : buildMissingOrderMessage(options)
         })
+        if (!orderId) return
         this.fetchTaskDetail()
     },
 

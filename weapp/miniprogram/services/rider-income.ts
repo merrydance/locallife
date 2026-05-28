@@ -34,6 +34,7 @@ export interface RiderIncomeStatusSummaryView {
   orderCount: number
   riderAmountDisplay: string
   deliveryFeeDisplay: string
+  riderPaymentFeeDisplay: string
 }
 
 export interface RiderIncomeSummaryView {
@@ -52,6 +53,7 @@ export interface RiderIncomeLedgerItemView {
   merchantName: string
   amountDisplay: string
   deliveryFeeDisplay: string
+  riderPaymentFeeDisplay: string
   riderAmountDisplay: string
   statusLabel: string
   statusTheme: RiderIncomeTagTheme
@@ -162,7 +164,9 @@ function findStatusSummary(rows: RiderIncomeStatusSummary[], status: RiderIncome
     status,
     order_count: 0,
     rider_amount: 0,
-    delivery_fee: 0
+    delivery_fee: 0,
+    rider_gross_amount: 0,
+    rider_payment_fee: 0
   }
 }
 
@@ -188,7 +192,8 @@ export function buildRiderIncomeSummaryView(summary: RiderIncomeSummaryResponse)
         theme: meta.theme,
         orderCount: item.order_count || 0,
         riderAmountDisplay: formatRiderIncomeFen(item.rider_amount || 0),
-        deliveryFeeDisplay: formatRiderIncomeFen(item.delivery_fee || 0)
+        deliveryFeeDisplay: formatRiderIncomeFen(item.delivery_fee || 0),
+        riderPaymentFeeDisplay: formatRiderIncomeFen(item.rider_payment_fee || 0)
       }
     })
   }
@@ -202,6 +207,7 @@ export function buildRiderIncomeLedgerItemView(item: RiderIncomeLedgerItem): Rid
     merchantName: item.merchant_name || '商户',
     amountDisplay: `+¥${formatRiderIncomeFen(item.rider_amount || 0)}`,
     deliveryFeeDisplay: `¥${formatRiderIncomeFen(item.delivery_fee || 0)}`,
+    riderPaymentFeeDisplay: `¥${formatRiderIncomeFen(item.rider_payment_fee || 0)}`,
     riderAmountDisplay: `¥${formatRiderIncomeFen(item.rider_amount || 0)}`,
     statusLabel: meta.label,
     statusTheme: meta.theme,
@@ -224,6 +230,8 @@ export function buildEmptyRiderIncomeSummaryView(): RiderIncomeSummaryView {
     total_deliveries: 0,
     total_rider_income: 0,
     total_delivery_fee: 0,
+    total_rider_gross_amount: 0,
+    total_rider_payment_fee: 0,
     status_summary: []
   })
 }

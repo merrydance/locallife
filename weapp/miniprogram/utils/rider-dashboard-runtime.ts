@@ -880,7 +880,7 @@ export const riderDashboardRuntimeMethods: Record<string, unknown> & ThisType<Ri
     const { orderId } = e.currentTarget.dataset as { orderId?: number }
     if (!orderId) return
     wx.navigateTo({
-      url: `/pages/rider/task-detail/index?id=${orderId}`
+      url: `/pages/rider/task-detail/index?orderId=${orderId}`
     })
   },
 

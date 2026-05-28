@@ -8,12 +8,16 @@ export interface RiderIncomeStatusSummary {
   order_count: number
   rider_amount: number
   delivery_fee: number
+  rider_gross_amount: number
+  rider_payment_fee: number
 }
 
 export interface RiderIncomeSummaryResponse {
   total_deliveries: number
   total_rider_income: number
   total_delivery_fee: number
+  total_rider_gross_amount: number
+  total_rider_payment_fee: number
   status_summary: RiderIncomeStatusSummary[]
 }
 
@@ -27,6 +31,8 @@ export interface RiderIncomeLedgerItem {
   status: RiderIncomeStatus
   total_amount: number
   delivery_fee: number
+  rider_gross_amount: number
+  rider_payment_fee: number
   rider_amount: number
   distributable_amount: number
   out_order_no: string
@@ -47,6 +53,8 @@ export interface RiderIncomeDailyItem {
   date: string
   delivery_count: number
   daily_income: number
+  rider_gross_amount: number
+  rider_payment_fee: number
 }
 
 export interface RiderIncomeDailyResponse {
