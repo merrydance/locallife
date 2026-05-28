@@ -32,7 +32,7 @@
     <view class="form-section">
       <t-input 
         label="邀请码" 
-        placeholder="请输入邀请码" 
+        placeholder="商户提供的绑定码"
         value="{{inviteCode}}"
         bindchange="onInput"
         borderless

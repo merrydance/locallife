@@ -86,6 +86,7 @@ export interface DeliveryProgressView {
 }
 
 export function getDeliveryStatusDisplay(status?: Delivery['status']) {
+    const isWaitingAssignment = status === 'pending'
     const isAssignedStage = status === 'assigned' || status === 'picking'
     const isPickedStage = status === 'picked'
     const isDeliveringStage = status === 'delivering'
@@ -112,9 +113,15 @@ export function getDeliveryStatusDisplay(status?: Delivery['status']) {
         isPickedStage,
         isDeliveringStage,
         isDeliveredStage,
+        isWaitingAssignment,
         isLocationTracked: isAssignedStage || isPickedStage || isDeliveringStage,
         canConfirmReceipt: status === 'delivered'
     }
+}
+
+export function shouldPollDeliveryTrackingState(status?: Delivery['status']): boolean {
+    const statusDisplay = getDeliveryStatusDisplay(status)
+    return statusDisplay.isWaitingAssignment || statusDisplay.isLocationTracked
 }
 
 export function buildDeliveryProgress(delivery: Delivery, formatTime: (timeStr: string) => string): DeliveryProgressView[] {

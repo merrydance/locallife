@@ -37,6 +37,21 @@
         <text class="result-summary">{{resultSummaryText}}</text>
       </view>
 
+      <view wx:if="{{commandResultText}}" class="command-result">
+        <view class="command-result__copy">
+          <text class="command-result__title">{{commandResultText}}</text>
+          <text class="command-result__note">{{commandResultNote}}</text>
+        </view>
+        <t-button
+          wx:if="{{commandResultPrinterId}}"
+          size="small"
+          theme="primary"
+          variant="outline"
+          data-id="{{commandResultPrinterId}}"
+          bind:tap="onViewPrinterStatus"
+        >查看状态</t-button>
+      </view>
+
       <view wx:if="{{loading && !printers.length}}" class="loading-state">
         <t-loading theme="circular" size="40rpx" text="加载中..." vertical />
       </view>

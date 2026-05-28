@@ -174,6 +174,9 @@ Page({
     hasLoadedOnce: false,
     loading: false,
     refreshErrorMessage: '',
+    commandResultText: '',
+    commandResultNote: '',
+    commandResultPrinterId: 0,
     resultSummaryText: '当前共 0 台设备',
     lastLoadedAt: 0,
     pageDirty: false,
@@ -422,12 +425,22 @@ Page({
         this.setData({ pageDirty: true })
         this.resetConfirmDialogState()
         await this.loadPageData(false, true)
-        wx.showToast({ title: '打印机已删除', icon: 'success' })
+        this.setData({
+          commandResultText: '打印机删除已提交',
+          commandResultNote: this.data.refreshErrorMessage
+            ? '删除已提交，设备列表同步失败，可下拉刷新'
+            : '设备列表已按后端结果回读',
+          commandResultPrinterId: 0
+        })
       } else if (this.data.confirmDialogAction === 'test') {
         this.setData({ testingPrinterId: targetId })
         await deviceManagementService.testPrinter(targetId)
         this.resetConfirmDialogState()
-        wx.showToast({ title: '测试命令已发送', icon: 'success' })
+        this.setData({
+          commandResultText: '测试打印命令已提交',
+          commandResultNote: '打印是否完成以设备实时状态为准',
+          commandResultPrinterId: targetId
+        })
       }
     } catch (err) {
       logger.error('Handle printer confirm action failed', err)

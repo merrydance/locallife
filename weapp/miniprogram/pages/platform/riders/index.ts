@@ -5,6 +5,7 @@ import {
 } from '@/api/platform-management'
 import { getErrorUserMessage } from '@/utils/user-facing'
 import { resolveStatusTagTheme, type StatusTagTheme } from '@/utils/status-tag'
+import { buildPlatformRiderStatusView } from '@/utils/platform-status-view'
 
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
 type TapEvent = WechatMiniprogram.CustomEvent & {
@@ -23,27 +24,15 @@ interface PlatformRiderCardView extends PlatformRiderCard {
   statusLabel: string
 }
 
-function riderStatusLabel(status: string): string {
-  switch (status) {
-    case 'active':
-      return '可接单'
-    case 'approved':
-      return '已通过'
-    case 'suspended':
-      return '暂停接单'
-    default:
-      return status || '--'
-  }
-}
-
 function buildRiderCardView(item: PlatformRiderCard): PlatformRiderCardView {
+  const statusView = buildPlatformRiderStatusView(item.status)
   return {
     ...item,
     regionText: item.region_name || '--',
     activeLabel: item.active ? '近3天活跃' : '近3天未接单',
     activeTheme: item.active ? resolveStatusTagTheme('success') : resolveStatusTagTheme('warning'),
     complaintText: `${item.complaint_count || 0} 次`,
-    statusLabel: riderStatusLabel(item.status)
+    statusLabel: statusView.label
   }
 }
 

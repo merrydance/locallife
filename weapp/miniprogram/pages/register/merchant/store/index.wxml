@@ -118,7 +118,7 @@
            <view class="section-header">联系信息</view>
            <view class="form-group">
                <view class="field-block {{phoneError ? 'field-block-error' : ''}}">
-                 <t-input label="联系电话" placeholder="请输入商户联系电话" type="number" value="{{formData.phone}}" bindchange="onPhoneInput" bindblur="onFieldBlur" data-field="phone" />
+                 <t-input label="联系电话" placeholder="11位手机号" type="number" value="{{formData.phone}}" bindchange="onPhoneInput" bindblur="onFieldBlur" data-field="phone" />
                </view>
                <view class="field-error-text" wx:if="{{phoneError}}">{{phoneError}}</view>
            </view>
@@ -218,4 +218,3 @@
         <t-button block variant="text" bindtap="closeConsentPopup">暂不继续</t-button>
     </view>
 </t-popup>
-

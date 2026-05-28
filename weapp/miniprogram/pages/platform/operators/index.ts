@@ -4,7 +4,8 @@ import {
   type PlatformOperatorCard
 } from '@/api/platform-management'
 import { getErrorUserMessage } from '@/utils/user-facing'
-import { resolveStatusTagTheme, type StatusTagTheme } from '@/utils/status-tag'
+import { type StatusTagTheme } from '@/utils/status-tag'
+import { buildPlatformOperatorStatusView } from '@/utils/platform-status-view'
 
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
 type TapEvent = WechatMiniprogram.CustomEvent & {
@@ -23,33 +24,12 @@ interface PlatformOperatorCardView extends PlatformOperatorCard {
   complaintText: string
 }
 
-function operatorStatusLabel(status: string): string {
-  switch (status) {
-    case 'active':
-      return '运营中'
-    case 'suspended':
-      return '已暂停'
-    default:
-      return status || '--'
-  }
-}
-
-function operatorStatusTheme(status: string): StatusTagTheme {
-  switch (status) {
-    case 'active':
-      return resolveStatusTagTheme('success')
-    case 'suspended':
-      return resolveStatusTagTheme('danger')
-    default:
-      return resolveStatusTagTheme('warning')
-  }
-}
-
 function buildOperatorCardView(item: PlatformOperatorCard): PlatformOperatorCardView {
+  const statusView = buildPlatformOperatorStatusView(item.status)
   return {
     ...item,
-    statusLabel: operatorStatusLabel(item.status),
-    statusTheme: operatorStatusTheme(item.status),
+    statusLabel: statusView.label,
+    statusTheme: statusView.theme,
     regionText: `${item.region_count || 0} 个`,
     merchantText: `${item.merchant_count || 0} 家`,
     complaintText: `${item.complaint_count || 0} 次`

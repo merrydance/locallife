@@ -4,7 +4,8 @@ import {
   type PlatformMerchantCard
 } from '@/api/platform-management'
 import { getErrorUserMessage } from '@/utils/user-facing'
-import { resolveStatusTagTheme, type StatusTagTheme } from '@/utils/status-tag'
+import { type StatusTagTheme } from '@/utils/status-tag'
+import { buildPlatformMerchantStatusView } from '@/utils/platform-status-view'
 
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
 type TapEvent = WechatMiniprogram.CustomEvent & {
@@ -24,43 +25,12 @@ interface PlatformMerchantCardView extends PlatformMerchantCard {
   complaintText: string
 }
 
-function merchantStatusLabel(status: string): string {
-  switch (status) {
-    case 'active':
-      return '正常'
-    case 'approved':
-      return '已通过'
-    case 'suspended':
-      return '已暂停'
-    case 'pending':
-      return '待处理'
-    case 'rejected':
-      return '已拒绝'
-    default:
-      return status || '--'
-  }
-}
-
-function merchantStatusTheme(status: string): StatusTagTheme {
-  switch (status) {
-    case 'active':
-    case 'approved':
-      return resolveStatusTagTheme('success')
-    case 'suspended':
-    case 'rejected':
-      return resolveStatusTagTheme('danger')
-    case 'pending':
-      return resolveStatusTagTheme('warning')
-    default:
-      return resolveStatusTagTheme('warning')
-  }
-}
-
 function buildMerchantCardView(item: PlatformMerchantCard): PlatformMerchantCardView {
+  const statusView = buildPlatformMerchantStatusView(item.status)
   return {
     ...item,
-    statusLabel: merchantStatusLabel(item.status),
-    statusTheme: merchantStatusTheme(item.status),
+    statusLabel: statusView.label,
+    statusTheme: statusView.theme,
     regionText: item.region_name || '--',
     openLabel: item.is_open ? '营业中' : '休息中',
     monthOrdersText: `${item.month_orders || 0} 单`,

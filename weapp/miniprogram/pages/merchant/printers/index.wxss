@@ -38,6 +38,37 @@
     font-weight: 600;
 }
 
+.command-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+  padding: var(--spacer-sm) var(--spacer-md);
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-container);
+  box-shadow: var(--shadow-sm);
+}
+
+.command-result__copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.command-result__title {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-primary);
+  font-weight: 600;
+}
+
+.command-result__note {
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--td-text-color-secondary);
+}
+
   .loading-state {
     display: flex;
     justify-content: center;

@@ -42,7 +42,7 @@
       <t-input
         wx:if="{{requiresTableCode && action === 'open_session'}}"
         label="桌台验证码"
-        placeholder="请输入桌台验证码"
+        placeholder="桌牌或服务员提供的验证码"
         value="{{tableCode}}"
         bind:change="onTableCodeInput"
         borderless
@@ -79,7 +79,7 @@
       <t-input
         wx:if="{{transferRequiresTableCode}}"
         label="当前桌台验证码"
-        placeholder="请输入当前桌台验证码"
+        placeholder="桌牌或服务员提供的验证码"
         value="{{transferCode}}"
         bind:change="onTransferCodeInput"
         borderless

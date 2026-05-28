@@ -2,7 +2,8 @@ import DeliveryService, {
   buildDeliveryProgress,
   DeliveryProgressView,
   DeliveryResponse,
-  getDeliveryStatusDisplay
+  getDeliveryStatusDisplay,
+  shouldPollDeliveryTrackingState
 } from '../../../api/delivery'
 import { BicyclingDirectionResponse, getBicyclingDirection } from '../../../api/location'
 import { mapService } from '../../../services/map'
@@ -329,7 +330,7 @@ Page({
   },
 
   shouldPollTrackingState(status?: DeliveryResponse['status']): boolean {
-    return status === 'pending' || getDeliveryStatusDisplay(status).isLocationTracked
+    return shouldPollDeliveryTrackingState(status)
   },
 
   async refreshTrackingState() {

@@ -5,7 +5,8 @@ import {
   type PlatformOperatorDetail
 } from '@/api/platform-management'
 import { getErrorUserMessage } from '@/utils/user-facing'
-import { resolveStatusTagTheme, type StatusTagTheme } from '@/utils/status-tag'
+import { type StatusTagTheme } from '@/utils/status-tag'
+import { buildPlatformOperatorStatusView } from '@/utils/platform-status-view'
 
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
 
@@ -30,37 +31,16 @@ function formatMoney(fen?: number): string {
   return `¥${(fen / 100).toFixed(2)}`
 }
 
-function operatorStatusLabel(status: string): string {
-  switch (status) {
-    case 'active':
-      return '运营中'
-    case 'suspended':
-      return '已暂停'
-    default:
-      return status || '--'
-  }
-}
-
-function operatorStatusTheme(status: string): StatusTagTheme {
-  switch (status) {
-    case 'active':
-      return resolveStatusTagTheme('success')
-    case 'suspended':
-      return resolveStatusTagTheme('danger')
-    default:
-      return resolveStatusTagTheme('warning')
-  }
-}
-
 function buildOperatorDetailView(detail: PlatformOperatorDetail): OperatorDetailView {
   const categories = (detail.service?.complaint_categories || []).map((item) => ({
     ...item,
     countText: `${item.count || 0} 次`
   }))
+  const statusView = buildPlatformOperatorStatusView(detail.status)
   return {
     ...detail,
-    statusLabel: operatorStatusLabel(detail.status),
-    statusTheme: operatorStatusTheme(detail.status),
+    statusLabel: statusView.label,
+    statusTheme: statusView.theme,
     regionText: `${detail.region_count || 0} 个`,
     merchantText: `${detail.merchant_count || 0} 家`,
     lastMonthRevenueText: formatMoney(detail.order_stats?.last_month_income),
@@ -77,6 +57,8 @@ Page({
     requesting: false,
     submitting: false,
     error: null as string | null,
+    actionResultText: '',
+    actionResultNote: '',
     operatorID: 0,
     detail: null as OperatorDetailView | null
   },
@@ -131,11 +113,21 @@ Page({
 
     try {
       this.setData({ submitting: true })
+      this.setData({
+        actionResultText: suspend ? '已提交暂停运营商' : '已提交恢复运营商',
+        actionResultNote: '正在回读后端状态'
+      })
       await platformManagementService.updatePlatformOperatorStatus(detail.id, suspend ? 'suspended' : 'active')
       await this.loadDetail()
-      wx.showToast({ title: suspend ? '已暂停' : '已恢复', icon: 'success' })
+      this.setData({
+        actionResultText: suspend ? '运营商已暂停' : '运营商已恢复',
+        actionResultNote: `当前状态：${this.data.detail?.statusLabel || '已同步'}`
+      })
     } catch (error: unknown) {
-      wx.showToast({ title: getErrorUserMessage(error, '操作失败，请稍后重试'), icon: 'none' })
+      this.setData({
+        actionResultText: '状态同步失败',
+        actionResultNote: getErrorUserMessage(error, '操作失败，请稍后重试')
+      })
     } finally {
       this.setData({ submitting: false })
     }

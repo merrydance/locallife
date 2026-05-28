@@ -49,3 +49,22 @@
   align-items: center;
   justify-content: center;
 }
+
+.action-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.action-result__title {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-primary);
+  font-weight: 600;
+}
+
+.action-result__note {
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--td-text-color-secondary);
+}

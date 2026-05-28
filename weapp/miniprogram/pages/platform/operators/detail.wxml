@@ -84,6 +84,11 @@
           <view wx:if="{{detail.categories.length === 0}}" class="empty-line">暂无投诉分类</view>
         </view>
 
+        <view wx:if="{{actionResultText}}" class="section-card action-result">
+          <text class="action-result__title">{{actionResultText}}</text>
+          <text class="action-result__note">{{actionResultNote}}</text>
+        </view>
+
         <view wx:if="{{detail.can_suspend || detail.can_resume}}" class="section-card">
           <t-button
             theme="{{detail.can_suspend ? 'danger' : 'primary'}}"

@@ -86,7 +86,7 @@
           <t-input 
             label="联系人电话" 
             type="number" 
-            placeholder="请输入负责人手机号" 
+            placeholder="11位手机号"
             value="{{formData.contactPhone}}" 
             bindchange="onInput" 
             data-field="contactPhone" 

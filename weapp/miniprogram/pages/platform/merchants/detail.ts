@@ -5,7 +5,8 @@ import {
   type PlatformMerchantDetail
 } from '@/api/platform-management'
 import { getErrorUserMessage } from '@/utils/user-facing'
-import { resolveStatusTagTheme, type StatusTagTheme } from '@/utils/status-tag'
+import { type StatusTagTheme } from '@/utils/status-tag'
+import { buildPlatformMerchantStatusView } from '@/utils/platform-status-view'
 
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
 
@@ -33,48 +34,17 @@ function formatMoney(fen?: number): string {
   return `¥${(fen / 100).toFixed(2)}`
 }
 
-function merchantStatusLabel(status: string): string {
-  switch (status) {
-    case 'active':
-      return '正常'
-    case 'approved':
-      return '已通过'
-    case 'suspended':
-      return '已暂停'
-    case 'pending':
-      return '待处理'
-    case 'rejected':
-      return '已拒绝'
-    default:
-      return status || '--'
-  }
-}
-
-function merchantStatusTheme(status: string): StatusTagTheme {
-  switch (status) {
-    case 'active':
-    case 'approved':
-      return resolveStatusTagTheme('success')
-    case 'suspended':
-    case 'rejected':
-      return resolveStatusTagTheme('danger')
-    case 'pending':
-      return resolveStatusTagTheme('warning')
-    default:
-      return resolveStatusTagTheme('warning')
-  }
-}
-
 function buildMerchantDetailView(detail: PlatformMerchantDetail): MerchantDetailView {
   const categories = (detail.service?.complaint_categories || []).map((item) => ({
     ...item,
     countText: `${item.count || 0} 次`
   }))
+  const statusView = buildPlatformMerchantStatusView(detail.basic?.status || '')
 
   return {
     ...detail,
-    statusLabel: merchantStatusLabel(detail.basic?.status || ''),
-    statusTheme: merchantStatusTheme(detail.basic?.status || ''),
+    statusLabel: statusView.label,
+    statusTheme: statusView.theme,
     regionText: detail.basic?.region_name || '--',
     openLabel: detail.basic?.is_open ? '营业中' : '休息中',
     phoneText: detail.basic?.phone || '--',
@@ -94,6 +64,8 @@ Page({
     requesting: false,
     submitting: false,
     error: null as string | null,
+    actionResultText: '',
+    actionResultNote: '',
     merchantID: 0,
     detail: null as MerchantDetailView | null
   },
@@ -148,15 +120,25 @@ Page({
 
     try {
       this.setData({ submitting: true })
+      this.setData({
+        actionResultText: suspend ? '已提交暂停商户' : '已提交恢复商户',
+        actionResultNote: '正在回读后端状态'
+      })
       if (suspend) {
         await platformManagementService.suspendPlatformMerchant(detail.id)
       } else {
         await platformManagementService.resumePlatformMerchant(detail.id)
       }
       await this.loadDetail()
-      wx.showToast({ title: suspend ? '已暂停' : '已恢复', icon: 'success' })
+      this.setData({
+        actionResultText: suspend ? '商户已暂停' : '商户已恢复',
+        actionResultNote: `当前状态：${this.data.detail?.statusLabel || '已同步'}`
+      })
     } catch (error: unknown) {
-      wx.showToast({ title: getErrorUserMessage(error, '操作失败，请稍后重试'), icon: 'none' })
+      this.setData({
+        actionResultText: '状态同步失败',
+        actionResultNote: getErrorUserMessage(error, '操作失败，请稍后重试')
+      })
     } finally {
       this.setData({ submitting: false })
     }

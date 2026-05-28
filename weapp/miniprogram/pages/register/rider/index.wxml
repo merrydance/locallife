@@ -108,7 +108,7 @@
           <t-input 
             label="联系电话" 
             type="number" 
-            placeholder="请输入联系电话" 
+            placeholder="11位手机号"
             value="{{formData.phone}}" 
             bindchange="onInput" 
             data-field="phone" 
