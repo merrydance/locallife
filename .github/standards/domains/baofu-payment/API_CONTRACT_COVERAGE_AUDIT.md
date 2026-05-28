@@ -487,7 +487,7 @@ rg -n "接口请求入口|bizContent|dataContent|riskInfo|share_after_pay|mercha
 
 | 文档 | 地址 | 本地覆盖 | 缺口 |
 | --- | --- | --- | --- |
-| 账户错误码 | https://doc.mandao.com/docs/bct/bct-1fjpm4fpns79f | C3：已把官方页列出的开户参数错误、业务异常错误码、开户异步通知错误码按安全前端语义归类，并对 union-gw `retCode` 业务失败做 `ProviderError` fail-closed | 资料字段级修复指引和沙箱错误样例仍待补；C4 前不得宣称真实错误码已验证。 |
+| 账户错误码 | https://doc.mandao.com/docs/bct/bct-1fjpm4fpns79f | C3：已把官方页列出的开户参数错误、业务异常错误码、开户异步通知错误码按安全前端语义归类，并对 union-gw `retCode` 业务失败做 `ProviderError` fail-closed；生产曾观测到非官方 `BF0020`，本地只作为 drift evidence 保留诊断快照，不把它列入官方错误码真值。 | 资料字段级修复指引和沙箱错误样例仍待补；C4 前不得宣称真实错误码已验证；再次出现 `BF0020` 时需用 `raw_snapshot.provider_diagnostic.source_path`、`ret_code`、`top_error_code`、`sys_resp_code` 向宝付确认来源。 |
 | 聚合支付错误码 | https://doc.mandao.com/docs/bct/bct-1f9qrfsj2fcbu | C3：已把官方页列出的 `INVALID_PARAMETER/SYSTEM_BUSY/UNOPENED_PRODUCT/ORDER_EXIST/MERCHANT_NOT_REPORT/RISK_REFUSED` 等错误码归类，并对聚合支付/报备 public envelope `resultCode != SUCCESS` 做 `ProviderError` fail-closed | 沙箱错误样例、响应验签/数字信封和真实渠道错误组合仍待补。 |
 | 产品类型 | https://doc.mandao.com/docs/bct/bct-1f9qrdjnaqra5 | C1：`SHARING` | 未限制其他产品类型。 |
 | 支付方式 | https://doc.mandao.com/docs/bct/bct-1f9qrdro3gtv1 | C1：`WECHAT_JSAPI` | 未建完整支付方式枚举和条件必填矩阵。 |

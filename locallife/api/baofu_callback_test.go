@@ -83,7 +83,7 @@ func TestBaofuAccountOpenCallbackAppliesTerminalStateBeforeAck(t *testing.T) {
 			require.Equal(t, int64(6101), arg.ID)
 			require.Equal(t, pgtype.Text{String: "CM_BCT_123", Valid: true}, arg.ContractNo)
 			require.Equal(t, pgtype.Text{String: "CM_BCT_123", Valid: true}, arg.SharingMerID)
-			require.JSONEq(t, `{"transSerialNo":"OPEN123","state":"1","contractNo":"CM_BCT_123"}`, string(arg.RawSnapshot))
+			require.JSONEq(t, `{"provider":"baofu","capability":"account","source_path":"body.state","result_state":"1"}`, string(arg.RawSnapshot))
 			binding.OpenState = db.BaofuAccountOpenStateActive
 			binding.ContractNo = arg.ContractNo
 			binding.SharingMerID = arg.SharingMerID
@@ -93,7 +93,7 @@ func TestBaofuAccountOpenCallbackAppliesTerminalStateBeforeAck(t *testing.T) {
 		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountOpeningFlowReadyParams) (db.BaofuAccountOpeningFlow, error) {
 			require.Equal(t, int64(7101), arg.ID)
 			require.Equal(t, pgtype.Int8{Int64: 6101, Valid: true}, arg.AccountBindingID)
-			require.JSONEq(t, `{"transSerialNo":"OPEN123","state":"1","contractNo":"CM_BCT_123"}`, string(arg.RawSnapshot))
+			require.JSONEq(t, `{"provider":"baofu","capability":"account","source_path":"body.state","result_state":"1"}`, string(arg.RawSnapshot))
 			flow.State = db.BaofuAccountOpeningStateReady
 			flow.AccountBindingID = arg.AccountBindingID
 			return flow, nil
@@ -389,7 +389,7 @@ func TestBaofuAccountOpenCallbackDuplicateFactRecoversFailedFlowBeforeAck(t *tes
 			require.Equal(t, pgtype.Int8{Int64: 6115, Valid: true}, arg.AccountBindingID)
 			require.Equal(t, pgtype.Text{String: "OPEN123", Valid: true}, arg.OpenTransSerialNo)
 			require.Equal(t, pgtype.Text{String: "CM_BCT_123", Valid: true}, arg.ContractNo)
-			require.JSONEq(t, `{"transSerialNo":"OPEN123","state":"1","contractNo":"CM_BCT_123"}`, string(arg.RawSnapshot))
+			require.JSONEq(t, `{"provider":"baofu","capability":"account","source_path":"body.state","result_state":"1"}`, string(arg.RawSnapshot))
 			flow.State = db.BaofuAccountOpeningStateReady
 			flow.AccountBindingID = arg.AccountBindingID
 			flow.FailureCode = pgtype.Text{}
@@ -501,13 +501,13 @@ func TestBaofuAccountOpenCallbackMarksAbnormalBeforeAck(t *testing.T) {
 	store.EXPECT().MarkBaofuAccountBindingAbnormal(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountBindingAbnormalParams) (db.BaofuAccountBinding, error) {
 			require.Equal(t, int64(6103), arg.ID)
-			require.JSONEq(t, `{"transSerialNo":"OPEN_ABNORMAL","state":"-1"}`, string(arg.RawSnapshot))
+			require.JSONEq(t, `{"provider":"baofu","capability":"account","source_path":"body.state","result_state":"-1"}`, string(arg.RawSnapshot))
 			return db.BaofuAccountBinding{ID: arg.ID, OpenState: db.BaofuAccountOpenStateAbnormal}, nil
 		})
 	store.EXPECT().MarkBaofuAccountOpeningFlowFailed(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountOpeningFlowFailedParams) (db.BaofuAccountOpeningFlow, error) {
 			require.Equal(t, int64(7103), arg.ID)
-			require.JSONEq(t, `{"transSerialNo":"OPEN_ABNORMAL","state":"-1"}`, string(arg.RawSnapshot))
+			require.JSONEq(t, `{"state":"failed","provider_diagnostic":{"provider":"baofu","capability":"account","source_path":"body.state","result_state":"-1"}}`, string(arg.RawSnapshot))
 			flow.State = db.BaofuAccountOpeningStateFailed
 			return flow, nil
 		})

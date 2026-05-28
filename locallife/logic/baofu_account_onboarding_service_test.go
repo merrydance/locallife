@@ -133,6 +133,62 @@ func TestBaofuAccountOnboardingServiceStart_ProviderOpenErrorMarksFlowFailed(t *
 	require.Equal(t, db.BaofuAccountOpenStateFailed, store.activeBinding.OpenState)
 }
 
+func TestBaofuAccountOnboardingServiceStart_ProviderOpenErrorPersistsSafeDiagnosticSnapshot(t *testing.T) {
+	store := newFakeBaofuAccountOnboardingStore()
+	providerErr := baofu.NewProviderBusinessError("T-1001-013-01", "BF0020", "通道返回身份证 110101199001010011 银行卡 6222020202020202 手机 13800138000")
+	var baofuProviderErr *baofu.ProviderError
+	require.ErrorAs(t, providerErr, &baofuProviderErr)
+	baofuProviderErr.DiagnosticSnapshot = []byte(`{"provider":"baofu","capability":"account","operation":"T-1001-013-01","http_status":200,"sys_resp_code":"S_0000","business_failure":true,"source_path":"body.errorCode","ret_code":"0","top_error_code":"BF0020","top_error_message_present":true}`)
+	accountClient := &fakeBaofuOnboardingAccountClient{err: providerErr}
+	service := NewBaofuAccountOnboardingService(store, accountClient, nil, nil, BaofuAccountOnboardingConfig{
+		VerifyFeeFen: 200,
+		IndustryID:   "9931",
+	})
+
+	_, err := service.StartOrRecoverOpening(context.Background(), BaofuAccountOpeningInput{
+		OwnerType: db.BaofuAccountOwnerTypeMerchant,
+		OwnerID:   88,
+		UserID:    99,
+		Profile: &BaofuAccountOpeningProfileInput{
+			LegalName:           "测试商户",
+			BusinessLicenseNo:   "91330100MA00000001",
+			LegalPersonName:     "李四",
+			LegalPersonIDNumber: "110101199001010011",
+			Email:               "merchant@example.com",
+			BankAccountNo:       "6222020202020202",
+			BankName:            "招商银行",
+			DepositBankProvince: "浙江省",
+			DepositBankCity:     "杭州市",
+			DepositBankName:     "招商银行杭州支行",
+		},
+	})
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusBadGateway, reqErr.Status)
+	require.Len(t, store.flows, 1)
+	require.Equal(t, db.BaofuAccountOpeningStateFailed, store.flows[0].State)
+	require.Equal(t, "BF0020", store.flows[0].FailureCode.String)
+	require.JSONEq(t, `{
+		"state":"failed",
+		"failure_code":"BF0020",
+		"provider_diagnostic":{
+			"provider":"baofu",
+			"capability":"account",
+			"operation":"T-1001-013-01",
+			"http_status":200,
+			"sys_resp_code":"S_0000",
+			"business_failure":true,
+			"source_path":"body.errorCode",
+			"ret_code":"0",
+			"top_error_code":"BF0020",
+			"top_error_message_present":true
+		}
+	}`, string(store.flows[0].RawSnapshot))
+	require.NotContains(t, string(store.flows[0].RawSnapshot), "110101199001010011")
+	require.NotContains(t, string(store.flows[0].RawSnapshot), "6222020202020202")
+	require.NotContains(t, string(store.flows[0].RawSnapshot), "13800138000")
+}
+
 func TestBaofuAccountOnboardingServiceStart_BusinessPrivateCardRequiresCorporateMobile(t *testing.T) {
 	store := newFakeBaofuAccountOnboardingStore()
 	service := NewBaofuAccountOnboardingService(store, &fakeBaofuOnboardingAccountClient{}, nil, nil, BaofuAccountOnboardingConfig{
@@ -740,6 +796,82 @@ func TestBaofuAccountOnboardingServiceApplyAccountOpenResult_FailedResultReturns
 	require.Contains(t, logs.String(), `"failure_category":"user_action_required"`)
 	require.NotContains(t, logs.String(), "该子商户已开户")
 	require.NotContains(t, logs.String(), "LLBFOO0000000999")
+}
+
+func TestBaofuAccountOnboardingServiceApplyAccountOpenResult_DoesNotPersistUnsafeRawSnapshot(t *testing.T) {
+	store := newFakeBaofuAccountOnboardingStore()
+	service := NewBaofuAccountOnboardingService(store, nil, nil, nil, BaofuAccountOnboardingConfig{VerifyFeeFen: 200, IndustryID: "9931"})
+	flow := db.BaofuAccountOpeningFlow{
+		ID:                13,
+		OwnerType:         db.BaofuAccountOwnerTypeOperator,
+		OwnerID:           1,
+		AccountType:       db.BaofuAccountTypePersonal,
+		State:             db.BaofuAccountOpeningStateOpeningProcessing,
+		OpenTransSerialNo: pgtype.Text{String: "BFO_SAFE_RAW_CURRENT", Valid: true},
+		LoginNo:           pgtype.Text{String: "LLBFOO0000000999", Valid: true},
+	}
+	store.flows = append(store.flows, flow)
+	store.activeBinding = db.BaofuAccountBinding{ID: 23, OwnerType: flow.OwnerType, OwnerID: flow.OwnerID, AccountType: flow.AccountType, OpenState: db.BaofuAccountOpenStateProcessing}
+
+	applied, err := service.ApplyAccountOpenResult(context.Background(), flow, baofucontracts.AccountResult{
+		OpenState:     db.BaofuAccountOpenStateFailed,
+		UpstreamState: "0",
+		FailCode:      "BF0020",
+		FailMessage:   "通道返回身份证 110101199001010011 银行卡 6222020202020202 手机 13800138000",
+		Raw:           []byte(`{"retCode":1,"result":[{"state":0,"errorCode":"BF0020","errorMsg":"通道返回身份证 110101199001010011 银行卡 6222020202020202 手机 13800138000","customerName":"测试用户","loginNo":"LLBFOO0000000999","contractNo":"CP_SECRET_123"}]}`),
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, db.BaofuAccountOpeningStateFailed, applied.Flow.State)
+	require.Equal(t, "BF0020", applied.Flow.FailureCode.String)
+	require.Equal(t, "支付通道异常，请联系平台处理", applied.Flow.FailureMessage.String)
+	require.JSONEq(t, `{
+		"state":"failed",
+		"failure_code":"BF0020",
+		"provider_diagnostic":{
+			"provider":"baofu",
+			"capability":"account",
+			"source_path":"body.result[0].errorCode",
+			"ret_code":"1",
+			"result_state":"0",
+			"result_error_code":"BF0020",
+			"result_error_message_present":true
+		}
+	}`, string(applied.Flow.RawSnapshot))
+	require.NotContains(t, string(applied.Flow.RawSnapshot), "测试用户")
+	require.NotContains(t, string(applied.Flow.RawSnapshot), "110101199001010011")
+	require.NotContains(t, string(applied.Flow.RawSnapshot), "6222020202020202")
+	require.NotContains(t, string(applied.Flow.RawSnapshot), "13800138000")
+	require.NotContains(t, string(applied.Flow.RawSnapshot), "LLBFOO0000000999")
+	require.NotContains(t, string(applied.Flow.RawSnapshot), "CP_SECRET_123")
+}
+
+func TestBaofuOpeningProviderFailureSnapshotDropsNestedDiagnosticValues(t *testing.T) {
+	snapshot := baofuOpeningProviderFailureSnapshot("BF0020", []byte(`{
+		"provider":"baofu",
+		"capability":"account",
+		"source_path":"body.result[0].errorCode",
+		"ret_code":"1",
+		"result_state":"0",
+		"result_error_code":{"customerName":"测试用户","contractNo":"CP_SECRET_123"},
+		"top_error_code":"身份证 110101199001010011",
+		"result_error_message_present":true
+	}`))
+
+	require.JSONEq(t, `{
+		"state":"failed",
+		"failure_code":"BF0020",
+		"provider_diagnostic":{
+			"provider":"baofu",
+			"capability":"account",
+			"source_path":"body.result[0].errorCode",
+			"ret_code":"1",
+			"result_state":"0",
+			"result_error_message_present":true
+		}
+	}`, string(snapshot))
+	require.NotContains(t, string(snapshot), "测试用户")
+	require.NotContains(t, string(snapshot), "CP_SECRET_123")
 }
 
 func TestBaofuAccountOnboardingServiceApplyAccountOpenResult_DuplicateOpenReconcilesByQuery(t *testing.T) {
@@ -1665,6 +1797,7 @@ func (s *fakeBaofuAccountOnboardingStore) MarkBaofuAccountOpeningFlowFailed(_ co
 		flow.State = db.BaofuAccountOpeningStateFailed
 		flow.FailureCode = arg.FailureCode
 		flow.FailureMessage = arg.FailureMessage
+		flow.RawSnapshot = arg.RawSnapshot
 	})
 }
 

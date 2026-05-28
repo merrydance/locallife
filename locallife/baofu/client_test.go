@@ -48,25 +48,28 @@ func TestIsProviderBusinessResponseErrorDistinguishesBusinessAndContractFailures
 }
 
 func TestBusinessFailureDetectorsFailClosedForMissingSuccessIndicators(t *testing.T) {
-	accountCode, accountMessage, accountFailed := accountBusinessFailure(json.RawMessage(`{"errorCode":"BF0005","errorMsg":"上游账户处理中"}`))
-	require.True(t, accountFailed)
-	require.Equal(t, "BF0005", accountCode)
-	require.Equal(t, "上游账户处理中", accountMessage)
+	accountFailure := accountBusinessFailure(json.RawMessage(`{"errorCode":"BF0005","errorMsg":"上游账户处理中"}`))
+	require.True(t, accountFailure.Failed)
+	require.Equal(t, "BF0005", accountFailure.Code)
+	require.Equal(t, "上游账户处理中", accountFailure.Message)
+	require.Equal(t, "body.errorCode", accountFailure.SourcePath)
 
-	accountCode, accountMessage, accountFailed = accountBusinessFailure(json.RawMessage(`{"errorMsg":"上游账户失败但未返回错误码"}`))
-	require.True(t, accountFailed)
-	require.Equal(t, "MISSING_RET_CODE", accountCode)
-	require.Equal(t, "上游账户失败但未返回错误码", accountMessage)
+	accountFailure = accountBusinessFailure(json.RawMessage(`{"errorMsg":"上游账户失败但未返回错误码"}`))
+	require.True(t, accountFailure.Failed)
+	require.Equal(t, "MISSING_RET_CODE", accountFailure.Code)
+	require.Equal(t, "上游账户失败但未返回错误码", accountFailure.Message)
+	require.Equal(t, "body.retCode", accountFailure.SourcePath)
 
 	publicCode, publicMessage, publicFailed := publicBusinessFailure(json.RawMessage(`{"errCode":"MERCHANT_NOT_REPORT","errMsg":"上游报备缺失"}`))
 	require.True(t, publicFailed)
 	require.Equal(t, "MERCHANT_NOT_REPORT", publicCode)
 	require.Equal(t, "上游报备缺失", publicMessage)
 
-	accountCode, accountMessage, accountFailed = accountBusinessFailure(json.RawMessage(`{"contractNo":"CM202605040001"}`))
-	require.True(t, accountFailed)
-	require.Equal(t, "MISSING_RET_CODE", accountCode)
-	require.Empty(t, accountMessage)
+	accountFailure = accountBusinessFailure(json.RawMessage(`{"contractNo":"CM202605040001"}`))
+	require.True(t, accountFailure.Failed)
+	require.Equal(t, "MISSING_RET_CODE", accountFailure.Code)
+	require.Empty(t, accountFailure.Message)
+	require.Equal(t, "body.retCode", accountFailure.SourcePath)
 
 	publicCode, publicMessage, publicFailed = publicBusinessFailure(json.RawMessage(`{"outTradeNo":"BF202605040001"}`))
 	require.True(t, publicFailed)
@@ -75,15 +78,24 @@ func TestBusinessFailureDetectorsFailClosedForMissingSuccessIndicators(t *testin
 }
 
 func TestAccountBusinessFailureAcceptsNumericRetCode(t *testing.T) {
-	code, message, failed := accountBusinessFailure(json.RawMessage(`{"retCode":0,"errorCode":"BF00061","errorMsg":"上游四要素失败"}`))
-	require.True(t, failed)
-	require.Equal(t, "BF00061", code)
-	require.Equal(t, "上游四要素失败", message)
+	failure := accountBusinessFailure(json.RawMessage(`{"retCode":0,"errorCode":"BF00061","errorMsg":"上游四要素失败"}`))
+	require.True(t, failure.Failed)
+	require.Equal(t, "BF00061", failure.Code)
+	require.Equal(t, "上游四要素失败", failure.Message)
+	require.Equal(t, "body.errorCode", failure.SourcePath)
 
-	code, message, failed = accountBusinessFailure(json.RawMessage(`{"retCode":1,"result":[{"state":2,"transSerialNo":"OPEN202605050001"}]}`))
-	require.False(t, failed)
-	require.Empty(t, code)
-	require.Empty(t, message)
+	failure = accountBusinessFailure(json.RawMessage(`{"retCode":1,"result":[{"state":2,"transSerialNo":"OPEN202605050001"}]}`))
+	require.False(t, failure.Failed)
+	require.Empty(t, failure.Code)
+	require.Empty(t, failure.Message)
+}
+
+func TestAccountBusinessFailureTreatsAcceptedResultFailureAsBusinessResult(t *testing.T) {
+	failure := accountBusinessFailure(json.RawMessage(`{"retCode":1,"result":[{"state":0,"errorCode":"BF00061","errorMsg":"企业法人四要素验证失败"}]}`))
+
+	require.False(t, failure.Failed)
+	require.Empty(t, failure.Code)
+	require.Empty(t, failure.Message)
 }
 
 func TestPublicBusinessFailureUsesUnknownNonSuccessResultCode(t *testing.T) {

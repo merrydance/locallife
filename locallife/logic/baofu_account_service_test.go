@@ -124,7 +124,7 @@ func TestBaofuAccountServiceOpenAccountMarksAbnormalForOfficialExceptionState(t 
 
 	require.NoError(t, err)
 	require.Equal(t, int64(7), store.lastAbnormal.ID)
-	require.JSONEq(t, `{"state":"-1"}`, string(store.lastAbnormal.RawSnapshot))
+	require.JSONEq(t, `{"provider":"baofu","capability":"account","source_path":"body.state","result_state":"-1"}`, string(store.lastAbnormal.RawSnapshot))
 	require.False(t, store.failedCalled)
 }
 

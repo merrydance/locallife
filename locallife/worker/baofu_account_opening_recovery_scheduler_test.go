@@ -213,6 +213,14 @@ func TestBaofuAccountOpeningRecoverySchedulerSubmitsMerchantReportAndMarksReady(
 		DoAndReturn(func(_ context.Context, arg db.MarkBaofuMerchantReportSucceededParams) (db.BaofuMerchantReport, error) {
 			return db.BaofuMerchantReport{ID: 788, OwnerType: flow.OwnerType, OwnerID: flow.OwnerID, ReportType: db.BaofuMerchantReportTypeWechat, ReportNo: "MR202605080088", ReportState: db.BaofuMerchantReportStateSucceeded, AppletAuthState: db.BaofuMerchantReportAppletAuthStatePending, SubMchID: arg.SubMchID}, nil
 		})
+	store.EXPECT().GetExternalPaymentCommandByExternalObject(gomock.Any(), db.GetExternalPaymentCommandByExternalObjectParams{
+		Provider:           db.ExternalPaymentProviderBaofu,
+		Channel:            db.PaymentChannelBaofuAggregate,
+		Capability:         db.ExternalPaymentCapabilityBaofuMerchantReport,
+		CommandType:        db.ExternalPaymentCommandTypeBaofuBindSubConfig,
+		ExternalObjectType: "baofu_bind_sub_config",
+		ExternalObjectKey:  "1900000118",
+	}).Return(db.ExternalPaymentCommand{}, db.ErrRecordNotFound)
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
 		Return(db.ExternalPaymentCommand{ID: 2, CommandType: db.ExternalPaymentCommandTypeBaofuBindSubConfig}, nil)
 	store.EXPECT().MarkBaofuMerchantReportAppletAuthSucceeded(gomock.Any(), int64(788)).
@@ -283,6 +291,7 @@ func TestBaofuAccountOpeningRecoverySchedulerMarksOpeningFailure(t *testing.T) {
 	store.EXPECT().MarkBaofuAccountBindingFailed(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountBindingFailedParams) (db.BaofuAccountBinding, error) {
 			require.Equal(t, binding.ID, arg.ID)
+			require.JSONEq(t, `{"state":"failed","failure_code":"VERIFY_FAILED","provider_diagnostic":{"provider":"baofu","capability":"account","source_path":"body.errorCode","result_state":"0","result_error_code":"VERIFY_FAILED"}}`, string(arg.RawSnapshot))
 			binding.OpenState = db.BaofuAccountOpenStateFailed
 			return binding, nil
 		})
@@ -290,7 +299,8 @@ func TestBaofuAccountOpeningRecoverySchedulerMarksOpeningFailure(t *testing.T) {
 		DoAndReturn(func(_ context.Context, arg db.MarkBaofuAccountOpeningFlowFailedParams) (db.BaofuAccountOpeningFlow, error) {
 			require.Equal(t, flow.ID, arg.ID)
 			require.Equal(t, pgtype.Text{String: "VERIFY_FAILED", Valid: true}, arg.FailureCode)
-			require.Equal(t, pgtype.Text{String: "银行卡校验失败", Valid: true}, arg.FailureMessage)
+			require.Equal(t, pgtype.Text{String: "支付通道异常，请联系平台处理", Valid: true}, arg.FailureMessage)
+			require.JSONEq(t, `{"state":"failed","failure_code":"VERIFY_FAILED","provider_diagnostic":{"provider":"baofu","capability":"account","source_path":"body.errorCode","result_state":"0","result_error_code":"VERIFY_FAILED"}}`, string(arg.RawSnapshot))
 			flow.State = db.BaofuAccountOpeningStateFailed
 			return flow, nil
 		})

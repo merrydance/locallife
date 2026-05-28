@@ -249,7 +249,40 @@ type officialAccountResult struct {
 	ErrorCode     officialScalarString `json:"errorCode"`
 	ErrorMessage  officialScalarString `json:"errorMsg"`
 	Result        json.RawMessage      `json:"result"`
-	Raw           json.RawMessage      `json:"-"`
+	Operation     string               `json:"-"`
+	RetCode       string               `json:"-"`
+}
+
+func (r *officialAccountResult) SetRaw(raw json.RawMessage) {
+	if r == nil {
+		return
+	}
+	var payload map[string]json.RawMessage
+	if len(raw) == 0 || json.Unmarshal(raw, &payload) != nil {
+		return
+	}
+	r.RetCode = accountScalarString(payload["retCode"])
+	if len(r.Result) == 0 {
+		r.Result = append(r.Result[:0], payload["result"]...)
+	}
+}
+
+func accountScalarString(raw json.RawMessage) string {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return ""
+	}
+	var decoded string
+	if err := json.Unmarshal(raw, &decoded); err == nil {
+		return strings.TrimSpace(decoded)
+	}
+	return strings.Trim(trimmed, `"`)
+}
+
+func (r *officialAccountResult) SetOperation(operation string) {
+	if r != nil {
+		r.Operation = strings.TrimSpace(operation)
+	}
 }
 
 func (r officialAccountResult) toAccountResult() *contracts.AccountResult {
@@ -271,26 +304,67 @@ func (r officialAccountResult) toAccountResult() *contracts.AccountResult {
 		OpenState:     contracts.OpenStateFromUpstream(state),
 		FailCode:      failCode,
 		FailMessage:   firstNonEmpty(item.ErrorMessage.String(), r.ErrorMessage.String()),
+		Raw:           r.safeDiagnosticSnapshot(item),
 	}
 }
 
-func (r officialAccountResult) firstResultItem() officialAccountResultItem {
-	raw := strings.TrimSpace(string(r.Result))
-	if raw == "" || raw == "null" {
-		return officialAccountResultItem{}
+func (r officialAccountResult) safeDiagnosticSnapshot(item officialAccountResultItem) []byte {
+	snapshot := map[string]any{
+		"provider":   "baofu",
+		"capability": "account",
 	}
-	if strings.HasPrefix(raw, "[") {
-		var items []officialAccountResultItem
-		if err := json.Unmarshal(r.Result, &items); err != nil || len(items) == 0 {
-			return officialAccountResultItem{}
+	if v := strings.TrimSpace(r.Operation); v != "" {
+		snapshot["operation"] = v
+	}
+	if v := strings.TrimSpace(r.RetCode); v != "" {
+		snapshot["ret_code"] = v
+	}
+	if v := strings.TrimSpace(item.State.String()); v != "" {
+		snapshot["result_state"] = v
+	}
+	resultCode := strings.TrimSpace(item.ErrorCode.String())
+	if resultCode != "" && !isOfficialSuccessCode(resultCode) {
+		snapshot["source_path"] = "body.result[0].errorCode"
+		snapshot["result_error_code"] = resultCode
+		if strings.TrimSpace(item.ErrorMessage.String()) != "" {
+			snapshot["result_error_message_present"] = true
 		}
-		return items[0]
+	} else if _, ok := accountFirstResultItemForRaw(r.Result); ok {
+		snapshot["source_path"] = "body.result[0]"
+	} else if strings.TrimSpace(r.State.String()) != "" || strings.TrimSpace(r.ErrorCode.String()) != "" {
+		snapshot["source_path"] = "body"
+	}
+	raw, err := json.Marshal(snapshot)
+	if err != nil {
+		return []byte(`{"provider":"baofu","capability":"account"}`)
+	}
+	return raw
+}
+
+func (r officialAccountResult) firstResultItem() officialAccountResultItem {
+	if item, ok := accountFirstResultItemForRaw(r.Result); ok {
+		return item
+	}
+	return officialAccountResultItem{}
+}
+
+func accountFirstResultItemForRaw(raw json.RawMessage) (officialAccountResultItem, bool) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return officialAccountResultItem{}, false
+	}
+	if strings.HasPrefix(trimmed, "[") {
+		var items []officialAccountResultItem
+		if err := json.Unmarshal(raw, &items); err != nil || len(items) == 0 {
+			return officialAccountResultItem{}, false
+		}
+		return items[0], true
 	}
 	var item officialAccountResultItem
-	if err := json.Unmarshal(r.Result, &item); err != nil {
-		return officialAccountResultItem{}
+	if err := json.Unmarshal(raw, &item); err != nil {
+		return officialAccountResultItem{}, false
 	}
-	return item
+	return item, true
 }
 
 type officialAccountResultItem struct {

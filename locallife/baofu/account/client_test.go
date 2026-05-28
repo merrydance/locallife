@@ -551,6 +551,127 @@ func TestAccountClientReturnsProviderErrorForBusinessFailure(t *testing.T) {
 	require.Equal(t, "身份或银行卡信息核验未通过，请核对后重新提交", providerErr.Frontend.Message)
 }
 
+func TestAccountClientProviderErrorIncludesSafeAccountFailureDiagnostic(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{
+		"retCode":   0,
+		"errorCode": "BF0020",
+		"errorMsg":  "通道返回身份证 110101199001010011 银行卡 6222020202020202 手机 13800138000",
+	}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	_, err := client.OpenAccount(context.Background(), contracts.OpenAccountRequest{
+		AccountType:         "business",
+		OutRequestNo:        "BFO202605281402418bd9d465",
+		LoginNo:             "LLBFOM0000000011",
+		LegalName:           "测试餐饮有限公司",
+		CertificateNo:       "91330100MA00000001",
+		CertificateType:     contracts.OfficialBusinessCertificateTypeLicense,
+		CorporateName:       "李四",
+		CorporateCertType:   contracts.OfficialCertificateTypeID,
+		CorporateCertID:     "110101199001010011",
+		Email:               "merchant@example.com",
+		BankAccountNo:       "6222020202020202",
+		BankName:            "招商银行",
+		DepositBankProvince: "浙江省",
+		DepositBankCity:     "杭州市",
+		DepositBankName:     "招商银行杭州支行",
+		IndustryID:          "9931",
+	})
+
+	require.Error(t, err)
+	var providerErr *baofu.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, "BF0020", providerErr.UpstreamCode)
+	require.JSONEq(t, `{
+		"provider":"baofu",
+		"capability":"account",
+		"operation":"T-1001-013-01",
+		"http_status":200,
+		"sys_resp_code":"S_0000",
+		"business_failure":true,
+		"source_path":"body.errorCode",
+		"ret_code":"0",
+		"top_error_code":"BF0020",
+		"top_error_message_present":true
+	}`, string(providerErr.DiagnosticSnapshot))
+	require.NotContains(t, string(providerErr.DiagnosticSnapshot), "110101199001010011")
+	require.NotContains(t, string(providerErr.DiagnosticSnapshot), "6222020202020202")
+	require.NotContains(t, string(providerErr.DiagnosticSnapshot), "13800138000")
+}
+
+func TestAccountClientOpenAccountResultKeepsSafeDiagnosticSnapshot(t *testing.T) {
+	response := accountOpenAcceptedResponseForTest("OPEN202605040001", "测试用户")
+	doer := &accountRecordingDoer{responseBody: response}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	result, err := client.OpenAccount(context.Background(), contracts.OpenAccountRequest{
+		AccountType:   "personal",
+		OutRequestNo:  "OPEN202605040001",
+		LoginNo:       "LLBFOR0000000001",
+		LegalName:     "测试用户",
+		CertificateNo: "110101199001010011",
+		BankAccountNo: "6222020202020202020",
+		BankMobile:    "13800138000",
+	})
+
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"provider":"baofu",
+		"capability":"account",
+		"operation":"T-1001-013-01",
+		"source_path":"body.result[0]",
+		"ret_code":"1",
+		"result_state":"2"
+	}`, string(result.Raw))
+	require.NotContains(t, string(result.Raw), "测试用户")
+	require.NotContains(t, string(result.Raw), "110101199001010011")
+	require.NotContains(t, string(result.Raw), "6222020202020202020")
+	require.NotContains(t, string(result.Raw), "13800138000")
+}
+
+func TestAccountClientOpenAccountResultDiagnosticCapturesResultFailureSource(t *testing.T) {
+	doer := &accountRecordingDoer{responseBody: map[string]any{
+		"retCode": 1,
+		"result": []map[string]any{{
+			"transSerialNo": "OPEN202605040002",
+			"loginNo":       "LLBFOR0000000002",
+			"customerName":  "测试用户",
+			"state":         0,
+			"errorCode":     "BF0020",
+			"errorMsg":      "通道返回身份证 110101199001010011 银行卡 6222020202020202 手机 13800138000",
+		}},
+	}}
+	client := NewClient(testBaofuRootClient(t, doer))
+
+	result, err := client.OpenAccount(context.Background(), contracts.OpenAccountRequest{
+		AccountType:   "personal",
+		OutRequestNo:  "OPEN202605040002",
+		LoginNo:       "LLBFOR0000000002",
+		LegalName:     "测试用户",
+		CertificateNo: "110101199001010011",
+		BankAccountNo: "6222020202020202020",
+		BankMobile:    "13800138000",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, contracts.OpenStateFailed, result.OpenState)
+	require.Equal(t, "BF0020", result.FailCode)
+	require.JSONEq(t, `{
+		"provider":"baofu",
+		"capability":"account",
+		"operation":"T-1001-013-01",
+		"source_path":"body.result[0].errorCode",
+		"ret_code":"1",
+		"result_state":"0",
+		"result_error_code":"BF0020",
+		"result_error_message_present":true
+	}`, string(result.Raw))
+	require.NotContains(t, string(result.Raw), "测试用户")
+	require.NotContains(t, string(result.Raw), "110101199001010011")
+	require.NotContains(t, string(result.Raw), "6222020202020202")
+	require.NotContains(t, string(result.Raw), "13800138000")
+}
+
 func TestAccountClientReturnsProviderErrorWhenErrorCodeHasNoRetCode(t *testing.T) {
 	doer := &accountRecordingDoer{responseBody: map[string]any{"errorCode": "BF0005", "errorMsg": "上游处理中"}}
 	client := NewClient(testBaofuRootClient(t, doer))

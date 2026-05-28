@@ -96,7 +96,7 @@ func (s *BaofuAccountOnboardingService) applyAccountOpenResult(ctx context.Conte
 			var err error
 			if normalized.OpenState == db.BaofuAccountOpenStateFailed {
 				if strings.TrimSpace(binding.OpenState) != db.BaofuAccountOpenStateFailed {
-					binding, err = s.store.MarkBaofuAccountBindingFailed(ctx, db.MarkBaofuAccountBindingFailedParams{ID: binding.ID, RawSnapshot: baofuAccountRawSnapshot(normalized.Raw)})
+					binding, err = s.store.MarkBaofuAccountBindingFailed(ctx, db.MarkBaofuAccountBindingFailedParams{ID: binding.ID, RawSnapshot: baofuAccountOpenResultFailureSnapshot(normalized.FailCode, normalized.Raw)})
 				}
 			} else if strings.TrimSpace(binding.OpenState) != db.BaofuAccountOpenStateAbnormal {
 				binding, err = s.store.MarkBaofuAccountBindingAbnormal(ctx, db.MarkBaofuAccountBindingAbnormalParams{ID: binding.ID, RawSnapshot: baofuAccountRawSnapshot(normalized.Raw)})
@@ -114,8 +114,8 @@ func (s *BaofuAccountOnboardingService) applyAccountOpenResult(ctx context.Conte
 		updated, err := s.store.MarkBaofuAccountOpeningFlowFailed(ctx, db.MarkBaofuAccountOpeningFlowFailedParams{
 			ID:             flow.ID,
 			FailureCode:    pgText(normalized.FailCode),
-			FailureMessage: pgText(normalized.FailMessage),
-			RawSnapshot:    baofuAccountRawSnapshot(normalized.Raw),
+			FailureMessage: baofuAccountSafeFailureMessage(normalized.FailCode),
+			RawSnapshot:    baofuAccountOpenResultFailureSnapshot(normalized.FailCode, normalized.Raw),
 		})
 		if err != nil {
 			return BaofuAccountOpenApplyResult{}, err

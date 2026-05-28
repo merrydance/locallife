@@ -112,13 +112,17 @@ func (c *Client) postUnionGateway(ctx context.Context, endpoint string, method s
 	if strings.TrimSpace(responseEnvelope.Header.SystemRespCode) != UnionGWSystemRespSuccess {
 		return providerResponseError(method, resp.StatusCode, responseEnvelope.Header.SystemRespCode, responseEnvelope.Header.SystemRespDesc, errProviderUnionGWSystemResponse)
 	}
-	if code, message, failed := accountBusinessFailure(responseEnvelope.Body); failed {
-		return providerResponseError(method, resp.StatusCode, code, message, errProviderAccountBusinessResponse)
+	if failure := accountBusinessFailure(responseEnvelope.Body); failure.Failed {
+		failure.Header = responseEnvelope.Header
+		failure.Operation = method
+		failure.HTTPStatus = resp.StatusCode
+		return providerResponseErrorWithDiagnostic(method, resp.StatusCode, failure.Code, failure.Message, failure.SafeDiagnosticSnapshot(), errProviderAccountBusinessResponse)
 	}
 	if out != nil {
 		if err := json.Unmarshal(responseEnvelope.Body, out); err != nil {
 			return providerRequestError(method, resp.StatusCode, responseEnvelope.Header.SystemRespCode, err)
 		}
+		setAccountRawResponse(out, method, responseEnvelope.Body)
 	}
 	return nil
 }
@@ -205,6 +209,15 @@ func validatePublicResponseIdentity(responseEnvelope PublicResponseEnvelope, mer
 	return nil
 }
 
+func setAccountRawResponse(out any, operation string, raw json.RawMessage) {
+	if target, ok := out.(interface{ SetOperation(string) }); ok {
+		target.SetOperation(operation)
+	}
+	if target, ok := out.(interface{ SetRaw(json.RawMessage) }); ok {
+		target.SetRaw(raw)
+	}
+}
+
 func NewProviderContractError(operation string, cause error) error {
 	if cause == nil {
 		return nil
@@ -248,41 +261,171 @@ func providerRequestUpstreamCode(statusCode int, upstreamCode string) string {
 }
 
 func providerResponseError(operation string, statusCode int, upstreamCode string, upstreamMessage string, cause error) error {
+	return providerResponseErrorWithDiagnostic(operation, statusCode, upstreamCode, upstreamMessage, nil, cause)
+}
+
+func providerResponseErrorWithDiagnostic(operation string, statusCode int, upstreamCode string, upstreamMessage string, diagnostic []byte, cause error) error {
 	classified := ClassifyBaofuError(upstreamCode, upstreamMessage)
 	return &ProviderError{
-		Operation:       strings.TrimSpace(operation),
-		Capability:      "baofu",
-		StatusCode:      statusCode,
-		UpstreamCode:    strings.TrimSpace(upstreamCode),
-		UpstreamMessage: strings.TrimSpace(upstreamMessage),
-		Frontend:        classified.FrontendGuidance(),
-		cause:           cause,
+		Operation:          strings.TrimSpace(operation),
+		Capability:         "baofu",
+		StatusCode:         statusCode,
+		UpstreamCode:       strings.TrimSpace(upstreamCode),
+		UpstreamMessage:    strings.TrimSpace(upstreamMessage),
+		DiagnosticSnapshot: diagnostic,
+		Frontend:           classified.FrontendGuidance(),
+		cause:              cause,
 	}
 }
 
-func accountBusinessFailure(raw json.RawMessage) (string, string, bool) {
+type accountBusinessFailureDiagnostic struct {
+	Operation                 string        `json:"operation,omitempty"`
+	HTTPStatus                int           `json:"http_status,omitempty"`
+	Header                    UnionGWHeader `json:"-"`
+	Code                      string        `json:"-"`
+	Message                   string        `json:"-"`
+	Failed                    bool          `json:"-"`
+	SourcePath                string        `json:"source_path,omitempty"`
+	RetCode                   string        `json:"ret_code,omitempty"`
+	TopErrorCode              string        `json:"top_error_code,omitempty"`
+	TopErrorMessagePresent    bool          `json:"top_error_message_present,omitempty"`
+	ResultState               string        `json:"result_state,omitempty"`
+	ResultErrorCode           string        `json:"result_error_code,omitempty"`
+	ResultErrorMessagePresent bool          `json:"result_error_message_present,omitempty"`
+}
+
+func (d accountBusinessFailureDiagnostic) SafeDiagnosticSnapshot() []byte {
+	snapshot := map[string]any{
+		"provider":         "baofu",
+		"capability":       "account",
+		"business_failure": d.Failed,
+	}
+	if v := strings.TrimSpace(d.Operation); v != "" {
+		snapshot["operation"] = v
+	}
+	if d.HTTPStatus != 0 {
+		snapshot["http_status"] = d.HTTPStatus
+	}
+	if v := strings.TrimSpace(d.Header.SystemRespCode); v != "" {
+		snapshot["sys_resp_code"] = v
+	}
+	if strings.TrimSpace(d.Header.SystemRespDesc) != "" {
+		snapshot["sys_resp_desc_present"] = true
+	}
+	if v := strings.TrimSpace(d.SourcePath); v != "" {
+		snapshot["source_path"] = v
+	}
+	if v := strings.TrimSpace(d.RetCode); v != "" {
+		snapshot["ret_code"] = v
+	}
+	if v := strings.TrimSpace(d.TopErrorCode); v != "" {
+		snapshot["top_error_code"] = v
+	}
+	if d.TopErrorMessagePresent {
+		snapshot["top_error_message_present"] = true
+	}
+	if v := strings.TrimSpace(d.ResultState); v != "" {
+		snapshot["result_state"] = v
+	}
+	if v := strings.TrimSpace(d.ResultErrorCode); v != "" {
+		snapshot["result_error_code"] = v
+	}
+	if d.ResultErrorMessagePresent {
+		snapshot["result_error_message_present"] = true
+	}
+	raw, err := json.Marshal(snapshot)
+	if err != nil {
+		return []byte(`{"provider":"baofu","capability":"account","business_failure":true}`)
+	}
+	return raw
+}
+
+func accountBusinessFailure(raw json.RawMessage) accountBusinessFailureDiagnostic {
 	var payload map[string]json.RawMessage
 	if len(raw) == 0 || json.Unmarshal(raw, &payload) != nil {
-		return "", "", false
+		return accountBusinessFailureDiagnostic{}
 	}
 	retCode := strings.ToUpper(jsonScalarString(payload["retCode"]))
 	errorCode := jsonScalarString(payload["errorCode"])
 	errorMessage := jsonScalarString(payload["errorMsg"])
+	item := accountFirstResultItem(payload["result"])
+	diagnostic := accountBusinessFailureDiagnostic{
+		RetCode:                   retCode,
+		TopErrorCode:              errorCode,
+		TopErrorMessagePresent:    strings.TrimSpace(errorMessage) != "",
+		ResultState:               item.State,
+		ResultErrorCode:           item.ErrorCode,
+		ResultErrorMessagePresent: strings.TrimSpace(item.ErrorMessage) != "",
+	}
 	if retCode == "" {
 		code := errorCode
 		if code == "" {
 			code = "MISSING_RET_CODE"
 		}
-		return code, errorMessage, true
+		diagnostic.Code = code
+		diagnostic.Message = errorMessage
+		diagnostic.Failed = true
+		diagnostic.SourcePath = "body.errorCode"
+		if errorCode == "" {
+			diagnostic.SourcePath = "body.retCode"
+		}
+		return diagnostic
 	}
 	if retCode == "1" || retCode == "SUCCESS" {
-		return "", "", false
+		return accountBusinessFailureDiagnostic{}
 	}
 	code := errorCode
 	if code == "" {
 		code = retCode
+		diagnostic.SourcePath = "body.retCode"
+	} else {
+		diagnostic.SourcePath = "body.errorCode"
 	}
-	return code, errorMessage, true
+	diagnostic.Code = code
+	diagnostic.Message = errorMessage
+	diagnostic.Failed = true
+	return diagnostic
+}
+
+type accountBusinessFailureResultItem struct {
+	State        string
+	ErrorCode    string
+	ErrorMessage string
+}
+
+func accountFirstResultItem(raw json.RawMessage) accountBusinessFailureResultItem {
+	raw = json.RawMessage(strings.TrimSpace(string(raw)))
+	if len(raw) == 0 || string(raw) == "null" {
+		return accountBusinessFailureResultItem{}
+	}
+	if strings.HasPrefix(string(raw), "[") {
+		var items []struct {
+			State        json.RawMessage `json:"state"`
+			ErrorCode    json.RawMessage `json:"errorCode"`
+			ErrorMessage json.RawMessage `json:"errorMsg"`
+		}
+		if err := json.Unmarshal(raw, &items); err != nil || len(items) == 0 {
+			return accountBusinessFailureResultItem{}
+		}
+		return accountBusinessFailureResultItem{
+			State:        strings.ToUpper(jsonScalarString(items[0].State)),
+			ErrorCode:    jsonScalarString(items[0].ErrorCode),
+			ErrorMessage: jsonScalarString(items[0].ErrorMessage),
+		}
+	}
+	var item struct {
+		State        json.RawMessage `json:"state"`
+		ErrorCode    json.RawMessage `json:"errorCode"`
+		ErrorMessage json.RawMessage `json:"errorMsg"`
+	}
+	if err := json.Unmarshal(raw, &item); err != nil {
+		return accountBusinessFailureResultItem{}
+	}
+	return accountBusinessFailureResultItem{
+		State:        strings.ToUpper(jsonScalarString(item.State)),
+		ErrorCode:    jsonScalarString(item.ErrorCode),
+		ErrorMessage: jsonScalarString(item.ErrorMessage),
+	}
 }
 
 func publicBusinessFailure(raw json.RawMessage) (string, string, bool) {

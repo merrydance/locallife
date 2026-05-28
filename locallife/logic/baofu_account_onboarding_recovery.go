@@ -60,13 +60,11 @@ func (s *BaofuAccountOnboardingService) markFlowFailedFromProviderError(ctx cont
 		OwnerType: flow.OwnerType,
 		OwnerID:   flow.OwnerID,
 	})
+	rawSnapshot := baofuOpeningProviderFailureSnapshot(classified.Code, providerErr.DiagnosticSnapshot)
 	if bindingErr == nil && strings.TrimSpace(binding.OpenState) != db.BaofuAccountOpenStateActive {
 		if _, err := s.store.MarkBaofuAccountBindingFailed(ctx, db.MarkBaofuAccountBindingFailedParams{
-			ID: binding.ID,
-			RawSnapshot: baofuOpeningSnapshot(map[string]any{
-				"state":        db.BaofuAccountOpeningStateFailed,
-				"failure_code": classified.Code,
-			}),
+			ID:          binding.ID,
+			RawSnapshot: rawSnapshot,
 		}); err != nil {
 			return db.BaofuAccountOpeningFlow{}, err
 		}
@@ -77,7 +75,7 @@ func (s *BaofuAccountOnboardingService) markFlowFailedFromProviderError(ctx cont
 		ID:             flow.ID,
 		FailureCode:    pgtype.Text{String: classified.Code, Valid: classified.Code != ""},
 		FailureMessage: pgtype.Text{String: classified.PublicMessage, Valid: strings.TrimSpace(classified.PublicMessage) != ""},
-		RawSnapshot:    baofuOpeningSnapshot(map[string]any{"state": db.BaofuAccountOpeningStateFailed, "failure_code": classified.Code}),
+		RawSnapshot:    rawSnapshot,
 	})
 }
 

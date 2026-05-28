@@ -17,14 +17,15 @@ type FrontendGuidance struct {
 }
 
 type ProviderError struct {
-	Operation       string
-	Capability      string
-	StatusCode      int
-	RequestID       string
-	UpstreamCode    string
-	UpstreamMessage string
-	Frontend        FrontendGuidance
-	cause           error
+	Operation          string
+	Capability         string
+	StatusCode         int
+	RequestID          string
+	UpstreamCode       string
+	UpstreamMessage    string
+	DiagnosticSnapshot []byte
+	Frontend           FrontendGuidance
+	cause              error
 }
 
 func (e *ProviderError) Error() string {

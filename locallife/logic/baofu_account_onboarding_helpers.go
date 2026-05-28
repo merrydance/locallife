@@ -257,6 +257,140 @@ func baofuOpeningSnapshot(payload map[string]any) []byte {
 	return body
 }
 
+func baofuOpeningProviderFailureSnapshot(failureCode string, diagnostic []byte) []byte {
+	payload := map[string]any{
+		"state": db.BaofuAccountOpeningStateFailed,
+	}
+	if code := strings.TrimSpace(failureCode); code != "" {
+		payload["failure_code"] = code
+	}
+	if providerDiagnostic := baofuOpeningProviderDiagnostic(diagnostic); providerDiagnostic != nil {
+		payload["provider_diagnostic"] = providerDiagnostic
+	}
+	return baofuOpeningSnapshot(payload)
+}
+
+func baofuOpeningProviderDiagnostic(raw []byte) map[string]any {
+	if len(raw) == 0 || !json.Valid(raw) {
+		return nil
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil || len(payload) == 0 {
+		return nil
+	}
+	safe := make(map[string]any, len(payload))
+	for _, key := range []string{
+		"provider",
+		"capability",
+		"operation",
+		"http_status",
+		"sys_resp_code",
+		"sys_resp_desc_present",
+		"business_failure",
+		"source_path",
+		"ret_code",
+		"top_error_code",
+		"top_error_message_present",
+		"result_state",
+		"result_error_code",
+		"result_error_message_present",
+	} {
+		if value, ok := payload[key]; ok {
+			if safeValue, ok := baofuSafeDiagnosticValue(key, value); ok {
+				safe[key] = safeValue
+			}
+		}
+	}
+	if len(safe) == 0 {
+		return nil
+	}
+	return safe
+}
+
+func baofuSafeDiagnosticValue(key string, value any) (any, bool) {
+	switch key {
+	case "provider":
+		if text, ok := baofuSafeDiagnosticString(value); ok && text == "baofu" {
+			return text, true
+		}
+	case "capability":
+		if text, ok := baofuSafeDiagnosticString(value); ok && text == "account" {
+			return text, true
+		}
+	case "source_path":
+		if text, ok := baofuSafeDiagnosticString(value); ok && baofuSafeDiagnosticSourcePath(text) {
+			return text, true
+		}
+	case "operation", "sys_resp_code", "ret_code", "top_error_code", "result_state", "result_error_code":
+		if text, ok := baofuSafeDiagnosticString(value); ok && baofuSafeDiagnosticToken(text) {
+			return text, true
+		}
+	case "http_status":
+		if number, ok := baofuSafeDiagnosticNumber(value); ok && number >= 100 && number < 600 {
+			return number, true
+		}
+	case "sys_resp_desc_present", "business_failure", "top_error_message_present", "result_error_message_present":
+		if flag, ok := value.(bool); ok && flag {
+			return flag, true
+		}
+	}
+	return nil, false
+}
+
+func baofuSafeDiagnosticString(value any) (string, bool) {
+	text, ok := value.(string)
+	if !ok {
+		return "", false
+	}
+	text = strings.TrimSpace(text)
+	return text, text != ""
+}
+
+func baofuSafeDiagnosticSourcePath(value string) bool {
+	switch strings.TrimSpace(value) {
+	case "body",
+		"body.retCode",
+		"body.errorCode",
+		"body.state",
+		"body.result[0]",
+		"body.result[0].errorCode":
+		return true
+	default:
+		return false
+	}
+}
+
+func baofuSafeDiagnosticToken(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 64 {
+		return false
+	}
+	for _, r := range value {
+		switch {
+		case r >= 'A' && r <= 'Z':
+		case r >= 'a' && r <= 'z':
+		case r >= '0' && r <= '9':
+		case r == '_' || r == '-' || r == '.' || r == ':':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func baofuSafeDiagnosticNumber(value any) (float64, bool) {
+	switch typed := value.(type) {
+	case float64:
+		return typed, true
+	case int:
+		return float64(typed), true
+	case int64:
+		return float64(typed), true
+	default:
+		return 0, false
+	}
+}
+
 func baofuOpeningRequestSnapshot(req baofucontracts.OpenAccountRequest) []byte {
 	return baofuOpeningSnapshot(map[string]any{
 		"owner_type":           req.OwnerType,

@@ -2,11 +2,14 @@ package logic
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/baofu"
 	baofucontracts "github.com/merrydance/locallife/baofu/account/contracts"
 	db "github.com/merrydance/locallife/db/sqlc"
 )
@@ -184,7 +187,7 @@ func (s *BaofuAccountService) OpenAccount(ctx context.Context, req baofucontract
 			},
 		})
 	case db.BaofuAccountOpenStateFailed:
-		_, err = s.store.MarkBaofuAccountBindingFailed(ctx, db.MarkBaofuAccountBindingFailedParams{ID: binding.ID, RawSnapshot: baofuAccountRawSnapshot(normalized.Raw)})
+		_, err = s.store.MarkBaofuAccountBindingFailed(ctx, db.MarkBaofuAccountBindingFailedParams{ID: binding.ID, RawSnapshot: baofuAccountOpenResultFailureSnapshot(normalized.FailCode, normalized.Raw)})
 	case db.BaofuAccountOpenStateAbnormal:
 		_, err = s.store.MarkBaofuAccountBindingAbnormal(ctx, db.MarkBaofuAccountBindingAbnormalParams{ID: binding.ID, RawSnapshot: baofuAccountRawSnapshot(normalized.Raw)})
 	}
@@ -231,7 +234,124 @@ func baofuAccountRawSnapshot(raw []byte) []byte {
 	if len(raw) == 0 {
 		return []byte(`{}`)
 	}
-	return raw
+	if safe := baofuSafeAccountSnapshot(raw); len(safe) > 0 {
+		return safe
+	}
+	return []byte(`{}`)
+}
+
+func baofuSafeAccountSnapshot(raw []byte) []byte {
+	if len(raw) == 0 || !json.Valid(raw) {
+		return nil
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil
+	}
+	if provider, _ := payload["provider"].(string); strings.TrimSpace(provider) == "baofu" {
+		return baofuOpeningSnapshot(baofuAccountSnapshotWhitelist(payload))
+	}
+	safe := map[string]any{
+		"provider":   "baofu",
+		"capability": "account",
+	}
+	if value, ok := safeString(payload["retCode"]); ok {
+		safe["ret_code"] = value
+	}
+	if result, ok := firstAccountSnapshotResult(payload["result"]); ok {
+		if value, ok := safeString(result["state"]); ok {
+			safe["result_state"] = value
+		}
+		if value, ok := safeString(result["errorCode"]); ok {
+			safe["source_path"] = "body.result[0].errorCode"
+			safe["result_error_code"] = value
+		} else {
+			safe["source_path"] = "body.result[0]"
+		}
+		if message, ok := safeString(result["errorMsg"]); ok && strings.TrimSpace(message) != "" {
+			safe["result_error_message_present"] = true
+		}
+	} else {
+		if value, ok := safeString(payload["state"]); ok {
+			safe["result_state"] = value
+			safe["source_path"] = "body.state"
+		}
+		if value, ok := safeString(payload["errorCode"]); ok {
+			safe["source_path"] = "body.errorCode"
+			safe["result_error_code"] = value
+		}
+		if message, ok := safeString(payload["errorMsg"]); ok && strings.TrimSpace(message) != "" {
+			safe["result_error_message_present"] = true
+		}
+	}
+	return baofuOpeningSnapshot(baofuAccountSnapshotWhitelist(safe))
+}
+
+func baofuAccountSnapshotWhitelist(payload map[string]any) map[string]any {
+	safe := make(map[string]any, len(payload))
+	for _, key := range []string{
+		"provider",
+		"capability",
+		"operation",
+		"source_path",
+		"ret_code",
+		"result_state",
+		"result_error_code",
+		"result_error_message_present",
+	} {
+		if value, ok := payload[key]; ok {
+			if safeValue, ok := baofuSafeDiagnosticValue(key, value); ok {
+				safe[key] = safeValue
+			}
+		}
+	}
+	if len(safe) == 0 {
+		return map[string]any{}
+	}
+	return safe
+}
+
+func firstAccountSnapshotResult(value any) (map[string]any, bool) {
+	switch typed := value.(type) {
+	case []any:
+		if len(typed) == 0 {
+			return nil, false
+		}
+		item, ok := typed[0].(map[string]any)
+		return item, ok
+	case map[string]any:
+		return typed, true
+	default:
+		return nil, false
+	}
+}
+
+func safeString(value any) (string, bool) {
+	switch typed := value.(type) {
+	case string:
+		trimmed := strings.TrimSpace(typed)
+		return trimmed, trimmed != ""
+	case float64:
+		text := strconv.FormatFloat(typed, 'f', -1, 64)
+		return text, text != ""
+	case bool:
+		if typed {
+			return "true", true
+		}
+		return "false", true
+	default:
+		return "", false
+	}
+}
+
+func baofuAccountSafeFailureMessage(code string) pgtype.Text {
+	classified := baofu.ClassifyBaofuError(code, "")
+	message := strings.TrimSpace(classified.PublicMessage)
+	return pgtype.Text{String: message, Valid: message != ""}
+}
+
+func baofuAccountOpenResultFailureSnapshot(failureCode string, raw []byte) []byte {
+	return baofuOpeningProviderFailureSnapshot(failureCode, baofuAccountRawSnapshot(raw))
 }
 
 func businessOwnerForBaofuAccount(ownerType string) string {

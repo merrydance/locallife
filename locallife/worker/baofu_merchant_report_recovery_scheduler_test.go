@@ -45,6 +45,14 @@ func TestBaofuMerchantReportRecoverySchedulerQueriesProcessingReportsAndBindsApp
 			report.PlatformBizNo = arg.PlatformBizNo
 			return report, nil
 		})
+	store.EXPECT().GetExternalPaymentCommandByExternalObject(gomock.Any(), db.GetExternalPaymentCommandByExternalObjectParams{
+		Provider:           db.ExternalPaymentProviderBaofu,
+		Channel:            db.PaymentChannelBaofuAggregate,
+		Capability:         db.ExternalPaymentCapabilityBaofuMerchantReport,
+		CommandType:        db.ExternalPaymentCommandTypeBaofuBindSubConfig,
+		ExternalObjectType: "baofu_bind_sub_config",
+		ExternalObjectKey:  "1900000111",
+	}).Return(db.ExternalPaymentCommand{}, db.ErrRecordNotFound)
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).
 		Return(db.ExternalPaymentCommand{ID: 2, CommandType: db.ExternalPaymentCommandTypeBaofuBindSubConfig}, nil)
 	store.EXPECT().MarkBaofuMerchantReportAppletAuthSucceeded(gomock.Any(), report.ID).
