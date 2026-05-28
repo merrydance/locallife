@@ -29,8 +29,9 @@ import { getCurrentRegion, reverseGeocode, searchRegions } from '../api/location
 import {
   DEFAULT_MERCHANT_OCR_DISPLAY_STATE,
   DEFAULT_MERCHANT_UPLOAD_FEEDBACK,
-  buildLegalBusinessAddress,
   buildMapLocationLabel,
+  buildMerchantInitialDraftFormPatch,
+  buildMerchantInitialDraftOcrResults,
   buildMerchantLatestOcrFormPatch,
   buildMerchantOcrDisplayState,
   buildMerchantOcrProgressMessage,
@@ -168,41 +169,12 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
         return
       }
 
-      const safeStr = (val: unknown): string => {
-        if (val === null || val === undefined || val === true || val === 'true') return ''
-        return String(val)
-      }
-
       const formData = {
         ...this.data.formData,
-        name: safeStr(data.merchant_name),
-        phone: safeStr(data.contact_phone),
-        address: buildLegalBusinessAddress(data),
-        addressDetail: '',
-        regionId: Number(data.region_id || 0),
-        latitude: data.latitude ? parseFloat(data.latitude) : 0,
-        longitude: data.longitude ? parseFloat(data.longitude) : 0,
-        licenseName: safeStr(data.business_license_ocr?.enterprise_name),
-        creditCode: safeStr(data.business_license_number || data.business_license_ocr?.reg_num || data.business_license_ocr?.credit_code),
-        registerAddress: safeStr(data.business_license_ocr?.address),
-        licenseValidity: safeStr(data.business_license_ocr?.valid_period),
-        businessScope: safeStr(data.business_scope || data.business_license_ocr?.business_scope),
-        foodLicenseValidity: safeStr(data.food_permit_ocr?.valid_to),
-        legalPerson: safeStr(data.id_card_front_ocr?.name || data.legal_person_name || data.business_license_ocr?.legal_representative),
-        idCard: safeStr(data.id_card_front_ocr?.id_number || data.legal_person_id_number),
-        gender: safeStr(data.id_card_front_ocr?.gender),
-        hometown: safeStr(data.id_card_front_ocr?.address),
-        idCardValidity: safeStr(data.id_card_back_ocr?.valid_date),
-        currentAddress: safeStr(data.legal_person_contact_address),
-        bankName: safeStr(data.bank_name),
-        bankAccount: safeStr(data.bank_account),
-        accountName: safeStr(data.bank_account_name)
+        ...buildMerchantInitialDraftFormPatch(data)
       }
 
-      const ocrResults = {
-        license: data.business_license_ocr || null,
-        idCard: data.id_card_front_ocr || null
-      }
+      const ocrResults = buildMerchantInitialDraftOcrResults(data)
 
       const safeResolve = async (assetId?: number | null): Promise<string> => {
         if (assetId && assetId > 0) {

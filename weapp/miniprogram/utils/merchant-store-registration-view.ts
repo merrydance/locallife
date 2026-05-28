@@ -68,6 +68,19 @@ export type MerchantLatestOcrFormPatch = {
   idCardValidity: string
 }
 
+export type MerchantInitialDraftFormPatch = MerchantLatestOcrFormPatch & {
+  name: string
+  phone: string
+  addressDetail: string
+  regionId: number
+  latitude: number
+  longitude: number
+  currentAddress: string
+  bankName: string
+  bankAccount: string
+  accountName: string
+}
+
 export const DEFAULT_MERCHANT_OCR_DISPLAY_STATE: MerchantOCRDisplayState = {
   businessLicenseReady: false,
   businessLicenseProcessing: false,
@@ -389,6 +402,30 @@ export function buildMerchantLatestOcrFormPatch(data: MerchantDraftExt, currentA
     gender: toSafeString(data.id_card_front_ocr?.gender),
     hometown: toSafeString(data.id_card_front_ocr?.address),
     idCardValidity: toSafeString(data.id_card_back_ocr?.valid_date)
+  }
+}
+
+export function buildMerchantInitialDraftFormPatch(data: MerchantDraftExt): MerchantInitialDraftFormPatch {
+  return {
+    ...buildMerchantLatestOcrFormPatch(data),
+    name: toSafeString(data.merchant_name),
+    phone: toSafeString(data.contact_phone),
+    address: buildLegalBusinessAddress(data),
+    addressDetail: '',
+    regionId: Number(data.region_id || 0),
+    latitude: data.latitude ? parseFloat(String(data.latitude)) : 0,
+    longitude: data.longitude ? parseFloat(String(data.longitude)) : 0,
+    currentAddress: toSafeString(data.legal_person_contact_address),
+    bankName: toSafeString(data.bank_name),
+    bankAccount: toSafeString(data.bank_account),
+    accountName: toSafeString(data.bank_account_name)
+  }
+}
+
+export function buildMerchantInitialDraftOcrResults(data: MerchantDraftExt) {
+  return {
+    license: data.business_license_ocr || null,
+    idCard: data.id_card_front_ocr || null
   }
 }
 

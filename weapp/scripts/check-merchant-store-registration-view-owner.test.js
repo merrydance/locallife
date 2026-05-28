@@ -326,6 +326,78 @@ assert.strictEqual(owner.buildMerchantLatestOcrFormPatch({
   business_license_ocr: {}
 }, '保留地址').address, '保留地址')
 
+assert.deepStrictEqual(plain(owner.buildMerchantInitialDraftFormPatch({
+  merchant_name: '本地生活餐饮店',
+  contact_phone: '13800138000',
+  business_address: '',
+  business_address_detail: '静安寺店',
+  region_id: 310106,
+  latitude: '31.223',
+  longitude: '121.445',
+  business_license_number: '',
+  business_scope: '',
+  business_license_ocr: {
+    enterprise_name: '营业执照主体',
+    reg_num: '91310000MA1LOCAL1X',
+    address: '上海市静安区',
+    valid_period: '2026-01-01 至 2036-01-01',
+    business_scope: '热食类食品制售',
+    legal_representative: '李四'
+  },
+  food_permit_ocr: {
+    valid_to: '2030-06-01'
+  },
+  legal_person_name: '',
+  legal_person_id_number: '',
+  id_card_front_ocr: {
+    name: '李四',
+    id_number: '310106199001010011',
+    gender: '男',
+    address: '上海市静安区'
+  },
+  id_card_back_ocr: {
+    valid_date: '2026.01.01-2036.01.01'
+  },
+  legal_person_contact_address: '上海市静安区现住址',
+  bank_name: '招商银行',
+  bank_account: '6225880000000000',
+  bank_account_name: '李四'
+})), {
+  name: '本地生活餐饮店',
+  phone: '13800138000',
+  address: '上海市静安区',
+  addressDetail: '',
+  regionId: 310106,
+  latitude: 31.223,
+  longitude: 121.445,
+  licenseName: '营业执照主体',
+  creditCode: '91310000MA1LOCAL1X',
+  registerAddress: '上海市静安区',
+  licenseValidity: '2026-01-01 至 2036-01-01',
+  businessScope: '热食类食品制售',
+  foodLicenseValidity: '2030-06-01',
+  legalPerson: '李四',
+  idCard: '310106199001010011',
+  gender: '男',
+  hometown: '上海市静安区',
+  idCardValidity: '2026.01.01-2036.01.01',
+  currentAddress: '上海市静安区现住址',
+  bankName: '招商银行',
+  bankAccount: '6225880000000000',
+  accountName: '李四'
+})
+assert.deepStrictEqual(plain(owner.buildMerchantInitialDraftOcrResults({
+  business_license_ocr: { enterprise_name: '营业执照主体' },
+  id_card_front_ocr: { name: '李四' }
+})), {
+  license: { enterprise_name: '营业执照主体' },
+  idCard: { name: '李四' }
+})
+assert.deepStrictEqual(plain(owner.buildMerchantInitialDraftOcrResults({})), {
+  license: null,
+  idCard: null
+})
+
 const runtimeSource = fs.readFileSync(runtimePath, 'utf8')
 const forbiddenRuntimePatterns = [
   'function buildLegalBusinessAddress',
@@ -349,7 +421,11 @@ const forbiddenRuntimePatterns = [
   '请稍候，识别结果会显示在当前卡片中',
   'licenseName: toSafeString(data.business_license_ocr',
   'foodLicenseValidity: toSafeString(data.food_permit_ocr',
-  'idCardValidity: toSafeString(data.id_card_back_ocr'
+  'idCardValidity: toSafeString(data.id_card_back_ocr',
+  'name: safeStr(data.merchant_name)',
+  'regionId: Number(data.region_id || 0)',
+  'licenseName: safeStr(data.business_license_ocr',
+  'const ocrResults = {'
 ]
 
 for (const pattern of forbiddenRuntimePatterns) {

@@ -18,6 +18,8 @@
 
 **Sixth Remediation Checkpoint:** 96 / 100 after the merchant registration latest-OCR form patch owner extraction slice.
 
+**Seventh Remediation Checkpoint:** 96.5 / 100 after the merchant registration initial-draft view patch owner extraction slice.
+
 **Target Score:** 100 / 100
 
 **Review Baseline:**
@@ -76,6 +78,12 @@
 - Extracted the latest OCR draft to merchant registration form-field patch mapping into `merchant-store-registration-view.ts`.
 - Kept `applyLatestOcrDraft` in `merchant-store-registration-runtime.ts` responsible for page state merge timing, OCR display refresh, and draft persistence, while removing another direct OCR DTO-to-form mapping from the runtime file.
 - Extended `check:merchant-store-registration-view-owner` to verify OCR form patch fallback behavior and block the extracted field mapping from drifting back into the runtime file.
+
+**Seventh Remediation Scope:**
+
+- Extracted merchant registration initial draft form patch and initial OCR result builders into `merchant-store-registration-view.ts`.
+- Kept `initApplication` in `merchant-store-registration-runtime.ts` responsible for backend fetch, status routing, private media signing, and page `setData` timing, while removing another DTO-to-ViewState mapping from the runtime.
+- Extended `check:merchant-store-registration-view-owner` to verify the initial draft mapping and block the extracted initialization mapping from drifting back into the runtime file.
 
 ---
 
