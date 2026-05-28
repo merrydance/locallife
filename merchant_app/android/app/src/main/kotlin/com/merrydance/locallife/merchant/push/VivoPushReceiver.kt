@@ -25,7 +25,7 @@ class VivoPushReceiver : OpenClientPushMessageReceiver() {
         val payload = message.params.toMutableMap<String, Any>()
         payload.putAll(parseJsonObject(message.content.orEmpty()))
         if (payload.isNotEmpty()) {
-            PushManager.onMessageReceived(payload)
+            PushManager.onNotificationOpened(payload)
         }
     }
 

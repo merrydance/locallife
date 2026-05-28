@@ -13,6 +13,7 @@ import 'package:merchant_app/features/settings/about_page.dart';
 import 'package:merchant_app/features/settings/agreement_page.dart';
 import 'package:merchant_app/features/printer/bluetooth_printer_page.dart';
 import 'package:merchant_app/features/order/order_detail_page.dart';
+import 'package:merchant_app/features/order/order_alert_coordinator.dart';
 import 'package:merchant_app/features/order/working_status_provider.dart';
 import 'package:merchant_app/features/table/ui/table_grid_screen.dart';
 import 'package:merchant_app/core/push/push_provider.dart';
@@ -151,7 +152,9 @@ class MerchantApp extends ConsumerWidget {
     // Keep background managers alive
     ref.watch(workingStatusSyncManagerProvider);
     ref.watch(deviceSyncManagerProvider);
+    ref.watch(notificationPermissionManagerProvider);
     ref.watch(orderPollerManagerProvider);
+    ref.watch(pendingOrderAlertDrainManagerProvider);
 
     final router = ref.watch(routerProvider);
     final authState = ref.watch(authProvider);

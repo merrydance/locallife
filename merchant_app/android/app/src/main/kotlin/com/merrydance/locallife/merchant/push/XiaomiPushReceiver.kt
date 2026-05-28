@@ -10,13 +10,12 @@ import org.json.JSONObject
 
 class XiaomiPushReceiver : PushMessageReceiver() {
     override fun onReceivePassThroughMessage(context: Context, message: MiPushMessage) {
-        val payload = message.content
-        Log.d("XiaomiPushReceiver", "Received payload: $payload")
+        Log.d("XiaomiPushReceiver", "Received pass-through payload")
         PushManager.onMessageReceived(newPayload(message))
     }
 
     override fun onNotificationMessageClicked(context: Context, message: MiPushMessage) {
-        PushManager.onMessageReceived(newPayload(message))
+        PushManager.onNotificationOpened(newPayload(message))
     }
 
     override fun onNotificationMessageArrived(context: Context, message: MiPushMessage) {

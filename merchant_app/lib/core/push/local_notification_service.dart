@@ -12,8 +12,17 @@ class LocalNotificationService {
       FlutterLocalNotificationsPlugin();
 
   bool _initialized = false;
+  final List<PushMessage> _pendingTapMessages = <PushMessage>[];
 
-  void Function(PushMessage message)? onNotificationTap;
+  void Function(PushMessage message)? _onNotificationTap;
+
+  set onNotificationTap(void Function(PushMessage message)? callback) {
+    _onNotificationTap = callback;
+    _drainPendingTapMessages();
+  }
+
+  void Function(PushMessage message)? get onNotificationTap =>
+      _onNotificationTap;
 
   Future<void> init() async {
     if (_initialized) {
@@ -28,12 +37,20 @@ class LocalNotificationService {
     await _plugin.initialize(
       settings: initializationSettings,
       onDidReceiveNotificationResponse: _handleNotificationResponse,
-      onDidReceiveBackgroundNotificationResponse: _handleBackgroundNotificationResponse,
+      onDidReceiveBackgroundNotificationResponse:
+          _handleBackgroundNotificationResponse,
     );
 
-    final androidPlugin =
-        _plugin.resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+    final launchDetails = await _plugin.getNotificationAppLaunchDetails();
+    final response = launchDetails?.notificationResponse;
+    if (launchDetails?.didNotificationLaunchApp == true && response != null) {
+      await _handleNotificationResponse(response);
+    }
+
+    final androidPlugin = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (androidPlugin != null) {
       await androidPlugin.createNotificationChannel(
         const AndroidNotificationChannel(
@@ -113,12 +130,37 @@ class LocalNotificationService {
     try {
       final decoded = jsonDecode(payload);
       if (decoded is Map<String, dynamic>) {
-        onNotificationTap?.call(PushMessage.fromJson(decoded));
+        _dispatchNotificationTap(PushMessage.fromJson(decoded));
       }
     } catch (error) {
       if (kDebugMode) {
         debugPrint('Failed to parse local notification payload: $error');
       }
+    }
+  }
+
+  void _dispatchNotificationTap(PushMessage message) {
+    final callback = _onNotificationTap;
+    if (callback == null) {
+      if (!_pendingTapMessages.any(
+        (pending) => pending.orderId == message.orderId,
+      )) {
+        _pendingTapMessages.add(message);
+      }
+      return;
+    }
+    callback(message);
+  }
+
+  void _drainPendingTapMessages() {
+    final callback = _onNotificationTap;
+    if (callback == null || _pendingTapMessages.isEmpty) {
+      return;
+    }
+    final pending = List<PushMessage>.from(_pendingTapMessages);
+    _pendingTapMessages.clear();
+    for (final message in pending) {
+      callback(message);
     }
   }
 }

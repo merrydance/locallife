@@ -68,6 +68,33 @@ void main() {
     expect(notifier.state.isAuthenticated, isTrue);
   });
 
+  test(
+    'startup auto login clears loading after token refresh notification',
+    () async {
+      final sessionController = AuthSessionController();
+      final authService = _FakeAuthService();
+      final notifier = AuthNotifier(authService, sessionController);
+
+      await authService.autoLoginCompleted;
+
+      sessionController.updateTokens(
+        accessToken: 'fresh-access-token',
+        refreshToken: 'fresh-refresh-token',
+      );
+      authService.completeAutoLogin({
+        'accessToken': 'fresh-access-token',
+        'refreshToken': 'fresh-refresh-token',
+        'merchantName': '测试商户',
+      });
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifier.state.accessToken, 'fresh-access-token');
+      expect(notifier.state.refreshToken, 'fresh-refresh-token');
+      expect(notifier.state.isAuthenticated, isTrue);
+      expect(notifier.state.isLoading, isFalse);
+    },
+  );
+
   test('shares in-flight manual refresh requests', () async {
     final authService = _FakeAuthService();
     final notifier = AuthNotifier(authService, AuthSessionController());
@@ -91,9 +118,73 @@ void main() {
     expect(results[0]?['accessToken'], 'fresh-access-token');
     expect(results[1]?['accessToken'], 'fresh-access-token');
   });
+
+  test(
+    'startup refresh transient failure keeps stored tokens in degraded state',
+    () async {
+      final authService = _FakeAuthService(
+        storedTokens: const {
+          'accessToken': 'cached-access-token',
+          'refreshToken': 'cached-refresh-token',
+          'merchantName': '测试商户',
+        },
+        autoLoginError: const AuthRefreshRecoverableException(),
+      );
+      final notifier = AuthNotifier(authService, AuthSessionController());
+
+      authService.completeAutoLogin();
+      await authService.autoLoginCompleted;
+      await Future<void>.delayed(Duration.zero);
+
+      expect(notifier.state.accessToken, 'cached-access-token');
+      expect(notifier.state.refreshToken, 'cached-refresh-token');
+      expect(notifier.state.merchantName, '测试商户');
+      expect(notifier.state.isAuthenticated, isTrue);
+      expect(notifier.state.isSessionDegraded, isTrue);
+      expect(notifier.state.isLoading, isFalse);
+      expect(authService.clearCalls, 0);
+    },
+  );
+
+  test(
+    'manual refresh transient failure does not clear stored tokens',
+    () async {
+      final authService = _FakeAuthService(
+        refreshError: const AuthRefreshRecoverableException(),
+      );
+      final notifier = AuthNotifier(authService, AuthSessionController());
+
+      authService.completeAutoLogin({
+        'accessToken': 'old-access-token',
+        'refreshToken': 'old-refresh-token',
+        'merchantName': '测试商户',
+      });
+      await authService.autoLoginCompleted;
+      await Future<void>.delayed(Duration.zero);
+
+      final result = await notifier.refreshSession();
+
+      expect(result, isNull);
+      expect(notifier.state.accessToken, 'old-access-token');
+      expect(notifier.state.refreshToken, 'old-refresh-token');
+      expect(notifier.state.isAuthenticated, isTrue);
+      expect(notifier.state.isSessionDegraded, isTrue);
+      expect(authService.clearCalls, 0);
+    },
+  );
 }
 
 class _FakeAuthService implements AuthService {
+  _FakeAuthService({
+    this.storedTokens = const {
+      'accessToken': null,
+      'refreshToken': null,
+      'merchantName': null,
+    },
+    this.autoLoginError,
+    this.refreshError,
+  });
+
   final Completer<void> _autoLoginCompleter = Completer<void>();
   final Completer<Map<String, String?>?> _autoLoginResultCompleter =
       Completer<Map<String, String?>?>();
@@ -101,8 +192,12 @@ class _FakeAuthService implements AuthService {
       Completer<Map<String, dynamic>>();
   final Completer<Map<String, dynamic>> _refreshCompleter =
       Completer<Map<String, dynamic>>();
+  final Map<String, String?> storedTokens;
+  final Object? autoLoginError;
+  final Object? refreshError;
   int verifyCalls = 0;
   int refreshCalls = 0;
+  int clearCalls = 0;
 
   Future<void> get autoLoginCompleted => _autoLoginCompleter.future;
 
@@ -132,18 +227,20 @@ class _FakeAuthService implements AuthService {
   }
 
   @override
-  Future<void> clearTokens() async {}
+  Future<void> clearTokens() async {
+    clearCalls++;
+  }
 
   @override
-  Future<Map<String, String?>> getTokens() async => {
-    'accessToken': null,
-    'refreshToken': null,
-    'merchantName': null,
-  };
+  Future<Map<String, String?>> getTokens() async => storedTokens;
 
   @override
   Future<Map<String, dynamic>> refreshToken(String refreshToken) {
     refreshCalls++;
+    final error = refreshError;
+    if (error != null) {
+      return Future<Map<String, dynamic>>.error(error);
+    }
     return _refreshCompleter.future;
   }
 
@@ -158,6 +255,10 @@ class _FakeAuthService implements AuthService {
   Future<Map<String, String?>?> tryAutoLogin() async {
     if (!_autoLoginCompleter.isCompleted) {
       _autoLoginCompleter.complete();
+    }
+    final error = autoLoginError;
+    if (error != null) {
+      throw error;
     }
     return _autoLoginResultCompleter.future;
   }

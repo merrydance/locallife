@@ -2,7 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:merchant_app/config/env.dart';
+import 'package:merchant_app/core/network/auth_refresh_failure.dart';
 import 'package:merchant_app/core/service/auth_session_controller.dart';
+export 'package:merchant_app/core/network/auth_refresh_failure.dart';
 
 Map<String, dynamic> extractApiResponseData(dynamic payload) {
   if (payload is Map<String, dynamic>) {
@@ -71,7 +73,12 @@ class ApiClient {
               requiresAuth &&
               !isRefreshRequest &&
               !alreadyRetried) {
-            final refreshedTokens = await refreshSessionTokens();
+            Map<String, String?>? refreshedTokens;
+            try {
+              refreshedTokens = await refreshSessionTokens();
+            } on AuthRefreshRecoverableException {
+              refreshedTokens = null;
+            }
             final refreshedAccessToken = refreshedTokens?['accessToken'];
             if (refreshedAccessToken != null) {
               requestOptions.headers['Authorization'] =
@@ -127,7 +134,11 @@ class ApiClient {
         refreshToken: newRefreshToken,
       );
       return {'accessToken': accessToken, 'refreshToken': newRefreshToken};
-    } on DioException {
+    } on DioException catch (error) {
+      final failureKind = classifyRefreshFailure(error);
+      if (failureKind == AuthRefreshFailureKind.recoverable) {
+        throw const AuthRefreshRecoverableException();
+      }
       await _clearSession('登录状态已失效，请重新绑定');
       return null;
     }

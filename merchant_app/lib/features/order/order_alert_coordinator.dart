@@ -6,8 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:merchant_app/core/audio/sound_player.dart';
 import 'package:merchant_app/core/audio/order_audio_alert.dart';
 import 'package:merchant_app/core/audio/tts_service.dart';
-import 'package:merchant_app/core/push/local_notification_service.dart';
+import 'package:merchant_app/core/push/push_provider.dart';
 import 'package:merchant_app/core/service/navigation_service.dart';
+import 'package:merchant_app/core/service/message_dedup.dart';
+import 'package:merchant_app/core/service/order_alert_checkpoint_store.dart';
+import 'package:merchant_app/core/service/pending_order_alert_store.dart';
 import 'package:merchant_app/features/auth/auth_provider.dart';
 import 'package:merchant_app/features/order/order_alert_page.dart';
 import 'package:merchant_app/features/order/order_detail_page.dart';
@@ -17,15 +20,54 @@ import 'package:merchant_app/features/settings/notification_settings_provider.da
 import 'package:merchant_app/models/order.dart';
 import 'package:merchant_app/models/push_message.dart';
 
-final localNotificationServiceProvider = Provider<LocalNotificationService>((
-  ref,
-) {
-  return LocalNotificationService();
-});
-
 final orderAlertCoordinatorProvider = Provider<OrderAlertCoordinator>((ref) {
   return OrderAlertCoordinator(ref);
 });
+
+final pendingOrderAlertDrainManagerProvider = Provider<void>((ref) {
+  final manager = PendingOrderAlertDrainManager(ref);
+  manager.start();
+  ref.onDispose(manager.dispose);
+});
+
+class PendingOrderAlertDrainManager with WidgetsBindingObserver {
+  PendingOrderAlertDrainManager(this._ref);
+
+  final Ref _ref;
+  bool _started = false;
+  bool _disposed = false;
+
+  void start() {
+    if (_started) {
+      return;
+    }
+    _started = true;
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _drain());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _drain();
+    }
+  }
+
+  void _drain() {
+    if (_disposed) {
+      return;
+    }
+    unawaited(_ref.read(orderAlertCoordinatorProvider).drainPendingAlerts());
+    unawaited(
+      _ref.read(orderAlertCoordinatorProvider).drainPendingNotificationTaps(),
+    );
+  }
+
+  void dispose() {
+    _disposed = true;
+    WidgetsBinding.instance.removeObserver(this);
+  }
+}
 
 class OrderAlertCoordinator {
   OrderAlertCoordinator(this._ref);
@@ -33,17 +75,53 @@ class OrderAlertCoordinator {
   final OrderAudioAlert _orderAudioAlert = OrderAudioAlert();
   final Ref _ref;
   final Set<String> _presentingOrderIds = <String>{};
+  final Set<String> _processingOrderIds = <String>{};
+  final List<PushMessage> _pendingNotificationTaps = <PushMessage>[];
+  Future<void>? _pendingDrainFuture;
+  Future<void>? _pendingTapDrainFuture;
 
   Future<void> handleIncomingOrder(
     PushMessage message, {
     required bool showLocalNotification,
   }) async {
+    if (!_processingOrderIds.add(message.orderId)) {
+      return;
+    }
+
+    try {
+      await _handleIncomingOrder(
+        message,
+        showLocalNotification: showLocalNotification,
+      );
+    } finally {
+      _processingOrderIds.remove(message.orderId);
+    }
+  }
+
+  Future<void> _handleIncomingOrder(
+    PushMessage message, {
+    required bool showLocalNotification,
+  }) async {
+    final dedupKeys = _dedupKeysFor(message);
+    final deduplicator = _ref.read(messageDeduplicatorProvider);
+    if (!await deduplicator.isAccepted(dedupKeys)) {
+      return;
+    }
+    final pendingStore = _ref.read(pendingOrderAlertStoreProvider);
+    if (await pendingStore.hasPending(message)) {
+      return;
+    }
+
     final hydratedMessage = await _hydrateIncomingOrder(message);
 
     if (showLocalNotification) {
-      await _ref
-          .read(localNotificationServiceProvider)
-          .showNewOrderNotification(hydratedMessage);
+      try {
+        await _ref
+            .read(localNotificationServiceProvider)
+            .showNewOrderNotification(hydratedMessage);
+      } catch (error) {
+        debugPrint('Failed to show new order notification: $error');
+      }
     }
 
     final notificationSettings = _ref.read(notificationSettingsProvider);
@@ -62,11 +140,64 @@ class OrderAlertCoordinator {
     if (notificationSettings.autoAcceptEnabled) {
       final accepted = await _acceptAndPrint(hydratedMessage);
       if (accepted) {
+        await deduplicator.markAccepted(dedupKeys);
+        await _markAlerted(hydratedMessage.orderId);
         return;
       }
     }
 
-    _presentAlert(hydratedMessage);
+    final presented = await _presentAlert(hydratedMessage);
+    if (presented) {
+      await deduplicator.markAccepted(dedupKeys);
+      await _markAlerted(hydratedMessage.orderId);
+    } else {
+      await pendingStore.save(hydratedMessage, source: 'incoming');
+    }
+  }
+
+  Future<void> drainPendingAlerts() {
+    _pendingDrainFuture ??= _drainPendingAlerts().whenComplete(() {
+      _pendingDrainFuture = null;
+    });
+    return _pendingDrainFuture!;
+  }
+
+  Future<void> _drainPendingAlerts() async {
+    final pendingStore = _ref.read(pendingOrderAlertStoreProvider);
+    final pendingAlerts = await pendingStore.loadPendingAlerts();
+
+    for (final pending in pendingAlerts) {
+      final message = pending.message;
+      if (await _hasAlerted(message.orderId)) {
+        await pendingStore.remove(message);
+        continue;
+      }
+
+      final hydratedMessage = await _hydrateIncomingOrder(message);
+      final hydratedOrder = _ref
+          .read(orderProvider)
+          .orders
+          .cast<OrderModel?>()
+          .firstWhere(
+            (candidate) => candidate?.id == hydratedMessage.orderId,
+            orElse: () => null,
+          );
+      if (hydratedOrder != null && !hydratedOrder.isAwaitingAcceptance) {
+        await pendingStore.remove(message);
+        continue;
+      }
+
+      final presented = await _presentAlert(hydratedMessage);
+      if (!presented) {
+        return;
+      }
+
+      await _ref
+          .read(messageDeduplicatorProvider)
+          .markAccepted(_dedupKeysFor(hydratedMessage));
+      await _markAlerted(hydratedMessage.orderId);
+      await pendingStore.remove(message);
+    }
   }
 
   Future<PushMessage> _hydrateIncomingOrder(PushMessage message) async {
@@ -81,6 +212,7 @@ class OrderAlertCoordinator {
               pickupCodeMasked: message.pickupCodeMasked,
               amount: message.amount,
               status: OrderStatus.paid,
+              fulfillmentStatus: FulfillmentStatus.pendingKitchen,
               createdAt: message.timestamp,
               items: message.items,
               note: message.note,
@@ -101,11 +233,18 @@ class OrderAlertCoordinator {
         .fetchOrderDetail(message.orderId);
     if (hydratedOrder != null) {
       if (hydratedOrder.isAwaitingAcceptance) {
-        _presentAlert(message.withOrderSnapshot(hydratedOrder));
+        final presented = await _presentAlert(
+          message.withOrderSnapshot(hydratedOrder),
+        );
+        if (!presented) {
+          _queueNotificationTap(message);
+        }
         return;
       }
 
-      _presentOrderDetail(hydratedOrder);
+      if (!_presentOrderDetail(hydratedOrder)) {
+        _queueNotificationTap(message);
+      }
       return;
     }
 
@@ -121,28 +260,67 @@ class OrderAlertCoordinator {
         );
 
     if (order == null) {
-      _presentAlert(message);
+      final presented = await _presentAlert(message);
+      if (!presented) {
+        _queueNotificationTap(message);
+      }
       return;
     }
 
     if (order.isAwaitingAcceptance) {
-      _presentAlert(message.withOrderSnapshot(order));
+      final presented = await _presentAlert(message.withOrderSnapshot(order));
+      if (!presented) {
+        _queueNotificationTap(message);
+      }
       return;
     }
 
-    _presentOrderDetail(order);
+    if (!_presentOrderDetail(order)) {
+      _queueNotificationTap(message);
+    }
   }
 
-  void _presentOrderDetail(OrderModel order) {
+  Future<void> drainPendingNotificationTaps() {
+    _pendingTapDrainFuture ??= _drainPendingNotificationTaps().whenComplete(() {
+      _pendingTapDrainFuture = null;
+    });
+    return _pendingTapDrainFuture!;
+  }
+
+  Future<void> _drainPendingNotificationTaps() async {
+    final pendingTaps = List<PushMessage>.from(_pendingNotificationTaps);
+    _pendingNotificationTaps.clear();
+
+    for (final message in pendingTaps) {
+      await handleNotificationTap(message);
+      if (_pendingNotificationTaps.isNotEmpty) {
+        break;
+      }
+    }
+  }
+
+  void _queueNotificationTap(PushMessage message) {
+    final orderId = message.orderId.trim();
+    if (orderId.isEmpty) {
+      return;
+    }
+    if (_pendingNotificationTaps.any((pending) => pending.orderId == orderId)) {
+      return;
+    }
+    _pendingNotificationTaps.add(message);
+  }
+
+  bool _presentOrderDetail(OrderModel order) {
     final navigator = rootNavigatorKey.currentState;
     final context = navigator?.context;
     if (navigator == null || context == null) {
-      return;
+      return false;
     }
 
     navigator.push(
       MaterialPageRoute(builder: (_) => OrderDetailPage(order: order)),
     );
+    return true;
   }
 
   Future<void> handlePolledOrders({
@@ -155,6 +333,25 @@ class OrderAlertCoordinator {
     );
 
     for (final order in newlyAwaitingAcceptanceOrders) {
+      if (await _hasAlerted(order.id)) {
+        continue;
+      }
+      final message = PushMessage.fromOrder(order, shopName: _merchantName);
+      await handleIncomingOrder(message, showLocalNotification: true);
+    }
+  }
+
+  Future<void> handleAwaitingAcceptanceBackfill(
+    List<OrderModel> latestOrders,
+  ) async {
+    final latestAwaitingAcceptanceOrders =
+        latestOrders.where((order) => order.isAwaitingAcceptance).toList()
+          ..sort((left, right) => left.createdAt.compareTo(right.createdAt));
+
+    for (final order in latestAwaitingAcceptanceOrders) {
+      if (await _hasAlerted(order.id)) {
+        continue;
+      }
       final message = PushMessage.fromOrder(order, shopName: _merchantName);
       await handleIncomingOrder(message, showLocalNotification: true);
     }
@@ -198,14 +395,14 @@ class OrderAlertCoordinator {
     return true;
   }
 
-  void _presentAlert(PushMessage message) {
+  Future<bool> _presentAlert(PushMessage message) async {
     if (_presentingOrderIds.contains(message.orderId)) {
-      return;
+      return true;
     }
 
     final navigator = rootNavigatorKey.currentState;
     if (navigator == null) {
-      return;
+      return false;
     }
 
     _presentingOrderIds.add(message.orderId);
@@ -219,6 +416,24 @@ class OrderAlertCoordinator {
           )
           .whenComplete(() => _presentingOrderIds.remove(message.orderId)),
     );
+    return true;
+  }
+
+  List<String> _dedupKeysFor(PushMessage message) {
+    return <String>[
+      if (message.messageId.trim().isNotEmpty)
+        MessageDeduplicator.messageKey(message.messageId),
+      if (message.orderId.trim().isNotEmpty)
+        MessageDeduplicator.orderKey(message.orderId),
+    ];
+  }
+
+  Future<bool> _hasAlerted(String orderId) {
+    return _ref.read(orderAlertCheckpointStoreProvider).hasAlerted(orderId);
+  }
+
+  Future<void> _markAlerted(String orderId) {
+    return _ref.read(orderAlertCheckpointStoreProvider).markAlerted(orderId);
   }
 
   String get _merchantName {

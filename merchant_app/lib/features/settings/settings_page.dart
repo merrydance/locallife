@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:merchant_app/config/theme.dart';
+import 'package:merchant_app/core/push/device_sync_service.dart';
+import 'package:merchant_app/core/push/push_provider.dart';
 import 'package:merchant_app/features/auth/auth_provider.dart';
 import 'package:merchant_app/features/order/order_provider.dart';
 import 'package:merchant_app/features/order/working_status_provider.dart';
@@ -23,6 +25,10 @@ class SettingsPage extends ConsumerWidget {
     final notificationSettingsNotifier = ref.read(
       notificationSettingsProvider.notifier,
     );
+    final notificationPermissionGranted = ref.watch(
+      notificationPermissionProvider,
+    );
+    final deviceSyncState = ref.watch(deviceSyncStateProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('系统设置')),
@@ -37,6 +43,47 @@ class SettingsPage extends ConsumerWidget {
                   title: '硬件与连接',
                   description: '查看当前打印与消息接收环境是否可用。',
                   children: [
+                    _buildActionTile(
+                      context: context,
+                      icon: Icons.notifications_active_outlined,
+                      title: '系统通知权限',
+                      subtitle: notificationPermissionGranted == false
+                          ? '未开启通知权限，后台订单可能没有系统提醒。'
+                          : notificationPermissionGranted == true
+                          ? '已允许系统通知。'
+                          : '通知权限状态正在检测。',
+                      badge: MerchantStatusBadge(
+                        label: notificationPermissionGranted == false
+                            ? '需开启'
+                            : notificationPermissionGranted == true
+                            ? '正常'
+                            : '检测中',
+                        tone: notificationPermissionGranted == false
+                            ? MerchantStatusTone.danger
+                            : notificationPermissionGranted == true
+                            ? MerchantStatusTone.positive
+                            : MerchantStatusTone.neutral,
+                      ),
+                      onTap: () => context.push('/settings/permission-guide'),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    _buildActionTile(
+                      context: context,
+                      icon: Icons.cloud_sync_outlined,
+                      title: '厂商推送与设备心跳',
+                      subtitle: _deviceSyncSubtitle(deviceSyncState),
+                      badge: MerchantStatusBadge(
+                        label: deviceSyncState.isDegraded ? '降级' : '正常',
+                        tone: deviceSyncState.isDegraded
+                            ? MerchantStatusTone.warning
+                            : MerchantStatusTone.positive,
+                      ),
+                      onTap: () {
+                        ref.read(deviceSyncServiceProvider).ensureRegistered();
+                        ref.read(deviceSyncServiceProvider).sendHeartbeat();
+                      },
+                    ),
+                    const SizedBox(height: AppSpacing.md),
                     _buildActionTile(
                       context: context,
                       icon: Icons.print_outlined,
@@ -325,4 +372,23 @@ class SettingsPage extends ConsumerWidget {
       child: content,
     );
   }
+}
+
+String _deviceSyncSubtitle(DeviceSyncState state) {
+  final messages = state.degradationMessages;
+  if (messages.isNotEmpty) {
+    return messages.join('；');
+  }
+  final provider = state.provider?.trim();
+  final providerLabel = provider == null || provider.isEmpty
+      ? '厂商通道'
+      : provider;
+  if (state.deviceRegistrationStatus == DeviceRegistrationStatus.success &&
+      state.heartbeatStatus == DeviceHeartbeatStatus.success) {
+    return '$providerLabel 已注册，设备心跳正常。';
+  }
+  if (state.deviceRegistrationStatus == DeviceRegistrationStatus.success) {
+    return '$providerLabel 已注册，等待下一次心跳确认。';
+  }
+  return '正在检测厂商推送、设备注册和心跳状态。';
 }

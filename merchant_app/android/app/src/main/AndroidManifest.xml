@@ -8,6 +8,10 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
@@ -53,6 +57,13 @@
         <!-- ========================================== -->
         <!-- Xiaomi Push Configuration -->
         <!-- ========================================== -->
+        <meta-data
+            android:name="XIAOMI_APP_ID"
+            android:value="${XIAOMI_APP_ID}" />
+        <meta-data
+            android:name="XIAOMI_APP_KEY"
+            android:value="${XIAOMI_APP_KEY}" />
+
         <service
             android:name="com.xiaomi.push.service.XMPushService"
             android:enabled="true"
@@ -114,6 +125,13 @@
         <!-- ========================================== -->
         <!-- OPPO Push Configuration -->
         <!-- ========================================== -->
+        <meta-data
+            android:name="OPPO_APP_KEY"
+            android:value="${OPPO_APP_KEY}" />
+        <meta-data
+            android:name="OPPO_APP_SECRET"
+            android:value="${OPPO_APP_SECRET}" />
+
         <service
             android:name="com.heytap.msp.push.service.DataMessageCallbackService"
             android:permission="com.heytap.mcs.permission.SEND_PUSH_MESSAGE"
@@ -126,6 +144,10 @@
         <!-- ========================================== -->
         <!-- Honor Push Configuration -->
         <!-- ========================================== -->
+        <meta-data
+            android:name="com.hihonor.push.app_id"
+            android:value="${HONOR_APP_ID}" />
+
         <service
             android:name=".push.HonorPushReceiver"
             android:exported="false">

@@ -6,6 +6,7 @@ class AuthState {
   final String? merchantName;
   final bool isAuthenticated;
   final bool isLoading;
+  final bool isSessionDegraded;
   final String? error;
 
   AuthState({
@@ -14,6 +15,7 @@ class AuthState {
     this.merchantName,
     this.isAuthenticated = false,
     this.isLoading = false,
+    this.isSessionDegraded = false,
     this.error,
   });
 
@@ -23,14 +25,22 @@ class AuthState {
     Object? merchantName = _unset,
     bool? isAuthenticated,
     bool? isLoading,
+    bool? isSessionDegraded,
     Object? error = _unset,
   }) {
     return AuthState(
-      accessToken: identical(accessToken, _unset) ? this.accessToken : accessToken as String?,
-      refreshToken: identical(refreshToken, _unset) ? this.refreshToken : refreshToken as String?,
-      merchantName: identical(merchantName, _unset) ? this.merchantName : merchantName as String?,
+      accessToken: identical(accessToken, _unset)
+          ? this.accessToken
+          : accessToken as String?,
+      refreshToken: identical(refreshToken, _unset)
+          ? this.refreshToken
+          : refreshToken as String?,
+      merchantName: identical(merchantName, _unset)
+          ? this.merchantName
+          : merchantName as String?,
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
       isLoading: isLoading ?? this.isLoading,
+      isSessionDegraded: isSessionDegraded ?? this.isSessionDegraded,
       error: identical(error, _unset) ? this.error : error as String?,
     );
   }

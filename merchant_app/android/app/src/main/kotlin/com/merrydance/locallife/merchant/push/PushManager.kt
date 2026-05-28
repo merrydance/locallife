@@ -20,6 +20,7 @@ object PushManager {
     private var context: Context? = null
     private var registrationId: String? = null
     private var registrationProvider: String? = null
+    private var initializationFailure: String? = null
 
     fun setChannel(channel: MethodChannel) {
         this.channel = channel
@@ -43,6 +44,7 @@ object PushManager {
     fun onTokenRegistered(token: String, provider: String) {
         registrationId = token
         registrationProvider = provider
+        initializationFailure = null
         Log.d(TAG, "Push token registered for provider: $provider")
         channel?.invokeMethod(
             "onTokenRegistered",
@@ -58,9 +60,16 @@ object PushManager {
         channel?.invokeMethod("onReceiveMessage", message)
     }
 
+    fun onNotificationOpened(message: Map<String, Any>) {
+        Log.d(TAG, "Push notification opened")
+        channel?.invokeMethod("onNotificationOpened", message)
+    }
+
     fun getRegistrationId(): String? = registrationId
 
     fun getRegistrationProvider(): String? = registrationProvider
+
+    fun getInitializationFailure(): String? = initializationFailure
 
     private fun initXiaomi(context: Context) {
         val appId = getMetadata(context, "XIAOMI_APP_ID")
@@ -70,6 +79,8 @@ object PushManager {
             MiPushClient.getRegId(context).takeIf { it.isNotBlank() }?.let {
                 onTokenRegistered(it, "xiaomi")
             }
+        } else {
+            onInitializationFailed("xiaomi", "小米推送配置缺失")
         }
     }
 
@@ -79,6 +90,8 @@ object PushManager {
             client.initialize(PushConfig.Builder().agreePrivacyStatement(true).build())
         } catch (e: VivoPushException) {
             Log.w(TAG, "vivo push initialization failed", e)
+            onInitializationFailed("vivo", "vivo 推送初始化失败")
+            return
         }
         client.turnOnPush(object : IPushActionListener {
             override fun onStateChanged(state: Int) {
@@ -90,10 +103,12 @@ object PushManager {
 
                         override fun onFail(errorCode: Int?) {
                             Log.w(TAG, "vivo push regId query failed: $errorCode")
+                            onInitializationFailed("vivo", "vivo 推送 Token 获取失败: $errorCode")
                         }
                     })
                 } else {
                     Log.w(TAG, "vivo push turnOnPush failed: $state")
+                    onInitializationFailed("vivo", "vivo 推送开启失败: $state")
                 }
             }
         })
@@ -112,6 +127,8 @@ object PushManager {
                     override fun onRegister(code: Int, regId: String?) {
                         if (code == 0 && regId != null) {
                             onTokenRegistered(regId, "oppo")
+                        } else {
+                            onInitializationFailed("oppo", "OPPO 推送注册失败: $code")
                         }
                     }
 
@@ -123,9 +140,13 @@ object PushManager {
 
                     override fun onGetNotificationStatus(code: Int, status: Int) {}
 
-                    override fun onError(code: Int, s: String?) {}
+                    override fun onError(code: Int, s: String?) {
+                        onInitializationFailed("oppo", s ?: "OPPO 推送初始化失败: $code")
+                    }
                 },
             )
+        } else {
+            onInitializationFailed("oppo", "OPPO 推送配置缺失")
         }
     }
 
@@ -138,8 +159,22 @@ object PushManager {
 
             override fun onFailure(errorCode: Int, errorMessage: String) {
                 Log.w(TAG, "Honor push token registration failed: $errorCode $errorMessage")
+                onInitializationFailed("honor", errorMessage.ifBlank { "荣耀推送 Token 获取失败: $errorCode" })
             }
         })
+    }
+
+    private fun onInitializationFailed(provider: String, message: String) {
+        registrationProvider = provider
+        initializationFailure = message
+        Log.w(TAG, "Push initialization failed for $provider: $message")
+        channel?.invokeMethod(
+            "onInitializationFailed",
+            mapOf(
+                "provider" to provider,
+                "message" to message,
+            ),
+        )
     }
 
     private fun getMetadata(context: Context, key: String): String? {

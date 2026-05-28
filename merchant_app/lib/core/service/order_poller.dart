@@ -86,16 +86,12 @@ class OrderPoller {
 
       await _ref.read(deviceSyncServiceProvider).sendHeartbeat();
       debugPrint('OrderPoller: Fetching latest orders (fallback).');
-      final previousOrders = List.of(_ref.read(orderProvider).orders);
       final latestOrders = await fetchLatestAwaitingAcceptanceOrders(
         _ref.read(orderProvider.notifier),
       );
       await _ref
           .read(orderAlertCoordinatorProvider)
-          .handlePolledOrders(
-            previousOrders: previousOrders,
-            latestOrders: latestOrders,
-          );
+          .handleAwaitingAcceptanceBackfill(latestOrders);
     } catch (e) {
       debugPrint('OrderPoller error: $e');
     }

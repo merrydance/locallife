@@ -30,9 +30,14 @@ void main() async {
 
   final container = ProviderContainer();
   await container.read(messageDeduplicatorProvider).ensureInitialized();
-  final localNotificationService = container.read(localNotificationServiceProvider);
+  final localNotificationService = container.read(
+    localNotificationServiceProvider,
+  );
   await localNotificationService.init();
-  await localNotificationService.ensureNotificationPermission();
+  final notificationGranted = await localNotificationService
+      .ensureNotificationPermission();
+  container.read(notificationPermissionProvider.notifier).state =
+      notificationGranted;
 
   // Initialize Push Manager
   final pushManager = container.read(pushManagerProvider);
@@ -42,11 +47,13 @@ void main() async {
   final wsClient = container.read(wsClientProvider);
   final orderAlertCoordinator = container.read(orderAlertCoordinatorProvider);
 
-  localNotificationService.onNotificationTap = orderAlertCoordinator.handleNotificationTap;
+  localNotificationService.onNotificationTap =
+      orderAlertCoordinator.handleNotificationTap;
 
   // Handle new order push
   pushManager.onNewOrder = orderAlertCoordinator.handleIncomingOrder;
-  pushManager.onNotificationOpened = orderAlertCoordinator.handleNotificationTap;
+  pushManager.onNotificationOpened =
+      orderAlertCoordinator.handleNotificationTap;
 
   // Handle new order WebSocket
   wsClient.onNewOrder = (message) {

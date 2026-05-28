@@ -27,6 +27,12 @@ class MainActivity : FlutterActivity() {
                 "getRegistrationId" -> {
                     result.success(PushManager.getRegistrationId())
                 }
+                "getRegistrationProvider" -> {
+                    result.success(PushManager.getRegistrationProvider())
+                }
+                "getInitializationFailure" -> {
+                    result.success(PushManager.getInitializationFailure())
+                }
                 else -> {
                     result.notImplemented()
                 }

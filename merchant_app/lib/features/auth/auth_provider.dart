@@ -43,9 +43,38 @@ class AuthNotifier extends StateNotifier<AuthState> {
           merchantName: tokens['merchantName'],
           isAuthenticated: true,
           isLoading: false,
+          isSessionDegraded: false,
+          error: null,
         );
       } else {
         state = AuthState(isLoading: false, isAuthenticated: false);
+      }
+    } on AuthRefreshRecoverableException catch (e) {
+      if (_manualLoginStarted || state.isAuthenticated) {
+        return;
+      }
+      final tokens = await _authService.getTokens();
+      final accessToken = tokens['accessToken'];
+      final refreshToken = tokens['refreshToken'];
+      if (accessToken != null &&
+          accessToken.isNotEmpty &&
+          refreshToken != null &&
+          refreshToken.isNotEmpty) {
+        state = state.copyWith(
+          accessToken: accessToken,
+          refreshToken: refreshToken,
+          merchantName: tokens['merchantName'],
+          isAuthenticated: true,
+          isLoading: false,
+          isSessionDegraded: true,
+          error: e.message,
+        );
+      } else {
+        state = AuthState(
+          isAuthenticated: false,
+          isLoading: false,
+          error: e.message,
+        );
       }
     } catch (e) {
       if (_manualLoginStarted || state.isAuthenticated) {
@@ -66,6 +95,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         accessToken: latestAccessToken,
         refreshToken: latestRefreshToken,
         isAuthenticated: true,
+        isLoading: false,
+        isSessionDegraded: false,
+        error: null,
       );
       _sessionController.clearTokenUpdate();
       return;
@@ -122,6 +154,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         accessToken: accessToken,
         refreshToken: newRefreshToken,
         isAuthenticated: true,
+        isSessionDegraded: false,
+        error: null,
       );
 
       return {
@@ -129,6 +163,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
         'refreshToken': newRefreshToken,
         'merchantName': state.merchantName,
       };
+    } on AuthRefreshRecoverableException catch (e) {
+      state = state.copyWith(
+        isAuthenticated: true,
+        isLoading: false,
+        isSessionDegraded: true,
+        error: e.message,
+      );
+      return null;
     } catch (_) {
       await _authService.clearTokens();
       state = AuthState(
@@ -175,6 +217,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
           merchantName: merchantName,
           isAuthenticated: true,
           isLoading: false,
+          isSessionDegraded: false,
+          error: null,
         );
       } else {
         state = state.copyWith(isLoading: false, error: '获取 Token 失败');

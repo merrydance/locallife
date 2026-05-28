@@ -5,13 +5,11 @@ import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:merchant_app/config/env.dart';
-import 'package:merchant_app/core/service/message_dedup.dart';
 import 'package:merchant_app/models/push_message.dart';
 
 typedef WsConnector = Future<WebSocketChannel> Function(Uri uri);
 
 class WsClient {
-  final MessageDeduplicator _deduplicator;
   final WsConnector _connector;
   WebSocketChannel? _channel;
   Timer? _reconnectTimer;
@@ -26,7 +24,7 @@ class WsClient {
   void Function(bool)? onStatusChange;
   Future<String?> Function()? onAuthenticationFailure;
 
-  WsClient(this._deduplicator, {WsConnector? connector})
+  WsClient({WsConnector? connector})
     : _connector = connector ?? _connectWebSocket;
 
   Future<void> connect(String token) async {
@@ -120,12 +118,7 @@ class WsClient {
         final orderId =
             payload['order_id']?.toString() ?? payload['id']?.toString();
 
-        if (messageId != null &&
-            orderId != null &&
-            await _deduplicator.tryAcceptGroup([
-              MessageDeduplicator.messageKey(messageId),
-              MessageDeduplicator.orderKey(orderId),
-            ])) {
+        if (messageId != null && orderId != null) {
           final pushMsg = PushMessage.fromJson(
             Map<String, dynamic>.from(payload),
           );

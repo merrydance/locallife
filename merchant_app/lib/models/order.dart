@@ -28,6 +28,27 @@ enum OrderStatus {
   }
 }
 
+enum FulfillmentStatus {
+  scheduled('scheduled'),
+  pendingKitchen('pending_kitchen'),
+  preparing('preparing'),
+  ready('ready'),
+  completed('completed'),
+  cancelled('cancelled'),
+  unknown('unknown');
+
+  final String backendValue;
+  const FulfillmentStatus(this.backendValue);
+
+  static FulfillmentStatus fromString(String value) {
+    final normalized = value.trim().toLowerCase();
+    return FulfillmentStatus.values.firstWhere(
+      (e) => e.backendValue == normalized || e.name == normalized,
+      orElse: () => FulfillmentStatus.unknown,
+    );
+  }
+}
+
 class OrderModel {
   final String id;
   final String orderNum;
@@ -36,6 +57,7 @@ class OrderModel {
   final double amount;
   final OrderFeeBreakdown? feeBreakdown;
   final OrderStatus status;
+  final FulfillmentStatus fulfillmentStatus;
   final DateTime createdAt;
   final String? userName;
   final String? userPhone;
@@ -51,6 +73,7 @@ class OrderModel {
     required this.amount,
     this.feeBreakdown,
     required this.status,
+    this.fulfillmentStatus = FulfillmentStatus.unknown,
     required this.createdAt,
     this.userName,
     this.userPhone,
@@ -81,6 +104,9 @@ class OrderModel {
       ),
       feeBreakdown: _feeBreakdownFromJson(json['fee_breakdown']),
       status: OrderStatus.fromString(json['status']?.toString() ?? 'unknown'),
+      fulfillmentStatus: FulfillmentStatus.fromString(
+        json['fulfillment_status']?.toString() ?? 'unknown',
+      ),
       createdAt:
           DateTime.tryParse(json['created_at']?.toString() ?? '') ??
           DateTime.now(),
@@ -111,7 +137,10 @@ class OrderModel {
 
   bool get isAwaitingAcceptance => status == OrderStatus.paid;
 
-  bool get canMarkReady => status == OrderStatus.preparing;
+  bool get canMarkReady =>
+      status == OrderStatus.preparing ||
+      (status == OrderStatus.courierAccepted &&
+          fulfillmentStatus == FulfillmentStatus.preparing);
 
   String get displayOrderNumber {
     final pickup = pickupCode?.trim() ?? '';

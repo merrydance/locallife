@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:merchant_app/core/network/api_client.dart';
+export 'package:merchant_app/core/network/auth_refresh_failure.dart';
 
 class AuthService {
   final ApiClient _apiClient;
@@ -153,6 +154,8 @@ class AuthService {
         'refreshToken': newRefreshToken,
         'merchantName': tokens['merchantName'],
       };
+    } on AuthRefreshRecoverableException {
+      rethrow;
     } catch (_) {
       await clearTokens();
       return null;

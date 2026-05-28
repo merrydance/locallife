@@ -1,10 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dio/dio.dart';
 import 'package:merchant_app/core/network/api_client.dart';
 import 'package:merchant_app/core/network/api_provider.dart';
+import 'package:merchant_app/core/push/local_notification_service.dart';
+import 'package:merchant_app/core/push/push_provider.dart';
 import 'package:merchant_app/core/service/auth_session_controller.dart';
+import 'package:merchant_app/core/service/message_dedup.dart';
+import 'package:merchant_app/core/service/navigation_service.dart';
+import 'package:merchant_app/core/service/order_alert_checkpoint_store.dart';
+import 'package:merchant_app/core/service/pending_order_alert_store.dart';
 import 'package:merchant_app/features/auth/auth_provider.dart';
 import 'package:merchant_app/features/auth/auth_service.dart';
 import 'package:merchant_app/features/auth/auth_state.dart';
@@ -13,6 +21,8 @@ import 'package:merchant_app/features/order/order_alert_coordinator.dart';
 import 'package:merchant_app/features/order/order_detail_page.dart';
 import 'package:merchant_app/models/order.dart';
 import 'package:merchant_app/models/push_message.dart';
+import 'package:merchant_app/features/settings/notification_settings_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('OrderAlertCoordinator.identifyNewAwaitingAcceptanceOrders', () {
@@ -44,6 +54,532 @@ void main() {
         ]);
       },
     );
+  });
+
+  group('OrderAlertCoordinator.handleIncomingOrder', () {
+    test(
+      'continues alert flow when local notification display fails',
+      () async {
+        TestWidgetsFlutterBinding.ensureInitialized();
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final container = ProviderContainer(
+          overrides: [
+            apiClientProvider.overrideWithValue(_FakeApiClient()),
+            messageDeduplicatorProvider.overrideWithValue(
+              MessageDeduplicator.memoryOnly(),
+            ),
+            localNotificationServiceProvider.overrideWithValue(
+              _ThrowingLocalNotificationService(),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final coordinator = container.read(orderAlertCoordinatorProvider);
+
+        await expectLater(
+          coordinator.handleIncomingOrder(
+            PushMessage(
+              messageId: 'merchant:new_order:501',
+              orderId: '501',
+              orderNumber: 'ORD501',
+              title: '新订单',
+              content: '您有一笔新订单',
+              amount: 18.5,
+              shopName: '测试门店',
+            ),
+            showLocalNotification: true,
+          ),
+          completes,
+        );
+      },
+    );
+
+    test(
+      'queues alert when navigator is unavailable without committing dedup',
+      () async {
+        TestWidgetsFlutterBinding.ensureInitialized();
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final deduplicator = MessageDeduplicator.memoryOnly();
+        await deduplicator.ensureInitialized();
+        final pendingStore = MemoryPendingOrderAlertStore();
+        final container = ProviderContainer(
+          overrides: [
+            apiClientProvider.overrideWithValue(_FakeApiClient()),
+            messageDeduplicatorProvider.overrideWithValue(deduplicator),
+            pendingOrderAlertStoreProvider.overrideWithValue(pendingStore),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final coordinator = container.read(orderAlertCoordinatorProvider);
+
+        await coordinator.handleIncomingOrder(
+          PushMessage(
+            messageId: 'merchant:new_order:502',
+            orderId: '502',
+            orderNumber: 'ORD502',
+            title: '新订单',
+            content: '您有一笔新订单',
+            amount: 18.5,
+            shopName: '测试门店',
+          ),
+          showLocalNotification: false,
+        );
+
+        final pending = await pendingStore.loadPendingAlerts();
+        expect(pending.map((alert) => alert.orderId), contains('502'));
+        expect(
+          await deduplicator.tryAcceptGroup([
+            MessageDeduplicator.messageKey('merchant:new_order:502'),
+            MessageDeduplicator.orderKey('502'),
+          ]),
+          isTrue,
+        );
+      },
+    );
+  });
+
+  group('OrderAlertCoordinator.drainPendingAlerts', () {
+    testWidgets(
+      'presents pending alert once navigator is available and commits it',
+      (tester) async {
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final deduplicator = MessageDeduplicator.memoryOnly();
+        await deduplicator.ensureInitialized();
+        final checkpointStore = MemoryOrderAlertCheckpointStore();
+        final pendingStore = MemoryPendingOrderAlertStore();
+        final message = PushMessage(
+          messageId: 'merchant:new_order:503',
+          orderId: '503',
+          orderNumber: 'ORD503',
+          title: '新订单',
+          content: '您有一笔新订单',
+          amount: 18.5,
+          shopName: '测试门店',
+        );
+        await pendingStore.save(message, source: 'incoming');
+
+        final container = ProviderContainer(
+          overrides: [
+            apiClientProvider.overrideWithValue(_FakeApiClient()),
+            messageDeduplicatorProvider.overrideWithValue(deduplicator),
+            orderAlertCheckpointStoreProvider.overrideWithValue(
+              checkpointStore,
+            ),
+            pendingOrderAlertStoreProvider.overrideWithValue(pendingStore),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              navigatorKey: rootNavigatorKey,
+              home: const Scaffold(body: SizedBox.shrink()),
+            ),
+          ),
+        );
+
+        await container
+            .read(orderAlertCoordinatorProvider)
+            .drainPendingAlerts();
+        await tester.pumpAndSettle();
+
+        expect(find.byType(OrderAlertPage), findsOneWidget);
+        expect(find.text('订单号 ORD503'), findsOneWidget);
+        expect(await pendingStore.loadPendingAlerts(), isEmpty);
+        expect(await checkpointStore.hasAlerted('503'), isTrue);
+        expect(
+          await deduplicator.tryAcceptGroup([
+            MessageDeduplicator.messageKey('merchant:new_order:503'),
+            MessageDeduplicator.orderKey('503'),
+          ]),
+          isFalse,
+        );
+
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+
+    testWidgets(
+      'does not drop pending alert just because dedup was committed earlier',
+      (tester) async {
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final deduplicator = MessageDeduplicator.memoryOnly();
+        await deduplicator.ensureInitialized();
+        final checkpointStore = MemoryOrderAlertCheckpointStore();
+        final pendingStore = MemoryPendingOrderAlertStore();
+        final message = PushMessage(
+          messageId: 'merchant:new_order:504',
+          orderId: '504',
+          orderNumber: 'ORD504',
+          title: '新订单',
+          content: '您有一笔新订单',
+          amount: 18.5,
+          shopName: '测试门店',
+        );
+        await pendingStore.save(message, source: 'incoming');
+        await deduplicator.markAccepted([
+          MessageDeduplicator.messageKey(message.messageId),
+          MessageDeduplicator.orderKey(message.orderId),
+        ]);
+
+        final container = ProviderContainer(
+          overrides: [
+            apiClientProvider.overrideWithValue(_FakeApiClient()),
+            messageDeduplicatorProvider.overrideWithValue(deduplicator),
+            orderAlertCheckpointStoreProvider.overrideWithValue(
+              checkpointStore,
+            ),
+            pendingOrderAlertStoreProvider.overrideWithValue(pendingStore),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              navigatorKey: rootNavigatorKey,
+              home: const Scaffold(body: SizedBox.shrink()),
+            ),
+          ),
+        );
+
+        await container
+            .read(orderAlertCoordinatorProvider)
+            .drainPendingAlerts();
+        await tester.pumpAndSettle();
+
+        expect(find.byType(OrderAlertPage), findsOneWidget);
+        expect(find.text('订单号 ORD504'), findsOneWidget);
+        expect(await pendingStore.loadPendingAlerts(), isEmpty);
+        expect(await checkpointStore.hasAlerted('504'), isTrue);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+
+    testWidgets(
+      'removes pending alert without presenting when backend order is no longer paid',
+      (tester) async {
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final pendingStore = MemoryPendingOrderAlertStore();
+        final checkpointStore = MemoryOrderAlertCheckpointStore();
+        final message = PushMessage(
+          messageId: 'merchant:new_order:506',
+          orderId: '506',
+          orderNumber: 'ORD506',
+          title: '新订单',
+          content: '您有一笔新订单',
+          amount: 18.5,
+          shopName: '测试门店',
+        );
+        await pendingStore.save(message, source: 'incoming');
+
+        final container = ProviderContainer(
+          overrides: [
+            apiClientProvider.overrideWithValue(
+              _OrderDetailApiClient(_orderJson(id: '506', status: 'preparing')),
+            ),
+            messageDeduplicatorProvider.overrideWithValue(
+              MessageDeduplicator.memoryOnly(),
+            ),
+            orderAlertCheckpointStoreProvider.overrideWithValue(
+              checkpointStore,
+            ),
+            pendingOrderAlertStoreProvider.overrideWithValue(pendingStore),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              navigatorKey: rootNavigatorKey,
+              home: const Scaffold(body: SizedBox.shrink()),
+            ),
+          ),
+        );
+
+        await container
+            .read(orderAlertCoordinatorProvider)
+            .drainPendingAlerts();
+        await tester.pumpAndSettle();
+
+        expect(find.byType(OrderAlertPage), findsNothing);
+        expect(await pendingStore.loadPendingAlerts(), isEmpty);
+        expect(await checkpointStore.hasAlerted('506'), isFalse);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  });
+
+  group('OrderAlertCoordinator.handleNotificationTap', () {
+    testWidgets(
+      'queues notification tap until navigator is ready and then shows alert for paid order',
+      (tester) async {
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final container = ProviderContainer(
+          overrides: [
+            apiClientProvider.overrideWithValue(
+              _OrderDetailApiClient(_orderJson(id: '509', status: 'paid')),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final coordinator = container.read(orderAlertCoordinatorProvider);
+        await coordinator.handleNotificationTap(
+          PushMessage(
+            messageId: 'merchant:new_order:509',
+            orderId: '509',
+            orderNumber: 'ORD509',
+            title: '新订单',
+            content: '您有一笔新订单',
+            amount: 18.5,
+            shopName: '测试门店',
+          ),
+        );
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              navigatorKey: rootNavigatorKey,
+              home: const Scaffold(body: SizedBox.shrink()),
+            ),
+          ),
+        );
+
+        await coordinator.drainPendingNotificationTaps();
+        await tester.pumpAndSettle();
+
+        expect(find.byType(OrderAlertPage), findsOneWidget);
+        expect(find.text('订单号 ORD509'), findsOneWidget);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+
+    testWidgets(
+      'queues notification tap until navigator is ready and then opens detail for non-paid order',
+      (tester) async {
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final container = ProviderContainer(
+          overrides: [
+            apiClientProvider.overrideWithValue(
+              _OrderDetailApiClient(_orderJson(id: '510', status: 'preparing')),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final coordinator = container.read(orderAlertCoordinatorProvider);
+        await coordinator.handleNotificationTap(
+          PushMessage(
+            messageId: 'merchant:new_order:510',
+            orderId: '510',
+            orderNumber: 'ORD510',
+            title: '新订单',
+            content: '您有一笔新订单',
+            amount: 18.5,
+            shopName: '测试门店',
+          ),
+        );
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              navigatorKey: rootNavigatorKey,
+              home: const Scaffold(body: SizedBox.shrink()),
+            ),
+          ),
+        );
+
+        await coordinator.drainPendingNotificationTaps();
+        await tester.pumpAndSettle();
+
+        expect(find.byType(OrderDetailPage), findsOneWidget);
+        expect(find.text('订单 ORD510'), findsOneWidget);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  });
+
+  group('OrderAlertCoordinator duplicate delivery', () {
+    test(
+      'suppresses duplicate side effects while the same order is already being handled',
+      () async {
+        TestWidgetsFlutterBinding.ensureInitialized();
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final localNotificationService = _BlockingLocalNotificationService();
+        final container = ProviderContainer(
+          overrides: [
+            apiClientProvider.overrideWithValue(_FakeApiClient()),
+            messageDeduplicatorProvider.overrideWithValue(
+              MessageDeduplicator.memoryOnly(),
+            ),
+            localNotificationServiceProvider.overrideWithValue(
+              localNotificationService,
+            ),
+            notificationSettingsProvider.overrideWith(
+              (ref) => _FakeNotificationSettingsNotifier(),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final coordinator = container.read(orderAlertCoordinatorProvider);
+        final message = PushMessage(
+          messageId: 'merchant:new_order:507',
+          orderId: '507',
+          orderNumber: 'ORD507',
+          title: '新订单',
+          content: '您有一笔新订单',
+          amount: 18.5,
+          shopName: '测试门店',
+        );
+
+        final first = coordinator.handleIncomingOrder(
+          message,
+          showLocalNotification: true,
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        final second = coordinator.handleIncomingOrder(
+          message,
+          showLocalNotification: true,
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        expect(localNotificationService.showCount, 1);
+
+        localNotificationService.complete();
+        await Future.wait([first, second]);
+      },
+    );
+
+    test(
+      'suppresses duplicate side effects while an order is pending presentation retry',
+      () async {
+        TestWidgetsFlutterBinding.ensureInitialized();
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final localNotificationService = _CountingLocalNotificationService();
+        final pendingStore = MemoryPendingOrderAlertStore();
+        final container = ProviderContainer(
+          overrides: [
+            apiClientProvider.overrideWithValue(_FakeApiClient()),
+            messageDeduplicatorProvider.overrideWithValue(
+              MessageDeduplicator.memoryOnly(),
+            ),
+            localNotificationServiceProvider.overrideWithValue(
+              localNotificationService,
+            ),
+            pendingOrderAlertStoreProvider.overrideWithValue(pendingStore),
+            notificationSettingsProvider.overrideWith(
+              (ref) => _FakeNotificationSettingsNotifier(),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final coordinator = container.read(orderAlertCoordinatorProvider);
+        final message = PushMessage(
+          messageId: 'merchant:new_order:508',
+          orderId: '508',
+          orderNumber: 'ORD508',
+          title: '新订单',
+          content: '您有一笔新订单',
+          amount: 18.5,
+          shopName: '测试门店',
+        );
+
+        final polledDuplicate = PushMessage(
+          messageId: 'polled-508',
+          orderId: '508',
+          orderNumber: 'ORD508',
+          title: '新订单',
+          content: '您有一笔新订单',
+          amount: 18.5,
+          shopName: '测试门店',
+        );
+
+        await coordinator.handleIncomingOrder(
+          polledDuplicate,
+          showLocalNotification: true,
+        );
+        await coordinator.handleIncomingOrder(
+          message,
+          showLocalNotification: true,
+        );
+
+        expect(localNotificationService.showCount, 1);
+        final pendingAlerts = await pendingStore.loadPendingAlerts();
+        expect(pendingAlerts.map((alert) => alert.orderId), ['508']);
+      },
+    );
+  });
+
+  group('PendingOrderAlertDrainManager', () {
+    testWidgets('drains pending alerts after the first app frame', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final deduplicator = MessageDeduplicator.memoryOnly();
+      await deduplicator.ensureInitialized();
+      final checkpointStore = MemoryOrderAlertCheckpointStore();
+      final pendingStore = MemoryPendingOrderAlertStore();
+      final message = PushMessage(
+        messageId: 'merchant:new_order:505',
+        orderId: '505',
+        orderNumber: 'ORD505',
+        title: '新订单',
+        content: '您有一笔新订单',
+        amount: 18.5,
+        shopName: '测试门店',
+      );
+      await pendingStore.save(message, source: 'incoming');
+
+      final container = ProviderContainer(
+        overrides: [
+          apiClientProvider.overrideWithValue(_FakeApiClient()),
+          messageDeduplicatorProvider.overrideWithValue(deduplicator),
+          orderAlertCheckpointStoreProvider.overrideWithValue(checkpointStore),
+          pendingOrderAlertStoreProvider.overrideWithValue(pendingStore),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            navigatorKey: rootNavigatorKey,
+            home: Consumer(
+              builder: (context, ref, child) {
+                ref.watch(pendingOrderAlertDrainManagerProvider);
+                return const Scaffold(body: SizedBox.shrink());
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(OrderAlertPage), findsOneWidget);
+      expect(find.text('订单号 ORD505'), findsOneWidget);
+      expect(await pendingStore.loadPendingAlerts(), isEmpty);
+      expect(await checkpointStore.hasAlerted('505'), isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
   });
 
   group('PushMessage.fromOrder', () {
@@ -224,6 +760,22 @@ void main() {
         expect(missingStatusOrder.isAwaitingAcceptance, isFalse);
         expect(unknownStatusOrder.status, OrderStatus.unknown);
         expect(unknownStatusOrder.isAwaitingAcceptance, isFalse);
+      },
+    );
+
+    test(
+      'allows mark-ready while rider has accepted but kitchen is preparing',
+      () {
+        final order = OrderModel.fromJson({
+          'id': 501,
+          'order_no': 'ORD501',
+          'total_amount': 1800,
+          'status': 'courier_accepted',
+          'fulfillment_status': 'preparing',
+          'created_at': '2026-04-12T08:00:00Z',
+        });
+
+        expect(order.canMarkReady, isTrue);
       },
     );
   });
@@ -513,6 +1065,123 @@ class _FakeApiClient implements ApiClient {
   }
 }
 
+class _ThrowingLocalNotificationService extends LocalNotificationService {
+  @override
+  Future<void> showNewOrderNotification(PushMessage message) async {
+    throw StateError('notification display failed');
+  }
+}
+
+class _BlockingLocalNotificationService extends LocalNotificationService {
+  final Completer<void> _completer = Completer<void>();
+  int showCount = 0;
+
+  @override
+  Future<void> showNewOrderNotification(PushMessage message) async {
+    showCount += 1;
+    return _completer.future;
+  }
+
+  void complete() {
+    if (!_completer.isCompleted) {
+      _completer.complete();
+    }
+  }
+}
+
+class _CountingLocalNotificationService extends LocalNotificationService {
+  int showCount = 0;
+
+  @override
+  Future<void> showNewOrderNotification(PushMessage message) async {
+    showCount += 1;
+  }
+}
+
+class _OrderDetailApiClient implements ApiClient {
+  _OrderDetailApiClient(this.orderJson);
+
+  final Map<String, dynamic> orderJson;
+
+  @override
+  Future<Response<dynamic>> get(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    bool requiresAuth = true,
+  }) async {
+    if (path == '/merchant/orders/${orderJson['id']}') {
+      return Response<dynamic>(
+        requestOptions: RequestOptions(path: path),
+        data: <String, dynamic>{'code': 0, 'message': 'ok', 'data': orderJson},
+      );
+    }
+    throw UnimplementedError('Unexpected GET $path');
+  }
+
+  @override
+  Future<Response<dynamic>> delete(String path, {bool requiresAuth = true}) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Response<dynamic>> patch(
+    String path, {
+    dynamic data,
+    bool requiresAuth = true,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Response<dynamic>> post(
+    String path, {
+    dynamic data,
+    bool requiresAuth = true,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Response<dynamic>> put(
+    String path, {
+    dynamic data,
+    bool requiresAuth = true,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Map<String, String?>?> refreshSessionTokens() {
+    throw UnimplementedError();
+  }
+}
+
+class _FakeNotificationSettingsNotifier
+    extends StateNotifier<NotificationSettingsState>
+    implements NotificationSettingsNotifier {
+  _FakeNotificationSettingsNotifier()
+    : super(
+        const NotificationSettingsState(
+          soundEnabled: false,
+          voiceEnabled: false,
+          autoAcceptEnabled: false,
+          autoPrintAfterAcceptEnabled: false,
+        ),
+      );
+
+  @override
+  Future<void> setAutoAcceptEnabled(bool enabled) async {}
+
+  @override
+  Future<void> setAutoPrintAfterAcceptEnabled(bool enabled) async {}
+
+  @override
+  Future<void> setSoundEnabled(bool enabled) async {}
+
+  @override
+  Future<void> setVoiceEnabled(bool enabled) async {}
+}
+
 class _FakeAuthService implements AuthService {
   @override
   Future<void> clearTokens() async {}
@@ -571,4 +1240,15 @@ OrderModel _buildOrder({
     createdAt: DateTime.parse('2026-04-12T08:00:00Z'),
     items: const <OrderItem>[],
   );
+}
+
+Map<String, dynamic> _orderJson({required String id, required String status}) {
+  return <String, dynamic>{
+    'id': id,
+    'order_no': 'ORD$id',
+    'total_amount': 1850,
+    'status': status,
+    'created_at': '2026-04-12T08:00:00Z',
+    'items': <Map<String, dynamic>>[],
+  };
 }

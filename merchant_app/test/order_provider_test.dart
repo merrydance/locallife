@@ -69,33 +69,96 @@ void main() {
     expect(notifier.state.orders.single.status, OrderStatus.ready);
   });
 
-  test('acceptOrder fallback uses backend preparing status', () async {
-    final apiClient = _FakeApiClient(
-      orders: [_orderJson(id: '501', status: 'paid')],
-    );
-    final notifier = OrderNotifier(apiClient);
+  test(
+    'acceptOrder reads detail when action response has no order snapshot',
+    () async {
+      final apiClient = _FakeApiClient(
+        orders: [_orderJson(id: '501', status: 'paid')],
+        detailOrders: {'501': _orderJson(id: '501', status: 'preparing')},
+      );
+      final notifier = OrderNotifier(apiClient);
 
-    await notifier.fetchOrders();
-    final success = await notifier.acceptOrder('501');
+      await notifier.fetchOrders();
+      final success = await notifier.acceptOrder('501');
 
-    expect(success, isTrue);
-    expect(apiClient.lastPostPath, '/merchant/orders/501/accept');
-    expect(notifier.state.orders.single.status, OrderStatus.preparing);
-    expect(notifier.state.orders.single.canMarkReady, isTrue);
-  });
+      expect(success, isTrue);
+      expect(apiClient.lastPostPath, '/merchant/orders/501/accept');
+      expect(apiClient.detailGetCalls['501'], 1);
+      expect(notifier.state.orders.single.status, OrderStatus.preparing);
+      expect(notifier.state.orders.single.canMarkReady, isTrue);
+    },
+  );
+
+  test(
+    'acceptOrder does not optimistically succeed when readback is unresolved',
+    () async {
+      final apiClient = _FakeApiClient(
+        orders: [_orderJson(id: '501', status: 'paid')],
+        detailOrders: {'501': _orderJson(id: '501', status: 'paid')},
+      );
+      final notifier = OrderNotifier(apiClient);
+
+      await notifier.fetchOrders();
+      final success = await notifier.acceptOrder('501');
+
+      expect(success, isFalse);
+      expect(apiClient.lastPostPath, '/merchant/orders/501/accept');
+      expect(apiClient.detailGetCalls['501'], 1);
+      expect(notifier.state.orders.single.status, OrderStatus.paid);
+      expect(notifier.state.error, '结果确认中，请刷新订单');
+    },
+  );
+
+  test(
+    'markOrderReady accepts courier-accepted readback with ready fulfillment',
+    () async {
+      final apiClient = _FakeApiClient(
+        orders: [
+          _orderJson(
+            id: '501',
+            status: 'courier_accepted',
+            fulfillmentStatus: 'preparing',
+          ),
+        ],
+        detailOrders: {
+          '501': _orderJson(
+            id: '501',
+            status: 'courier_accepted',
+            fulfillmentStatus: 'ready',
+          ),
+        },
+      );
+      final notifier = OrderNotifier(apiClient);
+
+      await notifier.fetchOrders();
+      final success = await notifier.markOrderReady('501');
+
+      expect(success, isTrue);
+      expect(apiClient.detailGetCalls['501'], 1);
+      expect(notifier.state.orders.single.status, OrderStatus.courierAccepted);
+      expect(
+        notifier.state.orders.single.fulfillmentStatus,
+        FulfillmentStatus.ready,
+      );
+      expect(notifier.state.orders.single.canMarkReady, isFalse);
+    },
+  );
 }
 
 class _FakeApiClient implements ApiClient {
   _FakeApiClient({
     this.orders = const <Map<String, dynamic>>[],
     this.postResponseOrder,
+    this.detailOrders = const <String, Map<String, dynamic>>{},
   });
 
   final List<Map<String, dynamic>> orders;
   final Map<String, dynamic>? postResponseOrder;
+  final Map<String, Map<String, dynamic>> detailOrders;
   String? lastPath;
   String? lastPostPath;
   Map<String, dynamic>? lastQueryParameters;
+  final Map<String, int> detailGetCalls = <String, int>{};
 
   @override
   Future<Response<dynamic>> get(
@@ -105,6 +168,29 @@ class _FakeApiClient implements ApiClient {
   }) async {
     lastPath = path;
     lastQueryParameters = queryParameters;
+    if (path.startsWith('/merchant/orders/')) {
+      final orderId = path.split('/').last;
+      detailGetCalls[orderId] = (detailGetCalls[orderId] ?? 0) + 1;
+      final detailOrder = detailOrders[orderId];
+      if (detailOrder == null) {
+        throw DioException(
+          requestOptions: RequestOptions(path: path),
+          type: DioExceptionType.badResponse,
+          response: Response<void>(
+            requestOptions: RequestOptions(path: path),
+            statusCode: 404,
+          ),
+        );
+      }
+      return Response<dynamic>(
+        requestOptions: RequestOptions(path: path),
+        data: <String, dynamic>{
+          'code': 0,
+          'message': 'ok',
+          'data': detailOrder,
+        },
+      );
+    }
     return Response<dynamic>(
       requestOptions: RequestOptions(path: path),
       data: <String, dynamic>{
@@ -166,12 +252,17 @@ class _FakeApiClient implements ApiClient {
   }
 }
 
-Map<String, dynamic> _orderJson({required String id, required String status}) {
+Map<String, dynamic> _orderJson({
+  required String id,
+  required String status,
+  String? fulfillmentStatus,
+}) {
   return <String, dynamic>{
     'id': id,
     'order_no': 'ORD-$id',
     'total_amount': 1800,
     'status': status,
+    'fulfillment_status': ?fulfillmentStatus,
     'created_at': '2026-04-12T08:00:00Z',
     'items': <Map<String, dynamic>>[],
   };

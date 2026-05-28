@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:merchant_app/core/network/connectivity_provider.dart';
 import 'package:merchant_app/core/network/ws_provider.dart';
+import 'package:merchant_app/core/push/push_provider.dart';
 import 'package:merchant_app/config/theme.dart';
 import 'package:merchant_app/features/printer/printer_provider.dart';
 import 'package:merchant_app/features/order/order_provider.dart';
@@ -55,6 +56,10 @@ class _OrderListPageState extends ConsumerState<OrderListPage> {
         workingStatusState.isLoading && !workingStatusState.hasConfirmedState;
     final hasNetwork = ref.watch(connectivityProvider).value ?? true;
     final isWsConnected = ref.watch(wsStatusProvider);
+    final notificationPermissionGranted = ref.watch(
+      notificationPermissionProvider,
+    );
+    final deviceSyncState = ref.watch(deviceSyncStateProvider);
     final isAuthenticated = authState.isAuthenticated;
     final merchantName = authState.merchantName;
     final canReceiveOrders = isAuthenticated && isWorking;
@@ -64,6 +69,11 @@ class _OrderListPageState extends ConsumerState<OrderListPage> {
         : (isAuthenticated ? '商户工作台' : '未绑定商户');
 
     final showWsWarning = canReceiveOrders && hasNetwork && !isWsConnected;
+    final degradedMessages = <String>[
+      if (authState.isSessionDegraded) authState.error ?? '登录状态暂未确认，网络恢复后会自动重试',
+      if (notificationPermissionGranted == false) '通知权限未开启，后台订单可能没有系统提醒',
+      ...deviceSyncState.degradationMessages,
+    ];
 
     return DefaultTabController(
       length: 3,
@@ -426,31 +436,55 @@ class _OrderListPageState extends ConsumerState<OrderListPage> {
               )
             : Column(
                 children: [
-                  if (!hasNetwork || showWsWarning)
+                  if (!hasNetwork ||
+                      showWsWarning ||
+                      degradedMessages.isNotEmpty)
                     Container(
                       color: !hasNetwork
                           ? AppColors.dangerSoft
+                          : degradedMessages.isNotEmpty
+                          ? AppColors.warningSoft
                           : AppColors.warningSoft,
-                      padding: const EdgeInsets.all(8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
-                            Icons.warning_amber_rounded,
-                            color: !hasNetwork
-                                ? AppColors.tertiary
-                                : AppColors.secondary,
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.warning_amber_rounded,
+                                color: !hasNetwork
+                                    ? AppColors.tertiary
+                                    : AppColors.secondary,
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: Text(
+                                  !hasNetwork
+                                      ? '无网络连接，正在等待恢复并补单'
+                                      : showWsWarning
+                                      ? '服务器已断开，正在重连并启用轮询兜底'
+                                      : '消息接收能力降级，请检查设置',
+                                  style: TextStyle(
+                                    color: !hasNetwork
+                                        ? AppColors.tertiary
+                                        : AppColors.onSurface,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            !hasNetwork ? '无网络连接，可能漏单请检查网络' : '服务器已断开，正在重连...',
-                            style: TextStyle(
-                              color: !hasNetwork
-                                  ? AppColors.tertiary
-                                  : AppColors.onSurface,
-                              fontWeight: FontWeight.w700,
+                          for (final message in degradedMessages.take(3)) ...[
+                            const SizedBox(height: AppSpacing.xs),
+                            Text(
+                              message,
+                              style: const TextStyle(
+                                color: AppColors.onSurfaceVariant,
+                                height: 1.35,
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ),

@@ -14,7 +14,6 @@ void main() {
         final channels = <_FakeWebSocketChannel>[];
         final statusChanges = <bool>[];
         final client = WsClient(
-          MessageDeduplicator(),
           connector: (uri) async {
             final channel = _FakeWebSocketChannel();
             channels.add(channel);
@@ -30,6 +29,38 @@ void main() {
         expect(channels.first.fakeSink.isClosed, isTrue);
         expect(channels.last.fakeSink.isClosed, isFalse);
         expect(statusChanges, [true, true]);
+
+        client.dispose();
+      },
+    );
+  });
+
+  group('WsClient message delivery', () {
+    test(
+      'does not permanently deduplicate before alert owner succeeds',
+      () async {
+        final deduplicator = MessageDeduplicator.memoryOnly();
+        final channel = _FakeWebSocketChannel();
+        final delivered = <String>[];
+        final client = WsClient(connector: (_) async => channel)
+          ..onNewOrder = (message) {
+            delivered.add(message.orderId);
+          };
+
+        await client.connect('access-token');
+        channel.addMessage(
+          '{"id":"merchant:new_order:501","type":"new_order","data":{"order_id":501,"order_no":"ORD501","event":"new_order"}}',
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        expect(delivered, <String>['501']);
+        expect(
+          await deduplicator.tryAcceptGroup([
+            MessageDeduplicator.messageKey('merchant:new_order:501'),
+            MessageDeduplicator.orderKey('501'),
+          ]),
+          isTrue,
+        );
 
         client.dispose();
       },
@@ -180,6 +211,10 @@ class _FakeWebSocketChannel implements WebSocketChannel {
 
   @override
   Stream get stream => _controller.stream;
+
+  void addMessage(Object? message) {
+    _controller.add(message);
+  }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

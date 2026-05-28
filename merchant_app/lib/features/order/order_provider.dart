@@ -102,32 +102,10 @@ class OrderNotifier extends StateNotifier<OrderState> {
         final updatedOrder = _extractOrderFromResponse(response.data);
         if (updatedOrder != null) {
           addOrUpdateOrder(updatedOrder);
-          return true;
+          return _isAcceptConfirmed(updatedOrder);
         }
 
-        state = state.copyWith(
-          orders: state.orders.map((o) {
-            if (o.id == orderId) {
-              return OrderModel(
-                id: o.id,
-                orderNum: o.orderNum,
-                pickupCode: o.pickupCode,
-                pickupCodeMasked: o.pickupCodeMasked,
-                amount: o.amount,
-                feeBreakdown: o.feeBreakdown,
-                status: OrderStatus.preparing,
-                createdAt: o.createdAt,
-                userName: o.userName,
-                userPhone: o.userPhone,
-                items: o.items,
-                note: o.note,
-                itemsLoadFailed: o.itemsLoadFailed,
-              );
-            }
-            return o;
-          }).toList(),
-        );
-        return true;
+        return _confirmActionWithReadback(orderId, _isAcceptConfirmed);
       } catch (e) {
         state = state.copyWith(error: ErrorHandler.getErrorMessage(e));
         return false;
@@ -145,32 +123,10 @@ class OrderNotifier extends StateNotifier<OrderState> {
         final updatedOrder = _extractOrderFromResponse(response.data);
         if (updatedOrder != null) {
           addOrUpdateOrder(updatedOrder);
-          return true;
+          return _isRejectConfirmed(updatedOrder);
         }
 
-        state = state.copyWith(
-          orders: state.orders.map((o) {
-            if (o.id == orderId) {
-              return OrderModel(
-                id: o.id,
-                orderNum: o.orderNum,
-                pickupCode: o.pickupCode,
-                pickupCodeMasked: o.pickupCodeMasked,
-                amount: o.amount,
-                feeBreakdown: o.feeBreakdown,
-                status: OrderStatus.cancelled,
-                createdAt: o.createdAt,
-                userName: o.userName,
-                userPhone: o.userPhone,
-                items: o.items,
-                note: o.note,
-                itemsLoadFailed: o.itemsLoadFailed,
-              );
-            }
-            return o;
-          }).toList(),
-        );
-        return true;
+        return _confirmActionWithReadback(orderId, _isRejectConfirmed);
       } catch (e) {
         state = state.copyWith(error: ErrorHandler.getErrorMessage(e));
         return false;
@@ -187,37 +143,43 @@ class OrderNotifier extends StateNotifier<OrderState> {
         final updatedOrder = _extractOrderFromResponse(response.data);
         if (updatedOrder != null) {
           addOrUpdateOrder(updatedOrder);
-          return true;
+          return _isReadyConfirmed(updatedOrder);
         }
 
-        state = state.copyWith(
-          orders: state.orders.map((o) {
-            if (o.id == orderId) {
-              return OrderModel(
-                id: o.id,
-                orderNum: o.orderNum,
-                pickupCode: o.pickupCode,
-                pickupCodeMasked: o.pickupCodeMasked,
-                amount: o.amount,
-                feeBreakdown: o.feeBreakdown,
-                status: OrderStatus.ready,
-                createdAt: o.createdAt,
-                userName: o.userName,
-                userPhone: o.userPhone,
-                items: o.items,
-                note: o.note,
-                itemsLoadFailed: o.itemsLoadFailed,
-              );
-            }
-            return o;
-          }).toList(),
-        );
-        return true;
+        return _confirmActionWithReadback(orderId, _isReadyConfirmed);
       } catch (e) {
         state = state.copyWith(error: ErrorHandler.getErrorMessage(e));
         return false;
       }
     });
+  }
+
+  Future<bool> _confirmActionWithReadback(
+    String orderId,
+    bool Function(OrderModel order) isConfirmed,
+  ) async {
+    final order = await fetchOrderDetail(orderId);
+    if (order != null && isConfirmed(order)) {
+      return true;
+    }
+    state = state.copyWith(error: '结果确认中，请刷新订单');
+    return false;
+  }
+
+  bool _isAcceptConfirmed(OrderModel order) {
+    return order.status == OrderStatus.preparing ||
+        (order.status == OrderStatus.courierAccepted &&
+            order.fulfillmentStatus == FulfillmentStatus.preparing);
+  }
+
+  bool _isRejectConfirmed(OrderModel order) {
+    return order.status == OrderStatus.cancelled ||
+        order.fulfillmentStatus == FulfillmentStatus.cancelled;
+  }
+
+  bool _isReadyConfirmed(OrderModel order) {
+    return order.status == OrderStatus.ready ||
+        order.fulfillmentStatus == FulfillmentStatus.ready;
   }
 
   Future<bool> _runSingleFlightAction(
@@ -276,6 +238,7 @@ class OrderNotifier extends StateNotifier<OrderState> {
       amount: incoming.amount > 0 ? incoming.amount : existing.amount,
       feeBreakdown: incoming.feeBreakdown ?? existing.feeBreakdown,
       status: incoming.status,
+      fulfillmentStatus: incoming.fulfillmentStatus,
       createdAt: incoming.createdAt,
       userName: incoming.userName ?? existing.userName,
       userPhone: incoming.userPhone ?? existing.userPhone,

@@ -6,6 +6,11 @@ class MessageDeduplicator {
   static const _maxMemorySize = 500;
   static const _retention = Duration(hours: 24);
 
+  MessageDeduplicator({bool persist = true}) : _persist = persist;
+
+  MessageDeduplicator.memoryOnly() : _persist = false;
+
+  final bool _persist;
   final _memoryCache = <String, DateTime>{};
   Database? _database;
   Future<void>? _initFuture;
@@ -16,7 +21,7 @@ class MessageDeduplicator {
   }
 
   Future<void> _initialize() async {
-    if (kIsWeb) {
+    if (!_persist || kIsWeb) {
       // sqflite does not support Web, fallback to memory-only
       return;
     }
@@ -42,13 +47,21 @@ class MessageDeduplicator {
   }
 
   Future<bool> tryAcceptGroup(List<String> rawKeys) async {
+    final keys = _normalizeKeys(rawKeys);
+    if (keys.isEmpty) {
+      return false;
+    }
+    if (!await isAccepted(keys)) {
+      return false;
+    }
+    await markAccepted(keys);
+    return true;
+  }
+
+  Future<bool> isAccepted(List<String> rawKeys) async {
     await ensureInitialized();
 
-    final keys = rawKeys
-        .map((key) => key.trim())
-        .where((key) => key.isNotEmpty)
-        .toSet()
-        .toList(growable: false);
+    final keys = _normalizeKeys(rawKeys);
     if (keys.isEmpty) {
       return false;
     }
@@ -63,10 +76,6 @@ class MessageDeduplicator {
     final cutoff = now.subtract(_retention).millisecondsSinceEpoch;
     final db = _database;
     if (db == null) {
-      // Memory fallback for Web or missing db
-      for (final key in keys) {
-        _remember(key, now);
-      }
       return true;
     }
 
@@ -82,6 +91,26 @@ class MessageDeduplicator {
       return false;
     }
 
+    return true;
+  }
+
+  Future<void> markAccepted(List<String> rawKeys) async {
+    await ensureInitialized();
+
+    final keys = _normalizeKeys(rawKeys);
+    if (keys.isEmpty) {
+      return;
+    }
+
+    final now = DateTime.now();
+    final db = _database;
+    if (db == null) {
+      for (final key in keys) {
+        _remember(key, now);
+      }
+      return;
+    }
+
     final batch = db.batch();
     for (final key in keys) {
       _remember(key, now);
@@ -95,13 +124,19 @@ class MessageDeduplicator {
     if (_memoryCache.length % 50 == 0) {
       await _cleanupExpired();
     }
-
-    return true;
   }
 
   static String messageKey(String messageId) => 'message:$messageId';
 
   static String orderKey(String orderId) => 'order:$orderId';
+
+  List<String> _normalizeKeys(List<String> rawKeys) {
+    return rawKeys
+        .map((key) => key.trim())
+        .where((key) => key.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+  }
 
   void _remember(String messageId, DateTime timestamp) {
     _memoryCache[messageId] = timestamp;

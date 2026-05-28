@@ -27,6 +27,17 @@ Notes:
 - Use the same release keystore for Google Play and domestic Android stores so future updates stay installable.
 - If you later enable Google Play App Signing, keep this keystore as your upload key or migration source.
 
+## Android vendor push config
+
+Release builds require native push credentials by default:
+
+- `XIAOMI_APP_ID`, `XIAOMI_APP_KEY`
+- `OPPO_APP_KEY`, `OPPO_APP_SECRET`
+- `VIVO_APP_ID`, `VIVO_APP_KEY`
+- `HONOR_APP_ID`
+
+Provide them as Gradle properties or environment variables before a production release. Internal non-production APK builds may explicitly set `ALLOW_INCOMPLETE_PUSH_CONFIG=true`.
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.

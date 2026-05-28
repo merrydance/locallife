@@ -1,6 +1,72 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
+enum ForegroundServiceStatus {
+  stopped,
+  waitingForOrders,
+  networkUnavailable,
+  reconnecting,
+  notificationPermissionMissing,
+}
+
+class ForegroundServiceDecision {
+  const ForegroundServiceDecision({
+    required this.shouldRun,
+    required this.status,
+    required this.notificationText,
+  });
+
+  final bool shouldRun;
+  final ForegroundServiceStatus status;
+  final String notificationText;
+}
+
+ForegroundServiceDecision decideForegroundServiceStatus({
+  required bool isAuthenticated,
+  required bool isWorking,
+  required bool hasNetwork,
+  required bool isWebSocketConnected,
+  required bool isNotificationPermissionGranted,
+}) {
+  if (!isAuthenticated || !isWorking) {
+    return const ForegroundServiceDecision(
+      shouldRun: false,
+      status: ForegroundServiceStatus.stopped,
+      notificationText: '商户未上线营业',
+    );
+  }
+
+  if (!isNotificationPermissionGranted) {
+    return const ForegroundServiceDecision(
+      shouldRun: true,
+      status: ForegroundServiceStatus.notificationPermissionMissing,
+      notificationText: '通知权限未开启 · 请到设置中允许通知',
+    );
+  }
+
+  if (!hasNetwork) {
+    return const ForegroundServiceDecision(
+      shouldRun: true,
+      status: ForegroundServiceStatus.networkUnavailable,
+      notificationText: '网络不可用 · 正在等待恢复并补单',
+    );
+  }
+
+  if (!isWebSocketConnected) {
+    return const ForegroundServiceDecision(
+      shouldRun: true,
+      status: ForegroundServiceStatus.reconnecting,
+      notificationText: '连接中断 · 正在重连并启用轮询兜底',
+    );
+  }
+
+  return const ForegroundServiceDecision(
+    shouldRun: true,
+    status: ForegroundServiceStatus.waitingForOrders,
+    notificationText: '后台运行中 · 等待新订单...',
+  );
+}
+
 class MerchantForegroundService {
   static Future<void> init() async {
     FlutterForegroundTask.init(
@@ -15,6 +81,7 @@ class MerchantForegroundService {
       foregroundTaskOptions: ForegroundTaskOptions(
         eventAction: ForegroundTaskEventAction.repeat(15000),
         autoRunOnBoot: true,
+        autoRunOnMyPackageReplaced: true,
         allowWakeLock: true,
         allowWifiLock: true,
       ),
@@ -23,14 +90,41 @@ class MerchantForegroundService {
 
   static Future<void> start() async {
     if (await FlutterForegroundTask.isRunningService) {
-      await FlutterForegroundTask.restartService();
+      await FlutterForegroundTask.updateService(
+        notificationTitle: '乐客来福商户端',
+        notificationText: '后台运行中 · 等待新订单...',
+      );
     } else {
       await FlutterForegroundTask.startService(
+        serviceTypes: const [
+          ForegroundServiceTypes.dataSync,
+          ForegroundServiceTypes.remoteMessaging,
+        ],
         notificationTitle: '乐客来福商户端',
         notificationText: '后台运行中 · 等待新订单...',
         callback: startCallback,
       );
     }
+  }
+
+  static Future<void> applyDecision(ForegroundServiceDecision decision) async {
+    if (!decision.shouldRun) {
+      await stop();
+      return;
+    }
+
+    await start();
+    await updateStatus(decision);
+  }
+
+  static Future<void> updateStatus(ForegroundServiceDecision decision) async {
+    if (!await FlutterForegroundTask.isRunningService) {
+      return;
+    }
+    await FlutterForegroundTask.updateService(
+      notificationTitle: '乐客来福商户端',
+      notificationText: decision.notificationText,
+    );
   }
 
   static Future<void> stop() async {
