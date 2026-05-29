@@ -176,6 +176,10 @@ func (f *DefaultPaymentFacade) CreatePaymentOrder(ctx context.Context, input Cre
 	return f.paymentService.CreatePaymentOrder(ctx, input)
 }
 
+func (f *DefaultPaymentFacade) CreateReservationAdjustmentPaymentOrder(ctx context.Context, input CreateReservationAdjustmentPaymentInput) (CreatePaymentOrderResult, error) {
+	return f.paymentService.CreateReservationAdjustmentPayment(ctx, input)
+}
+
 func (f *DefaultPaymentFacade) CreateCombinedPaymentOrder(ctx context.Context, input CreateCombinedPaymentOrderInput) (CreateCombinedPaymentOrderResult, error) {
 	return f.combinedService.CreateCombinedPaymentOrder(ctx, input)
 }

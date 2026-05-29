@@ -1586,7 +1586,12 @@ const updateReservationCookingStarted = `-- name: UpdateReservationCookingStarte
 UPDATE table_reservations
 SET cooking_started_at = now(),
     updated_at = now()
-WHERE id = $1
+WHERE table_reservations.id = $1
+  AND NOT EXISTS (
+    SELECT 1 FROM reservation_adjustments ra
+    WHERE ra.reservation_id = table_reservations.id
+      AND ra.status IN ('creating_payment', 'pending_payment', 'applying')
+  )
 RETURNING id, table_id, user_id, merchant_id, reservation_date, reservation_time, guest_count, contact_name, contact_phone, payment_mode, deposit_amount, prepaid_amount, refund_deadline, status, payment_deadline, notes, paid_at, confirmed_at, completed_at, cancelled_at, cancel_reason, created_at, updated_at, checked_in_at, cooking_started_at, source
 `
 

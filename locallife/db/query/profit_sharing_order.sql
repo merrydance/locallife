@@ -95,6 +95,47 @@ SET
 WHERE id = sqlc.arg(id)
 RETURNING *;
 
+-- name: UpdateBaofuPendingProfitSharingBillSnapshot :one
+UPDATE profit_sharing_orders
+SET
+    total_amount = sqlc.arg(total_amount),
+    delivery_fee = sqlc.arg(delivery_fee),
+    rider_id = sqlc.narg(rider_id),
+    rider_amount = sqlc.arg(rider_amount),
+    distributable_amount = sqlc.arg(distributable_amount),
+    platform_rate = sqlc.arg(platform_rate),
+    operator_rate = sqlc.arg(operator_rate),
+    platform_commission = sqlc.arg(platform_commission),
+    operator_commission = sqlc.arg(operator_commission),
+    merchant_amount = sqlc.arg(merchant_amount),
+    payment_fee = sqlc.arg(payment_fee)::bigint,
+    payment_fee_rate_bps = COALESCE(NULLIF(sqlc.arg(payment_fee_rate_bps)::integer, 0), 30),
+    merchant_sharing_mer_id = sqlc.narg(merchant_sharing_mer_id),
+    rider_sharing_mer_id = sqlc.narg(rider_sharing_mer_id),
+    operator_sharing_mer_id = sqlc.narg(operator_sharing_mer_id),
+    platform_sharing_mer_id = sqlc.narg(platform_sharing_mer_id),
+    sharing_detail_snapshot = COALESCE(sqlc.narg(sharing_detail_snapshot), '{}'::jsonb),
+    calculation_version = sqlc.arg(calculation_version),
+    settlement_mode = sqlc.arg(settlement_mode),
+    provider_payment_fee = sqlc.arg(provider_payment_fee),
+    provider_payment_fee_rate_bps = sqlc.arg(provider_payment_fee_rate_bps),
+    provider_payment_fee_base_amount = sqlc.arg(provider_payment_fee_base_amount),
+    provider_payment_fee_source = sqlc.arg(provider_payment_fee_source),
+    merchant_payment_fee = sqlc.arg(merchant_payment_fee),
+    merchant_payment_fee_rate_bps = sqlc.arg(merchant_payment_fee_rate_bps),
+    merchant_payment_fee_base_amount = sqlc.arg(merchant_payment_fee_base_amount),
+    rider_gross_amount = sqlc.arg(rider_gross_amount),
+    rider_payment_fee = sqlc.arg(rider_payment_fee),
+    rider_payment_fee_rate_bps = sqlc.arg(rider_payment_fee_rate_bps),
+    rider_payment_fee_base_amount = sqlc.arg(rider_payment_fee_base_amount),
+    commission_base_amount = sqlc.arg(commission_base_amount),
+    platform_receiver_amount = sqlc.arg(platform_receiver_amount)
+WHERE id = sqlc.arg(id)
+  AND provider = 'baofu'
+  AND channel = 'baofu_aggregate'
+  AND status IN ('pending', 'failed')
+RETURNING *;
+
 -- name: UpdateProfitSharingOrderRiderBillByPaymentOrder :one
 UPDATE profit_sharing_orders
 SET
@@ -210,7 +251,10 @@ WHERE pso.provider = 'baofu'
   AND NOT EXISTS (
       SELECT 1 FROM refund_orders ro
       WHERE ro.payment_order_id = po.id
-        AND ro.status IN ('pending', 'processing', 'success')
+        AND (
+            ro.status IN ('pending', 'processing')
+            OR (ro.status = 'success' AND po.business_type NOT IN ('reservation', 'reservation_addon'))
+        )
   )
 ORDER BY pso.created_at ASC, pso.id ASC
 LIMIT sqlc.arg('limit')::int;
@@ -530,13 +574,21 @@ SELECT
     po.id AS payment_order_id,
     po.order_id,
     po.reservation_id,
-    po.business_type
+    po.business_type,
+    (po.amount - COALESCE(success_refunds.total_success_refunded, 0))::bigint AS net_amount
 FROM payment_orders po
 LEFT JOIN orders o ON po.business_type = 'order' AND po.order_id = o.id
 LEFT JOIN table_reservations r ON po.business_type IN ('reservation', 'reservation_addon') AND po.reservation_id = r.id
+LEFT JOIN LATERAL (
+    SELECT COALESCE(SUM(ro.refund_amount), 0)::bigint AS total_success_refunded
+    FROM refund_orders ro
+    WHERE ro.payment_order_id = po.id
+      AND ro.status = 'success'
+) success_refunds ON TRUE
 WHERE po.status = 'paid'
   AND po.payment_channel = 'baofu_aggregate'
   AND po.requires_profit_sharing = TRUE
+  AND po.amount > COALESCE(success_refunds.total_success_refunded, 0)
   AND (
       (
           po.business_type = 'order'
@@ -553,11 +605,15 @@ WHERE po.status = 'paid'
   AND NOT EXISTS (
       SELECT 1 FROM refund_orders ro
       WHERE ro.payment_order_id = po.id
-        AND ro.status IN ('pending', 'processing', 'success')
+        AND (
+            ro.status IN ('pending', 'processing')
+            OR (ro.status = 'success' AND po.business_type NOT IN ('reservation', 'reservation_addon'))
+        )
   )
   AND NOT EXISTS (
       SELECT 1 FROM profit_sharing_orders pso
       WHERE pso.payment_order_id = po.id
+        AND pso.status IN ('processing', 'finished')
   )
 ORDER BY COALESCE(o.completed_at, o.updated_at, r.completed_at, po.paid_at, po.created_at) ASC, po.id ASC
 LIMIT sqlc.arg('limit')::int;

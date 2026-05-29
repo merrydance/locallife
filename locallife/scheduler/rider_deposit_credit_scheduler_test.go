@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/worker"
@@ -203,9 +204,43 @@ func TestDataCleanupScheduler_CleanupExpiredPaymentOrders_ClosesExpiredCombinedP
 
 	gomock.InOrder(
 		store.EXPECT().CloseExpiredPaymentOrders(gomock.Any()).Return(int64(2), nil),
+		store.EXPECT().ListActiveReservationAdjustments(gomock.Any(), gomock.Any()).Return([]db.ReservationAdjustment{}, nil),
 		store.EXPECT().ListPendingCombinedPaymentOrders(gomock.Any(), expiredCombinedPaymentBatchLimit).Return([]db.CombinedPaymentOrder{combinedA, combinedB}, nil),
 		store.EXPECT().UpdateCombinedPaymentOrderToClosed(gomock.Any(), combinedA.ID).Return(db.CombinedPaymentOrder{ID: combinedA.ID, Status: "closed"}, nil),
 		store.EXPECT().UpdateCombinedPaymentOrderToClosed(gomock.Any(), combinedB.ID).Return(db.CombinedPaymentOrder{ID: combinedB.ID, Status: "closed"}, nil),
+	)
+
+	s.cleanupExpiredPaymentOrders()
+}
+
+func TestDataCleanupScheduler_CleanupExpiredPaymentOrders_ExpiresClosedReservationAddonAdjustments(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	s := NewDataCleanupScheduler(store, nil, nil)
+	adjustment := db.ReservationAdjustment{
+		ID:             4201,
+		ReservationID:  5201,
+		Status:         db.ReservationAdjustmentStatusPendingPayment,
+		PaymentOrderID: pgtype.Int8{Int64: 6201, Valid: true},
+	}
+	paymentOrder := db.PaymentOrder{
+		ID:           adjustment.PaymentOrderID.Int64,
+		BusinessType: "reservation_addon",
+		Status:       "closed",
+	}
+
+	gomock.InOrder(
+		store.EXPECT().CloseExpiredPaymentOrders(gomock.Any()).Return(int64(1), nil),
+		store.EXPECT().ListActiveReservationAdjustments(gomock.Any(), gomock.Any()).Return([]db.ReservationAdjustment{adjustment}, nil),
+		store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil),
+		store.EXPECT().CloseReservationAdjustmentForPaymentTx(gomock.Any(), db.CloseReservationAdjustmentForPaymentTxParams{
+			PaymentOrderID: paymentOrder.ID,
+			Status:         db.ReservationAdjustmentStatusExpired,
+			Reason:         "payment expired by cleanup scheduler",
+		}).Return(db.CloseReservationAdjustmentForPaymentTxResult{Closed: true}, nil),
+		store.EXPECT().ListPendingCombinedPaymentOrders(gomock.Any(), expiredCombinedPaymentBatchLimit).Return([]db.CombinedPaymentOrder{}, nil),
 	)
 
 	s.cleanupExpiredPaymentOrders()
@@ -223,6 +258,7 @@ func TestDataCleanupScheduler_CleanupExpiredPaymentOrders_IgnoresCombinedPayment
 
 	gomock.InOrder(
 		store.EXPECT().CloseExpiredPaymentOrders(gomock.Any()).Return(int64(0), nil),
+		store.EXPECT().ListActiveReservationAdjustments(gomock.Any(), gomock.Any()).Return([]db.ReservationAdjustment{}, nil),
 		store.EXPECT().ListPendingCombinedPaymentOrders(gomock.Any(), expiredCombinedPaymentBatchLimit).Return([]db.CombinedPaymentOrder{combinedA, combinedB}, nil),
 		store.EXPECT().UpdateCombinedPaymentOrderToClosed(gomock.Any(), combinedA.ID).Return(db.CombinedPaymentOrder{}, db.ErrRecordNotFound),
 		store.EXPECT().UpdateCombinedPaymentOrderToClosed(gomock.Any(), combinedB.ID).Return(db.CombinedPaymentOrder{ID: combinedB.ID, Status: "closed"}, nil),

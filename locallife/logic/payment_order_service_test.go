@@ -108,7 +108,7 @@ func TestPaymentOrderServiceCreatePaymentOrder_UsesBaofuForMainBusiness(t *testi
 		require.Equal(t, db.PaymentChannelBaofuAggregate, arg.PaymentChannel)
 		require.True(t, arg.RequiresProfitSharing)
 		require.Equal(t, "order_id:2001", arg.Attach)
-		return db.CreatePartnerPaymentTxResult{PaymentOrder: txPayment}, nil
+		return db.CreatePartnerPaymentTxResult{PaymentOrder: txPayment, SubMchID: "sub-baofu"}, nil
 	})
 	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
 		require.Equal(t, db.ExternalPaymentProviderBaofu, arg.Provider)
@@ -321,7 +321,7 @@ func TestPaymentOrderServiceCreatePaymentOrder_BaofuWechatChannelNotReadyFailsBe
 	}
 }
 
-func TestPaymentOrderServiceCreatePaymentOrder_ReservationAddonCreatesReservationLinkedBaofuPayment(t *testing.T) {
+func TestPaymentOrderServiceCreatePaymentOrder_ReservationAddonRejectedByGenericPath(t *testing.T) {
 	input := CreatePaymentOrderInput{
 		UserID:       1007,
 		OrderID:      2007,
@@ -330,26 +330,52 @@ func TestPaymentOrderServiceCreatePaymentOrder_ReservationAddonCreatesReservatio
 		ClientIP:     "203.0.113.9",
 		Amount:       3600,
 	}
-	reservation := db.TableReservation{
-		ID:          input.OrderID,
-		UserID:      input.UserID,
-		MerchantID:  3007,
-		Status:      reservationStatusConfirmed,
-		PaymentMode: paymentModeFull,
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	svc := NewPaymentOrderServiceWithBaofu(store, nil, nil)
+
+	_, err := svc.CreatePaymentOrder(context.Background(), input)
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusBadRequest, reqErr.Status)
+	require.Contains(t, reqErr.Err.Error(), "reservation_addon")
+}
+
+func TestPaymentOrderServiceCreateReservationAdjustmentPaymentCreatesPendingAdjustment(t *testing.T) {
+	input := CreateReservationAdjustmentPaymentInput{
+		UserID:        1008,
+		ReservationID: 2008,
+		MerchantID:    3008,
+		CurrentTotal:  5000,
+		TargetTotal:   8600,
+		DeltaAmount:   3600,
+		ClientIP:      "203.0.113.10",
+		ExpiresAt:     time.Now().Add(30 * time.Minute),
+		Items: []db.CreateReservationItemParams{{
+			ReservationID: 2008,
+			DishID:        pgtype.Int8{Int64: 7008, Valid: true},
+			Quantity:      2,
+			UnitPrice:     4300,
+			TotalPrice:    8600,
+		}},
 	}
 	txPayment := db.PaymentOrder{
-		ID:                    4007,
+		ID:                    4008,
 		UserID:                input.UserID,
 		Status:                paymentStatusPending,
 		PaymentType:           paymentTypeMiniProgram,
 		PaymentChannel:        db.PaymentChannelBaofuAggregate,
 		RequiresProfitSharing: true,
 		BusinessType:          reservationAddonBusiness,
-		Amount:                input.Amount,
-		OutTradeNo:            "BFRA4007",
-		ReservationID:         pgtype.Int8{Int64: reservation.ID, Valid: true},
-		Attach:                pgtype.Text{String: "reservation_id:2007;payment_mode:full;addon:true;sub_mchid:sub-baofu", Valid: true},
+		Amount:                input.DeltaAmount,
+		OutTradeNo:            "BFRA4008",
+		ReservationID:         pgtype.Int8{Int64: input.ReservationID, Valid: true},
+		Attach:                pgtype.Text{String: "reservation_id:2008;payment_mode:full;addon:true;sub_mchid:sub-baofu", Valid: true},
 	}
+	adjustment := db.ReservationAdjustment{ID: 9008, ReservationID: input.ReservationID, PaymentOrderID: pgtype.Int8{Int64: txPayment.ID, Valid: true}}
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -357,9 +383,9 @@ func TestPaymentOrderServiceCreatePaymentOrder_ReservationAddonCreatesReservatio
 	store := mockdb.NewMockStore(ctrl)
 	baofuClient := &fakeBaofuAggregatePaymentClient{
 		unifiedResult: &aggregatecontracts.UnifiedOrderResult{
-			TradeNo: "BFPAY_ADDON_4007",
+			TradeNo: "BFPAY_ADJ_4008",
 			ChannelReturn: aggregatecontracts.ChannelReturn{
-				WechatPayData: json.RawMessage(`{"timeStamp":"1767225600","nonceStr":"addon-nonce","package":"prepay_id=addon","signType":"RSA","paySign":"addon-pay-sign"}`),
+				WechatPayData: json.RawMessage(`{"timeStamp":"1767225600","nonceStr":"adjustment-nonce","package":"prepay_id=adjustment","signType":"RSA","paySign":"adjustment-pay-sign"}`),
 			},
 		},
 	}
@@ -370,43 +396,82 @@ func TestPaymentOrderServiceCreatePaymentOrder_ReservationAddonCreatesReservatio
 		PaymentNotifyURL:  "https://api.example.com/v1/webhooks/baofu/payment",
 	})
 
-	store.EXPECT().GetTableReservation(gomock.Any(), input.OrderID).Return(reservation, nil)
-	store.EXPECT().GetLatestPaymentOrderByReservation(gomock.Any(), db.GetLatestPaymentOrderByReservationParams{
-		ReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
-		BusinessType:  reservationAddonBusiness,
-	}).Return(db.PaymentOrder{}, db.ErrRecordNotFound)
-	expectActiveMerchantBaofuBindingForPayment(store, reservation.MerchantID)
-	store.EXPECT().GetUser(gomock.Any(), input.UserID).Return(db.User{ID: input.UserID, WechatOpenid: "openid-addon"}, nil)
-	store.EXPECT().GetMerchant(gomock.Any(), reservation.MerchantID).Return(db.Merchant{ID: reservation.MerchantID, Name: "Merchant R"}, nil)
-	store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreatePartnerPaymentTxParams) (db.CreatePartnerPaymentTxResult, error) {
-		require.Zero(t, arg.OrderID)
-		require.Equal(t, reservation.ID, arg.ReservationID)
-		require.Equal(t, reservationAddonBusiness, arg.BusinessType)
-		require.Equal(t, db.PaymentChannelBaofuAggregate, arg.PaymentChannel)
-		require.True(t, arg.RequiresProfitSharing)
-		require.Equal(t, input.Amount, arg.Amount)
-		require.Equal(t, "reservation_id:2007;payment_mode:full;addon:true", arg.Attach)
-		return db.CreatePartnerPaymentTxResult{PaymentOrder: txPayment}, nil
+	expectActiveMerchantBaofuBindingForPayment(store, input.MerchantID)
+	store.EXPECT().GetUser(gomock.Any(), input.UserID).Return(db.User{ID: input.UserID, WechatOpenid: "openid-adjustment"}, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), input.MerchantID).Return(db.Merchant{ID: input.MerchantID, Name: "Merchant A"}, nil)
+	store.EXPECT().CreateReservationPositiveAdjustmentPaymentTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateReservationPositiveAdjustmentPaymentTxParams) (db.CreateReservationPositiveAdjustmentPaymentTxResult, error) {
+		require.Equal(t, input.ReservationID, arg.ReservationID)
+		require.Equal(t, input.UserID, arg.UserID)
+		require.Equal(t, input.MerchantID, arg.MerchantID)
+		require.Equal(t, input.CurrentTotal, arg.ExpectedCurrentAmount)
+		require.Equal(t, input.TargetTotal, arg.TargetTotal)
+		require.Equal(t, input.DeltaAmount, arg.DeltaAmount)
+		require.Equal(t, input.Items, arg.Items)
+		require.Equal(t, "reservation_id:2008;payment_mode:full;addon:true", arg.Attach)
+		return db.CreateReservationPositiveAdjustmentPaymentTxResult{
+			PaymentOrder: txPayment,
+			Adjustment:   adjustment,
+			SubMchID:     "sub-baofu-tx",
+		}, nil
 	})
-	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
-		require.Equal(t, db.ExternalPaymentProviderBaofu, arg.Provider)
-		require.Equal(t, db.PaymentChannelBaofuAggregate, arg.Channel)
-		require.Equal(t, db.ExternalPaymentCapabilityBaofuPayment, arg.Capability)
-		require.Equal(t, db.ExternalPaymentBusinessOwnerReservation, arg.BusinessOwner)
-		require.Equal(t, txPayment.OutTradeNo, arg.ExternalObjectKey)
-		return db.ExternalPaymentCommand{ID: 9707}, nil
-	})
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).Return(db.ExternalPaymentCommand{ID: 9708}, nil)
+	store.EXPECT().MarkReservationAdjustmentPendingPayment(gomock.Any(), adjustment.ID).Return(db.ReservationAdjustment{ID: adjustment.ID, Status: db.ReservationAdjustmentStatusPendingPayment}, nil)
 
 	svc := NewPaymentOrderServiceWithBaofu(store, nil, baofuPayment)
-	result, err := svc.CreatePaymentOrder(context.Background(), input)
+	result, err := svc.CreateReservationAdjustmentPayment(context.Background(), input)
 
 	require.NoError(t, err)
-	require.Equal(t, reservation.ID, result.PaymentOrder.ReservationID.Int64)
-	require.False(t, result.PaymentOrder.OrderID.Valid)
+	require.Equal(t, txPayment.ID, result.PaymentOrder.ID)
 	require.NotNil(t, result.PayParams)
 	require.True(t, baofuClient.called)
-	require.NotNil(t, baofuClient.lastRequest.RiskInfo)
+	require.Equal(t, "sub-baofu-tx", baofuClient.lastRequest.SubMchID)
+	require.Equal(t, "openid-adjustment", baofuClient.lastRequest.PayExtend.SubOpenID)
+	require.Equal(t, "Merchant A - Reservation Add-on", baofuClient.lastRequest.PayExtend.Body)
 	require.Equal(t, input.ClientIP, baofuClient.lastRequest.RiskInfo.ClientIP)
+}
+
+func TestPaymentOrderServiceCreateReservationAdjustmentPaymentMapsTxConflict(t *testing.T) {
+	input := CreateReservationAdjustmentPaymentInput{
+		UserID:        1009,
+		ReservationID: 2009,
+		MerchantID:    3009,
+		CurrentTotal:  5000,
+		TargetTotal:   8600,
+		DeltaAmount:   3600,
+		ClientIP:      "203.0.113.11",
+		ExpiresAt:     time.Now().Add(30 * time.Minute),
+		Items: []db.CreateReservationItemParams{{
+			ReservationID: 2009,
+			DishID:        pgtype.Int8{Int64: 7009, Valid: true},
+			Quantity:      2,
+			UnitPrice:     4300,
+			TotalPrice:    8600,
+		}},
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	baofuPayment := NewBaofuPaymentService(store, &fakeBaofuAggregatePaymentClient{}, BaofuPaymentServiceConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+		MiniProgramAppID:  "wxapp",
+		PaymentNotifyURL:  "https://api.example.com/v1/webhooks/baofu/payment",
+	})
+
+	expectActiveMerchantBaofuBindingForPayment(store, input.MerchantID)
+	store.EXPECT().GetUser(gomock.Any(), input.UserID).Return(db.User{ID: input.UserID, WechatOpenid: "openid-adjustment"}, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), input.MerchantID).Return(db.Merchant{ID: input.MerchantID, Name: "Merchant A"}, nil)
+	store.EXPECT().CreateReservationPositiveAdjustmentPaymentTx(gomock.Any(), gomock.Any()).
+		Return(db.CreateReservationPositiveAdjustmentPaymentTxResult{}, db.ErrOrderPendingPaymentConflict)
+
+	svc := NewPaymentOrderServiceWithBaofu(store, nil, baofuPayment)
+	_, err := svc.CreateReservationAdjustmentPayment(context.Background(), input)
+
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusConflict, reqErr.Status)
+	require.Contains(t, reqErr.Err.Error(), "支付订单状态已变化")
 }
 
 func TestPaymentOrderServiceQueryPaymentOrder_DirectPaymentIgnoresBaofuMainBusinessClient(t *testing.T) {

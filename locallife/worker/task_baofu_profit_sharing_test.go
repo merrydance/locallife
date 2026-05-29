@@ -230,14 +230,14 @@ func TestProcessTaskBaofuProfitSharingSkipsWhenRefundAmountIsOccupied(t *testing
 	store.EXPECT().GetProfitSharingOrder(gomock.Any(), profitSharingOrder.ID).Return(profitSharingOrder, nil)
 	store.EXPECT().PrepareBaofuProfitSharingCommandTx(gomock.Any(), db.PrepareBaofuProfitSharingCommandTxParams{
 		ProfitSharingOrderID: profitSharingOrder.ID,
-	}).Return(db.PrepareBaofuProfitSharingCommandTxResult{}, errors.New("订单已有退款申请或退款成功记录，不能继续发起宝付分账"))
+	}).Return(db.PrepareBaofuProfitSharingCommandTxResult{}, errors.New("订单已有未完成退款申请，不能继续发起宝付分账"))
 
 	payloadBytes, err := json.Marshal(worker.BaofuProfitSharingPayload{ProfitSharingOrderID: profitSharingOrder.ID})
 	require.NoError(t, err)
 	err = processor.ProcessTaskBaofuProfitSharing(context.Background(), asynq.NewTask(worker.TaskProcessBaofuProfitSharing, payloadBytes))
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "订单已有退款申请或退款成功记录")
+	require.Contains(t, err.Error(), "订单已有未完成退款申请")
 	require.False(t, client.called)
 }
 

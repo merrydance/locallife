@@ -291,3 +291,70 @@ func TestReplaceOrderTxRejectsAlreadyReplacedOldOrder(t *testing.T) {
 	_, err = testStore.GetOrderByOrderNo(ctx, secondOrderNo)
 	require.ErrorIs(t, err, ErrRecordNotFound)
 }
+
+func TestReplaceOrderTxRejectsActiveReservationAdjustment(t *testing.T) {
+	ctx := context.Background()
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+	table := createRandomTable(t, merchant.ID)
+	reservation := createRandomReservation(t, user.ID, merchant.ID, table.ID, "checked_in")
+
+	oldOrder, err := testStore.CreateOrder(ctx, CreateOrderParams{
+		OrderNo:             util.RandomString(20),
+		UserID:              user.ID,
+		MerchantID:          merchant.ID,
+		OrderType:           OrderTypeReservation,
+		TableID:             pgtype.Int8{Int64: table.ID, Valid: true},
+		ReservationID:       pgtype.Int8{Int64: reservation.ID, Valid: true},
+		DeliveryFee:         0,
+		Subtotal:            5000,
+		DiscountAmount:      0,
+		DeliveryFeeDiscount: 0,
+		TotalAmount:         5000,
+		Status:              OrderStatusPaid,
+		FulfillmentStatus:   FulfillmentStatusPendingKitchen,
+	})
+	require.NoError(t, err)
+	createActiveReservationAdjustmentForTxTest(t, reservation)
+
+	newOrderNo := util.RandomString(20)
+	_, err = testStore.ReplaceOrderTx(ctx, ReplaceOrderTxParams{
+		CreateOrderParams: CreateOrderParams{
+			OrderNo:             newOrderNo,
+			UserID:              user.ID,
+			MerchantID:          merchant.ID,
+			OrderType:           OrderTypeDineIn,
+			TableID:             pgtype.Int8{Int64: table.ID, Valid: true},
+			ReservationID:       pgtype.Int8{Int64: reservation.ID, Valid: true},
+			DeliveryFee:         0,
+			Subtotal:            4500,
+			DiscountAmount:      0,
+			DeliveryFeeDiscount: 0,
+			TotalAmount:         4500,
+			Status:              OrderStatusPaid,
+			FulfillmentStatus:   FulfillmentStatusPendingKitchen,
+		},
+		Items: []CreateOrderItemParams{{
+			DishID:    pgtype.Int8{Int64: 1, Valid: true},
+			Name:      "Replacement Dish",
+			UnitPrice: 4500,
+			Quantity:  1,
+			Subtotal:  4500,
+		}},
+		OldOrderID:   oldOrder.ID,
+		CancelReason: "replaced by new order",
+	})
+	require.Error(t, err)
+	statusCode, ok := IsRefundRequestError(err)
+	require.True(t, ok)
+	require.Equal(t, http.StatusConflict, statusCode)
+
+	unchangedOldOrder, getErr := testStore.GetOrder(ctx, oldOrder.ID)
+	require.NoError(t, getErr)
+	require.Equal(t, OrderStatusPaid, unchangedOldOrder.Status)
+	require.False(t, unchangedOldOrder.ReplacedByOrderID.Valid)
+
+	_, getErr = testStore.GetOrderByOrderNo(ctx, newOrderNo)
+	require.ErrorIs(t, getErr, ErrRecordNotFound)
+}

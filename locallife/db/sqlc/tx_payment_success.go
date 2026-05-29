@@ -173,6 +173,17 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 			if !paymentOrder.ReservationID.Valid {
 				return fmt.Errorf("reservation_id is required")
 			}
+			if _, err := q.GetReservationAdjustmentByPaymentOrderForUpdate(ctx, pgtype.Int8{Int64: paymentOrder.ID, Valid: true}); err == nil {
+				adjustmentResult, err := applyPaidReservationAdjustmentWithQueries(ctx, q, paymentOrder)
+				if err != nil {
+					return err
+				}
+				result.PaymentOrder = adjustmentResult.PaymentOrder
+				result.Processed = adjustmentResult.Processed
+				return nil
+			} else if !errors.Is(err, ErrRecordNotFound) {
+				return fmt.Errorf("get reservation adjustment by payment order: %w", err)
+			}
 			reservationID := paymentOrder.ReservationID.Int64
 			// 同 reservation case：先查后插，防止重试时唯一约束冲突导致任务卡死。
 			if _, err := q.GetReservationPaymentByPaymentOrderID(ctx, paymentOrder.ID); err == nil {

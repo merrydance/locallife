@@ -59,6 +59,7 @@ func TestBaofuPaymentRecoverySchedulerRunOnceCreatesPendingShareAndEnqueuesComma
 			PaymentOrderID: paymentOrder.ID,
 			OrderID:        paymentOrder.OrderID,
 			BusinessType:   paymentOrder.BusinessType,
+			NetAmount:      paymentOrder.Amount,
 		}}, nil)
 	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
 	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
@@ -138,6 +139,7 @@ func TestBaofuPaymentRecoverySchedulerRunOnceCreatesReservationShareAndEnqueuesC
 			PaymentOrderID: paymentOrder.ID,
 			ReservationID:  paymentOrder.ReservationID,
 			BusinessType:   paymentOrder.BusinessType,
+			NetAmount:      paymentOrder.Amount,
 		}}, nil)
 	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
 	store.EXPECT().GetTableReservation(gomock.Any(), reservation.ID).Return(reservation, nil)
@@ -216,6 +218,7 @@ func TestBaofuPaymentRecoverySchedulerRunOnceSkipsReservationShareWithoutComplet
 			PaymentOrderID: paymentOrder.ID,
 			ReservationID:  paymentOrder.ReservationID,
 			BusinessType:   paymentOrder.BusinessType,
+			NetAmount:      paymentOrder.Amount,
 		}}, nil)
 	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
 	store.EXPECT().GetTableReservation(gomock.Any(), reservation.ID).Return(reservation, nil)

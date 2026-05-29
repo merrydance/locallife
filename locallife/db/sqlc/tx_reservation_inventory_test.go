@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -137,6 +138,102 @@ func TestSyncReservationInventoryTx_ReserveAndRelease(t *testing.T) {
 	require.Equal(t, int32(1), entries[0].Quantity)
 }
 
+func TestReplaceReservationItemsWithRefundOrdersTxSyncsReservationInventory(t *testing.T) {
+	ctx := context.Background()
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	table := createRandomTable(t, merchant.ID)
+	user := createRandomUser(t)
+	category := createRandomDishCategory(t)
+	oldDish := createRandomDish(t, merchant.ID, category.ID)
+	newDish := createRandomDish(t, merchant.ID, category.ID)
+
+	reservation := createReservationWithItems(t, merchant, table, user, []CreateReservationItemParams{
+		{
+			DishID:     pgtype.Int8{Int64: oldDish.ID, Valid: true},
+			Quantity:   3,
+			UnitPrice:  3000,
+			TotalPrice: 9000,
+		},
+	})
+	for _, dish := range []Dish{oldDish, newDish} {
+		_, err := testStore.CreateDailyInventory(ctx, CreateDailyInventoryParams{
+			MerchantID:    merchant.ID,
+			DishID:        dish.ID,
+			Date:          pgtype.Date{Time: reservation.ReservationDate.Time, Valid: true},
+			TotalQuantity: 10,
+			SoldQuantity:  0,
+		})
+		require.NoError(t, err)
+	}
+
+	_, err := testStore.SyncReservationInventoryTx(ctx, SyncReservationInventoryTxParams{
+		ReservationID: reservation.ID,
+	})
+	require.NoError(t, err)
+
+	paymentOrder, err := testStore.CreatePaymentOrder(ctx, CreatePaymentOrderParams{
+		ReservationID:         pgtype.Int8{Int64: reservation.ID, Valid: true},
+		UserID:                user.ID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+		BusinessType:          ExternalPaymentBusinessOwnerReservation,
+		Amount:                9000,
+		OutTradeNo:            "BF_REPLACE_INV_" + util.RandomString(12),
+		ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
+	})
+	require.NoError(t, err)
+	paymentOrder, err = testStore.UpdatePaymentOrderToPaid(ctx, UpdatePaymentOrderToPaidParams{
+		ID:            paymentOrder.ID,
+		TransactionID: pgtype.Text{String: "BF_TX_REPLACE_INV_" + util.RandomString(12), Valid: true},
+	})
+	require.NoError(t, err)
+
+	newTotal := int64(1000)
+	_, err = testStore.ReplaceReservationItemsWithRefundOrdersTx(ctx, ReplaceReservationItemsWithRefundOrdersTxParams{
+		ReservationID:         reservation.ID,
+		ExpectedCurrentAmount: 9000,
+		Items: []CreateReservationItemParams{{
+			ReservationID: reservation.ID,
+			DishID:        pgtype.Int8{Int64: newDish.ID, Valid: true},
+			Quantity:      1,
+			UnitPrice:     newTotal,
+			TotalPrice:    newTotal,
+		}},
+		RefundOrders: []CreateRefundOrderTxParams{{
+			PaymentOrderID: paymentOrder.ID,
+			RefundType:     "profit_sharing",
+			RefundAmount:   paymentOrder.Amount - newTotal,
+			RefundReason:   "reservation dish change refund",
+			OutRefundNo:    "RF_REPLACE_INV_" + util.RandomString(12),
+		}},
+	})
+	require.NoError(t, err)
+
+	oldInventory, err := testStore.GetDailyInventory(ctx, GetDailyInventoryParams{
+		MerchantID: merchant.ID,
+		DishID:     oldDish.ID,
+		Date:       pgtype.Date{Time: reservation.ReservationDate.Time, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int32(0), oldInventory.ReservedQuantity)
+
+	newInventory, err := testStore.GetDailyInventory(ctx, GetDailyInventoryParams{
+		MerchantID: merchant.ID,
+		DishID:     newDish.ID,
+		Date:       pgtype.Date{Time: reservation.ReservationDate.Time, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int32(1), newInventory.ReservedQuantity)
+
+	entries, err := testStore.ListReservationInventoryByReservation(ctx, reservation.ID)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, newDish.ID, entries[0].DishID)
+	require.Equal(t, int32(1), entries[0].Quantity)
+}
+
 func TestReleaseReservationInventoryTx(t *testing.T) {
 	owner := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, owner.ID)
@@ -181,6 +278,39 @@ func TestReleaseReservationInventoryTx(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, int32(0), inventory.ReservedQuantity)
+
+	entries, err := testStore.ListReservationInventoryByReservation(context.Background(), reservation.ID)
+	require.NoError(t, err)
+	require.Len(t, entries, 0)
+}
+
+func TestReleaseReservationInventoryTxAllowsUnlimitedDishWithoutDailyInventory(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	table := createRandomTable(t, merchant.ID)
+	user := createRandomUser(t)
+	category := createRandomDishCategory(t)
+	dish := createRandomDish(t, merchant.ID, category.ID)
+
+	reservation := createReservationWithItems(t, merchant, table, user, []CreateReservationItemParams{
+		{
+			DishID:     pgtype.Int8{Int64: dish.ID, Valid: true},
+			Quantity:   2,
+			UnitPrice:  dish.Price,
+			TotalPrice: dish.Price * 2,
+		},
+	})
+	_, err := testStore.UpsertReservationInventory(context.Background(), UpsertReservationInventoryParams{
+		ReservationID: reservation.ID,
+		DishID:        dish.ID,
+		Quantity:      2,
+	})
+	require.NoError(t, err)
+
+	err = testStore.ReleaseReservationInventoryTx(context.Background(), ReleaseReservationInventoryTxParams{
+		ReservationID: reservation.ID,
+	})
+	require.NoError(t, err)
 
 	entries, err := testStore.ListReservationInventoryByReservation(context.Background(), reservation.ID)
 	require.NoError(t, err)

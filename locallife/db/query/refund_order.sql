@@ -127,6 +127,11 @@ SELECT COALESCE(SUM(refund_amount), 0)::bigint as total_refunded
 FROM refund_orders
 WHERE payment_order_id = $1 AND status IN ('pending', 'processing', 'success');
 
+-- name: GetTotalActiveRefundedByPaymentOrder :one
+SELECT COALESCE(SUM(refund_amount), 0)::bigint as total_active_refunded
+FROM refund_orders
+WHERE payment_order_id = $1 AND status IN ('pending', 'processing');
+
 -- name: GetTotalSuccessfulRefundedByPaymentOrder :one
 SELECT COALESCE(SUM(refund_amount), 0)::bigint as total_successful_refunded
 FROM refund_orders

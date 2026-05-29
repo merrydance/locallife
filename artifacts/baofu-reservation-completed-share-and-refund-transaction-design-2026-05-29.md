@@ -40,7 +40,11 @@ After this design is implemented:
 
 - Baofu reservation and `reservation_addon` profit sharing can be created only when the reservation is `completed` and `completed_at` is present.
 - `paid`, `confirmed`, and `checked_in` reservations are never profit-sharing-ready, regardless of age.
-- Active refund orders in `pending`, `processing`, or `success` still block profit sharing.
+- Active refund orders in `pending` or `processing` block profit sharing.
+- Successful partial refunds on `reservation` and `reservation_addon` payment orders do not permanently block later profit sharing; the local bill must be created or refreshed against `payment_order.amount - successful_refunds`.
+- If the net amount is zero or negative, no Baofu profit sharing is created.
+- The successful-refund net-share rule is scoped to reservation payment orders only. Ordinary `order` payment orders keep the existing behavior where successful refunds block automatic Baofu profit-sharing recovery/triggering.
+- `reservation_addon` is an independent payment order created by dish add/positive dish-change delta; it receives its own independent Baofu profit-sharing bill rather than being merged into the original reservation payment.
 - A started Baofu profit-sharing command still blocks new pre-share refunds.
 - Dish replacement with a negative price delta atomically replaces reservation items and creates all required refund orders in one DB transaction.
 - Replacement-order negative delta atomically creates the replacement order, marks the old order replaced, links billing groups, and creates all required refund orders in one DB transaction.
@@ -68,10 +72,12 @@ AND r.completed_at IS NOT NULL
 AND r.completed_at <= sqlc.arg(refund_closed_before)
 ```
 
-Keep the existing exclusions:
+Keep these exclusions and net-amount rules:
 
-- No active refund order in `pending`, `processing`, or `success`.
-- No existing `profit_sharing_orders` row for the same payment order.
+- No active refund order in `pending` or `processing`.
+- For ordinary `order` payment orders, no successful refund order.
+- For `reservation` and `reservation_addon` payment orders, successful refunds are subtracted from the payment amount and the query returns `net_amount`; rows with net amount `<= 0` are skipped.
+- No existing `profit_sharing_orders` row for the same payment order in `processing` or `finished`. Existing Baofu `pending` or `failed` bills may be refreshed to the latest reservation net amount before command start.
 - Payment order must be paid, Baofu aggregate, and `requires_profit_sharing = true`.
 
 Update ordering to use `r.completed_at` for reservation rows, not `paid_at` or `updated_at`, so the oldest completed reservations are picked first.
@@ -94,6 +100,7 @@ Current order flow already has the pattern:
 Reservation completion should follow the same style:
 
 - After `CompleteReservationTx` commits and returns a `completed` reservation with `completed_at`, resolve or create the Baofu reservation profit-sharing bill for each paid Baofu payment order tied to the reservation.
+- Dish-change add-payments use the existing `reservation_addon` business type. Completion-triggered sharing treats each paid Baofu `reservation` or `reservation_addon` payment order independently and passes that payment order's successful refunded amount into bill creation.
 - Resolve the active `profit_sharing_configs` row for `order_source = reservation` before creating the bill, using the merchant and region scope. The immediate completion trigger and the recovery scheduler must use the same rate source, so reservation bills do not silently fall back to hardcoded 2% / 3% rates.
 - Enqueue `ScheduleProfitSharing` for the created or existing pending/failed bill.
 - Log and continue if enqueue fails; the recovery scheduler remains the durable fallback.
@@ -175,7 +182,10 @@ DB/sqlc tests:
 - `completed` reservation without `completed_at` is not returned.
 - `completed` reservation with `completed_at` is returned.
 - Completed reservation with active refund order is still blocked.
-- Completed reservation with existing profit-sharing order is still blocked.
+- `completed` reservation with successful partial refund is returned with `net_amount`.
+- Ordinary completed `order` payment with successful refund is not returned by this reservation fix.
+- Completed reservation with existing `processing` or `finished` profit-sharing order is still blocked.
+- Completed reservation with existing Baofu `pending` or `failed` profit-sharing order can be refreshed to the current net amount before command start.
 - Dish-change transaction rolls back item replacement when guarded refund creation rejects.
 - Replacement-order transaction rolls back new order and old-order replacement state when guarded refund creation rejects.
 
@@ -188,6 +198,7 @@ Worker tests:
 Logic/API tests:
 
 - Merchant completes a full-payment Baofu reservation and the logic schedules profit sharing after commit.
+- Merchant completes a Baofu reservation after successful partial refunds and the logic schedules independent net-amount sharing for both the primary `reservation` payment and any `reservation_addon` payment.
 - Completion succeeds even if scheduling fails, with a warning log and recovery fallback.
 - Modify reservation dishes with negative delta uses the combined transaction and schedules refund tasks after commit.
 - Modify reservation dishes leaves old items unchanged when the refund guard rejects.
@@ -239,6 +250,9 @@ Implemented on 2026-05-29:
 - Replacement-order negative deltas use `ReplaceOrderWithRefundOrdersTx`, so the new order and old-order replacement marker roll back when guarded refund-order creation is rejected.
 - Replacement-order transactions lock the old order and require it to still be paid and unreplaced before creating the replacement order.
 - Idempotent Baofu profit-sharing bill creation now also rejects payment orders with occupied refund amount, so completion/recovery cannot leave a local bill that will later be permanently blocked at command start.
+- Successful partial refunds on `reservation` and `reservation_addon` payment orders now participate in net-amount sharing. Pending/processing refunds still block sharing, zero-net payments are skipped/rejected, and existing Baofu `pending`/`failed` bills are refreshed to the net amount before command execution.
+- The net-share follow-up is deliberately scoped to reservation payment orders. Ordinary `order` payment orders with successful refunds are still excluded from automatic Baofu sharing by the recovery scan and completion trigger.
+- Dish add/positive dish-change payments remain independent `reservation_addon` payment orders with independent Baofu share bills; they are not merged into the original reservation payment order.
 - Baofu provider calls remain post-commit and outside DB transactions.
 
 Validation run:

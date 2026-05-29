@@ -255,6 +255,122 @@ func TestListBaofuOrdersReadyForProfitSharing_GatesCompletedPaidAndRefundClosed(
 	}
 }
 
+func TestListBaofuOrdersReadyForProfitSharing_SkipsOrderAfterSuccessfulRefund(t *testing.T) {
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	address := createRandomUserAddress(t, user)
+
+	order, err := testStore.CreateOrder(context.Background(), CreateOrderParams{
+		OrderNo:             util.RandomString(20),
+		UserID:              user.ID,
+		MerchantID:          merchant.ID,
+		OrderType:           OrderTypeTakeout,
+		AddressID:           pgtype.Int8{Int64: address.ID, Valid: true},
+		DeliveryFee:         500,
+		DeliveryDistance:    pgtype.Int4{Int32: 1800, Valid: true},
+		Subtotal:            4800,
+		DiscountAmount:      0,
+		DeliveryFeeDiscount: 0,
+		TotalAmount:         5300,
+		Status:              OrderStatusCompleted,
+	})
+	require.NoError(t, err)
+
+	paymentOrder, err := testStore.CreatePaymentOrder(context.Background(), CreatePaymentOrderParams{
+		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
+		UserID:                user.ID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+		BusinessType:          ExternalPaymentBusinessOwnerOrder,
+		Amount:                order.TotalAmount,
+		OutTradeNo:            util.RandomString(24),
+		ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdatePaymentOrderToPaid(context.Background(), UpdatePaymentOrderToPaidParams{
+		ID:            paymentOrder.ID,
+		TransactionID: pgtype.Text{String: util.RandomString(24), Valid: true},
+	})
+	require.NoError(t, err)
+
+	refund := createRandomRefundOrder(t, paymentOrder.ID, 300)
+	_, err = testStore.UpdateRefundOrderToSuccess(context.Background(), refund.ID)
+	require.NoError(t, err)
+
+	profitSharingAnchor := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	backdateBaofuProfitSharingFixtures(t, paymentOrder.ID, order.ID, 0, true, false, profitSharingAnchor)
+
+	rows, err := testStore.ListBaofuOrdersReadyForProfitSharing(context.Background(), ListBaofuOrdersReadyForProfitSharingParams{
+		RefundClosedBefore: pgtype.Timestamptz{Time: profitSharingAnchor.Add(time.Minute), Valid: true},
+		Limit:              200,
+	})
+	require.NoError(t, err)
+
+	for _, row := range rows {
+		require.NotEqual(t, paymentOrder.ID, row.PaymentOrderID)
+	}
+}
+
+func TestListBaofuOrdersReadyForProfitSharing_AllowsReservationSuccessfulRefundWithNetAmount(t *testing.T) {
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	table := createRandomTable(t, merchant.ID)
+	reservation := createRandomReservation(t, user.ID, merchant.ID, table.ID, "completed")
+
+	paymentOrder, err := testStore.CreatePaymentOrder(context.Background(), CreatePaymentOrderParams{
+		ReservationID:         pgtype.Int8{Int64: reservation.ID, Valid: true},
+		UserID:                user.ID,
+		PaymentType:           "miniprogram",
+		PaymentChannel:        PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+		BusinessType:          ExternalPaymentBusinessOwnerReservation,
+		Amount:                5300,
+		OutTradeNo:            util.RandomString(24),
+		ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdatePaymentOrderToPaid(context.Background(), UpdatePaymentOrderToPaidParams{
+		ID:            paymentOrder.ID,
+		TransactionID: pgtype.Text{String: util.RandomString(24), Valid: true},
+	})
+	require.NoError(t, err)
+
+	refund := createRandomRefundOrder(t, paymentOrder.ID, 300)
+	_, err = testStore.UpdateRefundOrderToSuccess(context.Background(), refund.ID)
+	require.NoError(t, err)
+
+	profitSharingAnchor := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	backdateBaofuProfitSharingFixtures(t, paymentOrder.ID, 0, reservation.ID, false, true, profitSharingAnchor)
+	_, err = testStore.(*SQLStore).connPool.Exec(context.Background(), `
+		UPDATE table_reservations
+		SET completed_at = $1
+		WHERE id = $2
+	`, profitSharingAnchor, reservation.ID)
+	require.NoError(t, err)
+
+	rows, err := testStore.ListBaofuOrdersReadyForProfitSharing(context.Background(), ListBaofuOrdersReadyForProfitSharingParams{
+		RefundClosedBefore: pgtype.Timestamptz{Time: profitSharingAnchor.Add(time.Minute), Valid: true},
+		Limit:              200,
+	})
+	require.NoError(t, err)
+
+	matched := false
+	for _, row := range rows {
+		if row.PaymentOrderID == paymentOrder.ID {
+			require.False(t, row.OrderID.Valid)
+			require.True(t, row.ReservationID.Valid)
+			require.Equal(t, reservation.ID, row.ReservationID.Int64)
+			require.Equal(t, int64(5000), row.NetAmount)
+			matched = true
+			break
+		}
+	}
+	require.True(t, matched)
+}
+
 func TestListBaofuOrdersReadyForProfitSharing_RequiresCompletedReservationWithCompletedAt(t *testing.T) {
 	user := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)

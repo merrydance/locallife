@@ -13,6 +13,10 @@ function buildReservationListUrl(returnStatus?: string): string {
   return `/pages/user_center/reservations/index?status=${encodeURIComponent(status)}`
 }
 
+function isReservationPaymentBusinessType(businessType?: string): boolean {
+  return businessType === 'reservation' || businessType === 'reservation_addon'
+}
+
 let dineInCheckoutClosing = false
 
 Page({
@@ -153,7 +157,7 @@ Page({
     }
 
     if (action === 'list_page') {
-      if (this.data.businessType === 'reservation') {
+      if (isReservationPaymentBusinessType(this.data.businessType)) {
         wx.redirectTo({ url: buildReservationListUrl(this.data.returnStatus) })
         return
       }
@@ -167,7 +171,7 @@ Page({
     }
 
     if (this.data.businessId) {
-      if (this.data.businessType === 'reservation') {
+      if (isReservationPaymentBusinessType(this.data.businessType)) {
         wx.redirectTo({ url: `/pages/reservation/detail/index?id=${this.data.businessId}` })
         return
       }

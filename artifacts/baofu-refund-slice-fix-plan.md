@@ -44,9 +44,9 @@ Current Baofu reservation payment creation sets `RequiresProfitSharing: true` fo
 - `checked_in`
 - `completed`
 
-The query excludes payment orders that already have refund orders in `pending`, `processing`, or `success`, and excludes payment orders that already have a profit-sharing order. This means:
+The old query excluded payment orders that already had refund orders in `pending`, `processing`, or `success`, and excluded payment orders that already had a profit-sharing order. That meant:
 
-- If a refund order is created first, pending/processing/success refund state blocks later profit sharing.
+- If a refund order was created first, pending/processing/success refund state blocked later profit sharing.
 - If the scheduler creates and starts a profit-sharing command first, later refund creation is correctly blocked by the Baofu refund guard.
 
 The already-implemented fix closes the technical bypass where replacement-order refunds skipped `CreateRefundOrderTx`. It does not change the broader business timing: reservation profit sharing can start shortly after payment success, before the diner has completed all allowed post-payment reservation actions such as changing dishes or cancelling within policy.
@@ -80,11 +80,19 @@ Audit result:
 - `locallife/logic/replace_order.go` still allows full-payment reservation order replacement from `paid`, `confirmed`, and `checked_in`, and creates refund orders for negative deltas.
 - `locallife/db/sqlc/profit_sharing_order_recovery_test.go` currently locks the early policy with `TestListBaofuOrdersReadyForProfitSharing_IncludesPaidReservations`.
 
-Impact:
+Impact found during the audit:
 
-- If a refund action creates a refund order first, the pending/processing/success refund order blocks later sharing as intended.
+- If a refund action created a refund order first, the pending/processing/success refund order blocked later sharing.
 - If the five-minute Baofu recovery scheduler creates and starts a profit-sharing order first, later cancellation, dish reduction, or replacement-order refund is blocked by the Baofu refund guard. That block is technically correct for pre-share refund safety, but it contradicts the still-available reservation business actions.
 - Because LocalLife first-version scope supports pre-share refund and does not model post-share refund, early sharing can turn an otherwise supported automatic refund into a failed or manual-support path.
+
+Follow-up closure:
+
+- Reservation profit sharing now starts only after merchant `completed` + `completed_at`.
+- For `reservation` and `reservation_addon` payment orders, `pending`/`processing` refunds block sharing, while successful partial refunds reduce the later Baofu share bill to the payment-order net amount.
+- Zero-net reservation payment orders are skipped/rejected for sharing.
+- Ordinary `order` payment orders are outside this reservation fix; successful refunds still exclude them from automatic Baofu profit-sharing recovery/triggering.
+- Positive dish-change/add-dish payments remain separate `reservation_addon` payment orders and therefore receive independent net-amount Baofu share bills.
 
 Durable tracking:
 

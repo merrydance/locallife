@@ -1184,6 +1184,10 @@ func (s *DataCleanupScheduler) cleanupExpiredPaymentOrders() {
 	if paymentCount > 0 {
 		log.Info().Int64("count", paymentCount).Msg("closed expired payment orders")
 	}
+	if err := s.expireClosedReservationAddonAdjustments(ctx); err != nil {
+		log.Error().Err(err).Msg("failed to expire closed reservation addon adjustments")
+		return
+	}
 
 	combinedCount, err := s.closeExpiredCombinedPaymentOrders(ctx)
 	if err != nil {
@@ -1194,6 +1198,46 @@ func (s *DataCleanupScheduler) cleanupExpiredPaymentOrders() {
 	if combinedCount > 0 {
 		log.Info().Int("count", combinedCount).Msg("closed expired combined payment orders")
 	}
+}
+
+func (s *DataCleanupScheduler) expireClosedReservationAddonAdjustments(ctx context.Context) error {
+	adjustments, err := s.store.ListActiveReservationAdjustments(ctx, db.ListActiveReservationAdjustmentsParams{
+		Limit: expiredCombinedPaymentBatchLimit,
+	})
+	if err != nil {
+		return fmt.Errorf("list active reservation adjustments: %w", err)
+	}
+	for _, adjustment := range adjustments {
+		if !adjustment.PaymentOrderID.Valid {
+			continue
+		}
+		paymentOrder, err := s.store.GetPaymentOrder(ctx, adjustment.PaymentOrderID.Int64)
+		if err != nil {
+			if errors.Is(err, db.ErrRecordNotFound) {
+				continue
+			}
+			return fmt.Errorf("get reservation addon payment order %d: %w", adjustment.PaymentOrderID.Int64, err)
+		}
+		if paymentOrder.BusinessType != "reservation_addon" {
+			continue
+		}
+		status := db.ReservationAdjustmentStatusExpired
+		reason := "payment expired by cleanup scheduler"
+		if paymentOrder.Status == "failed" {
+			status = db.ReservationAdjustmentStatusFailed
+			reason = "payment failed before cleanup scheduler"
+		} else if paymentOrder.Status != "closed" {
+			continue
+		}
+		if _, err := s.store.CloseReservationAdjustmentForPaymentTx(ctx, db.CloseReservationAdjustmentForPaymentTxParams{
+			PaymentOrderID: paymentOrder.ID,
+			Status:         status,
+			Reason:         reason,
+		}); err != nil && !errors.Is(err, db.ErrRecordNotFound) {
+			return fmt.Errorf("close reservation adjustment %d for payment order %d: %w", adjustment.ID, paymentOrder.ID, err)
+		}
+	}
+	return nil
 }
 
 func (s *DataCleanupScheduler) closeExpiredCombinedPaymentOrders(ctx context.Context) (int, error) {

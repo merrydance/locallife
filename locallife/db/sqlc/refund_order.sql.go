@@ -335,6 +335,19 @@ func (q *Queries) GetRefundRequestIdempotencyForUpdate(ctx context.Context, arg 
 	return i, err
 }
 
+const getTotalActiveRefundedByPaymentOrder = `-- name: GetTotalActiveRefundedByPaymentOrder :one
+SELECT COALESCE(SUM(refund_amount), 0)::bigint as total_active_refunded
+FROM refund_orders
+WHERE payment_order_id = $1 AND status IN ('pending', 'processing')
+`
+
+func (q *Queries) GetTotalActiveRefundedByPaymentOrder(ctx context.Context, paymentOrderID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, getTotalActiveRefundedByPaymentOrder, paymentOrderID)
+	var total_active_refunded int64
+	err := row.Scan(&total_active_refunded)
+	return total_active_refunded, err
+}
+
 const getTotalRefundedByPaymentOrder = `-- name: GetTotalRefundedByPaymentOrder :one
 SELECT COALESCE(SUM(refund_amount), 0)::bigint as total_refunded
 FROM refund_orders

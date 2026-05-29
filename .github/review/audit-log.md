@@ -67,3 +67,11 @@ Append one section per formal backend audit or durable review pass.
 - Findings logged: No new finding. `BE-AUDIT-2026-05-29-01` marked resolved.
 - Durable docs updated: .github/review/open-findings.md; .github/review/audit-log.md; artifacts/baofu-reservation-completed-share-and-refund-transaction-design-2026-05-29.md
 - Remaining scope: No historical-data migration or remediation was required because the issue was found before affected historical records existed. Post-share refund remains outside this first-version scope.
+
+### 2026-05-29 - Baofu reservation successful partial-refund net-share follow-up
+
+- Scope: Reviewed and tightened the completed-share implementation after clarifying that successful partial refunds should not permanently block reservation sharing; the later Baofu share bill should use the payment-order net amount.
+- Reviewed paths: locallife/db/query/profit_sharing_order.sql; locallife/db/query/refund_order.sql; locallife/db/sqlc/tx_baofu_profit_sharing.go; locallife/db/sqlc/profit_sharing_order_recovery_test.go; locallife/logic/reservation_profit_sharing.go; locallife/logic/baofu_profit_sharing_trigger.go; locallife/logic/order_service_confirm_test.go; locallife/worker/baofu_payment_recovery_scheduler.go; artifacts/baofu-reservation-completed-share-and-refund-transaction-design-2026-05-29.md; artifacts/baofu-refund-slice-fix-plan.md
+- Findings logged: No new finding. `BE-AUDIT-2026-05-29-01` remains resolved with a clarified invariant.
+- Durable docs updated: .github/review/open-findings.md; .github/review/audit-log.md; artifacts/baofu-reservation-completed-share-and-refund-transaction-design-2026-05-29.md; artifacts/baofu-refund-slice-fix-plan.md
+- Remaining scope: Net-amount sharing is deliberately scoped to `reservation` and `reservation_addon` payment orders. Ordinary `order` payment orders with successful refunds remain excluded from automatic Baofu sharing; post-share refund remains outside this first-version scope.

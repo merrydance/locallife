@@ -119,8 +119,10 @@ func TestProfitSharingListQueriesUseIDTieBreaker(t *testing.T) {
 func TestProfitSharingReconciliationSummaryUsesFinishedDateForFinishedOrders(t *testing.T) {
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
 	operator := createRandomOperatorForRegion(t, merchant.RegionID)
-	rangeStart := time.Date(2096, time.Month(util.RandomInt(1, 12)), int(util.RandomInt(1, 20)), int(util.RandomInt(1, 20)), 0, 0, 0, time.UTC)
-	rangeEnd := rangeStart.Add(time.Hour - time.Nanosecond)
+	rangeStart := time.Date(2200, time.January, 1, 0, 0, 0, 0, time.UTC).
+		Add(time.Duration(util.RandomInt(0, 10*365*24*3600)) * time.Second).
+		Add(time.Duration(util.RandomInt(0, 999999)) * time.Microsecond)
+	rangeEnd := rangeStart.Add(time.Millisecond)
 
 	createOrder := func(outOrderNo string, amount int64, createdAt time.Time, finishedAt time.Time) {
 		paymentOrder := createRandomPaymentOrder(t, createRandomUser(t).ID)
@@ -153,8 +155,8 @@ func TestProfitSharingReconciliationSummaryUsesFinishedDateForFinishedOrders(t *
 		require.NoError(t, err)
 	}
 
-	createOrder("pso_finished_in_range_"+util.RandomString(16), 31000, rangeStart.AddDate(0, 0, -2), rangeStart.Add(30*time.Minute))
-	createOrder("pso_created_in_range_finished_later_"+util.RandomString(16), 17000, rangeStart.Add(30*time.Minute), rangeStart.AddDate(0, 0, 1))
+	createOrder("pso_finished_in_range_"+util.RandomString(16), 31000, rangeStart.AddDate(0, 0, -2), rangeStart.Add(500*time.Microsecond))
+	createOrder("pso_created_in_range_finished_later_"+util.RandomString(16), 17000, rangeStart.Add(500*time.Microsecond), rangeStart.AddDate(0, 0, 1))
 
 	rows, err := testStore.GetProfitSharingReconciliationSummary(context.Background(), GetProfitSharingReconciliationSummaryParams{
 		StartAt: pgtype.Timestamptz{Time: rangeStart, Valid: true},

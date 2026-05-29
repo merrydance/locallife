@@ -227,6 +227,118 @@ func TestProcessTaskPaymentOrderTimeout_BaofuWaitPayingClosesRemoteBeforeLocalCa
 	}, client.lastCloseRequest)
 }
 
+func TestProcessTaskPaymentOrderTimeout_BaofuReservationAddonExpiresAdjustment(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	client := &paymentTimeoutBaofuAggregateClient{
+		paymentResult: &aggregatecontracts.UnifiedOrderResult{
+			MerchantID:       "COLLECT_MER",
+			TerminalID:       "COLLECT_TER",
+			OutTradeNo:       "BF_TIMEOUT_RES_ADDON_1",
+			TradeNo:          "BFTX_9020",
+			TxnState:         aggregatecontracts.PaymentStateWaitPaying,
+			SuccessAmountFen: 12345,
+			ResultCode:       aggregatecontracts.BusinessResultCodeSuccess,
+		},
+		closeResult: &aggregatecontracts.OrderCloseResult{
+			MerchantID: "COLLECT_MER",
+			TerminalID: "COLLECT_TER",
+			OutTradeNo: "BF_TIMEOUT_RES_ADDON_1",
+			ResultCode: aggregatecontracts.BusinessResultCodeSuccess,
+		},
+	}
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
+	processor.SetBaofuAggregateClientForTest(client, worker.BaofuProfitSharingWorkerConfig{
+		CollectMerchantID: "COLLECT_MER",
+		CollectTerminalID: "COLLECT_TER",
+	})
+
+	paymentOrder := db.PaymentOrder{
+		ID:             9020,
+		OutTradeNo:     "BF_TIMEOUT_RES_ADDON_1",
+		Amount:         12345,
+		Status:         "pending",
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+		BusinessType:   "reservation_addon",
+		ReservationID:  pgtype.Int8{Int64: 91200, Valid: true},
+		Attach:         pgtype.Text{String: "sub_mchid:1900000112", Valid: true},
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(-1 * time.Minute), Valid: true},
+	}
+	closedPaymentOrder := paymentOrder
+	closedPaymentOrder.Status = "closed"
+
+	gomock.InOrder(
+		store.EXPECT().GetPaymentOrderByOutTradeNo(gomock.Any(), paymentOrder.OutTradeNo).Return(paymentOrder, nil),
+		store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error) {
+			require.Equal(t, db.ExternalPaymentProviderBaofu, arg.Provider)
+			require.Equal(t, db.PaymentChannelBaofuAggregate, arg.Channel)
+			require.Equal(t, db.ExternalPaymentCapabilityBaofuPayment, arg.Capability)
+			require.Equal(t, db.ExternalPaymentCommandTypeClosePayment, arg.CommandType)
+			require.Equal(t, db.ExternalPaymentBusinessOwnerReservation, arg.BusinessOwner)
+			require.Equal(t, paymentOrder.ID, arg.BusinessObjectID.Int64)
+			require.Equal(t, db.ExternalPaymentObjectBaofuPaymentOrder, arg.ExternalObjectType)
+			require.Equal(t, paymentOrder.OutTradeNo, arg.ExternalObjectKey)
+			return db.ExternalPaymentCommand{ID: 93020}, nil
+		}),
+		store.EXPECT().UpdatePaymentOrderToClosed(gomock.Any(), paymentOrder.ID).Return(closedPaymentOrder, nil),
+		store.EXPECT().CloseReservationAdjustmentForPaymentTx(gomock.Any(), db.CloseReservationAdjustmentForPaymentTxParams{
+			PaymentOrderID: paymentOrder.ID,
+			Status:         db.ReservationAdjustmentStatusExpired,
+			Reason:         "payment timeout",
+		}).Return(db.CloseReservationAdjustmentForPaymentTxResult{Closed: true}, nil),
+	)
+
+	task := asynq.NewTask(worker.TaskPaymentOrderTimeout, mustMarshalJSON(t, worker.PayloadPaymentOrderTimeout{PaymentOrderNo: paymentOrder.OutTradeNo}))
+	err := processor.ProcessTaskPaymentOrderTimeout(context.Background(), task)
+
+	require.NoError(t, err)
+	require.Equal(t, aggregatecontracts.PaymentQueryRequest{
+		MerchantID: "COLLECT_MER",
+		TerminalID: "COLLECT_TER",
+		OutTradeNo: "BF_TIMEOUT_RES_ADDON_1",
+	}, client.lastPaymentQuery)
+	require.Equal(t, aggregatecontracts.OrderCloseRequest{
+		MerchantID: "COLLECT_MER",
+		TerminalID: "COLLECT_TER",
+		OutTradeNo: "BF_TIMEOUT_RES_ADDON_1",
+	}, client.lastCloseRequest)
+}
+
+func TestProcessTaskPaymentOrderTimeout_ClosedReservationAddonExpiresAdjustmentIdempotently(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
+
+	paymentOrder := db.PaymentOrder{
+		ID:             9021,
+		OutTradeNo:     "BF_TIMEOUT_RES_ADDON_CLOSED_1",
+		Amount:         12345,
+		Status:         "closed",
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+		BusinessType:   "reservation_addon",
+		ReservationID:  pgtype.Int8{Int64: 91201, Valid: true},
+		ExpiresAt:      pgtype.Timestamptz{Time: time.Now().Add(-1 * time.Minute), Valid: true},
+	}
+
+	gomock.InOrder(
+		store.EXPECT().GetPaymentOrderByOutTradeNo(gomock.Any(), paymentOrder.OutTradeNo).Return(paymentOrder, nil),
+		store.EXPECT().CloseReservationAdjustmentForPaymentTx(gomock.Any(), db.CloseReservationAdjustmentForPaymentTxParams{
+			PaymentOrderID: paymentOrder.ID,
+			Status:         db.ReservationAdjustmentStatusExpired,
+			Reason:         "payment timeout",
+		}).Return(db.CloseReservationAdjustmentForPaymentTxResult{Closed: false}, nil),
+	)
+
+	task := asynq.NewTask(worker.TaskPaymentOrderTimeout, mustMarshalJSON(t, worker.PayloadPaymentOrderTimeout{PaymentOrderNo: paymentOrder.OutTradeNo}))
+	err := processor.ProcessTaskPaymentOrderTimeout(context.Background(), task)
+
+	require.NoError(t, err)
+}
+
 func TestProcessTaskPaymentOrderTimeout_BaofuQueryErrorStopsLocalClose(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

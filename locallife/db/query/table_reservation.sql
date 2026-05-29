@@ -285,7 +285,12 @@ RETURNING *;
 UPDATE table_reservations
 SET cooking_started_at = now(),
     updated_at = now()
-WHERE id = $1
+WHERE table_reservations.id = $1
+  AND NOT EXISTS (
+    SELECT 1 FROM reservation_adjustments ra
+    WHERE ra.reservation_id = table_reservations.id
+      AND ra.status IN ('creating_payment', 'pending_payment', 'applying')
+  )
 RETURNING *;
 
 -- name: CreateTableReservationByMerchant :one

@@ -13,7 +13,7 @@ import (
 )
 
 type confirmOrderTaskSchedulerStub struct {
-	profitSharingCalled bool
+	profitSharingCalled  bool
 	profitSharingOrderID int64
 }
 
@@ -97,6 +97,7 @@ func TestOrderServiceConfirmOrder_SchedulesBaofuProfitSharing(t *testing.T) {
 		Channel:        db.PaymentChannelBaofuAggregate,
 		Status:         db.ProfitSharingOrderStatusPending,
 		OrderSource:    db.OrderTypeTakeout,
+		TotalAmount:    paymentOrder.Amount,
 		DeliveryFee:    600,
 		RiderID:        pgtype.Int8{Int64: 808, Valid: true},
 		RiderSharingMerID: pgtype.Text{
@@ -118,7 +119,11 @@ func TestOrderServiceConfirmOrder_SchedulesBaofuProfitSharing(t *testing.T) {
 		Times(1).
 		Return(profitSharingOrder, nil)
 	store.EXPECT().
-		GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).
+		GetTotalActiveRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).
+		Times(1).
+		Return(int64(0), nil)
+	store.EXPECT().
+		GetTotalSuccessfulRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).
 		Times(1).
 		Return(int64(0), nil)
 
@@ -130,4 +135,64 @@ func TestOrderServiceConfirmOrder_SchedulesBaofuProfitSharing(t *testing.T) {
 	require.False(t, result.AlreadyCompleted)
 	require.True(t, taskScheduler.profitSharingCalled)
 	require.Equal(t, profitSharingOrder.ID, taskScheduler.profitSharingOrderID)
+}
+
+func TestOrderServiceConfirmOrder_DoesNotScheduleBaofuProfitSharingAfterSuccessfulRefund(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	taskScheduler := &confirmOrderTaskSchedulerStub{}
+
+	order := db.Order{
+		ID:         21,
+		UserID:     301,
+		MerchantID: 401,
+		OrderNo:    "ORDER-003",
+		OrderType:  db.OrderTypeTakeout,
+		Status:     db.OrderStatusRiderDelivered,
+	}
+	updated := order
+	updated.Status = db.OrderStatusCompleted
+	paymentOrder := db.PaymentOrder{
+		ID:                    91,
+		OrderID:               pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType:          db.ExternalPaymentBusinessOwnerOrder,
+		Status:                "paid",
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+		Amount:                1200,
+	}
+	profitSharingOrder := db.ProfitSharingOrder{
+		ID:             191,
+		PaymentOrderID: paymentOrder.ID,
+		Provider:       db.ExternalPaymentProviderBaofu,
+		Channel:        db.PaymentChannelBaofuAggregate,
+		Status:         db.ProfitSharingOrderStatusPending,
+		OrderSource:    db.OrderTypeTakeout,
+		TotalAmount:    1100,
+		DeliveryFee:    0,
+	}
+
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().CompleteTakeoutOrderByUser(gomock.Any(), order.ID).Return(updated, nil)
+	store.EXPECT().CreateOrderStatusLog(gomock.Any(), gomock.Any()).Return(db.OrderStatusLog{}, nil)
+	store.EXPECT().GetDeliveryByOrderID(gomock.Any(), order.ID).Return(db.Delivery{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+			BusinessType: db.ExternalPaymentBusinessOwnerOrder,
+		}).
+		Return(paymentOrder, nil)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(profitSharingOrder, nil)
+	store.EXPECT().GetTotalActiveRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(int64(0), nil)
+	store.EXPECT().GetTotalSuccessfulRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(int64(100), nil)
+
+	service := NewOrderService(store, nil, nil, nil, taskScheduler, nil, nil, nil, nil, nil, nil)
+
+	result, err := service.ConfirmOrder(context.Background(), ConfirmOrderInput{UserID: order.UserID, OrderID: order.ID})
+
+	require.NoError(t, err)
+	require.Equal(t, db.OrderStatusCompleted, result.Order.Status)
+	require.False(t, taskScheduler.profitSharingCalled)
 }

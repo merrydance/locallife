@@ -1,0 +1,17 @@
+DROP INDEX IF EXISTS reservation_adjustment_inventory_holds_inventory_idx;
+DROP INDEX IF EXISTS reservation_adjustment_inventory_holds_status_expires_idx;
+DROP INDEX IF EXISTS reservation_adjustment_inventory_holds_adjustment_idx;
+
+DROP INDEX IF EXISTS reservation_adjustment_items_combo_idx;
+DROP INDEX IF EXISTS reservation_adjustment_items_dish_idx;
+DROP INDEX IF EXISTS reservation_adjustment_items_adjustment_idx;
+
+DROP INDEX IF EXISTS reservation_adjustments_merchant_status_idx;
+DROP INDEX IF EXISTS reservation_adjustments_status_idx;
+DROP INDEX IF EXISTS reservation_adjustments_payment_order_idx;
+DROP INDEX IF EXISTS reservation_adjustments_reservation_idx;
+DROP INDEX IF EXISTS reservation_adjustments_one_active_positive_uidx;
+
+DROP TABLE IF EXISTS reservation_adjustment_inventory_holds;
+DROP TABLE IF EXISTS reservation_adjustment_items;
+DROP TABLE IF EXISTS reservation_adjustments;

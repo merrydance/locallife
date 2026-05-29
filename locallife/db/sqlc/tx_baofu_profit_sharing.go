@@ -9,10 +9,13 @@ import (
 )
 
 const (
-	errBaofuProfitSharingRefundStarted = "订单已有退款申请或退款成功记录，不能继续发起宝付分账"
-	errBaofuProfitSharingAlreadyExists = "订单已存在宝付分账单，不能重复发起分账"
-	errBaofuProfitSharingBillConflict  = "订单已存在不同的宝付分账账单"
-	errBaofuProfitSharingNotReady      = "宝付分账单当前状态不允许发起分账"
+	errBaofuProfitSharingRefundStarted    = "订单已有未完成退款申请，不能继续发起宝付分账"
+	errBaofuProfitSharingAlreadyExists    = "订单已存在宝付分账单，不能重复发起分账"
+	errBaofuProfitSharingBillConflict     = "订单已存在不同的宝付分账账单"
+	errBaofuProfitSharingNotReady         = "宝付分账单当前状态不允许发起分账"
+	errBaofuProfitSharingBillAmountStale  = "宝付分账账单金额与退款后净额不一致"
+	errBaofuProfitSharingNetAmountInvalid = "订单退款后净额不能继续发起宝付分账"
+	errBaofuProfitSharingRefundScope      = "宝付分账成功退款净额口径仅适用于预订支付单"
 )
 
 // CreateBaofuProfitSharingOrderTxParams contains the durable share order and
@@ -42,15 +45,29 @@ type PrepareBaofuProfitSharingCommandTxResult struct {
 func (store *SQLStore) CreateBaofuProfitSharingOrderTx(ctx context.Context, arg CreateBaofuProfitSharingOrderTxParams) (CreateBaofuProfitSharingOrderTxResult, error) {
 	var result CreateBaofuProfitSharingOrderTxResult
 	err := store.execTx(ctx, func(q *Queries) error {
-		if _, err := q.GetPaymentOrderForUpdate(ctx, arg.ProfitSharingOrder.PaymentOrderID); err != nil {
+		paymentOrder, err := q.GetPaymentOrderForUpdate(ctx, arg.ProfitSharingOrder.PaymentOrderID)
+		if err != nil {
 			return err
 		}
-		occupiedRefundAmount, err := q.GetTotalRefundedByPaymentOrder(ctx, arg.ProfitSharingOrder.PaymentOrderID)
+		occupiedRefundAmount, err := q.GetTotalActiveRefundedByPaymentOrder(ctx, arg.ProfitSharingOrder.PaymentOrderID)
 		if err != nil {
 			return err
 		}
 		if occupiedRefundAmount > 0 {
 			return &requestError{statusCode: 400, err: errors.New(errBaofuProfitSharingRefundStarted)}
+		}
+		successRefundAmount, err := q.GetTotalSuccessfulRefundedByPaymentOrder(ctx, arg.ProfitSharingOrder.PaymentOrderID)
+		if err != nil {
+			return err
+		}
+		if successRefundAmount > 0 && !baofuPaymentOrderAllowsSuccessfulRefundNetShare(paymentOrder) {
+			return &requestError{statusCode: 400, err: errors.New(errBaofuProfitSharingRefundScope)}
+		}
+		if paymentOrder.Amount-successRefundAmount <= 0 {
+			return &requestError{statusCode: 400, err: errors.New(errBaofuProfitSharingNetAmountInvalid)}
+		}
+		if arg.ProfitSharingOrder.TotalAmount != paymentOrder.Amount-successRefundAmount {
+			return &requestError{statusCode: 409, err: errors.New(errBaofuProfitSharingBillAmountStale)}
 		}
 		if _, err := q.GetProfitSharingOrderByPaymentOrder(ctx, arg.ProfitSharingOrder.PaymentOrderID); err == nil {
 			return &requestError{statusCode: 400, err: errors.New(errBaofuProfitSharingAlreadyExists)}
@@ -96,21 +113,46 @@ func (store *SQLStore) CreateBaofuProfitSharingOrderTx(ctx context.Context, arg 
 func (store *SQLStore) EnsureBaofuProfitSharingBillTx(ctx context.Context, arg CreateBaofuProfitSharingOrderTxParams) (CreateBaofuProfitSharingOrderTxResult, error) {
 	var result CreateBaofuProfitSharingOrderTxResult
 	err := store.execTx(ctx, func(q *Queries) error {
-		if _, err := q.GetPaymentOrderForUpdate(ctx, arg.ProfitSharingOrder.PaymentOrderID); err != nil {
+		paymentOrder, err := q.GetPaymentOrderForUpdate(ctx, arg.ProfitSharingOrder.PaymentOrderID)
+		if err != nil {
 			return err
 		}
-		occupiedRefundAmount, err := q.GetTotalRefundedByPaymentOrder(ctx, arg.ProfitSharingOrder.PaymentOrderID)
+		occupiedRefundAmount, err := q.GetTotalActiveRefundedByPaymentOrder(ctx, arg.ProfitSharingOrder.PaymentOrderID)
 		if err != nil {
 			return err
 		}
 		if occupiedRefundAmount > 0 {
 			return &requestError{statusCode: 400, err: errors.New(errBaofuProfitSharingRefundStarted)}
 		}
+		successRefundAmount, err := q.GetTotalSuccessfulRefundedByPaymentOrder(ctx, arg.ProfitSharingOrder.PaymentOrderID)
+		if err != nil {
+			return err
+		}
+		if successRefundAmount > 0 && !baofuPaymentOrderAllowsSuccessfulRefundNetShare(paymentOrder) {
+			return &requestError{statusCode: 400, err: errors.New(errBaofuProfitSharingRefundScope)}
+		}
+		if paymentOrder.Amount-successRefundAmount <= 0 {
+			return &requestError{statusCode: 400, err: errors.New(errBaofuProfitSharingNetAmountInvalid)}
+		}
+		if arg.ProfitSharingOrder.TotalAmount != paymentOrder.Amount-successRefundAmount {
+			return &requestError{statusCode: 409, err: errors.New(errBaofuProfitSharingBillAmountStale)}
+		}
 
 		existing, err := q.GetProfitSharingOrderByPaymentOrder(ctx, arg.ProfitSharingOrder.PaymentOrderID)
 		if err == nil {
 			if !baofuProfitSharingBillMatches(existing, arg) {
-				return &requestError{statusCode: 409, err: errors.New(errBaofuProfitSharingBillConflict)}
+				if existing.Provider != ExternalPaymentProviderBaofu ||
+					existing.Channel != PaymentChannelBaofuAggregate ||
+					(existing.Status != ProfitSharingOrderStatusPending && existing.Status != ProfitSharingOrderStatusFailed) ||
+					arg.FeeBreakdown.CalculationVersion == "" {
+					return &requestError{statusCode: 409, err: errors.New(errBaofuProfitSharingBillConflict)}
+				}
+				refreshed, refreshErr := refreshBaofuProfitSharingBillWithLedgers(ctx, q, existing.ID, arg)
+				if refreshErr != nil {
+					return refreshErr
+				}
+				result = refreshed
+				return nil
 			}
 			result.ProfitSharingOrder = existing
 			return nil
@@ -152,12 +194,26 @@ func (store *SQLStore) PrepareBaofuProfitSharingCommandTx(ctx context.Context, a
 			return &requestError{statusCode: 400, err: errors.New(errBaofuProfitSharingNotReady)}
 		}
 
-		occupiedRefundAmount, err := q.GetTotalRefundedByPaymentOrder(ctx, paymentOrder.ID)
+		occupiedRefundAmount, err := q.GetTotalActiveRefundedByPaymentOrder(ctx, paymentOrder.ID)
 		if err != nil {
 			return err
 		}
 		if occupiedRefundAmount > 0 {
 			return &requestError{statusCode: 400, err: errors.New(errBaofuProfitSharingRefundStarted)}
+		}
+		successRefundAmount, err := q.GetTotalSuccessfulRefundedByPaymentOrder(ctx, paymentOrder.ID)
+		if err != nil {
+			return err
+		}
+		netAmount := paymentOrder.Amount - successRefundAmount
+		if successRefundAmount > 0 && !baofuPaymentOrderAllowsSuccessfulRefundNetShare(paymentOrder) {
+			return &requestError{statusCode: 400, err: errors.New(errBaofuProfitSharingRefundScope)}
+		}
+		if netAmount <= 0 {
+			return &requestError{statusCode: 400, err: errors.New(errBaofuProfitSharingNetAmountInvalid)}
+		}
+		if profitSharingOrder.TotalAmount != netAmount {
+			return &requestError{statusCode: 409, err: errors.New(errBaofuProfitSharingBillAmountStale)}
 		}
 
 		profitSharingOrder, err = q.UpdateProfitSharingOrderToProcessing(ctx, UpdateProfitSharingOrderToProcessingParams{
@@ -172,6 +228,11 @@ func (store *SQLStore) PrepareBaofuProfitSharingCommandTx(ctx context.Context, a
 		return nil
 	})
 	return result, err
+}
+
+func baofuPaymentOrderAllowsSuccessfulRefundNetShare(paymentOrder PaymentOrder) bool {
+	return paymentOrder.BusinessType == ExternalPaymentBusinessOwnerReservation ||
+		paymentOrder.BusinessType == "reservation_addon"
 }
 
 func createBaofuProfitSharingOrderWithLedgers(ctx context.Context, q *Queries, arg CreateBaofuProfitSharingOrderTxParams) (CreateBaofuProfitSharingOrderTxResult, error) {
@@ -195,6 +256,62 @@ func createBaofuProfitSharingOrderWithLedgers(ctx context.Context, q *Queries, a
 		return result, err
 	}
 	result.PaymentFeeLedger = feeLedger
+
+	for _, ledgerArg := range arg.OrderPaymentFeeLedgers {
+		ledgerArg.PaymentOrderID = profitSharingOrder.PaymentOrderID
+		ledgerArg.ProfitSharingOrderID.Int64 = profitSharingOrder.ID
+		ledgerArg.ProfitSharingOrderID.Valid = true
+		ledger, err := q.UpsertOrderPaymentFeeLedgerCalculated(ctx, orderPaymentFeeLedgerCalculatedParams(ledgerArg))
+		if err != nil {
+			return result, err
+		}
+		result.OrderPaymentFeeLedgers = append(result.OrderPaymentFeeLedgers, ledger)
+	}
+	return result, nil
+}
+
+func refreshBaofuProfitSharingBillWithLedgers(ctx context.Context, q *Queries, existingID int64, arg CreateBaofuProfitSharingOrderTxParams) (CreateBaofuProfitSharingOrderTxResult, error) {
+	var result CreateBaofuProfitSharingOrderTxResult
+	refreshArg := UpdateBaofuPendingProfitSharingBillSnapshotParams{
+		ID:                           existingID,
+		TotalAmount:                  arg.ProfitSharingOrder.TotalAmount,
+		DeliveryFee:                  arg.ProfitSharingOrder.DeliveryFee,
+		RiderID:                      arg.ProfitSharingOrder.RiderID,
+		RiderAmount:                  arg.ProfitSharingOrder.RiderAmount,
+		DistributableAmount:          arg.ProfitSharingOrder.DistributableAmount,
+		PlatformRate:                 arg.ProfitSharingOrder.PlatformRate,
+		OperatorRate:                 arg.ProfitSharingOrder.OperatorRate,
+		PlatformCommission:           arg.ProfitSharingOrder.PlatformCommission,
+		OperatorCommission:           arg.ProfitSharingOrder.OperatorCommission,
+		MerchantAmount:               arg.ProfitSharingOrder.MerchantAmount,
+		PaymentFee:                   arg.ProfitSharingOrder.PaymentFee,
+		PaymentFeeRateBps:            arg.ProfitSharingOrder.PaymentFeeRateBps,
+		MerchantSharingMerID:         arg.ProfitSharingOrder.MerchantSharingMerID,
+		RiderSharingMerID:            arg.ProfitSharingOrder.RiderSharingMerID,
+		OperatorSharingMerID:         arg.ProfitSharingOrder.OperatorSharingMerID,
+		PlatformSharingMerID:         arg.ProfitSharingOrder.PlatformSharingMerID,
+		SharingDetailSnapshot:        bytesSQLArgOrDefault(arg.ProfitSharingOrder.SharingDetailSnapshot, []byte(`{}`)),
+		CalculationVersion:           arg.FeeBreakdown.CalculationVersion,
+		SettlementMode:               arg.FeeBreakdown.SettlementMode,
+		ProviderPaymentFee:           arg.FeeBreakdown.ProviderPaymentFee,
+		ProviderPaymentFeeRateBps:    arg.FeeBreakdown.ProviderPaymentFeeRateBps,
+		ProviderPaymentFeeBaseAmount: arg.FeeBreakdown.ProviderPaymentFeeBaseAmount,
+		ProviderPaymentFeeSource:     arg.FeeBreakdown.ProviderPaymentFeeSource,
+		MerchantPaymentFee:           arg.FeeBreakdown.MerchantPaymentFee,
+		MerchantPaymentFeeRateBps:    arg.FeeBreakdown.MerchantPaymentFeeRateBps,
+		MerchantPaymentFeeBaseAmount: arg.FeeBreakdown.MerchantPaymentFeeBaseAmount,
+		RiderGrossAmount:             arg.FeeBreakdown.RiderGrossAmount,
+		RiderPaymentFee:              arg.FeeBreakdown.RiderPaymentFee,
+		RiderPaymentFeeRateBps:       arg.FeeBreakdown.RiderPaymentFeeRateBps,
+		RiderPaymentFeeBaseAmount:    arg.FeeBreakdown.RiderPaymentFeeBaseAmount,
+		CommissionBaseAmount:         arg.FeeBreakdown.CommissionBaseAmount,
+		PlatformReceiverAmount:       arg.FeeBreakdown.PlatformReceiverAmount,
+	}
+	profitSharingOrder, err := q.UpdateBaofuPendingProfitSharingBillSnapshot(ctx, refreshArg)
+	if err != nil {
+		return result, err
+	}
+	result.ProfitSharingOrder = profitSharingOrder
 
 	for _, ledgerArg := range arg.OrderPaymentFeeLedgers {
 		ledgerArg.PaymentOrderID = profitSharingOrder.PaymentOrderID
@@ -338,6 +455,20 @@ func stringSQLArgOrDefault(value interface{}, fallback string) string {
 		return s
 	}
 	return fallback
+}
+
+func bytesSQLArgOrDefault(value interface{}, fallback []byte) []byte {
+	if value == nil {
+		return fallback
+	}
+	switch v := value.(type) {
+	case []byte:
+		return v
+	case string:
+		return []byte(v)
+	default:
+		return fallback
+	}
 }
 
 func orderPaymentFeeLedgerCalculatedParams(arg CreateOrderPaymentFeeLedgerParams) UpsertOrderPaymentFeeLedgerCalculatedParams {

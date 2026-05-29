@@ -35,6 +35,7 @@ type BaofuProfitSharingOrderInput struct {
 	PlatformOwnerID int64
 	OrderSource     string
 	TotalAmountFen  int64
+	RefundedFen     int64
 	DeliveryFeeFen  int64
 	PlatformRateBps int32
 	OperatorRateBps int32
@@ -92,6 +93,14 @@ func (s *BaofuProfitSharingService) CreatePendingOrder(ctx context.Context, inpu
 	if s == nil || s.store == nil || input.PaymentOrderID <= 0 || input.MerchantID <= 0 || strings.TrimSpace(input.OutOrderNo) == "" {
 		return db.CreateBaofuProfitSharingOrderTxResult{}, ErrBaofuProfitSharingInvalidAmount
 	}
+	if input.RefundedFen < 0 || input.RefundedFen >= input.TotalAmountFen {
+		return db.CreateBaofuProfitSharingOrderTxResult{}, ErrBaofuProfitSharingInvalidAmount
+	}
+	shareTotalAmountFen := input.TotalAmountFen - input.RefundedFen
+	deliveryFeeFen := input.DeliveryFeeFen
+	if input.RefundedFen > 0 && deliveryFeeFen > shareTotalAmountFen {
+		deliveryFeeFen = shareTotalAmountFen
+	}
 
 	receivers, err := ResolveBaofuProfitSharingReceivers(ctx, s.store, BaofuProfitSharingReceiverInput{
 		MerchantID:      input.MerchantID,
@@ -104,8 +113,8 @@ func (s *BaofuProfitSharingService) CreatePendingOrder(ctx context.Context, inpu
 	}
 	amounts, err := CalculateBaofuSettlementAmounts(BaofuSettlementCalculationInput{
 		OrderScene:                 strings.TrimSpace(input.OrderSource),
-		TotalAmountFen:             input.TotalAmountFen,
-		DeliveryFeeFen:             input.DeliveryFeeFen,
+		TotalAmountFen:             shareTotalAmountFen,
+		DeliveryFeeFen:             deliveryFeeFen,
 		PlatformCommissionRateBps:  input.PlatformRateBps,
 		OperatorCommissionRateBps:  input.OperatorRateBps,
 		MerchantPaymentFeeRateBps:  DefaultBaofuPaymentServiceFeeRateBps,

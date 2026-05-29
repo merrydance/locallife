@@ -102,6 +102,7 @@ func TestCompleteReservationSchedulesBaofuProfitSharingForCompletedReservationPa
 
 	store.EXPECT().GetMerchantByOwner(gomock.Any(), userID).Return(merchant, nil)
 	store.EXPECT().GetTableReservationForUpdate(gomock.Any(), reservationID).Return(reservation, nil)
+	expectNoActiveReservationAdjustment(store, reservationID)
 	store.EXPECT().GetTable(gomock.Any(), tableID).Return(db.Table{ID: tableID, CurrentReservationID: pgtype.Int8{Int64: reservationID, Valid: true}}, nil)
 	store.EXPECT().CompleteReservationTx(gomock.Any(), db.CompleteReservationTxParams{
 		ReservationID:        reservationID,
@@ -119,6 +120,8 @@ func TestCompleteReservationSchedulesBaofuProfitSharingForCompletedReservationPa
 		RegionID:    pgtype.Int8{Int64: merchant.RegionID, Valid: true},
 	}).Return(profitSharingConfig, nil)
 	store.EXPECT().GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).Return(operator, nil)
+	store.EXPECT().GetTotalSuccessfulRefundedByPaymentOrder(gomock.Any(), primaryPayment.ID).Return(int64(0), nil)
+	store.EXPECT().GetTotalSuccessfulRefundedByPaymentOrder(gomock.Any(), addonPayment.ID).Return(int64(0), nil)
 	expectLogicBaofuReceiverLookup(store, db.BaofuAccountOwnerTypeMerchant, merchantID, "MER_SHARE").Times(2)
 	expectLogicBaofuReceiverLookup(store, db.BaofuAccountOwnerTypeOperator, operatorID, "OP_SHARE").Times(2)
 	expectLogicBaofuReceiverLookup(store, db.BaofuAccountOwnerTypePlatform, int64(0), "PLATFORM_SHARE").Times(2)
@@ -140,6 +143,97 @@ func TestCompleteReservationSchedulesBaofuProfitSharingForCompletedReservationPa
 	require.NoError(t, err)
 	require.Equal(t, reservationStatusCompleted, result.Reservation.Status)
 	require.Equal(t, []int64{1501, 1502}, scheduler.profitSharingOrderIDs)
+}
+
+func TestCompleteReservationSchedulesBaofuProfitSharingForReservationPaymentsAfterSuccessfulRefund(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	scheduler := &reservationCompleteTaskSchedulerStub{}
+
+	userID := int64(13)
+	reservationID := int64(23)
+	merchantID := int64(33)
+	tableID := int64(43)
+	operatorID := int64(53)
+	reservation := db.TableReservation{
+		ID:         reservationID,
+		UserID:     userID + 1,
+		MerchantID: merchantID,
+		TableID:    tableID,
+		Status:     reservationStatusCheckedIn,
+	}
+	completedReservation := reservation
+	completedReservation.Status = reservationStatusCompleted
+	completedReservation.CompletedAt = pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
+	merchant := db.Merchant{ID: merchantID, OwnerUserID: userID, RegionID: 63}
+	operator := db.Operator{ID: operatorID, RegionID: merchant.RegionID}
+	profitSharingConfig := db.ProfitSharingConfig{PlatformRate: 4, OperatorRate: 1}
+	primaryPayment := db.PaymentOrder{
+		ID:                    801,
+		ReservationID:         pgtype.Int8{Int64: reservationID, Valid: true},
+		BusinessType:          db.ExternalPaymentBusinessOwnerReservation,
+		Amount:                10000,
+		Status:                paymentStatusPaid,
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+	}
+	addonPayment := db.PaymentOrder{
+		ID:                    802,
+		ReservationID:         pgtype.Int8{Int64: reservationID, Valid: true},
+		BusinessType:          reservationAddonBusiness,
+		Amount:                3000,
+		Status:                paymentStatusPaid,
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+	}
+
+	store.EXPECT().GetMerchantByOwner(gomock.Any(), userID).Return(merchant, nil)
+	store.EXPECT().GetTableReservationForUpdate(gomock.Any(), reservationID).Return(reservation, nil)
+	expectNoActiveReservationAdjustment(store, reservationID)
+	store.EXPECT().GetTable(gomock.Any(), tableID).Return(db.Table{ID: tableID, CurrentReservationID: pgtype.Int8{Int64: reservationID, Valid: true}}, nil)
+	store.EXPECT().CompleteReservationTx(gomock.Any(), gomock.Any()).Return(db.CompleteReservationTxResult{Reservation: completedReservation, TableUpdated: true}, nil)
+	store.EXPECT().GetPaymentOrdersByReservation(gomock.Any(), pgtype.Int8{Int64: reservationID, Valid: true}).Return([]db.PaymentOrder{
+		primaryPayment,
+		addonPayment,
+	}, nil)
+	store.EXPECT().GetActiveProfitSharingConfig(gomock.Any(), db.GetActiveProfitSharingConfigParams{
+		OrderSource: db.OrderTypeReservation,
+		MerchantID:  pgtype.Int8{Int64: merchantID, Valid: true},
+		RegionID:    pgtype.Int8{Int64: merchant.RegionID, Valid: true},
+	}).Return(profitSharingConfig, nil)
+	store.EXPECT().GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).Return(operator, nil)
+	store.EXPECT().GetTotalSuccessfulRefundedByPaymentOrder(gomock.Any(), primaryPayment.ID).Return(int64(2500), nil)
+	store.EXPECT().GetTotalSuccessfulRefundedByPaymentOrder(gomock.Any(), addonPayment.ID).Return(int64(500), nil)
+	expectLogicBaofuReceiverLookup(store, db.BaofuAccountOwnerTypeMerchant, merchantID, "MER_SHARE").Times(2)
+	expectLogicBaofuReceiverLookup(store, db.BaofuAccountOwnerTypeOperator, operatorID, "OP_SHARE").Times(2)
+	expectLogicBaofuReceiverLookup(store, db.BaofuAccountOwnerTypePlatform, int64(0), "PLATFORM_SHARE").Times(2)
+	store.EXPECT().EnsureBaofuProfitSharingBillTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.CreateBaofuProfitSharingOrderTxParams) (db.CreateBaofuProfitSharingOrderTxResult, error) {
+			switch arg.ProfitSharingOrder.PaymentOrderID {
+			case primaryPayment.ID:
+				require.Equal(t, int64(7500), arg.ProfitSharingOrder.TotalAmount)
+				require.Equal(t, int64(7500), arg.ProfitSharingOrder.DistributableAmount)
+			case addonPayment.ID:
+				require.Equal(t, int64(2500), arg.ProfitSharingOrder.TotalAmount)
+				require.Equal(t, int64(2500), arg.ProfitSharingOrder.DistributableAmount)
+			default:
+				t.Fatalf("unexpected payment order id %d", arg.ProfitSharingOrder.PaymentOrderID)
+			}
+			require.Equal(t, db.OrderTypeReservation, arg.ProfitSharingOrder.OrderSource)
+			require.Equal(t, merchantID, arg.ProfitSharingOrder.MerchantID)
+			require.Equal(t, operatorID, arg.ProfitSharingOrder.OperatorID.Int64)
+			return db.CreateBaofuProfitSharingOrderTxResult{
+				ProfitSharingOrder: db.ProfitSharingOrder{ID: arg.ProfitSharingOrder.PaymentOrderID + 1000, PaymentOrderID: arg.ProfitSharingOrder.PaymentOrderID},
+			}, nil
+		}).Times(2)
+
+	result, err := CompleteReservation(context.Background(), store, scheduler, userID, reservationID)
+
+	require.NoError(t, err)
+	require.Equal(t, reservationStatusCompleted, result.Reservation.Status)
+	require.Equal(t, []int64{1801, 1802}, scheduler.profitSharingOrderIDs)
 }
 
 func TestCompleteReservationReturnsSuccessWhenProfitSharingScheduleFails(t *testing.T) {
@@ -177,6 +271,7 @@ func TestCompleteReservationReturnsSuccessWhenProfitSharingScheduleFails(t *test
 
 	store.EXPECT().GetMerchantByOwner(gomock.Any(), userID).Return(merchant, nil)
 	store.EXPECT().GetTableReservationForUpdate(gomock.Any(), reservationID).Return(reservation, nil)
+	expectNoActiveReservationAdjustment(store, reservationID)
 	store.EXPECT().GetTable(gomock.Any(), tableID).Return(db.Table{ID: tableID}, nil)
 	store.EXPECT().CompleteReservationTx(gomock.Any(), gomock.Any()).Return(db.CompleteReservationTxResult{Reservation: completedReservation}, nil)
 	store.EXPECT().GetPaymentOrdersByReservation(gomock.Any(), pgtype.Int8{Int64: reservationID, Valid: true}).Return([]db.PaymentOrder{payment}, nil)
@@ -185,6 +280,7 @@ func TestCompleteReservationReturnsSuccessWhenProfitSharingScheduleFails(t *test
 		MerchantID:  pgtype.Int8{Int64: merchantID, Valid: true},
 		RegionID:    pgtype.Int8{},
 	}).Return(profitSharingConfig, nil)
+	store.EXPECT().GetTotalSuccessfulRefundedByPaymentOrder(gomock.Any(), payment.ID).Return(int64(0), nil)
 	expectLogicBaofuReceiverLookup(store, db.BaofuAccountOwnerTypeMerchant, merchantID, "MER_SHARE")
 	expectLogicBaofuReceiverLookup(store, db.BaofuAccountOwnerTypePlatform, int64(0), "PLATFORM_SHARE")
 	store.EXPECT().EnsureBaofuProfitSharingBillTx(gomock.Any(), gomock.Any()).Return(db.CreateBaofuProfitSharingOrderTxResult{
@@ -232,6 +328,7 @@ func TestCompleteReservationCreatesBaofuProfitSharingBillWithoutScheduler(t *tes
 
 	store.EXPECT().GetMerchantByOwner(gomock.Any(), userID).Return(merchant, nil)
 	store.EXPECT().GetTableReservationForUpdate(gomock.Any(), reservationID).Return(reservation, nil)
+	expectNoActiveReservationAdjustment(store, reservationID)
 	store.EXPECT().GetTable(gomock.Any(), tableID).Return(db.Table{ID: tableID}, nil)
 	store.EXPECT().CompleteReservationTx(gomock.Any(), gomock.Any()).Return(db.CompleteReservationTxResult{Reservation: completedReservation}, nil)
 	store.EXPECT().GetPaymentOrdersByReservation(gomock.Any(), pgtype.Int8{Int64: reservationID, Valid: true}).Return([]db.PaymentOrder{payment}, nil)
@@ -240,6 +337,7 @@ func TestCompleteReservationCreatesBaofuProfitSharingBillWithoutScheduler(t *tes
 		MerchantID:  pgtype.Int8{Int64: merchantID, Valid: true},
 		RegionID:    pgtype.Int8{},
 	}).Return(profitSharingConfig, nil)
+	store.EXPECT().GetTotalSuccessfulRefundedByPaymentOrder(gomock.Any(), payment.ID).Return(int64(0), nil)
 	expectLogicBaofuReceiverLookup(store, db.BaofuAccountOwnerTypeMerchant, merchantID, "MER_SHARE")
 	expectLogicBaofuReceiverLookup(store, db.BaofuAccountOwnerTypePlatform, int64(0), "PLATFORM_SHARE")
 	store.EXPECT().EnsureBaofuProfitSharingBillTx(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -258,6 +356,44 @@ func TestCompleteReservationCreatesBaofuProfitSharingBillWithoutScheduler(t *tes
 
 	require.NoError(t, err)
 	require.Equal(t, reservationStatusCompleted, result.Reservation.Status)
+}
+
+func TestCompleteReservationRejectsActiveAdjustment(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+
+	userID := int64(14)
+	reservationID := int64(24)
+	merchantID := int64(34)
+	tableID := int64(44)
+	reservation := db.TableReservation{
+		ID:         reservationID,
+		UserID:     userID + 1,
+		MerchantID: merchantID,
+		TableID:    tableID,
+		Status:     reservationStatusCheckedIn,
+	}
+	merchant := db.Merchant{ID: merchantID, OwnerUserID: userID}
+	adjustment := db.ReservationAdjustment{
+		ID:             904,
+		ReservationID:  reservationID,
+		Status:         db.ReservationAdjustmentStatusPendingPayment,
+		PaymentOrderID: pgtype.Int8{Int64: 1004, Valid: true},
+	}
+
+	store.EXPECT().GetMerchantByOwner(gomock.Any(), userID).Return(merchant, nil)
+	store.EXPECT().GetTableReservationForUpdate(gomock.Any(), reservationID).Return(reservation, nil)
+	store.EXPECT().GetActiveReservationAdjustmentByReservation(gomock.Any(), reservationID).Return(adjustment, nil)
+
+	_, err := CompleteReservation(context.Background(), store, nil, userID, reservationID)
+
+	require.Error(t, err)
+	var requestErr *RequestError
+	require.ErrorAs(t, err, &requestErr)
+	require.Equal(t, 409, requestErr.Status)
+	require.Contains(t, requestErr.Error(), "待支付改菜补差单")
 }
 
 func expectLogicBaofuReceiverLookup(store *mockdb.MockStore, ownerType string, ownerID int64, sharingMerID string) *gomock.Call {

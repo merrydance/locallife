@@ -71,6 +71,19 @@ type CreatePaymentOrderResult struct {
 	PayParams    *wechat.JSAPIPayParams
 }
 
+type CreateReservationAdjustmentPaymentInput struct {
+	UserID        int64
+	ReservationID int64
+	MerchantID    int64
+	Items         []db.CreateReservationItemParams
+	CurrentTotal  int64
+	TargetTotal   int64
+	DeltaAmount   int64
+	ClientIP      string
+	Now           time.Time
+	ExpiresAt     time.Time
+}
+
 type GetPaymentOrderInput struct {
 	UserID         int64
 	PaymentOrderID int64
@@ -131,6 +144,9 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 	}
 	if input.BusinessType != businessTypeOrder && input.BusinessType != businessTypeReservation && input.BusinessType != reservationAddonBusiness {
 		return result, NewRequestError(http.StatusBadRequest, errors.New("invalid business type"))
+	}
+	if input.BusinessType == reservationAddonBusiness {
+		return result, NewRequestError(http.StatusBadRequest, errors.New("reservation_addon payments must be created through reservation dish adjustment"))
 	}
 
 	var amount int64
@@ -482,6 +498,9 @@ func mapBaofuPaymentOrderCreateError(err error) error {
 		default:
 			return NewRequestError(status, errors.New("支付订单状态已变化，请刷新后重试"))
 		}
+	}
+	if isOutTradeNoConflict(err) || errors.Is(err, db.ErrOrderPendingPaymentConflict) || db.ErrorCode(err) == db.UniqueViolation {
+		return NewRequestError(http.StatusConflict, errors.New("支付订单状态已变化，请刷新后重试"))
 	}
 	msg := err.Error()
 	switch {

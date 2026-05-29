@@ -55,6 +55,19 @@ func (svc *PaymentFactService) applyBaofuReservationPaymentTerminalFailure(ctx c
 	if err != nil {
 		return result, err
 	}
+	if paymentOrder.BusinessType == reservationAddonBusiness {
+		status := db.ReservationAdjustmentStatusClosed
+		if fact.TerminalStatus == db.ExternalPaymentTerminalStatusFailed {
+			status = db.ReservationAdjustmentStatusFailed
+		}
+		if _, closeErr := svc.store.CloseReservationAdjustmentForPaymentTx(ctx, db.CloseReservationAdjustmentForPaymentTxParams{
+			PaymentOrderID: paymentOrder.ID,
+			Status:         status,
+			Reason:         fact.TerminalStatus,
+		}); closeErr != nil && !errors.Is(closeErr, db.ErrRecordNotFound) {
+			return result, fmt.Errorf("close reservation adjustment after terminal payment fact: %w", closeErr)
+		}
+	}
 	result.PaymentOrder = paymentOrder
 	if paymentOrder.ReservationID.Valid {
 		result.ReservationID = paymentOrder.ReservationID.Int64

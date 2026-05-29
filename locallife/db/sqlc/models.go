@@ -2066,6 +2066,50 @@ type RegionRuleConfig struct {
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
+type ReservationAdjustment struct {
+	ID             int64              `json:"id"`
+	ReservationID  int64              `json:"reservation_id"`
+	UserID         int64              `json:"user_id"`
+	MerchantID     int64              `json:"merchant_id"`
+	Direction      string             `json:"direction"`
+	Status         string             `json:"status"`
+	CurrentTotal   int64              `json:"current_total"`
+	TargetTotal    int64              `json:"target_total"`
+	DeltaAmount    int64              `json:"delta_amount"`
+	PaymentOrderID pgtype.Int8        `json:"payment_order_id"`
+	FailureReason  pgtype.Text        `json:"failure_reason"`
+	CloseReason    pgtype.Text        `json:"close_reason"`
+	AppliedAt      pgtype.Timestamptz `json:"applied_at"`
+	ClosedAt       pgtype.Timestamptz `json:"closed_at"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      time.Time          `json:"updated_at"`
+}
+
+type ReservationAdjustmentInventoryHold struct {
+	ID              int64       `json:"id"`
+	AdjustmentID    int64       `json:"adjustment_id"`
+	MerchantID      int64       `json:"merchant_id"`
+	DishID          int64       `json:"dish_id"`
+	ReservationDate pgtype.Date `json:"reservation_date"`
+	Quantity        int32       `json:"quantity"`
+	Status          string      `json:"status"`
+	ExpiresAt       time.Time   `json:"expires_at"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
+}
+
+type ReservationAdjustmentItem struct {
+	ID           int64       `json:"id"`
+	AdjustmentID int64       `json:"adjustment_id"`
+	DishID       pgtype.Int8 `json:"dish_id"`
+	ComboID      pgtype.Int8 `json:"combo_id"`
+	Quantity     int16       `json:"quantity"`
+	UnitPrice    int64       `json:"unit_price"`
+	TotalPrice   int64       `json:"total_price"`
+	Position     int32       `json:"position"`
+	CreatedAt    time.Time   `json:"created_at"`
+}
+
 type ReservationInventory struct {
 	ID            int64              `json:"id"`
 	ReservationID int64              `json:"reservation_id"`

@@ -1201,6 +1201,13 @@ func (svc *PaymentFactService) ensureBaofuOrderPaymentBill(ctx context.Context, 
 	if paymentOrder.OrderID.Valid && paymentOrder.OrderID.Int64 != order.ID {
 		return fmt.Errorf("payment order %d order id %d does not match applied order %d", paymentOrder.ID, paymentOrder.OrderID.Int64, order.ID)
 	}
+	refundedAmount, err := svc.store.GetTotalSuccessfulRefundedByPaymentOrder(ctx, paymentOrder.ID)
+	if err != nil {
+		return fmt.Errorf("get successful refund amount for baofu profit sharing bill: %w", err)
+	}
+	if refundedAmount > 0 {
+		return nil
+	}
 
 	merchant, err := svc.store.GetMerchant(ctx, order.MerchantID)
 	if err != nil {

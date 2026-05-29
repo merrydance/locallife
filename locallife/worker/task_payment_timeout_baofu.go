@@ -152,9 +152,13 @@ func (p *RedisTaskProcessor) closeBaofuPaymentOrderForTimeout(ctx context.Contex
 		CollectMerchantID: p.baofuProfitSharingConfig.CollectMerchantID,
 		CollectTerminalID: p.baofuProfitSharingConfig.CollectTerminalID,
 	})
+	businessOwner := paymentOrder.BusinessType
+	if paymentOrder.BusinessType == reservationPaymentAddonBusinessType {
+		businessOwner = db.ExternalPaymentBusinessOwnerReservation
+	}
 	_, err := service.CloseOrder(ctx, logic.CloseBaofuOrderInput{
 		PaymentOrder:  paymentOrder,
-		BusinessOwner: paymentOrder.BusinessType,
+		BusinessOwner: businessOwner,
 	})
 	if err != nil {
 		wrapped := fmt.Errorf("close baofu payment order before local timeout close: %w", err)

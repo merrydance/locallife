@@ -135,7 +135,7 @@ func (s *BaofuPaymentRecoveryScheduler) createReadyProfitSharingOrders(ctx conte
 					Msg("skip baofu profit sharing creation because order id is missing")
 				continue
 			}
-			created, err = s.createBaofuProfitSharingOrder(ctx, service, row.PaymentOrderID, row.OrderID.Int64)
+			created, err = s.createBaofuProfitSharingOrder(ctx, service, row.PaymentOrderID, row.OrderID.Int64, row.NetAmount)
 		case db.ExternalPaymentBusinessOwnerReservation, reservationPaymentAddonBusinessType:
 			if !row.ReservationID.Valid {
 				log.Warn().
@@ -144,7 +144,7 @@ func (s *BaofuPaymentRecoveryScheduler) createReadyProfitSharingOrders(ctx conte
 					Msg("skip baofu profit sharing creation because reservation id is missing")
 				continue
 			}
-			created, err = s.createBaofuReservationProfitSharingOrder(ctx, service, row.PaymentOrderID, row.ReservationID.Int64)
+			created, err = s.createBaofuReservationProfitSharingOrder(ctx, service, row.PaymentOrderID, row.ReservationID.Int64, row.NetAmount)
 		default:
 			log.Warn().
 				Int64("payment_order_id", row.PaymentOrderID).
@@ -191,7 +191,7 @@ func (s *BaofuPaymentRecoveryScheduler) enqueueBaofuProfitSharing(ctx context.Co
 	}
 }
 
-func (s *BaofuPaymentRecoveryScheduler) createBaofuProfitSharingOrder(ctx context.Context, service *logic.BaofuProfitSharingService, paymentOrderID int64, orderID int64) (db.CreateBaofuProfitSharingOrderTxResult, error) {
+func (s *BaofuPaymentRecoveryScheduler) createBaofuProfitSharingOrder(ctx context.Context, service *logic.BaofuProfitSharingService, paymentOrderID int64, orderID int64, netAmount int64) (db.CreateBaofuProfitSharingOrderTxResult, error) {
 	paymentOrder, err := s.store.GetPaymentOrder(ctx, paymentOrderID)
 	if err != nil {
 		return db.CreateBaofuProfitSharingOrderTxResult{}, fmt.Errorf("get payment order: %w", err)
@@ -205,6 +205,10 @@ func (s *BaofuPaymentRecoveryScheduler) createBaofuProfitSharingOrder(ctx contex
 	}
 	if order.Status != db.OrderStatusCompleted {
 		return db.CreateBaofuProfitSharingOrderTxResult{}, fmt.Errorf("order %d is not completed for baofu profit sharing", order.ID)
+	}
+	refundedAmount, err := baofuRecoveredSuccessfulRefundAmount(paymentOrder.Amount, netAmount)
+	if err != nil {
+		return db.CreateBaofuProfitSharingOrderTxResult{}, err
 	}
 
 	merchant, err := s.store.GetMerchant(ctx, order.MerchantID)
@@ -230,6 +234,7 @@ func (s *BaofuPaymentRecoveryScheduler) createBaofuProfitSharingOrder(ctx contex
 		PlatformOwnerID: 0,
 		OrderSource:     orderSource,
 		TotalAmountFen:  paymentOrder.Amount,
+		RefundedFen:     refundedAmount,
 		DeliveryFeeFen:  order.DeliveryFee,
 		PlatformRateBps: config.PlatformRateBps,
 		OperatorRateBps: config.OperatorRateBps,
@@ -237,7 +242,7 @@ func (s *BaofuPaymentRecoveryScheduler) createBaofuProfitSharingOrder(ctx contex
 	})
 }
 
-func (s *BaofuPaymentRecoveryScheduler) createBaofuReservationProfitSharingOrder(ctx context.Context, service *logic.BaofuProfitSharingService, paymentOrderID int64, reservationID int64) (db.CreateBaofuProfitSharingOrderTxResult, error) {
+func (s *BaofuPaymentRecoveryScheduler) createBaofuReservationProfitSharingOrder(ctx context.Context, service *logic.BaofuProfitSharingService, paymentOrderID int64, reservationID int64, netAmount int64) (db.CreateBaofuProfitSharingOrderTxResult, error) {
 	paymentOrder, err := s.store.GetPaymentOrder(ctx, paymentOrderID)
 	if err != nil {
 		return db.CreateBaofuProfitSharingOrderTxResult{}, fmt.Errorf("get payment order: %w", err)
@@ -250,6 +255,10 @@ func (s *BaofuPaymentRecoveryScheduler) createBaofuReservationProfitSharingOrder
 	}
 	if !paymentOrder.ReservationID.Valid || paymentOrder.ReservationID.Int64 != reservationID {
 		return db.CreateBaofuProfitSharingOrderTxResult{}, fmt.Errorf("payment order %d reservation id does not match %d", paymentOrder.ID, reservationID)
+	}
+	refundedAmount, err := baofuRecoveredSuccessfulRefundAmount(paymentOrder.Amount, netAmount)
+	if err != nil {
+		return db.CreateBaofuProfitSharingOrderTxResult{}, err
 	}
 
 	reservation, err := s.store.GetTableReservation(ctx, reservationID)
@@ -275,6 +284,7 @@ func (s *BaofuPaymentRecoveryScheduler) createBaofuReservationProfitSharingOrder
 		PlatformOwnerID: 0,
 		OrderSource:     db.OrderTypeReservation,
 		TotalAmountFen:  paymentOrder.Amount,
+		RefundedFen:     refundedAmount,
 		DeliveryFeeFen:  0,
 		PlatformRateBps: config.PlatformRateBps,
 		OperatorRateBps: config.OperatorRateBps,
@@ -284,6 +294,16 @@ func (s *BaofuPaymentRecoveryScheduler) createBaofuReservationProfitSharingOrder
 
 func baofuReservationReadyForProfitSharing(reservation db.TableReservation) bool {
 	return reservation.Status == "completed" && reservation.CompletedAt.Valid
+}
+
+func baofuRecoveredSuccessfulRefundAmount(paymentAmount int64, netAmount int64) (int64, error) {
+	if paymentAmount <= 0 {
+		return 0, fmt.Errorf("payment amount is required for baofu profit sharing")
+	}
+	if netAmount <= 0 || netAmount > paymentAmount {
+		return 0, fmt.Errorf("baofu profit sharing net amount %d is invalid for payment amount %d", netAmount, paymentAmount)
+	}
+	return paymentAmount - netAmount, nil
 }
 
 func (s *BaofuPaymentRecoveryScheduler) resolveBaofuProfitSharingRider(ctx context.Context, order db.Order) (int64, error) {

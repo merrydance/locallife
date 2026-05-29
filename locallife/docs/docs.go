@@ -25701,8 +25701,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/api.reservationDishAdjustmentResponse"
                         }
                     },
                     "400": {
@@ -26078,8 +26077,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/api.reservationDishAdjustmentResponse"
                         }
                     },
                     "400": {
@@ -42174,6 +42172,43 @@ const docTemplate = `{
                 },
                 "reservation_time": {
                     "type": "string"
+                }
+            }
+        },
+        "api.reservationDishAdjustmentPayment": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "pay_params": {
+                    "$ref": "#/definitions/api.miniProgramPayParams"
+                },
+                "payment_order_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.reservationDishAdjustmentResponse": {
+            "type": "object",
+            "properties": {
+                "delta_amount": {
+                    "type": "integer"
+                },
+                "items_count": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "outcome": {
+                    "type": "string"
+                },
+                "payment": {
+                    "$ref": "#/definitions/api.reservationDishAdjustmentPayment"
+                },
+                "refund_amount": {
+                    "type": "integer"
                 }
             }
         },

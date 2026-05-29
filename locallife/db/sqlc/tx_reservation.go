@@ -37,6 +37,9 @@ func (store *SQLStore) CancelReservationTx(ctx context.Context, arg CancelReserv
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
+		if err := ensureNoActiveReservationAdjustmentWithQueries(ctx, q, arg.ReservationID); err != nil {
+			return err
+		}
 
 		// 1. 更新预定状态为已取消
 		var cancelReason pgtype.Text
@@ -81,7 +84,7 @@ func (store *SQLStore) CancelReservationTx(ctx context.Context, arg CancelReserv
 				if e.Quantity <= 0 {
 					continue
 				}
-				if _, err := q.ReleaseReservedInventory(ctx, ReleaseReservedInventoryParams{
+				if err := releaseReservedInventoryIfTracked(ctx, q, ReleaseReservedInventoryParams{
 					MerchantID:       reservation.MerchantID,
 					DishID:           e.DishID,
 					Date:             reservation.ReservationDate,
@@ -127,6 +130,9 @@ func (store *SQLStore) MarkNoShowTx(ctx context.Context, arg MarkNoShowTxParams)
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
+		if err := ensureNoActiveReservationAdjustmentWithQueries(ctx, q, arg.ReservationID); err != nil {
+			return err
+		}
 
 		// 1. 更新预定状态为未到店
 		result.Reservation, err = q.UpdateReservationToNoShow(ctx, arg.ReservationID)
@@ -235,6 +241,9 @@ func (store *SQLStore) CompleteReservationTx(ctx context.Context, arg CompleteRe
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
+		if err := ensureNoActiveReservationAdjustmentWithQueries(ctx, q, arg.ReservationID); err != nil {
+			return err
+		}
 
 		// 1. 更新预定状态为已完成
 		result.Reservation, err = q.UpdateReservationToCompleted(ctx, arg.ReservationID)
@@ -297,6 +306,11 @@ func (store *SQLStore) ReplaceReservationItemsTx(ctx context.Context, arg Replac
 		if _, err := q.GetTableReservationForUpdate(ctx, arg.ReservationID); err != nil {
 			return fmt.Errorf("lock reservation: %w", err)
 		}
+		if _, err := q.GetActiveReservationAdjustmentByReservation(ctx, arg.ReservationID); err == nil {
+			return &requestError{statusCode: http.StatusConflict, err: errors.New("预订存在待支付改菜补差单，请先完成或关闭支付单")}
+		} else if !errors.Is(err, ErrRecordNotFound) {
+			return fmt.Errorf("get active reservation adjustment: %w", err)
+		}
 		currentTotal, err := q.SumReservationItemsTotal(ctx, arg.ReservationID)
 		if err != nil {
 			return fmt.Errorf("sum reservation items total: %w", err)
@@ -318,6 +332,9 @@ func (store *SQLStore) ReplaceReservationItemsTx(ctx context.Context, arg Replac
 			result.Items = append(result.Items, created)
 			result.TotalAmount += created.TotalPrice
 		}
+		if _, err := syncReservationInventoryWithQueries(ctx, q, arg.ReservationID); err != nil {
+			return fmt.Errorf("sync reservation inventory after replacing items: %w", err)
+		}
 
 		return nil
 	})
@@ -331,6 +348,11 @@ func (store *SQLStore) ReplaceReservationItemsWithRefundOrdersTx(ctx context.Con
 	err := store.execTx(ctx, func(q *Queries) error {
 		if _, err := q.GetTableReservationForUpdate(ctx, arg.ReservationID); err != nil {
 			return fmt.Errorf("lock reservation: %w", err)
+		}
+		if _, err := q.GetActiveReservationAdjustmentByReservation(ctx, arg.ReservationID); err == nil {
+			return &requestError{statusCode: http.StatusConflict, err: errors.New("预订存在待支付改菜补差单，请先完成或关闭支付单")}
+		} else if !errors.Is(err, ErrRecordNotFound) {
+			return fmt.Errorf("get active reservation adjustment: %w", err)
 		}
 		currentTotal, err := q.SumReservationItemsTotal(ctx, arg.ReservationID)
 		if err != nil {
@@ -361,6 +383,9 @@ func (store *SQLStore) ReplaceReservationItemsWithRefundOrdersTx(ctx context.Con
 				return err
 			}
 			result.RefundOrders = append(result.RefundOrders, refundResult.RefundOrder)
+		}
+		if _, err := syncReservationInventoryWithQueries(ctx, q, arg.ReservationID); err != nil {
+			return fmt.Errorf("sync reservation inventory after replacing items with refund orders: %w", err)
 		}
 
 		return nil
@@ -454,7 +479,7 @@ func syncReservationInventoryWithQueries(ctx context.Context, q *Queries, reserv
 				}
 			}
 		} else if delta < 0 {
-			_, err := q.ReleaseReservedInventory(ctx, ReleaseReservedInventoryParams{
+			err := releaseReservedInventoryIfTracked(ctx, q, ReleaseReservedInventoryParams{
 				MerchantID:       reservation.MerchantID,
 				DishID:           dishID,
 				Date:             reservation.ReservationDate,
@@ -485,7 +510,7 @@ func syncReservationInventoryWithQueries(ctx context.Context, q *Queries, reserv
 			}
 			continue
 		}
-		if _, err := q.ReleaseReservedInventory(ctx, ReleaseReservedInventoryParams{
+		if err := releaseReservedInventoryIfTracked(ctx, q, ReleaseReservedInventoryParams{
 			MerchantID:       reservation.MerchantID,
 			DishID:           dishID,
 			Date:             reservation.ReservationDate,
@@ -528,7 +553,7 @@ func (store *SQLStore) ReleaseReservationInventoryTx(ctx context.Context, arg Re
 			if e.Quantity <= 0 {
 				continue
 			}
-			if _, err := q.ReleaseReservedInventory(ctx, ReleaseReservedInventoryParams{
+			if err := releaseReservedInventoryIfTracked(ctx, q, ReleaseReservedInventoryParams{
 				MerchantID:       reservation.MerchantID,
 				DishID:           e.DishID,
 				Date:             reservation.ReservationDate,
@@ -546,6 +571,25 @@ func (store *SQLStore) ReleaseReservationInventoryTx(ctx context.Context, arg Re
 
 		return nil
 	})
+}
+
+func releaseReservedInventoryIfTracked(ctx context.Context, q *Queries, arg ReleaseReservedInventoryParams) error {
+	if _, err := q.ReleaseReservedInventory(ctx, arg); err != nil && !errors.Is(err, ErrRecordNotFound) {
+		return err
+	}
+	return nil
+}
+
+func ensureNoActiveReservationAdjustmentWithQueries(ctx context.Context, q *Queries, reservationID int64) error {
+	if _, err := q.GetTableReservationForUpdate(ctx, reservationID); err != nil {
+		return fmt.Errorf("lock reservation for active adjustment guard: %w", err)
+	}
+	if _, err := q.GetActiveReservationAdjustmentByReservation(ctx, reservationID); err == nil {
+		return &requestError{statusCode: http.StatusConflict, err: errors.New("预订存在待支付改菜补差单，请先完成或关闭支付单")}
+	} else if !errors.Is(err, ErrRecordNotFound) {
+		return fmt.Errorf("get active reservation adjustment: %w", err)
+	}
+	return nil
 }
 
 // ==================== 创建预定事务 ====================

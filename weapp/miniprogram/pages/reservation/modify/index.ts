@@ -3,6 +3,9 @@ import { getPublicMerchantDishes, DishDTO } from '../../../api/merchant'
 import { getPublicImageUrl } from '../../../utils/image'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import { getErrorUserMessage } from '../../../utils/user-facing'
+import { completePaymentWorkflow } from '../../payment/_main_shared/services/payment-workflow'
+import { PaymentOrderResponse } from '../../payment/_main_shared/api/payment'
+import Navigation from '../../../utils/navigation'
 
 interface DishView {
     id: number
@@ -35,6 +38,24 @@ interface OrphanDishView {
     price: number
     priceDisplay: string
     quantity: number
+}
+
+function buildAdjustmentPaymentOrder(
+    reservationId: number,
+    responsePayment: { payment_order_id: number; amount: number; pay_params?: PaymentOrderResponse['pay_params'] }
+): PaymentOrderResponse {
+    return {
+        id: responsePayment.payment_order_id,
+        user_id: 0,
+        order_id: reservationId,
+        out_trade_no: '',
+        amount: responsePayment.amount,
+        status: 'pending',
+        payment_type: 'miniprogram',
+        business_type: 'reservation_addon',
+        pay_params: responsePayment.pay_params,
+        created_at: ''
+    }
 }
 
 Page({
@@ -314,7 +335,24 @@ Page({
 
         try {
             this.setData({ submitting: true })
-            await ReservationService.modifyDishes(this.data.reservationId, items)
+            const result = await ReservationService.modifyDishes(this.data.reservationId, items)
+            if (result.outcome === 'payment_required' && result.payment) {
+                const payment = buildAdjustmentPaymentOrder(this.data.reservationId, result.payment)
+                const paymentResult = await completePaymentWorkflow(payment, {
+                    context: this,
+                    paymentMessage: '正在调起补差支付...',
+                    confirmingMessage: '支付结果确认中...'
+                })
+                Navigation.toPaymentResult({
+                    status: paymentResult.status,
+                    paymentOrderId: paymentResult.paymentOrderId,
+                    businessId: this.data.reservationId,
+                    businessType: 'reservation',
+                    orderNo: paymentResult.outTradeNo,
+                    amount: formatPriceNoSymbol(result.payment.amount)
+                })
+                return
+            }
             wx.navigateBack()
         } catch (error) {
             const errMessage = getErrorUserMessage(error, '修改失败，请稍后重试')

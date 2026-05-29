@@ -98,12 +98,22 @@ func (p *RedisTaskProcessor) ProcessTaskPaymentOrderTimeout(ctx context.Context,
 		if _, err := p.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID); err != nil {
 			return fmt.Errorf("update payment order to closed: %w", err)
 		}
+		if paymentOrder.BusinessType == reservationPaymentAddonBusinessType {
+			if err := p.expireReservationAdjustmentAfterPaymentTimeout(ctx, paymentOrder); err != nil {
+				return err
+			}
+		}
 	case "closed":
 		// 支付单已经关闭，可能是上次任务执行到一半后失败重试进来的
 		// 继续向下检查业务订单是否也已取消
 		log.Info().
 			Str("payment_order_no", payload.PaymentOrderNo).
 			Msg("payment order already closed, checking business order state")
+		if paymentOrder.BusinessType == reservationPaymentAddonBusinessType {
+			if err := p.expireReservationAdjustmentAfterPaymentTimeout(ctx, paymentOrder); err != nil {
+				return err
+			}
+		}
 	default:
 		log.Info().
 			Str("payment_order_no", payload.PaymentOrderNo).
@@ -142,6 +152,17 @@ func (p *RedisTaskProcessor) ProcessTaskPaymentOrderTimeout(ctx context.Context,
 		Str("payment_order_no", payload.PaymentOrderNo).
 		Msg("payment order timeout processed successfully")
 
+	return nil
+}
+
+func (p *RedisTaskProcessor) expireReservationAdjustmentAfterPaymentTimeout(ctx context.Context, paymentOrder db.PaymentOrder) error {
+	if _, err := p.store.CloseReservationAdjustmentForPaymentTx(ctx, db.CloseReservationAdjustmentForPaymentTxParams{
+		PaymentOrderID: paymentOrder.ID,
+		Status:         db.ReservationAdjustmentStatusExpired,
+		Reason:         "payment timeout",
+	}); err != nil && !errors.Is(err, db.ErrRecordNotFound) {
+		return fmt.Errorf("expire reservation adjustment after payment timeout: %w", err)
+	}
 	return nil
 }
 

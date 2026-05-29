@@ -441,6 +441,10 @@ func (f *replaceOrderPaymentFacade) CreatePaymentOrder(_ context.Context, input 
 	return f.paymentResult, f.paymentErr
 }
 
+func (f *replaceOrderPaymentFacade) CreateReservationAdjustmentPaymentOrder(context.Context, CreateReservationAdjustmentPaymentInput) (CreatePaymentOrderResult, error) {
+	return CreatePaymentOrderResult{}, errors.New("not implemented")
+}
+
 func (f *replaceOrderPaymentFacade) CreateCombinedPaymentOrder(context.Context, CreateCombinedPaymentOrderInput) (CreateCombinedPaymentOrderResult, error) {
 	return CreateCombinedPaymentOrderResult{}, errors.New("not implemented")
 }

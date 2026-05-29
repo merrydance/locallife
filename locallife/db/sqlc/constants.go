@@ -155,6 +155,22 @@ const (
 	PaymentChannelDirect         = "direct"
 	PaymentChannelBaofuAggregate = "baofu_aggregate"
 
+	ReservationAdjustmentDirectionPositive = "positive"
+	ReservationAdjustmentDirectionNegative = "negative"
+	ReservationAdjustmentDirectionZero     = "zero"
+
+	ReservationAdjustmentStatusCreatingPayment = "creating_payment"
+	ReservationAdjustmentStatusPendingPayment  = "pending_payment"
+	ReservationAdjustmentStatusApplying        = "applying"
+	ReservationAdjustmentStatusApplied         = "applied"
+	ReservationAdjustmentStatusClosed          = "closed"
+	ReservationAdjustmentStatusFailed          = "failed"
+	ReservationAdjustmentStatusExpired         = "expired"
+
+	ReservationAdjustmentHoldStatusHeld      = "held"
+	ReservationAdjustmentHoldStatusConverted = "converted"
+	ReservationAdjustmentHoldStatusReleased  = "released"
+
 	ExternalPaymentProviderWechat = "wechat"
 	ExternalPaymentProviderBaofu  = "baofu"
 

@@ -466,6 +466,9 @@ type Querier interface {
 	CreateRefundOrder(ctx context.Context, arg CreateRefundOrderParams) (RefundOrder, error)
 	CreateRefundRequestIdempotency(ctx context.Context, arg CreateRefundRequestIdempotencyParams) (RefundRequestIdempotency, error)
 	CreateRegion(ctx context.Context, arg CreateRegionParams) (Region, error)
+	CreateReservationAdjustment(ctx context.Context, arg CreateReservationAdjustmentParams) (ReservationAdjustment, error)
+	CreateReservationAdjustmentInventoryHold(ctx context.Context, arg CreateReservationAdjustmentInventoryHoldParams) (ReservationAdjustmentInventoryHold, error)
+	CreateReservationAdjustmentItem(ctx context.Context, arg CreateReservationAdjustmentItemParams) (ReservationAdjustmentItem, error)
 	CreateReservationItem(ctx context.Context, arg CreateReservationItemParams) (ReservationItem, error)
 	CreateReservationPayment(ctx context.Context, arg CreateReservationPaymentParams) (ReservationPayment, error)
 	CreateReview(ctx context.Context, arg CreateReviewParams) (Review, error)
@@ -618,6 +621,7 @@ type Querier interface {
 	// Phase2: 分账规则配置查询（草案）
 	GetActiveProfitSharingConfig(ctx context.Context, arg GetActiveProfitSharingConfigParams) (ProfitSharingConfig, error)
 	GetActiveRecommendConfig(ctx context.Context) (RecommendConfig, error)
+	GetActiveReservationAdjustmentByReservation(ctx context.Context, reservationID int64) (ReservationAdjustment, error)
 	GetActiveRiderCredentialLedgers(ctx context.Context, riderID pgtype.Int8) ([]CredentialLedger, error)
 	GetApplicableDiscountRules(ctx context.Context, arg GetApplicableDiscountRulesParams) ([]DiscountRule, error)
 	GetBaofuAccountBinding(ctx context.Context, id int64) (BaofuAccountBinding, error)
@@ -1018,6 +1022,9 @@ type Querier interface {
 	GetRegionStats(ctx context.Context, arg GetRegionStatsParams) (GetRegionStatsRow, error)
 	// 获取已开通运费配置的区县（带市名，用于天气抓取）
 	GetRegionsWithDeliveryFeeConfig(ctx context.Context) ([]GetRegionsWithDeliveryFeeConfigRow, error)
+	GetReservationAdjustment(ctx context.Context, id int64) (ReservationAdjustment, error)
+	GetReservationAdjustmentByPaymentOrderForUpdate(ctx context.Context, paymentOrderID pgtype.Int8) (ReservationAdjustment, error)
+	GetReservationAdjustmentForUpdate(ctx context.Context, id int64) (ReservationAdjustment, error)
 	GetReservationItemsByReservation(ctx context.Context, reservationID int64) ([]ReservationItem, error)
 	GetReservationPaymentByPaymentOrderID(ctx context.Context, paymentOrderID int64) (ReservationPayment, error)
 	// Get reservation statistics for a merchant
@@ -1085,6 +1092,7 @@ type Querier interface {
 	GetTag(ctx context.Context, id int64) (Tag, error)
 	// 菜品销量排行: 从order_items实时聚合
 	GetTopSellingDishes(ctx context.Context, arg GetTopSellingDishesParams) ([]GetTopSellingDishesRow, error)
+	GetTotalActiveRefundedByPaymentOrder(ctx context.Context, paymentOrderID int64) (int64, error)
 	GetTotalRefundedByPaymentOrder(ctx context.Context, paymentOrderID int64) (int64, error)
 	GetTotalSuccessfulRefundedByPaymentOrder(ctx context.Context, paymentOrderID int64) (int64, error)
 	GetUnconfirmedFraudPatterns(ctx context.Context, limit int32) ([]FraudPattern, error)
@@ -1174,6 +1182,7 @@ type Querier interface {
 	IsMerchantFavorited(ctx context.Context, arg IsMerchantFavoritedParams) (bool, error)
 	LinkFoodSafetyIncidentsToCase(ctx context.Context, arg LinkFoodSafetyIncidentsToCaseParams) (int64, error)
 	LinkMerchantDishCategory(ctx context.Context, arg LinkMerchantDishCategoryParams) (MerchantDishCategory, error)
+	LinkReservationAdjustmentPaymentOrder(ctx context.Context, arg LinkReservationAdjustmentPaymentOrderParams) (ReservationAdjustment, error)
 	ListAbnormalStatsAlerts(ctx context.Context, arg ListAbnormalStatsAlertsParams) ([]ListAbnormalStatsAlertsRow, error)
 	ListAbnormalStatsDaily(ctx context.Context, arg ListAbnormalStatsDailyParams) ([]AbnormalStatsDaily, error)
 	ListActiveAgreements(ctx context.Context) ([]ListActiveAgreementsRow, error)
@@ -1188,6 +1197,7 @@ type Querier interface {
 	ListActiveOperatorNotificationRecipientsByRegion(ctx context.Context, regionID int64) ([]ListActiveOperatorNotificationRecipientsByRegionRow, error)
 	ListActivePeakHourConfigsByRegion(ctx context.Context, regionID int64) ([]PeakHourConfig, error)
 	ListActiveRechargeRules(ctx context.Context, merchantID int64) ([]RechargeRule, error)
+	ListActiveReservationAdjustments(ctx context.Context, arg ListActiveReservationAdjustmentsParams) ([]ReservationAdjustment, error)
 	ListActiveRiderDepositCreditsByRiderID(ctx context.Context, riderID int64) ([]RiderDepositCredit, error)
 	ListActiveRuleVersions(ctx context.Context) ([]RuleVersion, error)
 	ListActiveVouchers(ctx context.Context, arg ListActiveVouchersParams) ([]Voucher, error)
@@ -1468,6 +1478,8 @@ type Querier interface {
 	ListRegionOperators(ctx context.Context, regionID int64) ([]ListRegionOperatorsRow, error)
 	ListRegions(ctx context.Context, arg ListRegionsParams) ([]Region, error)
 	ListRegionsWithWarning(ctx context.Context) ([]int64, error)
+	ListReservationAdjustmentInventoryHoldsForUpdate(ctx context.Context, adjustmentID int64) ([]ReservationAdjustmentInventoryHold, error)
+	ListReservationAdjustmentItems(ctx context.Context, adjustmentID int64) ([]ReservationAdjustmentItem, error)
 	ListReservationDishSummary(ctx context.Context, reservationID int64) ([]ListReservationDishSummaryRow, error)
 	// Reservation inventory tracking
 	ListReservationInventoryByReservation(ctx context.Context, reservationID int64) ([]ReservationInventory, error)
@@ -1589,6 +1601,14 @@ type Querier interface {
 	MarkPaymentDomainOutboxFailed(ctx context.Context, arg MarkPaymentDomainOutboxFailedParams) (PaymentDomainOutbox, error)
 	MarkPaymentDomainOutboxPublished(ctx context.Context, id int64) (PaymentDomainOutbox, error)
 	MarkRecoveryDisputeCompensated(ctx context.Context, arg MarkRecoveryDisputeCompensatedParams) error
+	MarkReservationAdjustmentApplied(ctx context.Context, id int64) (ReservationAdjustment, error)
+	MarkReservationAdjustmentApplying(ctx context.Context, id int64) (ReservationAdjustment, error)
+	MarkReservationAdjustmentClosed(ctx context.Context, arg MarkReservationAdjustmentClosedParams) (ReservationAdjustment, error)
+	MarkReservationAdjustmentExpired(ctx context.Context, arg MarkReservationAdjustmentExpiredParams) (ReservationAdjustment, error)
+	MarkReservationAdjustmentFailed(ctx context.Context, arg MarkReservationAdjustmentFailedParams) (ReservationAdjustment, error)
+	MarkReservationAdjustmentHoldConverted(ctx context.Context, id int64) (ReservationAdjustmentInventoryHold, error)
+	MarkReservationAdjustmentHoldReleased(ctx context.Context, id int64) (ReservationAdjustmentInventoryHold, error)
+	MarkReservationAdjustmentPendingPayment(ctx context.Context, id int64) (ReservationAdjustment, error)
 	MarkRiderDepositCreditExpired(ctx context.Context, arg MarkRiderDepositCreditExpiredParams) (RiderDepositCredit, error)
 	MarkUserVoucherAsExpiredOnRollback(ctx context.Context, arg MarkUserVoucherAsExpiredOnRollbackParams) (UserVoucher, error)
 	MarkUserVoucherAsUnused(ctx context.Context, arg MarkUserVoucherAsUnusedParams) (UserVoucher, error)
@@ -1723,6 +1743,7 @@ type Querier interface {
 	UnsuspendMerchant(ctx context.Context, merchantID int64) error
 	UnsuspendMerchantTakeout(ctx context.Context, merchantID int64) error
 	UnsuspendRider(ctx context.Context, riderID int64) error
+	UpdateBaofuPendingProfitSharingBillSnapshot(ctx context.Context, arg UpdateBaofuPendingProfitSharingBillSnapshotParams) (ProfitSharingOrder, error)
 	UpdateBaofuWithdrawalOrderStatus(ctx context.Context, arg UpdateBaofuWithdrawalOrderStatusParams) (BaofuWithdrawalOrder, error)
 	UpdateBaofuWithdrawalOrderToProcessing(ctx context.Context, arg UpdateBaofuWithdrawalOrderToProcessingParams) (BaofuWithdrawalOrder, error)
 	UpdateBehaviorActionExecution(ctx context.Context, arg UpdateBehaviorActionExecutionParams) error

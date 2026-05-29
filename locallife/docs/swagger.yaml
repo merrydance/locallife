@@ -7489,6 +7489,30 @@ definitions:
       reservation_time:
         type: string
     type: object
+  api.reservationDishAdjustmentPayment:
+    properties:
+      amount:
+        type: integer
+      pay_params:
+        $ref: '#/definitions/api.miniProgramPayParams'
+      payment_order_id:
+        type: integer
+    type: object
+  api.reservationDishAdjustmentResponse:
+    properties:
+      delta_amount:
+        type: integer
+      items_count:
+        type: integer
+      message:
+        type: string
+      outcome:
+        type: string
+      payment:
+        $ref: '#/definitions/api.reservationDishAdjustmentPayment'
+      refund_amount:
+        type: integer
+    type: object
   api.reservationItem:
     properties:
       combo_id:
@@ -26755,8 +26779,7 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/api.reservationDishAdjustmentResponse'
         "400":
           description: Bad Request
           schema:
@@ -27001,8 +27024,7 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/api.reservationDishAdjustmentResponse'
         "400":
           description: Bad Request
           schema:

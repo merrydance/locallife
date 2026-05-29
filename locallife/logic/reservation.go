@@ -442,6 +442,9 @@ func CompleteReservation(ctx context.Context, store db.Store, taskScheduler Task
 	if !isReservationStatusAllowed(reservation.Status, reservationActionComplete) {
 		return ReservationStatusUpdateResult{}, NewRequestError(http.StatusConflict, errors.New("reservation is not confirmed or checked in"))
 	}
+	if err := ensureNoActiveReservationAdjustment(ctx, store, reservation.ID); err != nil {
+		return ReservationStatusUpdateResult{}, err
+	}
 
 	var currentReservationID pgtype.Int8
 	if table, err := store.GetTable(ctx, reservation.TableID); err == nil {
@@ -454,6 +457,9 @@ func CompleteReservation(ctx context.Context, store db.Store, taskScheduler Task
 		CurrentReservationID: currentReservationID,
 	})
 	if err != nil {
+		if statusCode, ok := db.IsRefundRequestError(err); ok {
+			return ReservationStatusUpdateResult{}, NewRequestError(statusCode, errors.Unwrap(err))
+		}
 		return ReservationStatusUpdateResult{}, err
 	}
 
@@ -497,6 +503,9 @@ func CancelReservation(
 	}
 	if !isReservationStatusAllowed(reservation.Status, reservationActionCancel) {
 		return ReservationStatusUpdateResult{}, NewRequestError(http.StatusConflict, errors.New("预约状态不允许取消"))
+	}
+	if err := ensureNoActiveReservationAdjustment(ctx, store, reservation.ID); err != nil {
+		return ReservationStatusUpdateResult{}, err
 	}
 
 	refundPolicy = refundPolicy.normalize()
@@ -550,6 +559,9 @@ func CancelReservation(
 		ReleaseInventory:     true,
 	})
 	if err != nil {
+		if statusCode, ok := db.IsRefundRequestError(err); ok {
+			return ReservationStatusUpdateResult{}, NewRequestError(statusCode, errors.Unwrap(err))
+		}
 		return ReservationStatusUpdateResult{}, err
 	}
 
@@ -615,6 +627,9 @@ func MarkReservationNoShow(ctx context.Context, store db.Store, userID, reservat
 	if !isReservationStatusAllowed(reservation.Status, reservationActionNoShow) {
 		return ReservationStatusUpdateResult{}, NewRequestError(http.StatusConflict, errors.New("only paid or confirmed reservations can be marked as no-show"))
 	}
+	if err := ensureNoActiveReservationAdjustment(ctx, store, reservation.ID); err != nil {
+		return ReservationStatusUpdateResult{}, err
+	}
 
 	var currentReservationID pgtype.Int8
 	if table, err := store.GetTable(ctx, reservation.TableID); err == nil {
@@ -627,6 +642,9 @@ func MarkReservationNoShow(ctx context.Context, store db.Store, userID, reservat
 		CurrentReservationID: currentReservationID,
 	})
 	if err != nil {
+		if statusCode, ok := db.IsRefundRequestError(err); ok {
+			return ReservationStatusUpdateResult{}, NewRequestError(statusCode, errors.Unwrap(err))
+		}
 		return ReservationStatusUpdateResult{}, err
 	}
 
@@ -731,9 +749,15 @@ func StartCookingReservation(ctx context.Context, store db.Store, userID, reserv
 	if !isReservationStatusAllowed(reservation.Status, reservationActionStartCooking) {
 		return ReservationStatusUpdateResult{}, NewRequestError(http.StatusConflict, errors.New("only confirmed or checked-in reservations can start cooking"))
 	}
+	if err := ensureNoActiveReservationAdjustment(ctx, store, reservation.ID); err != nil {
+		return ReservationStatusUpdateResult{}, err
+	}
 
 	updated, err := store.UpdateReservationCookingStarted(ctx, reservationID)
 	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return ReservationStatusUpdateResult{}, NewRequestError(http.StatusConflict, errors.New("预订存在待支付改菜补差单，请先完成或关闭支付单"))
+		}
 		return ReservationStatusUpdateResult{}, err
 	}
 

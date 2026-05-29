@@ -129,39 +129,19 @@ type reservationDishSummaryDateResponse struct {
 	Items []reservationDishSummaryItem `json:"items"`
 }
 
-type addDishesPaymentResponse struct {
-	Message        string                `json:"message"`
+type reservationDishAdjustmentPayment struct {
 	PaymentOrderID int64                 `json:"payment_order_id"`
 	Amount         int64                 `json:"amount"`
-	ItemsCount     int                   `json:"items_count"`
 	PayParams      *miniProgramPayParams `json:"pay_params,omitempty"`
 }
 
-type addDishesSuccessResponse struct {
-	Message    string `json:"message"`
-	Amount     int64  `json:"amount"`
-	ItemsCount int    `json:"items_count"`
-	Note       string `json:"note"`
-}
-
-type modifyDishesPaymentResponse struct {
-	Message        string                `json:"message"`
-	PaymentOrderID int64                 `json:"payment_order_id"`
-	Amount         int64                 `json:"amount"`
-	ItemsCount     int                   `json:"items_count"`
-	PayParams      *miniProgramPayParams `json:"pay_params,omitempty"`
-}
-
-type modifyDishesRefundResponse struct {
-	Message      string `json:"message"`
-	RefundAmount int64  `json:"refund_amount"`
-	ItemsCount   int    `json:"items_count"`
-}
-
-type modifyDishesSuccessResponse struct {
-	Message    string `json:"message"`
-	ItemsCount int    `json:"items_count"`
-	Delta      int64  `json:"delta"`
+type reservationDishAdjustmentResponse struct {
+	Outcome      string                            `json:"outcome"`
+	DeltaAmount  int64                             `json:"delta_amount"`
+	ItemsCount   int                               `json:"items_count"`
+	Payment      *reservationDishAdjustmentPayment `json:"payment,omitempty"`
+	RefundAmount int64                             `json:"refund_amount,omitempty"`
+	Message      string                            `json:"message,omitempty"`
 }
 
 type reservationSliceResponse struct {
@@ -1490,7 +1470,7 @@ func (server *Server) getReservationStats(ctx *gin.Context) {
 // @Produce json
 // @Param id path int64 true "预定ID"
 // @Param body body addDishesRequest true "追加菜品请求"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} reservationDishAdjustmentResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
@@ -1534,6 +1514,7 @@ func (server *Server) addDishesToReservation(ctx *gin.Context) {
 		ReservationID: uriReq.ID,
 		Items:         addItems,
 		Now:           time.Now(),
+		PaymentFacade: server.paymentFacade,
 		ClientIP:      ctx.ClientIP(),
 	})
 	if err != nil {
@@ -1549,14 +1530,18 @@ func (server *Server) addDishesToReservation(ctx *gin.Context) {
 
 	if result.Payment != nil {
 		server.scheduleTimeoutForPaymentOrder(ctx, *result.Payment)
-		resp := addDishesPaymentResponse{
-			Message:        "additional dishes added, payment required",
-			PaymentOrderID: result.Payment.ID,
-			Amount:         result.AddedAmount,
-			ItemsCount:     len(req.Items),
+		resp := reservationDishAdjustmentResponse{
+			Outcome:     "payment_required",
+			DeltaAmount: result.AddedAmount,
+			ItemsCount:  len(req.Items),
+			Message:     "加菜需完成补差支付，支付成功后生效",
+			Payment: &reservationDishAdjustmentPayment{
+				PaymentOrderID: result.Payment.ID,
+				Amount:         result.AddedAmount,
+			},
 		}
 		if result.PayParams != nil {
-			resp.PayParams = &miniProgramPayParams{
+			resp.Payment.PayParams = &miniProgramPayParams{
 				TimeStamp: result.PayParams.TimeStamp,
 				NonceStr:  result.PayParams.NonceStr,
 				Package:   result.PayParams.Package,
@@ -1568,11 +1553,11 @@ func (server *Server) addDishesToReservation(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, addDishesSuccessResponse{
-		Message:    "additional dishes added successfully",
-		Amount:     result.AddedAmount,
-		ItemsCount: len(req.Items),
-		Note:       "payment will be settled on site",
+	ctx.JSON(http.StatusOK, reservationDishAdjustmentResponse{
+		Outcome:     "applied",
+		DeltaAmount: result.AddedAmount,
+		ItemsCount:  len(req.Items),
+		Message:     "加菜已生效",
 	})
 }
 
@@ -1585,7 +1570,7 @@ func (server *Server) addDishesToReservation(ctx *gin.Context) {
 // @Produce json
 // @Param id path int64 true "预定ID"
 // @Param body body modifyDishesRequest true "改菜请求"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} reservationDishAdjustmentResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
@@ -1628,6 +1613,7 @@ func (server *Server) modifyReservationDishes(ctx *gin.Context) {
 		ReservationID: uriReq.ID,
 		Items:         modifyItems,
 		Now:           time.Now(),
+		PaymentFacade: server.paymentFacade,
 		ClientIP:      ctx.ClientIP(),
 		TaskScheduler: apiTaskScheduler{server: server},
 	})
@@ -1644,14 +1630,18 @@ func (server *Server) modifyReservationDishes(ctx *gin.Context) {
 
 	if result.Payment != nil {
 		server.scheduleTimeoutForPaymentOrder(ctx, *result.Payment)
-		resp := modifyDishesPaymentResponse{
-			Message:        "reservation modified, payment required",
-			PaymentOrderID: result.Payment.ID,
-			Amount:         result.Delta,
-			ItemsCount:     len(req.Items),
+		resp := reservationDishAdjustmentResponse{
+			Outcome:     "payment_required",
+			DeltaAmount: result.Delta,
+			ItemsCount:  len(req.Items),
+			Message:     "改菜需完成补差支付，支付成功后生效",
+			Payment: &reservationDishAdjustmentPayment{
+				PaymentOrderID: result.Payment.ID,
+				Amount:         result.Delta,
+			},
 		}
 		if result.PayParams != nil {
-			resp.PayParams = &miniProgramPayParams{
+			resp.Payment.PayParams = &miniProgramPayParams{
 				TimeStamp: result.PayParams.TimeStamp,
 				NonceStr:  result.PayParams.NonceStr,
 				Package:   result.PayParams.Package,
@@ -1664,18 +1654,21 @@ func (server *Server) modifyReservationDishes(ctx *gin.Context) {
 	}
 
 	if result.RefundInitiated {
-		ctx.JSON(http.StatusOK, modifyDishesRefundResponse{
-			Message:      "reservation modified, refund initiated",
+		ctx.JSON(http.StatusOK, reservationDishAdjustmentResponse{
+			Outcome:      "refund_initiated",
+			DeltaAmount:  result.Delta,
 			RefundAmount: result.RefundAmount,
 			ItemsCount:   len(req.Items),
+			Message:      "改菜已生效，退款处理中",
 		})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, modifyDishesSuccessResponse{
-		Message:    "reservation modified successfully",
-		ItemsCount: len(req.Items),
-		Delta:      result.Delta,
+	ctx.JSON(http.StatusOK, reservationDishAdjustmentResponse{
+		Outcome:     "applied",
+		DeltaAmount: result.Delta,
+		ItemsCount:  len(req.Items),
+		Message:     "改菜已生效",
 	})
 }
 

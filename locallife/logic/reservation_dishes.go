@@ -60,10 +60,47 @@ func AddReservationDishes(ctx context.Context, store db.Store, input AddReservat
 	if reservation.Status != reservationStatusPaid && reservation.Status != reservationStatusConfirmed {
 		return result, NewRequestError(http.StatusBadRequest, fmt.Errorf("cannot add dishes to reservation in %s status", reservation.Status))
 	}
+	if reservation.CookingStartedAt.Valid {
+		return result, NewRequestError(http.StatusConflict, errors.New("cooking already started, modification is not allowed"))
+	}
+	if err := ensureNoActiveReservationAdjustment(ctx, store, reservation.ID); err != nil {
+		return result, err
+	}
 
 	validatedItems, addedAmount, err := ValidateReservationItems(ctx, store, reservation.MerchantID, input.Items)
 	if err != nil {
 		return result, err
+	}
+
+	if reservation.PaymentMode == paymentModeFull {
+		currentTotal, err := store.SumReservationItemsTotal(ctx, reservation.ID)
+		if err != nil {
+			return result, err
+		}
+		targetItems, err := buildAddReservationDishesTargetItems(ctx, store, reservation.ID, validatedItems)
+		if err != nil {
+			return result, err
+		}
+		result.Reservation = reservation
+		result.AddedAmount = addedAmount
+		paymentOrder, payParams, err := createReservationAdjustmentPaymentOrder(
+			ctx,
+			input.PaymentFacade,
+			reservation,
+			input.UserID,
+			currentTotal,
+			currentTotal+addedAmount,
+			addedAmount,
+			targetItems,
+			input.Now,
+			input.ClientIP,
+		)
+		if err != nil {
+			return result, err
+		}
+		result.Payment = &paymentOrder
+		result.PayParams = payParams
+		return result, nil
 	}
 
 	for _, item := range validatedItems {
@@ -90,15 +127,6 @@ func AddReservationDishes(ctx context.Context, store db.Store, input AddReservat
 
 	result.Reservation = reservation
 	result.AddedAmount = addedAmount
-
-	if reservation.PaymentMode == paymentModeFull {
-		paymentOrder, payParams, err := createReservationAddonPaymentOrder(ctx, store, input.PaymentFacade, reservation, input.UserID, addedAmount, input.Now, input.ClientIP)
-		if err != nil {
-			return result, err
-		}
-		result.Payment = &paymentOrder
-		result.PayParams = payParams
-	}
 
 	return result, nil
 }
@@ -129,6 +157,47 @@ type reservationRefundAllocation struct {
 	RefundAmount int64
 }
 
+func buildAddReservationDishesTargetItems(
+	ctx context.Context,
+	store db.Store,
+	reservationID int64,
+	addedItems []ValidatedReservationItem,
+) ([]db.CreateReservationItemParams, error) {
+	currentItems, err := store.GetReservationItemsByReservation(ctx, reservationID)
+	if err != nil {
+		return nil, fmt.Errorf("get current reservation items: %w", err)
+	}
+	targetItems := make([]db.CreateReservationItemParams, 0, len(currentItems)+len(addedItems))
+	for _, item := range currentItems {
+		targetItems = append(targetItems, db.CreateReservationItemParams{
+			ReservationID: reservationID,
+			DishID:        item.DishID,
+			ComboID:       item.ComboID,
+			Quantity:      item.Quantity,
+			UnitPrice:     item.UnitPrice,
+			TotalPrice:    item.TotalPrice,
+		})
+	}
+	for _, item := range addedItems {
+		var dishID, comboID pgtype.Int8
+		if item.DishID != nil {
+			dishID = pgtype.Int8{Int64: *item.DishID, Valid: true}
+		}
+		if item.ComboID != nil {
+			comboID = pgtype.Int8{Int64: *item.ComboID, Valid: true}
+		}
+		targetItems = append(targetItems, db.CreateReservationItemParams{
+			ReservationID: reservationID,
+			DishID:        dishID,
+			ComboID:       comboID,
+			Quantity:      item.Quantity,
+			UnitPrice:     item.UnitPrice,
+			TotalPrice:    item.UnitPrice * int64(item.Quantity),
+		})
+	}
+	return targetItems, nil
+}
+
 // ModifyReservationDishes replaces reservation items and handles payment/refund if needed.
 func ModifyReservationDishes(
 	ctx context.Context,
@@ -157,6 +226,9 @@ func ModifyReservationDishes(
 	}
 	if reservation.CookingStartedAt.Valid {
 		return result, NewRequestError(http.StatusConflict, errors.New("cooking already started, modification is not allowed"))
+	}
+	if err := ensureNoActiveReservationAdjustment(ctx, store, reservation.ID); err != nil {
+		return result, err
 	}
 
 	currentTotal, err := store.SumReservationItemsTotal(ctx, reservation.ID)
@@ -204,6 +276,27 @@ func ModifyReservationDishes(
 
 	result.Reservation = reservation
 	result.Delta = delta
+
+	if reservation.PaymentMode == paymentModeFull && delta > 0 {
+		paymentOrder, payParams, err := createReservationAdjustmentPaymentOrder(
+			ctx,
+			input.PaymentFacade,
+			reservation,
+			input.UserID,
+			currentTotal,
+			newTotal,
+			delta,
+			createItems,
+			input.Now,
+			input.ClientIP,
+		)
+		if err != nil {
+			return result, err
+		}
+		result.Payment = &paymentOrder
+		result.PayParams = payParams
+		return result, nil
+	}
 
 	refundAmount := sumReservationRefundAllocations(refundAllocations)
 	refundOrderParams := make([]db.CreateRefundOrderTxParams, 0, len(refundAllocations))
@@ -263,16 +356,6 @@ func ModifyReservationDishes(
 		return result, nil
 	}
 
-	if delta > 0 {
-		paymentOrder, payParams, err := createReservationAddonPaymentOrder(ctx, store, input.PaymentFacade, reservation, input.UserID, delta, input.Now, input.ClientIP)
-		if err != nil {
-			return result, err
-		}
-		result.Payment = &paymentOrder
-		result.PayParams = payParams
-		return result, nil
-	}
-
 	if refundAmount <= 0 {
 		return result, nil
 	}
@@ -298,6 +381,57 @@ func ModifyReservationDishes(
 	result.RefundAmount = refundAmount
 	result.RefundInitiated = true
 	return result, nil
+}
+
+func createReservationAdjustmentPaymentOrder(
+	ctx context.Context,
+	paymentFacade PaymentFacade,
+	reservation db.TableReservation,
+	userID, currentTotal, targetTotal, amount int64,
+	items []db.CreateReservationItemParams,
+	now time.Time,
+	clientIP string,
+) (db.PaymentOrder, *wechat.JSAPIPayParams, error) {
+	if amount <= 0 {
+		return db.PaymentOrder{}, nil, NewRequestError(http.StatusBadRequest, errors.New("payment amount must be greater than 0"))
+	}
+	if paymentFacade == nil {
+		return db.PaymentOrder{}, nil, fmt.Errorf("baofu payment facade not configured")
+	}
+	expiresAt := now.Add(30 * time.Minute)
+	if now.IsZero() {
+		expiresAt = time.Now().Add(30 * time.Minute)
+	}
+	baofuResult, err := paymentFacade.CreateReservationAdjustmentPaymentOrder(ctx, CreateReservationAdjustmentPaymentInput{
+		UserID:        userID,
+		ReservationID: reservation.ID,
+		MerchantID:    reservation.MerchantID,
+		Items:         items,
+		CurrentTotal:  currentTotal,
+		TargetTotal:   targetTotal,
+		DeltaAmount:   amount,
+		ClientIP:      clientIP,
+		Now:           now,
+		ExpiresAt:     expiresAt,
+	})
+	if err != nil {
+		return db.PaymentOrder{}, nil, err
+	}
+	return baofuResult.PaymentOrder, baofuResult.PayParams, nil
+}
+
+func ensureNoActiveReservationAdjustment(ctx context.Context, store db.Store, reservationID int64) error {
+	adjustment, err := store.GetActiveReservationAdjustmentByReservation(ctx, reservationID)
+	if err == nil {
+		if adjustment.PaymentOrderID.Valid {
+			return NewRequestError(http.StatusConflict, fmt.Errorf("预订存在待支付改菜补差单，请先完成或关闭支付单 %d", adjustment.PaymentOrderID.Int64))
+		}
+		return NewRequestError(http.StatusConflict, errors.New("预订存在进行中的改菜补差单，请刷新后重试"))
+	}
+	if errors.Is(err, db.ErrRecordNotFound) {
+		return nil
+	}
+	return fmt.Errorf("get active reservation adjustment: %w", err)
 }
 
 func buildReservationRefundAllocations(
@@ -364,34 +498,4 @@ func minInt64(left, right int64) int64 {
 		return left
 	}
 	return right
-}
-
-func createReservationAddonPaymentOrder(
-	ctx context.Context,
-	store db.Store,
-	paymentFacade PaymentFacade,
-	reservation db.TableReservation,
-	userID, amount int64,
-	now time.Time,
-	clientIP string,
-) (db.PaymentOrder, *wechat.JSAPIPayParams, error) {
-	if amount <= 0 {
-		return db.PaymentOrder{}, nil, NewRequestError(http.StatusBadRequest, errors.New("payment amount must be greater than 0"))
-	}
-	if paymentFacade == nil {
-		return db.PaymentOrder{}, nil, fmt.Errorf("baofu payment facade not configured")
-	}
-
-	baofuResult, err := paymentFacade.CreatePaymentOrder(ctx, CreatePaymentOrderInput{
-		UserID:       userID,
-		OrderID:      reservation.ID,
-		PaymentType:  paymentTypeMiniProgram,
-		BusinessType: reservationAddonBusiness,
-		ClientIP:     clientIP,
-		Amount:       amount,
-	})
-	if err != nil {
-		return db.PaymentOrder{}, nil, err
-	}
-	return baofuResult.PaymentOrder, baofuResult.PayParams, nil
 }

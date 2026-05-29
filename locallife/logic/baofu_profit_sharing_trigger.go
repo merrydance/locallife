@@ -53,6 +53,9 @@ func ResolveCompletedOrderBaofuProfitSharingOrder(ctx context.Context, store db.
 	if err := ValidateBaofuProfitSharingRefundSafety(ctx, store, paymentOrder.ID); err != nil {
 		return db.ProfitSharingOrder{}, err
 	}
+	if err := ValidateBaofuProfitSharingBillNetAmount(ctx, store, paymentOrder, profitSharingOrder); err != nil {
+		return db.ProfitSharingOrder{}, err
+	}
 	return profitSharingOrder, nil
 }
 
@@ -78,7 +81,7 @@ func ValidateBaofuProfitSharingOrderReadyForCommand(profitSharingOrder db.Profit
 }
 
 func ValidateBaofuProfitSharingRefundSafety(ctx context.Context, store db.Store, paymentOrderID int64) error {
-	refundedAmount, err := store.GetTotalRefundedByPaymentOrder(ctx, paymentOrderID)
+	refundedAmount, err := store.GetTotalActiveRefundedByPaymentOrder(ctx, paymentOrderID)
 	if err != nil {
 		return fmt.Errorf("get refunded amount before baofu profit sharing: %w", err)
 	}
@@ -86,4 +89,27 @@ func ValidateBaofuProfitSharingRefundSafety(ctx context.Context, store db.Store,
 		return fmt.Errorf("payment order %d has active refund amount %d before baofu profit sharing", paymentOrderID, refundedAmount)
 	}
 	return nil
+}
+
+func ValidateBaofuProfitSharingBillNetAmount(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder, profitSharingOrder db.ProfitSharingOrder) error {
+	successRefundAmount, err := store.GetTotalSuccessfulRefundedByPaymentOrder(ctx, paymentOrder.ID)
+	if err != nil {
+		return fmt.Errorf("get successful refund amount before baofu profit sharing: %w", err)
+	}
+	if successRefundAmount > 0 && !baofuPaymentOrderAllowsSuccessfulRefundNetShare(paymentOrder) {
+		return fmt.Errorf("payment order %d successful refund net sharing is only supported for reservation payment orders", paymentOrder.ID)
+	}
+	netAmount := paymentOrder.Amount - successRefundAmount
+	if netAmount <= 0 {
+		return fmt.Errorf("payment order %d net amount %d before baofu profit sharing is invalid", paymentOrder.ID, netAmount)
+	}
+	if profitSharingOrder.TotalAmount != netAmount {
+		return fmt.Errorf("payment order %d baofu profit sharing bill amount %d does not match net amount %d", paymentOrder.ID, profitSharingOrder.TotalAmount, netAmount)
+	}
+	return nil
+}
+
+func baofuPaymentOrderAllowsSuccessfulRefundNetShare(paymentOrder db.PaymentOrder) bool {
+	return paymentOrder.BusinessType == db.ExternalPaymentBusinessOwnerReservation ||
+		paymentOrder.BusinessType == reservationAddonBusiness
 }

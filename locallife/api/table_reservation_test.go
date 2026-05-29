@@ -40,6 +40,12 @@ func TestWriteReservationPaymentConfigErrorReturnsActionable503(t *testing.T) {
 	require.Contains(t, resp.Error, "重试")
 }
 
+func expectNoActiveReservationAdjustment(store *mockdb.MockStore, reservationID int64) *gomock.Call {
+	return store.EXPECT().
+		GetActiveReservationAdjustmentByReservation(gomock.Any(), reservationID).
+		Return(db.ReservationAdjustment{}, db.ErrRecordNotFound)
+}
+
 func randomReservation(tableID, userID, merchantID int64) db.TableReservation {
 	now := time.Now()
 	reservationDate := now.Add(24 * time.Hour)
@@ -879,6 +885,7 @@ func TestCancelReservationAPI(t *testing.T) {
 					GetTableReservationForUpdate(gomock.Any(), gomock.Eq(reservation.ID)).
 					Times(1).
 					Return(reservation, nil)
+				expectNoActiveReservationAdjustment(store, reservation.ID)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(reservation.TableID)).
@@ -1433,6 +1440,7 @@ func TestCompleteReservationAPI(t *testing.T) {
 					GetTableReservationForUpdate(gomock.Any(), gomock.Eq(confirmedReservation.ID)).
 					Times(1).
 					Return(confirmedReservation, nil)
+				expectNoActiveReservationAdjustment(store, confirmedReservation.ID)
 
 				// 获取桌台信息以获取currentReservationID
 				store.EXPECT().
@@ -1543,6 +1551,7 @@ func TestCompleteReservationAPI(t *testing.T) {
 					GetTableReservationForUpdate(gomock.Any(), gomock.Eq(confirmedReservation.ID)).
 					Times(1).
 					Return(confirmedReservation, nil)
+				expectNoActiveReservationAdjustment(store, confirmedReservation.ID)
 
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(confirmedReservation.TableID)).
@@ -1622,6 +1631,7 @@ func TestMarkNoShowAPI(t *testing.T) {
 					GetTableReservationForUpdate(gomock.Any(), gomock.Eq(confirmedReservation.ID)).
 					Times(1).
 					Return(confirmedReservation, nil)
+				expectNoActiveReservationAdjustment(store, confirmedReservation.ID)
 
 				// 获取桌台信息以获取currentReservationID
 				store.EXPECT().

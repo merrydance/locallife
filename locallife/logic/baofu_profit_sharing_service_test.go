@@ -154,6 +154,37 @@ func TestBaofuProfitSharingServiceCreatePendingOrderPersistsSnapshotAndFeeLedger
 	require.Equal(t, int64(3), store.lastTx.OrderPaymentFeeLedgers[2].Amount)
 }
 
+func TestBaofuProfitSharingServiceCreatePendingOrderUsesNetAmountAfterSuccessfulRefund(t *testing.T) {
+	store := &fakeBaofuProfitSharingOrderStore{
+		fakeBaofuProfitSharingReceiverStore: fakeBaofuProfitSharingReceiverStore{bindings: map[string]db.BaofuAccountBinding{
+			"merchant:101": activeBaofuReceiverBinding(db.BaofuAccountOwnerTypeMerchant, 101, "MER_CONTRACT", "MER_SHARE"),
+			"platform:0":   activeBaofuReceiverBinding(db.BaofuAccountOwnerTypePlatform, 0, "PLATFORM_CONTRACT", "PLATFORM_SHARE"),
+		}},
+	}
+	service := NewBaofuProfitSharingService(store)
+
+	_, err := service.CreatePendingOrder(context.Background(), BaofuProfitSharingOrderInput{
+		PaymentOrderID:  9002,
+		MerchantID:      101,
+		OrderSource:     "reservation",
+		TotalAmountFen:  10000,
+		RefundedFen:     2500,
+		PlatformRateBps: 200,
+		OperatorRateBps: 300,
+		OutOrderNo:      "BAOFU_SHARE_9002",
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(7500), store.lastTx.ProfitSharingOrder.TotalAmount)
+	require.Equal(t, int64(7500), store.lastTx.ProfitSharingOrder.DistributableAmount)
+	require.Equal(t, int64(375), store.lastTx.ProfitSharingOrder.PlatformCommission)
+	require.Equal(t, int64(0), store.lastTx.ProfitSharingOrder.OperatorCommission)
+	require.Equal(t, int64(7080), store.lastTx.ProfitSharingOrder.MerchantAmount)
+	require.Equal(t, int64(23), store.lastTx.ProfitSharingOrder.PaymentFee)
+	require.Equal(t, int64(45), store.lastTx.FeeBreakdown.MerchantPaymentFee)
+	require.Equal(t, int64(397), store.lastTx.FeeBreakdown.PlatformReceiverAmount)
+	require.JSONEq(t, `{"provider":"baofu","channel":"baofu_aggregate","calculation_version":"baofu_fee_v2","settlement_mode":"commission_share","shareable_amount":7477,"platform_receiver_amount":397,"fees":{"provider_payment_fee":23,"merchant_payment_fee":45,"rider_payment_fee":0,"provider_payment_fee_source":"estimated","provider_payment_fee_timing":"realtime_deducted_before_reserve"},"bases":{"total_amount":7500,"merchant_payment_fee_base":7500,"rider_payment_fee_base":0,"commission_base":7500},"receivers":[{"role":"merchant","sharing_mer_id":"MER_SHARE","amount":7080},{"role":"platform","sharing_mer_id":"PLATFORM_SHARE","amount":397}]}`, string(store.lastTx.ProfitSharingOrder.SharingDetailSnapshot.([]byte)))
+}
+
 type fakeBaofuProfitSharingOrderStore struct {
 	fakeBaofuProfitSharingReceiverStore
 	lastTx db.CreateBaofuProfitSharingOrderTxParams

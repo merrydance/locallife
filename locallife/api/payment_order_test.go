@@ -312,7 +312,7 @@ func TestCreatePaymentOrderAPIUsesBaofuWhenMainBusinessConfigured(t *testing.T) 
 		DoAndReturn(func(_ context.Context, arg db.CreatePartnerPaymentTxParams) (db.CreatePartnerPaymentTxResult, error) {
 			require.Equal(t, db.PaymentChannelBaofuAggregate, arg.PaymentChannel)
 			require.True(t, arg.RequiresProfitSharing)
-			return db.CreatePartnerPaymentTxResult{PaymentOrder: paymentOrder}, nil
+			return db.CreatePartnerPaymentTxResult{PaymentOrder: paymentOrder, SubMchID: "sub-api-baofu"}, nil
 		})
 	store.EXPECT().
 		CreateExternalPaymentCommand(gomock.Any(), gomock.AssignableToTypeOf(db.CreateExternalPaymentCommandParams{})).

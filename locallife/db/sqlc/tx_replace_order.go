@@ -86,6 +86,11 @@ func replaceOrderWithQueries(ctx context.Context, q *Queries, arg ReplaceOrderTx
 	if oldOrder.Status != OrderStatusPaid || oldOrder.ReplacedByOrderID.Valid {
 		return result, &requestError{statusCode: 409, err: errors.New("order is no longer replaceable")}
 	}
+	if oldOrder.ReservationID.Valid {
+		if err := ensureNoActiveReservationAdjustmentWithQueries(ctx, q, oldOrder.ReservationID.Int64); err != nil {
+			return result, err
+		}
+	}
 
 	// 1. 创建新订单
 	result.NewOrder, err = q.CreateOrder(ctx, arg.CreateOrderParams)

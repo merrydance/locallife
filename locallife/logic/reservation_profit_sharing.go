@@ -32,6 +32,17 @@ func scheduleBaofuProfitSharingForCompletedReservation(ctx context.Context, stor
 		if !reservationPaymentOrderReadyForBaofuProfitSharing(paymentOrder, reservation.ID) {
 			continue
 		}
+		refundedAmount, err := store.GetTotalSuccessfulRefundedByPaymentOrder(ctx, paymentOrder.ID)
+		if err != nil {
+			log.Warn().Err(err).
+				Int64("reservation_id", reservation.ID).
+				Int64("payment_order_id", paymentOrder.ID).
+				Msg("skip scheduling baofu reservation profit sharing because successful refund amount cannot be resolved")
+			continue
+		}
+		if refundedAmount >= paymentOrder.Amount {
+			continue
+		}
 		created, err := service.CreatePendingOrder(ctx, BaofuProfitSharingOrderInput{
 			PaymentOrderID:  paymentOrder.ID,
 			MerchantID:      reservation.MerchantID,
@@ -39,6 +50,7 @@ func scheduleBaofuProfitSharingForCompletedReservation(ctx context.Context, stor
 			PlatformOwnerID: 0,
 			OrderSource:     db.OrderTypeReservation,
 			TotalAmountFen:  paymentOrder.Amount,
+			RefundedFen:     refundedAmount,
 			DeliveryFeeFen:  0,
 			PlatformRateBps: config.PlatformRateBps,
 			OperatorRateBps: config.OperatorRateBps,

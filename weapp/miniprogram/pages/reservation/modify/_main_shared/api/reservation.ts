@@ -323,6 +323,31 @@ export interface ReservationItem {
   image_url?: string
 }
 
+export interface MiniProgramPayParams {
+  timeStamp: string
+  nonceStr: string
+  package: string
+  signType?: 'MD5' | 'HMAC-SHA256' | 'RSA'
+  paySign: string
+}
+
+export interface ReservationDishAdjustmentPayment {
+  payment_order_id: number
+  amount: number
+  pay_params?: MiniProgramPayParams
+}
+
+export type ReservationDishAdjustmentOutcome = 'applied' | 'payment_required' | 'refund_initiated'
+
+export interface ReservationDishAdjustmentResponse {
+  outcome: ReservationDishAdjustmentOutcome
+  delta_amount: number
+  items_count: number
+  payment?: ReservationDishAdjustmentPayment
+  refund_amount?: number
+  message?: string
+}
+
 /**
  * 用户创建预订请求
  */
@@ -552,7 +577,7 @@ export class ReservationService {
    * 追加菜品
    * POST /v1/reservations/:id/add-dishes
    */
-  static async addDishes(id: number, items: ReservationItem[]): Promise<unknown> {
+  static async addDishes(id: number, items: ReservationItem[]): Promise<ReservationDishAdjustmentResponse> {
     return await request({
       url: `/v1/reservations/${id}/add-dishes`,
       method: 'POST',
@@ -564,7 +589,7 @@ export class ReservationService {
    * 预订改菜（差量）
    * POST /v1/reservations/:id/modify-dishes
    */
-  static async modifyDishes(id: number, items: ReservationItem[]): Promise<unknown> {
+  static async modifyDishes(id: number, items: ReservationItem[]): Promise<ReservationDishAdjustmentResponse> {
     return await request({
       url: `/v1/reservations/${id}/modify-dishes`,
       method: 'POST',

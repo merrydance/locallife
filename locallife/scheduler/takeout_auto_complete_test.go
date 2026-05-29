@@ -78,17 +78,18 @@ func TestTakeoutAutoCompleteScheduler_AutoCompletesWithoutClaim(t *testing.T) {
 		Amount:                1000,
 	}
 	profitSharingOrder := db.ProfitSharingOrder{
-		ID:                 401,
-		PaymentOrderID:     paymentOrder.ID,
-		Provider:           db.ExternalPaymentProviderBaofu,
-		Channel:            db.PaymentChannelBaofuAggregate,
-		Status:             db.ProfitSharingOrderStatusPending,
-		OrderSource:        db.OrderTypeTakeout,
-		DeliveryFee:        500,
-		RiderID:            pgtype.Int8{Int64: 501, Valid: true},
-		RiderSharingMerID:  pgtype.Text{String: "RIDER_SHARE", Valid: true},
-		RiderGrossAmount:   500,
-		RiderAmount:        490,
+		ID:                401,
+		PaymentOrderID:    paymentOrder.ID,
+		Provider:          db.ExternalPaymentProviderBaofu,
+		Channel:           db.PaymentChannelBaofuAggregate,
+		Status:            db.ProfitSharingOrderStatusPending,
+		OrderSource:       db.OrderTypeTakeout,
+		TotalAmount:       paymentOrder.Amount,
+		DeliveryFee:       500,
+		RiderID:           pgtype.Int8{Int64: 501, Valid: true},
+		RiderSharingMerID: pgtype.Text{String: "RIDER_SHARE", Valid: true},
+		RiderGrossAmount:  500,
+		RiderAmount:       490,
 	}
 	store.EXPECT().
 		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
@@ -97,7 +98,8 @@ func TestTakeoutAutoCompleteScheduler_AutoCompletesWithoutClaim(t *testing.T) {
 		}).
 		Return(paymentOrder, nil)
 	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(profitSharingOrder, nil)
-	store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(int64(0), nil)
+	store.EXPECT().GetTotalActiveRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(int64(0), nil)
+	store.EXPECT().GetTotalSuccessfulRefundedByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(int64(0), nil)
 
 	s := NewTakeoutAutoCompleteScheduler(store, distributor)
 	s.autoCompleteTakeoutOrders()

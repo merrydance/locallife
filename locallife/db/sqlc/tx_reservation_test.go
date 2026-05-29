@@ -41,6 +41,21 @@ func createRandomReservation(t *testing.T, userID, merchantID, tableID int64, st
 	return reservation
 }
 
+func createActiveReservationAdjustmentForTxTest(t *testing.T, reservation TableReservation) ReservationAdjustment {
+	adjustment, err := testStore.CreateReservationAdjustment(context.Background(), CreateReservationAdjustmentParams{
+		ReservationID: reservation.ID,
+		UserID:        reservation.UserID,
+		MerchantID:    reservation.MerchantID,
+		Direction:     ReservationAdjustmentDirectionPositive,
+		Status:        ReservationAdjustmentStatusCreatingPayment,
+		CurrentTotal:  1000,
+		TargetTotal:   2000,
+		DeltaAmount:   1000,
+	})
+	require.NoError(t, err)
+	return adjustment
+}
+
 // ==================== CreateReservationTx Tests ====================
 
 func TestCreateReservationTx_DepositMode(t *testing.T) {
@@ -345,6 +360,35 @@ func TestCompleteReservationTx_TableNotReleased(t *testing.T) {
 	require.False(t, result.TableUpdated)
 }
 
+func TestCompleteReservationTxRejectsActiveAdjustment(t *testing.T) {
+	user := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	room := createRandomRoom(t, merchant.ID)
+
+	reservation := createRandomReservation(t, user.ID, merchant.ID, room.ID, "pending")
+	_, err := testStore.UpdateReservationToPaid(context.Background(), reservation.ID)
+	require.NoError(t, err)
+	_, err = testStore.UpdateReservationToConfirmed(context.Background(), reservation.ID)
+	require.NoError(t, err)
+	createActiveReservationAdjustmentForTxTest(t, reservation)
+
+	_, err = testStore.CompleteReservationTx(context.Background(), CompleteReservationTxParams{
+		ReservationID:        reservation.ID,
+		TableID:              room.ID,
+		CurrentReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
+	})
+	require.Error(t, err)
+	statusCode, ok := IsRefundRequestError(err)
+	require.True(t, ok)
+	require.Equal(t, 409, statusCode)
+
+	current, getErr := testStore.GetTableReservation(context.Background(), reservation.ID)
+	require.NoError(t, getErr)
+	require.Equal(t, "confirmed", current.Status)
+	require.False(t, current.CompletedAt.Valid)
+}
+
 // ==================== CancelReservationTx Tests ====================
 
 func TestCancelReservationTx_Success(t *testing.T) {
@@ -434,6 +478,32 @@ func TestCancelReservationTx_WithTableRelease(t *testing.T) {
 	require.False(t, dbTable.CurrentReservationID.Valid)
 }
 
+func TestCancelReservationTxRejectsActiveAdjustment(t *testing.T) {
+	user := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	room := createRandomRoom(t, merchant.ID)
+
+	reservation := createRandomReservation(t, user.ID, merchant.ID, room.ID, "pending")
+	createActiveReservationAdjustmentForTxTest(t, reservation)
+
+	_, err := testStore.CancelReservationTx(context.Background(), CancelReservationTxParams{
+		ReservationID:        reservation.ID,
+		TableID:              room.ID,
+		CancelReason:         "cancel while adjustment pending",
+		CurrentReservationID: pgtype.Int8{Valid: false},
+	})
+	require.Error(t, err)
+	statusCode, ok := IsRefundRequestError(err)
+	require.True(t, ok)
+	require.Equal(t, 409, statusCode)
+
+	current, getErr := testStore.GetTableReservation(context.Background(), reservation.ID)
+	require.NoError(t, getErr)
+	require.Equal(t, reservation.Status, current.Status)
+	require.False(t, current.CancelledAt.Valid)
+}
+
 // ==================== MarkNoShowTx Tests ====================
 
 func TestMarkNoShowTx_Success(t *testing.T) {
@@ -489,6 +559,135 @@ func TestMarkNoShowTx_Success(t *testing.T) {
 	dbTable, err := testStore.GetTable(context.Background(), room.ID)
 	require.NoError(t, err)
 	require.Equal(t, "available", dbTable.Status)
+}
+
+func TestMarkNoShowTxRejectsActiveAdjustment(t *testing.T) {
+	user := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	room := createRandomRoom(t, merchant.ID)
+
+	reservation := createRandomReservation(t, user.ID, merchant.ID, room.ID, "pending")
+	_, err := testStore.UpdateReservationToPaid(context.Background(), reservation.ID)
+	require.NoError(t, err)
+	createActiveReservationAdjustmentForTxTest(t, reservation)
+
+	_, err = testStore.MarkNoShowTx(context.Background(), MarkNoShowTxParams{
+		ReservationID:        reservation.ID,
+		TableID:              room.ID,
+		CurrentReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
+	})
+	require.Error(t, err)
+	statusCode, ok := IsRefundRequestError(err)
+	require.True(t, ok)
+	require.Equal(t, 409, statusCode)
+
+	current, getErr := testStore.GetTableReservation(context.Background(), reservation.ID)
+	require.NoError(t, getErr)
+	require.Equal(t, "paid", current.Status)
+}
+
+func TestUpdateReservationCookingStartedRejectsActiveAdjustment(t *testing.T) {
+	user := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	room := createRandomRoom(t, merchant.ID)
+
+	reservation := createRandomReservation(t, user.ID, merchant.ID, room.ID, "pending")
+	_, err := testStore.UpdateReservationToPaid(context.Background(), reservation.ID)
+	require.NoError(t, err)
+	_, err = testStore.UpdateReservationToConfirmed(context.Background(), reservation.ID)
+	require.NoError(t, err)
+	createActiveReservationAdjustmentForTxTest(t, reservation)
+
+	_, err = testStore.UpdateReservationCookingStarted(context.Background(), reservation.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+
+	current, getErr := testStore.GetTableReservation(context.Background(), reservation.ID)
+	require.NoError(t, getErr)
+	require.False(t, current.CookingStartedAt.Valid)
+}
+
+func TestReplaceReservationItemsTxRejectsActiveAdjustment(t *testing.T) {
+	user := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	room := createRandomRoom(t, merchant.ID)
+	category := createRandomDishCategory(t)
+	dish := createRandomDish(t, merchant.ID, category.ID)
+
+	reservation := createRandomReservation(t, user.ID, merchant.ID, room.ID, "paid")
+	_, err := testStore.CreateReservationItem(context.Background(), CreateReservationItemParams{
+		ReservationID: reservation.ID,
+		DishID:        pgtype.Int8{Int64: dish.ID, Valid: true},
+		Quantity:      1,
+		UnitPrice:     1000,
+		TotalPrice:    1000,
+	})
+	require.NoError(t, err)
+	createActiveReservationAdjustmentForTxTest(t, reservation)
+
+	_, err = testStore.ReplaceReservationItemsTx(context.Background(), ReplaceReservationItemsTxParams{
+		ReservationID:         reservation.ID,
+		ExpectedCurrentAmount: 1000,
+		Items: []CreateReservationItemParams{{
+			ReservationID: reservation.ID,
+			DishID:        pgtype.Int8{Int64: dish.ID, Valid: true},
+			Quantity:      2,
+			UnitPrice:     1000,
+			TotalPrice:    2000,
+		}},
+	})
+	require.Error(t, err)
+	statusCode, ok := IsRefundRequestError(err)
+	require.True(t, ok)
+	require.Equal(t, 409, statusCode)
+
+	items, getErr := testStore.GetReservationItemsByReservation(context.Background(), reservation.ID)
+	require.NoError(t, getErr)
+	require.Len(t, items, 1)
+	require.Equal(t, int16(1), items[0].Quantity)
+}
+
+func TestReplaceReservationItemsWithRefundOrdersTxRejectsActiveAdjustment(t *testing.T) {
+	user := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	room := createRandomRoom(t, merchant.ID)
+	category := createRandomDishCategory(t)
+	dish := createRandomDish(t, merchant.ID, category.ID)
+
+	reservation := createRandomReservation(t, user.ID, merchant.ID, room.ID, "paid")
+	_, err := testStore.CreateReservationItem(context.Background(), CreateReservationItemParams{
+		ReservationID: reservation.ID,
+		DishID:        pgtype.Int8{Int64: dish.ID, Valid: true},
+		Quantity:      2,
+		UnitPrice:     1000,
+		TotalPrice:    2000,
+	})
+	require.NoError(t, err)
+	createActiveReservationAdjustmentForTxTest(t, reservation)
+
+	_, err = testStore.ReplaceReservationItemsWithRefundOrdersTx(context.Background(), ReplaceReservationItemsWithRefundOrdersTxParams{
+		ReservationID:         reservation.ID,
+		ExpectedCurrentAmount: 2000,
+		Items: []CreateReservationItemParams{{
+			ReservationID: reservation.ID,
+			DishID:        pgtype.Int8{Int64: dish.ID, Valid: true},
+			Quantity:      1,
+			UnitPrice:     1000,
+			TotalPrice:    1000,
+		}},
+	})
+	require.Error(t, err)
+	statusCode, ok := IsRefundRequestError(err)
+	require.True(t, ok)
+	require.Equal(t, 409, statusCode)
+
+	items, getErr := testStore.GetReservationItemsByReservation(context.Background(), reservation.ID)
+	require.NoError(t, getErr)
+	require.Len(t, items, 1)
+	require.Equal(t, int16(2), items[0].Quantity)
 }
 
 // ==================== Complete Business Flow Test ====================

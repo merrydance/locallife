@@ -36,6 +36,7 @@ type OrderQueryService interface {
 
 type PaymentFacade interface {
 	CreatePaymentOrder(ctx context.Context, input CreatePaymentOrderInput) (CreatePaymentOrderResult, error)
+	CreateReservationAdjustmentPaymentOrder(ctx context.Context, input CreateReservationAdjustmentPaymentInput) (CreatePaymentOrderResult, error)
 	CreateCombinedPaymentOrder(ctx context.Context, input CreateCombinedPaymentOrderInput) (CreateCombinedPaymentOrderResult, error)
 	GetCombinedPaymentOrder(ctx context.Context, input GetCombinedPaymentOrderInput) (GetCombinedPaymentOrderResult, error)
 	QueryCombinedPaymentOrder(ctx context.Context, input QueryCombinedPaymentOrderInput) (QueryCombinedPaymentOrderResult, error)
