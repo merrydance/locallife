@@ -1,0 +1,11 @@
+{
+  "purpose": "Read-only display surface for BaoFu settlement account status facts on role status pages.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "tag",
+    "icon",
+    "cell"
+  ],
+  "decision": "local-component",
+  "rationale": "The status page needs a non-interactive progress summary, not form-like label/value rows. TDesign cell visually reads as a selectable form row in this flow and caused short labels such as 核验费 to wrap on narrow devices, so this component uses TDesign tag/icon primitives inside an icon-led read-only fact strip."
+}

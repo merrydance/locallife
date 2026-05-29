@@ -1,5 +1,4 @@
-import dayjs from 'dayjs'
-import Toast, { hideToast } from '../../../miniprogram_npm/tdesign-miniprogram/toast/index'
+import dayjs from '../_main_shared/miniprogram_npm/dayjs/index'
 import { getStableBarHeights } from '../../../utils/responsive'
 import {
   cancelReservation,
@@ -9,7 +8,7 @@ import {
   markReservationNoShow,
   ReservationService,
   startCookingReservation
-} from '../../../api/reservation'
+} from '../_main_shared/api/reservation'
 import { logger } from '../../../utils/logger'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import {
@@ -39,7 +38,7 @@ import {
   type ReservationMutationKey,
   type ReservationPrimaryActionKey,
   type ReservationWorkbenchTab
-} from '../../../utils/merchant-reservations-view'
+} from '../_utils/merchant-reservations-view'
 
 const getErrorMessage = getErrorUserMessage
 
@@ -355,32 +354,19 @@ Page({
   },
 
   showFeedbackToast(theme: 'success' | 'warning' | 'error', message: string, duration = 2200) {
-    Toast({
-      context: this,
-      selector: '#t-toast',
-      theme,
-      message,
-      placement: 'middle',
-      duration,
-      direction: 'column'
+    wx.showToast({
+      title: message,
+      icon: theme === 'success' ? 'success' : 'none',
+      duration
     })
   },
 
   showLoadingToast(message: string) {
-    Toast({
-      context: this,
-      selector: '#t-toast',
-      theme: 'loading',
-      message,
-      placement: 'middle',
-      duration: 0,
-      direction: 'column',
-      preventScrollThrough: true
-    })
+    wx.showLoading({ title: message, mask: true })
   },
 
   hideLoadingToast() {
-    hideToast({ context: this, selector: '#t-toast' })
+    wx.hideLoading()
   },
 
   openReservationActionSheet(

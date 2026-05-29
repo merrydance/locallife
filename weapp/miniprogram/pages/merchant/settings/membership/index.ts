@@ -4,7 +4,6 @@ import {
   MerchantMembershipSettingsResponse,
   updateMyMerchantMembershipSettings
 } from '../../../../api/merchant'
-import Toast from '../../../../miniprogram_npm/tdesign-miniprogram/toast/index'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
@@ -134,14 +133,10 @@ Page({
   },
 
   showFeedbackToast(theme: 'success' | 'warning' | 'error', message: string, duration = 2200) {
-    Toast({
-      context: this,
-      selector: '#t-toast',
-      theme,
-      message,
-      placement: 'middle',
-      duration,
-      direction: 'column'
+    wx.showToast({
+      title: message,
+      icon: theme === 'success' ? 'success' : 'none',
+      duration
     })
   },
 

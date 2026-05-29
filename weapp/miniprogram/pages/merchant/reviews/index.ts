@@ -1,6 +1,6 @@
-import dayjs from 'dayjs'
+import dayjs from '../_main_shared/miniprogram_npm/dayjs/index'
 import { getMyMerchantProfile } from '../../../api/merchant'
-import ReviewService, { Review } from '../../../api/review'
+import ReviewService, { Review } from '../_main_shared/api/review'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'

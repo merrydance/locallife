@@ -1,0 +1,11 @@
+{
+  "purpose": "Visible waiting and result surface for BaoFu onboarding flows that need to express submitting, payment confirming, opening processing, pending confirmation, and terminal result states.",
+  "tdesignGroup": "feedback",
+  "tdesignCandidates": [
+    "loading",
+    "result",
+    "button"
+  ],
+  "decision": "local-component",
+  "rationale": "The onboarding flow needs a reusable, page-owned feedback surface that keeps long-running status visible without absorbing requests or routing. Directly inlining the same loading/result/button composition in four role pages would duplicate the same state handling and make the waiting experience inconsistent."
+}

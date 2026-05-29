@@ -1,15 +1,15 @@
 import { isLargeScreen } from '@/utils/responsive'
-import { getConsoleDashboardErrorState } from '../../../utils/console-dashboard'
+import { getConsoleDashboardErrorState } from '../_main_shared/utils/console-dashboard'
 import {
   loadOperatorRegions,
   type ConsoleRegionOption
-} from '../../../services/operator-regions'
+} from '../_services/operator-regions'
 import {
   loadOperatorAnalyticsPageData,
   type OperatorAnalyticsRegionSummary,
   type OperatorMerchantRankingView,
   type OperatorRiderRankingView
-} from '../../../services/operator-analytics-dashboard'
+} from '../_services/operator-analytics-dashboard'
 
 type TimeDimension = 'day' | 'week' | 'month'
 type RankingType = 'merchant' | 'rider'

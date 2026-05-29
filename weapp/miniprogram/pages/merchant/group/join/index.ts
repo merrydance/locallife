@@ -1,4 +1,4 @@
-import { applyToJoinGroup, searchGroups } from '../../../../api/group-application'
+import { applyToJoinGroup, searchGroups } from '../../_main_shared/api/group-application'
 import { logger } from '../../../../utils/logger'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'

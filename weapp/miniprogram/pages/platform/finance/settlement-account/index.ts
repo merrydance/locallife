@@ -1,11 +1,12 @@
-import { getPlatformBaofuSettlementAccount } from '../../../../api/baofu-account'
-import { baofuSettlementStatusBehavior } from '../../../../behaviors/baofu-settlement-status'
+import { getPlatformBaofuSettlementAccount } from '../../_main_shared/api/baofu-account'
+import { baofuSettlementStatusBehavior } from '../../_main_shared/behaviors/baofu-settlement-status'
 
 Page({
   behaviors: [
     baofuSettlementStatusBehavior({
       role: 'platform',
-      submitPagePath: '/pages/platform/finance/settlement-account/submit/index',
+      submitPagePath: '',
+      disableSubmitProfile: true,
       getAccount: getPlatformBaofuSettlementAccount,
       supportPaymentRecovery: false,
       logTag: 'platform-baofu-settlement-account',

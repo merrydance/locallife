@@ -15,7 +15,7 @@ import {
   type TableListItem,
   type TableStatusFilterKey,
   type TableTypeFilterKey
-} from '../../../utils/merchant-tables-shared'
+} from '../_utils/merchant-tables-shared'
 
 interface TableQRCodeContext {
   tableNo: string

@@ -1,4 +1,4 @@
-import { type TableResponse } from '../../../../api/table'
+import { type TableResponse } from '../../_main_shared/api/table'
 import { type TableImageResponse } from '../../../../api/table-device-management'
 import {
   ensureArray,
@@ -8,7 +8,7 @@ import {
   type TableFormData,
   type TableTagOption,
   type TableUploadFile
-} from '../../../../utils/merchant-tables-shared'
+} from '../../_utils/merchant-tables-shared'
 
 export interface TableEditPageOptions {
   id?: string

@@ -1,11 +1,11 @@
 import { responsiveBehavior } from '@/utils/responsive'
-import { getAdminApprovalStatusDisplay, type AdminApprovalTheme } from '@/adapters/admin-review'
+import { getAdminApprovalStatusDisplay, type AdminApprovalTheme } from '../_main_shared/adapters/admin-review'
 import {
   platformManagementService,
   type AdminGroupApplicationItem
-} from '@/api/platform-management'
-import { getPrivateMediaUrl } from '@/utils/image-security'
-import { resolveStatusTagTheme } from '@/utils/status-tag'
+} from '../_api/platform-management'
+import { getPrivateMediaUrl } from '../_main_shared/utils/image-security'
+import { resolveStatusTagTheme } from '../_main_shared/utils/status-tag'
 import { getErrorUserMessage } from '@/utils/user-facing'
 
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>

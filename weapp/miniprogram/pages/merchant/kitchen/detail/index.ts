@@ -1,7 +1,7 @@
-import dayjs from 'dayjs'
-import { KitchenDisplayService, KitchenOrderItem, KitchenOrderResponse, OrderManagementAdapter } from '../../../../api/order-management'
+import dayjs from '../../_main_shared/miniprogram_npm/dayjs/index'
+import { KitchenDisplayService, KitchenOrderItem, KitchenOrderResponse, OrderManagementAdapter } from '../../_api/order-management'
 import { logger } from '../../../../utils/logger'
-import { getKitchenStatusView, KitchenStatusTheme } from '../../../../utils/merchant-kitchen-detail-view'
+import { getKitchenStatusView, KitchenStatusTheme } from '../../_utils/merchant-kitchen-detail-view'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 

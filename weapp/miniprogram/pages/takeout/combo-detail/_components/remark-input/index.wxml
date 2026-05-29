@@ -1,0 +1,23 @@
+<view class="remark-input-wrapper">
+  <t-textarea
+    class="native-textarea"
+    value="{{value}}"
+    placeholder="{{placeholder}}"
+    maxlength="{{maxlength}}"
+    autosize
+    indicator="{{false}}"
+    bind:change="onInputChange"
+  ></t-textarea>
+
+  <view class="quick-remarks" wx:if="{{quickRemarks.length > 0}}">
+    <view 
+      wx:for="{{quickRemarks || []}}" 
+      wx:key="*this" 
+      class="quick-remark-tag"
+      bindtap="onQuickRemarkTap"
+      data-item="{{item}}"
+    >
+      + {{item}}
+    </view>
+  </view>
+</view>

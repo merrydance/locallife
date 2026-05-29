@@ -7,7 +7,7 @@ import {
 import {
   buildMerchantFinanceEntries,
   type MerchantFinanceEntryView
-} from '../../../utils/merchant-finance-entry-view'
+} from '../_utils/merchant-finance-entry-view'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 

@@ -7,13 +7,13 @@ import {
   type OperatorCommissionBillPageView,
   type OperatorCommissionBillRowView,
   type OperatorCommissionBillSummaryView
-} from '../../../../services/operator-finance'
+} from '../../_services/operator-finance'
 import {
   formatFinanceDateParam,
   getFinanceDateTime,
   getFinanceRangeCalendarValue,
   validateFinanceDateRange
-} from '../../../../utils/finance-date-range'
+} from '../../_main_shared/utils/finance-date-range'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'

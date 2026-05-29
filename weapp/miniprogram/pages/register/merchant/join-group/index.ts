@@ -1,4 +1,4 @@
-import { searchGroups, applyToJoinGroup } from '../../../../api/group-application'
+import { searchGroups, applyToJoinGroup } from '../../_main_shared/api/group-application'
 import { logger } from '../../../../utils/logger'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 

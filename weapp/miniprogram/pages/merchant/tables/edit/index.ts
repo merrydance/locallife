@@ -1,6 +1,6 @@
 import { tableManagementService, type CreateTableRequest, type TableImageResponse, type UpdateTableRequest } from '../../../../api/table-device-management'
-import { type TableResponse } from '../../../../api/table'
-import { TagService } from '../../../../api/dish'
+import { type TableResponse } from '../../_main_shared/api/table'
+import { TagService } from '../../_main_shared/api/dish'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { logger } from '../../../../utils/logger'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
@@ -19,7 +19,7 @@ import {
   type TableFormData,
   type TableTagOption,
   type TableUploadFile
-} from '../../../../utils/merchant-tables-shared'
+} from '../../_utils/merchant-tables-shared'
 import {
   buildPersistedUploadFile,
   buildSelectedTagState,

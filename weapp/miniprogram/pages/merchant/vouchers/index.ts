@@ -1,10 +1,10 @@
 import { getStableBarHeights } from '../../../utils/responsive'
 import {
   MerchantVoucherService
-} from '../../../api/coupon'
+} from '../_main_shared/api/coupon'
 import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
 import { logger } from '../../../utils/logger'
-import { syncCurrentMerchantContext } from '../../../utils/current-merchant'
+import { syncCurrentMerchantContext } from '../_utils/current-merchant'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import {
   appendVoucherViews,
@@ -22,7 +22,7 @@ import {
   type VoucherPageChunk,
   type VoucherPageProbeResult,
   type VoucherView
-} from '../../../utils/merchant-vouchers-view'
+} from '../_utils/merchant-vouchers-view'
 
 Page({
   data: {

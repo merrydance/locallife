@@ -1,5 +1,5 @@
-import { Review, ReviewService, CreateReviewParams, UpdateReviewParams } from '../../../../api/review'
-import { getOrderDetail } from '../../../../api/order'
+import { Review, ReviewService, CreateReviewParams, UpdateReviewParams } from '../_main_shared/api/review'
+import { getOrderDetail } from '../_main_shared/api/order'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'

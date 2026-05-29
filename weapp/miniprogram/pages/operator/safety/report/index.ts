@@ -2,7 +2,7 @@ import {
   loadOperatorFoodSafetyCaseListPageData,
   type OperatorFoodSafetyCaseView,
   type OperatorSafetyStatusFilter
-} from '../../../../services/operator-safety'
+} from '../../_services/operator-safety'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 interface TabChangeDetail {

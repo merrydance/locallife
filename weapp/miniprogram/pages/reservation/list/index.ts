@@ -1,5 +1,5 @@
-import { ReservationService, ReservationStatus, ReservationResponse } from '../../../api/reservation'
-import ReservationAdapter from '../../../adapters/reservation'
+import { ReservationService, ReservationStatus, ReservationResponse } from './_main_shared/api/reservation'
+import ReservationAdapter from './_main_shared/adapters/reservation'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type ValueEvent<T> = WechatMiniprogram.CustomEvent<{ value: T }>

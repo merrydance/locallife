@@ -8,7 +8,7 @@ import {
 } from '../../../../api/merchant'
 import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
 import { logger } from '../../../../utils/logger'
-import { syncCurrentMerchantContext } from '../../../../utils/current-merchant'
+import { syncCurrentMerchantContext } from '../../_utils/current-merchant'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 interface RechargeRuleView extends MerchantRechargeRuleResponse {

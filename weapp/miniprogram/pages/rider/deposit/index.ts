@@ -1,9 +1,9 @@
-import RiderService from '../../../api/rider'
+import RiderService from '../_main_shared/api/rider'
 import {
     buildRiderDepositFinanceView,
     getRiderDepositWithdrawStatusView,
     type RiderDepositFinanceView
-} from '../../../services/rider-deposit-finance'
+} from '../_services/rider-deposit-finance'
 import {
     continueStoredRiderDepositRecharge,
     getPendingRiderDepositRecharge,
@@ -12,17 +12,16 @@ import {
     submitRiderDepositRecharge,
     type RiderDepositPendingRechargeContext,
     type RiderDepositRechargeWorkflowResult
-} from '../../../services/rider-deposit-payment'
+} from '../_main_shared/services/rider-deposit-payment'
 import {
     buildRiderDepositWithdrawalStatusData, clearPendingRiderDepositWithdrawal,
     buildStoredRiderDepositWithdrawalSyncFailedView, recoverStoredRiderDepositWithdrawalStatus,
     waitForSubmittedRiderDepositWithdrawalTerminalStatus,
     type RiderDepositWithdrawalStatusView
-} from '../../../services/rider-deposit-withdrawal'
-import Toast, { hideToast } from '../../../miniprogram_npm/tdesign-miniprogram/toast/index'
+} from '../_services/rider-deposit-withdrawal'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
-import { buildDepositBillRecordView, formatFenValue, type DepositRecordView } from '../../../utils/rider-deposit-record-view'
+import { buildDepositBillRecordView, formatFenValue, type DepositRecordView } from '../_utils/rider-deposit-record-view'
 
 interface AmountInputDataset {
     field?: 'rechargeAmount' | 'withdrawAmount'
@@ -41,26 +40,19 @@ type WithdrawalStatusOptions = { silent?: boolean, refreshIfTerminal?: boolean, 
 
 type ActionFeedbackTheme = 'success' | 'warning'
 
-const TOAST_SELECTOR = '#t-toast'
 const FINANCE_REFRESH_DELAY_MS = [1200, 4000] as const
 
 let financeRefreshPromise: Promise<void> | null = null
 let financeRefreshTimerIds: number[] = []
 
 function showDepositLoadingToast(context: WechatMiniprogram.Page.TrivialInstance, message: string) {
-    Toast({
-        context,
-        selector: TOAST_SELECTOR,
-        message,
-        theme: 'loading',
-        direction: 'column',
-        duration: 0,
-        preventScrollThrough: true
-    })
+    void context
+    wx.showLoading({ title: message, mask: true })
 }
 
 function hideDepositToast(context: WechatMiniprogram.Page.TrivialInstance) {
-    hideToast({ context, selector: TOAST_SELECTOR })
+    void context
+    wx.hideLoading()
 }
 
 function showDepositResultToast(
@@ -68,12 +60,10 @@ function showDepositResultToast(
     message: string,
     theme: 'success' | 'warning' | 'error' = 'warning'
 ) {
-    Toast({
-        context,
-        selector: TOAST_SELECTOR,
-        message,
-        theme,
-        direction: 'column',
+    void context
+    wx.showToast({
+        title: message,
+        icon: theme === 'success' ? 'success' : 'none',
         duration: 1800
     })
 }

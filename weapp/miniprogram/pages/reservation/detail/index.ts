@@ -1,9 +1,9 @@
-import { ReservationService } from '../../../api/reservation'
+import { ReservationService } from './_main_shared/api/reservation'
 import Navigation from '../../../utils/navigation'
-import { ReservationCardAdapter, ReservationDetailViewModel } from '../../../adapters/reservation-card'
+import { ReservationCardAdapter, ReservationDetailViewModel } from './_main_shared/adapters/reservation-card'
 import { logger } from '../../../utils/logger'
 import { getErrorUserMessage } from '../../../utils/user-facing'
-import { startPaymentOrderWorkflow } from '../../../services/payment-workflow'
+import { startPaymentOrderWorkflow } from './_main_shared/services/payment-workflow'
 
 const getErrorMessage = getErrorUserMessage
 

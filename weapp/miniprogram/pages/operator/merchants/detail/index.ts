@@ -3,7 +3,7 @@ import {
   loadOperatorMerchantStatsView,
   type OperatorMerchantDetailView,
   type OperatorMerchantStatsView
-} from '../../../../services/operator-merchant-management'
+} from '../../_services/operator-merchant-management'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 Page({

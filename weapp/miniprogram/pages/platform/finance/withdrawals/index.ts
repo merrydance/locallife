@@ -3,7 +3,7 @@ import {
   listBaofuWithdrawals,
   type BaofuWithdrawalBalanceResponse,
   type BaofuWithdrawalItem
-} from '../../../../api/baofu-withdrawal'
+} from '../../_main_shared/api/baofu-withdrawal'
 import {
   buildBaofuWithdrawalBalanceView,
   buildBaofuWithdrawalItemView,
@@ -15,7 +15,7 @@ import {
   type BaofuWithdrawalBalanceView,
   type BaofuWithdrawalItemView,
   type BaofuWithdrawalLoadedSummaryView
-} from '../../../../services/baofu-withdrawal-workflow'
+} from '../../_main_shared/services/baofu-withdrawal-workflow'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'

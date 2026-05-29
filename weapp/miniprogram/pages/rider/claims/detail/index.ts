@@ -6,9 +6,9 @@ import {
   ClaimRecoveryPaymentResponse,
   MerchantClaimDecisionResponse,
   validateAppealReason
-} from '../../../../api/appeals-customer-service'
-import { isPaymentStatusSuccessful } from '../../../../api/payment'
-import { completeClaimRecoveryPayment, isClaimRecoveryPaymentIncomplete } from '../../../../services/claim-recovery-payment'
+} from '../../_main_shared/api/appeals-customer-service'
+import { isPaymentStatusSuccessful } from '../../_main_shared/api/payment'
+import { completeClaimRecoveryPayment, isClaimRecoveryPaymentIncomplete } from '../../_main_shared/services/claim-recovery-payment'
 import { logger } from '../../../../utils/logger'
 import { isSettledFulfilled, isSettledRejected, settleAll } from '../../../../utils/promise'
 import { getStableBarHeights } from '../../../../utils/responsive'
@@ -29,7 +29,7 @@ import {
   isClaimRecoveryNotFoundError,
   type BehaviorSummaryCardView,
   type RiderClaimDetailView
-} from '../../../../utils/rider-claim-detail-view'
+} from '../../_utils/rider-claim-detail-view'
 
 interface ClaimDetailOptions {
   id?: string

@@ -1,8 +1,8 @@
 import * as CartAPI from '../../../api/cart'
 import { logger } from '../../../utils/logger'
-import { createOrder, OrderType } from '../../../api/order'
-import { createOrderPayment } from '../../../api/payment'
-import { completePaymentWorkflow } from '../../../services/payment-workflow'
+import { createOrder, OrderType } from './_main_shared/api/order'
+import { createOrderPayment } from './_main_shared/api/payment'
+import { completePaymentWorkflow } from './_main_shared/services/payment-workflow'
 import Navigation from '../../../utils/navigation'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import {
@@ -10,7 +10,7 @@ import {
   getDefaultCheckoutAddress,
   loadTakeoutMembershipState,
   type CheckoutAddress
-} from '../../../services/takeout-checkout'
+} from './_services/takeout-checkout'
 import {
   buildAddressSyncKey,
   buildCheckoutSnapshotPatch,
@@ -24,8 +24,8 @@ import {
   MerchantCartView,
   ORDER_CONFIRM_CONCURRENCY,
   syncTakeoutCartSummary
-} from '../../../utils/takeout-order-confirm-support'
-import { getTakeoutPaymentCreateFailedContent } from '../../../utils/takeout-payment-error-copy'
+} from './_utils/takeout-order-confirm-support'
+import { getTakeoutPaymentCreateFailedContent } from './_utils/takeout-payment-error-copy'
 
 Page({
   data: {

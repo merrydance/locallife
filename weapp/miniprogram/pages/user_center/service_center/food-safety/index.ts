@@ -1,5 +1,5 @@
-import type { FoodSafetyIncidentType, ReportFoodSafetyResponse } from '../../../../api/food-safety'
-import { loadCustomerFoodSafetyOrderView, submitCustomerFoodSafetyReport } from '../../../../services/customer-food-safety-report'
+import type { FoodSafetyIncidentType, ReportFoodSafetyResponse } from '../_api/food-safety'
+import { loadCustomerFoodSafetyOrderView, submitCustomerFoodSafetyReport } from '../_services/customer-food-safety-report'
 import { logger } from '../../../../utils/logger'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 

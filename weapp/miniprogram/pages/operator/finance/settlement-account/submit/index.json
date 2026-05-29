@@ -1,6 +1,6 @@
 {
   "usingComponents": {
-    "baofu-onboarding-wait": "/components/baofu-onboarding-wait/index",
+    "baofu-onboarding-wait": "../../../_components/baofu-onboarding-wait/index",
     "custom-navbar": "/components/custom-navbar/index",
     "t-button": "tdesign-miniprogram/button/button",
     "t-cell": "tdesign-miniprogram/cell/cell",

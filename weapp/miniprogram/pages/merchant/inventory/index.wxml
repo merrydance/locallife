@@ -116,7 +116,5 @@
       bind:confirm="onDateConfirm"
       bind:cancel="onCloseDatePicker"
     />
-
-    <t-message id="t-message" />
   </block>
 </view>

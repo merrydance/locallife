@@ -1,5 +1,5 @@
-import FavoriteService, { FavoriteMerchantListItem, FavoriteType } from '../../../api/favorite'
-import ConsumerProfileAdapter from '../../../adapters/consumer-profile'
+import FavoriteService, { FavoriteMerchantListItem, FavoriteType } from './_api/favorite'
+import ConsumerProfileAdapter from './_main_shared/adapters/consumer-profile'
 import { ErrorHandler } from '../../../utils/error-handler'
 import Navigation from '../../../utils/navigation'
 import { formatPriceNoSymbol } from '../../../utils/util'

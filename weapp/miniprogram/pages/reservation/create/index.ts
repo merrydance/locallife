@@ -1,5 +1,5 @@
-import { ReservationService } from '../../../api/reservation'
-import ReservationAdapter from '../../../adapters/reservation'
+import { ReservationService } from './_main_shared/api/reservation'
+import ReservationAdapter from './_main_shared/adapters/reservation'
 import Navigation from '../../../utils/navigation'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 

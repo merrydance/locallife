@@ -1,4 +1,4 @@
-import dayjs from 'dayjs'
+import dayjs from '../_main_shared/miniprogram_npm/dayjs/index'
 import { getStableBarHeights } from '../../../utils/responsive'
 import {
   deviceManagementService,

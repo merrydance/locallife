@@ -4,10 +4,10 @@
  */
 
 import { formatPriceNoSymbol } from '@/utils/util'
-import { createReservation, CreateReservationRequest } from '../../../api/reservation'
-import { checkRoomAvailability } from '../../../api/room'
+import { createReservation, CreateReservationRequest } from './_main_shared/api/reservation'
+import { checkRoomAvailability } from './_main_shared/api/room'
 import Navigation from '../../../utils/navigation'
-import { startPaymentOrderWorkflow } from '../../../services/payment-workflow'
+import { startPaymentOrderWorkflow } from './_main_shared/services/payment-workflow'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import { logger } from '../../../utils/logger'
 

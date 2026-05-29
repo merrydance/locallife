@@ -4,16 +4,16 @@ import {
   updateRiderApplicationBasic, 
   submitRiderApplication,
   type RiderApplicationResponse
-} from '../../../api/rider-application'
-import { getPrivateMediaUrl } from '../../../utils/image-security'
+} from './_api/rider-application'
+import { getPrivateMediaUrl } from '../_main_shared/utils/image-security'
 import { logger } from '../../../utils/logger'
 import Navigation from '../../../utils/navigation'
-import { buildAgreementConsentPayload } from '../../../api/agreement-consent'
+import { buildAgreementConsentPayload } from '../_main_shared/api/agreement-consent'
 import {
   buildActiveCredentialDisplays,
   buildOnboardingReviewDisplay,
   type ApplicationStatus
-} from '../../../api/onboarding'
+} from '../_main_shared/api/onboarding'
 import { getErrorDebugMessage, getErrorUserMessage } from '../../../utils/user-facing'
 import {
   DEFAULT_RIDER_OCR_DISPLAY_STATE,
@@ -23,7 +23,7 @@ import {
   isRejectedRiderApplication,
   type UploadField,
   type UploadFieldValue
-} from '../../../utils/rider-register-view'
+} from './_utils/rider-register-view'
 import {
   buildRiderApplicationResponsePatch,
   buildRiderDocumentDeleteLocalPatch,
@@ -32,7 +32,7 @@ import {
   createRiderDocumentOCRWorkflow,
   deleteRiderDocumentByField,
   type RiderDocumentOCRWorkflow
-} from '../../../utils/rider-application-document-workflow'
+} from './_utils/rider-application-document-workflow'
 
 type UploadEvent = WechatMiniprogram.CustomEvent<{ path?: string }>
 

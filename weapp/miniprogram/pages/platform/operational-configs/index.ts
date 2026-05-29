@@ -2,7 +2,7 @@ import { responsiveBehavior } from '@/utils/responsive'
 import {
   platformManagementService,
   type PlatformOperationalConfigItem
-} from '@/api/platform-management'
+} from '../_api/platform-management'
 import { getErrorUserMessage } from '@/utils/user-facing'
 
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>

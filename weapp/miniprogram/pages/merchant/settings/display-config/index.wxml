@@ -117,6 +117,4 @@
       </block>
     </view>
   </block>
-
-  <t-message id="t-message" />
 </view>

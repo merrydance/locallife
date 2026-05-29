@@ -1,17 +1,17 @@
 {
-    "navigationBarTitleText": "餐厅详情",
-    "usingComponents": {
-        "custom-navbar": "/components/custom-navbar/index",
-        "cart-bar": "/components/cart-bar/index",
-        "merchant-coupon-strip": "/components/merchant-coupon-strip/index",
-        "t-image": "tdesign-miniprogram/image/image",
-        "t-tag": "tdesign-miniprogram/tag/tag",
-        "t-button": "tdesign-miniprogram/button/button",
-        "t-tabs": "tdesign-miniprogram/tabs/tabs",
-        "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
-        "t-empty": "tdesign-miniprogram/empty/empty",
-        "t-loading": "tdesign-miniprogram/loading/loading",
-        "t-icon": "tdesign-miniprogram/icon/icon"
-    },
-    "navigationStyle": "custom"
+  "navigationBarTitleText": "餐厅详情",
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
+    "cart-bar": "/components/cart-bar/index",
+    "merchant-coupon-strip": "./_components/merchant-coupon-strip/index",
+    "t-image": "tdesign-miniprogram/image/image",
+    "t-tag": "tdesign-miniprogram/tag/tag",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-tabs": "tdesign-miniprogram/tabs/tabs",
+    "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-icon": "tdesign-miniprogram/icon/icon"
+  },
+  "navigationStyle": "custom"
 }

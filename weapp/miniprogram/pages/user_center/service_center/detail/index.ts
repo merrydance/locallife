@@ -1,5 +1,5 @@
-import { claimManagementService, getUserClaimPresentation } from '../../../../api/appeals-customer-service'
-import type { UserClaimResponse } from '../../../../api/appeals-customer-service'
+import { claimManagementService, getUserClaimPresentation } from '../_main_shared/api/appeals-customer-service'
+import type { UserClaimResponse } from '../_main_shared/api/appeals-customer-service'
 import { logger } from '../../../../utils/logger'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 

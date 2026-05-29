@@ -1,7 +1,7 @@
 import {
   claimManagementService,
   ClaimResponse
-} from '../../../api/appeals-customer-service'
+} from '../_main_shared/api/appeals-customer-service'
 import { logger } from '../../../utils/logger'
 import {
   ClaimTagTheme,
@@ -17,7 +17,7 @@ import {
   getClaimStatusTheme,
   getMerchantClaimListActionState,
   getRecoveryStatusTheme
-} from '../../../utils/merchant-claim-detail-view'
+} from '../_main_shared/utils/merchant-claim-detail-view'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 

@@ -1,12 +1,12 @@
-import dayjs from 'dayjs'
+import dayjs from '../_main_shared/miniprogram_npm/dayjs/index'
 import { getMyMerchantOpenStatus } from '../../../api/merchant'
-import { KitchenDisplayService, KitchenOrderResponse, KitchenOrdersResponse, OrderManagementAdapter } from '../../../api/order-management'
-import { isPreparingOrderStatus, isReadyOrderStatus } from '../../../api/order'
+import { KitchenDisplayService, KitchenOrderResponse, KitchenOrdersResponse, OrderManagementAdapter } from '../_api/order-management'
+import { isPreparingOrderStatus, isReadyOrderStatus } from '../_main_shared/api/order'
 import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
-import { resolveStatusTagTheme, type StatusTagTheme } from '../../../utils/status-tag'
-import { wsManager, WSMessageType } from '../../../utils/websocket'
+import { resolveStatusTagTheme, type StatusTagTheme } from '../_main_shared/utils/status-tag'
+import { wsManager, WSMessageType } from '../_main_shared/utils/websocket'
 
 type WsUnsubscribe = () => void
 

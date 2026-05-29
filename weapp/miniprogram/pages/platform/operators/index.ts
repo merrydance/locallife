@@ -2,10 +2,10 @@ import { responsiveBehavior } from '@/utils/responsive'
 import {
   platformManagementService,
   type PlatformOperatorCard
-} from '@/api/platform-management'
+} from '../_api/platform-management'
 import { getErrorUserMessage } from '@/utils/user-facing'
-import { type StatusTagTheme } from '@/utils/status-tag'
-import { buildPlatformOperatorStatusView } from '@/utils/platform-status-view'
+import { type StatusTagTheme } from '../_main_shared/utils/status-tag'
+import { buildPlatformOperatorStatusView } from '../_utils/platform-status-view'
 
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
 type TapEvent = WechatMiniprogram.CustomEvent & {

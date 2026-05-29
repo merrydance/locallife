@@ -3,22 +3,22 @@
  * 提供基础统计与管理入口（不做大屏展示）
  */
 
-import { platformDashboardService, type RealtimeDashboardData, type PlatformOverviewResponse } from '@/api/platform-dashboard'
-import { platformAlertsService } from '@/api/platform-alerts'
+import { platformDashboardService, type RealtimeDashboardData, type PlatformOverviewResponse } from '../_api/platform-dashboard'
+import { platformAlertsService } from '../_api/platform-alerts'
 import { responsiveBehavior } from '@/utils/responsive'
 import {
     buildPlatformDashboardView,
     type PlatformDashboardEntry,
     type PlatformDashboardView
-} from '@/services/platform-dashboard-view'
-import { getConsoleDashboardErrorState } from '../../../utils/console-dashboard'
-import { wsManager, WSMessageType } from '../../../utils/websocket'
+} from '../_services/platform-dashboard-view'
+import { getConsoleDashboardErrorState } from '../_main_shared/utils/console-dashboard'
+import { wsManager, WSMessageType } from '../_main_shared/utils/websocket'
 import {
     buildAbnormalRefundClipboardText,
     formatPlatformAlertTime,
     toActionableAbnormalRefundAlert,
     type ActionableAbnormalRefundAlert
-} from '../../../utils/platform-alerts'
+} from '../_utils/platform-alerts'
 
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
 

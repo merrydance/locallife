@@ -9,10 +9,10 @@ import {
   ocrOperatorIdCard, 
   submitOperatorApplication,
   type OperatorApplicationResponse
-} from '../../../api/operator-application'
+} from '../_main_shared/api/operator-application'
 import { logger } from '../../../utils/logger'
 import Navigation from '../../../utils/navigation'
-import { buildAgreementConsentPayload } from '../../../api/agreement-consent'
+import { buildAgreementConsentPayload } from '../_main_shared/api/agreement-consent'
 import {
   buildOperatorApplicationPatch,
   buildOperatorBasicPayload,
@@ -35,7 +35,7 @@ import {
   UploadEvent,
   UploadFeedback,
   UploadFieldValue
-} from '../../../utils/operator-registration-view'
+} from './_utils/operator-registration-view'
 import {
   buildOperatorUploadStartPatch,
   buildRegionNamePatch,
@@ -45,7 +45,7 @@ import {
   fetchOperatorProvinceOptions,
   handleExistingOperatorApplication,
   resolveOperatorDefaultRegionPatch
-} from '../../../utils/operator-registration-support'
+} from './_utils/operator-registration-support'
 
 Page({
   data: {

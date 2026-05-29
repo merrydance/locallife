@@ -1,22 +1,21 @@
-import { Message } from 'tdesign-miniprogram'
 import type {
   BaofuSettlementAccountProfileDefaults,
   BaofuSettlementAccountResponse
-} from '../../../../../api/baofu-account'
-import { getMerchantBaofuSettlementAccount } from '../../../../../api/baofu-account'
+} from '../../../_main_shared/api/baofu-account'
+import { getMerchantBaofuSettlementAccount } from '../../../_main_shared/api/baofu-account'
 import type {
   ApplymentBankFormDraftPayload,
   ApplymentBankFormPayload
-} from '../../../../../components/applyment-bank-form/index'
-import { baofuSettlementSubmitBehavior } from '../../../../../behaviors/baofu-settlement-submit'
-import type { AccessCheckResult } from '../../../../../behaviors/baofu-settlement-status'
+} from './_components/applyment-bank-form/index'
+import { baofuSettlementSubmitBehavior } from '../../../_main_shared/behaviors/baofu-settlement-submit'
+import type { AccessCheckResult } from '../../../_main_shared/behaviors/baofu-settlement-status'
 import {
   buildBaofuOnboardingWaitViewFromText,
   startBaofuAccountOnboarding
-} from '../../../../../services/baofu-account-onboarding'
+} from '../../../_main_shared/services/baofu-account-onboarding'
 import {
   buildBaofuRolePageView
-} from '../../../../../services/baofu-account-role-page'
+} from '../../../_main_shared/services/baofu-account-role-page'
 import {
   buildBaofuEnterpriseBankDraftFromDefaults,
   buildBaofuEnterpriseFormFromDefaults,
@@ -26,7 +25,7 @@ import {
   validateBaofuEnterpriseProfileForm,
   type BaofuEnterpriseProfileField,
   type BaofuEnterpriseProfileForm
-} from '../../../../../services/baofu-account-profile-form'
+} from '../../../_main_shared/services/baofu-account-profile-form'
 import {
   ensureMerchantApplymentAccess,
   getMerchantConsoleAccessErrorMessage,
@@ -45,12 +44,9 @@ function showProfileValidationMessage(
   offsetTop: number,
   content: string
 ) {
-  Message.warning({
-    context,
-    offset: [offsetTop + 16, 24] as [number, number],
-    duration: 2200,
-    content
-  })
+  void context
+  void offsetTop
+  wx.showToast({ title: content, icon: 'none', duration: 2200 })
 }
 
 async function merchantAccessGuard(): Promise<AccessCheckResult> {

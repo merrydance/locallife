@@ -8,9 +8,9 @@ import {
   MerchantMembershipTransaction
 } from '../../../../api/merchant'
 import { logger } from '../../../../utils/logger'
-import { getMembershipTransactionTagView } from '../../../../utils/membership-transaction-view'
+import { getMembershipTransactionTagView } from '../../_utils/membership-transaction-view'
 import { getStableBarHeights } from '../../../../utils/responsive'
-import type { StatusTagTheme } from '../../../../utils/status-tag'
+import type { StatusTagTheme } from '../../_main_shared/utils/status-tag'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 type AdjustDirection = 'increase' | 'decrease'

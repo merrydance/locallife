@@ -4,12 +4,12 @@ import DeliveryService, {
   DeliveryResponse,
   getDeliveryStatusDisplay,
   shouldPollDeliveryTrackingState
-} from '../../../api/delivery'
+} from '../_main_shared/api/delivery'
 import { BicyclingDirectionResponse, getBicyclingDirection } from '../../../api/location'
-import { mapService } from '../../../services/map'
+import { mapService } from '../_main_shared/services/map'
 import { logger } from '../../../utils/logger'
 import { getErrorUserMessage } from '../../../utils/user-facing'
-import { confirmReceiptWithRecovery } from '../../../services/order-receipt-confirmation'
+import { confirmReceiptWithRecovery } from '../_services/order-receipt-confirmation'
 
 interface MapPoint {
   latitude: number

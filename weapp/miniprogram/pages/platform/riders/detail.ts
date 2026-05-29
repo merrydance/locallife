@@ -3,10 +3,10 @@ import {
   platformManagementService,
   type PlatformComplaintCategory,
   type PlatformRiderDetail
-} from '@/api/platform-management'
+} from '../_api/platform-management'
 import { getErrorUserMessage } from '@/utils/user-facing'
-import { resolveStatusTagTheme, type StatusTagTheme } from '@/utils/status-tag'
-import { buildPlatformRiderStatusView } from '@/utils/platform-status-view'
+import { resolveStatusTagTheme, type StatusTagTheme } from '../_main_shared/utils/status-tag'
+import { buildPlatformRiderStatusView } from '../_utils/platform-status-view'
 
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
 

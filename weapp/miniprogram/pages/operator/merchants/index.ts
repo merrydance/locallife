@@ -4,7 +4,7 @@ import {
   parseOperatorMerchantStatusFilter,
   type OperatorMerchantFilterStatus,
   type OperatorMerchantListView
-} from '../../../services/operator-merchant-management'
+} from '../_services/operator-merchant-management'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface MerchantListPageDataset {

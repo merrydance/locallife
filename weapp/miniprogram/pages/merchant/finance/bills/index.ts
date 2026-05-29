@@ -8,13 +8,13 @@ import {
   type MerchantFinanceBillRowView,
   type MerchantFinanceBillSummaryView,
   type MerchantFinanceRange
-} from '../../../../services/merchant-finance-workflow'
+} from '../../_services/merchant-finance-workflow'
 import {
   formatFinanceDateParam,
   getFinanceDateTime,
   getFinanceRangeCalendarValue,
   validateFinanceDateRange
-} from '../../../../utils/finance-date-range'
+} from '../../_main_shared/utils/finance-date-range'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'

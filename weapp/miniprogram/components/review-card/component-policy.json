@@ -1,9 +1,0 @@
-{
-  "purpose": "Review summary card with text excerpt, images, and reviewer metadata.",
-  "tdesignGroup": "data",
-  "tdesignCandidates": [
-    "image"
-  ],
-  "decision": "local-component",
-  "rationale": "Review presentation has its own text, image, reply, and metadata layout. A shared card component prevents review metadata layouts from drifting."
-}

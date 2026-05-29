@@ -1,4 +1,4 @@
-import CouponService, { UserCoupon, MyCouponParams } from '../../../api/coupon'
+import CouponService, { UserCoupon, MyCouponParams } from './_main_shared/api/coupon'
 import { ErrorHandler } from '../../../utils/error-handler'
 
 // ViewModel

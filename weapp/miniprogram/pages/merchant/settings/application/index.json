@@ -10,7 +10,7 @@
     "t-loading": "tdesign-miniprogram/loading/loading",
     "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
     "t-tag": "tdesign-miniprogram/tag/tag",
-    "onboarding-review-summary": "/components/onboarding-review-summary/index"
+    "onboarding-review-summary": "../../_components/onboarding-review-summary/index"
   },
   "navigationStyle": "custom",
   "enablePullDownRefresh": true

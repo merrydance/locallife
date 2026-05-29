@@ -6,12 +6,12 @@ import {
   ocrGroupBusinessLicense,
   submitGroupApplication,
   type GroupApplicationResponse
-} from '../../../../api/group-application'
-import { getPrivateMediaUrl } from '../../../../utils/image-security'
+} from '../../_main_shared/api/group-application'
+import { getPrivateMediaUrl } from '../../_main_shared/utils/image-security'
 import { logger } from '../../../../utils/logger'
 import Navigation from '../../../../utils/navigation'
-import { buildAgreementConsentPayload } from '../../../../api/agreement-consent'
-import { AdminApprovalDisplay, getAdminApprovalStatusDisplay } from '../../../../adapters/admin-review'
+import { buildAgreementConsentPayload } from '../../_main_shared/api/agreement-consent'
+import { AdminApprovalDisplay, getAdminApprovalStatusDisplay } from '../../_main_shared/adapters/admin-review'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
 

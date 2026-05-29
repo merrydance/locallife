@@ -1,12 +1,12 @@
-import dayjs from 'dayjs'
-import { AppealResponse, appealManagementService } from '../../../../api/appeals-customer-service'
+import dayjs from '../../_main_shared/miniprogram_npm/dayjs/index'
+import { AppealResponse, appealManagementService } from '../../_main_shared/api/appeals-customer-service'
 import { logger } from '../../../../utils/logger'
 import {
   getMerchantAppealProgressCurrent,
   getMerchantAppealResultSummary,
   getMerchantAppealStatusView,
   MerchantAppealTagTheme
-} from '../../../../utils/merchant-appeal-view'
+} from '../../_utils/merchant-appeal-view'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 

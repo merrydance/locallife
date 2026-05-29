@@ -7,7 +7,7 @@ import {
   DishManagementService,
   TagInfo,
   TagService
-} from '../../../../api/dish'
+} from '../../_main_shared/api/dish'
 import { logger } from '../../../../utils/logger'
 import { isSettledFulfilled, settleAll } from '../../../../utils/promise'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
@@ -28,7 +28,7 @@ import {
   type DishOption,
   type FormInputDetail,
   type SelectedSpecState
-} from '../../../../utils/combo-edit-view'
+} from '../../_utils/combo-edit-view'
 
 const getErrorMessage = getErrorUserMessage
 

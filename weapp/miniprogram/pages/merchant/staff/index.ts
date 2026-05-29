@@ -12,7 +12,7 @@ import {
   MerchantStaffRole,
   removeMerchantStaff,
   updateMerchantStaffRole
-} from '../../../api/merchant-staff'
+} from '../_api/merchant-staff'
 import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'

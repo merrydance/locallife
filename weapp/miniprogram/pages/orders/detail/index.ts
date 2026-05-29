@@ -12,20 +12,20 @@ import {
   isFoodSafetyReportableOrder,
   isReadyOrderStatus,
   isTrackableOrderStatus
-} from '../../../api/order'
-import { startPaymentOrderWorkflow } from '../../../services/payment-workflow'
-import { confirmReceiptWithRecovery } from '../../../services/order-receipt-confirmation'
-import { OrderAdapter } from '../../../adapters/order'
-import { OrderDetail } from '../../../models/order'
-import { generateOrderTimeline } from '../../../utils/timeline'
+} from '../_main_shared/api/order'
+import { startPaymentOrderWorkflow } from '../_main_shared/services/payment-workflow'
+import { confirmReceiptWithRecovery } from '../_services/order-receipt-confirmation'
+import { OrderAdapter } from '../_adapters/order'
+import { OrderDetail } from '../_models/order'
+import { generateOrderTimeline } from '../_utils/timeline'
 import { getErrorUserMessage } from '../../../utils/user-facing'
-import { loadOrderDetailBundle, getOrderReview, type OrderDetailReservation } from '../../../services/order-detail'
+import { loadOrderDetailBundle, getOrderReview, type OrderDetailReservation } from '../_services/order-detail'
 import {
   disposeOrderCancelRefundWorkflow,
   orderCancelRefundInitialState,
   orderCancelRefundWorkflow,
   startRefundTrackingAfterCancel
-} from '../../../services/order-cancel-refund-workflow'
+} from '../_services/order-cancel-refund-workflow'
 
 type PageWithUrgeTimer = {
   _urgeTimer?: ReturnType<typeof setInterval>

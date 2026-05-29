@@ -1,4 +1,4 @@
-import { DishCategory, DishManagementService } from '../../../../api/dish'
+import { DishCategory, DishManagementService } from '../../_main_shared/api/dish'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { logger } from '../../../../utils/logger'
 import { getErrorUserMessage } from '../../../../utils/user-facing'

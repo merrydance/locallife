@@ -28,7 +28,7 @@ import {
   type CategoryPickerOption,
   type MerchantProfileForm,
   type TagItem
-} from '../../../../utils/merchant-profile-view'
+} from '../../_utils/merchant-profile-view'
 
 const getErrorMessage = getErrorUserMessage
 

@@ -3,7 +3,7 @@ import {
   claimManagementService,
   AppealResponse,
   ClaimResponse
-} from '../../../api/appeals-customer-service'
+} from '../_main_shared/api/appeals-customer-service'
 import { logger } from '../../../utils/logger'
 import {
   buildRiderAppealViewStatus,
@@ -15,7 +15,7 @@ import {
   getRiderClaimActionHint,
   getRiderClaimStatusView,
   getRiderRecoveryStatusView
-} from '../../../utils/rider-claims-view'
+} from '../_utils/rider-claims-view'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 type ClaimBucketTab = 'all' | 'pending_action' | 'appealed' | 'closed'

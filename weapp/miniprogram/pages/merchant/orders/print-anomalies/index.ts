@@ -2,17 +2,17 @@ import {
   MerchantOrderManagementService,
   MerchantPrintAnomalyItem,
   OrderManagementAdapter
-} from '../../../../api/order-management'
+} from '../../_api/order-management'
 import { logger } from '../../../../utils/logger'
 import {
   formatPrintAnomalyRetryHint,
   getPrintAnomalyStatusView,
   PrintAnomalyTheme
-} from '../../../../utils/merchant-print-anomaly-view'
+} from '../../_utils/merchant-print-anomaly-view'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
-import dayjs from 'dayjs'
+import dayjs from '../../_main_shared/miniprogram_npm/dayjs/index'
 
 const PRINT_ANOMALIES_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 

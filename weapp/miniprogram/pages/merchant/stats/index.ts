@@ -1,4 +1,4 @@
-import dayjs from 'dayjs'
+import dayjs from '../_main_shared/miniprogram_npm/dayjs/index'
 import {
   MerchantCategoryStatRow,
   MerchantDailyStatRow,
@@ -8,9 +8,9 @@ import {
   MerchantRepurchaseRateResponse,
   MerchantStatsService,
   TopSellingDishRow
-} from '../../../api/merchant-stats'
-import { MerchantOrderManagementService, OrderStatsResponse } from '../../../api/order-management'
-import { ReservationService, ReservationStats } from '../../../api/reservation'
+} from '../_api/merchant-stats'
+import { MerchantOrderManagementService, OrderStatsResponse } from '../_api/order-management'
+import { ReservationService, ReservationStats } from '../_main_shared/api/reservation'
 import { logger } from '../../../utils/logger'
 import { isSettledFulfilled, isSettledRejected, settleAll, type SettledResult } from '../../../utils/promise'
 import { getStableBarHeights } from '../../../utils/responsive'

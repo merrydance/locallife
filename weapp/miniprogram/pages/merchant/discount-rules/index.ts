@@ -6,7 +6,7 @@ import {
 } from '../../../api/merchant'
 import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
 import { logger } from '../../../utils/logger'
-import { syncCurrentMerchantContext } from '../../../utils/current-merchant'
+import { syncCurrentMerchantContext } from '../_utils/current-merchant'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import {
   appendRuleViews,
@@ -24,7 +24,7 @@ import {
   type DiscountRulePageChunk,
   type DiscountRulePageProbeResult,
   type DiscountRuleView
-} from '../../../utils/merchant-discount-rules-view'
+} from '../_utils/merchant-discount-rules-view'
 
 Page({
   data: {

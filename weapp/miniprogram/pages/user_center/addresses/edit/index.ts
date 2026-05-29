@@ -1,6 +1,6 @@
-import AddressService, { CreateAddressRequest, UpdateAddressRequest } from '../../../../api/address'
+import AddressService, { CreateAddressRequest, UpdateAddressRequest } from '../_main_shared/api/address'
 import { getCurrentRegion } from '../../../../api/location'
-import { listRegions, RegionItem } from '../../../../api/operator-application'
+import { listRegions, RegionItem } from '../_main_shared/api/operator-application'
 import { logger } from '../../../../utils/logger'
 import { ErrorHandler } from '../../../../utils/error-handler'
 import { getErrorDebugMessage, getErrorUserMessage } from '../../../../utils/user-facing'

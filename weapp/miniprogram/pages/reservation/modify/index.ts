@@ -1,4 +1,4 @@
-import { ReservationItem, ReservationResponse, ReservationService } from '../../../api/reservation'
+import { ReservationItem, ReservationResponse, ReservationService } from './_main_shared/api/reservation'
 import { getPublicMerchantDishes, DishDTO } from '../../../api/merchant'
 import { getPublicImageUrl } from '../../../utils/image'
 import { formatPriceNoSymbol } from '../../../utils/util'

@@ -8,7 +8,7 @@ import {
   type OperatorRuleFilterCategory,
   type OperatorRuleValidationResult,
   type OperatorRuleView
-} from '../../../services/operator-rules-management'
+} from '../_services/operator-rules-management'
 import { logger } from '../../../utils/logger'
 
 interface RuleCategoryDataset {

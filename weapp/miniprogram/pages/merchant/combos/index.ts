@@ -1,5 +1,5 @@
 import { getStableBarHeights } from '../../../utils/responsive'
-import { ComboManagementService, ComboSetResponse } from '../../../api/dish'
+import { ComboManagementService, ComboSetResponse } from '../_main_shared/api/dish'
 import { getPublicImageUrl } from '../../../utils/image'
 import { logger } from '../../../utils/logger'
 import { getErrorUserMessage } from '../../../utils/user-facing'

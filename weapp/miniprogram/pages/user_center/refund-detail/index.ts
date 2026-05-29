@@ -1,6 +1,6 @@
-import { buildRefundProgress, getRefundById, getRefundStatusView, isRefundStatusTerminal, RefundOrder, RefundProgressView } from '../../../api/payment'
+import { buildRefundProgress, getRefundById, getRefundStatusView, isRefundStatusTerminal, RefundOrder, RefundProgressView } from './_main_shared/api/payment'
 import { logger } from '../../../utils/logger'
-import { waitForRefundTerminalResult } from '../../../services/refund-workflow'
+import { waitForRefundTerminalResult } from './_main_shared/services/refund-workflow'
 
 let refundTerminalWaitToken = 0
 

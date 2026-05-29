@@ -1,16 +1,16 @@
 import type {
   BaofuSettlementAccountProfileDefaults,
   BaofuSettlementAccountResponse
-} from '../../../../../api/baofu-account'
-import { getOperatorBaofuSettlementAccount } from '../../../../../api/baofu-account'
-import { baofuSettlementSubmitBehavior } from '../../../../../behaviors/baofu-settlement-submit'
+} from '../../../_main_shared/api/baofu-account'
+import { getOperatorBaofuSettlementAccount } from '../../../_main_shared/api/baofu-account'
+import { baofuSettlementSubmitBehavior } from '../../../_main_shared/behaviors/baofu-settlement-submit'
 import {
   buildBaofuOnboardingWaitViewFromText,
   startBaofuAccountOnboarding
-} from '../../../../../services/baofu-account-onboarding'
+} from '../../../_main_shared/services/baofu-account-onboarding'
 import {
   buildBaofuRolePageView
-} from '../../../../../services/baofu-account-role-page'
+} from '../../../_main_shared/services/baofu-account-role-page'
 import {
   buildBaofuPersonalFormFromDefaults,
   buildBaofuPersonalProfilePayload,
@@ -18,7 +18,7 @@ import {
   validateBaofuPersonalProfileForm,
   type BaofuPersonalProfileField,
   type BaofuPersonalProfileForm
-} from '../../../../../services/baofu-account-profile-form'
+} from '../../../_main_shared/services/baofu-account-profile-form'
 import { logger } from '../../../../../utils/logger'
 import { getErrorUserMessage } from '../../../../../utils/user-facing'
 

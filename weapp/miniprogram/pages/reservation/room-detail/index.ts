@@ -1,5 +1,5 @@
-import { getRoomDetail, Room } from '../../../api/reservation'
-import { checkRoomAvailability, RoomAvailabilityResponse, TimeSlot } from '../../../api/room'
+import { getRoomDetail, Room } from './_main_shared/api/reservation'
+import { checkRoomAvailability, RoomAvailabilityResponse, TimeSlot } from './_main_shared/api/room'
 import { formatPriceNoSymbol } from '@/utils/util'
 import { settleAll } from '../../../utils/promise'
 import { getErrorUserMessage } from '../../../utils/user-facing'

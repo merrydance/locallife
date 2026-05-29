@@ -1,6 +1,6 @@
-import { claimManagementService } from '../../../../api/appeals-customer-service'
-import type { UserClaimResponse, UserClaimType, SubmitClaimResponse } from '../../../../api/appeals-customer-service'
-import { getOrderDetail, getOrderList } from '../../../../api/order'
+import { claimManagementService } from '../_main_shared/api/appeals-customer-service'
+import type { UserClaimResponse, UserClaimType, SubmitClaimResponse } from '../_main_shared/api/appeals-customer-service'
+import { getOrderDetail, getOrderList } from '../_main_shared/api/order'
 import { logger } from '../../../../utils/logger'
 import {
   buildClaimOrderOptions,
@@ -11,7 +11,7 @@ import {
   toSelectedClaimOrder,
   type ClaimOrderOption,
   type SelectedClaimOrder
-} from '../../../../utils/user-claim-submit-view'
+} from '../_utils/user-claim-submit-view'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 const SUPPORTED_USER_CLAIM_TYPES: UserClaimType[] = ['foreign-object', 'damage', 'timeout']

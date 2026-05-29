@@ -11,7 +11,7 @@ import {
   getTotalCount,
   isAbortLikeError,
   type MerchantCartGroup
-} from '@/utils/takeout-cart-view'
+} from './_utils/takeout-cart-view'
 
 let _loadAllCartsPromise: Promise<void> | null = null
 let _lastLoadAllCartsAt = 0

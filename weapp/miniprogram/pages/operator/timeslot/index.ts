@@ -6,7 +6,7 @@ import {
   loadOperatorPeakHourViews,
   type OperatorCreatePeakHourConfigRequest,
   type OperatorPeakHourViewItem
-} from '../../../services/operator-region-config'
+} from '../_services/operator-region-config'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface TimeslotPageOptions {

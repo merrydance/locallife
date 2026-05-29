@@ -6,9 +6,9 @@ import {
   MERCHANT_REJECT_REASON_OPTIONS,
   MerchantOrderStatusFilter,
   normalizeMerchantVisibleOrderStatusFilter
-} from '../../../../api/order-management'
+} from '../../_api/order-management'
 import { logger } from '../../../../utils/logger'
-import dayjs from 'dayjs'
+import dayjs from '../../_main_shared/miniprogram_npm/dayjs/index'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 import {
   ensureMerchantConsoleAccess,
@@ -16,8 +16,8 @@ import {
   isMerchantConsoleAccessDenied,
   isMerchantConsoleAccessGranted
 } from '../../../../utils/console-access'
-import { buildMerchantOrderFeeBreakdownView } from '../../../../utils/merchant-order-detail-view'
-import { wsManager, WSMessageType } from '../../../../utils/websocket'
+import { buildMerchantOrderFeeBreakdownView } from '../../_utils/merchant-order-detail-view'
+import { wsManager, WSMessageType } from '../../_main_shared/utils/websocket'
 
 type OrderStatusFilter = MerchantOrderStatusFilter
 type OrderTypeFilter = '' | OrderResponse['order_type']

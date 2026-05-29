@@ -1,4 +1,4 @@
-import { getTableStatusDisplay } from '../../../api/table'
+import { getTableStatusDisplay } from '../_main_shared/api/table'
 import {
   getDiningSessionEntry,
   getDiningSessionMenu,
@@ -7,12 +7,12 @@ import {
   type DiningSessionEntryResponse,
   type DiningSessionEntrySessionSummary,
   type DiningSessionPrecheckResponse
-} from '../../../api/dining-session'
+} from '../_main_shared/api/dining-session'
 import {
   saveDineInSessionFromEntrySummary,
   saveDineInSessionFromMenu,
   saveDineInSessionFromOpenResponse
-} from '../../../services/dine-in-session'
+} from '../_main_shared/services/dine-in-session'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type EntryParams = {

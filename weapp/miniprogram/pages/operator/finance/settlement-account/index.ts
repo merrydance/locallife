@@ -1,5 +1,5 @@
-import { getOperatorBaofuSettlementAccount } from '../../../../api/baofu-account'
-import { baofuSettlementStatusBehavior } from '../../../../behaviors/baofu-settlement-status'
+import { getOperatorBaofuSettlementAccount } from '../../_main_shared/api/baofu-account'
+import { baofuSettlementStatusBehavior } from '../../_main_shared/behaviors/baofu-settlement-status'
 
 Page({
   behaviors: [

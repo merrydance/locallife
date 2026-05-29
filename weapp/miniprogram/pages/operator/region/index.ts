@@ -1,4 +1,4 @@
-import { loadOperatorRegionListItems, type OperatorRegionListItem } from '../../../services/operator-regions'
+import { loadOperatorRegionListItems, type OperatorRegionListItem } from '../_services/operator-regions'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type RegionPageTarget = 'delivery' | 'rules'

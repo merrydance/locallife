@@ -1,9 +1,9 @@
-import dayjs from 'dayjs'
+import dayjs from '../../_main_shared/miniprogram_npm/dayjs/index'
 import {
   MerchantCustomerOrderBy,
   MerchantCustomerStatRow,
   MerchantStatsService
-} from '../../../../api/merchant-stats'
+} from '../../_api/merchant-stats'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'

@@ -370,6 +370,10 @@ function collectWxmlHandlerBindingFailures(options = {}) {
 
   for (const relativePath of wxmlFiles) {
     const normalizedPath = normalizeRelativePath(relativePath)
+    if (normalizedPath.includes('/_components/')) {
+      continue
+    }
+
     const absolutePath = path.join(currentRepoRoot, normalizedPath)
     if (!fs.existsSync(absolutePath)) {
       continue

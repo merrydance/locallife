@@ -1,5 +1,5 @@
 import { getPublicMerchantDetail, PublicMerchantDetail } from '../../../api/merchant'
-import ConsumerMerchantDetailAdapter, { type ConsumerMerchantDetailViewModel } from '../../../adapters/consumer-merchant-detail'
+import ConsumerMerchantDetailAdapter, { type ConsumerMerchantDetailViewModel } from './_adapters/consumer-merchant-detail'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type RestaurantInfoViewModel = ConsumerMerchantDetailViewModel

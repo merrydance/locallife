@@ -1,4 +1,4 @@
-import { AgreementService, AgreementDetail } from '../../../../api/agreement'
+import { AgreementService, AgreementDetail } from '../_main_shared/api/agreement'
 
 function stripAgreementHtmlHeader(html: string): string {
   if (!html) return html

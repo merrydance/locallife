@@ -2,7 +2,7 @@ import {
     createEmptyOperatorPeakConfigSummary,
     createEmptyOperatorRegionConfigSummary,
     loadOperatorRegionConfigOverview
-} from '../../../services/operator-region-config'
+} from '../_services/operator-region-config'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface RegionConfigPageOptions {

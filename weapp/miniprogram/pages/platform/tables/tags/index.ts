@@ -1,4 +1,4 @@
-import { TagService, type TagInfo } from '../../../../api/dish'
+import { TagService, type TagInfo } from '../../_main_shared/api/dish'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { logger } from '../../../../utils/logger'
 import { getErrorUserMessage } from '../../../../utils/user-facing'

@@ -5,7 +5,7 @@
 
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
-import { clearDineInSessionContext, getDineInSessionContext, saveDineInSessionFromMenu } from '../../../services/dine-in-session'
+import { clearDineInSessionContext, getDineInSessionContext, saveDineInSessionFromMenu } from '../_main_shared/services/dine-in-session'
 import {
     addMenuItemToCart,
     calculateMenuCart,
@@ -16,7 +16,7 @@ import {
     updateMenuCartItem,
     type MenuComboInfo,
     type MenuPromotionInfo
-} from '../../../services/dine-in-menu'
+} from '../_services/dine-in-menu'
 import {
     buildDishQtyUpdate,
     buildDrawerState,
@@ -33,7 +33,7 @@ import {
     type MenuDish,
     type MerchantInfoView,
     type TableInfoView
-} from '../../../utils/dine-in-menu-view'
+} from '../_utils/dine-in-menu-view'
 
 Page({
     data: {

@@ -1,19 +1,19 @@
 {
-    "usingComponents": {
-        "custom-navbar": "/components/custom-navbar/index",
-        "t-cell": "tdesign-miniprogram/cell/cell",
-        "t-button": "tdesign-miniprogram/button/button",
-        "t-icon": "tdesign-miniprogram/icon/icon",
-        "t-input": "tdesign-miniprogram/input/input",
-        "t-steps": "tdesign-miniprogram/steps/steps",
-        "t-step-item": "tdesign-miniprogram/step-item/step-item",
-        "t-loading": "tdesign-miniprogram/loading/loading",
-        "t-stepper": "tdesign-miniprogram/stepper/stepper",
-        "t-checkbox": "tdesign-miniprogram/checkbox/checkbox",
-        "t-checkbox-group": "tdesign-miniprogram/checkbox-group/checkbox-group",
-        "t-picker": "tdesign-miniprogram/picker/picker",
-        "t-picker-item": "tdesign-miniprogram/picker-item/picker-item",
-        "t-popup": "tdesign-miniprogram/popup/popup",
-        "document-uploader": "/components/document-uploader/index"
-    }
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
+    "t-cell": "tdesign-miniprogram/cell/cell",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "t-input": "tdesign-miniprogram/input/input",
+    "t-steps": "tdesign-miniprogram/steps/steps",
+    "t-step-item": "tdesign-miniprogram/step-item/step-item",
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-stepper": "tdesign-miniprogram/stepper/stepper",
+    "t-checkbox": "tdesign-miniprogram/checkbox/checkbox",
+    "t-checkbox-group": "tdesign-miniprogram/checkbox-group/checkbox-group",
+    "t-picker": "tdesign-miniprogram/picker/picker",
+    "t-picker-item": "tdesign-miniprogram/picker-item/picker-item",
+    "t-popup": "tdesign-miniprogram/popup/popup",
+    "document-uploader": "../_components/document-uploader/index"
+  }
 }

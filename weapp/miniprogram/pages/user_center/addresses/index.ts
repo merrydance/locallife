@@ -1,4 +1,4 @@
-import AddressService, { Address } from '../../../api/address'
+import AddressService, { Address } from './_main_shared/api/address'
 import { logger } from '../../../utils/logger'
 import { ErrorHandler } from '../../../utils/error-handler'
 

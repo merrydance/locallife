@@ -4,7 +4,7 @@ import {
   parseOperatorRiderStatusFilter,
   type OperatorRiderFilterStatus,
   type OperatorRiderListView
-} from '../../../services/operator-rider-management'
+} from '../_services/operator-rider-management'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type RiderListPageOptions = {

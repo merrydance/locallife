@@ -4,7 +4,7 @@ import {
   saveOperatorFoodSafetyResolution,
   type OperatorFoodSafetyCaseDetailView,
   type OperatorFoodSafetyIncidentView
-} from '../../../../services/operator-safety'
+} from '../../_services/operator-safety'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 interface InputDetail {

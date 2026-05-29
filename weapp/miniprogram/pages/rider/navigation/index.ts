@@ -1,15 +1,15 @@
-import DeliveryService, { Delivery, DeliveryLocationPoint } from '../../../api/delivery'
-import { mapService, MapMarker, MapPoint, MapPolyline } from '../../../services/map'
+import DeliveryService, { Delivery, DeliveryLocationPoint } from '../_main_shared/api/delivery'
+import { mapService, MapMarker, MapPoint, MapPolyline } from '../_main_shared/services/map'
 import { getStableBarHeights } from '../../../utils/responsive'
-import { riderLiveLocationSession, RiderLiveLocationState } from '../../../utils/rider-live-location'
+import { riderLiveLocationSession, RiderLiveLocationState } from '../_utils/rider-live-location'
 import { locationService } from '../../../utils/location'
 import { logger } from '../../../utils/logger'
-import { getRiderLocationStatusView } from '../../../utils/rider-location-status-view'
+import { getRiderLocationStatusView } from '../_utils/rider-location-status-view'
 import {
   getRiderNavigationNextStop,
   isRiderDeliveryTrackedStatus
-} from '../../../utils/rider-delivery-view'
-import { resolveStatusTagTheme, type StatusTagTheme } from '../../../utils/status-tag'
+} from '../_utils/rider-delivery-view'
+import { resolveStatusTagTheme, type StatusTagTheme } from '../_main_shared/utils/status-tag'
 
 interface RiderNavigationOptions {
   id?: string

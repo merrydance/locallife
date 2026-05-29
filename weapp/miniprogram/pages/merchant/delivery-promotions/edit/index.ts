@@ -4,9 +4,9 @@ import {
   type CreateDeliveryPromotionRequest,
   type DeliveryPromotionResponse,
   DeliveryFeeAdapter
-} from '../../../../api/delivery-fee'
+} from '../../_main_shared/api/delivery-fee'
 import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
-import { syncCurrentMerchantContext } from '../../../../utils/current-merchant'
+import { syncCurrentMerchantContext } from '../../_utils/current-merchant'
 import { logger } from '../../../../utils/logger'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 

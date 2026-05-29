@@ -1,6 +1,6 @@
-import { isPaymentWorkflowPaid, waitForPaymentWorkflowTerminalResult } from '../../../services/payment-workflow'
-import { checkoutPaidDineInSession } from '../../../services/dine-in-session'
-import { buildPaymentResultView, normalizePaymentWorkflowStatus, PaymentResultAction, PaymentWorkflowStatus } from '../../../utils/payment-result-view'
+import { isPaymentWorkflowPaid, waitForPaymentWorkflowTerminalResult } from '../_main_shared/services/payment-workflow'
+import { checkoutPaidDineInSession } from '../_main_shared/services/dine-in-session'
+import { buildPaymentResultView, normalizePaymentWorkflowStatus, PaymentResultAction, PaymentWorkflowStatus } from '../_utils/payment-result-view'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 

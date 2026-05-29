@@ -3,11 +3,11 @@
  * 显示用户的所有预订记录
  */
 
-import { ReservationService, ReservationStatus, ReservationListParams } from '../../../api/reservation'
+import { ReservationService, ReservationStatus, ReservationListParams } from './_main_shared/api/reservation'
 import { logger } from '../../../utils/logger'
-import { ReservationCardAdapter, ReservationCardViewModel } from '../../../adapters/reservation-card'
+import { ReservationCardAdapter, ReservationCardViewModel } from './_main_shared/adapters/reservation-card'
 import Navigation from '../../../utils/navigation'
-import { startPaymentOrderWorkflow } from '../../../services/payment-workflow'
+import { startPaymentOrderWorkflow } from './_main_shared/services/payment-workflow'
 
 // 状态筛选选项
 const STATUS_TABS = [

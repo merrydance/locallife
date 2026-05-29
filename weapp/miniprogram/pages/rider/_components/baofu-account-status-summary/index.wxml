@@ -1,0 +1,51 @@
+<view class="account-status-summary">
+  <view class="summary-banner">
+    <view class="summary-banner__copy">
+      <text class="summary-banner__title">当前进度</text>
+      <text class="summary-banner__desc">{{statusDesc || nextActionText}}</text>
+    </view>
+    <t-tag theme="{{tagTheme}}" size="small">{{statusText}}</t-tag>
+  </view>
+
+  <view class="summary-facts">
+    <view class="summary-fact">
+      <view class="summary-fact__icon">
+        <t-icon name="assignment" size="34rpx" />
+      </view>
+      <view class="summary-fact__body">
+        <text class="summary-fact__title">开户资料</text>
+        <text class="summary-fact__desc">{{profileHint}}</text>
+      </view>
+    </view>
+
+    <view class="summary-fact">
+      <view class="summary-fact__icon">
+        <t-icon name="wallet" size="34rpx" />
+      </view>
+      <view class="summary-fact__body">
+        <text class="summary-fact__title">核验费</text>
+        <text class="summary-fact__desc">{{verifyFeePrompt}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{showOpenReportHint}}" class="summary-fact">
+      <view class="summary-fact__icon">
+        <t-icon name="shop" size="34rpx" />
+      </view>
+      <view class="summary-fact__body">
+        <text class="summary-fact__title">微信展示</text>
+        <text class="summary-fact__desc">商户展示名称配置中，请稍后刷新。</text>
+      </view>
+    </view>
+
+    <view wx:if="{{isReady}}" class="summary-fact">
+      <view class="summary-fact__icon summary-fact__icon--success">
+        <t-icon name="check-circle" size="34rpx" />
+      </view>
+      <view class="summary-fact__body">
+        <text class="summary-fact__title">银行账户</text>
+        <text class="summary-fact__desc">结算账户已开通，可用于后续结算。</text>
+      </view>
+    </view>
+  </view>
+</view>

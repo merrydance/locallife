@@ -1,5 +1,5 @@
-import dayjs from 'dayjs'
-import { type BaofuSettlementAccountView } from '../../../api/baofu-account-view'
+import dayjs from '../_main_shared/miniprogram_npm/dayjs/index'
+import { type BaofuSettlementAccountView } from '../_main_shared/api/baofu-account-view'
 import {
   canManageMerchantApplyment,
   canUseMerchantDeviceManagementFallback,
@@ -14,18 +14,18 @@ import { getStableBarHeights } from '../../../utils/responsive'
 import {
   fetchMerchantDashboardOrderSummary,
   fetchMerchantDashboardOverview
-} from '../../../services/merchant-dashboard'
+} from '../_services/merchant-dashboard'
 import {
   fetchMerchantStorefrontOpenStatus,
   fetchMerchantStorefrontProfile,
   updateMerchantStorefrontOpenStatus
-} from '../../../services/merchant-open-status'
+} from '../_services/merchant-open-status'
 import {
   fetchMerchantBaofuSettlementAccountView
-} from '../../../services/merchant-baofu-settlement-account'
+} from '../_services/merchant-baofu-settlement-account'
 import {
   createMerchantAppBindCode
-} from '../../../services/merchant-app-bind'
+} from '../_services/merchant-app-bind'
 import {
   buildOverviewMetrics,
   buildMerchantBusinessStateView,
@@ -41,11 +41,11 @@ import {
   type OverviewMetric,
   shouldAutoRefreshDashboard,
   SKELETON_ROWS
-} from '../../../utils/merchant-dashboard-view'
+} from '../_utils/merchant-dashboard-view'
 import {
   MERCHANT_SETTLEMENT_ACCOUNT_PAGE_PATH
-} from '../../../utils/merchant-finance-entry-view'
-import { wsManager, WSMessageType } from '../../../utils/websocket'
+} from '../_utils/merchant-finance-entry-view'
+import { wsManager, WSMessageType } from '../_main_shared/utils/websocket'
 
 const SETTLEMENT_ACCOUNT_PAGE_PATH = MERCHANT_SETTLEMENT_ACCOUNT_PAGE_PATH
 

@@ -10,7 +10,7 @@
     "t-badge": "tdesign-miniprogram/badge/badge",
     "t-icon": "tdesign-miniprogram/icon/icon",
     "t-popup": "tdesign-miniprogram/popup/popup",
-    "merchant-section-card": "/components/merchant-section-card/index",
+    "merchant-section-card": "../_components/merchant-section-card/index",
     "custom-navbar": "/components/custom-navbar/index"
   },
   "navigationStyle": "custom"

@@ -5,10 +5,10 @@ import {
   DeliveryFeeAdapter,
   buildDeliveryPromotionStatusView,
   type DeliveryPromotionStatusTheme
-} from '../../../api/delivery-fee'
+} from '../_main_shared/api/delivery-fee'
 import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
 import { logger } from '../../../utils/logger'
-import { syncCurrentMerchantContext } from '../../../utils/current-merchant'
+import { syncCurrentMerchantContext } from '../_utils/current-merchant'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface PromotionView extends DeliveryPromotionResponse {

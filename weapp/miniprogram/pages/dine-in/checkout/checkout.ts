@@ -2,7 +2,7 @@ import { formatPriceNoSymbol } from '../../../utils/util'
 import Navigation from '../../../utils/navigation'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import { logger } from '../../../utils/logger'
-import { getDineInSessionContext, saveDineInSessionFromMenu, savePendingDineInCheckoutContext } from '../../../services/dine-in-session'
+import { getDineInSessionContext, saveDineInSessionFromMenu, savePendingDineInCheckoutContext } from '../_main_shared/services/dine-in-session'
 import {
     calculateCheckoutCart,
     completeCheckoutPayment,
@@ -14,7 +14,7 @@ import {
     loadDineInCheckoutSession,
     type CheckoutCalculationResponse,
     type CheckoutCartResponse
-} from '../../../services/dine-in-checkout'
+} from '../_services/dine-in-checkout'
 import {
     buildCheckoutRenderState,
     buildCheckoutSessionState,
@@ -26,7 +26,7 @@ import {
     type PromotionItem,
     type LadderItem,
     type VoucherTrialItem
-} from '../../../utils/dine-in-checkout-view'
+} from '../_utils/dine-in-checkout-view'
 
 Page({
     data: {

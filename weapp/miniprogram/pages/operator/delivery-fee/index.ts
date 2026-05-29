@@ -3,7 +3,7 @@ import {
     loadOperatorDeliveryFeeConfigView,
     saveOperatorDeliveryFeeConfig,
     type OperatorDeliveryFeeConfigView
-} from '../../../services/operator-region-config'
+} from '../_services/operator-region-config'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface DeliveryFeePageOptions {

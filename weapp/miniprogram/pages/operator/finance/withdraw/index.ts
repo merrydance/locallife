@@ -1,7 +1,7 @@
 import {
   loadOperatorFinancePageData,
   type OperatorCommissionRowView
-} from '../../../../services/operator-finance'
+} from '../../_services/operator-finance'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 

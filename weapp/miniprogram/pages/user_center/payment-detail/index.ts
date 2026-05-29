@@ -1,11 +1,10 @@
-import { BusinessType, closePayment, getPaymentById, getPaymentRefunds, getPayments, getPaymentStatusView, getRefundStatusView, PaymentOrder, RefundOrder } from '../../../api/payment'
+import { BusinessType, closePayment, getPaymentById, getPaymentRefunds, getPayments, getPaymentStatusView, getRefundStatusView, PaymentOrder, RefundOrder } from './_main_shared/api/payment'
 import {
     continuePendingRiderDepositRecharge,
     getRiderDepositRechargeWorkflowStatusView,
     type RiderDepositPendingRechargeContext
-} from '../../../services/rider-deposit-payment'
-import { startPaymentOrderWorkflow } from '../../../services/payment-workflow'
-import Toast, { hideToast } from '../../../miniprogram_npm/tdesign-miniprogram/toast/index'
+} from './_main_shared/services/rider-deposit-payment'
+import { startPaymentOrderWorkflow } from './_main_shared/services/payment-workflow'
 import { logger } from '../../../utils/logger'
 import Navigation from '../../../utils/navigation'
 
@@ -32,26 +31,18 @@ type CurrentPageWithOptions = {
 }
 
 const BUSINESS_TYPES: BusinessType[] = ['order', 'reservation', 'reservation_addon', 'membership_recharge', 'rider_deposit', 'claim_recovery']
-const TOAST_SELECTOR = '#t-toast'
-
 function normalizeBusinessType(value?: string): BusinessType {
     return BUSINESS_TYPES.includes(value as BusinessType) ? value as BusinessType : 'order'
 }
 
 function showPaymentToast(context: WechatMiniprogram.Page.TrivialInstance, message: string) {
-    Toast({
-        context,
-        selector: TOAST_SELECTOR,
-        message,
-        theme: 'loading',
-        direction: 'column',
-        duration: 0,
-        preventScrollThrough: true
-    })
+    void context
+    wx.showLoading({ title: message, mask: true })
 }
 
 function hidePaymentToast(context: WechatMiniprogram.Page.TrivialInstance) {
-    hideToast({ context, selector: TOAST_SELECTOR })
+    void context
+    wx.hideLoading()
 }
 
 Page({

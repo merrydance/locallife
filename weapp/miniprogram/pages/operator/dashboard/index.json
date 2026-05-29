@@ -1,18 +1,18 @@
 {
-    "navigationBarTitleText": "运营中心",
-    "usingComponents": {
-        "custom-navbar": "/components/custom-navbar/index",
-        "page-state": "/components/page-state/index",
-        "operator-finance-overview": "/components/operator-finance-overview/index",
-        "operator-notification-summary": "/components/operator-notification-summary/index",
-        "operator-ranking-panel": "/components/operator-ranking-panel/index",
-        "t-icon": "tdesign-miniprogram/icon/icon",
-        "t-button": "tdesign-miniprogram/button/button",
-        "t-picker": "tdesign-miniprogram/picker/picker",
-        "t-picker-item": "tdesign-miniprogram/picker-item/picker-item",
-        "t-tabs": "tdesign-miniprogram/tabs/tabs",
-        "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
-        "card-skeleton": "/components/card-skeleton/index",
-        "list-skeleton": "/components/list-skeleton/index"
-    }
+  "navigationBarTitleText": "运营中心",
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
+    "page-state": "../_components/page-state/index",
+    "operator-finance-overview": "../_components/operator-finance-overview/index",
+    "operator-notification-summary": "../_components/operator-notification-summary/index",
+    "operator-ranking-panel": "../_components/operator-ranking-panel/index",
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-picker": "tdesign-miniprogram/picker/picker",
+    "t-picker-item": "tdesign-miniprogram/picker-item/picker-item",
+    "t-tabs": "tdesign-miniprogram/tabs/tabs",
+    "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+    "card-skeleton": "/components/card-skeleton/index",
+    "list-skeleton": "/components/list-skeleton/index"
+  }
 }

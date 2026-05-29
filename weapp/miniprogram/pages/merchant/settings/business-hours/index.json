@@ -3,7 +3,7 @@
   "enablePullDownRefresh": true,
   "usingComponents": {
     "custom-navbar": "/components/custom-navbar/index",
-    "business-hours-weekly-editor": "/components/business-hours-weekly-editor/index",
+    "business-hours-weekly-editor": "../../_components/business-hours-weekly-editor/index",
     "t-loading": "tdesign-miniprogram/loading/loading",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-button": "tdesign-miniprogram/button/button",

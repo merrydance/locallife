@@ -13,9 +13,9 @@ import {
   type MerchantApplicationOCRSubmissionResult,
   updateMerchantBasicInfo,
   deleteMerchantApplicationDocument
-} from '../../../../api/onboarding'
-import { buildAgreementConsentPayload } from '../../../../api/agreement-consent'
-import { getPrivateMediaUrl } from '../../../../utils/image-security'
+} from '../../_main_shared/api/onboarding'
+import { buildAgreementConsentPayload } from '../../_main_shared/api/agreement-consent'
+import { getPrivateMediaUrl } from '../../_main_shared/utils/image-security'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
@@ -43,7 +43,7 @@ import {
   type OcrStatus,
   type UploadField,
   type UploadFileItem
-} from '../../../../utils/merchant-application-view'
+} from '../../_utils/merchant-application-view'
 
 Page({
   data: {

@@ -1,5 +1,5 @@
-import ReviewService, { Review } from '../../../api/review'
-import ConsumerProfileAdapter from '../../../adapters/consumer-profile'
+import ReviewService, { Review } from './_main_shared/api/review'
+import ConsumerProfileAdapter from './_main_shared/adapters/consumer-profile'
 import { formatTime } from '../../../utils/util'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { logger } from '../../../utils/logger'

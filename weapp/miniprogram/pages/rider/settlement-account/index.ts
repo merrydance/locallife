@@ -1,5 +1,5 @@
-import { getRiderBaofuSettlementAccount } from '../../../api/baofu-account'
-import { baofuSettlementStatusBehavior } from '../../../behaviors/baofu-settlement-status'
+import { getRiderBaofuSettlementAccount } from '../_main_shared/api/baofu-account'
+import { baofuSettlementStatusBehavior } from '../_main_shared/behaviors/baofu-settlement-status'
 
 Page({
   behaviors: [

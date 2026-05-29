@@ -6,7 +6,7 @@ import {
   type MerchantUploadFeedback,
   type OCRResult,
   merchantStoreRegistrationRuntimeMethods
-} from '../../../../utils/merchant-store-registration-runtime'
+} from './_utils/merchant-store-registration-runtime'
 
 Page({
   data: {

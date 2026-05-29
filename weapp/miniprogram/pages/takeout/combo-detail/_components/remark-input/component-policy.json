@@ -1,0 +1,10 @@
+{
+  "purpose": "Remark input area with quick tag suggestions and constrained local editing state for checkout flows.",
+  "tdesignGroup": "form",
+  "tdesignCandidates": [
+    "textarea",
+    "tag"
+  ],
+  "decision": "local-component",
+  "rationale": "Remark entry combines free text with quick-pick tag insertion and checkout-specific constraints. Extracting it keeps order pages from owning another local editing widget."
+}

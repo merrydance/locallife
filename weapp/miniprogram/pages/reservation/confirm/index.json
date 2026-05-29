@@ -1,21 +1,20 @@
 {
-    "navigationBarTitleText": "确认预订",
-    "navigationStyle": "custom",
-    "usingComponents": {
-        "custom-navbar": "/components/custom-navbar/index",
-        "t-cell": "tdesign-miniprogram/cell/cell",
-        "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
-        "t-input": "tdesign-miniprogram/input/input",
-        "t-button": "tdesign-miniprogram/button/button",
-        "t-stepper": "tdesign-miniprogram/stepper/stepper",
-        "t-date-time-picker": "tdesign-miniprogram/date-time-picker/date-time-picker",
-        "t-icon": "tdesign-miniprogram/icon/icon",
-        "t-radio": "tdesign-miniprogram/radio/radio",
-        "t-radio-group": "tdesign-miniprogram/radio-group/radio-group",
-        "t-picker": "tdesign-miniprogram/picker/picker",
-        "t-picker-item": "tdesign-miniprogram/picker-item/picker-item",
-        "t-tag": "tdesign-miniprogram/tag/tag",
-        "merchant-promos": "/components/merchant-promos/index",
-        "t-toast": "tdesign-miniprogram/toast/toast"
-    }
+  "navigationBarTitleText": "确认预订",
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
+    "t-cell": "tdesign-miniprogram/cell/cell",
+    "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
+    "t-input": "tdesign-miniprogram/input/input",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-stepper": "tdesign-miniprogram/stepper/stepper",
+    "t-date-time-picker": "tdesign-miniprogram/date-time-picker/date-time-picker",
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "t-radio": "tdesign-miniprogram/radio/radio",
+    "t-radio-group": "tdesign-miniprogram/radio-group/radio-group",
+    "t-picker": "tdesign-miniprogram/picker/picker",
+    "t-picker-item": "tdesign-miniprogram/picker-item/picker-item",
+    "t-tag": "tdesign-miniprogram/tag/tag",
+    "t-toast": "tdesign-miniprogram/toast/toast"
+  }
 }

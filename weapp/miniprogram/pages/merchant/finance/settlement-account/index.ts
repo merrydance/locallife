@@ -1,8 +1,8 @@
-import { getMerchantBaofuSettlementAccount } from '../../../../api/baofu-account'
+import { getMerchantBaofuSettlementAccount } from '../../_main_shared/api/baofu-account'
 import {
   baofuSettlementStatusBehavior,
   type AccessCheckResult
-} from '../../../../behaviors/baofu-settlement-status'
+} from '../../_main_shared/behaviors/baofu-settlement-status'
 import {
   ensureMerchantApplymentAccess,
   getMerchantConsoleAccessErrorMessage,

@@ -1,7 +1,7 @@
 {
   "usingComponents": {
     "custom-navbar": "/components/custom-navbar/index",
-    "merchant-section-card": "/components/merchant-section-card/index",
+    "merchant-section-card": "../../_components/merchant-section-card/index",
     "t-cell": "tdesign-miniprogram/cell/cell",
     "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
     "t-switch": "tdesign-miniprogram/switch/switch",

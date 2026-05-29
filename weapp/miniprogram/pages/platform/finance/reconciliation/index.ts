@@ -4,13 +4,13 @@ import {
   loadPlatformFinanceReconciliationPage,
   type PlatformFinanceReconciliationRange,
   type PlatformFinanceReconciliationPageView
-} from '../../../../services/platform-finance-reconciliation'
+} from '../../_services/platform-finance-reconciliation'
 import {
   formatFinanceDateParam,
   getFinanceDateTime,
   getFinanceRangeCalendarValue,
   validateFinanceDateRange
-} from '../../../../utils/finance-date-range'
+} from '../../_main_shared/utils/finance-date-range'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'

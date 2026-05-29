@@ -1,4 +1,3 @@
-import { Message } from 'tdesign-miniprogram'
 import { displayConfigService, DisplayConfigResponse } from '../../../../api/table-device-management'
 import {
   ensureMerchantDeviceManagementAccess,
@@ -72,12 +71,9 @@ function showPageMessage(
   content: string,
   duration = 2200
 ) {
-  Message.error({
-    context,
-    offset: [offsetTop + 16, 24] as [number, number],
-    duration,
-    content
-  })
+  void context
+  void offsetTop
+  wx.showToast({ title: content, icon: 'none', duration })
 }
 
 Page({

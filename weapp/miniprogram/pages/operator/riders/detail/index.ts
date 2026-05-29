@@ -3,7 +3,7 @@ import {
   loadOperatorRiderStatsView,
   type OperatorRiderDetailView,
   type OperatorRiderStatsView
-} from '../../../../services/operator-rider-management'
+} from '../../_services/operator-rider-management'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 Page({

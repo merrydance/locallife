@@ -1,8 +1,16 @@
-import MembershipService, { Membership } from '../../../api/membership'
-import ConsumerProfileAdapter from '../../../adapters/consumer-profile'
+import MembershipService, { Membership } from './_main_shared/api/membership'
+import ConsumerProfileAdapter from './_main_shared/adapters/consumer-profile'
 import { ErrorHandler } from '../../../utils/error-handler'
 import Navigation from '../../../utils/navigation'
-import { showMembershipRechargePausedMessage } from '../../../utils/membership-recharge-pause'
+
+function showMembershipRechargePausedMessage() {
+  wx.showModal({
+    title: '线上充值已暂停',
+    content: '会员线上充值已暂停，请联系商户线下充值后入账。',
+    showCancel: false,
+    confirmText: '我知道了'
+  })
+}
 
 interface MembershipDisplay {
   id: number

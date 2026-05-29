@@ -19,15 +19,15 @@ import {
   type CustomerMerchantCouponView,
   type CustomerMerchantDetail,
   type CustomerRoom
-} from '../../../services/customer-discovery-workflow'
-import ConsumerMerchantDetailAdapter, { type ConsumerMerchantDetailViewModel } from '../../../adapters/consumer-merchant-detail'
+} from './_services/customer-discovery-workflow'
+import ConsumerMerchantDetailAdapter, { type ConsumerMerchantDetailViewModel } from './_adapters/consumer-merchant-detail'
 import { getPublicImageUrl } from '../../../utils/image'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import Navigation from '../../../utils/navigation'
 import {
   resolveRestaurantHeaderCollapsed,
   type RestaurantHeaderScrollDirection
-} from '../../../utils/restaurant-detail-header'
+} from './_utils/restaurant-detail-header'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type RestaurantViewModel = ConsumerMerchantDetailViewModel

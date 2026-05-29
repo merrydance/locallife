@@ -10,8 +10,8 @@ import {
   RiderIncomeDailyItemView,
   RiderIncomeLedgerItemView,
   RiderIncomeStatusFilter
-} from '../../../services/rider-income'
-import type { BaofuWithdrawalBalanceView } from '../../../services/baofu-withdrawal-workflow'
+} from '../_services/rider-income'
+import type { BaofuWithdrawalBalanceView } from '../_main_shared/services/baofu-withdrawal-workflow'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'

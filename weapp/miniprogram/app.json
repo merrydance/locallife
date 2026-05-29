@@ -82,7 +82,6 @@
         "operators/detail",
         "operational-configs/index",
         "finance/settlement-account/index",
-        "finance/settlement-account/submit/index",
         "finance/reconciliation/index",
         "finance/withdrawals/index",
         "finance/withdrawals/create/index",
@@ -109,7 +108,9 @@
     {
       "root": "pages/payment",
       "name": "payment",
-      "pages": ["result/index"]
+      "pages": [
+        "result/index"
+      ]
     },
     {
       "root": "pages/dine-in",
@@ -122,65 +123,165 @@
     },
     {
       "root": "pages/takeout/cart",
-      "pages": ["index"]
+      "pages": [
+        "index"
+      ]
     },
     {
       "root": "pages/takeout/dish-detail",
-      "pages": ["index"]
+      "pages": [
+        "index"
+      ]
     },
     {
       "root": "pages/takeout/combo-detail",
-      "pages": ["index"]
+      "pages": [
+        "index"
+      ]
     },
     {
       "root": "pages/takeout/order-confirm",
-      "pages": ["index"]
+      "pages": [
+        "index"
+      ]
     },
     {
       "root": "pages/takeout/restaurant-detail",
-      "pages": ["index"]
+      "pages": [
+        "index"
+      ]
     },
     {
       "root": "pages/takeout/search",
-      "pages": ["index"]
+      "pages": [
+        "index"
+      ]
     },
     {
       "root": "pages/takeout/merchant-info",
-      "pages": ["index"]
+      "pages": [
+        "index"
+      ]
     },
     {
       "root": "pages/takeout/category",
-      "pages": ["index"]
+      "pages": [
+        "index"
+      ]
     },
-    { "root": "pages/reservation/create", "pages": ["index"] },
-    { "root": "pages/reservation/confirm", "pages": ["index"] },
-    { "root": "pages/reservation/detail", "pages": ["index"] },
-    { "root": "pages/reservation/list", "pages": ["index"] },
-    { "root": "pages/reservation/modify", "pages": ["index"] },
-    { "root": "pages/reservation/room-detail", "pages": ["index"] },
-    { "root": "pages/user_center/addresses", "pages": ["index", "edit/index"] },
-    { "root": "pages/user_center/coupons", "pages": ["index"] },
-    { "root": "pages/user_center/favorites", "pages": ["index"] },
-    { "root": "pages/user_center/membership", "pages": ["index"] },
-    { "root": "pages/user_center/reviews", "pages": ["index", "create/index"] },
-    { "root": "pages/user_center/wallet", "pages": ["index"] },
-    { "root": "pages/user_center/payment-detail", "pages": ["index"] },
-    { "root": "pages/user_center/refund-detail", "pages": ["index"] },
+    {
+      "root": "pages/reservation/create",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "root": "pages/reservation/confirm",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "root": "pages/reservation/detail",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "root": "pages/reservation/list",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "root": "pages/reservation/modify",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "root": "pages/reservation/room-detail",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "root": "pages/user_center/addresses",
+      "pages": [
+        "index",
+        "edit/index"
+      ]
+    },
+    {
+      "root": "pages/user_center/coupons",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "root": "pages/user_center/favorites",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "root": "pages/user_center/membership",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "root": "pages/user_center/reviews",
+      "pages": [
+        "index",
+        "create/index"
+      ]
+    },
+    {
+      "root": "pages/user_center/wallet",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "root": "pages/user_center/payment-detail",
+      "pages": [
+        "index"
+      ]
+    },
+    {
+      "root": "pages/user_center/refund-detail",
+      "pages": [
+        "index"
+      ]
+    },
     {
       "root": "pages/user_center/reservations",
-      "pages": ["index"]
+      "pages": [
+        "index"
+      ]
     },
     {
       "root": "pages/user_center/agreements",
-      "pages": ["index", "detail/index"]
+      "pages": [
+        "index",
+        "detail/index"
+      ]
     },
     {
       "root": "pages/user_center/about_us",
-      "pages": ["index"]
+      "pages": [
+        "index"
+      ]
     },
     {
       "root": "pages/user_center/service_center",
-      "pages": ["index", "submit/index", "detail/index", "food-safety/index"]
+      "pages": [
+        "index",
+        "submit/index",
+        "detail/index",
+        "food-safety/index"
+      ]
     },
     {
       "root": "pages/merchant",

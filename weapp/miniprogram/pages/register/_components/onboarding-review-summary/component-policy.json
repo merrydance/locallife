@@ -1,0 +1,10 @@
+{
+  "purpose": "Display onboarding review summary and active credential status for application flows.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "cell",
+    "tag"
+  ],
+  "decision": "local-component",
+  "rationale": "The backend contract combines review outcome, rule summary, and multiple credential ledgers. A small domain display component keeps that mapping reusable across merchant and rider application pages while still using TDesign cell and tag primitives."
+}

@@ -4,9 +4,9 @@ import {
   type CreateMerchantVoucherParams,
   type MerchantVoucher,
   type UpdateMerchantVoucherParams
-} from '../../../../api/coupon'
+} from '../../_main_shared/api/coupon'
 import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
-import { syncCurrentMerchantContext } from '../../../../utils/current-merchant'
+import { syncCurrentMerchantContext } from '../../_utils/current-merchant'
 import { logger } from '../../../../utils/logger'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 

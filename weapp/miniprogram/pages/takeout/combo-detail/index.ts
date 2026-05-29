@@ -2,7 +2,7 @@
  * 套餐详情页面
  */
 
-import { ComboManagementService, ComboSetWithDetailsResponse } from '../../../api/dish'
+import { ComboManagementService, ComboSetWithDetailsResponse } from './_main_shared/api/dish'
 import { getPublicImageUrl } from '../../../utils/image'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import { tracker, EventType } from '../../../utils/tracker'

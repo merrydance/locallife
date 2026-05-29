@@ -6,7 +6,7 @@ import {
   type OperatorRegionExpansionApplicationView,
   type OperatorRegionExpansionCityOption,
   type OperatorRegionExpansionRegionOption
-} from '../../../services/operator-region-expansion'
+} from '../_services/operator-region-expansion'
 import { logger } from '../../../utils/logger'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 

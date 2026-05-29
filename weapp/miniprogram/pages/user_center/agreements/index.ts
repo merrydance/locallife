@@ -1,4 +1,4 @@
-import { AgreementService, AgreementBrief } from '../../../api/agreement'
+import { AgreementService, AgreementBrief } from './_main_shared/api/agreement'
 import Navigation from '../../../utils/navigation'
 
 Page({

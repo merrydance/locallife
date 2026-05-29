@@ -5,17 +5,17 @@ import {
   getOrderDetail,
   OrderType,
   ListOrdersParams
-} from '../../../api/order'
+} from '../_main_shared/api/order'
 import { logger } from '../../../utils/logger'
-import { OrderCardAdapter } from '../../../adapters/order-card'
-import type { OrderCardViewModel } from '../../../adapters/order-card'
+import { OrderCardAdapter } from '../_adapters/order-card'
+import type { OrderCardViewModel } from '../_adapters/order-card'
 import CartService from '../../../services/cart'
-import { OrderAdapter } from '../../../adapters/order'
-import { createOrderPayment } from '../../../api/payment'
+import { OrderAdapter } from '../_adapters/order'
+import { createOrderPayment } from '../_main_shared/api/payment'
 import {
   completePaymentWorkflow,
   isPaymentWorkflowPaid
-} from '../../../services/payment-workflow'
+} from '../_main_shared/services/payment-workflow'
 import Navigation from '../../../utils/navigation'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 const getErrorMessage = getErrorUserMessage
@@ -29,7 +29,7 @@ import {
   ORDER_REQUEST_DEDUP_MS,
   type OrderTypeFilter,
   STATUS_TABS
-} from '../../../utils/orders-list-view'
+} from '../_utils/orders-list-view'
 
 Page({
   _activeRequestKey: '',

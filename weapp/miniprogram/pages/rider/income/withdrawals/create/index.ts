@@ -1,12 +1,12 @@
 import {
   createBaofuWithdrawal,
   getBaofuWithdrawalBalance
-} from '../../../../../api/baofu-withdrawal'
+} from '../../../_main_shared/api/baofu-withdrawal'
 import {
   buildBaofuWithdrawalBalanceView,
   buildBaofuWithdrawalSubmitCheck,
   type BaofuWithdrawalBalanceView
-} from '../../../../../services/baofu-withdrawal-workflow'
+} from '../../../_main_shared/services/baofu-withdrawal-workflow'
 import { logger } from '../../../../../utils/logger'
 import { getStableBarHeights } from '../../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../../utils/user-facing'

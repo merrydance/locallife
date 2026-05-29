@@ -5,7 +5,7 @@ import {
   markOperatorNotificationAsRead,
   type OperatorNotificationFilterCategory,
   type OperatorNotificationView
-} from '../../../services/operator-notification-center'
+} from '../_services/operator-notification-center'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type NotificationListOptions = {

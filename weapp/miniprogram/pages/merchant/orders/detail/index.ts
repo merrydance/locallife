@@ -4,13 +4,13 @@ import {
   OrderResponse,
   OrderManagementAdapter,
   MERCHANT_REJECT_REASON_OPTIONS
-} from '../../../../api/order-management'
-import { createRefund, getMerchantRefundReturns, getPaymentRefunds, getPayments } from '../../../../api/payment'
+} from '../../_api/order-management'
+import { createRefund, getMerchantRefundReturns, getPaymentRefunds, getPayments } from '../../_main_shared/api/payment'
 import { logger } from '../../../../utils/logger'
 import { isSettledFulfilled, isSettledRejected, settleAll } from '../../../../utils/promise'
-import dayjs from 'dayjs'
+import dayjs from '../../_main_shared/miniprogram_npm/dayjs/index'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
-import { waitForRefundTerminalResult } from '../../../../services/refund-workflow'
+import { waitForRefundTerminalResult } from '../../_main_shared/services/refund-workflow'
 import {
   buildPaymentView,
   buildMerchantOrderFeeBreakdownView,
@@ -30,7 +30,7 @@ import {
   type MerchantOrderRefundView,
   type RefundFormData,
   selectActivePayment
-} from '../../../../utils/merchant-order-detail-view'
+} from '../../_utils/merchant-order-detail-view'
 
 const getErrorMessage = getErrorUserMessage
 

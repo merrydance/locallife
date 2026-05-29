@@ -1,4 +1,4 @@
-import dayjs from 'dayjs'
+import dayjs from '../../_main_shared/miniprogram_npm/dayjs/index'
 import {
   formatReservationStatus,
   isMerchantReservationEditable,
@@ -7,8 +7,8 @@ import {
   ReservationService,
   ReservationSource,
   UpdateReservationRequest
-} from '../../../../api/reservation'
-import { isTableStatusDisabled } from '../../../../api/table'
+} from '../../_main_shared/api/reservation'
+import { isTableStatusDisabled } from '../../_main_shared/api/table'
 import { tableManagementService, TableResponse } from '../../../../api/table-device-management'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'

@@ -1,7 +1,6 @@
-import dayjs from 'dayjs'
-import { Message } from 'tdesign-miniprogram'
+import dayjs from '../_main_shared/miniprogram_npm/dayjs/index'
 import { getStableBarHeights } from '../../../utils/responsive'
-import { DailyInventoryWithDishResponse, InventoryManagementService } from '../../../api/dish'
+import { DailyInventoryWithDishResponse, InventoryManagementService } from '../_main_shared/api/dish'
 import { logger } from '../../../utils/logger'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
@@ -457,11 +456,10 @@ Page({
         [`inventories[${index}].submitting`]: false,
         lastLoadedAt: Date.now()
       })
-      Message.success({
-        context: this,
-        offset: [this.data.navBarHeight + 16, 24],
-        duration: 1800,
-        content: `${item.dish_name}已保存为${buildInventoryLimitText(totalQuantity)}`
+      wx.showToast({
+        title: `${item.dish_name}已保存为${buildInventoryLimitText(totalQuantity)}`,
+        icon: 'success',
+        duration: 1800
       })
     } catch (err) {
       logger.error('Update inventory failed', err)

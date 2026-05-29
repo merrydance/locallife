@@ -4,7 +4,7 @@
  */
 
 import { tracker, EventType } from '../../../utils/tracker'
-import { DishManagementService, DishResponse } from '../../../api/dish'
+import { DishManagementService, DishResponse } from './_main_shared/api/dish'
 import { getMerchantReviews } from '../../../api/personal'
 import { getPublicImageUrl } from '../../../utils/image'
 import { formatPriceNoSymbol } from '../../../utils/util'

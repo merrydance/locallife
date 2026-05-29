@@ -1,11 +1,11 @@
-import { RiderInfo, RiderStatus } from '../../../api/rider'
-import { RecommendedOrder } from '../../../api/delivery'
+import { RiderInfo, RiderStatus } from '../_main_shared/api/rider'
+import { RecommendedOrder } from '../_main_shared/api/delivery'
 import {
   DashboardDeliveryView,
   WsUnsubscribe,
   riderDashboardRuntimeMethods
-} from '../../../utils/rider-dashboard-runtime'
-import { RiderWorkbenchDashboardView } from '../../../services/rider-workbench'
+} from '../_utils/rider-dashboard-runtime'
+import { RiderWorkbenchDashboardView } from '../_services/rider-workbench'
 
 const emptyWorkbenchView: RiderWorkbenchDashboardView = {
   riderStatus: {

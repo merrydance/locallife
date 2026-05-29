@@ -1,0 +1,287 @@
+import { type BaofuSettlementAccountView } from '../_main_shared/api/baofu-account-view'
+import { getErrorUserMessage } from '../../../utils/user-facing'
+import type { MerchantStorefrontProfile } from '../_services/merchant-open-status'
+import {
+  MERCHANT_FINANCE_LABEL,
+  MERCHANT_FINANCE_PAGE_PATH
+} from '../_utils/merchant-finance-entry-view'
+
+export interface MerchantBusinessStateView {
+  title: string
+  hint: string
+}
+
+export interface OverviewMetric {
+  id: string
+  label: string
+  value: string
+  note: string
+}
+
+interface DashboardIconConfig {
+  name: string
+  color: string
+  size: string
+}
+
+interface DashboardBadgeConfig {
+  count: string
+  maxCount: number
+  offset: [number, string]
+}
+
+interface DashboardEntryDefinition {
+  id: string
+  title: string
+  icon: DashboardIconConfig
+  path: string
+  badgeKey?: 'orders'
+}
+
+interface DashboardEntryView extends DashboardEntryDefinition {
+  badgeText: string
+  badgeProps: DashboardBadgeConfig | null
+}
+
+interface DashboardSectionDefinition {
+  id: string
+  title: string
+  items: DashboardEntryDefinition[]
+}
+
+export interface DashboardSectionView {
+  id: string
+  title: string
+  items: DashboardEntryView[]
+}
+
+export type DashboardRequestResult<T> =
+  | { ok: true, value: T }
+  | { ok: false, error: unknown }
+
+export const EMPTY_MERCHANT: MerchantStorefrontProfile = {
+  id: 0,
+  owner_user_id: 0,
+  region_id: 0,
+  name: '',
+  description: '',
+  logo_url: '',
+  phone: '',
+  address: '',
+  latitude: '',
+  longitude: '',
+  status: '',
+  is_open: true,
+  version: 0,
+  created_at: '',
+  updated_at: ''
+}
+
+const PRE_OPEN_PREPARATION_HINT = '主体审核通过后，可先完善菜品、桌台、套餐和门店配置；准备收款前再完成结算账户开户。'
+
+export function buildMerchantBusinessStateView(params: {
+  merchantStatus?: string
+  isOpen: boolean
+  settlementAccountView?: BaofuSettlementAccountView | null
+}): MerchantBusinessStateView {
+  const merchantStatus = String(params.merchantStatus || '').trim().toLowerCase()
+  const settlementAccountView = params.settlementAccountView || null
+
+  if (merchantStatus === 'suspended' || merchantStatus === 'expired') {
+    return {
+      title: '已停业',
+      hint: '当前店铺状态受限，暂不可对外营业。'
+    }
+  }
+
+  if (params.isOpen) {
+    return {
+      title: '营业中',
+      hint: '顾客当前可以正常下单。'
+    }
+  }
+
+  if (settlementAccountView?.isReady) {
+    return {
+      title: '打烊中',
+      hint: '结算账户已开通，当前是自主打烊状态，可随时恢复营业。'
+    }
+  }
+
+  if (settlementAccountView?.isFailed) {
+    return {
+      title: '待处理',
+      hint: settlementAccountView.statusDesc || '宝付开户失败，请修改后重新提交。'
+    }
+  }
+
+  if (settlementAccountView?.isProcessing || settlementAccountView?.isWaiting) {
+    return {
+      title: '待开通',
+      hint: settlementAccountView.statusDesc || settlementAccountView.nextActionText || PRE_OPEN_PREPARATION_HINT
+    }
+  }
+
+  if (merchantStatus === 'bindbank_submitted' || merchantStatus === 'approved' || merchantStatus === 'pending_bindbank') {
+    return {
+      title: '待开通',
+      hint: settlementAccountView?.statusDesc || settlementAccountView?.nextActionText || PRE_OPEN_PREPARATION_HINT
+    }
+  }
+
+  return {
+    title: '待开通',
+    hint: settlementAccountView?.statusDesc || PRE_OPEN_PREPARATION_HINT
+  }
+}
+
+export const SKELETON_ROWS = [
+  { width: '100%', height: '360rpx' },
+  { width: '100%', height: '920rpx', marginTop: '24rpx' }
+]
+
+export const GRID_GUTTER = 16
+export const DASHBOARD_STALE_MS = 60 * 1000
+export const getErrorMessage = getErrorUserMessage
+
+function createIcon(name: string, color: string): DashboardIconConfig {
+  return {
+    name,
+    color,
+    size: '40rpx'
+  }
+}
+
+const DASHBOARD_SECTIONS: DashboardSectionDefinition[] = [
+  {
+    id: 'operations',
+    title: '经营',
+    items: [
+      { id: 'orders', title: '订单管理', icon: createIcon('cart', 'var(--td-brand-color)'), path: '/pages/merchant/orders/list/index', badgeKey: 'orders' },
+      { id: 'kitchen', title: '后厨看板', icon: createIcon('task', 'var(--td-brand-color)'), path: '/pages/merchant/kitchen/index' },
+      { id: 'reservations', title: '预订管理', icon: createIcon('calendar-event', 'var(--td-brand-color)'), path: '/pages/merchant/reservations/index' }
+    ]
+  },
+  {
+    id: 'store',
+    title: '店铺信息',
+    items: [
+      { id: 'profile', title: '门店资料', icon: createIcon('shop', 'var(--td-success-color)'), path: '/pages/merchant/settings/profile/index' },
+      { id: 'business-hours', title: '营业时间', icon: createIcon('calendar-1', 'var(--td-success-color)'), path: '/pages/merchant/settings/business-hours/index' },
+      { id: 'staff', title: '员工管理', icon: createIcon('usergroup', 'var(--td-success-color)'), path: '/pages/merchant/staff/index' },
+      { id: 'dishes', title: '菜品管理', icon: createIcon('fork', 'var(--td-success-color)'), path: '/pages/merchant/dishes/index' },
+      { id: 'tables', title: '桌台房间', icon: createIcon('table', 'var(--td-success-color)'), path: '/pages/merchant/tables/index' },
+      { id: 'combos', title: '套餐管理', icon: createIcon('combination', 'var(--td-success-color)'), path: '/pages/merchant/combos/index' },
+      { id: 'inventory', title: '库存管理', icon: createIcon('system-storage', 'var(--td-success-color)'), path: '/pages/merchant/inventory/index' },
+      { id: 'display-config', title: '后厨协同', icon: createIcon('setting', 'var(--td-success-color)'), path: '/pages/merchant/settings/display-config/index' },
+      { id: 'printers', title: '打印设备', icon: createIcon('print', 'var(--td-success-color)'), path: '/pages/merchant/printers/index' },
+      { id: 'bind-app', title: '绑定商户端App', icon: createIcon('setting', 'var(--td-success-color)'), path: '' },
+      { id: 'group-join', title: '申请加入集团', icon: createIcon('cooperate', 'var(--td-success-color)'), path: '/pages/merchant/group/join/index' }
+    ]
+  },
+  {
+    id: 'growth',
+    title: '会员与营销',
+    items: [
+      { id: 'membership', title: '叠加规则', icon: createIcon('cardmembership', 'var(--td-brand-color)'), path: '/pages/merchant/settings/membership/index' },
+      { id: 'members', title: '会员列表', icon: createIcon('usergroup', 'var(--td-brand-color)'), path: '/pages/merchant/settings/members/index' },
+      { id: 'recharge-rules', title: '充值规则', icon: createIcon('saving-pot', 'var(--td-brand-color)'), path: '/pages/merchant/settings/recharge-rules/index' },
+      { id: 'discount-rules', title: '满减活动', icon: createIcon('discount', 'var(--td-brand-color)'), path: '/pages/merchant/discount-rules/index' },
+      { id: 'delivery-promotions', title: '代取活动', icon: createIcon('vehicle', 'var(--td-brand-color)'), path: '/pages/merchant/delivery-promotions/index' },
+      { id: 'vouchers', title: '代金券', icon: createIcon('coupon', 'var(--td-brand-color)'), path: '/pages/merchant/vouchers/index' }
+    ]
+  },
+  {
+    id: 'finance',
+    title: '财务',
+    items: [
+      { id: 'finance-home', title: MERCHANT_FINANCE_LABEL, icon: createIcon('money', 'var(--td-brand-color)'), path: MERCHANT_FINANCE_PAGE_PATH },
+      { id: 'application', title: '主体资料', icon: createIcon('personal-information', 'var(--td-brand-color)'), path: '/pages/merchant/settings/application/index' }
+    ]
+  }
+]
+
+const DEVICE_MANAGE_ENTRY_IDS = new Set(['display-config', 'printers', 'bind-app'])
+
+function formatMoney(fen: number | null | undefined) {
+  if (typeof fen !== 'number' || !Number.isFinite(fen)) return '--'
+  return `¥${(fen / 100).toFixed(0)}`
+}
+
+function formatCount(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--'
+  return `${value}`
+}
+
+function toBadgeText(value: number | null | undefined) {
+  if (typeof value !== 'number' || value <= 0) return ''
+  return value > 99 ? '99+' : `${value}`
+}
+
+export function hasTrustedDashboardData(data: { lastRefreshAt: number }) {
+  return data.lastRefreshAt > 0
+}
+
+export function shouldAutoRefreshDashboard(data: { lastRefreshAt: number }) {
+  return !data.lastRefreshAt || Date.now() - data.lastRefreshAt >= DASHBOARD_STALE_MS
+}
+
+export function formatAppBindRemaining(seconds: number) {
+  if (seconds <= 0) {
+    return '绑定码已过期，请重新生成'
+  }
+
+  const minutes = Math.floor(seconds / 60)
+  const remainderSeconds = seconds % 60
+  return `请在 ${String(minutes).padStart(2, '0')}:${String(remainderSeconds).padStart(2, '0')} 内在商户端 App 输入此绑定码`
+}
+
+export async function captureDashboardRequest<T>(request: Promise<T>): Promise<DashboardRequestResult<T>> {
+  try {
+    return { ok: true, value: await request }
+  } catch (error) {
+    return { ok: false, error }
+  }
+}
+
+export function isDashboardRequestOk<T>(result: DashboardRequestResult<T>): result is { ok: true, value: T } {
+  return result.ok
+}
+
+export function buildOverviewMetrics(params: {
+  monthlyOrders: number | null
+  monthlySales: number | null
+}): OverviewMetric[] {
+  return [
+    { id: 'orders', label: '本月订单', value: formatCount(params.monthlyOrders), note: '已完成订单' },
+    { id: 'sales', label: '本月成交额', value: formatMoney(params.monthlySales), note: '扣折后金额' }
+  ]
+}
+
+export function buildSections(params: {
+  pendingOrders: number | null
+  canManageDeviceSettings: boolean
+  canManageMerchantApplyment: boolean
+}): DashboardSectionView[] {
+  const badgeOffset: [number, string] = [0, '8rpx']
+
+  return DASHBOARD_SECTIONS.map((section) => ({
+    id: section.id,
+    title: section.title,
+    items: section.items.filter((item) => {
+      const passesDeviceGate = params.canManageDeviceSettings || !DEVICE_MANAGE_ENTRY_IDS.has(item.id)
+      return passesDeviceGate
+    }).map((item) => {
+      let badgeText = ''
+      if (item.badgeKey === 'orders') {
+        badgeText = toBadgeText(params.pendingOrders)
+      }
+
+      return {
+        ...item,
+        badgeText,
+        badgeProps: badgeText ? { count: badgeText, maxCount: 99, offset: badgeOffset } : null
+      }
+    })
+  })).filter((section) => section.items.length > 0)
+}

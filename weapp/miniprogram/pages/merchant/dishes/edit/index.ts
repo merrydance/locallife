@@ -7,8 +7,8 @@ import {
   TagService,
   TagInfo,
   CustomizationGroup
-} from '../../../../api/dish'
-import { waitForPublicMediaDisplayUrl } from '../../../../api/onboarding'
+} from '../../_main_shared/api/dish'
+import { waitForPublicMediaDisplayUrl } from '../../_main_shared/api/onboarding'
 import { logger } from '../../../../utils/logger'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 import { settleAll, isSettledFulfilled } from '../../../../utils/promise'
@@ -40,7 +40,7 @@ import {
   resolveDishCategoryConfirmResult,
   resolveDishImageRemoveResult,
   UploadFileItem
-} from '../../../../utils/merchant-dish-edit-view'
+} from '../../_utils/merchant-dish-edit-view'
 
 Page({
   data: {

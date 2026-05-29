@@ -1,5 +1,5 @@
 import { logger } from '../../../utils/logger'
-import { uploadMerchantImage, getMerchantApplication } from '../../../api/onboarding'
+import { uploadMerchantImage, getMerchantApplication } from '../_main_shared/api/onboarding'
 import { getMyMerchantProfile, updateMyMerchantLogo } from '../../../api/merchant'
 import {
   buildControlledUploadImages,
@@ -21,9 +21,9 @@ import {
   toPersistedImageUrls,
   UploadFileItem,
   findPendingUploadImageIndex
-} from '../../../utils/merchant-profile-images-view'
-import { merchantProfileImagesLifecycleMethods } from '../../../utils/merchant-profile-images-lifecycle'
-import { merchantProfileImagesRecoveryMethods } from '../../../utils/merchant-profile-images-recovery'
+} from '../_utils/merchant-profile-images-view'
+import { merchantProfileImagesLifecycleMethods } from '../_utils/merchant-profile-images-lifecycle'
+import { merchantProfileImagesRecoveryMethods } from '../_utils/merchant-profile-images-recovery'
 
 Page({
   data: {

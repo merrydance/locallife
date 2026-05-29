@@ -1,12 +1,12 @@
 import {
   loadOperatorRegions,
   type ConsoleRegionOption
-} from '../../../services/operator-regions'
+} from '../_services/operator-regions'
 import {
   loadOperatorDispatchMonitorPageData,
   type OperatorDispatchMonitorSummaryView,
   type OperatorPendingDispatchView
-} from '../../../services/operator-dispatch-monitor'
+} from '../_services/operator-dispatch-monitor'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type DispatchHallOptions = {

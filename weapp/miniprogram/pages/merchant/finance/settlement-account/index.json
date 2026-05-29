@@ -1,7 +1,7 @@
 {
   "usingComponents": {
-    "baofu-account-status-summary": "/components/baofu-account-status-summary/index",
-    "baofu-onboarding-wait": "/components/baofu-onboarding-wait/index",
+    "baofu-account-status-summary": "../../_components/baofu-account-status-summary/index",
+    "baofu-onboarding-wait": "../../_components/baofu-onboarding-wait/index",
     "custom-navbar": "/components/custom-navbar/index",
     "t-button": "tdesign-miniprogram/button/button",
     "t-empty": "tdesign-miniprogram/empty/empty",

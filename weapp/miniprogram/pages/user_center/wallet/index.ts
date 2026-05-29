@@ -1,9 +1,9 @@
 import { formatPriceNoSymbol } from '../../../utils/util'
-import { getPaymentLedger, PaymentLedgerEntry } from '../../../api/payment'
-import ConsumerProfileAdapter from '../../../adapters/consumer-profile'
-import MembershipService from '../../../api/membership'
+import { getPaymentLedger, PaymentLedgerEntry } from './_main_shared/api/payment'
+import ConsumerProfileAdapter from './_main_shared/adapters/consumer-profile'
+import MembershipService from './_main_shared/api/membership'
 import Navigation from '../../../utils/navigation'
-import { getPaymentLedgerStatusView, isPaymentLedgerEntryTerminal } from '../../../utils/payment-ledger-view'
+import { getPaymentLedgerStatusView, isPaymentLedgerEntryTerminal } from './_utils/payment-ledger-view'
 
 interface MembershipDisplay {
   id: number

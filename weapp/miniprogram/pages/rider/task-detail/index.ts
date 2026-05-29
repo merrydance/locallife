@@ -1,8 +1,8 @@
-import DeliveryService, { Delivery } from '../../../api/delivery'
+import DeliveryService, { Delivery } from '../_main_shared/api/delivery'
 import { logger } from '../../../utils/logger'
 import { locationService } from '../../../utils/location'
-import { normalizeLocationError, syncRiderDeliveryLocation } from '../../../utils/rider-location'
-import { riderLiveLocationSession } from '../../../utils/rider-live-location'
+import { normalizeLocationError, syncRiderDeliveryLocation } from '../_main_shared/utils/rider-location'
+import { riderLiveLocationSession } from '../_utils/rider-live-location'
 import {
     buildRiderDeliveryActionConfirmFeedback,
     buildRiderDeliveryActionFailureFeedback,
@@ -12,8 +12,8 @@ import {
     isExpectedDeliveryStatusReached,
     isRiderDeliveryTrackedStatus,
     RiderDeliveryActionKey
-} from '../../../utils/rider-delivery-view'
-import { buildRiderDeliveryIncomeView, RiderDeliveryIncomeView } from '../../../utils/rider-delivery-income-view'
+} from '../_utils/rider-delivery-view'
+import { buildRiderDeliveryIncomeView, RiderDeliveryIncomeView } from '../_utils/rider-delivery-income-view'
 import { getStableBarHeights } from '../../../utils/responsive'
 
 interface RiderTaskDetailOptions {

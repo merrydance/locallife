@@ -12,7 +12,7 @@
     "t-loading": "tdesign-miniprogram/loading/loading",
     "t-checkbox": "tdesign-miniprogram/checkbox/checkbox",
     "t-checkbox-group": "tdesign-miniprogram/checkbox-group/checkbox-group",
-    "document-uploader": "/components/document-uploader/index"
+    "document-uploader": "../../_components/document-uploader/index"
   },
   "navigationStyle": "custom"
 }
