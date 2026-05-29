@@ -9,6 +9,8 @@ class EscPosUtils {
   static const List<int> _boldOff = [27, 69, 0];
   static const List<int> _doubleHeightOn = [29, 33, 1];
   static const List<int> _doubleHeightOff = [29, 33, 0];
+  static const List<int> _smallFontOn = [27, 77, 1];
+  static const List<int> _smallFontOff = [27, 77, 0];
   static const List<int> _lineFeed = [10];
 
   /// Generate raw ESC/POS bytes for an order receipt using UTF-8 or GBK.
@@ -75,16 +77,22 @@ class EscPosUtils {
       ),
     );
     bytes.addAll(_boldOff);
+    bytes.addAll(_encode("商户账单\n"));
+    bytes.addAll(
+      _encode("菜品合计: ${_formatCents(feeBreakdown.foodPayableAmountCents)}\n"),
+    );
+    bytes.addAll(_smallFontOn);
     bytes.addAll(
       _encode(
-        "平台服务费: ${_formatCents(feeBreakdown.platformServiceFeeAmountCents)}\n",
+        "- 平台服务费: ${_formatCents(feeBreakdown.platformServiceFeeAmountCents)}\n",
       ),
     );
     bytes.addAll(
       _encode(
-        "支付通道费: ${_formatCents(feeBreakdown.paymentChannelFeeAmountCents)}\n",
+        "- 支付通道费: ${_formatCents(feeBreakdown.paymentChannelFeeAmountCents)}\n",
       ),
     );
+    bytes.addAll(_smallFontOff);
     bytes.addAll(
       _encode(
         "商户实收: ${_formatCents(feeBreakdown.merchantReceivableAmountCents)}\n",
@@ -93,14 +101,23 @@ class EscPosUtils {
     final riderGrossAmount = feeBreakdown.riderGrossAmountCents > 0
         ? feeBreakdown.riderGrossAmountCents
         : feeBreakdown.deliveryFeeAmountCents;
+    if (riderGrossAmount > 0 ||
+        feeBreakdown.riderPaymentFeeCents > 0 ||
+        feeBreakdown.riderNetEarningsCents > 0) {
+      bytes.addAll(_encode("骑手账单\n"));
+    }
     if (riderGrossAmount > 0) {
       bytes.addAll(_encode("代取费: ${_formatCents(riderGrossAmount)}\n"));
     }
     if (feeBreakdown.riderPaymentFeeCents > 0 ||
         feeBreakdown.riderNetEarningsCents > 0) {
+      bytes.addAll(_smallFontOn);
       bytes.addAll(
-        _encode("骑手通道费: ${_formatCents(feeBreakdown.riderPaymentFeeCents)}\n"),
+        _encode(
+          "- 支付通道费: ${_formatCents(feeBreakdown.riderPaymentFeeCents)}\n",
+        ),
       );
+      bytes.addAll(_smallFontOff);
       bytes.addAll(
         _encode("骑手实收: ${_formatCents(feeBreakdown.riderNetEarningsCents)}\n"),
       );

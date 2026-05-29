@@ -434,10 +434,6 @@ func buildFeieReceipt(order db.GetOrderWithDetailsRow, items []db.ListOrderItems
 	if order.VoucherAmount > 0 {
 		builder.WriteString("券抵扣：-" + fenToYuan(order.VoucherAmount) + "<BR>")
 	}
-	if order.DeliveryFee > 0 {
-		builder.WriteString("跑腿费：" + fenToYuan(order.DeliveryFee) + "<BR>")
-	}
-	builder.WriteString("<BOLD>实付：" + fenToYuan(order.TotalAmount) + "</BOLD><BR>")
 	if slip == printSlipFull && settlementBill != nil {
 		writeFeieSettlementBill(&builder, settlementBill)
 	}
@@ -466,13 +462,16 @@ func writeFeieSettlementBill(builder *strings.Builder, settlementBill *printSett
 
 	builder.WriteString("--------------------------------<BR>")
 	builder.WriteString("用户实付：" + fenToYuan(breakdown.CustomerPayableAmount) + "<BR>")
-	builder.WriteString("平台服务费：-" + fenToYuan(breakdown.PlatformServiceFeeAmount) + "<BR>")
-	builder.WriteString("支付通道费：-" + fenToYuan(breakdown.PaymentChannelFeeAmount) + "<BR>")
+	builder.WriteString("商户账单<BR>")
+	builder.WriteString("菜品合计：" + fenToYuan(breakdown.FoodPayableAmount) + "<BR>")
+	builder.WriteString(formatPrintDeductionLine("平台服务费", breakdown.PlatformServiceFeeAmount))
+	builder.WriteString(formatPrintDeductionLine("支付通道费", breakdown.PaymentChannelFeeAmount))
 	builder.WriteString("<BOLD>商户实收：" + fenToYuan(breakdown.MerchantReceivableAmount) + "</BOLD><BR>")
 
 	if profitSharingOrder.RiderGrossAmount > 0 || profitSharingOrder.RiderPaymentFee > 0 || profitSharingOrder.RiderAmount > 0 {
+		builder.WriteString("骑手账单<BR>")
 		builder.WriteString("代取费：" + fenToYuan(profitSharingOrder.RiderGrossAmount) + "<BR>")
-		builder.WriteString("骑手通道费：-" + fenToYuan(profitSharingOrder.RiderPaymentFee) + "<BR>")
+		builder.WriteString(formatPrintDeductionLine("支付通道费", profitSharingOrder.RiderPaymentFee))
 		builder.WriteString("骑手实收：" + fenToYuan(profitSharingOrder.RiderAmount) + "<BR>")
 	}
 }
@@ -529,6 +528,10 @@ func formatPrintItemLine(name string, quantity int16, subtotal int64) string {
 		trimmed = "未命名商品"
 	}
 	return fmt.Sprintf("%s x%d  %s", trimmed, quantity, fenToYuan(subtotal))
+}
+
+func formatPrintDeductionLine(label string, amount int64) string {
+	return "- " + label + "：-" + fenToYuan(amount) + "<BR>"
 }
 
 func fenToYuan(amount int64) string {
