@@ -150,7 +150,10 @@ Page({
           // Recover avatar from local storage if backend returns empty
           const localAvatar = wx.getStorageSync('user_avatar')
           const finalAvatar = user.avatar_url || localAvatar || ''
-          console.log('[UserCenter] Refresh Info - Avatar:', finalAvatar, 'User:', user)
+          logger.debug('Refreshed user profile avatar state', {
+            hasBackendAvatar: !!user.avatar_url,
+            hasLocalAvatar: !!localAvatar
+          }, 'UserCenter.refreshUserInfo')
 
           // Update Global Data
           app.globalData.userInfo = {
@@ -549,7 +552,7 @@ Page({
         avatarUrl: previousAvatarUrl
       } as WechatMiniprogram.UserInfo
 
-      console.error('Failed to update avatar on backend', error)
+      logger.warn('Failed to update avatar on backend', error, 'UserCenter.onChooseAvatar')
       wx.showToast({ title: '头像上传失败', icon: 'none' })
     } finally {
       wx.hideLoading()
@@ -574,7 +577,7 @@ Page({
     try {
       await updateUserProfile({ full_name: nickName })
     } catch (error) {
-      console.error('Failed to update nickname on backend', error)
+      logger.warn('Failed to update nickname on backend', error, 'UserCenter.onNicknameChange')
     }
   }
 })

@@ -349,7 +349,9 @@
     "pages/takeout/index": {
       "network": "all",
       "packages": [
-        "__APP__"
+        "pages/takeout/restaurant-detail",
+        "pages/takeout/dish-detail",
+        "pages/takeout/cart"
       ]
     }
   },

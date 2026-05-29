@@ -49,9 +49,9 @@ const consumerDiscovery = loadTsModule('miniprogram/adapters/consumer-discovery.
 })
 
 const { ConsumerDiscoveryAdapter } = consumerDiscovery
-const consumerMerchantDetail = loadTsModule('miniprogram/adapters/consumer-merchant-detail.ts', {
-  '../utils/image': { getPublicImageUrl: (url) => url || '' },
-  './merchant-labels': merchantLabelStub
+const consumerMerchantDetail = loadTsModule('miniprogram/pages/takeout/restaurant-detail/_adapters/consumer-merchant-detail.ts', {
+  '../../../../utils/image': { getPublicImageUrl: (url) => url || '' },
+  '../../../../adapters/merchant-labels': merchantLabelStub
 })
 
 const { default: ConsumerMerchantDetailAdapter } = consumerMerchantDetail

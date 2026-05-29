@@ -1,6 +1,7 @@
 // / <reference path="../../../typings/index.d.ts" />
 
 import { globalStore } from '../../utils/global-store'
+import { logger } from '../../utils/logger'
 
 type NavbarInstance = WechatMiniprogram.Component.InstanceMethods<WechatMiniprogram.IAnyObject> & {
   _unsubscribe?: () => void
@@ -97,16 +98,9 @@ Component({
             ? (newLocation as { name?: string })
             : {}
 
-        console.log('[Navbar] 收到位置更新通知', {
-          newLocation: locationData,
-          hasPropertiesLocation: !!this.properties.location,
-          willUpdate: !this.properties.location
-        })
-
         // 只在必要时更新 - 如果properties没传location,才使用全局的
         if (!this.properties.location) {
           this.setData({ displayLocation: locationData.name || '定位中...' })
-          console.log('[Navbar] 已更新 displayLocation:', locationData.name || '定位中...')
         }
       })
     },
@@ -118,13 +112,11 @@ Component({
       // 优先使用properties传入的location
       if (this.properties.location) {
         this.setData({ displayLocation: this.properties.location })
-        console.log('[Navbar] 使用 properties 传入的位置:', this.properties.location)
       } else {
         // 否则使用全局location
         const location = globalStore.get('location')
         const displayText = location.name || '定位中...'
         this.setData({ displayLocation: displayText })
-        console.log('[Navbar] 从 globalStore 读取位置:', location, '显示:', displayText)
       }
     },
 
@@ -175,6 +167,7 @@ Component({
 
             wx.showToast({ title: '位置已更新', icon: 'success', duration: 1500 })
           } catch (err) {
+            logger.warn('选择位置后逆地理编码失败，使用微信返回位置', err, 'CustomNavbar.openChooseLocation')
             // 逆地理编码失败，使用用户选择的信息
             const name = res.name || '选择的位置'
 

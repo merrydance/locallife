@@ -45,6 +45,7 @@ interface IAppOption {
             address?: string
         } | null
     }
+    _hasHandledInitialShow?: boolean
     userInfoReadyCallback?: WechatMiniprogram.GetUserInfoSuccessCallback
     silentLogin(attempt?: number): void
     getLocation(): void
@@ -53,7 +54,6 @@ interface IAppOption {
     isDemoMode(): boolean
     bootstrapDemoUser(): void
     reportErrorToMonitor(error: any, type: string): void
-    clearApiCache(): void
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     _applyUserInfo(user: any): void
     _refreshThenLoadUser(max: number, delays: number[]): void

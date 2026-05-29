@@ -1,11 +1,7 @@
 import { tracker, EventType } from './utils/tracker'
-import { getUserInfo, type UserResponse } from './api/auth'
+import type { UserResponse } from './api/auth'
 import { logger } from './utils/logger'
 import { AppError, ErrorHandler, ErrorType } from './utils/error-handler'
-import { networkMonitor } from './utils/network-monitor'
-import { themeManager } from './utils/theme'
-import { locationService } from './utils/location'
-import { getCurrentRegion } from './api/location'
 import { getErrorDebugMessage, isRetryableNetworkError } from './utils/user-facing'
 import { installPromptFeedbackGuards } from './utils/prompt-feedback'
 import { ensureWechatLoginSession } from './utils/wechat-login-session'
@@ -42,6 +38,7 @@ App<IAppOption>({
       address?: string
     } | null
   },
+  _hasHandledInitialShow: false,
 
   onLaunch() {
     logger.info('🚀 小程序启动', undefined, 'App.onLaunch')
@@ -109,18 +106,6 @@ App<IAppOption>({
       } catch (_e) { /* storage 读取失败不影响主流程 */ }
     }, 0)
 
-    // 清除旧的 API 缓存（响应格式已更新为统一信封格式）
-    this.clearApiCache()
-
-    // 初始化主题
-    themeManager // 引用主题管理器触发初始化
-    logger.debug('主题管理器已初始化', { isDark: themeManager.isDark() }, 'App.onLaunch')
-
-    // 初始化网络监控
-    networkMonitor.subscribe((state) => {
-      logger.info('网络状态更新', state, 'App.networkMonitor')
-    })
-
     // 始终执行真实登录流程（移除 Demo 模式判断）
     // 并行执行：登录 + 获取坐标
     logger.info('📍 开始并行执行：登录 + 获取坐标', undefined, 'App.onLaunch')
@@ -132,7 +117,13 @@ App<IAppOption>({
   },
 
   onShow() {
+    if (!this._hasHandledInitialShow) {
+      this._hasHandledInitialShow = true
+      return
+    }
+
     // 桌面微信长时间后台后，网络状态可能滞后；前台恢复时主动刷新
+    const { networkMonitor } = require('./utils/network-monitor')
     networkMonitor.refreshStatus(true).catch(() => {
       // 忽略刷新失败，不影响主流程
     })
@@ -245,8 +236,9 @@ App<IAppOption>({
       // 快速路径：access token 仍有效，直接拉取用户信息，无需 wx.login
       if (existingToken && !isTokenNearExpiry(0)) {
         logger.info('Token 仍有效，跳过 wx.login', undefined, 'App.silentLogin')
+        const { getUserInfo } = require('./api/auth')
         getUserInfo()
-          .then((user) => {
+          .then((user: UserResponse) => {
             this._applyUserInfo(user)
             logger.info('✅ 静默登录成功 (复用 token)', { userId: user.id }, 'App.silentLogin')
             if (this.globalData.latitude && this.globalData.longitude) {
@@ -316,6 +308,7 @@ App<IAppOption>({
     refreshAuthToken(true)
       .then(() => {
         logger.info('refresh_token 续期成功，拉取用户信息', undefined, 'App._refreshThenLoadUser')
+        const { getUserInfo } = require('./api/auth')
         return getUserInfo()
       })
       .then((user: UserResponse) => {
@@ -553,6 +546,7 @@ App<IAppOption>({
       }, 'reverseGeocodeWhenReady')
 
       try {
+        const { getCurrentRegion } = require('./api/location')
         const region = await getCurrentRegion({
           latitude: this.globalData.latitude,
           longitude: this.globalData.longitude
@@ -564,6 +558,7 @@ App<IAppOption>({
         logger.warn('当前运营区域匹配失败', regionErr, 'reverseGeocodeWhenReady')
       }
 
+      const { locationService } = require('./utils/location')
       const locationInfo = await locationService.reverseGeocode(
         this.globalData.latitude,
         this.globalData.longitude
@@ -629,33 +624,6 @@ App<IAppOption>({
    */
   getLocation() {
     this.getLocationCoordinates()
-  },
-
-  /**
-   * 清除 API 缓存（响应格式更新时需要清除旧缓存）
-   */
-  clearApiCache() {
-    try {
-      // 获取所有存储的 key
-      const res = wx.getStorageInfoSync()
-      const keysToRemove = res.keys.filter((key) => key.startsWith('api_'))
-
-      keysToRemove.forEach((key) => {
-        try {
-          wx.removeStorageSync(key)
-        } catch (e) {
-          // 忽略单个 key 删除失败
-        }
-      })
-
-      if (keysToRemove.length > 0) {
-        logger.info('已清除 API 缓存', { count: keysToRemove.length }, 'clearApiCache')
-      }
-    } catch (e) {
-      // 忽略缓存清除失败
-      logger.warn('清除 API 缓存失败', e, 'clearApiCache')
-    }
   }
-
 
 })

@@ -22,8 +22,6 @@ import {
   showTakeoutLocationGuide,
   sleep,
   TAKEOUT_BACKGROUND_DISH_HYDRATION_DELAY_MS,
-  TAKEOUT_BACKGROUND_META_HYDRATION_DELAY_MS,
-  TAKEOUT_FIRST_SCREEN_MERCHANT_COUNT,
   TAKEOUT_HYDRATION_BATCH_SIZE,
   TAKEOUT_PAGE_SIZE,
   TAKEOUT_PRIORITY_META_HYDRATION_DELAY_MS,
@@ -34,6 +32,8 @@ import {
 } from '../../utils/takeout-index-support'
 
 const PAGE_CONTEXT = 'takeout_index'
+const TAKEOUT_HYDRATION_MERCHANT_LIMIT = 3
+const TAKEOUT_CART_REFRESH_INTERVAL_MS = 30000
 
 Page({
   data: {
@@ -63,6 +63,7 @@ Page({
   _feedHydrationGeneration: 0,
   _feedHydrationTimers: [] as SearchTimer[],
   _pendingReload: false,
+  _lastCartRefreshAt: 0,
 
   onLoad() {
     wx.showShareMenu({
@@ -186,7 +187,9 @@ Page({
     if (cachedCart) {
       this.setData({ cartTotalCount: cachedCart.totalCount, cartTotalPrice: cachedCart.totalPrice })
     }
-    this.updateCartDisplay()
+    if (this.shouldRefreshCartDisplay()) {
+      void this.updateCartDisplay()
+    }
 
     // 更新位置显示
     const app = getApp<IAppOption>()
@@ -359,13 +362,10 @@ Page({
    * 将卡片水合拆成优先批次和后台批次，避免第一页首屏产生逐店请求风暴。
    */
   scheduleMerchantHydration(merchantIds: number[], generation: number) {
-    const priorityIds = merchantIds.slice(0, TAKEOUT_FIRST_SCREEN_MERCHANT_COUNT)
-    const backgroundIds = merchantIds.slice(TAKEOUT_FIRST_SCREEN_MERCHANT_COUNT)
+    const priorityIds = merchantIds.slice(0, TAKEOUT_HYDRATION_MERCHANT_LIMIT)
 
-    this.queueHydrationPhase(priorityIds, generation, 0, this.hydrateMerchantDishesBatch)
+    this.queueHydrationPhase(priorityIds, generation, TAKEOUT_BACKGROUND_DISH_HYDRATION_DELAY_MS, this.hydrateMerchantDishesBatch)
     this.queueHydrationPhase(priorityIds, generation, TAKEOUT_PRIORITY_META_HYDRATION_DELAY_MS, this.hydrateMerchantMetaBatch)
-    this.queueHydrationPhase(backgroundIds, generation, TAKEOUT_BACKGROUND_DISH_HYDRATION_DELAY_MS, this.hydrateMerchantDishesBatch)
-    this.queueHydrationPhase(backgroundIds, generation, TAKEOUT_BACKGROUND_META_HYDRATION_DELAY_MS, this.hydrateMerchantMetaBatch)
   },
 
   queueHydrationPhase(
@@ -472,6 +472,11 @@ Page({
     return this._feedHydrationGeneration
   },
 
+  shouldRefreshCartDisplay(force = false) {
+    if (force) return true
+    return Date.now() - this._lastCartRefreshAt > TAKEOUT_CART_REFRESH_INTERVAL_MS
+  },
+
   /**
    * Feed 卡片中的菜品加购事件
    */
@@ -501,17 +506,13 @@ Page({
   },
 
   async updateCartDisplay() {
+    this._lastCartRefreshAt = Date.now()
     try {
-      console.log('[updateCartDisplay] 开始调用API')
       // 直接从后端获取最新购物车汇总，确保数据准确
       const userCarts = await getUserCarts('takeout', { loading: false })
 
-      console.log('[updateCartDisplay] API返回:', JSON.stringify(userCarts))
-
       const totalCount = userCarts.summary?.total_items || 0
       const totalPrice = userCarts.summary?.total_amount || 0
-
-      console.log('[updateCartDisplay] 设置数据:', { totalCount, totalPrice })
 
       this.setData({
         cartTotalCount: totalCount,
@@ -527,7 +528,6 @@ Page({
       })
     } catch (error) {
       // API 调用失败时重置为 0
-      console.error('[updateCartDisplay] 错误:', error)
       logger.warn('获取购物车汇总失败', error, 'Takeout.updateCartDisplay')
       this.setData({
         cartTotalCount: 0,
