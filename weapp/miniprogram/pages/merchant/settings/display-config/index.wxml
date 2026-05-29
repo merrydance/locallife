@@ -51,6 +51,9 @@
             <t-cell title="打印预订订单" description="代客建预订或预订点餐后打印预订相关单据">
               <t-switch slot="note" value="{{settingsForm.print_reservation}}" data-field="print_reservation" bind:change="onSettingsSwitchChange" size="large" disabled="{{!settingsForm.enable_print}}" />
             </t-cell>
+            <t-cell title="自动接单" description="顾客支付成功后自动确认接单；需启用打印、选择接单即打印，并保持可用打印机在线">
+              <t-switch slot="note" value="{{settingsForm.auto_accept_paid_orders}}" data-field="auto_accept_paid_orders" bind:change="onSettingsSwitchChange" size="large" disabled="{{!settingsForm.enable_print}}" />
+            </t-cell>
           </t-cell-group>
 
           <view class="option-group {{!settingsForm.enable_print ? 'option-group--disabled' : ''}}">

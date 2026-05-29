@@ -252,6 +252,7 @@ export interface DisplayConfigResponse {
     print_reservation: boolean
     print_dispatch_mode: 'single_full' | 'split' | string
     print_trigger_mode: 'accepted' | 'ready' | 'manual' | string
+    auto_accept_paid_orders: boolean
     voice_takeout: boolean
     voice_dine_in: boolean
     kds_url?: string
@@ -269,6 +270,7 @@ export interface UpdateDisplayConfigRequest extends Record<string, unknown> {
     print_reservation?: boolean
     print_dispatch_mode?: 'single_full' | 'split' | string
     print_trigger_mode?: 'accepted' | 'ready' | 'manual' | string
+    auto_accept_paid_orders?: boolean
     voice_takeout?: boolean
     voice_dine_in?: boolean
     kds_url?: string
