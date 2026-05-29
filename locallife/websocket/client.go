@@ -64,7 +64,7 @@ func (c *Client) ReadPump() {
 		var msg Message
 		err := c.conn.ReadJSON(&msg)
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+			if isUnexpectedWebSocketReadError(err) {
 				log.Error().Err(err).
 					Int64("user_id", c.info.UserID).
 					Str("client_type", string(c.info.ClientType)).
@@ -76,6 +76,15 @@ func (c *Client) ReadPump() {
 		// 处理客户端消息（如心跳、确认等）
 		c.handleMessage(msg)
 	}
+}
+
+func isUnexpectedWebSocketReadError(err error) bool {
+	return websocket.IsUnexpectedCloseError(
+		err,
+		websocket.CloseNormalClosure,
+		websocket.CloseGoingAway,
+		websocket.CloseAbnormalClosure,
+	)
 }
 
 // WritePump 向WebSocket写入消息
