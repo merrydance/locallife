@@ -1,4 +1,5 @@
 import { getToken } from '../../../../utils/auth'
+import { ensureValidToken } from '../../../../utils/request-auth-refresh'
 import { logger } from '../../../../utils/logger'
 import { EventBus } from './event-bus'
 import { mapBackendMessageToUserMessage } from '../../../../utils/user-facing'
@@ -32,6 +33,7 @@ class WebSocketManager {
   private forcedClose = false
   private isConnecting = false
   private lastSequence = 0 // 记录最后收到的消息序号，断线重连时带给服务端以触发消息回放
+  private lastUrlOrPath?: string
   private readonly eventBus = new EventBus()
 
   private isConnectionBlocked(detail: string): boolean {
@@ -96,11 +98,9 @@ class WebSocketManager {
    * 建立连接
    * @param url WebSocket 地址，若不传则从配置获取
    */
-  connect(urlOrPath?: string) {
-    const token = getToken()
-    if (!token) {
-      logger.warn('WebSocket: No token found, aborting connection', undefined, 'WS')
-      return
+  async connect(urlOrPath?: string) {
+    if (urlOrPath !== undefined) {
+      this.lastUrlOrPath = urlOrPath
     }
 
     if (this.socket || this.isConnected || this.isConnecting) {
@@ -114,7 +114,31 @@ class WebSocketManager {
 
     this.isConnecting = true
     this.forcedClose = false
-    const wsUrl = this.resolveWebSocketUrl(token, urlOrPath, this.lastSequence)
+
+    try {
+      await ensureValidToken()
+    } catch (err) {
+      this.isConnecting = false
+      logger.warn('WebSocket: Token refresh failed before connection', err, 'WS')
+      this.notifyConnectionBlocked('token refresh failed')
+      return
+    }
+
+    if (this.forcedClose) {
+      this.isConnecting = false
+      return
+    }
+
+    const token = getToken()
+    if (!token) {
+      this.isConnecting = false
+      logger.warn('WebSocket: No token found, aborting connection', undefined, 'WS')
+      this.notifyConnectionBlocked('token refresh failed')
+      return
+    }
+
+    const targetUrlOrPath = this.lastUrlOrPath
+    const wsUrl = this.resolveWebSocketUrl(token, targetUrlOrPath, this.lastSequence)
 
     logger.info(`WebSocket: Connecting to ${wsUrl.split('?')[0]}...`, undefined, 'WS')
 
@@ -277,7 +301,7 @@ class WebSocketManager {
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
-      this.connect()
+      void this.connect(this.lastUrlOrPath)
     }, delay)
   }
 
