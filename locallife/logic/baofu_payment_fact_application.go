@@ -19,6 +19,15 @@ func (svc *PaymentFactService) markBaofuPaymentOrderPaid(ctx context.Context, ap
 	if transactionID == "" {
 		transactionID = strings.TrimSpace(fact.ExternalObjectKey)
 	}
+
+	current, err := svc.store.GetPaymentOrder(ctx, application.BusinessObjectID)
+	if err != nil {
+		return db.PaymentOrder{}, fmt.Errorf("get baofu payment order before paid update: %w", err)
+	}
+	if err := validateBaofuPaymentSuccessAmount(fact, current); err != nil {
+		return db.PaymentOrder{}, err
+	}
+
 	paid, err := svc.store.UpdatePaymentOrderToPaid(ctx, db.UpdatePaymentOrderToPaidParams{
 		ID:            application.BusinessObjectID,
 		TransactionID: pgtype.Text{String: transactionID, Valid: transactionID != ""},
@@ -29,14 +38,32 @@ func (svc *PaymentFactService) markBaofuPaymentOrderPaid(ctx context.Context, ap
 	if !errors.Is(err, db.ErrRecordNotFound) {
 		return db.PaymentOrder{}, fmt.Errorf("mark baofu payment order paid: %w", err)
 	}
-	current, getErr := svc.store.GetPaymentOrder(ctx, application.BusinessObjectID)
-	if getErr != nil {
-		return db.PaymentOrder{}, fmt.Errorf("get baofu payment order after paid update conflict: %w", getErr)
+	if current.Status != paymentStatusPaid {
+		current, err = svc.store.GetPaymentOrder(ctx, application.BusinessObjectID)
+		if err != nil {
+			return db.PaymentOrder{}, fmt.Errorf("get baofu payment order after paid update conflict: %w", err)
+		}
+		if err := validateBaofuPaymentSuccessAmount(fact, current); err != nil {
+			return db.PaymentOrder{}, err
+		}
 	}
-	if current.Status != "paid" {
+	if current.Status != paymentStatusPaid {
 		return db.PaymentOrder{}, fmt.Errorf("baofu payment order %d is not payable after success fact: status=%s", current.ID, current.Status)
 	}
 	return current, nil
+}
+
+func validateBaofuPaymentSuccessAmount(fact db.ExternalPaymentFact, paymentOrder db.PaymentOrder) error {
+	if !isBaofuMainBusinessPaymentFact(fact) || fact.TerminalStatus != db.ExternalPaymentTerminalStatusSuccess {
+		return nil
+	}
+	if !fact.Amount.Valid || fact.Amount.Int64 <= 0 {
+		return fmt.Errorf("宝付支付结果金额与本地订单金额不一致，请等待系统对账或联系平台处理: payment_order_id=%d reason=missing_success_amount", paymentOrder.ID)
+	}
+	if fact.Amount.Int64 != paymentOrder.Amount {
+		return fmt.Errorf("宝付支付结果金额与本地订单金额不一致，请等待系统对账或联系平台处理: payment_order_id=%d fact_amount=%d local_amount=%d", paymentOrder.ID, fact.Amount.Int64, paymentOrder.Amount)
+	}
+	return nil
 }
 
 func (svc *PaymentFactService) applyBaofuOrderPaymentTerminalFailure(ctx context.Context, application db.ExternalPaymentFactApplication, fact db.ExternalPaymentFact) (ApplyOrderPaymentFactResult, error) {

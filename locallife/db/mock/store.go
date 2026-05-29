@@ -20323,6 +20323,21 @@ func (mr *MockStoreMockRecorder) UpdateDishesCategory(ctx, arg any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDishesCategory", reflect.TypeOf((*MockStore)(nil).UpdateDishesCategory), ctx, arg)
 }
 
+// UpdateExternalPaymentCommandOutcome mocks base method.
+func (m *MockStore) UpdateExternalPaymentCommandOutcome(ctx context.Context, arg db.UpdateExternalPaymentCommandOutcomeParams) (db.ExternalPaymentCommand, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateExternalPaymentCommandOutcome", ctx, arg)
+	ret0, _ := ret[0].(db.ExternalPaymentCommand)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateExternalPaymentCommandOutcome indicates an expected call of UpdateExternalPaymentCommandOutcome.
+func (mr *MockStoreMockRecorder) UpdateExternalPaymentCommandOutcome(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateExternalPaymentCommandOutcome", reflect.TypeOf((*MockStore)(nil).UpdateExternalPaymentCommandOutcome), ctx, arg)
+}
+
 // UpdateExternalPaymentFactProcessingStatus mocks base method.
 func (m *MockStore) UpdateExternalPaymentFactProcessingStatus(ctx context.Context, arg db.UpdateExternalPaymentFactProcessingStatusParams) (db.ExternalPaymentFact, error) {
 	m.ctrl.T.Helper()

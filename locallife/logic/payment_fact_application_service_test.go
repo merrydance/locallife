@@ -56,7 +56,8 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuProfitSharin
 	fact.ExternalObjectKey = "BFSHARE202605030001"
 	fact.ExternalSecondaryKey = pgtype.Text{String: "BFSHAREUP202605030001", Valid: true}
 	fact.UpstreamState = "SUCCESS"
-	fact.RawResource = []byte(`{"txnState":"SUCCESS","succAmt":10000}`)
+	fact.Amount = pgtype.Int8{Int64: 1360, Valid: true}
+	fact.RawResource = []byte(`{"txnState":"SUCCESS","succAmt":1360}`)
 
 	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
 	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
@@ -73,6 +74,66 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuProfitSharin
 	require.NoError(t, err)
 	require.True(t, result.Applied)
 	require.Equal(t, db.ExternalPaymentFactApplicationStatusApplied, result.Application.Status)
+}
+
+func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuProfitSharingRejectsMissingSuccessAmount(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	now := time.Date(2026, 5, 3, 12, 11, 0, 0, time.UTC)
+	application := buildProfitSharingFactApplication(2704, 2604, db.ExternalPaymentFactApplicationStatusProcessing)
+	fact := buildProfitSharingFact(2604, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess)
+	fact.Provider = db.ExternalPaymentProviderBaofu
+	fact.Channel = db.PaymentChannelBaofuAggregate
+	fact.Capability = db.ExternalPaymentCapabilityBaofuProfitSharing
+	fact.ExternalObjectType = db.ExternalPaymentObjectProfitSharing
+	fact.UpstreamState = "SUCCESS"
+	fact.Amount = pgtype.Int8{}
+	fact.RawResource = []byte(`{"txnState":"SUCCESS"}`)
+
+	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
+	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().GetProfitSharingOrder(gomock.Any(), application.BusinessObjectID).Return(buildProfitSharingOrderForApplication(application, db.ProfitSharingOrderStatusProcessing), nil)
+	expectApplicationFailed(t, store, application, now, "宝付分账结果金额与本地账单不一致")
+
+	svc := NewPaymentFactService(store)
+	svc.now = func() time.Time { return now }
+
+	result, err := svc.ApplyExternalPaymentFactApplication(context.Background(), application.ID)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "宝付分账结果金额与本地账单不一致")
+	require.False(t, result.Applied)
+}
+
+func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuProfitSharingRejectsSuccessAmountMismatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	now := time.Date(2026, 5, 3, 12, 12, 0, 0, time.UTC)
+	application := buildProfitSharingFactApplication(2705, 2605, db.ExternalPaymentFactApplicationStatusProcessing)
+	fact := buildProfitSharingFact(2605, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess)
+	fact.Provider = db.ExternalPaymentProviderBaofu
+	fact.Channel = db.PaymentChannelBaofuAggregate
+	fact.Capability = db.ExternalPaymentCapabilityBaofuProfitSharing
+	fact.ExternalObjectType = db.ExternalPaymentObjectProfitSharing
+	fact.UpstreamState = "SUCCESS"
+	fact.Amount = pgtype.Int8{Int64: 1359, Valid: true}
+	fact.RawResource = []byte(`{"txnState":"SUCCESS","succAmt":1359}`)
+
+	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
+	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().GetProfitSharingOrder(gomock.Any(), application.BusinessObjectID).Return(buildProfitSharingOrderForApplication(application, db.ProfitSharingOrderStatusProcessing), nil)
+	expectApplicationFailed(t, store, application, now, "宝付分账结果金额与本地账单不一致")
+
+	svc := NewPaymentFactService(store)
+	svc.now = func() time.Time { return now }
+
+	result, err := svc.ApplyExternalPaymentFactApplication(context.Background(), application.ID)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "宝付分账结果金额与本地账单不一致")
+	require.False(t, result.Applied)
 }
 
 func TestPaymentFactServiceApplyExternalPaymentFactApplication_ProfitSharingFailedFactDoesNotRegressFinishedOrder(t *testing.T) {
@@ -590,11 +651,12 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrderPaymentSucce
 	now := time.Date(2026, 4, 26, 11, 11, 40, 0, time.UTC)
 	application := buildOrderPaymentFactApplication(803, 703, db.ExternalPaymentFactApplicationStatusProcessing)
 	fact := buildOrderPaymentFact(703, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess)
-	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, BusinessType: db.ExternalPaymentBusinessOwnerOrder, PaymentChannel: db.PaymentChannelBaofuAggregate}
+	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, BusinessType: db.ExternalPaymentBusinessOwnerOrder, PaymentChannel: db.PaymentChannelBaofuAggregate, Amount: 8800}
 	orderResult := db.ProcessOrderPaymentTxResult{Order: db.Order{ID: 6201, MerchantID: 7101, OrderNo: "ORD6201"}}
 
 	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
 	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), application.BusinessObjectID).Return(paymentOrder, nil)
 	store.EXPECT().UpdatePaymentOrderToPaid(gomock.Any(), db.UpdatePaymentOrderToPaidParams{
 		ID:            application.BusinessObjectID,
 		TransactionID: pgtype.Text{String: "BFPAY_6001", Valid: true},
@@ -647,6 +709,7 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuOrderPayment
 
 	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
 	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), application.BusinessObjectID).Return(paymentOrder, nil)
 	store.EXPECT().UpdatePaymentOrderToPaid(gomock.Any(), db.UpdatePaymentOrderToPaidParams{
 		ID:            application.BusinessObjectID,
 		TransactionID: pgtype.Text{String: "BFPAY_6401", Valid: true},
@@ -718,6 +781,60 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuOrderPayment
 	require.Equal(t, db.PaymentDomainOutboxEventOrderPaymentSucceeded, result.Outbox.EventType)
 }
 
+func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuOrderPaymentRejectsMissingSuccessAmount(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	now := time.Date(2026, 5, 3, 11, 2, 0, 0, time.UTC)
+	application := buildOrderPaymentFactApplication(828, 728, db.ExternalPaymentFactApplicationStatusProcessing)
+	fact := buildBaofuOrderPaymentFact(728, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess)
+	fact.Amount = pgtype.Int8{}
+	fact.RawResource = []byte(`{"tradeNo":"BFPAY_6401","txnState":"SUCCESS"}`)
+	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, BusinessType: db.ExternalPaymentBusinessOwnerOrder, PaymentChannel: db.PaymentChannelBaofuAggregate, Amount: 12900, Status: "pending"}
+
+	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
+	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), application.BusinessObjectID).Return(paymentOrder, nil)
+	expectApplicationFailed(t, store, application, now, "宝付支付结果金额与本地订单金额不一致")
+
+	svc := NewPaymentFactService(store).WithPaymentSuccessConfig(15000, 20)
+	svc.now = func() time.Time { return now }
+
+	result, err := svc.ApplyExternalPaymentFactApplication(context.Background(), application.ID)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "宝付支付结果金额与本地订单金额不一致")
+	require.False(t, result.Applied)
+	require.Nil(t, result.Outbox)
+}
+
+func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuOrderPaymentRejectsSuccessAmountMismatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	now := time.Date(2026, 5, 3, 11, 3, 0, 0, time.UTC)
+	application := buildOrderPaymentFactApplication(829, 729, db.ExternalPaymentFactApplicationStatusProcessing)
+	fact := buildBaofuOrderPaymentFact(729, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess)
+	fact.Amount = pgtype.Int8{Int64: 12899, Valid: true}
+	fact.RawResource = []byte(`{"tradeNo":"BFPAY_6401","txnState":"SUCCESS","succAmt":12899}`)
+	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, BusinessType: db.ExternalPaymentBusinessOwnerOrder, PaymentChannel: db.PaymentChannelBaofuAggregate, Amount: 12900, Status: "pending"}
+
+	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
+	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), application.BusinessObjectID).Return(paymentOrder, nil)
+	expectApplicationFailed(t, store, application, now, "宝付支付结果金额与本地订单金额不一致")
+
+	svc := NewPaymentFactService(store).WithPaymentSuccessConfig(15000, 20)
+	svc.now = func() time.Time { return now }
+
+	result, err := svc.ApplyExternalPaymentFactApplication(context.Background(), application.ID)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "宝付支付结果金额与本地订单金额不一致")
+	require.False(t, result.Applied)
+	require.Nil(t, result.Outbox)
+}
+
 func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuOrderPaymentBillFailureBlocksOutbox(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -733,6 +850,7 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuOrderPayment
 
 	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
 	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), application.BusinessObjectID).Return(paymentOrder, nil)
 	store.EXPECT().UpdatePaymentOrderToPaid(gomock.Any(), db.UpdatePaymentOrderToPaidParams{
 		ID:            application.BusinessObjectID,
 		TransactionID: pgtype.Text{String: "BFPAY_6401", Valid: true},
@@ -786,6 +904,7 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuOrderPayment
 
 	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
 	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), application.BusinessObjectID).Return(paymentOrder, nil)
 	store.EXPECT().UpdatePaymentOrderToPaid(gomock.Any(), db.UpdatePaymentOrderToPaidParams{
 		ID:            application.BusinessObjectID,
 		TransactionID: pgtype.Text{String: "BFPAY_6401", Valid: true},
@@ -891,11 +1010,12 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_OrderPaymentOutbo
 	application := buildOrderPaymentFactApplication(805, 705, db.ExternalPaymentFactApplicationStatusProcessing)
 	fact := buildOrderPaymentFact(705, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess)
 	processedAt := pgtype.Timestamptz{Time: now.Add(-time.Minute), Valid: true}
-	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, BusinessType: db.ExternalPaymentBusinessOwnerOrder, PaymentChannel: db.PaymentChannelBaofuAggregate, OrderID: pgtype.Int8{Int64: 6202, Valid: true}, ProcessedAt: processedAt}
+	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, BusinessType: db.ExternalPaymentBusinessOwnerOrder, PaymentChannel: db.PaymentChannelBaofuAggregate, Amount: 8800, OrderID: pgtype.Int8{Int64: 6202, Valid: true}, ProcessedAt: processedAt}
 	order := db.Order{ID: paymentOrder.OrderID.Int64, MerchantID: 7102, OrderNo: "ORD6202"}
 
 	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
 	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), application.BusinessObjectID).Return(paymentOrder, nil)
 	store.EXPECT().UpdatePaymentOrderToPaid(gomock.Any(), db.UpdatePaymentOrderToPaidParams{
 		ID:            application.BusinessObjectID,
 		TransactionID: pgtype.Text{String: "BFPAY_6001", Valid: true},
@@ -935,10 +1055,11 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_ReservationPaymen
 	now := time.Date(2026, 4, 26, 12, 0, 0, 0, time.UTC)
 	application := buildReservationPaymentFactApplication(804, 704, db.ExternalPaymentFactApplicationStatusProcessing)
 	fact := buildReservationPaymentFact(704, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess)
-	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, BusinessType: db.ExternalPaymentBusinessOwnerReservation, ReservationID: pgtype.Int8{Int64: 6201, Valid: true}, PaymentChannel: db.PaymentChannelBaofuAggregate, Status: paymentStatusPaid}
+	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, BusinessType: db.ExternalPaymentBusinessOwnerReservation, ReservationID: pgtype.Int8{Int64: 6201, Valid: true}, PaymentChannel: db.PaymentChannelBaofuAggregate, Amount: 4200, Status: paymentStatusPaid}
 
 	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
 	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), application.BusinessObjectID).Return(paymentOrder, nil)
 	store.EXPECT().UpdatePaymentOrderToPaid(gomock.Any(), db.UpdatePaymentOrderToPaidParams{
 		ID:            application.BusinessObjectID,
 		TransactionID: pgtype.Text{String: "BFPAY_6201", Valid: true},
@@ -977,10 +1098,11 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuReservationP
 	now := time.Date(2026, 5, 23, 10, 0, 0, 0, time.UTC)
 	application := buildReservationPaymentFactApplication(834, 734, db.ExternalPaymentFactApplicationStatusProcessing)
 	fact := buildReservationPaymentFact(734, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess)
-	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, BusinessType: db.ExternalPaymentBusinessOwnerReservation, ReservationID: pgtype.Int8{Int64: 6201, Valid: true}, PaymentChannel: db.PaymentChannelBaofuAggregate, Status: paymentStatusPaid}
+	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, BusinessType: db.ExternalPaymentBusinessOwnerReservation, ReservationID: pgtype.Int8{Int64: 6201, Valid: true}, PaymentChannel: db.PaymentChannelBaofuAggregate, Amount: 4200, Status: paymentStatusPaid}
 
 	claimCall := store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
 	getFactCall := store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	getPaymentCall := store.EXPECT().GetPaymentOrder(gomock.Any(), application.BusinessObjectID).Return(paymentOrder, nil)
 	markPaidCall := store.EXPECT().UpdatePaymentOrderToPaid(gomock.Any(), db.UpdatePaymentOrderToPaidParams{
 		ID:            application.BusinessObjectID,
 		TransactionID: pgtype.Text{String: "BFPAY_6201", Valid: true},
@@ -989,7 +1111,7 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuReservationP
 		Processed:    true,
 		PaymentOrder: paymentOrder,
 	}, nil)
-	gomock.InOrder(claimCall, getFactCall, markPaidCall, processCall)
+	gomock.InOrder(claimCall, getFactCall, getPaymentCall, markPaidCall, processCall)
 	store.EXPECT().CreatePaymentDomainOutboxOnce(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreatePaymentDomainOutboxOnceParams) (db.PaymentDomainOutbox, error) {
 		require.Equal(t, db.PaymentDomainOutboxEventReservationPaymentSucceeded, arg.EventType)
 		require.Equal(t, db.PaymentDomainOutboxAggregatePaymentOrder, arg.AggregateType)
@@ -1021,15 +1143,15 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuReservationP
 	now := time.Date(2026, 5, 23, 10, 5, 0, 0, time.UTC)
 	application := buildReservationPaymentFactApplication(835, 735, db.ExternalPaymentFactApplicationStatusProcessing)
 	fact := buildReservationPaymentFact(735, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess)
-	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, BusinessType: db.ExternalPaymentBusinessOwnerReservation, ReservationID: pgtype.Int8{Int64: 6201, Valid: true}, PaymentChannel: db.PaymentChannelBaofuAggregate, Status: paymentStatusPaid}
+	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, BusinessType: db.ExternalPaymentBusinessOwnerReservation, ReservationID: pgtype.Int8{Int64: 6201, Valid: true}, PaymentChannel: db.PaymentChannelBaofuAggregate, Amount: 4200, Status: paymentStatusPaid}
 
 	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
 	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), application.BusinessObjectID).Return(paymentOrder, nil)
 	store.EXPECT().UpdatePaymentOrderToPaid(gomock.Any(), db.UpdatePaymentOrderToPaidParams{
 		ID:            application.BusinessObjectID,
 		TransactionID: pgtype.Text{String: "BFPAY_6201", Valid: true},
 	}).Return(db.PaymentOrder{}, db.ErrRecordNotFound)
-	store.EXPECT().GetPaymentOrder(gomock.Any(), application.BusinessObjectID).Return(paymentOrder, nil)
 	store.EXPECT().ProcessPaymentSuccessTx(gomock.Any(), db.ProcessPaymentSuccessTxParams{PaymentOrderID: application.BusinessObjectID}).Return(db.ProcessPaymentSuccessTxResult{
 		Processed:    true,
 		PaymentOrder: paymentOrder,
@@ -1051,6 +1173,33 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuReservationP
 	require.NotNil(t, result.ReservationPayment)
 	require.True(t, result.ReservationPayment.Processed)
 	require.Equal(t, paymentStatusPaid, result.ReservationPayment.PaymentOrder.Status)
+}
+
+func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuReservationPaymentRejectsSuccessAmountMismatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	now := time.Date(2026, 5, 23, 10, 6, 0, 0, time.UTC)
+	application := buildReservationPaymentFactApplication(840, 740, db.ExternalPaymentFactApplicationStatusProcessing)
+	fact := buildReservationPaymentFact(740, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess)
+	fact.Amount = pgtype.Int8{Int64: 4199, Valid: true}
+	fact.RawResource = []byte(`{"tradeNo":"BFPAY_6201","txnState":"SUCCESS","succAmt":4199}`)
+	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, BusinessType: db.ExternalPaymentBusinessOwnerReservation, ReservationID: pgtype.Int8{Int64: 6201, Valid: true}, PaymentChannel: db.PaymentChannelBaofuAggregate, Amount: 4200, Status: "pending"}
+
+	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
+	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), application.BusinessObjectID).Return(paymentOrder, nil)
+	expectApplicationFailed(t, store, application, now, "宝付支付结果金额与本地订单金额不一致")
+
+	svc := NewPaymentFactService(store)
+	svc.now = func() time.Time { return now }
+
+	result, err := svc.ApplyExternalPaymentFactApplication(context.Background(), application.ID)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "宝付支付结果金额与本地订单金额不一致")
+	require.False(t, result.Applied)
+	require.Nil(t, result.Outbox)
 }
 
 func TestPaymentFactServiceApplyExternalPaymentFactApplication_BaofuReservationPaymentClosedMarksPaymentClosedWithoutSuccessOutbox(t *testing.T) {
@@ -1255,10 +1404,11 @@ func TestPaymentFactServiceApplyExternalPaymentFactApplication_ReservationPaymen
 	now := time.Date(2026, 4, 26, 12, 0, 30, 0, time.UTC)
 	application := buildReservationPaymentFactApplication(806, 706, db.ExternalPaymentFactApplicationStatusProcessing)
 	fact := buildReservationPaymentFact(706, application.BusinessObjectID, db.ExternalPaymentTerminalStatusSuccess)
-	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, BusinessType: db.ExternalPaymentBusinessOwnerReservation, ReservationID: pgtype.Int8{Int64: 6203, Valid: true}, PaymentChannel: db.PaymentChannelBaofuAggregate, ProcessedAt: pgtype.Timestamptz{Time: now.Add(-time.Minute), Valid: true}}
+	paymentOrder := db.PaymentOrder{ID: application.BusinessObjectID, BusinessType: db.ExternalPaymentBusinessOwnerReservation, ReservationID: pgtype.Int8{Int64: 6203, Valid: true}, PaymentChannel: db.PaymentChannelBaofuAggregate, Amount: 4200, ProcessedAt: pgtype.Timestamptz{Time: now.Add(-time.Minute), Valid: true}}
 
 	store.EXPECT().ClaimExternalPaymentFactApplication(gomock.Any(), application.ID).Return(application, nil)
 	store.EXPECT().GetExternalPaymentFact(gomock.Any(), application.FactID).Return(fact, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), application.BusinessObjectID).Return(paymentOrder, nil)
 	store.EXPECT().UpdatePaymentOrderToPaid(gomock.Any(), db.UpdatePaymentOrderToPaidParams{
 		ID:            application.BusinessObjectID,
 		TransactionID: pgtype.Text{String: "BFPAY_6201", Valid: true},
@@ -2161,7 +2311,7 @@ func buildReservationPaymentFactApplication(applicationID, factID int64, status 
 }
 
 func buildProfitSharingFact(factID, profitSharingOrderID int64, terminalStatus string) db.ExternalPaymentFact {
-	return db.ExternalPaymentFact{
+	fact := db.ExternalPaymentFact{
 		ID:                 factID,
 		Provider:           db.ExternalPaymentProviderBaofu,
 		Channel:            db.PaymentChannelBaofuAggregate,
@@ -2174,6 +2324,10 @@ func buildProfitSharingFact(factID, profitSharingOrderID int64, terminalStatus s
 		IsTerminal:         true,
 		RawResource:        []byte(`{}`),
 	}
+	if terminalStatus == db.ExternalPaymentTerminalStatusSuccess {
+		fact.Amount = pgtype.Int8{Int64: 1360, Valid: true}
+	}
+	return fact
 }
 
 func buildProfitSharingReturnFact(factID, profitSharingReturnID int64, terminalStatus string, upstreamState string, returnID string) db.ExternalPaymentFact {
@@ -2253,7 +2407,7 @@ func buildBaofuVerifyFeePaymentFact(factID, paymentOrderID int64, terminalStatus
 }
 
 func buildOrderPaymentFact(factID, paymentOrderID int64, terminalStatus string) db.ExternalPaymentFact {
-	return db.ExternalPaymentFact{
+	fact := db.ExternalPaymentFact{
 		ID:                   factID,
 		Provider:             db.ExternalPaymentProviderBaofu,
 		Channel:              db.PaymentChannelBaofuAggregate,
@@ -2269,10 +2423,15 @@ func buildOrderPaymentFact(factID, paymentOrderID int64, terminalStatus string) 
 		IsTerminal:           true,
 		RawResource:          []byte(`{}`),
 	}
+	if terminalStatus == db.ExternalPaymentTerminalStatusSuccess {
+		fact.Amount = pgtype.Int8{Int64: 8800, Valid: true}
+		fact.RawResource = []byte(`{"tradeNo":"BFPAY_6001","txnState":"SUCCESS","succAmt":8800}`)
+	}
+	return fact
 }
 
 func buildBaofuOrderPaymentFact(factID, paymentOrderID int64, terminalStatus string) db.ExternalPaymentFact {
-	return db.ExternalPaymentFact{
+	fact := db.ExternalPaymentFact{
 		ID:                   factID,
 		Provider:             db.ExternalPaymentProviderBaofu,
 		Channel:              db.PaymentChannelBaofuAggregate,
@@ -2288,10 +2447,15 @@ func buildBaofuOrderPaymentFact(factID, paymentOrderID int64, terminalStatus str
 		IsTerminal:           true,
 		RawResource:          []byte(`{"tradeNo":"BFPAY_6401","txnState":"SUCCESS"}`),
 	}
+	if terminalStatus == db.ExternalPaymentTerminalStatusSuccess {
+		fact.Amount = pgtype.Int8{Int64: 12900, Valid: true}
+		fact.RawResource = []byte(`{"tradeNo":"BFPAY_6401","txnState":"SUCCESS","succAmt":12900}`)
+	}
+	return fact
 }
 
 func buildReservationPaymentFact(factID, paymentOrderID int64, terminalStatus string) db.ExternalPaymentFact {
-	return db.ExternalPaymentFact{
+	fact := db.ExternalPaymentFact{
 		ID:                   factID,
 		Provider:             db.ExternalPaymentProviderBaofu,
 		Channel:              db.PaymentChannelBaofuAggregate,
@@ -2307,6 +2471,11 @@ func buildReservationPaymentFact(factID, paymentOrderID int64, terminalStatus st
 		IsTerminal:           true,
 		RawResource:          []byte(`{}`),
 	}
+	if terminalStatus == db.ExternalPaymentTerminalStatusSuccess {
+		fact.Amount = pgtype.Int8{Int64: 4200, Valid: true}
+		fact.RawResource = []byte(`{"tradeNo":"BFPAY_6201","txnState":"SUCCESS","succAmt":4200}`)
+	}
+	return fact
 }
 
 func buildProfitSharingOrderForApplication(application db.ExternalPaymentFactApplication, status string) db.ProfitSharingOrder {

@@ -223,8 +223,8 @@ func (s *BaofuProfitSharingService) RecordShareFact(ctx context.Context, input R
 		rawResource = []byte(`{}`)
 	}
 	amount := shareFact.SuccessAmountFen
-	if amount <= 0 {
-		amount = baofuProfitSharingOrderExpectedShareAmount(order)
+	if terminalStatus == db.ExternalPaymentTerminalStatusSuccess && amount <= 0 {
+		return result, ErrBaofuProfitSharingFactInvalidInput
 	}
 
 	fact, err := factStore.CreateExternalPaymentFact(ctx, db.CreateExternalPaymentFactParams{

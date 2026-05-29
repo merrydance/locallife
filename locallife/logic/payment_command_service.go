@@ -16,6 +16,7 @@ type PaymentCommandService struct {
 
 type externalPaymentCommandStore interface {
 	CreateExternalPaymentCommand(ctx context.Context, arg db.CreateExternalPaymentCommandParams) (db.ExternalPaymentCommand, error)
+	UpdateExternalPaymentCommandOutcome(ctx context.Context, arg db.UpdateExternalPaymentCommandOutcomeParams) (db.ExternalPaymentCommand, error)
 }
 
 func NewPaymentCommandService(store externalPaymentCommandStore) *PaymentCommandService {
@@ -47,6 +48,20 @@ type RecordExternalPaymentCommandInput struct {
 }
 
 type RecordExternalPaymentCommandResult struct {
+	Command db.ExternalPaymentCommand
+}
+
+type RecordExternalPaymentCommandOutcomeInput struct {
+	CommandID        int64
+	CommandStatus    string
+	AcceptedAt       *time.Time
+	RejectedAt       *time.Time
+	LastErrorCode    *string
+	LastErrorMessage *string
+	ResponseSnapshot []byte
+}
+
+type RecordExternalPaymentCommandOutcomeResult struct {
 	Command db.ExternalPaymentCommand
 }
 
@@ -106,6 +121,44 @@ func (svc *PaymentCommandService) RecordExternalPaymentCommand(ctx context.Conte
 	return result, nil
 }
 
+func (svc *PaymentCommandService) RecordExternalPaymentCommandOutcome(ctx context.Context, input RecordExternalPaymentCommandOutcomeInput) (RecordExternalPaymentCommandOutcomeResult, error) {
+	var result RecordExternalPaymentCommandOutcomeResult
+
+	if err := validateRecordExternalPaymentCommandOutcomeInput(input); err != nil {
+		return result, err
+	}
+
+	now := svc.now().UTC()
+	acceptedAt := input.AcceptedAt
+	if acceptedAt == nil && input.CommandStatus == db.ExternalPaymentCommandStatusAccepted {
+		acceptedAt = &now
+	}
+	rejectedAt := input.RejectedAt
+	if rejectedAt == nil && input.CommandStatus == db.ExternalPaymentCommandStatusRejected {
+		rejectedAt = &now
+	}
+	responseSnapshot := input.ResponseSnapshot
+	if len(responseSnapshot) == 0 {
+		responseSnapshot = []byte(`{}`)
+	}
+
+	command, err := svc.store.UpdateExternalPaymentCommandOutcome(ctx, db.UpdateExternalPaymentCommandOutcomeParams{
+		ID:               input.CommandID,
+		CommandStatus:    input.CommandStatus,
+		AcceptedAt:       timestamptzFromTimePtr(acceptedAt),
+		RejectedAt:       timestamptzFromTimePtr(rejectedAt),
+		LastErrorCode:    textFromStringPtr(input.LastErrorCode),
+		LastErrorMessage: textFromStringPtr(input.LastErrorMessage),
+		ResponseSnapshot: responseSnapshot,
+	})
+	if err != nil {
+		return result, err
+	}
+
+	result.Command = command
+	return result, nil
+}
+
 func validateRecordExternalPaymentCommandInput(input RecordExternalPaymentCommandInput) error {
 	if !isExternalPaymentProvider(input.Provider) {
 		return fmt.Errorf("unsupported provider %q", input.Provider)
@@ -139,6 +192,22 @@ func validateRecordExternalPaymentCommandInput(input RecordExternalPaymentComman
 	}
 	if !isExternalPaymentCommandStatus(input.CommandStatus) {
 		return fmt.Errorf("unsupported command status %q", input.CommandStatus)
+	}
+	if input.AcceptedAt != nil && input.CommandStatus != db.ExternalPaymentCommandStatusAccepted {
+		return fmt.Errorf("accepted at is only valid for accepted command")
+	}
+	if input.RejectedAt != nil && input.CommandStatus != db.ExternalPaymentCommandStatusRejected {
+		return fmt.Errorf("rejected at is only valid for rejected command")
+	}
+	return nil
+}
+
+func validateRecordExternalPaymentCommandOutcomeInput(input RecordExternalPaymentCommandOutcomeInput) error {
+	if input.CommandID == 0 {
+		return fmt.Errorf("command id is required")
+	}
+	if input.CommandStatus == db.ExternalPaymentCommandStatusSubmitted || !isExternalPaymentCommandStatus(input.CommandStatus) {
+		return fmt.Errorf("unsupported command outcome status %q", input.CommandStatus)
 	}
 	if input.AcceptedAt != nil && input.CommandStatus != db.ExternalPaymentCommandStatusAccepted {
 		return fmt.Errorf("accepted at is only valid for accepted command")

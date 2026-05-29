@@ -10,12 +10,23 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/baofu"
 	aggregatecontracts "github.com/merrydance/locallife/baofu/aggregatepay/contracts"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/rs/zerolog/log"
 )
 
 const TaskProcessBaofuProfitSharing = "baofu:process_profit_sharing"
+
+const (
+	baofuProfitSharingCommandAcceptedCode    = "baofu_profit_sharing_accepted"
+	baofuProfitSharingCommandAcceptedMessage = "宝付分账已受理，等待结果回调或系统查询"
+	baofuProfitSharingCommandRejectedCode    = "baofu_profit_sharing_rejected"
+	baofuProfitSharingCommandRejectedMessage = "宝付分账请求被拒绝，请检查分账订单状态或联系平台处理"
+	baofuProfitSharingCommandUnknownCode     = "baofu_profit_sharing_unknown"
+	baofuProfitSharingCommandUnknownMessage  = "宝付分账请求结果暂不确定，系统将通过查询恢复"
+)
 
 type BaofuProfitSharingWorkerConfig struct {
 	CollectMerchantID string
@@ -113,7 +124,7 @@ func (processor *RedisTaskProcessor) ProcessTaskBaofuProfitSharing(ctx context.C
 		_ = processor.markBaofuProfitSharingCommandFailed(ctx, profitSharingOrder.ID)
 		return fmt.Errorf("build baofu share request: %w", err)
 	}
-	if _, err := processor.store.CreateExternalPaymentCommand(ctx, db.CreateExternalPaymentCommandParams{
+	command, err := processor.store.CreateExternalPaymentCommand(ctx, db.CreateExternalPaymentCommandParams{
 		Provider:             db.ExternalPaymentProviderBaofu,
 		Channel:              db.PaymentChannelBaofuAggregate,
 		Capability:           db.ExternalPaymentCapabilityBaofuProfitSharing,
@@ -127,22 +138,36 @@ func (processor *RedisTaskProcessor) ProcessTaskBaofuProfitSharing(ctx context.C
 		CommandStatus:        db.ExternalPaymentCommandStatusSubmitted,
 		SubmittedAt:          time.Now().UTC(),
 		ResponseSnapshot:     baofuProfitSharingCommandSnapshot(profitSharingOrder),
-	}); err != nil {
+	})
+	if err != nil {
 		_ = processor.markBaofuProfitSharingCommandFailed(ctx, profitSharingOrder.ID)
 		return fmt.Errorf("create baofu profit sharing command: %w", err)
 	}
 
 	result, err := processor.baofuAggregateClient.CreateProfitSharing(ctx, req)
 	if err != nil {
+		outcome := baofuProfitSharingCommandOutcomeFromError(err)
+		if auditErr := recordBaofuProfitSharingCommandOutcome(ctx, processor.store, command.ID, outcome.status, nil, outcome.code, outcome.message); auditErr != nil {
+			return fmt.Errorf("record baofu profit sharing command outcome: %w", auditErr)
+		}
 		return fmt.Errorf("create baofu profit sharing: %w", err)
 	}
 	if result == nil {
+		if auditErr := recordBaofuProfitSharingCommandOutcome(ctx, processor.store, command.ID, db.ExternalPaymentCommandStatusUnknown, nil, baofuProfitSharingCommandUnknownCode, baofuProfitSharingCommandUnknownMessage); auditErr != nil {
+			return fmt.Errorf("record baofu profit sharing command outcome: %w", auditErr)
+		}
 		return fmt.Errorf("create baofu profit sharing returned empty result")
 	}
 	upstreamShareID := strings.TrimSpace(result.TradeNo)
 	responseOutTradeNo := strings.TrimSpace(result.OutTradeNo)
 	if upstreamShareID == "" && responseOutTradeNo == "" {
+		if auditErr := recordBaofuProfitSharingCommandOutcome(ctx, processor.store, command.ID, db.ExternalPaymentCommandStatusUnknown, result, baofuProfitSharingCommandUnknownCode, baofuProfitSharingCommandUnknownMessage); auditErr != nil {
+			return fmt.Errorf("record baofu profit sharing command outcome: %w", auditErr)
+		}
 		return fmt.Errorf("create baofu profit sharing missing upstream share reference")
+	}
+	if auditErr := recordBaofuProfitSharingCommandOutcome(ctx, processor.store, command.ID, db.ExternalPaymentCommandStatusAccepted, result, "", ""); auditErr != nil {
+		return fmt.Errorf("record baofu profit sharing command outcome: %w", auditErr)
 	}
 	if _, err := processor.store.UpdateProfitSharingOrderSharingID(ctx, db.UpdateProfitSharingOrderSharingIDParams{
 		ID:             profitSharingOrder.ID,
@@ -158,6 +183,78 @@ func (processor *RedisTaskProcessor) ProcessTaskBaofuProfitSharing(ctx context.C
 		Str("baofu_share_state", strings.TrimSpace(result.TxnState)).
 		Msg("baofu profit sharing command accepted")
 	return nil
+}
+
+type baofuProfitSharingCommandOutcome struct {
+	status  string
+	code    string
+	message string
+}
+
+func baofuProfitSharingCommandOutcomeFromError(err error) baofuProfitSharingCommandOutcome {
+	if baofu.IsProviderBusinessResponseError(err) {
+		return baofuProfitSharingCommandOutcome{
+			status:  db.ExternalPaymentCommandStatusRejected,
+			code:    baofuProfitSharingCommandRejectedCode,
+			message: baofuProfitSharingCommandRejectedMessage,
+		}
+	}
+	return baofuProfitSharingCommandOutcome{
+		status:  db.ExternalPaymentCommandStatusUnknown,
+		code:    baofuProfitSharingCommandUnknownCode,
+		message: baofuProfitSharingCommandUnknownMessage,
+	}
+}
+
+func recordBaofuProfitSharingCommandOutcome(ctx context.Context, store db.Store, commandID int64, status string, result *aggregatecontracts.ShareResult, errorCode string, errorMessage string) error {
+	input := logic.RecordExternalPaymentCommandOutcomeInput{
+		CommandID:        commandID,
+		CommandStatus:    status,
+		ResponseSnapshot: baofuProfitSharingCommandOutcomeSnapshot(status, result),
+	}
+	if errorCode != "" {
+		input.LastErrorCode = &errorCode
+	}
+	if errorMessage != "" {
+		input.LastErrorMessage = &errorMessage
+	}
+	_, err := logic.NewPaymentCommandService(store).RecordExternalPaymentCommandOutcome(ctx, input)
+	return err
+}
+
+func baofuProfitSharingCommandOutcomeSnapshot(status string, result *aggregatecontracts.ShareResult) []byte {
+	snapshot := map[string]string{
+		"provider":  db.ExternalPaymentProviderBaofu,
+		"operation": "share_after_pay",
+		"outcome":   baofuProfitSharingCommandSnapshotOutcome(status),
+	}
+	if result != nil {
+		if txnState := strings.TrimSpace(result.TxnState); txnState != "" {
+			snapshot["txn_state"] = txnState
+		}
+		if result.SuccessAmountFen > 0 {
+			snapshot["succ_amt_present"] = "true"
+		}
+		if strings.TrimSpace(result.TradeNo) != "" || strings.TrimSpace(result.OutTradeNo) != "" {
+			snapshot["upstream_ref_present"] = "true"
+		}
+	}
+	raw, err := json.Marshal(snapshot)
+	if err != nil {
+		return []byte(`{"provider":"baofu","operation":"share_after_pay"}`)
+	}
+	return raw
+}
+
+func baofuProfitSharingCommandSnapshotOutcome(status string) string {
+	switch status {
+	case db.ExternalPaymentCommandStatusAccepted:
+		return "accepted"
+	case db.ExternalPaymentCommandStatusRejected:
+		return "rejected"
+	default:
+		return "unknown"
+	}
 }
 
 func (processor *RedisTaskProcessor) markBaofuProfitSharingCommandFailed(ctx context.Context, profitSharingOrderID int64) error {

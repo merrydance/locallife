@@ -549,3 +549,7 @@ func (s *fakeBaofuPaymentCommandStore) CreateExternalPaymentCommand(ctx context.
 	s.last = arg
 	return db.ExternalPaymentCommand{ID: 707, Provider: arg.Provider, Channel: arg.Channel, ExternalObjectType: arg.ExternalObjectType}, nil
 }
+
+func (s *fakeBaofuPaymentCommandStore) UpdateExternalPaymentCommandOutcome(ctx context.Context, arg db.UpdateExternalPaymentCommandOutcomeParams) (db.ExternalPaymentCommand, error) {
+	return db.ExternalPaymentCommand{}, errors.New("not implemented in payment command tests")
+}

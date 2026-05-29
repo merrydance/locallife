@@ -722,6 +722,7 @@ func TestPaymentOrderServiceQueryPaymentOrder_BaofuAggregateSuccessAppliesPaymen
 				UpstreamState:        arg.UpstreamState,
 				TerminalStatus:       arg.TerminalStatus,
 				IsTerminal:           arg.IsTerminal,
+				Amount:               arg.Amount,
 				RawResource:          []byte(`{}`),
 			}, nil
 		})
@@ -765,8 +766,10 @@ func TestPaymentOrderServiceQueryPaymentOrder_BaofuAggregateSuccessAppliesPaymen
 		UpstreamState:        aggregatecontracts.PaymentStateSuccess,
 		TerminalStatus:       db.ExternalPaymentTerminalStatusSuccess,
 		IsTerminal:           true,
+		Amount:               pgtype.Int8{Int64: paymentOrder.Amount, Valid: true},
 		RawResource:          []byte(`{}`),
 	}, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
 	store.EXPECT().UpdatePaymentOrderToPaid(gomock.Any(), db.UpdatePaymentOrderToPaidParams{
 		ID:            paymentOrder.ID,
 		TransactionID: pgtype.Text{String: queryResult.TradeNo, Valid: true},

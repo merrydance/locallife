@@ -118,7 +118,42 @@ INSERT INTO external_payment_commands (
     $18
 )
 ON CONFLICT (provider, channel, capability, command_type, external_object_type, external_object_key)
-DO UPDATE SET updated_at = external_payment_commands.updated_at
+DO UPDATE SET
+    command_status = CASE
+        WHEN external_payment_commands.command_status IN ('accepted', 'rejected') THEN external_payment_commands.command_status
+        WHEN excluded.command_status = 'submitted' THEN external_payment_commands.command_status
+        ELSE excluded.command_status
+    END,
+    accepted_at = CASE
+        WHEN external_payment_commands.command_status IN ('accepted', 'rejected') THEN external_payment_commands.accepted_at
+        WHEN external_payment_commands.accepted_at IS NOT NULL THEN external_payment_commands.accepted_at
+        WHEN excluded.command_status = 'accepted' THEN excluded.accepted_at
+        ELSE external_payment_commands.accepted_at
+    END,
+    rejected_at = CASE
+        WHEN external_payment_commands.command_status IN ('accepted', 'rejected') THEN external_payment_commands.rejected_at
+        WHEN external_payment_commands.rejected_at IS NOT NULL THEN external_payment_commands.rejected_at
+        WHEN excluded.command_status = 'rejected' THEN excluded.rejected_at
+        ELSE external_payment_commands.rejected_at
+    END,
+    last_error_code = CASE
+        WHEN external_payment_commands.command_status IN ('accepted', 'rejected') THEN external_payment_commands.last_error_code
+        WHEN excluded.command_status IN ('rejected', 'unknown') THEN excluded.last_error_code
+        WHEN excluded.command_status = 'accepted' THEN NULL
+        ELSE external_payment_commands.last_error_code
+    END,
+    last_error_message = CASE
+        WHEN external_payment_commands.command_status IN ('accepted', 'rejected') THEN external_payment_commands.last_error_message
+        WHEN excluded.command_status IN ('rejected', 'unknown') THEN excluded.last_error_message
+        WHEN excluded.command_status = 'accepted' THEN NULL
+        ELSE external_payment_commands.last_error_message
+    END,
+    response_snapshot = CASE
+        WHEN external_payment_commands.command_status IN ('accepted', 'rejected') THEN external_payment_commands.response_snapshot
+        WHEN excluded.command_status = 'submitted' THEN external_payment_commands.response_snapshot
+        ELSE COALESCE(excluded.response_snapshot, external_payment_commands.response_snapshot)
+    END,
+    updated_at = now()
 RETURNING id, provider, channel, capability, command_type, business_owner, business_object_type, business_object_id, external_object_type, external_object_key, external_secondary_key, command_status, submitted_at, accepted_at, rejected_at, last_error_code, last_error_message, request_fingerprint, response_snapshot, created_at, updated_at
 `
 
@@ -1134,6 +1169,88 @@ func (q *Queries) MarkPaymentDomainOutboxPublished(ctx context.Context, id int64
 		&i.AttemptCount,
 		&i.NextRetryAt,
 		&i.LastError,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateExternalPaymentCommandOutcome = `-- name: UpdateExternalPaymentCommandOutcome :one
+UPDATE external_payment_commands
+SET command_status = CASE
+        WHEN command_status IN ('accepted', 'rejected') THEN command_status
+        ELSE $1
+    END,
+    accepted_at = CASE
+        WHEN command_status IN ('accepted', 'rejected') THEN accepted_at
+        ELSE $2
+    END,
+    rejected_at = CASE
+        WHEN command_status IN ('accepted', 'rejected') THEN rejected_at
+        ELSE $3
+    END,
+    last_error_code = CASE
+        WHEN command_status IN ('accepted', 'rejected') THEN last_error_code
+        ELSE $4
+    END,
+    last_error_message = CASE
+        WHEN command_status IN ('accepted', 'rejected') THEN last_error_message
+        ELSE $5
+    END,
+    response_snapshot = CASE
+        WHEN command_status IN ('accepted', 'rejected') THEN response_snapshot
+        ELSE $6
+    END,
+    updated_at = CASE
+        WHEN command_status IN ('accepted', 'rejected') THEN updated_at
+        ELSE now()
+    END
+WHERE id = $7
+    AND command_status IN ('submitted', 'unknown', $1)
+RETURNING id, provider, channel, capability, command_type, business_owner, business_object_type, business_object_id, external_object_type, external_object_key, external_secondary_key, command_status, submitted_at, accepted_at, rejected_at, last_error_code, last_error_message, request_fingerprint, response_snapshot, created_at, updated_at
+`
+
+type UpdateExternalPaymentCommandOutcomeParams struct {
+	CommandStatus    string             `json:"command_status"`
+	AcceptedAt       pgtype.Timestamptz `json:"accepted_at"`
+	RejectedAt       pgtype.Timestamptz `json:"rejected_at"`
+	LastErrorCode    pgtype.Text        `json:"last_error_code"`
+	LastErrorMessage pgtype.Text        `json:"last_error_message"`
+	ResponseSnapshot []byte             `json:"response_snapshot"`
+	ID               int64              `json:"id"`
+}
+
+func (q *Queries) UpdateExternalPaymentCommandOutcome(ctx context.Context, arg UpdateExternalPaymentCommandOutcomeParams) (ExternalPaymentCommand, error) {
+	row := q.db.QueryRow(ctx, updateExternalPaymentCommandOutcome,
+		arg.CommandStatus,
+		arg.AcceptedAt,
+		arg.RejectedAt,
+		arg.LastErrorCode,
+		arg.LastErrorMessage,
+		arg.ResponseSnapshot,
+		arg.ID,
+	)
+	var i ExternalPaymentCommand
+	err := row.Scan(
+		&i.ID,
+		&i.Provider,
+		&i.Channel,
+		&i.Capability,
+		&i.CommandType,
+		&i.BusinessOwner,
+		&i.BusinessObjectType,
+		&i.BusinessObjectID,
+		&i.ExternalObjectType,
+		&i.ExternalObjectKey,
+		&i.ExternalSecondaryKey,
+		&i.CommandStatus,
+		&i.SubmittedAt,
+		&i.AcceptedAt,
+		&i.RejectedAt,
+		&i.LastErrorCode,
+		&i.LastErrorMessage,
+		&i.RequestFingerprint,
+		&i.ResponseSnapshot,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

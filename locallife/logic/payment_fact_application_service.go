@@ -819,7 +819,7 @@ func (svc *PaymentFactService) applyProfitSharingFact(ctx context.Context, appli
 
 	switch fact.TerminalStatus {
 	case db.ExternalPaymentTerminalStatusSuccess:
-		return svc.applyProfitSharingSuccessFact(ctx, application.BusinessObjectID)
+		return svc.applyProfitSharingSuccessFact(ctx, application.BusinessObjectID, fact)
 	case db.ExternalPaymentTerminalStatusFailed, db.ExternalPaymentTerminalStatusClosed:
 		return svc.applyProfitSharingFailedFact(ctx, application.BusinessObjectID)
 	default:
@@ -846,16 +846,22 @@ func validateProfitSharingFactApplication(application db.ExternalPaymentFactAppl
 	return nil
 }
 
-func (svc *PaymentFactService) applyProfitSharingSuccessFact(ctx context.Context, profitSharingOrderID int64) (db.ProfitSharingOrder, error) {
+func (svc *PaymentFactService) applyProfitSharingSuccessFact(ctx context.Context, profitSharingOrderID int64, fact db.ExternalPaymentFact) (db.ProfitSharingOrder, error) {
 	order, err := svc.store.GetProfitSharingOrder(ctx, profitSharingOrderID)
 	if err != nil {
 		return db.ProfitSharingOrder{}, fmt.Errorf("get profit sharing order: %w", err)
 	}
 	if order.Status == db.ProfitSharingOrderStatusFinished {
+		if err := validateBaofuProfitSharingSuccessAmount(fact, order); err != nil {
+			return db.ProfitSharingOrder{}, err
+		}
 		return order, nil
 	}
 	if order.Status != db.ProfitSharingOrderStatusProcessing {
 		return db.ProfitSharingOrder{}, fmt.Errorf("profit sharing order %d status %q cannot apply success fact", profitSharingOrderID, order.Status)
+	}
+	if err := validateBaofuProfitSharingSuccessAmount(fact, order); err != nil {
+		return db.ProfitSharingOrder{}, err
 	}
 	updated, err := svc.store.UpdateProfitSharingOrderToFinished(ctx, profitSharingOrderID)
 	if err != nil {
@@ -870,6 +876,20 @@ func (svc *PaymentFactService) applyProfitSharingSuccessFact(ctx context.Context
 		return db.ProfitSharingOrder{}, fmt.Errorf("update profit sharing order to finished: %w", err)
 	}
 	return updated, nil
+}
+
+func validateBaofuProfitSharingSuccessAmount(fact db.ExternalPaymentFact, order db.ProfitSharingOrder) error {
+	if !isBaofuMainBusinessProfitSharingFact(fact) || fact.TerminalStatus != db.ExternalPaymentTerminalStatusSuccess {
+		return nil
+	}
+	expected := baofuProfitSharingOrderExpectedShareAmount(order)
+	if !fact.Amount.Valid || fact.Amount.Int64 <= 0 {
+		return fmt.Errorf("宝付分账结果金额与本地账单不一致，请等待系统对账或联系平台处理: profit_sharing_order_id=%d reason=missing_success_amount", order.ID)
+	}
+	if fact.Amount.Int64 != expected {
+		return fmt.Errorf("宝付分账结果金额与本地账单不一致，请等待系统对账或联系平台处理: profit_sharing_order_id=%d fact_amount=%d expected_amount=%d", order.ID, fact.Amount.Int64, expected)
+	}
+	return nil
 }
 
 func (svc *PaymentFactService) applyProfitSharingFailedFact(ctx context.Context, profitSharingOrderID int64) (db.ProfitSharingOrder, error) {

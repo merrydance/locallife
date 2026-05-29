@@ -72,11 +72,158 @@ func TestCreateExternalPaymentCommand_DedupesByExternalObject(t *testing.T) {
 	require.NoError(t, err)
 
 	arg.CommandStatus = ExternalPaymentCommandStatusAccepted
+	arg.AcceptedAt = pgtype.Timestamptz{Time: now.Add(time.Minute), Valid: true}
+	arg.ResponseSnapshot = []byte(`{"prepay_id":"wx_secret_redacted","status":"accepted"}`)
 	command2, err := testStore.CreateExternalPaymentCommand(context.Background(), arg)
 	require.NoError(t, err)
 
 	require.Equal(t, command1.ID, command2.ID)
-	require.Equal(t, ExternalPaymentCommandStatusSubmitted, command2.CommandStatus)
+	require.Equal(t, ExternalPaymentCommandStatusAccepted, command2.CommandStatus)
+	require.True(t, command2.AcceptedAt.Valid)
+	require.JSONEq(t, `{"prepay_id":"wx_secret_redacted","status":"accepted"}`, string(command2.ResponseSnapshot))
+}
+
+func TestCreateExternalPaymentCommand_DoesNotDowngradeAcceptedToSubmitted(t *testing.T) {
+	now := time.Now().UTC()
+	externalKey := "PAY" + util.RandomString(24)
+
+	arg := CreateExternalPaymentCommandParams{
+		Provider:           ExternalPaymentProviderWechat,
+		Channel:            PaymentChannelDirect,
+		Capability:         ExternalPaymentCapabilityDirectJSAPIPayment,
+		CommandType:        ExternalPaymentCommandTypeCreatePayment,
+		BusinessOwner:      ExternalPaymentBusinessOwnerRiderDeposit,
+		BusinessObjectType: pgtype.Text{String: "payment_order", Valid: true},
+		BusinessObjectID:   pgtype.Int8{Int64: time.Now().UnixNano(), Valid: true},
+		ExternalObjectType: ExternalPaymentObjectPayment,
+		ExternalObjectKey:  externalKey,
+		CommandStatus:      ExternalPaymentCommandStatusAccepted,
+		SubmittedAt:        now,
+		AcceptedAt:         pgtype.Timestamptz{Time: now, Valid: true},
+		ResponseSnapshot:   []byte(`{"status":"accepted"}`),
+	}
+
+	command1, err := testStore.CreateExternalPaymentCommand(context.Background(), arg)
+	require.NoError(t, err)
+
+	arg.CommandStatus = ExternalPaymentCommandStatusSubmitted
+	arg.AcceptedAt = pgtype.Timestamptz{}
+	arg.ResponseSnapshot = []byte(`{"status":"submitted"}`)
+	command2, err := testStore.CreateExternalPaymentCommand(context.Background(), arg)
+	require.NoError(t, err)
+
+	require.Equal(t, command1.ID, command2.ID)
+	require.Equal(t, ExternalPaymentCommandStatusAccepted, command2.CommandStatus)
+	require.True(t, command2.AcceptedAt.Valid)
+	require.JSONEq(t, `{"status":"accepted"}`, string(command2.ResponseSnapshot))
+}
+
+func TestCreateExternalPaymentCommand_DoesNotAttachRejectedTimeToAcceptedCommand(t *testing.T) {
+	now := time.Now().UTC()
+	externalKey := "PAY" + util.RandomString(24)
+
+	arg := CreateExternalPaymentCommandParams{
+		Provider:           ExternalPaymentProviderWechat,
+		Channel:            PaymentChannelDirect,
+		Capability:         ExternalPaymentCapabilityDirectJSAPIPayment,
+		CommandType:        ExternalPaymentCommandTypeCreatePayment,
+		BusinessOwner:      ExternalPaymentBusinessOwnerRiderDeposit,
+		BusinessObjectType: pgtype.Text{String: "payment_order", Valid: true},
+		BusinessObjectID:   pgtype.Int8{Int64: time.Now().UnixNano(), Valid: true},
+		ExternalObjectType: ExternalPaymentObjectPayment,
+		ExternalObjectKey:  externalKey,
+		CommandStatus:      ExternalPaymentCommandStatusAccepted,
+		SubmittedAt:        now,
+		AcceptedAt:         pgtype.Timestamptz{Time: now, Valid: true},
+		ResponseSnapshot:   []byte(`{"status":"accepted"}`),
+	}
+
+	command1, err := testStore.CreateExternalPaymentCommand(context.Background(), arg)
+	require.NoError(t, err)
+
+	arg.CommandStatus = ExternalPaymentCommandStatusRejected
+	arg.AcceptedAt = pgtype.Timestamptz{}
+	arg.RejectedAt = pgtype.Timestamptz{Time: now.Add(time.Minute), Valid: true}
+	arg.LastErrorCode = pgtype.Text{String: "provider_rejected", Valid: true}
+	arg.LastErrorMessage = pgtype.Text{String: "provider rejected", Valid: true}
+	arg.ResponseSnapshot = []byte(`{"status":"rejected"}`)
+	command2, err := testStore.CreateExternalPaymentCommand(context.Background(), arg)
+	require.NoError(t, err)
+
+	require.Equal(t, command1.ID, command2.ID)
+	require.Equal(t, ExternalPaymentCommandStatusAccepted, command2.CommandStatus)
+	require.True(t, command2.AcceptedAt.Valid)
+	require.False(t, command2.RejectedAt.Valid)
+	require.False(t, command2.LastErrorCode.Valid)
+	require.False(t, command2.LastErrorMessage.Valid)
+	require.JSONEq(t, `{"status":"accepted"}`, string(command2.ResponseSnapshot))
+}
+
+func TestUpdateExternalPaymentCommandOutcome_AcceptsSubmittedCommand(t *testing.T) {
+	now := time.Now().UTC()
+	command, err := testStore.CreateExternalPaymentCommand(context.Background(), CreateExternalPaymentCommandParams{
+		Provider:           ExternalPaymentProviderBaofu,
+		Channel:            PaymentChannelBaofuAggregate,
+		Capability:         ExternalPaymentCapabilityBaofuProfitSharing,
+		CommandType:        ExternalPaymentCommandTypeCreateProfitSharing,
+		BusinessOwner:      ExternalPaymentBusinessOwnerProfitSharing,
+		BusinessObjectType: pgtype.Text{String: "profit_sharing_order", Valid: true},
+		BusinessObjectID:   pgtype.Int8{Int64: time.Now().UnixNano(), Valid: true},
+		ExternalObjectType: ExternalPaymentObjectProfitSharing,
+		ExternalObjectKey:  "BFPS" + util.RandomString(24),
+		CommandStatus:      ExternalPaymentCommandStatusSubmitted,
+		SubmittedAt:        now,
+		ResponseSnapshot:   []byte(`{"operation":"share_after_pay"}`),
+	})
+	require.NoError(t, err)
+
+	updated, err := testStore.UpdateExternalPaymentCommandOutcome(context.Background(), UpdateExternalPaymentCommandOutcomeParams{
+		ID:               command.ID,
+		CommandStatus:    ExternalPaymentCommandStatusAccepted,
+		AcceptedAt:       pgtype.Timestamptz{Time: now.Add(time.Minute), Valid: true},
+		ResponseSnapshot: []byte(`{"operation":"share_after_pay","outcome":"accepted"}`),
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, ExternalPaymentCommandStatusAccepted, updated.CommandStatus)
+	require.True(t, updated.AcceptedAt.Valid)
+	require.False(t, updated.RejectedAt.Valid)
+	require.False(t, updated.LastErrorCode.Valid)
+	require.False(t, updated.LastErrorMessage.Valid)
+	require.JSONEq(t, `{"operation":"share_after_pay","outcome":"accepted"}`, string(updated.ResponseSnapshot))
+}
+
+func TestUpdateExternalPaymentCommandOutcome_DoesNotRewriteAcceptedCommand(t *testing.T) {
+	now := time.Now().UTC()
+	command, err := testStore.CreateExternalPaymentCommand(context.Background(), CreateExternalPaymentCommandParams{
+		Provider:           ExternalPaymentProviderBaofu,
+		Channel:            PaymentChannelBaofuAggregate,
+		Capability:         ExternalPaymentCapabilityBaofuProfitSharing,
+		CommandType:        ExternalPaymentCommandTypeCreateProfitSharing,
+		BusinessOwner:      ExternalPaymentBusinessOwnerProfitSharing,
+		BusinessObjectType: pgtype.Text{String: "profit_sharing_order", Valid: true},
+		BusinessObjectID:   pgtype.Int8{Int64: time.Now().UnixNano(), Valid: true},
+		ExternalObjectType: ExternalPaymentObjectProfitSharing,
+		ExternalObjectKey:  "BFPS" + util.RandomString(24),
+		CommandStatus:      ExternalPaymentCommandStatusAccepted,
+		SubmittedAt:        now,
+		AcceptedAt:         pgtype.Timestamptz{Time: now, Valid: true},
+		ResponseSnapshot:   []byte(`{"operation":"share_after_pay","outcome":"accepted","first":"true"}`),
+	})
+	require.NoError(t, err)
+
+	updated, err := testStore.UpdateExternalPaymentCommandOutcome(context.Background(), UpdateExternalPaymentCommandOutcomeParams{
+		ID:               command.ID,
+		CommandStatus:    ExternalPaymentCommandStatusAccepted,
+		AcceptedAt:       pgtype.Timestamptz{Time: now.Add(time.Minute), Valid: true},
+		ResponseSnapshot: []byte(`{"operation":"share_after_pay","outcome":"accepted","first":"false"}`),
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, ExternalPaymentCommandStatusAccepted, updated.CommandStatus)
+	require.True(t, command.AcceptedAt.Time.Equal(updated.AcceptedAt.Time))
+	require.False(t, updated.RejectedAt.Valid)
+	require.JSONEq(t, `{"operation":"share_after_pay","outcome":"accepted","first":"true"}`, string(updated.ResponseSnapshot))
 }
 
 func TestCreateExternalPaymentCommand_AcceptsBaofuAggregateChannel(t *testing.T) {

@@ -1788,6 +1788,7 @@ type Querier interface {
 	UpdateDishOnlineStatus(ctx context.Context, arg UpdateDishOnlineStatusParams) error
 	UpdateDishStats(ctx context.Context, arg UpdateDishStatsParams) error
 	UpdateDishesCategory(ctx context.Context, arg UpdateDishesCategoryParams) error
+	UpdateExternalPaymentCommandOutcome(ctx context.Context, arg UpdateExternalPaymentCommandOutcomeParams) (ExternalPaymentCommand, error)
 	UpdateExternalPaymentFactProcessingStatus(ctx context.Context, arg UpdateExternalPaymentFactProcessingStatusParams) (ExternalPaymentFact, error)
 	UpdateFoodSafetyCaseInvestigation(ctx context.Context, arg UpdateFoodSafetyCaseInvestigationParams) (FoodSafetyCase, error)
 	UpdateFoodSafetyIncidentStatus(ctx context.Context, arg UpdateFoodSafetyIncidentStatusParams) error

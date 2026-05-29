@@ -39,7 +39,76 @@ INSERT INTO external_payment_commands (
     sqlc.narg(response_snapshot)
 )
 ON CONFLICT (provider, channel, capability, command_type, external_object_type, external_object_key)
-DO UPDATE SET updated_at = external_payment_commands.updated_at
+DO UPDATE SET
+    command_status = CASE
+        WHEN external_payment_commands.command_status IN ('accepted', 'rejected') THEN external_payment_commands.command_status
+        WHEN excluded.command_status = 'submitted' THEN external_payment_commands.command_status
+        ELSE excluded.command_status
+    END,
+    accepted_at = CASE
+        WHEN external_payment_commands.command_status IN ('accepted', 'rejected') THEN external_payment_commands.accepted_at
+        WHEN external_payment_commands.accepted_at IS NOT NULL THEN external_payment_commands.accepted_at
+        WHEN excluded.command_status = 'accepted' THEN excluded.accepted_at
+        ELSE external_payment_commands.accepted_at
+    END,
+    rejected_at = CASE
+        WHEN external_payment_commands.command_status IN ('accepted', 'rejected') THEN external_payment_commands.rejected_at
+        WHEN external_payment_commands.rejected_at IS NOT NULL THEN external_payment_commands.rejected_at
+        WHEN excluded.command_status = 'rejected' THEN excluded.rejected_at
+        ELSE external_payment_commands.rejected_at
+    END,
+    last_error_code = CASE
+        WHEN external_payment_commands.command_status IN ('accepted', 'rejected') THEN external_payment_commands.last_error_code
+        WHEN excluded.command_status IN ('rejected', 'unknown') THEN excluded.last_error_code
+        WHEN excluded.command_status = 'accepted' THEN NULL
+        ELSE external_payment_commands.last_error_code
+    END,
+    last_error_message = CASE
+        WHEN external_payment_commands.command_status IN ('accepted', 'rejected') THEN external_payment_commands.last_error_message
+        WHEN excluded.command_status IN ('rejected', 'unknown') THEN excluded.last_error_message
+        WHEN excluded.command_status = 'accepted' THEN NULL
+        ELSE external_payment_commands.last_error_message
+    END,
+    response_snapshot = CASE
+        WHEN external_payment_commands.command_status IN ('accepted', 'rejected') THEN external_payment_commands.response_snapshot
+        WHEN excluded.command_status = 'submitted' THEN external_payment_commands.response_snapshot
+        ELSE COALESCE(excluded.response_snapshot, external_payment_commands.response_snapshot)
+    END,
+    updated_at = now()
+RETURNING id, provider, channel, capability, command_type, business_owner, business_object_type, business_object_id, external_object_type, external_object_key, external_secondary_key, command_status, submitted_at, accepted_at, rejected_at, last_error_code, last_error_message, request_fingerprint, response_snapshot, created_at, updated_at;
+
+-- name: UpdateExternalPaymentCommandOutcome :one
+UPDATE external_payment_commands
+SET command_status = CASE
+        WHEN command_status IN ('accepted', 'rejected') THEN command_status
+        ELSE sqlc.arg(command_status)
+    END,
+    accepted_at = CASE
+        WHEN command_status IN ('accepted', 'rejected') THEN accepted_at
+        ELSE sqlc.narg(accepted_at)
+    END,
+    rejected_at = CASE
+        WHEN command_status IN ('accepted', 'rejected') THEN rejected_at
+        ELSE sqlc.narg(rejected_at)
+    END,
+    last_error_code = CASE
+        WHEN command_status IN ('accepted', 'rejected') THEN last_error_code
+        ELSE sqlc.narg(last_error_code)
+    END,
+    last_error_message = CASE
+        WHEN command_status IN ('accepted', 'rejected') THEN last_error_message
+        ELSE sqlc.narg(last_error_message)
+    END,
+    response_snapshot = CASE
+        WHEN command_status IN ('accepted', 'rejected') THEN response_snapshot
+        ELSE sqlc.narg(response_snapshot)
+    END,
+    updated_at = CASE
+        WHEN command_status IN ('accepted', 'rejected') THEN updated_at
+        ELSE now()
+    END
+WHERE id = sqlc.arg(id)
+    AND command_status IN ('submitted', 'unknown', sqlc.arg(command_status))
 RETURNING id, provider, channel, capability, command_type, business_owner, business_object_type, business_object_id, external_object_type, external_object_key, external_secondary_key, command_status, submitted_at, accepted_at, rejected_at, last_error_code, last_error_message, request_fingerprint, response_snapshot, created_at, updated_at;
 
 -- name: GetExternalPaymentCommandByExternalObject :one
