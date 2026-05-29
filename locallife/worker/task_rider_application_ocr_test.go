@@ -406,6 +406,46 @@ func TestParseRiderHealthCertOCRText_ExtractsFlexibleValidEnd(t *testing.T) {
 			expectName:     "周松涛",
 			expectValidEnd: "2026.12.06",
 		},
+		{
+			name:            "SplitLabelsAndCompactDate",
+			text:            "宁晋县从业人员健康证明\n姓 名\n柳少宁\n性别 男\n有效期限\n20250603 至 20260602\n证件编号 1305282025D861",
+			expectName:      "柳少宁",
+			expectCertNo:    "1305282025D861",
+			expectValidFrom: "20250603",
+			expectValidEnd:  "20260602",
+		},
+		{
+			name:           "NoisyNameLabelFromRotatedCertificate",
+			text:           "居民健康\n姓全名：盖睿人\n性别 女\n食品从业人员\n有效日期至 2026年6月3日",
+			expectName:     "盖睿人",
+			expectValidEnd: "2026年6月3日",
+		},
+		{
+			name:           "AliyunWordFragmentsWithValuesOnNextLines",
+			text:           "姓名：\n张三\n性别：\n男\n健康证明编号：\nJK20260088\n有效期至：\n2030年12月31日",
+			expectName:     "张三",
+			expectCertNo:   "JK20260088",
+			expectValidEnd: "2030年12月31日",
+		},
+		{
+			name:         "DoesNotUseIDNumberAsHealthCertNumberOrDate",
+			text:         "姓名：张三\n身份证号：130528202506031234\n从业类别：食品",
+			expectName:   "张三",
+			expectCertNo: "",
+		},
+		{
+			name:           "DoesNotUseCompactDateInsideCertificateNumber",
+			text:           "姓名：张三\n健康证明编号：JK20260602A\n从业类别：食品",
+			expectName:     "张三",
+			expectCertNo:   "JK20260602A",
+			expectValidEnd: "",
+		},
+		{
+			name:           "AdjacentTitleNameGenderAndSpaceSeparatedDate",
+			text:           "健康合格证明 姓名 王小明 性别 男 从业类别 食品 有效期至 2026 06 03",
+			expectName:     "王小明",
+			expectValidEnd: "2026-06-03",
+		},
 	}
 
 	for _, tc := range testCases {
