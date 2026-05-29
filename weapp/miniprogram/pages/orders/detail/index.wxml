@@ -99,7 +99,7 @@
           <view class="item-main">
             <view class="item-row-1">
               <view class="item-name">{{item.name}}</view>
-              <view class="item-price">{{item.unitPriceDisplay}}</view>
+              <view class="item-price">{{item.subtotalDisplay}}</view>
             </view>
             <view class="item-row-2">
               <view class="item-specs">
@@ -115,6 +115,10 @@
 
       <!-- 费用详情 -->
       <view class="fee-list">
+        <view class="fee-row">
+           <text>菜品小计</text>
+           <text>{{order.subtotalDisplay}}</text>
+        </view>
         <view class="fee-row" wx:if="{{order.type === 'takeout'}}">
            <text>代取费</text>
            <view class="price-group">
