@@ -170,14 +170,77 @@ func ReplaceReservationOrderWithBaofu(
 		createArgs.Notes = pgtype.Text{String: input.Notes, Valid: true}
 	}
 
-	replaceTx, err := store.ReplaceOrderTx(ctx, db.ReplaceOrderTxParams{
+	replaceArg := db.ReplaceOrderTxParams{
 		CreateOrderParams: createArgs,
 		Items:             items,
 		OldOrderID:        oldOrder.ID,
 		CancelReason:      "replaced by new order",
-	})
-	if err != nil {
-		return ReplaceOrderResult{}, err
+	}
+
+	type replacementRefundSubmission struct {
+		PaymentOrder db.PaymentOrder
+		RefundAmount int64
+		RefundReason string
+		OutRefundNo  string
+		RefundOrder  db.RefundOrder
+	}
+
+	refundOrderParams := make([]db.CreateRefundOrderTxParams, 0, len(refundAllocations))
+	refundSubmissions := make([]replacementRefundSubmission, 0, len(refundAllocations))
+	if delta < 0 {
+		for _, allocation := range refundAllocations {
+			if allocation.RefundAmount <= 0 {
+				continue
+			}
+			refundReason := "订单改菜单退款"
+			outRefundNo, err := generateOutRefundNo()
+			if err != nil {
+				return ReplaceOrderResult{}, fmt.Errorf("generate out refund no: %w", err)
+			}
+
+			refundOrderParams = append(refundOrderParams, db.CreateRefundOrderTxParams{
+				PaymentOrderID: allocation.PaymentOrder.ID,
+				RefundType:     paymentTypeProfitSharing,
+				RefundAmount:   allocation.RefundAmount,
+				RefundReason:   refundReason,
+				OutRefundNo:    outRefundNo,
+			})
+			refundSubmissions = append(refundSubmissions, replacementRefundSubmission{
+				PaymentOrder: allocation.PaymentOrder,
+				RefundAmount: allocation.RefundAmount,
+				RefundReason: refundReason,
+				OutRefundNo:  outRefundNo,
+			})
+		}
+	}
+
+	var replaceTx db.ReplaceOrderTxResult
+	if len(refundOrderParams) > 0 {
+		combinedTx, err := store.ReplaceOrderWithRefundOrdersTx(ctx, db.ReplaceOrderWithRefundOrdersTxParams{
+			ReplaceOrderTxParams: replaceArg,
+			RefundOrders:         refundOrderParams,
+		})
+		if err != nil {
+			if statusCode, ok := db.IsRefundRequestError(err); ok {
+				return ReplaceOrderResult{}, NewRequestError(statusCode, errors.Unwrap(err))
+			}
+			return ReplaceOrderResult{}, err
+		}
+		replaceTx = combinedTx.ReplaceOrderTxResult
+		if len(combinedTx.RefundOrders) != len(refundSubmissions) {
+			return ReplaceOrderResult{}, fmt.Errorf("replace order refund order count mismatch: got %d want %d", len(combinedTx.RefundOrders), len(refundSubmissions))
+		}
+		for i := range refundSubmissions {
+			refundSubmissions[i].RefundOrder = combinedTx.RefundOrders[i]
+		}
+	} else {
+		replaceTx, err = store.ReplaceOrderTx(ctx, replaceArg)
+		if err != nil {
+			if statusCode, ok := db.IsRefundRequestError(err); ok {
+				return ReplaceOrderResult{}, NewRequestError(statusCode, errors.Unwrap(err))
+			}
+			return ReplaceOrderResult{}, err
+		}
 	}
 
 	result := ReplaceOrderResult{
@@ -194,36 +257,13 @@ func ReplaceReservationOrderWithBaofu(
 	} else if delta < 0 {
 		refundAmount := -delta
 		if refundAmount > 0 {
-			for _, allocation := range refundAllocations {
-				if allocation.RefundAmount <= 0 {
-					continue
-				}
-				refundReason := "订单改菜单退款"
-				outRefundNo, err := generateOutRefundNo()
-				if err != nil {
-					return ReplaceOrderResult{}, fmt.Errorf("generate out refund no: %w", err)
-				}
-
-				refundOrder, err := store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
-					PaymentOrderID: allocation.PaymentOrder.ID,
-					RefundType:     paymentTypeProfitSharing,
-					RefundAmount:   allocation.RefundAmount,
-					RefundReason:   pgtype.Text{String: refundReason, Valid: true},
-					OutRefundNo:    outRefundNo,
-					Status:         "pending",
-				})
-				if err != nil {
-					return ReplaceOrderResult{}, err
-				}
-
-				refundStatus, refundID, refundErr := processReplaceOrderRefundWithBaofu(ctx, store, paymentFacade, oldOrder.MerchantID, allocation.PaymentOrder, outRefundNo, refundReason, allocation.RefundAmount)
+			for _, refundSubmission := range refundSubmissions {
+				refundOrder := refundSubmission.RefundOrder
+				refundStatus, refundID, refundErr := processReplaceOrderRefundWithBaofu(ctx, store, paymentFacade, oldOrder.MerchantID, refundSubmission.PaymentOrder, refundSubmission.OutRefundNo, refundSubmission.RefundReason, refundSubmission.RefundAmount)
 				if refundErr != nil {
-					if _, dbErr := store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
-						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
-					} else {
-						recordReplaceReservationRefundCommandRejected(ctx, store, allocation.PaymentOrder, refundOrder, outRefundNo, refundErr)
-					}
-					return ReplaceOrderResult{}, refundErr
+					recordReplaceReservationRefundCommandRejected(ctx, store, refundSubmission.PaymentOrder, refundOrder, refundSubmission.OutRefundNo, refundErr)
+					result.RefundInitiated = true
+					continue
 				}
 				switch refundStatus {
 				case wechatcontracts.DirectRefundStatusSuccess:
@@ -234,7 +274,7 @@ func ReplaceReservationOrderWithBaofu(
 					if _, dbErr := store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{ID: refundOrder.ID, RefundID: pgtype.Text{String: refundID, Valid: refundID != ""}}); dbErr != nil {
 						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
 					}
-					recordReplaceReservationRefundCommandAccepted(ctx, store, allocation.PaymentOrder, refundOrder, outRefundNo, refundID)
+					recordReplaceReservationRefundCommandAccepted(ctx, store, refundSubmission.PaymentOrder, refundOrder, refundSubmission.OutRefundNo, refundID)
 				}
 				result.RefundInitiated = true
 			}

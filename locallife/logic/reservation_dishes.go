@@ -22,12 +22,12 @@ const (
 
 // AddReservationDishesInput describes the add-dishes request.
 type AddReservationDishesInput struct {
-	UserID          int64
-	ReservationID   int64
-	Items           []ReservationItemInput
-	Now             time.Time
-	PaymentFacade   PaymentFacade
-	ClientIP        string
+	UserID        int64
+	ReservationID int64
+	Items         []ReservationItemInput
+	Now           time.Time
+	PaymentFacade PaymentFacade
+	ClientIP      string
 }
 
 // AddReservationDishesResult returns the add-dishes outcome.
@@ -105,13 +105,13 @@ func AddReservationDishes(ctx context.Context, store db.Store, input AddReservat
 
 // ModifyReservationDishesInput describes a modify-dishes request.
 type ModifyReservationDishesInput struct {
-	UserID          int64
-	ReservationID   int64
-	Items           []ReservationItemInput
-	Now             time.Time
-	PaymentFacade   PaymentFacade
-	ClientIP        string
-	TaskScheduler   TaskScheduler
+	UserID        int64
+	ReservationID int64
+	Items         []ReservationItemInput
+	Now           time.Time
+	PaymentFacade PaymentFacade
+	ClientIP      string
+	TaskScheduler TaskScheduler
 }
 
 // ModifyReservationDishesResult returns modify-dishes outcomes.
@@ -173,9 +173,13 @@ func ModifyReservationDishes(
 
 	var refundAllocations []reservationRefundAllocation
 	if reservation.PaymentMode == paymentModeFull && delta < 0 {
-		refundAllocations, err = buildReservationRefundAllocations(ctx, store, reservation.ID, minInt64(-delta, reservation.PrepaidAmount))
+		requiredRefundAmount := minInt64(-delta, reservation.PrepaidAmount)
+		refundAllocations, err = buildReservationRefundAllocations(ctx, store, reservation.ID, requiredRefundAmount)
 		if err != nil {
 			return result, err
+		}
+		if sumReservationRefundAllocations(refundAllocations) != requiredRefundAmount {
+			return result, NewRequestError(http.StatusConflict, errors.New("预订退款资金链路已变化，请刷新后重试"))
 		}
 	}
 
@@ -198,15 +202,62 @@ func ModifyReservationDishes(
 		})
 	}
 
-	if _, err := store.ReplaceReservationItemsTx(ctx, db.ReplaceReservationItemsTxParams{
-		ReservationID: reservation.ID,
-		Items:         createItems,
-	}); err != nil {
-		return result, err
-	}
-
 	result.Reservation = reservation
 	result.Delta = delta
+
+	refundAmount := sumReservationRefundAllocations(refundAllocations)
+	refundOrderParams := make([]db.CreateRefundOrderTxParams, 0, len(refundAllocations))
+	refundScheduleInputs := make([]ProcessRefundTaskInput, 0, len(refundAllocations))
+	if reservation.PaymentMode == paymentModeFull && delta < 0 && refundAmount > 0 {
+		for _, allocation := range refundAllocations {
+			if allocation.RefundAmount <= 0 {
+				continue
+			}
+			outRefundNo, genErr := generateOutRefundNo()
+			if genErr != nil {
+				return result, fmt.Errorf("generate out refund no: %w", genErr)
+			}
+
+			refundType := refundTypeForPaymentOrder(allocation.PaymentOrder)
+			refundOrderParams = append(refundOrderParams, db.CreateRefundOrderTxParams{
+				PaymentOrderID: allocation.PaymentOrder.ID,
+				RefundType:     refundType,
+				RefundAmount:   allocation.RefundAmount,
+				RefundReason:   reservationRefundReason,
+				OutRefundNo:    outRefundNo,
+			})
+			refundScheduleInputs = append(refundScheduleInputs, ProcessRefundTaskInput{
+				PaymentOrderID: allocation.PaymentOrder.ID,
+				ReservationID:  reservation.ID,
+				RefundAmount:   allocation.RefundAmount,
+				Reason:         reservationRefundReason,
+				OutRefundNo:    outRefundNo,
+			})
+		}
+	}
+
+	if len(refundOrderParams) > 0 {
+		if _, err := store.ReplaceReservationItemsWithRefundOrdersTx(ctx, db.ReplaceReservationItemsWithRefundOrdersTxParams{
+			ReservationID:         reservation.ID,
+			ExpectedCurrentAmount: currentTotal,
+			Items:                 createItems,
+			RefundOrders:          refundOrderParams,
+		}); err != nil {
+			if statusCode, ok := db.IsRefundRequestError(err); ok {
+				return result, NewRequestError(statusCode, errors.Unwrap(err))
+			}
+			return result, fmt.Errorf("replace reservation dishes with refund orders: %w", err)
+		}
+	} else if _, err := store.ReplaceReservationItemsTx(ctx, db.ReplaceReservationItemsTxParams{
+		ReservationID:         reservation.ID,
+		ExpectedCurrentAmount: currentTotal,
+		Items:                 createItems,
+	}); err != nil {
+		if statusCode, ok := db.IsRefundRequestError(err); ok {
+			return result, NewRequestError(statusCode, errors.Unwrap(err))
+		}
+		return result, err
+	}
 
 	if reservation.PaymentMode != paymentModeFull || delta == 0 {
 		return result, nil
@@ -222,51 +273,24 @@ func ModifyReservationDishes(
 		return result, nil
 	}
 
-	refundAmount := sumReservationRefundAllocations(refundAllocations)
 	if refundAmount <= 0 {
 		return result, nil
 	}
-	for _, allocation := range refundAllocations {
-		outRefundNo, genErr := generateOutRefundNo()
-		if genErr != nil {
-			return result, fmt.Errorf("generate out refund no: %w", genErr)
-		}
-
-		refundType := refundTypeForPaymentOrder(allocation.PaymentOrder)
-
-		if _, createErr := store.CreateRefundOrderTx(ctx, db.CreateRefundOrderTxParams{
-			PaymentOrderID: allocation.PaymentOrder.ID,
-			RefundType:     refundType,
-			RefundAmount:   allocation.RefundAmount,
-			RefundReason:   reservationRefundReason,
-			OutRefundNo:    outRefundNo,
-		}); createErr != nil {
-			if statusCode, ok := db.IsRefundRequestError(createErr); ok {
-				return result, NewRequestError(statusCode, errors.Unwrap(createErr))
-			}
-			return result, fmt.Errorf("create reservation dish change refund order: %w", createErr)
-		}
-
+	for _, scheduleInput := range refundScheduleInputs {
 		if input.TaskScheduler == nil {
 			log.Error().
-				Int64("payment_order_id", allocation.PaymentOrder.ID).
-				Str("out_refund_no", outRefundNo).
+				Int64("payment_order_id", scheduleInput.PaymentOrderID).
+				Str("out_refund_no", scheduleInput.OutRefundNo).
 				Msg("reservation dish change refund task scheduler not configured; relying on recovery scheduler")
 			continue
 		}
 
-		scheduleErr := input.TaskScheduler.ScheduleProcessRefund(ctx, ProcessRefundTaskInput{
-			PaymentOrderID: allocation.PaymentOrder.ID,
-			ReservationID:  reservation.ID,
-			RefundAmount:   allocation.RefundAmount,
-			Reason:         reservationRefundReason,
-			OutRefundNo:    outRefundNo,
-		})
+		scheduleErr := input.TaskScheduler.ScheduleProcessRefund(ctx, scheduleInput)
 		if scheduleErr != nil {
 			log.Error().
 				Err(scheduleErr).
-				Int64("payment_order_id", allocation.PaymentOrder.ID).
-				Str("out_refund_no", outRefundNo).
+				Int64("payment_order_id", scheduleInput.PaymentOrderID).
+				Str("out_refund_no", scheduleInput.OutRefundNo).
 				Msg("failed to enqueue reservation dish change refund task; pending recovery remains available")
 		}
 	}

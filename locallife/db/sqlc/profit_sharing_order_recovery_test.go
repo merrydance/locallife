@@ -255,11 +255,87 @@ func TestListBaofuOrdersReadyForProfitSharing_GatesCompletedPaidAndRefundClosed(
 	}
 }
 
-func TestListBaofuOrdersReadyForProfitSharing_IncludesPaidReservations(t *testing.T) {
+func TestListBaofuOrdersReadyForProfitSharing_RequiresCompletedReservationWithCompletedAt(t *testing.T) {
 	user := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
 	table := createRandomTable(t, merchant.ID)
-	reservation := createRandomReservation(t, user.ID, merchant.ID, table.ID, "paid")
+
+	type reservationCase struct {
+		name           string
+		status         string
+		completedAt    pgtype.Timestamptz
+		expectIncluded bool
+	}
+
+	cases := []reservationCase{
+		{name: "paid", status: "paid"},
+		{name: "confirmed", status: "confirmed"},
+		{name: "checked_in", status: "checked_in"},
+		{name: "completed_without_completed_at", status: "completed"},
+		{name: "completed_with_completed_at", status: "completed", completedAt: pgtype.Timestamptz{Time: time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC), Valid: true}, expectIncluded: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reservation := createRandomReservation(t, user.ID, merchant.ID, table.ID, tc.status)
+
+			paymentOrder, err := testStore.CreatePaymentOrder(context.Background(), CreatePaymentOrderParams{
+				ReservationID:         pgtype.Int8{Int64: reservation.ID, Valid: true},
+				UserID:                user.ID,
+				PaymentType:           "miniprogram",
+				PaymentChannel:        PaymentChannelBaofuAggregate,
+				RequiresProfitSharing: true,
+				BusinessType:          ExternalPaymentBusinessOwnerReservation,
+				Amount:                10000,
+				OutTradeNo:            util.RandomString(24),
+				ExpiresAt:             pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true},
+			})
+			require.NoError(t, err)
+
+			_, err = testStore.UpdatePaymentOrderToPaid(context.Background(), UpdatePaymentOrderToPaidParams{
+				ID:            paymentOrder.ID,
+				TransactionID: pgtype.Text{String: util.RandomString(24), Valid: true},
+			})
+			require.NoError(t, err)
+
+			profitSharingAnchor := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+			backdateBaofuProfitSharingFixtures(t, paymentOrder.ID, 0, reservation.ID, false, true, profitSharingAnchor)
+			if tc.completedAt.Valid {
+				_, err = testStore.(*SQLStore).connPool.Exec(context.Background(), `
+					UPDATE table_reservations
+					SET completed_at = $1
+					WHERE id = $2
+				`, tc.completedAt.Time, reservation.ID)
+				require.NoError(t, err)
+			}
+
+			rows, err := testStore.ListBaofuOrdersReadyForProfitSharing(context.Background(), ListBaofuOrdersReadyForProfitSharingParams{
+				RefundClosedBefore: pgtype.Timestamptz{Time: profitSharingAnchor.Add(time.Minute), Valid: true},
+				Limit:              200,
+			})
+			require.NoError(t, err)
+
+			matched := false
+			for _, row := range rows {
+				if row.PaymentOrderID == paymentOrder.ID {
+					require.False(t, row.OrderID.Valid)
+					require.True(t, row.ReservationID.Valid)
+					require.Equal(t, reservation.ID, row.ReservationID.Int64)
+					require.Equal(t, ExternalPaymentBusinessOwnerReservation, row.BusinessType)
+					matched = true
+					break
+				}
+			}
+			require.Equal(t, tc.expectIncluded, matched)
+		})
+	}
+}
+
+func TestListBaofuProfitSharingOrdersReadyForCommand_RequiresCompletedReservationWithCompletedAt(t *testing.T) {
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	table := createRandomTable(t, merchant.ID)
+	reservation := createRandomReservation(t, user.ID, merchant.ID, table.ID, "checked_in")
 
 	paymentOrder, err := testStore.CreatePaymentOrder(context.Background(), CreatePaymentOrderParams{
 		ReservationID:         pgtype.Int8{Int64: reservation.ID, Valid: true},
@@ -280,22 +356,68 @@ func TestListBaofuOrdersReadyForProfitSharing_IncludesPaidReservations(t *testin
 	})
 	require.NoError(t, err)
 
+	shareOrder, err := testStore.CreateProfitSharingOrder(context.Background(), CreateProfitSharingOrderParams{
+		PaymentOrderID:       paymentOrder.ID,
+		MerchantID:           merchant.ID,
+		OrderSource:          OrderTypeReservation,
+		TotalAmount:          paymentOrder.Amount,
+		DeliveryFee:          0,
+		RiderAmount:          0,
+		DistributableAmount:  paymentOrder.Amount,
+		PlatformRate:         200,
+		OperatorRate:         300,
+		PlatformCommission:   200,
+		OperatorCommission:   300,
+		MerchantAmount:       9500,
+		OutOrderNo:           util.RandomString(24),
+		Status:               ProfitSharingOrderStatusPending,
+		PaymentFee:           30,
+		PaymentFeeRateBps:    30,
+		Provider:             pgtype.Text{String: ExternalPaymentProviderBaofu, Valid: true},
+		Channel:              pgtype.Text{String: PaymentChannelBaofuAggregate, Valid: true},
+		MerchantSharingMerID: pgtype.Text{String: "MER_SHARE", Valid: true},
+		PlatformSharingMerID: pgtype.Text{String: "PLATFORM_SHARE", Valid: true},
+		SharingDetailSnapshot: []byte(`{
+			"shareable_amount": 9500,
+			"receivers": [
+				{"sharing_mer_id": "MER_SHARE", "amount": 9500}
+			]
+		}`),
+	})
+	require.NoError(t, err)
+
 	profitSharingAnchor := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	backdateBaofuProfitSharingFixtures(t, paymentOrder.ID, 0, reservation.ID, false, true, profitSharingAnchor)
+	_, err = testStore.(*SQLStore).connPool.Exec(context.Background(), `
+		UPDATE profit_sharing_orders
+		SET created_at = $1
+		WHERE id = $2
+	`, profitSharingAnchor, shareOrder.ID)
+	require.NoError(t, err)
 
-	rows, err := testStore.ListBaofuOrdersReadyForProfitSharing(context.Background(), ListBaofuOrdersReadyForProfitSharingParams{
-		RefundClosedBefore: pgtype.Timestamptz{Time: profitSharingAnchor.Add(time.Minute), Valid: true},
-		Limit:              200,
+	rows, err := testStore.ListBaofuProfitSharingOrdersReadyForCommand(context.Background(), ListBaofuProfitSharingOrdersReadyForCommandParams{
+		CreatedBefore: profitSharingAnchor.Add(time.Minute),
+		Limit:         200,
+	})
+	require.NoError(t, err)
+
+	for _, row := range rows {
+		require.NotEqual(t, shareOrder.ID, row.ID)
+	}
+
+	completed, err := testStore.UpdateReservationToCompleted(context.Background(), reservation.ID)
+	require.NoError(t, err)
+	require.True(t, completed.CompletedAt.Valid)
+
+	rows, err = testStore.ListBaofuProfitSharingOrdersReadyForCommand(context.Background(), ListBaofuProfitSharingOrdersReadyForCommandParams{
+		CreatedBefore: profitSharingAnchor.Add(time.Minute),
+		Limit:         200,
 	})
 	require.NoError(t, err)
 
 	matched := false
 	for _, row := range rows {
-		if row.PaymentOrderID == paymentOrder.ID {
-			require.False(t, row.OrderID.Valid)
-			require.True(t, row.ReservationID.Valid)
-			require.Equal(t, reservation.ID, row.ReservationID.Int64)
-			require.Equal(t, ExternalPaymentBusinessOwnerReservation, row.BusinessType)
+		if row.ID == shareOrder.ID {
 			matched = true
 			break
 		}

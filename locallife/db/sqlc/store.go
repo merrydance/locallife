@@ -60,6 +60,7 @@ type Store interface {
 	CompleteReservationTx(ctx context.Context, arg CompleteReservationTxParams) (CompleteReservationTxResult, error)
 	CreateReservationTx(ctx context.Context, arg CreateReservationTxParams) (CreateReservationTxResult, error)
 	ReplaceReservationItemsTx(ctx context.Context, arg ReplaceReservationItemsTxParams) (ReplaceReservationItemsTxResult, error)
+	ReplaceReservationItemsWithRefundOrdersTx(ctx context.Context, arg ReplaceReservationItemsWithRefundOrdersTxParams) (ReplaceReservationItemsWithRefundOrdersTxResult, error)
 	// Payment transactions
 	MarkBaofuAccountBindingActiveWithFeeLedgerTx(ctx context.Context, arg MarkBaofuAccountBindingActiveWithFeeLedgerTxParams) (MarkBaofuAccountBindingActiveWithFeeLedgerTxResult, error)
 	MarkMerchantBaofuAccountOpeningReadyTx(ctx context.Context, arg MarkMerchantBaofuAccountOpeningReadyTxParams) (MarkMerchantBaofuAccountOpeningReadyTxResult, error)
@@ -112,6 +113,7 @@ type Store interface {
 	UpdateMerchantAppDeviceHeartbeatTx(ctx context.Context, arg UpdateMerchantAppDeviceHeartbeatParams) (MerchantAppDevice, error)
 	// Order replacement transaction
 	ReplaceOrderTx(ctx context.Context, arg ReplaceOrderTxParams) (ReplaceOrderTxResult, error)
+	ReplaceOrderWithRefundOrdersTx(ctx context.Context, arg ReplaceOrderWithRefundOrdersTxParams) (ReplaceOrderWithRefundOrdersTxResult, error)
 	// Food safety transactions
 	ReportFoodSafetyIncidentTx(ctx context.Context, arg ReportFoodSafetyIncidentTxParams) (ReportFoodSafetyIncidentTxResult, error)
 	ResolveFoodSafetyCaseTx(ctx context.Context, arg ResolveFoodSafetyCaseTxParams) (ResolveFoodSafetyCaseTxResult, error)

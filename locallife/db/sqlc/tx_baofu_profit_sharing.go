@@ -99,6 +99,13 @@ func (store *SQLStore) EnsureBaofuProfitSharingBillTx(ctx context.Context, arg C
 		if _, err := q.GetPaymentOrderForUpdate(ctx, arg.ProfitSharingOrder.PaymentOrderID); err != nil {
 			return err
 		}
+		occupiedRefundAmount, err := q.GetTotalRefundedByPaymentOrder(ctx, arg.ProfitSharingOrder.PaymentOrderID)
+		if err != nil {
+			return err
+		}
+		if occupiedRefundAmount > 0 {
+			return &requestError{statusCode: 400, err: errors.New(errBaofuProfitSharingRefundStarted)}
+		}
 
 		existing, err := q.GetProfitSharingOrderByPaymentOrder(ctx, arg.ProfitSharingOrder.PaymentOrderID)
 		if err == nil {

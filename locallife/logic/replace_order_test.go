@@ -174,6 +174,234 @@ func TestCreateReplaceOrderBaofuPaymentPassesClientIP(t *testing.T) {
 	require.Equal(t, int64(2600), facade.lastCreatePayment.Amount)
 }
 
+func TestReplaceReservationOrderWithBaofuCreatesRefundOrderThroughGuardedTx(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	facade := &replaceOrderPaymentFacade{
+		baofuRefund: &aggregatecontracts.RefundResult{
+			OutTradeNo:      "RF_REPLACE_001",
+			TradeNo:         "BFRFD_REPLACE_001",
+			RefundAmountFen: 1500,
+			TotalAmountFen:  1500,
+			ResultCode:      aggregatecontracts.BusinessResultCodeSuccess,
+			RefundState:     aggregatecontracts.RefundStateAccepted,
+		},
+	}
+	userID := int64(1001)
+	merchantID := int64(2001)
+	reservationID := int64(3001)
+	oldOrderID := int64(4001)
+	newOrderID := int64(4002)
+	paymentOrderID := int64(5001)
+	dishID := int64(6001)
+
+	oldOrder := db.Order{
+		ID:            oldOrderID,
+		UserID:        userID,
+		MerchantID:    merchantID,
+		OrderType:     "reservation",
+		Status:        "paid",
+		TotalAmount:   5000,
+		ReservationID: pgtype.Int8{Int64: reservationID, Valid: true},
+	}
+	reservation := db.TableReservation{
+		ID:          reservationID,
+		UserID:      userID,
+		MerchantID:  merchantID,
+		TableID:     88,
+		Status:      "paid",
+		PaymentMode: "full",
+	}
+	paymentOrder := db.PaymentOrder{
+		ID:             paymentOrderID,
+		OrderID:        pgtype.Int8{Int64: oldOrderID, Valid: true},
+		ReservationID:  pgtype.Int8{Int64: reservationID, Valid: true},
+		UserID:         userID,
+		PaymentType:    paymentTypeProfitSharing,
+		BusinessType:   businessTypeReservation,
+		Amount:         5000,
+		OutTradeNo:     "BF_REPLACE_PAY_001",
+		TransactionID:  pgtype.Text{String: "BF_UP_REPLACE_PAY_001", Valid: true},
+		Status:         paymentStatusPaid,
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+	}
+	newOrder := db.Order{
+		ID:            newOrderID,
+		UserID:        userID,
+		MerchantID:    merchantID,
+		OrderType:     "dine_in",
+		Status:        "paid",
+		TotalAmount:   3500,
+		ReservationID: pgtype.Int8{Int64: reservationID, Valid: true},
+	}
+	refundOrder := db.RefundOrder{
+		ID:             7001,
+		PaymentOrderID: paymentOrderID,
+		RefundAmount:   1500,
+		OutRefundNo:    "RF_REPLACE_001",
+		Status:         "pending",
+	}
+
+	store.EXPECT().GetOrderForUpdate(gomock.Any(), oldOrderID).Return(oldOrder, nil)
+	store.EXPECT().GetTableReservation(gomock.Any(), reservationID).Return(reservation, nil)
+	store.EXPECT().GetActiveDiningSessionByReservation(gomock.Any(), pgtype.Int8{Int64: reservationID, Valid: true}).Return(db.DiningSession{ID: 700, UserID: userID}, nil)
+	store.EXPECT().GetDish(gomock.Any(), dishID).Return(db.Dish{ID: dishID, MerchantID: merchantID, Name: "审计套餐", Price: 3500, IsOnline: true, IsAvailable: true}, nil)
+	store.EXPECT().ListActiveDiscountRules(gomock.Any(), merchantID).Return([]db.DiscountRule{}, nil)
+	store.EXPECT().GetPaymentOrdersByReservation(gomock.Any(), pgtype.Int8{Int64: reservationID, Valid: true}).Return([]db.PaymentOrder{paymentOrder}, nil)
+	store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrderID).Return(int64(0), nil)
+	store.EXPECT().ReplaceOrderWithRefundOrdersTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ReplaceOrderWithRefundOrdersTxParams) (db.ReplaceOrderWithRefundOrdersTxResult, error) {
+		require.Equal(t, oldOrderID, arg.OldOrderID)
+		require.Equal(t, int64(3500), arg.CreateOrderParams.TotalAmount)
+		require.Equal(t, "paid", arg.CreateOrderParams.Status)
+		require.Len(t, arg.RefundOrders, 1)
+		require.Equal(t, paymentOrderID, arg.RefundOrders[0].PaymentOrderID)
+		require.Equal(t, paymentTypeProfitSharing, arg.RefundOrders[0].RefundType)
+		require.Equal(t, int64(1500), arg.RefundOrders[0].RefundAmount)
+		require.Equal(t, "订单改菜单退款", arg.RefundOrders[0].RefundReason)
+		require.NotEmpty(t, arg.RefundOrders[0].OutRefundNo)
+		refundOrder.OutRefundNo = arg.RefundOrders[0].OutRefundNo
+		return db.ReplaceOrderWithRefundOrdersTxResult{
+			ReplaceOrderTxResult: db.ReplaceOrderTxResult{NewOrder: newOrder, OldOrder: oldOrder},
+			RefundOrders:         []db.RefundOrder{refundOrder},
+		}, nil
+	})
+	store.EXPECT().GetRefundOrderByOutRefundNo(gomock.Any(), gomock.Any()).Return(refundOrder, nil)
+	store.EXPECT().UpdateRefundOrderToProcessing(gomock.Any(), gomock.Any()).Return(db.RefundOrder{ID: refundOrder.ID, Status: "processing"}, nil)
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).Return(db.ExternalPaymentCommand{}, nil)
+
+	result, err := ReplaceReservationOrderWithBaofu(
+		context.Background(),
+		store,
+		facade,
+		ReplaceOrderInput{
+			UserID:  userID,
+			OrderID: oldOrderID,
+			Items: []OrderItemInput{{
+				DishID:   &dishID,
+				Quantity: 1,
+			}},
+			ClientIP: "198.51.100.9",
+		},
+		func(context.Context, int64, map[string]interface{}) ([]byte, int64, error) {
+			return nil, 0, nil
+		},
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, newOrderID, result.NewOrder.ID)
+	require.Equal(t, int64(-1500), result.Delta)
+	require.True(t, result.RefundInitiated)
+	require.True(t, facade.baofuRefundCalled)
+	require.Equal(t, refundOrder.OutRefundNo, facade.lastBaofuRefund.OutTradeNo)
+}
+
+func TestReplaceReservationOrderWithBaofuReturnsSuccessWhenPostCommitRefundSubmissionFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	facade := &replaceOrderPaymentFacade{baofuRefundErr: errors.New("temporary baofu outage")}
+	userID := int64(1101)
+	merchantID := int64(2101)
+	reservationID := int64(3101)
+	oldOrderID := int64(4101)
+	newOrderID := int64(4102)
+	paymentOrderID := int64(5101)
+	dishID := int64(6101)
+
+	oldOrder := db.Order{
+		ID:            oldOrderID,
+		UserID:        userID,
+		MerchantID:    merchantID,
+		OrderType:     "reservation",
+		Status:        "paid",
+		TotalAmount:   5000,
+		ReservationID: pgtype.Int8{Int64: reservationID, Valid: true},
+	}
+	reservation := db.TableReservation{
+		ID:          reservationID,
+		UserID:      userID,
+		MerchantID:  merchantID,
+		TableID:     88,
+		Status:      "paid",
+		PaymentMode: "full",
+	}
+	paymentOrder := db.PaymentOrder{
+		ID:             paymentOrderID,
+		OrderID:        pgtype.Int8{Int64: oldOrderID, Valid: true},
+		ReservationID:  pgtype.Int8{Int64: reservationID, Valid: true},
+		UserID:         userID,
+		PaymentType:    paymentTypeProfitSharing,
+		BusinessType:   businessTypeReservation,
+		Amount:         5000,
+		OutTradeNo:     "BF_REPLACE_PAY_002",
+		TransactionID:  pgtype.Text{String: "BF_UP_REPLACE_PAY_002", Valid: true},
+		Status:         paymentStatusPaid,
+		PaymentChannel: db.PaymentChannelBaofuAggregate,
+	}
+	newOrder := db.Order{
+		ID:            newOrderID,
+		UserID:        userID,
+		MerchantID:    merchantID,
+		OrderType:     "dine_in",
+		Status:        "paid",
+		TotalAmount:   3500,
+		ReservationID: pgtype.Int8{Int64: reservationID, Valid: true},
+	}
+	refundOrder := db.RefundOrder{
+		ID:             7101,
+		PaymentOrderID: paymentOrderID,
+		RefundAmount:   1500,
+		OutRefundNo:    "RF_REPLACE_002",
+		Status:         "pending",
+	}
+
+	store.EXPECT().GetOrderForUpdate(gomock.Any(), oldOrderID).Return(oldOrder, nil)
+	store.EXPECT().GetTableReservation(gomock.Any(), reservationID).Return(reservation, nil)
+	store.EXPECT().GetActiveDiningSessionByReservation(gomock.Any(), pgtype.Int8{Int64: reservationID, Valid: true}).Return(db.DiningSession{ID: 701, UserID: userID}, nil)
+	store.EXPECT().GetDish(gomock.Any(), dishID).Return(db.Dish{ID: dishID, MerchantID: merchantID, Name: "审计套餐", Price: 3500, IsOnline: true, IsAvailable: true}, nil)
+	store.EXPECT().ListActiveDiscountRules(gomock.Any(), merchantID).Return([]db.DiscountRule{}, nil)
+	store.EXPECT().GetPaymentOrdersByReservation(gomock.Any(), pgtype.Int8{Int64: reservationID, Valid: true}).Return([]db.PaymentOrder{paymentOrder}, nil)
+	store.EXPECT().GetTotalRefundedByPaymentOrder(gomock.Any(), paymentOrderID).Return(int64(0), nil)
+	store.EXPECT().ReplaceOrderWithRefundOrdersTx(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.ReplaceOrderWithRefundOrdersTxParams) (db.ReplaceOrderWithRefundOrdersTxResult, error) {
+		require.Len(t, arg.RefundOrders, 1)
+		refundOrder.OutRefundNo = arg.RefundOrders[0].OutRefundNo
+		return db.ReplaceOrderWithRefundOrdersTxResult{
+			ReplaceOrderTxResult: db.ReplaceOrderTxResult{NewOrder: newOrder, OldOrder: oldOrder},
+			RefundOrders:         []db.RefundOrder{refundOrder},
+		}, nil
+	})
+	store.EXPECT().GetRefundOrderByOutRefundNo(gomock.Any(), gomock.Any()).Return(refundOrder, nil)
+	store.EXPECT().CreateExternalPaymentCommand(gomock.Any(), gomock.Any()).Return(db.ExternalPaymentCommand{}, nil)
+
+	result, err := ReplaceReservationOrderWithBaofu(
+		context.Background(),
+		store,
+		facade,
+		ReplaceOrderInput{
+			UserID:  userID,
+			OrderID: oldOrderID,
+			Items: []OrderItemInput{{
+				DishID:   &dishID,
+				Quantity: 1,
+			}},
+			ClientIP: "198.51.100.10",
+		},
+		func(context.Context, int64, map[string]interface{}) ([]byte, int64, error) {
+			return nil, 0, nil
+		},
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, newOrderID, result.NewOrder.ID)
+	require.Equal(t, int64(-1500), result.Delta)
+	require.True(t, result.RefundInitiated)
+	require.True(t, facade.baofuRefundCalled)
+	require.Equal(t, refundOrder.OutRefundNo, facade.lastBaofuRefund.OutTradeNo)
+}
+
 func TestReplaceReservationRefundCommandInputUsesBaofuProvider(t *testing.T) {
 	refundOrderID := int64(6103)
 	input := dbReplaceReservationRefundCommandInput(

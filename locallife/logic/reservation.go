@@ -419,7 +419,7 @@ func ConfirmReservation(ctx context.Context, store db.Store, userID, reservation
 }
 
 // CompleteReservation marks a reservation as completed and releases the table.
-func CompleteReservation(ctx context.Context, store db.Store, userID, reservationID int64) (ReservationStatusUpdateResult, error) {
+func CompleteReservation(ctx context.Context, store db.Store, taskScheduler TaskScheduler, userID, reservationID int64) (ReservationStatusUpdateResult, error) {
 	merchant, err := resolveMerchantForUser(ctx, store, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
@@ -456,6 +456,8 @@ func CompleteReservation(ctx context.Context, store db.Store, userID, reservatio
 	if err != nil {
 		return ReservationStatusUpdateResult{}, err
 	}
+
+	scheduleBaofuProfitSharingForCompletedReservation(ctx, store, taskScheduler, merchant, result.Reservation)
 
 	return ReservationStatusUpdateResult{Reservation: result.Reservation, PreviousStatus: reservation.Status}, nil
 }

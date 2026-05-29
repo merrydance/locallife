@@ -23,8 +23,6 @@ const (
 	baofuPaymentRecoveryBatchLimit = int32(200)
 	baofuShareTaskUniqueWindow     = 30 * time.Second
 	baofuShareRecoveryMinAge       = 2 * time.Minute
-	baofuPlatformRateBps           = int32(200)
-	baofuOperatorRateBps           = int32(300)
 )
 
 type BaofuPaymentRecoveryScheduler struct {
@@ -213,9 +211,10 @@ func (s *BaofuPaymentRecoveryScheduler) createBaofuProfitSharingOrder(ctx contex
 	if err != nil {
 		return db.CreateBaofuProfitSharingOrderTxResult{}, fmt.Errorf("get merchant: %w", err)
 	}
-	operatorID, err := s.resolveBaofuProfitSharingOperator(ctx, merchant)
+	orderSource := logic.BaofuProfitSharingOrderSource(order)
+	config, err := logic.ResolveBaofuProfitSharingConfig(ctx, s.store, orderSource, merchant)
 	if err != nil {
-		return db.CreateBaofuProfitSharingOrderTxResult{}, err
+		return db.CreateBaofuProfitSharingOrderTxResult{}, fmt.Errorf("resolve baofu profit sharing config: %w", err)
 	}
 
 	riderID, err := s.resolveBaofuProfitSharingRider(ctx, order)
@@ -227,13 +226,13 @@ func (s *BaofuPaymentRecoveryScheduler) createBaofuProfitSharingOrder(ctx contex
 		PaymentOrderID:  paymentOrder.ID,
 		MerchantID:      order.MerchantID,
 		RiderID:         riderID,
-		OperatorID:      operatorID,
+		OperatorID:      config.OperatorID,
 		PlatformOwnerID: 0,
-		OrderSource:     order.OrderType,
+		OrderSource:     orderSource,
 		TotalAmountFen:  paymentOrder.Amount,
 		DeliveryFeeFen:  order.DeliveryFee,
-		PlatformRateBps: baofuPlatformRateBps,
-		OperatorRateBps: baofuOperatorRateBps,
+		PlatformRateBps: config.PlatformRateBps,
+		OperatorRateBps: config.OperatorRateBps,
 		OutOrderNo:      fmt.Sprintf("BFPS%dO%d", paymentOrder.ID, order.ID),
 	})
 }
@@ -257,53 +256,34 @@ func (s *BaofuPaymentRecoveryScheduler) createBaofuReservationProfitSharingOrder
 	if err != nil {
 		return db.CreateBaofuProfitSharingOrderTxResult{}, fmt.Errorf("get reservation: %w", err)
 	}
-	if !baofuReservationReadyForProfitSharing(reservation.Status) {
+	if !baofuReservationReadyForProfitSharing(reservation) {
 		return db.CreateBaofuProfitSharingOrderTxResult{}, fmt.Errorf("reservation %d status %q is not ready for baofu profit sharing", reservation.ID, reservation.Status)
 	}
 	merchant, err := s.store.GetMerchant(ctx, reservation.MerchantID)
 	if err != nil {
 		return db.CreateBaofuProfitSharingOrderTxResult{}, fmt.Errorf("get merchant: %w", err)
 	}
-	operatorID, err := s.resolveBaofuProfitSharingOperator(ctx, merchant)
+	config, err := logic.ResolveBaofuProfitSharingConfig(ctx, s.store, db.OrderTypeReservation, merchant)
 	if err != nil {
-		return db.CreateBaofuProfitSharingOrderTxResult{}, err
+		return db.CreateBaofuProfitSharingOrderTxResult{}, fmt.Errorf("resolve baofu reservation profit sharing config: %w", err)
 	}
 
 	return service.CreatePendingOrder(ctx, logic.BaofuProfitSharingOrderInput{
 		PaymentOrderID:  paymentOrder.ID,
 		MerchantID:      reservation.MerchantID,
-		OperatorID:      operatorID,
+		OperatorID:      config.OperatorID,
 		PlatformOwnerID: 0,
 		OrderSource:     db.OrderTypeReservation,
 		TotalAmountFen:  paymentOrder.Amount,
 		DeliveryFeeFen:  0,
-		PlatformRateBps: baofuPlatformRateBps,
-		OperatorRateBps: baofuOperatorRateBps,
+		PlatformRateBps: config.PlatformRateBps,
+		OperatorRateBps: config.OperatorRateBps,
 		OutOrderNo:      fmt.Sprintf("BFPS%dR%d", paymentOrder.ID, reservation.ID),
 	})
 }
 
-func (s *BaofuPaymentRecoveryScheduler) resolveBaofuProfitSharingOperator(ctx context.Context, merchant db.Merchant) (int64, error) {
-	if merchant.RegionID <= 0 {
-		return 0, nil
-	}
-	operator, err := s.store.GetActiveOperatorByRegion(ctx, merchant.RegionID)
-	if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
-		return 0, fmt.Errorf("get active operator by region: %w", err)
-	}
-	if err != nil {
-		return 0, nil
-	}
-	return operator.ID, nil
-}
-
-func baofuReservationReadyForProfitSharing(status string) bool {
-	switch status {
-	case "paid", "confirmed", "checked_in", "completed":
-		return true
-	default:
-		return false
-	}
+func baofuReservationReadyForProfitSharing(reservation db.TableReservation) bool {
+	return reservation.Status == "completed" && reservation.CompletedAt.Valid
 }
 
 func (s *BaofuPaymentRecoveryScheduler) resolveBaofuProfitSharingRider(ctx context.Context, order db.Order) (int64, error) {

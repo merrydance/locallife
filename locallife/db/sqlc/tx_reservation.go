@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -264,8 +265,9 @@ func (store *SQLStore) CompleteReservationTx(ctx context.Context, arg CompleteRe
 
 // ReplaceReservationItemsTxParams contains the input parameters for replacing reservation items
 type ReplaceReservationItemsTxParams struct {
-	ReservationID int64
-	Items         []CreateReservationItemParams
+	ReservationID         int64
+	ExpectedCurrentAmount int64
+	Items                 []CreateReservationItemParams
 }
 
 // ReplaceReservationItemsTxResult contains the result of replacing reservation items
@@ -274,11 +276,35 @@ type ReplaceReservationItemsTxResult struct {
 	TotalAmount int64
 }
 
+type ReplaceReservationItemsWithRefundOrdersTxParams struct {
+	ReservationID         int64
+	ExpectedCurrentAmount int64
+	Items                 []CreateReservationItemParams
+	RefundOrders          []CreateRefundOrderTxParams
+}
+
+type ReplaceReservationItemsWithRefundOrdersTxResult struct {
+	Items        []ReservationItem
+	TotalAmount  int64
+	RefundOrders []RefundOrder
+}
+
 // ReplaceReservationItemsTx replaces all reservation items in a single transaction
 func (store *SQLStore) ReplaceReservationItemsTx(ctx context.Context, arg ReplaceReservationItemsTxParams) (ReplaceReservationItemsTxResult, error) {
 	var result ReplaceReservationItemsTxResult
 
 	err := store.execTx(ctx, func(q *Queries) error {
+		if _, err := q.GetTableReservationForUpdate(ctx, arg.ReservationID); err != nil {
+			return fmt.Errorf("lock reservation: %w", err)
+		}
+		currentTotal, err := q.SumReservationItemsTotal(ctx, arg.ReservationID)
+		if err != nil {
+			return fmt.Errorf("sum reservation items total: %w", err)
+		}
+		if currentTotal != arg.ExpectedCurrentAmount {
+			return &requestError{statusCode: http.StatusConflict, err: errors.New("预订菜品金额已变化，请刷新后重试")}
+		}
+
 		if err := q.DeleteReservationItems(ctx, arg.ReservationID); err != nil {
 			return fmt.Errorf("delete reservation items: %w", err)
 		}
@@ -291,6 +317,50 @@ func (store *SQLStore) ReplaceReservationItemsTx(ctx context.Context, arg Replac
 			}
 			result.Items = append(result.Items, created)
 			result.TotalAmount += created.TotalPrice
+		}
+
+		return nil
+	})
+
+	return result, err
+}
+
+func (store *SQLStore) ReplaceReservationItemsWithRefundOrdersTx(ctx context.Context, arg ReplaceReservationItemsWithRefundOrdersTxParams) (ReplaceReservationItemsWithRefundOrdersTxResult, error) {
+	var result ReplaceReservationItemsWithRefundOrdersTxResult
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		if _, err := q.GetTableReservationForUpdate(ctx, arg.ReservationID); err != nil {
+			return fmt.Errorf("lock reservation: %w", err)
+		}
+		currentTotal, err := q.SumReservationItemsTotal(ctx, arg.ReservationID)
+		if err != nil {
+			return fmt.Errorf("sum reservation items total: %w", err)
+		}
+		if currentTotal != arg.ExpectedCurrentAmount {
+			return &requestError{statusCode: http.StatusConflict, err: errors.New("预订菜品金额已变化，请刷新后重试")}
+		}
+
+		if err := q.DeleteReservationItems(ctx, arg.ReservationID); err != nil {
+			return fmt.Errorf("delete reservation items: %w", err)
+		}
+
+		result.Items = make([]ReservationItem, 0, len(arg.Items))
+		for _, item := range arg.Items {
+			created, err := q.CreateReservationItem(ctx, item)
+			if err != nil {
+				return fmt.Errorf("create reservation item: %w", err)
+			}
+			result.Items = append(result.Items, created)
+			result.TotalAmount += created.TotalPrice
+		}
+
+		result.RefundOrders = make([]RefundOrder, 0, len(arg.RefundOrders))
+		for _, refundArg := range arg.RefundOrders {
+			refundResult, err := createRefundOrderWithGuard(ctx, q, refundArg)
+			if err != nil {
+				return err
+			}
+			result.RefundOrders = append(result.RefundOrders, refundResult.RefundOrder)
 		}
 
 		return nil

@@ -1312,7 +1312,7 @@ func (server *Server) completeReservation(ctx *gin.Context) {
 
 	// 验证商户权限
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	result, err := logic.CompleteReservation(ctx, server.store, authPayload.UserID, req.ID)
+	result, err := logic.CompleteReservation(ctx, server.store, apiTaskScheduler{server: server}, authPayload.UserID, req.ID)
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
 			return

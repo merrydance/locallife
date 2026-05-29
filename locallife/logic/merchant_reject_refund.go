@@ -2,7 +2,6 @@ package logic
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -150,75 +149,4 @@ func processMerchantRejectBaofuRefund(
 	}
 	recordBaofuRefundCommand(ctx, store, paymentOrder, refundOrder, baofuRefund, db.ExternalPaymentCommandStatusAccepted, nil)
 	return nil
-}
-
-func recordMerchantRejectRefundCommandAccepted(
-	ctx context.Context,
-	store db.Store,
-	paymentOrder db.PaymentOrder,
-	refundOrder db.RefundOrder,
-	outRefundNo string,
-	refundID string,
-) {
-	paymentCommandSvc := NewPaymentCommandService(store)
-	_, err := paymentCommandSvc.RecordExternalPaymentCommand(ctx, dbMerchantRejectRefundCommandInput(
-		paymentOrder,
-		refundOrder,
-		outRefundNo,
-		db.ExternalPaymentCommandStatusAccepted,
-		stringPtrIfNotEmpty(refundID),
-		merchantRejectRefundCommandSnapshot(map[string]string{
-			"out_refund_no": outRefundNo,
-			"refund_id":     refundID,
-		}),
-	))
-	if err != nil {
-		log.Error().Err(err).
-			Int64("refund_order_id", refundOrder.ID).
-			Str("out_refund_no", outRefundNo).
-			Msg("record merchant reject refund command accepted failed")
-	}
-}
-
-func dbMerchantRejectRefundCommandInput(
-	paymentOrder db.PaymentOrder,
-	refundOrder db.RefundOrder,
-	outRefundNo string,
-	commandStatus string,
-	externalSecondaryKey *string,
-	responseSnapshot []byte,
-) RecordExternalPaymentCommandInput {
-	businessObjectType := "refund_order"
-	businessObjectID := refundOrder.ID
-	return RecordExternalPaymentCommandInput{
-		Provider:             db.ExternalPaymentProviderWechat,
-		Channel:              paymentOrder.PaymentChannel,
-		Capability:           db.ExternalPaymentCapabilityBaofuRefund,
-		CommandType:          db.ExternalPaymentCommandTypeCreateRefund,
-		BusinessOwner:        db.ExternalPaymentBusinessOwnerOrder,
-		BusinessObjectType:   &businessObjectType,
-		BusinessObjectID:     &businessObjectID,
-		ExternalObjectType:   db.ExternalPaymentObjectRefund,
-		ExternalObjectKey:    outRefundNo,
-		ExternalSecondaryKey: externalSecondaryKey,
-		CommandStatus:        commandStatus,
-		ResponseSnapshot:     responseSnapshot,
-	}
-}
-
-func merchantRejectRefundCommandSnapshot(values map[string]string) []byte {
-	filtered := make(map[string]string, len(values))
-	for key, value := range values {
-		if value != "" {
-			filtered[key] = value
-		}
-	}
-	if len(filtered) == 0 {
-		return []byte(`{}`)
-	}
-	data, err := json.Marshal(filtered)
-	if err != nil {
-		return []byte(`{}`)
-	}
-	return data
 }
