@@ -279,12 +279,19 @@ func TestProcessTaskPrintOrder_FullReceiptIncludesBaofuProfitSharingBill(t *test
 	require.NoError(t, err)
 	require.Len(t, printerClient.inputs, 1)
 	content := printerClient.inputs[0].Content
+	require.Contains(t, content, "菜品小计：100.00")
+	require.NotContains(t, content, "跑腿费")
+	require.NotContains(t, content, "<BOLD>实付：")
 	require.Contains(t, content, "用户实付：103.00")
-	require.Contains(t, content, "平台服务费：-4.75")
-	require.Contains(t, content, "支付通道费：-0.57")
+	require.Contains(t, content, "商户账单")
+	require.Contains(t, content, "菜品合计：95.00")
+	require.Contains(t, content, "- 平台服务费：-4.75")
+	require.Contains(t, content, "- 支付通道费：-0.57")
 	require.Contains(t, content, "商户实收：89.68")
+	require.Contains(t, content, "骑手账单")
 	require.Contains(t, content, "代取费：8.00")
-	require.Contains(t, content, "骑手通道费：-0.05")
+	require.Contains(t, content, "- 支付通道费：-0.05")
+	require.NotContains(t, content, "骑手通道费")
 	require.Contains(t, content, "骑手实收：7.95")
 }
 

@@ -51,6 +51,7 @@ func TestBaofuPaymentRecoverySchedulerRunOnceCreatesPendingShareAndEnqueuesComma
 	}
 	merchant := db.Merchant{ID: 501, RegionID: 601}
 	operator := db.Operator{ID: 701, RegionID: 601}
+	profitSharingConfig := db.ProfitSharingConfig{PlatformRate: 4, OperatorRate: 1}
 
 	store.EXPECT().
 		ListBaofuOrdersReadyForProfitSharing(gomock.Any(), gomock.AssignableToTypeOf(db.ListBaofuOrdersReadyForProfitSharingParams{})).
@@ -62,6 +63,11 @@ func TestBaofuPaymentRecoverySchedulerRunOnceCreatesPendingShareAndEnqueuesComma
 	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
 	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
 	store.EXPECT().GetMerchant(gomock.Any(), merchant.ID).Return(merchant, nil)
+	store.EXPECT().GetActiveProfitSharingConfig(gomock.Any(), db.GetActiveProfitSharingConfigParams{
+		OrderSource: db.OrderTypeDineIn,
+		MerchantID:  pgtype.Int8{Int64: merchant.ID, Valid: true},
+		RegionID:    pgtype.Int8{Int64: merchant.RegionID, Valid: true},
+	}).Return(profitSharingConfig, nil)
 	store.EXPECT().GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).Return(operator, nil)
 	expectBaofuReceiverLookup(store, db.BaofuAccountOwnerTypeMerchant, merchant.ID, "MER_SHARE")
 	expectBaofuReceiverLookup(store, db.BaofuAccountOwnerTypeOperator, operator.ID, "OP_SHARE")
@@ -72,8 +78,8 @@ func TestBaofuPaymentRecoverySchedulerRunOnceCreatesPendingShareAndEnqueuesComma
 			require.Equal(t, paymentOrder.ID, arg.ProfitSharingOrder.PaymentOrderID)
 			require.Equal(t, merchant.ID, arg.ProfitSharingOrder.MerchantID)
 			require.Equal(t, operator.ID, arg.ProfitSharingOrder.OperatorID.Int64)
-			require.Equal(t, int32(200), arg.ProfitSharingOrder.PlatformRate)
-			require.Equal(t, int32(300), arg.ProfitSharingOrder.OperatorRate)
+			require.Equal(t, int32(400), arg.ProfitSharingOrder.PlatformRate)
+			require.Equal(t, int32(100), arg.ProfitSharingOrder.OperatorRate)
 			require.Equal(t, int64(0), arg.ProfitSharingOrder.PlatformCommission)
 			require.Equal(t, int64(0), arg.ProfitSharingOrder.OperatorCommission)
 			require.EqualValues(t, 30, arg.ProfitSharingOrder.PaymentFee)
@@ -116,10 +122,15 @@ func TestBaofuPaymentRecoverySchedulerRunOnceCreatesReservationShareAndEnqueuesC
 	reservation := db.TableReservation{
 		ID:         402,
 		MerchantID: 502,
-		Status:     "paid",
+		Status:     "completed",
+		CompletedAt: pgtype.Timestamptz{
+			Time:  time.Now().Add(-time.Minute),
+			Valid: true,
+		},
 	}
 	merchant := db.Merchant{ID: 502, RegionID: 602}
 	operator := db.Operator{ID: 702, RegionID: 602}
+	profitSharingConfig := db.ProfitSharingConfig{PlatformRate: 4, OperatorRate: 1}
 
 	store.EXPECT().
 		ListBaofuOrdersReadyForProfitSharing(gomock.Any(), gomock.AssignableToTypeOf(db.ListBaofuOrdersReadyForProfitSharingParams{})).
@@ -131,6 +142,11 @@ func TestBaofuPaymentRecoverySchedulerRunOnceCreatesReservationShareAndEnqueuesC
 	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
 	store.EXPECT().GetTableReservation(gomock.Any(), reservation.ID).Return(reservation, nil)
 	store.EXPECT().GetMerchant(gomock.Any(), merchant.ID).Return(merchant, nil)
+	store.EXPECT().GetActiveProfitSharingConfig(gomock.Any(), db.GetActiveProfitSharingConfigParams{
+		OrderSource: db.OrderTypeReservation,
+		MerchantID:  pgtype.Int8{Int64: merchant.ID, Valid: true},
+		RegionID:    pgtype.Int8{Int64: merchant.RegionID, Valid: true},
+	}).Return(profitSharingConfig, nil)
 	store.EXPECT().GetActiveOperatorByRegion(gomock.Any(), merchant.RegionID).Return(operator, nil)
 	expectBaofuReceiverLookup(store, db.BaofuAccountOwnerTypeMerchant, merchant.ID, "MER_SHARE")
 	expectBaofuReceiverLookup(store, db.BaofuAccountOwnerTypeOperator, operator.ID, "OP_SHARE")
@@ -145,15 +161,17 @@ func TestBaofuPaymentRecoverySchedulerRunOnceCreatesReservationShareAndEnqueuesC
 			require.Equal(t, int64(0), arg.ProfitSharingOrder.DeliveryFee)
 			require.False(t, arg.ProfitSharingOrder.RiderID.Valid)
 			require.Equal(t, int64(0), arg.ProfitSharingOrder.RiderAmount)
-			require.Equal(t, int64(200), arg.ProfitSharingOrder.PlatformCommission)
-			require.Equal(t, int64(300), arg.ProfitSharingOrder.OperatorCommission)
+			require.Equal(t, int32(400), arg.ProfitSharingOrder.PlatformRate)
+			require.Equal(t, int32(100), arg.ProfitSharingOrder.OperatorRate)
+			require.Equal(t, int64(400), arg.ProfitSharingOrder.PlatformCommission)
+			require.Equal(t, int64(100), arg.ProfitSharingOrder.OperatorCommission)
 			require.EqualValues(t, 30, arg.ProfitSharingOrder.PaymentFee)
 			require.Equal(t, int64(9440), arg.ProfitSharingOrder.MerchantAmount)
 			require.Equal(t, "BFPS302R402", arg.ProfitSharingOrder.OutOrderNo)
 			require.Equal(t, db.ProfitSharingSettlementModeCommissionShare, arg.FeeBreakdown.SettlementMode)
 			require.Equal(t, int64(60), arg.FeeBreakdown.MerchantPaymentFee)
 			require.Equal(t, int64(10000), arg.FeeBreakdown.CommissionBaseAmount)
-			require.Equal(t, int64(230), arg.FeeBreakdown.PlatformReceiverAmount)
+			require.Equal(t, int64(430), arg.FeeBreakdown.PlatformReceiverAmount)
 			return db.CreateBaofuProfitSharingOrderTxResult{
 				ProfitSharingOrder: db.ProfitSharingOrder{ID: 802, PaymentOrderID: paymentOrder.ID, OutOrderNo: arg.ProfitSharingOrder.OutOrderNo},
 				PaymentFeeLedger:   db.BaofuFeeLedger{ID: 902},
@@ -166,6 +184,49 @@ func TestBaofuPaymentRecoverySchedulerRunOnceCreatesReservationShareAndEnqueuesC
 	scheduler.RunOnce()
 
 	require.Equal(t, []int64{802}, distributor.profitSharingOrderIDs)
+}
+
+func TestBaofuPaymentRecoverySchedulerRunOnceSkipsReservationShareWithoutCompletedAt(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	distributor := &baofuProfitSharingEnqueueRecorder{}
+
+	paymentOrder := db.PaymentOrder{
+		ID:                    312,
+		ReservationID:         pgtype.Int8{Int64: 412, Valid: true},
+		BusinessType:          db.ExternalPaymentBusinessOwnerReservation,
+		Amount:                10000,
+		OutTradeNo:            "BFR_312",
+		TransactionID:         pgtype.Text{String: "BFUP_312", Valid: true},
+		Status:                "paid",
+		PaymentChannel:        db.PaymentChannelBaofuAggregate,
+		RequiresProfitSharing: true,
+	}
+	reservation := db.TableReservation{
+		ID:         412,
+		MerchantID: 512,
+		Status:     "completed",
+	}
+
+	store.EXPECT().
+		ListBaofuOrdersReadyForProfitSharing(gomock.Any(), gomock.AssignableToTypeOf(db.ListBaofuOrdersReadyForProfitSharingParams{})).
+		Return([]db.ListBaofuOrdersReadyForProfitSharingRow{{
+			PaymentOrderID: paymentOrder.ID,
+			ReservationID:  paymentOrder.ReservationID,
+			BusinessType:   paymentOrder.BusinessType,
+		}}, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetTableReservation(gomock.Any(), reservation.ID).Return(reservation, nil)
+	store.EXPECT().
+		ListBaofuProfitSharingOrdersReadyForCommand(gomock.Any(), gomock.AssignableToTypeOf(db.ListBaofuProfitSharingOrdersReadyForCommandParams{})).
+		Return([]db.ProfitSharingOrder{}, nil)
+
+	scheduler := worker.NewBaofuPaymentRecoveryScheduler(store, distributor)
+	scheduler.RunOnce()
+
+	require.Empty(t, distributor.profitSharingOrderIDs)
 }
 
 func TestBaofuPaymentRecoverySchedulerRunOnceEnqueuesExistingPendingShare(t *testing.T) {

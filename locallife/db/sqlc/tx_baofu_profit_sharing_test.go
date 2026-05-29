@@ -141,7 +141,7 @@ func TestPrepareBaofuProfitSharingCommandTxRetriesFailedOrder(t *testing.T) {
 	require.Equal(t, ProfitSharingOrderStatusProcessing, result.ProfitSharingOrder.Status)
 }
 
-func TestEnsureBaofuProfitSharingBillTxAllowsRefundedPaymentForBillOnly(t *testing.T) {
+func TestEnsureBaofuProfitSharingBillTxRejectsActiveRefund(t *testing.T) {
 	ctx := context.Background()
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
 	paymentOrder, err := testStore.CreatePaymentOrder(ctx, CreatePaymentOrderParams{
@@ -161,7 +161,7 @@ func TestEnsureBaofuProfitSharingBillTxAllowsRefundedPaymentForBillOnly(t *testi
 	require.NoError(t, err)
 	_ = createRandomRefundOrder(t, paymentOrder.ID, 500)
 
-	result, err := testStore.EnsureBaofuProfitSharingBillTx(ctx, CreateBaofuProfitSharingOrderTxParams{
+	_, err = testStore.EnsureBaofuProfitSharingBillTx(ctx, CreateBaofuProfitSharingOrderTxParams{
 		ProfitSharingOrder: CreateProfitSharingOrderParams{
 			PaymentOrderID:        paymentOrder.ID,
 			MerchantID:            merchant.ID,
@@ -204,13 +204,14 @@ func TestEnsureBaofuProfitSharingBillTxAllowsRefundedPaymentForBillOnly(t *testi
 			PlatformReceiverAmount:       230,
 		},
 	})
-	require.NoError(t, err)
-	require.Equal(t, paymentOrder.ID, result.ProfitSharingOrder.PaymentOrderID)
-	require.Equal(t, ProfitSharingOrderStatusPending, result.ProfitSharingOrder.Status)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "订单已有退款申请或退款成功记录")
+	statusCode, ok := IsRefundRequestError(err)
+	require.True(t, ok)
+	require.Equal(t, http.StatusBadRequest, statusCode)
 
-	got, err := testStore.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
-	require.NoError(t, err)
-	require.Equal(t, result.ProfitSharingOrder.ID, got.ID)
+	_, getErr := testStore.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
+	require.ErrorIs(t, getErr, ErrRecordNotFound)
 }
 
 func TestEnsureBaofuProfitSharingBillTxReturnsExistingIdenticalBill(t *testing.T) {

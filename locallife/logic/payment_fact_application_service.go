@@ -1207,34 +1207,21 @@ func (svc *PaymentFactService) ensureBaofuOrderPaymentBill(ctx context.Context, 
 		return fmt.Errorf("get merchant for baofu profit sharing bill: %w", err)
 	}
 	orderSource := baofuProfitSharingOrderSource(order)
-	config, err := svc.store.GetActiveProfitSharingConfig(ctx, db.GetActiveProfitSharingConfigParams{
-		OrderSource: orderSource,
-		MerchantID:  pgtype.Int8{Int64: order.MerchantID, Valid: true},
-		RegionID:    pgtype.Int8{Int64: merchant.RegionID, Valid: merchant.RegionID > 0},
-	})
+	config, err := ResolveBaofuProfitSharingConfigStrict(ctx, svc.store, orderSource, merchant)
 	if err != nil {
-		return fmt.Errorf("get active profit sharing config for baofu bill: %w", err)
-	}
-
-	operatorID := int64(0)
-	if merchant.RegionID > 0 && config.OperatorRate > 0 {
-		operator, err := svc.store.GetActiveOperatorByRegion(ctx, merchant.RegionID)
-		if err != nil {
-			return fmt.Errorf("get active operator for baofu profit sharing bill: %w", err)
-		}
-		operatorID = operator.ID
+		return fmt.Errorf("resolve baofu profit sharing config: %w", err)
 	}
 
 	_, err = NewBaofuProfitSharingService(svc.store).CreatePendingOrder(ctx, BaofuProfitSharingOrderInput{
 		PaymentOrderID:  paymentOrder.ID,
 		MerchantID:      order.MerchantID,
-		OperatorID:      operatorID,
+		OperatorID:      config.OperatorID,
 		PlatformOwnerID: 0,
 		OrderSource:     orderSource,
 		TotalAmountFen:  paymentOrder.Amount,
 		DeliveryFeeFen:  order.DeliveryFee,
-		PlatformRateBps: profitSharingPercentToBps(config.PlatformRate),
-		OperatorRateBps: profitSharingPercentToBps(config.OperatorRate),
+		PlatformRateBps: config.PlatformRateBps,
+		OperatorRateBps: config.OperatorRateBps,
 		OutOrderNo:      fmt.Sprintf("BFPS%dO%d", paymentOrder.ID, order.ID),
 	})
 	if err != nil {
@@ -1244,10 +1231,7 @@ func (svc *PaymentFactService) ensureBaofuOrderPaymentBill(ctx context.Context, 
 }
 
 func baofuProfitSharingOrderSource(order db.Order) string {
-	if order.ReservationID.Valid && order.OrderType == orderTypeDineIn {
-		return db.OrderTypeReservation
-	}
-	return order.OrderType
+	return BaofuProfitSharingOrderSource(order)
 }
 
 func profitSharingPercentToBps(rate int32) int32 {

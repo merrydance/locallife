@@ -19,6 +19,7 @@ void main() {
         note: '少放葱',
         feeBreakdown: const FeeBreakdown(
           customerPayableAmountCents: 8800,
+          foodPayableAmountCents: 5600,
           platformServiceFeeAmountCents: 475,
           paymentChannelFeeAmountCents: 31,
           merchantReceivableAmountCents: 8294,
@@ -48,12 +49,18 @@ void main() {
     expect(text, contains('规格: 大份 / 少辣'));
     expect(text, contains('备注: 少放葱'));
     expect(text, contains('用户实付: ¥88.00'));
-    expect(text, contains('平台服务费: ¥4.75'));
-    expect(text, contains('支付通道费: ¥0.31'));
+    expect(text, contains('商户账单'));
+    expect(text, contains('菜品合计: ¥56.00'));
+    expect(text, contains('- 平台服务费: ¥4.75'));
+    expect(text, contains('- 支付通道费: ¥0.31'));
     expect(text, contains('商户实收: ¥82.94'));
+    expect(text, contains('骑手账单'));
     expect(text, contains('代取费: ¥7.00'));
-    expect(text, contains('骑手通道费: ¥0.05'));
+    expect(text, contains('- 支付通道费: ¥0.05'));
+    expect(text, isNot(contains('骑手通道费')));
     expect(text, contains('骑手实收: ¥7.95'));
+    expect(bytes, containsAllInOrder([27, 77, 1, 45, 32]));
+    expect(bytes, containsAllInOrder([27, 77, 0]));
   });
 
   test('generateOrderReceipt refuses missing fee breakdown', () {

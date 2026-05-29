@@ -521,7 +521,7 @@ func (s *RefundRecoveryScheduler) recordBaofuRefundQueryFact(ctx context.Context
 		consumer           string
 	)
 	switch paymentOrder.BusinessType {
-	case db.ExternalPaymentBusinessOwnerReservation:
+	case db.ExternalPaymentBusinessOwnerReservation, reservationPaymentAddonBusinessType:
 		businessOwner = db.ExternalPaymentBusinessOwnerReservation
 		businessObjectType = reservationRefundFactBusinessObjectOrder
 		consumer = reservationRefundFactConsumerDomain

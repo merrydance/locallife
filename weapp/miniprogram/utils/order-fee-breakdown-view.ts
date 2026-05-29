@@ -66,26 +66,30 @@ export function createOrderFeeBreakdownRow(
   }
 }
 
+function deductionLabel(label: string) {
+  return `- ${label}`
+}
+
 export function buildOrderFeeSettlementGroups(breakdown: OrderFeeBreakdown): OrderFeeSettlementGroup[] {
   const merchantRows = [
-    createOrderFeeBreakdownRow('merchant_food_payable_amount', '餐费应分', breakdown.food_payable_amount, 'default', true),
-    createOrderFeeBreakdownRow('merchant_platform_service_fee_amount', '平台服务费', -breakdown.platform_service_fee_amount, 'fee', true),
-    createOrderFeeBreakdownRow('merchant_payment_channel_fee_amount', '支付通道费', -breakdown.payment_channel_fee_amount, 'fee', true),
+    createOrderFeeBreakdownRow('merchant_food_payable_amount', '菜品合计', breakdown.food_payable_amount, 'default', true),
+    createOrderFeeBreakdownRow('merchant_platform_service_fee_amount', deductionLabel('平台服务费'), -breakdown.platform_service_fee_amount, 'fee', true),
+    createOrderFeeBreakdownRow('merchant_payment_channel_fee_amount', deductionLabel('支付通道费'), -breakdown.payment_channel_fee_amount, 'fee', true),
     createOrderFeeBreakdownRow('merchant_receivable_amount', '商户实收', breakdown.merchant_receivable_amount, 'income', true)
   ]
   const riderGrossAmount = breakdown.rider_gross_amount || 0
   const riderPaymentFeeAmount = breakdown.rider_payment_fee_amount || 0
   const riderNetEarningsAmount = breakdown.rider_net_earnings_amount || 0
   const riderRows = [
-    createOrderFeeBreakdownRow('rider_gross_amount', '骑手应分', riderGrossAmount, 'default', true),
-    createOrderFeeBreakdownRow('rider_payment_fee_amount', '骑手通道费', -riderPaymentFeeAmount, 'fee', true),
-    createOrderFeeBreakdownRow('rider_net_earnings_amount', '骑手收入', riderNetEarningsAmount, 'income', true)
+    createOrderFeeBreakdownRow('rider_gross_amount', '代取费', riderGrossAmount, 'default', true),
+    createOrderFeeBreakdownRow('rider_payment_fee_amount', deductionLabel('支付通道费'), -riderPaymentFeeAmount, 'fee', true),
+    createOrderFeeBreakdownRow('rider_net_earnings_amount', '骑手实收', riderNetEarningsAmount, 'income', true)
   ]
 
   return [
     {
       key: 'merchant',
-      title: '商户部分',
+      title: '商户账单',
       total_text: formatOrderFeeMoney(breakdown.merchant_receivable_amount),
       tone: 'merchant',
       visible: true,
@@ -93,7 +97,7 @@ export function buildOrderFeeSettlementGroups(breakdown: OrderFeeBreakdown): Ord
     },
     {
       key: 'rider',
-      title: '骑手部分',
+      title: '骑手账单',
       total_text: formatOrderFeeMoney(riderNetEarningsAmount),
       tone: 'rider',
       visible: riderGrossAmount !== 0 || riderPaymentFeeAmount !== 0 || riderNetEarningsAmount !== 0,

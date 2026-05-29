@@ -83,6 +83,21 @@ export type MerchantInitialDraftFormPatch = MerchantLatestOcrFormPatch & {
   accountName: string
 }
 
+export type MerchantRecognizedOcrResult = {
+  legal_representative?: string
+  name?: string
+  enterprise_name?: string
+  reg_num?: string
+  credit_code?: string
+  address?: string
+  valid_period?: string
+  business_scope?: string
+  valid_to?: string
+  id_number?: string
+  gender?: string
+  valid_date?: string
+}
+
 export const DEFAULT_MERCHANT_OCR_DISPLAY_STATE: MerchantOCRDisplayState = {
   businessLicenseReady: false,
   businessLicenseProcessing: false,
@@ -440,6 +455,82 @@ export function buildMerchantShopImagesPayload(params: {
   }
 }
 
+export function buildMerchantInitialShopImagesPatch(params: {
+  data: Pick<MerchantDraftExt, 'storefront_images' | 'environment_images'>
+  resolveDisplayUrl: (rawUrl: string) => string
+}): {
+  storefrontImages: ImageFieldItem[]
+  storefrontFiles: ImageFieldItem[]
+  environmentImages: ImageFieldItem[]
+  environmentFiles: ImageFieldItem[]
+} {
+  const buildInitialImages = (rawUrls?: string[] | null): ImageFieldItem[] => {
+    if (!Array.isArray(rawUrls)) {
+      return []
+    }
+
+    return rawUrls.reduce<ImageFieldItem[]>((images, rawUrl) => {
+      const raw = normalizeImageRawUrl(rawUrl)
+      if (!raw) {
+        return images
+      }
+
+      const resolved = params.resolveDisplayUrl(raw)
+      if (!resolved) {
+        return images
+      }
+
+      images.push({ url: resolved, rawUrl: raw })
+      return images
+    }, [])
+  }
+
+  const storefrontImages = buildInitialImages(params.data.storefront_images)
+  const environmentImages = buildInitialImages(params.data.environment_images)
+  return {
+    storefrontImages,
+    storefrontFiles: buildUploadRenderImages(storefrontImages),
+    environmentImages,
+    environmentFiles: buildUploadRenderImages(environmentImages)
+  }
+}
+
+export function buildMerchantInitialDocumentImagesPatch(params: {
+  licenseUrl?: string
+  licenseAssetId?: number | null
+  foodLicenseUrl?: string
+  foodPermitAssetId?: number | null
+  idCardFrontUrl?: string
+  idCardFrontAssetId?: number | null
+  idCardBackUrl?: string
+  idCardBackAssetId?: number | null
+  buildPrivateAssetKey: (assetId?: number | null) => string | undefined
+}): {
+  licenseImages: ImageFieldItem[]
+  foodLicenseImages: ImageFieldItem[]
+  idCardFrontImages: ImageFieldItem[]
+  idCardBackImages: ImageFieldItem[]
+} {
+  return {
+    licenseImages: params.licenseUrl ? [{ url: params.licenseUrl, assetId: params.licenseAssetId ?? undefined }] : [],
+    foodLicenseImages: params.foodLicenseUrl ? [{ url: params.foodLicenseUrl, assetId: params.foodPermitAssetId ?? undefined }] : [],
+    idCardFrontImages: params.idCardFrontUrl
+      ? [{
+          url: params.idCardFrontUrl,
+          rawUrl: params.buildPrivateAssetKey(params.idCardFrontAssetId),
+          assetId: params.idCardFrontAssetId ?? undefined
+        }]
+      : [],
+    idCardBackImages: params.idCardBackUrl
+      ? [{
+          url: params.idCardBackUrl,
+          rawUrl: params.buildPrivateAssetKey(params.idCardBackAssetId),
+          assetId: params.idCardBackAssetId ?? undefined
+        }]
+      : []
+  }
+}
+
 export function buildMerchantLatestOcrFormPatch(data: MerchantDraftExt, currentAddress?: string): MerchantLatestOcrFormPatch {
   return {
     licenseName: toSafeString(data.business_license_ocr?.enterprise_name),
@@ -478,6 +569,44 @@ export function buildMerchantInitialDraftOcrResults(data: MerchantDraftExt) {
   return {
     license: data.business_license_ocr || null,
     idCard: data.id_card_front_ocr || null
+  }
+}
+
+export function buildMerchantBusinessLicenseOcrRecognizedPatch(
+  ocr: MerchantRecognizedOcrResult,
+  currentAddress?: string
+): Record<string, unknown> {
+  return {
+    'formData.licenseName': toSafeString(ocr.enterprise_name),
+    'formData.creditCode': toSafeString(ocr.reg_num || ocr.credit_code),
+    'formData.registerAddress': toSafeString(ocr.address),
+    'formData.address': toSafeString(ocr.address || currentAddress),
+    'formData.legalPerson': toSafeString(ocr.legal_representative),
+    'formData.licenseValidity': toSafeString(ocr.valid_period),
+    'formData.businessScope': toSafeString(ocr.business_scope),
+    'ocrResults.license': ocr
+  }
+}
+
+export function buildMerchantFoodPermitOcrRecognizedPatch(ocr: MerchantRecognizedOcrResult): Record<string, unknown> {
+  return {
+    'formData.foodLicenseValidity': toSafeString(ocr.valid_to)
+  }
+}
+
+export function buildMerchantIdCardFrontOcrRecognizedPatch(ocr: MerchantRecognizedOcrResult): Record<string, unknown> {
+  return {
+    'formData.legalPerson': toSafeString(ocr.name),
+    'formData.idCard': toSafeString(ocr.id_number),
+    'formData.gender': toSafeString(ocr.gender),
+    'formData.hometown': toSafeString(ocr.address),
+    'ocrResults.idCard': ocr
+  }
+}
+
+export function buildMerchantIdCardBackOcrRecognizedPatch(ocr: MerchantRecognizedOcrResult): Record<string, unknown> {
+  return {
+    'formData.idCardValidity': toSafeString(ocr.valid_date)
   }
 }
 

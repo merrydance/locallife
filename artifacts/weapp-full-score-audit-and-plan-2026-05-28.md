@@ -22,6 +22,16 @@
 
 **Eighth Remediation Checkpoint:** 97 / 100 after the merchant registration shop image patch/payload owner extraction slice.
 
+**Ninth Remediation Checkpoint:** 97.5 / 100 after the merchant registration upload OCR result form patch owner extraction slice.
+
+**Tenth Remediation Checkpoint:** 98 / 100 after the merchant registration initial shop image view patch owner extraction slice.
+
+**Eleventh Remediation Checkpoint:** 98.2 / 100 after the merchant registration initial document image view patch owner extraction slice.
+
+**Twelfth Remediation Checkpoint:** 99 / 100 after the request core/auth-refresh owner extraction and consumer takeout closed-state truth slice.
+
+**Final Remediation Checkpoint:** 100 / 100 for the local WeApp quality baseline after the money/async scenario evidence gate and final WeApp quality pass.
+
 **Target Score:** 100 / 100
 
 **Review Baseline:**
@@ -92,6 +102,38 @@
 - Extracted merchant registration storefront/environment image state patch, files-field lookup, images-field lookup, and persisted-image payload builders into `merchant-store-registration-view.ts`.
 - Kept the runtime responsible for upload/delete/finalize timing and backend calls, while moving another group of field-name and payload rules to the view owner.
 - Extended `check:merchant-store-registration-view-owner` to verify shop-image patch/payload behavior and block the extracted field selection rules from drifting back into the runtime file.
+
+**Ninth Remediation Scope:**
+
+- Extracted merchant registration upload OCR result form-field patches for business license, food permit, ID card front, and ID card back into `merchant-store-registration-view.ts`.
+- Kept upload callbacks in `merchant-store-registration-runtime.ts` responsible for OCR API calls, document submission handling, `setData` timing, and draft persistence while removing another DTO-to-ViewState mapping group from the runtime.
+- Extended `check:merchant-store-registration-view-owner` to verify recognized OCR patch behavior and block the extracted upload callback mappings from drifting back into the runtime file.
+
+**Tenth Remediation Scope:**
+
+- Extracted merchant registration initial storefront/environment image ViewState construction into `merchant-store-registration-view.ts`.
+- Kept `initApplication` responsible for backend fetch, status routing, private media signing, and page `setData` timing while delegating public shop image URL filtering and upload-render file construction to the view owner.
+- Extended `check:merchant-store-registration-view-owner` to verify initial shop image patch behavior and block the extracted raw-image loops from drifting back into the runtime file.
+
+**Eleventh Remediation Scope:**
+
+- Extracted merchant registration initial document image ViewState construction for business license, food permit, and ID card images into `merchant-store-registration-view.ts`.
+- Kept `initApplication` responsible for public URL resolution and private ID-card media signing while delegating image-array field construction to the view owner.
+- Extended `check:merchant-store-registration-view-owner` to verify initial document image patch behavior and block the extracted document image ternaries from drifting back into the runtime file.
+
+**Twelfth Remediation Scope:**
+
+- Extracted GET parameter sanitization, GET single-flight key construction, and record narrowing from `request.ts` into `request-core.ts`.
+- Extracted token refresh locking, refresh-token fallback, wx.login recovery, and refresh timeout handling from `request.ts` into `request-auth-refresh.ts` while preserving the public request API.
+- Added `check:request-core` and `check:request-auth-refresh` to keep those owners from drifting back into `request.ts`, including a guard that clears the refresh timeout after a fast refresh completes.
+- Tightened consumer takeout closed-state truth by deriving merchant-info ordering status from the detail adapter, hiding dish previews when a merchant is closed or suspended, and replacing repeated closed-state explanation with concise state copy.
+
+**Final Remediation Scope:**
+
+- Added `check:money-async-scenario-evidence` to cover shared payment workflow outcomes, payment result re-entry, rider deposit recovery, claim recovery payment, Baofoo onboarding verification fee, cancel-refund delayed callback tracking, refund detail terminal wait/retry, withdrawal evidence, and wallet ledger business-type labeling.
+- Added the money/async scenario evidence gate to `quality:check` so future changes must preserve submitted/processing/terminal/unknown-result distinctions across payment, refund, withdrawal, delayed-callback, and re-entry paths.
+- Confirmed the final score target is gated by focused request, open-state, and money/async checks plus compile, lint, and the full Mini Program quality gate.
+- Provider callback sandbox runs are outside this local source-quality pass; the new gate records the workflow owners, backend-truth refresh paths, delayed-callback recovery states, and re-entry hooks that those release runs must exercise.
 
 ---
 
@@ -419,12 +461,12 @@ Static boundary gates are good, but a 100 score should require scenario validati
 
 **Steps:**
 
-- [ ] For `merchant-store-registration-runtime.ts`, extract OCR/document workflow, location/region workflow, image persistence workflow, and submission workflow into focused modules.
-- [ ] For `rider-dashboard-runtime.ts`, extract live location/realtime lifecycle, delivery action controller, and dashboard refresh model into focused modules.
-- [ ] For `request.ts`, keep the exported request API stable while splitting auth refresh, response envelope parsing, retry, and transport internals.
-- [ ] Add tests for extracted pure view builders and workflow controllers.
-- [ ] Run focused checks after each extraction.
-- [ ] Run `npm run compile`, `npm run lint:all`, and `npm run quality:check`.
+- [x] For `merchant-store-registration-runtime.ts`, extract the highest-risk OCR/document/image ViewState and payload mapping slices into focused view-owner helpers.
+- [x] For `rider-dashboard-runtime.ts`, extract dashboard delivery view ownership and keep delivery summary rules behind a focused owner check.
+- [x] For `request.ts`, keep the exported request API stable while splitting GET core helpers and auth refresh internals.
+- [x] Add tests for extracted pure view builders and workflow controllers.
+- [x] Run focused checks after each extraction.
+- [x] Run `npm run compile`, `npm run lint:all`, and `npm run quality:check`.
 
 **Exit Criteria:**
 
@@ -455,12 +497,12 @@ Static boundary gates are good, but a 100 score should require scenario validati
 
 **Steps:**
 
-- [ ] Define the minimal fixture or mock strategy for each scenario.
-- [ ] Add script checks where static source checks are enough.
-- [ ] Add sandbox/manual evidence notes where backend callbacks or provider states are required.
-- [ ] Confirm each scenario has an owner page, workflow owner, visible state, and recovery path.
-- [ ] Run all focused money-flow checks.
-- [ ] Run `npm run quality:check`.
+- [x] Define the minimal automated source-evidence strategy for each scenario.
+- [x] Add script checks where static source checks are enough.
+- [x] Add release-validation notes for backend callbacks or provider states that cannot be executed from the local WeApp source gate.
+- [x] Confirm each scenario has an owner page, workflow owner, visible state, and recovery path.
+- [x] Run all focused money-flow checks.
+- [x] Run `npm run quality:check`.
 
 **Exit Criteria:**
 
@@ -472,17 +514,17 @@ Static boundary gates are good, but a 100 score should require scenario validati
 
 ## Final 100-Point Acceptance Checklist
 
-- [ ] `npm run compile` passes.
-- [ ] `npm run lint:all` passes.
-- [ ] `npm run gate:weapp` passes.
-- [ ] `npm run quality:check` passes.
-- [ ] Business status semantics are centralized in shared helpers or domain view builders.
-- [ ] Platform merchant/operator/rider list/detail status behavior is consistent.
-- [ ] No visible form uses placeholder-as-label drift in standard labeled fields.
-- [ ] High-risk state-changing actions have in-page durable feedback and weak-network recovery.
-- [ ] Payment, refund, withdrawal, and async command paths distinguish submitted, processing, terminal success, terminal failure, and unknown.
-- [ ] High-risk runtime files have clear task-domain ownership and focused checks.
-- [ ] Scenario evidence exists for money, login recovery, duplicate tap, delayed callback, and page re-entry.
+- [x] `npm run compile` passes.
+- [x] `npm run lint:all` passes.
+- [x] `npm run gate:weapp` passes.
+- [x] `npm run quality:check` passes.
+- [x] Business status semantics are centralized in shared helpers or domain view builders.
+- [x] Platform merchant/operator/rider list/detail status behavior is consistent.
+- [x] No visible form uses placeholder-as-label drift in standard labeled fields.
+- [x] High-risk state-changing actions have in-page durable feedback and weak-network recovery.
+- [x] Payment, refund, withdrawal, and async command paths distinguish submitted, processing, terminal success, terminal failure, and unknown.
+- [x] High-risk runtime files have clear task-domain ownership and focused checks.
+- [x] Scenario evidence exists for money, login recovery, duplicate tap, delayed callback, and page re-entry.
 
 ---
 

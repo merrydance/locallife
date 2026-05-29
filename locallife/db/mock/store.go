@@ -18087,6 +18087,21 @@ func (mr *MockStoreMockRecorder) ReplaceOrderTx(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplaceOrderTx", reflect.TypeOf((*MockStore)(nil).ReplaceOrderTx), ctx, arg)
 }
 
+// ReplaceOrderWithRefundOrdersTx mocks base method.
+func (m *MockStore) ReplaceOrderWithRefundOrdersTx(ctx context.Context, arg db.ReplaceOrderWithRefundOrdersTxParams) (db.ReplaceOrderWithRefundOrdersTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReplaceOrderWithRefundOrdersTx", ctx, arg)
+	ret0, _ := ret[0].(db.ReplaceOrderWithRefundOrdersTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReplaceOrderWithRefundOrdersTx indicates an expected call of ReplaceOrderWithRefundOrdersTx.
+func (mr *MockStoreMockRecorder) ReplaceOrderWithRefundOrdersTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplaceOrderWithRefundOrdersTx", reflect.TypeOf((*MockStore)(nil).ReplaceOrderWithRefundOrdersTx), ctx, arg)
+}
+
 // ReplaceReservationItemsTx mocks base method.
 func (m *MockStore) ReplaceReservationItemsTx(ctx context.Context, arg db.ReplaceReservationItemsTxParams) (db.ReplaceReservationItemsTxResult, error) {
 	m.ctrl.T.Helper()
@@ -18100,6 +18115,21 @@ func (m *MockStore) ReplaceReservationItemsTx(ctx context.Context, arg db.Replac
 func (mr *MockStoreMockRecorder) ReplaceReservationItemsTx(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplaceReservationItemsTx", reflect.TypeOf((*MockStore)(nil).ReplaceReservationItemsTx), ctx, arg)
+}
+
+// ReplaceReservationItemsWithRefundOrdersTx mocks base method.
+func (m *MockStore) ReplaceReservationItemsWithRefundOrdersTx(ctx context.Context, arg db.ReplaceReservationItemsWithRefundOrdersTxParams) (db.ReplaceReservationItemsWithRefundOrdersTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReplaceReservationItemsWithRefundOrdersTx", ctx, arg)
+	ret0, _ := ret[0].(db.ReplaceReservationItemsWithRefundOrdersTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReplaceReservationItemsWithRefundOrdersTx indicates an expected call of ReplaceReservationItemsWithRefundOrdersTx.
+func (mr *MockStoreMockRecorder) ReplaceReservationItemsWithRefundOrdersTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplaceReservationItemsWithRefundOrdersTx", reflect.TypeOf((*MockStore)(nil).ReplaceReservationItemsWithRefundOrdersTx), ctx, arg)
 }
 
 // ReportFoodSafetyIncidentTx mocks base method.

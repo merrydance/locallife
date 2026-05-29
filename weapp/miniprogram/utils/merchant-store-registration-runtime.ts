@@ -30,8 +30,14 @@ import {
   DEFAULT_MERCHANT_OCR_DISPLAY_STATE,
   DEFAULT_MERCHANT_UPLOAD_FEEDBACK,
   buildMapLocationLabel,
+  buildMerchantBusinessLicenseOcrRecognizedPatch,
+  buildMerchantFoodPermitOcrRecognizedPatch,
+  buildMerchantIdCardBackOcrRecognizedPatch,
+  buildMerchantIdCardFrontOcrRecognizedPatch,
+  buildMerchantInitialDocumentImagesPatch,
   buildMerchantInitialDraftFormPatch,
   buildMerchantInitialDraftOcrResults,
+  buildMerchantInitialShopImagesPatch,
   buildMerchantLatestOcrFormPatch,
   buildMerchantOcrDisplayState,
   buildMerchantOcrProgressMessage,
@@ -191,43 +197,38 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
       const foodLicenseUrl = getMediaDisplayUrl(data.food_permit_url || '')
       const idCardFrontUrl = await safeResolve(data.id_card_front_media_asset_id)
       const idCardBackUrl = await safeResolve(data.id_card_back_media_asset_id)
-
-      const licenseImages = licenseUrl ? [{ url: licenseUrl, assetId: data.business_license_media_asset_id ?? undefined }] : []
-      const foodLicenseImages = foodLicenseUrl ? [{ url: foodLicenseUrl, assetId: data.food_permit_media_asset_id ?? undefined }] : []
-      const idCardFrontImages = idCardFrontUrl ? [{ url: idCardFrontUrl, rawUrl: buildPrivateAssetKey(data.id_card_front_media_asset_id), assetId: data.id_card_front_media_asset_id ?? undefined }] : []
-      const idCardBackImages = idCardBackUrl ? [{ url: idCardBackUrl, rawUrl: buildPrivateAssetKey(data.id_card_back_media_asset_id), assetId: data.id_card_back_media_asset_id ?? undefined }] : []
+      const documentImagesPatch = buildMerchantInitialDocumentImagesPatch({
+        licenseUrl,
+        licenseAssetId: data.business_license_media_asset_id,
+        foodLicenseUrl,
+        foodPermitAssetId: data.food_permit_media_asset_id,
+        idCardFrontUrl,
+        idCardFrontAssetId: data.id_card_front_media_asset_id,
+        idCardBackUrl,
+        idCardBackAssetId: data.id_card_back_media_asset_id,
+        buildPrivateAssetKey
+      })
       const accountPermitImages: Array<{ url: string }> = []
+      const shopImagesPatch = buildMerchantInitialShopImagesPatch({
+        data,
+        resolveDisplayUrl: getMediaDisplayUrl
+      })
 
-      const storefrontRaw: string[] = Array.isArray(data.storefront_images) ? data.storefront_images : []
-      const storefrontImages: Array<{ url: string, rawUrl?: string }> = []
-      for (const url of storefrontRaw) {
-        const resolved = getMediaDisplayUrl(url)
-        if (resolved) storefrontImages.push({ url: resolved, rawUrl: url })
-      }
-
-      const environmentRaw: string[] = Array.isArray(data.environment_images) ? data.environment_images : []
-      const environmentImages: Array<{ url: string, rawUrl?: string }> = []
-      for (const url of environmentRaw) {
-        const resolved = getMediaDisplayUrl(url)
-        if (resolved) environmentImages.push({ url: resolved, rawUrl: url })
-      }
-
-      console.log('[DEBUG] setData payload:', { formData, licenseImages: licenseImages.length, storefrontImages: storefrontImages.length, environmentImages: environmentImages.length })
+      console.log('[DEBUG] setData payload:', {
+        formData,
+        licenseImages: documentImagesPatch.licenseImages.length,
+        storefrontImages: shopImagesPatch.storefrontImages.length,
+        environmentImages: shopImagesPatch.environmentImages.length
+      })
 
       this.setData({
         formData,
         ocrDisplayState: this.buildMerchantOcrDisplayState(data),
         uploadFeedback: this.buildMerchantUploadFeedback(data),
         ocrResults,
-        licenseImages,
-        foodLicenseImages,
-        idCardFrontImages,
-        idCardBackImages,
+        ...documentImagesPatch,
         accountPermitImages,
-        storefrontImages,
-        storefrontFiles: buildUploadRenderImages(storefrontImages),
-        environmentImages,
-        environmentFiles: buildUploadRenderImages(environmentImages)
+        ...shopImagesPatch
       })
 
       logger.debug('[MerchantRegister] initApplication 完成', formData, 'initApplication')
@@ -789,16 +790,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
       logger.info('[MerchantRegister] 营业执照上传成功', result, 'onLicenseUpload')
       this.handleDocumentOCRSubmission('business_license_ocr', result, (ocr: OCRResult) => {
         if (ocr) {
-          this.setData({
-            'formData.licenseName': ocr.enterprise_name || '',
-            'formData.creditCode': ocr.reg_num || ocr.credit_code || '',
-            'formData.registerAddress': ocr.address || '',
-            'formData.address': ocr.address || this.data.formData.address || '',
-            'formData.legalPerson': ocr.legal_representative || '',
-            'formData.licenseValidity': ocr.valid_period || '',
-            'formData.businessScope': ocr.business_scope || '',
-            'ocrResults.license': ocr
-          })
+          this.setData(buildMerchantBusinessLicenseOcrRecognizedPatch(ocr, this.data.formData.address))
           this.saveDraft()
         }
       })
@@ -833,9 +825,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
       logger.info('[MerchantRegister] 食品许可证上传成功', result, 'onFoodLicenseUpload')
       this.handleDocumentOCRSubmission('food_permit_ocr', result, (ocr: OCRResult) => {
         if (ocr) {
-          this.setData({
-            'formData.foodLicenseValidity': ocr.valid_to || ''
-          })
+          this.setData(buildMerchantFoodPermitOcrRecognizedPatch(ocr))
           this.saveDraft()
         }
       })
@@ -870,13 +860,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
       logger.info('[MerchantRegister] 身份证正面上传成功', result, 'onIdCardFrontUpload')
       this.handleDocumentOCRSubmission('id_card_front_ocr', result, (ocr: OCRResult) => {
         if (ocr) {
-          this.setData({
-            'formData.legalPerson': ocr.name || '',
-            'formData.idCard': ocr.id_number || '',
-            'formData.gender': ocr.gender || '',
-            'formData.hometown': ocr.address || '',
-            'ocrResults.idCard': ocr
-          })
+          this.setData(buildMerchantIdCardFrontOcrRecognizedPatch(ocr))
           this.saveDraft()
         }
       })
@@ -911,9 +895,7 @@ export const merchantStoreRegistrationRuntimeMethods: Record<string, unknown> & 
       logger.info('[MerchantRegister] 身份证反面上传成功', result, 'onIdCardBackUpload')
       this.handleDocumentOCRSubmission('id_card_back_ocr', result, (ocr: OCRResult) => {
         if (ocr) {
-          this.setData({
-            'formData.idCardValidity': ocr.valid_date || ''
-          })
+          this.setData(buildMerchantIdCardBackOcrRecognizedPatch(ocr))
           this.saveDraft()
         }
       })

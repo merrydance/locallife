@@ -41,101 +41,109 @@ func (store *SQLStore) CreateRefundOrderTx(ctx context.Context, arg CreateRefund
 	var result CreateRefundOrderTxResult
 
 	err := store.execTx(ctx, func(q *Queries) error {
-		// 对支付单行加排他锁，串行化同一支付单的并发退款请求
-		paymentOrder, err := q.GetPaymentOrderForUpdate(ctx, arg.PaymentOrderID)
-		if err != nil {
-			if errors.Is(err, ErrRecordNotFound) {
-				return &requestError{statusCode: http.StatusNotFound, err: errors.New("payment order not found")}
-			}
-			return fmt.Errorf("lock payment order: %w", err)
-		}
-		result.PaymentOrder = paymentOrder
-
-		useIdempotency := arg.IdempotencyOperationScope != "" || arg.IdempotencyActorUserID != 0 || arg.IdempotencyKey != "" || arg.IdempotencyRequestHash != ""
-		if useIdempotency {
-			if arg.IdempotencyOperationScope == "" || arg.IdempotencyActorUserID == 0 || arg.IdempotencyKey == "" || arg.IdempotencyRequestHash == "" {
-				return &requestError{statusCode: http.StatusBadRequest, err: errors.New("refund idempotency metadata is incomplete")}
-			}
-
-			binding, bindingErr := q.GetRefundRequestIdempotencyForUpdate(ctx, GetRefundRequestIdempotencyForUpdateParams{
-				OperationScope: arg.IdempotencyOperationScope,
-				ActorUserID:    arg.IdempotencyActorUserID,
-				IdempotencyKey: arg.IdempotencyKey,
-			})
-			if bindingErr == nil {
-				if binding.RequestHash != arg.IdempotencyRequestHash {
-					return &requestError{statusCode: http.StatusConflict, err: errors.New("idempotency key already used by a different refund request")}
-				}
-				refundOrder, getErr := q.GetRefundOrder(ctx, binding.RefundOrderID)
-				if getErr != nil {
-					return fmt.Errorf("get idempotent refund order: %w", getErr)
-				}
-				result.RefundOrder = refundOrder
-				result.IdempotencyReplayed = true
-				return nil
-			}
-			if !errors.Is(bindingErr, ErrRecordNotFound) {
-				return fmt.Errorf("get refund request idempotency: %w", bindingErr)
-			}
-		}
-
-		if paymentOrder.Status != "paid" {
-			return &requestError{statusCode: http.StatusBadRequest, err: errors.New("payment order is not paid")}
-		}
-
-		if paymentOrder.PaymentChannel == PaymentChannelBaofuAggregate {
-			guard, err := q.GetBaofuPaymentOrderRefundGuardForUpdate(ctx, arg.PaymentOrderID)
-			if err != nil {
-				return fmt.Errorf("get baofu refund guard: %w", err)
-			}
-			if guard.HasStartedProfitSharing {
-				return &requestError{statusCode: http.StatusBadRequest, err: errors.New("订单已进入结算分账流程，不支持退款")}
-			}
-		}
-
-		// 在持锁状态下统计已占用退款额度（pending/processing/success 都占用额度）
-		alreadyRefunded, err := q.GetTotalRefundedByPaymentOrder(ctx, arg.PaymentOrderID)
-		if err != nil {
-			return fmt.Errorf("get total refunded: %w", err)
-		}
-		if alreadyRefunded+arg.RefundAmount > paymentOrder.Amount {
-			return &requestError{
-				statusCode: http.StatusBadRequest,
-				err: fmt.Errorf("refund amount %d + already refunded %d exceeds payment amount %d",
-					arg.RefundAmount, alreadyRefunded, paymentOrder.Amount),
-			}
-		}
-
-		refundOrder, err := q.CreateRefundOrder(ctx, CreateRefundOrderParams{
-			PaymentOrderID: arg.PaymentOrderID,
-			RefundType:     arg.RefundType,
-			RefundAmount:   arg.RefundAmount,
-			RefundReason:   pgtype.Text{String: arg.RefundReason, Valid: arg.RefundReason != ""},
-			OutRefundNo:    arg.OutRefundNo,
-			Status:         "pending",
-		})
-		if err != nil {
-			return fmt.Errorf("create refund order: %w", err)
-		}
-		result.RefundOrder = refundOrder
-		if useIdempotency {
-			if _, err := q.CreateRefundRequestIdempotency(ctx, CreateRefundRequestIdempotencyParams{
-				OperationScope: arg.IdempotencyOperationScope,
-				ActorUserID:    arg.IdempotencyActorUserID,
-				IdempotencyKey: arg.IdempotencyKey,
-				RequestHash:    arg.IdempotencyRequestHash,
-				RefundOrderID:  refundOrder.ID,
-			}); err != nil {
-				if errors.Is(err, ErrRecordNotFound) {
-					return &requestError{statusCode: http.StatusConflict, err: errors.New("idempotency key already used by a different refund request")}
-				}
-				return fmt.Errorf("create refund request idempotency: %w", err)
-			}
-		}
-		return nil
+		var err error
+		result, err = createRefundOrderWithGuard(ctx, q, arg)
+		return err
 	})
 
 	return result, err
+}
+
+func createRefundOrderWithGuard(ctx context.Context, q *Queries, arg CreateRefundOrderTxParams) (CreateRefundOrderTxResult, error) {
+	var result CreateRefundOrderTxResult
+
+	// 对支付单行加排他锁，串行化同一支付单的并发退款请求
+	paymentOrder, err := q.GetPaymentOrderForUpdate(ctx, arg.PaymentOrderID)
+	if err != nil {
+		if errors.Is(err, ErrRecordNotFound) {
+			return result, &requestError{statusCode: http.StatusNotFound, err: errors.New("payment order not found")}
+		}
+		return result, fmt.Errorf("lock payment order: %w", err)
+	}
+	result.PaymentOrder = paymentOrder
+
+	useIdempotency := arg.IdempotencyOperationScope != "" || arg.IdempotencyActorUserID != 0 || arg.IdempotencyKey != "" || arg.IdempotencyRequestHash != ""
+	if useIdempotency {
+		if arg.IdempotencyOperationScope == "" || arg.IdempotencyActorUserID == 0 || arg.IdempotencyKey == "" || arg.IdempotencyRequestHash == "" {
+			return result, &requestError{statusCode: http.StatusBadRequest, err: errors.New("refund idempotency metadata is incomplete")}
+		}
+
+		binding, bindingErr := q.GetRefundRequestIdempotencyForUpdate(ctx, GetRefundRequestIdempotencyForUpdateParams{
+			OperationScope: arg.IdempotencyOperationScope,
+			ActorUserID:    arg.IdempotencyActorUserID,
+			IdempotencyKey: arg.IdempotencyKey,
+		})
+		if bindingErr == nil {
+			if binding.RequestHash != arg.IdempotencyRequestHash {
+				return result, &requestError{statusCode: http.StatusConflict, err: errors.New("idempotency key already used by a different refund request")}
+			}
+			refundOrder, getErr := q.GetRefundOrder(ctx, binding.RefundOrderID)
+			if getErr != nil {
+				return result, fmt.Errorf("get idempotent refund order: %w", getErr)
+			}
+			result.RefundOrder = refundOrder
+			result.IdempotencyReplayed = true
+			return result, nil
+		}
+		if !errors.Is(bindingErr, ErrRecordNotFound) {
+			return result, fmt.Errorf("get refund request idempotency: %w", bindingErr)
+		}
+	}
+
+	if paymentOrder.Status != "paid" {
+		return result, &requestError{statusCode: http.StatusBadRequest, err: errors.New("payment order is not paid")}
+	}
+
+	if paymentOrder.PaymentChannel == PaymentChannelBaofuAggregate {
+		guard, err := q.GetBaofuPaymentOrderRefundGuardForUpdate(ctx, arg.PaymentOrderID)
+		if err != nil {
+			return result, fmt.Errorf("get baofu refund guard: %w", err)
+		}
+		if guard.HasStartedProfitSharing {
+			return result, &requestError{statusCode: http.StatusBadRequest, err: errors.New("订单已进入结算分账流程，不支持退款")}
+		}
+	}
+
+	// 在持锁状态下统计已占用退款额度（pending/processing/success 都占用额度）
+	alreadyRefunded, err := q.GetTotalRefundedByPaymentOrder(ctx, arg.PaymentOrderID)
+	if err != nil {
+		return result, fmt.Errorf("get total refunded: %w", err)
+	}
+	if alreadyRefunded+arg.RefundAmount > paymentOrder.Amount {
+		return result, &requestError{
+			statusCode: http.StatusBadRequest,
+			err: fmt.Errorf("refund amount %d + already refunded %d exceeds payment amount %d",
+				arg.RefundAmount, alreadyRefunded, paymentOrder.Amount),
+		}
+	}
+
+	refundOrder, err := q.CreateRefundOrder(ctx, CreateRefundOrderParams{
+		PaymentOrderID: arg.PaymentOrderID,
+		RefundType:     arg.RefundType,
+		RefundAmount:   arg.RefundAmount,
+		RefundReason:   pgtype.Text{String: arg.RefundReason, Valid: arg.RefundReason != ""},
+		OutRefundNo:    arg.OutRefundNo,
+		Status:         "pending",
+	})
+	if err != nil {
+		return result, fmt.Errorf("create refund order: %w", err)
+	}
+	result.RefundOrder = refundOrder
+	if useIdempotency {
+		if _, err := q.CreateRefundRequestIdempotency(ctx, CreateRefundRequestIdempotencyParams{
+			OperationScope: arg.IdempotencyOperationScope,
+			ActorUserID:    arg.IdempotencyActorUserID,
+			IdempotencyKey: arg.IdempotencyKey,
+			RequestHash:    arg.IdempotencyRequestHash,
+			RefundOrderID:  refundOrder.ID,
+		}); err != nil {
+			if errors.Is(err, ErrRecordNotFound) {
+				return result, &requestError{statusCode: http.StatusConflict, err: errors.New("idempotency key already used by a different refund request")}
+			}
+			return result, fmt.Errorf("create refund request idempotency: %w", err)
+		}
+	}
+	return result, nil
 }
 
 // requestError 是一个内部错误类型，携带 HTTP 状态码以便上层转换为 API 错误

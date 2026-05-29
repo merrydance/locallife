@@ -1,4 +1,4 @@
-import { getToken, clearToken, setToken, isTokenNearExpiry, hasToken } from './auth'
+import { getToken, clearToken } from './auth'
 import { ApiResponse, ErrorCode, classifyErrorCode } from '../api/types'
 import { logger } from './logger'
 import { ErrorHandler, ErrorType, AppError } from './error-handler'
@@ -9,7 +9,8 @@ import { API_CONFIG, ENV } from '../config/index'
 import { performanceMonitor } from './performance-monitor'
 import { mapBackendMessageToUserMessage } from './user-facing'
 import { buildDefaultRequestId } from './request-id'
-import { ensureWechatLoginSession } from './wechat-login-session'
+import { buildGetSingleFlightKey, isRecord, sanitizeGetParams } from './request-core'
+import { ensureValidToken, performTokenRefresh, refreshAuthToken } from './request-auth-refresh'
 
 export const API_BASE = API_CONFIG.BASE_URL
 
@@ -34,60 +35,7 @@ const MEDIA_SECURITY_BLOCKED_MESSAGE = '图片被微信多媒体内容安全审�
 const OCR_TIMEOUT_MESSAGE = '识别超时，请稍后重试'
 const OCR_FAILURE_MESSAGE = '识别失败，请提供更清晰更规整的图片重试'
 
-interface RefreshTokenPayload {
-  access_token: string
-  refresh_token?: string
-  access_token_expires_at?: string
-}
-
 const _inflightGetRequests = new Map<string, Promise<unknown>>()
-
-function sanitizeGetParams(data: unknown): unknown {
-  if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    return data
-  }
-
-  const source = data as Record<string, unknown>
-  const cleaned: Record<string, unknown> = {}
-
-  Object.entries(source).forEach(([key, value]) => {
-    if (value === undefined || value === null) {
-      return
-    }
-
-    if (typeof value === 'string') {
-      const trimmed = value.trim()
-      const lower = trimmed.toLowerCase()
-      if (!trimmed || lower === 'undefined' || lower === 'null' || lower === 'nan') {
-        return
-      }
-      cleaned[key] = trimmed
-      return
-    }
-
-    if (typeof value === 'number' && !Number.isFinite(value)) {
-      return
-    }
-
-    cleaned[key] = value
-  })
-
-  return cleaned
-}
-
-function buildGetSingleFlightKey(url: string, data: unknown, skipAuth: boolean): string {
-  let serialized = ''
-  try {
-    serialized = JSON.stringify(data || {})
-  } catch (_error) {
-    serialized = String(data)
-  }
-  return `GET|${url}|${serialized}|skipAuth:${skipAuth ? '1' : '0'}`
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
 
 function containsChineseText(text: string): boolean {
   return /[\u4e00-\u9fff]/.test(text)
@@ -828,134 +776,4 @@ function _showRetryDialog(error: AppError, retryFn: () => Promise<unknown>) {
   })
 }
 
-// ==================== Token刷新机制 ====================
-
-// 单次并发刷新锁
-let _refreshingPromise: Promise<void> | null = null
-const REFRESH_THRESHOLD = 5 * 60 * 1000 // 5分钟
-const REFRESH_TIMEOUT = 25000 // 覆盖 refresh_token 超时 + wx.login 降级链路
-const TOKEN_REFRESH_REQUEST_TIMEOUT = 10000
-
-/**
- * 统一的Token刷新入口 (带锁)
- * @param force 是否强制刷新(忽略有效期检查)
- */
-async function performTokenRefresh(force: boolean = false): Promise<void> {
-  // 如果已有刷新任务在执行，直接复用
-  if (_refreshingPromise) {
-    logger.debug('检测到正在刷新Token,复用Promise', undefined, 'performTokenRefresh')
-    return _refreshingPromise
-  }
-
-  // 非强制模式下，检查是否真的需要刷新
-  if (!force && !isTokenNearExpiry(REFRESH_THRESHOLD)) {
-    return
-  }
-
-  logger.info('开始刷新Token', { force }, 'performTokenRefresh')
-
-  _refreshingPromise = new Promise<void>((resolve, reject) => {
-    refreshTokenWithTimeout()
-      .then(resolve)
-      .catch(reject)
-      .finally(() => {
-        // 延迟清除锁，防止瞬间并发穿透
-        setTimeout(() => {
-          _refreshingPromise = null
-        }, 500)
-      })
-  })
-
-  return _refreshingPromise
-}
-
-/**
- * 确保Token有效性(请求前检查)
- */
-export async function ensureValidToken(): Promise<void> {
-  if (!hasToken()) {
-    return performTokenRefresh(true)
-  }
-  return performTokenRefresh(false)
-}
-
-export async function refreshAuthToken(force: boolean = false): Promise<void> {
-  return performTokenRefresh(force)
-}
-
-/**
- * 带超时的Token刷新实现
- */
-async function refreshTokenWithTimeout(): Promise<void> {
-  return Promise.race([
-    refreshTokenOnce(),
-    new Promise<void>((_, reject) => {
-      setTimeout(() => {
-        reject(new AppError({
-          type: ErrorType.NETWORK,
-          message: 'Token刷新超时',
-          userMessage: '网络超时,请重试'
-        }))
-      }, REFRESH_TIMEOUT)
-    })
-  ])
-}
-
-/**
- * 刷新Token核心逻辑 - 优先使用refresh_token,降级到重新登录
- */
-async function refreshTokenOnce(): Promise<void> {
-  try {
-    const { getRefreshToken } = require('./auth')
-    const refreshToken = getRefreshToken()
-
-    // 策略1: 使用refresh_token刷新
-    if (refreshToken) {
-      logger.info('尝试使用refresh_token刷新', undefined, 'refreshTokenOnce')
-      try {
-        const res = await new Promise<WechatMiniprogram.RequestSuccessCallbackResult>((resolve, reject) => {
-          wx.request({
-            url: `${API_BASE}/v1/auth/refresh`,
-            method: 'POST',
-            data: { refresh_token: refreshToken },
-            header: { 'Content-Type': 'application/json', 'X-Response-Envelope': '1' },
-            success: resolve,
-            fail: reject,
-            timeout: TOKEN_REFRESH_REQUEST_TIMEOUT
-          })
-        })
-
-        const response = res.data as ApiResponse<RefreshTokenPayload>
-        if (res.statusCode === 200 && response.code === ErrorCode.SUCCESS && response.data?.access_token) {
-          const d = response.data
-          const expiresAt = d.access_token_expires_at ? new Date(d.access_token_expires_at).getTime() : undefined
-          setToken(d.access_token, expiresAt, d.refresh_token)
-          logger.info('refresh_token刷新成功', undefined, 'refreshTokenOnce')
-          return
-        }
-        logger.warn('refresh_token刷新失效，尝试重新登录', response, 'refreshTokenOnce')
-      } catch (e) {
-        logger.warn('refresh_token请求失败，尝试重新登录', e, 'refreshTokenOnce')
-      }
-    }
-
-    // 策略2: 降级到共享的 wx.login 重新登录
-    logger.info('开始wx.login重新登录', undefined, 'refreshTokenOnce')
-    const loginData = await ensureWechatLoginSession()
-    if (loginData?.access_token) {
-      logger.info('wx.login重登录成功', undefined, 'refreshTokenOnce')
-      return
-    }
-
-    throw new AppError({
-      type: ErrorType.AUTH,
-      message: '自动登录失败',
-      userMessage: '登录已过期，请手动重新登录'
-    })
-
-  } catch (err) {
-    logger.error('Token刷新流程彻底失败', err, 'refreshTokenOnce')
-    clearToken()
-    throw err
-  }
-}
+export { ensureValidToken, refreshAuthToken }

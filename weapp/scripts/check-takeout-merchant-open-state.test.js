@@ -49,6 +49,12 @@ const consumerDiscovery = loadTsModule('miniprogram/adapters/consumer-discovery.
 })
 
 const { ConsumerDiscoveryAdapter } = consumerDiscovery
+const consumerMerchantDetail = loadTsModule('miniprogram/adapters/consumer-merchant-detail.ts', {
+  '../utils/image': { getPublicImageUrl: (url) => url || '' },
+  './merchant-labels': merchantLabelStub
+})
+
+const { default: ConsumerMerchantDetailAdapter } = consumerMerchantDetail
 
 function merchantSummary(overrides) {
   return {
@@ -118,6 +124,18 @@ assert.strictEqual(
   'feed lite detail hydration should keep list isOpen=true when detail says open'
 )
 
+const closedMerchantDetailView = ConsumerMerchantDetailAdapter.toViewModel(merchantDetail(false))
+assert.strictEqual(
+  closedMerchantDetailView.ordering_status_label,
+  '暂停接单',
+  'merchant info should not display normal ordering while the merchant is closed'
+)
+assert.strictEqual(
+  closedMerchantDetailView.ordering_status_tone,
+  'closed',
+  'closed merchants should render ordering status with the closed tone'
+)
+
 let capturedComponent = null
 const toastCalls = []
 const navigateCalls = []
@@ -172,8 +190,30 @@ assert(
 
 const feedCardWxml = fs.readFileSync(path.join(rootDir, 'miniprogram/components/merchant-feed-card/index.wxml'), 'utf8')
 assert(
-  feedCardWxml.includes('merchant.isOpen === false') && feedCardWxml.includes('商户休息中'),
-  'feed card should render a closed-state panel instead of active dish actions when merchant is closed'
+  feedCardWxml.includes('merchant.isOpen === false') && feedCardWxml.includes('休息中'),
+  'feed card should keep the closed-state tag when merchant is closed'
+)
+assert(
+  !feedCardWxml.includes('该商户当前暂未营业，可进入店铺查看信息。'),
+  'feed card should not repeat closed-state explanatory copy below the merchant header'
+)
+assert(
+  !feedCardWxml.includes('当前暂停接单') && !feedCardWxml.includes('该商户暂时无法下外卖单'),
+  'feed card should keep paused ordering as a compact tag instead of a repeated explanatory panel'
+)
+assert(
+  feedCardWxml.includes('class="dish-preview-section" wx:if="{{merchant.isOpen !== false && !merchant.isOrderingSuspended}}"'),
+  'feed card should hide dish previews when the merchant is closed or ordering is suspended'
+)
+
+const restaurantDetailWxml = fs.readFileSync(path.join(rootDir, 'miniprogram/pages/takeout/restaurant-detail/index.wxml'), 'utf8')
+assert(
+  restaurantDetailWxml.includes('商家休息中，暂不可下单'),
+  'restaurant detail should use concise closed-state copy'
+)
+assert(
+  !restaurantDetailWxml.includes('该店铺当前支持浏览门店信息与经营内容，暂不支持下单或预订。'),
+  'restaurant detail should not render long closed-state explanatory copy'
 )
 
 const merchantApiSource = fs.readFileSync(merchantApiPath, 'utf8')

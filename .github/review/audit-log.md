@@ -43,3 +43,27 @@ Append one section per formal backend audit or durable review pass.
 - Findings logged: BE-AUDIT-2026-05-19-01; BE-AUDIT-2026-05-19-02
 - Durable docs updated: artifacts/backend-subsidy-authz-task-card-2026-05-19.md; artifacts/backend-subsidy-idempotency-task-card-2026-05-19.md; artifacts/backend-ocr-subsidy-authz-idempotency-review-fix-index-2026-05-19.md; .github/review/open-findings.md
 - Remaining scope: No subsidy code changes were made in this pass. Reopen both deferred task cards when the platform payment chain is re-enabled, then implement the fixes before subsidy traffic resumes.
+
+### 2026-05-29 - Baofu reservation refund and profit-sharing timing audit
+
+- Scope: Focused G3 audit of Baofu reservation and reservation_addon profit-sharing readiness versus still-supported post-payment refund actions after the Baofu refund slice fix.
+- Reviewed paths: artifacts/baofu-refund-slice-fix-plan.md; locallife/db/query/profit_sharing_order.sql; locallife/worker/baofu_payment_recovery_scheduler.go; locallife/worker/task_baofu_profit_sharing.go; locallife/logic/baofu_profit_sharing_trigger.go; locallife/logic/reservation.go; locallife/logic/reservation_dishes.go; locallife/logic/replace_order.go; locallife/logic/payment_fact_application_service.go; locallife/db/sqlc/profit_sharing_order_recovery_test.go
+- Findings logged: BE-AUDIT-2026-05-29-01
+- Durable docs updated: artifacts/baofu-refund-slice-fix-plan.md; .github/review/open-findings.md; .github/review/audit-log.md
+- Remaining scope: No timing fix was implemented in this pass. The business cutoff for reservation refunds, dish modification, replacement-order refunds, and profit sharing still needs to be chosen before changing SQL, scheduler readiness, generated sqlc output, and regression tests.
+
+### 2026-05-29 - Baofu reservation completed-share design
+
+- Scope: Converted the Baofu reservation refund/share timing finding into an implementation-ready design after the business cutoff was chosen.
+- Reviewed paths: artifacts/baofu-refund-slice-fix-plan.md; artifacts/baofu-reservation-completed-share-and-refund-transaction-design-2026-05-29.md; .github/review/open-findings.md
+- Findings logged: No new finding. `BE-AUDIT-2026-05-29-01` remains open until implementation and validation.
+- Durable docs updated: artifacts/baofu-refund-slice-fix-plan.md; artifacts/baofu-reservation-completed-share-and-refund-transaction-design-2026-05-29.md; .github/review/open-findings.md; .github/review/audit-log.md
+- Remaining scope: Implement the design: restrict reservation profit sharing to merchant `completed` + `completed_at`, add completion-triggered enqueue with scheduler fallback, and refactor dish-change/replacement-order refund creation into guarded DB transactions.
+
+### 2026-05-29 - Baofu reservation completed-share implementation closure
+
+- Scope: Implemented and validated `BE-AUDIT-2026-05-29-01` across SQL/sqlc readiness, worker defensive checks, reservation completion trigger, shared Baofu profit-sharing config resolution, and refund transaction composition for dish changes and replacement orders.
+- Reviewed paths: locallife/db/query/profit_sharing_order.sql; locallife/db/sqlc/profit_sharing_order.sql.go; locallife/db/sqlc/profit_sharing_order_recovery_test.go; locallife/db/sqlc/tx_refund.go; locallife/db/sqlc/tx_reservation.go; locallife/db/sqlc/tx_replace_order.go; locallife/db/sqlc/store.go; locallife/logic/baofu_profit_sharing_config.go; locallife/logic/payment_fact_application_service.go; locallife/logic/reservation.go; locallife/logic/reservation_dishes.go; locallife/logic/replace_order.go; locallife/worker/baofu_payment_recovery_scheduler.go
+- Findings logged: No new finding. `BE-AUDIT-2026-05-29-01` marked resolved.
+- Durable docs updated: .github/review/open-findings.md; .github/review/audit-log.md; artifacts/baofu-reservation-completed-share-and-refund-transaction-design-2026-05-29.md
+- Remaining scope: No historical-data migration or remediation was required because the issue was found before affected historical records existed. Post-share refund remains outside this first-version scope.

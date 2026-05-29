@@ -62,7 +62,7 @@ assertContains(detailView, /MerchantOrderFeeBreakdownView/, 'Detail view helper 
 
 assertContains(detailWxml, 'fee_breakdown_view.summary_rows', 'Merchant order detail must render fee breakdown summary rows')
 assertContains(detailWxml, 'fee_breakdown_view.settlement_groups', 'Merchant order detail must render fee breakdown settlement groups')
-for (const label of ['用户实付', '商户部分', '骑手部分', '商户实收', '骑手收入']) {
+for (const label of ['用户实付', '商户账单', '骑手账单', '菜品合计', '商户实收', '骑手实收']) {
   assertContains(`${detailView}\n${sharedFeeBreakdownView}`, label, `Merchant order detail view model must include ${label}`)
 }
 assertContains(listWxml, '实收', 'Merchant order list must render merchant receivable summary')
@@ -148,7 +148,7 @@ if (!Array.isArray(feeBreakdownView.settlement_groups)) {
 }
 
 const settlementGroupLabels = feeBreakdownView.settlement_groups.map((group) => group.title)
-if (settlementGroupLabels.join('|') !== '商户部分|骑手部分') {
+if (settlementGroupLabels.join('|') !== '商户账单|骑手账单') {
   throw new Error(`Merchant order detail fee breakdown must group settlements by participant, got ${settlementGroupLabels.join('|')}`)
 }
 
@@ -157,8 +157,11 @@ const riderGroup = feeBreakdownView.settlement_groups[1]
 if (merchantGroup.total_text !== '¥89.68' || riderGroup.total_text !== '¥7.95') {
   throw new Error('Merchant order detail fee breakdown must summarize merchant and rider totals separately')
 }
-if (!merchantGroup.rows.some((row) => row.label === '平台服务费') || !riderGroup.rows.some((row) => row.label === '骑手通道费')) {
+if (!merchantGroup.rows.some((row) => row.label === '- 平台服务费') || !riderGroup.rows.some((row) => row.label === '- 支付通道费')) {
   throw new Error('Merchant order detail fee breakdown must keep fee rows inside their participant groups')
+}
+if (merchantOrderSources.includes('跑腿费') || merchantOrderSources.includes('配送费') || merchantOrderSources.includes('骑手通道费')) {
+  throw new Error('Merchant order fee breakdown copy must use 代取费 and unified 支付通道费 wording')
 }
 
 console.log('Merchant order fee breakdown contract check passed')

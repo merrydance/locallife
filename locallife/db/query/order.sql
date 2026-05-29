@@ -217,6 +217,8 @@ SET
     replaced_by_order_id = sqlc.arg('replaced_by_order_id'),
     updated_at = now()
 WHERE id = sqlc.arg('id')
+    AND status = 'paid'
+    AND replaced_by_order_id IS NULL
 RETURNING *;
 
 -- name: UpdateOrderToPaid :one

@@ -1185,8 +1185,9 @@ WHERE po.status = 'paid'
       )
       OR (
           po.business_type IN ('reservation', 'reservation_addon')
-          AND r.status IN ('paid', 'confirmed', 'checked_in', 'completed')
-          AND COALESCE(r.paid_at, r.updated_at, po.paid_at, po.created_at) <= $1
+          AND r.status = 'completed'
+          AND r.completed_at IS NOT NULL
+          AND r.completed_at <= $1
       )
   )
   AND NOT EXISTS (
@@ -1198,7 +1199,7 @@ WHERE po.status = 'paid'
       SELECT 1 FROM profit_sharing_orders pso
       WHERE pso.payment_order_id = po.id
   )
-ORDER BY COALESCE(o.completed_at, o.updated_at, r.paid_at, r.updated_at, po.paid_at, po.created_at) ASC, po.id ASC
+ORDER BY COALESCE(o.completed_at, o.updated_at, r.completed_at, po.paid_at, po.created_at) ASC, po.id ASC
 LIMIT $2::int
 `
 
@@ -1342,7 +1343,8 @@ WHERE pso.provider = 'baofu'
       )
       OR (
           po.business_type IN ('reservation', 'reservation_addon')
-          AND r.status IN ('paid', 'confirmed', 'checked_in', 'completed')
+          AND r.status = 'completed'
+          AND r.completed_at IS NOT NULL
       )
   )
   AND NOT EXISTS (
