@@ -67,6 +67,24 @@
   gap: var(--spacer-sm);
 }
 
+.auto-business-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+}
+
+.auto-business-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-sm);
+}
+
+.section-copy {
+  flex: 1;
+  min-width: 0;
+}
+
 .section-actions {
   flex-shrink: 0;
   display: flex;
@@ -110,7 +128,6 @@
   }
 
   .section-actions {
-    align-self: stretch;
-    justify-content: space-between;
+    justify-content: flex-end;
   }
 }

@@ -42,21 +42,21 @@
       </view>
 
       <view class="section-panel">
-        <view class="section-top">
+        <view class="auto-business-header">
           <view class="section-copy">
-            <text class="section-title">自动营业</text>
+            <view class="auto-business-title-row">
+              <text class="section-title">自动营业</text>
+              <t-switch value="{{autoOpenByBusinessHours}}" size="medium" bind:change="onAutoOpenSwitchChange" />
+            </view>
             <text class="section-note">开启后，系统会按营业时间自动切换营业与打烊；关闭后完全依赖手动开店和打烊。</text>
           </view>
-          <view class="section-actions">
-            <t-button
-              size="small"
-              theme="light"
-              icon="copy"
-              disabled="{{saving || initialLoading}}"
-              bind:tap="onSyncFirstBusinessDay"
-            >同步</t-button>
-            <t-switch value="{{autoOpenByBusinessHours}}" size="medium" bind:change="onAutoOpenSwitchChange" />
-          </view>
+          <t-button
+            size="small"
+            theme="light"
+            icon="copy"
+            disabled="{{saving || initialLoading}}"
+            bind:tap="onSyncFirstBusinessDay"
+          >同步</t-button>
         </view>
       </view>
 
