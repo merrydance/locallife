@@ -1,6 +1,7 @@
 package algorithm
 
 import (
+	"errors"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -12,6 +13,14 @@ const (
 	ClaimTypeDamage        = "damage"
 	ClaimTypeTimeout       = "timeout"
 	ClaimTypeFoodSafety    = "food-safety"
+)
+
+const (
+	ClaimPayoutMinimumAmountFen = 30
+)
+
+var (
+	ErrClaimPayoutBelowMinimum = errors.New("claim payout amount below minimum")
 )
 
 // Approval types

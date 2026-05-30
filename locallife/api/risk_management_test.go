@@ -347,6 +347,40 @@ func TestSubmitClaimAPI_ClaimFinalAdjudicatorFailsClosedWhenStatsUnavailable(t *
 	require.Equal(t, http.StatusInternalServerError, recorder.Code)
 }
 
+func TestSubmitClaimAPI_RejectsAmountBelowMerchantTransferMinimum(t *testing.T) {
+	user, _ := randomUser(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetOrder(gomock.Any(), gomock.Any()).Times(0)
+
+	server := newTestServer(t, store)
+	body, err := json.Marshal(SubmitClaimRequest{
+		OrderID:     3001,
+		ClaimType:   "damage",
+		ClaimAmount: 29,
+		ClaimReason: "餐品破损，需要平台介入处理",
+	})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/claims", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, ErrClaimAmountBelowPayoutMinimum.Code, resp.Code)
+	require.Equal(t, ErrClaimAmountBelowPayoutMinimum.Message, resp.Error)
+}
+
 func TestSubmitClaimAPI_PayoutDispatchUsesTxActionWithoutBehaviorReload(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)

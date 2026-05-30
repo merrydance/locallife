@@ -41,16 +41,19 @@ Active provider/capability: WeChat Pay direct merchant, merchant transfer user-c
 
 Official source set:
 
+- Product introduction and real-name amount boundary: `https://pay.wechatpay.cn/doc/v3/merchant/4012711988`
 - Create transfer: `https://pay.wechatpay.cn/doc/v3/merchant/4012716434`
 - JSAPI user confirmation: `https://pay.wechatpay.cn/doc/v3/merchant/4012716430`
 - Query by merchant bill no: `https://pay.wechatpay.cn/doc/v3/merchant/4012716437`
 - Query by WeChat bill no: `https://pay.wechatpay.cn/doc/v3/merchant/4012716457`
 - Transfer notification: `https://pay.wechatpay.cn/doc/v3/merchant/4012712115`
+- Merchant transfer FAQ: `https://pay.wechatpay.cn/doc/v3/merchant/4013778940`
 
 Important boundary:
 
 - Customer-entered payout real name and WeChat's user confirmation page are different steps.
 - `users.full_name` is the LocalLife source for WeChat `user_name` when claim payout creates a merchant transfer. The WeChat client encrypts `user_name` before sending it to `/v3/fund-app/mch-transfer/transfer-bills`.
+- Because LocalLife claim payout always sends `user_name` for WeChat real-name matching, claim payout amount must be at least 30 fen. WeChat allows optional `user_name` for transfer amounts from 0.30 yuan inclusive to 2,000 yuan exclusive, requires it at 2,000 yuan and above, and does not support `user_name` below 0.30 yuan.
 - `package_info` is returned by WeChat only when the transfer bill is in `WAIT_USER_CONFIRM`; it is passed to the Mini Program so the client can call the WeChat confirmation component.
 - `requestMerchantTransfer:ok` means the WeChat confirmation page was displayed and control returned to the Mini Program. It is not payout success. LocalLife must wait for WeChat query or notification state `SUCCESS` before treating the claim payout as completed and before continuing recovery-side effects.
 
@@ -62,8 +65,8 @@ Field matrix:
 | Create transfer | `out_bill_no` | string | required | `claimPayoutOutBillNo(actionID)` | Local idempotency key. Never change this merely to retry an unclear provider result. |
 | Create transfer | `transfer_scene_id` | string | required | `DirectMerchantTransferSceneEnterpriseCompensation` | Enterprise compensation scene. Current LocalLife claim payout uses `1011`. |
 | Create transfer | `openid` | string | required | `users.wechat_openid` | Receiving customer identity under the Mini Program app id. |
-| Create transfer | `user_name` | encrypted string | conditional; required by LocalLife for claim payout | `users.full_name` -> `EncryptSensitiveData` | Payout real name supplied by the customer for WeChat real-name matching. It is not the WeChat confirmation UI. |
-| Create transfer | `transfer_amount` | integer fen | required | payout action `amount` | Compensation amount in cents/fen. |
+| Create transfer | `user_name` | encrypted string | conditional by WeChat amount; required by LocalLife for claim payout | `users.full_name` -> `EncryptSensitiveData` | Payout real name supplied by the customer for WeChat real-name matching. It is not the WeChat confirmation UI. Not supported by WeChat when `transfer_amount` is below 30 fen; required by WeChat at 200,000 fen and above. |
+| Create transfer | `transfer_amount` | integer fen | required | payout action `amount` | Compensation amount in cents/fen. LocalLife claim payout minimum is 30 fen because claim payout sends `user_name`. |
 | Create transfer | `transfer_remark` | string | required | payout action `remark` or default compensation reason | User-visible/recorded transfer reason. |
 | Create transfer | `notify_url` | string URL | optional request field; required by LocalLife config | `WECHAT_PAY_MERCHANT_TRANSFER_NOTIFY_URL` | Callback destination for terminal transfer state. |
 | Create transfer | `user_recv_perception` | enum string | optional | `DirectMerchantTransferUserRecvPerceptionMerchantCompensation` | User-facing receipt perception, currently merchant compensation. |

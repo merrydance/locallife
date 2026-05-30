@@ -161,7 +161,7 @@ func applyClaimRuleDecisionOverride(decision *algorithm.Decision, ruleDecision r
 type SubmitClaimRequest struct {
 	OrderID           int64  `json:"order_id" binding:"required,min=1"`
 	ClaimType         string `json:"claim_type" binding:"required,oneof=foreign-object damage timeout"`
-	ClaimAmount       int64  `json:"claim_amount" binding:"required,min=1,max=100000000"` // 最高100万分(1万元)
+	ClaimAmount       int64  `json:"claim_amount" binding:"required,min=1,max=100000000" minimum:"30" maximum:"100000000"` // 最低30分，最高100万分(1万元)
 	ClaimReason       string `json:"claim_reason" binding:"required,min=5,max=1000"`
 	DeviceFingerprint string `json:"device_fingerprint,omitempty" binding:"omitempty,max=256"`
 }
@@ -328,6 +328,10 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 	var req SubmitClaimRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if req.ClaimAmount < algorithm.ClaimPayoutMinimumAmountFen {
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrClaimAmountBelowPayoutMinimum))
 		return
 	}
 
@@ -581,6 +585,10 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		req.ClaimType,
 	)
 	if err != nil {
+		if errors.Is(err, algorithm.ErrClaimPayoutBelowMinimum) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrClaimAmountBelowPayoutMinimum))
+			return
+		}
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}

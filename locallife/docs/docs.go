@@ -31970,10 +31970,10 @@ const docTemplate = `{
             ],
             "properties": {
                 "claim_amount": {
-                    "description": "最高100万分(1万元)",
+                    "description": "最低30分，最高100万分(1万元)",
                     "type": "integer",
                     "maximum": 100000000,
-                    "minimum": 1
+                    "minimum": 30
                 },
                 "claim_reason": {
                     "type": "string",

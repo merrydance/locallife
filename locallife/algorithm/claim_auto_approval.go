@@ -113,6 +113,9 @@ func (caa *ClaimAutoApproval) EvaluateClaim(
 	if compensationAmount > eligibleAmount {
 		compensationAmount = eligibleAmount
 	}
+	if compensationAmount > 0 && compensationAmount < ClaimPayoutMinimumAmountFen {
+		return nil, ErrClaimPayoutBelowMinimum
+	}
 	compensationSource := CompensationSourceMerchant
 	reason := "销售侧异常索赔默认由商户承担责任"
 

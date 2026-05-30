@@ -23,6 +23,19 @@ func TestDeliveryPickupMerchantNotReadyErrorCodeIsUnique(t *testing.T) {
 	require.Equal(t, "ErrDeliveryPickupMerchantNotReady", matches[0].Name)
 }
 
+func TestClaimAmountBelowPayoutMinimumErrorCodeIsUnique(t *testing.T) {
+	apiErrors := collectAPIErrorsFromSource(t)
+	matches := make([]apiErrorDefinition, 0, 1)
+	for _, apiErr := range apiErrors {
+		if apiErr.Code == ErrClaimAmountBelowPayoutMinimum.Code {
+			matches = append(matches, apiErr)
+		}
+	}
+
+	require.Len(t, matches, 1)
+	require.Equal(t, "ErrClaimAmountBelowPayoutMinimum", matches[0].Name)
+}
+
 type apiErrorDefinition struct {
 	Name string
 	Code int

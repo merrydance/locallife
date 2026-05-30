@@ -2,6 +2,7 @@ package algorithm
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -194,6 +195,27 @@ func TestEvaluateClaim_CapsRequestedAmountByEligibleOrderAmount(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, decision)
 	require.Equal(t, int64(5000), decision.Amount)
+}
+
+func TestEvaluateClaim_RejectsAmountBelowPayoutMinimum(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	wsHub := NewMockWebSocketHub()
+	caa := NewClaimAutoApproval(store, wsHub)
+
+	decision, err := caa.EvaluateClaim(
+		context.Background(),
+		1,
+		100,
+		testCompensationContext(ClaimPayoutMinimumAmountFen-1, 5000, 300),
+		ClaimTypeDamage,
+	)
+
+	require.Error(t, err)
+	require.Nil(t, decision)
+	require.True(t, errors.Is(err, ErrClaimPayoutBelowMinimum))
 }
 
 // ========================================
