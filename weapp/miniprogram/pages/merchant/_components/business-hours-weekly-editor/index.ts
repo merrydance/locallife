@@ -1,7 +1,9 @@
 type TimeField = 'open_time' | 'close_time'
 
+type PickerValueTuple = [string, string]
+
 interface PickerConfirmDetail {
-  value?: string | null
+  value?: Array<string | number> | null
 }
 
 interface TimeEditContext {
@@ -14,6 +16,29 @@ function normalizeTimeValue(value: string | undefined): string {
   const matched = (value || '').match(/^(\d{1,2}):(\d{1,2})$/)
   if (!matched) return '09:00'
   return `${matched[1].padStart(2, '0')}:${matched[2].padStart(2, '0')}`
+}
+
+function buildTwoDigit(value: number): string {
+  return String(value).padStart(2, '0')
+}
+
+function buildHourOptions() {
+  return Array.from({ length: 24 }, (_, index) => {
+    const value = buildTwoDigit(index)
+    return { label: value, value }
+  })
+}
+
+function buildMinuteOptions() {
+  return Array.from({ length: 60 }, (_, index) => {
+    const value = buildTwoDigit(index)
+    return { label: value, value }
+  })
+}
+
+function splitTimeValue(value: string | undefined): PickerValueTuple {
+  const normalized = normalizeTimeValue(value)
+  return [normalized.slice(0, 2), normalized.slice(3, 5)]
 }
 
 Component({
@@ -29,9 +54,17 @@ Component({
   },
 
   data: {
+    hourOptions: buildHourOptions(),
+    minuteOptions: buildMinuteOptions(),
+    pickerPopupProps: {
+      preventScrollThrough: true,
+      overlayProps: {
+        preventScrollThrough: true
+      }
+    },
     pickerVisible: false,
     pickerTitle: '选择时间',
-    pickerValue: '09:00',
+    pickerValue: ['09', '00'] as PickerValueTuple,
     timeEditContext: null as TimeEditContext | null
   },
 
@@ -80,7 +113,7 @@ Component({
       this.setData({
         pickerVisible: true,
         pickerTitle: field === 'open_time' ? '选择开始时间' : '选择结束时间',
-        pickerValue: normalizeTimeValue(value),
+        pickerValue: splitTimeValue(value),
         timeEditContext: {
           day,
           slotIndex,
@@ -98,12 +131,13 @@ Component({
       this.triggerEvent('pickervisibilitychange', { visible: false })
     },
 
-    onPickerClose() {
+    onPickerVisibleChange(e: WechatMiniprogram.CustomEvent<{ visible?: boolean }>) {
+      const visible = !!e.detail?.visible
       this.setData({
-        pickerVisible: false,
-        timeEditContext: null
+        pickerVisible: visible,
+        timeEditContext: visible ? this.data.timeEditContext : null
       })
-      this.triggerEvent('pickervisibilitychange', { visible: false })
+      this.triggerEvent('pickervisibilitychange', { visible })
     },
 
     onPickerConfirm(e: WechatMiniprogram.CustomEvent<PickerConfirmDetail>) {
@@ -113,13 +147,15 @@ Component({
         return
       }
 
-      const value = normalizeTimeValue(e.detail?.value || undefined)
+      const values = Array.isArray(e.detail?.value) ? e.detail.value : []
+      const hour = String(values[0] || '09').padStart(2, '0')
+      const minute = String(values[1] || '00').padStart(2, '0')
 
       this.triggerEvent('changetime', {
         day: context.day,
         slotIndex: context.slotIndex,
         field: context.field,
-        value
+        value: `${hour}:${minute}`
       })
 
       this.setData({

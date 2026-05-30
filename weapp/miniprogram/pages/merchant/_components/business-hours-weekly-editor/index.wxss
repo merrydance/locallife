@@ -97,3 +97,8 @@
   font-weight: 600;
   color: var(--td-text-color-secondary);
 }
+
+.business-time-picker {
+  --td-picker-toolbar-height: 116rpx;
+  --td-picker-item-font-size: 34rpx;
+}

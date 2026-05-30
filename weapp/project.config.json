@@ -203,10 +203,6 @@
         "type": "folder"
       },
       {
-        "value": "miniprogram_npm/tdesign-miniprogram/config-provider",
-        "type": "folder"
-      },
-      {
         "value": "miniprogram_npm/tdesign-miniprogram/count-down",
         "type": "folder"
       },
@@ -248,10 +244,6 @@
       },
       {
         "value": "miniprogram_npm/tdesign-miniprogram/indexes-anchor",
-        "type": "folder"
-      },
-      {
-        "value": "miniprogram_npm/tdesign-miniprogram/locale",
         "type": "folder"
       },
       {

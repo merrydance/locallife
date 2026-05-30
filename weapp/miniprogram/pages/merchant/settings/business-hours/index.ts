@@ -110,6 +110,10 @@ function cloneWeeklyHours(hours: WeeklyBusinessHour[]) {
   }))
 }
 
+function cloneSlotsWithNewKeys(slots: BusinessHourSlot[], dayOfWeek: number) {
+  return slots.map((slot, index) => createSlot(slot.open_time, slot.close_time, `${dayOfWeek}-sync-${index}-${Date.now()}`))
+}
+
 function hasWeeklyHoursChanged(current: WeeklyBusinessHour[], initial: WeeklyBusinessHour[]) {
   return JSON.stringify(current) !== JSON.stringify(initial)
 }
@@ -348,9 +352,6 @@ Page({
     if (typeof value !== 'string' || !value) return
 
     target.slots[slotIndex][field] = value
-    if (!target.is_closed) {
-      target.slots = sortSlots(target.slots)
-    }
 
     this.setData({
       actionNoticeMessage: '',
@@ -383,7 +384,6 @@ Page({
     } else {
       target.slots.push(createSlot())
     }
-    target.slots = sortSlots(target.slots)
     this.setData({
       actionNoticeMessage: '',
       refreshErrorMessage: '',
@@ -432,6 +432,44 @@ Page({
         this.data.initialAutoOpenByBusinessHours
       )
     })
+  },
+
+  onSyncFirstBusinessDay() {
+    if (this.data.saving || this.data.initialLoading) return
+
+    const sourceDay = this.data.weeklyHours.find((day) => !day.is_closed && day.slots.length > 0)
+    if (!sourceDay) {
+      wx.showToast({ title: '请先配置一个营业日', icon: 'none' })
+      return
+    }
+
+    const weeklyHours = this.data.weeklyHours.map((day) => {
+      if (day.day_of_week === sourceDay.day_of_week) {
+        return {
+          ...day,
+          slots: day.slots.map((slot) => ({ ...slot }))
+        }
+      }
+
+      return {
+        ...day,
+        is_closed: sourceDay.is_closed,
+        slots: cloneSlotsWithNewKeys(sourceDay.slots, day.day_of_week)
+      }
+    })
+
+    this.setData({
+      actionNoticeMessage: '',
+      refreshErrorMessage: '',
+      weeklyHours,
+      hasChanges: hasBusinessHoursPageChanges(
+        weeklyHours,
+        this.data.initialWeeklyHours,
+        this.data.autoOpenByBusinessHours,
+        this.data.initialAutoOpenByBusinessHours
+      )
+    })
+    wx.showToast({ title: `已同步${sourceDay.day_name}到其他日期`, icon: 'none' })
   },
 
   onTimePickerVisibilityChange(e: WechatMiniprogram.CustomEvent<{ visible?: boolean }>) {

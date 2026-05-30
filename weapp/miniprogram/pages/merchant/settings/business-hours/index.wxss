@@ -1,8 +1,13 @@
 .page-container {
-  min-height: 100vh;
+  height: 100vh;
   background: var(--td-bg-color-page);
+  overflow: hidden;
 }
 
+.business-hours-scroll {
+  height: 100%;
+  box-sizing: border-box;
+}
 
 .state-block {
   min-height: 60vh;
@@ -62,6 +67,13 @@
   gap: var(--spacer-sm);
 }
 
+.section-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-sm);
+}
+
 .section-title,
 .special-date {
   font-size: var(--font-size-base);
@@ -95,5 +107,10 @@
   .special-row {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .section-actions {
+    align-self: stretch;
+    justify-content: space-between;
   }
 }

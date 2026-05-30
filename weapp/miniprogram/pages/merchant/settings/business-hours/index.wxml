@@ -24,7 +24,13 @@
   </view>
 
   <block wx:else>
-    <view class="page-content">
+    <scroll-view
+      class="page-content business-hours-scroll"
+      scroll-y="{{!timePickerVisible}}"
+      enhanced="{{true}}"
+      show-scrollbar="{{false}}"
+      bounces="{{false}}"
+    >
       <view wx:if="{{actionNoticeMessage}}" class="notice-banner">
         <t-notice-bar theme="success" visible="{{true}}" content="{{actionNoticeMessage}}" />
       </view>
@@ -41,7 +47,16 @@
             <text class="section-title">自动营业</text>
             <text class="section-note">开启后，系统会按营业时间自动切换营业与打烊；关闭后完全依赖手动开店和打烊。</text>
           </view>
-          <t-switch value="{{autoOpenByBusinessHours}}" size="medium" bind:change="onAutoOpenSwitchChange" />
+          <view class="section-actions">
+            <t-button
+              size="small"
+              theme="light"
+              icon="copy"
+              disabled="{{saving || initialLoading}}"
+              bind:tap="onSyncFirstBusinessDay"
+            >同步</t-button>
+            <t-switch value="{{autoOpenByBusinessHours}}" size="medium" bind:change="onAutoOpenSwitchChange" />
+          </view>
         </view>
       </view>
 
@@ -71,7 +86,7 @@
       <view class="form-actions">
         <t-button theme="primary" loading="{{saving}}" disabled="{{saving || initialLoading || timePickerVisible}}" bind:tap="onSave">保存营业时间</t-button>
       </view>
-    </view>
+    </scroll-view>
   </block>
   </block>
 </view>
