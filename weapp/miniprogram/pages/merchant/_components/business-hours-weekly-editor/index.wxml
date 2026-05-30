@@ -71,17 +71,14 @@
     </view>
   </view>
 
-  <t-picker
+  <t-date-time-picker
     visible="{{pickerVisible}}"
-    use-popup="{{true}}"
-    popup-props="{{pickerPopupProps}}"
+    mode="time"
+    format="HH:mm"
     title="{{pickerTitle}}"
     value="{{pickerValue}}"
     bind:confirm="onPickerConfirm"
     bind:cancel="onPickerCancel"
-    bind:visible-change="onPickerVisibleChange"
-  >
-    <t-picker-item options="{{hourOptions}}" />
-    <t-picker-item options="{{minuteOptions}}" />
-  </t-picker>
+    bind:close="onPickerClose"
+  />
 </view>

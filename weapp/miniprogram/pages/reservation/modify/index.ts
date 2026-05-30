@@ -42,7 +42,7 @@ interface OrphanDishView {
 
 function buildAdjustmentPaymentOrder(
     reservationId: number,
-    responsePayment: { payment_order_id: number; amount: number; pay_params?: PaymentOrderResponse['pay_params'] }
+    responsePayment: { payment_order_id: number, amount: number, pay_params?: PaymentOrderResponse['pay_params'] }
 ): PaymentOrderResponse {
     return {
         id: responsePayment.payment_order_id,
