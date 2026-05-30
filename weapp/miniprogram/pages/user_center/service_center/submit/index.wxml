@@ -21,9 +21,23 @@
       </view>
     </view>
 
-    <t-button theme="primary" block bindtap="onBackToCenter" t-class="result-action">
+    <view wx:if="{{canConfirmContinueResult}}" class="result-actions">
+      <t-button theme="primary" block loading="{{resultActionSubmitting}}" disabled="{{resultActionSubmitting}}" bindtap="onConfirmContinueFromResult">
+        继续申请赔付
+      </t-button>
+      <t-button theme="danger" variant="outline" block disabled="{{resultActionSubmitting}}" bindtap="onWithdrawFromResult">
+        撤回本次索赔
+      </t-button>
+      <t-button theme="default" variant="text" block disabled="{{resultActionSubmitting}}" bindtap="onViewClaimDetail">
+        查看工单详情
+      </t-button>
+    </view>
+
+    <t-button wx:else theme="primary" block bindtap="onBackToCenter" t-class="result-action">
       返回客服中心
     </t-button>
+
+    <text wx:if="{{resultActionError}}" class="result-action-error">{{resultActionError}}</text>
   </view>
 
   <!-- 提交表单 -->

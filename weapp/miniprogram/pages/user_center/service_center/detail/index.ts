@@ -2,6 +2,10 @@ import { claimManagementService, getUserClaimPresentation } from '../_main_share
 import type { UserClaimResponse } from '../_main_shared/api/appeals-customer-service'
 import { logger } from '../../../../utils/logger'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
+import {
+  isClaimPayoutRealNameRequiredError
+} from '../_utils/claim-payout-real-name'
+import { ensureClaimPayoutRealName } from '../_utils/claim-payout-real-name-workflow'
 
 /** 索赔类型 → 中文显示（涵盖所有 claim_type 值） */
 const CLAIM_TYPE_DISPLAY: Record<string, string> = {
@@ -132,18 +136,34 @@ Page({
     })
   },
 
-  async onConfirmContinue() {
+  async onConfirmContinue(): Promise<void> {
     if (this.data.actionSubmitting || !this.data.claim?.canConfirmContinue) return
+    const realNameReady = await ensureClaimPayoutRealName('ClaimDetail')
+    if (!realNameReady) return
+
     this.setData({ actionSubmitting: true, actionError: '' })
-    try {
-      const claim = await claimManagementService.confirmContinueClaim(this.data.claimId)
-      this.applyClaimDetail(claim, { actionSubmitting: false })
-    } catch (err) {
-      logger.error('[ClaimDetail] confirm continue failed', err)
-      this.setData({
-        actionSubmitting: false,
-        actionError: getErrorUserMessage(err, '当前工单暂不能继续处理，请刷新后重试')
-      })
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const claim = await claimManagementService.confirmContinueClaim(this.data.claimId)
+        this.applyClaimDetail(claim, { actionSubmitting: false })
+        return
+      } catch (err) {
+        logger.error('[ClaimDetail] confirm continue failed', err)
+        if (attempt === 0 && isClaimPayoutRealNameRequiredError(err)) {
+          this.setData({ actionSubmitting: false })
+          const retried = await ensureClaimPayoutRealName('ClaimDetail')
+          if (retried) {
+            this.setData({ actionSubmitting: true, actionError: '' })
+            continue
+          }
+          return
+        }
+        this.setData({
+          actionSubmitting: false,
+          actionError: getErrorUserMessage(err, '当前工单暂不能继续处理，请刷新后重试')
+        })
+        return
+      }
     }
   },
 

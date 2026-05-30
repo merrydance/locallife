@@ -147,6 +147,12 @@ func ExecuteClaimPayoutAction(ctx context.Context, store db.Store, distributor T
 		_ = markClaimPayoutActionFailure(ctx, store, action.ID, detail, true)
 		return fmt.Errorf("payout user %d missing full name", detail.UserID)
 	}
+	if !logic.ClaimPayoutRealNameReady(user.FullName) {
+		detail.LastError = fmt.Sprintf("payout user %d missing payout real name", detail.UserID)
+		detail.TerminalFailure = true
+		_ = markClaimPayoutActionFailure(ctx, store, action.ID, detail, true)
+		return fmt.Errorf("payout user %d missing payout real name", detail.UserID)
+	}
 
 	transferReq := buildClaimPayoutTransferRequest(action.ID, detail, user, transferClient)
 	detail.OutBillNo = transferReq.OutBillNo

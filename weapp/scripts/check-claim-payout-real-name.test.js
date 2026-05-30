@@ -1,0 +1,32 @@
+const assert = require('assert')
+const fs = require('fs')
+const path = require('path')
+
+const ROOT = path.resolve(__dirname, '..')
+const helperSource = fs.readFileSync(path.join(ROOT, 'miniprogram/pages/user_center/service_center/_utils/claim-payout-real-name.ts'), 'utf8')
+const workflowSource = fs.readFileSync(path.join(ROOT, 'miniprogram/pages/user_center/service_center/_utils/claim-payout-real-name-workflow.ts'), 'utf8')
+const submitSource = fs.readFileSync(path.join(ROOT, 'miniprogram/pages/user_center/service_center/submit/index.ts'), 'utf8')
+const submitWxml = fs.readFileSync(path.join(ROOT, 'miniprogram/pages/user_center/service_center/submit/index.wxml'), 'utf8')
+const detailSource = fs.readFileSync(path.join(ROOT, 'miniprogram/pages/user_center/service_center/detail/index.ts'), 'utf8')
+const detailWxml = fs.readFileSync(path.join(ROOT, 'miniprogram/pages/user_center/service_center/detail/index.wxml'), 'utf8')
+
+assert(helperSource.includes('CLAIM_PAYOUT_REAL_NAME_REQUIRED_CODE = 40978'), 'real-name helper must track backend API error code')
+assert(helperSource.includes("name === DEFAULT_WECHAT_USER_NAME"), 'real-name helper must reject the default WeChat placeholder')
+assert(workflowSource.includes('updateUserProfile({ full_name: realName })'), 'real-name workflow must persist payout real name before continuing')
+
+const submitFunctionStart = submitSource.indexOf('async onSubmit()')
+const submitFunctionEnd = submitSource.indexOf('onBackToCenter()', submitFunctionStart)
+const submitFunctionSource = submitSource.slice(submitFunctionStart, submitFunctionEnd)
+assert(!submitFunctionSource.includes('ensureClaimPayoutRealName'), 'submit page must not ask for payout real name before the user chooses to continue compensation')
+assert(submitSource.includes('customer_action_required === true') && submitSource.includes("customer_action === 'confirm_continue'"), 'submit page must derive confirm-continue action from backend response')
+assert(submitSource.includes('confirmContinueClaim(this.data.submitResult.claim_id)'), 'submit result action must call confirm-continue with returned claim id')
+assert(submitSource.includes('withdrawClaim(this.data.submitResult.claim_id)'), 'submit result action must allow withdrawing the returned claim')
+assert(submitSource.includes("ensureClaimPayoutRealName('SubmitClaim')"), 'submit result confirm action must ensure payout real name')
+
+assert(submitWxml.includes('继续申请赔付'), 'submit result must expose continue compensation action')
+assert(submitWxml.includes('撤回本次索赔'), 'submit result must expose withdrawal action')
+assert(submitWxml.includes('查看工单详情'), 'submit result must expose detail fallback action')
+
+assert(detailSource.includes('ensureClaimPayoutRealName'), 'detail page must ensure payout real name before confirm-continue')
+assert(detailSource.includes('isClaimPayoutRealNameRequiredError'), 'detail page must recover from backend real-name requirement')
+assert(detailWxml.includes('继续申请赔付'), 'detail action copy must match the compensation action')

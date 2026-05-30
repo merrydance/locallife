@@ -17,7 +17,7 @@
       <text class="status-desc">{{claim.statusSummary}}</text>
       <text wx:if="{{claim.reason}}" class="status-desc">{{claim.reason}}</text>
       <view wx:if="{{claim.canConfirmContinue || claim.canWithdraw}}" class="claim-actions">
-        <t-button wx:if="{{claim.canConfirmContinue}}" theme="primary" size="medium" shape="round" loading="{{actionSubmitting}}" disabled="{{actionSubmitting}}" bindtap="onConfirmContinue">继续处理</t-button>
+        <t-button wx:if="{{claim.canConfirmContinue}}" theme="primary" size="medium" shape="round" loading="{{actionSubmitting}}" disabled="{{actionSubmitting}}" bindtap="onConfirmContinue">继续申请赔付</t-button>
         <t-button wx:if="{{claim.canWithdraw}}" theme="danger" size="medium" shape="round" variant="outline" disabled="{{actionSubmitting}}" bindtap="onWithdraw">撤回</t-button>
       </view>
       <text wx:if="{{actionError}}" class="action-error">{{actionError}}</text>

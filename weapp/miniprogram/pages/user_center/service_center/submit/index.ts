@@ -12,6 +12,10 @@ import {
   type ClaimOrderOption,
   type SelectedClaimOrder
 } from '../_utils/user-claim-submit-view'
+import {
+  isClaimPayoutRealNameRequiredError
+} from '../_utils/claim-payout-real-name'
+import { ensureClaimPayoutRealName } from '../_utils/claim-payout-real-name-workflow'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 const SUPPORTED_USER_CLAIM_TYPES: UserClaimType[] = ['foreign-object', 'damage', 'timeout']
@@ -39,6 +43,10 @@ function getEventOrderId(event: WechatMiniprogram.BaseEvent): number {
   return Number.isFinite(id) ? id : 0
 }
 
+function claimRequiresCustomerConfirmation(result: Pick<SubmitClaimResponse, 'customer_action_required' | 'customer_action'> | null): boolean {
+  return result?.customer_action_required === true && result.customer_action === 'confirm_continue'
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -63,7 +71,10 @@ Page({
     resultTheme: 'default' as 'default' | 'success' | 'warning' | 'error',
     resultTitle: '',
     resultSummary: '',
-    approvedAmountDisplay: ''
+    approvedAmountDisplay: '',
+    resultActionSubmitting: false,
+    resultActionError: '',
+    canConfirmContinueResult: false
   },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight: number }>) {
@@ -242,6 +253,8 @@ Page({
           result.approved_amount !== null && result.approved_amount !== undefined
             ? formatClaimAmount(result.approved_amount)
             : '',
+        canConfirmContinueResult: claimRequiresCustomerConfirmation(result),
+        resultActionError: '',
         submitting: false
       })
     } catch (err: unknown) {
@@ -254,5 +267,93 @@ Page({
 
   onBackToCenter() {
     wx.navigateBack()
+  },
+
+  onViewClaimDetail() {
+    const claimId = this.data.submitResult?.claim_id
+    if (!claimId) return
+    wx.redirectTo({
+      url: `/pages/user_center/service_center/detail/index?id=${claimId}`,
+      fail: () => {
+        wx.navigateTo({ url: `/pages/user_center/service_center/detail/index?id=${claimId}` })
+      }
+    })
+  },
+
+  async onConfirmContinueFromResult(): Promise<void> {
+    if (this.data.resultActionSubmitting || !this.data.submitResult?.claim_id || !this.data.canConfirmContinueResult) return
+    const realNameReady = await ensureClaimPayoutRealName('SubmitClaim')
+    if (!realNameReady) return
+
+    this.setData({ resultActionSubmitting: true, resultActionError: '' })
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const claim = await claimManagementService.confirmContinueClaim(this.data.submitResult.claim_id)
+        wx.redirectTo({
+          url: `/pages/user_center/service_center/detail/index?id=${claim.id}`,
+          fail: () => {
+            this.setData({
+              resultActionSubmitting: false,
+              canConfirmContinueResult: false,
+              resultTitle: '已进入赔付处理',
+              resultSummary: '平台已受理本次赔付，请在工单详情查看进度。'
+            })
+          }
+        })
+        return
+      } catch (err) {
+        logger.error('[SubmitClaim] confirm continue from result failed', err)
+        if (attempt === 0 && isClaimPayoutRealNameRequiredError(err)) {
+          this.setData({ resultActionSubmitting: false })
+          const retried = await ensureClaimPayoutRealName('SubmitClaim')
+          if (retried) {
+            this.setData({ resultActionSubmitting: true, resultActionError: '' })
+            continue
+          }
+          return
+        }
+        this.setData({
+          resultActionSubmitting: false,
+          resultActionError: getErrorUserMessage(err, '当前工单暂不能继续申请赔付，请稍后重试')
+        })
+        return
+      }
+    }
+  },
+
+  async onWithdrawFromResult() {
+    if (this.data.resultActionSubmitting || !this.data.submitResult?.claim_id || !this.data.canConfirmContinueResult) return
+    wx.showModal({
+      title: '撤回索赔',
+      content: '撤回后本次索赔不会继续赔付处理。',
+      confirmText: '撤回',
+      confirmColor: '#d32f2f',
+      success: (res) => {
+        if (res.confirm) {
+          void this.submitWithdrawFromResult()
+        }
+      }
+    })
+  },
+
+  async submitWithdrawFromResult() {
+    if (!this.data.submitResult?.claim_id) return
+    this.setData({ resultActionSubmitting: true, resultActionError: '' })
+    try {
+      await claimManagementService.withdrawClaim(this.data.submitResult.claim_id)
+      this.setData({
+        resultActionSubmitting: false,
+        canConfirmContinueResult: false,
+        resultTheme: 'warning',
+        resultTitle: '已撤回',
+        resultSummary: '本次索赔已撤回，系统不会继续赔付处理。'
+      })
+    } catch (err) {
+      logger.error('[SubmitClaim] withdraw from result failed', err)
+      this.setData({
+        resultActionSubmitting: false,
+        resultActionError: getErrorUserMessage(err, '当前工单暂不能撤回，请稍后重试')
+      })
+    }
   }
 })

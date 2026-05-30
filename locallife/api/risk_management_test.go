@@ -1696,6 +1696,7 @@ func TestConfirmContinueClaimAPI_TriggersDeferredCompensation(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	store.EXPECT().GetClaim(gomock.Any(), claim.ID).Return(claim, nil)
+	store.EXPECT().GetUser(gomock.Any(), user.ID).Return(db.User{ID: user.ID, FullName: "张三"}, nil)
 	store.EXPECT().CreateClaimCompensationTx(gomock.Any(), db.CreateClaimCompensationTxParams{ClaimID: claim.ID}).Return(db.CreateClaimCompensationTxResult{
 		Claim: processingClaim,
 		PayoutAction: &db.BehaviorAction{
@@ -1785,6 +1786,7 @@ func TestConfirmContinueClaimAPI_ReturnsProcessingWhenEnqueueFailsAfterPersisten
 
 	store := mockdb.NewMockStore(ctrl)
 	store.EXPECT().GetClaim(gomock.Any(), claim.ID).Return(claim, nil)
+	store.EXPECT().GetUser(gomock.Any(), user.ID).Return(db.User{ID: user.ID, FullName: "张三"}, nil)
 	store.EXPECT().CreateClaimCompensationTx(gomock.Any(), db.CreateClaimCompensationTxParams{ClaimID: claim.ID}).Return(db.CreateClaimCompensationTxResult{
 		Claim: processingClaim,
 		PayoutAction: &db.BehaviorAction{
@@ -1827,6 +1829,47 @@ func TestConfirmContinueClaimAPI_ReturnsProcessingWhenEnqueueFailsAfterPersisten
 	require.Equal(t, int64(1500), *resp.ApprovedAmount)
 }
 
+func TestConfirmContinueClaimAPI_RejectsDefaultWechatUserNameBeforeCompensation(t *testing.T) {
+	user, _ := randomUser(t)
+	user.FullName = "微信用户"
+	now := time.Now()
+	claim := db.Claim{
+		ID:                 9042,
+		OrderID:            30042,
+		UserID:             user.ID,
+		ClaimType:          "damage",
+		Description:        "餐品洒漏",
+		ClaimAmount:        1800,
+		ApprovedAmount:     pgtype.Int8{Int64: 1500, Valid: true},
+		Status:             db.ClaimStatusWaitingCustomerConfirmation,
+		ApprovalType:       pgtype.Text{String: "auto", Valid: true},
+		AutoApprovalReason: pgtype.Text{String: "平台已完成自动裁定，等待用户确认继续", Valid: true},
+		CreatedAt:          now.Add(-30 * time.Minute),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetClaim(gomock.Any(), claim.ID).Return(claim, nil)
+	store.EXPECT().GetUser(gomock.Any(), user.ID).Return(user, nil)
+	store.EXPECT().CreateClaimCompensationTx(gomock.Any(), gomock.Any()).Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPost, "/v1/claims/9042/confirm-continue", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusConflict, recorder.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, ErrClaimPayoutRealNameRequired.Message, resp.Error)
+}
+
 func TestConfirmContinueClaimAPI_IsIdempotentWhenAlreadyProcessing(t *testing.T) {
 	user, _ := randomUser(t)
 	now := time.Now()
@@ -1849,6 +1892,7 @@ func TestConfirmContinueClaimAPI_IsIdempotentWhenAlreadyProcessing(t *testing.T)
 
 	store := mockdb.NewMockStore(ctrl)
 	store.EXPECT().GetClaim(gomock.Any(), claim.ID).Return(claim, nil)
+	store.EXPECT().GetUser(gomock.Any(), user.ID).Return(db.User{ID: user.ID, FullName: "张三"}, nil)
 	store.EXPECT().CreateClaimCompensationTx(gomock.Any(), db.CreateClaimCompensationTxParams{ClaimID: claim.ID}).Return(db.CreateClaimCompensationTxResult{
 		Claim: claim,
 		PayoutAction: &db.BehaviorAction{

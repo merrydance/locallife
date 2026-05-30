@@ -251,6 +251,7 @@ var (
 	ErrAccountAlreadyRegistered       = apierr(40970, "结算账户开户已完成，无需重复提交；如需变更结算账户，请使用结算账户修改入口")
 	ErrClaimCannotBeWithdrawn         = apierr(40971, "claim cannot be withdrawn after compensation has started or when no adjudicated compensation is pending")
 	ErrClaimCannotContinue            = apierr(40972, "claim cannot continue to compensation in its current state")
+	ErrClaimPayoutRealNameRequired    = apierr(40978, "请填写与微信实名一致的姓名后继续申请赔付")
 	ErrGroupApplicationReviewConflict = apierr(40975, "该集团申请状态已变化，请刷新后查看最新审核结果")
 	ErrGroupJoinRequestReviewConflict = apierr(40976, "该加入申请状态已变化，请刷新后查看最新审核结果")
 	ErrMerchantAlreadyJoinedGroup     = apierr(40977, "该门店已加入其他集团，请刷新后查看最新归属")

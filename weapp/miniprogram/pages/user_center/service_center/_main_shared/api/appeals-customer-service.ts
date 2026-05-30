@@ -215,6 +215,8 @@ export interface SubmitClaimResponse {
     payout_status?: 'processing' | 'paid'
     approved_amount?: number
     compensation_source?: string    // merchant | rider | platform
+    customer_action_required?: boolean
+    customer_action?: string
     reason: string
     payout_eta?: string             // 预计赔付时间
     warning?: string                // 警告信息

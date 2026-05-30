@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/rules"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/worker"
@@ -1754,6 +1755,16 @@ func (server *Server) ConfirmContinueClaim(ctx *gin.Context) {
 
 	if claim.Status != db.ClaimStatusApproved && !claimAwaitingCustomerConfirmation(claim) {
 		ctx.JSON(http.StatusConflict, errorResponse(ErrClaimCannotContinue))
+		return
+	}
+
+	user, err := server.store.GetUser(ctx, authPayload.UserID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get user for claim payout real name: %w", err)))
+		return
+	}
+	if !logic.ClaimPayoutRealNameReady(user.FullName) {
+		ctx.JSON(http.StatusConflict, errorResponse(ErrClaimPayoutRealNameRequired))
 		return
 	}
 

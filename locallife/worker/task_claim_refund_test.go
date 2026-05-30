@@ -285,6 +285,56 @@ func TestProcessTaskClaimPayout_FailureMarksActionFailed(t *testing.T) {
 	require.Contains(t, err.Error(), "create claim payout transfer")
 }
 
+func TestProcessTaskClaimPayout_DefaultWechatUserNameMarksTerminalFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	transferClient := mockwechat.NewMockTransferClientInterface(ctrl)
+	processor := NewTestTaskProcessor(store, nil, nil, nil)
+	processor.SetTransferClient(transferClient)
+
+	detailBytes, err := json.Marshal(claimPayoutActionDetail{
+		ClaimID:    11,
+		UserID:     22,
+		Amount:     3300,
+		SourceType: "platform",
+		Remark:     "platform payout",
+	})
+	require.NoError(t, err)
+
+	action := db.BehaviorAction{
+		ID:           99,
+		DecisionID:   77,
+		ActionType:   "payout",
+		TargetEntity: "user",
+		Status:       "created",
+		Detail:       detailBytes,
+	}
+
+	store.EXPECT().GetBehaviorAction(gomock.Any(), action.ID).Return(action, nil)
+	expectClaimPayoutClaimLookup(store, 11, db.ClaimStatusApproved)
+	store.EXPECT().GetUser(gomock.Any(), int64(22)).Return(db.User{ID: 22, WechatOpenid: "openid-22", FullName: "微信用户"}, nil)
+	store.EXPECT().UpdateBehaviorActionExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, arg db.UpdateBehaviorActionExecutionParams) error {
+			require.Equal(t, action.ID, arg.ID)
+			require.Equal(t, "failed", arg.Status)
+			var persisted claimPayoutActionDetail
+			require.NoError(t, json.Unmarshal(arg.Detail, &persisted))
+			require.Contains(t, persisted.LastError, "missing payout real name")
+			require.True(t, persisted.TerminalFailure)
+			return nil
+		},
+	)
+
+	payloadBytes, err := json.Marshal(ClaimPayoutPayload{ActionID: action.ID})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskClaimPayout(context.Background(), asynq.NewTask(TaskClaimPayout, payloadBytes))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing payout real name")
+}
+
 func TestProcessTaskClaimPayout_WechatCreateTransferErrorsPersistRetryableDetail(t *testing.T) {
 	testCases := []struct {
 		name         string
