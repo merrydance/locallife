@@ -261,6 +261,8 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
 		RecoveryAmount:     recoveryAmount,
 		RecoveryDueAt:      recoveryDueAt,
 		DecisionSnapshot:   decisionSnapshot,
+		ScoreBreakdown:     decision.ScoreBreakdown,
+		FactSnapshot:       decision.FactSnapshot,
 		SkipActionCreation: true,
 	})
 	if err != nil {

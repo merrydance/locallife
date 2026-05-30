@@ -35,11 +35,12 @@ HAVING SUM(total_orders) > 0
 ORDER BY abnormal_rate DESC
 LIMIT sqlc.arg('limit');
 
--- name: BackfillAbnormalStatsDaily :exec
-WITH cleared AS (
-  DELETE FROM abnormal_stats_daily
-  WHERE stat_date >= $1::date AND stat_date < $2::date
-)
+-- name: ClearAbnormalStatsDailyForBackfill :exec
+DELETE FROM abnormal_stats_daily
+WHERE stat_date >= sqlc.arg('start_at')::date
+  AND stat_date < sqlc.arg('end_at')::date;
+
+-- name: InsertBackfillAbnormalStatsDaily :exec
 INSERT INTO abnormal_stats_daily (
     stat_date,
     entity_type,
@@ -62,8 +63,8 @@ FROM (
            0 AS abnormal_claims
     FROM orders o
     WHERE o.status = 'completed'
-      AND COALESCE(o.completed_at, o.created_at) >= $1
-      AND COALESCE(o.completed_at, o.created_at) < $2
+      AND COALESCE(o.completed_at, o.created_at) >= sqlc.arg('start_at')
+      AND COALESCE(o.completed_at, o.created_at) < sqlc.arg('end_at')
     GROUP BY 1,2,3
 
     UNION ALL
@@ -76,8 +77,8 @@ FROM (
            0 AS abnormal_claims
     FROM orders o
     WHERE o.status = 'completed'
-      AND COALESCE(o.completed_at, o.created_at) >= $1
-      AND COALESCE(o.completed_at, o.created_at) < $2
+      AND COALESCE(o.completed_at, o.created_at) >= sqlc.arg('start_at')
+      AND COALESCE(o.completed_at, o.created_at) < sqlc.arg('end_at')
     GROUP BY 1,2,3
 
     UNION ALL
@@ -91,8 +92,8 @@ FROM (
     FROM deliveries d
     WHERE d.status = 'completed'
       AND d.rider_id IS NOT NULL
-      AND COALESCE(d.completed_at, d.delivered_at, d.created_at) >= $1
-      AND COALESCE(d.completed_at, d.delivered_at, d.created_at) < $2
+      AND COALESCE(d.completed_at, d.delivered_at, d.created_at) >= sqlc.arg('start_at')
+      AND COALESCE(d.completed_at, d.delivered_at, d.created_at) < sqlc.arg('end_at')
     GROUP BY 1,2,3
 
     UNION ALL
@@ -105,8 +106,8 @@ FROM (
            COUNT(*) AS abnormal_claims
     FROM claims c
     WHERE c.status IN ('auto-approved', 'approved')
-      AND c.created_at >= $1
-      AND c.created_at < $2
+      AND c.created_at >= sqlc.arg('start_at')
+      AND c.created_at < sqlc.arg('end_at')
     GROUP BY 1,2,3
 
     UNION ALL
@@ -120,8 +121,8 @@ FROM (
     FROM claims c
     JOIN orders o ON o.id = c.order_id
     WHERE c.status IN ('auto-approved', 'approved')
-      AND c.created_at >= $1
-      AND c.created_at < $2
+      AND c.created_at >= sqlc.arg('start_at')
+      AND c.created_at < sqlc.arg('end_at')
     GROUP BY 1,2,3
 
     UNION ALL
@@ -137,8 +138,13 @@ FROM (
     JOIN deliveries d ON d.order_id = o.id
     WHERE c.status IN ('auto-approved', 'approved')
       AND d.rider_id IS NOT NULL
-      AND c.created_at >= $1
-      AND c.created_at < $2
+      AND c.created_at >= sqlc.arg('start_at')
+      AND c.created_at < sqlc.arg('end_at')
     GROUP BY 1,2,3
 ) AS summary
-GROUP BY stat_date, entity_type, entity_id;
+GROUP BY stat_date, entity_type, entity_id
+ON CONFLICT (stat_date, entity_type, entity_id)
+DO UPDATE SET
+    total_orders = EXCLUDED.total_orders,
+    abnormal_claims = EXCLUDED.abnormal_claims,
+    updated_at = NOW();

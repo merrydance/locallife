@@ -81,6 +81,8 @@ type Decision struct {
 	Warning            string          `json:"warning,omitempty"`
 	ShouldWarn         bool            `json:"should_warn,omitempty"`
 	LookbackData       *LookbackResult `json:"lookback_data,omitempty"`
+	ScoreBreakdown     []byte          `json:"-"`
+	FactSnapshot       []byte          `json:"-"`
 }
 
 func DecisionApprovalType(decisionType string) string {

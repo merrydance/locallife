@@ -196,6 +196,8 @@ type CreateClaimWithBehaviorTxParams struct {
 	RecoveryAmount     int64
 	RecoveryDueAt      *time.Time
 	DecisionSnapshot   []byte
+	ScoreBreakdown     []byte
+	FactSnapshot       []byte
 	SkipActionCreation bool
 }
 
@@ -280,17 +282,22 @@ func (store *SQLStore) CreateClaimWithBehaviorTx(ctx context.Context, arg Create
 			return err
 		}
 
-		decisionResolution = promoteBehaviorUserRestricted(
-			arg.Status,
-			arg.ApprovedAmount,
-			decisionResolution,
-			associationPayload,
-			userScoreSummary,
-		)
+		if len(arg.ScoreBreakdown) == 0 && len(arg.FactSnapshot) == 0 {
+			decisionResolution = promoteBehaviorUserRestricted(
+				arg.Status,
+				arg.ApprovedAmount,
+				decisionResolution,
+				associationPayload,
+				userScoreSummary,
+			)
+		}
 		if err := validateClaimCompensationTargets(decisionResolution, riderID); err != nil {
 			return err
 		}
-		scoreBreakdownJSON := []byte(`{"version":"claims_rules_v1"}`)
+		scoreBreakdownJSON := arg.ScoreBreakdown
+		if len(scoreBreakdownJSON) == 0 {
+			scoreBreakdownJSON = []byte(`{"version":"claims_rules_v1"}`)
+		}
 
 		claimParams := CreateClaimParams{
 			OrderID:            arg.OrderID,
@@ -320,24 +327,27 @@ func (store *SQLStore) CreateClaimWithBehaviorTx(ctx context.Context, arg Create
 		if err != nil {
 			return err
 		}
-		factSnapshot, err := json.Marshal(behaviorDecisionFactSnapshot{
-			OrderID:              arg.OrderID,
-			ClaimType:            arg.ClaimType,
-			ClaimAmount:          arg.ClaimAmount,
-			ResponsibleParty:     decisionResolution.ResponsibleParty,
-			CompensationSource:   decisionResolution.CompensationSource,
-			DecisionMode:         decisionResolution.DecisionMode,
-			ResponsibilityDomain: decisionResolution.ResponsibilityDomain,
-			PayoutMode:           decisionResolution.PayoutMode,
-			RecoveryTarget:       decisionResolution.RecoveryTarget,
-			RecoveryAmount:       decisionResolution.RecoveryAmount,
-			RecoveryDueAt:        decisionResolution.RecoveryDueAt,
-			ApprovedAmount:       approvedAmountValue(arg.ApprovedAmount),
-			Associations:         associationPayload,
-			ResponsibilityFacts:  responsibilityFacts,
-		})
-		if err != nil {
-			return err
+		factSnapshot := arg.FactSnapshot
+		if len(factSnapshot) == 0 {
+			factSnapshot, err = json.Marshal(behaviorDecisionFactSnapshot{
+				OrderID:              arg.OrderID,
+				ClaimType:            arg.ClaimType,
+				ClaimAmount:          arg.ClaimAmount,
+				ResponsibleParty:     decisionResolution.ResponsibleParty,
+				CompensationSource:   decisionResolution.CompensationSource,
+				DecisionMode:         decisionResolution.DecisionMode,
+				ResponsibilityDomain: decisionResolution.ResponsibilityDomain,
+				PayoutMode:           decisionResolution.PayoutMode,
+				RecoveryTarget:       decisionResolution.RecoveryTarget,
+				RecoveryAmount:       decisionResolution.RecoveryAmount,
+				RecoveryDueAt:        decisionResolution.RecoveryDueAt,
+				ApprovedAmount:       approvedAmountValue(arg.ApprovedAmount),
+				Associations:         associationPayload,
+				ResponsibilityFacts:  responsibilityFacts,
+			})
+			if err != nil {
+				return err
+			}
 		}
 
 		decision, err := q.CreateBehaviorDecision(ctx, CreateBehaviorDecisionParams{

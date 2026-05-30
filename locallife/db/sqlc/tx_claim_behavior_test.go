@@ -418,6 +418,53 @@ func TestCreateClaimWithBehaviorTx_MerchantRecoveryWritesV2Artifacts(t *testing.
 	require.Zero(t, recovery.ID)
 }
 
+func TestCreateClaimWithBehaviorTx_PersistsExternalFinalAdjudicatorPayloads(t *testing.T) {
+	ctx := context.Background()
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+	order := createTakeoutOrderForClaimBehavior(t, user.ID, merchant.ID, nil)
+	riderUser := createRandomUser(t)
+	rider := createRandomRiderWithUser(t, riderUser.ID)
+	createAssignedDeliveryForClaimBehavior(t, order.ID, rider.ID)
+	seedUserMaliciousHistoryForClaimBehavior(t, user.ID, 1)
+
+	approvedAmount := int64(3600)
+	scoreBreakdown := []byte(`{"version":"claim_final_adjudicator_v1","final_decision_mode":"rider_recovery","scores":{"rider_liability":{"score":70}}}`)
+	factSnapshot := []byte(`{"order_id":123,"claim_type":"damage","base_responsible_party":"rider","reason_codes":["base_type_damage_rider"]}`)
+
+	result, err := testStore.CreateClaimWithBehaviorTx(ctx, CreateClaimWithBehaviorTxParams{
+		OrderID:            order.ID,
+		UserID:             user.ID,
+		ClaimType:          "damage",
+		Description:        "餐品撒漏",
+		ClaimAmount:        approvedAmount,
+		Status:             ClaimStatusWaitingCustomerConfirmation,
+		ApprovalType:       "auto",
+		ApprovedAmount:     &approvedAmount,
+		AutoApprovalReason: "餐损由取餐骑手承担基线责任",
+		DecisionVersion:    "claim_final_adjudicator_v1",
+		ReasonCodes:        []string{"base_type_damage_rider"},
+		ResponsibleParty:   "rider",
+		CompensationSource: "rider",
+		TraceSummary:       "餐损由取餐骑手承担基线责任",
+		ScoreBreakdown:     scoreBreakdown,
+		FactSnapshot:       factSnapshot,
+		CreateRecovery:     true,
+		RecoveryTarget:     "rider",
+		RecoveryAmount:     approvedAmount,
+		SkipActionCreation: true,
+	})
+	require.NoError(t, err)
+
+	decision, err := testStore.GetBehaviorDecision(ctx, result.BehaviorDecision.ID)
+	require.NoError(t, err)
+	require.Equal(t, BehaviorDecisionModeRiderRecovery, decision.DecisionMode.String)
+	require.Equal(t, "rider", decision.ResponsibleParty)
+	require.JSONEq(t, string(scoreBreakdown), string(decision.ScoreBreakdown))
+	require.JSONEq(t, string(factSnapshot), string(decision.FactSnapshot))
+}
+
 func TestCreateClaimWithBehaviorTx_MerchantRecoveryPersistsDeterministicResponsibility(t *testing.T) {
 	ctx := context.Background()
 	owner := createRandomUser(t)

@@ -11,11 +11,60 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const backfillAbnormalStatsDaily = `-- name: BackfillAbnormalStatsDaily :exec
-WITH cleared AS (
-  DELETE FROM abnormal_stats_daily
-  WHERE stat_date >= $1::date AND stat_date < $2::date
-)
+const clearAbnormalStatsDailyForBackfill = `-- name: ClearAbnormalStatsDailyForBackfill :exec
+DELETE FROM abnormal_stats_daily
+WHERE stat_date >= $1::date
+  AND stat_date < $2::date
+`
+
+type ClearAbnormalStatsDailyForBackfillParams struct {
+	StartAt pgtype.Date `json:"start_at"`
+	EndAt   pgtype.Date `json:"end_at"`
+}
+
+func (q *Queries) ClearAbnormalStatsDailyForBackfill(ctx context.Context, arg ClearAbnormalStatsDailyForBackfillParams) error {
+	_, err := q.db.Exec(ctx, clearAbnormalStatsDailyForBackfill, arg.StartAt, arg.EndAt)
+	return err
+}
+
+const getAbnormalStatsSummary = `-- name: GetAbnormalStatsSummary :one
+
+SELECT
+    COALESCE(SUM(total_orders), 0)::INT AS total_orders,
+    COALESCE(SUM(abnormal_claims), 0)::INT AS abnormal_claims
+FROM abnormal_stats_daily
+WHERE entity_type = $1
+  AND entity_id = $2
+  AND stat_date >= $3
+  AND stat_date <= $4
+`
+
+type GetAbnormalStatsSummaryParams struct {
+	EntityType string      `json:"entity_type"`
+	EntityID   int64       `json:"entity_id"`
+	StatDate   pgtype.Date `json:"stat_date"`
+	StatDate_2 pgtype.Date `json:"stat_date_2"`
+}
+
+type GetAbnormalStatsSummaryRow struct {
+	TotalOrders    int32 `json:"total_orders"`
+	AbnormalClaims int32 `json:"abnormal_claims"`
+}
+
+// Phase3: abnormal stats aggregation queries
+func (q *Queries) GetAbnormalStatsSummary(ctx context.Context, arg GetAbnormalStatsSummaryParams) (GetAbnormalStatsSummaryRow, error) {
+	row := q.db.QueryRow(ctx, getAbnormalStatsSummary,
+		arg.EntityType,
+		arg.EntityID,
+		arg.StatDate,
+		arg.StatDate_2,
+	)
+	var i GetAbnormalStatsSummaryRow
+	err := row.Scan(&i.TotalOrders, &i.AbnormalClaims)
+	return i, err
+}
+
+const insertBackfillAbnormalStatsDaily = `-- name: InsertBackfillAbnormalStatsDaily :exec
 INSERT INTO abnormal_stats_daily (
     stat_date,
     entity_type,
@@ -118,53 +167,21 @@ FROM (
     GROUP BY 1,2,3
 ) AS summary
 GROUP BY stat_date, entity_type, entity_id
+ON CONFLICT (stat_date, entity_type, entity_id)
+DO UPDATE SET
+    total_orders = EXCLUDED.total_orders,
+    abnormal_claims = EXCLUDED.abnormal_claims,
+    updated_at = NOW()
 `
 
-type BackfillAbnormalStatsDailyParams struct {
-	CompletedAt   pgtype.Timestamptz `json:"completed_at"`
-	CompletedAt_2 pgtype.Timestamptz `json:"completed_at_2"`
+type InsertBackfillAbnormalStatsDailyParams struct {
+	StartAt pgtype.Timestamptz `json:"start_at"`
+	EndAt   pgtype.Timestamptz `json:"end_at"`
 }
 
-func (q *Queries) BackfillAbnormalStatsDaily(ctx context.Context, arg BackfillAbnormalStatsDailyParams) error {
-	_, err := q.db.Exec(ctx, backfillAbnormalStatsDaily, arg.CompletedAt, arg.CompletedAt_2)
+func (q *Queries) InsertBackfillAbnormalStatsDaily(ctx context.Context, arg InsertBackfillAbnormalStatsDailyParams) error {
+	_, err := q.db.Exec(ctx, insertBackfillAbnormalStatsDaily, arg.StartAt, arg.EndAt)
 	return err
-}
-
-const getAbnormalStatsSummary = `-- name: GetAbnormalStatsSummary :one
-
-SELECT
-    COALESCE(SUM(total_orders), 0)::INT AS total_orders,
-    COALESCE(SUM(abnormal_claims), 0)::INT AS abnormal_claims
-FROM abnormal_stats_daily
-WHERE entity_type = $1
-  AND entity_id = $2
-  AND stat_date >= $3
-  AND stat_date <= $4
-`
-
-type GetAbnormalStatsSummaryParams struct {
-	EntityType string      `json:"entity_type"`
-	EntityID   int64       `json:"entity_id"`
-	StatDate   pgtype.Date `json:"stat_date"`
-	StatDate_2 pgtype.Date `json:"stat_date_2"`
-}
-
-type GetAbnormalStatsSummaryRow struct {
-	TotalOrders    int32 `json:"total_orders"`
-	AbnormalClaims int32 `json:"abnormal_claims"`
-}
-
-// Phase3: abnormal stats aggregation queries
-func (q *Queries) GetAbnormalStatsSummary(ctx context.Context, arg GetAbnormalStatsSummaryParams) (GetAbnormalStatsSummaryRow, error) {
-	row := q.db.QueryRow(ctx, getAbnormalStatsSummary,
-		arg.EntityType,
-		arg.EntityID,
-		arg.StatDate,
-		arg.StatDate_2,
-	)
-	var i GetAbnormalStatsSummaryRow
-	err := row.Scan(&i.TotalOrders, &i.AbnormalClaims)
-	return i, err
 }
 
 const listAbnormalStatsAlerts = `-- name: ListAbnormalStatsAlerts :many

@@ -184,6 +184,169 @@ func TestSubmitClaimAPI_ReturnsUserFacingLifecycleAndWritesAudit(t *testing.T) {
 	require.Equal(t, true, entries[0].Metadata["auto_adjudicated"])
 }
 
+func TestSubmitClaimAPI_ClaimFinalAdjudicatorRestrictsHighRiskUser(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	merchant.RegionID = 130528
+	order := randomOrder(user.ID, merchant.ID)
+	order.Status = OrderStatusCompleted
+	order.TotalAmount = 5600
+
+	approvedAmount := int64(1200)
+	claim := db.Claim{
+		ID:                 851,
+		OrderID:            order.ID,
+		UserID:             user.ID,
+		ClaimType:          "damage",
+		Description:        "餐品撒漏，需要平台介入处理",
+		ClaimAmount:        approvedAmount,
+		ApprovedAmount:     pgtype.Int8{Int64: approvedAmount, Valid: true},
+		Status:             db.ClaimStatusWaitingCustomerConfirmation,
+		ApprovalType:       pgtype.Text{String: "auto", Valid: true},
+		AutoApprovalReason: pgtype.Text{String: "您的账号因索赔行为异常已被限制服务；若确认继续索赔，平台将先行赔付并停止后续服务。", Valid: true},
+		CreatedAt:          time.Now(),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
+	store.EXPECT().ListUserClaimsInPeriod(gomock.Any(), gomock.Any()).Return([]db.Claim{}, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(merchant, nil)
+	store.EXPECT().GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
+		ConfigKey: "claim_final_adjudicator",
+		ScopeType: "global",
+		ScopeID:   pgtype.Int8{Valid: false},
+	}).Return(db.PlatformConfig{
+		ConfigKey:   "claim_final_adjudicator",
+		ConfigValue: []byte(`{"enabled":true,"gray_regions":[130528],"thresholds":{"min_user_orders_30d":5,"min_user_claims_30d":3,"user_claim_rate_30d":0.5}}`),
+		ScopeType:   "global",
+	}, nil)
+	store.EXPECT().GetAbnormalStatsSummary(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ any, arg db.GetAbnormalStatsSummaryParams) (db.GetAbnormalStatsSummaryRow, error) {
+			if arg.EntityType == "user" {
+				return db.GetAbnormalStatsSummaryRow{TotalOrders: 8, AbnormalClaims: 1}, nil
+			}
+			return db.GetAbnormalStatsSummaryRow{}, nil
+		},
+	).Times(4)
+	store.EXPECT().GetBehaviorEffectSummary(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ any, arg db.GetBehaviorEffectSummaryParams) (db.GetBehaviorEffectSummaryRow, error) {
+			if arg.EntityType == "user" {
+				return db.GetBehaviorEffectSummaryRow{MaliciousConfirmedClaims: 1}, nil
+			}
+			return db.GetBehaviorEffectSummaryRow{}, nil
+		},
+	).Times(2)
+	store.EXPECT().GetDeliveryByOrderID(gomock.Any(), order.ID).Return(db.Delivery{}, db.ErrRecordNotFound)
+	store.EXPECT().GetDevicesByUserID(gomock.Any(), user.ID).Return([]db.UserDevice{}, nil)
+	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ any, arg db.CreateClaimWithBehaviorTxParams) (db.CreateClaimWithBehaviorTxResult, error) {
+			require.Equal(t, "user", arg.ResponsibleParty)
+			require.Equal(t, "platform", arg.CompensationSource)
+			require.Equal(t, "auto", arg.ApprovalType)
+			require.False(t, arg.CreateRecovery)
+			require.NotEmpty(t, arg.ScoreBreakdown)
+			require.NotEmpty(t, arg.FactSnapshot)
+			require.Contains(t, string(arg.ScoreBreakdown), "claim_final_adjudicator_v1")
+			require.Contains(t, string(arg.ScoreBreakdown), "historical_malicious_confirmed")
+			require.Contains(t, string(arg.FactSnapshot), "base_responsible_party")
+			require.Contains(t, string(arg.FactSnapshot), "total_orders_30d")
+			require.Contains(t, string(arg.FactSnapshot), "malicious_confirmed_claims")
+			return db.CreateClaimWithBehaviorTxResult{
+				Claim: claim,
+				BehaviorDecision: db.BehaviorDecision{
+					ID:                 951,
+					OrderID:            pgtype.Int8{Int64: order.ID, Valid: true},
+					DecisionMode:       pgtype.Text{String: db.BehaviorDecisionModeUserRestricted, Valid: true},
+					CompensationSource: "platform",
+					TraceSummary:       pgtype.Text{String: "您的账号因索赔行为异常已被限制服务；若确认继续索赔，平台将先行赔付并停止后续服务。", Valid: true},
+				},
+			}, nil
+		},
+	)
+
+	server := newTestServer(t, store)
+	server.config.ClaimFinalAdjudicatorEnabled = true
+	server.SetTransferClientForTest(mockwechat.NewMockTransferClientInterface(ctrl))
+
+	body, err := json.Marshal(SubmitClaimRequest{
+		OrderID:     order.ID,
+		ClaimType:   "damage",
+		ClaimAmount: approvedAmount,
+		ClaimReason: "餐品撒漏，需要平台介入处理",
+	})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/claims", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp SubmitClaimResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, "platform", resp.CompensationSource)
+	require.NotNil(t, resp.Warning)
+	require.Contains(t, *resp.Warning, "索赔行为异常")
+}
+
+func TestSubmitClaimAPI_ClaimFinalAdjudicatorFailsClosedWhenStatsUnavailable(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	merchant.RegionID = 130528
+	order := randomOrder(user.ID, merchant.ID)
+	order.Status = OrderStatusCompleted
+	order.TotalAmount = 5600
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().GetActiveBehaviorBlocklist(gomock.Any(), gomock.Any()).Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
+	store.EXPECT().ListUserClaimsInPeriod(gomock.Any(), gomock.Any()).Return([]db.Claim{}, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), order.MerchantID).Return(merchant, nil)
+	store.EXPECT().GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
+		ConfigKey: "claim_final_adjudicator",
+		ScopeType: "global",
+		ScopeID:   pgtype.Int8{Valid: false},
+	}).Return(db.PlatformConfig{
+		ConfigKey:   "claim_final_adjudicator",
+		ConfigValue: []byte(`{"enabled":true,"gray_regions":[130528]}`),
+		ScopeType:   "global",
+	}, nil)
+	store.EXPECT().GetAbnormalStatsSummary(gomock.Any(), gomock.Any()).Return(db.GetAbnormalStatsSummaryRow{}, errors.New("stats unavailable")).Times(1)
+	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).Times(0)
+
+	server := newTestServer(t, store)
+	server.config.ClaimFinalAdjudicatorEnabled = true
+
+	body, err := json.Marshal(SubmitClaimRequest{
+		OrderID:     order.ID,
+		ClaimType:   "damage",
+		ClaimAmount: 1200,
+		ClaimReason: "餐品撒漏，需要平台介入处理",
+	})
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/claims", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+}
+
 func TestSubmitClaimAPI_PayoutDispatchUsesTxActionWithoutBehaviorReload(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)

@@ -136,6 +136,10 @@ type Config struct {
 	// Rules engine toggle
 	RulesEngineEnabled bool `mapstructure:"RULES_ENGINE_ENABLED"`
 
+	// Claim final adjudicator rollout toggle. Region scope is still controlled
+	// by platform_configs so rollout can be changed without restarting.
+	ClaimFinalAdjudicatorEnabled bool `mapstructure:"CLAIM_FINAL_ADJUDICATOR_ENABLED"`
+
 	// Geofence configs for delivery events
 	GeofenceRadiusMeters       int  `mapstructure:"GEOFENCE_RADIUS_M"`
 	GeofenceDwellMinSeconds    int  `mapstructure:"GEOFENCE_DWELL_MIN_SECONDS"`

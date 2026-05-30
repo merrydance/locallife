@@ -62,7 +62,6 @@ type Querier interface {
 	AutoCloseMerchants(ctx context.Context) ([]int64, error)
 	// 系统自动完成（外卖）：1h 未手动完成且无索赔时触发，记录 auto_user_delivered_at
 	AutoCompleteTakeoutOrder(ctx context.Context, id int64) (Order, error)
-	BackfillAbnormalStatsDaily(ctx context.Context, arg BackfillAbnormalStatsDailyParams) error
 	BatchCreateDailyInventory(ctx context.Context, arg []BatchCreateDailyInventoryParams) (int64, error)
 	BatchCreateOrderItems(ctx context.Context, arg []BatchCreateOrderItemsParams) (int64, error)
 	BatchCreateRiderLocations(ctx context.Context, arg []BatchCreateRiderLocationsParams) (int64, error)
@@ -96,6 +95,7 @@ type Querier interface {
 	ClaimRiderSuspensionIfAvailable(ctx context.Context, arg ClaimRiderSuspensionIfAvailableParams) (int64, error)
 	// P1-026: 清理长期未更新的购物车及其商品（ON DELETE CASCADE）
 	CleanupOldCarts(ctx context.Context, updatedAt time.Time) error
+	ClearAbnormalStatsDailyForBackfill(ctx context.Context, arg ClearAbnormalStatsDailyForBackfillParams) error
 	ClearBrowseHistory(ctx context.Context, userID int64) error
 	ClearCart(ctx context.Context, cartID int64) error
 	ClearGroupApplicationBusinessLicense(ctx context.Context, id int64) (MerchantGroupApplication, error)
@@ -1178,6 +1178,7 @@ type Querier interface {
 	IncrementUserPlatformPayCount(ctx context.Context, arg IncrementUserPlatformPayCountParams) error
 	IncrementVoucherClaimedQuantity(ctx context.Context, id int64) (Voucher, error)
 	IncrementVoucherUsedQuantity(ctx context.Context, id int64) (Voucher, error)
+	InsertBackfillAbnormalStatsDaily(ctx context.Context, arg InsertBackfillAbnormalStatsDailyParams) error
 	IsDishFavorited(ctx context.Context, arg IsDishFavoritedParams) (bool, error)
 	IsMerchantFavorited(ctx context.Context, arg IsMerchantFavoritedParams) (bool, error)
 	LinkFoodSafetyIncidentsToCase(ctx context.Context, arg LinkFoodSafetyIncidentsToCaseParams) (int64, error)

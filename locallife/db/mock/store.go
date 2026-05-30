@@ -940,6 +940,20 @@ func (mr *MockStoreMockRecorder) CleanupOldCarts(ctx, updatedAt any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CleanupOldCarts", reflect.TypeOf((*MockStore)(nil).CleanupOldCarts), ctx, updatedAt)
 }
 
+// ClearAbnormalStatsDailyForBackfill mocks base method.
+func (m *MockStore) ClearAbnormalStatsDailyForBackfill(ctx context.Context, arg db.ClearAbnormalStatsDailyForBackfillParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearAbnormalStatsDailyForBackfill", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ClearAbnormalStatsDailyForBackfill indicates an expected call of ClearAbnormalStatsDailyForBackfill.
+func (mr *MockStoreMockRecorder) ClearAbnormalStatsDailyForBackfill(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearAbnormalStatsDailyForBackfill", reflect.TypeOf((*MockStore)(nil).ClearAbnormalStatsDailyForBackfill), ctx, arg)
+}
+
 // ClearBrowseHistory mocks base method.
 func (m *MockStore) ClearBrowseHistory(ctx context.Context, userID int64) error {
 	m.ctrl.T.Helper()
@@ -12426,6 +12440,20 @@ func (m *MockStore) IncrementVoucherUsedQuantity(ctx context.Context, id int64) 
 func (mr *MockStoreMockRecorder) IncrementVoucherUsedQuantity(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncrementVoucherUsedQuantity", reflect.TypeOf((*MockStore)(nil).IncrementVoucherUsedQuantity), ctx, id)
+}
+
+// InsertBackfillAbnormalStatsDaily mocks base method.
+func (m *MockStore) InsertBackfillAbnormalStatsDaily(ctx context.Context, arg db.InsertBackfillAbnormalStatsDailyParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InsertBackfillAbnormalStatsDaily", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// InsertBackfillAbnormalStatsDaily indicates an expected call of InsertBackfillAbnormalStatsDaily.
+func (mr *MockStoreMockRecorder) InsertBackfillAbnormalStatsDaily(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertBackfillAbnormalStatsDaily", reflect.TypeOf((*MockStore)(nil).InsertBackfillAbnormalStatsDaily), ctx, arg)
 }
 
 // IsDishFavorited mocks base method.

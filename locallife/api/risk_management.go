@@ -534,6 +534,25 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		}
 	}
 
+	claimFinalAdjudicatorEnabled := false
+	claimFinalAdjudicatorConfig := algorithm.DefaultClaimFinalAdjudicatorConfig()
+	claimFinalRegionID := int64(0)
+	if server.config.ClaimFinalAdjudicatorEnabled {
+		if merchant, err := server.store.GetMerchant(ctx, order.MerchantID); err == nil {
+			claimFinalRegionID = merchant.RegionID
+		} else {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant for claim final adjudicator: %w", err)))
+			return
+		}
+		var enabled bool
+		claimFinalAdjudicatorConfig, enabled, err = loadClaimFinalAdjudicatorConfig(ctx, server.store, claimFinalRegionID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		claimFinalAdjudicatorEnabled = enabled
+	}
+
 	// SubmitClaim 的正式主链边界：
 	// 1. API 负责请求校验、规则覆盖标准化、证据采集与依赖注入；
 	// 2. algorithm 负责生成 claim 创建参数并消费事务返回的 persisted decision/action；
@@ -563,9 +582,86 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		return
 	}
 
+	if claimFinalAdjudicatorEnabled {
+		windowEnd := time.Now()
+		start7d := pgtype.Date{Time: windowEnd.AddDate(0, 0, -7), Valid: true}
+		start30d := pgtype.Date{Time: windowEnd.AddDate(0, 0, -30), Valid: true}
+		endDate := pgtype.Date{Time: windowEnd, Valid: true}
+		userStats, err := loadClaimFinalPartyStats(ctx, server.store, "user", authPayload.UserID, start7d, start30d, endDate)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		addressID := resolveClaimAddressID(order)
+		if err := enrichClaimFinalUserBehaviorStats(ctx, server.store, &userStats, req.DeviceFingerprint, addressID, windowEnd); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		merchantStats, err := loadClaimFinalPartyStats(ctx, server.store, "merchant", order.MerchantID, start7d, start30d, endDate)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		if err := enrichClaimFinalLiabilityStats(ctx, server.store, &merchantStats, windowEnd); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		var riderStats *algorithm.PartyWindowStats
+		if delivery, err := server.store.GetDeliveryByOrderID(ctx, order.ID); err == nil && delivery.RiderID.Valid {
+			loaded, err := loadClaimFinalPartyStats(ctx, server.store, "rider", delivery.RiderID.Int64, start7d, start30d, endDate)
+			if err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
+			if err := enrichClaimFinalLiabilityStats(ctx, server.store, &loaded, windowEnd); err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
+			riderStats = &loaded
+		}
+
+		adjudication, err := algorithm.NewClaimFinalAdjudicator(claimFinalAdjudicatorConfig).Adjudicate(algorithm.ClaimFinalAdjudicationInput{
+			RegionID:  claimFinalRegionID,
+			ClaimType: req.ClaimType,
+			User:      userStats,
+			Rider:     riderStats,
+			Merchant:  merchantStats,
+		})
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			return
+		}
+		scoreBreakdown, err := json.Marshal(adjudication.ScoreBreakdown)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("marshal claim final score breakdown: %w", err)))
+			return
+		}
+		factSnapshot, err := json.Marshal(claimFinalAdjudicatorFactSnapshot{
+			OrderID:              order.ID,
+			ClaimType:            req.ClaimType,
+			ClaimAmount:          req.ClaimAmount,
+			BaseResponsibleParty: adjudication.BaseResponsibleParty,
+			ResponsibleParty:     adjudication.ResponsibleParty,
+			DecisionMode:         adjudication.DecisionMode,
+			CompensationSource:   adjudication.CompensationSource,
+			User:                 userStats,
+			Rider:                riderStats,
+			Merchant:             merchantStats,
+			ReasonCodes:          adjudication.ReasonCodes,
+		})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("marshal claim final fact snapshot: %w", err)))
+			return
+		}
+		applyClaimFinalAdjudication(decision, adjudication, scoreBreakdown, factSnapshot)
+	}
+
 	// 规则引擎结果覆盖（如需）
 	if ruleDecision.Action != "" && ruleDecision.Action != "allow" && ruleDecision.Action != "alert" {
-		applyClaimRuleDecisionOverride(decision, ruleDecision)
+		if applied := applyClaimRuleDecisionOverride(decision, ruleDecision); applied != "" {
+			decision.ScoreBreakdown = nil
+			decision.FactSnapshot = nil
+		}
 	}
 	if ruleDecision.Meta != nil {
 		if v, ok := ruleDecision.Meta["decision_reason"].(string); ok && v != "" && decision.Reason == "" {
