@@ -1,0 +1,28 @@
+const assert = require('assert')
+const fs = require('fs')
+const path = require('path')
+
+const ROOT = path.resolve(__dirname, '..')
+const apiSource = fs.readFileSync(path.join(ROOT, 'miniprogram/pages/user_center/service_center/_main_shared/api/appeals-customer-service.ts'), 'utf8')
+const detailSource = fs.readFileSync(path.join(ROOT, 'miniprogram/pages/user_center/service_center/detail/index.ts'), 'utf8')
+const detailWxml = fs.readFileSync(path.join(ROOT, 'miniprogram/pages/user_center/service_center/detail/index.wxml'), 'utf8')
+
+assert(apiSource.includes('ClaimPayoutConfirmationResponse'), 'service must define the payout confirmation response contract')
+assert(apiSource.includes('/payout-confirmation'), 'service must call the backend payout-confirmation endpoint')
+assert(apiSource.includes('getClaimPayoutConfirmation'), 'service must expose getClaimPayoutConfirmation')
+assert(apiSource.includes('payout_confirmation_required'), 'claim detail contract must include backend payout confirmation capability field')
+assert(apiSource.includes('payout_confirmation_action'), 'claim detail contract must include backend payout confirmation action field')
+
+assert(detailSource.includes('canConfirmPayoutReceipt'), 'detail view model must expose the receipt confirmation action')
+assert(detailSource.includes('payout_confirmation_required === true'), 'detail view model must derive receipt action from backend capability flag')
+assert(detailSource.includes("payout_confirmation_action === 'request_merchant_transfer'"), 'detail view model must require the backend action kind')
+assert(detailSource.includes('requestMerchantTransfer'), 'detail page must call wx.requestMerchantTransfer')
+assert(detailSource.includes('getClaimPayoutConfirmation(this.data.claimId)'), 'detail page must fetch confirmation params before invoking WeChat')
+assert(detailSource.includes('await this.loadDetail()'), 'detail page must refresh backend claim detail after WeChat confirmation returns')
+assert(detailSource.includes("errMsg.includes('ok')"), 'detail page must inspect the requestMerchantTransfer return state')
+assert(detailSource.includes('确认页已返回，请等待到账结果'), 'detail page must not treat requestMerchantTransfer ok as final payout success')
+assert(detailSource.includes('RequestMerchantTransferCancelError'), 'detail page must distinguish user cancellation from provider failure')
+assert(detailSource.includes('已取消确认收款，可稍后再次确认'), 'detail page must show a retryable cancellation message')
+
+assert(detailWxml.includes('确认收款'), 'detail page must render a confirm receipt action')
+assert(detailWxml.includes('claim.canConfirmPayoutReceipt'), 'confirm receipt action must be gated by backend-derived view state')

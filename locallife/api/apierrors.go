@@ -245,16 +245,17 @@ var (
 	ErrRiderNotDeliverer         = apierr(40362, "you are not the assigned rider for this order")
 
 	// 409 类
-	ErrOrderAlreadyHasClaim           = apierr(40967, "a claim record already exists for this order")
-	ErrApplicationStateChanged        = apierr(40968, "application state has changed, action is no longer valid")
-	ErrAccountApplymentPending        = apierr(40969, "已有进行中的结算账户申请，请进入开户状态页查看签约或账户验证进度，等待处理完成后再提交")
-	ErrAccountAlreadyRegistered       = apierr(40970, "结算账户开户已完成，无需重复提交；如需变更结算账户，请使用结算账户修改入口")
-	ErrClaimCannotBeWithdrawn         = apierr(40971, "claim cannot be withdrawn after compensation has started or when no adjudicated compensation is pending")
-	ErrClaimCannotContinue            = apierr(40972, "claim cannot continue to compensation in its current state")
-	ErrClaimPayoutRealNameRequired    = apierr(40978, "请填写与微信实名一致的姓名后继续申请赔付")
-	ErrGroupApplicationReviewConflict = apierr(40975, "该集团申请状态已变化，请刷新后查看最新审核结果")
-	ErrGroupJoinRequestReviewConflict = apierr(40976, "该加入申请状态已变化，请刷新后查看最新审核结果")
-	ErrMerchantAlreadyJoinedGroup     = apierr(40977, "该门店已加入其他集团，请刷新后查看最新归属")
+	ErrOrderAlreadyHasClaim               = apierr(40967, "a claim record already exists for this order")
+	ErrApplicationStateChanged            = apierr(40968, "application state has changed, action is no longer valid")
+	ErrAccountApplymentPending            = apierr(40969, "已有进行中的结算账户申请，请进入开户状态页查看签约或账户验证进度，等待处理完成后再提交")
+	ErrAccountAlreadyRegistered           = apierr(40970, "结算账户开户已完成，无需重复提交；如需变更结算账户，请使用结算账户修改入口")
+	ErrClaimCannotBeWithdrawn             = apierr(40971, "claim cannot be withdrawn after compensation has started or when no adjudicated compensation is pending")
+	ErrClaimCannotContinue                = apierr(40972, "claim cannot continue to compensation in its current state")
+	ErrClaimPayoutRealNameRequired        = apierr(40978, "请填写与微信实名一致的姓名后继续申请赔付")
+	ErrClaimPayoutConfirmationUnavailable = apierr(40979, "当前赔付暂不需要微信确认收款，请刷新后查看最新状态")
+	ErrGroupApplicationReviewConflict     = apierr(40975, "该集团申请状态已变化，请刷新后查看最新审核结果")
+	ErrGroupJoinRequestReviewConflict     = apierr(40976, "该加入申请状态已变化，请刷新后查看最新审核结果")
+	ErrMerchantAlreadyJoinedGroup         = apierr(40977, "该门店已加入其他集团，请刷新后查看最新归属")
 )
 
 // ==================== 区域/运营商扩张 (Region / Operator Expansion) ====================

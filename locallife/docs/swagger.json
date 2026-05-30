@@ -2347,6 +2347,85 @@
                 }
             }
         },
+        "/v1/claims/{id}/payout-confirmation": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "仅当当前用户自己的索赔赔付处于微信 WAIT_USER_CONFIRM 状态时，返回小程序 wx.requestMerchantTransfer 所需参数",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "索赔管理"
+                ],
+                "summary": "获取索赔赔付确认收款参数",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "索赔ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "确认收款参数",
+                        "schema": {
+                            "$ref": "#/definitions/api.claimPayoutConfirmationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "无效的索赔ID",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "该索赔不属于当前用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "索赔不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "当前赔付不需要微信确认收款",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "赔付服务不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/claims/{id}/withdraw": {
             "post": {
                 "security": [
@@ -33337,6 +33416,20 @@
                 }
             }
         },
+        "api.claimPayoutConfirmationResponse": {
+            "type": "object",
+            "properties": {
+                "app_id": {
+                    "type": "string"
+                },
+                "mch_id": {
+                    "type": "string"
+                },
+                "package": {
+                    "type": "string"
+                }
+            }
+        },
         "api.claimRecoveryPaymentResponse": {
             "type": "object",
             "properties": {
@@ -45650,6 +45743,13 @@
                 },
                 "order_id": {
                     "type": "integer"
+                },
+                "payout_confirmation_action": {
+                    "description": "request_merchant_transfer",
+                    "type": "string"
+                },
+                "payout_confirmation_required": {
+                    "type": "boolean"
                 },
                 "payout_status": {
                     "description": "processing, paid",

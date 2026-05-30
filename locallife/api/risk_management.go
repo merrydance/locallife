@@ -19,6 +19,7 @@ import (
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/rules"
 	"github.com/merrydance/locallife/token"
+	wechatcontracts "github.com/merrydance/locallife/wechat/contracts"
 	"github.com/merrydance/locallife/worker"
 	"github.com/rs/zerolog/log"
 )
@@ -181,20 +182,21 @@ type SubmitClaimResponse struct {
 }
 
 const (
-	submitClaimStatusAccepted                 = "accepted"
-	submitClaimStatusRejected                 = "rejected"
-	submitClaimStatusClosed                   = "closed"
-	submitClaimStatusWaitingCustomerConfirm   = "warned_waiting_customer_confirmation"
-	submitClaimDecisionStatusAutoAdjudicated  = "auto-adjudicated"
-	submitClaimDecisionStatusRejected         = "rejected"
-	submitClaimCompensationStatusAwaiting     = "awaiting_compensation"
-	submitClaimCompensationStatusCompensating = "compensating"
-	submitClaimCompensationStatusCompensated  = "compensated"
-	submitClaimPayoutStatusProcessing         = "processing"
-	submitClaimPayoutStatusPaid               = "paid"
-	claimCustomerActionConfirmContinue        = "confirm_continue"
-	claimReviewNoteCustomerWithdrawn          = "claim withdrawn by customer before compensation execution"
-	claimReasonCustomerWithdrawn              = "用户已主动撤回索赔，未进入补偿执行"
+	submitClaimStatusAccepted                            = "accepted"
+	submitClaimStatusRejected                            = "rejected"
+	submitClaimStatusClosed                              = "closed"
+	submitClaimStatusWaitingCustomerConfirm              = "warned_waiting_customer_confirmation"
+	submitClaimDecisionStatusAutoAdjudicated             = "auto-adjudicated"
+	submitClaimDecisionStatusRejected                    = "rejected"
+	submitClaimCompensationStatusAwaiting                = "awaiting_compensation"
+	submitClaimCompensationStatusCompensating            = "compensating"
+	submitClaimCompensationStatusCompensated             = "compensated"
+	submitClaimPayoutStatusProcessing                    = "processing"
+	submitClaimPayoutStatusPaid                          = "paid"
+	claimCustomerActionConfirmContinue                   = "confirm_continue"
+	claimPayoutConfirmationActionRequestMerchantTransfer = "request_merchant_transfer"
+	claimReviewNoteCustomerWithdrawn                     = "claim withdrawn by customer before compensation execution"
+	claimReasonCustomerWithdrawn                         = "用户已主动撤回索赔，未进入补偿执行"
 )
 
 func claimWasWithdrawnByCustomer(claim db.Claim) bool {
@@ -1407,21 +1409,23 @@ func (server *Server) SuspendRider(ctx *gin.Context) {
 // ==================== 用户索赔查询 API ====================
 
 type userClaimResponse struct {
-	ID                     int64      `json:"id"`
-	OrderID                int64      `json:"order_id"`
-	ClaimType              string     `json:"claim_type"`
-	Description            string     `json:"description"`
-	ClaimAmount            int64      `json:"claim_amount"`
-	ApprovedAmount         *int64     `json:"approved_amount,omitempty"`
-	Status                 string     `json:"status"`
-	DecisionStatus         string     `json:"decision_status,omitempty"` // auto-adjudicated, rejected
-	CompensationStatus     string     `json:"compensation_status,omitempty"`
-	PayoutStatus           string     `json:"payout_status,omitempty"` // processing, paid
-	CustomerActionRequired bool       `json:"customer_action_required"`
-	CustomerAction         string     `json:"customer_action,omitempty"`
-	Reason                 string     `json:"reason,omitempty"`
-	CreatedAt              time.Time  `json:"created_at"`
-	ProcessedAt            *time.Time `json:"processed_at,omitempty"`
+	ID                         int64      `json:"id"`
+	OrderID                    int64      `json:"order_id"`
+	ClaimType                  string     `json:"claim_type"`
+	Description                string     `json:"description"`
+	ClaimAmount                int64      `json:"claim_amount"`
+	ApprovedAmount             *int64     `json:"approved_amount,omitempty"`
+	Status                     string     `json:"status"`
+	DecisionStatus             string     `json:"decision_status,omitempty"` // auto-adjudicated, rejected
+	CompensationStatus         string     `json:"compensation_status,omitempty"`
+	PayoutStatus               string     `json:"payout_status,omitempty"` // processing, paid
+	PayoutConfirmationRequired bool       `json:"payout_confirmation_required,omitempty"`
+	PayoutConfirmationAction   string     `json:"payout_confirmation_action,omitempty"` // request_merchant_transfer
+	CustomerActionRequired     bool       `json:"customer_action_required"`
+	CustomerAction             string     `json:"customer_action,omitempty"`
+	Reason                     string     `json:"reason,omitempty"`
+	CreatedAt                  time.Time  `json:"created_at"`
+	ProcessedAt                *time.Time `json:"processed_at,omitempty"`
 }
 
 type riderSuspendResponse struct {
@@ -1461,6 +1465,63 @@ func newUserClaimResponse(claim db.Claim) userClaimResponse {
 	}
 
 	return resp
+}
+
+type claimPayoutConfirmationResponse struct {
+	MchID   string `json:"mch_id"`
+	AppID   string `json:"app_id"`
+	Package string `json:"package"`
+}
+
+type claimPayoutConfirmationActionDetail struct {
+	ClaimID           int64  `json:"claim_id"`
+	UserID            int64  `json:"user_id"`
+	RecoveryDisputeID int64  `json:"recovery_dispute_id"`
+	TransferState     string `json:"transfer_state"`
+	PackageInfo       string `json:"package_info"`
+}
+
+type claimPayoutConfirmationState struct {
+	Required    bool
+	PackageInfo string
+}
+
+func (server *Server) claimPayoutConfirmationState(ctx context.Context, claim db.Claim) (claimPayoutConfirmationState, error) {
+	if claim.PaidAt.Valid || claim.Status != db.ClaimStatusApproved || !claim.ApprovedAmount.Valid || claim.ApprovedAmount.Int64 <= 0 {
+		return claimPayoutConfirmationState{}, nil
+	}
+
+	decision, err := server.store.GetLatestBehaviorDecisionByClaimID(ctx, pgtype.Int8{Int64: claim.ID, Valid: true})
+	if err != nil {
+		if isNotFoundError(err) {
+			return claimPayoutConfirmationState{}, nil
+		}
+		return claimPayoutConfirmationState{}, fmt.Errorf("get latest behavior decision for claim %d: %w", claim.ID, err)
+	}
+
+	actions, err := server.store.ListBehaviorActionsByDecision(ctx, decision.ID)
+	if err != nil {
+		return claimPayoutConfirmationState{}, fmt.Errorf("list behavior actions for decision %d: %w", decision.ID, err)
+	}
+
+	for _, action := range actions {
+		if action.ActionType != "payout" || action.TargetEntity != "user" || action.Status != "running" {
+			continue
+		}
+
+		var detail claimPayoutConfirmationActionDetail
+		if err := json.Unmarshal(action.Detail, &detail); err != nil {
+			return claimPayoutConfirmationState{}, fmt.Errorf("decode claim payout action %d detail: %w", action.ID, err)
+		}
+		if detail.ClaimID != claim.ID || detail.UserID != claim.UserID || detail.RecoveryDisputeID > 0 {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(detail.TransferState), wechatcontracts.DirectMerchantTransferStateWaitUserConfirm) && strings.TrimSpace(detail.PackageInfo) != "" {
+			return claimPayoutConfirmationState{Required: true, PackageInfo: strings.TrimSpace(detail.PackageInfo)}, nil
+		}
+	}
+
+	return claimPayoutConfirmationState{}, nil
 }
 
 func (server *Server) enqueueClaimCompensationActions(ctx context.Context, result db.CreateClaimCompensationTxResult) error {
@@ -1699,7 +1760,91 @@ func (server *Server) GetClaimDetail(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newUserClaimResponse(claim))
+	resp := newUserClaimResponse(claim)
+	confirmationState, err := server.claimPayoutConfirmationState(ctx, claim)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("load claim payout confirmation state for claim %d: %w", claim.ID, err)))
+		return
+	}
+	if confirmationState.Required {
+		resp.PayoutConfirmationRequired = true
+		resp.PayoutConfirmationAction = claimPayoutConfirmationActionRequestMerchantTransfer
+	}
+
+	ctx.JSON(http.StatusOK, resp)
+}
+
+// GetClaimPayoutConfirmation 获取微信确认收款参数
+// @Summary 获取索赔赔付确认收款参数
+// @Description 仅当当前用户自己的索赔赔付处于微信 WAIT_USER_CONFIRM 状态时，返回小程序 wx.requestMerchantTransfer 所需参数
+// @Tags 索赔管理
+// @Accept json
+// @Produce json
+// @Param id path int true "索赔ID"
+// @Success 200 {object} claimPayoutConfirmationResponse "确认收款参数"
+// @Failure 400 {object} ErrorResponse "无效的索赔ID"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "该索赔不属于当前用户"
+// @Failure 404 {object} ErrorResponse "索赔不存在"
+// @Failure 409 {object} ErrorResponse "当前赔付不需要微信确认收款"
+// @Failure 503 {object} ErrorResponse "赔付服务不可用"
+// @Failure 500 {object} ErrorResponse "内部错误"
+// @Router /v1/claims/{id}/payout-confirmation [get]
+// @Security BearerAuth
+func (server *Server) GetClaimPayoutConfirmation(ctx *gin.Context) {
+	claimIDStr := ctx.Param("id")
+	claimID, err := strconv.ParseInt(claimIDStr, 10, 64)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidClaimID))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	claim, err := server.store.GetClaim(ctx, claimID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrClaimNotFound))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get claim %d: %w", claimID, err)))
+		return
+	}
+
+	if claim.UserID != authPayload.UserID {
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrClaimNotOwned))
+		return
+	}
+
+	confirmationState, err := server.claimPayoutConfirmationState(ctx, claim)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("load claim payout confirmation state for claim %d: %w", claim.ID, err)))
+		return
+	}
+	if !confirmationState.Required {
+		ctx.JSON(http.StatusConflict, errorResponse(ErrClaimPayoutConfirmationUnavailable))
+		return
+	}
+	if server.transferClient == nil {
+		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrClaimPayoutServiceUnavailable))
+		return
+	}
+
+	resp := claimPayoutConfirmationResponse{
+		MchID:   strings.TrimSpace(server.transferClient.GetMchID()),
+		AppID:   strings.TrimSpace(server.transferClient.GetAppID()),
+		Package: confirmationState.PackageInfo,
+	}
+	if err := wechatcontracts.ValidateRequestMerchantTransferParams(&wechatcontracts.RequestMerchantTransferParams{
+		MchID:   resp.MchID,
+		AppID:   resp.AppID,
+		Package: resp.Package,
+	}); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("build claim payout requestMerchantTransfer params for claim %d: %w", claim.ID, err)))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // ConfirmContinueClaim 确认继续索赔并进入补偿阶段

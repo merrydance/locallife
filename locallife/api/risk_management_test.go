@@ -1672,6 +1672,365 @@ func TestGetClaimDetailAPI_ReturnsUserFacingLifecycle(t *testing.T) {
 	require.Nil(t, resp.ProcessedAt)
 }
 
+func TestGetClaimDetailAPI_MarksPayoutConfirmationRequired(t *testing.T) {
+	user, _ := randomUser(t)
+	now := time.Now()
+	claim := db.Claim{
+		ID:                 9031,
+		OrderID:            30031,
+		UserID:             user.ID,
+		ClaimType:          "damage",
+		Description:        "餐品洒漏",
+		ClaimAmount:        1800,
+		ApprovedAmount:     pgtype.Int8{Int64: 1500, Valid: true},
+		Status:             db.ClaimStatusApproved,
+		ApprovalType:       pgtype.Text{String: "auto", Valid: true},
+		AutoApprovalReason: pgtype.Text{String: "平台已完成自动裁定，赔付正在处理中", Valid: true},
+		CreatedAt:          now.Add(-30 * time.Minute),
+	}
+	decision := db.BehaviorDecision{ID: 93031, ClaimID: pgtype.Int8{Int64: claim.ID, Valid: true}}
+	payoutDetail := mustMarshalJSONDetail(t, map[string]any{
+		"claim_id":            claim.ID,
+		"user_id":             claim.UserID,
+		"transfer_state":      "WAIT_USER_CONFIRM",
+		"package_info":        "merchant-transfer-package",
+		"recovery_dispute_id": int64(0),
+	})
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetClaim(gomock.Any(), claim.ID).Return(claim, nil)
+	store.EXPECT().GetLatestBehaviorDecisionByClaimID(gomock.Any(), pgtype.Int8{Int64: claim.ID, Valid: true}).Return(decision, nil)
+	store.EXPECT().ListBehaviorActionsByDecision(gomock.Any(), decision.ID).Return([]db.BehaviorAction{{
+		ID:           93032,
+		DecisionID:   decision.ID,
+		ActionType:   "payout",
+		TargetEntity: "user",
+		Status:       "running",
+		Detail:       payoutDetail,
+	}}, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/claims/9031", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp userClaimResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.True(t, resp.PayoutConfirmationRequired)
+	require.Equal(t, "request_merchant_transfer", resp.PayoutConfirmationAction)
+	require.NotContains(t, recorder.Body.String(), "merchant-transfer-package")
+}
+
+func TestGetClaimPayoutConfirmationAPI_ReturnsWechatNativeParams(t *testing.T) {
+	user, _ := randomUser(t)
+	now := time.Now()
+	claim := db.Claim{
+		ID:                 9032,
+		OrderID:            30032,
+		UserID:             user.ID,
+		ClaimType:          "damage",
+		Description:        "餐品洒漏",
+		ClaimAmount:        1800,
+		ApprovedAmount:     pgtype.Int8{Int64: 1500, Valid: true},
+		Status:             db.ClaimStatusApproved,
+		ApprovalType:       pgtype.Text{String: "auto", Valid: true},
+		AutoApprovalReason: pgtype.Text{String: "平台已完成自动裁定，赔付正在处理中", Valid: true},
+		CreatedAt:          now.Add(-30 * time.Minute),
+	}
+	decision := db.BehaviorDecision{ID: 93033, ClaimID: pgtype.Int8{Int64: claim.ID, Valid: true}}
+	payoutDetail := mustMarshalJSONDetail(t, map[string]any{
+		"claim_id":            claim.ID,
+		"user_id":             claim.UserID,
+		"transfer_state":      "WAIT_USER_CONFIRM",
+		"package_info":        "merchant-transfer-package",
+		"recovery_dispute_id": int64(0),
+	})
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetClaim(gomock.Any(), claim.ID).Return(claim, nil)
+	store.EXPECT().GetLatestBehaviorDecisionByClaimID(gomock.Any(), pgtype.Int8{Int64: claim.ID, Valid: true}).Return(decision, nil)
+	store.EXPECT().ListBehaviorActionsByDecision(gomock.Any(), decision.ID).Return([]db.BehaviorAction{{
+		ID:           93034,
+		DecisionID:   decision.ID,
+		ActionType:   "payout",
+		TargetEntity: "user",
+		Status:       "running",
+		Detail:       payoutDetail,
+	}}, nil)
+
+	transferClient := mockwechat.NewMockTransferClientInterface(ctrl)
+	transferClient.EXPECT().GetMchID().Return("mch_123")
+	transferClient.EXPECT().GetAppID().Return("wx_app_123")
+
+	server := newTestServer(t, store)
+	server.SetTransferClientForTest(transferClient)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/claims/9032/payout-confirmation", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp claimPayoutConfirmationResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, "mch_123", resp.MchID)
+	require.Equal(t, "wx_app_123", resp.AppID)
+	require.Equal(t, "merchant-transfer-package", resp.Package)
+	require.NotContains(t, recorder.Body.String(), "transfer_state")
+	require.NotContains(t, recorder.Body.String(), "out_bill_no")
+	require.NotContains(t, recorder.Body.String(), "transfer_bill_no")
+}
+
+func TestGetClaimPayoutConfirmationAPI_RejectsClaimNotOwned(t *testing.T) {
+	user, _ := randomUser(t)
+	otherUser, _ := randomUser(t)
+	claim := db.Claim{
+		ID:             9033,
+		OrderID:        30033,
+		UserID:         otherUser.ID,
+		ClaimType:      "timeout",
+		Description:    "代取超时",
+		ClaimAmount:    1800,
+		ApprovedAmount: pgtype.Int8{Int64: 1500, Valid: true},
+		Status:         db.ClaimStatusApproved,
+		CreatedAt:      time.Now(),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetClaim(gomock.Any(), claim.ID).Return(claim, nil)
+	store.EXPECT().GetLatestBehaviorDecisionByClaimID(gomock.Any(), gomock.Any()).Times(0)
+	store.EXPECT().ListBehaviorActionsByDecision(gomock.Any(), gomock.Any()).Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/claims/9033/payout-confirmation", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, ErrClaimNotOwned.Message, resp.Error)
+}
+
+func TestGetClaimPayoutConfirmationAPI_RejectsUnavailableTransferState(t *testing.T) {
+	user, _ := randomUser(t)
+	claim := db.Claim{
+		ID:             9034,
+		OrderID:        30034,
+		UserID:         user.ID,
+		ClaimType:      "damage",
+		Description:    "餐品洒漏",
+		ClaimAmount:    1800,
+		ApprovedAmount: pgtype.Int8{Int64: 1500, Valid: true},
+		Status:         db.ClaimStatusApproved,
+		CreatedAt:      time.Now(),
+	}
+	decision := db.BehaviorDecision{ID: 93035, ClaimID: pgtype.Int8{Int64: claim.ID, Valid: true}}
+	payoutDetail := mustMarshalJSONDetail(t, map[string]any{
+		"claim_id":            claim.ID,
+		"user_id":             claim.UserID,
+		"transfer_state":      "PROCESSING",
+		"package_info":        "merchant-transfer-package",
+		"recovery_dispute_id": int64(0),
+	})
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetClaim(gomock.Any(), claim.ID).Return(claim, nil)
+	store.EXPECT().GetLatestBehaviorDecisionByClaimID(gomock.Any(), pgtype.Int8{Int64: claim.ID, Valid: true}).Return(decision, nil)
+	store.EXPECT().ListBehaviorActionsByDecision(gomock.Any(), decision.ID).Return([]db.BehaviorAction{{
+		ID:           93036,
+		DecisionID:   decision.ID,
+		ActionType:   "payout",
+		TargetEntity: "user",
+		Status:       "running",
+		Detail:       payoutDetail,
+	}}, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/claims/9034/payout-confirmation", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusConflict, recorder.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, ErrClaimPayoutConfirmationUnavailable.Message, resp.Error)
+}
+
+func TestGetClaimPayoutConfirmationAPI_RejectsMissingTransferClient(t *testing.T) {
+	user, _ := randomUser(t)
+	claim := db.Claim{
+		ID:             9036,
+		OrderID:        30036,
+		UserID:         user.ID,
+		ClaimType:      "damage",
+		Description:    "餐品洒漏",
+		ClaimAmount:    1800,
+		ApprovedAmount: pgtype.Int8{Int64: 1500, Valid: true},
+		Status:         db.ClaimStatusApproved,
+		CreatedAt:      time.Now(),
+	}
+	decision := db.BehaviorDecision{ID: 93039, ClaimID: pgtype.Int8{Int64: claim.ID, Valid: true}}
+	payoutDetail := mustMarshalJSONDetail(t, map[string]any{
+		"claim_id":            claim.ID,
+		"user_id":             claim.UserID,
+		"transfer_state":      "WAIT_USER_CONFIRM",
+		"package_info":        "merchant-transfer-package",
+		"recovery_dispute_id": int64(0),
+	})
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetClaim(gomock.Any(), claim.ID).Return(claim, nil)
+	store.EXPECT().GetLatestBehaviorDecisionByClaimID(gomock.Any(), pgtype.Int8{Int64: claim.ID, Valid: true}).Return(decision, nil)
+	store.EXPECT().ListBehaviorActionsByDecision(gomock.Any(), decision.ID).Return([]db.BehaviorAction{{
+		ID:           93040,
+		DecisionID:   decision.ID,
+		ActionType:   "payout",
+		TargetEntity: "user",
+		Status:       "running",
+		Detail:       payoutDetail,
+	}}, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/claims/9036/payout-confirmation", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+
+	var envelope APIResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &envelope))
+	require.Equal(t, ErrClaimPayoutServiceUnavailable.Code, envelope.Code)
+	require.NotContains(t, envelope.Message, "transfer client")
+}
+
+func TestGetClaimPayoutConfirmationAPI_IgnoresRecoveryDisputeCompensationAction(t *testing.T) {
+	user, _ := randomUser(t)
+	claim := db.Claim{
+		ID:             9037,
+		OrderID:        30037,
+		UserID:         user.ID,
+		ClaimType:      "damage",
+		Description:    "餐品洒漏",
+		ClaimAmount:    1800,
+		ApprovedAmount: pgtype.Int8{Int64: 1500, Valid: true},
+		Status:         db.ClaimStatusApproved,
+		CreatedAt:      time.Now(),
+	}
+	decision := db.BehaviorDecision{ID: 93041, ClaimID: pgtype.Int8{Int64: claim.ID, Valid: true}}
+	payoutDetail := mustMarshalJSONDetail(t, map[string]any{
+		"claim_id":            claim.ID,
+		"user_id":             claim.UserID,
+		"recovery_dispute_id": int64(781),
+		"transfer_state":      "WAIT_USER_CONFIRM",
+		"package_info":        "recovery-dispute-package",
+	})
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetClaim(gomock.Any(), claim.ID).Return(claim, nil)
+	store.EXPECT().GetLatestBehaviorDecisionByClaimID(gomock.Any(), pgtype.Int8{Int64: claim.ID, Valid: true}).Return(decision, nil)
+	store.EXPECT().ListBehaviorActionsByDecision(gomock.Any(), decision.ID).Return([]db.BehaviorAction{{
+		ID:           93042,
+		DecisionID:   decision.ID,
+		ActionType:   "payout",
+		TargetEntity: "user",
+		Status:       "running",
+		Detail:       payoutDetail,
+	}}, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/claims/9037/payout-confirmation", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusConflict, recorder.Code)
+	require.NotContains(t, recorder.Body.String(), "recovery-dispute-package")
+}
+
+func TestGetClaimPayoutConfirmationAPI_MalformedActionDetailFailsClosed(t *testing.T) {
+	user, _ := randomUser(t)
+	claim := db.Claim{
+		ID:             9035,
+		OrderID:        30035,
+		UserID:         user.ID,
+		ClaimType:      "damage",
+		Description:    "餐品洒漏",
+		ClaimAmount:    1800,
+		ApprovedAmount: pgtype.Int8{Int64: 1500, Valid: true},
+		Status:         db.ClaimStatusApproved,
+		CreatedAt:      time.Now(),
+	}
+	decision := db.BehaviorDecision{ID: 93037, ClaimID: pgtype.Int8{Int64: claim.ID, Valid: true}}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetClaim(gomock.Any(), claim.ID).Return(claim, nil)
+	store.EXPECT().GetLatestBehaviorDecisionByClaimID(gomock.Any(), pgtype.Int8{Int64: claim.ID, Valid: true}).Return(decision, nil)
+	store.EXPECT().ListBehaviorActionsByDecision(gomock.Any(), decision.ID).Return([]db.BehaviorAction{{
+		ID:           93038,
+		DecisionID:   decision.ID,
+		ActionType:   "payout",
+		TargetEntity: "user",
+		Status:       "running",
+		Detail:       []byte(`{"transfer_state":`),
+	}}, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/claims/9035/payout-confirmation", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+
+	var resp ErrorResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.NotContains(t, resp.Error, "transfer_state")
+}
+
 func TestConfirmContinueClaimAPI_TriggersDeferredCompensation(t *testing.T) {
 	user, _ := randomUser(t)
 	now := time.Now()

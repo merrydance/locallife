@@ -3,26 +3,20 @@ import { logger } from '../../../../utils/logger'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 import { isClaimPayoutRealNameReady, promptClaimPayoutRealName } from './claim-payout-real-name'
 
-function getCachedUserFullName(): string {
-  return String(getApp<IAppOption>().globalData.userInfo?.nickName || '').trim()
-}
-
 export async function ensureClaimPayoutRealName(logScope: string): Promise<boolean> {
   const app = getApp<IAppOption>()
-  let fullName = getCachedUserFullName()
+  let fullName = ''
 
-  if (!isClaimPayoutRealNameReady(fullName)) {
-    try {
-      const profile = await fetchUserProfile()
-      fullName = String(profile.full_name || '').trim()
-      app.globalData.userInfo = {
-        ...(app.globalData.userInfo || {}),
-        nickName: fullName || app.globalData.userInfo?.nickName || '微信用户',
-        avatarUrl: profile.avatar_url || app.globalData.userInfo?.avatarUrl || ''
-      } as WechatMiniprogram.UserInfo
-    } catch (err) {
-      logger.warn(`[${logScope}] fetch user profile before payout real name failed`, err)
-    }
+  try {
+    const profile = await fetchUserProfile()
+    fullName = String(profile.full_name || '').trim()
+    app.globalData.userInfo = {
+      ...(app.globalData.userInfo || {}),
+      nickName: fullName || app.globalData.userInfo?.nickName || '微信用户',
+      avatarUrl: profile.avatar_url || app.globalData.userInfo?.avatarUrl || ''
+    } as WechatMiniprogram.UserInfo
+  } catch (err) {
+    logger.warn(`[${logScope}] fetch user profile before payout real name failed`, err)
   }
 
   if (isClaimPayoutRealNameReady(fullName)) {

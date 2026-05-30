@@ -234,6 +234,8 @@ export interface UserClaimResponse {
     decision_status?: UserClaimDecisionStatus
     compensation_status?: UserClaimCompensationStatus
     payout_status?: UserClaimPayoutStatus
+    payout_confirmation_required?: boolean
+    payout_confirmation_action?: 'request_merchant_transfer'
     customer_action_required?: boolean
     customer_action?: string
     reason?: string
@@ -247,6 +249,12 @@ export interface UserClaimsListResponse {
     total: number
     page: number
     page_size: number
+}
+
+export interface ClaimPayoutConfirmationResponse {
+    mch_id: string
+    app_id: string
+    package: string
 }
 
 export interface UserClaimPresentation {
@@ -497,6 +505,13 @@ export class ClaimManagementService {
     async getClaimDetail(claimId: number): Promise<UserClaimResponse> {
         return request({
             url: `/v1/claims/${claimId}`,
+            method: 'GET'
+        })
+    }
+
+    async getClaimPayoutConfirmation(claimId: number): Promise<ClaimPayoutConfirmationResponse> {
+        return request({
+            url: `/v1/claims/${claimId}/payout-confirmation`,
             method: 'GET'
         })
     }

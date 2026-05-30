@@ -44,6 +44,17 @@
 
 本计划以 [README.md](README.md) 和 [.github/standards/domains/wechat-payment/README.md](.github/standards/domains/wechat-payment/README.md) 中已登记的官方链接为仓库内能力组入口，以微信官方页面为唯一外部真值。
 
+### 3.0 当前执行基线
+
+截至 2026-05-30，本仓库已切到微信支付直连“商家转账”用户确认模式，平台顾客索赔赔付链路必须按以下基线继续实现和审查：
+
+- 顾客在小程序内填写或确认的 `full_name` 仍然有业务意义：它是后端发起微信商家转账时提交给微信的 `user_name` 来源，用于微信侧 OpenID 与实名匹配、限额或回单等要求。
+- `full_name` 不是微信确认收款组件。微信确认收款组件由微信客户端根据后端取得的 `package_info` 调起，当前小程序通过 `wx.requestMerchantTransfer` 承接。
+- 后端 source of truth 是 [locallife/db/query/user.sql](locallife/db/query/user.sql) / `users.full_name`。小程序缓存里的 `nickName` 只能用于普通展示，不能被当作赔付实名。
+- 发起转账时，[locallife/worker/task_claim_refund.go](locallife/worker/task_claim_refund.go) 读取 `users.wechat_openid` 和 `users.full_name`，并在 [locallife/wechat/direct_payment.go](locallife/wechat/direct_payment.go) 中把 `user_name` 加密后提交微信。
+- 微信返回 `WAIT_USER_CONFIRM` 且带 `package_info` 时，后端只向当前索赔所属用户暴露 `mch_id`、`app_id`、`package` 三个调起参数，不把 `out_bill_no`、`transfer_bill_no` 等内部资金状态泄露给小程序。
+- `requestMerchantTransfer:ok` 只代表微信确认页面展示成功并返回小程序，不代表赔付成功。赔付完成仍以微信查询或回调进入 `SUCCESS` 后，本地 worker 标记 claim paid 为准。
+
 ### 3.1 首批必须对齐的官方页面
 
 - 产品介绍

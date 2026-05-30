@@ -35,6 +35,44 @@ The retained WeChat callback routes are:
 
 Baofu callback routes are documented and validated in the Baofu payment domain.
 
+## Merchant Transfer Compensation Contract
+
+Active provider/capability: WeChat Pay direct merchant, merchant transfer user-confirmation mode.
+
+Official source set:
+
+- Create transfer: `https://pay.wechatpay.cn/doc/v3/merchant/4012716434`
+- JSAPI user confirmation: `https://pay.wechatpay.cn/doc/v3/merchant/4012716430`
+- Query by merchant bill no: `https://pay.wechatpay.cn/doc/v3/merchant/4012716437`
+- Query by WeChat bill no: `https://pay.wechatpay.cn/doc/v3/merchant/4012716457`
+- Transfer notification: `https://pay.wechatpay.cn/doc/v3/merchant/4012712115`
+
+Important boundary:
+
+- Customer-entered payout real name and WeChat's user confirmation page are different steps.
+- `users.full_name` is the LocalLife source for WeChat `user_name` when claim payout creates a merchant transfer. The WeChat client encrypts `user_name` before sending it to `/v3/fund-app/mch-transfer/transfer-bills`.
+- `package_info` is returned by WeChat only when the transfer bill is in `WAIT_USER_CONFIRM`; it is passed to the Mini Program so the client can call the WeChat confirmation component.
+- `requestMerchantTransfer:ok` means the WeChat confirmation page was displayed and control returned to the Mini Program. It is not payout success. LocalLife must wait for WeChat query or notification state `SUCCESS` before treating the claim payout as completed and before continuing recovery-side effects.
+
+Field matrix:
+
+| Provider operation | Provider field | Type/unit | Requiredness | Local owner | Business meaning |
+| --- | --- | --- | --- | --- | --- |
+| Create transfer `POST /v3/fund-app/mch-transfer/transfer-bills` | `appid` | string | required | `DirectMerchantTransferCreateRequest.AppID` | Mini Program app id used for the transfer. |
+| Create transfer | `out_bill_no` | string | required | `claimPayoutOutBillNo(actionID)` | Local idempotency key. Never change this merely to retry an unclear provider result. |
+| Create transfer | `transfer_scene_id` | string | required | `DirectMerchantTransferSceneEnterpriseCompensation` | Enterprise compensation scene. Current LocalLife claim payout uses `1011`. |
+| Create transfer | `openid` | string | required | `users.wechat_openid` | Receiving customer identity under the Mini Program app id. |
+| Create transfer | `user_name` | encrypted string | conditional; required by LocalLife for claim payout | `users.full_name` -> `EncryptSensitiveData` | Payout real name supplied by the customer for WeChat real-name matching. It is not the WeChat confirmation UI. |
+| Create transfer | `transfer_amount` | integer fen | required | payout action `amount` | Compensation amount in cents/fen. |
+| Create transfer | `transfer_remark` | string | required | payout action `remark` or default compensation reason | User-visible/recorded transfer reason. |
+| Create transfer | `notify_url` | string URL | optional request field; required by LocalLife config | `WECHAT_PAY_MERCHANT_TRANSFER_NOTIFY_URL` | Callback destination for terminal transfer state. |
+| Create transfer | `user_recv_perception` | enum string | optional | `DirectMerchantTransferUserRecvPerceptionMerchantCompensation` | User-facing receipt perception, currently merchant compensation. |
+| Create transfer | `transfer_scene_report_infos[].info_type` | string | required for enterprise compensation | `DirectMerchantTransferReportInfoTypeCompensationReason` | Enterprise compensation report info key, fixed to compensation reason. |
+| Create transfer response | `state` | enum string | required | `DirectMerchantTransferCreateResponse.State` | Creation result state; `WAIT_USER_CONFIRM` requires Mini Program confirmation. |
+| Create transfer response | `package_info` | string | conditional | payout action `PackageInfo` -> `GET /v1/claims/{id}/payout-confirmation` | Token passed to `wx.requestMerchantTransfer` only while waiting for user confirmation. |
+| JSAPI confirmation | `mchId`, `appId`, `package` | strings | required | `RequestMerchantTransferParams` | Mini Program parameters for WeChat's native confirmation page. |
+| JSAPI confirmation result | `requestMerchantTransfer:ok` | string | returned by client | Mini Program detail page | Page-display result only; backend status must still be refreshed. |
+
 ## Validation
 
 For direct WeChat payment changes, prefer focused tests first:

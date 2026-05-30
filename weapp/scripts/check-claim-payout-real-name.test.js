@@ -12,6 +12,8 @@ const detailWxml = fs.readFileSync(path.join(ROOT, 'miniprogram/pages/user_cente
 
 assert(helperSource.includes('CLAIM_PAYOUT_REAL_NAME_REQUIRED_CODE = 40978'), 'real-name helper must track backend API error code')
 assert(helperSource.includes("name === DEFAULT_WECHAT_USER_NAME"), 'real-name helper must reject the default WeChat placeholder')
+assert(workflowSource.includes('fetchUserProfile()'), 'real-name workflow must verify the server-side profile before trusting payout full_name readiness')
+assert(!workflowSource.includes('getCachedUserFullName'), 'real-name workflow must not use Mini Program nickName as payout full_name truth')
 assert(workflowSource.includes('updateUserProfile({ full_name: realName })'), 'real-name workflow must persist payout real name before continuing')
 
 const submitFunctionStart = submitSource.indexOf('async onSubmit()')
